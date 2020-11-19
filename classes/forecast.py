@@ -4,191 +4,168 @@ import numpy as np
 from climacell_api.client import ClimacellApiClient
 from climacell_api.climacell_response import ObservationData
 
-from .constants import fields, maxDates
+from .constants import fields, maxDates, FORECAST_TYPES
 
 
-class forecast:
+class Forecast:
 	data: dict[str: Union[np.ndarray, list]] = {}
+	lat: float
+	lon: float
+	fields: list[str]
+	apiKey: str
+	forecastType: str
+	allowedFields: list[str]
 
-	def __init__(self, key, lat_lon: tuple[str, str], forecastTypes: Union[list[str], str],
+	def __init__(self, key, lat_lon: tuple[float, float], forecastType: str,
 				 measurementFields: Union[list[str], str] = None) -> None:
+
+		if forecastType not in FORECAST_TYPES:
+			raise ValueError("This is not a valid forecast type. Valid values are: {}".format(FORECAST_TYPES))
+		if not set(measurementFields).issubset(set(fields.HOURLY)):
+			raise ValueError("Measures are not valid.  Must be {}".format(fields.HOURLY))
+
 		self.apiKey = key
-		self.dates = []
-		self.forecastTypes = forecastTypes
+		self.forecastType = forecastType
 		self.fields = measurementFields
 		self.lat, self.lon = lat_lon
-		self.getData()
-		self.combineForecasts()
 
-	def getData(self):
+	def __getitem__(self, item):
 
-		lat, lon = self.lat, self.lon
+		if isinstance(item, str):
+			return self.data[item]
 
-		client = ClimacellApiClient(self.apiKey)
+		if isinstance(item, int):
+			result = {'timestamp': self.data['timestamp'][item],
+					  'units':     self.data['units'],
+					  'type':      self.data['type']}
 
-		def buildDictionary():
+			for field in self.fields:
+				result[field] = self.data[field][item]
 
-			data: dict[str, Union[list, str]] = {'timestamp': [], 'type': self.forecastTypes, 'units': {}}
+			return result
 
-			for value in self.fields:
-				data[value] = []
+	def __iter__(self):
+		self.n = 0
+		self.max = len(self.data['timestamp']) - 1
+		return self
 
-			return data
+	def __next__(self):
+		if self.n <= self.max:
 
-		def mapData(data: Union[list[ObservationData], ObservationData], forecastType: str) -> dict[
-			str, list[ObservationData]]:
+			result = {'timestamp': self.data['timestamp'][self.n],
+					  'units': self.data['units'],
+					  'type': self.data['type']}
 
-			output = buildDictionary(data[0].fields, forecastType)
+			for field in self.fields:
+				result[field] = self.data[field][self.n]
 
-			if forecastType == 'realtime':
-				for field in data.fields:
-					self.data['units'][field] = data.units
-					output['timestamp'].append(data.observation_time)
-					output[field].append(data.measurements[field].value)
+			self.n += 1
 
-			elif forecastType == 'historical':
-				# disables historical data for now
-				pass
-				for measurement in data:
-					import json
-					if "None" in json.load(measurement.raw_json):
-						pass
-					else:
-						output['timestamp'].append(measurement.observation_time)
-						for field in measurement.fields:
-							self.units[field] = measurement.measurements[field].units
-							output[field].append(measurement.measurements[field].value)
+			return result
+		else:
+			raise StopIteration
 
-			else:
-				for measurement in data:
-					output['timestamp'].append(measurement.observation_time)
-					for field in measurement.fields:
-						self.units[field] = measurement.measurements[field].units
-						output[field].append(measurement.measurements[field].value)
+	def buildDictionary(self):
 
-			return output
+		data: dict[str, Union[list, str]] = {'timestamp': [], 'type': self.forecastType, 'units': {}}
 
-		def fieldFilter(requested: Union[list[str], str], forecastType: list[str]) -> [str]:
-			# return list(set(requested).intersection(forecastType)) or list(forecastType)
-			return list(set(requested).intersection(forecastType))
+		for value in self.fields:
+			data[value] = []
 
-		def realtime(measurementFields: Union[list[str], str, None]):
+		return data
 
-			return mapData(client.realtime(lat=self.lat,
-										   lon=self.lon,
-										   fields=fields.REALTIME,
-										   units='us'
-										   ).data(), 'realtime')
+	def fieldFilter(self, requested: Union[list[str], str], forecastType: str) -> list[str]:
+		# return list(set(requested).intersection(forecastType)) or list(forecastType)
+		return list(set(requested).intersection(forecastType))
 
-		def nowcast(measurementFields: Union[list[str], str, None]):
-			# requested = list(filter(measurementFields, fields.NOWCAST))
-			return mapData(client.nowcast(lat=self.lat, lon=self.lon, end_time=maxDates.nowcast(),
-										  fields=fields.NOWCAST, units='us',
-										  timestep=1).data(), 'nowcast')
+	def mapData(self, inputData: Union[list[ObservationData], ObservationData]) -> dict[
+		str, list[ObservationData]]:
 
-		def hourly(measurementFields: Union[list[str], str, None]):
-			return mapData(client.forecast_hourly(lat=self.lat,
-												  lon=self.lon,
-												  start_time=maxDates.nowcast(),
-												  end_time=maxDates.hourly(),
-												  fields=fields.HOURLY,
-												  units='us').data(), 'hourly')
+		output: dict[str, Union[list, str]] = self.buildDictionary()
 
-		def daily(measurementFields: Union[list[str], str, None]):
-			return mapData(client.forecast_daily(lat=self.lat,
-												 lon=self.lon,
-												 start_time=maxDates.hourly(),
-												 end_time=maxDates.daily(),
-												 fields=fields.DAILY,
-												 units='us').data(), 'daily')
+		for measurement in inputData:
+			output['timestamp'].append(measurement.observation_time)
+			for field in measurement.fields:
+				output[field].append(measurement.measurements[field].value)
+				output['units'][field] = measurement.measurements[field].units
 
-		def historical(measurementFields: Union[list[str], str, None]):
-			return mapData(client.historical_climacell(lat=self.lat,
-													   lon=self.lon,
-													   timestep=5,
-													   start_time=maxDates.historical(),
-													   end_time='now',
-													   fields=fields.HISTORICAL,
-													   units='us').data(), 'historical')
+		return output
 
-		forecastData = {}
-		if 'historical' in self.forecastTypes:
-			forecastData['historical'] = historical()
-		if 'realtime' in self.forecastTypes:
-			forecastData['realtime'] = realtime()
-		if 'nowcast' in self.forecastTypes:
-			forecastData['nowcast'] = nowcast()
-		if 'hourly' in self.forecastTypes:
-			forecastData['hourly'] = hourly()
-		if 'daily' in self.forecastTypes:
-			forecastData['daily'] = daily()
-
-		return forecastData
-
-	def dateArray(self):
-	# def dateArray(self, data: dict[str: Union[np.ndarray, list]], forecasts: Union[list[str], str, None]):
-
-		array = []
-
-
-		# for set(data.keys()).intersection(FORECAST_TYPES):
-
-
-		if 'historical' in self.fields:
-			array += self.historical['timestamp']
-		if 'realtime' in forecasts:
-			array += self.realtime['timestamp']
-		if 'nowcast' in forecasts:
-			array += self.nowcast['timestamp']
-		if 'hourly' in forecasts:
-			array += self.hourly['timestamp']
-		if 'daily' in forecasts:
-			array += self.daily['timestamp']
-
-		return np.array(array)
-
-	def combineForecasts(self)
-	# def combineForecasts(self, forecasts: Union[list[str], str, None], fields: Union[list[str], str]) -> dict[str, np.array]:
-
-		dictionary = {'timestamp': self.dateArray()}
-		commonFields = set(self.fields)
-		if self.historical:
-			commonFields = set(self.historical.keys()).intersection(commonFields)
-		if self.realtime:
-			commonFields = set(self.realtime.keys()).intersection(commonFields)
-		if self.nowcast:
-			commonFields = set(self.nowcast.keys()).intersection(commonFields)
-		if self.hourly:
-			commonFields = set(self.hourly.keys()).intersection(commonFields)
-		if self.daily:
-			commonFields = set(self.daily.keys()).intersection(commonFields)
-
-		for field in commonFields:
-
-			valueArray: list[Any] = []
-
-			if 'historical' in forecasts and field in self.historical.keys():
-				valueArray += self.historical[field]
-
-			if 'realtime' in forecasts and field in self.realtime.keys():
-				valueArray += self.realtime[field]
-
-			if 'nowcast' in forecasts and field in self.nowcast.keys():
-				valueArray += self.nowcast[field]
-
-			if 'hourly' in forecasts and field in self.hourly.keys():
-				valueArray += self.hourly[field]
-
-			if 'daily' in forecasts and field in self.daily.keys():
-				valueArray += self.daily[field]
-			dictionary[field] = np.array(valueArray)
-
-		### TODO: add unit value
-		return dictionary
+	# def combineForecasts(self):
+	# 	# def combineForecasts(self, forecasts: Union[list[str], str, None], fields: Union[list[str], str]) -> dict[str, np.array]:
+	#
+	# 	dictionary = {'timestamp': self.dateArray()}
+	# 	commonFields = set(self.fields)
+	# 	if self.historical:
+	# 		commonFields = set(self.historical.keys()).intersection(commonFields)
+	# 	if self.realtime:
+	# 		commonFields = set(self.realtime.keys()).intersection(commonFields)
+	# 	if self.nowcast:
+	# 		commonFields = set(self.nowcast.keys()).intersection(commonFields)
+	# 	if self.hourly:
+	# 		commonFields = set(self.hourly.keys()).intersection(commonFields)
+	# 	if self.daily:
+	# 		commonFields = set(self.daily.keys()).intersection(commonFields)
+	#
+	# 	for field in commonFields:
+	#
+	# 		valueArray: list[Any] = []
+	#
+	# 		if 'historical' in forecasts and field in self.historical.keys():
+	# 			valueArray += self.historical[field]
+	#
+	# 		if 'realtime' in forecasts and field in self.realtime.keys():
+	# 			valueArray += self.realtime[field]
+	#
+	# 		if 'nowcast' in forecasts and field in self.nowcast.keys():
+	# 			valueArray += self.nowcast[field]
+	#
+	# 		if 'hourly' in forecasts and field in self.hourly.keys():
+	# 			valueArray += self.hourly[field]
+	#
+	# 		if 'daily' in forecasts and field in self.daily.keys():
+	# 			valueArray += self.daily[field]
+	# 		dictionary[field] = np.array(valueArray)
+	#
+	# 	### TODO: add unit value
+	# 	return dictionary
 
 	def makeItRain(self, length: int) -> np.ndarray:
 		np.random.seed(19680801)
 		return np.random.random_integers(0, 100, length)
+
+
+class hourlyForecast(Forecast):
+
+	allowedFields: list[str] = ['precipitation', 'precipitation_type', 'precipitation_probability', 'temp', 'feels_like',
+						 'dewpoint', 'wind_speed', 'wind_gust', 'baro_pressure', 'visibility', 'humidity',
+						 'wind_direction', 'sunrise', 'sunset', 'cloud_cover', 'cloud_ceiling', 'cloud_base',
+						 'surface_shortwave_radiation', 'moon_phase', 'weather_code']
+
+	def __init__(self, key, lat_lon: tuple[float, float], forecastType: str,
+				 measurementFields: Union[list[str], str] = None) -> None:
+
+		super().__init__(key, lat_lon, forecastType, measurementFields)
+
+		self.data = self.getData()
+
+	def getData(self):
+
+		client = ClimacellApiClient(self.apiKey)
+
+		forecastData = {}
+
+		data = client.forecast_hourly(lat=self.lat,
+									  lon=self.lon,
+									  start_time=maxDates.nowcast(),
+									  end_time=maxDates.hourly(),
+									  fields=self.fields,
+									  units='us').data()
+		print(data)
+		forecastData = self.mapData(data)
+
+		return forecastData
+
 
 # lastValue = 0
 # for measurement in data:
@@ -212,5 +189,3 @@ class display():
 		from math import sqrt
 		diag = sqrt(self.x ** 2 + self.y ** 2)
 		return round(diag / self.d)
-
-
