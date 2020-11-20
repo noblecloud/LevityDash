@@ -12,6 +12,8 @@ plotly = "*"
 scipy = "*"
 spline = "*"
 seaborn = "*"
+socketio = "*"
+kivy-garden = "*"
 
 [dev-packages]
 

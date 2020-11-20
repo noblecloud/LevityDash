@@ -1,90 +1,128 @@
 import numpy as np
 from matplotlib import dates as mdates, pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg, RendererAgg
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import find_peaks
+import matplotlib as mp
+
+mp.use("Agg")
+import matplotlib.font_manager as fm
+import matplotlib.backends.backend_agg as agg
+import pylab
 
 
 class dataDisplay():
+	renderer: RendererAgg
+	canvas: FigureCanvasAgg
+	font = {'size': 6}
+	mp.rc('font', **font)
+	largeFont = fm.FontProperties(fname='/Library/Fonts/SF-Pro-Text-Light.otf', size=4)
+	smallFont = fm.FontProperties(fname='/Library/Fonts/SF-Pro-Text-Light.otf', size=6)
+	mp.rcParams['font.family'] = 'SF Pro Text Light'
 
-	def __init__(self, forecastData):
+	def __init__(self, forecastData, size: tuple[int, int, int]):
+
+		self.x, self.y, self.d = size
 		self.forecastData = forecastData
 
 	@staticmethod
 	def smoothData(data: np.ndarray, sigma: int = 1) -> np.ndarray:
 		return gaussian_filter1d(data, sigma)
 
-	def makeFigurePix(self, data, size: tuple[int, int, int], forecastType=None, fields):
+	def findTemperaturePeaks(self, plotter, measurement: str):
 
-		x, y, d = size
+		peaks, _ = find_peaks(self.forecastData.data[measurement], height=3, wlen=4)
+		troughs, _ = find_peaks(-self.forecastData.data[measurement], height=-200, wlen=4)
+		for value in peaks:
+			plotter.text(self.forecastData['timestamp'][value], self.forecastData.data[measurement][value] + 1,
+						 str(round(self.forecastData.data[measurement][value])) +
+						 self.forecastData.data['units'][measurement] + 'º', horizontalalignment='center',
+						 color='white',
+						 fontsize=12,
+						 fontproperties=self.largeFont)
 
-		if forecastType is None:
-			forecastType = ['hourly']
+		for value in troughs:
+			plotter.text(self.forecastData.data['timestamp'][value], self.forecastData.data[measurement][value] - 3,
+						 str(round(self.forecastData.data[measurement][value])) +
+						 self.forecastData.data['units'][measurement] + 'º',
+						 horizontalalignment='center', color='white', fontsize=12, fontproperties=self.largeFont)
 
-		import matplotlib as mp
-		mp.use("Agg")
-		import matplotlib.font_manager as fm
-		import matplotlib.backends.backend_agg as agg
-		import pylab
+	def addDaysOfWeek(self, plotter):
+		ypos = round(self.y/7)
+		print(self.y)
+		print(ypos)
+		for d in self.forecastData.data['timestamp']:
+			if d.hour == 12:
+				# pos = date2num(d)
+				# temperature.text(d, 30, 'test', color='white', fontsize=14, fontproperties=prop)
+				plotter.text(d, ypos, d.strftime('%a'), horizontalalignment='center', color='darkgrey',
+							 fontsize=14, fontproperties=self.largeFont)
 
-		# Attempting to set a font...
-		font = {'size': 6}
-		mp.rc('font', **font)
-		prop = fm.FontProperties(fname='/Library/Fonts/SF-Pro-Text-Light.otf')
-		mp.rcParams['font.family'] = 'SF Pro Text Light'
+	def addTicks(self, plotter):
+		from matplotlib import dates as mdates
+		plotter.xaxis.set_major_locator(mdates.DayLocator())
+		plotter.xaxis.set_minor_formatter(mdates.DateFormatter('%-I%p'))
+		plotter.xaxis.set_minor_locator(mdates.HourLocator(byhour=range(0, 24, 6)))
+
+		for x in plotter.get_xmajorticklabels():
+			x.set_color('white')
+			x.set_fontproperties(self.smallFont)
+			x.set_horizontalalignment('center')
+			x.set_visible(False)
+
+		for tick in plotter.xaxis.get_major_ticks():
+			tick.tick1line.set_markersize(0)
+			tick.tick2line.set_markersize(0)
+			tick.label.set_horizontalalignment('center')
+
+		for x in plotter.get_xminorticklabels(): x.set_color('white'); x.set_fontproperties(self.smallFont)
+		plotter.grid(color='white', alpha=0.5)
+		plotter.grid(axis='y', alpha=0)
+
+	def makeFigurePix(self, fields):
 
 		# Construct figure
-		fig = pylab.figure(figsize=[x / d, y / d], dpi=d, facecolor='k')
-		fig.patch.set_facecolor('k')
+		fig = pylab.figure(figsize=[self.x / self.d, self.y / self.d], dpi=self.d, facecolor='k')
+		fig.patch.set_facecolor('gray')
+		plt.margins(0, 0)
+		plt.subplots_adjust(left=0.01, right=.99)
+		plt.gca().set_axis_off()
 
 		# Construct plotter
 		temperature = fig.gca()
 		temperature.set_facecolor('k')
 
-		forecastData: dict[str: np.ndarray] = data.combineForecasts(forecastType, fields)
-
 		# Make it Rain
-		forecastData['precipitation'] = data.makeItRain(len(forecastData['precipitation']))
-
+		# forecastData['precipitation'] = data.makeItRain(len(forecastData['precipitation']))
 		# Smooth Data
-		forecastData['precipitation'] = self.smoothData(forecastData['precipitation'])
-		forecastData['temp'] = self.smoothData(forecastData['temp'], 2)
+		self.forecastData.data['precipitation'] = self.smoothData(self.forecastData.data['precipitation'])
+		self.forecastData.data['temp'] = self.smoothData(self.forecastData.data['temp'], 2)
 
 		# dates = self.dateArray(type)
 
 		# Find peaks in data
 
-		# noinspection PySameParameterValue
-		def findTemperaturePeaks(plotter, measurmentData: dict[str:np.ndarray], measurement: str):
-
-			peaks, _ = find_peaks(forecastData[measurement], height=3, wlen=3)
-			troughs, _ = find_peaks(-forecastData[measurement], height=-200, wlen=3)
-			for value in peaks:
-				plotter.text(measurmentData['timestamp'][value], measurmentData[measurement][value] + 1,
-							 str(round(measurmentData[measurement][value])) +
-							 data.units[measurement] + 'º', horizontalalignment='center', color='white', fontsize=12,
-							 fontproperties=prop)
-
-			for value in troughs:
-				print(value)
-				plotter.text(measurmentData['timestamp'][value], measurmentData[measurement][value] - 2, round(measurmentData[measurement][value]),
-							 horizontalalignment='center', color='white', fontsize=12, fontproperties=prop)
-
-		findTemperaturePeaks(temperature, forecastData, 'temp')
+		self.findTemperaturePeaks(temperature, 'temp')
 
 		temperature.margins(x=None, y=None, tight=True)
-
-		temperature.plot('timestamp', 'temp', data=forecastData, label='Hourly Forecast', zorder=-1)
-
-		precipitation = temperature.twinx()
-		precipitation.set_ylim([0, 100])
-		precipitation.bar('timestamp'[1:10], 'precipitation'[:10], data=forecastData, label='Precipitation', zorder=-2,
-						  color='cornflowerblue')
-
-		temperature.xaxis.set_major_formatter(mdates.DateFormatter('%a'))
-		temperature.xaxis.set_major_locator(mdates.DayLocator())
+		# temperature.xaxis.set_formatter(mdates.DayLocator())
+		#
+		# temperature.xaxis.set_major_formatter(mdates.DateFormatter('%a'))
+		# temperature.xaxis.set_major_locator(mdates.DayLocator())
 		temperature.tick_params(axis='x', pad=0)
 
-		plt.xticks(rotation=0)
+		temperature.plot('timestamp', 'temp', data=self.forecastData.data, label='Hourly Forecast', zorder=-1,
+						 color='white')
+
+		# precipitation = temperature.twinx()
+		# precipitation.set_ylim([0, 100])
+		# precipitation.bar('timestamp'[1:10], 'precipitation'[:10], data=self.forecastData.data, label='Precipitation',
+		# 				  zorder=-2,
+		# 				  color='cornflowerblue')
+
+		# plt.xticks(rotation=0)
+		self.addDaysOfWeek(temperature)
+		# self.addTicks(temperature)
 
 		# from matplotlib.patches import FancyBboxPatch
 		# new_patches = []
@@ -102,43 +140,13 @@ class dataDisplay():
 		# for patch in new_patches:
 		# 	precipitation.add_patch(patch)
 
-		def addDaysOfWeek(plotter, data):
-			for d in data['timestamp']:
-				if d.hour == 12:
-					# pos = date2num(d)
-					# temperature.text(d, 30, 'test', color='white', fontsize=14, fontproperties=prop)
-					plotter.text(d, 60, d.strftime('%a'), horizontalalignment='center', color='darkgrey',
-								 fontsize=14, fontproperties=prop)
-
 		# for i, date in enumerate(self.dateArray):
 		# 	print(self.forecastDict['sunrise'][i])
 		# 	if d > datetime.strptime(self.forecastDict['sunrise'][i],):
 		# 		print(i)
 		# 		pos = date2num(d)
 		# 		ax.axvspan(pos, pos + 0.02, color='#DDDDDD')
-
-		addDaysOfWeek(temperature, forecastData)
-
-		def addTicks(plotter):
-			plotter.xaxis.set_minor_formatter(mdates.DateFormatter('%-I%p'))
-			plotter.xaxis.set_minor_locator(mdates.HourLocator(byhour=range(0, 24, 6)))
-
-			for x in plotter.get_xmajorticklabels():
-				x.set_color('white')
-				x.set_fontproperties(prop)
-				x.set_horizontalalignment('center')
-				x.set_visible(False)
-
-			for tick in plotter.xaxis.get_major_ticks():
-				tick.tick1line.set_markersize(0)
-				tick.tick2line.set_markersize(0)
-				tick.label.set_horizontalalignment('center')
-
-			for x in plotter.get_xminorticklabels(): x.set_color('white'); x.set_fontproperties(prop)
-			plotter.grid(color='white', alpha=0.5)
-			plotter.grid(axis='y', alpha=0)
-
-		addTicks(temperature)
+		#
 
 		for spine in plt.gca().spines.values():
 			spine.set_visible(False)
@@ -149,7 +157,7 @@ class dataDisplay():
 
 		self.canvas = agg.FigureCanvasAgg(fig)
 		self.canvas.draw()
-		renderer = self.canvas.get_renderer()
-		raw_data = renderer.tostring_rgb()
+		self.renderer = self.canvas.get_renderer()
+		raw_data = self.renderer.tostring_rgb()
 
 		return raw_data
