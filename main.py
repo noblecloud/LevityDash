@@ -1,7 +1,7 @@
-from classes.forecast import forecast
+from classes.forecast import Forecast
 
 key = "q2W59y2MsmBLqmxbw34QGdtS5hABEwLl"
-forecast = forecast(key)
+forecast = Forecast(key)
 #
 forecast.getData(),
 # fig = forecast.makeFigure()

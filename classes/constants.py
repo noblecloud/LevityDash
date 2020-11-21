@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from pytz import timezone, utc
 
 
 class fields:
@@ -27,7 +28,7 @@ class fields:
 
 FORECAST_TYPES = ['historical', 'realtime', 'nowcast', 'hourly', 'daily']
 
-
+tz = timezone("US/Eastern")
 
 class maxDates:
 
@@ -47,7 +48,8 @@ class maxDates:
 
 	@staticmethod
 	def hourly() -> str:
-		date = datetime.now() + timedelta(hours=107, minutes=50)
+		# date = datetime.now() + timedelta(hours=107, minutes=50)
+		date = datetime.now() + timedelta(hours=72)
 		return date.strftime('%Y-%m-%d %H:%M:%S')
 
 	@staticmethod
