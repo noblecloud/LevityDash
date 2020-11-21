@@ -81,13 +81,28 @@ class Forecast:
 	def mapData(self, inputData: Union[list[ObservationData], ObservationData]) -> dict[
 		str, list[ObservationData]]:
 
+		import dateutil.parser
+		from classes.constants import tz
+
 		output: dict[str, Union[list, str]] = self.buildDictionary()
 
 		for measurement in inputData:
-			output['timestamp'].append(measurement.observation_time)
+			from classes.constants import utc
+			utcTimestamp = measurement.observation_time
+			localTimestamp = utcTimestamp.replace(tzinfo=utc)
+			localTimestamp = localTimestamp.astimezone(tz)
+			output['timestamp'].append(localTimestamp)
 			for field in measurement.fields:
-				output[field].append(measurement.measurements[field].value)
-				output['units'][field] = measurement.measurements[field].units
+				if field in ['sunrise', 'sunset']:
+					value = dateutil.parser.parse(measurement.measurements[field].value)
+
+					localDate = value.replace(tzinfo=utc)
+					localDate = localDate.astimezone(tz)
+
+					output[field].append(localDate)
+				else:
+					output[field].append(measurement.measurements[field].value)
+					output['units'][field] = measurement.measurements[field].units
 
 		return output
 
@@ -157,7 +172,7 @@ class hourlyForecast(Forecast):
 
 		data = client.forecast_hourly(lat=self.lat,
 									  lon=self.lon,
-									  start_time=maxDates.nowcast(),
+									  start_time='now',
 									  end_time=maxDates.hourly(),
 									  fields=self.fields,
 									  units='us').data()
@@ -165,7 +180,6 @@ class hourlyForecast(Forecast):
 		forecastData = self.mapData(data)
 
 		return forecastData
-
 
 # lastValue = 0
 # for measurement in data:
