@@ -4,3 +4,6 @@ scipy
 
 aiohttp
 aioambient
+
+pytz
+pygame
