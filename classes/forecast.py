@@ -182,6 +182,7 @@ class hourlyForecast(Forecast):
 		super().__init__(key, lat_lon, forecastType, measurementFields, interval=interval)
 		self.client = ClimacellApiClient(self.apiKey)
 		self.lastCall = datetime.now() - timedelta(minutes=1)
+		self.dataUpdate()
 
 	def dataUpdate(self):
 
@@ -204,8 +205,8 @@ class hourlyForecast(Forecast):
 
 	def run(self):
 		while self.liveUpdate:
-			self.dataUpdate()
 			time.sleep(self.interval)
+			self.dataUpdate()
 
 	def stop(self):
 		self.liveUpdate = False

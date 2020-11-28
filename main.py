@@ -119,7 +119,7 @@ sizey = round(screeny/2)
 forecastDisplay = classes.display.dataDisplay(forecast, (sizex,sizey,dpi))
 
 
-fig = forecastDisplay.makeFigure('raster')
+fig = forecastDisplay.plot('raster')
 hourlySurf = pygame.image.fromstring(fig, (sizex, sizey), "RGB")
 screen.blit(hourlySurf, (outdoorTempRect.right - 100, -40))
 

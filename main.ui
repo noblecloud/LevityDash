@@ -1,11 +1,13 @@
 <?xml version='1.0' encoding='utf-8'?>
 <interface version="1.0">
-  <object class="ttk.Frame" id="Main">
-    <property name="height">450</property>
-    <property name="width">800</property>
-    <layout manager="pack">
-      <property name="propagate">True</property>
-      <property name="side">top</property>
+  <object class="tk.Frame" id="Main">
+    <property name="background">black</property>
+    <layout manager="place">
+      <property name="anchor">nw</property>
+      <property name="relheight">1</property>
+      <property name="relwidth">1</property>
+      <property name="x">0</property>
+      <property name="y">0</property>
     </layout>
     <child>
       <object class="tk.Canvas" id="graph">
@@ -22,8 +24,10 @@
       </object>
     </child>
     <child>
-      <object class="ttk.Frame" id="topLeft">
+      <object class="tk.Frame" id="topLeft">
+        <property name="background">black</property>
         <property name="height">200</property>
+        <property name="relief">raised</property>
         <property name="width">200</property>
         <layout manager="place">
           <property name="anchor">nw</property>
@@ -35,7 +39,8 @@
           <property name="y">0</property>
         </layout>
         <child>
-          <object class="ttk.Frame" id="timedate">
+          <object class="tk.Frame" id="timedate">
+            <property name="background">black</property>
             <property name="height">200</property>
             <property name="width">200</property>
             <layout manager="place">
@@ -46,7 +51,8 @@
               <property name="y">0</property>
             </layout>
             <child>
-              <object class="ttk.Frame" id="date">
+              <object class="tk.Frame" id="date">
+                <property name="background">black</property>
                 <property name="height">200</property>
                 <property name="width">200</property>
                 <layout manager="place">
@@ -59,7 +65,9 @@
                   <property name="y">0</property>
                 </layout>
                 <child>
-                  <object class="ttk.Label" id="dateText">
+                  <object class="tk.Label" id="dateText">
+                    <property name="background">black</property>
+                    <property name="foreground">white</property>
                     <property name="justify">right</property>
                     <property name="text" translatable="yes">Mon Dec
 </property>
@@ -72,7 +80,8 @@
                   </object>
                 </child>
                 <child>
-                  <object class="ttk.Frame" id="dayNumber">
+                  <object class="tk.Frame" id="dayNumber">
+                    <property name="background">black</property>
                     <property name="height">200</property>
                     <property name="width">200</property>
                     <layout manager="pack">
@@ -82,7 +91,9 @@
                       <property name="side">right</property>
                     </layout>
                     <child>
-                      <object class="ttk.Label" id="dayText">
+                      <object class="tk.Label" id="dayText">
+                        <property name="background">black</property>
+                        <property name="foreground">white</property>
                         <property name="text" translatable="yes">12</property>
                         <layout manager="pack">
                           <property name="propagate">True</property>
@@ -91,7 +102,9 @@
                       </object>
                     </child>
                     <child>
-                      <object class="ttk.Label" id="dayOrdinal">
+                      <object class="tk.Label" id="dayOrdinal">
+                        <property name="background">black</property>
+                        <property name="foreground">white</property>
                         <property name="text" translatable="yes">th</property>
                         <layout manager="pack">
                           <property name="propagate">True</property>
@@ -104,7 +117,8 @@
               </object>
             </child>
             <child>
-              <object class="ttk.Frame" id="time">
+              <object class="tk.Frame" id="time">
+                <property name="background">black</property>
                 <property name="height">200</property>
                 <property name="width">200</property>
                 <layout manager="place">
@@ -117,7 +131,10 @@
                   <property name="y">0</property>
                 </layout>
                 <child>
-                  <object class="ttk.Label" id="timeText">
+                  <object class="tk.Label" id="timeText">
+                    <property name="anchor">center</property>
+                    <property name="background">black</property>
+                    <property name="foreground">white</property>
                     <property name="text" translatable="yes">11:00</property>
                     <layout manager="place">
                       <property name="anchor">nw</property>
@@ -129,7 +146,8 @@
                   </object>
                 </child>
                 <child>
-                  <object class="ttk.Frame" id="timeSub">
+                  <object class="tk.Frame" id="timeSub">
+                    <property name="background">black</property>
                     <property name="height">200</property>
                     <property name="width">200</property>
                     <layout manager="place">
@@ -143,6 +161,10 @@
                     </layout>
                     <child>
                       <object class="tk.Canvas" id="moonphase">
+                        <property name="background">black</property>
+                        <property name="highlightbackground">black</property>
+                        <property name="insertbackground">black</property>
+                        <property name="selectbackground">black</property>
                         <layout manager="place">
                           <property name="anchor">nw</property>
                           <property name="relheight">.7</property>
@@ -155,7 +177,9 @@
                       </object>
                     </child>
                     <child>
-                      <object class="ttk.Label" id="ampm">
+                      <object class="tk.Label" id="ampm">
+                        <property name="background">black</property>
+                        <property name="foreground">white</property>
                         <property name="text" translatable="yes">am</property>
                         <layout manager="place">
                           <property name="anchor">nw</property>
@@ -175,7 +199,8 @@
           </object>
         </child>
         <child>
-          <object class="ttk.Frame" id="current">
+          <object class="tk.Frame" id="current">
+            <property name="background">black</property>
             <property name="height">200</property>
             <property name="width">200</property>
             <layout manager="place">
@@ -188,7 +213,8 @@
               <property name="y">0</property>
             </layout>
             <child>
-              <object class="ttk.Frame" id="indoor">
+              <object class="tk.Frame" id="indoor">
+                <property name="background">black</property>
                 <property name="height">200</property>
                 <property name="width">200</property>
                 <layout manager="place">
@@ -201,7 +227,9 @@
                   <property name="y">0</property>
                 </layout>
                 <child>
-                  <object class="ttk.Label" id="indoorLabel">
+                  <object class="tk.Label" id="indoorLabel">
+                    <property name="background">black</property>
+                    <property name="foreground">white</property>
                     <property name="text" translatable="yes">Indoors</property>
                     <layout manager="pack">
                       <property name="propagate">True</property>
@@ -210,7 +238,9 @@
                   </object>
                 </child>
                 <child>
-                  <object class="ttk.Label" id="indoorTemp">
+                  <object class="tk.Label" id="indoorTemp">
+                    <property name="background">black</property>
+                    <property name="foreground">white</property>
                     <property name="textvariable">string:indoorTemp</property>
                     <layout manager="pack">
                       <property name="propagate">True</property>
@@ -219,7 +249,8 @@
                   </object>
                 </child>
                 <child>
-                  <object class="ttk.Frame" id="frame_24">
+                  <object class="tk.Frame" id="frame_24">
+                    <property name="background">black</property>
                     <property name="height">200</property>
                     <property name="width">200</property>
                     <layout manager="pack">
@@ -227,7 +258,9 @@
                       <property name="side">top</property>
                     </layout>
                     <child>
-                      <object class="ttk.Label" id="label_15">
+                      <object class="tk.Label" id="label_15">
+                        <property name="background">black</property>
+                        <property name="foreground">white</property>
                         <property name="text" translatable="yes">label_15</property>
                         <layout manager="pack">
                           <property name="propagate">True</property>
@@ -236,7 +269,9 @@
                       </object>
                     </child>
                     <child>
-                      <object class="ttk.Label" id="label_16">
+                      <object class="tk.Label" id="label_16">
+                        <property name="background">black</property>
+                        <property name="foreground">white</property>
                         <property name="text" translatable="yes">label_16</property>
                         <layout manager="pack">
                           <property name="propagate">True</property>
@@ -249,7 +284,8 @@
               </object>
             </child>
             <child>
-              <object class="ttk.Frame" id="outdoor">
+              <object class="tk.Frame" id="outdoor">
+                <property name="background">black</property>
                 <property name="height">200</property>
                 <property name="width">200</property>
                 <layout manager="place">
