@@ -1,0 +1,271 @@
+<?xml version='1.0' encoding='utf-8'?>
+<interface version="1.0">
+  <object class="ttk.Frame" id="Main">
+    <property name="height">450</property>
+    <property name="width">800</property>
+    <layout manager="pack">
+      <property name="propagate">True</property>
+      <property name="side">top</property>
+    </layout>
+    <child>
+      <object class="tk.Canvas" id="graph">
+        <bind sequence="getGraph" handler="callback" add="" />
+        <layout manager="place">
+          <property name="anchor">nw</property>
+          <property name="relheight">.5</property>
+          <property name="relwidth">.7</property>
+          <property name="relx">.3</property>
+          <property name="rely">0</property>
+          <property name="x">0</property>
+          <property name="y">0</property>
+        </layout>
+      </object>
+    </child>
+    <child>
+      <object class="ttk.Frame" id="topLeft">
+        <property name="height">200</property>
+        <property name="width">200</property>
+        <layout manager="place">
+          <property name="anchor">nw</property>
+          <property name="relheight">.5</property>
+          <property name="relwidth">.3</property>
+          <property name="relx">0</property>
+          <property name="rely">0</property>
+          <property name="x">0</property>
+          <property name="y">0</property>
+        </layout>
+        <child>
+          <object class="ttk.Frame" id="timedate">
+            <property name="height">200</property>
+            <property name="width">200</property>
+            <layout manager="place">
+              <property name="anchor">nw</property>
+              <property name="relheight">.5</property>
+              <property name="relwidth">1</property>
+              <property name="x">0</property>
+              <property name="y">0</property>
+            </layout>
+            <child>
+              <object class="ttk.Frame" id="date">
+                <property name="height">200</property>
+                <property name="width">200</property>
+                <layout manager="place">
+                  <property name="anchor">nw</property>
+                  <property name="relheight">.3</property>
+                  <property name="relwidth">1</property>
+                  <property name="relx">0</property>
+                  <property name="rely">0</property>
+                  <property name="x">0</property>
+                  <property name="y">0</property>
+                </layout>
+                <child>
+                  <object class="ttk.Label" id="dateText">
+                    <property name="justify">right</property>
+                    <property name="text" translatable="yes">Mon Dec
+</property>
+                    <layout manager="pack">
+                      <property name="expand">true</property>
+                      <property name="fill">both</property>
+                      <property name="propagate">True</property>
+                      <property name="side">left</property>
+                    </layout>
+                  </object>
+                </child>
+                <child>
+                  <object class="ttk.Frame" id="dayNumber">
+                    <property name="height">200</property>
+                    <property name="width">200</property>
+                    <layout manager="pack">
+                      <property name="expand">true</property>
+                      <property name="fill">both</property>
+                      <property name="propagate">True</property>
+                      <property name="side">right</property>
+                    </layout>
+                    <child>
+                      <object class="ttk.Label" id="dayText">
+                        <property name="text" translatable="yes">12</property>
+                        <layout manager="pack">
+                          <property name="propagate">True</property>
+                          <property name="side">left</property>
+                        </layout>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="ttk.Label" id="dayOrdinal">
+                        <property name="text" translatable="yes">th</property>
+                        <layout manager="pack">
+                          <property name="propagate">True</property>
+                          <property name="side">right</property>
+                        </layout>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="ttk.Frame" id="time">
+                <property name="height">200</property>
+                <property name="width">200</property>
+                <layout manager="place">
+                  <property name="anchor">nw</property>
+                  <property name="relheight">.7</property>
+                  <property name="relwidth">1</property>
+                  <property name="relx">0</property>
+                  <property name="rely">0.3</property>
+                  <property name="x">0</property>
+                  <property name="y">0</property>
+                </layout>
+                <child>
+                  <object class="ttk.Label" id="timeText">
+                    <property name="text" translatable="yes">11:00</property>
+                    <layout manager="place">
+                      <property name="anchor">nw</property>
+                      <property name="relheight">1</property>
+                      <property name="relwidth">.8</property>
+                      <property name="x">0</property>
+                      <property name="y">0</property>
+                    </layout>
+                  </object>
+                </child>
+                <child>
+                  <object class="ttk.Frame" id="timeSub">
+                    <property name="height">200</property>
+                    <property name="width">200</property>
+                    <layout manager="place">
+                      <property name="anchor">nw</property>
+                      <property name="relheight">1</property>
+                      <property name="relwidth">.2</property>
+                      <property name="relx">.8</property>
+                      <property name="rely">0</property>
+                      <property name="x">0</property>
+                      <property name="y">0</property>
+                    </layout>
+                    <child>
+                      <object class="tk.Canvas" id="moonphase">
+                        <layout manager="place">
+                          <property name="anchor">nw</property>
+                          <property name="relheight">.7</property>
+                          <property name="relwidth">1</property>
+                          <property name="relx">0</property>
+                          <property name="rely">.3</property>
+                          <property name="x">0</property>
+                          <property name="y">0</property>
+                        </layout>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="ttk.Label" id="ampm">
+                        <property name="text" translatable="yes">am</property>
+                        <layout manager="place">
+                          <property name="anchor">nw</property>
+                          <property name="relheight">.3</property>
+                          <property name="relwidth">1</property>
+                          <property name="relx">0</property>
+                          <property name="rely">0</property>
+                          <property name="x">0</property>
+                          <property name="y">0</property>
+                        </layout>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="ttk.Frame" id="current">
+            <property name="height">200</property>
+            <property name="width">200</property>
+            <layout manager="place">
+              <property name="anchor">nw</property>
+              <property name="relheight">.5</property>
+              <property name="relwidth">1</property>
+              <property name="relx">0</property>
+              <property name="rely">.5</property>
+              <property name="x">0</property>
+              <property name="y">0</property>
+            </layout>
+            <child>
+              <object class="ttk.Frame" id="indoor">
+                <property name="height">200</property>
+                <property name="width">200</property>
+                <layout manager="place">
+                  <property name="anchor">nw</property>
+                  <property name="relheight">1</property>
+                  <property name="relwidth">.5</property>
+                  <property name="relx">0</property>
+                  <property name="rely">0</property>
+                  <property name="x">0</property>
+                  <property name="y">0</property>
+                </layout>
+                <child>
+                  <object class="ttk.Label" id="indoorLabel">
+                    <property name="text" translatable="yes">Indoors</property>
+                    <layout manager="pack">
+                      <property name="propagate">True</property>
+                      <property name="side">top</property>
+                    </layout>
+                  </object>
+                </child>
+                <child>
+                  <object class="ttk.Label" id="indoorTemp">
+                    <property name="textvariable">string:indoorTemp</property>
+                    <layout manager="pack">
+                      <property name="propagate">True</property>
+                      <property name="side">top</property>
+                    </layout>
+                  </object>
+                </child>
+                <child>
+                  <object class="ttk.Frame" id="frame_24">
+                    <property name="height">200</property>
+                    <property name="width">200</property>
+                    <layout manager="pack">
+                      <property name="propagate">True</property>
+                      <property name="side">top</property>
+                    </layout>
+                    <child>
+                      <object class="ttk.Label" id="label_15">
+                        <property name="text" translatable="yes">label_15</property>
+                        <layout manager="pack">
+                          <property name="propagate">True</property>
+                          <property name="side">left</property>
+                        </layout>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="ttk.Label" id="label_16">
+                        <property name="text" translatable="yes">label_16</property>
+                        <layout manager="pack">
+                          <property name="propagate">True</property>
+                          <property name="side">right</property>
+                        </layout>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="ttk.Frame" id="outdoor">
+                <property name="height">200</property>
+                <property name="width">200</property>
+                <layout manager="place">
+                  <property name="anchor">nw</property>
+                  <property name="relheight">1</property>
+                  <property name="relwidth">.5</property>
+                  <property name="relx">.5</property>
+                  <property name="rely">0</property>
+                  <property name="x">0</property>
+                  <property name="y">0</property>
+                </layout>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+  </object>
+</interface>
