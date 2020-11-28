@@ -5,8 +5,11 @@ import matplotlib.font_manager as fm
 import numpy as np
 import pylab
 from matplotlib import pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import find_peaks
+
+from classes.forecast import Forecast
 
 
 class dataDisplay:
@@ -16,17 +19,36 @@ class dataDisplay:
 	smallFont = fm.FontProperties(fname='/Library/Fonts/SF-Pro-Text-Light.otf', size=12)
 	tempFont = fm.FontProperties(fname='/Library/Fonts/SF-Pro-Display-Bold.otf', size=20)
 	bigThickFont = fm.FontProperties(fname='/Library/Fonts/SF-Pro-Text-Heavy.otf', size=24)
+	smallMono = fm.FontProperties(fname='/Library/Fonts/SF-Mono-Light.otf', size=10)
 	mp.rcParams['font.family'] = 'SF Pro Text Light'
 	# mainColor = Colors().kelvinToHEX(3000)
 	mainColor = 'w'
+	_forecast: Forecast
+	_canvas: FigureCanvasTkAgg
 
-	def __init__(self, forecastData, size: tuple[int, int, int]):
+	def __init__(self, forecastData: Forecast, size: tuple[int, int, int]):
 
 		self.toFix = []
 		self.x, self.y, self.d = size
 		self._forecast = forecastData
 		self.tempMax = 0
 		self.tempMin = 0
+
+		# Construct graph
+		self.graph = pylab.figure(figsize=[self.x / self.d, self.y / self.d], dpi=self.d, facecolor='k')
+		self.graph.patch.set_facecolor('k')
+		plt.margins(0.4, 0.4)
+		plt.subplots_adjust(left=0.01, right=.99)
+		# plt.gca().set_axis_off()
+
+		# Construct plotter
+		self.temperature = self.graph.gca()
+		self.temperature.set_facecolor('k')
+		self.lastUpdate = self.temperature.text(0.98, 0.03, '',
+		                                        horizontalalignment='right',
+		                                        verticalalignment='center',
+		                                        transform=self.temperature.transAxes, color=self.mainColor,
+		                                        fontproperties=self.smallFont)
 
 	@staticmethod
 	def smoothData(data: np.ndarray, sigma: int = 1, count: int = 1) -> np.ndarray:
@@ -80,8 +102,7 @@ class dataDisplay:
 			                 color=self.mainColor,
 			                 fontproperties=self.tempFont, fontsize=10).set_path_effects(
 					[PathEffects.withStroke(linewidth=6, foreground='k')])
-			# plotter.plot([x, x], [y - 5, self.tempMin], color='w', linewidth=1, alpha=.5, zorder=-15)
-			print(t)
+		# plotter.plot([x, x], [y - 5, self.tempMin], color='w', linewidth=1, alpha=.5, zorder=-15)
 
 	# for value in troughs:
 	# 	text = str(round(self.forecastData.data[measurement][value])) + 'º'
@@ -161,68 +182,32 @@ class dataDisplay:
 
 	# plotter.grid()
 
-	def makeFigure(self, renderType: str, canvas=None):
-
-		# Construct figure
-		fig = pylab.figure(figsize=[self.x / self.d, self.y / self.d], dpi=self.d, facecolor='k')
-		fig.patch.set_facecolor('k')
-		plt.margins(0.4, 0.4)
-		plt.subplots_adjust(left=0.01, right=.99)
-		# plt.gca().set_axis_off()
-
-		# Construct plotter
-		temperature = fig.gca()
-		temperature.set_facecolor('k')
-
-		# Make it Rain
-		# forecastData['precipitation'] = data.makeItRain(len(forecastData['precipitation']))
+	def plot(self):
 
 		# Smooth Data
-		# self.forecastData.data['precipitation'] = self.smoothData(self.forecastData.data['precipitation'])
 		self._forecast.data['temp'] = self.smoothData(self._forecast.data['temp'], 1, 3)
 		self._forecast.data['feels_like'] = self.smoothData(self._forecast.data['feels_like'], 1, 3)
 		self._forecast.data['dewpoint'] = self.smoothData(self._forecast.data['dewpoint'], 1, 3)
 
 		# Find peaks in data
-		self.findTemperaturePeaks(temperature, 'temp')
+		self.findTemperaturePeaks(self.temperature, 'temp')
 		self.tempMax = self._forecast.data['temp'].max()
 		self.tempMin = self._forecast.data['temp'].min()
 
-		feelsLike = temperature.twinx()
+		self.temperature.zorder = 10
 
-		temperature.plot('timestamp', 'temp', data=self._forecast.data, label='Hourly Forecast', zorder=2,
-		                 color=self.mainColor, linewidth=4)
+		self.temperature.plot('timestamp', 'temp', data=self._forecast.data, label='Hourly Forecast', zorder=2,
+		                      color=self.mainColor, linewidth=4)
 
-		temperature.plot('timestamp', 'feels_like', data=self._forecast.data, label='Hourly Forecast', zorder=-20,
-		                 color=(.25, .89, .96), linestyle='dashed', alpha=.8, linewidth=3)
+		self.temperature.plot('timestamp', 'feels_like', data=self._forecast.data, label='Hourly Forecast', zorder=-20,
+		                      color=(.25, .89, .96), linestyle='dashed', alpha=.8, linewidth=3)
 
-		temperature.zorder = 10
+		self.temperature.plot('timestamp', 'dewpoint', data=self._forecast.data, zorder=-20,
+		                      color=self.mainColor, label='Hourly Forecast', linestyle='dashed', alpha=.8, linewidth=2)
 
-		dewpoint = temperature.twinx()
-
-		temperature.plot('timestamp', 'dewpoint', data=self._forecast.data, zorder=-20,
-		                 color=self.mainColor, label='Hourly Forecast', linestyle='dashed', alpha=.8, linewidth=2)
-
-		# precipitation = temperature.twinx()
-		# precipitation.set_ylim([0, 100])
-		# precipitation.bar('timestamp'[1:10], 'precipitation'[:10], data=self.forecastData.data, label='Precipitation',
-		# 				  zorder=-2,
-		# 				  color='cornflowerblue')
-
-		plt.xticks(rotation=0)
-		self.addDaysOfWeek(temperature)
-		self.daylight(temperature)
-		self.addTicks(temperature)
-
-		# for spine in plt.gca().spines.values():
-		# 	spine.set_visible(False)
-
-		if renderType == 'raster':
-			return self.rasterRender(fig)
-		elif renderType == 'Tk':
-			return self.TkRender(fig, canvas)
-		else:
-			return fig
+		self.addDaysOfWeek(self.temperature)
+		self.daylight(self.temperature)
+		self.addTicks(self.temperature)
 
 	def rasterRender(self, figure):
 
@@ -237,23 +222,13 @@ class dataDisplay:
 
 		return raw_data
 
-	def TkRender(self, figure, canvas):
+	def setTkCanvas(self, canvas):
 		from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 		mp.use('TkAgg')
-		figure_canvas_agg = FigureCanvasTkAgg(figure, canvas)
-		figure_canvas_agg.draw()
-		figure_canvas_agg.get_tk_widget().pack(side='top', fill='both', expand=1)
-		return figure_canvas_agg
+		self._canvas = FigureCanvasTkAgg(self.graph, canvas)
+		self._canvas.draw()
+		self._canvas.get_tk_widget().pack(side='top', fill='both', expand=1)
 
-	def tkUpdate(self):
-
-	def update(self, data):
-		self._forecast = data
-
-	@property
-	def forecast(self):
-		return self._forecast
-
-	@forecast.setter
-	def forecast(self, value):
-		self._forecast = value
+	def update(self):
+		self.lastUpdate.set_text(datetime.now().strftime('%H:%M:%S'))
+		self._canvas.draw()
