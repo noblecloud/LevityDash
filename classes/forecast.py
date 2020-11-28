@@ -1,13 +1,15 @@
-from typing import Any, Union
+import threading
+import time
+from typing import Union
 
 import numpy as np
 from climacell_api.client import ClimacellApiClient
 from climacell_api.climacell_response import ObservationData
 
-from .constants import fields, maxDates, FORECAST_TYPES
+from .constants import fields, FORECAST_TYPES, maxDates
 
 
-class Forecast:
+class Forecast(threading.Thread):
 	data: dict[str: Union[np.ndarray, list]] = {}
 	lat: float
 	lon: float
@@ -17,7 +19,10 @@ class Forecast:
 	allowedFields: list[str]
 
 	def __init__(self, key, lat_lon: tuple[float, float], forecastType: str,
-				 measurementFields: Union[list[str], str] = None) -> None:
+	             measurementFields: Union[list[str], str] = None, interval: int = 5) -> None:
+
+		super().__init__()
+		self.interval = interval
 
 		if forecastType not in FORECAST_TYPES:
 			raise ValueError("This is not a valid forecast type. Valid values are: {}".format(FORECAST_TYPES))
@@ -29,6 +34,11 @@ class Forecast:
 		self.fields = measurementFields
 		self.lat, self.lon = lat_lon
 
+	def run(self):
+		while True:
+			print('This is just a while loop')
+			time.sleep(5)
+
 	def __getitem__(self, item):
 
 		if isinstance(item, str):
@@ -36,8 +46,8 @@ class Forecast:
 
 		if isinstance(item, int):
 			result = {'timestamp': self.data['timestamp'][item],
-					  'units':     self.data['units'],
-					  'type':      self.data['type']}
+			          'units':     self.data['units'],
+			          'type':      self.data['type']}
 
 			for field in self.fields:
 				result[field] = self.data[field][item]
@@ -53,8 +63,8 @@ class Forecast:
 		if self.n <= self.max:
 
 			result = {'timestamp': self.data['timestamp'][self.n],
-					  'units': self.data['units'],
-					  'type': self.data['type']}
+			          'units':     self.data['units'],
+			          'type':      self.data['type']}
 
 			for field in self.fields:
 				result[field] = self.data[field][self.n]
@@ -149,37 +159,56 @@ class Forecast:
 		np.random.seed(19680801)
 		return np.random.random_integers(0, 100, length)
 
+	def update(self):
+		while True:
+			time.sleep(self.interval)
+
+
+import asyncio
+from datetime import datetime, timedelta
+
 
 class hourlyForecast(Forecast):
-
-	allowedFields: list[str] = ['precipitation', 'precipitation_type', 'precipitation_probability', 'temp', 'feels_like',
-						 'dewpoint', 'wind_speed', 'wind_gust', 'baro_pressure', 'visibility', 'humidity',
-						 'wind_direction', 'sunrise', 'sunset', 'cloud_cover', 'cloud_ceiling', 'cloud_base',
-						 'surface_shortwave_radiation', 'moon_phase', 'weather_code']
+	lastCall: datetime
+	liveUpdate = True
+	allowedFields: list[str] = ['precipitation', 'precipitation_type', 'precipitation_probability', 'temp',
+	                            'feels_like',
+	                            'dewpoint', 'wind_speed', 'wind_gust', 'baro_pressure', 'visibility', 'humidity',
+	                            'wind_direction', 'sunrise', 'sunset', 'cloud_cover', 'cloud_ceiling', 'cloud_base',
+	                            'surface_shortwave_radiation', 'moon_phase', 'weather_code']
 
 	def __init__(self, key, lat_lon: tuple[float, float], forecastType: str,
-				 measurementFields: Union[list[str], str] = None) -> None:
+	             measurementFields: Union[list[str], str] = None, interval: int = 60) -> None:
+		super().__init__(key, lat_lon, forecastType, measurementFields, interval=interval)
+		self.client = ClimacellApiClient(self.apiKey)
+		self.lastCall = datetime.now() - timedelta(minutes=1)
 
-		super().__init__(key, lat_lon, forecastType, measurementFields)
+	def dataUpdate(self):
 
-		self.data = self.getData()
+		# if self.lastCall < datetime.now() - timedelta(seconds=5):
 
-	def getData(self):
+		self.data = self.mapData(self.client.forecast_hourly(lat=self.lat,
+		                                                     lon=self.lon,
+		                                                     start_time='now',
+		                                                     end_time=maxDates.hourly(),
+		                                                     fields=self.fields,
+		                                                     units='us').data())
 
-		client = ClimacellApiClient(self.apiKey)
+		self.lastCall = datetime.now()
+		print('hourly updated at {}'.format(self.lastCall.strftime('%H:%M:%S')))
+		return True
+			# else:
+			# 	waitTime = (datetime.now() - self.lastCall).total_seconds()
+			# 	print('api call too fast, waiting {} seconds'.format(waitTime))
+			# 	asyncio.sleep(waitTime)
 
-		forecastData = {}
+	def run(self):
+		while self.liveUpdate:
+			self.dataUpdate()
+			time.sleep(self.interval)
 
-		data = client.forecast_hourly(lat=self.lat,
-									  lon=self.lon,
-									  start_time='now',
-									  end_time=maxDates.hourly(),
-									  fields=self.fields,
-									  units='us').data()
-		print(data)
-		forecastData = self.mapData(data)
-
-		return forecastData
+	def stop(self):
+		self.liveUpdate = False
 
 # lastValue = 0
 # for measurement in data:
@@ -191,15 +220,3 @@ class hourlyForecast(Forecast):
 # 	else:
 # 		pass
 # # historicalDict[field].append(None)
-
-class display():
-	def __init__(self, x, y, d):
-		self.x = x
-		self.y = y
-		self.d = d
-
-	@property
-	def dpi(self):
-		from math import sqrt
-		diag = sqrt(self.x ** 2 + self.y ** 2)
-		return round(diag / self.d)
