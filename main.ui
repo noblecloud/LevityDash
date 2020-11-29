@@ -245,9 +245,10 @@
                   </object>
                 </child>
                 <child>
-                  <object class="tk.Label" id="insideTemp">
+                  <object class="tk.Label" id="insideTempLabel">
                     <property name="background">black</property>
                     <property name="foreground">white</property>
+                    <property name="text" translatable="yes">º</property>
                     <property name="textvariable">string:insideTempText</property>
                     <layout manager="pack">
                       <property name="propagate">True</property>
@@ -318,10 +319,11 @@
                   </object>
                 </child>
                 <child>
-                  <object class="tk.Label" id="outsideTemp">
+                  <object class="tk.Label" id="outsideTempLabel">
                     <property name="background">black</property>
                     <property name="foreground">white</property>
-                    <property name="textvariable">string:outsideTemp</property>
+                    <property name="text" translatable="yes">º</property>
+                    <property name="textvariable">string:outsideTempText</property>
                     <layout manager="pack">
                       <property name="propagate">True</property>
                       <property name="side">top</property>
