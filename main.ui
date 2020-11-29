@@ -220,7 +220,7 @@
               <property name="y">0</property>
             </layout>
             <child>
-              <object class="tk.Frame" id="indoor">
+              <object class="tk.Frame" id="inside">
                 <property name="background">black</property>
                 <property name="height">200</property>
                 <property name="width">200</property>
@@ -234,7 +234,7 @@
                   <property name="y">0</property>
                 </layout>
                 <child>
-                  <object class="tk.Label" id="indoorLabel">
+                  <object class="tk.Label" id="insideLabel">
                     <property name="background">black</property>
                     <property name="foreground">white</property>
                     <property name="text" translatable="yes">Inside</property>
@@ -245,10 +245,10 @@
                   </object>
                 </child>
                 <child>
-                  <object class="tk.Label" id="indoorTemp">
+                  <object class="tk.Label" id="insideTemp">
                     <property name="background">black</property>
                     <property name="foreground">white</property>
-                    <property name="textvariable">string:indoorTempText</property>
+                    <property name="textvariable">string:insideTempText</property>
                     <layout manager="pack">
                       <property name="propagate">True</property>
                       <property name="side">top</property>
@@ -265,11 +265,11 @@
                       <property name="side">top</property>
                     </layout>
                     <child>
-                      <object class="tk.Label" id="indoorSubA">
+                      <object class="tk.Label" id="insideSubA">
                         <property name="background">black</property>
                         <property name="foreground">white</property>
                         <property name="text" translatable="yes">A</property>
-                        <property name="textvariable">string:indoorTextSubA</property>
+                        <property name="textvariable">string:insideTextSubA</property>
                         <layout manager="pack">
                           <property name="propagate">True</property>
                           <property name="side">left</property>
@@ -277,11 +277,11 @@
                       </object>
                     </child>
                     <child>
-                      <object class="tk.Label" id="indoorSubB">
+                      <object class="tk.Label" id="insideSubB">
                         <property name="background">black</property>
                         <property name="foreground">white</property>
                         <property name="text" translatable="yes">B</property>
-                        <property name="textvariable">string:indoorTextSubB</property>
+                        <property name="textvariable">string:insideTextSubB</property>
                         <layout manager="pack">
                           <property name="propagate">True</property>
                           <property name="side">right</property>
@@ -293,7 +293,7 @@
               </object>
             </child>
             <child>
-              <object class="tk.Frame" id="outdoor">
+              <object class="tk.Frame" id="outside">
                 <property name="background">black</property>
                 <property name="height">200</property>
                 <property name="width">200</property>
@@ -307,7 +307,7 @@
                   <property name="y">0</property>
                 </layout>
                 <child>
-                  <object class="tk.Label" id="outdoorLabel">
+                  <object class="tk.Label" id="outsideLabel">
                     <property name="background">black</property>
                     <property name="foreground">white</property>
                     <property name="text" translatable="yes">Outside</property>
@@ -318,10 +318,10 @@
                   </object>
                 </child>
                 <child>
-                  <object class="tk.Label" id="outdoorTemp">
+                  <object class="tk.Label" id="outsideTemp">
                     <property name="background">black</property>
                     <property name="foreground">white</property>
-                    <property name="textvariable">string:outdoorTemp</property>
+                    <property name="textvariable">string:outsideTemp</property>
                     <layout manager="pack">
                       <property name="propagate">True</property>
                       <property name="side">top</property>
@@ -329,7 +329,7 @@
                   </object>
                 </child>
                 <child>
-                  <object class="tk.Frame" id="outdoorSub">
+                  <object class="tk.Frame" id="outsideSub">
                     <property name="background">black</property>
                     <property name="height">200</property>
                     <property name="width">200</property>
@@ -338,11 +338,11 @@
                       <property name="side">top</property>
                     </layout>
                     <child>
-                      <object class="tk.Label" id="outdoorSubA">
+                      <object class="tk.Label" id="outsideSubA">
                         <property name="background">black</property>
                         <property name="foreground">white</property>
                         <property name="text" translatable="yes">A</property>
-                        <property name="textvariable">string:outdoorTextSubA</property>
+                        <property name="textvariable">string:outsideTextSubA</property>
                         <layout manager="pack">
                           <property name="propagate">True</property>
                           <property name="side">left</property>
