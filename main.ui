@@ -19,10 +19,10 @@
       <object class="tk.Canvas" id="graph">
         <bind sequence="getGraph" handler="callback" add="" />
         <layout manager="place">
-          <property name="anchor">nw</property>
+          <property name="anchor">ne</property>
           <property name="relheight">.55</property>
-          <property name="relwidth">.7</property>
-          <property name="relx">.3</property>
+          <property name="relwidth">.65</property>
+          <property name="relx">1</property>
           <property name="rely">0</property>
           <property name="x">0</property>
           <property name="y">0</property>
@@ -38,7 +38,7 @@
         <layout manager="place">
           <property name="anchor">nw</property>
           <property name="relheight">.55</property>
-          <property name="relwidth">.3</property>
+          <property name="relwidth">.35</property>
           <property name="relx">0</property>
           <property name="rely">0</property>
           <property name="x">0</property>
@@ -51,7 +51,7 @@
             <property name="width">200</property>
             <layout manager="place">
               <property name="anchor">nw</property>
-              <property name="relheight">.47</property>
+              <property name="relheight">.4</property>
               <property name="relwidth">1</property>
               <property name="relx">0</property>
               <property name="rely">0</property>
@@ -78,6 +78,8 @@
                     <property name="height">200</property>
                     <property name="width">200</property>
                     <layout manager="pack">
+                      <property name="expand">true</property>
+                      <property name="fill">both</property>
                       <property name="propagate">True</property>
                       <property name="side">left</property>
                     </layout>
@@ -86,17 +88,13 @@
                         <property name="background">red</property>
                         <property name="foreground">white</property>
                         <property name="justify">right</property>
-                        <property name="text" translatable="yes">Mon Dec
-												</property>
+                        <property name="text" translatable="yes">Monday, December	</property>
                         <property name="textvariable">string:monthText</property>
-                        <layout manager="place">
-                          <property name="anchor">nw</property>
-                          <property name="relheight">1</property>
-                          <property name="relwidth">1</property>
-                          <property name="relx">0</property>
-                          <property name="rely">0</property>
-                          <property name="x">0</property>
-                          <property name="y">0</property>
+                        <layout manager="pack">
+                          <property name="expand">false</property>
+                          <property name="fill">y</property>
+                          <property name="propagate">True</property>
+                          <property name="side">right</property>
                         </layout>
                       </object>
                     </child>
@@ -106,23 +104,11 @@
                   <object class="tk.Frame" id="dayNumber">
                     <property name="background">black</property>
                     <layout manager="pack">
-                      <property name="expand">true</property>
-                      <property name="fill">both</property>
+                      <property name="expand">false</property>
+                      <property name="fill">y</property>
                       <property name="propagate">True</property>
                       <property name="side">right</property>
                     </layout>
-                    <child>
-                      <object class="tk.Label" id="dayNumberLabel">
-                        <property name="background">black</property>
-                        <property name="foreground">white</property>
-                        <property name="text" translatable="yes">12</property>
-                        <property name="textvariable">string:dayNumberText</property>
-                        <layout manager="pack">
-                          <property name="propagate">True</property>
-                          <property name="side">left</property>
-                        </layout>
-                      </object>
-                    </child>
                     <child>
                       <object class="tk.Label" id="dayOrdinalLabel">
                         <property name="background">black</property>
@@ -132,7 +118,7 @@
                         <property name="textvariable">string:dayOrdinalText</property>
                         <layout manager="pack">
                           <property name="propagate">True</property>
-                          <property name="side">right</property>
+                          <property name="side">top</property>
                         </layout>
                       </object>
                     </child>
@@ -142,13 +128,13 @@
             </child>
             <child>
               <object class="tk.Frame" id="time">
-                <property name="background">#00ff00</property>
+                <property name="background">#107f01</property>
                 <property name="height">200</property>
                 <property name="width">200</property>
                 <layout manager="place">
                   <property name="anchor">sw</property>
                   <property name="bordermode">ignore</property>
-                  <property name="relheight">.62</property>
+                  <property name="relheight">.6</property>
                   <property name="relwidth">1</property>
                   <property name="relx">0</property>
                   <property name="rely">1</property>
@@ -157,13 +143,13 @@
                 </layout>
                 <child>
                   <object class="tk.Frame" id="timeFrame">
-                    <property name="background">#EfEfEf</property>
+                    <property name="background">#6377f7</property>
                     <property name="height">200</property>
                     <property name="width">200</property>
                     <layout manager="place">
                       <property name="anchor">nw</property>
                       <property name="relheight">1</property>
-                      <property name="relwidth">.75</property>
+                      <property name="relwidth">.5</property>
                       <property name="relx">0</property>
                       <property name="rely">0</property>
                       <property name="x">0</property>
@@ -174,19 +160,20 @@
                         <property name="anchor">center</property>
                         <property name="background">#000000</property>
                         <property name="foreground">white</property>
-                        <property name="justify">right</property>
+                        <property name="justify">left</property>
                         <property name="padx">0</property>
                         <property name="pady">0</property>
                         <property name="text" translatable="yes">11:00</property>
                         <property name="textvariable">string:timeText</property>
                         <layout manager="pack">
+                          <property name="anchor">nw</property>
                           <property name="expand">false</property>
-                          <property name="fill">x</property>
+                          <property name="fill">both</property>
                           <property name="ipadx">0</property>
                           <property name="ipady">0</property>
                           <property name="padx">0</property>
                           <property name="pady">0</property>
-                          <property name="propagate">True</property>
+                          <property name="propagate">False</property>
                           <property name="side">right</property>
                         </layout>
                       </object>
@@ -195,42 +182,121 @@
                 </child>
                 <child>
                   <object class="tk.Frame" id="timeSub">
-                    <property name="background">#404040</property>
+                    <property name="background">#ffff66</property>
                     <property name="height">200</property>
                     <property name="width">200</property>
                     <layout manager="place">
-                      <property name="anchor">nw</property>
+                      <property name="anchor">ne</property>
                       <property name="relheight">1</property>
-                      <property name="relwidth">.25</property>
-                      <property name="relx">.75</property>
+                      <property name="relwidth">.5</property>
+                      <property name="relx">1</property>
                       <property name="rely">0</property>
                       <property name="x">0</property>
                       <property name="y">0</property>
                     </layout>
                     <child>
-                      <object class="tk.Label" id="periodLabel">
-                        <property name="background">#000000</property>
-                        <property name="foreground">white</property>
-                        <property name="text" translatable="yes">am</property>
-                        <property name="textvariable">string:periodText</property>
+                      <object class="tk.Frame" id="moonphaseFrame">
+                        <property name="background">#0f7ffe</property>
+                        <property name="height">10</property>
+                        <property name="width">10</property>
                         <layout manager="pack">
                           <property name="expand">true</property>
-                          <property name="fill">y</property>
-                          <property name="propagate">True</property>
-                          <property name="side">top</property>
+                          <property name="fill">both</property>
+                          <property name="propagate">False</property>
+                          <property name="side">left</property>
                         </layout>
+                        <child>
+                          <object class="tk.Label" id="moonLabel">
+                            <property name="background">#afd51b</property>
+                            <property name="text" translatable="yes">M</property>
+                            <property name="textvariable">string:moonText</property>
+                            <layout manager="pack">
+                              <property name="expand">true</property>
+                              <property name="fill">both</property>
+                              <property name="propagate">True</property>
+                              <property name="side">bottom</property>
+                            </layout>
+                          </object>
+                        </child>
                       </object>
                     </child>
                     <child>
-                      <object class="tk.Canvas" id="moonphase">
-                        <property name="background">black</property>
-                        <property name="highlightbackground">#ff5578</property>
-                        <property name="selectbackground">black</property>
+                      <object class="tk.Frame" id="sunriseFrame">
+                        <property name="background">#66ccfe</property>
+                        <property name="height">200</property>
+                        <property name="width">200</property>
                         <layout manager="pack">
-                          <property name="expand">false</property>
+                          <property name="propagate">True</property>
+                          <property name="side">top</property>
+                        </layout>
+                        <child>
+                          <object class="tk.Label" id="sunriseLabel">
+                            <property name="text" translatable="yes">6:00am</property>
+                            <property name="textvariable">string:sunriseText</property>
+                            <layout manager="pack">
+                              <property name="anchor">n</property>
+                              <property name="expand">false</property>
+                              <property name="propagate">False</property>
+                              <property name="side">bottom</property>
+                            </layout>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="tk.Label" id="sunriseTitle">
+                            <property name="text" translatable="yes">Sunrise</property>
+                            <layout manager="pack">
+                              <property name="anchor">n</property>
+                              <property name="expand">false</property>
+                              <property name="propagate">True</property>
+                              <property name="side">top</property>
+                            </layout>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="tk.Frame" id="sunsetFrame">
+                        <property name="background">#fc8008</property>
+                        <property name="height">200</property>
+                        <property name="width">200</property>
+                        <layout manager="pack">
                           <property name="propagate">True</property>
                           <property name="side">bottom</property>
                         </layout>
+                        <child>
+                          <object class="tk.Label" id="sunsetLabel">
+                            <property name="borderwidth">0</property>
+                            <property name="padx">0</property>
+                            <property name="pady">0</property>
+                            <property name="text" translatable="yes">9:00pm</property>
+                            <property name="textvariable">string:sunsetText</property>
+                            <layout manager="pack">
+                              <property name="anchor">s</property>
+                              <property name="ipadx">0</property>
+                              <property name="ipady">0</property>
+                              <property name="padx">0</property>
+                              <property name="pady">0</property>
+                              <property name="propagate">False</property>
+                              <property name="side">bottom</property>
+                            </layout>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="tk.Label" id="sunsetTitle">
+                            <property name="text" translatable="yes">Sunrise</property>
+                            <layout manager="pack">
+                              <property name="anchor">n</property>
+                              <property name="expand">true</property>
+                              <property name="fill">y</property>
+                              <property name="ipadx">0</property>
+                              <property name="ipady">0</property>
+                              <property name="padx">0</property>
+                              <property name="pady">0</property>
+                              <property name="propagate">True</property>
+                              <property name="side">top</property>
+                            </layout>
+                          </object>
+                        </child>
                       </object>
                     </child>
                   </object>
@@ -242,11 +308,12 @@
         <child>
           <object class="tk.Frame" id="current">
             <property name="background">#ffc5a6</property>
+            <property name="borderwidth">0</property>
             <property name="height">100</property>
             <property name="width">200</property>
             <layout manager="place">
               <property name="anchor">sw</property>
-              <property name="relheight">.53</property>
+              <property name="relheight">.52</property>
               <property name="relwidth">1</property>
               <property name="relx">0</property>
               <property name="rely">1</property>
@@ -256,6 +323,7 @@
             <child>
               <object class="tk.Frame" id="inside">
                 <property name="background">#81ff86</property>
+                <property name="borderwidth">0</property>
                 <property name="height">200</property>
                 <property name="width">200</property>
                 <layout manager="place">
@@ -268,59 +336,135 @@
                   <property name="y">0</property>
                 </layout>
                 <child>
-                  <object class="tk.Label" id="insideLabel">
-                    <property name="background">black</property>
-                    <property name="foreground">white</property>
-                    <property name="text" translatable="yes">Inside</property>
-                    <layout manager="pack">
-                      <property name="propagate">True</property>
-                      <property name="side">top</property>
-                    </layout>
-                  </object>
-                </child>
-                <child>
-                  <object class="tk.Label" id="insideTempLabel">
-                    <property name="background">black</property>
-                    <property name="foreground">white</property>
-                    <property name="text" translatable="yes">º</property>
-                    <property name="textvariable">string:insideTempText</property>
-                    <layout manager="pack">
-                      <property name="propagate">True</property>
-                      <property name="side">top</property>
-                    </layout>
-                  </object>
-                </child>
-                <child>
-                  <object class="tk.Frame" id="insideSub">
-                    <property name="background">black</property>
-                    <property name="height">200</property>
+                  <object class="tk.Frame" id="insideTitleFrame">
+                    <property name="borderwidth">0</property>
+                    <property name="height">20</property>
+                    <property name="padx">0</property>
+                    <property name="pady">0</property>
                     <property name="width">200</property>
                     <layout manager="pack">
+                      <property name="anchor">s</property>
+                      <property name="expand">false</property>
+                      <property name="ipadx">0</property>
+                      <property name="ipady">0</property>
+                      <property name="padx">0</property>
+                      <property name="pady">0</property>
                       <property name="propagate">True</property>
                       <property name="side">top</property>
                     </layout>
                     <child>
-                      <object class="tk.Label" id="insideSubA">
+                      <object class="tk.Label" id="insideLabel">
+                        <property name="anchor">center</property>
                         <property name="background">black</property>
                         <property name="foreground">white</property>
-                        <property name="text" translatable="yes">A</property>
-                        <property name="textvariable">string:insideTextSubA</property>
+                        <property name="text" translatable="yes">Inside</property>
                         <layout manager="pack">
+                          <property name="anchor">s</property>
+                          <property name="expand">false</property>
+                          <property name="ipadx">0</property>
+                          <property name="ipady">0</property>
+                          <property name="padx">0</property>
+                          <property name="pady">0</property>
                           <property name="propagate">True</property>
-                          <property name="side">left</property>
+                          <property name="side">bottom</property>
                         </layout>
                       </object>
                     </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="tk.Frame" id="insideTempDom">
+                    <property name="height">200</property>
+                    <property name="width">200</property>
+                    <layout manager="pack">
+                      <property name="anchor">n</property>
+                      <property name="expand">true</property>
+                      <property name="fill">both</property>
+                      <property name="ipadx">0</property>
+                      <property name="ipady">0</property>
+                      <property name="padx">0</property>
+                      <property name="pady">0</property>
+                      <property name="propagate">True</property>
+                      <property name="side">top</property>
+                    </layout>
                     <child>
-                      <object class="tk.Label" id="insideSubB">
+                      <object class="tk.Frame" id="insideSub">
                         <property name="background">black</property>
-                        <property name="foreground">white</property>
-                        <property name="text" translatable="yes">B</property>
-                        <property name="textvariable">string:insideTextSubB</property>
+                        <property name="height">70</property>
+                        <property name="width">200</property>
                         <layout manager="pack">
-                          <property name="propagate">True</property>
-                          <property name="side">right</property>
+                          <property name="anchor">s</property>
+                          <property name="expand">false</property>
+                          <property name="fill">both</property>
+                          <property name="propagate">False</property>
+                          <property name="side">bottom</property>
                         </layout>
+                        <child>
+                          <object class="tk.Label" id="insideSubA">
+                            <property name="background">#2379fd</property>
+                            <property name="foreground">white</property>
+                            <property name="text" translatable="yes">A</property>
+                            <property name="textvariable">string:insideTextSubA</property>
+                            <layout manager="pack">
+                              <property name="expand">true</property>
+                              <property name="fill">both</property>
+                              <property name="propagate">True</property>
+                              <property name="side">left</property>
+                            </layout>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="tk.Label" id="insideSubB">
+                            <property name="background">#ff8953</property>
+                            <property name="foreground">white</property>
+                            <property name="text" translatable="yes">B</property>
+                            <property name="textvariable">string:insideTextSubB</property>
+                            <layout manager="pack">
+                              <property name="expand">true</property>
+                              <property name="fill">both</property>
+                              <property name="propagate">True</property>
+                              <property name="side">right</property>
+                            </layout>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="tk.Frame" id="insideTempFrame">
+                        <property name="borderwidth">0</property>
+                        <property name="height">200</property>
+                        <property name="padx">0</property>
+                        <property name="pady">0</property>
+                        <property name="width">200</property>
+                        <layout manager="pack">
+                          <property name="anchor">n</property>
+                          <property name="expand">false</property>
+                          <property name="fill">x</property>
+                          <property name="ipadx">0</property>
+                          <property name="ipady">0</property>
+                          <property name="padx">0</property>
+                          <property name="pady">0</property>
+                          <property name="propagate">True</property>
+                          <property name="side">top</property>
+                        </layout>
+                        <child>
+                          <object class="tk.Label" id="insideTempLabel">
+                            <property name="background">#ff43f6</property>
+                            <property name="borderwidth">0</property>
+                            <property name="compound">top</property>
+                            <property name="foreground">white</property>
+                            <property name="padx">0</property>
+                            <property name="pady">0</property>
+                            <property name="text" translatable="yes">º</property>
+                            <property name="textvariable">string:insideTempText</property>
+                            <layout manager="pack">
+                              <property name="expand">true</property>
+                              <property name="fill">both</property>
+                              <property name="propagate">True</property>
+                              <property name="side">top</property>
+                            </layout>
+                          </object>
+                        </child>
                       </object>
                     </child>
                   </object>
@@ -353,49 +497,87 @@
                   </object>
                 </child>
                 <child>
-                  <object class="tk.Label" id="outsideTempLabel">
-                    <property name="background">black</property>
-                    <property name="foreground">white</property>
-                    <property name="text" translatable="yes">º</property>
-                    <property name="textvariable">string:outsideTempText</property>
-                    <layout manager="pack">
-                      <property name="propagate">True</property>
-                      <property name="side">top</property>
-                    </layout>
-                  </object>
-                </child>
-                <child>
-                  <object class="tk.Frame" id="outsideSub">
-                    <property name="background">black</property>
+                  <object class="tk.Frame" id="outsideDomFrame">
                     <property name="height">200</property>
                     <property name="width">200</property>
                     <layout manager="pack">
+                      <property name="anchor">n</property>
+                      <property name="expand">true</property>
+                      <property name="fill">both</property>
+                      <property name="ipadx">0</property>
+                      <property name="ipady">0</property>
+                      <property name="padx">0</property>
+                      <property name="pady">0</property>
                       <property name="propagate">True</property>
                       <property name="side">top</property>
                     </layout>
                     <child>
-                      <object class="tk.Label" id="outsideSubA">
+                      <object class="tk.Frame" id="outsideSub">
                         <property name="background">black</property>
-                        <property name="foreground">white</property>
-                        <property name="text" translatable="yes">A</property>
-                        <property name="textvariable">string:outsideTextSubA</property>
+                        <property name="height">70</property>
+                        <property name="width">200</property>
                         <layout manager="pack">
-                          <property name="propagate">True</property>
-                          <property name="side">left</property>
+                          <property name="anchor">s</property>
+                          <property name="expand">false</property>
+                          <property name="fill">both</property>
+                          <property name="propagate">False</property>
+                          <property name="side">bottom</property>
                         </layout>
+                        <child>
+                          <object class="tk.Label" id="outsideSubA">
+                            <property name="background">#2379fd</property>
+                            <property name="foreground">white</property>
+                            <property name="text" translatable="yes">A</property>
+                            <property name="textvariable">string:outsideTextSubA</property>
+                            <layout manager="pack">
+                              <property name="expand">true</property>
+                              <property name="fill">both</property>
+                              <property name="propagate">False</property>
+                              <property name="side">left</property>
+                            </layout>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="tk.Label" id="outsideSubB">
+                            <property name="background">#ff8953</property>
+                            <property name="foreground">white</property>
+                            <property name="text" translatable="yes">B</property>
+                            <property name="textvariable">string:oudoorTextSubB
+												</property>
+                            <layout manager="pack">
+                              <property name="expand">true</property>
+                              <property name="fill">both</property>
+                              <property name="propagate">True</property>
+                              <property name="side">right</property>
+                            </layout>
+                          </object>
+                        </child>
                       </object>
                     </child>
                     <child>
-                      <object class="tk.Label" id="outodoorSubB">
-                        <property name="background">black</property>
-                        <property name="foreground">white</property>
-                        <property name="text" translatable="yes">B</property>
-                        <property name="textvariable">string:oudoorTextSubB
-												</property>
+                      <object class="tk.Frame" id="outdoorTempFrame">
+                        <property name="height">200</property>
+                        <property name="width">200</property>
                         <layout manager="pack">
+                          <property name="expand">true</property>
+                          <property name="fill">both</property>
                           <property name="propagate">True</property>
-                          <property name="side">right</property>
+                          <property name="side">top</property>
                         </layout>
+                        <child>
+                          <object class="tk.Label" id="outsideTempLabel">
+                            <property name="background">#6f64ff</property>
+                            <property name="foreground">white</property>
+                            <property name="text" translatable="yes">º</property>
+                            <property name="textvariable">string:outsideTempText</property>
+                            <layout manager="pack">
+                              <property name="expand">true</property>
+                              <property name="fill">both</property>
+                              <property name="propagate">True</property>
+                              <property name="side">top</property>
+                            </layout>
+                          </object>
+                        </child>
                       </object>
                     </child>
                   </object>
@@ -456,7 +638,7 @@
     </child>
     <child>
       <object class="tk.Frame" id="SubD">
-        <property name="background">#ffae6f</property>
+        <property name="background">#00ae6f</property>
         <property name="height">200</property>
         <property name="width">200</property>
         <layout manager="place">
