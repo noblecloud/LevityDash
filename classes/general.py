@@ -177,7 +177,7 @@ class Measurement:
 		return self._value
 
 	def __str__(self):
-		return '{:.2f}'.format(self._value)
+		return '{:.1f}'.format(self._value)
 
 	@property
 	def unit(self) -> str:
@@ -404,6 +404,16 @@ class WeatherStation:
 class AmbientWeatherStation:
 	__info: dict[str:Any]
 
+	empty = {'dateutc':        None, 'tempinf': None, 'humidityin': None, 'baromrelin': None, 'baromabsin': None,
+	         'tempf':          None,
+	         'winddir':        None, 'windspeedmph': None, 'windgustmph': None, 'maxdailygust': None,
+	         'hourlyrainin':   None,
+	         'eventrainin':    None, 'dailyrainin': None, 'weeklyrainin': None, 'monthlyrainin': None,
+	         'totalrainin':    None,
+	         'solarradiation': None, 'uv': None, 'feelsLike': None, 'dewPoint': None, 'feelsLikein': None,
+	         'dewPointin':     None,
+	         'lastRain':       None, 'tz': None, 'date': None}
+
 	def __init__(self, params: dict, info: dict):
 		self.__info = info
 		self.__indoor = Location(params, AmbientWeatherInterpIndoor())
@@ -427,16 +437,16 @@ class AmbientWeatherStation:
 
 	@property
 	def address(self) -> str:
-	    return self.__info['coords']['address']
+		return self.__info['coords']['address']
 
 	@property
 	def elevation(self) -> float:
-	    return self.__info['coords']['elevation']
+		return self.__info['coords']['elevation']
 
 	@property
 	def city(self) -> str:
-	    return self.__info['coords']['location']
+		return self.__info['coords']['location']
 
 	@property
 	def name(self) -> str:
-	    return self.__info['name']
+		return self.__info['name']

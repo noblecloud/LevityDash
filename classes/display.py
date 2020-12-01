@@ -94,15 +94,32 @@ class dataDisplay:
 			t.set_path_effects([PathEffects.withStroke(linewidth=6, foreground='k')])
 
 			# t.
-			d = plotter.text(x,
-			                 y - 4,
-			                 time.lower(),
-			                 ha='center',
-			                 va='center',
-			                 color=self.mainColor,
-			                 fontproperties=self.tempFont, fontsize=10).set_path_effects(
-					[PathEffects.withStroke(linewidth=6, foreground='k')])
-		# plotter.plot([x, x], [y - 5, self.tempMin], color='w', linewidth=1, alpha=.5, zorder=-15)
+			# d = plotter.text(0,
+			#                  0,
+			#                  time.lower(),
+			#                  ha='center',
+			#                  va='center',
+			#                  color=self.mainColor,
+			#                  fontproperties=self.tempFont,
+			#                  # transform=t.get_window_extent(),
+			#                  fontsize=10).set_path_effects(
+			# 		[PathEffects.withStroke(linewidth=6, foreground='k')])
+
+			from matplotlib.text import OffsetFrom
+
+			d = OffsetFrom(plotter, t.get_position())
+			# self.graph.artist
+
+			'''
+			(0.98, 0.03, '',
+		                                        horizontalalignment='right',
+		                                        verticalalignment='center',
+		                                        transform=self.temperature.transAxes, color=self.mainColor,
+		                                        fontproperties=self.smallFont)
+
+			'''
+
+	# plotter.plot([x, x], [y - 5, self.tempMin], color='w', linewidth=1, alpha=.5, zorder=-15)
 
 	# for value in troughs:
 	# 	text = str(round(self.forecastData.data[measurement][value])) + 'º'
@@ -230,5 +247,5 @@ class dataDisplay:
 		self._canvas.get_tk_widget().pack(side='top', fill='both', expand=1)
 
 	def update(self):
-		self.lastUpdate.set_text(datetime.now().strftime('%H:%M:%S'))
+		self.lastUpdate.set_text(datetime.now().strftime('%-I:%M%p').lower())
 		self._canvas.draw()
