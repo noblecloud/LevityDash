@@ -17,6 +17,7 @@ kivy-garden = "*"
 adjusttext = "*"
 pylunar = "*"
 pyglet = "*"
+pyqt5 = "*"
 
 [dev-packages]
 

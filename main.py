@@ -1,160 +1,137 @@
-from scipy.ndimage import gaussian_filter1d
-import matplotlib.pyplot as plt
-from numpy import random
-import matplotlib
-from datetime import datetime
-from classes.constants import Colors
-# stringDates = [value.strftime('%Y%m%d') for value in dateArray]
+# This Python file uses the following encoding: utf-8
+import sys
+from time import strftime
 
-# import pylab
+from PySide2 import QtCore
+from PySide2.QtCore import QFile
+from PySide2.QtUiTools import QUiLoader
+from PySide2.QtWidgets import QApplication, QMainWindow
 
-from classes.constants import fields
-from classes.forecast import *
-import classes.display
-
-lat, lon = 37.40834, -76.54845
-key = "q2W59y2MsmBLqmxbw34QGdtS5hABEwLl"
-
-forecast = hourlyForecast(key, (lat, lon), 'hourly', measurementFields=['temp', 'precipitation', 'sunrise', 'sunset',
-																		'feels_like', 'dewpoint'])
-#
-# print(forecast['temp'])
-# print(forecast[0])
-
-# for x in forecast:
-# 	print(x)
+from display import dataDisplay
+from forecast import nowcast, hourlyForecast
+from realtime import Realtime
+from ui.main_UI import QFont, QSizePolicy, Ui_weatherDisplay
+from widgets.Complication import Complication
+from widgets.DynamicLabel import DynamicLabel
+from widgets.GlyphBox import GlyphBox
+from widgets.Temperature import LargeBox
 
 
+class MainWindow(QMainWindow, Ui_weatherDisplay):
+	ui: QMainWindow
 
-print(device[0].last_data)
-outdoorTempValue 	= device[0].last_data['tempf']
-outdoorDewpoint 	= device[0].last_data['dewPoint']
-outdoorFeels 		= device[0].last_data['feelsLike']
+	def __init__(self, *args, **kwargs):
+		super(MainWindow, self).__init__()
+		self.setupUi(self)
+		self.indoor.title.setText('Indoors')
+		self.outdoor.title.setText('Outdoors')
+		self.moonPhase.glyph = 0xF09A
+		self.subA.glyph = 0xF025
+		self.installEventFilter(self)
 
-indoorTempValue 	= device[0].last_data['tempinf']
-indoorDewpointValue = device[0].last_data['dewPointin']
+		lat, lon = 37.40834, -76.54845
+		key = "q2W59y2MsmBLqmxbw34QGdtS5hABEwLl"
+		AmbKey = 'e574e1bfb9804a52a1084c9f1a4ee5d88e9e850fc1004aeaa5010f15c4a23260'
+		AmbApp = 'ec02a6c4e29d42e086d98f5db18972ba9b93d864471443919bb2956f73363395'
 
-# forecast = forecast(key,['nowcast', 'hourly'], measurementFields=fields.HOURLY)
-#
-# forecast.getData(['nowcast', 'hourly'], ['temp', 'feels_like'])
-# nowcast = forecast.makeFigurePix((1600, 300, 226),['nowcast'])
-# hourly = forecast.makeFigurePix((1600, 300, 226), ['hourly'])
+		self.forecast = hourlyForecast(key, (lat, lon), 'hourly',
+		                          measurementFields=['temp', 'precipitation', 'sunrise', 'sunset',
+		                                             'feels_like', 'dewpoint', 'precipitation_probability'])
 
-import pygame
-from pygame.locals import *
+		self.realtime = Realtime(AmbKey, AmbApp)
+		self.realtime.getData()
 
-pygame.init()
+		self.forecastDisplay = dataDisplay(self.forecast, (1920, 1080, 200))
 
-screenx = 1920
-screeny = 1080
-# screenx = 1080
-# screeny = 720
-dpi = 212
+		self.frame = self.forecastDisplay.setQtCanvas()
+		self.forecastDisplay.plot()
 
-chunkx: int = int(screenx/24)
-chunky: int = int(screeny/24)
+		sizePolicy7 = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
+		sizePolicy7.setHorizontalStretch(9)
+		sizePolicy7.setVerticalStretch(0)
+		sizePolicy7.setHeightForWidth(self.frame.sizePolicy().hasHeightForWidth())
+		self.frame.setSizePolicy(sizePolicy7)
 
-flags = pygame.DOUBLEBUF | pygame.FULLSCREEN | pygame.HWSURFACE
+		self.gridLayout_3.addWidget(self.frame, 0, 1, 1, 1)
 
-window = pygame.display.set_mode((screenx, screeny), flags, display=1)
-screen = pygame.display.get_surface()
+		self.update()
 
-#
-# # nowcastSurf = pygame.image.fromstring(nowcast, size, "RGB")
-# # screen.blit(nowcastSurf, (screenx - 1600, screeny - 900))
+	def buildUI(self):
 
-white = (255, 255, 255)
-black = (0, 0, 0)
-almostBlack = (50, 50, 50)
-kelvin = Colors().kelvinToRGB(3000)
+		loader = QUiLoader()
+		loader.registerCustomWidget(DynamicLabel)
+		loader.registerCustomWidget(Complication)
+		loader.registerCustomWidget(LargeBox)
+		loader.registerCustomWidget(GlyphBox)
 
-pygame.display.set_caption('Show Text')
+		file = QFile("ui/main.ui")
+		file.open(QFile.ReadOnly)
+		self.ui = loader.load(file)
+		file.close()
 
-largeFont = pygame.font.Font('/Library/Fonts/SF-Pro-Text-Light.otf', round(screeny / 6))
-smallFont = pygame.font.Font('/Library/Fonts/SF-Pro-Text-Light.otf', round(screeny / 24))
-timeFont  = pygame.font.Font('/Library/Fonts/SF-Mono-Light.otf', 	 round((chunky * 2) - 8))
+		self.loadStyle()
 
-topLeftRect = pygame.Rect((10, 10), (chunkx*8, chunky*4))
-topLeftScreen = screen.subsurface(topLeftRect)
+	def loadStyle(self):
+		sshFile = "styles/main.qss"
+		with open(sshFile, "r") as fh:
+			self.setStyleSheet(fh.read())
+		self.update()
 
-ctime = datetime.now().strftime('%-I:%M%p').lower()
-cdate = datetime.now().strftime('%a %b %-d')
-timeText = timeFont.render(ctime, True, kelvin, black)
-timeTextRect = timeText.get_rect()
+	def eventFilter(self, obj, event):
+		if event.type() == QtCore.QEvent.KeyPress:
+			if event.key() == QtCore.Qt.Key_R:
+				print('refresh')
+				self.loadStyle()
+			if event.key() == QtCore.Qt.Key_B:
+				print('rebuild')
+				self.hide()
+				self.buildUI()
+				self.show()
+			if event.key() == QtCore.Qt.Key_P:
+				self.forecastDisplay.plot()
+				self.update()
+		elif event.type() == QtCore.QEvent.MouseButtonPress:
+			print(obj)
+		return super(MainWindow, self).eventFilter(obj, event)
 
-dateText = timeFont.render(cdate, True, kelvin, black)
-dateTextRect = dateText.get_rect()
-dateTextRect.top = timeTextRect.bottom
+	def update(self):
+		self.time.setText(strftime('%-I:%M'))
+		self.date.setText(strftime('%a, %B %-d'))
+		self.indoor.temperature.setText(str(self.realtime.nearest.indoor.temperature) + 'º')
+		self.outdoor.temperature.setText(str(self.realtime.nearest.outdoor.temperature) + 'º')
 
-topLeftScreen.blit(timeText, timeTextRect)
-topLeftScreen.blit(dateText, dateTextRect)
-
-centerLeftRect = pygame.Rect((chunkx*8, 10), (chunkx*8, chunky*8))
-
-outdoorTemp = largeFont.render('{}º'.format(outdoorTempValue), True, kelvin, black)
-outdoorTempRect = outdoorTemp.get_rect()
-outdoorTempRect.topleft = (chunkx, chunky*6)
-
-outdoorLabel = smallFont.render("Outdoors", True, kelvin, black)
-outdoorLabelRect = outdoorLabel.get_rect()
-outdoorTempRect.width = round((screenx / 3) + 20)
-outdoorLabelRect.center = (outdoorTempRect.centerx, outdoorTempRect.top)
-
-indoorTemp = largeFont.render('{}º'.format(indoorTempValue), True, kelvin, black)
-indoorTempRect = indoorTemp.get_rect()
-indoorTempRect.width = round((screenx - 20) / 3)
-indoorTempRect.topleft = (chunkx, chunky*16)
-
-indoorLabel = smallFont.render("Indoors", True, kelvin, black)
-indoorLabelRect = outdoorLabel.get_rect()
-indoorLabelRect.center = (indoorTempRect.centerx, indoorTempRect.top)
-
-screen.blit(outdoorTemp, outdoorTempRect)
-screen.blit(outdoorLabel, outdoorLabelRect)
-screen.blit(indoorTemp, indoorTempRect)
-screen.blit(indoorLabel, indoorLabelRect)
-
-sizex = screenx - int(outdoorLabelRect.right) - 150
-sizey = round(screeny/2)
-forecastDisplay = classes.display.dataDisplay(forecast, (sizex,sizey,dpi))
+		glyphs = QFont()
+		glyphs.setPointSize(30)
+		glyphs.setFamily(u"Weather Icons")
+		self.sunSet.value.setText(self.forecast.data['sunrise'][0].strftime('%-I:%M'))
+		self.sunSet.title.setText('')
+		self.sunSet.title.setFont(glyphs)
+		# self.sunSet.title.setFontSize(20)
+		self.sunRise.value.setText(self.forecast.data['sunset'][0].strftime('%-I:%M'))
+		self.sunRise.title.setFont(glyphs)
+		self.sunRise.title.setText('')
 
 
-fig = forecastDisplay.plot('raster')
-hourlySurf = pygame.image.fromstring(fig, (sizex, sizey), "RGB")
-screen.blit(hourlySurf, (outdoorTempRect.right - 100, -40))
+# def keyPressEvent(self, event):
+# 	print('test')
+# 	if event.key() == QtCore.Qt.Key_R:
+# 		print("refreshing")
+# 		self.loadStyle()
+# 	elif event.key() == QtCore.Qt.Key_U:
+# 		self.ui.setupUi(self)
+# 	elif event.key() == QtCore.Qt.Key_B:
+# 		print('building UI')
+# 		self.buildUI()
+# 	event.accept()
 
-pygame.display.flip()
 
-done = False
-clock = pygame.time.Clock()
+if __name__ == "__main__":
+	app = QApplication()
+	window = MainWindow()
 
-while not done:
+	# print(window.ui.moonPhase.setProperty('charStr', ''))
 
-	# forecast = hourlyForecast(key, (lat, lon), 'hourly',
-	# 						  measurementFields=['temp', 'precipitation', 'sunrise', 'sunset'])
-	# forecastDisplay = classes.display.dataDisplay(forecast, (sizex, sizey, dpi))
-	#
-	# fig = forecastDisplay.makeFigurePix('test')
-	# hourlySurf = pygame.image.fromstring(fig, (sizex, sizey), "RGB")
-	# screen.blit(hourlySurf, (outdoorTempRect.right - 0, 40))
-	#
-	# ctime = datetime.now().strftime('%I:%M:%S')
-	# indoorLabel = smallFont.render(ctime, True, white, black)
-	# indoorLabelRect = outdoorLabel.get_rect()
-	# indoorLabelRect.center = (indoorTempRect.centerx, indoorTempRect.top)
-	# screen.blit(indoorLabel, indoorLabelRect)
-	#
-	#
-	# pygame.display.flip()
-	# # pygame.time.wait(5*1000)
+	window.show()
+	# window.showFullScreen()
 
-	for event in pygame.event.get():
-		if event.type == pygame.QUIT:
-			done = True
-
-	# This limits the while loop to a max of 60 times per second.
-	# Leave this out and we will use all CPU we can.
-	clock.tick(1)
-
-# Be IDLE friendly
-pygame.quit()
+	sys.exit(app.exec_())
