@@ -1,0 +1,29 @@
+#moonPhase {
+	}
+
+* {
+	background-color: black;
+}
+.Complication{
+}
+
+#time {
+}
+
+#date {
+	}
+
+#sunSet {
+	}
+
+LoudWidget {
+	background-color: black;
+	text-align: center;
+	}
+
+#indoor {
+	left: 100px;
+}
+
+
+

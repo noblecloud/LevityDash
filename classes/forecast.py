@@ -1,12 +1,12 @@
 import threading
-import time
+from datetime import datetime, timedelta
 from typing import Union
 
 import numpy as np
 from climacell_api.client import ClimacellApiClient
 from climacell_api.climacell_response import ObservationData
 
-from .constants import fields, FORECAST_TYPES, maxDates
+from classes.constants import fields, FORECAST_TYPES, maxDates
 
 
 class Forecast(threading.Thread):
@@ -17,6 +17,9 @@ class Forecast(threading.Thread):
 	apiKey: str
 	forecastType: str
 	allowedFields: list[str]
+
+	lastCall: datetime
+	liveUpdate: bool = True
 
 	def __init__(self, key, lat_lon: tuple[float, float], forecastType: str,
 	             measurementFields: Union[list[str], str] = None, interval: int = 5) -> None:
@@ -33,11 +36,6 @@ class Forecast(threading.Thread):
 		self.forecastType = forecastType
 		self.fields = measurementFields
 		self.lat, self.lon = lat_lon
-
-	def run(self):
-		while True:
-			print('This is just a while loop')
-			time.sleep(5)
 
 	def __getitem__(self, item):
 
@@ -159,23 +157,14 @@ class Forecast(threading.Thread):
 		np.random.seed(19680801)
 		return np.random.random_integers(0, 100, length)
 
-	def update(self):
-		while True:
-			time.sleep(self.interval)
-
-
-import asyncio
-from datetime import datetime, timedelta
-
 
 class hourlyForecast(Forecast):
 	lastCall: datetime
 	liveUpdate = True
 	allowedFields: list[str] = ['precipitation', 'precipitation_type', 'precipitation_probability', 'temp',
-	                            'feels_like',
-	                            'dewpoint', 'wind_speed', 'wind_gust', 'baro_pressure', 'visibility', 'humidity',
-	                            'wind_direction', 'sunrise', 'sunset', 'cloud_cover', 'cloud_ceiling', 'cloud_base',
-	                            'surface_shortwave_radiation', 'moon_phase', 'weather_code']
+	                            'feels_like', 'dewpoint', 'wind_speed', 'wind_gust', 'baro_pressure', 'visibility',
+	                            'humidity', 'wind_direction', 'sunrise', 'sunset', 'cloud_cover', 'cloud_ceiling',
+	                            'cloud_base', 'surface_shortwave_radiation', 'moon_phase', 'weather_code']
 
 	def __init__(self, key, lat_lon: tuple[float, float], forecastType: str,
 	             measurementFields: Union[list[str], str] = None, interval: int = 60) -> None:
@@ -185,7 +174,6 @@ class hourlyForecast(Forecast):
 		self.dataUpdate()
 
 	def dataUpdate(self):
-
 		# if self.lastCall < datetime.now() - timedelta(seconds=5):
 
 		self.data = self.mapData(self.client.forecast_hourly(lat=self.lat,
@@ -198,18 +186,45 @@ class hourlyForecast(Forecast):
 		self.lastCall = datetime.now()
 		print('hourly updated at {}'.format(self.lastCall.strftime('%H:%M:%S')))
 		return True
-			# else:
-			# 	waitTime = (datetime.now() - self.lastCall).total_seconds()
-			# 	print('api call too fast, waiting {} seconds'.format(waitTime))
-			# 	asyncio.sleep(waitTime)
 
-	def run(self):
-		while self.liveUpdate:
-			time.sleep(self.interval)
-			self.dataUpdate()
 
-	def stop(self):
-		self.liveUpdate = False
+# else:
+# 	waitTime = (datetime.now() - self.lastCall).total_seconds()
+# 	print('api call too fast, waiting {} seconds'.format(waitTime))
+# 	asyncio.sleep(waitTime)
+
+
+class nowcast(Forecast):
+	allowedFields: list[str] = ['precipitation', 'precipitation_type', 'temp', 'feels_like', 'dewpoint', 'wind_speed',
+	                            'wind_gust', 'baro_pressure', 'visibility', 'humidity', 'wind_direction', 'sunrise',
+	                            'sunset', 'cloud_cover', 'cloud_ceiling', 'cloud_base', 'surface_shortwave_radiation',
+	                            'weather_code']
+
+	def __init__(self,
+	             key: str,
+	             lat_lon: tuple[float, float],
+	             measurementFields: Union[list[str], str] = None,
+	             interval: int = 1) -> None:
+
+		super().__init__(key, lat_lon, 'nowcast', measurementFields, interval=interval)
+		self.client = ClimacellApiClient(self.apiKey)
+		self.lastCall = datetime.now() - timedelta(minutes=1)
+		self.interval = interval
+		self.dataUpdate()
+
+	def dataUpdate(self):
+		# if self.lastCall < datetime.now() - timedelta(seconds=5):
+
+		self.data = self.mapData(self.client.nowcast(lat=self.lat,
+		                                             lon=self.lon,
+		                                             end_time=maxDates.nowcast(),
+		                                             fields=self.fields,
+		                                             units='us',
+		                                             timestep=self.interval).data())
+
+		self.lastCall = datetime.now()
+		print('nowcast updated at {}'.format(self.lastCall.strftime('%H:%M:%S')))
+		return True
 
 # lastValue = 0
 # for measurement in data:
