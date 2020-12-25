@@ -1,5 +1,5 @@
-from datetime import datetime
-from typing import Any, List, Optional, Tuple, Union
+from datetime import datetime, timedelta
+from typing import Optional, Union
 
 import matplotlib as mp
 import matplotlib.font_manager as fm
@@ -8,14 +8,16 @@ import pylab
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.colors import LinearSegmentedColormap
 from numpy.core._multiarray_umath import ndarray
-from scipy.ndimage import gaussian_filter1d
 from scipy.signal import find_peaks
 
 from classes.forecast import Forecast
+from constants import EaseFade, FadeFilter
 
 
 class dataDisplay:
+	solarColorMap: LinearSegmentedColormap
 	rain: plt.axes
 	temperature: plt.axes
 	timeFloat: list[float] = None
@@ -26,12 +28,12 @@ class dataDisplay:
 	smallFont = fm.FontProperties(fname='/Library/Fonts/SF-Pro-Rounded-Light.otf', size=12)
 	tempFont = fm.FontProperties(fname='/Library/Fonts/SF-Pro-Rounded-Bold.otf', size=20)
 	bigThickFont = fm.FontProperties(fname='/Library/Fonts/SF-Pro-Rounded-Heavy.otf', size=24)
+	weatherIconsFont = fm.FontProperties(fname='fonts/weathericons.ttf', size=24)
 	smallMono = fm.FontProperties(fname='/Library/Fonts/SF-Mono-Light.otf', size=10)
-	mp.rcParams['font.family'] = 'SF Pro Text Light'
 	# mainColor = Colors().kelvinToHEX(3000)
 	mainColor = 'w'
 	_forecast: Forecast
-	_canvas: FigureCanvasTkAgg
+	_canvas: FigureCanvasTkAgg = None
 
 	def __init__(self, forecastData: Forecast, size: tuple[int, int, int]):
 
@@ -41,6 +43,8 @@ class dataDisplay:
 		self.tempMax = 0
 		self.tempMin = 0
 
+		self.buildColorMaps()
+
 		# Construct graph
 		self.graph = pylab.figure(figsize=[self.x / self.d, self.y / self.d], dpi=self.d, facecolor='k')
 		self.graph.patch.set_facecolor('k')
@@ -49,64 +53,101 @@ class dataDisplay:
 		plt.gca().set_axis_off()
 
 		# Construct plotter
+		# self.temperature: plt.axes.Axes = self.graph.add_subplot(label='temperature')
 		self.temperature: plt.axes.Axes = self.graph.gca()
+
 		self.temperature.set_facecolor('k')
-		self.lastUpdate = self.temperature.text(0.98, 0.03, '',
+		self.lastUpdate = self.temperature.text(0.97, 0.97, '',
 		                                        horizontalalignment='right',
 		                                        verticalalignment='center',
 		                                        transform=self.temperature.transAxes, color=self.mainColor,
 		                                        fontproperties=self.smallFont)
 
-	@staticmethod
-	def smoothData(data: np.ndarray, sigma: int = 1, count: int = 1) -> np.ndarray:
-		for x in range(0, count):
-			data = gaussian_filter1d(data, sigma)
-		return data
+	def buildColorMaps(self):
+		from matplotlib.colors import LinearSegmentedColormap
+		solarColorDict = {'red':   [(0.0, 0.0, 0.0),
+		                            (0.5, 0.5, 0.5),
+		                            (1.0, 1.0, 1.0)],
+		                  'green': [(0.0, 0.0, 0.0),
+		                            (0.5, 0.5, 0.5),
+		                            (1.0, 1.0, 1.0)],
+		                  'blue':  [(0.0, 0.0, 0.0),
+		                            (0.5, 0.5, 0.5),
+		                            (1.0, 1.0, 1.0)]}
+		# 'alpha': [(0.0, 0.0, 0.0),
+		#           (0.25, 0.0, 0.0),
+		#           (.5, 0.5, 0.5)]}
+
+		self.solarColorMap = LinearSegmentedColormap('colorMap', solarColorDict, 256)
 
 	def interpTime(self):
-		self.timeFloat = list(map((lambda i: i.timestamp()), self._forecast.data['timestamp']))
-		self._interpTime = np.linspace(self.timeFloat[0], self.timeFloat[:-1], len(self.timeFloat))
+		self.timeFloat = list(map((lambda i: i.timestamp()), self.data['timestamp']))
+		self._interpTime = np.linspace(self.timeFloat[0], self.timeFloat[:-1], 68)
 
 	def splineData(self, data):
-		from scipy.interpolate import make_interp_spline, BSpline
+		from scipy.interpolate import make_interp_spline
 
-		if self._interpTime is None:
-			self.interpTime()
-
-		spl = make_interp_spline(self.timeFloat, data)
+		self.interpTime()
+		time = list(map((lambda i: i.timestamp()), self.data['timestamp']))
+		spl = make_interp_spline(time, data)
 		ynew = spl(self._interpTime)
 		flat = ynew.flatten()
 		return flat
 
+	def interp(self, x, y):
+		from scipy.interpolate import interp1d
+		x = interp1d(x, y)
+		return x
+
+	def preview(self):
+		self.plot()
+		self.graph.show()
+
+	# cover = self.splineData(self.data['cloud_cover'])
 
 	def findTemperaturePeaks(self, plotter, measurement: str):
+
+		def daterange(start_date, end_date):
+			for n in range(int((end_date - start_date).days)):
+				yield start_date + timedelta(n)
 
 		import matplotlib.patheffects as PathEffects
 
 		self.tempMax = self._forecast.data['temp'].max()
 		self.tempMin = self._forecast.data['temp'].min()
 
-		def removeDuplicates(array, spread):
-			for i in array[:-1]:
-				print(i)
+		# for x in self.data['timestamp']:
+
+		# def removeDuplicates(array: list, spread):
+		# 	for i in range(0, len(array)):
+		# 		difference = array[i+1] - array[i]
+		# 		if difference < spread:
+		# 			print('AHHHH')
 
 		range = self.tempMax - self.tempMin
 
-		peaks, _ = find_peaks(self._forecast.data[measurement], distance=12)
-		troughs, _ = find_peaks(-self._forecast.data[measurement], distance=12)
+		peaks, _ = find_peaks(self._forecast.data[measurement], distance=80)
+		troughs, _ = find_peaks(-self._forecast.data[measurement], distance=80)
 
 		both = np.concatenate((peaks, troughs))
-		both = np.sort(both)
+		both = list(np.sort(both))
 
-		removeDuplicates(both, 5)
+		t = plotter.text(self.data['timestamp'][0] + timedelta(hours=2),
+		                 self.data['temp'][0],
+		                 str(round(self._forecast.data[measurement][0])) + 'º'.lower(),
+		                 ha='center',
+		                 va='center',
+		                 color=self.mainColor,
+		                 fontproperties=self.tempFont)
+		t.set_path_effects([PathEffects.withStroke(linewidth=6, foreground='k')])
 
 		for value in both:
 			text = str(round(self._forecast.data[measurement][value])) + 'º'.lower()
 			time = self._forecast['timestamp'][value].strftime('%-I%p').lower()
 			x = pylab.date2num(self._forecast['timestamp'][value])
 			y = self._forecast.data[measurement][value]
-			if y >= self.tempMax:
-				y -= 3
+			# if y >= self.tempMax:
+			# 	y -= 3
 			t = plotter.text(x + 0.02,
 			                 y,
 			                 text.lower(),
@@ -128,9 +169,9 @@ class dataDisplay:
 			#                  fontsize=10).set_path_effects(
 			# 		[PathEffects.withStroke(linewidth=6, foreground='k')])
 
-			from matplotlib.text import OffsetFrom
-
-			d = OffsetFrom(plotter, t.get_position())
+			# from matplotlib.text import OffsetFrom
+			#
+			# d = OffsetFrom(plotter, t.get_position())
 			# self.graph.artist
 
 			'''
@@ -168,18 +209,35 @@ class dataDisplay:
 	# plotter.plot([x, x], [y - 5, self.tempMin], color='w', linewidth=1, alpha=.5, zorder=-15)
 	# t.set_path_effects([PathEffects.withStroke(linewidth=2, foreground='k')])
 
+	@property
+	def data(self):
+		return self._forecast.data
+
 	def addDaysOfWeek(self, plotter):
 		ypos = (self.tempMax - self.tempMin) / 2 + self.tempMin - 8
-		for d in self._forecast.data['timestamp']:
-			if d.hour == 12:
-				# temperature.text(d, 30, 'test', color='white', fontsize=14, fontproperties=prop)
-				plotter.text(d, ypos, d.strftime('%a'), horizontalalignment='center', color='k',
-				             fontproperties=self.bigThickFont, zorder=-100)
 
-			if d.hour == 0:
-				pos = pylab.date2num(d)
-				plotter.axvspan(pos, pos, color=self.mainColor, linestyle=(0, (5, 10)), linewidth=1, alpha=0.5)
-			# plotter.axvspan(pos, pos+0.005, color='white', alpha=.5, ec=None)
+		days = [item[0] for item in self.data['splitDates']]
+
+		for d in days:
+			noon = datetime(year=d.year, month=d.month, day=d.day, hour=12)
+			midnight = datetime(year=d.year, month=d.month, day=d.day)
+			if datetime.now() < noon:
+				# temperature.text(d, 30, 'test', color='white', fontsize=14, fontproperties=prop)
+				plotter.text(noon, ypos, d.strftime('%a'), horizontalalignment='center', color='k',
+			             fontproperties=self.bigThickFont, zorder=-100)
+
+			pos = pylab.date2num(midnight)
+			if datetime.now() < midnight:
+				plotter.axvspan(midnight, midnight, color=self.mainColor, linestyle=(0, (5, 10)), linewidth=2, alpha=0.5)
+
+	# if d.hour in (6, 12, 18):
+	# 	pos = pylab.date2num(d)
+	# 	plotter.axvspan(pos, pos, color=self.mainColor, linestyle=(0, (5, 10)), linewidth=1, alpha=0.5)
+	#
+	# if d.hour not in (0, 6, 12, 18):
+	# 	pos = pylab.date2num(d)
+	# 	plotter.axvspan(pos, pos, color=self.mainColor, linestyle=(0, (5, 10)), linewidth=1, alpha=0.2)
+	# plotter.axvspan(pos, pos+0.005, color='white', alpha=.5, ec=None)
 
 	def daylight(self, plotter):
 
@@ -199,23 +257,23 @@ class dataDisplay:
 
 		from matplotlib import dates as mdates
 		plotter.xaxis.set_major_locator(mdates.HourLocator(byhour=0, tz=tz))
-		# plotter.xaxis.set_minor_formatter(mdates.DateFormatter('%-I%p', tz=tz))
-		# plotter.xaxis.set_major_formatter(mdates.DateFormatter('%-I%p', tz=tz))
-		# plotter.xaxis.set_minor_locator(mdates.HourLocator(byhour=range(0, 24, 6)))
+		plotter.xaxis.set_minor_formatter(mdates.DateFormatter('%-I%p', tz=tz))
+		plotter.xaxis.set_major_formatter(mdates.DateFormatter('%-I%p', tz=tz))
+		plotter.xaxis.set_minor_locator(mdates.HourLocator(byhour=range(0, 24, 6)))
 
 		for x in plotter.get_xmajorticklabels():
 			x.set_color('white')
 			x.set_fontproperties(self.smallFont)
 			x.set_horizontalalignment('center')
-			x.set_visible(False)
+			x.set_visible(True)
 
-		# for tick in plotter.xaxis.get_major_ticks():
-		# 	tick.tick1line.set_markersize(1)
-		# 	tick.tick2line.set_markersize(1)
-		# 	tick.label.set_horizontalalignment('center')
+		for tick in plotter.xaxis.get_major_ticks():
+			tick.tick1line.set_markersize(1)
+			tick.tick2line.set_markersize(1)
+			tick.label.set_horizontalalignment('center')
 
 		for x in plotter.get_xminorticklabels(): x.set_color('white'); x.set_fontproperties(self.smallFont)
-		plotter.grid(color=self.mainColor, alpha=.75, axis='y', visible=False)
+		plotter.grid(color=self.mainColor, alpha=.75, axis='y', visible=True)
 		plotter.grid(axis='x', alpha=1, linestyle=(0, (11, 12)), color=self.mainColor)
 
 	# plotter.grid()
@@ -226,10 +284,7 @@ class dataDisplay:
 		# self._forecast.data['temp'] = self.splineData(self._forecast.data['temp'])
 		# self._forecast.data['feels_like'] = self.splineData(self._forecast.data['feels_like'])
 		# self._forecast.data['dewpoint'] = self.splineData(self._forecast.data['dewpoint'])
-		self._forecast.data['temp'] = self.smoothData(self._forecast.data['feels_like'], 1, 3)
-		self._forecast.data['feels_like'] = self.smoothData(self._forecast.data['feels_like'], 1, 3)
-		self._forecast.data['dewpoint'] = self.smoothData(self._forecast.data['dewpoint'], 1, 3)
-		self._forecast.data['precipitation'] = self.smoothData(self._forecast.data['precipitation'], 1, 6)
+		# self._forecast.data['precipitation'] = self.smoothData(self._forecast.data['precipitation'], 1, 6)
 
 		# Find peaks in data
 		self.findTemperaturePeaks(self.temperature, 'temp')
@@ -244,18 +299,106 @@ class dataDisplay:
 		                      label='Hourly Forecast', zorder=2,
 		                      color=self.mainColor, linewidth=4)
 
-		self.temperature.plot('timestamp', 'feels_like', data=self._forecast.data, label='Hourly Forecast', zorder=-20,
+		self.temperature.plot('timestamp', 'feels_like', data=self._forecast.data, label='Hourly Forecast',
+		                      zorder=-20,
 		                      color=(.25, .89, .96), linestyle='dashed', alpha=.8, linewidth=3)
 
 		self.temperature.plot('timestamp', 'dewpoint', data=self._forecast.data, zorder=-20,
 		                      color=self.mainColor, label='Hourly Forecast', linestyle='dashed', alpha=.8, linewidth=2)
 
 		self.addDaysOfWeek(self.temperature)
-		self.daylight(self.temperature)
+		self.showWind()
+		# self.showLunar()
+		# self.daylight(self.temperature)
+		self.showLight()
 		self.addTicks(self.temperature)
 
-		self.temperature.set_ylim(self.hiLow(2))
+		self.temperature.set_ylim(self.hiLow(5))
 
+	# self.rain = self.temperature.twinx()
+	# n = 2
+	# rainSplit = [
+	# 		sum(self._forecast.data['precipitation_probability'][i:i + n]) // n for i in
+	# 		range(0, len(self._forecast.data['precipitation_probability']), n)]
+	#
+	# rainSplit = np.array(rainSplit)
+	#
+	# date = self._forecast.data['timestamp'][::n]
+	# self.rain.plot('timestamp', 'precipitation', data=self._forecast.data)
+	# self.rain.bar(date, rainSplit, zorder=200, width=.08, color=(.25, .89, .96))
+	# x = rainSplit.max()
+	# self.rain.set_ylim(0, x * 2)
+
+	# self.solar = self.graph.add_subplot(111, label='lights', frame_on=False)
+
+	def showWind(self):
+		self.wind = self.graph.add_subplot(212, label='wind', frame_on=False, sharex=self.temperature)
+		self.wind.plot('timestamp', 'wind_speed', data=self.data)
+
+	def showSolar(self):
+		self.solar = self.graph.add_subplot(111, label='solar', frame_on=False, sharex=self.temperature)
+		self.solar.set_ylim(-18, 360)
+		# self.solar.set_xlim(self._forecast.data['minutes'][0], self._forecast.data['minutes'][-1])
+		self.solar.plot('timestamp', 'sun', data=self.data)
+		# self.solar.scatter('timestamp', 'sun', data=self._forecast.data,
+		#                    cmap=self.solarColorMap,
+		#                    edgecolor='none')
+
+		# self.solar.plot('minutes', 'moon', data=self._forecast.data)
+		self.updateCanvas()
+
+	def showLunar(self):
+		self.lunar = self.graph.add_subplot(111, label='lunar', frame_on=False, sharex=self.temperature)
+		self.lunar.set_ylim(-16, 360)
+		# for time in self._forecast.data['moonTimes']:
+		# 	self.solar.axvspan(time['rise'], time['set'], alpha=0.1)
+
+		for d in self._forecast.data['lunarTransit']:
+			if d['time'] is not None:
+				self.lunar.text(d['time'] + timedelta(hours=5), d['maxAltitude'], self.moonAge(d['age']),
+				                horizontalalignment='center',
+				                color='w',
+				                fontproperties=self.weatherIconsFont, zorder=-100)
+
+		# self.lunar.plot('timestamp', 'moon', data=self.data)
+		self.updateCanvas()
+
+	def moonAge(self, age):
+		start = int(0xF095)
+		return chr(round(age) + start)
+
+	def showLight(self):
+		limits = (self.data['timestampInt'][0], self.data['timestampInt'][-1])
+		filter = EaseFade()
+		a = self.mapImage(self.data['surface_shortwave_radiation'], filter)
+		self.radiation = self.graph.add_subplot(111, label='radiation', frame_on=False)
+		# self.radiation = self.temperature.twinx()
+		# self.radiation.set_xlim(self.data['timestampInt'][0])
+		self.radiation.imshow(a, aspect='auto', cmap=self.solarColorMap, alpha=1, interpolation='bilinear')
+
+	def mapImage(self, array: Union[list, np.ndarray], fadeFilter: Union[FadeFilter, None] = None):
+
+		if isinstance(array, list):
+			array = np.array(array)
+		max: int = array.max()
+		newArray = []
+		for x in array:
+			s = x / max
+			newArray.append(s)
+		a = (np.outer(np.ones(len(newArray)), newArray))
+		if fadeFilter:
+			return fadeFilter.fadeArray(a)
+		return a
+
+	# light = np.array(self._forecast.data['radiation'])
+	# self.solar.imshow(light[np.newaxis,:], cmap="plasma", aspect="auto")
+	# self.updateCanvas()
+
+	def hideSolar(self):
+		self.solar.cla()
+		self.updateCanvas()
+
+	def showRain(self):
 		self.rain = self.temperature.twinx()
 		n = 2
 		rainSplit = [
@@ -284,9 +427,18 @@ class dataDisplay:
 		# 	self.rain.add_patch(patch)
 		x = rainSplit.max()
 		self.rain.set_ylim(0, x * 2)
-		self._canvas.draw()
+		self.updateCanvas()
 
-	def hiLow(self, offset):
+	def hideRain(self):
+		self.rain.cla()
+		self.updateCanvas()
+
+	def updateCanvas(self):
+		if self._canvas:
+			self._canvas.draw()
+
+	def hiLow(self, offset=None):
+
 		if self._forecast.data['temp'].max() > self._forecast.data['feels_like'].max():
 			h = self._forecast.data['temp'].max()
 		else:
@@ -299,9 +451,9 @@ class dataDisplay:
 
 		l = self._forecast.data['dewpoint'].min()
 
-		return l - offset - 1, h + offset
+		variance = (h - l) * 0.1
 
-
+		return l - variance - 1, h + variance
 
 	def rasterRender(self):
 
@@ -330,9 +482,13 @@ class dataDisplay:
 		self._canvas = FigureCanvas(self.graph)
 		return self._canvas
 
+	def plotQtCanvas(self):
+		self.plot()
+		self._canvas.draw()
+
 	def update(self):
 		self.lastUpdate.set_text(datetime.now().strftime('%-I:%M%p').lower())
-		self._canvas.draw()
+		self.updateCanvas()
 
 
 class MplCanvas(FigureCanvasQTAgg, dataDisplay):
