@@ -16,13 +16,15 @@ from widgets.DynamicLabel import DynamicLabel
 from widgets.Temperature import LargeBox
 from widgets.GlyphBox import GlyphBox
 from widgets.Complication import Complication
+from widgets.Submodule import windSubmodule
+from widgets.Submodule import currentConditions
 
 
 class Ui_weatherDisplay(object):
     def setupUi(self, weatherDisplay):
         if not weatherDisplay.objectName():
             weatherDisplay.setObjectName(u"weatherDisplay")
-        weatherDisplay.resize(1920, 1080)
+        weatherDisplay.resize(1792, 1067)
         sizePolicy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
@@ -33,6 +35,7 @@ class Ui_weatherDisplay(object):
         font = QFont()
         font.setFamily(u"SF Pro Rounded")
         weatherDisplay.setFont(font)
+        weatherDisplay.setAutoFillBackground(True)
         self.centralwidget = QWidget(weatherDisplay)
         self.centralwidget.setObjectName(u"centralwidget")
         self.centralwidget.setEnabled(True)
@@ -167,8 +170,8 @@ class Ui_weatherDisplay(object):
         self.indoor = LargeBox(self.topLeft)
         self.indoor.setObjectName(u"indoor")
         sizePolicy4 = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.MinimumExpanding)
-        sizePolicy4.setHorizontalStretch(3)
-        sizePolicy4.setVerticalStretch(2)
+        sizePolicy4.setHorizontalStretch(1)
+        sizePolicy4.setVerticalStretch(1)
         sizePolicy4.setHeightForWidth(self.indoor.sizePolicy().hasHeightForWidth())
         self.indoor.setSizePolicy(sizePolicy4)
         self.indoor.setMinimumSize(QSize(0, 100))
@@ -177,11 +180,8 @@ class Ui_weatherDisplay(object):
 
         self.outdoor = LargeBox(self.topLeft)
         self.outdoor.setObjectName(u"outdoor")
-        sizePolicy5 = QSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
-        sizePolicy5.setHorizontalStretch(1)
-        sizePolicy5.setVerticalStretch(1)
-        sizePolicy5.setHeightForWidth(self.outdoor.sizePolicy().hasHeightForWidth())
-        self.outdoor.setSizePolicy(sizePolicy5)
+        sizePolicy4.setHeightForWidth(self.outdoor.sizePolicy().hasHeightForWidth())
+        self.outdoor.setSizePolicy(sizePolicy4)
 
         self.Temps.addWidget(self.outdoor)
 
@@ -196,11 +196,11 @@ class Ui_weatherDisplay(object):
 
         self.bottom = QFrame(self.centralwidget)
         self.bottom.setObjectName(u"bottom")
-        sizePolicy6 = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        sizePolicy6.setHorizontalStretch(0)
-        sizePolicy6.setVerticalStretch(4)
-        sizePolicy6.setHeightForWidth(self.bottom.sizePolicy().hasHeightForWidth())
-        self.bottom.setSizePolicy(sizePolicy6)
+        sizePolicy5 = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        sizePolicy5.setHorizontalStretch(0)
+        sizePolicy5.setVerticalStretch(4)
+        sizePolicy5.setHeightForWidth(self.bottom.sizePolicy().hasHeightForWidth())
+        self.bottom.setSizePolicy(sizePolicy5)
         self.bottom.setFrameShape(QFrame.StyledPanel)
         self.bottom.setFrameShadow(QFrame.Raised)
         self.gridLayout_2 = QGridLayout(self.bottom)
@@ -208,16 +208,6 @@ class Ui_weatherDisplay(object):
         self.gridLayout_2.setHorizontalSpacing(1)
         self.gridLayout_2.setVerticalSpacing(0)
         self.gridLayout_2.setContentsMargins(0, 0, 0, 0)
-        self.subA = QWidget(self.bottom)
-        self.subA.setObjectName(u"subA")
-
-        self.gridLayout_2.addWidget(self.subA, 0, 0, 1, 1)
-
-        self.subB = QWidget(self.bottom)
-        self.subB.setObjectName(u"subB")
-
-        self.gridLayout_2.addWidget(self.subB, 0, 1, 1, 1)
-
         self.subC = QWidget(self.bottom)
         self.subC.setObjectName(u"subC")
 
@@ -227,6 +217,17 @@ class Ui_weatherDisplay(object):
         self.subD.setObjectName(u"subD")
 
         self.gridLayout_2.addWidget(self.subD, 0, 3, 1, 1)
+
+        self.subB = windSubmodule(self.bottom)
+        self.subB.setObjectName(u"subB")
+        self.subB.setMinimumSize(QSize(447, 472))
+
+        self.gridLayout_2.addWidget(self.subB, 0, 1, 1, 1)
+
+        self.subA = currentConditions(self.bottom)
+        self.subA.setObjectName(u"subA")
+
+        self.gridLayout_2.addWidget(self.subA, 0, 0, 1, 1)
 
         self.gridLayout_2.setColumnStretch(0, 1)
         self.gridLayout_2.setColumnStretch(1, 1)
@@ -239,17 +240,18 @@ class Ui_weatherDisplay(object):
 
         self.gridLayout_3.addWidget(self.bottom, 1, 0, 1, 2)
 
-        self.frame = QFrame(self.centralwidget)
-        self.frame.setObjectName(u"frame")
-        sizePolicy7 = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
-        sizePolicy7.setHorizontalStretch(9)
-        sizePolicy7.setVerticalStretch(0)
-        sizePolicy7.setHeightForWidth(self.frame.sizePolicy().hasHeightForWidth())
-        self.frame.setSizePolicy(sizePolicy7)
-        self.frame.setFrameShape(QFrame.StyledPanel)
-        self.frame.setFrameShadow(QFrame.Raised)
+        self.forecastGraph = QFrame(self.centralwidget)
+        self.forecastGraph.setObjectName(u"frame")
+        sizePolicy6 = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
+        sizePolicy6.setHorizontalStretch(7)
+        sizePolicy6.setVerticalStretch(0)
+        sizePolicy6.setHeightForWidth(self.forecastGraph.sizePolicy().hasHeightForWidth())
+        self.forecastGraph.setSizePolicy(sizePolicy6)
+        self.forecastGraph.setFont(font)
+        self.forecastGraph.setFrameShape(QFrame.StyledPanel)
+        self.forecastGraph.setFrameShadow(QFrame.Raised)
 
-        self.gridLayout_3.addWidget(self.frame, 0, 1, 1, 1)
+        self.gridLayout_3.addWidget(self.forecastGraph, 0, 1, 1, 1)
 
         weatherDisplay.setCentralWidget(self.centralwidget)
 

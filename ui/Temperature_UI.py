@@ -19,6 +19,7 @@ class Ui_Form(object):
     def setupUi(self, Form):
         if not Form.objectName():
             Form.setObjectName(u"Form")
+        Form.resize(246, 272)
         sizePolicy = QSizePolicy(QSizePolicy.Minimum, QSizePolicy.MinimumExpanding)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
@@ -32,10 +33,6 @@ class Ui_Form(object):
         self.verticalLayout.setSpacing(0)
         self.verticalLayout.setObjectName(u"verticalLayout")
         self.verticalLayout.setContentsMargins(0, 0, 0, 0)
-        self.verticalSpacer = QSpacerItem(20, 0, QSizePolicy.Minimum, QSizePolicy.Fixed)
-
-        self.verticalLayout.addItem(self.verticalSpacer)
-
         self.title = QLabel(Form)
         self.title.setObjectName(u"title")
         sizePolicy1 = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Maximum)
@@ -59,7 +56,7 @@ class Ui_Form(object):
         sizePolicy2.setHeightForWidth(self.temperature.sizePolicy().hasHeightForWidth())
         self.temperature.setSizePolicy(sizePolicy2)
         self.temperature.setMinimumSize(QSize(0, 80))
-        self.temperature.setMaximumSize(QSize(16777215, 16777215))
+        self.temperature.setMaximumSize(QSize(16777215, 100))
         font2 = QFont()
         font2.setFamily(u"SF Pro Rounded")
         font2.setPointSize(80)
@@ -81,10 +78,10 @@ class Ui_Form(object):
         sizePolicy3.setHeightForWidth(self.frame.sizePolicy().hasHeightForWidth())
         self.frame.setSizePolicy(sizePolicy3)
         self.frame.setMinimumSize(QSize(0, 100))
-        self.frame.setFrameShape(QFrame.StyledPanel)
-        self.frame.setFrameShadow(QFrame.Raised)
         self.gridLayout = QGridLayout(self.frame)
+        self.gridLayout.setSpacing(0)
         self.gridLayout.setObjectName(u"gridLayout")
+        self.gridLayout.setContentsMargins(0, 0, 0, 0)
         self.subs = QHBoxLayout()
         self.subs.setSpacing(0)
         self.subs.setObjectName(u"subs")
@@ -98,6 +95,10 @@ class Ui_Form(object):
         sizePolicy4.setVerticalStretch(0)
         sizePolicy4.setHeightForWidth(self.SubAValue.sizePolicy().hasHeightForWidth())
         self.SubAValue.setSizePolicy(sizePolicy4)
+        font3 = QFont()
+        font3.setFamily(u"SF Compact Rounded")
+        font3.setPointSize(70)
+        self.SubAValue.setFont(font3)
         self.SubAValue.setAlignment(Qt.AlignBottom|Qt.AlignHCenter)
 
         self.gridLayout_4.addWidget(self.SubAValue, 0, 0, 1, 1)
@@ -109,6 +110,10 @@ class Ui_Form(object):
         sizePolicy5.setVerticalStretch(0)
         sizePolicy5.setHeightForWidth(self.subATitle.sizePolicy().hasHeightForWidth())
         self.subATitle.setSizePolicy(sizePolicy5)
+        font4 = QFont()
+        font4.setFamily(u"SF Compact Rounded")
+        font4.setPointSize(20)
+        self.subATitle.setFont(font4)
         self.subATitle.setAlignment(Qt.AlignHCenter|Qt.AlignTop)
 
         self.gridLayout_4.addWidget(self.subATitle, 1, 0, 1, 1)
@@ -117,6 +122,7 @@ class Ui_Form(object):
         self.SubBValue.setObjectName(u"SubBValue")
         sizePolicy4.setHeightForWidth(self.SubBValue.sizePolicy().hasHeightForWidth())
         self.SubBValue.setSizePolicy(sizePolicy4)
+        self.SubBValue.setFont(font3)
         self.SubBValue.setAlignment(Qt.AlignBottom|Qt.AlignHCenter)
 
         self.gridLayout_4.addWidget(self.SubBValue, 0, 1, 1, 1)
@@ -125,6 +131,7 @@ class Ui_Form(object):
         self.subBTitle.setObjectName(u"subBTitle")
         sizePolicy5.setHeightForWidth(self.subBTitle.sizePolicy().hasHeightForWidth())
         self.subBTitle.setSizePolicy(sizePolicy5)
+        self.subBTitle.setFont(font4)
         self.subBTitle.setAlignment(Qt.AlignHCenter|Qt.AlignTop)
 
         self.gridLayout_4.addWidget(self.subBTitle, 1, 1, 1, 1)
@@ -142,6 +149,8 @@ class Ui_Form(object):
 
         self.verticalLayout.addItem(self.verticalSpacer_2)
 
+        self.verticalLayout.setStretch(0, 3)
+        self.verticalLayout.setStretch(1, 1)
 
         self.retranslateUi(Form)
 
