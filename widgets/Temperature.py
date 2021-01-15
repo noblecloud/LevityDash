@@ -1,13 +1,14 @@
-from PySide2 import QtCore, QtGui
+from PySide2 import QtGui
 
-from classes.loudWidget import LoudWidget
+from widgets.Status import StatusObject
+from widgets.loudWidget import LoudWidget
 from ui.Temperature_UI import Ui_Form
 
 # current_dir = os.path.dirname(os.path.abspath(__file__))
 # Form, Base = QUiLoader.loadUiType(os.path.join(current_dir, "widgets/indoorOutdoor.ui"))
 
 
-class LargeBox(LoudWidget, Ui_Form):
+class LargeBox(LoudWidget, Ui_Form, StatusObject):
 	# layout: QtWidgets.QVBoxLayout
 	# title: QtWidgets.QLabel
 	# value: DynamicLabel
