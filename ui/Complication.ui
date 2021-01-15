@@ -82,5 +82,25 @@
   </customwidget>
  </customwidgets>
  <resources/>
- <connections/>
+ <connections>
+  <connection>
+   <sender>Frame</sender>
+   <signal>clicked()</signal>
+   <receiver>Frame</receiver>
+   <slot>update()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>54</x>
+     <y>34</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>54</x>
+     <y>34</y>
+    </hint>
+   </hints>
+  </connection>
+ </connections>
+ <slots>
+  <signal>clicked()</signal>
+ </slots>
 </ui>
