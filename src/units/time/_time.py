@@ -9,9 +9,6 @@ class _Time(AbnormalScale):
 	# milliseconds, second, minute, hour, day
 	_factors = [1, 1000, 60, 60, 12]
 
-	def __init__(self, value):
-		self._value = value
-
 	def _milliseconds(self):
 		return self.changeScale(0)
 
