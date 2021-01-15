@@ -22,16 +22,16 @@ class _Metric(_Length):
 		return self._feet() * 3
 
 	def _millimeter(self):
-		return self._value * pow(10, self._magnitude + 2)
+		return self * pow(10, self._magnitude + 2)
 
 	def _centimeter(self):
-		return self._value * pow(10, self._magnitude + 1)
+		return self * pow(10, self._magnitude + 1)
 
 	def _meter(self):
-		return self._value * pow(10, self._magnitude - 1)
+		return self * pow(10, self._magnitude - 1)
 
 	def _kilometer(self):
-		return self._value * pow(10, self._magnitude - 4)
+		return self * pow(10, self._magnitude - 4)
 
 
 class Millimeter(_Metric):

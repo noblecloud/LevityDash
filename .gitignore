@@ -4,7 +4,13 @@
 # Reference: https://intellij-support.jetbrains.com/hc/en-us/articles/206544839
 
 .idea/*
+.idea/**
+./idea/**
 
+fonts/*
+fonts/**
+
+*.idea
 # User-specific stuff
 .idea/**/workspace.xml
 .idea/**/tasks.xml
@@ -113,7 +119,7 @@ MANIFEST
 pip-log.txt
 pip-delete-this-directory.txt
 
-# Unit test / coverage reports
+# Measurement test / coverage reports
 htmlcov/
 .tox/
 .nox/
@@ -214,3 +220,6 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 /.idea/
+
+.tests
+.tests/*

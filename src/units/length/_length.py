@@ -1,11 +1,10 @@
 # from typing import Callable, Union
 from units import Callable, Union
 
-from units._unit import Unit
+from units._unit import Measurement
 
 
-class _Length(Unit):
-	_value: Union[int, float]
+class _Length(Measurement):
 	_millimeter: Callable
 	_centimeter: Callable
 	_meter: Callable
@@ -16,8 +15,9 @@ class _Length(Unit):
 	_yards: Callable
 	_miles: Callable
 
-	def __init__(self, value):
-		self._value = value
+	def __str__(self) -> str:
+		x = self._config['speed'].split(',')[0]
+		return self[x].formatString.format(self).rstrip('0').rstrip('.')
 
 	@property
 	def mm(self):
