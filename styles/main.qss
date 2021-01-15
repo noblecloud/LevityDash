@@ -1,28 +1,21 @@
-#moonPhase {
-	}
-
 * {
 	background-color: black;
-}
-.Complication{
-}
-
-#time {
+	color: yellow;
 }
 
-#date {
-	}
+*[live=true] {
+	color: lightblue;
+}
 
-#sunSet {
-	}
+*[live=false]{
+	color: gray;
+}
 
-LoudWidget {
-	background-color: black;
-	text-align: center;
-	}
-
-#indoor {
-	left: 100px;
+#windVane {
+	background-color: none;
+}
+#directionLabel {
+	margin: -20px;
 }
 
 
