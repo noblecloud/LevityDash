@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 
+from api.errors import APIError, InvalidCredentials, RateLimitExceeded
 from src import config
 from observations import Observation, WFStationObservation
 from translators import WFStationTranslator, WFTranslator
@@ -70,7 +71,7 @@ class WeatherFlow:
 		params = {**self._baseParams, **params}
 		request = requests.get(url, params)
 		if request.status_code != 200:
-			raise Error
+			raise ErrorNoConnection()
 		else:
 			return json.loads(request.content)
 
@@ -84,7 +85,7 @@ class Station:
 	_id: int
 	_prams: dict[str, str]
 	_info = dict[str: Any]
-	_currentConditions: Observation
+	_current: Observation
 	_hourlyForecast: Any
 	_dailyForecast: Any
 	_translator = WFStationTranslator()
@@ -97,25 +98,41 @@ class Station:
 
 	@property
 	def currentConditions(self):
-		return self._currentConditions
+		return self._current
 
-	def update(self):
+	def getData(self):
+
 		request = requests.get(self._baseURL, self._prams)
-		data = request.json()
+
+		if request.status_code == 200:
+			data = request.json()
+		elif request.status_code == 429:
+			logging.error("Rate limit exceeded for {} API".format(self.__class__.__name__))
+			raise RateLimitExceeded
+		elif request.status_code == 401:
+			logging.error("Invalid credentials for {} API".format(self.__class__.__name__))
+			raise InvalidCredentials
+		else:
+			raise APIError
 
 		observationData: dict = data.pop('obs')[0]
 		self._info = data
-		self._currentConditions = WFStationObservation(observationData)
+		self._current = WFStationObservation(observationData)
 
 
-class Error(Exception):
+class ErrorNoConnection(Exception):
+
+	def __init__(self, data, *args, **kwargs):
+		logging.error(data)
+		super(ErrorNoConnection, self).__init__(*args, **kwargs)
+
 	pass
 
 
 if __name__ == '__main__':
 	logging.getLogger().setLevel(logging.WARNING)
 	wf = WeatherFlow()
-	wf._station.update()
+	wf._station.getData()
 	t = wf.station.currentConditions
 	print(wf.station.currentConditions.precipitation.hourly)
 	print(wf.station.currentConditions.wind.gust)
