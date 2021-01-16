@@ -14,8 +14,8 @@ from numpy.core._multiarray_umath import ndarray
 from PIL import Image, ImageChops, ImageDraw
 from scipy.signal import find_peaks
 
-from classes.api.forecast import dailyForecast, Forecast, hourlyForecast
-from constants import EaseFade, FadeFilter, LinearFade
+from src.api.forecast import dailyForecast, Forecast, hourlyForecast
+from src.constants import EaseFade, FadeFilter, LinearFade
 
 
 class dataDisplay:
