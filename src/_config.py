@@ -1,14 +1,14 @@
 import logging
 from configparser import ConfigParser
-from pytz import timezone
+from pathlib import Path
 
-import utils
+from pytz import timezone
 
 
 class _Config(ConfigParser):
 
 	def __init__(self, *args, **kwargs):
-		self.path = utils.rootPath.joinpath('config.ini')
+		self.path = rootPath.joinpath('config.ini')
 		super(_Config, self).__init__(*args, **kwargs)
 		self.read()
 
@@ -39,3 +39,4 @@ class _Config(ConfigParser):
 
 
 config = _Config()
+rootPath = Path(__file__).parent
