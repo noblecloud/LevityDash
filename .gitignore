@@ -224,3 +224,4 @@ cython_debug/
 /tests
 /tests/*
 /plugins/*
+/plugins/*__init.py
