@@ -5,9 +5,7 @@ from PySide2 import QtCore, QtWidgets
 from PySide2.QtCore import Property, QEasingCurve, QPoint, QPointF, QPropertyAnimation, Signal
 from PySide2.QtGui import QFont, QImage, QPainter, QPen, QPolygonF
 
-from constants import Fonts
-from measurments import Measurement
-from measurments.groups import Wind
+from src.constants import Fonts
 from ui.conditions_UI import Ui_conditions
 from ui.wind_UI import Ui_Frame as windUI
 from widgets.loudWidget import LoudWidget

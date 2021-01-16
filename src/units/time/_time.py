@@ -5,7 +5,6 @@ from units._unit import AbnormalScale
 
 class _Time(AbnormalScale):
 	_format = '{:2.2f}'
-	_value = Union[int, float]
 	# milliseconds, second, minute, hour, day
 	_factors = [1, 1000, 60, 60, 12]
 

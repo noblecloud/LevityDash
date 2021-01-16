@@ -10,13 +10,14 @@ from PySide2.QtGui import QFont
 from PySide2.QtUiTools import QUiLoader
 from PySide2.QtWidgets import QApplication, QMainWindow
 
-from classes import config
+from api import AmbientWeather, AWStation
+from api.errors import APIError
+from src import config
 from translators._translator import ClimacellConditionInterpreter, ConditionInterpreter
 from display import dataDisplay
 from api.forecast import dailyForecast, hourlyForecast
-from realtime import NoRealtimeData, Realtime
 from ui.main_UI import QFont, QSizePolicy, Ui_weatherDisplay
-from api.weatherFlow import Station
+from api.weatherFlow import WeatherFlow
 from widgets.Complication import Complication
 from widgets.DynamicLabel import DynamicLabel
 from widgets.GlyphBox import GlyphBox
@@ -24,9 +25,9 @@ from widgets.Temperature import LargeBox
 
 
 class MainWindow(QMainWindow, Ui_weatherDisplay):
-	tempest: Station
 	forecastGraph: FigureCanvasTkAgg
-	realtime: Realtime
+	weatherFlow: WeatherFlow
+	ambientWeather: AmbientWeather
 	dailyForecast: dailyForecast
 	forecast: hourlyForecast
 	glyphs: QFont
@@ -57,8 +58,8 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 		self.AmbKey = 'e574e1bfb9804a52a1084c9f1a4ee5d88e9e850fc1004aeaa5010f15c4a23260'
 		self.AmbApp = 'ec02a6c4e29d42e086d98f5db18972ba9b93d864471443919bb2956f73363395'
 
-		self.connectForecast()
-		self.connectRealtime()
+		# self.connectForecast()
+		self.connectAW()
 		self.refreshTimeDateTemp()
 		self.subB.clicked.connect(self.testEvent)
 
@@ -71,18 +72,35 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 		logging.info('Testing Signal:')
 		logging.info(event)
 
-	def connectRealtime(self):
+	def connectAW(self):
 		try:
-			self.tempest = Station(38442)
-			self.tempest.update()
-			self.realtime = Realtime(self.AmbKey, self.AmbApp)
-			self.realtime.update()
+			self.aw = AWStation()
 			self.setRealtimeItems()
-			self.checkThreadTimer.singleShot(1000 * 3, self.updateRealtime)
-		except NoRealtimeData:
-			logging.error("No realtime data, trying again in 1 minute")
-			self.checkThreadTimer.singleShot(1000 * 60, self.connectRealtime)
+			self.checkThreadTimer.singleShot(1000 * 3, self.updateAW)
+		except APIError:
+			logging.error("Unable to reach AmbientWeather API, trying again in 1 minute")
+			self.checkThreadTimer.singleShot(1000 * 60, self.connectAW)
 
+	def connectWF(self):
+		try:
+			self.self.wf = WeatherFlow()
+			self.setRealtimeItems()
+			self.checkThreadTimer.singleShot(1000 * 3, self.updateWF)
+		except APIError:
+			logging.error("Unable to reach WeatherFlow API, trying again in 1 minute")
+			self.checkThreadTimer.singleShot(1000 * 60, self.connectAW)
+
+	def updateAW(self):
+
+		try:
+			self.aw.update()
+			self.setRealtimeItems()
+			logging.debug('AmbientWeather updated')
+			self.checkThreadTimer.singleShot(1000 * 5, self.updateRealtime)
+		except APIError:
+			self.fadeRealtimeItems()
+			logging.error("No realtime data, trying again in 1 minute")
+			self.checkThreadTimer.singleShot(1000 * 60, self.updateRealtime)
 
 	def connectForecast(self):
 		try:
@@ -95,7 +113,7 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 			                                                  'wind_direction'])
 			self.dailyForecast = dailyForecast(self.key, (self.lat, self.lon), 'hourly',
 			                                   measurementFields=['weather_code'])
-			self.buildGraph()
+			# self.buildGraph()
 			self.setForecastItems()
 			self.checkThreadTimer.singleShot(1000 * 15, self.updateForecast)
 		except ValueError:
@@ -111,10 +129,10 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 		points = tuple(zip(xdata[ind], ydata[ind]))
 		print(points[1][0])
 
+
 	def motionEvent(self, event):
 		print(event.xdata, event.ydata)
 		self.forecastDisplay.showLine(event)
-
 
 	def buildGraph(self):
 		logging.debug('Building Graph')
@@ -217,19 +235,6 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 			self.fadeForecastItems()
 			logging.error("No forecast data, trying again in 1 minute")
 			self.checkThreadTimer.singleShot(1000 * 60, self.updateForecast)
-
-	def updateRealtime(self):
-
-		try:
-			self.realtime.update()
-			self.tempest.update()
-			self.setRealtimeItems()
-			logging.debug('Realtime updated')
-			self.checkThreadTimer.singleShot(1000 * 5, self.updateRealtime)
-		except NoRealtimeData:
-			self.fadeRealtimeItems()
-			logging.error("No realtime data, trying again in 1 minute")
-			self.checkThreadTimer.singleShot(1000 * 60, self.updateRealtime)
 
 	def setRealtimeItems(self):
 

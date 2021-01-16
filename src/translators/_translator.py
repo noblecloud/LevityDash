@@ -1,70 +1,59 @@
 from datetime import datetime
-from typing import Union
 
-from src import SmartDictionary
-from src.measurments import Light, Lightning, Precipitation, Pressure, Temperature, Wind
-from measurments import _groups
+from src import config, SmartDictionary
 from units import heat, length, others, pressure, time
 
 
 class UnitTranslator(SmartDictionary):
-	_unitTypes = SmartDictionary({
-			'f':        heat.Fahrenheit,
-			'c':        heat.Celsius,
-			'%':        others.Humidity,
-			'º':        int,
-			'str':      str,
-			'int':      int,
-			'mmHg':     pressure.mmHg,
-			'inHg':     pressure.inHg,
-			'W/m^2':    others.Irradiance,
-			'lux':      others.Illuminance,
-			'mb':       pressure.hPa,
-			'in':       length.Inch,
-			'mi':       length.Mile,
-			'mm':       length.Millimeter,
-			'm':        length.Meter,
-			'km':       length.Kilometer,
-			'hr':       time.Hour,
-			'min':      time.Minute,
-			's':        time.Second,
-			'date':     datetime,
-			'timezone': str
-	})
 
-	_groups = {'temperature':   Temperature,
-	           'light':         Light,
-	           'precipitation': Precipitation,
-	           'pressure':      Pressure,
-	           'wind':          Wind,
-	           'lightning':     Lightning}
+	# _groups = {'temperature':   Temperature,
+	#            'light':         Light,
+	#            'precipitation': Precipitation,
+	#            'pressure':      Pressure,
+	#            'wind':          Wind,
+	#            'lightning':     Lightning}
 
 	_groups: SmartDictionary
 
 	@property
-	def types(self):
-		return self._unitTypes
+	def classes(self):
+		return self._classes
 
 	@property
 	def groups(self):
-		return SmartDictionary(_groups)
+		return SmartDictionary(self._groups)
 
 
 class Translator(SmartDictionary):
 	_units: SmartDictionary
 	_dateFormatString: str
-	_dateIntDivisor: int = 1
 
 	def __init__(self, *args, **kwargs):
 		super(Translator, self).__init__(*args, **kwargs)
-
-
-
-	def formatDate(self, value, tz = None):
-		if isinstance(value, str):
-			return datetime.strptime(value, self._dateFormatString)
-		elif isinstance(value, int):
-			return datetime.fromtimestamp(int(value/self._dateIntDivisor))
+		_dateIntDivisor: int = 1
+		_classes = SmartDictionary({
+				'f':        heat.Fahrenheit,
+				'c':        heat.Celsius,
+				'%':        others.Humidity,
+				'º':        int,
+				'str':      str,
+				'int':      int,
+				'mmHg':     pressure.mmHg,
+				'inHg':     pressure.inHg,
+				'W/m^2':    others.Irradiance,
+				'lux':      others.Illuminance,
+				'mb':       pressure.hPa,
+				'in':       length.Inch,
+				'mi':       length.Mile,
+				'mm':       length.Millimeter,
+				'm':        length.Meter,
+				'km':       length.Kilometer,
+				'hr':       time.Hour,
+				'min':      time.Minute,
+				's':        time.Second,
+				'date':     datetime,
+				'timezone': str
+		})
 
 	# def __getitem__(self, item):
 	# 	fetched = SmartDictionary(super(Translator, self).__getitem__(item), self._units[item])

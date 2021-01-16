@@ -13,7 +13,7 @@ from pytz import utc
 from scipy.interpolate import interp1d
 from scipy.ndimage import gaussian_filter1d
 
-from classes.constants import fields, FORECAST_TYPES, maxDates, tz
+from src.constants import fields, FORECAST_TYPES, maxDates, tz
 
 
 class Forecast(threading.Thread):
