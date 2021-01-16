@@ -1,8 +1,21 @@
 import logging
 
 
+class SmarterDict(dict):
+
+	def __init__(self, *args, **kwargs):
+		super(SmarterDict, self).__init__(*args, **kwargs)
+
+	def update(self, values, **kwargs):
+		super(SmarterDict, self).update(values, **kwargs)
+
+
 class _SmartDictionary(dict):
 	_flipped: dict
+
+	@property
+	def name(self):
+		return self.__class__.__name__
 
 	# allow for property access to subscript keys
 	def __getattr__(self, item):
@@ -45,6 +58,23 @@ class _SmartDictionary(dict):
 	def __str__(self):
 		return super().__str__()
 
+	def pop(self, item):
+		try:
+			popped = dict.pop(self, item)
+		except KeyError:
+			try:
+				key = self.flip[item]
+				_ = dict.pop(self, key)
+				popped = key
+			except KeyError or AttributeError as e:
+				logging.error('Could not find item {} in SmartDictionary {}'.format(item, self.name))
+				raise e
+		return popped
+
+	def copy(self):
+		copy = dict.copy(self)
+		return self.__class__(copy)
+
 	def update(self, values, **kwargs):
 		super(_SmartDictionary, self).update(values, **kwargs)
 
@@ -78,10 +108,6 @@ class _SmartDictionary(dict):
 		return {value: key for key, value in self.items()}
 
 	@property
-	def flat(self):
-		return self._flat()
-
-	@property
 	def flip(self):
 		return self._flip()
 
@@ -97,6 +123,14 @@ class SmartDictionary(_SmartDictionary):
 
 	def __init__(self, *args, **kwargs):
 		super(_SmartDictionary, self).__init__(*args, **kwargs)
+
+	@property
+	def flat(self):
+		return self._flat()
+
+	@property
+	def flip(self):
+		return self._flip()
 
 	def _flat(self):
 		flat = SmartDictionary()
@@ -124,14 +158,6 @@ class SmartDictionary(_SmartDictionary):
 			logging.debug(failedArray)
 
 		return flat
-
-	@property
-	def flat(self):
-		return self._flat()
-
-	@property
-	def flip(self):
-		return self._flip()
 
 	def _flip(self):
 		flip = self.copy()
