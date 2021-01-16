@@ -1,4 +1,7 @@
+import logging
 from configparser import ConfigParser
+from pytz import timezone
+
 import utils
 
 
@@ -26,6 +29,13 @@ class _Config(ConfigParser):
 	@property
 	def aw(self):
 		return self['AmbientWeather']
+
+	@property
+	def tz(self):
+		try:
+			return timezone(self['Location']['timezone'])
+		except Exception as e:
+			logging.error('Unable load timezone from config\n', e)
 
 
 config = _Config()
