@@ -1,5 +1,4 @@
 from _easyDict import _SmartDictionary, SmartDictionary
-from measurments import Temperature
 from translators._translator import Translator, UnitTranslator
 
 
