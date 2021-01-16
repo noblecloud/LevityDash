@@ -4,20 +4,20 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-pyclimacell = "*"
+pylunar = "*"
+pysolar = "*"
 pytz = "*"
 climacell-python = "*"
-numpy = "*"
-plotly = "*"
-scipy = "*"
-spline = "*"
-seaborn = "*"
-socketio = "*"
-kivy-garden = "*"
-adjusttext = "*"
-pylunar = "*"
-pyglet = "*"
+setuptools = "*"
+wheel = "*"
+numpy = "*" #install with pip3 install numpy --no-use-pep517 first
+matplotlib = "*"
 pyqt5 = "*"
+scipy = "*"
+install = "*"
+ambient-api = "*"
+vector = "*"
+pyside2 = "*"
 
 [dev-packages]
 
