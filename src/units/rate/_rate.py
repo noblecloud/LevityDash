@@ -4,6 +4,7 @@ from units._unit import Measurement
 
 
 class _Rate(Measurement):
+	_type = 'rate'
 	_numerator: Measurement
 	_denominator: Measurement
 
@@ -20,7 +21,7 @@ class _Rate(Measurement):
 	def localized(self):
 		try:
 			newClass = self.__class__
-			n, d = self._config[self.name.lower()].split(',')
+			n, d = self._config[self._type.lower()].split(',')
 			n = 'inch' if n == 'in' else n
 			return newClass(self._numerator[n], self._denominator[d])
 		except KeyError:

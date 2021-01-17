@@ -3,10 +3,11 @@ from datetime import datetime
 
 import requests
 
+import utils
 from api.errors import InvalidCredentials, RateLimitExceeded, APIError
 from src import SmartDictionary, config
 from observations import Observation
-from observations.AmbientWeather import AWIndoor, AWOutdoor
+from observations.ambientWeather import AWIndoor, AWOutdoor
 from translators import AWTranslator
 
 
@@ -26,9 +27,11 @@ class _AmbientWeather:
 		self._apiKey = config.aw['apiKey']
 		self._appKey = config.aw['appKey']
 
-	def getData(self):
+	def getData(self, params: dict = None):
 
-		request = requests.get(self.url, self._params)
+		params = {**self._params, **params}
+
+		request = requests.get(self.url, params)
 		if request.status_code == 200:
 			return request.json()
 		elif request.status_code == 429:
@@ -98,15 +101,19 @@ class AWStation(_AmbientWeather):
 		self._url = '{}/{}/'.format(self._url, self._id)
 		self._indoor = AWIndoor()
 		self._outdoor = AWOutdoor()
+		self._translator = AWTranslator()
 
 	def getCurrent(self):
 		params = {'limit': 1}
 		self._params.update(params)
 
 	def getData(self, params: dict = None):
-		data = super(AWStation, self).getData()
-		self._indoor.update(data)
-		self._outdoor.update(data)
+		data = super(AWStation, self).getData({'limit': 1})[0]
+		timeName = self._translator['time']['time']
+		tz = self._translator.tz()
+		self._time = utils.formatDate(data.pop(timeName), tz.zone, utc=True, microseconds=True)
+		self._outdoor.dataUpdate(data)
+		self._indoor.dataUpdate(data)
 
 
 	def _parseInfo(self, data):
@@ -130,13 +137,16 @@ class AWStation(_AmbientWeather):
 		params = {'limit': limit, 'endDate': endDate}
 		self._params.update(params)
 
-
-	@property
-	def currentConditions(self):
-		return self._current
-
 	def update(self):
 		pass
+
+	@property
+	def indoor(self):
+		return self._indoor
+
+	@property
+	def outdoor(self):
+		return self._outdoor
 
 	@property
 	def _limit(self):
@@ -148,5 +158,6 @@ class Error(Exception):
 
 
 if __name__ == '__main__':
-	wf = AmbientWeather()
-	print(wf)
+	aw = AWStation()
+	aw.getData()
+	print(aw)

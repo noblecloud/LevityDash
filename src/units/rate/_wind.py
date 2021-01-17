@@ -3,6 +3,7 @@ from units.time import _Time
 from . import _Rate
 
 class Wind(_Rate):
+	_type = 'wind'
 	_numerator: _Length
 	_denominator: _Time
 
@@ -39,3 +40,4 @@ class Wind(_Rate):
 	@property
 	def mmh(self):
 		return Wind(self._numerator.mm, self._denominator.hr)
+

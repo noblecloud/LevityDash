@@ -5,19 +5,19 @@ from time import strftime
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from PySide2 import QtCore
-from PySide2.QtCore import QFile, QTimer
+from PySide2.QtCore import QFile, QSize, QTimer
 from PySide2.QtGui import QFont
 from PySide2.QtUiTools import QUiLoader
-from PySide2.QtWidgets import QApplication, QMainWindow
+from PySide2.QtWidgets import QApplication, QDesktopWidget, QMainWindow
 
-from api import AmbientWeather, AWStation
-from api.errors import APIError
+from src.api import AmbientWeather, AWStation
+from src.api.errors import APIError
 from src import config
 from translators._translator import ClimacellConditionInterpreter, ConditionInterpreter
 from display import dataDisplay
-from api.forecast import dailyForecast, hourlyForecast
+from src.api.forecast import dailyForecast, hourlyForecast
 from ui.main_UI import QFont, QSizePolicy, Ui_weatherDisplay
-from api.weatherFlow import WeatherFlow
+from src.api.weatherFlow import WFStation, WeatherFlow
 from widgets.Complication import Complication
 from widgets.DynamicLabel import DynamicLabel
 from widgets.GlyphBox import GlyphBox
@@ -59,7 +59,11 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 		self.AmbApp = 'ec02a6c4e29d42e086d98f5db18972ba9b93d864471443919bb2956f73363395'
 
 		# self.connectForecast()
+		self.aw = AWStation()
+		self.wf = WFStation()
 		self.connectAW()
+		self.connectWF()
+		self.setRealtimeItems()
 		self.refreshTimeDateTemp()
 		self.subB.clicked.connect(self.testEvent)
 
@@ -74,8 +78,7 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 
 	def connectAW(self):
 		try:
-			self.aw = AWStation()
-			self.setRealtimeItems()
+			self.aw.getData()
 			self.checkThreadTimer.singleShot(1000 * 3, self.updateAW)
 		except APIError:
 			logging.error("Unable to reach AmbientWeather API, trying again in 1 minute")
@@ -83,9 +86,10 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 
 	def connectWF(self):
 		try:
-			self.self.wf = WeatherFlow()
-			self.setRealtimeItems()
+			self.wf.getData()
 			self.checkThreadTimer.singleShot(1000 * 3, self.updateWF)
+
+			self.wf.messenger.signal.connect(self.setRealtimeItems)
 		except APIError:
 			logging.error("Unable to reach WeatherFlow API, trying again in 1 minute")
 			self.checkThreadTimer.singleShot(1000 * 60, self.connectAW)
@@ -96,11 +100,23 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 			self.aw.update()
 			self.setRealtimeItems()
 			logging.debug('AmbientWeather updated')
-			self.checkThreadTimer.singleShot(1000 * 5, self.updateRealtime)
+			self.checkThreadTimer.singleShot(1000 * 5, self.updateAW)
 		except APIError:
 			self.fadeRealtimeItems()
 			logging.error("No realtime data, trying again in 1 minute")
-			self.checkThreadTimer.singleShot(1000 * 60, self.updateRealtime)
+			self.checkThreadTimer.singleShot(1000 * 60, self.updateAW)
+
+	def updateWF(self):
+
+		try:
+			self.aw.update()
+			self.setRealtimeItems()
+			logging.debug('AmbientWeather updated')
+			self.checkThreadTimer.singleShot(1000 * 5, self.updateAW)
+		except APIError:
+			self.fadeRealtimeItems()
+			logging.error("No realtime data, trying again in 1 minute")
+			self.checkThreadTimer.singleShot(1000 * 60, self.updateAW)
 
 	def connectForecast(self):
 		try:
@@ -239,25 +255,26 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 	def setRealtimeItems(self):
 
 		if not self.timeTraveling:
+			print('updating')
 
 			# Wind Widget
 			self.subB.live = True
-			self.subB.speed = str(self.tempest.currentConditions.wind.speed)
-			self.subB.direction = self.tempest.currentConditions.wind.direction
-			self.subB.gust = str(self.tempest.currentConditions.wind.gust)# + self.realtime.nearest.outdoor.wind.unit
-			self.subB.max = str(self.tempest.currentConditions.wind.lull) #+ self.realtime.nearest.outdoor.wind.unit
+			self.subB.speed = self.wf.current.speed
+			self.subB.direction = self.wf.current.direction
+			self.subB.gust = str(self.wf.current.gust)
+			self.subB.max = str(self.wf.current.lull)
 
 			# Temperatures
-			# self.indoor.live = True
-			# self.indoor.temperature.setText(str(self.realtime.nearest.indoor.temperature) + 'º')
-			# self.indoor.SubAValue.setText(str(self.realtime.nearest.indoor.humidity.short) + '%')
-			# self.indoor.SubBValue.setText(str(self.realtime.nearest.indoor.temperature.dewpoint.short) + 'º')
+			self.indoor.live = True
+			self.indoor.temperature.setText(str(self.aw.indoor.temperature) + 'º')
+			self.indoor.SubAValue.setText(str(self.aw.indoor.humidity))
+			self.indoor.SubBValue.setText(str(self.aw.indoor.dewpoint) + 'º')
 
 			# Outdoor
 			self.outdoor.live = True
-			self.outdoor.temperature.setText(str(self.tempest.currentConditions.temperature.temperature) + 'º')
+			self.outdoor.temperature.setText(str(self.wf.current.temperature) + 'º')
 			# SubAValue relies on forecast data
-			self.outdoor.SubBValue.setText(str(self.tempest.currentConditions.temperature.dewpoint.int) + 'º')
+			self.outdoor.SubBValue.setText(str(self.wf.current.dewpoint) + 'º')
 
 	def fadeRealtimeItems(self):
 
@@ -367,9 +384,9 @@ if __name__ == "__main__":
 	# print(window.ui.moonPhase.setProperty('charStr', ''))
 
 	window.show()
-	# display_monitor = 1
-	# monitor = QDesktopWidget().screenGeometry(display_monitor)
-	# window.move(monitor.left(), monitor.top())
+	display_monitor = 0
+	monitor = QDesktopWidget().screenGeometry(display_monitor)
+	window.move(monitor.left(), monitor.top())
 	# window.showFullScreen()
 
 	sys.exit(app.exec_())

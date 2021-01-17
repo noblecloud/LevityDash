@@ -5,6 +5,8 @@ from units._unit import Measurement
 
 
 class _Length(Measurement):
+	_type = 'length'
+
 	_millimeter: Callable
 	_centimeter: Callable
 	_meter: Callable
@@ -16,8 +18,7 @@ class _Length(Measurement):
 	_miles: Callable
 
 	def __str__(self) -> str:
-		x = self._config['speed'].split(',')[0]
-		return self[x].formatString.format(self).rstrip('0').rstrip('.')
+		return self.formatString.format(self).rstrip('0').rstrip('.')
 
 	@property
 	def mm(self):

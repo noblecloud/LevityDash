@@ -1,15 +1,6 @@
 import logging
 
 
-class SmarterDict(dict):
-
-	def __init__(self, *args, **kwargs):
-		super(SmarterDict, self).__init__(*args, **kwargs)
-
-	def update(self, values, **kwargs):
-		super(SmarterDict, self).update(values, **kwargs)
-
-
 class _SmartDictionary(dict):
 	_flipped: dict
 
@@ -44,19 +35,16 @@ class _SmartDictionary(dict):
 				try:
 					return dict(self.flat.flip)[item]
 				except KeyError:
-					self.__getattribute__(item)
+					try:
+						self.__getattribute__(item)
+					except AttributeError as e:
+						raise e
 			except TypeError:
 				logging.warning('Invalid attribute ({}) of {}'.format(item, self.__class__))
 			raise AttributeError
 
 	def __init__(self, *args, **kwargs):
 		super(_SmartDictionary, self).__init__(*args, **kwargs)
-
-	def __repr__(self):
-		return self.pretty(self).rstrip('\n')
-
-	def __str__(self):
-		return super().__str__()
 
 	def pop(self, item):
 		try:
@@ -174,11 +162,11 @@ class SmartDictionary(_SmartDictionary):
 					flip.update(value.flip)
 				except AttributeError:
 					flip.update({value: key})
-					# try:
-					# 	flip.update({value: key})
-					# except TypeError:
-					# 	failed = True
-					# 	failedArray.append(key)
+				# try:
+				# 	flip.update({value: key})
+				# except TypeError:
+				# 	failed = True
+				# 	failedArray.append(key)
 				except TypeError:
 					pass
 		if failed:

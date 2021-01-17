@@ -2,12 +2,13 @@ from units._unit import Measurement
 
 
 class _Heat(Measurement):
+	_type = 'heat'
 
 	def __repr__(self):
 		return str(self)
 
 	def __str__(self) -> str:
-		return self.formatString.format(self.localized).rstrip('0').rstrip('.')
+		return self.formatString.format(self).rstrip('0').rstrip('.')
 
 	@property
 	def f(self):

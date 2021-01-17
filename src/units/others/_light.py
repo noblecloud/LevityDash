@@ -1,9 +1,15 @@
 from units._unit import Measurement
 
+
 class Irradiance(Measurement):
 	_format = "{:4d}"
 	_unit = 'W/m²'
 	_suffix = ''
+
+
+class RadiantFlux(Irradiance):
+	pass
+
 
 class Illuminance(Measurement):
 	_format = "{:4d}"
@@ -19,3 +25,7 @@ class Illuminance(Measurement):
 			_suffix = 'k'
 			value /= 1000
 		float.__init__(value)
+
+
+class Lux(Irradiance):
+	pass

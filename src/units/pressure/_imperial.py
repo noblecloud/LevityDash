@@ -5,10 +5,10 @@ class inHg(_Pressure):
 	_unit = 'inHg'
 
 	def _hPa(self):
-		return self._value * 33.86389
+		return self * 33.86389
 
 	def _mmHg(self):
-		return self._value * 25.4
+		return self * 25.4
 
 	def _inHg(self):
-		return self._value
+		return self

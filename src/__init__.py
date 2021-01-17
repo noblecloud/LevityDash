@@ -1,8 +1,8 @@
 # from .general import *
-from _config import config
-from _easyDict import SmartDictionary
-import units
+from src._config import config
+from src._easyDict import SmartDictionary
 import observations
+import units
 import api
 import translators
 import utils

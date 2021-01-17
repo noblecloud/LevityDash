@@ -7,6 +7,7 @@ from _easyDict import SmartDictionary
 from src.translators import Translator
 from units.rate import Wind, Precipitation
 from src import config
+from src import utils
 
 
 class Observation(SmartDictionary):
@@ -20,19 +21,10 @@ class Observation(SmartDictionary):
 	def __init__(self, *args, **kwargs):
 		super(Observation, self).__init__(*args, **kwargs)
 
-	def update(self, data):
+	def dataUpdate(self, data):
 
-		valueDictionary = self.translator
-		unitDictionary = self.translator.units
-
-		try:
-			self._timezone = data.pop(valueDictionary['timezone'])
-		except KeyError:
-			self._timezone = config.tz
-		try:
-			self._time = data.pop(valueDictionary['time'])
-		except KeyError:
-			self._time = datetime.now()
+		valueDictionary = self.translator.flat.copy()
+		unitDictionary = self.translator.units.flat.copy()
 
 		classDictionary = self.translator.classes
 		for dataName, name in valueDictionary.items():
@@ -52,16 +44,21 @@ class Observation(SmartDictionary):
 					numerator, denominator = classType
 					measurement = compoundClass(numerator(value), denominator(1))
 				elif type == 'date':
-					measurement = unitDictionary.formatDate(value)
+					tz = self.t.tz()
+					format = self.t.dateFormatString
+					measurement = utils.formatDate(value, tz.zone, format=format, utc=True)
 				else:
 					measurement = classType(value)
 				self[name] = measurement
 			except KeyError:
-				logging.warn('{} is not a valid key for {} of {}'.format(dataName, self.name, t.__class__.__name__))
+				logging.warn('{} is not a valid key for {} of {}'.format(dataName, self.name, self.t.__class__.__name__))
 
 	# for group, typeTranslator in self.translator.items():
 	# 	typeClass: ObservationSection = classes[group]
 	# 	self[group] = typeClass(data, self.translator)
+
+	def udpUpdate(self, data):
+		self.update(data)
 
 	def localize(self, measurement, value):
 		t = self._translator

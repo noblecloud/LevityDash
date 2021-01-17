@@ -38,6 +38,7 @@ class _Imperial(_Length, AbnormalScale):
 
 
 class Line(_Imperial):
+	_type = 'microDistance'
 	_format = '{:2.2f}'
 	_scale = 0
 	_metric: Millimeter
@@ -49,6 +50,7 @@ class Line(_Imperial):
 
 
 class Inch(_Imperial):
+	_type = 'smallDistance'
 	_format = '{:2.2f}'
 	_scale = 1
 	_metric: Centimeter
@@ -60,10 +62,10 @@ class Inch(_Imperial):
 
 
 class Foot(_Imperial):
+	_type = 'mediumDistance'
 	_scale = 2
 	_metric: Meter
 	_unit = 'ft'
-
 
 	def __init__(self, value):
 		super().__init__(value)
@@ -71,6 +73,7 @@ class Foot(_Imperial):
 
 
 class Yard(_Imperial):
+	_type = 'mediumDistance'
 	_scale = 3
 	_metric: Meter
 	_unit = 'yd'
@@ -81,6 +84,7 @@ class Yard(_Imperial):
 
 
 class Mile(_Imperial):
+	_type = 'largeDistance'
 	_scale = 4
 	_metric: Kilometer
 	_unit = 'mi'

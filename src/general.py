@@ -2,10 +2,9 @@ import logging
 from typing import Any
 
 from _easyDict import SmartDictionary
-from src.observations.AmbientWeather import AWObservation
-from src.observations.WeatherFlow import WFObservation
+from src.observations.ambientWeather import AWObservation
+from src.observations.weatherFlow import WFObservation
 from src.translators import Translator, WFTranslator
-
 
 logging.getLogger().setLevel(logging.INFO)
 
