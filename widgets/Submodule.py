@@ -8,24 +8,20 @@ from PySide2.QtGui import QFont, QImage, QPainter, QPen, QPolygonF
 from src.constants import Fonts
 from ui.conditions_UI import Ui_conditions
 from ui.wind_UI import Ui_Frame as windUI
+from units.rate import Wind
 from widgets.loudWidget import LoudWidget
 from widgets.Status import StatusObject
 
-fonts = Fonts()
 
-
-class RotateSVG(QtWidgets.QFrame):
+class windRose(QtWidgets.QFrame):
 	_rotation: float = 0
-	_image: QImage = QImage()
 	_animation: QPropertyAnimation
 
 	valueChanged = Signal(float)
 	clicked = Signal()
 
-	def __init__(self, imagePath: str, *args, **kwargs):
-		super(RotateSVG, self).__init__(*args, **kwargs)
-		self._image.load(imagePath)
-		# self.resize(self._image.size())
+	def __init__(self, *args, **kwargs):
+		super(windRose, self).__init__(*args, **kwargs)
 		self._animation = QPropertyAnimation(self, b'rotation')
 		self._animation.setEasingCurve(QEasingCurve.InOutCubic)
 
@@ -80,9 +76,6 @@ class RotateSVG(QtWidgets.QFrame):
 		arrow.append(right)
 		paint.drawPolygon(arrow)
 
-	def resizeSVG(self, svg, size):
-		pass
-
 	@property
 	def duration(self):
 		return self._animation.duration()
@@ -128,32 +121,27 @@ class Submodule(LoudWidget, StatusObject):
 	# def live(self, value: bool):
 	# 	self.setProperty('live', value)
 
+
 class windSubmodule(windUI, Submodule):
-	_value: Wind
+	# _speed: float
+	# animation: QPropertyAnimation
 
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
+		self._speed = 0.0
 		self.setupUi(self)
 		self.directionLabel.move(-10, 0)
-		self.image = RotateSVG('ui/elements/WindDial.svg', self.mainFrame)
-		self.image.setObjectName(u"windVane")
-		# self.unit.hide()
+		self.image = windRose(self.mainFrame)
+		self.image.setObjectName(u"windRose")
+		# self.animation = QPropertyAnimation(self, b'speed')
 
-	# self.move(0,10)
-	# self.image.pos = self.pos()
-	# self.mainFrame.layout().addWidget(self.image)
-
-	def refresh(self, data: Wind):
-		self.live = True
-		self._value = data
-		self.speed.setText(data.wind.speed)
+		self.unit.hide()
 
 	def setLive(self, value):
 		self.speedLabel.live = value
 		self.directionLabel.live = value
 		self.maxValueLabel.live = value
 		self.gustValueLabel.live = value
-
 
 	def paintEvent(self, event):
 		cardinalDirections = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
@@ -162,13 +150,26 @@ class windSubmodule(windUI, Submodule):
 		super().paintEvent(event)
 		self.image.setGeometry(self.mainFrame.geometry())
 
+	# @Property(float)
 	@property
 	def speed(self):
-		return self.speedLabel.text()
+		return self._speed
 
 	@speed.setter
 	def speed(self, value):
-		self.speedLabel.setText(value)
+		self.speedLabel.setText(str(value))
+		self._speed = value
+
+	# def animate(self, value):
+	# 	print(value, self._speed)
+	# 	self.animation.setStartValue(float(self._speed))
+	# 	self.animation.setEndValue(value)
+	# 	self.animation.setDuration(1000)
+	# 	self.animation.start()
+
+	#
+	# def animateSpeed(self, value):
+	# 	self.animate(value)
 
 	@property
 	def direction(self):
@@ -179,9 +180,6 @@ class windSubmodule(windUI, Submodule):
 		if isinstance(value, float) or isinstance(value, int):
 			logging.debug('setting wind with int or float')
 			self.image.animate(value, True, 3000)
-		elif isinstance(value, Measurement):
-			logging.debug('setting wind with int or float')
-			self.image.animate(value.int, True, 3000)
 		else:
 			logging.warn('Unable to set wind direction')
 

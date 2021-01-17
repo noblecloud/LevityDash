@@ -1,17 +1,17 @@
 * {
 	background-color: black;
-	color: yellow;
+	color: white;
 }
 
 *[live=true] {
-	color: lightblue;
+	color: white;
 }
 
 *[live=false]{
-	color: gray;
+	color: red;
 }
 
-#windVane {
+#windRose {
 	background-color: none;
 }
 #directionLabel {

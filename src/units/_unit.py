@@ -25,7 +25,7 @@ class SmartFloat(float):
 
 	def __str__(self) -> str:
 		string = self.formatString.format(self).rstrip('0').rstrip('.')
-		return '{}{} {}'.format(str(string), self.suffix, self.unit)
+		return '{}{}'.format(str(string), self.suffix)
 
 	def strip(self):
 		return self._format.format(str(self)).rstrip('0').rstrip('.')
@@ -92,6 +92,7 @@ class SmartFloat(float):
 
 
 class Measurement(SmartFloat):
+	_type = ''
 
 	def __new__(cls, value):
 		return SmartFloat.__new__(cls, value)
@@ -106,16 +107,27 @@ class Measurement(SmartFloat):
 		except ValueError:
 			raise BadConversion
 
-	def __str__(self) -> str:
-		string = self.formatString.format(self.localized).rstrip('0').rstrip('.')
-		return '{}{} {}'.format(str(string), self.localized.suffix, self.localized.unit)
+	# def __str__(self) -> str:
+	# string = self.formatString.format(self.localized).rstrip('0').rstrip('.')
+	# return '{}{} {}'.format(str(string), self.localized.suffix, self.localized.unit)
+
+	# def __repr__(self):
+	# 	return self.localized
 
 	@property
 	def localized(self):
-		try:
-			return self[self._config[self.name.lower()]]
-		except KeyError:
+		if self.convertable:
+			try:
+				return self[self._config[self._type.lower()]]
+			except AttributeError or KeyError as e:
+				logging.debug("Unable to get localized type for {}".format(self.name), e)
+				return self
+		else:
 			return self
+
+	@property
+	def convertable(self):
+		return self._type in self._config
 
 
 class AbnormalScale(Measurement):

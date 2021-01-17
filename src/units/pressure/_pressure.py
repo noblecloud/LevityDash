@@ -3,6 +3,7 @@ from units._unit import Measurement
 
 
 class _Pressure(Measurement):
+	_type = 'pressure'
 	_format = "{:2.2f}"
 
 	@property

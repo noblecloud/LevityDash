@@ -1,19 +1,18 @@
-from pathlib import Path
-
+import logging
 from datetime import datetime
 from typing import Union
-from pytz import timezone, tzinfo, utc
+
+from pytz import timezone, utc
 
 from src import config
 
-rootPath = Path(__file__).parent
-
 
 def utcCorrect(utcTime: datetime, tz: timezone = None):
+	"""Correct a datetime from utc to local time zone"""
 	return utcTime.replace(tzinfo=utc).astimezone(tz if tz else config.tz)
 
 
-def formatDate(value, **kwargs):
+def formatDate(value, tz: Union[str, timezone], utc: bool = False, format: str = '', microseconds: bool = False):
 	"""
 	Convert a date string, int or float into a datetime object with an optional timezone setting
 	and converting UTC to local time
@@ -32,12 +31,16 @@ def formatDate(value, **kwargs):
 	:return datetime:
 
 	"""
-	tz = timezone(kwargs['tz']) if kwargs['tz'] else config.tz
+	tz = timezone(tz) if tz else config.tz
 	if isinstance(value, str):
-		time = datetime.strptime(value, kwargs['format'])
+		try:
+			time = datetime.strptime(value, format)
+		except ValueError as e:
+			logging.error('A format string must be provided')
+			raise e
 	elif isinstance(value, int):
-		time = datetime.fromtimestamp(value * 0.001 if kwargs['microseconds'] else value)
+		time = datetime.fromtimestamp(value * 0.001 if microseconds else value)
 	else:
 		time = value
 
-	return utcCorrect(time, tz) if kwargs['utc'] else time.astimezone(tz)
+	return utcCorrect(time, tz) if utc else time.astimezone(tz)

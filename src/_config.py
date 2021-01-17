@@ -8,6 +8,7 @@ from pytz import timezone
 class _Config(ConfigParser):
 
 	def __init__(self, *args, **kwargs):
+		rootPath = Path(__file__).parent.parent
 		self.path = rootPath.joinpath('config.ini')
 		super(_Config, self).__init__(*args, **kwargs)
 		self.read()
@@ -39,4 +40,3 @@ class _Config(ConfigParser):
 
 
 config = _Config()
-rootPath = Path(__file__).parent

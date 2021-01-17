@@ -2,7 +2,9 @@ from units.length import _Length
 from units.time import _Time
 from . import _Rate
 
+
 class Precipitation(_Rate):
+	_type = 'precipitationRate'
 	_numerator: _Length
 	_denominator: _Time
 

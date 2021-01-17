@@ -30,8 +30,7 @@ class Translator(SmartDictionary):
 
 	def __init__(self, *args, **kwargs):
 		super(Translator, self).__init__(*args, **kwargs)
-		_dateIntDivisor: int = 1
-		_classes = SmartDictionary({
+		self._classes = SmartDictionary({
 				'f':        heat.Fahrenheit,
 				'c':        heat.Celsius,
 				'%':        others.Humidity,
@@ -65,6 +64,10 @@ class Translator(SmartDictionary):
 	@property
 	def units(self):
 		return self._units
+
+	@property
+	def classes(self):
+		return self._classes
 
 
 class ConditionValue:
