@@ -56,7 +56,6 @@ class UDPMessage(dict):
 		converted = {}
 		for key, value in zip(self.atlas, data):
 			try:
-				print(key, classAtlas[key], value)
 				converted[key] = classAtlas[key](value).localized
 			except AttributeError:
 				converted[key] = classAtlas[key](value)
@@ -79,6 +78,21 @@ class Wind(UDPMessage):
 		self.messAtlas['data'] = 'ob'
 		self.atlas = [*self.atlas, 'speed', 'direction']
 		super(Wind, self).__init__(udpData)
+		delattr(self, 'atlas')
+
+
+class Light(UDPMessage):
+	"""
+	I haven't quite figured out what this message contains.
+	I am confident the item at index 2 is irradiance, but the
+	item a index 1 alludes me.  It could be illuminance, but I
+	can not figure out what the unit is.
+	"""
+
+	def __init__(self, udpData):
+		self.messAtlas['data'] = 'ob'
+		self.atlas = [*self.atlas, 'illuminance', 'irradiance', 'zero', 'zero']
+		super(Light, self).__init__(udpData)
 		delattr(self, 'atlas')
 
 
