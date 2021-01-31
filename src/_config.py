@@ -32,11 +32,27 @@ class _Config(ConfigParser):
 		return self['AmbientWeather']
 
 	@property
+	def cc(self):
+		return self['ClimaCell']
+
+	@property
 	def tz(self):
 		try:
 			return timezone(self['Location']['timezone'])
 		except Exception as e:
 			logging.error('Unable load timezone from config\n', e)
+
+	@property
+	def loc(self):
+		return float(self['Location']['lat']), float(self['Location']['lon'])
+
+	@property
+	def lat(self):
+		return float(self['Location']['lat'])
+
+	@property
+	def lon(self):
+		return float(self['Location']['lon'])
 
 
 config = _Config()
