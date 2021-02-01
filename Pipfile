@@ -8,16 +8,10 @@ pylunar = "*"
 pysolar = "*"
 pytz = "*"
 climacell-python = "*"
-setuptools = "*"
-wheel = "*"
 numpy = "*" #install with pip3 install numpy --no-use-pep517 first
-matplotlib = "*"
-pyqt5 = "*"
-scipy = "*"
-install = "*"
 ambient-api = "*"
-vector = "*"
 pyside2 = "*"
+docopt = "<0.7,>=0.6.2"
 
 [dev-packages]
 
