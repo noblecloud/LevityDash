@@ -1,18 +1,19 @@
 import json
 import logging
-from datetime import datetime, timedelta
-from typing import Any
+from configparser import ConfigParser, SectionProxy
+from typing import Any, Union
 
-from PySide2.QtCore import QObject, Signal, Slot
+import requests
+from PySide2.QtCore import QObject, Signal
 from PySide2.QtNetwork import QUdpSocket
 
 import utils
 from api.errors import APIError, InvalidCredentials, RateLimitExceeded
+from observations import Observation, WFStationObservation
 from src import config
-from observations import Observation, WFObservation, WFStationObservation
-from translators import WFStationTranslator, WFTranslator
-import requests
 from src.udp import weatherFlow as udp
+import src.units.defaults.weatherFlow as units
+from translators import WFStationTranslator
 
 
 class UDPMessenger(QObject):
@@ -24,7 +25,7 @@ class UDPMessenger(QObject):
 		self.udpSocket = QUdpSocket(self)
 
 	def connectUPD(self):
-		self.udpSocket.bind(50224)
+		self.udpSocket.bind(50222)
 		self.udpSocket.readyRead.connect(self.receiveUDP)
 
 	def receiveUDP(self):
@@ -35,10 +36,8 @@ class UDPMessenger(QObject):
 			if datagram['type'] in messageTypes:
 				messageType = messageTypes[datagram['type']]
 				message = messageType(datagram)
-				print(self.station._current['speed'])
 				self.station.udpUpdate(message)
 				self.signal.emit('updated')
-				print(self.station._current['speed'])
 
 
 class _URLs:
@@ -76,23 +75,23 @@ class _URLs:
 
 
 class WeatherFlow:
-	_apiKey: str
 	_stationID: int
 	_deviceID: int
 
 	_baseParams: dict[str, str] = {}
+	_params: dict[str, str] = {}
 
 	_baseURL = 'https://swd.weatherflow.com/swd/rest/'
+	_endpoint = ''
 
 	def __init__(self):
-		self._apiKey = config.wf['token']
 		self._baseParams['token'] = config.wf['token']
 
 	def getData(self, params: dict = None):
 
-		params = {**self._baseParams, **params} if params else self._baseParams
+		params = {**self._baseParams, **self._params, **params} if params else {**self._baseParams, **self._params}
 
-		request = requests.get(self._url, params)
+		request = requests.get(self.url, params)
 
 		if request.status_code == 200:
 			return request.json()
@@ -106,18 +105,70 @@ class WeatherFlow:
 			raise APIError
 
 	@property
-	def _url(self):
-		return self._baseURL
+	def url(self):
+		return self._baseURL + self._endpoint
+
+
+class WFForecast(WeatherFlow):
+	_info = dict[str: Any]
+	# _hourly: Observation
+	# _daily: ObservationSet
+	_translator = WFStationTranslator()
+
+	def __init__(self, **kwargs):
+		## TODO: Add support for using units in config.ini
+		super().__init__()
+		self._endpoint = 'better_forecast'
+		self._params.update({"station_id": config.wf['stationID'], **kwargs})
+		self._translator = WFStationTranslator()
+		self._observation = WFStationObservation()
+
+	def getData(self, *args):
+		translator = ConfigParser()
+		translator.read('weatherFlow.ini')
+		self.data: dict = super(WFForecast, self).getData()
+		atlas = self.buildClassAtlas(translator)
+		self.translateData(translator['root'], self.data, translator, atlas)
+
+	# for item in infoConfig:
+	# 	newKey = infoConfig[item]
+	# 	if item != newKey:
+	# 		self.data[newKey] = self.data.pop(item)
+	# 	else:
+	# 		pass
+
+	def translateData(self, section, data: Union[dict, list], translator, atlas) -> Union[dict, list]:
+		if isinstance(data, list):
+			newList = []
+			for i in range(len(data)):
+				newList.append(self.translateData(section, data[i], translator, atlas))
+			return newList
+		for key in section:
+			newKey = section[key]
+			if newKey[0] == '[':
+				data[newKey[1:-1]] = self.translateData(translator[newKey[1:-1]], data.pop(key), translator, atlas)
+			else:
+				if key != newKey:
+					value = data.pop(key)
+					data[newKey] = data.pop(key)
+				else:
+					pass
+		return data
+
+	def buildClassAtlas(self, translator) -> dict[str, str]:
+		atlas = {}
+		for item in translator['unitGroups']:
+			type = item
+			group = [value.strip(' ') for value in translator['unitGroups'][type].split(',')]
+			for value in group:
+				atlas[value] = type
+		return atlas
 
 
 class WFStation(WeatherFlow):
-	_baseURL: str
 	_id: int
-	_prams: dict[str, str]
 	_info = dict[str: Any]
-	_current: Observation
-	_hourlyForecast: Any
-	_dailyForecast: Any
+	_observation: Observation
 	_translator = WFStationTranslator()
 	_messenger = UDPMessenger
 
@@ -125,12 +176,13 @@ class WFStation(WeatherFlow):
 		super().__init__()
 
 		self._id = config.wf['StationID']
+		self._endpoint = 'observations/station/{id}'.format(id=self._id)
 		self._translator = WFStationTranslator()
-		self._current = WFStationObservation()
+		self._observation = WFStationObservation()
 		self._messenger = UDPMessenger(station=self)
 		self._messenger.connectUPD()
 
-	def getData(self):
+	def getData(self, *args):
 		data = super(WFStation, self).getData()
 		observationData: dict = data.pop('obs')[0]
 		tz = data['timezone']
@@ -138,27 +190,34 @@ class WFStation(WeatherFlow):
 		date = utils.formatDate(time, tz)
 		self._date = date
 		self._info = data
-		self._current.dataUpdate(observationData)
+		self._observation.dataUpdate(observationData)
+		self.localize()
+
+	def getForecast(self):
+		data = super(WFStation, self).getData()
+		observationData: dict = data.pop('obs')[0]
+		tz = data['timezone']
+		time = observationData.pop('timestamp')
+		date = utils.formatDate(time, tz)
+		self._date = date
+		self._info = data
+		self._observation.dataUpdate(observationData)
 		self.localize()
 
 	def localize(self):
-		for key, value in self._current.items():
+		for key, value in self._observation.items():
 			try:
-				self._current[key] = value.localized
+				self._observation[key] = value.localized
 			except AttributeError:
 				pass
 
 	def udpUpdate(self, data):
 		data = data['data']
-		self._current.update(data)
+		self._observation.update(data)
 
 	@property
-	def _url(self):
-		return '{}observations/station/{}'.format(self._baseURL, self._id)
-
-	@property
-	def current(self):
-		return self._current
+	def obs(self):
+		return self._observation
 
 	@property
 	def messenger(self):
@@ -176,8 +235,6 @@ class ErrorNoConnection(Exception):
 
 if __name__ == '__main__':
 	logging.getLogger().setLevel(logging.DEBUG)
-	wf = WFStation()
+	wf = WFForecast()
 	wf.getData()
-	c = wf._current
-	print(c.humidity)
-	print()
+	print(wf)
