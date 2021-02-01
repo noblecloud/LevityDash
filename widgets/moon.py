@@ -1,8 +1,16 @@
+import sys
+from datetime import datetime
+
 import numpy as np
+import pylunar
 from PySide2 import QtCore, QtGui, QtWidgets
-from PySide2.QtCore import Property, QEasingCurve, QPropertyAnimation, QRect, Signal
+from PySide2.QtCore import Property, QPropertyAnimation, Signal
 from PySide2.QtGui import QPainter, QPainterPath, QPen
-from scipy.constants import golden
+from PySide2.QtWidgets import QApplication
+from pysolar import solar
+
+from src import config
+from utils import utcCorrect
 
 
 class MoonPhases(QtWidgets.QFrame):
@@ -13,29 +21,48 @@ class MoonPhases(QtWidgets.QFrame):
 
 	valueChanged = Signal(float)
 
-	def __init__(self, rect: QRect, *args, **kwargs):
+	def __init__(self, *args, **kwargs):
 		super(MoonPhases, self).__init__(*args, **kwargs)
-		self.setFrameRect(rect)
+		# self.setFrameRect(rect)
 		self.setStyleSheet('background-color: black')
-		self.installEventFilter(self)
-		self._animation = QPropertyAnimation(self, b'phase')
-		self._animation.setEasingCurve(QEasingCurve.InCurve)
-		self.show()
+		# self.installEventFilter(self)
+		# self._animation = QPropertyAnimation(self, b'phase')
+		# self._animation.setEasingCurve(QEasingCurve.InCurve)
 
-	def animate(self):
-		if self._animation.state() != QtCore.QAbstractAnimation.Running:
-			self._animation.setStartValue(0.0)
-			self._animation.setEndValue(10.0)
-			self._animation.setDuration(5000)
-			self._animation.start()
+		self.lat, self.lon = config.loc
 
-	def mousePressEvent(self, event):
+		date = datetime.now()
+		date = utcCorrect(date)
+		mi = pylunar.MoonInfo(self.decdeg2dms(self.lat), self.decdeg2dms(self.lon))
+		mi.update(date)
+		self._phase = mi.fractional_phase()
 		print(self._phase)
 
-	def eventFilter(self, obj, event):
-		if event.type() == QtCore.QEvent.KeyPress:
-			if event.key() == QtCore.Qt.Key_R:
-				self.animate()
+		self._rotation = self.getAngle(mi)
+
+	def getAngle(self, mi) -> float:
+
+		local = datetime.now(tz=config.tz)
+		sunalt = solar.get_altitude_fast(self.lat, self.lon, local)
+		sunaz = solar.get_azimuth_fast(self.lat, self.lon, local)
+		moonaz = mi.azimuth()
+		moonalt = mi.altitude()
+
+		dLon = (sunaz - moonaz)
+		y = np.sin(np.deg2rad(dLon)) * np.cos(np.deg2rad(sunalt))
+		x = np.cos(np.deg2rad(moonalt)) * np.sin(np.deg2rad(sunalt)) - np.sin(np.deg2rad(moonalt)) * np.cos(
+				np.deg2rad(sunalt)) * np.cos(np.deg2rad(dLon))
+		brng = np.arctan2(y, x)
+		brng = np.rad2deg(brng)
+		return brng
+
+	@staticmethod
+	def decdeg2dms(dd):
+		# a = []
+		# for dd in args:
+		mnt, sec = divmod(dd * 3600, 60)
+		deg, mnt = divmod(mnt, 60)
+		return deg, mnt, sec
 
 	def sphericalToCartesian(self, ascension, declination):
 
@@ -67,7 +94,7 @@ class MoonPhases(QtWidgets.QFrame):
 
 		if self._rotation:
 			painter.translate(w / 2, h / 2)
-			painter.rotate(self._rotation)
+			painter.rotate(self._rotation + 180)
 			painter.translate(-(w / 2), -(h / 2))
 
 		painter.setRenderHint(QPainter.HighQualityAntialiasing)
@@ -85,7 +112,7 @@ class MoonPhases(QtWidgets.QFrame):
 		three4 = QtGui.QColor(255, 255, 255, 192)
 		full = QtGui.QColor(255, 255, 255, 255)
 
-		self.drawMoon(painter, phase, full)
+		self.drawMoon(painter, self._phase, full)
 
 		# This sorta works for drawing a gradient phase
 		# TODO: Find a more efficient method for this
@@ -94,11 +121,15 @@ class MoonPhases(QtWidgets.QFrame):
 
 		painter.end()
 
-	def drawMoon(self, painter, phase, color):
+	def drawMoon(self, painter, phase: float, color):
 		brush = QtGui.QBrush(color)
 		pen = QPen(color, 0)
 		moon = QPainterPath()
 		painter.setPen(pen)
+
+		phase *= 360
+		phase = (phase + 180) % 360
+
 		if phase < 9:
 			pass
 		elif phase < 180:
@@ -136,4 +167,14 @@ class MoonPhases(QtWidgets.QFrame):
 	def phase(self, value: float):
 		self._phase = value
 		self.update()
-		self.valueChanged.emit(value)
+
+
+if __name__ == '__main__':
+	app = QApplication()
+
+	window = MoonPhases()
+
+	# window.phase = 2
+	window.show()
+
+	sys.exit(app.exec_())
