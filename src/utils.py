@@ -5,13 +5,14 @@ from typing import Union
 from pytz import timezone, utc
 
 from src import config
-
+from dateutil.parser import parse as dateParser
 
 def utcCorrect(utcTime: datetime, tz: timezone = None):
 	"""Correct a datetime from utc to local time zone"""
 	return utcTime.replace(tzinfo=utc).astimezone(tz if tz else config.tz)
 
 
+# TODO: Look into using dateutil.parser.parse as a backup for if util.formatDate is given a string without a format
 def formatDate(value, tz: Union[str, timezone], utc: bool = False, format: str = '', microseconds: bool = False):
 	"""
 	Convert a date string, int or float into a datetime object with an optional timezone setting
@@ -31,16 +32,20 @@ def formatDate(value, tz: Union[str, timezone], utc: bool = False, format: str =
 	:return datetime:
 
 	"""
-	tz = timezone(tz) if tz else config.tz
+	tz = timezone(tz) if isinstance(tz, str) else tz
+	tz = tz if tz else config.tz
+
 	if isinstance(value, str):
 		try:
-			time = datetime.strptime(value, format)
+			if format:
+				time = datetime.strptime(value, format)
+			else:
+				time = dateParser(value)
 		except ValueError as e:
-			logging.error('A format string must be provided')
+			logging.error('A format string must be provided.  Maybe dateutil.parser.parse failed?')
 			raise e
 	elif isinstance(value, int):
 		time = datetime.fromtimestamp(value * 0.001 if microseconds else value)
 	else:
 		time = value
-
 	return utcCorrect(time, tz) if utc else time.astimezone(tz)

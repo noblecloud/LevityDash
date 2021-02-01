@@ -225,3 +225,4 @@ cython_debug/
 /tests/*
 /plugins/*
 /plugins/*__init.py
+/config.ini

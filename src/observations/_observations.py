@@ -99,3 +99,8 @@ class Observation(SmartDictionary):
 	# 	return self._light
 
 
+class ObservationSet(SmartDictionary):
+	_translator: Translator
+
+	def __init__(self, *args, **kwargs):
+		super(ObservationSet, self).__init__(*args, **kwargs)
