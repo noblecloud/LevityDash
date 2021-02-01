@@ -1,5 +1,4 @@
 import logging
-import threading
 from datetime import datetime, timedelta
 from typing import Union
 
@@ -10,13 +9,14 @@ from climacell_api.client import ClimacellApiClient
 from climacell_api.climacell_response import ClimacellResponse, ObservationData
 from pysolar import util
 from pytz import utc
-from scipy.interpolate import interp1d
-from scipy.ndimage import gaussian_filter1d
 
+from api.errors import APIError, BadRequest, TooManyRequests, Unauthorized
+from src import config
 from src.constants import fields, FORECAST_TYPES, maxDates, tz
+from utils import formatDate
 
 
-class Forecast(threading.Thread):
+class Forecast:
 	live: bool = True
 	forecastLength: timedelta
 	tz = tz
@@ -31,21 +31,19 @@ class Forecast(threading.Thread):
 	lastCall: datetime
 	liveUpdate: bool = True
 
-	def __init__(self, key, lat_lon: tuple[float, float], forecastType: str,
-	             measurementFields: Union[list[str], str] = None, interval: int = 5) -> None:
+	def __init__(self, forecastType: str, measurementFields: Union[list[str], str] = None) -> None:
 
 		super().__init__()
-		self.interval = interval
 
 		if forecastType not in FORECAST_TYPES:
 			raise ValueError("This is not a valid forecast type. Valid values are: {}".format(FORECAST_TYPES))
 		if not set(measurementFields).issubset(set(fields.HOURLY)):
 			raise ValueError("Measures are not valid.  Must be {}".format(fields.HOURLY))
 
-		self.apiKey = key
+		self.apiKey = config.cc['apiKey']
 		self.forecastType = forecastType
 		self.fields = measurementFields
-		self.lat, self.lon = lat_lon
+		self.lat, self.lon = config.loc
 
 	def __getitem__(self, item):
 
@@ -104,7 +102,7 @@ class Forecast(threading.Thread):
 		else:
 			self.live = False
 			logging.error(response.data())
-			raise Error
+			raise APIError
 
 		return True
 
@@ -257,7 +255,6 @@ class Forecast(threading.Thread):
 	def mapData(self, inputData: Union[list[ObservationData], ObservationData], interpolate: bool = True) -> dict[
 		str, list[ObservationData]]:
 
-		import dateutil.parser
 		temp = False
 		precipitation = False
 		light = True
@@ -278,19 +275,12 @@ class Forecast(threading.Thread):
 		output: dict[str, Union[list, str, int]] = self.buildDictionary()
 
 		for measurement in inputData:
-			utcTimestamp = measurement.observation_time
-			localTimestamp = utcTimestamp.replace(tzinfo=utc)
-			localTimestamp = localTimestamp.astimezone(tz)
-			output['timestampInt'].append(localTimestamp.timestamp())
-			output['timestamp'].append(localTimestamp)
+			time = formatDate(measurement.observation_time, config.tz, utc=True)
+			output['timestampInt'].append(time.timestamp())
+			output['timestamp'].append(time)
 			for field in measurement.fields:
 				if field in ['sunrise', 'sunset']:
-					value = dateutil.parser.parse(measurement.measurements[field].value)
-
-					localDate = value.replace(tzinfo=utc)
-					localDate = localDate.astimezone(tz)
-
-					output[field].append(localDate)
+					output[field].append(formatDate(measurement.measurements[field].value, config.tz.zone, utc=True))
 				# elif field in ['cloud_base', 'cloud_ceiling']:
 				# 	if value == None:
 				# 		value = 0
@@ -380,26 +370,6 @@ class Forecast(threading.Thread):
 		return np.random.random_integers(0, 100, length)
 
 
-class Error(Exception):
-	pass
-
-
-class BadRequest(Error):
-	pass
-
-
-class Unauthorized(Error):
-	pass
-
-
-class Forbidden(Error):
-	pass
-
-
-class TooManyRequests(Error):
-	pass
-
-
 class hourlyForecast(Forecast):
 	lastCall: datetime
 	liveUpdate = True
@@ -408,9 +378,14 @@ class hourlyForecast(Forecast):
 	                            'humidity', 'wind_direction', 'sunrise', 'sunset', 'cloud_cover', 'cloud_ceiling',
 	                            'cloud_base', 'surface_shortwave_radiation', 'moon_phase', 'weather_code']
 
-	def __init__(self, key, lat_lon: tuple[float, float], forecastType: str,
-	             measurementFields: Union[list[str], str] = None, interval: int = 60) -> None:
-		super().__init__(key, lat_lon, forecastType, measurementFields, interval=interval)
+	def __init__(self) -> None:
+		fields = ['temp', 'precipitation', 'sunrise', 'sunset',
+		          'feels_like', 'dewpoint', 'precipitation_probability',
+		          'cloud_cover', 'surface_shortwave_radiation',
+		          'wind_speed',
+		          'epa_aqi', 'cloud_ceiling', 'cloud_base',
+		          'wind_direction']
+		super().__init__('hourly', fields)
 		self.client = ClimacellApiClient(self.apiKey)
 		self.lastCall = datetime.now() - timedelta(minutes=1)
 		self.update()
@@ -429,6 +404,10 @@ class hourlyForecast(Forecast):
 			print('hourly updated at {}'.format(self.lastCall.strftime('%H:%M:%S')))
 		return True
 
+	@property
+	def dd(self):
+		return self.data
+
 
 class dailyForecast(Forecast):
 	lastCall: datetime
@@ -439,9 +418,9 @@ class dailyForecast(Forecast):
 	                            'humidity', 'wind_direction', 'sunrise', 'sunset', 'cloud_cover', 'cloud_ceiling',
 	                            'cloud_base', 'surface_shortwave_radiation', 'moon_phase', 'weather_code']
 
-	def __init__(self, key, lat_lon: tuple[float, float], forecastType: str,
+	def __init__(self, forecastType: str,
 	             measurementFields: Union[list[str], str] = None, interval: int = 60) -> None:
-		super().__init__(key, lat_lon, forecastType, measurementFields, interval=interval)
+		super().__init__(forecastType, measurementFields, interval=interval)
 		self.client = ClimacellApiClient(self.apiKey)
 		self.update()
 
@@ -526,12 +505,8 @@ class nowcast(Forecast):
 	                            'sunset', 'cloud_cover', 'cloud_ceiling', 'cloud_base', 'surface_shortwave_radiation',
 	                            'weather_code']
 
-	def __init__(self,
-	             key: str,
-	             lat_lon: tuple[float, float],
-	             measurementFields: Union[list[str], str] = None,
-	             interval: int = 1) -> None:
-		super().__init__(key, lat_lon, 'nowcast', measurementFields, interval=interval)
+	def __init__(self, measurementFields: Union[list[str], str] = None, interval: int = 1) -> None:
+		super().__init__('nowcast', measurementFields, interval=interval)
 		self.client = ClimacellApiClient(self.apiKey)
 		self.lastCall = datetime.now() - timedelta(minutes=1)
 		self.interval = interval

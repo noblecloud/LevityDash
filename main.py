@@ -2,30 +2,31 @@
 import logging
 import sys
 from time import strftime
+import PyQt5
 
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from PySide2 import QtCore
-from PySide2.QtCore import QFile, QSize, QTimer
+# from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from PySide2 import QtCore, QtGui
+from PySide2.QtCore import QTimer
 from PySide2.QtGui import QFont
-from PySide2.QtUiTools import QUiLoader
 from PySide2.QtWidgets import QApplication, QDesktopWidget, QMainWindow
 
+from display import dataDisplay
 from src.api import AmbientWeather, AWStation
 from src.api.errors import APIError
-from src import config
-from translators._translator import ClimacellConditionInterpreter, ConditionInterpreter
-from display import dataDisplay
 from src.api.forecast import dailyForecast, hourlyForecast
-from ui.main_UI import QFont, QSizePolicy, Ui_weatherDisplay
-from src.api.weatherFlow import WFStation, WeatherFlow
-from widgets.Complication import Complication
-from widgets.DynamicLabel import DynamicLabel
-from widgets.GlyphBox import GlyphBox
-from widgets.Temperature import LargeBox
+from src.api.weatherFlow import WeatherFlow, WFStation
+from translators._translator import ClimacellConditionInterpreter, ConditionInterpreter
+from ui.main_UI import QFont, Ui_weatherDisplay
+from widgets.Graph import Graph
+
+
+class dummyForecast:
+	from tests.pickler import pans as reload
+	data = reload('./tests/snapshots/202101031000')
 
 
 class MainWindow(QMainWindow, Ui_weatherDisplay):
-	forecastGraph: FigureCanvasTkAgg
+	forecastGraph: Graph
 	weatherFlow: WeatherFlow
 	ambientWeather: AmbientWeather
 	dailyForecast: dailyForecast
@@ -58,7 +59,7 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 		self.AmbKey = 'e574e1bfb9804a52a1084c9f1a4ee5d88e9e850fc1004aeaa5010f15c4a23260'
 		self.AmbApp = 'ec02a6c4e29d42e086d98f5db18972ba9b93d864471443919bb2956f73363395'
 
-		# self.connectForecast()
+		self.connectForecast()
 		self.aw = AWStation()
 		self.wf = WFStation()
 		self.connectAW()
@@ -109,7 +110,7 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 	def updateWF(self):
 
 		try:
-			self.aw.update()
+			# self.aw.update()
 			self.setRealtimeItems()
 			logging.debug('AmbientWeather updated')
 			self.checkThreadTimer.singleShot(1000 * 5, self.updateAW)
@@ -119,17 +120,12 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 			self.checkThreadTimer.singleShot(1000 * 60, self.updateAW)
 
 	def connectForecast(self):
+
 		try:
-			self.forecast = hourlyForecast(self.key, (self.lat, self.lon), 'hourly',
-			                               measurementFields=['temp', 'precipitation', 'sunrise', 'sunset',
-			                                                  'feels_like', 'dewpoint', 'precipitation_probability',
-			                                                  'cloud_cover', 'surface_shortwave_radiation',
-			                                                  'wind_speed',
-			                                                  'epa_aqi', 'cloud_ceiling', 'cloud_base',
-			                                                  'wind_direction'])
-			self.dailyForecast = dailyForecast(self.key, (self.lat, self.lon), 'hourly',
-			                                   measurementFields=['weather_code'])
-			# self.buildGraph()
+			self.forecast = hourlyForecast()
+			# self.dailyForecast = dailyForecast(self.key, (self.lat, self.lon), 'hourly',
+			#                                    measurementFields=['weather_code'])
+			self.buildGraph()
 			self.setForecastItems()
 			self.checkThreadTimer.singleShot(1000 * 15, self.updateForecast)
 		except ValueError:
@@ -145,35 +141,34 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 		points = tuple(zip(xdata[ind], ydata[ind]))
 		print(points[1][0])
 
-
 	def motionEvent(self, event):
 		print(event.xdata, event.ydata)
 		self.forecastDisplay.showLine(event)
 
 	def buildGraph(self):
 		logging.debug('Building Graph')
-		self.forecastDisplay = dataDisplay(self.forecast, (1920, 1080, 200))
-		self.forecastGraph = self.forecastDisplay.setQtCanvas()
-		self.forecastGraph.mpl_connect('pick_event', self.pickEvent)
-		self.forecastGraph.mpl_connect('figure_enter_event', self.startTimeTravel)
-		self.forecastGraph.mpl_connect('figure_leave_event', self.stopTimeTravel)
-		# self.forecastDisplay.testPicker()
-		self.forecastDisplay.showTemperature()
-		self.forecastDisplay.showDewpoint()
-		self.forecastDisplay.showFeelsLike()
-		# self.forecastDisplay.showLight()
-		self.forecastDisplay.addDaysOfWeek()
-		# self.forecastDisplay.showWind()
-		# self.forecastDisplay.showRain()
-		# self.forecastDisplay.showCloudCover()
-		# self.forecastDisplay.showLunar()
-		self.forecastDisplay.plot()
-		sizePolicy = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
-		sizePolicy.setHorizontalStretch(9)
-		sizePolicy.setVerticalStretch(0)
-		sizePolicy.setHeightForWidth(self.forecastGraph.sizePolicy().hasHeightForWidth())
-		self.forecastGraph.setSizePolicy(sizePolicy)
-		self.gridLayout_3.addWidget(self.forecastGraph, 0, 1, 1, 1)
+		# self.forecastDisplay = dataDisplay(self.forecast, (1920, 1080, 200))
+		self.forecastGraph.data = self.forecast.dd
+
+	# self.forecastGraph.mpl_connect('pick_event', self.pickEvent)
+	# self.forecastGraph.mpl_connect('figure_enter_event', self.startTimeTravel)
+	# self.forecastGraph.mpl_connect('figure_leave_event', self.stopTimeTravel)
+	# # self.forecastDisplay.testPicker()
+	# self.forecastDisplay.showTemperature()
+	# self.forecastDisplay.showDewpoint()
+	# self.forecastDisplay.showFeelsLike()
+	# # self.forecastDisplay.showLight()
+	# self.forecastDisplay.addDaysOfWeek()
+	# # self.forecastDisplay.showWind()
+	# # self.forecastDisplay.showRain()
+	# # self.forecastDisplay.showCloudCover()
+	# # self.forecastDisplay.showLunar()
+	# self.forecastDisplay.plot()
+	# sizePolicy = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
+	# sizePolicy.setHorizontalStretch(9)
+	# sizePolicy.setVerticalStretch(0)
+	# sizePolicy.setHeightForWidth(self.forecastGraph.sizePolicy().hasHeightForWidth())
+	# self.forecastGraph.setSizePolicy(sizePolicy)
 
 	def buildFonts(self):
 		self.glyphs = QFont()
@@ -201,20 +196,19 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 		if not self.timeTraveling:
 			logging.info('setting forecast items')
 			# Current Conditions
-			today = self.dailyForecast.data[0]
+			# today = self.dailyForecast.data[0]
 			self.subB.live = True
-			self.subA.glyph = self.interpreter[today.measurements['weather_code'].value]
-			self.subA.currentCondition = str(self.interpreter[today.measurements['weather_code'].value])
+			# self.subA.glyph = self.interpreter[today.measurements['weather_code'].value]
+			# self.subA.currentCondition = str(self.interpreter[today.measurements['weather_code'].value])
 
 			# Outdoor Air Quality
 			self.outdoor.live = True
-			self.outdoor.SubAValue.setText(('{:4d}'.format(round(self.forecast.data['epa_aqi'][0]))))
+			# self.outdoor.SubAValue.setText(('{:4d}'.format(round(self.forecast.data['epa_aqi'][0]))))
 
 			# Sunrise/Sunset
 			self.sunSet.live = True
-			self.sunSet.value.setText(self.forecast.data['sunrise'][0].strftime('%-I:%M'))
-			self.sunRise.live = True
-			self.sunRise.value.setText(self.forecast.data['sunset'][0].strftime('%-I:%M'))
+		self.sunSet.value.setText(self.forecast.data['sunrise'][0].strftime('%-I:%M'))
+		self.sunRise.value.setText(self.forecast.data['sunset'][0].strftime('%-I:%M'))
 
 	def clearForecastItems(self):
 		# Current Conditions
@@ -255,14 +249,15 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 	def setRealtimeItems(self):
 
 		if not self.timeTraveling:
-			print('updating')
+			self.forecastGraph.data = self.forecast.dd
 
 			# Wind Widget
+			self.moonPhase.phase = 15
 			self.subB.live = True
-			self.subB.speed = self.wf.current.speed
-			self.subB.direction = self.wf.current.direction
-			self.subB.gust = str(self.wf.current.gust)
-			self.subB.max = str(self.wf.current.lull)
+			self.subB.speed = self.wf.obs.speed
+			self.subB.direction = self.wf.obs.direction
+			self.subB.gust = str(self.wf.obs.gust)
+			self.subB.max = str(self.wf.obs.lull)
 
 			# Temperatures
 			self.indoor.live = True
@@ -272,9 +267,10 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 
 			# Outdoor
 			self.outdoor.live = True
-			self.outdoor.temperature.setText(str(self.wf.current.temperature) + 'º')
+			self.outdoor.temperature.setText(str(self.wf.obs.temperature) + 'º')
 			# SubAValue relies on forecast data
-			self.outdoor.SubBValue.setText(str(self.wf.current.dewpoint) + 'º')
+			self.outdoor.SubBValue.setText(str(self.wf.obs.dewpoint) + 'º')
+			self.outdoor.SubAValue.setText(str(round(self.forecast.data['epa_aqi'][0])))
 
 	def fadeRealtimeItems(self):
 
@@ -384,9 +380,9 @@ if __name__ == "__main__":
 	# print(window.ui.moonPhase.setProperty('charStr', ''))
 
 	window.show()
-	display_monitor = 0
-	monitor = QDesktopWidget().screenGeometry(display_monitor)
-	window.move(monitor.left(), monitor.top())
+	# display_monitor = 0
+	# monitor = QDesktopWidget().screenGeometry(display_monitor)
+	# window.move(monitor.left(), monitor.top())
 	# window.showFullScreen()
 
 	sys.exit(app.exec_())
