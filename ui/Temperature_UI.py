@@ -18,7 +18,7 @@ from widgets.DynamicLabel import DynamicLabel
 class Ui_Form(object):
     def setupUi(self, Form):
         if not Form.objectName():
-	        Form.setObjectName(u"Form")
+            Form.setObjectName(u"Form")
         Form.resize(335, 285)
         Form.setMinimumSize(QSize(335, 285))
         font = QFont()
