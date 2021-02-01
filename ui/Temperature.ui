@@ -2,57 +2,51 @@
 <ui version="4.0">
  <class>Form</class>
  <widget class="QWidget" name="Form">
-  <property name="geometry">
-   <rect>
-    <x>0</x>
-    <y>0</y>
-    <width>246</width>
-    <height>272</height>
-   </rect>
-  </property>
-  <property name="sizePolicy">
-   <sizepolicy hsizetype="Minimum" vsizetype="MinimumExpanding">
-    <horstretch>0</horstretch>
-    <verstretch>0</verstretch>
-   </sizepolicy>
-  </property>
-  <property name="font">
-   <font>
-    <family>SF Compact Rounded</family>
-   </font>
-  </property>
-  <property name="styleSheet">
-   <string notr="true"/>
-  </property>
-  <layout class="QVBoxLayout" name="verticalLayout" stretch="3,1,0,0">
-   <property name="spacing">
-    <number>0</number>
-   </property>
-   <property name="leftMargin">
-    <number>0</number>
-   </property>
-   <property name="topMargin">
-    <number>0</number>
-   </property>
-   <property name="rightMargin">
-    <number>0</number>
-   </property>
-   <property name="bottomMargin">
-    <number>0</number>
-   </property>
-   <item>
-    <widget class="QLabel" name="title">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="MinimumExpanding" vsizetype="Maximum">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
-     </property>
-     <property name="font">
-      <font>
-       <family>SF Pro Rounded</family>
-       <pointsize>45</pointsize>
-      </font>
+	 <property name="geometry">
+		 <rect>
+			 <x>0</x>
+			 <y>0</y>
+			 <width>335</width>
+			 <height>285</height>
+		 </rect>
+	 </property>
+	 <property name="minimumSize">
+		 <size>
+			 <width>335</width>
+			 <height>285</height>
+		 </size>
+	 </property>
+	 <property name="font">
+		 <font>
+			 <family>SF Compact Rounded</family>
+		 </font>
+	 </property>
+	 <property name="styleSheet">
+		 <string notr="true"/>
+	 </property>
+	 <layout class="QVBoxLayout" name="verticalLayout" stretch="1,10,2">
+		 <property name="spacing">
+			 <number>0</number>
+		 </property>
+		 <property name="leftMargin">
+			 <number>0</number>
+		 </property>
+		 <property name="topMargin">
+			 <number>0</number>
+		 </property>
+		 <property name="rightMargin">
+			 <number>0</number>
+		 </property>
+		 <property name="bottomMargin">
+			 <number>0</number>
+		 </property>
+		 <item>
+			 <widget class="QLabel" name="title">
+				 <property name="font">
+					 <font>
+						 <family>SF Pro Rounded</family>
+						 <pointsize>31</pointsize>
+					 </font>
      </property>
      <property name="text">
       <string>Location</string>
@@ -64,38 +58,17 @@
    </item>
    <item>
     <widget class="DynamicLabel" name="temperature">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="MinimumExpanding" vsizetype="Expanding">
-       <horstretch>0</horstretch>
-       <verstretch>2</verstretch>
-      </sizepolicy>
-     </property>
-     <property name="minimumSize">
-      <size>
-       <width>0</width>
-       <height>80</height>
-      </size>
-     </property>
-     <property name="maximumSize">
-      <size>
-       <width>16777215</width>
-       <height>100</height>
-      </size>
-     </property>
+		<property name="sizePolicy">
+			<sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+				<horstretch>0</horstretch>
+				<verstretch>0</verstretch>
+			</sizepolicy>
+		</property>
      <property name="font">
-      <font>
-       <family>SF Pro Rounded</family>
-       <pointsize>80</pointsize>
-      </font>
-     </property>
-     <property name="autoFillBackground">
-      <bool>false</bool>
-     </property>
-     <property name="styleSheet">
-      <string notr="true">max-height:100%;</string>
-     </property>
-     <property name="lineWidth">
-      <number>0</number>
+		 <font>
+			 <family>SF Pro Rounded</family>
+			 <pointsize>135</pointsize>
+		 </font>
      </property>
      <property name="text">
       <string>123º</string>
@@ -103,164 +76,116 @@
      <property name="alignment">
       <set>Qt::AlignCenter</set>
      </property>
-     <property name="margin">
-      <number>0</number>
-     </property>
-     <property name="indent">
-      <number>0</number>
-     </property>
     </widget>
    </item>
    <item>
     <widget class="QFrame" name="frame">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
-     </property>
-     <property name="minimumSize">
-      <size>
-       <width>0</width>
-       <height>100</height>
-      </size>
-     </property>
-     <layout class="QGridLayout" name="gridLayout">
-      <property name="leftMargin">
-       <number>0</number>
-      </property>
-      <property name="topMargin">
-       <number>0</number>
-      </property>
-      <property name="rightMargin">
-       <number>0</number>
-      </property>
-      <property name="bottomMargin">
-       <number>0</number>
-      </property>
-      <property name="spacing">
-       <number>0</number>
-      </property>
-      <item row="0" column="0">
-       <layout class="QHBoxLayout" name="subs" stretch="0">
-        <property name="spacing">
-         <number>0</number>
-        </property>
-        <property name="sizeConstraint">
-         <enum>QLayout::SetMinimumSize</enum>
-        </property>
-        <item>
-         <layout class="QGridLayout" name="gridLayout_4">
-          <item row="0" column="0">
-           <widget class="DynamicLabel" name="SubAValue">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Preferred" vsizetype="MinimumExpanding">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="font">
-             <font>
-              <family>SF Compact Rounded</family>
-              <pointsize>70</pointsize>
-             </font>
-            </property>
-            <property name="text">
-             <string>89º</string>
-            </property>
-            <property name="alignment">
-             <set>Qt::AlignBottom|Qt::AlignHCenter</set>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="DynamicLabel" name="subATitle">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="font">
-             <font>
-              <family>SF Compact Rounded</family>
-              <pointsize>20</pointsize>
-             </font>
-            </property>
-            <property name="text">
-             <string>TextLabel</string>
-            </property>
-            <property name="alignment">
-             <set>Qt::AlignHCenter|Qt::AlignTop</set>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="DynamicLabel" name="SubBValue">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Preferred" vsizetype="MinimumExpanding">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="font">
-             <font>
-              <family>SF Compact Rounded</family>
-              <pointsize>70</pointsize>
-             </font>
-            </property>
-            <property name="text">
-             <string>45%</string>
-            </property>
-            <property name="alignment">
-             <set>Qt::AlignBottom|Qt::AlignHCenter</set>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="DynamicLabel" name="subBTitle">
-            <property name="sizePolicy">
-             <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
-              <horstretch>0</horstretch>
-              <verstretch>0</verstretch>
-             </sizepolicy>
-            </property>
-            <property name="font">
-             <font>
-              <family>SF Compact Rounded</family>
-              <pointsize>20</pointsize>
-             </font>
-            </property>
-            <property name="text">
-             <string>TextLabel</string>
-            </property>
-            <property name="alignment">
-             <set>Qt::AlignHCenter|Qt::AlignTop</set>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </item>
-       </layout>
-      </item>
-     </layout>
+		<layout class="QGridLayout" name="gridLayout">
+			<property name="leftMargin">
+				<number>0</number>
+			</property>
+			<property name="topMargin">
+				<number>0</number>
+			</property>
+			<property name="rightMargin">
+				<number>0</number>
+			</property>
+			<property name="bottomMargin">
+				<number>0</number>
+			</property>
+			<property name="spacing">
+				<number>0</number>
+			</property>
+			<item row="0" column="0">
+				<widget class="QLabel" name="SubAValue">
+					<property name="sizePolicy">
+						<sizepolicy hsizetype="Preferred" vsizetype="Minimum">
+							<horstretch>0</horstretch>
+							<verstretch>0</verstretch>
+						</sizepolicy>
+					</property>
+					<property name="font">
+						<font>
+							<family>SF Compact Rounded</family>
+							<pointsize>64</pointsize>
+						</font>
+					</property>
+					<property name="text">
+						<string notr="true">31</string>
+					</property>
+					<property name="alignment">
+						<set>Qt::AlignBottom|Qt::AlignHCenter</set>
+					</property>
+				</widget>
+			</item>
+			<item row="0" column="1">
+				<widget class="QLabel" name="SubBValue">
+					<property name="sizePolicy">
+						<sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+							<horstretch>0</horstretch>
+							<verstretch>0</verstretch>
+						</sizepolicy>
+					</property>
+					<property name="font">
+						<font>
+							<family>SF Compact Rounded</family>
+							<pointsize>64</pointsize>
+						</font>
+					</property>
+					<property name="text">
+						<string>45%</string>
+					</property>
+					<property name="alignment">
+						<set>Qt::AlignBottom|Qt::AlignHCenter</set>
+					</property>
+				</widget>
+			</item>
+			<item row="1" column="0">
+				<widget class="QLabel" name="subATitle">
+					<property name="sizePolicy">
+						<sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+							<horstretch>0</horstretch>
+							<verstretch>0</verstretch>
+						</sizepolicy>
+					</property>
+					<property name="font">
+						<font>
+							<family>SF Compact Rounded</family>
+							<pointsize>21</pointsize>
+						</font>
+					</property>
+					<property name="text">
+						<string>TextLabel</string>
+					</property>
+					<property name="alignment">
+						<set>Qt::AlignHCenter|Qt::AlignTop</set>
+					</property>
+				</widget>
+			</item>
+			<item row="1" column="1">
+				<widget class="QLabel" name="subBTitle">
+					<property name="sizePolicy">
+						<sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+							<horstretch>0</horstretch>
+							<verstretch>0</verstretch>
+						</sizepolicy>
+					</property>
+					<property name="font">
+						<font>
+							<family>SF Compact Rounded</family>
+							<pointsize>21</pointsize>
+						</font>
+					</property>
+					<property name="text">
+						<string>TextLabel</string>
+					</property>
+					<property name="alignment">
+						<set>Qt::AlignHCenter|Qt::AlignTop</set>
+					</property>
+				</widget>
+			</item>
+		</layout>
     </widget>
-   </item>
-   <item>
-    <spacer name="verticalSpacer_2">
-     <property name="orientation">
-      <enum>Qt::Vertical</enum>
-     </property>
-     <property name="sizeType">
-      <enum>QSizePolicy::Fixed</enum>
-     </property>
-     <property name="sizeHint" stdset="0">
-      <size>
-       <width>20</width>
-       <height>0</height>
-      </size>
-     </property>
-    </spacer>
    </item>
   </layout>
  </widget>

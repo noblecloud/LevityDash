@@ -4,10 +4,10 @@
  <widget class="QFrame" name="Frame">
   <property name="geometry">
    <rect>
-    <x>0</x>
-    <y>0</y>
-    <width>613</width>
-    <height>382</height>
+	   <x>0</x>
+	   <y>0</y>
+	   <width>620</width>
+	   <height>626</height>
    </rect>
   </property>
   <property name="font">
@@ -31,15 +31,15 @@
    <property name="leftMargin">
     <number>0</number>
    </property>
-   <property name="topMargin">
-    <number>0</number>
-   </property>
+	  <property name="topMargin">
+		  <number>15</number>
+	  </property>
    <property name="rightMargin">
     <number>0</number>
    </property>
-   <property name="bottomMargin">
-    <number>0</number>
-   </property>
+	  <property name="bottomMargin">
+		  <number>15</number>
+	  </property>
    <item>
     <widget class="QFrame" name="mainFrame">
      <property name="sizePolicy">
@@ -77,31 +77,44 @@
         </property>
        </spacer>
       </item>
-      <item>
-       <layout class="QVBoxLayout" name="centerCluster" stretch="5,2,2,0">
-        <property name="spacing">
-         <number>0</number>
-        </property>
-        <item>
-         <widget class="DynamicLabel" name="directionLabel">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Preferred" vsizetype="MinimumExpanding">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="font">
-           <font>
-            <family>SF Pro Rounded</family>
-            <pointsize>90</pointsize>
-            <weight>75</weight>
-            <bold>true</bold>
-           </font>
-          </property>
-          <property name="text">
-           <string>W</string>
-          </property>
-          <property name="alignment">
+		 <item>
+			 <layout class="QVBoxLayout" name="centerCluster" stretch="0,5,2">
+				 <property name="spacing">
+					 <number>0</number>
+				 </property>
+				 <item>
+					 <spacer name="verticalSpacer">
+						 <property name="orientation">
+							 <enum>Qt::Vertical</enum>
+						 </property>
+						 <property name="sizeHint" stdset="0">
+							 <size>
+								 <width>20</width>
+								 <height>20</height>
+							 </size>
+						 </property>
+					 </spacer>
+				 </item>
+				 <item>
+					 <widget class="DynamicLabel" name="directionLabel">
+						 <property name="sizePolicy">
+							 <sizepolicy hsizetype="Preferred" vsizetype="MinimumExpanding">
+								 <horstretch>0</horstretch>
+								 <verstretch>0</verstretch>
+							 </sizepolicy>
+						 </property>
+						 <property name="font">
+							 <font>
+								 <family>SF Pro Rounded</family>
+								 <pointsize>90</pointsize>
+								 <weight>75</weight>
+								 <bold>true</bold>
+							 </font>
+						 </property>
+						 <property name="text">
+							 <string>W</string>
+						 </property>
+						 <property name="alignment">
            <set>Qt::AlignBottom|Qt::AlignHCenter</set>
           </property>
          </widget>
@@ -129,44 +142,6 @@
            <set>Qt::AlignHCenter|Qt::AlignTop</set>
           </property>
          </widget>
-        </item>
-        <item>
-         <widget class="QLabel" name="unit">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="font">
-           <font>
-            <family>SF Pro Rounded</family>
-            <pointsize>21</pointsize>
-           </font>
-          </property>
-          <property name="text">
-           <string> mph</string>
-          </property>
-          <property name="alignment">
-           <set>Qt::AlignHCenter|Qt::AlignTop</set>
-          </property>
-          <property name="indent">
-           <number>0</number>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <spacer name="verticalSpacer">
-          <property name="orientation">
-           <enum>Qt::Vertical</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>20</width>
-            <height>40</height>
-           </size>
-          </property>
-         </spacer>
         </item>
        </layout>
       </item>
@@ -288,9 +263,9 @@
           <family>SF Pro Rounded</family>
          </font>
         </property>
-        <property name="text">
-         <string>Max: </string>
-        </property>
+		   <property name="text">
+			   <string>Lull:</string>
+		   </property>
         <property name="alignment">
          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
         </property>
