@@ -3,6 +3,10 @@
 	color: white;
 }
 
+#Graph{
+	background-color: black;
+}
+
 *[live=true] {
 	color: white;
 }

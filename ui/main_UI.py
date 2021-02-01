@@ -14,33 +14,36 @@ from PySide2.QtWidgets import *
 
 from widgets.DynamicLabel import DynamicLabel
 from widgets.Temperature import LargeBox
-from widgets.GlyphBox import GlyphBox
 from widgets.Complication import Complication
 from widgets.Submodule import windSubmodule
 from widgets.Submodule import currentConditions
+from widgets.moon import MoonPhases
+from widgets.Graph import Graph
 
 
 class Ui_weatherDisplay(object):
-    def setupUi(self, weatherDisplay):
-        if not weatherDisplay.objectName():
-            weatherDisplay.setObjectName(u"weatherDisplay")
-        weatherDisplay.resize(1792, 1067)
-        sizePolicy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(weatherDisplay.sizePolicy().hasHeightForWidth())
-        weatherDisplay.setSizePolicy(sizePolicy)
-        weatherDisplay.setMinimumSize(QSize(800, 450))
-        weatherDisplay.setBaseSize(QSize(1080, 720))
-        font = QFont()
-        font.setFamily(u"SF Pro Rounded")
-        weatherDisplay.setFont(font)
-        weatherDisplay.setAutoFillBackground(True)
-        self.centralwidget = QWidget(weatherDisplay)
-        self.centralwidget.setObjectName(u"centralwidget")
-        self.centralwidget.setEnabled(True)
-        self.centralwidget.setAutoFillBackground(False)
-        self.gridLayout_3 = QGridLayout(self.centralwidget)
+	def setupUi(self, weatherDisplay):
+		if not weatherDisplay.objectName():
+			weatherDisplay.setObjectName(u"weatherDisplay")
+		weatherDisplay.resize(1920, 1067)
+		sizePolicy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+		sizePolicy.setHorizontalStretch(0)
+		sizePolicy.setVerticalStretch(0)
+		sizePolicy.setHeightForWidth(weatherDisplay.sizePolicy().hasHeightForWidth())
+		weatherDisplay.setSizePolicy(sizePolicy)
+		weatherDisplay.setMinimumSize(QSize(1080, 720))
+		weatherDisplay.setMaximumSize(QSize(1920, 1080))
+		weatherDisplay.setSizeIncrement(QSize(16, 9))
+		weatherDisplay.setBaseSize(QSize(1080, 720))
+		font = QFont()
+		font.setFamily(u"SF Pro Rounded")
+		weatherDisplay.setFont(font)
+		weatherDisplay.setAutoFillBackground(True)
+		self.centralwidget = QWidget(weatherDisplay)
+		self.centralwidget.setObjectName(u"centralwidget")
+		self.centralwidget.setEnabled(True)
+		self.centralwidget.setAutoFillBackground(False)
+		self.gridLayout_3 = QGridLayout(self.centralwidget)
         self.gridLayout_3.setSpacing(0)
         self.gridLayout_3.setObjectName(u"gridLayout_3")
         self.gridLayout_3.setContentsMargins(0, 0, 0, 0)
@@ -122,45 +125,43 @@ class Ui_weatherDisplay(object):
         self.timeComplications.addWidget(self.time)
 
         self.gridLayout = QGridLayout()
-        self.gridLayout.setSpacing(0)
         self.gridLayout.setObjectName(u"gridLayout")
         self.gridLayout.setSizeConstraint(QLayout.SetMinimumSize)
-        self.moonPhase = GlyphBox(self.topLeft)
-        self.moonPhase.setObjectName(u"moonPhase")
-        self.moonPhase.setMinimumSize(QSize(50, 50))
-
-        self.gridLayout.addWidget(self.moonPhase, 0, 0, 1, 1)
-
-        self.Un = GlyphBox(self.topLeft)
-        self.Un.setObjectName(u"Un")
-
-        self.gridLayout.addWidget(self.Un, 1, 0, 1, 1)
-
         self.sunRise = Complication(self.topLeft)
         self.sunRise.setObjectName(u"sunRise")
-        sizePolicy.setHeightForWidth(self.sunRise.sizePolicy().hasHeightForWidth())
-        self.sunRise.setSizePolicy(sizePolicy)
+		sizePolicy.setHeightForWidth(self.sunRise.sizePolicy().hasHeightForWidth())
+		self.sunRise.setSizePolicy(sizePolicy)
 
-        self.gridLayout.addWidget(self.sunRise, 0, 1, 1, 1)
+		self.gridLayout.addWidget(self.sunRise, 0, 1, 1, 1)
 
-        self.sunSet = Complication(self.topLeft)
-        self.sunSet.setObjectName(u"sunSet")
+		self.sunSet = Complication(self.topLeft)
+		self.sunSet.setObjectName(u"sunSet")
 
-        self.gridLayout.addWidget(self.sunSet, 1, 1, 1, 1)
+		self.gridLayout.addWidget(self.sunSet, 1, 1, 1, 1)
 
-        self.gridLayout.setRowStretch(0, 1)
-        self.gridLayout.setRowStretch(1, 1)
-        self.gridLayout.setColumnStretch(0, 1)
-        self.gridLayout.setColumnStretch(1, 1)
-        self.gridLayout.setColumnMinimumWidth(0, 1)
-        self.gridLayout.setColumnMinimumWidth(1, 1)
-        self.gridLayout.setRowMinimumHeight(0, 1)
-        self.gridLayout.setRowMinimumHeight(1, 1)
+		self.period = DynamicLabel(self.topLeft)
+		self.period.setObjectName(u"period")
+		self.period.setFont(font)
+		self.period.setAlignment(Qt.AlignLeading | Qt.AlignLeft | Qt.AlignTop)
 
-        self.timeComplications.addLayout(self.gridLayout)
+		self.gridLayout.addWidget(self.period, 1, 0, 1, 1)
 
-        self.timeComplications.setStretch(0, 12)
-        self.timeComplications.setStretch(1, 7)
+		self.moonPhase = MoonPhases(self.topLeft)
+		self.moonPhase.setObjectName(u"moonPhase")
+		self.moonPhase.setFrameShape(QFrame.StyledPanel)
+		self.moonPhase.setFrameShadow(QFrame.Raised)
+
+		self.gridLayout.addWidget(self.moonPhase, 0, 0, 1, 1)
+
+		self.gridLayout.setRowStretch(0, 1)
+		self.gridLayout.setRowStretch(1, 1)
+		self.gridLayout.setColumnStretch(0, 1)
+		self.gridLayout.setColumnStretch(1, 1)
+
+		self.timeComplications.addLayout(self.gridLayout)
+
+		self.timeComplications.setStretch(0, 12)
+		self.timeComplications.setStretch(1, 7)
 
         self.verticalLayout.addLayout(self.timeComplications)
 
@@ -203,55 +204,51 @@ class Ui_weatherDisplay(object):
         self.bottom.setSizePolicy(sizePolicy5)
         self.bottom.setFrameShape(QFrame.StyledPanel)
         self.bottom.setFrameShadow(QFrame.Raised)
-        self.gridLayout_2 = QGridLayout(self.bottom)
-        self.gridLayout_2.setObjectName(u"gridLayout_2")
-        self.gridLayout_2.setHorizontalSpacing(1)
-        self.gridLayout_2.setVerticalSpacing(0)
-        self.gridLayout_2.setContentsMargins(0, 0, 0, 0)
-        self.subC = QWidget(self.bottom)
-        self.subC.setObjectName(u"subC")
+		self.gridLayout_2 = QGridLayout(self.bottom)
+		self.gridLayout_2.setObjectName(u"gridLayout_2")
+		self.gridLayout_2.setHorizontalSpacing(1)
+		self.gridLayout_2.setVerticalSpacing(0)
+		self.gridLayout_2.setContentsMargins(0, 0, 0, 0)
+		self.subD = QWidget(self.bottom)
+		self.subD.setObjectName(u"subD")
 
-        self.gridLayout_2.addWidget(self.subC, 0, 2, 1, 1)
+		self.gridLayout_2.addWidget(self.subD, 0, 3, 1, 1)
 
-        self.subD = QWidget(self.bottom)
-        self.subD.setObjectName(u"subD")
+		self.subA = currentConditions(self.bottom)
+		self.subA.setObjectName(u"subA")
 
-        self.gridLayout_2.addWidget(self.subD, 0, 3, 1, 1)
+		self.gridLayout_2.addWidget(self.subA, 0, 0, 1, 1)
 
-        self.subB = windSubmodule(self.bottom)
-        self.subB.setObjectName(u"subB")
-        self.subB.setMinimumSize(QSize(447, 472))
+		self.subC = QWidget(self.bottom)
+		self.subC.setObjectName(u"subC")
 
-        self.gridLayout_2.addWidget(self.subB, 0, 1, 1, 1)
+		self.gridLayout_2.addWidget(self.subC, 0, 2, 1, 1)
 
-        self.subA = currentConditions(self.bottom)
-        self.subA.setObjectName(u"subA")
+		self.subB = windSubmodule(self.bottom)
+		self.subB.setObjectName(u"subB")
+		self.subB.setMinimumSize(QSize(447, 472))
 
-        self.gridLayout_2.addWidget(self.subA, 0, 0, 1, 1)
+		self.gridLayout_2.addWidget(self.subB, 0, 1, 1, 1)
 
-        self.gridLayout_2.setColumnStretch(0, 1)
-        self.gridLayout_2.setColumnStretch(1, 1)
-        self.gridLayout_2.setColumnStretch(2, 1)
-        self.gridLayout_2.setColumnStretch(3, 1)
-        self.gridLayout_2.setColumnMinimumWidth(0, 1)
-        self.gridLayout_2.setColumnMinimumWidth(1, 1)
-        self.gridLayout_2.setColumnMinimumWidth(2, 1)
-        self.gridLayout_2.setColumnMinimumWidth(3, 1)
+		self.gridLayout_2.setColumnStretch(0, 1)
+		self.gridLayout_2.setColumnStretch(1, 1)
+		self.gridLayout_2.setColumnStretch(2, 1)
+		self.gridLayout_2.setColumnStretch(3, 1)
 
-        self.gridLayout_3.addWidget(self.bottom, 1, 0, 1, 2)
+		self.gridLayout_3.addWidget(self.bottom, 1, 0, 1, 2)
 
-        self.forecastGraph = QFrame(self.centralwidget)
-        self.forecastGraph.setObjectName(u"frame")
-        sizePolicy6 = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
-        sizePolicy6.setHorizontalStretch(7)
-        sizePolicy6.setVerticalStretch(0)
-        sizePolicy6.setHeightForWidth(self.forecastGraph.sizePolicy().hasHeightForWidth())
-        self.forecastGraph.setSizePolicy(sizePolicy6)
-        self.forecastGraph.setFont(font)
-        self.forecastGraph.setFrameShape(QFrame.StyledPanel)
-        self.forecastGraph.setFrameShadow(QFrame.Raised)
+		self.forecastGraph = Graph(self.centralwidget)
+		self.forecastGraph.setObjectName(u"forecastGraph")
+		sizePolicy6 = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
+		sizePolicy6.setHorizontalStretch(7)
+		sizePolicy6.setVerticalStretch(0)
+		sizePolicy6.setHeightForWidth(self.forecastGraph.sizePolicy().hasHeightForWidth())
+		self.forecastGraph.setSizePolicy(sizePolicy6)
+		self.forecastGraph.setFont(font)
+		self.forecastGraph.setFrameShape(QFrame.StyledPanel)
+		self.forecastGraph.setFrameShadow(QFrame.Raised)
 
-        self.gridLayout_3.addWidget(self.forecastGraph, 0, 1, 1, 1)
+		self.gridLayout_3.addWidget(self.forecastGraph, 0, 1, 1, 1)
 
         weatherDisplay.setCentralWidget(self.centralwidget)
 
@@ -265,6 +262,6 @@ class Ui_weatherDisplay(object):
         self.date.setText(QCoreApplication.translate("weatherDisplay", u"Mon November 12", None))
         self.ordinal.setText(QCoreApplication.translate("weatherDisplay", u"th", None))
         self.time.setText(QCoreApplication.translate("weatherDisplay", u"12:34", None))
-        self.moonPhase.setProperty("charStr", QCoreApplication.translate("weatherDisplay", u"\uf09a", None))
+        self.period.setText(QCoreApplication.translate("weatherDisplay", u"pm", None))
     # retranslateUi
 
