@@ -133,9 +133,10 @@ class windSubmodule(windUI, Submodule):
 		self.directionLabel.move(-10, 0)
 		self.image = windRose(self.mainFrame)
 		self.image.setObjectName(u"windRose")
-		# self.animation = QPropertyAnimation(self, b'speed')
 
-		self.unit.hide()
+	# self.animation = QPropertyAnimation(self, b'speed')
+
+	# self.unit.hide()
 
 	def setLive(self, value):
 		self.speedLabel.live = value
