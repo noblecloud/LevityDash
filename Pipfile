@@ -4,13 +4,13 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-pylunar = "*"
 pysolar = "*"
 pytz = "*"
 climacell-python = "*"
-numpy = "*" #install with pip3 install numpy --no-use-pep517 first
+pylunar = { editable = true, git = "https://github.com/noblecloud/pylunar.git" }
+#numpy = "*" #install with pip3 install numpy --no-use-pep517 first
 ambient-api = "*"
-pyside2 = "*"
+#pyside2 = "*"
 docopt = "<0.7,>=0.6.2"
 
 [dev-packages]
