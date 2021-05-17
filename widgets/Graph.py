@@ -3,6 +3,7 @@ import sys
 import numpy as np
 
 from PySide2 import QtCore, QtGui, QtWidgets
+from scipy.signal import find_peaks
 
 sys.modules['PyQt5.QtGui'] = QtGui
 from PIL.ImageQt import ImageQt
@@ -10,10 +11,9 @@ from PySide2.QtGui import QBrush, QFont, QPainter, QPainterPath, QPen, QPixmap
 from PySide2.QtWidgets import QApplication, QHBoxLayout, QLabel
 from PIL import Image
 
-from math import sqrt
-from api.forecast import hourlyForecast
+from api.forecast import Forecast, hourlyForecast
 
-golden = (1 + sqrt(5)) / 2
+golden = (1 + np.sqrt(5)) / 2
 
 
 class Graph(QtWidgets.QFrame):
@@ -21,13 +21,16 @@ class Graph(QtWidgets.QFrame):
 	pix: QPixmap
 	_time: np.ndarray
 	_data: dict
+	_max: float
+	_min: float
+	_p2p: float
 
 	def __init__(self, *args, **kwargs):
 		# self._data = data
 		super(Graph, self).__init__(*args, **kwargs)
 		self.buildColorMaps()
 		self.setStyleSheet('background-color: black;')
-		self.font = QFont("SF Pro Rounded", 100)
+		self.font = QFont("SF Pro Rounded", 50)
 		self.setContentsMargins(10, 20, 10, 20)
 
 	def backgroundImage(self):
@@ -115,22 +118,39 @@ class Graph(QtWidgets.QFrame):
 	def paintEvent(self, event):
 		self.margin = 0.2
 
-		self._time: np.ndarray = self.normalizeToFrame(self.data['timestampInt'], self.width())
+		self._time: np.ndarray = self.normalizeToFrame(self.data['timestampInt'], self.width(), frame='timestampInt')
 
 		# yStep = ((tempRange / y) - (y * self.margin))
 		self.painter = QPainter()
 		self.painter.begin(self)
+		# self.painter.translate(0, self.height());
+		# self.painter.scale(1.0, -1.0);
 
 		self.painter.setRenderHint(QPainter.HighQualityAntialiasing)
+		self.painter.setRenderHint(QPainter.Antialiasing)
 		self.painter.setRenderHint(QPainter.SmoothPixmapTransform)
 
 		self.painter.drawPixmap(self.rect(), self.pix)
 
 		babyBlue = QtGui.QColor(3, 232, 252)
 		# self.painter.drawText(self.rect(), QtCore.Qt.AlignCenter, "Hello")
-		self.plotLine(self.data['feels_like'], babyBlue)
 		self.plotLine(self.data['temp'])
-		self.plotText(QtCore.QPoint(200, 200), 'test')
+		self.plotLine(self.data['dewpoint'], babyBlue)
+		temperature: np.ndarray = self.data['temp']
+		peaks, _ = find_peaks(temperature, distance=80)
+		troughs, _ = find_peaks(-temperature, distance=80)
+		peaks = np.concatenate((peaks, troughs))
+		peaks.sort()
+		x = np.empty(len(peaks))
+		y = np.zeros(len(peaks))
+		for i in range(0, len(peaks)):
+			y[i] = (self._time[peaks[i]])
+			x[i] = (self.data['temp'][peaks[i]])
+		x = self.normalizeToFrame(x, self.height(), 0.1)
+		# y = self.normalizeToFrame(y, self.width(), 0, 'timestampInt')
+		for x, y, value in zip(x, y, peaks):
+			self.plotText(QtCore.QPoint(y - 30, x + 20), str(round(temperature[value])))
+		#
 		# for x in range(0, len(self.time)):
 		# 	y = (self.height() * 0.1) + ((self._data['feels_like'][x] - tmin) * yStep) * 0.8
 		# 	path.lineTo(x * xStep, y)
@@ -173,42 +193,77 @@ class Graph(QtWidgets.QFrame):
 		path.addText(position, self.font, string)
 		self.painter.drawPath(path)
 
-	def normalizeToFrame(self, array, axis: int, offset: float = 0.0):
+	def normalizeToFrame(self, array, axis: int, offset: float = 0.0, frame: str = 'temp'):
 
 		# start at leading margin
 		# subtract the lowest value
 		# height / peak to trough represents one unit value
 		# shrink by top margin
 
+		temp = self._data[frame]
+
 		leading = axis * offset
 		if self.height() == axis:
-			return axis - (leading + (((array - array.min()) * axis / np.ptp(array)) * (1 - offset * 2)))
-		return leading + (((array - array.min()) * axis / np.ptp(array)) * (1 - offset * 2))
+			return axis - (leading + (((array - self._min) * axis / self._p2p) * (1 - offset * 2)))
+		return leading + (((array - temp.min()) * axis / np.ptp(temp)) * (1 - offset * 2))
 
 	@property
 	def data(self):
 		return self._data
 
 	@data.setter
-	def data(self, data):
+	def data(self, data: Forecast):
+
+		def minMaxP2P(data) -> tuple[float, float, float]:
+			arr = np.concatenate(((data['feels_like']), (data['temp']), (data['dewpoint'])), axis=0)
+			return float(arr.min()), float(arr.max()), float(arr.ptp())
+
 		self._data = data
+		self._min, self._max, self._p2p = minMaxP2P(data)
 		self.backgroundImage()
 
 	@staticmethod
 	def normalize(a):
 		return (a - np.min(a)) / np.ptp(a)
 
+	def gen(self, size):
+		l = 200
+
+		u = int(l * .07)
+		# up = np.linspace((-np.pi / 2)+2, np.pi * .5, 20)
+		# y2 = np.linspace(np.pi * .5, np.pi * .5, int(u / 2))
+		# down = np.linspace(np.pi * .5, np.pi * 1.5, int(u * 2.5))
+
+		up = np.logspace(.95, 1, 5)
+		down = np.logspace(1, 0, int(u * 4))
+
+		# x = normalize(x)
+		y = self.normalize(np.concatenate((up, down)))
+		x = np.linspace(0, 1, 272)
+		y2 = np.zeros(size)
+		y = np.concatenate((y, y2))
+		return y
+
 	def image(self):
 		raw = self.normalize(self._data['surface_shortwave_radiation'])
 		raw = np.outer(np.ones(len(raw)), raw)
 		# raw = np.flip(raw)
 
-		raw = self.solarColorMap(raw)
-		scale = 1 / len(raw)
+		fade = .3
 
+		# raw = self.solarColorMap(raw)
+		scale = 1 / len(raw)
+		rr = self.gen(len(raw))
 		for x in range(0, len(raw)):
-			raw[x] *= 1 - (scale * x)
-		opacity = 0.7
+			raw[x] = raw[x] * rr[x]
+		# if x < len(raw) * .1:
+		# 	raw[x] *= scale * x *10
+		# if x < len(raw) * fade:
+		# 	raw[x] *= 1 - (scale * x) * (1/fade)
+		# else:
+		# 	raw[x] = 0
+
+		opacity = .9
 		raw *= 255 * opacity
 		raw = raw.astype(np.uint8)
 
@@ -295,42 +350,37 @@ class GraphImage(QtWidgets.QFrame):
 	def normalize(a):
 		return (a - np.min(a)) / np.ptp(a)
 
-	def image(self, data: [dict]):
-		norm = self.normalize(data)
-		raw = []
-		rS = 1.0
-		gS = 0.85
-		bS = 0.6
-		aS = 1.0
-		for i in range(0, 272):
-			r, g, b, a = [norm[i]] * 4
-			r *= rS
-			g *= gS
-			b *= bS
-			a *= 0
-			raw.append((r, g, b))
-		raw = np.outer(np.ones(len(raw)), raw)
-		raw = raw.reshape(272, 272, 3)
-
-		raw *= 255
-		raw = raw.astype(np.uint8)
-		return QtGui.QImage(raw, 272, 272, QtGui.QImage.Format_RGB32)
+# def image(self, data: [dict]):
+# 	norm = self.normalize(data)
+# 	raw = []
+# 	rS = 1.0
+# 	gS = 0.85
+# 	bS = 0.6
+# 	aS = 1.0
+# 	for i in range(0, 272):
+# 		r, g, b, a = [norm[i]] * 4
+# 		r *= rS
+# 		g *= gS
+# 		b *= bS
+# 		a *= aS
+# 		raw.append((r, g, b))
+# 	raw = np.outer(np.ones(len(raw)), raw)
+# 	raw = raw.reshape(272, 272, 3)
+#
+# 	raw *= 255
+# 	raw = raw.astype(np.uint8)
+# 	return QtGui.QImage(raw, 272, 272, QtGui.QImage.Format_RGB32)
 
 
 if __name__ == '__main__':
+	from tests.pickler import pans as reload
+
 	app = QApplication()
 
-	# from tests.pickler import pans as reload
-	#
-	# data = reload('./tests/snapshots/202101031000')
-	data = hourlyForecast('hourly')
-	# data = hourlyForecast('hourly', measurementFields=['temp', 'precipitation', 'sunrise', 'sunset',
-	#                                                    'feels_like', 'dewpoint', 'precipitation_probability',
-	#                                                    'cloud_cover', 'surface_shortwave_radiation',
-	#                                                    'wind_speed',
-	#                                                    'epa_aqi', 'cloud_ceiling', 'cloud_base',
-	#                                                    'wind_direction'])
-	window = Graph(data)
+	data = reload('../tests/snapshots/202101031000')
+	# data = hourlyForecast()
+	window = Graph()
+	window.data = data
 	window.show()
 
 	sys.exit(app.exec_())
