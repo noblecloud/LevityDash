@@ -6,7 +6,7 @@
 		 <rect>
 			 <x>0</x>
 			 <y>0</y>
-			 <width>1920</width>
+			 <width>1792</width>
 			 <height>1067</height>
 		 </rect>
 	 </property>
@@ -52,264 +52,13 @@
 		 <bool>true</bool>
 	 </property>
 	 <widget class="QWidget" name="centralwidget">
-   <property name="enabled">
-    <bool>true</bool>
-   </property>
-   <property name="autoFillBackground">
-    <bool>false</bool>
-   </property>
-   <layout class="QGridLayout" name="gridLayout_3">
-    <property name="leftMargin">
-     <number>0</number>
-    </property>
-    <property name="topMargin">
-     <number>0</number>
-    </property>
-    <property name="rightMargin">
-     <number>0</number>
-    </property>
-    <property name="bottomMargin">
-     <number>0</number>
-    </property>
-    <property name="spacing">
-     <number>0</number>
-    </property>
-    <item row="0" column="0">
-     <widget class="QFrame" name="topLeft">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
-        <horstretch>4</horstretch>
-        <verstretch>5</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="frameShape">
-       <enum>QFrame::StyledPanel</enum>
-      </property>
-      <property name="frameShadow">
-       <enum>QFrame::Raised</enum>
-      </property>
-      <layout class="QVBoxLayout" name="verticalLayout" stretch="0,4,6">
-       <property name="spacing">
-        <number>0</number>
-       </property>
-       <property name="leftMargin">
-        <number>12</number>
-       </property>
-       <property name="topMargin">
-        <number>12</number>
-       </property>
-       <property name="rightMargin">
-        <number>12</number>
-       </property>
-       <property name="bottomMargin">
-        <number>12</number>
-       </property>
-       <item>
-        <layout class="QHBoxLayout" name="dateFrame" stretch="1,0">
-         <property name="spacing">
-          <number>0</number>
-         </property>
-         <property name="leftMargin">
-          <number>0</number>
-         </property>
-         <property name="topMargin">
-          <number>0</number>
-         </property>
-         <item>
-          <widget class="QLabel" name="date">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Expanding" vsizetype="Minimum">
-             <horstretch>10</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="minimumSize">
-            <size>
-             <width>0</width>
-             <height>0</height>
-            </size>
-           </property>
-           <property name="font">
-            <font>
-             <family>SF Pro Rounded</family>
-             <pointsize>72</pointsize>
-             <weight>50</weight>
-             <bold>false</bold>
-            </font>
-           </property>
-           <property name="text">
-            <string>Mon November 12</string>
-           </property>
-           <property name="scaledContents">
-            <bool>true</bool>
-           </property>
-           <property name="alignment">
-            <set>Qt::AlignRight|Qt::AlignTop|Qt::AlignTrailing</set>
-           </property>
-           <property name="margin">
-            <number>0</number>
-           </property>
-           <property name="indent">
-            <number>0</number>
-           </property>
-           <property name="textInteractionFlags">
-            <set>Qt::NoTextInteraction</set>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLabel" name="ordinal">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Fixed" vsizetype="Minimum">
-             <horstretch>0</horstretch>
-             <verstretch>1</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="font">
-            <font>
-             <family>SF Pro Rounded</family>
-             <pointsize>31</pointsize>
-             <weight>50</weight>
-             <bold>false</bold>
-            </font>
-           </property>
-           <property name="text">
-            <string>th</string>
-           </property>
-           <property name="alignment">
-            <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </item>
-       <item>
-        <layout class="QHBoxLayout" name="timeComplications" stretch="12,7">
-         <property name="spacing">
-          <number>0</number>
-         </property>
-         <property name="sizeConstraint">
-          <enum>QLayout::SetMinimumSize</enum>
-         </property>
-         <item>
-          <widget class="DynamicLabel" name="time">
-           <property name="font">
-            <font>
-             <family>SF Pro Rounded</family>
-             <pointsize>140</pointsize>
-             <weight>50</weight>
-             <bold>false</bold>
-            </font>
-           </property>
-           <property name="text">
-            <string>12:34</string>
-           </property>
-           <property name="alignment">
-            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-           </property>
-           <property name="maxSize" stdset="0">
-            <number>180</number>
-           </property>
-          </widget>
-         </item>
-			<item>
-				<layout class="QGridLayout" name="gridLayout" rowstretch="1,1" columnstretch="1,1">
-					<property name="sizeConstraint">
-						<enum>QLayout::SetMinimumSize</enum>
-					</property>
-					<item row="0" column="1">
-						<widget class="Complication" name="sunRise" native="true">
-							<property name="sizePolicy">
-								<sizepolicy hsizetype="Preferred" vsizetype="Expanding">
-									<horstretch>0</horstretch>
-									<verstretch>0</verstretch>
-								</sizepolicy>
-							</property>
-						</widget>
-					</item>
-					<item row="1" column="1">
-						<widget class="Complication" name="sunSet" native="true"/>
-					</item>
-					<item row="1" column="0">
-						<widget class="DynamicLabel" name="period">
-							<property name="font">
-								<font>
-									<family>SF Pro Rounded</family>
-								</font>
-							</property>
-							<property name="text">
-								<string>pm</string>
-							</property>
-							<property name="alignment">
-								<set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
-							</property>
-						</widget>
-					</item>
-					<item row="0" column="0">
-						<widget class="MoonPhases" name="moonPhase">
-							<property name="frameShape">
-								<enum>QFrame::StyledPanel</enum>
-							</property>
-							<property name="frameShadow">
-								<enum>QFrame::Raised</enum>
-							</property>
-						</widget>
-					</item>
-				</layout>
-			</item>
-        </layout>
-       </item>
-       <item>
-        <layout class="QHBoxLayout" name="Temps" stretch="1,0">
-         <property name="spacing">
-          <number>0</number>
-         </property>
-         <item>
-          <widget class="LargeBox" name="indoor" native="true">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
-             <horstretch>1</horstretch>
-             <verstretch>1</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="minimumSize">
-            <size>
-             <width>0</width>
-             <height>100</height>
-            </size>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="LargeBox" name="outdoor" native="true">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
-             <horstretch>1</horstretch>
-             <verstretch>1</verstretch>
-            </sizepolicy>
-           </property>
-          </widget>
-         </item>
-        </layout>
-       </item>
-      </layout>
-     </widget>
-    </item>
-    <item row="1" column="0" colspan="2">
-     <widget class="QFrame" name="bottom">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-		   <horstretch>0</horstretch>
-		   <verstretch>4</verstretch>
-	   </sizepolicy>
-	  </property>
-		 <property name="frameShape">
-			 <enum>QFrame::StyledPanel</enum>
+		 <property name="enabled">
+			 <bool>true</bool>
 		 </property>
-		 <property name="frameShadow">
-			 <enum>QFrame::Raised</enum>
+		 <property name="autoFillBackground">
+			 <bool>false</bool>
 		 </property>
-		 <layout class="QGridLayout" name="gridLayout_2" columnstretch="1,1,1,1">
+		 <layout class="QGridLayout" name="gridLayout_3">
 			 <property name="leftMargin">
 				 <number>0</number>
 			 </property>
@@ -322,104 +71,368 @@
 			 <property name="bottomMargin">
 				 <number>0</number>
 			 </property>
-			 <property name="horizontalSpacing">
-				 <number>1</number>
-			 </property>
-			 <property name="verticalSpacing">
+			 <property name="spacing">
 				 <number>0</number>
 			 </property>
-			 <item row="0" column="3">
-				 <widget class="QWidget" name="subD" native="true"/>
-			 </item>
-			 <item row="0" column="0">
-				 <widget class="currentConditions" name="subA"/>
-			 </item>
-			 <item row="0" column="2">
-				 <widget class="QWidget" name="subC" native="true"/>
+			 <item row="1" column="0" colspan="2">
+				 <widget class="QFrame" name="bottom">
+					 <property name="sizePolicy">
+						 <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+							 <horstretch>0</horstretch>
+							 <verstretch>4</verstretch>
+						 </sizepolicy>
+					 </property>
+					 <property name="frameShape">
+						 <enum>QFrame::StyledPanel</enum>
+					 </property>
+					 <property name="frameShadow">
+						 <enum>QFrame::Raised</enum>
+					 </property>
+					 <layout class="QGridLayout" name="gridLayout_2" columnstretch="1,1,1,1">
+						 <property name="leftMargin">
+							 <number>0</number>
+						 </property>
+						 <property name="topMargin">
+							 <number>0</number>
+						 </property>
+						 <property name="rightMargin">
+							 <number>0</number>
+						 </property>
+						 <property name="bottomMargin">
+							 <number>0</number>
+						 </property>
+						 <property name="horizontalSpacing">
+							 <number>1</number>
+						 </property>
+						 <property name="verticalSpacing">
+							 <number>0</number>
+						 </property>
+						 <item row="0" column="3">
+							 <widget class="QWidget" name="subD" native="true"/>
+						 </item>
+						 <item row="0" column="2">
+							 <widget class="QWidget" name="subC" native="true"/>
+						 </item>
+						 <item row="0" column="1">
+							 <widget class="windSubmodule" name="subB">
+								 <property name="minimumSize">
+									 <size>
+										 <width>447</width>
+										 <height>472</height>
+									 </size>
+								 </property>
+							 </widget>
+						 </item>
+					 </layout>
+				 </widget>
 			 </item>
 			 <item row="0" column="1">
-				 <widget class="windSubmodule" name="subB">
-					 <property name="minimumSize">
-						 <size>
-							 <width>447</width>
-							 <height>472</height>
-						 </size>
+				 <widget class="Graph" name="forecastGraph">
+					 <property name="sizePolicy">
+						 <sizepolicy hsizetype="MinimumExpanding" vsizetype="Preferred">
+							 <horstretch>7</horstretch>
+							 <verstretch>0</verstretch>
+						 </sizepolicy>
 					 </property>
+					 <property name="font">
+						 <font>
+							 <family>SF Pro Rounded</family>
+						 </font>
+					 </property>
+					 <property name="frameShape">
+						 <enum>QFrame::StyledPanel</enum>
+					 </property>
+					 <property name="frameShadow">
+						 <enum>QFrame::Raised</enum>
+					 </property>
+				 </widget>
+			 </item>
+			 <item row="0" column="0">
+				 <widget class="QFrame" name="topLeft">
+					 <property name="sizePolicy">
+						 <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
+							 <horstretch>4</horstretch>
+							 <verstretch>4</verstretch>
+						 </sizepolicy>
+					 </property>
+					 <property name="frameShape">
+						 <enum>QFrame::StyledPanel</enum>
+					 </property>
+					 <property name="frameShadow">
+						 <enum>QFrame::Raised</enum>
+					 </property>
+					 <layout class="QVBoxLayout" name="verticalLayout" stretch="0,4,6">
+						 <property name="spacing">
+							 <number>0</number>
+						 </property>
+						 <property name="leftMargin">
+							 <number>12</number>
+						 </property>
+						 <property name="topMargin">
+							 <number>12</number>
+						 </property>
+						 <property name="rightMargin">
+							 <number>12</number>
+						 </property>
+						 <property name="bottomMargin">
+							 <number>12</number>
+						 </property>
+						 <item>
+							 <layout class="QHBoxLayout" name="dateFrame" stretch="1,0">
+								 <property name="spacing">
+									 <number>0</number>
+								 </property>
+								 <property name="leftMargin">
+									 <number>0</number>
+								 </property>
+								 <property name="topMargin">
+									 <number>0</number>
+								 </property>
+								 <item>
+									 <widget class="QLabel" name="date">
+										 <property name="sizePolicy">
+											 <sizepolicy hsizetype="Expanding" vsizetype="Minimum">
+												 <horstretch>10</horstretch>
+												 <verstretch>0</verstretch>
+											 </sizepolicy>
+										 </property>
+										 <property name="minimumSize">
+											 <size>
+												 <width>0</width>
+												 <height>0</height>
+											 </size>
+										 </property>
+										 <property name="maximumSize">
+											 <size>
+												 <width>16777215</width>
+												 <height>86</height>
+											 </size>
+										 </property>
+										 <property name="font">
+											 <font>
+												 <family>SF Pro Rounded</family>
+												 <pointsize>80</pointsize>
+												 <weight>50</weight>
+												 <bold>false</bold>
+											 </font>
+										 </property>
+										 <property name="text">
+											 <string>Mon November 12</string>
+										 </property>
+										 <property name="scaledContents">
+											 <bool>true</bool>
+										 </property>
+										 <property name="alignment">
+											 <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+										 </property>
+										 <property name="margin">
+											 <number>0</number>
+										 </property>
+										 <property name="indent">
+											 <number>0</number>
+										 </property>
+										 <property name="textInteractionFlags">
+											 <set>Qt::NoTextInteraction</set>
+										 </property>
+									 </widget>
+								 </item>
+								 <item>
+									 <widget class="QLabel" name="ordinal">
+										 <property name="sizePolicy">
+											 <sizepolicy hsizetype="Fixed" vsizetype="Minimum">
+												 <horstretch>0</horstretch>
+												 <verstretch>1</verstretch>
+											 </sizepolicy>
+										 </property>
+										 <property name="font">
+											 <font>
+												 <family>SF Pro Rounded</family>
+												 <pointsize>31</pointsize>
+												 <weight>50</weight>
+												 <bold>false</bold>
+											 </font>
+										 </property>
+										 <property name="text">
+											 <string>th</string>
+										 </property>
+										 <property name="alignment">
+											 <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+										 </property>
+									 </widget>
+								 </item>
+							 </layout>
+						 </item>
+						 <item>
+							 <layout class="QHBoxLayout" name="timeComplications" stretch="12,7">
+								 <property name="spacing">
+									 <number>0</number>
+								 </property>
+								 <property name="sizeConstraint">
+									 <enum>QLayout::SetMinimumSize</enum>
+								 </property>
+								 <item>
+									 <widget class="QLabel" name="time">
+										 <property name="minimumSize">
+											 <size>
+												 <width>0</width>
+												 <height>150</height>
+											 </size>
+										 </property>
+										 <property name="maximumSize">
+											 <size>
+												 <width>16777215</width>
+												 <height>190</height>
+											 </size>
+										 </property>
+										 <property name="font">
+											 <font>
+												 <family>SF Pro Rounded</family>
+												 <pointsize>182</pointsize>
+												 <weight>75</weight>
+												 <bold>true</bold>
+											 </font>
+										 </property>
+										 <property name="text">
+											 <string>12:34</string>
+										 </property>
+										 <property name="alignment">
+											 <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+										 </property>
+										 <property name="maxSize" stdset="0">
+											 <number>180</number>
+										 </property>
+									 </widget>
+								 </item>
+								 <item>
+									 <layout class="QGridLayout" name="gridLayout" rowstretch="1,1" columnstretch="1,1">
+										 <property name="sizeConstraint">
+											 <enum>QLayout::SetMinimumSize</enum>
+										 </property>
+										 <property name="leftMargin">
+											 <number>10</number>
+										 </property>
+										 <property name="topMargin">
+											 <number>10</number>
+										 </property>
+										 <property name="rightMargin">
+											 <number>10</number>
+										 </property>
+										 <property name="bottomMargin">
+											 <number>10</number>
+										 </property>
+										 <property name="spacing">
+											 <number>10</number>
+										 </property>
+										 <item row="1" column="1">
+											 <widget class="Complication" name="sunSet" native="true"/>
+										 </item>
+										 <item row="0" column="0">
+											 <widget class="MoonPhases" name="moonPhase">
+												 <property name="frameShape">
+													 <enum>QFrame::StyledPanel</enum>
+												 </property>
+												 <property name="frameShadow">
+													 <enum>QFrame::Raised</enum>
+												 </property>
+											 </widget>
+										 </item>
+										 <item row="0" column="1">
+											 <widget class="Complication" name="sunRise" native="true">
+												 <property name="sizePolicy">
+													 <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+														 <horstretch>0</horstretch>
+														 <verstretch>0</verstretch>
+													 </sizepolicy>
+												 </property>
+											 </widget>
+										 </item>
+										 <item row="1" column="0">
+											 <widget class="currentConditions" name="subA"/>
+										 </item>
+									 </layout>
+								 </item>
+							 </layout>
+						 </item>
+						 <item>
+							 <layout class="QHBoxLayout" name="Temps" stretch="1,0">
+								 <property name="spacing">
+									 <number>0</number>
+								 </property>
+								 <item>
+									 <widget class="LargeBox" name="indoor" native="true">
+										 <property name="sizePolicy">
+											 <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+												 <horstretch>1</horstretch>
+												 <verstretch>1</verstretch>
+											 </sizepolicy>
+										 </property>
+										 <property name="minimumSize">
+											 <size>
+												 <width>0</width>
+												 <height>100</height>
+											 </size>
+										 </property>
+									 </widget>
+								 </item>
+								 <item>
+									 <widget class="LargeBox" name="outdoor" native="true">
+										 <property name="sizePolicy">
+											 <sizepolicy hsizetype="MinimumExpanding" vsizetype="MinimumExpanding">
+												 <horstretch>1</horstretch>
+												 <verstretch>1</verstretch>
+											 </sizepolicy>
+										 </property>
+									 </widget>
+								 </item>
+							 </layout>
+						 </item>
+					 </layout>
 				 </widget>
 			 </item>
 		 </layout>
 	 </widget>
-    </item>
-	   <item row="0" column="1">
-		   <widget class="Graph" name="forecastGraph">
-			   <property name="sizePolicy">
-				   <sizepolicy hsizetype="MinimumExpanding" vsizetype="Preferred">
-					   <horstretch>7</horstretch>
-					   <verstretch>0</verstretch>
-				   </sizepolicy>
-			   </property>
-			   <property name="font">
-				   <font>
-					   <family>SF Pro Rounded</family>
-				   </font>
-			   </property>
-			   <property name="frameShape">
-				   <enum>QFrame::StyledPanel</enum>
-			   </property>
-			   <property name="frameShadow">
-				   <enum>QFrame::Raised</enum>
-			   </property>
-		   </widget>
-	   </item>
-   </layout>
-  </widget>
  </widget>
- <customwidgets>
-  <customwidget>
-   <class>DynamicLabel</class>
-   <extends>QLabel</extends>
-   <header>widgets/DynamicLabel</header>
-  </customwidget>
-  <customwidget>
-   <class>LargeBox</class>
-   <extends>QWidget</extends>
-   <header>widgets/Temperature</header>
-   <container>1</container>
-  </customwidget>
-	 <customwidget>
-		 <class>Complication</class>
-		 <extends>QWidget</extends>
-		 <header>widgets/Complication</header>
-		 <container>1</container>
-		 <slots>
-			 <signal>clicked()</signal>
-		 </slots>
-	 </customwidget>
-	 <customwidget>
-		 <class>windSubmodule</class>
-		 <extends>QFrame</extends>
-		 <header>widgets/Submodule</header>
-		 <container>1</container>
-	 </customwidget>
-	 <customwidget>
-		 <class>currentConditions</class>
-		 <extends>QFrame</extends>
-		 <header>widgets/Submodule</header>
-		 <container>1</container>
-	 </customwidget>
-	 <customwidget>
-		 <class>MoonPhases</class>
-		 <extends>QFrame</extends>
-		 <header>widgets/moon</header>
-		 <container>1</container>
-	 </customwidget>
-	 <customwidget>
-		 <class>Graph</class>
-		 <extends>QFrame</extends>
-		 <header>widgets/Graph</header>
-		 <container>1</container>
-	 </customwidget>
- </customwidgets>
- <resources/>
- <connections/>
+	<customwidgets>
+		<customwidget>
+			<class>LargeBox</class>
+			<extends>QWidget</extends>
+			<header>widgets/Temperature</header>
+			<container>1</container>
+		</customwidget>
+		<customwidget>
+			<class>Complication</class>
+			<extends>QWidget</extends>
+			<header>widgets/Complication</header>
+			<container>1</container>
+			<slots>
+				<signal>clicked()</signal>
+			</slots>
+		</customwidget>
+		<customwidget>
+			<class>windSubmodule</class>
+			<extends>QFrame</extends>
+			<header>widgets/Submodule</header>
+			<container>1</container>
+		</customwidget>
+		<customwidget>
+			<class>currentConditions</class>
+			<extends>QFrame</extends>
+			<header>widgets/Submodule</header>
+			<container>1</container>
+		</customwidget>
+		<customwidget>
+			<class>MoonPhases</class>
+			<extends>QFrame</extends>
+			<header>widgets/moon</header>
+			<container>1</container>
+		</customwidget>
+		<customwidget>
+			<class>Graph</class>
+			<extends>QFrame</extends>
+			<header>widgets/Graph</header>
+			<container>1</container>
+		</customwidget>
+	</customwidgets>
+	<resources/>
+	<connections/>
 </ui>

@@ -12,8 +12,6 @@ from PySide2.QtCore import *
 from PySide2.QtGui import *
 from PySide2.QtWidgets import *
 
-from widgets.DynamicLabel import DynamicLabel
-
 
 class Ui_Form(object):
     def setupUi(self, Form):
@@ -33,13 +31,15 @@ class Ui_Form(object):
         self.title.setObjectName(u"title")
         font1 = QFont()
         font1.setFamily(u"SF Pro Rounded")
-        font1.setPointSize(31)
+        font1.setPointSize(39)
+        font1.setBold(True)
+        font1.setWeight(75)
         self.title.setFont(font1)
         self.title.setAlignment(Qt.AlignCenter)
 
         self.verticalLayout.addWidget(self.title)
 
-        self.temperature = DynamicLabel(Form)
+        self.temperature = QLabel(Form)
         self.temperature.setObjectName(u"temperature")
         sizePolicy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
         sizePolicy.setHorizontalStretch(0)
@@ -48,7 +48,7 @@ class Ui_Form(object):
         self.temperature.setSizePolicy(sizePolicy)
         font2 = QFont()
         font2.setFamily(u"SF Pro Rounded")
-        font2.setPointSize(135)
+        font2.setPointSize(129)
         self.temperature.setFont(font2)
         self.temperature.setAlignment(Qt.AlignCenter)
 
@@ -69,7 +69,7 @@ class Ui_Form(object):
         self.SubAValue.setSizePolicy(sizePolicy1)
         font3 = QFont()
         font3.setFamily(u"SF Compact Rounded")
-        font3.setPointSize(64)
+        font3.setPointSize(75)
         self.SubAValue.setFont(font3)
         self.SubAValue.setText(u"31")
         self.SubAValue.setAlignment(Qt.AlignBottom | Qt.AlignHCenter)
@@ -112,6 +112,7 @@ class Ui_Form(object):
 
         self.gridLayout.addWidget(self.subBTitle, 1, 1, 1, 1)
 
+
         self.verticalLayout.addWidget(self.frame)
 
         self.verticalLayout.setStretch(0, 1)
@@ -124,9 +125,9 @@ class Ui_Form(object):
     # setupUi
 
     def retranslateUi(self, Form):
-        self.title.setText(QCoreApplication.translate("Form", u"Location", None))
-        self.temperature.setText(QCoreApplication.translate("Form", u"123\u00ba", None))
-        self.SubBValue.setText(QCoreApplication.translate("Form", u"45%", None))
+	    self.title.setText(QCoreApplication.translate("Form", u"Location", None))
+	    self.temperature.setText(QCoreApplication.translate("Form", u"35.4\u00ba", None))
+	    self.SubBValue.setText(QCoreApplication.translate("Form", u"45%", None))
         self.subATitle.setText(QCoreApplication.translate("Form", u"TextLabel", None))
         self.subBTitle.setText(QCoreApplication.translate("Form", u"TextLabel", None))
         pass
