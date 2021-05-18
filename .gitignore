@@ -226,3 +226,5 @@ cython_debug/
 /plugins/*
 /plugins/*__init.py
 /config.ini
+/Arduino/
+/Pipfile.lock
