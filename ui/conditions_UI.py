@@ -64,6 +64,7 @@ class Ui_conditions(object):
 
         self.verticalLayout_2.addWidget(self.forecastStringLabel)
 
+
         self.retranslateUi(conditions)
 
         QMetaObject.connectSlotsByName(conditions)
@@ -73,6 +74,6 @@ class Ui_conditions(object):
 	    conditions.setWindowTitle(QCoreApplication.translate("conditions", u"Frame", None))
 	    self.glyphLabel.setText(QCoreApplication.translate("conditions", u"\uf02e", None))
 	    self.currentConditionLabel.setText(QCoreApplication.translate("conditions", u"TextLabel", None))
-        self.forecastStringLabel.setText(QCoreApplication.translate("conditions", u"TextLabel", None))
+	    self.forecastStringLabel.setText(QCoreApplication.translate("conditions", u"TextLabel", None))
     # retranslateUi
 
