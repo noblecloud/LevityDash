@@ -107,12 +107,6 @@
 						 <property name="verticalSpacing">
 							 <number>0</number>
 						 </property>
-						 <item row="0" column="3">
-							 <widget class="QWidget" name="subD" native="true"/>
-						 </item>
-						 <item row="0" column="2">
-							 <widget class="QWidget" name="subC" native="true"/>
-						 </item>
 						 <item row="0" column="1">
 							 <widget class="windSubmodule" name="subB">
 								 <property name="minimumSize">
@@ -122,6 +116,12 @@
 									 </size>
 								 </property>
 							 </widget>
+						 </item>
+						 <item row="0" column="2">
+							 <widget class="QWidget" name="subC" native="true"/>
+						 </item>
+						 <item row="0" column="3">
+							 <widget class="QWidget" name="subD" native="true"/>
 						 </item>
 					 </layout>
 				 </widget>
@@ -326,16 +326,6 @@
 										 <item row="1" column="1">
 											 <widget class="Complication" name="sunSet" native="true"/>
 										 </item>
-										 <item row="0" column="0">
-											 <widget class="MoonPhases" name="moonPhase">
-												 <property name="frameShape">
-													 <enum>QFrame::StyledPanel</enum>
-												 </property>
-												 <property name="frameShadow">
-													 <enum>QFrame::Raised</enum>
-												 </property>
-											 </widget>
-										 </item>
 										 <item row="0" column="1">
 											 <widget class="Complication" name="sunRise" native="true">
 												 <property name="sizePolicy">
@@ -346,8 +336,18 @@
 												 </property>
 											 </widget>
 										 </item>
+										 <item row="0" column="0">
+											 <widget class="MoonPhases" name="moonPhase">
+												 <property name="frameShape">
+													 <enum>QFrame::StyledPanel</enum>
+												 </property>
+												 <property name="frameShadow">
+													 <enum>QFrame::Raised</enum>
+												 </property>
+											 </widget>
+										 </item>
 										 <item row="1" column="0">
-											 <widget class="currentConditions" name="subA"/>
+											 <widget class="GlyphBox" name="conditions"/>
 										 </item>
 									 </layout>
 								 </item>
@@ -415,12 +415,6 @@
 			<container>1</container>
 		</customwidget>
 		<customwidget>
-			<class>currentConditions</class>
-			<extends>QFrame</extends>
-			<header>widgets/Submodule</header>
-			<container>1</container>
-		</customwidget>
-		<customwidget>
 			<class>MoonPhases</class>
 			<extends>QFrame</extends>
 			<header>widgets/moon</header>
@@ -430,6 +424,12 @@
 			<class>Graph</class>
 			<extends>QFrame</extends>
 			<header>widgets/Graph</header>
+			<container>1</container>
+		</customwidget>
+		<customwidget>
+			<class>GlyphBox</class>
+			<extends>QFrame</extends>
+			<header>widgets/GlyphBox</header>
 			<container>1</container>
 		</customwidget>
 	</customwidgets>
