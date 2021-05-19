@@ -15,9 +15,9 @@ from PySide2.QtWidgets import *
 from widgets.Temperature import LargeBox
 from widgets.Complication import Complication
 from widgets.Submodule import windSubmodule
-from widgets.Submodule import currentConditions
 from widgets.moon import MoonPhases
 from widgets.Graph import Graph
+from widgets.GlyphBox import GlyphBox
 
 
 class Ui_weatherDisplay(object):
@@ -60,21 +60,21 @@ class Ui_weatherDisplay(object):
 		self.gridLayout_2.setHorizontalSpacing(1)
 		self.gridLayout_2.setVerticalSpacing(0)
 		self.gridLayout_2.setContentsMargins(0, 0, 0, 0)
-		self.subD = QWidget(self.bottom)
-		self.subD.setObjectName(u"subD")
+		self.subB = windSubmodule(self.bottom)
+		self.subB.setObjectName(u"subB")
+		self.subB.setMinimumSize(QSize(447, 472))
 
-		self.gridLayout_2.addWidget(self.subD, 0, 3, 1, 1)
+		self.gridLayout_2.addWidget(self.subB, 0, 1, 1, 1)
 
 		self.subC = QWidget(self.bottom)
 		self.subC.setObjectName(u"subC")
 
 		self.gridLayout_2.addWidget(self.subC, 0, 2, 1, 1)
 
-		self.subB = windSubmodule(self.bottom)
-		self.subB.setObjectName(u"subB")
-		self.subB.setMinimumSize(QSize(447, 472))
+		self.subD = QWidget(self.bottom)
+		self.subD.setObjectName(u"subD")
 
-		self.gridLayout_2.addWidget(self.subB, 0, 1, 1, 1)
+		self.gridLayout_2.addWidget(self.subD, 0, 3, 1, 1)
 
 		self.gridLayout_2.setColumnStretch(0, 1)
 		self.gridLayout_2.setColumnStretch(1, 1)
@@ -186,13 +186,6 @@ class Ui_weatherDisplay(object):
 
 		self.gridLayout.addWidget(self.sunSet, 1, 1, 1, 1)
 
-		self.moonPhase = MoonPhases(self.topLeft)
-		self.moonPhase.setObjectName(u"moonPhase")
-		self.moonPhase.setFrameShape(QFrame.StyledPanel)
-		self.moonPhase.setFrameShadow(QFrame.Raised)
-
-		self.gridLayout.addWidget(self.moonPhase, 0, 0, 1, 1)
-
 		self.sunRise = Complication(self.topLeft)
 		self.sunRise.setObjectName(u"sunRise")
 		sizePolicy.setHeightForWidth(self.sunRise.sizePolicy().hasHeightForWidth())
@@ -200,10 +193,17 @@ class Ui_weatherDisplay(object):
 
 		self.gridLayout.addWidget(self.sunRise, 0, 1, 1, 1)
 
-		self.subA = currentConditions(self.topLeft)
-		self.subA.setObjectName(u"subA")
+		self.moonPhase = MoonPhases(self.topLeft)
+		self.moonPhase.setObjectName(u"moonPhase")
+		self.moonPhase.setFrameShape(QFrame.StyledPanel)
+		self.moonPhase.setFrameShadow(QFrame.Raised)
 
-		self.gridLayout.addWidget(self.subA, 1, 0, 1, 1)
+		self.gridLayout.addWidget(self.moonPhase, 0, 0, 1, 1)
+
+		self.conditions = GlyphBox(self.topLeft)
+		self.conditions.setObjectName(u"conditions")
+
+		self.gridLayout.addWidget(self.conditions, 1, 0, 1, 1)
 
 		self.gridLayout.setRowStretch(0, 1)
 		self.gridLayout.setRowStretch(1, 1)
