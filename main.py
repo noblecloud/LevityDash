@@ -198,8 +198,7 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 			# Current Conditions
 			# today = self.dailyForecast.data[0]
 			self.subB.live = True
-			# self.subA.glyph = self.interpreter[today.measurements['weather_code'].value]
-			# self.subA.currentCondition = str(self.interpreter[today.measurements['weather_code'].value])
+			self.conditions.glyph = self.interpreter[today.measurements['weather_code'].value]
 
 			# Outdoor Air Quality
 			self.outdoor.live = True
