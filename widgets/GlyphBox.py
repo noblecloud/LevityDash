@@ -32,9 +32,9 @@ class GlyphBox(LoudWidget, StatusObject):
 
 	@property
 	def glyph(self):
-		return self._glyph
+		return self._glyph.glyph
 
 	@glyph.setter
 	def glyph(self, value):
 		self.live = True
-		self._glyph = value
+		self._glyph.glyph = value
