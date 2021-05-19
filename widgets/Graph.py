@@ -1,13 +1,17 @@
 import sys
+from typing import Any, Iterable, Union
+from enum import Enum
 
 import numpy as np
+from numpy import ndarray
 
 from PySide2 import QtCore, QtGui, QtWidgets
+from PySide2.QtCore import Qt
 from scipy.signal import find_peaks
 
 sys.modules['PyQt5.QtGui'] = QtGui
 from PIL.ImageQt import ImageQt
-from PySide2.QtGui import QBrush, QFont, QPainter, QPainterPath, QPen, QPixmap
+from PySide2.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen, QPixmap
 from PySide2.QtWidgets import QApplication, QHBoxLayout, QLabel
 from PIL import Image
 
@@ -16,9 +20,22 @@ from api.forecast import Forecast, hourlyForecast
 golden = (1 + np.sqrt(5)) / 2
 
 
+class Axis(Enum):
+	Vertical = 0
+	Horizontal = 1
+	x = 0
+	y = 1
+
+
+class Dataset(dict):
+	_data: ndarray
+	data: ndarray
+
+
 class Graph(QtWidgets.QFrame):
-	painter: QPainter
-	pix: QPixmap
+	_image: QPixmap
+	_font: QFont
+	_painter: QPainter
 	_time: np.ndarray
 	_data: dict
 	_max: float
@@ -26,116 +43,48 @@ class Graph(QtWidgets.QFrame):
 	_p2p: float
 
 	def __init__(self, *args, **kwargs):
-		# self._data = data
 		super(Graph, self).__init__(*args, **kwargs)
-		self.buildColorMaps()
+		self.parseKwargs(kwargs)
 		self.setStyleSheet('background-color: black;')
-		self.font = QFont("SF Pro Rounded", 50)
 		self.setContentsMargins(10, 20, 10, 20)
 
-	def backgroundImage(self):
+	def parseKwargs(self, kwargs):
+		if 'font' in kwargs:
+			font = kwargs['font']
+			if isinstance(font, str):
+				self._font = QFont(font, self.height() * .1)
+			elif isinstance(font, QFont):
+				self._font = kwargs['font']
+			else:
+				self._font = QFont(font)
+		else:
+			self._font = QFont("SF Pro Rounded", self.height() * .1)
+
+	def backgroundImage(self) -> QPixmap:
 		LightImage = self.image()
 		img = Image.fromarray(np.uint8(LightImage)).convert('RGBA')
 		img.resize((self.width(), self.height()), Image.ANTIALIAS)
 		qim = ImageQt(img)
-		pix = QtGui.QPixmap.fromImage(qim)
-		self.pix = pix
+		return QtGui.QPixmap.fromImage(qim)
 
-	def buildColorMaps(self):
-		from matplotlib.colors import LinearSegmentedColormap
-		solarColorDict = {'red':   [(0.0, 0.0, 0.0),
-		                            # (0.12, 1, 1),
-		                            (0.2, 0.9, 0.9),
-		                            # (0.3, 0.3, 0.3),
-		                            # (0.4, 0.4, 0.4),
-		                            # (0.5, 0.5, 0.5),
-		                            # (0.6, 0.6, 0.6),
-		                            # (0.7, 0.7, 0.7),
-		                            # (0.8, 0.8, 0.8),
-		                            (0.7, 1, 1),
-		                            (1, 1, 1)],
-		                  'green': [(0.0, 0.0, 0.0),
-		                            (0.2, 0.75, 0.75),
-		                            # (0.2, 0.2, 0.2),
-		                            # (0.3, 0.3, 0.3),
-		                            # (0.4, 0.4, 0.4),
-		                            # (0.5, 0.5, 0.5),
-		                            # (0.6, 0.6, 0.6),
-		                            # (0.7, 0.7, 0.7),
-		                            # (0.8, 0.8, 0.8),
-		                            (0.7, 1, 1),
-		                            (1, 1, 1)],
-		                  'blue':  [(0.0, 0.0, 0.0),
-		                            (0.1, 0.2, 0.2),
-		                            # (0.2, 0.2, 0.2),
-		                            # (0.3, 0.3, 0.3),
-		                            (0.4, 0.4, 0.4),
-		                            # (0.5, 0.5, 0.5),
-		                            # (0.6, 0.6, 0.6),
-		                            (0.75, 1, 1),
-		                            # (0.8, 0.8, 0.8),
-		                            # (0.9, 0.9, 0.9),
-		                            (1, 1, 1)
-		                            ]  # ,
-		                  # 'alpha': [(0.0, 0.0, 0.0),
-		                  #           (0.1, 0.1, 0.1),
-		                  #           (0.2, 0.2, 0.2),
-		                  #           (0.3, 0.3, 0.3),
-		                  #           (0.4, 0.4, 0.4),
-		                  #           (0.5, 0.5, 0.5),
-		                  #           (0.6, 0.6, 0.6),
-		                  #           (0.7, 0.7, 0.7),
-		                  #           (0.8, 0.8, 0.8),
-		                  #           (0.9, 0.9, 0.9),
-		                  #           (1, 1, 1.0)]
-		                  }
+	def paintEvent(self, event: QtGui.QPaintEvent) -> None:
 
-		gray = {'red':   ((0.0, 0, 0), (1.0, 1, 1)),
-		        'green': ((0.0, 0, 0), (1.0, 1, 1)),
-		        'blue':  ((0.0, 0, 0), (1.0, 1, 1))}
+		self._time: np.ndarray = self.normalizeToFrame(self.data['timestampInt'], Axis.y, frame='timestampInt')
 
-		rain = {'red':   [(0.0, 0.1, 0.1),
-		                  (1.0, .4, .4)],
+		self._painter = QPainter()
+		self._painter.begin(self)
 
-		        'green': [(0.0, 0.1, 0.1),
-		                  (1.0, .6, .6)],
+		# Set render hints
+		self._painter.setRenderHint(QPainter.HighQualityAntialiasing)
+		self._painter.setRenderHint(QPainter.Antialiasing)
+		self._painter.setRenderHint(QPainter.SmoothPixmapTransform)
 
-		        'blue':  [(0.0, .2, .2),
-		                  (0.0, .6, .6),
-		                  (1.0, 0.8, 0.8)],
-
-		        'alpha': [(0.0, 0.0, 0.0),
-		                  (0.1, 0.2, 0.2),
-		                  (1.0, 1, 1)]}
-		# 'alpha': [(0.0, 0.0, 0.0),
-		#           (0.25, 0.0, 0.0),
-		#           (.5, 0.5, 0.5)]}
-
-		self.rainColorMap = LinearSegmentedColormap('colormap', rain)
-
-		self.solarColorMap = LinearSegmentedColormap('colorMap', solarColorDict)
-
-	def paintEvent(self, event):
-		self.margin = 0.2
-
-		self._time: np.ndarray = self.normalizeToFrame(self.data['timestampInt'], self.width(), frame='timestampInt')
-
-		# yStep = ((tempRange / y) - (y * self.margin))
-		self.painter = QPainter()
-		self.painter.begin(self)
-		# self.painter.translate(0, self.height());
-		# self.painter.scale(1.0, -1.0);
-
-		self.painter.setRenderHint(QPainter.HighQualityAntialiasing)
-		self.painter.setRenderHint(QPainter.Antialiasing)
-		self.painter.setRenderHint(QPainter.SmoothPixmapTransform)
-
-		self.painter.drawPixmap(self.rect(), self.pix)
+		self._painter.drawPixmap(self.rect(), self._image)
 
 		babyBlue = QtGui.QColor(3, 232, 252)
 		# self.painter.drawText(self.rect(), QtCore.Qt.AlignCenter, "Hello")
+		self.plotLine(self.data['dewpoint'], babyBlue, [1, 3])
 		self.plotLine(self.data['temp'])
-		self.plotLine(self.data['dewpoint'], babyBlue)
 		temperature: np.ndarray = self.data['temp']
 		peaks, _ = find_peaks(temperature, distance=80)
 		troughs, _ = find_peaks(-temperature, distance=80)
@@ -146,55 +95,110 @@ class Graph(QtWidgets.QFrame):
 		for i in range(0, len(peaks)):
 			y[i] = (self._time[peaks[i]])
 			x[i] = (self.data['temp'][peaks[i]])
-		x = self.normalizeToFrame(x, self.height(), 0.1)
+		x = self.normalizeToFrame(x, Axis.x, 0.1)
 		# y = self.normalizeToFrame(y, self.width(), 0, 'timestampInt')
-		for x, y, value in zip(x, y, peaks):
-			self.plotText(QtCore.QPoint(y - 30, x + 20), str(round(temperature[value])))
+
+		average = sum(peaks) / len(peaks)
+		for x, y, value in zip(y, x, peaks):
+			self.plotText(x, y, f"{str(round(temperature[value]))}º", offset="+" if value > average else '-')
+			self.drawVerticalLine(x)
 		#
 		# for x in range(0, len(self.time)):
 		# 	y = (self.height() * 0.1) + ((self._data['feels_like'][x] - tmin) * yStep) * 0.8
 		# 	path.lineTo(x * xStep, y)
 
-		self.painter.end()
+		self._painter.end()
 
-	def plotLine(self, data: np.ndarray, color=QtCore.Qt.white):
-		plotData = self.normalizeToFrame(data, self.height(), 0.1)
+	def drawVerticalLine(self, position: Union[int, float], color: QtGui.QColor = QtCore.Qt.white, style: Union[QtCore.Qt.PenStyle, list[int]] = Qt.SolidLine):
+		lineThickness = self.height() * golden * 0.01
+		lineThickness = lineThickness if lineThickness > 8 else 8
+		pen = QPen(color, lineThickness)
+		if isinstance(style, Iterable):
+			pen.setDashPattern(style)
+		else:
+			pen.setStyle(style)
+
+		self._painter.setPen(pen)
+		path = QPainterPath()
+		path.moveTo(position, 0)
+		path.lineTo(position, self.height())
+		self._painter.drawPath(path)
+
+	def plotLine(self, data: np.ndarray, color: QtGui.QColor = QtCore.Qt.white, style: Union[QtCore.Qt.PenStyle, list[int]] = Qt.SolidLine):
+
+		plotData = self.normalizeToFrame(data, Axis.Vertical, 0.1)
 
 		lineThickness = self.height() * golden * 0.01
 		lineThickness = lineThickness if lineThickness > 8 else 8
 		pen = QPen(color, lineThickness)
-		self.painter.setPen(pen)
+		if isinstance(style, Iterable):
+			pen.setDashPattern(style)
+		else:
+			pen.setStyle(style)
+
+		self._painter.setPen(pen)
 
 		path = QPainterPath()
 		path.moveTo(self._time[0], plotData[0])
+
 		for xPlot, yPlot in zip(plotData, self._time):
 			path.lineTo(yPlot, xPlot)
 
-		self.painter.drawPath(path)
+		self._painter.drawPath(path)
 
-	def plotText(self, position: QtCore.QPoint, string: str, color=QtCore.Qt.white):
-		# lineThickness = self.height() * golden * 0.005
-		# lineThickness = lineThickness if lineThickness > .01 else 0.01
-		pen = QPen(color, 3)
+	def plotText(self, x: Union[float, int], y: Union[float, float], string: str, color=QtCore.Qt.white, offset: str = None):
+		def outOfBounds(value):
+			return 0 < value < self.height()
+
+		fontSize = min(max(self.height() * 0.1, 30, min(self.width() * 0.06, self.height() * .2)), 100)
+		self._font.setPixelSize(fontSize)
+
+		# TODO: add logic to put values above line for high and below for lows while keeping text in frame
+		"""
+		if font is outside of screen:
+			if font is for high:
+				lower font
+			else:
+				raise font
+		else:
+			if font is for high:
+				raise font
+			else:
+				lower font
+
+		"""
+
+		if 0 < y < self.height():
+			if offset == '+':
+				y = y - fontSize
+			else:
+				y = y + fontSize
+		position = QtCore.QPoint(x - fontSize * .8, y + fontSize)
+
+		lineThickness = max(fontSize * golden * 0.07, 3)
+		pen = QPen(color, lineThickness)
+
 		brush = QBrush(QtCore.Qt.black)
-		self.painter.setPen(pen)
-		self.painter.setBrush(brush)
+		self._painter.setPen(pen)
+		self._painter.setBrush(QColor(None))
 		path = QPainterPath()
-		path.moveTo(position)
-		path.addText(position, self.font, string)
-		self.painter.drawPath(path)
+		path.addText(position, self._font, string)
+		self._painter.drawPath(path)
 
-		pen = QPen(color, 0)
-		brush = QBrush(QtCore.Qt.black)
-		self.painter.setPen(pen)
-		self.painter.setBrush(brush)
+		self._painter.setPen(None)
+		self._painter.setBrush(brush)
 		path = QPainterPath()
-		path.moveTo(position)
-		path.addText(position, self.font, string)
-		self.painter.drawPath(path)
+		path.addText(position, self._font, string)
+		self._painter.drawPath(path)
 
-	def normalizeToFrame(self, array, axis: int, offset: float = 0.0, frame: str = 'temp'):
-
+	def normalizeToFrame(self, array: ndarray, axis: Axis, offset: float = 0.0, frame: str = 'temp'):
+		"""
+		:param array: array which to normalize
+		:param axis: Vertical or Horizontal
+		:param offset:
+		:param frame:
+		:return: Normalized
+		"""
 		# start at leading margin
 		# subtract the lowest value
 		# height / peak to trough represents one unit value
@@ -202,10 +206,11 @@ class Graph(QtWidgets.QFrame):
 
 		temp = self._data[frame]
 
-		leading = axis * offset
-		if self.height() == axis:
-			return axis - (leading + (((array - self._min) * axis / self._p2p) * (1 - offset * 2)))
-		return leading + (((array - temp.min()) * axis / np.ptp(temp)) * (1 - offset * 2))
+		if axis == Axis.Vertical:
+			leading = self.height() * offset
+			return self.height() - (leading + (((array - self._min) * self.height() / self._p2p) * (1 - offset * 2)))
+		else:
+			return ((array - temp.min()) * self.width() / np.ptp(temp)) * (1 - offset * 2)
 
 	@property
 	def data(self):
@@ -220,7 +225,7 @@ class Graph(QtWidgets.QFrame):
 
 		self._data = data
 		self._min, self._max, self._p2p = minMaxP2P(data)
-		self.backgroundImage()
+		self._image = self.backgroundImage()
 
 	@staticmethod
 	def normalize(a):
@@ -268,108 +273,6 @@ class Graph(QtWidgets.QFrame):
 		raw = raw.astype(np.uint8)
 
 		return raw
-
-
-class GraphScene(QtWidgets.QGraphicsScene):
-	time: dict
-	temp: dict
-
-	def __init__(self, *args, **kwargs):
-		super(GraphScene, self).__init__(*args, **kwargs)
-
-	def parseData(self):
-		self.time = self._data['timestamp']
-		self.temp = self._data['temp']
-
-	def plotGraph(self):
-		tmin = self.temp.min()
-		tmax = self.temp.max()
-		w = self.width()
-		h = self.height()
-		trange = tmax - tmin
-		xlen = len(self.time)
-		xm, ym = w, h
-		xStep = xm / xlen
-		yStep = ((trange / ym) - (ym * 0.2))
-		yStep = ym / trange
-		paint = QPainter()
-		paint.begin(self)
-
-		lineThickness = (w * h * 0.00001) if (w * h * 0.00001) > 2 else 2
-
-		pen = QPen(QtCore.Qt.white, lineThickness)
-		paint.setPen(pen)
-		path = QPainterPath()
-
-		firsty = (self.temp[0] - tmin) * yStep
-		path.moveTo(0, firsty)
-
-		for x in range(0, len(self.time)):
-			y = (self.height() * 0.1) + ((self.temp[x] - tmin) * yStep) * 0.8
-			path.lineTo(x * xStep, y)
-
-		paint.drawPath(path)
-		paint.end()
-
-
-class GraphImage(QtWidgets.QFrame):
-
-	def __init__(self, *args, **kwargs):
-		super(GraphImage, self).__init__(*args, **kwargs)
-
-		from tests.pickler import pans as reload
-		data = reload('./tests/snapshots/202101031000')['surface_shortwave_radiation']
-
-		hbox = QHBoxLayout(self)
-		# img = Image.fromarray(self.image().astype('uint8'), 'RGB')
-		img = Image.fromarray(self.image())
-		# img.resize((self.width(), self.height()), Image.ANTIALIAS)
-		qim = ImageQt(img)
-		pix = QtGui.QPixmap.fromImage(qim)
-		lbl = QLabel(self)
-		w = self.width()
-		h = self.height()
-		lbl.setPixmap(pix)
-
-	#   hbox.addWidget(lbl)
-	# 		self.setLayout(hbox)
-	#
-	# 		self.show()
-
-	def paintEvent(self, event):
-		super(GraphImage, self).paintEvent(event)
-		paint = QPainter()
-		paint.begin(self)
-
-		# img = img.scaled(50, 50, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-		# p.drawPixmap(100, 0, img);
-		# paint.drawPixmap(self.rect(), self.pix)
-		paint.end()
-
-	@staticmethod
-	def normalize(a):
-		return (a - np.min(a)) / np.ptp(a)
-
-# def image(self, data: [dict]):
-# 	norm = self.normalize(data)
-# 	raw = []
-# 	rS = 1.0
-# 	gS = 0.85
-# 	bS = 0.6
-# 	aS = 1.0
-# 	for i in range(0, 272):
-# 		r, g, b, a = [norm[i]] * 4
-# 		r *= rS
-# 		g *= gS
-# 		b *= bS
-# 		a *= aS
-# 		raw.append((r, g, b))
-# 	raw = np.outer(np.ones(len(raw)), raw)
-# 	raw = raw.reshape(272, 272, 3)
-#
-# 	raw *= 255
-# 	raw = raw.astype(np.uint8)
-# 	return QtGui.QImage(raw, 272, 272, QtGui.QImage.Format_RGB32)
 
 
 if __name__ == '__main__':
