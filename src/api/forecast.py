@@ -252,6 +252,10 @@ class Forecast:
 			data = gaussian_filter1d(data, sigma)
 		return data
 
+	def minMaxP2P(self) -> tuple[float, float, float]:
+		arr = np.concatenate(((self.data['feels_like']), (self.data['temp']), (self.data['dewpoint'])), axis=0)
+		return float(arr.min()), float(arr.max()), float(arr.ptp())
+
 	def mapData(self, inputData: Union[list[ObservationData], ObservationData], interpolate: bool = True) -> dict[
 		str, list[ObservationData]]:
 
