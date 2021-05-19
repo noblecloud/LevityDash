@@ -125,6 +125,8 @@ class Submodule(LoudWidget, StatusObject):
 class windSubmodule(windUI, Submodule):
 	# _speed: float
 	# animation: QPropertyAnimation
+	_directionArray: deque = deque([], 10)
+	_direction: int = 0
 
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
@@ -144,7 +146,12 @@ class windSubmodule(windUI, Submodule):
 		self.maxValueLabel.live = value
 		self.gustValueLabel.live = value
 
-	def paintEvent(self, event):
+	def setVector(self, speed, direction):
+		self.speed = speed
+		if speed > 0:
+			self.direction = direction
+
+	def paintEvent(self, event: QPaintEvent) -> None:
 		cardinalDirections = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 		direction = int(((self.image.rotation + 22.5) % 360) // 45 % 8)
 		self.directionLabel.setText(cardinalDirections[direction])
@@ -178,11 +185,9 @@ class windSubmodule(windUI, Submodule):
 
 	@direction.setter
 	def direction(self, value):
-		if isinstance(value, float) or isinstance(value, int):
-			logging.debug('setting wind with int or float')
-			self.image.animate(value, True, 3000)
-		else:
-			logging.warn('Unable to set wind direction')
+		self._directionArray.append(value)
+		smoothedValue = sum(self._directionArray) / len(self._directionArray)
+		self.image.animate(smoothedValue, True, 3000)
 
 	@property
 	def max(self):
