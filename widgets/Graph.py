@@ -27,9 +27,36 @@ class Axis(Enum):
 	y = 1
 
 
-class Dataset(dict):
-	_data: ndarray
-	data: ndarray
+class TimeMarkers:
+	_stamps: ndarray
+	_dates: ndarray
+
+	def __init__(self, start: datetime, finish: datetime, increment: timedelta):
+		dates = []
+		stamps = []
+
+		if increment.days:
+			start = datetime(year=start.year, month=start.month, day=start.day, hour=0, minute=0, second=0, tzinfo=start.tzinfo)
+		elif not increment.seconds % 3600:
+			hour = increment.seconds / 3600
+			startHour = int(hour * (start.hour // hour))
+			start = datetime(year=start.year, month=start.month, day=start.day, hour=startHour, minute=0, second=0, tzinfo=start.tzinfo)
+
+		i = start + increment
+		while i < finish:
+			stamps.append(i.timestamp())
+			dates.append(i)
+			i += increment
+		self._dates = np.array(dates)
+		self._stamps = np.array(stamps)
+
+	@property
+	def stamps(self):
+		return self._stamps
+
+	@property
+	def dates(self):
+		return self._dates
 
 
 class Graph(QtWidgets.QFrame):
