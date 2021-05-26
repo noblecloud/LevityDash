@@ -1,7 +1,7 @@
 import logging
 import sys
 from datetime import datetime, timedelta
-from typing import Any, Iterable, Union
+from typing import Iterable, List, Tuple, Union
 from enum import Enum
 
 import numpy as np
@@ -9,13 +9,12 @@ from numpy import ndarray
 
 from PySide2.QtCore import QPointF, Qt, QTimer
 
-sys.modules['PyQt5.QtGui'] = QtGui
 from PIL.ImageQt import ImageQt
-from PySide2.QtGui import QBrush, QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
-from PySide2.QtWidgets import QApplication, QGraphicsDropShadowEffect, QGraphicsItem, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsScene, QGraphicsTextItem, QGraphicsView
+from PySide2.QtGui import QBrush, QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QResizeEvent
+from PySide2.QtWidgets import QApplication, QGraphicsDropShadowEffect, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsScene, QGraphicsView
 from PIL import Image
 
-from api.forecast import Forecast, hourlyForecast
+from api.forecast import Forecast
 
 golden = (1 + np.sqrt(5)) / 2
 
@@ -75,7 +74,7 @@ class Holder(QGraphicsView):
 		self.setScene(scene)
 		self.resizeTimer.timeout.connect(self.updateGraphics)
 
-	def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
+	def resizeEvent(self, event: QResizeEvent) -> None:
 		self.resizeTimer.start(300)
 
 	@property
@@ -99,7 +98,6 @@ class Holder(QGraphicsView):
 		except Exception:
 			pass
 		self.resizeTimer.stop()
-# self.scene().s.setEnabled(True)
 
 
 class SoftShadow(QGraphicsDropShadowEffect):
@@ -158,7 +156,7 @@ class GraphScene(QGraphicsScene):
 
 	def setColors(self):
 		self.faded = QColor(255, 255, 255, 128)
-		self.babyBlue = QtGui.QColor(3, 232, 252)
+		self.babyBlue = QColor(3, 232, 252)
 
 	def addAnnotations(self):
 		for item in self._peaks:
@@ -269,7 +267,7 @@ class GraphScene(QGraphicsScene):
 
 class LineMarkers(QGraphicsPathItem):
 
-	def __init__(self, parent: GraphScene, markerArray: str, color: QtGui.QColor = QtCore.Qt.white, style: Union[QtCore.Qt.PenStyle, list[int]] = Qt.SolidLine, scalar: float = 1.0, **kwargs):
+	def __init__(self, parent: GraphScene, markerArray: str, color: QColor = Qt.white, style: Union[Qt.PenStyle, list[int]] = Qt.SolidLine, scalar: float = 1.0, **kwargs):
 		super(LineMarkers, self).__init__()
 		self.markerArray = markerArray
 		self.parent = parent
@@ -303,7 +301,7 @@ class LineMarkers(QGraphicsPathItem):
 
 class Text(QGraphicsPathItem):
 
-	def __init__(self, parent, x: float, y: float, text: str, alignment: QtCore.Qt.AlignmentFlag = Qt.AlignCenter,
+	def __init__(self, parent, x: float, y: float, text: str, alignment: Qt.AlignmentFlag = Qt.AlignCenter,
 	             scalar: float = 1.0, font: Union[QFont, str] = None, color: QColor = Qt.white):
 		super(Text, self).__init__()
 		self.x, self.y = x, y
@@ -348,7 +346,7 @@ class Text(QGraphicsPathItem):
 		lineThickness = max(self.parent.fontSize * self.scalar * golden * 0.07, 3)
 		pen = QPen(self.color, lineThickness)
 
-		brush = QBrush(QtCore.Qt.white)
+		brush = QBrush(Qt.white)
 		self.setPen(QColor(Qt.white))
 		self.setBrush(brush)
 		path = QPainterPath()
@@ -394,7 +392,7 @@ class Text(QGraphicsPathItem):
 		if y > self.parent.height - 15:
 			y = self.parent.height - 15
 
-		return QtCore.QPointF(x, y)
+		return QPointF(x, y)
 
 
 class MarkerAnnotation(Text):
@@ -413,7 +411,7 @@ class MarkerAnnotation(Text):
 		date: datetime = self.parent.hours.dates[self.index]
 		return date.strftime('%a')
 
-	def position(self) -> QtCore.QPointF:
+	def position(self) -> QPointF:
 
 		strWidth, strHeight = self.estimateTextSize(self.font)
 
@@ -458,7 +456,7 @@ class PlotAnnotation(Text):
 	def text(self):
 		return f"{str(round(self.parent.data[self.array][self.index]))}º"
 
-	def position(self) -> QtCore.QPointF:
+	def position(self) -> QPointF:
 
 		lineWeight = self.parent.lineWeight
 
@@ -485,7 +483,7 @@ class PlotAnnotation(Text):
 		if y > self.parent.height - 15:
 			y = self.parent.height - 15
 
-		return QtCore.QPointF(x, y)
+		return QPointF(x, y)
 
 
 class BackgroundImage(QGraphicsPixmapItem):
@@ -563,7 +561,6 @@ class Plot(QGraphicsPathItem):
 		self.scalar = scalar
 		self._x = x
 		super(Plot, self).__init__()
-		self.grad()
 		self.setPen(self.genPen())
 		self.setPath(self.genPath())
 
@@ -614,7 +611,7 @@ NoMargin = Margins(0, 0, 0, 0)
 
 
 class TwinPlot(QGraphicsPathItem):
-	def __init__(self, parent, color: QtGui.QColor = QtCore.Qt.white, margins: Margins = NoMargin):
+	def __init__(self, parent, color: QColor = Qt.white, margins: Margins = NoMargin):
 		self.parent: GraphScene = parent
 		self.color = color
 		self.margins = margins
@@ -625,7 +622,7 @@ class TwinPlot(QGraphicsPathItem):
 		self.setPen(QPen(QColor(color)))
 		self.setPath(self.genPath())
 
-	def genPath(self) -> QtGui.QPainterPath:
+	def genPath(self) -> QPainterPath:
 		width = self.parent.height * 0.02
 		path = QPainterPath()
 		top = normalize(self.parent.data['cloud_cover'])
@@ -883,10 +880,5 @@ if __name__ == '__main__':
 	window.scene().data = data
 	window.show()
 	window.scene().plot()
-	# scene = QGraphicsScene()
-	# scene.addText('test')
-	# scene.addEllipse(100, 100, 100, 100)
-	# view = QGraphicsView(scene)
-	# view.show()
 
 	sys.exit(app.exec_())
