@@ -8,7 +8,7 @@ pretty_errors.configure(filename_display=pretty_errors.FILENAME_FULL)
 
 from PySide2 import QtCore
 from PySide2.QtCore import QTimer
-from PySide2.QtGui import QFont
+from PySide2.QtGui import QFont, QFontDatabase
 from PySide2.QtWidgets import QApplication, QDesktopWidget, QGraphicsOpacityEffect, QMainWindow
 
 from src.api import AmbientWeather, AWStation
@@ -250,15 +250,15 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 
 			# Temperatures
 			self.indoor.live = True
-			self.indoor.temperature.setText(" " + str(self.aw.indoor.temperature) + 'º')
+			self.indoor.temperature.setText(" " + str(self.aw.indoor.temperature))
 			self.indoor.SubAValue.setText(" " + str(self.aw.indoor.humidity))
-			self.indoor.SubBValue.setText(" " + str(self.aw.indoor.dewpoint) + 'º')
+			self.indoor.SubBValue.setText(" " + str(self.aw.indoor.dewpoint))
 
 			# Outdoor
 			self.outdoor.live = True
-			self.outdoor.temperature.setText(" " + str(self.wf.obs.temperature) + 'º')
+			self.outdoor.temperature.setText(" " + str(self.wf.obs.temperature))
 			# SubAValue relies on forecast data
-			self.outdoor.SubBValue.setText(" " + str(self.wf.obs.dewpoint) + 'º')
+			self.outdoor.SubBValue.setText(" " + str(self.wf.obs.dewpoint))
 
 	# self.outdoor.SubAValue.setText(str(round(self.forecast.data['epa_aqi'][0])))
 
@@ -371,9 +371,9 @@ if __name__ == "__main__":
 	# print(window.ui.moonPhase.setProperty('charStr', ''))
 
 	window.show()
-	display_monitor = 1
+	display_monitor = 0
 	monitor = QDesktopWidget().screenGeometry(display_monitor)
 	window.move(monitor.left(), monitor.top())
-	window.showFullScreen()
+	# window.showFullScreen()
 
 	sys.exit(app.exec_())
