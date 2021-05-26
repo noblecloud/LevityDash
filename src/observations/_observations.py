@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any, Union
 
 from pytz import timezone, UTC
-from _easyDict import SmartDictionary
+from src._easyDict import SmartDictionary
 from src.translators import Translator
 from units.rate import Wind, Precipitation
 from src import config
