@@ -7,7 +7,7 @@ from src import utils
 from src.api.errors import InvalidCredentials, RateLimitExceeded, APIError
 from src import SmartDictionary, config
 from src.observations import Observation
-from src.observations.ambientWeather import AWIndoor, AWOutdoor
+from src.observations.AmbientWeather import AWIndoor, AWOutdoor
 from src.translators import AWTranslator
 
 
