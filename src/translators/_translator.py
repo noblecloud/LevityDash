@@ -1,11 +1,10 @@
 from datetime import datetime
 
-from src import config, SmartDictionary
-from units import heat, length, others, pressure, time
+from src import SmartDictionary
+from WeatherUnits import heat, length, others, pressure, time
 
 
 class UnitTranslator(SmartDictionary):
-
 	# _groups = {'temperature':   Temperature,
 	#            'light':         Light,
 	#            'precipitation': Precipitation,

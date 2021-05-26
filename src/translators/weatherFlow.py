@@ -1,5 +1,5 @@
-from _easyDict import _SmartDictionary, SmartDictionary
-from translators._translator import Translator, UnitTranslator
+from src import SmartDictionary
+from . import Translator, UnitTranslator
 
 
 class WFUnits(UnitTranslator):
@@ -41,7 +41,7 @@ class WFUnits(UnitTranslator):
 	                              'lightning3hr':      {'type': 'quantity', 'unit': 'int'}})
 	_battery = SmartDictionary({'type': 'power', 'unit': 'volts'})
 	_meta = SmartDictionary({'time': _time, 'battery': _battery})
-	_flat: _SmartDictionary
+	_flat: dict
 
 	def __init__(self, *args, **kwargs):
 		super(WFUnits, self).__init__({

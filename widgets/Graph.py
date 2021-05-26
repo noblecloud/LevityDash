@@ -7,14 +7,14 @@ from enum import Enum
 import numpy as np
 from numpy import ndarray
 
-from PySide2.QtCore import QPointF, Qt, QTimer
+from PySide2.QtCore import QPoint, QPointF, Qt, QTimer
 
 from PIL.ImageQt import ImageQt
 from PySide2.QtGui import QBrush, QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QResizeEvent
 from PySide2.QtWidgets import QApplication, QGraphicsDropShadowEffect, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsScene, QGraphicsView
 from PIL import Image
 
-from api.forecast import Forecast
+from src.api.forecast import Forecast
 
 golden = (1 + np.sqrt(5)) / 2
 
@@ -341,7 +341,7 @@ class Text(QGraphicsPathItem):
 		:return: height and width of text
 		"""
 		p = QPainterPath()
-		p.addText(QtCore.QPoint(0, 0), font, self.text)
+		p.addText(QPoint(0, 0), font, self.text)
 		rect = p.boundingRect()
 		return rect.width(), rect.height()
 
@@ -560,7 +560,7 @@ class BackgroundImage(QGraphicsPixmapItem):
 
 
 class Plot(QGraphicsPathItem):
-	def __init__(self, parent, x: str, color: QtGui.QColor = QtCore.Qt.white, style: Union[QtCore.Qt.PenStyle, list[int]] = Qt.SolidLine, scalar: float = 1.0):
+	def __init__(self, parent, x: str, color: QColor = Qt.white, style: Union[Qt.PenStyle, list[int]] = Qt.SolidLine, scalar: float = 1.0):
 		self.parent: GraphScene = parent
 		self.color = color
 		self.style = style

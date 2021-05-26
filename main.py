@@ -2,8 +2,11 @@
 import logging
 import sys
 from time import strftime
+import pretty_errors
 
-from PySide2 import QtCore, QtGui
+pretty_errors.configure(filename_display=pretty_errors.FILENAME_FULL)
+
+from PySide2 import QtCore
 from PySide2.QtCore import QTimer
 from PySide2.QtGui import QFont
 from PySide2.QtWidgets import QApplication, QDesktopWidget, QGraphicsOpacityEffect, QMainWindow
@@ -12,15 +15,9 @@ from src.api import AmbientWeather, AWStation
 from src.api.errors import APIError
 from src.api.forecast import dailyForecast, hourlyForecast
 from src.api.weatherFlow import WeatherFlow, WFStation
-from translators._translator import ClimacellConditionInterpreter, ConditionInterpreter
-from ui.main_UI import QFont, Ui_weatherDisplay
+from src.translators import ClimacellConditionInterpreter, ConditionInterpreter
+from ui.main_UI import Ui_weatherDisplay
 from widgets.Graph import Graph
-
-
-#
-# class dummyForecast:
-# 	from tests.pickler import pans as reload
-# 	data = reload('tests/snapshots/202101031000')
 
 
 class MainWindow(QMainWindow, Ui_weatherDisplay):

@@ -10,10 +10,10 @@ from climacell_api.climacell_response import ClimacellResponse, ObservationData
 from pysolar import util
 from pytz import utc
 
-from api.errors import APIError, BadRequest, TooManyRequests, Unauthorized
+from src.api.errors import APIError, BadRequest, TooManyRequests, Unauthorized
 from src import config
 from src.constants import fields, FORECAST_TYPES, maxDates, tz
-from utils import formatDate
+from src.utils import formatDate
 
 
 def savitzky_golay(y, window_size, order, deriv=0, rate=1):

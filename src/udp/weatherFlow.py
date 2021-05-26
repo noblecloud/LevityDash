@@ -3,7 +3,7 @@ from datetime import datetime
 
 # from units.length import Kilometer
 from src import config
-from units.defaults.weatherFlow import *
+from WeatherUnits.defaults.WeatherFlow import *
 
 classAtlas = {
 		'time':                   int,
@@ -16,7 +16,7 @@ classAtlas = {
 
 		'windSampleInterval':     Second,
 		'pressure':               mmHg,
-		'temperature':            Heat,
+		'temperature':            Temperature,
 		'humidity':               Humidity,
 
 		'illuminance':            Lux,

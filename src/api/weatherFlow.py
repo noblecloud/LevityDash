@@ -7,13 +7,13 @@ import requests
 from PySide2.QtCore import QObject, Signal
 from PySide2.QtNetwork import QUdpSocket
 
-import utils
-from api.errors import APIError, InvalidCredentials, RateLimitExceeded
-from observations import Observation, WFStationObservation
+from src import utils
+from src.api.errors import APIError, InvalidCredentials, RateLimitExceeded
+from src.observations import Observation, WFStationObservation
 from src import config
 from src.udp import weatherFlow as udp
-import src.units.defaults.weatherFlow as units
-from translators import WFStationTranslator
+import WeatherUnits.defaults.WeatherFlow as units
+from src.translators import WFStationTranslator
 
 
 class UDPMessenger(QObject):
