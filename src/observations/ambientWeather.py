@@ -1,5 +1,5 @@
-from observations import Observation
-from translators import AWTranslator, AWTranslatorIndoor, AWTranslatorOutdoor
+from src.observations import Observation
+from src.translators import AWTranslator, AWTranslatorIndoor, AWTranslatorOutdoor
 
 
 class AWObservation(Observation):

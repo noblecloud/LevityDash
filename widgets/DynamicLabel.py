@@ -5,7 +5,7 @@ from PySide2.QtGui import QFont, QFontMetricsF
 from PySide2.QtWidgets import QLabel
 
 ### Ported from https://github.com/jonaias/DynamicFontSizeWidgets/ ###
-from translators._translator import ConditionValue
+from src.translators import ConditionValue
 from widgets.Status import StatusLabel
 
 fontPrecision = 0.5

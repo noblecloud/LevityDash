@@ -5,8 +5,7 @@ from typing import Any, Union
 from pytz import timezone, UTC
 from src._easyDict import SmartDictionary
 from src.translators import Translator
-from units.rate import Wind, Precipitation
-from src import config
+from WeatherUnits.derived import Wind, Precipitation
 from src import utils
 
 

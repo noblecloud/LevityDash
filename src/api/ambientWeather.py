@@ -3,16 +3,15 @@ from datetime import datetime
 
 import requests
 
-import utils
-from api.errors import InvalidCredentials, RateLimitExceeded, APIError
+from src import utils
+from src.api.errors import InvalidCredentials, RateLimitExceeded, APIError
 from src import SmartDictionary, config
-from observations import Observation
-from observations.ambientWeather import AWIndoor, AWOutdoor
-from translators import AWTranslator
+from src.observations import Observation
+from src.observations.ambientWeather import AWIndoor, AWOutdoor
+from src.translators import AWTranslator
 
 
 class _AmbientWeather:
-
 	_stations = []
 	_data: dict
 	_apiKey: str

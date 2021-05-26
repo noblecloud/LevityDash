@@ -1,8 +1,8 @@
 from pytz import timezone
 
-from _easyDict import _SmartDictionary, SmartDictionary
+from src import SmartDictionary
 from src import config
-from translators._translator import Translator, UnitTranslator
+from . import Translator, UnitTranslator
 
 
 class AWUnits(UnitTranslator):
