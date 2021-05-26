@@ -210,7 +210,13 @@ class GraphScene(QGraphicsScene):
 	def updateValues(self) -> None:
 		self.fontSize = min(max(self.height * 0.1, 30, min(self.width * 0.06, self.height * .2)), 100)
 		self.lineWeight = self.plotLineWeight()
+		self.gradientPoints = self.genGradientLocations()
 		self.mapData()
+
+	def genGradientLocations(self):
+		x = np.array([0, 100])
+		x = self.normalizeToFrame(x, Axis.y)
+		return x[0], x[1]
 
 	@property
 	def height(self):
@@ -507,7 +513,7 @@ class BackgroundImage(QGraphicsPixmapItem):
 		img = Image.fromarray(np.uint8(LightImage)).convert('RGBA')
 		img = img.resize((self.parent.width, self.parent.height))
 		qim = ImageQt(img)
-		return QtGui.QPixmap.fromImage(qim)
+		return QPixmap.fromImage(qim)
 
 	def gen(self, size):
 		print('gen image')
@@ -565,18 +571,19 @@ class Plot(QGraphicsPathItem):
 		self.setPath(self.genPath())
 
 	def grad(self) -> QLinearGradient:
-		gradient = QLinearGradient(QtCore.QPointF(0, self.parent.height), QtCore.QPointF(0, 0))
-		gradient.setColorAt(0, QColor(0, 0, 0))
-		gradient.setColorAt(.4, QColor(75, 0, 130))
-		gradient.setColorAt(.6, Qt.red)
-		gradient.setColorAt(.8, Qt.yellow)
-		gradient.setColorAt(1.0, Qt.white)
+		gradient = QLinearGradient(QPointF(0, self.parent.gradientPoints[0]), QPointF(0, self.parent.gradientPoints[1]))
+		gradient.setColorAt(0, QColor('#BFE8FF'))
+		gradient.setColorAt(0.3, QColor('#0D41E1'))
+		gradient.setColorAt(.5, Qt.white)
+		gradient.setColorAt(.75, Qt.white)
+		gradient.setColorAt(0.8, '#FFE874')
+		gradient.setColorAt(1.0, '#FF4F4F')
 		return gradient
 
 	def genPen(self):
 		weight = self.parent.plotLineWeight() * self.scalar
-		# brush = QBrush(self.grad())
-		pen = QPen(self.color, weight)
+		brush = QBrush(self.grad())
+		pen = QPen(brush, weight)
 		if isinstance(self.style, Iterable):
 			pen.setDashPattern(self.style)
 		else:
