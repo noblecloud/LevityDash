@@ -155,10 +155,10 @@ if __name__ == '__main__':
 					m = RainStart(data)
 					print(m.message)
 				if data['type'] == 'obs_st':
-					m = WF_UDPObs_st(data)
+					m = Obs_st(data)
 					print(m.message)
 				elif data['type'] == 'rapid_wind' and data['ob'][1] > 0:
-					m = WF_UDPWind(data)
+					m = Wind(data)
 					print(m.message)
 				elif data['type'] not in ['hub_status', 'device_status', 'light_debug']:
 					# print(data)
