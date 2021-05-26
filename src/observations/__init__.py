@@ -1,3 +1,3 @@
 from ._observations import Observation
-from .ambientWeather import AWObservation
-from .weatherFlow import WFObservation, WFStationObservation
+from .AmbientWeather import AWObservation
+from .WeatherFlow import WFObservation, WFStationObservation

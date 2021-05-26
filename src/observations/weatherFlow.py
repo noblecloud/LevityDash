@@ -4,6 +4,8 @@ from src.translators import WFStationTranslator
 
 class WFObservation(Observation):
 	pass
+
+
 # def __init__(self, data: dict):
 # 	for measurement in data.keys():
 # 		attrName, attrValue = self.localize(measurement, data[measurement])
@@ -11,5 +13,4 @@ class WFObservation(Observation):
 
 
 class WFStationObservation(WFObservation):
-
 	_translator = WFStationTranslator()
