@@ -13,6 +13,7 @@ ambient-api = "*"
 scipy = "*"
 pyside2 = "*" # See https://github.com/piwheels/packages/issues/4#issuecomment-772058821 for RPI installation
 Pillow = "*"
+WeatherUnits = "*"
 
 [dev-packages]
 
