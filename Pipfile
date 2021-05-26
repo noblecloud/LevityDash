@@ -8,11 +8,11 @@ pysolar = "*"
 pytz = "*"
 climacell-python = "*"
 pylunar = { editable = true, git = "https://github.com/noblecloud/pylunar.git" }
-#numpy = "*" #install with pip3 install numpy --no-use-pep517 first
+numpy = "*" #install with pip3 install numpy --no-use-pep517 first
 ambient-api = "*"
 scipy = "*"
-#pyside2 = "*"
-docopt = "<0.7,>=0.6.2"
+pyside2 = "*" # See https://github.com/piwheels/packages/issues/4#issuecomment-772058821 for RPI installation
+Pillow = "*"
 
 [dev-packages]
 
