@@ -1,14 +1,14 @@
 import logging
 from typing import Union
+from collections import deque
 
 from PySide2 import QtCore, QtWidgets
 from PySide2.QtCore import Property, QEasingCurve, QPoint, QPointF, QPropertyAnimation, Signal
-from PySide2.QtGui import QFont, QImage, QPainter, QPen, QPolygonF
+from PySide2.QtGui import QFont, QPainter, QPaintEvent, QPen, QPolygonF
 
 from src.constants import Fonts
 from ui.conditions_UI import Ui_conditions
 from ui.wind_UI import Ui_Frame as windUI
-from units.rate import Wind
 from widgets.loudWidget import LoudWidget
 from widgets.Status import StatusObject
 
@@ -24,9 +24,6 @@ class windRose(QtWidgets.QFrame):
 		super(windRose, self).__init__(*args, **kwargs)
 		self._animation = QPropertyAnimation(self, b'rotation')
 		self._animation.setEasingCurve(QEasingCurve.InOutCubic)
-
-	# def resizeEvent(self, event):
-	# 	super().resizeEvent(event)
 
 	def animate(self, rotation: int = None, absolute: bool = False, duration: int = 2000):
 		if self._animation.state() != QtCore.QAbstractAnimation.Running:
@@ -46,9 +43,12 @@ class windRose(QtWidgets.QFrame):
 				self._animation.setDuration(duration)
 			self._animation.start()
 
+
 	def paintEvent(self, event):
 		paint = QPainter()
 		paint.begin(self)
+		paint.setRenderHint(QPainter.HighQualityAntialiasing)
+		paint.setRenderHint(QPainter.Antialiasing)
 		cx, cy = self.width() * 0.5, self.height() * 0.5
 		cw, ch = self.width() * 0.9, self.height() * 0.9
 		base = self.height() * 0.17
@@ -216,8 +216,22 @@ class currentConditions(Ui_conditions, Submodule):
 		self.setupUi(self)
 		self.glyphLabel.fontFamily = u"Weather Icons"
 		self.forecastString = False
+		sshFile = "styles/conditions.qss"
+		with open(sshFile, "r") as fh:
+			self.setStyleSheet(fh.read())
 
 	# self.forecastString.setFont('test')
+
+	def resizeEvent(self, event):
+		super().resizeEvent(event)
+		if self.height() > 100:
+			font = self.glyphLabel._font()
+			font.setPointSizeF(self.height() * .9)
+			self.glyphLabel.setFont(font)
+			self.topSpacer.setDisabled(True)
+			self.forecastStringLabel.setDisabled(True)
+			self.currentConditionLabel.setDisabled(True)
+			self.bottomSpacer.setDisabled(True)
 
 	@property
 	def glyph(self):
