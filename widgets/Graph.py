@@ -7,9 +7,7 @@ from enum import Enum
 import numpy as np
 from numpy import ndarray
 
-from PySide2 import QtCore, QtGui, QtWidgets
-from PySide2.QtCore import QPoint, QRectF, Qt, QTimer
-from scipy.signal import find_peaks
+from PySide2.QtCore import QPointF, Qt, QTimer
 
 sys.modules['PyQt5.QtGui'] = QtGui
 from PIL.ImageQt import ImageQt
@@ -110,6 +108,21 @@ class SoftShadow(QGraphicsDropShadowEffect):
 		self.setOffset(0.0)
 		self.setBlurRadius(60)
 		self.setColor(Qt.black)
+
+
+def peaksAndTroughs(data: ndarray) -> Tuple[List[int], List[int]]:
+	# Still needs work but doesn't require scipy
+	peakBool = (data > np.roll(data, 1)) & (data > np.roll(data, -1))
+	troughBool = (data < np.roll(data, 1)) & (data < np.roll(data, -1))
+	peaks = []
+	troughs = []
+	for i, value in enumerate(peakBool):
+		if value:
+			peaks.append(i)
+	for i, value in enumerate(troughBool):
+		if value:
+			troughs.append(i)
+	return peaks, troughs
 
 
 class GraphScene(QGraphicsScene):
@@ -231,8 +244,8 @@ class GraphScene(QGraphicsScene):
 		self._data = data
 		self._min, self._max, self._p2p = minMaxP2P(data)
 		self._time: np.ndarray = data['timestampInt']
-		self._peaks, _ = find_peaks(self.data[self.textField], distance=80)
-		self._troughs, _ = find_peaks(-self.data[self.textField], distance=80)
+		self._peaks, self._troughs = peaksAndTroughs(data['temp'])
+
 		# self._image = self.backgroundImage()
 		start, finish = data['timestamp'][0], data['timestamp'][-1]
 		self.hours = TimeMarkers(start, finish, timedelta(hours=6), mask=[0])
