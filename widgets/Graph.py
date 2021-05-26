@@ -61,11 +61,11 @@ class TimeMarkers:
 		return self._dates
 
 
-class Holder(QGraphicsView):
+class Graph(QGraphicsView):
 	resizeTimer = QTimer()
 
 	def __init__(self, *args, **kwargs):
-		super(Holder, self).__init__(*args, **kwargs)
+		super(Graph, self).__init__(*args, **kwargs)
 		self.setStyleSheet('background: black')
 		self.setRenderHint(QPainter.HighQualityAntialiasing)
 		self.setRenderHint(QPainter.Antialiasing)
@@ -124,7 +124,7 @@ def peaksAndTroughs(data: ndarray) -> Tuple[List[int], List[int]]:
 
 
 class GraphScene(QGraphicsScene):
-	parent: Holder
+	parent: Graph
 	lineWeight: float
 	data: Forecast
 	dataKeys = ['temp', 'feels_like']
@@ -438,7 +438,7 @@ class MarkerAnnotation(Text):
 		if y > self.parent.height - 15:
 			y = self.parent.height - 15
 
-		return QtCore.QPointF(x, y)
+		return QPointF(x, y)
 
 
 class PlotAnnotation(Text):
@@ -650,224 +650,6 @@ def normalize(a, scalar: float = 1.0):
 	return (a - np.min(a)) / np.ptp(a) * scalar
 
 
-class Graph(QtWidgets.QFrame):
-	_image: QPixmap
-	_font: QFont
-	_painter: QPainter
-	_time: np.ndarray
-	_data: dict
-	_max: float
-	_min: float
-	_p2p: float
-
-	def __init__(self, *args, **kwargs):
-		super(Graph, self).__init__(*args, **kwargs)
-		self.parseKwargs(kwargs)
-		self.setStyleSheet('background-color: black;')
-		self.setContentsMargins(10, 20, 10, 20)
-
-	def parseKwargs(self, kwargs):
-		if 'font' in kwargs:
-			font = kwargs['font']
-			if isinstance(font, str):
-				self._font = QFont(font, self.height() * .1)
-			elif isinstance(font, QFont):
-				self._font = kwargs['font']
-			else:
-				self._font = QFont(font)
-		else:
-			self._font = QFont("SF Pro Rounded", self.height() * .1)
-
-	def paintEvent(self, event: QtGui.QPaintEvent) -> None:
-		self._fontSize = min(max(self.height() * 0.1, 30, min(self.width() * 0.06, self.height() * .2)), 100)
-		self._lineWeight = self.plotLineWeight()
-
-		self._painter = QPainter()
-		self._painter.begin(self)
-
-		# Set render hints
-		self._painter.setRenderHint(QPainter.HighQualityAntialiasing)
-		self._painter.setRenderHint(QPainter.Antialiasing)
-		self._painter.setRenderHint(QPainter.SmoothPixmapTransform)
-
-		# Draw Background
-		self._painter.drawPixmap(self.rect(), self._image)
-
-		# Draw markers
-		pen = self._painter.pen()
-		faded = QColor(255, 255, 255, 128)
-		for i in self.normalizeToFrame(self.days.stamps, Axis.y):
-			self.drawVerticalLine(i, scalar=.5, color=faded)
-
-		hourMarkers = self.normalizeToFrame(self.hours.stamps, Axis.y)
-		for i, date in zip(hourMarkers, self.hours.dates):
-			if date.hour != 0:
-				self.drawVerticalLine(i, scalar=0.2, style=[3, 9], color=faded)
-			self.plotText(i, self.height(), date.strftime('%-I%p').lower(), scalar=.5)
-
-		# Draw foreground
-		babyBlue = QtGui.QColor(3, 232, 252)
-		self.plotLine(self.data['dewpoint'], babyBlue, [1, 3])
-		self.plotLine(self.data['temp'])
-
-		# Add Temperatures
-		temperature: np.ndarray = self.data['temp']
-		peaks, _ = find_peaks(temperature, distance=80)
-		x, y = np.empty(len(peaks)), np.empty(len(peaks))
-		for i in range(0, len(peaks)):
-			j = peaks[i]
-			y[i] = self._time[j]
-			x[i] = temperature[j]
-		x = self.normalizeToFrame(x, Axis.x, 0.1)
-		for x, y, i in zip(x, y, peaks):
-			self.plotText(y, x, f"{str(round(temperature[i]))}º", offset="+")
-
-		troughs, _ = find_peaks(-temperature, distance=80)
-		x, y = np.empty(len(troughs)), np.empty(len(troughs))
-		for i in range(0, len(troughs)):
-			j = troughs[i]
-			y[i] = self._time[j]
-			x[i] = self.data['temp'][j]
-		x = self.normalizeToFrame(x, Axis.x, 0.1)
-		for x, y, value in zip(y, x, troughs):
-			self.plotText(x, y, f"{str(round(temperature[value]))}º", offset="-")
-
-		self._painter.end()
-
-	def drawVerticalLine(self, position: Union[int, float], color: QtGui.QColor = QtCore.Qt.white, style: Union[QtCore.Qt.PenStyle, list[int]] = Qt.SolidLine, scalar: float = 1.0) -> None:
-		"""
-		Draws a vertical line on graph
-		:param Union[int, float] position: y position of line
-		:param QColor color: Color of pen
-		:param Union[PenStyle, list[int]] style:
-		:param float scalar: weight relative to baseline line thickness
-		"""
-		pen = QPen(color, self._lineWeight * scalar)
-		if isinstance(style, Iterable):
-			pen.setDashPattern(style)
-		else:
-			pen.setStyle(style)
-
-		self._painter.setPen(pen)
-		path = QPainterPath()
-		path.moveTo(position, 0)
-		path.lineTo(position, self.height())
-		self._painter.drawPath(path)
-
-	def plotLine(self, data: np.ndarray, color: QtGui.QColor = QtCore.Qt.white, style: Union[QtCore.Qt.PenStyle, list[int]] = Qt.SolidLine, scalar: float = 1.0):
-
-		plotData = self.normalizeToFrame(data, Axis.Vertical, 0.1)
-
-		lineThickness = self._lineWeight * scalar
-		pen = QPen(color, lineThickness)
-		if isinstance(style, Iterable):
-			pen.setDashPattern(style)
-		else:
-			pen.setStyle(style)
-
-		self._painter.setPen(pen)
-		self._painter.setBrush(Qt.NoBrush)
-
-		path = QPainterPath()
-		path.moveTo(self._time[0], plotData[0])
-
-		for xPlot, yPlot in zip(plotData, self._time):
-			path.lineTo(yPlot, xPlot)
-
-		self._painter.drawPath(path)
-
-	def plotLineWeight(self) -> float:
-		weight = self.height() * golden * 0.005
-		weight = weight if weight > 8 else 8.0
-		return weight
-
-	def plotText(self, x: Union[float, int], y: Union[float, float], string: str, color=QtCore.Qt.white, offset: str = None, scalar: float = 1.0):
-
-		def estimateTextSize(font: QFont) -> tuple[float, float]:
-			p = QPainterPath()
-			p.addText(QtCore.QPoint(0, 0), font, string)
-			rect = p.boundingRect()
-			return rect.width(), rect.height()
-
-		font = QFont(self._font)
-		font.setPixelSize(self._fontSize * scalar)
-
-		strWidth, strHeight = estimateTextSize(font)
-
-		lineWeight = self._lineWeight
-		x -= strWidth / 2
-
-		lineThickness = max(self._fontSize * scalar * golden * 0.07, 3)
-		print(offset)
-
-		if offset == '-':
-			y += strHeight + lineWeight * 1.2
-		else:
-			y -= lineWeight * 1.2
-		if y - strHeight < 10:
-			y = 10 + strHeight
-		if y > self.height() - 15:
-			y = self.height() - 15
-		position = QtCore.QPoint(x, y)
-
-		pen = QPen(color, lineThickness)
-
-		brush = QBrush(QtCore.Qt.black)
-		self._painter.setPen(pen)
-		self._painter.setBrush(QColor(None))
-		path = QPainterPath()
-		path.addText(position, font, string)
-		self._painter.drawPath(path)
-
-		self._painter.setPen(None)
-		self._painter.setBrush(brush)
-		path = QPainterPath()
-		path.addText(position, font, string)
-		self._painter.drawPath(path)
-
-	def normalizeToFrame(self, array: ndarray, axis: Axis, offset: float = 0.0):
-		"""
-		:param array: array which to normalize
-		:param axis: Vertical or Horizontal
-		:param offset:
-		:param frame:
-		:return: Normalized
-		"""
-		# start at leading margin
-		# subtract the lowest value
-		# height / peak to trough represents one unit value
-		# shrink by top margin
-
-		if axis == Axis.Vertical:
-			leading = self.height() * offset
-			return self.height() - (leading + (((array - self._min) * self.height() / self._p2p) * (1 - offset * 2)))
-		else:
-			time = self._data['timestampInt']
-			return ((array - time.min()) * self.width() / np.ptp(time)) * (1 - offset * 2)
-
-	@property
-	def data(self):
-		return self._data
-
-	@data.setter
-	def data(self, data: Forecast):
-
-		def minMaxP2P(data) -> tuple[float, float, float]:
-			arr = np.concatenate(((data['feels_like']), (data['temp']), (data['dewpoint'])), axis=0)
-			return float(arr.min()), float(arr.max()), float(arr.ptp())
-
-		self._data = data
-		self._min, self._max, self._p2p = minMaxP2P(data)
-		self._image = self.backgroundImage()
-		start, finish = data['timestamp'][0], data['timestamp'][-1]
-		self.hours = TimeMarkers(start, finish, timedelta(hours=6))
-		self.days = TimeMarkers(start, finish, timedelta(days=1))
-
-	@staticmethod
-	def normalize(a):
-		return (a - np.min(a)) / np.ptp(a)
-
-
 if __name__ == '__main__':
 	from tests.pickler import pans as reload
 
@@ -875,7 +657,7 @@ if __name__ == '__main__':
 
 	data = reload('../tests/snapshots/202101031000')
 	# data = hourlyForecast()
-	window = Holder()
+	window = Graph()
 	window.resize(1800, 1000)
 	window.scene().data = data
 	window.show()
