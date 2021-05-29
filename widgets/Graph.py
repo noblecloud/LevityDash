@@ -15,6 +15,7 @@ from PySide2.QtWidgets import QApplication, QGraphicsDropShadowEffect, QGraphics
 from PIL import Image
 
 from src.api.forecast import Forecast
+from utils import filterBest, findPeaks, group
 
 golden = (1 + np.sqrt(5)) / 2
 
@@ -110,16 +111,10 @@ class SoftShadow(QGraphicsDropShadowEffect):
 
 def peaksAndTroughs(data: ndarray) -> Tuple[List[int], List[int]]:
 	# Still needs work but doesn't require scipy
-	peakBool = (data > np.roll(data, 1)) & (data > np.roll(data, -1))
-	troughBool = (data < np.roll(data, 1)) & (data < np.roll(data, -1))
-	peaks = []
-	troughs = []
-	for i, value in enumerate(peakBool):
-		if value:
-			peaks.append(i)
-	for i, value in enumerate(troughBool):
-		if value:
-			troughs.append(i)
+	peaks, troughs = findPeaks(data, -data)
+	peaks, troughs = group(peaks, troughs)
+	peaks = filterBest(peaks, data, True)
+	troughs = filterBest(troughs, data, False)
 	return peaks, troughs
 
 
@@ -140,6 +135,7 @@ class GraphScene(QGraphicsScene):
 		self.setColors()
 
 	def plot(self):
+		self.clear()
 		self.line = Plot(self, 'temp')
 		self.addItem(BackgroundImage(self, self._data['surface_shortwave_radiation']))
 		self.addItem(Plot(self, 'feels_like', self.babyBlue, [1, 3]))
@@ -240,7 +236,6 @@ class GraphScene(QGraphicsScene):
 
 	@data.setter
 	def data(self, data: Forecast):
-
 		def minMaxP2P(data) -> tuple[float, float, float]:
 			arr = np.concatenate(((data['feels_like']), (data['temp']), (data['dewpoint'])), axis=0)
 			return float(arr.min()), float(arr.max()), float(arr.ptp())
@@ -250,7 +245,6 @@ class GraphScene(QGraphicsScene):
 		self._time: np.ndarray = data['timestampInt']
 		self._peaks, self._troughs = peaksAndTroughs(data['temp'])
 
-		# self._image = self.backgroundImage()
 		start, finish = data['timestamp'][0], data['timestamp'][-1]
 		self.hours = TimeMarkers(start, finish, timedelta(hours=6), mask=[0])
 		self.days = TimeMarkers(start, finish, timedelta(days=1))
@@ -662,7 +656,7 @@ if __name__ == '__main__':
 
 	app = QApplication()
 
-	data = reload('../tests/snapshots/202101031000')
+	data = reload('../rain.pickle')
 	# data = hourlyForecast()
 	window = Graph()
 	window.resize(1800, 1000)
