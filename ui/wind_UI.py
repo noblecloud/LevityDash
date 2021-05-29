@@ -101,6 +101,7 @@ class Ui_Frame(object):
 
         self.horizontalLayout_2.addWidget(self.maxValueLabel)
 
+
         self.horizontalLayout_3.addLayout(self.horizontalLayout_2)
 
         self.horizontalLayout = QHBoxLayout()
@@ -127,6 +128,7 @@ class Ui_Frame(object):
         self.rightSubSpacer = QSpacerItem(40, 0, QSizePolicy.Minimum, QSizePolicy.Minimum)
 
         self.horizontalLayout.addItem(self.rightSubSpacer)
+
 
         self.horizontalLayout_3.addLayout(self.horizontalLayout)
 
