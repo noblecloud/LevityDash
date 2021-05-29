@@ -117,9 +117,9 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 		try:
 			self.forecast = hourlyForecast()
 			self.dailyForecast = dailyForecast(measurementFields=['weather_code'])
-			self.buildGraph()
+			self.forecastGraph.data = self.forecast
 			self.setForecastItems()
-			self.checkThreadTimer.singleShot(1000 * 60 * 10, self.updateForecast)
+			self.checkThreadTimer.singleShot(1000 * 60 * 5, self.updateForecast)
 		except ValueError:
 			logging.error("No forecast data, trying again in 1 minute")
 			self.checkThreadTimer.singleShot(1000 * 60, self.connectForecast)
@@ -136,11 +136,6 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 	def motionEvent(self, event):
 		print(event.xdata, event.ydata)
 		self.forecastDisplay.showLine(event)
-
-	def buildGraph(self):
-		logging.debug('Building Graph')
-		# self.forecastDisplay = dataDisplay(self.forecast, (1920, 1080, 200))
-		self.forecastGraph.data = self.forecast
 
 	# self.forecastGraph.mpl_connect('pick_event', self.pickEvent)
 	# self.forecastGraph.mpl_connect('figure_enter_event', self.startTimeTravel)
@@ -228,7 +223,7 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 		try:
 			self.forecast.update()
 			self.dailyForecast.update()
-			# self.forecastDisplay.update()
+			self.forecastGraph.data = self.forecast
 			self.setForecastItems()
 			logging.debug('Forecast updated')
 			self.checkThreadTimer.singleShot(1000 * 60 * 5, self.updateForecast)
@@ -297,33 +292,39 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 		with open(sshFile, "r") as fh:
 			self.setStyleSheet(fh.read())
 
-	# def eventFilter(self, obj, event):
-	# 	if event.type() == QtCore.QEvent.KeyPress:
-	# 		if event.key() == QtCore.Qt.Key_R:
-	# 			print('refresh')
-	# 			self.loadStyle()
-	# 		if event.key() == QtCore.Qt.Key_B:
-	# 			print('rebuild')
-	# 			self.hide()
-	# 			self.buildUI()
-	# 			self.show()
-	# 		if event.key() == QtCore.Qt.Key_P:
-	# 			self.forecastDisplay.plot()
-	# 			self.update()
-	# 		if event.key() == QtCore.Qt.Key_F:
-	# 			if self.live:
-	# 				print('fading items')
-	# 				self.fadeForecastItems()
-	# 				self.fadeRealtimeItems()
-	# 				self.live = False
-	# 			else:
-	# 				print('setting items')
-	# 				self.setForecastItems()
-	# 				self.setRealtimeItems()
-	# 				self.live = True
-	# 	elif event.type() == QtCore.QEvent.MouseButtonPress:
-	# 		print(obj)
-	# 	return super(MainWindow, self).eventFilter(obj, event)
+	def eventFilter(self, obj, event):
+		if event.type() == QtCore.QEvent.KeyPress:
+			if event.key() == QtCore.Qt.Key_Q:
+				self.close()
+			if event.key() == QtCore.Qt.Key_F:
+				if self.isFullScreen():
+					self.showMaximized()
+				else:
+					self.showFullScreen()
+		# 		print('refresh')
+		# 		self.loadStyle()
+		# 	if event.key() == QtCore.Qt.Key_B:
+		# 		print('rebuild')
+		# 		self.hide()
+		# 		self.buildUI()
+		# 		self.show()
+		# 	if event.key() == QtCore.Qt.Key_P:
+		# 		self.forecastDisplay.plot()
+		# 		self.update()
+		# 	if event.key() == QtCore.Qt.Key_F:
+		# 		if self.live:
+		# 			print('fading items')
+		# 			self.fadeForecastItems()
+		# 			self.fadeRealtimeItems()
+		# 			self.live = False
+		# 		else:
+		# 			print('setting items')
+		# 			self.setForecastItems()
+		# 			self.setRealtimeItems()
+		# 			self.live = True
+		# elif event.type() == QtCore.QEvent.MouseButtonPress:
+		# 	print(obj)
+		return super(MainWindow, self).eventFilter(obj, event)
 
 	def buildUI(self):
 
