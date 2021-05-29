@@ -60,7 +60,7 @@
 						 <verstretch>10</verstretch>
 					 </sizepolicy>
 				 </property>
-				 <layout class="QVBoxLayout" name="verticalLayout" stretch="1,2,1">
+				 <layout class="QVBoxLayout" name="verticalLayout" stretch="">
 					 <property name="spacing">
 						 <number>0</number>
 					 </property>
@@ -76,114 +76,6 @@
 					 <property name="bottomMargin">
 						 <number>0</number>
 					 </property>
-					 <item>
-						 <spacer name="topSpacer">
-							 <property name="orientation">
-								 <enum>Qt::Vertical</enum>
-							 </property>
-							 <property name="sizeType">
-								 <enum>QSizePolicy::Fixed</enum>
-							 </property>
-							 <property name="sizeHint" stdset="0">
-								 <size>
-									 <width>20</width>
-									 <height>130</height>
-								 </size>
-							 </property>
-						 </spacer>
-					 </item>
-					 <item>
-						 <layout class="QVBoxLayout" name="centerCluster" stretch="5,2">
-							 <property name="spacing">
-								 <number>0</number>
-							 </property>
-							 <item>
-								 <widget class="QLabel" name="directionLabel">
-									 <property name="sizePolicy">
-										 <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-											 <horstretch>0</horstretch>
-											 <verstretch>0</verstretch>
-										 </sizepolicy>
-									 </property>
-									 <property name="minimumSize">
-										 <size>
-											 <width>0</width>
-											 <height>75</height>
-										 </size>
-									 </property>
-									 <property name="maximumSize">
-										 <size>
-											 <width>16777215</width>
-											 <height>80</height>
-										 </size>
-									 </property>
-									 <property name="font">
-										 <font>
-											 <family>SF Pro Rounded</family>
-											 <pointsize>62</pointsize>
-											 <weight>75</weight>
-											 <bold>true</bold>
-										 </font>
-									 </property>
-									 <property name="text">
-										 <string>W</string>
-									 </property>
-									 <property name="alignment">
-										 <set>Qt::AlignBottom|Qt::AlignHCenter</set>
-									 </property>
-								 </widget>
-							 </item>
-							 <item>
-								 <widget class="QLabel" name="speedLabel">
-									 <property name="sizePolicy">
-										 <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
-											 <horstretch>0</horstretch>
-											 <verstretch>0</verstretch>
-										 </sizepolicy>
-									 </property>
-									 <property name="maximumSize">
-										 <size>
-											 <width>16777215</width>
-											 <height>110</height>
-										 </size>
-									 </property>
-									 <property name="font">
-										 <font>
-											 <family>SF Pro Rounded</family>
-											 <pointsize>104</pointsize>
-											 <weight>75</weight>
-											 <bold>true</bold>
-										 </font>
-									 </property>
-									 <property name="text">
-										 <string>2.2</string>
-									 </property>
-									 <property name="alignment">
-										 <set>Qt::AlignBottom|Qt::AlignHCenter</set>
-									 </property>
-									 <property name="indent">
-										 <number>0</number>
-									 </property>
-								 </widget>
-							 </item>
-						 </layout>
-					 </item>
-					 <item>
-						 <spacer name="bottomSpacer">
-							 <property name="orientation">
-								 <enum>Qt::Vertical</enum>
-							 </property>
-							 <property name="sizeType">
-								 <enum>QSizePolicy::Fixed</enum>
-							 </property>
-							 <property name="sizeHint" stdset="0">
-								 <size>
-									 <width>20</width>
-									 <height>90</height>
-								 </size>
-							 </property>
-						 </spacer>
-					 </item>
 				 </layout>
 			 </widget>
 		 </item>
