@@ -12,87 +12,14 @@ from pytz import utc
 
 from src.api.errors import APIError, BadRequest, TooManyRequests, Unauthorized
 from src import config
-from src.constants import fields, FORECAST_TYPES, maxDates, tz
-from src.utils import formatDate
-
-
-def savitzky_golay(y, window_size, order, deriv=0, rate=1):
-	'''https://scipy.github.io/old-wiki/pages/Cookbook/SavitzkyGolay'''
-	r"""Smooth (and optionally differentiate) data with a Savitzky-Golay filter.
-	The Savitzky-Golay filter removes high frequency noise from data.
-	It has the advantage of preserving the original shape and
-	features of the signal better than other types of filtering
-	approaches, such as moving averages techniques.
-	Parameters
-	----------
-	y : array_like, shape (N,)
-		the values of the time history of the signal.
-	window_size : int
-		the length of the window. Must be an odd integer number.
-	order : int
-		the order of the polynomial used in the filtering.
-		Must be less then `window_size` - 1.
-	deriv: int
-		the order of the derivative to compute (default = 0 means only smoothing)
-	Returns
-	-------
-	ys : ndarray, shape (N)
-		the smoothed signal (or it's n-th derivative).
-	Notes
-	-----
-	The Savitzky-Golay is a type of low-pass filter, particularly
-	suited for smoothing noisy data. The main idea behind this
-	approach is to make for each point a least-square fit with a
-	polynomial of high order over a odd-sized window centered at
-	the point.
-	Examples
-	--------
-	t = np.linspace(-4, 4, 500)
-	y = np.exp( -t**2 ) + np.random.normal(0, 0.05, t.shape)
-	ysg = savitzky_golay(y, window_size=31, order=4)
-	import matplotlib.pyplot as plt
-	plt.plot(t, y, label='Noisy signal')
-	plt.plot(t, np.exp(-t**2), 'k', lw=1.5, label='Original signal')
-	plt.plot(t, ysg, 'r', label='Filtered signal')
-	plt.legend()
-	plt.show()
-	References
-	----------
-	.. [1] A. Savitzky, M. J. E. Golay, Smoothing and Differentiation of
-	   Data by Simplified Least Squares Procedures. Analytical
-	   Chemistry, 1964, 36 (8), pp 1627-1639.
-	.. [2] Numerical Recipes 3rd Edition: The Art of Scientific Computing
-	   W.H. Press, S.A. Teukolsky, W.T. Vetterling, B.P. Flannery
-	   Cambridge University Press ISBN-13: 9780521880688
-	"""
-	from math import factorial
-
-	try:
-		window_size = np.abs(np.int(window_size))
-		order = np.abs(np.int(order))
-	except ValueError as msg:
-		raise ValueError("window_size and order have to be of type int")
-	if window_size % 2 != 1 or window_size < 1:
-		raise TypeError("window_size size must be a positive odd number")
-	if window_size < order + 2:
-		raise TypeError("window_size is too small for the polynomials order")
-	order_range = range(order + 1)
-	half_window = (window_size - 1) // 2
-	# precompute coefficients
-	b = np.mat([[k ** i for i in order_range] for k in range(-half_window, half_window + 1)])
-	m = np.linalg.pinv(b).A[deriv] * rate ** deriv * factorial(deriv)
-	# pad the signal at the extremes with
-	# values taken from the signal itself
-	firstvals = y[0] - np.abs(y[1:half_window + 1][::-1] - y[0])
-	lastvals = y[-1] + np.abs(y[-half_window - 1:-1][::-1] - y[-1])
-	y = np.concatenate((firstvals, y, lastvals))
-	return np.convolve(m[::-1], y, mode='valid')
+from src.constants import fields, FORECAST_TYPES, maxDates
+from src.utils import formatDate, smoothData, interpData
 
 
 class Forecast:
 	live: bool = True
 	forecastLength: timedelta
-	tz = tz
+	tz = config.tz
 	data: dict[str: Union[np.ndarray, list]] = {}
 	lat: float
 	lon: float
@@ -276,28 +203,6 @@ class Forecast:
 		brng = np.rad2deg(brng)
 		return brng
 
-	@staticmethod
-	def interpData(data: Union[list, np.ndarray], multiplier: int = 6) -> np.array:
-
-		if type(data) is list:
-			newLength = len(data) * multiplier
-		elif type(data) is np.ndarray:
-			newLength = data.size * multiplier
-		else:
-			newLength = 500
-
-		if isinstance(data, list):
-			data = np.array(data).flatten()
-		if isinstance(data[0], datetime):
-			time = np.array(list(map((lambda i: i.timestamp()), data)))
-			new_x = np.linspace(min(time), max(time), num=newLength)
-			interpTime = np.interp(new_x, time, time)
-			return np.array(list(map((lambda i: datetime.fromtimestamp(i, tz=tz)), interpTime))).flatten()
-		else:
-			new_x = np.linspace(min(data), max(data), num=newLength)
-			y = np.linspace(min(data), max(data), num=len(data))
-			return np.interp(new_x, y, data)
-
 	def findTransit(self, date: datetime, mi) -> datetime:
 		mi.update(date)
 		a = mi.rise_set_times(date.tzinfo.zone)
@@ -321,15 +226,6 @@ class Forecast:
 
 	def buildInterpolatedList(self):
 		smoothed = {}
-
-	@staticmethod
-	def smoothData(data: np.ndarray, window: int = 17, order: int = 1) -> np.ndarray:
-		if window % 2 == 0:
-			window += 1
-		if not type(data[0]) is datetime:
-			data = savitzky_golay(data, window, order)
-		# data = gaussian_filter1d(data, sigma)
-		return data
 
 	def minMaxP2P(self) -> tuple[float, float, float]:
 		arr = np.concatenate(((self.data['feels_like']), (self.data['temp']), (self.data['dewpoint'])), axis=0)
@@ -374,11 +270,11 @@ class Forecast:
 			for field in x.keys():
 				if x[field] and None not in output[field]:
 					if field == 'surface_shortwave_radiation':
-						output[field] = self.smoothData(self.interpData(output[field], 4), 4, 1)
+						output[field] = smoothData(interpData(output[field], 4), 4, 1)
 					elif field == 'cloud_cover':
-						output[field] = self.smoothData(self.interpData(output[field], 4), 21, 1)
+						output[field] = smoothData(interpData(output[field], 4), 21, 1)
 					else:
-						output[field] = self.smoothData(self.interpData(output[field], 4), 11, 1)
+						output[field] = smoothData(interpData(output[field], 4), 11, 1)
 
 		self.forecastLength = timedelta(seconds=(output['timestamp'][-1] - output['timestamp'][0]).total_seconds())
 
@@ -521,68 +417,6 @@ class dailyForecast(Forecast):
 		pass
 
 
-# import dateutil.parser
-# temp = False
-# precipitation = False
-# light = True
-# x = {'precipitation':               True,
-#      'temp':                        True,
-#      'feels_like':                  True,
-#      'dewpoint':                    True,
-#      'cloud_cover':                 True,
-#      'cloud_ceiling':               True,
-#      'cloud_base':                  True,
-#      'surface_shortwave_radiation': True,
-#      'timestampInt':                True,
-#      'timestamp':                   True,
-#      'wind_speed':                  True,
-#      'wind_direction':              True
-#      }
-#
-# days = {}
-# current = 0
-# for day in inputData:
-# 	output: dict[str, Union[list, str, int]] = self.buildDictionary()
-# 	for measurement in day:
-# 		utcTimestamp = measurement.observation_time
-# 		localTimestamp = utcTimestamp.replace(tzinfo=utc)
-# 		localTimestamp = localTimestamp.astimezone(tz)
-# 		output['timestampInt'].append(localTimestamp.timestamp())
-# 		output['timestamp'].append(localTimestamp)
-# 		for field in measurement.fields:
-# 			if field in ['sunrise', 'sunset']:
-# 				value = dateutil.parser.parse(measurement.measurements[field].value)
-#
-# 				localDate = value.replace(tzinfo=utc)
-# 				localDate = localDate.astimezone(tz)
-#
-# 				output[field].append(localDate)
-# 			# elif field in ['cloud_base', 'cloud_ceiling']:
-# 			# 	if value == None:
-# 			# 		value = 0
-# 			else:
-# 				if 'min' in measurement.measurements[field].keys():
-# 					max = measurement.measurements[field]['max'].value
-# 					min = measurement.measurements[field]['min'].value
-# 					output[field].append({})
-# 				output['units'][field] = measurement.measurements[field].units
-# if interpolate:
-# 	for field in x.keys():
-# 		if x[field]:
-# 			if field == 'surface_shortwave_radiation':
-# 				output[field] = self.interpData(output[field], 4)
-# 			else:
-# 				output[field] = self.smoothData(self.interpData(output[field], 4), 3)
-#
-# self.forecastLength = timedelta(seconds=(output['timestamp'][-1] - output['timestamp'][0]).total_seconds())
-
-
-# else:
-# 	waitTime = (datetime.now() - self.lastCall).total_seconds()
-# 	print('api call too fast, waiting {} seconds'.format(waitTime))
-# 	asyncio.sleep(waitTime)
-
-
 class nowcast(Forecast):
 	allowedFields: list[str] = ['precipitation', 'precipitation_type', 'temp', 'feels_like', 'dewpoint', 'wind_speed',
 	                            'wind_gust', 'baro_pressure', 'visibility', 'humidity', 'wind_direction', 'sunrise',
@@ -609,14 +443,3 @@ class nowcast(Forecast):
 		self.lastCall = datetime.now()
 		print('nowcast updated at {}'.format(self.lastCall.strftime('%H:%M:%S')))
 		return True
-
-# lastValue = 0
-# for measurement in data:
-# 	if measurement.measurements['temp'].value != lastValue:
-# 		lastValue = measurement.measurements['temp'].value
-# 		for field in fields:
-# 			dictionary[field].append(measurement.measurements[field].value)
-# 		dateArray.append(measurement.observation_time)
-# 	else:
-# 		pass
-# # historicalDict[field].append(None)
