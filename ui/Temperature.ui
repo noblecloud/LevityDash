@@ -1,132 +1,177 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>Form</class>
- <widget class="QWidget" name="Form">
-	 <property name="minimumSize">
-		 <size>
-			 <width>335</width>
-			 <height>285</height>
-		 </size>
-	 </property>
-	 <property name="font">
-		 <font>
-			 <family>SF Compact Rounded</family>
-		 </font>
-	 </property>
-	 <property name="styleSheet">
-		 <string notr="true"/>
-	 </property>
-	 <layout class="QVBoxLayout" name="verticalLayout" stretch="1,3,6,3">
-		 <property name="spacing">
-			 <number>0</number>
-		 </property>
-		 <property name="leftMargin">
-			 <number>0</number>
-		 </property>
-		 <property name="topMargin">
-			 <number>0</number>
-		 </property>
-		 <property name="rightMargin">
-			 <number>0</number>
-		 </property>
-		 <property name="bottomMargin">
-			 <number>0</number>
-		 </property>
-		 <item>
-			 <widget class="DynamicLabel" name="titleLabel">
-				 <property name="sizePolicy">
-					 <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-						 <horstretch>0</horstretch>
-						 <verstretch>0</verstretch>
-					 </sizepolicy>
-				 </property>
-				 <property name="text">
-					 <string>TextLabel</string>
-				 </property>
-				 <property name="alignment">
-					 <set>Qt::AlignCenter</set>
-				 </property>
-			 </widget>
-		 </item>
-		 <item>
-			 <widget class="ComplicationArrayHorizontal" name="top">
-				 <property name="sizePolicy">
-					 <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
-						 <horstretch>0</horstretch>
-						 <verstretch>3</verstretch>
-					 </sizepolicy>
-				 </property>
-			 </widget>
-		 </item>
-		 <item>
-			 <widget class="QFrame" name="middleLayout">
-				 <property name="sizePolicy">
-					 <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-						 <horstretch>0</horstretch>
-						 <verstretch>9</verstretch>
-					 </sizepolicy>
-				 </property>
-				 <layout class="QHBoxLayout" name="horizontalLayout" stretch="3,9,3">
-					 <property name="spacing">
-						 <number>0</number>
-					 </property>
-					 <property name="leftMargin">
-						 <number>0</number>
-					 </property>
-					 <property name="topMargin">
-						 <number>0</number>
-					 </property>
-					 <property name="rightMargin">
-						 <number>0</number>
-					 </property>
-					 <property name="bottomMargin">
-						 <number>0</number>
-					 </property>
-					 <item>
-						 <widget class="ComplicationArrayVertical" name="left">
-							 <property name="sizePolicy">
-								 <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
-									 <horstretch>3</horstretch>
-									 <verstretch>0</verstretch>
-								 </sizepolicy>
-							 </property>
-						 </widget>
-					 </item>
-					 <item>
-						 <widget class="Complication" name="center" native="true">
-							 <property name="sizePolicy">
-								 <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-									 <horstretch>9</horstretch>
-									 <verstretch>0</verstretch>
-								 </sizepolicy>
-							 </property>
-						 </widget>
-					 </item>
-					 <item>
-						 <widget class="ComplicationArrayVertical" name="right">
-							 <property name="sizePolicy">
-								 <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
-									 <horstretch>3</horstretch>
-									 <verstretch>0</verstretch>
-								 </sizepolicy>
-							 </property>
-						 </widget>
-					 </item>
-				 </layout>
-			 </widget>
-		 </item>
-		 <item>
-			 <widget class="ComplicationArrayHorizontal" name="bottom">
-				 <property name="sizePolicy">
-					 <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
-						 <horstretch>0</horstretch>
-						 <verstretch>3</verstretch>
-					 </sizepolicy>
-				 </property>
-			 </widget>
-		 </item>
-	 </layout>
- </widget>
+	<class>ComplicationGroup</class>
+	<widget class="QWidget" name="ComplicationGroup">
+		<property name="geometry">
+			<rect>
+				<x>0</x>
+				<y>0</y>
+				<width>529</width>
+				<height>487</height>
+			</rect>
+		</property>
+		<property name="minimumSize">
+			<size>
+				<width>335</width>
+				<height>285</height>
+			</size>
+		</property>
+		<property name="font">
+			<font>
+				<family>SF Compact Rounded</family>
+			</font>
+		</property>
+		<property name="styleSheet">
+			<string notr="true"/>
+		</property>
+		<layout class="QGridLayout" name="grid" rowstretch="0,0,0,0" columnstretch="0,0,0" rowminimumheight="0,0,0,0">
+			<property name="leftMargin">
+				<number>0</number>
+			</property>
+			<property name="topMargin">
+				<number>0</number>
+			</property>
+			<property name="rightMargin">
+				<number>0</number>
+			</property>
+			<property name="bottomMargin">
+				<number>0</number>
+			</property>
+			<property name="spacing">
+				<number>0</number>
+			</property>
+			<item row="0" column="0" colspan="3">
+				<widget class="DynamicLabel" name="titleLabel">
+					<property name="sizePolicy">
+						<sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+							<horstretch>0</horstretch>
+							<verstretch>1</verstretch>
+						</sizepolicy>
+					</property>
+					<property name="styleSheet">
+						<string notr="true">background: orange</string>
+					</property>
+				</widget>
+			</item>
+			<item row="1" column="0">
+				<widget class="Complication" name="topLeft" native="true">
+					<property name="sizePolicy">
+						<sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+							<horstretch>3</horstretch>
+							<verstretch>3</verstretch>
+						</sizepolicy>
+					</property>
+					<property name="styleSheet">
+						<string notr="true">background: maroon</string>
+					</property>
+				</widget>
+			</item>
+			<item row="1" column="1">
+				<widget class="ComplicationArrayHorizontal" name="topArray">
+					<property name="sizePolicy">
+						<sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+							<horstretch>6</horstretch>
+							<verstretch>3</verstretch>
+						</sizepolicy>
+					</property>
+					<property name="styleSheet">
+						<string notr="true">background: pink</string>
+					</property>
+				</widget>
+			</item>
+			<item row="1" column="2">
+				<widget class="Complication" name="topRight" native="true">
+					<property name="sizePolicy">
+						<sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+							<horstretch>3</horstretch>
+							<verstretch>3</verstretch>
+						</sizepolicy>
+					</property>
+					<property name="styleSheet">
+						<string notr="true">background: yellow</string>
+					</property>
+				</widget>
+			</item>
+			<item row="2" column="0">
+				<widget class="ComplicationArrayVertical" name="leftArray">
+					<property name="sizePolicy">
+						<sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+							<horstretch>3</horstretch>
+							<verstretch>5</verstretch>
+						</sizepolicy>
+					</property>
+					<property name="styleSheet">
+						<string notr="true">background: lime</string>
+					</property>
+				</widget>
+			</item>
+			<item row="2" column="1">
+				<widget class="Complication" name="center" native="true">
+					<property name="sizePolicy">
+						<sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+							<horstretch>6</horstretch>
+							<verstretch>5</verstretch>
+						</sizepolicy>
+					</property>
+					<property name="styleSheet">
+						<string notr="true">background: red</string>
+					</property>
+				</widget>
+			</item>
+			<item row="2" column="2">
+				<widget class="ComplicationArrayVertical" name="rightArray">
+					<property name="sizePolicy">
+						<sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+							<horstretch>3</horstretch>
+							<verstretch>5</verstretch>
+						</sizepolicy>
+					</property>
+					<property name="styleSheet">
+						<string notr="true">background: green</string>
+					</property>
+				</widget>
+			</item>
+			<item row="3" column="0">
+				<widget class="Complication" name="bottomLeft" native="true">
+					<property name="sizePolicy">
+						<sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+							<horstretch>3</horstretch>
+							<verstretch>3</verstretch>
+						</sizepolicy>
+					</property>
+					<property name="styleSheet">
+						<string notr="true">background: lightblue</string>
+					</property>
+				</widget>
+			</item>
+			<item row="3" column="1">
+				<widget class="ComplicationArrayHorizontal" name="bottomArray">
+					<property name="sizePolicy">
+						<sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+							<horstretch>6</horstretch>
+							<verstretch>3</verstretch>
+						</sizepolicy>
+					</property>
+					<property name="styleSheet">
+						<string notr="true">background: blue</string>
+					</property>
+				</widget>
+			</item>
+			<item row="3" column="2">
+				<widget class="Complication" name="bottomRight" native="true">
+					<property name="sizePolicy">
+						<sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+							<horstretch>3</horstretch>
+							<verstretch>3</verstretch>
+						</sizepolicy>
+					</property>
+					<property name="styleSheet">
+						<string notr="true">background: purple</string>
+					</property>
+				</widget>
+			</item>
+		</layout>
+	</widget>
 	<customwidgets>
 		<customwidget>
 			<class>Complication</class>
