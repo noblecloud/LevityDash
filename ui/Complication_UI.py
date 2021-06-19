@@ -18,7 +18,7 @@ from widgets.DynamicLabel import DynamicLabel
 class Ui_Frame(object):
     def setupUi(self, Frame):
         if not Frame.objectName():
-	        Frame.setObjectName(u"Frame")
+            Frame.setObjectName(u"Frame")
         Frame.resize(106, 100)
         sizePolicy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
         sizePolicy.setHorizontalStretch(1)
