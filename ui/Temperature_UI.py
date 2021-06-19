@@ -147,9 +147,9 @@ class Ui_ComplicationGroup(object):
 		self.retranslateUi(ComplicationGroup)
 
 		QMetaObject.connectSlotsByName(ComplicationGroup)
-    # setupUi
+
+	# setupUi
 
 	def retranslateUi(self, ComplicationGroup):
 		pass
-    # retranslateUi
-
+	# retranslateUi
