@@ -274,7 +274,7 @@ class Forecast:
 					elif field == 'cloud_cover':
 						output[field] = smoothData(interpData(output[field], 4), 21, 1)
 					else:
-						output[field] = smoothData(interpData(output[field], 4), 11, 1)
+						output[field] = smoothData(interpData(output[field], 2), 5, 1)
 
 		self.forecastLength = timedelta(seconds=(output['timestamp'][-1] - output['timestamp'][0]).total_seconds())
 

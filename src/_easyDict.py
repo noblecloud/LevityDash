@@ -1,4 +1,4 @@
-import logging
+from utils import Logger
 
 
 class _SmartDictionary(dict):
@@ -100,6 +100,7 @@ class _SmartDictionary(dict):
 		return self._flip()
 
 
+@Logger
 class SmartDictionary(_SmartDictionary):
 
 	# def __getitem__(self, item):
@@ -107,7 +108,7 @@ class SmartDictionary(_SmartDictionary):
 	# 		super().__getitem__(item)
 	# 	except KeyError:
 	# 		logging.warning('Improper key ({}) usage of {}'.format(item, self.__class__))
-	# 		raise KeyError
+	# 		raise KeyErro
 
 	def __init__(self, *args, **kwargs):
 		super(_SmartDictionary, self).__init__(*args, **kwargs)

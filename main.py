@@ -2,14 +2,14 @@
 import logging
 import sys
 from time import strftime
-import pretty_errors
+# import pretty_errors
 
-pretty_errors.configure(filename_display=pretty_errors.FILENAME_FULL)
+# pretty_errors.configure(filename_display=pretty_errors.FILENAME_FULL)
 
 from PySide2 import QtCore
 from PySide2.QtCore import QTimer
-from PySide2.QtGui import QFont, QFontDatabase
-from PySide2.QtWidgets import QApplication, QDesktopWidget, QGraphicsOpacityEffect, QMainWindow
+from PySide2.QtGui import QFont, QPainter, QPixmap
+from PySide2.QtWidgets import QApplication, QDesktopWidget, QMainWindow
 
 from src.api import AmbientWeather, AWStation
 from src.api.errors import APIError
@@ -17,9 +17,20 @@ from src.api.forecast import dailyForecast, hourlyForecast
 from src.api.weatherFlow import WeatherFlow, WFStation
 from src.translators import ClimacellConditionInterpreter, ConditionInterpreter
 from ui.main_UI import Ui_weatherDisplay
+from utils import Logger
+from widgets.Complication import Complication
+from widgets.LargeComplication import LargeComplication
 from widgets.Graph import Graph
+import WeatherUnits
+
+from widgets.moon import Moon
+from widgets.Wind import WindSubmodule
+from widgets.WindRose import windRose
+
+WeatherUnits.config.read('config.ini')
 
 
+@Logger
 class MainWindow(QMainWindow, Ui_weatherDisplay):
 	forecastGraph: Graph
 	weatherFlow: WeatherFlow
@@ -36,8 +47,6 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 	def __init__(self, *args, **kwargs):
 		super(MainWindow, self).__init__()
 		self.setupUi(self)
-		self.indoor.title.setText('Indoors')
-		self.outdoor.title.setText('Outdoors')
 
 		# Clear preset data
 		# self.fadeRealtimeItems()
@@ -53,64 +62,71 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 		self.AmbKey = 'e574e1bfb9804a52a1084c9f1a4ee5d88e9e850fc1004aeaa5010f15c4a23260'
 		self.AmbApp = 'ec02a6c4e29d42e086d98f5db18972ba9b93d864471443919bb2956f73363395'
 
-		self.connectForecast()
+		# self.connectForecast()
 		self.aw = AWStation()
 		self.wf = WFStation()
 		self.connectAW()
 		self.connectWF()
 		self.setRealtimeItems()
 		self.refreshTimeDateTemp()
-		self.subB.clicked.connect(self.testEvent)
+
 		# self.subA.value.setText(self.forecast.data['sunrise'][0].strftime('%-I:%M'))
 		# self.subA.title.setFont(self.glyphs)
 
 		self.loadStyle()
+		self.subscribe()
+
+	def subscribe(self):
+		self.aw.indoor.subscribe(self.indoor)
+		self.aw.indoor.subscribe(*self.indoor.complications)
+		self.wf.obs.subscribe(self.outdoor)
+		self.wf.obs.subscribe(*self.bottom.complications)
+		self.wf.obs.subscribe(*self.outdoor.complications)
+		self.wf.obs.subscribe(self.light)
 
 	def testEvent(self, event):
-		logging.info('Testing Signal:')
-		logging.info(event)
+		self._log.info('Testing Signal:')
+		self._log.info(event)
 
 	def connectAW(self):
 		try:
 			self.aw.getData()
-			self.checkThreadTimer.singleShot(1000 * 3, self.updateAW)
+			self.checkThreadTimer.singleShot(1000 * 1, self.updateAW)
 		except APIError:
-			logging.error("Unable to reach AmbientWeather API, trying again in 1 minute")
-			self.checkThreadTimer.singleShot(1000 * 60, self.connectAW)
-
-	def connectWF(self):
-		try:
-			self.wf.getData()
-			self.checkThreadTimer.singleShot(1000 * 3, self.updateWF)
-
-			self.wf.messenger.signal.connect(self.setRealtimeItems)
-		except APIError:
-			logging.error("Unable to reach WeatherFlow API, trying again in 1 minute")
+			self._log.error("Unable to reach AmbientWeather API, trying again in 1 minute")
 			self.checkThreadTimer.singleShot(1000 * 60, self.connectAW)
 
 	def updateAW(self):
 
 		try:
 			self.aw.update()
-			self.setRealtimeItems()
-			logging.debug('AmbientWeather updated')
-			self.checkThreadTimer.singleShot(1000 * 5, self.updateAW)
+			self.checkThreadTimer.singleShot(1000 * 60, self.updateAW)
 		except APIError:
 			self.fadeRealtimeItems()
-			logging.error("No realtime data, trying again in 1 minute")
+			self._log.error("No realtime data, trying again in 1 minute")
 			self.checkThreadTimer.singleShot(1000 * 60, self.updateAW)
+
+	def connectWF(self):
+		try:
+			self.wf.getData()
+			self._log.info('WeatherFlow connected')
+			self.checkThreadTimer.singleShot(1000 * 60, self.updateWF)
+
+		# self.wf.messenger.signal.connect(self.setRealtimeItems)
+		except APIError:
+			self._log.error("Unable to reach WeatherFlow API, trying again in 1 minute")
+			self.checkThreadTimer.singleShot(1000 * 60, self.connectWF)
 
 	def updateWF(self):
 
 		try:
-			# self.aw.update()
-			self.setRealtimeItems()
-			logging.debug('AmbientWeather updated')
-			self.checkThreadTimer.singleShot(1000 * 5, self.updateAW)
+			self.wf.getData()
+			self._log.info('WeatherFlow updated')
+			self.checkThreadTimer.singleShot(1000 * 60, self.updateWF)
 		except APIError:
 			self.fadeRealtimeItems()
-			logging.error("No realtime data, trying again in 1 minute")
-			self.checkThreadTimer.singleShot(1000 * 60, self.updateAW)
+			self._log.error("No realtime data, trying again in 1 minute")
+			self.checkThreadTimer.singleShot(1000 * 60, self.updateWF)
 
 	def connectForecast(self):
 
@@ -118,44 +134,19 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 			self.forecast = hourlyForecast()
 			self.dailyForecast = dailyForecast(measurementFields=['weather_code'])
 			self.forecastGraph.data = self.forecast
-			self.setForecastItems()
 			self.checkThreadTimer.singleShot(1000 * 60 * 5, self.updateForecast)
 		except ValueError:
-			logging.error("No forecast data, trying again in 1 minute")
+			self._log.error("No forecast data, trying again in 1 minute")
 			self.checkThreadTimer.singleShot(1000 * 60, self.connectForecast)
 
 	def pickEvent(self, event):
-		logging.info('Graph pickEvent')
+		self._log.info('Graph pickEvent')
 		thisline = event.artist
 		xdata = thisline.get_xdata()
 		ydata = thisline.get_ydata()
 		ind = event.ind
 		points = tuple(zip(xdata[ind], ydata[ind]))
 		print(points[1][0])
-
-	def motionEvent(self, event):
-		print(event.xdata, event.ydata)
-		self.forecastDisplay.showLine(event)
-
-	# self.forecastGraph.mpl_connect('pick_event', self.pickEvent)
-	# self.forecastGraph.mpl_connect('figure_enter_event', self.startTimeTravel)
-	# self.forecastGraph.mpl_connect('figure_leave_event', self.stopTimeTravel)
-	# # self.forecastDisplay.testPicker()
-	# self.forecastDisplay.showTemperature()
-	# self.forecastDisplay.showDewpoint()
-	# self.forecastDisplay.showFeelsLike()
-	# # self.forecastDisplay.showLight()
-	# self.forecastDisplay.addDaysOfWeek()
-	# # self.forecastDisplay.showWind()
-	# # self.forecastDisplay.showRain()
-	# # self.forecastDisplay.showCloudCover()
-	# # self.forecastDisplay.showLunar()
-	# self.forecastDisplay.plot()
-	# sizePolicy = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
-	# sizePolicy.setHorizontalStretch(9)
-	# sizePolicy.setVerticalStretch(0)
-	# sizePolicy.setHeightForWidth(self.forecastGraph.sizePolicy().hasHeightForWidth())
-	# self.forecastGraph.setSizePolicy(sizePolicy)
 
 	def buildFonts(self):
 		self.glyphs = QFont()
@@ -181,43 +172,17 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 
 	def setForecastItems(self):
 		if not self.timeTraveling:
-			logging.info('setting forecast items')
+			self._log.info('setting forecast items')
 			# Current Conditions
 			today = self.dailyForecast.data[0]
-			self.subB.live = True
-			self.conditions.glyph = self.interpreter[today.measurements['weather_code'].value]
-
-			# Outdoor Air Quality
-			self.outdoor.live = True
-			# self.outdoor.SubAValue.setText(('{:4d}'.format(round(self.forecast.data['epa_aqi'][0]))))
-
-			# Sunrise/Sunset
-			self.sunSet.live = True
-		self.sunSet.value.setText(self.forecast.data['sunrise'][0].strftime('%-I:%M'))
-		self.sunRise.value.setText(self.forecast.data['sunset'][0].strftime('%-I:%M'))
-
-	def clearForecastItems(self):
-		# Current Conditions
-		self.subA.glyph = ''
-		self.subA.currentCondition = ''
+		# self.conditions.glyph = self.interpreter[today.measurements['weather_code'].value]
 
 		# Outdoor Air Quality
-		self.outdoor.SubAValue.setText('')
+		# self.outdoor.SubAValue.setText(('{:4d}'.format(round(self.forecast.data['epa_aqi'][0]))))
 
 		# Sunrise/Sunset
-		self.sunSet.value.setText('')
-		self.sunRise.value.setText('')
-
-	def fadeForecastItems(self):
-		# Current Conditions
-		self.subA.live = False
-
-		# Outdoor Air Quality
-		self.outdoor.SubAValue.live = False
-
-		# Sunrise/Sunset
-		self.sunSet.live = False
-		self.sunRise.live = False
+		self.sunSet.value = self.forecast.data['sunset'][0].strftime('%-I:%M')
+		self.sunRise.value = self.forecast.data['sunrise'][0].strftime('%-I:%M')
 
 	def updateForecast(self):
 		try:
@@ -225,67 +190,33 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 			self.dailyForecast.update()
 			self.forecastGraph.data = self.forecast
 			self.setForecastItems()
-			logging.debug('Forecast updated')
+			self._log.debug('Forecast updated')
 			self.checkThreadTimer.singleShot(1000 * 60 * 5, self.updateForecast)
 		except AttributeError:
 			self.fadeForecastItems()
-			logging.error("No forecast data, trying again in 1 minute")
+			self._log.error("No forecast data, trying again in 1 minute")
 			self.checkThreadTimer.singleShot(1000 * 60, self.updateForecast)
 
-	def setRealtimeItems(self):
+	def setRealtimeItems(self) -> None:
+		pass
 
-		if not self.timeTraveling:
-			# Wind Widget
-			self.subB.live = True
-			self.subB.setVector(self.wf.obs.speed, self.wf.obs.direction)
-			self.wf.obs.gust._suffix = ' mph'
-			self.wf.obs.lull._suffix = ' mph'
-			self.subB.gust = str(self.wf.obs.gust)
-			self.subB.max = str(self.wf.obs.lull)
+	# Wind Widget
+	# self.subB.setVector(self.wf.obs.speed, self.wf.obs.direction)
+	# self.subB.topLeft.value = self.wf.obs.gust
+	# self.subB.topRight.value = self.wf.obs.lull
+	#
+	# self.subA.main.value = self.wf.obs.rate
+	# self.subA.a2.value = self.wf.obs.daily
+	# self.subA.a3.value = self.wf.obs.minutes.auto
+	#
+	# # Temperatures
 
-			# Temperatures
-			self.indoor.live = True
-			self.indoor.temperature.setText(" " + str(self.aw.indoor.temperature))
-			self.indoor.SubAValue.setText(" " + str(self.aw.indoor.humidity))
-			self.indoor.SubBValue.setText(" " + str(self.aw.indoor.dewpoint))
+	# # Outdoor
+	# # self.outdoor.live = True
 
-			# Outdoor
-			self.outdoor.live = True
-			self.outdoor.temperature.setText(" " + str(self.wf.obs.temperature))
-			# SubAValue relies on forecast data
-			self.outdoor.SubBValue.setText(" " + str(self.wf.obs.dewpoint))
+	# self.wind.value = windRose()
 
 	# self.outdoor.SubAValue.setText(str(round(self.forecast.data['epa_aqi'][0])))
-
-	def fadeRealtimeItems(self):
-
-		self.subB.live = False
-		# Temperatures
-		self.indoor.live = False
-		self.outdoor.live = False
-		# Sunrise/Sunset
-		self.sunSet.live = False
-		self.sunRise.live = False
-
-		self.subB.live = False
-
-	def clearRealtimeItems(self):
-
-		# Wind Widget
-		self.subB.speed.setText('')
-		self.subB.direction.setText('')
-		# Temperatures
-		self.indoor.temperature.setText('')
-		self.outdoor.temperature.setText('')
-		# Sunrise/Sunset
-		self.sunSet.value.setText('')
-		self.sunRise.value.setText('')
-		# Outdoor
-		self.outdoor.SubAValue.setText('')
-		self.outdoor.SubBValue.setText('')
-		# Outdoor
-		self.indoor.SubAValue.setText('')
-		self.indoor.SubBValue.setText('')
 
 	def loadStyle(self):
 		sshFile = "styles/main.qss"
@@ -294,6 +225,10 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 
 	def eventFilter(self, obj, event):
 		if event.type() == QtCore.QEvent.KeyPress:
+			if event.key() == QtCore.Qt.Key_P:
+				self.aw.indoor.update({'temperature': self.aw.indoor.temperature})
+			if event.key() == QtCore.Qt.Key_I:
+				self.bottom.insert(self.light)
 			if event.key() == QtCore.Qt.Key_Q:
 				self.close()
 			if event.key() == QtCore.Qt.Key_F:
@@ -326,19 +261,78 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 		# 	print(obj)
 		return super(MainWindow, self).eventFilter(obj, event)
 
+	# resizeStarted = True
+	# resizeTimer = QTimer()
+	#
+	# def resizeFinished(self):
+	# 	self.resizeStarted = False
+	# 	self.centralwidget.show()
+	#
+	#
+	# def resizeStartedFunc(self):
+	# 	self.resizeStarted = True
+	# 	self.img = self.grab(self.rect())
+	# 	self.centralwidget.hide()
+	#
+	# def paintEvent(self, event):
+	# 	if self.resizeStarted and self.img:
+	# 		painter = QPainter()
+	# 		painter.begin(self)
+	# 		painter.drawPixmap(self.rect(), self.img)
+	# 		painter.end()
+	# 	else:
+	# 		super().paintEvent(event)
+	#
+	# def resizeEvent(self, event):
+	# 	if not self.resizeStarted:
+	# 		self.resizeStartedFunc()
+	# 	self.resizeTimer.start(300)
+	# 	super(MainWindow, self).resizeEvent(event)
+
 	def buildUI(self):
+		# self.resizeTimer.timeout.connect(self.resizeFinished)
 
-		self.sunSet.title.setFont(self.glyphs)
-		self.sunSet.title.setText('')
+		self.indoor = LargeComplication(self.bottom, title='Indoor', subscriptionKey='temperature')
+		dewpoint = Complication(title='Dewpoint')
+		self.indoor.addItems(WeatherUnits.others.Humidity, Complication(title='Dewpoint'))
 
-		self.sunRise.title.setFont(self.glyphs)
-		self.sunRise.title.setText('')
+		self.outdoor = LargeComplication(self.bottom, title='Outdoor', subscriptionKey='temperature')
+		self.outdoor.addItems(dewpoint, WeatherUnits.others.UVI)
 
-		self.outdoor.subATitle.setText('Air Quality')
-		self.outdoor.subBTitle.setText('Dewpoint')
+		self.temperatures.insert(self.indoor, self.outdoor)
 
-		self.indoor.subATitle.setText('Humidity')
-		self.indoor.subBTitle.setText('Dewpoint')
+		# moon = Complication(title='Moon Phase', widget=Moon())
+		# self.moonLarge = LargeComplication(self.bottom, widget=Moon())
+
+		self.light = LargeComplication(self.bottom, title='Light', subscriptionKey='illuminance', showTitle=False)
+		self.light.center.titleLabel.hide()
+		# self.wind = WindSubmodule(self.bottom, title='Wind')
+		self.wind = Complication(self.bottom, title='Wind', subscriptionKey='speed', showUnit=True)
+		self.rain = Complication(self.bottom, title='Rain', subscriptionKey='rate', showUnit=True)
+		# self.bottom.insert(self.moonLarge)
+		# self.bottom.insert(self.outdoor)
+		# self.bottom.insert(self.rain)
+		self.bottom.insert(self.wind, self.light, self.rain)
+		self.complicationMini
+		self.am = Complication(self.complicationMini, value='pm', square=True)
+		self.sunRise = Complication(self.complicationMini, glyphTitle='', value='8:00', miniature=True, square=True)
+		self.sunSet = Complication(self.complicationMini, glyphTitle='', value='10:00', miniature=True, square=True)
+		# self.conditions = Complication(self.ComplicationFrame)
+		# self.complicationMini.isGrid = True
+		self.complicationMini.insert(self.am, self.sunSet, self.sunRise)
+
+	# self.sunSet.title.setFont(self.glyphs)
+	# self.sunRise.title.setFont(self.glyphs)
+
+	# self.outdoor.subATitle.setText('Air Quality')
+	# self.outdoor.subBTitle.setText('Dewpoint')
+
+	def testValues(self):
+		self.outdoor.value = WeatherUnits.temperature.Fahrenheit(80)
+		self.light.value = WeatherUnits.others.Illuminance(12383.7)
+		# self.outdoor.addItems(WeatherUnits.others.Humidity(87))
+		self.indoor.value = WeatherUnits.temperature.Fahrenheit(80)
+		self.rain.value = 12
 
 	def refreshTimeDateTemp(self, auto=True):
 
@@ -350,19 +344,6 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 				self.checkThreadTimer.singleShot(500, self.refreshTimeDateTemp)
 
 
-# def keyPressEvent(self, event):
-# 	print('test')
-# 	if event.key() == QtCore.Qt.Key_R:
-# 		print("refreshing")
-# 		self.loadStyle()
-# 	elif event.key() == QtCore.Qt.Key_U:
-# 		self.ui.setupUi(self)
-# 	elif event.key() == QtCore.Qt.Key_B:
-# 		print('building UI')
-# 		self.buildUI()
-# 	event.accept()
-
-
 if __name__ == "__main__":
 	logging.getLogger().setLevel(logging.INFO)
 	app = QApplication()
@@ -372,7 +353,7 @@ if __name__ == "__main__":
 	# print(window.ui.moonPhase.setProperty('charStr', ''))
 
 	window.show()
-	display_monitor = 0
+	display_monitor = 1
 	monitor = QDesktopWidget().screenGeometry(display_monitor)
 	window.move(monitor.left(), monitor.top())
 	# window.showFullScreen()

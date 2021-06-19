@@ -15,7 +15,9 @@ from PySide2.QtWidgets import QApplication, QGraphicsDropShadowEffect, QGraphics
 from PIL import Image
 
 from src.api.forecast import Forecast
-from utils import filterBest, findPeaks, group
+from src.utils import filterBest, findPeaks, group
+from ui.colors import Default
+from ui.fonts import rounded
 
 golden = (1 + np.sqrt(5)) / 2
 
@@ -267,7 +269,7 @@ class GraphScene(QGraphicsScene):
 
 class LineMarkers(QGraphicsPathItem):
 
-	def __init__(self, parent: GraphScene, markerArray: str, color: QColor = Qt.white, style: Union[Qt.PenStyle, list[int]] = Qt.SolidLine, scalar: float = 1.0, **kwargs):
+	def __init__(self, parent: GraphScene, markerArray: str, color: QColor = Default.main, style: Union[Qt.PenStyle, list[int]] = Qt.SolidLine, scalar: float = 1.0, **kwargs):
 		super(LineMarkers, self).__init__()
 		self.markerArray = markerArray
 		self.parent = parent
@@ -302,7 +304,7 @@ class LineMarkers(QGraphicsPathItem):
 class Text(QGraphicsPathItem):
 
 	def __init__(self, parent, x: float, y: float, text: str, alignment: Qt.AlignmentFlag = Qt.AlignCenter,
-	             scalar: float = 1.0, font: Union[QFont, str] = None, color: QColor = Qt.white):
+	             scalar: float = 1.0, font: Union[QFont, str] = None, color: QColor = Default.main):
 		super(Text, self).__init__()
 		self.x, self.y = x, y
 		self._parent = parent
@@ -319,7 +321,7 @@ class Text(QGraphicsPathItem):
 	@font.setter
 	def font(self, font: Union[QFont, str]):
 		if font == None:
-			self.font = QFont(self.parent.font)
+			self.font = QFont(rounded)
 		elif isinstance(font, str):
 			self._font = QFont(font, self.height() * .1)
 		elif isinstance(font, QFont):
@@ -346,8 +348,8 @@ class Text(QGraphicsPathItem):
 		lineThickness = max(self.parent.fontSize * self.scalar * golden * 0.07, 3)
 		pen = QPen(self.color, lineThickness)
 
-		brush = QBrush(Qt.white)
-		self.setPen(QColor(Qt.white))
+		brush = QBrush(Default.main)
+		self.setPen(QColor(Default.main))
 		self.setBrush(brush)
 		path = QPainterPath()
 		path.setFillRule(Qt.WindingFill)
@@ -399,7 +401,7 @@ class MarkerAnnotation(Text):
 	scalar: float
 
 	def __init__(self, parent: GraphScene, index: int, array: str, alignment: Qt.AlignmentFlag = Qt.AlignCenter,
-	             scalar: float = 1.0, font: Union[QFont, str] = None, color: QColor = Qt.white):
+	             scalar: float = 1.0, font: Union[QFont, str] = None, color: QColor = Default.main):
 		super(MarkerAnnotation, self).__init__(parent, x=0, y=0, text="", alignment=alignment, scalar=scalar, font=font, color=color)
 		self.index = index
 		self.array = array
@@ -445,7 +447,7 @@ class PlotAnnotation(Text):
 	scalar: float
 
 	def __init__(self, parent: GraphScene, index: int, array: str, alignment: Qt.AlignmentFlag = Qt.AlignCenter,
-	             scalar: float = 1.0, font: Union[QFont, str] = None, color: QColor = Qt.white):
+	             scalar: float = 1.0, font: Union[QFont, str] = None, color: QColor = Default.main):
 		super(PlotAnnotation, self).__init__(parent, x=0, y=0, text="", alignment=alignment, scalar=scalar, font=font, color=color)
 		self.index = index
 		self.array = array
@@ -507,7 +509,8 @@ class BackgroundImage(QGraphicsPixmapItem):
 		img = Image.fromarray(np.uint8(LightImage)).convert('RGBA')
 		img = img.resize((self.parent.width, self.parent.height))
 		qim = ImageQt(img)
-		return QPixmap.fromImage(qim)
+
+	# return QPixmap.fromImage(qim)
 
 	def gen(self, size):
 		print('gen image')
@@ -554,7 +557,7 @@ class BackgroundImage(QGraphicsPixmapItem):
 
 
 class Plot(QGraphicsPathItem):
-	def __init__(self, parent, x: str, color: QColor = Qt.white, style: Union[Qt.PenStyle, list[int]] = Qt.SolidLine, scalar: float = 1.0):
+	def __init__(self, parent, x: str, color: QColor = Default.main, style: Union[Qt.PenStyle, list[int]] = Qt.SolidLine, scalar: float = 1.0):
 		self.parent: GraphScene = parent
 		self.color = color
 		self.style = style
@@ -568,8 +571,8 @@ class Plot(QGraphicsPathItem):
 		gradient = QLinearGradient(QPointF(0, self.parent.gradientPoints[0]), QPointF(0, self.parent.gradientPoints[1]))
 		gradient.setColorAt(0, QColor('#BFE8FF'))
 		gradient.setColorAt(0.3, QColor('#0D41E1'))
-		gradient.setColorAt(.5, Qt.white)
-		gradient.setColorAt(.75, Qt.white)
+		gradient.setColorAt(.5, Default.main)
+		gradient.setColorAt(.75, Default.main)
 		gradient.setColorAt(0.8, '#FFE874')
 		gradient.setColorAt(1.0, '#FF4F4F')
 		return gradient
@@ -612,7 +615,7 @@ NoMargin = Margins(0, 0, 0, 0)
 
 
 class TwinPlot(QGraphicsPathItem):
-	def __init__(self, parent, color: QColor = Qt.white, margins: Margins = NoMargin):
+	def __init__(self, parent, color: QColor = Default.main, margins: Margins = NoMargin):
 		self.parent: GraphScene = parent
 		self.color = color
 		self.margins = margins

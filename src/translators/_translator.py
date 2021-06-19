@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from src import SmartDictionary
-from WeatherUnits import heat, length, others, pressure, time
+from WeatherUnits import temperature, length, Measurement, others, pressure, time, derived, mass
 
 
 class UnitTranslator(SmartDictionary):
@@ -23,6 +23,10 @@ class UnitTranslator(SmartDictionary):
 		return SmartDictionary(self._groups)
 
 
+class SmartString(str):
+	_title = ''
+
+
 class Translator(SmartDictionary):
 	_units: SmartDictionary
 	_dateFormatString: str
@@ -30,12 +34,12 @@ class Translator(SmartDictionary):
 	def __init__(self, *args, **kwargs):
 		super(Translator, self).__init__(*args, **kwargs)
 		self._classes = SmartDictionary({
-				'f':        heat.Fahrenheit,
-				'c':        heat.Celsius,
+				'f':        temperature.Fahrenheit,
+				'c':        temperature.Celsius,
 				'%':        others.Humidity,
-				'º':        int,
-				'str':      str,
-				'int':      int,
+				'º':        others.Direction,
+				'str':      SmartString,
+				'int':      Measurement,
 				'mmHg':     pressure.mmHg,
 				'inHg':     pressure.inHg,
 				'W/m^2':    others.Irradiance,
@@ -46,11 +50,24 @@ class Translator(SmartDictionary):
 				'mm':       length.Millimeter,
 				'm':        length.Meter,
 				'km':       length.Kilometer,
+				'day':      time.Day,
 				'hr':       time.Hour,
 				'min':      time.Minute,
 				's':        time.Second,
+				'kg':       mass.Kilogram,
+				'lb':       mass.Pound,
+				'm^3':      derived.CubicMeter,
 				'date':     datetime,
-				'timezone': str
+				'uvi':      others.UVI,
+				'strike':   others.Strikes,
+				'timezone': str,
+				'special':  {'precipitation':       derived.Precipitation,
+				             'precipitationDaily':  derived.PrecipitationDaily,
+				             'precipitationHourly': derived.PrecipitationDaily,
+				             'precipitationRate':   derived.PrecipitationHourly,
+				             'wind':                derived.Wind,
+				             'airDensity':          derived.Density
+				             }
 		})
 
 	# def __getitem__(self, item):
@@ -67,6 +84,10 @@ class Translator(SmartDictionary):
 	@property
 	def classes(self):
 		return self._classes
+
+	@property
+	def specialClasses(self):
+		return self._classes['special']
 
 
 class ConditionValue:
