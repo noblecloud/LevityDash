@@ -1,18 +1,26 @@
-from src.observations import Observation
+from src.observations import ObservationSingle
 from src.translators import AWTranslator, AWTranslatorIndoor, AWTranslatorOutdoor
 
 
-class AWObservation(Observation):
+class AWObservationSingle(ObservationSingle):
 	_translator = AWTranslator()
 
+	def __init__(self, *args, **kwargs):
+		super(AWObservationSingle, self).__init__(*args, **kwargs)
 
-class AWIndoor(Observation):
+
+class AWIndoor(ObservationSingle):
 	_translator = AWTranslatorIndoor()
 
+	def __init__(self, *args, **kwargs):
+		super(AWIndoor, self).__init__(*args, **kwargs)
 
-class AWOutdoor(Observation):
+
+class AWOutdoor(ObservationSingle):
 	_translator = AWTranslatorOutdoor()
 
+	def __init__(self, *args, **kwargs):
+		super(AWOutdoor, self).__init__(*args, **kwargs)
 # def __init__(self, data: SmartDictionary, t: SmartDictionary):
 # 	tz = timezone(data[t.timezone])
 # 	self._dateTime = datetime.fromtimestamp(int(data[t.time]) / 1e3, tz=tz)

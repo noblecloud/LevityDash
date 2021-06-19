@@ -1,148 +1,18 @@
 from collections import deque
 
-from numpy import sqrt
-from PySide2 import QtCore, QtWidgets
-from PySide2.QtCore import Property, QEasingCurve, QPoint, QPointF, QPropertyAnimation, Signal
-from PySide2.QtGui import QBrush, QFont, QPainter, QPainterPath, QPaintEvent, QPen, QPolygonF
+from PySide2.QtCore import Qt
+from PySide2.QtGui import QPaintEvent
 from PySide2.QtWidgets import QApplication
+from WeatherUnits.derived import Wind
+from WeatherUnits.length import Meter
+from WeatherUnits.others import Direction
+from WeatherUnits.time import Second
 
-from ui.wind_UI import Ui_Frame as windUI
+from ui.wind_UI import Ui_wind as windUI
 from widgets.Submodule import Submodule
 
-cardinalDirections = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 
-
-class windRose(QtWidgets.QFrame):
-	_rotation: float = 0
-	_animation: QPropertyAnimation
-
-	valueChanged = Signal(float)
-	clicked = Signal()
-
-	def __init__(self, *args, **kwargs):
-		super(windRose, self).__init__(*args, **kwargs)
-		self._animation = QPropertyAnimation(self, b'rotation')
-		self._animation.setEasingCurve(QEasingCurve.InOutCubic)
-
-	def animate(self, rotation: int = None, absolute: bool = False, duration: int = 2000):
-		if self._animation.state() != QtCore.QAbstractAnimation.Running:
-			if rotation is not None:
-				self._animation.setStartValue(self._rotation)
-				if absolute:
-					if self._animation.startValue() > 180 and rotation % 360 == 0:
-						self._animation.setEndValue(360)
-					else:
-						self._animation.setEndValue(rotation)
-				else:
-					self._animation.setEndValue(self._rotation + rotation)
-				self._animation.setDuration(duration)
-			else:
-				self._animation.setStartValue(0)
-				self._animation.setEndValue(360)
-				self._animation.setDuration(duration)
-			self._animation.start()
-
-	def resizeEvent(self, event):
-		self.fontLarge = QFont(self.font())
-		self.fontLarge.setWeight(70)
-		self.fontLarge.setPointSize(self.height() * .25)
-		super().resizeEvent(event)
-
-	def paintEvent(self, event):
-		paint = QPainter()
-		paint.begin(self)
-		paint.setRenderHint(QPainter.HighQualityAntialiasing)
-		paint.setRenderHint(QPainter.Antialiasing)
-		cx, cy = self.width() * 0.5, self.height() * 0.5
-		cw, ch = self.width() * 0.9, self.height() * 0.9
-		base = self.height() * 0.17
-		pointerHeight = base * .9
-
-		paint.translate(cx, cy)
-		paint.rotate(self._rotation)
-		paint.translate(-cx, -cy)
-		penWidth = sqrt(self.height() ** 2 + self.width() ** 2) * 0.08
-		pen = QPen(QtCore.Qt.white, penWidth)
-		# paint.setPen(pen)
-		radius = self.height() * .4
-		paint.setBrush(QBrush(QtCore.Qt.white))
-		path = QPainterPath()
-		path.addEllipse(QPoint(cx, cy), radius, radius)
-		path.addEllipse(QPoint(cx, cy), radius * 0.7, radius * 0.7)
-		paint.drawPath(path)
-		paint.setBrush(QtCore.Qt.white)
-
-		paint.setPen(QPen(QtCore.Qt.white, 0))
-
-		middle = QPointF(cx, 5)
-		left = QPointF(cx - pointerHeight, base)
-		right = QPointF(cx + pointerHeight, base)
-
-		arrow = QPolygonF()
-		arrow.append(middle)
-		arrow.append(left)
-		arrow.append(right)
-
-		paint.drawPolygon(arrow)
-
-		paint.translate(cx, cy)
-		paint.rotate(-self._rotation)
-		paint.translate(-cx, -cy)
-		text = QPainterPath()
-		directionStr = cardinalDirections[int(((self._rotation + 22.5) % 360) // 45 % 8)]
-		x, y = estimateTextSize(self.fontLarge, directionStr)
-		x1, y1 = estimateTextSize(self.fontLarge, '0.0')
-		text.addText(cx - (x / 2) - 10, (cy) - 10, self.fontLarge, 'N')
-		text.addText(cx - (x1 / 2) - 10, (cy) + y1, self.fontLarge, '0.0')
-		paint.drawPath(text)
-
-	@property
-	def duration(self):
-		return self._animation.duration()
-
-	@duration.setter
-	def duration(self, value):
-		self._animation.setDuration(value)
-
-	@property
-	def easing(self):
-		return self._animation.getEasingCurve()
-
-	@easing.setter
-	def easing(self, value: QEasingCurve):
-		if isinstance(QEasingCurve, value):
-			self._animation.setEasingCurve(value)
-		else:
-			print('Not a valid easing curve')
-
-	@Property(float)
-	def rotation(self) -> float:
-		return self._rotation
-
-	@rotation.setter
-	def rotation(self, value: float):
-		if value != self._rotation:
-			self._rotation = value
-			self.update()
-			self.valueChanged.emit(value)
-
-	@property
-	def speed(self):
-		return self._speed
-
-	@speed.setter
-	def speed(self, value):
-		self._speed = value
-
-
-def estimateTextSize(font: QFont, string: str) -> tuple[float, float]:
-	p = QPainterPath()
-	p.addText(QtCore.QPoint(0, 0), font, string)
-	rect = p.boundingRect()
-	return rect.width(), rect.height()
-
-
-class windSubmodule(Submodule, windUI):
+class WindSubmodule(Submodule, windUI):
 	# _speed: float
 	# animation: QPropertyAnimation
 	_directionArray: deque = deque([], 10)
@@ -152,9 +22,18 @@ class windSubmodule(Submodule, windUI):
 		super().__init__(*args, **kwargs)
 		self._speed = 0.0
 		self.setupUi(self)
-		# self.directionLabel.move(-10, 0)
-		self.image = windRose(self.mainFrame)
-		self.image.setObjectName(u"windRose")
+
+	# self.directionLabel.move(-10, 0)
+	# self.setAttribute(Qt.WA_NoSystemBackground, True)
+	# self.setAttribute(Qt.WA_TranslucentBackground, True)
+	# self.setStyleSheet("color: white; background: black")
+	# self.maxTitle.setAttribute(Qt.WA_TranslucentBackground, True)
+	# self.maxValueLabel.setAttribute(Qt.WA_TranslucentBackground, True)
+	# self.gustTitle.setAttribute(Qt.WA_TranslucentBackground, True)
+	# self.gustTitle.setAttribute(Qt.WA_TranslucentBackground, True)
+	# self.subDataFrame.setAttribute(Qt.WA_TranslucentBackground, True)
+	# setAttribute(Qt::WA_NoSystemBackground);
+	# setAttribute(Qt::WA_TranslucentBackground);
 
 	# self.animation = QPropertyAnimation(self, b'speed')
 
@@ -173,7 +52,13 @@ class windSubmodule(Submodule, windUI):
 
 	def paintEvent(self, event: QPaintEvent) -> None:
 		super().paintEvent(event)
-		self.image.setGeometry(self.mainFrame.geometry())
+		self.rose.setGeometry(self.rect())
+		width = self.width() / 5 + (self.width() - self.rose.width())
+		height = self.height() / 5 + (self.height() - self.rose.height())
+		self.bottomLeft.setGeometry(0, self.height() - height, width, height)
+		self.topLeft.setGeometry(0, 0, width, height)
+		self.topRight.setGeometry(self.width() - width, 0, width, height)
+		self.bottomRight.setGeometry(self.width() - width, self.height() - height, width, height)
 
 	# @Property(float)
 	@property
@@ -182,7 +67,7 @@ class windSubmodule(Submodule, windUI):
 
 	@speed.setter
 	def speed(self, value):
-		self.image.speed = value
+		self.rose.speed = value
 
 	# def animate(self, value):
 	# 	print(value, self._speed)
@@ -202,8 +87,8 @@ class windSubmodule(Submodule, windUI):
 	@direction.setter
 	def direction(self, value):
 		self._directionArray.append(value)
-		smoothedValue = sum(self._directionArray) / len(self._directionArray)
-		self.image.animate(smoothedValue, True, 3000)
+		smoothedValue = Direction(sum(self._directionArray) / len(self._directionArray))
+		self.rose.animate(smoothedValue, True, 3000)
 
 	@property
 	def max(self):
@@ -211,7 +96,9 @@ class windSubmodule(Submodule, windUI):
 
 	@max.setter
 	def max(self, value):
-		self.maxValueLabel.setText(value)
+		pass
+
+	# self.TLValue.setText(value)
 
 	@property
 	def gust(self):
@@ -219,16 +106,20 @@ class windSubmodule(Submodule, windUI):
 
 	@gust.setter
 	def gust(self, value):
-		self.gustValueLabel.setText(value)
+		pass
+	# self.TRValue.setText(value)
 
 
 if __name__ == '__main__':
 	import sys
-	from tests.pickler import pans as reload
 
+	rotation: Direction = Direction(30)
+	speed: Wind = Wind(Meter(13.0), Second(1))
 	app = QApplication()
 
-	window = windSubmodule()
+	window = WindSubmodule()
+	window.topLeft.show()
 	window.resize(800, 800)
 	window.show()
+	window.setVector(speed, rotation)
 	sys.exit(app.exec_())

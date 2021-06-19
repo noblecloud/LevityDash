@@ -1,45 +1,47 @@
 from src import SmartDictionary
 from . import Translator, UnitTranslator
 
+from WeatherUnits.defaults.WeatherFlow import *
+
 
 class WFUnits(UnitTranslator):
 	_time = SmartDictionary({'type': 'datetime', 'unit': 'date'})
-	_temperature = SmartDictionary({'temperature': {'type': 'heat', 'unit': 'c'},
-	                                'dewpoint':    {'type': 'heat', 'unit': 'c'},
-	                                'wetbulb':     {'type': 'heat', 'unit': 'c'},
-	                                'feelsLike':   {'type': 'heat', 'unit': 'c'},
-	                                'heatIndex':   {'type': 'heat', 'unit': 'c'},
-	                                'windChill':   {'type': 'heat', 'unit': 'c'},
-	                                'deltaT':      {'type': 'heat', 'unit': 'c'},
-	                                'humidity':    {'type': 'saturation', 'unit': '%'}})
-	_pressure = SmartDictionary({'pressure':   {'type': 'pressure', 'unit': 'mb'},
-	                             'absolute':   {'type': 'pressure', 'unit': 'mb'},
-	                             'seaLevel':   {'type': 'pressure', 'unit': 'mb'},
-	                             'airDensity': {'type': 'pressure', 'unit': 'mb'},
-	                             'trend':      {'type': 'str', 'unit': 'str'}})
-	_wind = SmartDictionary({'direction': {'type': 'angle', 'unit': 'º'},
-	                         'speed':     {'type': 'speed', 'unit': ('m', 's')},
-	                         'lull':      {'type': 'speed', 'unit': ('m', 's')},
-	                         'gust':      {'type': 'speed', 'unit': ('m', 's')},
-	                         'interval':  {'type': 'interval', 'unit': 's'}})
-	_light = SmartDictionary({'uvi':         {'type': 'index', 'unit': 'int'},
-	                          'irradiance':  {'type': 'irradiance', 'unit': 'W/m^2'},
-	                          'illuminance': {'type': 'illuminance', 'unit': 'lux'}})
-	_precipitation = SmartDictionary({'type':                {'type': 'type', 'unit': 'int'},
-	                                  'typeYesterday':       {'type': 'type', 'unit': 'int'},
-	                                  'rate':                {'type': 'rate', 'unit': ('mm', 'hr')},
-	                                  'hourly':              {'type': 'length', 'unit': ('mm', 'hr')},
-	                                  'daily':               {'type': 'length', 'unit': 'mm'},
-	                                  'yesterday':           {'type': 'length', 'unit': 'mm'},
-	                                  'yesterdayRaw':        {'type': 'length', 'unit': 'mm'},
-	                                  'minutes':             {'type': 'time', 'unit': 'min'},
-	                                  'minutesYesterday':    {'type': 'time', 'unit': 'min'},
-	                                  'minutesYesterdayRaw': {'type': 'time', 'unit': 'min'}})
-	_lightning = SmartDictionary({'strikeCount':       {'type': 'quantity', 'unit': 'int'},
-	                              'lightningDistance': {'type': 'length', 'unit': 'km'},
-	                              'lightning1hr':      {'type': 'quantity', 'unit': 'int'},
-	                              'lightning3hr':      {'type': 'quantity', 'unit': 'int'}})
-	_battery = SmartDictionary({'type': 'power', 'unit': 'volts'})
+	_temperature = SmartDictionary({'temperature': {'type': 'temperature', 'unit': 'c', 'title': 'Temperature'},
+	                                'dewpoint':    {'type': 'temperature', 'unit': 'c', 'title': 'Dewpoint'},
+	                                'wetbulb':     {'type': 'temperature', 'unit': 'c', 'title': 'Wet Bulb'},
+	                                'feelsLike':   {'type': 'temperature', 'unit': 'c', 'title': 'Feels Like'},
+	                                'heatIndex':   {'type': 'temperature', 'unit': 'c', 'title': 'Heat Index'},
+	                                'windChill':   {'type': 'temperature', 'unit': 'c', 'title': 'Wind Chill'},
+	                                'deltaT':      {'type': 'temperature', 'unit': 'c', 'title': 'Delta T'},
+	                                'humidity':    {'type': 'humidity', 'unit': '%', 'title': 'Humidity'}})
+	_pressure = SmartDictionary({'pressure':   {'type': 'pressure', 'unit': 'mb', 'title': 'Pressure'},
+	                             'absolute':   {'type': 'pressure', 'unit': 'mb', 'title': 'Absolute'},
+	                             'seaLevel':   {'type': 'pressure', 'unit': 'mb', 'title': 'Sea Level'},
+	                             'airDensity': {'type': 'pressure', 'unit': 'mb', 'title': 'Air Density'},
+	                             'trend':      {'type': 'str', 'unit': 'str', 'title': 'Trend'}})
+	_wind = SmartDictionary({'direction': {'type': 'direction', 'unit': 'º', 'title': 'Direction'},
+	                         'speed':     {'type': 'wind', 'unit': ('m', 's'), 'title': 'Speed'},
+	                         'lull':      {'type': 'wind', 'unit': ('m', 's'), 'title': 'Lull'},
+	                         'gust':      {'type': 'wind', 'unit': ('m', 's'), 'title': 'Gust'},
+	                         'interval':  {'type': 'interval', 'unit': 's', 'title': 'Sample Interval'}})
+	_light = SmartDictionary({'uvi':         {'type': 'index', 'unit': 'uvi', 'title': 'UVI'},
+	                          'irradiance':  {'type': 'irradiance', 'unit': 'W/m^2', 'title': 'Irradiance'},
+	                          'illuminance': {'type': 'illuminance', 'unit': 'lux', 'title': 'Illuminance'}})
+	_precipitation = SmartDictionary({'type':                {'type': 'precipitationType', 'unit': 'precipitationType', 'title': 'Type'},
+	                                  'typeYesterday':       {'type': 'precipitationType', 'unit': 'precipitationType', 'title': 'Type Yesterday'},
+	                                  'rate':                {'type': 'precipitationRate', 'unit': ('mm', 'min'), 'title': 'Rate'},
+	                                  'hourly':              {'type': 'precipitationHourly', 'unit': ('mm', 'hr'), 'title': 'Hourly'},
+	                                  'daily':               {'type': 'precipitationDaily', 'unit': ('mm', 'day'), 'title': 'Daily'},
+	                                  'yesterday':           {'type': 'precipitationDaily', 'unit': ('mm', 'day'), 'title': 'Yesterday'},
+	                                  'yesterdayRaw':        {'type': 'precipitationDaily', 'unit': ('mm', 'day'), 'title': 'Yesterday'},
+	                                  'minutes':             {'type': 'time', 'unit': 'min', 'title': 'Minutes'},
+	                                  'minutesYesterday':    {'type': 'time', 'unit': 'min', 'title': 'Minutes Yesterday'},
+	                                  'minutesYesterdayRaw': {'type': 'time', 'unit': 'min', 'title': 'Minutes Yesterday'}})
+	_lightning = SmartDictionary({'strikeCount':       {'type': 'strikeCount', 'unit': 'strike', 'title': 'Strikes'},
+	                              'lightningDistance': {'type': 'length', 'unit': 'km', 'title': 'Distance'},
+	                              'lightning1hr':      {'type': 'strikeCount', 'unit': 'strike', 'title': '1hr'},
+	                              'lightning3hr':      {'type': 'strikeCount', 'unit': 'strike', 'title': '3hrs'}})
+	_battery = SmartDictionary({'type': 'power', 'unit': 'volts', 'title': 'Battery'})
 	_meta = SmartDictionary({'time': _time, 'battery': _battery})
 	_flat: dict
 
@@ -106,6 +108,9 @@ class WFStationTranslator(WFTranslator):
 				 'wind':          self._wind,
 				 'precipitation': self._precipitation,
 				 'lightning':     self._lightning}, *args, **kwargs)
+		self._classes.update({
+				'precipitationType': PrecipitationType
+		})
 
 
 class AWUDPDictionary(SmartDictionary):
@@ -121,12 +126,12 @@ class AWUDPDictionary(SmartDictionary):
 	          ('illuminance', 'lux'),
 	          ('uvi', 'index'),
 	          ('irradiance', 'W/m^2'),
-	          ('precipitationHourlyRaw', 'mm'),
-	          ('precipitationType', int),
+	          ('precipitationHourlyRaw', ('mm', 'min')),
+	          ('precipitationType', PrecipitationType),
 	          ('lightningDistance', 'km'),
-	          ('lightning', int),
+	          ('lightning', Strikes),
 	          ('battery', 'volts'),
-	          ('reportInterval', 'sec')]
+	          ('reportInterval', 'min')]
 
 	def __init__(self, *args, **kwargs):
 		super(AWUDPDictionary, self).__init__(*args, **kwargs)
@@ -187,15 +192,15 @@ class WFDeviceTranslator(WFTranslator):
 			9:  ('illuminance', 'lux'),
 			10: ('uvi', 'index'),
 			11: ('irradiance', 'W/m^2'),
-			12: ('precipitationHourlyRaw', 'mm'),
-			13: ('precipitationType', 'index'),
+			12: ('precipitationHourlyRaw', ('mm', 'min')),
+			13: ('precipitationType', PrecipitationType),
 			14: ('lightningDistance', 'km'),
 			15: ('lightning', 'int'),
 			16: ('battery', 'volts'),
 			17: ('reportInterval', 'min'),
-			18: ('precipitationDailyRaw', 'mm'),
-			19: ('precipitationHourly', 'mm'),
-			20: ('precipitationDaily', 'mm'),
+			18: ('precipitationDailyRaw', ('mm', 'day')),
+			19: ('precipitationHourly', ('mm', 'hr')),
+			20: ('precipitationDaily', ('mm', 'day')),
 			21: ('precipitationCheck', 'bool')}
 
 

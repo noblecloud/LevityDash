@@ -9,15 +9,15 @@ from PySide2.QtNetwork import QUdpSocket
 
 from src import utils
 from src.api.errors import APIError, InvalidCredentials, RateLimitExceeded
-from src.observations import Observation, WFStationObservation
+from src.observations import ObservationSingle, WFStationObservation
 from src import config
 from src.udp import weatherFlow as udp
 import WeatherUnits.defaults.WeatherFlow as units
 from src.translators import WFStationTranslator
+from utils import Logger
 
 
 class UDPMessenger(QObject):
-	signal = Signal(str)
 
 	def __init__(self, station=None, *args, **kwargs):
 		super(UDPMessenger, self).__init__(*args, **kwargs)
@@ -29,7 +29,7 @@ class UDPMessenger(QObject):
 		self.udpSocket.readyRead.connect(self.receiveUDP)
 
 	def receiveUDP(self):
-		messageTypes = {'rapid_wind': udp.Wind, 'evt_precip': udp.RainStart, 'evt_strike': udp.Lightning, 'obs_st': udp.Obs_st}
+		messageTypes = {'rapid_wind': udp.WindMessage, 'evt_precip': udp.RainStart, 'evt_strike': udp.Lightning, 'obs_st': udp.Obs_st}
 		while self.udpSocket.hasPendingDatagrams():
 			datagram, host, port = self.udpSocket.readDatagram(self.udpSocket.pendingDatagramSize())
 			datagram = json.loads(str(datagram, encoding='ascii'))
@@ -37,7 +37,6 @@ class UDPMessenger(QObject):
 				messageType = messageTypes[datagram['type']]
 				message = messageType(datagram)
 				self.station.udpUpdate(message)
-				self.signal.emit('updated')
 
 
 class _URLs:
@@ -74,6 +73,7 @@ class _URLs:
 		return self._station
 
 
+@Logger
 class WeatherFlow:
 	_stationID: int
 	_deviceID: int
@@ -94,6 +94,7 @@ class WeatherFlow:
 		request = requests.get(self.url, params)
 
 		if request.status_code == 200:
+			self._log.info('Updated')
 			return request.json()
 		elif request.status_code == 429:
 			logging.error("Rate limit exceeded for {} API".format(self.__class__.__name__))
@@ -168,7 +169,7 @@ class WFForecast(WeatherFlow):
 class WFStation(WeatherFlow):
 	_id: int
 	_info = dict[str: Any]
-	_observation: Observation
+	_observation: ObservationSingle
 	_translator = WFStationTranslator()
 	_messenger = UDPMessenger
 
@@ -183,6 +184,7 @@ class WFStation(WeatherFlow):
 		self._messenger.connectUPD()
 
 	def getData(self, *args):
+		self._observation.source = 'tcp'
 		data = super(WFStation, self).getData()
 		observationData: dict = data.pop('obs')[0]
 		tz = data['timezone']
@@ -191,7 +193,6 @@ class WFStation(WeatherFlow):
 		self._date = date
 		self._info = data
 		self._observation.dataUpdate(observationData)
-		self.localize()
 
 	def getForecast(self):
 		data = super(WFStation, self).getData()
@@ -202,7 +203,6 @@ class WFStation(WeatherFlow):
 		self._date = date
 		self._info = data
 		self._observation.dataUpdate(observationData)
-		self.localize()
 
 	def localize(self):
 		for key, value in self._observation.items():
@@ -213,6 +213,7 @@ class WFStation(WeatherFlow):
 
 	def udpUpdate(self, data):
 		data = data['data']
+		self._observation.source = 'udp'
 		self._observation.update(data)
 
 	@property

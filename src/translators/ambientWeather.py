@@ -8,26 +8,26 @@ from . import Translator, UnitTranslator
 class AWUnits(UnitTranslator):
 	# TODO: add support for all AmbientWeather devices https://github.com/ambient-weather/api-docs/wiki/Device-Data-Specs
 	_time = SmartDictionary({'type': 'datetime', 'unit': 'ms'})
-	_temperature = SmartDictionary({'temperature': {'type': 'heat', 'unit': 'f'},
-	                                'dewpoint':    {'type': 'heat', 'unit': 'f'},
-	                                'feelsLike':   {'type': 'heat', 'unit': 'f'},
-	                                'humidity':    {'type': 'saturation', 'unit': '%'}})
-	_pressure = SmartDictionary({'pressure': {'type': 'pressure', 'unit': 'inHg'},
-	                             'absolute': {'type': 'pressure', 'unit': 'inHg'}})
-	_wind = SmartDictionary({'direction': {'type': 'angle', 'unit': 'º'},
-	                         'speed':     {'type': 'speed', 'unit': ('mi', 'hr')},
-	                         'gust':      {'type': 'speed', 'unit': ('mi', 'hr')},
-	                         'max':       {'type': 'speed', 'unit': ('mi', 'hr')}
+	_temperature = SmartDictionary({'temperature': {'type': 'temperature', 'unit': 'f', 'title': 'Temperature'},
+	                                'dewpoint':    {'type': 'temperature', 'unit': 'f', 'title': 'Dewpoint'},
+	                                'feelsLike':   {'type': 'temperature', 'unit': 'f', 'title': 'Feels Like'},
+	                                'humidity':    {'type': 'humidity', 'unit': '%', 'title': 'Humidity'}})
+	_pressure = SmartDictionary({'pressure': {'type': 'pressure', 'unit': 'inHg', 'title': 'Pressure'},
+	                             'absolute': {'type': 'pressure', 'unit': 'inHg', 'title': 'Absolute'}})
+	_wind = SmartDictionary({'direction': {'type': 'direction', 'unit': 'º', 'title': 'Direction'},
+	                         'speed':     {'type': 'wind', 'unit': ('mi', 'hr'), 'title': 'Speed'},
+	                         'gust':      {'type': 'wind', 'unit': ('mi', 'hr'), 'title': 'Gust'},
+	                         'max':       {'type': 'wind', 'unit': ('mi', 'hr'), 'title': 'Max'}
 	                         })
-	_light = SmartDictionary({'uvi':        {'type': 'index', 'unit': 'int'},
-	                          'irradiance': {'type': 'irradiance', 'unit': 'W/m^2'}})
-	_precipitation = SmartDictionary({'rate':    {'type': 'rate', 'unit': ('in', 'hr')},
-	                                  'hourly':  {'type': 'rate', 'unit': ('in', 'hr')},
-	                                  'daily':   {'type': 'length', 'unit': 'in'},
-	                                  'monthly': {'type': 'length', 'unit': 'in'},
-	                                  'event':   {'type': 'length', 'unit': 'in'},
-	                                  'total':   {'type': 'length', 'unit': 'in'},
-	                                  'last':    {'type': 'date', 'unit': 'date'}
+	_light = SmartDictionary({'uvi':        {'type': 'index', 'unit': 'int', 'title': 'UVI'},
+	                          'irradiance': {'type': 'irradiance', 'unit': 'W/m^2', 'title': 'Irradiance'}})
+	_precipitation = SmartDictionary({'rate':   {'type': 'precipitationRate', 'unit': ('in', 'hr'), 'title': 'Rate'},
+	                                  'hourly': {'type': 'precipitationRate', 'unit': ('in', 'hr'), 'title': 'Hourly'},
+	                                  'daily':  {'type': 'precipitationRate', 'unit': ('in', 'day'), 'title': 'Daily'},
+	                                  # 'monthly': {'type': 'precipitation', 'unit': ('in', 'mth'), 'title': 'Monthly'},
+	                                  'event':  {'type': 'length', 'unit': 'in', 'title': 'Event'},
+	                                  'total':  {'type': 'length', 'unit': 'in', 'title': 'Total'},
+	                                  'last':   {'type': 'date', 'unit': 'date', 'title': 'Last Rain'}
 	                                  })
 
 	def __init__(self, *args, **kwargs):
@@ -97,13 +97,13 @@ class AWTranslatorOutdoor(AWTranslator):
 	                          'solarradiation': 'irradiance',
 	                          'brightness':     'illuminance'})
 	# Precipitation
-	_precipitation = SmartDictionary({'hourlyrainin':  'rate',
-	                                  'hourlyrainin':  'hourly',
-	                                  'dailyrainin':   'daily',
-	                                  'monthlyrainin': 'monthly',
-	                                  'eventrainin':   'event',
-	                                  'totalrainin':   'total',
-	                                  'lastRain':      'last'})
+	_precipitation = SmartDictionary({'hourlyrainin': 'rate',
+	                                  'hourlyrainin': 'hourly',
+	                                  'dailyrainin':  'daily',
+	                                  # 'monthlyrainin': 'monthly',
+	                                  'eventrainin':  'event',
+	                                  'totalrainin':  'total',
+	                                  'lastRain':     'last'})
 
 	def __init__(self, *args, **kwargs):
 		super(AWTranslator, self).__init__(

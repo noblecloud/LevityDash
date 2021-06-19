@@ -1,11 +1,18 @@
-import logging
 from datetime import datetime
+from enum import Enum, Flag
 from typing import Iterable, Union
 import numpy as np
+from PySide2 import QtCore
+from PySide2.QtGui import QFont, QPainterPath
 from pytz import timezone, utc
 
-from src import config
+from _config import config
 from dateutil.parser import parse as dateParser
+
+import logging
+from colorLog import ColoredLogger
+
+logging.setLoggerClass(ColoredLogger)
 
 
 def utcCorrect(utcTime: datetime, tz: timezone = None):
@@ -170,6 +177,14 @@ def filterBest(arr, data, high: bool):
 	return newArr
 
 
+def randomColor(min: int = 0, max: int = 255, prefix: str = '#') -> str:
+	from random import randrange
+	rgb = [0, 0, 0]
+	while sum(rgb) < 300 or any(map(lambda x: x > 200, rgb)) and any(map(lambda x: x < 50, rgb)):
+		rgb = list(map(lambda _: randrange(min, max, 1), rgb))
+	return prefix + ''.join([f'{i:02x}' for i in rgb]).upper()
+
+
 def plural(func):
 	def wrapper(*value):
 		value = func(*value)
@@ -179,14 +194,14 @@ def plural(func):
 
 
 @plural
-def group(*arrays: list[Iterable], span: int = 15):
+def group(*arrays: list[Iterable], spread: int = 20):
 	class CloseEnoughInt(int):
 		span: int
 
-		def __new__(cls, value, span: int = 15):
+		def __new__(cls, value, span: int = spread):
 			return super(CloseEnoughInt, cls).__new__(cls, value)
 
-		def __init__(self, value, span: int = 15):
+		def __init__(self, value, span: int = spread):
 			self.span = span
 			int.__init__(value)
 
@@ -213,7 +228,7 @@ def group(*arrays: list[Iterable], span: int = 15):
 		clusters = []
 		cluster = []
 		for i, x in enumerate(arr):
-			x = CloseEnoughInt(x, span=span)
+			x = CloseEnoughInt(x, span=spread)
 			previous = arr[i - 1] if i > 0 else arr[-1]
 			if i < len(arr) - 1:
 				next = arr[i + 1]
@@ -247,7 +262,7 @@ def group(*arrays: list[Iterable], span: int = 15):
 
 
 @plural
-def findPeaks(*arrays: list[Iterable]) -> tuple[list, ...]:
+def findPeaks(*arrays: list[Iterable], spread: int = 9) -> tuple[list, ...]:
 	"""
 	Takes any number of arrays and finds the peaks for each one and returns a tuple containing the index of each peak
 	To find peaks
@@ -265,4 +280,52 @@ def findPeaks(*arrays: list[Iterable]) -> tuple[list, ...]:
 		returned.append(peaks)
 	return tuple(returned)
 	"""
-	return [[i for (i, t) in enumerate((array > np.roll(array, 5)) & (array > np.roll(array, -5))) if t] for array in arrays]
+	return [[i for (i, t) in enumerate((array > np.roll(array, spread)) & (array > np.roll(array, -spread))) if t] for array in arrays]
+
+
+def estimateTextFontSize(font: QFont, string: str, maxSize: tuple[Union[float, int], Union[float, int]]) -> tuple[float, float, QFont]:
+	font = QFont(font)
+	p = QPainterPath()
+	p.addText(QtCore.QPoint(0, 0), font, string)
+	rect = p.boundingRect()
+	x, y = estimateTextSize(font, string)
+	while x > maxSize[0] or y > maxSize[1]:
+		size = font.pixelSize()
+		if font.pixelSize() < 10:
+			break
+		font.setPixelSize(size - 3)
+		x, y = estimateTextSize(font, string)
+	return x, y, font
+
+
+def estimateTextSize(font: QFont, string: str) -> tuple[float, float]:
+	p = QPainterPath()
+	p.addText(QtCore.QPoint(0, 0), font, string)
+	rect = p.boundingRect()
+	return rect.width(), rect.height()
+
+
+def Logger(cls):
+	cls._log = logging.getLogger(cls.__name__)
+	return cls
+
+
+class Position(Flag):
+	Top = 1
+	Center = 2
+	Bottom = 4
+	Left = 8
+	Right = 16
+
+	TopLeft = Top | Left
+	TopCenter = Top | Center
+	TopRight = Top | Right
+
+	CenterRight = Center | Right
+	CenterLeft = Center | Left
+
+	BottomLeft = Bottom | Left
+	BottomCenter = Bottom | Center
+	BottomRight = Bottom | Right
+
+	Corners = TopLeft | TopRight | BottomLeft | BottomRight

@@ -1,8 +1,8 @@
-from src.observations import Observation
+from src.observations import ObservationSingle
 from src.translators import WFStationTranslator
 
 
-class WFObservation(Observation):
+class WFObservationSingle(ObservationSingle):
 	pass
 
 
@@ -12,5 +12,5 @@ class WFObservation(Observation):
 # 		self._data[attrName] = attrValue
 
 
-class WFStationObservation(WFObservation):
+class WFStationObservation(WFObservationSingle):
 	_translator = WFStationTranslator()

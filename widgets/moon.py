@@ -11,12 +11,13 @@ from PySide2.QtWidgets import QApplication, QDesktopWidget, QSlider, QVBoxLayout
 from pysolar import solar
 
 from src import config
+from ui.colors import Default
 
 golden = (1 + np.sqrt(5)) / 2
 dark = QColor(28, 29, 31, 255)
 
 
-class MoonPhases(QtWidgets.QFrame):
+class Moon(QtWidgets.QWidget):
 	_date: datetime
 	_phase: float = 0
 	_animation: QPropertyAnimation
@@ -26,7 +27,7 @@ class MoonPhases(QtWidgets.QFrame):
 	valueChanged = Signal(float)
 
 	def __init__(self, *args, **kwargs):
-		super(MoonPhases, self).__init__(*args, **kwargs)
+		super(Moon, self).__init__(*args, **kwargs)
 		self._date = datetime.now(timezone.utc)
 		self.lat, self.lon = config.loc
 		self.auto()
@@ -97,7 +98,7 @@ class MoonPhases(QtWidgets.QFrame):
 		painter.setRenderHint(QPainter.Antialiasing)
 
 		blackPen = QPen(QtCore.Qt.black, 5)
-		whitePen = QPen(QtCore.Qt.white, 0, j=QtCore.Qt.PenJoinStyle.MiterJoin)
+		whitePen = QPen(Default.main, 0, j=QtCore.Qt.PenJoinStyle.MiterJoin)
 		redPen = QPen(QtCore.Qt.red, 5)
 
 		# moon.setFillRule(QtCore.Qt.WindingFill)
@@ -180,7 +181,6 @@ class MoonPhases(QtWidgets.QFrame):
 	@phase.setter
 	def phase(self, value: float):
 		self._phase = value
-		print(value)
 		self.update()
 
 
@@ -193,7 +193,7 @@ class Example(QWidget):
 
 	def initUI(self):
 		hbox = QVBoxLayout()
-		self.moon = MoonPhases()
+		self.moon = Moon()
 
 		sld = QSlider(Qt.Horizontal, self)
 		sld.setRange(0, 1000)
