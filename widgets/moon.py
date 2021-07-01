@@ -1,28 +1,31 @@
 import sys
 from datetime import datetime, timedelta, timezone
-from typing import Tuple
+from typing import Any, Optional, Tuple, Union
 
 import numpy as np
 import pylunar
 from PySide2 import QtCore, QtGui, QtWidgets
-from PySide2.QtCore import Property, QPropertyAnimation, Qt, Signal
-from PySide2.QtGui import QColor, QPainter, QPainterPath, QPen
-from PySide2.QtWidgets import QApplication, QDesktopWidget, QSlider, QVBoxLayout, QWidget
+from PySide2.QtCore import Property, QPropertyAnimation, QRect, Qt, QTimer, Signal
+from PySide2.QtGui import QBrush, QColor, QPainter, QPainterPath, QPen, QRegion
+from PySide2.QtWidgets import QApplication, QDesktopWidget, QMessageBox, QSlider, QVBoxLayout, QWidget
 from pysolar import solar
 
 from src import config
-from ui.colors import Default
 
 golden = (1 + np.sqrt(5)) / 2
 dark = QColor(28, 29, 31, 255)
 
 
 class Moon(QtWidgets.QWidget):
+	moonFull: QPainterPath
+	moonPath: QPainterPath
 	_date: datetime
 	_phase: float = 0
 	_animation: QPropertyAnimation
 	_radius: float = 200.0
 	_rotation: float = 0.0
+	_hitBox: QPainterPath
+	_interval = 60
 
 	valueChanged = Signal(float)
 
@@ -30,13 +33,24 @@ class Moon(QtWidgets.QWidget):
 		super(Moon, self).__init__(*args, **kwargs)
 		self._date = datetime.now(timezone.utc)
 		self.lat, self.lon = config.loc
-		self.auto()
+		self.mi = pylunar.MoonInfo(self.deg2dms(self.lat), self.deg2dms(self.lon))
+		self.painter = QPainter(self)
+		self.moonFull = QPainterPath()
+		self.mainColor = self.palette().midlight()
+		self.updateMoon()
 
-	def auto(self):
-		mi = pylunar.MoonInfo(self.deg2dms(self.lat), self.deg2dms(self.lon))
-		mi.update(self._date)
-		self._phase = mi.fractional_age()
-		self._rotation = self.getAngle(mi)
+		# Build timer
+		self.timer = QTimer(self)
+		self.timer.setInterval(1000 * self._interval)
+		self.timer.setTimerType(Qt.VeryCoarseTimer)
+		self.timer.timeout.connect(self.updateMoon)
+		self.timer.start()
+
+	def updateMoon(self):
+		self.mi.update(self._date)
+		self._phase = self.mi.fractional_age()
+		self._rotation = self.getAngle(self.mi)
+		self.moonFull.addEllipse(self.rect().center(), self._radius - 1, self._radius - 1)
 
 	def getAngle(self, mi) -> float:
 		"""https://stackoverflow.com/a/45029216/2975046"""
@@ -55,6 +69,21 @@ class Moon(QtWidgets.QWidget):
 		brng = np.rad2deg(brng)
 		return brng - 90
 
+	def resizeEvent(self, event):
+		w = self.width()
+		h = self.height()
+		lineThickness = h * golden * 0.01
+		self._radius = (h if h < w else w) * 0.48
+		self.moonPath = self.drawMoon()
+		self.moonFull.clear()
+		self.moonFull.addEllipse(self.rect().center(), self._radius, self._radius)
+
+		super(Moon, self).resizeEvent(event)
+
+	def update(self):
+		self.moonPath = self.drawMoon()
+		super(Moon, self).update()
+
 	@staticmethod
 	def deg2dms(dd: float) -> Tuple[float, float, float]:
 		mnt, sec = divmod(dd * 3600, 60)
@@ -69,110 +98,83 @@ class Moon(QtWidgets.QWidget):
 		ascension = np.deg2rad(ascension)
 		declination = np.deg2rad(declination)
 
-		cx, cy = self.width() / 2, self.height() / 2
-
-		return (float(np.sin(ascension) * np.sin(declination) * r) + cx,
-		        float(np.cos(declination) * r) + cy,
+		c = self.rect().center()
+		return (float(np.sin(ascension) * np.sin(declination) * r) + c.x(),
+		        float(np.cos(declination) * r) + c.y(),
 		        float(np.cos(ascension) * np.sin(declination) * r))
 
 	def paintEvent(self, event: QtGui.QPaintEvent) -> None:
 
-		w = self.width()
-		h = self.height()
+		self.painter.begin(self)
 
-		self._radius = (h if h < w else w) * 0.4
+		self.painter.setRenderHint(QPainter.HighQualityAntialiasing)
+		self.painter.setRenderHint(QPainter.Antialiasing)
 
-		lineThickness = self.height() * golden * 0.01
-		lineThickness = 1
-		r = 100
-
-		painter = QPainter()
-		painter.begin(self)
-
+		c = self.rect().center()
 		if self._rotation:
-			painter.translate(w / 2, h / 2)
-			painter.rotate(self._rotation)
-			painter.translate(-(w / 2), -(h / 2))
+			self.painter.translate(c.x(), c.y())
+			self.painter.rotate(self._rotation)
+			self.painter.translate(-c.x(), -c.y())
 
-		painter.setRenderHint(QPainter.HighQualityAntialiasing)
-		painter.setRenderHint(QPainter.Antialiasing)
+		# Draw entire sphere
+		self.painter.setBrush(QBrush(dark))
+		self.painter.drawPath(self.moonFull)
 
-		blackPen = QPen(QtCore.Qt.black, 5)
-		whitePen = QPen(Default.main, 0, j=QtCore.Qt.PenJoinStyle.MiterJoin)
-		redPen = QPen(QtCore.Qt.red, 5)
+		# Draw the illuminated bit
+		self.painter.setBrush(self.mainColor)
+		# self.painter.setPen(QPen(self.mainColor, 0, j=QtCore.Qt.PenJoinStyle.MiterJoin))
+		self.painter.drawPath(self.moonPath)
 
-		# moon.setFillRule(QtCore.Qt.WindingFill)
+		self.painter.end()
 
-		phase = self.getDegree()
-
-		one4 = QtGui.QColor(255, 255, 255, 32)
-		half = QtGui.QColor(255, 255, 255, 128)
-		three4 = QtGui.QColor(255, 255, 255, 192)
-		full = QtGui.QColor(255, 255, 255, 255)
-
-		self.drawMoon(painter, self._phase, full)
-
-		# This sorta works for drawing a gradient phase
-		# TODO: Find a more efficient method for this
-		# for x in range(0, 16):
-		# 	self.drawMoon(painter, self._phase + x/1000, one4)
-		#
-		painter.end()
-
-	def drawMoon(self, painter, phase: float, color):
+	def drawMoon(self) -> QPainterPath:
+		color = self.mainColor
+		phase = self._phase
 		brush = QtGui.QBrush(color)
 		pen = QPen(color, 0)
 		moon = QPainterPath()
 		phase *= 360
 
-		if phase < 10:
-			h = self.height() / 500
-			border = QPen(color, h)
-			self.drawCircle(painter, dark, border)
-		elif phase < 180:
-			self.drawCircle(painter, dark)
+		## Todo: try to rewrite this to use an ellipse rather than 240 lines
+
+		'''
+		pen = QPen(Qt.red, 10)
+		self.painter.setPen(QColor(Qt.red))
+		path = QPainterPath()
+		rect = QRect()
+		_, t, _ = self.sphericalToCartesian(self._phase * 360, 180)
+		r, b, _ = self.sphericalToCartesian(self._phase * 360, 360)
+		l, _, _ = self.sphericalToCartesian(self._phase * 360, 270)
+		rect.setTop(t)
+		rect.setRight(r)
+		rect.setLeft(l)
+		rect.setBottom(b)
+		path.arcTo(rect, 0, 360.0)
+		# path.addRect(rect)
+		self.painter.drawPath(path)
+		'''
+
+		if phase < 180:
 			x, y, z = self.sphericalToCartesian(phase, 0)
 			moon.moveTo(x, y)
-			for i in range(0, 180):
+			for i in range(0, 180, 3):
 				x, y, z = self.sphericalToCartesian(phase, i)
 				moon.lineTo(x, y)
-			for i in range(180, 360):
+			for i in range(180, 360, 3):
 				x, y, z = self.sphericalToCartesian(180, i)
-				moon.lineTo(x, y)
-		elif phase < 350:
-			self.drawCircle(painter, dark)
-			x, y, z = self.sphericalToCartesian(phase, 0)
-			moon.moveTo(x, y)
-			for i in range(0, 180):
-				x, y, z = self.sphericalToCartesian(180, i)
-				moon.lineTo(x, y)
-			for i in range(180, 360):
-				x, y, z = self.sphericalToCartesian(phase, i)
 				moon.lineTo(x, y)
 		else:
-			h = self.height() / 500
-			border = QPen(color, h)
-			self.drawCircle(painter, dark, border)
+			x, y, z = self.sphericalToCartesian(phase, 0)
+			moon.moveTo(x, y)
+			for i in range(0, 180, 3):
+				x, y, z = self.sphericalToCartesian(180, i)
+				moon.lineTo(x, y)
+			for i in range(180, 360, 3):
+				x, y, z = self.sphericalToCartesian(phase, i)
+				moon.lineTo(x, y)
 
 		moon.closeSubpath()
-
-		painter.setPen(pen)
-		painter.setBrush(brush)
-		painter.drawPath(moon)
-
-	def drawCircle(self, painter, color: QColor, border: QPen = None):
-		path = QPainterPath()
-		fill = QtGui.QBrush(color)
-		_, y, _ = self.sphericalToCartesian(0, 180)
-		_, r, _ = self.sphericalToCartesian(0, 0)
-		x, _, _ = self.sphericalToCartesian(0, 270)
-		path.addEllipse(x, y, r - y, r - y)
-		painter.setBrush(fill)
-		painter.setPen(border)
-		painter.drawPath(path)
-
-	def getDegree(self) -> float:
-		return self._phase * 12
+		return moon
 
 	@Property(float)
 	def phase(self) -> float:
@@ -182,6 +184,10 @@ class Moon(QtWidgets.QWidget):
 	def phase(self, value: float):
 		self._phase = value
 		self.update()
+
+	@property
+	def hitBox(self):
+		return self.moonFull
 
 
 class Example(QWidget):
