@@ -10,6 +10,7 @@ COLOR_SEQ = "\033[1;%dm"
 BOLD_SEQ = "\033[1m"
 
 
+
 def formatter_message(message, use_color=True):
 	if use_color:
 		message = message.replace("$RESET", RESET_SEQ).replace("$BOLD", BOLD_SEQ)
@@ -41,11 +42,11 @@ class ColoredFormatter(logging.Formatter):
 
 
 class ColoredLogger(logging.Logger):
-	FORMAT = "[$BOLD%(name)-20s$RESET][%(levelname)-18s]  %(message)s ($BOLD%(filename)s$RESET:%(lineno)d)"
+	FORMAT = "[$BOLD%(name)-30s$RESET][%(levelname)-18s]  %(message)s ($BOLD%(filename)s$RESET:%(lineno)d)"
 	COLOR_FORMAT = formatter_message(FORMAT, True)
 
 	def __init__(self, name):
-		logging.Logger.__init__(self, name, logging.INFO)
+		logging.Logger.__init__(self, name, logging.DEBUG)
 
 		color_formatter = ColoredFormatter(self.COLOR_FORMAT)
 

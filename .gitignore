@@ -228,3 +228,4 @@ cython_debug/
 /config.ini
 /Arduino/
 /Pipfile.lock
+/.vscode/

@@ -106,7 +106,7 @@ class Forecast:
 
 		return True
 
-	def buildDictionary(self):
+	def builddict(self):
 
 		data: dict[str, Union[list, str]] = {'timestamp': [], 'timestampInt': [], 'type': self.forecastType,
 		                                     'units':     {}}
@@ -204,7 +204,7 @@ class Forecast:
 		return brng
 
 	def findTransit(self, date: datetime, mi) -> datetime:
-		mi.update(date)
+		mi.update(date, )
 		a = mi.rise_set_times(date.tzinfo.zone)
 		for x in a:
 			if 'transit' in x:
@@ -223,9 +223,6 @@ class Forecast:
 	def fieldFilter(self, requested: Union[list[str], str], forecastType: str) -> list[str]:
 		# return list(set(requested).intersection(forecastType)) or list(forecastType)
 		return list(set(requested).intersection(forecastType))
-
-	def buildInterpolatedList(self):
-		smoothed = {}
 
 	def minMaxP2P(self) -> tuple[float, float, float]:
 		arr = np.concatenate(((self.data['feels_like']), (self.data['temp']), (self.data['dewpoint'])), axis=0)
@@ -251,7 +248,7 @@ class Forecast:
 		     'wind_direction':              True
 		     }
 
-		output: dict[str, Union[list, str, int]] = self.buildDictionary()
+		output: dict[str, Union[list, str, int]] = self.builddict()
 
 		for measurement in inputData:
 			time = formatDate(measurement.observation_time, config.tz, utc=True)
@@ -310,7 +307,7 @@ class Forecast:
 	# def combineForecasts(self):
 	# 	# def combineForecasts(self, forecasts: Union[list[str], str, None], fields: Union[list[str], str]) -> dict[str, np.array]:
 	#
-	# 	dictionary = {'timestamp': self.dateArray()}
+	# 	dict = {'timestamp': self.dateArray()}
 	# 	commonFields = set(self.fields)
 	# 	if self.historical:
 	# 		commonFields = set(self.historical.keys()).intersection(commonFields)
@@ -341,10 +338,10 @@ class Forecast:
 	#
 	# 		if 'daily' in forecasts and field in self.daily.keys():
 	# 			valueArray += self.daily[field]
-	# 		dictionary[field] = np.array(valueArray)
+	# 		dict[field] = np.array(valueArray)
 	#
 	# 	### TODO: add unit value
-	# 	return dictionary
+	# 	return dict
 
 	def makeItRain(self, length: int) -> np.ndarray:
 		np.random.seed(19680801)
