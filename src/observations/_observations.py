@@ -117,12 +117,12 @@ class DateKey(int):
 
 
 class ObservationDict(dict):
-	_source: 'API'
+	_api: 'API'
 	_time: datetime
 
 	def __init__(self, source: 'API', *args, **kwargs):
 		super(ObservationDict, self).__init__()
-		self._source = source
+		self._api = source
 
 	@property
 	def period(self) -> timedelta:
@@ -206,8 +206,8 @@ class Observation(ObservationDict):
 			return parse(value).astimezone(config.tz)
 
 	@property
-	def source(self) -> 'API':
-		return self._source
+	def api(self) -> 'API':
+		return self._api
 
 	@classmethod
 	def timeKey(cls, data) -> str:
@@ -325,7 +325,7 @@ class ObservationRealtime(Observation):
 			for item in receiver:
 				key = item.subscriptionKey
 				signal = item.updateSignal
-				item.api = self.source
+				item.api = self.api
 				try:
 					item.suggestTitle(self[key].title)
 					if isinstance(key, tuple):
