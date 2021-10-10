@@ -1,13 +1,16 @@
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from functools import cached_property
 from operator import attrgetter
 from typing import Dict, Iterable, List, Optional, Union
 
-import numpy as np
 import requests
+import socketio
+import websocket
+from PySide2.QtCore import QObject, QThread, QTimer, Signal, Slot
 
-from .errors import APIError, InvalidCredentials, RateLimitExceeded
+from src.api.errors import APIError, InvalidCredentials, RateLimitExceeded
 from src.observations import Observation, ObservationDict, ObservationForecast, ObservationRealtime, MeasurementForecast
 from src.utils import closest, Period
 
@@ -330,6 +333,14 @@ class API:
 		headers = {**self._baseHeaders, **self._headers, **headers}
 		return headers
 
+	def connectSocket(self):
+		self.socket.signal.connect(self.socketUpdate)
+
+	@Slot(dict)
+	def socketUpdate(self, data: dict):
+		data = self._normalizeData(data)
+		self.realtime.update(data)
+
 	@property
 	def realtime(self):
 		if self._realtime is None:
@@ -343,10 +354,6 @@ class API:
 	@property
 	def daily(self):
 		return self._endpoints.daily
-
-	@classmethod
-	def annotation(cls):
-		f = [t for t in a if issubclass(t, API)]
 
 	@classmethod
 	def getParent(cls):
