@@ -39,6 +39,106 @@ class URLs:
 		return self.default
 
 
+class Messenger(QObject):
+	signal: Signal = Signal(Observation)
+
+	def __init__(self, *args, **kwargs):
+		super(Messenger, self).__init__(*args, **kwargs)
+
+	def push(self, message: Observation):
+		self.signal.emit(message)
+
+
+class SocketIOMessenger(QThread, Messenger):
+	connected = Signal()
+	disconnected = Signal()
+	error_ocurred = Signal(object, name="errorOcurred")
+	data_changed = Signal(str, name="dataChanged")
+	station: 'API'
+
+	url: str
+	params: dict
+	socketParams: dict
+
+	def __init__(self, station: 'API', url: str, params: dict = {}, *args, **kwargs):
+		self.url = url
+		self.station = station
+		self.params = params
+		super(SocketIOMessenger, self).__init__(*args, **kwargs)
+		self.socket.on("connect", self._connect)
+		self.socket.on("disconnect", self._disconnect)
+		self.socket.on('*', self._anything)
+
+	@cached_property
+	def socket(self):
+		return socketio.Client(
+				reconnection=True,
+				reconnection_attempts=3,
+				reconnection_delay=5,
+				reconnection_delay_max=5
+		)
+
+	def run(self):
+		self.socket.connect(url=self.url, **self.socketParams)
+
+	def begin(self):
+		self.start()
+
+	def end(self):
+		self.socket.disconnect()
+
+	def _anything(self, data):
+		log.warning('Catchall for SocketIO used')
+		log.debug(data)
+
+	def _connect(self):
+		pass
+
+	def _disconnect(self):
+		pass
+
+
+class WSMessenger(QThread, Messenger):
+	urlBase = ''
+
+	@property
+	def url(self):
+		return self.urlBase
+
+	def __init__(self, parent=None):
+		super(WSMessenger, self).__init__(parent)
+		self.socket = websocket.WebSocketApp(self.url,
+		                                     on_open=self.on_open,
+		                                     on_message=self.on_message,
+		                                     on_error=self.on_error,
+		                                     on_close=self.on_close)
+
+	def run(self):
+		self.WS.run_forever()
+
+	def begin(self):
+		self.start()
+
+	def end(self):
+		self.socket.close()
+
+	def on_open(self, ws):
+		pass
+
+	def on_message(self, ws, message):
+		pass
+
+	def on_error(self, ws, error: bytes):
+		pass
+
+	def on_close(self, ws):
+		log.info(f'Socket {self.__class__.__name__}')
+		print("### closed ###")
+
+	def terminate(self):
+		self.socket.close()
+
+
 class EndpointList(list):
 
 	def insert(self, value: ObservationDict):
