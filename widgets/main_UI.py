@@ -35,7 +35,6 @@ class Ui_weatherDisplay(object):
         weatherDisplay.setFont(font)
         self.centralwidget = QWidget(weatherDisplay)
         self.centralwidget.setObjectName(u"centralwidget")
-        self.centralwidget.setEnabled(True)
         self.centralwidget.setAutoFillBackground(False)
         self.gridLayout_3 = QGridLayout(self.centralwidget)
         self.gridLayout_3.setObjectName(u"gridLayout_3")
@@ -257,7 +256,7 @@ class Ui_weatherDisplay(object):
 
         self.gridLayout_3.addWidget(self.topLeft, 0, 0, 1, 1)
 
-        weatherDisplay.setCentralWidget(self.centralwidget)
+        # weatherDisplay.setCentralWidget(self.centralwidget)
 
         self.retranslateUi(weatherDisplay)
 

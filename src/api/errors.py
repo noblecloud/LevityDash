@@ -1,7 +1,7 @@
-
-
 class APIError(Exception):
-	pass
+	def __init__(self, *args, **kwargs):
+		self.data = args[0]
+		super(APIError, self).__init__(*args)
 
 
 class RateLimitExceeded(APIError):

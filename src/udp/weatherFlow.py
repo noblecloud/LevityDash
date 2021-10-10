@@ -1,41 +1,13 @@
 import logging
 from datetime import datetime
-import random
 
+from WeatherUnits import Measurement
 from WeatherUnits.defaults.WeatherFlow import *
+from src.translators.units import unitDict
+from src.observations.weatherFlow import unitDefinitions
 from src import config
 
-classAtlas = {
-		'time':                   int,
-		'lullSpeed':              'Wind',
-		'windSpeed':              'Wind',
-		'gustSpeed':              'Wind',
-		'speed':                  'Wind',
-		'direction':              Direction,
-		'windDirection':          Direction,
-
-		'windSampleInterval':     Second,
-		'pressure':               mmHg,
-		'temperature':            Celsius,
-		'humidity':               Humidity,
-
-		'illuminance':            Lux,
-		'uvi':                    UVI,
-		'irradiance':             RadiantFlux,
-
-		'precipitationHourlyRaw': 'Precipitation',
-		'precipitationType':      PrecipitationType,
-
-		'distance':               Kilometer,
-		'lightningDistance':      Kilometer,
-		'lightning':              Strikes,
-		'energy':                 int,
-
-		'battery':                Voltage,
-		'reportInterval':         Minute,
-		'Wind':                   (Wind, Meter, Second),
-		'Precipitation':          (Precipitation, Millimeter, Minute)
-}
+log = logging.getLogger(__name__)
 
 
 class UDPMessage(dict):
@@ -44,45 +16,74 @@ class UDPMessage(dict):
 	             'hub':    'hub_sn',
 	             'data':   ''}
 	atlas = ['time']
-	interval: int = 6
+	interval: Time.Minute = 1
 
 	def __init__(self, udpData):
 		data = {key: udpData[value] for key, value in self.messAtlas.items()}
-		data['data'] = self.convert(data['data'])
-		t = data['data'].pop('time')
-		data['time'] = datetime.fromtimestamp(int(t), config.tz)
-		if 'interval' in data['data'].keys():
-			UDPMessage.interval = data['data']['interval']
-
+		if 'data' in data.keys():
+			data['data'] = self.convert(self.atlas, data['data'])
+			t = data['data'].pop('time')
+			data['time'] = datetime.fromtimestamp(int(t), config.tz)
+			if 'interval' in data['data'].keys():
+				UDPMessage.interval = data['data']['interval']
+		else:
+			data.pop('type')
+			dataNew = {}
+			for key, value in data.items():
+				cls = UDPClasses[key]
+				if issubclass(cls, Measurement):
+					t = unitDefinitions[key]
+					measurement = cls(value, title=t['title'], subscriptionKey=key)
+				else:
+					measurement = cls(value)
+				dataNew[key] = measurement
+			data = dataNew
+			data['time'] = datetime.fromtimestamp(int(data['time']), config.tz)
+			data['uptime'] = data['uptime'].day
 		super(UDPMessage, self).__init__(data)
 
-	def convert(self, data):
+	def convert(self, atlas, data):
 		if isinstance(data[0], list):
 			data = data[0]
 		converted = {}
 		for key, value in zip(self.atlas, data):
-			newClass = classAtlas[key]
+			newClass = UDPClasses[key]
 			if isinstance(newClass, str):
-				newClass, nClass, dClass = classAtlas[newClass]
+				t = unitDefinitions[key]
+				newClass, nClass, dClass = UDPClasses[newClass]
 				n = nClass(value)
-				d = dClass(UDPMessage.interval)
-				newValue = newClass(n, d)
+				d = dClass(1)
+				newValue = newClass(n, d, title=t['title'], subscriptionKey=key)
 			else:
-				newValue = newClass(value)
-			try:
-				converted[key] = newValue.localized
-			except AttributeError:
-				converted[key] = newValue
-		# print(converted)
-		# if 'speed' in converted.keys():
-		# 	speed = Meter(random.random() + random.randrange(0, 5, 1))
-		# 	direction = random.randrange(0, 359, 1)
-		# 	converted['speed'] = Wind(speed, Second(1))
-		# 	converted['direction'] = Direction(direction)
+				if issubclass(newClass, Measurement):
+					t = unitDefinitions[key]
+					newValue = newClass(value, title=t['title'], subscriptionKey=key)
+				else:
+					newValue = newClass(value)
+			if isinstance(newValue, Measurement):
+				try:
+					newValue = newValue.localize
+				except AttributeError:
+					log.debug(f'{newValue.withUnit} could not be localized')
+			converted[key] = newValue
 		return converted
 
 	def __setitem__(self, *args):
 		logging.error('UDP Messages are immutable')
+
+	def __repr__(self):
+		return f'{self.name}'
+
+	def __str__(self):
+		return f'{self.name}: {self.data}'
+
+	@property
+	def name(self):
+		return self.__class__.__name__
+
+	@property
+	def data(self):
+		return self['data'] if ('data' in self.keys()) else dict(self)
 
 
 class RainStart(UDPMessage):
@@ -96,7 +97,7 @@ class WindMessage(UDPMessage):
 
 	def __init__(self, udpData):
 		self.messAtlas['data'] = 'ob'
-		self.atlas = [*self.atlas, 'speed', 'direction']
+		self.atlas = [*self.atlas, 'windSpeed', 'windDirection']
 		super(WindMessage, self).__init__(udpData)
 		delattr(self, 'atlas')
 
@@ -116,23 +117,58 @@ class Light(UDPMessage):
 		delattr(self, 'atlas')
 
 
-class Obs_st(UDPMessage):
+class TempestObservation(UDPMessage):
 
 	def __init__(self, udpData):
 		self.messAtlas['data'] = 'obs'
 		self.atlas = [*self.atlas, 'lullSpeed', 'windSpeed', 'gustSpeed', 'windDirection',
 		              'windSampleInterval', 'pressure', 'temperature', 'humidity',
-		              'illuminance', 'uvi', 'irradiance', 'precipitationHourlyRaw',
-		              'precipitationType', 'lightningDistance', 'lightning',
+		              'illuminance', 'uvi', 'irradiance', 'precipitationRate',
+		              'precipitationType', 'lightningLastDistance', 'lightning',
 		              'battery', 'reportInterval']
-		super(Obs_st, self).__init__(udpData)
+		super(TempestObservation, self).__init__(udpData)
+
+
+class DeviceStatus(UDPMessage):
+	messAtlas = {
+			'deviceSerial': 'serial_number',
+			'type':         'type',
+			'hubSerial':    'hub_sn',
+			'time':         'timestamp',
+			'uptime':       'uptime',
+			'battery':      'voltage',
+			'firmware':     'firmware_revision',
+			'deviceRSSI':   'rssi',
+			'hubRSSI':      'hub_rssi',
+			'sensorStatus': 'sensor_status',
+			'debug':        'debug'
+	}
+
+	def __init__(self, udpData):
+		self.atlas = []
+		super(DeviceStatus, self).__init__(udpData)
+
+
+class HubStatus(UDPMessage):
+	messAtlas = {'hubSerial':  'serial_number',
+	             'type':       'type',
+	             'time':       'timestamp',
+	             'uptime':     'uptime',
+	             'firmware':   'firmware_revision',
+	             'hubRSSI':    'rssi',
+	             'resetFlags': 'reset_flags'
+	             }
+
+	def __init__(self, udpData):
+		self.atlas = []
+		super(HubStatus, self).__init__(udpData)
 
 
 class Lightning(UDPMessage):
 
 	def __init__(self, udpData):
 		self.messAtlas['data'] = 'evt'
-		self.atlas = [*self.atlas, 'distance', 'energy']
+		self.atlas = [*self.atlas, 'lightningLastDistance', 'lightningEnergy']
 		super(Lightning, self).__init__(udpData)
 		delattr(self, 'atlas')
 
@@ -175,7 +211,7 @@ if __name__ == '__main__':
 					m = RainStart(data)
 					print(m.message)
 				if data['type'] == 'obs_st':
-					m = Obs_st(data)
+					m = TempestObservation(data)
 					print(m.message)
 				elif data['type'] == 'rapid_wind' and data['ob'][1] > 0:
 					m = WindMessage(data)

@@ -1,17 +1,27 @@
 from typing import Optional, Union
 
-from PyQt5.QtGui import QFont, QPainter
-from PySide2.QtCore import QSize, Qt, Signal, Slot
-from PySide2.QtWidgets import QBoxLayout, QLabel, QSizePolicy, QWidget
-from WeatherUnits import Measurement
+from PySide2 import QtCore
+from PySide2.QtGui import QBrush, QColor, QDrag, QDragEnterEvent, QDragMoveEvent, QDropEvent, QFont, QMouseEvent, QPainter, QPainterPath, QPaintEvent, QPen, QPixmap
+from PySide2.QtCore import QEvent, QMimeData, QPoint, QPointF, QRect, QSize, Qt, Signal, Slot
+from PySide2.QtWidgets import QBoxLayout, QSizeGrip, QSizePolicy, QWidget
+from WeatherUnits.base import Measurement
 
-from ui.fonts import rounded, weatherGlyph
-from utils import Logger, randomColor
+from src.grid.Cell import Cell
+from src.fonts import rounded, weatherGlyph
+from src.utils import Logger
+from colors import randomColor
 from widgets.DynamicLabel import DynamicLabel
+from widgets.grip import Gripper
+
+
+class MimeDataOffset(QMimeData):
+	offset: QPointF = QPointF(0, 0)
 
 
 @Logger
 class ComplicationPrototype(QWidget):
+	sizeGripBR: QSizeGrip
+	_classColor = randomColor()
 	_direction: QBoxLayout.Direction = None
 	_title: Optional[str] = None
 	_widget: QWidget = None
@@ -29,9 +39,19 @@ class ComplicationPrototype(QWidget):
 	valueLabel: Optional[DynamicLabel]
 	titleLabel: Optional[DynamicLabel]
 	updateSignal = Signal(Measurement)
+	_debug: bool = False
+
+	@property
+	def subTitleUnit(self) -> bool:
+		return self._subTitleUnit
+
+	@subTitleUnit.setter
+	def subTitleUnit(self, value: bool):
+		self._subTitleUnit = value
 
 	def __init__(self, *args, title: str = None,
 	             value: Union[Measurement, float, int] = None,
+	             glyph: bool = False,
 	             widget: QWidget = None,
 	             direction: QBoxLayout.Direction = None,
 	             showTitle: bool = True,
@@ -40,10 +60,15 @@ class ComplicationPrototype(QWidget):
 	             miniature: bool = False,
 	             square: bool = False,
 	             subscriptionKey: str = None,
+	             subTitleUnit: bool = None,
+	             cell: Cell = None,
+	             debug: bool = False,
+	             placeholder: bool = False,
 	             **kwargs):
 
 		self._title = title
 		self._value = value
+		self._glyph = glyph
 		self._widget = widget
 		self._glyphTitle = glyphTitle
 		self._showTitle = showTitle
@@ -51,32 +76,75 @@ class ComplicationPrototype(QWidget):
 		self._direction = direction
 		self._square = square
 		self._subscriptionKey = subscriptionKey
+		self._subTitleUnit = subTitleUnit
+		self._color = randomColor()
+		self._cell = cell
+		self._showDelete = False
 
 		local = [item[1:] for item in ComplicationPrototype.__dict__.keys() if item[0:2] != '__' and item[0] == '_']
-		super(ComplicationPrototype, self).__init__(*args, **{key: item for key, item in kwargs.items() if key not in local})
-		# self.setAttribute(Qt.WA_TranslucentBackground, True)
-		# self.setAttribute(Qt.WA_NoSystemBackground, True)
-		# self.valueLabel.setAttribute(Qt.WA_NoSystemBackground, True)
-		# self.valueLabel.setAttribute(Qt.WA_TranslucentBackground, True)
-		# self.title.setAttribute(Qt.WA_NoSystemBackground, True)
-		# self.title.setAttribute(Qt.WA_TranslucentBackground, True)
+		# super(ComplicationPrototype, self).__init__(*args, **{key: item for key, item in kwargs.items() if key not in local})
+		super(ComplicationPrototype, self).__init__(parent=kwargs.get('parent', None))
+		# self.setAttribute(Qt.WA_TranslucentBackground)
+		self.setAttribute(Qt.WA_Hover)
 		self.updateSignal.connect(self.updateValueSlot)
-		policy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-		policy.setHeightForWidth(True)
-		self.setSizePolicy(policy)
+		if not cell:
+			self._cell = Cell(self, h=1, w=1)
+		elif isinstance(cell, dict):
+			self._cell = Cell(self, **cell)
+		self.setWindowFlag(Qt.SubWindow)
+		self.setMouseTracking(True)
 
+	# self._debug = True
+	# if debug:
 	# self.setAttribute(Qt.WA_StyledBackground, True)
-	# self.setStyleSheet(f"background: {randomColor()}")
+	# x = f'''
+	# background: {self._color};
+	# '''
+	# self.setStyleSheet(x)
+
+	def paintEvent(self, event):
+		p = QPainter(self)
+		if self._showDelete:
+			p.setBrush(QBrush(QColor(0.7, 0, 0, 0)))
+			# p.setPen(QColor(0, 0, 0, a=0.7))
+			p.drawRect(self.rect())
+		# pen.setWidth(self._lineWeight)
+		# pen.setColor(QColor(self._classColor))
+		# p.drawRect(self.rect())
+		super(ComplicationPrototype, self).paintEvent(event)
+
+	@property
+	def pix(self) -> QPixmap:
+		return self.grab(self.rect())
 
 	def resizeEvent(self, event):
-		if self._square:
-			new_size = QSize(10, 10)
-			new_size.scale(event.size(), Qt.KeepAspectRatio)
-			self.resize(new_size)
+		self.setGripper()
+		# if self._square:
+		# 	new_size = QSize(10, 10)
+		# 	new_size.scale(self.size(), Qt.KeepAspectRatio)
+		# 	# self.setMinimumSize(new_size)
+		# 	self.resize(new_size)
 		super(ComplicationPrototype, self).resizeEvent(event)
 
-	def heightForWidth(self, width):
-		return width
+	# def event(self, event):
+	# 	if event.type() == QEvent.HoverMove:
+	# 		if (event.pos() - self.rect().topRight()).manhattanLength() < 20:
+	# 			if not self._showDelete:
+	# 				print('delete area')
+	# 				self._showDelete = True
+	# 				self.repaint()
+	# 		else:
+	# 			if self._showDelete:
+	# 				print('leave delete area')
+	# 				self._showDelete = False
+	# 				self.repaint()
+	# 	return super().event(event)
+
+	# def eventFilter(self, obj, event):
+	# 	if event.type() == QtCore.QEvent.Enter:
+	#
+	# 		print('tset', obj)
+	# 	return super(ComplicationPrototype, self).eventFilter(obj, event)
 
 	@property
 	def subscriptionKey(self):
@@ -88,46 +156,18 @@ class ComplicationPrototype(QWidget):
 
 	@property
 	def canBalance(self):
-		return self.valueLabel.isVisible() and not self._isGrid
+		return hasattr(self, 'valueLabel') and self.valueLabel.isVisible() and not self._isGrid
+
+	def setValue(self, value):
+		self.value = value
 
 	@property
 	def shouldBeShown(self):
-		t = [self.value]
+		t = [self.value is not None]
 		return any(t)
 
-	@property
-	def isEmpty(self):
-		t = [self.value]
-		return not self.valueLabel.text
-
-	def update(self):
-		if self.shouldBeShown:
-			self.show()
-		else:
-			self.hide()
-		if self._showTitle and self.title:
-			if self.titleLabel.isGlyph:
-				self.titleLabel.setGlyph(self.title)
-			else:
-				self.titleLabel.setText(self.title)
-			self.titleLabel.show()
-		else:
-			self.titleLabel.hide()
-
-		if isinstance(self.value, QWidget):
-			self.valueWidget.show()
-			self.valueLabel.hide()
-			self.layout.removeWidget(self.valueWidget)
-			self.valueWidget = self.value
-			self.layout.addWidget(self.valueWidget)
-		elif isinstance(self.value, str):
-			self.valueLabel.setText(self.value)
-			self.valueLabel.show()
-			self.valueWidget.hide()
-		else:
-			pass
-		self.valueLabel.update()
-		super().update()
+	def autoShow(self):
+		self.show() if self.shouldBeShown else self.hide()
 
 	@property
 	def glyphTitle(self):
@@ -153,6 +193,22 @@ class ComplicationPrototype(QWidget):
 			self.titleLabel.hide()
 
 	@property
+	def showUnit(self) -> bool:
+		return self._showUnit
+
+	@showUnit.setter
+	def showUnit(self, value: bool):
+		self._showUnit = value
+
+	@property
+	def square(self):
+		return self._square
+
+	@square.setter
+	def square(self, value):
+		self._square = value
+
+	@property
 	def title(self):
 		title: Optional[str] = self._title if self._glyphTitle is None else self._glyphTitle
 		if isinstance(self._value, str):
@@ -172,7 +228,6 @@ class ComplicationPrototype(QWidget):
 	def value(self) -> Union[str, QWidget, None, Measurement]:
 		if isinstance(self._value, Measurement):
 			return self._value
-		# return self._value.withUnit if self._showUnit else str(self._value)
 		elif isinstance(self._value, QWidget):
 			return self._value
 		elif self._value is None:
@@ -183,9 +238,15 @@ class ComplicationPrototype(QWidget):
 	@value.setter
 	def value(self, value):
 		self.valueLabel.value = value
-		self.valueWidget.hide()
 		self._value = value
 		self.update()
+
+	def hit(self, sender, position):
+		p = self.mapFrom(sender, position)
+		return self.valueLabel.hit(sender, position), self.rect().contains(p)
+
+	def inHitBox(self, sender, position):
+		return self.geometry().contains(self.mapTo(sender, position))
 
 	@property
 	def widget(self):
@@ -197,7 +258,8 @@ class ComplicationPrototype(QWidget):
 		self._widget = value
 		self.layout.replaceWidget(oldWidget, value)
 		self._widget.show()
-		del oldWidget
+
+	# del oldWidget
 
 	@property
 	def showUnit(self) -> bool:
@@ -209,6 +271,14 @@ class ComplicationPrototype(QWidget):
 		self.update()
 
 	@property
+	def showTitle(self) -> bool:
+		return self._showTitle
+
+	@showTitle.setter
+	def showTitle(self, value: bool):
+		self._showTitle = value
+
+	@property
 	def layout(self) -> QBoxLayout:
 		return super().layout()
 
@@ -218,7 +288,7 @@ class ComplicationPrototype(QWidget):
 
 	@direction.setter
 	def direction(self, value):
-		self._direction = value
+		self._direction = None
 
 	@property
 	def maxFontSize(self):
@@ -226,7 +296,7 @@ class ComplicationPrototype(QWidget):
 
 	@property
 	def maxFontSizeTitle(self):
-		return self.titleLabel.maxSize if self.valueLabel.maxSize is not None else 20
+		return self.titleLabel.maxSize if self.valueLabel.maxSize is not None else 10
 
 	@Slot(Measurement)
 	def updateValueSlot(self, value):
@@ -234,7 +304,81 @@ class ComplicationPrototype(QWidget):
 		# print(f'{self} updated with {value}')
 		if hasattr(self.parent(), 'valueChangedSignal'):
 			self.parent().valueChangedSignal.emit(self)
+
 	# print(value)
 	# if not self._customTitle:
 	# 	self_title(f"{value.title} ({value.unit})" if self.showUnit else value.title)
 	# self.valueLabel.setText(str(value))
+
+	@property
+	def subscriptionKey(self):
+		if isinstance(self._value, Measurement):
+			return self._value.subscriptionKey
+		elif self._subscriptionKey is not None:
+			return self._subscriptionKey
+		elif self.title:
+			t = self.title
+			t = t.lower() if t.isupper() else t
+			t = t.replace(' ', '')
+			key = f"{t[0].lower()}{t[1:]}"
+			self._log.warning(f'A subscription key was not provided by this complications measurement; using {key} generated from the title')
+			return key
+		else:
+			return None
+
+	@subscriptionKey.setter
+	def subscriptionKey(self, value):
+		pass
+
+	def actionForPosition(self, position):
+		print(self, position)
+
+	@property
+	def cell(self):
+		return self._cell
+
+	@cell.setter
+	def cell(self, value):
+		self._cell = value
+
+	def autoSetCell(self):
+		self.cell.w = max(1, round(self.width() / self.parent().columnWidth))
+		self.cell.h = max(1, round(self.height() / self.parent().rowHeight))
+
+	def setGripper(self):
+		x = self.sizeGripBR.geometry()
+		x.moveBottom(self.rect().bottom())
+		x.moveRight(self.rect().right())
+		self.sizeGripBR.setGeometry(x)
+		x.moveLeft(self.rect().left())
+		self.sizeGripBL.setGeometry(x)
+
+	def mouseDoubleClickEvent(self, event):
+		if self._showDelete:
+			self.parent().yank(self)
+
+	def mouseMoveEvent(self, event: QMouseEvent):
+		print(event.pos())
+		super(ComplicationPrototype, self).mouseMoveEvent(event)
+
+	def startPickup(self):
+		self.mouseHoldTimer.stop()
+		i, child = self.parent().pluck(self)
+		if child is self:
+			self.hide()
+
+		info = MimeDataOffset()
+		info.setText(str(child))
+		drag = QDrag(child)
+		drag.setPixmap(child.pix)
+		drag.setHotSpot(child.rect().center())
+		drag.setParent(child)
+		drag.setMimeData(info)
+
+		status = drag.exec_()
+		# self.dragCancel(i, child, status, drag)
+
+		self.clickStart = None
+
+	def dragCancel(self, index, child, status, drag):
+		pass

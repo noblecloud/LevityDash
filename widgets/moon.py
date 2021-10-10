@@ -11,6 +11,7 @@ from PySide2.QtWidgets import QApplication, QDesktopWidget, QMessageBox, QSlider
 from pysolar import solar
 
 from src import config
+from widgets.Complication import LocalComplication
 
 golden = (1 + np.sqrt(5)) / 2
 dark = QColor(28, 29, 31, 255)
@@ -34,7 +35,6 @@ class Moon(QtWidgets.QWidget):
 		self._date = datetime.now(timezone.utc)
 		self.lat, self.lon = config.loc
 		self.mi = pylunar.MoonInfo(self.deg2dms(self.lat), self.deg2dms(self.lon))
-		self.painter = QPainter(self)
 		self.moonFull = QPainterPath()
 		self.mainColor = self.palette().midlight()
 		self.updateMoon()
@@ -105,8 +105,7 @@ class Moon(QtWidgets.QWidget):
 
 	def paintEvent(self, event: QtGui.QPaintEvent) -> None:
 
-		self.painter.begin(self)
-
+		self.painter = QPainter(self)
 		self.painter.setRenderHint(QPainter.HighQualityAntialiasing)
 		self.painter.setRenderHint(QPainter.Antialiasing)
 
@@ -188,6 +187,13 @@ class Moon(QtWidgets.QWidget):
 	@property
 	def hitBox(self):
 		return self.moonFull
+
+
+class MoonComplication(LocalComplication):
+
+	def __init__(self, *args, **kwargs):
+		super(MoonComplication, self).__init__(*args, **kwargs)
+		self.setWidget(Moon(self))
 
 
 class Example(QWidget):

@@ -19,13 +19,14 @@ class Ui_Frame(object):
     def setupUi(self, Frame):
         if not Frame.objectName():
             Frame.setObjectName(u"Frame")
-        Frame.resize(106, 100)
+        Frame.resize(73, 60)
         sizePolicy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
         sizePolicy.setHorizontalStretch(1)
         sizePolicy.setVerticalStretch(1)
         sizePolicy.setHeightForWidth(Frame.sizePolicy().hasHeightForWidth())
         Frame.setSizePolicy(sizePolicy)
-        Frame.setMinimumSize(QSize(50, 50))
+        Frame.setMinimumSize(QSize(60, 60))
+        Frame.setSizeIncrement(QSize(100, 100))
         font = QFont()
         font.setFamily(u"SF Compact Display")
         Frame.setFont(font)
@@ -42,24 +43,11 @@ class Ui_Frame(object):
 
         self.valueLabel = DynamicLabel(Frame)
         self.valueLabel.setObjectName(u"valueLabel")
-        sizePolicy1 = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        sizePolicy1.setHorizontalStretch(0)
-        sizePolicy1.setVerticalStretch(5)
-        sizePolicy1.setHeightForWidth(self.valueLabel.sizePolicy().hasHeightForWidth())
-        self.valueLabel.setSizePolicy(sizePolicy1)
 
         self.verticalLayout.addWidget(self.valueLabel)
 
-        self.valueWidget = QWidget(Frame)
-        self.valueWidget.setObjectName(u"valueWidget")
-        sizePolicy1.setHeightForWidth(self.valueWidget.sizePolicy().hasHeightForWidth())
-        self.valueWidget.setSizePolicy(sizePolicy1)
-
-        self.verticalLayout.addWidget(self.valueWidget)
-
-        self.verticalLayout.setStretch(0, 2)
-        self.verticalLayout.setStretch(1, 7)
-        self.verticalLayout.setStretch(2, 7)
+        self.verticalLayout.setStretch(0, 1)
+        self.verticalLayout.setStretch(1, 9)
 
         self.retranslateUi(Frame)
 

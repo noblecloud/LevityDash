@@ -10,7 +10,7 @@ class _Config(ConfigParser):
 	def __init__(self, *args, **kwargs):
 		rootPath = Path(__file__).parent.parent
 		self.path = rootPath.joinpath('config.ini')
-		super(_Config, self).__init__(*args, **kwargs)
+		super(_Config, self).__init__(allow_no_value=True, *args, **kwargs)
 		self.read()
 
 	def read(self, *args, **kwargs):
@@ -32,8 +32,12 @@ class _Config(ConfigParser):
 		return self['AmbientWeather']
 
 	@property
-	def cc(self):
-		return self['ClimaCell']
+	def tmrrow(self):
+		return self['TomorrowIO']
+
+	@property
+	def solcast(self):
+		return self['Solcast']
 
 	@property
 	def tz(self):
@@ -45,6 +49,10 @@ class _Config(ConfigParser):
 	@property
 	def loc(self):
 		return float(self['Location']['lat']), float(self['Location']['lon'])
+
+	@property
+	def locStr(self):
+		return f"{float(self['Location']['lat'])}, {float(self['Location']['lon'])}"
 
 	@property
 	def lat(self):

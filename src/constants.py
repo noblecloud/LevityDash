@@ -72,7 +72,7 @@ class fields:
 	                         'sunset', 'cloud_cover', 'cloud_ceiling', 'cloud_base', 'surface_shortwave_radiation',
 	                         'weather_code']
 
-	dictionary: dict[str, list[str]] = {'realtime': REALTIME, 'nowcast': NOWCAST, 'hourly': HOURLY, 'daily': DAILY}
+	values: dict[str, list] = {'realtime': REALTIME, 'nowcast': NOWCAST, 'hourly': HOURLY, 'daily': DAILY}
 
 
 FORECAST_TYPES = ['historical', 'realtime', 'nowcast', 'hourly', 'daily']
@@ -279,7 +279,7 @@ class EaseFade(FadeFilter):
 			flare[x] = flare[x - 1] * 1.01
 
 		# index = 0
-		# for x in range(size-middle, size):
+		# for x in range(minSize-middle, minSize):
 		# 	y = flare[x]
 		# 	z = flare[x - 1] - (0.94 * index)
 		# 	flare[x] = flare[x - 1] - (0.85 * index)
