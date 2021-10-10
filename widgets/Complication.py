@@ -1,17 +1,15 @@
 import logging
 from typing import Optional
 
-from PySide2 import QtSvg
-from PySide2.QtGui import QDrag, QFont, QMouseEvent, QPainter, QResizeEvent
-from PySide2.QtWidgets import QDialogButtonBox, QFrame, QLineEdit, QMessageBox, QSizeGrip, QSizePolicy, QVBoxLayout, QWidget
+from PySide2.QtGui import QFont, QMouseEvent, QPainter, QResizeEvent
+from PySide2.QtWidgets import QDialogButtonBox, QFrame, QLineEdit, QMessageBox, QSizePolicy, QVBoxLayout, QWidget
 
 from src.api import API
 from colors import randomColor
 from src.grid.Cell import Cell
-from src.observations._observations import Observation, ObservationRealtime
 from src.fonts import compact, rounded
-from ui.Complication_UI import Ui_Frame
-from PySide2.QtCore import QEvent, QMimeData, QPoint, QRect, QSize, Qt, QTimer
+from ui.Complication_UI import ui
+from PySide2.QtCore import QEvent, QPoint, QRect, Qt, QTimer
 
 from WeatherUnits.base import Measurement
 
@@ -22,7 +20,7 @@ from widgets.Proto import ComplicationPrototype
 log = logging.getLogger(__name__)
 
 
-class Complication(Ui_Frame, ComplicationPrototype):
+class Complication(ui, ComplicationPrototype):
 	sizeGripBR: Gripper = None
 	innerHitBox: QRect
 	clickStart: Optional[QPoint] = None

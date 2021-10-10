@@ -18,6 +18,3 @@
 #windRose {
 	background-color: none;
 }
-#directionLabel {
-	margin: -20px;
-}
