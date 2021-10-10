@@ -2,16 +2,16 @@ import logging
 from typing import Any
 
 from _easyDict import SmartDictionary
-from src.observations.ambientWeather import AWObservation
-from src.observations.weatherFlow import WFObservation
+from src.observations.ambientWeather import AWObservationSingle
+from src.observations.weatherFlow import WFObservationSingle
 from src.translators import Translator, WFTranslator
 
 logging.getLogger().setLevel(logging.INFO)
 
 
 class _WeatherStation:
-	__indoor: AWObservation
-	__outdoor: AWObservation
+	__indoor: AWObservationSingle
+	__outdoor: AWObservationSingle
 	__currentWeather: Any
 	__translator = Translator
 
@@ -25,7 +25,7 @@ class WeatherFlowStation(_WeatherStation):
 
 	def __init__(self, data):
 		observationData = data['obs'][0]
-		__currentWeather = WFObservation(observationData)
+		__currentWeather = WFObservationSingle(observationData)
 
 
 class AmbientWeatherStation:
@@ -40,9 +40,6 @@ class AmbientWeatherStation:
 	         'solarradiation': None, 'uv': None, 'feelsLike': None, 'dewPoint': None, 'feelsLikein': None,
 	         'dewPointin':     None,
 	         'lastRain':       None, 'tz': None, 'date': None}
-
-	def __init__(self, data: SmartDictionary):
-		print(data)
 
 	@property
 	def coordinates(self) -> tuple[float, float]:

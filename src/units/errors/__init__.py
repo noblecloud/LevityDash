@@ -1,2 +1,0 @@
-class BadConversion(Exception):
-	pass
