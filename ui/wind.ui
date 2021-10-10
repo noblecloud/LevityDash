@@ -1,377 +1,186 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>Frame</class>
- <widget class="QFrame" name="Frame">
-	 <property name="geometry">
-		 <rect>
-			 <x>0</x>
-			 <y>0</y>
-			 <width>447</width>
-			 <height>472</height>
-		 </rect>
-	 </property>
-	 <property name="minimumSize">
-		 <size>
-			 <width>447</width>
-			 <height>471</height>
-		 </size>
-	 </property>
-	 <property name="baseSize">
-		 <size>
-			 <width>479</width>
-			 <height>471</height>
-		 </size>
-	 </property>
-	 <property name="font">
-		 <font>
-			 <family>SF Pro Rounded</family>
-		 </font>
-	 </property>
-	 <property name="windowTitle">
-		 <string>Frame</string>
-	 </property>
-	 <property name="frameShape">
-		 <enum>QFrame::StyledPanel</enum>
-	 </property>
-	 <property name="frameShadow">
-		 <enum>QFrame::Raised</enum>
-	 </property>
-	 <layout class="QVBoxLayout" name="verticalLayout_2">
-		 <property name="spacing">
-			 <number>0</number>
-		 </property>
-		 <property name="leftMargin">
-			 <number>0</number>
-		 </property>
-		 <property name="topMargin">
-			 <number>15</number>
-		 </property>
-		 <property name="rightMargin">
-			 <number>0</number>
-		 </property>
-		 <property name="bottomMargin">
-			 <number>15</number>
-		 </property>
-		 <item>
-			 <widget class="QFrame" name="mainFrame">
-				 <property name="sizePolicy">
-					 <sizepolicy hsizetype="Preferred" vsizetype="MinimumExpanding">
-						 <horstretch>0</horstretch>
-						 <verstretch>10</verstretch>
-					 </sizepolicy>
-				 </property>
-				 <layout class="QVBoxLayout" name="verticalLayout" stretch="1,2,1">
-					 <property name="spacing">
-						 <number>0</number>
-					 </property>
-					 <property name="leftMargin">
-						 <number>0</number>
-					 </property>
-					 <property name="topMargin">
-						 <number>0</number>
-					 </property>
-					 <property name="rightMargin">
-						 <number>0</number>
-					 </property>
-					 <property name="bottomMargin">
-						 <number>0</number>
-					 </property>
-					 <item>
-						 <spacer name="topSpacer">
-							 <property name="orientation">
-								 <enum>Qt::Vertical</enum>
-							 </property>
-							 <property name="sizeType">
-								 <enum>QSizePolicy::Fixed</enum>
-							 </property>
-							 <property name="sizeHint" stdset="0">
-								 <size>
-									 <width>20</width>
-									 <height>130</height>
-								 </size>
-							 </property>
-						 </spacer>
-					 </item>
-					 <item>
-						 <layout class="QVBoxLayout" name="centerCluster" stretch="5,2">
-							 <property name="spacing">
-								 <number>0</number>
-							 </property>
-							 <item>
-								 <widget class="QLabel" name="directionLabel">
-									 <property name="sizePolicy">
-										 <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-											 <horstretch>0</horstretch>
-											 <verstretch>0</verstretch>
-										 </sizepolicy>
-									 </property>
-									 <property name="minimumSize">
-										 <size>
-											 <width>0</width>
-											 <height>75</height>
-										 </size>
-									 </property>
-									 <property name="maximumSize">
-										 <size>
-											 <width>16777215</width>
-											 <height>80</height>
-										 </size>
-									 </property>
-									 <property name="font">
-										 <font>
-											 <family>SF Pro Rounded</family>
-											 <pointsize>62</pointsize>
-											 <weight>75</weight>
-											 <bold>true</bold>
-										 </font>
-									 </property>
-									 <property name="text">
-										 <string>W</string>
-									 </property>
-									 <property name="alignment">
-										 <set>Qt::AlignBottom|Qt::AlignHCenter</set>
-									 </property>
-								 </widget>
-							 </item>
-							 <item>
-								 <widget class="QLabel" name="speedLabel">
-									 <property name="sizePolicy">
-										 <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
-											 <horstretch>0</horstretch>
-											 <verstretch>0</verstretch>
-										 </sizepolicy>
-									 </property>
-									 <property name="maximumSize">
-										 <size>
-											 <width>16777215</width>
-											 <height>110</height>
-										 </size>
-									 </property>
-									 <property name="font">
-										 <font>
-											 <family>SF Pro Rounded</family>
-											 <pointsize>104</pointsize>
-											 <weight>75</weight>
-											 <bold>true</bold>
-										 </font>
-									 </property>
-									 <property name="text">
-										 <string>2.2</string>
-									 </property>
-									 <property name="alignment">
-										 <set>Qt::AlignBottom|Qt::AlignHCenter</set>
-									 </property>
-									 <property name="indent">
-										 <number>0</number>
-									 </property>
-								 </widget>
-							 </item>
-						 </layout>
-					 </item>
-					 <item>
-						 <spacer name="bottomSpacer">
-							 <property name="orientation">
-								 <enum>Qt::Vertical</enum>
-							 </property>
-							 <property name="sizeType">
-								 <enum>QSizePolicy::Fixed</enum>
-							 </property>
-							 <property name="sizeHint" stdset="0">
-								 <size>
-									 <width>20</width>
-									 <height>90</height>
-								 </size>
-							 </property>
-						 </spacer>
-					 </item>
-				 </layout>
-			 </widget>
-		 </item>
-		 <item>
-			 <widget class="QFrame" name="subDataFrame">
-				 <property name="sizePolicy">
-					 <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
-						 <horstretch>0</horstretch>
-						 <verstretch>1</verstretch>
-					 </sizepolicy>
-				 </property>
-				 <property name="font">
-					 <font>
-						 <family>SF Pro Rounded</family>
-						 <pointsize>29</pointsize>
-						 <weight>50</weight>
-						 <bold>false</bold>
-					 </font>
-				 </property>
-				 <layout class="QHBoxLayout" name="horizontalLayout_3" stretch="1,1">
-					 <property name="spacing">
-						 <number>10</number>
-					 </property>
-					 <property name="leftMargin">
-						 <number>0</number>
-					 </property>
-					 <property name="topMargin">
-						 <number>0</number>
-					 </property>
-					 <property name="rightMargin">
-						 <number>0</number>
-					 </property>
-					 <property name="bottomMargin">
-						 <number>0</number>
-					 </property>
-					 <item>
-						 <layout class="QHBoxLayout" name="horizontalLayout_2">
-							 <property name="spacing">
-								 <number>0</number>
-							 </property>
-							 <item>
-								 <spacer name="leftSubSpacer">
-									 <property name="orientation">
-										 <enum>Qt::Horizontal</enum>
-									 </property>
-									 <property name="sizeType">
-										 <enum>QSizePolicy::Minimum</enum>
-									 </property>
-									 <property name="sizeHint" stdset="0">
-										 <size>
-											 <width>40</width>
-											 <height>0</height>
-										 </size>
-									 </property>
-								 </spacer>
-							 </item>
-							 <item>
-								 <widget class="QLabel" name="maxTitle">
-									 <property name="sizePolicy">
-										 <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
-											 <horstretch>6</horstretch>
-											 <verstretch>3</verstretch>
-										 </sizepolicy>
-									 </property>
-									 <property name="font">
-										 <font>
-											 <family>SF Pro Rounded</family>
-											 <pointsize>33</pointsize>
-											 <weight>75</weight>
-											 <bold>true</bold>
-										 </font>
-									 </property>
-									 <property name="text">
-										 <string>Lull:</string>
-									 </property>
-									 <property name="alignment">
-										 <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-									 </property>
-									 <property name="buddy">
-										 <cstring>maxValueLabel</cstring>
-									 </property>
-								 </widget>
-							 </item>
-							 <item>
-								 <widget class="QLabel" name="maxValueLabel">
-									 <property name="sizePolicy">
-										 <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
-											 <horstretch>6</horstretch>
-											 <verstretch>9</verstretch>
-										 </sizepolicy>
-									 </property>
-									 <property name="font">
-										 <font>
-											 <family>SF Pro Rounded</family>
-											 <pointsize>33</pointsize>
-											 <weight>50</weight>
-											 <bold>false</bold>
-										 </font>
-									 </property>
-									 <property name="text">
-										 <string>0</string>
-									 </property>
-									 <property name="alignment">
-										 <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
-									 </property>
-								 </widget>
-							 </item>
-						 </layout>
-					 </item>
-					 <item>
-						 <layout class="QHBoxLayout" name="horizontalLayout">
-							 <property name="spacing">
-								 <number>0</number>
-							 </property>
-							 <item>
-								 <widget class="QLabel" name="gustTitle">
-									 <property name="sizePolicy">
-										 <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
-											 <horstretch>6</horstretch>
-											 <verstretch>3</verstretch>
-										 </sizepolicy>
-									 </property>
-									 <property name="font">
-										 <font>
-											 <family>SF Pro Rounded</family>
-											 <pointsize>33</pointsize>
-											 <weight>75</weight>
-											 <bold>true</bold>
-										 </font>
-									 </property>
-									 <property name="text">
-										 <string>Gust:</string>
-									 </property>
-									 <property name="alignment">
-										 <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-									 </property>
-									 <property name="buddy">
-										 <cstring>gustValueLabel</cstring>
-									 </property>
-								 </widget>
-							 </item>
-							 <item>
-								 <widget class="QLabel" name="gustValueLabel">
-									 <property name="sizePolicy">
-										 <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
-											 <horstretch>6</horstretch>
-											 <verstretch>9</verstretch>
-										 </sizepolicy>
-									 </property>
-									 <property name="font">
-										 <font>
-											 <family>SF Pro Rounded</family>
-											 <pointsize>33</pointsize>
-											 <weight>50</weight>
-											 <bold>false</bold>
-										 </font>
-									 </property>
-									 <property name="text">
-										 <string>0</string>
-									 </property>
-									 <property name="alignment">
-										 <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
-									 </property>
-								 </widget>
-							 </item>
-							 <item>
-								 <spacer name="rightSubSpacer">
-									 <property name="orientation">
-										 <enum>Qt::Horizontal</enum>
-									 </property>
-									 <property name="sizeType">
-										 <enum>QSizePolicy::Minimum</enum>
-									 </property>
-									 <property name="sizeHint" stdset="0">
-										 <size>
-											 <width>40</width>
-											 <height>0</height>
-										 </size>
-									 </property>
-								 </spacer>
-							 </item>
-						 </layout>
-					 </item>
-				 </layout>
-			 </widget>
-		 </item>
-	 </layout>
- </widget>
- <resources/>
- <connections/>
+	<class>wind</class>
+	<widget class="QWidget" name="wind">
+		<property name="geometry">
+			<rect>
+				<x>0</x>
+				<y>0</y>
+				<width>853</width>
+				<height>657</height>
+			</rect>
+		</property>
+		<property name="font">
+			<font>
+				<family>SF Pro Rounded</family>
+			</font>
+		</property>
+		<property name="windowTitle">
+			<string>Form</string>
+		</property>
+		<widget class="windRose" name="rose" native="true">
+			<property name="geometry">
+				<rect>
+					<x>89</x>
+					<y>49</y>
+					<width>571</width>
+					<height>391</height>
+				</rect>
+			</property>
+		</widget>
+		<widget class="Complication" name="topLeft" native="true">
+			<property name="geometry">
+				<rect>
+					<x>0</x>
+					<y>0</y>
+					<width>155</width>
+					<height>114</height>
+				</rect>
+			</property>
+			<property name="font">
+				<font>
+					<family>SF Pro Rounded</family>
+					<pointsize>31</pointsize>
+				</font>
+			</property>
+			<property name="showUnit" stdset="0">
+				<bool>false</bool>
+			</property>
+			<layout class="QGridLayout" name="gridLayout_2">
+				<property name="leftMargin">
+					<number>10</number>
+				</property>
+				<property name="topMargin">
+					<number>10</number>
+				</property>
+				<property name="rightMargin">
+					<number>0</number>
+				</property>
+				<property name="bottomMargin">
+					<number>0</number>
+				</property>
+			</layout>
+		</widget>
+		<widget class="Complication" name="bottomLeft" native="true">
+			<property name="geometry">
+				<rect>
+					<x>0</x>
+					<y>540</y>
+					<width>155</width>
+					<height>100</height>
+				</rect>
+			</property>
+			<property name="font">
+				<font>
+					<family>SF Pro Rounded</family>
+					<pointsize>31</pointsize>
+				</font>
+			</property>
+			<property name="showUnit" stdset="0">
+				<bool>false</bool>
+			</property>
+			<layout class="QGridLayout" name="gridLayout">
+				<property name="leftMargin">
+					<number>10</number>
+				</property>
+				<property name="topMargin">
+					<number>0</number>
+				</property>
+				<property name="rightMargin">
+					<number>10</number>
+				</property>
+				<property name="bottomMargin">
+					<number>0</number>
+				</property>
+				<property name="spacing">
+					<number>0</number>
+				</property>
+			</layout>
+		</widget>
+		<widget class="Complication" name="topRight" native="true">
+			<property name="geometry">
+				<rect>
+					<x>690</x>
+					<y>0</y>
+					<width>155</width>
+					<height>114</height>
+				</rect>
+			</property>
+			<property name="font">
+				<font>
+					<family>SF Pro Rounded</family>
+					<pointsize>31</pointsize>
+				</font>
+			</property>
+			<property name="showUnit" stdset="0">
+				<bool>false</bool>
+			</property>
+			<layout class="QGridLayout" name="gridLayout_4">
+				<property name="leftMargin">
+					<number>10</number>
+				</property>
+				<property name="topMargin">
+					<number>10</number>
+				</property>
+				<property name="rightMargin">
+					<number>0</number>
+				</property>
+				<property name="bottomMargin">
+					<number>0</number>
+				</property>
+			</layout>
+		</widget>
+		<widget class="Complication" name="bottomRight" native="true">
+			<property name="geometry">
+				<rect>
+					<x>690</x>
+					<y>530</y>
+					<width>155</width>
+					<height>116</height>
+				</rect>
+			</property>
+			<property name="font">
+				<font>
+					<family>SF Pro Rounded</family>
+					<pointsize>31</pointsize>
+				</font>
+			</property>
+			<property name="showUnit" stdset="0">
+				<bool>false</bool>
+			</property>
+			<layout class="QGridLayout" name="gridLayout_3">
+				<property name="leftMargin">
+					<number>10</number>
+				</property>
+				<property name="topMargin">
+					<number>10</number>
+				</property>
+				<property name="rightMargin">
+					<number>0</number>
+				</property>
+				<property name="bottomMargin">
+					<number>0</number>
+				</property>
+			</layout>
+		</widget>
+	</widget>
+	<customwidgets>
+		<customwidget>
+			<class>Complication</class>
+			<extends>QWidget</extends>
+			<header>widgets/Complication</header>
+			<container>1</container>
+			<slots>
+				<signal>clicked()</signal>
+			</slots>
+		</customwidget>
+		<customwidget>
+			<class>windRose</class>
+			<extends>QWidget</extends>
+			<header>widgets/WindRose</header>
+			<container>1</container>
+		</customwidget>
+	</customwidgets>
+	<resources/>
+	<connections/>
 </ui>

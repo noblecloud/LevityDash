@@ -1,23 +1,27 @@
 import json
 import logging
 from configparser import ConfigParser, SectionProxy
+from dataclasses import dataclass, InitVar
+from datetime import datetime
 from typing import Any, Union
 
-import requests
 from PySide2.QtCore import QObject, Signal
-from PySide2.QtNetwork import QUdpSocket
+from PySide2.QtNetwork import QHostAddress, QNetworkDatagram, QUdpSocket
+from WeatherUnits.base import Measurement
 
-import utils
-from api.errors import APIError, InvalidCredentials, RateLimitExceeded
-from observations import Observation, WFStationObservation
+from src.api.baseAPI import API, URLs
+from src.observations import WFObservationRealtime, WFForecastHourly, WFForecastDaily
 from src import config
 from src.udp import weatherFlow as udp
-import src.units.defaults.weatherFlow as units
-from translators import WFStationTranslator
+from src.utils import Logger, SignalDispatcher
+
+log = logging.getLogger(__name__)
+log.setLevel(logging.CRITICAL)
 
 
 class UDPMessenger(QObject):
-	signal = Signal(str)
+	last: QNetworkDatagram
+	udpSocket: QUdpSocket
 
 	def __init__(self, station=None, *args, **kwargs):
 		super(UDPMessenger, self).__init__(*args, **kwargs)
@@ -26,202 +30,185 @@ class UDPMessenger(QObject):
 
 	def connectUPD(self):
 		self.udpSocket.bind(50222)
+		log.debug('Listening UDP')
 		self.udpSocket.readyRead.connect(self.receiveUDP)
+		self.last = self.udpSocket.receiveDatagram(self.udpSocket.pendingDatagramSize())
 
 	def receiveUDP(self):
-		messageTypes = {'rapid_wind': udp.Wind, 'evt_precip': udp.RainStart, 'evt_strike': udp.Lightning, 'obs_st': udp.Obs_st}
+		messageTypes = {'rapid_wind': udp.WindMessage, 'evt_precip': udp.RainStart, 'evt_strike': udp.Lightning, 'obs_st': udp.TempestObservation, 'device_status': udp.DeviceStatus}
 		while self.udpSocket.hasPendingDatagrams():
-			datagram, host, port = self.udpSocket.readDatagram(self.udpSocket.pendingDatagramSize())
-			datagram = json.loads(str(datagram, encoding='ascii'))
-			if datagram['type'] in messageTypes:
-				messageType = messageTypes[datagram['type']]
-				message = messageType(datagram)
-				self.station.udpUpdate(message)
-				self.signal.emit('updated')
+			datagram = self.udpSocket.receiveDatagram(self.udpSocket.pendingDatagramSize())
+			if self.last.data() != datagram.data():
+				self.last = datagram
+				datagram = json.loads(str(datagram.data().data(), encoding='ascii'))
+				if datagram['type'] in messageTypes:
+					messageType = messageTypes[datagram['type']]
+					message = messageType(datagram)
+					log.debug(f'UDP message: {str(message)}')
+					self.station.udpUpdate(message)
 
 
-class _URLs:
-	_base = 'https://swd.weatherflow.com/swd/rest/'
-	_stationObservation = _base + 'observations/station/{}'
-	_deviceObservation = _base + 'observations/device/{}'
+class WFURLs(URLs):
+	base = 'https://swd.weatherflow.com/swd/rest/'
+	__deviceID: InitVar[int]
+	__stationID: int
+	stations = 'stations'
+	stationObservation = 'observations/station'
+	deviceObservation = 'observations/device'
+	station = 'stations'
+	forecast = 'better_forecast'
 
-	_stations = _base + 'stations/'
-	_station = _base + 'stations/{}'
-
-	_forecast = _base + 'better_forecast/'
-
-	_stationID: int
-	_deviceID: int
-
-	# def __init__(self, stationID, deviceID):
-	# 	self._stationID = stationID
-	# 	self._deviceID = deviceID
-
-	@property
-	def forecast(self):
-		return self._forecast
-
-	@property
-	def station(self):
-		return self._stationObservation
+	def __init__(self, deviceID: int, stationID: int):
+		self.__station = self.station
+		self.__stationObservation = self.stationObservation
+		self.__deviceObservation = self.deviceObservation
+		self.deviceID = deviceID
+		self.stationID = stationID
+		super(WFURLs, self).__init__()
 
 	@property
-	def device(self):
-		return self._deviceObservation
+	def deviceID(self) -> int:
+		return self.__deviceID
+
+	@deviceID.setter
+	def deviceID(self, value: Union[str, int]):
+		self.__deviceID = int(value)
+		self.deviceObservation = f'{self.__deviceObservation}/{self.__deviceID}'
 
 	@property
-	def stationData(self):
-		return self._station
+	def stationID(self) -> int:
+		return self.__stationID
+
+	@stationID.setter
+	def stationID(self, value: Union[str, int]):
+		self.__stationID = int(value)
+		self.station = f'{self.__station}/{self.__stationID}'
+		self.stationObservation = f'{self.__stationObservation}/{self.__stationID}'
 
 
-class WeatherFlow:
-	_stationID: int
-	_deviceID: int
+class WeatherFlow(API):
+	_stationID: int = int(config.wf['StationID'])
+	_deviceID: int = int(config.wf['DeviceID'])
+	_baseParams: dict[str, str] = {'token': config.wf['token']}
 
-	_baseParams: dict[str, str] = {}
-	_params: dict[str, str] = {}
-
-	_baseURL = 'https://swd.weatherflow.com/swd/rest/'
-	_endpoint = ''
+	_urls: WFURLs
 
 	def __init__(self):
-		self._baseParams['token'] = config.wf['token']
-
-	def getData(self, params: dict = None):
-
-		params = {**self._baseParams, **self._params, **params} if params else {**self._baseParams, **self._params}
-
-		request = requests.get(self.url, params)
-
-		if request.status_code == 200:
-			return request.json()
-		elif request.status_code == 429:
-			logging.error("Rate limit exceeded for {} API".format(self.__class__.__name__))
-			raise RateLimitExceeded
-		elif request.status_code == 401:
-			logging.error("Invalid credentials for {} API".format(self.__class__.__name__))
-			raise InvalidCredentials
-		else:
-			raise APIError
-
-	@property
-	def url(self):
-		return self._baseURL + self._endpoint
-
-
-class WFForecast(WeatherFlow):
-	_info = dict[str: Any]
-	# _hourly: Observation
-	# _daily: ObservationSet
-	_translator = WFStationTranslator()
-
-	def __init__(self, **kwargs):
-		## TODO: Add support for using units in config.ini
-		super().__init__()
-		self._endpoint = 'better_forecast'
-		self._params.update({"station_id": config.wf['stationID'], **kwargs})
-		self._translator = WFStationTranslator()
-		self._observation = WFStationObservation()
-
-	def getData(self, *args):
-		translator = ConfigParser()
-		translator.read('weatherFlow.ini')
-		self.data: dict = super(WFForecast, self).getData()
-		atlas = self.buildClassAtlas(translator)
-		self.translateData(translator['root'], self.data, translator, atlas)
-
-	# for item in infoConfig:
-	# 	newKey = infoConfig[item]
-	# 	if item != newKey:
-	# 		self.data[newKey] = self.data.pop(item)
-	# 	else:
-	# 		pass
-
-	def translateData(self, section, data: Union[dict, list], translator, atlas) -> Union[dict, list]:
-		if isinstance(data, list):
-			newList = []
-			for i in range(len(data)):
-				newList.append(self.translateData(section, data[i], translator, atlas))
-			return newList
-		for key in section:
-			newKey = section[key]
-			if newKey[0] == '[':
-				data[newKey[1:-1]] = self.translateData(translator[newKey[1:-1]], data.pop(key), translator, atlas)
-			else:
-				if key != newKey:
-					value = data.pop(key)
-					data[newKey] = data.pop(key)
-				else:
-					pass
-		return data
-
-	def buildClassAtlas(self, translator) -> dict[str, str]:
-		atlas = {}
-		for item in translator['unitGroups']:
-			type = item
-			group = [value.strip(' ') for value in translator['unitGroups'][type].split(',')]
-			for value in group:
-				atlas[value] = type
-		return atlas
+		super(WeatherFlow, self).__init__()
+		# self.__urls = WFURLs(self._deviceID, self._stationID)
+		pass
 
 
 class WFStation(WeatherFlow):
-	_id: int
-	_info = dict[str: Any]
-	_observation: Observation
-	_translator = WFStationTranslator()
+	signalDispatcher = SignalDispatcher()
+	_info: dict[str: Any]
+	realtime: WFObservationRealtime
+	hourly: WFForecastHourly
+	daily: WFForecastDaily
 	_messenger = UDPMessenger
 
 	def __init__(self):
-		super().__init__()
-
-		self._id = config.wf['StationID']
-		self._endpoint = 'observations/station/{id}'.format(id=self._id)
-		self._translator = WFStationTranslator()
-		self._observation = WFStationObservation()
+		super(WFStation, self).__init__()
 		self._messenger = UDPMessenger(station=self)
 		self._messenger.connectUPD()
 
-	def getData(self, *args):
-		data = super(WFStation, self).getData()
-		observationData: dict = data.pop('obs')[0]
-		tz = data['timezone']
-		time = observationData.pop('timestamp')
-		date = utils.formatDate(time, tz)
-		self._date = date
+	def _normalizeData(self, rawData):
+		if 'forecast' in rawData:
+			return rawData
+		if 'obs' in rawData:
+			return rawData.pop('obs')[0]
+		return rawData
+
+	def getData(self):
+		self.getForecast()
+
+	def getCurrent(self):
+		self.realtime.source = 'tcp'
+		data = super(WFStation, self).getData(endpoint=self._urls.stationObservation)
+		observationData = self._normalizeData(data)
 		self._info = data
-		self._observation.dataUpdate(observationData)
-		self.localize()
+		self.realtime.update(observationData)
 
 	def getForecast(self):
-		data = super(WFStation, self).getData()
-		observationData: dict = data.pop('obs')[0]
-		tz = data['timezone']
-		time = observationData.pop('timestamp')
-		date = utils.formatDate(time, tz)
-		self._date = date
-		self._info = data
-		self._observation.dataUpdate(observationData)
-		self.localize()
-
-	def localize(self):
-		for key, value in self._observation.items():
-			try:
-				self._observation[key] = value.localized
-			except AttributeError:
-				pass
+		data = super(WFStation, self).getData(endpoint=self._urls.forecast, params={'station_id': self._stationID})
+		self.hourly.update(data['forecast']['hourly'])
+		self.daily.update(data['forecast']['daily'])
+		# self.realtime.source = 'tcp'
+		self.realtime.update(data['current_conditions'])
 
 	def udpUpdate(self, data):
-		data = data['data']
-		self._observation.update(data)
-
-	@property
-	def obs(self):
-		return self._observation
+		if 'data' in data.keys():
+			data = data['data']
+		# self.realtime.source = 'udp'
+		for key, value in data.items():
+			if key in self.realtime.keys() and value is not None:
+				self.realtime.emitUpdate(key)
+				if isinstance(value, Measurement):
+					self.realtime[key] |= value.localize
+				else:
+					self.realtime[key] = value
+			else:
+				self.realtime[key] = value
+				self.realtime.signalDispatcher.valueAddedSignal.emit({'value': value, 'source': self.realtime})
 
 	@property
 	def messenger(self):
 		return self._messenger
+
+
+# class WFForecast(WeatherFlow):
+# 	_info = dict[str: Any]
+# 	_hourly: ObservationForecast
+# 	_daily: ObservationForecast
+#
+# 	def __init__(self, **kwargs):
+# 		## TODO: Add support for using units in config.ini
+# 		super().__init__()
+# 		self._endpoint = 'better_forecast'
+# 		self._params.update({"station_id": config.wf['stationID'], **kwargs})
+# 		self._observation = WFObservationHour()
+#
+# 	def getData(self, *args):
+# 		translator = ConfigParser()
+# 		translator.read('weatherFlow.ini')
+# 		data: dict = super(WFForecast, self).getData()
+# 		self._hourly = WFForecastHourly(data['forecast']['hourly'])
+# 		self._daily = WFForecastHourly(data['forecast']['daily'])
+#
+# 	def translateData(self, section, data: Union[dict, list], translator, atlas) -> Union[dict, list]:
+# 		if isinstance(data, list):
+# 			newList = []
+# 			for i in range(len(data)):
+# 				newList.append(self.translateData(section, data[i], translator, atlas))
+# 			return newList
+# 		for key in section:
+# 			newKey = section[key]
+# 			if newKey[0] == '[':
+# 				data[newKey[1:-1]] = self.translateData(translator[newKey[1:-1]], data.pop(key), translator, atlas)
+# 			else:
+# 				if key != newKey:
+# 					value = data.pop(key)
+# 					data[newKey] = data.pop(key)
+# 				else:
+# 					pass
+# 		return data
+#
+# 	def buildClassAtlas(self, translator) -> dict[str, str]:
+# 		atlas = {}
+# 		for item in translator['unitGroups']:
+# 			type = item
+# 			group = [value.strip(' ') for value in translator['unitGroups'][type].split(',')]
+# 			for value in group:
+# 				atlas[value] = type
+# 		return atlas
+#
+# 	@property
+# 	def daily(self):
+# 		return self._daily
+#
+# 	@property
+# 	def hourly(self):
+# 		return self._hourly
 
 
 class ErrorNoConnection(Exception):
@@ -235,6 +222,6 @@ class ErrorNoConnection(Exception):
 
 if __name__ == '__main__':
 	logging.getLogger().setLevel(logging.DEBUG)
-	wf = WFForecast()
-	wf.getData()
-	print(wf)
+	wf = WFStation()
+	wf.getForecast()
+	print(wf.hourly[datetime.now()])

@@ -1,48 +1,76 @@
-from PySide2 import QtGui
+import logging
 
-from widgets.Status import StatusObject
-from widgets.loudWidget import LoudWidget
-from ui.Temperature_UI import Ui_Form
+from widgets.Complication import Complication
+from widgets.ComplicationArray import ComplicationArrayGrid, ComplicationArrayHorizontal
+from widgets.DragDropWindow import DragDropWindow
+from widgets.DynamicLabel import DynamicLabel
+from widgets.ComplicationCluster import ComplicationCluster
+from widgets.moon import Moon
+from PySide2.QtWidgets import QApplication, QDesktopWidget, QFrame, QLabel, QMainWindow, QVBoxLayout, QWidget
 
-# current_dir = os.path.dirname(os.path.abspath(__file__))
-# Form, Base = QUiLoader.loadUiType(os.path.join(current_dir, "widgets/indoorOutdoor.ui"))
+from widgets.Proto import ComplicationPrototype
+from widgets.Wind import WindSubmodule
+
+debug = True
+
+log = logging.getLogger(__name__)
+log.setLevel(logging.DEBUG)
 
 
-class LargeBox(LoudWidget, Ui_Form, StatusObject):
-	# layout: QtWidgets.QVBoxLayout
-	# title: QtWidgets.QLabel
-	# value: DynamicLabel
-	# subs: QtWidgets.QHBoxLayout
-	#
-	# valueFont = QtGui.QFont()
-	# valueFont.setPointSize(80)
-	#
-	# titleFont = QtGui.QFont()
-	# titleFont.setPointSize(40)
-	#
-	# subFont = QtGui.QFont()
-	# subFont.setPointSize(20)
+class Window(QMainWindow):
 
-	def __init__(self, parent=None):
-		super(self.__class__, self).__init__(parent)
-		self.setupUi(self)
-		# self.SubBValue.setFontSize(self.SubAValue.fontS)
-	# def __init__(self, subs, *args, **kwargs):
-	# 	super().__init__(*args, **kwargs)
-		# loader = QUiLoader()
-		# file = QFile("widgets/Temperature.ui")
-		# file.open(QFile.ReadOnly)
-		# self.ui = loader.load(file, self)
+	def __init__(self, *args, **kwargs):
+		super(Window, self).__init__(*args, **kwargs)
 
-	def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
-		print(self)
 
-	# TODO: implement adding list of sub widgets
-	# if isinstance(subs, list):
-	# 	self.nSubs = len(subs)
-	# 	self.subs = subs
-	# elif isinstance(subs, int):
-	# 	self.
+if __name__ == '__main__':
+	import sys
+	from PySide2.QtWidgets import QApplication, QDesktopWidget, QMainWindow
 
-	# def sizeHint(self):
-	# 	return QtCore.QSize(200, 120)
+	# logging.getLogger().setLevel(logging.CRITICAL)
+	import WeatherUnits as wu
+
+	app = QApplication()
+
+	window = DragDropWindow()
+	window.setLayout(QVBoxLayout())
+	hor = ComplicationArrayGrid(acceptCluster=True)
+	# grid = ComplicationArrayGrid()
+	# hor.insert(grid)
+
+	a = ComplicationCluster(app, title='Temperature', showTitle=False)
+	fahrenheit = wu.Temperature.Fahrenheit(66.6)
+	humidity = wu.others.Humidity(84)
+	dewpointComp = Complication(value=wu.Temperature.Fahrenheit(74), title='Dewpoint')
+	a.addItems(Complication(window, value=fahrenheit))
+	uvi = wu.Light.UVI(7)
+	a.addItems(humidity)
+	a.addItems(dewpointComp)
+	a.addItems(uvi)
+
+	b = ComplicationCluster(app, title='Wind', showTitle=False)
+	windValue = Complication(value=wu.derived.Wind(wu.length.Mile(3.4), wu.Time.Hour(1)), showTitle=False)
+	b.addItems(windValue)
+
+	c = ComplicationCluster(app, title='c', showTitle=False)
+	strikes = wu.others.Strikes(4)
+	c.addItems(Complication(value=strikes))
+	c.setObjectName('c')
+
+	ts = Complication(value=fahrenheit, showUnit=True, debug=False)
+	s = Complication(value='\uf019', debug=False, glyph=True)
+	c.addItems(ts, s)
+
+	hor.insert(a, b, c)
+	print(hor._complications)
+
+	window.setCentralWidget(hor)
+
+	display_monitor = 1
+	monitor = QDesktopWidget().screenGeometry(display_monitor)
+	w, h = 600, 600
+	window.setGeometry((monitor.left() - w) / 2, 200, w, h)
+
+	window.show()
+	loggers = [logging.getLogger(name) for name in logging.root.manager.loggerDict]
+	sys.exit(app.exec_())

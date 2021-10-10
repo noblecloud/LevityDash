@@ -9,7 +9,7 @@ class LoudWidget(QFrame):
 	clicked = Signal(QFrame)
 
 	def mousePressEvent(self, event: QMouseEvent) -> None:
-		logging.info(self)
-		logging.info(self.size())
-		self.clicked.emit(self)
 		super(LoudWidget, self).mousePressEvent(event)
+
+	def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+		super(LoudWidget, self).mouseReleaseEvent(event)

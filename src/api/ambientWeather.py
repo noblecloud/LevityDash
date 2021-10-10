@@ -1,120 +1,58 @@
 import logging
+from dataclasses import InitVar
 from datetime import datetime
+from typing import Union
 
-import requests
+from src.observations import AWObservationRealtime
+from src.api.baseAPI import API, URLs
+from .errors import InvalidCredentials, RateLimitExceeded, APIError
+from src import config
+from src.observations import ObservationRealtime
+from src.utils import formatDate, Logger, SignalDispatcher
 
-import utils
-from api.errors import InvalidCredentials, RateLimitExceeded, APIError
-from src import SmartDictionary, config
-from observations import Observation
-from observations.ambientWeather import AWIndoor, AWOutdoor
-from translators import AWTranslator
+log = logging.getLogger(__name__)
 
 
-class _AmbientWeather:
-
-	_stations = []
-	_data: dict
-	_apiKey: str
-	_translator = AWTranslator()
-
-	_baseHeader: dict[str, str] = {'Accept': 'application/json'}
-
-	_url = 'https://api.ambientweather.net/v1/devices'
-	_deviceURL = '{}/{{}}/'.format(_url)
+class AWURLs(URLs):
+	base = 'https://api.ambientweather.net/v1'
+	device = 'devices'
 
 	def __init__(self):
-		self._apiKey = config.aw['apiKey']
-		self._appKey = config.aw['appKey']
-
-	def getData(self, params: dict = None):
-
-		params = {**self._params, **params}
-
-		request = requests.get(self.url, params)
-		if request.status_code == 200:
-			return request.json()
-		elif request.status_code == 429:
-			logging.error("Rate limit exceeded for {} API".format(self.__class__.__name__))
-			raise RateLimitExceeded
-		elif request.status_code == 401:
-			logging.error("Invalid credentials for {} API".format(self.__class__.__name__))
-			raise InvalidCredentials
-		else:
-			raise APIError
-
-	@property
-	def _device(self):
-		config.update()
-		return config.aw['device']
-
-	@property
-	def _baseParams(self) -> dict:
-		params = {'applicationKey': self._appKey, 'apiKey': self._apiKey}
-		return params
-
-	@property
-	def _params(self):
-		return self._baseParams
-
-	@property
-	def url(self):
-		return self._url
+		super(AWURLs, self).__init__()
 
 
-class AmbientWeather(_AmbientWeather):
-	_stations = []
-
-	def getData(self):
-		pass
-		# data = super(AmbientWeather, self).getData()
-		# for stationData in data:
-		# 	self._stations.append(AWStation(stationData))
-
-	@property
-	def _device(self):
-		config.update()
-		return config.aw['device']
-
-	@property
-	def _baseParams(self) -> dict:
-		params = {'applicationKey': self._appKey, 'apiKey': self._apiKey}
-		return params
-
-	@property
-	def _limit(self):
-		config.update()
-		return config.aw['limit']
+class AmbientWeather(API):
+	_baseParams = {'applicationKey': config.aw['appKey'], 'apiKey': config.aw['apiKey']}
+	_baseHeaders: dict[str, str] = {'Accept': 'application/json'}
 
 
-class AWStation(_AmbientWeather):
-	_deviceURL: str
-	_mac: str
-	_info = SmartDictionary
-	_current: Observation
-	_indoor: AWIndoor
-	_outdoor: AWOutdoor
+class AWStation(AmbientWeather):
+	_deviceID: str = config.aw['device']
+	_params = {'macAddress': _deviceID}
+	_urls: AWURLs
+	realtime: AWObservationRealtime
 
 	def __init__(self):
 		super().__init__()
 		self._id = config.aw['device']
-		self._url = '{}/{}/'.format(self._url, self._id)
-		self._indoor = AWIndoor()
-		self._outdoor = AWOutdoor()
-		self._translator = AWTranslator()
 
 	def getCurrent(self):
 		params = {'limit': 1}
 		self._params.update(params)
 
 	def getData(self, params: dict = None):
-		data = super(AWStation, self).getData({'limit': 1})[0]
-		timeName = self._translator['time']['time']
-		tz = self._translator.tz()
-		self._time = utils.formatDate(data.pop(timeName), tz.zone, utc=True, microseconds=True)
-		self._outdoor.dataUpdate(data)
-		self._indoor.dataUpdate(data)
+		try:
+			data = super(AWStation, self).getData(endpoint=self._urls.device)
+			# timeName = self._translator['time']['time']
+			self.realtime.update(data)
+			log.info('Updated')
+		except APIError as e:
+			log.error('Unable to fetch data', e)
 
+	def _normalizeData(self, rawData):
+		data = rawData[0]['lastData']
+		data['dateutc'] = int(data['dateutc'] / 1000)
+		return data
 
 	def _parseInfo(self, data):
 		_macAddress = data['macAddress']
@@ -124,11 +62,11 @@ class AWStation(_AmbientWeather):
 		             'address':     _coord['address'],
 		             'city':        _coord['location'],
 		             'elevation':   _coord['elevation'],
-		             'coordinates': SmartDictionary(_coord['coords'])}
+		             'coordinates': dict(_coord['coords'])}
 
-		data = SmartDictionary({'id':     _macAddress,
-		                      'name':     data['name'],
-		                      'location': SmartDictionary(_location)})
+		data = dict({'id':       _macAddress,
+		             'name':     data['name'],
+		             'location': dict(_location)})
 		self._info = data
 
 	def getHistorical(self, limit: int = None, endDate: datetime = None):
@@ -138,20 +76,12 @@ class AWStation(_AmbientWeather):
 		self._params.update(params)
 
 	def update(self):
-		pass
-
-	@property
-	def indoor(self):
-		return self._indoor
-
-	@property
-	def outdoor(self):
-		return self._outdoor
+		self.getData()
 
 	@property
 	def _limit(self):
-		config.update()
 		return config.aw['limit']
+
 
 class Error(Exception):
 	pass

@@ -1,169 +1,218 @@
 # This Python file uses the following encoding: utf-8
 import logging
 import sys
+import traceback
+from json import JSONDecodeError, load
 from time import strftime
+# import pretty_errors
+
+# pretty_errors.configure(filename_display=pretty_errors.FILENAME_FULL)
 
 from PySide2 import QtCore, QtGui
 from PySide2.QtCore import QTimer
-from PySide2.QtGui import QFont
-from PySide2.QtWidgets import QApplication, QDesktopWidget, QGraphicsOpacityEffect, QMainWindow
+from PySide2.QtGui import QColor, QFont, QMouseEvent, QPainter
+from PySide2.QtWidgets import QApplication, QDesktopWidget, QMainWindow
 
-from src.api import AmbientWeather, AWStation
+from src.api.tomorrowIO import TomorrowIO
+from src.grid.Cell import Cell
+from src import colors
+from src.api import AWStation, API
 from src.api.errors import APIError
 from src.api.forecast import dailyForecast, hourlyForecast
 from src.api.weatherFlow import WeatherFlow, WFStation
-from translators._translator import ClimacellConditionInterpreter, ConditionInterpreter
-from ui.main_UI import QFont, Ui_weatherDisplay
-from widgets.Graph import Graph
+from src.utils import Logger, Position
+from widgets.Complication import Complication
+from widgets.ComplicationArray import ComplicationArrayGrid, MainBox
+from widgets.ComplicationCluster import ComplicationCluster
+
+from widgets.Proto import ComplicationPrototype
+from widgets.WidgetBox import Tabs
 
 
-#
-# class dummyForecast:
-# 	from tests.pickler import pans as reload
-# 	data = reload('tests/snapshots/202101031000')
-
-
-class MainWindow(QMainWindow, Ui_weatherDisplay):
-	forecastGraph: Graph
-	weatherFlow: WeatherFlow
-	ambientWeather: AmbientWeather
-	dailyForecast: dailyForecast
-	forecast: hourlyForecast
+@Logger
+class MainWindow(QMainWindow):
 	glyphs: QFont
 	checkThreadTimer: QTimer
-	ui: QMainWindow
-	interpreter: ConditionInterpreter = ClimacellConditionInterpreter()
-	live = True
-	timeTraveling = False
+	apiDict: dict[str, API] = {}
 
 	def __init__(self, *args, **kwargs):
-		super(MainWindow, self).__init__()
-		self.setupUi(self)
-		self.indoor.title.setText('Indoors')
-		self.outdoor.title.setText('Outdoors')
-
-		# Clear preset data
-		# self.fadeRealtimeItems()
-
+		super(MainWindow, self).__init__(*args, **kwargs)
+		self.__ui_init__()
 		self.checkThreadTimer = QtCore.QTimer(self)
+		self.show()
 
-		self.installEventFilter(self)
+	def __ui_init__(self):
+		if not self.objectName():
+			self.setObjectName(u"weatherDisplay")
+		self.resize(1792, 1067)
+		font = QFont()
+		font.setFamily(u"SF Pro Rounded")
+		self.setFont(font)
+		self.setUnifiedTitleAndToolBarOnMac(True)
+		self.centralwidget = MainBox(self)
 		self.buildFonts()
-		self.buildUI()
-
-		self.lat, self.lon = 37.40834, -76.54845
-		self.key = "q2W59y2MsmBLqmxbw34QGdtS5hABEwLl"
-		self.AmbKey = 'e574e1bfb9804a52a1084c9f1a4ee5d88e9e850fc1004aeaa5010f15c4a23260'
-		self.AmbApp = 'ec02a6c4e29d42e086d98f5db18972ba9b93d864471443919bb2956f73363395'
-
-		self.connectForecast()
-		self.aw = AWStation()
-		self.wf = WFStation()
-		self.connectAW()
-		self.connectWF()
-		self.setRealtimeItems()
-		self.refreshTimeDateTemp()
-		self.subB.clicked.connect(self.testEvent)
-		# self.subA.value.setText(self.forecast.data['sunrise'][0].strftime('%-I:%M'))
-		# self.subA.title.setFont(self.glyphs)
-
+		self.installEventFilter(self)
+		self.setCentralWidget(self.centralwidget)
 		self.loadStyle()
 
+	def connectAPIs(self):
+		self.wf = WFStation()
+		self.aw = AWStation()
+		self.tm = TomorrowIO()
+		self.apiDict['WFStation'] = self.wf
+		self.apiDict['AWStation'] = self.aw
+		self.apiDict['TomorrowIO'] = self.tm
+		self.toolbox = Tabs()
+		self.toolbox.addAPI(self.wf)
+		self.toolbox.addAPI(self.tm)
+		self.toolbox.addAPI(self.aw)
+		# self.connectAW()
+		# self.connectTM()
+		self.connectWF()
+
 	def testEvent(self, event):
-		logging.info('Testing Signal:')
-		logging.info(event)
+		self._log.info('Testing Signal:')
+		self._log.info(event)
+
+	def load(self):
+
+		def rebuildComplication(item, location: ComplicationArrayGrid):
+
+			api = None
+			if 'api' in item:
+				try:
+					api = self.toolbox.toolboxes[item['api']].api
+				except KeyError:
+					api = None
+			if api is not None and 'key' in item:
+				comp: Complication = location.makeComplication(Complication, subscriptionKey=item['key'], api=api, title=item['title'])
+				comp.api.realtime.subscribe(comp)
+			else:
+				if item['class'] == 'GraphComplication':
+					comp: 'GraphComplication' = location.makeComplication(Tabs.localComplications[item['class']])
+					comp.connections = self.apiDict
+					comp.state = item
+				elif item['class'] == 'WindComplication':
+					item.pop('type')
+					comp: 'WindComplication' = location.makeComplication(Tabs.localComplications[item['class']], **item)
+					print('')
+				else:
+					comp = location.makeComplication(Tabs.localComplications[item['class']], title=item['title'])
+			comp.cell = Cell(comp, **item['cell'])
+			location.plop(comp, comp.cell.i, update=False, afterIndex=False)
+
+		def rebuildCluster(data, location: ComplicationArrayGrid):
+			t = data.pop('type')
+			cluster = ComplicationCluster(location, title=data.pop('title'))
+			g = cluster.geometry()
+			g.moveBottom(self.geometry().bottom())
+			g.moveRight(self.geometry().right())
+			cluster.setGeometry(g)
+			cluster.cell = Cell(cluster, **data.pop('cell'))
+
+			for name, sectionItems in data.items():
+				section = getattr(cluster, name)
+				for item in sectionItems:
+					rebuildComplication(item, section)
+				section.update()
+
+			cluster.hideEmpty()
+			location.plop(cluster, cluster.cell.i)
+
+		def recursive(data, location=self.centralwidget):
+			for item in data:
+				# if 'type' not in data:
+				# 	rebuildComplication(item, location)
+				if item['type'] == 'ComplicationCluster':
+					rebuildCluster(item, location)
+				else:
+					rebuildComplication(item, location)
+			location.update()
+
+		self.connectAPIs()
+
+		with open('save.json', 'r') as inf:
+			try:
+				state = load(inf)
+			except JSONDecodeError:
+				state = []
+		recursive(state)
 
 	def connectAW(self):
 		try:
 			self.aw.getData()
-			self.checkThreadTimer.singleShot(1000 * 3, self.updateAW)
+			self.checkThreadTimer.singleShot(1000 * 15, self.updateAW)
 		except APIError:
-			logging.error("Unable to reach AmbientWeather API, trying again in 1 minute")
-			self.checkThreadTimer.singleShot(1000 * 60, self.connectAW)
-
-	def connectWF(self):
-		try:
-			self.wf.getData()
-			self.checkThreadTimer.singleShot(1000 * 3, self.updateWF)
-
-			self.wf.messenger.signal.connect(self.setRealtimeItems)
-		except APIError:
-			logging.error("Unable to reach WeatherFlow API, trying again in 1 minute")
+			self._log.error("Unable to reach AmbientWeather API, trying again in 1 minute")
 			self.checkThreadTimer.singleShot(1000 * 60, self.connectAW)
 
 	def updateAW(self):
 
 		try:
 			self.aw.update()
-			self.setRealtimeItems()
-			logging.debug('AmbientWeather updated')
-			self.checkThreadTimer.singleShot(1000 * 5, self.updateAW)
+			self.checkThreadTimer.singleShot(1000 * 60, self.updateAW)
 		except APIError:
 			self.fadeRealtimeItems()
-			logging.error("No realtime data, trying again in 1 minute")
+			self._log.error("No realtime data, trying again in 1 minute")
 			self.checkThreadTimer.singleShot(1000 * 60, self.updateAW)
+
+	def connectWF(self):
+		try:
+			self.wf.getData()
+			self._log.info('WeatherFlow connected')
+			self.checkThreadTimer.singleShot(1000 * 60, self.updateWF)
+
+		# self.wf.messenger.signal.connect(self.setRealtimeItems)
+		except APIError:
+			self._log.error("Unable to reach WeatherFlow API, trying again in 1 minute")
+			self.checkThreadTimer.singleShot(1000 * 60, self.connectWF)
 
 	def updateWF(self):
 
 		try:
-			# self.aw.update()
-			self.setRealtimeItems()
-			logging.debug('AmbientWeather updated')
-			self.checkThreadTimer.singleShot(1000 * 5, self.updateAW)
+			self.wf.getData()
+			self._log.info('WeatherFlow updated')
+			self.checkThreadTimer.singleShot(1000 * 60, self.updateWF)
 		except APIError:
 			self.fadeRealtimeItems()
-			logging.error("No realtime data, trying again in 1 minute")
-			self.checkThreadTimer.singleShot(1000 * 60, self.updateAW)
+			self._log.error("No realtime data, trying again in 1 minute")
+			self.checkThreadTimer.singleShot(1000 * 60, self.updateWF)
+
+	def connectTM(self):
+		try:
+			self.tm.getCurrent()
+			self._log.info('Tomorrow.io connected')
+			self.checkThreadTimer.singleShot(1000 * 60 * 5, self.updateWF)
+
+		# self.wf.messenger.signal.connect(self.setRealtimeItems)
+		except APIError:
+			self._log.error("Unable to reach Tomorrow.io API, trying again in 1 minute")
+			self.checkThreadTimer.singleShot(1000 * 60 * 5, self.connectWF)
+
+	def updateTM(self):
+
+		try:
+			self.tm.getCurrent()
+			self._log.info('Tomorrow.io updated')
+			self.checkThreadTimer.singleShot(1000 * 60 * 5, self.updateWF)
+		except APIError:
+			self._log.error("No realtime, trying again in 1 minute")
+			self.checkThreadTimer.singleShot(1000 * 60 * 5, self.updateWF)
 
 	def connectForecast(self):
 
 		try:
 			self.forecast = hourlyForecast()
-			self.dailyForecast = dailyForecast(measurementFields=['weather_code'])
-			self.buildGraph()
+			self.dailyForecast = dailyForecast(measurementFields=['weather_code', 'feels_like'])
+			self.forecastGraph.data = self.forecast
+			self.checkThreadTimer.singleShot(1000 * 60 * 5, self.updateForecast)
 			self.setForecastItems()
-			self.checkThreadTimer.singleShot(1000 * 60 * 10, self.updateForecast)
 		except ValueError:
-			logging.error("No forecast data, trying again in 1 minute")
+			self._log.error("No forecast data, trying again in 1 minute")
 			self.checkThreadTimer.singleShot(1000 * 60, self.connectForecast)
-
-	def pickEvent(self, event):
-		logging.info('Graph pickEvent')
-		thisline = event.artist
-		xdata = thisline.get_xdata()
-		ydata = thisline.get_ydata()
-		ind = event.ind
-		points = tuple(zip(xdata[ind], ydata[ind]))
-		print(points[1][0])
-
-	def motionEvent(self, event):
-		print(event.xdata, event.ydata)
-		self.forecastDisplay.showLine(event)
-
-	def buildGraph(self):
-		logging.debug('Building Graph')
-		# self.forecastDisplay = dataDisplay(self.forecast, (1920, 1080, 200))
-		self.forecastGraph.data = self.forecast
-
-	# self.forecastGraph.mpl_connect('pick_event', self.pickEvent)
-	# self.forecastGraph.mpl_connect('figure_enter_event', self.startTimeTravel)
-	# self.forecastGraph.mpl_connect('figure_leave_event', self.stopTimeTravel)
-	# # self.forecastDisplay.testPicker()
-	# self.forecastDisplay.showTemperature()
-	# self.forecastDisplay.showDewpoint()
-	# self.forecastDisplay.showFeelsLike()
-	# # self.forecastDisplay.showLight()
-	# self.forecastDisplay.addDaysOfWeek()
-	# # self.forecastDisplay.showWind()
-	# # self.forecastDisplay.showRain()
-	# # self.forecastDisplay.showCloudCover()
-	# # self.forecastDisplay.showLunar()
-	# self.forecastDisplay.plot()
-	# sizePolicy = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
-	# sizePolicy.setHorizontalStretch(9)
-	# sizePolicy.setVerticalStretch(0)
-	# sizePolicy.setHeightForWidth(self.forecastGraph.sizePolicy().hasHeightForWidth())
-	# self.forecastGraph.setSizePolicy(sizePolicy)
+		except APIError:
+			self._log.error("No forecast data, trying again in 30 minutes")
+			self.checkThreadTimer.singleShot(1000 * 60 * 30, self.connectForecast)
 
 	def buildFonts(self):
 		self.glyphs = QFont()
@@ -188,195 +237,175 @@ class MainWindow(QMainWindow, Ui_weatherDisplay):
 		self.refreshTimeDateTemp()
 
 	def setForecastItems(self):
-		if not self.timeTraveling:
-			logging.info('setting forecast items')
-			# Current Conditions
-			today = self.dailyForecast.data[0]
-			self.subB.live = True
-			self.conditions.glyph = self.interpreter[today.measurements['weather_code'].value]
-
-			# Outdoor Air Quality
-			self.outdoor.live = True
-			# self.outdoor.SubAValue.setText(('{:4d}'.format(round(self.forecast.data['epa_aqi'][0]))))
-
-			# Sunrise/Sunset
-			self.sunSet.live = True
-		self.sunSet.value.setText(self.forecast.data['sunrise'][0].strftime('%-I:%M'))
-		self.sunRise.value.setText(self.forecast.data['sunset'][0].strftime('%-I:%M'))
-
-	def clearForecastItems(self):
 		# Current Conditions
-		self.subA.glyph = ''
-		self.subA.currentCondition = ''
+		today = self.dailyForecast.data[0]
+
+		# self.conditions.value = self.interpreter[today.measurements['weather_code'].value].glyph
 
 		# Outdoor Air Quality
-		self.outdoor.SubAValue.setText('')
+		# self.outdoor.SubAValue.setText(('{:4d}'.format(round(self.forecast.data['epa_aqi'][0]))))
 
 		# Sunrise/Sunset
-		self.sunSet.value.setText('')
-		self.sunRise.value.setText('')
-
-	def fadeForecastItems(self):
-		# Current Conditions
-		self.subA.live = False
-
-		# Outdoor Air Quality
-		self.outdoor.SubAValue.live = False
-
-		# Sunrise/Sunset
-		self.sunSet.live = False
-		self.sunRise.live = False
+		self.sunSet.value = self.forecast.data['sunset'][0].strftime('%-I:%M')
+		self.sunRise.value = self.forecast.data['sunrise'][0].strftime('%-I:%M')
 
 	def updateForecast(self):
 		try:
 			self.forecast.update()
 			self.dailyForecast.update()
-			# self.forecastDisplay.update()
+			self.forecastGraph.data = self.forecast
 			self.setForecastItems()
-			logging.debug('Forecast updated')
+			self._log.debug('Forecast updated')
 			self.checkThreadTimer.singleShot(1000 * 60 * 5, self.updateForecast)
 		except AttributeError:
 			self.fadeForecastItems()
-			logging.error("No forecast data, trying again in 1 minute")
+			self._log.error("No forecast data, trying again in 1 minute")
 			self.checkThreadTimer.singleShot(1000 * 60, self.updateForecast)
 
-	def setRealtimeItems(self):
+	def setRealtimeItems(self) -> None:
+		pass
 
-		if not self.timeTraveling:
-			# Wind Widget
-			self.subB.live = True
-			self.subB.setVector(self.wf.obs.speed, self.wf.obs.direction)
-			self.wf.obs.gust._suffix = ' mph'
-			self.wf.obs.lull._suffix = ' mph'
-			self.subB.gust = str(self.wf.obs.gust)
-			self.subB.max = str(self.wf.obs.lull)
+	# Wind Widget
+	# self.subB.setVector(self.wf.obs.speed, self.wf.obs.direction)
+	# self.subB.topLeft.value = self.wf.obs.gust
+	# self.subB.topRight.value = self.wf.obs.lull
+	#
+	# self.subA.main.value = self.wf.obs.rate
+	# self.subA.a2.value = self.wf.obs.daily
+	# self.subA.a3.value = self.wf.obs.minutes.auto
+	#
+	# # Temperatures
 
-			# Temperatures
-			self.indoor.live = True
-			self.indoor.temperature.setText(" " + str(self.aw.indoor.temperature) + 'º')
-			self.indoor.SubAValue.setText(" " + str(self.aw.indoor.humidity))
-			self.indoor.SubBValue.setText(" " + str(self.aw.indoor.dewpoint) + 'º')
+	# # Outdoor
+	# # self.outdoor.live = True
 
-			# Outdoor
-			self.outdoor.live = True
-			self.outdoor.temperature.setText(" " + str(self.wf.obs.temperature) + 'º')
-			# SubAValue relies on forecast data
-			self.outdoor.SubBValue.setText(" " + str(self.wf.obs.dewpoint) + 'º')
+	# self.wind.value = windRose()
 
 	# self.outdoor.SubAValue.setText(str(round(self.forecast.data['epa_aqi'][0])))
 
-	def fadeRealtimeItems(self):
+	def rise(self):
+		palette = self.palette()
+		palette.setColor(QtGui.QPalette.Text, QColor(*colors.kelvinToRGB(4000)))
+		palette.setColor(QtGui.QPalette.Window, QtGui.Qt.black)
+		self.setPalette(palette)
 
-		self.subB.live = False
-		# Temperatures
-		self.indoor.live = False
-		self.outdoor.live = False
-		# Sunrise/Sunset
-		self.sunSet.live = False
-		self.sunRise.live = False
-
-		self.subB.live = False
-
-	def clearRealtimeItems(self):
-
-		# Wind Widget
-		self.subB.speed.setText('')
-		self.subB.direction.setText('')
-		# Temperatures
-		self.indoor.temperature.setText('')
-		self.outdoor.temperature.setText('')
-		# Sunrise/Sunset
-		self.sunSet.value.setText('')
-		self.sunRise.value.setText('')
-		# Outdoor
-		self.outdoor.SubAValue.setText('')
-		self.outdoor.SubBValue.setText('')
-		# Outdoor
-		self.indoor.SubAValue.setText('')
-		self.indoor.SubBValue.setText('')
+	# self.setStyleSheet(colors.color())
 
 	def loadStyle(self):
+		# self.rise()
+		# palette = self.palette()
+		# palette.setColor(QtGui.QPalette.Text, colors.qcolor())
+		# self.setPalette(palette)
+		# self.setStyleSheet(colors.color())
 		sshFile = "styles/main.qss"
 		with open(sshFile, "r") as fh:
 			self.setStyleSheet(fh.read())
 
-	# def eventFilter(self, obj, event):
-	# 	if event.type() == QtCore.QEvent.KeyPress:
-	# 		if event.key() == QtCore.Qt.Key_R:
-	# 			print('refresh')
-	# 			self.loadStyle()
-	# 		if event.key() == QtCore.Qt.Key_B:
-	# 			print('rebuild')
-	# 			self.hide()
-	# 			self.buildUI()
-	# 			self.show()
-	# 		if event.key() == QtCore.Qt.Key_P:
-	# 			self.forecastDisplay.plot()
-	# 			self.update()
-	# 		if event.key() == QtCore.Qt.Key_F:
-	# 			if self.live:
-	# 				print('fading items')
-	# 				self.fadeForecastItems()
-	# 				self.fadeRealtimeItems()
-	# 				self.live = False
-	# 			else:
-	# 				print('setting items')
-	# 				self.setForecastItems()
-	# 				self.setRealtimeItems()
-	# 				self.live = True
-	# 	elif event.type() == QtCore.QEvent.MouseButtonPress:
-	# 		print(obj)
-	# 	return super(MainWindow, self).eventFilter(obj, event)
+	def eventFilter(self, obj, event):
 
-	def buildUI(self):
+		if isinstance(obj, ComplicationPrototype):
+			if event.type() == QtCore.Qt.KeyPress:
+				if event.key() == QtCore.Qt.Key_Delete:
+					self.centralwidget.yank(obj)
 
-		self.sunSet.title.setFont(self.glyphs)
-		self.sunSet.title.setText('')
+		elif event.type() == QtCore.QEvent.KeyPress:
+			if event.key() == QtCore.Qt.Key_P:
+				if self.toolbox.isVisible():
+					self.toolbox.hide()
+				else:
+					self.toolbox.setGeometry(self.rect())
+					self.toolbox.show()
+			if event.key() == QtCore.Qt.Key_C:
+				self.rise()
+			if event.key() == QtCore.Qt.Key_L:
+				self.load()
+			if event.key() == QtCore.Qt.Key_S:
+				self.centralWidget().save()
+			if event.key() == QtCore.Qt.Key_Q:
+				self.close()
+			if event.key() == QtCore.Qt.Key_F:
+				if self.isFullScreen():
+					self.showMaximized()
+				else:
+					self.showFullScreen()
+		# 		print('refresh')
+		# 		self.loadStyle()
+		# 	if event.key() == QtCore.Qt.Key_B:
+		# 		print('rebuild')
+		# 		self.hide()
+		# 		self.buildUI()
+		# 		self.show()
+		# 	if event.key() == QtCore.Qt.Key_P:
+		# 		self.forecastDisplay.plot()
+		# 		self.update()
+		# 	if event.key() == QtCore.Qt.Key_F:
+		# 		if self.live:
+		# 			print('fading items')
+		# 			self.fadeForecastItems()
+		# 			self.fadeRealtimeItems()
+		# 			self.live = False
+		# 		else:
+		# 			print('setting items')
+		# 			self.setForecastItems()
+		# 			self.setRealtimeItems()
+		# 			self.live = True
+		# elif event.type() == QtCore.QEvent.MouseButtonPress:
+		# 	print(obj)
+		return super(MainWindow, self).eventFilter(obj, event)
 
-		self.sunRise.title.setFont(self.glyphs)
-		self.sunRise.title.setText('')
+	# resizeStarted = True
+	# resizeTimer = QTimer()
+	#
+	# def resizeFinished(self):
+	# 	self.resizeStarted = False
+	# 	self.centralwidget.show()
+	#
+	#
+	# def resizeStartedFunc(self):
+	# 	self.resizeStarted = True
+	# 	self.img = self.grab(self.rect())
+	# 	self.centralwidget.hide()
+	#
+	# def paintEvent(self, event):
+	# 	if self.resizeStarted and self.img:
+	# 		painter = QPainter()
+	# 		painter.begin(self)
+	# 		painter.drawPixmap(self.rect(), self.img)
+	# 		painter.end()
+	# 	else:
+	# 		super().paintEvent(event)
+	#
 
-		self.outdoor.subATitle.setText('Air Quality')
-		self.outdoor.subBTitle.setText('Dewpoint')
 
-		self.indoor.subATitle.setText('Humidity')
-		self.indoor.subBTitle.setText('Dewpoint')
-
-	def refreshTimeDateTemp(self, auto=True):
-
-		if not self.timeTraveling:
-			self.time.setText(strftime('%-I:%M'))
-			self.date.setText(strftime('%a, %B %-d'))
-
-			if auto:
-				self.checkThreadTimer.singleShot(500, self.refreshTimeDateTemp)
-
-
-# def keyPressEvent(self, event):
-# 	print('test')
-# 	if event.key() == QtCore.Qt.Key_R:
-# 		print("refreshing")
-# 		self.loadStyle()
-# 	elif event.key() == QtCore.Qt.Key_U:
-# 		self.ui.setupUi(self)
-# 	elif event.key() == QtCore.Qt.Key_B:
-# 		print('building UI')
-# 		self.buildUI()
-# 	event.accept()
+class MyApp(QApplication):
+	def notify(self, obj, event):
+		isex = False
+		try:
+			return QApplication.notify(self, obj, event)
+		except Exception:
+			isex = True
+			print
+			"Unexpected Error"
+			print
+			traceback.format_exception(*sys.exc_info())
+			return False
+		finally:
+			if isex:
+				self.quit()
 
 
 if __name__ == "__main__":
 	logging.getLogger().setLevel(logging.INFO)
-	app = QApplication()
+	app = MyApp()
 	window = MainWindow()
-	# window.sunSet.connect(window.forecastDisplay.showSolar)
-
-	# print(window.ui.moonPhase.setProperty('charStr', ''))
-
-	window.show()
+	window.load()
 	display_monitor = 1
 	monitor = QDesktopWidget().screenGeometry(display_monitor)
 	window.move(monitor.left(), monitor.top())
-	window.showFullScreen()
-
-	sys.exit(app.exec_())
+	if '-f' in sys.argv:
+		window.showFullScreen()
+	try:
+		sys.exit(app.exec_())
+	except Exception as e:
+		print(e)
+		sys.exit(app.exec_())
