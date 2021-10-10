@@ -15,7 +15,7 @@ from PySide2.QtWidgets import *
 from widgets.DynamicLabel import DynamicLabel
 
 
-class Ui_Frame(object):
+class ui(object):
     def setupUi(self, Frame):
         if not Frame.objectName():
             Frame.setObjectName(u"Frame")
