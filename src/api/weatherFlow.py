@@ -123,7 +123,7 @@ class WFStation(WeatherFlow):
 		self.getForecast()
 
 	def getCurrent(self):
-		self.realtime.source = 'tcp'
+		self.realtime.api = 'tcp'
 		data = super(WFStation, self).getData(endpoint=self._urls.stationObservation)
 		observationData = self._normalizeData(data)
 		self._info = data

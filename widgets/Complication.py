@@ -8,7 +8,7 @@ from src.api import API
 from colors import randomColor
 from src.grid.Cell import Cell
 from src.fonts import compact, rounded
-from ui.Complication_UI import ui
+from ui.Complication_UI import Ui_Frame as ComplicationUI
 from PySide2.QtCore import QEvent, QPoint, QRect, Qt, QTimer
 
 from WeatherUnits.base import Measurement
@@ -20,7 +20,7 @@ from widgets.Proto import ComplicationPrototype
 log = logging.getLogger(__name__)
 
 
-class Complication(ui, ComplicationPrototype):
+class Complication(ComplicationUI, ComplicationPrototype):
 	sizeGripBR: Gripper = None
 	innerHitBox: QRect
 	clickStart: Optional[QPoint] = None
@@ -148,7 +148,7 @@ class Complication(ui, ComplicationPrototype):
 		itemCopy.value = self.value
 		if hasattr(self, 'valueWidget') and self.valueWidget is not None:
 			itemCopy.setWidget(self.valueWidget.__class__())
-		if hasattr(self, 'source'):
+		if hasattr(self, 'api'):
 			if self.api is not None and self.api != 'local':
 				itemCopy.api = self.api
 				itemCopy.api.realtime.subscribe(itemCopy)
