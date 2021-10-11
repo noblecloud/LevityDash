@@ -2,15 +2,16 @@ import logging
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from enum import Enum, Flag
-from typing import Any, Iterable, List, NamedTuple, Optional, Tuple, Union
+from functools import cached_property
+from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Tuple, Union
 
 from sys import float_info
 
 import numpy as np
 from dateutil.parser import parse as dateParser
-from numpy import ndarray
+from numpy import ceil, floor, ndarray
 from PySide2 import QtCore
-from PySide2.QtCore import QObject, QPoint, QPointF, QRectF, Signal
+from PySide2.QtCore import QObject, QPoint, QPointF, QRectF, Signal, Slot
 from PySide2.QtGui import QFont, QPainterPath, QVector2D
 from PySide2.QtWidgets import QGraphicsTextItem, QWidget
 from pytz import timezone, utc
@@ -695,8 +696,104 @@ def grabWidget(layout, index):
 	return item
 
 
-class SignalDispatcher(QObject):
-	valueAddedSignal = Signal(dict)
+@dataclass
+class SubscriptionKey:
+	key: str
+	api: str
+
+	def __post_init__(self):
+		self.key = self.key.lower()
+	# if isinstance(self.api, str):
+	# 	# LookUpAPI
+	# 	pass
+
+
+class Subscriber:
+	subscriptions: dict[str, SubscriptionKey]
+
+	def __init__(self, subscriptionKeys: list = None, *args, **kwargs):
+		self.subscriptions = {}
+
+
+class SignalWrapper(QObject):
+	signal = Signal(Measurement)
+
+	def __init__(self, key: str, observation: 'ObservationRealtime', *args, **kwargs):
+		self._key = key
+		self._observation = observation
+		super(SignalWrapper, self).__init__(*args, **kwargs)
+
+	def emitUpdate(self):
+		self.signal.emit(self.value)
+
+	def emitValue(self, value: Measurement):
+		self.signal.emit(value)
+
+	@property
+	def value(self):
+		return self._observation[self._key]
+
+
+class ObservationUpdateHandler(QObject):
+	newKey = Signal(Measurement)
+	_signals: Dict[str, Signal]
+	_observation: 'ObservationRealtime'
+
+	def __init__(self, observation: 'ObservationRealtime', *args, **kwargs):
+		self._signals = {}
+		self._observation = observation
+		super(ObservationUpdateHandler, self).__init__(*args, **kwargs)
+
+	def signalFor(self, key: str = None, measurement: Measurement = None) -> Signal:
+		wrapper = None
+		if key is not None:
+			wrapper = self._produceKey(key)
+		elif measurement is not None:
+			wrapper = self._produceMeasurement(measurement.subscriptionKey)
+		if wrapper is None:
+			raise ValueError('No key or measurement provided')
+		return wrapper.signal
+
+	def _produceKey(self, key: str) -> SignalWrapper:
+		wrapper = self._signals.get(key, None)
+		if wrapper is None:
+			wrapper = SignalWrapper(key, self._observation)
+			self._signals[key] = wrapper
+		return wrapper
+
+	def t(self, key: str):
+		self._signals[key].emitUpdate()
+
+	def new(self, key: str):
+		self._signals[key] = SignalWrapper(key, self._observation)
+		value = self._observation.get(key)
+		self.newKey.emit(value)
+
+	def autoEmit(self, key: str):
+		if key not in self._signals:
+			self.new(key)
+		self.t(key)
+
+	@property
+	def observation(self) -> 'ObservationRealtime':
+		return self._observation
+
+
+class NewKeyDispatcher(QObject):
+	_signal = Signal(str)
+	_observation: 'ObservationRealtime'
+
+	def __init__(self, observation: 'ObservationRealtime', *args, **kwargs):
+		self._observation = observation
+		super(NewKeyDispatcher, self).__init__(*args, **kwargs)
+
+	@property
+	def signal(self) -> Signal:
+		return self._signal
+
+	@property
+	def observation(self) -> 'ObservationRealtime':
+		return self._observation
 
 
 class ForecastSignalDispatcher(QObject):
