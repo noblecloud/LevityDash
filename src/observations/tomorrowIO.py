@@ -1,7 +1,7 @@
 from enum import Enum
 
 from src.observations import ObservationRealtime, ObservationForecast, Observation
-from src.utils import Period, SignalDispatcher
+from src.utils import Period
 
 unitDefinitions = {
 		'time':                                {'type': 'datetime', 'unit': 'ISO8601', 'format': '%Y-%m-%dT%H:%M:%SZ', 'title': 'Time', 'sourceKey': 'time'},
@@ -145,7 +145,6 @@ class TomorrowIOObservationRealtime(ObservationRealtime):
 	unitDict = unitDict
 	subscriptionChannel = 'TomorrowIO'
 	_translator = unitDefinitions
-	signalDispatcher = SignalDispatcher()
 
 
 class TomorrowIOObservation(Observation):
