@@ -4,7 +4,7 @@ from math import ceil, floor, inf, sqrt
 from typing import Any, Dict, Optional, Union
 
 from PySide2 import QtGui
-from PySide2.QtCore import QPoint, QRect, QSize, QSizeF, Qt, QTimer, Signal
+from PySide2.QtCore import QPoint, QRect, QSize, QSizeF, Qt, QTimer, Signal, Slot
 from PySide2.QtGui import QColor, QDropEvent, QPainter, QPaintEvent, QPen, QShowEvent
 from PySide2.QtWidgets import QBoxLayout, QGridLayout, QHBoxLayout, QSizePolicy, QSpacerItem, QVBoxLayout, QWidget
 from WeatherUnits import Measurement
@@ -972,9 +972,12 @@ class ToolBox(WidgetBox):
 	def __init__(self, parent, api: API = None, *args, **kwargs):
 		super(ToolBox, self).__init__(parent, *args, **kwargs)
 		self._api = api
-		if self._api is not None:
-			self._api.realtime.signalDispatcher.valueAddedSignal.connect(self.addMeasurement)
 		self.keys = {}
+		if self._api is not None:
+			self._api.realtime.updateHandler.newKey.connect(self.addMeasurement)
+			x = [item for item in self._api.realtime.values()]
+			self.insert(x)
+
 		self._acceptsDropsOf = None
 		self.setAcceptDrops(False)
 
@@ -984,15 +987,15 @@ class ToolBox(WidgetBox):
 		return i, child
 
 	def insert(self, *args, **kwargs):
-		inserted = super(ToolBox, self).insert(*args, **kwargs)
+		inserted = super(ToolBox, self).insert(api=self.api, *args, **kwargs)
 		for item in inserted:
 			self.keys.update({item.subscriptionKey: item})
 		return inserted
 
-	def addMeasurement(self, measurement):
+	@Slot(str, Measurement)
+	def addMeasurement(self, measurement: Measurement):
 		if isinstance(measurement, Measurement):
 			insert = self.insert(measurement)
-			self.api.realtime.subscribe(*insert)
 		else:
 			self.insert(measurement)
 

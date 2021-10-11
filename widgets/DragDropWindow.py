@@ -5,9 +5,8 @@ from PySide2.QtCore import QMimeData, QTimer
 from PySide2.QtGui import QDrag, QDragEnterEvent, QDragMoveEvent, QMouseEvent, Qt
 from PySide2.QtWidgets import QMainWindow, QSizeGrip
 
-from widgets import ToolBox
 from widgets.Complication import Complication
-from widgets.ComplicationArray import ComplicationArrayGrid
+from widgets.ComplicationArray import ComplicationArrayGrid, ToolBox
 from widgets.ComplicationCluster import ComplicationCluster
 from widgets.WidgetBox import Tabs
 

@@ -38,7 +38,6 @@ class ComplicationPrototype(QWidget):
 	valueWidget: Optional[QWidget]
 	valueLabel: Optional[DynamicLabel]
 	titleLabel: Optional[DynamicLabel]
-	updateSignal = Signal(Measurement)
 	_debug: bool = False
 
 	@property
@@ -86,7 +85,6 @@ class ComplicationPrototype(QWidget):
 		super(ComplicationPrototype, self).__init__(parent=kwargs.get('parent', None))
 		# self.setAttribute(Qt.WA_TranslucentBackground)
 		self.setAttribute(Qt.WA_Hover)
-		self.updateSignal.connect(self.updateValueSlot)
 		if not cell:
 			self._cell = Cell(self, h=1, w=1)
 		elif isinstance(cell, dict):
@@ -297,13 +295,6 @@ class ComplicationPrototype(QWidget):
 	@property
 	def maxFontSizeTitle(self):
 		return self.titleLabel.maxSize if self.valueLabel.maxSize is not None else 10
-
-	@Slot(Measurement)
-	def updateValueSlot(self, value):
-		self.value = value
-		# print(f'{self} updated with {value}')
-		if hasattr(self.parent(), 'valueChangedSignal'):
-			self.parent().valueChangedSignal.emit(self)
 
 	# print(value)
 	# if not self._customTitle:

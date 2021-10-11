@@ -21,10 +21,9 @@ from widgets.Complication import Complication, LocalComplication
 class WindSubmodule(QWidget):
 	_directionArray: deque = deque([], 10)
 	_direction: int = 0
-	speedUpdateSignal = Signal(Measurement)
-	sampleRateSignal = Signal(Measurement)
-	gustUpdateSignal: Signal(Measurement)
-	directionUpdateSignal = Signal(Measurement)
+	_speedSignal: Signal
+	_sampleRateSignal: Signal
+	_directionSignal: Signal
 	subscriptionKey = ('speed', 'direction', 'lull', 'gust')
 	topLeft: Complication
 	topLeftRect: QRect
@@ -41,24 +40,50 @@ class WindSubmodule(QWidget):
 	speedState: dict = {'api': None, 'key': None}
 	directionState: dict = {'api': None, 'key': None}
 
-	def __init__(self, *args, state: dict = None, **kwargs):
-		super().__init__(*args, **kwargs)
-		if state is not None:
-			self.speedState = state['speed']
-			if self.speedState is not None:
-				self.parent().parent().parent().toolbox.toolboxes[self.speedState['api']].api.realtime.tryToSubscribe(self.speedState['key'], self.speedUpdateSignal)
+	@property
+	def speedSignal(self):
+		return self._speedSignal
 
-			self.directionState = state['direction']
+	@speedSignal.setter
+	def speedSignal(self, value):
+		self._speedSignal = value
+		value.connect(self.setSpeed)
+
+	@property
+	def directionSignal(self):
+		return self._directionSignal
+
+	@directionSignal.setter
+	def directionSignal(self, value):
+		self._directionSignal = value
+		value.connect(self.setDirection)
+
+	@property
+	def sampleRateSignal(self):
+		return self._sampleRateSignal
+
+	@sampleRateSignal.setter
+	def sampleRateSignal(self, value):
+		self._sampleRateSignal = value
+		value.connect(self.setSampleRate)
+
+	def __init__(self, *args, subscriptions: dict = None, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.__init_ui__()
+		if subscriptions is not None:
+			self.speedState = subscriptions['speed']
+			if self.speedState is not None:
+				api = self.parent().parent().parent().toolbox.toolboxes[self.speedState['api']].api.realtime
+				self.speedSignal = api.updateHandler.signalFor(key=self.speedState['key'])
+				self.speed = api.get(self.speedState['key'])
+
+			self.directionState = subscriptions['direction']
 			if self.directionState is not None:
 				api = self.parent().parent().parent().toolbox.toolboxes[self.directionState['api']].api.realtime
-				api.tryToSubscribe(self.directionState['key'], self.directionUpdateSignal)
-				api.tryToSubscribe('windSampleInterval', self.sampleRateSignal)
+				self.directionSignal = api.updateHandler.signalFor(key=self.directionState['key'])
+				self.sampleRateSignal = api.updateHandler.signalFor(key='windSampleInterval')
+				self.direction = api.get(self.directionState['key'])
 
-		self.speedUpdateSignal.connect(self.setSpeed)
-		self.directionUpdateSignal.connect(self.setDirection)
-		self.sampleRateSignal.connect(self.setSampleRate)
-		self._speed = 0.0
-		self.__init_ui__()
 		self.topLeftRect = QRect(0, 0, 0, 0)
 		self.topRightRect = QRect(0, 0, 0, 0)
 		self.bottomLeftRect = QRect(0, 0, 0, 0)
@@ -135,7 +160,6 @@ class WindSubmodule(QWidget):
 		rect.moveBottomRight(self.rect().bottomRight())
 		self.bottomRight.setGeometry(rect)
 
-	# @Property(float)
 	@property
 	def speed(self):
 		return self.rose.speed
@@ -162,15 +186,13 @@ class WindSubmodule(QWidget):
 		elif 'speed' in dropped.subscriptionKey.lower():
 			state = dropped.state
 			self.speedState = {k: v for k, v in state.items() if k in self.speedState}
-			self.speedUpdateSignal = dropped.updateSignal
-			self.speedUpdateSignal.connect(self.setSpeed)
+			self.speedSignal = dropped.signal
 			return True
 		elif 'direction' in dropped.subscriptionKey.lower():
 			state = dropped.state
 			self.directionState = {k: v for k, v in state.items() if k in self.speedState}
-			self.directionUpdateSignal = dropped.updateSignal
-			self.directionUpdateSignal.connect(self.setDirection)
-			dropped.api.tryToSubscribe('windSampleInterval', self.sampleRateSignal)
+			self.directionSignal = dropped.signal
+			dropped.api.tryToSubscribe('windSampleInterval', self._sampleRateSignal)
 			return True
 		return False
 
@@ -186,10 +208,6 @@ class WindSubmodule(QWidget):
 	def setSampleRate(self, value):
 		print(int(value.ms) - 100)
 		self.rose.duration = int(value.ms) - 100
-
-	@Slot(Measurement)
-	def setGust(self, value):
-		self.gust = value
 
 	@property
 	def value(self):
@@ -254,8 +272,8 @@ class WindComplication(LocalComplication):
 
 	def __init__(self, *args, **kwargs):
 		super(WindComplication, self).__init__(*args, **kwargs)
-		state = kwargs.get('state', None)
-		self.setWidget(WindSubmodule(self, state=state))
+		subscriptions = kwargs.get('subscriptions', None)
+		self.setWidget(WindSubmodule(self, subscriptions=subscriptions))
 		self.setAcceptDrops(True)
 
 	@Slot(Measurement)
@@ -278,7 +296,7 @@ class WindComplication(LocalComplication):
 	@property
 	def state(self):
 		s = super(WindComplication, self).state
-		s.update(self.valueWidget.state)
+		s['subscriptions'] = self.valueWidget.state
 		return s
 
 

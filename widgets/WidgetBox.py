@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from PySide2.QtCore import Qt, QTimer
 from PySide2.QtGui import QMouseEvent, QTransform
-from PySide2.QtWidgets import QScrollArea, QTabWidget
+from PySide2.QtWidgets import QApplication, QScrollArea, QTabWidget
 
 from src.api import API
 from src.observations import ObservationRealtime
@@ -20,10 +20,13 @@ from widgets.Wind import WindComplication
 
 class GraphComplication(LocalComplication):
 	_pointerPosition: object
-	connections: dict[str, API] = None
 
-	def __init__(self, *args, **kwargs):
+	def __init__(self, apis: dict = None, *args, **kwargs):
 		super(GraphComplication, self).__init__(*args, **kwargs)
+		if apis is None:
+			self.APIs = [x for x in QApplication.topLevelWidgets() if 'MainWindow' in x.__class__.__name__][0].APIs
+		else:
+			self.APIs = apis
 		self.layout.removeWidget(self.titleLabel)
 		self.titleLabel.hide()
 		self.titleLabel.deleteLater()
@@ -81,15 +84,14 @@ class GraphComplication(LocalComplication):
 	@state.setter
 	def state(self, value: dict):
 		graphScene = self.valueWidget.scene()
-		if self.connections is not None:
-			figures = value['data']['figures']
-			for name, figure in figures.items():
+		figures = value['data']['figures']
+		for name, figure in figures.items():
 
-				fig = graphScene.figures.get(name, Figure(graphScene, Margins(**figure['margins'])))
-				graphScene.figures[name] = fig
-				for datum in figure['data'].values():
-					datum['api'] = self.connections[datum['api']]
-					graphScene.addMeasurement(**datum, figure=fig)
+			fig = graphScene.figures.get(name, Figure(graphScene, Margins(**figure['margins'])))
+			graphScene.figures[name] = fig
+			for datum in figure['data'].values():
+				datum['api'] = self.APIs[datum['api']]
+				graphScene.addMeasurement(**datum, figure=fig)
 
 
 class Clock(LocalComplication):

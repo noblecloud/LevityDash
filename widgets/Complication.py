@@ -9,7 +9,7 @@ from colors import randomColor
 from src.grid.Cell import Cell
 from src.fonts import compact, rounded
 from ui.Complication_UI import Ui_Frame as ComplicationUI
-from PySide2.QtCore import QEvent, QPoint, QRect, Qt, QTimer
+from PySide2.QtCore import QEvent, QPoint, QRect, Qt, QTimer, Signal, Slot
 
 from WeatherUnits.base import Measurement
 
@@ -29,9 +29,10 @@ class Complication(ComplicationUI, ComplicationPrototype):
 	_orphan: bool = None
 	_api: API = None
 	_cell: Cell
+	_signal: Signal
 
 	# def __init__(self, title: str = None, value: Union[Measurement, int, float, str] = None):
-	def __init__(self, *args, api: API = None, **kwargs):
+	def __init__(self, *args, api: API = None, signal: Optional[Signal] = None, **kwargs):
 		super(Complication, self).__init__(*args, **kwargs)
 		self.a = QLineEdit(self)
 		self.a.hide()
@@ -78,6 +79,28 @@ class Complication(ComplicationUI, ComplicationPrototype):
 		self._indoorRect = None
 		if api is not None:
 			self.api = api
+			if self.subscriptionKey in self.api.realtime:
+				self.setValue(self.api.realtime[self.subscriptionKey])
+		if signal is not None:
+			self.signal = signal
+		else:
+			if self.api is not None and self.subscriptionKey is not None:
+				self.signal = self.api.realtime.updateHandler.signalFor(key=self.subscriptionKey)
+
+	@property
+	def signal(self):
+		return self._signal
+
+	@signal.setter
+	def signal(self, value: Signal):
+		self._signal = value
+		self._signal.connect(self.updateValueSlot)
+
+	@Slot(Measurement)
+	def updateValueSlot(self, value):
+		self.value = value
+		if hasattr(self.parent(), 'valueChangedSignal'):
+			self.parent().valueChangedSignal.emit(self)
 
 	def makeResizable(self, value: bool = True):
 		self.setWindowFlag(Qt.SubWindow, False)
@@ -112,6 +135,8 @@ class Complication(ComplicationUI, ComplicationPrototype):
 	@api.setter
 	def api(self, value):
 		self._api = value
+		if self.subscriptionKey is not None:
+			self.signal = self.api.realtime.updateHandler.signalFor(key=self.subscriptionKey)
 
 	@property
 	def hitBox(self):
@@ -151,7 +176,6 @@ class Complication(ComplicationUI, ComplicationPrototype):
 		if hasattr(self, 'api'):
 			if self.api is not None and self.api != 'local':
 				itemCopy.api = self.api
-				itemCopy.api.realtime.subscribe(itemCopy)
 		return itemCopy
 
 	def suggestTitle(self, value: str):
