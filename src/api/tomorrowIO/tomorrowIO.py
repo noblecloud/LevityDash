@@ -20,6 +20,6 @@ from src.api.errors import APIError, InvalidCredentials, RateLimitExceeded
 from src.observations import ObservationRealtime, WFObservationHour, ObservationForecast, WFForecastHourly
 from src import config
 from src.udp import weatherFlow as udp
-from src.utils import Logger, SignalDispatcher
+from src.utils import Logger, UpdateDispatcher
 
 log.setLevel(logging.CRITICAL)
