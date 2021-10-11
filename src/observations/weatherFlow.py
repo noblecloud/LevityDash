@@ -1,5 +1,5 @@
 from src.observations import Observation, ObservationRealtime, ObservationForecast
-from src.utils import Period, SignalDispatcher
+from src.utils import Period
 
 unitDefinitions = {'temperature':                        {'type': 'temperature', 'unit': 'c', 'title': 'Temperature', 'sourceKey': 'air_temperature'},
                    'dewpoint':                           {'type': 'temperature', 'unit': 'c', 'title': 'Dewpoint', 'sourceKey': 'dew_point'},
@@ -73,7 +73,6 @@ unitDefinitionsForecast.update({'time':              {'type': 'datetime', 'unit'
 class WFObservationRealtime(ObservationRealtime):
 	subscriptionChannel = 'WeatherFlow'
 	_translator = unitDefinitions
-	signalDispatcher = SignalDispatcher()
 
 
 class WFObservationHour(Observation):

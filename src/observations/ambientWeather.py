@@ -1,9 +1,7 @@
 from src.observations import ObservationRealtime
-from src.utils import SignalDispatcher
 
 
 class AWObservationRealtime(ObservationRealtime):
-	signalDispatcher = SignalDispatcher()
 	subscriptionChannel = 'AmbientWeather'
 	_indoorOutdoor = True
 	_translator = {
