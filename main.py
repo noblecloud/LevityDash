@@ -81,16 +81,14 @@ class MainWindow(QMainWindow):
 			api = None
 			if 'api' in item:
 				try:
-					api = self.toolbox.toolboxes[item['api']].api
+					api = self.APIs[item['api']]
 				except KeyError:
 					api = None
 			if api is not None and 'key' in item:
 				comp: Complication = location.makeComplication(Complication, subscriptionKey=item['key'], api=api, title=item['title'])
-				comp.api.realtime.subscribe(comp)
 			else:
 				if item['class'] == 'GraphComplication':
-					comp: 'GraphComplication' = location.makeComplication(Tabs.localComplications[item['class']])
-					comp.connections = self.apiDict
+					comp: 'GraphComplication' = location.makeComplication(Tabs.localComplications[item['class']], apis=self.APIs)
 					comp.state = item
 				elif item['class'] == 'WindComplication':
 					item.pop('type')
@@ -128,8 +126,6 @@ class MainWindow(QMainWindow):
 				else:
 					rebuildComplication(item, location)
 			location.update()
-
-		self.connectAPIs()
 
 		with open('save.json', 'r') as inf:
 			try:
