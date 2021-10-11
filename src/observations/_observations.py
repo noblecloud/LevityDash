@@ -13,7 +13,7 @@ from WeatherUnits.base import DerivedMeasurement
 
 from src import config
 from src.translators import unitDict
-from src.utils import closest, ForecastSignalDispatcher, ISOduration, SignalDispatcher
+from src.utils import closest, ForecastSignalDispatcher, ISOduration, NewKeyDispatcher, ObservationUpdateHandler
 
 tz = config.tz
 
@@ -120,9 +120,9 @@ class ObservationDict(dict):
 	_api: 'API'
 	_time: datetime
 
-	def __init__(self, source: 'API', *args, **kwargs):
+	def __init__(self, api: 'API', *args, **kwargs):
+		self._api = api
 		super(ObservationDict, self).__init__()
-		self._api = source
 
 	@property
 	def period(self) -> timedelta:
@@ -200,10 +200,15 @@ class Observation(ObservationDict):
 		unitDefinition = self._translator['time']['unit']
 		timeKey = self.timeKey(data)
 		value = data.pop(timeKey)
-		if unitDefinition == 'epoch':
-			return datetime.fromtimestamp(value).astimezone(config.tz)
-		elif unitDefinition == 'ISO8601':
+		if isinstance(value, datetime):
+			return value
+		try:
 			return parse(value).astimezone(config.tz)
+		except TypeError:
+			return datetime.fromtimestamp(value).astimezone(config.tz)
+
+	# elif unitDefinition == 'ISO8601':
+	# 	return parse(value).astimezone(config.tz)
 
 	@property
 	def api(self) -> 'API':
@@ -279,14 +284,14 @@ class Observation(ObservationDict):
 class ObservationRealtime(Observation):
 	time: datetime
 	timezone: timezone
-	signalDispatcher: SignalDispatcher
 	subscriptionChannel: str = None
 	_indoorOutdoor: bool = False
+	updateHandler: ObservationUpdateHandler
 
 	def __init__(self, *args, **kwargs):
-		self.signals: dict[str, [Signal]] = {}
 		# self.source = 'tcp'
 		super(ObservationRealtime, self).__init__(*args, **kwargs)
+		self.updateHandler = ObservationUpdateHandler(self)
 
 	def convertValue(self, key, value):
 		measurement = super(ObservationRealtime, self).convertValue(key, value)
@@ -301,49 +306,21 @@ class ObservationRealtime(Observation):
 				self[key] |= value
 			else:
 				self[key] = value
-				self.emitNewKey(value)
 		else:
 			super(ObservationRealtime, self)._updateValue(key, value)
-		self.emitUpdate(key)
+		self.updateHandler.autoEmit(key)
 
 	def udpUpdate(self, data):
 		self.update(data)
 
 	def emitUpdate(self, key):
 		if key in self.signals.keys():
-			for signal in self.signals[key]:
-				try:
-					signal.emit(self[key])
-				except RuntimeError:
-					self.signals[key].remove(signal)
+			signal = self.signals[key]
+			signal.emit(self[key])
 
-	def emitNewKey(self, value: wu.Measurement):
-		self.signalDispatcher.valueAddedSignal.emit(value)
-
-	def subscribe(self, *receiver):
-		if isinstance(receiver, tuple):
-			for item in receiver:
-				key = item.subscriptionKey
-				signal = item.updateSignal
-				item.api = self.api
-				try:
-					item.suggestTitle(self[key].title)
-					if isinstance(key, tuple):
-						for k in key:
-							self.tryToSubscribe(k, signal)
-					else:
-						self.tryToSubscribe(key, signal)
-				except AttributeError:
-					log.error(f'Complication: {item} attempted to subscribe without a key')
-				except TypeError as e:
-					log.error(e)
-					log.error(f'Complication: {item} attempted to subscribe without a key')
-				except KeyError:
-					log.error(f'Complication: {item} does not have key {key}')
-
-	def tryToSubscribe(self, key, signal):
+	def tryToSubscribe(self, key):
 		if key in self.signals.keys():
-			self.signals[key].append(signal)
+			self.signals[key]
 		else:
 			self.signals.update({key: [signal]})
 		try:
