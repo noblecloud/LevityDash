@@ -1,5 +1,6 @@
 import logging
-from dataclasses import asdict, dataclass
+from collections import namedtuple
+from dataclasses import asdict, dataclass, field, InitVar
 from datetime import datetime, timedelta
 from enum import Enum, Flag
 from functools import cached_property
@@ -159,6 +160,81 @@ def smoothData(data: np.ndarray, window: int = 25, order: int = 1) -> np.ndarray
 	if not type(data[0]) is datetime:
 		data = savitzky_golay(data, window, order)
 	return data
+
+
+Size = namedtuple("Size", "h w")
+
+
+@dataclass
+class Subscription:
+	api: 'API'
+	key: str
+
+	def __init__(self, api: 'API', key: str, subscriber: Any = None, signalFunction: Optional[Callable] = None):
+		self._api: 'API' = api
+		self._key: str = key
+		self._subscriber: Any = subscriber
+		self._signalFunction: Callable = signalFunction
+		super(Subscription, self).__init__()
+
+	@property
+	def subscriber(self):
+		return self._subscriber
+
+	@subscriber.setter
+	def subscriber(self, value):
+		self._subscriber = value
+
+	@property
+	def key(self) -> str:
+		return self._key
+
+	@key.setter
+	def key(self, value: str):
+		self._key = value
+		self.__updateSignal()
+
+	@property
+	def api(self):
+		return self._api
+
+	@api.setter
+	def api(self, value: 'API'):
+		self._api = value
+		self.__updateSignal()
+
+	def __updateSignal(self):
+		if self.subscriber is not None:
+			if self._signalFunction is not None:
+				self.signal.disconnect(self._signalFunction)
+				delattr(self, 'signal')
+				self.signal.connect(self._signalFunction)
+			else:
+				self.signal.disconnect()
+				delattr(self, 'signal')
+
+	@property
+	def signalFunction(self):
+		return self._signalFunction
+
+	@signalFunction.setter
+	def signalFunction(self, value):
+		self.signal.disconnect(self._signalFunction)
+		self._signalFunction = value
+		self.signal.connect(self._signalFunction)
+
+	@cached_property
+	def signal(self) -> Signal:
+		return self._api.realtime.updateHandler.signalFor(self._key)
+
+	def subscribe(self, func: Callable, subscriber: Any = None):
+		if subscriber is None and self._subscriber is None:
+			pass
+		if subscriber is None:
+			pass
+		else:
+			self._subscriber = subscriber
+		self.signalFunction = func
 
 
 class Axis(Enum):
@@ -696,23 +772,88 @@ def grabWidget(layout, index):
 	return item
 
 
-@dataclass
-class SubscriptionKey:
-	key: str
-	api: str
+# @dataclass
+# class Subscription:
+# 	name: 'str'
+# 	key: InitVar[str] = field(init=True, default=None, repr=True)
+# 	_key: str = field(init=False, default=None, repr=False)
+# 	api: str = field(init=True, default=None)
+# 	_api: 'API' = field(init=False, default=None, repr=False)
+# 	signal: InitVar[Signal] = field(init=True, default=None)
+# 	_signal: Signal = field(init=False, default=None, repr=False)
+#
+# 	def __init__(self, name: str, key: str = None, api: 'API' = None, signal: Signal = None):
+# 		self.name = name
+# 		self._key = key
+# 		self._api = api
+# 		self._signal = signal
+#
+# 	@property
+# 	def key(self):
+# 		return self._key
+#
+# 	@key.setter
+# 	def key(self, value: str):
+# 		self._key = value
+#
+# 	@property
+# 	def api(self):
+# 		return self._api
+#
+# 	@api.setter
+# 	def api(self, value: 'API'):
+# 		self._api = value
+#
+# 	@property
+# 	def signal(self):
+# 		return self._signal
+#
+# 	@signal.setter
+# 	def signal(self, value: Signal):
+# 		self._signal = value
+#
+# 	def connect(self, key: str, api: 'API'):
+# 		self._key = key
+# 		self._api = api
+# 		self._signal = api.updateHandler.signalFor(key=self.key)
+# 		curframe = currentframe()
+# 		caller = getouterframes(curframe, 2)
+# 		if isinstance(caller, 'Subscriber'):
+# 			print('hi')
 
-	def __post_init__(self):
-		self.key = self.key.lower()
-	# if isinstance(self.api, str):
-	# 	# LookUpAPI
-	# 	pass
+
+class SubscriptionCollection(dict):
+
+	def add(self, item: Subscription):
+		self[item.name] = item
+
+	def __getitem__(self, item: str):
+		keys = [i for i in self.values() if i.key == item]
+		if len(keys) == 1:
+			return keys[0]
+		if item in keys:
+			return self[item]
+		return super(SubscriptionCollection, self).__getitem__(item)
 
 
-class Subscriber:
-	subscriptions: dict[str, SubscriptionKey]
+class Subscriber(QObject):
+	subscriptions: SubscriptionCollection[str, Subscription]
 
-	def __init__(self, subscriptionKeys: list = None, *args, **kwargs):
-		self.subscriptions = {}
+	def __init__(self, subscriptions: list = None, *args, **kwargs):
+
+		self.subscriptions = SubscriptionCollection()
+		annotations = {k: v for d in [t.__annotations__ for t in self.__class__.mro() if hasattr(t, '__annotations__')] for k, v in d.items() if issubclass(v, Subscription)}
+		for key, value in annotations.items():
+			value: Type[Subscription]
+			self.subscriptions.add(value(key))
+
+		super(Subscriber, self).__init__(*args, **kwargs)
+
+	def __getattr__(self, item: str):
+		if item in self.subscriptions:
+			return self.subscriptions[item]
+		return super(Subscriber, self).__getattr__(item)
+
 
 
 class SignalWrapper(QObject):
@@ -737,19 +878,23 @@ class SignalWrapper(QObject):
 class ObservationUpdateHandler(QObject):
 	newKey = Signal(Measurement)
 	_signals: Dict[str, Signal]
-	_observation: 'ObservationRealtime'
+	_source: 'ObservationRealtime'
 
-	def __init__(self, observation: 'ObservationRealtime', *args, **kwargs):
+	def __init__(self, observation: 'ObservationRealtime'):
 		self._signals = {}
-		self._observation = observation
-		super(ObservationUpdateHandler, self).__init__(*args, **kwargs)
+		self._source = observation
+		super(ObservationUpdateHandler, self).__init__()
+
+	@property
+	def source(self):
+		return self._source
 
 	def signalFor(self, key: str = None, measurement: Measurement = None) -> Signal:
 		wrapper = None
 		if key is not None:
 			wrapper = self._produceKey(key)
 		elif measurement is not None:
-			wrapper = self._produceMeasurement(measurement.subscriptionKey)
+			wrapper = self._produceMeasurement(measurement.key)
 		if wrapper is None:
 			raise ValueError('No key or measurement provided')
 		return wrapper.signal
@@ -757,26 +902,41 @@ class ObservationUpdateHandler(QObject):
 	def _produceKey(self, key: str) -> SignalWrapper:
 		wrapper = self._signals.get(key, None)
 		if wrapper is None:
-			wrapper = SignalWrapper(key, self._observation)
+			wrapper = SignalWrapper(key, self.source)
 			self._signals[key] = wrapper
 		return wrapper
 
-	def t(self, key: str):
+	def emitExisting(self, key: str):
 		self._signals[key].emitUpdate()
 
 	def new(self, key: str):
-		self._signals[key] = SignalWrapper(key, self._observation)
-		value = self._observation.get(key)
+		self._signals[key] = SignalWrapper(key, self.source)
+		value = self.source.get(key)
 		self.newKey.emit(value)
 
 	def autoEmit(self, key: str):
 		if key not in self._signals:
 			self.new(key)
-		self.t(key)
+		self.emitExisting(key)
 
 	@property
 	def observation(self) -> 'ObservationRealtime':
-		return self._observation
+		return self.source
+
+
+class ForecastUpdateHandler(ObservationUpdateHandler):
+	_source: 'ObservationForecast'
+
+	def __init__(self, forecast: 'ObservationForecast'):
+		super(ForecastUpdateHandler, self).__init__(forecast)
+
+	def autoEmit(self, keys: list[str]):
+		for key in keys:
+			super(ForecastUpdateHandler, self).autoEmit(key)
+
+	@property
+	def forecast(self) -> 'ObservationForecast':
+		return self.source
 
 
 class NewKeyDispatcher(QObject):
@@ -794,10 +954,6 @@ class NewKeyDispatcher(QObject):
 	@property
 	def observation(self) -> 'ObservationRealtime':
 		return self._observation
-
-
-class ForecastSignalDispatcher(QObject):
-	signal = Signal(dict)
 
 
 class SmartString(str):
