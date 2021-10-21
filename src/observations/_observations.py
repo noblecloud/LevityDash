@@ -1,19 +1,19 @@
 import logging
 from datetime import datetime, timedelta
+from functools import cached_property
 from operator import attrgetter
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Type, Union, TYPE_CHECKING
+from typing import Iterable, List, Type, Union
 
 import numpy as np
 import WeatherUnits as wu
-from dateutil.parser import parse, parser
-from PySide2.QtCore import Signal
+from dateutil.parser import parse
 from pytz import timezone
 from WeatherUnits import Measurement
 from WeatherUnits.base import DerivedMeasurement
 
 from src import config
 from src.translators import unitDict
-from src.utils import closest, ForecastSignalDispatcher, ISOduration, NewKeyDispatcher, ObservationUpdateHandler
+from src.utils import closest, ForecastUpdateHandler, ISOduration, ObservationUpdateHandler
 
 tz = config.tz
 
@@ -125,6 +125,14 @@ class ObservationDict(dict):
 		super(ObservationDict, self).__init__()
 
 	@property
+	def translator(self):
+		return self._translator
+
+	@cached_property
+	def normalizeDict(self):
+		return {value['sourceKey']: key for key, value in self.translator.items()}
+
+	@property
 	def period(self) -> timedelta:
 		return timedelta(seconds=0)
 
@@ -192,8 +200,8 @@ class Observation(ObservationDict):
 
 	def __preprocess(self, data: dict):
 		self._time = self.__processTime(data)
-		normalizeDict = {value['sourceKey']: key for key, value in self.translator.items()}
-		data = {normalizeDict[key]: value for key, value in data.items() if key in normalizeDict.keys()}
+
+		data = {self.normalizeDict[key]: value for key, value in data.items() if key in self.normalizeDict.keys()}
 		return data
 
 	def __processTime(self, data: dict, pop: bool = False) -> datetime:
@@ -206,6 +214,10 @@ class Observation(ObservationDict):
 			return parse(value).astimezone(config.tz)
 		except TypeError:
 			return datetime.fromtimestamp(value).astimezone(config.tz)
+
+	@cached_property
+	def normalizeDict(self):
+		return {value['sourceKey']: key for key, value in self.translator.items()}
 
 	# elif unitDefinition == 'ISO8601':
 	# 	return parse(value).astimezone(config.tz)
@@ -337,10 +349,10 @@ class ObservationForecast(ObservationDict):
 	_observationClass: Type[Observation] = Observation
 	period: timedelta
 	timeframe: timedelta
-	signalDispatcher: ForecastSignalDispatcher
+	updateHandler: ForecastUpdateHandler
 
 	def __init__(self, *args, **kwargs):
-		self.signalDispatcher = ForecastSignalDispatcher()
+		self.updateHandler = ForecastUpdateHandler(self)
 		self['time']: dict[DateKey, Observation] = {}
 		super(ObservationForecast, self).__init__(*args, **kwargs)
 
@@ -363,8 +375,12 @@ class ObservationForecast(ObservationDict):
 		return list(list(self['time'].values())[0].keys())
 
 	def update(self, data: dict, **kwargs):
+
 		raw = data
 
+		if isinstance(raw, dict):
+			raw = list(raw.values())
+		keys = [self.normalizeDict[key] for key in {key for obs in data for key in obs.keys()} if key in self.normalizeDict.keys()]
 		if isinstance(raw, List):
 			for rawObs in raw:
 				key = self.__makeKey(rawObs)
@@ -378,9 +394,13 @@ class ObservationForecast(ObservationDict):
 		for key in self.knownKeys:
 			self.__updateObsKey(key)
 
+		self.updateHandler.autoEmit(keys)
+
 		p = np.array(list(self['time'].keys()))
 		self._period = timedelta(seconds=(p[1:, ] - p[:-1]).mean())
-		self.signalDispatcher.signal.emit({'source': self})
+
+	def issueUpdate(self, key: str, value: 'MeasurementForecast'):
+		self.updateHandler.autoEmit(key)
 
 	def __updateObsKey(self, key):
 		# self[key] = {k1: value[key] for k1, value in self['time'].items() if key in value.keys()}
@@ -404,6 +424,11 @@ class ObservationForecast(ObservationDict):
 	@property
 	def timestamps(self):
 		return list(self['time'].keys())
+
+	@property
+	def translator(self):
+		## Todo: find a better way for this
+		return self._observationClass._translator
 
 	def __makeKey(self, data: dict):
 		return self._observationClass.observationKey(data)
@@ -443,10 +468,6 @@ class ObservationForecast(ObservationDict):
 		for key, value in data.items():
 			finalData[key] = self.convertValue(key, value)
 		return finalData
-
-	@property
-	def translator(self):
-		return self._translator
 
 	@property
 	def raw(self):
