@@ -1,8 +1,10 @@
 import logging
+import re
+from abc import ABC, ABCMeta, abstractmethod
 from collections import namedtuple
 from dataclasses import asdict, dataclass, field, InitVar
 from datetime import datetime, timedelta
-from enum import Enum, Flag
+from enum import auto, Enum, EnumMeta, IntFlag
 from functools import cached_property
 from typing import Any, Dict, Iterable, List, NamedTuple, Optional, Tuple, Union
 
@@ -1029,25 +1031,1220 @@ def goToNewYork(start: Union[QWidget, QPoint], end: Union[QWidget, QPoint]):
 	return (start - end).manhattanLength()
 
 
-class Position(Flag):
-	Top = 1
-	Center = 2
-	Bottom = 4
-	Left = 8
-	Right = 16
+class ClosestMatchEnumMeta(EnumMeta):
 
+	def __new__(metacls, cls, bases, classdict, **kwds):
+		enum_class = super().__new__(metacls, cls, bases, classdict, **kwds)
+		for k, v in metacls.__dict__.items():
+			if not k.startswith('_'):
+				setattr(enum_class, k, v)
+		return enum_class
+
+	def __getitem__(cls, name):
+
+		if isinstance(name, str):
+			if name not in cls.__members__:
+				name = name.title()
+				if name not in cls.__members__:
+					name = closestStringInList(name, list(cls.__members__.keys()))
+			return cls.__members__[name]
+
+		if isinstance(name, int):
+			if name not in cls.__dict__.values():
+				name = closest(list(cls.__members__.values()), name)
+			return cls(name)
+
+	@classmethod
+	def all(self):
+		return [self.TopLeft, self.TopCenter, self.TopRight, self.CenterLeft, self.BottomLeft, self.BottomCenter, self.BottomRight, self.CenterRight]
+
+	@cached_property
+	def isCenter(self):
+		return not bool(self & (self.Left | self.Top | self.Right | self.Bottom))
+
+	@cached_property
+	def isBottomLeft(self):
+		return self.isBottom and self.isLeft
+
+	@cached_property
+	def isBottomRight(self):
+		return self.isBottom and self.isRight
+
+	@cached_property
+	def isTopLeft(self):
+		return self.isTop and self.isLeft
+
+	@cached_property
+	def isBottom(self):
+		return bool(self & self.Bottom)
+
+	@cached_property
+	def isRight(self):
+		return bool(self & self.Right)
+
+	@cached_property
+	def isLeft(self):
+		return bool(self & self.Left)
+
+	@cached_property
+	def isCentered(self):
+		return bool(self * self.Center)
+
+	@cached_property
+	def isTopRight(self):
+		return self.isTop and self.isRight
+
+	@cached_property
+	def isTop(self):
+		return bool(self & self.Top)
+
+
+class LocationFlag(IntFlag, metaclass=ClosestMatchEnumMeta):
+	Bottom = auto()
+	Top = auto()
+	Right = auto()
+	Left = auto()
+	Center = auto()
+	BottomRight = Bottom | Right
+	TopRight = Top | Right
+	BottomLeft = Bottom | Left
 	TopLeft = Top | Left
 	TopCenter = Top | Center
 	TopRight = Top | Right
-
+	BottomLeft = Bottom | Left
+	TopLeft = Top | Left
 	CenterRight = Center | Right
 	CenterLeft = Center | Left
-
-	BottomLeft = Bottom | Left
 	BottomCenter = Bottom | Center
-	BottomRight = Bottom | Right
+	TopCenter = Top | Center
 
-	Corners = TopLeft | TopRight | BottomLeft | BottomRight
+	Vertical = Top | Bottom
+	Horizontal = Left | Right
+	VerticalCentered = Top | Bottom | Center
+	HorizontalCentered = Left | Right | Center
+
+	@cached_property
+	def asQtAlignment(self):
+		if self.isLeft:
+			return Qt.AlignLeft
+		elif self.isRight:
+			return Qt.AlignRight
+		elif self.isTop:
+			return Qt.AlignTop
+		elif self.isBottom:
+			return Qt.AlignBottom
+		elif self.isCenter:
+			return Qt.AlignCenter
+		else:
+			return Qt.AlignCenter
+
+	@cached_property
+	def isVertical(self):
+		return self.isTop or self.isBottom or self.isCenter
+
+	@cached_property
+	def isHorizontal(self):
+		return self.isLeft or self.isRight or self.isCenter
+
+	@cached_property
+	def asVertical(self):
+		value = self.Vertical & self
+		if value:
+			return value
+		else:
+			return AlignmentFlag.Center
+
+	@cached_property
+	def asHorizontal(self):
+		value = self.Horizontal & self
+		if value:
+			return value
+		else:
+			return AlignmentFlag.Center
+
+
+class Alignment:
+	__slots__ = ('__horizontal', '__vertical')
+
+	@overload
+	def __init__(self, alignment: AlignmentFlag):
+		...
+
+	@overload
+	def __init__(self, horizontal: Union[str, int, AlignmentFlag] = AlignmentFlag.Center, vertical: Union[str, int, AlignmentFlag] = AlignmentFlag.Center):
+		...
+
+	@overload
+	def __init__(self, horizontal: Union[str, int, AlignmentFlag], vertical: Union[str, int, AlignmentFlag]):
+		...
+
+	def __init__(self, horizontal: Union[str, int, AlignmentFlag], vertical: Union[str, int, AlignmentFlag] = None):
+		if vertical is None:
+			if isinstance(horizontal, AlignmentFlag):
+				self.horizontal = horizontal
+				self.vertical = horizontal
+			else:
+				self.horizontal = AlignmentFlag[horizontal]
+				self.vertical = self.horizontal
+		else:
+			self.horizontal = AlignmentFlag[horizontal]
+			self.vertical = AlignmentFlag[vertical]
+
+	@property
+	def horizontal(self):
+		return self.__horizontal
+
+	@horizontal.setter
+	def horizontal(self, value: Union[str, int, AlignmentFlag]):
+		if not isinstance(value, AlignmentFlag):
+			value = AlignmentFlag[value]
+		value = value.asHorizontal
+		assert value.isHorizontal, 'Horizontal alignment can only be horizontal'
+		self.__horizontal = value
+
+	@property
+	def vertical(self):
+		return self.__vertical
+
+	@vertical.setter
+	def vertical(self, value: Union[str, int, AlignmentFlag]):
+		if not isinstance(value, AlignmentFlag):
+			value = AlignmentFlag[value]
+		value = value.asVertical
+		assert value.isVertical, 'Vertical alignment must be a vertical flag'
+		self.__vertical = value
+
+	def asDict(self):
+		return {'horizontal': int(self.horizontal), 'vertical': int(self.vertical)}
+
+	@property
+	def asQtAlignment(self):
+		return self.horizontal.asQtAlignment | self.vertical.asQtAlignment
+
+
+Alignment.Center = Alignment(AlignmentFlag.Center)
+
+
+def relativePosition(item: 'Panel') -> LocationFlag:
+	center = item.sceneRect().center()
+	sceneRect = item.scene().sceneRect()
+	if center.x() < sceneRect.center().x():
+		x = LocationFlag.Left
+	else:
+		x = LocationFlag.Right
+	if center.y() < sceneRect.center().y():
+		y = LocationFlag.Top
+	else:
+		y = LocationFlag.Bottom
+	return x | y
+
+
+def stringIsNumber(string: str) -> bool:
+	try:
+		float(string)
+		return True
+	except ValueError:
+		return False
+
+
+class MutableFloat:
+	__slots__ = ('__value')
+	__value: float
+
+	def __init__(self, value: float):
+		self.value = value
+
+	@property
+	def value(self) -> float:
+		if not isinstance(self.__value, float):
+			self.__value = float(self.__value)
+		return self.__value
+
+	@value.setter
+	def value(self, value):
+		self.__value = self.__parseValue(value)
+
+	def _setValue(self, value):
+		if value is None:
+			value = nan
+		try:
+			value = float.__float__(self, value)
+		except ValueError:
+			raise ValueError(f'{value} is not a number')
+		self.__value = value
+
+	def __parseValue(self, value) -> float:
+		if value is None:
+			return nan
+		try:
+			return float(value)
+		except ValueError:
+			raise ValueError(f'{value} is not a number')
+
+	def __get__(self, instance, owner):
+		return self.__value
+
+	def __set__(self, instance, value):
+		self._setValue(value)
+
+	def __call__(self):
+		return self.__value
+
+	def __add__(self, other):
+		return self.__class__(self.__value + float(other))
+
+	def __radd__(self, other):
+		return self.__add__(other)
+
+	def __iadd__(self, other):
+		self.__value += float(other)
+		return self
+
+	def __sub__(self, other):
+		return self.__class__(self.__value - float(other))
+
+	def __rsub__(self, other):
+		return self.__sub__(other)
+
+	def __isub__(self, other):
+		self.__value -= float(other)
+		return self
+
+	def __mul__(self, other):
+		return self.__class__(self.__value * float(other))
+
+	def __rmul__(self, other):
+		return self.__mul__(other)
+
+	def __imul__(self, other):
+		self.__value *= float(other)
+		return self
+
+	def __truediv__(self, other):
+		try:
+			return self.__class__(self.__value / float(other))
+		except ZeroDivisionError:
+			return self.__class__(0)
+
+	def __rtruediv__(self, other):
+		return self.__truediv__(other)
+
+	def __itruediv__(self, other):
+		self.__value /= float(other)
+		return self
+
+	def __floordiv__(self, other):
+		return self.__class__(self.__value // float(other))
+
+	def __rfloordiv__(self, other):
+		return self.__floordiv__(other)
+
+	def __ifloordiv__(self, other):
+		self.__value //= float(other)
+		return self
+
+	def __mod__(self, other):
+		return self.__class__(self.__value % float(other))
+
+	def __rmod__(self, other):
+		return self.__mod__(other)
+
+	def __imod__(self, other):
+		self.__value %= float(other)
+		return self
+
+	def __pow__(self, other):
+		return self.__class__(self.__value ** float(other))
+
+	def __rpow__(self, other):
+		return self.__pow__(other)
+
+	def __neg__(self):
+		return self.__class__(-self.__value)
+
+	def __pos__(self):
+		return self.__class__(+self.__value)
+
+	def __abs__(self):
+		return self.__class__(abs(self.__value))
+
+	def __invert__(self):
+		return self.__class__(~self.__value)
+
+	def __round__(self, n=None):
+		return self.__class__(round(self.__value, n))
+
+	def __floor__(self):
+		return self.__class__(self.__value.__floor__())
+
+	def __ceil__(self):
+		return self.__class__(self.__value.__ceil__())
+
+	def __trunc__(self):
+		return self.__class__(self.__value.__trunc__())
+
+	def __lt__(self, other):
+		return self.__value < float(other)
+
+	def __le__(self, other):
+		return self.__value <= float(other)
+
+	def __eq__(self, other):
+		try:
+			return self.__value == float(other)
+		except TypeError:
+			return False
+
+	def __ne__(self, other):
+		return not self.__eq__(other)
+
+	def __gt__(self, other):
+		return self.__value > float(other)
+
+	def __ge__(self, other):
+		return self.__value >= float(other)
+
+	def __hash__(self):
+		return hash(self.__value)
+
+	def __str__(self):
+		return str(round(self.__value, 3)).rstrip('0').rstrip('.')
+
+	def __repr__(self):
+		return f'<{self.__class__.__name__}({self.__str__()})>'
+
+	def __bool__(self):
+		return bool(self.__value)
+
+	def __int__(self):
+		return int(self.__value)
+
+	def __float__(self):
+		return float(self.__value)
+
+	def __complex__(self):
+		return complex(self.__value)
+
+	def __index__(self):
+		return int(self.__value)
+
+	def __len__(self):
+		return 1
+
+	def is_integer(self) -> bool:
+		return self.__value.is_integer()
+
+
+class DimensionTypeMeta(EnumMeta):
+
+	def __getitem__(cls, name):
+		try:
+			return super(DimensionTypeMeta, cls).__getitem__(name)
+		except KeyError:
+			pass
+		names = name.split('.')
+		names.reverse()
+		for name in names:
+			name = name.lower()
+			if name in cls.__members__:
+				return cls.__members__[name]
+		if name[0].isalpha() and name[1:].isdigit():
+			return cls(int(name[1:]))
+		raise KeyError(name)
+
+
+class DimensionType(Enum, metaclass=DimensionTypeMeta):
+	x = 1
+	y = 2
+	z = 3
+	w = 4
+	t = w
+	width = x
+	height = y
+	depth = z
+	column = x
+	row = y
+	layer = z
+	columns = x
+	rows = y
+	layers = z
+	left = x
+	top = y
+	right = z
+	bottom = w
+
+
+class Dimension(MutableFloat):
+	__slots__ = ('_absolute', '_parent')
+	_absolute: bool
+
+	def __init__(self, value: Union[int, float], absolute: bool = None, relative: bool = None):
+		super().__init__(float(value))
+
+		# If absolute is not specified, absolute is True
+		if relative is None and absolute is None:
+			absolute = False
+
+		# If both absolute and relative are specified, absolute takes precedence
+		elif relative is not None and absolute is not None:
+			absolute = relative
+
+		# If Relative is specified, absolute is the opposite of relative
+		elif relative is not None:
+			absolute = not relative
+
+		# If Absolute is specified, absolute is the same as absolute
+		elif absolute is not None:
+			pass
+
+		self._absolute = absolute
+
+	def __str__(self):
+		if self._absolute:
+			string = super(Dimension, self).__str__()
+			if self.__absoluteDecorator__:
+				string = f'{string}{self.__absoluteDecorator__}'
+			return string
+
+		string = f'{str(round(self.value * 100, 1)).rstrip("0").rstrip(".")}'
+		if self.__relativeDecorator__:
+			string = f'{string}{self.__relativeDecorator__}'
+		return string
+
+	@property
+	def absolute(self) -> bool:
+		return self._absolute
+
+	def toggleAbsolute(self, parentSize: Union[int, float] = None, value: bool = None):
+		if value is not None and parentSize is not None:
+			if value:
+				self.toAbsolute(parentSize)
+			else:
+				self.toRelative(parentSize)
+		elif parentSize is not None:
+			if self._absolute:
+				self.toRelative(parentSize)
+			else:
+				self.toAbsolute(parentSize)
+		else:
+			self._absolute = not self._absolute
+
+	def toggleRelative(self, parentSize: Union[int, float] = None, value: bool = None):
+		if value is not None:
+			value = not self.relative
+		self.toggleAbsolute(parentSize, value)
+
+	@property
+	def relative(self) -> bool:
+		return not self._absolute
+
+	@property
+	def name(self) -> str:
+		return self.__class__.__name__.split('.')[-1]
+
+	@property
+	def fullName(self):
+		return self.__class__.__name__
+
+	@property
+	def dimension(self) -> DimensionType:
+		return self.__class__.__dimension__
+
+	def toDict(self):
+		return {
+			'value':    round(self.value, 5),
+			'absolute': self._absolute,
+		}
+
+	def toAbsolute(self, value: float) -> 'Dimension':
+		if not self._absolute:
+			return self.__class__(self * value, True)
+		return self
+
+	def toRelative(self, value: float) -> 'Dimension':
+		if self._absolute:
+			return self.__class__(self / value, False)
+		return self
+
+	def setAbsolute(self, value: float):
+		self._absolute = True
+		self.value = value
+
+	def setRelative(self, value: float):
+		self._absolute = False
+		self.value = value
+
+	def __parseValue(self, value: Union[int, float, str]) -> float:
+		if isinstance(value, str):
+			if '%' in value:
+				self.relative = True
+				value = value.replace('%', '')
+			elif 'px' in value:
+				self.absolute = True
+				value = value.replace('px', '')
+			value = re.sub(r'[^0-9.]', '', value, 0, re.DOTALL)
+		return super(Dimension, self).__parseValue(value)
+
+	def __truediv__(self, other):
+		if isinstance(other, Dimension):
+			return self.__class__(self.value / other.value, absolute=not (self.absolute and other.absolute))
+		absolute = self > 1 and other > 1
+		return self.__class__(self.value / other.value, absolute=absolute)
+
+# def __mul__(self, other):
+# 	if isinstance(other, Dimension):
+# 		absolute = other.absolute
+# 	else:
+# 	if other > 1:
+# 		absolute = True
+#
+# 	absolute = absolute or other > 1
+# 	return self.__class__(self.value * other.value, absolute=self.absolute or absolute)
+
+
+class NamedDimension:
+
+	def __new__(cls, name: str, dimension: int, relativeDecorator: str = '%', absoluteDecorator: str = 'px'):
+		cls = type(name, (Dimension,), {})
+		cls.__dimension__ = DimensionType(dimension)
+		cls.__relativeDecorator__ = relativeDecorator
+		cls.__absoluteDecorator__ = absoluteDecorator
+		return cls
+
+
+def makePropertyGetter(key):
+	def get(self):
+		return getattr(self, f'__{key}')
+
+	return get
+
+
+def makePropertySetter(key):
+	if isinstance(key, str) and key.isdigit():
+		key = int(key)
+
+	def set(self, value):
+		try:
+			getattr(self, f'__{key}').value = value
+		except AttributeError:
+			cls = self.__dimensions__[key]
+			setattr(self, f'__{key}', cls(value))
+
+	return set
+
+
+class Validator(ABC):
+
+	def __init__(self, cls: type):
+		self.cls = cls
+		self.valueSet = False
+
+	def __set_name__(self, owner, name):
+		self.private_name = '__' + name
+
+	def __get__(self, obj, objtype=None):
+		return getattr(obj, self.private_name)
+
+	def __set__(self, obj, value):
+		if not self.valueSet or not hasattr(obj, self.private_name):
+			setattr(obj, self.private_name, value)
+			self.valueSet = True
+		elif self.valueSet:
+			getattr(obj, self.private_name).value = value
+		elif isinstance(value, self.cls):
+			setattr(obj, self.private_name, value)
+			self.valueSet = True
+		else:
+			log.warning(f'IMPROPER VALUE TYPE FOP {self.cls} {self.private_name}')
+			setattr(obj, self.private_name, value)
+			self.valueSet = True
+
+
+class MultiDimensionMeta(type):
+
+	def __new__(cls, name: str, bases: tuple, attrs: dict,
+	            dimensions: Union[int, Iterable[str]] = None,
+	            separator: str = None, relativeDecorator: str = '%',
+	            absoluteDecorator: str = 'px',
+	            extend: bool = False):
+		if separator is not None:
+			pass
+		elif separator is None and bases:
+			separator = bases[0].__separator__
+		else:
+			separator = ','
+
+		if isinstance(dimensions, int):
+			dimensions = MultiDimensionMeta.parseInt(dimensions)
+		if dimensions:
+			pass
+		elif dimensions is None and bases:
+			dimensionBases = [i for i in bases if hasattr(i, '__dimensions__')]
+			dimensions = [a for a in dimensionBases[0].__dimensions__.keys()]
+		elif dimensions is None:
+			dimensions = []
+
+		__dimensions__ = {d: NamedDimension(f'{name}.{d.title()}', i + 1, relativeDecorator, absoluteDecorator) for i, d in enumerate(dimensions)}
+		if extend:
+			__dimensions__ = {**[i for i in bases if hasattr(i, '__dimensions__')][0].__dimensions__, **__dimensions__}
+		# subClasses = list(__dimensions__.values())
+
+		# 	for s, item in __dimensions__.items():
+		# 		attrs[s] = property(makePropertyGetter(f'{item.__dimension__.value}'), makePropertySetter(f'{item.__dimension__.value}'))
+		if name != 'MultiDimension':
+			if '__annotations__' in attrs:
+				attrs['__annotations__'].update(__dimensions__)
+			else:
+				attrs['__annotations__'] = __dimensions__
+			attrs['__dimensions__'] = __dimensions__
+			for k, v in __dimensions__.items():
+				# attrs[k] = property(lambda cls: getattr(cls, f'__{k}'), lambda cls, value: getattr(cls, f'__{k}')._setValue(value))
+				attrs[k] = Validator(v)
+				# attrs[k] = property(lambda k: v.__value, lambda k, value: v._setValue(v, value))
+				# attrs[k] = property(makePropertyGetter(k), makePropertySetter(k))
+				attrs[k.title()] = v
+		attrs['__separator__'] = separator
+		cls = type.__new__(cls, name, bases, attrs)
+		cls.__slots__ = tuple((*__dimensions__, *[f'__{i}' for i in __dimensions__]))
+		cls.cls = cls
+
+		# if name != 'MultiDimension':
+		# 	for k, v in __dimensions__.items():
+		# 		globals(k.title(), v)
+
+		# cls.__dimensions__ = {**{v.__dimension__.value: v for v in __dimensions__.values()}, **{v.__dimension__: v for v in __dimensions__.values()}, **__dimensions__}
+
+		# slots = [f'__d{i}'.upper() for i in range(1, len(dimensions) + 1)]
+		# cls.dimensions = tuple(dimensions)
+		# slotAnnotations = {k: v for k, v in zip(slots, cls.__dimensions__.values())}
+		return cls
+
+	@staticmethod
+	def parseInt(dimensions) -> list[str]:
+
+		if 0 < dimensions < 5:
+			dimensions = ['x', 'y', 'z', 't'][:dimensions]
+		elif dimensions == 0:
+			raise ValueError('Dimensions cannot be 0')
+		else:
+			dimensions = [f'd{i}' for i in range(1, dimensions + 1)]
+		return dimensions
+
+
+class MultiDimension(metaclass=MultiDimensionMeta):
+
+	def __init__(self, *T: Union[int, float, QPoint, QPointF, QSize, QSizeF, dict], absolute: bool = None, relative: bool = None, **kwargs):
+		if len(T) == 1:
+			T = T[0]
+		if isinstance(T, (int, float)):
+			T = [T] * len(self.__dimensions__)
+		elif isinstance(T, dict):
+			T = tuple(T[k] for k in self.__dimensions__)
+		elif isinstance(T, (QPoint, QPointF, QSize, QSizeF)):
+			T = T.toTuple()
+		elif len(T) != len(self.__dimensions__):
+			T = tuple(kwargs.get(k, 0) for k in self.__dimensions__)
+		else:
+			T = list(T)
+
+		assert (len(T) == len(self.__dimensions__), 'Dimensions do not match')
+
+		# for i in range(1, len(self.__slots__) + 1):
+		# 	j = self.__dimensions__[i].__name__.split('.')[-1].lower()
+		# 	if j in kwargs:
+		# 		try:
+		# 			T[i] = kwargs[j]
+		# 		except IndexError:
+		# 			T.append(kwargs[j])
+
+		if relative is None and absolute is None:
+			# if relative and absolute are both unset, infer from the values
+			# if any of the values are integers and greater than 50, then the dimension is absolute
+			if isinstance(T, Iterable) and len(T) == 1:
+				_T = T[0]
+			else:
+				_T = T
+			if isinstance(_T, (QPoint, QPointF, QSize, QSizeF)):
+				_T = _T.toTuple()
+			absolute = any((isinstance(t, int) or t.is_integer()) and t > 1 for t in _T)
+		elif relative is not None and absolute is not None:
+			raise ValueError('Cannot set both absolute and relative')
+		elif relative is not None:
+			absolute = not relative
+		elif absolute is not None:
+			pass
+
+		# n = len(self.__slots__)
+		# if isinstance(T, dict):
+		# 	if len(T) != n:
+		# 		raise ValueError(f'Expected {n} values, got {len(T)}')
+		# 	for key, attrs in T.items():
+		# 		cls = self.__annotations__[key]
+		# 		setattr(self, f'__D{cls.__dimension__.value}', cls(**attrs))
+
+		# if len(T) == 1:
+		# 	T = T[0]
+		# 	if isinstance(T, (QPoint, QPointF, QSize, QSizeF)):
+		# 		T = T.toTuple()
+		# 	elif isinstance(T, (int, float)):
+		# 		T = (T, T)
+		# 	elif isinstance(T, (tuple, list)):
+		# 		if len(T) == 2:
+		# 			T = T
+		# 		else:
+		# 			raise ValueError(f'Expected a tuple of length {n}')
+		# 	else:
+		# 		raise ValueError(f'Expected a tuple of length {n}')
+		# elif len(T) == n:
+		# 	pass
+		# else:
+		# 	raise ValueError(f'Expected a tuple of length {n}')
+		annotations = [i for k, i in self.__annotations__.items() if k in self.__dimensions__]
+		for cls, t, s in zip(annotations, T, self.__slots__):
+			if isinstance(t, Dimension):
+				t._absolute = absolute
+			if not isinstance(t, dict):
+				t = {'value': t}
+			if absolute is not None:
+				t['absolute'] = absolute
+			value = cls(**t)
+			setattr(self, s, value)
+
+	# def __setattr__(self, key, value):
+	# 	if key in self.__slots__:
+	# 		super(MultiDimension, self).__setattr__(key, value)
+	# 	elif key in self.__annotations__:
+	# 		getattr(self, f'__{key}').value = float(value)
+	#
+	# def __getattr__(self, item):
+	# 	if item in self.__annotations__:
+	# 		item = f'__{item}'
+	# 	return super(MultiDimension, self).__getattribute__(item)
+
+	@property
+	def absolute(self):
+		return any([x.absolute for x in self])
+
+	@property
+	def relative(self):
+		return any([x.relative for x in self])
+
+	def toRelative(self, *V):
+		assert len(V) == len(self)
+		if any(d is None for d in V):
+			raise ValueError('Expected at least one argument')
+		value = []
+		for i, d in enumerate(self):
+			if d is not None:
+				value.append(d.toRelative(V[i]))
+		return self.cls(*value, relative=True)
+
+	def setRelative(self, *V):
+		assert len(V) == len(self)
+		if any(d is None for d in V):
+			raise ValueError('Expected at least one argument')
+		for v, d in zip(V, self):
+			d.setRelative(v)
+
+	def toAbsolute(self, *V, setValue: bool = False):
+		assert len(V) == len(self)
+		if any(d is None for d in V):
+			raise ValueError('Expected at least one argument')
+		value = []
+		for i, d in enumerate(self):
+			if d is not None:
+				value.append(d.toAbsolute(V[i]))
+		return self.cls(*value, absolute=True)
+
+	def setAbsolute(self, *V):
+		assert len(V) == len(self)
+		if any(d is None for d in V):
+			raise ValueError('Expected at least one argument')
+		for v, d in zip(V, self):
+			d.setAbsolute(v)
+
+	def toDict(self) -> dict[str, Union[int, float, bool]]:
+		value = {i.name.lower(): i.toDict() for i in self}
+		if sum(int(i['absolute']) for i in value.values()) in (len(self), 0):
+			return {'absolute': self.absolute, **{i.name.lower(): i.value for i in self}}
+		return value
+
+	def toTuple(self) -> tuple[Dimension]:
+		return tuple(self)
+
+	def __int__(self) -> int:
+		return int(self.size)
+
+	def __eq__(self, other) -> bool:
+		return self.x == other.x and self.y == other.rows
+
+	def __hash__(self) -> int:
+		return hash((self.x, self.y))
+
+	def __repr__(self) -> str:
+		return f'{self.__class__.__name__}({self})'
+
+	def __str__(self) -> str:
+		return self.__separator__.join(str(d) for d in self)
+
+	def __iter__(self):
+		return iter(getattr(self, v) for v in self.__dimensions__)
+
+	# @cached_property
+	# def _tuple(self) -> tuple[Dimension]:
+	# 	return tuple(getattr(self, d) for d in self.__dimensions__)
+
+	def __len__(self):
+		return 2
+
+	def __wrapOther(self, other: Any) -> tuple[float]:
+		if isinstance(other, MultiDimension):
+			pass
+		elif isinstance(other, Iterable):
+			other = tuple(*other)
+		elif isinstance(other, (QPoint, QPointF, QSize, QSizeF, QRect, QRectF)):
+			other = other.toTuple()
+		elif isinstance(other, (int, float)):
+			other = tuple(other)
+		elif isinstance(other, dict):
+			other = tuple(float(d) for d in self.values())
+		elif all(hasattr(other, dimension) for dimension in self.dimensions):
+			other = tuple(getattr(other, dimension) for dimension in self.dimensions)
+		s = len(self)
+		o = len(other)
+		if s == o or o == 1:
+			return other
+		elif s > o and (mul := s % o) % 2 == 0:
+			return tuple(i for j in ([*other] for x in range(mul)) for i in j)
+
+		raise TypeError(f'Cannot convert {type(other)} to Size')
+
+	def __bool__(self):
+		return all(d is not None for d in self)
+
+	def __add__(self, other: 'MultiDimension') -> 'MultiDimension':
+		other = self.__wrapOther(other)
+		return self.cls(map(lambda x, y: x + y, self, other))
+
+	def __sub__(self, other: 'MultiDimension') -> 'MultiDimension':
+		other = self.__wrapOther(other)
+		return self.cls(map(lambda x, y: x - y, self, other))
+
+	def __mul__(self, other: int) -> 'MultiDimension':
+		other = self.__wrapOther(other)
+		return self.cls(map(lambda x, y: x * y, self, other))
+
+	def __truediv__(self, other: int) -> 'MultiDimension':
+		other = self.__wrapOther(other)
+		return self.cls(list(map(lambda x, y: x / y, self, other)))
+
+	def __floordiv__(self, other: int) -> 'MultiDimension':
+		other = self.__wrapOther(other)
+		return self.cls(map(lambda x, y: x // y, self, other))
+
+	def __mod__(self, other: int) -> 'MultiDimension':
+		other = self.__wrapOther(other)
+		return self.cls(map(lambda x, y: x % y, self, other))
+
+	def __pow__(self, other: int) -> 'MultiDimension':
+		other = self.__wrapOther(other)
+		return self.cls(map(lambda x, y: x ** y, self, other))
+
+	def __gt__(self, other: 'MultiDimension') -> bool:
+		other = self.__wrapOther(other)
+		return all(x > y for x, y in zip(self, other))
+
+	def __lt__(self, other: 'MultiDimension') -> bool:
+		other = self.__wrapOther(other)
+		return all(x < y for x, y in zip(self, other))
+
+	def __ge__(self, other: 'MultiDimension') -> bool:
+		other = self.__wrapOther(other)
+		return all(x >= y for x, y in zip(self, other))
+
+	def __le__(self, other: 'MultiDimension') -> bool:
+		other = self.__wrapOther(other)
+		return all(x <= y for x, y in zip(self, other))
+
+	def __eq__(self, other: 'MultiDimension') -> bool:
+		other = self.__wrapOther(other)
+		return all(x == y for x, y in zip(self, other))
+
+	def __ne__(self, other: 'MultiDimension') -> bool:
+		other = self.__wrapOther(other)
+		return all(x != y for x, y in zip(self, other))
+
+	def __and__(self, other: 'MultiDimension') -> 'MultiDimension':
+		return self.cls(map(lambda x, y: x & y, self, other))
+
+
+class Size(MultiDimension, dimensions=('width', 'height'), separator='×'):
+
+	@overload
+	def __init__(self, width: float, height: float) -> None: ...
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+
+	def asQSize(self):
+		return QSize(self.x, self.y)
+
+	def asQSizeF(self):
+		return QSizeF(self.x, self.y)
+
+
+class Position(MultiDimension, dimensions=('x', 'y'), separator=', '):
+
+	def __init__(self, x: float, y: float) -> None:
+		...
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+
+	def asQPoint(self):
+		return QPoint(self.x, self.y)
+
+	def asQPointF(self):
+		return QPointF(self.x, self.y)
+
+	@property
+	def relativeLocation(self) -> LocationFlag:
+		if self.x > 0.5:
+			x = LocationFlag.Right
+		elif self.x < 0.5:
+			x = LocationFlag.Left
+		else:
+			x = LocationFlag.Center
+
+		if self.y > 0.5:
+			y = LocationFlag.Bottom
+		elif self.y < 0.5:
+			y = LocationFlag.Top
+		else:
+			y = LocationFlag.Center
+
+		return x | y
+
+	def __and__(self, other: Union['MultiDimension', LocationFlag]) -> 'MultiDimension':
+		if isinstance(other, LocationFlag):
+			return self.relativeLocation & other
+		return self.cls(*map(lambda x, y: x & y, self, other))
+
+
+class Margins(MultiDimension, dimensions=('left', 'top', 'right', 'bottom'), separator=', '):
+	surface: _Panel
+
+	@overload
+	def __init__(self, surface: _Panel, left: float, top: float, right: float, bottom: float) -> None:
+		...
+
+	def __init__(self, surface: _Panel, *args, **kwargs):
+		assert isinstance(surface, _Panel)
+		assert hasattr(surface, 'geometry')
+		self.surface: 'Panel' = surface
+		super().__init__(*args, **kwargs)
+
+	@property
+	def horizontalSpan(self) -> float:
+		if mostly(self.left.relative, self.right.relative):
+			return self.relativeHorizontalSpan
+		return self.absoluteHorizontalSpan
+
+	@property
+	def relativeHorizontalSpan(self) -> float:
+		return round(1 - self.relativeLeft - self.relativeRight, 3)
+
+	@property
+	def absoluteHorizontalSpan(self) -> float:
+		return round(self.surface.geometry.absoulueWidth - (self.absoluteLeft + self.absoluteRight), 3)
+
+	@property
+	def verticalSpan(self) -> float:
+		if mostly(self.top.relative, self.bottom.relative):
+			return self.relativeVerticalSpan
+		return self.absoluteVerticalSpan
+
+	@property
+	def relativeVerticalSpan(self) -> float:
+		return round(1 - self.relativeTop - self.relativeBottom, 3)
+
+	@property
+	def absoluteVerticalSpan(self) -> float:
+		return round(self.surface.geometry.absoluteHeight - (self.absoluteTop + self.absoluteBottom), 3)
+
+	def __getMargin(self, attr: Union[str, LocationFlag]) -> Union['Margins.Left', 'Margins.Right', 'Margins.Top', 'Margins.Bottom']:
+		if isinstance(attr, LocationFlag) and attr.isEdge:
+			return getattr(self, attr.name.lower())
+		elif isinstance(attr, str) and attr.lower() in self.__dimensions__:
+			return getattr(self, attr.lower())
+		raise AttributeError(f'{attr} is not a valid attribute')
+
+	def __values(self, *attrs: Union[str, LocationFlag], absolute: bool = True, values: tuple[float] = None) -> Union[List[float], float]:
+		attrs = [self.__getMargin(attr) for attr in attrs]
+
+		if values:
+			if not isinstance(values, Iterable):
+				values = [values]
+			assert len(attrs) == len(values) or len(values) == 1
+			if len(values) == 1:
+				values *= len(attrs)
+
+		surfaceSize = self.surface.geometry.absoluteSize()
+
+		if values:
+			for i, attr in enumerate(attrs):
+				if attr.absolute == absolute:
+					attr.value = values[i]
+				elif attr.relative != absolute:
+					attr.value = values[i]
+				else:
+					other = surfaceSize.width.value if attr.name.lower() in ('left', 'right') else surfaceSize.height.value
+					attr.value = capValue(other * values[i], 0, other) if attr.absolute else capValue(values[i] / other, 0, 1)
+			return None
+
+		for i, attr in enumerate(attrs):
+			if attr.absolute and absolute:
+				attrs[i] = attr.value
+			elif attr.relative and not absolute:
+				attrs[i] = attr.value
+			else:
+				other = surfaceSize.width.value if attr.name.lower() in ('left', 'right') else surfaceSize.height.value
+				attrs[i] = attr.value / other if attr.absolute else attr.value * other
+
+		if len(attrs) == 1:
+			return attrs[0]
+		return attrs
+
+	@property
+	def absoluteLeft(self):
+		if self.left.absolute:
+			return self.left.value
+		return self.surface.rect().width() * self.left.value
+
+	@absoluteLeft.setter
+	def absoluteLeft(self, value):
+		if self.left.absolute:
+			self.left.value = value
+		else:
+			self.left.value = value / self.surface.rect().width()
+
+	@property
+	def absoluteTop(self):
+		if self.top.absolute:
+			return self.top
+		return self.surface.rect().height() * self.top.value
+
+	@absoluteTop.setter
+	def absoluteTop(self, value):
+		if self.top.absolute:
+			self.top.value = value
+		else:
+			self.top.value = value / self.surface.rect().height()
+
+	@property
+	def absoluteRight(self):
+		if self.right.absolute:
+			return self.right.value
+		return self.surface.rect().width() * self.right.value
+
+	@absoluteRight.setter
+	def absoluteRight(self, value):
+		if self.right.absolute:
+			self.right.value = value
+		else:
+			self.right.value = value / self.surface.rect().width()
+
+	@property
+	def absoluteBottom(self):
+		if self.bottom.absolute:
+			return self.bottom.value
+		return self.surface.rect().height() * self.bottom.value
+
+	@absoluteBottom.setter
+	def absoluteBottom(self, value):
+		if self.bottom.absolute:
+			self.bottom.value = value
+		else:
+			self.bottom.value = value / self.surface.rect().height()
+
+	@property
+	def relativeLeft(self):
+		if self.left.relative:
+			return self.left.value
+		return self.surface.rect().width() * self.left.value
+
+	@relativeLeft.setter
+	def relativeLeft(self, value):
+		if self.left.relative:
+			self.left.value = value
+		else:
+			self.left.value = value / self.surface.rect().width()
+
+	@property
+	def relativeTop(self):
+		if self.top.relative:
+			return self.top.value
+		return self.surface.rect().height() * self.top.value
+
+	@relativeTop.setter
+	def relativeTop(self, value):
+		if self.top.relative:
+			self.top.value = value
+		else:
+			self.top.value = value / self.surface.rect().height()
+
+	@property
+	def relativeRight(self):
+		if self.right.relative:
+			return self.right.value
+		return self.surface.rect().width() * self.right.value
+
+	@relativeRight.setter
+	def relativeRight(self, value):
+		if self.right.relative:
+			self.right.value = value
+		else:
+			self.right.value = value / self.surface.rect().width()
+
+	@property
+	def relativeBottom(self):
+		if self.bottom.relative:
+			return self.bottom.value
+		return self.surface.rect().height() * self.bottom.value
+
+	@relativeBottom.setter
+	def relativeBottom(self, value):
+		if self.bottom.relative:
+			self.bottom.value = value
+		else:
+			self.bottom.value = value / self.surface.rect().height()
+
+	def absoluteValues(self, edges: List[Union[str, LocationFlag]] = LocationFlag.edges()) -> List[float]:
+		return self.__values(*edges)
+
+	def setAbsoluteValues(self, values: list[float], edges: List[Union[str, LocationFlag]] = LocationFlag.edges()) -> List[float]:
+		return self.__values(*edges, values=values)
+
+	def relativeValues(self, edges: List[Union[str, LocationFlag]] = LocationFlag.edges()) -> List[float]:
+		return self.__values(*edges, absolute=False)
+
+	def setRelativeValues(self, values: list[float], edges: List[Union[str, LocationFlag]] = LocationFlag.edges()) -> List[float]:
+		return self.__values(*edges, absolute=False, values=values)
+
+	def asQMarginF(self) -> QMarginsF:
+		return QMarginsF(self.absoluteLeft, self.absoluteTop, self.absoluteRight, self.absoluteBottom)
+
+	def asQMargin(self) -> QMargins:
+		return QMargins(*[int(i) for i in self.absoluteValues()])
+
+	@property
+	def state(self):
+		return {
+			'left':   self.left,
+			'top':    self.top,
+			'right':  self.right,
+			'bottom': self.bottom,
+		}
 
 
 def ISOsplit(s, split):
