@@ -1,13 +1,14 @@
-import logging
+from src import logging
 from functools import cached_property
-from typing import Callable, Optional, Type
+from typing import Callable, List, Optional, Type, Union
 from sys import gettrace
 
 from PySide2.QtCore import QPointF, QRectF, QSize, Qt
 from PySide2.QtGui import QPainterPath, QPen
 from PySide2.QtWidgets import QGraphicsItem, QGraphicsItemGroup, QGraphicsPathItem, QGraphicsRectItem, QGraphicsScene, QGraphicsView
 
-from src.utils import LocationFlag
+from src.Grid import Geometry
+from src.utils import _Panel, disconnectSignal, HandleItemSignals, LocationFlag, Position
 from src import colorPalette
 
 log = logging.getLogger(__name__)
@@ -17,42 +18,61 @@ debug = log.level <= 10
 
 
 class Handle(QGraphicsPathItem):
-	location: LocationFlag
+	location: Union[LocationFlag, Position]
 	cursor: Qt.CursorShape
-	surface: QGraphicsItem
+	surface: _Panel
+	signals: HandleItemSignals
+	_resizeSignalConnected: bool
 
-	def __init__(self, parent: 'HandleGroup', location: LocationFlag):
-		super(Handle, self).__init__()
-		self._boundingRect = None
-		self.setParentItem(parent)
+	def __init__(self, parent: 'HandleGroup', location: Union[LocationFlag, Position], alignment: LocationFlag = LocationFlag.Center):
+		super(Handle, self).__init__(parent=parent)
 		self.location = location
+		self.alignment = alignment
+		self.__init_defaults__()
+
+	def __repr__(self):
+		return f'{self.__class__.__name__}({self.location.name})'
+
+	def __init_defaults__(self):
 		pen = QPen(colorPalette.windowText().color(), self.width)
 		pen.setCapStyle(Qt.RoundCap)
 		pen.setJoinStyle(Qt.RoundJoin)
+
+		if isinstance(self.parentItem(), _Panel):
+			# self.itemChange = self._itemChangeWithPanelParent
+			self._resizeSignalConnected = False
+		self._init_signals_()
 		self.setPen(pen)
 		self.setAcceptHoverEvents(True)
 		self.setFlag(QGraphicsItem.ItemIsMovable, True)
 		self.setFlag(QGraphicsItem.ItemIsFocusable, False)
-		# self.setFlag(QGraphicsItem.ItemStopsClickFocusPropagation, True)
 		self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
-		# self.setAcceptedMouseButtons(Qt.NoButton)
 		self.setPath(self._path)
+
+	def _init_signals_(self):
+		if hasattr(self.parentItem(), 'signals') and isinstance(self.parentItem(), HandleGroup):
+			self.signals = self.parentItem().signals
+		else:
+			cls = type(self)
+			annotations = cls.__annotations__
+			while 'signals' not in annotations:
+				cls = cls.mro()[1]
+				annotations = cls.__annotations__
+			self.signals = annotations['signals']()
 
 	def hoverEnterEvent(self, event):
 		self.setCursor(self.cursor)
 		self.setScale(1.5)
+		self.update()
+		self.surface.update()
 		self.setZValue(self.zValue() + 100)
-		# self.updatePosition()
-		# effect = QGraphicsDropShadowEffect(None)
-		# effect.setOffset(0, 0)
-		# effect.setBlurRadius(5)
-		# effect.setColor(Qt.black)
-		# self.setGraphicsEffect(effect)
 		super(Handle, self).hoverEnterEvent(event)
 
 	def hoverLeaveEvent(self, event):
 		self.setCursor(Qt.ArrowCursor)
 		self.setScale(1.0)
+		self.update()
+		self.surface.update()
 		self.setZValue(self.zValue() - 100)
 		super(Handle, self).hoverLeaveEvent(event)
 
@@ -61,18 +81,38 @@ class Handle(QGraphicsPathItem):
 
 	@property
 	def surfaceRect(self):
-		return self.parentItem().surface.rect()
+		# if hasattr(self.surface, 'geometry'):
+		# 	if isinstance(self.surface.geometry, Geometry):
+		# 		return self.surface.geometry.absoluteRect()
+		# 	return self.surface.geometry()
+		return self.surface.boundingRect()
 
 	@property
 	def position(self) -> QPointF:
-		offset = self.parentItem().offset
-		rect = self.surfaceRect
-		xS, yS, oX, oY = self.positionScalars
-		w = rect.width()
-		h = rect.height()
-		x = w * xS + (offset * oX)
-		y = h * yS + (offset * oY)
-		return QPointF(x, y) + rect.topLeft()
+		if isinstance(self.location, Position):
+			pos = self.location.toAbsolute(*self.surfaceRect.size().toTuple()).asQPointF()
+		# _, _, oX, oY = self.positionScalars
+		# offset = self.parentItem().offset
+		# pos += QPointF(oX * offset, oY * offset)
+		else:
+			# offset = self.parentItem().offset
+			pos = self.location.action(self.surface.geometry.absoluteRect())
+
+		# w = rect.width()
+		# h = rect.height()
+		# x = w * xS + (offset * oX)
+		# y = h * yS + (offset * oY)
+		# pos = QPointF(x, y) + rect.topLeft()
+		# alignmentRect = self._path.boundingRect()
+		# if self.alignment.isLeft:
+		# 	pos.setX(pos.x() + alignmentRect.right())
+		# elif self.alignment.isRight:
+		# 	pos.setX(pos.x() + alignmentRect.left())
+		# if self.alignment.isTop:
+		# 	pos.setY(pos.y() + alignmentRect.bottom())
+		# elif self.alignment.isBottom:
+		# 	pos.setY(pos.y() + alignmentRect.top())
+		return pos
 
 	def resetAttribute(self, *attr):
 		if not attr:
@@ -141,22 +181,27 @@ class Handle(QGraphicsPathItem):
 	def shape(self):
 		return self._shape
 
-	@property
+	@cached_property
 	def surface(self):
-		return self.parentItem().parentItem()
+		parent = self.parentItem()
+		while parent is not None and not isinstance(parent, _Panel):
+			parent = parent.parentItem()
+		return parent
 
-	def updatePosition(self):
-		if not self.isUnderMouse():
-			self.setPos(self.position)
+	def updatePosition(self, rect: QRectF = None):
+		if rect is None:
+			rect = self.surfaceRect
+		if not self.isUnderMouse() and self.isVisible():
+			self.setPos(self.location.action(rect))
 
-	def paint(self, painter, option, widget):
-		super(Handle, self).paint(painter, option, widget)
-		if debug and False:
-			pen = self.pen()
-			pen.setCosmetic(True)
-			painter.setPen(pen)
-			painter.setBrush(Qt.NoBrush)
-			painter.drawRect(self.boundingRect())
+	# def paint(self, painter, option, widget):
+	# 	super(Handle, self).paint(painter, option, widget)
+	# 	if debug and False:
+	# 		pen = self.pen()
+	# 		pen.setCosmetic(True)
+	# 		painter.setPen(pen)
+	# 		painter.setBrush(Qt.NoBrush)
+	# 		painter.drawRect(self.boundingRect())
 
 	@cached_property
 	def _shape(self) -> QPainterPath:
@@ -185,8 +230,8 @@ class Handle(QGraphicsPathItem):
 			w = -w
 			x = -x
 		rect = QRectF(x, y, w, l)
-		self._boudingRect = rect
 		path.addRect(rect)
+		path.translate(self.offset)
 		return path
 
 	@cached_property
@@ -211,11 +256,34 @@ class Handle(QGraphicsPathItem):
 			path.moveTo(0, hor)
 			path.lineTo(0, 0)
 			path.lineTo(ver, 0)
+		path.translate(self.offset)
 		return path
+
+	@property
+	def offset(self):
+		_, _, oX, oY = self.positionScalars
+		offset = getattr(self.parentItem(), 'offset', 0)
+		return QPointF(oX * offset, oY * offset)
 
 	@property
 	def parent(self) -> 'HandleGroup':
 		return self.parentItem()
+
+	def itemChange(self, change, value):
+		if isinstance(self.parentItem(), _Panel):
+			if change == QGraphicsItem.ItemVisibleChange:
+				if value and not self._resizeSignalConnected:
+					self.surface.signals.resized.connect(self.updatePosition)
+					self._resizeSignalConnected = True
+				elif not value and self._resizeSignalConnected:
+					self.surface.signals.resized.disconnect(self.updatePosition)
+					self._resizeSignalConnected = False
+			elif change and change == QGraphicsItem.ItemVisibleHasChanged:
+				self.updatePosition(self.surface.geometry.absoluteRect())
+			elif change == QGraphicsItem.ItemParentChange:
+				self.surface.signals.resized.disconnect(self.updatePosition)
+				self._resizeSignalConnected = False
+		return super().itemChange(change, value)
 
 
 class HandleGroup(QGraphicsItemGroup):
@@ -224,19 +292,28 @@ class HandleGroup(QGraphicsItemGroup):
 	__width: float
 	currentHandle = None
 	forceDisplay = False
-	locations: LocationFlag = LocationFlag.all()
+	locations: Union[LocationFlag, List[Union[LocationFlag, Position]]] = [*LocationFlag.edges(), *LocationFlag.corners()]
 	handleClass: Type[Handle] = Handle
+	_resizeSignalConnected: bool = True
+	signals: HandleItemSignals
 
-	def __init__(self, parent: 'Panel', length: float = 10.0, offset: float = -2.0, width: float = 5.0, locations: LocationFlag = None, *args, **kwargs):
+	def __init__(self, parent: 'Panel',
+	             length: float = 10.0,
+	             offset: float = -2.0,
+	             width: float = 5.0,
+	             locations: Optional[LocationFlag] = None,
+	             *args, **kwargs):
+
 		super(HandleGroup, self).__init__(*args, **kwargs)
+		self._init_signals_()
 		self.setParentItem(parent)
 		if locations is not None:
 			self.locations = locations
-		# parent.signals.resized.connect(self.updatePosition)
 		self.setHandlesChildEvents(False)
 		self.setFiltersChildEvents(False)
 		self.forceDisplay = False
 		self.setAcceptHoverEvents(False)
+		self._resizeSignalConnected = False
 
 		self.length = length
 		self.offset = offset
@@ -245,8 +322,13 @@ class HandleGroup(QGraphicsItemGroup):
 		self._genHandles()
 		self.hide()
 
-	def show(self) -> None:
-		super(HandleGroup, self).show()
+	def _init_signals_(self):
+		cls = type(self)
+		annotations = cls.__annotations__
+		while 'signals' not in annotations:
+			cls = cls.mro()[1]
+			annotations = cls.__annotations__
+		self.signals = annotations['signals']()
 
 	def hide(self):
 		if not self.forceDisplay:
@@ -255,6 +337,7 @@ class HandleGroup(QGraphicsItemGroup):
 			self.show()
 
 	def _genHandles(self):
+		self.handles = []
 		if isinstance(self.locations, LocationFlag):
 			locations = {loc & self.locations for loc in LocationFlag.all() if loc & self.locations}
 		elif isinstance(self.locations, (list, tuple)):
@@ -262,11 +345,23 @@ class HandleGroup(QGraphicsItemGroup):
 		else:
 			raise TypeError('locations must be a LocationFlag or a list of LocationFlags')
 		for value in locations:
-			self.handleClass(self, value)
+			h = self.handleClass(self, value)
+			self.handles.append(h)
+			setattr(self, f'{h.location.name[0].lower()}{h.location.name[1:]}Handle', h)
 
 	def itemChange(self, change, value):
 		if change == QGraphicsItem.ItemVisibleHasChanged:
-			self.updatePosition()
+			if value and not self._resizeSignalConnected:
+				self.surface.signals.resized.connect(self.updatePosition)
+				self._resizeSignalConnected = True
+			elif not value and self._resizeSignalConnected:
+				disconnectSignal(self.surface.signals.resized, self.updatePosition)
+				self._resizeSignalConnected = False
+			elif change == QGraphicsItem.ItemParentChange:
+				disconnectSignal(self.surface.signals.resized, self.updatePosition)
+				self._resizeSignalConnected = False
+		elif change and change == QGraphicsItem.ItemVisibleHasChanged:
+			self.updatePosition(self.surface.geometry.absoluteRect())
 		return super(HandleGroup, self).itemChange(change, value)
 
 	@property
@@ -300,9 +395,8 @@ class HandleGroup(QGraphicsItemGroup):
 		attr = (a for a in attr if a is not None)
 		list(map(lambda item: item.resetAttribute(*attr), self.childItems()))
 
-	def updatePosition(self, *args):
-		for item in self.childItems():
-			item.updatePosition()
+	def updatePosition(self, rect=None):
+		list(map(lambda item: item.updatePosition(rect), self.handles))
 
 	@cached_property
 	def surface(self):
@@ -339,7 +433,7 @@ if __name__ == '__main__':
 	x = IndoorIcon(rect)
 	# window.scene().addItem(rect)
 	# rect.setPos(100, 100)
-	# handles = Handles(rect)
+	# marginHandles = Handles(rect)
 	# d = DrawerHandle(rect)
 	window.scene().addItem(x)
 
@@ -348,5 +442,5 @@ if __name__ == '__main__':
 	g.moveCenter(app.screens()[1].geometry().center())
 	window.setGeometry(g)
 	window.show()
-	# handles.update()
+	# marginHandles.update()
 	sys.exit(app.exec_())

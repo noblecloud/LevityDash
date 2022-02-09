@@ -1,15 +1,27 @@
-from PySide2.QtCore import QPointF, QRectF
+from PySide2.QtCore import QObject, QPointF, QRectF, Signal
 from PySide2.QtWidgets import QGraphicsItem, QGraphicsSceneMouseEvent
 
-from utils import LocationFlag
-from . import Handle, HandleGroup
+from src.utils import _Panel, Axis, clearCacheAttr, disconnectSignal, HandleItemSignals, LocationFlag
+from src.Modules.Handles import Handle, HandleGroup
 
 __all__ = ['ResizeHandle', 'ResizeHandles', 'Splitter']
 
 
+class ResizeHandleSignals(QObject):
+	action = Signal(QRectF, Axis)
+
+
 class ResizeHandle(Handle):
+	signals: ResizeHandleSignals
+	_ratio = None
+	parentWasMovable = True
 
 	def mousePressEvent(self, event) -> None:
+		if hasattr(self.surface.parent, 'childIsMoving'):
+			self.surface.parent.childIsMoving = True
+			self.parentWasMovable = self.surface.parent.movable
+			if self.parentWasMovable:
+				self.surface.parent.setMovable(False)
 		self.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
 		event.accept()
 		self.setSelected(True)
@@ -22,15 +34,15 @@ class ResizeHandle(Handle):
 		super(Handle, self).mouseMoveEvent(event)
 
 	def mouseReleaseEvent(self, event):
-		self.surface.geometry.updateSurface()
+		if hasattr(self.surface.parent, 'childIsMoving'):
+			self.surface.parent.childIsMoving = False
+			if self.parentWasMovable:
+				self.surface.parent.setMovable(True)
 		super(Handle, self).mouseReleaseEvent(event)
 
 	def interactiveResize(self, mouseEvent: QGraphicsSceneMouseEvent) -> tuple[QRectF, QPointF]:
 
 		rect = self.surface.rect()
-		startWidth = rect.width()
-		startHeight = rect.height()
-		pos = self.surface.pos()
 		# if self.parent.keepInFrame:
 		# 	mousePos = self.mapToFromScene(mouseEvent.scenePos())
 		# 	parentRect = self.parent.rect()
@@ -113,131 +125,196 @@ class ResizeHandle(Handle):
 		# self.surface.setPos(QPointF(0, 0))
 		# self.surface.setRect(rect)
 		self.surface.geometry.setGeometry(rect)
-		# self.surface.geometry.setAbsolutePosition(p)
-		self.surface.geometry.updateSurface()
+		self.signals.action.emit(rect, self.location.asAxis)
+
+	# self.mapValues(rect)
 
 	def itemChange(self, change, value):
 		if change == QGraphicsItem.ItemPositionChange:
-			x = value
 			value = self.position
+		elif value and change == QGraphicsItem.ItemVisibleHasChanged and self.surface:
+			self.updatePosition(self.surface.geometry.absoluteRect())
 		return super(ResizeHandle, self).itemChange(change, value)
 
 
 class ResizeHandles(HandleGroup):
 	handleClass = ResizeHandle
+	signals: ResizeHandleSignals
+
+	def __init__(self, *args, **kwargs):
+		super(ResizeHandles, self).__init__(*args, **kwargs)
 
 
 class Splitter(Handle):
-	surfaceAPosition: LocationFlag
-	surfaceBPosition: LocationFlag
+	_ratio: float = None
 
-	def __init__(self, surfaceA, surfaceB):
-		assert surfaceA.parent == surfaceB.parent
+	def __init__(self, surface, ratio=0.5, splitType: LocationFlag = LocationFlag.Horizontal, *args, **kwargs):
+		assert isinstance(ratio, float)
 
-		self.surfaceA = surfaceA
-		self.surfaceB = surfaceB
-		self.splitType = self.determineSplitType()
-		self.surfaceA.parent.signals.resized.connect(self.updatePosition)
-		# self.surfaceB.signals.resized.connect(self.updatePosition)
-		self.determinePositions()
+		if isinstance(splitType, str):
+			splitType = LocationFlag[splitType.title()]
+		assert isinstance(splitType, LocationFlag)
 
-		self.width = 5
-		self.length = 20
+		self.width = 2.5
+		self.length = 10
+		self.location = splitType
 
-		super(Splitter, self).__init__(surfaceA.parent, location=self.splitType)
+		primary = kwargs.pop('primary', None)
+		if primary is not None and primary.parent is not surface:
+			primary.setParentItem(surface)
+		secondary = kwargs.pop('secondary', None)
+		if secondary is not None and secondary.parent is not surface:
+			secondary.setParentItem(surface)
 
-	def determineSplitType(self):
-		centerA, centerB = self.centers()
-		horizontal = abs(centerA.x() - centerB.x())
-		vertical = abs(centerA.y() - centerB.y())
-		if horizontal < vertical:
-			return LocationFlag.TopCenter
+		super(Splitter, self).__init__(surface, location=splitType, *args, **kwargs)
+
+		self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
+
+		surfaceChildren = [child for child in self.surface.childPanels if child is not primary or child is not secondary]
+		if len(surfaceChildren) > 2:
+			raise Exception("Splitter can only be used with 2 child panels")
+		elif len(surfaceChildren) == 2:
+			self.primary = surfaceChildren[0]
+			self.secondary = surfaceChildren[1]
+		elif len(surfaceChildren) == 1:
+			self.primary = surfaceChildren[0]
+			self.secondary = None
 		else:
-			return LocationFlag.CenterLeft
+			self.primary = None
+			self.secondary = None
 
-	def determinePositions(self):
-		centerA, centerB = self.centers()
-		if self.splitType.isHorizontal:
-			if centerA.x() < centerB.x():
-				self.surfaceAPosition = LocationFlag.Left
-				self.surfaceBPosition = LocationFlag.Right
-			else:
-				self.surfaceAPosition = LocationFlag.Right
-				self.surfaceBPosition = LocationFlag.Left
-		else:
-			if centerA.y() < centerB.y():
-				self.surfaceAPosition = LocationFlag.Top
-				self.surfaceBPosition = LocationFlag.Bottom
-			else:
-				self.surfaceAPosition = LocationFlag.Bottom
-				self.surfaceBPosition = LocationFlag.Top
-
-	def rects(self) -> tuple[QRectF, QRectF]:
-		a = self.surfaceA.mapRectFromParent(self.surfaceA.rect())
-		b = self.surfaceB.mapRectFromParent(self.surfaceB.rect())
-		return a, b
-
-	def centers(self) -> tuple[QPointF, QPointF]:
-		a, b = self.rects()
-		return a.center(), b.center()
+		self.ratio = ratio
+		self.setPos(self.position)
 
 	@property
 	def position(self) -> QPointF:
-		a, _ = self.rects()
-		aCenter = a.center()
-		if self.splitType.isHorizontal:
-			if self.surfaceAPosition.isLeft:
-				aCenter.setX(a.right())
-			else:
-				aCenter.setX(a.left())
+		center = self.surface.rect().center()
+		if self.location.isVertical:
+			center.setX(self.ratio * float(self.surface.geometry.absoluteWidth))
 		else:
-			if self.surfaceAPosition.isTop:
-				aCenter.setY(a.bottom())
-			else:
-				aCenter.setY(a.top())
-		return aCenter
+			center.setY(self.ratio * float(self.surface.geometry.absoluteHeight))
+		return center
 
 	def mousePressEvent(self, event) -> None:
-		self.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
 		event.accept()
 		self.setSelected(True)
-		self.surface.setSelected(False)
 		super(Handle, self).mousePressEvent(event)
 
 	def mouseMoveEvent(self, event):
-
 		event.accept()
 		self.interactiveResize(event)
-		super(Handle, self).mouseMoveEvent(event)
 
-	def mouseReleaseEvent(self, event):
-		# self.setFlag(QGraphicsItem.ItemIgnoresTransformations, False)
-		self.surface.geometry.updateSurface()
+	def mouseDoubleClickEvent(self, event):
+		event.accept()
+		self.swapSurfaces()
+
+	def mouseReleaseEvent(self, event) -> None:
+		self.update()
 		super(Handle, self).mouseReleaseEvent(event)
 
 	def interactiveResize(self, mouseEvent):
-		a, b = self.rects()
-		aCenter, bCenter = self.centers()
-		if self.splitType.isHorizontal:
-			if self.surfaceAPosition.isLeft:
-				a.setRight(mouseEvent.pos().x())
-			else:
-				a.setLeft(mouseEvent.pos().x())
+		eventPosition = self.parent.mapFromScene(mouseEvent.scenePos())
+		value = eventPosition.x() if self.location.isVertical else eventPosition.y()
+		surfaceSize = float(self.surface.geometry.absoluteWidth if self.location.isVertical else self.surface.geometry.absoluteHeight)
+		value /= surfaceSize
+		# Snap value to 0.1 increments if within 0.03
+		valueRounded = round(value, 1)
+		if abs(valueRounded - value) < surfaceSize * 0.0003:
+			value = valueRounded
+		self.ratio = value
+
+	def swapSurfaces(self):
+		self.primary, self.secondary = self.secondary, self.primary
+		if hasattr(self.surface, 'primary'):
+			self.surface.primary, self.surface.secondary = self.surface.secondary, self.surface.primary
+		self.setGeometries()
+
+	def updatePosition(self, rect: QRectF):
+		center = rect.center()
+		if self.location.isVertical:
+			center.setX(self.ratio * float(self.surface.geometry.absoluteWidth))
 		else:
-			if self.surfaceAPosition.isTop:
-				a.setBottom(mouseEvent.pos().y())
+			center.setY(self.ratio * float(self.surface.geometry.absoluteHeight))
+		self.setPos(center)
+
+	def itemChange(self, change, value):
+		if change == QGraphicsItem.ItemPositionChange:
+			value = self.position
+			if self.location.isVertical:
+				value.setY(self.position.y())
 			else:
-				a.setTop(mouseEvent.pos().y())
-		if self.splitType.isHorizontal:
-			if self.surfaceBPosition.isLeft:
-				b.setLeft(mouseEvent.pos().x())
+				value.setX(self.position.x())
+		elif change == QGraphicsItem.ItemVisibleChange:
+			if value and not self._resizeSignalConnected:
+				self.surface.signals.resized.connect(self.updatePosition)
+				self._resizeSignalConnected = True
+			elif not value and self._resizeSignalConnected:
+				self.surface.signals.resized.disconnect(self.updatePosition)
+				self._resizeSignalConnected = False
+		return super(Handle, self).itemChange(change, value)
+
+	@property
+	def ratio(self):
+		if self.primary is not None and self.secondary is not None and self.primary.isVisible() != self.secondary.isVisible():
+			self._ratio = 0
+		if self._ratio is None:
+			if self.location.isVertical:
+				self._ratio = self.pos().x() / float(self.surface.rect().width())
 			else:
-				b.setRight(mouseEvent.pos().x())
+				self._ratio = self.pos().y() / float(self.surface.rect().height())
+		return self._ratio
+
+	@ratio.setter
+	def ratio(self, value):
+		if self._ratio != value:
+			self._ratio = value
+			self.updatePosition(self.surface.rect())
+			self.setGeometries()
+
+	def setGeometries(self):
+		value = self._ratio
+
+		if value == 0:
+			selected = self.primary if self.primary.isVisible() else self.secondary
+			selected.geometry.setRelativeGeometry(QRectF(0, 0, 1, 1))
+			selected.updateFromGeometry()
+			self.surface.update()
+			return
+
+		primary, secondary = self.primary, self.secondary
+
+		if self.location.isVertical:
+			if primary is not None:
+				primary.geometry.relativeWidth = value
+				primary.geometry.relativeHeight = 1
+				primary.geometry.relativeX = 0
+				primary.geometry.relativeY = 0
+			if secondary is not None:
+				secondary.geometry.relativeWidth = 1 - value
+				secondary.geometry.relativeHeight = 1
+				secondary.geometry.relativeX = value
+				secondary.geometry.relativeY = 0
 		else:
-			if self.surfaceBPosition.isTop:
-				b.setTop(mouseEvent.pos().y())
-			else:
-				b.setBottom(mouseEvent.pos().y())
-		self.surfaceA.geometry.setGeometry(a)
-		self.surfaceB.geometry.setGeometry(b)
-		self.surfaceA.geometry.updateSurface()
+			if primary is not None:
+				primary.geometry.relativeWidth = 1
+				primary.geometry.relativeHeight = value
+				primary.geometry.relativeY = 0
+				primary.geometry.relativeX = 0
+			if secondary is not None:
+				secondary.geometry.relativeWidth = 1
+				secondary.geometry.relativeHeight = 1 - value
+				secondary.geometry.relativeY = value
+				secondary.geometry.relativeX = 0
+		for child in [primary, secondary]:
+			if child is not None:
+				child.updateFromGeometry()
+		self.surface.update()
+
+	@property
+	def state(self):
+		return {
+			'ratio:':    self.ratio,
+			'primary':   self.primary,
+			'secondary': self.secondary,
+			'splitType': self.location.name
+		}

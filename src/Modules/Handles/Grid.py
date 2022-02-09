@@ -1,6 +1,6 @@
 from functools import cached_property
 
-from .Incrementer import Incrementer, IncrementerGroup
+from src.Modules.Handles.Incrementer import Incrementer, IncrementerGroup
 
 __all__ = ['GridAdjuster', 'GridAdjusters']
 
@@ -27,6 +27,11 @@ class GridAdjuster(Incrementer):
 
 class GridAdjusters(IncrementerGroup):
 	handleType = GridAdjuster
+
+	def __init__(self, *args, **kwargs):
+		super(GridAdjusters, self).__init__(*args, **kwargs)
+		self.setVisible(False)
+		self.setEnabled(self.surface.staticGrid)
 
 	@cached_property
 	def grid(self) -> 'Grid':
