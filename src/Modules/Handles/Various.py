@@ -5,9 +5,9 @@ from PySide2.QtCore import QPointF, QRectF, Qt, QTimer
 from PySide2.QtGui import QPainter, QPainterPath, QPen
 from PySide2.QtWidgets import QApplication, QGraphicsItem, QGraphicsPathItem, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent
 
-from . import debug, Handle
+from src.Modules.Handles import debug, Handle
 from src import colorPalette
-from utils import clamp, LocationFlag, relativePosition
+from src.utils import clamp, LocationFlag, relativePosition
 
 __all__ = ["DrawerHandle", "HoverArea", "IndoorIcon"]
 
@@ -29,10 +29,9 @@ class DrawerHandle(Handle):
 		self.hideTimer = QTimer(interval=1000 * 5, timeout=self.close, singleShot=True)
 		self.moveDoneTimer = QTimer(interval=1500, timeout=self.openClose, singleShot=True)
 		parent.signals.resized.connect(self.rePos)
-		self.parent = parent
+		self._parent = parent
 		self.setParentItem(None)
 		self.parent.scene().addItem(self)
-
 		pen = QPen(QApplication.palette().foreground(), 1)
 		self.setBrush(QApplication.palette().foreground().color())
 		self.setPen(pen)
@@ -46,6 +45,10 @@ class DrawerHandle(Handle):
 		self.setPos(self.position)
 		self.setVisible(True)
 		self.setEnabled(True)
+
+	@cached_property
+	def parent(self):
+		return self._parent
 
 	@property
 	def position(self):
@@ -149,7 +152,7 @@ class DrawerHandle(Handle):
 class HoverArea(QGraphicsPathItem):
 
 	def __init__(self, parent: 'Panel',
-	             size: int = 20,
+	             size: int = 80,
 	             visible: bool = False,
 	             enterAction: Callable = None,
 	             exitAction: Callable = None,
@@ -188,6 +191,10 @@ class HoverArea(QGraphicsPathItem):
 	def hoverLeaveEvent(self, event: QGraphicsSceneHoverEvent) -> None:
 		if self._exitAction:
 			self._exitAction()
+
+	def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
+		if self._enterAction:
+			self._enterAction()
 
 	@property
 	def _path(self):
