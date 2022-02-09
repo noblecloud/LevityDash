@@ -1,10 +1,11 @@
-import logging
+from src import logging
 from configparser import ConfigParser
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Union
 
 import requests
+from PySide2.QtCore import QTimer
 
 from src.api import APIError
 from src.api.baseAPI import API, URLs
@@ -323,8 +324,10 @@ class TomorrowIO(API):
 	currently: TomorrowIOObservationRealtime
 	hourly: TomorrowIOForecastHourly
 	daily: TomorrowIOForecastDaily
-	_baseParams: dict[str, str] = {'apikey': config.tmrrow['apiKey']}
+	_baseParams: dict[str, str] = {'apikey': config.api.tmrrow['apiKey']}
 	_params = {}
+	_realtimeRefreshInterval = timedelta(minutes=5)
+	_refreshIntervalForecast = timedelta(minutes=10)
 
 	def __init__(self):
 		self.fields = Fields()
@@ -332,7 +335,19 @@ class TomorrowIO(API):
 		self._params['fields'] = self.fields['core']
 		super(TomorrowIO, self).__init__()
 
-	def getCurrent(self):
+		# self.getRealtime()
+
+		# self._refreshTimerForecast = QTimer()
+		self._realtimeRefreshTimer.setInterval(self._refreshInterval.total_seconds() * 1000)
+		# self._refreshTimerForecast.setInterval(self._refreshIntervalForecast.total_seconds() * 1000)
+
+		self._realtimeRefreshTimer.timeout.connect(self.getRealtime)
+		# self._refreshTimerForecast.timeout.connect(self.getForecast)
+		self._realtimeRefreshTimer.start()
+
+	# self._refreshTimerForecast.start()
+
+	def getRealtime(self):
 		# params = {'location': config.locStr, 'timesteps': 'current,1h', 'endTime': timedelta(days=3)}
 		params = {'location': config.locStr, 'timesteps': 'current,1h', 'timezone': config.tz}
 		params = self._API__combineParameters(params)
@@ -456,5 +471,5 @@ class ErrorNoConnection(Exception):
 if __name__ == '__main__':
 	logging.getLogger().setLevel(logging.DEBUG)
 	wf = TomorrowIO()
-	wf.getCurrent()
+	wf.getRealtime()
 	print(wf)

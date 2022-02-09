@@ -1,5 +1,5 @@
 import json
-import logging
+from src import logging
 from configparser import ConfigParser, SectionProxy
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
@@ -22,4 +22,3 @@ from src import config
 from src.udp import weatherFlow as udp
 from src.utils import Logger, UpdateDispatcher
 
-log.setLevel(logging.CRITICAL)
