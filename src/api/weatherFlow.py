@@ -1,62 +1,30 @@
-import json
-import logging
-from configparser import ConfigParser, SectionProxy
-from dataclasses import dataclass, InitVar
-from datetime import datetime
-from typing import Any, Union
+from src import logging
+from datetime import datetime, timedelta
+from json import dumps, loads
+from typing import Any, Dict, Union
 
-from PySide2.QtCore import QObject, Signal
+import websocket
+from PySide2.QtCore import QObject, QThread, QTimer, Signal
 from PySide2.QtNetwork import QHostAddress, QNetworkDatagram, QUdpSocket
 from WeatherUnits.base import Measurement
 
-from src.api.baseAPI import API, URLs
+from src.api.baseAPI import API, Socket, tryConnection, UDPSocket, URLs, Websocket
 from src.observations import WFObservationRealtime, WFForecastHourly, WFForecastDaily
 from src import config
 from src.udp import weatherFlow as udp
-from src.utils import Logger, SignalDispatcher
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.CRITICAL)
 
 
-class UDPMessenger(QObject):
-	last: QNetworkDatagram
-	udpSocket: QUdpSocket
-
-	def __init__(self, station=None, *args, **kwargs):
-		super(UDPMessenger, self).__init__(*args, **kwargs)
-		self.station: WFStation = station
-		self.udpSocket = QUdpSocket(self)
-
-	def connectUPD(self):
-		self.udpSocket.bind(50222)
-		log.debug('Listening UDP')
-		self.udpSocket.readyRead.connect(self.receiveUDP)
-		self.last = self.udpSocket.receiveDatagram(self.udpSocket.pendingDatagramSize())
-
-	def receiveUDP(self):
-		messageTypes = {'rapid_wind': udp.WindMessage, 'evt_precip': udp.RainStart, 'evt_strike': udp.Lightning, 'obs_st': udp.TempestObservation, 'device_status': udp.DeviceStatus}
-		while self.udpSocket.hasPendingDatagrams():
-			datagram = self.udpSocket.receiveDatagram(self.udpSocket.pendingDatagramSize())
-			if self.last.data() != datagram.data():
-				self.last = datagram
-				datagram = json.loads(str(datagram.data().data(), encoding='ascii'))
-				if datagram['type'] in messageTypes:
-					messageType = messageTypes[datagram['type']]
-					message = messageType(datagram)
-					log.debug(f'UDP message: {str(message)}')
-					self.station.udpUpdate(message)
-
-
-class WFURLs(URLs):
-	base = 'https://swd.weatherflow.com/swd/rest/'
-	__deviceID: InitVar[int]
+class WFURLs(URLs, realtime=True):
+	base = 'https://swd.weatherflow.com/swd/'
+	__deviceID: int
 	__stationID: int
-	stations = 'stations'
-	stationObservation = 'observations/station'
-	deviceObservation = 'observations/device'
-	station = 'stations'
-	forecast = 'better_forecast'
+	stationObservation = 'rest/observations/station'
+	deviceObservation = 'rest/observations/device'
+	station = 'rest/stations'
+	forecast = 'rest/better_forecast'
+	realtime = stationObservation
 
 	def __init__(self, deviceID: int, stationID: int):
 		self.__station = self.station
@@ -86,74 +54,134 @@ class WFURLs(URLs):
 		self.stationObservation = f'{self.__stationObservation}/{self.__stationID}'
 
 
+class WFWebsocket(Websocket):
+	urlBase = 'wss://swd.weatherflow.com/swd/data'
+
+	@property
+	def url(self):
+		return self.urlBase
+
+	def __init__(self, DeviceID: int, *args, **kwargs):
+		self._deviceID = DeviceID
+		super(WFWebsocket, self).__init__(*args, **kwargs)
+		from secrets import token_urlsafe as genUUID
+		self.uuid = genUUID(8)
+		self.socket = websocket.WebSocketApp(self.url,
+		                                     on_open=self._open,
+		                                     on_data=self._data,
+		                                     on_message=self._message,
+		                                     on_error=self._error,
+		                                     on_close=self._close)
+
+	def genMessage(self, messageType: str) -> dict[str:str]:
+		message = {"type":      messageType,
+		           "device_id": self._deviceID,
+		           "id":        self.uuid}
+		return message
+
+	def _open(self, ws):
+		ws.send(dumps(self.genMessage('listen_start')))
+		ws.send(dumps(self.genMessage('listen_rapid_start')))
+		print("### opened ###")
+
+	def _message(self, ws, message):
+		self.push(loads(message))
+
+
+class WFUDPSocket(UDPSocket):
+	port = 50222
+	messageTypes = {'rapid_wind': udp.WindMessage, 'evt_precip': udp.RainStart, 'evt_strike': udp.Lightning, 'obs_st': udp.TempestObservation, 'device_status': udp.DeviceStatus}
+
+	def parseDatagram(self, datagram: QNetworkDatagram):
+		datagram = loads(str(datagram.data().data(), encoding='ascii'))
+		if datagram['type'] in self.messageTypes:
+			print(datagram)
+			messageType = self.messageTypes[datagram['type']]
+			message = messageType(datagram)
+			log.debug(f'UDP message: {str(message)}')
+			self.push(message)
+
+
 class WeatherFlow(API):
-	_stationID: int = int(config.wf['StationID'])
-	_deviceID: int = int(config.wf['DeviceID'])
-	_baseParams: dict[str, str] = {'token': config.wf['token']}
+	_stationID: int = int(config.api.wf['StationID'])
+	_deviceID: int = int(config.api.wf['DeviceID'])
+	_baseParams: Dict[str, str] = {'token': config.api.wf['token']}
 
 	_urls: WFURLs
 
-	def __init__(self):
-		super(WeatherFlow, self).__init__()
-		# self.__urls = WFURLs(self._deviceID, self._stationID)
-		pass
-
 
 class WFStation(WeatherFlow):
-	signalDispatcher = SignalDispatcher()
-	_info: dict[str: Any]
+	_info: Dict[str, Any]
 	realtime: WFObservationRealtime
 	hourly: WFForecastHourly
 	daily: WFForecastDaily
-	_messenger = UDPMessenger
+	# _udpSocket = WFUDPSocket
+	_realtimeRefreshInterval = timedelta(minutes=15)
+	_forecastRefreshInterval = timedelta(minutes=15)
+	name = 'WeatherFlow'
 
 	def __init__(self):
 		super(WFStation, self).__init__()
-		self._messenger = UDPMessenger(station=self)
-		self._messenger.connectUPD()
-
-	def _normalizeData(self, rawData):
-		if 'forecast' in rawData:
-			return rawData
-		if 'obs' in rawData:
-			return rawData.pop('obs')[0]
-		return rawData
-
-	def getData(self):
+		self._udpSocket = WFUDPSocket(api=self)
+		if config.api.aw.getboolean('autoUpdate'):
+			self._realtimeRefreshTimer.stop()
+		# self._webSocket = WFWebsocket(self._deviceID)
+		# self._webSocket.begin()
+		# if config.api.wf.getboolean('socketUpdates'):
+		# self._udpSocket.begin()
+		self.getRealtime()
 		self.getForecast()
 
-	def getCurrent(self):
-		self.realtime.api = 'tcp'
-		data = super(WFStation, self).getData(endpoint=self._urls.stationObservation)
+	def _normalizeData(self, rawData):
+
+		try:
+			if 'forecast' in rawData:
+				return rawData
+			if 'obs' in rawData:
+				obs = rawData.pop('obs')
+				if len(obs) == 0:
+					raise ValueError(rawData['status']['status_message'])
+				else:
+					return obs[0]
+			return rawData
+		except ValueError as e:
+			log.error(e)
+			return {}
+
+	@tryConnection
+	def getRealtime(self):
+		data = self.getData(endpoint=self._urls.stationObservation)
 		observationData = self._normalizeData(data)
-		self._info = data
 		self.realtime.update(observationData)
 
+	@tryConnection
 	def getForecast(self):
 		data = super(WFStation, self).getData(endpoint=self._urls.forecast, params={'station_id': self._stationID})
 		self.hourly.update(data['forecast']['hourly'])
-		self.daily.update(data['forecast']['daily'])
+		try:
+			self.daily.update(data['forecast']['daily'])
+		except KeyError:
+			pass
 		# self.realtime.source = 'tcp'
 		self.realtime.update(data['current_conditions'])
 
-	def udpUpdate(self, data):
+	def socketUpdate(self, data):
 		if 'data' in data.keys():
 			data = data['data']
 		# self.realtime.source = 'udp'
 		for key, value in data.items():
-			if key in self.realtime.keys() and value is not None:
-				self.realtime.emitUpdate(key)
-				if isinstance(value, Measurement):
-					self.realtime[key] |= value.localize
+			if isinstance(value, Measurement):
+				if key in self.realtime.keys():
+					self.realtime[key] |= value
 				else:
 					self.realtime[key] = value
 			else:
 				self.realtime[key] = value
-				self.realtime.signalDispatcher.valueAddedSignal.emit({'value': value, 'source': self.realtime})
+			self.realtime.updateHandler.autoEmit(key)
 
 	@property
 	def messenger(self):
-		return self._messenger
+		return self._udpSocket
 
 
 # class WFForecast(WeatherFlow):
@@ -165,7 +193,7 @@ class WFStation(WeatherFlow):
 # 		## TODO: Add support for using units in config.ini
 # 		super().__init__()
 # 		self._endpoint = 'better_forecast'
-# 		self._params.update({"station_id": config.wf['stationID'], **kwargs})
+# 		self._params.update({"station_id": config.api.wf['stationID'], **kwargs})
 # 		self._observation = WFObservationHour()
 #
 # 	def getData(self, *args):

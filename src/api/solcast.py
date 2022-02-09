@@ -1,4 +1,5 @@
-import logging
+from src import logging
+from datetime import timedelta
 
 from typing import List, Literal, Union
 
@@ -7,27 +8,27 @@ from src.observations.solcast import SolcastForecast, SolcastObservation
 from src import config
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.CRITICAL)
 
 
 class SolcastURLs(URLs):
 	base = 'https://api.solcast.com.au'
-	endpoint = 'world_radiation/forecasts'
+	forecast = 'world_radiation/forecasts'
 
 
 class Solcast(API):
 	_urls: SolcastURLs
-	_baseParams: dict[str, Literal] = {'apikey':    config.solcast['apiKey'],
+	_baseParams: dict[str, Literal] = {'apikey':    config.api.solcast['apiKey'],
 	                                   'hours':     168,
 	                                   "latitude":  config.lat,
 	                                   "longitude": config.lon,
 	                                   "format":    "json",
 	                                   }
-	_headers: dict = {'Authorization': f'Bearer {config.solcast["apiKey"]}'}
+	_headers: dict = {'Authorization': f'Bearer {config.api.solcast["apiKey"]}'}
 	forecast: SolcastForecast
 	realtime: SolcastObservation
+	_forecastRefreshInterval = timedelta(minutes=120)
 
-	def getData(self):
+	def getForecast(self):
 		data = super(Solcast, self).getData()
 		self.forecast.update(data)
 		self.realtime = self.forecast[0]
