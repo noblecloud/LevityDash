@@ -1,6 +1,6 @@
 class APIError(Exception):
 	def __init__(self, *args, **kwargs):
-		self.data = args[0]
+		self.data = args
 		super(APIError, self).__init__(*args)
 
 
