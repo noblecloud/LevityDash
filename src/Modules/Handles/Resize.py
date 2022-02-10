@@ -38,6 +38,7 @@ class ResizeHandle(Handle):
 			self.surface.parent.childIsMoving = False
 			if self.parentWasMovable:
 				self.surface.parent.setMovable(True)
+		self.surface.setFocus()
 		super(Handle, self).mouseReleaseEvent(event)
 
 	def interactiveResize(self, mouseEvent: QGraphicsSceneMouseEvent) -> tuple[QRectF, QPointF]:
@@ -249,7 +250,7 @@ class Splitter(Handle):
 				self.surface.signals.resized.connect(self.updatePosition)
 				self._resizeSignalConnected = True
 			elif not value and self._resizeSignalConnected:
-				self.surface.signals.resized.disconnect(self.updatePosition)
+				disconnectSignal(self.surface.signals.resized, self.updatePosition)
 				self._resizeSignalConnected = False
 		return super(Handle, self).itemChange(change, value)
 
