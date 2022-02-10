@@ -24,6 +24,9 @@ class ClockSignals(QObject):
 	second = Signal(int)
 	minute = Signal(int)
 	hour = Signal(int)
+	sync = Signal()
+
+	syncInterval = timedelta(minutes=5)
 
 	def __init__(self):
 		super().__init__()
@@ -47,7 +50,7 @@ class ClockSignals(QObject):
 		# Ensures that the timers are synced to the current time every six hours
 		self.__syncTimer = QTimer()
 		self.__syncTimer.timeout.connect(self.__syncTimers)
-		self.__syncTimer.setInterval(1000 * 60 * 60 * 6)
+		self.__syncTimer.setInterval(1000 * 60 * 5)
 		self.__syncTimer.setTimerType(Qt.VeryCoarseTimer)
 		self.__syncTimer.setSingleShot(False)
 		self.__syncTimer.start()
@@ -67,7 +70,6 @@ class ClockSignals(QObject):
 	def __emitSecond(self):
 		# now = datetime.now()
 		# diff = now.replace(second=now.second + 1, microsecond=0) - now
-		# print(diff.total_seconds())
 		self.second.emit(datetime.now().second)
 
 	def __emitMinute(self):
@@ -80,6 +82,9 @@ class ClockSignals(QObject):
 		'''
 			Synchronizes the timers to the current time.
 		'''
+
+		self.sync.emit()
+
 		self.__secondTimer.stop()
 		self.__minuteTimer.stop()
 		self.__hourTimer.stop()
