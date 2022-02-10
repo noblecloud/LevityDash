@@ -1,20 +1,14 @@
-import ctypes
-
-from math import ceil
-
-from logger import debug
-from src import logging
-from itertools import chain, zip_longest
-
-from cmath import sin
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from functools import cached_property
+from itertools import chain, zip_longest
+from json import loads
 from typing import Any, Iterable, List, Optional, overload, Tuple, Union
 
 import numpy as np
-from json import loads
+from cmath import sin
+from math import ceil
 from PIL import Image
 from PIL.ImageQt import ImageQt
 from PySide2.QtCore import QLineF, QObject, QPoint, QPointF, QRectF, QSizeF, Qt, QTimer, Signal, Slot
@@ -25,22 +19,24 @@ from PySide2.QtWidgets import (QCheckBox, QColorDialog, QComboBox, QDialogButton
                                QVBoxLayout, QWidget)
 from scipy.constants import golden
 from scipy.interpolate import interp1d, interp2d
-from shiboken2 import getCppPointer
 from WeatherUnits import Measurement, Temperature
 
+from src.Modules import Handle
+from src.Modules.DateTime import baseClock as ClockSignals
+from src import colorPalette, config, logging
+from src.api import API
+from src.catagories import CategoryItem, ValueWrapper
+from src.colors import kelvinToQColor, rgbHex
+from src.fonts import rounded
+from src.logger import debug
+from src.merger import MergedValue
+from src.Modules import hook
+from src.Modules.Handles.Figure import FigureHandles
 from src.Modules.Handles.Incrementer import Incrementer, IncrementerGroup
 from src.Modules.Handles.Timeframe import GraphZoom
-from src.catagories import CategoryItem, ValueWrapper
-from src.Modules import hook
-from src.merger import MergedValue
-from src.Modules.Handles.Figure import FigureHandles
 from src.Modules.Panel import Panel
-from src import colorPalette, config, selectionPen
-from src.api import API
-from src.colors import Default, kelvinToQColor, rgbHex
-from src.fonts import rounded
-from src.utils import Alignment, AlignmentFlag, autoDType, Axis, capValue, clearCacheAttr, dataTimeRange, disconnectSignal, DisplayType, findPeaksAndTroughs, normalize, replaceSignal, smoothData
-from src.utils import ArrayMetaData, Margins, TimeFrame, TimeLineCollection
+from src.utils import (Alignment, AlignmentFlag, ArrayMetaData, autoDType, Axis, capValue, clamp, clearCacheAttr, dataTimeRange, disconnectSignal, DisplayType, findPeaksAndTroughs, Margins, normalize, smoothData, TimeFrame,
+                       TimeLineCollection)
 
 log = logging.getLogger(__name__)
 
