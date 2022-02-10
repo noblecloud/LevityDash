@@ -229,7 +229,7 @@ class Handle(QGraphicsPathItem):
 		if self.location.isRight:
 			w = -w
 			x = -x
-		rect = QRectF(x, y, w, l)
+		rect = QRectF(x * 1.2, y * 1.2, w * 1.2, l * 1.2)
 		path.addRect(rect)
 		path.translate(self.offset)
 		return path

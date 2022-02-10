@@ -146,3 +146,6 @@ class FigureHandle(MarginHandle):
 class FigureHandles(MarginHandles):
 	handleClass = FigureHandle
 	locations = [LocationFlag.Top, LocationFlag.Bottom]
+
+	def __init__(self, parent: 'Panel', *args, offset: float = -5.0, **kwargs):
+		super(FigureHandles, self).__init__(parent=parent, offset=offset, length=15, width=7, *args, **kwargs)
