@@ -295,9 +295,10 @@ values = {
 }
 
 
-class TomorrowIOURLs(URLs):
+class TomorrowIOURLs(URLs, realtime=True, hourly=True):
 	base = 'https://api.tomorrow.io/v4/'
-	endpoint = 'timelines'
+	realtime = 'timelines'
+	forecast = realtime
 
 
 parameters = {'location': config.locStr,
@@ -326,50 +327,48 @@ class TomorrowIO(API):
 	daily: TomorrowIOForecastDaily
 	_baseParams: dict[str, str] = {'apikey': config.api.tmrrow['apiKey']}
 	_params = {}
-	_realtimeRefreshInterval = timedelta(minutes=5)
-	_refreshIntervalForecast = timedelta(minutes=10)
+	_realtimeRefreshInterval = timedelta(minutes=15)
+	_refreshIntervalForecast = timedelta(minutes=30)
 
 	def __init__(self):
 		self.fields = Fields()
+		super(TomorrowIO, self).__init__()
 		# self.fields.save()
 		self._params['fields'] = self.fields['core']
-		super(TomorrowIO, self).__init__()
-
-		# self.getRealtime()
-
-		# self._refreshTimerForecast = QTimer()
-		self._realtimeRefreshTimer.setInterval(self._refreshInterval.total_seconds() * 1000)
-		# self._refreshTimerForecast.setInterval(self._refreshIntervalForecast.total_seconds() * 1000)
-
-		self._realtimeRefreshTimer.timeout.connect(self.getRealtime)
-		# self._refreshTimerForecast.timeout.connect(self.getForecast)
-		self._realtimeRefreshTimer.start()
-
-	# self._refreshTimerForecast.start()
+		self.getRealtime()
+		self.getHourly()
 
 	def getRealtime(self):
-		# params = {'location': config.locStr, 'timesteps': 'current,1h', 'endTime': timedelta(days=3)}
-		params = {'location': config.locStr, 'timesteps': 'current,1h', 'timezone': config.tz}
+		params = {'location': config.locStr, 'timesteps': 'current', 'timezone': config.tz}
 		params = self._API__combineParameters(params)
 		params = self.__filterParameters(params)
 		if isinstance(params['fields'], list):
-			data = self.multiRequest(params)
+			pass
+		# data = self.multiRequest(params)
 		else:
-			data = self.getData(params=params).json()
+			data = self.getData(endpoint=self._urls.realtime, params=params)
 		data = self.dataParser(data)
-		# import pickle as p
-		# import os, sys
-		# fp = f"{os.path.dirname(os.path.abspath(__file__))}/test.pickle"
-		# with open(fp, 'rb') as f:
-		# 	data = p.load(f)
 		self.realtime.update(data['current'])
+
+	def getHourly(self):
+		params = {'location': config.locStr, 'timesteps': '1h', 'timezone': config.tz}
+		params = self._API__combineParameters(params)
+		params = self.__filterParameters(params)
+		if isinstance(params['fields'], list):
+			pass
+		else:
+			data = self.getData(endpoint=self._urls.realtime, params=params)
+		data = self.dataParser(data)
 		self.hourly.update(data['1h'])
 
-	def getData(self, params=None):
-		data = requests.get(self._urls, params=params)
-		if data.status_code == 400:
-			self.fields.fixError(data.json()['message'])
-		return data
+	def getForecast(self):
+		self.getHourly()
+
+	# def getData(self, endpoint, params=None):
+	# 	data = super(TomorrowIO, self).getData(endpoint=self._urls.forecast, params=params)
+	# 	if data.status_code == 400:
+	# 		self.fields.fixError(data.json()['message'])
+	# 	return data
 
 	def multiRequest(self, params):
 		params = self.__filterParameters(params)
