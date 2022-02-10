@@ -35,12 +35,21 @@ class TimeframeIncrementer(Incrementer):
 		super(TimeframeIncrementer, self).hoverMoveEvent(event)
 
 	def increase(self):
-		self.parent.timeframe.increase(self.parent.incrementValue)
+		self.parent.timeframe.decrease(self.parent.incrementValue)
+		self.ensureFramed()
 		super(TimeframeIncrementer, self).increase()
 
 	def decrease(self):
-		self.parent.timeframe.decrease(self.parent.incrementValue)
+		self.parent.timeframe.increase(self.parent.incrementValue)
+		self.ensureFramed()
 		super(TimeframeIncrementer, self).decrease()
+
+	def ensureFramed(self):
+		graph = self.surface
+		td = max(f.figureTimeRangeMax for f in graph.figures)
+		r = td.total_seconds() / 3600 * graph.pixelHour
+		if r < graph.width():
+			graph.timeframe.range = td
 
 	@property
 	def position(self):
