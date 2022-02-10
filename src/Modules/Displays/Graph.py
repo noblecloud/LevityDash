@@ -12,11 +12,9 @@ from math import ceil
 from PIL import Image
 from PIL.ImageQt import ImageQt
 from PySide2.QtCore import QLineF, QObject, QPoint, QPointF, QRectF, QSizeF, Qt, QTimer, Signal, Slot
-from PySide2.QtGui import QBrush, QColor, QFocusEvent, QFont, QLinearGradient, QPainter, QPainterPath, QPainterPathStroker, QPen, QPixmap, QPolygonF, QTextBlockFormat, QTransform
-from PySide2.QtWidgets import (QCheckBox, QColorDialog, QComboBox, QDialogButtonBox, QDoubleSpinBox, QFormLayout, QFrame, QGraphicsDropShadowEffect, QGraphicsItem, QGraphicsItemGroup, QGraphicsLineItem, QGraphicsPathItem,
-                               QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsSceneDragDropEvent, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent, QGraphicsSceneWheelEvent, QGraphicsTextItem, QGridLayout, QLabel, QLineEdit, QSpinBox,
-                               QToolButton,
-                               QVBoxLayout, QWidget)
+from PySide2.QtGui import QBrush, QColor, QFocusEvent, QFont, QLinearGradient, QPainterPath, QPainterPathStroker, QPen, QPixmap, QTransform
+from PySide2.QtWidgets import (QGraphicsBlurEffect, QGraphicsDropShadowEffect, QGraphicsItem, QGraphicsItemGroup, QGraphicsLineItem, QGraphicsPathItem,
+                               QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsSceneDragDropEvent, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent, QGraphicsSceneWheelEvent, QGraphicsTextItem)
 from scipy.constants import golden
 from scipy.interpolate import interp1d, interp2d
 from WeatherUnits import Measurement, Temperature
@@ -196,6 +194,7 @@ class GraphItemData(QObject):
 		super(GraphItemData, self).__init__()
 		self.offset = 0
 		self.value = value
+		self.timeframe = dataTimeRange(self)
 		self._raw = []
 		self._labelData = None
 		self._path = None
@@ -211,11 +210,7 @@ class GraphItemData(QObject):
 		self.figure.marginHandles.signals.action.connect(self.remapValues)
 		self.figure.signals.resized.connect(self.remapValues)
 		self._value.hourly.signals.updated.connect(self.updateEverything)
-		self.rollTimer = QTimer()
-		self.rollTimer.setInterval(3000)
 
-	# self.rollTimer.timeout.connect(self.roll)
-	# self.rollTimer.start()
 
 	def buildGraphic(self, **kwargs):
 		type = kwargs.pop('type', DisplayType.Plot)
@@ -230,13 +225,12 @@ class GraphItemData(QObject):
 
 		return f'{self.__class__.__name__}(key: {self.key}, x: {mX} - {MX}, y: {mY} - {MY})'
 
-	def roll(self):
-		self.value.hourly.roll()
-
 	def updateEverything(self, source):
 		print('update everything')
 		self.__clearCache()
 		self.renormalizeValues(Axis.Both)
+		self.update()
+		self.figure.ensureFramed()
 
 	@Slot(Axis)
 	def remapValues(self, axis: Axis = Axis.Both):
@@ -245,6 +239,7 @@ class GraphItemData(QObject):
 		if axis & Axis.Y:
 			self.__mappedY = None
 		self.mappedChanged.emit(axis)
+		self.figure.ensureFramed()
 
 	@Slot(QRectF, Axis)
 	def remapValues(self, rect: QRectF, axis: Axis = Axis.Both):
@@ -253,6 +248,7 @@ class GraphItemData(QObject):
 		if axis & Axis.Y:
 			self.__mappedY = None
 		self.mappedChanged.emit(axis)
+		self.figure.ensureFramed()
 
 	@Slot(Axis)
 	def renormalizeValues(self, axis: Axis = Axis.Both):
@@ -263,16 +259,7 @@ class GraphItemData(QObject):
 			self.__normalY = None
 			self.__mappedY = None
 		self.normalsChanged.emit(axis)
-
-	@Slot(Axis)
-	def renormalizeValues(self, axis: Axis = Axis.Both):
-		if axis & Axis.X:
-			self.__normalX = None
-			self.__mappedX = None
-		if axis & Axis.Y:
-			self.__normalY = None
-			self.__mappedY = None
-		self.normalsChanged.emit(axis)
+		self.figure.ensureFramed()
 
 	@Slot(dict)
 	def updateSlot(self, data: dict = None):
@@ -328,11 +315,6 @@ class GraphItemData(QObject):
 				days.append(day)
 				day = [value]
 		return days
-
-	@property
-	def highsLows(self):
-		now = datetime.now().astimezone(config.tz)
-		return {(i[0].timestamp - now).days: {'high': max(i), 'low': min(i)} for i in self.splitDays()}
 
 	@property
 	def type(self):
@@ -401,41 +383,24 @@ class GraphItemData(QObject):
 		# troughs = filterBest(troughs, self.rawData, indexes=False, high=False)
 		return peaks, troughs
 
-	# peaks, troughs = findPeaksAndTroughs(list(self.smoothed), spread=4)
-	# self._peaks = filterBest(peaks, self.smoothed, True)
-	# self._troughs = filterBest(troughs, self.smoothed, False)
-
-	def interp(self):
-		x = np.array([t.timestamp.timestamp() for t in self.rawData])
-		y = np.array(self.rawData)
-		f = interp1d(x, y, kind='cubic')
-		f = self._figure.interpField
-		return f(x, y)
-
 	@overload
 	def __parseData(self, values: Iterable[Union[ValueWrapper, 'PeakTroughData']]):
 		...  # values is an iterable of ValueWrapper or PeakTroughData that contain both x and y axes
-
 	@overload
 	def __parseData(self, value: Union[ValueWrapper, 'PeakTroughData']):
 		...  # value is a single ValueWrapper or PeakTroughData that contains both x and y axes
-
 	@overload
 	def __parseData(self, x: Iterable[Union[float, int]], y: Iterable[Union[float, int]]):
 		...  # x and y are iterables of floats or ints
-
 	@overload
 	def __parseData(self, x: Union[float, int], y: Union[float, int]):
 		...  # x and y are single values of floats or ints
-
 	@overload
 	def __parseData(self, T: Iterable[Iterable[Union[float, int]]], axis: Axis):
 		...  # T is a 1d array of floats or ints that requires axis to be specified
-
 	@overload
 	def __parseData(self, v: Union[float, int], axis: Axis):
 		...  # v is a single float or int that requires axis to be specified
-
 	def __parseData(self, *T, **K) -> tuple[Optional[Union[float, int, Iterable]], Optional[Union[float, int, Iterable]]]:
 		axis, T, K = self.__findAxis(*T, **K)
 		x = K.get('x', None)
@@ -508,7 +473,8 @@ class GraphItemData(QObject):
 			return x, y
 		raise ValueError('Invalid data')
 
-	def __findAxis(self, *T, **K) -> tuple[Axis, tuple, dict]:
+	@staticmethod
+	def __findAxis(*T, **K) -> tuple[Axis, tuple, dict]:
 		if any(isinstance(i, Axis) for i in T):
 			axis = T.pop(T.index([i for i in T if isinstance(i, Axis)][0]))
 		elif 'axis' in K:
@@ -670,12 +636,11 @@ class GraphItemData(QObject):
 		return np.array(self.rawData.array, dtype=self.dtype)
 		if self._array is None:
 			self._array = np.array(self.rawData, dtype=self.dtype)
-		self._array
-		return np.roll(self._array, -self.offset)
+		return self._array
 
 	@property
 	def timeArray(self) -> np.array:
-		x = self.rawData.timeseries
+		x = self.rawData.timeseriesInts
 		return x
 
 	@property
@@ -702,16 +667,6 @@ class GraphItemData(QObject):
 	@property
 	def smoothed(self) -> np.array:
 		return smoothData(self.array, 17, 5)
-		# if not self._smooth or not self.isInterpolatable:
-		# 	return self.array
-		if self._smoothed is None:
-			# return self.interpolated
-			# kernel_size = 20l
-			# kernel = np.ones(kernel_size) / kernel_size
-			# self._smoothed = np.convolve(self.interpolated, kernel, mode='same')
-			# y = smoothData(, 17, 5)
-			self._smoothed = smoothData(self.array, 17, 5)
-		return self._smoothed
 
 	@property
 	def data(self) -> np.array:
@@ -736,7 +691,7 @@ class GraphItemData(QObject):
 		return self._numerical
 
 	@property
-	def multiplier(self) -> timedelta:
+	def multiplier(self) -> int:
 		if self._multiplier is None:
 			return max(int(self.length / len(self)), 1)
 		totalSeconds = self.value.hourly.period.total_seconds()
@@ -796,13 +751,11 @@ class GraphItemData(QObject):
 			self._allGraphics = self.scene.createItemGroup([self.graphic, self.labels])
 		return self._allGraphics
 
-	@property
-	def timeframe(self):
-		return self._timeframe
-
 	def update(self):
 		self.graphic.prepareGeometryChange()
 		self.graphic.update()
+		if self.labeled:
+			self._labelData.setLabels()
 
 	# self.scene.addItem(self.graphic)
 	# for label in self.labels.childItems():
@@ -894,10 +847,10 @@ class Plot(QGraphicsPathItem):
 		else:
 			event.ignore()
 
-	def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent) -> None:
-		event.ignore()
-		self.figure.parent.mouseMoveEvent(event)
-		self.figure.parent.setFocus(Qt.MouseFocusReason)
+	# def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent) -> None:
+	# 	event.ignore()
+	# 	self.figure.parent.mouseMoveEvent(event)
+	# 	self.figure.setFocus(Qt.MouseFocusReason)
 
 	def hoverEntryEvent(self, event: QGraphicsSceneHoverEvent) -> None:
 		self.setGraphicsEffect(hover)
@@ -991,7 +944,7 @@ class Plot(QGraphicsPathItem):
 		self._dashPattern = convertPattern(value)
 
 	def __repr__(self):
-		return f"Plot {hex(id(self))} of '{self.data.value.key}' in figure '{self.figure.name}'"
+		return f"Plot {hex(id(self))} of '{self.data.value.key}' in figure '0x{self.figure.uuidShort}'"
 
 	def _generatePen(self):
 		weight = self.figure.parentItem().plotLineWeight() * self.scalar
@@ -1011,7 +964,7 @@ class Plot(QGraphicsPathItem):
 		values = self.__getValues()
 		start = values[0]
 		start.setY(start.y() * self.penOffsetScaler + self.penOffset)
-		start.setX(-10)
+		start.setX(start.x() - 10)
 		self._path.moveTo(start)
 		for value in values:
 			value.setY(value.y() * self.penOffsetScaler + self.penOffset)
@@ -1131,6 +1084,8 @@ class GraphicText(QGraphicsTextItem):
 	             font: Union[QFont, str] = None,
 	             color: QColor = None):
 		super(GraphicText, self).__init__(parent=None)
+		if hasattr(self, 'position'):
+			ClockSignals.sync.connect(self.updateItem)
 		self._parent = parent
 		self._value = value
 		self.scalar = scalar
@@ -1331,8 +1286,10 @@ class PeakTroughLabel(GraphicText):
 
 	def itemChange(self, change, value):
 		if change == QGraphicsItem.ItemPositionChange:
-			containingRect = self.figure.contentsRect()
+			containingRect = self.figure.containingRect
 			selfRect = self.boundingRect()
+			tr = self.transform()
+			selfRect.translate(tr.dx(), tr.dy())
 			maxX = containingRect.right() - selfRect.width() - 10
 			minX = containingRect.left() + 10
 			maxY = containingRect.bottom() - selfRect.height() - 10
@@ -1434,7 +1391,6 @@ class PeakTroughList(list):
 			i.delete()
 
 	def update(self, values: list[dict]):
-		self.clearNormalized = True
 		self.clear(len(values))
 		if len(values) > len(self):
 			self.extend([PeakTroughData(parent=self, **value) for value in values[len(self):]])
@@ -1610,7 +1566,9 @@ class TimeMarker(QGraphicsLineItem):
 		if color is None:
 			color = colorPalette.windowText().color()
 		self.setPen(QPen(color, 3, Qt.DashLine))
-		self.update()
+		self.updateItem()
+		if hasattr(self, 'updateItem'):
+			ClockSignals.sync.connect(self.updateItem)
 
 	@property
 	def _line(self):
@@ -1621,15 +1579,15 @@ class TimeMarker(QGraphicsLineItem):
 
 	@property
 	def position(self):
-		start = self.parent.timeStart()
+		start = self.parent.displayStart()
 		x = (self.timestamp - start).total_seconds() / 3600 * self.parent.graph.pixelHour
 		# y = self.parent.graph.height() - self.boundingRect().height() - 20
 		return QPointF(x, 0)
 
-	def update(self):
+	def updateItem(self):
 		self.setLine(self._line)
 		self.setPos(self.position)
-		super(TimeMarker, self).update()
+		self.update()
 
 
 class DayLine(TimeMarker):
@@ -1639,18 +1597,20 @@ class DayLine(TimeMarker):
 		self.update()
 
 
-class DayText(GraphicText):
-	formatStrings = ['%A', '%a']
+class TimeStampText(GraphicText):
+	formatID = 0
+	formatStrings = ['%H:%M:%S.%f', '%H:%M:%S', '%H:%M']
 
 	def __init__(self, parent: 'DayAnnotations', timestamp: datetime):
 		self.graph = parent.graph
-		super(DayText, self).__init__(parent=parent, value=timestamp, scalar=0.75)
+		super(TimeStampText, self).__init__(parent=parent, value=timestamp, scalar=0.75)
 		self.update()
 		self.setPlainText(self.text())
 
 	def updateItem(self) -> None:
 		self.setZValue(self.parent.zValue() + 1)
 		self.updateFontSize()
+		self.setPlainText(self.text())
 		self.setPos(self.position())
 
 	def setZValue(self, z: float) -> None:
@@ -1660,18 +1620,18 @@ class DayText(GraphicText):
 		self.setFont(QFont(self.font().family(), self.graph.fontSize * self.scalar))
 
 	def position(self):
-		start = self.parent.timeStart()
+		start = self.parent.displayStart()
 		x = (self._value - start).total_seconds() / 3600 * self.graph.pixelHour
 		y = self.graph.height() - self.boundingRect().height() - 10
 		return QPointF(x, y)
 
 	def update(self):
 		QGraphicsTextItem.setPos(self, self.position())
-		# self.setPlainText(self.text())
-		super(DayText, self).update()
+		super(TimeStampText, self).update()
 
 	def text(self) -> str:
-		return self.value.strftime(self.formatStrings[0])
+		return self.value.strftime(self.formatStrings[self.formatID])
+
 
 # def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget = None):
 # 	painter.setPen(selectionPen)
@@ -1679,39 +1639,46 @@ class DayText(GraphicText):
 # 	painter.drawRect(QRectF(-2, -2, 4, 4))
 # 	super(DayText, self).paint(painter, option, widget)
 
+class DayMarkerText(TimeStampText):
+	formatStrings = ['%A', '%a']
+
 
 class DayAnnotations(QGraphicsRectItem):
 
-	def __init__(self, graph: 'GraphPanel'):
+	def __init__(self, graph: 'GraphPanel', **kwargs):
 		self.graph = graph
 		super(DayAnnotations, self).__init__(parent=graph)
-		self.buildLabels()
-		self.addDayLines()
+		self._dayLabels = kwargs.get('dayLabels', False)
+		if self._dayLabels:
+			self.buildLabels()
+		self._dayLines = kwargs.get('dayLines', False)
+		if self._dayLines:
+			self.addDayLines()
 		self.graph.signals.resized.connect(self.parentResized)
+		self.graph.graphZoom.signals.action.connect(self.update)
+		ClockSignals.sync.connect(self.updateItem)
 		self.update()
 
 	def parentResized(self):
 		self.update()
 
 	def addDayLines(self):
-		self.lines = []
 		start = self.timeStart().replace(hour=0, minute=0, second=0, microsecond=0)
 		for day in range(ceil(self.timeRange().total_seconds() / 3600 / 24) + 1):
 			line = TimeMarker(self, start + timedelta(days=day))
-			self.scene().addItem(line)
-			self.lines.append(line)
 
 	def buildLabels(self):
 		self.dayLabels = []
 		start = self.timeStart().replace(hour=0, minute=0, second=0, microsecond=0)
 		for day in range(ceil(self.timeRange().total_seconds() / 3600 / 24) + 1):
 			timestamp = start + timedelta(days=day) + timedelta(hours=12)
-			label = DayText(self, timestamp)
-			self.dayLabels.append(label)
-			self.graph.scene().addItem(label)
+			label = DayMarkerText(self, timestamp)
 
 	def timeStart(self):
 		return min(figure.figureMinStart() for figure in self.graph.figures)
+
+	def displayStart(self):
+		return self.graph.timeframe.min
 
 	def timeEnd(self):
 		return max(figure.figureMaxEnd() for figure in self.graph.figures)
@@ -1722,28 +1689,42 @@ class DayAnnotations(QGraphicsRectItem):
 	@property
 	def _rect(self):
 		figureRects = [f.mapRectToParent(f.contentsRect()) for f in self.graph.figures]
-		x = min(f.x() for f in figureRects)
-		y = min(f.y() for f in figureRects)
-		w = max(f.width() for f in figureRects)
-		h = max(f.height() for f in figureRects)
-		return QRectF(x, y, w, h)
+		if figureRects:
+			x = min(f.x() for f in figureRects)
+			y = min(f.y() for f in figureRects)
+			w = max(f.width() for f in figureRects)
+			h = max(f.height() for f in figureRects)
+			return QRectF(x, y, w, h)
+		return self.graph.rect()
 
 	def update(self):
-		rect = self._rect
-		pos = rect.topLeft()
-		self.setPos(pos)
-		rect.moveTo(0, 0)
-		self.setRect(rect)
-		for label in self.dayLabels:
-			label.updateItem()
-		for line in self.lines:
-			line.update()
+		self.updateItem()
 		super(DayAnnotations, self).update()
+
+	def updateChildren(self):
+		for child in self.childItems():
+			if hasattr(child, 'updateItem'):
+				child.updateItem()
 
 	def updatePosition(self):
 		rect = self._rect
 		pos = rect.topLeft()
 		self.setPos(pos)
+
+	def updateItem(self):
+		rect = self._rect
+		pos = rect.topLeft()
+		self.setPos(pos)
+		rect.moveTo(0, 0)
+		self.setRect(rect)
+		self.updateChildren()
+
+	@property
+	def state(self):
+		return {
+			'dayLabels': self._dayLabels,
+			'dayLines':  self._dayLines
+		}
 
 # def paint(self, painter, option, widget):
 # 	pen = QPen(Qt.red, 1)
@@ -1760,11 +1741,10 @@ class DayAnnotations(QGraphicsRectItem):
 
 class GraphPanel(Panel):
 	isEmpty = False
-	figures: List['FigureRect'] = []
+	figures: List['FigureRect']
 	timeframe: TimeFrame
 	_acceptsChildren: bool = False
 	graphZoom: GraphZoom
-	a = None
 
 	def __init__(self, *args, **kwargs):
 		if 'geometry' not in kwargs:
@@ -1772,6 +1752,7 @@ class GraphPanel(Panel):
 		super(GraphPanel, self).__init__(*args, **kwargs)
 		self.isEmpty = False
 		self.timeframe = kwargs.get('timeframe', TimeFrame(timedelta(days=3)))
+		self.figures = []
 		self.selectedItem = None
 		self.setHighlighted(True)
 		self.setAcceptDrops(True)
@@ -1781,8 +1762,17 @@ class GraphPanel(Panel):
 			cls = figure.pop('class', FigureRect)
 			cls(self, **figure)
 		self.lines = []
-		self.a = DayAnnotations(self)
-		self.scene().addItem(self.a)
+		self.annotations = DayAnnotations(self, **kwargs.get('annotations', {}))
+		self.scene().addItem(self.annotations)
+		self.refreshTimer = QTimer()
+		self.refreshTimer.setInterval(1000)
+		self.refreshTimer.timeout.connect(self.refresh)
+		self.refreshTimer.start()
+
+	def refresh(self):
+		for figure in self.figures:
+			figure.update()
+		self.graphZoom.update()
 
 	@property
 	def pixelHour(self):
@@ -1811,9 +1801,6 @@ class GraphPanel(Panel):
 	def name(self) -> str:
 		return f'{self.__class__.__name__}_0x{self.uuidShort}'
 
-	def redraw(self, axis: Axis = Axis.Both):
-		pass
-
 	def focusInEvent(self, event) -> None:
 		super(GraphPanel, self).focusInEvent(event)
 
@@ -1821,11 +1808,32 @@ class GraphPanel(Panel):
 		super(GraphPanel, self).focusOutEvent(event)
 
 	def mouseMoveEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
+		handles = [i for i in self.scene().items(mouseEvent.scenePos()) if isinstance(i, Handle)]
+		if handles:
+			mouseEvent.ignore()
+			handles[0].mouseMoveEvent(mouseEvent)
+
 		diff = mouseEvent.scenePos() - mouseEvent.lastScenePos()
-		for figure in [*self.figures]:
-			figure.moveBy(diff.x(), diff.y())
-			self.a.updatePosition()
-		# figure.marginHandles.topHandle.moveBy(diff.x(), diff.y())
+		# for figure in [*self.figures]:
+		# 	t = figure.transform()
+		# 	t.translate(diff.x(), diff.y())
+		# 	figure.setTransform(t)
+		# t = self.a.transform()
+		# t.translate(diff.x(), diff.y())
+		# self.a.setTransform(t)
+		if mouseEvent.modifiers() & Qt.ShiftModifier:
+			mouseEvent.accept()
+			super(GraphPanel, self).mouseMoveEvent(mouseEvent)
+		else:
+			for figure in [*self.figures]:
+				figure.moveBy(diff.x(), diff.y())
+			self.annotations.updatePosition()
+
+	def mouseReleaseEvent(self, mouseEvent):
+		super(GraphPanel, self).mouseReleaseEvent(mouseEvent)
+		# for figure in [*self.figures]:
+		# 	figure.setTransform(QTransform())
+		self.annotations.updatePosition()
 
 	@property
 	def timeframeIncrement(self):
@@ -1883,8 +1891,8 @@ class GraphPanel(Panel):
 
 	def parentResized(self, arg):
 		super(GraphPanel, self).parentResized(arg)
-		if self.a is not None:
-			self.a.update()
+		if self.annotations is not None:
+			self.annotations.update()
 
 	def plotLineWeight(self) -> float:
 		weight = self.rect().height() * golden * 0.005
@@ -1903,6 +1911,16 @@ class GraphPanel(Panel):
 		return super(GraphPanel, self).itemChange(change, value)
 
 	@property
+	def annotations(self):
+		return self._annotations
+
+	@annotations.setter
+	def annotations(self, value):
+		if isinstance(value, dict):
+			value = DayAnnotations(self, **value)
+		self._annotations = value
+
+	@property
 	def state(self):
 		state = super(GraphPanel, self).state
 		state.pop('childItems', None)
@@ -1910,7 +1928,11 @@ class GraphPanel(Panel):
 			'figures':   {str(figure.sharedKey): figure.state for figure in self.figures},
 			'timeframe': self.timeframe.state,
 		})
+		annotationState = self.annotations.state
+		if annotationState:
+			state['annotations'] = annotationState
 		return state
+
 
 
 class FigureRect(Panel):
@@ -1931,14 +1953,17 @@ class FigureRect(Panel):
 			kwargs['geometry'] = {'size': {'width': 1.0, 'height': 1.0}, 'position': {'x': 0, 'y': 0}, 'absolute': False}
 
 		super(FigureRect, self).__init__(parent, margins=margins, **kwargs)
-
 		self.setParentItem(parent)
+
+		# self.setGraphicsEffect(b)
+
 		self.setFlag(QGraphicsItem.ItemIsMovable, False)
 		self.setFlag(QGraphicsItem.ItemIsFocusable, True)
 		self.setFlag(QGraphicsItem.ItemClipsChildrenToShape, False)
 		self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
 		self.resizeHandles.setParentItem(None)
 		self.marginHandles = FigureHandles(self)
+		ClockSignals.sync.connect(self.redraw)
 
 		self.marginHandles.hide()
 		self.marginHandles.setZValue(1000)
@@ -1947,13 +1972,25 @@ class FigureRect(Panel):
 		if data:
 			self.loadPlotData(data)
 
+	def refresh(self):
+		for plot in self.plotData.values():
+			plot.update()
+
+	# def mousePressEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
+	# 	self.marginHandles.mousePressEvent(mouseEvent)
+	# 	super(FigureRect, self).mousePressEvent(mouseEvent)
+
+	def mouseReleaseEvent(self, mouseEvent):
+		self.setTransform(QTransform())
+		super(FigureRect, self).mouseReleaseEvent(mouseEvent)
+
 	@property
 	def graph(self) -> GraphPanel:
 		return self.parentItem()
 
 	def redraw(self):
 		for item in self.plotData.values():
-			item.graphic.update()
+			item.update()
 
 	def loadPlotData(self, plotData: dict[str, GraphItemData]):
 		for key, data in plotData.items():
@@ -2041,8 +2078,16 @@ class FigureRect(Panel):
 			return self.figureTimeRangeMax.total_seconds() / r * self.frameRect.width()
 		return self.frameRect.width()
 
+	@property
+	def contentsX(self) -> float:
+		if self.plotData:
+			graphStart = self.parentItem().timeframe.min
+			return (self.figureMinStart() - graphStart).total_seconds() * self.graph.pixelHour / 3600
+		return 0
+
 	def setRect(self, rect: QRectF):
 		rect.setWidth(self.contentsWidth)
+		rect.setX(self.contentsX)
 		super(FigureRect, self).setRect(rect)
 
 	def contentsRect(self) -> QRectF:
@@ -2132,25 +2177,11 @@ class FigureRect(Panel):
 		super(FigureRect, self).update()
 
 	def ensureFramed(self):
-		maxX = 0
-		maxY = self.parentItem().rect().bottom() - self.rect().height()
-		minX = self.parentItem().rect().right() - self.contentsWidth
-		value = self.pos()
-		x = min(max(value.x(), minX), maxX)
-		y = min(max(value.y(), 0), maxY)
-		value.setX(x)
-		value.setY(y)
-		self.setPos(value)
+		self.setPos(self.clampPoint(self.pos()))
 
 	def itemChange(self, change, value):
 		if change == QGraphicsItem.ItemPositionChange:
-			maxX = 0
-			maxY = self.parentItem().rect().bottom() - self.rect().height()
-			minX = self.parentItem().rect().right() - self.contentsWidth
-			x = min(max(value.x(), minX), maxX)
-			y = min(max(value.y(), 0), maxY)
-			value.setX(x)
-			value.setY(y)
+			self.clampPoint(value)
 			return super(Panel, self).itemChange(change, value)
 
 		elif change == QGraphicsItem.ItemChildAddedChange:
@@ -2168,6 +2199,36 @@ class FigureRect(Panel):
 		# 		disconnectSignal(self.signals.resized, value.updateItem)
 
 		return super(FigureRect, self).itemChange(change, value)
+
+	def clampPoint(self, value):
+		maxX = -self.contentsX
+		maxY = self.parentItem().rect().bottom() - self.rect().height()
+		minX = self.parentItem().rect().right() - self.contentsWidth - self.contentsX
+		x = clamp(value.x(), minX, maxX)
+		y = clamp(value.y(), 0, maxY)
+		# if x != value.x():
+		# 	elasticValue = self.elasticCap(value.x(), minX, maxX)
+		# rubberband scroll while dragging
+		# if self.scene().clicked and value.x() != x:
+		# 	self.elasticTransform(x, value.x())
+		value.setX(x)
+		value.setY(y)
+		return value
+
+	def elasticCap(self, m, M, v):
+		def elastic(x, xLimit):
+			return xLimit - (xLimit * np.ma.log(xLimit / x))
+
+		# return xLimit * np.ma.log(xLimit / x)
+		if v > M:
+			m = int(M)
+			M = elastic(v, M)
+			print(m, round(M, 4), round(v, 4))
+		elif v < m:
+			m = elastic(v, m)
+		return min(max(m, v), M)
+
+		return x
 
 	@property
 	def state(self):
