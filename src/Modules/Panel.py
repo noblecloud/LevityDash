@@ -31,7 +31,7 @@ log.setLevel('DEBUG' if gettrace() else 'INFO')
 
 
 class Panel(_Panel):
-	collisionThreshold = 0
+	collisionThreshold = 0.5
 	onlyAddChildrenOnRelease = False
 	signals: GraphicsItemSignals
 	filePath: FileLocation
