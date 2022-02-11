@@ -802,6 +802,7 @@ class Plot(QGraphicsPathItem):
 	def __init__(self, parent: GraphItemData,
 	             color: QColor = None,
 	             gradient: str = '',
+	             opacity: float = 1.0,
 	             dashPattern: Union[Qt.PenStyle, Iterable, str] = Qt.SolidLine,
 	             scalar: float = 1.0):
 
@@ -822,6 +823,7 @@ class Plot(QGraphicsPathItem):
 		# 	morph = normalize(morph) * 10
 		# self.morph = morph
 		super(Plot, self).__init__()
+		self.setOpacity(opacity)
 		self.update()
 		self.setAcceptHoverEvents(True)
 		self.setParentItem(self.figure)
@@ -846,6 +848,11 @@ class Plot(QGraphicsPathItem):
 
 		else:
 			event.ignore()
+
+	def wheelEvent(self, event: QGraphicsSceneWheelEvent) -> None:
+		self.scalar += event.delta() / 1000
+		event.accept()
+		self.update()
 
 	# def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent) -> None:
 	# 	event.ignore()
