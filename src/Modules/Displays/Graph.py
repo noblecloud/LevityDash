@@ -907,7 +907,8 @@ class Plot(QGraphicsPathItem):
 			'scalar':      round(self.scalar, 5),
 			'dashPattern': self.dashPattern,
 			'gradient':    None,
-			'color':       rgbHex(*QColor(self.color).toTuple()[:3]) if self._color is not None else None
+			'color':       rgbHex(*QColor(self.color).toTuple()[:3]) if self._color is not None else None,
+			'opacity':     self.opacity()
 		}
 
 	@property
@@ -1594,18 +1595,48 @@ class DayLine(TimeMarker):
 
 	def __init__(self, graph: 'GraphPanel', timestamp: datetime):
 		super(DayLine, self).__init__(graph, timestamp)
-		self.update()
+		pen = self.pen()
+		color = pen.color()
+		color.setAlpha(128)
+		pen.setColor(color)
+		width = pen.width()
+		pen.setDashPattern([width, width])
+		self.setPen(pen)
+		self.updateItem()
+
+
+s = SoftShadow()
+
+
+class HourMarker(TimeMarker):
+
+	def __init__(self, graph: 'GraphPanel', timestamp: datetime):
+		super(HourMarker, self).__init__(graph, timestamp)
+		pen = self.pen()
+		color = pen.color()
+		if self.timestamp.hour % 6 == 0:
+			color.setAlpha(100)
+		else:
+			color.setAlpha(64)
+		pen.setColor(color)
+		width = pen.width()
+		pen.setWidth(width * .75)
+		pen.setDashPattern([width, width])
+		self.setPen(pen)
+		self.updateItem()
 
 
 class TimeStampText(GraphicText):
-	formatID = 0
-	formatStrings = ['%H:%M:%S.%f', '%H:%M:%S', '%H:%M']
+	formatID = 3
+	formatStrings = ['%H:%M:%S.%f', '%H:%M:%S', '%H:%M', '%-I%p']
+	scalar = 0.60
 
 	def __init__(self, parent: 'DayAnnotations', timestamp: datetime):
 		self.graph = parent.graph
-		super(TimeStampText, self).__init__(parent=parent, value=timestamp, scalar=0.75)
+		super(TimeStampText, self).__init__(parent=parent, value=timestamp, scalar=self.scalar)
 		self.update()
 		self.setPlainText(self.text())
+		self.setGraphicsEffect(s)
 
 	def updateItem(self) -> None:
 		self.setZValue(self.parent.zValue() + 1)
@@ -1622,7 +1653,8 @@ class TimeStampText(GraphicText):
 	def position(self):
 		start = self.parent.displayStart()
 		x = (self._value - start).total_seconds() / 3600 * self.graph.pixelHour
-		y = self.graph.height() - self.boundingRect().height() - 10
+
+		y = self.graph.height() - 30
 		return QPointF(x, y)
 
 	def update(self):
@@ -1630,7 +1662,7 @@ class TimeStampText(GraphicText):
 		super(TimeStampText, self).update()
 
 	def text(self) -> str:
-		return self.value.strftime(self.formatStrings[self.formatID])
+		return self.value.strftime(self.formatStrings[self.formatID]).lower()
 
 
 # def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget = None):
@@ -1640,7 +1672,25 @@ class TimeStampText(GraphicText):
 # 	super(DayText, self).paint(painter, option, widget)
 
 class DayMarkerText(TimeStampText):
+	formatID = 0
 	formatStrings = ['%A', '%a']
+	scalar = 1.75
+
+	def __init__(self, parent: 'DayAnnotations', timestamp: datetime):
+		super(DayMarkerText, self).__init__(parent, timestamp)
+		self.update()
+		self.setPlainText(self.text())
+		self.setOpacity(0.6)
+
+	def position(self):
+		start = self.parent.displayStart()
+		x = (self._value - start).total_seconds() / 3600 * self.graph.pixelHour
+		y = self.graph.height() / 2
+		return QPointF(x, y)
+
+	def text(self) -> str:
+		return self.value.strftime(self.formatStrings[self.formatID])
+
 
 
 class DayAnnotations(QGraphicsRectItem):
@@ -1663,16 +1713,21 @@ class DayAnnotations(QGraphicsRectItem):
 		self.update()
 
 	def addDayLines(self):
-		start = self.timeStart().replace(hour=0, minute=0, second=0, microsecond=0)
-		for day in range(ceil(self.timeRange().total_seconds() / 3600 / 24) + 1):
-			line = TimeMarker(self, start + timedelta(days=day))
+		hourOffset = self.timeStart().hour // 6 * 6
+		start = self.timeStart().replace(hour=hourOffset, minute=0, second=0, microsecond=0)
+		for quarterDay in range(0, ceil(self.timeRange().total_seconds() / 3600) + 1, 3):
+			if (quarterDay + hourOffset) % 24 == 0:
+				line = DayLine(self, start + timedelta(days=quarterDay // 24, hours=quarterDay % 24))
+			else:
+				line = HourMarker(self, start + timedelta(hours=quarterDay))
 
 	def buildLabels(self):
-		self.dayLabels = []
-		start = self.timeStart().replace(hour=0, minute=0, second=0, microsecond=0)
-		for day in range(ceil(self.timeRange().total_seconds() / 3600 / 24) + 1):
-			timestamp = start + timedelta(days=day) + timedelta(hours=12)
-			label = DayMarkerText(self, timestamp)
+		hourOffset = self.timeStart().hour // 6 * 6
+		start = self.timeStart().replace(hour=hourOffset, minute=0, second=0, microsecond=0)
+		for day in range(0, ceil(self.timeRange().total_seconds() / 3600) + 1, 6):
+			if (day + hourOffset + 12) % 24 == 0:
+				text = DayMarkerText(self, start + timedelta(days=day // 24, hours=day % 24))
+			text = TimeStampText(self, start + timedelta(hours=day))
 
 	def timeStart(self):
 		return min(figure.figureMinStart() for figure in self.graph.figures)
