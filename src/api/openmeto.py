@@ -1,11 +1,11 @@
 from src import logging
 from datetime import datetime, timedelta
 
-from PySide2.QtCore import QTimer
+from PySide2.QtCore import QThreadPool, QTimer
 
 from src.observations.openmeteo import OpenMeteoForecastDaily, OpenMeteoForecastHourly, OpenMeteoObservation
 from src import config
-from src.api.baseAPI import API, URLs
+from src.api.baseAPI import API, URLs, Worker
 
 log = logging.getLogger(__name__)
 
@@ -96,8 +96,8 @@ class OpenMeteo(API):
 	daily: OpenMeteoForecastDaily
 	_forecastRefreshInterval = timedelta(minutes=15)
 
-	def __init__(self):
-		super(OpenMeteo, self).__init__()
+	def __init__(self, *args, **kwargs):
+		super(OpenMeteo, self).__init__(*args, **kwargs)
 		self.getForecast()
 
 	def _normalizeData(self, rawData):
@@ -123,19 +123,23 @@ class OpenMeteo(API):
 		return rawData
 
 	def getForecast(self):
-		params = {'hourly': basicParams,
-		          'daily':  dailyParams}
-		data = super(OpenMeteo, self).getData(endpoint=self._urls.forecast, params=params)
-		self.hourly.update(data['hourly'])
-		self.daily.update(data['daily'])
-		now = datetime.now()
-		now = datetime(year=now.year, month=now.month, day=now.day, hour=now.hour if now.minute < 30 else now.hour + 1).strftime('%Y-%m-%dT%H:%M')
-		realtimeISH = data['hourly'][now]
-		realtimeISH['temperature_2m'] = data['current_weather']['temperature']
-		realtimeISH['windspeed_10m'] = data['current_weather']['windspeed']
-		realtimeISH['winddirection_10m'] = data['current_weather']['winddirection']
-		realtimeISH['time'] = now
-		self.realtime.update(realtimeISH)
+		def _forecast(self):
+			params = {'hourly': basicParams,
+			          'daily':  dailyParams}
+			data = super(OpenMeteo, self).getData(endpoint=self._urls.forecast, params=params)
+			self.hourly.update(data['hourly'])
+			self.daily.update(data['daily'])
+			now = datetime.now()
+			now = datetime(year=now.year, month=now.month, day=now.day, hour=now.hour if now.minute < 30 else now.hour + 1).strftime('%Y-%m-%dT%H:%M')
+			realtimeISH = data['hourly'][now]
+			realtimeISH['temperature_2m'] = data['current_weather']['temperature']
+			realtimeISH['windspeed_10m'] = data['current_weather']['windspeed']
+			realtimeISH['winddirection_10m'] = data['current_weather']['winddirection']
+			realtimeISH['time'] = now
+			self.realtime.update(realtimeISH)
+
+		worker = Worker(self, _forecast)
+		QThreadPool.globalInstance().start(worker)
 
 
 if __name__ == '__main__':
