@@ -2,13 +2,13 @@ from src import logging
 from configparser import ConfigParser
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Union
+from typing import Callable, Union
 
 import requests
-from PySide2.QtCore import QTimer
+from PySide2.QtCore import QThreadPool, QTimer
 
 from src.api import APIError
-from src.api.baseAPI import API, URLs
+from src.api.baseAPI import API, tryConnection, URLs, Worker
 from src.api.tomorrowIO.field import *
 from src.observations import ObservationForecast
 from src.observations.tomorrowIO import TomorrowIOForecastDaily, TomorrowIOForecastHourly, TomorrowIOObservationRealtime
@@ -330,36 +330,43 @@ class TomorrowIO(API):
 	_realtimeRefreshInterval = timedelta(minutes=15)
 	_refreshIntervalForecast = timedelta(minutes=30)
 
-	def __init__(self):
+	def __init__(self, callback: Callable, *args, **kwargs):
 		self.fields = Fields()
-		super(TomorrowIO, self).__init__()
+		super(TomorrowIO, self).__init__(*args, **kwargs)
 		# self.fields.save()
 		self._params['fields'] = self.fields['core']
 		self.getRealtime()
 		self.getHourly()
+		callback(self)
 
 	def getRealtime(self):
-		params = {'location': config.locStr, 'timesteps': 'current', 'timezone': config.tz}
-		params = self._API__combineParameters(params)
-		params = self.__filterParameters(params)
-		if isinstance(params['fields'], list):
-			pass
-		# data = self.multiRequest(params)
-		else:
-			data = self.getData(endpoint=self._urls.realtime, params=params)
-		data = self.dataParser(data)
-		self.realtime.update(data['current'])
+		def _realtime(self):
+			params = {'location': config.locStr, 'timesteps': 'current', 'timezone': config.tz}
+			params = self._API__combineParameters(params)
+			params = self.__filterParameters(params)
+			if isinstance(params['fields'], list):
+				pass
+			# data = self.multiRequest(params)
+			else:
+				data = self.getData(endpoint=self._urls.realtime, params=params)
+			data = self.dataParser(data)
+			self.realtime.update(data['current'])
+
+		worker = Worker(self, _realtime)
+		QThreadPool.globalInstance().start(worker)
 
 	def getHourly(self):
-		params = {'location': config.locStr, 'timesteps': '1h', 'timezone': config.tz}
-		params = self._API__combineParameters(params)
-		params = self.__filterParameters(params)
-		if isinstance(params['fields'], list):
-			pass
-		else:
-			data = self.getData(endpoint=self._urls.realtime, params=params)
-		data = self.dataParser(data)
-		self.hourly.update(data['1h'])
+		def _hourly(self):
+			params = {'location': config.locStr, 'timesteps': '1h', 'timezone': config.tz}
+			params = self._API__combineParameters(params)
+			params = self.__filterParameters(params)
+			if isinstance(params['fields'], list):
+				pass
+			else:
+				self.getData(endpoint=self._urls.realtime, params=params)
+
+		worker = Worker(self, _hourly)
+		QThreadPool.globalInstance().start(worker)
 
 	def getForecast(self):
 		self.getHourly()

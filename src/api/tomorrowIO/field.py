@@ -284,8 +284,8 @@ class Fields:
 		if 'path' in kwargs.keys():
 			self._path = kwargs['path']
 			self.load()
-		elif 'values' in kwargs.keys():
-			self._layers: Dict[str, Dict[str, Field]] = kwargs['values']
+		elif '_values' in kwargs.keys():
+			self._layers: Dict[str, Dict[str, Field]] = kwargs['_values']
 		else:
 			self.load()
 
@@ -491,7 +491,7 @@ if __name__ == '__main__':
 	# 				"14-1": "mm\nin",
 	# 				"14-2": "F: [-6 h for free, up to -48h for paying accounts, +15d]\nD: T \nA: WW\nS: ∧ ∨ ~ ⧖",
 	# 				"23-0": "`uvIndex`\n\nStandard measurement of the strength of sunburn producing UV radiation at a particular place and time.",
-	# 				"24-0": "`uvHealthConcern `\n\nWhen the predicted UV index is within these numerical ranges, the recommended need for protection is indicated by the qualitative description of the values.",
+	# 				"24-0": "`uvHealthConcern `\n\nWhen the predicted UV index is within these numerical ranges, the recommended need for protection is indicated by the qualitative description of the _values.",
 	# 				"23-2": "F: [-6 h for free, up to -48h for paying accounts, +15d]\nD: T \nA: WW\nS: ∧ ∨ ~ ⧖",
 	# 				"24-2": "F: [-6 h for free, up to -48h for paying accounts, +15d]\nD: T \nA: WW\nS: ∧ ∨ ~ ⧖",
 	# 				"23-1": "0-2: Low\n3-5: Moderate\n6-7: High\n8-10: Very High\n11+: Extreme",
@@ -521,7 +521,7 @@ if __name__ == '__main__':
 	# f = Field(v)
 	# print(f)
 	#
-	# values = {}
+	# _values = {}
 	# for row in range(rows):
 	# 	v = Field([data[f'{row}-{col}'] for col in range(cols)])
 	#
@@ -534,7 +534,7 @@ if __name__ == '__main__':
 	# 	data = loads(data[start:end])
 	# 	rows, cols, data = data['rows'], data['cols'], data['data']
 	#
-	# 	values = {}
+	# 	_values = {}
 	# 	for row in range(rows):
 	# 		itemData = [data[f'{row}-{col}'] for col in range(cols)]
 	# 		if itemData[0].count('`') > 4:
@@ -544,11 +544,11 @@ if __name__ == '__main__':
 	# 			for i in names:
 	# 				itemData[0] = f'{i}\n\n{des}'
 	# 				v = Field(itemData)
-	# 				values[v.name] = v
+	# 				_values[v.name] = v
 	# 		else:
 	# 			v = Field(itemData)
-	# 			values[v.name] = v
-	# 	layers[name] = values
+	# 			_values[v.name] = v
+	# 	layers[name] = _values
 	# 	pass
 
 	# for a in ['best', '1d', '1h', '30m', '15m', '5m', '1m', 'current']:
@@ -558,10 +558,10 @@ if __name__ == '__main__':
 
 	url = "https://api.tomorrow.io/v4/timelines"
 	params = {
-			"location":  "37.409121118319156, -76.54907590734848",
-			"fields":    None,
-			"timesteps": "5m",
-			"apikey":    "DALOZbzLA2WwWHKAIuvcAP5swaSaKm76",
+		"location":  "37.409121118319156, -76.54907590734848",
+		"fields":    None,
+		"timesteps": "5m",
+		"apikey":    "DALOZbzLA2WwWHKAIuvcAP5swaSaKm76",
 	}
 
 	f = list(fa.allFields)

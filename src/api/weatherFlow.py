@@ -1,14 +1,14 @@
 from src import logging
 from datetime import datetime, timedelta
 from json import dumps, loads
-from typing import Any, Dict, Union
+from typing import Any, Callable, Dict, Union
 
 import websocket
-from PySide2.QtCore import QObject, QThread, QTimer, Signal
+from PySide2.QtCore import QObject, QThread, QThreadPool, QTimer, Signal, Slot
 from PySide2.QtNetwork import QHostAddress, QNetworkDatagram, QUdpSocket
 from WeatherUnits.base import Measurement
 
-from src.api.baseAPI import API, Socket, tryConnection, UDPSocket, URLs, Websocket
+from src.api.baseAPI import API, Socket, tryConnection, UDPSocket, URLs, Websocket, Worker
 from src.observations import WFObservationRealtime, WFForecastHourly, WFForecastDaily
 from src import config
 from src.udp import weatherFlow as udp
@@ -90,16 +90,17 @@ class WFWebsocket(Websocket):
 
 class WFUDPSocket(UDPSocket):
 	port = 50222
-	messageTypes = {'rapid_wind': udp.WindMessage, 'evt_precip': udp.RainStart, 'evt_strike': udp.Lightning, 'obs_st': udp.TempestObservation, 'device_status': udp.DeviceStatus}
+	messageTypes = {'rapid_wind': udp.WindMessage, 'evt_precip': udp.RainStart, 'evt_strike': udp.Lightning, 'obs_st': udp.TempestObservation, 'device_status': udp.DeviceStatus, 'hub_status': udp.HubStatus}  # , 'light': udp.Light}
 
 	def parseDatagram(self, datagram: QNetworkDatagram):
 		datagram = loads(str(datagram.data().data(), encoding='ascii'))
 		if datagram['type'] in self.messageTypes:
-			print(datagram)
 			messageType = self.messageTypes[datagram['type']]
 			message = messageType(datagram)
 			log.debug(f'UDP message: {str(message)}')
 			self.push(message)
+		else:
+			print(datagram)
 
 
 class WeatherFlow(API):
@@ -120,17 +121,20 @@ class WFStation(WeatherFlow):
 	_forecastRefreshInterval = timedelta(minutes=15)
 	name = 'WeatherFlow'
 
-	def __init__(self):
-		super(WFStation, self).__init__()
+	def __init__(self, callback: Callable, *args, **kwargs):
+		super(WFStation, self).__init__(*args, **kwargs)
 		self._udpSocket = WFUDPSocket(api=self)
-		if config.api.aw.getboolean('autoUpdate'):
-			self._realtimeRefreshTimer.stop()
 		# self._webSocket = WFWebsocket(self._deviceID)
 		# self._webSocket.begin()
 		# if config.api.wf.getboolean('socketUpdates'):
-		# self._udpSocket.begin()
+		callback(self)
+		self._udpSocket.begin()
+		self._udpSocket.relay.connect(self.socketUpdate)
+		# self._realtimeRefreshTimer.stop()
+		# self._forecastRefreshTimer.stop()
 		self.getRealtime()
 		self.getForecast()
+
 
 	def _normalizeData(self, rawData):
 
@@ -148,36 +152,38 @@ class WFStation(WeatherFlow):
 			log.error(e)
 			return {}
 
-	@tryConnection
 	def getRealtime(self):
-		data = self.getData(endpoint=self._urls.stationObservation)
-		observationData = self._normalizeData(data)
-		self.realtime.update(observationData)
+		def _realtime(self):
+			data = self.getData(endpoint=self._urls.stationObservation)
+			data = self._normalizeData(data)
+			self.realtime.update(data)
 
-	@tryConnection
+		worker = Worker(self, _realtime)
+		QThreadPool.globalInstance().start(worker)
+
 	def getForecast(self):
-		data = super(WFStation, self).getData(endpoint=self._urls.forecast, params={'station_id': self._stationID})
-		self.hourly.update(data['forecast']['hourly'])
-		try:
-			self.daily.update(data['forecast']['daily'])
-		except KeyError:
-			pass
-		# self.realtime.source = 'tcp'
-		self.realtime.update(data['current_conditions'])
+		def _forecast(self):
+			data = self.getData(endpoint=self._urls.forecast, params={'station_id': self._stationID})
+			self.hourly.update(data['forecast']['hourly'])
+			if 'daily' in data['forecast']:
+				self.daily.update(data['forecast']['daily'])
+
+		# if 'current_conditions' in data:
+		# 	self.realtime.update(data['current_conditions'])
+
+		worker = Worker(self, _forecast)
+		QThreadPool.globalInstance().start(worker)
+
+	# self.hourly.update(data['forecast']['hourly'])
+	# try:
+	# 	self.daily.update(data['forecast']['daily'])
+	# except KeyError:
+	# 	pass
+	# # self.realtime.source = 'tcp'
+	# self.realtime.update(data['current_conditions'])
 
 	def socketUpdate(self, data):
-		if 'data' in data.keys():
-			data = data['data']
-		# self.realtime.source = 'udp'
-		for key, value in data.items():
-			if isinstance(value, Measurement):
-				if key in self.realtime.keys():
-					self.realtime[key] |= value
-				else:
-					self.realtime[key] = value
-			else:
-				self.realtime[key] = value
-			self.realtime.updateHandler.autoEmit(key)
+		self.realtime.update(data)
 
 	@property
 	def messenger(self):
