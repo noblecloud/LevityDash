@@ -1,3 +1,4 @@
+
 from src import logging
 import pprint
 from dataclasses import dataclass
@@ -6,12 +7,12 @@ from functools import cached_property
 from operator import attrgetter
 from threading import Thread
 from types import GenericAlias
-from typing import Dict, Iterable, List, Optional, Union
+from typing import Callable, Dict, Iterable, List, Optional, Union
 
 import requests
 import socketio
 import websocket
-from PySide2.QtCore import QObject, QThread, QTimer, Signal, Slot
+from PySide2.QtCore import QObject, QRunnable, QThread, QThreadPool, QTimer, Signal, Slot
 from PySide2.QtNetwork import QHostAddress, QNetworkDatagram, QUdpSocket
 
 from src.catagories import CategoryItem
@@ -104,13 +105,15 @@ class URLs:
 
 class Socket(QObject):
 	api: 'API'
+	relay = Signal(dict)
 
 	def __init__(self, api: 'API', *args, **kwargs):
 		self.api = api
+		self.log = logging.getLogger(f'{api.name}.{self.__class__.__name__}')
 		super(Socket, self).__init__(*args, **kwargs)
 
 	def push(self, message):
-		self.api.realtime.update(message)
+		self.relay.emit(message)
 
 	def begin(self):
 		self.log.warning(f'Socket.begin() is not implemented for {self.__class__.__name__,}')
@@ -130,6 +133,7 @@ class UDPSocket(Socket):
 
 	def connectUPD(self):
 		self.socket.bind(address=self.address, port=self.port)
+
 		self.log.debug('Listening UDP')
 		self.socket.readyRead.connect(self.receiveUDP)
 		self.last = self.socket.receiveDatagram(self.socket.pendingDatagramSize())
@@ -142,28 +146,27 @@ class UDPSocket(Socket):
 				self.parseDatagram(datagram)
 
 	def begin(self):
+		print('socketad-=-------------------------------------------------------------------------------------------------------------------------------------------------la')
 		self.connectUPD()
 
 
-class SocketIO(Socket, QThread):
-	connected = Signal()
-	disconnected = Signal()
-	error_ocurred = Signal(object, name="errorOcurred")
-	data_changed = Signal(str, name="dataChanged")
-	api: 'API'
-
+class SocketIO(QThread):
 	url: str
 	params: dict
 	socketParams: dict
+	relay = Signal(dict)
 
 	def __init__(self, params: dict = {}, *args, **kwargs):
-		super(SocketIO, self).__init__(*args, **kwargs)
+		super(SocketIO, self).__init__()
 		if 'api' in kwargs:
 			self.api = kwargs['api']
 		self.params = params
 		self.socket.on("connect", self._connect)
 		self.socket.on("disconnect", self._disconnect)
 		self.socket.on('*', self._anything)
+
+	def push(self, message):
+		self.relay.emit(message)
 
 	@property
 	def url(self):
@@ -397,7 +400,7 @@ class Container:
 			return self.daily[0]
 		return None
 
-	@cached_property
+	@property
 	def now(self):
 		if self.api.realtime:
 			value = self.api.realtime[self.key]
@@ -407,17 +410,17 @@ class Container:
 			return value
 		return None
 
-	@cached_property
+	@property
 	def hourly(self):
 		if self.api.hourly:
 			value = self.api.hourly[self.key]
 			if value == {}:
-				self.log.warning(f'{self.api.name}({self.key}) is an empty dictionary')
+				self.log.warning(f'{self.api.name}() is an empty dictionary')
 				return None
 			return value
 		return None
 
-	@cached_property
+	@property
 	def daily(self):
 		if self.api.daily:
 			value = self.api.daily[self.key]
@@ -435,7 +438,7 @@ class Container:
 			return self.daily
 		return None
 
-	def customTimeFrame(self, timeframe: timedelta):
+	def customTimeFrame(self, timeframe: timedelta, sensitivity: timedelta = timedelta(minutes=1)) -> Optional[MeasurementTimeSeries]:
 		try:
 			return self.api.get(self.key, timeframe)
 		except KeyError:
@@ -461,17 +464,23 @@ class KeyTracker(QObject):
 	removed = Signal(dict)
 	keys = {}
 
+	# TODO This may be unnecessary?
+
 	def __init__(self, api: 'API'):
 		self.api = api
 		super(KeyTracker, self).__init__()
 
 	def add(self, value: dict):
-		key = value['key']
-		source = value['source']
-		value = value['value']
-		if key not in self.keys:
-			self.keys[key] = Container(self.api, key)
-			self.added.emit(self.keys[key])
+		exisitingKeys = set(self.keys.keys())
+		if isinstance(list(value.keys())[0], CategoryItem):
+			for v in value.values():
+				key = v['key']
+				if key not in self.keys:
+					self.keys[key] = Container(self.api, key)
+		newKeys = set(self.keys.keys()) - exisitingKeys
+		endpoints.lock()
+		self.added.emit({k: v for k, v in self.keys.items() if k in newKeys})
+		endpoints.unlock()
 
 	def remove(self, key: CategoryItem):
 		if key in self.keys:
@@ -479,14 +488,58 @@ class KeyTracker(QObject):
 			del self.keys[key]
 
 
+class Worker(QRunnable):
+
+	def __init__(self, owner, func, **kwargs):
+		super(Worker, self).__init__()
+		self.owner = owner
+		self.func = func
+		self.kwargs = kwargs
+
+	def run(self):
+		try:
+			self.func(self.owner, **self.kwargs)
+		except APIError as e:
+			self.log.error(f'API Error: {e}')
+
+
+def asRunnable(func):
+	def wrapper(value, **kwargs):
+		worker = Worker(value, func, **kwargs)
+		QThreadPool.globalInstance().start(worker)
+
+	return wrapper
+
+
 def tryConnection(func):
 	def wrapper(*value, **kwargs):
 		try:
 			func(*value, **kwargs)
 		except APIError as e:
-			self.log.error(e)
+			value[0].log.error(e)
 
 	return wrapper
+
+
+class WorkerSignals(QObject):
+	finished = Signal(dict)
+	error = Signal(tuple)
+	result = Signal(dict)
+
+
+class Worker(QRunnable):
+
+	def __init__(self, owner, func, *args, **kwargs):
+		super(Worker, self).__init__()
+		self.owner = owner
+		self.func = func
+		self.args = args
+		self.kwargs = kwargs
+		self.signals = WorkerSignals()
+
+	def run(self):
+		print(f'Running {self.func.__name__} for {self.owner}')
+		self.func(self.owner)
 
 
 class API(QObject):
@@ -506,15 +559,16 @@ class API(QObject):
 	_forecastRefreshTimer: QTimer
 	_forecastRefreshInterval: Optional[timedelta] = timedelta(minutes=15)
 
-	def __init__(self):
+	def __init__(self, mainEndpoint, callback: Callable = None):
 		super(API, self).__init__()
+		self.main = mainEndpoint
+		self.containers = {}
 		apiLog = logging.getLogger(f'API')
 
 		self.log = logging.getLogger(f'API.{self.name}')
 		self.log.setLevel(apiLog.level)
 		self._endpoints = EndpointList()
 		self.keySignal = KeyTracker(self)
-		self.updateSignaler = APIUpdateSignaler()
 		annotations = {k: v for d in [t.__annotations__ for t in self.__class__.mro() if issubclass(t, API) and t != API] for k, v in d.items()}
 		# annotations.pop('_realtime')
 		self._realtime = None
@@ -551,18 +605,25 @@ class API(QObject):
 			self._forecastRefreshTimer.timeout.connect(self.getForecast)
 			self._forecastRefreshTimer.start()
 
+		if callback:
+			callback(self)
+
 	@property
 	def name(self) -> str:
 		return self.__class__.__name__
 
 	@property
-	def endpoints(self):
+	def endpoints(self) -> EndpointList[ObservationDict]:
 		return self._endpoints
 
 	def __hash__(self):
 		return hash(self.name)
 
 	def __getitem__(self, item):
+		if isinstance(item, CategoryItem):
+			if item not in self.containers:
+				self.containers[item] = Container(self, item)
+			return self.containers[item]
 		return self._endpoints[item]
 
 	def values(self):
@@ -618,6 +679,9 @@ class API(QObject):
 	def containerValue(self, key: str):
 		return Container(self, key)
 
+	def containerValues(self) -> Dict[CategoryItem, Container]:
+		return {key: Container(self, key) for key in self.allKeys()}
+
 	def keys(self):
 		keys = set()
 		for endpoint in self._endpoints:
@@ -650,9 +714,14 @@ class API(QObject):
 
 		url = self._urls.default if endpoint is None else endpoint
 		try:
-			request = requests.get(url, params=params, headers=headers, timeout=5)
+			request = requests.get(url, params=params, headers=headers, timeout=10)
+
+		# TODO: Add retry logic
 		except requests.exceptions.ConnectionError:
 			self.log.error('ConnectionError')
+			return
+		except requests.exceptions.Timeout:
+			self.log.error(f'{self.name} request timed out for {url}')
 			return
 
 		if request.status_code == 200:

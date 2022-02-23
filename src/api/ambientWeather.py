@@ -1,10 +1,12 @@
+from PySide2.QtCore import QThreadPool
+
 from src import logging
 from datetime import datetime
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 from urllib.parse import urlencode
 
 from src.observations import AWObservationRealtime
-from src.api.baseAPI import API, SocketIO, tryConnection, URLs, Websocket
+from src.api.baseAPI import API, SocketIO, tryConnection, URLs, Websocket, Worker
 from src.api.errors import InvalidCredentials, RateLimitExceeded, APIError
 from src import config
 from src.observations import ObservationRealtime
@@ -69,22 +71,28 @@ class AWStation(AmbientWeather):
 	_realtimeRefreshInterval = 15
 	name = 'AmbientWeather'
 
-	def __init__(self):
-		super().__init__()
+	def __init__(self, callback: Callable, *args, **kwargs):
+		super().__init__(*args, **kwargs)
 		self._id = config.api.aw['device']
-		# self.socketIO = AWMessenger(api=self, device=self._deviceID)
-		# if config.api.aw.getboolean('socketUpdates'):
-		# 	self.socketIO.begin()
+		self.socketIO = AWMessenger(api=self, device=self._deviceID)
+		if config.api.aw.getboolean('socketUpdates'):
+			self.socketIO.begin()
+		# self.getForecast()
+		# self._realtimeRefreshTimer.stop()
+		# self._forecastRefreshTimer.stop()
+		callback(self)
 		self.getRealtime()
 
-	@tryConnection
 	def getRealtime(self):
-		params = {'limit': 1}
-		try:
-			data = self.getData(endpoint=self._urls.realtime)
+		def _realtime(self):
+			data = self.getData(endpoint=self._urls.realtime, params=self._params)
 			self.realtime.update(data)
-		except APIError:
-			pass
+
+		params = {'limit': 1}
+		worker = Worker(self, _realtime)
+		QThreadPool.globalInstance().start(worker)
+
+	# worker.signals.finished.connect(callback)
 
 	def _normalizeData(self, rawData):
 		try:
