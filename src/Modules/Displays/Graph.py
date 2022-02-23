@@ -194,10 +194,12 @@ class GraphItemData(QObject):
 	             order: int = 3,
 	             plot: dict = {}, **kwargs):
 		super(GraphItemData, self).__init__()
+		self.uuid = uuid4()
 		self.graphic = None
 		self.offset = 0
 		self._raw = []
 		self._labelData = None
+		self._peakTroughLabelData = None
 		self._interpolate = interpolate
 		self._smooth = smooth
 		self._spread = spread
@@ -206,12 +208,43 @@ class GraphItemData(QObject):
 		self._value = None
 		self._placeholder = None
 		self.labeled = labeled
+		self.figure = parent
+		self._plotData = plot
 		self.key = key
 		self.figure = parent
 		# self.figure.parent.graphZoom.signals.action.connect(self.renormalizeValues)
-		# self.figure.marginHandles.signals.action.connect(self.remapValues)
-		# self.figure.signals.resized.connect(self.remapValues)
-		self._plotData = plot
+		self.log = log.getChild(self.key.name)
+		self.log.setLevel('DEBUG')
+		self.figure.un = []
+		self.figure.un.append(self)
+
+	def onValueChange(self):
+		self.__clearCache()
+		clearCacheAttr(self, '_t')
+		self.resetAxis(Axis.Both)
+		self.graphic.onValueChange()
+		self.update()
+		self.log.debug(f"Timeseries {self.key.name} changed")
+
+	def onDataRangeChange(self):
+		clearCacheAttr(self, '_t')
+		self.resetAxis(Axis.Y)
+		self.graphic.onDataRangeChange()
+		if self.labeled:
+			self._peakTroughLabelData.resetAxis(Axis.Y)
+			self._labelData.resetAxis(Axis.Y)
+
+	def onTimeRangeChange(self):
+		self.graphic.onTimeRangeChange()
+		if self.labeled:
+			self._peakTroughLabelData.resetAxis(Axis.X)
+			self._labelData.resetAxis(Axis.X)
+
+	def onFrameChange(self):
+		self.graphic.onFrameChange()
+		if self.labeled:
+			self._labelData.quickSet()
+			self._peakTroughLabelData.quickSet()
 
 	@cached_property
 	def timeframe(self) -> dataTimeRange:
@@ -237,33 +270,45 @@ class GraphItemData(QObject):
 		return self._value
 
 	@value.setter
-	def value(self, value):
-		if value is None:
-			if self._value is not None:
-				disconnectSignal(self._value.signals.changed, self.valuesChanged)
-		else:
-			if self._value is not None:
-				replaceSignal(self._value.hourly.signals.updated, value.hourly.signals.updated, self.valuesChanged)
-			else:
-				value.hourly.signals.updated.connect(self.updateEverything)
-		self._value = value
-		if self._value:
-			self.figure.plotData[self.key] = self
-			self.graphic = self.buildGraphic(**self._plotData)
-			self.graphic.setParentItem(self.figure)
-
-			self.figure.updateEverything()
-
-			self.figure.graph.annotations.updateItem()
+	def value(self, value: MonitoredKey):
+		if value:
+			if self._value:
+				disconnectSignal(self._value.hourly.signals.updated, self.onValueChange)
+			if value:
+				if isinstance(value, MergedValue):
+					value.hourly.signals.updated.connect(self.onValueChange)
+					self._value = value
+				else:
+					value.value.hourly.signals.updated.connect(self.onValueChange)
+					self._value = value.value
+			if self.key not in self.figure.plotData:
+				self.figure.plotData[self.key] = self
+				self.graphic = self.buildGraphic(**self._plotData)
+				self.graphic.setParentItem(self.figure)
+				self.normalizeData()
+				# self.figure.signals.resized.connect(self.graphic.onFrameResize)
+				self.figure.dataRange.changed.connect(self.onDataRangeChange)
+				self.figure.graph.timeframe.changed.connect(self.onTimeRangeChange)
+			self.figure.graph.proxy.annotations.updateItem()
 			if self.labeled:
+				if self._peakTroughLabelData is None:
+					self._peakTroughLabelData = PlotLabels(self.key, self, peaksTroughs=True)
 				if self._labelData is None:
-					self._labelData = PeakTroughList(self.key, self)
-				self._labelData.setVisible(bool(value))
+					self._labelData = PlotLabels(self.key, self, peaksTroughs=False)
 			else:
+				if self._peakTroughLabelData is None:
+					pass
+				elif self._peakTroughLabelData.isVisible():
+					self._peakTroughLabelData.setVisible(False)
 				if self._labelData is None:
 					pass
 				elif self._labelData.isVisible():
 					self._labelData.setVisible(False)
+			if isinstance(value, MonitoredKey):
+				value.requesters.remove(self)
+		else:
+			if self._value:
+				disconnectSignal(self._value.hourly.signals.updated, self.onValueChange)
 
 	@property
 	def placeholder(self):
@@ -276,12 +321,13 @@ class GraphItemData(QObject):
 			self._placeholder.signal.disconnect(self.listenForKey)
 		self._placeholder = value
 		if self._placeholder is not None:
-			self._placeholder.signal.connect(lambda value: self.listenForKey(value))
+			self._placeholder.signal.connect(self.listenForKey)
 
-	@Slot(MergedValue)
-	def listenForKey(self, value: MergedValue):
-		if value.key == self.placeholder.key:
-			if value.hourly is not None:
+	@Slot(MonitoredKey)
+	def listenForKey(self, value: MonitoredKey):
+		if str(value.key) == str(self.placeholder.key):
+			print(f"{self.key.name} got new value {value.key}")
+			if value.value.hourly is not None:
 				self.value = value
 				disconnectSignal(self.placeholder.signal, self.listenForKey)
 			else:
