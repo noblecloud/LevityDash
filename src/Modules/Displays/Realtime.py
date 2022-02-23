@@ -1,56 +1,55 @@
+from src.catagories import ValueWrapper
 from src import logging
 from functools import cached_property
 
 from json import loads
-from PySide2.QtCore import QTimer, Slot
-from PySide2.QtWidgets import QGraphicsBlurEffect, QGraphicsSceneMouseEvent
+from PySide2.QtCore import QTimer, Signal, Slot
+from PySide2.QtWidgets import QGraphicsBlurEffect, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent
 
-from src.merger import MergedValue
+from src.dispatcher import endpoints, MergedValue, MonitoredKey, PlaceholderSignal
 from src.Grid import Grid
-from src.Modules.AttributeEditor import AttributeEditor, IntAttribute
-from src import selectionPen
-from src.Modules.Handles.Figure import MarginHandles
 from src.Modules.Handles.Resize import Splitter
 from src.Modules import hook, Panel
 from src.Modules.Menus import RealtimeContextMenu
-from src.utils import DisplayType, Subscription
+from src.utils import disconnectSignal, DisplayType, Subscription
 from src.Modules.Label import EditableLabel, Label, TitleLabel
 
 log = logging.getLogger(__name__)
 
+displayDefault = {'displayType': DisplayType.Numeric, 'geometry': {'absolute': False, 'position': {'x': 0, 'y': 0.2}, 'size': {'width': 1.0, 'height': 0.8}}}
 
-def buildDisplay(kwargs):
+
+def buildDisplay(parent, kwargs):
+	if len(kwargs) == 0:
+		kwargs = displayDefault
 	displayType = kwargs.pop('displayType', DisplayType.Numeric)
 	if displayType == DisplayType.Numeric:
-		return DisplayLabel(**kwargs)
+		return DisplayLabel(parent=parent, **kwargs)
+	if displayType == DisplayType.Gauge:
+		return DisplayGauge(parent=parent, **kwargs)
 
 
 class Realtime(Panel):
 	_includeChildrenInState = False
+
 
 	def __init__(self, parent: Panel, **kwargs):
 		super(Realtime, self).__init__(parent=parent, **kwargs)
 		self.buildTitle(kwargs.get('title', {}))
 		self.geometry.updateSurface()
 		self._valueLink = None
-		valueLink = kwargs.get('valueLink', None)
-		self.valueLink = valueLink
-		display = kwargs.get('display', None)
-		if display is None:
-			display = {'displayType': DisplayType.Numeric, 'geometry': {'absolute': False, 'position': {'x': 0, 'y': 0.2}, 'size': {'width': 1.0, 'height': 0.8}}}
-		display['parent'] = self
-		display['value'] = valueLink
-		self.display = buildDisplay(display)
+		self._placeholder = None
+		self._key = None
+		self.display = buildDisplay(self, kwargs.get('display', {}))
+		self.key = kwargs.get([k for k in ['key', 'valueLink', 'placeholder'] if k in kwargs].pop())
 		self.display.setFlag(self.display.ItemIsSelectable, False)
 
 		self.contentStaleTimer = QTimer()
-		self.contentStaleTimer.setInterval(1000 * 60 * 15)
+		self.contentStaleTimer.setInterval(1000 * 60 * 30)
 		self.contentStaleTimer.timeout.connect(self.contentStaled)
-		self.setAcceptHoverEvents(True)
-		# if self.grid is not None:
-		# 	delattr(self, 'grid')
+		self.contentStaleTimer.start()
 
-		# self.resizeHandles.mapValues()
+		self.setAcceptHoverEvents(True)
 		self.setAcceptDrops(True)
 		self.splitter = Splitter(surface=self, splitType='horizontal', ratio=0.2, primary=self.title, secondary=self.display)
 		self.splitter.hide()
@@ -65,17 +64,6 @@ class Realtime(Panel):
 	def buildTitle(self, kwargs):
 		if not hasattr(self, 'title'):
 			self.title = TitleLabel(self, **kwargs)
-
-	def paint(self, painter, option, widget):
-		super().paint(painter, option, widget)
-
-	# if self.hasFocus() or self.childHasFocus():
-	# 	painter.setPen(selectionPen)
-	# 	splitterPosition = self.splitter.position
-	# 	if self.splitter.location.isVertical:
-	# 		painter.drawLine(splitterPosition.x(), 0, splitterPosition.x(), self.height())
-	# 	else:
-	# 		painter.drawLine(0, splitterPosition.y(), self.width(), splitterPosition.y())
 
 	def hideTitle(self):
 		self._titleRatio = self.splitter.ratio
@@ -105,28 +93,62 @@ class Realtime(Panel):
 		return RealtimeContextMenu(self)
 
 	@property
+	def key(self):
+		return self._key
+
+	@key.setter
+	def key(self, value):
+		self._key = value
+		value = endpoints.request(self, value)
+		if isinstance(value, PlaceholderSignal):
+			self.placeholder = value
+			self.valueLink = None
+		elif isinstance(value, MergedValue):
+			self.valueLink = value
+			self.placeholder = None
+
+	@property
 	def valueLink(self) -> 'MergedValue':
 		return self._valueLink
 
 	@valueLink.setter
 	def valueLink(self, value):
-		if not value:
-			log.warn(f'No valueLink set for {self.name}')
-			return
 		if self._valueLink is not None and value != self._valueLink:
 			self._valueLink.valueChanged.disconnect(self.updateSlot)
-		self._valueLink = value
-		self._valueLink.valueChanged.connect(self.updateSlot)
-		if hasattr(self, 'display'):
-			self.display.value = self._valueLink
-		if self.title.isEnabled() and self.title.allowDynamicUpdate():
-			self.title.setText(self._valueLink.title)
+		elif self._valueLink is None and value is not None:
+			self._valueLink = value
+			self._valueLink.valueChanged.connect(self.updateSlot)
+			if hasattr(self, 'display'):
+				self.display.value = self._valueLink
+			if self.title.isEnabled() and self.title.allowDynamicUpdate():
+				self.title.setText(self._valueLink.title)
+
+	@property
+	def placeholder(self):
+		return self._placeholder
+
+	@placeholder.setter
+	def placeholder(self, value):
+		if isinstance(value, PlaceholderSignal):
+			self.display.value = "⋯"
+			value.signal.connect(self.listenForKey)
+		elif self._placeholder is not None and value is None:
+			self._placeholder.signal.disconnect(self.listenForKey)
+		self._placeholder = value
+
+	@Slot(MonitoredKey)
+	def listenForKey(self, value):
+		if value.key == self.placeholder.key:
+			self.valueLink = value.value
+			disconnectSignal(self.placeholder.signal, self.listenForKey)
+			value.requesters.remove(self)
 
 	def setSubscription(self, value):
 		self.valueLink = value
 
-	@Slot(dict)
+	@Slot(ValueWrapper)
 	def updateSlot(self, value):
+		print(f"{self.key} updated to {value.value}")
 		self.contentStaleTimer.start()
 		self.display.refresh()
 
@@ -153,7 +175,7 @@ class Realtime(Panel):
 	def changeSource(self, newSource):
 		if self._valueLink is not None:
 			self._valueLink.valueChanged.disconnect(self.updateSlot)
-		self.valueLink.selected = newSource
+		self.valueLink.preferredSource = newSource
 		self._valueLink.valueChanged.connect(self.updateSlot)
 		self.valueLink = self.valueLink
 
@@ -164,13 +186,12 @@ class Realtime(Panel):
 		state['display'] = self.display
 		state['title'] = self.title
 		state['showTitle'] = self.title.isEnabled()
-		state['valueLink'] = self.valueLink.toDict()
-
+		state['key'] = self.key
 		return state
 
 
 class DisplayLabel(Label):
-	def __init__(self, value: MergedValue, *args, **kwargs):
+	def __init__(self, value: MergedValue = None, *args, **kwargs):
 		kwargs.pop('childItems', None)
 		super().__init__(*args, **kwargs)
 		self.displayType = DisplayType.Numeric
