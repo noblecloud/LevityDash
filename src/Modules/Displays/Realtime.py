@@ -1,17 +1,21 @@
+from PySide2.QtGui import QColor, QPainter, QRegion, QTextBlockFormat, QTransform
+
+from src.Modules.Handles.Figure import MarginHandles
+from src.Modules.Displays.Text import Text
 from src.catagories import ValueWrapper
 from src import logging
 from functools import cached_property
 
 from json import loads
-from PySide2.QtCore import QTimer, Signal, Slot
-from PySide2.QtWidgets import QGraphicsBlurEffect, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent
+from PySide2.QtCore import QRectF, Qt, QTimer, Signal, Slot
+from PySide2.QtWidgets import QGraphicsBlurEffect, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent, QGraphicsTextItem, QStyleOptionGraphicsItem, QWidget
 
 from src.dispatcher import endpoints, MergedValue, MonitoredKey, PlaceholderSignal
 from src.Grid import Grid
 from src.Modules.Handles.Resize import Splitter
 from src.Modules import hook, Panel
 from src.Modules.Menus import RealtimeContextMenu
-from src.utils import disconnectSignal, DisplayType, Subscription
+from src.utils import addCrosshair, disconnectSignal, DisplayType, Subscription
 from src.Modules.Label import EditableLabel, Label, TitleLabel
 
 log = logging.getLogger(__name__)
@@ -190,21 +194,47 @@ class Realtime(Panel):
 		return state
 
 
-class DisplayLabel(Label):
+class DisplayLabel(Panel):
 	def __init__(self, value: MergedValue = None, *args, **kwargs):
 		kwargs.pop('childItems', None)
+		self.text = ""
 		super().__init__(*args, **kwargs)
 		self.displayType = DisplayType.Numeric
 		self.setMovable(False)
 		self.value = value
 
-	# self.marginAdjusters.setVisible(True)
+		self.textBox.setDefaultTextColor(Qt.white)
+		self.marginHandles = MarginHandles(self)
+		self.marginHandles.signals.action.connect(self.textBox.updateTransform)
+
+	# self.a.setAlignment(Qt.AlignCenter)
+	# self.a.setZValue(1000)
+
 	# modifier = AttributeEditor(self.parent, IntAttribute(value, 'max', -1, 1, 6))
 	# modifier.setVisible(True)
+
+	@cached_property
+	def textBox(self):
+		a = Text(self, value=str(self.text))
+		a.setParentItem(self)
+		return a
 
 	def mouseDoubleClickEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
 		mouseEvent.ignore()
 		return
+
+	def refresh(self):
+		f = QTextBlockFormat()
+		f.setAlignment(Qt.AlignCenter)
+		# self.a.setHtml(f'<div style="text-align: center; top: 50%;">{str(self.text)}</div>')
+		self.textBox.setPlainText(str(self.text))
+
+	def setRect(self, *args):
+		super().setRect(*args)
+		self.textBox.setPos(self.rect().topLeft())
+		# self.a.adjustSize()
+		# self.a.setTextWidth(self.rect().width())
+		self.textBox.updateTransform()
 
 	@property
 	def value(self):
@@ -212,7 +242,15 @@ class DisplayLabel(Label):
 
 	@value.setter
 	def value(self, value):
+		if value is not None and '⋯' not in value:
+			print(value)
+		# center text with css
+		# self.a.setHtml(f'<div style="text-align: center; top: 50%;">{str(value)}</div>')
+		self.textBox.setPlainText(str(value))
 		self.text = value
+
+	# self.a.setTextWidth(self.rect().width())
+	# self.a.adjustSize()
 
 	@property
 	def state(self):
