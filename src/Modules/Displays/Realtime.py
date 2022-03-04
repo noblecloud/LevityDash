@@ -203,7 +203,7 @@ class DisplayLabel(Panel):
 		self.setMovable(False)
 		self.value = value
 
-		self.textBox.setDefaultTextColor(Qt.white)
+		# self.textBox.setDefaultTextColor(Qt.white)
 		self.marginHandles = MarginHandles(self)
 		self.marginHandles.signals.action.connect(self.textBox.updateTransform)
 
@@ -212,6 +212,14 @@ class DisplayLabel(Panel):
 
 	# modifier = AttributeEditor(self.parent, IntAttribute(value, 'max', -1, 1, 6))
 	# modifier.setVisible(True)
+
+	@property
+	def value(self):
+		return self.textBox.value
+
+	@value.setter
+	def value(self, value):
+		self.textBox.value = value
 
 	@cached_property
 	def textBox(self):
@@ -224,33 +232,18 @@ class DisplayLabel(Panel):
 		return
 
 	def refresh(self):
-		f = QTextBlockFormat()
-		f.setAlignment(Qt.AlignCenter)
 		# self.a.setHtml(f'<div style="text-align: center; top: 50%;">{str(self.text)}</div>')
-		self.textBox.setPlainText(str(self.text))
+		self.textBox.refresh()
 
 	def setRect(self, *args):
 		super().setRect(*args)
-		self.textBox.setPos(self.rect().topLeft())
+		# self.textBox.setPos(self.rect().topLeft())
 		# self.a.adjustSize()
 		# self.a.setTextWidth(self.rect().width())
 		self.textBox.updateTransform()
 
-	@property
-	def value(self):
-		return self.text
-
-	@value.setter
-	def value(self, value):
-		if value is not None and '⋯' not in value:
-			print(value)
-		# center text with css
-		# self.a.setHtml(f'<div style="text-align: center; top: 50%;">{str(value)}</div>')
-		self.textBox.setPlainText(str(value))
-		self.text = value
-
 	# self.a.setTextWidth(self.rect().width())
-	# self.a.adjustSize()
+	# self.a.adjustSize
 
 	@property
 	def state(self):

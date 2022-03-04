@@ -1,22 +1,207 @@
+from src.Modules.Displays.Text import Text
 from src import logging
 from functools import cached_property
-from typing import Callable, Union
+from typing import Any, Callable, Optional, Union
 
 from PySide2.QtCore import QRectF, Qt, QTimer, Signal, Slot
-from PySide2.QtGui import QFont, QFontMetrics, QPalette, QPen
-from PySide2.QtWidgets import QApplication, QGraphicsItem, QGraphicsProxyWidget, QLineEdit
+from PySide2.QtGui import QColor, QFont, QFontMetrics, QPainter, QPalette, QPen, QTransform
+from PySide2.QtWidgets import QApplication, QGraphicsItem, QGraphicsProxyWidget, QGraphicsTextItem, QLineEdit
 
 from src.Modules.Handles.Figure import MarginHandles
 from src.Grid import Geometry
 from src.fonts import compact, rounded
 from src import colorPalette
-from src.utils import Alignment, AlignmentFlag, clearCacheAttr, Margins, Position, Size, StepSignal, strToOrdinal, toOrdinal
+from src.utils import Alignment, AlignmentFlag, clearCacheAttr, Margins, Position, Size, SizeWatchDog, strToOrdinal, toOrdinal
 from src.Modules.Panel import Panel
 from src.Modules.Menus import EditableLabelContextMenu, LabelContextMenu
 
 __all__ = ['Label', 'EditableLabel']
 
 log = logging.getLogger(__name__)
+
+
+# class Text(QGraphicsTextItem):
+#
+# 	def __init__(self, parent: Panel,
+# 	             value: Optional[Any] = None,
+# 	             alignment: Alignment = Alignment.Center,
+# 	             scalar: float = 1.0,
+# 	             font: Union[QFont, str] = None,
+# 	             color: QColor = None):
+# 		super(Text, self).__init__(parent=parent)
+# 		self._value = None
+# 		self.__alignment = None
+# 		self.setParentItem(parent)
+# 		self.setFlag(QGraphicsItem.ItemIsMovable, False)
+# 		self.setFlag(QGraphicsItem.ItemIsSelectable, False)
+# 		self.setFlag(QGraphicsItem.ItemIsFocusable, False)
+# 		self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
+# 		self.setFlag(QGraphicsItem.ItemSendsScenePositionChanges, True)
+# 		self.setAlignment(alignment)
+# 		self.scalar = scalar
+# 		self.setFont(font)
+# 		self.setColor(color)
+# 		self.value = value
+# 		# print(self.text)
+#
+# 	@cached_property
+# 	def fontMetrics(self) -> QFontMetrics:
+# 		font = QFont(self.dynamicFont)
+# 		self.__ratioFontSize = round(self.parentItem().marginRect.height())
+# 		font.setPixelSize(self.__ratioFontSize)
+# 		return QFontMetrics(font)
+#
+# 	@cached_property
+# 	def ratio(self):
+# 		textRect = self.fontMetrics.boundingRect(self.text())
+# 		return self.__ratioFontSize / max(textRect.width(), 1)
+#
+# 	@property
+# 	def dynamicFont(self) -> QFont:
+# 		if self.font() is None:
+# 			height = self. height()
+# 			if height > 120:
+# 				return QFont(rounded)
+# 			return QFont(compact)
+# 		return self.font()
+#
+# 	def setAlignment(self, alignment: Alignment):
+# 		if not isinstance(alignment, Alignment):
+# 			alignment = Alignment(alignment)
+# 		self.__alignment = alignment
+# 		# self.updateTransform()
+#
+# 	def alignment(self):
+# 		return self.__alignment
+#
+# 	def setFont(self, font: Union[QFont, str]):
+# 		if font == None:
+# 			font = QFont(rounded.family(), 100)
+# 		elif isinstance(font, str):
+# 			font = QFont(font, self.height() * .1)
+# 		elif isinstance(font, QFont):
+# 			font = font
+# 		else:
+# 			font = QFont(font)
+# 		super(Text, self).setFont(font)
+# 		# self.updateTransform()
+#
+# 	# def updateTransform(self):
+# 	# 	transform = QTransform()
+# 	# 	parentRect = self.parentItem().rect()
+# 	# #
+# 	# # 	# transform.translate(self.boundingRect().width() * self.alignment().multipliers[0], self.boundingRect().height() * self.alignment().multipliers[1])
+# 	# 	selfRect = self.fontMetrics.boundingRect(self.text())
+# 	# # 	# selfRect.moveCenter(self.boundingRect().center().toPoint())
+# 	# 	widthScalar = parentRect.width() / max(selfRect.width(), 1)
+# 	# 	heightScalar = parentRect.height() / max(selfRect.height(), 1)
+# 	# 	scale = min(widthScalar, heightScalar)
+# 	# 	xMul, yMul = self.alignment().multipliers
+# 	#
+# 	# 	rect = self.boundingRect()
+# 	# 	xOffset = parentRect.width() * xMul - rect.width() * xMul * scale
+# 	# 	yOffset = parentRect.height() * -yMul - rect.height() * -yMul * scale
+# 	#
+# 	# 	transform.translate(*(rect.topLeft().toPoint() - selfRect.topLeft()).toTuple())
+# 	# 	transform.scale(scale, scale)
+# 	# 	self.setTransform(transform)
+#
+# 	def setColor(self, value):
+# 		if value is None:
+# 			color = colorPalette.windowText().color()
+# 		elif isinstance(value, str) and value.startswith('#'):
+# 			value = QColor(value)
+# 		elif isinstance(value, QColor):
+# 			color = value
+# 		else:
+# 			color = colorPalette.windowText().color()
+# 		self.setDefaultTextColor(color)
+#
+# 	def updateFontSize(self):
+# 		self.setFont(QFont(self.font().family(), self.parentItem().fontSize * self.scalar))
+#
+# 	def setPlainText(self, text: str) -> None:
+# 		# self.setHtml('<p style="text-align:center;">' + text + '</p>')
+# 		super(Text, self).setPlainText(text)
+# 		# self.setTextWidth(len(str(text)) * 2)
+# 		# self.updateTransform()
+#
+# 	def setRect(self, rect: QRectF) -> None:
+# 		transform = QTransform()
+# 		r = self.boundingRect()
+# 		hS = self.boundingRect().height() / self.fontMetrics.height()
+# 		widthScalar = rect.width() / max(r.width(), 1)
+# 		heightScalar = rect.height() / (max(r.height(), 1))
+# 		scale = min(widthScalar, heightScalar)
+# 		if self.alignment().horizontal.isLeft:
+# 			pass
+# 		elif self.alignment().horizontal.isRight:
+# 			transform.translate(rect.width() - r.width() * scale, 0)
+# 		else:
+# 			transform.translate((rect.width() - r.width() * scale) / 2, 0)
+# 		if self.alignment().vertical.isTop:
+# 			pass
+# 		elif self.alignment().vertical.isBottom:
+# 			transform.translate(0, rect.height() - r.height() * scale)
+# 		else:
+# 			transform.translate(0, (rect.height() - r.height() * scale) / 2)
+# 		xMul, yMul = self.alignment().multipliers
+# 		transform.scale(scale, scale)
+# 		transform.translate(*(rect.topLeft() - r.topLeft()).toTuple())
+# 		# transform.translate(rect.width() * self.alignment().multipliers[0], rect.height() * self.alignment().multipliers[1])
+# 		self.setTransform(transform)
+#
+# 	def paint(self, painter: QPainter, option, widget):
+# 		# # painter.translate()
+# 		# parentRect = self.parentItem().rect()
+# 		# #
+# 		# # 	# transform.translate(self.boundingRect().width() * self.alignment().multipliers[0], self.boundingRect().height() * self.alignment().multipliers[1])
+# 		#
+# 		# # 	# selfRect.moveCenter(self.boundingRect().center().toPoint())
+# 		# # r = self.fontMetrics.boundingRect(self.text())
+# 		# # r = self.fontMetrics.boundingRect(parentRect.toRect(), self.alignment().asQtAlignment, self.text(), 0)
+# 		# # selfRect = self.boundingRect()
+# 		# r = self.boundingRect()
+# 		#
+# 		# widthScalar = parentRect.width() / max(r.width(), 1)
+# 		# heightScalar = parentRect.height() / max(r.height(), 1)
+# 		# xMul, yMul = self.alignment().multipliers
+# 		# scale = min(widthScalar, heightScalar)
+# 		# xOffset = r.width() * xMul
+# 		# yOffset = parentRect.height() * -yMul - r.height() * -yMul
+# 		# transform = QTransform()
+# 		#
+# 		# # painter.translate(xOffset, yOffset)
+# 		# # painter.scale(scale, scale)
+# 		#
+# 		#
+# 		#
+# 		#
+# 		# # painter.setRenderHint(QPainter.Antialiasing, False)
+# 		# # painter.setRenderHint(QPainter.TextAntialiasing, False)
+# 		# # painter.setRenderHint(QPainter.SmoothPixmapTransform, False)
+# 		# # painter.setRenderHint(QPainter.HighQualityAntialiasing, False)
+# 		# # # Falsepainter.setRenderHint(QPainter.NonCosmeticDefaultPen, False)
+# 		# painter.setRenderHint(QPainter.Qt4CompatiblePainting, False)
+# 		super(Text, self).paint(painter, option, widget)
+#
+# 		painter.setPen(QPen(Qt.red, 1))
+# 		painter.drawRect(self.boundingRect())
+#
+# 	@property
+# 	def value(self):
+# 		return self._value
+#
+# 	@value.setter
+# 	def value(self, value):
+# 		if str(value) != self.text():
+# 			self._value = value
+# 			self.setPlainText(self.text())
+#
+# 	def text(self):
+# 		if self.value is None:
+# 			return ''
+# 		return str(self.value)
 
 
 class Label(Panel):
@@ -38,15 +223,16 @@ class Label(Panel):
 		if filters is None:
 			filters = list()
 		self.lineBreaking = lineBreaking
-		self.changeWatcher = StepSignal(signal=self.updateRatio, step=10)
 		self.enabledFilters: set = set()
 		super().__init__(parent=parent, *args, **kwargs)
 		if alignment is None:
 			alignment = Alignment.Center
 		self.alignment: Alignment = alignment
-		self.text = text
 		self.font = QFont(rounded)
 		self.marginHandles = MarginHandles(self)
+		self.marginHandles.signals.action.connect(self.textBox.updateTransform)
+		self.textBox.setParentItem(self)
+		self.text = text
 		# self.showGrid = False
 		for filter in filters:
 			self.setFilter(filter, True)
@@ -55,6 +241,12 @@ class Label(Panel):
 
 		self.update()
 		self.setAcceptDrops(False)
+
+	@cached_property
+	def textBox(self):
+		a = Text(self, value=str(self.text))
+		a.setParentItem(self)
+		return a
 
 	def editMargins(self):
 		self.marginHandles.show()
@@ -96,6 +288,14 @@ class Label(Panel):
 	def contextMenu(self):
 		return LabelContextMenu(self)
 
+	@property
+	def alignment(self):
+		return self.textBox.align
+
+	@alignment.setter
+	def alignment(self, value):
+		self.textBox.setAlignment(value)
+
 	def setAlignment(self, alignment: AlignmentFlag):
 		if isinstance(alignment, Alignment):
 			self.alignment = alignment
@@ -126,7 +326,7 @@ class Label(Panel):
 	@cached_property
 	def fontMetrics(self):
 		font = QFont(self.dynamicFont)
-		self.__ratioFontSize = round(self.marginRect.height())
+		self.__ratioFontSize = self.marginRect.height() or 10
 		font.setPixelSize(self.__ratioFontSize)
 		return QFontMetrics(font)
 
@@ -145,14 +345,13 @@ class Label(Panel):
 
 	@text.setter
 	def text(self, value):
-		clearCacheAttr(self, 'ratio', 'fontMetrics', 'fontSize')
+		# clearCacheAttr(self, 'ratio', 'fontMetrics', 'fontSize')
 		self._text = value
+		self.textBox.text = value
 
 		self.update()
 
 	def setText(self, text: str):
-		if str(self._text) != str(text):
-			clearCacheAttr(self, 'ratio', 'fontMetrics', 'fontSize')
 		self._text = text
 
 	@cached_property
@@ -186,24 +385,12 @@ class Label(Panel):
 	@cached_property
 	def fontSize(self):
 		rect = self.marginRect
-		return max(10, min(self.ratio * rect.width(), rect.height()))
+		return round(max(10, min(self.ratio * rect.width(), rect.height())))
 
 	def setRect(self, rect: QRectF):
 		super(Label, self).setRect(rect)
-		clearCacheAttr(self, 'ratio', 'fontMetrics', 'fontSize', 'marginRect')
-
-	def paint(self, painter, option, widget):
-		super(Label, self).paint(painter, option, widget)
-		painter.setPen(QPen(colorPalette.windowText().color()))
-		painter.setBrush(Qt.NoBrush)
-		font = self.dynamicFont
-		font.setPixelSize(self.fontSize)
-
-		painter.setFont(font)
-		rect = self.marginRect
-
-		painter.drawText(rect, self.alignment.asQtAlignment | Qt.TextDontClip, self.text)
-	# super(DynamicLabel, self).paint(painter, option, widget)
+		self.textBox.setPos(self.rect().topLeft())
+		self.textBox.updateTransform()
 
 
 class HiddenLineEdit(QLineEdit):
