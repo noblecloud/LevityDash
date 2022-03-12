@@ -1,20 +1,24 @@
+from dataclasses import dataclass
+
+import time
+
 from src import logging
 from uuid import uuid4
 from abc import ABCMeta
 from datetime import datetime, timedelta
 from functools import cached_property
-from typing import Iterable, List, OrderedDict, Type, Union
+from typing import Dict, Iterable, List, OrderedDict, Type, Union
 
 import numpy as np
 import WeatherUnits as wu
 from dateutil.parser import parse
-from PySide2.QtCore import QObject, Signal
+from PySide2.QtCore import QObject, QTimer, Signal, Slot
 from pytz import timezone
 from WeatherUnits import Measurement
 
 from src import config
 from src.translators import Translator, unitDict
-from src.utils import clearCacheAttr, closest, ForecastUpdateHandler, ObservationUpdateHandler, Period, DateKey
+from src.utils import clearCacheAttr, closest, ForecastUpdateHandler, KeyData, ObservationUpdateHandler, Period, DateKey
 from src.catagories import CategoryDict, CategoryItem, ValueWrapper
 
 log = logging.getLogger(__name__)
@@ -220,23 +224,72 @@ __all__ = ['ObservationDict', 'Observation', 'ObservationRealtime', 'Observation
 # 				return subCat.__contains__(remainder)
 
 class ObservationSignal(QObject):
-	valueAdded = Signal(dict)
-	updated = Signal(dict)
+	__signal = Signal(set)
+	__data: set
+
+	def __init__(self, observation: 'ObservationDict'):
+		self.__hash = hash((observation, hash(id)))
+		self.__observation = observation
+		self.__data = set()
+		super(ObservationSignal, self).__init__()
+		self.__timer = QTimer(singleShot=True, interval=200)
+		self.__timer.timeout.connect(self.__emitChange)
+
+	def __hash__(self):
+		return self.__hash
+
+	def addKey(self, key):
+		self.__data.add(key)
+		self.__timer.start()
+
+	@property
+	def observation(self):
+		return
+
+	def __emitChange(self):
+		self.__timer.stop()
+		self.__observation.log.debug(f'Announcing keys f{self.__data}')
+		self.__signal.emit(KeyData(self.__observation, self.__data))
+		self.__data.clear()
+
+	def connectSlot(self, slot: Slot):
+		self.__signal.connect(slot)
+
+	def disconnectSlot(self, slot: Slot):
+		try:
+			self.__signal.disconnect(slot)
+		except RuntimeError:
+			pass
+
+
+apiLog = logging.getLogger(f'API')
 
 
 class ObservationDict(dict, metaclass=ABCMeta):
 	_api: 'API'
 	_time: datetime
 	_period = Period.Now
+	signal: ObservationSignal
 
-	def __init_subclass__(cls, category: str = None, **kwargs):
+	def __init_subclass__(cls, category: str = None, published: bool = None, **kwargs):
 		if category is None:
 			pass
 		else:
 			cls.category = CategoryItem(category)
-			return super(ObservationDict, cls).__init_subclass__()
+		if published is None:
+			published = cls.mro()[0]._published
+		cls._published = published
+
+		cls.log = apiLog.getChild(cls.__name__)
+		cls.log.setLevel('DEBUG')
+		return super(ObservationDict, cls).__init_subclass__()
 
 	def __init__(self, *args, **kwargs):
+		self._uuid = uuid4()
+
+		if self.published:
+			self.signals = ObservationSignal(self)
+
 		api = kwargs.get('api')
 		if api is None:
 			from src.api import API
@@ -246,13 +299,17 @@ class ObservationDict(dict, metaclass=ABCMeta):
 			else:
 				raise ValueError('An API must be specified')
 		# self._period = kwargs.get('period', None)
-		self._api = api
-		self._uuid = uuid4()
+		self.api = api
+
 		# self._categories = Category(self.category, self)
 		super(ObservationDict, self).__init__()
 
 	def __hash__(self):
 		return hash(self._uuid)
+
+	@property
+	def published(self) -> bool:
+		return self._published
 
 	@property
 	def translator(self):
@@ -282,6 +339,13 @@ class ObservationDict(dict, metaclass=ABCMeta):
 	def api(self):
 		return self._api
 
+	@api.setter
+	def api(self, value):
+		if hasattr(value, 'endpoints'):
+			self._api = value
+			if self.published:
+				self.signals.connectSlot(value.keySignal.addBulk)
+
 	def __setitem__(self, key, value):
 		key = self._convertToCategoryItem(key)
 		item = super(ObservationDict, self).get(key, None)
@@ -293,17 +357,20 @@ class ObservationDict(dict, metaclass=ABCMeta):
 			else:
 				super(ObservationDict, self).__setitem__(key, value)
 		else:
-			if not bool(value):
+			if isinstance(value, MeasurementTimeSeries):
+				super(ObservationDict, self).__setitem__(key, value)
+			elif not bool(value):
 				return super(ObservationDict, self).__setitem__(key, value)
-			if not isinstance(value, ValueWrapper):
+			elif isinstance(value, datetime) and key == 'time':
+				super(ObservationDict, self).__setitem__(key, value)
+			elif not isinstance(value, ValueWrapper):
 				value = ValueWrapper(**value)
 				super(ObservationDict, self).__setitem__(key, value)
-			if isinstance(value, ValueWrapper):
-				self.signals.valueAdded.emit({'source': self, 'key': key, 'value': value})
-
+		if self.published:
+			self.signals.addKey(key)
 	# toRefresh = self.categories[key[:-1]]
 	# if isinstance(toRefresh, (dict, CategoryDict)):
-	# 	for value in toRefresh.values():
+	# 	for value in toRefresh._values():
 	# 		if isinstance(value, CategoryDict):
 	# 			value.refresh()
 
@@ -318,18 +385,15 @@ class ObservationDict(dict, metaclass=ABCMeta):
 
 		item = self._convertToCategoryItem(item)
 
-		if item == 'time':
-			return self._time
-
 		try:
 			return super(ObservationDict, self).__getitem__(item)
 		except KeyError:
 			pass
-		# if key contains wildcards return a dict containing all the values
+		# if key contains wildcards return a dict containing all the _values
 		# Possibly later change this to return a custom subcategory
 		if any('*' in i for i in item):
 			return self.categories[item]
-			# if the last value in the key assume all matching values are being requested
+			# if the last value in the key assume all matching _values are being requested
 			wildcardValues = {k: v for k, v in self.items() if k < item}
 			if wildcardValues:
 				return wildcardValues
@@ -347,12 +411,12 @@ class ObservationDict(dict, metaclass=ABCMeta):
 	def categories(self):
 		return CategoryDict(self, self, None)
 
-	def __contains__(self, item):
-		if not super(ObservationDict, self).__contains__(item):
-			item = self._convertToCategoryItem(item)
-			return any([item in i for i in (list(self.keys()))])
-		else:
-			return True
+# def __contains__(self, item):
+# 	if not super(ObservationDict, self).__contains__(item):
+# 		item = self._convertToCategoryItem(item)
+# 		return any([item in i for i in (list(self.keys()))])
+# 	else:
+# 		return True
 
 
 # class Translator(dict):
@@ -367,11 +431,11 @@ class ObservationDict(dict, metaclass=ABCMeta):
 #
 #
 
-
-class Observation(ObservationDict):
+class Observation(ObservationDict, published=False):
 	unitDict = unitDict
 	_translator: dict
 	_time: datetime = None
+	_calculatedKeys: set = set()
 
 	# def __new__(cls, *args, **kwargs):
 	# 	period = kwargs.get('period')
@@ -381,7 +445,6 @@ class Observation(ObservationDict):
 	# 	return cls
 
 	def __init__(self, *args, **kwargs):
-		self.signals = ObservationSignal()
 		super(Observation, self).__init__(*args, **kwargs)
 		if not isinstance(self.__class__._translator, CategoryDict):
 			self.__class__._translator = Translator(self._translator, observation=self)
@@ -401,17 +464,29 @@ class Observation(ObservationDict):
 
 	def update(self, data: dict, **kwargs):
 		data = self.__preprocess(data)
-		data = self.translator.translate(data, time=self._time)
+		data = self.translator.translate(data, time=self['time'])
+		beforeKeys = set(self.keys())
 		for key, item in data.items():
 			self[key] = item
 		self.calculateMissing()
+		afterKeys = set(self.keys())
+		newKeys = afterKeys - beforeKeys
+		newKeys = [container for key in newKeys if key if (container := self.api[key]) is not None]
+		if newKeys and self.period.total_seconds() == 0:
+			pass
+		# start = time.time()
+		# if self.api.main.mutex.tryLock(2000):
+		# print(f'{self.api.name} waited for unlock for {time.time() - start}')
+
+		# 	self.api.main.update(newKeys)
+		# 	self.api.main.mutex.unlock()
 
 	def __getitem__(self, item: str):
 		if item in self:
 			return super(Observation, self).__getitem__(item)
 		else:
-			if isinstance(item, datetime) and item == self._time:
-				return self
+			# if isinstance(item, datetime) and item == self._time:
+			# 	return self
 			return super(Observation, self).__getitem__(item)
 
 	# def __setitem__(self, key: str, value):
@@ -427,23 +502,66 @@ class Observation(ObservationDict):
 	def printItem(self, item):
 		print(item)
 
-	def calculateMissing(self):
-		keys = set(self.keys())
+	def calculateMissing(self, keys: set = None):
+		if keys is None:
+			keys = set(self.keys()) - self._calculatedKeys
 		light = {'environment.light.illuminance', 'environment.light.irradiance'}
 
-		if 'environment.humidity.humidity' in self.keys():
-			if 'environment.temperature.dewpoint' not in self.keys():
-				temperature = self['environment.temperature.temperature']
-				dewpoint = temperature.dewpoint(self['environment.humidity.humidity'].value)
-				dewpointDict = temperature.toDict()
-				dewpointDict['value'] = dewpoint
-				self['environment.temperature.dewpoint'] = dewpointDict
-
-	# if 'heatIndex' not in self.keys():
-	# 	self['heatIndex'] = self['temperature'].heatIndex(self['humidity'])
-
-	# if 'windChill' not in self.keys() and 'windSpeed' in self.keys():
-	# 	self['windChill'] = self['temperature'].windChill(self['windSpeed'])
+		if 'environment.temperature.temperature' in keys:
+			temperature = self['environment.temperature.temperature']
+			if 'environment.humidity.humidity' in keys:
+				humidity = self['environment.humidity.humidity']
+				if 'environment.temperature.dewpoint' not in keys:
+					self._calculatedKeys.add('environment.temperature.dewpoint')
+					dewpoint = temperature.dewpoint(humidity.value)
+					dewpointDict = temperature.toDict()
+					dewpointDict['value'] = dewpoint
+					dewpointDict['key'] = 'environment.temperature.dewpoint'
+					dewpointDict['sourceValue'] = 'calculated'
+					dewpointDict['title'] = 'Dewpoint'
+					self['environment.temperature.dewpoint'] = dewpointDict
+				if 'environment.temperature.heatIndex' not in keys:
+					self._calculatedKeys.add('environment.temperature.heatIndex')
+					heatIndex = temperature.heatIndex(humidity.value)
+					heatIndexDict = temperature.toDict()
+					heatIndexDict['value'] = heatIndex
+					heatIndexDict['key'] = 'heatIndex'
+					heatIndexDict['sourceValue'] = 'calculated'
+					heatIndexDict['title'] = 'Heat Index'
+					self['environment.temperature.heatIndex'] = heatIndexDict
+			if 'environment.wind.speed' in keys:
+				windSpeed = self['environment.wind.speed']
+				if 'environment.temperature.windChill' not in keys:
+					self._calculatedKeys.add('environment.temperature.windChill')
+					windChill = temperature.windChill(windSpeed.value)
+					windChillDict = temperature.toDict()
+					windChillDict['value'] = windChill
+					windChillDict['key'] = 'windChill'
+					windChillDict['sourceValue'] = 'calculated'
+					windChillDict['title'] = 'Wind Chill'
+					self['environment.temperature.windChill'] = windChillDict
+		if 'indoor.temperature.temperature' in keys:
+			temperature = self['indoor.temperature.temperature']
+			if 'indoor.humidity.humidity' in keys:
+				humidity = self['indoor.humidity.humidity']
+				if 'indoor.temperature.dewpoint' not in keys:
+					self._calculatedKeys.add('indoor.temperature.dewpoint')
+					dewpoint = temperature.dewpoint(humidity.value)
+					dewpointDict = temperature.toDict()
+					dewpointDict['value'] = dewpoint
+					dewpointDict['key'] = 'indoor.temperature.dewpoint'
+					dewpointDict['sourceValue'] = 'calculated'
+					dewpointDict['title'] = 'Dewpoint'
+					self['indoor.temperature.dewpoint'] = dewpointDict
+				if 'indoor.temperature.heatIndex' not in keys:
+					self._calculatedKeys.add('indoor.temperature.heatIndex')
+					heatIndex = temperature.heatIndex(humidity.value)
+					heatIndexDict = temperature.toDict()
+					heatIndexDict['value'] = heatIndex
+					heatIndexDict['key'] = 'heatIndex'
+					heatIndexDict['sourceValue'] = 'calculated'
+					heatIndexDict['title'] = 'Heat Index'
+					self['indoor.temperature.heatIndex'] = heatIndexDict
 
 	# if keys.intersection(light) and not keys.issubset(light):
 	# 	if 'environment.light.irradiance' in self.keys():
@@ -456,7 +574,7 @@ class Observation(ObservationDict):
 
 	def __preprocess(self, data: dict):
 		if data:
-			self._time = self.__processTime(data)
+			self['time'] = self.__processTime(data)
 			# if not all(key in self.translator for key in data.keys()):
 			# 	data = {self.normalizeDict[key]: value for key, value in data.items() if key in self.normalizeDict.keys()}
 			return data
@@ -578,10 +696,10 @@ class Observation(ObservationDict):
 
 	@property
 	def time(self):
-		return self._time
+		return self['time']
 
 
-class ObservationRealtime(Observation):
+class ObservationRealtime(Observation, published=True):
 	time: datetime
 	timezone: timezone
 	subscriptionChannel: str = None
@@ -617,16 +735,6 @@ class ObservationRealtime(Observation):
 			signal = self.signals[key]
 			signal.emit(self[key])
 
-	def tryToSubscribe(self, key):
-		if key in self.signals.keys():
-			self.signals[key]
-		else:
-			self.signals.update({key: [signal]})
-		try:
-			signal.emit(self[key])
-		except KeyError:
-			log.error(f'API does not have that {key} yet, will emit when added')
-
 
 class ForecastValues(dict):
 
@@ -647,7 +755,7 @@ class ForecastValues(dict):
 			yield key, self[key]
 
 
-class ObservationForecast(ObservationDict):
+class ObservationForecast(ObservationDict, published=True):
 	_knownKeys: list[str] = []
 	observations: dict[CategoryItem, 'MeasurementTimeSeries']
 	_fieldsToPop = []
@@ -659,7 +767,6 @@ class ObservationForecast(ObservationDict):
 
 	def __init__(self, *args, **kwargs):
 		self.keyDict = ForecastValues(self)
-		self.signals = ObservationSignal()
 		super(ObservationForecast, self).__init__(*args, **kwargs)
 		self['time']: dict[DateKey, Observation] = {}
 		self.observations = {}
@@ -691,21 +798,35 @@ class ObservationForecast(ObservationDict):
 
 		self.calculatePeriod(raw)
 
+		now = datetime.now(tz=config.tz)
+
 		keys = [self.normalizeDict[key] for key in {key for obs in (data.values() if isinstance(data, dict) else data) for key in obs.keys()} if key in self.normalizeDict.keys()]
 		if isinstance(raw, List):
 			for rawObs in raw:
 				key = self.__makeKey(rawObs)
 				obs = self['time'].get(key)
-				if obs is None:
+				if key < now:
+					if obs is not None:
+						self['time'].pop(key)
+				elif obs is None:
 					self['time'][key] = self._observationClass(parentObservation=self, values=rawObs, api=self.api, period=self.period)
 				else:
 					self['time'][key].update(rawObs)
-		for key in keys:
-			values = [i[key] for i in self['time'].values()]
-			if key in self.observations.keys():
-				self.observations[key].update(values)
+		for key in self[0].keys():
+			if key[0] == 'time':
+				continue
+			if key in self.keys():
+				self[key].refresh()
 			else:
-				self.observations[key] = MeasurementTimeSeries(self, key, values)
+				value = MeasurementTimeSeries(self, key)
+				self[key] = value
+		self.removeOldObservations()
+
+	def removeOldObservations(self, allowedTime: timedelta = timedelta(hours=0)):
+		now = datetime.now(tz=config.tz)
+		for key in list(self['time'].keys()):
+			if key < now - allowedTime:
+				self['time'].pop(key)
 
 	# for key in self.knownKeys:
 	# 	self.__updateObsKey(key)
@@ -754,35 +875,39 @@ class ObservationForecast(ObservationDict):
 	def __getitem__(self, key) -> Union[List[Measurement], Observation]:
 		# if key in self._knownKeys:
 		# self[key] = {k1: _value[key] for k1, _value in self['time'].items() if key in _value.keys()}
+		if isinstance(key, CategoryItem):
+			return super(ObservationForecast, self).__getitem__(key)
 		if key in ['time', 'datetime', 'timestamp']:
 			return dict.get(self, 'time')
 		if isinstance(key, int):
 			key = list(self['time'].keys())[key]
 			return self['time'][key]
-		if not any(key in k for k in self.observationKeys()):
+		return super(ObservationForecast, self).__getitem__(key)
 
-			if isinstance(key, int):
-				return list(self['time'].values())[key]
-
-			if isinstance(key, datetime):
-				timestamp = int(key.timestamp())
-				key = closest(list(self['time'].keys()), timestamp)
-				return self['time'][key]
-
-		else:
-			# values = {K: MeasurementTimeSeries(self, K, [i[K] for i in self['time'].values()]) for K in self.observationKeys() if key in K}
-			# if len(values) == 1:
-			# 	return values.popitem()[1]
-			# return values
-			if key in self.observations:
-				return self.observations[key]
-			if key in self.observationKeys():
-				value = [i[key] for i in self['time'].values()]
-				series = MeasurementTimeSeries(self, key, value)
-				self.observations[key] = series
-				return series
-			else:
-				raise KeyError(key)
+	# # if not any(key in k for k in self.observationKeys()):
+	# #
+	# # 	if isinstance(key, int):
+	# # 		return list(self['time'].values())[key]
+	# #
+	# # 	if isinstance(key, datetime):
+	# # 		timestamp = int(key.timestamp())
+	# # 		key = closest(list(self['time'].keys()), timestamp)
+	# # 		return self['time'][key]
+	#
+	# else:
+	# 	# _values = {K: MeasurementTimeSeries(self, K, [i[K] for i in self['time']._values()]) for K in self.observationKeys() if key in K}
+	# 	# if len(_values) == 1:
+	# 	# 	return _values.popitem()[1]
+	# 	# return _values
+	# 	if key in self.observations:
+	# 		return self.observations[key]
+	# 	if key in self.observationKeys():
+	# 		value = [i[key] for i in self['time'].values()]
+	# 		series = MeasurementTimeSeries(self, key, value)
+	# 		self.observations[key] = series
+	# 		return series
+	# 	else:
+	# 		raise KeyError(key)
 
 	@cached_property
 	def categories(self):
@@ -823,7 +948,28 @@ class ObservationForecast(ObservationDict):
 		return self['raw']
 
 
-class ObservationForecastItem(Observation):
+class TimeSeriesSignal(QObject):
+	__signal = Signal()
+
+	def __init__(self, parent=None):
+		super(TimeSeriesSignal, self).__init__(parent)
+
+	def publish(self):
+		self.__signal.emit()
+
+	def connectSlot(self, slot):
+		self.__signal.connect(slot)
+
+	def disconnectSlot(self, slot):
+		try:
+			self.__signal.disconnect(slot)
+		except TypeError:
+			pass
+		except RuntimeError:
+			pass
+
+
+class ObservationForecastItem(Observation, published=False):
 
 	def __init__(self, *args, parentObservation: ObservationForecast, **kwargs):
 		self.__parent = parentObservation
@@ -838,35 +984,43 @@ class MeasurementTimeSeries(OrderedDict):
 	_source: ObservationForecast
 	offset = 0
 
-	def __init__(self, source: ObservationForecast, key: str, values: Iterable):
+	def __init__(self, source: ObservationForecast, key: str):
 		self._source = source
 		self._key = key
-		self.signals = ObservationSignal()
+		self.signals = TimeSeriesSignal()
 		super(MeasurementTimeSeries, self).__init__()
 		self.signals.blockSignals(True)
-		self.update(values)
 		self.signals.blockSignals(False)
 
 	def __hash__(self):
 		return hash(self._key)
 
+	def __repr__(self):
+		return f'MeasurementTimeSeries: {self._key}{" [uninitialized]" if len(self) == 0 else ""}'
+
+	def __str__(self):
+		return self.__repr__()
+
 	def pullUpdate(self):
 		self.update()
 
-	def update(self, *V) -> None:
+	def refresh(self):
+		self.update()
 
-		if len(V) == 1:
-			V = V[0]
-		for v in V:
-			if isinstance(v, ValueWrapper):
-				self[v.timestamp] = v
+	def update(self) -> None:
+		key = self._key
+		for item in ((k, v[key]) for k, v in self._source['time'].items()):
+			k, v = item
+			self[k] = v
 		self.removeOldValues()
 		self.__clearCache()
-		self.signals.updated.emit(self)
+		self.publish()
+
+	def publish(self):
+		self.signals.publish()
 
 	def roll(self):
 		self.__clearCache()
-		self.signals.updated.emit(self)
 
 	def removeOldValues(self):
 		keysToPop = []
@@ -881,14 +1035,16 @@ class MeasurementTimeSeries(OrderedDict):
 			key = value.timestamp
 		if isinstance(key, (datetime, timedelta)):
 			key = DateKey(key)
-		if key in self:
-			self[key].updateValue(**value.toDict())
+		if key in self and self[key] == value:
+			self.log.debug('Stored value is the same as the new value, this should never happen')
 		else:
 			# self._source.signals.valueAdded.emit({'source': self._source, 'key': key, 'value': value})
 			# value.valueChanged.connect(self.__clearCache)
 			super(MeasurementTimeSeries, self).__setitem__(key, value)
 
 	def __getitem__(self, key):
+		if len(self) == 0:
+			self.update()
 		if isinstance(key, (datetime, timedelta)):
 			key = DateKey(key)
 		if key in self:
@@ -916,24 +1072,37 @@ class MeasurementTimeSeries(OrderedDict):
 	def __clearCache(self):
 		clearCacheAttr(self, 'array')
 		clearCacheAttr(self, 'timeseries')
+		clearCacheAttr(self, 'timeseriesInts')
 		clearCacheAttr(self, 'start')
 
 	def updateItem(self, value):
 		key = DateKey(value.timestamp)
 		self[key] = value
 
-	@cached_property
-	def start(self):
-		return min(self.keys())
-
 	@property
 	def period(self):
 		return self._source.period
 
 	@cached_property
+	def start(self):
+		if len(self) == 0:
+			self.update()
+		return list[self.keys()][0]
+
+	@cached_property
 	def array(self) -> np.array:
+		if len(self) == 0:
+			self.update()
 		return np.array([i.value for i in self.values()])
 
 	@cached_property
 	def timeseries(self) -> np.array:
+		if len(self) == 0:
+			self.update()
+		return [i.timestamp for i in self.values()]
+
+	@cached_property
+	def timeseriesInts(self) -> np.array:
+		if len(self) == 0:
+			self.update()
 		return np.array([x.timestamp.timestamp() for x in self.values()])
