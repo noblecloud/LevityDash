@@ -1,6 +1,9 @@
+import random
+from measurement.base import classproperty
 
-from src import logging
-import pprint
+import asyncio
+
+from src import config, logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import cached_property
@@ -22,6 +25,7 @@ from src.utils import APIUpdateSignaler, closest, Period
 
 __all__ = ['URLs', 'EndpointList', 'API']
 
+apiLog = logging.getLogger(f'API')
 
 @dataclass
 class URLs:
@@ -460,32 +464,45 @@ class PlaceholderContainer(Container):
 
 
 class KeyTracker(QObject):
-	added = Signal(dict)
-	removed = Signal(dict)
-	keys = {}
-
-	# TODO This may be unnecessary?
+	__added = Signal(dict)
+	__removed = Signal(dict)
+	__data: dict[timedelta, set[CategoryItem]]
 
 	def __init__(self, api: 'API'):
 		self.api = api
+		self.__data = {}
 		super(KeyTracker, self).__init__()
+		self.__timer = QTimer(singleShot=True, interval=200)
+		self.__timer.timeout.connect(self.__emitChange)
 
-	def add(self, value: dict):
-		exisitingKeys = set(self.keys.keys())
-		if isinstance(list(value.keys())[0], CategoryItem):
-			for v in value.values():
-				key = v['key']
-				if key not in self.keys:
-					self.keys[key] = Container(self.api, key)
-		newKeys = set(self.keys.keys()) - exisitingKeys
-		endpoints.lock()
-		self.added.emit({k: v for k, v in self.keys.items() if k in newKeys})
-		endpoints.unlock()
+	@Slot(KeyData)
+	def addBulk(self, data: KeyData):
+		sender = data.sender.period
+		keys = data.keys
+		if sender not in self.__data:
+			self.__data[sender] = set()
+		self.__data[sender].update(keys)
+		self.__timer.start()
 
 	def remove(self, key: CategoryItem):
 		if key in self.keys:
 			self.removed.emit(self.keys[key])
 			del self.keys[key]
+
+	def __emitChange(self):
+		data = KeyData(self.api, self.__data)
+		self.__added.emit(data)
+		self.__data = {}
+
+	def connectSlot(self, slot: Slot):
+		self.__added.connect(slot)
+
+	def disconnectSlot(self, slot: Slot):
+		try:
+			self.__added.disconnect(slot)
+		except TypeError:
+			pass
+
 
 
 class Worker(QRunnable):
@@ -542,8 +559,110 @@ class Worker(QRunnable):
 		self.func(self.owner)
 
 
-class API(QObject):
-	newKey = Signal(dict)
+class ScheduledEvent:
+	stagger: bool
+	staggerAmount: timedelta
+	when: datetime
+	interval: timedelta
+	func: Callable
+	args: tuple
+	kwargs: dict
+	timer: asyncio.TimerHandle
+
+	def __init__(self,
+	             interval: timedelta,
+	             func: Callable,
+	             arguments: tuple = None,
+	             keywordArguments: dict = None,
+	             stagger: bool = None,
+	             staggerAmount: timedelta = None,
+	             fireImmediately: bool = True,
+	             singleShot: bool = False,
+	             pool=None):
+
+		if arguments is None:
+			arguments = ()
+		if keywordArguments is None:
+			keywordArguments = {}
+		if stagger is None:
+			stagger = False
+		if staggerAmount is None:
+			staggerAmount = timedelta(minutes=2.5)
+		self.__interval = interval
+
+		self.__func = func
+		self.__args = arguments
+		self.__kwargs = keywordArguments
+		self.__stagger = stagger
+		self.__staggerAmount = staggerAmount
+		self.__singleShot = singleShot
+		self.__fireImmediately = fireImmediately
+
+	def start(self, immediately: bool = False, startTime: datetime = None):
+		self.__fireImmediately = immediately
+		self.__run(startTime)
+
+	def stop(self):
+		self.timer.stop()
+
+	def reschedule(self, interval: timedelta = None, fireImmediately: bool = False):
+		self.__fireImmediately = fireImmediately
+		if interval is not None:
+			self.interval = interval
+		self.__run()
+
+	@property
+	def when(self) -> datetime:
+		when = datetime.now() + self.__interval
+		if self.__stagger:
+			seconds = self.__staggerAmount.seconds * (random() * 2 - 1)
+			loopTime = asyncio.get_event_loop().time()
+			if seconds + loopTime < 0:
+				seconds = self.__staggerAmount.seconds * random()
+			when += timedelta(seconds=seconds)
+		return when
+
+	@when.setter
+	def when(self, value: datetime):
+		pass
+
+	@property
+	def interval(self):
+		return self.__interval
+
+	@interval.setter
+	def interval(self, value):
+		if value != self.__interval:
+			self.__interval = value
+			self.timer.cancel()
+			self.__run()
+		self.__interval = value
+
+	@property
+	def fireImmediately(self) -> bool:
+		value = self.__fireImmediately
+		self.__fireImmediately = False
+		return value
+
+	def __run(self, startTime: datetime = None):
+		loop = asyncio.get_event_loop()
+		when = self.when if startTime is None else startTime
+		_when = (when - datetime.now()).total_seconds()
+		self.timer = loop.call_soon(self.__fire) if self.fireImmediately else loop.call_at(_when, self.__fire)
+		print(f'Scheduled {self.__func.__name__} to run at {when.strftime("%-I:%M:%S%p").lower()}')
+
+	def __fire(self):
+		asyncio.create_task(self.__func(*self.__args, **self.__kwargs))
+		print(f'{self.__func.__name__} fired!')
+		if not self.__singleShot:
+			self.__run()
+
+	@property
+	def __timeTo(self) -> float:
+		self.timer.when()
+
+
+class API:
 	_params: Dict = {}
 	_headers: Dict = {}
 	_baseParams: Dict = {}
@@ -740,6 +859,9 @@ class API(QObject):
 			self.log.error('API Error', request.content)
 			raise APIError(request)
 
+	async def getData(self, endpoint: str = None, params: dict = None, headers: dict = {}) -> dict:
+		loop = asyncio.get_event_loop()
+		return await loop.run_in_executor(None, self.__getData, endpoint, params, headers)
 
 	def hasForecastFor(self, item: str) -> bool:
 		return any([item in endpoint.keys() and endpoint.isForecast for endpoint in self._endpoints])
