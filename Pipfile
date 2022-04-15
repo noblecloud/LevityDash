@@ -1,51 +1,31 @@
 [[source]]
 url = "https://pypi.org/simple"
-verify_ssl = true
+verify_ssl = false
 name = "pypi"
+
+[[source]]
+url = "https://download.qt.io/official_releases/QtForPython/"
+verify_ssl = true
+name = "qt"
+
 
 [packages]
 pysolar = "*"
 pytz = "*"
-climacell-python = "*"
+requests = "*"
 pylunar = { editable = true, git = "https://github.com/noblecloud/pylunar.git" }
-numpy = "*" #install with pip3 install numpy --no-use-pep517 first
-ambient-api = "*"
-scipy = "*"
-pyside2 = "*" # See https://github.com/piwheels/packages/issues/4#issuecomment-772058821 for RPI installation
+#numpy = { pip_options = ['--no-use-pep517'] }
+#scipy = "*"
+#pyside2 = { version = "*", index = "qt" } # See https://github.com/piwheels/packages/issues/4#issuecomment-772058821 for RPI installationz
 Pillow = "*"
-WeatherUnits = "*"
-q = "*"
-dumb = "*"
-normalize = "*"
-plot = "*"
-scene = "*"
-parameters = "*"
-todict = "*"
-params = "*"
-intervals = "*"
-dataparser = "*"
-solcast = "*"
-measurement = "*"
-timestamp = "*"
-jsonobject = "*"
-sensitivity = "*"
-top = "*"
-station = "*"
-tomorrow = "*"
-beautifulsoup4 = "*"
-groups = "*"
-item = "*"
-fields = "*"
-apikey = "*"
-figures = "*"
-offset = "*"
-bottom = "*"
-graphic = "*"
-dewpoint = "*"
-realtime = "*"
-chart = "*"
-pram = "*"
-qr = "*"
+WeatherUnits = { editable = true, path = "../WeatherUnits" }
+qasync = "*"
+websockets = "*"
+aiohttp = "*"
+#pyqt5-stubs = "==5.15.2.0"
+#prettyprint = "*"
+#pylint = "*"
+#bleak = "*"
 
 [dev-packages]
 
