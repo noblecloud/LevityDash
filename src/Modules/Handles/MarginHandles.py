@@ -1,11 +1,16 @@
-from PySide2.QtCore import QRectF
+from PySide2.QtCore import QObject, QRectF, Signal
+from PySide2.QtGui import QTransform
 from PySide2.QtWidgets import QGraphicsItem
 
-from src.utils import capValue, clearCacheAttr, LocationFlag
+from src.utils import Axis, clamp, clearCacheAttr, LocationFlag
 
 from src.Modules.Handles.Resize import ResizeHandle, ResizeHandles
 
 __all__ = ['MarginHandle', 'MarginHandles', 'FigureHandle', 'FigureHandles']
+
+
+class MarginHandleSignals(QObject):
+	action = Signal(Axis)
 
 
 class MarginHandle(ResizeHandle):
@@ -50,35 +55,38 @@ class MarginHandle(ResizeHandle):
 		pos = self.mapToParent(event.pos())
 
 		if loc.isTop:
-			margins.relativeTop = capValue(pos.y() / rect.height(), 0, 1)
+			margins.relativeTop = clamp(pos.y()/rect.height(), 0, 1)
 			value = margins.relativeTop
 			other = 1 - margins.relativeBottom
 			if value > other:
 				margins.relativeTop = float(other)
 		elif loc.isBottom:
-			margins.relativeBottom = capValue(1 - pos.y() / rect.height(), 0, 1)
+			margins.relativeBottom = clamp(1 - pos.y()/rect.height(), 0, 1)
 			value = 1 - margins.relativeBottom
 			other = margins.relativeTop
 			if value < other:
 				margins.relativeBottom = 1 - float(other)
 		elif loc.isLeft:
-			margins.relativeLeft = capValue(pos.x() / rect.width(), 0, 1)
+			margins.relativeLeft = clamp(pos.x()/rect.width(), 0, 1)
 			value = margins.relativeLeft
 			other = 1 - margins.relativeRight
 			if value > other:
 				margins.relativeLeft = float(other)
 		elif loc.isRight:
-			margins.relativeRight = capValue(1 - pos.x() / rect.width(), 0, 1)
+			margins.relativeRight = clamp(1 - pos.x()/rect.width(), 0, 1)
 			value = 1 - margins.relativeRight
 			other = margins.relativeLeft
 			if value < other:
 				margins.relativeRight = 1 - float(other)
+		self.emitUpdate(loc.asAxis)
+
+	def emitUpdate(self, axis):
+		self.surface.t = None
 		clearCacheAttr(self.surface, 'marginRect')
-		self.signals.action.emit(rect, loc.asAxis)
+		self.signals.action.emit(axis)
 
 	def itemChange(self, change, value):
 		if change == QGraphicsItem.ItemPositionChange:
-
 			marginRect = self.marginRect()
 			surfaceRect = self.surface.contentsRect()
 			y = value.y()
@@ -87,6 +95,10 @@ class MarginHandle(ResizeHandle):
 				boundingRect = self.surfaceBoundingRect()
 				center = marginRect.center()
 				value.setX(center.x() + boundingRect.x())
+				if boundingRect.width() < surfaceRect.width():
+					proxy = self.surface.parentItem()
+					center = proxy.visibleRect().center()
+					value.setX(center.x())
 				surfaceRect = self.surfaceRect
 				offset = -offset
 				if self.location.isTop:
@@ -127,13 +139,22 @@ class MarginHandle(ResizeHandle):
 class MarginHandles(ResizeHandles):
 	locations = LocationFlag.edges()
 	handleClass = MarginHandle
+	signals: MarginHandleSignals
 
-	def __init__(self, parent: 'Panel', *args, offset: float = -5.0, **kwargs):
+	def __init__(self, parent: 'Panel', *args, offset: float = 0, **kwargs):
 		super(MarginHandles, self).__init__(parent=parent, offset=offset, *args, **kwargs)
 
-	def updatePosition(self, rect=None):
-		for handle in self.handles:
-			handle.updatePosition(self.surface.marginRect)
+	def updatePosition(self, rect=None, *args, **kwargs):
+		# t = QTransform()
+		# wScale = self.surface.parentItem().parentItem().rect().width() / self.surface.parentItem().rect().width()
+		# hScale = self.surface.parentItem().parentItem().rect().height() / self.surface.parentItem().rect().height()
+		# t.scale(wScale, hScale)
+		# self.setTransformOriginPoint(self.surface.geometry.absoluteRect().center())
+		# # t.scale(1, -1)
+		# for handle in self.handles:
+		# 	handle.updatePosition(self.surface.marginRect)
+		# self.setTransform(t)
+		super(MarginHandles, self).updatePosition(self.surface.marginRect, *args, **kwargs)
 	# list(map(lambda item: item.updatePosition(self.surface.marginRect), self.handles))
 
 
@@ -141,6 +162,11 @@ class FigureHandle(MarginHandle):
 
 	def surfaceBoundingRect(self) -> QRectF:
 		return self.surface.mapRectFromParent(super(FigureHandle, self).surfaceBoundingRect())
+
+	def emitUpdate(self, axis):
+		# self.surface.onAxisResized(axis)
+		# action = list(map(lambda plot: plot.onAxisTransform(axis), self.surface.plotData.values()))
+		self.signals.action.emit(axis)
 
 
 class FigureHandles(MarginHandles):

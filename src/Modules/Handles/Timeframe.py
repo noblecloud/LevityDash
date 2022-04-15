@@ -1,10 +1,13 @@
 from datetime import timedelta
 
-from PySide2.QtCore import Signal
+from PySide2.QtCore import Qt, Signal
+from PySide2.QtGui import QPen, QTransform
+from PySide2.QtWidgets import QGraphicsDropShadowEffect, QGraphicsSceneMouseEvent
 
 from src.Modules.Handles.Incrementer import IncrementerGroup, Incrementer
 
-from src.utils import LocationFlag, TimeFrame
+from src.utils import LocationFlag, TimeFrameWindow
+from src import colorPalette
 
 __all__ = ["GraphZoom", "TimeframeIncrementer"]
 
@@ -47,13 +50,25 @@ class TimeframeIncrementer(Incrementer):
 	def ensureFramed(self):
 		graph = self.surface
 		td = max(f.figureTimeRangeMax for f in graph.figures)
-		r = td.total_seconds() / 3600 * graph.pixelHour
+		r = td.total_seconds()/3600*graph.pixelsPerHour
 		if r < graph.width():
 			graph.timeframe.range = td
 
 	@property
+	def _shape(self):
+		s = super(TimeframeIncrementer, self)._shape
+		T = QTransform()
+		T.scale(1.2, 1.2)
+		return T.map(s)
+
+	@property
 	def position(self):
 		return super(TimeframeIncrementer, self).position
+
+	def paint(self, painter, option, widget):
+		painter.setPen(QPen(Qt.black, 10))
+		painter.drawPath(self._path)
+		super(TimeframeIncrementer, self).paint(painter, option, widget)
 
 
 class GraphZoom(IncrementerGroup):
@@ -61,7 +76,7 @@ class GraphZoom(IncrementerGroup):
 	offset = -40
 	locations = [LocationFlag.BottomLeft, LocationFlag.BottomRight]
 
-	def __init__(self, parent: 'Panel', timeframe: TimeFrame, *args, **kwargs):
+	def __init__(self, parent: 'Panel', timeframe: TimeFrameWindow, *args, **kwargs):
 		self.timeframe = timeframe
 		super(GraphZoom, self).__init__(parent=parent, offset=-30, *args, **kwargs)
 		self.setVisible(True)
