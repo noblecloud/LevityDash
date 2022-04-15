@@ -1,17 +1,16 @@
 from src.Modules.Displays.Text import Text
 from src import logging
 from functools import cached_property
-from typing import Any, Callable, Optional, Union
+from typing import Union
 
-from PySide2.QtCore import QRectF, Qt, QTimer, Signal, Slot
-from PySide2.QtGui import QColor, QFont, QFontMetrics, QPainter, QPalette, QPen, QTransform
-from PySide2.QtWidgets import QApplication, QGraphicsItem, QGraphicsProxyWidget, QGraphicsTextItem, QLineEdit
+from PySide2.QtCore import QRectF, Qt, QTimer
+from PySide2.QtGui import QFont
+from PySide2.QtWidgets import QGraphicsItem, QGraphicsProxyWidget, QLineEdit
 
 from src.Modules.Handles.Figure import MarginHandles
 from src.Grid import Geometry
 from src.fonts import compact, rounded
-from src import colorPalette
-from src.utils import Alignment, AlignmentFlag, clearCacheAttr, Margins, Position, Size, SizeWatchDog, strToOrdinal, toOrdinal
+from src.utils import Alignment, AlignmentFlag, Position, Size
 from src.Modules.Panel import Panel
 from src.Modules.Menus import EditableLabelContextMenu, LabelContextMenu
 
@@ -205,13 +204,12 @@ log = logging.getLogger(__name__)
 
 
 class Label(Panel):
-	_text = ''
-	__filters: dict[str, Callable] = {'0Ordinal': toOrdinal, '0Add Ordinal': strToOrdinal, '1Lower': str.lower, '1Upper': str.upper, '2Title': str.title}
-	enabledFilters: set[str]
+
 	_acceptsChildren = False
 
 	__ratioFontSize = 100
 	_lineBreaking: bool
+	marginHandles: MarginHandles
 
 	def __init__(self, parent: Union['Panel', 'GridScene'],
 	             text: str = "",
@@ -220,36 +218,46 @@ class Label(Panel):
 	             font: QFont = None,
 	             lineBreaking: bool = False,
 	             *args, **kwargs):
-		if filters is None:
-			filters = list()
 		self.lineBreaking = lineBreaking
-		self.enabledFilters: set = set()
+
+		if filters is None:
+			filters = []
+
 		super().__init__(parent=parent, *args, **kwargs)
 		if alignment is None:
-			alignment = Alignment.Center
+			alignment = Alignment(AlignmentFlag.Center)
 		self.alignment: Alignment = alignment
-		self.font = QFont(rounded)
-		self.marginHandles = MarginHandles(self)
+		self.marginHandles: MarginHandles = MarginHandles(self)
 		self.marginHandles.signals.action.connect(self.textBox.updateTransform)
 		self.textBox.setParentItem(self)
 		self.text = text
-		# self.showGrid = False
-		for filter in filters:
-			self.setFilter(filter, True)
-		self.font = font
-		# self.grid = None
+		for f in filters:
+			self.textBox.setFilter(f, True)
 
-		self.update()
 		self.setAcceptDrops(False)
 
 	@cached_property
 	def textBox(self):
-		a = Text(self, value=str(self.text))
-		a.setParentItem(self)
-		return a
+		box = Text(self)
+		box.setParentItem(self)
+		return box
+
+	@property
+	def filters(self):
+		return self.textBox.enabledFilters
+
+	@filters.setter
+	def filters(self, value):
+		if isinstance(value, str):
+			value = {value}
+		if not isinstance(value, set):
+			value = set(value)
+		self.textBox.enabledFilters = value
 
 	def editMargins(self):
+		self.marginHandles.setEnabled(True)
 		self.marginHandles.show()
+		self.marginHandles.updatePosition(self.rect())
 
 	def dragEnterEvent(self, event):
 		if event.mimeData().hasFormat('text/plain'):
@@ -262,27 +270,20 @@ class Label(Panel):
 		return f'<{self.__class__.__name__}(text={self.text}, position={Position(self.pos())}, size={Size(self.rect().size())} {f", {self.gridItem}," if self.snapping else ""} zPosition={self.zValue()}>'
 
 	@property
-	def filters(self):
-		return list(self.__filters.keys())
-
-	@property
-	def lineBreaking(self):
-		return self._lineBreaking
-
-	@lineBreaking.setter
-	def lineBreaking(self, value):
-		self._lineBreaking = value
-		clearCacheAttr(self, 'ratio', 'fontMetrics', 'fontSize')
-
-	@property
 	def state(self):
 		state = super(Label, self).state
-		state['alignment'] = self.alignment.asDict()
-		state['filters'] = list(self.enabledFilters)
+		if not self.alignment.isDefault():
+			state['alignment'] = self.alignment
+		if self.filters:
+			state['filters'] = list(self.textBox.enabledFilters)
 		state['text'] = self.text
-		if self.lineBreaking:
-			state['lineBreaking'] = True
 		return state
+
+	@state.setter
+	def state(self, state):
+		self.alignment = state.get('alignment', Alignment.default())
+		self.filters = state.get('filters', [])
+		self.text = state.get('text', '')
 
 	@cached_property
 	def contextMenu(self):
@@ -297,67 +298,22 @@ class Label(Panel):
 		self.textBox.setAlignment(value)
 
 	def setAlignment(self, alignment: AlignmentFlag):
-		if isinstance(alignment, Alignment):
-			self.alignment = alignment
-		elif isinstance(alignment, AlignmentFlag):
-			if alignment.isVertical:
-				self.alignment.vertical = alignment.asVertical
-			if alignment.isHorizontal:
-				self.alignment.horizontal = alignment.asHorizontal
-		elif isinstance(alignment, int, str):
-			self.alignment = AlignmentFlag[alignment]
+		self.textBox.setAlignment(alignment)
 		self.update()
 
-	def setFilter(self, filter: str, value: bool = None):
-		rawString = str(self.text)
-		print(f'Setting filter: {filter}')
-		if value is None:
-			value = not filter in self.enabledFilters
-		if value:
-			self.enabledFilters.add(filter)
-		else:
-			self.enabledFilters.discard(filter)
-		if rawString == self.text:
-			self.enabledFilters.discard(filter)
-			log.warning(f'Filter {filter[1:]} is not applicable to "{rawString}"')
-
-		self.update()
-
-	@cached_property
-	def fontMetrics(self):
-		font = QFont(self.dynamicFont)
-		self.__ratioFontSize = self.marginRect.height() or 10
-		font.setPixelSize(self.__ratioFontSize)
-		return QFontMetrics(font)
-
-	def refresh(self):
-		clearCacheAttr(self, 'ratio', 'fontMetrics', 'fontSize')
-		self.update()
+	def setFilter(self, filter: str, enabled: bool = True):
+		self.textBox.setFilter(filter, enabled)
 
 	@property
 	def text(self):
-		text = str(self._text)
-		for filter in self.enabledFilters:
-			text = self.__filters[filter](text)
-		if self.lineBreaking:
-			text = text.replace(' ', '\n')
-		return text
+		return self.textBox.text
 
 	@text.setter
 	def text(self, value):
-		# clearCacheAttr(self, 'ratio', 'fontMetrics', 'fontSize')
-		self._text = value
-		self.textBox.text = value
-
-		self.update()
+		self.textBox.value = value
 
 	def setText(self, text: str):
-		self._text = text
-
-	@cached_property
-	def ratio(self):
-		textRect = self.fontMetrics.boundingRect(self.text)
-		return self.__ratioFontSize / max(textRect.width(), 1)
+		self.text = text
 
 	def height(self):
 		return self.rect().height()
@@ -378,19 +334,40 @@ class Label(Panel):
 			return QFont(compact)
 		return self.font
 
-	def updateRatio(self):
-		clearCacheAttr(self, 'ratio', 'fontMetrics', 'fontSize')
-		self.update()
-
-	@cached_property
-	def fontSize(self):
-		rect = self.marginRect
-		return round(max(10, min(self.ratio * rect.width(), rect.height())))
-
 	def setRect(self, rect: QRectF):
 		super(Label, self).setRect(rect)
 		self.textBox.setPos(self.rect().topLeft())
 		self.textBox.updateTransform()
+
+
+class NonInteractiveLabel(Label):
+	_movable = False
+	_resizable = False
+	_locked = True
+
+	def __init__(self, parent: Union['Panel', 'GridScene'],
+	             *args, **kwargs):
+		super().__init__(parent=parent, *args, **kwargs)
+		self.setFlag(QGraphicsItem.ItemIsMovable, False)
+		self.setFlag(QGraphicsItem.ItemIsSelectable, False)
+		self.setFlag(QGraphicsItem.ItemIsFocusable, False)
+
+	def contextMenuEvent(self, event):
+		event.ignore()
+		return
+
+	def unlock(self):
+		self.setFlag(QGraphicsItem.ItemIsMovable, True)
+		self.setFlag(QGraphicsItem.ItemIsSelectable, True)
+		self.setFlag(QGraphicsItem.ItemIsFocusable, True)
+		self.resizeHandles.setEnabled(True)
+		self.resizeHandles.updatePosition(self.rect())
+
+	def lock(self):
+		self.setFlag(QGraphicsItem.ItemIsMovable, False)
+		self.setFlag(QGraphicsItem.ItemIsSelectable, False)
+		self.setFlag(QGraphicsItem.ItemIsFocusable, False)
+		self.resizeHandles.setEnabled(False)
 
 
 class HiddenLineEdit(QLineEdit):
@@ -432,6 +409,11 @@ class EditableLabel(Label):
 		self.setAcceptDrops(True)
 		self.setAcceptHoverEvents(True)
 
+	@classmethod
+	def validate(cls, item: dict) -> bool:
+		panelValidation = super(EditableLabel, cls).validate(item)
+		return panelValidation and 'text' in item
+
 	def focusInEvent(self, event):
 		super(EditableLabel, self).focusInEvent(event)
 
@@ -441,7 +423,7 @@ class EditableLabel(Label):
 	def dragEnterEvent(self, event):
 		if event.mimeData().hasText():
 			event.accept()
-			self.__text = self._text
+			self.__text = self.text
 			self.text = event.mimeData().text()
 		else:
 			event.ignore()
@@ -454,37 +436,36 @@ class EditableLabel(Label):
 		self.text = event.mimeData().text()
 		event.accept()
 
-	def hoverLeaveEvent(self, event):
-		if self.lineEdit.keyboardGrabber() is self.lineEdit:
-			self.doneEditing()
+	# def hoverLeaveEvent(self, event):
+	# 	if self.lineEdit.keyboardGrabber() is self.lineEdit:
+	# 		self.doneEditing()
 
 	def cursorPositionChanged(self):
 		self.editTimer.start()
-		self.update()
+		self.textBox.refresh()
 
 	def textChanged(self, text: str):
-		self.editTimer.start()
-		self.setText(text)
+		# self.editTimer.start()
+		self.textBox.value = text
 
 	def mouseDoubleClickEvent(self, event):
 		self.edit()
 
 	def doneEditing(self):
-		print('done editing')
 		self.editTimer.stop()
 		self.lineEdit.releaseKeyboard()
 		self.lineEdit.releaseMouse()
 		self.lineEdit.clearFocus()
 		self.clearFocus()
-		self._text = self._text.strip()
-		if len(self._text) == 0:
+		self.text = self.text.strip()
+		if len(self.text) == 0:
 			self._manualValue = False
 		else:
 			self._manualValue = True
 
 	@property
 	def text(self):
-		text = str(self._text)
+		text = self.textBox.text
 		if self.lineEdit.keyboardGrabber() is self.lineEdit:
 			cursorPos = self.lineEdit.cursorPosition()
 			text = list(text)
@@ -494,10 +475,8 @@ class EditableLabel(Label):
 
 	@text.setter
 	def text(self, value):
-		self._text = value
+		self.textBox.value = value
 		self.lineEdit.setText(value)
-		if hasattr(self, 'ratio'):
-			delattr(self, 'ratio')
 
 	@cached_property
 	def contextMenu(self):
@@ -512,6 +491,12 @@ class EditableLabel(Label):
 		self.editTimer.stop()
 		super(EditableLabel, self).delete()
 
+	@property
+	def state(self):
+		state = super(EditableLabel, self).state
+		state['type'] = 'text'
+		return state
+
 
 class TitleLabel(EditableLabel):
 
@@ -519,10 +504,18 @@ class TitleLabel(EditableLabel):
 		kwargs['geometry'] = Geometry(surface=self, size=(1, 0.2), position=Position(0, 0), absolute=False, snapping=False)
 		super().__init__(*args, **kwargs)
 		self.setMovable(False)
-		self._manualValue = kwargs.get('manualValue', False)
+		self._manualValue = kwargs.get('text', None)
 
 	def allowDynamicUpdate(self) -> bool:
 		return not self._manualValue
+
+	def setManualValue(self, value: str):
+		self._manualValue = value
+		self.text = value
+
+	@property
+	def isEmpty(self) -> bool:
+		return False
 
 	@property
 	def state(self):

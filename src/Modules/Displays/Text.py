@@ -1,32 +1,59 @@
+import logging
+
+from datetime import datetime, timedelta
+
 from functools import cached_property
-from PySide2.QtCore import QPoint, QPointF, QRectF
+from PySide2.QtCore import QObject, QPoint, QPointF, QRectF, Signal, Slot
 from PySide2.QtGui import QBrush, QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPen, Qt, QTransform
 from PySide2.QtWidgets import QGraphicsItem, QGraphicsPathItem, QGraphicsTextItem, QStyleOptionGraphicsItem
-from typing import Any, Optional, Union
+from typing import Any, Callable, Optional, Union
 from WeatherUnits.length import Centimeter, Millimeter
 
-from src.catagories import ValueWrapper
+from src.plugins.plugin import Container
+from src.plugins.dispatcher import MultiSourceContainer
 from src import app, colorPalette, rounded
-from src.utils import _Panel, addCrosshair, Alignment, AlignmentFlag, cachedUnless, clearCacheAttr
+from src.utils import _Panel, addCrosshair, Alignment, AlignmentFlag, cachedUnless, clearCacheAttr, connectSignal, Size, strToOrdinal, toOrdinal
+
+
+class TextItemSignals(QObject):
+	changed = Signal()
 
 
 class Text(QGraphicsPathItem):
-	_value: ValueWrapper
+	log = logging.getLogger(__name__)
+	_value: Container
 	_parent: _Panel
-	figure: 'FigureRect'
+	figure: 'Figure'
 	__alignment: Alignment
 	_scaleSelection = min
 	minimumDisplayHeight = Millimeter(10)
 	baseLabelRelativeHeight = 0.3
 
+	__filters: dict[str, Callable] = {'0Ordinal': toOrdinal, '0Add Ordinal': strToOrdinal, '1Lower': str.lower, '1Upper': str.upper, '2Title': str.title}
+	enabledFilters: set[str]
+
 	def __init__(self, parent: _Panel,
 	             value: Optional[Any] = None,
-	             alignment: Alignment = AlignmentFlag.Center,
+	             alignment: Union[Alignment, AlignmentFlag] = None,
 	             scalar: float = 1.0,
 	             font: Union[QFont, str] = None,
+	             filters: Optional[set[str]] = None,
 	             color: QColor = None):
+		self.__customFilterFunction = None
+		self.__enabledFilters = set()
+
 		super(Text, self).__init__(parent=None)
-		self.__alignment = Alignment(AlignmentFlag.Center)
+		self.setPen(QPen(Qt.NoPen))
+		self.signals = TextItemSignals()
+
+		if filters is None:
+			filters = list()
+
+		if alignment is None:
+			alignment = Alignment(AlignmentFlag.Center)
+		elif isinstance(alignment, AlignmentFlag):
+			alignment = Alignment(alignment)
+		self.__alignment = alignment
 		self._value = None
 		self._parent = parent
 		self.scalar = scalar
@@ -39,7 +66,7 @@ class Text(QGraphicsPathItem):
 		self.setAlignment(alignment)
 		self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations, False)
 		self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemClipsToShape, False)
-		self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemUsesExtendedStyleOption, True)
+		# self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemUsesExtendedStyleOption, True)
 		# self.setTextInteractionFlags(Qt.TextInteractionFlag.TextEditorInteraction)
 		# self.document().setDocumentMargin(0)
 		font = self.font()
@@ -47,10 +74,15 @@ class Text(QGraphicsPathItem):
 		self.setFont(font)
 		self.screenWidth = 0
 		self.updateTransform()
-		if hasattr(self.parent, 'signals'):
+
+		for filter in filters:
+			self.setFilter(filter, True)
+
+		if hasattr(self.parent, 'signals') and hasattr(self.parent.signals, 'resized'):
 			self.parent.signals.resized.connect(self.updateTransform)
 
-	# self.setCache
+	def setCustomFilterFunction(self, filterFunc: Callable):
+		self.__customFilterFunction = filterFunc
 
 	def updateItem(self):
 		pass
@@ -60,11 +92,11 @@ class Text(QGraphicsPathItem):
 		if app.activeWindow() is None:
 			return None
 		dpi = app.activeWindow().screen().logicalDotsPerInch()
-		return float(self.minimumDisplayHeight.inch * dpi)
+		return max(float(self.minimumDisplayHeight.inch*dpi), 5.0)
 
 	@property
 	def suggestedFontSize(self) -> float:
-		return self.limitRect.height()
+		return max(self.limitRect.height(), 5)
 
 	@property
 	def align(self):
@@ -90,41 +122,27 @@ class Text(QGraphicsPathItem):
 				self.__alignment.horizontal = value.asHorizontal
 		else:
 			if not isinstance(value, Alignment):
-				value = Alignment(value)
+				if isinstance(value, str):
+					value = Alignment(value)
+				elif isinstance(value, dict):
+					value = Alignment(**value)
+				else:
+					raise TypeError('Alignment must be of type Alignment or AlignmentFlag')
 			self.__alignment = value
 		self.__updatePath()
 		self.updateTransform()
 
-	# @cached_property
-	# def textRect(self) -> QRectF:
-	# 	self.prepareGeometryChange()
-	# 	fm = QFontMetricsF(self.font())
-	# 	rect = fm.tightBoundingRect(self.text)
-	#
-	# 	bounding_rect = QGraphicsPathItem.boundingRect(self)
-	# 	m = QPointF(*self.align.multipliersAlt)
-	# 	rect.moveTopLeft(QPointF(0, 0))
-	# 	t = QTransform()
-	# 	t.translate(*((rect.size() - bounding_rect.size()) / 2).toTuple())
-	# 	t.translate(-rect.width() * m.x(), -rect.height() * m.y())
-	# 	rect.translate(-rect.width() * m.x(), -rect.height() * m.y())
-	# 	self.t = t
-	# 	return rect
+	@property
+	def enabledFilters(self):
+		return self.__enabledFilters
 
-	@cached_property
-	def tightTextRect(self) -> QRectF:
-		self.prepareGeometryChange()
-		fm = QFontMetricsF(self.font())
-		rect = fm.tightBoundingRect(self.toPlainText())
-		rect.adjust(-1, -1, 1, 1)
-		# tRect = fm.tightBoundingRect(self.toPlainText())
-		bounding_rect = QGraphicsTextItem.boundingRect(self)
-		rect.moveCenter(bounding_rect.topLeft())
-		# rect.moveTo(QGraphicsTextItem.boundingRect(self).topLeft())
-		return rect
-
-	# def boundingRect(self) -> QRectF:
-	# 	return self.textRect
+	@enabledFilters.setter
+	def enabledFilters(self, value):
+		if isinstance(value, str):
+			value = {value}
+		if not isinstance(value, set):
+			value = set(value)
+		self.__enabledFilters = value
 
 	def setFont(self, font: Union[QFont, str]):
 		self.prepareGeometryChange()
@@ -183,6 +201,9 @@ class Text(QGraphicsPathItem):
 			transform.scale(scale, scale)
 			self.setTransform(transform)
 
+	def sceneBoundingRect(self) -> QRectF:
+		return self.mapRectToScene(self.transform().mapRect(self.boundingRect()))
+
 	def refresh(self):
 		self._font.setPointSizeF(self.suggestedFontSize)
 		self.__updatePath()
@@ -193,49 +214,28 @@ class Text(QGraphicsPathItem):
 		w = painter.worldTransform()
 		scale = min(w.m11(), w.m22())
 		w.scale(1 / w.m11(), 1 / w.m22())
-		painter.setPen(Qt.NoPen)
-		painter.setBrush(self.brush())
 		# if self.font().pointSizeF() > self.minimumFontSize * scale:
 		# 	scale = self.minimumFontSize / self.font().pointSizeF()
 		w.scale(scale, scale)
 
 		painter.setTransform(w)
+		super().paint(painter, option, widget)
 		# iT = t.inverted()[0]
-		self.screenWidth = option.rect.width() * scale
-		self.screenHeight = option.rect.height() * scale
-		# option.rect = iT.mapRect(option.rect).adjusted(-1, -1, 1, 1)
-		# option.exposedRect = iT.mapRect(option.exposedRect).adjusted(-1, -1, 1, 1)
-		# pen = QPen(Qt.white)
-		# painter.setPen(pen)
-		painter.drawPath(self._path)
-
-	# painter.setBrush(Qt.NoBrush)
-	# pen = QPen(Qt.red)
-	# pen.setCosmetic(True)
-	# pen.setWidth(1)
-	# painter.setPen(pen)
-	# painter.drawRect(option.rect)
-	# pen.setColor(Qt.blue)
-	# painter.setPen(pen)
-	# painter.drawRect(self.boundingRect())
-	# painter.drawRect(self.limitRect.adjusted(1, 1, -1, -1))
-	# if self.text:
-	# 	addCrosshair(painter, color=Qt.green)
-
-	# super(Text, self).paint(painter, option, widget)
 
 	def worldTransform(self) -> QTransform:
 		if self.scene():
-			return app.activeWindow().transform()
+			return self.deviceTransform(self.scene().views()[0].transform())
 		else:
-			return QTransform()
+			return self.transform()
 
 	@property
 	def physicalDisplaySize(self) -> tuple[Centimeter, Centimeter]:
 		window = self.scene().views()[0]
-		physicalHeight = Centimeter(window.physicalDpiY() / 25.4 * window.height())
-		physicalWidth = Centimeter(window.physicalDpiX() / 25.4 * window.width())
-		return physicalWidth, physicalHeight
+		t = self.worldTransform()
+		rect = t.map(self.path()).boundingRect()
+		physicalHeight = rect.height()/window.physicalDpiY()*2.54
+		physicalWidth = rect.width()/window.physicalDpiX()*2.54
+		return Centimeter(physicalWidth), Centimeter(physicalHeight)
 
 	def setColor(self, value):
 		if value is None:
@@ -248,10 +248,8 @@ class Text(QGraphicsPathItem):
 			color = colorPalette.windowText().color()
 		pen = QPen(color)
 		brush = QBrush(color)
-		self.setPen(pen)
+		self.setPen(Qt.NoPen)
 		self.setBrush(brush)
-
-	# self.setDefaultTextColor(color)
 
 	def estimateTextSize(self, font: QFont) -> tuple[float, float]:
 		"""
@@ -265,9 +263,29 @@ class Text(QGraphicsPathItem):
 		rect = p.boundingRect()
 		return rect.width(), rect.height()
 
+	def setFilter(self, filter: str, value: bool = None):
+		rawString = str(self.text)
+		print(f'Setting filter: {filter}')
+		if value is None:
+			value = not filter in self.enabledFilters
+		if value:
+			self.enabledFilters.add(filter)
+		else:
+			self.enabledFilters.discard(filter)
+		# if rawString == self.text:
+		# 	self.enabledFilters.discard(filter)
+		# 	self.log.warning(f'Filter {filter[1:]} is not applicable to "{rawString}"')
+		self.__updatePath()
+
 	@property
 	def text(self):
-		return str(self.value)
+		if self.__customFilterFunction:
+			text = self.withoutUnit()
+		else:
+			text = str(self.value)
+		for filter in self.enabledFilters:
+			text = self.__filters[filter](text)
+		return text
 
 	@text.setter
 	def text(self, value):
@@ -275,14 +293,22 @@ class Text(QGraphicsPathItem):
 
 	@property
 	def value(self):
-		return self._value
+		if self._value is None:
+			return 'NA'
+		if isinstance(self._value, (str, int, float, datetime, timedelta)):
+			return self._value
+		return self._value.value
 
 	@value.setter
 	def value(self, value):
 		if str(value) != self.text:
+			if isinstance(value, MultiSourceContainer):
+				self.__customFilterFunction = True
 			self._value = value
 			self.__updatePath()
-		self.updateTransform()
+			self.updateTransform()
+		else:
+			self.updateTransform()
 
 	def __updatePath(self):
 		path = QPainterPath()
@@ -294,11 +320,33 @@ class Text(QGraphicsPathItem):
 		path.translate(-c)
 		path.translate(self.alignment.translationFromCenter(r).asQPointF())
 
-		self._path = path
+		self._path = path.simplified()
 		self.setPath(path)
 
-	def fixExposedRect(self, rect, t, painter):
-		return t.inverted()[0].mapRect(t.mapRect(rect).intersected(t.mapRect(painter.window())))
+	def updateText(self):
+		self.__updatePath()
+		self.updateTransform()
+
+	def withoutUnit(self):
+		return getattr(self.value, '@withoutUnit', None) or f'WithOutUnit{self.value}'
 
 
-m = (0.0, 0.0)
+class TextHelper(Text):
+	"""
+	This class does not have its own stored value, instead it is provided a value by the parent Text item.
+	Example: Displaying the parent text item's unit
+	"""
+
+	def __init__(self, parent, reference: Text, font: QFont = None, alignment: Alignment = None, enabledFilters: set = None, *args, **kwargs):
+		self.reference = reference
+		super().__init__(parent, '', font, alignment, enabledFilters, *args, **kwargs)
+
+	# connectSignal(reference.signals.changed, self.refresh)
+
+	@property
+	def value(self):
+		return getattr(self.reference.value, '@unit', '')
+
+	@value.setter
+	def value(self, value):
+		pass
