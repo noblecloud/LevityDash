@@ -718,29 +718,87 @@ def findPeaks(*arrays: Union[list[Iterable], Iterable], spread: int = 2) -> tupl
 	return [[i for (i, t) in enumerate((array > np.roll(array, spread)) & (array > np.roll(array, -spread))) if t] for array in arrays]
 
 
-def findPeaksAndTroughs(array: Iterable, spread: int = 12) -> tuple[list[list[int]], list[list[int]]]:
+class TemporalGroups(object):
+	def __init__(self, data: List, spread: timedelta = timedelta(hours=12), step: int = 1):
+		self.data = data
+		self.spread = spread
+		self.current = 0
+		self.step = step
+
+	def __iter__(self):
+		return self
+
+	def __next__(self):
+		i = self.current
+		forI = i
+		backI = i
+
+		ahead = []
+		behind = []
+		if self.current >= len(self.data):
+			raise StopIteration
+		currentV = self.data[i]
+		backV = self.data[i - 1]
+		while backI > 0 and abs(backV.timestamp - currentV.timestamp) < self.spread:
+			if len(behind) == 0:
+				behind.append(backV)
+			elif abs(behind[-1].value - backV.value) > 0.1:
+				behind.append(backV)
+
+			backI -= 1
+			backV = self.data[backI]
+		if i + 1 >= len(self.data):
+			ahead = []
+		else:
+			forV = self.data[i + 1]
+			while forI < len(self.data) - 1 and abs(forV.timestamp - currentV.timestamp) < self.spread:
+				if len(ahead) == 0:
+					ahead.append(forV)
+				elif abs(ahead[-1].value - forV.value) > 0.1:
+					ahead.append(forV)
+				forI += 1
+				forV = self.data[forI]
+		i = self.current
+		self.current += self.step
+		return i, currentV, behind, ahead
+
+
+def findPeaksAndTroughs(array: Iterable, spread: timedelta = 12) -> tuple[list, list]:
+	log.debug('Finding Peaks and Troughs')
 	peaks = []
 	troughs = []
-	maxI = len(array)
-	for i, t in enumerate(array):
-		ahead = array[i: min(i + spread, maxI)]
-		behind = array[max(i - spread, 0):i]
 
+	maxI = len(array)
+	groupGenerator = TemporalGroups(array, spread=spread)
+	for i, t, behind, ahead in groupGenerator:
+		# ahead = array[i: min(i + spread, maxI)]
+		# behind = array[max(i - spread, 0):i]
 		if not ahead:
 			ahead = [array[-1]]
 		if not behind:
 			behind = [array[0]]
-		t = t
-		if min(behind) >= t <= min(ahead):
-			if troughs and troughs[-1][0] == i - len(troughs[-1]):
-				troughs[-1].append(i)
+
+		tV = float(t.value)
+		if float(min(behind).value) >= t <= float(min(ahead).value):
+			if len(troughs) == 0:
+				troughs.append(t)
+			elif datetimeDiff(troughs[-1].timestamp, t.timestamp) <= timedelta(hours=6):
+				troughs[-1] += t
+				p = troughs[-1]
 			else:
-				troughs.append([i])
-		if max(behind) <= t >= max(ahead):
-			if peaks and peaks[-1][0] == i - len(peaks[-1]):
-				peaks[-1].append(i)
+				troughs.append(t)
+
+		# if troughs and troughs[-1][0] == i - len(troughs[-1]):
+		# 	troughs[-1].append(t)
+		# else:
+		elif float(max(behind).value) <= t >= float(max(ahead).value):
+			if len(peaks) == 0:
+				peaks.append(t)
+			elif datetimeDiff(peaks[-1].timestamp, t.timestamp) <= timedelta(hours=6):
+				peaks[-1] += t
+				p = peaks[-1]
 			else:
-				peaks.append([i])
+				peaks.append(t)
 
 	return peaks, troughs
 
