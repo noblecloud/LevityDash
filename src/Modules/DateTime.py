@@ -1,3 +1,4 @@
+from src.Modules import itemLoader
 from src import logging
 import re
 from datetime import datetime, timedelta
@@ -7,7 +8,7 @@ from PySide2.QtCore import QObject, Qt, QTimer, Signal
 from PySide2.QtWidgets import QDialog, QInputDialog, QMenu
 
 from time import strftime
-from typing import Union
+from typing import Any, Union
 
 from src.Modules.Panel import Panel
 from src.Modules.Label import Label
@@ -16,8 +17,9 @@ from src.Modules.Menus import TimeContextMenu
 __all__ = ['ClockComponent', 'Clock']
 
 log = logging.getLogger(__name__)
+log.setLevel(logging.ERROR)
 
-from src.utils import disconnectSignal
+from src.utils import disconnectSignal, Margins
 
 
 class ClockSignals(QObject):
@@ -56,16 +58,22 @@ class ClockSignals(QObject):
 		self.__syncTimer.start()
 
 	def __startSeconds(self):
+		self.__emitSecond()
 		self.__secondTimer.setSingleShot(False)
 		self.__secondTimer.start()
+		log.debug('Second timer started')
 
 	def __startMinutes(self):
+		self.__emitMinute()
 		self.__minuteTimer.setSingleShot(False)
 		self.__minuteTimer.start()
+		log.debug('Minute timer started')
 
 	def __startHours(self):
+		self.__emitHour()
 		self.__hourTimer.setSingleShot(False)
 		self.__hourTimer.start()
+		log.debug('Hour timer started')
 
 	def __emitSecond(self):
 		# now = datetime.now()
@@ -73,15 +81,17 @@ class ClockSignals(QObject):
 		self.second.emit(datetime.now().second)
 
 	def __emitMinute(self):
-		self.minute.emit(datetime.now().minute)
+		minute = datetime.now().minute
+		log.debug(f'Minute timer emitted with value {minute}')
+		self.minute.emit(minute)
 
 	def __emitHour(self):
-		self.hour.emit(datetime.now().hour)
+		hour = datetime.now().hour
+		log.debug(f'Hour timer emitted with value {hour}')
+		self.hour.emit(hour)
 
 	def __syncTimers(self):
-		'''
-			Synchronizes the timers to the current time.
-		'''
+		"""Synchronizes the timers to the current time."""
 
 		self.sync.emit()
 
@@ -91,16 +101,20 @@ class ClockSignals(QObject):
 
 		now = datetime.now()
 
-		timeToNextSecond = round((now.replace(second=now.second, microsecond=0) + timedelta(seconds=1) - now).total_seconds() * 1000)
-		self.__secondTimer.singleShot(timeToNextSecond, self.__startSeconds)
+		# Offset the timers by 10ms to ensure that the timers are synced to the current time
+		# otherwise, the time will be announced
+		timerOffset = 10
 
-		timeToNextMinute = round((now.replace(minute=now.minute, second=0, microsecond=0) + timedelta(minutes=1) - now).total_seconds() * 1000)
-		log.info(f'Time to next minute: {timeToNextMinute / 1000} seconds')
-		self.__minuteTimer.singleShot(timeToNextMinute, self.__startMinutes)
+		timeToNextSecond = round((now.replace(second=now.second, microsecond=0) + timedelta(seconds=1) - now).total_seconds()*1000)
+		self.__secondTimer.singleShot(timeToNextSecond + timerOffset, self.__startSeconds)
 
-		timeToNextHour = round((now.replace(hour=now.hour, minute=0, second=0, microsecond=0) + timedelta(hours=1) - now).total_seconds() * 1000)
-		log.info(f'Time to next hour: {timeToNextHour / 1000} seconds')
-		self.__hourTimer.singleShot(timeToNextHour, self.__startHours)
+		timeToNextMinute = round((now.replace(minute=now.minute, second=0, microsecond=0) + timedelta(minutes=1) - now).total_seconds()*1000)
+		log.info(f'Time to next minute: {timeToNextMinute/1000} seconds')
+		self.__minuteTimer.singleShot(timeToNextMinute + timerOffset, self.__startMinutes)
+
+		timeToNextHour = round((now.replace(hour=now.hour, minute=0, second=0, microsecond=0) + timedelta(hours=1) - now).total_seconds()*1000)
+		log.info(f'Time to next hour: {timeToNextHour/1000} seconds')
+		self.__hourTimer.singleShot(timeToNextHour + timerOffset, self.__startHours)
 
 
 baseClock = ClockSignals()
@@ -111,6 +125,8 @@ class ClockComponent(Label):
 	_text: str = ''
 	__hourlyFormats = {'%h', '%I', '%p'}
 	_acceptsChildren = False
+	savable = True
+	defaultMargins = (0, 0, 0, 0)
 
 	def __init__(self, parent: Union['Panel', 'GridScene'], format: str = None, *args, **kwargs):
 		if format is not None:
@@ -143,6 +159,10 @@ class ClockComponent(Label):
 	def setTime(self, *args):
 		self.text = strftime(self.format)
 
+	# self.textBox.value = self.text
+	# self.textBox.setPlainText(self.text)
+	# self.textBox.updateTransform()
+
 	@property
 	def format(self):
 		return self._format
@@ -170,21 +190,47 @@ class ClockComponent(Label):
 		self.update()
 
 	@property
+	def name(self):
+		return self.format
+
+	@property
 	def state(self):
-		state = super(ClockComponent, self).state
-		state['format'] = self.format
+		state = {
+			'format':   self.format,
+			'geometry': self.geometry,
+		}
+		if self.filters:
+			state['filters'] = tuple(self.filters)
+		if self.margins != Margins.zero():
+			state['margins'] = self.margins
+		if not self.alignment.isDefault():
+			state['alignment'] = self.alignment
 		return state
 
 
 class Clock(Panel):
 	def __init__(self, *args, **kwargs):
 		super(Clock, self).__init__(*args, **kwargs)
-		if 'childItems' not in kwargs:
+		if 'items' not in kwargs:
 			time = ClockComponent(self)
 			time.setRect(self.parent.rect())
 			time.setLocked(True)
 		self.neverReleaseChildren = True
 		self.updateFromGeometry()
+
+	def _loadChildren(self, childItems: list[dict[str, Any]]):
+		if isinstance(childItems, dict):
+			for name, item in childItems.items():
+				if 'class' in item:
+					self.loadChildFromState(item)
+				else:
+					ClockComponent(self, format=name, **item)
+		else:
+			for item in childItems:
+				if 'type' in item:
+					item = itemLoader(self, item)
+				else:
+					ClockComponent(self, **item)
 
 	@property
 	def name(self):
@@ -219,4 +265,6 @@ class Clock(Panel):
 
 	@property
 	def state(self):
-		return super(Clock, self).state
+		state = super(Clock, self).state
+		state.pop('grid', None)
+		return state
