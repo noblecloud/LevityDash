@@ -1,22 +1,29 @@
+import PIL
 from datetime import datetime
 from functools import cached_property
 from json import dump, JSONDecodeError, load
+import yaml
 from os import remove, rename
 from pathlib import Path
 
-from PySide2.QtCore import QEvent, QPoint, QRect, Qt
+from PySide2.QtCore import QEvent, QPoint, QRect, Qt, QTimer
 from PySide2.QtGui import QPainter, QPainterPath, QPen
-from PySide2.QtWidgets import QFileDialog, QGraphicsItem, QGraphicsScene, QMessageBox
+from PySide2.QtWidgets import QApplication, QFileDialog, QGraphicsItem, QGraphicsScene, QMessageBox
 
+from src.Modules.Drawer import RadialMenuItem
 from src.GridView import GridScene
 from src.Grid import Geometry
-from src.Modules import hook
+from src.Modules import hook, itemLoader
 from src.Modules.Menus import CentralPanelContextMenu
 from src.Modules.Panel import Panel
 from src import config, gridPen
 from src.utils import FileLocation, hasState, JsonEncoder
 
 from src import logging
+
+import errno
+import os
+import functools
 
 log = logging.getLogger(__name__)
 
@@ -33,16 +40,10 @@ class CentralPanel(Panel):
 		# self.grid.surface = self
 		geometry = {'fillParent': True}
 		super(CentralPanel, self).__init__(parent, geometry=geometry, movable=False, resizable=False)
-		self.resizeHandles.setEnabled(False)
-		self.resizeHandles.setVisible(False)
 		self.setAcceptDrops(True)
 		self._keepInFrame = True
-		self.setLocked(True)
-		self._locked = False
-		self.setFlag(QGraphicsItem.ItemStopsClickFocusPropagation, False)
 		self.setAcceptedMouseButtons(Qt.AllButtons)
 		self.staticGrid = False
-		self.grid.static = False
 
 		path = Path(config.dashboardPath)
 		name = str(path).split('/')[-1]
@@ -50,15 +51,17 @@ class CentralPanel(Panel):
 		self.preventCollisions = True
 		self.setFlag(QGraphicsItem.ItemStopsClickFocusPropagation, False)
 		self.setFlag(QGraphicsItem.ItemStopsFocusHandling, False)
-		self._load(self.filePath)
+		self.setFlag(self.ItemHasNoContents, True)
+		self.insertMenu = RadialMenuItem(self, root=True)
+		self.resizeHandles.setVisible(False)
+		self.resizeHandles.setEnabled(False)
 
-		from src.Modules.Drawer import RadialMenuItem
-		from src.merger import endpoints
-		self.insertMenu = RadialMenuItem(self, subItems=endpoints.categories, root=True)
+	def load(self):
 		if self.isEmpty:
 			self.insertMenu.setVisible(True)
 		else:
 			self.insertMenu.setVisible(False)
+		self._load(self.filePath)
 
 	@property
 	def parentGrid(self):
@@ -73,6 +76,10 @@ class CentralPanel(Panel):
 		from PySide2.QtWidgets import QApplication
 		return QApplication.instance()
 
+	def mousePresEvent(self, event):
+		self.scene().clearSelection()
+		return
+
 	# def wheelEvent(self, event):
 	# 		event.accept()
 	# 		v = event.delta() / 120 * 40
@@ -80,6 +87,7 @@ class CentralPanel(Panel):
 	# 		self.scene().update()
 
 	def paint(self, painter, option, widget):
+		return super(CentralPanel, self).paint(painter, option, widget)
 		if self.scene().editingMode:
 			# if self.gridOpacity == 1:
 			# 	pen = QPen(gridPen)
@@ -92,13 +100,14 @@ class CentralPanel(Panel):
 			painter.setBrush(Qt.NoBrush)
 			path = QPainterPath()
 			for i in range(1, self.grid.columns):
-				path.moveTo(i * self.grid.columnWidth, 0)
-				path.lineTo(i * self.grid.columnWidth, self.grid.rowHeight * self.grid.rows)
+				path.moveTo(i*self.grid.columnWidth, 0)
+				path.lineTo(i*self.grid.columnWidth, self.grid.rowHeight*self.grid.rows)
 			for i in range(1, self.grid.rows):
-				path.moveTo(0, i * self.grid.rowHeight)
-				path.lineTo(self.grid.columnWidth * self.grid.columns, i * self.grid.rowHeight)
-			# for panel in self.childPanels:
-			# 	path -= panel.mappedShape()
+				path.moveTo(0, i*self.grid.rowHeight)
+				path.lineTo(self.grid.columnWidth*self.grid.columns, i*self.grid.rowHeight)
+			for panel in self.childPanels:
+				if isinstance(panel, GraphPanel):
+					path -= panel.mappedShape()
 			painter.drawPath(path)
 
 	# elif self.gridOpacity > 0:
@@ -113,11 +122,10 @@ class CentralPanel(Panel):
 		return super(CentralPanel, self).itemChange(change, value)
 
 	@property
-	def state(self):
-		return {
-			'childItems': {child.name if child.name is not None else f'{child.__class__.__name__}_0x{child.uuidShort}': child.state for child in self.childPanels if hasState(child)},
-			'fullscreen': self.window.isFullScreen()
-		}
+	def state(self) -> list[Panel]:
+		items = self.childPanels
+		items.sort(key=lambda x: (x.geometry.size.x.pos().y(), self.width() - x.pos().x()))
+		return [item for item in items if hasState(item)]
 
 	# def contextMenuEvent(self, event):
 	# 	contextMenu = QMenu(event.widget())
@@ -196,7 +204,7 @@ class CentralPanel(Panel):
 
 	def loadPanel(self):
 		from Modules.Panel import PanelFromFile
-		paths = self._selectFile(fileType="Dashboard Files (*.dashiePanel *.json)", startingDir='panels', multipleFiles=True)
+		paths = self._selectFile(fileType="Dashboard Files (*.levityPanel *.json)", startingDir='panels', multipleFiles=True)
 		for p in paths:
 			PanelFromFile(self, p)
 
@@ -204,34 +212,26 @@ class CentralPanel(Panel):
 		if path is None:
 			path = config.userPath.joinpath('saves', 'dashboards')
 		if fileName is None:
-			fileName = 'default.dashie'
+			fileName = 'default.levity'
 
 		if not path.exists():
 			path.mkdir(parents=True)
 
-		fileNameTemp = fileName + '.tmp'
-		with open(path.joinpath(fileNameTemp), 'w') as f:
-			dump(self.state, f, indent=2, cls=JsonEncoder)
-		try:
-			with open(path.joinpath(fileNameTemp), 'r') as f:
-				from Modules import hook
-				load(f, object_hook=hook)
-			rename(path.joinpath(fileNameTemp), path.joinpath(fileName))
-		except Exception as e:
-			QMessageBox.critical(self.parent.parentWidget(), "Error", f"Error saving dashboard: {e}")
-			remove(path.joinpath(fileNameTemp))
+		fileNameTemp = fileName + '.temp'
+		with open(path.joinpath(fileName), 'w') as f:
+			yaml.safe_dump(self, f, default_flow_style=False)
 
 	def save(self):
 		self._save()
 
 	def saveAs(self):
-		dateString = datetime.now().strftime('dashboard.%Y.%m.%d.dashie')
+		dateString = datetime.now().strftime('dashboard.%Y.%m.%d.levity')
 		path = config.userPath.joinpath('saves', 'dashboards')
 
 		path = path.joinpath(dateString)
 		dialog = QFileDialog(self.parentWidget(), 'Save Dashboard As...', str(path))
 		dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
-		dialog.setNameFilter("Dashboard Files (*.dashie)")
+		dialog.setNameFilter("Dashboard Files (*.levity)")
 		dialog.setViewMode(QFileDialog.ViewMode.Detail)
 		if dialog.exec_():
 			fileName = Path(dialog.selectedFiles()[0])
@@ -244,7 +244,7 @@ class CentralPanel(Panel):
 		if isinstance(path, FileLocation):
 			path = path.fullPath
 		if path is None:
-			path = config.userPath.joinpath('saves', 'dashboards', 'default.dashie')
+			path = config.userPath.joinpath('saves', 'dashboards', 'default.levity')
 		if not path.exists():
 			if isinstance(self.parent, QGraphicsScene):
 				QMessageBox.critical(self.parentWidget(), "Error", f"Dashboard file not found: {path}")
@@ -253,19 +253,23 @@ class CentralPanel(Panel):
 			return
 		with open(path, 'r') as f:
 			try:
-				state = load(f, object_hook=hook)
-
-				# window = self.scene().views()[0].parentWidget()
-				# g = window.geometry()
-				# g.setSize(QSizeF(*state['size']).toSize())
-				# window.setGeometry(g)
-				self.clear()
-				if 'geometry' in state:
-					self.geometry = Geometry(self, **state['geometry'])
-				self._loadChildren(state.get('childItems', {}))
-				config.dashboardPath = path
-			except JSONDecodeError:
-				QMessageBox.critical(None, "Error", f"Error loading dashboard: {path}")
+				if path.name.endswith('levity'):
+					state = yaml.safe_load(f)
+					if 'geometry' in state:
+						self.geometry = Geometry(self, **state['geometry'])
+					for item in state:
+						itemLoader(self, item)
+					config.dashboardPath = path
+				elif path.name.endswith('dashie'):
+					state = load(f, object_hook=hook)
+					self._loadChildren(state['items'])
+					config.dashboardPath = path
+			except JSONDecodeError as error:
+				log.error(f"Error loading dashboard: {path}\n{error}")
+				message = QMessageBox.critical(None, "Error", f"Error loading dashboard: {path}\n{error}")
+				message.show()
+				message.exec_()
+				return
 
 	def clear(self):
 		items = [child for child in self.childPanels if child is not self.insertMenu]
@@ -277,7 +281,7 @@ class CentralPanel(Panel):
 		if path:
 			self._load(path[0])
 
-	def _selectFile(self, fileType: str = "Dashboard Files (*.dashie *.json)", startingDir: str = 'dashboard', multipleFiles: bool = False):
+	def _selectFile(self, fileType: str = "Dashboard Files (*.levity *.yaml)", startingDir: str = 'dashboard', multipleFiles: bool = False):
 		path = config.userPath.joinpath('saves', startingDir)
 		dialog = QFileDialog(self.parentWidget(), 'Save Dashboard As...', str(path))
 		dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptOpen)
@@ -288,3 +292,7 @@ class CentralPanel(Panel):
 			filePaths = [Path(p) for p in dialog.selectedFiles()]
 			return filePaths
 		return []
+
+	@classmethod
+	def representer(cls, dumper, data):
+		return dumper.represent_list(data.state)
