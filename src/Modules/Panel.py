@@ -1,33 +1,60 @@
+import asyncio
+
 from functools import cached_property
 from json import dump, dumps, load, loads
 from pprint import pprint
 
+import PIL
 from math import prod
 from os import remove, replace
 from pathlib import Path
 from sys import gettrace
-from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
-from uuid import uuid4
+from typing import Any, Callable, Iterable, List, Optional, overload, Tuple, Union
+from uuid import UUID, uuid4
 
 from PySide2.QtCore import QByteArray, QMimeData, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt, QTimer, Slot
-from PySide2.QtGui import QColor, QDrag, QFocusEvent, QPainter, QPainterPath, QPen, QPixmap, QTransform
-from PySide2.QtWidgets import (QApplication, QFileDialog, QGraphicsDropShadowEffect, QGraphicsItem, QGraphicsPathItem, QGraphicsRectItem, QGraphicsScene, QGraphicsSceneDragDropEvent, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent,
+from PySide2.QtGui import QColor, QDrag, QFocusEvent, QPainter, QPainterPath, QPen, QPixmap, QRegion, QTransform
+from PySide2.QtWidgets import (QApplication, QFileDialog, QGraphicsBlurEffect, QGraphicsDropShadowEffect, QGraphicsItem, QGraphicsItemGroup, QGraphicsPathItem, QGraphicsRectItem, QGraphicsScene, QGraphicsSceneDragDropEvent,
+                               QGraphicsSceneHoverEvent,
+                               QGraphicsSceneMouseEvent,
                                QGraphicsSceneWheelEvent, QMessageBox,
                                QStyleOptionGraphicsItem)
 
 from src.Grid import GridItem, Grid, Geometry
 from src import colorPalette, config, debugPen, gridPen, logging, colors, selectionPen
-from src.utils import (_Panel, boolFilter, clearCacheAttr, disconnectSignal, Edge, FileLocation, getItemsWithType, GraphicsItemSignals, hasState, Indicator, JsonEncoder, LocationFlag, Margins, polygon_area, Position, SimilarValue,
+from src.utils import (_Panel, _Position, _Rect, _Size, boolFilter, clearCacheAttr, disconnectSignal, Edge, FileLocation, getItemsWithType, GraphicsItemSignals, hasState, Indicator, JsonEncoder, LocationFlag, Margins, Numeric, polygon_area,
+                       Position,
+                       SimilarValue,
                        findScene,
                        findSizePosition)
 from src.Modules.Menus import BaseContextMenu
-from src.Modules import hook
+from src.Modules import hook, itemLoader
 from src.Modules.Handles import Handle, HandleGroup
 from src.Modules.Handles.Resize import ResizeHandles
 from src.Modules.Handles.Grid import GridAdjusters
 
 log = logging.getLogger(__name__)
 log.setLevel('DEBUG' if gettrace() else 'INFO')
+
+blurEffect = QGraphicsBlurEffect()
+blurEffect.setBlurRadius(10)
+blurEffect.setBlurHints(QGraphicsBlurEffect.PerformanceHint)
+
+
+class blurrrrr(QGraphicsRectItem):
+
+	def __init__(self, parent: QGraphicsItem = None):
+		super(blurrrrr, self).__init__(parent=parent)
+		self.setGraphicsEffect(blurEffect)
+
+	def paint(self, painter: QPainter, option, widget=None) -> None:
+		toPaint = [child for child in self.scene().items(self.parentItem().sceneShape()) if not (child is self
+		                                                                                         or child is self.parentItem()
+		                                                                                         or isinstance(child, blurrrrr)
+		                                                                                         or self.parentItem().isAncestorOf(child))]
+		for child in toPaint:
+			child.paint(painter, option, None)
+		super(blurrrrr, self).paint(painter, option, widget)
 
 
 class Panel(_Panel):
@@ -44,21 +71,26 @@ class Panel(_Panel):
 	_scene = None
 	_showGrid: bool = True
 	_parent: QGraphicsItem = None
-	_underHover: bool = False
-	_frozen: bool = False
-	_locked: bool = False
-	neverReleaseChildren: bool = False
-	preventCollisions = False
 	_acceptsChildren: bool = True
 	savable: bool = True
 	acceptsWheelEvents: bool = False
 	_childIsMoving: bool = False
-	_lockedToParent: bool = False
+
+	defaults = {
+		'resizable': True,
+		'movable':   True,
+		'frozen':    False,
+		'locked':    False,
+	}
 
 	# section Panel init
 	def __init__(self, parent: 'Panel', *args, **kwargs):
 		super(Panel, self).__init__()
-
+		self.__hold = False
+		self._contextMenuOpen = False
+		self.uuid = kwargs.get('uuid', uuid4())
+		if isinstance(self.uuid, str):
+			self.uuid = UUID(self.uuid, version=4)
 		self.__init_defaults__()
 		self.__init_args(parent, *args, **kwargs)
 		self.geometry.updateSurface(set=False)
@@ -83,7 +115,8 @@ class Panel(_Panel):
 
 		kwargs['parent'] = parent
 		kwargs = self.__parse_args__(*args, **kwargs)
-		self._geometry = kwargs.get('geometry', None)
+		self.geometry = kwargs.get('geometry', None)
+		self.geometry.updateSurface(set=False)
 
 		if 'scene' in kwargs and not parent:
 			scene = kwargs['scene']
@@ -106,26 +139,26 @@ class Panel(_Panel):
 
 		self._name = kwargs.get('name', None)
 
-		self.clipping = kwargs.get('clipChildren', False)
+		# self.clipping = kwargs.get('clipChildren', False)
 		self.movable = kwargs.get('movable', True)
 		self.resizable = kwargs.get('resizable', True)
-		self._loadChildren(kwargs.get('childItems', {}))
+		items = kwargs.get('items', [])
+		self._loadChildren(items)
 		self.frozen = kwargs.get('frozen', False)
 		self.locked = kwargs.get('locked', False)
 		if 'savable' in kwargs:
 			self.savable = kwargs.get('savable')
 
+		self.setAcceptedMouseButtons(Qt.AllButtons if kwargs.get('clickable', None) or kwargs.get('intractable', True) else Qt.NoButton)
 	# self.geometry.relative = True
 
 	def __init_defaults__(self):
-		self.uuid = uuid4()
-		self.uuidShort = self.uuid.hex[:4]
+		self.uuidShort = self.uuid.hex[-4:]
 		self.signals = GraphicsItemSignals()
 		self._geometry = None
 		self._fillParent = False
 		self.filePath = None
 		self._locked = False
-		self.clicked = False
 		self.mousePressPos = None
 		self.hoverPosition = None
 		self.hoverOffset = None
@@ -136,16 +169,18 @@ class Panel(_Panel):
 		self.maxRect = None
 		self._frozen = False
 		self._name = None
+		self.__grid = None
 		# self.hoverTimer = QTimer(interval=500, singleShot=True, timeout=self.hoverFunc)
 		self.hideTimer = QTimer(interval=1000 * 3, singleShot=True, timeout=self.hideHandles)
 		# self.parentSelectionTimer = QTimer(interval=750, singleShot=True, timeout=self.transferToParent)
 		self.setAcceptHoverEvents(False)
 		self.setAcceptDrops(True)
 		self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
-		self.setFlag(QGraphicsItem.ItemSendsScenePositionChanges, True)
+		self.setFlag(QGraphicsItem.ItemSendsScenePositionChanges, False)
 		self.setFlag(QGraphicsItem.ItemIsFocusable, True)
 		# self.setFlag(QGraphicsItem.ItemIsSelectable, True)
 		self.setFlag(QGraphicsItem.ItemClipsToShape, not True)
+		self.setFlag(QGraphicsItem.ItemClipsChildrenToShape, not True)
 		self.setFlag(QGraphicsItem.ItemStopsClickFocusPropagation, True)
 		self.setFlag(QGraphicsItem.ItemStopsFocusHandling, True)
 		# self.indicator = Indicator(self)
@@ -185,6 +220,11 @@ class Panel(_Panel):
 	def __hash__(self):
 		return hash(self.uuid)
 
+	@classmethod
+	def validate(cls, item: dict):
+		geometry = Geometry.validate(item.get('geometry', {}))
+		return geometry
+
 	def childNames(self, *exclude):
 		return [child.name for child in self.childPanels if child not in exclude]
 
@@ -198,13 +238,6 @@ class Panel(_Panel):
 			self._childIsMoving = value
 			self.update()
 
-	@property
-	def lockedToParent(self):
-		return self._lockedToParent
-
-	@lockedToParent.setter
-	def lockedToParent(self, value):
-		self._lockedToParent = value
 
 	def debugBreak(self):
 		state = self.state
@@ -238,7 +271,7 @@ class Panel(_Panel):
 				# find the largest panel with a linkedValue
 				linkedValues = [child for child in self.childItems() if hasattr(child, 'linkedValue')]
 			else:
-				self._name = f'{self.__class__.__name__}_0x{self.uuidShort}'
+				self._name = f'{self.__class__.__name__}-0x{self.uuidShort}'
 				return self._name
 
 	@name.setter
@@ -259,19 +292,42 @@ class Panel(_Panel):
 	def hideHandles(self):
 		self.clearFocus()
 
+	@property
+	def uuidDict(self):
+		return {item.uuid: item for item in self.childPanels if hasattr(item, 'uuid')}
+
+	def __findChildUUID(self, uuid) -> Optional['Panel']:
+		for child in self.childPanels:
+			if child.uuid == uuid:
+				return child
+		return None
+
 	def _loadChildren(self, childItems: list[dict[str, Any]]):
-		assert isinstance(childItems, dict)
+		self.geometry.updateSurface(set=False)
 		loadedChildren = []
 		# for child in childItems:
-		for name, child in childItems.items():
-			child['name'] = name
-			if any(child == c for c in loadedChildren):
-				continue
-			else:
-				loadedChildren.append(child)
-			self.loadChildFromState(child)
+		if isinstance(childItems, list):
+			for child in childItems:
+				item = itemLoader(self, child)
+		elif isinstance(childItems, dict):
+			for name, child in childItems.items():
+				child['name'] = name
+				if any(child == c for c in loadedChildren):
+					continue
+				else:
+					loadedChildren.append(child)
+				self.loadChildFromState(child)
+
+	def loadState(self, state: dict):
+		state.pop('class', None)
+		self.__init_args(parent=self.parent, **state)
 
 	def loadChildFromState(self, child):
+		if 'uuid' in child:
+			childInstance = self.__findChildUUID(child['uuid'])
+			if childInstance is not None:
+				childInstance.loadState(child)
+				return childInstance
 		cls = child.pop('class')
 		try:
 			child = cls(parent=self, **child)
@@ -364,14 +420,26 @@ class Panel(_Panel):
 	def onGrid(self) -> bool:
 		return self.parentGrid is not None
 
-	@cached_property
-	def grid(self) -> Grid:
-		clearCacheAttr(self, 'allHandles')
-		grid = Grid(self, static=self._staticGrid)
-		return grid
+	@property
+	def grid(self) -> Optional[Grid]:
+		if len(self.childPanels) == 0:
+			return None
+		if self.__grid is None:
+			clearCacheAttr(self, 'allHandles')
+			self.__grid = Grid(self, static=self._staticGrid)
+		return self.__grid
+
+	@grid.setter
+	def grid(self, value):
+		if isinstance(value, dict):
+			value = Grid(self, **value)
+		self.__grid = value
+		self._staticGrid = value.static
 
 	@cached_property
 	def gridAdjusters(self):
+		if self.grid is None:
+			return None
 		clearCacheAttr(self, 'allHandles')
 		handles = GridAdjusters(self, offset=-15)
 		return handles
@@ -420,7 +488,12 @@ class Panel(_Panel):
 		if value is None:
 			value = Margins(self, 0.1, 0.1, 0.1, 0.1)
 		elif not isinstance(value, Margins):
-			value = Margins(self, **value)
+			if isinstance(value, str):
+				value = Margins(self, *value.split(','))
+			elif isinstance(value, list):
+				value = Margins(self, *value)
+			else:
+				value = Margins(self, **value)
 		self._margins = value
 
 	@property
@@ -450,7 +523,8 @@ class Panel(_Panel):
 	def state(self) -> dict:
 		sizePosType = 'relative' if self.geometry.relative else 'absolute'
 		state = {
-			'class':     self.__class__.__name__,
+			# 'uuid':      str(self.uuid),
+			'type':      self.__class__.__name__.lower(),
 			'geometry':  self.geometry,
 			'frozen':    self.frozen,
 			'locked':    self.locked,
@@ -458,12 +532,39 @@ class Panel(_Panel):
 			'movable':   bool(self.flags() & QGraphicsItem.ItemIsMovable),
 			'margins':   self.margins,
 		}
+		if state['type'] == 'panel':
+			state['type'] = 'group'
 		if self.hasChildren:
-			state['grid'] = self.grid
-			state['childItems'] = {child.name if child.name is not None else f'{child.__class__.__name__}_0x{child.uuidShort}': child.state for child in self.childPanels if hasState(child)}
-			state['clipChildren'] = bool(self.flags() & QGraphicsItem.ItemClipsToShape)
-			state['keepInFrame'] = self._keepInFrame
-			state['preventCollisions'] = self.preventCollisions
+			items = self.childPanels
+			items.sort(key=lambda x: (x.pos().y(), -x.pos().x()))
+			state['items'] = [child for child in items if hasState(child)]
+		# state['clipChildren'] = bool(self.flags() & QGraphicsItem.ItemClipsToShape)
+		# state['keepInFrame'] = self._keepInFrame
+		# state['preventCollisions'] = self.preventCollisions
+
+		return type(self).removeDefaults(state)
+
+	@classmethod
+	def representer(cls, dumper, data):
+		return dumper.represent_dict(data.state.items())
+
+	@classmethod
+	def removeDefaults(cls, state):
+		for key, value in list(state.items()):
+			if hasattr(value, 'default') and value == (value.default() if isinstance(value.default, Callable) else value.default):
+				del state[key]
+			elif hasattr(cls, f'_{key}') and value == getattr(cls, f'_{key}'):
+				del state[key]
+			elif hasattr(cls, 'defaults') and key in cls.defaults and value == cls.defaults[key]:
+				del state[key]
+
+		if state.get('locked', False):
+			state.pop('movable', None)
+			state.pop('resizable', None)
+			state.pop('frozen', None)
+		if state.get('frozen', False):
+			state.pop('movable', None)
+
 		return state
 
 	# section mouseEvents
@@ -474,13 +575,22 @@ class Panel(_Panel):
 		return menu
 
 	def contextMenuEvent(self, event):
-		if self.scene().focusItem() is self.parent:
+		if self.canFocus and self.hasFocus():
+			event.accept()
+		else:
 			event.ignore()
 			return
+		# if self.scene().focusItem() is self.parent or bool(QApplication.mouseButtons() & Qt.LeftButton):
+		# 	event.ignore()
+		# 	return
 		self.resizeHandles.forceDisplay = True
 		self.contextMenu.position = event.pos()
+		self._contextMenuOpen = True
 		self.contextMenu.exec_(event.screenPos())
+		self.setFocus(Qt.MouseFocusReason)
 		self.resizeHandles.forceDisplay = False
+		self._contextMenuOpen = False
+		self.update()
 
 	def underMouse(self):
 		return self.scene().underMouse()
@@ -509,10 +619,16 @@ class Panel(_Panel):
 		else:
 			data['geometry']['absolute'] = True
 			data['geometry']['position'] = event.pos()
-
 		item = cls(parent=self, **data)
 		item.setLocked(False)
 		item.updateSizePosition()
+		item.geometry.relative = True
+
+		# For whatever reason this prevents the item from jumping to the top left corner
+		# when the item is first moved
+		rect = item.rect()
+		rect.moveTo(event.pos())
+		item.geometry.setGeometry(rect)
 
 		super(Panel, self).dropEvent(event)
 		return item
@@ -533,16 +649,8 @@ class Panel(_Panel):
 		drag.setHotSpot(item.rect().center().toPoint())
 		# drag.setParent(child)
 		drag.setMimeData(info)
-		status = drag.exec_()
 
 	def focusInEvent(self, event: QFocusEvent) -> None:
-		# if self.parent.hasFocus():
-		# 	self.parent.clearFocus()
-		# 	event.accept()
-		# list(map(lambda item: item.setFlag(QGraphicsItem.ItemIsFocusable, True), self.childPanels))
-		# list(map(lambda item: item.setFlag(QGraphicsItem.ItemIsSelectable, True), self.childPanels))
-		# list(map(lambda item: item.setFlag(QGraphicsItem.ItemIsMovable, True), self.childPanels))
-
 		self.refreshHandles()
 		super(Panel, self).focusInEvent(event)
 
@@ -554,14 +662,10 @@ class Panel(_Panel):
 				handleGroup.setZValue(self.zValue() + 1000)
 
 	def focusOutEvent(self, event: QFocusEvent) -> None:
-		# event.accept()
-		self.clicked = False
-		# list(map(lambda item: item.setFlag(QGraphicsItem.ItemIsFocusable, False), self.childPanels))
-		# list(map(lambda item: item.setFlag(QGraphicsItem.ItemIsSelectable, False), self.childPanels))
-		# list(map(lambda item: item.setFlag(QGraphicsItem.ItemIsMovable, False), self.childPanels))
 		for handleGroup in self.allHandles:
 			handleGroup.hide()
 			handleGroup.setZValue(self.zValue())
+		self.setSelected(False)
 		super(Panel, self).focusOutEvent(event)
 
 	def stackOnTop(self):
@@ -575,7 +679,7 @@ class Panel(_Panel):
 				# highestZValue = max(zValues)
 				# lowest = min(zValues)
 				# set zValues of items
-				# degrease all the z values by 1
+				# degrease all the z _values by 1
 				zValues = [parentZValue + (value / 100) for value in range(len(items) + 1)]
 				zValues.reverse()
 				list(map(lambda item: item[1].setZValue(item[0]), zip(zValues, items)))
@@ -610,52 +714,48 @@ class Panel(_Panel):
 		return neighbors
 
 	def childHasFocus(self):
-		return any(map(lambda item: (item.childHasFocus() or item.hasFocus()), self.childPanels))
+		return any(item.hasFocus() or item.childHasFocus() for item in self.childPanels)
 
 	def siblingHasFocus(self):
 		return self.parent.childHasFocus()
 
 	def mousePressEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
-		# if self.parent not in (self.scene(), self.scene().base):
-		# 	mouseEvent.ignore()
-
-		# list(map(lambda item: item.setFlag(QGraphicsItem.ItemIsFocusable, False), self.childPanels))
-		# list(map(lambda item: item.setFlag(QGraphicsItem.ItemIsSelectable, False), self.childPanels))
-		# list(map(lambda item: item.setFlag(QGraphicsItem.ItemIsMovable, False), self.childPanels))
-
-		# if self.hasFocus():
-		# 	pass
-		# elif self.parent.hasFocus() or self.parent is self.scene().base:
-		# 	# self.parent.clearFocus()
-		# 	mouseEvent.accept()
-		# else:
-		# 	mouseEvent.ignore()
-		# 	return super(Panel, self).mousePressEvent(mouseEvent)
-		# self.moveToTop()
-
-		if mouseEvent.modifiers() & Qt.KeyboardModifier.ControlModifier:
+		if mouseEvent.buttons() == Qt.LeftButton | Qt.RightButton:
+			mouseEvent.setButtons(Qt.LeftButton)
+			mouseEvent.setButton(Qt.LeftButton)
+			return self.mousePressEvent(mouseEvent)
+		elif mouseEvent.modifiers() & Qt.KeyboardModifier.ControlModifier:
 			self.clone()
-
-		if mouseEvent.modifiers() & Qt.KeyboardModifier.ShiftModifier:
-			self.setSelected(not self.isSelected())
-			print(self.scene().selectedItems())
-
+			mouseEvent.accept()
+			self.clearFocus()
+			return
+		elif mouseEvent.button() == Qt.RightButton and mouseEvent.buttons() ^ Qt.RightButton:
+			mouseEvent.accept()
+			return super(Panel, self).mousePressEvent(mouseEvent)
 		elif mouseEvent.button() == Qt.MouseButton.LeftButton:
-			self.scene().clearSelection()
-			if self.resizeHandles.isEnabled() and self.resizeHandles.currentHandle is not None:
-				mouseEvent.ignore()
-				self.resizeHandles.mousePressEvent(mouseEvent)
-			elif self.parent.hasFocus() or self.parent is self.scene().base or self.hasFocus() or self.siblingHasFocus():
+			# if self.resizeHandles.isEnabled() and self.resizeHandles.currentHandle is not None:
+			# 	mouseEvent.ignore()
+			# 	self.resizeHandles.mousePressEvent(mouseEvent)
+			# if self.scene().focusStack.focusAllowed(self):
+
+			if (self.scene().focusItem() is self.parent
+			    or self.parent is self.scene().base
+			    or self.hasFocus()
+			    or self.siblingHasFocus()) and self.canFocus:
+				print(f'clicked {self} which is a {type(self)}')
+				self.scene().clearSelection()
+				self.setSelected(True)
 				mouseEvent.accept()
 				self.setFocus(Qt.FocusReason.MouseFocusReason)
+				self.stackOnTop()
+				self.startingParent = self.parent
+				if self.maxRect is None:
+					self.maxRect = self.rect().size()
 			else:
 				mouseEvent.ignore()
-			# self.parent.mousePressEvent(mouseEvent)
-			self.stackOnTop()
-			self.startingParent = self.parent
-			if self.maxRect is None:
-				self.maxRect = self.rect().size()
-		# self.parentSelectionTimer.start()
+		# self.parent.mousePressEvent(mouseEvent)
+
+	# self.parentSelectionTimer.start()
 
 		# self.setFocus(Qt.FocusReason.MouseFocusReason)
 		# if self.resizeHandles.isVisible() and self.resizeHandles.currentHandle is not None:
@@ -677,23 +777,39 @@ class Panel(_Panel):
 		# 	if self.maxRect is None:
 		# 		self.maxRect = self.rect().size()
 		# 	self.startingParent = self.parent
-		# 	self.parent.setHighlighted(True)
-		# 	self.hoverStart = mouseEvent.pos()
-		# if self.parent is not self.scene():
-		# 	effect = QGraphicsDropShadowEffect()
-		# 	effect.setBlurRadius(5)
-		# 	effect.setOffset(0, 0)
-		# 	effect.setColor(Qt.white)
-		# if self.parent is not self.scene():
-		# 	self.parent.setGraphicsEffect(effect)
-		# self.setGraphicsEffect(effect)
-		return super().mousePressEvent(mouseEvent)
+	# 	self.parent.setHighlighted(True)
+	# 	self.hoverStart = mouseEvent.pos()
+	# if self.parent is not self.scene():
+	# 	effect = QGraphicsDropShadowEffect()
+	# 	effect.setBlurRadius(5)
+	# 	effect.setOffset(0, 0)
+	# 	effect.setColor(Qt.white)
+	# if self.parent is not self.scene():
+	# 	self.parent.setGraphicsEffect(effect)
+	# self.setGraphicsEffect(effect)
+	# return super(Panel, self).mousePressEvent(mouseEvent)
+
+	@property
+	def canFocus(self) -> bool:
+		parentIsFrozen = isinstance(self.parent, Panel) and self.parent.frozen
+		return bool(int(self.flags() & QGraphicsItem.ItemIsFocusable)) and not parentIsFrozen
+
+	def hold(self):
+		self.setFlag(QGraphicsItem.ItemIsMovable, False)
+		self.__hold = True
+
+	def release(self):
+		self.setFlag(QGraphicsItem.ItemIsMovable, True)
+		self.__hold = False
 
 	def mouseMoveEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
+		if self.__hold:
+			return
 		# if self.parentItem() is not self.scene().base:
 		# 	self.startingParent = self.parent
 		# 	self.setParentItem(self.scene().base)
-		if (self.rect().size().toSize() == self.parent.rect().size().toSize() or self.parent.hasFocus()) and isinstance(self.parent, Panel):
+		filledParent = self.rect().size().toSize() == self.parent.rect().size().toSize()
+		if (filledParent or self.parent.hasFocus()) and isinstance(self.parent, (QGraphicsItemGroup, Panel)):
 			mouseEvent.ignore()
 			self.parent.mouseMoveEvent(mouseEvent)
 		if not self.movable and isinstance(self.parent, Panel) and self.parent.movable and self.parent.childHasFocus() and self.parent is not self.scene():
@@ -701,36 +817,32 @@ class Panel(_Panel):
 			self.parent.mouseMoveEvent(mouseEvent)
 			self.parent.setFocus(Qt.FocusReason.MouseFocusReason)
 		else:
-			self.clicked = True
 			if hasattr(self.parent, 'childIsMoving'):
 				self.parent.childIsMoving = True
 			# self.hoverPosition = mouseEvent.scenePos()
 			# if mouseEvent.lastPos() != mouseEvent.pos() and mouseEvent.buttons() & Qt.MouseButton.LeftButton:
 			# 	self.hoverTimer.start()
-			super().mouseMoveEvent(mouseEvent)
+			return super(Panel, self).mouseMoveEvent(mouseEvent)
 
-	def mouseReleaseEvent(self, mouseEvent):
-		if self.clicked:
-			if hasattr(self.parent, 'childIsMoving'):
+	def mouseReleaseEvent(self, mouseEvent: QGraphicsSceneMouseEvent) -> None:
+		if hasattr(self.parent, 'childIsMoving'):
+			wasMoving = self.parent.childIsMoving
+			self.parent.childIsMoving = False
 
-				wasMoving = self.parent.childIsMoving
-				self.parent.childIsMoving = False
+			if wasMoving:
+				releaseParents = [item for item in self.scene().items(mouseEvent.scenePos())
+				                  if item is not self
+				                  and not item.isAncestorOf(self)
+				                  and self.parent is not item
+				                  and isinstance(item, Panel)
+				                  and item.onlyAddChildrenOnRelease]
 
-				if wasMoving:
-					releaseParents = [item for item in self.scene().items(mouseEvent.scenePos())
-					                  if item is not self
-					                  and not item.isAncestorOf(self)
-					                  and self.parent is not item
-					                  and isinstance(item, Panel)
-					                  and item.onlyAddChildrenOnRelease]
-
-					sorted(releaseParents, key=lambda item: item.zValue(), reverse=True)
-					if releaseParents:
-						releaseParent = releaseParents[0]
-						self.setParentItem(releaseParent)
-						self.updateFromGeometry()
-			# self.geometry.setAbsolutePosition(self.pos())
-			self.clicked = False
+				sorted(releaseParents, key=lambda item: item.zValue(), reverse=True)
+				if releaseParents:
+					releaseParent = releaseParents[0]
+					self.setParentItem(releaseParent)
+					self.updateFromGeometry()
+		# self.geometry.setAbsolutePosition(self.pos())
 		if self.scene().focusItem() is not self:
 			self.setFocus(Qt.FocusReason.MouseFocusReason)
 		# if self.hoverPosition:
@@ -754,7 +866,6 @@ class Panel(_Panel):
 		self.parent.setHighlighted(False)
 
 	def mouseDoubleClickEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
-		self.clicked = False
 		if not self.parent in [self.scene(), self.scene().base]:
 			self._fillParent = not self._fillParent
 			if self._fillParent:
@@ -813,106 +924,6 @@ class Panel(_Panel):
 		else:
 			return None
 
-	def interactiveResize(self, mouseEvent: QGraphicsSceneMouseEvent) -> tuple[QRectF, QPointF]:
-		# if self.geometry.size.snapping:
-		# 	returnRect = None
-		# 	returnPos = None
-		#
-		# 	diff = mouseEvent.pos() - mouseEvent.lastPos()
-		# 	self.mousePressPos += diff
-		# 	change = self.mousePressPos
-		# 	x = round(change.x() / self.parentGrid.columnWidth)
-		# 	y = round(change.y() / self.parentGrid.rowHeight)
-		#
-		# 	direction = diff.x() < 0 and 1 or -1, diff.y() < 0 and 1 or -1
-		#
-		# 	gridItem = GridItem(self.gridItem)
-		# 	loc = self.handleSelected.location
-		# 	if loc.isEdge:
-		# 		if loc.isVertical:
-		# 			y = 0
-		# 		else:
-		# 			x = 0
-		#
-		# 	if x != 0:
-		# 		if loc.isRight:
-		# 			self.gridItem.width += x
-		# 		elif loc.isLeft:
-		# 			self.gridItem.leftExpand(x)
-		# 		if 0 < self.gridItem.width < self.parentGrid.columns:
-		# 			self.mousePressPos.setX(self.parentGrid.columnWidth / 2 * direction[0])
-		#
-		# 	if y != 0:
-		# 		if loc.isBottom:
-		# 			self.gridItem.height += y
-		# 		elif loc.isTop:
-		# 			self.gridItem.topExpand(y)
-		# 		if 0 < self.gridItem.height < self.parentGrid.rows:
-		# 			self.mousePressPos.setY(self.parentGrid.rowHeight / 2 * direction[1])
-
-		# 	returnRect = self.gridItem.rect()
-		#
-		# 	return returnRect, returnPos
-		# else:
-		rect = self.rect()
-		startWidth = rect.width()
-		startHeight = rect.height()
-		pos = self.pos()
-		# if self.parent.keepInFrame:
-		# 	mousePos = self.mapToFromScene(mouseEvent.scenePos())
-		# 	parentRect = self.parent.rect()
-		# 	mousePos.setX(min(max(mousePos.x(), 0), parentRect.width()))
-		# 	mousePos.setY(min(max(mousePos.y(), 0), parentRect.height()))
-		# 	mouseEvent.setPos(self.mapFromParent(mousePos))
-
-		loc = self.handleSelected.location
-		mousePos = mouseEvent.scenePos()
-		mousePos = self.mapFromScene(mousePos)
-		# mousePos = self.mapToParent(mousePos)
-		if loc.isRight:
-			rect.setRight(mousePos.x())
-		elif loc.isLeft:
-			rect.setLeft(mousePos.x())
-		if loc.isBottom:
-			rect.setBottom(mousePos.y())
-		elif loc.isTop:
-			rect.setTop(mousePos.y())
-
-		# rect = self.mapRectToParent(rect)
-		# flatten array
-		# similarEdges = [item for sublist in [self.similarEdges(n, rect=rect, singleEdge=loc) for n in self.neighbors] for item in sublist]
-		# if similarEdges:
-		# 	s: SimilarValue = similarEdges[0]
-		# 	snapValue = s.otherValue.pix
-		# 	if loc.isRight:
-		# 		rect.setRight(snapValue)
-		# 	elif loc.isLeft:
-		# 		rect.setLeft(snapValue)
-		# 	elif loc.isTop:
-		# 		rect.setTop(snapValue)
-		# 	elif loc.isBottom:
-		# 		rect.setBottom(snapValue)
-		# rect = self.mapRectFromParent(rect)
-
-		if any(rect.topLeft().toTuple()):
-			p = self.mapToParent(rect.topLeft())
-			rect.moveTo(QPointF(0, 0))
-		else:
-			p = None
-
-		if rect.width() < 20:
-			rect.setWidth(20)
-			p.setX(pos.x())
-		if rect.height() < 20:
-			rect.setHeight(20)
-
-		# if rect.width() == startWidth:
-		# 	p.setX(pos.x())
-		# if rect.height() == startHeight:
-		# 	p.setY(pos.y())
-
-		self.geometry.setAbsoluteRect(rect)
-		self.geometry.updateSurface()
 
 	# return rect, p
 
@@ -941,19 +952,6 @@ class Panel(_Panel):
 		matchedEdges.sort(key=lambda x: x.differance)
 		return matchedEdges
 
-	def shape(self):
-		path = QPainterPath()
-		path.addRect(self.rect())
-		if self.hasFocus() and self.resizeHandles.isEnabled():
-			for handle in self.resizeHandles.childItems():
-				path += self.mapFromItem(handle, handle.shape())
-		return path
-
-	def boundingRect(self) -> QRectF:
-		if self.hasFocus():
-			return self.shape().boundingRect()
-		return super(Panel, self).boundingRect().adjusted(5, 5, -5, -5)
-
 	def contentsRect(self) -> QRectF:
 		return self.geometry.absoluteRect()
 
@@ -974,8 +972,6 @@ class Panel(_Panel):
 		children = [i for j in children for i in j]
 		children.insert(0, self)
 		return children
-
-	# section itemChange
 
 	def visibleArea(self, *exclude: 'Panel') -> QRectF:
 		children = self.childPanels
@@ -1012,7 +1008,7 @@ class Panel(_Panel):
 		# 		self.indicator.color = Qt.white
 
 		elif change == QGraphicsItem.ItemPositionChange:
-			if self.clicked:
+			if QApplication.mouseButtons() & Qt.LeftButton and self.isSelected() and not self.focusProxy():
 				area = polygon_area(self.shape())
 				diff = value - self.pos()
 
@@ -1215,7 +1211,7 @@ class Panel(_Panel):
 				self.previousParent.childIsMoving = False
 			self._parent = value
 
-			if hasattr(value, 'childIsMoving') and self.clicked:
+			if hasattr(value, 'childIsMoving') and QApplication.mouseButtons() & Qt.LeftButton:
 				value.childIsMoving = True
 
 			# log.debug(f'Parent now {self.parent}')
@@ -1245,7 +1241,7 @@ class Panel(_Panel):
 
 	def updateFromGeometry(self):
 		self.setRect(self.geometry.absoluteRect())
-		self.setPos(self.geometry.absolutePosition())
+		self.setPos(self.geometry.absolutePosition().asQPointF())
 		self.update()
 
 	def setGeometry(self, rect: Optional[QRectF], position: Optional[QPointF]):
@@ -1275,14 +1271,20 @@ class Panel(_Panel):
 	# 	y = self.parent.height() * self.geometry.position.y
 	# 	self.setPos(QPointF(x, y))
 
-	def setPos(self, pos: Union[QPointF, QPoint, Position, Tuple[float, float]]):
-		if isinstance(pos, Position):
-			pos = pos.toTuple()
-		if isinstance(pos, tuple):
-			pos = QPointF(*pos)
-		super(Panel, self).setPos(pos)
+	# def setPos(self, pos: Union[QPointF, QPoint, Position, Tuple[float, float]]):
+	# 	if isinstance(pos, Position):
+	# 		pos = pos.toTuple()
+	# 	if isinstance(pos, tuple):
+	# 		pos = QPointF(*pos)
+	# 	super(Panel, self).setPos(pos)
 
-	def setRect(self, rect: QRectF):
+	@overload
+	def setRect(self, pos: _Position, size: _Size): ...
+
+	@overload
+	def setRect(self, args: tuple[Numeric, Numeric, Numeric, Numeric]): ...
+
+	def setRect(self, rect):
 		emit = self.rect().size() != rect.size()
 		super(Panel, self).setRect(rect)
 		if emit:
@@ -1400,19 +1402,25 @@ class Panel(_Panel):
 			return
 		# return super(Panel, self).paint(painter, option, widget)
 		color = colorPalette.window().color()
-		color.setAlpha(100)
-		painter.setBrush(color)
-		painter.setPen(Qt.NoPen)
+		# color.setAlpha(100)
+		# painter.setBrush(color)
+		# painter.setPen(Qt.NoPen)
+
+		if self._contextMenuOpen or self.isSelected():
+			painter.setPen(selectionPen)
+			painter.setBrush(Qt.NoBrush)
+			painter.drawRect(self.boundingRect())
+			return
 
 		if self.debug:
 			# if self.parent and not self.parent.frozen:
 			# 	painter.setBrush(self.color)
 			# 	painter.drawPath(self.shape())
 			painter.setPen(debugPen)
-			painter.setBrush(color)
+			# painter.setBrush(color)
 			painter.drawPath(self.shape())
 
-		if self.isEmpty or self.childIsMoving or self.isSelected():
+		if self.isEmpty or self.childIsMoving or self.isSelected() and not self.resizeHandles.isEnabled():
 			painter.setPen(selectionPen)
 			painter.setBrush(Qt.NoBrush)
 			painter.drawRect(self.rect().adjusted(2, 2, -2, -2))
@@ -1461,21 +1469,15 @@ class Panel(_Panel):
 		return self.rect()
 
 	@property
+	def globalTransform(self):
+		return self.scene().views()[0].viewportTransform()
+
+	@property
 	def pix(self) -> QPixmap:
-		'''
-		static QPixmap QPixmapFromItem(QGraphicsItem *item){
-				QPixmap pixmap(item->boundingRect().size().toSize());
-				pixmap.fill(Qt::transparent);
-				QPainter painter(&pixmap);
-				painter.setRenderHint(QPainter::Antialiasing);
-				QStyleOptionGraphicsItem opt;
-				item->paint(&painter, &opt);
-				return pixmap;
-		}
-		'''
 		pix = QPixmap(self.containingRect.size().toSize())
 		pix.fill(Qt.transparent)
 		painter = QPainter(pix)
+		pix.initPainter(painter)
 		painter.setRenderHint(QPainter.HighQualityAntialiasing)
 		opt = QStyleOptionGraphicsItem()
 		self.paint(painter, opt, None)
@@ -1496,8 +1498,9 @@ class Panel(_Panel):
 	@showGrid.setter
 	def showGrid(self, value):
 		self._showGrid = value
-		self.gridAdjusters.setEnabled(value)
-		self.gridAdjusters.setVisible(value)
+		if self.gridAdjusters:
+			self.gridAdjusters.setEnabled(value)
+			self.gridAdjusters.setVisible(value)
 		if value:
 			self.update()
 
@@ -1548,13 +1551,16 @@ class Panel(_Panel):
 			child.setLocked(value)
 		# self.setHandlesChildEvents(value)
 		# self.setFiltersChildEvents(value)
-		# self.setFlag(QGraphicsItem.ItemStopsClickFocusPropagation, value)
-		# self.setFlag(QGraphicsItem.ItemStopsFocusHandling, value)
+		self.setFlag(QGraphicsItem.ItemStopsClickFocusPropagation, value)
+		self.setFlag(QGraphicsItem.ItemStopsFocusHandling, value)
+		# self.setHandlesChildEvents(value)
 		self.setAcceptDrops(not value)
 
 	@cached_property
 	def childPanels(self) -> List['Panel']:
-		return [child for child in self.childItems() if isinstance(child, Panel)]
+		items = [child for child in self.childItems() if isinstance(child, Panel)]
+		items.sort(key=lambda x: (x.pos().y(), x.pos().x()))
+		return items
 
 	@property
 	def hasChildren(self) -> bool:
@@ -1572,7 +1578,7 @@ class Panel(_Panel):
 
 		fileNameTemp = fileName + '.tmp'
 		with open(path.joinpath(fileNameTemp), 'w') as f:
-			dump(self.state, f, indent=2, sort_keys=True, cls=JsonEncoder)
+			dump(JsonEncoder.removeNullValues(self.state), f, indent=2, sort_keys=False, cls=JsonEncoder)
 		try:
 			with open(path.joinpath(fileNameTemp), 'r') as f:
 				from Modules import hook
@@ -1589,7 +1595,7 @@ class Panel(_Panel):
 		path = path.joinpath(self.__class__.__name__)
 		dialog = QFileDialog(self.parentWidget(), 'Save Dashboard As...', str(path))
 		dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
-		dialog.setNameFilter("Dashboard Files (*.dashie)")
+		dialog.setNameFilter("Dashboard Files (*.levity)")
 		dialog.setViewMode(QFileDialog.ViewMode.Detail)
 		if dialog.exec_():
 			fileName = Path(dialog.selectedFiles()[0])
