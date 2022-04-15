@@ -1,24 +1,24 @@
+import numpy as np
 from functools import cached_property
 from json import dumps
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Iterable, Optional, Union
 
 import math
-from PySide2 import QtCore
 from PySide2.QtCore import QByteArray, QMimeData, QPoint, QPointF, QRect, QRectF, Qt, QTimer, Slot
-from PySide2.QtGui import QColor, QDrag, QFocusEvent, QPainterPath, QPen
-from PySide2.QtWidgets import QGraphicsItem, QGraphicsPathItem, QGraphicsRectItem, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent, QGraphicsSceneWheelEvent
+from PySide2.QtGui import QColor, QDrag, QFocusEvent, QPainter, QPainterPath, QPen, QPixmap
+from PySide2.QtWidgets import QGraphicsBlurEffect, QGraphicsItem, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent, QGraphicsSceneWheelEvent
 
+from src.plugins.observation import TimeAwareValue
+from src.Modules.Displays.Realtime import LockedRealtime
 from src.Modules.glyphs import BackArrow, Plus
-from src.api.baseAPI import Container
-from src.catagories import CategoryDict, CategoryItem, ValueWrapper
+from src.catagories import CategoryDict, CategoryItem
 from src.Grid import GridItem, Geometry, Grid
-from src.utils import Alignment, angleBetweenPoints, GridItemSize, clearCacheAttr, GraphicsItemSignals, JsonEncoder, levenshtein, mouseHoldTimer, mouseTimer, Position, Size, Subscription
-from src.merger import MergedValue
+from src.utils import Alignment, angleBetweenPoints, GridItemSize, clearCacheAttr, GraphicsItemSignals, JsonEncoder, levenshtein, Margins, mouseHoldTimer, mouseTimer, Position, Size, Subscription
+from src.plugins.dispatcher import ValueDirectory, MultiSourceContainer
 
 from src.Modules.Handles.Various import DrawerHandle, HoverArea, IndoorIcon
 from src.Modules.Label import Label, TitleLabel
 from src.Modules.Panel import Panel
-from src.translators.aliases import aliases
 
 
 class ScrollRect(Panel):
@@ -120,36 +120,43 @@ class ScrollRect(Panel):
 
 class RadialMenuItem(Panel):
 	savable = False
+	root: 'RadialMenu' = None
 
-	def __init__(self, *args, root: Union[Panel, bool], key: CategoryItem = None, subItems: CategoryDict = None, value: ValueWrapper = None, **kwargs):
-		if isinstance(root, bool):
-			root = self
-		self.root = root
+	angle: float = 90
+	start: float = 270
+	iconSize: float = 200
+
+	def __init__(self, *args, key: CategoryItem = None, subItems: CategoryDict = None, value: TimeAwareValue = None, **kwargs):
+		if self.__class__.root is None:
+			self.__class__.root = self
 		self.showing = False
-		self.angle = 90
-		self.start = 270
-		self.size = 200
+		self.__boundingRect = QRectF(0, 0, self.iconSize, self.iconSize)
 		super(RadialMenuItem, self).__init__(*args, **kwargs)
+		self.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
 		self.backArrow = BackArrow(self)
 		self.subItems = subItems
-		# self.path = QGraphicsPathItem(self)
+
 		self.key = key
 		self.lookupTable = {}
-		self.subItems = subItems
 		self.value = value
-		self.geometry.size.width.setAbsolute(100)
-		self.geometry.size.height.setAbsolute(100)
-		self.updateFromGeometry()
+
 		self.clipping = False
 		self.backArrow.update()
 		self.backArrow.hide()
-		self.gridAdjusters.setEnabled(False)
+
 		self.resizeHandles.setEnabled(False)
 		self.resizeHandles.setVisible(False)
-		self.gridAdjusters.setVisible(False)
 		self.resizable = False
+		self.movable = False
+
 		self.setZValue(1000)
+
 		self.backArrow.setZValue(self.zValue() + 10)
+		self.setAcceptHoverEvents(True)
+
+		self.label = Label(self, text=str(key), geometry={'fillParent': True}, margin={'left': 0, 'right': 0, 'top': 0, 'bottom': 0})
+		self.label.setLocked(True)
+		self.label.geometry.relative = True
 
 		if subItems:
 			# if key in aliases:
@@ -157,42 +164,40 @@ class RadialMenuItem(Panel):
 			# 	font = weatherGlyph
 			# else:
 			# 	font = None
-			self.label = Label(self, text=str(key), geometry={'fillParent': True})
-			self.label.setLocked(True)
-			self.label.geometry.relative = True
+
 			# self.title = TitleLabel(self, text=str(self.key))
 			# self.title.setLocked(True)
 			self.subItems = subItems
-		if isinstance(self.parent, RadialMenuItem):
-			self.hide()
 
 		# Move to bottom of scene rect
 
 		radialPath = QGraphicsPathItem(self)
+		self.backgroundImage = QGraphicsPixmapItem(radialPath)
 
 		path = QPainterPath()
-		path.arcMoveTo(0, 0, self.size, self.size, self.start)
-		path.arcTo(0, 0, self.size, self.size, self.start, self.angle)
-		path.translate(-self.size / 2, -self.size / 2)
+		path.arcMoveTo(0, 0, self.iconSize, self.iconSize, self.start)
+		path.arcTo(0, 0, self.iconSize, self.iconSize, self.start, self.angle)
+		path.translate(-self.iconSize/2, -self.iconSize/2)
 		# path = QPainterPath()
-		# path.arcMoveTo(0, 0, self.size, self.size, self.start)
-		# path.arcTo(0, 0, self.size, self.size, self.start, self.angle)
-		# path.translate(-self.size / 2, -self.size / 2)
+		# path.arcMoveTo(0, 0, self.iconSize, self.iconSize, self.start)
+		# path.arcTo(0, 0, self.iconSize, self.iconSize, self.start, self.angle)
+		# path.translate(-self.iconSize / 2, -self.iconSize / 2)
 		#
 		radialPath.setPath(path)
 		#
 		# # set pen to red with width of 5
 		radialPath.setPen(Qt.NoPen)
 		color = QColor(Qt.black)
-		color.setAlpha(200)
+		# color.setAlpha(200)
 		radialPath.setBrush(color)
 		radialPath.setZValue(self.zValue() - 100)
-		# self.resizable = False
+		radialPath.setParentItem(self)
 
 		self.path = radialPath
-		self.displayGeometry = Geometry(self, size=Size(130, 60), absolute=True)
+		self.displayGeometry = Geometry(self, size=Size(100, 100), absolute=True)
 		self.menuGeometry = Geometry(self, size=Size(100, 100), position=Position(0, 0), absolute=True)
-		if not isinstance(self.parent, RadialMenuItem):
+		self.__hold = True
+		if self.isRoot:
 			self.hideTimer = QTimer()
 			self.hideTimer.setSingleShot(True)
 			self.hideTimer.timeout.connect(lambda x=self: x.collapse(hide=True))
@@ -204,10 +209,24 @@ class RadialMenuItem(Panel):
 			self.path.hide()
 			self.label.hide()
 			self.hoverArea = HoverArea(self, enterAction=self.show, exitAction=None)
+			self.geometry = self.displayGeometry
+			self.updateFromGeometry()
+			ValueDirectory.newKeys.connectSlot(self.refreshRoot)
+			self.refreshRoot()
+			self.collapse()
+			self.hide()
 		else:
 			self.geometry = self.displayGeometry
+			self.hide()
 
 	# self.title.hide()
+
+	@property
+	def isRoot(self) -> bool:
+		return self.root is self
+
+	def shape(self) -> QPainterPath:
+		return self.path.shape()
 
 	def buildSubItems(self):
 		for key, item in self.subItems.items():
@@ -215,10 +234,20 @@ class RadialMenuItem(Panel):
 			if isinstance(item, CategoryDict):
 				subkwargs['subItems'] = item
 				self.lookupTable[key] = RadialMenuItem(**subkwargs)
+			elif key == 'sources':
+				self.lookupTable['sources'] = RadialMenuItem(parent=self, key="sources", subItems=item)
 			else:
 				subkwargs['value'] = item
-				self.lookupTable[key] = LockRealtimeDisplay(**subkwargs)
+				self.lookupTable[key] = LockedRealtime(**subkwargs)
 				self.lookupTable[key].hide()
+
+	def refreshRoot(self):
+		if self.isRoot:
+			ValueDirectory.categories.refresh()
+			self.subItems = ValueDirectory.categories
+		# self.buildSubItems()
+		# showAfter = self.showingself.showing
+		# self.collapse()
 
 	def hideChildren(self, exclude=None):
 		for item in self.childItems():
@@ -241,14 +270,22 @@ class RadialMenuItem(Panel):
 		self.backArrow.hide()
 
 	def hide(self):
+		if self.isUnderMouse():
+			return
 		super(RadialMenuItem, self).hide()
 
 	def show(self):
+		if self.isRoot:
+			# self.ppix = QPixmap(self.scene().sceneRect().size().toSize())
+			# self.ppix.fill(Qt.red)
+			self.ppix = self.scene().views()[0].grab(self.scene().sceneRect().toRect())
 		self.setZValue(1000)
 		super(RadialMenuItem, self).show()
 
 	def setItems(self):
-		if hasattr(self, 'plus'):
+		self.setFocus(Qt.MouseFocusReason)
+		self.backgroundImage.setPixmap(self.scene().views()[0].grab(self.scene().sceneRect().toRect()))
+		if self.isRoot:
 			self.plus.hide()
 			self.plus.setEnabled(False)
 			self.label.hide()
@@ -264,12 +301,16 @@ class RadialMenuItem(Panel):
 		spacing = 0.7
 		layer = 1
 		self.showing = True
-		# arcLength = 2 * math.pi * self.size * layer / 4 / items
+		# arcLength = 2 * math.pi * self.iconSize * layer / 4 / items
 		I = 0
-		self.subItems.refresh()
+		if isinstance(self.subItems, CategoryDict):
+			self.subItems.refresh()
+		elif isinstance(self.subItems, dict):
+			for item in self.subItems.values():
+				item.refresh()
 		quantity = len(self.subItems.keys())
 
-		startAngle = 90 / max(quantity - 1, 1) / 2
+		startAngle = 90/max(quantity - 1, 1)/2
 
 		items = [i for i in self.childItems() if isinstance(i, RadialMenuItem)]
 		previousItem = None
@@ -280,13 +321,13 @@ class RadialMenuItem(Panel):
 				abandon.setParentItem(None)
 
 		# if 3 > quantity or quantity > 5:
-		# 	# first check to see if there are any values that contain more values
-		# 	values = [(key, value) for key, value in self.subItems.items() if isinstance(value, CategoryDict)]
+		# 	# first check to see if there are any _values that contain more _values
+		# 	_values = [(key, value) for key, value in self.subItems.items() if isinstance(value, CategoryDict)]
 		#
-		# 	if len(values) > 0:
+		# 	if len(_values) > 0:
 		# 		# find the smallest subcategory
 		#
-		# 		smallest = min(values, key=lambda x: len(x[1].keys()))
+		# 		smallest = min(_values, key=lambda x: len(x[1].keys()))
 		# 		if len(smallest[1].keys()) < 4:
 		# 			items = dict(self.subItems)
 		# 			toFlatten = dict(items.pop(smallest[0]))
@@ -315,18 +356,20 @@ class RadialMenuItem(Panel):
 		# items.sort(key=lambda x: levenshtein(str(x[0]), str(self.key)))
 
 		# sort items based on frequency of use and key similarity
-		items.sort(key=lambda x: (len(x[1]), -levenshtein(str(x[0]), str(self.key))), reverse=True)
+		items.sort(key=lambda x: (len(x) if isinstance(x, Iterable) else x[1], levenshtein(str(x[0]), str(self.key))), reverse=True)
 
-		size = self.size * spacing
+		size = self.iconSize*spacing
 
 		for i, (key, value) in enumerate(items):
 			self.scene().update()
 			if key not in self.lookupTable:
 				if isinstance(value, CategoryDict):
-					kwargs = {'parent': self, 'key': key, 'subItems': value, 'root': self.root}
+					kwargs = {'parent': self, 'key': key, 'subItems': value}
 					self.lookupTable[key] = RadialMenuItem(**kwargs)
+				elif key == 'sources':
+					self.lookupTable['sources'] = RadialMenuItem(parent=self, key="sources", subItems=value)
 				else:
-					self.lookupTable[key] = LockRealtimeDisplay(parent=self, key=key, value=value)
+					self.lookupTable[key] = LockedRealtime(parent=self, value=value)
 
 			item = self.lookupTable[key]
 
@@ -335,7 +378,6 @@ class RadialMenuItem(Panel):
 
 			arcLength = 2 * math.pi * size * layer / 4
 			itemSize = 100
-			itemsForThisLayer = arcLength // itemSize
 			# if I > itemsForThisLayer:
 			# 	I = 0
 			# 	layer += 1
@@ -367,13 +409,13 @@ class RadialMenuItem(Panel):
 			# 	layer += 1
 			# angle += startAngle
 			# angle += self.start
-			x = math.cos(math.radians(angle + 180 if angle else 0)) * size * layer
-			y = math.sin(math.radians(angle + 180 if angle else 0)) * size * layer
+			x = math.cos(math.radians(angle + 180 if angle else 0))*size*layer
+			y = math.sin(math.radians(angle + 180 if angle else 0))*size*layer
 
 			# add another layer if there are too many items
 
-			# x += self.size / 2
-			# y += self.size / 2
+			# x += self.iconSize / 2
+			# y += self.iconSize / 2
 			if hasattr(item, 'displayGeometry'):
 				item.geometry = item.displayGeometry
 			item.geometry.position.x.setAbsolute(x)
@@ -394,14 +436,29 @@ class RadialMenuItem(Panel):
 		# size *= layer * 2
 		# size += itemSize * math.pi
 		path = QPainterPath()
-		path.addEllipse(QPoint(0, 0), size * layer + 170, size * layer + 170)
+		scenePath = QPainterPath()
+		self.__boundingRect = QRectF(0, 0, size*layer + 170, size*layer + 170)
+		scenePath.addRect(self.__boundingRect)
+		path.addEllipse(QPoint(0, 0), size*layer + 170, size*layer + 170)
+		path = scenePath.intersected(path)
 		# path.arcMoveTo(0, 0, size, size, self.start)
 		# path.arcTo(0, 0, size, size, self.start, self.angle)
 		# path.lineTo(0, 0)
 		# path.closeSubpath()
 		# path.translate(-size / 2, -size / 2)
 		self.path.setPath(path)
+		self.prepareGeometryChange()
 		self.path.show()
+		self.path.setFlag(self.ItemClipsChildrenToShape, True)
+		# self.setFlag(self.ItemHasNoContents, True)
+
+		# self.setFlag(self.ItemHasNoContents, False)
+		effect = QGraphicsBlurEffect()
+		effect.setBlurRadius(30)
+		self.backgroundImage.setGraphicsEffect(effect)
+		self.backgroundImage.setPos(0, 0)
+		self.backgroundImage.show()
+		self.backgroundImage.setOpacity(0.6)
 		self.scene().update()
 
 	def setZValue(self, value: int):
@@ -411,16 +468,24 @@ class RadialMenuItem(Panel):
 			value = self.parent.zValue() + 1
 		super(RadialMenuItem, self).setZValue(value)
 
-	def unsetItems(self, exclude=None):
+	def containingRect(self):
+		return self.rect()
 
+	def unsetItems(self, exclude=None):
 		path = QPainterPath()
 		path.addEllipse(QPoint(0, 0), 200, 200)
+		self.__bounidngRect = QRect(0, 0, 200, 200)
+		scenePath = QPainterPath()
+		scenePath.addRect(self.__boundingRect)
+		path = scenePath.intersected(path)
 		self.path.setPath(path)
 
 		self.showing = False
 		self.showLabels()
-		items = [i for i in self.childItems() if isinstance(i, (RadialMenuItem, LockRealtimeDisplay)) and i != exclude]
-		for item in items:
+		# items = [i for i in self.childItems() if isinstance(i, (RadialMenuItem, LockedRealtime)) and i != exclude]
+		for item in self.childPanels:
+			if item is exclude:
+				continue
 			if isinstance(item, RadialMenuItem):
 				item.unsetItems(exclude)
 			item.hide()
@@ -429,9 +494,13 @@ class RadialMenuItem(Panel):
 			self.plus.show()
 			self.label.setEnabled(True)
 			self.label.hide()
+		# self.backgroundImage.hide()
+		self.path.hide()
 		self.scene().update()
 
 	def collapse(self, hide: bool = False):
+		self.scene().clearSelection()
+		self.__boundingRect = self.containingRect()
 		if hasattr(self, 'plus'):
 			self.unsetItems()
 			if hide:
@@ -442,30 +511,21 @@ class RadialMenuItem(Panel):
 	def collapseAndHide(self):
 		self.collapse(hide=True)
 
-	def startHideTimer(self, interval: int = 1):
-		if hasattr(self, 'plus'):
-			self.hideTimer.setInterval(interval * 1000)
-			self.hideTimer.start()
-
-		else:
-			self.parent.startHideTimer(interval)
+	def startHideTimer(self, interval: Union[int, float] = None):
+		if interval is not None:
+			self.root.hideTimer.setInterval(int(interval*1000))
+		self.root.hideTimer.start()
 
 	def stopHideTimer(self):
-		if hasattr(self, 'plus'):
-			self.hideTimer.stop()
-		else:
-			self.parent.stopHideTimer()
+		self.root.hideTimer.stop()
 
 	def setRect(self, rect: QRectF):
 		super(RadialMenuItem, self).setRect(rect)
-		self.update()
 
-	def update(self):
-		super(RadialMenuItem, self).update()
-		if hasattr(self, 'backArrow'):
-			self.backArrow.update()
-		if hasattr(self, 'hoverArea'):
-			self.hoverArea.update()
+	def boundingRect(self):
+		if self.showing:
+			return self.__boundingRect
+		return super(RadialMenuItem, self).boundingRect()
 
 	# def mouseMoveEvent(self, mouseEvent):
 	# 	print(f'{angleBetweenPoints(mouseEvent.scenePos(), degrees=True)}\r', end='')
@@ -474,13 +534,15 @@ class RadialMenuItem(Panel):
 	# if self.subItems is None:
 	# 	pass
 	def mousePressEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
-		# super(RadialMenuItem, self).mousePressEvent(mouseEvent)
-		self.root.setFocus(Qt.MouseFocusReason)
-		self.startHideTimer(7)
+		# if self.showing:
+		mouseEvent.accept()
 
-	def mouseMoveEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
-		# super(RadialMenuItem, self).mouseMoveEvent(mouseEvent)
-		self.startHideTimer(7)
+	# super(RadialMenuItem, self).mousePressEvent(mouseEvent)
+
+	# self.root.setFocus(Qt.MouseFocusReason)
+
+	def mouseMoveEvent(self, event):
+		event.ignore()
 
 	def mouseReleaseEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
 		if self.subItems:
@@ -490,19 +552,47 @@ class RadialMenuItem(Panel):
 					self.geometry = self.menuGeometry
 					self.updateFromGeometry()
 				self.setItems()
-			else:
+			elif self.displayGeometry.rect().contains(mouseEvent.pos()):
 				self.parent.show()
 				self.unsetItems()
 				if isinstance(self.parent, RadialMenuItem):
 					self.parent.setItems()
+		self.scene().clearSelection()
+
+	def hoverEnterEvent(self, event: QGraphicsSceneHoverEvent):
+		if self.showing:
+			event.accept()
+		self.stopHideTimer()
+		super(RadialMenuItem, self).hoverEnterEvent(event)
+
+	def hoverMoveEvent(self, event: QGraphicsSceneHoverEvent) -> None:
+		self.startHideTimer(15)
+
+	def hoverLeaveEvent(self, event: QGraphicsSceneHoverEvent):
+		if self.boundingRect().contains(event.pos()):
+			event.ignore()
+			return
+		if self.showing:
+			print('hiding in 200ms')
+			if self.root.childHasFocus():
+				self.startHideTimer(5)
+			else:
+				self.startHideTimer(0.2)
+		super(RadialMenuItem, self).hoverLeaveEvent(event)
 
 	def focusInEvent(self, event: QFocusEvent) -> None:
-		super().focusInEvent(event)
+		super(RadialMenuItem, self).focusInEvent(event)
 
 	def focusOutEvent(self, event: QFocusEvent) -> None:
-		if not self.root.hasFocus():
+		print(f'focus out: {self.label.text}')
+		if not self.root.childHasFocus():
 			self.root.collapse()
-		super().focusOutEvent(event)
+
+	def hasFocus(self):
+		return self.scene().focusItem() is self or self.focusItem() is self
+
+	def rootHasFocus(self):
+		return self.root.childHasFocus() or self.root.hasFocus()
 
 
 class APIRect(ScrollRect):
@@ -512,7 +602,7 @@ class APIRect(ScrollRect):
 		super(APIRect, self).__init__(*args, **kwargs)
 		self.clickHoldTimer = mouseHoldTimer(self.startPickup)
 		# self.insertBlanks()
-		# from src.merger import endpoints
+		# from src.merger import observations
 		self.grid.overflow = [False, True]
 
 		# 	EndpointRect(self.scene().base, endpoint=endpoint)
@@ -529,9 +619,9 @@ class APIRect(ScrollRect):
 		# # a = endpoint.containerValue('temperature')
 		# endpoint.hourly.categories.subKeys()
 		# endpoint.realtime.updateHandler.newKey.connect(self.insertSubscription)
-		# for item in endpoint.realtime.values():
+		# for item in endpoint.realtime._values():
 		# 	self.insertSubscription(item)
-		# if not endpoints.values():
+		# if not observations._values():
 		# 	self.insertBlanks()
 		self.show()
 
@@ -706,164 +796,3 @@ class PanelDrawer(Panel):
 			self.scrollRect.moveBy(event.delta() * 0.5, 0)
 		else:
 			self.scrollRect.moveBy(0, event.delta() * 0.5)
-
-
-class LockRealtimeDisplay(Label):
-	savable = False
-
-	def __init__(self, value: MergedValue = None, *args, **kwargs):
-		self._valueLink = None
-		self._parent = kwargs['parent']
-		kwargs['geometry'] = {'absolute': True}
-		super().__init__(*args, **kwargs)
-		self.resizeHandles.setEnabled(False)
-		self.clickHoldTimer = mouseHoldTimer(self.startPickup)
-		# kwargs['gridItem'] = GridItem(surface=self, width=1, height=1)
-
-		self.title.show()
-		self.title.updateFromGeometry()
-		# self.title.moveToTop()
-
-		self.setLocked(False)
-		self.setZValue(self.parent.zValue() + 100)
-
-		if value is not None and value.value is not None:
-			self.valueLink = value
-			self.title.text = self.titleText
-
-	def startPickup(self):
-		item = self
-		stateString = str(dumps(item.state, cls=JsonEncoder))
-		info = QMimeData()
-		if hasattr(item, 'text'):
-			info.setText(str(item.text))
-		else:
-			info.setText(str(item))
-		info.setData('application/panel-valueLink', QByteArray(stateString.encode('utf-8')))
-		drag = QDrag(self.scene().views()[0].parent())
-		drag.setPixmap(item.pix)
-		drag.setHotSpot(item.rect().center().toPoint())
-		# drag.setParent(child)
-		drag.setMimeData(info)
-		self.parent.collapse()
-		self.parent.startHideTimer(.5)
-		status = drag.exec_()
-
-	def show(self):
-		self.title.updateFromGeometry()
-		super().show()
-
-	def hoverEnterEvent(self, event):
-		self.setHighlighted(True)
-
-	def hoverLeaveEvent(self, event):
-		self.setHighlighted(False)
-
-	def mousePressEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
-		self.clickHoldTimer.start(mouseEvent.scenePos())
-
-	# super().mousePressEvent(mouseEvent)
-
-	def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent):
-		self.clickHoldTimer.updatePosition(event.scenePos())
-		super(LockRealtimeDisplay, self).mouseMoveEvent(event)
-
-	def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent):
-		self.clickHoldTimer.stop()
-		super(LockRealtimeDisplay, self).mouseReleaseEvent(event)
-
-	def onValueChanged(self, value):
-		if hasattr(self.value, 'title'):
-			text = self.titleText
-			if self.title.text != text:
-				self.title.text = text
-				self.title.updateSizePosition()
-				self.title.setLocked(True)
-				self.title.show()
-		if hasattr(self._text, 'indoor'):
-			if self.value.indoor:
-				self.indoorIcon.show()
-				self.indoorIcon.update()
-			else:
-				self.indoorIcon.hide()
-		self.update()
-
-	@property
-	def text(self):
-		return str(self._valueLink)
-
-	@text.setter
-	def text(self, value):
-		self.update()
-
-	@cached_property
-	def title(self):
-		title = Label(parent=self, text='Realtime Display', geometry={'size': Size(1, 0.2), 'position': Position(0, 0), 'absolute': False})
-		title.setParentItem(self)
-		title.setAlignment(Alignment.Center)
-		title.updateSizePosition()
-		# rect = self.rect()
-		# rect.setHeight(rect.height() * 0.2)
-		# title.setRect(rect)
-		# title.sizeRatio = (0, 0.3)
-		# title.positionRatio = (0, 0)
-		# title.setPos(self.pos())
-		# self.setLocked(True)
-		title.setZValue(self.zValue() + 0.1)
-		return title
-
-	@property
-	def titleText(self):
-		if hasattr(self.value, 'title'):
-			text = self.value.title
-		if isinstance(self.value, MergedValue):
-			text = self.value.default.value.title
-		if isinstance(text, Callable):
-			text = text()
-		return text
-
-	@property
-	def valueLink(self):
-		return self._valueLink
-
-	@valueLink.setter
-	def valueLink(self, value):
-		self._valueLink = value
-		if self._valueLink.default.value is not None:
-			self._valueLink.default.value.valueChanged.connect(self.onValueChanged)
-		self.onValueChanged(value)
-
-	@property
-	def value(self):
-		return self._valueLink
-
-	@Slot()
-	def updateSlot(self, value):
-		self.text = value
-
-	# @Slot('parentResized')
-	# def parentResized(self, arg):
-	#
-	# 	self.setRect(self.gridItem.rect())
-	# 	self.setPos(self.gridItem.pos())
-	def setZValue(self, value: int):
-		self.parent.zValue() + 10
-		super().setZValue(value)
-
-	def setRect(self, rect):
-		super(LockRealtimeDisplay, self).setRect(rect)
-		if hasattr(self, 'indoorIcon'):
-			self.indoorIcon.update()
-		self.title.updateSizePosition()
-
-	@property
-	def state(self):
-		state = {
-			'class':     'Realtime',
-			'text':      self.text,
-			'valueLink': self.valueLink.toDict(),
-		}
-		return state
-
-	def wheelEvent(self, event: QGraphicsSceneWheelEvent) -> None:
-		event.ignore()
