@@ -1,68 +1,51 @@
-import sys
-from datetime import datetime
-
-import qasync
-from functools import partial
-
+from datetime import datetime, timedelta
 import asyncio
 
 from bleak import BleakScanner
 import WeatherUnits as wu
-from qasync import QApplication
 
-from src.api import API, URLs
-from src.observations import ObservationRealtime
+from src.plugins.plugin import ScheduledEvent
+from src.plugins.web.rest import REST
+from src import config
+
+# from src.plugins import Plugins
+
+__all__ = ["Govee"]
 
 
-class IndoorObservation(ObservationRealtime):
-	subscriptionChannel = 'Govee Indoor'
-	category = 'environment'
-	_indoorOutdoor = True
-	_translator = {
+class Govee(REST, realtime=True, logged=True):
+	name = 'Govee'
+	translator = {
 		'time.time':                      {'type': 'datetime', 'sourceUnit': 'epoch', 'title': 'Time', 'sourceKey': 'time'},
 		'indoor.temperature.temperature': {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Temperature', 'sourceKey': 'temperature'},
+		'indoor.temperature.dewpoint':    {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Dew Point', 'sourceKey': 'dewPoint'},
+		'indoor.temperature.heatIndex':   {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Heat Index', 'sourceKey': 'heatIndex'},
 		'indoor.humidity.humidity':       {'type': 'humidity', 'sourceUnit': '%', 'title': 'Humidity', 'sourceKey': 'humidity'},
 		'indoor.device.battery':          {'type': 'battery', 'sourceUnit': '%%', 'title': 'Battery', 'sourceKey': 'battery'},
+		'@timezone':                      {'default': {'value': config.tz}}
 	}
 
-
-class BLEServices(URLs, realtime=False, forecast=False):
-	base = ''
-	device = '0000ec88-0000-1000-8000-00805f9b34fb'
-	realtime = device
-
-
-class GoveeH5101(API):
-	_urls = BLEServices()
-	_realtime: IndoorObservation
-	name = 'Govee'
-
 	def __init__(self):
-		from src.dispatcher import endpoints
-		super().__init__(mainEndpoint=endpoints)
+		super().__init__()
 		self.__enabled = False
-		self._realtime = IndoorObservation(self)
-		self._realtime._api = self
-		self.endpoints.insert(self._realtime)
 		self.name = "GoveeH5101BLE"
 		self.scanner = BleakScanner()
 		self.scanner.register_detection_callback(self.dataParse)
-		self.scanner._service_uuids = ['0000ec88-0000-1000-8000-00805f9b34fb']
+		self.scanner._service_uuids = [self.getConfig()['device']]
 		self.temperature = wu.Temperature.Celsius(20)
 		self.humidity = wu.Humidity(50)
 		self.battery = wu.Percentage(50)
+
+	def start(self):
+		asyncio.create_task(self.run())
+		self.historicalTimer = ScheduledEvent(timedelta(minutes=1), self.logValues)
+		self.historicalTimer.start(False)
 
 	async def run(self):
 		await self.scanner.start()
 		while True:
 			await asyncio.sleep(0.1)
 		await self.scanner.stop()
-
-	async def enabled(self, value):
-		if value:
-			await self.run()
-		else:
-			self.scanner.clear()
 
 	def dataParse(self, device, temperatureHumidityData):
 		if "GVH" in str(temperatureHumidityData.local_name) and temperatureHumidityData.manufacturer_data:
@@ -83,6 +66,4 @@ class GoveeH5101(API):
 		self.realtime.update(data)
 
 
-async def initializeAsyncPlugin():
-	t = GoveeH5101()
-	await t.run()
+__plugin__ = Govee

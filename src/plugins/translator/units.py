@@ -50,6 +50,7 @@ unitDict: Dict[str, Union[Type[wu.Measurement], Type[bool], Dict[str, Union[Type
 	'uvi':              wu.others.light.UVI,
 	'strike':           wu.others.Strikes,
 	'timezone':         pytz.timezone,
+	'datetime':         datetime,
 	'epoch':            datetime.fromtimestamp,
 	'rssi':             wu.RSSI,
 	'ppt':              wu.derived.PartsPer.Thousand,
