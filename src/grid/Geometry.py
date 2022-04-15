@@ -131,6 +131,7 @@ class Geometry:
 					size = surface.rect().size()
 					if prod(size.toTuple()) == 0:
 						size = (100, 100)
+						absolute = True
 				size = Size(size, absolute=absolute)
 			elif isinstance(size, GridItemSize):
 				size = size
@@ -186,6 +187,42 @@ class Geometry:
 	# self.signals.moved.connect(self.repositionSurface)
 	# self.signals.resized.connect(self.resizeSurface)
 
+	@classmethod
+	def validate(cls, item: dict) -> bool:
+		"""
+		Validates the geometry item.
+
+		:param item: Geometry item to validate
+		:type item: dict
+		:return: True if the geometry item is valid, False otherwise
+		:rtype: bool
+		"""
+
+		size = False
+		position = False
+		if 'size' in item:
+			size = True
+		else:
+			size = 'width' in item and 'height' in item
+		if 'position' in item:
+			position = True
+		else:
+			position = 'x' in item and 'y' in item
+		return size and position
+
+	@classmethod
+	def representer(cls, dumper, data):
+		value = {
+			'width':  data.size.width,
+			'height': data.size.height,
+			'x':      data.position.x,
+			'y':      data.position.y
+		}
+		# value =
+		if data.relativeWidth == 1 and data.relativeHeight == 1 and data.relativeX == 0 and data.relativeY == 0:
+			return dumper.represent_dict({'fillParent': True})
+		return dumper.represent_dict({k: str(v) for k, v in value.items()})
+
 	@property
 	def surface(self):
 		return self._surface
@@ -233,7 +270,7 @@ class Geometry:
 
 	@relative.setter
 	def relative(self, value):
-		size = self.surface.parent.rect().size().toTuple()
+		size = self.surface.parent.size().toTuple()
 		if value:
 			sizeValues = [v.value if v.relative else v.value / i for i, v in zip(size, self.size)]
 			positionValues = [v.value if v.relative else v.value / i for i, v in zip(size, self.position)]
@@ -249,7 +286,7 @@ class Geometry:
 		"""
 		Toggles relative/absolute positioning.
 		"""
-		size = self.surface.parent.rect().size().toTuple()
+		size = self.surface.parent.size().toTuple()
 		if 'width' in T:
 			self.size.width.toggleRelative(size[0])
 		if 'height' in T:
@@ -285,8 +322,9 @@ class Geometry:
 			if self.position.relative:
 				self.surface.setPos(self.posFromParentPos(parentRect))
 		else:
-			self.surface.setRect(self.absoluteRect())
-			self.surface.setPos(self.absolutePosition().asQPointF())
+			if self.surface.parent:
+				self.surface.setRect(self.absoluteRect())
+				self.surface.setPos(self.absolutePosition().asQPointF())
 
 	def posFromParentPos(self, parentRect: QRectF):
 		if self.position.x.absolute:
@@ -339,7 +377,7 @@ class Geometry:
 
 	@absolute.setter
 	def absolute(self, value):
-		size = self.surface.parent.rect().size().toTuple()
+		size = self.surface.parent.size().toTuple()
 		if value:
 			sizeValues = [v.value if v.absolute else v.value * i for i, v in zip(size, self.size)]
 			positionValues = [v.value if v.absolute else v.value * i for i, v in zip(size, self.position)]
@@ -369,7 +407,7 @@ class Geometry:
 	def absoluteWidth(self) -> Size.Width:
 		if self.size.width.absolute:
 			return self.width
-		return self.width.toAbsolute(self.surface.parent.rect().width())
+		return self.width.toAbsolute(self.surface.parent.size().width())
 
 	@absoluteWidth.setter
 	def absoluteWidth(self, value):
@@ -379,7 +417,7 @@ class Geometry:
 	def relativeWidth(self) -> Size.Width:
 		if self.size.width.relative:
 			return self.width
-		return self.width.toRelative(self.surface.parent.rect().width())
+		return self.width.toRelative(self.surface.parent.size().width())
 
 	@relativeWidth.setter
 	def relativeWidth(self, value):
@@ -405,7 +443,7 @@ class Geometry:
 	def absoluteHeight(self) -> Size.Height:
 		if self.size.height.absolute:
 			return self.height
-		return self.height.toAbsolute(self.surface.parent.rect().height())
+		return self.height.toAbsolute(self.surface.parent.size().height())
 
 	@absoluteHeight.setter
 	def absoluteHeight(self, value):
@@ -415,7 +453,7 @@ class Geometry:
 	def relativeHeight(self) -> Size.Height:
 		if self.size.height.relative:
 			return self.height
-		return self.height.toRelative(self.surface.parent.rect().height())
+		return self.height.toRelative(self.surface.parent.size().height())
 
 	@relativeHeight.setter
 	def relativeHeight(self, value):
@@ -441,7 +479,7 @@ class Geometry:
 			return self.gridItem.x
 		if self.position.x.absolute:
 			return self.x
-		return self.x.toAbsolute(self.surface.parent.rect().width())
+		return self.x.toAbsolute(self.surface.parent.size().width())
 
 	@absoluteX.setter
 	def absoluteX(self, value):
@@ -451,7 +489,7 @@ class Geometry:
 	def relativeX(self) -> Position.X:
 		if self.position.x.relative:
 			return self.x
-		return self.x.toRelative(self.surface.parent.rect().width())
+		return self.x.toRelative(self.surface.parent.size().width())
 
 	@relativeX.setter
 	def relativeX(self, value):
@@ -477,7 +515,7 @@ class Geometry:
 			return self.gridItem.y
 		if self.position.y.absolute:
 			return self.y
-		return self.y.toAbsolute(self.surface.parent.rect().height())
+		return self.y.toAbsolute(self.surface.parent.size().height())
 
 	@absoluteY.setter
 	def absoluteY(self, value):
@@ -487,7 +525,7 @@ class Geometry:
 	def relativeY(self) -> Position.Y:
 		if self.position.y.relative:
 			return self.y
-		return self.y.toRelative(self.surface.parent.rect().height())
+		return self.y.toRelative(self.surface.parent.size().height())
 
 	@relativeY.setter
 	def relativeY(self, value):
@@ -521,11 +559,11 @@ class Geometry:
 			pass
 
 		if self.size.width.relative:
-			width = width / self.surface.parent.rect().width()
+			width = width/self.surface.parent.size().width()
 		self.size.width = width
 
 		if self.size.height.relative:
-			height = height / self.surface.parent.rect().height()
+			height = height/self.surface.parent.size().height()
 		self.size.height = height
 
 	def absoluteRect(self, parentRect: QRectF = None):
@@ -537,8 +575,6 @@ class Geometry:
 	def setGeometry(self, rect: QRectF):
 		p = rect.topLeft()
 		rect.moveTo(0, 0)
-		# self.surface.setTransform(self.rectToTransform(rect))
-		# self.surface: _Panel
 		self.setRect(rect)
 		self.setPos(p)
 		self.updateSurface()
@@ -583,11 +619,11 @@ class Geometry:
 			pass
 
 		if self.position.x.relative:
-			x = x / self.surface.parent.rect().width()
+			x = x/self.surface.parent.size().width()
 		self.position.x = x
 
 		if self.position.y.relative:
-			y = y / self.surface.parent.rect().height()
+			y = y/self.surface.parent.size().height()
 		self.position.y = y
 
 	def toTransform(self) -> QTransform:
@@ -600,8 +636,8 @@ class Geometry:
 		sT = self.surface.sceneTransform()
 		currentRect = self.surface.rect()
 		transform = QTransform()
-		transform.translate(sT.dx() - rect.x(), sT.dy() - rect.y())
 		transform.scale(rect.width() / currentRect.width(), rect.height() / currentRect.height())
+		# transform.translate(sT.dx() - rect.x(), sT.dy() - rect.y())
 		return transform
 
 	def absolutePosition(self) -> Position:
@@ -666,6 +702,9 @@ class Geometry:
 			di = {**size, **pos}
 		if self.onGrid:
 			di['gridItem'] = self.gridItem
+		for k, v in di.items():
+			if isinstance(v, float):
+				di[k] = round(v, 4)
 		return di
 
 	def asAbsoluteGeometry(self):
@@ -687,6 +726,14 @@ class Geometry:
 		:rtype: Geometry
 		"""
 		return self.__class__(surface=self.surface, size=self.absoluteSize(), position=self.absolutePosition(), absolute=True, onGrid=self.onGrid, gridItem=self.gridItem)
+
+	def absoluteGeometrySize(self) -> QSizeF:
+		if self.surface.parent is not None and hasattr(self.surface.parent, 'geometry') and hasattr(self.surface.parent.geometry, 'absoluteGeometrySize'):
+			parentGeometrySize = self.surface.parent.geometry.absoluteGeometrySize()
+			if self.size.relative:
+				return QSizeF(parentGeometrySize.width()*self.size.width, parentGeometrySize.height()*self.size.height)
+			else:
+				return QSizeF(self.size.width, self.size.height)
 
 
 class StaticGeometry(Geometry):
