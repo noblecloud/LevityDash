@@ -1,13 +1,12 @@
+import re
+
 from src import logging
-from copy import copy, deepcopy
-from datetime import datetime
 from functools import cached_property
-from typing import Any, Callable, Iterable, Optional, Union
+from typing import Any, Hashable, Iterable, Optional, Union
 
-from PySide2.QtCore import QObject, Signal, Slot
-from WeatherUnits import Measurement
+from PySide2.QtCore import Slot
 
-from src.utils import clearCacheAttr, removeSimilar, subsequenceCheck
+from src.utils import clearCacheAttr, removeSimilar, subsequenceCheck, TranslatorProperty
 
 log = logging.getLogger(__name__)
 
@@ -20,10 +19,14 @@ class UnitMetaData(dict):
 		self._reference = reference
 		value = {}
 		for i in range(len(key)):
-			x = reference.getExact(key[:i + 1])
-			if x is not None:
-				if all(isinstance(k, str) for k in x):
-					value.update(x)
+			try:
+				x = reference.getExact(key[:i + 1])
+				if x is not None:
+					if all(isinstance(k, str) for k in x):
+						value.update(x)
+			except KeyError:
+				pass
+		value = self.findProperties(reference, value)
 		super(UnitMetaData, self).__init__(value)
 		self['key'] = key
 
@@ -36,9 +39,46 @@ class UnitMetaData(dict):
 	def __hash__(self):
 		return hash(self['sourceKey'])
 
+	def __findSimilar(self, key: 'CategoryItem'):
+		from plugins.translator import Translator
+		return Translator.getFromAll(key, None)
+
+	def findProperties(self, source: 'Translator', data: dict):
+		if isinstance(data, UnitMetaData):
+			data = dict(data)
+		if isinstance(data, dict):
+			alias = data.pop('alias', None) or data.pop('aliases', None)
+			for key, value in data.items():
+				data[key] = self.findProperties(source, value)
+			if alias is not None:
+				data['alias'] = source.aliases.get(alias, {})
+		elif isinstance(data, CategoryItem):
+			pass
+		elif isinstance(data, (tuple, list)):
+			data = [self.findProperties(source, i) for i in data]
+		elif isinstance(data, str):
+			if data.startswith('@'):
+				prop = source.properties.get(data, None)
+				if prop is None:
+					raise ValueNotFound(f'{data} not found')
+				data = TranslatorProperty(source, prop)
+		# elif data in self.units:
+		# 	data = self.units[data]
+		return data
+
 	@property
 	def title(self):
-		return self.get('title', None)
+		value = self.get('title', None)
+		if value is None:
+			others = self.__findSimilar(self['key'])
+			if others is not None:
+				titles = [x.get('title', None) for x in others]
+				titles = [x for x in titles if x is not None]
+				mostCommon = max(titles, key=titles.count)
+				if mostCommon is not None:
+					value = mostCommon
+				return value
+		return value
 
 	@property
 	def description(self):
@@ -136,8 +176,9 @@ class UnitMetaData(dict):
 class Category(str):
 	super: 'Category'
 	sub: set['Category']
+	source: Optional[Any]
 
-	def __init__(self, value: str, super: Optional['Category'] = None, sub: Optional['Category'] = None):
+	def __init__(self, value: str, super: Optional['Category'] = None, sub: Optional['Category'] = None, source: Any = None):
 		if '.' in value:
 			split = value.index('.')
 			value, sub = value[:split], value[split + 1:]
@@ -145,6 +186,7 @@ class Category(str):
 		super().__init__(value)
 		self.super = super
 		self.sub = sub
+		self.source = source
 
 	def __eq__(self, other):
 		if str.__eq__(other, '*') or str.__eq__(self, '*'):
@@ -187,29 +229,66 @@ class Category(str):
 
 class CategoryItem(tuple):
 	__separator: str = '.'
+	__source: Optional[Hashable]
+	__existing__ = {}
 
-	def __new__(cls, value: Union[tuple, list, str], separator: Optional[str] = None):
+	def __new__(cls, *values: Union[tuple, list, str], separator: Optional[str] = None, source: Any = None, **kwargs):
 		if separator is not None:
 			cls.__separator = separator
-		if isinstance(value, str):
-			value = value.split(cls.__separator)
-		if value is None or len(value) == 0:
-			value = ('')
-		# while value and not value[0] and value is not root:
-		# 	value.pop(0)
-		# while value and not value[-1]:
-		# 	value.pop(-1)
-		# if not value:
-		# 	raise ValueError('CategoryItem must not be empty')
-		return super(CategoryItem, cls).__new__(cls, value)
+		valueArray = []
+		for value in values:
+			if value is None:
+				continue
+			elif isinstance(value, str):
+				valueArray.extend(i.group() for i in re.finditer(r"[\w|*]+", value, re.MULTILINE))
+			else:
+				valueArray.extend(value)
+		source = tuple(source) if isinstance(source, list) else (source,)
+		id = hash((*tuple(valueArray), *source))
+		if id in cls.__existing__:
+			return cls.__existing__[id]
+		kwargs['id'] = id
+		value = super(CategoryItem, cls).__new__(cls, valueArray, **kwargs)
+		cls.__existing__[id] = value
+		return value
+
+	def __init__(self, *values: Union[tuple, list, str], separator: Optional[str] = None, source: Any = None, **kwargs):
+		self.source = source
+		self.__id = kwargs.pop('id', None)
+		self.__hash = None
+
+	@property
+	def source(self) -> Hashable:
+		return self.__source
+
+	@source.setter
+	def source(self, value: Hashable):
+		if value is None:
+			self.__source = value
+			return
+		if isinstance(value, Iterable):
+			value = tuple(value)
+		if not isinstance(value, Hashable):
+			raise TypeError('source must be hashable')
+		if not isinstance(value, tuple):
+			value = (value,)
+		self.__source = value
 
 	@cached_property
 	def hasWildcard(self):
-		return any(item == '*' for item in self)
+		return any([str(item) == '*' for item in tuple(self)])
 
 	@cached_property
 	def isRoot(self):
 		return len(self) == 0
+
+	@cached_property
+	def anonymous(self) -> 'CategoryItem':
+		return CategoryItem(self, source=None)
+
+	@cached_property
+	def isAnonymous(self) -> bool:
+		return self.source is None
 
 	@property
 	def category(self) -> 'CategoryItem':
@@ -236,10 +315,18 @@ class CategoryItem(tuple):
 		return self[-1]
 
 	def __hash__(self):
-		return hash(self.__separator.join(self))
+		if self.__hash is None:
+			if self.__source is None:
+				value = hash(str(self))
+			else:
+				value = hash((self.__source, self.__separator.join(self)))
+			self.__hash = value
+		return self.__hash
 
 	def __str__(self):
-		return self.__separator.join(self)
+		if self.__source is None:
+			return self.__separator.join(self)
+		return f'{":".join(str(_) for _ in self.__source)}:{self.__separator.join(self)}'
 
 	def __repr__(self):
 		if self:
@@ -281,7 +368,9 @@ class CategoryItem(tuple):
 			return False
 		if self.hasWildcard or other.hasWildcard:
 			return subsequenceCheck(list(self), list(other), strict=True)
-		return super(CategoryItem, self).__eq__(other)
+		if self.source is not None and other.source is not None:
+			return hash(self) == hash(other) and self.source == other.source
+		return hash(self) == hash(other)
 
 	def __add__(self, other):
 		return CategoryItem([*self, *other])
@@ -324,7 +413,7 @@ class CategoryItem(tuple):
 		for x, y in zip(self, other):
 			if x == y or '*' in (x, y):
 				start += 1
-		return CategoryItem(self[start:], self.__separator)
+		return CategoryItem(self[start:], separator=self.__separator)
 
 	def __and__(self, other):
 		if isinstance(other, str):
@@ -332,7 +421,7 @@ class CategoryItem(tuple):
 		if other.isRoot:
 			return self[0]
 		value = [x for x, y in zip(self, other) if x == y or '*' in (x, y)]
-		return CategoryItem(value, self.__separator)
+		return CategoryItem(value, separator=self.__separator)
 		end = 0
 		m = min(len(self), len(other)) - 1
 		value = list(self)
@@ -340,7 +429,7 @@ class CategoryItem(tuple):
 		newValue
 		while (self and other) and end < m and self[end] == other[end] or (self[end] == '*' or other[end] == '*'):
 			end += 1
-		return CategoryItem(self[:end], self.__separator)
+		return CategoryItem(self[:end], separator=self.__separator)
 
 	def __xor__(self, other):
 
@@ -364,7 +453,7 @@ class CategoryItem(tuple):
 		M = min(len(self), len(other))
 		while -trim < M and (self and other) and (self[trim] == other[trim]):
 			trim -= 1
-		return CategoryItem(self[:trim], self.__separator)
+		return CategoryItem(self[:trim], separator=self.__separator)
 
 	def __truediv__(self, other):
 		if isinstance(other, str):
@@ -378,7 +467,7 @@ class CategoryItem(tuple):
 		value = [*[x for x, y in zip(self, other) if x != y or '*' in (x, y)], *self[len(other):]]
 		while value and value[-1] == '*':
 			value.pop(-1)
-		return CategoryItem(value, self.__separator)
+		return CategoryItem(value, separator=self.__separator)
 
 	def __mod__(self, other):
 		if isinstance(other, str):
@@ -396,10 +485,13 @@ class CategoryItem(tuple):
 			return self[:1]
 		return self[:len(other)]
 
+	def __iter__(self):
+		return super().__iter__()
+
 	def __getitem__(self, s) -> 'CategoryItem':
 		if self.isRoot:
 			return self
-		return CategoryItem(list(self)[s], self.__separator)
+		return CategoryItem(list(self)[s], separator=self.__separator)
 
 	def asStr(self):
 		return str(self)
@@ -411,389 +503,7 @@ class CategoryItem(tuple):
 root = CategoryItem(':')
 
 
-class ValueWrapper(QObject):
-	value: Any
-	_value: Any = None
-	key: CategoryItem
-	sourceUnit: str
-	sourceValue: Any
-	sourceKey: str
-	type: str
-	category: CategoryItem
-	timestamp: datetime
-	title: str
-	description: str
-	format: str
-	valueChanged: Signal = Signal(QObject)
-	__iter__: Callable
-	_hash: int = None
-
-	def __init__(self, **kwargs):
-		"""
-		:param key: The key of the value
-		:type key: CategoryItem
-		:param source: The source of the value
-		:type source: ObservationDict
-		:Keyword Arguments:
-			* *value* (``Any``) -- The value of the value
-			* *sourceUnit* (``str``) -- The unit of the value
-			* *sourceValue* (``Any``) -- The value provided by the source before localization
-			* *category* (``str``) -- The category of the value
-			* *timestamp* (``datetime``) -- The timestamp of the value
-			* *title* (``str``) -- The title of the value
-			* *description* (``str``) -- The description of the value
-		"""
-		super(ValueWrapper, self).__init__()
-
-		for key, value in kwargs.items():
-			setattr(self, key, value)
-
-		self._hash = hash((self.key, self.timestamp))
-
-		if isinstance(self._value, Iterable):
-			self.__iter__ = self._value.__iter__
-
-	@property
-	def value(self):
-		return QObject.__getattribute__(self, '_value')
-
-	@value.setter
-	def value(self, value):
-		if value != self._value:
-			if isinstance(value, Measurement) and isinstance(self._value, Measurement):
-				self._value |= value
-			else:
-				self._value = value
-			self.valueChanged.emit(self)
-
-	def updateValue(self, **kwargs):
-		"""
-		:Keyword Arguments:
-			* *value* (``Any``) -- The value to update
-			* *sourceUnit* (``str``) -- The unit of the value
-			* *sourceValue* (``Any``) -- The value provided by the source before localization
-			* *category* (``str``) -- The category of the value
-			* *timestamp* (``datetime``) -- The timestamp of the value
-			* *title* (``str``) -- The title of the value
-			* *description* (``str``) -- The description of the value
-		"""
-		for key, value in kwargs.items():
-			setattr(self, key, value)
-
-	def toDict(self):
-		_dict = {
-			'value':      self._value,
-			'key':        self.key,
-			# 'sourceTimeframe': int(self.source.timeframe.total_seconds()) if self.source else None,
-			# 'api':             self.api.name,
-			'sourceUnit': self.sourceUnit,
-			'timestamp':  self.timestamp,
-		}
-		if hasattr(self, 'category'):
-			_dict['category'] = self.category
-		if hasattr(self, 'sourceValue'):
-			_dict['sourceValue'] = self.sourceValue
-		if hasattr(self, 'description'):
-			_dict['description'] = self.description
-		if hasattr(self, 'title'):
-			_dict['title'] = self.title
-		if hasattr(self, 'selectedUnit'):
-			_dict['displayUnit'] = self.displayUnit
-		if hasattr(self, 'showUnit'):
-			_dict['showUnit'] = self.showUnit
-		if hasattr(self, 'shorten'):
-			_dict['shorten'] = self.shorten
-		return _dict
-
-	@classmethod
-	def isValue(cls, value):
-		return isinstance(value, cls)
-
-	def __getattr__(self, item):
-		if item in self.__dict__:
-			return QObject.__getattribute__(self, item)
-		attr = getattr(self._value, item, None)
-		if attr is not None:
-			return attr
-		return QObject.__getattribute__(self, item)
-
-	def __setattr__(self, key, value):
-		if key in self.__annotations__:
-			QObject.__setattr__(self, key, value)
-		else:
-			self._value.__setattr__(key, value)
-
-	def __hash__(self):
-		return self._hash
-
-	def __str__(self):
-		return str(self._value)
-
-	def __repr__(self):
-		return str(self._value)
-
-	def __add__(self, other):
-		d = self.__dict__.copy()
-		d['value'] = self._value + other
-		return ValueWrapper(**d)
-
-	def __sub__(self, other):
-		d = self.__dict__.copy()
-		d['value'] = self._value - other
-		return ValueWrapper(**d)
-
-	def __mul__(self, other):
-		d = self.__dict__.copy()
-		d['value'] = self._value * other
-		return ValueWrapper(**d)
-
-	def __truediv__(self, other):
-		d = self.__dict__.copy()
-		d['value'] = self._value / other
-		return ValueWrapper(**d)
-
-	def __floordiv__(self, other):
-		d = self.__dict__.copy()
-		d['value'] = self._value // other
-		return ValueWrapper(**d)
-
-	def __mod__(self, other):
-		d = self.__dict__.copy()
-		d['value'] = self._value % other
-		return ValueWrapper(**d)
-
-	def __pow__(self, other):
-		d = self.__dict__.copy()
-		d['value'] = self._value ** other
-		return ValueWrapper(**d)
-
-	def __neg__(self):
-		d = self.__dict__.copy()
-		d['value'] = -self._value
-		return ValueWrapper(**d)
-
-	def __pos__(self):
-		d = self.__dict__.copy()
-		d['value'] = +self._value
-		return ValueWrapper(**d)
-
-	def __abs__(self):
-		d = self.__dict__.copy()
-		d['value'] = abs(self._value)
-		return ValueWrapper(**d)
-
-	def __invert__(self):
-		return self._value.__invert__()
-
-	def __lt__(self, other):
-		if isinstance(other, ValueWrapper):
-			return self._value < other._value
-		return self._value.__lt__(other)
-
-	def __le__(self, other):
-		if isinstance(other, ValueWrapper):
-			return self._value <= other._value
-		return self._value.__le__(other)
-
-	def __eq__(self, other):
-		if isinstance(other, ValueWrapper):
-			return self._value == other._value
-		return self._value.__eq__(other)
-
-	def __ne__(self, other):
-		if isinstance(other, ValueWrapper):
-			return self._value != other._value
-		return self._value.__ne__(other)
-
-	def __gt__(self, other):
-		if isinstance(other, ValueWrapper):
-			return self._value > other._value
-		return self._value.__gt__(other)
-
-	def __ge__(self, other):
-		if isinstance(other, ValueWrapper):
-			return self._value >= other._value
-		return self._value.__ge__(other)
-
-	def __and__(self, other):
-		return self._value.__and__(other)
-
-	def __or__(self, other):
-		return self._value.__or__(other)
-
-	def __xor__(self, other):
-		return self._value.__xor__(other)
-
-	def __lshift__(self, other):
-		return self._value.__lshift__(other)
-
-	def __rshift__(self, other):
-		return self._value.__rshift__(other)
-
-	def __radd__(self, other):
-		d = self.__dict__.copy()
-		d['value'] = self._value + other
-		return ValueWrapper(**d)
-
-	def __rsub__(self, other):
-		d = self.__dict__.copy()
-		d['value'] = self._value - other
-		return ValueWrapper(**d)
-
-	def __rmul__(self, other):
-		d = self.__dict__.copy()
-		d['value'] = self._value * other
-		return ValueWrapper(**d)
-
-	def __rtruediv__(self, other):
-		d = self.__dict__.copy()
-		d['value'] = self._value / other
-		return ValueWrapper(**d)
-
-	def __rfloordiv__(self, other):
-		d = self.__dict__.copy()
-		d['value'] = self._value // other
-		return ValueWrapper(**d)
-
-	def __rmod__(self, other):
-		d = self.__dict__.copy()
-		d['value'] = self._value % other
-		return ValueWrapper(**d)
-
-	def __rpow__(self, other):
-		d = self.__dict__.copy()
-		d['value'] = self._value ** other
-		return ValueWrapper(**d)
-
-	def __rlshift__(self, other):
-		return self._value.__rlshift__(other)
-
-	def __rrshift__(self, other):
-		return self._value.__rrshift__(other)
-
-	def __iadd__(self, other):
-		self._value += other
-		self.valueChanged.emit(self.toDict())
-		return self
-
-	def __isub__(self, other):
-		self._value -= other
-		self.valueChanged.emit(self.toDict())
-		return self
-
-	def __imul__(self, other):
-		self._value *= other
-		self.valueChanged.emit(self.toDict())
-		return self
-
-	def __itruediv__(self, other):
-		self._value /= other
-		self.valueChanged.emit(self.toDict())
-		return self
-
-	def __ifloordiv__(self, other):
-		self._value //= other
-		self.valueChanged.emit(self.toDict())
-		return self
-
-	def __imod__(self, other):
-		self._value %= other
-		self.valueChanged.emit(self.toDict())
-		return self
-
-	def __ipow__(self, other):
-		self._value **= other
-		self.valueChanged.emit(self.toDict())
-		return self
-
-	def __ilshift__(self, other):
-		self._value <<= other
-		self.valueChanged.emit(self.toDict())
-		return self
-
-	def __irshift__(self, other):
-		self._value >>= other
-		self.valueChanged.emit(self.toDict())
-		return self
-
-	def __iand__(self, other):
-		self._value &= other
-		self.valueChanged.emit(self.toDict())
-		return self
-
-	def __ior__(self, other):
-		self._value |= other
-		self.valueChanged.emit(self.toDict())
-		return self
-
-	def __ixor__(self, other):
-		self._value ^= other
-		self.valueChanged.emit(self.toDict())
-		return self
-
-	# def __getitem__(self, key):
-	# 	return self._value[key]
-	#
-	# def __setitem__(self, key, _value):
-	# 	self._value[key] = _value
-	#
-	# def __delitem__(self, key):
-	# 	del self._value[key]
-
-	def __len__(self):
-		return len(self._value)
-
-	def __contains__(self, item):
-		return item in self._value
-
-	# def __iter__(self):
-	# 	return iter(self._value)
-
-	def __reversed__(self):
-		return reversed(self._value)
-
-	def __repr__(self):
-		return repr(self._value)
-
-	def __str__(self):
-		return str(self._value)
-
-	def __format__(self, format_spec):
-		return format(self._value, format_spec)
-
-	def __copy__(self):
-		d = self.__dict__.copy()
-		d['value'] = copy(self._value)
-		return ValueWrapper(**d)
-
-	def __deepcopy__(self, memo):
-		d = self.__dict__.copy()
-		d['value'] = deepcopy(self._value, memo)
-		return ValueWrapper(**d)
-
-	def __getstate__(self):
-		d = self.__dict__.copy()
-		d['value'] = self._value.__getstate__()
-		return d
-
-	def __setstate__(self, state):
-		self._value = state['value']
-		self.__dict__ = state
-
-	def __bool__(self):
-		return bool(self._value)
-
-
-class CategorySignals(QObject):
-	sourceChanged = Signal(dict)
-	categoryAdded = Signal(dict)
-	categoryRemoved = Signal(dict)
-	categoryUpdated = Signal(dict)
-
-
 class CategoryDict(dict):
-	signals = CategorySignals()
-
 	_cache = {}
 
 	def __init__(self, parent: dict = None, source: dict = None, category: str = None):
@@ -848,10 +558,6 @@ class CategoryDict(dict):
 		# 	newKey.pop()
 		return CategoryItem(newKey)
 
-	def sourceChanged(self, *args):
-		self.refresh()
-		self.signals.sourceChanged.emit(True)
-
 	def __getitem__(self, item):
 		'''
 		Final attempt to find the key
@@ -876,7 +582,7 @@ class CategoryDict(dict):
 		# Own category is not wildcard
 
 		if len(item) == 1:
-			return {key: value if not isinstance(value, CategoryDict) else value[item] for key, value in self._dict.items() if (isinstance(value, CategoryDict) and item in value) or isinstance(value, ValueWrapper)}
+			return {key: value if not isinstance(value, CategoryDict) else value[item] for key, value in self._dict.items() if (isinstance(value, CategoryDict) and item in value) or isinstance(value, TimeAwareValue)}
 		# return {key: value if not isinstance(value, CategoryDict) else value[item] for key, value in self._dict.items() if item in value}
 		else:
 			k = item[1:]
@@ -1006,8 +712,8 @@ class CategoryDict(dict):
 	def __str__(self):
 		return dict.__str__(self._dict)
 
-	def __repr__(self):
-		return dict.__repr__(self._dict)
+	# def __repr__(self):
+	# 	return dict.__repr__(self._source)
 
 	def __len__(self):
 		return len(self._dict)
@@ -1162,20 +868,21 @@ class CategoryEndpointDict(CategoryDict):
 
 	#
 	# def keys(self):
-	# 	return {**self._dict, **self._source.endpoints}.keys()
+	# 	return {**self._dict, **self._source.observations}.keys()
 	#
 	# def items(self):
-	# 	return {**self._dict, **self._source.endpoints}.items()
+	# 	return {**self._dict, **self._source.observations}.items()
 	#
 	# def _values(self):
-	# 	return {**self._dict, **self._source.endpoints}._values()
+	# 	return {**self._dict, **self._source.observations}._values()
 
 	@cached_property
 	def _dict(self):
-		a = super(CategoryEndpointDict, self)._dict
-		a.pop('time', None)
-		a['sources'] = {k: v.realtime.categories for k, v in self._source.endpoints.items()}
-		return a
+		d = super(CategoryEndpointDict, self)._dict
+		d.pop('time', None)
+		d['sources'] = {plugin.name: plugin.containerCategories for plugin in self.parent.plugins}
+		# a['sources'] = {}
+		return d
 
 
 class SubCategory(CategoryDict):
