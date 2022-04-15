@@ -1,14 +1,17 @@
+import yaml
+from enum import Enum
+
 from functools import cached_property
 from json import dumps
 from pathlib import Path
 from pprint import pprint
-from typing import Any, overload, Union
+from typing import Any, overload, Type, Union
 
 from PySide2.QtCore import QPointF, Qt, Slot
 from PySide2.QtGui import QIcon, QKeySequence
 from PySide2.QtWidgets import QActionGroup, QMenu, QMessageBox
 
-from src import config
+from src import config, Plugins
 from src.utils import Alignment, AlignmentFlag, DisplayType, EasyPath, JsonEncoder, Position, Subscription
 
 
@@ -16,9 +19,10 @@ class BaseContextMenu(QMenu):
 	parent: 'ResizeableItem'
 	position = QPointF(0, 0)
 
-	def __init__(self, parent, *args: Any, **kwargs: Any):
+	def __init__(self, parent, title: str = None, *args: Any, **kwargs: Any):
 		super().__init__()
-
+		if title:
+			self.setTitle(title)
 		self.parent = parent
 		self.aboutToShow.connect(self.updateItems)
 		self.buildMenuItems()
@@ -42,12 +46,12 @@ class BaseContextMenu(QMenu):
 			self.freezePanelMenuAction()
 		if self.parent.acceptDrops():
 			self.addMenu(InsertMenu(self))
-			self.gridMenu()
+			# self.gridMenu()
 			self.saveLoadMenu()
 			self.addSeparator()
-		if self.parent.debug:
-			self.addAction('Print State', self.printState)
-			self.addAction('Debug Breakpoint', self.parent.debugBreak)
+		# if self.parent.debug:
+		self.addAction('Print State', self.printState)
+		self.addAction('Debug Breakpoint', self.parent.debugBreak)
 
 		self.addAction('Delete', self.delete)
 
@@ -61,27 +65,26 @@ class BaseContextMenu(QMenu):
 		self.locked.setChecked(self.parent.locked)
 
 	def mainChunk(self):
-
 		self.addSeparator()
 
-		resize = self.addAction('Resizable', self.parent.setResizable)
-		resize.setCheckable(True)
-		resize.setChecked(self.parent.resizable)
-
-		moveable = self.addAction('Movable', self.parent.setMovable)
-		moveable.setCheckable(True)
-		moveable.setChecked(self.parent.movable)
-
-		keepInFrame = self.addAction('Keep in Frame', self.parent.setKeepInFrame)
-		keepInFrame.setCheckable(True)
-		keepInFrame.setChecked(self.parent.keepInFrame)
+		# resize = self.addAction('Resizable', self.parent.setResizable)
+		# resize.setCheckable(True)
+		# resize.setChecked(self.parent.resizable)
+		#
+		# moveable = self.addAction('Movable', self.parent.setMovable)
+		# moveable.setCheckable(True)
+		# moveable.setChecked(self.parent.movable)
+		#
+		# keepInFrame = self.addAction('Keep in Frame', self.parent.setKeepInFrame)
+		# keepInFrame.setCheckable(True)
+		# keepInFrame.setChecked(self.parent.keepInFrame)
 		self.geometryMenu()
 		# collisions = self.addAction('Allow Collisions', self.collisions)
 		# collisions.setCheckable(True)
 		# collisions.setChecked(not self.parent.preventCollisions)
-		clipping = self.addAction('Clipping', self.parent.setClipping)
-		clipping.setCheckable(True)
-		clipping.setChecked(self.parent.clipping)
+		# clipping = self.addAction('Clipping', self.parent.setClipping)
+		# clipping.setCheckable(True)
+		# clipping.setChecked(self.parent.clipping)
 		self.addSeparator()
 		if self.parent.debug:
 			self.addAction('Print Status', self.printStatus)
@@ -93,6 +96,9 @@ class BaseContextMenu(QMenu):
 
 	def printState(self):
 		pprint(self.parent.state)
+
+	# state = yaml.dump(self.parent.state, default_flow_style=False)
+	# pprint(state)
 
 	def saveLoadMenu(self):
 		saveAct = self.addAction("Save Panel", self.parent.save)
@@ -309,9 +315,9 @@ class LabelContextMenu(BaseContextMenu):
 	def buildMenuItems(self):
 		self.alignmentMenu()
 		self.textFilterMenu()
-		lb = self.addAction('Allow Line Wrap', self.allowLineWrap)
-		lb.setCheckable(True)
-		lb.setChecked(self.parent.lineBreaking)
+		# lb = self.addAction('Allow Line Wrap', self.allowLineWrap)
+		# lb.setCheckable(True)
+		# lb.setChecked(self.parent.lineBreaking)
 		self.addAction('Edit Margins', self.parent.editMargins)
 		super(LabelContextMenu, self).buildMenuItems()
 
@@ -331,7 +337,7 @@ class LabelContextMenu(BaseContextMenu):
 			filterAction.setCheckable(True)
 			filterAction.setChecked(filter in self.parent.enabledFilters)
 
-		upper = filters.addAction('Upper', lambda: self.parent.setFilter('1upper'))
+	# upper = filters.addAction('Upper', lambda: self.parent.setFilter('1upper'))
 
 	# upper.setCheckable(True)
 	# upper.setChecked('1upper' in self.parent.enabledFilters)
@@ -366,11 +372,19 @@ class RealtimeContextMenu(BaseContextMenu):
 		self.addMenu(SourceMenu(self))
 		self.showTitle = self.addAction('Show Title', self.parent.toggleTitle)
 		self.showTitle.setCheckable(True)
-		self.showTitle.setChecked(self.parent.title.isEnabled())
-		self.addAction('Edit Margins', self.parent.display.editMargins)
-		lb = self.addAction('Allow Line Wrap', self.allowLineWrap)
-		lb.setCheckable(True)
-		lb.setChecked(self.parent.display.lineBreaking)
+		self.showTitle.setChecked(self.parent.splitter.enabled)
+		showUnit = self.addAction('Show Unit', self.parent.display.toggleUnit)
+		showUnit.setCheckable(True)
+		showUnit.setChecked(self.parent.display.displayProperties.unitPosition != 'hidden')
+		self.addMenu(LabelContextMenu(self.parent.display.valueTextBox, title="Value"))
+		self.addMenu(LabelContextMenu(self.parent.display.unitTextBox, title="Unit"))
+		self.addMenu(MenuFromEnum(self.parent.display, 'displayProperties.unitPosition', self.parent.display.setUnitPosition, 'Unit Position'))
+
+		# self.addAction('Edit Value Margins', self.parent.display.valueTextBox.editMargins)
+		# self.addAction('Edit Unit Margins', self.parent.display.unitTextBox.editMargins)
+		# lb = self.addAction('Allow Line Wrap', self.allowLineWrap)
+		# lb.setCheckable(True)
+		# lb.setChecked(self.parent.display.lineBreaking)
 
 		super(RealtimeContextMenu, self).buildMenuItems()
 
@@ -380,6 +394,35 @@ class RealtimeContextMenu(BaseContextMenu):
 
 	def hasTitle(self):
 		return hasattr(self.parent, 'title')
+
+
+class MenuFromEnum(QMenu):
+
+	def __init__(self, parent, enum: Type[Enum], action=None, title=None):
+		super(MenuFromEnum, self).__init__()
+		if isinstance(enum, str):
+			if '.' in enum:
+				enum = enum.split('.')
+				result = parent
+				for attr in enum:
+					result = getattr(result, attr)
+				enum = result
+			else:
+				enum = getattr(parent, enum)
+		self.parent = parent
+		self.enum = enum
+		self.action = action
+		self.selection = None
+		self.buildActions()
+
+	def buildActions(self):
+		actionGroup = QActionGroup(self)
+		actionGroup.setExclusive(True)
+		for value in type(self.enum):
+			action = self.addAction(value, lambda value=value: self.action(value))
+			action.setCheckable(True)
+			action.setChecked(value == self.selection)
+			actionGroup.addAction(action)
 
 
 class TimeContextMenu(BaseContextMenu):
@@ -409,13 +452,14 @@ class CentralPanelContextMenu(BaseContextMenu):
 
 	def buildMenuItems(self):
 		self.addMenu(InsertMenu(self))
-		collisions = self.addAction('Allow Collisions', self.collisions)
-		collisions.setCheckable(True)
-		collisions.setChecked(not self.parent.preventCollisions)
 
-		clipping = self.addAction('Clipping', self.parent.setClipping)
-		clipping.setCheckable(True)
-		clipping.setChecked(self.parent.clipping)
+		# collisions = self.addAction('Allow Collisions', self.collisions)
+		# collisions.setCheckable(True)
+		# collisions.setChecked(not self.parent.preventCollisions)
+		#
+		# clipping = self.addAction('Clipping', self.parent.setClipping)
+		# clipping.setCheckable(True)
+		# clipping.setChecked(self.parent.clipping)
 
 		self.gridMenu()
 		self.addSeparator()
@@ -502,18 +546,28 @@ class SourceMenu(QMenu):
 		self.parent = parent
 		super(SourceMenu, self).__init__(parent)
 		self.setTitle('Source')
-		e = {}
-		if self.parent.parent.valueLink and len(self.parent.parent.valueLink.keys()) > 1:
-			e = [i for i in self.parent.parent.valueLink.keys()]
-		for k in e:
-			self.addAction(k, lambda k=k: self.parent.parent.changeSource(k))
+		self.__addSources()
 
 	def show(self):
-		if len(self.parent.parent.valueLink.keys()) > 1:
+		if len(self.sources) > 1:
 			self.setEnabled(True)
 		else:
 			self.setEnabled(False)
 		super(SourceMenu, self).aboutToShow()
+
+	@property
+	def sources(self):
+		if self.parent.parent.valueLink is not None:
+			return [i for i in Plugins if self.parent.parent.valueLink.key in i]
+		return []
+
+	def __addSources(self):
+		print(self.sources)
+		for k in self.sources:
+			name = k.name
+			if not hasattr(k, 'realtime'):
+				name += ' (not realtime)'
+			self.addAction(name, lambda k=k: self.parent.parent.changeSource(k))
 
 
 class TemplateMenu(QMenu):
@@ -525,7 +579,7 @@ class TemplateMenu(QMenu):
 		super(TemplateMenu, self).__init__(*args, **kwargs)
 		self.setTitle('From Template')
 		for file in self.directoryPath.ls():
-			if file.path.name.endswith('.json') or file.path.name.endswith('.dashiePanel'):
+			if file.path.name.endswith('.json') or file.path.name.endswith('.levityPanel'):
 				name = '.'.join(file.path.name.split('.')[:-1])
 				self.addAction(name, lambda file=file: PanelFromFile(self.parent.parent.parent, file.path, self.parent.parent.position))
 
