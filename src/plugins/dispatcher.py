@@ -1,31 +1,23 @@
-import time
-
-import uuid
-
 from dataclasses import dataclass, field
-
-from PySide2.QtCore import QMutex, QObject, QThread, QTimer, Signal
-from PySide2.QtWidgets import QApplication
-
-from src import logging
 from datetime import timedelta
 from functools import cached_property
-from typing import Any, NamedTuple
+from PySide2.QtCore import QObject, QTimer, Signal, Slot
+from typing import Any
 
-import src.api as api
-from src.api.baseAPI import Container, PlaceholderContainer
-from src.catagories import CategoryDict, CategoryEndpointDict, CategoryItem
 import src.config as config
-from src import config
-from src.utils import Period
+from src.plugins.observation import MeasurementTimeSeries
+from src.plugins.plugin import Container
+from src import config, logging, Plugins
+from src.catagories import CategoryEndpointDict, CategoryItem
+from src.utils import Accumulator, clearCacheAttr, KeyData, Period
 
-log = logging.getLogger(__name__)
+log = logging.getLogger('Dispatcher')
 log.setLevel(logging.DEBUG)
 
-__all__ = ["MergedEndpoint", "MergedValue", "endpoints"]
+__all__ = ["PluginValueDirectory", "MultiSourceContainer", "ValueDirectory"]
 
 
-class MergedValue(dict):
+class MultiSourceContainer(dict):
 	key: CategoryItem
 	period: Period
 	value: Any
@@ -33,31 +25,28 @@ class MergedValue(dict):
 	preferredSource: str
 	timeOffset: timedelta
 
-	def __init__(self, key, value=None, selected=None, timeOffset=None):
+	def __init__(self, key, value: Container = None, preferredSource: str = None, timeOffset: timedelta = None):
 		self.key = key
-		self.preferredSource = selected
+		self.preferredSource = preferredSource
 		self.timeOffset = timeOffset
 
-		super(MergedValue, self).__init__(value if value else {})
+		super(MultiSourceContainer, self).__init__(value if value else {})
 
 	def __str__(self):
 		return self.value.__str__()
 
 	def __getattr__(self, item):
+		if item == 'default':
+			return self.__getattribute__(item)
 		attr = getattr(self.__getattribute__('value').value, item, None)
 		if attr is None:
 			if item in dir(self):
 				return self.__getattribute__(item)
 			else:
-				return self.default.__getattr__(item)
-		return attr.value
-
-	# def __getattribute__(self, item):
-	# 	try:
-	# 		return dict.__getattribute__(self, item)
-	# 	except AttributeError:
-	# 		return getattr(self.value, item)
-	# 	super(MergedValue, self).__getattribute__(item)
+				return self.defaultContainer.__getattr__(item)
+		if isinstance(attr, Container):
+			return attr.value
+		return attr
 
 	def __setattr__(self, key, value):
 		if key in self.__annotations__:
@@ -65,12 +54,17 @@ class MergedValue(dict):
 		else:
 			self.value.__setattr__(key, value)
 
+	def __setitem__(self, key, value):
+		super(MultiSourceContainer, self).__setitem__(key, value)
+		clearCacheAttr(self, 'defaultContainer')
+
 	@property
 	def value(self) -> Container:
 		if self.preferredSource and self.preferredSource in self.keys():
 			value = self[self.preferredSource]
 		else:
-			value = self.default
+			clearCacheAttr(self, 'default')
+			value = self.defaultContainer
 		periods = ['now', 'minute', 'hour', 'day', 'week', 'month', 'year']
 		# if self.period:
 		# 	if self.period in 'realtime,now' or self.period == Period.Now:
@@ -88,18 +82,16 @@ class MergedValue(dict):
 		# 	if period >= 0:
 		# 		value = getattr(value, periods[period])
 		#
-		# if self.timeOffset and period != 0:
+		# if self.timespan and period != 0:
 		# 	pass
 
 		return value
 
 	@property
 	def hourly(self) -> 'MeasurementTimeSeries':
-		if self.value.api.hourly is not None and self.key in self.value.api.hourly.observations:
-			if endpoints.mutex.tryLock(2000):
-				value = self.value.hourly
-				endpoints.mutex.unlock()
-				return value
+		if self.value.source.hourly is not None and self.key in self.value.source.hourly:
+			value = self.value.hourly
+			return value
 		else:
 			containersWithHourly = [container for container in self.values()
 			                        if hasattr(container, 'hourly')
@@ -121,16 +113,23 @@ class MergedValue(dict):
 		return self.key
 
 	@cached_property
-	def default(self):
-		sections = [i for i in config.api.values() if i.getboolean('enabled') and i.name in self]
+	def defaultContainer(self) -> 'Container':
+		sections = [i for i in config.plugins.values() if i.getboolean('enabled') and i.name in self]
 		for i in self.key[::-1]:
 			for section in sections:
 				if 'defaultFor' in section and i in section['defaultFor']:
 					return self[section.name]
 		for section in sections:
-			if section.name in endpoints.endpoints and endpoints[section.name] in self:
+			if section.name in ValueDirectory.plugins and ValueDirectory[section.name] in self:
 				return self[section.name]
-		return list(self.values())[0]
+		options = list(self.values())
+		if len(options) == 1:
+			return options[0]
+		elif len(options) > 1:
+			options = sorted(options, key=lambda x: config.plugins.sections().index(x.source.name), reverse=False)
+			return options[0]
+		else:
+			raise ValueError('No default container found for {}'.format(self.key))
 
 	def addValue(self, endpoint, value):
 		self[endpoint.name] = value
@@ -142,12 +141,12 @@ class MergedValue(dict):
 		if self.period:
 			state['period'] = self.period
 		if self.timeOffset:
-			state['timeOffset'] = self.timeOffset
+			state['startTime'] = self.timeOffset
 		return state
 
 	@property
 	def valueChanged(self):
-		return self.default.valueChanged
+		return self.defaultContainer.valueChanged
 
 
 @dataclass
@@ -155,7 +154,7 @@ class MonitoredKey:
 	key: CategoryItem = field(init=True)
 	period: Period = field(init=False)
 	source: str = field(init=False)
-	value: MergedValue = field(init=False)
+	value: MultiSourceContainer = field(init=False)
 	requesters: set = field(init=False)
 	attempts: int = field(init=False)
 
@@ -201,13 +200,14 @@ class MonitoredKeySignalWrapper(QObject):
 	def announce(self, values):
 		for value in values:
 			if key := self.monitoredKeys.get(value.key, False):
-				key.value = value
+				key.value = self.source[value.key]
 				self.signal.emit(key)
 				key.attempts += 1
 				self.announcedKeys[key.key] = self.monitoredKeys.pop(key.key)
 			if key := self.monitoredKeysForecastKeys.get(value.key, False):
 				key.value = value
-				if value.forecast:
+				if value.forecast.hasForecast:
+					value.forecast.update()
 					self.requirementsSignal.emit(key)
 					log.info(f'Announcing {key.key} with forecast')
 					key.attempts += 1
@@ -219,27 +219,29 @@ class MonitoredKeySignalWrapper(QObject):
 	def __contains__(self, item):
 		return item in self.monitoredKeys
 
-	def hasRequirements(self, value: MergedValue) -> bool:
+	def hasRequirements(self, value: MultiSourceContainer) -> bool:
 		return value.key in self.monitoredKeysForecastKeys and any(container.forecast for container in value.values())
 
 
-class MergedEndpoint(QObject):
-	endpoints = {}
+class PluginValueDirectory:
+	__plugins = Plugins
 	__singleton = None
 	categories = None
 	_values = {}
 
 	def __new__(cls, *args, **kwargs):
 		if cls.__singleton is None:
-			cls.__singleton = super(MergedEndpoint, cls).__new__(cls, *args, **kwargs)
+			cls.__singleton = super(PluginValueDirectory, cls).__new__(cls, *args, **kwargs)
 		return cls.__singleton
 
 	def __init__(self):
-		super(MergedEndpoint, self).__init__()
-		self.mutex = QMutex()
+		super(PluginValueDirectory, self).__init__()
 		self.monitoredKeys = MonitoredKeySignalWrapper(self)
-		self.newKeys = newKeysSignalWrapper()
-		self.clearSuccess = QTimer(singleShot=True, interval=1000, timeout=self.clearSuccessful)
+		self.newKeys = Accumulator(self)
+		self.clearSuccess = QTimer(singleShot=True, interval=5000, timeout=self.clearSuccessful)
+		for plugin in self.plugins:
+			plugin.publisher.connectSlot(self.keyAdded)
+		self.categories = CategoryEndpointDict(self, self._values, None)
 
 	def clearSuccessful(self):
 		monitor = self.monitoredKeys
@@ -251,12 +253,15 @@ class MergedEndpoint(QObject):
 			monitor.signal.emit(key)
 			log.info(f'Announcing {key.key}')
 		for key in monitor.announcedKeysForecastKeys.values():
-			if key.value.forecast:
+			if key.value.forecast.hasForecast:
 				key.attempts += 1
 				monitor.requirementsSignal.emit(key)
 				log.info(f'Announcing {key.key} with forecast')
 			if key.attempts > 5:
 				log.info(f'{key.key} failed to announce after {key.attempts} attempts')
+			elif key.attempts > 15:
+				log.info(f'{key.key} failed to announce after {key.attempts} attempts, removing')
+				self.monitoredKeys.monitoredKeys.pop(key.key)
 		if monitor.announcedKeys or monitor.announcedKeysForecastKeys:
 			self.clearSuccess.start()
 
@@ -269,64 +274,39 @@ class MergedEndpoint(QObject):
 	def items(self):
 		return self._values.items()
 
-	def loadEndpoints(self):
-		# self.newKeys.blockSignals(True)
-		if 'AmbientWeather' not in self.endpoints:
-			if config.api.getboolean('AmbientWeather', 'enabled'):
-				api.ambientWeather.AWStation(callback=self.onAPIFinishLoading, mainEndpoint=self)
-
-		if 'WeatherFlow' not in self.endpoints:
-			if config.api.getboolean('WeatherFlow', 'enabled'):
-				api.weatherFlow.WFStation(callback=self.onAPIFinishLoading, mainEndpoint=self)
-
-		if 'OpenMeteo' not in self.endpoints:
-			if config.api.getboolean('OpenMeteo', 'enabled'):
-				api.OpenMeteo(callback=self.onAPIFinishLoading, mainEndpoint=self)
-
-		if 'TomorrowIO' not in self.endpoints:
-			if config.api.getboolean('TomorrowIO', 'enabled'):
-				api.TomorrowIO(callback=self.onAPIFinishLoading, mainEndpoint=self)
-
-		# for endpoint in self.endpoints._values():
-		# 	endpoint.keySignal.added.connect(self.keyAdded)
-		# 	for key in endpoint.keys():
-		# 		self[key] = endpoint.containerValue(key)
-		# self.newKeys.blockSignals(False)
-
-		self.categories = CategoryEndpointDict(self, self._values, None)
-		self.newKeys.newKeys.emit(list(self.keys()))
-
-	def onAPIFinishLoading(self, api):
-		self.endpoints[api.name] = api
-		log.info(f'{api.name} loaded')
-		self.update(api.containerValues())
-		self.clearSuccess.start()
-
 	def __hash__(self):
 		return hash(str(self.__class__.__name__))
 
-	def keyAdded(self, values):
-		for value in values:
-			self._values[value.key] = value
+	@Slot(KeyData)
+	def keyAdded(self, data: KeyData):
+		keys = data.keys
+		if isinstance(keys, dict):
+			keys = set().union(*data.keys.values())
+		values = {key: data.sender[key] for key in keys}
+		self.update(values)
 
 	def __getitem__(self, item):
-		if item in self.endpoints:
-			return self.endpoints[item]
-		return super(MergedEndpoint, self).__getitem__(item)
+		if item in self.__plugins:
+			return self.__plugins[item]
+		return self._values[item]
 
 	def __setitem__(self, key, value):
 		if key not in self._values:
-			self._values[key] = MergedValue(key)
+			self._values[key] = MultiSourceContainer(key)
+			self.newKeys.publishKey(key)
 		mergedValue = self._values[key]
-		mergedValue.addValue(value.api, value)
+		if value.source.name not in mergedValue:
+			mergedValue.addValue(value.source, value)
 
 	def update(self, values: dict):
-		log.debug(f'Updating {values}')
-		for value in values:
-			self[value.key] = value
-		if values:
-			toAnnouce = [self._values[value.key] for value in values]
-			self.monitoredKeys.announce(toAnnouce)
+		# log.debug(f'Updating {values}')
+		with self.newKeys as muted:
+			for key, value in values.items():
+				self[key] = value
+			if values:
+				# toAnnouce = [self._values[value.key] for value in values]
+				self.monitoredKeys.announce(list(values.values()))
+				self.clearSuccess.start()
 
 	def request(self, requester, item):
 		if item in self._values:
@@ -347,6 +327,10 @@ class MergedEndpoint(QObject):
 		for key in state:
 			self._values[key] = state[key]
 
+	@property
+	def plugins(self):
+		return self.__plugins
+
 
 @dataclass
 class PlaceholderSignal:
@@ -360,21 +344,6 @@ class ForecastPlaceholderSignal:
 	signal: Signal
 	key: CategoryItem
 	preferredSource: str = None
-# period: int = None
 
 
-endpoints = MergedEndpoint()
-
-
-class MergedEndpointThread(QThread):
-	def __init__(self):
-		super(MergedEndpointThread, self).__init__()
-		self.endpoints = MergedEndpoint()
-
-	def run(self):
-		self.endpoints.loadEndpoints()
-
-# thread = MergedEndpointThread()
-# endpoints = thread.endpoints
-# thread.start(priority=QThread.LowPriority)
-# thread.
+ValueDirectory = PluginValueDirectory()
