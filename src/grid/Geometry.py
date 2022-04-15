@@ -727,6 +727,12 @@ class Geometry:
 		"""
 		return self.__class__(surface=self.surface, size=self.absoluteSize(), position=self.absolutePosition(), absolute=True, onGrid=self.onGrid, gridItem=self.gridItem)
 
+	@property
+	def parentGeometry(self) -> Optional[Self]:
+		surface = self.surface
+		parent = getattr(surface, 'parent', None)
+		return getattr(parent, 'geometry', None)
+
 	def absoluteGeometrySize(self) -> QSizeF:
 		if self.surface.parent is not None and hasattr(self.surface.parent, 'geometry') and hasattr(self.surface.parent.geometry, 'absoluteGeometrySize'):
 			parentGeometrySize = self.surface.parent.geometry.absoluteGeometrySize()
@@ -734,6 +740,22 @@ class Geometry:
 				return QSizeF(parentGeometrySize.width()*self.size.width, parentGeometrySize.height()*self.size.height)
 			else:
 				return QSizeF(self.size.width, self.size.height)
+
+	@property
+	def area(self):
+		return self.size.width*self.size.height
+
+	@property
+	def absoluteArea(self):
+		return self.absoluteWidth*self.absoluteHeight
+
+	@property
+	def relativeArea(self):
+		if self.parentGeometry:
+			return self.parentGeometry.absoluteArea/self.absoluteArea
+		w = 100*float(self.relativeWidth)
+		h = 100*float(self.relativeHeight)
+		return h*w/100
 
 
 class StaticGeometry(Geometry):
