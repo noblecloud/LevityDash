@@ -135,8 +135,9 @@ unitDefinitions = {
 	'environment.pressure.airDensity':                   {'type': 'airDensity', 'sourceUnit': ['kg', 'm'], 'title': 'Air Density', 'sourceKey': 'air_density'},
 	'environment.pressure.trend':                        {'type': 'pressureTrend', 'sourceUnit': 'str', 'title': 'Trend', 'sourceKey': 'pressure_trend'},
 
-	'environment.wind.direction.direction':              {'type': 'direction', 'sourceUnit': 'º', 'title': 'Direction', 'sourceKey': 'wind_direction'},
-	'environment.wind.direction.cardinal':               {'type': None, 'sourceUnit': None, 'title': None, 'sourceKey': 'wind_direction_cardinal'},
+	'environment.wind.direction':                        {'type': 'direction', 'requires': {'environment.wind.speed.speed': {'gt': 0}}},
+	'environment.wind.direction.direction':              {'sourceUnit': 'º', 'title': 'Direction', 'sourceKey': 'wind_direction'},
+	'environment.wind.direction.cardinal':               {'sourceUnit': 'º[cardinal]', 'title': 'Cardinal Direction', 'sourceKey': 'wind_direction_cardinal'},
 	'environment.wind.speed':                            {'type': 'wind', 'sourceUnit': ['m', 's']},
 	'environment.wind.speed.speed':                      {'title': 'Speed', 'sourceKey': 'wind_avg'},
 	'environment.wind.speed.lull':                       {'title': 'Lull', 'sourceKey': 'wind_lull'},
