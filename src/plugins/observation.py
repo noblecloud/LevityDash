@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from WeatherUnits.errors import UnknownUnit
 from WeatherUnits.time.time import Second
 
-from src.logger import sendPushoverMessage
+from src.plugins.translator import LevityDatagram
 from src import logging
 from uuid import uuid4
 from abc import ABC, ABCMeta, abstractmethod
@@ -25,7 +25,7 @@ from PySide2.QtCore import QObject, Signal
 from WeatherUnits import Measurement
 
 from src import config
-from plugins.translator import unitDict
+from src.plugins.translator import unitDict
 from src.utils import (clearCacheAttr, closest, isa, isOlderThan, mostCommonClass, mostFrequentValue, now, Now, Period, DateKey, roundToPeriod,
                        toLiteral, TranslatorProperty,
                        UTC)
@@ -51,204 +51,6 @@ def convertToCategoryItem(key, source: Hashable = None):
 	else:
 		key.source = source or key.source
 	return key
-
-
-# def wrapClass(cls):
-# 	if cls.__name__ in ValueWrapper.knownTypes:
-# 		return ValueWrapper.knownTypes[cls.__name__]
-# 	for attr in dir(cls):
-# 		if not attr.startswith('__'):
-# 			setattr(cls, attr, ValueWrapper(getattr(cls, attr)))
-# 	return cls
-
-
-# class CategoryKey(tuple):
-#
-# 	def __new__(cls, value: Union[str, tuple], parent: Optional[dict] = None):
-# 		if isinstance(value, str):
-# 			if '.' in value:
-# 				value = tuple(value.split('.'))
-# 			else:
-# 				value = (value,)
-# 		return super(CategoryKey, cls).__new__(cls, value)
-#
-# 	def __init__(self, value, parent: Optional['ObservationDict'] = None):
-# 		# if parent is None:
-# 		# 	parent = self.__getParent()
-# 		# self.parent = parent
-# 		self._name = str(value)
-# 		# if isinstance(value, str):
-# 		# 	value = value.split('.')
-# 		# if isinstance(value, list):
-# 		# 	super(CategoryKey, self).__init__(value)
-#
-# 	def __hash__(self):
-# 		if self:
-# 			return hash(self[-1])
-# 		return hash(None)
-#
-# 	def __getParent(self):
-# 		calframe = inspect.getouterframes(inspect.currentframe(), 2)
-# 		parent = None
-# 		while calframe:
-# 			frame = calframe.pop()
-# 			v = frame.frame.f_locals
-# 			if 'self' in v and isinstance(v['self'], ObservationDict):
-# 				parent = v['self']
-# 				calframe = None
-# 		return parent
-#
-# 	@property
-# 	def __hasSimilarName(self):
-# 		return self._name in categories
-#
-#
-# 	def __repr__(self):
-# 		name = self[-1]
-# 		parents = [i[:3] for i in self[:-1]]
-# 		if parents:
-# 			return f'{".".join(parents)}.{name}'
-# 		return self._name
-#
-# 	def __eq__(self, other):
-# 		if isinstance(other, CategoryKey):
-# 			return list(self) == (other)
-# 		if isinstance(other, str):
-# 			if '.' in other:
-# 				return list(self) == other.split('.')
-# 			else:
-# 				return self[-1] == [other]
-#
-# 	def subKeys(self):
-# 		return [i for j in [key for key in self.keys()] for i in j]
-#
-# 	def __contains__(self, item):
-# 		if isinstance(item, str):
-# 			if '.' in item:
-# 				item = item.split('.')
-# 			else:
-# 				item = [item]
-# 		if self._name in item:
-# 			return True
-
-# class Category(dict):
-# 	_sourceKeys: List[str] = []
-# 	_superCategory: 'Category'
-# 	_name: str
-# 	_head: 'ObservationDict'
-# 	_value: Optional[Any] = None
-#
-#
-# 	def __init__(self, category: str, superCategory: Union['Category', 'ObservationDict']):
-# 		self._name = category
-# 		self._superCategory = superCategory
-# 		if superCategory is not None:
-# 			head = superCategory
-# 			while head is not self and not isinstance(head, ObservationDict) and head._superCategory is not None:
-# 				head = head._superCategory
-# 		else:
-# 			head = self
-# 		self._head = head
-# 		super(Category, self).__init__()
-#
-# 	def hasSubKey(self, key: str):
-# 		# return true if key is in the category or any of its subcategories
-# 		if key in self:
-# 			return True
-# 		for subCategory in self._values():
-# 			if subCategory.hasSubKey(key):
-# 				return True
-# 		return False
-#
-# 		# return any(sub.hasSubKey(key) if isinstance(sub, Category) else key in sub for sub in [*self._values(), *self.keys()])
-#
-# 	def __repr__(self):
-# 		string = self._name
-# 		if self._value is not None:
-# 			string = f'{string} [{self._value}]'
-# 		_values = [key for key, value in self.items() if isinstance(value, Category)]
-# 		if _values:
-# 			string = f'{string} >> {_values}'
-# 		return string
-#
-# 	def __getitem__(self, item):
-# 		if isinstance(item, str) and '.' not in item:
-# 			if item in self.keys():
-# 				return super(Category, self).__getitem__(item)
-# 			else:
-# 				for value in self._values():
-# 					if isinstance(value, UnitMetaData) and value['sourceKey'] == item:
-# 						return value
-# 					if isinstance(value, Category) and value._name == item:
-# 						return value
-# 					if item in value.keys():
-# 						return value[item]
-# 				return self.hasSubKey(item)
-# 		elif isinstance(item, str) and '.' in item:
-# 			item = item.split('.')
-# 		if isinstance(item, Iterable):
-# 			if len(item) == 1:
-# 				return self[item[0]]
-# 			item, remainder = item[0], item[1:]
-# 			if item in self:
-# 				return self[item][remainder]
-# 		return super(Category, self).__getitem__(item)
-#
-# 	def __setitem__(self, key, value):
-# 		if isinstance(key, str):
-# 			if '.' in key:
-# 				key = key.split('.')
-# 			else:
-# 				return super(Category, self).__setitem__(key, value)
-# 		if isinstance(key, Iterable):
-# 			if len(key) == 1:
-# 				key = key[0]
-# 				if key in self:
-# 					self[key].update(value)
-# 				else:
-# 					super(Category, self).__setitem__(key, value)
-# 					if key == self._name:
-# 						self._value = value
-# 			else:
-# 				key, remainder = key[0], key[1:]
-# 				if key not in self:
-# 					super(Category, self).__setitem__(key, Category(key, self))
-# 				self[key][remainder] = value
-# 				# self[key][remainder] = _value
-# 		if self is self._head:
-# 			self._sourceKeys.append(key)
-#
-# 	def update(self, __m: Mapping[str, Any], **kwargs: Any) -> None:
-# 		for key, value in __m.items():
-# 			self[key] = value
-#
-# 	def __contains__(self, item):
-# 		if isinstance(item, str):
-# 			if '.' not in item:
-# 				return super(Category, self).__contains__(item)
-# 				if item in self.keys():
-# 					return True
-# 				else:
-# 					if item in self[item]:
-# 						return True
-# 			else:
-# 				item = item.split('.')
-# 				if item[0] == self._name:
-# 					item.pop(0)
-# 				cat = self
-# 				while item[0] in cat.keys():
-# 					cat = cat[item[0]]
-# 					item.pop(0)
-# 		if isinstance(item, Iterable):
-# 			if len(item) == 1:
-# 				item = item[0]
-# 				return super(Category, self).__contains__(item)
-# 			else:
-# 				item, remainder = item[0], item[1:]
-# 				subCat = self.get(item, None)
-# 				if subCat is None:
-# 					return False
-# 				return subCat.__contains__(remainder)
 
 
 class RealtimeSource(ABC):
@@ -1121,12 +923,14 @@ class RecordedObservationValue(ObservationValue):
 	def timestamp(self):
 		return self.__history.timestamp
 
-	def archivedFrom(self, from_: datetime = None, to: datetime = None) -> TimeSeriesItem:
+	def archivedFrom(self, from_: datetime = None, to: datetime = None) -> Optional[TimeSeriesItem]:
 		from_ = from_ or self.first.timestamp
 		to = to or self.last.timestamp
 		rawValue = self.history.rollingAverage(from_, to)
-		value = self.convertFunc(rawValue.value) if rawValue is not None else None
-		sourceUnitValue = self.convertFunc(rawValue) if rawValue is not None else None
+		if rawValue is None:
+			return None
+		value = self.convertFunc(rawValue.value)
+		sourceUnitValue = self.convertFunc(rawValue)
 		if hasattr(value, 'localize'):
 			value = value.localize
 		if value:
@@ -1339,7 +1143,6 @@ class ObservationDict(PublishedDict):
 				RecordedObservation.register(cls.itemClass)
 				if 'Realtime' in cls.__name__ or issubclass(cls, RealtimeSource):
 					RealtimeSource.register(cls.itemClass)
-
 			else:
 				cls.itemClass = type(cls.__name__ + 'Value', (ObservationValue,), {})
 
@@ -1384,11 +1187,11 @@ class ObservationDict(PublishedDict):
 		if self.published:
 			self.accumulator.muted = True
 
-		source = kwargs.get('source', None) or data.get('source', [self.source.name])
-		if source[0] != self.source.name:
-			source = [self.source.name, *source]
 		if self.dataName in data:
-			data = data[self.dataName]
+			if isinstance(data, LevityDatagram):
+				data = data.get(self.dataName)
+			else:
+				data = data[self.dataName]
 		if 'data' in data:
 			data = data.pop('data')
 		timestamp = ObservationTimestamp(data, self, extract=True).value
@@ -1397,9 +1200,9 @@ class ObservationDict(PublishedDict):
 			if not isinstance(item, TimeAwareValue):
 				item = TimeSeriesItem(item, timestamp)
 			self[key] = item
-		self.calculateMissing()
-		afterKeys = set(self.keys())
-		# newKeys = [container for key in newKeys if key if (container := self.source[key]) is not None]
+
+		self.calculateMissing()  # TODO: Use Requirements to handle this automatically based on translator
+
 		if self.published:
 			self.accumulator.muted = False
 
@@ -1440,7 +1243,6 @@ class ObservationDict(PublishedDict):
 			self.accumulator.publishKeys(key)
 
 	def __getitem__(self, item):
-		#### ObservationDict __get__
 
 		item = convertToCategoryItem(item)
 
@@ -1663,19 +1465,6 @@ class Observation(ObservationDict, published=False, recorded=False):
 		super().__init_subclass__(**kwargs)
 		cls._calculatedKeys = set()
 
-	def __init__(self, *args, **kwargs):
-		super(Observation, self).__init__(*args, **kwargs)
-
-		values = kwargs.get('values')
-
-	# if values is not None:
-	# 	pass
-	# else:
-	# 	values = {}
-	# 	for value in [value for value in args if isinstance(value, dict)]:
-	# 		values.update(value)
-	# 	self.update(values)
-
 	@property
 	def sortKey(self):
 		time: ObservationTimestamp = self.timestamp
@@ -1693,21 +1482,11 @@ class Observation(ObservationDict, published=False, recorded=False):
 @Archived.register
 class ArchivedObservation(Observation, published=False, recorded=False):
 
-	# def __new__(cls, source: Archivable, *args, **kwargs):
-	# 	if hasattr(source, '__archivedClass__'):
-	# 		cls = source.__archivedClass__
-	# 	else:
-	# 		cls = type(type(source).__name__, (cls, type(source),), {})
-	# 		source.__archivedClass__ = cls
-	# 	return super().__new__(cls, source, *args, **kwargs)
-
 	def __init__(self, source: Optional[Archivable] = None, *args, **kwargs):
-		timestamp = kwargs.get('timestamp', None) or (source.timestamp if source is not None else None)
-		if timestamp is not None:
-			self.timestamp = timestamp
 		if source:
-			values = {key: value.archived if isinstance(value, ArchivableValue) else copy(value) for key, value in source.items()}
-			values = {key: value for key, value in values.items() if value is not None}
+			values = {key: v for key, value in source.items() if (v := (value.archived if isinstance(value, ArchivableValue) else copy(value))) is not None}
+			times = [i.timestamp.timestamp() for i in values.values()]
+			self.timestamp = datetime.fromtimestamp(sum(times)/len(times)).astimezone(_timezones.utc).astimezone(tz=config.tz)
 			dict.__init__(self, values)
 		else:
 			dict.__init__(self)
@@ -1732,7 +1511,7 @@ class ArchivedObservation(Observation, published=False, recorded=False):
 			dict.update(*args, **kwargs)
 		raise AttributeError('ArchivedObservation is immutable')
 
-	def calculateMissing(self):
+	def calculateMissing(self) -> None:
 		return
 
 	@property
@@ -1929,8 +1708,6 @@ class ObservationTimeSeries(ObservationDict, published=True):
 		self._period = period
 
 	def __updateObsKey(self, key):
-		# self[key] = {k1: _value[key] for k1, _value in self['time'].items() if key in _value.keys()}
-		# self[key] = MeasurementTimeline(self, key)
 		self[key] = MeasurementTimeSeries(self, key, [x[key] if key in x.keys() else None for x in self['time'].values()])
 
 	def __genObsValueForKey(self, key):
@@ -1973,7 +1750,6 @@ class ObservationTimeSeries(ObservationDict, published=True):
 
 	@property
 	def translator(self):
-		## Todo: find a better way for this
 		return self.source.translator
 
 	def observationKeys(self):
@@ -2014,64 +1790,9 @@ class ObservationTimeSeries(ObservationDict, published=True):
 		else:
 			raise KeyError(f'Only "ObservationTimestamp" is supported as key')
 
-	# # if not any(key in k for k in self.observationKeys()):
-	# #
-	# # 	if isinstance(key, int):
-	# # 		return list(self['time'].values())[key]
-	# #
-	# # 	if isinstance(key, datetime):
-	# # 		timestamp = int(key.timestamp())
-	# # 		key = closest(list(self['time'].keys()), timestamp)
-	# # 		return self['time'][key]
-	#
-	# else:
-	# 	# _values = {K: MeasurementTimeSeries(self, K, [i[K] for i in self['time']._values()]) for K in self.observationKeys() if key in K}
-	# 	# if len(_values) == 1:
-	# 	# 	return _values.popitem()[1]
-	# 	# return _values
-	# 	if key in self.observations:
-	# 		return self.observations[key]
-	# 	if key in self.observationKeys():
-	# 		value = [i[key] for i in self['time'].values()]
-	# 		series = MeasurementTimeSeries(self, key, value)
-	# 		self.observations[key] = series
-	# 		return series
-	# 	else:
-	# 		raise KeyError(key)
-
 	@cached_property
 	def categories(self):
 		return CategoryDict(self, self.keys(), None)
-
-	@cached_property
-	def valueKeys(self) -> set[str]:
-		if 'time' not in self:
-			try:
-				return (delattr(self, 'valueKeys'))
-			except AttributeError:
-				return set()
-		elif 'time' in self and len(self['time']) == 0:
-			try:
-				return (delattr(self, 'valueKeys'))
-			except AttributeError:
-				return set()
-		else:
-			allKeys = set()
-			for obs in self['time'].values():
-				allKeys.update(obs.keys())
-			return allKeys
-
-	def parseData(self, data):
-		for field in self._ignoredFields:
-			data.pop(field)
-
-		normalizeDict = {value['sourceKey']: key for key, value in self.translator.items()}
-		data = {normalizeDict[key]: value for key, value in data.items()}
-
-		finalData = {}
-		for key, value in data.items():
-			finalData[key] = self.convertValue(key, value)
-		return finalData
 
 	@property
 	def raw(self):
@@ -2083,11 +1804,7 @@ class ObservationTimeSeries(ObservationDict, published=True):
 
 
 class ObservationLog(ObservationTimeSeries, published=False, recorded=True):
-	archiveAfter: timedelta = timedelta(minutes=15)
-
-	# def __init_subclass__(cls, **kwargs):
-	# 	cls.ArchivedItemClass = type('Archived'+cls.itemClass.__name__, (ArchivedObservation,), {})
-	# 	super().__init_subclass__(**kwargs)
+	archiveAfter: timedelta = timedelta(minutes=15)  # TODO: Make this a configurable option
 
 	@ObservationTimeSeries.period.getter
 	def period(self) -> timedelta:
@@ -2289,12 +2006,6 @@ class MeasurementTimeSeries(OrderedDict):
 		self.__lashHash = thisHash
 
 	def __sourcePull(self) -> list[ObservationValue]:
-		def calculatePeriod(arr) -> float:
-			if len(arr) == 0:
-				return timedelta(seconds=-1)
-			timestamps = np.array([i.timestamp.timestamp() for i in arr])
-			return (timestamps[1:-2] - np.roll(timestamps, 1)[1:-2]).mean()
-
 		assert hasattr(self._source, 'observations')
 		values: list[ObservationValue] = []
 		sources: List[MeasurementTimeSeries, ObservationRealtime] = [e[self._key] for e in self._source.observations if self._key in e]
@@ -2306,7 +2017,6 @@ class MeasurementTimeSeries(OrderedDict):
 				item.refresh()
 				log.debug(f'{self} refreshed {item} with length: {len(item)}')
 
-		sourcesString = ', '.join(f'{s} with length {len(s)}' for s in sources)
 		expectedLength = sum(len(s) for s in sources)
 		for item in sources:
 			log.debug(f'Pulling from {item}')
@@ -2333,18 +2043,6 @@ class MeasurementTimeSeries(OrderedDict):
 				keysToPop.append(key)
 		for key in keysToPop:
 			self.pop(key)
-
-	# def __setitem__(self, key, value):
-	# if isinstance(value, ValueWrapper) and not isinstance(key, (datetime, timedelta, DateKey)):
-	# 	key = value.timestamp
-	# if isinstance(key, (datetime, timedelta)):
-	# 	key = DateKey(key)
-	# if key in self and self[key] != value:
-	# 	self.log.debug('Stored value is not the same as the new value, this should never happen')
-	# else:
-	# 	# self._source.signals.valueAdded.emit({'source': self._source, 'key': key, 'value': value})
-	# 	# value.valueChanged.connect(self.__clearCache)
-	# 	super(MeasurementTimeSeries, self).__setitem__(key, value)
 
 	def __getitem__(self, key):
 		if isinstance(key, slice):
@@ -2392,15 +2090,7 @@ class MeasurementTimeSeries(OrderedDict):
 	def __contains__(self, key):
 		if isinstance(key, datetime):
 			return super(MeasurementTimeSeries, self).__contains__(key) or self.first.timestamp <= key <= self.last.timestamp
-
-	# previousKey = key - self.period
-	# if super(MeasurementTimeSeries, self).__contains__(previousKey):
-	# 	key -= self.period
-	# 	return True
-	# nextKey = key + self.period
-	# if super(MeasurementTimeSeries, self).__contains__(nextKey):
-	# 	key += self.period
-	# 	return True
+		return super().__contains__(key)
 
 	def __convertKey(self, key) -> DateKey:
 		if isinstance(key, int):
@@ -2415,7 +2105,6 @@ class MeasurementTimeSeries(OrderedDict):
 			start = key.start or self.first.timestamp
 			stop = key.stop or self.last.timestamp
 			start, stop = sorted((start, stop))
-			# step = key.step if key.step is not None else timedelta(minutes=1)
 			if start.tzinfo is None:
 				start = start.replace(tzinfo=config.tz)
 			if stop.tzinfo is None:
