@@ -412,64 +412,10 @@ class ObservationValue(TimeAwareValue):
 		return self.__rawValue
 
 	@property
-	def __convertFunc(self):
-		typeString = self.__metadata.get('type', None)
-		unitDef = self.__metadata.get('sourceUnit', None)
-		kwargs = kwargs = self.__metadata.get('kwargs', {})
-
-		if typeString == 'datetime':
-			if 'tz' in kwargs:
-				if isinstance(kwargs['tz'], TranslatorProperty):
-					value = kwargs['tz']
-					kwargs['tz'] = value()
-				if isinstance(kwargs['tz'], str):
-					kwargs['tz'] = pytz.timezone(kwargs['tz'])
-			else:
-				kwargs['tz'] = config.tz
-			if unitDef == 'epoch':
-				return lambda value: datetime.fromtimestamp(value, **kwargs)
-			elif unitDef == 'ISO8601':
-				format = self.__metadata.get('format', None)
-				if format@isa@Iterable:
-					for f in format:
-						try:
-							datetime.strptime(self.rawValue, f).astimezone(config.tz)
-							return lambda value: datetime.strptime(value, f).astimezone(config.tz)
-						except ValueError:
-							pass
-
-				return lambda value: datetime.strptime(value, format).astimezone(config.tz)
-		if typeString == 'icon':
-			if self.__metadata['iconType'] == 'glyph':
-				alias = self.__metadata['alias']
-				return lambda value: alias.get(str(value), value)
-		if isinstance(unitDef, str) and unitDef in unitDict:
-			return lambda value: unitDict[unitDef](value, **kwargs)
-		if isinstance(unitDef, Iterable):
-			if len(unitDef) == 2:
-				n, d = unitDef
-				if isinstance(n, str) and n in unitDict:
-					n = unitDict[n]
-				if isinstance(d, str) and d in unitDict:
-					d = unitDict[d]
-				if isinstance(d, TranslatorProperty):
-					d = d()
-				elif isinstance(d, type):
-					d = d(1)
-				if hasattr(d, 'value'):
-					d = d.value
-				comboCls = unitDict['special'][typeString][n, type(d)]
-				return lambda value: comboCls(value, d, **kwargs)
-		if typeString is not None and unitDef is not None:
-			if isinstance(unitDef, str):
-				cls = unitDict['str']
-				return lambda value: cls(value, **kwargs)
-
-		return lambda value: value
-
-	@property
-	def convertFunc(self):
-		return self.__convertFunc
+	def convertFunc(self) -> Callable:
+		if self.__convertFunc__ is None:
+			self.__convertFunc__ = self.metadata.getConvertFunc(self.source)
+		return self.__convertFunc__
 
 	def __str__(self):
 		return str(self.value)
