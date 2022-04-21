@@ -1,183 +1,394 @@
-from collections.abc import Iterable
-from typing import Callable, Hashable, Set, Union
-
-from src import config, logging
+from difflib import get_close_matches
 from datetime import datetime
+from enum import Enum
 from functools import cached_property, lru_cache
+from typing import Callable, Hashable, Optional, Set, Union, Iterable
+from collections import ChainMap
 
+from dateutil import parser as DateParser
 from WeatherUnits.base import DerivedMeasurement, Measurement
 
+from src import config, logging
 from src.catagories import CategoryDict, CategoryItem, UnitMetaData, ValueNotFound
-from src.utils import clearCacheAttr, ISOduration, levenshtein
-from .units import unitDict
+from src.utils import clearCacheAttr, ISOduration, now, Unset
+from src.plugins.translator.units import unitDict
 
 log = logging.getLogger(__name__)
 
 
-class ConditionValue:
-	_description: str
-	_glyph: chr
+class TranslatorSpecialKeys(str, Enum):
+	sourceData = "{{sourceData}}"
+	metaData = "{{metaData}}"
 
-	def __init__(self, data):
-		self._description = data['description']
-		self._glyph = data['icon']
 
-	def __str__(self):
-		return self._description
+tsk = TranslatorSpecialKeys
 
-	def __repr__(self):
-		return self._glyph
+
+class DotStorage(dict):
+	"""
+		A class that can be used to store values in a dictionary.
+		This is useful for storing values in a dictionary that are
+		not otherwise accessible.
+	"""
+
+	# TODO: This could probably be changed to a SimpleNamespace
+
+	def __getattr__(self, item):
+		return self[item]
+
+	def __setattr__(self, key, value):
+		if isinstance(value, dict):
+			value = DotStorage(value)
+		self[key] = value
+
+
+class LevityDatagram(dict):
+	sourceData: dict
+	metaData: dict
+
+	def __init__(self, data: dict, translator: 'Translator' = None, **kwargs):
+		self.__creationTime = kwargs.get('creationTime', None) or now()
+		self.__translator = translator
+		self.__sourceData = kwargs.get('sourceData', {})
+		self.__metaData = kwargs.get('metaData', {})
+		self.__static = kwargs.get('static', False)
+		self.__subItems = []
+		self.__dataMap = kwargs.get('dataMap', None)
+		super().__init__()
+		self.__initdata__(data)
+		self.mapData()
+		self.validate()
+
+	def __initdata__(self, data: dict):
+		data = self.mapArrays(data)
+		data = self.parseData(data=data)
+		data = self.replaceKeys(data)
+		data = self.replaceKeyVars(data)
+		self.update(data)
+
+	@lru_cache(maxsize=16)
+	def findTimeKey(self, data: dict) -> str:
+		if isinstance(data, frozenset):
+			timeKey = self.translator['timestamp']['sourceKey']
+			if isinstance(timeKey, (list, tuple, set, frozenset)):
+				for key in timeKey:
+					if key in data:
+						return key
+			elif timeKey in data:
+				return timeKey
+			return (get_close_matches('timestamp', list(data), n=1, cutoff=0.5) or ['timestamp'])[0]
+		else:
+			return 'timestamp'
+
+	def mapData(self):
+		if self.__translator is None:
+			return
+		data = self
+		dataMap = self.dataMap
+		items = self.findAll() or [Subdatagram(parent=self, data=dict(self), path=())]
+		for name, _map in dataMap.items():
+			s = DotStorage({'map': _map})
+			for item in items:
+				match item:
+					case Subdatagram(path=s.map):
+						self[name] = items.pop(items.index(item))
+						break
+					case [Subdatagram(path=(s.map, i)), *_]:
+						self[name] = items.pop(items.index(item))
+						break
+					case [Subdatagram(path=s.map), *_]:
+						self[name] = items.pop(items.index(item))
+						break
+
+		# remove any items that were not mapped
+		for key, value in list(data.items()):
+			if key in dataMap:
+				continue
+			else:
+				del data[key]
+
+	def findAll(self):
+		items = []
+
+		def find(item: dict):
+			match item:
+				case [Subdatagram(), *_]:
+					if len(item) == 1:
+						items.append(item[0])
+					else:
+						items.append(item)
+				case Subdatagram() as item:
+					items.append(item)
+				case dict():
+					for key, value in item.items():
+						find(value)
+
+		find(self)
+		return items
 
 	@property
-	def description(self):
-		return self._description
+	def sourceData(self):
+		return self.__sourceData
+
+	@sourceData.setter
+	def sourceData(self, value):
+		self.__sourceData = value
 
 	@property
-	def glyph(self) -> chr:
-		return self._glyph
+	def metaData(self):
+		return self.__metaData
 
+	@metaData.setter
+	def metaData(self, value):
+		self.__metaData = value
 
-class ConditionInterpreter:
-	_library: dict[str, dict[str, str]]
+	@property
+	def creationTime(self):
+		return self.__creationTime
+
+	@property
+	def translator(self):
+		return self.__translator
+
+	@property
+	def static(self):
+		return self.__static
 
 	def __getitem__(self, item):
-		return ConditionValue(self._library[item])
+		if item.startswith('@'):
+			if item.startswith('@meta.'):
+				return self.metaData[f'@{item[6:]}']
+			elif item.startswith('@source.'):
+				return self.sourceData[f'@{item[8:]}']
+			return self.metaData.get(item, None) or self.sourceData.get(item, None)
+		return super().__getitem__(item)
+
+	def __setitem__(self, key, value):
+		if not self.static:
+			if key in self.translator._ignored:
+				return
+			if not isinstance(value, LevityDatagram):
+				self.parseData(key=key, value=value)
+				data = self.replaceKeyVars({key: value})
+			super().__setitem__(key, value)
+
+	def replaceKeyVars(self, data: dict):
+		for key, value in dict(data).items():
+			key = CategoryItem(key)
+			keyVars = {f'{i}': self.sourceData.get(i, None) or self.metaData.get(i, '.') for i in key.vars}
+			if keyVars:
+				data.pop(key)
+				key = key.replaceVar(**keyVars)
+			data[key] = value
+		return data
+
+	def replaceKeys(self, data: dict = None):
+		for key, value in dict(data).items():
+			data.pop(key)
+			if key in self.translator._ignored:
+				continue
+			data[self.translator.sourceKeyMap.get(key, key)] = value
+		return data
+
+	def __hash__(self):
+		return hash(tuple(self.sourceData.items()))
+
+	def parseData(self, *_: None, key: str = None, value: str = None, data: dict = None, path: list = None):
+		if key and value and data is None:
+			data = {key: value}
+		if data is None:
+			raise SyntaxError('No data provided')
+		storage = DotStorage({})
+		for key, value in list(data.items()):
+			storage.update({
+				'key':     key,
+				'value':   value,
+				'path':    (*(path or ()), key),
+				'timekey': self.findTimeKey(frozenset(value.keys())) if isinstance(value, dict) else ''
+			})
+			if len(storage.path) == 1:
+				storage.path = storage.path[0]
+			match value:
+				case (str() | int() | float() | bool()):
+					popLater = False
+					if key in self.translator.properties:
+						prop = self.translator.properties.get(key)
+						if prop.get(tsk.sourceData, False):
+							self.sourceData[f'@{self.translator.properties.getKey(key)}'] = value
+							popLater = True
+					if key in self.translator.metaData:
+						meta = self.translator.metaData.get(key)
+						if meta.get(TranslatorSpecialKeys.metaData, False):
+							if any(i in str(key) for i in ('time', 'date')) and isinstance(value, str):
+								try:
+									v = DateParser.parse(value)
+								except DateParser.ParserError:
+									continue
+							self.metaData[f'@{self.translator.metaData.getKey(key)}'] = value
+							popLater = True
+					if popLater:
+						data.pop(key)
+				case {storage.timekey: list(timestamps), **values} if storage.path in self.validPaths and set(values.keys()).intersection(self.translator._sourceKeys.keys()):
+					keys = list(value.keys())
+					d = []
+					for i, _ in enumerate(timestamps):
+						d.append(Subdatagram(parent=self, data={k: value[k][i] for k in keys}, path=[*(path or []), key, i]))
+					data[key] = d
+				case dict() as obs if storage.path in self.validPaths and set(obs.keys()).intersection(self.translator._sourceKeys.keys()):
+					data[key] = Subdatagram(parent=self, data=value, path=key)
+				# if list(data[key].path) in [i[1:] for i in self.translator.dataMapPaths]:
+				# 	print('here')
+				case dict():
+					data[key] = self.parseData(data=value, path=[key])
+				case [*items]:
+					for i, item in enumerate(items):
+						match item:
+							case dict() as obs if set(obs.keys()).intersection(self.translator._sourceKeys.keys()):
+								value[i] = Subdatagram(parent=self, data=item, path=[*(path or []), key, i])
+							case _:
+								pass
+				case _:
+					pass
+
+		return data
+
+	def mapArrays(self, data, keyMap: Optional[str] = None):
+		keyMap = keyMap or self.translator.getKeyMap(data) or {}
+		if isinstance(keyMap, dict):
+			for key, subMap in keyMap.items():
+				if isinstance(data, list) and key is iter:
+					data = [self.mapArrays(data=item, keyMap=subMap) for item in data]
+				# if len(data) == 1:
+				# 	data = data[0]
+				# 	newData.update(data)
+				# else:
+				# 	newData = data
+				elif isinstance(subMap, list) and key is filter:
+					for k, v in list(data.items()):
+						if k in subMap:
+							continue
+						data.pop(k)
+				elif key in data:
+					data[key] = self.mapArrays(data=data.pop(key), keyMap=subMap)
+		# data = self.__replaceSourceKeys(data)
+		elif isinstance(keyMap, list) and len(keyMap) == len(data):
+			return {key: value for key, value in zip(keyMap, data)}
+		return data
+
+	def replace(self, data: dict, metadata: dict = None):
+		self.clear()
+		m = {k: v for k, v in data.items() if k.startswith('@')}
+		self.update(data)
+
+	def replaceKey(self, oldKey: str, newKey: str):
+		self[newKey] = self.pop(oldKey, None)
+
+	def metaKeys(self):
+		return *[f'@meta.{i.strip("@")}' for i in self.metaData.keys()], *[f'@source.{i.strip("@")}' for i in self.sourceData.keys()]
+
+	def metaValues(self):
+		return [*self.metaData.values(), *self.sourceData.values()]
+
+	def metaItems(self):
+		return zip(self.metaKeys(), self.metaValues())
+
+	def __iter__(self):
+		return super().items().__iter__()
+
+	def __replaceWithSubData(self, key: str, value: str):
+		self[key] = Subdatagram(parent=self, data=value, path=key)
+
+	def getData(self, key: str):
+		data = self.get(key, None)
+		if isinstance(data, Subdatagram):
+			return data
+		if isinstance(data, dict):
+			return LevityDatagram(data=data, translator=self.__translator, static=True, sourceData=self.sourceData, metaData=self.metaData)
+		return None
+
+	@property
+	def dataMap(self):
+		return self.__dataMap or self.translator.dataMaps.get(self.metaData.get('@type', ''), None) or dict()
+
+	@property
+	def validPaths(self):
+		return list(self.dataMap.values())
+
+	def validate(self):
+		for key, value in list(self.items()):
+			match value:
+				case [Subdatagram()]:
+					for item in value:
+						item.validate()
+				case Subdatagram():
+					value.validate()
+				case _ if key in self.translator and ((unitMetaData := self.translator.getExact(key)) and unitMetaData.hasValidation):
+					validation = unitMetaData.validate(self, key, value)
+					if not validation:
+						self.pop(key)
 
 
-class ClimacellConditionInterpreter(ConditionInterpreter):
-	_library = {
-		'rain_heavy':          {'description': 'Substantial rain', 'icon': ''},
-		'rain':                {'description': 'Rain', 'icon': ''},
-		'rain_light':          {'description': 'Light rain', 'icon': ''},
-		'freezing_rain_heavy': {'description': 'Substantial freezing rain', 'icon': ''},
-		'freezing_rain':       {'description': 'Freezing rain', 'icon': ''},
-		'freezing_rain_light': {'description': 'Light freezing rain', 'icon': ''},
-		'freezing_drizzle':    {'description': 'Light freezing rain falling in fine pieces', 'icon': ''},
-		'drizzle':             {'description': 'Light rain falling in very fine drops', 'icon': ''},
-		'ice_pellets_heavy':   {'description': 'Substantial ice pellets', 'icon': ''},
-		'ice_pellets':         {'description': 'Ice pellets', 'icon': ''},
-		'ice_pellets_light':   {'description': 'Light ice pellets', 'icon': ''},
-		'snow_heavy':          {'description': 'Substantial snow', 'icon': ''},
-		'snow':                {'description': 'Snow', 'icon': ''},
-		'snow_light':          {'description': 'Light snow', 'icon': ''},
-		'flurries':            {'description': 'Flurries', 'icon': ''},
-		'tstorm':              {'description': 'Thunderstorm conditions', 'icon': ''},
-		'fog_light':           {'description': 'Light fog', 'icon': ''},
-		'fog':                 {'description': 'Fog', 'icon': ''},
-		'cloudy':              {'description': 'Cloudy', 'icon': ''},
-		'mostly_cloudy':       {'description': 'Mostly cloudy', 'icon': ''},
-		'partly_cloudy':       {'description': 'Partly cloudy', 'icon': ''},
-		'mostly_clear':        {'description': 'Mostly clear', 'icon': ''},
-		'clear':               {'description': 'Clear, sunny', 'icon': ''}
-	}
+class Subdatagram(LevityDatagram):
+	def __init__(self, parent: LevityDatagram, data: dict, path: Union[str, tuple]):
+		self.__path: tuple[str, int] = (path,) if isinstance(path, str) else tuple(path)
+		self.__sourceData = {}
+		self.__metaData = {}
+		self.__parent = parent
+		dict.__init__({})
+		self.__initdata__(data)
 
+	@property
+	def sourceData(self):
+		return ChainMap(self.__sourceData, self.__parent.sourceData)
 
-def convert(source, data):
-	measurementData = data
-	# unit = measurementData['unit']
-	# if isinstance(unit, str) and '@' in unit:
-	# 	unit = lambda: getattr(source, unit)
-	# if "@" in measurementData['unit']
-	unitDefinition = measurementData['sourceUnit']
-	# typeString = measurementData['type']
-	# if isinstance(unitDefinition, list):
-	# 	n, d = [units[cls] for cls in unitDefinition]
-	# 	comboCls: DerivedMeasurement = self.units['special'][typeString]
-	# 	measurement = comboCls(n(value), d(1), timestamp=source.time)
-	# elif unitDefinition == '*':
-	# 	specialCls = units['special'][typeString]
-	# 	kwargs = {'timestamp': self._time} if issubclass(specialCls, Measurement) else {}
-	# 	measurement = specialCls(value, **kwargs)
-	# elif typeString in ['date', 'datetime']:
-	# 	if isinstance(value, datetime):
-	# 		measurement = value
-	# 	else:
-	# 		if unitDefinition == 'epoch':
-	# 			try:
-	# 				measurement = datetime.fromtimestamp(value)
-	# 			except ValueError:
-	# 				measurement = datetime.fromtimestamp(value / 1000)
-	# 		elif unitDefinition == 'ISO8601':
-	# 			measurement = datetime.strptime(value, measurementData['format'])
-	# 		else:
-	# 			measurement = datetime.now()
-	# 			log.warning(f'Unable to convert date value "{value}" defaulting to current time')
-	if typeString == 'timedelta':
-		if unitDefinition == 'epoch':
-			measurement = self.units['s'](value)
-		elif unitDefinition == 'ISO8601':
-			measurement = ISOduration(value)
-	elif unitDefinition is None:
-		raise ValueError(f'Value Ignored: {key}')
-	else:
-		cls = units[unitDefinition]
-		if isinstance(cls, type) and issubclass(cls, Measurement):
-			measurement = cls(value, timestamp=time)
-		else:
-			measurement = cls(value)
+	@sourceData.setter
+	def sourceData(self, value):
+		self.__sourceData = value
 
-	if isinstance(measurement, Measurement) and localize:
-		others = {'sourceValue': measurement, 'sourceValueRaw': value}
-		measurement = measurement.localize
-	else:
-		others = {'sourceValue': value}
+	@property
+	def metaData(self):
+		return ChainMap(self.__metaData, self.__parent.metaData)
 
+	@metaData.setter
+	def metaData(self, value):
+		self.__metaData = value
 
-def propertyGetter(source: 'ObservationDict', data: dict):
-	"""
-		Returns a property getter that will return the value of the data
-		key in the source dictionary.
-		Order of preference:
-			1. source[data['key']]
-			2. source.get(data['attr'])
-			3. data['default']
-	"""
+	@property
+	def parent(self):
+		return self.__parent
 
-	def getter():
-		if 'key' in data and data['key'] in source:
-			return source[data['key']]
-		elif 'attr' in data and hasattr(source, data['attr']):
-			return getattr(source, data['attr'])
-		else:
-			unitCls = data['default'].get('unit', None)
-			if unitCls is not None:
-				value = data['default']['value']
-				return unitCls(value)
-			return data['default']
+	@property
+	def translator(self):
+		return self.__parent.translator
 
-	return getter
+	@property
+	def creationTime(self):
+		return self.__parent.creationTime
 
+	@property
+	def static(self):
+		return self.__parent.static
 
-#
-# def conversionGetter(data: UnitMetaData):
-#
-#
-#
-# 	unit = data['unit']
-# 	typeString = data.get('type', None)
-# 	if typeString in ['date', 'datetime']:
-# 		if isinstance(value, datetime):
-# 			measurement = value
-# 		else:
-# 			if unitDefinition == 'epoch':
-# 				try:
-# 					measurement = datetime.fromtimestamp(value)
-# 				except ValueError:
-# 					measurement = datetime.fromtimestamp(value / 1000)
-# 			elif unitDefinition == 'ISO8601':
-# 				measurement = datetime.strptime(value, measurementData['format'])
-# 			else:
-# 				measurement = datetime.now()
-# 				log.warning(f'Unable to convert date value "{value}" defaulting to current time'):
+	@property
+	def path(self):
+		path = (*getattr(self.__parent, 'path', ()), *self.__path,)
+		if len(path) == 1:
+			return path[0]
+		return path
+
+	@property
+	def dataMap(self):
+		return self.__parent.dataMap
 
 
 class Properties(dict):
 
-	def __init__(self, source):
+	def __init__(self, plugin: 'Plugin', source: dict):
+		self.__plugin = plugin
 		keys = [key for key in source.keys() if str(key).startswith('@')]
 		for key in keys:
 			self[key.strip('@')] = source.pop(key)
-		super().__init__()
+		super().__init__({'plugin': plugin})
 
 	def __setitem__(self, key, value):
 		key = key.strip('@')
@@ -185,15 +396,140 @@ class Properties(dict):
 
 	def __getitem__(self, key):
 		key = key.strip('@')
-		return super().__getitem__(key)
+		item = super().__getitem__(key)
+		return item
 
-	def get(self, key, default=None):
+	def get(self, key, default=Unset):
+		if isinstance(key, str):
+			key = key.strip('@')
+		value = super().get(key, None)
+		if value is not None:
+			return value
+		key = self.sourceKeys.get(key, None)
+		if key is not None:
+			return super().get(key, None)
+		if default is not Unset:
+			return default
+		raise KeyError(key)
+
+	def getKey(self, key):
 		key = key.strip('@')
-		return super().get(key, default)
+		if key in self.keys():
+			return key
+		return self.sourceKeys.get(key, key)
 
 	def __contains__(self, key):
+		if isinstance(key, str):
+			key = key.strip('@')
+		return super().__contains__(key) or key in self.sourceKeys
+
+	@cached_property
+	def sourceKeys(self):
+		sourceKeys = {key: value['sourceKey'] for key, value in self.items() if 'sourceKey' in value}
+		for key in [k for k in sourceKeys]:
+			value = sourceKeys.pop(key)
+			if isinstance(value, list):
+				sourceKeys.update({v: key for v in value})
+			else:
+				sourceKeys[value] = key
+		return sourceKeys
+
+	@property
+	def plugin(self) -> 'Plugin':
+		return self.__plugin
+
+
+class MetaData(dict):
+
+	def __init__(self, plugin: 'Plugin', source: dict):
+		self.__plugin = plugin
+		keys = [key for key, value in source.items() if str(key).startswith('@meta') or TranslatorSpecialKeys.metaData in value]
+		keys = sorted(keys, key=lambda k: str(k).startswith('@'), reverse=True)
+		for key in keys:
+			originalKey = key
+			key = key.replace('@meta.', '@', 1)
+			if TranslatorSpecialKeys.metaData not in source[originalKey] or originalKey.startswith('@meta.'):
+				self[key] = source.pop(originalKey)
+			else:
+				self[key] = source[originalKey]
+		super().__init__({'plugin': plugin})
+
+	def __setitem__(self, key, value):
+		if isinstance(value.get(TranslatorSpecialKeys.metaData, False), str):
+			key = value[TranslatorSpecialKeys.metaData]
 		key = key.strip('@')
-		return super().__contains__(key)
+		if 'key' not in value:
+			value['key'] = key
+		if key in self:
+			self[key].update(value)
+		else:
+			if isinstance(value, dict) and not isinstance(value, UnitMetaData):
+				value = UnitMetaData(value=value)
+			super().__setitem__(key, value)
+		clearCacheAttr(self, 'sourceKeys')
+		clearCacheAttr(self, 'metaKeys')
+
+	def __getitem__(self, key):
+		key = key.strip('@')
+		return super().__getitem__(key)
+
+	def get(self, key, default=Unset):
+		if isinstance(key, str):
+			key = key.strip('@')
+		value = super().get(key, None)
+		if value is not None:
+			return value
+		key = self.sourceKeys.get(key, None)
+		if key is not None:
+			return super().get(key, None)
+		if default is not Unset:
+			return default
+		raise KeyError(key)
+
+	def getKey(self, key):
+		if isinstance(key, str):
+			key = key.strip('@')
+		if key in self.keys():
+			return key
+		return self.sourceKeys.get(key, key)
+
+	def __contains__(self, key):
+		if isinstance(key, str):
+			key = key.strip('@')
+		return super().__contains__(key) or key in self.sourceKeys
+
+	@cached_property
+	def sourceKeys(self):
+		sourceKeys = {key: value['sourceKey'] for key, value in self.items() if 'sourceKey' in value}
+		keys = {key: value['key'] for key, value in self.items() if 'key' in value}
+		for key in [k for k in sourceKeys]:
+			value = sourceKeys.pop(key)
+			if isinstance(value, (list, tuple)):
+				sourceKeys.update({v: key for v in value})
+			else:
+				sourceKeys[value] = key
+		return sourceKeys
+
+	@cached_property
+	def metaKeys(self) -> dict:
+		return {key: value['key'] for key, value in self.items() if 'key' in value}
+
+	def getValue(self, key, data: dict, default=Unset):
+		if isinstance(key, str):
+			key = key.strip('@')
+		key = self[key].get('sourceKey', key)
+		if isinstance(key, (list, tuple)):
+			for k in key:
+				if k in data:
+					return data[k]
+			if default is not Unset:
+				return default
+			raise KeyError(key)
+		return data.get(key, default)
+
+	@property
+	def plugin(self):
+		return self.__plugin
 
 
 class Translator(CategoryDict):
@@ -206,114 +542,203 @@ class Translator(CategoryDict):
 		result = {n: t.getExact(key) for n, t in cls.__translators__.items() if key in t}
 		return result
 
-	def __init__(self, api: 'API', source: dict, category: str = None, ignored: Iterable[str] = None, **kwargs):
+	def __init__(self, plugin: 'Plugin', source: dict, category: str = None, ignored: Iterable[str] = None, **kwargs):
 		self._ignored = set(source.pop('ignored', []))
 		category = ''
-		self.properties = Properties(source)
+		self._plugin = plugin
+		self.__requirements = self.buildRequirements(source)
+		self.metaData = MetaData(plugin=plugin, source=source)
+		self.properties = Properties(plugin=plugin, source=source)
 		self.keyMaps = source.pop('keyMaps', {})
 		self.dataMaps = source.pop('dataMaps', {})
 		self.calculations = source.pop('calculations', {})
 		self.aliases = source.pop('aliases', {})
+		# self.metaData.update({k: v for k, v in self.properties.items() if v.get('@isMeta', False)})
 		super(Translator, self).__init__(None, source, category)
 		if ignored is not None:
 			self._ignored.update(ignored)
-		self._api = api
+
 		toConvert = [key for key, value in self._source.items() if isinstance(value, dict)]
 		for key in toConvert:
-			self._source[key] = UnitMetaData(key, self)
-		self.__translators__[api.name] = self
-		self.__hash = hash((api, frozenset(self.keys())))
+			value = UnitMetaData(key=key, reference=self)
+			self._source[key] = value
+		self.__translators__[plugin.name] = self
+		self.__hash = hash((plugin, frozenset(self.keys())))
+
+	def buildRequirements(self, data: dict):
+		return {key: value['requires'] for key, value in data.items() if 'requires' in value}
 
 	def propertySetters(self):
 		return {key: value for key, value in self._source.items() if 'property' in value.keys() or 'setter' in value.keys()}
 
-	def getExact(self, key: str):
+	def getExact(self, key: str) -> Optional[UnitMetaData]:
 		if not isinstance(key, CategoryItem):
 			key = CategoryItem(key)
-		foundKey = self._source.get(key, None) or self._source.get(key.anonymous, None)
-		if foundKey is None:
+		result = self._source.get(key, None) or self._source.get(key.anonymous, None)
+		if result is None:
+			if str(key) in self.properties:
+				return self.properties[str(key)]
 			wildcardKeys = [k for k in self._source.keys() if k.hasWildcard and k == key]
 			if len(wildcardKeys) == 1:
-				foundKey = self._source[wildcardKeys[0]]
+				result = self._source[wildcardKeys[0]]
 			elif len(wildcardKeys) > 1:
-				raise ValueError(f'Multiple keys match "{key}"')
+				log.warning(f'{key} has wildcard which results in multiple values for {key}')
 			else:
-				raise KeyError(f'No key found for "{key}"')
-		return foundKey
+				log.warning(f'{key} was not found in {self}')
+		return result
 
 	def __hash__(self):
 		return self.__hash
 
+	@cached_property
+	def sourceKeyMap(self):
+		keyMap = {key: value['sourceKey'] for key, value in self._source.items() if 'sourceKey' in value and key is not None}
+		for key in [k for k in keyMap]:
+			value = keyMap.pop(key)
+			if isinstance(value, list):
+				keyMap.update({v: key for v in value})
+			else:
+				keyMap[value] = key
+		return keyMap
+
+	@cached_property
+	def dataMapPaths(self):
+		def __recurse(dataMap, path):
+			paths = []
+			if isinstance(dataMap, dict):
+				for key, value in dataMap.items():
+					if isinstance(value, dict):
+						paths.extend(__recurse(value, path + [key]))
+					else:
+						paths.append(path + [key])
+			return paths
+
+		paths = []
+		for key, value in self.dataMaps.items():
+			if isinstance(value, dict):
+				paths.extend(__recurse(value, [key]))
+			else:
+				paths.append([key])
+		return paths
+
+	def __setitem__(self, key: CategoryItem, value: UnitMetaData):
+		if not isinstance(value, UnitMetaData) and not isinstance(value, dict):
+			value = UnitMetaData(key=key, value=value)
+		super(Translator, self).__setitem__(key, value)
+
 	def getKeyMap(self, source: Union[str, Iterable[str]]):
 		if isinstance(source, str):
 			source = [source]
-		mappings = [s for s in source if isinstance(s, Hashable) and s in self.keyMaps]
+		keys = {i for j in source.items() for i in j if isinstance(i, Hashable)}
+		if hasattr(source, 'metaItems'):
+			keys.update({i for j in source.metaItems() for i in j})
+		mappings = [s for s in keys if isinstance(s, Hashable) and s in self.keyMaps]
 		if len(mappings) == 1:
 			return self.keyMaps[mappings[0]]
 		elif len(mappings) > 1:
 			return self.keyMaps[mappings[-1]]
 		else:
-			raise KeyError(f'No key map found for "{source}"')
+			return None
 
 	@lru_cache(maxsize=128)
-	def getUnitMetaData(self, key: str, source) -> UnitMetaData:
-		sourceKey = self._sourceKeys.get(key, None) or self.getExact(key)
-		if isinstance(sourceKey, CategoryItem):
-			value = self.getExact(sourceKey)
-		elif isinstance(sourceKey, UnitMetaData):
-			value = sourceKey
-		elif sourceKey is None:
-			keys = [k for k in self._source.keys() if k == key]
-			## This originally searched for the closest match, but that was too slow and inaccurate
-			## Instead, the key is ignored
-			raise ValueNotFound(f'{key} not found')
-			key = self._sourceKeys[min([(levenshtein(key, i), i) for i in (list(self._sourceKeys.keys()))])[1]]
-			value = self[key], '.'.join(key.split('.')[:-1] + [k])
-			log.warning(f'{k} not found in using best match {value[1]}')
-		else:
-			raise ValueNotFound(f'{key} not found, this should never happen...')
-		value = dict(value)
-		if not isinstance(value['sourceKey'], (str, CategoryItem)):
-			value['sourceKey'] = str(key)
-		return value
+	def getUnitMetaData(self, key: str, source) -> Optional[UnitMetaData]:
+		if str(key).startswith('@meta.'):
+			key = key[6:]
+			data = self.metaData[key]
+			if not isinstance(data, UnitMetaData):
+				key = data.get('key', key)
+				return self.getUnitMetaData(key, source)
+			return data
+		if key not in self:
+			key = self.sourceKeyMap.get(key, None)
+			if key is None:
+				log.warning(f'{key} was not found in {self}')
+				return None
+		metaData = self.getExact(key)
+		if metaData is None:
+			keys = [str(key) for k in self._source.keys()]
+			closestMatch = get_close_matches(str(key), keys, n=1, cutoff=0.5)
+			if closestMatch:
+				log.warning(f'{key} was not found in {self} but {closestMatch[0]} was found as it\'s closest match')
+				return self.getUnitMetaData(closestMatch[0], source)
+			else:
+				log.warning(f'{key} was not found in {self}')
+				return None
+		return metaData
+
+	def mapKeys(self, source: Union[str, Iterable[str]], data, keyMap: Optional[str] = None):
+		keyMap = keyMap or self.getKeyMap(data) or {}
+		if isinstance(keyMap, dict):
+			for key, value in keyMap.items():
+				if isinstance(data, list) and key is iter:
+					data = [self.mapKeys(source, item, value) for item in data]
+				# if len(data) == 1:
+				# 	data = data[0]
+				# 	newData.update(data)
+				# else:
+				# 	newData = data
+				elif isinstance(value, list) and key is filter:
+					for k, v in list(data.items()):
+						if k in value:
+							continue
+						data.pop(k)
+				elif key in data:
+					data[key] = self.mapKeys(source, data.pop(key), value)
+			data = self.__replaceSourceKeys(data)
+		elif isinstance(keyMap, list) and len(keyMap) == len(data):
+			return {keyMap[i]: data[i] for i in range(len(keyMap))}
+		return data
+
+	def __replaceSourceKeys(self, data: dict):
+		if isinstance(data, (list, tuple)):
+			return [self.__replaceSourceKeys(item) for item in data]
+		for key, value in data.copy().items():
+			if isinstance(value, dict):
+				data[key] = self.__replaceSourceKeys(value)
+			elif isinstance(value, (list, tuple)):
+				data[key] = [self.__replaceSourceKeys(item) for item in value]
+			elif key in self.sourceKeyMap:
+				newKey = self.sourceKeyMap[key]
+				data[newKey] = data.pop(key)
+		return data
 
 	def mapData(self, source: dict, data: dict, requiredKeys: Set[str] = None):
-		newData = {}
-		try:
-			keyMap = self.getKeyMap(data.values())
-			newData['keyMap'] = keyMap
-		except KeyError:
-			pass
-		for mapName, maps in self.dataMaps.items():
+		data = self.mapKeys(source, data)
+		possibleDataMaps = {k: v for k, v in self.dataMaps.items() if k in data or any(V[0] in [*data.values(), *data.keys()] for V in v)}
+		for mapName, maps in possibleDataMaps.items():
 			subData = data
-			for subMap in maps:
-				subMap = subMap.split('>')
+			for subMap in (m for m in maps if m[0] in (*(i for i in subData.values() if isinstance(i, (str, int))), *subData.keys())):
 				for key in subMap:
 					if key in subData:
 						subData = subData[key]
 					elif key.isdigit() and len(subData) == 1:
 						try:
-							subData = subData[int(key)]
+							subData = subData.pop(int(key))
 						except (IndexError, TypeError):
 							break
 					else:
 						break
 				else:
-					newData[mapName] = subData
+					data[mapName] = subData
 					break
-		for key in data:
-			if key in self.properties:
-				newData[key] = data[key]
-		data = self.__mapData(source, '.', newData)
+		self.__setProperties(source, '.', data)
+
+		for key in list(data.keys()):
+			if key not in self.dataMaps:
+				data.pop(key)
+
 		return data
 
-	def __mapData(self, source: dict, key: str, data: dict):
+	def __setProperties(self, source: dict, key: str, data: dict):
 		if key in self._ignored:
 			pass
 		if key in self.keyMaps:
 			key = self.keyMaps[key]
 		if isinstance(data, dict):
-			return {k: self.__mapData(source, k, v) for k, v in data.items() if k not in self._ignored}
+			for key, value in data.items():
+				if key in self._ignored:
+					continue
+				self.__setProperties(source, key, value)
 		elif isinstance(data, (tuple, list)):
 			if key in self.keyMaps:
 				return data
@@ -349,8 +774,8 @@ class Translator(CategoryDict):
 			raise ValueNotFound(f'{key} not found')
 
 	@property
-	def api(self):
-		return self._api
+	def plugin(self) -> 'Plugin':
+		return self._plugin
 
 	@cached_property
 	def _sourceKeys(self):
@@ -364,23 +789,6 @@ class Translator(CategoryDict):
 				else:
 					sourceKeys[sourceKey] = k
 		return sourceKeys
-
-	def translate(self, source: 'ObservationDict', raw: dict, localize: bool = True, time: datetime = None):
-		clearCacheAttr(self, '_sourceKeys')
-		result = {}
-		for key, value in raw.items():
-			if key in self._ignored:
-				log.debug(f'Ignoring {key}')
-				continue
-			try:
-				value = self.convert(source, key, value, localize=localize, time=time)
-			except ValueError:
-				continue
-			except ValueNotFound:
-				log.warning(f'{key} not found')
-				continue
-			result[value['key']] = value
-		return result
 
 	def convertIter(self, values: list, cls, localize: bool = True, **kwargs):
 		return [cls(value) for value in values]
@@ -407,74 +815,6 @@ class Translator(CategoryDict):
 			cls = datetime.strptime
 			kwargs['format'] = measurementData['format']
 		return [cls(v, **kwargs) for v in values]
-
-	def getUnit(self, key: str):
-		# if '@' in key:
-		return self.getUnitMetaData(self, key)[0]
-
-	def convert(self, source, key, value, localize: bool = True, time: datetime = None):
-		measurementData = self.getUnitMetaData(source, key)
-		# unit = measurementData['unit']
-		# if isinstance(unit, str) and '@' in unit:
-		# 	unit = lambda: getattr(source, unit)
-		# if "@" in measurementData['unit']
-		return {'value': value, **measurementData}
-		unitDefinition = measurementData['sourceUnit']
-		typeString = measurementData['type']
-		# if isinstance(unitDefinition, list):
-		# 	n, d = [self.units[cls] for cls in unitDefinition]
-		# 	comboCls: DerivedMeasurement = self.units['special'][typeString]
-		# 	measurement = comboCls(n(value), d(1), timestamp=time)
-		# elif unitDefinition == '*':
-		# 	specialCls = self.units['special'][typeString]
-		# 	kwargs = {'timestamp': self._time} if issubclass(specialCls, Measurement) else {}
-		# 	measurement = specialCls(value, **kwargs)
-		# elif typeString in ['date', 'datetime']:
-		# 	if isinstance(value, datetime):
-		# 		measurement = value
-		# 	else:
-		# 		if unitDefinition == 'epoch':
-		# 			try:
-		# 				measurement = datetime.fromtimestamp(value)
-		# 			except ValueError:
-		# 				measurement = datetime.fromtimestamp(value / 1000)
-		# 		elif unitDefinition == 'ISO8601':
-		# 			measurement = datetime.strptime(value, measurementData['format'])
-		# 		else:
-		# 			measurement = datetime.now()
-		# 			log.warning(f'Unable to convert date value "{value}" defaulting to current time')
-		# elif typeString == 'timedelta':
-		# 	if unitDefinition == 'epoch':
-		# 		measurement = self.units['s'](value)
-		# 	elif unitDefinition == 'ISO8601':
-		# 		measurement = ISOduration(value)
-		# elif unitDefinition is None:
-		# 	raise ValueError(f'Value Ignored: {key}')
-		# else:
-		# 	cls = self.units[unitDefinition]
-		# 	if isinstance(cls, type) and issubclass(cls, Measurement):
-		# 		measurement = cls(value, timestamp=time)
-		# 	else:
-		# 		measurement = cls(value)
-		#
-		# if isinstance(measurement, Measurement) and localize:
-		# 	others = {'sourceValue': measurement, 'sourceValueRaw': value}
-		# 	measurement = measurement.localize
-		# else:
-		# 	others = {'sourceValue': value}
-
-		# get existing value
-		# existing = self._observation.get(key, None)
-		# if existing is not None:
-		# 	existing.update(measurement, timestamp=time)
-		# else:
-		# 	measurement = ValueWrapper(value=measurement, key=key, metaData=measurementData, timestamp=time, source=self._observation)
-		return {'value': measurement, 'timestamp': time, **others, **measurementData}
-
-	def convertFunction(self, key) -> Callable:
-		measurementData = self.getUnitMetaData(key)
-
-		"""Returns the function needed to convert a value for a given key"""
 
 	def convertList(self, key, value, localize: bool = True):
 		measurementData, key = self.getUnitMetaData(key)
