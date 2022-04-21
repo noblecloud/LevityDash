@@ -11,11 +11,11 @@ from PySide2.QtCore import QObject, QTimer, Signal, Slot
 from typing import Callable, Iterable, Optional, Type, Union
 
 from src.catagories import CategoryDict, CategoryItem
-from src.plugins import pluginLog
+from src.logger import LevityPluginLog as pluginLog
 from src.plugins.observation import (ArchivedObservationValue, MeasurementTimeSeries, Observation, ObservationDict,
                                      ObservationLog, ObservationRealtime, ObservationTimeSeries, ObservationValue, PublishedDict, RecordedObservationValue)
 from src import config
-from plugins.translator import Translator
+from src.plugins.translator import Translator
 from src.utils import ChannelSignal, clearCacheAttr, closest, KeyData, Now, Period
 
 

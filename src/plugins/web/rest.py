@@ -4,6 +4,7 @@ import requests
 
 from typing import overload
 
+from src.plugins.translator import LevityDatagram
 from src.plugins.web import Endpoint, Web
 from src.plugins.web.errors import APIError, InvalidCredentials, RateLimitExceeded
 
@@ -54,4 +55,5 @@ class REST(Web, prototype=True):
 			headers.update(kwargs.get('headers', {}))
 
 		loop = asyncio.get_event_loop()
-		return await loop.run_in_executor(None, self.__getData, url, params, headers)
+		value = await loop.run_in_executor(None, self.__getData, url, params, headers)
+		return self.normalizeData(LevityDatagram(value, translator=self.translator, sourceData={'endpoint': endpoint}, dataMap=self.translator.dataMaps.get(endpoint.name, {})))
