@@ -1,19 +1,99 @@
 import re
+from datetime import datetime
+from functools import cached_property, lru_cache
+from typing import Any, Callable, ClassVar, Dict, Hashable, Iterable, Mapping, Optional, Type, TypeVar, Union
 
-from src import logging
-from functools import cached_property
-from typing import Any, Hashable, Iterable, Optional, Union
+from pytz import timezone
+import WeatherUnits as wu
 
-from PySide2.QtCore import Slot
-
-from src.utils import clearCacheAttr, removeSimilar, subsequenceCheck, TranslatorProperty
+from src import config, logging
+from src.utils import (clearCacheAttr, ColorStr, get, getOrSet, matchWildCard, operatorDict, removeSimilar, SmartString, subsequenceCheck,
+                       TranslatorProperty, Unset)
 
 log = logging.getLogger(__name__)
 
+__all__ = ['UnitMetaData', 'CategoryWildcard', 'CategoryAtom', 'CategoryItem', 'CategoryDict', 'CategoryEndpointDict', 'ValueNotFound']
+
+# TODO: This is currently a duplicate of the unitDict in the Translator package...
+unitDict: Dict[str, Union[Type[wu.Measurement], Type[bool], Dict[str, Union[Type[wu.base.Measurement], Type[wu.base.DerivedMeasurement]]]]] = {
+	'f':                wu.temperature.Fahrenheit,
+	'c':                wu.temperature.Celsius,
+	'%':                wu.others.Humidity,
+	'%c':               wu.others.Coverage,
+	'%p':               wu.others.Probability,
+	'%%':               wu.others.Percentage,
+	'º':                wu.others.Direction,
+	'ºa':               wu.others.Angle,
+	'str':              SmartString,
+	'int':              wu.base.Measurement,
+	'mmHg':             wu.pressure.MillimeterOfMercury,
+	'inHg':             wu.pressure.InchOfMercury,
+	'W/m^2':            wu.others.light.Irradiance,
+	'lux':              wu.others.light.Illuminance,
+	'mb':               wu.Pressure.Millibar,
+	'mbar':             wu.Pressure.Millibar,
+	'bar':              wu.Pressure.Bar,
+	'hPa':              wu.Pressure.Hectopascal,
+	'in':               wu.length.Inch,
+	'mi':               wu.length.Mile,
+	'mm':               wu.length.Millimeter,
+	'm':                wu.length.Meter,
+	'km':               wu.length.Kilometer,
+	'month':            wu.Time.Month,
+	'week':             wu.Time.Week,
+	'day':              wu.Time.Day,
+	'hr':               wu.Time.Hour,
+	'min':              wu.Time.Minute,
+	's':                wu.Time.Second,
+	'ug':               wu.mass.Microgram,
+	'μg':               wu.mass.Microgram,
+	'mg':               wu.mass.Milligram,
+	'g':                wu.mass.Gram,
+	'kg':               wu.mass.Kilogram,
+	'lb':               wu.mass.Pound,
+	'm^3':              wu.Volume.CubicMeter,
+	'ft^3':             wu.Volume.CubicFoot,
+	'volts':            wu.Voltage,
+	'date':             datetime,
+	'uvi':              wu.others.light.UVI,
+	'strike':           wu.others.Strikes,
+	'timezone':         timezone,
+	'datetime':         datetime,
+	'epoch':            datetime.fromtimestamp,
+	'rssi':             wu.RSSI,
+	'ppt':              wu.derived.PartsPer.Thousand,
+	'ppm':              wu.derived.PartsPer.Million,
+	'ppb':              wu.derived.PartsPer.Billion,
+	'pptr':             wu.derived.PartsPer.Trillion,
+	'bool':             bool,
+	'PI':               wu.PollutionIndex,
+	'PrimaryPollutant': wu.PrimaryPollutant,
+	'AQI':              wu.AQI,
+	'AQIHC':            wu.HeathConcern,
+	'MoonPhase':        wu.Measurement,
+	"WeatherCode":      wu.Measurement,
+	'tz':               timezone,
+	'special':          {
+		'precipitation':       wu.Precipitation,
+		'precipitationDaily':  wu.Precipitation.Daily,
+		'precipitationHourly': wu.Precipitation.Hourly,
+		'precipitationRate':   wu.Precipitation.Hourly,
+		'wind':                wu.derived.Wind,
+		'airDensity':          wu.derived.Density,
+		'pollutionDensity':    wu.derived.Density,
+		'precipitationType':   wu.Precipitation.Type,
+		'pressureTrend':       SmartString
+	}
+}
+
+RHS = TypeVar('RHS')
+LHS = TypeVar('LHS')
+
+
 class Requirement:
 	operator: Callable
-	rhs:     RHS
-	lhs:     LHS
+	rhs: RHS
+	lhs: LHS
 	negated: bool
 	result: Union[bool, RHS, LHS]
 	__operationName: str
@@ -139,7 +219,7 @@ class UnitMetaData(dict):
 					value = kwargs['tz']
 					kwargs['tz'] = value(source)
 				if isinstance(kwargs['tz'], str):
-					kwargs['tz'] = pytz.timezone(kwargs['tz'])
+					kwargs['tz'] = timezone(kwargs['tz'])
 			else:
 				kwargs['tz'] = config.tz
 			if unitDef == 'epoch':
@@ -186,7 +266,6 @@ class UnitMetaData(dict):
 				return data[keys[0]]
 
 	def validate(self, data: 'Subdatagram', key: Union[str, 'CategoryItem', Hashable] = Unset, value: Any = Unset) -> bool:
-
 		def isValid(validation) -> bool:
 			return all(v for k, v in validation.items() if '.' not in k)
 
@@ -234,16 +313,16 @@ class UnitMetaData(dict):
 							results.append(Requirement(op, compare, otherValue, localNegate))
 						requirementValidation[requirementKey] = results
 
-						# # is
-						# if compare := get(requirements, op.is_, isinstance, 'isinstance', 'is', 'is an', False):
-						# 	if not isinstance(compare, type):
-						# 		compare = type(compare)
-						# 	requirementValidation[f'{requirementKey}.is'] = Requirement(result=op.is_(compare, otherValue) != negate, value=compare)
-						# # is not
-						# if compare := get(requirements, op.is_not, not isinstance, 'not isinstance', 'is not', 'is not an', False):
-						# 	if not isinstance(compare, type):
-						# 		compare = type(compare)
-						# 	requirementValidation[f'{requirementKey}.is not'] = Requirement(result=op.is_not(compare, otherValue) != negate, value=compare)
+					# # is
+					# if compare := get(requirements, op.is_, isinstance, 'isinstance', 'is', 'is an', False):
+					# 	if not isinstance(compare, type):
+					# 		compare = type(compare)
+					# 	requirementValidation[f'{requirementKey}.is'] = Requirement(result=op.is_(compare, otherValue) != negate, value=compare)
+					# # is not
+					# if compare := get(requirements, op.is_not, not isinstance, 'not isinstance', 'is not', 'is not an', False):
+					# 	if not isinstance(compare, type):
+					# 		compare = type(compare)
+					# 	requirementValidation[f'{requirementKey}.is not'] = Requirement(result=op.is_not(compare, otherValue) != negate, value=compare)
 					else:
 						requirementValidation[requirementKey] = {'valid': [False]}
 				failures = [i for j in [v for k, v in requirementValidation.items() if not all(v)] for i in j]
@@ -268,7 +347,6 @@ class UnitMetaData(dict):
 			log.warning(f'{self} and {other} require each other which would result in a loop')
 			return False
 		return True
-
 
 	@property
 	def hasValidation(self) -> bool:
@@ -358,103 +436,63 @@ class UnitMetaData(dict):
 		return frozenset(requires)
 
 
+class CategoryWildcard(str):
+	__knownWildcards: ClassVar[set[str]] = set()
 
-# class Category(tuple):
-# 	__separator: str = '.'
-#
-# 	def __new__(cls, value: Union[tuple, list, str]):
-# 		if isinstance(value, str):
-# 			value = value.split(cls.__separator)
-# 		if not value:
-# 			value = ()
-# 		if len(value) >= 2 and value[-2] == value[-1]:
-# 			value = value[:-1]
-# 		return super(Category, cls).__new__(cls, value)
-#
-# 	def __init__(self, value: Union[tuple, list, str], separator: Optional[str] = None):
-# 		if separator is not None:
-# 			self.__separator = separator
-#
-# 		if value:
-# 			if isinstance(value, str):
-# 				value = value.split(self.__separator)
-# 			if len(value) >= 2 and value[-2] == value[-1]:
-# 				value.pop(-1)
-# 		else:
-# 			value = ()
-#
-# 		# super(Category, self).__init__(value)
-#
-# 	def isSubcategory(self, other: 'Category'):
-# 		return str(other) in str(self)
-#
-# 	def __str__(self):
-# 		return self.__separator.join(self)
-#
-# 	def __contains__(self, item):
-# 		# item in subcategory of self:
-# 		try:
-# 			return self == item[:len(self)]
-# 		except IndexError:
-# 			return False
-#
-# 	@property
-# 	def super(self):
-# 		return Category(self[:-1])
+	def __new__(cls, value: str):
+		if len(value) > 1:
+			value = f'*{value.strip("*")}*'
+		if value in cls.__knownWildcards:
+			return cls.__knownWildcards[value]
+		value = super().__new__(cls, value)
+		cls.__knownWildcards.add(value)
+		return value
 
+	def __str__(self):
+		return f'{ColorStr.italic(self)}'
 
-class Category(str):
-	super: 'Category'
-	sub: set['Category']
-	source: Optional[Any]
-
-	def __init__(self, value: str, super: Optional['Category'] = None, sub: Optional['Category'] = None, source: Any = None):
-		if '.' in value:
-			split = value.index('.')
-			value, sub = value[:split], value[split + 1:]
-			self._sub = Category(sub, super=self)
-		super().__init__(value)
-		self.super = super
-		self.sub = sub
-		self.source = source
-
-	def __eq__(self, other):
-		if str.__eq__(other, '*') or str.__eq__(self, '*'):
-			return True
-		return str.__eq__(self, other)
-
-	def __ne__(self, other):
-		return not self == other
+	def __repr__(self):
+		return f'{self}'
 
 	def __hash__(self):
-		return hash(str(self)) + hash(self.level)
+		return str.__hash__(self)
 
-	@cached_property
-	def level(self) -> int:
-		if self.super is None:
-			return 0
-		return self.super.level + 1
+	def __eq__(self, other):
+		if isinstance(other, CategoryWildcard):
+			return True
+		return super().__eq__(other)
 
-	@property
-	def super(self):
-		return self._super
+	@classmethod
+	def addWildcard(cls, wildcard: str):
+		cls.__knownWildcards.add(CategoryWildcard(wildcard))
 
-	@super.setter
-	def super(self, value):
-		self._super = value
-		clearCacheAttr(self, 'level')
+	@classmethod
+	def regexMatchPattern(cls) -> str:
+		return rf'{"|".join(cls.__knownWildcards)}'
 
-	@property
-	def sub(self) -> set['Category']:
-		return self._sub
+	@classmethod
+	def contains(cls, item):
+		return item in cls.__knownWildcards
 
-	@sub.setter
-	def sub(self, value):
-		self._sub.intersection_update(value)
 
-	def removeSub(self, value):
-		if isinstance(value, str):
-			pass
+CategoryWildcard.addWildcard('*')
+CategoryWildcard.addWildcard('@')
+
+
+class CategoryAtom(str):
+
+	def __new__(cls, value: str):
+		if CategoryWildcard.contains(value):
+			return CategoryWildcard(value)
+		return super().__new__(cls, value)
+
+	def __eq__(self, other):
+		if isinstance(other, CategoryWildcard):
+			return True
+		return super().__eq__(other)
+
+	def __hash__(self):
+		return str.__hash__(self)
 
 
 class CategoryItem(tuple):
@@ -470,7 +508,7 @@ class CategoryItem(tuple):
 			if value is None:
 				continue
 			elif isinstance(value, str):
-				valueArray.extend(i.group() for i in re.finditer(r"[\w|*]+", value, re.MULTILINE))
+				valueArray.extend(re.findall(rf"[\w|{CategoryWildcard.regexMatchPattern()}]+", value))
 			else:
 				valueArray.extend(value)
 		source = tuple(source) if isinstance(source, list) else (source,)
@@ -478,6 +516,7 @@ class CategoryItem(tuple):
 		if id in cls.__existing__:
 			return cls.__existing__[id]
 		kwargs['id'] = id
+		valueArray = tuple(CategoryAtom(value) for value in valueArray)
 		value = super(CategoryItem, cls).__new__(cls, valueArray, **kwargs)
 		cls.__existing__[id] = value
 		return value
@@ -506,7 +545,7 @@ class CategoryItem(tuple):
 
 	@cached_property
 	def hasWildcard(self):
-		return any([str(item) == '*' for item in tuple(self)])
+		return any([str(item) == '*' or str(item).startswith("@") for item in tuple(self)])
 
 	@cached_property
 	def isRoot(self):
@@ -562,9 +601,7 @@ class CategoryItem(tuple):
 		if self:
 			return self.__separator.join(self)
 		else:
-			# log.warning('CategoryItem is empty')
 			return '.'
-		return f'\33[2m\33[35m{leading}.\33[1m\33[36m{key}\33[36m\33[0m'
 
 	def __contains__(self, item):
 		if self.isRoot:
@@ -605,31 +642,6 @@ class CategoryItem(tuple):
 	def __add__(self, other):
 		return CategoryItem([*self, *other])
 
-	# 	if isinstance(other, str):
-	# 		other = CategoryItem(other)
-	# 	start = 0
-	# 	m = min(len(self), len(other))
-	# 	while (self and other) and start < m and self[start] == other[start]:
-	# 		start += 1
-	# 	other = other[start:]
-	# 	trimmed = self[start:]
-	# 	if not other:
-	# 		final = trimmed
-	# 	elif not trimmed:
-	# 		final = other
-	# 	else:
-	# 		final = [*trimmed, *other]
-	# # while final and final[0] == '*':
-	# # 	final = final[1:]
-	# return CategoryItem(final, self.__separator)
-
-	# def __radd__(self, other):
-	# 	if other is root or self is root:
-	# 		value = CategoryItem((*root, *self))
-	# 		while value[0] == '*':
-	# 			value = value[1:]
-	# 	return self.__add__(other)
-
 	def __sub__(self, other):
 		if self.isRoot:
 			return other
@@ -641,7 +653,7 @@ class CategoryItem(tuple):
 
 		start = 0
 		for x, y in zip(self, other):
-			if x == y or '*' in (x, y):
+			if matchWildCard(x, y):
 				start += 1
 		return CategoryItem(self[start:], separator=self.__separator)
 
@@ -650,19 +662,18 @@ class CategoryItem(tuple):
 			other = CategoryItem(other)
 		if other.isRoot:
 			return self[0]
-		value = [x for x, y in zip(self, other) if x == y or '*' in (x, y)]
+		value = [x for x, y in zip(self, other) if matchWildCard(x, y)]
 		return CategoryItem(value, separator=self.__separator)
 		end = 0
 		m = min(len(self), len(other)) - 1
 		value = list(self)
 		otherValue = list(other)
 		newValue
-		while (self and other) and end < m and self[end] == other[end] or (self[end] == '*' or other[end] == '*'):
+		while (self and other) and end < m and matchWildCard(self[end], other[end]):
 			end += 1
 		return CategoryItem(self[:end], separator=self.__separator)
 
 	def __xor__(self, other):
-
 		'''
 		This operation trims similar endings
 		'time.temperature' ^ 'environment.temperature' = 'time'
@@ -729,41 +740,40 @@ class CategoryItem(tuple):
 	def toJSON(self):
 		return str(self)
 
+	def replaceVar(self, **vars):
+		return CategoryItem([vars.get(f'{i}', i) for i in self], separator=self.__separator, source=self.__source)
+
+	@cached_property
+	def vars(self):
+		return {i for i in self if i.startswith('@')}
+
+	@cached_property
+	def parents(self):
+		return tuple(CategoryItem(self[:i], separator=self.__separator) for i in range(1, len(self)))
+
+	def startswith(self, value: str):
+		return self.__str__().startswith(value)
+
 
 root = CategoryItem(':')
 
 
 class CategoryDict(dict):
-	_cache = {}
+	_cache: dict
 
 	def __init__(self, parent: dict = None, source: dict = None, category: str = None):
+		self._cache = {}
 		self._parent = parent
-		# if not isinstance(parent, CategoryDict) and hasattr(self._parent, 'signals'):
-		# 	for action in self._parent.signals._values():
-		# 		action.added.connect(self.keyAdded)
 		self._category = CategoryItem(category)
 		self._source = source
+
 		for k in [i for i in source.keys() if not isinstance(i, CategoryItem)]:
 			source[CategoryItem(k)] = source.pop(k)
-
-	# toConvert = {key for key in self._source.keys() if isinstance(key, str) and '.' in key}
-	# for key in toConvert:
-	# 	self._source[CategoryItem(key)] = self._source.pop(key)
-
-	@Slot(dict)
-	def keyAdded(self, value: 'Container'):
-		key = value.key
-
-	# self._dict[key]
 
 	def refresh(self):
 		clearCacheAttr(self, '_dict')
 		clearCacheAttr(self, '_keys')
 		clearCacheAttr(self, 'flatDict')
-
-	# for value in self._values():
-	# 	if isinstance(value, CategoryDict):
-	# 		value.refresh()
 
 	def genWildCardKey(self, *keys: CategoryItem):
 		'''
@@ -906,7 +916,6 @@ class CategoryDict(dict):
 					raise KeyError(item)
 
 		else:
-
 			# check to see if the root of the key is the same as its own category
 			if item[0] == self._category:
 				items = {key: value for key, value in self._source.items() if key in item}
@@ -942,25 +951,17 @@ class CategoryDict(dict):
 	def __str__(self):
 		return dict.__str__(self._dict)
 
-	# def __repr__(self):
-	# 	return dict.__repr__(self._source)
-
 	def __len__(self):
 		return len(self._dict)
 
-	@cached_property
+	@property
 	def level(self):
-		if not isinstance(self._parent, CategoryDict):
-			return 0
-		return self._parent.level + 1
+		def __func():
+			if not isinstance(self._parent, CategoryDict):
+				return 0
+			return self._parent.level + 1
 
-	# try:
-	# 	self[item[0]][str(item - item[0])]
-	# except KeyError:
-	# 	return self[item[0]][item - item[0]]
-
-	# else:
-	# 	raise KeyError(item)
+		return getOrSet(self._cache, 'level', __func)
 
 	def get(self, item, default=None):
 		try:
@@ -980,21 +981,10 @@ class CategoryDict(dict):
 		self._source.__setitem__(key, value)
 		self.refresh()
 
-	def update(self, values: dict):
-		values = {CategoryItem(k): UnitMetaData(k, v) if isinstance(v, dict) else v for k, v in values.items()}
-		# for key, value in _values.items():
-		# 	if isinstance(value, UnitMetaData):
-		# 		pass
-		# 	elif isinstance(value, dict):
-		# 		_values[key] = UnitMetaData(key, value)
-		# 	else:
-		# 		pass
-		super(CategoryDict, self).update(values)
-
 	def __contains__(self, item):
 		if not isinstance(item, CategoryItem):
 			item = CategoryItem(item)
-		return item in super(CategoryDict, self).keys() or item in (keys := self.keys()) or any(item in self.category + key for key in keys)
+		return item in self.flatDict or any(item == i for i in self.wildcardKeys)
 
 	@property
 	def category(self) -> CategoryItem:
@@ -1045,6 +1035,10 @@ class CategoryDict(dict):
 			log.error(f'Unable to create subcategory for {self.category}')
 			raise KeyError(self.category)
 
+	@cached_property
+	def wildcardKeys(self):
+		return tuple({key for key in self._source.keys() if key.hasWildcard})
+
 	@property
 	def parent(self):
 		return self._parent
@@ -1069,12 +1063,14 @@ class CategoryDict(dict):
 		else:
 			return dict(self)
 
+	@lru_cache(maxsize=8)
 	def subValues(self, level: int = None):
 		if level is None:
 			return self.flatDict.values()
 		level = self.level + level
 		return [v for k, v in self.flatDict.items() if len(k) == level]
 
+	@lru_cache(maxsize=8)
 	def subItems(self, level: int = None):
 		if level is None:
 			return self.flatDict.items()
@@ -1085,7 +1081,7 @@ class CategoryDict(dict):
 		if level is None:
 			return self.flatDict.keys()
 		level = self.level + level
-		return [k for k, v in self.flatDict.items() if len(k) == level]
+		return getOrSet(self._cache, f'subKeys:{level}', (k for k, v in self.flatDict.items() if len(k) == level))
 
 	def __iter__(self):
 		return self._dict.__iter__()
@@ -1124,7 +1120,7 @@ class SubCategory(CategoryDict):
 		self._category = category
 		if len(category) > 1:
 			precount = len({k for k in values.keys() if self.category in k})
-			values = {k / category if category.hasWildcard else k: v for k, v in values.items() if k in self.category}
+			values = {k/category if category.hasWildcard else k: v for k, v in values.items() if k in self.category}
 			postCount = len(values)
 			if postCount != precount:
 				log.warning(f'{precount - postCount} out of {precount} items were removed from subcategory {self.category}')
@@ -1178,27 +1174,6 @@ class SubCategory(CategoryDict):
 			return self._dict[item]
 		except KeyError:
 			raise KeyError(item)
-		if len(item) == 1:
-
-			items = {key: value for key, value in dict.items(self) if key in self.category + item}
-			if len(items) == 1:
-				return items.popitem()[1]
-			elif len(items) == 0:
-				items = {key: value for key, value in dict.items(self) if self.category in key}
-				if len(items) == 1:
-					return items.popitem()[1][str(item)]
-				if len(items) == 0:
-					raise KeyError(item)
-				return SubCategory(self, items, item)
-			else:
-				return SubCategory(self, items, item)
-		else:
-			value = self._dict[item - self.category]
-			return value
-			if isinstance(value, SubCategory):
-				return value
-			else:
-				return value[item[1]]
 
 	@property
 	def category(self):
@@ -1211,13 +1186,3 @@ class SubCategory(CategoryDict):
 
 class ValueNotFound(Exception):
 	pass
-
-
-if __name__ == '__main__':
-	from src.observations.weatherFlow import unitDefinitions as ud
-
-	A = ud
-	a = CategoryDict(A)
-	b = a['time.time']
-	b = a['time']._dict
-	print(a)
