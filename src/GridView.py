@@ -3,16 +3,14 @@ from time import time
 from src import app, logging
 from functools import cached_property
 
-from PySide2.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt, QTimer, Signal
-from PySide2.QtGui import QIcon, QMouseEvent, QPainter, QPainterPath, QTransform, QWheelEvent, QWindow
+from PySide2.QtCore import QEvent, QRect, QRectF, Qt, QTimer, Signal
+from PySide2.QtGui import QMouseEvent, QPainter, QPainterPath
 from PySide2.QtWidgets import (QApplication, QGraphicsItem, QGraphicsPathItem, QGraphicsScene, QGraphicsView,
-                               QMainWindow, QOpenGLWidget,
-                               QSizePolicy,
-                               QVBoxLayout, QWidget)
+                               QOpenGLWidget)
 
 __all__ = []
 
-from src.utils import _Panel, ActionTimer, cachedUnless, clearCacheAttr
+from src.utils import _Panel, clearCacheAttr
 
 log = logging.getLogger(__name__)
 
@@ -67,7 +65,6 @@ class GridScene(QGraphicsScene):
 
 		self.visualAidRed = QGraphicsPathItem()
 		self.addVisualAids()
-		from src.Modules.Drawer import PanelDrawer
 
 		# self.apiDrawer = PanelDrawer(self, self.base)
 		# self.apiDrawer.close()
@@ -123,7 +120,7 @@ class GridScene(QGraphicsScene):
 
 	@cached_property
 	def geometry(self):
-		from src.Grid.Geometry import StaticGeometry
+		from src.Geometry import StaticGeometry
 		return StaticGeometry(self, position=(0, 0), absolute=True, snapping=False, updateSurface=False)
 
 	@cached_property

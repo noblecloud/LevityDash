@@ -24,16 +24,16 @@ from WeatherUnits.time.time import Millisecond, Second
 from WeatherUnits.length import Centimeter
 
 from src.plugins.plugin import Container
-from src.plugins.observation import MeasurementTimeSeries, Realtime, TimeAwareValue, TimeSeriesItem
+from src.plugins.observation import MeasurementTimeSeries, RealtimeSource, TimeAwareValue, TimeSeriesItem
 from src import app, colorPalette, config, logging
 from src.catagories import CategoryItem
 from src.colors import kelvinToQColor, rgbHex
 from src.plugins.dispatcher import ValueDirectory, ForecastPlaceholderSignal, MultiSourceContainer, MonitoredKey
-from src.logger import guiLog
+from src.logger import LevityGUILog
 from src.Modules import hook
 from src.Modules.DateTime import baseClock, baseClock as ClockSignals
 from src.Modules.Displays.Text import Text
-from src.Modules.Handles.Figure import FigureHandles
+from src.Modules.Handles.MarginHandles import FigureHandles
 from src.Modules.Handles.Incrementer import Incrementer, IncrementerGroup
 from src.Modules.Handles.Timeframe import GraphZoom
 from src.Modules.Panel import Panel
@@ -41,7 +41,7 @@ from src.utils import (_Panel, AlignmentFlag, autoDType, Axis, AxisMetaData, cla
                        normalize, roundToPeriod, smoothData, TimeFrameWindow, timestampToTimezone)
 from time import time
 
-log = guiLog.getChild(__name__)
+log = LevityGUILog.getChild(__name__)
 
 __all__ = ['GraphItemData', 'Figure', 'GraphPanel']
 
@@ -2556,7 +2556,7 @@ class GraphPanel(Panel):
 	timeframe: TimeFrameWindow
 	_acceptsChildren: bool = False
 	graphZoom: GraphZoom
-	log = guiLog.getChild('Graph')
+	log = LevityGUILog.getChild('Graph')
 	savable = True
 
 	# Section GraphPanel

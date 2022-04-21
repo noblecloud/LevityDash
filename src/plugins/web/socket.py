@@ -5,7 +5,7 @@ import logging
 import asyncio
 
 from abc import ABC, abstractmethod
-from json import loads
+from json import JSONDecodeError, loads
 from PySide2.QtCore import QObject, Signal
 
 
@@ -139,7 +139,7 @@ class BaseSocketProtocol(asyncio.DatagramProtocol):
 	handler: 'SockeMessageHandler'
 
 	def __init__(self, api: 'REST'):
-		self._api = api
+		self._plugin = api
 		self.handler = LevityQtSocketMessageHandler()
 		self.log = api.pluginLog.getChild(self.__class__.__name__)
 

@@ -27,7 +27,7 @@ class REST(Web, prototype=True):
 		if request.status_code == 200:
 			self.pluginLog.info(f'{self.name} request successful for {url}')
 			self.pluginLog.debug(f'Returned: {str(request.json())[:300]} ... ')
-			return self.normalizeData(request.json())
+			return request.json()
 		elif request.status_code == 429:
 			self.pluginLog.error('Rate limit exceeded', request.content)
 			raise RateLimitExceeded
@@ -40,10 +40,7 @@ class REST(Web, prototype=True):
 			self.pluginLog.error('API Error', request.content)
 			raise APIError(request)
 
-	# @overload
-	# async def getData(self, url: str = None, params: dict = None, headers=None) -> dict: ...
-
-	async def getData(self, endpoint: Endpoint, **kwargs) -> dict:
+	async def getData(self, endpoint: Endpoint, **kwargs) -> LevityDatagram:
 		if isinstance(endpoint, str):
 			url = kwargs.get('url', endpoint)
 			params = kwargs.get('params', {})

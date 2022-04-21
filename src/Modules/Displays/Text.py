@@ -12,7 +12,7 @@ from WeatherUnits.length import Centimeter, Millimeter
 from src.plugins.plugin import Container
 from src.plugins.dispatcher import MultiSourceContainer
 from src import app, colorPalette, rounded
-from src.utils import _Panel, addCrosshair, Alignment, AlignmentFlag, cachedUnless, clearCacheAttr, connectSignal, Size, strToOrdinal, toOrdinal
+from src.utils import _Panel, Alignment, AlignmentFlag, clearCacheAttr, strToOrdinal, toOrdinal
 
 
 class TextItemSignals(QObject):

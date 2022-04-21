@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 
 from enum import Enum
 
-from ..plugin import Plugin
+from src.plugins import Plugin
 from datetime import timedelta
 from typing import Any, Dict, Optional, Union
 
@@ -115,6 +115,7 @@ class Endpoint:
 	__period: Optional[timedelta]
 	__auth: Optional[Auth]
 	__name: Optional[str]
+	__dataMap: Optional[Dict[str, Any]]
 
 	def __init__(self,
 	             method: str = None,
@@ -265,8 +266,6 @@ class Web(Plugin, prototype=True):
 	urls: URLs
 
 	def normalizeData(self, rawData):
-		if self.translator:
-			return self.translator.mapData(self, rawData)
 		return rawData
 
 

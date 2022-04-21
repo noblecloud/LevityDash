@@ -120,6 +120,8 @@ logging.setLoggerClass(Logger)
 debug = sys.gettrace()
 logging.basicConfig(level=logging.DEBUG if debug else logging.INFO)
 
+LevityLogger = logging.getLogger("Levity")
+
 weatherUnitsLog = logging.getLogger('WeatherUnits')
 weatherUnitsLogUtils = logging.getLogger('WeatherUnits.utils')
 weatherUnitsLogUtils.setLevel(logging.INFO)
@@ -129,6 +131,8 @@ urllog = logging.getLogger('urllib3')
 urllogPool = logging.getLogger('urllib3.connectionpool')
 urllog.setLevel(logging.ERROR)
 urllogPool.setLevel(logging.ERROR)
-guiLog = logging.getLogger('Display')
-apiLog = logging.getLogger('API')
-apiLog.setLevel(logging.INFO)
+LevityGUILog = LevityLogger.getChild('GUI')
+LevityPluginLog = LevityLogger.getChild('Plugin')
+LevityPluginLog.setLevel(logging.INFO)
+
+__all__ = ['LevityLogger', 'LevityPluginLog', 'LevityGUILog']
