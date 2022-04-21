@@ -251,7 +251,7 @@ def convertToCategoryItem(key, source: Hashable = None):
 # 				return subCat.__contains__(remainder)
 
 
-class Realtime(ABC):
+class RealtimeSource(ABC):
 	pass
 
 
@@ -335,7 +335,10 @@ class ObservationValue(TimeAwareValue):
 					kSource = key.source
 				else:
 					kSource = None
-				key = CategoryItem(metadata['key'], kSource)
+				if metadata['key'] == key and metadata['key'].vars:
+					pass
+				else:
+					key = CategoryItem(metadata['key'], kSource)
 				source.__sourceKeyMap__[metadata['sourceKey']] = metadata['key']
 			metadata['key'] = key
 		if isinstance(value, Measurement):
@@ -352,6 +355,7 @@ class ObservationValue(TimeAwareValue):
 		self.__source = source
 		self.__container = container
 		self.__value = None
+		self.__convertFunc__: Callable = None
 		self.value = timeAware or value
 		if str(key) == 'environment.precipitation.precipitation':
 			self.convertFunc(self.rawValue).localize
@@ -378,7 +382,7 @@ class ObservationValue(TimeAwareValue):
 	def value(self):
 		if self.__value is None:
 			try:
-				value = self.__convertFunc(self.rawValue)
+				value = self.convertFunc(self.rawValue)
 			except Exception as e:
 				value = self.rawValue
 			if hasattr(value, 'localize'):
@@ -405,7 +409,7 @@ class ObservationValue(TimeAwareValue):
 
 	@property
 	def sourceUnitValue(self):
-		return self.__convertFunc(self.rawValue)
+		return self.convertFunc(self.rawValue)
 
 	@property
 	def rawValue(self):
@@ -435,9 +439,9 @@ class ObservationValue(TimeAwareValue):
 
 	def __repr__(self):
 		if self.timestamp is None:
-			return f'{self.value} @ UnknownTime'
-		if self.timestamp != self.__source.timestamp:
-			timestamp = f' @{self.timestamp.strftime("%-I:%M%p %m/%d")}'
+			timestamp = ' Unknown Time'
+		elif self.timestamp != self.__source.timestamp:
+			timestamp = f' @{self.timestamp:"%-I:%M%p %m/%d"}'
 		else:
 			timestamp = ''
 		return f'{{\'{self.value.__class__.__name__}\'}} {self.value}{timestamp}'
@@ -447,10 +451,10 @@ class ObservationValue(TimeAwareValue):
 		return ArchivedObservationValue(self)
 
 	@property
-	def metadata(self):
+	def metadata(self) -> 'UnitMetadata':
 		return self.__metadata
 
-	@property
+	@cached_property
 	def source(self):
 		return self.__source
 
@@ -745,6 +749,8 @@ class TimeSeriesItem(TimeAwareValue):
 			return int(self.value)
 		except ValueError as e:
 			raise TypeError(f'{self.value} is not an int') from e
+		except TypeError as e:
+			raise TypeError(f'{self.value} is not an int') from e
 
 	def __str__(self):
 		return str(self.value)
@@ -808,7 +814,7 @@ class MultiValueTimeSeriesItem(TimeSeriesItem):
 
 	@value.setter
 	def value(self, value):
-		if not isinstance(value, Iterable):
+		if isinstance(value, str) or not isinstance(value, Iterable):
 			value = (value,)
 		self.values.update(value)
 		self.__value = None
@@ -1048,7 +1054,7 @@ class RecordedObservationValue(ObservationValue):
 
 		# This assumes that the observation time series keys are being rounded,
 		# which is the case for the ObservationTimeSeries
-		if isinstance(container, Realtime):
+		if isinstance(container, RealtimeSource):
 			start = Now()
 		else:
 			start = roundToPeriod(timeAnchor - timedelta(seconds=1), duration) - duration/2
@@ -1153,28 +1159,34 @@ class RecordedObservationValue(ObservationValue):
 
 class ObservationTimestamp(ObservationValue):
 
+	# TODO: Convert to class generated for each PublishedDict with a set 'source' therefore 'source' is not need for initialization.
+	#       Especially since the source is not the proper term here
+
 	def __init__(self, data: dict, source: 'ObservationDict', extract: bool = True, roundedTo: timedelta = None):
 		self.__roundedTo = roundedTo
 
 		if isinstance(data, ObservationDict):
 			value = data.timestamp
-			key = 'time.time'
+			key = 'timestamp'
+		elif isinstance(data, LevityDatagram):
+			key = '@meta.timestamp'
+			value = data[key]
 		elif isinstance(data, dict):
-			if CategoryItem('time.time') in data:
-				key = 'time.time'
+			if CategoryItem('timestamp') in data:
+				key = 'timestamp'
 			else:
-				key = source.translator.findKey('time.time', data)
+				key = source.translator.findKey('timestamp', data)
 			if extract:
 				value = data.pop(key, None)
 			else:
 				value = data[key]
 		elif isinstance(data, datetime):
 			value = data
-			key = CategoryItem('time.time')
+			key = CategoryItem('timestamp')
 		else:
 			print(f'Unable to find valid timestamp in {data}.  Using current time.')
 			value = datetime.now().astimezone(_timezones.utc)
-			key = CategoryItem('time.time')
+			key = CategoryItem('timestamp')
 		super(ObservationTimestamp, self).__init__(value, key, container=source, source=source)
 		if isinstance(value, datetime):
 			self.__value = value
@@ -1185,7 +1197,7 @@ class ObservationTimestamp(ObservationValue):
 				postVal = self.__value.replace(tzinfo=None)
 				pluginLog.warning(f"Timestamp {self} does not have a timezone.  "
 				                  f"Assuming Local Timezone and converting to UTC with a "
-				                  f"difference of {Second((abs((preVal - postVal)).total_seconds()).autoAny)}")
+				                  f"difference of {Second((abs((preVal - postVal)).total_seconds())).autoAny}")
 
 	@ObservationValue.value.getter
 	def value(self):
@@ -1259,7 +1271,7 @@ class MultiSourceValue(ObservationValue):
 		return sourceValues[-1].value
 
 	def __repr__(self):
-		return f'Mulitsource: {self.value}'
+		return f'MultiSource: {self.value}'
 
 	@property
 	def rawValue(self):
@@ -1325,8 +1337,8 @@ class ObservationDict(PublishedDict):
 				RecordedObservation.register(cls)
 				cls.itemClass = type(cls.__name__ + 'Value', (RecordedObservationValue,), {})
 				RecordedObservation.register(cls.itemClass)
-				if 'Realtime' in cls.__name__ or issubclass(cls, Realtime):
-					Realtime.register(cls.itemClass)
+				if 'Realtime' in cls.__name__ or issubclass(cls, RealtimeSource):
+					RealtimeSource.register(cls.itemClass)
 
 			else:
 				cls.itemClass = type(cls.__name__ + 'Value', (ObservationValue,), {})
@@ -1340,7 +1352,7 @@ class ObservationDict(PublishedDict):
 		self.__timestamp = timestamp
 		self._published = published
 		self._recorded = recorded
-		self.dataName = None
+		self.__dataName = None
 
 		if self.published:
 			self.accumulator = Accumulator(self)
@@ -1424,24 +1436,6 @@ class ObservationDict(PublishedDict):
 				super(ObservationDict, self).__setitem__(valueKey, value)
 			else:
 				super(ObservationDict, self).__setitem__(key, None)
-		# item = super(ObservationDict, self).get(key, None)
-		# if item is not None:
-		# 	if isinstance(item, ValueWrapper):
-		# 		if isinstance(value, ValueWrapper):
-		# 			value.update(**value.toDict())
-		# 		item.updateValue(**value)
-		# 	else:
-		# 		super(ObservationDict, self).__setitem__(key, value)
-		# else:
-		# 	if isinstance(value, MeasurementTimeSeries):
-		# 		super(ObservationDict, self).__setitem__(key, value)
-		# 	elif not bool(value):
-		# 		return super(ObservationDict, self).__setitem__(key, value)
-		# 	elif isinstance(value, datetime) and key == 'time':
-		# 		super(ObservationDict, self).__setitem__(key, value)
-		# 	elif not isinstance(value, ValueWrapper):
-		# 		value = ValueWrapper(**value)
-		# 		super(ObservationDict, self).__setitem__(key, value)
 		if self.published:
 			self.accumulator.publishKeys(key)
 
@@ -1450,7 +1444,7 @@ class ObservationDict(PublishedDict):
 
 		item = convertToCategoryItem(item)
 
-		if item in self.__sourceKeyMap__:
+		if item not in self.keys() and item in self.__sourceKeyMap__:
 			item = self.__sourceKeyMap__[item]
 
 		try:
@@ -1463,7 +1457,7 @@ class ObservationDict(PublishedDict):
 			pass
 		# if key contains wildcards return a dict containing all the _values
 		# Possibly later change this to return a custom subcategory
-		if any('*' in i for i in item):
+		if item.hasWildcard:
 			return self.categories[item]
 			# if the last value in the key assume all matching _values are being requested
 			wildcardValues = {k: v for k, v in self.items() if k < item}
@@ -1549,13 +1543,13 @@ class ObservationDict(PublishedDict):
 
 	def __preprocess(self, data: dict):
 		if data:
-			dict.__setitem__(self, CategoryItem('time.time'), self.__processTime(data))
+			dict.__setitem__(self, CategoryItem('timestamp'), self.__processTime(data))
 		return data
 
 	def timeKey(self, data) -> str:
-		if 'time.time' in data:
-			return 'time.time'
-		unitData = self.translator.getExact(CategoryItem('time.time')) or {}
+		if 'timestamp' in data:
+			return 'timestamp'
+		unitData = self.translator.getExact(CategoryItem('timestamp')) or {}
 		srcKey = unitData.get('sourceKey', None)
 		if isinstance(srcKey, (str, CategoryItem)):
 			return srcKey
@@ -1580,6 +1574,14 @@ class ObservationDict(PublishedDict):
 	@property
 	def timestamp(self):
 		return self.__timestamp
+
+	@property
+	def dataName(self):
+		return self.__dataName
+
+	@dataName.setter
+	def dataName(self, value):
+		self.__dataName = value
 
 	def __processTime(self, data: dict) -> datetime:
 		timeKey = self.timeKey(data)
@@ -1738,7 +1740,7 @@ class ArchivedObservation(Observation, published=False, recorded=False):
 		return self.__dict__.get('timestamp')
 
 
-@Realtime.register
+@RealtimeSource.register
 class ObservationRealtime(Observation, published=True, recorded=True):
 	time: datetime
 	timezone: tzinfo
@@ -1769,6 +1771,10 @@ class ObservationTimeSeriesItem(Observation, published=False):
 	@property
 	def timeseries(self):
 		return self.__timeseries
+
+	@property
+	def dataName(self):
+		return self.timeseries.dataName
 
 	@property
 	def period(self):
@@ -1941,7 +1947,7 @@ class ObservationTimeSeries(ObservationDict, published=True):
 			return key
 
 	def extractTimestamp(self, data: dict) -> datetime:
-		key = self.translator.findKey('time.time', data)
+		key = self.translator.findKey('timestamp', data)
 		self[key] = data.pop(key)
 
 	@property
@@ -1949,9 +1955,9 @@ class ObservationTimeSeries(ObservationDict, published=True):
 		return self.__timeseries__
 
 	@property
-	def period(self) -> timedelta:
+	def period(self) -> wu.Time:
 		if self._period is None:
-			return timedelta(seconds=1)
+			return wu.Time.Second(1)
 		return self._period
 
 	@property

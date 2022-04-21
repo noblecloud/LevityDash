@@ -7,7 +7,7 @@ from PySide2.QtCore import QRectF, Qt, QTimer
 from PySide2.QtGui import QFont
 from PySide2.QtWidgets import QGraphicsItem, QGraphicsProxyWidget, QLineEdit
 
-from src.Modules.Handles.Figure import MarginHandles
+from src.Modules.Handles.MarginHandles import MarginHandles
 from src.Grid import Geometry
 from src.fonts import compact, rounded
 from src.utils import Alignment, AlignmentFlag, Position, Size

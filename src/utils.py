@@ -2989,49 +2989,49 @@ KeyData = NamedTuple('KeyData', sender=dict, keys=set)
 
 
 class Period(Enum):
-	Now: timedelta = timedelta(seconds=0)
-	Realtime: timedelta = timedelta(seconds=0)
-	Minute: timedelta = timedelta(minutes=1)
-	QuarterHour: timedelta = timedelta(minutes=15)
-	HalfHour: timedelta = timedelta(minutes=30)
-	Hour: timedelta = timedelta(hours=1)
-	Day: timedelta = timedelta(days=1)
-	Week: timedelta = timedelta(weeks=1)
-	Month: timedelta = timedelta(days=31)
-	Year: timedelta = timedelta(days=365)
+	Now = wu.Time.Millisecond(0)
+	Realtime = Now
+	Minute = wu.Time.Minute(1)
+	QuarterHour = wu.Time.Hour(0.25)
+	HalfHour = wu.Time.Hour(0.5)
+	Hour = wu.Time.Hour(1)
+	Day = wu.Time.Day(1)
+	Week = wu.Time.Week(1)
+	Month = wu.Time.Month(1)
+	Year = wu.Time.Year(1)
+
+	def __wrapOther(self, other):
+		if isinstance(other, wu.Time):
+			return other
+		elif isinstance(other, (int, float)):
+			return wu.Time.Second(other)
+		elif isinstance(other, timedelta):
+			return wu.Time.Second(other.total_seconds())
+		elif isinstance(other, datetime):
+			return wu.Time.Second(other.timestamp())
+		else:
+			return self.__class__(other)
 
 	def __lt__(self, other):
-		if isinstance(other, (datetime, timedelta)):
-			return self.value < other
-		return self.value < other.value
+		return self.value < self.__wrapOther(other)
 
 	def __gt__(self, other):
-		if isinstance(other, (datetime, timedelta)):
-			return self.value > other
-		return self.value > other.value
+		return self.value > self.__wrapOther(other)
 
 	def __eq__(self, other):
-		if isinstance(other, (datetime, timedelta)):
-			return self.value == other
-		return self.value == other.value
+		return self.value == self.__wrapOther(other)
 
 	def __le__(self, other):
-		if isinstance(other, (datetime, timedelta)):
-			return self.value <= other
-		return self.value <= other.value
+		return self.value <= self.__wrapOther(other)
 
 	def __ge__(self, other):
-		if isinstance(other, (datetime, timedelta)):
-			return self.value >= other
-		return self.value >= other.value
+		return self.value >= self.__wrapOther(other)
 
 	def __ne__(self, other):
-		if isinstance(other, (datetime, timedelta)):
-			return self.value != other
-		return self.value != other.value
+		return self.value != self.__wrapOther(other)
 
 	def __hash__(self):
-		return hash(self.value)
+		return hash(self.value.second)
 
 	def __str__(self):
 		return self.name
@@ -3040,64 +3040,46 @@ class Period(Enum):
 		return self.name
 
 	def __int__(self):
-		return int(self.value.total_seconds())
+		return int(self.value.second)
 
 	def __float__(self):
-		return float(self.value.total_seconds())
+		return float(self.value.second)
 
 	def __bool__(self):
-		return bool(self.value.total_seconds())
+		return float(self.value.second) != 0
 
 	def __add__(self, other):
-		if isinstance(other, (datetime, timedelta)):
-			return self.value + other
-		return self.value + other.value
+		return self.value + self.__wrapOther(other)
 
 	def __radd__(self, other):
-		if isinstance(other, (datetime, timedelta)):
-			return self.value + other
-		return self.value + other.value
+		return self.__wrapOther(other) + self.value
 
 	def __sub__(self, other):
-		if isinstance(other, (datetime, timedelta)):
-			return self.value - other
-		return self.value - other.value
+		return self.value - self.__wrapOther(other)
 
 	def __rsub__(self, other):
-		if isinstance(other, (datetime, timedelta)):
-			return other - self.value - other
-		return self.value - other.value
+		return self.__wrapOther(other) - self.value
 
 	def __mul__(self, other):
-		if isinstance(other, (datetime, timedelta)):
-			return self.value*other
-		return self.value*other.value
+		return self.value*self.__wrapOther(other)
 
 	def __floordiv__(self, other):
-		if isinstance(other, (datetime, timedelta)):
-			return self.value//other
-		return self.value//other.value
+		return self.value//self.__wrapOther(other)
 
 	def __truediv__(self, other):
-		if isinstance(other, (datetime, timedelta)):
-			return self.value/other
-		return self.value/other.value
+		return self.value/self.__wrapOther(other)
 
 	def __mod__(self, other):
-		if isinstance(other, (datetime, timedelta)):
-			return self.value%other
-		return self.value%other.value
+		return self.value%self.__wrapOther(other)
 
 	def __divmod__(self, other):
-		if isinstance(other, (datetime, timedelta)):
-			return divmod(self.value, other)
-		return divmod(self.value, other.value)
+		return divmod(self.value, self.__wrapOther(other))
 
 	def __abs__(self):
-		return abs(self.value)
+		return abs(self.value.second)
 
 	def total_seconds(self):
-		return self.value.total_seconds()
+		return int(self.value.second)
 
 
 class ChannelSignal(QObject):
@@ -3718,7 +3700,7 @@ def findSizePosition(*args, **kwargs):
 
 	position = getItemsWithType(args, kwargs, Position)
 	size = getItemsWithType(args, kwargs, QSize, QSizeF)
-	from src.Grid.Geometry import Geometry
+	from src.Geometry import Geometry
 	geometry = getItemsWithType(args, kwargs, Geometry)
 
 	if kwargs['size'] is None and size:
@@ -3971,9 +3953,6 @@ class DateKey(datetime):
 	def __ge__(self, other):
 		other = self.__getComparable(other)
 		return super().__ge__(other)
-
-
-Now = object()
 
 
 def addCrosshair(painter: QPainter, color: QColor = Qt.red, size: int = 2.5, weight=1, pos: QPointF = QPointF(0, 0), *args, **kwargs):
@@ -4429,3 +4408,59 @@ class Now(datetime):
 		if item == 'now':
 			return super().__getattribute__(item)
 		return getattr(self.now(), item)
+
+
+def get(obj: Mapping, *keys: [Hashable], default: Any = Unset) -> Any:
+	"""
+	Returns the value of the key in the mapping.
+
+	:param obj: The mapping to search.
+	:param key: The keys to search for.
+	:param default: The default value to return if the key is not found.
+	:return: The value of the key in the mapping or the default value.
+	"""
+	values = list({obj.get(key, Unset) for key in keys} - {Unset})
+	match len(values):
+		case 0:
+			if default is Unset:
+				raise KeyError(f'{keys} not found in {obj}')
+			return default
+		case 1:
+			return values[0]
+		case _:
+			log.warning(f'Multiple values found for {keys} in {obj}, returning first value.')
+			return values[0]
+
+
+import operator as __operator
+
+operators = [getattr(__operator, op) for op in dir(__operator) if not op.startswith('__')]
+operatorList = [
+	(__operator.add, ('+')),
+	(__operator.sub, ('-')),
+	(__operator.mul, ('*', 'x', 'X')),
+	(__operator.truediv, ('/', '÷')),
+	(__operator.floordiv, ('//', '÷')),
+	(__operator.mod, ('%', 'mod')),
+	(__operator.pow, ('**', '^')),
+	(__operator.lshift, ('<<', '<')),
+	(__operator.rshift, ('>>', '>')),
+	(__operator.and_, ('&', 'and')),
+	(__operator.or_, ('|', 'or')),
+	(__operator.xor, ('^', 'xor')),
+	(__operator.neg, ('-', 'neg')),
+	(__operator.pos, ('+', 'pos')),
+	(__operator.invert, ('~', 'invert')),
+	(__operator.lt, ('<', 'lt', 'min', 'minimum')),
+	(__operator.le, ('<=', 'le', 'min=', 'minimum=')),
+	(__operator.eq, ('==', '=', 'eq', 'equal', 'equals')),
+	(__operator.ne, ('!=', '<>', 'ne', 'neq', 'not equal', 'not equals')),
+	(__operator.ge, ('>=', 'ge', 'max=', 'maximum=')),
+	(__operator.gt, ('>', 'gt', 'max', 'maximum')),
+	(__operator.is_, ('is', 'is_', 'is a', 'is an', 'is_a', 'is_an', 'isA', 'isAn', 'isinstance')),
+	(__operator.is_not, ('is not', 'is_not', 'is not a', 'is not an', 'is_not_a', 'is_not_an', 'isNot', 'isNotA', 'isNotAn', 'isnot', 'isnotA', 'isnotAn', 'not idinstance')),
+	(__operator.contains, ('in', 'contains', 'contains', 'range')),
+]
+operatorDict = {name: op for op, names in operatorList for name in names}
+del operatorList
+del operators

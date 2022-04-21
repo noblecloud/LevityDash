@@ -530,6 +530,7 @@ class PluginMeta(type):
 					attrs['minutely'] = property(lambda self: self.observations.grab(period))
 
 			attrs['classes'] = Classes(**classes)
+			attrs['pluginLog'] = pluginLog.getChild(name)
 
 		return super().__new__(mcs, name, bases, attrs)
 
@@ -581,7 +582,7 @@ class Plugin(metaclass=PluginMeta):
 		self.publisher = Publisher(self)
 
 		if isinstance(self.translator, dict):
-			self.translator = Translator(api=self, source=self.translator, category=self.name)
+			self.translator = Translator(plugin=self, source=self.translator, category=self.name)
 
 		for key, value in self.classes:
 			if not issubclass(value, PublishedDict):

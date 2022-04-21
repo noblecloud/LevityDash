@@ -444,9 +444,9 @@ from . import Resize
 from . import Incrementer
 from . import Grid
 from . import Timeframe
-from . import Figure
+from . import MarginHandles
 
-__all__ = ['Handle', 'HandleGroup', 'Various', 'Resize', 'Incrementer', 'Grid', 'Timeframe', 'FigureRect']
+__all__ = ['Handle', 'HandleGroup', 'Various', 'Resize', 'Incrementer', 'Grid', 'Timeframe', 'MarginHandles']
 
 if __name__ == '__main__':
 	from PySide2.QtWidgets import QApplication

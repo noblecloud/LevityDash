@@ -1921,26 +1921,3 @@ class WindVein(Gauge):
 	@Slot(float)
 	def updateSlot(self, value: float):
 		self.speedLabel.text = str(value.withoutUnit)
-
-
-if __name__ == '__main__':
-	from PySide2.QtWidgets import QApplication, QDesktopWidget
-	from api.weatherFlow import WFStation
-	import sys
-
-	app = QApplication()
-	wf = WFStation()
-	# wf = TomorrowIO()
-	wf.getData()
-	# wf.getRealtime()
-	# data = reload('../rain.pickle')
-	window = WindVein()
-	wf.realtime.updateHandler.signalFor(key='windSpeed').connect(window.updateSlot)
-	wf.realtime.updateHandler.signalFor(key='windDirection').connect(window.setDirection)
-	window.resize(800, 800)
-	window.show()
-	display_monitor = 1
-	monitor = QDesktopWidget().screenGeometry(display_monitor)
-	window.move(monitor.left(), monitor.top())
-
-	sys.exit(app.exec_())
