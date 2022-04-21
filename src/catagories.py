@@ -10,34 +10,89 @@ from src.utils import clearCacheAttr, removeSimilar, subsequenceCheck, Translato
 
 log = logging.getLogger(__name__)
 
+class Requirement:
+	operator: Callable
+	rhs:     RHS
+	lhs:     LHS
+	negated: bool
+	result: Union[bool, RHS, LHS]
+	__operationName: str
+	__storedResult: Union[bool, RHS, LHS]
+
+	def __init__(self, operator: Union[Callable, str], rhs: Any, lhs: Any, negated: bool = False):
+		self.__operationName = operator if isinstance(operator, str) else operator.__name__
+		self.__storedResult = Unset
+		if not isinstance(operator, Callable):
+			operator = operatorDict[operator]
+		self.operator = operator
+		self.rhs = rhs
+		self.lhs = lhs
+		self.negated = negated
+
+	def __bool__(self):
+		return self.result != self.negated
+
+	@property
+	def result(self):
+		if self.__storedResult is Unset:
+			self.__storedResult = self.operator(self.lhs, self.rhs)
+		return self.__storedResult
+
+	def reset(self):
+		self.__storedResult = Unset
+
+	def __str__(self):
+		match bool(self):
+			case True:
+				return f'{self.__operationName}[{ColorStr.green("Passed ✔︎︎︎")}]'
+			case False:
+				return f'{self.__operationName}[{ColorStr.red("Failed ✘")}]: {self.lhs} {"not " if self.negated else ""}{self.__operationName} {self.rhs}'
+
+	def __repr__(self):
+		return f'{self.__operationName}[{"Passed ︎︎✔︎" if self else "Failed ✘"}]'
+
 
 class UnitMetaData(dict):
 
-	def __init__(self, key: str, reference: dict):
-		if not isinstance(key, CategoryItem):
-			key = CategoryItem(key)
-		self._reference = reference
-		value = {}
-		for i in range(len(key)):
-			try:
-				x = reference.getExact(key[:i + 1])
-				if x is not None:
-					if all(isinstance(k, str) for k in x):
-						value.update(x)
-			except KeyError:
-				pass
-		value = self.findProperties(reference, value)
+	def __init__(self, **kwargs):
+		match kwargs:
+			case {'key': key, 'reference': reference} | {'key': key, 'source': reference}:
+				key = CategoryItem(key)
+				value = kwargs.get('value', {})
+			case {'value': dict(value)} if 'key' in value:
+				key = CategoryItem(value['key'])
+				value = kwargs.get('value', {})
+				reference = None
+			case {'key': key, 'value': dict(value)}:
+				key = CategoryItem(key)
+				reference = None
+			case {}:
+				raise ValueError('No data provided')
+			case {**rest}:
+				raise ValueError(f'Unknown data: {rest}')
+			case _:
+				raise ValueError(f'Unknown data: {kwargs}')
+
+		if reference:
+			for atom in (i for i in (*key.parents, key) if i in reference.flatDict):
+				x = reference.getExact(atom)
+				if isinstance(x, dict):
+					value.update(x)
+			value = self.findProperties(reference, value)
+		value['key'] = key
 		super(UnitMetaData, self).__init__(value)
-		self['key'] = key
 
 	def __repr__(self):
-		try:
-			return self['sourceKey']
-		except KeyError:
-			return super(UnitMetaData, self).__repr__()
+		match self:
+			case {'key': CategoryItem(key)}:
+				return f'UnitMetaData({key.name})'
+			case {'sourceKey': key}:
+				return f'UnitMetaData({key})'
+			case _:
+				return f'UnitMetaData({self})'
 
 	def __hash__(self):
-		return hash(self['sourceKey'])
+		return hash(self.key)
 
 	def __findSimilar(self, key: 'CategoryItem'):
 		from plugins.translator import Translator
@@ -49,9 +104,14 @@ class UnitMetaData(dict):
 		if isinstance(data, dict):
 			alias = data.pop('alias', None) or data.pop('aliases', None)
 			for key, value in data.items():
+				if key == '{{metaData}}':
+					continue
 				data[key] = self.findProperties(source, value)
 			if alias is not None:
-				data['alias'] = source.aliases.get(alias, {})
+				if isinstance(alias, dict):
+					data['alias'] = self.findProperties(source, alias)
+				else:
+					data['alias'] = source.aliases.get(alias, {})
 		elif isinstance(data, CategoryItem):
 			pass
 		elif isinstance(data, (tuple, list)):
@@ -116,6 +176,104 @@ class UnitMetaData(dict):
 				return lambda value: cls(value, **kwargs)
 
 		return lambda value: value
+
+	def findValue(self, data: dict) -> Any:
+		keys = list(set(data.keys()) & self.dataKeys)
+		match len(keys):
+			case 0:
+				return None
+			case _:
+				return data[keys[0]]
+
+	def validate(self, data: 'Subdatagram', key: Union[str, 'CategoryItem', Hashable] = Unset, value: Any = Unset) -> bool:
+
+		def isValid(validation) -> bool:
+			return all(v for k, v in validation.items() if '.' not in k)
+
+		validation = {}
+
+		# find the value from the provided data if not provided
+		if value is Unset:
+			keys = list(set(data.keys()) & set(self.dataKeys))
+			match len(keys):
+				case 0:
+					validation['KeyFound'] = False
+					value = None
+				case 1:
+					value = data[keys[0]]
+					validation['KeyFound'] = True
+				case _:
+					log.warning(f'{self} found multiple keys: {keys} while validating')
+					value = data[keys[0]]
+					validation['KeyFound'] = True
+					validation['KeyFound.MultipleKeys'] = keys
+
+		if (required := self.get('requires', False)) and isValid(validation):
+			if isinstance(required, str):
+				other = data.translator.get(required)
+				validation['MeetsRequirements'] = True if self.testValidationLoop(other) and other.validate(data) else False
+			elif isinstance(required, (list, tuple)):
+				if all(data.translator.get(r).validate(data) for r in required if self.testValidationLoop(r)):
+					validation['MeetsRequirements'] = True
+				else:
+					validation['MeetsRequirements'] = False
+					validation['MeetsRequirements.Missing'] = list(set(required) - set(data.keys()))
+			elif isinstance(required, dict):
+				requirementValidation: dict[str, [Requirement]] = {}
+				for requirementKey, requirements in required.items():
+					other = data.translator.get(requirementKey)
+					otherValue = other.findValue(data)
+					negate = requirements.get('negate', False)
+					if self.testValidationLoop(other) and other.validate(data):
+						results: [Requirement] = []
+						operations = list(set(requirements.keys()) & set(operatorDict.keys()))
+						for opName in operations:
+							op = operatorDict[opName]
+							compare = requirements[opName]
+							localNegate = requirements['negate'] if 'negate' in requirements else negate
+							results.append(Requirement(op, compare, otherValue, localNegate))
+						requirementValidation[requirementKey] = results
+
+						# # is
+						# if compare := get(requirements, op.is_, isinstance, 'isinstance', 'is', 'is an', False):
+						# 	if not isinstance(compare, type):
+						# 		compare = type(compare)
+						# 	requirementValidation[f'{requirementKey}.is'] = Requirement(result=op.is_(compare, otherValue) != negate, value=compare)
+						# # is not
+						# if compare := get(requirements, op.is_not, not isinstance, 'not isinstance', 'is not', 'is not an', False):
+						# 	if not isinstance(compare, type):
+						# 		compare = type(compare)
+						# 	requirementValidation[f'{requirementKey}.is not'] = Requirement(result=op.is_not(compare, otherValue) != negate, value=compare)
+					else:
+						requirementValidation[requirementKey] = {'valid': [False]}
+				failures = [i for j in [v for k, v in requirementValidation.items() if not all(v)] for i in j]
+				if failures:
+					if get(required, 'verbose', default=False) or not get(required, 'quiet', 'silent', 'silently', default=False):
+						log.debug(f'{self.__class__.__name__} failed the following validation requirements: {failures}')
+					validation['MeetsRequirements'] = False
+					validation['MeetsRequirements.Missing'] = failures
+				else:
+					validation['MeetsRequirements'] = True
+			else:
+				raise TypeError(f'{self} requires must be a string, list, tuple, or dict')
+
+		return isValid(validation)
+
+	def testValidationLoop(self, other: 'UnitMetaData') -> bool:
+		"""
+		Checks to see if both items require each other which would result in a loop
+		"""
+		overlap = self.requirements & other.requirements
+		if self in overlap and other in overlap:
+			log.warning(f'{self} and {other} require each other which would result in a loop')
+			return False
+		return True
+
+
+	@property
+	def hasValidation(self) -> bool:
+		return 'requires' in self or 'requirements' in self
+
 	@property
 	def title(self):
 		value = self.get('title', None)
@@ -177,6 +335,28 @@ class UnitMetaData(dict):
 	@property
 	def category(self):
 		return CategoryItem(self.get('key', None))
+
+	@cached_property
+	def dataKeys(self) -> frozenset[str, 'CategoryItem']:
+		sourceKeys = [self.sourceKey] if isinstance(self.sourceKey, (str, CategoryItem)) else self.sourceKey
+		return frozenset({self.key, *(sourceKeys if sourceKeys is not None else [])})
+
+	@cached_property
+	def requirements(self) -> frozenset[str, 'CategoryItem', Hashable]:
+		requires = self.get('requires', [])
+		if not isinstance(requires, str) and isinstance(requires, Iterable):
+			if isinstance(requires, Mapping):
+				requires = requires.keys()
+			elif all(isinstance(x, Hashable) for x in requires):
+				requires = set(requires)
+			else:
+				raise TypeError(f'Requirements for {self.key} are invalid.  The following items are not hashable: {[x for x in requires if not isinstance(x, Hashable)]}')
+		elif isinstance(requires, Hashable):
+			requires = [requires]
+		else:
+			raise TypeError(f'Requirements for UnitMetaData must be a string, list or tuple of keys, or mapping of value/operation pairs')
+		return frozenset(requires)
+
 
 
 # class Category(tuple):
