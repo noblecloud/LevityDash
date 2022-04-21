@@ -66,6 +66,56 @@ class UnitMetaData(dict):
 		# 	data = self.units[data]
 		return data
 
+	@lru_cache(maxsize=256)
+	def getConvertFunc(self, source: Hashable = None):
+		typeString = self.get('type', None)
+		unitDef = self.get('sourceUnit', None)
+		kwargs = kwargs = self.get('kwargs', {})
+		if typeString is None or unitDef is None:
+			return lambda value: value
+		if typeString in ('datetime', 'date'):
+			if 'tz' in kwargs:
+				if isinstance(kwargs['tz'], TranslatorProperty):
+					value = kwargs['tz']
+					kwargs['tz'] = value(source)
+				if isinstance(kwargs['tz'], str):
+					kwargs['tz'] = pytz.timezone(kwargs['tz'])
+			else:
+				kwargs['tz'] = config.tz
+			if unitDef == 'epoch':
+				return lambda value: datetime.fromtimestamp(int(value), **kwargs)
+			elif unitDef == 'ISO8601':
+				format = self.get('format', None)
+				if isinstance(format, dict):
+					format = format[source.dataName]
+				return lambda value: datetime.strptime(value, format).astimezone(config.tz)
+		if typeString == 'icon':
+			if self['iconType'] == 'glyph':
+				alias = self['alias']
+				return lambda value: alias.get(str(value), value)
+		if isinstance(unitDef, str) and unitDef in unitDict:
+			return lambda value: unitDict[unitDef](value, **kwargs)
+		if isinstance(unitDef, Iterable):
+			if len(unitDef) == 2:
+				n, d = unitDef
+				if isinstance(n, str) and n in unitDict:
+					n = unitDict[n]
+				if isinstance(d, str) and d in unitDict:
+					d = unitDict[d]
+				if isinstance(d, TranslatorProperty):
+					d = d(source)
+				elif isinstance(d, type):
+					d = d(1)
+				if hasattr(d, 'value'):
+					d = d.value
+				comboCls = unitDict['special'][typeString][n, type(d)]
+				return lambda value: comboCls(value, d, **kwargs)
+		if typeString is not None and unitDef is not None:
+			if isinstance(unitDef, str):
+				cls = unitDict['str']
+				return lambda value: cls(value, **kwargs)
+
+		return lambda value: value
 	@property
 	def title(self):
 		value = self.get('title', None)
