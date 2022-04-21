@@ -10,7 +10,6 @@ python = ">=3.10,<3.11"
 pylunar = { git = "https://github.com/noblecloud/pylunar.git" }
 WeatherUnits = { file = "./req/WeatherUnits-0.4-py2.py3-none-any.whl" }
 numpy = "^1.22.3"
-PySide6 = "^6.2.4"
 requests = "^2.27.1"
 pytz = "^2022.1"
 qasync = "^0.23.0"
@@ -21,8 +20,12 @@ python-dateutil = "^2.8.2"
 bleak = "^0.14.2"
 PyYAML = "^6.0"
 Pillow = "^9.1.0"
+pyjion = "^1.2.6"
 
 [tool.poetry.dev-dependencies]
+pytest = "^5.4.2"
+pytest-cov = "^2.10.1"
+fbs = "^0.3.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
