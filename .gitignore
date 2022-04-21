@@ -229,3 +229,5 @@ cython_debug/
 /Arduino/
 /Pipfile.lock
 /.vscode/
+ui/autoWindow.py
+.codeedit/selection.json
