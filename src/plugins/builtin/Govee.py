@@ -1,20 +1,19 @@
-from datetime import datetime, timedelta
 import asyncio
+from datetime import timedelta
 from types import FunctionType
 from typing import Callable, Dict, Optional, Union
 from uuid import UUID
 import re
 
 from bleak import BleakScanner
-import WeatherUnits as wu
 from bleak.backends.device import BLEDevice
 
-from src.plugins.translator import LevityDatagram, TranslatorSpecialKeys as tsk
+from src.logger import LevityPluginLog
 from src.plugins.plugin import ScheduledEvent
+from src.plugins.translator import LevityDatagram, Translator, TranslatorSpecialKeys as tsk
 from src.plugins.web.rest import REST
-from src import config
+from src.utils import getOr, now
 
-# from src.plugins import Plugins
 pluginLog = LevityPluginLog.getChild('Govee')
 
 __all__ = ["Govee"]
@@ -74,64 +73,172 @@ class BLEPayloadParser:
 
 class Govee(REST, realtime=True, logged=True):
 	name = 'Govee'
-	translator = {
+	translator: Translator = {
 		'timestamp':                      {'type': 'datetime', 'sourceUnit': 'epoch', 'title': 'Time', 'sourceKey': 'timestamp', tsk.metaData: True},
 		'indoor.temperature.temperature': {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Temperature', 'sourceKey': 'temperature'},
 		'indoor.temperature.dewpoint':    {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Dew Point', 'sourceKey': 'dewPoint'},
 		'indoor.temperature.heatIndex':   {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Heat Index', 'sourceKey': 'heatIndex'},
 		'indoor.humidity.humidity':       {'type': 'humidity', 'sourceUnit': '%', 'title': 'Humidity', 'sourceKey': 'humidity'},
-		'indoor.device.battery':          {'type': 'battery', 'sourceUnit': '%%', 'title': 'Battery', 'sourceKey': 'battery'},
-		'@type':                          {'sourceKey': 'type', tsk.metaData: True},
-		'@timezone':                      {'default': {'value': config.tz}, tsk.metaData: True},
+		'indoor.@deviceName.battery':     {'type': 'battery', 'sourceUnit': '%%', 'title': 'Battery', 'sourceKey': 'battery'},
+		'indoor.@deviceName.rssi':        {'type': 'rssi', 'sourceUnit': 'rssi', 'title': 'Signal', 'sourceKey': 'rssi'},
+		'@type':                          {'sourceKey': 'type', tsk.metaData: True, tsk.sourceData: True},
+		'@deviceName':                    {'sourceKey': 'deviceName', tsk.metaData: True, tsk.sourceData: True},
+		'@deviceAddress':                 {'sourceKey': 'deviceAddress', tsk.metaData: True, tsk.sourceData: True},
+		# '@timezone':                      {'default': {'value': config.tz}, tsk.metaData: True},
 
 		'dataMaps':                       {
-			'ble': {
+			'BLEAdvertisementData': {
 				'realtime': ()
 			}
 		}
 	}
+	__device: BLEDevice
 
 	def __init__(self):
 		super().__init__()
 		self.__enabled = False
-		self.name = "GoveeH5101BLE"
-		self.scanner = BleakScanner()
-		self.scanner.register_detection_callback(self.dataParse)
-		self.scanner._service_uuids = [self.getConfig()['device']]
-		self.temperature = wu.Temperature.Celsius(20)
-		self.humidity = wu.Humidity(50)
-		self.battery = wu.Percentage(50)
+		self.name = "GoveeBLE"
+		self.__config = self.__readConfig()
+
+	async def __init_device__(self):
+		config = self.__config
+		deviceConfig = self.__readDeviceConfig(config)
+		device = deviceConfig['id']
+		match device:
+			case str() if self.__varifyDeviceID(device):
+				self.scanner = BleakScanner(service_uuids=(device,))
+			case str() if ',' in device and (devices := tuple([i for i in device.split(',') if self.__varifyDeviceID(i)])):
+				self.scanner = BleakScanner(service_uuids=devices)
+			case _:
+				device = None
+				__scanAttempts = 0
+				self.scanner = BleakScanner()
+
+				while device is None:
+					try:
+						device = await self.__discoverDevice(deviceConfig)
+					except NoDevice:
+						__scanAttempts += 1
+						if __scanAttempts > 10:
+							raise NoDevice(f'No device found after {__scanAttempts} attempts')
+						pluginLog.warning(f"Unable to find device matching config {deviceConfig}... Retrying in 30 seconds")
+						await asyncio.sleep(30)
+
+				self.scanner._service_uuids = tuple(device.metadata['uuids'])
+				self.name = f'GoveeBLE [{device.name}]'
+				self.__config['device.name'] = device.name
+				self.__config['device.uuid'] = f"{', '.join(device.metadata['uuids'])}"
+				self.__config._parser.save()
+
+		self.scanner.register_detection_callback(self.__dataParse)
+
+	def __readConfig(self):
+		config = self.getConfig()
+
+		def getValues(key) -> Dict[str, Union[str, int, float, Callable]]:
+			params = {'field': key}
+			if f'{key}.slice' in config:
+				params['startingByte'], params['endingByte'] = [int(i) for i in re.findall(r'\d+', config[f'{key}.slice'])]
+			if f'{key}.modifier' in config:
+				params['modifier'] = config[f'{key}.modifier']
+			if f'{key}.base' in config:
+				params['base'] = int(config[f'{key}.base'])
+			return params
+
+		self.__temperatureParse = BLEPayloadParser(**getValues('temperature'))
+		self.__humidityParse = BLEPayloadParser(**getValues('humidity'))
+		self.__batteryParse = BLEPayloadParser(**getValues('battery'))
+
+		return config
+
+	def __varifyDeviceID(self, deviceID: str) -> bool:
+		reMac = r'((?:(\d{1,2}|[a-fA-F]{1,2}){2})(?::|-*)){6}'
+		reUUID = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}'
+		return bool(re.match(reMac, deviceID) or re.match(reUUID, deviceID))
+
+	@staticmethod
+	def __readDeviceConfig(config):
+		deviceConfig = {}
+		deviceConfig['id'] = getOr(config, 'device.id', 'device.address', 'device.uuid', 'id', 'device', expectedType=str, default=None)
+		deviceConfig['model'] = getOr(config, 'model', 'device.model', 'type', 'device.type', expectedType=str, default=None)
+		return {k: v for k, v in deviceConfig.items() if v is not None}
 
 	def start(self):
+		self.__enabled = True
 		asyncio.create_task(self.run())
 		self.historicalTimer = ScheduledEvent(timedelta(minutes=1), self.logValues)
 		self.historicalTimer.start(False)
 
 	async def run(self):
+		await self.__init_device__()
 		await self.scanner.start()
-		while True:
-			await asyncio.sleep(0.1)
+		while True and self.__enabled:
+			await asyncio.sleep(0.5)
 		await self.scanner.stop()
 
-	def dataParse(self, device, temperatureHumidityData):
-		if "GVH" in str(temperatureHumidityData.local_name) and temperatureHumidityData.manufacturer_data:
-			data = temperatureHumidityData.manufacturer_data[1].hex().upper()
-			temperatureHumidityData = data[4:10]
-			battery = int(data[10:12], 16)
-			temperature = int(temperatureHumidityData, 16)/10000
-			humidity = int(temperatureHumidityData, 16)%1000/10
-			self.setData(temperature, humidity, battery)
+	def stop(self):
+		self.__enabled = False
 
-	def setData(self, temperature: wu.Temperature.Celsius, humidity: wu.Humidity, battery: wu.Percentage):
-		data = {
-			'timestamp':   datetime.now().timestamp(),
-			'type':        'ble',
-			'temperature': temperature,
-			'humidity':    humidity,
-			'battery':     battery
+	async def __discoverDevice(self, deviceConfig, timeout=60) -> Optional[BLEDevice]:
+		async def discover(timeout):
+			devices = []
+			for device in self.scanner.discover(timeout=timeout):
+				devices.append(device)
+			return devices
+
+		def genFilter(by: str, value: str, contains: bool = False):
+			def filter(device, _):
+				return str(getattr(device, by, f'{hash(value)}')).lower() == f'{str(value).lower()}'
+
+			def containsFilter(device, _):
+				return str(getattr(device, by, f'{hash(value)}')).lower().find(f'{str(value).lower()}') != -1
+
+			return containsFilter if contains else filter
+
+		match deviceConfig:
+			case {'id': 'closest', 'model': model}:
+				devices = await discover(timeout)
+				device = found[0] if (found := [device for device in devices if genFilter('name', model, contains=True)]) else None
+
+			case {'id': 'first', 'model': str(model)} | {'model': str(model)}:
+				device = await self.scanner.find_device_by_filter(genFilter('name', model, contains=True), timeout=timeout) or None
+
+			case {'id': UUID(_id)}:
+				device = await self.scanner.find_device_by_filter(genFilter('address', _id), timeout=timeout) or None
+
+			case {'id': str(address)} if re.match("[0-9a-f]{2}([-:]?)[0-9a-f]{2}(\\1[0-9a-f]{2}){4}$", address.lower()):
+				device = await self.scanner.find_device_by_filter(genFilter('address', address), timeout=timeout) or None
+
+			case {'id': str(_id)}:
+				device = await self.scanner.find_device_by_filter(lambda d, _: _id.lower() in str(d.name).lower(), timeout=timeout) or None
+
+			case _:
+				device = await self.scanner.find_device_by_filter(lambda d, _: 'gvh' in str(d.name).lower(), timeout=timeout) or None
+
+		if device:
+			pluginLog.info(f'Found device {device.name}')
+			return device
+		else:
+			raise NoDevice(f'No device found for {deviceConfig}')
+
+	def __dataParse(self, device, data):
+		dataBytes: bytes = data.manufacturer_data[1]
+		results = {
+			'timestamp':     now().timestamp(),
+			'type':          f'BLE{str(type(data).__name__)}',
+			'rssi':          int(device.rssi),
+			'deviceName':    str(device.name),
+			'deviceAddress': str(device.address),
+			**self.__temperatureParse(dataBytes),
+			**self.__humidityParse(dataBytes),
+			**self.__batteryParse(dataBytes),
 		}
-		data = LevityDatagram(data, translator=self.translator, dataMaps=self.translator.dataMaps, sourceData={'@source': 'ble'}, metaData={'@type': 'ble'})
+		data = LevityDatagram(results, translator=self.translator, dataMaps=self.translator.dataMaps)
 		self.realtime.update(data)
 
 
 __plugin__ = Govee
+
+
+class NoDevice(Exception):
+	pass
