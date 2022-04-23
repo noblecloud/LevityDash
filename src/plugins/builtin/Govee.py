@@ -1,8 +1,13 @@
 from datetime import datetime, timedelta
 import asyncio
+from types import FunctionType
+from typing import Callable, Dict, Optional, Union
+from uuid import UUID
+import re
 
 from bleak import BleakScanner
 import WeatherUnits as wu
+from bleak.backends.device import BLEDevice
 
 from src.plugins.translator import LevityDatagram, TranslatorSpecialKeys as tsk
 from src.plugins.plugin import ScheduledEvent
@@ -10,6 +15,7 @@ from src.plugins.web.rest import REST
 from src import config
 
 # from src.plugins import Plugins
+pluginLog = LevityPluginLog.getChild('Govee')
 
 __all__ = ["Govee"]
 
@@ -42,6 +48,30 @@ def parseMathString(mathString: str, functionName: str = 'mathExpression', **kwa
 	funcString = f'''def {functionName}({', '.join(remainingVars)}):\n\treturn {mathString}'''
 	exec(compile(funcString, "<string>", "exec"))
 	return locals()[functionName]
+
+
+class BLEPayloadParser:
+	def __init__(self, field: str, startingByte: int, endingByte: int, modifier: Optional[Union[str, Callable]] = None, base: int = 16):
+		self.__field = field
+		self.__startingByte = startingByte
+		self.__endingByte = endingByte
+		self.__modifier = modifier
+		self.__base = base
+		match modifier:
+			case FunctionType():
+				self.__modifier = modifier
+			case str():
+				self.__modifier = parseMathString(modifier)
+
+	def __call__(self, payload: bytes) -> dict[str, float | int]:
+		payload = int(payload.hex().upper()[self.__startingByte: self.__endingByte], self.__base)
+		if self.__modifier is not None:
+			value = self.__modifier(payload)
+		else:
+			value = payload
+		return {self.__field: value}
+
+
 class Govee(REST, realtime=True, logged=True):
 	name = 'Govee'
 	translator = {
