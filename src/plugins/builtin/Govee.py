@@ -14,6 +14,34 @@ from src import config
 __all__ = ["Govee"]
 
 
+def getBadActors(string: str) -> list[str]:
+	return re.findall(r"sys\.?|import\.?|path\.?|os\.|\w*\sas\s\w*|eval|exec|compile|__[a-zA-Z_][a-zA-Z0-9_]*__", string)
+
+
+def parseMathString(mathString: str, functionName: str = 'mathExpression', **kwargs) -> Callable:
+	if badActors := getBadActors(mathString):
+		raise RuntimeError(f"The following are not allowed in the math string: {badActors}")
+
+	if mathString.count('\n') > 1:
+		raise RuntimeError("Only one line allowed")
+
+	variables = {}
+	for match in re.finditer(r"[a-zA-Z_][a-zA-Z0-9_]*", mathString):
+		variables[match.group(0)] = None
+
+	variables.update(kwargs)
+
+	remainingVars = []
+	for key, value in list(variables.items()):
+		if value is None:
+			variables.pop(key)
+			remainingVars.append(key)
+			continue
+		mathString = mathString.replace(key, str(value))
+
+	funcString = f'''def {functionName}({', '.join(remainingVars)}):\n\treturn {mathString}'''
+	exec(compile(funcString, "<string>", "exec"))
+	return locals()[functionName]
 class Govee(REST, realtime=True, logged=True):
 	name = 'Govee'
 	translator = {
