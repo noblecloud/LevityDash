@@ -2,9 +2,10 @@ from dataclasses import dataclass, field
 
 from enum import Enum
 
+from src.config import PluginConfig
 from src.plugins import Plugin
 from datetime import timedelta
-from typing import Any, Dict, Optional, Union
+from typing import Any, ClassVar, Dict, Optional, Union
 
 __all__ = ["AuthType", "Auth", "URLs", "Endpoint", "Web", "REST"]
 
@@ -25,6 +26,10 @@ class AuthType(Enum):
 class Auth:
 	authType: AuthType = field(default=AuthType.NONE, repr=True, compare=True, hash=True)
 	authData: Dict[str, str] = field(default_factory=dict, repr=True, compare=True, hash=True)
+
+	@property
+	def vars(self):
+		return {i for i in self.authData.values() if isinstance(i, str) and i.startswith('@')}
 
 
 class URLsMeta(type):
@@ -77,12 +82,24 @@ class URLs(metaclass=URLsMeta):
 	base: str
 	auth: Auth
 
-	def __init__(self):
+	__instances: ClassVar[dict[Plugin, 'URLs']] = dict()
+
+	def __init__(self, plugin=None):
 		endpoints = ((endpointName, endpoint) for endpointName, endpoint in self.__class__.__dict__.items() if isinstance(endpoint, Endpoint))
-		for endpointName, endpoint in endpoints:
-			if endpoint.base is None:
-				endpoint.base = self
-			endpoint.name = endpointName
+		self.__plugin = plugin
+		self.endpoints = dict()
+		match plugin:
+			case None:
+				for endpointName, endpoint in endpoints:
+					if endpoint.base is None:
+						endpoint.base = self
+					endpoint.name = endpointName
+			case Plugin():
+				for endpointName, endpoint in endpoints:
+					exec(f'self.{endpointName} = endpoint')
+					endpoint.name = endpointName
+					if isinstance(endpoint.base, type(self)):
+						endpoint.base = self
 
 	@property
 	def default(self):
@@ -93,8 +110,35 @@ class URLs(metaclass=URLsMeta):
 	def __str__(self):
 		return self.base
 
+	def __get__(self, instance, owner):
+		if instance in self.__instances:
+			return self.__instances[instance]
+		new = type(self)(plugin=instance)
+		self.__instances[instance] = new
+		return new
 
-class Endpoint:
+	def __set__(self, instance, value):
+		self.__instances[instance] = value
+
+	# def __getattribute__(self, key):
+	# 	if not key.startswith('__') and key in self.__dict__:
+	# 		return self.__dict__[key]
+	# 	return super().__getattribute__(key)
+
+	@property
+	def config(self) -> Optional['PluginConfig']:
+		return getattr(self.plugin, 'config', None)
+
+	@classmethod
+	def newInstance(cls, owner):
+		return cls(plugin=owner)
+
+	@property
+	def plugin(self):
+		return self.__plugin
+
+
+class Endpoint(object):
 	base: URLs
 	params: dict
 	url: str
@@ -139,6 +183,11 @@ class Endpoint:
 		self.period = period
 		self.auth = auth
 		self.__inherit = {'headers', 'params', 'auth'}
+		self.__instances: dict = dict()
+
+	@classmethod
+	def newInstance(cls, owner):
+		return cls(base=owner)
 
 	def parseData(self, data: dict) -> dict:
 		return data
@@ -172,13 +221,37 @@ class Endpoint:
 		self.__base = value
 
 	@property
+	def urlBase(self):
+		if isinstance(self.base, Endpoint):
+			return self.base.urlBase
+		return self.base
+
+	@property
 	def url(self):
+		url = self.__url
 		if self.__base is None:
-			return self.__url
-		return f'{self.protocol}://{self.base}/{self.__url}'
+			value = url
+		else:
+			value = f'{self.protocol}://{self.base}/{url}'
+		return value
+
+	def _applyConfigVariables(self, value: str) -> str:
+		match value:
+			case str() if '{' in value:
+				return value.format(**self.config.defaults())
+			case dict():
+				for key in value:
+					value[key] = self._applyConfigVariables(value[key])
+				return value
+			case _:
+				return value
+		return value
 
 	def __str__(self):
-		return f'{self.base}/{self.__url}'
+		string = f'{self.base}/{self.__url}'
+		# if '{' in string:
+		# 	string = string.format(**self.params)
+		return string
 
 	@url.setter
 	def url(self, value):
@@ -246,7 +319,7 @@ class Endpoint:
 			if auth.authType == self.__auth.authType:
 				authData.update(auth.authData)
 			authData.update(self.__auth.authData)
-			return Auth(auth.authType, authData)
+			return Auth(auth.authType, self._applyConfigVariables(authData))
 		return self.__auth
 
 	@auth.setter
@@ -261,9 +334,31 @@ class Endpoint:
 	def name(self, value):
 		self.__name = value
 
+	def __get__(self, instance, owner):
+		if self.name in instance.endpoints:
+			return instance.endpoints[self.name]
+		return self
+
+	def __getattribute__(self, name):
+		value = super().__getattribute__(name)
+		if name != '_applyConfigVariables':
+			func = super().__getattribute__('_applyConfigVariables')
+			return func(value)
+		return value
+
+	def __set__(self, instance, value):
+		instance.endpoints[self.name] = value
+
+	@property
+	def config(self):
+		return getattr(self.urlBase, 'config', None)
+
 
 class Web(Plugin, prototype=True):
 	urls: URLs
+
+	def __init__(self, *args, **kwargs):
+		super().__init__()
 
 	def normalizeData(self, rawData):
 		return rawData

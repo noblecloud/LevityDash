@@ -4,12 +4,13 @@ import pytz
 import WeatherUnits as wu
 from typing import Dict, Type, Union
 
-from src.utils import SmartString
+from src.utils.shared import SmartString
 
 __all__ = ['unitDict']
 unitDict: Dict[str, Union[Type[wu.Measurement], Type[bool], Dict[str, Union[Type[wu.base.Measurement], Type[wu.base.DerivedMeasurement]]]]] = {
 	'f':                wu.temperature.Fahrenheit,
 	'c':                wu.temperature.Celsius,
+	'kelvin':           wu.temperature.Kelvin,
 	'%':                wu.others.Humidity,
 	'%c':               wu.others.Coverage,
 	'%p':               wu.others.Probability,

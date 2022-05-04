@@ -1,80 +1,79 @@
+import asyncio
 import pkgutil
+from typing import Any, ClassVar, Dict, Iterator, List, Optional
 
-import logging
-
-pluginLog = logging.getLogger(f'Plugins')
-
-from typing import Any, Dict, Iterator, List, Type
-import importlib as imp
-
-from src import config
-from src.plugins.plugin import *
+from src.utils.log import LevityPluginLog as pluginLog
+from src.plugins.utils import *
+from src.config import pluginConfig
+from src.plugins import categories
+from src.plugins import translator
+from src.plugins import observation
+from src.plugins.plugin import Plugin
 
 
 class Singleton(type):
-	__instances: Dict[str, Any] = {}
+	instances: Dict[str, Any] = {}
 
 	def __new__(cls, name, bases, attrs):
-		if name not in cls.__instances:
-			cls.__instances[name] = super().__new__(cls, name, bases, attrs)
-		return cls.__instances[name]
+		if name not in cls.instances:
+			cls.instances[name] = super().__new__(cls, name, bases, attrs)()
+		return cls.instances[name]
 
 
 class Plugins(metaclass=Singleton):
-	pluginConfig = config.plugins
-	__instance: 'Plugins'
+	instance: ClassVar['Plugins'] = None
 	__plugins: Dict[str, Plugin] = {}
 
 	def __init__(self):
 		# find all the plugins that are enabled in the config
-		enabledPlugins = set(self.pluginConfig.enabledPlugins)
+		enabledPlugins = set(pluginConfig.enabledPlugins)
 		enabledPlugins.intersection_update(self.allPlugins())
 		pluginsToInit = {name: self.__loadPlugin(name) for name in enabledPlugins}
+
 		for name, plugin in pluginsToInit.items():
 			if plugin is None:
 				continue
-			pluginInstance = plugin.__plugin__()
-			self.__plugins[name] = pluginInstance
-			pluginLog.info(f'Loaded plugin {name}')
+			try:
+				pluginInstance = plugin.__plugin__()
+				self.__plugins[name] = pluginInstance
+				pluginLog.info(f'Loaded plugin {name}')
+			except Exception as e:
+				pluginLog.debug(f'Unable to load {name} due to exception --> {e}')
 		pluginLog.info(f'Loaded {len(self.__plugins)} plugins')
 
 	def start(self):
-		if self.pluginConfig.getboolean('Options', 'enabled'):
+		if pluginConfig['Options'].getboolean('enabled'):
 			print('--------------------- Starting plugins ---------------------')
-			for plugin in self:
-				plugin.start()
-			print('---------------------Plugins started ---------------------')
+			asyncio.gather(*[plugin.asyncStart() for plugin in self])
+
+	# for plugin in self:
+	# 	print(f'Starting plugin {plugin.name}')
+	# 	plugin.asyncStart()
+	# asyncio.get_event_loop().run_in_executor(None, plugin.start)
+
+	# print('---------------------Plugins started ---------------------')
 
 	@staticmethod
-	def allPlugins() -> Iterator:
-		def recursiveSearch(paths: List[str]) -> Iterator:
+	def allPlugins() -> Iterator[str]:
+		def search(paths: List[str]) -> Iterator:
 			plugins = (i for i in pkgutil.iter_modules(paths))
 			for _, name, ispkg in plugins:
-				# if ispkg:
-				# 	yield from recursiveSearch([f'{path}/{name}' for path in paths])
-				# else:
 				yield name
 
-		pluginDirs = []
-		pluginDirs.append(__path__[0] + '/builtin')
-		userPluginDir = config.userPath.joinpath('plugins')
-		if userPluginDir.exists():
-			pluginDirs.append(str(userPluginDir))
+		pluginDirs = [__path__[0] + '/builtin']
 
-		return recursiveSearch(pluginDirs)
+		return search(pluginDirs)
 
-	def __loadPlugin(self, name: str) -> Plugin:
+	def __loadPlugin(self, name: str) -> Optional[Plugin]:
 		if name in self.__plugins:
 			return self.__plugins[name]
+		builtinNamespace = 'src.plugins.builtin'
 		try:
-			name = f'src.plugins.builtin.{name}'
-			plugin = imp.import_module(name, f'{__path__[0]}/builtin/{name}.py')
-		except FileNotFoundError:
-			plugin = imp.import_module(name, f'{config.userPath.joinpath("plugins")}/{name}.py')
+			exec(f'from {builtinNamespace} import {name}')
 		except Exception as e:
 			pluginLog.error(f'Failed to load plugin {name}: {e}')
-			return None
-		return plugin
+			return
+		return locals()[name]
 
 	def __getitem__(self, item: str) -> Plugin:
 		return self.__plugins[item]
@@ -97,4 +96,5 @@ class Plugins(metaclass=Singleton):
 		return iter(self.__plugins.keys())
 
 
-Plugins = Plugins()
+def __getattr__(item: str) -> Plugin:
+	return getattr(Plugins, item, None) or super().__getattribute__(item)
