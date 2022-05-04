@@ -8,8 +8,6 @@
   <h1 align="center" color="505050"><b>LevityDash</b></h1>
   <p align="center">
   A lightweight, desktop native, multisource dashboard for macOS, Windows and Linux
-    <br />
-    <a href="https://levitydash.app"><strong>levitydash.app</strong></a>
   </p>
 </p>
 
