@@ -256,14 +256,14 @@ class GridView(QGraphicsView):
 			self.noActivityTimer.start()
 		if event.type() == QEvent.KeyPress:
 			# save
-			if event.key() == Qt.Key_D:
+			if event.key() == Qt.Key_R:
 				pos = self.mapToScene(self.mapFromGlobal(QCursor.pos()))
 				items = self.graphicsScene.items(pos)
 				for item in items:
-					if not hasattr(item, 'representer') or item is self.graphicsScene.base:
-						continue
-					yamlStr = yaml.safe_dump(item, default_flow_style=False)
-					print(yamlStr)
+					if hasattr(item, 'refresh'):
+						item.refresh()
+			# 	yamlStr = yaml.safe_dump(item, default_flow_style=False)
+			# 	print(yamlStr)
 			# load
 		return super(GridView, self).eventFilter(obj, event)
 
