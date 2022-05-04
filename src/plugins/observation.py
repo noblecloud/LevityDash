@@ -7,42 +7,34 @@ from operator import add
 
 import pytz
 from dataclasses import dataclass, field
-from WeatherUnits.errors import UnknownUnit
-from WeatherUnits.time.time import Second
 
-from src.plugins.translator import LevityDatagram
-from src import logging
 from uuid import uuid4
 from abc import ABC, ABCMeta, abstractmethod
 from datetime import datetime, timedelta, timezone as _timezones, tzinfo
 from functools import cached_property, lru_cache
-from typing import Any, Callable, ClassVar, Hashable, Iterable, List, Mapping, Optional, OrderedDict, Set, Tuple, Type, Union
+from typing import Any, Callable, ClassVar, Hashable, Iterable, List, Mapping, Optional, OrderedDict, Set, Tuple, Type, Union, SupportsAbs
 
 import numpy as np
 import WeatherUnits as wu
 from dateutil.parser import parse
+from math import inf, isinf
 from PySide2.QtCore import QObject, Signal
-from WeatherUnits import Measurement
 
-from src import config
-from src.plugins.translator import unitDict
-from src.utils import (clearCacheAttr, closest, isa, isOlderThan, mostCommonClass, mostFrequentValue, now, Now, Period, DateKey, roundToPeriod,
-                       toLiteral, TranslatorProperty,
-                       UTC)
-from src.catagories import CategoryDict, CategoryItem
-from src.plugins import pluginLog
+from src.plugins.categories import CategoryItem
+from src.plugins.translator import LevityDatagram
+from src.utils import NoValue, isOlderThan, mostFrequentValue, clearCacheAttr, closest, DateKey, isa, mostCommonClass, now, Now, Period, roundToPeriod, toLiteral, UTC, LOCAL_TIMEZONE
+from src.plugins import TranslatorProperty, pluginLog, unitDict, Accumulator
+from src.utils.data import findPeaksAndTroughs
 
 loop = asyncio.get_running_loop()
 
 __all__ = ['ObservationDict', 'Observation', 'ObservationRealtime', 'ObservationTimeSeries',
-           'ObservationLog', 'ObservationTimeSeriesItem', 'MeasurementTimeSeries',
-           'TimeSeriesItem', 'TimeAwareValue', 'ObservationValue', 'RecordedObservationValue', 'ArchivedObservationValue', 'ArchivedObservation',
-           'ObservationValueResult', 'ObservationTimestamp', 'MiniTimeSeries']
-
-from src.utils import Accumulator
+	'ObservationLog', 'ObservationTimeSeriesItem', 'MeasurementTimeSeries',
+	'TimeSeriesItem', 'TimeAwareValue', 'ObservationValue', 'RecordedObservationValue', 'ArchivedObservationValue', 'ArchivedObservation',
+	'ObservationValueResult', 'ObservationTimestamp', 'MiniTimeSeries', 'PublishedDict']
 
 log = pluginLog.getChild('Observation')
-log.setLevel(logging.ERROR)
+log.setLevel('ERROR')
 
 
 def convertToCategoryItem(key, source: Hashable = None):
@@ -111,12 +103,12 @@ class ObservationValue(TimeAwareValue):
 		super(ObservationValue, cls).__init_subclass__(**kwargs)
 
 	def __init__(self,
-	             value: Any,
-	             key: Union[str, CategoryItem],
-	             source: Any,
-	             container: 'ObservationDict',
-	             metadata: dict = None,
-	             **kwargs):
+		value: Any,
+		key: Union[str, CategoryItem],
+		source: Any,
+		container: 'ObservationDict',
+		metadata: dict = None,
+		**kwargs):
 		self.__rawValue = None
 		self.__timestamp = None
 		if isinstance(value, TimeSeriesItem):
@@ -143,7 +135,7 @@ class ObservationValue(TimeAwareValue):
 					key = CategoryItem(metadata['key'], kSource)
 				source.__sourceKeyMap__[metadata['sourceKey']] = metadata['key']
 			metadata['key'] = key
-		if isinstance(value, Measurement):
+		if isinstance(value, wu.Measurement):
 			sourceUnit = metadata['sourceUnit']
 			if value.unit != sourceUnit:
 				try:
@@ -151,7 +143,7 @@ class ObservationValue(TimeAwareValue):
 					if timeAware:
 						timeAware.value = value
 
-				except UnknownUnit:
+				except wu.errors.UnknownUnit:
 					log.warning(f'Failed to convert {key} from {value.unit} to {sourceUnit}.  This may cause issues later conversion accuracy.')
 		self.__metadata = metadata
 		self.__source = source
@@ -181,6 +173,10 @@ class ObservationValue(TimeAwareValue):
 		return self.__getattribute__(item)
 
 	@property
+	def isValid(self) -> bool:
+		return self.rawValue is not None
+
+	@property
 	def value(self):
 		if self.__value is None:
 			try:
@@ -189,6 +185,11 @@ class ObservationValue(TimeAwareValue):
 				value = self.rawValue
 			if hasattr(value, 'localize'):
 				value = value.localize
+			if not isinstance(self, ObservationTimestamp):
+				if isinstance(value, datetime):
+					value = wu.Time.Second((value - Now()).total_seconds()).autoAny
+				elif isinstance(value, timedelta):
+					value = wu.Time.Second(value.total_seconds()).autoAny
 			self.__value = value
 		return self.__value
 
@@ -493,6 +494,8 @@ class TimeSeriesItem(TimeAwareValue):
 		return self.__truediv__(other)
 
 	def __gt__(self, other):
+		if isinf(other):
+			return True
 		if hasattr(other, 'value'):
 			other = other.value
 		if isinstance(other, datetime) and not isinstance(self.value, datetime):
@@ -500,6 +503,8 @@ class TimeSeriesItem(TimeAwareValue):
 		return self.value > type(self.value)(other)
 
 	def __lt__(self, other):
+		if isinf(other):
+			return True
 		if hasattr(other, 'value'):
 			other = other.value
 		if isinstance(other, datetime) and not isinstance(self.value, datetime):
@@ -507,6 +512,8 @@ class TimeSeriesItem(TimeAwareValue):
 		return self.value < type(self.value)(other)
 
 	def __ge__(self, other):
+		if isinf(other):
+			return True
 		if hasattr(other, 'value'):
 			other = other.value
 		if isinstance(other, datetime) and not isinstance(self.value, datetime):
@@ -514,6 +521,8 @@ class TimeSeriesItem(TimeAwareValue):
 		return self.value >= type(self.value)(other)
 
 	def __le__(self, other):
+		if isinf(other):
+			return True
 		if hasattr(other, 'value'):
 			other = other.value
 		if isinstance(other, datetime) and not isinstance(self.value, datetime):
@@ -521,6 +530,8 @@ class TimeSeriesItem(TimeAwareValue):
 		return self.value <= type(self.value)(other)
 
 	def __eq__(self, other):
+		if isinf(other):
+			return True
 		if hasattr(other, 'value'):
 			other = other.value
 		if isinstance(other, datetime) and not isinstance(self.value, datetime):
@@ -531,6 +542,8 @@ class TimeSeriesItem(TimeAwareValue):
 			return False
 
 	def __ne__(self, other):
+		if isinf(other):
+			return True
 		if hasattr(other, 'value'):
 			other = other.value
 		if isinstance(other, datetime) and not isinstance(self.value, datetime):
@@ -577,6 +590,11 @@ class TimeSeriesItem(TimeAwareValue):
 	def __ceil__(self):
 		return int(self.value) + 1
 
+	def __abs__(self):
+		if isinstance(self.value, SupportsAbs):
+			return abs(self.value)
+		return 0
+
 	@classmethod
 	def average(cls, *items: 'TimeSeriesItem') -> 'TimeSeriesItem':
 		valueCls = mostCommonClass(item.value for item in items)
@@ -587,8 +605,8 @@ class TimeSeriesItem(TimeAwareValue):
 			values = [item.value for item in items]
 			value = sum(values)/len(values)
 			times = [item.timestamp.timestamp() for item in items]
-		timestamp = datetime.fromtimestamp(sum(times)/len(times)).astimezone(_timezones.utc).astimezone(tz=config.tz)
-		if issubclass(valueCls, Measurement) and {'denominator', 'numerator'}.intersection(valueCls.__init__.__annotations__.keys()):
+		timestamp = datetime.fromtimestamp(sum(times)/len(times)).astimezone(_timezones.utc).astimezone(tz=LOCAL_TIMEZONE)
+		if issubclass(valueCls, wu.Measurement) and {'denominator', 'numerator'}.intersection(valueCls.__init__.__annotations__.keys()):
 			ref = values[0]
 			n = type(ref.n)
 			d = type(ref.d)(1)
@@ -612,7 +630,7 @@ class MultiValueTimeSeriesItem(TimeSeriesItem):
 	def value(self) -> Union[Hashable]:
 		if self.__value is None:
 			self.__value = self.average(*self.values)
-		return self.__value
+		return self.__value.value
 
 	@value.setter
 	def value(self, value):
@@ -623,7 +641,9 @@ class MultiValueTimeSeriesItem(TimeSeriesItem):
 
 	@property
 	def timestamp(self) -> datetime:
-		return self.value.timestamp
+		if self.__value is None:
+			self.__value = self.average(*self.values)
+		return self.__value.timestamp
 
 	def __iadd__(self, other):
 		if isinstance(other, TimeSeriesItem):
@@ -640,8 +660,10 @@ class MiniTimeSeries(deque):
 	__samples: int
 	__timeOffset: int
 	__itemType: Type
+	__lastItem: Optional[TimeSeriesItem]
 
 	def __init__(self, start: datetime, timespan: timedelta, resolution: timedelta, *args, **kwargs):
+		self.__lastItem = None
 		self.__resolution = resolution
 		if start is Now():
 			timespan = timedelta(minutes=-5)
@@ -678,6 +700,7 @@ class MiniTimeSeries(deque):
 		value = self.last.timestamp
 		value = roundToPeriod(value, self.__resolution)
 		return value
+		return
 
 	def filterKey(self, key: Union[int, datetime, timedelta]) -> int:
 		seconds = int(self.__resolution.total_seconds())
@@ -713,6 +736,8 @@ class MiniTimeSeries(deque):
 		if not isinstance(value, TimeSeriesItem):
 			value = TimeSeriesItem(value, key)
 		self[index].append(value)
+		if self.__lastItem is None or value.timestamp > self.__lastItem.timestamp:
+			self.__lastItem = value
 
 	def getValue(self, key: Union[int, datetime, timedelta]) -> Optional[TimeSeriesItem]:
 		index = self.filterKey(key)
@@ -726,19 +751,14 @@ class MiniTimeSeries(deque):
 		return TimeSeriesItem.average(*value)
 
 	@property
-	def value(self) -> TimeSeriesItem:
-		return self.last.value
+	def value(self) -> Optional[TimeSeriesItem]:
+		if last := self.last:
+			return last.value
+		return None
 
 	@property
-	def last(self):
-		if all(len(item) == 0 for item in self):
-			return None
-		i = -1
-		item = self[-1]
-		while len(item) == 0:
-			i -= 1
-			item = self[i]
-		return item[-1]
+	def last(self) -> Optional[TimeSeriesItem]:
+		return self.__lastItem
 
 	@property
 	def first(self):
@@ -777,8 +797,8 @@ class MiniTimeSeries(deque):
 					if isinstance(step, timedelta):
 						resolution = step.total_seconds()
 						span = (end - start).total_seconds()
-						lenth = int(span/resolution) + 1
-						items = [[] for _ in range(lenth)]
+						length = int(span/resolution) + 1
+						items = [[] for _ in range(length)]
 						for i in range(len(values)):
 							index = round((values[i].timestamp - start).total_seconds()/resolution)
 							items[index].append(values[i])
@@ -884,7 +904,13 @@ class RecordedObservationValue(ObservationValue):
 		return self.__rawValue
 
 	@property
+	def isValid(self):
+		return self.__history.last is not None
+
+	@property
 	def value(self):
+		if not self.isValid:
+			return NoValue
 		if self.__value is None:
 			try:
 				value = self.convertFunc(self.rawValue)
@@ -929,8 +955,12 @@ class RecordedObservationValue(ObservationValue):
 		rawValue = self.history.rollingAverage(from_, to)
 		if rawValue is None:
 			return None
-		value = self.convertFunc(rawValue.value)
-		sourceUnitValue = self.convertFunc(rawValue)
+		try:
+			value = self.convertFunc(rawValue.value)
+			sourceUnitValue = self.convertFunc(rawValue)
+		except Exception as e:
+			log.error(f'Error converting value {rawValue.value} to {self.convertFunc}', exc_info=e)
+			return None
 		if hasattr(value, 'localize'):
 			value = value.localize
 		if value:
@@ -1001,7 +1031,7 @@ class ObservationTimestamp(ObservationValue):
 				postVal = self.__value.replace(tzinfo=None)
 				pluginLog.warning(f"Timestamp {self} does not have a timezone.  "
 				                  f"Assuming Local Timezone and converting to UTC with a "
-				                  f"difference of {Second((abs((preVal - postVal)).total_seconds())).autoAny}")
+				                  f"difference of {wu.Time.Second((abs((preVal - postVal)).total_seconds())).autoAny}")
 
 	@ObservationValue.value.getter
 	def value(self):
@@ -1112,15 +1142,15 @@ class ObservationDict(PublishedDict):
 		return self.dataName or self.__class__.__name__
 
 	def __init_subclass__(cls, category: str = None,
-	                      published: bool = None,
-	                      recorded: bool = None,
-	                      sourceKeyMap: Dict[str, CategoryItem] = None,
-	                      itemClass: Union[Type[ObservationValue], Type['Observation']] = None,
-	                      keyed: bool = False,
-	                      **kwargs):
+		published: bool = None,
+		recorded: bool = None,
+		sourceKeyMap: Dict[str, CategoryItem] = None,
+		itemClass: Union[Type[ObservationValue], Type['Observation']] = None,
+		keyed: bool = False,
+		**kwargs):
 		cls.__sourceKeyMap__ = sourceKeyMap
 		if cls.__sourceKeyMap__ is None:
-			print('No sourceKeyMap provided for', cls.__name__)
+			pluginLog.debug(f'No sourceKeyMap provided for {cls.__name__}')
 			cls.__sourceKeyMap__ = {}
 		k = kwargs.get('keyMap', {})
 
@@ -1176,11 +1206,7 @@ class ObservationDict(PublishedDict):
 		item = convertToCategoryItem(item)
 		return super(ObservationDict, self).__contains__(item)
 
-	def extractTime(self, data: dict):
-		return
-
 	async def asyncUpdate(self, data, **kwargs):
-		# async with self.__lock:
 		self.update(data, **kwargs)
 
 	def update(self, data: dict, **kwargs):
@@ -1196,7 +1222,7 @@ class ObservationDict(PublishedDict):
 			data = data.pop('data')
 		timestamp = ObservationTimestamp(data, self, extract=True).value
 		for key, item in data.items():
-			key = convertToCategoryItem(key, source if self.keyed else None)
+			key = convertToCategoryItem(key, source=None)
 			if not isinstance(item, TimeAwareValue):
 				item = TimeSeriesItem(item, timestamp)
 			self[key] = item
@@ -1343,16 +1369,11 @@ class ObservationDict(PublishedDict):
 					heatIndex = TimeSeriesItem(heatIndex, timestamp=timestamp)
 					self['indoor.temperature.heatIndex'] = heatIndex
 
-	def __preprocess(self, data: dict):
-		if data:
-			dict.__setitem__(self, CategoryItem('timestamp'), self.__processTime(data))
-		return data
-
 	def timeKey(self, data) -> str:
 		if 'timestamp' in data:
 			return 'timestamp'
 		unitData = self.translator.getExact(CategoryItem('timestamp')) or {}
-		srcKey = unitData.get('sourceKey', None)
+		srcKey = unitData.get('sourceKey', dict())
 		if isinstance(srcKey, (str, CategoryItem)):
 			return srcKey
 		for key in srcKey:
@@ -1361,7 +1382,7 @@ class ObservationDict(PublishedDict):
 		else:
 			return (set(data.keys()).intersection({'time', 'timestamp', 'day_start_local', 'date', 'datetime'})).pop()
 
-	def timezoneKey(self, data) -> str:
+	def timezoneKey(self, data) -> str | None:
 		if 'time.timezone' in data:
 			return 'time.timezone'
 		if 'time.timezone' in self.translator:
@@ -1384,27 +1405,6 @@ class ObservationDict(PublishedDict):
 	@dataName.setter
 	def dataName(self, value):
 		self.__dataName = value
-
-	def __processTime(self, data: dict) -> datetime:
-		timeKey = self.timeKey(data)
-		tzKey = self.timezoneKey(data)
-		if tzKey is not None:
-			tz = pytz.timezone(data.get(tzKey, None))
-		else:
-			tz = config.tz
-		if tz is None:
-			tz = config.tz
-		value = data.pop(timeKey, None)
-		if value is not None:
-			value = self.translator.convert(self, timeKey, value)['value']
-		if isinstance(value, datetime):
-			if value.tzinfo is None:
-				value = value.replace(tzinfo=tz)
-			return value
-		try:
-			return parse(value).astimezone(tz)
-		except TypeError:
-			return datetime.fromtimestamp(value).astimezone(tz)
 
 	@property
 	def lock(self) -> Lock:
@@ -1450,9 +1450,6 @@ class ObservationDict(PublishedDict):
 	def categories(self):
 		return CategoryDict(self, self, None)
 
-	def __cleanup(self):
-		pass
-
 
 @Archivable.register
 class Observation(ObservationDict, published=False, recorded=False):
@@ -1485,11 +1482,12 @@ class ArchivedObservation(Observation, published=False, recorded=False):
 	def __init__(self, source: Optional[Archivable] = None, *args, **kwargs):
 		if source:
 			values = {key: v for key, value in source.items() if (v := (value.archived if isinstance(value, ArchivableValue) else copy(value))) is not None}
-			times = [i.timestamp.timestamp() for i in values.values()]
-			self.timestamp = datetime.fromtimestamp(sum(times)/len(times)).astimezone(_timezones.utc).astimezone(tz=config.tz)
-			dict.__init__(self, values)
-		else:
-			dict.__init__(self)
+			if values:
+				times = [i.timestamp.timestamp() for i in values.values()]
+				self.timestamp = datetime.fromtimestamp(sum(times)/len(times)).astimezone(_timezones.utc).astimezone(tz=LOCAL_TIMEZONE)
+				dict.__init__(self, values)
+				return
+		dict.__init__(self)
 
 	def __setattr__(self, key, value):
 		if key == 'timestamp' and (not hasattr(self, 'timestamp') or self.timestamp is None):
@@ -1537,7 +1535,7 @@ class ObservationRealtime(Observation, published=True, recorded=True):
 	def timestamp(self):
 		timestamps = [value.timestamp.timestamp() for value in self.values() if isinstance(value, TimeAwareValue)] or [datetime.now().astimezone(_timezones.utc).timestamp()]
 		average = sum(timestamps)/len(timestamps)
-		return datetime.fromtimestamp(average).astimezone(config.tz)
+		return datetime.fromtimestamp(average).astimezone(LOCAL_TIMEZONE)
 
 
 class ObservationTimeSeriesItem(Observation, published=False):
@@ -1637,7 +1635,10 @@ class ObservationTimeSeries(ObservationDict, published=True):
 				raw = list(raw.values())
 
 		keys = set()
+
 		if isinstance(raw, List):
+			items = len(raw)
+			i = 0
 			for rawObs in raw:
 				if not isinstance(rawObs, Mapping):
 					rawObs = {k: v for k, v in zip(keyMap, rawObs)}
@@ -1645,6 +1646,9 @@ class ObservationTimeSeries(ObservationDict, published=True):
 				obs = self.__timeseries__.get(key, None) or self.buildObservation(key)
 				obs.update(rawObs, source=source)
 				keys.update(obs.keys())
+				print(f'\r {source[0]}.{self.dataName}: {i} of {items}', end='')
+				i += 1
+			print(f'\r {source[0]}.{self.dataName}: finished loading {items} items')
 		# self.calculatePeriod(raw)
 		self.__knownKeys.update(keys)
 
@@ -1677,7 +1681,7 @@ class ObservationTimeSeries(ObservationDict, published=True):
 
 	def removeOldObservations(self):
 		return
-		now = roundToPeriod(datetime.now(tz=config.tz), self.period, method=int)
+		now = roundToPeriod(datetime.now(tz=LOCAL_TIMEZONE), self.period, method=int)
 		toPass = {}
 		for key in {(key, value) for key, value in self.__timeseries__.items() if key < now}:
 			toPass[key] = self.destroyObservation(key)
@@ -1701,9 +1705,9 @@ class ObservationTimeSeries(ObservationDict, published=True):
 			time = np.array([x[0] for x in data])
 		else:
 			raise TypeError(f'{type(data[0])} is not supported yet')
-		meanTime = datetime.fromtimestamp(int(np.mean(time)), tz=config.tz)
+		meanTime = datetime.fromtimestamp(int(np.mean(time)), tz=LOCAL_TIMEZONE)
 		period = timedelta(seconds=((time - np.roll(time, 1))[1:].mean()))
-		if period.total_seconds() > 0 and meanTime < datetime.now(tz=config.tz):
+		if period.total_seconds() > 0 and meanTime < datetime.now(tz=LOCAL_TIMEZONE):
 			period = timedelta(-period.total_seconds())
 		self._period = period
 
@@ -1716,7 +1720,7 @@ class ObservationTimeSeries(ObservationDict, published=True):
 	def observationKey(self, data) -> DateKey:
 		timeData = self.translator['time']['time']
 		timeValue = data[self.timeKey(data)]
-		tz = data.get(self.timezoneKey(data), config.tz)
+		tz = data.get(self.timezoneKey(data), LOCAL_TIMEZONE)
 		if timeData['sourceUnit'] == 'epoch':
 			return DateKey(datetime.fromtimestamp(timeValue, tz))
 		if timeData['sourceUnit'] == 'ISO8601':
@@ -1770,7 +1774,7 @@ class ObservationTimeSeries(ObservationDict, published=True):
 	def __makeKey(self, data: dict):
 		return self.observationKey(data)
 
-	def __getitem__(self, key) -> Union[List[Measurement], Observation]:
+	def __getitem__(self, key) -> Union[List[wu.Measurement], Observation]:
 		if isinstance(key, CategoryItem):
 			if key in self.__knownKeys:
 				return super(ObservationTimeSeries, self).__getitem__(key)
@@ -1815,7 +1819,7 @@ class ObservationLog(ObservationTimeSeries, published=False, recorded=True):
 
 	def removeOldObservations(self):
 		keepFor = timedelta(days=2)
-		cutoff = roundToPeriod(datetime.now(tz=config.tz), self.period) - keepFor
+		cutoff = roundToPeriod(datetime.now(tz=LOCAL_TIMEZONE), self.period) - keepFor
 		for key in [k for k in self if k < cutoff]:
 			del self.__timeseries__[key]
 
@@ -1885,7 +1889,7 @@ class MeasurementTimeSeries(OrderedDict):
 	__references: Set[Hashable]
 	__nullValue: Optional[TimeAwareValue]
 
-	def __init__(self, source: Union[ObservationTimeSeries, 'Plugin'], key: str):
+	def __init__(self, source: Union[ObservationTimeSeries, 'Plugin'], key: Union[str, CategoryItem]):
 		self.__lashHash = 0
 		self.__references = set()
 		self.__nullValue = None
@@ -1897,7 +1901,6 @@ class MeasurementTimeSeries(OrderedDict):
 		self.signals.blockSignals(False)
 		if self.isMultiSource:
 			source: 'Plugin'
-			source.publisher: 'KeySignal'
 			source.publisher.connectChannel(self._key, self.sourceChanged)
 
 	def __valuesHash(self) -> int:
@@ -1947,14 +1950,27 @@ class MeasurementTimeSeries(OrderedDict):
 			self.update()
 			self.log.debug(f'{repr(self)} refreshed: {lenBefore} -> {len(self)}')
 
+	def __findPeaks(self):
+		return findPeaksAndTroughs(self.list)
+
+	@property
+	def peaksAndTroughs(self):
+		v = self.__findPeaks()
+
 	@property
 	def hasForecast(self):
 		if isinstance(self._source, ObservationTimeSeries):
-			return any(v[self._key].timestamp > datetime.now(config.tz) for v in reversed(self._source.timeseries.values()) if self._key in v)
-		for item in (e[self._key] for e in self._source.observations if self._key in e and hasattr(e[self._key], 'hasForecast')):
-			if item.hasForecast and item.hasValues:
-				return True
-		return False
+			return any(
+				v[self._key].timestamp > datetime.now(LOCAL_TIMEZONE)
+					for v in reversed(self._source.timeseries.values())
+					if self._key in v
+			)
+		return any(
+			item.hasForecast and item.hasValues
+				for item in (e[self._key] for e in self._source.observations
+				if self._key in e
+				   and hasattr(e[self._key], 'hasForecast'))
+		)
 
 	@property
 	def sources(self):
@@ -1975,34 +1991,30 @@ class MeasurementTimeSeries(OrderedDict):
 		currentLength = len(self)
 		log.debug(f'{self} updating')
 		self.clear()
-		log.debug(f'{self} cleared with length {len(self)}')
+		log.verboseDebug(f'{self} cleared with length {len(self)}')
 		key = self._key
 		if isinstance(self._source, ObservationTimeSeries):
-			log.debug(f'{self} updating from single source of length {len(self._source.timeseries)}')
+			log.verboseDebug(f'{self} updating from single source of length {len(self._source.timeseries)}')
 			itemCount = 0
 			for item in (v[key] for v in self._source.timeseries.values() if key in v):
 				itemCount += 1
-				# self.updateItem(item)
-				if item.value is None or item is None:
-					sendPushoverMessage(title='Error', message=f'{self} has null value for {item.timestamp}')
-					print(item.value)
 				self[item.timestamp] = item
-			log.debug(f'{self} updated from single source with {itemCount} expected items and a change of {len(self) - currentLength} [{currentLength} -> {len(self)}]')
+			log.verboseDebug(f'{self} updated from single source with {itemCount} expected items and a change of {len(self) - currentLength} [{currentLength} -> {len(self)}]')
 		else:
 			values = self.__sourcePull()
 
 			for item in values:
 				self[item.timestamp] = item
-			log.debug(f'{self} updated from multiple sources with {len(self) - currentLength} [{currentLength} -> {len(self)}]')
+			log.verboseDebug(f'{self} updated from multiple sources with {len(self) - currentLength} [{currentLength} -> {len(self)}]')
 		# self.removeOldValues()
 
 		thisHash = self.__valuesHash()
 		if thisHash != self.__lashHash:
-			log.debug(f'{self} has changed...clearing cache and emitting signal')
+			log.verboseDebug(f'{self} has changed...clearing cache and emitting signal')
 			self.__clearCache()
 			self.publish()
 		else:
-			log.debug(f'{self} has not changed')
+			log.verboseDebug(f'{self} has not changed')
 		self.__lashHash = thisHash
 
 	def __sourcePull(self) -> list[ObservationValue]:
@@ -2010,23 +2022,23 @@ class MeasurementTimeSeries(OrderedDict):
 		values: list[ObservationValue] = []
 		sources: List[MeasurementTimeSeries, ObservationRealtime] = [e[self._key] for e in self._source.observations if self._key in e]
 
-		log.debug(f'{self} refreshing sources')
+		log.verboseDebug(f'{self} refreshing sources')
 		for item in sources:
 			if isinstance(item, MeasurementTimeSeries):
 				item.addReference(self)
 				item.refresh()
-				log.debug(f'{self} refreshed {item} with length: {len(item)}')
+				log.verboseDebug(f'{self} refreshed {item} with length: {len(item)}')
 
 		expectedLength = sum(len(s) for s in sources)
 		for item in sources:
-			log.debug(f'Pulling from {item}')
+			log.verboseDebug(f'Pulling from {item}')
 			if isinstance(item, MeasurementTimeSeries):
 				values.extend(item)
-				log.debug(f'Pulled from {item} with length: {len(item)}')
+				log.verboseDebug(f'Pulled from {item} with length: {len(item)}')
 			else:
 				values.append(item)
-				log.debug(f'Pulled from {item}')
-		log.debug(f'{"✅" if len(values) == expectedLength else "❌"} {self} pulled from sources {len(sources)} with a new length of: {len(values)}.  Expected a length of: {expectedLength}')
+				log.verboseDebug(f'Pulled from {item}')
+		log.verboseDebug(f'{"✅" if len(values) == expectedLength else "❌"} {self} pulled from sources {len(sources)} with a new length of: {len(values)}.  Expected a length of: {expectedLength}')
 		values.sort(key=lambda x: x.timestamp)
 		return values
 
@@ -2045,11 +2057,11 @@ class MeasurementTimeSeries(OrderedDict):
 			self.pop(key)
 
 	def __getitem__(self, key):
+		if len(self) == 0:
+			self.update()
 		if isinstance(key, slice):
 			hashArgs = HashSlice(key.start, key.stop, key.step)
 			return self.__getSlice(hashArgs)
-		if len(self) == 0:
-			self.update()
 		if isinstance(key, (datetime, timedelta, Period)):
 			if isinstance(key, timedelta):
 				key = Now() + key
@@ -2081,6 +2093,15 @@ class MeasurementTimeSeries(OrderedDict):
 
 	def __withinExtendedRange(self, key, extend: timedelta = None):
 		period = extend or self.period
+		match period:
+			case wu.Time():
+				period = timedelta(period.second)
+			case Period():
+				period = timedelta(period.value.second)
+			case int() | float():
+				period = timedelta(period)
+			case _:
+				pass
 		if isinstance(period, Period):
 			period = period.value
 		start = self.first.timestamp - period
@@ -2106,9 +2127,9 @@ class MeasurementTimeSeries(OrderedDict):
 			stop = key.stop or self.last.timestamp
 			start, stop = sorted((start, stop))
 			if start.tzinfo is None:
-				start = start.replace(tzinfo=config.tz)
+				start = start.replace(tzinfo=LOCAL_TIMEZONE)
 			if stop.tzinfo is None:
-				stop = stop.replace(tzinfo=config.tz)
+				stop = stop.replace(tzinfo=LOCAL_TIMEZONE)
 			return [k for k in self if start <= k.timestamp <= stop]
 
 	def __delitem__(self, key):
@@ -2121,7 +2142,7 @@ class MeasurementTimeSeries(OrderedDict):
 		return iter(self.list)
 
 	def __clearCache(self):
-		log.debug(f'Clearing cache for {self}')
+		log.verboseDebug(f'Clearing cache for {self}')
 		clearCacheAttr(self, 'array')
 		clearCacheAttr(self, 'timeseries')
 		clearCacheAttr(self, 'timeseriesInts')

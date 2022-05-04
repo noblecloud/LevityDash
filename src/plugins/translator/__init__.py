@@ -1,19 +1,18 @@
-from difflib import get_close_matches
+from collections import ChainMap
 from datetime import datetime
+from difflib import get_close_matches
 from enum import Enum
 from functools import cached_property, lru_cache
-from typing import Callable, Hashable, Optional, Set, Union, Iterable
-from collections import ChainMap
+from typing import Dict, Hashable, Iterable, Optional, Set, Union
 
 from dateutil import parser as DateParser
-from WeatherUnits.base import DerivedMeasurement, Measurement
 
-from src import config, logging
-from src.catagories import CategoryDict, CategoryItem, UnitMetaData, ValueNotFound
-from src.utils import clearCacheAttr, ISOduration, now, Unset
-from src.plugins.translator.units import unitDict
+from src.plugins.utils import unitDict
+from src.utils import LevityPluginLog
+from src.utils.shared import clearCacheAttr, now, Unset
+from ..categories import CategoryDict, CategoryItem, UnitMetaData, ValueNotFound
 
-log = logging.getLogger(__name__)
+log = LevityPluginLog.getChild('Translator')
 
 
 class TranslatorSpecialKeys(str, Enum):
@@ -55,11 +54,11 @@ class LevityDatagram(dict):
 		self.__subItems = []
 		self.__dataMap = kwargs.get('dataMap', None)
 		super().__init__()
-		self.__initdata__(data)
+		self.__init_data__(data)
 		self.mapData()
 		self.validate()
 
-	def __initdata__(self, data: dict):
+	def __init_data__(self, data: dict):
 		data = self.mapArrays(data)
 		data = self.parseData(data=data)
 		data = self.replaceKeys(data)
@@ -219,11 +218,12 @@ class LevityDatagram(dict):
 					if key in self.translator.metaData:
 						meta = self.translator.metaData.get(key)
 						if meta.get(TranslatorSpecialKeys.metaData, False):
-							if any(i in str(key) for i in ('time', 'date')) and isinstance(value, str):
-								try:
-									v = DateParser.parse(value)
-								except DateParser.ParserError:
-									continue
+							if any(i in str(key) for i in ('time', 'date')):
+								if isinstance(value, str):
+									try:
+										DateParser.parse(value)
+									except DateParser.ParserError:
+										continue
 							self.metaData[f'@{self.translator.metaData.getKey(key)}'] = value
 							popLater = True
 					if popLater:
@@ -232,7 +232,7 @@ class LevityDatagram(dict):
 					keys = list(value.keys())
 					d = []
 					for i, _ in enumerate(timestamps):
-						d.append(Subdatagram(parent=self, data={k: value[k][i] for k in keys}, path=[*(path or []), key, i]))
+						d.append(Subdatagram(parent=self, data={k: value[k][i] for k in keys}, path=(*(storage.path or ()), key, i)))
 					data[key] = d
 				case dict() as obs if storage.path in self.validPaths and set(obs.keys()).intersection(self.translator._sourceKeys.keys()):
 					data[key] = Subdatagram(parent=self, data=value, path=key)
@@ -253,10 +253,10 @@ class LevityDatagram(dict):
 		return data
 
 	def mapArrays(self, data, keyMap: Optional[str] = None):
-		keyMap = keyMap or self.translator.getKeyMap(data) or {}
+		keyMap = keyMap or self.translator.getKeyMap(data, datagram=self) or {}
 		if isinstance(keyMap, dict):
 			for key, subMap in keyMap.items():
-				if isinstance(data, list) and key is iter:
+				if isinstance(data, list) and key == len(data) or (key is iter and len(subMap) == len(data)):
 					data = [self.mapArrays(data=item, keyMap=subMap) for item in data]
 				# if len(data) == 1:
 				# 	data = data[0]
@@ -268,6 +268,8 @@ class LevityDatagram(dict):
 						if k in subMap:
 							continue
 						data.pop(k)
+				elif isinstance(data, list) and isinstance(data[0], list) and len(data[0]) == len(subMap):
+					return [self.mapArrays(data=item, keyMap=subMap) for item in data]
 				elif key in data:
 					data[key] = self.mapArrays(data=data.pop(key), keyMap=subMap)
 		# data = self.__replaceSourceKeys(data)
@@ -335,7 +337,7 @@ class Subdatagram(LevityDatagram):
 		self.__metaData = {}
 		self.__parent = parent
 		dict.__init__({})
-		self.__initdata__(data)
+		self.__init_data__(data)
 
 	@property
 	def sourceData(self):
@@ -571,7 +573,7 @@ class Translator(CategoryDict):
 	def propertySetters(self):
 		return {key: value for key, value in self._source.items() if 'property' in value.keys() or 'setter' in value.keys()}
 
-	def getExact(self, key: str) -> Optional[UnitMetaData]:
+	def getExact(self, key: str | CategoryItem) -> Optional[UnitMetaData]:
 		if not isinstance(key, CategoryItem):
 			key = CategoryItem(key)
 		result = self._source.get(key, None) or self._source.get(key.anonymous, None)
@@ -626,11 +628,23 @@ class Translator(CategoryDict):
 			value = UnitMetaData(key=key, value=value)
 		super(Translator, self).__setitem__(key, value)
 
-	def getKeyMap(self, source: Union[str, Iterable[str]]):
-		if isinstance(source, str):
-			source = [source]
-		keys = {i for j in source.items() for i in j if isinstance(i, Hashable)}
-		if hasattr(source, 'metaItems'):
+	def getKeyMap(self, source: Union[str, Iterable[str], Dict[str, str]], datagram: dict | None = None) -> Dict[str, str]:
+		source = dict(source)
+		if datagram is None:
+			datagram = {}
+		else:
+			source.update(getattr(datagram, 'sourceData', {}))
+			source.update(getattr(datagram, 'metaData', {}))
+		match source:
+			case dict():
+				keys = {i for j in source.items() for i in j if isinstance(i, Hashable)}
+			case list() | set() | tuple() | frozenset():
+				keys = {i for i in source if isinstance(i, Hashable)}
+			case str():
+				keys = {source}
+			case _:
+				keys = set()
+		if hasattr(source, 'metaData'):
 			keys.update({i for j in source.metaItems() for i in j})
 		mappings = [s for s in keys if isinstance(s, Hashable) and s in self.keyMaps]
 		if len(mappings) == 1:
@@ -769,9 +783,9 @@ class Translator(CategoryDict):
 			return sourceKey
 		elif isinstance(sourceKey, Iterable):
 			sourceKey = set(sourceKey).intersection(set(data.keys()))
-			return sourceKey.pop()
-		else:
-			raise ValueNotFound(f'{key} not found')
+			if len(sourceKey) == 1:
+				return sourceKey.pop()
+		raise ValueNotFound(f'{key} not found')
 
 	@property
 	def plugin(self) -> 'Plugin':
@@ -789,62 +803,6 @@ class Translator(CategoryDict):
 				else:
 					sourceKeys[sourceKey] = k
 		return sourceKeys
-
-	def convertIter(self, values: list, cls, localize: bool = True, **kwargs):
-		return [cls(value) for value in values]
-
-	def convertComboIter(self, values: list, cls, n, d, localize: bool = True):
-		return [cls(n(value), d(1)) for value in values]
-
-	def convertNonLocalizableIter(self, values: list, cls):
-		return [cls(value) for value in values]
-
-	def convertDateTimeIter(self, values: list, unitDefinition, measurementData):
-		kwargs = {'tz': config.tz}
-		if isinstance(values[0], datetime):
-			return values
-		if isinstance(values[0], (float, int)) and abs(values[0]) <= 0xffffffff:
-			v = values[0]
-			reduction = 1
-			while v/reduction > 0xffffffff:
-				reduction *= 10
-			values = (v/reduction for v in values)
-		if unitDefinition == 'epoch':
-			cls = datetime.fromtimestamp
-		elif unitDefinition == 'ISO8601':
-			cls = datetime.strptime
-			kwargs['format'] = measurementData['format']
-		return [cls(v, **kwargs) for v in values]
-
-	def convertList(self, key, value, localize: bool = True):
-		measurementData, key = self.getUnitMetaData(key)
-
-		unitDefinition = measurementData['sourceUnit']
-		typeString = measurementData['type']
-		if isinstance(unitDefinition, list):
-			n, d = [self.units[cls] for cls in unitDefinition]
-			comboCls: DerivedMeasurement = self.units['special'][typeString]
-			measurement = self.convertComboIter(value, comboCls, n, d, localize=localize)
-		elif unitDefinition == '*':
-			specialCls = self.units['special'][typeString]
-			measurement = self.convertIter(value, specialCls, localize=localize)
-		elif typeString in ['date', 'datetime']:
-			measurement = self.convertDateTimeIter(value, unitDefinition, measurementData)
-		elif typeString == 'timedelta':
-			if unitDefinition == 'epoch':
-				cls = self.units['s']
-			elif unitDefinition == 'ISO8601':
-				cls = ISOduration
-			measurement = self.convertNonLocalizableIter(value, cls)
-		elif unitDefinition is None:
-			raise ValueError(f'Value Ignored: {key}')
-		else:
-			cls = self.units[unitDefinition]
-			if isinstance(cls, type) and issubclass(cls, Measurement):
-				measurement = self.convertIter(value, cls, localize=localize)
-			else:
-				measurement = self.convertNonLocalizableIter(value, cls)
-		return key, measurement
 
 	def __parseDateTime(self, measurementData, unitDefinition, value):
 		if isinstance(value, datetime):

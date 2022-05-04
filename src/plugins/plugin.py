@@ -1,22 +1,24 @@
-import random
-
 import asyncio
-
+import random
+from abc import abstractmethod
 from datetime import datetime, timedelta
-
 from functools import cached_property, lru_cache
-
 from operator import attrgetter
-from PySide2.QtCore import QObject, QTimer, Signal, Slot
-from typing import Callable, Iterable, Optional, Type, Union
 
-from src.catagories import CategoryDict, CategoryItem
-from src.logger import LevityPluginLog as pluginLog
+import WeatherUnits
+from PySide2.QtCore import QObject, QTimer, Signal, Slot
+from typing import Callable, Iterable, Optional, Type, Union, ClassVar
+
+from src.config import pluginConfig, PluginConfig
+from src.plugins.categories import CategoryDict, CategoryItem
 from src.plugins.observation import (ArchivedObservationValue, MeasurementTimeSeries, Observation, ObservationDict,
-                                     ObservationLog, ObservationRealtime, ObservationTimeSeries, ObservationValue, PublishedDict, RecordedObservationValue)
-from src import config
+                                     ObservationLog, ObservationRealtime, ObservationTimeSeries, ObservationValue,
+                                     PublishedDict, RecordedObservationValue)
 from src.plugins.translator import Translator
-from src.utils import ChannelSignal, clearCacheAttr, closest, KeyData, Now, Period
+from src.plugins.utils import ChannelSignal
+from src.utils.data import KeyData
+from src.utils.log import LevityPluginLog as pluginLog
+from src.utils.shared import clearCacheAttr, closest, Now, Period
 
 
 class ObservationList(list):
@@ -80,8 +82,8 @@ class ObservationList(list):
 			return None
 
 	def selectBest(self, minTimeframe: timedelta,
-	               minPeriod: timedelta = timedelta(minutes=1),
-	               maxPeriod: timedelta = timedelta(hours=4)) -> Optional[ObservationTimeSeries]:
+		minPeriod: timedelta = timedelta(minutes=1),
+		maxPeriod: timedelta = timedelta(hours=4)) -> Optional[ObservationTimeSeries]:
 		selection = [obs for obs in self if minPeriod <= obs.period <= maxPeriod and obs.timeframe > minTimeframe]
 		if selection:
 			return selection[min(range(len(selection)), key=lambda i: selection[i].period)]
@@ -165,6 +167,12 @@ class Container:
 		else:
 			self.value.__setattr__(key, value)
 
+	@lru_cache(maxsize=8)
+	def getFromTime(self, time: timedelta | datetime) -> Optional[Observation]:
+		if isinstance(time, timedelta):
+			time = Now() + time
+		return self.forecast[time]
+
 	def __repr__(self):
 		return f'{self.source.name}({self.key[-1]}: {self.value})'
 
@@ -202,11 +210,7 @@ class Container:
 	@property
 	def now(self):
 		if self.sourceHasRealtime and self.source.realtime and self.key in self.source.realtime:
-			value = self.source.realtime[self.key]
-			if value == {}:
-				self.log.warning(f'{self.source.name}({self.key}) is an empty dictionary')
-				return None
-			return value
+			return self.source.realtime[self.key]
 		elif self.metadata.get('forecastOnly', False) or not self.sourceHasRealtime:
 			return self.nowFromTimeseries
 		return None
@@ -231,7 +235,7 @@ class Container:
 	def forecast(self):
 		return MeasurementTimeSeries(self.source, self.key)
 
-	def customTimeFrame(self, timeframe: timedelta, sensitivity: timedelta = timedelta(minutes=1)) -> Optional[MeasurementTimeSeries]:
+	def customTimeFrame(self, timeframe: timedelta, sensitivity: timedelta = timedelta(minutes=1)) -> Optional[MeasurementTimeSeries | ObservationValue]:
 		try:
 			return self.source.get(self.key, timeframe)
 		except KeyError:
@@ -253,8 +257,8 @@ class Container:
 class Publisher(QObject):
 	__added = Signal(dict)
 	__changed = Signal(dict)
-	__data: dict[timedelta, set[CategoryItem]]
-	__signals: dict[CategoryItem: ChannelSignal]
+	__data: dict['Plugin', set[CategoryItem]]
+	__signals: dict[CategoryItem, ChannelSignal]
 
 	def __init__(self, source: 'Plugin'):
 		self.source = source
@@ -306,12 +310,19 @@ class Publisher(QObject):
 		signal = self.__signals.get(channel, None) or self.__addChannel(channel)
 		signal.connectSlot(slot)
 
+	def disconnectChannel(self, channel: CategoryItem, slot: Slot):
+		signal = self.__signals.get(channel, None)
+		if signal:
+			signal.disconnectSlot(slot)
+
 	def __addChannel(self, channel: CategoryItem):
 		self.__signals[channel] = ChannelSignal(self.source, channel)
 		return self.__signals[channel]
 
 
-class ScheduledEvent:
+class ScheduledEvent(object):
+	instances: ClassVar[dict['Plugin', ['ScheduledEvent']]] = {}
+
 	stagger: bool
 	staggerAmount: timedelta
 	when: datetime
@@ -321,18 +332,18 @@ class ScheduledEvent:
 	kwargs: dict
 	timer: asyncio.TimerHandle
 	log = pluginLog.getChild('ScheduledEvent')
-	log.setLevel('INFO')
 
 	def __init__(self,
-	             interval: timedelta,
-	             func: Callable,
-	             arguments: tuple = None,
-	             keywordArguments: dict = None,
-	             stagger: bool = None,
-	             staggerAmount: timedelta = None,
-	             fireImmediately: bool = True,
-	             singleShot: bool = False,
-	             pool=None):
+		interval: timedelta,
+		func: Callable,
+		arguments: tuple = None,
+		keywordArguments: dict = None,
+		stagger: bool = None,
+		staggerAmount: timedelta = None,
+		fireImmediately: bool = True,
+		singleShot: bool = False,
+		pool=None
+	):
 		if arguments is None:
 			arguments = ()
 		if keywordArguments is None:
@@ -344,6 +355,10 @@ class ScheduledEvent:
 		self.__interval = interval
 
 		self.__owner = func.__self__
+		if self.__owner in self.instances:
+			self.instances[self.__owner].append(self)
+		else:
+			self.instances[self.__owner] = [self]
 		self.__func = func
 		self.__args = arguments
 		self.__kwargs = keywordArguments
@@ -354,7 +369,16 @@ class ScheduledEvent:
 
 	def start(self, immediately: bool = False, startTime: datetime = None):
 		self.__fireImmediately = immediately
+		if self.__singleShot:
+			self.log.debug(f'{self.__owner.name} - Scheduled single shot event: {self.__func.__name__}')
+		else:
+			interval = WeatherUnits.Time.Second(self.__interval.total_seconds())
+			stagger = WeatherUnits.Time.Second(abs(self.__staggerAmount.total_seconds()))
+			self.log.debug(f'{self.__owner.name} - Scheduled recurring event: {self.__func.__name__} every {interval} ±{stagger}')
 		self.__run(startTime)
+
+	def __del__(self):
+		self.instances[self.__owner].remove(self)
 
 	def stop(self):
 		self.timer.stop()
@@ -415,7 +439,7 @@ class ScheduledEvent:
 
 	def __fire(self):
 		asyncio.create_task(self.__func(*self.__args, **self.__kwargs))
-		self.log.debug(f'{self.__func.__name__}() fired for {self.__owner.name}')
+		self.log.verboseDebug(f'{self.__func.__name__}() fired for {self.__owner.name}')
 		if not self.__singleShot:
 			self.__run()
 
@@ -534,32 +558,33 @@ class PluginMeta(type):
 
 		return super().__new__(mcs, name, bases, attrs)
 
-	# observationClasses = {}
-	# observationAnnotations = {k: obs for k, obs in attrs['__annotations__'].items()
-	#                           if isinstance(obs, type)
-	#                           and not isinstance(obs, GenericAlias)
-	#                           and issubclass(obs, ObservationDict)}
-	#
-	# for obsName, observation in observationAnnotations.items():
-	# 	value = attrs.get(obsName, None)
-	# 	if isinstance(value, timedelta):
-	# 		if value.total_seconds() < 0:
-	# 			observationClasses[obsName] = type(f'{name}{obsName.title()}', (obsLog,), {'_period': value}, sourceKeyMap=mcs.__APIKeyMap__, recorded=True)
-	# 		else:
-	# 			observationClasses[obsName] = type(f'{name}{obsName.title()}', (forecast,), {'_period': value}, sourceKeyMap=mcs.__APIKeyMap__)
-	# 		continue
-	# 	if value is ObservationRealtime or observation is ObservationRealtime:
-	# 		observationClasses[obsName] = realtime
-	# 		continue
-	# 	if value is ObservationLog:
-	# 		observationClasses[obsName] = history
-	# 		continue
-	# 	if value is ObservationTimeSeries:
-	# 		observationClasses[obsName] = forecast
-	# 		continue
-	# 	# attrs[obsName] = property(fget=lambda self: getattr(self, f'__{obsName}'))
-	# attrs['__annotations__'].update(observationClasses)
-	# attrs.update(observationClasses)
+
+# observationClasses = {}
+# observationAnnotations = {k: obs for k, obs in attrs['__annotations__'].items()
+#                           if isinstance(obs, type)
+#                           and not isinstance(obs, GenericAlias)
+#                           and issubclass(obs, ObservationDict)}
+#
+# for obsName, observation in observationAnnotations.items():
+# 	value = attrs.get(obsName, None)
+# 	if isinstance(value, timedelta):
+# 		if value.total_seconds() < 0:
+# 			observationClasses[obsName] = type(f'{name}{obsName.title()}', (obsLog,), {'_period': value}, sourceKeyMap=mcs.__APIKeyMap__, recorded=True)
+# 		else:
+# 			observationClasses[obsName] = type(f'{name}{obsName.title()}', (forecast,), {'_period': value}, sourceKeyMap=mcs.__APIKeyMap__)
+# 		continue
+# 	if value is ObservationRealtime or observation is ObservationRealtime:
+# 		observationClasses[obsName] = realtime
+# 		continue
+# 	if value is ObservationLog:
+# 		observationClasses[obsName] = history
+# 		continue
+# 	if value is ObservationTimeSeries:
+# 		observationClasses[obsName] = forecast
+# 		continue
+# 	# attrs[obsName] = property(fget=lambda self: getattr(self, f'__{obsName}'))
+# attrs['__annotations__'].update(observationClasses)
+# attrs.update(observationClasses)
 
 
 class Plugin(metaclass=PluginMeta):
@@ -572,6 +597,7 @@ class Plugin(metaclass=PluginMeta):
 	log: Optional[ObservationLog]
 
 	def __init__(self):
+		self.__running = False
 		self.containers = {}
 		self.containerCategories = CategoryDict(self, self.containers, None)
 
@@ -595,18 +621,70 @@ class Plugin(metaclass=PluginMeta):
 				o.accumulator.connectSlot(self.publisher.addBulk)
 			self.observations.append(o)
 
-	@classmethod
-	def getConfig(cls):
-		if config.plugins.has_section(cls.__name__):
-			return config.plugins[cls.__name__]
-		return None
+		self.config = self.getConfig(self)
+
+	@abstractmethod
+	def start(self):
+		pass
+
+	async def asyncStart(self):
+		asyncio.get_running_loop().call_soon(self.start)
 
 	@classmethod
-	def enabled(cls) -> bool:
-		con = cls.getConfig()
-		if con is None:
-			return False
-		return con.getboolean('enabled', False)
+	def getConfig(cls, plugin: 'Plugin'):
+		cls.configFileName = f'{cls.__name__}.ini'
+
+		# Look in the userPlugins directory for config files.
+		# Plugin configs can either be in userPlugins/PluginName/config.ini or userPlugins/PluginName.ini
+		match pluginConfig.userPluginsDir.asDict(depth=2):
+			case {cls.__name__: {'config.ini': file}}:
+				del cls.configFileName
+				value = PluginConfig(path=file.path, plugin=plugin)
+				if plugin._validateConfig(value):
+					return value
+			case {cls.configFileName: file}:
+				del cls.configFileName
+				value = PluginConfig(path=file.path, plugin=plugin)
+				if plugin._validateConfig(value):
+					return value
+		del cls.configFileName
+		# configsDict = config.userPath['plugins'].asDict(depth=3)
+		# if cls.__name__ in configsDict and isinstance(d := configsDict[cls.__name__], dict) and 'config.ini' in d:
+		# 	value = PluginConfig(path=config.userPath['plugins'][cls.__name__].path, plugin=plugin)
+		# 	if plugin._validateConfig(value):
+		# 		return value
+		# elif cls.configFileName in configsDict and isinstance(d := configsDict[cls.configFileName], File):
+		# 	del cls.configFileName
+		# 	value = PluginConfig(path=config.userPath['plugins'][cls.configFileName].path, plugin=plugin)
+		# 	if plugin._validateConfig(value):
+		# 		return value
+
+		# Look in the userConfig file for sections with the plugin name
+		if pluginConfig.has_section(cls.__name__):
+			value = PluginConfig(plugin=plugin)
+			if cls._validateConfig(value):
+				return value
+		raise ValueError(f'No config for {cls.__name__}')
+
+	@classmethod
+	def _validateConfig(cls, cfg: pluginConfig):
+		return True
+
+	@property
+	def running(self) -> bool:
+		return self.__running
+
+	def enabled(self) -> bool:
+		return self.config['enabled']
+
+	def setEnabled(self, value: bool = None):
+		if value is None:
+			value = not self.enabled()
+		self.config.defaults()['enabled'] = value
+		if value:
+			self.start()
+
+	# self.config.save()
 
 	@property
 	def name(self) -> str:

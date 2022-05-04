@@ -1,0 +1,43 @@
+- type: clock
+  geometry:
+    height: 22.2%
+    width: 34.3%
+    x: 0%
+    y: 1.7%
+  frozen: true
+  items:
+    - format: '%A, %B %-d'
+      geometry:
+        height: 27.1%
+        width: 100%
+        x: 0%
+        y: 0%
+      filters:
+        - 0Add Ordinal
+      alignment:
+        horizontal: Right
+        vertical: Center
+    - type: moon
+      geometry:
+        height: 44.1%
+        width: 20.1%
+        x: 79.2%
+        y: 28.6%
+      locked: true
+    - format: '%-I:%M'
+      geometry:
+        height: 68.6%
+        width: 77.3%
+        x: 1.5%
+        y: 28.6%
+      alignment:
+        horizontal: Right
+        vertical: Center
+    - format: '%p'
+      geometry:
+        height: 24.5%
+        width: 20.5%
+        x: 78.8%
+        y: 72.7%
+      filters:
+        - 1Lower

@@ -1,4 +1,5 @@
 import asyncio
+import platform
 from datetime import timedelta
 from types import FunctionType
 from typing import Callable, Dict, Optional, Union
@@ -8,11 +9,11 @@ import re
 from bleak import BleakScanner
 from bleak.backends.device import BLEDevice
 
-from src.logger import LevityPluginLog
-from src.plugins.plugin import ScheduledEvent
+from src.utils.log import LevityPluginLog
+
+from src.plugins.plugin import Plugin, ScheduledEvent
 from src.plugins.translator import LevityDatagram, Translator, TranslatorSpecialKeys as tsk
-from src.plugins.web.rest import REST
-from src.utils import getOr, now
+from src.utils.shared import getOr, now
 
 pluginLog = LevityPluginLog.getChild('Govee')
 
@@ -71,12 +72,12 @@ class BLEPayloadParser:
 		return {self.__field: value}
 
 
-class Govee(REST, realtime=True, logged=True):
+class Govee(Plugin, realtime=True, logged=True):
 	name = 'Govee'
 	translator: Translator = {
 		'timestamp':                      {'type': 'datetime', 'sourceUnit': 'epoch', 'title': 'Time', 'sourceKey': 'timestamp', tsk.metaData: True},
 		'indoor.temperature.temperature': {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Temperature', 'sourceKey': 'temperature'},
-		'indoor.temperature.dewpoint':    {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Dew Point', 'sourceKey': 'dewPoint'},
+		'indoor.temperature.dewpoint':    {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Dewpoint', 'sourceKey': 'dewpoint'},
 		'indoor.temperature.heatIndex':   {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Heat Index', 'sourceKey': 'heatIndex'},
 		'indoor.humidity.humidity':       {'type': 'humidity', 'sourceUnit': '%', 'title': 'Humidity', 'sourceKey': 'humidity'},
 		'indoor.@deviceName.battery':     {'type': 'battery', 'sourceUnit': '%%', 'title': 'Battery', 'sourceKey': 'battery'},
@@ -92,16 +93,19 @@ class Govee(REST, realtime=True, logged=True):
 			}
 		}
 	}
+
 	__device: BLEDevice
 
 	def __init__(self):
 		super().__init__()
 		self.__enabled = False
-		self.name = "GoveeBLE"
-		self.__config = self.__readConfig()
+		try:
+			self.__readConfig()
+		except Exception as e:
+			raise e
 
 	async def __init_device__(self):
-		config = self.__config
+		config = self.config
 		deviceConfig = self.__readDeviceConfig(config)
 		device = deviceConfig['id']
 		match device:
@@ -126,30 +130,40 @@ class Govee(REST, realtime=True, logged=True):
 
 				self.scanner._service_uuids = tuple(device.metadata['uuids'])
 				self.name = f'GoveeBLE [{device.name}]'
-				self.__config['device.name'] = device.name
-				self.__config['device.uuid'] = f"{', '.join(device.metadata['uuids'])}"
-				self.__config._parser.save()
-
+				self.config['device.name'] = device.name
+				self.config['device.uuid'] = f"{', '.join(device.metadata['uuids'])}"
+				self.config._parser.save()
 		self.scanner.register_detection_callback(self.__dataParse)
+		pluginLog.info(f'{self.name} initialized for device {device}')
+
+	@classmethod
+	def _validateConfig(cls, cfg) -> bool:
+		results = dict()
+		results['enabled'] = 'enabled' in cfg and cfg['enabled']
+		expectedIDStrings = ('uuid', 'id', 'mac', 'address', 'name')
+		expectedIDStrings = {*expectedIDStrings, *[f'device.{i}' for i in expectedIDStrings]}
+		availableIDKeys = expectedIDStrings & cfg.keys()
+		results['device'] = any(cfg[i] for i in availableIDKeys)
+		return all(results.values())
 
 	def __readConfig(self):
-		config = self.getConfig()
+		pluginConfig = self.config
 
 		def getValues(key) -> Dict[str, Union[str, int, float, Callable]]:
 			params = {'field': key}
-			if f'{key}.slice' in config:
-				params['startingByte'], params['endingByte'] = [int(i) for i in re.findall(r'\d+', config[f'{key}.slice'])]
-			if f'{key}.modifier' in config:
-				params['modifier'] = config[f'{key}.modifier']
-			if f'{key}.base' in config:
-				params['base'] = int(config[f'{key}.base'])
+			if f'{key}.slice' in pluginConfig:
+				params['startingByte'], params['endingByte'] = [int(i) for i in re.findall(r'\d+', pluginConfig[f'{key}.slice'])]
+			if f'{key}.modifier' in pluginConfig:
+				params['modifier'] = pluginConfig[f'{key}.modifier']
+			if f'{key}.base' in pluginConfig:
+				params['base'] = int(pluginConfig[f'{key}.base'])
 			return params
 
 		self.__temperatureParse = BLEPayloadParser(**getValues('temperature'))
 		self.__humidityParse = BLEPayloadParser(**getValues('humidity'))
 		self.__batteryParse = BLEPayloadParser(**getValues('battery'))
 
-		return config
+		return pluginConfig
 
 	def __varifyDeviceID(self, deviceID: str) -> bool:
 		reMac = r'((?:(\d{1,2}|[a-fA-F]{1,2}){2})(?::|-*)){6}'
@@ -165,15 +179,23 @@ class Govee(REST, realtime=True, logged=True):
 
 	def start(self):
 		self.__enabled = True
+		pluginLog.debug(f'{self.name} starting...')
 		asyncio.create_task(self.run())
+		pluginLog.info(f'{self.name} started!')
 		self.historicalTimer = ScheduledEvent(timedelta(minutes=1), self.logValues)
 		self.historicalTimer.start(False)
+		self.__running = True
 
 	async def run(self):
-		await self.__init_device__()
+		try:
+			await self.__init_device__()
+		except Exception as e:
+			pluginLog.error(f'Error initializing device: {e}')
+			return
 		await self.scanner.start()
-		while True and self.__enabled:
+		while self.__enabled:
 			await asyncio.sleep(0.5)
+		pluginLog.critical(f'{self.name} stopping...')
 		await self.scanner.stop()
 
 	def stop(self):
@@ -234,6 +256,7 @@ class Govee(REST, realtime=True, logged=True):
 			**self.__batteryParse(dataBytes),
 		}
 		data = LevityDatagram(results, translator=self.translator, dataMaps=self.translator.dataMaps)
+		pluginLog.debug(f'{self.__class__.__name__} received: {data["realtime"]}')
 		self.realtime.update(data)
 
 

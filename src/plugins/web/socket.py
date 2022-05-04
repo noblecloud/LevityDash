@@ -1,12 +1,10 @@
-from typing import Optional
-
-import logging
+from json import JSONDecodeError, loads
 
 import asyncio
-
+import logging
 from abc import ABC, abstractmethod
-from json import JSONDecodeError, loads
 from PySide2.QtCore import QObject, Signal
+from typing import Optional
 
 
 class SocketMessageHandler(ABC):
@@ -144,7 +142,7 @@ class BaseSocketProtocol(asyncio.DatagramProtocol):
 		self.log = api.pluginLog.getChild(self.__class__.__name__)
 
 	def datagram_received(self, data, addr):
-		self.log.debug(f'Received {len(data)} bytes from {addr}')
+		self.log.verboseDebug(f'Received data bytes from {addr}')
 		try:
 			message = loads(data.decode('utf-8'))
 		except JSONDecodeError:
