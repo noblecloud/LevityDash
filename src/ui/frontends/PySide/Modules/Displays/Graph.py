@@ -520,6 +520,18 @@ class GraphItemData(QObject):
 
 		self.axisChanged.announce(Axis.Both, instant=True)
 
+	def refresh(self):
+		if self._value is not None:
+			self.value.refresh()
+		self.__clearAxis(Axis.Both)
+		self.__updateTransform(Axis.Both)
+		self.graphic.onAxisChange(Axis.Both)
+		self.timeframe.invalidate()
+		if self.labeled:
+			clearCacheAttr(self, 'peaksAndTroughs')
+			self.labels.onValueChange(Axis.Both)
+		self.log.info(f'GraphItemData[{self.key.name}] refreshed')
+
 	@cached_property
 	def timeframe(self) -> DataTimeRange:
 		return DataTimeRange(self)
@@ -2916,8 +2928,7 @@ class GraphPanel(Panel):
 
 	def refresh(self):
 		for figure in self.figures:
-			figure.update()
-		self.graphZoom.update()
+			figure.refresh()
 
 	@property
 	def msPerPixel(self) -> int:
@@ -3472,7 +3483,7 @@ class Figure(Panel):
 
 	def refresh(self):
 		for plot in self.plotData.values():
-			plot.update()
+			plot.refresh()
 
 	def mousePressEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
 		mouseEvent.ignore()
