@@ -296,8 +296,7 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 				observation.update(message)
 
 	def start(self):
-		# if self.config['fetchHistory']:
-		# 	ScheduledEvent(interval=timedelta(seconds=0), singleShot=True, func=self.getHistorical, fireImmediately=True).start()
+
 
 		if self.config['socketUpdates']:
 			self.udp.start()
@@ -312,6 +311,9 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 		self.loggingTimer = ScheduledEvent(timedelta(minutes=1), self.logValues)
 		self.loggingTimer.start(False)
 		self.__running = True
+
+		if self.config['fetchHistory']:
+			ScheduledEvent(interval=timedelta(seconds=15), singleShot=True, func=self.getHistorical, fireImmediately=True).start()
 
 	async def getRealtime(self):
 		urls = self.urls
