@@ -219,15 +219,16 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+
+
 /.idea/
 /.idea
+
 /tests
 /tests/*
-/plugins/*
-/plugins/*__init.py
+
 /config.ini
 /Arduino/
-/Pipfile.lock
 /.vscode/
-ui/autoWindow.py
 .codeedit/selection.json
+scraches

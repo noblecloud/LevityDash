@@ -1,8 +1,7 @@
 import asyncio
+from typing import Optional
 
-import requests
-
-from typing import overload
+import aiohttp
 
 from src.plugins.translator import LevityDatagram
 from src.plugins.web import Endpoint, Web
@@ -13,33 +12,36 @@ __all__ = ["REST"]
 
 class REST(Web, prototype=True):
 
-	def __getData(self, url: str = None, params: dict = None, headers=None) -> dict:
-		try:
-			request = requests.get(url=url, params=params, headers=headers, timeout=10)
+	async def __getData(self, url: str = None, params: dict = None, headers=None) -> Optional[dict]:
+		async with aiohttp.ClientSession() as session:
+			async with session.get(url, params=params, headers=headers) as response:
+				if response.status == 200:
+					self.pluginLog.info(f'{self.name} request successful for {url}')
+					data = await response.json()
+					self.pluginLog.debug(f'Returned: {str(data)[:300]} ... ')
+					return await response.json()
+				elif response.status == 429:
+					self.pluginLog.error('Rate limit exceeded', response.content)
+					raise RateLimitExceeded
+				elif response.status == 401:
+					self.pluginLog.error('Invalid credentials', response.content)
+					raise InvalidCredentials
+				elif response.status == 404:
+					self.pluginLog.error(f'404: Invalid URL: {url}')
+				else:
+					self.pluginLog.error('API Error', response.content)
+					raise APIError(response)
 
-		# TODO: Add retry logic
-		except requests.exceptions.ConnectionError:
-			self.pluginLog.error('ConnectionError')
-			return
-		except requests.exceptions.Timeout:
-			self.pluginLog.error(f'{self.name} request timed out for {url}')
-			return
-
-		if request.status_code == 200:
-			self.pluginLog.info(f'{self.name} request successful for {url}')
-			self.pluginLog.debug(f'Returned: {str(request.json())[:300]} ... ')
-			return request.json()
-		elif request.status_code == 429:
-			self.pluginLog.error('Rate limit exceeded', request.content)
-			raise RateLimitExceeded
-		elif request.status_code == 401:
-			self.pluginLog.error('Invalid credentials', request.content)
-			raise InvalidCredentials
-		elif request.status_code == 404:
-			self.pluginLog.error(f'404: Invalid URL: {request.url}')
-		else:
-			self.pluginLog.error('API Error', request.content)
-			raise APIError(request)
+	# try:
+	# 	request = requests.get(url=url, params=params, headers=headers, timeout=10)
+	#
+	# 	# TODO: Add retry logic
+	# 	except aiohttp.client_exceptions.ClientConnectorError as e:
+	# 		self.pluginLog.error('ConnectionError')
+	# 		return
+	# 	except aiohttp.ServerTimeoutError as e:
+	# 		self.pluginLog.error(f'{self.name} request timed out for {url}')
+	# 		return
 
 	async def getData(self, endpoint: Endpoint, **kwargs) -> LevityDatagram:
 		if isinstance(endpoint, str):
@@ -54,6 +56,16 @@ class REST(Web, prototype=True):
 			headers = endpoint.headers
 			headers.update(kwargs.get('headers', {}))
 
-		loop = asyncio.get_event_loop()
-		value = await loop.run_in_executor(None, self.__getData, url, params, headers)
-		return self.normalizeData(LevityDatagram(value, translator=self.translator, sourceData={'endpoint': endpoint}, dataMap=self.translator.dataMaps.get(endpoint.name, {})))
+		try:
+			data = await self.__getData(url, params, headers)
+			datagram = LevityDatagram(data, translator=self.translator, sourceData={'endpoint': endpoint}, dataMap=self.translator.dataMaps.get(endpoint.name, {}))
+			return self.normalizeData(datagram)
+		except Exception as e:
+			self.pluginLog.error(f'{self.name} request failed for {url}')
+			self.pluginLog.exception(e)
+
+	@property
+	def running(self):
+		from src.plugins.plugin import ScheduledEvent
+		tasks = ScheduledEvent.instances.get(self, [])
+		return any(task.timer.when() for task in tasks)

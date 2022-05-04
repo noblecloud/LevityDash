@@ -1,9 +1,9 @@
 import re
 
+import utils.data
 from src import logging
 
 from WeatherUnits import Measurement
-from WeatherUnits.defaults.WeatherFlow import *
 from src import config
 
 log = logging.getLogger(__name__)
@@ -11,11 +11,13 @@ log.setLevel(logging.DEBUG)
 
 
 class UDPMessage(dict):
-	messAtlas = {'@deviceSerial': 'serial_number',
-	             'metadata.type': 'type',
-	             '@hubSerial':    'hub_sn',
-	             'data':          'data'}
-	atlas = ['time.time']
+	messAtlas = {
+		'@deviceSerial': 'serial_number',
+		'metadata.type': 'type',
+		'@hubSerial':    'hub_sn',
+		'data':          'data'
+	}
+	atlas = ['timestamp']
 	interval: Time.Minute = 1
 	source: list[str] = ['serial_number', 'hub_sn', 'type']
 
@@ -66,7 +68,7 @@ class UDPMessage(dict):
 		return tuple([self.stripNonChars(data.pop(key)) for key in self.source if key in data])
 
 	def stripNonChars(self, string):
-		return ''.join(i.group() for i in re.finditer(r"[\w|*]+", string, re.MULTILINE))
+		return ''.join(utils.data.group() for i in re.finditer(r"[\w|*]+", string, re.MULTILINE))
 
 	def convert(self, atlas, data):
 		if isinstance(data[0], list):
@@ -171,7 +173,7 @@ class DeviceStatus(UDPMessage):
 		'device.status.@deivceSerial.serial':       'serial_number',
 		'metadata.type':                            'type',
 		'device.status.@hubSerial.serial':          'hub_sn',
-		'time.time':                                'timestamp',
+		'timestamp':                                'timestamp',
 		'device.status.@deivceSerial.uptime':       'uptime',
 		'device.status.@deivceSerial.battery':      'voltage',
 		'device.status.@deivceSerial.firmware':     'firmware_revision',
@@ -187,14 +189,15 @@ class DeviceStatus(UDPMessage):
 
 
 class HubStatus(UDPMessage):
-	messAtlas = {'device.status.hub.@hubSerial.serial': 'serial_number',
-	             'metadata.type':                       'type',
-	             'time.time':                           'timestamp',
-	             'device.status.@hubSerial.uptime':     'uptime',
-	             'device.status.@hubSerial.firmware':   'firmware_revision',
-	             'device.status.@hubSerial.RSSI':       'rssi',
-	             'device.status.@hubSerial.resetFlags': 'reset_flags'
-	             }
+	messAtlas = {
+		'device.status.hub.@hubSerial.serial': 'serial_number',
+		'metadata.type':                       'type',
+		'timestamp':                           'timestamp',
+		'device.status.@hubSerial.uptime':     'uptime',
+		'device.status.@hubSerial.firmware':   'firmware_revision',
+		'device.status.@hubSerial.RSSI':       'rssi',
+		'device.status.@hubSerial.resetFlags': 'reset_flags'
+	}
 
 	def __init__(self, udpData):
 		self.atlas = []

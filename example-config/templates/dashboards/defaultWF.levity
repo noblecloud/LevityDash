@@ -1,0 +1,427 @@
+- type: graph
+  geometry:
+    height: 479.057px
+    width: 618.9px
+    x: 378.1px
+    y: 0px
+  timeframe:
+    days: 1
+    hours: 12
+  figures:
+    - environment.temperature.dewpoint:
+        labeled: false
+        plot:
+          color: 5882ff
+          dashPattern: 5, 5
+          opacity: 0.9
+          scalar: 0.322
+          type: plot
+      environment.temperature.feelsLike:
+        labeled: false
+        plot:
+          gradient: TemperatureGradient
+          scalar: 0.433
+          type: plot
+      environment.temperature.temperature:
+        labeled: true
+        plot:
+          gradient: TemperatureGradient
+          scalar: 0.866
+          type: plot
+      margins: 0%, 24.6%, 0%, 11.8%
+    - environment.precipitation.probability:
+        labeled: false
+        plot:
+          color: 55b2ff
+          scalar: 0.3
+          type: plot
+      margins: 0%, 60%, 0%, 10%
+    - environment.wind.speed.speed:
+        labeled: false
+        plot:
+          color: ff2f20
+          dashPattern: 1, 1
+          opacity: 0.7
+          scalar: 0.4
+          type: plot
+      margins: 0%, 75%, 0%, 10%
+- type: clock
+  geometry:
+    height: 22.2%
+    width: 34.3%
+    x: 0%
+    y: 1.7%
+  frozen: true
+  items:
+    - format: '%A, %B %-d'
+      geometry:
+        height: 27.1%
+        width: 100%
+        x: 0%
+        y: 0%
+      filters:
+        - 0Add Ordinal
+      alignment:
+        horizontal: Right
+        vertical: Center
+    - type: moon
+      geometry:
+        height: 44.1%
+        width: 20.1%
+        x: 79.2%
+        y: 28.6%
+      locked: true
+    - format: '%-I:%M'
+      geometry:
+        height: 68.6%
+        width: 77.3%
+        x: 1.5%
+        y: 28.6%
+      alignment:
+        horizontal: Right
+        vertical: Center
+    - format: '%p'
+      geometry:
+        height: 24.5%
+        width: 20.5%
+        x: 78.8%
+        y: 72.7%
+      filters:
+        - 1Lower
+- type: group
+  geometry:
+    height: 41.5%
+    width: 18.8%
+    x: 19.1%
+    y: 23.9%
+  items:
+    - type: realtime.numeric
+      key: environment.temperature.temperature
+      display:
+        value:
+          margins: 0%, 0%, 0%, 0%
+      title:
+        text: Outdoor
+        visible: true
+      geometry:
+        height: 57.7%
+        width: 100%
+        x: 0%
+        y: 1%
+    - type: realtime.numeric
+      key: environment.humidity.humidity
+      title:
+        ratio: 0.3
+        visible: true
+      geometry:
+        height: 19.3%
+        width: 44.6%
+        x: 54.6%
+        y: 58.6%
+    - type: realtime.numeric
+      key: environment.temperature.dewpoint
+      display:
+        value:
+          margins: 0%, 0%, 0%, 0%
+      geometry:
+        height: 41.4%
+        width: 54.6%
+        x: 0%
+        y: 58.7%
+    - type: realtime.numeric
+      key: device.ST-00024322.battery
+      title:
+        ratio: 0.3
+        visible: true
+      geometry:
+        height: 22.1%
+        width: 44.6%
+        x: 54.6%
+        y: 78%
+- type: group
+  geometry:
+    height: 41.5%
+    width: 18.8%
+    x: 0%
+    y: 23.9%
+  items:
+    - type: realtime.numeric
+      key: indoor.temperature.temperature
+      display:
+        value:
+          margins: 0%, 0%, 0%, 0%
+      title:
+        text: Indoor
+        visible: true
+      geometry:
+        height: 59%
+        width: 100%
+        x: 0%
+        y: 0%
+    - type: realtime.numeric
+      key: indoor.humidity.humidity
+      geometry:
+        height: 21.1%
+        width: 40.6%
+        x: 59.4%
+        y: 59%
+    - type: realtime.numeric
+      key: indoor.temperature.dewpoint
+      geometry:
+        height: 41%
+        width: 63.5%
+        x: 0%
+        y: 59%
+    - type: realtime.numeric
+      key: indoor.GVH5102_6736.battery
+      geometry:
+        height: 19.9%
+        width: 40.6%
+        x: 59.4%
+        y: 80.1%
+- type: realtime.numeric
+  key: environment.wind.speed.speed
+  display:
+    unit:
+      alignment:
+        horizontal: Left
+        vertical: VerticalCenter
+    valueUnitRatio: 0.75
+  title:
+    text: Wind
+    visible: true
+  geometry:
+    height: 20.7%
+    width: 14.5%
+    x: 85.5%
+    y: 65.3%
+- type: group
+  geometry:
+    height: 33.2%
+    width: 26.6%
+    x: 58.9%
+    y: 65.3%
+  items:
+    - type: realtime.numeric
+      key: environment.pressure.pressure
+      display:
+        valueUnitRatio: 0.75
+      title:
+        ratio: 0.34
+        visible: true
+      geometry:
+        height: 40.9%
+        width: 48.5%
+        x: 50.9%
+        y: 0%
+    - type: realtime.numeric
+      key: environment.light.illuminance
+      display:
+        value:
+          margins: 0%, 0%, 0%, 0%
+        valueUnitRatio: 0.75
+      title:
+        ratio: 0.25
+        text: Light
+        visible: true
+      geometry:
+        height: 62.4%
+        width: 50.9%
+        x: 0%
+        y: 0%
+    - type: realtime.numeric
+      key: environment.pressure.trend
+      title: false
+      geometry:
+        height: 21.5%
+        width: 48.2%
+        x: 51.2%
+        y: 40.9%
+    - type: realtime.numeric
+      key: environment.pressure.airDensity
+      display:
+        valueUnitRatio: 0.75
+      geometry:
+        height: 37.6%
+        width: 48.2%
+        x: 50.9%
+        y: 62.4%
+    - type: realtime.numeric
+      key: environment.clouds.cover.cover
+      display:
+        value:
+          margins: 0%, 0%, 0%, 0%
+      title:
+        position: Below
+        ratio: 0.8
+        visible: true
+      geometry:
+        height: 37.6%
+        width: 28.5%
+        x: 22.4%
+        y: 62.4%
+    - type: realtime.numeric
+      key: environment.light.uvi
+      display:
+        value:
+          margins: 10%, 24.8%, 10%, 20.6%
+      title:
+        position: Below
+        ratio: 0.76
+        visible: true
+      geometry:
+        height: 37.6%
+        width: 22.4%
+        x: 0%
+        y: 62.4%
+- type: realtime.numeric
+  key: environment.condition.icon
+  display:
+    value:
+      margins: 0%, 5%, 0%, 5%
+  title: false
+  geometry:
+    height: 26.8%
+    width: 19.1%
+    x: 0%
+    y: 65.3%
+- type: group
+  geometry:
+    height: 33.1%
+    width: 28.9%
+    x: 30%
+    y: 65.4%
+  items:
+    - type: text
+      geometry:
+        height: 34.546px
+        width: 324.7px
+        x: 0px
+        y: 0px
+      margins: 0%, 0%, 0%, 0%
+      text: Precipitation
+    - type: realtime.numeric
+      key: environment.lightning.distance
+      display:
+        unitPosition: below
+      title:
+        text: "\u26A1\uFE0F Distance"
+        visible: true
+      geometry:
+        height: 40.7%
+        width: 24.8%
+        x: 75.2%
+        y: 17.9%
+    - type: realtime.numeric
+      key: environment.precipitation.daily
+      display:
+        unitPosition: hidden
+      geometry:
+        height: 40.7%
+        width: 24.4%
+        x: 50.8%
+        y: 17.9%
+    - type: realtime.numeric
+      key: environment.precipitation.precipitation
+      display:
+        value:
+          margins: 10%, 6.2%, 10%, 7%
+        valueUnitRatio: 0.8
+      geometry:
+        height: 82.1%
+        width: 50.8%
+        x: 0%
+        y: 17.9%
+    - type: realtime.numeric
+      key: environment.lightning.count3hr
+      display:
+        unitPosition: hidden
+      title:
+        text: "\u26A1\uFE0F Last 3hrs"
+        visible: true
+      geometry:
+        height: 41.4%
+        width: 24.8%
+        x: 75.2%
+        y: 58.6%
+    - type: realtime.numeric
+      key: environment.lightning.lightning
+      display:
+        unitPosition: hidden
+      title:
+        text: "\u26A1\uFE0F Strikes"
+        visible: true
+      geometry:
+        height: 41.4%
+        width: 24.4%
+        x: 50.8%
+        y: 58.6%
+- type: realtime.numeric
+  key: environment.temperature.high
+  title:
+    ratio: 0.25
+    text: High
+    visible: true
+  geometry:
+    height: 15.6%
+    width: 10.9%
+    x: 19.1%
+    y: 66.8%
+- type: realtime.numeric
+  key: environment.wind.direction.direction
+  geometry:
+    height: 4.3%
+    width: 6.1%
+    x: 93.9%
+    y: 81.7%
+- type: realtime.numeric
+  key: environment.temperature.low
+  display:
+    value:
+      margins: 10%, 0%, 10%, 0%
+  title:
+    ratio: 0.25
+    text: Low
+    visible: true
+  geometry:
+    height: 16.1%
+    width: 10.9%
+    x: 19.1%
+    y: 82.4%
+- type: realtime.numeric
+  key: environment.wind.speed.gust
+  display:
+    unitPosition: hidden
+  title:
+    position: Below
+    ratio: 0.7
+    visible: true
+  geometry:
+    height: 11.1%
+    width: 7%
+    x: 93%
+    y: 87.5%
+- type: realtime.numeric
+  key: environment.wind.speed.lull
+  display:
+    unitPosition: hidden
+  title:
+    position: Below
+    ratio: 0.7
+    visible: true
+  geometry:
+    height: 11.1%
+    width: 7.5%
+    x: 85.5%
+    y: 87.5%
+- type: realtime.numeric
+  key: environment.condition.condition
+  display:
+    value:
+      margins: 0%, 0%, 0%, 0%
+  title: false
+  geometry:
+    height: 6.4%
+    width: 19.1%
+    x: 0%
+    y: 92.1%
