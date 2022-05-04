@@ -1,31 +1,29 @@
+import asyncio
+
+import qasync
 
 from src.plugins.translator import LevityDatagram, TranslatorSpecialKeys as tsk
 from src.plugins.web.socket import UDPSocket
 from src.plugins.plugin import ScheduledEvent
 from src.plugins.web import Auth, AuthType, Endpoint, REST, URLs
+from src.utils.shared import LOCAL_TIMEZONE
 
 from datetime import datetime, timedelta, timezone
-
-from src import config
-from .socket import *
 
 __all__ = ["WeatherFlow", '__plugin__']
 
 
 class WFURLs(URLs, base='swd.weatherflow.com/swd'):
-	stationID: int = int(config.plugins.wf['StationID'])
-	deviceID: int = int(config.plugins.wf['DeviceID'])
-
-	auth = Auth(authType=AuthType.PARAMETER, authData={'token': config.plugins.wf['token']})
+	auth = Auth(authType=AuthType.PARAMETER, authData={'token': '{token}'})
 
 	rest = Endpoint(url='rest', auth=auth, protocol='https', refreshInterval=timedelta(minutes=5))
 	websocket = Endpoint(url='data', protocol='wss')
 
-	stationObservation = Endpoint(base=rest, url=f'observations/station/{stationID}')
-	deviceObservation = Endpoint(base=rest, url=f'observations/device/{deviceID}')
+	stationObservation = Endpoint(base=rest, url=f'observations/station/{{stationID}}')
+	deviceObservation = Endpoint(base=rest, url=f'observations/device/{{deviceID}}')
 	station = Endpoint(base=rest, url='stations')
 
-	forecast = Endpoint(base=rest, url='better_forecast', params={'station_id': stationID}, period=[timedelta(hours=1), timedelta(days=1)])
+	forecast = Endpoint(base=rest, url='better_forecast', params={'station_id': '{{stationID}}'}, period=[timedelta(hours=1), timedelta(days=1)])
 
 	realtime = Endpoint(base=stationObservation)
 	historical = Endpoint(base=deviceObservation)
@@ -99,11 +97,14 @@ translator = {
 	'environment.wind.speed.gust':                       {'title': 'Gust', 'sourceKey': 'wind_gust'},
 
 	'environment.precipitation.precipitation':           {'type': 'precipitationRate', 'sourceUnit': ['mm', '@period'], 'title': 'Rate', 'sourceKey': 'precip'},
+	'environment.precipitation.precipitationNearCast':   {'type': 'precipitationRate', 'sourceUnit': ['mm', '@period'], 'title': 'Rate', 'sourceKey': 'precip_nc'},
 	'environment.precipitation.hourly':                  {'type': 'precipitationHourly', 'sourceUnit': ['mm', 'hr'], 'title': 'Hourly', 'sourceKey': 'precip_accum_last_1hr'},
 	'environment.precipitation.daily':                   {'type': 'precipitationDaily', 'sourceUnit': ['mm', 'day'], 'title': 'Daily', 'sourceKey': 'precip_accum_local_day'},
-	'environment.precipitation.dailyFinal':              {'type': 'precipitationDaily', 'sourceUnit': ['mm', 'day'], 'title': 'Daily', 'sourceKey': 'precip_accum_local_day_final'},
-	'environment.precipitation.icon':                    {'type':    'icon', 'sourceUnit': 'str', 'title': 'Precipitation Icon', 'forecastOnly': True, 'sourceKey': 'precip_icon', 'iconType': 'glyph', 'glyphFont': 'WeatherIcons',
-	                                                      'aliases': '@precipitationIcon'},
+	'environment.precipitation.dailyNearCast':           {'type': 'precipitationDaily', 'sourceUnit': ['mm', 'day'], 'title': 'Daily', 'sourceKey': 'precip_accum_local_day_final'},
+	'environment.precipitation.icon':                    {
+		'type':    'icon', 'sourceUnit': 'str', 'title': 'Precipitation Icon', 'forecastOnly': True, 'sourceKey': 'precip_icon', 'iconType': 'glyph', 'glyphFont': 'WeatherIcons',
+		'aliases': '@precipitationIcon'
+	},
 	'environment.precipitation.time':                    {'type': 'time', 'sourceUnit': 'min', 'title': 'Minutes', 'sourceKey': 'precip_minutes_local_day'},
 	'environment.precipitation.type':                    {'type': 'precipitationType', 'sourceUnit': '*', 'title': 'Precipitation Type', 'sourceKey': 'precip_type'},
 	'environment.precipitation.analysis':                {'type': 'rainCheckType', 'sourceUnit': 'int', 'title': 'Type', 'sourceKey': 'precip_analysis_type'},
@@ -142,18 +143,28 @@ translator = {
 	'device.@deviceSerial.sensorStatus':                 {'sourceUnit': 'str', 'title': 'Sensor Status', 'sourceKey': 'sensor_status'},
 	'device.@deviceSerial.debug':                        {'sourceUnit': 'bool', 'title': 'Debug', 'sourceKey': 'debug'},
 	'device.@deviceSerial.resetFlags':                   {'sourceUnit': 'str', 'title': 'Reset Flags', 'sourceKey': 'reset_flags'},
-	'environment.condition.icon':                        {'type':         'icon', 'sourceUnit': 'str', 'title': 'Condition Icon', 'sourceKey': 'icon', 'iconType': 'glyph', 'glyphFont': 'WeatherIcons', 'aliases': '@conditionIcon',
-	                                                      'forecastOnly': True},
+	'environment.condition.icon':                        {
+		'type':         'icon', 'sourceUnit': 'str', 'title': 'Condition Icon', 'sourceKey': 'icon', 'iconType': 'glyph', 'glyphFont': 'WeatherIcons', 'aliases': '@conditionIcon',
+		'forecastOnly': True
+	},
 	'environment.condition.condition':                   {'type': 'description', 'sourceUnit': 'str', 'title': 'Condition', 'sourceKey': 'conditions', 'forecastOnly': True},
 	'environment.sunrise':                               {'type': 'date', 'sourceUnit': 'epoch', 'title': 'Sunrise', 'sourceKey': 'sunrise', 'forecastOnly': True},
 	'environment.sunset':                                {'type': 'date', 'sourceUnit': 'epoch', 'title': 'Sunset', 'sourceKey': 'sunset', 'forecastOnly': True},
 	'@type':                                             {'sourceKey': 'type', tsk.metaData: True, tsk.sourceData: True},
-	'@period':                                           {'key': 'device.@deviceSerial.sampleInterval.report', 'attr': 'period', 'default': {'value': 1, 'unit': 'min'}, 'allowZero': False},
+	'@period':                                           {
+		'key':        'device.@deviceSerial.sampleInterval.report',
+		'attr':       'period',
+		'default':    {'value': 1, 'unit': 'min'},
+		'allowZero':  False,
+		'sourceKey':  'bucket_step_minutes',
+		tsk.metaData: True
+	},
 	'@windSampleInterval':                               {'key': 'device.@deviceSerial.sampleInterval.wind', 'default': {'value': 3, 'unit': 's'}},
-	'@timezone':                                         {'key': 'time.timezone', 'attr': 'timezone', 'default': {'value': config.tz}, 'setter': '@plugins', tsk.metaData: True},
+	'@timezone':                                         {'dataType': timezone, 'key': 'timezone', 'attr': 'timezone', 'default': {'value': LOCAL_TIMEZONE}, 'setter': '@plugin', tsk.metaData: True},
 	'@timestamp':                                        {'key': 'timestamp', 'attr': 'timestamp', 'default': {'value': datetime.now, 'kwargs': {'tz': '@timezone'}}, 'setter': '@source', tsk.metaData: True},
-	'@hubSerial':                                        {'sourceKey': ['hub_sn', 'serial_number'], 'key': 'device.@deviceSerial.status.serial', tsk.sourceData: True},
-	'@deviceSerial':                                     {'sourceKey': 'serial_number', 'key': 'device.@deviceSerial.status.serial', tsk.sourceData: True},
+	'@hubSerial':                                        {'sourceKey': ['hub_sn', 'serial_number'], 'key': 'device.@deviceSerial.serial', tsk.sourceData: True},
+	'@deviceSerial':                                     {'sourceKey': 'serial_number', 'key': 'device.@deviceSerial.serial', tsk.sourceData: True},
+	'@deviceID':                                         {'sourceKey': 'device_id', 'key': 'device.@deviceID.deviceID', tsk.sourceData: True},
 	'@latitude':                                         {'sourceKey': 'latitude', 'attr': 'latitude', 'setter': '@plugin', tsk.metaData: True},
 	'@longitude':                                        {'sourceKey': 'longitude', 'attr': 'longitude', 'setter': '@plugin', tsk.metaData: True},
 	'meta@stationID':                                    {'sourceKey': 'station_id', 'filter.match': '@plugin', tsk.metaData: True},
@@ -163,19 +174,38 @@ translator = {
 	'ignored':                                           ['wind_direction_cardinal', 'lightning_strike_last_distance_msg', 'is_precip_local_day_rain_check', 'is_precip_local_yesterday_rain_check', 'firmware_revision'],
 
 	'keyMaps':                                           {
-		'obs_st':        {'obs': {iter: ['timestamp', 'environment.wind.speed.lull', 'environment.wind.speed.speed', 'environment.wind.speed.gust', 'environment.wind.direction.direction',
-		                                 'device.@deviceSerial.sampleInterval.wind', 'environment.pressure.pressure', 'environment.temperature.temperature', 'environment.humidity.humidity',
-		                                 'environment.light.illuminance', 'environment.light.uvi', 'environment.light.irradiance', 'environment.precipitation.precipitation',
-		                                 'environment.precipitation.type', 'environment.lightning.distance', 'environment.lightning.lightning',
-		                                 'device.@deviceSerial.battery', 'device.@deviceSerial.sampleInterval.report']}},
+		'obs_st':        {
+			'obs': {
+				18: (basic := ['timestamp', 'environment.wind.speed.lull', 'environment.wind.speed.speed', 'environment.wind.speed.gust', 'environment.wind.direction.direction',
+					'device.@deviceSerial.sampleInterval.wind', 'environment.pressure.pressure', 'environment.temperature.temperature', 'environment.humidity.humidity',
+					'environment.light.illuminance', 'environment.light.uvi', 'environment.light.irradiance', 'environment.precipitation.precipitation',
+					'environment.precipitation.type', 'environment.lightning.distance', 'environment.lightning.lightning',
+					'device.@deviceSerial.battery', 'device.@deviceSerial.sampleInterval.report']),
+				22: [*basic,
+					'environment.precipitation.daily',
+					'environment.precipitation.precipitationNearCast',
+					'environment.precipitation.dailyNearCast',
+					'environment.yesterday.precipitation.analysis'
+				]
+			},
 
-		'obs_sky':       {'obs': {iter: ['timestamp', 'environment.light.illuminance', 'environment.light.uvi', 'environment.precipitation.precipitation',
-		                                 'environment.wind.speed.lull', 'environment.wind.speed.speed', 'environment.wind.speed.gust', 'environment.wind.direction.direction',
-		                                 'device.@deviceSerial.battery', 'device.@deviceSerial.sampleInterval.report', 'environment.light.irradiance', 'environment.precipitation.type',
-		                                 'device.@deviceSerial.sampleInterval.wind']}},
+		},
 
-		'obs_air':       {'obs': {iter: ['timestamp', 'environment.pressure.pressure', 'environment.temperature.temperature', 'environment.humidity.humidity',
-		                                 'environment.lightning.lightning', 'environment.lightning.distance', 'device.@deviceSerial.battery', 'device.@deviceSerial.sampleInterval.report']}},
+		'obs_sky':       {
+			'obs': {
+				iter: ['timestamp', 'environment.light.illuminance', 'environment.light.uvi', 'environment.precipitation.precipitation',
+					'environment.wind.speed.lull', 'environment.wind.speed.speed', 'environment.wind.speed.gust', 'environment.wind.direction.direction',
+					'device.@deviceSerial.battery', 'device.@deviceSerial.sampleInterval.report', 'environment.light.irradiance', 'environment.precipitation.type',
+					'device.@deviceSerial.sampleInterval.wind']
+			}
+		},
+
+		'obs_air':       {
+			'obs': {
+				iter: ['timestamp', 'environment.pressure.pressure', 'environment.temperature.temperature', 'environment.humidity.humidity',
+					'environment.lightning.lightning', 'environment.lightning.distance', 'device.@deviceSerial.battery', 'device.@deviceSerial.sampleInterval.report']
+			}
+		},
 
 		'rapid_wind':    {'ob': ['timestamp', 'environment.wind.speed.speed', 'environment.wind.direction.direction']},
 		'device_status': {filter: ['type', 'serial_number', 'hub_sn', 'timestamp', 'uptime', 'voltage', 'rssi', 'hub_rssi']},
@@ -183,9 +213,10 @@ translator = {
 	},
 	'dataMaps':                                          {
 		'realtime':      {
-			'realtime': ('obs', 0)},
+			'realtime': ('obs', 0)
+		},
 		'forecast':      {
-			'realtime': ('current_conditions',),
+			'realtime': 'current_conditions',
 			'hourly':   ('forecast', 'hourly', 0),
 			'daily':    ('forecast', 'daily', 0)
 		},
@@ -265,33 +296,38 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 				observation.update(message)
 
 	def start(self):
-		if config.plugins.wf.getboolean('socketUpdates'):
+		# if self.config['fetchHistory']:
+		# 	ScheduledEvent(interval=timedelta(seconds=0), singleShot=True, func=self.getHistorical, fireImmediately=True).start()
+
+		if self.config['socketUpdates']:
 			self.udp.start()
 
 		self.realtimeTimer = ScheduledEvent(self.urls.realtime.refreshInterval, self.getRealtime)
 		self.realtimeTimer.start(True)
+		# self.realtimeTimer.start(immediately=False, startTime=self.urls.realtime.refreshInterval.total_seconds() / 2)
 
 		self.forecastTimer = ScheduledEvent(timedelta(minutes=15), self.getForecast)
 		self.forecastTimer.start(True)
 
-		ScheduledEvent(interval=timedelta(seconds=45), singleShot=True, func=self.getHistorical, fireImmediately=True).start()
 		self.loggingTimer = ScheduledEvent(timedelta(minutes=1), self.logValues)
 		self.loggingTimer.start(False)
+		self.__running = True
 
 	async def getRealtime(self):
-		data = await self.getData(self.urls.realtime)
+		urls = self.urls
+		endpoint = urls.realtime
+		data = await self.getData(endpoint)
 		await self.realtime.asyncUpdate(data, source=[self.name, self.urls.realtime])
 
 	async def getForecast(self):
 		data = await self.getData(self.urls.forecast)
-		# r = data.pop('realtime', None)
 		for observation in self.observations:
 			if observation.dataName in data:
 				await observation.asyncUpdate(data)
 
 	async def getHistorical(self, start: datetime = None, end: datetime = None):
 		if end is None:
-			end = datetime.now(tz=config.tz)
+			end = datetime.now(tz=LOCAL_TIMEZONE)
 		if start is None:
 			start = end - timedelta(days=.5)
 		params = self.urls.historical.params.copy()
@@ -299,10 +335,7 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 		end = end.astimezone(tz=timezone.utc)
 		params.update({'time_start': int(start.timestamp()), 'time_end': int(end.timestamp())})
 		data = await self.getData(self.urls.historical, params=params)
-		source = [self.urls.historical.name]
-		if 'type' in data:
-			source.append(data.pop('type'))
-		await self.log.asyncUpdate(data, source=source)
+		await self.log.asyncUpdate(data)
 
 	@property
 	def messenger(self):

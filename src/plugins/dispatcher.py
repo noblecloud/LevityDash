@@ -4,17 +4,15 @@ from functools import cached_property
 from PySide2.QtCore import QObject, QTimer, Signal, Slot
 from typing import Any
 
-import src.config as config
 from src.plugins.observation import MeasurementTimeSeries
 from src.plugins.plugin import Container
-from src import config, logging, Plugins
-from src.catagories import CategoryEndpointDict, CategoryItem
-from src.utils import Accumulator, clearCacheAttr, KeyData, Period
+from src.plugins import Plugins, Accumulator
+from src.plugins.categories import CategoryEndpointDict, CategoryItem
+from src.utils.data import KeyData
+from src.utils.shared import clearCacheAttr, Period
+from src.utils.log import LevityPluginLog
 
-log = logging.getLogger('Dispatcher')
-log.setLevel(logging.DEBUG)
-
-__all__ = ["PluginValueDirectory", "MultiSourceContainer", "ValueDirectory"]
+log = LevityPluginLog.getChild('Dispatcher')
 
 
 class MultiSourceContainer(dict):
@@ -36,7 +34,7 @@ class MultiSourceContainer(dict):
 		return self.value.__str__()
 
 	def __getattr__(self, item):
-		if item == 'default':
+		if item == 'defaultContainer':
 			return self.__getattribute__(item)
 		attr = getattr(self.__getattribute__('value').value, item, None)
 		if attr is None:
@@ -63,9 +61,8 @@ class MultiSourceContainer(dict):
 		if self.preferredSource and self.preferredSource in self.keys():
 			value = self[self.preferredSource]
 		else:
-			clearCacheAttr(self, 'default')
+			clearCacheAttr(self, 'defaultContainer')
 			value = self.defaultContainer
-		periods = ['now', 'minute', 'hour', 'day', 'week', 'month', 'year']
 		# if self.period:
 		# 	if self.period in 'realtime,now' or self.period == Period.Now:
 		# 		period = 0
@@ -114,19 +111,21 @@ class MultiSourceContainer(dict):
 
 	@cached_property
 	def defaultContainer(self) -> 'Container':
-		sections = [i for i in config.plugins.values() if i.getboolean('enabled') and i.name in self]
+		if len(self) == 1:
+			return list(self.values())[0]
+		_plugins = [i for i in Plugins if i.config['enabled'] and i.name in self]
 		for i in self.key[::-1]:
-			for section in sections:
-				if 'defaultFor' in section and i in section['defaultFor']:
-					return self[section.name]
-		for section in sections:
-			if section.name in ValueDirectory.plugins and ValueDirectory[section.name] in self:
-				return self[section.name]
+			for plugin in _plugins:
+				if i in plugin.config.defaultFor:
+					return self[plugin.name]
+		for plugin in _plugins:
+			if ValueDirectory[plugin.name] in self:
+				return self[plugin.name]
 		options = list(self.values())
 		if len(options) == 1:
 			return options[0]
 		elif len(options) > 1:
-			options = sorted(options, key=lambda x: config.plugins.sections().index(x.source.name), reverse=False)
+			options = sorted(options, key=lambda x: len(x.config.defaultFor), reverse=False)
 			return options[0]
 		else:
 			raise ValueError('No default container found for {}'.format(self.key))
@@ -254,6 +253,8 @@ class PluginValueDirectory:
 			log.info(f'Announcing {key.key}')
 		for key in monitor.announcedKeysForecastKeys.values():
 			if key.value.forecast.hasForecast:
+				if len(key.value.forecast) < 5:
+					key.value.forecast.update()
 				key.attempts += 1
 				monitor.requirementsSignal.emit(key)
 				log.info(f'Announcing {key.key} with forecast')
@@ -328,7 +329,7 @@ class PluginValueDirectory:
 			self._values[key] = state[key]
 
 	@property
-	def plugins(self):
+	def plugins(self) -> Plugins:
 		return self.__plugins
 
 
@@ -347,3 +348,5 @@ class ForecastPlaceholderSignal:
 
 
 ValueDirectory = PluginValueDirectory()
+
+__all__ = ["PluginValueDirectory", "MultiSourceContainer", "ValueDirectory", 'MonitoredKey', 'PlaceholderSignal', 'ForecastPlaceholderSignal']
