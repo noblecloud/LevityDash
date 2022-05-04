@@ -29,7 +29,7 @@ translator = {
 	'environment.pressure.pressure':                {'type': 'pressure', 'sourceUnit': 'hPa', 'title': 'Pressure', 'description': 'Pressure at 2m height', 'sourceKey': 'pressure_msl'},
 	'environment.pressure.vaporPressureDeficit':    {'type': 'pressure', 'sourceUnit': 'kPa', 'title': 'Vapor pressure deficit', 'description': 'Vapor pressure deficit', 'sourceKey': 'vapor_pressure_deficit'},
 
-	'environment.clouds.cover.cover':               {'type': 'cloudcover', 'sourceUnit': '%', 'title': 'Cloud cover', 'description': 'Cloud cover', 'sourceKey': 'cloudcover'},
+	'environment.clouds.cover.cover':               {'type': 'cloudcover', 'sourceUnit': '%', 'title': 'Cloud Coverage', 'description': 'Cloud Coverage', 'sourceKey': 'cloudcover'},
 	'environment.clouds.cover.low':                 {'type': 'cloudcover', 'sourceUnit': '%', 'title': 'Cloud cover low', 'description': 'Cloud cover low', 'sourceKey': 'cloudcover_low'},
 	'environment.clouds.cover.mid':                 {'type': 'cloudcover', 'sourceUnit': '%', 'title': 'Cloud cover mid', 'description': 'Cloud cover mid', 'sourceKey': 'cloudcover_mid'},
 	'environment.clouds.cover.high':                {'type': 'cloudcover', 'sourceUnit': '%', 'title': 'Cloud cover high', 'description': 'Cloud cover high', 'sourceKey': 'cloudcover_high'},
