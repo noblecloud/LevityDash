@@ -12,6 +12,10 @@ max_line_length = 240
 indent_size = 2
 indent_style = space
 
+[{*.spec}]
+indent_size = 2
+indent_style = space
+
 [{*.py,*.pyw}]
 indent_style = tab
 indent_size = 2

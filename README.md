@@ -1,15 +1,12 @@
 <p align="center">
-  <a href="#">
-
-  </a>
-  <p align="center">
+	<p align="center">
    <img width="200" height="200" src="src/ui/icon512.png" alt="Logo">
   </p>
-  <h1 align="center" color="505050"><b>LevityDash</b></h1>
+	<h1 align="center" color="505050">
+		<strong><b>LevityDash</b></strong>
+	</h1>
   <p align="center">
-  A lightweight, desktop native, multisource dashboard for macOS, Windows and Linux
-    <br />
-    <a href="https://levitydash.app"><strong>levitydash.app</strong></a>
+  	A lightweight, desktop native, multisource dashboard for macOS, Windows and Linux
   </p>
 </p>
 
@@ -19,6 +16,14 @@ LevityDash aims to be a lightweight, desktop native, multisource dashboard witho
 platforms, including embedded.
 
 *Note: This project is very much in the proof of concept stage – it functions, but it is far from the goal of a lightweight dashboard.*
+
+<p align="right">
+<img src="https://img.shields.io/badge/license-MIT-blueviolet">
+<img src="https://img.shields.io/badge/Python-3.10-blueviolet">
+<img src="https://img.shields.io/badge/aiohttp-3.6-blueviolet">
+<img src="https://img.shields.io/badge/PySide2-5.12-blueviolet">
+
+</p>
 
 # Current Features
 
