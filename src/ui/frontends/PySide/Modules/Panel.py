@@ -500,7 +500,7 @@ class Panel(_Panel):
 		# 	self.setPos(self.gridItem.pos())
 		super(Panel, self).show()
 
-	def scene(self) -> 'GridScene':
+	def scene(self) -> 'LevityScene':
 		return super(Panel, self).scene()
 
 	@property
@@ -1246,7 +1246,7 @@ class Panel(_Panel):
 		return super(Panel, self).itemChange(change, value)
 
 	@property
-	def parent(self) -> Union['Panel', 'GridScene']:
+	def parent(self) -> Union['Panel', 'LevityScene']:
 		if self._parent is not None:
 			return self._parent
 		parents = [self.parentItem(), self.parentObject(), self.parentWidget()]

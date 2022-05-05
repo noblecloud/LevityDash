@@ -28,6 +28,14 @@ from PySide2.QtWidgets import QGraphicsRectItem
 from src.utils import utilLog
 
 
+def simpleRequest(url: str) -> dict:
+	from urllib.request import urlopen, Request
+	from json import loads
+	r = Request(url)
+	with urlopen(r) as response:
+		return loads(response.read())
+
+
 class _Panel(QGraphicsRectItem):
 
 	def isValid(self) -> bool:
@@ -787,7 +795,7 @@ def clamp(value: Numeric, minimum: Numeric, maximum: Numeric) -> Numeric:
 	:return: The clamped value.
 	:rtype: float
 	"""
-	return max(minimum, min(value, maximum))
+	return sorted([value, minimum, maximum])[1]
 
 
 class DateKey(datetime):

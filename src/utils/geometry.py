@@ -6,8 +6,6 @@ from collections import namedtuple
 
 from functools import cached_property
 from math import atan2, degrees as mathDegrees, nan
-from numba import float32
-from numba.experimental import jitclass
 from PySide2.QtGui import QPainterPath, QPolygon, QPolygonF, QTransform
 from PySide2.QtWidgets import QGraphicsItem
 
@@ -17,7 +15,8 @@ from enum import auto, Enum, EnumMeta, IntFlag
 
 from PySide2.QtCore import QMargins, QMarginsF, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt
 
-from .shared import _Panel, Auto, clearCacheAttr, ClosestMatchEnumMeta, DType, mostly, Unset
+from .shared import _Panel, Auto, clearCacheAttr, ClosestMatchEnumMeta, DType, mostly, Unset, clamp
+from .shared import utilLog as log
 
 
 class Axis(IntFlag):
@@ -1398,7 +1397,7 @@ class Margins(MultiDimension, dimensions=('left', 'top', 'right', 'bottom'), sep
 					attr.value = values[i]
 				else:
 					other = surfaceSize.width.value if attr.name.lower() in ('left', 'right') else surfaceSize.height.value
-					attr.value = capValue(other*values[i], 0, other) if attr.absolute else capValue(values[i]/other, 0, 1)
+					attr.value = clamp(other*values[i], 0, other) if attr.absolute else clamp(values[i]/other, 0, 1)
 			return None
 
 		for i, attr in enumerate(attrs):

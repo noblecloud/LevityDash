@@ -1,43 +1,39 @@
 - type: clock
   geometry:
-    height: 0.222
-    width: 0.375
-    x: 0.0
-    y: 0.017
+    height: 22.2%
+    width: 36.5%
+    x: 0%
+    y: 1.7%
   frozen: true
   items:
   - format: '%A, %B %-d'
     geometry:
-      height: 0.271
-      width: 1.0
-      x: 0.0
-      y: 0.0
+      height: 27.1%
+      width: 100%
+      x: 0%
+      y: 0%
     filters:
     - 0Add Ordinal
-    alignment:
-      horizontal: Right
-      vertical: VerticalCenter
+    alignment: CenterRight
   - type: moon
     geometry:
-      height: 0.401
-      width: 0.201
-      x: 0.788
-      y: 0.25
+      height: 44.1%
+      width: 19%
+      x: 79.2%
+      y: 25%
     locked: true
   - format: '%-I:%M'
     geometry:
-      height: 0.686
-      width: 0.773
-      x: 0.015
-      y: 0.286
-    alignment:
-      horizontal: Right
-      vertical: VerticalCenter
+      height: 70%
+      width: 77.3%
+      x: 0%
+      y: 27.2%
+    alignment: CenterRight
   - format: '%p'
     geometry:
-      height: 0.369
-      width: 0.205
-      x: 0.786
-      y: 0.68
+      height: 26.5%
+      width: 20.5%
+      x: 77%
+      y: 68%
     filters:
     - 1Lower

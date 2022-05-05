@@ -210,7 +210,7 @@ class Label(Panel):
 	_lineBreaking: bool
 	marginHandles: MarginHandles
 
-	def __init__(self, parent: Union['Panel', 'GridScene'],
+	def __init__(self, parent: Union['Panel', 'LevityScene'],
 		text: str = "",
 		alignment: Alignment = None,
 		filters: list[str] = None,
@@ -353,7 +353,7 @@ class NonInteractiveLabel(Label):
 	_resizable = False
 	_locked = True
 
-	def __init__(self, parent: Union['Panel', 'GridScene'],
+	def __init__(self, parent: Union['Panel', 'LevityScene'],
 		*args, **kwargs):
 		super().__init__(parent=parent, *args, **kwargs)
 		self.setFlag(QGraphicsItem.ItemIsMovable, False)

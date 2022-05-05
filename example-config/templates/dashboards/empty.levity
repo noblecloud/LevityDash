@@ -1,7 +1,7 @@
 - type: clock
   geometry:
     height: 22.2%
-    width: 34.3%
+    width: 36.5%
     x: 0%
     y: 1.7%
   frozen: true
@@ -14,30 +14,26 @@
         y: 0%
       filters:
         - 0Add Ordinal
-      alignment:
-        horizontal: Right
-        vertical: Center
+      alignment: CenterRight
     - type: moon
       geometry:
         height: 44.1%
-        width: 20.1%
+        width: 19%
         x: 79.2%
-        y: 28.6%
+        y: 25%
       locked: true
     - format: '%-I:%M'
       geometry:
-        height: 68.6%
+        height: 70%
         width: 77.3%
-        x: 1.5%
-        y: 28.6%
-      alignment:
-        horizontal: Right
-        vertical: Center
+        x: 0%
+        y: 27.2%
+      alignment: CenterRight
     - format: '%p'
       geometry:
-        height: 24.5%
+        height: 26.5%
         width: 20.5%
-        x: 78.8%
-        y: 72.7%
+        x: 77%
+        y: 68%
       filters:
         - 1Lower

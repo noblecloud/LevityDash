@@ -5,7 +5,6 @@ import webbrowser
 
 from pathlib import Path
 
-import yaml
 from qasync import QApplication
 
 from src.config import userConfig
@@ -20,7 +19,6 @@ from PySide2.QtWidgets import (QAction, QGraphicsItem, QGraphicsPathItem, QGraph
 
 from src.utils import clearCacheAttr
 from src.ui.frontends.PySide.utils import *
-from src.utils.log import LevityGUILog
 
 app: QApplication = QApplication.instance()
 app.setPalette(colorPalette)
@@ -50,7 +48,7 @@ class FocusStack(list):
 		return parent in self or any(i in self for i in parent.childItems())
 
 
-class GridScene(QGraphicsScene):
+class LevityScene(QGraphicsScene):
 	columnWidth = 100
 	rowHeight = 100
 	_gridRect: QRectF = None
@@ -63,7 +61,7 @@ class GridScene(QGraphicsScene):
 
 	def __init__(self, *args, **kwargs):
 		self.time = time()
-		super(GridScene, self).__init__(*args, **kwargs)
+		super(LevityScene, self).__init__(*args, **kwargs)
 		from .Modules.CentralPanel import CentralPanel
 		# QGraphicsScene.setSceneRect(self, self.window.rect())
 		self.base = CentralPanel(self)
@@ -153,7 +151,7 @@ class GridScene(QGraphicsScene):
 		return False
 
 	# def setSceneRect(self, rect: QRectF):
-	# 	super(GridScene, self).setSceneRect(rect)
+	# 	super(LevityScene, self).setSceneRect(rect)
 	# self.base.parentResized(rect)
 
 	def hideLines(self, hide: bool = True):
@@ -167,17 +165,17 @@ class GridScene(QGraphicsScene):
 
 	def mousePressEvent(self, event: QMouseEvent):
 		self.hideLines(False)
-		super(GridScene, self).mousePressEvent(event)
+		super(LevityScene, self).mousePressEvent(event)
 
 	# def mouseMoveEvent(self, event):
 	# 	# if event.button == Qt.LeftButton:
 	# 	# 	self.editingModeTimer.start()
 	# 	# event.ignore()
-	# 	super(GridScene, self).mouseMoveEvent(event)
+	# 	super(LevityScene, self).mouseMoveEvent(event)
 
 	def mouseReleaseEvent(self, event):
 		self.editingModeTimer.start()
-		super(GridScene, self).mouseReleaseEvent(event)
+		super(LevityScene, self).mouseReleaseEvent(event)
 
 	def gridRect(self):
 		if self._gridRect is None:
@@ -201,19 +199,20 @@ class GridScene(QGraphicsScene):
 	def clicked(self):
 		return QApplication.instance().mouseButtons() == Qt.LeftButton
 
+
 # def drawForeground(self, painter: QPainter, rect: QRectF) -> None:
-# 	super(GridScene, self).drawForeground(painter, rect)
+# 	super(LevityScene, self).drawForeground(painter, rect)
 # 	fpsTimer()
 # 	end = time()
 # 	print(f'\r{1/(end - self.time):.3f}fps', end='')
 # 	self.time = end
 
 
-class GridView(QGraphicsView):
+class LevitySceneView(QGraphicsView):
 	resizeFinished = Signal()
 
 	def __init__(self, *args, **kwargs):
-		super(GridView, self).__init__(*args, **kwargs)
+		super(LevitySceneView, self).__init__(*args, **kwargs)
 		self.noActivityTimer = QTimer(self)
 		self.noActivityTimer.setSingleShot(True)
 		self.noActivityTimer.timeout.connect(self.noActivity)
@@ -228,7 +227,7 @@ class GridView(QGraphicsView):
 		# self.layout().addWidget(self.graphicsView)
 		# self.graphicsView.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 		self.setRenderHint(QPainter.HighQualityAntialiasing)
-		self.graphicsScene = GridScene(self)
+		self.graphicsScene = LevityScene(self)
 		self.setScene(self.graphicsScene)
 		self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 		self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -254,6 +253,7 @@ class GridView(QGraphicsView):
 	def eventFilter(self, obj, event):
 		if event.type() in {QEvent.KeyPress, QEvent.MouseButtonPress, QEvent.MouseMove, QEvent.GraphicsSceneMouseMove, QEvent.GraphicsSceneMousePress, QEvent.InputMethod, QEvent.InputMethodQuery}:
 			self.noActivityTimer.start()
+			self.setCursor(Qt.ArrowCursor)
 		if event.type() == QEvent.KeyPress:
 			# save
 			if event.key() == Qt.Key_R:
@@ -265,7 +265,7 @@ class GridView(QGraphicsView):
 			# 	yamlStr = yaml.safe_dump(item, default_flow_style=False)
 			# 	print(yamlStr)
 			# load
-		return super(GridView, self).eventFilter(obj, event)
+		return super(LevitySceneView, self).eventFilter(obj, event)
 
 	def resizeDoneEvent(self):
 		self.setRenderHint(QPainter.HighQualityAntialiasing, True)
@@ -302,43 +302,14 @@ class GridView(QGraphicsView):
 		# 	self.base.setRect(rect)
 		# 	self.setSceneRect(rect)
 
-		super(GridView, self).resizeEvent(event)
+		super(LevitySceneView, self).resizeEvent(event)
 		self.fitInView(self.base)
 		self.resizeDone.start()
 
 	def noActivity(self):
 		self.graphicsScene.clearSelection()
 		self.graphicsScene.clearFocus()
-
-
-# 	finish = time()
-# 	# print(f'\rResize took {finish - start:.6f} seconds', end ='')
-
-# def show(self):
-# 	rect = self.graphicsScene.base.rect()
-# 	super(GridView, self).show()
-# 	self.graphicsView.fitInView(rect)
-
-# def scroll(self, dx: int, dy: int) -> None:
-# 	return None
-
-# def eventFilter(self, obj, event: QEvent):
-# 	if event.type() == QEvent.KeyPress:
-# 		log.debug(Qt.Key(event.key()).name.decode())
-# 		if event.key() == Qt.Key_F or event.key() == Qt.Key_F11:
-# 			self.toggleFullScreen()
-# 			return True
-# 		elif event.key() == Qt.Key_Q:
-# 			QApplication.instance().quit()
-# 		elif event.key() == Qt.Key_R:
-# 			self.graphicsScene.base.load()
-# 		elif event.key() == Qt.Key_Control:
-# 			self.graphicsView.parentWidget().setCursor(Qt.CursorShape.OpenHandCursor)
-# 	elif event.type() == QEvent.KeyRelease:
-# 		if event.key() == Qt.Key_Control:
-# 			self.graphicsView.parentWidget().setCursor(Qt.CursorShape.ArrowCursor)
-#
-# 	return super(GridView, self).eventFilter(obj, event)
+		self.setCursor(Qt.BlankCursor)
 
 
 class PluginsMenu(QMenu):
@@ -377,7 +348,7 @@ class LevityMainWindow(QMainWindow):
 	def __init__(self, *args, **kwargs):
 		super(LevityMainWindow, self).__init__(*args, **kwargs)
 		self.setWindowTitle('LevityDash')
-		view = GridView(self)
+		view = LevitySceneView(self)
 		view.setGeometry(self.geometry())
 		self.setCentralWidget(view)
 		view.postInit()

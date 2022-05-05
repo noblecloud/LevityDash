@@ -12,6 +12,7 @@ from pytz import timezone
 import src.EasyPath as EasyPath
 
 
+
 def buildDirectories(path: Path, dirs: Union[list, str, dict[str, Union[str, list]]]) -> None:
 	'''
 	Builds a directory tree for the given path and the given dict of directories.
@@ -40,6 +41,15 @@ def buildDirectories(path: Path, dirs: Union[list, str, dict[str, Union[str, lis
 
 
 unsetConfig = object()
+
+
+def guessLocation() -> tuple[str, str, str]:
+	from src.utils.shared import simpleRequest
+
+	location = simpleRequest('https://ipapi.co/json/')
+
+	log.info(f'Location fetched from IP: {location["city"]}, {location["region"]}, {location["country"]}, lat: {location["latitude"]},  lon: {location["longitude"]}')
+	return location['latitude'], location['longitude'], location['timezone']
 
 
 class LevityConfig(ConfigParser):
@@ -254,19 +264,29 @@ class Config(LevityConfig):
 
 	@property
 	def loc(self):
-		return float(self['Location']['lat']), float(self['Location']['lon'])
+		noLocationSection = 'Location' not in self.sections()
+		latitude = self.get('Location', 'latitude', fallback=None)
+		longitude = self.get('Location', 'longitude', fallback=None)
+		timezone = self.get('Location', 'timezone', fallback=None)
+		if noLocationSection or not latitude or not longitude or not timezone:
+			log.info('No location set in config')
+			lat, lon, tz = guessLocation()
+			self['Location'] = {'timezone': timezone or tz, 'latitude': latitude or lat, 'longitude': longitude or lon}
+			self.save()
+		return float(self['Location']['latitude']), float(self['Location']['longitude'])
 
 	@property
 	def locStr(self):
-		return f"{float(self['Location']['lat'])}, {float(self['Location']['lon'])}"
+		lat, lon = self.loc
+		return f"{lat: .6f}, {lon:.6f}"
 
 	@property
 	def lat(self):
-		return float(self['Location']['lat'])
+		return self.loc[0]
 
 	@property
 	def lon(self):
-		return float(self['Location']['lon'])
+		return self.loc[1]
 
 	@property
 	def dashboardPath(self):
