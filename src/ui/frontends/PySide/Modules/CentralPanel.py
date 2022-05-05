@@ -28,7 +28,7 @@ class CentralPanel(Panel):
 	# preventCollisions = False
 	# signals = GraphicsItemSignals()
 
-	def __init__(self, parent: 'GridScene'):
+	def __init__(self, parent: 'LevityScene'):
 		self.gridOpacity = 1
 		# self.grid = grid
 		# self.grid.surface = self

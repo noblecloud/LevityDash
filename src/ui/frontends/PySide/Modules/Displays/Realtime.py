@@ -916,12 +916,12 @@ class DisplayLabel(Panel):
 
 
 class UnitLabel(Label):
-	def __init__(self, parent: Union['Panel', 'GridScene'],
-	             reference: Label,
-	             alignment: Alignment = None,
-	             filters: list[str] = None,
-	             font: QFont = None,
-	             *args, **kwargs):
+	def __init__(self, parent: Union['Panel', 'LevityScene'],
+		reference: Label,
+		alignment: Alignment = None,
+		filters: list[str] = None,
+		font: QFont = None,
+		*args, **kwargs):
 		self.reference = reference
 		super().__init__(parent=parent, alignment=alignment, filters=filters, font=font, *args, **kwargs)
 		self.setResizable(False)

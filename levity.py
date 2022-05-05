@@ -5,7 +5,6 @@ import sys
 
 import asyncio
 import qasync
-import shiboken2
 from pathlib import Path
 from rich.traceback import install
 

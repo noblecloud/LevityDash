@@ -673,7 +673,7 @@ class PanelDrawer(Panel):
 	savable = False
 	centralPanel: 'CentralPanel'
 
-	def __init__(self, parent: 'GridScene', centralPanel: 'CentralPanel', *args, **kwargs):
+	def __init__(self, parent: 'LevityScene', centralPanel: 'CentralPanel', *args, **kwargs):
 		self.centralPanel = centralPanel
 		kwargs['geometry'] = {'size': {'width': 1, 'height': 0.1}, 'position': {'x': 0, 'y': -0.1}, 'absolute': False}
 		super(PanelDrawer, self).__init__(parent, *args, **kwargs)

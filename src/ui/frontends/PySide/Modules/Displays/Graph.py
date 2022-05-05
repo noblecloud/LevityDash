@@ -3461,7 +3461,7 @@ class Figure(Panel):
 		self.axisTransformed.announce(axis, instant=True)
 
 	@property
-	def parent(self) -> Union['Panel', 'GridScene']:
+	def parent(self) -> Union['Panel', 'LevityScene']:
 		if isinstance(self.parentItem(), QGraphicsItemGroup):
 			return self.parentItem().parentItem()
 		return self.parentItem()

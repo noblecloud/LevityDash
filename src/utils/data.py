@@ -4,8 +4,7 @@ from functools import cached_property
 from dataclasses import asdict, dataclass, is_dataclass
 from json import JSONEncoder
 
-from math import ceil, floor, log10, inf
-from numba import jit
+from math import ceil, floor, inf
 from numpy import ndarray
 from typing import Any, Iterable, List, NamedTuple, Tuple, Union, Callable
 

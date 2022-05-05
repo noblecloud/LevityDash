@@ -128,7 +128,7 @@ class ClockComponent(Label):
 	savable = True
 	defaultMargins = (0, 0, 0, 0)
 
-	def __init__(self, parent: Union['Panel', 'GridScene'], format: str = None, *args, **kwargs):
+	def __init__(self, parent: Union['Panel', 'LevityScene'], format: str = None, *args, **kwargs):
 		if format is not None:
 			self._format = format
 		else:
