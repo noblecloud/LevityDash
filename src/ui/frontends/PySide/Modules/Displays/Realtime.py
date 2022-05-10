@@ -490,7 +490,7 @@ class LockedRealtime(Realtime):
 		painter.translate(rect.center().toPoint())
 		# painter.setTransform(self.transform())
 		# painter.setWorldTransform(self.globalTransform)
-		painter.setRenderHint(QPainter.HighQualityAntialiasing)
+		painter.setRenderHint(QPainter.Antialiasing)
 		opt = QStyleOptionGraphicsItem(15)
 		opt.rect.setRect(*rect.toRect().getCoords())
 		opt.exposedRect.setRect(*rect.toRect().getCoords())

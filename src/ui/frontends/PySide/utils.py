@@ -30,13 +30,13 @@ def itemLoader(parent, item: dict):
 			return Clock(**item)
 	elif itemType in ('panel', 'group'):
 		if Panel.validate(item):
-			Panel(**item)
+			return Panel(**item)
 	elif itemType == 'graph':
 		if GraphPanel.validate(item):
-			GraphPanel(**item)
+			return GraphPanel(**item)
 	elif itemType in ('text', 'editablelabel'):
 		if EditableLabel.validate(item):
-			EditableLabel(**item)
+			return EditableLabel(**item)
 	elif itemType == 'moon':
 		if Moon.validate(item):
 			return Moon(**item)

@@ -14,8 +14,8 @@ from functools import cached_property
 
 from PySide2.QtCore import QEvent, QRect, QRectF, Qt, QTimer, Signal
 from PySide2.QtGui import QIcon, QMouseEvent, QPainter, QPainterPath, QCursor
-from PySide2.QtWidgets import (QAction, QGraphicsItem, QGraphicsPathItem, QGraphicsScene, QGraphicsView,
-                               QMainWindow, QMenu)
+from PySide2.QtWidgets import (QGraphicsItem, QGraphicsPathItem, QGraphicsScene, QGraphicsView,
+                               QMainWindow, QMenu, QAction)
 
 from src.utils import clearCacheAttr
 from src.ui.frontends.PySide.utils import *
@@ -226,7 +226,9 @@ class LevitySceneView(QGraphicsView):
 		# self.graphicsView = QGraphicsView(self)
 		# self.layout().addWidget(self.graphicsView)
 		# self.graphicsView.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-		self.setRenderHint(QPainter.HighQualityAntialiasing)
+		self.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+		self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+		self.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
 		self.graphicsScene = LevityScene(self)
 		self.setScene(self.graphicsScene)
 		self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -268,7 +270,6 @@ class LevitySceneView(QGraphicsView):
 		return super(LevitySceneView, self).eventFilter(obj, event)
 
 	def resizeDoneEvent(self):
-		self.setRenderHint(QPainter.HighQualityAntialiasing, True)
 		self.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 		self.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
 		self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
@@ -294,7 +295,6 @@ class LevitySceneView(QGraphicsView):
 		pass
 
 	def resizeEvent(self, event):
-		self.setRenderHint(QPainter.HighQualityAntialiasing, False)
 		self.setRenderHint(QPainter.RenderHint.Antialiasing, False)
 		self.setRenderHint(QPainter.RenderHint.TextAntialiasing, False)
 		self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
@@ -363,9 +363,9 @@ class LevityMainWindow(QMainWindow):
 			screens = app.screens()
 			if len(screens) == 1:
 				return screens[0]
-			for i, screen in enumerate(screens):
+			for screen in screens:
 				# if the screen is the primary screen, skip it
-				if app.desktop().primaryScreen() == i:
+				if app.primaryScreen() == screen:
 					continue
 				# if the screen is taller than it is wide, skip it
 				if screen.size().height() > screen.size().width():

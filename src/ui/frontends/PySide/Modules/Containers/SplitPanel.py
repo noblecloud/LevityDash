@@ -118,25 +118,25 @@ class SplitPanel(Panel):
 
 		self.splitter.setGeometries()
 
-	def itemChange(self, change, value):
-		if change == QGraphicsItem.ItemChildAddedChange and isinstance(value, Panel):
-			if hasattr(self, 'splitter'):
-				if isinstance(value, Panel):
-					pos = self.mapFromItem(value.previousParent, value.pos())
-					self.placeChild(value, pos)
-					self.geometry.updateSurface()
-		# value.lockedToParent = True
-		if change == QGraphicsItem.ItemChildRemovedChange and isinstance(value, Panel):
-			if hasattr(self, 'splitter'):
-				if self.primary is value:
-					self.splitter.primary = None
-					self.primary = None
-				elif self.secondary is value:
-					self.splitter.secondary = None
-					self.secondary = None
-				self.splitter.setGeometries()
-
-		return super(SplitPanel, self).itemChange(change, value)
+	# def itemChange(self, change, value):
+	# 	if change == QGraphicsItem.ItemChildAddedChange and isinstance(value, Panel):
+	# 		if hasattr(self, 'splitter'):
+	# 			if isinstance(value, Panel):
+	# 				pos = self.mapFromItem(value.previousParent, value.pos())
+	# 				self.placeChild(value, pos)
+	# 				self.geometry.updateSurface()
+	# 	# value.lockedToParent = True
+	# 	if change == QGraphicsItem.ItemChildRemovedChange and isinstance(value, Panel):
+	# 		if hasattr(self, 'splitter'):
+	# 			if self.primary is value:
+	# 				self.splitter.primary = None
+	# 				self.primary = None
+	# 			elif self.secondary is value:
+	# 				self.splitter.secondary = None
+	# 				self.secondary = None
+	# 			self.splitter.setGeometries()
+	# 
+	# 	return super(SplitPanel, self).itemChange(change, value)
 
 	@property
 	def orientation(self):

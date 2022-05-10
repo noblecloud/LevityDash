@@ -1,14 +1,21 @@
 #!/usr/bin/env python
+
 import os
 import signal
 import sys
+
+try:
+	import PySide2
+except ImportError:
+	sys.path.append('/usr/lib/python3/dist-packages')
+	import PySide2
 
 import asyncio
 import qasync
 from pathlib import Path
 from rich.traceback import install
 
-install(show_locals=True, width=120)
+install(show_locals=False, width=120, )
 qasync.logger.setLevel('ERROR')
 
 os.environ['WU_CONFIG_PATH'] = f'{Path.home()}/.config/levity/config.ini'
@@ -24,7 +31,7 @@ def init_app():
 	qasync.QApplication.setAttribute(Qt.AA_DontUseNativeMenuBar, False)
 	# QApplication.setAttribute(Qt.AA_CompressHighFrequencyEvents, False)
 
-	icon = QIcon(Path('src/ui/icon.png').as_posix())
+	icon = QIcon(Path('src/ui/icon512.png').as_posix())
 	qasync.QApplication.setWindowIcon(icon)
 	qasync.QApplication.setApplicationName('LevityDash')
 

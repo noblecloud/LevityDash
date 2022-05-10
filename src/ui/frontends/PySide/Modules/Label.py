@@ -403,15 +403,8 @@ class HiddenLineEdit(QLineEdit):
 class EditableLabel(Label):
 
 	def __init__(self, *args, **kwargs):
-		self.lineEdit = HiddenLineEdit(self)
 		self._manualValue = None
 		super().__init__(*args, **kwargs)
-		proxy = QGraphicsProxyWidget(self)
-		proxy.setWidget(self.lineEdit)
-		self.lineEdit.textChanged.connect(self.textChanged)
-		self.lineEdit.cursorPositionChanged.connect(self.cursorPositionChanged)
-		self.lineEdit.returnPressed.connect(self.doneEditing)
-		self.editTimer = QTimer(interval=3000, timeout=self.doneEditing, singleShot=True)
 		self.setFlag(QGraphicsItem.ItemIsSelectable, True)
 
 		self.setAcceptDrops(True)
@@ -449,7 +442,6 @@ class EditableLabel(Label):
 	# 		self.doneEditing()
 
 	def cursorPositionChanged(self):
-		self.editTimer.start()
 		self.textBox.refresh()
 
 	def textChanged(self, text: str):
@@ -460,10 +452,6 @@ class EditableLabel(Label):
 		self.edit()
 
 	def doneEditing(self):
-		self.editTimer.stop()
-		self.lineEdit.releaseKeyboard()
-		self.lineEdit.releaseMouse()
-		self.lineEdit.clearFocus()
 		self.clearFocus()
 		self.text = self.text.strip()
 		if len(self.text) == 0:
@@ -473,30 +461,21 @@ class EditableLabel(Label):
 
 	@property
 	def text(self):
-		text = self.textBox.text
-		if self.lineEdit.keyboardGrabber() is self.lineEdit:
-			cursorPos = self.lineEdit.cursorPosition()
-			text = list(text)
-			text.insert(cursorPos, '_')
-			text = ''.join(text)
-		return text
+		return self.textBox.text
 
 	@text.setter
 	def text(self, value):
 		self.textBox.value = value
-		self.lineEdit.setText(value)
 
 	@cached_property
 	def contextMenu(self):
 		return EditableLabelContextMenu(self)
 
 	def edit(self):
-		self.lineEdit.grabKeyboard()
 		self.update()
 		self.setFocus(Qt.MouseFocusReason)
 
 	def delete(self):
-		self.editTimer.stop()
 		super(EditableLabel, self).delete()
 
 	@property
@@ -506,7 +485,7 @@ class EditableLabel(Label):
 		return state
 
 
-class TitleLabel(EditableLabel):
+class TitleLabel(Label):
 
 	def __init__(self, *args, **kwargs):
 		kwargs['geometry'] = Geometry(surface=self, size=(1, 0.2), position=Position(0, 0), absolute=False, snapping=False)
