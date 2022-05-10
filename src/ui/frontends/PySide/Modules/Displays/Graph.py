@@ -2,25 +2,18 @@ import re
 from json import loads
 
 import numpy as np
-import scipy as sp
-from copy import copy
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from functools import cached_property
 
-import WeatherUnits
 from itertools import chain, zip_longest
-from PIL import Image
-from PIL.ImageQt import ImageQt
-from PySide2.QtCore import QLineF, QObject, QPoint, QPointF, QRectF, QSize, Qt, QTimer, Signal, Slot
-from PySide2.QtGui import QBrush, QColor, QFocusEvent, QFont, QFontMetricsF, QLinearGradient, QPainter, QPainterPath, QPainterPathStroker, QPen, QPixmap, QPolygonF, QTransform
-from PySide2.QtWidgets import (QGraphicsDropShadowEffect, QGraphicsEffect, QGraphicsItem, QGraphicsItemGroup, QGraphicsLineItem, QGraphicsPathItem,
+from PySide2.QtCore import QLineF, QObject, QPoint, QPointF, QRectF, Qt, QTimer, Signal, Slot
+from PySide2.QtGui import QBrush, QColor, QFocusEvent, QLinearGradient, QPainter, QPainterPath, QPainterPathStroker, QPen, QPixmap, QPolygonF, QTransform
+from PySide2.QtWidgets import (QGraphicsDropShadowEffect, QGraphicsItem, QGraphicsItemGroup, QGraphicsLineItem, QGraphicsPathItem,
                                QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsSceneDragDropEvent, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent, QGraphicsSceneWheelEvent, QToolTip)
-from qasync import QApplication
 from scipy.constants import golden
-from scipy.interpolate import CubicSpline, interp1d
-import scipy.signal
+from scipy.interpolate import CubicSpline
 from typing import Callable, ClassVar, Iterable, List, Optional, overload, Set, Tuple, Union, Any, Type, TypeVar, Dict
 from uuid import uuid4
 from WeatherUnits import Measurement, Temperature, Probability
@@ -30,11 +23,11 @@ from WeatherUnits.length import Centimeter, Inch, Millimeter
 from yaml import SafeDumper
 
 from src.plugins.plugin import Container
-from src.plugins.observation import MeasurementTimeSeries, RealtimeSource, TimeAwareValue, TimeSeriesItem
+from src.plugins.observation import MeasurementTimeSeries, TimeAwareValue, TimeSeriesItem
 from src.ui.frontends.PySide import app, colorPalette
 
 from src.plugins.categories import CategoryItem
-from src.ui.colors import kelvinToQColor, rgbHex
+from src.ui.colors import rgbHex
 from src.plugins.dispatcher import ValueDirectory, ForecastPlaceholderSignal, MultiSourceContainer, MonitoredKey
 from src.utils.log import LevityGUILog
 from src.ui.frontends.PySide.Modules.DateTime import baseClock, baseClock as ClockSignals
@@ -50,7 +43,6 @@ from src.utils.data import AxisMetaData, DataTimeRange, findPeaksAndTroughs, nor
 from src.utils.shared import autoDType, clamp, clearCacheAttr, closestCeil, disconnectSignal, roundToPeriod, timestampToTimezone
 from src.utils.geometry import AlignmentFlag, Axis, Margins
 from time import time
-from src.ui.fonts import defaultFont, compactFont
 
 log = LevityGUILog.getChild(__name__)
 
@@ -1595,70 +1587,70 @@ class LinePlot(Plot):
 # super(LinePlot, self).paint(painter, option, widget)
 
 
-class BackgroundImage(QGraphicsPixmapItem):
-
-	def __init__(self, parent: 'GraphPanel', data: np.array, *args, **kwargs):
-		self._data = data
-		self._parent = parent
-		super(BackgroundImage, self).__init__(*args, **kwargs)
-		self.setPixmap(self.backgroundImage())
-
-	def updateItem(self):
-		print('update background image')
-		self.setPixmap(self.backgroundImage())
-
-	@property
-	def parent(self):
-		return self._parent
-
-	def backgroundImage(self) -> QPixmap:
-		LightImage = self.image()
-		img = Image.fromarray(np.uint8(LightImage)).convert('RGBA')
-		img = img.resize((self.parent.width, self.parent.height))
-		qim = ImageQt(img)
-
-	def gen(self, size):
-		print('gen image')
-		l = self.parent.height
-
-		u = int(l*.2)
-		# up = np.linspace((-np.pi / 2)+2, np.pi * .5, 20)
-		# y2 = np.linspace(np.pi * .5, np.pi * .5, int(u / 2))
-		# down = np.linspace(np.pi * .5, np.pi * 1.5, int(u * 2.5))
-
-		up = np.logspace(.95, 1, 5)
-		down = np.logspace(1, 0, u, base=10)
-
-		y = normalize(np.concatenate((up, down)))
-		x = np.linspace(0, 1, 272)
-		y2 = np.zeros(size)
-		y = np.concatenate((y, y2))
-		return y
-
-	def image(self):
-		raw = normalize(self._data)
-		raw = np.outer(np.ones(len(raw)), raw)
-		# raw = np.flip(raw)
-
-		fade = .3
-
-		# raw = self.solarColorMap(raw)
-		scale = 1/len(raw)
-		rr = self.gen(len(raw))
-		for x in range(0, len(raw)):
-			raw[x] = raw[x]*rr[x]
-		# if x < len(raw) * .1:
-		# 	raw[x] *= scale * x *10
-		# if x < len(raw) * fade:
-		# 	raw[x] *= 1 - (scale * x) * (1/fade)
-		# else:
-		# 	raw[x] = 0
-
-		opacity = .9
-		raw *= 255*opacity
-		raw = raw.astype(np.uint8)
-
-		return raw
+# class BackgroundImage(QGraphicsPixmapItem):
+#
+# 	def __init__(self, parent: 'GraphPanel', data: np.array, *args, **kwargs):
+# 		self._data = data
+# 		self._parent = parent
+# 		super(BackgroundImage, self).__init__(*args, **kwargs)
+# 		self.setPixmap(self.backgroundImage())
+#
+# 	def updateItem(self):
+# 		print('update background image')
+# 		self.setPixmap(self.backgroundImage())
+#
+# 	@property
+# 	def parent(self):
+# 		return self._parent
+#
+# 	def backgroundImage(self) -> QPixmap:
+# 		LightImage = self.image()
+# 		img = Image.fromarray(np.uint8(LightImage)).convert('RGBA')
+# 		img = img.resize((self.parent.width, self.parent.height))
+# 		qim = ImageQt(img)
+#
+# 	def gen(self, size):
+# 		print('gen image')
+# 		l = self.parent.height
+#
+# 		u = int(l*.2)
+# 		# up = np.linspace((-np.pi / 2)+2, np.pi * .5, 20)
+# 		# y2 = np.linspace(np.pi * .5, np.pi * .5, int(u / 2))
+# 		# down = np.linspace(np.pi * .5, np.pi * 1.5, int(u * 2.5))
+#
+# 		up = np.logspace(.95, 1, 5)
+# 		down = np.logspace(1, 0, u, base=10)
+#
+# 		y = normalize(np.concatenate((up, down)))
+# 		x = np.linspace(0, 1, 272)
+# 		y2 = np.zeros(size)
+# 		y = np.concatenate((y, y2))
+# 		return y
+#
+# 	def image(self):
+# 		raw = normalize(self._data)
+# 		raw = np.outer(np.ones(len(raw)), raw)
+# 		# raw = np.flip(raw)
+#
+# 		fade = .3
+#
+# 		# raw = self.solarColorMap(raw)
+# 		scale = 1/len(raw)
+# 		rr = self.gen(len(raw))
+# 		for x in range(0, len(raw)):
+# 			raw[x] = raw[x]*rr[x]
+# 		# if x < len(raw) * .1:
+# 		# 	raw[x] *= scale * x *10
+# 		# if x < len(raw) * fade:
+# 		# 	raw[x] *= 1 - (scale * x) * (1/fade)
+# 		# else:
+# 		# 	raw[x] = 0
+#
+# 		opacity = .9
+# 		raw *= 255*opacity
+# 		raw = raw.astype(np.uint8)
+#
+# 		return raw
 
 
 @Slot()
@@ -1679,6 +1671,8 @@ class PlotText(Text):
 		if isinstance(self.parent, GraphItemData):
 			self.setParentItem(self.parent.figure)
 			self.graph = self.parent.figure.graph
+		elif graph := kwargs.get('graph', None):
+			self.graph = graph
 		else:
 			pass
 		self.setGraphicsEffect(PlotText.shadow())
@@ -1708,7 +1702,7 @@ class PlotText(Text):
 	def limitRect(self) -> QRectF:
 		global qApp
 		heightInchs = self.idealTextSize.inch
-		dpi = qApp.desktop().physicalDpiY()
+		dpi = qApp.primaryScreen().physicalDotsPerInch()
 		physicalHeight = heightInchs*dpi  # * t.inverted()[0].m11()
 
 		wt = self.worldTransform()
@@ -1749,9 +1743,10 @@ class PeakTroughLabel(PlotText):
 
 	def __init__(self, parent: 'PlotLabels', value: 'PeakTroughData'):
 		self.peakList = parent
-		super(PeakTroughLabel, self).__init__(parent=parent.data)
+		super(PeakTroughLabel, self).__init__(parent=parent.labels, graph=parent.data.graph)
 		self.value = value
 		# self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
+		parent.labels.addToGroup(self)
 		self.setParentItem(parent.labels)
 
 	# def updateTransform(self):
@@ -3405,7 +3400,8 @@ class Figure(Panel):
 			kwargs['geometry'] = {'size': {'width': 1.0, 'height': 1.0}, 'position': {'x': 0, 'y': 0}, 'absolute': False}
 		self.syncTimer = QTimer(singleShot=False, interval=5000)
 		self.axisTransformed = AxisSignal(self)
-		super(Figure, self).__init__(parent, margins=margins, **kwargs)
+		super(Figure, self).__init__(parent=parent, margins=margins, **kwargs)
+		self._parent = parent
 
 		self.setFlag(QGraphicsItem.ItemIsMovable, False)
 		# self.setFlag(QGraphicsItem.ItemHasNoContents, True)
@@ -3460,11 +3456,12 @@ class Figure(Panel):
 		self._transform = None
 		self.axisTransformed.announce(axis, instant=True)
 
-	@property
+	@Panel.parent.getter
 	def parent(self) -> Union['Panel', 'LevityScene']:
-		if isinstance(self.parentItem(), QGraphicsItemGroup):
-			return self.parentItem().parentItem()
-		return self.parentItem()
+		parent = self.parentItem() or super().parent
+		if isinstance(parent, QGraphicsItemGroup):
+			return parent.parentItem()
+		return parent
 
 	@property
 	def t(self) -> QTransform:

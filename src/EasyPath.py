@@ -115,6 +115,11 @@ class EasyPath:
 			return self
 		return {item.name: item if item.isFile else item.asDict(recursive=recursive, depth=depth - 1) for item in self.ls() if not item.name.startswith('.') or hiddenFiles}
 
+	def __contains__(self, item):
+		if self.isDir:
+			if isinstance(item, str) and any(i not in item for i in ('.', '..', '/', '\\')):
+				return self.path.joinpath(item).exists()
+
 
 class EasyPathFile(EasyPath):
 	def __init__(self, basePath: str | Path):

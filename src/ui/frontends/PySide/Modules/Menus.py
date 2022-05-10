@@ -6,7 +6,13 @@ from pprint import pprint
 from typing import Any, Type, Union
 
 from PySide2.QtCore import QPointF, Qt, Slot
-from PySide2.QtWidgets import QActionGroup, QMenu
+
+try:
+	from PySide2.QtGui import QActionGroup
+except ImportError:
+	from PySide2.QtWidgets import QActionGroup
+
+from PySide2.QtWidgets import QMenu
 
 from src.config import userConfig
 from src.plugins import Plugins

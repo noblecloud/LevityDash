@@ -6,12 +6,11 @@ import numpy as np
 import pylunar
 from PySide2.QtCore import QPointF, Qt, QTimer, Signal
 from PySide2.QtGui import QBrush, QColor, QPainter, QPainterPath, QPen, QTransform
-from PySide2.QtWidgets import QApplication, QGraphicsPathItem, QGraphicsRectItem, QGraphicsBlurEffect, QGraphicsItem
+from PySide2.QtWidgets import QGraphicsPathItem, QGraphicsItem, QGraphicsDropShadowEffect
 from pysolar import solar
 
 from src.ui.frontends.PySide.utils import colorPalette
 from src.ui.frontends.PySide.Modules.Panel import Panel
-from src.ui.frontends.PySide.utils import addCrosshair
 from src.utils.shared import clearCacheAttr
 from src.config import userConfig
 
@@ -138,7 +137,6 @@ class MoonFront(QGraphicsPathItem):
 		self.setTransformOriginPoint(self.parentItem().rect().center())
 
 	def paint(self, painter, option, widget):
-		# addCrosshair(painter, color=Qt.green, size=10, width=2)
 		tW = painter.worldTransform()
 		scale = min(tW.m11(), tW.m22())
 		tW.scale(1/tW.m11(), 1/tW.m22())
@@ -146,29 +144,21 @@ class MoonFront(QGraphicsPathItem):
 		painter.setWorldTransform(tW, False)
 		super().paint(painter, option, widget)
 
-
 # def paint(self, painter, option, widget):
 # 	# painter.drawPath(self.path())
 # 	super(MoonFront, self).paint(painter, option, widget)
 
 
-class MoonGlowEffect(QGraphicsBlurEffect):
-	def __init__(self):
+class MoonGlowEffect(QGraphicsDropShadowEffect):
+	def __init__(self, parent):
 		super().__init__(None)
-		self.setBlurRadius(10)
-		# self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations, True)
-		self.setBlurHints(QGraphicsBlurEffect.QualityHint)
+		self.surface = parent
+		self.setBlurRadius(self.surface.parentItem().radius)
+		self.setColor(QColor(255, 255, 255, 255))
+		self.setOffset(QPointF(0, 0))
 
 	def draw(self, painter: QPainter):
-		tW = painter.worldTransform()
-		painter.setRenderHint(QPainter.HighQualityAntialiasing)
-		scale = min(tW.m11(), tW.m22())
-		tW.scale(1/tW.m11(), 1/tW.m22())
-		tW.scale(scale, scale)
-		painter.setTransform(tW, False)
-
-		self.drawSource(painter)
-		painter.setCompositionMode(QPainter.CompositionMode_Lighten)
+		painter.setRenderHint(QPainter.Antialiasing, True)
 		super().draw(painter)
 
 
@@ -192,7 +182,7 @@ class Moon(Panel):
 		self.moonFull.setParentItem(self)
 		self.moonPath.setParentItem(self)
 		self.moonPath.setPos(self.boundingRect().center())
-		self.moonPath.setGraphicsEffect(MoonGlowEffect())
+		self.moonPath.setGraphicsEffect(MoonGlowEffect(self.moonPath))
 
 		# Build timer
 		self.timer = QTimer()

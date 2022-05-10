@@ -9,6 +9,8 @@ def recurseFonts(path):
 	fonts = []
 	for i in path.ls():
 		if i.path.is_dir():
+			if 'disabled' in i:
+				continue
 			fonts += recurseFonts(i)
 		elif i.path.is_file() and i.suffix in ['.ttf', '.otf']:
 			fonts.append(i)

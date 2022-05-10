@@ -1327,7 +1327,7 @@ class Margins(MultiDimension, dimensions=('left', 'top', 'right', 'bottom'), sep
 		...
 
 	def __init__(self, surface: _Panel, *args, **kwargs):
-		assert isinstance(surface, _Panel)
+		# assert isinstance(surface, QGraphicsItem)
 		self.surface: 'Panel' = surface
 		super().__init__(*args, **kwargs)
 

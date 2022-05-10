@@ -9,7 +9,6 @@ import logging
 import qasync
 from rich.console import Console
 from rich.logging import RichHandler
-from shiboken2 import shiboken2
 
 
 class _LevityLogger(logging.Logger):
@@ -32,12 +31,7 @@ class _LevityLogger(logging.Logger):
 		handler = RichHandler(
 
 			console=console,
-			log_time_format="%H:%M:%S",
-			# rich_tracebacks=True,
-			# tracebacks_width=console.width,
-			# tracebacks_extra_lines=3,
-			# tracebacks_show_locals=True,
-			# tracebacks_suppress=[asyncio, shiboken2, qasync],
+			log_time_format="%H:%M:%S"
 
 		)
 		self.addHandler(handler)

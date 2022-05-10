@@ -16,7 +16,7 @@ from PySide2.QtWidgets import (QApplication, QFileDialog, QGraphicsBlurEffect, Q
                                QGraphicsSceneHoverEvent,
                                QGraphicsSceneMouseEvent,
                                QMessageBox,
-                               QStyleOptionGraphicsItem)
+                               QStyleOptionGraphicsItem, QGraphicsRectItem)
 
 from src.plugins.categories import CategoryItem
 from src.Geometry.Grid import GridItem, Grid
@@ -69,12 +69,14 @@ class Panel(_Panel):
 	# section Panel init
 	def __init__(self, parent: 'Panel', *args, **kwargs):
 		super(Panel, self).__init__()
+
 		self.__hold = False
 		self._contextMenuOpen = False
 		self.uuid = kwargs.get('uuid', uuid4())
 		if isinstance(self.uuid, str):
 			self.uuid = UUID(self.uuid, version=4)
 		self.__init_defaults__()
+		self.setParentItem(parent if isinstance(parent, QGraphicsItem) else None)
 		self.__init_args(parent, *args, **kwargs)
 		self.geometry.updateSurface(set=False)
 		self.previousParent = self.parent
@@ -97,10 +99,8 @@ class Panel(_Panel):
 	def __init_args(self, parent, *args, **kwargs):
 		kwargs['parent'] = parent
 		kwargs = self.__parse_args__(*args, **kwargs)
-		self.geometry = kwargs.get('geometry', None)
-		self.geometry.updateSurface(set=False)
 
-		if 'scene' in kwargs and not parent:
+		if 'scene' in kwargs and (not parent or kwargs['scene'] == parent):
 			scene = kwargs['scene']
 			if isinstance(scene, Callable):
 				scene = scene()
@@ -111,8 +111,12 @@ class Panel(_Panel):
 			self._scene = parent
 		elif isinstance(parent, QGraphicsItem):
 			self.setParentItem(parent)
+		# parent.scene().addItem(self)
 
 		self.margins = kwargs.get('margins', None)
+
+		self.geometry = kwargs.get('geometry', None)
+		self.geometry.updateSurface(set=False)
 
 		if 'grid' in kwargs:
 			self.grid = kwargs.get('grid', None)
@@ -179,21 +183,6 @@ class Panel(_Panel):
 		self.setGraphicsEffect(selectionEffect)
 		self._highlighted = False
 
-		if self.debug:
-			self.visualAid = QGraphicsPathItem()
-			# try:
-			# 	self.visualAid.setParentItem(self.scene().base)
-			# except AttributeError:
-			self.visualAid.setParentItem(self)
-			pen = self.visualAid.pen()
-			self.color = QColor(colors.randomColor())
-			pen.setColor(self.color)
-			self.color.setAlpha(100)
-			pen.setWidth(5)
-			self.visualAid.setPen(pen)
-			self.visualAid.setZValue(80)
-			self.visualAid.setBrush(Qt.NoBrush)
-
 	def __eq__(self, other):
 		if isinstance(other, Panel):
 			return self.uuid == other.uuid
@@ -220,10 +209,15 @@ class Panel(_Panel):
 			self._childIsMoving = value
 			self.update()
 
-
 	def debugBreak(self):
 		state = self.state
 		print(pprint(self.state))
+
+	def isValid(self) -> bool:
+		return self.rect().isValid()
+
+	def size(self) -> QSizeF:
+		return self.rect().size()
 
 	@property
 	def name(self):
@@ -939,7 +933,6 @@ class Panel(_Panel):
 		else:
 			return None
 
-
 	# return rect, p
 
 	def similarEdges(self, other: 'Panel', rect: QRectF = None, singleEdge: LocationFlag = None):
@@ -1219,13 +1212,13 @@ class Panel(_Panel):
 					g = self.geometry.absoluteSize() / value.geometry.absoluteSize()
 					self.geometry.setRelativeSize(g)
 				self.previousParent = self.parent
-			self._parent = value
+			self.parent = value
 
 		elif change == QGraphicsItem.ItemParentHasChanged:
 
 			if hasattr(self.previousParent, 'childIsMoving'):
 				self.previousParent.childIsMoving = False
-			self._parent = value
+			self.parent = value
 
 			if hasattr(value, 'childIsMoving') and QApplication.mouseButtons() & Qt.LeftButton:
 				value.childIsMoving = True
@@ -1254,6 +1247,12 @@ class Panel(_Panel):
 			if parent is not None:
 				return parent
 		return self.scene()
+
+	@parent.setter
+	def parent(self, value: Union['Panel', 'LevityScene']):
+		if self._parent is not value:
+			self._parent = value
+		# QGraphicsRectItem.setParentItem(self, value)
 
 	def updateFromGeometry(self):
 		self.setRect(self.geometry.absoluteRect())
@@ -1494,7 +1493,7 @@ class Panel(_Panel):
 		pix.fill(Qt.transparent)
 		painter = QPainter(pix)
 		pix.initPainter(painter)
-		painter.setRenderHint(QPainter.HighQualityAntialiasing)
+		painter.setRenderHint(QPainter.Antialiasing)
 		opt = QStyleOptionGraphicsItem()
 		self.paint(painter, opt, None)
 		for child in self.childItems():

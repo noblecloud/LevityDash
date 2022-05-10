@@ -46,7 +46,9 @@ class Text(QGraphicsPathItem):
 		font: Union[QFont, str] = None,
 		filters: Optional[set[str]] = None,
 		modifier: Optional[dict] = None,
-		color: QColor = None):
+		color: QColor = None,
+		**kwargs
+	):
 		self._font = None
 		self.__customFilterFunction = None
 		self.__enabledFilters = set()
@@ -94,9 +96,7 @@ class Text(QGraphicsPathItem):
 
 	@property
 	def minimumFontSize(self) -> float:
-		dpi = (qApp.activeWindow().screen().logicalDotsPerInch()
-		       if qApp.activeWindow() is not None
-		       else qApp.desktop().logicalDpiY())
+		dpi = qApp.primaryScreen().logicalDotsPerInchY()
 		return max(float(self.minimumDisplayHeight.inch*dpi), 5.0)
 
 	@property
