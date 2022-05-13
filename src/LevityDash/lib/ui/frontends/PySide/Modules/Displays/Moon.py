@@ -3,11 +3,12 @@ from functools import cached_property
 from typing import Iterable, Tuple
 
 import numpy as np
-import pylunar
+from pylunar import MoonInfo as _MoonInfo
 from PySide2.QtCore import QPointF, Qt, QTimer, Signal
 from PySide2.QtGui import QBrush, QColor, QPainter, QPainterPath, QPen, QTransform
 from PySide2.QtWidgets import QGraphicsPathItem, QGraphicsItem, QGraphicsDropShadowEffect
 from pysolar import solar
+from ephem import previous_new_moon, next_new_moon
 
 from LevityDash.lib.ui.frontends.PySide.utils import colorPalette
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
@@ -18,6 +19,17 @@ golden = (1 + np.sqrt(5))/2
 dark = QColor(28, 29, 31, 255)
 
 __all__ = ["Moon"]
+
+
+class MoonInfo(_MoonInfo):
+	"""
+	Class to provide fractional age until pull request for pylunmar is accepted and merged
+	"""
+
+	def fractional_age(self) -> float:
+		prev_new = previous_new_moon(self.observer.date)
+		next_new = next_new_moon(self.observer.date)
+		return (self.observer.date - prev_new)/(next_new - prev_new)
 
 
 class ThreeDimensionalPoint:
@@ -145,11 +157,6 @@ class MoonFront(QGraphicsPathItem):
 		super().paint(painter, option, widget)
 
 
-# def paint(self, painter, option, widget):
-# 	# painter.drawPath(self.path())
-# 	super(MoonFront, self).paint(painter, option, widget)
-
-
 class MoonGlowEffect(QGraphicsDropShadowEffect):
 	def __init__(self, parent):
 		super().__init__(None)
@@ -209,8 +216,8 @@ class Moon(Panel):
 		return MoonFront(self)
 
 	@cached_property
-	def _moonInfo(self) -> pylunar.MoonInfo:
-		return pylunar.MoonInfo(self.deg2dms(self.lat), self.deg2dms(self.lon))
+	def _moonInfo(self) -> MoonInfo:
+		return MoonInfo(self.deg2dms(self.lat), self.deg2dms(self.lon))
 
 	@property
 	def visibleWidth(self):
@@ -237,8 +244,6 @@ class Moon(Panel):
 		clearCacheAttr(self, 'pathPoints')
 		self.moonPath.draw()
 		self.moonFull.draw()
-
-	# self.moonPath.setRotation(self.getAngle())
 
 	def getAngle(self) -> float:
 		"""https://stackoverflow.com/a/45029216/2975046"""
@@ -276,63 +281,3 @@ class Moon(Panel):
 		if effect is not None:
 			effect.updateBoundingRect()
 			effect.update()
-
-
-# def paint(self, painter: QPainter, option, widget):
-# 	painter.setPen(Qt.red)
-# 	painter.drawRect(self.rect())
-# 	w = self.rect().width() / 2
-# 	one = QPointF(w, 0)
-# 	two = QPointF(w, self.rect().height())
-# 	painter.drawLine(one, two)
-# 	super(Moon, self).paint(painter, option, widget)
-
-
-if __name__ == '__main__':
-	from PySide2.QtWidgets import QApplication
-	from PySide2.QtCore import QSize
-	from LevityDash.lib import app
-	from GridView import TestWindow
-	import sys
-
-	QApplication.setAttribute(Qt.AA_UseDesktopOpenGL)
-	# app = QApplication(sys.argv)
-
-	window = TestWindow()
-
-	# window.scene().addItem(rect)
-	# rect.setPos(100, 100)
-	# marginHandles = Handles(rect)
-	# d = DrawerHandle(rect)
-	moon = Moon(parent=window.graphicsScene.base)
-	# moon.setParentItem()
-	window.show()
-
-	g = window.geometry()
-	screen = app.screens()[-1].geometry()
-	g.setWidth(screen.width()*0.8)
-	g.setHeight(screen.height()*0.8)
-	g.moveCenter(screen.center())
-
-	window.setGeometry(g)
-
-	g = window.geometry()
-	g.setSize(QSize(800, 600))
-	# g.moveCenter(app.screens()[1].geometry().center())
-	window.setGeometry(g)
-	window.show()
-	# marginHandles.update()
-	sys.exit(app.exec_())
-
-	# window.phase = 2
-	display_monitor = 1
-	# monitor = QDesktopWidget().screenGeometry(display_monitor)
-	window.move(monitor.left(), monitor.top())
-	# SECOND_DISPLAY = True
-	# if SECOND_DISPLAY:
-	# 	display = app.screens()[1]
-	# 	window.setScreen(display)
-	# 	window.move(display.geometry().x() + 200, display.geometry().y() + 200)
-	window.show()
-
-	sys.exit(app.exec_())

@@ -1,5 +1,4 @@
 import asyncio
-import platform
 from datetime import timedelta
 from types import FunctionType
 from typing import Callable, Dict, Optional, Union

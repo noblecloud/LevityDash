@@ -1,4 +1,3 @@
-import asyncio
 import os
 import shutil
 from collections import deque
@@ -6,7 +5,6 @@ from sys import argv, gettrace
 
 import logging
 
-import qasync
 from rich.console import Console
 from rich.logging import RichHandler
 
