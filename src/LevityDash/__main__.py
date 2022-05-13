@@ -20,7 +20,16 @@ qasync.logger.setLevel('ERROR')
 
 os.environ['WU_CONFIG_PATH'] = f'{Path.home()}/.config/levity/config.ini'
 
-signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+def signalQuit(sig, frame):
+	if sig == signal.SIGINT:
+		print('Closing...')
+		qasync.QApplication.instance().quit()
+		remainingFutures = len(asyncio.tasks.all_tasks(asyncio.get_event_loop()))
+		print(f'Waiting for {remainingFutures} tasks to finish...')
+
+
+signal.signal(signal.SIGINT, signalQuit)
 
 
 def init_app():
@@ -47,7 +56,6 @@ async def main():
 	window = lib.ui.frontends.PySide.LevityMainWindow()
 
 	def close_future(future, loop):
-		print('####### close_future #######')
 		loop.call_later(10, future.cancel)
 		future.cancel()
 

@@ -748,7 +748,6 @@ class Panel(_Panel):
 			    or self.parent is self.scene().base
 			    or self.hasFocus()
 			    or self.siblingHasFocus()) and self.canFocus:
-				print(f'clicked {self} which is a {type(self)}')
 				self.scene().clearSelection()
 				self.setSelected(True)
 				mouseEvent.accept()
@@ -1495,7 +1494,6 @@ class Panel(_Panel):
 		return pix
 
 	def recursivePaint(self, painter: QPainter):
-		print(f'{self.__class__.__name__}::recursivePaint')
 		t = QTransform.fromTranslate(*self.scenePos().toPoint().toTuple())
 		# if hasattr(self.parentItem(), 'globalTransform'):
 		# 	painter.setTransform(self.parentItem().globalTransform)

@@ -527,7 +527,6 @@ class Grid(QObject):
 				if remining:
 					i = min(remining)
 				else:
-					print('shrink')
 					if not gridItem.canShrink:
 						break
 					gridItem.shrink()

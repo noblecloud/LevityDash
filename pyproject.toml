@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "LevityDash"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 description = "A lightweight, desktop native, multi-source dashboard for macOS, Windows and Linux"
 authors = ["noblecloud <git@noblecloud.io>"]
 license = "MIT"

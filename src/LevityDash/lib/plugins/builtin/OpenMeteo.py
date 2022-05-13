@@ -186,7 +186,7 @@ class OpenMeteo(REST, realtime=False, hourly=True, daily=True):
 	async def getForecast(self):
 		data = await self.getData(self.urls.forecast)
 		if data is None:
-			print('OpenMeteo: No data received')
+			self.pluginLog.warn('OpenMeteo: No data received')
 			return
 		data['source'] = [self.name, self.urls.forecast]
 		await self.hourly.asyncUpdate(data)

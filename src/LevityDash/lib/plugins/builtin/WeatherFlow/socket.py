@@ -151,7 +151,6 @@ class Light(UDPMessage):
 		# write message to file
 		with open(f'{config.dataDir}/light.json', 'a') as f:
 			f.write(f'{udpData}\n')
-		print(self)
 		delattr(self, 'atlas')
 
 

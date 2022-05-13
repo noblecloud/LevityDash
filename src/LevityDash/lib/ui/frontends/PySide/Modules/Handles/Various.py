@@ -104,11 +104,9 @@ class DrawerHandle(Handle):
 		return super(DrawerHandle, self).itemChange(change, value)
 
 	def close(self):
-		print('close')
 		self.setPos(self.pos().x(), 0)
 
 	def open(self):
-		print('open')
 		self.setPos(self.pos().x(), self.parent.rect().height())
 		self.hideTimer.start()
 
