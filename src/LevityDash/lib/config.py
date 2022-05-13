@@ -97,12 +97,9 @@ class LevityConfig(ConfigParser):
 
 	@cached_property
 	def rootPath(self) -> EasyPath.EasyPath:
-		path = Path(__file__).parent
-		while path is not None and not 'levity.py' in [x.name for x in path.iterdir()]:
-			if path.parent.owner() == 'root':
-				return EasyPath.EasyPath(path)
-			path = path.parent
-		return EasyPath.EasyPath(path)
+		from LevityDash import __lib__
+		breakpoint()
+		return EasyPath.EasyPath(__lib__.parent)
 
 	def save(self):
 		with self.path.path.open('w') as f:
