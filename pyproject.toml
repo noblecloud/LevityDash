@@ -5,8 +5,19 @@ description = "dashboard"
 authors = ["Bryan Neal Garrison <git@noblecloud.io>"]
 license = "MIT"
 
+include = ["LevityDash/lib/"]
+packages = [
+
+	{ include = 'LevityDash', from = 'src' },
+	#	{ include = 'LevityDash/lib', from = 'src' }
+]
+
+[tool.poetry.scripts]
+#dddd = 'poetry.console:LevityDash'
+LevityDash = 'LevityDash:__main__.run'
+
 [tool.poetry.dependencies]
-python = ">=3.10,<3.11"
+python = ">=3.10,<3.12"
 pylunar = { git = "https://github.com/noblecloud/pylunar.git" }
 WeatherUnits = "^0.5.2"
 numpy = "^1.18.0"
@@ -21,9 +32,11 @@ rich = "^12.3.0"
 aiohttp = "^3.8.1"
 PySide2 = { version = "^5.15.2", markers = "platform_machine != 'aarch64'" }
 
+
 [tool.poetry.dev-dependencies]
-PyInstaller = ">=5.0"
+pyinstaller = "^5.0.1"
+certifi = "^2021.10.8"
 
 [build-system]
-requires = ["poetry-core>=1.0.0, PyInstaller>=5.0", "certifi = ^2021.10.8"]
+requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
