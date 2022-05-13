@@ -38,7 +38,7 @@ exe = EXE(
 	argv_emulation=False,
 	target_arch=None,
 	codesign_identity=environ['CODE_SIGN_IDENTITY'],
-	entitlements_file='build/entitlements.plist',
+	entitlements_file='build-to-app/entitlements.plist',
 	icon='macOS.icns',
 )
 coll = COLLECT(
@@ -56,7 +56,7 @@ app = BUNDLE(
 	name='LevityDash.app',
 	icon='macOS.icns',
 	bundle_identifier='dev.noblecloud.levity',
-	version='0.1.0a',
+	version='0.1.0b4',
 	info_plist={
 		'NSBluetoothAlwaysUsageDescription':     'LevityDash would like to use your bluetooth for connecting to devices',
 		'NSBluetoothPeripheralUsageDescription': 'LevityDash would like to use your bluetooth for connecting to devices',
