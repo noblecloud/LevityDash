@@ -1,7 +1,7 @@
 from functools import cached_property
 from typing import Any, Callable, Optional
 
-from PySide2.QtCore import QPointF, QRectF, Qt, QTimer
+from PySide2.QtCore import QPointF, QRectF, Qt, QTimer, QRect, QPoint
 from PySide2.QtGui import QPainter, QPainterPath, QPen
 from PySide2.QtWidgets import QApplication, QGraphicsItem, QGraphicsPathItem, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent
 
@@ -155,18 +155,28 @@ class HoverArea(QGraphicsPathItem):
 		visible: bool = False,
 		enterAction: Callable = None,
 		exitAction: Callable = None,
+		moveAction: Callable = None,
 		alignment: Optional[LocationFlag] = None,
-		position: Optional[LocationFlag] = None):
+		position: Optional[LocationFlag] = None,
+		rect: Optional[QRectF] = None,
+		offset: Optional[QPointF] = None,
+		ignoredEdges: Optional[LocationFlag] = None,
+	):
 		super(HoverArea, self).__init__(None)
+		self.ignoredEdges = ignoredEdges
+		if offset is None:
+			offset = QPointF(0, 0)
+		self.offset = offset
 		self.alignment = alignment
 		self.position = position
 		self.parent = parent
 		self.parent.scene().addItem(self)
 		self.setZValue(parent.zValue() + 10)
-		self.size = size
+		self.size = rect or size
 		self.visible = visible
 		self._enterAction = enterAction
 		self._exitAction = exitAction
+		self._moveAction = moveAction
 		self.setPath(self._path)
 		self.setAcceptHoverEvents(True)
 		self.setFlag(self.ItemIsMovable, False)
@@ -174,25 +184,36 @@ class HoverArea(QGraphicsPathItem):
 		self.setAcceptedMouseButtons(Qt.NoButton)
 		self.update()
 
-		if self.visible:
-			color = colorPalette.button().color()
-			color.setAlpha(200)
-			self.setBrush(color)
-			self.setPen(Qt.NoPen)
-		else:
-			self.setBrush(Qt.NoBrush)
-			self.setPen(Qt.NoPen)
+	def testIgnoredEdges(self, pos: QPointF) -> bool:
+		if self.ignoredEdges:
+			if pos.y() < self.boundingRect().top() and self.ignoredEdges & LocationFlag.Top:
+				return True
+			if pos.y() > self.boundingRect().bottom() and self.ignoredEdges & LocationFlag.Bottom:
+				return True
+			if pos.x() < self.boundingRect().left() and self.ignoredEdges & LocationFlag.Left:
+				return True
+			if pos.x() > self.boundingRect().right() and self.ignoredEdges & LocationFlag.Right:
+				return True
+		return False
 
 	def hoverEnterEvent(self, event: QGraphicsSceneHoverEvent) -> None:
-		if self._enterAction:
+		if self.testIgnoredEdges(event.pos()):
+			return
+		if self._enterAction and self.isEnabled():
 			self._enterAction()
 
 	def hoverLeaveEvent(self, event: QGraphicsSceneHoverEvent) -> None:
-		if self._exitAction:
+		if self.testIgnoredEdges(event.pos()):
+			return
+		if self._exitAction and self.isEnabled():
 			self._exitAction()
 
+	def hoverMoveEvent(self, event: QGraphicsSceneHoverEvent) -> None:
+		if self._moveAction and self.isEnabled():
+			self._moveAction()
+
 	def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
-		if self._enterAction:
+		if self._enterAction and self.isEnabled():
 			self._enterAction()
 
 	@property
@@ -202,20 +223,33 @@ class HoverArea(QGraphicsPathItem):
 		align = self.alignment
 		size = self.size
 
-		if align.isCentered:
-			x = -size/2
-			y = -size/2
+		if isinstance(size, int):
+			x, y = 0, 0
+			if align.isCentered:
+				x = -size/2
+				y = -size/2
+			if align.isTop:
+				y = 0
+			elif align.isBottom:
+				y = -size
+			if align.isLeft:
+				x = 0
+			elif align.isRight:
+				x = -size
+			path.addRect(QRectF(x, y, self.size, self.size))
 
-		if align.isTop:
-			y = 0
-		elif align.isBottom:
-			y = -size
-		if align.isLeft:
-			x = 0
-		elif align.isRight:
-			x = -size
-
-		path.addRect(QRectF(x, y, self.size, self.size))
+		elif isinstance(size, (QRect, QRectF)):
+			if align.isCentered:
+				size.moveCenter(QPoint(0, 0))
+			if align.isTop:
+				size.moveBottom(0)
+			elif align.isBottom:
+				size.moveTop(0)
+			if align.isLeft:
+				size.moveRight(0)
+			elif align.isRight:
+				size.moveLEft(0)
+			path.addRect(size)
 		return path
 
 	@property
@@ -238,18 +272,32 @@ class HoverArea(QGraphicsPathItem):
 	def alignment(self, value):
 		self._alignment = value
 
-	# def paint(self, painter: QPainter, option, widget=None):
-	# 	if debug:
-	# 		painter.setPen(QPen(Qt.red, 1))
-	# 		painter.drawPath(self._path)
-	# 		painter.setPen(QPen(Qt.black, 1))
-	# 		painter.drawRect(self.boundingRect())
-	# 	super(HoverArea, self).paint(painter, option, widget)
+	@property
+	def visible(self):
+		return self._visible
+
+	@visible.setter
+	def visible(self, value):
+		self._visible = value
+		if value:
+			color = colorPalette.button().color()
+			color.setAlpha(200)
+			self.setBrush(color)
+			self.setPen(Qt.NoPen)
+			self.update()
+		else:
+			self.setBrush(Qt.NoBrush)
+			self.setPen(Qt.NoPen)
+			self.update()
+
+	def updateRect(self, rect: QRectF):
+		self.size = rect
+		self.update()
 
 	def update(self):
 		parentRect = self.parent.sceneRect()
 		positionFlag = self.position
-
+		x, y = 0, 0
 		if positionFlag.isCentered:
 			x = parentRect.center().x()
 			y = parentRect.center().y()
@@ -265,6 +313,7 @@ class HoverArea(QGraphicsPathItem):
 			x = parentRect.right()
 
 		self.setPos(x, y)
+		self.moveBy(*self.offset.toTuple())
 		self.setPath(self._path)
 		super(HoverArea, self).update()
 

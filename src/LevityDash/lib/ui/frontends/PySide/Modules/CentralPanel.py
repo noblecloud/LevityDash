@@ -47,6 +47,7 @@ class CentralPanel(Panel):
 		self.setFlag(QGraphicsItem.ItemStopsFocusHandling, False)
 		self.setFlag(self.ItemHasNoContents, True)
 		self.insertMenu = RadialMenuItem(self, root=True)
+		self.insertMenu.setVisible(False)
 		self.resizeHandles.setVisible(False)
 		self.resizeHandles.setEnabled(False)
 
@@ -198,7 +199,7 @@ class CentralPanel(Panel):
 		self._load(self.filePath)
 
 	def loadPanel(self):
-		from Modules.Panel import PanelFromFile
+		from LevityDash.lib.ui.frontends.PySide.Modules import PanelFromFile
 		paths = self._selectFile(fileType="Dashboard Files (*.levityPanel *.json)", startingDir='panels', multipleFiles=True)
 		for p in paths:
 			PanelFromFile(self, p)
@@ -260,7 +261,7 @@ class CentralPanel(Panel):
 				state = yaml.safe_load(f)
 				if 'geometry' in state:
 					self.geometry = Geometry(self, **state['geometry'])
-				# self.clear()
+				self.clear()
 				for item in state:
 					itemLoader(self, item)
 				if path != userConfig.dashboardPath:

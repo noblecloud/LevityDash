@@ -1,3 +1,4 @@
+import platform
 from enum import Enum
 from functools import cached_property
 from json import dumps
@@ -30,6 +31,7 @@ class BaseContextMenu(QMenu):
 			self.setTitle(title)
 		self.parent = parent
 		self.aboutToShow.connect(self.updateItems)
+		self.setMinimumWidth(150)
 		self.buildMenuItems()
 
 	@Slot()
@@ -54,9 +56,9 @@ class BaseContextMenu(QMenu):
 			# self.gridMenu()
 			self.saveLoadMenu()
 			self.addSeparator()
-		# if self.parent.debug:
-		self.addAction('Print State', self.printState)
-		self.addAction('Debug Breakpoint', self.parent.debugBreak)
+		if self.parent.debug:
+			self.addAction('Print State', self.printState)
+			self.addAction('Debug Breakpoint', self.parent.debugBreak)
 
 		self.addAction('Delete', self.delete)
 
@@ -141,43 +143,34 @@ class BaseContextMenu(QMenu):
 
 	def geometryMenu(self):
 		self.geometry = self.addMenu('Geometry')
+		self.geometry.setMinimumWidth(150)
 		size = self.geometry.addMenu('Size')
-		sep = size.addAction('Width')
-		sep.setDisabled(True)
 		# s = size.addAction('Snap to Grid', lambda: self.parent.geometry.size.width.toggleSnapping())
 		# s.setCheckable(True)
 		# s.setChecked(self.parent.geometry.size.width.snapping)
-		a = size.addAction('Relative', lambda: self.parent.geometry.toggleRelative('width'))
+		a = size.addAction('Relative Width', lambda: self.parent.geometry.toggleRelative('width'))
 		a.setCheckable(True)
 		a.setChecked(not self.parent.geometry.size.width.absolute)
 
-		size.addSeparator()
-		sep = size.addAction('Height')
-		sep.setDisabled(True)
 		# s = size.addAction('Snap to Grid', lambda: self.parent.geometry.size.height.toggleSnapping())
 		# s.setCheckable(True)
 		# s.setChecked(self.parent.geometry.size.height.snapping)
-		a = size.addAction('Relative', lambda: self.parent.geometry.toggleRelative('height'))
+		a = size.addAction('Relative Height', lambda: self.parent.geometry.toggleRelative('height'))
 		a.setCheckable(True)
 		a.setChecked(not self.parent.geometry.size.height.absolute)
 
 		pos = self.geometry.addMenu('Position')
-		sep = pos.addAction('X Position')
-		sep.setDisabled(True)
 		# s = pos.addAction('Snap to Grid', lambda: self.parent.geometry.position.x.toggleSnapping())
 		# s.setCheckable(True)
 		# s.setChecked(self.parent.geometry.position.x.snapping)
-		a = pos.addAction('Relative', lambda: self.parent.geometry.toggleRelative('x'))
+		a = pos.addAction('Relative X', lambda: self.parent.geometry.toggleRelative('x'))
 		a.setCheckable(True)
 		a.setChecked(not self.parent.geometry.position.x.absolute)
 
-		pos.addSeparator()
-		sep = pos.addAction('Y Position')
-		sep.setDisabled(True)
 		# s = pos.addAction('Snap to Grid', lambda: self.parent.geometry.position.y.toggleSnapping())
 		# s.setCheckable(True)
 		# s.setChecked(self.parent.geometry.position.y.snapping)
-		a = pos.addAction('Relative', lambda: self.parent.geometry.toggleRelative('y'))
+		a = pos.addAction('Relative Y', lambda: self.parent.geometry.toggleRelative('y'))
 		a.setCheckable(True)
 		a.setChecked(not self.parent.geometry.position.y.absolute)
 
@@ -374,7 +367,10 @@ class EditableLabelContextMenu(LabelContextMenu):
 class RealtimeContextMenu(BaseContextMenu):
 
 	def buildMenuItems(self):
-		self.addMenu(SourceMenu(self))
+		self.sources = SourceMenu(self)
+		self.addMenu(self.sources)
+		# if not self.sources.sources:
+		# 	self.sources.setEnabled(False)
 		self.showTitle = self.addAction('Show Title', self.parent.toggleTitle)
 		self.showTitle.setCheckable(True)
 		self.showTitle.setChecked(self.parent.splitter.enabled)
@@ -383,14 +379,8 @@ class RealtimeContextMenu(BaseContextMenu):
 		showUnit.setChecked(self.parent.display.displayProperties.unitPosition != 'hidden')
 		self.addMenu(LabelContextMenu(self.parent.display.valueTextBox, title="Value"))
 		self.addMenu(LabelContextMenu(self.parent.display.unitTextBox, title="Unit"))
-		self.addMenu(MenuFromEnum(self.parent.display, 'displayProperties.unitPosition', self.parent.display.setUnitPosition, 'Unit Position'))
-
-		# self.addAction('Edit Value Margins', self.parent.display.valueTextBox.editMargins)
-		# self.addAction('Edit Unit Margins', self.parent.display.unitTextBox.editMargins)
-		# lb = self.addAction('Allow Line Wrap', self.allowLineWrap)
-		# lb.setCheckable(True)
-		# lb.setChecked(self.parent.display.lineBreaking)
-
+		# unitPositions = MenuFromEnum(self.parent.display, 'displayProperties.unitPosition', self.parent.display.setUnitPosition, 'Unit Position')
+		# self.addMenu(unitPositions)
 		super(RealtimeContextMenu, self).buildMenuItems()
 
 	def allowLineWrap(self):
@@ -400,11 +390,20 @@ class RealtimeContextMenu(BaseContextMenu):
 	def hasTitle(self):
 		return hasattr(self.parent, 'title')
 
+	def updateItems(self):
+		self.sources.update()
+		if self.sources.sources:
+			self.sources.setEnabled(True)
+		else:
+			self.sources.setEnabled(False)
+		super(RealtimeContextMenu, self).updateItems()
+
 
 class MenuFromEnum(QMenu):
 
 	def __init__(self, parent, enum: Type[Enum], action=None, title=None):
 		super(MenuFromEnum, self).__init__()
+		self.setMinimumWidth(150)
 		if isinstance(enum, str):
 			if '.' in enum:
 				enum = enum.split('.')
@@ -497,13 +496,18 @@ class InsertMenu(QMenu):
 	def __init__(self, parent):
 		self.parent = parent
 		super(InsertMenu, self).__init__(parent)
+		self.aboutToShow.connect(self.updateItems)
+		self.setMinimumWidth(150)
 		self.setTitle('Insert')
-		self.addAction('Empty Panel', self.parent.addPanel)
-		self.templates = self.addMenu(TemplateMenu(self, EasyPath(userConfig.userPath).templates.panels))
+		self.addAction('Group/Empty Panel', self.parent.addPanel)
+		# self.templates = TemplateMenu(self, EasyPath(userConfig.userPath).templates.panels)
+		# self.addMenu(self.templates)
+		# if not self.templates.hasTemplates:
+		# 	self.templates.setEnabled(False)
 		self.addAction('Graph', self.insertGraph)
 		self.addAction('Clock', self.insertClock)
 		self.addAction('Label', self.parent.addLabel)
-		self.addAction('Split Panel', self.insertSplitPanel)
+		# self.addAction('Split Panel', self.insertSplitPanel)
 		self.addAction('Moon')
 
 	def update(self):
@@ -524,6 +528,10 @@ class InsertMenu(QMenu):
 	def insertSplitPanel(self):
 		from LevityDash.lib.ui.frontends.PySide.Modules.Containers import SplitPanel
 		split = SplitPanel(self.parent.parent, position=self.parent.position)
+
+	def updateItems(self):
+		pass
+	# self.templates.updateItems()
 
 
 class PlotContextMenu(BaseContextMenu):
@@ -550,15 +558,16 @@ class SourceMenu(QMenu):
 	def __init__(self, parent):
 		self.parent = parent
 		super(SourceMenu, self).__init__(parent)
+		self.aboutToShow.connect(self.updateItems)
+		self.setMinimumWidth(150)
 		self.setTitle('Source')
 		self.__addSources()
 
-	def show(self):
-		if len(self.sources) > 1:
+	def updateItems(self):
+		if self.sources:
 			self.setEnabled(True)
 		else:
 			self.setEnabled(False)
-		super(SourceMenu, self).aboutToShow()
 
 	@property
 	def sources(self):
@@ -578,15 +587,27 @@ class SourceMenu(QMenu):
 class TemplateMenu(QMenu):
 
 	def __init__(self, parent, directoryPath: Union[str, Path], *args, **kwargs):
-		from LevityDash.lib.ui.frontends.PySide.Modules.Panel import PanelFromFile
 		self.parent = parent
 		self.directoryPath = EasyPath(directoryPath)
 		super(TemplateMenu, self).__init__(*args, **kwargs)
+		self.setMinimumWidth(150)
 		self.setTitle('From Template')
-		for file in self.directoryPath.ls():
-			if file.path.name.endswith('.json') or file.path.name.endswith('.levity'):
+
+	@property
+	def hasTemplates(self) -> bool:
+		return bool(self.directoryPath.ls())
+
+	def updateItems(self):
+		from LevityDash.lib.ui.frontends.PySide.Modules import PanelFromFile
+		templates = [file for file in self.directoryPath.ls() if file.path.name.endswith('.yaml') or 'levity' in file.path.name]
+		self.clear()
+		if len(templates):
+			self.setEnabled(True)
+			for file in templates:
 				name = '.'.join(file.path.name.split('.')[:-1])
 				self.addAction(name, lambda file=file: PanelFromFile(self.parent.parent.parent, file.path, self.parent.parent.position))
+		else:
+			self.setEnabled(False)
 
 
 class DashboardTemplates(QMenu):

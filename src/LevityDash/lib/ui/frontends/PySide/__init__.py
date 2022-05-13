@@ -2,23 +2,20 @@ import asyncio
 import platform
 import sys
 import webbrowser
-
 from pathlib import Path
-
-from qasync import QApplication
-
-from LevityDash.lib.config import userConfig
-from time import time
-
 from functools import cached_property
 
+from qasync import QApplication
 from PySide2.QtCore import QEvent, QRect, QRectF, Qt, QTimer, Signal
 from PySide2.QtGui import QIcon, QMouseEvent, QPainter, QPainterPath, QCursor
 from PySide2.QtWidgets import (QGraphicsItem, QGraphicsPathItem, QGraphicsScene, QGraphicsView,
                                QMainWindow, QMenu, QAction)
 
-from LevityDash.lib.utils import clearCacheAttr
+from LevityDash.lib.config import userConfig
+from LevityDash.lib.utils import clearCacheAttr, LocationFlag
 from LevityDash.lib.ui.frontends.PySide.utils import *
+
+from time import time
 
 app: QApplication = QApplication.instance()
 app.setPalette(colorPalette)
@@ -63,21 +60,12 @@ class LevityScene(QGraphicsScene):
 		self.time = time()
 		super(LevityScene, self).__init__(*args, **kwargs)
 		from .Modules.CentralPanel import CentralPanel
-		# QGraphicsScene.setSceneRect(self, self.window.rect())
 		self.base = CentralPanel(self)
 		self.editingModeTimer = QTimer(interval=3*1000, timeout=self.hideLines)
 		from LevityDash.lib.Geometry.Grid import Grid
 		self.grid = Grid(self, static=False, overflow=False)
 		self.staticGrid = False
 		clearCacheAttr(self, 'geometry')
-		self.focusStack = FocusStack(self)
-
-		self.visualAidRed = QGraphicsPathItem()
-		self.addVisualAids()
-
-		# self.apiDrawer = PanelDrawer(self, self.base)
-		# self.apiDrawer.close()
-		# self.setBackgroundBrush(Qt.red)
 		self.setBackgroundBrush(QApplication.instance().palette().window().color())
 
 	def addVisualAids(self):
@@ -200,14 +188,6 @@ class LevityScene(QGraphicsScene):
 		return QApplication.instance().mouseButtons() == Qt.LeftButton
 
 
-# def drawForeground(self, painter: QPainter, rect: QRectF) -> None:
-# 	super(LevityScene, self).drawForeground(painter, rect)
-# 	fpsTimer()
-# 	end = time()
-# 	print(f'\r{1/(end - self.time):.3f}fps', end='')
-# 	self.time = end
-
-
 class LevitySceneView(QGraphicsView):
 	resizeFinished = Signal()
 
@@ -257,13 +237,24 @@ class LevitySceneView(QGraphicsView):
 			self.noActivityTimer.start()
 			self.setCursor(Qt.ArrowCursor)
 		if event.type() == QEvent.KeyPress:
-			# save
 			if event.key() == Qt.Key_R:
 				pos = self.mapToScene(self.mapFromGlobal(QCursor.pos()))
 				items = self.graphicsScene.items(pos)
 				for item in items:
 					if hasattr(item, 'refresh'):
 						item.refresh()
+			if event.key() == Qt.Key_Down:
+				if getattr(self.graphicsScene.focusItem(), 'movable', False):
+					self.graphicsScene.focusItem().moveBy(0, 1)
+			elif event.key() == Qt.Key_Up:
+				if getattr(self.graphicsScene.focusItem(), 'movable', False):
+					self.graphicsScene.focusItem().moveBy(0, -1)
+			elif event.key() == Qt.Key_Left:
+				if getattr(self.graphicsScene.focusItem(), 'movable', False):
+					self.graphicsScene.focusItem().moveBy(-1, 0)
+			elif event.key() == Qt.Key_Right:
+				if getattr(self.graphicsScene.focusItem(), 'movable', False):
+					self.graphicsScene.focusItem().moveBy(1, 0)
 		# 	yamlStr = yaml.safe_dump(item, default_flow_style=False)
 		# 	print(yamlStr)
 		# load
@@ -275,11 +266,6 @@ class LevitySceneView(QGraphicsView):
 		self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
 		self.graphicsScene.update()
 		self.resizeFinished.emit()
-
-	# rect = self.rect()
-	# self.fitInView(rect)
-	# self.graphicsScene.setSceneRect(rect)
-	# self.base.setRect(rect)
 
 	def load(self):
 		self.graphicsScene.base.load()
@@ -351,10 +337,66 @@ class LevityMainWindow(QMainWindow):
 		view = LevitySceneView(self)
 		view.setGeometry(self.geometry())
 		self.setCentralWidget(view)
+		style = '''
+					QMenu {
+						background-color: #2e2e2e;
+						color: #fafafa;
+						padding: 2.5px;
+						border: 1px solid #5e5e5e;
+						border-radius: 5px;
+					}
+					QMenu::item {
+						padding: 2.5px 5px;
+						margin: 1px;
+						background-color: #2e2e2e;
+						color: #fafafa;
+					}
+					QMenu::item:selected {
+						background-color: #6e6e6e;
+						color: #fafafa;
+						border-radius: 2.5px;
+					}
+					QMenu::item:disabled {
+						background-color: #2e2e2e;
+						color: #aaaaaa;
+					}
+					'''
+		if platform.system() == 'Darwin':
+			style += '''
+					QMenu::item::unchecked {
+						padding-left: -12px;
+						margin-left: 0px;
+					}
+					QMenu::item::checked {
+						padding-left: 0px;
+						margin-left: 0px;
+					}'''
+		app.setStyleSheet(style)
+		# view.setVisible(False)
+		self.setStyleSheet("selection-color: transparent; border-color: transparent; border-style: Solid; border-width: 0px;")
 		view.postInit()
+
+		from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Various import HoverArea
+		self.menuBarHoverArea = HoverArea(view.graphicsScene.base,
+			size=10,
+			rect=QRect(0, 0, self.width(), 5),
+			visible=False,
+			enterAction=self.menuBarHover,
+			exitAction=self.menuBarLeave,
+			alignment=LocationFlag.Bottom,
+			position=LocationFlag.TopLeft,
+			ignoredEdges=LocationFlag.Top
+		)
+		self.menuBarHoverArea.setEnabled(False)
 		self.buildMenu()
 
 		self.__init_ui__()
+
+	def menuBarHover(self):
+		self.menuBar().show()
+
+	def menuBarLeave(self):
+		self.menuBar().hide()
 
 	def __init_ui__(self):
 		self.centralWidget().load()
@@ -390,25 +432,26 @@ class LevityMainWindow(QMainWindow):
 		fileMenu = menubar.addMenu('&File')
 
 		if platform.system() == 'Darwin':
+			self.setUnifiedTitleAndToolBarOnMac(True)
 			macOSConfig = QAction('&config', self)
 			macOSConfig.setStatusTip('Open the config folder')
 			macOSConfig.triggered.connect(self.openConfigFolder)
-
-			macOSFileConfigAction = QAction('Open Config Folder', self)
-			macOSFileConfigAction.setStatusTip('Open the config folder')
-			macOSFileConfigAction.triggered.connect(self.openConfigFolder)
-			fileMenu.addAction(macOSFileConfigAction)
 			fileMenu.addAction(macOSConfig)
 
-		# macOSMenu = self.menuBar().addMenu('&MacOS')
-		# macOSMenu.addAction(macOSConfig)
+		fileConfigAction = QAction('Open Config Folder', self)
+		fileConfigAction.setStatusTip('Open the config folder')
+		fileConfigAction.setShortcut('Alt+C')
+		fileConfigAction.triggered.connect(self.openConfigFolder)
+		fileMenu.addAction(fileConfigAction)
 
 		quitAct = QAction('Quit', self)
 		quitAct.setStatusTip('Quit the application')
+		quitAct.setShortcut('Ctrl+Q')
 		quitAct.triggered.connect(QApplication.instance().quit)
+		fileMenu.addAction(quitAct)
 
-		plugins = PluginsMenu(self)
-		self.menuBar().addMenu(plugins)
+		# plugins = PluginsMenu(self)
+		# self.menuBar().addMenu(plugins)
 
 		save = QAction('&Save', self)
 		save.setShortcut('Ctrl+S')
@@ -450,22 +493,22 @@ class LevityMainWindow(QMainWindow):
 		if userConfig['Display'].getboolean('fullscreen'):
 			asyncio.get_event_loop().call_later(10, self.showFullScreen)
 
-	def showFullScreen(self):
-		super(LevityMainWindow, self).showFullScreen()
-		self.menuBar().hide()
-
-	def showNormal(self):
-		super(LevityMainWindow, self).showNormal()
-		self.menuBar().show()
-
 	def openConfigFolder(self):
 		webbrowser.open(f'file:///{Path.home().absolute().joinpath(".config", "levity")}')
 
-	def resizeEvent(self, event):
-		super(LevityMainWindow, self).resizeEvent(event)
-
-
-# self.centralWidget().resizeDone.emit(event.size())
+	def changeEvent(self, event: QEvent):
+		super().changeEvent(event)
+		if event.type() == QEvent.WindowStateChange \
+			and (platform.system() != 'Darwin' or not app.testAttribute(Qt.AA_DontUseNativeMenuBar)):
+			if self.windowState() & Qt.WindowFullScreen:
+				self.menuBarHoverArea.setEnabled(True)
+				self.menuBarHoverArea.size.setWidth(self.width())
+				self.menuBarHoverArea.update()
+				self.menuBar().hide()
+			else:
+				self.menuBar().show()
+				self.menuBarHoverArea.setEnabled(False)
+				self.menuBarHoverArea.update()
 
 
 __all__ = ['LevityMainWindow']

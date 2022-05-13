@@ -3678,8 +3678,8 @@ class Figure(Panel):
 	def ensureFramed(self):
 		self.setPos(self.clampPoint(self.pos()))
 
-	def itemChange(self, change, value):
-		# if change == QGraphicsItem.ItemPositionChange:
+	# def itemChange(self, change, value):
+	# if change == QGraphicsItem.ItemPositionChange:
 		# 	self.clampPoint(value)
 		# 	return super(QGraphicsRectItem, self).itemChange(change, value)
 
@@ -3695,9 +3695,8 @@ class Figure(Panel):
 		# 		disconnectSignal(self.marginHandles.action.action, value.update)
 		# 	elif isinstance(value, Text):
 		# 		disconnectSignal(value.updateItem, self.parent.incrementers.action.action)
-		# 		disconnectSignal(self.signals.resized, value.updateItem)
-
-		return super(Figure, self).itemChange(change, value)
+	# 		disconnectSignal(self.signals.resized, value.updateItem)
+	# return super(Figure, self).itemChange(change, value)
 
 	def clampPoint(self, value):
 		maxX = -self.contentsX

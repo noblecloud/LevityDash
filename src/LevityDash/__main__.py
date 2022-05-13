@@ -10,12 +10,20 @@ except ImportError:
 	sys.path.append('/usr/lib/python3/dist-packages')
 	import PySide2
 
+# These attributes have to be set before the application is created.
+from PySide2.QtWidgets import QApplication
+from PySide2.QtCore import Qt
+
+QApplication.setAttribute(Qt.AA_UseDesktopOpenGL, True)
+QApplication.setAttribute(Qt.AA_UseOpenGLES, True)
+QApplication.setAttribute(Qt.AA_DontUseNativeMenuBar, False)
+
 import asyncio
 import qasync
 from pathlib import Path
 from rich.traceback import install
 
-install(show_locals=False, width=120, )
+install(show_locals=True, width=120)
 qasync.logger.setLevel('ERROR')
 
 os.environ['WU_CONFIG_PATH'] = f'{Path.home()}/.config/levity/config.ini'
@@ -33,12 +41,7 @@ signal.signal(signal.SIGINT, signalQuit)
 
 
 def init_app():
-	from PySide2.QtCore import Qt
 	from PySide2.QtGui import QIcon
-	# QApplication.setAttribute(Qt.AA_UseDesktopOpenGL, True)
-	# QApplication.setAttribute(Qt.AA_UseOpenGLES, True)
-	qasync.QApplication.setAttribute(Qt.AA_DontUseNativeMenuBar, False)
-	# QApplication.setAttribute(Qt.AA_CompressHighFrequencyEvents, False)
 	path = Path(__file__).parent.joinpath('lib', 'ui', 'icon.icns')
 	icon = QIcon(path.as_posix())
 	qasync.QApplication.setWindowIcon(icon)
@@ -49,9 +52,8 @@ def init_app():
 async def main():
 	from functools import partial
 	import asyncio
-	import LevityDash.lib as lib
-
 	init_app()
+	import LevityDash.lib as lib
 
 	window = lib.ui.frontends.PySide.LevityMainWindow()
 
@@ -81,15 +83,3 @@ def run():
 
 if __name__ == '__main__':
 	run()
-# except KeyboardInterrupt:
-# 	print('####### KeyboardInterrupt #######')
-# 	asyncio.get_event_loop().stop()
-# 	sys.exit(0)
-# except Exception as e:
-# 	print(e)
-# 	asyncio.get_event_loop().stop()
-# 	raise e
-# finally:
-# 	print('####### finally #######')
-# 	asyncio.get_event_loop().stop()
-# 	sys.exit(0)
