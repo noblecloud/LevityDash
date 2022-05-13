@@ -1,13 +1,15 @@
 [tool.poetry]
 name = "LevityDash"
-version = "0.1.0-beta.3"
-description = "A lightweight, desktop native, multi-source dashboard for macOS, Windows and Linux"
 authors = ["noblecloud <git@noblecloud.io>"]
-license = "MIT"
-include = ['src/LevityDash/example-config']
+description = "A lightweight, desktop native, multi-source, modulear dashboard for macOS, Windows and Linux"
+
+version = "0.1.0-beta.4"
 readme = "README.md"
+license = "MIT"
+
 homepage = "https://levitydash.app"
 repository = "https://github.com/noblecloud/LevityDash"
+
 keywords = ["dashboard", "desktop", "app", "weather", "dash"]
 classifiers = [
 	"Programming Language :: Python :: 3.10",
@@ -26,13 +28,12 @@ classifiers = [
 	"Intended Audience :: Information Technology",
 ]
 
-
+include = ['src/LevityDash/example-config']
 packages = [
 	{ include = 'LevityDash', from = 'src' },
 ]
 
-[[tool.poetry.source]]
-# Source needed for arm platform
+[[tool.poetry.source]] # Source needed for arm platform
 name = "PiWheels"
 url = "https://www.piwheels.org/simple"
 
