@@ -98,7 +98,6 @@ class LevityConfig(ConfigParser):
 	@cached_property
 	def rootPath(self) -> EasyPath.EasyPath:
 		from LevityDash import __lib__
-		breakpoint()
 		return EasyPath.EasyPath(__lib__.parent)
 
 	def save(self):
