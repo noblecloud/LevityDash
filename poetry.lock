@@ -1,0 +1,757 @@
+[[package]]
+name = "aiohttp"
+version = "3.8.1"
+description = "Async http client/server framework (asyncio)"
+category = "main"
+optional = false
+python-versions = ">=3.6"
+
+[package.dependencies]
+aiosignal = ">=1.1.2"
+async-timeout = ">=4.0.0a3,<5.0"
+attrs = ">=17.3.0"
+charset-normalizer = ">=2.0,<3.0"
+frozenlist = ">=1.1.1"
+multidict = ">=4.5,<7.0"
+yarl = ">=1.0,<2.0"
+
+[package.extras]
+speedups = ["aiodns", "brotli", "cchardet"]
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "aiosignal"
+version = "1.2.0"
+description = "aiosignal: a list of registered asynchronous callbacks"
+category = "main"
+optional = false
+python-versions = ">=3.6"
+
+[package.dependencies]
+frozenlist = ">=1.1.0"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "altgraph"
+version = "0.17.2"
+description = "Python graph (network) package"
+category = "dev"
+optional = false
+python-versions = "*"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "async-timeout"
+version = "4.0.2"
+description = "Timeout context manager for asyncio programs"
+category = "main"
+optional = false
+python-versions = ">=3.6"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "attrs"
+version = "21.4.0"
+description = "Classes Without Boilerplate"
+category = "main"
+optional = false
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
+
+[package.extras]
+dev = ["coverage[toml] (>=5.0.2)", "hypothesis", "pympler", "pytest (>=4.3.0)", "six", "zope.interface", "furo", "sphinx", "sphinx-notfound-page", "pre-commit", "cloudpickle"]
+docs = ["furo", "sphinx", "zope.interface", "sphinx-notfound-page"]
+tests = ["coverage[toml] (>=5.0.2)", "hypothesis", "pympler", "pytest (>=4.3.0)", "six", "zope.interface", "cloudpickle"]
+tests_no_zope = ["coverage[toml] (>=5.0.2)", "hypothesis", "pympler", "pytest (>=4.3.0)", "six", "cloudpickle"]
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "bleak"
+version = "0.14.3"
+description = "Bluetooth Low Energy platform Agnostic Klient"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+bleak-winrt = { version = ">=1.1.1", markers = "platform_system == \"Windows\"" }
+dbus-next = { version = "*", markers = "platform_system == \"Linux\"" }
+pyobjc-core = { version = "*", markers = "platform_system == \"Darwin\"" }
+pyobjc-framework-CoreBluetooth = { version = "*", markers = "platform_system == \"Darwin\"" }
+pyobjc-framework-libdispatch = { version = "*", markers = "platform_system == \"Darwin\"" }
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "bleak-winrt"
+version = "1.1.1"
+description = "Python WinRT bindings for Bleak"
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
+name = "certifi"
+version = "2021.10.8"
+description = "Python package for providing Mozilla's CA Bundle."
+category = "dev"
+optional = false
+python-versions = "*"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "charset-normalizer"
+version = "2.0.12"
+description = "The Real First Universal Charset Detector. Open, modern and actively maintained alternative to Chardet."
+category = "main"
+optional = false
+python-versions = ">=3.5.0"
+
+[package.extras]
+unicode_backport = ["unicodedata2"]
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "commonmark"
+version = "0.9.1"
+description = "Python parser for the CommonMark Markdown spec"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.extras]
+test = ["flake8 (==3.7.8)", "hypothesis (==3.55.3)"]
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "dbus-next"
+version = "0.2.3"
+description = "A zero-dependency DBus library for Python with asyncio support"
+category = "main"
+optional = false
+python-versions = ">=3.6.0"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "ephem"
+version = "4.1.3"
+description = "Compute positions of the planets and stars"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "frozenlist"
+version = "1.3.0"
+description = "A list-like structure which implements collections.abc.MutableSequence"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "future"
+version = "0.18.2"
+description = "Clean single-source support for Python 3 and 2"
+category = "dev"
+optional = false
+python-versions = ">=2.6, !=3.0.*, !=3.1.*, !=3.2.*"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "idna"
+version = "3.3"
+description = "Internationalized Domain Names in Applications (IDNA)"
+category = "main"
+optional = false
+python-versions = ">=3.5"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "macholib"
+version = "1.16"
+description = "Mach-O header analysis and editing"
+category = "dev"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+altgraph = ">=0.15"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "multidict"
+version = "6.0.2"
+description = "multidict implementation"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "numpy"
+version = "1.22.3"
+description = "NumPy is the fundamental package for array computing with Python."
+category = "main"
+optional = false
+python-versions = ">=3.8"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "pefile"
+version = "2021.9.3"
+description = "Python PE parsing module"
+category = "dev"
+optional = false
+python-versions = ">=3.6.0"
+
+[package.dependencies]
+future = "*"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "pygments"
+version = "2.12.0"
+description = "Pygments is a syntax highlighting package written in Python."
+category = "main"
+optional = false
+python-versions = ">=3.6"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "pyinstaller"
+version = "5.0.1"
+description = "PyInstaller bundles a Python application and all its dependencies into a single package."
+category = "dev"
+optional = false
+python-versions = "<3.11,>=3.7"
+
+[package.dependencies]
+altgraph = "*"
+macholib = { version = ">=1.8", markers = "sys_platform == \"darwin\"" }
+pefile = { version = ">=2017.8.1", markers = "sys_platform == \"win32\"" }
+pyinstaller-hooks-contrib = ">=2020.6"
+pywin32-ctypes = { version = ">=0.2.0", markers = "sys_platform == \"win32\"" }
+
+[package.extras]
+encryption = ["tinyaes (>=1.0.0)"]
+hook_testing = ["pytest (>=2.7.3)", "execnet (>=1.5.0)", "psutil"]
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "pyinstaller-hooks-contrib"
+version = "2022.4"
+description = "Community maintained hooks for PyInstaller"
+category = "dev"
+optional = false
+python-versions = ">=3.7"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "pylunar"
+version = "0.6.0"
+description = "Information for completing the Astronomical League's Lunar and Lunar II observing programs."
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+ephem = "*"
+pytz = "*"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "pyobjc-core"
+version = "8.5"
+description = "Python<->ObjC Interoperability Module"
+category = "main"
+optional = false
+python-versions = ">=3.6"
+
+[[package]]
+name = "pyobjc-framework-cocoa"
+version = "8.5"
+description = "Wrappers for the Cocoa frameworks on macOS"
+category = "main"
+optional = false
+python-versions = ">=3.6"
+
+[package.dependencies]
+pyobjc-core = ">=8.5"
+
+[[package]]
+name = "pyobjc-framework-corebluetooth"
+version = "8.5"
+description = "Wrappers for the framework CoreBluetooth on macOS"
+category = "main"
+optional = false
+python-versions = ">=3.6"
+
+[package.dependencies]
+pyobjc-core = ">=8.5"
+pyobjc-framework-Cocoa = ">=8.5"
+
+[[package]]
+name = "pyobjc-framework-libdispatch"
+version = "8.5"
+description = "Wrappers for libdispatch on macOS"
+category = "main"
+optional = false
+python-versions = ">=3.6"
+
+[package.dependencies]
+pyobjc-core = ">=8.5"
+
+[[package]]
+name = "pyside2"
+version = "5.15.2.1"
+description = "Python bindings for the Qt cross-platform application and UI framework"
+category = "main"
+optional = false
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, <3.11"
+
+[package.dependencies]
+shiboken2 = "5.15.2.1"
+
+[[package]]
+name = "pysolar"
+version = "0.10"
+description = "Collection of Python libraries for simulating the irradiation of any point on earth by the sun"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "python-dateutil"
+version = "2.8.2"
+description = "Extensions to the standard Python datetime module"
+category = "main"
+optional = false
+python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,>=2.7"
+
+[package.dependencies]
+six = ">=1.5"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "pytz"
+version = "2022.1"
+description = "World timezone definitions, modern and historical"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "pywin32-ctypes"
+version = "0.2.0"
+description = ""
+category = "dev"
+optional = false
+python-versions = "*"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "pyyaml"
+version = "6.0"
+description = "YAML parser and emitter for Python"
+category = "main"
+optional = false
+python-versions = ">=3.6"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "qasync"
+version = "0.23.0"
+description = "Implementation of the PEP 3156 Event-Loop with Qt."
+category = "main"
+optional = false
+python-versions = "~=3.6"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "rich"
+version = "12.4.1"
+description = "Render rich text, tables, progress bars, syntax highlighting, markdown and more to the terminal"
+category = "main"
+optional = false
+python-versions = ">=3.6.3,<4.0.0"
+
+[package.dependencies]
+commonmark = ">=0.9.0,<0.10.0"
+pygments = ">=2.6.0,<3.0.0"
+
+[package.extras]
+jupyter = ["ipywidgets (>=7.5.1,<8.0.0)"]
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "scipy"
+version = "1.8.0"
+description = "SciPy: Scientific Library for Python"
+category = "main"
+optional = false
+python-versions = ">=3.8,<3.11"
+
+[package.dependencies]
+numpy = ">=1.17.3,<1.25.0"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "shiboken2"
+version = "5.15.2.1"
+description = "Python / C++ bindings helper module"
+category = "main"
+optional = false
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, <3.11"
+
+[[package]]
+name = "six"
+version = "1.16.0"
+description = "Python 2 and 3 compatibility utilities"
+category = "main"
+optional = false
+python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "weatherunits"
+version = "0.5.2"
+description = "Easy conversion for common weather units"
+category = "main"
+optional = false
+python-versions = ">=3.7,<4.0"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[[package]]
+name = "yarl"
+version = "1.7.2"
+description = "Yet another URL library"
+category = "main"
+optional = false
+python-versions = ">=3.6"
+
+[package.dependencies]
+idna = ">=2.0"
+multidict = ">=4.0"
+
+[package.source]
+type = "legacy"
+url = "https://www.piwheels.org/simple"
+reference = "PiWheels"
+
+[metadata]
+lock-version = "1.1"
+python-versions = ">=3.10,<3.11"
+content-hash = "2118066ff7aaed6bcfead7ee8913abfbd141815ad91ced1beb25889f57280033"
+
+[metadata.files]
+aiohttp = [
+	{ file = "aiohttp-3.8.1-cp37-cp37m-linux_armv6l.whl", hash = "sha256:80fa2d39e44dd7180aa1447fcc2ab5009b8c9179be386466b7741e02c5c79a8c" },
+	{ file = "aiohttp-3.8.1-cp37-cp37m-linux_armv7l.whl", hash = "sha256:80fa2d39e44dd7180aa1447fcc2ab5009b8c9179be386466b7741e02c5c79a8c" },
+	{ file = "aiohttp-3.8.1-cp39-cp39-linux_armv6l.whl", hash = "sha256:cc80dc3140b8547d3fcf3d9107de1f96f890e3a776c66f6a9d912704750fb994" },
+	{ file = "aiohttp-3.8.1-cp39-cp39-linux_armv7l.whl", hash = "sha256:cc80dc3140b8547d3fcf3d9107de1f96f890e3a776c66f6a9d912704750fb994" },
+]
+aiosignal = [
+	{ file = "aiosignal-1.2.0-py3-none-any.whl", hash = "sha256:795a51b23e074d030519301177892f0c5ebc4384ddf49fabadeca87aac8462e6" },
+]
+altgraph = [
+	{ file = "altgraph-0.17.2-py2.py3-none-any.whl", hash = "sha256:a4aad92954906036c78e27b957a071753fe2d1182fcfe78e4ab528c0610923e4" },
+]
+async-timeout = [
+	{ file = "async_timeout-4.0.2-py3-none-any.whl", hash = "sha256:0ff8e5dcb63782d6baa0daf29dfed7e8f3c997a61453a1c5f8510938565e93d6" },
+]
+attrs = [
+	{ file = "attrs-21.4.0-py2.py3-none-any.whl", hash = "sha256:fe43ed2c8b43d4b1f97b342b2a798b0ece766c86a249ac8bd8ae940f9e62f4ab" },
+]
+bleak = [
+	{ file = "bleak-0.14.3-py2.py3-none-any.whl", hash = "sha256:7cd05563b3d75eeb92026b62f85ef16b20570af09e8b489a8749380f294561a1" },
+]
+bleak-winrt = [
+	{ file = "bleak-winrt-1.1.1.tar.gz", hash = "sha256:3e7765f98d71b5229d95bd3b197931994dead40f3144e7186de7b8f664e26df0" },
+	{ file = "bleak_winrt-1.1.1-cp310-cp310-win32.whl", hash = "sha256:f1ab6641cfdadce69126b459c5d30f1a934384bc0c37632393163eea3c94d7a8" },
+	{ file = "bleak_winrt-1.1.1-cp310-cp310-win_amd64.whl", hash = "sha256:79a87c7fcc99838bf7f71765e855a74a80e085c4aedde14d0931d56a9f87be77" },
+	{ file = "bleak_winrt-1.1.1-cp37-cp37m-win32.whl", hash = "sha256:1cf652fe38822216c093d4322b9899f54bff3169c4fc48ee8dd10bc1938ec59c" },
+	{ file = "bleak_winrt-1.1.1-cp37-cp37m-win_amd64.whl", hash = "sha256:09b64b9b768dfa3abab16e67f7e0d476a0e9d86da2975a2487e033ce2be96663" },
+	{ file = "bleak_winrt-1.1.1-cp38-cp38-win32.whl", hash = "sha256:1c4a9ee0c3195d07a3fd8f994953075443563c2c5c8e608cd09f3d0eaac540ed" },
+	{ file = "bleak_winrt-1.1.1-cp38-cp38-win_amd64.whl", hash = "sha256:e75b8d5aad3169bd528be9ccbacb775fb0d07f1714ca93b1efa6687c47a1b755" },
+	{ file = "bleak_winrt-1.1.1-cp39-cp39-win32.whl", hash = "sha256:e0da28651f8e83aaaea4113d084880f1fafae75c29c2a70429ae1f0b8681dc52" },
+	{ file = "bleak_winrt-1.1.1-cp39-cp39-win_amd64.whl", hash = "sha256:7481aed7d17e8c2aa2bf9e3786206e382f710f516e00887d825df1b7a4c613d5" },
+]
+certifi = [
+	{ file = "certifi-2021.10.8-py2.py3-none-any.whl", hash = "sha256:eaf5fd6a051cba81570919009491fc35069c99da0dd8d57304930ee7a5699fb0" },
+]
+charset-normalizer = [
+	{ file = "charset_normalizer-2.0.12-py3-none-any.whl", hash = "sha256:4418fd831327416197e8458fdc804bb74f6945c0f0ee3fdc0cf504db905139a1" },
+]
+commonmark = [
+	{ file = "commonmark-0.9.1-py2.py3-none-any.whl", hash = "sha256:da2f38c92590f83de410ba1a3cbceafbc74fee9def35f9251ba9a971d6d66fd9" },
+]
+dbus-next = [
+	{ file = "dbus_next-0.2.3-py3-none-any.whl", hash = "sha256:f72f30b9e2fbf046696a647de9c702ab37eb7f79474bc5ef8b025b376a5da3c2" },
+]
+ephem = [
+	{ file = "ephem-4.1.3-cp35-cp35m-linux_armv6l.whl", hash = "sha256:e1e4fcaaaa4a4509c8490ec36f82f5dd52788a013b711f6135835cadcdebbd49" },
+	{ file = "ephem-4.1.3-cp35-cp35m-linux_armv7l.whl", hash = "sha256:e1e4fcaaaa4a4509c8490ec36f82f5dd52788a013b711f6135835cadcdebbd49" },
+	{ file = "ephem-4.1.3-cp37-cp37m-linux_armv6l.whl", hash = "sha256:b1532f6b44709f8f3f8569e8095d6d320774bc7f5a068abf1eec5c9c93c89dc8" },
+	{ file = "ephem-4.1.3-cp37-cp37m-linux_armv7l.whl", hash = "sha256:b1532f6b44709f8f3f8569e8095d6d320774bc7f5a068abf1eec5c9c93c89dc8" },
+	{ file = "ephem-4.1.3-cp39-cp39-linux_armv6l.whl", hash = "sha256:31d58f5cfc8704e48e0f3c03d5985ad40c03fdf09d72857874b36a27d1e413a1" },
+	{ file = "ephem-4.1.3-cp39-cp39-linux_armv7l.whl", hash = "sha256:31d58f5cfc8704e48e0f3c03d5985ad40c03fdf09d72857874b36a27d1e413a1" },
+]
+frozenlist = [
+	{ file = "frozenlist-1.3.0-cp37-cp37m-linux_armv6l.whl", hash = "sha256:0b8c2404d280075c63ada59a0221180ae0dff0eb6eb493728e54cc0827452bc1" },
+	{ file = "frozenlist-1.3.0-cp37-cp37m-linux_armv7l.whl", hash = "sha256:0b8c2404d280075c63ada59a0221180ae0dff0eb6eb493728e54cc0827452bc1" },
+	{ file = "frozenlist-1.3.0-cp39-cp39-linux_armv6l.whl", hash = "sha256:b15633949cd59bb167a7aa501b8dce64416bd1a986f73a5cd0b6d3b3a344f6e9" },
+	{ file = "frozenlist-1.3.0-cp39-cp39-linux_armv7l.whl", hash = "sha256:b15633949cd59bb167a7aa501b8dce64416bd1a986f73a5cd0b6d3b3a344f6e9" },
+]
+future = [
+	{ file = "future-0.18.2-py3-none-any.whl", hash = "sha256:83c4f8cec14cd08179d8b4bfe8c5e48724efadac8add187f385c68d6ae2345e6" },
+]
+idna = [
+	{ file = "idna-3.3-py3-none-any.whl", hash = "sha256:a8c56282ad8491e5d10c5d44e9e4ce38e37a16bc03ebb54fdcaf9d05b8e0c309" },
+]
+macholib = [
+	{ file = "macholib-1.16-py2.py3-none-any.whl", hash = "sha256:f6004c78e7712e00df6dab5b2ffb60efe50f07e402343591013a95718f9b35ed" },
+]
+multidict = [
+	{ file = "multidict-6.0.2-cp37-cp37m-linux_armv6l.whl", hash = "sha256:ce3df96e83a17dc387d6827ee04a82a27509963f01b80a99d78795925fef9a01" },
+	{ file = "multidict-6.0.2-cp37-cp37m-linux_armv7l.whl", hash = "sha256:ce3df96e83a17dc387d6827ee04a82a27509963f01b80a99d78795925fef9a01" },
+	{ file = "multidict-6.0.2-cp39-cp39-linux_armv6l.whl", hash = "sha256:86073e8851860885b6097e0999bbd48927f2516767132711fd6fd2494bc7b483" },
+	{ file = "multidict-6.0.2-cp39-cp39-linux_armv7l.whl", hash = "sha256:86073e8851860885b6097e0999bbd48927f2516767132711fd6fd2494bc7b483" },
+]
+numpy = [
+	{ file = "numpy-1.22.3-cp39-cp39-linux_armv6l.whl", hash = "sha256:82df998306893fcabebce6f0a86a87b10b0486de08dde77423ef81b37da0b3ba" },
+	{ file = "numpy-1.22.3-cp39-cp39-linux_armv7l.whl", hash = "sha256:82df998306893fcabebce6f0a86a87b10b0486de08dde77423ef81b37da0b3ba" },
+]
+pefile = [
+	{ file = "pefile-2021.9.3-py3-none-any.whl", hash = "sha256:935e99cb52c409a58dca691462b76cbc61ffb3108e65d1ee7eaf45bf409f5299" },
+]
+pygments = [
+	{ file = "Pygments-2.12.0-py3-none-any.whl", hash = "sha256:2d0272a419f7725dfb36fb7feb6dfb8c66a4c37066ead3931e73cd65673c268d" },
+]
+pyinstaller = [
+	{ file = "pyinstaller-5.0.1-py3-none-any.whl", hash = "sha256:934fec86bef8224eacfb3b16f05abc23a1a1df65682de39e69e814a341ecc185" },
+]
+pyinstaller-hooks-contrib = [
+	{ file = "pyinstaller_hooks_contrib-2022.4-py2.py3-none-any.whl", hash = "sha256:bfdfbd27261253e6fe8da33cfd8a1bff2677180521a0d8e6bbdf38dfffd589c4" },
+]
+pylunar = [
+	{ file = "pylunar-0.6.0-py2.py3-none-any.whl", hash = "sha256:ea7a60f9327b2838596162c32a17902fc7f5658444f2adf57dceceb303e5d9aa" },
+]
+pyobjc-core = [
+	{ file = "pyobjc-core-8.5.tar.gz", hash = "sha256:704c275439856c0d1287469f0d589a7d808d48b754a93d9ce5415d4eaf06d576" },
+	{ file = "pyobjc_core-8.5-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:0c234143b48334443f5adcf26e668945a6d47bc1fa6223e80918c6c735a029d9" },
+	{ file = "pyobjc_core-8.5-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:1486ee533f0d76f666804ce89723ada4db56bfde55e56151ba512d3f849857f8" },
+	{ file = "pyobjc_core-8.5-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:412de06dfa728301c04b3e46fd7453320a8ae8b862e85236e547cd797a73b490" },
+	{ file = "pyobjc_core-8.5-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:0b3e09cccb1be574a82cc9f929ae27fc4283eccc75496cb5d51534caa6bb83a3" },
+	{ file = "pyobjc_core-8.5-cp38-cp38-macosx_11_0_universal2.whl", hash = "sha256:eeafe21f879666ab7f57efcc6b007c9f5f8733d367b7e380c925203ed83f000d" },
+	{ file = "pyobjc_core-8.5-cp39-cp39-macosx_10_9_universal2.whl", hash = "sha256:c0071686976d7ea8c14690950e504a13cb22b4ebb2bc7b5ec47c1c1c0f6eff41" },
+]
+pyobjc-framework-cocoa = [
+	{ file = "pyobjc-framework-Cocoa-8.5.tar.gz", hash = "sha256:569bd3a020f64b536fb2d1c085b37553e50558c9f907e08b73ffc16ae68e1861" },
+	{ file = "pyobjc_framework_Cocoa-8.5-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:7a7c160416696bf6035dfcdf0e603aaa52858d6afcddfcc5ab41733619ac2529" },
+	{ file = "pyobjc_framework_Cocoa-8.5-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:6ceba444282030be8596b812260e8d28b671254a51052ad778d32da6e17db847" },
+	{ file = "pyobjc_framework_Cocoa-8.5-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:f46b2b161b8dd40c7b9e00bc69636c3e6480b2704a69aee22ee0154befbe163a" },
+	{ file = "pyobjc_framework_Cocoa-8.5-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:b31d425aee8698cbf62b187338f5ca59427fa4dca2153a73866f7cb410713119" },
+	{ file = "pyobjc_framework_Cocoa-8.5-cp38-cp38-macosx_11_0_universal2.whl", hash = "sha256:898359ac1f76eedec8aa156847682378a8950824421c40edb89391286e607dc4" },
+	{ file = "pyobjc_framework_Cocoa-8.5-cp39-cp39-macosx_10_9_universal2.whl", hash = "sha256:baa2947f76b119a3360973d74d57d6dada87ac527bab9a88f31596af392f123c" },
+]
+pyobjc-framework-corebluetooth = [
+	{ file = "pyobjc-framework-CoreBluetooth-8.5.tar.gz", hash = "sha256:d83928083b0fc1aa9f653b3bbc4c22558559adbd82689aa461f4ccb295669dd2" },
+	{ file = "pyobjc_framework_CoreBluetooth-8.5-cp36-abi3-macosx_10_9_universal2.whl", hash = "sha256:19b42a2020ee36e2b0e9b8ae64fb130084a609612fcdedafea7cb53234d3cb63" },
+	{ file = "pyobjc_framework_CoreBluetooth-8.5-cp36-abi3-macosx_10_9_x86_64.whl", hash = "sha256:ef319beb88d8e75af61eb8f0fef01c6fe186d9a271718bcfaafc68c599af8c37" },
+	{ file = "pyobjc_framework_CoreBluetooth-8.5-cp36-abi3-macosx_11_0_universal2.whl", hash = "sha256:57ae20e1dc54b8f0805cda8681a5293b11a499d053df5bdae459d4ca8c67756c" },
+]
+pyobjc-framework-libdispatch = [
+	{ file = "pyobjc-framework-libdispatch-8.5.tar.gz", hash = "sha256:f610a0e57e9bb31878776db0a1c1cfd279f4e43e26e3195c6647786b4522b1c4" },
+	{ file = "pyobjc_framework_libdispatch-8.5-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:63808d104951f7f721be6ad3de194f23c8e2f7a93c771e07961c63d70f2628c3" },
+	{ file = "pyobjc_framework_libdispatch-8.5-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:8c67972b6e068ce168611852742cbabe59cbb4a33d3750a351171a7c062771f9" },
+	{ file = "pyobjc_framework_libdispatch-8.5-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:5a1cc3bb6014c28a4223ad9f2257057f7d2861087c87c81c9649813fc7ec43a6" },
+	{ file = "pyobjc_framework_libdispatch-8.5-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:c22da1d79a5b0b22e3f040f40c63c51cd46e275a82f143cf2630f772ffc1a4ef" },
+	{ file = "pyobjc_framework_libdispatch-8.5-cp38-cp38-macosx_11_0_universal2.whl", hash = "sha256:05d20953557924f4280a6186600600cf5ea4391f5612b43155b3b2a7dfda6b61" },
+	{ file = "pyobjc_framework_libdispatch-8.5-cp39-cp39-macosx_10_9_universal2.whl", hash = "sha256:fa9d4b446dc62c15fd04c65decbb36530bf866231f2630262a6435e11d53bf77" },
+]
+pyside2 = [
+	{ file = "PySide2-5.15.2.1-5.15.2-cp27-cp27m-macosx_10_13_intel.whl", hash = "sha256:b5e1d92f26b0bbaefff67727ccbb2e1b577f2c0164b349b3d6e80febb4c5bde2" },
+	{ file = "PySide2-5.15.2.1-5.15.2-cp27-cp27mu-manylinux1_x86_64.whl", hash = "sha256:235240b6ec8206d9fdf0232472c6ef3241783d480425e5b54796f06e39ed23da" },
+	{ file = "PySide2-5.15.2.1-5.15.2-cp35.cp36.cp37.cp38.cp39.cp310-abi3-macosx_10_13_intel.whl", hash = "sha256:a9e2e6bbcb5d2ebb421e46e72244a0f4fe0943b2288115f80a863aacc1de1f06" },
+	{ file = "PySide2-5.15.2.1-5.15.2-cp35.cp36.cp37.cp38.cp39.cp310-abi3-manylinux1_x86_64.whl", hash = "sha256:23886c6391ebd916e835fa1b5ae66938048504fd3a2934ae3189a96cd5ac0b46" },
+	{ file = "PySide2-5.15.2.1-5.15.2-cp35.cp36.cp37.cp38.cp39.cp310-none-win32.whl", hash = "sha256:439509e53cfe05abbf9a99422a2cbad086408b0f9bf5e6f642ff1b13b1f8b055" },
+	{ file = "PySide2-5.15.2.1-5.15.2-cp35.cp36.cp37.cp38.cp39.cp310-none-win_amd64.whl", hash = "sha256:af6b263fe63ba6dea7eaebae80aa7b291491fe66f4f0057c0aafe780cc83da9d" },
+]
+pysolar = [
+	{ file = "pysolar-0.10-py3-none-any.whl", hash = "sha256:2ef24cc94f48b880551aa26bff75e556054b1690ee66c3679f53c693f96d476d" },
+]
+python-dateutil = [
+	{ file = "python_dateutil-2.8.2-py2.py3-none-any.whl", hash = "sha256:961d03dc3453ebbc59dbdea9e4e11c5651520a876d0f4db161e8674aae935da9" },
+]
+pytz = [
+	{ file = "pytz-2022.1-py3-none-any.whl", hash = "sha256:d7c0502dc1bc5e1a1a447a7527f99ddf7a302c0f83367ed442b6b3c38c38286d" },
+]
+pywin32-ctypes = [
+	{ file = "pywin32_ctypes-0.2.0-py2.py3-none-any.whl", hash = "sha256:9dc2d991b3479cc2df15930958b674a48a227d5361d413827a4cfd0b5876fc98" },
+]
+pyyaml = [
+	{ file = "PyYAML-6.0-cp37-cp37m-linux_armv6l.whl", hash = "sha256:dddcabaafe0a7a1eb5725cb20c3c197a9041766962c097289f470a1430fde72d" },
+	{ file = "PyYAML-6.0-cp37-cp37m-linux_armv7l.whl", hash = "sha256:dddcabaafe0a7a1eb5725cb20c3c197a9041766962c097289f470a1430fde72d" },
+	{ file = "PyYAML-6.0-cp39-cp39-linux_armv6l.whl", hash = "sha256:03f43334d3a45d0fc40ca291a043438257abeb85e851cb154a32d159b3a49fdb" },
+	{ file = "PyYAML-6.0-cp39-cp39-linux_armv7l.whl", hash = "sha256:03f43334d3a45d0fc40ca291a043438257abeb85e851cb154a32d159b3a49fdb" },
+]
+qasync = [
+	{ file = "qasync-0.23.0-py3-none-any.whl", hash = "sha256:564378948b4453fb4f53ae3db9fff47e842c29b40e1c86a1cf560a6c25c478a2" },
+]
+rich = [
+	{ file = "rich-12.4.1-py3-none-any.whl", hash = "sha256:d0f660193a976f179d87c3d990d80f20a577b8fee8187350b3720aca3197cc7b" },
+]
+scipy = [
+	{ file = "scipy-1.8.0-cp39-cp39-linux_armv6l.whl", hash = "sha256:ecb0b84dc20446471bdb102e68236e11be76293805d311e2a167d7446352fd45" },
+	{ file = "scipy-1.8.0-cp39-cp39-linux_armv7l.whl", hash = "sha256:ecb0b84dc20446471bdb102e68236e11be76293805d311e2a167d7446352fd45" },
+]
+shiboken2 = [
+	{ file = "shiboken2-5.15.2.1-5.15.2-cp27-cp27m-macosx_10_13_intel.whl", hash = "sha256:f890f5611ab8f48b88cfecb716da2ac55aef99e2923198cefcf781842888ea65" },
+	{ file = "shiboken2-5.15.2.1-5.15.2-cp27-cp27mu-manylinux1_x86_64.whl", hash = "sha256:87079c07587859a525b9800d60b1be971338ce9b371d6ead81f15ee5a46d448b" },
+	{ file = "shiboken2-5.15.2.1-5.15.2-cp35.cp36.cp37.cp38.cp39.cp310-abi3-macosx_10_13_intel.whl", hash = "sha256:ffd3d0ec3d508e592d7ee3885d27fee1f279a49989f734eb130f46d9501273a9" },
+	{ file = "shiboken2-5.15.2.1-5.15.2-cp35.cp36.cp37.cp38.cp39.cp310-abi3-manylinux1_x86_64.whl", hash = "sha256:63debfcc531b6a2b4985aa9b71433d2ad3bac542acffc729cc0ecaa3854390c0" },
+	{ file = "shiboken2-5.15.2.1-5.15.2-cp35.cp36.cp37.cp38.cp39.cp310-none-win32.whl", hash = "sha256:eb0da44b6fa60c6bd317b8f219e500595e94e0322b33ec5b4e9f406bedaee555" },
+	{ file = "shiboken2-5.15.2.1-5.15.2-cp35.cp36.cp37.cp38.cp39.cp310-none-win_amd64.whl", hash = "sha256:a0d0fdeb12b72c8af349b9642ccc67afd783dca449309f45e78cda50272fd6b7" },
+]
+six = [
+	{ file = "six-1.16.0-py2.py3-none-any.whl", hash = "sha256:8abb2f1d86890a2dfb989f9a77cfcfd3e47c2a354b01111771326f8aa26e0254" },
+]
+weatherunits = [
+	{ file = "WeatherUnits-0.5.2-py3-none-any.whl", hash = "sha256:b2694bc25774fd974db70aea3701ccf28f3c14e581dfe4d50d391ace4880bbcb" },
+]
+yarl = [
+	{ file = "yarl-1.7.2-cp37-cp37m-linux_armv6l.whl", hash = "sha256:64ae3c1771f00fbf4cbf2c8d9a43b95a306a829ffa466c43a8c006d409c56e6b" },
+	{ file = "yarl-1.7.2-cp37-cp37m-linux_armv7l.whl", hash = "sha256:64ae3c1771f00fbf4cbf2c8d9a43b95a306a829ffa466c43a8c006d409c56e6b" },
+	{ file = "yarl-1.7.2-cp39-cp39-linux_armv6l.whl", hash = "sha256:fe368d4d76e62edee42ab206ffa1da2dad2f848b1ae123a1fd3777987f0e8393" },
+	{ file = "yarl-1.7.2-cp39-cp39-linux_armv7l.whl", hash = "sha256:fe368d4d76e62edee42ab206ffa1da2dad2f848b1ae123a1fd3777987f0e8393" },
+]
