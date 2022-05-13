@@ -36,12 +36,12 @@ PyInstaller.config.CONF['pathx'] = ['../src/LevityDash']
 def get_sig():
 	def inputSig():
 		sig = input('Enter Apple ID for app signature: ')
-		with open('build/.signature', 'w') as f:
+		with open('build-to-app/.signature', 'w') as f:
 			f.write(sig)
 		return sig
 
 	try:
-		with open('build/.signature', 'r') as f:
+		with open('build-to-app/.signature', 'r') as f:
 			sig = f.read()
 		return sig or inputSig()
 	except FileNotFoundError:
@@ -54,7 +54,7 @@ try:
 		os.environ['CODE_SIGN_IDENTITY'] = sig
 		main.run(
 			[
-				"./build/macOS.spec",
+				"./build-to-app/macOS.spec",
 				'--noconfirm',
 			]
 		)
@@ -63,7 +63,7 @@ try:
 	elif platform.system() == "Linux":
 		main.run(
 			[
-				"./build/linux.spec",
+				"./build-to-app/linux.spec",
 				'--noconfirm'
 			]
 		)
