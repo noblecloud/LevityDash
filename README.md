@@ -1,6 +1,6 @@
 <p align="center">
 	<p align="center">
-   <img width="200" height="200" src="src/ui/icon512.png" alt="Logo">
+   <img width="200" height="200" src="src/LevityDash/lib/ui/icon512.png" alt="Logo">
   </p>
 	<h1 align="center" color="505050">
 		<strong><b>LevityDash</b></strong>
