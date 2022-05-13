@@ -1653,11 +1653,6 @@ class LinePlot(Plot):
 # 		return raw
 
 
-@Slot()
-def removeInstance(*args):
-	print(args)
-
-
 # Section Plot Text
 
 
@@ -2650,7 +2645,6 @@ class DayAnnotations(QGraphicsItemGroup):
 
 		t = self.deviceTransform(self.scene().views()[0].viewportTransform())
 		width = max(t.mapRect(m.textRect).width() for m in hourLabels)
-		print(width)
 		self.maxHourLabelWidth = width
 		hourLabelsWidthPerDay = (24*self.graph.pixelsPerHour/t.m11())/width
 		self.hourLabelsWidthPerDay = hourLabelsWidthPerDay
@@ -3728,7 +3722,6 @@ class Figure(Panel):
 		if v > M:
 			m = int(M)
 			M = elastic(v, M)
-			print(m, round(M, 4), round(v, 4))
 		elif v < m:
 			m = elastic(v, m)
 		return min(max(m, v), M)

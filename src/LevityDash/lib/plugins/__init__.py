@@ -63,7 +63,6 @@ class Plugins(metaclass=Singleton):
 
 		from LevityDash import __lib__
 		pluginDirs = [f'{__lib__}/plugins/builtin']
-		print(pluginDirs)
 
 		return search(pluginDirs)
 
@@ -73,7 +72,6 @@ class Plugins(metaclass=Singleton):
 			return self.__plugins[name]
 		builtinNamespace = f'LevityDash.lib.plugins.builtin'
 		try:
-			# breakpoint()
 			exec(f'from {builtinNamespace} import {name}')
 		except Exception as e:
 			pluginLog.error(f'Failed to load plugin {name}: {e}')

@@ -5,7 +5,6 @@ from copy import copy
 
 from operator import add
 
-import pytz
 from dataclasses import dataclass, field
 
 from uuid import uuid4
@@ -17,8 +16,9 @@ from typing import Any, Callable, ClassVar, Hashable, Iterable, List, Mapping, O
 import numpy as np
 import WeatherUnits as wu
 from dateutil.parser import parse
-from math import inf, isinf
+from math import isinf
 from PySide2.QtCore import QObject, Signal
+from rich.progress import Progress
 
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.translator import LevityDatagram
@@ -1018,7 +1018,7 @@ class ObservationTimestamp(ObservationValue):
 			value = data
 			key = CategoryItem('timestamp')
 		else:
-			print(f'Unable to find valid timestamp in {data}.  Using current time.')
+			log.warn(f'Unable to find valid timestamp in {data}.  Using current time.')
 			value = datetime.now().astimezone(_timezones.utc)
 			key = CategoryItem('timestamp')
 		super(ObservationTimestamp, self).__init__(value, key, container=source, source=source)
@@ -1635,9 +1635,10 @@ class ObservationTimeSeries(ObservationDict, published=True):
 
 		keys = set()
 
-		if isinstance(raw, List):
-			items = len(raw)
-			i = 0
+		if not isinstance(raw, List):
+			raise ValueError('ObservationTimeSeries.update: data must be a dict or a list of dicts')
+
+		def updateWithProgress(raw: List[Dict], progress: Progress | None):
 			for rawObs in raw:
 				if not isinstance(rawObs, Mapping):
 					rawObs = {k: v for k, v in zip(keyMap, rawObs)}
@@ -1645,10 +1646,19 @@ class ObservationTimeSeries(ObservationDict, published=True):
 				obs = self.__timeseries__.get(key, None) or self.buildObservation(key)
 				obs.update(rawObs, source=source)
 				keys.update(obs.keys())
-				print(f'\r {source[0]}.{self.dataName}: {i} of {items}', end='')
-				i += 1
-			print(f'\r {source[0]}.{self.dataName}: finished loading {items} items')
-		# self.calculatePeriod(raw)
+				if progress is not None:
+					progress.update(task, advance=1, refresh=True)
+			if progress is not None:
+				progress.update(task, complete=True, refresh=True)
+
+		if len(raw) > 5:
+			with Progress() as progress:
+				task = progress.add_task(f'Updating [blue]{source[0]}.{self.dataName}', total=len(raw), transient=True)
+				updateWithProgress(raw, progress)
+				progress.refresh()
+		else:
+			updateWithProgress(raw, None)
+
 		self.__knownKeys.update(keys)
 
 		keys = {key for key in keys if key.category not in self._ignoredFields and key.category ^ 'time'}

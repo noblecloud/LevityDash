@@ -588,7 +588,6 @@ class RadialMenuItem(Panel):
 		super(RadialMenuItem, self).focusInEvent(event)
 
 	def focusOutEvent(self, event: QFocusEvent) -> None:
-		print(f'focus out: {self.label.text}')
 		if not self.root.childHasFocus():
 			self.root.collapse()
 
@@ -784,11 +783,9 @@ class PanelDrawer(Panel):
 		event.ignore()
 
 	def hoverEnterEvent(self, event: QGraphicsSceneHoverEvent):
-		print('hover enter')
 		self.handle.hideTimer.stop()
 
 	def hoverLeaveEvent(self, event: QGraphicsSceneHoverEvent):
-		print('hover leave')
 		self.handle.hideTimer.start()
 
 	def wheelEvent(self, event: QGraphicsSceneWheelEvent) -> None:
