@@ -3,7 +3,7 @@ name = "LevityDash"
 authors = ["noblecloud <git@noblecloud.io>"]
 description = "A lightweight, desktop native, multi-source, modulear dashboard for macOS, Windows and Linux"
 
-version = "0.1.0-beta.4"
+version = "0.1.0-beta.5"
 readme = "README.md"
 license = "MIT"
 
@@ -33,17 +33,13 @@ packages = [
 	{ include = 'LevityDash', from = 'src' },
 ]
 
-[[tool.poetry.source]] # Source needed for arm platform
-name = "PiWheels"
-url = "https://www.piwheels.org/simple"
-
 [tool.poetry.scripts]
 LevityDash = 'LevityDash:__main__.run'
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.11"
 pylunar = "^0.6.0"
-WeatherUnits = "^0.5.2"
+WeatherUnits = "^0.5.3"
 numpy = "^1.18.0"
 pytz = "^2022.1"
 qasync = "^0.23.0"
@@ -55,12 +51,13 @@ PyYAML = "^6.0"
 rich = "^12.3.0"
 aiohttp = "^3.8.1"
 PySide2 = "^5.15.2"
+appdirs = "^1.4.4"
 
 [tool.poetry.urls]
 "Bug Tracker" = "https://github.com/noblecloud/LevityDash/issues"
 
 [tool.poetry.dev-dependencies]
-pyinstaller = "^5.0.1"
+pyinstaller = "^5.1"
 certifi = "^2021.10.8"
 
 [build-system]

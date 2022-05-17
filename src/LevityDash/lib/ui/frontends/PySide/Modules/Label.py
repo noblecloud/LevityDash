@@ -11,7 +11,7 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Handles.MarginHandles import Mar
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import EditableLabelContextMenu, LabelContextMenu
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.utils.geometry import Alignment, AlignmentFlag, Position, Size
-from LevityDash.lib.utils.log import LevityGUILog as guiLog
+from LevityDash.lib.log import LevityGUILog as guiLog
 
 log = guiLog.getChild(__name__)
 

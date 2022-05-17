@@ -10,7 +10,7 @@ from LevityDash.lib.plugins import Plugins, Accumulator
 from LevityDash.lib.plugins.categories import CategoryEndpointDict, CategoryItem
 from LevityDash.lib.utils.data import KeyData
 from LevityDash.lib.utils.shared import clearCacheAttr, Period
-from LevityDash.lib.utils.log import LevityPluginLog
+from LevityDash.lib.log import LevityPluginLog
 
 log = LevityPluginLog.getChild('Dispatcher')
 

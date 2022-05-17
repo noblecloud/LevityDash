@@ -6,7 +6,7 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Resize import Splitter
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.utils.shared import _Panel
 from LevityDash.lib.utils.geometry import LocationFlag, relativePosition
-from LevityDash.lib.utils.log import LevityGUILog as guiLog
+from LevityDash.lib.log import LevityGUILog as guiLog
 
 log = guiLog.getChild(__name__)
 

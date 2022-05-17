@@ -66,6 +66,7 @@ urllogPool.setLevel(logging.ERROR)
 
 LevityGUILog = LevityLogger.getChild('GUI')
 LevityPluginLog = LevityLogger.getChild('Plugins')
+LevityUtilsLog = LevityLogger.getChild('Utils')
 # LevityPluginLog.setLevel(logging.INFO)
 
-__all__ = ['LevityLogger', 'LevityPluginLog', 'LevityGUILog']
+__all__ = ['LevityLogger', 'LevityPluginLog', 'LevityGUILog', 'LevityUtilsLog']

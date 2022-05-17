@@ -8,7 +8,7 @@ from typing import Dict, Hashable, Iterable, Optional, Set, Union
 from dateutil import parser as DateParser
 
 from LevityDash.lib.plugins.utils import unitDict
-from LevityDash.lib.utils import LevityPluginLog
+from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.utils.shared import clearCacheAttr, now, Unset
 from ..categories import CategoryDict, CategoryItem, UnitMetaData, ValueNotFound
 

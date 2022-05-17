@@ -1,4 +1,5 @@
 import re
+import sys
 from json import loads
 
 import numpy as np
@@ -29,7 +30,7 @@ from LevityDash.lib.ui.frontends.PySide import app, colorPalette
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.ui.colors import rgbHex
 from LevityDash.lib.plugins.dispatcher import ValueDirectory, ForecastPlaceholderSignal, MultiSourceContainer, MonitoredKey
-from LevityDash.lib.utils.log import LevityGUILog
+from LevityDash.lib.log import LevityGUILog
 from LevityDash.lib.ui.frontends.PySide.Modules.DateTime import baseClock, baseClock as ClockSignals
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import Text
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.MarginHandles import FigureHandles
@@ -2276,11 +2277,11 @@ class TimeMarkers(QGraphicsRectItem):
 def useHeight(_, *args):
 	return args[1]
 
-
+from platform import system as syscheck
 class TimeStampText(PlotText):
 	formatID: int
 	defaultFormatID = 3
-	formatStrings = ['%H:%M:%S.%f', '%H:%M:%S', '%H:%M', '%-I%p', '%A', '%a']
+	formatStrings = ['%H:%M:%S.%f', '%H:%M:%S', '%H:%M', f'%{"-" if syscheck() != "Windows" else "#"}I%p', '%A', '%a']
 	scalar = 1
 	displayScale = 1
 	baseLabelRelativeHeight = 0.1

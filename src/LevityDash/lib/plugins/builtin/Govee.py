@@ -8,7 +8,7 @@ import re
 from bleak import BleakScanner
 from bleak.backends.device import BLEDevice
 
-from LevityDash.lib.utils.log import LevityPluginLog
+from LevityDash.lib.log import LevityPluginLog
 
 from LevityDash.lib.plugins.plugin import Plugin, ScheduledEvent
 from LevityDash.lib.plugins.translator import LevityDatagram, Translator, TranslatorSpecialKeys as tsk

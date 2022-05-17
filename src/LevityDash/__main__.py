@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import os
 import signal
 import sys
 
@@ -25,8 +24,6 @@ from rich.traceback import install
 
 install(show_locals=True, width=120)
 qasync.logger.setLevel('ERROR')
-
-os.environ['WU_CONFIG_PATH'] = f'{Path.home()}/.config/levity/config.ini'
 
 
 def signalQuit(sig, frame):

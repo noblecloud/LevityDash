@@ -11,7 +11,8 @@ from pytz import timezone
 
 from . import EasyPath as EasyPath
 
-
+from LevityDash.lib.log import LevityUtilsLog as log
+log = log.getChild('config')
 
 def buildDirectories(path: Path, dirs: Union[list, str, dict[str, Union[str, list]]]) -> None:
 	'''
@@ -61,14 +62,13 @@ class LevityConfig(ConfigParser):
 		configSection = kwargs.pop('fromSection', None) or kwargs.pop('section', None) or kwargs.pop('config', None) or None
 		super(LevityConfig, self).__init__(allow_no_value=True, *args, **kwargs)
 		self.optionxform = str
-		userPath = Path.home().joinpath('.config', 'levity')
+		from LevityDash import __dirs__
+		dirs = __dirs__
+
+		userPath = Path(dirs.user_config_dir)
 		if not userPath.exists():
 			# log.info(f'Creating user config directory: {userPath}')
 			copytree(self.rootPath['example-config'].path, userPath)
-
-		global log
-		from LevityDash.lib.utils import utilLog
-		log = utilLog.getChild('config')
 
 		self.userPath = userPath
 
@@ -85,15 +85,9 @@ class LevityConfig(ConfigParser):
 
 		if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
 			os.environ['DEBUG'] = '1'
-			Path.home().joinpath('.config', 'levity', 'LevityDash.log').touch(exist_ok=True)
+			Path(dirs.user_log_dir).joinpath('levitydash.log').touch(exist_ok=True)
 
 	# sys.stdout = open(Path.home().joinpath('.config', 'levity', 'LevityDash.log'), 'a')
-
-	@property
-	def exampleFileName(self):
-		l = self.fileName.split('.')
-		l[-2] = f'{l[-2]}-example'
-		return '.'.join(l)
 
 	@cached_property
 	def rootPath(self) -> EasyPath.EasyPath:
@@ -287,21 +281,25 @@ class Config(LevityConfig):
 		return self.loc[1]
 
 	@property
-	def dashboardPath(self):
-		path = self['MetaData']['filepath']
-		if path is not None:
-			return Path(path).expanduser()
-		return None
+	def dashboardPath(self) -> Path:
+		path = self['Display']['dashboard']
+		userSaves = self.userPath['saves']['dashboards']
+		if path in userSaves:
+			return userSaves[path].path.absolute()
+		return Path(path).absolute()
 
 	@dashboardPath.setter
 	def dashboardPath(self, path: Path):
-		user = Path.home().expanduser()
-		self['MetaData']['filepath'] = str(path).replace(str(user), '~')
+		userSaves = self.userPath['saves']['dashboards'].path
+		if str(path.absolute()).startswith(str(userSaves)):
+			path = path.relative_to(userSaves)
+		self['Display']['dashboard'] = path
 		with open(self.path.path, 'w') as f:
 			self.write(f)
 
 
 userConfig = Config()
 pluginConfig = userConfig.plugins
+os.environ['WU_CONFIG_PATH'] = str(userConfig.path.absolute())
 
 __all__ = ['userConfig', 'pluginConfig']

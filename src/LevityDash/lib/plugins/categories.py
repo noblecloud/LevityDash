@@ -7,7 +7,7 @@ from typing import Any, Callable, ClassVar, Dict, Hashable, Iterable, Mapping, O
 from pytz import timezone
 
 from LevityDash.lib.plugins.utils import TranslatorProperty, unitDict
-from LevityDash.lib.utils import LevityPluginLog
+from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.utils.shared import (clearCacheAttr, ColorStr, get, getOrSet, LOCAL_TIMEZONE, matchWildCard, operatorDict,
                                          removeSimilar, subsequenceCheck, Unset)
 

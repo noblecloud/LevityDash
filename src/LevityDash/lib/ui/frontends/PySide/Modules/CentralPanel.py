@@ -1,3 +1,4 @@
+from os import remove
 from shutil import copyfile
 from tempfile import NamedTemporaryFile
 
@@ -17,7 +18,7 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.config import userConfig
 from LevityDash.lib.EasyPath import FileLocation
 
-from LevityDash.lib.utils.log import LevityGUILog as guiLog
+from LevityDash.lib.log import LevityGUILog as guiLog
 
 log = guiLog.getChild(__name__)
 
@@ -213,18 +214,19 @@ class CentralPanel(Panel):
 		if not path.exists():
 			path.mkdir(parents=True)
 
-		# try:
-		tempFile = NamedTemporaryFile(dir=str(path), prefix=fileName, suffix='.temp', delete=True, mode='w')
-		with tempFile as f:
-			yaml.safe_dump(self.state, f, default_flow_style=False)
+		try:
+			tempFile = NamedTemporaryFile(delete=False, mode='w')
+			with tempFile as f:
+				yaml.safe_dump(self.state, f, default_flow_style=False)
 			copyfile(tempFile.name, str(path.joinpath(fileName)))
-			# except Exception as e:
-			# 	log.error(e)
-			# finally:
+		except Exception as e:
+			log.error(e)
+		finally:
+			remove(tempFile.name)
 			# 	t = locals().get('tempFile', False)
 			# 	if t and t.mode == 'w':
 			# 		t.close()
-			return
+		return
 
 	def save(self):
 		self._save()

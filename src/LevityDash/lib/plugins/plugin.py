@@ -17,7 +17,7 @@ from LevityDash.lib.plugins.observation import (ArchivedObservationValue, Measur
 from LevityDash.lib.plugins.translator import Translator
 from LevityDash.lib.plugins.utils import ChannelSignal
 from LevityDash.lib.utils.data import KeyData
-from LevityDash.lib.utils.log import LevityPluginLog as pluginLog
+from LevityDash.lib.log import LevityPluginLog as pluginLog
 from LevityDash.lib.utils.shared import clearCacheAttr, closest, Now, Period
 
 

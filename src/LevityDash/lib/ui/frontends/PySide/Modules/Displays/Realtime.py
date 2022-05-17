@@ -22,7 +22,7 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Menus import RealtimeContextMenu
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.utils.geometry import Alignment, AlignmentFlag, DisplayPosition
 from LevityDash.lib.utils.shared import clamp, disconnectSignal, Now, TitleCamelCase
-from LevityDash.lib.utils.log import LevityGUILog as guiLog
+from LevityDash.lib.log import LevityGUILog as guiLog
 from LevityDash.lib.utils.data import JsonEncoder
 
 log = guiLog.getChild(__name__)
@@ -167,7 +167,7 @@ class Realtime(Panel):
 			self.__updateTimeOffsetLabel()
 
 			self.display.refresh()
-			self.setToolTip(f'{value.source.name} @ {value.value.timestamp:%-I:%M%p}')
+			self.setToolTip(f'{value.source.name} @ {value.value.timestamp:%I:%M%p}')
 
 	@property
 	def placeholder(self):

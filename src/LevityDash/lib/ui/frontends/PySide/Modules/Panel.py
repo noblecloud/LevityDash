@@ -27,7 +27,7 @@ from LevityDash.lib.EasyPath import FileLocation
 from LevityDash.lib.utils.shared import boolFilter, clearCacheAttr, disconnectSignal, getItemsWithType, Numeric, SimilarValue, _Panel
 from LevityDash.lib.utils.geometry import Edge, LocationFlag, Margins, polygon_area, Position
 
-from LevityDash.lib.utils.log import LevityGUILog as log
+from LevityDash.lib.log import LevityGUILog as log
 from LevityDash.lib.ui.frontends.PySide.utils import debugPen, DisplayType, gridPen, selectionPen, colorPalette, findScene, findSizePosition, GraphicsItemSignals, hasState, itemLoader
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import BaseContextMenu
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles import Handle, HandleGroup
