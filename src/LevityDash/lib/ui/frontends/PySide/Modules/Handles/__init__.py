@@ -8,7 +8,7 @@ from PySide2.QtWidgets import QGraphicsItem, QGraphicsItemGroup, QGraphicsPathIt
 from LevityDash.lib.utils.shared import _Panel
 from LevityDash.lib.utils.geometry import LocationFlag, Position, Axis
 from LevityDash.lib.ui.frontends.PySide.utils import colorPalette
-from LevityDash.lib.utils.log import LevityGUILog
+from LevityDash.lib.log import LevityGUILog
 
 log = LevityGUILog.getChild('Handles')
 

@@ -1,6 +1,4 @@
-from .log import *
-
-utilLog = LevityLogger.getChild('Utils')
+from LevityDash.lib.log import LevityUtilsLog as utilLog
 from .shared import *
 from .various import *
 from .geometry import *

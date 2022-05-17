@@ -494,7 +494,8 @@ class LevityMainWindow(QMainWindow):
 			asyncio.get_event_loop().call_later(10, self.showFullScreen)
 
 	def openConfigFolder(self):
-		webbrowser.open(f'file:///{Path.home().absolute().joinpath(".config", "levity")}')
+		from LevityDash import __dirs__
+		webbrowser.open(f'file:///{Path(__dirs__.user_config_dir).as_posix()}')
 
 	def changeEvent(self, event: QEvent):
 		super().changeEvent(event)

@@ -1,5 +1,7 @@
 import sys
 from os import chdir
+from pathlib import Path
+from appdirs import AppDirs
 
 if sys.version_info < (3, 10, 0):
 	sys.exit(
@@ -8,11 +10,15 @@ if sys.version_info < (3, 10, 0):
 		"for installation instructions."
 	)
 
-from pathlib import Path
 
 isCompiled = getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
 
 __lib__ = (Path(__file__).parent.parent if isCompiled else Path(__file__).parent).joinpath('lib')
+__dirs__ = AppDirs(appname='LevityDash', appauthor='LevityDash.app')
 
 if isCompiled:
 	chdir(sys._MEIPASS)
+
+from __main__ import run
+
+__all__ = ('__lib__', '__dirs__', 'run')

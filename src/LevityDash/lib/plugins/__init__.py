@@ -2,7 +2,7 @@ import asyncio
 import pkgutil
 from typing import Any, ClassVar, Dict, Iterator, List, Optional
 
-from LevityDash.lib.utils.log import LevityPluginLog as pluginLog
+from LevityDash.lib.log import LevityPluginLog as pluginLog
 from LevityDash.lib.plugins.utils import *
 from LevityDash.lib.config import pluginConfig
 from LevityDash.lib.plugins import categories

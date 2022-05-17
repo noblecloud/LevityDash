@@ -7,7 +7,7 @@ from PySide2.QtCore import QObject, Signal, Slot
 from pytz import timezone
 
 from LevityDash.lib.utils import abbreviatedIterable, KeyData, SmartString
-from LevityDash.lib.utils.log import LevityPluginLog as log
+from LevityDash.lib.log import LevityPluginLog as log
 
 unitDict: Dict[str, Union[Type[wu.Measurement], Type[bool], Dict[str, Union[Type[wu.base.Measurement], Type[wu.base.DerivedMeasurement]]]]] = {
 	'f':                wu.temperature.Fahrenheit,

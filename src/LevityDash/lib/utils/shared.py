@@ -272,7 +272,7 @@ def levenshtein(source, target):
 	return previous_row[-1]
 
 
-MAX_TIMESTAMP_INT = datetime.max.timestamp()
+MAX_TIMESTAMP_INT = 253402318800
 
 
 def formatDate(value, tz: Union[str, timezone], utc: bool = False, format: str = ''):

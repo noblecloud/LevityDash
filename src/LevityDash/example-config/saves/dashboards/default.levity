@@ -92,7 +92,7 @@
       key: environment.temperature.temperature
       display:
         value:
-          alignment: CenterRight
+          alignment: Center
           margins: 0%, 0%, 0%, 0%
       title: false
       geometry:

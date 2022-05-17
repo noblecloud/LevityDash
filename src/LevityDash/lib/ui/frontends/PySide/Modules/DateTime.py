@@ -14,13 +14,13 @@ from time import strftime
 
 __all__ = ['ClockComponent', 'Clock', 'baseClock']
 
-from LevityDash.lib.utils.log import LevityGUILog as guiLog
+from LevityDash.lib.log import LevityGUILog as guiLog
 
 log = guiLog.getChild(__name__)
 
 from LevityDash.lib.utils.shared import disconnectSignal
 from LevityDash.lib.utils.geometry import Margins
-
+from platform import system as syscheck
 
 class ClockSignals(QObject):
 	second = Signal(int)
@@ -129,11 +129,11 @@ class ClockComponent(Label):
 	defaultMargins = (0, 0, 0, 0)
 
 	def __init__(self, parent: Union['Panel', 'LevityScene'], format: str = None, *args, **kwargs):
-		if format is not None:
-			self._format = format
-		else:
-			format = self._format
+		format = format or self._format
 		kwargs.pop('text', None)
+		if syscheck() == 'Windows':
+			format = format.replace('%-', '%#')
+		self._format = format
 		text = strftime(format)
 		kwargs['margins'] = {'top': 0, 'bottom': 0, 'left': 0, 'right': 0}
 		super(ClockComponent, self).__init__(parent, text=text, *args, **kwargs)
@@ -170,6 +170,8 @@ class ClockComponent(Label):
 	@format.setter
 	def format(self, value):
 		if self._format != value:
+			if syscheck() == "Windows":
+				value = value.replace('%-', '%#')
 			self._format = value
 			self.setTime()
 			disconnectSignal(self.timer, self.setTime)

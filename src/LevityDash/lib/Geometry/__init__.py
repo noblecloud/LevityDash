@@ -4,7 +4,7 @@ from math import prod
 from typing import Iterable, List, Optional, Union
 
 from PySide2.QtCore import QObject, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Signal
-from LevityDash.lib.utils.log import LevityGUILog as guiLog
+from LevityDash.lib.log import LevityGUILog as guiLog
 from LevityDash.lib.utils.shared import _Panel
 from .utils import *
 from LevityDash.lib.utils.geometry import GridItemPosition, GridItemSize, MultiDimension, Position, Size
