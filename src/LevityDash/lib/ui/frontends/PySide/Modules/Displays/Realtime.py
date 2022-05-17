@@ -27,7 +27,7 @@ from LevityDash.lib.utils.data import JsonEncoder
 
 log = guiLog.getChild(__name__)
 
-displayDefault = {'displayType': DisplayType.Numeric, 'geometry': {'absolute': False, 'position': {'x': 0, 'y': 0.2}, 'size': {'width': 1.0, 'height': 0.8}}}
+displayDefault = {'displayType': DisplayType.Text, 'geometry': {'absolute': False, 'position': {'x': 0, 'y': 0.2}, 'size': {'width': 1.0, 'height': 0.8}}}
 
 
 def buildDisplay(parent, displayType: Union[str, DisplayType], kwargs: dict = {}):
@@ -37,7 +37,7 @@ def buildDisplay(parent, displayType: Union[str, DisplayType], kwargs: dict = {}
 		displayType = DisplayType(displayType)
 	if isinstance(kwargs, str):
 		kwargs = {}
-	if displayType == DisplayType.Numeric:
+	if displayType == DisplayType.Text:
 		return DisplayLabel(parent=parent, **kwargs)
 	if displayType == DisplayType.Gauge:
 		return DisplayGauge(parent=parent, **kwargs)
@@ -53,7 +53,7 @@ class Realtime(Panel):
 		self._valueLink = None
 		self._placeholder = None
 		self._key = None
-		self.display = buildDisplay(self, kwargs.get('displayType', 'numeric'), kwargs.get('display', {}))
+		self.display = buildDisplay(self, kwargs.get('displayType', 'text'), kwargs.get('display', {}))
 		if 'value' in kwargs:
 			value = kwargs.pop('value')
 			if isinstance(value, MultiSourceContainer):
@@ -772,7 +772,7 @@ class DisplayLabel(Panel):
 		kwargs.pop('childItems', None)
 		self.text = ""
 		super().__init__(*args, **kwargs)
-		self.displayType = DisplayType.Numeric
+		self.displayType = DisplayType.Text
 		self.setMovable(False)
 		self.setResizable(False)
 		self.displayProperties = MeasurementDisplayProperties(self, **(displayProperties or {}), **kwargs)
