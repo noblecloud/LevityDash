@@ -15,7 +15,7 @@ def itemLoader(parent, item: dict):
 	itemType = item.pop('type', None)
 	if itemType is None:
 		if 'key' in item:
-			itemType = 'realtime.numeric'
+			itemType = 'realtime.text'
 		else:
 			itemType = 'panel'
 	if itemType.startswith('realtime'):
@@ -225,7 +225,6 @@ def estimateTextSize(font: QFont, string: str) -> QRectF:
 
 
 class DisplayType(str, Enum, metaclass=ClosestMatchEnumMeta):
-	Numeric = 'numeric'
 	Text = 'text'
 	Gauge = 'gauge'
 	Graph = 'graph'

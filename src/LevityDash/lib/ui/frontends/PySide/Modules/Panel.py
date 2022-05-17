@@ -614,7 +614,7 @@ class Panel(_Panel):
 				try:
 					object['displayType'] = DisplayType[object['displayType']]
 				except KeyError:
-					object['displayType'] = DisplayType.Numeric
+					object['displayType'] = DisplayType.Text
 			return object
 
 		data = loads(event.mimeData().data('application/panel-valueLink').data(), object_hook=hook)

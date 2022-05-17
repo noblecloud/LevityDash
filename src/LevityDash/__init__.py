@@ -19,6 +19,4 @@ __dirs__ = AppDirs(appname='LevityDash', appauthor='LevityDash.app')
 if isCompiled:
 	chdir(sys._MEIPASS)
 
-from __main__ import run
-
-__all__ = ('__lib__', '__dirs__', 'run')
+__all__ = ('__lib__', '__dirs__')
