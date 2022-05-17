@@ -3341,7 +3341,7 @@ class GraphProxy(QGraphicsItemGroup):
 		return 0
 
 	def clampPoint(self, value):
-		maxX = -self.graph.timeframe.negativeOffset.total_seconds()*self.graph.pixelsPerSecond
+		maxX = -self.graph.timeframe.lookback.total_seconds()*self.graph.pixelsPerSecond
 		maxY = self.graph.rect().bottom() - self.rect().height()
 		minX = self.graph.rect().right() - self.contentsWidth()
 		x = clamp(value.x(), minX, maxX)
@@ -3592,7 +3592,7 @@ class Figure(Panel):
 
 	@property
 	def contentsX(self) -> float:
-		return self.graph.timeframe.negativeOffset.total_seconds()/3600*self.graph.pixelsPerHour
+		return self.graph.timeframe.lookback.total_seconds()/3600*self.graph.pixelsPerHour
 		# if self.plotData and any(i.value for i in self.plotData.values()):
 		# 	return min(i.plotValues[0].x() for i in self.plots if i.value) * self.graph.timescalar * 10
 		return 0

@@ -397,7 +397,7 @@ class TimeFrameWindow(QObject):
 		The length of time to display on the graph
 	offset : timedelta
 		The offset from the current time to display on the graph
-	negativeOffset : timedelta
+	lookback : timedelta
 		The offset from the current time to display on the graph
 
 	Properties
@@ -439,22 +439,22 @@ class TimeFrameWindow(QObject):
 
 	def __init__(self, value: timedelta = None,
 		offset: timedelta = timedelta(seconds=0),
-		negativeOffset: timedelta = timedelta(hours=-6),
+		lookback: timedelta = timedelta(hours=-6),
 		**kwargs):
 		"""
 		:param value: The length of time to display on the graph
 		:type value: timedelta
 		:param offset: The offset to apply to the start time
 		:type offset: timedelta
-		:param negativeOffset: The offset to apply to the end time
-		:type negativeOffset: timedelta
+		:param lookback: The offset to apply to the end time
+		:type lookback: timedelta
 		"""
 		super(TimeFrameWindow, self).__init__()
 
 		self.__delayTimer = QTimer(singleShot=True, interval=500, timeout=self.__emitChanged)
 
 		self.offset = offset
-		self.negativeOffset = negativeOffset
+		self.lookback = lookback
 
 		if isinstance(value, dict):
 			value = timedelta(**value)
@@ -571,11 +571,11 @@ class TimeFrameWindow(QObject):
 		self.range += value
 
 	@property
-	def negativeOffset(self):
+	def lookback(self):
 		return self._negativeOffset
 
-	@negativeOffset.setter
-	def negativeOffset(self, value):
+	@lookback.setter
+	def lookback(self, value):
 		if isinstance(value, dict):
 			value = timedelta(**value)
 		if value.total_seconds() > 0:
@@ -585,7 +585,7 @@ class TimeFrameWindow(QObject):
 
 	@property
 	def combinedOffset(self):
-		return self.offset + self.negativeOffset
+		return self.offset + self.lookback
 
 	@classmethod
 	def validate(cls, item: dict) -> bool:
@@ -622,7 +622,7 @@ class TimeFrameWindow(QObject):
 		state = {
 			**self.__exportTimedelta(self.range),
 			'offset':         self.__exportTimedelta(self.offset),
-			'negativeOffset': self.__exportTimedelta(self.negativeOffset)
+			'lookback': self.__exportTimedelta(self.lookback)
 		}
 		return {k: v for k, v in state.items() if v}
 
