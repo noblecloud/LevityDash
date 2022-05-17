@@ -48,15 +48,15 @@
     y: 0%
   frozen: true
   items:
-  - format: '%A, %B %#d'
-    geometry:
-      height: 27.1%
-      width: 100%
-      x: 0%
-      y: 0%
-    filters:
-    - 0Add Ordinal
-    alignment: CenterRight
+    - format: '%A, %B %-d'
+      geometry:
+        height: 27.1%
+        width: 100%
+        x: 0%
+        y: 0%
+      filters:
+        - 0Add Ordinal
+      alignment: CenterRight
   - type: moon
     geometry:
       height: 43.1%
@@ -64,13 +64,13 @@
       x: 79.2%
       y: 25%
     locked: true
-  - format: '%#I:%M'
-    geometry:
-      height: 68.6%
-      width: 77.3%
-      x: 0%
-      y: 28.6%
-    alignment: CenterRight
+    - format: '%-I:%M'
+      geometry:
+        height: 68.6%
+        width: 77.3%
+        x: 0%
+        y: 28.6%
+      alignment: CenterRight
   - format: '%p'
     geometry:
       height: 24.5%

@@ -198,7 +198,7 @@ class ClockComponent(Label):
 	@property
 	def state(self):
 		state = {
-			'format':   self.format,
+			'format':   self.format.replace('%#', '%-'),
 			'geometry': self.geometry,
 		}
 		if self.filters:
