@@ -1,0 +1,81 @@
+<svg width="100%"
+		 height="100%"
+		 viewBox="0 0 2715 2404"
+		 version="1.1" xmlns="http://www.w3.org/2000/svg"
+		 xml:space="preserve"
+		 style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;"
+		 class="svg-logo">
+>
+  <defs>
+        <filter id="inset-shadow">
+
+            <feComponentTransfer in="SourceAlpha" result="inset-selection">
+                <feFuncA type="discrete" tableValues="0 1 1 1 1 1"/>
+            </feComponentTransfer>
+
+					<feComponentTransfer in="SourceGraphic" result="original-no-fill">
+                <feFuncA type="discrete" tableValues="0 0 1"/>
+            </feComponentTransfer>
+
+					<feColorMatrix type="matrix" in="original-no-fill" result="new-source-alpha" values="0 0 0 0 0
+                      0 0 0 0 0
+                      0 0 0 0 0
+                      0 0 0 1 0"
+					/>
+
+					<feGaussianBlur in="new-source-alpha" result="blur" stdDeviation="5"/>
+					<feGaussianBlur in="new-source-alpha" result="blur2" stdDeviation="10"/>
+					<feGaussianBlur in="new-source-alpha" result="blur3" stdDeviation="15"/>
+					<feMerge result="blur">
+                <feMergeNode in="blur" mode="normal"/>
+						<feMergeNode in="blur2" mode="normal"/>
+						<feMergeNode in="blur3" mode="normal"/>
+            </feMerge>
+
+					<feComposite operator="in" in="inset-selection" in2="blur" result="inset-blur"/>
+
+					<feComposite operator="over" in="original-no-fill" in2="inset-blur"/>
+        </filter>
+    </defs>
+	<g transform="matrix(1,0,0,1,-690.602,-846.49)" stroke="red" stroke-width="100" fill="white" filter="url(#inset-shadow)">
+    <g transform="matrix(0.409387,0,0,0.312196,1289.62,1022.65)">
+      <g>
+        <g transform="matrix(0.638063,0,0,0.92569,2438.48,3335.89)" class="logo-block">
+            <path
+							d="M2967.45,1404.14C2967.45,1302.2 2875.88,1219.43 2763.1,1219.43L1286.29,1219.43C1173.5,1219.43 1081.94,1302.2 1081.94,1404.14L1081.94,2742.11C1081.94,2844.06 1173.5,2926.82 1286.29,2926.82L2763.1,2926.82C2875.88,2926.82 2967.45,2844.06 2967.45,2742.11L2967.45,1404.14Z"
+						/>
+        </g>
+				<g transform="matrix(1.8377,0,0,0.922089,-1114.6,1375.72)" class="logo-block">
+                <path
+									d="M2967.45,1404.48C2967.45,1302.35 2935.72,1219.43 2896.64,1219.43L1152.74,1219.43C1113.66,1219.43 1081.94,1302.35 1081.94,1404.48L1081.94,2741.77C1081.94,2843.9 1113.66,2926.82 1152.74,2926.82L2896.64,2926.82C2935.72,2926.82 2967.45,2843.9 2967.45,2741.77L2967.45,1404.48Z"
+								/>
+            </g>
+				<g transform="matrix(0.641668,0,0,0.929213,2434.58,-609.7)" class="logo-block">
+                <path
+									d="M2967.45,1404.48C2967.45,1302.35 2875.88,1219.43 2763.1,1219.43L1286.29,1219.43C1173.5,1219.43 1081.94,1302.35 1081.94,1404.48L1081.94,2741.77C1081.94,2843.9 1173.5,2926.82 1286.29,2926.82L2763.1,2926.82C2875.88,2926.82 2967.45,2843.9 2967.45,2741.77L2967.45,1404.48Z"
+								/>
+            </g>
+				<g transform="matrix(0.641668,0,0,2.07984,-1328.01,-2012.82)" class="logo-block">
+                <path
+									d="M2967.45,1302.11C2967.45,1256.48 2875.88,1219.43 2763.1,1219.43L1286.29,1219.43C1173.5,1219.43 1081.94,1256.48 1081.94,1302.11L1081.94,2844.15C1081.94,2889.78 1173.5,2926.82 1286.29,2926.82L2763.1,2926.82C2875.88,2926.82 2967.45,2889.78 2967.45,2844.15L2967.45,1302.11Z"
+								/>
+            </g>
+				<g transform="matrix(1.03822,0,0,0.929213,-249.608,-609.7)" class="logo-block">
+                <path
+									d="M2967.45,1404.48C2967.45,1302.35 2910.86,1219.43 2841.15,1219.43L1208.24,1219.43C1138.53,1219.43 1081.94,1302.35 1081.94,1404.48L1081.94,2741.77C1081.94,2843.9 1138.53,2926.82 1208.24,2926.82L2841.15,2926.82C2910.86,2926.82 2967.45,2843.9 2967.45,2741.77L2967.45,1404.48Z"
+								/>
+            </g>
+				<g transform="matrix(1.03822,0,0,0.929213,-1757.05,3325.59)" class="logo-block">
+                <path
+									d="M2967.45,1404.48C2967.45,1302.35 2910.86,1219.43 2841.15,1219.43L1208.24,1219.43C1138.53,1219.43 1081.94,1302.35 1081.94,1404.48L1081.94,2741.77C1081.94,2843.9 1138.53,2926.82 1208.24,2926.82L2841.15,2926.82C2910.86,2926.82 2967.45,2843.9 2967.45,2741.77L2967.45,1404.48Z"
+								/>
+            </g>
+				<g transform="matrix(0.638063,0,0,0.92569,937.833,3335.89)" class="logo-block">
+                <path
+									d="M2967.45,1404.14C2967.45,1302.2 2875.88,1219.43 2763.1,1219.43L1286.29,1219.43C1173.5,1219.43 1081.94,1302.2 1081.94,1404.14L1081.94,2742.11C1081.94,2844.06 1173.5,2926.82 1286.29,2926.82L2763.1,2926.82C2875.88,2926.82 2967.45,2844.06 2967.45,2742.11L2967.45,1404.14Z"
+								/>
+            </g>
+        </g>
+    </g>
+    </g>
+</svg>

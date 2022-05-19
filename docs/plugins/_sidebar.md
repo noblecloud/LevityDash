@@ -1,0 +1,5 @@
+- [Built-in Plugins](/#built-in-plugins)
+	- [Open-Meteo](/#open-meteo)
+	- [WeatherFlow](/#weatherflow)
+	- [Govee BLE](/#govee-ble)
+- [Build Your Own](/#build-your-own)

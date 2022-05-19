@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<link href="/_images/favicons/apple-touch-icon.png" rel="apple-touch-icon" sizes="180x180">
+<link href="/_images/favicons/favicon-32x32.png" rel="icon" sizes="32x32" type="image/png">
+<link href="/_images/favicons/favicon-16x16.png" rel="icon" sizes="16x16" type="image/png">
+<link href="/_images/favicons/site.webmanifest" rel="manifest">
+<head>
+	<meta charset="UTF-8">
+	<meta content="IE=edge,chrome=1" http-equiv="X-UA-Compatible">
+	<link href="https://fonts.googleapis.com/css?family=Nunito" rel="stylesheet">
+	<meta content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0" name="viewport">
+
+	<title>LevityDash</title>
+	<meta content="Documentation for the LevityDashboard" name="description">
+
+
+	<!-- Theme: Simple (latest v0.x.x) -->
+	<link href="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/css/theme-simple-dark.css" rel="stylesheet">
+	<link href="style.css" rel="stylesheet">
+
+
+</head>
+
+<body>
+<!--<nav>-->
+<!--  <a href="#/">github</a>-->
+<!--</nav>-->
+<div id="app">please wait...</div>
+
+<script>
+	var repoUrl = "https://github.com/noblecloud/LevityDash"; // TODO: Update.
+	var editPath = repoUrl + "/blob/master/docs/";
+	var editMsg = "📝 Edit on GitHub";
+	window.$docsify = {
+		name: "LevityDash", // TODO: Update.
+		repo: repoUrl,
+
+		readyTransition: true, // default
+		responsiveTables: true,  // default
+
+		auto2top: true,
+		coverpage: {
+			'/': 'coverpage.html',
+		},
+
+		loadSidebar: true,
+		alias: {
+			'/.*/_sidebar.md': '/_sidebar.md'
+		},
+
+		subMaxLevel: 4,
+		sidebarDisplayLevel: 2,
+		logo: "_images/logo-simple.svg",
+		copyCode: {
+			buttonText: 'Copy to clipboard',
+			errorText: 'Error',
+			successText: 'Copied'
+		},
+		plugins: ['docsify-copy-code'],
+	}
+
+</script>
+
+</body>
+<script src="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/js/docsify-themeable.min.js"></script>
+<script defer src="//unpkg.com/docsify/lib/docsify.min.js"></script>
+<!-- Edit on GitHub plugin. -->
+<!--Plugins-->
+<script src="https://unpkg.com/docsify-copy-code@2"></script>
+<!--  <script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/emoji.min.js"></script>-->
+<script src="//cdn.jsdelivr.net/npm/docsify-sidebar-collapse/dist/docsify-sidebar-collapse.min.js"></script>
+<script src="//unpkg.com/docsify-edit-on-github/index.js"></script>
+
+<!-- Syntax highlighting.-->
+<script defer src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-markdown.min.js"></script>
+<script defer src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
+<script defer src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-python.min.js"></script>
+<script defer src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-yaml.min.js"></script>
+<script defer src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-ini.min.js"></script>
+
+</html>

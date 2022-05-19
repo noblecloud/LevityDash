@@ -1,0 +1,22 @@
+{
+	"name": "levity-dash-docs",
+	"version": "0.0.1",
+	"description": "Docs for LevityDash.app",
+	"main": "index.html",
+	"scripts": {
+		"start": "cd .. ; docsify serve docs"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/noblecloud/LevityDash.git"
+	},
+	"author": "",
+	"license": "ISC",
+	"bugs": {
+		"url": "https://github.com/noblecloud/LevityDash/issues"
+	},
+	"homepage": "https://github.com/noblecloud/LevityDash#readme",
+	"dependencies": {
+		"docsify-cli": "^4.4.4"
+	}
+}

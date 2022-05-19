@@ -1,0 +1,2 @@
+- [Install](/#install)
+- [Setup](/#setup)
