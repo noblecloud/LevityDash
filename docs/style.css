@@ -1,0 +1,40 @@
+/* Fix issue on mobile devices where a custom cover image goes off the screen. */
+
+:root {
+	--theme-hue: 0;
+	--theme-saturation: 0%;
+	--theme-lightness: 100%;
+	--theme-color: hsl(var(--theme-hue), var(--theme-saturation), var(--theme-lightness));
+	--base-background-color: #505285;
+	--navbar-menu-background: #505285;
+	--navbar-root-background: #505285;
+	--sidebar-background: rgba(0, 0, 0, 0.2);
+	--sidebar-toggle-background: rgba(0, 0, 0, 0.2);
+	--sidebar-toggle-offset-top: 0;
+}
+
+.sidebar {
+	border-right: 0 solid #505285;
+	z-index: 10;
+	box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+}
+
+.sidebar-toggle-button {
+	backdrop-filter: blur(5px);
+	-webkit-backdrop-filter: blur(5px);
+}
+
+main {
+	background: linear-gradient(to top, #09203F 0%, #505285 100%) repeat-x scroll 0% 0% #0C6027;
+	/*background-position: top;*/
+	/*background-repeat: no-repeat;*/
+	/*background-size: 100%;*/
+}
+
+.app-name-link img {
+	color: green;
+	/*  !*filter: drop-shadow(0 0 0.5rem rgba(0, 0, 0, 0.5));*!*/
+	filter: drop-shadow(1px 1px 10px rgba(0, 0, 0, 0.5));
+}

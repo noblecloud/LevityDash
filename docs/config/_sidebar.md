@@ -1,0 +1,2 @@
+- [Dashboards](/dashboard.md)
+	- [Shared Options](/dashboard.md#shared-options)

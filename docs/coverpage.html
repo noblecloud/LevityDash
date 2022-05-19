@@ -1,0 +1,142 @@
+<style>
+
+	:root {
+		/*--base-background-color: gray;*/
+		/*--base-color: var(--mono-shade2);*/
+		--base-font-family: "Nunito", -apple-system, BlinkMacSystemFont, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+		--base-font-size: 16px;
+		--base-font-weight: normal;
+		--base-letter-spacing: ;
+		--base-line-height: 1.7;
+
+		--cover-margin: 0em;
+		--cover-padding: 0em;
+		--cover-max-width: 100%;
+		--cover-min-width: 400px;
+		/*--cover-text-align: center;*/
+
+		/*!* Background *!*/
+		/*--cover-background-blend-mode: screen;*/
+		/*--cover-background-image: linear-gradient(to bottom, #7028e4 0%, #e5b2ca 100%);*/
+		/*--cover-background-image: linear-gradient(to top, #5f72bd 0%, #9b23ea 100%);*/
+		--cover-background-image: linear-gradient(to top, #505285 0%, #585E92 12%, #65689F 25%, #7474B0 37%, #7E7EBB 50%, #8389C7 62%, #9795D4 75%, #A2A1DC 87%, #B5AEE4 100%);;
+
+		/*--cover-background-mask-color: #fff;*/
+		--cover-background-mask-opacity: 0;
+		/*--cover-background-mask-visibility: ;*/
+		--cover-background-position: center center;
+		/*--cover-background-repeat: no-repeat;*/
+		/*--cover-background-size: cover;*/
+
+		/* Blockquote (Subtitle) */
+		/*--cover-blockquote-color: ;*/
+		/*--cover-blockquote-font-size: var(--font-size-l);*/
+
+		/*!* Border *!*/
+		--cover-border-inset: 0;
+		--cover-border-width: 0;
+
+		/*!* Heading *!*/
+		/*--cover-heading-color: var(--theme-color);*/
+		--cover-heading-font-size: unset;
+		/*--cover-heading-filter: drop-shadow(0 0 0.5rem rgba(0, 0, 0, 0.5));*/
+		--cover-heading-font-size-min: unset;
+		--cover-heading-font-size-max: unset;
+		/*--cover-heading-font-weight: normal;*/
+	}
+
+	@media (orientation: landscape) {
+		:root {
+			--cover-height: 100vh;
+			--cover-max-height: 100vh;
+			--cover-min-height: 60vh;
+		}
+	}
+
+	@media (orientation: portrait) {
+		:root {
+			--cover-height: auto;
+			--cover-max-height: 100vh;
+			--cover-min-height: 60vh;
+		}
+	}
+
+
+	.cover {
+		padding-top: 1em;
+		color: #FFFFFF;
+		max-height: var(--cover-max-height);
+		min-height: var(--cover-min-height);
+		height: var(--cover-height);
+		z-index: -1;
+		/*justify-content: start;*/
+	}
+
+	/*.first-container {*/
+	/*  max-height: 100%;*/
+	/*  padding: 5%;*/
+	/*}*/
+
+	.dash {
+		color: #4F3F91;
+	}
+
+	.cover h1 {
+		color: #2C2E50;
+		/*filter: drop-shadow(0px 0px 5px rgba(0, 0, 0, 0.3));*/
+		/*max-font-size: 10vh;*/
+		/*min-font-size: 4vh;*/
+
+		font-size: 100px;
+		font-weight: 900 !important;
+		/*font-size: 8rem;*/
+		line-height: 1.1;
+	}
+
+	@media (max-width: 500px) {
+		.cover {
+			overflow: hidden;
+		}
+
+		.cover h1 {
+			font-size: 60px;
+		}
+
+	}
+
+	.cover h2 {
+		font-weight: normal;
+		max-font-size: 5vh;
+		min-font-size: 1vh;
+		font-size: 2vh;
+	}
+
+	.screenshotAlpha {
+		/*max-width: 230px;*/
+		max-height: 75vh;
+		min-height: 40px;
+		min-width: 100%;
+		height: auto;
+		background-color: rgba(0, 0, 0, 0.4);
+		padding: 2%;
+		/*padding-top: 5px;*/
+		border-radius: 10px;
+		filter: drop-shadow(0px 0px 5px rgba(0, 0, 0, 0.5));
+		/*--min-height: 900px;*/
+
+	}
+
+</style>
+
+<div id="cover-heading">
+	<div class="first-container">
+		<h1>
+			Levity<span class="dash">Dash</span>
+		</h1>
+		<h2>
+			A lightweight, desktop native, multi-source dashboard for macOS, Windows and Linux
+		</h2>
+		<img alt="Screenshot" class="screenshotAlpha" src="_images/screenshotTransparent.png">
+	</div>
+
+</div>
