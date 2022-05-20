@@ -50,22 +50,22 @@ def parseMathString(mathString: str, functionName: str = 'mathExpression', **kwa
 
 
 class BLEPayloadParser:
-	def __init__(self, field: str, startingByte: int, endingByte: int, modifier: Optional[Union[str, Callable]] = None, base: int = 16):
+	def __init__(self, field: str, startingByte: int, endingByte: int, expression: Optional[Union[str, Callable]] = None, base: int = 16):
 		self.__field = field
 		self.__startingByte = startingByte
 		self.__endingByte = endingByte
-		self.__modifier = modifier
+		self.__expression = expression
 		self.__base = base
-		match modifier:
+		match expression:
 			case FunctionType():
-				self.__modifier = modifier
+				self.__expression = expression
 			case str():
-				self.__modifier = parseMathString(modifier)
+				self.__expression = parseMathString(expression)
 
 	def __call__(self, payload: bytes) -> dict[str, float | int]:
 		payload = int(payload.hex().upper()[self.__startingByte: self.__endingByte], self.__base)
-		if self.__modifier is not None:
-			value = self.__modifier(payload)
+		if self.__expression is not None:
+			value = self.__expression(payload)
 		else:
 			value = payload
 		return {self.__field: value}
@@ -152,8 +152,8 @@ class Govee(Plugin, realtime=True, logged=True):
 			params = {'field': key}
 			if f'{key}.slice' in pluginConfig:
 				params['startingByte'], params['endingByte'] = [int(i) for i in re.findall(r'\d+', pluginConfig[f'{key}.slice'])]
-			if f'{key}.modifier' in pluginConfig:
-				params['modifier'] = pluginConfig[f'{key}.modifier']
+			if f'{key}.expression' in pluginConfig:
+				params['expression'] = pluginConfig[f'{key}.expression']
 			if f'{key}.base' in pluginConfig:
 				params['base'] = int(pluginConfig[f'{key}.base'])
 			return params
