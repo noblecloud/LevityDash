@@ -2,39 +2,39 @@
 
 There are several modules already available for use. However, you can also build your own.
 
-## Realtime
+## Realtime  <!-- {docsify-ignore} -->
 
 Single line text with support for showing units and titles and mapping glyphs/emojis to values
 
-## Graph
+## Graph  <!-- {docsify-ignore} -->
 
-### Figures
+### Figures  <!-- {docsify-ignore} -->
 
 A figure is a collection of plots. Figures can be resized within the graph and contain multiple plot types. Generally figure is limited to categorically similar values such as temperature, dewpoint, and apparent temperature.
 
-### Plots
+### Plots  <!-- {docsify-ignore} -->
 
-#### Line
+#### Line  <!-- {docsify-ignore} -->
 
 Any scalar value can be plotted as a line. The line can be colored by a scalar value or by a categorical value. Coloring can also be a value mapped gradient.
 
-#### Bar
+#### Bar  <!-- {docsify-ignore} -->
 
 Not fully implemented
 
-## Clock
+## Clock  <!-- {docsify-ignore} -->
 
 A customizable clock that can have whatever formatting you want and values can be placed wherever you want.
 
-## Moon Phase
+## Moon Phase  <!-- {docsify-ignore} -->
 
-Displays the current moon phase and optionally current phase rotation.
+Displays the current moon phase and its rotation.
 
-## Groups
+## Groups  <!-- {docsify-ignore} -->
 
 A group is a collection of display modules. Groups can be resized within the graph and contain multiple display modules.
 
-## Planned Modules
+## Planned Modules  <!-- {docsify-ignore} -->
 
 - Gauges [nearly complete]
 - Weather Radar
@@ -44,7 +44,7 @@ A group is a collection of display modules. Groups can be resized within the gra
 - Mini Graphs
 - More plot types
 
-## Other Features
+## Other Features  <!-- {docsify-ignore} -->
 
 - Drag and drop dashboard design (This can be a little funky at times)
 - YAML based dashboard specifications with support for both absolute and relative size/positioning

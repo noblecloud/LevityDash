@@ -4,13 +4,22 @@
 	--theme-hue: 0;
 	--theme-saturation: 0%;
 	--theme-lightness: 100%;
-	--theme-color: hsl(var(--theme-hue), var(--theme-saturation), var(--theme-lightness));
+	/* --theme-color: hsl(var(--theme-hue), var(--theme-saturation), var(--theme-lightness)); */
+	--theme-color: white;
 	--base-background-color: #505285;
 	--navbar-menu-background: #505285;
 	--navbar-root-background: #505285;
 	--sidebar-background: rgba(0, 0, 0, 0.2);
 	--sidebar-toggle-background: rgba(0, 0, 0, 0.2);
 	--sidebar-toggle-offset-top: 0;
+	--docsifytabs-border-color: transparent;
+	--docsifytabs-border-px: 0;
+	--docsifytabs-tab-background: rgba(130, 128, 128, 0.2);
+	--docsifytabs-margin: .5em;
+	--docsifytabs-tab-color: var(--theme-color);
+	--docsifytabs-tab-highlight-color: rgb(201, 201, 201);
+	--docsifytabs-content-background: rgba(0, 0, 0, 0.2);
+	--sidebar-nav-link-text-decoration: none;
 }
 
 .sidebar {
@@ -19,11 +28,26 @@
 	box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
 	backdrop-filter: blur(10px);
 	-webkit-backdrop-filter: blur(10px);
+	-ms-overflow-style: none; /* IE and Edge */
+	scrollbar-width: none; /* Firefox */
+}
+
+.sidebar::-webkit-scrollbar {
+	display: none;
 }
 
 .sidebar-toggle-button {
 	backdrop-filter: blur(5px);
 	-webkit-backdrop-filter: blur(5px);
+}
+
+code {
+	-ms-overflow-style: none; /* IE and Edge */
+	scrollbar-width: none; /* Firefox */
+}
+
+code::-webkit-scrollbar {
+	display: none;
 }
 
 main {
@@ -37,4 +61,46 @@ main {
 	color: green;
 	/*  !*filter: drop-shadow(0 0 0.5rem rgba(0, 0, 0, 0.5));*!*/
 	filter: drop-shadow(1px 1px 10px rgba(0, 0, 0, 0.5));
+}
+
+.note {
+	color: var(--theme-color);
+	background-color: rgba(204, 237, 252, 0.31);
+	border-color: rgba(181, 230, 252, 0.27);
+}
+
+.mono {
+	font-family: monospace;
+	font-weight: 100;
+}
+
+.mono-bold {
+	font-family: monospace;
+	font-weight: bold;
+}
+
+.mono-header {
+	font-family: monospace;
+}
+
+h4 .mono-header {
+	font-family: monospace;
+}
+
+h5 .mono-header {
+
+	font-size: 1.5em;
+}
+
+description {
+	color: inherit;
+}
+
+.level-1 ul {
+	list-style: none;
+}
+
+.level-2 ul li::before {
+
+	display: inline-block;
 }

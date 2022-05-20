@@ -5,7 +5,7 @@ platforms, including embedded. It can easily be deployed on a Raspberry Pi, or s
 
 *Note: This project is very much in the proof of concept stage – it functions, but it is far from the goal of a lightweight dashboard.*
 
-# Quick Start
+# Quick Start <!-- {docsify-ignore} -->
 
 Install with pip:
 
