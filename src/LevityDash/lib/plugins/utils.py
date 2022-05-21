@@ -82,7 +82,7 @@ unitDict: Dict[str, Union[Type[wu.Measurement], Type[bool], Dict[str, Union[Type
 }
 
 
-class TranslatorProperty:
+class SchemaProperty:
 	def __init__(self, source: 'ObservationDict', data: dict):
 		self.source = source
 		self.data = data
@@ -245,4 +245,4 @@ class Accumulator(QObject):
 		asyncio.create_task(self.__emitChange())
 
 
-__all__ = ['unitDict', 'Accumulator', 'ChannelSignal', 'TranslatorProperty']
+__all__ = ['unitDict', 'Accumulator', 'ChannelSignal', 'SchemaProperty']

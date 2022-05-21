@@ -21,9 +21,9 @@ from PySide2.QtCore import QObject, Signal
 from rich.progress import Progress
 
 from LevityDash.lib.plugins.categories import CategoryItem
-from LevityDash.lib.plugins.translator import LevityDatagram
+from LevityDash.lib.plugins.schema import LevityDatagram
 from LevityDash.lib.utils import NoValue, isOlderThan, mostFrequentValue, clearCacheAttr, closest, DateKey, isa, mostCommonClass, now, Now, Period, roundToPeriod, toLiteral, UTC, LOCAL_TIMEZONE
-from LevityDash.lib.plugins import TranslatorProperty, pluginLog, unitDict, Accumulator
+from LevityDash.lib.plugins import SchemaProperty, pluginLog, unitDict, Accumulator
 from LevityDash.lib.utils.data import findPeaksAndTroughs
 
 loop = asyncio.get_running_loop()
@@ -121,7 +121,7 @@ class ObservationValue(TimeAwareValue):
 		else:
 			timeAware = None
 		if metadata is None:
-			metadata = source.translator.getUnitMetaData(key, source)
+			metadata = source.schema.getUnitMetaData(key, source)
 			if metadata['key'] != key:
 				metadata['sourceKey'] = key
 				if isinstance(key, CategoryItem):
@@ -417,7 +417,7 @@ class TimeSeriesItem(TimeAwareValue):
 			else:
 				timestamp = datetime.utcnow().replace(tzinfo=_timezones.utc)
 
-		if isinstance(timestamp, TranslatorProperty):
+		if isinstance(timestamp, SchemaProperty):
 			timestamp = timestamp()
 		elif isinstance(timestamp, ObservationTimestamp):
 			timestamp = timestamp.value
@@ -1008,7 +1008,7 @@ class ObservationTimestamp(ObservationValue):
 			if CategoryItem('timestamp') in data:
 				key = 'timestamp'
 			else:
-				key = source.translator.findKey('timestamp', data)
+				key = source.schema.findKey('timestamp', data)
 			if extract:
 				value = data.pop(key, None)
 			else:
@@ -1226,7 +1226,7 @@ class ObservationDict(PublishedDict):
 				item = TimeSeriesItem(item, timestamp)
 			self[key] = item
 
-		self.calculateMissing()  # TODO: Use Requirements to handle this automatically based on translator
+		self.calculateMissing()  # TODO: Use Requirements to handle this automatically based on schema
 
 		if self.published:
 			self.accumulator.muted = False
@@ -1314,7 +1314,7 @@ class ObservationDict(PublishedDict):
 					dewpoint = TimeSeriesItem(dewpoint, timestamp=timestamp)
 					self['environment.temperature.dewpoint'] = dewpoint
 
-				if 'environment.temperature.heatIndex' not in keys and self.translator.get('environment.temperature.heatIndex', None):
+				if 'environment.temperature.heatIndex' not in keys and self.schema.get('environment.temperature.heatIndex', None):
 					self._calculatedKeys.add('environment.temperature.heatIndex')
 					heatIndex = temperature.heatIndex(humidity.value)
 					heatIndex.key = CategoryItem('environment.temperature.heatIndex')
@@ -1326,7 +1326,7 @@ class ObservationDict(PublishedDict):
 				windSpeed = self['environment.wind.speed.speed']
 				if isinstance(windSpeed, RecordedObservationValue):
 					windSpeed = windSpeed.rollingAverage(timedelta(minutes=-5)) or windSpeed
-				if 'environment.temperature.windChill' not in keys and self.translator.get('environment.temperature.windChill', None):
+				if 'environment.temperature.windChill' not in keys and self.schema.get('environment.temperature.windChill', None):
 					self._calculatedKeys.add('environment.temperature.windChill')
 					windChill = temperature.windChill(windSpeed.value)
 					windChill.key = CategoryItem('environment.temperature.windChill')
@@ -1370,7 +1370,7 @@ class ObservationDict(PublishedDict):
 	def timeKey(self, data) -> str:
 		if 'timestamp' in data:
 			return 'timestamp'
-		unitData = self.translator.getExact(CategoryItem('timestamp')) or {}
+		unitData = self.schema.getExact(CategoryItem('timestamp')) or {}
 		srcKey = unitData.get('sourceKey', dict())
 		if isinstance(srcKey, (str, CategoryItem)):
 			return srcKey
@@ -1383,8 +1383,8 @@ class ObservationDict(PublishedDict):
 	def timezoneKey(self, data) -> str | None:
 		if 'time.timezone' in data:
 			return 'time.timezone'
-		if 'time.timezone' in self.translator:
-			return self.translator['time.timezone']['sourceKey']
+		if 'time.timezone' in self.schema:
+			return self.schema['time.timezone']['sourceKey']
 		else:
 			value = set(data.keys()).intersection({'timezone', 'timezone_name', 'tz'})
 			if value:
@@ -1426,12 +1426,12 @@ class ObservationDict(PublishedDict):
 		return self.__keyed
 
 	@property
-	def translator(self):
-		return self.source.translator
+	def schema(self):
+		return self.source.schema
 
 	@cached_property
 	def normalizeDict(self):
-		return {value['sourceKey']: key for key, value in self.translator.items() if 'sourceKey' in value}
+		return {value['sourceKey']: key for key, value in self.schema.items() if 'sourceKey' in value}
 
 	@property
 	def source(self):
@@ -1452,7 +1452,7 @@ class ObservationDict(PublishedDict):
 @Archivable.register
 class Observation(ObservationDict, published=False, recorded=False):
 	unitDict = unitDict
-	_translator: dict
+	_schema: dict
 	_time: datetime = None
 	_calculatedKeys: set
 
@@ -1726,7 +1726,7 @@ class ObservationTimeSeries(ObservationDict, published=True):
 		self[key] = [None if key not in x.keys() else x[key] for x in self['time'].values()]
 
 	def observationKey(self, data) -> DateKey:
-		timeData = self.translator['time']['time']
+		timeData = self.schema['time']['time']
 		timeValue = data[self.timeKey(data)]
 		tz = data.get(self.timezoneKey(data), LOCAL_TIMEZONE)
 		if timeData['sourceUnit'] == 'epoch':
@@ -1736,7 +1736,7 @@ class ObservationTimeSeries(ObservationDict, published=True):
 			return key
 
 	def extractTimestamp(self, data: dict) -> datetime:
-		key = self.translator.findKey('timestamp', data)
+		key = self.schema.findKey('timestamp', data)
 		self[key] = data.pop(key)
 
 	@property
@@ -1761,8 +1761,8 @@ class ObservationTimeSeries(ObservationDict, published=True):
 		return list(self['time'].keys())
 
 	@property
-	def translator(self):
-		return self.source.translator
+	def schema(self):
+		return self.source.schema
 
 	def observationKeys(self):
 		return list({key for obs in (self['time'].values() if isinstance(self['time'], dict) else self['time']) for key in obs.keys()})

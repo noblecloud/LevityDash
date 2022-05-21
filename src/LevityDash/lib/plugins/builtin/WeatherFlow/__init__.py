@@ -1,5 +1,5 @@
 
-from LevityDash.lib.plugins.translator import LevityDatagram, TranslatorSpecialKeys as tsk
+from LevityDash.lib.plugins.schema import LevityDatagram, SchemaSpecialKeys as tsk
 from LevityDash.lib.plugins.web.socket import UDPSocket
 from LevityDash.lib.plugins.plugin import ScheduledEvent
 from LevityDash.lib.plugins.web import Auth, AuthType, Endpoint, REST, URLs
@@ -60,7 +60,7 @@ class WFURLs(URLs, base='swd.weatherflow.com/swd'):
 # 		self.push(loads(message))
 
 
-translator = {
+schema = {
 	'environment.temperature':                           {'type': 'temperature', 'sourceUnit': 'c'},
 	'environment.temperature.temperature':               {'title': 'Temperature', 'sourceKey': 'air_temperature'},
 	'environment.temperature.dewpoint':                  {'title': 'Dewpoint', 'sourceKey': 'dew_point'},
@@ -267,7 +267,7 @@ translator = {
 
 class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 	urls: WFURLs = WFURLs()
-	translator = translator
+	schema = schema
 	name = 'WeatherFlow'
 
 	def __init__(self, *args, **kwargs):
@@ -287,7 +287,7 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 		self._timezone = value
 
 	def socketUpdate(self, datagram):
-		message = LevityDatagram(datagram, translator=self.translator, sourceData={'socket': self.udp})
+		message = LevityDatagram(datagram, schema=self.schema, sourceData={'socket': self.udp})
 		self.pluginLog.verbose(f'{self.name} received {message}')
 		for observation in self.observations:
 			if observation.dataName in message:

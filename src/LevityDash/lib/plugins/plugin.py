@@ -14,7 +14,7 @@ from LevityDash.lib.plugins.categories import CategoryDict, CategoryItem
 from LevityDash.lib.plugins.observation import (ArchivedObservationValue, MeasurementTimeSeries, Observation, ObservationDict,
                                                 ObservationLog, ObservationRealtime, ObservationTimeSeries, ObservationValue,
                                                 PublishedDict, RecordedObservationValue)
-from LevityDash.lib.plugins.translator import Translator
+from LevityDash.lib.plugins.schema import Schema
 from LevityDash.lib.plugins.utils import ChannelSignal
 from LevityDash.lib.utils.data import KeyData
 from LevityDash.lib.log import LevityPluginLog as pluginLog
@@ -243,7 +243,7 @@ class Container:
 
 	@property
 	def metadata(self):
-		return self.source.translator.getExact(self.key)
+		return self.source.schema.getExact(self.key)
 
 	@property
 	def sourceHasRealtime(self):
@@ -588,7 +588,7 @@ class PluginMeta(type):
 
 
 class Plugin(metaclass=PluginMeta):
-	translator: Translator
+	schema: Schema
 	publisher: Publisher
 	classes: Classes
 	observations: ObservationList[ObservationDict]
@@ -606,8 +606,8 @@ class Plugin(metaclass=PluginMeta):
 		self.observations = ObservationList(self)
 		self.publisher = Publisher(self)
 
-		if isinstance(self.translator, dict):
-			self.translator = Translator(plugin=self, source=self.translator, category=self.name)
+		if isinstance(self.schema, dict):
+			self.schema = Schema(plugin=self, source=self.schema, category=self.name)
 
 		for key, value in self.classes:
 			if not issubclass(value, PublishedDict):

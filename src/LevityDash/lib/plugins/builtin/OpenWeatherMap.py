@@ -1,4 +1,4 @@
-from LevityDash.lib.plugins.translator import LevityDatagram, TranslatorSpecialKeys as tsk
+from LevityDash.lib.plugins.schema import LevityDatagram, SchemaSpecialKeys as tsk
 from LevityDash.lib.plugins.plugin import ScheduledEvent
 from LevityDash.lib.plugins.web import Auth, AuthType, Endpoint, REST, URLs
 from LevityDash.lib import config
@@ -12,7 +12,7 @@ class OWMURLs(URLs, base='api.openweathermap.org/data/2.5/'):
 	oneCall = Endpoint(url='onecall', protocol='https', refreshInterval=timedelta(minutes=15))
 
 
-translator = {
+schema = {
 	'timestamp':                           {'type': 'datetime', 'sourceUnit': 'epoch', 'kwargs': {'tz': '@timezone'}, 'title': 'Time', 'sourceKey': 'dt', tsk.metaData: '@timestamp'},
 	'environment.temperature':             {'type': 'temperature', 'sourceUnit': 'kelvin'},
 	'environment.temperature.temperature': {'title': 'Temperature', 'sourceKey': 'temp'},
