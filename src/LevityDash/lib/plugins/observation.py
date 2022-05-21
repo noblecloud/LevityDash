@@ -34,7 +34,6 @@ __all__ = ['ObservationDict', 'Observation', 'ObservationRealtime', 'Observation
 	'ObservationValueResult', 'ObservationTimestamp', 'MiniTimeSeries', 'PublishedDict']
 
 log = pluginLog.getChild('Observation')
-log.setLevel('ERROR')
 
 
 def convertToCategoryItem(key, source: Hashable = None):
@@ -1942,10 +1941,10 @@ class MeasurementTimeSeries(OrderedDict):
 	def refresh(self):
 		self.__clearCache()
 		if self.signals.hasConnections or len(self.__references) > 0:
-			log.debug(f'Refreshing {self}')
+			log.verbose(f'Refreshing {self}')
 			self.update()
 		else:
-			log.debug(f'Refreshing {self}...item has 0 references, aborting')
+			log.verbose(f'Refreshing {self}...item has 0 references, aborting')
 
 	def sourceChanged(self, sources: 'Plugin'):
 		if self.isMultiSource and not any(s.period > Period.Minute for s in sources):
@@ -2000,54 +1999,53 @@ class MeasurementTimeSeries(OrderedDict):
 		currentLength = len(self)
 		log.debug(f'{self} updating')
 		self.clear()
-		log.verboseDebug(f'{self} cleared with length {len(self)}')
+		log.verbose(f'{self} cleared with length {len(self)}')
 		key = self._key
 		if isinstance(self._source, ObservationTimeSeries):
-			log.verboseDebug(f'{self} updating from single source of length {len(self._source.timeseries)}')
+			log.verbose(f'{self} updating from single source of length {len(self._source.timeseries)}')
 			itemCount = 0
 			for item in (v[key] for v in self._source.timeseries.values() if key in v):
 				itemCount += 1
 				self[item.timestamp] = item
-			log.verboseDebug(f'{self} updated from single source with {itemCount} expected items and a change of {len(self) - currentLength} [{currentLength} -> {len(self)}]')
+			log.verbose(f'{self} updated from single source with {itemCount} expected items and a change of {len(self) - currentLength} [{currentLength} -> {len(self)}]')
 		else:
 			values = self.__sourcePull()
 
 			for item in values:
 				self[item.timestamp] = item
-			log.verboseDebug(f'{self} updated from multiple sources with {len(self) - currentLength} [{currentLength} -> {len(self)}]')
+			log.verbose(f'{self} updated from multiple sources with {len(self) - currentLength} [{currentLength} -> {len(self)}]')
 		# self.removeOldValues()
 
 		thisHash = self.__valuesHash()
 		if thisHash != self.__lashHash:
-			log.verboseDebug(f'{self} has changed...clearing cache and emitting signal')
+			log.verbose(f'{self} has changed...clearing cache and emitting signal')
 			self.__clearCache()
 			self.publish()
 		else:
-			log.verboseDebug(f'{self} has not changed')
+			log.verbose(f'{self} has not changed')
 		self.__lashHash = thisHash
 
 	def __sourcePull(self) -> list[ObservationValue]:
-		assert hasattr(self._source, 'observations')
 		values: list[ObservationValue] = []
 		sources: List[MeasurementTimeSeries, ObservationRealtime] = [e[self._key] for e in self._source.observations if self._key in e]
 
-		log.verboseDebug(f'{self} refreshing sources')
+		log.verbose(f'{self} refreshing sources')
 		for item in sources:
 			if isinstance(item, MeasurementTimeSeries):
 				item.addReference(self)
 				item.refresh()
-				log.verboseDebug(f'{self} refreshed {item} with length: {len(item)}')
+				log.verbose(f'{self} refreshed {item} with length: {len(item)}')
 
 		expectedLength = sum(len(s) for s in sources)
 		for item in sources:
-			log.verboseDebug(f'Pulling from {item}')
+			log.verbose(f'Pulling from {item}')
 			if isinstance(item, MeasurementTimeSeries):
 				values.extend(item)
-				log.verboseDebug(f'Pulled from {item} with length: {len(item)}')
+				log.verbose(f'Pulled from {item} with length: {len(item)}')
 			else:
 				values.append(item)
-				log.verboseDebug(f'Pulled from {item}')
-		log.verboseDebug(f'{"✅" if len(values) == expectedLength else "❌"} {self} pulled from sources {len(sources)} with a new length of: {len(values)}.  Expected a length of: {expectedLength}')
+				log.verbose(f'Pulled from {item}')
+		log.verbose(f'{"︎︎✔︎" if len(values) == expectedLength else "✘"} {self} pulled from sources {len(sources)} with a new length of: {len(values)}.  Expected a length of: {expectedLength}')
 		values.sort(key=lambda x: x.timestamp)
 		return values
 
@@ -2151,7 +2149,7 @@ class MeasurementTimeSeries(OrderedDict):
 		return iter(self.list)
 
 	def __clearCache(self):
-		log.verboseDebug(f'Clearing cache for {self}')
+		log.verbose(f'Clearing cache for {self}')
 		clearCacheAttr(self, 'array')
 		clearCacheAttr(self, 'timeseries')
 		clearCacheAttr(self, 'timeseriesInts')

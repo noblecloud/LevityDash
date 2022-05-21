@@ -3,7 +3,7 @@ name = "LevityDash"
 authors = ["noblecloud <git@noblecloud.io>"]
 description = "A lightweight, desktop native, multi-source, modulear dashboard for macOS, Windows and Linux"
 
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 readme = "README.md"
 license = "MIT"
 
@@ -55,6 +55,8 @@ appdirs = "^1.4.4"
 
 [tool.poetry.urls]
 "Bug Tracker" = "https://github.com/noblecloud/LevityDash/issues"
+"Documentation" = "https://levitydash.app/#/getting-started"
+"Discussions" = "https://github.com/noblecloud/LevityDash/discussions"
 
 [tool.poetry.dev-dependencies]
 pyinstaller = "^5.1"

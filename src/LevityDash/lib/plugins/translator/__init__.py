@@ -6,6 +6,7 @@ from functools import cached_property, lru_cache
 from typing import Dict, Hashable, Iterable, Optional, Set, Union
 
 from dateutil import parser as DateParser
+from rich.pretty import pretty_repr
 
 from LevityDash.lib.plugins.utils import unitDict
 from LevityDash.lib.log import LevityPluginLog
@@ -172,9 +173,18 @@ class LevityDatagram(dict):
 			super().__setitem__(key, value)
 
 	def replaceKeyVars(self, data: dict):
+		def findVar(atom: str, ignore: set = None):
+			if ignore is None:
+				ignore = set()
+			elif atom in ignore:
+				return None
+			ignore.add(atom)
+			main = self.sourceData.get(atom, None) or self.metaData.get(atom, None)
+			return main or findVar(self.translator.properties.get(atom, {}).get('alt', None), ignore) or 'NA'
+
 		for key, value in dict(data).items():
 			key = CategoryItem(key)
-			keyVars = {f'{i}': self.sourceData.get(i, None) or self.metaData.get(i, '.') for i in key.vars}
+			keyVars = {f'{i}': findVar(i) for i in key.vars}
 			if keyVars:
 				data.pop(key)
 				key = key.replaceVar(**keyVars)
@@ -271,10 +281,10 @@ class LevityDatagram(dict):
 				elif isinstance(data, list) and isinstance(data[0], list) and len(data[0]) == len(subMap):
 					return [self.mapArrays(data=item, keyMap=subMap) for item in data]
 				elif key in data:
-					data[key] = self.mapArrays(data=data.pop(key), keyMap=subMap)
+					data[CategoryItem(key)] = self.mapArrays(data=data.pop(key), keyMap=subMap)
 		# data = self.__replaceSourceKeys(data)
 		elif isinstance(keyMap, list) and len(keyMap) == len(data):
-			return {key: value for key, value in zip(keyMap, data)}
+			return {CategoryItem(key): value for key, value in zip(keyMap, data)}
 		return data
 
 	def replace(self, data: dict, metadata: dict = None):
@@ -296,6 +306,36 @@ class LevityDatagram(dict):
 
 	def __iter__(self):
 		return super().items().__iter__()
+
+	@property
+	def __trunc(self):
+		def trim(data):
+			match data:
+				case Subdatagram():
+					meta = {k: v for k, v in data.metaData.items() if k not in self.metaData}
+					source = {k: v for k, v in data.sourceData.items() if k not in self.sourceData}
+					return {**meta, **source, **data}
+				case dict():
+					return {k: trim(v) for k, v in (V for i, V in enumerate(data.items()) if i < 10)}
+				case list():
+					return [trim(i) for i in data[:min(len(data), 10)]]
+				case _:
+					return data
+
+		return {k: trim(v) for k, v in self.items()}
+
+	def __str__(self):
+		# if len(self) == 1:
+		# 	item = list(self.values())[0]
+		# 	if len(self) and all(not isinstance(i, dict) for i in item[:min(10, len(item))]):
+		# 		return str(item)
+		# 	else:
+		# 		key = list(self.keys())[0]
+		# 		repr = {key: item[:min(10, len(item))]}
+		# else:
+		# 	repr = self
+		# reprs = {k: [i for i in v[:min(5, len(v))]] if isinstance(v, list) else v for k, v in repr.items()}
+		return pretty_repr({**self.metaData, **self.sourceData, **self.__trunc}, indent_size=2, max_width=80, max_depth=3, max_length=200, max_string=600)
 
 	def __replaceWithSubData(self, key: str, value: str):
 		self[key] = Subdatagram(parent=self, data=value, path=key)
@@ -381,6 +421,17 @@ class Subdatagram(LevityDatagram):
 	@property
 	def dataMap(self):
 		return self.__parent.dataMap
+
+	@property
+	def isTimeSeries(self) -> bool:
+		return len(self) and all(isinstance(i, dict) for i in list(self.values())[:min(10, len(self))])
+
+	def __str__(self, maxLen: int = None):
+		maxLen = maxLen or 100
+		if self.isTimeSeries:
+			dataRepr = [i for i in self.values()[:min(5, len(self))]]
+			return pretty_repr({**self.metaData, **self.sourceData, 'data': dataRepr}, indent_size=2, max_width=120, max_depth=1, max_length=maxLen, max_string=200)
+		return pretty_repr({**self.metaData, **self.sourceData, **self}, indent_size=2, max_width=120, max_depth=1, max_length=maxLen, max_string=200)
 
 
 class Properties(dict):

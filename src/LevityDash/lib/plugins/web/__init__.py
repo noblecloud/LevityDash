@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 
 from enum import Enum
 
+from rich import repr
+
 from LevityDash.lib.config import PluginConfig
 from LevityDash.lib.plugins import Plugin
 from datetime import timedelta
@@ -10,6 +12,7 @@ from typing import Any, ClassVar, Dict, Optional, Union
 __all__ = ["AuthType", "Auth", "URLs", "Endpoint", "Web", "REST"]
 
 
+@repr.auto
 class AuthType(Enum):
 	NONE = 0
 	BASIC = 1
@@ -22,6 +25,7 @@ class AuthType(Enum):
 		return AuthType.NONE
 
 
+@repr.auto
 @dataclass
 class Auth:
 	authType: AuthType = field(default=AuthType.NONE, repr=True, compare=True, hash=True)
@@ -78,6 +82,7 @@ class URLsMeta(type):
 		return super().__new__(cls, name, bases, attrs)
 
 
+@repr.auto
 class URLs(metaclass=URLsMeta):
 	base: str
 	auth: Auth
@@ -138,6 +143,7 @@ class URLs(metaclass=URLsMeta):
 		return self.__plugin
 
 
+@repr.auto
 class Endpoint(object):
 	base: URLs
 	params: dict

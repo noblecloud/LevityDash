@@ -1,9 +1,14 @@
 import asyncio
+import mimetypes
 import platform
 import sys
 import webbrowser
+from email.generator import Generator
+from email.message import EmailMessage
 from pathlib import Path
 from functools import cached_property
+from tempfile import TemporaryFile, NamedTemporaryFile
+from zipfile import ZipFile
 
 from qasync import QApplication
 from PySide2.QtCore import QEvent, QRect, QRectF, Qt, QTimer, Signal
@@ -14,12 +19,12 @@ from PySide2.QtWidgets import (QGraphicsItem, QGraphicsPathItem, QGraphicsScene,
 from LevityDash.lib.config import userConfig
 from LevityDash.lib.utils import clearCacheAttr, LocationFlag
 from LevityDash.lib.ui.frontends.PySide.utils import *
+from LevityDash.lib.log import LevityGUILog as guiLog
 
 from time import time
 
 app: QApplication = QApplication.instance()
 app.setPalette(colorPalette)
-
 
 class FocusStack(list):
 	def __init__(self, scene: QGraphicsScene):
@@ -438,18 +443,6 @@ class LevityMainWindow(QMainWindow):
 			macOSConfig.triggered.connect(self.openConfigFolder)
 			fileMenu.addAction(macOSConfig)
 
-		fileConfigAction = QAction('Open Config Folder', self)
-		fileConfigAction.setStatusTip('Open the config folder')
-		fileConfigAction.setShortcut('Alt+C')
-		fileConfigAction.triggered.connect(self.openConfigFolder)
-		fileMenu.addAction(fileConfigAction)
-
-		quitAct = QAction('Quit', self)
-		quitAct.setStatusTip('Quit the application')
-		quitAct.setShortcut('Ctrl+Q')
-		quitAct.triggered.connect(QApplication.instance().quit)
-		fileMenu.addAction(quitAct)
-
 		# plugins = PluginsMenu(self)
 		# self.menuBar().addMenu(plugins)
 
@@ -482,6 +475,46 @@ class LevityMainWindow(QMainWindow):
 		from LevityDash.lib.ui.frontends.PySide.Modules.Menus import DashboardTemplates
 		fileMenu.addMenu(DashboardTemplates(self))
 
+		fileMenu.addSeparator()
+
+		fileConfigAction = QAction('Open Config Folder', self)
+		fileConfigAction.setStatusTip('Open the config folder')
+		fileConfigAction.setShortcut('Alt+C')
+		fileConfigAction.triggered.connect(self.openConfigFolder)
+		fileMenu.addAction(fileConfigAction)
+
+		quitAct = QAction('Quit', self)
+		quitAct.setStatusTip('Quit the application')
+		quitAct.setShortcut('Ctrl+Q')
+		quitAct.triggered.connect(QApplication.instance().quit)
+		fileMenu.addAction(quitAct)
+
+		logsMenu = menubar.addMenu('&Logs')
+
+		openLogAction = QAction('Open Log', self)
+		openLogAction.setStatusTip('Open the current log file')
+		openLogAction.triggered.connect(self.openLogFile)
+		logsMenu.addAction(openLogAction)
+
+		fileLogAction = QAction('Open Log Folder', self)
+		fileLogAction.setStatusTip('Open the log folder')
+		fileLogAction.setShortcut('Alt+L')
+		fileLogAction.triggered.connect(self.openLogFolder)
+		logsMenu.addAction(fileLogAction)
+
+		submitLogsMenu = QMenu('Submit Logs', self)
+		submitLogsMenu.setStatusTip('Submit the logs to the developer')
+		showLogBundle = QAction('Create Zip Bundle', self)
+		showLogBundle.setStatusTip('Create a zipfile containing the logs')
+		showLogBundle.triggered.connect(lambda: self.submitLogs('openFolder'))
+		submitLogsMenu.addAction(showLogBundle)
+
+		submitLogs = QAction('Email logs', self)
+		submitLogs.setStatusTip('Create an email containing the logs to send to the developer')
+		submitLogs.triggered.connect(lambda: self.submitLogs('email'))
+		submitLogsMenu.addAction(submitLogs)
+		logsMenu.addMenu(submitLogsMenu)
+
 	def toggleFullScreen(self):
 		if self.isFullScreen():
 			self.showNormal()
@@ -495,7 +528,59 @@ class LevityMainWindow(QMainWindow):
 
 	def openConfigFolder(self):
 		from LevityDash import __dirs__
-		webbrowser.open(f'file:///{Path(__dirs__.user_config_dir).as_posix()}')
+		webbrowser.open(Path(__dirs__.user_config_dir).as_uri())
+
+	def openLogFile(self):
+		guiLog.openLog()
+
+	def openLogFolder(self):
+		from LevityDash import __dirs__
+		webbrowser.open(Path(__dirs__.user_log_dir).as_uri())
+
+	def submitLogs(self, sendType=None):
+		if sendType is None:
+			sendType = 'openFolder'
+		from LevityDash import __dirs__
+		logDir = Path(__dirs__.user_log_dir)
+
+		def writeFiles(zipFile, path, relativeTo: Path = None):
+			if relativeTo is None:
+				relativeTo = path
+			for file in path.iterdir():
+				if file.is_dir():
+					writeFiles(zipFile, file, relativeTo)
+				else:
+					zipFile.write(file, file.relative_to(relativeTo))
+
+		tempDir = Path(__dirs__.user_cache_dir)
+		tempDir.mkdir(exist_ok=True, parents=True)
+
+		email = EmailMessage()
+		email['Subject'] = 'Levity Dashboard Logs'
+		email['To'] = 'logs@levitydash.app'
+
+		zipFilePath = tempDir.joinpath('logs.zip')
+		if zipFilePath.exists():
+			zipFilePath.unlink()
+		with ZipFile(zipFilePath, 'x') as zip:
+			writeFiles(zip, logDir)
+
+		if sendType == 'openFolder':
+			webbrowser.open(zipFilePath.parent.as_uri())
+			return
+
+		_ctype, encoding = mimetypes.guess_type(zipFilePath.as_posix())
+		if _ctype is None or encoding is not None:
+			_ctype = 'application/octet-stream'
+		maintype, subtype = _ctype.split('/', 1)
+
+		with open(zipFilePath, 'rb') as zipFile:
+			email.add_attachment(zipFile.read(), maintype=maintype, subtype=subtype, filename='logs.zip')
+
+		with NamedTemporaryFile(mode='w', suffix='.eml') as f:
+			gen = Generator(f)
+			gen.flatten(email)
+			webbrowser.open(Path(f.name).as_uri())
 
 	def changeEvent(self, event: QEvent):
 		super().changeEvent(event)
@@ -505,9 +590,9 @@ class LevityMainWindow(QMainWindow):
 				self.menuBarHoverArea.setEnabled(True)
 				self.menuBarHoverArea.size.setWidth(self.width())
 				self.menuBarHoverArea.update()
-				self.menuBar().hide()
+				self.menuBar().move(0, self.menuBar().height())
 			else:
-				self.menuBar().show()
+				self.menuBar().move(0, -self.menuBar().height())
 				self.menuBarHoverArea.setEnabled(False)
 				self.menuBarHoverArea.update()
 

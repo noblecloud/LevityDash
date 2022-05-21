@@ -61,19 +61,19 @@ class ClockSignals(QObject):
 		self.__emitSecond()
 		self.__secondTimer.setSingleShot(False)
 		self.__secondTimer.start()
-		log.debug('Second timer started')
+		log.verbose('Second timer started')
 
 	def __startMinutes(self):
 		self.__emitMinute()
 		self.__minuteTimer.setSingleShot(False)
 		self.__minuteTimer.start()
-		log.debug('Minute timer started')
+		log.verbose('Minute timer started')
 
 	def __startHours(self):
 		self.__emitHour()
 		self.__hourTimer.setSingleShot(False)
 		self.__hourTimer.start()
-		log.debug('Hour timer started')
+		log.verbose('Hour timer started')
 
 	def __emitSecond(self):
 		# now = datetime.now()
@@ -82,12 +82,12 @@ class ClockSignals(QObject):
 
 	def __emitMinute(self):
 		minute = datetime.now().minute
-		log.debug(f'Minute timer emitted with value {minute}')
+		log.verbose(f'Minute timer emitted with value {minute}')
 		self.minute.emit(minute)
 
 	def __emitHour(self):
 		hour = datetime.now().hour
-		log.debug(f'Hour timer emitted with value {hour}')
+		log.verbose(f'Hour timer emitted with value {hour}')
 		self.hour.emit(hour)
 
 	def __syncTimers(self):
@@ -109,11 +109,11 @@ class ClockSignals(QObject):
 		self.__secondTimer.singleShot(timeToNextSecond + timerOffset, self.__startSeconds)
 
 		timeToNextMinute = round((now.replace(minute=now.minute, second=0, microsecond=0) + timedelta(minutes=1) - now).total_seconds()*1000)
-		log.info(f'Time to next minute: {timeToNextMinute/1000} seconds')
+		log.verbose(f'Time to next minute: {timeToNextMinute/1000} seconds')
 		self.__minuteTimer.singleShot(timeToNextMinute + timerOffset, self.__startMinutes)
 
 		timeToNextHour = round((now.replace(hour=now.hour, minute=0, second=0, microsecond=0) + timedelta(hours=1) - now).total_seconds()*1000)
-		log.info(f'Time to next hour: {timeToNextHour/1000} seconds')
+		log.verbose(f'Time to next hour: {timeToNextHour/1000} seconds')
 		self.__hourTimer.singleShot(timeToNextHour + timerOffset, self.__startHours)
 
 

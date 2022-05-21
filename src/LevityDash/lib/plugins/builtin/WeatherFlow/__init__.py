@@ -1,6 +1,3 @@
-import asyncio
-
-import qasync
 
 from LevityDash.lib.plugins.translator import LevityDatagram, TranslatorSpecialKeys as tsk
 from LevityDash.lib.plugins.web.socket import UDPSocket
@@ -16,7 +13,7 @@ __all__ = ["WeatherFlow", '__plugin__']
 class WFURLs(URLs, base='swd.weatherflow.com/swd'):
 	auth = Auth(authType=AuthType.PARAMETER, authData={'token': '{token}'})
 
-	rest = Endpoint(url='rest', auth=auth, protocol='https', refreshInterval=timedelta(minutes=5))
+	rest = Endpoint(url='rest', auth=auth, protocol='https', refreshInterval=timedelta(minutes=15))
 	websocket = Endpoint(url='data', protocol='wss')
 
 	stationObservation = Endpoint(base=rest, url=f'observations/station/{{stationID}}')
@@ -163,8 +160,8 @@ translator = {
 	'@timezone':                                         {'dataType': timezone, 'key': 'timezone', 'attr': 'timezone', 'default': {'value': LOCAL_TIMEZONE}, 'setter': '@plugin', tsk.metaData: True},
 	'@timestamp':                                        {'key': 'timestamp', 'attr': 'timestamp', 'default': {'value': datetime.now, 'kwargs': {'tz': '@timezone'}}, 'setter': '@source', tsk.metaData: True},
 	'@hubSerial':                                        {'sourceKey': ['hub_sn', 'serial_number'], 'key': 'device.@deviceSerial.serial', tsk.sourceData: True},
-	'@deviceSerial':                                     {'sourceKey': 'serial_number', 'key': 'device.@deviceSerial.serial', tsk.sourceData: True},
-	'@deviceID':                                         {'sourceKey': 'device_id', 'key': 'device.@deviceID.deviceID', tsk.sourceData: True},
+	'@deviceSerial':                                     {'sourceKey': 'serial_number', 'key': 'device.@deviceSerial.serial', tsk.sourceData: True, 'alt': '@deviceID'},
+	'@deviceID':                                         {'sourceKey': 'device_id', 'key': 'device.@deviceID.deviceID', tsk.sourceData: True, 'alt': '@deviceSerial'},
 	'@latitude':                                         {'sourceKey': 'latitude', 'attr': 'latitude', 'setter': '@plugin', tsk.metaData: True},
 	'@longitude':                                        {'sourceKey': 'longitude', 'attr': 'longitude', 'setter': '@plugin', tsk.metaData: True},
 	'meta@stationID':                                    {'sourceKey': 'station_id', 'filter.match': '@plugin', tsk.metaData: True},
@@ -174,7 +171,7 @@ translator = {
 	'ignored':                                           ['wind_direction_cardinal', 'lightning_strike_last_distance_msg', 'is_precip_local_day_rain_check', 'is_precip_local_yesterday_rain_check', 'firmware_revision'],
 
 	'keyMaps':                                           {
-		'obs_st':        {
+		'obs_st': {
 			'obs': {
 				18: (basic := ['timestamp', 'environment.wind.speed.lull', 'environment.wind.speed.speed', 'environment.wind.speed.gust', 'environment.wind.direction.direction',
 					'device.@deviceSerial.sampleInterval.wind', 'environment.pressure.pressure', 'environment.temperature.temperature', 'environment.humidity.humidity',
@@ -291,6 +288,7 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 
 	def socketUpdate(self, datagram):
 		message = LevityDatagram(datagram, translator=self.translator, sourceData={'socket': self.udp})
+		self.pluginLog.verbose(f'{self.name} received {message}')
 		for observation in self.observations:
 			if observation.dataName in message:
 				observation.update(message)
@@ -311,7 +309,7 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 		self.__running = True
 
 		if self.config['fetchHistory']:
-			ScheduledEvent(interval=timedelta(seconds=15), singleShot=True, func=self.getHistorical, fireImmediately=True).start()
+			ScheduledEvent(interval=timedelta(seconds=30), singleShot=True, func=self.getHistorical, fireImmediately=False).start()
 
 	async def getRealtime(self):
 		urls = self.urls

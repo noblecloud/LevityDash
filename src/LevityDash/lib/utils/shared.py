@@ -1147,10 +1147,10 @@ operatorList = [
 	(__operator.mul, ('*', 'x', 'X')),
 	(__operator.truediv, ('/', '÷')),
 	(__operator.floordiv, ('//', '÷')),
-	(__operator.mod, ('%', 'mod')),
-	(__operator.pow, ('**', '^')),
-	(__operator.lshift, ('<<', '<')),
-	(__operator.rshift, ('>>', '>')),
+	(__operator.mod, ('mod', '%')),
+	(__operator.pow, ('^', '**')),
+	(__operator.lshift, ('<<',)),
+	(__operator.rshift, ('>>',)),
 	(__operator.and_, ('&', 'and')),
 	(__operator.or_, ('|', 'or')),
 	(__operator.xor, ('^', 'xor')),
@@ -1167,7 +1167,7 @@ operatorList = [
 	(__operator.is_not, ('is not', 'is_not', 'is not a', 'is not an', 'is_not_a', 'is_not_an', 'isNot', 'isNotA', 'isNotAn', 'isnot', 'isnotA', 'isnotAn', 'not idinstance')),
 	(__operator.contains, ('in', 'contains', 'contains', 'range')),
 ]
-operatorDict = {name: op for op, names in operatorList for name in names}
+operatorDict = {**{name: op for op, names in operatorList for name in names}, **{func: names[0] for func, names in operatorList}}
 
 
 def getOrSet(d: dict, key: Hashable, value: Any, *args, **kwargs) -> Any:

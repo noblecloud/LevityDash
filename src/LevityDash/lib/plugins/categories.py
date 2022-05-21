@@ -4,6 +4,7 @@ from datetime import datetime
 from functools import cached_property, lru_cache
 from typing import Any, Callable, ClassVar, Dict, Hashable, Iterable, Mapping, Optional, TypeVar, Union
 
+from rich import repr
 from pytz import timezone
 
 from LevityDash.lib.plugins.utils import TranslatorProperty, unitDict
@@ -28,14 +29,16 @@ class Requirement:
 	__operationName: str
 	__storedResult: Union[bool, RHS, LHS]
 
-	def __init__(self, operator: Union[Callable, str], rhs: Any, lhs: Any, negated: bool = False):
+	def __init__(self, *_, operator: Union[Callable, str], lhs: Any, lhsName: str = None, rhs: Any, rhsName: str = None, negated: bool = False):
 		self.__operationName = operator if isinstance(operator, str) else operator.__name__
 		self.__storedResult = Unset
 		if not isinstance(operator, Callable):
 			operator = operatorDict[operator]
 		self.operator = operator
 		self.rhs = rhs
+		self.rhsName = rhsName
 		self.lhs = lhs
+		self.lhsName = lhsName
 		self.negated = negated
 
 	def __bool__(self):
@@ -58,9 +61,12 @@ class Requirement:
 				return f'{self.__operationName}[{ColorStr.red("Failed ✘")}]: {self.lhs} {"not " if self.negated else ""}{self.__operationName} {self.rhs}'
 
 	def __repr__(self):
-		return f'{self.__operationName}[{"Passed ︎︎✔︎" if self else "Failed ✘"}]'
+		lhs = f'{self.lhsName}={self.lhs}' if self.lhsName else str(self.lhs)
+		rhs = f'{self.rhsName}={self.rhs}' if self.rhsName else str(self.rhs)
+		return f'{"︎︎✔︎" if self else "✘"} | {lhs} {operatorDict[self.operator]} {rhs}'
 
 
+@repr.auto
 class UnitMetaData(dict):
 
 	def __init__(self, **kwargs):
@@ -92,10 +98,10 @@ class UnitMetaData(dict):
 		super(UnitMetaData, self).__init__(value)
 
 	def __repr__(self):
-		match self:
-			case {'key': CategoryItem(key)}:
+		match dict(self):
+			case {'key': CategoryItem(key) | key, **rest}:
 				return f'UnitMetaData({key.name})'
-			case {'sourceKey': key}:
+			case {'sourceKey': key, **rest}:
 				return f'UnitMetaData({key})'
 			case _:
 				return f'UnitMetaData({self})'
@@ -201,6 +207,8 @@ class UnitMetaData(dict):
 				return data[keys[0]]
 
 	def validate(self, data: 'Subdatagram', key: Union[str, 'CategoryItem', Hashable] = Unset, value: Any = Unset) -> bool:
+		log.verbose(f'Validating {self.key.name}')
+
 		def isValid(validation) -> bool:
 			return all(v for k, v in validation.items() if '.' not in k)
 
@@ -223,6 +231,7 @@ class UnitMetaData(dict):
 					validation['KeyFound.MultipleKeys'] = keys
 
 		if (required := self.get('requires', False)) and isValid(validation):
+			log.verbose('Checking requirements...')
 			if isinstance(required, str):
 				other = data.translator.get(required)
 				validation['MeetsRequirements'] = True if self.testValidationLoop(other) and other.validate(data) else False
@@ -235,6 +244,7 @@ class UnitMetaData(dict):
 			elif isinstance(required, dict):
 				requirementValidation: dict[str, [Requirement]] = {}
 				for requirementKey, requirements in required.items():
+					requirementKey = CategoryItem(requirementKey)
 					other = data.translator.get(requirementKey)
 					otherValue = other.findValue(data)
 					negate = requirements.get('negate', False)
@@ -245,7 +255,7 @@ class UnitMetaData(dict):
 							op = operatorDict[opName]
 							compare = requirements[opName]
 							localNegate = requirements['negate'] if 'negate' in requirements else negate
-							results.append(Requirement(op, compare, otherValue, localNegate))
+							results.append(Requirement(operator=op, lhs=otherValue, lhsName=requirementKey.name, rhs=compare, rhsName=None, negated=localNegate))
 						requirementValidation[requirementKey] = results
 
 					# # is
@@ -261,17 +271,29 @@ class UnitMetaData(dict):
 					else:
 						requirementValidation[requirementKey] = {'valid': [False]}
 				failures = [i for j in [v for k, v in requirementValidation.items() if not all(v)] for i in j]
+				report = self.__genReport(requirementValidation)
 				if failures:
 					if get(required, 'verbose', default=False) or not get(required, 'quiet', 'silent', 'silently', default=False):
-						log.debug(f'{self.__class__.__name__} failed the following validation requirements: {failures}')
+						log.debug(report)
+					else:
+						log.verbose(report)
 					validation['MeetsRequirements'] = False
 					validation['MeetsRequirements.Missing'] = failures
 				else:
 					validation['MeetsRequirements'] = True
+					log.verbose(report)
 			else:
 				raise TypeError(f'{self} requires must be a string, list, tuple, or dict')
 
 		return isValid(validation)
+
+	def __genReport(self, validationResults):
+		status = any(i for j in [v for k, v in validationResults.items() if all(v)] for i in j)
+		header = f'--- {self.key.name} - {"Success" if status else "Failure"} {"✔︎" if status else "✘"} ---'
+		validationResults = [i for j in [v for v in validationResults.values()] for i in j]
+		body = '\n'.join(f'  {i.__repr__()}' for i in validationResults)
+		report = f'{header}\n{body}'
+		return report
 
 	def testValidationLoop(self, other: 'UnitMetaData') -> bool:
 		"""
