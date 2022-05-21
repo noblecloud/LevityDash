@@ -1,5 +1,5 @@
 from LevityDash.lib.plugins.plugin import ScheduledEvent
-from LevityDash.lib.plugins.translator import TranslatorSpecialKeys as tsk
+from LevityDash.lib.plugins.schema import SchemaSpecialKeys as tsk
 from LevityDash.lib.plugins.web import Endpoint, REST, URLs
 from datetime import datetime, timedelta
 
@@ -20,7 +20,7 @@ WMOCodes = {
 
 }
 
-translator = {
+schema = {
 	'environment.temperature.temperature':          {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Temperature', 'description': 'Temperature at 2m height', 'sourceKey': 'temperature_2m'},
 	'environment.humidity.humidity':                {'type': 'relativehumidity', 'sourceUnit': '%', 'title': 'Relative humidity', 'description': 'Relative humidity at 2m height', 'sourceKey': 'relativehumidity_2m'},
 	'environment.temperature.dewpoint':             {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Dewpoint', 'description': 'Dewpoint at 2m height', 'sourceKey': 'dewpoint_2m'},
@@ -171,7 +171,7 @@ class OpenMeteoURLs(URLs, base='api.open-meteo.com/v1'):
 
 class OpenMeteo(REST, realtime=False, hourly=True, daily=True):
 	urls = OpenMeteoURLs()
-	translator = translator
+	schema = schema
 	name = 'OpenMeteo'
 
 	def __init__(self, *args, **kwargs):

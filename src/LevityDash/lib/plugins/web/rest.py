@@ -3,7 +3,7 @@ from typing import Optional
 import aiohttp
 from rich.pretty import pretty_repr
 
-from LevityDash.lib.plugins.translator import LevityDatagram
+from LevityDash.lib.plugins.schema import LevityDatagram
 from LevityDash.lib.plugins.web import Endpoint, Web
 from LevityDash.lib.plugins.web.errors import APIError, InvalidCredentials, RateLimitExceeded
 
@@ -58,7 +58,7 @@ class REST(Web, prototype=True):
 
 		try:
 			data = await self.__getData(url, params, headers)
-			datagram = LevityDatagram(data, translator=self.translator, sourceData={'endpoint': endpoint}, dataMap=self.translator.dataMaps.get(endpoint.name, {}))
+			datagram = LevityDatagram(data, schema=self.schema, sourceData={'endpoint': endpoint}, dataMap=self.schema.dataMaps.get(endpoint.name, {}))
 			self.pluginLog.verbose(f'{self.name} received parsed data: {datagram}')
 			return self.normalizeData(datagram)
 		except Exception as e:

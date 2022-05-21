@@ -7,7 +7,7 @@ from typing import Any, Callable, ClassVar, Dict, Hashable, Iterable, Mapping, O
 from rich import repr
 from pytz import timezone
 
-from LevityDash.lib.plugins.utils import TranslatorProperty, unitDict
+from LevityDash.lib.plugins.utils import SchemaProperty, unitDict
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.utils.shared import (clearCacheAttr, ColorStr, get, getOrSet, LOCAL_TIMEZONE, matchWildCard, operatorDict,
                                          removeSimilar, subsequenceCheck, Unset)
@@ -110,10 +110,10 @@ class UnitMetaData(dict):
 		return hash(self.key)
 
 	def __findSimilar(self, key: 'CategoryItem'):
-		from plugins.translator import Translator
-		return Translator.getFromAll(key, None)
+		from plugins.schema import Schema
+		return Schema.getFromAll(key, None)
 
-	def findProperties(self, source: 'Translator', data: dict):
+	def findProperties(self, source: 'Schema', data: dict):
 		if isinstance(data, UnitMetaData):
 			data = dict(data)
 		if isinstance(data, dict):
@@ -136,7 +136,7 @@ class UnitMetaData(dict):
 				prop = source.properties.get(data, None)
 				if prop is None:
 					raise ValueNotFound(f'{data} not found')
-				data = TranslatorProperty(source, prop)
+				data = SchemaProperty(source, prop)
 		# elif data in self.units:
 		# 	data = self.units[data]
 		return data
@@ -150,7 +150,7 @@ class UnitMetaData(dict):
 			return lambda value: value
 		if typeString in ('datetime', 'date'):
 			if 'tz' in kwargs:
-				if isinstance(kwargs['tz'], TranslatorProperty):
+				if isinstance(kwargs['tz'], SchemaProperty):
 					value = kwargs['tz']
 					kwargs['tz'] = value(source)
 				if isinstance(kwargs['tz'], str):
@@ -183,7 +183,7 @@ class UnitMetaData(dict):
 					n = unitDict[n]
 				if isinstance(d, str) and d in unitDict:
 					d = unitDict[d]
-				if isinstance(d, TranslatorProperty):
+				if isinstance(d, SchemaProperty):
 					d = d(source)
 				elif isinstance(d, type):
 					d = d(1)
@@ -233,10 +233,10 @@ class UnitMetaData(dict):
 		if (required := self.get('requires', False)) and isValid(validation):
 			log.verbose('Checking requirements...')
 			if isinstance(required, str):
-				other = data.translator.get(required)
+				other = data.schema.get(required)
 				validation['MeetsRequirements'] = True if self.testValidationLoop(other) and other.validate(data) else False
 			elif isinstance(required, (list, tuple)):
-				if all(data.translator.get(r).validate(data) for r in required if self.testValidationLoop(r)):
+				if all(data.schema.get(r).validate(data) for r in required if self.testValidationLoop(r)):
 					validation['MeetsRequirements'] = True
 				else:
 					validation['MeetsRequirements'] = False
@@ -245,7 +245,7 @@ class UnitMetaData(dict):
 				requirementValidation: dict[str, [Requirement]] = {}
 				for requirementKey, requirements in required.items():
 					requirementKey = CategoryItem(requirementKey)
-					other = data.translator.get(requirementKey)
+					other = data.schema.get(requirementKey)
 					otherValue = other.findValue(data)
 					negate = requirements.get('negate', False)
 					if self.testValidationLoop(other) and other.validate(data):

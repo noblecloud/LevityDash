@@ -11,17 +11,17 @@ from rich.pretty import pretty_repr
 from LevityDash.lib.plugins.utils import unitDict
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.utils.shared import clearCacheAttr, now, Unset
-from ..categories import CategoryDict, CategoryItem, UnitMetaData, ValueNotFound
+from LevityDash.lib.plugins.categories import CategoryDict, CategoryItem, UnitMetaData, ValueNotFound
 
-log = LevityPluginLog.getChild('Translator')
+log = LevityPluginLog.getChild('Schema')
 
 
-class TranslatorSpecialKeys(str, Enum):
+class SchemaSpecialKeys(str, Enum):
 	sourceData = "{{sourceData}}"
 	metaData = "{{metaData}}"
 
 
-tsk = TranslatorSpecialKeys
+tsk = SchemaSpecialKeys
 
 
 class DotStorage(dict):
@@ -46,9 +46,9 @@ class LevityDatagram(dict):
 	sourceData: dict
 	metaData: dict
 
-	def __init__(self, data: dict, translator: 'Translator' = None, **kwargs):
+	def __init__(self, data: dict, schema: 'Schema' = None, **kwargs):
 		self.__creationTime = kwargs.get('creationTime', None) or now()
-		self.__translator = translator
+		self.__schema = schema
 		self.__sourceData = kwargs.get('sourceData', {})
 		self.__metaData = kwargs.get('metaData', {})
 		self.__static = kwargs.get('static', False)
@@ -69,7 +69,7 @@ class LevityDatagram(dict):
 	@lru_cache(maxsize=16)
 	def findTimeKey(self, data: dict) -> str:
 		if isinstance(data, frozenset):
-			timeKey = self.translator['timestamp']['sourceKey']
+			timeKey = self.schema['timestamp']['sourceKey']
 			if isinstance(timeKey, (list, tuple, set, frozenset)):
 				for key in timeKey:
 					if key in data:
@@ -81,7 +81,7 @@ class LevityDatagram(dict):
 			return 'timestamp'
 
 	def mapData(self):
-		if self.__translator is None:
+		if self.__schema is None:
 			return
 		data = self
 		dataMap = self.dataMap
@@ -147,8 +147,8 @@ class LevityDatagram(dict):
 		return self.__creationTime
 
 	@property
-	def translator(self):
-		return self.__translator
+	def schema(self):
+		return self.__schema
 
 	@property
 	def static(self):
@@ -165,7 +165,7 @@ class LevityDatagram(dict):
 
 	def __setitem__(self, key, value):
 		if not self.static:
-			if key in self.translator._ignored:
+			if key in self.schema._ignored:
 				return
 			if not isinstance(value, LevityDatagram):
 				self.parseData(key=key, value=value)
@@ -180,7 +180,7 @@ class LevityDatagram(dict):
 				return None
 			ignore.add(atom)
 			main = self.sourceData.get(atom, None) or self.metaData.get(atom, None)
-			return main or findVar(self.translator.properties.get(atom, {}).get('alt', None), ignore) or 'NA'
+			return main or findVar(self.schema.properties.get(atom, {}).get('alt', None), ignore) or 'NA'
 
 		for key, value in dict(data).items():
 			key = CategoryItem(key)
@@ -194,9 +194,9 @@ class LevityDatagram(dict):
 	def replaceKeys(self, data: dict = None):
 		for key, value in dict(data).items():
 			data.pop(key)
-			if key in self.translator._ignored:
+			if key in self.schema._ignored:
 				continue
-			data[self.translator.sourceKeyMap.get(key, key)] = value
+			data[self.schema.sourceKeyMap.get(key, key)] = value
 		return data
 
 	def __hash__(self):
@@ -220,40 +220,40 @@ class LevityDatagram(dict):
 			match value:
 				case (str() | int() | float() | bool()):
 					popLater = False
-					if key in self.translator.properties:
-						prop = self.translator.properties.get(key)
+					if key in self.schema.properties:
+						prop = self.schema.properties.get(key)
 						if prop.get(tsk.sourceData, False):
-							self.sourceData[f'@{self.translator.properties.getKey(key)}'] = value
+							self.sourceData[f'@{self.schema.properties.getKey(key)}'] = value
 							popLater = True
-					if key in self.translator.metaData:
-						meta = self.translator.metaData.get(key)
-						if meta.get(TranslatorSpecialKeys.metaData, False):
+					if key in self.schema.metaData:
+						meta = self.schema.metaData.get(key)
+						if meta.get(SchemaSpecialKeys.metaData, False):
 							if any(i in str(key) for i in ('time', 'date')):
 								if isinstance(value, str):
 									try:
 										DateParser.parse(value)
 									except DateParser.ParserError:
 										continue
-							self.metaData[f'@{self.translator.metaData.getKey(key)}'] = value
+							self.metaData[f'@{self.schema.metaData.getKey(key)}'] = value
 							popLater = True
 					if popLater:
 						data.pop(key)
-				case {storage.timekey: list(timestamps), **values} if storage.path in self.validPaths and set(values.keys()).intersection(self.translator._sourceKeys.keys()):
+				case {storage.timekey: list(timestamps), **values} if storage.path in self.validPaths and set(values.keys()).intersection(self.schema._sourceKeys.keys()):
 					keys = list(value.keys())
 					d = []
 					for i, _ in enumerate(timestamps):
 						d.append(Subdatagram(parent=self, data={k: value[k][i] for k in keys}, path=(*(storage.path or ()), key, i)))
 					data[key] = d
-				case dict() as obs if storage.path in self.validPaths and set(obs.keys()).intersection(self.translator._sourceKeys.keys()):
+				case dict() as obs if storage.path in self.validPaths and set(obs.keys()).intersection(self.schema._sourceKeys.keys()):
 					data[key] = Subdatagram(parent=self, data=value, path=key)
-				# if list(data[key].path) in [i[1:] for i in self.translator.dataMapPaths]:
+				# if list(data[key].path) in [i[1:] for i in self.schema.dataMapPaths]:
 				# 	print('here')
 				case dict():
 					data[key] = self.parseData(data=value, path=[key])
 				case [*items]:
 					for i, item in enumerate(items):
 						match item:
-							case dict() as obs if set(obs.keys()).intersection(self.translator._sourceKeys.keys()):
+							case dict() as obs if set(obs.keys()).intersection(self.schema._sourceKeys.keys()):
 								value[i] = Subdatagram(parent=self, data=item, path=[*(path or []), key, i])
 							case _:
 								pass
@@ -263,7 +263,7 @@ class LevityDatagram(dict):
 		return data
 
 	def mapArrays(self, data, keyMap: Optional[str] = None):
-		keyMap = keyMap or self.translator.getKeyMap(data, datagram=self) or {}
+		keyMap = keyMap or self.schema.getKeyMap(data, datagram=self) or {}
 		if isinstance(keyMap, dict):
 			for key, subMap in keyMap.items():
 				if isinstance(data, list) and key == len(data) or (key is iter and len(subMap) == len(data)):
@@ -345,12 +345,12 @@ class LevityDatagram(dict):
 		if isinstance(data, Subdatagram):
 			return data
 		if isinstance(data, dict):
-			return LevityDatagram(data=data, translator=self.__translator, static=True, sourceData=self.sourceData, metaData=self.metaData)
+			return LevityDatagram(data=data, schema=self.__schema, static=True, sourceData=self.sourceData, metaData=self.metaData)
 		return None
 
 	@property
 	def dataMap(self):
-		return self.__dataMap or self.translator.dataMaps.get(self.metaData.get('@type', ''), None) or dict()
+		return self.__dataMap or self.schema.dataMaps.get(self.metaData.get('@type', ''), None) or dict()
 
 	@property
 	def validPaths(self):
@@ -364,7 +364,7 @@ class LevityDatagram(dict):
 						item.validate()
 				case Subdatagram():
 					value.validate()
-				case _ if key in self.translator and ((unitMetaData := self.translator.getExact(key)) and unitMetaData.hasValidation):
+				case _ if key in self.schema and ((unitMetaData := self.schema.getExact(key)) and unitMetaData.hasValidation):
 					validation = unitMetaData.validate(self, key, value)
 					if not validation:
 						self.pop(key)
@@ -400,8 +400,8 @@ class Subdatagram(LevityDatagram):
 		return self.__parent
 
 	@property
-	def translator(self):
-		return self.__parent.translator
+	def schema(self):
+		return self.__parent.schema
 
 	@property
 	def creationTime(self):
@@ -496,20 +496,20 @@ class MetaData(dict):
 
 	def __init__(self, plugin: 'Plugin', source: dict):
 		self.__plugin = plugin
-		keys = [key for key, value in source.items() if str(key).startswith('@meta') or TranslatorSpecialKeys.metaData in value]
+		keys = [key for key, value in source.items() if str(key).startswith('@meta') or SchemaSpecialKeys.metaData in value]
 		keys = sorted(keys, key=lambda k: str(k).startswith('@'), reverse=True)
 		for key in keys:
 			originalKey = key
 			key = key.replace('@meta.', '@', 1)
-			if TranslatorSpecialKeys.metaData not in source[originalKey] or originalKey.startswith('@meta.'):
+			if SchemaSpecialKeys.metaData not in source[originalKey] or originalKey.startswith('@meta.'):
 				self[key] = source.pop(originalKey)
 			else:
 				self[key] = source[originalKey]
 		super().__init__({'plugin': plugin})
 
 	def __setitem__(self, key, value):
-		if isinstance(value.get(TranslatorSpecialKeys.metaData, False), str):
-			key = value[TranslatorSpecialKeys.metaData]
+		if isinstance(value.get(SchemaSpecialKeys.metaData, False), str):
+			key = value[SchemaSpecialKeys.metaData]
 		key = key.strip('@')
 		if 'key' not in value:
 			value['key'] = key
@@ -585,14 +585,14 @@ class MetaData(dict):
 		return self.__plugin
 
 
-class Translator(CategoryDict):
-	__translators__ = {}
+class Schema(CategoryDict):
+	__schemas__ = {}
 	units = unitDict
 	_ignored: set[str]
 
 	@classmethod
 	def getFromAll(cls, key: str, default=None):
-		result = {n: t.getExact(key) for n, t in cls.__translators__.items() if key in t}
+		result = {n: t.getExact(key) for n, t in cls.__schemas__.items() if key in t}
 		return result
 
 	def __init__(self, plugin: 'Plugin', source: dict, category: str = None, ignored: Iterable[str] = None, **kwargs):
@@ -607,7 +607,7 @@ class Translator(CategoryDict):
 		self.calculations = source.pop('calculations', {})
 		self.aliases = source.pop('aliases', {})
 		# self.metaData.update({k: v for k, v in self.properties.items() if v.get('@isMeta', False)})
-		super(Translator, self).__init__(None, source, category)
+		super(Schema, self).__init__(None, source, category)
 		if ignored is not None:
 			self._ignored.update(ignored)
 
@@ -615,7 +615,7 @@ class Translator(CategoryDict):
 		for key in toConvert:
 			value = UnitMetaData(key=key, reference=self)
 			self._source[key] = value
-		self.__translators__[plugin.name] = self
+		self.__schemas__[plugin.name] = self
 		self.__hash = hash((plugin, frozenset(self.keys())))
 
 	def buildRequirements(self, data: dict):
@@ -677,7 +677,7 @@ class Translator(CategoryDict):
 	def __setitem__(self, key: CategoryItem, value: UnitMetaData):
 		if not isinstance(value, UnitMetaData) and not isinstance(value, dict):
 			value = UnitMetaData(key=key, value=value)
-		super(Translator, self).__setitem__(key, value)
+		super(Schema, self).__setitem__(key, value)
 
 	def getKeyMap(self, source: Union[str, Iterable[str], Dict[str, str]], datagram: dict | None = None) -> Dict[str, str]:
 		source = dict(source)

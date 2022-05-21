@@ -6,7 +6,7 @@ from LevityDash.lib.log import LevityPluginLog as pluginLog
 from LevityDash.lib.plugins.utils import *
 from LevityDash.lib.config import pluginConfig
 from LevityDash.lib.plugins import categories
-from LevityDash.lib.plugins import translator
+from LevityDash.lib.plugins import schema
 from LevityDash.lib.plugins import observation
 from LevityDash.lib.plugins.plugin import Plugin
 

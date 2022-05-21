@@ -22,11 +22,11 @@ class UDPMessage(dict):
 	source: list[str] = ['serial_number', 'hub_sn', 'type']
 
 	def __init__(self, udpData):
-		translatorProperties = self.source.translator.properties
+		schemaProperties = self.source.schema.properties
 		messAtlas = {}
 		for key in self.messAtlas:
-			if key in translatorProperties:
-				meta = translatorProperties[key]
+			if key in schemaProperties:
+				meta = schemaProperties[key]
 				newKey = meta['key']
 				sourceKey = meta['sourceKey']
 				if isinstance(sourceKey, list):

@@ -11,7 +11,7 @@ from bleak.backends.device import BLEDevice
 from LevityDash.lib.log import LevityPluginLog
 
 from LevityDash.lib.plugins.plugin import Plugin, ScheduledEvent
-from LevityDash.lib.plugins.translator import LevityDatagram, Translator, TranslatorSpecialKeys as tsk
+from LevityDash.lib.plugins.schema import LevityDatagram, Schema, SchemaSpecialKeys as tsk
 from LevityDash.lib.utils.shared import getOr, now
 
 pluginLog = LevityPluginLog.getChild('Govee')
@@ -73,7 +73,7 @@ class BLEPayloadParser:
 
 class Govee(Plugin, realtime=True, logged=True):
 	name = 'Govee'
-	translator: Translator = {
+	schema: Schema = {
 		'timestamp':                      {'type': 'datetime', 'sourceUnit': 'epoch', 'title': 'Time', 'sourceKey': 'timestamp', tsk.metaData: True},
 		'indoor.temperature.temperature': {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Temperature', 'sourceKey': 'temperature'},
 		'indoor.temperature.dewpoint':    {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Dewpoint', 'sourceKey': 'dewpoint'},
@@ -254,7 +254,7 @@ class Govee(Plugin, realtime=True, logged=True):
 			**self.__humidityParse(dataBytes),
 			**self.__batteryParse(dataBytes),
 		}
-		data = LevityDatagram(results, translator=self.translator, dataMaps=self.translator.dataMaps)
+		data = LevityDatagram(results, schema=self.schema, dataMaps=self.schema.dataMaps)
 		pluginLog.debug(f'{self.__class__.__name__} received: {data["realtime"]}')
 		self.realtime.update(data)
 
