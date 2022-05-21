@@ -20,9 +20,7 @@ QApplication.setAttribute(Qt.AA_DontUseNativeMenuBar, False)
 import asyncio
 import qasync
 from pathlib import Path
-from rich.traceback import install
 
-install(show_locals=True, width=120)
 qasync.logger.setLevel('ERROR')
 
 

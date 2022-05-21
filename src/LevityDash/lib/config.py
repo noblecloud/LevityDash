@@ -1,6 +1,5 @@
 import os
 import re
-import sys
 from configparser import ConfigParser
 from functools import cached_property
 from pathlib import Path, PosixPath, PurePath
@@ -11,8 +10,6 @@ from pytz import timezone
 
 from . import EasyPath as EasyPath
 
-from LevityDash.lib.log import LevityUtilsLog as log
-log = log.getChild('config')
 
 def buildDirectories(path: Path, dirs: Union[list, str, dict[str, Union[str, list]]]) -> None:
 	'''
@@ -83,12 +80,6 @@ class LevityConfig(ConfigParser):
 		elif configSection is not None:
 			self.read_dict({'Config': dict(configSection)})
 
-		if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-			os.environ['DEBUG'] = '1'
-			Path(dirs.user_log_dir).joinpath('levitydash.log').touch(exist_ok=True)
-
-	# sys.stdout = open(Path.home().joinpath('.config', 'levity', 'LevityDash.log'), 'a')
-
 	@cached_property
 	def rootPath(self) -> EasyPath.EasyPath:
 		from LevityDash import __lib__
@@ -110,9 +101,13 @@ class LevityConfig(ConfigParser):
 			case str() | Path() | PosixPath() | PurePath():
 				value = EasyPath.EasyPath(value)
 			case _:
+				from LevityDash.lib.log import LevityUtilsLog as log
+				log = log.getChild('config')
 				log.critical(f'User path \'{value}\' is not a valid path.')
 				raise TypeError(f'User config path must be a String, PosixPath or EasyPath, not {type(value)}')
 		if not value.path.exists():
+			from LevityDash.lib.log import LevityUtilsLog as log
+			log = log.getChild('config')
 			log.critical(f'User path \'{value}\' does not exist')
 			raise FileNotFoundError(f'{value} does not exist')
 		self.__userPath = value
@@ -252,6 +247,8 @@ class Config(LevityConfig):
 		try:
 			return timezone(self['Location']['timezone'])
 		except Exception as e:
+			from LevityDash.lib.log import LevityUtilsLog as log
+			log = log.getChild('config')
 			log.error('Unable load timezone from config\n', e)
 
 	@property
@@ -261,7 +258,9 @@ class Config(LevityConfig):
 		longitude = self.get('Location', 'longitude', fallback=None)
 		timezone = self.get('Location', 'timezone', fallback=None)
 		if noLocationSection or not latitude or not longitude or not timezone:
-			log.info('No location set in config')
+			from LevityDash.lib.log import LevityUtilsLog as log
+			log = log.getChild('config')
+			log.info('No location set in config.  Guessing location based on IP address.')
 			lat, lon, tz = guessLocation()
 			self['Location'] = {'timezone': timezone or tz, 'latitude': latitude or lat, 'longitude': longitude or lon}
 			self.save()

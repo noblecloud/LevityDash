@@ -142,13 +142,12 @@ class BaseSocketProtocol(asyncio.DatagramProtocol):
 		self.log = api.pluginLog.getChild(self.__class__.__name__)
 
 	def datagram_received(self, data, addr):
-		self.log.verboseDebug(f'Received data bytes from {addr}')
 		try:
 			message = loads(data.decode('utf-8'))
-		except JSONDecodeError:
+			self.handler.publish(message)
+		except JSONDecodeError as e:
 			self.log.error(f'Received invalid JSON from {addr}')
-			return
-		self.handler.publish(message)
+			self.log.error(e)
 
 	def connection_made(self, transport):
 		self.log.debug('Connection made')

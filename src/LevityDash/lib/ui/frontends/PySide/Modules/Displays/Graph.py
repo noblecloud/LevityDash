@@ -45,7 +45,7 @@ from LevityDash.lib.utils.shared import autoDType, clamp, clearCacheAttr, closes
 from LevityDash.lib.utils.geometry import AlignmentFlag, Axis, Margins
 from time import time
 
-log = LevityGUILog.getChild(__name__)
+log = LevityGUILog.getChild('Graph')
 
 __all__ = ['GraphItemData', 'Figure', 'GraphPanel']
 
@@ -1055,9 +1055,9 @@ class GraphItemData(QObject):
 	@cached_property
 	def list(self):
 		if self.value is not None:
-			return self.value[self.graph.timeframe.historicalStart:]
+			return self.value[self.graph.timeframe.historicalStart:] or []
 		else:
-			return self.value
+			return self.value or []
 
 	@staticmethod
 	def smooth_data_np_convolve(arr, span):

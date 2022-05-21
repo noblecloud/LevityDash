@@ -1,6 +1,7 @@
 from typing import Optional
 
 import aiohttp
+from rich.pretty import pretty_repr
 
 from LevityDash.lib.plugins.translator import LevityDatagram
 from LevityDash.lib.plugins.web import Endpoint, Web
@@ -17,7 +18,7 @@ class REST(Web, prototype=True):
 				if response.status == 200:
 					self.pluginLog.info(f'{self.name} request successful for {url}')
 					data = await response.json()
-					self.pluginLog.debug(f'Returned: {str(data)[:300]} ... ')
+					self.pluginLog.debug(pretty_repr(data, indent_size=2, max_width=120, max_depth=5, max_length=10, max_string=600))
 					return await response.json()
 				elif response.status == 429:
 					self.pluginLog.error('Rate limit exceeded', response.content)
@@ -58,10 +59,12 @@ class REST(Web, prototype=True):
 		try:
 			data = await self.__getData(url, params, headers)
 			datagram = LevityDatagram(data, translator=self.translator, sourceData={'endpoint': endpoint}, dataMap=self.translator.dataMaps.get(endpoint.name, {}))
+			self.pluginLog.verbose(f'{self.name} received parsed data: {datagram}')
 			return self.normalizeData(datagram)
 		except Exception as e:
 			self.pluginLog.error(f'{self.name} request failed for {url}')
 			self.pluginLog.exception(e)
+			return LevityDatagram({})
 
 	@property
 	def running(self):

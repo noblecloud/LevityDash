@@ -439,7 +439,7 @@ class ScheduledEvent(object):
 
 	def __fire(self):
 		asyncio.create_task(self.__func(*self.__args, **self.__kwargs))
-		self.log.verboseDebug(f'{self.__func.__name__}() fired for {self.__owner.name}')
+		self.log.verbose(f'{self.__func.__name__}() fired for {self.__owner.name}')
 		if not self.__singleShot:
 			self.__run()
 
@@ -602,7 +602,6 @@ class Plugin(metaclass=PluginMeta):
 		self.containerCategories = CategoryDict(self, self.containers, None)
 
 		self.pluginLog = pluginLog.getChild(f'{self.name}')
-		self.pluginLog.setLevel(pluginLog.level)
 
 		self.observations = ObservationList(self)
 		self.publisher = Publisher(self)
