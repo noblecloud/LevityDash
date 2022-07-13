@@ -1846,46 +1846,85 @@ class ObservationLog(ObservationTimeSeries, published=False, recorded=True):
 		return item
 
 
-class TimeSeriesSignal(QObject):
-	__signal = Signal()
-	__connections: Set[Hashable]
+class TimeSeriesSignal(ChannelSignal):
 	__lastHash: int
-	__parent: 'MeasurementTimeSeries'
+	_signal = Signal()
+	_source: 'MeasurementTimeSeries'
+	_singleShots: Dict[Hashable, coroutine]
+	_conditionalSingleShots: Dict[coroutine, Callable[['MeasurementTimeSeries'], bool]]
 
 	def __init__(self, parent: 'MeasurementTimeSeries'):
-		self.__parent = parent
+		self._singleShots = {}
+		self._conditionalSingleShots = {}
 		self.__lashHash = 0
-		self.__connections = set()
-		super(TimeSeriesSignal, self).__init__()
+		super(TimeSeriesSignal, self).__init__(parent, parent.key)
 
 	def __repr__(self):
-		return f'<{repr(self.__parent)}.Publisher>'
+		return f'<{repr(self._source)}.Publisher>'
 
-	def publish(self):
-		self.__signal.emit()
+	@property
+	def muted(self):
+		return ChannelSignal.muted.fget(self)
 
-	def connectSlot(self, slot):
-		self.__connections.add(slot.__self__)
-		self.__signal.connect(slot)
-		if len(self.__connections) == 1:
-			self.__parent.refresh()
+	@muted.setter
+	def muted(self, value: bool):
+		ChannelSignal.muted.fset(self, value)
+		if self._source.isMultiSource:
+			sources = [s for s in self._source.sources if isinstance(s, MeasurementTimeSeries)]
+			for source in sources:
+				source.signals.muted = value
 
-	def disconnectSlot(self, slot):
-		try:
-			self.__connections.discard(slot.__self__)
-			self.__signal.disconnect(slot)
-		except TypeError:
-			pass
-		except RuntimeError:
-			pass
+	def _emit(self):
+		self._signal.emit()
+		if self._singleShots and self._source.hasTimeseries:
+			for coro in self._singleShots.values():
+				loop.create_task(coro)
+		self._singleShots.clear()
+		coroutines = [coro for coro, condition in self._conditionalSingleShots.items() if condition(self._source)]
+		list(self._conditionalSingleShots.pop(coro, None) for coro in coroutines)
+		for coro in coroutines:
+			loop.create_task(coro)
+
+	def addCallback(self, callback: coroutine, guardHash=None):
+		if not iscoroutine(callback):
+			raise TypeError(f'{callback} is not a coroutine')
+		guardHash = guardHash or hash(callback)
+		if (existing := self._singleShots.pop(guardHash, None)) is not None:
+			existing.close()
+		self._singleShots[guardHash] = callback
+
+	def addConditionalCallback(self, callback: coroutine, condition: Callable[['MeasurementTimeSeries'], bool]):
+		if not iscoroutine(callback):
+			raise TypeError(f'{callback} is not a coroutine')
+		# if (existing := self._conditionalSingleShots.pop(callback, None)) is not None:
+		# 	callback.close()
+		self._conditionalSingleShots[callback] = condition
+
+	def connectSlot(self, slot) -> bool:
+		connected = super(TimeSeriesSignal, self).connectSlot(slot)
+		if connected and not len(self._source):
+			self._source.refresh()
+		return connected
 
 	@property
 	def hasConnections(self) -> bool:
-		return len(self.__connections) > 0
+		return bool(len(self._connections) or len(self._singleShots))
 
 	@property
-	def connectedItems(self):
-		return list(self.__connections)
+	def connectedItems(self) -> List[Slot]:
+		return list(self._connections.values())
+
+
+class TimeHash:
+	__slots__ = ('__interval')
+
+	def __init__(self, interval: timedelta | int):
+		if isinstance(interval, timedelta):
+			interval = interval.total_seconds()
+		self.__interval = interval
+
+	def __hash__(self):
+		return int(loop.time()//self.__interval)
 
 
 class MeasurementTimeSeries(OrderedDict):
@@ -2197,3 +2236,204 @@ class MeasurementTimeSeries(OrderedDict):
 	@property
 	def first(self):
 		return self.list[0]
+
+
+class Container:
+	__containers__ = {}
+
+	_awaitingRequirements: Dict[Hashable, Tuple[Callable[[Set['Observation']], bool], Callable]]
+
+	source: 'Plugin'
+	key: CategoryItem
+	now: ObservationValue
+	minutely: Optional[MeasurementTimeSeries]
+	hourly: Optional[MeasurementTimeSeries]
+	daily: Optional[MeasurementTimeSeries]
+	forecast: Optional[MeasurementTimeSeries]
+	historical: Optional[MeasurementTimeSeries]
+	timeseriesOnly: bool
+
+	title: str
+	__hash_key__: CategoryItem
+	log = log.getChild(__name__)
+
+	@classmethod
+	def __buildKey(cls, source: 'Plugin', key: CategoryItem) -> CategoryItem:
+		return CategoryItem(key, source=[source.name])
+
+	def __new__(cls, source: 'Plugin', key: CategoryItem):
+		containerKey = cls.__buildKey(source, key)
+		if containerKey not in cls.__containers__:
+			cls.__containers__[containerKey] = super(Container, cls).__new__(cls)
+		return cls.__containers__[containerKey]
+
+	def __init__(self, source: 'Plugin', key: CategoryItem):
+		self.__hash_key__ = Container.__buildKey(source, key)
+		self.source = source
+		self.key = key
+		self.__channel = self.source.publisher.connectChannel(self.key, self.__sourceUpdated)
+		self._awaitingRequirements = dict()
+
+	@property
+	def channel(self) -> 'ChannelSignal':
+		if self.__channel is False:
+			try:
+				self.source.publisher.connectChannel(self.key, self.__sourceUpdated)
+			except Exception as e:
+				raise Exception(f'Failed to connect channel for {self.key}') from e
+		return self.__channel
+
+	@Slot()
+	def __sourceUpdated(self, sources):
+		if any(not isinstance(source, RealtimeSource) for source in sources):
+			self.__clearCache()
+		if self._awaitingRequirements:
+			for requester, (requirement, callback) in self._awaitingRequirements.items():
+				if requirement(sources):
+					if iscoroutine(callback):
+						loop.create_task(callback(), name=f'P{requester}RequirementsMet')
+					else:
+						loop.call_soon(callback)
+					del self._awaitingRequirements[requester]
+
+	@lru_cache(maxsize=8)
+	def getFromTime(self, time: timedelta | datetime, timehash: TimeHash = TimeHash.Minutely) -> Optional[Observation]:
+		if isinstance(time, timedelta):
+			time = Now() + time
+		return self.timeseriesAll[time]
+
+	def __repr__(self):
+		return f'Container({self.source.name}:{self.key[-1]} {self.value})'
+
+	def __str__(self):
+		return f'{self.value!s}'
+
+	def __hash__(self):
+		return hash(self.__hash_key__)
+
+	def toDict(self):
+		return {'key': self.key, 'value': self.value}
+
+	def __eq__(self, other):
+		return hash(self) == hash(other)
+
+	def __clearCache(self):
+		clearCacheAttr(self, 'nowFromTimeseries', 'hourly', 'daily')
+
+	@property
+	def title(self):
+		if hasattr(self.value, 'title'):
+			return self.value.title
+		return str(self.key).title()
+
+	@property
+	def value(self) -> ObservationValue:
+		if self.now is not None:
+			return self.now
+		elif self.hourly is not None:
+			return self.hourly[Now()]
+		elif self.daily is not None:
+			return self.daily[Now()]
+		elif self.timeseries is not None:
+			return self.timeseries[Now()]
+		return None
+
+	@property
+	def now(self) -> Optional[Observation]:
+		if self.isRealtime:
+			return self.source.realtime[self.key]
+		elif self.metadata.get('isTimeseriesOnly', False) or not self.isRealtime:
+			return self.nowFromTimeseries
+		return None
+
+	realtime = now
+
+	@property
+	def nowFromTimeseries(self):
+		if self.hourly is not None:
+			return self.hourly[now()]
+		elif self.daily is not None:
+			return self.daily[now()]
+		return self.timeseriesAll[now()]
+
+	@cached_property
+	def hourly(self) -> Optional[MeasurementTimeSeries]:
+		if self.source.hourly and self.key in self.source.hourly:
+			return self.source.hourly[self.key]
+		return None
+
+	@cached_property
+	def daily(self) -> Optional[MeasurementTimeSeries]:
+		if self.source.daily and self.key in self.source.daily:
+			return self.source.daily[self.key]
+		return None
+
+	@cached_property
+	def timeseries(self) -> MeasurementTimeSeries:
+		return MeasurementTimeSeries(self.source, self.key, minPeriod=timedelta(hours=-3), maxPeriod=timedelta(hours=3))
+
+	@cached_property
+	def timeseriesAll(self) -> MeasurementTimeSeries:
+		return MeasurementTimeSeries(self.source, self.key)
+
+	def customTimeFrame(self, timeframe: timedelta, sensitivity: timedelta = timedelta(minutes=1)) -> Optional[MeasurementTimeSeries | ObservationValue]:
+		try:
+			return self.source.get(self.key, timeframe)
+		except KeyError:
+			return None
+
+	@property
+	def metadata(self) -> 'UnitMetadata':
+		return self.source.schema.getExact(self.key)
+
+	@property
+	def isRealtime(self) -> bool:
+		return any(isinstance(obs, RealtimeSource) for obs in self.source.observations if self.key in obs)
+
+	@property
+	def isRealtimeApproximate(self) -> bool:
+		return (
+			not self.isRealtime
+			and self.isTimeseriesOnly
+			and any(obs.period < REALTIME_THRESHOLD
+			for obs in self.source.observations
+			if self.key in obs)
+			or self.isDailyOnly
+		)
+
+	@property
+	def isTimeseries(self) -> bool:
+		return any(isinstance(obs, TimeseriesSource)
+			for obs in self.source.observations
+			if self.key in obs
+			   and len(obs) > 3
+			   and obs.period < timedelta(hours=6)
+		)
+
+	@property
+	def isForecast(self) -> bool:
+		for obs in self.source.observations:
+			if self.key in obs and isinstance(obs, TimeseriesSource):
+				if len(obs.__timeseries__) > 3:
+					if obs.period < timedelta(hours=6):
+						return True
+		return False
+
+	@property
+	def isDaily(self) -> bool:
+		return any(abs(obs.period) >= timedelta(days=1) for obs in self.source.observations if self.key in obs)
+
+	@property
+	def isDailyForecast(self) -> bool:
+		return any(obs.period >= timedelta(days=1) for obs in self.source.observations if self.key in obs)
+
+	@property
+	def isTimeseriesOnly(self) -> bool:
+		return self.metadata.get('isTimeseriesOnly', False) or not self.isRealtime
+
+	@property
+	def isDailyOnly(self) -> bool:
+		return all(obs.period >= timedelta(days=1) for obs in self.source.observations if self.key in obs)
+
+	def notifyOnRequirementsMet(self, requester: Hashable, requirements: Callable[[Set['Observation']], bool], callback: Coroutine):
+		self._awaitingReuqirements[requester] = (requirements, callback)

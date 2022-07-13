@@ -745,8 +745,11 @@ class Plugin(metaclass=PluginMeta):
 			keys.intersection_update(set(endpoint.keys()))
 		return list(keys)
 
-	def hasForecastFor(self, item: str) -> bool:
-		return any([item in endpoint.keys() and endpoint.isForecast for endpoint in self.observations])
+	def hasTimeseriesFor(self, item: str | CategoryItem) -> bool:
+		return any([item in endpoint.keys() and hasattr(endpoint, 'timeseries') for endpoint in self.observations if not isinstance(endpoint, RealtimeSource)])
+
+	def hasRealtimeFor(self, item: str | CategoryItem) -> bool:
+		return any([item in endpoint.keys() for endpoint in self.observations if isinstance(endpoint, RealtimeSource)])
 
 	async def logValues(self):
 		# if self.realtime.keyed:
