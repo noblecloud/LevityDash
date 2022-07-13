@@ -1,21 +1,18 @@
 #!/usr/bin/env python
+from platform import system
+from signal import SIGINT, signal
 
-import signal
-import sys
+from sys import path, exit
+
+from locale import setlocale, LC_ALL
+
+setlocale(LC_ALL, 'en_US.UTF-8')
 
 try:
 	import PySide2
 except ImportError:
-	sys.path.append('/usr/lib/python3/dist-packages')
+	path.append('/usr/lib/python3/dist-packages')
 	import PySide2
-
-# These attributes have to be set before the application is created.
-from PySide2.QtWidgets import QApplication
-from PySide2.QtCore import Qt
-
-QApplication.setAttribute(Qt.AA_UseDesktopOpenGL, True)
-QApplication.setAttribute(Qt.AA_UseOpenGLES, True)
-QApplication.setAttribute(Qt.AA_DontUseNativeMenuBar, False)
 
 import asyncio
 import qasync
@@ -25,32 +22,61 @@ qasync.logger.setLevel('ERROR')
 
 
 def signalQuit(sig, frame):
-	if sig == signal.SIGINT:
+	signalQuit.count += 1
+	if sig == SIGINT:
 		print('Closing...')
+		from LevityDash.lib.log import debug
+		if debug or signalQuit.count > 1:
+			quit()
 		qasync.QApplication.instance().quit()
 		remainingFutures = len(asyncio.tasks.all_tasks(asyncio.get_event_loop()))
 		print(f'Waiting for {remainingFutures} tasks to finish...')
 
 
-signal.signal(signal.SIGINT, signalQuit)
+signalQuit.count = 0
+
+signal(SIGINT, signalQuit)
 
 
 def init_app():
 	from PySide2.QtGui import QIcon
-	path = Path(__file__).parent.joinpath('lib', 'ui', 'icon.icns')
-	icon = QIcon(path.as_posix())
+	iconPath = Path(__file__).parent.joinpath('lib', 'ui', 'icon.icns')
+	icon = QIcon(iconPath.as_posix())
 	qasync.QApplication.setWindowIcon(icon)
 	qasync.QApplication.setApplicationName('LevityDash')
 	qasync.QApplication.setApplicationDisplayName('LevityDash')
+	qasync.QApplication.setApplicationVersion('0.1.0-beta.7')
+	qasync.QApplication.setOrganizationName('LevityDash')
+	qasync.QApplication.setOrganizationDomain('LevityDash.app')
 
 
 async def main():
 	from functools import partial
 	import asyncio
 	init_app()
+
+	# Secret key for clearing config.
+	from PySide2.QtCore import Qt
+	if qasync.QApplication.queryKeyboardModifiers() & (Qt.ShiftModifier | Qt.AltModifier):
+		print('Removing config in...', end='')
+		for i in range(5, 0, -1):
+			print(i, end=' ')
+			await asyncio.sleep(1)
+			if not qasync.QApplication.queryKeyboardModifiers() & (Qt.ShiftModifier | Qt.AltModifier):
+				print('Cancelled')
+				break
+		if qasync.QApplication.queryKeyboardModifiers() & (Qt.ShiftModifier | Qt.AltModifier):
+			from shutil import rmtree
+			from LevityDash import __dirs__
+			configDir = Path(__dirs__.user_config_dir)
+			rmtree(configDir.as_posix(), ignore_errors=True)
+			print('Config cleared!')
+		else:
+			print('Config not cleared')
+
 	import LevityDash.lib as lib
 
-	window = lib.ui.frontends.PySide.LevityMainWindow()
+	window = lib.ui.LevityMainWindow()
 
 	def close_future(future, loop):
 		loop.call_later(10, future.cancel)
@@ -73,7 +99,7 @@ def run():
 	try:
 		qasync.run(main())
 	except asyncio.exceptions.CancelledError:
-		sys.exit(0)
+		exit(0)
 
 
 if __name__ == '__main__':
