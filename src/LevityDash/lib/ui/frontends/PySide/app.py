@@ -353,10 +353,6 @@ class LevitySceneView(QGraphicsView):
 		self.graphicsScene.update()
 		self.resizeFinished.emit()
 
-	def focusInEvent(self, *args):
-		super(LevitySceneView, self).focusInEvent(*args)
-		print('focusInEvent')
-
 	def load(self):
 		self.status = 'Loading'
 		with BusyContext(pluginManager) as context:
