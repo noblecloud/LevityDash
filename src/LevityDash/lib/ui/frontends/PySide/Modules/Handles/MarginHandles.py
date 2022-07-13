@@ -1,6 +1,6 @@
 from PySide2.QtCore import QObject, QRectF, Signal
 from PySide2.QtGui import QTransform
-from PySide2.QtWidgets import QGraphicsItem
+from PySide2.QtWidgets import QGraphicsItem, QGraphicsScene
 
 from LevityDash.lib.utils.shared import clamp, clearCacheAttr
 from LevityDash.lib.utils.geometry import Axis, LocationFlag
@@ -82,7 +82,7 @@ class MarginHandle(ResizeHandle):
 		self.emitUpdate(loc.asAxis)
 
 	def emitUpdate(self, axis):
-		self.surface.t = None
+		self.surface.combinedTransform = None
 		clearCacheAttr(self.surface, 'marginRect')
 		self.signals.action.emit(axis)
 
@@ -126,15 +126,10 @@ class MarginHandle(ResizeHandle):
 					value.setX(xMax)
 				elif value.x() > xMin:
 					value.setX(xMin)
+		elif value and change == QGraphicsItem.ItemVisibleHasChanged and self.surface:
+			self.updatePosition(self.surface.geometry.absoluteRect())
 
 		return super(ResizeHandle, self).itemChange(change, value)
-
-
-# def updatePosition(self, rect: QRectF = None):
-# 	if rect is None:
-# 		rect = self.surfaceRect
-# 	marginRect = self.marginRect()
-# 	super(MarginHandle, self).updatePosition(marginRect)
 
 
 class MarginHandles(ResizeHandles):
@@ -144,31 +139,34 @@ class MarginHandles(ResizeHandles):
 
 	def __init__(self, parent: 'Panel', *args, offset: float = 0, **kwargs):
 		super(MarginHandles, self).__init__(parent=parent, offset=offset, *args, **kwargs)
+		self.setFlag(QGraphicsItem.ItemIsFocusable, True)
 
 	def updatePosition(self, rect=None, *args, **kwargs):
-		# t = QTransform()
-		# wScale = self.surface.parentItem().parentItem().rect().width() / self.surface.parentItem().rect().width()
-		# hScale = self.surface.parentItem().parentItem().rect().height() / self.surface.parentItem().rect().height()
-		# t.scale(wScale, hScale)
-		# self.setTransformOriginPoint(self.surface.geometry.absoluteRect().center())
-		# # t.scale(1, -1)
-		# for handle in self.handles:
-		# 	handle.updatePosition(self.surface.marginRect)
-		# self.setTransform(t)
+		clearCacheAttr(self.surface, 'marginRect')
 		super(MarginHandles, self).updatePosition(self.surface.marginRect, *args, **kwargs)
 
+	def focusInEvent(self, event):
+		if (resizeHandles := getattr(self.surface, 'resizeHandles', None)) is not None:
+			resizeHandles.setVisible(False)
+			current = self.surface
+			while not isinstance(current, QGraphicsScene) and current.parentItem() is not None:
+				if (parentResizeHandles := getattr(current, 'resizeHandles', None)) is not None:
+					parentResizeHandles.setVisible(False)
+				current = current.parentItem()
+		super(MarginHandles, self).focusInEvent(event)
 
-# list(map(lambda item: item.updatePosition(self.surface.marginRect), self.handles))
+	def focusOutEvent(self, event):
+		self.setVisible(False)
 
 
 class FigureHandle(MarginHandle):
 
 	def surfaceBoundingRect(self) -> QRectF:
+		# TODO: Look into not clearing 'marginRect' each time
+		clearCacheAttr(self.surface, 'marginRect')
 		return self.surface.mapRectFromParent(super(FigureHandle, self).surfaceBoundingRect())
 
 	def emitUpdate(self, axis):
-		# self.surface.onAxisResized(axis)
-		# action = list(map(lambda plot: plot.onAxisTransform(axis), self.surface.plotData.values()))
 		self.signals.action.emit(axis)
 
 

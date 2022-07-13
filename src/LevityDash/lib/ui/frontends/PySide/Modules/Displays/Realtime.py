@@ -1,93 +1,134 @@
-import asyncio
+from asyncio import get_event_loop, gather, get_running_loop, Task
+from abc import abstractmethod
 from datetime import timedelta
-from functools import cached_property
+from functools import cached_property, partial
 
-from json import dumps
 from PySide2.QtCore import QByteArray, QMimeData, Qt, QTimer, Slot
 from PySide2.QtGui import QDrag, QFocusEvent, QFont, QPainter, QPixmap, QTransform
 from PySide2.QtWidgets import QGraphicsItem, QGraphicsSceneMouseEvent, QStyleOptionGraphicsItem
-from typing import Union
-from WeatherUnits.time.time import Second
+from typing import Any, Iterable, Type, Dict
 
-from LevityDash.lib.Geometry.Grid import Grid
-from LevityDash.lib.ui.frontends.PySide.Modules.Label import NonInteractiveLabel as Label, TitleLabel
+from qasync import asyncSlot, QApplication
+
+from LevityDash.lib.config import DATETIME_NO_ZERO_CHAR
+from WeatherUnits.time_.time import Second
 
 from LevityDash.lib.plugins.categories import CategoryItem
-from LevityDash.lib.plugins.dispatcher import MonitoredKey, MultiSourceContainer, PlaceholderSignal, ValueDirectory
+from LevityDash.lib.plugins import Plugin, Plugins, Container
+from LevityDash.lib.plugins.plugin import AnySource, SomePlugin
+from LevityDash.lib.plugins.dispatcher import MultiSourceContainer, ValueDirectory
 from LevityDash.lib.ui.fonts import weatherGlyph
 from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, mouseHoldTimer
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import TextHelper
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Label import NonInteractiveLabel as Label, TitleLabel
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Resize import MeasurementUnitSplitter, ResizeHandle, TitleValueSplitter
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import RealtimeContextMenu
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
-from LevityDash.lib.utils.geometry import Alignment, AlignmentFlag, DisplayPosition
-from LevityDash.lib.utils.shared import clamp, disconnectSignal, Now, TitleCamelCase
-from LevityDash.lib.log import LevityGUILog as guiLog
-from LevityDash.lib.utils.data import JsonEncoder
+from LevityDash.lib.utils.geometry import Alignment, AlignmentFlag, DisplayPosition, LocationFlag, Size
+from LevityDash.lib.utils.shared import clamp, disconnectSignal, Now, TitleCamelCase, Unset, OrUnset, connectSignal
+from LevityDash.lib.stateful import StateProperty, Stateful, DefaultGroup
+from LevityDash.lib.plugins.observation import RealtimeSource
+
+from ... import UILogger as guiLog
 
 log = guiLog.getChild(__name__)
 
-displayDefault = {'displayType': DisplayType.Text, 'geometry': {'absolute': False, 'position': {'x': 0, 'y': 0.2}, 'size': {'width': 1.0, 'height': 0.8}}}
+loop = get_running_loop()
 
 
-def buildDisplay(parent, displayType: Union[str, DisplayType], kwargs: dict = {}):
-	if len(kwargs) == 0:
-		kwargs = displayDefault
-	if isinstance(displayType, str):
-		displayType = DisplayType(displayType)
-	if isinstance(kwargs, str):
-		kwargs = {}
-	if displayType == DisplayType.Text:
-		return DisplayLabel(parent=parent, **kwargs)
-	if displayType == DisplayType.Gauge:
-		return DisplayGauge(parent=parent, **kwargs)
+class Display(Panel, tag=...):
+	__exclude__ = {'items', 'geometry', 'locked', 'frozen', 'movable', 'resizable', 'text'}
+
+	__defaults__ = {
+		'displayType': DisplayType.Text,
+		'geometry':    {'x': 0, 'y': 0.2, 'width': 1.0, 'height': 0.8},
+		'movable':     False,
+		'resizable':   False,
+		'locked':      True,
+	}
+
+	@property
+	@abstractmethod
+	def type(self) -> DisplayType: ...
+
+	@classmethod
+	def default(cls):
+		return super().default()
 
 
-class Realtime(Panel):
-	_includeChildrenInState = False
+class InvalidSource(Exception):
+	pass
+
+
+# Section Realtime
+class Realtime(Panel, tag='realtime'):
+	_preferredSourceName: str
+	_acceptsChildren = False
+	key: CategoryItem
+	_source: Plugin | SomePlugin
+	_container: Container
+	_key: CategoryItem
+
+	__exclude__ = {'items'}
+
+	__match_args__ = ('key',)
+
+	__defaults__ = {
+		'resizable': True,
+		'movable':   True,
+		'frozen':    False,
+		'locked':    False,
+	}
+
+	__exclude__ = {'items'}
+
+	@property
+	def subtag(self) -> str:
+		return self.display.displayType.value
 
 	def __init__(self, parent: Panel, **kwargs):
+		self.__connectedContainer: Container | None = None
+		self.__pendingActions: Dict[int, Task] = {}
 		super(Realtime, self).__init__(parent=parent, **kwargs)
-		self.buildTitle(kwargs.get('title', {}))
-		self.geometry.updateSurface()
-		self._valueLink = None
-		self._placeholder = None
-		self._key = None
-		self.display = buildDisplay(self, kwargs.get('displayType', 'text'), kwargs.get('display', {}))
-		if 'value' in kwargs:
-			value = kwargs.pop('value')
-			if isinstance(value, MultiSourceContainer):
-				self.valueLink = value
-			else:
-				self.value = value
-		else:
-			self.key = kwargs.get([k for k in ['key', 'valueLink', 'value', 'placeholder'] if k in kwargs].pop())
-		self.display.setFlag(self.display.ItemIsSelectable, False)
-
-		self.contentStaleTimer = QTimer()
-
-		self.setAcceptHoverEvents(True)
-		self.setAcceptDrops(True)
-		if isinstance(kwargs.get('title', None), bool):
-			kwargs['title'] = {'visible': kwargs['title']}
-		self.splitter = TitleValueSplitter(surface=self, title=self.title, value=self.display, **kwargs.get('title', {}))
-		self.splitter.hide()
-		self.setFlag(self.ItemIsSelectable, True)
-		self.title.setFlag(self.display.ItemIsSelectable, False)
-
-		self.display: DisplayLabel
+		self.lastUpdate = None
 		self.display.valueTextBox.marginHandles.surfaceProxy = self
 		self.display.unitTextBox.marginHandles.surfaceProxy = self
 		self.display.unitTextBox.resizeHandles.surfaceProxy = self
 		self.timeOffsetLabel.setEnabled(False)
+		self.scene().view.loadingFinished.connect(self.onLoadFinished)
+
+	@asyncSlot()
+	async def onLoadFinished(self):
+		if not self.__pendingActions:
+			return
+		await gather(*self.__pendingActions)
+
+	def _init_defaults_(self):
+		super()._init_defaults_()
+		self.contentStaleTimer = QTimer(singleShot=True)
+		self.setFlag(self.ItemIsSelectable, True)
+		self.setAcceptHoverEvents(not True)
+		self.setAcceptDrops(True)
+		self._container = None
+		self._placeholder = None
+		self._source = AnySource
+
+	def _init_args_(self, *args, **kwargs):
+		displayType = kwargs.pop('type', 'realtime.text')
+		display = kwargs.pop('display')
+		display['displayType'] = DisplayType[displayType.split('.')[-1]]
+		kwargs['display'] = display
+		super(Realtime, self)._init_args_(*args, **kwargs)
 
 	def __repr__(self):
-		return f'<Realtime: {self.key.name}>'
+		return f'Realtime(key={self.key.name}, display={self.display.displayType.value})'
 
-	def buildTitle(self, kwargs):
-		# if isinstance(kwargs, bool):
-		# 	kwargs = {'visible': kwargs}
-		self.title = TitleLabel(self)
+	def __rich_repr__(self):
+		yield 'value', self.container
+		yield from super().__rich_repr__()
+
+	def __str__(self):
+		return f'Realtime.{self.display.displayType.name}: {self.key.name}'
 
 	def hideTitle(self):
 		self.splitter.hideTitle()
@@ -107,8 +148,8 @@ class Realtime(Panel):
 			event.accept()
 
 	@cached_property
-	def grid(self) -> None:
-		return Grid(self, rows=12, columns=12, static=True)
+	def title(self):
+		return TitleLabel(self)
 
 	@cached_property
 	def contextMenu(self):
@@ -118,87 +159,294 @@ class Realtime(Panel):
 	def timeOffsetLabel(self):
 		return TimeOffsetLabel(self)
 
-	@property
-	def key(self):
-		return self._key
+	@StateProperty(sortOrder=0, match=True, dependencies={'display', 'title'})
+	def key(self) -> CategoryItem:
+		return getattr(self, '_key', None)
 
 	@key.setter
 	def key(self, value):
 		if isinstance(value, str):
 			value = CategoryItem(value)
+		if value == getattr(self, '_key', None):
+			return
 		self._key = value
-		value = ValueDirectory.request(self, value)
-		if isinstance(value, PlaceholderSignal):
-			self.placeholder = value
-			self.valueLink = None
-		elif isinstance(value, MultiSourceContainer):
-			self.valueLink = value
-			self.placeholder = None
+		self.container = ValueDirectory.getContainer(value)
+
+	@StateProperty(default=AnySource, dependencies={'key', 'display', 'title'}, values=Plugins.plugins)
+	def source(self) -> Plugin | SomePlugin:
+		return getattr(self, '_source', AnySource)
+
+	@source.setter
+	def source(self, value: Plugin):
+		self._source = value or AnySource
+
+	@source.after
+	def source(self):
+		return
+
+	@source.encode
+	def source(value: Plugin) -> str:
+		return getattr(value, 'name', 'any')
+
+	@source.decode
+	def source(self, value: str) -> Plugin | SomePlugin:
+		source = Plugins.get(value, AnySource)
+		self._preferredSourceName = value
+		if source is None:
+			log.info(f'{value} is not a valid source or the plugin is not Loaded')
+		return source
 
 	@property
-	def valueLink(self) -> 'MultiSourceContainer':
-		return self._valueLink
+	def currentSource(self) -> Plugin | None:
+		if self.__connectedContainer is not None:
+			return self.__connectedContainer.source
 
-	@valueLink.setter
-	def valueLink(self, value):
-		if self._valueLink is not None and value != self._valueLink:
-			self._valueLink.valueChanged.disconnect(self.updateSlot)
-		elif self._valueLink is None and value is not None:
-			if isinstance(value, MultiSourceContainer):
-				self._key = value.key
-				value = value.value
-			self._valueLink = value
+	@StateProperty(allowNone=False, default=Stateful)
+	def display(self) -> Display:
+		return self._display
 
-			self._valueLink.source.publisher.connectChannel(self.key, self.updateSlot)
-			if value.metadata['type'] == 'icon' and value.metadata['iconType'] == 'glyph':
-				fontName = value.metadata['glyphFont']
-				if fontName == 'WeatherIcons':
-					self.display.valueTextBox.textBox.setFont(weatherGlyph)
-			if hasattr(self, 'display'):
-				self.display.value = self._valueLink
-			if self.title.isEnabled() and self.title.allowDynamicUpdate():
-				if isinstance(self._valueLink, MultiSourceContainer):
-					title = self._valueLink.defaultContainer.value['title']
-				else:
-					title = self._valueLink.value['title']
-				self.title.setText(title)
-			self.lastUpdate = asyncio.get_event_loop().time()
-			self.display.splitter.updateUnitDisplay()
-			self.__updateTimeOffsetLabel()
+	@display.setter
+	def display(self, value):
+		self._display = value
 
-			self.display.refresh()
-			self.setToolTip(f'{value.source.name} @ {value.value.timestamp:%I:%M%p}')
+	@display.decode
+	def display(self, value) -> Panel:
+		if isinstance(value, dict):
+			return DisplayLabel(parent=self, **value)
+
+	@StateProperty(key='title', sortOrder=1, allowNone=False, default=Stateful)
+	def splitter(self) -> TitleValueSplitter:
+		return self._splitter
+
+	@splitter.setter
+	def splitter(self, value: TitleValueSplitter):
+		self._splitter = value
+		value.hide()
+
+	@splitter.decode
+	def splitter(self, value: dict | bool | float | str) -> TitleValueSplitter:
+		match value:
+			case bool(value):
+				value = {'visible': value}
+			case float(value):
+				value = {'ratio': value}
+			case str(value):
+				value = {'text': value}
+			case _:
+				pass
+		return TitleValueSplitter(surface=self, title=self.title, value=self.display, **value)
+
+	@cached_property
+	def __requestAttempts(self) -> int:
+		return 0
 
 	@property
-	def placeholder(self):
-		return self._placeholder
+	def container(self) -> 'MultiSourceContainer':
+		return self._container
 
-	@placeholder.setter
-	def placeholder(self, value):
-		if isinstance(value, PlaceholderSignal):
-			self.display.value = "⋯"
-			value.signal.connect(self.listenForKey)
-		elif self._placeholder is not None and value is None:
-			self._placeholder.signal.disconnect(self.listenForKey)
-		self._placeholder = value
+	@container.setter
+	def container(self, container: 'MultiSourceContainer'):
+		# Always accept the container unless it is the same as the current one or is None.
+		# The rest of the long will be handled by the subscriber and unless the key changes,
+		# the container will not be changed.
+		if self._container == container or container is None:
+			return
 
-	@Slot(MonitoredKey)
-	def listenForKey(self, value):
-		if value.key == self.placeholder.key and value.value.now:
-			self.valueLink = value.value
-			disconnectSignal(self.placeholder.signal, self.listenForKey)
-			value.requesters.remove(self)
-		elif self.placeholder.key in value.key and value.value.now:
-			self.valueLink = value.value
-			disconnectSignal(self.placeholder.signal, self.listenForKey)
-			value.requesters.remove(self)
+		realtimePossible = any(
+			not metadata.get('timeseriesOnly', False)
+				for plugin in ValueDirectory.plugins
+				if (metadata := plugin.schema.getExact(self.key, silent=True)) is not None
+				   and any(isinstance(obs, RealtimeSource) for obs in plugin.observations)
+		)
+		self._container = container
+		trueRealtimePreferred = False  # This is a placeholder for a future option.
 
-	def setSubscription(self, value):
-		self.valueLink = value
+		async def setupScheduledCheck():
+			raise NotImplementedError
+
+		async def startConnecting():
+			firstAttemptContainer: Container = self.container.getRealtimeContainer(self.source, realtimePossible)
+			if firstAttemptContainer is None:
+				# If no realtime provided the MultiSourceContainer to notify when new realtime
+				# sources are available.  For now accept anything that is available.
+				# It can be assumed from here forward that the MultiSourceContainer will
+				# have a realtime source available.
+				container.getPreferredSourceContainer(self, AnySource, firstRealtimeContainerAvailable())
+			else:
+				loop.create_task(firstRealtimeContainerAvailable())
+
+		async def firstRealtimeContainerAvailable():
+			# This should only be called once!
+			anyRealtimeContainer = self.container.getRealtimeContainer(self.source, realtimePossible) or self.container.getRealtimeContainer(self.source, False)
+
+			# Not picky about the source, so just try to connect to anything
+			self.connectRealtime(anyRealtimeContainer)
+
+			if self.source is not AnySource and anyRealtimeContainer.source is self.source:
+				# Correct source found on first attempt, and it's already connected!
+				if not anyRealtimeContainer.isRealtime and not anyRealtimeContainer.isRealtimeApproximate:
+					# The source is correct, but it isn't true real value has not been added yet.
+					# have the container notify when it is.  This is currently not exactly necessary, since
+					# the container is already listening for any changes to the container.  However, it's
+					# eventually a 'connect to any true realtime source' will be implemented, and it will be
+					# necessary then.
+
+					def requirementCheck(sources: Iterable['Observation']):
+						return any(isinstance(obs, RealtimeSource) for obs in sources)
+
+					connect = partial(self.connectRealtime, anyRealtimeContainer)
+					anyRealtimeContainer.notifyOnRequirementsMet(self, requirementCheck, connect)
+
+			elif (self.source is AnySource
+			      and realtimePossible
+			      and anyRealtimeContainer.isRealtimeApproximate):
+				# A true real time source is possible and better than what is
+				# currently connected.
+				container.getTrueRealtimeContainer(self, AnySource, approximateRealtimeOnLastAttempt())
+
+
+			elif self.source != anyRealtimeContainer.source:
+				# There's a preferred source, but this ain't it...ask the MultiSourceContainer
+				# to notify when the preferred source is available.
+				container.getPreferredSourceContainer(self, self.source, notPreferredSourceOnLastAttempt())
+
+		# If it made it this far, the correct source is connected!
+
+		# This should be called when a source is specified or changed
+		async def notPreferredSourceOnLastAttempt():
+			preferredSourceContainer = self.container.getRealtimeContainer(self.source)
+
+			# This should never happen
+			if preferredSourceContainer is None:
+				raise Exception(f'{self.source} is not a valid source or the plugin is not Loaded')
+
+			# This should also never happen
+			if preferredSourceContainer.source is not self.source:
+				container.getPreferredSourceContainer(self, self.source, notPreferredSourceOnLastAttempt())
+				return
+
+			# If the preferred source does not have a realtime value
+			if not preferredSourceContainer.isRealtime:
+				# However, the source plugin's schema says it never will
+				if preferredSourceContainer.isRealtimeApproximate:
+					self.connectRealtime(preferredSourceContainer)
+					return
+
+				# For now, it's better than the current connection
+				if not self.__connectedContainer.isRealtime:
+					self.connectRealtime(preferredSourceContainer)
+
+				def requirementCheck(sources: Iterable['Observation']):
+					return any(isinstance(obs, RealtimeSource) for obs in sources)
+
+				# We have the correct source, but a realtime value has not been received yet
+				preferredSourceContainer.notifyOnRequirementsMet(self, requirementCheck, wasPreferredSourceButNotTrueRealtime())
+
+		# This should be called when any source will be accepted
+		async def approximateRealtimeOnLastAttempt():
+			# ask for containers again, but only those with true realtime sources
+			trueRealtimeContainer = self.container.getRealtimeContainer(AnySource, strict=True)
+
+			# Still no true realtime sources check if any of the loaded plugins
+			# have a realtime source according to their respective schemas
+			# This should never happen though.
+			if trueRealtimeContainer is None:
+				raise Exception(f'No true realtime source found for {self.source}')
+
+			# # "I'll fuckin' do it again! guh-HYuK"
+			# if realtimePossible:
+			# 	if self.__requestAttempts < 10:
+			# 		self.__requestAttempts += 1
+			# 		container.getPreferredSourceContainer(self.source, firstRealtimeContainerAvailable())
+			# 	else:
+			# 		# TODO: Implement a time scheduled check and disconnect from MultiSourceContainer
+			# 		pass
+			#
+			# # Accept a realtime approximate source and connect to it if not already
+			# loop.create_task(self.connectToAny())
+
+			# If the preferred source does not have a realtime value
+			if trueRealtimeContainer.isRealtimeApproximate:
+				# However, the source plugin's schema says it never will
+				if trueRealtimeContainer.isTimeSeriesOnly:
+					self.connectRealtime(trueRealtimeContainer)
+
+				# For now, it's better than the current connection
+				if not self.__connectedContainer.isRealtime:
+					self.connectRealtime(trueRealtimeContainer)
+
+				def requirementCheck(sources: Iterable['Observation']):
+					return any(isinstance(obs, RealtimeSource) for obs in sources)
+
+				# We have the correct source, but a realtime value has not been received yet
+				trueRealtimeContainer.notifyOnRequirementsMet(requirementCheck, approximateRealtimeOnLastAttempt())
+				return
+
+			# Everything checks out, connect to the realtime source
+			self.connectRealtime(trueRealtimeContainer)
+
+		async def wasPreferredSourceButNotTrueRealtime():
+			preferredTrueRealtimeContainer = self.container.getRealtimeContainer(self.source, strict=True)
+			self.connectRealtime(preferredTrueRealtimeContainer)
+
+		loop.create_task(startConnecting())
+
+	def connectRealtime(self, container: Container):
+		if self.__connectedContainer is container:
+			return True
+		try:
+			disconnected = self.disconnectRealtime()
+		except ValueError:
+			disconnected = True
+		if not disconnected:
+			raise ValueError('Failed to disconnect from existing timeseries')
+
+		connected = container.channel.connectSlot(self.updateSlot)
+		if connected:
+			self.__connectedContainer = container
+			log.debug(f'Realtime {self.key.name} connected to {self.__connectedContainer!r}')
+		else:
+			log.warning(f'Realtime {self.key.name} failed to connect to {container}')
+			return
+
+		# The logic for after a connection is made
+		if container.metadata['type'] == 'icon' and container.metadata['iconType'] == 'glyph':
+			fontName = container.metadata['glyphFont']
+			if fontName == 'WeatherIcons':
+				self.display.valueTextBox.textBox.setFont(weatherGlyph)
+		if hasattr(self, 'display'):
+			self.display.value = container
+		if self.title.isEnabled() and self.title.allowDynamicUpdate():
+			title = container.value['title']
+			self.title.setText(title)
+		self.lastUpdate = get_event_loop().time()
+		self.display.splitter.updateUnitDisplay()
+		self.__updateTimeOffsetLabel()
+
+		self.display.refresh()
+		self.setToolTip(f'{container.source.name} @ {container.now.timestamp:%I:%M%p}')
+		return connected
+
+	def disconnectRealtime(self) -> bool:
+		if self.__connectedContainer is not None:
+			disconnected = self.__connectedContainer.source.publisher.disconnectChannel(self._key, self.updateSlot)
+			if disconnected:
+				log.debug(f'Realtime {self.key.name} disconnected from {self.__connectedContainer}')
+				self.__connectedContainer = None
+			else:
+				log.warning(f'Realtime {self.key.name} failed to disconnect from {self.__connectedContainer}')
+			return disconnected
+		raise ValueError('No timeseries connected')
+
+	@asyncSlot(MultiSourceContainer)
+	async def testSlot(self, container: MultiSourceContainer):
+		if isinstance(container, MultiSourceContainer):
+			self.container = container
+			ValueDirectory.getChannel(self.key).disconnectSlot(self.testSlot)
 
 	def adjustContentStaleTimer(self):
-		now = asyncio.get_event_loop().time()
-		last = self.lastUpdate
+		now = get_event_loop().time()
+		last = self.lastUpdate or get_event_loop().time()
 		self.updateFreqency = now - last
 
 		def resumeRegularInterval():
@@ -206,28 +454,26 @@ class Realtime(Panel):
 			falloff = self.updateFreqency*0.1
 			self.contentStaleTimer.setInterval(1000*falloff)
 			self.contentStaleTimer.timeout.disconnect(resumeRegularInterval)
-			self.contentStaleTimer.timeout.connect(self.contentStaled)
 			self.contentStaleTimer.start()
 
-		self.contentStaleTimer.timeout.connect(resumeRegularInterval)
 		self.contentStaleTimer.setInterval(1000*(self.updateFreqency + 15))
 		self.contentStaleTimer.start()
 
-	@Slot()
-	def updateSlot(self):
+	@asyncSlot()
+	async def updateSlot(self, *args):
 		self.__updateTimeOffsetLabel()
 		self.setOpacity(1)
 		self.display.refresh()
 		self.adjustContentStaleTimer()
 		try:
-			self.setToolTip(f'{self.valueLink.source.name} @ {self.valueLink.value.timestamp:%-I:%M%p}')
+			self.setToolTip(f'{self.container.source.name} @ {self.container.value.timestamp:%{DATETIME_NO_ZERO_CHAR}I:%M%p}')
 		except AttributeError:
 			pass
 
 	def __updateTimeOffsetLabel(self):
-		if self.valueLink.forecastOnly:
-			# if abs(offset := Now() - self.value.timestamp) > timedelta(hours=5):
-			# 	self.timeOffsetLabel.setEnabled(True)
+		# TODO: fix this
+		return
+		if self.container.timeseriesOnly:
 			self.timeOffsetLabel.setEnabled(False)
 		elif self.value.isValid and abs(offset := Now() - self.value.timestamp) > timedelta(minutes=15):
 			self.timeOffsetLabel.setEnabled(True)
@@ -270,17 +516,6 @@ class Realtime(Panel):
 			return
 		super().mousePressEvent(mouseEvent)
 
-	# if mouseEvent.isAccepted():
-	# 	item = self.scene().itemAt(mouseEvent.scenePos(), self.transform())
-	# 	if isinstance(item, ResizeHandle):
-	# 		self.setFocusProxy(item)
-	# 		# item.mousePressEvent(mouseEvent)
-	# 	elif self.focusProxy():
-	# 		if not self.focusProxy().isUnderMouse():
-	# # 			self.focusProxy().hide()
-	# # 			self.setFocusProxy(None)
-	# # 			self.setFocus(Qt.MouseFocusReason)
-
 	def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent):
 		if self.focusProxy():
 			self.focusProxy().mouseMoveEvent(event)
@@ -300,16 +535,12 @@ class Realtime(Panel):
 		self.display.unitTextBox.marginHandles.hide()
 		super(Realtime, self).focusOutEvent(event)
 
-	def changeSource(self, newSource):
-		if self._valueLink is not None:
-			self._valueLink.valueChanged.disconnect(self.updateSlot)
-		self.valueLink.preferredSource = newSource
-		self._valueLink.valueChanged.connect(self.updateSlot)
-		self.valueLink = self.valueLink
+	def changeSource(self, newSource: Plugin):
+		self.source = newSource
 
 	@property
 	def name(self):
-		return f'{str(self.key.name)@TitleCamelCase}-0x{self.uuidShort.upper()}'
+		return f'{str(self._key.name)@TitleCamelCase}-0x{self.uuidShort.upper()}'
 
 	@classmethod
 	def validate(cls, item: dict):
@@ -343,57 +574,9 @@ class Realtime(Panel):
 	# 	print(f'\r{x:0.4f}, {y:0.4f}', end='')
 	# 	# transform.setMatrix(1, 0, x, 0, 1, y, 0, 0, 1)
 	# 	# self.setTransform(transform)
-	#
-	# def wheelEvent(self, event: QGraphicsSceneWheelEvent) -> None:
-	# 	value = event.delta() / 1200000
-	# 	transform = QTransform()
-	# 	if event.orientation() != 1:
-	# 		transform.setMatrix(1 - value*100, 0, value, 0, 1, 0, 0, 0, 1)
-	# 	else:
-	# 		transform.setMatrix(1, 0, 0, 0, 1, value, 0, 0, 1)
-	# 	self.setTransform(transform, True)
-
-	@property
-	def state(self):
-		display = self.display.state
-		state = {
-			'type': f'realtime.{display.pop("displayType") if isinstance(display, dict) else display}',
-			'key':  str(self.key)
-		}
-		if isinstance(display, dict):
-			state['display'] = display
-		titleState = self.splitter.state
-		if len(titleState) == 1 and 'visible' in titleState:
-			titleState = titleState['visible']
-		state['title'] = titleState
-		if state['title'] is True:
-			del state['title']
-		superState = super(Realtime, self).state
-		state.update({k: v for k, v in superState.items() if k not in state})
-		state.pop('childItems', None)
-		return state
-
-	@state.setter
-	def state(self, state):
-		self.key = state.pop('key', None) or self.key
-		displayState = state.pop('display', None)
-		if displayState:
-			displayType = displayState.pop('displayType', None)
-			if 'value' in displayState:
-				valueState = displayState.pop('value')
-				valueState.pop('text', None)
-				self.display.valueTextBox.state = valueState
-			if 'unit' in displayState:
-				unitState = displayState.pop('unit')
-				unitState.pop('text', None)
-				self.display.unitTextBox.state = unitState
-			self.display.displayProperties.state = displayState
-		if 'title' in state:
-			self.splitter.state = state.pop('title')
-		self.geometry = state.pop('geometry', None) or self.geometry
 
 	def __del__(self):
-		self._valueLink.source.publisher.disconnectChannel(self.key, self.updateSlot)
+		self._container.source.publisher.disconnectChannel(self.key, self.updateSlot)
 		log.debug(f'{self.name} deleted')
 		super(Realtime, self).__del__()
 
@@ -410,23 +593,31 @@ class TimeOffsetLabel(Label):
 		value = Second(offset.total_seconds()).autoAny
 		value.precision = 0
 		if value > 0:
-			self.text = f'{value.str} ago'
+			self.text = f'{value:unit=False} {type(value).pluralUnit} ago'
 		else:
-			self.text = f'in {value.str.strip("-")}'
+			self.text = f'in {value: format:{"{value}"}, type: g} {type(value).pluralUnit}'
 
 	def setEnabled(self, enabled: bool) -> None:
 		super(TimeOffsetLabel, self).setEnabled(enabled)
 		if enabled:
 			self.show()
-			# connectSignal(baseClock.minute, self.refresh)
+			connectSignal(qApp.instance().clock.minute, self.refresh)
 			self.refresh()
 		else:
 			self.hide()
-# disconnectSignal(baseClock.minute, self.refresh)
+			disconnectSignal(qApp.instance().clock.minute, self.refresh)
 
 
 class LockedRealtime(Realtime):
 	savable = False
+	deletable = False
+
+	__defaults__ = {
+		'geometry':  {'x': 0, 'y': 0, 'width': '100px', 'height': '100px'},
+		'movable':   False,
+		'resizable': False,
+		'locked':    True,
+	}
 
 	def __init__(self, *args, **kwargs):
 		kwargs['showTitle'] = True
@@ -451,15 +642,11 @@ class LockedRealtime(Realtime):
 
 	def startPickup(self):
 		item = self
-		state = item.state
-		state['class'] = 'Realtime'
-		stateString = str(dumps(state, cls=JsonEncoder))
+		state = {'key': str(item.key)}
 		info = QMimeData()
-		if hasattr(item, 'text'):
-			info.setText(str(item.text))
-		else:
-			info.setText(str(item))
-		info.setData('application/panel-valueLink', QByteArray(stateString.encode('utf-8')))
+		info.state = state
+		info.setText(str(item.key))
+		info.setData('text/plain', QByteArray(str(item.key).encode('utf-8')))
 		drag = QDrag(self.scene().views()[0])
 		drag.setPixmap(item.pix)
 		drag.setHotSpot(item.rect().center().toPoint())
@@ -468,16 +655,6 @@ class LockedRealtime(Realtime):
 		self.parent.collapse()
 		self.parent.startHideTimer(.5)
 		drag.start()
-
-	# currentThread: QThread = self.scene().views()[0].thread().currentThread()
-
-	# asyncio.get_running_loop().run_in_executor(None, drag.start, Qt.CopyAction)
-
-	@property
-	def state(self):
-		return {
-			'key': self.key
-		}
 
 	@property
 	def pix(self) -> QPixmap:
@@ -504,13 +681,9 @@ class LockedRealtime(Realtime):
 		return pix
 
 
-# class PropertyTypeVar(TypeVar):
-# 	pass
-
-
-class MeasurementDisplayProperties:
-	__slots__ = ('__label', '__maxLength', '__precision', '__forcePrecision', '__unitSpacer', '__unitPosition', '__suffix',
-	'__decorator', '__shorten', '__decimalSeparator', '__radixPoint', '__valueMargins', '__unitMargins', '__dict__')
+class MeasurementDisplayProperties(Stateful):
+	# __slots__ = ('__label', '__maxLength', '__precision', '__forcePrecision', '__unitSpacer', '__unitPosition', '__suffix',
+	# '__decorator', '__shorten', '__decimalSeparator', '__radixPoint', '__valueMargins', '__unitMargins', '__dict__')
 
 	Label: 'DisplayLabel'
 	maxLength: int
@@ -554,36 +727,14 @@ class MeasurementDisplayProperties:
 		is the radix point for the current locale.
 	"""
 
-	def __init__(self, label: 'DisplayLabel' = None,
-		maxLength: int = None,
-		precision: int = None,
-		unitSpacer: str = None,
-		unitPosition: DisplayPosition = None,
-		suffix: str = None,
-		decorator: str = None,
-		shorten: bool = None,
-		decimalSeparator: str = None,
-		radixPoint: str = None,
-		valueUnitRatio: float = None,
-		splitDirection=None,
-		**kwargs
-	):
+	def __init__(self, label: 'DisplayLabel', **kwargs):
+		kwargs = self.prep_init(kwargs)
 		self.label = label
-		self.maxLength = maxLength
-		self.precision = precision
-		self.unitSpacer = unitSpacer
-		self.unitPosition = unitPosition
-		self.suffix = suffix
-		self.decorator = decorator
-		self.shorten = shorten
-		self.decimalSeparator = decimalSeparator
-		self.radixPoint = radixPoint
-		self.valueUnitRatio = valueUnitRatio or kwargs.get('ratio', None)
-		self.splitDirection = splitDirection
+		self.state = kwargs
 		if 'unit' in kwargs:
 			unitDict = kwargs['unit']
-			position = unitDict.pop('position', None)
-			if position is not None and self.__unitPosition is None:
+			position = unitDict.pop('position', Unset)
+			if position is not Unset and self.__unitPosition is Unset:
 				self.unitPosition = position
 			hide = None
 			if 'hide' in unitDict:
@@ -594,6 +745,9 @@ class MeasurementDisplayProperties:
 				hide = not unitDict.pop('visible')
 			if hide:
 				self.unitPosition = DisplayPosition.Hidden
+
+	def __copy__(self):
+		return MeasurementDisplayProperties(self.label, **self.state)
 
 	@property
 	def label(self):
@@ -614,19 +768,23 @@ class MeasurementDisplayProperties:
 			return unit is not None or len(unit) == 0
 		return False
 
-	@property
+	@StateProperty(default=Unset, allowNone=False)
 	def maxLength(self) -> int:
-		if self.__maxLength is None and self.__isValid:
+		if self.__maxLength is Unset and self.__isValid:
 			return self.__label.value['@max']
 		return self.__maxLength
+
+	@maxLength.condition
+	def maxLength(self) -> bool:
+		return getattr(self, '__maxLength', Unset) is not Unset
 
 	@maxLength.setter
 	def maxLength(self, value: int):
 		self.__maxLength = value
 
-	@property
+	@StateProperty(default=Unset, allowNone=False)
 	def precision(self) -> int:
-		if self.__precision is None and self.__isValid:
+		if self.__precision is Unset and self.__isValid:
 			return self.__label.value['@precision']
 		return self.__precision
 
@@ -634,9 +792,13 @@ class MeasurementDisplayProperties:
 	def precision(self, value: int):
 		self.__precision = value
 
-	@property
+	@precision.condition
+	def precision(self) -> bool:
+		return getattr(self, '__precision', Unset) is not Unset
+
+	@StateProperty(default=Unset, allowNone=False)
 	def unitSpacer(self) -> str:
-		if self.__unitSpacer is None and self.__isValid:
+		if self.__unitSpacer is Unset and self.__isValid:
 			return self.__label.value['@unitSpacer']
 		return self.__unitSpacer
 
@@ -644,12 +806,16 @@ class MeasurementDisplayProperties:
 	def unitSpacer(self, value: str):
 		self.__unitSpacer = value
 
-	@property
+	@unitSpacer.condition
+	def unitSpacer(self) -> bool:
+		return getattr(self, '__unitSpacer', Unset) is not Unset
+
+	@StateProperty(default=DisplayPosition.Auto, allowNone=False, singleVal=True)
 	def unitPosition(self) -> DisplayPosition:
-		if self.__unitPosition is None:
+		if self.__unitPosition == DisplayPosition.Auto:
 			if self.__isValid:
 				if self.__label.value['@showUnit']:
-					unitText = self.__label.value['@unit']
+					unitText = f'{self.__label.value.value:format: {"{unit}"}}'
 					if len(unitText) > 2:
 						return DisplayPosition.Auto
 					elif len(unitText) == 0:
@@ -664,10 +830,20 @@ class MeasurementDisplayProperties:
 		if isinstance(value, str):
 			value = DisplayPosition[value]
 		self.__unitPosition = value
+		if hasattr(self.label, 'splitter'):
+			self.label.splitter.updateUnitDisplay()
 
-	@property
+	@unitPosition.decode
+	def unitPosition(self, value: str) -> DisplayPosition:
+		return DisplayPosition[value]
+
+	@unitPosition.condition
+	def unitPosition(self) -> bool:
+		return getattr(self, '__unitPosition', Unset) is not Unset
+
+	@StateProperty(default=Unset, allowNone=False)
 	def suffix(self) -> str:
-		if self.__suffix is None and self.__isValid:
+		if self.__suffix is Unset and self.__isValid:
 			return self.__label.value['@suffix']
 		return self.__suffix
 
@@ -675,9 +851,13 @@ class MeasurementDisplayProperties:
 	def suffix(self, value: str):
 		self.__suffix = value
 
-	@property
+	@suffix.condition
+	def suffix(self) -> bool:
+		return getattr(self, '__suffix', Unset) is not Unset
+
+	@StateProperty(default=Unset, allowNone=False)
 	def decorator(self) -> str:
-		if self.__decorator is None and self.__isValid:
+		if self.__decorator is Unset and self.__isValid:
 			return self.__label.value['@decorator']
 		return self.__decorator
 
@@ -685,9 +865,13 @@ class MeasurementDisplayProperties:
 	def decorator(self, value: str):
 		self.__decorator = value
 
-	@property
+	@decorator.condition
+	def decorator(self) -> bool:
+		return getattr(self, '__decorator', Unset) is not Unset
+
+	@StateProperty(default=Unset, allowNone=False)
 	def shorten(self) -> bool:
-		if self.__shorten is None and self.__isValid:
+		if self.__shorten is Unset and self.__isValid:
 			return self.__label.value['@shorten']
 		return self.__shorten
 
@@ -695,47 +879,73 @@ class MeasurementDisplayProperties:
 	def shorten(self, value: bool):
 		self.__shorten = value
 
-	@property
-	def decimalSeparator(self) -> str:
-		if self.__decimalSeparator is None and self.__isValid:
-			return self.__label.value['@decimalSeparator']
+	@shorten.condition
+	def shorten(self) -> bool:
+		return getattr(self, '__shorten', Unset) is not Unset
 
+	# ! This is broken
+	@StateProperty(default=Unset, allowNone=False)
+	def decimalSeparator(self) -> str:
+		# if self.__decimalSeparator is None and self.__isValid:
+		# 	return self.__label.value['@decimalSeparator']
 		return self.__decimalSeparator
 
 	@decimalSeparator.setter
 	def decimalSeparator(self, value: str):
 		self.__decimalSeparator = value
 
-	@property
+	@decimalSeparator.condition
+	def decimalSeparator(self) -> bool:
+		return getattr(self, '__decimalSeparator', Unset) is not Unset
+
+	@StateProperty(default=Unset, allowNone=False)
 	def radixPoint(self) -> str:
-		if self.__radixPoint is None and self.__isValid:
-			return self.__label.value['@radixPoint']
+		# if self.__radixPoint is None and self.__isValid:
+		# 	return self.__label.value['@radixPoint']
 		return self.__radixPoint
 
 	@radixPoint.setter
 	def radixPoint(self, value: str):
 		self.__radixPoint = value
 
-	@property
-	def valueUnitRatio(self) -> float:
+	@radixPoint.condition
+	def radixPoint(self) -> bool:
+		return getattr(self, '__radixPoint', Unset) is not Unset
+
+	@StateProperty(key='unitSize', default=0.2, singleVal=True, allowNone=False)
+	def valueUnitRatio(self) -> Size.Height:
 		if self.__isValid:
 			return self.__valueUnitRatio
-		return 1.0
+		return Size.Height(1.0, relative=True)
 
 	@valueUnitRatio.setter
-	def valueUnitRatio(self, value):
+	def valueUnitRatio(self, value: Size.Height):
 		if value is None:
 			self.__valueUnitRatio = value
 		else:
-			self.__valueUnitRatio = clamp(value, 0.1, 0.9)
+			if value.relative:
+				value = clamp(value, 0.1, 0.9)
+			self.__valueUnitRatio = value
 
-	@property
-	def splitDirection(self):
+	@valueUnitRatio.decode
+	def valueUnitRatio(value: str | int | float) -> Size.Height:
+		return Size.Height(value)
+
+	@valueUnitRatio.condition
+	def valueUnitRatio(self):
+		return self.unitPosition != DisplayPosition.Hidden and self.unitPosition != DisplayPosition.Floating
+
+	@StateProperty(default=LocationFlag.Horizontal, allowNone=False)
+	def splitDirection(self) -> LocationFlag:
 		return self.__splitDirection
 
 	@splitDirection.setter
-	def splitDirection(self, value):
+	def splitDirection(self, value: LocationFlag):
 		self.__splitDirection = value
+
+	@splitDirection.decode
+	def splitDirection(self, value: str) -> LocationFlag:
+		return LocationFlag[value]
 
 	def toDict(self) -> dict:
 		attrs = {
@@ -753,63 +963,120 @@ class MeasurementDisplayProperties:
 		}
 		return {k: v for k, v in attrs.items() if v is not None}
 
-	def toPropertyOptions(self):
-		pass
-
-	def __getstate__(self):
-		return self.toDict()
-
-	def __setstate__(self, state):
-		self.__init__(label=self.__label, **state)
+	def __iter__(self):
+		return iter(self.toDict())
 
 
 def withoutUnit(self):
 	return self.value['@withoutUnit']
 
 
-class DisplayLabel(Panel):
-	def __init__(self, displayProperties: MeasurementDisplayProperties = None, *args, **kwargs):
-		kwargs.pop('childItems', None)
-		self.text = ""
+class UnitLabel(Label, tag=...):
+	deletable = False
+
+	__exclude__ = {'items', 'geometry', 'locked', 'frozen', 'movable', 'resizable', 'text'}
+
+	def __init__(self, parent: Panel,
+		reference: Label,
+		alignment: Alignment = None,
+		filters: list[str] = None,
+		font: QFont = None,
+		*args, **kwargs):
+		self.reference = reference
+		super().__init__(parent=parent, alignment=alignment, filters=filters, font=font, *args, **kwargs)
+		self.setResizable(False)
+		self.setMovable(False)
+
+	@StateProperty
+	def text(self) -> str:
+		pass
+
+	@text.condition
+	def text(self, value: str):
+		return value != getattr(self.referenceValue, '@unit', Unset) << OrUnset >> getattr(self.referenceValue, 'unit', None)
+
+	@property
+	def referenceValue(self) -> Any:
+		return self.parent.value
+
+	@property
+	def isEmpty(self):
+		return False
+
+	@cached_property
+	def textBox(self):
+		box = TextHelper(self, self.reference.textBox)
+		box.setParentItem(self)
+		return box
+
+
+class DisplayLabel(Display):
+	deletable = False
+
+	def __init__(self, *args, **kwargs):
+		self.text = "⋯"
 		super().__init__(*args, **kwargs)
 		self.displayType = DisplayType.Text
-		self.setMovable(False)
-		self.setResizable(False)
-		self.displayProperties = MeasurementDisplayProperties(self, **(displayProperties or {}), **kwargs)
-
-		unitDisplay = kwargs.get('unit', {})
-		valueDisplay = kwargs.get('value', {})
-
-		self.valueTextBox = Label(self, clickable=False, **valueDisplay)
-		self.valueTextBox.locked = True
-		self.valueTextBox.movable = False
-		self.valueTextBox.resizable = False
-
-		self.unitTextBox = UnitLabel(self, self.valueTextBox, clickable=False, **unitDisplay)
-		self.unitTextBox.locked = True
-		self.unitTextBox.movable = False
-		self.unitTextBox.resizable = False
 
 		self.splitter = MeasurementUnitSplitter(surface=self, value=self.valueTextBox, unit=self.unitTextBox)
-		self.setFlag(QGraphicsItem.ItemIsMovable, False)
 		self.setFlag(QGraphicsItem.ItemIsSelectable, False)
 		self.setFlag(QGraphicsItem.ItemIsFocusable, False)
 		self.setAcceptDrops(False)
-
-	# self.setHandlesChildEvents(True)
-	# self.a.setAlignment(Qt.AlignCenter)
-	# self.a.setZValue(1000)
-
-	# modifiers = AttributeEditor(self.parent, IntAttribute(value, 'max', -1, 1, 6))
-	# modifiers.setVisible(True)
+		self.value = "⋯"
 
 	def setUnitPosition(self, value: DisplayPosition):
 		self.displayProperties.unitPosition = value
-		self.splitter.updateUnitDisplay()
 
 	def contextMenuEvent(self, event):
 		event.ignore()
 		return
+
+	@StateProperty(key='value', sortOrder=0, allowNone=False, default=Stateful)
+	def valueTextBox(self) -> Label:
+		return self._valueTextBox
+
+	@valueTextBox.setter
+	def valueTextBox(self, value: Label):
+		self._valueTextBox = value
+
+	@valueTextBox.decode
+	def valueTextBox(self, value: dict) -> Label:
+		return Label(self, clickable=False, **value)
+
+	@StateProperty(key='unit', allowNone=False, default=Stateful)
+	def unitTextBox(self) -> UnitLabel:
+		return self._unitTextBox
+
+	@unitTextBox.setter
+	def unitTextBox(self, value: UnitLabel):
+		self._unitTextBox = value
+
+	@unitTextBox.decode
+	def unitTextBox(self, value: dict) -> UnitLabel:
+		return UnitLabel(self, self.valueTextBox, clickable=False, **value)
+
+	@StateProperty(unwrap=True, allowNone=False, default=Stateful)
+	def displayProperties(self) -> MeasurementDisplayProperties:
+		return self._displayProperties
+
+	@displayProperties.setter
+	def displayProperties(self, value: MeasurementDisplayProperties):
+		self._displayProperties = value
+
+	@displayProperties.decode
+	def displayProperties(self, value: dict | float | str) -> MeasurementDisplayProperties:
+		match value:
+			case float(value):
+				value = {'valueUnitRatio': value}
+			case str(value):
+				value = {'unitPosition': DisplayPosition[value]}
+			case _:
+				pass
+		return MeasurementDisplayProperties(self, **value)
+
+	@property
+	def type(self):
+		return self.displayProperties.displayType
 
 	@property
 	def value(self):
@@ -820,25 +1087,6 @@ class DisplayLabel(Panel):
 		self.valueTextBox.textBox.value = value
 		self.unitTextBox.textBox.refresh()
 		self.splitter.updateUnitDisplay()
-
-	# @cached_property
-	# def valueTextBox(self):
-	# 	a = Label(self, clickable=False)
-	# 	a.locked = True
-	# 	a.movable = False
-	# 	a.resizable = False
-	# 	a.setAlignment(AlignmentFlag.VerticalCenter | AlignmentFlag.HorizontalCenter)
-	# 	return a
-
-	# @cached_property
-	# def unitTextBox(self):
-	# 	a = UnitLabel(self, self.valueTextBox, clickable=False)
-	# 	a.locked = True
-	# 	a.movable = False
-	# 	a.resizable = False
-	# 	a.setAlignment(AlignmentFlag.Top | AlignmentFlag.HorizontalCenter)
-
-	# return a
 
 	def mouseDoubleClickEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
 		mouseEvent.ignore()
@@ -856,13 +1104,6 @@ class DisplayLabel(Panel):
 	def setRect(self, *args):
 		super().setRect(*args)
 
-	# self.valueTextBox.setPos(self.rect().topLeft())
-	# self.a.adjustSize()
-	# self.a.setTextWidth(self.rect().width())
-
-	# self.a.setTextWidth(self.rect().width())
-	# self.a.adjustSize
-
 	def hideUnit(self):
 		self.displayProperties.unitPosition = DisplayPosition.Hidden
 		self.splitter.updateUnitDisplay()
@@ -876,62 +1117,3 @@ class DisplayLabel(Panel):
 			self.showUnit()
 		else:
 			self.hideUnit()
-
-	@property
-	def state(self):
-		state = {
-			'displayType': self.displayType,
-		}
-		state.update(self.displayProperties.toDict())
-		valueState = {}
-		if self.valueTextBox.textBox.alignment != AlignmentFlag.Center:
-			valueState['alignment'] = self.valueTextBox.textBox.alignment
-		if len(self.valueTextBox.textBox.enabledFilters):
-			valueState['filters'] = tuple(self.valueTextBox.textBox.enabledFilters)
-		if not self.valueTextBox.margins.isDefault():
-			valueState['margins'] = self.valueTextBox.margins
-		if self.valueTextBox.modifiers:
-			valueState['modifiers'] = self.valueTextBox.modifiers
-		if valueState:
-			state['value'] = valueState
-
-		if self.unitTextBox.isVisible():
-			unitState = {}
-			if self.unitTextBox.textBox.alignment != AlignmentFlag.Center:
-				unitState['alignment'] = self.unitTextBox.textBox.alignment.__getstate__()
-			if self.unitTextBox.textBox.enabledFilters:
-				unitState['filters'] = tuple(self.unitTextBox.textBox.enabledFilters)
-			if not self.unitTextBox.margins.isDefault():
-				unitState['margins'] = self.unitTextBox.margins
-			if unitState:
-				if 'unitPosition' in state:
-					unitState['position'] = state.pop('unitPosition')
-				state['unit'] = unitState
-		else:
-			state.pop('valueUnitRatio', None)
-		if len(state) == 1 and 'displayType' in state:
-			return state['displayType']
-		return state
-
-
-class UnitLabel(Label):
-	def __init__(self, parent: Union['Panel', 'LevityScene'],
-		reference: Label,
-		alignment: Alignment = None,
-		filters: list[str] = None,
-		font: QFont = None,
-		*args, **kwargs):
-		self.reference = reference
-		super().__init__(parent=parent, alignment=alignment, filters=filters, font=font, *args, **kwargs)
-		self.setResizable(False)
-		self.setMovable(False)
-
-	@property
-	def isEmpty(self):
-		return False
-
-	@cached_property
-	def textBox(self):
-		box = TextHelper(self, self.reference.textBox)
-		box.setParentItem(self)
-		return box

@@ -50,22 +50,16 @@ class Incrementer(Handle):
 
 	def mousePressEvent(self, event):
 		event.accept()
+		loc = self.location
+		if loc.isTop or loc.isRight:
+			self.increase()
+		else:
+			self.decrease()
+		self.signals.action.emit(self.location.asAxis)
 		return super().mousePressEvent(event)
-
-	def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent) -> None:
-		if self.sceneBoundingRect().contains(event.scenePos()):
-			loc = self.location
-			if loc.isTop or loc.isRight:
-				self.increase()
-			else:
-				self.decrease()
-			self.signals.action.emit(self.location.asAxis)
 
 	def increase(self):
 		self.surface.update()
-
-	# self.parent.incrementSignal.emit(self.location, self.parent.incrementValue)
-	#
 
 	def decrease(self):
 		self.surface.update()
