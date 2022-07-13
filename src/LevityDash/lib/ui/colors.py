@@ -54,11 +54,14 @@ def kelvinToRGB(temp):
 	return red, green, blue
 
 
-def rgbHex(r, g, b):
+def rgbHex(r, g, b, a=None):
 	r = hex(r)[2:]
 	g = hex(g)[2:]
 	b = hex(b)[2:]
-	return f'#{r}{g}{b}'
+	if a is None:
+		return f'#{r}{g}{b}'
+	a = hex(a)[2:]
+	return f'#{r}{g}{b}{a}'
 
 
 def kelvinToQColor(kelvin: int = None):

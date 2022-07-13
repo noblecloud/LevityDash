@@ -1,13 +1,15 @@
+from math import sqrt
 from PySide2.QtGui import QTransform
 
-from math import prod
-from typing import Iterable, List, Optional, Union
+from typing import Iterable, List, Optional, Union, Tuple, Set
 
 from PySide2.QtCore import QObject, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Signal
-from LevityDash.lib.log import LevityGUILog as guiLog
-from LevityDash.lib.utils.shared import _Panel
+from LevityDash.lib.ui import UILogger as guiLog
 from .utils import *
-from LevityDash.lib.utils.geometry import GridItemPosition, GridItemSize, MultiDimension, Position, Size
+
+from LevityDash.lib.utils.geometry import MultiDimension, Position, Size
+
+__all__ = ('Geometry', 'StaticGeometry')
 
 log = guiLog.getChild('Geometry')
 
@@ -58,18 +60,7 @@ class Geometry:
 	_aspectRatio: Optional[float]
 	_fillParent: bool
 
-	def __init__(self, surface: 'Panel',
-		gridItem: GridItem = None,
-		size: Size = None,
-		position: Position = None,
-		rect: QRectF = None,
-		absolute: bool = None,
-		relative: bool = None,
-		onGrid: bool = None,
-		aspectRatio: float = None,
-		updateSurface: bool = True,
-		fillParent: bool = False,
-		**kwargs):
+	def __init__(self, *_, **kwargs):
 		"""
 		:param surface: Parent surface
 		:type surface: Panel
@@ -86,12 +77,22 @@ class Geometry:
 		:param relative: Relative positioning enabled
 		:type relative: bool
 		"""
-
+		if _:
+			raise TypeError("Geometry takes no positional arguments")
+		self.surface = kwargs.get('surface', None)
+		self._aspectRatio = kwargs.get('aspectRatio', None)
 		self.signals = GeometrySignals()
-		self.aspectRatio = kwargs.get('aspectRatio', False)
 
 		self.subGeometries = []
 
+		self._absolute = self.__parseAbsolute(kwargs)
+
+		self.size = self.__parseSize(kwargs)
+		self.position = self.__parsePosition(kwargs)
+
+	def __parseAbsolute(self, kwargs) -> bool:
+		absolute = kwargs.get('absolute', None)
+		relative = kwargs.get('relative', None)
 		if relative is None and absolute is None:
 			absolute = None
 		elif absolute != relative:
@@ -100,88 +101,64 @@ class Geometry:
 			absolute = not relative
 		elif absolute is not None:
 			pass
+		return absolute
 
-		self._absolute = absolute
+	def __parsePosition(self, kwargs):
+		absolute = self.__parseAbsolute(kwargs)
+		match kwargs:
+			case {'fillParent': True, **rest}:
+				return Position(0, 0, absolute=False)
+			case {'x': x, 'y': y, **rest}:
+				return Position(x=x, y=y, absolute=absolute)
+			case {'position': rawPos, **rest} | {'pos': rawPos, **rest}:
+				match rawPos:
+					case {'x': x, 'y': y, **posRest}:
+						absolute = posRest.get('absolute', absolute)
+						return Position(x=x, y=y, absolute=absolute)
+					case list(rawSize) | tuple(rawSize) | set(rawSize) | frozenset(rawSize):
+						return Position(rawPos, absolute=absolute)
+					case str(rawPos):
+						raise NotImplementedError("Position string parsing not implemented", rawPos)
+					case QPointF(x, y) | QPoint(x, y) | QRectF(x, y, _, _) | QRect(x, y, _, _):
+						return Position(x, y, absolute=absolute)
+					case Position(x, y):
+						return rawPos
+			case _:
+				return Position(0, 0, absolute=absolute)
 
-		if position is None and rect is not None:
-			position = Position(rect.pos())
-		if size is None and rect is not None:
-			size = Size(rect.size())
+	def __parseSize(self, kwargs):
+		absolute = self.__parseAbsolute(kwargs)
+		match kwargs:
+			case {'fillParent': True, **rest}:
+				return Size(1, 1, absolute=False)
+			case {'width': w, 'height': h, **rest} | {'w': w, 'h': h, **rest}:
+				return Size(w, h, absolute=absolute)
+			case {'size': rawSize, **rest}:
+				match rawSize:
+					case {'width': w, 'height': h, **sizeRest} | {'w': w, 'h': h, **sizeRest}:
+						absolute = sizeRest.get('absolute', absolute)
+						return Size(w, h, absolute=absolute)
+					case list(rawSize) | tuple(rawSize) | set(rawSize) | frozenset(rawSize):
+						return Size(*rawSize, absolute=absolute)
+					case str(rawSize):
+						raise NotImplementedError("Size string parsing not implemented", rawSize)
+					case QSizeF(x, y) | QSize(x, y) | QRectF(_, _, x, y) | QRect(_, _, x, y):
+						return Size(x, y, absolute=absolute)
+					case Size(x, y):
+						return rawSize
 
-		del rect
+			case _:
+				return Size(1, 1, absolute=False)
 
-		if onGrid is None and (isinstance(size, GridItemSize) or isinstance(position, GridItemPosition)):
-			onGrid = True
-
-		if fillParent:
-			size = Size(1, 1, absolute=False)
-			position = Position(0, 0)
-		elif onGrid:
-			if size is None:
-				size = GridItemSize(1, 1)
-			if position is None:
-				grid = None if surface is None else surface.parentGrid
-				position = GridItemPosition(None, None, grid)
-		else:
-			if size is None:
-				if 'width' in kwargs and 'height' in kwargs:
-					size = (kwargs['width'], kwargs['height'])
-				else:
-					size = surface.rect().size()
-					if prod(size.toTuple()) == 0:
-						size = (100, 100)
-						absolute = True
-				size = Size(size, absolute=absolute)
-			elif isinstance(size, GridItemSize):
-				size = size
-			elif isinstance(size, dict):
-				if absolute is not None:
-					size['absolute'] = absolute
-				size = Size(**size)
-			elif isinstance(size, (QSize, QSizeF)):
-				size = Size(self, size, absolute=absolute)
-			elif isinstance(size, Iterable) and len(size) == 2:
-				size = Size(*size, absolute=absolute)
-
-			if position is None:
-				if 'x' in kwargs and 'y' in kwargs:
-					position = (kwargs['x'], kwargs['y'])
-				else:
-					position = Position(surface.pos(), absolute=absolute)
-				position = Position(position, absolute=absolute)
-			elif isinstance(position, GridItemPosition):
-				pass
-			elif isinstance(position, dict):
-				if absolute is not None:
-					position['absolute'] = absolute
-				position = Position(**position)
-			elif isinstance(position, (QPoint, QPointF)):
-				position = Position(position, absolute=absolute)
-			elif isinstance(position, Iterable) and len(position) == 2:
-				position = Position(*position, absolute=absolute)
-
-		# self.gridItem = gridItem
-		self._gridItem = gridItem
-		self.surface = surface
-		if self.surface is not None:
-			surface.geometry = self
-			if onGrid:
-				gridItem = self.surface.parentGrid.createGridItem(self)
-		else:
-			gridItem = GridItem(self)
-		self.size = size
-		self.position = position
-
-		if self.absolute and not absolute is None and not absolute:
-			self.relative = True
-
-		# if updateSurface and surface is not None:
-		# 	self.updateSurface()
-		# self.absolute = absolute
-
-		if isinstance(gridItem, dict):
-			gridItem = GridItem(**gridItem, surface=surface)
-		self._gridItem = gridItem
+	# if size is None:
+	# 	if 'width' in kwargs and 'height' in kwargs:
+	# 		size = (kwargs['width'], kwargs['height'])
+	# 	else:
+	# 		size = surface.rect().size()
+	# 		if prod(size.toTuple()) == 0:
+	# 			size = (100, 100)
+	# 			absolute = True
+	# 	size = Size(size, absolute=absolute)
 
 	# self.signals.moved.connect(self.repositionSurface)
 	# self.signals.resized.connect(self.resizeSurface)
@@ -236,12 +213,6 @@ class Geometry:
 		# 		size = GridItemSize(1, 1)
 		# if self._size is None:
 		self._surface = value
-		if self.onGrid:
-			value.parentGrid.insert(self)
-
-	@property
-	def onGrid(self):
-		return self.gridItem is not None
 
 	@property
 	def size(self) -> Size:
@@ -249,6 +220,10 @@ class Geometry:
 
 	@size.setter
 	def size(self, value):
+		if value is None:
+			if hasattr(self, '_size') and self._size is not None:
+				return
+			value = Size(1, 1, absolute=False)
 		self._size = value
 
 	@property
@@ -257,11 +232,11 @@ class Geometry:
 
 	@position.setter
 	def position(self, value):
+		if value is None:
+			if hasattr(self, '_position') and self._position is not None:
+				return
+			value = Position(0, 0)
 		self._position = value
-
-	@property
-	def gridItem(self) -> GridItem:
-		return self._gridItem
 
 	@property
 	def relative(self) -> bool:
@@ -321,7 +296,9 @@ class Geometry:
 			if self.position.relative:
 				self.surface.setPos(self.posFromParentPos(parentRect))
 		else:
-			if self.surface.parent:
+			if parent := self.surface.parent:
+				if not parent.rect().isValid():
+					parent.geometry.updateSurface()
 				self.surface.setRect(self.absoluteRect())
 				self.surface.setPos(self.absolutePosition().asQPointF())
 
@@ -390,17 +367,11 @@ class Geometry:
 
 	@property
 	def width(self) -> Size.Width:
-		if self.onGrid:
-			if self.size.width.absolute:
-				return self.gridItem.absoluteWidth
-			return self.gridItem.relativeWidth
 		return self.size.width
 
 	@width.setter
 	def width(self, value):
 		self.size.width = value
-		if self.onGrid:
-			self.gridItem.absoluteWidth = self.absoluteWidth
 
 	@property
 	def absoluteWidth(self) -> Size.Width:
@@ -426,17 +397,11 @@ class Geometry:
 	def height(self) -> Size.Height:
 		if self.aspectRatio:
 			return self.size.width.value*self.aspectRatio
-		if self.onGrid:
-			if self.size.height.absolute:
-				return self.gridItem.absoluteHeight
-			return self.gridItem.relativeHeight
 		return self.size.height
 
 	@height.setter
 	def height(self, value):
 		self.size.height.value = value
-		if self.onGrid:
-			self.gridItem.absoluteHeight = self.absoluteHeight
 
 	@property
 	def absoluteHeight(self) -> Size.Height:
@@ -465,17 +430,9 @@ class Geometry:
 	@x.setter
 	def x(self, value):
 		self.position.x.value = value
-		if self.position.x.absolute:
-			if self.gridItem is not None:
-				self.gridItem.x = value
-		else:
-			if self.gridItem is not None:
-				self.gridItem.relativeX = value
 
 	@property
 	def absoluteX(self) -> Position.X:
-		if self.onGrid:
-			return self.gridItem.x
 		if self.position.x.absolute:
 			return self.x
 		return self.x.toAbsolute(self.surface.parent.size().width())
@@ -501,17 +458,9 @@ class Geometry:
 	@y.setter
 	def y(self, value):
 		self.position.y.value = value
-		if self.position.y.absolute:
-			if self.gridItem is not None:
-				self.gridItem.y = value
-		else:
-			if self.gridItem is not None:
-				self.gridItem.relativeY = value
 
 	@property
 	def absoluteY(self) -> Position.Y:
-		if self.onGrid:
-			return self.gridItem.y
 		if self.position.y.absolute:
 			return self.y
 		return self.y.toAbsolute(self.surface.parent.size().height())
@@ -531,12 +480,8 @@ class Geometry:
 		self.position.y.setRelative(value)
 
 	def rect(self):
-		if self.onGrid:
-			width = self.gridItem.absoluteWidth
-			height = self.gridItem.absoluteHeight
-		else:
-			width = self.width
-			height = self.height
+		width = self.width
+		height = self.height
 		return QRectF(0, 0, width, height)
 
 	def setRect(self, rect: QRectF):
@@ -549,12 +494,6 @@ class Geometry:
 
 		width = rect.width()
 		height = rect.height()
-
-		try:
-			self.gridItem.absoluteHeight = height
-			self.gridItem.absoluteWidth = width
-		except AttributeError:
-			pass
 
 		if self.size.width.relative:
 			width = width/self.surface.parent.size().width()
@@ -609,12 +548,6 @@ class Geometry:
 
 		x = pos.x()
 		y = pos.y()
-
-		try:
-			self.gridItem.absoluteX = x
-			self.gridItem.absoluteY = y
-		except AttributeError:
-			pass
 
 		if self.position.x.relative:
 			x = x/self.surface.parent.size().width()
@@ -685,31 +618,45 @@ class Geometry:
 		self.relativeHeight = height
 
 	@property
+	def fillParent(self):
+		return self.relativeWidth == 1 and self.relativeHeight == 1 and self.relativeX == 0 and self.relativeY == 0
+
+	@fillParent.setter
+	def fillParent(self, value):
+		if value:
+			self.relativeWidth = 1
+			self.relativeHeight = 1
+			self.relativeX = 0
+			self.relativeY = 0
+
+	@property
 	def snapping(self) -> bool:
 		return self.onGrid
 
 	def __bool__(self) -> bool:
 		return bool(self.size) or bool(self.position)
 
-	def toDict(self):
-		pos = self.position.toDict()
-		size = self.size.toDict()
-		if 'absolute' in pos and 'absolute' in size and size['absolute'] != pos['absolute']:
-			di = {'position': pos, 'size': size}
-		else:
-			di = {**size, **pos}
-		if self.onGrid:
-			di['gridItem'] = self.gridItem
-		for k, v in di.items():
-			if isinstance(v, float):
-				di[k] = round(v, 4)
-		return di
+	def __eq__(self, other) -> bool:
+		match other:
+			case (x, y, width, height):
+				return self.x == x and self.y == y and self.width == width and self.height == height
+			case {'x': x, 'y': y, 'width': width, 'height': height}:
+				return self.x == x and self.y == y and self.width == width and self.height == height
+			case Geometry():
+				return super().__eq__(other)
+			case _:
+				return False
 
-	def asAbsoluteGeometry(self):
-		return {}
+	def __dict__(self):
+		return {
+			**self.position,
+			**self.size
+		}
 
 	def __repr__(self):
-		return f'<{self.__class__.__name__}(position=({self.position}), size=({self.size}) {f", {self.gridItem}," if False else ""} zPosition={round(self.surface.zValue(), 4)})>'
+		return f'<{self.__class__.__name__}(position=({self.position}), size=({self.size}) for {type(self.surface).__name__})>'
+
+	# return f'<{self.__class__.__name__}(position=({self.position}), size=({self.size}) zPosition={round(self.surface.zValue(), 4)})>'
 
 	def addSubGeometry(self, geometry: 'Geometry'):
 		self.subGeometries.append(geometry)
@@ -723,7 +670,7 @@ class Geometry:
 		:return: Absolute geometry
 		:rtype: Geometry
 		"""
-		return self.__class__(surface=self.surface, size=self.absoluteSize(), position=self.absolutePosition(), absolute=True, onGrid=self.onGrid, gridItem=self.gridItem)
+		return self.__class__(surface=self.surface, size=self.absoluteSize(), position=self.absolutePosition(), absolute=True)
 
 	@property
 	def parentGeometry(self) -> Optional['Geometry']:
@@ -754,6 +701,43 @@ class Geometry:
 		w = 100*float(self.relativeWidth)
 		h = 100*float(self.relativeHeight)
 		return h*w/100
+
+	@property
+	def state(self):
+		return self.toDict()
+
+	@state.setter
+	def state(self, value: dict):
+		self.size = self.__parseSize(value)
+		self.position = self.__parsePosition(value)
+		# self.absolute = value.get('absolute', self.position.absolute and self.size.absolute)
+		self.updateSurface()
+
+	def scoreSimilarity(self, other: 'Geometry') -> float:
+		"""
+		Returns a similarity score between this geometry and another geometry
+		:param other: The other geometry
+		:type other: Geometry
+		:return: The similarity score
+		:rtype: float
+		"""
+		if isinstance(other, dict):
+			other = Geometry(surface=self.surface, **other)
+		if other.surface is None:
+			other.surface = self.surface
+		diffX = self.absoluteX - other.absoluteX
+		diffY = self.absoluteY - other.absoluteY
+		diffWidth = self.absoluteWidth - other.absoluteWidth
+		diffHeight = self.absoluteHeight - other.absoluteHeight
+		return float((diffX ** 2 + diffY ** 2 + diffWidth ** 2 + diffHeight ** 2) ** 0.5)
+
+	@property
+	def sortValue(self) -> tuple[float, float]:
+		return self.distanceFromOrigin
+
+	@property
+	def distanceFromOrigin(self) -> float:
+		return sqrt(self.absoluteX ** 2 + self.absoluteY ** 2)
 
 
 class StaticGeometry(Geometry):

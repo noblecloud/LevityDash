@@ -1,21 +1,25 @@
 import re
+from types import FunctionType
 
 import numpy as np
 from abc import ABC
 from collections import namedtuple
 
 from functools import cached_property
-from math import atan2, degrees as mathDegrees, nan
+from math import atan2, degrees as mathDegrees, nan, inf
 from PySide2.QtGui import QPainterPath, QPolygon, QPolygonF, QTransform
 from PySide2.QtWidgets import QGraphicsItem
 
-from typing import Any, Callable, Iterable, List, Optional, overload, Tuple, Union
+from typing import Any, Callable, Iterable, List, Optional, overload, Tuple, Union, Type, ClassVar
 
 from enum import auto, Enum, EnumMeta, IntFlag
 
 from PySide2.QtCore import QMargins, QMarginsF, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt
+from WeatherUnits import Length
+from yaml import Dumper
+from rich.repr import auto as auto_rich_repr
 
-from .shared import _Panel, Auto, clearCacheAttr, ClosestMatchEnumMeta, DType, mostly, Unset, clamp
+from .shared import _Panel, Auto, clearCacheAttr, ClosestMatchEnumMeta, DType, mostly, Unset, clamp, IgnoreOr, camelCase
 from .shared import utilLog as log
 
 
@@ -289,6 +293,7 @@ class LocationFlag(IntFlag, metaclass=LocationEnumMeta):
 
 
 class AlignmentFlag(IntFlag, metaclass=LocationEnumMeta):
+	Auto = 0
 	Bottom = auto()
 	Top = auto()
 	Right = auto()
@@ -338,12 +343,26 @@ class AlignmentFlag(IntFlag, metaclass=LocationEnumMeta):
 		return bool(self & (self.Left | self.Right | self.HorizontalCenter))
 
 	@cached_property
+	def simplified(self):
+		if self.isVertical:
+			return self.asVertical
+		elif self.isHorizontal:
+			return self.asHorizontal
+		elif self.isCenter:
+			return self.Center.a
+		return self
+
+	@cached_property
+	def isCenter(self):
+		return bool(self & self.Center)
+
+	@cached_property
 	def asVertical(self):
 		value = self.Vertical & self
 		if value:
 			return value
 		else:
-			return AlignmentFlag.Center
+			return AlignmentFlag.VerticalCenter
 
 	@cached_property
 	def asHorizontal(self):
@@ -351,11 +370,12 @@ class AlignmentFlag(IntFlag, metaclass=LocationEnumMeta):
 		if value:
 			return value
 		else:
-			return AlignmentFlag.Center
+			return AlignmentFlag.HorizontalCenter
 
 
+@auto_rich_repr
 class Alignment:
-	__slots__ = ('__horizontal', '__vertical', '__dict__')
+	# __slots__ = ('__horizontal', '__vertical', '__dict__')
 
 	@overload
 	def __init__(self, alignment: AlignmentFlag): ...
@@ -376,7 +396,7 @@ class Alignment:
 
 	@property
 	def horizontal(self):
-		return self.__horizontal
+		return AlignmentFlag(self.__horizontal)
 
 	@horizontal.setter
 	def horizontal(self, value: Union[str, int, AlignmentFlag]):
@@ -389,7 +409,7 @@ class Alignment:
 
 	@property
 	def vertical(self):
-		return self.__vertical
+		return AlignmentFlag(self.__vertical)
 
 	@vertical.setter
 	def vertical(self, value: Union[str, int, AlignmentFlag]):
@@ -401,7 +421,7 @@ class Alignment:
 		clearCacheAttr(self, 'multipliers', 'multipliersAlt')
 
 	def asDict(self):
-		return {'horizontal': self.horizontal.name, 'vertical': self.vertical.name}
+		return {'horizontal': self.horizontal.simplified.name, 'vertical': self.vertical.simplified.name}
 
 	@property
 	def asQtAlignment(self):
@@ -476,10 +496,12 @@ class Alignment:
 	def __setstate__(self, state):
 		self.__init__(**state)
 
-	def __repr__(self):
-		if (a := self.horizontal | self.vertical) in AlignmentFlag:
-			return f'<Alignment: {a.name}>'
-		return f'<Alignment {self.asDict()}>'
+	def __rich_repr__(self):
+		if (a := self.horizontal.simplified | self.vertical.simplified) in AlignmentFlag:
+			yield a.name
+		else:
+			yield 'horizontal', self.horizontal.name
+			yield 'vertical', self.vertical.name
 
 	def __eq__(self, other):
 		if isinstance(other, Alignment):
@@ -495,14 +517,16 @@ class Alignment:
 		return self == self.default()
 
 	@classmethod
-	def representer(cls, dumper, data):
-		if (a := data.horizontal | data.vertical) in AlignmentFlag:
+	def representer(cls, dumper, data: 'Alignment'):
+		vertical = data.vertical.simplified
+		horizontal = data.horizontal.simplified
+		if (a := (horizontal | vertical)) in AlignmentFlag:
 			return dumper.represent_str(a.name)
 		d = data.asDict()
-		if d['horizontal'] == AlignmentFlag.HorizontalCenter:
-			d['horizontal'] = 'Center'
-		if d['vertical'] == AlignmentFlag.VerticalCenter:
-			d['vertical'] = 'Center'
+		# if d['horizontal'] == AlignmentFlag.HorizontalCenter:
+		# 	d['horizontal'] = 'Center'
+		# if d['vertical'] == AlignmentFlag.VerticalCenter:
+		# 	d['vertical'] = 'Center'
 		return dumper.represent_dict(d)
 
 
@@ -514,8 +538,16 @@ class DisplayPosition(str, Enum, metaclass=ClosestMatchEnumMeta):
 	Below = 'below'  # Displays the unit below the value
 	Hidden = 'hidden'  # Hides the unit completely
 	Floating = 'floating'  # Displays the unit in a separate label that can be placed anywhere
+	Center = 'center'  # Displays the unit in the center of the value
+	Left = 'left'  # Displays the unit to the left of the value
+	Right = 'right'  # Displays the unit to the right of the value
 	Top = Above
 	Bottom = Below
+
+
+# class SplitDirection(IntFlag, metaclass=LocationEnumMeta):
+# 	Horizontal = 'horizontal'
+# 	Vertical = 'vertical'
 
 
 class MutableFloat:
@@ -549,6 +581,8 @@ class MutableFloat:
 		self.__value = value
 
 	def __parseValue(self, value) -> float:
+		# ! This function must only be used for the object's own value
+		# ! if a value needs to be parsed, use __parseOther
 		mul = 1
 		if value is None:
 			return nan
@@ -565,6 +599,25 @@ class MutableFloat:
 			return float(value)*mul
 		except ValueError:
 			raise ValueError(f'{value} is not a number')
+
+	def __parseOther(self, value: float | str | int) -> float:
+		mul = 1
+		if value is None:
+			return nan
+		if isinstance(value, str):
+			if '%' in value:
+				value = value.replace('%', '')
+				mul = 0.01
+			elif 'px' in value:
+				value = value.replace('px', '')
+			value = re.sub(r'[^0-9.]', '', value, 0, re.DOTALL)
+		elif isinstance(value, MutableFloat):
+			value = value.value
+		elif isinstance(value, int | float | np.number):
+			pass
+		else:
+			raise ValueError(f'{value} is not a number')
+		return float(value)*mul
 
 	def __get__(self, instance, owner):
 		return self.__value
@@ -676,7 +729,7 @@ class MutableFloat:
 
 	def __eq__(self, other):
 		try:
-			return self.__value == float(other)
+			return self.__value == self.__parseOther(other)
 		except TypeError:
 			return False
 
@@ -761,7 +814,12 @@ class DimensionType(Enum, metaclass=DimensionTypeMeta):
 
 class Dimension(MutableFloat):
 	__slots__ = ('_absolute', '_parent')
+	__match_args__ = ('value', 'absolute', 'relative')
 	_absolute: bool
+
+	@classmethod
+	def representer(cls, dumper: Dumper, data):
+		return dumper.represent_str(str(data))
 
 	def __init__(self, value: Union[int, float], absolute: bool = None, relative: bool = None):
 		super().__init__(value)
@@ -771,7 +829,7 @@ class Dimension(MutableFloat):
 			if hasattr(self, '_absolute'):
 				absolute = self._absolute
 			else:
-				if isinstance(value, float) and not value.is_integer() and value <= 1:
+				if isinstance(value, float) and not value.is_integer() or value <= 1:
 					absolute = False
 				else:
 					absolute = True
@@ -841,9 +899,9 @@ class Dimension(MutableFloat):
 	def dimension(self) -> DimensionType:
 		return self.__class__.__dimension__
 
-	def toDict(self):
+	def __dict__(self):
 		return {
-			'value':    round(self.value, 5),
+			'value':    self.value,
 			'absolute': self._absolute,
 		}
 
@@ -884,19 +942,20 @@ class Dimension(MutableFloat):
 		return self.__class__(self.value/other, absolute=absolute)
 
 
-class NamedDimension:
+class NamedDimension(type):
 
-	def __new__(cls, name: str, dimension: int, relativeDecorator: str = '%', absoluteDecorator: str = 'px'):
-		cls = type(name, (Dimension,), {})
-		cls.__dimension__ = DimensionType(dimension)
-		cls.__relativeDecorator__ = relativeDecorator
-		cls.__absoluteDecorator__ = absoluteDecorator
-		return cls
+	def __new__(mcs, name: str, dimension: int, relativeDecorator: str = '%', absoluteDecorator: str = 'px'):
+		mcs = type(name, (Dimension,), {})
+		mcs.__dimension__ = DimensionType(dimension)
+		mcs.__relativeDecorator__ = relativeDecorator
+		mcs.__absoluteDecorator__ = absoluteDecorator
+		return mcs
 
 
+# ?TODO: This needs to be merged to the NamedDimension class
 class Validator(ABC):
 
-	def __init__(self, cls: type):
+	def __init__(self, cls: NamedDimension):
 		self.cls = cls
 		self.valueSet = False
 
@@ -923,11 +982,22 @@ class Validator(ABC):
 
 class MultiDimensionMeta(type):
 
-	def __new__(cls, name: str, bases: tuple, attrs: dict,
-		dimensions: Union[int, Iterable[str]] = None,
-		separator: str = None, relativeDecorator: str = '%',
-		absoluteDecorator: str = 'px',
-		extend: bool = False):
+	def __new__(
+		mcs,
+		name: str,
+		bases: tuple,
+		attrs: dict,
+		dimensions: int | float | Iterable[int | float | DimensionType] = None,
+		separator: str = None,
+		relativeDecorator: str = None,
+		absoluteDecorator: str = None,
+		extend: bool = False
+	):
+		if absoluteDecorator is None:
+			absoluteDecorator = "px"
+		if relativeDecorator is None:
+			relativeDecorator = "%"
+
 		if separator is not None:
 			pass
 		elif separator is None and bases:
@@ -945,52 +1015,33 @@ class MultiDimensionMeta(type):
 		elif dimensions is None:
 			dimensions = []
 
+		# Example: for Size {'width': Dimension, 'height': Dimension(100, True)}
 		__dimensions__ = {d: NamedDimension(f'{name}.{d.title()}', i + 1, relativeDecorator, absoluteDecorator) for i, d in enumerate(dimensions)}
 		if extend:
 			__dimensions__ = {**[i for i in bases if hasattr(i, '__dimensions__')][0].__dimensions__, **__dimensions__}
-		# subClasses = list(__dimensions__._values())
 
-		# 	for s, item in __dimensions__.items():
-		# 		attrs[s] = property(makePropertyGetter(f'{item.__dimension__.value}'), makePropertySetter(f'{item.__dimension__.value}'))
 		if name != 'MultiDimension':
 			if '__annotations__' in attrs:
 				attrs['__annotations__'].update(__dimensions__)
 			else:
 				attrs['__annotations__'] = __dimensions__
 			attrs['__dimensions__'] = __dimensions__
+
+			# Adds the dimension classes to the class
+			attrs.update({camelCase(k): v for k, v in __dimensions__.items()})
+
 			for k, v in __dimensions__.items():
-				# attrs[k] = property(lambda cls: getattr(cls, f'__{k}'), lambda cls, value: getattr(cls, f'__{k}')._setValue(value))
 				attrs[k] = Validator(v)
-				# attrs[k] = property(lambda k: v.__value, lambda k, value: v._setValue(v, value))
-				# attrs[k] = property(makePropertyGetter(k), makePropertySetter(k))
 				attrs[k.title()] = v
+
 		attrs['__separator__'] = separator
+		attrs['__count__'] = len(__dimensions__)
 
-		def compressedSerialized(cls, dumper, obj):
-			return dumper.represent_str(", ".join(tuple(str(i) for i in obj.toTuple())))
-
-		def expandedSerialized(cls, dumper, obj):
-			return dumper.represent_dict(obj.toDict())
-
-		if True:  # config.getboolean(option='compress', section='', fallback=True):
-			attrs['__serialize__'] = compressedSerialized
-		else:
-			attrs['__serialize__'] = expandedSerialized
-
-		cls = type.__new__(cls, name, bases, attrs)
-		cls.__slots__ = tuple((*__dimensions__, *[f'__{i}' for i in __dimensions__]))
-		cls.cls = cls
-
-		# if name != 'MultiDimension':
-		# 	for k, v in __dimensions__.items():
-		# 		globals(k.title(), v)
-
-		# cls.__dimensions__ = {**{v.__dimension__.value: v for v in __dimensions__._values()}, **{v.__dimension__: v for v in __dimensions__._values()}, **__dimensions__}
-
-		# slots = [f'__d{i}'.upper() for i in range(1, len(dimensions) + 1)]
-		# cls.dimensions = tuple(dimensions)
-		# slotAnnotations = {k: v for k, v in zip(slots, cls.__dimensions__._values())}
-		return cls
+		mcs = type.__new__(mcs, name, bases, attrs)
+		mcs.__slots__ = tuple((*__dimensions__, *[f'__{i}' for i in __dimensions__]))
+		mcs.__match_args__ = tuple(__dimensions__.keys(), )
+		mcs.cls = mcs
+		return mcs
 
 	@staticmethod
 	def parseInt(dimensions) -> list[str]:
@@ -1008,8 +1059,15 @@ class MultiDimensionMeta(type):
 
 
 class MultiDimension(metaclass=MultiDimensionMeta):
+	__separator__: ClassVar[str]
+	__dimensions__: ClassVar[dict]
+	__count__: ClassVar[int]
 
-	def __init__(self, *V: Union[int, float, QPoint, QPointF, QSize, QSizeF, dict], absolute: bool = None, relative: bool = None, **kwargs):
+	def __init__(self,
+		*V: Union[int, float, QPoint, QPointF, QSize, QSizeF, dict],
+		absolute: bool = None,
+		relative: bool = None,
+		**kwargs):
 		if len(V) == 1:
 			V = V[0]
 		if isinstance(V, (int, float)):
@@ -1023,15 +1081,6 @@ class MultiDimension(metaclass=MultiDimensionMeta):
 		else:
 			V = list(V)
 
-		assert len(V) == len(self.__dimensions__), "Dimensions do not match"
-
-		# for i in range(1, len(self.__slots__) + 1):
-		# 	j = self.__dimensions__[i].__name__.split('.')[-1].lower()
-		# 	if j in kwargs:
-		# 		try:
-		# 			T[i] = kwargs[j]
-		# 		except IndexError:
-		# 			T.append(kwargs[j])
 		assumedAbsolute = Unset
 		if relative is None and absolute is None:
 			# if relative and absolute are both unset, infer from the _values
@@ -1054,31 +1103,6 @@ class MultiDimension(metaclass=MultiDimensionMeta):
 		elif absolute is not None:
 			pass
 
-		# n = len(self.__slots__)
-		# if isinstance(T, dict):
-		# 	if len(T) != n:
-		# 		raise ValueError(f'Expected {n} _values, got {len(T)}')
-		# 	for key, attrs in T.items():
-		# 		cls = self.__annotations__[key]
-		# 		setattr(self, f'__D{cls.__dimension__.value}', cls(**attrs))
-
-		# if len(T) == 1:
-		# 	T = T[0]
-		# 	if isinstance(T, (QPoint, QPointF, QSize, QSizeF)):
-		# 		T = T.toTuple()
-		# 	elif isinstance(T, (int, float)):
-		# 		T = (T, T)
-		# 	elif isinstance(T, (tuple, list)):
-		# 		if len(T) == 2:
-		# 			T = T
-		# 		else:
-		# 			raise ValueError(f'Expected a tuple of length {n}')
-		# 	else:
-		# 		raise ValueError(f'Expected a tuple of length {n}')
-		# elif len(T) == n:
-		# 	pass
-		# else:
-		# 	raise ValueError(f'Expected a tuple of length {n}')
 		annotations = [i for k, i in self.__annotations__.items() if k in self.__dimensions__]
 		for cls, t, s in zip(annotations, V, self.__slots__):
 			if isinstance(t, Dimension):
@@ -1090,16 +1114,9 @@ class MultiDimension(metaclass=MultiDimensionMeta):
 			value = cls(**t)
 			setattr(self, s, value)
 
-	# def __setattr__(self, key, value):
-	# 	if key in self.__slots__:
-	# 		super(MultiDimension, self).__setattr__(key, value)
-	# 	elif key in self.__annotations__:
-	# 		getattr(self, f'__{key}').value = float(value)
-	#
-	# def __getattr__(self, item):
-	# 	if item in self.__annotations__:
-	# 		item = f'__{item}'
-	# 	return super(MultiDimension, self).__getattribute__(item)
+	@classmethod
+	def representer(cls, dumper, data):
+		return dumper.represent_str(cls.__separator__.join(tuple(str(i) for i in data.toTuple())))
 
 	@property
 	def absolute(self) -> bool:
@@ -1143,27 +1160,27 @@ class MultiDimension(metaclass=MultiDimensionMeta):
 		for v, d in zip(V, self):
 			d.setAbsolute(v)
 
-	def toDict(self) -> dict[str, Union[int, float, bool]]:
-		value = {i.name.lower(): i.toDict() for i in self}
-		if sum(int(i['absolute']) for i in value.values()) in (len(self), 0):
-			result = {'absolute': self.absolute, **{i.name.lower(): i.value for i in self}}
-			if result['absolute'] == False:
-				result.pop('absolute')
-			return result
-		return value
-
 	def toTuple(self: DType) -> tuple[DType]:
 		return tuple(self)
 
+	def scoreSimilarity(self, other: DType) -> float:
+		if not isinstance(other, type(self)):
+			other = type(self)(other)
+		if len(self) != len(other):
+			return inf
+		return sum(abs(i - j) for i, j in zip(self, other))
+
+	def keys(self):
+		return self.__dimensions__.keys()
+
+	def values(self):
+		return {v: getattr(self, v) for v in self.__dimensions__}.values()
+
+	def items(self):
+		return {v: getattr(self, v) for v in self.__dimensions__}.items()
+
 	def __int__(self) -> int:
 		return int(self.size)
-
-	def __eq__(self, other) -> bool:
-		if not isinstance(other, MultiDimension):
-			return NotImplemented
-		relative = self.relative == other.relative
-		absolute = self.absolute == other.absolute
-		return tuple(self) == tuple(other) and relative and absolute
 
 	def __hash__(self) -> int:
 		return hash(tuple(self))
@@ -1177,24 +1194,20 @@ class MultiDimension(metaclass=MultiDimensionMeta):
 	def __iter__(self) -> Iterable:
 		return iter(getattr(self, v) for v in self.__dimensions__)
 
-	# @cached_property
-	# def _tuple(self) -> tuple[Dimension]:
-	# 	return tuple(getattr(self, d) for d in self.__dimensions__)
-
 	def __len__(self) -> int:
-		return 2
+		return type(self).__count__
 
 	def __wrapOther(self, other: Any) -> tuple[float]:
 		if isinstance(other, MultiDimension):
 			pass
 		elif isinstance(other, Iterable):
-			other = tuple(*other)
+			other = tuple(other)
 		elif isinstance(other, (QPoint, QPointF, QSize, QSizeF, QRect, QRectF)):
 			other = other.toTuple()
 		elif isinstance(other, (int, float)):
 			other = tuple(other)
 		elif isinstance(other, dict):
-			other = tuple(float(d) for d in self.values())
+			other = tuple(float(d) for d in other.values())
 		elif all(hasattr(other, dimension) for dimension in self.__dimensions__):
 			other = tuple(getattr(other, dimension) for dimension in self.__dimensions__)
 		s = len(self)
@@ -1254,6 +1267,8 @@ class MultiDimension(metaclass=MultiDimensionMeta):
 		return all(x <= y for x, y in zip(self, other))
 
 	def __eq__(self, other: 'MultiDimension') -> bool:
+		if isinstance(other, IgnoreOr):
+			return False
 		other = self.__wrapOther(other)
 		return all(x == y for x, y in zip(self, other))
 
@@ -1266,9 +1281,11 @@ class MultiDimension(metaclass=MultiDimensionMeta):
 
 
 class Size(MultiDimension, dimensions=('width', 'height'), separator='×'):
+	Width: ClassVar[NamedDimension]
+	Height: ClassVar[NamedDimension]
 
 	@overload
-	def __init__(self, width: float, height: float) -> None: ...
+	def __init__(self, width: float, height: float, **kwargs) -> None: ...
 
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
@@ -1321,6 +1338,14 @@ class Position(MultiDimension, dimensions=('x', 'y'), separator=', '):
 class Margins(MultiDimension, dimensions=('left', 'top', 'right', 'bottom'), separator=', '):
 	surface: _Panel
 	default: 'Margins'
+
+	@classmethod
+	def representer(cls, dumper, data):
+		if (defaults := getattr(data.surface, '__defaults__', {})) and (default := defaults.get('margins', None)):
+			nonDefaults = {k: v for i, (k, v) in enumerate(zip(data.__dimensions__, data)) if v != default[i]}
+			if len(nonDefaults) == len(data.__dimensions__) or nonDefaults:
+				return dumper.represent_dict(nonDefaults)
+		return dumper.represent_str(", ".join(tuple(str(i) for i in data.toTuple())))
 
 	@overload
 	def __init__(self, surface: _Panel, left: float, top: float, right: float, bottom: float) -> None:
@@ -1469,53 +1494,53 @@ class Margins(MultiDimension, dimensions=('left', 'top', 'right', 'bottom'), sep
 	def relativeLeft(self):
 		if self.left.relative:
 			return self.left.value
-		return self.surface.rect().width()*self.left.value
+		return self.left.toRelativeF(self.surface.rect().width())
 
 	@relativeLeft.setter
 	def relativeLeft(self, value):
 		if self.left.relative:
 			self.left = value
 		else:
-			self.left = value/self.surface.rect().width()
+			self.left = value*self.surface.rect().width()
 
 	@property
 	def relativeTop(self):
 		if self.top.relative:
 			return self.top.value
-		return self.surface.rect().height()*self.top.value
+		return self.top.toRelativeF(self.surface.rect().height())
 
 	@relativeTop.setter
 	def relativeTop(self, value):
 		if self.top.relative:
 			self.top = value
 		else:
-			self.top = value/self.surface.rect().height()
+			self.top = value*self.surface.rect().height()
 
 	@property
 	def relativeRight(self):
 		if self.right.relative:
 			return self.right.value
-		return self.surface.rect().width()*self.right.value
+		return self.right.toRelativeF(self.surface.rect().width())
 
 	@relativeRight.setter
 	def relativeRight(self, value):
 		if self.right.relative:
 			self.right = value
 		else:
-			self.right = value/self.surface.rect().width()
+			self.right = value*self.surface.rect().width()
 
 	@property
 	def relativeBottom(self):
 		if self.bottom.relative:
 			return self.bottom.value
-		return self.surface.rect().height()*self.bottom.value
+		return self.bottom.toRelativeF(self.surface.rect().height())
 
 	@relativeBottom.setter
 	def relativeBottom(self, value):
 		if self.bottom.relative:
 			self.bottom = value
 		else:
-			self.bottom = value/self.surface.rect().height()
+			self.bottom = value*self.surface.rect().height()
 
 	def absoluteValues(self, edges: List[Union[str, LocationFlag]] = LocationFlag.edges()) -> List[float]:
 		return self.__values(*edges)
@@ -1857,3 +1882,53 @@ def polygon_area(path: Union[QPolygonF, QPolygon, QPainterPath, list, tuple]) ->
 	correction = x[-1]*y[0] - y[-1]*x[0]
 	main_area = np.dot(x[:-1], y[1:]) - np.dot(y[:-1], x[1:])
 	return 0.5*np.abs(main_area + correction)
+
+
+def parseSize(value: str | float | int, default, dimension: DimensionType = DimensionType.height) -> Length | Size.Height:
+	match value:
+		case str(value):
+			unit = ''.join(re.findall(r'[^\d\.\,]+', value)).strip(' ')
+			match unit:
+				case 'cm':
+					value = Length.Centimeter(float(value.strip(unit)))
+					value.precision = 3
+					value.max = 10
+					return value
+				case 'mm':
+					value = Length.Millimeter(float(value.strip(unit)))
+					value.precision = 3
+					value.max = 10
+					return value
+				case 'in':
+					value = Length.Inch(float(value.strip(unit)))
+					value.precision = 3
+					value.max = 10
+					return value
+				case 'pt' | 'px':
+					if dimension == DimensionType.height:
+						return Size.Height(float(value.strip(unit)), absolute=True)
+					return Size.Width(float(value.strip(unit)), absolute=True)
+				case '%':
+					numericValue = float(value.strip(unit))/100
+					if dimension == DimensionType.height:
+						return Size.Height(numericValue, relative=True)
+					return Size.Width(numericValue, relative=True)
+				case _:
+					try:
+						if dimension == DimensionType.height:
+							return Size.Height(float(value), absolute=True)
+						return Size.Width(float(value), absolute=True)
+					except Exception as e:
+						log.error(e)
+						return default
+		case float(value) | int(value):
+			if value <= 1:
+				if dimension == DimensionType.height:
+					return Size.Height(value, relative=True)
+				return Size.Width(value, relative=True)
+			if dimension == DimensionType.height:
+				return Size.Height(value, absolute=True)
+			return Size.Width(value, absolute=True)
+		case _:
+			log.error(f'{value} is not a valid value for labelHeight.  Using default value of {default} for now.')
+			return default

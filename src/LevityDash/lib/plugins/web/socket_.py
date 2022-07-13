@@ -1,3 +1,4 @@
+import platform
 from json import JSONDecodeError, loads
 
 import asyncio
@@ -204,7 +205,8 @@ class UDPSocket(Socket):
 	def __init__(self, api: 'REST', address: Optional[str] = None, port: Optional[int] = None, *args, **kwargs):
 		super(UDPSocket, self).__init__(api=api, *args, **kwargs)
 		if address is None:
-			self.address = '0.0.0.0'
+			address = '0.0.0.0'
+		self.address = address
 		if port is not None:
 			self.port = port
 		self.protocol = BaseSocketProtocol(self.api)
@@ -216,4 +218,5 @@ class UDPSocket(Socket):
 	async def run(self):
 		self.log.info('Starting')
 		loop = asyncio.get_event_loop()
-		self.transport, self.protocol = await loop.create_datagram_endpoint(lambda: self.protocol, reuse_port=True, local_addr=(self.address, self.port))
+		reusePort = False if platform.system() == 'Windows' else True
+		self.transport, self.protocol = await loop.create_datagram_endpoint(lambda: self.protocol, reuse_port=reusePort, local_addr=(self.address, self.port))

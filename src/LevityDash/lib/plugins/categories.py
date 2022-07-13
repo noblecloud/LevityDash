@@ -1,16 +1,18 @@
 import re
-from collections import ChainMap
+from collections import ChainMap, Counter
 from datetime import datetime
 from functools import cached_property, lru_cache
-from typing import Any, Callable, ClassVar, Dict, Hashable, Iterable, Mapping, Optional, TypeVar, Union
+from typing import Any, Callable, ClassVar, Dict, Hashable, Iterable, Mapping, Optional, TypeVar, Union, Type
 
 from rich import repr
+from rich.text import Text
 from pytz import timezone
 
 from LevityDash.lib.plugins.utils import SchemaProperty, unitDict
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.utils.shared import (clearCacheAttr, ColorStr, get, getOrSet, LOCAL_TIMEZONE, matchWildCard, operatorDict,
                                          removeSimilar, subsequenceCheck, Unset)
+from WeatherUnits import Measurement
 
 log = LevityPluginLog.getChild('Categories')
 
@@ -110,7 +112,7 @@ class UnitMetaData(dict):
 		return hash(self.key)
 
 	def __findSimilar(self, key: 'CategoryItem'):
-		from plugins.schema import Schema
+		from LevityDash.lib.plugins.schema import Schema
 		return Schema.getFromAll(key, None)
 
 	def findProperties(self, source: 'Schema', data: dict):
@@ -164,10 +166,6 @@ class UnitMetaData(dict):
 				if isinstance(format, dict):
 					format = format[source.dataName]
 				return lambda value: datetime.strptime(value, format).astimezone(LOCAL_TIMEZONE)
-		if typeString == 'icon':
-			if self['iconType'] == 'glyph':
-				alias = self['alias']
-				return lambda value: alias.get(str(value), value)
 		if isinstance(unitDef, str) and unitDef in unitDict:
 			return lambda value: unitDict[unitDef](value, **kwargs)
 		if isinstance(unitDef, str) and '[' in unitDef:
@@ -198,6 +196,29 @@ class UnitMetaData(dict):
 
 		return lambda value: value
 
+	@lru_cache(maxsize=64)
+	def mapAlias(self, value: Any) -> Any:
+		typeString = self.get('type', None)
+		if not self.hasAliases:
+			if typeString == 'icon':
+				log.warning(f'No aliases found for {self.key}.  A mapping of icons must be provided in the schema.')
+			else:
+				log.warning(f'No aliases found for {self.key}')
+			return value
+		alias = self['alias']
+		try:
+			value = self.aliasDataType(value)
+		except ValueError:
+			pass
+		return alias.get(value, value)
+
+	@cached_property
+	def aliasDataType(self) -> Type:
+		aliasDict = self.get('alias', None)
+		allTypes = set(type(i) for i in aliasDict)
+		typeList = [type(i) for i in aliasDict]
+		return max(((i, typeList.count(i)) for i in allTypes), key=lambda i: i[1], default=(str, 0))[0]
+
 	def findValue(self, data: dict) -> Any:
 		keys = list(set(data.keys()) & self.dataKeys)
 		match len(keys):
@@ -207,7 +228,7 @@ class UnitMetaData(dict):
 				return data[keys[0]]
 
 	def validate(self, data: 'Subdatagram', key: Union[str, 'CategoryItem', Hashable] = Unset, value: Any = Unset) -> bool:
-		log.verbose(f'Validating {self.key.name}')
+		log.verbose(f'Validating {self.key.name}', verbosity=4)
 
 		def isValid(validation) -> bool:
 			return all(v for k, v in validation.items() if '.' not in k)
@@ -231,7 +252,7 @@ class UnitMetaData(dict):
 					validation['KeyFound.MultipleKeys'] = keys
 
 		if (required := self.get('requires', False)) and isValid(validation):
-			log.verbose('Checking requirements...')
+			log.verbose('Checking requirements...', verbosity=4)
 			if isinstance(required, str):
 				other = data.schema.get(required)
 				validation['MeetsRequirements'] = True if self.testValidationLoop(other) and other.validate(data) else False
@@ -258,30 +279,20 @@ class UnitMetaData(dict):
 							results.append(Requirement(operator=op, lhs=otherValue, lhsName=requirementKey.name, rhs=compare, rhsName=None, negated=localNegate))
 						requirementValidation[requirementKey] = results
 
-					# # is
-					# if compare := get(requirements, op.is_, isinstance, 'isinstance', 'is', 'is an', False):
-					# 	if not isinstance(compare, type):
-					# 		compare = type(compare)
-					# 	requirementValidation[f'{requirementKey}.is'] = Requirement(result=op.is_(compare, otherValue) != negate, value=compare)
-					# # is not
-					# if compare := get(requirements, op.is_not, not isinstance, 'not isinstance', 'is not', 'is not an', False):
-					# 	if not isinstance(compare, type):
-					# 		compare = type(compare)
-					# 	requirementValidation[f'{requirementKey}.is not'] = Requirement(result=op.is_not(compare, otherValue) != negate, value=compare)
 					else:
 						requirementValidation[requirementKey] = {'valid': [False]}
 				failures = [i for j in [v for k, v in requirementValidation.items() if not all(v)] for i in j]
 				report = self.__genReport(requirementValidation)
 				if failures:
 					if get(required, 'verbose', default=False) or not get(required, 'quiet', 'silent', 'silently', default=False):
-						log.debug(report)
+						log.verbose(report, verbosity=5)
 					else:
-						log.verbose(report)
+						log.verbose(report, verbosity=5)
 					validation['MeetsRequirements'] = False
 					validation['MeetsRequirements.Missing'] = failures
 				else:
 					validation['MeetsRequirements'] = True
-					log.verbose(report)
+					log.verbose(report, verbosity=4)
 			else:
 				raise TypeError(f'{self} requires must be a string, list, tuple, or dict')
 
@@ -345,7 +356,7 @@ class UnitMetaData(dict):
 
 	@property
 	def abbreviation(self):
-		return self.get('abbreviation', None)
+		return self.get('aliases', None)
 
 	@property
 	def display(self):
@@ -392,17 +403,19 @@ class UnitMetaData(dict):
 			raise TypeError(f'Requirements for UnitMetaData must be a string, list or tuple of keys, or mapping of value/operation pairs')
 		return frozenset(requires)
 
+	@cached_property
+	def hasAliases(self) -> bool:
+		return 'alias' in self
+
 
 class CategoryWildcard(str):
-	__knownWildcards: ClassVar[set[str]] = set()
+	__knownWildcards: ClassVar[Dict[str, 'CategoryWildcard']] = dict()
 
 	def __new__(cls, value: str):
 		if len(value) > 1:
 			value = f'*{value.strip("*")}*'
-		if value in cls.__knownWildcards:
-			return cls.__knownWildcards[value]
-		value = super().__new__(cls, value)
-		cls.__knownWildcards.add(value)
+		if (value := cls.__knownWildcards.get(value, None)) is None:
+			value = cls.__knownWildcards[value] = super().__new__(cls, value)
 		return value
 
 	def __str__(self):
@@ -421,15 +434,15 @@ class CategoryWildcard(str):
 
 	@classmethod
 	def addWildcard(cls, wildcard: str):
-		cls.__knownWildcards.add(CategoryWildcard(wildcard))
+		cls.__knownWildcards[str(wildcard)] = CategoryWildcard(wildcard)
 
 	@classmethod
 	def regexMatchPattern(cls) -> str:
 		return rf'{"|".join(cls.__knownWildcards)}'
 
 	@classmethod
-	def contains(cls, item):
-		return item in cls.__knownWildcards
+	def contains(cls, item: str) -> bool:
+		return item in cls.__knownWildcards or item in cls.__knownWildcards.items()
 
 
 CategoryWildcard.addWildcard('*')
@@ -452,6 +465,7 @@ class CategoryAtom(str):
 		return str.__hash__(self)
 
 
+# Section CategoryItem
 class CategoryItem(tuple):
 	__separator: str = '.'
 	__source: Optional[Hashable]
@@ -522,15 +536,14 @@ class CategoryItem(tuple):
 
 	@property
 	def name(self) -> str:
-		if len(self) == 0:
+		values = tuple(self)
+		if len(values) == 0:
 			return ''
-		elif len(self) == 1:
-			return self[0]
-		elif len(self) == 2:
-			return self[1]
+		if len(values) <= 2:
+			return str(values[-1])
 		else:
-			name = str(self[1])
-			for item in self[2:]:
+			name = str(values[1])
+			for item in values[2:]:
 				if item == '*' or item.lower() in name.lower():
 					continue
 				name += item.title()
@@ -560,6 +573,24 @@ class CategoryItem(tuple):
 		else:
 			return '.'
 
+	def __rich_repr__(self) -> repr.Result:
+		yield 'name', self.name
+		yield 'key', str(self)
+		if len(self) > 1:
+			yield 'domain', str(self[0])
+		if len(self) > 2:
+			yield 'category', str(self[1])
+		if len(self) > 3:
+			yield 'key', tuple(str(i) for i in self[1:-1])
+		if (source := self.source) is not None:
+			yield 'source', source
+		if self.hasWildcard:
+			yield 'wildcard', True
+			if vars := self.vars:
+				yield 'vars', vars
+		if self.isAnonymous:
+			yield 'anonymous', True
+
 	def __contains__(self, item):
 		if self.isRoot:
 			return True
@@ -586,8 +617,17 @@ class CategoryItem(tuple):
 		return subsequenceCheck(list(self)[:m], list(other)[:m])
 
 	def __eq__(self, other):
+		if isinstance(other, str):
+			nameMatch = self.name == other
+			exactMatch = str(self) == other
+			if nameMatch or exactMatch:
+				return True
 		if not isinstance(other, CategoryItem) and isinstance(other, (str, list, tuple, set, frozenset)):
 			other = CategoryItem(other)
+		elif other is None:
+			return False
+		if not isinstance(other, type(self)):
+			return False
 		if self.isRoot or other.isRoot:
 			return False
 		if self.hasWildcard or other.hasWildcard:
@@ -1146,40 +1186,4 @@ class ValueNotFound(Exception):
 	pass
 
 
-class NewCatDict(ChainMap):
-
-	def __init__(self, *args, **kwargs):
-		args = list(args)
-		dicts = [args.pop(i) for i, item in enumerate(list(args)) if isinstance(item, dict)]
-		super(NewCatDict, self).__init__(*args, **kwargs)
-		for d in dicts:
-			self.update(d)
-
-	def __setitem__(self, key, value):
-		key = CategoryItem(key)
-		if len(key) == 1:
-			ChainMap.__setitem__(self, key, value)
-		else:
-			if key[0] not in self:
-				self[key[0]] = NewCatDict()
-			ChainMap.__getitem__(self, key[0]).__setitem__(key[1:], value)
-
-	def __getitem__(self, item):
-		key = CategoryItem(item)
-		if len(key) == 1:
-			return ChainMap.__getitem__(self, key)
-		else:
-			if key[0] not in self:
-				raise KeyError(key)
-			return ChainMap.__getitem__(self, key[0]).__getitem__(key[1:])
-
-	@property
-	def default(self):
-		return {k: v for k, v in self.items() if not isinstance(v, NewCatDict)}
-
-	def update(self, data: dict):
-		for key, value in data.items():
-			self[key] = value
-
-
-__all__ = ['CategoryDict', 'CategoryEndpointDict', 'SubCategory', 'ValueNotFound', 'NewCatDict']
+__all__ = ['CategoryDict', 'CategoryEndpointDict', 'SubCategory', 'ValueNotFound', 'UnitMetaData']

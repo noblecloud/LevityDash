@@ -606,6 +606,7 @@ class Schema(CategoryDict):
 		self.dataMaps = source.pop('dataMaps', {})
 		self.calculations = source.pop('calculations', {})
 		self.aliases = source.pop('aliases', {})
+		super(Schema, self).__init__(None, source, category)
 		if ignored is not None:
 			self._ignored.update(ignored)
 

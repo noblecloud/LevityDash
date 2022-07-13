@@ -1,4 +1,3 @@
-from LevityDash.lib.Geometry import Geometry, log
 from functools import cached_property
 from math import sqrt
 from typing import Iterable, List, Optional, overload, Union
@@ -8,9 +7,10 @@ from math import ceil, floor
 from PySide2.QtCore import QObject, QPoint, QPointF, QRectF, Signal
 from PySide2.QtWidgets import QGraphicsItem, QGraphicsRectItem, QGraphicsScene, QWidget
 
+from ..Geometry import Geometry
 from LevityDash.lib.utils.shared import clearCacheAttr
 from LevityDash.lib.utils.geometry import GridItemPosition, GridItemSize, MultiDimension, Position
-from LevityDash.lib.Geometry.utils import GridItem
+from .utils import GridItem
 
 __all__ = ['Grid', 'GridItems', 'GridItem']
 
@@ -30,9 +30,9 @@ class GridOverFlow:
 			vertical = kwargs['vertical']
 			horizontal = kwargs['horizontal']
 
-		elif isinstance(args[0], GridOverFlow):
-			vertical = args[0].vertical
-			horizontal = args[0].horizontal
+		# elif isinstance(args[0], GridOverFlow):
+		# 	vertical = args[0].vertical
+		# 	horizontal = args[0].horizontal
 		elif len(args) == 1:
 			vertical = args[0]
 			horizontal = args[0]
