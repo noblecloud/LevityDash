@@ -45,7 +45,7 @@ def init_app():
 	qasync.QApplication.setWindowIcon(icon)
 	qasync.QApplication.setApplicationName('LevityDash')
 	qasync.QApplication.setApplicationDisplayName('LevityDash')
-	qasync.QApplication.setApplicationVersion('0.1.0-beta.7')
+	qasync.QApplication.setApplicationVersion('0.1.0-beta.8')
 	qasync.QApplication.setOrganizationName('LevityDash')
 	qasync.QApplication.setOrganizationDomain('LevityDash.app')
 
