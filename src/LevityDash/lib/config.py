@@ -1,14 +1,23 @@
 import os
+import platform
 import re
-from configparser import ConfigParser
+from configparser import ConfigParser, SectionProxy, ParsingError
+from datetime import timedelta
 from functools import cached_property
+from logging import getLogger, Logger
 from pathlib import Path, PosixPath, PurePath
-from shutil import copy, copytree
-from typing import Union
+from re import search
+from shutil import copytree
+from typing import Union, Callable, Any, ClassVar
 
+from PySide2.QtCore import Qt
+from PySide2.QtWidgets import QInputDialog, QWidget, QMessageBox, QLineEdit
 from pytz import timezone
+from qasync import QApplication
 
-from . import EasyPath as EasyPath
+from .EasyPath import EasyPathFile, EasyPath
+
+_backupLogger = getLogger('LevityConfig')
 
 
 def buildDirectories(path: Path, dirs: Union[list, str, dict[str, Union[str, list]]]) -> None:
@@ -41,18 +50,22 @@ def buildDirectories(path: Path, dirs: Union[list, str, dict[str, Union[str, lis
 
 unsetConfig = object()
 
+DATETIME_NO_ZERO_CHAR = '#' if platform.system() == 'Windows' else '-'
+
 
 def guessLocation() -> tuple[str, str, str]:
 	from LevityDash.lib.utils.shared import simpleRequest
 
 	location = simpleRequest('https://ipapi.co/json/')
 
+	from LevityDash.lib.log import LevityLogger as log
 	log.info(f'Location fetched from IP: {location["city"]}, {location["region"]}, {location["country"]}, lat: {location["latitude"]},  lon: {location["longitude"]}')
 	return location['latitude'], location['longitude'], location['timezone']
 
 
 class LevityConfig(ConfigParser):
 	fileName: str
+	_log: ClassVar[Logger] = _backupLogger
 
 	def __init__(self, *args, **kwargs):
 		path = getattr(self, 'fileName', None) or kwargs.pop('fileName', None) or kwargs.pop('path', None) or None
@@ -64,26 +77,110 @@ class LevityConfig(ConfigParser):
 
 		userPath = Path(dirs.user_config_dir)
 		if not userPath.exists():
-			# log.info(f'Creating user config directory: {userPath}')
+			self.log.info(f'Creating user config directory: {userPath}')
 			copytree(self.rootPath['example-config'].path, userPath)
 
 		self.userPath = userPath
 
 		if path is not None:
 			self.path = self.userPath[path]
-			if not self.path.exists():
-				example = self.rootPath[self.exampleFileName]
-				if not example.exists():
-					raise FileNotFoundError(f'Example file not found: {example}')
-				copy(example, self.path)
 			self.read(self.path.path)
-		elif configSection is not None:
-			self.read_dict({'Config': dict(configSection)})
+
+		for sectionName, section in self._sections.items():
+			if (enabled := section.get('enabled', None)) is not None and enabled.startswith('@ask'):
+				enabled = self.askValue(enabled)
+				section['enabled'] = str(enabled)
+				self.save()
+			if enabled is not None and not enabled:
+				continue
+			for key, value in section.items():
+				if value and str(value).startswith('@ask'):
+					value = self.askValue(value)
+					section[key] = str(value)
+					self.save()
+
+	def askValue(self, value: str):
+		value = re.search(r'@(?P<action>\w+)(\((?P<options>(?P<type>\w+)(:(?P<value>.*?))?)\))?(\.message\((?P<message>.+?)\))?', value)
+		if (value_ := value.groupdict() if value is not None else None) is None:
+			raise ParsingError
+		elif 'action' in value_:
+			value = value_
+			del value_
+		else:
+			raise KeyError
+		match value['action']:
+			case 'ask':
+				askType = 'askInput'
+			case 'askChoose':
+				askType = 'askChoose'
+			case _:
+				askType = 'askInput'
+		valueType = value['type']
+		match valueType:
+			case None:
+				raise TypeError
+			case 'bool':
+				valueType = bool
+			case 'str':
+				valueType = str
+			case 'int':
+				valueType = int
+			case 'float':
+				valueType = float
+		message = value['message']
+		if askType == 'askChoose':
+			choices = value['value']
+			choices = re.findall(r'\w+', choices)
+		elif (default := value['value']) is not None:
+			choices = [default]
+		else:
+			choices = None
+		windowFlags = Qt.WindowFlags(Qt.ActiveWindowFocusReason | Qt.WA_AlwaysStackOnTop)
+		if askType == 'askInput':
+			message = message or ''
+			default = choices[0] if choices is not None else ''
+			if valueType is bool:
+				default = default.lower() in ('true', 't', '1', 'y', 'yes')
+				result = QMessageBox(QWidget(), flags=windowFlags).question(QWidget(),
+					self.path.name,
+					message,
+					QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes if default else QMessageBox.No,
+				) == QMessageBox.Yes
+				return result
+			if valueType is str:
+				return QInputDialog.getText(QWidget(), self.path.name, message, QLineEdit.Normal, default)[0]
+			if valueType is int:
+				try:
+					default = int(default)
+				except ValueError:
+					pass
+				return QInputDialog.getInt(QWidget(), self.path.name, message, default)[0]
+			if valueType is float:
+				try:
+					default = float(default)
+				except ValueError:
+					pass
+				return QInputDialog.getDouble(QWidget(), self.path.name, message, default)[0]
+		elif askType == 'askChoose':
+			message = message or ''
+			if choices is not None:
+				return QInputDialog.getItem(QWidget(), self.path.name, message, choices, 0, 'custom' in choices)[0]
+
+		print(value)
+
+	@classmethod
+	@property
+	def log(cls):
+		return getattr(cls, '_log', None)
+
+	@classmethod
+	def setLogger(cls, value):
+		cls._log = value
 
 	@cached_property
-	def rootPath(self) -> EasyPath.EasyPath:
+	def rootPath(self) -> EasyPath:
 		from LevityDash import __lib__
-		return EasyPath.EasyPath(__lib__.parent)
+		return EasyPath(__lib__.parent)
 
 	def save(self):
 		with self.path.path.open('w') as f:
@@ -96,10 +193,10 @@ class LevityConfig(ConfigParser):
 	@userPath.setter
 	def userPath(self, value):
 		match value:
-			case EasyPath.EasyPath():
+			case EasyPath():
 				pass
 			case str() | Path() | PosixPath() | PurePath():
-				value = EasyPath.EasyPath(value)
+				value = EasyPath(value)
 			case _:
 				from LevityDash.lib.log import LevityUtilsLog as log
 				log = log.getChild('config')
@@ -112,6 +209,111 @@ class LevityConfig(ConfigParser):
 			raise FileNotFoundError(f'{value} does not exist')
 		self.__userPath = value
 
+	def getOrSet(self, section: str, key: str, default: str, getter: Callable | None = None) -> str:
+		try:
+			section = self[section]
+		except KeyError:
+			self.add_section(section)
+
+		if getter == self.getboolean:
+			if (value := section.getboolean(key)) is None:
+				section[key] = str(default)
+				self.save()
+				return default
+			return value
+		elif getter == self.getint:
+			if (value := section.getint(key)) is None:
+				section[key] = str(default)
+				self.save()
+				return default
+			return value
+		elif getter == self.getfloat:
+			if (value := section.getfloat(key)) is None:
+				section[key] = f'{default:g}'
+				self.save()
+				return default
+			return value
+
+		try:
+			value = section[key]
+		except KeyError:
+			section[key] = value = str(default)
+			self.save()
+		if getter is not None:
+			return getter(value)
+		return value
+
+	@staticmethod
+	def configToFileSize(value: str) -> int | float:
+		if value.isdigit():
+			return int(value)
+
+		_val = search(r'\d+', value)
+		if _val is None:
+			raise AttributeError(f"{value} is not a valid file size")
+		else:
+			_val = _val.group(0)
+		unit = value[len(_val):].lower()
+		_val = float(_val)
+
+		match unit:
+			case 'b' | 'byte' | 'bytes':
+				return int(_val)
+			case 'k' | 'kb' | 'kilobyte' | 'kilobytes':
+				return _val*1024
+			case 'm' | 'mb' | 'megabyte' | 'megabytes':
+				return _val*1024 ** 2
+			case 'g' | 'gb' | 'gigabyte' | 'gigabytes':
+				return _val*1024 ** 3
+			case '_val' | 'tb' | 'terabyte' | 'terabytes':
+				return _val*1024 ** 4
+			case _:
+				raise AttributeError(f'Unable to parse maxSize: {value}')
+
+	@staticmethod
+	def configToTimeDelta(value: str) -> timedelta:
+		if value.isdigit():
+			return timedelta(seconds=int(value))
+		elif value.startswith("{") and value.endswith("}"):
+			value = LevityConfig.strToDict(value)
+			return timedelta(**value)
+
+		_val = search(r'\d+', value)
+		if _val is None:
+			raise AttributeError(f"{value} is not a valid file size")
+		else:
+			_val = _val.group(0)
+		unit = value[len(_val):].strip(' ')
+		_val = float(_val)
+		match unit:
+			case 's' | 'sec' | 'second' | 'seconds':
+				return timedelta(seconds=_val)
+			case 'm' | 'min' | 'minute' | 'minutes':
+				return timedelta(minutes=_val)
+			case 'h' | 'hour' | 'hours':
+				return timedelta(hours=_val)
+			case 'd' | 'day' | 'days':
+				return timedelta(days=_val)
+			case 'w' | 'week' | 'weeks':
+				return timedelta(weeks=_val)
+			case 'mo' | 'month' | 'months':
+				return timedelta(days=_val*30)
+			case 'y' | 'year' | 'years':
+				return timedelta(days=_val*365)
+			case _:
+				raise AttributeError(f'Unable to parse maxSize: {value}')
+
+	@staticmethod
+	def strToDict(value: str) -> dict:
+		def parse(_value):
+			if _value.startswith('{') and _value.endswith('}'):
+				_value = _value.strip('{}').split(',')
+				return {k.strip(' "\''): float(v.strip(' "\'')) for k, v in map(lambda x: x.split(':'), _value)}
+			else:
+				return _value
+
+		return parse(value)
+
 
 class PluginsConfig(LevityConfig):
 	fileName: str = 'plugins/plugins.ini'
@@ -120,6 +322,8 @@ class PluginsConfig(LevityConfig):
 	def enabledPlugins(self):
 		enabled = set()
 		for plugin in self.sections():
+			if plugin == 'Options':
+				continue
 			if self[plugin].getboolean('enabled'):
 				enabled.add(plugin)
 		for name, plugin in self.userConfigs.items():
@@ -136,7 +340,6 @@ class PluginsConfig(LevityConfig):
 	def userConfigs(self):
 		configsDir = self.userPath['plugins'].asDict(depth=3)
 		result = {}
-		# x = {name: LevityConfig(path=pluginDir['config.ini'].path if isinstance(pluginDir, dict) else LevityConfig(path=pluginDir.path)) for name, pluginDir in configsDir.items() if 'config.ini' in pluginDir or '.ini' in name}
 		for name, pluginDir in configsDir.items():
 			if '.ini' in name and name != 'plugins.ini':
 				result[name.strip('.ini')] = LevityConfig(path=pluginDir.path)
@@ -146,7 +349,7 @@ class PluginsConfig(LevityConfig):
 		return result
 
 	@property
-	def userPlugins(self) -> dict[str, dict[str, EasyPath.EasyPath] | EasyPath.EasyPathFile]:
+	def userPlugins(self) -> dict[str, dict[str, EasyPath] | EasyPathFile]:
 		pluginsDir = self.userPath['plugins'].asDict(depth=1)
 		result = {}
 
@@ -159,7 +362,7 @@ class PluginsConfig(LevityConfig):
 		return result
 
 	@property
-	def userPluginsDir(self) -> EasyPath.EasyPath:
+	def userPluginsDir(self) -> EasyPath:
 		return self.userPath['plugins']
 
 
@@ -189,14 +392,9 @@ class PluginConfig(LevityConfig):
 			self.log.critical(f'No value for {key} in config for {self.__plugin.name}')
 		elif value is unsetConfig:
 			raise KeyError
-		return self.__parseValue(value)
-
-	def __getattr__(self, item):
-		if item != '_defaults':
-			validKeys = super(PluginConfig, self).defaults()
-			if item in validKeys:
-				return self[item]
-		return super(PluginConfig, self).__getattribute__(item)
+		if isinstance(value, str):
+			return self.__parseValue(value)
+		return value
 
 	def __contains__(self, key):
 		return key in self.sections() or key in self.defaults()
@@ -217,6 +415,20 @@ class PluginConfig(LevityConfig):
 	def __repr__(self):
 		return f'<PluginConfig: {self.plugin.name} {"✅" if self["enabled"] else "❌"}>'
 
+	def validate(self, key: str):
+		# TODO: Finish this
+		try:
+			value = self[self.default_section][key]
+		except KeyError:
+			value = unsetConfig
+		if value is unsetConfig or value == '':
+			value = ''
+			from rich.prompt import Prompt
+			while value == '':
+				value = Prompt.ask(f'{self.__plugin.name} requires \'{key}\' to continue.  Please enter a value.\n{key}')
+			self[self.default_section][key] = value
+			self.save()
+
 	@cached_property
 	def defaultFor(self):
 		if 'defaultFor' in self.defaults():
@@ -230,9 +442,6 @@ class PluginConfig(LevityConfig):
 
 class Config(LevityConfig):
 	fileName: str = 'config.ini'
-
-	def __init__(self, *args, **kwargs):
-		super(Config, self).__init__(*args, **kwargs)
 
 	@cached_property
 	def plugins(self):
@@ -280,8 +489,10 @@ class Config(LevityConfig):
 		return self.loc[1]
 
 	@property
-	def dashboardPath(self) -> Path:
+	def dashboardPath(self) -> Path | None:
 		path = self['Display']['dashboard']
+		if not path:
+			return None
 		userSaves = self.userPath['saves']['dashboards']
 		if path in userSaves:
 			return userSaves[path].path.absolute()
@@ -292,10 +503,9 @@ class Config(LevityConfig):
 		userSaves = self.userPath['saves']['dashboards'].path
 		if str(path.absolute()).startswith(str(userSaves)):
 			path = path.relative_to(userSaves)
-		self['Display']['dashboard'] = path
+		self['Display']['dashboard'] = str(path)
 		with open(self.path.path, 'w') as f:
 			self.write(f)
-
 
 userConfig = Config()
 pluginConfig = userConfig.plugins
