@@ -25,15 +25,28 @@ class AuthType(Enum):
 		return AuthType.NONE
 
 
-@repr.auto
 @dataclass
 class Auth:
-	authType: AuthType = field(default=AuthType.NONE, repr=True, compare=True, hash=True)
-	authData: Dict[str, str] = field(default_factory=dict, repr=True, compare=True, hash=True)
+	authType: AuthType = field(default=AuthType.NONE, hash=True)
+	authData: Dict[str, str] = field(default_factory=dict, hash=True)
 
 	@property
 	def vars(self):
 		return {i for i in self.authData.values() if isinstance(i, str) and i.startswith('@')}
+
+	def __repr__(self):
+		data = {k: self.__obfuscateSensitiveData(v) for k, v in self.authData.items()}
+		return f'Auth({self.authType.name}, data={data})'
+
+	def __str__(self):
+		return repr(self)
+
+	@staticmethod
+	def __obfuscateSensitiveData(value: str):
+		if len(value) > 8:
+			return value[:4] + '...' + value[-4:]
+		else:
+			return hash(value)
 
 
 class URLsMeta(type):
