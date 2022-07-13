@@ -10,7 +10,8 @@ from bleak.backends.device import BLEDevice
 
 from LevityDash.lib.log import LevityPluginLog
 
-from LevityDash.lib.plugins.plugin import Plugin, ScheduledEvent
+from LevityDash.lib.plugins.plugin import Plugin
+from LevityDash.lib.plugins.utils import ScheduledEvent
 from LevityDash.lib.plugins.schema import LevityDatagram, Schema, SchemaSpecialKeys as tsk
 from LevityDash.lib.utils.shared import getOr, now
 
@@ -76,10 +77,10 @@ class Govee(Plugin, realtime=True, logged=True):
 	schema: Schema = {
 		'timestamp':                      {'type': 'datetime', 'sourceUnit': 'epoch', 'title': 'Time', 'sourceKey': 'timestamp', tsk.metaData: True},
 		'indoor.temperature.temperature': {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Temperature', 'sourceKey': 'temperature'},
-		'indoor.temperature.dewpoint':    {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Dewpoint', 'sourceKey': 'dewpoint'},
+		'indoor.temperature.dewpoint':    {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Dew Point', 'sourceKey': 'dewpoint'},
 		'indoor.temperature.heatIndex':   {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Heat Index', 'sourceKey': 'heatIndex'},
-		'indoor.humidity.humidity':       {'type': 'humidity', 'sourceUnit': '%', 'title': 'Humidity', 'sourceKey': 'humidity'},
-		'indoor.@deviceName.battery':     {'type': 'battery', 'sourceUnit': '%%', 'title': 'Battery', 'sourceKey': 'battery'},
+		'indoor.humidity.humidity':       {'type': 'humidity', 'sourceUnit': '%h', 'title': 'Humidity', 'sourceKey': 'humidity'},
+		'indoor.@deviceName.battery':     {'type': 'battery', 'sourceUnit': '%bat', 'title': 'Battery', 'sourceKey': 'battery'},
 		'indoor.@deviceName.rssi':        {'type': 'rssi', 'sourceUnit': 'rssi', 'title': 'Signal', 'sourceKey': 'rssi'},
 		'@type':                          {'sourceKey': 'type', tsk.metaData: True, tsk.sourceData: True},
 		'@deviceName':                    {'sourceKey': 'deviceName', tsk.metaData: True, tsk.sourceData: True},
@@ -93,11 +94,10 @@ class Govee(Plugin, realtime=True, logged=True):
 		}
 	}
 
-	__device: BLEDevice
-
 	def __init__(self):
 		super().__init__()
-		self.__enabled = False
+		self.historicalTimer: ScheduledEvent | None = None
+		self.scannerTask = None
 		try:
 			self.__readConfig()
 		except Exception as e:
@@ -118,20 +118,30 @@ class Govee(Plugin, realtime=True, logged=True):
 				self.scanner = BleakScanner()
 
 				while device is None:
+					scanTime = min(5*max(__scanAttempts, 1), 60)
 					try:
-						device = await self.__discoverDevice(deviceConfig)
+						pluginLog.info(f"Scanning for Govee devices for {scanTime} seconds")
+						device = await self.__discoverDevice(deviceConfig, timeout=scanTime)
 					except NoDevice:
 						__scanAttempts += 1
 						if __scanAttempts > 10:
-							raise NoDevice(f'No device found after {__scanAttempts} attempts')
-						pluginLog.warning(f"Unable to find device matching config {deviceConfig}... Retrying in 30 seconds")
-						await asyncio.sleep(30)
+							raise NoDevice(f'No device found after scanning for {scanTime} and {__scanAttempts} attempts')
+						pluginLog.warning(f"Unable to find device matching config {deviceConfig} after scanning for {scanTime}...")
+					except RuntimeError:
+						__scanAttempts += 1
+						if __scanAttempts > 10:
+							raise NoDevice(f'No device found after scanning for {scanTime} and {__scanAttempts} attempts')
+						pluginLog.warning(f"Unable to find device matching config {deviceConfig} after scanning for {scanTime}...")
 
 				self.scanner._service_uuids = tuple(device.metadata['uuids'])
-				self.name = f'GoveeBLE [{device.name}]'
-				self.config['device.name'] = device.name
-				self.config['device.uuid'] = f"{', '.join(device.metadata['uuids'])}"
-				self.config._parser.save()
+				name = f'GoveeBLE [{device.name}]'
+				self.name = name
+				self.config[name]['device.name'] = str(device.name)
+				self.config[name]['device.uuid'] = f"{', '.join(device.metadata['uuids'])}"
+				self.config.defaults().pop('device.id', None)
+				self.config.defaults().pop('device.mac', None)
+				self.config.defaults().pop('device.model', None)
+				self.config.save()
 		self.scanner.register_detection_callback(self.__dataParse)
 		pluginLog.info(f'{self.name} initialized for device {device}')
 
@@ -164,26 +174,26 @@ class Govee(Plugin, realtime=True, logged=True):
 
 		return pluginConfig
 
-	def __varifyDeviceID(self, deviceID: str) -> bool:
+	@staticmethod
+	def __varifyDeviceID(deviceID: str) -> bool:
 		reMac = r'((?:(\d{1,2}|[a-fA-F]{1,2}){2})(?::|-*)){6}'
 		reUUID = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}'
 		return bool(re.match(reMac, deviceID) or re.match(reUUID, deviceID))
 
 	@staticmethod
 	def __readDeviceConfig(config):
-		deviceConfig = {}
-		deviceConfig['id'] = getOr(config, 'device.id', 'device.address', 'device.uuid', 'id', 'device', expectedType=str, default=None)
-		deviceConfig['model'] = getOr(config, 'model', 'device.model', 'type', 'device.type', expectedType=str, default=None)
+		deviceConfig = {
+			"id":    getOr(config, "device.id", "device.address", "device.uuid", "id", "device", expectedType=str, default=None),
+			"model": getOr(config, "model", "device.model", "type", "device.type", expectedType=str, default=None),
+		}
 		return {k: v for k, v in deviceConfig.items() if v is not None}
 
 	def start(self):
-		self.__enabled = True
 		pluginLog.debug(f'{self.name} starting...')
 		asyncio.create_task(self.run())
-		pluginLog.info(f'{self.name} started!')
-		self.historicalTimer = ScheduledEvent(timedelta(minutes=1), self.logValues)
-		self.historicalTimer.start(False)
-		self.__running = True
+
+		if self.historicalTimer is None:
+			self.historicalTimer = ScheduledEvent(timedelta(seconds=15), self.logValues).schedule()
 
 	async def run(self):
 		try:
@@ -191,27 +201,35 @@ class Govee(Plugin, realtime=True, logged=True):
 		except Exception as e:
 			pluginLog.error(f'Error initializing device: {e}')
 			return
-		await self.scanner.start()
-		while self.__enabled:
-			await asyncio.sleep(0.5)
-		pluginLog.critical(f'{self.name} stopping...')
-		await self.scanner.stop()
+		self.scannerTask = asyncio.create_task(self.scanner.start())
+		pluginLog.info(f'{self.name} started!')
 
 	def stop(self):
-		self.__enabled = False
+		pluginLog.debug(f'{self.name} stopping...')
+		self.scanner.stop()
+		if self.scannerTask is not None:
+			self.scannerTask.cancel()
+			self.scannerTask = None
+		if self.historicalTimer is not None:
+			self.historicalTimer.stop()
+		pluginLog.info(f'{self.name} stopped!')
 
-	async def __discoverDevice(self, deviceConfig, timeout=60) -> Optional[BLEDevice]:
+	def enabled(self) -> bool:
+		return self.config['enabled']
+
+	def running(self) -> bool:
+		return self.scanner.is_scanning
+
+	async def __discoverDevice(self, deviceConfig, timeout=15) -> Optional[BLEDevice]:
 		async def discover(timeout):
-			devices = []
-			for device in self.scanner.discover(timeout=timeout):
-				devices.append(device)
+			devices = await self.scanner.discover(timeout=timeout) or []
 			return devices
 
 		def genFilter(by: str, value: str, contains: bool = False):
-			def filter(device, _):
+			def filter(device, *_):
 				return str(getattr(device, by, f'{hash(value)}')).lower() == f'{str(value).lower()}'
 
-			def containsFilter(device, _):
+			def containsFilter(device, *_):
 				return str(getattr(device, by, f'{hash(value)}')).lower().find(f'{str(value).lower()}') != -1
 
 			return containsFilter if contains else filter
@@ -219,7 +237,8 @@ class Govee(Plugin, realtime=True, logged=True):
 		match deviceConfig:
 			case {'id': 'closest', 'model': model}:
 				devices = await discover(timeout)
-				device = found[0] if (found := [device for device in devices if genFilter('name', model, contains=True)]) else None
+				filterFunc = genFilter('name', model, contains=True)
+				device = found[0] if (found := sorted([device for device in devices if filterFunc(device)], key=lambda x: -x.rssi)) else None
 
 			case {'id': 'first', 'model': str(model)} | {'model': str(model)}:
 				device = await self.scanner.find_device_by_filter(genFilter('name', model, contains=True), timeout=timeout) or None
