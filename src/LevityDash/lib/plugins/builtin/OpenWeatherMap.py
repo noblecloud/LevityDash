@@ -1,5 +1,5 @@
 from LevityDash.lib.plugins.schema import LevityDatagram, SchemaSpecialKeys as tsk
-from LevityDash.lib.plugins.plugin import ScheduledEvent
+from LevityDash.lib.plugins.utils import ScheduledEvent
 from LevityDash.lib.plugins.web import Auth, AuthType, Endpoint, REST, URLs
 from LevityDash.lib import config
 
@@ -17,7 +17,7 @@ schema = {
 	'environment.temperature':             {'type': 'temperature', 'sourceUnit': 'kelvin'},
 	'environment.temperature.temperature': {'title': 'Temperature', 'sourceKey': 'temp'},
 	'environment.temperature.feelsLike':   {'title': 'Feels like', 'sourceKey': 'feels_like'},
-	'environment.temperature.dewpoint':    {'title': 'Dewpoint', 'sourceKey': 'dew_point'},
+	'environment.temperature.dewpoint':    {'title': 'Dew Point', 'sourceKey': 'dew_point'},
 
 	'environment.humidity.humidity':       {'type': 'humidity', 'sourceUnit': '%', 'title': 'Humidity', 'sourceKey': 'humidity'},
 
