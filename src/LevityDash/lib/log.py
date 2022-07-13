@@ -1,21 +1,32 @@
 import asyncio
+from configparser import SectionProxy
 import os
 import shutil
+
+import bleak
 import sys
 import webbrowser
 from collections import deque
-from datetime import datetime, timedelta
+from datetime import datetime
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from re import findall, search
+
+from shiboken2 import shiboken2
 from sys import argv, gettrace
+
+from .config import userConfig
 
 import logging
 from typing import ClassVar
 
 logging.addLevelName(5, "VERBOSE")
-from LevityDash import __lib__
+logging.addLevelName(4, "VERBOSE-1")
+logging.addLevelName(3, "VERBOSE-2")
+logging.addLevelName(2, "VERBOSE-3")
+logging.addLevelName(1, "VERBOSE-4")
+
+from LevityDash import __lib__, __dirs__
 import qasync
-from appdirs import AppDirs
 from rich.console import Console
 from rich.logging import RichHandler
 
@@ -27,9 +38,29 @@ def levelFilter(level: int):
 	return filter
 
 
+class RichRotatingLogHandlerProxy(RotatingFileHandler, RichHandler):
+	"""
+	RichRotatingLogHandler is a subclass of RotatingFileHandler that uses Rich's Log Handler and Console to format the record.
+	"""
+
+	def __init__(self, *args, **kwargs):
+		RotatingFileHandler.__init__(self, **{kwarg: value for kwarg, value in kwargs.items() if kwarg in RotatingFileHandler.__init__.__code__.co_varnames})
+		RichHandler.__init__(self, **{kwarg: value for kwarg, value in kwargs.items() if kwarg in RichHandler.__init__.__annotations__})
+		self.console.file = self.stream
+
+	def emit(self, record: logging.LogRecord):
+		try:
+			if self.shouldRollover(record):
+				self.doRollover()
+				self.console.file = self.stream
+			RichHandler.emit(self, record)
+		except Exception as e:
+			RichHandler.handleError(self, record)
+
+
 class _LevityLogger(logging.Logger):
-	__config__: ClassVar[dict]
-	logDir: ClassVar[Path]
+	__config__: ClassVar[SectionProxy]
+	logDir: ClassVar[Path] = Path(__dirs__.user_log_dir)
 	errorLogDir: ClassVar[Path]
 	logPath: ClassVar[Path]
 
@@ -68,8 +99,8 @@ class _LevityLogger(logging.Logger):
 	duplicateFilter: ClassVar[DuplicateFilter] = DuplicateFilter()
 
 	def __init__(self, name):
-		from LevityDash.lib.config import userConfig
-		super().__init__(name, level=1)
+		from .config import userConfig
+		super().__init__(name)
 		self.addFilter(_LevityLogger.duplicateFilter)
 
 		if not userConfig.has_section("Logging"):
@@ -81,55 +112,61 @@ class _LevityLogger(logging.Logger):
 			self.initClassVars()
 
 	def initClassVars(self) -> None:
-		_LevityLogger.logDir = Path(AppDirs("LevityDash", "LevityDash").user_log_dir)
+		os.environ["PYTHONIOENCODING"] = 'utf-8'
 		_LevityLogger.errorLogDir = self.logDir.joinpath("prettyErrors")
 		self.__ensureFoldersExists()
+		self.getFile()
+		columns = shutil.get_terminal_size((120, 20)).columns - 5
+		fileColumns = userConfig.getOrSet('Logging', 'logFileWidth', '120', userConfig.getint)
 
-		columns = shutil.get_terminal_size((160, 20)).columns
-		fileColumns = int(self.__config__['logFileWidth'])
 		consoleFile = Console(
 			tab_size=2,
 			soft_wrap=True,
+			no_color=True,
 			width=fileColumns,
 			record=True,
-			file=self.getFile(),
-		)
-		fileHandler = RichHandler(
-			console=consoleFile,
-			log_time_format="D%j|%H:%M:%S",
-			rich_tracebacks=True,
-			omit_repeated_times=False,
-			level=1,
-			tracebacks_suppress=[qasync, asyncio],
-			tracebacks_show_locals=True,
-			tracebacks_width=fileColumns,
-			locals_max_string=500,
-			markup=True,
-		)
-		fileHandler.setLevel(1)
-		console = Console(
-			soft_wrap=True,
-			tab_size=2,
-			width=columns,
-			record=False,
-			log_time_format="%H:%M:%S",
 		)
 		consoleHandler = RichHandler(
-			console=console,
+			console=Console(
+				soft_wrap=True,
+				tab_size=2,
+				width=columns,
+				log_time_format="%H:%M:%S",
+			),
 			level=self.determineLogLevel(),
 			log_time_format="%H:%M:%S",
+			tracebacks_show_locals=True,
+			show_path=False,
+			tracebacks_width=columns,
+			tracebacks_suppress=[qasync, asyncio, bleak, shiboken2],
 			rich_tracebacks=True,
-			markup=True,
 		)
 		consoleHandler.setLevel(self.determineLogLevel())
 		consoleHandler.addFilter(levelFilter(consoleHandler.level))
+		richRotatingFileHandler = RichRotatingLogHandlerProxy(
+			encoding="utf-8",
+			console=consoleFile,
+			show_path=False,
+			log_time_format="D%j|%H:%M:%S",
+			rich_tracebacks=True,
+			omit_repeated_times=True,
+			level=5 - self.verbosity(5),
+			tracebacks_suppress=[qasync, asyncio, bleak, shiboken2],
+			tracebacks_show_locals=True,
+			tracebacks_width=fileColumns,
+			locals_max_string=200,
+			filename=self.logPath,
+			maxBytes=int(userConfig.getOrSet('Logging', 'rolloverSize', '2mb', userConfig.configToFileSize)),
+			backupCount=5,
+		)
+		self.addHandler(richRotatingFileHandler)
 		self.addHandler(consoleHandler)
-		self.addHandler(fileHandler)
-		# self.propagate = False
+		self.propagate = False
 		self.cleanupLogFolder()
-		sys.excepthook = self.prettyErrorLogger
+		if self.__config__.getboolean('prettyErrors', False):
+			sys.excepthook = self.prettyErrorLogger
 
-		_LevityLogger.fileHandler = fileHandler
+		_LevityLogger.fileHandler = richRotatingFileHandler
 		_LevityLogger.consoleHandler = consoleHandler
 
 	def __ensureFoldersExists(self):
@@ -151,18 +188,36 @@ class _LevityLogger(logging.Logger):
 		configVerbose = int(self.__config__['level'].upper() == "VERBOSE")
 		verboseSum = envVerbose + argvVerbose + configVerbose
 		if verboseSum and verboseSum > debugSum:
-			print(f"determineLogLevel found: {verboseSum}")
-			return 'VERBOSE'
+			level = 5
 		elif debugSum and debugSum > inDebug:
-			print(f"determineLogLevel found: {debugSum}")
-			return 'DEBUG'
+			level = 10
 		else:
-			print(f"determineLogLevel found: {self.__config__['level'].upper()}")
-			return self.__config__['level'].upper()
+			level = logging.getLevelName(self.__config__['level'].upper())
+		level -= self.verbosity(level)
+		return logging.getLevelName(level)
 
 	@property
 	def VERBOSE(self):
 		return logging.getLevelName('VERBOSE')
+
+	@property
+	def VERBOSITY(self):
+		return logging.getLevelName('VERBOSE') - self.verbosity(5)
+
+	def verbosity(self, forLevel: str | int = 20) -> int:
+		if isinstance(forLevel, str):
+			forLevel = logging.getLevelName(forLevel.upper())
+		if forLevel > 5:
+			return 0
+		verb = _LevityLogger.__config__.getint('verbosity', None)
+		if verb is None:
+			verb = 5 - forLevel
+			self.__config__['verbosity'] = str(verb)
+			self.__config__.parser.save()
+		return verb
+
+	def verbose(self, msg: str, verbosity: int = 0, *args, **kwargs):
+		self._log(self.VERBOSE - verbosity, msg, args, **kwargs)
 
 	@classmethod
 	def getFile(cls):
@@ -171,19 +226,16 @@ class _LevityLogger(logging.Logger):
 		if logFile.exists():
 			timestamp = datetime.fromtimestamp(logFile.stat().st_ctime)
 			newFileName = logFile.with_stem(f"LevityDash_{timestamp.strftime(_format)}")
+			if newFileName.exists():
+				newFileName.unlink()
 			logFile.rename(newFileName)
 		_LevityLogger.logPath = logFile
-		return open(logFile, "w")
 
 	@classmethod
 	def openLog(cls):
 		webbrowser.open(cls.logPath.as_uri())
 
-	def verbose(self, msg, *args, **kwargs):
-		if self.isEnabledFor(self.VERBOSE):
-			self._log(self.VERBOSE, msg, args, **kwargs)
-
-	def getChild(self, name):
+	def getChild(self, name: str) -> '_LevityLogger':
 		child = super().getChild(name)
 		child.setLevel(self.level)
 		return child
@@ -231,9 +283,9 @@ class _LevityLogger(logging.Logger):
 				os.remove(file)
 
 	def cleanupLogFolder(self):
-		maxLogSize = configToFileSize(self.__config__["maxLogSize"])
-		maxErrorsAge = configToTimeDelta(self.__config__["maxErrorLogAge"])
-		maxPrettyErrorsSize = configToFileSize(self.__config__["maxErrorLogSize"])
+		maxLogSize = self.__config__.parser.configToFileSize(self.__config__["maxLogSize"])
+		maxErrorsAge = self.__config__.parser.configToTimeDelta(self.__config__["maxErrorLogAge"])
+		maxPrettyErrorsSize = self.__config__.parser.configToFileSize(self.__config__["maxErrorLogSize"])
 		if self.folderSize(self.logDir, 1) > maxLogSize:
 			self.removeOldestFileToFitSize(self.logDir, maxLogSize)
 		self.removeOlderThan(self.errorLogDir, maxErrorsAge)
@@ -266,90 +318,27 @@ class _LevityLogger(logging.Logger):
 		console.save_html(path=self.genPrettyErrorFileName(_type, value, tb), inline_styles=False)
 
 	def setLevel(self, level: int | str) -> None:
-		# super().setLevel(level)
 		self.consoleHandler.setLevel(level)
-		self.fileHandler.setLevel('VERBOSE')
-		self.verbose(f"Log {self.name} set to level {logging.getLevelName(level) if isinstance(level, int) else level}")
+		super().setLevel(1)
+		self.verbose(
+			f"Log {self.name} set to level {logging.getLevelName(level) if isinstance(level, int) else level}",
+			verbosity=5
+		)
 
-
-def configToFileSize(value: str) -> int | float:
-	if value.isdigit():
-		return int(value)
-
-	_val = search(r'\d+', value)
-	if _val is None:
-		raise AttributeError(f"{value} is not a valid file size")
-	else:
-		_val = _val.group(0)
-	unit = value[len(_val):]
-	_val = float(_val)
-
-	match unit:
-		case 'b' | 'byte' | 'bytes':
-			return int(_val)
-		case 'k' | 'kb' | 'kilobyte' | 'kilobytes':
-			return _val*1024
-		case 'm' | 'mb' | 'megabyte' | 'megabytes':
-			return _val*1024 ** 2
-		case 'g' | 'gb' | 'gigabyte' | 'gigabytes':
-			return _val*1024 ** 3
-		case '_val' | 'tb' | 'terabyte' | 'terabytes':
-			return _val*1024 ** 4
-		case _:
-			raise AttributeError(f'Unable to parse maxSize: {value}')
-
-
-def configToTimeDelta(value: str) -> timedelta:
-	if value.isdigit():
-		return timedelta(seconds=int(value))
-	elif value.startswith("{") and value.endswith("}"):
-		value = strToDict(value)
-		return timedelta(**value)
-
-	_val = search(r'\d+', value)
-	if _val is None:
-		raise AttributeError(f"{value} is not a valid file size")
-	else:
-		_val = _val.group(0)
-	unit = value[len(_val):].strip(' ')
-	_val = float(_val)
-	match unit:
-		case 's' | 'sec' | 'second' | 'seconds':
-			return timedelta(seconds=_val)
-		case 'm' | 'min' | 'minute' | 'minutes':
-			return timedelta(minutes=_val)
-		case 'h' | 'hour' | 'hours':
-			return timedelta(hours=_val)
-		case 'd' | 'day' | 'days':
-			return timedelta(days=_val)
-		case 'w' | 'week' | 'weeks':
-			return timedelta(weeks=_val)
-		case 'mo' | 'month' | 'months':
-			return timedelta(days=_val*30)
-		case 'y' | 'year' | 'years':
-			return timedelta(days=_val*365)
-		case _:
-			raise AttributeError(f'Unable to parse maxSize: {value}')
-
-
-def strToDict(value: str) -> dict:
-	isDict = lambda x: x.startswith('{') and x.endswith('}')
-
-	def parse(value):
-		if isDict(value):
-			value = value.strip('{}').split(',')
-			return {k.strip(' "\''): float(v.strip(' "\'')) for k, v in map(lambda x: x.split(':'), value)}
-		else:
-			return value
-
-	return parse(value)
+	def setVerbosity(self, level: int):
+		self.fileHandler.setLevel(5 - level)
+		self.__config__['verbosity'] = str(level)
+		self.__config__.parser.save()
+		self.verbose(
+			f"Log {self.name} set to verbosity {level}",
+			verbosity=5
+		)
 
 
 logging.setLoggerClass(_LevityLogger)
 LevityLogger = logging.getLogger("Levity")
 LevityLogger.setLevel(LevityLogger.determineLogLevel())
 
-# LevityLogger.setLevel(logging.DEBUG if debug else logging.INFO)
 LevityLogger.info(f"Log set to {logging.getLevelName(LevityLogger.level)}")
 
 weatherUnitsLog = logging.getLogger("WeatherUnits")
@@ -365,9 +354,10 @@ urllogPool.setLevel(logging.ERROR)
 bleaklog = logging.getLogger("bleak")
 bleaklog.setLevel(logging.ERROR)
 
-LevityGUILog = LevityLogger.getChild("GUI")
 LevityPluginLog = LevityLogger.getChild("Plugins")
 LevityUtilsLog = LevityLogger.getChild("Utils")
-# LevityPluginLog.setLevel(logging.INFO)
+userConfig.setLogger(LevityLogger.getChild('LevityConfig'))
 
-__all__ = ["LevityLogger", "LevityPluginLog", "LevityGUILog", "LevityUtilsLog"]
+debug = logging.getLevelName(LevityLogger.determineLogLevel()) <= logging.DEBUG
+
+__all__ = ["LevityLogger", "LevityPluginLog", "LevityUtilsLog", 'debug']
