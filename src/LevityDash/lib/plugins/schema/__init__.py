@@ -12,6 +12,7 @@ from LevityDash.lib.plugins.utils import unitDict
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.utils.shared import clearCacheAttr, now, Unset
 from LevityDash.lib.plugins.categories import CategoryDict, CategoryItem, UnitMetaData, ValueNotFound
+from LevityDash.lib.plugins.errors import InvalidData
 
 log = LevityPluginLog.getChild('Schema')
 
@@ -64,6 +65,7 @@ class LevityDatagram(dict):
 		data = self.parseData(data=data)
 		data = self.replaceKeys(data)
 		data = self.replaceKeyVars(data)
+		data = self.addDataKeyValues(data)
 		self.update(data)
 
 	@lru_cache(maxsize=16)
@@ -199,6 +201,13 @@ class LevityDatagram(dict):
 			data[self.schema.sourceKeyMap.get(key, key)] = value
 		return data
 
+	def addDataKeyValues(self, data: dict):
+		if not self.schema.hasDataKeys:
+			return data
+		for key, dataKey in ((k, j) for k, v in self.schema.dataKeyItems.items() if (j := v.get('dataKey', None)) in data):
+			data[key] = data[dataKey]
+		return data
+
 	def __hash__(self):
 		return hash(tuple(self.sourceData.items()))
 
@@ -238,23 +247,29 @@ class LevityDatagram(dict):
 							popLater = True
 					if popLater:
 						data.pop(key)
-				case {storage.timekey: list(timestamps), **values} if storage.path in self.validPaths and set(values.keys()).intersection(self.schema._sourceKeys.keys()):
+				case {storage.timekey: list(timestamps), **rest} if storage.path in self.validPaths and any(key in self.schema.sourceKeys for key in value):
+					expectedLen = len(value[storage.timekey])
+					if any(len(v) != expectedLen for v in value.values()):
+						raise InvalidData
 					keys = list(value.keys())
 					d = []
+					basePath = storage.path if isinstance(storage.path, (tuple, list)) else (storage.path,)
 					for i, _ in enumerate(timestamps):
-						d.append(Subdatagram(parent=self, data={k: value[k][i] for k in keys}, path=(*(storage.path or ()), key, i)))
+						values = {k: value[k][i] for k in keys}
+						itemPath = basePath + (i,)
+						subdatagram = Subdatagram(parent=self, data=values, path=itemPath)
+						d.append(subdatagram)
 					data[key] = d
-				case dict() as obs if storage.path in self.validPaths and set(obs.keys()).intersection(self.schema._sourceKeys.keys()):
+				case dict() as obs if storage.path in self.validPaths and any(key in self.schema.sourceKeys for key in obs):
 					data[key] = Subdatagram(parent=self, data=value, path=key)
-				# if list(data[key].path) in [i[1:] for i in self.schema.dataMapPaths]:
-				# 	print('here')
 				case dict():
 					data[key] = self.parseData(data=value, path=[key])
 				case [*items]:
 					for i, item in enumerate(items):
 						match item:
-							case dict() as obs if set(obs.keys()).intersection(self.schema._sourceKeys.keys()):
-								value[i] = Subdatagram(parent=self, data=item, path=[*(path or []), key, i])
+							case dict() as obs if any(key in self.schema.sourceKeys for key in obs):
+								itemPath = (*(path or ()), key, i)
+								value[i] = Subdatagram(parent=self, data=item, path=itemPath)
 							case _:
 								pass
 				case _:
@@ -268,11 +283,6 @@ class LevityDatagram(dict):
 			for key, subMap in keyMap.items():
 				if isinstance(data, list) and key == len(data) or (key is iter and len(subMap) == len(data)):
 					data = [self.mapArrays(data=item, keyMap=subMap) for item in data]
-				# if len(data) == 1:
-				# 	data = data[0]
-				# 	newData.update(data)
-				# else:
-				# 	newData = data
 				elif isinstance(subMap, list) and key is filter:
 					for k, v in list(data.items()):
 						if k in subMap:
@@ -282,7 +292,6 @@ class LevityDatagram(dict):
 					return [self.mapArrays(data=item, keyMap=subMap) for item in data]
 				elif key in data:
 					data[CategoryItem(key)] = self.mapArrays(data=data.pop(key), keyMap=subMap)
-		# data = self.__replaceSourceKeys(data)
 		elif isinstance(keyMap, list) and len(keyMap) == len(data):
 			return {CategoryItem(key): value for key, value in zip(keyMap, data)}
 		return data
@@ -314,28 +323,18 @@ class LevityDatagram(dict):
 				case Subdatagram():
 					meta = {k: v for k, v in data.metaData.items() if k not in self.metaData}
 					source = {k: v for k, v in data.sourceData.items() if k not in self.sourceData}
-					return {**meta, **source, **data}
+					return {**meta, **source, **{k.name if isinstance(k, CategoryItem) else k: trim(v) for k, v in data.items()}}
 				case dict():
-					return {k: trim(v) for k, v in (V for i, V in enumerate(data.items()) if i < 10)}
+					return {k: trim(v) for k, v in (V for i, V in enumerate(data.items()) if i < 3)}
 				case list():
-					return [trim(i) for i in data[:min(len(data), 10)]]
+					return [trim(i) for i in data[:min(len(data), 3)]]
 				case _:
 					return data
 
 		return {k: trim(v) for k, v in self.items()}
 
 	def __str__(self):
-		# if len(self) == 1:
-		# 	item = list(self.values())[0]
-		# 	if len(self) and all(not isinstance(i, dict) for i in item[:min(10, len(item))]):
-		# 		return str(item)
-		# 	else:
-		# 		key = list(self.keys())[0]
-		# 		repr = {key: item[:min(10, len(item))]}
-		# else:
-		# 	repr = self
-		# reprs = {k: [i for i in v[:min(5, len(v))]] if isinstance(v, list) else v for k, v in repr.items()}
-		return pretty_repr({**self.metaData, **self.sourceData, **self.__trunc}, indent_size=2, max_width=80, max_depth=3, max_length=200, max_string=600)
+		return pretty_repr({**self.metaData, **self.sourceData, **self.__trunc}, indent_size=2, max_depth=3, max_length=200, max_string=600)
 
 	def __replaceWithSubData(self, key: str, value: str):
 		self[key] = Subdatagram(parent=self, data=value, path=key)
@@ -500,6 +499,7 @@ class MetaData(dict):
 		keys = sorted(keys, key=lambda k: str(k).startswith('@'), reverse=True)
 		for key in keys:
 			originalKey = key
+			key = str(key)
 			key = key.replace('@meta.', '@', 1)
 			if SchemaSpecialKeys.metaData not in source[originalKey] or originalKey.startswith('@meta.'):
 				self[key] = source.pop(originalKey)
@@ -606,8 +606,6 @@ class Schema(CategoryDict):
 		self.dataMaps = source.pop('dataMaps', {})
 		self.calculations = source.pop('calculations', {})
 		self.aliases = source.pop('aliases', {})
-		# self.metaData.update({k: v for k, v in self.properties.items() if v.get('@isMeta', False)})
-		super(Schema, self).__init__(None, source, category)
 		if ignored is not None:
 			self._ignored.update(ignored)
 
@@ -624,7 +622,7 @@ class Schema(CategoryDict):
 	def propertySetters(self):
 		return {key: value for key, value in self._source.items() if 'property' in value.keys() or 'setter' in value.keys()}
 
-	def getExact(self, key: str | CategoryItem) -> Optional[UnitMetaData]:
+	def getExact(self, key: str | CategoryItem, silent: bool = False) -> Optional[UnitMetaData]:
 		if not isinstance(key, CategoryItem):
 			key = CategoryItem(key)
 		result = self._source.get(key, None) or self._source.get(key.anonymous, None)
@@ -634,10 +632,11 @@ class Schema(CategoryDict):
 			wildcardKeys = [k for k in self._source.keys() if k.hasWildcard and k == key]
 			if len(wildcardKeys) == 1:
 				result = self._source[wildcardKeys[0]]
-			elif len(wildcardKeys) > 1:
-				log.warning(f'{key} has wildcard which results in multiple values for {key}')
-			else:
-				log.warning(f'{key} was not found in {self}')
+			elif not silent:
+				if len(wildcardKeys) > 1:
+					log.warning(f'{key} has wildcard which results in multiple values for {key}')
+				else:
+					log.warning(f'{key} was not found in {self}')
 		return result
 
 	def __hash__(self):
@@ -653,6 +652,14 @@ class Schema(CategoryDict):
 			else:
 				keyMap[value] = key
 		return keyMap
+
+	@cached_property
+	def hasDataKeys(self) -> bool:
+		return any('dataKey' in value for value in self._source.values())
+
+	@cached_property
+	def dataKeyItems(self) -> Dict[CategoryItem, Dict]:
+		return {k: v for k, v in self.flatDict.items() if 'dataKey' in v}
 
 	@cached_property
 	def dataMapPaths(self):
@@ -843,7 +850,7 @@ class Schema(CategoryDict):
 		return self._plugin
 
 	@cached_property
-	def _sourceKeys(self):
+	def sourceKeys(self):
 		sourceKeys = {}
 		for k, v in self._source.items():
 			if isinstance(v, dict):
