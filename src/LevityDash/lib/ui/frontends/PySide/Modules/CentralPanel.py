@@ -1,67 +1,82 @@
-from os import remove
+import re
+
 from shutil import copyfile
 from tempfile import NamedTemporaryFile
 
 from datetime import datetime
 from functools import cached_property
+from typing import Any, TypeVar
+
 import yaml
 from pathlib import Path
 
-from PySide2.QtCore import Qt
-from PySide2.QtWidgets import QFileDialog, QGraphicsItem, QGraphicsScene, QMessageBox
+from PySide2.QtCore import Qt, QRect, Slot
+from PySide2.QtWidgets import QFileDialog, QGraphicsItem, QGraphicsScene, QMessageBox, QGraphicsBlurEffect, QWidget, QApplication
 
 from LevityDash.lib.ui.frontends.PySide.Modules.Drawer import RadialMenuItem
-from LevityDash.lib.Geometry import Geometry
-from LevityDash.lib.ui.frontends.PySide.utils import hasState, itemLoader
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import CentralPanelContextMenu
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.config import userConfig
-from LevityDash.lib.EasyPath import FileLocation
+from LevityDash.lib.EasyPath import EasyPathFile
+from LevityDash.lib.log import debug
 
-from LevityDash.lib.log import LevityGUILog as guiLog
+from .. import UILogger as guiLog
+from LevityDash.lib.stateful import DefaultFalse, StateProperty, StatefulLoader, StatefulDumper
 
 log = guiLog.getChild(__name__)
 
 
 class CentralPanel(Panel):
-	acceptsWheelEvents = True
+	_keepInFrame = True
 
-	# preventCollisions = False
-	# signals = GraphicsItemSignals()
+	__exclude__ = {'geometry', 'movable', 'resizable', 'locked', 'frozen'}
+
+	__defaults__ = {
+		'movable':    False,
+		'resizable':  False,
+		'locked':     True,
+		'fillParent': True,
+		'geometry':   {'fillParent': True},
+		'margins':    ('10px', '10px', '10px', '10px'),
+	}
 
 	def __init__(self, parent: 'LevityScene'):
-		self.gridOpacity = 1
-		# self.grid = grid
-		# self.grid.surface = self
-		geometry = {'fillParent': True}
-		super(CentralPanel, self).__init__(parent, geometry=geometry, movable=False, resizable=False)
-		self.setAcceptDrops(True)
-		self._keepInFrame = True
-		self.setAcceptedMouseButtons(Qt.AllButtons)
-		self.staticGrid = False
+		self._scene = parent
+		self.__boundingRect = QRect(-2000, -2000, 6000, 6000)
+		self._parent = parent
+		super(CentralPanel, self).__init__(None)
 
-		path = Path(userConfig.dashboardPath)
-		name = str(path).split('/')[-1]
-		self.filePath = FileLocation(path.parent, name)
-		self.preventCollisions = True
+		self.setAcceptedMouseButtons(Qt.AllButtons)
+
+		defaultDashboardPath = userConfig.dashboardPath
+		self.filePath = EasyPathFile(defaultDashboardPath) if defaultDashboardPath is not None else None
+		self.loadedFile: Any = None
+
 		self.setFlag(QGraphicsItem.ItemStopsClickFocusPropagation, False)
 		self.setFlag(QGraphicsItem.ItemStopsFocusHandling, False)
-		self.setFlag(self.ItemHasNoContents, True)
-		self.insertMenu = RadialMenuItem(self, root=True)
-		self.insertMenu.setVisible(False)
+		self.setFlag(QGraphicsItem.ItemHasNoContents)
+		# self.insertMenu = RadialMenuItem(self, root=True)
+		# self.insertMenu.setVisible(True)
 		self.resizeHandles.setVisible(False)
 		self.resizeHandles.setEnabled(False)
+		self.setFlag(self.ItemClipsChildrenToShape, False)
+		self.setFlag(self.ItemClipsToShape, False)
+		self.setFlag(self.ItemIsFocusable, False)
+		self.setFlag(self.ItemIsMovable, False)
+		self.setFlag(self.ItemIsSelectable, False)
 
-	def load(self):
-		if self.isEmpty:
-			self.insertMenu.setVisible(True)
-		else:
-			self.insertMenu.setVisible(False)
-		self._load(self.filePath)
+	@Slot()
+	def onFileLoaded(self):
+		print('FileLoaded')
+
+	def _init_args_(self, *args, **kwargs):
+		self._scene.addItem(self)
+		super(CentralPanel, self)._init_args_(*args, **kwargs)
+		self._parent = self.scene()
 
 	@property
-	def parentGrid(self):
-		return None
+	def parent(self):
+		return self.scene()
 
 	@cached_property
 	def window(self):
@@ -74,44 +89,6 @@ class CentralPanel(Panel):
 
 	def mousePresEvent(self, event):
 		self.scene().clearSelection()
-		return
-
-	# def wheelEvent(self, event):
-	# 		event.accept()
-	# 		v = event.delta() / 120 * 40
-	# 		self.scene().apiDrawer.handle.moveBy(0, v)
-	# 		self.scene().update()
-
-	def paint(self, painter, option, widget):
-		return super(CentralPanel, self).paint(painter, option, widget)
-
-	# if self.scene().editingMode:
-	# 	# if self.gridOpacity == 1:
-	# 	# 	pen = QPen(gridPen)
-	# 	# else:
-	# 	# pen = QPen(gridPen)
-	# 	# color = pen.color()
-	# 	# color.setAlphaF(self.gridOpacity)
-	# 	# pen.setColor(color)
-	# 	painter.setPen(gridPen)
-	# 	painter.setBrush(Qt.NoBrush)
-	# 	path = QPainterPath()
-	# 	for i in range(1, self.grid.columns):
-	# 		path.moveTo(i*self.grid.columnWidth, 0)
-	# 		path.lineTo(i*self.grid.columnWidth, self.grid.rowHeight*self.grid.rows)
-	# 	for i in range(1, self.grid.rows):
-	# 		path.moveTo(0, i*self.grid.rowHeight)
-	# 		path.lineTo(self.grid.columnWidth*self.grid.columns, i*self.grid.rowHeight)
-	# 	for panel in self.childPanels:
-	# 		if isinstance(panel, GraphPanel):
-	# 			path -= panel.mappedShape()
-	# 	painter.drawPath(path)
-
-	# elif self.gridOpacity > 0:
-	# 	self.gridOpacity -= 0.05
-	# else:
-	# 	self.gridOpacity = 0
-	# super(CentralPanel, self).paint(painter, option, widget)
 
 	def itemChange(self, change, value):
 		if change == QGraphicsItem.ItemPositionChange:
@@ -119,85 +96,36 @@ class CentralPanel(Panel):
 		return super(CentralPanel, self).itemChange(change, value)
 
 	@property
-	def state(self) -> list[Panel]:
-		items = self.childPanels
-		items.sort(key=lambda x: (x.geometry.position.y, -x.geometry.position.x))
-		return [item for item in items if hasState(item)]
+	def childPanels(self):
+		return [i for i in self.childItems() if isinstance(i, Panel) and not isinstance(i, RadialMenuItem)]
 
-	# def contextMenuEvent(self, event):
-	# 	contextMenu = QMenu(event.widget())
-	# 	# newAct = contextMenu.addAction("Insert")
-	# 	insertMenu = contextMenu.addMenu('Insert')
-	# 	insertBlock = insertMenu.addMenu('Block')
-	# 	insertSnapping = insertBlock.addAction('Snapping')
-	# 	insertFreeform = insertBlock.addAction('Freeform')
-	# 	time = insertMenu.addAction('Time')
-	# 	saveAct = contextMenu.addAction("Save")
-	# 	loadAct = contextMenu.addAction("Load")
-	# 	quitAct = contextMenu.addAction("Quit")
-	# 	action = contextMenu.exec_(event.screenPos())
-	# 	if action == quitAct:
-	# 		QApplication().quit()
-	# 	elif action == insertSnapping:
-	# 		item = Panel(self)
-	# 		item.gridItem.location = event.pos()
-	# 		item.setPos(event.pos())
-	# 		item.snapping.setValue(True)
-	# 	elif action == insertFreeform:
-	# 		item = Panel(self)
-	# 		item.setPos(event.pos())
-	# 		item.snapping.setValue(False)
-	# 	elif action == saveAct:
-	# 		childItems = self.childItems()
-	# 		state = [child.state for child in childItems if hasattr(child, 'state') and child.state is not None]
-	# 		with open('state.json', 'w') as f:
-	# 			dump(state, f, indent=2, sort_keys=True, cls=JsonEncoder)
-	#
-	# 	elif action == loadAct:
-	# 		with open('state.json', 'r') as f:
-	# 			state = load(f, object_hook=JsonDecoder(self.apiDrawer.apiDict))
-	# 			for item in state:
-	# 				cls = item.pop('class')
-	# 				item = cls(parent=self, **item)
-	#
-	# def itemChange(self, change, value):
-	# 	if change == QGraphicsItem.ItemChildAddedChange:
-	# 		if hasattr(value, 'gridItem'):
-	# 			self.grid.gridItems.add(value.gridItem)
-	# 			self.signals.resized.connect(value.parentResized)
-	# 	if change == QGraphicsItem.ItemChildRemovedChange:
-	# 		if hasattr(value, 'gridItem'):
-	# 			self.signals.resized.disconnect(value.parentResized)
-	# 			self.grid.gridItems.remove(value.gridItem)
-	# 	return super(GridLines, self).itemChange(change, value)
-	#
-	# def setRect(self, rect: QRectF):
-	# 	self.signals.resized.emit(rect)
-	# 	super(GridLines, self).setRect(rect)
-	#
-	# @property
-	# def containingRect(self):
-	# 	return self.rect()
-	# self.setFlag(QGraphicsItem.ItemIsFocusable, False)
+	@StateProperty(singleVal='force')
+	def items(self) -> list[Panel]:
+		pass
+
 	@cached_property
 	def contextMenu(self):
 		return CentralPanelContextMenu(self)
 
-	# def setRect(self, rect):
-	# 	super(CentralPanel, self).setRect(rect)
+	def load(self, *_):
+		try:
+			path = Path(self._selectFile()[0])
+		except IndexError:
+			return
+		self.filePath = EasyPathFile(path)
+		self._load(self.filePath)
 
-	# def itemChange(self, change, value):
-	#
-	# 	if change == QGraphicsItem.ItemChildAddedChange:
-	# 		value.setZValue(self.zValue() - 10)
-	# 	return super(CentralPanel, self).itemChange(change, value)
-
-	def load(self):
+	def loadDefault(self):
 		if self.filePath is None:
 			path = Path(self._selectFile()[0])
-			name = str(path).split('/')[-1]
-			self.filePath = FileLocation(path.parent, name)
+			self.filePath = EasyPathFile(path)
 		self._load(self.filePath)
+
+	def reload(self):
+		if self.filePath.exists():
+			self._load(self.filePath)
+		else:
+			QMessageBox.warning(self, "No Dashboard", "There is currently no loaded dashboard to refresh").exec_()
 
 	def loadPanel(self):
 		from LevityDash.lib.ui.frontends.PySide.Modules import PanelFromFile
@@ -214,19 +142,17 @@ class CentralPanel(Panel):
 		if not path.exists():
 			path.mkdir(parents=True)
 
-		try:
-			tempFile = NamedTemporaryFile(delete=False, mode='w')
-			with tempFile as f:
-				yaml.safe_dump(self.state, f, default_flow_style=False)
-			copyfile(tempFile.name, str(path.joinpath(fileName)))
-		except Exception as e:
-			log.error(e)
-		finally:
-			remove(tempFile.name)
-			# 	t = locals().get('tempFile', False)
-			# 	if t and t.mode == 'w':
-			# 		t.close()
-		return
+		with NamedTemporaryFile(delete=True, mode="w+", encoding='utf-8') as f:
+			try:
+				state = self.state
+				yaml.dump(state, f, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True)
+
+				YAMLPreprocessor(f)
+				copyfile(f.name, str(path.joinpath(fileName)))
+			except Exception if not debug else DebugException as e:
+				print('Failed')
+				log.error(e)
+		print('Saved!')
 
 	def save(self):
 		self._save()
@@ -246,39 +172,42 @@ class CentralPanel(Panel):
 			fileName = dialog.selectedFiles()[0].split('/')[-1]
 			self._save(path, fileName)
 
-	def _load(self, path: Path = None, isTemplate: bool = False):
+	def _load(self, path: Path = None):
+		name = path.name
+		self.scene().view.parentWidget().setWindowTitle(f"Levity Dashboard - {name}")
 		log.debug(f"Loading dashboard from {str(path)}")
-		if isinstance(path, FileLocation):
-			path = path.fullPath
+		if isinstance(path, EasyPathFile):
+			path = path.path
 		if path is None:
 			path = userConfig.userPath.joinpath('saves', 'dashboards', 'default.levity')
 		if not path.exists():
-			if isinstance(self.parent, QGraphicsScene):
-				QMessageBox.critical(self.parentWidget(), "Error", f"Dashboard file not found: {path}")
-			else:
-				QMessageBox.critical(self.parent.parentWidget(), "Error", f"Error loading dashboard: {path}")
+			QMessageBox.critical(self.scene().view, "Error", f"Dashboard file not found: {path}").exec_()
 			return
-		with open(path, 'r') as f:
-			try:
-				state = yaml.safe_load(f)
-				if 'geometry' in state:
-					self.geometry = Geometry(self, **state['geometry'])
-				self.clear()
-				for item in state:
-					itemLoader(self, item)
-				if path != userConfig.dashboardPath:
-					userConfig.dashboardPath = path
-			except yaml.YAMLError as error:
-				log.error(f"Error loading dashboard: {path}\n{error}")
-				message = QMessageBox.critical(None, "Error", f"Error loading dashboard: {path}\n{error}")
-				message.show()
-				message.exec_()
-				return
-		self.scene().views()[0].setWindowFilePath(str(path))
-		self.scene().views()[0].setWindowModified(True)
+
+		try:
+			with open(path, 'r', encoding='utf-8') as f:
+				loader = type(self).__loader__(YAMLPreprocessor(f.read()))
+				state = loader.get_data()
+				if state is None:
+					raise yaml.YAMLError("Failed to load dashboard")
+		except yaml.YAMLError as error:
+			log.error(f"Error loading dashboard: {path}\n{error}")
+			QMessageBox.critical(self.scene().window, "Error", f"Error loading dashboard: {path}\n{error}")
+			return
+
+		if self.filePath is None or self.loadedFile != path:
+			self.filePath = EasyPathFile(path)
+			self.clear()
+			self.state = state
+			self.loadedFile = EasyPathFile(path)
+		else:
+			self.state = state
+
+	def setDefault(self):
+		userConfig.dashboardPath = self.loadedFile
 
 	def clear(self):
-		items = [child for child in self.childPanels if child is not self.insertMenu]
+		items = [child for child in self.childPanels]
 		for item in items:
 			self.scene().removeItem(item)
 
@@ -289,7 +218,23 @@ class CentralPanel(Panel):
 				path = path[0]
 			self._load(path)
 
-	def _selectFile(self, fileType: str = "Dashboard Files (*.levity *.yaml)", startingDir: str = 'dashboard', multipleFiles: bool = False):
+	def loadTemplate(self, templatePath: Path, filePath: Path = None):
+		if filePath is None:
+			dialog = QFileDialog(None, 'Save Template Dashboard As...', str(userConfig.userPath.joinpath('saves', 'dashboards', templatePath.name)))
+			dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
+			dialog.setNameFilter("Dashboard Files (*.levity)")
+			dialog.setViewMode(QFileDialog.ViewMode.Detail)
+			if dialog.exec_():
+				try:
+					filePath = Path(dialog.selectedFiles()[0])
+				except IndexError:
+					return
+
+		# copy the file from the template's folder to the saves folder
+		copyfile(str(templatePath.absolute()), str(filePath.absolute()))
+		self._load(filePath)
+
+	def _selectFile(self, fileType: str = "Dashboard Files (*.levity *.yaml)", startingDir: str = 'dashboards', multipleFiles: bool = False):
 		path = userConfig.userPath.joinpath('saves', startingDir)
 		dialog = QFileDialog(self.parentWidget(), 'Save Dashboard As...', str(path))
 		dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptOpen)
@@ -304,3 +249,35 @@ class CentralPanel(Panel):
 	@classmethod
 	def representer(cls, dumper, data):
 		return dumper.represent_list(data.state)
+
+	def boundingRect(self):
+		return self.__boundingRect
+# def paint(self, p, o, w):
+# 	p.setPen(Qt.white)
+# 	p.setBrush(QBrush(Qt.red))
+# 	p.drawRect(self.scene().sceneRect())
+# 	super().paint(p, o, w)
+
+
+colorPreprocessIn = r"(?<=color\:)\s*?#*?(?P<color>[A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})", " \\g<color>"
+
+colorPreprocessOut = r"(?<=color\:)\s*?#?(?P<color>[A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})", " #\\g<color>"
+
+
+def YAMLPreprocessor(data):
+	if not isinstance(data, str):
+		file = data
+		data.seek(0)
+		data = file.read()
+		file.flush()
+		data = re.sub(*colorPreprocessOut, data, 0, re.MULTILINE)
+		file.seek(0)
+		file.write(data)
+		file.truncate()
+	else:
+		data = re.sub(*colorPreprocessIn, data, 0, re.MULTILINE)
+		return data
+
+
+class DebugException(RuntimeError):
+	pass
