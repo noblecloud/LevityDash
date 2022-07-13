@@ -3,7 +3,6 @@ import operator
 import platform
 import re
 from abc import abstractmethod
-from asyncio import Handle
 
 from builtins import isinstance
 from json import loads
@@ -22,7 +21,6 @@ from PySide2.QtWidgets import (QGraphicsDropShadowEffect, QGraphicsItem, QGraphi
                                QGraphicsRectItem, QGraphicsSceneDragDropEvent, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent, QGraphicsSceneWheelEvent, QToolTip, QMenu, QStyleOptionGraphicsItem, QGraphicsPixmapItem, QWidget,
                                QGraphicsEffect)
 
-from PySide2.QtCharts import QtCharts
 from qasync import asyncSlot, QApplication
 from rich.repr import auto
 from scipy.constants import golden
@@ -3733,18 +3731,6 @@ class GraphProxy(QGraphicsItemGroup):
 		x = self.xForTime(datetime.now(tz=LOCAL_TIMEZONE))
 		painter.drawLine(x, top, x, bottom)
 		super(GraphProxy, self).paint(painter, option, widget)
-
-
-class Chart(QtCharts.QChart):
-
-	def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
-		event.ignore()
-
-	def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent) -> None:
-		event.ignore()
-
-	def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent) -> None:
-		event.ignore()
 
 
 class Figure(NonInteractivePanel, tag=...):
