@@ -1,28 +1,57 @@
 import asyncio
 import pkgutil
-from typing import Any, ClassVar, Dict, Iterator, List, Optional
+from types import ModuleType
+from typing import Any, ClassVar, Dict, Iterator, List, Optional, Hashable
 
-from LevityDash.lib.log import LevityPluginLog as pluginLog
+from PySide2.QtCore import Qt
+
 from LevityDash.lib.plugins.utils import *
+from LevityDash.lib.plugins import errors
+from LevityDash.lib.log import LevityPluginLog as pluginLog
 from LevityDash.lib.config import pluginConfig
 from LevityDash.lib.plugins import categories
 from LevityDash.lib.plugins import schema
 from LevityDash.lib.plugins import observation
-from LevityDash.lib.plugins.plugin import Plugin
+from LevityDash.lib.plugins.observation import Container
+from LevityDash.lib.plugins.plugin import Plugin, AnySource, SomePlugin
+from LevityDash.lib.utils import UnsetKwarg
+
+Plugins: 'PluginsLoader' = None
 
 
-class Singleton(type):
-	instances: Dict[str, Any] = {}
+class GlobalSingleton(type):
+	instances: ClassVar[Dict[str, Any]] = {}
+	__root: ClassVar[ModuleType]
 
-	def __new__(cls, name, bases, attrs):
-		if name not in cls.instances:
-			cls.instances[name] = super().__new__(cls, name, bases, attrs)()
-		return cls.instances[name]
+	def __new__(mcs, clsName, bases, attrs, **kwargs):
+		name = kwargs.get('name', None) or clsName
+		if name not in mcs.instances:
+			instance = super().__new__(mcs, name, bases, attrs)()
+			if (root := mcs.root) is not None:
+				root.__setattr__(name, instance)
+			globals()[name] = instance
+			mcs.instances[name] = instance
+		return mcs.instances[name]
+
+	@classmethod
+	@property
+	def root(mcs):
+		try:
+			return mcs.__root
+		except AttributeError:
+			try:
+				import LevityDash as root
+				mcs.__root = root
+				root.singletons = mcs
+				return mcs.__root
+			except ImportError:
+				return None
 
 
-class Plugins(metaclass=Singleton):
+class PluginsLoader(metaclass=GlobalSingleton, name='Plugins'):
 	instance: ClassVar['Plugins'] = None
 	__plugins: Dict[str, Plugin] = {}
+	Plugin = Plugin
 
 	def __init__(self):
 		# find all the plugins that are enabled in the config
@@ -37,14 +66,19 @@ class Plugins(metaclass=Singleton):
 				pluginInstance = plugin.__plugin__()
 				self.__plugins[name] = pluginInstance
 				pluginLog.info(f'Loaded plugin {name}')
-			except Exception as e:
+			except ImportError as e:
 				pluginLog.debug(f'Unable to load {name} due to exception --> {e}')
+				continue
 		pluginLog.info(f'Loaded {len(self.__plugins)} plugins')
 
 	def start(self):
+		keyboardModifiers = qApp.queryKeyboardModifiers()
+		if keyboardModifiers & Qt.AltModifier:
+			print('Alt is pressed, skipping plugins')
+			return
 		if pluginConfig['Options'].getboolean('enabled'):
 			print('--------------------- Starting plugins ---------------------')
-			asyncio.gather(*[plugin.asyncStart() for plugin in self])
+			asyncio.gather(*(plugin.asyncStart() for plugin in self))
 
 	# for plugin in self:
 	# 	print(f'Starting plugin {plugin.name}')
@@ -81,6 +115,13 @@ class Plugins(metaclass=Singleton):
 	def __getitem__(self, item: str) -> Plugin:
 		return self.__plugins[item]
 
+	def get(self, item: Hashable | str, default: Any = UnsetKwarg) -> Plugin:
+		if item == 'any' or item is AnySource or item is SomePlugin:
+			return AnySource
+		if default is not UnsetKwarg:
+			return self.__plugins.get(item, default)
+		return self.__plugins.get(item)
+
 	def __iter__(self) -> Iterator[Plugin]:
 		return iter(self.__plugins.values())
 
@@ -88,7 +129,7 @@ class Plugins(metaclass=Singleton):
 		return len(self.__plugins)
 
 	def __contains__(self, item: str) -> bool:
-		return item in self.__plugins
+		return item in self.__plugins or item == 'any' or item is SomePlugin
 
 	def __getattr__(self, item: str) -> Plugin:
 		if item in self.__plugins:
@@ -98,6 +139,9 @@ class Plugins(metaclass=Singleton):
 	def __dir__(self) -> Iterator[str]:
 		return iter(self.__plugins.keys())
 
+	@property
+	def plugins(self) -> Dict[str, Plugin]:
+		return self.__plugins
 
 def __getattr__(item: str) -> Plugin:
-	return getattr(Plugins, item, None) or super().__getattribute__(item)
+	return getattr(Plugins, item, None) or locals()[item]

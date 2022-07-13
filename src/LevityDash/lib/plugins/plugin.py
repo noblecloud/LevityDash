@@ -1,24 +1,21 @@
 import asyncio
-import random
+from asyncio import get_running_loop, sleep
 from abc import abstractmethod
 from datetime import datetime, timedelta
 from functools import cached_property, lru_cache
 from operator import attrgetter
 
-import WeatherUnits
-from PySide2.QtCore import QObject, QTimer, Signal, Slot
-from typing import Callable, Iterable, Optional, Type, Union, ClassVar
+from typing import Iterable, Optional, Type, Union, Mapping
 
 from LevityDash.lib.config import pluginConfig, PluginConfig
 from LevityDash.lib.plugins.categories import CategoryDict, CategoryItem
-from LevityDash.lib.plugins.observation import (ArchivedObservationValue, MeasurementTimeSeries, Observation, ObservationDict,
-                                                ObservationLog, ObservationRealtime, ObservationTimeSeries, ObservationValue,
-                                                PublishedDict, RecordedObservationValue)
+from LevityDash.lib.plugins.observation import (ArchivedObservationValue, Observation, ObservationDict,
+                                                ObservationLog, ObservationRealtime, RealtimeSource, ObservationTimeSeries, ObservationValue,
+                                                PublishedDict, RecordedObservationValue, Container)
 from LevityDash.lib.plugins.schema import Schema
-from LevityDash.lib.plugins.utils import ChannelSignal
-from LevityDash.lib.utils.data import KeyData
 from LevityDash.lib.log import LevityPluginLog as pluginLog
-from LevityDash.lib.utils.shared import clearCacheAttr, closest, Now, Period
+from LevityDash.lib.utils.shared import closest, Period
+from LevityDash.lib.plugins.utils import Publisher
 
 
 class ObservationList(list):
@@ -57,7 +54,7 @@ class ObservationList(list):
 		return hash(self.source.name)
 
 	@lru_cache(maxsize=12)
-	def grab(self, value: timedelta, sensitivity: timedelta = timedelta(minutes=5), forecastOnly: bool = False) -> Optional[ObservationDict]:
+	def grab(self, value: timedelta, sensitivity: timedelta = timedelta(minutes=5), timeseriesOnly: bool = False) -> Optional[ObservationDict]:
 		if isinstance(value, int):
 			value = timedelta(seconds=value)
 		if isinstance(value, Period):
@@ -68,7 +65,7 @@ class ObservationList(list):
 		if isinstance(sensitivity, Period):
 			sensitivity = sensitivity.value
 
-		selection = [obs for obs in self if isinstance(obs, ObservationTimeSeries)] if forecastOnly else self
+		selection = [obs for obs in self if isinstance(obs, ObservationTimeSeries)] if timeseriesOnly else self
 		if selection:
 			grabbed = selection[min(range(len(selection)), key=lambda i: abs(selection[i].period - value))]
 
@@ -92,7 +89,7 @@ class ObservationList(list):
 	@cached_property
 	def hourly(self) -> Optional[ObservationTimeSeries]:
 		try:
-			return self.grab(Period.Hour, sensitivity=Period.QuarterHour, forecastOnly=True)
+			return self.grab(Period.Hour, sensitivity=Period.QuarterHour, timeseriesOnly=True)
 		except IndexError:
 			return None
 
@@ -107,7 +104,7 @@ class ObservationList(list):
 	@cached_property
 	def daily(self) -> Optional[ObservationTimeSeries]:
 		try:
-			return self.grab(Period.Day, sensitivity=Period.Hour, forecastOnly=True)
+			return self.grab(Period.Day, sensitivity=Period.Hour, timeseriesOnly=True)
 		except IndexError:
 			return None
 
@@ -119,333 +116,8 @@ class ObservationList(list):
 			return None
 
 	@property
-	def forecasts(self) -> Iterable[ObservationTimeSeries]:
-		return [obs for obs in self if isinstance(obs, ObservationTimeSeries) and obs.period.total_seconds() > 0]
-
-
-class Container:
-	__containers__ = {}
-
-	source: 'Plugin'
-	key: CategoryItem
-	now: ObservationValue
-	minutely: Optional[MeasurementTimeSeries]
-	hourly: Optional[MeasurementTimeSeries]
-	daily: Optional[MeasurementTimeSeries]
-	forecast: Optional[MeasurementTimeSeries]
-	historical: Optional[MeasurementTimeSeries]
-	forecastOnly: bool
-
-	title: str
-	__hash_key__: CategoryItem
-	log = pluginLog.getChild(__name__)
-
-	@classmethod
-	def __buildKey(cls, source: 'Plugin', key: CategoryItem) -> CategoryItem:
-		return CategoryItem(key, source=[source.name])
-
-	def __new__(cls, source: 'Plugin', key: CategoryItem):
-		containerKey = cls.__buildKey(source, key)
-		if containerKey not in cls.__containers__:
-			cls.__containers__[containerKey] = super(Container, cls).__new__(cls)
-		return cls.__containers__[containerKey]
-
-	def __init__(self, source: 'Plugin', key: CategoryItem):
-		self.__hash_key__ = Container.__buildKey(source, key)
-		self.source = source
-		self.key = key
-		self.source.publisher.connectChannel(self.key, self.__clearCache)
-
-	def __getattr__(self, item):
-		if item.startswith('__') or item in super(Container, self).__getattribute__('__annotations__') or item == '__annotations__':
-			return super(Container, self).__getattribute__(item)
-		return getattr(super(Container, self).__getattribute__('value'), item)
-
-	def __setattr__(self, key, value):
-		if key in self.__annotations__:
-			super(Container, self).__setattr__(key, value)
-		else:
-			self.value.__setattr__(key, value)
-
-	@lru_cache(maxsize=8)
-	def getFromTime(self, time: timedelta | datetime) -> Optional[Observation]:
-		if isinstance(time, timedelta):
-			time = Now() + time
-		return self.forecast[time]
-
-	def __repr__(self):
-		return f'{self.source.name}({self.key[-1]}: {self.value})'
-
-	def __str__(self):
-		return str(self.value)
-
-	def __hash__(self):
-		return hash(self.__hash_key__)
-
-	def toDict(self):
-		return {'key': self.key, 'value': self.value}
-
-	def __eq__(self, other):
-		return hash(self) == hash(other)
-
-	def __clearCache(self):
-		clearCacheAttr(self, 'nowFromTimeseries', 'hourly', 'daily')
-
-	@property
-	def title(self):
-		if hasattr(self.value, 'title'):
-			return self.value.title
-		return str(self.key).title()
-
-	@property
-	def value(self):
-		if self.now is not None:
-			return self.now
-		elif self.hourly is not None:
-			return self.hourly[Now()]
-		elif self.daily is not None:
-			return self.daily[Now()]
-		return None
-
-	@property
-	def now(self):
-		if self.sourceHasRealtime and self.source.realtime and self.key in self.source.realtime:
-			return self.source.realtime[self.key]
-		elif self.metadata.get('forecastOnly', False) or not self.sourceHasRealtime:
-			return self.nowFromTimeseries
-		return None
-
-	@cached_property
-	def nowFromTimeseries(self):
-		return self.forecast[Now()]
-
-	@cached_property
-	def hourly(self):
-		if self.source.hourly and self.key in self.source.hourly:
-			return self.source.hourly[self.key]
-		return None
-
-	@cached_property
-	def daily(self):
-		if self.source.daily and self.key in self.source.daily:
-			return self.source.daily[self.key]
-		return None
-
-	@cached_property
-	def forecast(self):
-		return MeasurementTimeSeries(self.source, self.key)
-
-	def customTimeFrame(self, timeframe: timedelta, sensitivity: timedelta = timedelta(minutes=1)) -> Optional[MeasurementTimeSeries | ObservationValue]:
-		try:
-			return self.source.get(self.key, timeframe)
-		except KeyError:
-			return None
-
-	@property
-	def metadata(self):
-		return self.source.schema.getExact(self.key)
-
-	@property
-	def sourceHasRealtime(self):
-		return hasattr(self.source, 'realtime')
-
-	@property
-	def forecastOnly(self) -> bool:
-		return self.metadata.get('forecastOnly', False) or not self.sourceHasRealtime
-
-
-class Publisher(QObject):
-	__added = Signal(dict)
-	__changed = Signal(dict)
-	__data: dict['Plugin', set[CategoryItem]]
-	__signals: dict[CategoryItem, ChannelSignal]
-
-	def __init__(self, source: 'Plugin'):
-		self.source = source
-		self.__data = {}
-		self.__signals = {}
-		super(Publisher, self).__init__()
-		self.__timer = QTimer(singleShot=True, interval=200)
-		self.__timer.timeout.connect(self.__emitChange)
-
-	@Slot(KeyData)
-	def addBulk(self, data: KeyData):
-		sender = data.sender
-		keys = data.keys
-		if sender not in self.__data:
-			self.__data[sender] = set()
-		self.__data[sender].update(keys)
-		if sum(len(d) for d in self.__data.values()) < 10:
-			self.__timer.stop()
-			self.__emitChange()
-		else:
-			self.__timer.start()
-
-	def remove(self, key: CategoryItem):
-		if key in self.keys:
-			self.removed.emit(self.keys[key])
-			del self.keys[key]
-
-	def __emitChange(self):
-		data = KeyData(self.source, self.__data)
-		if len(self.__signals):
-			keys = set([i for j in [d for d in data.keys.values()] for i in j])
-			True
-			for s in (signal for key, signal in self.__signals.items() if key in keys):
-				sources = tuple([d for d in data.keys if s.key in d])
-				s.publish(sources)
-		self.__added.emit(data)
-		self.__data = {}
-
-	def connectSlot(self, slot: Slot):
-		self.__added.connect(slot)
-
-	def disconnectSlot(self, slot: Slot):
-		try:
-			self.__added.disconnect(slot)
-		except TypeError:
-			pass
-
-	def connectChannel(self, channel: CategoryItem, slot: Slot):
-		signal = self.__signals.get(channel, None) or self.__addChannel(channel)
-		signal.connectSlot(slot)
-
-	def disconnectChannel(self, channel: CategoryItem, slot: Slot):
-		signal = self.__signals.get(channel, None)
-		if signal:
-			signal.disconnectSlot(slot)
-
-	def __addChannel(self, channel: CategoryItem):
-		self.__signals[channel] = ChannelSignal(self.source, channel)
-		return self.__signals[channel]
-
-
-class ScheduledEvent(object):
-	instances: ClassVar[dict['Plugin', ['ScheduledEvent']]] = {}
-
-	stagger: bool
-	staggerAmount: timedelta
-	when: datetime
-	interval: timedelta
-	func: Callable
-	args: tuple
-	kwargs: dict
-	timer: asyncio.TimerHandle
-	log = pluginLog.getChild('ScheduledEvent')
-
-	def __init__(self,
-		interval: timedelta,
-		func: Callable,
-		arguments: tuple = None,
-		keywordArguments: dict = None,
-		stagger: bool = None,
-		staggerAmount: timedelta = None,
-		fireImmediately: bool = True,
-		singleShot: bool = False,
-		pool=None
-	):
-		if arguments is None:
-			arguments = ()
-		if keywordArguments is None:
-			keywordArguments = {}
-		if stagger is None:
-			stagger = False
-		if staggerAmount is None:
-			staggerAmount = timedelta(minutes=2.5)
-		self.__interval = interval
-
-		self.__owner = func.__self__
-		if self.__owner in self.instances:
-			self.instances[self.__owner].append(self)
-		else:
-			self.instances[self.__owner] = [self]
-		self.__func = func
-		self.__args = arguments
-		self.__kwargs = keywordArguments
-		self.__stagger = stagger
-		self.__staggerAmount = staggerAmount
-		self.__singleShot = singleShot
-		self.__fireImmediately = fireImmediately
-
-	def start(self, immediately: bool = False, startTime: datetime = None):
-		self.__fireImmediately = immediately
-		if self.__singleShot:
-			self.log.debug(f'{self.__owner.name} - Scheduled single shot event: {self.__func.__name__}')
-		else:
-			interval = WeatherUnits.Time.Second(self.__interval.total_seconds())
-			stagger = WeatherUnits.Time.Second(abs(self.__staggerAmount.total_seconds()))
-			self.log.debug(f'{self.__owner.name} - Scheduled recurring event: {self.__func.__name__} every {interval} ±{stagger}')
-		self.__run(startTime)
-
-	def __del__(self):
-		self.instances[self.__owner].remove(self)
-
-	def stop(self):
-		self.timer.stop()
-
-	def reschedule(self, interval: timedelta = None, fireImmediately: bool = False):
-		self.__fireImmediately = fireImmediately
-		if interval is not None:
-			self.interval = interval
-		self.__run()
-
-	@property
-	def when(self) -> datetime:
-		when = self.__interval.total_seconds()
-		if self.__stagger:
-			seconds = self.__staggerAmount.seconds*(random()*2 - 1)
-			loopTime = asyncio.get_event_loop().time()
-			if seconds + loopTime < 0:
-				seconds = self.__staggerAmount.seconds*random()
-			when += seconds
-		return when
-
-	@when.setter
-	def when(self, value: datetime):
-		pass
-
-	@property
-	def interval(self):
-		return self.__interval
-
-	@interval.setter
-	def interval(self, value):
-		if value != self.__interval:
-			self.__interval = value
-			self.timer.cancel()
-			self.__run()
-		self.__interval = value
-
-	@property
-	def fireImmediately(self) -> bool:
-		value = self.__fireImmediately
-		self.__fireImmediately = False
-		return value
-
-	def __errorCatcher(self):
-		try:
-			self.__func(*self.__args, **self.__kwargs)
-		except Exception as e:
-			self.log.exception(e)
-
-	def __run(self, startTime: datetime = None):
-		loop = asyncio.get_event_loop()
-		when = self.when if startTime is None else startTime
-		if isinstance(when, timedelta):
-			when = when.total_seconds()
-		self.timer = loop.call_soon(self.__fire) if self.fireImmediately else loop.call_later(when, self.__fire)
-
-	# print(f'Scheduled {self.__func.__name__} to run at {when.strftime("%-I:%M:%S%p").lower()}')
-
-	def __fire(self):
-		asyncio.create_task(self.__func(*self.__args, **self.__kwargs))
-		self.log.verbose(f'{self.__func.__name__}() fired for {self.__owner.name}')
-		if not self.__singleShot:
-			self.__run()
-
-	@property
-	def __timeTo(self) -> float:
-		return self.timer.when()
+	def timeseries(self) -> Iterable[ObservationTimeSeries]:
+		return [obs for obs in self if not isinstance(obs, RealtimeSource)]
 
 
 class Classes:
@@ -528,7 +200,7 @@ class PluginMeta(type):
 				classes['Log'] = obsLog
 				attrs['log'] = property(lambda self: self.observations.log)
 
-			if any(kwargs.get(k, False) for k in ('forecast', 'hourly', 'daily', 'minutely')):
+			if any(kwargs.get(k, False) for k in ('timeseries', 'hourly', 'daily', 'minutely')):
 				forecast = type(f'{name}Forecast', (ObservationTimeSeries,), {'_period': None}, sourceKeyMap=mcs.__APIKeyMap__, recorded=False)
 				classes['Forecast'] = forecast
 
@@ -559,32 +231,27 @@ class PluginMeta(type):
 		return super().__new__(mcs, name, bases, attrs)
 
 
-# observationClasses = {}
-# observationAnnotations = {k: obs for k, obs in attrs['__annotations__'].items()
-#                           if isinstance(obs, type)
-#                           and not isinstance(obs, GenericAlias)
-#                           and issubclass(obs, ObservationDict)}
-#
-# for obsName, observation in observationAnnotations.items():
-# 	value = attrs.get(obsName, None)
-# 	if isinstance(value, timedelta):
-# 		if value.total_seconds() < 0:
-# 			observationClasses[obsName] = type(f'{name}{obsName.title()}', (obsLog,), {'_period': value}, sourceKeyMap=mcs.__APIKeyMap__, recorded=True)
-# 		else:
-# 			observationClasses[obsName] = type(f'{name}{obsName.title()}', (forecast,), {'_period': value}, sourceKeyMap=mcs.__APIKeyMap__)
-# 		continue
-# 	if value is ObservationRealtime or observation is ObservationRealtime:
-# 		observationClasses[obsName] = realtime
-# 		continue
-# 	if value is ObservationLog:
-# 		observationClasses[obsName] = history
-# 		continue
-# 	if value is ObservationTimeSeries:
-# 		observationClasses[obsName] = forecast
-# 		continue
-# 	# attrs[obsName] = property(fget=lambda self: getattr(self, f'__{obsName}'))
-# attrs['__annotations__'].update(observationClasses)
-# attrs.update(observationClasses)
+class SomePlugin(metaclass=PluginMeta, prototype=True):
+	name = 'any'
+
+	def __eq__(self, other):
+		return isinstance(other, (Plugin, SomePlugin)) or other == 'any'
+
+	def __repr__(self):
+		return 'SomePlugin(any)'
+
+	def __subclasscheck__(self, subclass):
+		return issubclass(subclass, Plugin)
+
+	def __instancecheck__(self, instance):
+		return isinstance(instance, Plugin)
+
+	def __hash__(self):
+		return hash('any')
+
+
+AnySource = SomePlugin()
+SomePlugin.AnySource = AnySource
 
 
 class Plugin(metaclass=PluginMeta):
@@ -617,7 +284,7 @@ class Plugin(metaclass=PluginMeta):
 			o = value(source=self)
 			o.dataName = key.lower()
 			if o.published:
-				o.accumulator.connectSlot(self.publisher.addBulk)
+				o.accumulator.connectSlot(self.publisher.publish)
 			self.observations.append(o)
 
 		self.config = self.getConfig(self)
@@ -661,8 +328,7 @@ class Plugin(metaclass=PluginMeta):
 		# Look in the userConfig file for sections with the plugin name
 		if pluginConfig.has_section(cls.__name__):
 			value = PluginConfig(plugin=plugin)
-			if cls._validateConfig(value):
-				return value
+			return value
 		raise ValueError(f'No config for {cls.__name__}')
 
 	@classmethod
@@ -683,14 +349,27 @@ class Plugin(metaclass=PluginMeta):
 		if value:
 			self.start()
 
-	# self.config.save()
-
 	@property
 	def name(self) -> str:
 		return self.__class__.__name__
 
 	def __hash__(self):
 		return hash(self.name)
+
+	def __str__(self):
+		return self.name
+
+	def __repr__(self):
+		return f'Plugin({self.name})'
+
+	def __eq__(self, other) -> bool:
+		if other is any:
+			return True
+		if isinstance(other, str):
+			return self.name == other
+		if isinstance(other, Plugin):
+			return self.name == other.name
+		return False
 
 	def items(self):
 		return self.containers.items()
@@ -701,7 +380,7 @@ class Plugin(metaclass=PluginMeta):
 			raise IndexError(f'No endpoint found for {timeframe}')
 		return endpoint[key]
 
-	def __getitem__(self, item: Union[str, datetime, timedelta]):
+	def __getitem__(self, item: Union[str, CategoryItem, datetime, timedelta]):
 		# if item is a timedelta:
 		if isinstance(item, timedelta):
 			# add the current date to the item
@@ -721,8 +400,6 @@ class Plugin(metaclass=PluginMeta):
 
 	def __buildContainer(self, key: CategoryItem):
 		self.containers[key] = self.classes.Container(self, key)
-		if 'low' in str(key):
-			a = self.containers[key].daily
 		return self.containers[key]
 
 	def keys(self):
@@ -761,4 +438,4 @@ class Plugin(metaclass=PluginMeta):
 			await self.log.asyncUpdate(archive)
 
 
-__all__ = ['Plugin', 'ObservationList', 'Container', 'Publisher', 'ScheduledEvent', 'Classes']
+__all__ = ['Plugin', 'ObservationList', 'Classes']
