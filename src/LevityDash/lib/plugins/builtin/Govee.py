@@ -133,7 +133,9 @@ class Govee(Plugin, realtime=True, logged=True):
 							raise NoDevice(f'No device found after scanning for {scanTime} and {__scanAttempts} attempts')
 						pluginLog.warning(f"Unable to find device matching config {deviceConfig} after scanning for {scanTime}...")
 
-				self.scanner._service_uuids = tuple(device.metadata['uuids'])
+				await self.scanner.stop()
+				delattr(self, 'scanner')
+				self.scanner = BleakScanner(service_uuids=tuple(device.metadata['uuids']))
 				name = f'GoveeBLE [{device.name}]'
 				self.name = name
 				self.config[name]['device.name'] = str(device.name)
@@ -262,7 +264,10 @@ class Govee(Plugin, realtime=True, logged=True):
 			raise NoDevice(f'No device found for {deviceConfig}')
 
 	def __dataParse(self, device, data):
-		dataBytes: bytes = data.manufacturer_data[1]
+		try:
+			dataBytes: bytes = data.manufacturer_data[1]
+		except KeyError:
+			pluginLog.error(f'Invalid data: {data!r}')
 		results = {
 			'timestamp':     now().timestamp(),
 			'type':          f'BLE{str(type(data).__name__)}',
