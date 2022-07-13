@@ -43,23 +43,6 @@ class EasyPath:
 		cls = EasyPath if path.is_dir() else EasyPathFile
 		return super().__new__(cls)
 
-	# @classmethod
-	# def fromPath(cls, path: str | Path, create: bool = False):
-	# 	match path:
-	# 		case Path() | str() if str(path)
-	# 			p = Path(path)
-	# 			if create:
-	# 				if not p.parent.exists():
-	# 					p.parent.mkdir(parents=True)
-	# 				fp = open(p, 'x')
-	# 				fp.close()
-	# 			return EasyPathFile(p)
-	# 		case Path() if s:
-	#
-	# if create and not path.exists():
-	# 	path.mkdir(parents=True)
-	# return cls(path)
-
 	def __init__(self, path: str | Path):
 		if hasattr(path, 'path'):
 			path = path.path
@@ -82,7 +65,7 @@ class EasyPath:
 		return EasyPathFile(path)
 
 	@property
-	def path(self):
+	def path(self) -> Path:
 		return self.__basePath
 
 	def up(self, n: int = 1) -> 'EasyPath':
@@ -105,7 +88,7 @@ class EasyPath:
 		return self.__basePath.is_file()
 
 	def __repr__(self):
-		return f'{self.__basePath.name}'
+		return f'EasyPath(dir={self.__basePath.name})'
 
 	def __str__(self):
 		return str(self.__basePath.name)
@@ -120,6 +103,20 @@ class EasyPath:
 			if isinstance(item, str) and any(i not in item for i in ('.', '..', '/', '\\')):
 				return self.path.joinpath(item).exists()
 
+	def __eq__(self, other):
+		own = self.__basePath.absolute()
+		match other:
+			case EasyPath() | EasyPathFile():
+				return own == other.path.absolute()
+			case str():
+				return own == Path(other).absolute()
+			case Path():
+				return own == other.absolute()
+			case None:
+				return False
+			case _:
+				raise TypeError(f'{repr(other)} is not a valid type for comparison')
+
 
 class EasyPathFile(EasyPath):
 	def __init__(self, basePath: str | Path):
@@ -129,4 +126,4 @@ class EasyPathFile(EasyPath):
 			raise FileNotFoundError(f'{self.__basePath} is not a file')
 
 	def __repr__(self):
-		return f'{self.__basePath.name}'
+		return f'EasyPath(file={self.__basePath.name})'
