@@ -47,7 +47,7 @@ WMOCodes = {
 	73: {'description': 'Snowfall', 'icon': ''},
 	75: {'description': 'Heavy Snowfall', 'icon': ''},
 	77: {'description': 'Snow grains', 'icon': ''},
-	80: {'description': 'Light Rain showers', 'icon': ''},
+	80: {'description': 'Light Rain showers', 'icon': ''},
 	81: {'description': 'Rain showers', 'icon': ''},
 	82: {'description': 'Heavy Rain showers', 'icon': ''},
 	85: {'description': 'Light Snow showers', 'icon': ''},
