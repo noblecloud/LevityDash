@@ -189,7 +189,8 @@ class Text(QGraphicsPathItem):
 
 		# For consistency across other text boxes, the a '|' character is added when
 		# getting the text height
-		fmRect = QFontMetricsF(self.font()).tightBoundingRect(f'|{self.text}')
+		fm = QFontMetricsF(self.font())
+		fmRect = fm.tightBoundingRect(f'|{self.text}')
 
 		rect.setHeight(fmRect.height())
 		pRect = self.limitRect
@@ -225,7 +226,7 @@ class Text(QGraphicsPathItem):
 			refreshTask = getattr(self, 'refreshTask', None)
 			if refreshTask is not None:
 				refreshTask.cancel()
-			# TODO: change this to properly use abs once WeatherUnit has it implemented
+			# TODO: change this to properly use abs once WeatherUnits has it implemented
 			if wu.Time.Minute(abs(value.minute)) < wu.Time.Minute(1):
 				self.refreshTask = loop.call_later(1, self.refresh)
 			elif wu.Time.Hour(abs(value.hour)) < wu.Time.Hour(1):
@@ -368,7 +369,7 @@ class Text(QGraphicsPathItem):
 
 		fm = QFontMetricsF(self.font())
 		fontPath = QPainterPath()
-		fontPath.addText(0, 0, self.font(), '0')
+		fontPath.addText(0, 0, self.font(), f'|')
 
 		fm.fontPath = fontPath
 
@@ -380,7 +381,9 @@ class Text(QGraphicsPathItem):
 		path.addText(QPointF(0, 0), self.font(), text)
 
 		textCenter = path.boundingRect().center()
-		textCenter.setY(-fm.strikeOutPos())
+
+		if self.font().family() != 'Weather Icons':
+			textCenter.setY(-fm.strikeOutPos())
 
 		path.translate(-textCenter)
 

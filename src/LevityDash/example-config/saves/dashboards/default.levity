@@ -361,6 +361,13 @@
 - type: realtime.text
   key: environment.condition.condition
   title: false
+  display:
+    value:
+      margins:
+        bottom: 0%
+        left: 0%
+        right: 0%
+        top: 0%
   geometry:
     height: 6.4%
     width: 20.7%
