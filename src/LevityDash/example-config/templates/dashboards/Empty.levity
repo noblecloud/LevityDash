@@ -1,0 +1,45 @@
+- type: clock
+  frozen: true
+  geometry:
+    height: 22.2%
+    width: 36.5%
+    x: 0%
+    y: 1.6%
+  items:
+    - format: '%A, %B %-d'
+      alignment: CenterRight
+      filters:
+        - 0Add Ordinal
+      geometry:
+        height: 27%
+        width: 100%
+        x: 0%
+        y: 0%
+      margins:
+        left: 10px
+    - format: '%-I:%M'
+      alignment: CenterRight
+      geometry:
+        height: 73%
+        width: 80%
+        x: 1.2%
+        y: 27%
+      margins:
+        right: 10px
+    - type: moon
+      geometry:
+        height: 45%
+        width: 18.8%
+        x: 81.2%
+        y: 27%
+      glowStrength: 2
+      interval:
+        minutes: 20
+    - format: '%p'
+      filters:
+        - 1Lower
+      geometry:
+        height: 29.6%
+        width: 18.8%
+        x: 81.2%
+        y: 70.4%
