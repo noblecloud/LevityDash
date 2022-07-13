@@ -133,8 +133,11 @@ class Govee(Plugin, realtime=True, logged=True):
 							raise NoDevice(f'No device found after scanning for {scanTime} and {__scanAttempts} attempts')
 						pluginLog.warning(f"Unable to find device matching config {deviceConfig} after scanning for {scanTime}...")
 
-				await self.scanner.stop()
-				delattr(self, 'scanner')
+				try:
+					await self.scanner.stop()
+					delattr(self, 'scanner')
+				except Exception as e:
+					pass
 				self.scanner = BleakScanner(service_uuids=tuple(device.metadata['uuids']))
 				name = f'GoveeBLE [{device.name}]'
 				self.name = name
