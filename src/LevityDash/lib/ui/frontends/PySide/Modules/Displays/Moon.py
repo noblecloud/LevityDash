@@ -13,6 +13,7 @@ from ephem import previous_new_moon, next_new_moon
 from LevityDash.lib.ui.frontends.PySide.utils import colorPalette
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.utils.shared import clearCacheAttr
+from LevityDash.lib.stateful import StateProperty
 from LevityDash.lib.config import userConfig
 
 golden = (1 + np.sqrt(5))/2
@@ -83,6 +84,7 @@ class MoonBack(QGraphicsPathItem):
 
 	def paint(self, painter: QPainter, option, widget):
 		tW = painter.worldTransform()
+		painter.setRenderHint(QPainter.Antialiasing)
 		scale = min(tW.m11(), tW.m22())
 		tW.scale(1/tW.m11(), 1/tW.m22())
 		tW.scale(scale, scale)
@@ -145,11 +147,11 @@ class MoonFront(QGraphicsPathItem):
 		t.rotate(self.parentItem().getAngle())
 		path = t.map(path)
 		self.setPath(path.simplified())
-
 		self.setTransformOriginPoint(self.parentItem().rect().center())
 
 	def paint(self, painter, option, widget):
 		tW = painter.worldTransform()
+		painter.setRenderHint(QPainter.Antialiasing)
 		scale = min(tW.m11(), tW.m22())
 		tW.scale(1/tW.m11(), 1/tW.m22())
 		tW.scale(scale, scale)
@@ -158,25 +160,25 @@ class MoonFront(QGraphicsPathItem):
 
 
 class MoonGlowEffect(QGraphicsDropShadowEffect):
-	def __init__(self, parent):
+	def __init__(self, parent, strength):
 		super().__init__(None)
 		self.surface = parent
-		self.setBlurRadius(self.surface.parentItem().radius)
+		self.setBlurRadius(strength)
 		self.setColor(QColor(255, 255, 255, 255))
 		self.setOffset(QPointF(0, 0))
 
-	def draw(self, painter: QPainter):
-		painter.setRenderHint(QPainter.Antialiasing, True)
-		super().draw(painter)
 
-
-class Moon(Panel):
+class Moon(Panel, tag="moon"):
 	moonFull: QPainterPath
 	moonPath: QPainterPath
 	_date: datetime
-	_phase: float = 0
-	rotation: float = 0.0
+	_phase: float
+	_glow: bool
+	_glowStrength: float
+	rotation: float
 	_interval = timedelta(minutes=5)
+
+	__exclude__ = {..., 'items'}
 
 	valueChanged = Signal(float)
 
@@ -185,23 +187,24 @@ class Moon(Panel):
 		self.lat, self.lon = userConfig.loc
 		self._date = datetime.now(userConfig.tz)
 		self.refreshData()
+		self._glow = True
+		self._glowStrength = 0.5
+		self.timer = QTimer(interval=1000*60*15)
+		self.timer.setTimerType(Qt.VeryCoarseTimer)
 		super(Moon, self).__init__(*args, **kwargs)
-		self.setFlag(self.ItemHasNoContents, False)
+		self.timer.timeout.connect(self.updateMoon)
+		self.setFlag(self.ItemHasNoContents)
 		self.moonFull.setParentItem(self)
 		self.moonPath.setParentItem(self)
 		self.moonPath.setPos(self.boundingRect().center())
-		self.moonPath.setGraphicsEffect(MoonGlowEffect(self.moonPath))
+		self.scene().view.resizeFinished.connect(self.refresh)
 
-		# Build timer
-		self.timer = QTimer()
-		self.timer.setInterval(1000*self._interval.total_seconds())
-		# self.timer.setInterval(200)
-		self.timer.setTimerType(Qt.VeryCoarseTimer)
-		self.timer.timeout.connect(self.updateMoon)
 		self.timer.start()
-		self.updateFromGeometry()
 		self._acceptsChildren = False
 		self.updateMoon()
+
+	def refresh(self):
+		self.setRect(self.rect())
 
 	@property
 	def isEmpty(self):
@@ -230,6 +233,69 @@ class Moon(Panel):
 	@property
 	def radius(self) -> float:
 		return min(self.visibleHeight, self.visibleWidth)/2
+
+	@StateProperty(default=True, allowNone=False, dependencies={'glowStrength'})
+	def glow(self) -> bool:
+		return self._glow
+
+	@glow.setter
+	def glow(self, value):
+		self._glow = value
+		if moonPath := getattr(self, "moonPath", None):
+			if value:
+				if effect := moonPath.graphicsEffect():
+					effect.setEnabled(True)
+				else:
+					moonPath.setGraphicsEffect(MoonGlowEffect(self.moonPath, self.glowStrength))
+			else:
+				if effect := moonPath.graphicsEffect():
+					effect.setEnabled(False)
+
+	@StateProperty(default=0.2, allowNone=False)
+	def glowStrength(self) -> float:
+		return self._glowStrength
+
+	@glowStrength.setter
+	def glowStrength(self, value: float):
+		self._glowStrength = max(value, 0)
+		if not self._glowStrength:
+			self.glow = False
+			return
+		if moonPath := getattr(self, "moonPath", None):
+			if effect := moonPath.graphicsEffect():
+				effect.setBlurRadius(value*self.radius)
+
+	@glowStrength.condition
+	def glowStrength(value: float):
+		return value > 0
+
+	@glowStrength.condition
+	def glowStrength(self):
+		return self._glow
+
+	@StateProperty(default=timedelta(minutes=5), allowNone=False)
+	def interval(self) -> timedelta:
+		interval = self.timer.interval()
+		if interval < 0:
+			interval = 0
+		return timedelta(seconds=interval/1000)
+
+	@interval.setter
+	def interval(self, value: timedelta):
+		if timer := getattr(self, "timer", None):
+			timer.stop()
+			timer.setInterval(1000*value.total_seconds())
+			timer.start()
+
+	@interval.decode
+	def interval(value: dict | int) -> timedelta:
+		match value:
+			case dict(value):
+				return timedelta(**value)
+			case int(value):
+				return timedelta(minutes=value)
+			case _:
+				raise ValueError(f"Invalid interval: {value}")
 
 	def refreshData(self):
 		self._date = datetime.now(timezone.utc)
@@ -276,8 +342,8 @@ class Moon(Panel):
 		self.moonPath.draw()
 		self.moonFull.setPos(rect.center())
 		self.moonFull.draw()
-		effect = self.moonPath.graphicsEffect()
 		self.setCacheMode(QGraphicsItem.CacheMode.ItemCoordinateCache)
-		if effect is not None:
+		if self.glow and (effect := self.moonPath.graphicsEffect()):
+			effect.setBlurRadius(self.glowStrength*self.radius)
 			effect.updateBoundingRect()
 			effect.update()

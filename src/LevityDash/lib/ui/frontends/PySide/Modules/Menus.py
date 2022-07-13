@@ -1,12 +1,13 @@
-import platform
 from enum import Enum
 from functools import cached_property
-from json import dumps
 from pathlib import Path
-from pprint import pprint
+from shutil import get_terminal_size
 from typing import Any, Type, Union
 
 from PySide2.QtCore import QPointF, Qt, Slot
+from rich.console import Console
+from rich.panel import Panel
+from rich.pretty import Pretty
 
 try:
 	from PySide2.QtGui import QActionGroup
@@ -15,6 +16,7 @@ except ImportError:
 
 from PySide2.QtWidgets import QMenu
 
+from LevityDash.lib.log import debug
 from LevityDash.lib.config import userConfig
 from LevityDash.lib.plugins import Plugins
 from LevityDash.lib.EasyPath import EasyPath
@@ -22,45 +24,43 @@ from LevityDash.lib.utils.geometry import AlignmentFlag, Position
 
 
 class BaseContextMenu(QMenu):
-	parent: 'ResizeableItem'
+	parent: 'Panel'
 	position = QPointF(0, 0)
 
 	def __init__(self, parent, title: str = None, *args: Any, **kwargs: Any):
 		super().__init__()
-		if title:
-			self.setTitle(title)
 		self.parent = parent
+		if title is not None:
+			self.setTitle(title)
 		self.aboutToShow.connect(self.updateItems)
 		self.setMinimumWidth(150)
 		self.buildMenuItems()
 
 	@Slot()
 	def updateItems(self):
-		childMenues = [menu for menu in self.children() if isinstance(menu, QMenu)]
-		for menu in childMenues:
+		childMenus = [menu for menu in self.children() if isinstance(menu, QMenu)]
+		for menu in childMenus:
 			menu.update()
 		if hasattr(self, 'freeze'):
 			self.freeze.setEnabled(self.parent.hasChildren)
 
-	def show(self):
-		self.parent.resizeHandles.show()
-		super(BaseContextMenu, self).show()
+	def uniqueItems(self):
+		pass
 
 	def buildMenuItems(self):
+		self.uniqueItems()
 		self.mainChunk()
 		# --------------------- #
-		if self.parent.hasChildren:
+		if self.parent.hasChildren and self.parent._acceptsChildren:
 			self.freezePanelMenuAction()
-		if self.parent.acceptDrops():
+		if self.parent._acceptsChildren:
 			self.addMenu(InsertMenu(self))
-			# self.gridMenu()
 			self.saveLoadMenu()
 			self.addSeparator()
-		if self.parent.debug:
+		if debug:
 			self.addAction('Print State', self.printState)
-			self.addAction('Debug Breakpoint', self.parent.debugBreak)
-
-		self.addAction('Delete', self.delete)
+		if self.parent.deletable:
+			self.addAction('Delete', self.delete)
 
 	def freezePanelMenuAction(self):
 		self.freeze = self.addAction('Freeze Panel', self.parent.freeze)
@@ -74,38 +74,28 @@ class BaseContextMenu(QMenu):
 	def mainChunk(self):
 		self.addSeparator()
 
-		# resize = self.addAction('Resizable', self.parent.setResizable)
-		# resize.setCheckable(True)
-		# resize.setChecked(self.parent.resizable)
+		resize = self.addAction('Resizable', self.parent.setResizable)
+		resize.setCheckable(True)
+		resize.setChecked(self.parent.resizable)
 		#
-		# moveable = self.addAction('Movable', self.parent.setMovable)
-		# moveable.setCheckable(True)
-		# moveable.setChecked(self.parent.movable)
-		#
-		# keepInFrame = self.addAction('Keep in Frame', self.parent.setKeepInFrame)
-		# keepInFrame.setCheckable(True)
-		# keepInFrame.setChecked(self.parent.keepInFrame)
+		movable = self.addAction('Movable', self.parent.setMovable)
+		movable.setCheckable(True)
+		movable.setChecked(self.parent.movable)
 		self.geometryMenu()
-		# collisions = self.addAction('Allow Collisions', self.collisions)
-		# collisions.setCheckable(True)
-		# collisions.setChecked(not self.parent.preventCollisions)
-		# clipping = self.addAction('Clipping', self.parent.setClipping)
-		# clipping.setCheckable(True)
-		# clipping.setChecked(self.parent.clipping)
-		self.addSeparator()
-		if self.parent.debug:
-			self.addAction('Print Status', self.printStatus)
-			self.addAction('Breakpoint', self.parent.debugBreak)
-
-	def printStatus(self):
-		value = dumps(self.parent.state, indent=2, sort_keys=False, cls=JsonEncoder)
-		print(value)
 
 	def printState(self):
-		pprint(self.parent.state)
-
-	# state = yaml.dump(self.parent.state, default_flow_style=False)
-	# pprint(state)
+		console = Console(
+			soft_wrap=True,
+			tab_size=2,
+			no_color=False,
+			force_terminal=True,
+			width=get_terminal_size((100, 20)).columns - 5,
+			record=False,
+			log_time_format="%H:%M:%S",
+		)
+		pretty = Pretty(self.parent.state)
+		panel = Panel(pretty, title=type(self.parent).__name__)
+		console.print(panel)
 
 	def saveLoadMenu(self):
 		saveAct = self.addAction("Save Panel", self.parent.save)
@@ -118,7 +108,7 @@ class BaseContextMenu(QMenu):
 		item.setFocus(Qt.FocusReason.MouseFocusReason)
 
 	def addLabel(self):
-		from LevityDash.lib.ui.frontends.PySide.Modules.Label import EditableLabel
+		from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Label import EditableLabel
 		item = EditableLabel(self.parent)
 		item.setPos(self.position)
 
@@ -181,16 +171,6 @@ class BaseContextMenu(QMenu):
 		allAbsolute.setCheckable(True)
 		allAbsolute.setChecked(not self.parent.geometry.relative)
 
-	# self.geometry.addAction('Snap to Grid', lambda: self.parent.geometry.toggleSnapping('y', 'x', 'height', 'width'))
-
-	# snapping = self.geometry.addMenu('Snapping')
-	# locMag = snapping.addAction('Position', self.locationSnap)
-	# locMag.setCheckable(True)
-	# locMag.setChecked(self.parent.geometry.position.snapping)
-	# sizeMag = snapping.addAction('Size', self.sizeSnap)
-	# sizeMag.setCheckable(True)
-	# sizeMag.setChecked(self.parent.geometry.size.snapping)
-
 	def setRelative(self, value):
 		self.parent.geometry.relative = value
 
@@ -235,58 +215,6 @@ class BaseContextMenu(QMenu):
 		verticalGroup.addAction(bottom)
 		verticalGroup.setExclusive(True)
 
-	# def snappingSubMenu(self):
-	# snapping = self.addMenu('Snap Subpanes To Grid')
-	# locMag = snapping.addAction('Position', self.subpaneLocSnap())
-	# locMag.setCheckable(True)
-	# locMag.setChecked(self.parent.subpaneSnapping.location)
-	# sizeMag = snapping.addAction('Size', self.subpanesSizeSnap)
-	# sizeMag.setCheckable(True)
-	# sizeMag.setChecked(self.parent.subpaneSnapping.size)
-
-	def showGrid(self):
-		self.parent.showGrid = not self.parent.showGrid
-		self.parent.update()
-
-	def resetGrid(self):
-		self.parent.grid.reset()
-
-	def static(self):
-		self.parent.staticGrid = not self.parent.staticGrid
-		self.parent.update()
-
-	def collisions(self):
-		self.parent.preventCollisions = not self.parent.preventCollisions
-
-	def clipping(self):
-		self.parent.setFlag(self.parent.ItemClipsChildrenToShape, not self.flags() & self.parent.ItemClipsChildrenToShape)
-
-	def keepInFrame(self):
-		self.parent._keepInFrame = not self.parent._keepInFrame
-		self.parent.updateSizePosition()
-
-	def subpaneLocSnap(self):
-		value = not self.parent.subpaneSnapping.location
-		subpanes = [x.surface for x in self.parent.grid.gridItems]
-		for pane in subpanes:
-			pane.updateRatios()
-			pane.snapping.location = value
-			pane.updateSizePosition()
-
-	def subpaneSizeSnap(self):
-		value = not self.parent.subpaneSnapping.size
-		subpanes = [x.surface for x in self.parent.grid.gridItems]
-		for pane in subpanes:
-			pane.updateRatios()
-			pane.snapping.size = value
-			pane.updateSizePosition()
-
-	def locationSnap(self):
-		self.parent.geometry.position.snapping = not self.parent.geometry.position.snapping
-
-	def sizeSnap(self):
-		self.parent.geometry.size.snapping = not self.parent.geometry.size.snapping
-
 	def debugBreak(self):
 		self.parent.debugBreak()
 
@@ -300,7 +228,7 @@ class BaseContextMenu(QMenu):
 
 	@cached_property
 	def window(self):
-		return self.parent.scene().views()[0]
+		return self.parent.scene().view
 
 	@cached_property
 	def app(self):
@@ -310,24 +238,13 @@ class BaseContextMenu(QMenu):
 
 class LabelContextMenu(BaseContextMenu):
 
-	def buildMenuItems(self):
+	def uniqueItems(self):
 		self.alignmentMenu()
-		self.textFilterMenu()
-		# lb = self.addAction('Allow Line Wrap', self.allowLineWrap)
-		# lb.setCheckable(True)
-		# lb.setChecked(self.parent.lineBreaking)
+		# self.textFilterMenu()
 		self.addAction('Edit Margins', self.parent.editMargins)
-		super(LabelContextMenu, self).buildMenuItems()
 
 	def textFilterMenu(self):
 		filters = self.addMenu('Text Filters')
-
-		# lower = filters.addAction('Lower', lambda: self.parent.setFilter('1lower'))
-		# lower.setCheckable(True)
-		# lower.setChecked('1lower' in self.parent.enabledFilters)
-
-		# filterFuncs = {filter: lambda: self.parent.setFilter(filter) for filter in self.parent.filters}
-
 		for filter in self.parent.filters:
 			name = filter[1:]
 			filterAction = filters.addAction(name, lambda filter=filter: self.parent.setFilter(filter))
@@ -335,42 +252,19 @@ class LabelContextMenu(BaseContextMenu):
 			filterAction.setCheckable(True)
 			filterAction.setChecked(filter in self.parent.enabledFilters)
 
-	# upper = filters.addAction('Upper', lambda: self.parent.setFilter('1upper'))
-
-	# upper.setCheckable(True)
-	# upper.setChecked('1upper' in self.parent.enabledFilters)
-	#
-	# title = filters.addAction('Title', lambda: self.parent.setFilter('1title'))
-	# title.setCheckable(True)
-	# title.setChecked('1title' in self.parent.enabledFilters)
-	#
-	# ordinal = filters.addAction('Ordinal', lambda: self.parent.setFilter('0ordinal'))
-	# ordinal.setCheckable(True)
-	# ordinal.setChecked('0ordinal' in self.parent.enabledFilters)
-	#
-	# addOrdinal = filters.addAction('Add Ordinal', lambda: self.parent.setFilter('0addordinal'))
-	# addOrdinal.setCheckable(True)
-	# addOrdinal.setChecked('0addOrdinal' in self.parent.enabledFilters)
-
-	def allowLineWrap(self):
-		self.parent.lineBreaking = not self.parent.lineBreaking
-		self.parent.update()
-
 
 class EditableLabelContextMenu(LabelContextMenu):
 
-	def buildMenuItems(self):
+	def uniqueItems(self):
 		self.addAction('Edit', self.parent.edit)
-		super(EditableLabelContextMenu, self).buildMenuItems()
+		super().uniqueItems()
 
 
 class RealtimeContextMenu(BaseContextMenu):
 
-	def buildMenuItems(self):
+	def uniqueItems(self):
 		self.sources = SourceMenu(self)
 		self.addMenu(self.sources)
-		# if not self.sources.sources:
-		# 	self.sources.setEnabled(False)
 		self.showTitle = self.addAction('Show Title', self.parent.toggleTitle)
 		self.showTitle.setCheckable(True)
 		self.showTitle.setChecked(self.parent.splitter.enabled)
@@ -379,16 +273,6 @@ class RealtimeContextMenu(BaseContextMenu):
 		showUnit.setChecked(self.parent.display.displayProperties.unitPosition != 'hidden')
 		self.addMenu(LabelContextMenu(self.parent.display.valueTextBox, title="Value"))
 		self.addMenu(LabelContextMenu(self.parent.display.unitTextBox, title="Unit"))
-		# unitPositions = MenuFromEnum(self.parent.display, 'displayProperties.unitPosition', self.parent.display.setUnitPosition, 'Unit Position')
-		# self.addMenu(unitPositions)
-		super(RealtimeContextMenu, self).buildMenuItems()
-
-	def allowLineWrap(self):
-		self.parent.display.lineBreaking = not self.parent.display.lineBreaking
-		self.parent.update()
-
-	def hasTitle(self):
-		return hasattr(self.parent, 'title')
 
 	def updateItems(self):
 		self.sources.update()
@@ -432,7 +316,7 @@ class MenuFromEnum(QMenu):
 class TimeContextMenu(BaseContextMenu):
 	parent: 'Clock'
 
-	def buildMenuItems(self):
+	def uniqueItems(self):
 		insert = self.addMenu('Insert')
 		insert.addAction('Time', lambda: self.parent.addItem('%-I:%M'))
 		insert.addAction('Date', lambda: self.parent.addItem('%A, %B %-d'))
@@ -448,7 +332,7 @@ class TimeContextMenu(BaseContextMenu):
 		insert.addAction('Year [abbreviated]', lambda: self.parent.addItem('\'%y'))
 		insert.addAction('Custom', self.parent.addCustom)
 		insert.addAction('Reset')
-		super(TimeContextMenu, self).buildMenuItems()
+		super(TimeContextMenu, self).uniqueItems()
 
 
 class CentralPanelContextMenu(BaseContextMenu):
@@ -456,21 +340,10 @@ class CentralPanelContextMenu(BaseContextMenu):
 
 	def buildMenuItems(self):
 		self.addMenu(InsertMenu(self))
-
-		# collisions = self.addAction('Allow Collisions', self.collisions)
-		# collisions.setCheckable(True)
-		# collisions.setChecked(not self.parent.preventCollisions)
-		#
-		# clipping = self.addAction('Clipping', self.parent.setClipping)
-		# clipping.setCheckable(True)
-		# clipping.setChecked(self.parent.clipping)
-
-		self.gridMenu()
 		self.addSeparator()
 		self.saveLoadMenu()
-		# fullscreen
 		self.addSeparator()
-		f = self.addAction('Fullscreen', self.fullsceen)
+		self.addAction('Fullscreen', self.fullsceen)
 		self.addAction('Quit', self.app.quit)
 
 	def fullsceen(self):
@@ -537,21 +410,6 @@ class InsertMenu(QMenu):
 class PlotContextMenu(BaseContextMenu):
 	parent: 'PlotPanel'
 
-	def buildMenuItems(self):
-		self.addMenu(InsertMenu(self))
-		self.addAction('Reset', self.reset)
-		# self.addAction('Reset Zoom', self.parent.resetZoom)
-		# self.addAction('Reset Range', self.parent.resetRange)
-		self.addAction('Reset All', self.parent.resetAll)
-		self.addAction('Reset X-Axis', self.parent.resetXAxis)
-		self.addAction('Reset Y-Axis', self.parent.resetYAxis)
-		self.addAction('Reset X-Axis Range', self.parent.resetXAxisRange)
-		self.addAction('Reset Y-Axis Range', self.parent.resetYAxisRange)
-		self.addAction('Reset X-Axis Zoom', self.parent.resetXAxisZoom)
-		self.addAction('Reset Y-Axis Zoom', self.parent.resetYAxisZoom)
-		self.addAction('Reset All Zoom', self.parent.resetAllZoom)
-		self.addAction('Reset All Ranges', self.parent.resetAllRanges)
-
 
 class SourceMenu(QMenu):
 
@@ -561,27 +419,36 @@ class SourceMenu(QMenu):
 		self.aboutToShow.connect(self.updateItems)
 		self.setMinimumWidth(150)
 		self.setTitle('Source')
-		self.__addSources()
+		self.addSources()
 
 	def updateItems(self):
 		if self.sources:
 			self.setEnabled(True)
 		else:
 			self.setEnabled(False)
+		for action in self.actions():
+			action.setChecked(action.source == self.parent.parent.currentSource)
 
 	@property
 	def sources(self):
-		if self.parent.parent.valueLink is not None:
-			return [i for i in Plugins if self.parent.parent.valueLink.key in i]
+		if self.parent.parent.key is not None:
+			return [i for i in Plugins if self.parent.parent.key in i]
 		return []
 
-	def __addSources(self):
-		print(self.sources)
+	def addSources(self):
 		for k in self.sources:
 			name = k.name
 			if not hasattr(k, 'realtime'):
 				name += ' (not realtime)'
-			self.addAction(name, lambda k=k: self.parent.parent.changeSource(k))
+			action = self.addAction(name, lambda k=k: self.changeSource(k))
+			action.source = k
+			action.setCheckable(True)
+			action.setChecked(k == self.parent.parent.currentSource)
+
+	def changeSource(self, source):
+		for action in self.actions():
+			action.setChecked(action.text().startswith(source.name))
+		self.parent.parent.changeSource(source)
 
 
 class TemplateMenu(QMenu):
@@ -619,7 +486,7 @@ class DashboardTemplates(QMenu):
 		for file in EasyPath(userConfig.userPath)['templates']['dashboards'].ls():
 			if file.path.name.endswith('.yaml') or file.path.name.endswith('.levity'):
 				name = file.name.split('.')[0]
-				self.addAction(name, lambda file=file: self.parent.centralWidget().base.loadFile(file.path))
+				self.addAction(name, lambda file=file: self.parent.centralWidget().base.loadTemplate(file.path))
 
 
 __all__ = ['BaseContextMenu', 'LabelContextMenu', 'TimeContextMenu', 'CentralPanelContextMenu', 'EditableLabelContextMenu', 'RealtimeContextMenu']

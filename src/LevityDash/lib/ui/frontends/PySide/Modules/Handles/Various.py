@@ -28,7 +28,6 @@ class DrawerHandle(Handle):
 	def __init__(self, parent):
 		super(DrawerHandle, self).__init__(None, LocationFlag.BottomCenter)
 		self.hideTimer = QTimer(interval=1000*5, timeout=self.close, singleShot=True)
-		self.moveDoneTimer = QTimer(interval=1500, timeout=self.openClose, singleShot=True)
 		parent.signals.resized.connect(self.rePos)
 		self._parent = parent
 		self.setParentItem(None)
@@ -36,7 +35,7 @@ class DrawerHandle(Handle):
 		pen = QPen(QApplication.palette().foreground(), 1)
 		self.setBrush(QApplication.palette().foreground().color())
 		self.setPen(pen)
-		self.setAcceptHoverEvents(True)
+		self.setAcceptHoverEvents(not True)
 		self.setFlag(self.ItemIsMovable, True)
 		self.setFlag(self.ItemSendsGeometryChanges, True)
 		self.setAcceptedMouseButtons(Qt.LeftButton)
@@ -148,6 +147,9 @@ class DrawerHandle(Handle):
 		return path
 
 
+from LevityDash.lib.log import LevityUtilsLog as log
+
+
 class HoverArea(QGraphicsPathItem):
 
 	def __init__(self, parent: 'Panel',
@@ -186,21 +188,15 @@ class HoverArea(QGraphicsPathItem):
 
 	def testIgnoredEdges(self, pos: QPointF) -> bool:
 		if self.ignoredEdges:
-			if pos.y() < self.boundingRect().top() and self.ignoredEdges & LocationFlag.Top:
-				return True
-			if pos.y() > self.boundingRect().bottom() and self.ignoredEdges & LocationFlag.Bottom:
-				return True
-			if pos.x() < self.boundingRect().left() and self.ignoredEdges & LocationFlag.Left:
-				return True
-			if pos.x() > self.boundingRect().right() and self.ignoredEdges & LocationFlag.Right:
-				return True
-		return False
-
-	def hoverEnterEvent(self, event: QGraphicsSceneHoverEvent) -> None:
-		if self.testIgnoredEdges(event.pos()):
-			return
-		if self._enterAction and self.isEnabled():
-			self._enterAction()
+			if pos.y() > self.boundingRect().top() and self.ignoredEdges & LocationFlag.Top:
+				return False
+			if pos.y() < self.boundingRect().bottom() and self.ignoredEdges & LocationFlag.Bottom:
+				return False
+			if pos.x() > self.boundingRect().left() and self.ignoredEdges & LocationFlag.Left:
+				return False
+			if pos.x() < self.boundingRect().right() and self.ignoredEdges & LocationFlag.Right:
+				return False
+		return True
 
 	def hoverLeaveEvent(self, event: QGraphicsSceneHoverEvent) -> None:
 		if self.testIgnoredEdges(event.pos()):
@@ -211,6 +207,12 @@ class HoverArea(QGraphicsPathItem):
 	def hoverMoveEvent(self, event: QGraphicsSceneHoverEvent) -> None:
 		if self._moveAction and self.isEnabled():
 			self._moveAction()
+
+	def hoverEnterEvent(self, event: QGraphicsSceneHoverEvent) -> None:
+		if self.testIgnoredEdges(event.pos()):
+			return
+		if self._enterAction and self.isEnabled():
+			self._enterAction()
 
 	def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
 		if self._enterAction and self.isEnabled():

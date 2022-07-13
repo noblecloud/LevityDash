@@ -1,47 +1,52 @@
-import logging
+from asyncio import get_running_loop
 
 from datetime import datetime, timedelta
-
-from functools import cached_property
 
 from dateutil.parser import parser
 from PySide2.QtCore import QObject, QPoint, QPointF, QRectF, Signal, Slot
 from PySide2.QtGui import QBrush, QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPen, Qt, QTransform
 from PySide2.QtWidgets import QGraphicsItem, QGraphicsPathItem, QGraphicsTextItem, QStyleOptionGraphicsItem
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Optional, Union, TYPE_CHECKING
 
 import WeatherUnits as wu
+from LevityDash.lib.config import userConfig
 
-from LevityDash.lib.plugins.plugin import Container
+from LevityDash.lib.plugins import Container
 from LevityDash.lib.plugins.dispatcher import MultiSourceContainer
 from LevityDash.lib.ui.fonts import defaultFont, compactFont, weatherGlyph
-from LevityDash.lib.ui.frontends.PySide import colorPalette
-from LevityDash.lib.utils.shared import clearCacheAttr, now, Now, strToOrdinal, toOrdinal, _Panel
+from LevityDash.lib.utils.shared import clearCacheAttr, now, Now, strToOrdinal, toOrdinal, _Panel, TextFilter
 from LevityDash.lib.utils.geometry import Alignment, AlignmentFlag
-from LevityDash.lib.ui.frontends.PySide.utils import addBoundingRectDecorator, addCrosshair, addCrosshairDecorator
+from LevityDash.lib.ui.frontends.PySide.utils import colorPalette, addCrosshair, DebugSwitch, DebugPaint
+from LevityDash.lib.plugins.observation import TimeHash
+
+loop = get_running_loop()
 
 
 class TextItemSignals(QObject):
 	changed = Signal()
 
 
+@DebugPaint
 class Text(QGraphicsPathItem):
-	log = logging.getLogger(__name__)
 	_value: Container
 	_parent: _Panel
 	__alignment: Alignment
 	__modifier: Optional[dict]
-	_scaleSelection = min
+	scaleSelection = min
 	minimumDisplayHeight = wu.Length.Millimeter(10)
 	baseLabelRelativeHeight = 0.3
 
 	__filters: dict[str, Callable] = {'0Ordinal': toOrdinal, '0Add Ordinal': strToOrdinal, '1Lower': str.lower, '1Upper': str.upper, '2Title': str.title}
 	enabledFilters: set[str]
 
+	if TYPE_CHECKING:
+		from LevityDash.lib.ui.frontends.PySide.app import LevityScene
+		def scene(self) -> LevityScene: ...
+
+	# Section init
 	def __init__(self, parent: _Panel,
 		value: Optional[Any] = None,
 		alignment: Union[Alignment, AlignmentFlag] = None,
-		scalar: float = 1.0,
 		font: Union[QFont, str] = None,
 		filters: Optional[set[str]] = None,
 		modifier: Optional[dict] = None,
@@ -60,7 +65,6 @@ class Text(QGraphicsPathItem):
 		self._parent = parent
 		if isinstance(parent, QGraphicsItem):
 			self.setParentItem(parent)
-
 		if filters is None:
 			filters = list()
 
@@ -70,15 +74,11 @@ class Text(QGraphicsPathItem):
 			alignment = Alignment(alignment)
 		self.__alignment = alignment
 		self._value = None
+
 		self.setFont(font)
-		self.scalar = scalar
 		self.setColor(color)
 		self.value = value
-		self.updateItem()
 		self.setAlignment(alignment)
-		# self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations, False)
-		# self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemClipsToShape, False)
-		self.screenWidth = 0
 		self.updateTransform()
 
 		for _filter in filters:
@@ -87,15 +87,13 @@ class Text(QGraphicsPathItem):
 		if hasattr(self.parent, 'signals') and hasattr(self.parent.signals, 'resized'):
 			self.parent.signals.resized.connect(self.updateTransform)
 
+
 	def setCustomFilterFunction(self, filterFunc: Callable):
 		self.__customFilterFunction = filterFunc
 
-	def updateItem(self):
-		pass
-
 	@property
 	def minimumFontSize(self) -> float:
-		dpi = qApp.primaryScreen().logicalDotsPerInchY()
+		dpi = self.scene().view.physicalDpiX()
 		return max(float(self.minimumDisplayHeight.inch*dpi), 5.0)
 
 	@property
@@ -104,17 +102,17 @@ class Text(QGraphicsPathItem):
 
 	@property
 	def suggestedFontPointSize(self):
-		return self.suggestedFontPixelSize/qApp.activeWindow().screen().logicalDotsPerInch()
+		return self.suggestedFontPixelSize/self.scene().view.physicalDpiY()
 
 	@property
-	def align(self):
+	def align(self) -> Alignment:
 		return self.__alignment
 
 	@property
 	def parent(self):
 		return self._parent
 
-	def setAlignment(self, alignment: Alignment):
+	def setAlignment(self, alignment: Alignment | AlignmentFlag):
 		self.alignment = alignment
 
 	@property
@@ -143,7 +141,7 @@ class Text(QGraphicsPathItem):
 		self.updateTransform()
 
 	@property
-	def enabledFilters(self):
+	def enabledFilters(self) -> set[str]:
 		return self.__enabledFilters
 
 	@enabledFilters.setter
@@ -162,7 +160,7 @@ class Text(QGraphicsPathItem):
 		elif isinstance(font, str):
 			font = QFont(font)
 		elif isinstance(font, QFont):
-			font = font
+			font = QFont(font)
 		else:
 			font = QFont(font)
 		if self.minimumFontSize and font.pointSizeF() < self.minimumFontSize:
@@ -179,28 +177,20 @@ class Text(QGraphicsPathItem):
 	def limitRect(self) -> QRectF:
 		return self.parent.marginRect
 
-	#
-	# @cached_property
-	# def textRect(self):
-	# 	fm = QFontMetricsF(self._font or defaultFont)
-	# 	rect = fm.tightBoundingRect(self.text)
-	# 	rect.setHeight(fm.height())
-	# 	rect.moveCenter(QPoint(0, 0))
-	# 	return rect
-	#
-	# # def boundingRect(self):
-	# # 	return self.textRect
-
 	@property
 	def atFontMinimum(self):
 		if self.minimumFontSize:
-			return self.font().pointSizeF() <= self.minimumFontSize
+			return self.suggestedFontPointSize <= self.minimumFontSize
 		return False
 
 	def updateTransform(self, rect: QRectF = None, *args):
 		transform = QTransform()
 		rect = self.boundingRect()
-		fmRect = QFontMetricsF(self.font()).tightBoundingRect('0p')
+
+		# For consistency across other text boxes, the a '|' character is added when
+		# getting the text height
+		fmRect = QFontMetricsF(self.font()).tightBoundingRect(f'|{self.text}')
+
 		rect.setHeight(fmRect.height())
 		pRect = self.limitRect
 		m = QPointF(*self.align.multipliersAlt)
@@ -212,41 +202,49 @@ class Text(QGraphicsPathItem):
 			origin = rect.center()
 			self.setTransformOriginPoint(origin)
 			x += m.x()*pRect.width()
-			# x += m.x() * rect.width()
 			y += m.y()*pRect.height()
-			# y -= m.y() * rect.height()
 			transform.translate(x, y)
-			scale = self._scaleSelection(wScale, hScale)
-			# if abs(scale - 1) > 0.1 and not self.atFontMinimum:
-			# 	font = self.font()
-			# 	font.setPointSizeF(font.pointSizeF() * scale)
-			# 	self._font = font
-			# 	clearCacheAttr(self, 'textRect')
-			# 	self.updateTransform()
+			scale = self.scaleSelection(wScale, hScale)
 			transform.scale(scale, scale)
+			transform.mapRect(pRect)
 			self.setTransform(transform)
 
 	def sceneBoundingRect(self) -> QRectF:
 		return self.mapRectToScene(self.transform().mapRect(self.boundingRect()))
 
+	def autoFont(self, size: float):
+		if self.atFontMinimum:
+			return
+
 	def refresh(self):
 		self._font.setPointSizeF(self.suggestedFontPixelSize)
 		self.__updatePath()
 		self.updateTransform()
+		value = getattr(self.value, 'value', self.value)
+		if isinstance(value, wu.Time) and userConfig.getOrSet('Display', 'liveUpdateTimedeltas', True, userConfig.getboolean):
+			refreshTask = getattr(self, 'refreshTask', None)
+			if refreshTask is not None:
+				refreshTask.cancel()
+			# TODO: change this to properly use abs once WeatherUnit has it implemented
+			if wu.Time.Minute(abs(value.minute)) < wu.Time.Minute(1):
+				self.refreshTask = loop.call_later(1, self.refresh)
+			elif wu.Time.Hour(abs(value.hour)) < wu.Time.Hour(1):
+				self.refreshTask = loop.call_later(60, self.refresh)
 
+	# Section .paint
 	def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Any) -> None:
-		# t = self.t
+		painter.setRenderHint(QPainter.Antialiasing)
 		w = painter.worldTransform()
 		scale = min(w.m11(), w.m22())
 		w.scale(1/w.m11(), 1/w.m22())
-		# if self.font().pointSizeF() > self.minimumFontSize * scale:
-		# 	scale = self.minimumFontSize / self.font().pointSizeF()
 		w.scale(scale, scale)
-
 		painter.setTransform(w)
 		super().paint(painter, option, widget)
 
-	# iT = t.inverted()[0]
+	def _debug_paint(self, painter, option, widget):
+		self._normal_paint(painter, option, widget)
+		painter.setOpacity(1)
+		addCrosshair(painter, pos=QPoint(0, 0), color=self._debug_paint_color)
 
 	def worldTransform(self) -> QTransform:
 		if self.scene():
@@ -350,7 +348,7 @@ class Text(QGraphicsPathItem):
 						time -= timedelta(days=1)
 					else:
 						time = parser.parse(time)
-					value = value.getFromTime(time)
+					value = value.getFromTime(time, timehash=TimeHash.Minutely)
 
 		return value
 
@@ -376,10 +374,10 @@ class Text(QGraphicsPathItem):
 
 		path = QPainterPath()
 		path.setFillRule(Qt.WindingFill)
-		r = fm.tightBoundingRect(self.text)
+		text = self.text
+		r = fm.tightBoundingRect(text)
 		r.setHeight(fm.fontPath.boundingRect().height())
-
-		path.addText(QPointF(0, 0), self.font(), self.text)
+		path.addText(QPointF(0, 0), self.font(), text)
 
 		textCenter = path.boundingRect().center()
 		textCenter.setY(-fm.strikeOutPos())
@@ -395,7 +393,7 @@ class Text(QGraphicsPathItem):
 
 		self._textRect = pRect
 
-		self._path = path.simplified()
+		self._path = path
 		self.setPath(path)
 
 	def updateText(self):
@@ -432,3 +430,6 @@ class TextHelper(Text):
 	@value.setter
 	def value(self, value):
 		pass
+
+	def __dir__(self):
+		return set(super().__dir__()) - set(dir(QGraphicsItem))

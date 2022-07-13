@@ -1,4 +1,5 @@
 from datetime import timedelta
+from functools import cached_property
 
 from PySide2.QtCore import Qt, Signal
 from PySide2.QtGui import QPen, QTransform
@@ -39,28 +40,38 @@ class TimeframeIncrementer(Incrementer):
 		super(TimeframeIncrementer, self).hoverMoveEvent(event)
 
 	def increase(self):
+		acceptedButtons = self.acceptedMouseButtons()
+		self.setAcceptedMouseButtons(Qt.NoButton)
 		self.parent.timeframe.decrease(self.parent.incrementValue)
-		self.ensureFramed()
 		super(TimeframeIncrementer, self).increase()
+		self.ensureFramed()
+		self.setAcceptedMouseButtons(acceptedButtons)
 
 	def decrease(self):
+		acceptedButtons = self.acceptedMouseButtons()
+		self.setAcceptedMouseButtons(Qt.NoButton)
 		self.parent.timeframe.increase(self.parent.incrementValue)
-		self.ensureFramed()
 		super(TimeframeIncrementer, self).decrease()
+		self.ensureFramed()
+		self.setAcceptedMouseButtons(acceptedButtons)
 
 	def ensureFramed(self):
+		return
 		graph = self.surface
-		td = max(f.figureTimeRangeMax for f in graph.figures)
+		td = max((f.figureTimeRangeMax for f in graph.figures), default=graph.timeframe.range)
 		r = td.total_seconds()/3600*graph.pixelsPerHour
 		if r < graph.width():
 			graph.timeframe.range = td
 
-	@property
+	@cached_property
 	def _shape(self):
 		s = super(TimeframeIncrementer, self)._shape
 		T = QTransform()
-		T.scale(1.2, 1.2)
-		return T.map(s)
+		T.scale(1.3, 1.3)
+		S = T.map(s)
+		centerDiff = s.boundingRect().center() - S.boundingRect().center()
+		S.translate(centerDiff)
+		return S
 
 	@property
 	def position(self):
@@ -74,17 +85,14 @@ class TimeframeIncrementer(Incrementer):
 
 class GraphZoom(IncrementerGroup):
 	handleClass = TimeframeIncrementer
-	offset = -40
+	offset = -60
 	locations = [LocationFlag.BottomLeft, LocationFlag.BottomRight]
 
 	def __init__(self, parent: 'Panel', timeframe: TimeFrameWindow, *args, **kwargs):
 		self.timeframe = timeframe
-		super(GraphZoom, self).__init__(parent=parent, offset=-30, *args, **kwargs)
+		super(GraphZoom, self).__init__(parent=parent, offset=-60, *args, **kwargs)
 		self.setVisible(True)
 		self.setEnabled(True)
-
-	def _genHandles(self):
-		super(GraphZoom, self)._genHandles()
 
 	@property
 	def incrementValue(self) -> int:
