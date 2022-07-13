@@ -8,6 +8,10 @@ class RateLimitExceeded(APIError):
 	pass
 
 
+class RequestTimeout(APIError):
+	pass
+
+
 class InvalidCredentials(APIError):
 	pass
 

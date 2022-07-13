@@ -1,12 +1,10 @@
-from functools import cached_property
 
 from PySide2.QtWidgets import QGraphicsItem
 
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Resize import Splitter
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
-from LevityDash.lib.utils.shared import _Panel
 from LevityDash.lib.utils.geometry import LocationFlag, relativePosition
-from LevityDash.lib.log import LevityGUILog as guiLog
+from ... import UILogger as guiLog
 
 log = guiLog.getChild(__name__)
 
@@ -15,7 +13,7 @@ __all__ = ["SplitPanel"]
 
 class SplitPanel(Panel):
 	onlyAddChildrenOnRelease = True
-	_includeChildrenInState = False
+	includeChildrenInState = False
 
 	collisionThreshold = 0.9
 	_primary = None

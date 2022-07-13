@@ -6,12 +6,13 @@ from json import JSONEncoder
 
 from math import ceil, floor, inf
 from numpy import ndarray
-from typing import Any, Iterable, List, NamedTuple, Tuple, Union, Callable
+from typing import Any, Iterable, List, NamedTuple, Tuple, Union, Callable, Type, Set, Dict
 
 from datetime import datetime, timedelta
 import numpy as np
 from PySide2.QtCore import QObject, QTimer, Signal
 from scipy.signal import savgol_filter
+from rich.repr import auto as auto_rich_repr
 
 from LevityDash.lib.utils import Axis, clearCacheAttr, datetimeDiff, Infix, LOCAL_TIMEZONE, makeNumerical, Numeric, plural
 
@@ -133,6 +134,7 @@ def smoothData(data: np.ndarray, window: int = 25, order: int = 1) -> np.ndarray
 	return data
 
 
+@auto_rich_repr
 class DataTimeRange(QObject):
 	'''
 		DataTimeRange(source: GraphItemData)
@@ -151,40 +153,46 @@ class DataTimeRange(QObject):
 		self.__varify = True
 		self.__range = None
 		super(DataTimeRange, self).__init__()
-		self.__timer = QTimer(singleShot=True, interval=200)
-		self.__timer.timeout.connect(self.__emitChange)
+
+	# self.__timer = QTimer(singleShot=True, interval=200)
+	# self.__timer.timeout.connect(self.__emitChange)
 
 	def invalidate(self):
 		self.__varify = True
 
 	@property
-	def min(self):
+	def min(self) -> datetime:
 		return self.__source.list[0].timestamp
 
 	@property
-	def max(self):
-		return self.__source.list[-1].timestamp
+	def max(self) -> datetime:
+		try:
+			return self.__source.list[-1].timestamp
+		except IndexError:
+			delattr(self.__source, 'list')
+			return self.__source.list[-1].timestamp
 
 	@property
-	def range(self):
-		if self.__varify:
-			value = self.max - self.min
-			if value != self.__range:
-				self.__range = value
-				self.delayedEmit()
-				self.__varify = False
+	def range(self) -> timedelta:
+		value = self.max - self.min
+		if value != self.__range:
+			self.__range = value
+			self.__emitChange()
 		return self.__range
 
 	@property
-	def source(self):
+	def source(self) -> 'GraphItemData':
 		return self.__source
 
-	def delayedEmit(self):
-		self.__timer.start()
-
 	def __emitChange(self):
-		self.__timer.stop()
 		self.changed.emit(Axis.X)
+
+	def __rich_repr__(self):
+		yield 'source', self.__source.key.name
+		if self.__source.hasData:
+			yield 'range', self.range
+			yield 'min', f'{self.min:%m-%d %H:%M}'
+			yield 'max', f'{self.max:%m-%d %H:%M}'
 
 
 TimeLineCollection = NamedTuple('TimeLineCollection', [('max', datetime), ('min', datetime), ('range', timedelta)])
@@ -263,7 +271,7 @@ class AxisMetaData(QObject):
 	min: Numeric
 	max: Numeric
 	range: Numeric
-	_link: 'FigureRect' = None
+	_link: 'Figure' = None
 	__min: Numeric = None
 	__max: Numeric = None
 
@@ -274,15 +282,21 @@ class AxisMetaData(QObject):
 
 	@property
 	def __actualMin(self) -> Numeric:
-		value = min([min(i.data[1]) for i in self._link.plotData.values() if i.value])
+		if plots := self._link.plots:
+			value = min(min(i.data[1]) for i in plots)
+		else:
+			value = self.__limits[0]
+		value = max(value, self._link.lowerLimit)
 		return max(value, self.__limits[0])
 
 	@property
 	def __limits(self) -> Tuple[float, float]:
-		limits = [i.dataType.limits for i in self._link.plots if hasattr(i.dataType, 'limits')] or [(-inf, inf)]
-		maxLimit = max(limits, key=lambda x: x[1])[1]
-		minLimit = min(limits, key=lambda x: x[0])[0]
-		return minLimit, maxLimit
+		limits = getattr(self.dataType, 'typedLimits', (-inf, inf))
+		return limits
+
+	@property
+	def dataType(self) -> Type[float]:
+		return next((i.dataType for i in self._link.plots if i.hasData), float)
 
 	@property
 	def min(self):
@@ -294,7 +308,11 @@ class AxisMetaData(QObject):
 
 	@property
 	def __actualMax(self) -> Numeric:
-		value = max([max(i.data[1]) for i in self._link.plotData.values() if i.value])
+		if plots := self._link.plots:
+			value = max(max(i.data[1]) for i in plots)
+		else:
+			value = self.__limits[1]
+		value = min(self._link.upperLimit, value)
 		return min(value, self.__limits[1])
 
 	@property
@@ -304,7 +322,7 @@ class AxisMetaData(QObject):
 		if self.__max != value:
 			self.__max = value
 			self.emitChanged()
-		if figureMax is not None and value < figureMax:
+		if figureMax is not inf and value < figureMax:
 			return figureMax
 		return value
 
@@ -317,7 +335,9 @@ class AxisMetaData(QObject):
 		return
 
 	def emitChanged(self):
-		self.__delayTimer.start()
+		self.changed.emit(Axis.Vertical)
+
+	# self.__delayTimer.start()
 
 	def __emitChanged(self):
 		self.changed.emit(Axis.Vertical)
@@ -336,10 +356,6 @@ class AxisMetaData(QObject):
 			return floor
 		return lambda v: roundToPrecision(v, mask=diff, maxVal=False)
 
-	@property
-	def dataType(self):
-		return self._link.plots[0].rawData[0].unit
-
 	def __getitem__(self, item: slice) -> MinMax:
 		if self._link.plots:
 			# stop = min(item.stop, len(self._link.plots[0].data[0]
@@ -350,6 +366,13 @@ class AxisMetaData(QObject):
 		m = 0
 		M = 1
 		return MinMax(m, M)
+
+	def __repr__(self):
+		d = self.dataType
+		m = d(self.min)
+		M = d(self.max)
+		r = d(self.range)
+		return f'AxisMetaData(figure={self._link}, min={m}, max={M}, range={r})'
 
 
 def roundToPrecision(value: Numeric, mask: Numeric | None = None, maxVal: bool = True) -> Numeric:
@@ -429,6 +452,8 @@ class TimeFrameWindow(QObject):
 		Connects the given slot to the time frame changed signal.
 	"""
 
+	# TODO: Currently gets ignored when saving the settings.
+
 	range: timedelta
 	offset: timedelta
 	negativeOffset: timedelta
@@ -438,8 +463,8 @@ class TimeFrameWindow(QObject):
 	changed = Signal(Axis)
 
 	def __init__(self, value: timedelta = None,
-		offset: timedelta = timedelta(seconds=0),
-		lookback: timedelta = timedelta(hours=-6),
+		offset: timedelta = timedelta(hours=-6),
+		lookback: timedelta = timedelta(hours=-18),
 		**kwargs):
 		"""
 		:param value: The length of time to display on the graph
@@ -493,6 +518,8 @@ class TimeFrameWindow(QObject):
 
 	@offset.setter
 	def offset(self, value: timedelta):
+		if value is None:
+			return
 		if isinstance(value, dict):
 			value = timedelta(**value)
 		self._offset = value
@@ -504,7 +531,7 @@ class TimeFrameWindow(QObject):
 
 	@property
 	def start(self) -> datetime:
-		start = datetime.now(tz=LOCAL_TIMEZONE)
+		start = datetime.now(tz=LOCAL_TIMEZONE).replace(second=0, microsecond=0)
 		return start
 
 	@property
@@ -543,12 +570,15 @@ class TimeFrameWindow(QObject):
 
 	@range.setter
 	def range(self, value: timedelta):
+		if value is None:
+			return
 		if self._range != value:
 			if value < timedelta(hours=1):
 				value = timedelta(hours=1)
 			self.__clearCache()
 			self._range = value
 			self.changed.emit(Axis.Horizontal)
+		print(self.range)
 
 	@property
 	def rangeSeconds(self) -> int:
@@ -576,6 +606,8 @@ class TimeFrameWindow(QObject):
 
 	@lookback.setter
 	def lookback(self, value):
+		if value is None:
+			return
 		if isinstance(value, dict):
 			value = timedelta(**value)
 		if value.total_seconds() > 0:
@@ -621,10 +653,20 @@ class TimeFrameWindow(QObject):
 	def state(self):
 		state = {
 			**self.__exportTimedelta(self.range),
-			'offset':         self.__exportTimedelta(self.offset),
+			'offset':   self.__exportTimedelta(self.offset),
 			'lookback': self.__exportTimedelta(self.lookback)
 		}
 		return {k: v for k, v in state.items() if v}
+
+	@state.setter
+	def state(self, value):
+		self.offset = value.pop('offset', None)
+		self.lookback = value.pop('lookback', None)
+		if isinstance(value, dict):
+			value = timedelta(**value)
+		self._range = value
+		self.__displayPosition = self.start + self.offset
+		self.__clearCache()
 
 	def delayedEmit(self):
 		self.__delayTimer.start()
@@ -634,6 +676,17 @@ class TimeFrameWindow(QObject):
 
 	def connectItem(self, slot):
 		self.changed.connect(slot)
+
+	def disconnectItem(self, slot):
+		self.changed.disconnect(slot)
+
+	def scoreSimilarity(self, other):
+		if isinstance(other, dict):
+			other = TimeFrameWindow(**other)
+		rangeDiff = abs(self.range - other.range).total_seconds()
+		offsetDiff = abs(self.offset - other.offset).total_seconds()
+		lookbackDiff = abs(self.lookback - other.lookback).total_seconds()
+		return (rangeDiff + offsetDiff + lookbackDiff)/3600
 
 
 def normalize(a: Iterable, meta: Union[AxisMetaData, TimeFrameWindow] = None, useInterpolated: bool = True) -> np.ndarray:
@@ -915,21 +968,16 @@ class TemporalGroups(object):
 
 
 def findPeaksAndTroughs(array: Iterable, spread: timedelta = 12) -> tuple[list, list]:
-	log.debug('Finding Peaks and Troughs')
 	peaks = []
 	troughs = []
 
-	maxI = len(array)
 	groupGenerator = TemporalGroups(array, spread=spread)
 	for i, t, behind, ahead in groupGenerator:
-		# ahead = array[i: min(i + spread, maxI)]
-		# behind = array[max(i - spread, 0):i]
 		if not ahead:
 			ahead = [array[-1]]
 		if not behind:
 			behind = [array[0]]
 
-		tV = float(t.value)
 		if float(min(behind).value) >= t <= float(min(ahead).value):
 			if len(troughs) == 0:
 				troughs.append(t)
@@ -939,9 +987,6 @@ def findPeaksAndTroughs(array: Iterable, spread: timedelta = 12) -> tuple[list, 
 			else:
 				troughs.append(t)
 
-		# if troughs and troughs[-1][0] == i - len(troughs[-1]):
-		# 	troughs[-1].append(t)
-		# else:
 		elif float(max(behind).value) <= t >= float(max(ahead).value):
 			if len(peaks) == 0:
 				peaks.append(t)
@@ -954,7 +999,7 @@ def findPeaksAndTroughs(array: Iterable, spread: timedelta = 12) -> tuple[list, 
 	return peaks, troughs
 
 
-KeyData = NamedTuple('KeyData', sender=dict, keys=set)
+KeyData = NamedTuple('KeyData', sender='Plugin', keys=Set['CategoryItem'] | Dict['Plugin', Set['CategoryItem']])
 
 
 def mostFrequentValue(iterable: Iterable) -> Any:

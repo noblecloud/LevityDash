@@ -324,7 +324,7 @@ dashPattern: 2, 4
 The size or weight of the plot
 
 ``` yaml
-scalar: 0.3
+weight: 0.3
 ```
 
 </description>

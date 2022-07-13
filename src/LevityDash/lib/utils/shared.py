@@ -1,9 +1,23 @@
+from abc import abstractmethod, ABC
+from builtins import isinstance
+from functools import lru_cache
+from gc import get_referrers
 from types import FunctionType, GeneratorType
+
+try:
+	from locale import setlocale, LC_ALL, nl_langinfo, RADIXCHAR, THOUSEP
+
+	setlocale(LC_ALL, '')
+	RADIX_CHAR = nl_langinfo(RADIXCHAR) or '.'
+	GROUPING_CHAR = nl_langinfo(THOUSEP) or ','
+except ImportError:
+	RADIX_CHAR = '.'
+	GROUPING_CHAR = ','
 
 import operator as __operator
 from sys import float_info
 
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 
 import re
 import WeatherUnits as wu
@@ -18,14 +32,22 @@ from pytz import utc
 from WeatherUnits import Measurement
 
 from time import time
-from typing import Any, Callable, Hashable, Iterable, List, Mapping, Optional, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Hashable, Iterable, List, Mapping, Optional, Tuple, Type, TypeVar, Union, Set, Final, Sized, ClassVar, Dict, Protocol, runtime_checkable
+from types import NoneType
 
 from enum import auto, Enum, EnumMeta
 
-from PySide2.QtCore import QObject, QPointF, QRectF, QSizeF, Signal
-from PySide2.QtWidgets import QGraphicsRectItem
+from PySide2.QtCore import QObject, QPointF, QRectF, QSizeF, Signal, Qt
+from PySide2.QtWidgets import QGraphicsRectItem, QApplication, QGraphicsItem
 
 from LevityDash.lib.utils import utilLog
+
+numberRegex = re.compile(fr"""
+	(?P<number>
+	[-+]?
+	([\d{GROUPING_CHAR}]+)?
+	([{RADIX_CHAR}]\d+)?)
+	""", re.VERBOSE)
 
 
 def simpleRequest(url: str) -> dict:
@@ -68,10 +90,41 @@ class ClosestMatchEnumMeta(EnumMeta):
 			return cls(name)
 
 	def representer(cls, dumper, data):
-		return dumper.represent_scalar('tag:yaml.org,2002:str', str(data))
+		return dumper.represent_scalar('tag:yaml.org,2002:str', data.name)
+
+
+class ClosestMatchEnumMeta2(EnumMeta):
+
+	def __new__(metacls, cls, bases, classdict, **kwds):
+		enum_class = super().__new__(metacls, cls, bases, classdict, **kwds)
+		for k, v in metacls.__dict__.items():
+			if not k.startswith('_'):
+				setattr(enum_class, k, v)
+		return enum_class
+
+
+def find_name(obj):
+	for referrer in get_referrers(obj):
+		if isinstance(referrer, dict):
+			for k, v in referrer.items():
+				if v is obj:
+					return k
+	return None
 
 
 class IgnoreOr(object):
+
+	def __init__(self, name: str):
+		self.__name__ = name
+
+	def copy(self):
+		return self
+
+	def __copy__(self):
+		return self
+
+	def __repr__(self):
+		return f'<{self.__name__}>'
 
 	def __or__(self, other):
 		return other
@@ -79,8 +132,34 @@ class IgnoreOr(object):
 	def __ror__(self, other):
 		return other
 
+	def __bool__(self):
+		return False
 
-Unset = IgnoreOr()
+	def __neg__(self):
+		return self
+
+	def __invert__(self):
+		return self
+
+	def __eq__(self, other):
+		return self is other
+
+	def __ne__(self, other):
+		return self is not other
+
+	def __hash__(self):
+		return hash((self.__name__, type(self)))
+
+	def __instancecheck__(self, instance):
+		return self is instance
+
+	def get(self, *args, **kwargs):
+		return self
+
+
+Unset: Final = IgnoreOr('Unset')
+UnsetKwarg: Final = IgnoreOr('UnsetKwarg')
+
 Auto = object()
 DType = TypeVar('DimensionType')
 Numeric = Union[int, float, complex, np.number]
@@ -359,6 +438,60 @@ def getItemsWithType(*args: Union[List[Union[QObject, dict, Iterable]], type], r
 	return []
 
 
+@runtime_checkable
+class Mutable(Protocol):
+	muted: bool
+	_muteLevel: int
+
+	def __hash__(self) -> int: ...
+
+	def __enter__(self): ...
+
+	def __exit__(self, exc_type, exc_val, exc_tb): ...
+
+	@abstractmethod
+	def setMute(self, mute: bool): ...
+
+
+class BusyContext:
+	blocker: ClassVar[QGraphicsItem | None] = None
+
+	_tasks: ClassVar[Dict[Hashable, int]] = defaultdict(int)
+
+	def __init__(self, mutable: Mutable | None = None, task: Hashable | None = None):
+		self._mutable = mutable
+		self._task = task
+
+	@property
+	def __taskHash__(self):
+		hash_ = []
+		if self._mutable is not None:
+			hash_.append(hash(self._mutable))
+		if self._task is not None:
+			hash_.append(hash(self._task))
+		return hash(*hash_)
+
+	def __enter__(self):
+		if isinstance(self._mutable, Mutable):
+			self._mutable.muted = True
+		qApp.setOverrideCursor(Qt.WaitCursor)
+		BusyContext._tasks[self.__taskHash__] += 1
+		return self
+
+	def __exit__(self, exc_type, exc_val, exc_tb):
+		BusyContext._tasks[self.__taskHash__] -= 1
+		qApp.restoreOverrideCursor()
+		if not BusyContext._tasks[self.__taskHash__]:
+			BusyContext._tasks.pop(self.__taskHash__, None)
+			if isinstance(self._mutable, Mutable):
+				self._mutable.muted = False
+
+	@classmethod
+	@property
+	def isBusy(cls) -> bool:
+		return sum(cls._tasks.values()) > 0
+
+
 class ColorStr(str):
 	__last__ = ''
 
@@ -472,6 +605,18 @@ def makeNumerical(value: Any, castAs: type = int, using: Callable = None) -> Num
 	if using is not None:
 		value = using(value)
 	return value
+
+
+def getFirstList(a: List, default: Any = None) -> Any:
+	if a:
+		return a[0]
+	return default
+
+
+def getLastList(a: List, default: Any = None) -> Any:
+	if len(a):
+		return a[-1]
+	return default
 
 
 def closest_point_on_path(rect: QRectF, path: QPainterPath) -> QPointF:
@@ -673,34 +818,21 @@ class Period(Enum):
 
 def boolFilter(value: Any, raiseError: bool = False) -> bool:
 	if not isinstance(value, bool):
+		if isinstance(value, str):
+			match value.lower():
+				case 'true' | 't' | '1' | 'yes' | 'y' | 'on':
+					return True
+				case 'false' | 'f' | '0' | 'no' | 'n' | 'off' | 'none' | 'null' | 'nil':
+					return False
+				case _:
+					raise ValueError(f"Invalid boolean string value: {value}")
 		try:
 			value = bool(value)
 		except ValueError:
 			if raiseError:
-				raise TypeError('resizable must be a boolean')
+				raise TypeError(f"Invalid boolean value: {value}")
 			return False
 	return value
-
-
-class StrEnum(str, Enum):
-	def __new__(cls, *args):
-		for arg in args:
-			if not isinstance(arg, (str, auto)):
-				raise TypeError(
-					"Values of StrEnums must be strings: {} is a {}".format(
-						repr(arg), type(arg)
-					)
-				)
-		return super().__new__(cls, *args)
-
-	def __str__(self):
-		return self.value
-
-	# The first argument to this function is documented to be the name of the
-	# enum member, not `self`:
-	# https://docs.python.org/3.6/library/enum.html#using-automatic-values
-	def _generate_next_value_(name, *_):
-		return name
 
 
 def half(*args):
@@ -749,7 +881,27 @@ def toOrdinal(n: Union[str, int]) -> str:
 	return 'th' if 10 <= n%100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n%10, 'th')
 
 
-def disconnectSignal(signal: QObject, slot: Callable):
+class TextFilter(tuple, Enum, metaclass=ClosestMatchEnumMeta):
+	Ordinal = 'ordinal', toOrdinal
+	AddOrdinal = 'addOrdinal', addOrdinal
+	Lower = 'lower', str.lower
+	Upper = 'upper', str.upper
+	Title = 'title', str.title
+
+	def __new__(cls, value):
+		name, func = value
+		obj = super().__new__(cls, name)
+		obj.func = func
+		return obj
+
+	def __repr__(self):
+		return self.name
+
+	def __call__(self, value):
+		return self.func(value)
+
+
+def disconnectSignal(signal: Signal, slot: Callable):
 	try:
 		signal.disconnect(slot)
 	except TypeError:
@@ -758,7 +910,7 @@ def disconnectSignal(signal: QObject, slot: Callable):
 		pass
 
 
-def connectSignal(signal: QObject, slot: Callable):
+def connectSignal(signal: Signal, slot: Callable):
 	try:
 		signal.connect(slot)
 	except TypeError:
@@ -783,7 +935,7 @@ def sloppyIsinstance(obj, *args):
 	return bool(names.intersection(classes))
 
 
-def clamp(value: Numeric, minimum: Numeric, maximum: Numeric) -> Numeric:
+def clamp(value: Numeric, minimum: Numeric, maximum: Numeric, key: Callable = None) -> Numeric:
 	"""
 	Clamps a value between a minimum and maximum value.
 	:param value: The value to clamp.
@@ -795,7 +947,7 @@ def clamp(value: Numeric, minimum: Numeric, maximum: Numeric) -> Numeric:
 	:return: The clamped value.
 	:rtype: float
 	"""
-	return sorted([value, minimum, maximum])[1]
+	return sorted([value, minimum, maximum], key=key)[1]
 
 
 class DateKey(datetime):
@@ -1001,14 +1153,75 @@ class InfixModifier:
 		pass
 
 
-def asTitleCamelCase(value: str) -> str:
-	return value[0].upper() + value[1:]
+def __or__(a, b):
+	if isinstance(a, IgnoreOr):
+		return b
+	elif isinstance(b, IgnoreOr):
+		return a
+	return a
 
 
-TitleCamelCase = InfixModifier(asTitleCamelCase)
+def atomizeString(var: str | list[str], itemFilter: Callable = None) -> List[str]:
+	"""
+	Splits a string into a list of words.
+	:param var: The string to split.
+	:type var: str
+	:return: The list of words.
+	:rtype: List[str]
+	"""
+	if isinstance(var, (tuple, list)):
+		var = ' '.join(var)
+	var = re.findall(r'((?=[A-Z\_]?)[A-Z]?[A-Za-z][a-z]+)', var)
+	if itemFilter is not None:
+		var = [itemFilter(i) for i in var]
+	return var
+
+
+def camelCase(value: List[str] | str, titleCase=True, itemFilter: Callable = None) -> str:
+	"""
+	Converts a list of words into a camel case string.
+	:param value: The list of words to convert.
+	:type value: List[str]
+	:param titleCase: Whether to capitalize the first letter of the first word.
+	:type titleCase: bool
+	:return: The camel case string.
+	:rtype: str
+	"""
+	value = atomizeString(value)
+	value = [i.lower().title() for i in value]
+	if not titleCase:
+		value[0] = value[0].lower()
+	value = ''.join(value)
+	if itemFilter is not None:
+		value = itemFilter(value)
+	return value
+
+
+def joinCase(value: List[str] | str, joiner: str | List[str] = ' ', valueFilter: Callable = None, itemFilter: Callable = None) -> str | List[str]:
+	"""
+	Converts a list of words into a new case joined by string.
+	:param value: The list of words to convert.
+	:type value: List[str]
+	:param joiner: The string to join the words with.
+	:type joiner: str
+	:return: The snake case string.
+	:rtype: str
+	"""
+	value = atomizeString(value, itemFilter)
+	if isinstance(joiner, (list, tuple)):
+		val = [joinCase(value, joiner=j, valueFilter=valueFilter) for j in joiner]
+		return list(unwrap(val))
+	value = joiner.join(value)
+	if valueFilter is not None:
+		value = valueFilter(value)
+	return value
+
+
+TitleCamelCase = InfixModifier(camelCase)
 isa = Infix(lambda x, y: (isinstance(x, y) and x))
 isnot = Infix(lambda x, y: not isinstance(x, y) and x)
 hasEx = Infix(lambda x, y: hasattr(x, y) and getattr(x, y))
+OrUnset = Infix(__or__)
 
 
 def mostCommonClass(iterable: Iterable) -> Type:
@@ -1118,7 +1331,42 @@ class Now(datetime):
 		return getattr(self.now(), item)
 
 
-def get(obj: Mapping, *keys: [Hashable], default: Any = Unset) -> Any:
+def __get(obj, key, default=UnsetKwarg):
+	if default is not UnsetKwarg:
+		return obj.get(key, default)
+	return obj.get(key)
+
+
+@lru_cache(maxsize=128)
+def genAltVarNames(varName: str) -> Iterable[str]:
+	camel = camelCase(varName)
+	screamingCamel = camel.upper()
+	joinedCase = joinCase(varName, joiner=['_', '-', '.'], valueFilter=lambda x: x.lower())
+	titleJoinedCase = joinCase(varName, joiner=['_', '-', '.'], valueFilter=lambda x: x.title())
+	screamingJoinedCase = joinCase(varName, joiner=['_', '-', '.'], valueFilter=lambda x: x.upper())
+	arr = [varName, camel, screamingCamel, joinedCase, titleJoinedCase, screamingJoinedCase]
+	result = unwrap(arr)
+	return result
+
+
+def unwrap(arr: List[str | List[str]]) -> Set[str]:
+	result = set()
+	for i in arr:
+		if isinstance(i, str):
+			result.add(i)
+		else:
+			result.update(i)
+	return result
+
+
+def get(
+	obj: Mapping | object,
+	*keys: [Hashable],
+	default: Any = UnsetKwarg,
+	expectedType: Type = object,
+	castVal: bool = False,
+	getter: Callable = __get,
+) -> Any:
 	"""
 	Returns the value of the key in the mapping.
 
@@ -1127,17 +1375,24 @@ def get(obj: Mapping, *keys: [Hashable], default: Any = Unset) -> Any:
 	:param default: The default value to return if the key is not found.
 	:return: The value of the key in the mapping or the default value.
 	"""
-	values = list({obj.get(key, Unset) for key in keys} - {Unset})
+	values = {getter(obj, key, Unset) for key in keys}
+	values.discard(Unset)
 	match len(values):
 		case 0:
 			if default is Unset:
 				raise KeyError(f'{keys} not found in {obj}')
 			return default
 		case 1:
-			return values[0]
+			value = values.pop()
+			if castVal:
+				return expectedType(value)
+			return value
 		case _:
 			utilLog.warning(f'Multiple values found for {keys} in {obj}, returning first value.')
-			return values[0]
+			for value in (k for key in keys if isinstance(k := getter(obj, key, Unset), expectedType) or (castVal and k is not Unset)):
+				if castVal:
+					return expectedType(value)
+				return value
 
 
 operators = [getattr(__operator, op) for op in dir(__operator) if not op.startswith('__')]
@@ -1175,7 +1430,7 @@ def getOrSet(d: dict, key: Hashable, value: Any, *args, **kwargs) -> Any:
 		return d[key]
 
 	match value:
-		case int() | float() | str() | bool() | list() | tuple() | dict() | set() | type(None):
+		case int() | float() | str() | bool() | list() | tuple() | dict() | set() | NoneType():
 			pass
 		case GeneratorType(value):
 			value = list(value)
@@ -1199,3 +1454,86 @@ def getOr(d: dict, *keys: Hashable, default: Any = Unset, expectedType: Type = A
 	if default is not Unset:
 		return default
 	raise KeyError(f'{keys} not found in {d}')
+
+
+def hasState(obj):
+	return 'state' in dir(obj) and getattr(obj, 'savable', False)
+
+
+class DotDict(dict):
+
+	def __init__(self, *args, **kwargs):
+		args = list(args)
+		self.parent = kwargs.get('parent', Unset)
+		self.key = kwargs.get('key', Unset)
+		dicts = [args.pop(i) for i, item in enumerate(list(args)) if isinstance(item, dict)]
+		super(DotDict, self).__init__(*args, **kwargs)
+		for d in dicts:
+			self.update(d)
+
+	@property
+	def key(self):
+		if self.parent:
+			return '.'.join([self.parent.key, self.__key])
+
+	@key.setter
+	def key(self, value):
+		value = self.makeKey(value)
+		if self.parent:
+			parentKey = self.parent.key
+		else:
+			parentKey = ()
+		if len(value) > 1 and value[:-1] == parentKey:
+			value = value[-1]
+		self.__key = value
+
+	@staticmethod
+	def makeKey(key: str) -> tuple:
+		if isinstance(key, tuple):
+			return key
+		elif isinstance(key, Hashable) and not isinstance(key, str):
+			return key,
+		return tuple(re.findall(rf"[\w|\-|\_]+", key), )
+
+	def __setitem__(self, key, value):
+		key = self.makeKey(key)
+		if len(key) == 1:
+			dict.__setitem__(self, key[0], value)
+		else:
+			if key[0] not in self:
+				self[key[0]] = DotDict(key=key[0], parent=self)
+			dict.__getitem__(self, key[0]).__setitem__(key[1:], value)
+
+	def __contains__(self, key):
+		key = self.makeKey(key)
+		if len(key) == 1:
+			return dict.__contains__(self, key[0])
+		else:
+			if key[0] not in self:
+				return False
+			return dict.__getitem__(self, key[0]).__contains__(key[1:])
+
+	def popValue(self):
+		return self.popitem()[1]
+
+	def __getitem__(self, item):
+		key = self.makeKey(item)
+		if len(key) == 1:
+			return dict.__getitem__(self, key[0])
+		else:
+			if key[0] not in self:
+				raise KeyError(key)
+			return dict.__getitem__(self, key[0]).__getitem__(key[1:])
+
+	def get(self, key, default: Any = UnsetKwarg):
+		key = self.makeKey(key)
+		if key in self:
+			return self[key]
+		else:
+			if default is UnsetKwarg:
+				raise KeyError
+			return default
+
+	def update(self, data: dict):
+		for key, value in data.items():
+			self[key] = value

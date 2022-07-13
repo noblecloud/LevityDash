@@ -53,9 +53,9 @@ class GridItem:
 
 		self.geometry = geometry
 		self.i = i
-		if grid is None and hasattr(self.surface, 'parentGrid'):
-			grid = self.surface.parentGrid
-		self.grid = grid
+		# if grid is None and hasattr(self.surface, 'parentGrid'):
+		# 	grid = self.surface.parentGrid
+		# self.grid = grid
 		if 'location' in kwargs:
 			column, row = self.__parseLocation(kwargs['location'])
 		self.column = column
