@@ -91,7 +91,7 @@ class LevityConfig(ConfigParser):
 				enabled = self.askValue(enabled)
 				section['enabled'] = str(enabled)
 				self.save()
-			if enabled is not None and not enabled:
+			if enabled is not None and not self.BOOLEAN_STATES.get(str(enabled).lower(), False):
 				continue
 			for key, value in section.items():
 				if value and str(value).startswith('@ask'):
@@ -135,13 +135,12 @@ class LevityConfig(ConfigParser):
 			choices = [default]
 		else:
 			choices = None
-		windowFlags = Qt.WindowFlags(Qt.ActiveWindowFocusReason | Qt.WA_AlwaysStackOnTop)
 		if askType == 'askInput':
 			message = message or ''
 			default = choices[0] if choices is not None else ''
 			if valueType is bool:
 				default = default.lower() in ('true', 't', '1', 'y', 'yes')
-				result = QMessageBox(QWidget(), flags=windowFlags).question(QWidget(),
+				result = QMessageBox(QWidget()).question(QWidget(),
 					self.path.name,
 					message,
 					QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes if default else QMessageBox.No,
