@@ -59,7 +59,12 @@ try:
 			]
 		)
 	elif platform.system() == "Windows":
-		pass
+		main.run(
+			[
+				"./build-to-app/windows.spec",
+				'--noconfirm'
+			]
+		)
 	elif platform.system() == "Linux":
 		main.run(
 			[
