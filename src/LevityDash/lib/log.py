@@ -7,7 +7,7 @@ import bleak
 import sys
 import webbrowser
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -69,13 +69,16 @@ class _LevityLogger(logging.Logger):
 
 	LOGGING_DEFAULT_CONFIG: ClassVar[dict] = {
 		"Logging": {
-			"level":           "INFO",
-			"maxLogSize":      "50mb",
-			"maxErrorLogAge":  '30 days',
-			"maxErrorLogSize": "200mb",
-			"logFileFormat":   "%%Y-%%m-%%d_%%H-%%M-%%S",
-			"logFileWidth":    200,
-			"prettyErrors":    True,
+			"level":                   "INFO",
+			"verbosity":               "0",
+			"encoding":                "utf-8",
+			"logFileFormat":           "%Y-%m-%d_%H-%M-%S",
+			"logTimeFormat":           "%H:%M:%S",
+			"logFileWidth":            "120",
+			"maxLogFolderSize":        "200mb",
+			"maxLogAge":               timedelta(days=7),
+			"prettyErrors":            "False",
+			"maxPrettyErrorTotalSize": "50mb",
 		}
 	}
 
@@ -100,6 +103,7 @@ class _LevityLogger(logging.Logger):
 
 	def __init__(self, name):
 		from .config import userConfig
+		self.savePrettyErrors = True
 		super().__init__(name)
 		self.addFilter(_LevityLogger.duplicateFilter)
 
@@ -118,6 +122,7 @@ class _LevityLogger(logging.Logger):
 		self.getFile()
 		columns = shutil.get_terminal_size((120, 20)).columns - 5
 		fileColumns = userConfig.getOrSet('Logging', 'logFileWidth', '120', userConfig.getint)
+		timeFormat = userConfig.getOrSet('Logging', 'logTimeFormat', '%H:%M:%S', str)
 
 		consoleFile = Console(
 			tab_size=2,
@@ -131,10 +136,10 @@ class _LevityLogger(logging.Logger):
 				soft_wrap=True,
 				tab_size=2,
 				width=columns,
-				log_time_format="%H:%M:%S",
+				log_time_format=timeFormat,
 			),
 			level=self.determineLogLevel(),
-			log_time_format="%H:%M:%S",
+			log_time_format=timeFormat,
 			tracebacks_show_locals=True,
 			show_path=False,
 			tracebacks_width=columns,
@@ -144,10 +149,10 @@ class _LevityLogger(logging.Logger):
 		consoleHandler.setLevel(self.determineLogLevel())
 		consoleHandler.addFilter(levelFilter(consoleHandler.level))
 		richRotatingFileHandler = RichRotatingLogHandlerProxy(
-			encoding="utf-8",
+			encoding=userConfig.getOrSet('Logging', 'encoding', 'utf-8', str),
 			console=consoleFile,
 			show_path=False,
-			log_time_format="D%j|%H:%M:%S",
+			log_time_format=timeFormat,
 			rich_tracebacks=True,
 			omit_repeated_times=True,
 			level=5 - self.verbosity(5),
@@ -156,15 +161,15 @@ class _LevityLogger(logging.Logger):
 			tracebacks_width=fileColumns,
 			locals_max_string=200,
 			filename=self.logPath,
-			maxBytes=int(userConfig.getOrSet('Logging', 'rolloverSize', '2mb', userConfig.configToFileSize)),
-			backupCount=5,
+			maxBytes=int(userConfig.getOrSet('Logging', 'rolloverSize', '10mb', userConfig.configToFileSize)),
+			backupCount=int(userConfig.getOrSet('Logging', 'rolloverCount', '5', userConfig.getint)),
 		)
 		self.addHandler(richRotatingFileHandler)
 		self.addHandler(consoleHandler)
 		self.propagate = False
 		self.cleanupLogFolder()
-		if self.__config__.getboolean('prettyErrors', False):
-			sys.excepthook = self.prettyErrorLogger
+		self.savePrettyErrors = self.__config__.getboolean('prettyErrors', False)
+		sys.excepthook = self.prettyErrorLogger
 
 		_LevityLogger.fileHandler = richRotatingFileHandler
 		_LevityLogger.consoleHandler = consoleHandler
@@ -283,14 +288,18 @@ class _LevityLogger(logging.Logger):
 				os.remove(file)
 
 	def cleanupLogFolder(self):
-		maxLogSize = self.__config__.parser.configToFileSize(self.__config__["maxLogSize"])
-		maxErrorsAge = self.__config__.parser.configToTimeDelta(self.__config__["maxErrorLogAge"])
-		maxPrettyErrorsSize = self.__config__.parser.configToFileSize(self.__config__["maxErrorLogSize"])
-		if self.folderSize(self.logDir, 1) > maxLogSize:
-			self.removeOldestFileToFitSize(self.logDir, maxLogSize)
-		self.removeOlderThan(self.errorLogDir, maxErrorsAge)
+		maxLogFolderSize = int(userConfig.getOrSet('Logging', 'maxLogFolderSize', '200mb', userConfig.configToFileSize))
+		maxAge: timedelta = userConfig.getOrSet('Logging', 'maxLogAge', '7 days', userConfig.configToTimeDelta)
+		maxPrettyErrorsSize = int(userConfig.getOrSet('Logging', 'maxPrettyErrorsFolderSize', '50mb', userConfig.configToFileSize))
+
+		if self.folderSize(self.logDir, 1) > maxLogFolderSize:
+			self.removeOldestFileToFitSize(self.logDir, maxLogFolderSize)
+
 		if self.folderSize(self.errorLogDir) > maxPrettyErrorsSize:
 			self.removeOldestFileToFitSize(self.errorLogDir, maxPrettyErrorsSize)
+
+		self.removeOlderThan(self.logDir, maxAge)
+		self.removeOlderThan(self.errorLogDir, maxAge)
 
 	def removeOldestFileToFitSize(self, path, maxSize):
 		def filesToRemoveToFitSize(path, amountToFree):
@@ -315,7 +324,8 @@ class _LevityLogger(logging.Logger):
 		self.exception(
 			f"Uncaught exception: {_type.__name__}", exc_info=(_type, value, tb)
 		)
-		console.save_html(path=self.genPrettyErrorFileName(_type, value, tb), inline_styles=False)
+		if self.savePrettyErrors:
+			console.save_html(path=self.genPrettyErrorFileName(_type, value, tb), inline_styles=False)
 
 	def setLevel(self, level: int | str) -> None:
 		self.consoleHandler.setLevel(level)
