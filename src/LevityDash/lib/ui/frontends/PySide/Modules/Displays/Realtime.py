@@ -424,7 +424,7 @@ class Realtime(Panel, tag='realtime'):
 		self.__updateTimeOffsetLabel()
 
 		self.display.refresh()
-		self.setToolTip(f'{container.source.name} @ {container.now.timestamp:%I:%M%p}')
+		self.updateToolTip()
 		return connected
 
 	def disconnectRealtime(self) -> bool:
@@ -465,8 +465,15 @@ class Realtime(Panel, tag='realtime'):
 		self.setOpacity(1)
 		self.display.refresh()
 		self.adjustContentStaleTimer()
+
+	def updateToolTip(self):
 		try:
-			self.setToolTip(f'{self.container.source.name} @ {self.container.value.timestamp:%{DATETIME_NO_ZERO_CHAR}I:%M%p}')
+			container = self.__connectedContainer
+			if container.isDailyOnly:
+				self.setToolTip(f'{self.currentSource.name} {self.value.timestamp:%{DATETIME_NO_ZERO_CHAR}m/%{DATETIME_NO_ZERO_CHAR}d}')
+			else:
+				self.setToolTip(f'{self.currentSource.name} @ {container.now.timestamp:%{DATETIME_NO_ZERO_CHAR}I:%M%p}')
+
 		except AttributeError:
 			pass
 

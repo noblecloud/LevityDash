@@ -452,8 +452,7 @@ class StateProperty(property):
 				value = factory()
 			elif not self.allowNone:
 				raise e
-
-		return value
+		return self.default(obj)
 
 	def __decode__(self, obj, value):
 		decoder = self.__options.get("decode", {})
