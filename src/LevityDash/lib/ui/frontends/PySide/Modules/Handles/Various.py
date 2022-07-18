@@ -163,6 +163,7 @@ class HoverArea(QGraphicsPathItem):
 		rect: Optional[QRectF] = None,
 		offset: Optional[QPointF] = None,
 		ignoredEdges: Optional[LocationFlag] = None,
+		delay: float = 0.33,
 	):
 		super(HoverArea, self).__init__(None)
 		self.ignoredEdges = ignoredEdges
@@ -179,6 +180,12 @@ class HoverArea(QGraphicsPathItem):
 		self._enterAction = enterAction
 		self._exitAction = exitAction
 		self._moveAction = moveAction
+		self._delay = delay
+		if delay:
+			self._delayTimer = QTimer()
+			self._delayTimer.setSingleShot(True)
+			self._delayTimer.timeout.connect(self._enterAction)
+			self._delayTimer.setInterval(delay*1000)
 		self.setPath(self._path)
 		self.setAcceptHoverEvents(True)
 		self.setFlag(self.ItemIsMovable, False)
@@ -201,6 +208,8 @@ class HoverArea(QGraphicsPathItem):
 	def hoverLeaveEvent(self, event: QGraphicsSceneHoverEvent) -> None:
 		if self.testIgnoredEdges(event.pos()):
 			return
+		if self._delay:
+			self._delayTimer.stop()
 		if self._exitAction and self.isEnabled():
 			self._exitAction()
 
@@ -212,7 +221,10 @@ class HoverArea(QGraphicsPathItem):
 		if self.testIgnoredEdges(event.pos()):
 			return
 		if self._enterAction and self.isEnabled():
-			self._enterAction()
+			if self._delay:
+				self._delayTimer.start()
+			else:
+				self._enterAction()
 
 	def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
 		if self._enterAction and self.isEnabled():

@@ -745,7 +745,6 @@ class MiniTimeSeries(deque):
 		value = self.last.timestamp
 		value = roundToPeriod(value, self.__resolution)
 		return value
-		return
 
 	def filterKey(self, key: Union[int, datetime, timedelta]) -> int:
 		seconds = int(self.__resolution.total_seconds())
@@ -2256,8 +2255,10 @@ class MeasurementTimeSeries(OrderedDict):
 				key = now() + key
 			if isinstance(key, Period):
 				key = key.value
-			if key in self or self.__withinExtendedRange(key):
-				return self.__now(self._timeHashInvalidator, self.__lastHash)
+			if key in self.keys():
+				return super().__getitem__(key)
+			if self.__withinExtendedRange(key):
+				return self.__value(key, self._timeHashInvalidator, self.__lastHash)
 		elif isinstance(key, int):
 			return self.list[key]
 		return super(MeasurementTimeSeries, self).__getitem__(key)
@@ -2278,6 +2279,11 @@ class MeasurementTimeSeries(OrderedDict):
 	@lru_cache()
 	def __now(self, timeHashInvalidator: TimeHash, valueHash: Optional[int] = 0) -> ObservationValue:
 		key = closest(list(self.keys()), now())
+		return super(MeasurementTimeSeries, self).__getitem__(key)
+
+	@lru_cache()
+	def __value(self, key, timeHashInvalidator: TimeHash, valueHash: Optional[int] = 0) -> ObservationValue:
+		key = closest(list(self.keys()), key)
 		return super(MeasurementTimeSeries, self).__getitem__(key)
 
 	def __missing__(self, key):
@@ -2467,6 +2473,16 @@ class Container:
 
 	def __repr__(self):
 		return f'Container({self.source.name}:{self.key[-1]} {self.value})'
+
+	def __rich_repr__(self):
+		yield 'key', self.key.name
+		yield 'source', self.source.name
+		yield 'value', (value := self.value)
+		yield 'timestamp', f'{value.timestamp:%m-%d %H:%M:%S}'
+		yield 'isRealtime', self.isRealtime
+		yield 'isForecast', self.isForecast
+		yield 'isTimeseries', self.isTimeseries
+		yield 'isDaily', self.isDaily
 
 	def __str__(self):
 		return f'{self.value!s}'

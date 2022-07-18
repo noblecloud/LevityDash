@@ -1106,7 +1106,6 @@ class Panel(_Panel, Stateful, tag='group'):
 		return len([childPanel for childPanel in self.childPanels if not childPanel.isEmpty]) == 0
 
 	# section paint
-
 	def paint(self, painter, option, widget):
 		if self.parent is None or self.scene() is None:
 			return

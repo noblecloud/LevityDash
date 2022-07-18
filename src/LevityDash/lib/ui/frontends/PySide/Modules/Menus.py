@@ -12,7 +12,7 @@ from rich.pretty import Pretty
 try:
 	from PySide2.QtGui import QActionGroup
 except ImportError:
-	from PySide2.QtWidgets import QActionGroup
+	from PySide2.QtWidgets import QActionGroup, QApplication
 
 from PySide2.QtWidgets import QMenu
 
@@ -29,6 +29,7 @@ class BaseContextMenu(QMenu):
 
 	def __init__(self, parent, title: str = None, *args: Any, **kwargs: Any):
 		super().__init__()
+		self.debugActions = QActionGroup(self)
 		self.parent = parent
 		if title is not None:
 			self.setTitle(title)
@@ -39,6 +40,7 @@ class BaseContextMenu(QMenu):
 	@Slot()
 	def updateItems(self):
 		childMenus = [menu for menu in self.children() if isinstance(menu, QMenu)]
+		self.debugActions.setVisible(QApplication.queryKeyboardModifiers() & Qt.KeyboardModifier.AltModifier or debug)
 		for menu in childMenus:
 			menu.update()
 		if hasattr(self, 'freeze'):
@@ -57,8 +59,8 @@ class BaseContextMenu(QMenu):
 			self.addMenu(InsertMenu(self))
 			self.saveLoadMenu()
 			self.addSeparator()
-		if debug:
-			self.addAction('Print State', self.printState)
+		self.debugActions.addAction(self.addAction('Print State', self.printState))
+		self.debugActions.addAction(self.addAction('Print Repr', self.printRepr))
 		if self.parent.deletable:
 			self.addAction('Delete', self.delete)
 
@@ -94,7 +96,20 @@ class BaseContextMenu(QMenu):
 			log_time_format="%H:%M:%S",
 		)
 		pretty = Pretty(self.parent.state)
-		panel = Panel(pretty, title=type(self.parent).__name__)
+		panel = Panel(pretty, title=f'{type(self.parent).__name__} - State')
+		console.print(panel)
+
+	def printRepr(self):
+		console = Console(
+			soft_wrap=True,
+			tab_size=2,
+			no_color=False,
+			force_terminal=True,
+			width=get_terminal_size((100, 20)).columns - 5,
+			log_time_format="%H:%M:%S",
+		)
+		pretty = Pretty(self.parent)
+		panel = Panel(pretty, title=f'{type(self.parent).__name__} - Repr')
 		console.print(panel)
 
 	def saveLoadMenu(self):
@@ -482,7 +497,7 @@ class DashboardTemplates(QMenu):
 	def __init__(self, parent):
 		self.parent = parent
 		super(DashboardTemplates, self).__init__(parent)
-		self.setTitle('Templates')
+		self.setTitle('Open Template')
 		for file in EasyPath(userConfig.userPath)['templates']['dashboards'].ls():
 			if file.path.name.endswith('.yaml') or file.path.name.endswith('.levity'):
 				name = file.name.split('.')[0]
