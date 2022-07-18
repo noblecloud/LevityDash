@@ -21,23 +21,6 @@ from pathlib import Path
 qasync.logger.setLevel('ERROR')
 
 
-def signalQuit(sig, frame):
-	signalQuit.count += 1
-	if sig == SIGINT:
-		print('Closing...')
-		from LevityDash.lib.log import debug
-		if debug or signalQuit.count > 1:
-			quit()
-		qasync.QApplication.instance().quit()
-		remainingFutures = len(asyncio.tasks.all_tasks(asyncio.get_event_loop()))
-		print(f'Waiting for {remainingFutures} tasks to finish...')
-
-
-signalQuit.count = 0
-
-signal(SIGINT, signalQuit)
-
-
 def init_app():
 	from PySide2.QtGui import QIcon
 	iconPath = Path(__file__).parent.joinpath('lib', 'ui', 'icon.icns')
@@ -78,16 +61,39 @@ async def main():
 
 	window = lib.ui.LevityMainWindow()
 
+	def signalQuit(sig, frame):
+		signalQuit.count += 1
+		if sig == SIGINT:
+			print('Closing...')
+			from LevityDash.lib.log import debug
+			if debug or signalQuit.count > 1:
+				quit()
+			qasync.QApplication.instance().quit()
+			remainingFutures = len(asyncio.tasks.all_tasks(asyncio.get_event_loop()))
+			print(f'Waiting for {remainingFutures} tasks to finish...')
+
+	signalQuit.count = 0
+
+	signal(SIGINT, signalQuit)
+
 	def close_future(future, loop):
 		loop.call_later(10, future.cancel)
 		future.cancel()
 
 	loop = asyncio.get_event_loop()
+
+	def stopAndDisconnect():
+		lib.plugins.stop()
+		if (aboutToQuit_ := getattr(qasync.QApplication.instance(), "aboutToQuit", None)) is not None:
+			try:
+				aboutToQuit_.disconnect(stopAndDisconnect)
+			except Exception as e:
+				print(e)
+
 	future = asyncio.Future()
-	if hasattr(qasync.QApplication.instance(), "aboutToQuit"):
-		getattr(qasync.QApplication.instance(), "aboutToQuit").connect(
-			partial(close_future, future, loop)
-		)
+	if (aboutToQuit := getattr(qasync.QApplication.instance(), "aboutToQuit", None)) is not None:
+		aboutToQuit.connect(stopAndDisconnect)
+		aboutToQuit.connect(partial(close_future, future, loop))
 	lib.plugins.start()
 
 	window.show()
