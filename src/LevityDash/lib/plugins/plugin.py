@@ -291,10 +291,19 @@ class Plugin(metaclass=PluginMeta):
 
 	@abstractmethod
 	def start(self):
-		pass
+		raise NotImplementedError
 
+	@abstractmethod
 	async def asyncStart(self):
-		asyncio.get_running_loop().call_soon(self.start)
+		raise NotImplementedError
+
+	@abstractmethod
+	def stop(self):
+		raise NotImplementedError
+
+	@abstractmethod
+	async def asyncStop(self):
+		raise NotImplementedError
 
 	@classmethod
 	def getConfig(cls, plugin: 'Plugin'):
@@ -337,7 +346,7 @@ class Plugin(metaclass=PluginMeta):
 
 	@property
 	def running(self) -> bool:
-		return self.__running
+		raise NotImplementedError
 
 	def enabled(self) -> bool:
 		return self.config['enabled']

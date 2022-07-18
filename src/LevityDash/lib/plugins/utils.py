@@ -1,4 +1,4 @@
-from asyncio import get_event_loop, TimerHandle, create_task, get_running_loop
+from asyncio import get_event_loop, TimerHandle, create_task, get_running_loop, iscoroutinefunction
 from random import random as randomFloat
 from abc import abstractmethod
 from asyncio import iscoroutine, coroutine
@@ -479,6 +479,10 @@ class ScheduledEvent(object):
 		return self
 
 	@property
+	def running(self) -> bool:
+		return self.timer is not None and not self.timer.cancelled()
+
+	@property
 	def when(self) -> datetime | timedelta:
 		if self.__singleShot and self.__interval is Now():
 			return timedelta()
@@ -532,9 +536,9 @@ class ScheduledEvent(object):
 	# print(f'Scheduled {self.__func.__name__} to run at {when.strftime("%-I:%M:%S%p").lower()}')
 
 	def __fire(self):
-		try:
+		if iscoroutine(self.__func) or iscoroutinefunction(self.__func):
 			create_task(self.__func(*self.__args, **self.__kwargs))
-		except TypeError:
+		else:
 			loop = get_running_loop()
 			func = partial(self.__func, *self.__args, **self.__kwargs)
 			loop.call_soon(func)
@@ -546,6 +550,16 @@ class ScheduledEvent(object):
 	@property
 	def __timeTo(self) -> float:
 		return self.timer.when()
+
+	@classmethod
+	def cancelAll(cls, owner=None):
+		if owner is None:
+			for owner in cls.instances:
+				for event in cls.instances[owner]:
+					event.stop()
+		else:
+			for event in cls.instances[owner]:
+				event.stop()
 
 
 __all__ = ['unitDict', 'Accumulator', 'ChannelSignal', 'SchemaProperty', 'MutableSignal', 'ScheduledEvent',

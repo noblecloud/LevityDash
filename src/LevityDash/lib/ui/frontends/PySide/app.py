@@ -404,7 +404,9 @@ class PluginsMenu(QMenu):
 			action = QAction(plugin.name, self)
 			action.setCheckable(True)
 			action.setChecked(plugin.enabled())
-			# action.toggled.connect(plugin.setEnabled)
+			action.plugin = plugin
+			action.togglePlugin = partial(self.togglePlugin, plugin)
+			action.toggled.connect(action.togglePlugin)
 			self.addAction(action)
 
 	def show(self):
@@ -418,6 +420,12 @@ class PluginsMenu(QMenu):
 			plugin = action.text()
 			action.setChecked(plugin.enabled())
 
+	@staticmethod
+	def togglePlugin(plugin, enabled):
+		if enabled:
+			plugin.start()
+		else:
+			plugin.stop()
 
 class InsertMenu(QMenu):
 	existing = set()

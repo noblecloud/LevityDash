@@ -78,4 +78,4 @@ class REST(Web, prototype=True):
 	def running(self):
 		from LevityDash.lib.plugins.utils import ScheduledEvent
 		tasks = ScheduledEvent.instances.get(self, [])
-		return any(task.timer.when() for task in tasks)
+		return any(task.running for task in tasks)
