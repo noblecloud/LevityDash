@@ -1,5 +1,8 @@
 import asyncio
+from asyncio import create_task
+from json import loads, dumps
 
+from aiohttp import ClientSession, WSMsgType, ClientWebSocketResponse, WSCloseCode
 from LevityDash.lib.plugins.schema import LevityDatagram, SchemaSpecialKeys as tsk
 from LevityDash.lib.plugins.web.socket_ import UDPSocket
 from LevityDash.lib.plugins.utils import ScheduledEvent
@@ -9,6 +12,8 @@ from LevityDash.lib.utils.shared import LOCAL_TIMEZONE, Now
 from datetime import datetime, timedelta, timezone
 
 __all__ = ["WeatherFlow", '__plugin__']
+
+loop = asyncio.get_running_loop()
 
 
 class WFURLs(URLs, base='swd.weatherflow.com/swd'):
@@ -25,41 +30,6 @@ class WFURLs(URLs, base='swd.weatherflow.com/swd'):
 
 	realtime = Endpoint(base=stationObservation)
 	historical = Endpoint(base=deviceObservation)
-
-
-# class WFWebsocket(Websocket):
-# 	urlBase = 'wss://swd.weatherflow.com/swd/data'
-#
-# 	@property
-# 	def url(self):
-# 		return self.urlBase
-#
-# 	def __init__(self, DeviceID: int, *args, **kwargs):
-# 		self._deviceID = DeviceID
-# 		super(WFWebsocket, self).__init__(*args, **kwargs)
-# 		from secrets import token_urlsafe as genUUID
-# 		self.uuid = genUUID(8)
-# 		self.socket = websocket.WebSocketApp(self.url,
-# 		                                     on_open=self._open,
-# 		                                     on_data=self._data,
-# 		                                     on_message=self._message,
-# 		                                     on_error=self._error,
-# 		                                     on_close=self._close)
-#
-# 	def genMessage(self, messageType: str) -> dict[str:str]:
-# 		message = {"type":      messageType,
-# 		           "device_id": self._deviceID,
-# 		           "id":        self.uuid}
-# 		return message
-#
-# 	def _open(self, ws):
-# 		ws.send(dumps(self.genMessage('listen_start')))
-# 		ws.send(dumps(self.genMessage('listen_rapid_start')))
-# 		print("### opened ###")
-#
-# 	def _message(self, ws, message):
-# 		self.push(loads(message))
-
 
 schema = {
 	'environment.temperature':                    {'type': 'temperature', 'sourceUnit': 'c'},
@@ -96,7 +66,7 @@ schema = {
 
 	'environment.precipitation.precipitation':           {'type': 'precipitationRate', 'sourceUnit': ['mm', '@period'], 'title': 'Rate', 'sourceKey': 'precip'},
 	'environment.precipitation.precipitationNearCast':   {'type': 'precipitationRate', 'sourceUnit': ['mm', '@period'], 'title': 'Rate', 'sourceKey': 'precip_nc'},
-	'environment.precipitation.hourly':                  {'type': 'precipitationHourly', 'sourceUnit': ['mm', 'hr'], 'title': 'Hourly', 'sourceKey': 'precip_accum_last_1hr'},
+	'environment.precipitation.hourly':                  {'type': 'precipitationHourly', 'sourceUnit': ['mm', 'hr'], 'title': 'Hourly', 'sourceKey': ('precip_accum_last_1hr', 'precip_total_1h')},
 	'environment.precipitation.daily':                   {'type': 'precipitationDaily', 'sourceUnit': ['mm', 'day'], 'title': 'Daily', 'sourceKey': 'precip_accum_local_day'},
 	'environment.precipitation.dailyNearCast':           {'type': 'precipitationDaily', 'sourceUnit': ['mm', 'day'], 'title': 'Daily', 'sourceKey': 'precip_accum_local_day_final'},
 	'environment.precipitation.icon':             {
@@ -114,13 +84,13 @@ schema = {
 	'environment.yesterday.precipitation.timeRaw':       {'type': 'time', 'sourceUnit': 'min', 'title': 'Minutes Yesterday Raw', 'sourceKey': 'precip_minutes_local_yesterday'},
 	'environment.yesterday.precipitation.analysis':      {'type': 'rainCheckType', 'sourceUnit': 'int', 'title': 'Type Yesterday', 'sourceKey': 'precip_analysis_type_yesterday'},
 
-	'environment.lightning.last':                        {'type': 'date', 'sourceUnit': 'epoch', 'title': 'Last Strike', 'sourceKey': 'lightning_strike_last_epoch'},
-	'environment.lightning.distance':                    {'type': 'length', 'sourceUnit': 'km', 'title': 'Last Strike Distance', 'sourceKey': 'lightning_strike_last_distance'},
+	'environment.lightning.last':                        {'type': 'date', 'sourceUnit': 'epoch', 'title': 'Last Strike', 'sourceKey': ('lightning_strike_last_epoch', 'strike_last_epoch')},
+	'environment.lightning.distance':                    {'type': 'length', 'sourceUnit': 'km', 'title': 'Last Strike Distance', 'sourceKey': ('lightning_strike_last_distance', 'strike_last_dist')},
 	'environment.lightning.distanceAverage':             {'type': 'length', 'sourceUnit': 'km', 'title': 'Last Strike Distance', 'sourceKey': 'lightning_strike_last_distance_msg'},
 	'environment.lightning.lightning':                   {'type': 'strikeCount', 'sourceUnit': 'strike', 'title': 'Strike Count', 'sourceKey': 'lightning_strike_count'},
 	'environment.lightning.energy':                      {'type': 'energy', 'sourceUnit': 'int', 'title': 'Strike Energy', 'sourceKey': 'strikeEnergy'},
-	'environment.lightning.count1hr':                    {'type': 'strikeCount', 'sourceUnit': 'strike', 'title': 'Lightning 1hr', 'sourceKey': 'lightning_strike_count_last_1hr'},
-	'environment.lightning.count3hr':                    {'type': 'strikeCount', 'sourceUnit': 'strike', 'title': 'Lightning 3hrs', 'sourceKey': 'lightning_strike_count_last_3hr'},
+	'environment.lightning.count1hr':                    {'type': 'strikeCount', 'sourceUnit': 'strike', 'title': 'Lightning 1hr', 'sourceKey': ('lightning_strike_count_last_1hr', 'strike_count_1h')},
+	'environment.lightning.count3hr':                    {'type': 'strikeCount', 'sourceUnit': 'strike', 'title': 'Lightning 3hrs', 'sourceKey': ('lightning_strike_count_last_3hr', 'strike_count_3h')},
 
 	'timestamp':                                  {'type': 'datetime', 'sourceUnit': 'epoch', 'kwargs': {'tz': '@timezone'}, 'title': 'Time', 'sourceKey': ('time', 'timestamp', 'day_start_local'), tsk.metaData: '@timestamp'},
 	'time.hour':                                  {'type': 'time', 'sourceUnit': 'hr', 'title': 'Hour', 'sourceKey': 'local_hour', tsk.metaData: '@hour'},
@@ -168,7 +138,10 @@ schema = {
 	# '@source':                                           {'sourceKey': [] 'source', 'key': 'device.status.@.source'},
 	# '@wind':                                             {'type': 'vector', 'source': ['environment.wind.speed', 'environment.wind.direction.direction'], 'title': 'Wind'}
 
-	'ignored':                                    ['wind_direction_cardinal', 'lightning_strike_last_distance_msg', 'is_precip_local_day_rain_check', 'is_precip_local_yesterday_rain_check', 'firmware_revision', 'air_density'],
+	'ignored':                                           ['wind_direction_cardinal', 'lightning_strike_last_distance_msg',
+		'is_precip_local_day_rain_check', 'is_precip_local_yesterday_rain_check', 'firmware_revision', 'air_density',
+		'raining_minutes', 'pulse_adj_ob_time', 'pulse_adj_ob_wind_avg', 'pulse_adj_ob_temp'
+	],
 
 	'keyMaps':                                    {
 		'obs_st':        {
@@ -205,6 +178,7 @@ schema = {
 		},
 
 		'rapid_wind':    {'ob': ['timestamp', 'environment.wind.speed.speed', 'environment.wind.direction.direction']},
+		'evt_strike':    {'evt': ['timestamp', 'environment.lightning.distance', ...]},
 		'device_status': {filter: ['type', 'serial_number', 'hub_sn', 'timestamp', 'uptime', 'voltage', 'rssi', 'hub_rssi']},
 		'hub_status':    {filter: ['type', 'serial_number', 'timestamp', 'uptime', 'rssi']}
 	},
@@ -217,9 +191,11 @@ schema = {
 			'hourly':   ('forecast', 'hourly', 0),
 			'daily':    ('forecast', 'daily', 0)
 		},
+		'summary':       {'realtime': ()},
 		'historical':    {'log': ('obs', 0)},
 		'obs_st':        {'realtime': ('obs', 0)},
 		'obs_sky':       {'realtime': ('obs', 0)},
+		'evt_strike':    {'realtime': 'evt'},
 		'obs_air':       {'realtime': ('obs', 0)},
 		'rapid_wind':    {'realtime': 'ob'},
 		'device_status': {'realtime': ()},
@@ -267,6 +243,93 @@ schema = {
 ignore = {'rapid_wind'}
 
 
+class WFWebsocket:
+	socket: ClientWebSocketResponse | None
+
+	def __init__(self, plugin: 'WeatherFlow', *args, **kwargs):
+		self.socket = None
+		self.plugin = plugin
+		from secrets import token_urlsafe as genUUID
+		self.uuid = genUUID(8)
+
+	def _genMessage(self, messageType: str) -> str:
+		return dumps({
+			"type":      messageType,
+			"device_id": self.deviceID,
+			"id":        self.uuid
+		})
+
+	def start(self):
+		asyncio.create_task(self.run())
+
+	def stop(self):
+		create_task(self.astop())
+
+	async def astop(self):
+		if self.socket is None:
+			return
+		self.plugin.pluginLog.info('WeatherFlow: disconnecting Websocket')
+		await self.socket.send_str(self._genMessage('listen_stop'))
+		await self.socket.close()
+		self.socket = None
+		self.plugin.pluginLog.info('WeatherFlow: socket disconnected')
+
+	async def run(self):
+		self.plugin.pluginLog.info('WeatherFlow: connecting Websocket')
+		async with ClientSession() as session:
+			async with session.ws_connect(self.url, params=self.endpoint.params) as ws:
+				self.socket = ws
+				await self._open(ws)
+				async for msg in ws:
+					if msg.type == WSMsgType.TEXT:
+						await self._handleMessage(msg.data)
+					elif msg.type == WSMsgType.ERROR:
+						break
+
+	async def _handleMessage(self, data: str):
+		datagram = loads(data)
+		mesage = False
+		match datagram:
+			case {'type': 'connection_opened'}:
+				self.plugin.pluginLog.info("Websocket connected to WeatherFlow")
+				return
+			case {'type': 'ack', **rest}:
+				self.plugin.pluginLog.info("Websocket acknowledged connection")
+				return
+			case {'summary': dict(summary), **rest}:
+				summaryDatagram = LevityDatagram({'type': 'summary', **summary}, schema=self.plugin.schema, sourceData={'websocket': self})
+				message = LevityDatagram(rest, schema=self.plugin.schema, sourceData={'websocket': self})
+				message['realtime'].update(summaryDatagram['realtime'])
+				asyncio.create_task(self.plugin.observations.realtime.asyncUpdate(message))
+			case dict(datagram) if 'type' in datagram:
+				message = LevityDatagram(datagram, schema=self.plugin.schema, sourceData={'websocket': self})
+				asyncio.create_task(self.plugin.observations.realtime.asyncUpdate(message))
+			case {'type': 'connection_closed'}:
+				self.plugin.pluginLog.info("Websocket disconnected from WeatherFlow")
+			case _:
+				print(datagram)
+
+	@property
+	def running(self) -> bool:
+		return not self.socket.closed
+
+	@property
+	def url(self):
+		return self.plugin.urls.websocket.url
+
+	@property
+	def endpoint(self):
+		return self.plugin.urls.websocket
+
+	@property
+	def deviceID(self):
+		return self.plugin.config['deviceID']
+
+	async def _open(self, ws):
+		await ws.send_str(self._genMessage('listen_start'))
+		await ws.send_str(self._genMessage('listen_rapid_start'))
+
+
 class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 	urls: WFURLs = WFURLs()
 	schema = schema
@@ -278,6 +341,7 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 		super(WeatherFlow, self).__init__(*args, **kwargs)
 		self.udp = UDPSocket(self, port=50222)
 		self.udp.handler.connectSlot(self.socketUpdate)
+		self.websocket = WFWebsocket(self)
 
 	@property
 	def timezone(self):
@@ -308,7 +372,11 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 
 	def start(self):
 		if self.config['socketUpdates']:
-			ScheduledEvent(Now(), self.udp.start, singleShot=True).start()
+			section = self.config.default_section
+			if self.config.getOrSet(section, 'socketType', 'web') == 'web':
+				ScheduledEvent(Now(), self.websocket.start, singleShot=True).start()
+			else:
+				ScheduledEvent(Now(), self.udp.start, singleShot=True).start()
 
 		self.realtimeTimer = ScheduledEvent(self.urls.realtime.refreshInterval, self.getRealtime)
 		self.realtimeTimer.start()
