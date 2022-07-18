@@ -293,6 +293,7 @@ class LevitySceneView(QGraphicsView):
 		self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 		self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
 		self.setBackgroundBrush(Qt.black)
+		self.setStyleSheet('QGraphicsView { border: 0px; }')
 
 	def deviceTransform(self) -> QTransform:
 		devicePixelRatio = self.devicePixelRatioF()
