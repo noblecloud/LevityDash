@@ -80,12 +80,11 @@ class PluginsLoader(metaclass=GlobalSingleton, name='Plugins'):
 			print('--------------------- Starting plugins ---------------------')
 			asyncio.gather(*(plugin.asyncStart() for plugin in self))
 
-	# for plugin in self:
-	# 	print(f'Starting plugin {plugin.name}')
-	# 	plugin.asyncStart()
-	# asyncio.get_event_loop().run_in_executor(None, plugin.start)
-
-	# print('---------------------Plugins started ---------------------')
+	def stop(self):
+		print('--------------------- Stopping plugins ---------------------')
+		# asyncio.gather(*(plugin.asyncStop() for plugin in self))
+		for plugin in self:
+			plugin.stop()
 
 	@staticmethod
 	def allPlugins() -> Iterator[str]:

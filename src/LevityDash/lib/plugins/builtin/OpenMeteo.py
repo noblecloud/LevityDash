@@ -1,4 +1,4 @@
-from asyncio import gather, create_task
+from asyncio import gather, create_task, get_event_loop
 
 from LevityDash.lib.plugins.utils import ScheduledEvent
 from LevityDash.lib.plugins.schema import SchemaSpecialKeys as tsk
@@ -241,9 +241,28 @@ class OpenMeteo(REST, realtime=False, hourly=True, daily=True):
 		super(OpenMeteo, self).__init__(*args, **kwargs)
 
 	def start(self):
+		self.pluginLog.info('OpenMeteo: starting')
 		if self.running:
+			self.pluginLog.info('OpenMeteo: already running')
 			return
 		self.requestTimer = ScheduledEvent(timedelta(minutes=15), self.getForecast).start()
+		self.pluginLog.info('OpenMeteo: started')
+
+	async def asyncStart(self):
+		loop = get_event_loop()
+		loop.call_soon(self.start)
+
+	def stop(self):
+		self.pluginLog.info('OpenMeteo: stopping')
+		if not self.running:
+			self.pluginLog.info('OpenMeteo: not running')
+			return
+		self.requestTimer.stop()
+		self.pluginLog.info('OpenMeteo: stopped')
+
+	async def asyncStop(self):
+		loop = get_event_loop()
+		loop.call_soon(self.stop)
 
 	async def getForecast(self):
 		try:

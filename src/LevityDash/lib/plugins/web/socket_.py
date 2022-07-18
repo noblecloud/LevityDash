@@ -4,8 +4,12 @@ from json import JSONDecodeError, loads
 import asyncio
 import logging
 from abc import ABC, abstractmethod
+
+from aiohttp import ClientSession
 from PySide2.QtCore import QObject, Signal
 from typing import Optional
+
+from LevityDash.lib.plugins.web import Endpoint
 
 
 class SocketMessageHandler(ABC):
@@ -86,7 +90,7 @@ class LevityQtSocketMessageHandler(QObject):
 # 	def _disconnect(self):
 # 		pass
 
-
+#
 # class Websocket(QThread, Socket):
 # 	urlBase = ''
 #
@@ -96,12 +100,6 @@ class LevityQtSocketMessageHandler(QObject):
 #
 # 	def __init__(self, *args, **kwargs):
 # 		super(Websocket, self).__init__(*args, **kwargs)
-# 		self.socket = websocket.WebSocketApp(self.url,
-# 		                                     on_open=self._open,
-# 		                                     on_data=self._data,
-# 		                                     on_message=self._message,
-# 		                                     on_error=self._error,
-# 		                                     on_close=self._close)
 #
 # 	def run(self):
 # 		self.socket.run_forever()
@@ -187,15 +185,32 @@ class Socket:
 	api: 'REST'
 
 	def __init__(self, api: 'REST', *args, **kwargs):
+		self.runTask: Optional[asyncio.Task] = None
 		self.api = api
-		self.log = logging.getLogger(f'{api.name}.{self.__class__.__name__}')
+		self.log = api.pluginLog.getChild(self.__class__.__name__)
 		super(Socket, self).__init__(*args, **kwargs)
 
 	def start(self):
-		asyncio.create_task(self.run())
+		self.log.debug(f'Starting socket for {self.api.name}')
+		self.runTask = asyncio.create_task(self.run())
 
+	def stop(self):
+		if self.runTask:
+			self.runTask.cancel()
+			self.runTask = None
+		self.transport.close()
+		self.protocol.close()
+
+	@abstractmethod
 	async def run(self):
 		raise NotImplementedError
+
+	@property
+	def running(self) -> bool:
+		try:
+			return not (self.runTask.done() or self.runTask.cancelled())
+		except AttributeError:
+			return False
 
 
 class UDPSocket(Socket):
@@ -204,9 +219,7 @@ class UDPSocket(Socket):
 
 	def __init__(self, api: 'REST', address: Optional[str] = None, port: Optional[int] = None, *args, **kwargs):
 		super(UDPSocket, self).__init__(api=api, *args, **kwargs)
-		if address is None:
-			address = '0.0.0.0'
-		self.address = address
+		self._address = address
 		if port is not None:
 			self.port = port
 		self.protocol = BaseSocketProtocol(self.api)
@@ -215,8 +228,15 @@ class UDPSocket(Socket):
 	def handler(self):
 		return self.protocol.handler
 
+	@property
+	def address(self) -> str:
+		return self._address or '0.0.0.0'
+
 	async def run(self):
-		self.log.info('Starting')
+		self.log.debug(f'Connecting UDP Socket: {self.api.name}')
 		loop = asyncio.get_event_loop()
-		reusePort = False if platform.system() == 'Windows' else True
-		self.transport, self.protocol = await loop.create_datagram_endpoint(lambda: self.protocol, reuse_port=reusePort, local_addr=(self.address, self.port))
+		try:
+			self.transport, self.protocol = await loop.create_datagram_endpoint(lambda: self.protocol, local_addr=(self.address, self.port))
+		except Exception as e:
+			self.log.error(f'Error connecting UDP Socket: {e}')
+		self.log.debug(f'Connected UDP Socket: {self.api.name}')

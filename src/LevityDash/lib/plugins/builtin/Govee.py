@@ -14,6 +14,7 @@ from LevityDash.lib.plugins.plugin import Plugin
 from LevityDash.lib.plugins.utils import ScheduledEvent
 from LevityDash.lib.plugins.schema import LevityDatagram, Schema, SchemaSpecialKeys as tsk
 from LevityDash.lib.utils.shared import getOr, now
+from qasync import asyncClose
 
 pluginLog = LevityPluginLog.getChild('Govee')
 
@@ -72,6 +73,8 @@ class BLEPayloadParser:
 		return {self.__field: value}
 
 
+loop = asyncio.get_event_loop()
+
 class Govee(Plugin, realtime=True, logged=True):
 	name = 'Govee'
 	schema: Schema = {
@@ -96,6 +99,8 @@ class Govee(Plugin, realtime=True, logged=True):
 
 	def __init__(self):
 		super().__init__()
+		self.__running = False
+		self.lastDatagram: Optional[LevityDatagram] = None
 		self.historicalTimer: ScheduledEvent | None = None
 		self.scannerTask = None
 		try:
@@ -108,9 +113,9 @@ class Govee(Plugin, realtime=True, logged=True):
 		deviceConfig = self.__readDeviceConfig(config)
 		device = deviceConfig['id']
 		match device:
-			case str() if self.__varifyDeviceID(device):
+			case str() if self._varifyDeviceID(device):
 				self.scanner = BleakScanner(service_uuids=(device,))
-			case str() if ',' in device and (devices := tuple([i for i in device.split(',') if self.__varifyDeviceID(i)])):
+			case str() if ',' in device and (devices := tuple([i for i in device.split(',') if self._varifyDeviceID(i)])):
 				self.scanner = BleakScanner(service_uuids=devices)
 			case _:
 				device = None
@@ -134,6 +139,7 @@ class Govee(Plugin, realtime=True, logged=True):
 						pluginLog.warning(f"Unable to find device matching config {deviceConfig} after scanning for {scanTime}...")
 
 				try:
+					self.scanner.register_detection_callback(None)
 					await self.scanner.stop()
 					delattr(self, 'scanner')
 				except Exception as e:
@@ -143,6 +149,7 @@ class Govee(Plugin, realtime=True, logged=True):
 				self.name = name
 				self.config[name]['device.name'] = str(device.name)
 				self.config[name]['device.uuid'] = f"{', '.join(device.metadata['uuids'])}"
+				self.config[name]['device.address'] = str(device.address)
 				self.config.defaults().pop('device.id', None)
 				self.config.defaults().pop('device.mac', None)
 				self.config.defaults().pop('device.model', None)
@@ -180,7 +187,7 @@ class Govee(Plugin, realtime=True, logged=True):
 		return pluginConfig
 
 	@staticmethod
-	def __varifyDeviceID(deviceID: str) -> bool:
+	def _varifyDeviceID(deviceID: str) -> bool:
 		reMac = r'((?:(\d{1,2}|[a-fA-F]{1,2}){2})(?::|-*)){6}'
 		reUUID = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}'
 		return bool(re.match(reMac, deviceID) or re.match(reUUID, deviceID))
@@ -188,17 +195,26 @@ class Govee(Plugin, realtime=True, logged=True):
 	@staticmethod
 	def __readDeviceConfig(config):
 		deviceConfig = {
-			"id":    getOr(config, "device.id", "device.address", "device.uuid", "id", "device", expectedType=str, default=None),
+			"id":    getOr(config, "device.id", "device.uuid", "device.address", "id", "device", expectedType=str, default=None),
 			"model": getOr(config, "model", "device.model", "type", "device.type", expectedType=str, default=None),
 		}
 		return {k: v for k, v in deviceConfig.items() if v is not None}
 
 	def start(self):
-		pluginLog.debug(f'{self.name} starting...')
-		asyncio.create_task(self.run())
+		asyncio.create_task(self.asyncStart())
+
+	async def asyncStart(self):
+		pluginLog.info(f'{self.name} starting...')
+		await self.run()
 
 		if self.historicalTimer is None:
 			self.historicalTimer = ScheduledEvent(timedelta(seconds=15), self.logValues).schedule()
+		else:
+			self.historicalTimer.schedule()
+
+	@property
+	def running(self) -> bool:
+		return self.__running
 
 	async def run(self):
 		try:
@@ -206,24 +222,34 @@ class Govee(Plugin, realtime=True, logged=True):
 		except Exception as e:
 			pluginLog.error(f'Error initializing device: {e}')
 			return
-		self.scannerTask = asyncio.create_task(self.scanner.start())
+		await self.scanner.start()
 		pluginLog.info(f'{self.name} started!')
+		self.__running = True
 
 	def stop(self):
-		pluginLog.debug(f'{self.name} stopping...')
-		self.scanner.stop()
-		if self.scannerTask is not None:
-			self.scannerTask.cancel()
-			self.scannerTask = None
-		if self.historicalTimer is not None:
+		if self.running:
+			asyncio.create_task(self.asyncStop())
+
+	async def asyncStop(self):
+		pluginLog.info(f'{self.name} stopping...')
+		self.__running = False
+		try:
+			self.scanner.register_detection_callback(None)
+			await self.scanner.stop()
+		except AttributeError:
+			pass
+		except Exception as e:
+			pluginLog.error(f'Error stopping scanner: {e}')
+		if self.historicalTimer is not None and self.historicalTimer.running:
 			self.historicalTimer.stop()
 		pluginLog.info(f'{self.name} stopped!')
 
+	@asyncClose
+	async def close(self):
+		await self.asyncStop()
+
 	def enabled(self) -> bool:
 		return self.config['enabled']
-
-	def running(self) -> bool:
-		return self.scanner.is_scanning
 
 	async def __discoverDevice(self, deviceConfig, timeout=15) -> Optional[BLEDevice]:
 		async def discover(timeout):
@@ -284,6 +310,7 @@ class Govee(Plugin, realtime=True, logged=True):
 		data = LevityDatagram(results, schema=self.schema, dataMaps=self.schema.dataMaps)
 		pluginLog.debug(f'{self.__class__.__name__} received: {data["realtime"]}')
 		self.realtime.update(data)
+		self.lastDatagram = data
 
 
 __plugin__ = Govee
