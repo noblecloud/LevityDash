@@ -24,10 +24,13 @@ From there you can find both the station ID and the device ID.
 [Config] ; Since the config file is an INI, a main section must be provided
 enabled = False
 
-; Enables/disables socket updates, currently only UDP
+; Enables/disables socket updates
 socketUpdates = True
 
-; Enables/disables socket updates, currently only UDP  
+; Set socket to web or udp
+socketType = web
+
+; Enables/disables getting historical when the plugin is loaded.
 fetchHistory = False
 
 ;This is the ID of the station you want to monitor

@@ -105,6 +105,8 @@ Every module has the following options:
     alignment: center
     filters:
       - 2Title
+    modifiers:
+    	atTime: today 
 ```
 
 This module is for displaying static text. It has all the shared options along with `text` and `alignment`. The alignment option is fairly flexable since fuzzy matching is used.
@@ -226,6 +228,27 @@ Not implemented yet, but nothing is stopping you from making a really tiny graph
 
 Like the previous Realtime, the Graph Module also a collection of submodules. It only has two of the shared options, `geometry` and `type` along with two additional options, `figures` and `timeframe`.
 
+### Background Annotations
+
+This section is how you adjust the background annotations, such as the hourly lines and timestamp markers.
+
+```yaml
+annotations:
+  dayLabels:
+    position: Bottom
+    alignment: TopCenter
+    opacity: 20%
+    height: 20px
+  hourLabels:
+    position: Top
+    alignment: BottomCenter
+    opacity: 100%
+    height: 2cm
+    offset: 2%
+  lines:
+    weight: 0.3
+```
+
 ### Figures
 
 Going with the theme, a figure is a collection of graph items that share a unit of measure and range, although it is not strictly required. For readability, each figure has a `figure` option to provide a hint of the contents of the figure.
@@ -254,7 +277,7 @@ the `min:` and `max:` parameters.
 
 The values provided to min/max are currently assumed to be of the same unit displayed. In this case the values are assumed to be 'in/hr' (inches per hour).
 > [!WARNING]
-> Min/Max does not currently limit the actual rendering of the plot so any values outside of that range will be drawn outside of the figure.
+> Min/Max does not currently limit the actual rendering of the plot so any values outside that range will be drawn outside the figure.
 
 ### Graph Items
 
@@ -264,7 +287,13 @@ Graph items are what contain all the data, labels, and the visual plot that is r
 - figure: temperature
   ...
   environment.temperature.temperature:
-    labeled: true
+    labels:
+      enabled: true
+      opacity: 100%
+      height: 1.5cm
+      offset: 5px
+    ------ or -------
+    labels: false   
     plot:
       ...
 ```
@@ -374,4 +403,14 @@ i.e. `%-d`. Because of this, the format string can contain whatever text you wan
 
 ### Moon Phase
 
-This module currently has no configuration options aside from the shared parameters
+Essentially, the Moon Phase you can only adjust the `glowStrength` and the update interval.
+
+```yaml
+- type: moon
+  ...
+  geometry:
+    ...
+  glowStrength: 2
+  interval:
+    minutes: 20
+```
