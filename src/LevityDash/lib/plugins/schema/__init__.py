@@ -3,7 +3,7 @@ from datetime import datetime
 from difflib import get_close_matches
 from enum import Enum
 from functools import cached_property, lru_cache
-from typing import Dict, Hashable, Iterable, Optional, Set, Union
+from typing import Dict, Hashable, Iterable, Optional, Set, Union, Sized, List
 
 from dateutil import parser as DateParser
 from rich.pretty import pretty_repr
@@ -283,6 +283,8 @@ class LevityDatagram(dict):
 			for key, subMap in keyMap.items():
 				if isinstance(data, list) and key == len(data) or (key is iter and len(subMap) == len(data)):
 					data = [self.mapArrays(data=item, keyMap=subMap) for item in data]
+				elif isinstance(data, dict) and (subData := data.get(key, None)) is not None and isinstance(subData, List) and len(subData) >= len(subMap) and ... in subMap:
+					data[key] = self.mapArrays(subData, keyMap=subMap)
 				elif isinstance(subMap, list) and key is filter:
 					for k, v in list(data.items()):
 						if k in subMap:
@@ -292,8 +294,8 @@ class LevityDatagram(dict):
 					return [self.mapArrays(data=item, keyMap=subMap) for item in data]
 				elif key in data:
 					data[CategoryItem(key)] = self.mapArrays(data=data.pop(key), keyMap=subMap)
-		elif isinstance(keyMap, list) and len(keyMap) == len(data):
-			return {CategoryItem(key): value for key, value in zip(keyMap, data)}
+		elif isinstance(keyMap, list) and (len(keyMap) == len(data) or ... in keyMap):
+			return {CategoryItem(key): value for key, value in zip((i for i in keyMap if i is not ...), data)}
 		return data
 
 	def replace(self, data: dict, metadata: dict = None):
