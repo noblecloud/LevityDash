@@ -7,7 +7,7 @@ from collections import namedtuple
 from datetime import timedelta, datetime
 from email.generator import Generator
 from email.message import EmailMessage
-from functools import cached_property
+from functools import cached_property, partial
 
 import PySide2
 import sys
@@ -253,6 +253,7 @@ class MenuBar(QMenuBar):
 class LevitySceneView(QGraphicsView):
 	resizeFinished = Signal()
 	loadingFinished = Signal()
+	__lastKey = (None, None)
 
 	def __init__(self, *args, **kwargs):
 		self.status = 'Initializing'
@@ -340,8 +341,10 @@ class LevitySceneView(QGraphicsView):
 					moveAmount = 1 if shiftHeld else 0.1
 					self.graphicsScene.focusItem().moveBy(moveAmount, 0)
 			elif event.key() == Qt.Key_Escape:
-				self.graphicsScene.clearFocus()
-				self.graphicsScene.clearSelection()
+				if self.graphicsScene.focusItem():
+					self.graphicsScene.clearFocus()
+					self.graphicsScene.clearSelection()
+			self.__lastKey = event.key(), loop.time()
 		# elif event.type() == QEvent.GraphicsSceneMousePress:
 		# 	SoftShadow.disable(delay=400)
 		# elif event.type() == QEvent.GraphicsSceneMouseRelease:
@@ -429,6 +432,7 @@ class PluginsMenu(QMenu):
 
 class InsertMenu(QMenu):
 	existing = set()
+	source = pluginManager
 
 	def __init__(self, parent):
 		super(InsertMenu, self).__init__(parent)
@@ -446,6 +450,7 @@ class InsertMenu(QMenu):
 		if items:
 			for item in items:
 				action = InsertItemAction(self, key=item.key)
+				action.setEnabled(False)
 				self.addAction(action)
 		else:
 			refresh = QAction('Refresh', self)
@@ -561,19 +566,17 @@ class LevityMainWindow(QMainWindow):
 			exitAction=self.menuBarLeave,
 			alignment=LocationFlag.Bottom,
 			position=LocationFlag.TopLeft,
-			ignoredEdges=LocationFlag.Top
+			ignoredEdges=LocationFlag.Top,
+			delay=userConfig.getOrSet('MenuBar', 'delay', 0.3, userConfig.getfloat)
 		)
-
+		self.menuBarHoverArea.setEnabled(False)
 		if platform.system() != 'Darwin':
 			menubar = MenuBar(self)
 			self.__menubarHeight = self.menuBar().height()*2
-			menubar.setParent(view)
 			self.bar = menubar
 			self.setMenuWidget(menubar)
-			self.bar.setParent(view)
-			self.menuBarHoverArea.setEnabled(True)
+		# self.bar.setParent(view)
 		else:
-			self.menuBarHoverArea.setEnabled(False)
 			self.bar = self.menuBar()
 
 		self.buildMenu()
@@ -676,17 +679,10 @@ class LevityMainWindow(QMainWindow):
 		fileMenu = menubar.addMenu('&File')
 
 		if platform.system() == 'Darwin':
-			self.setUnifiedTitleAndToolBarOnMac(True)
 			macOSConfig = QAction('&config', self)
 			macOSConfig.setStatusTip('Open the config folder')
 			macOSConfig.triggered.connect(self.openConfigFolder)
 			fileMenu.addAction(macOSConfig)
-
-		plugins = PluginsMenu(self)
-		self.bar.addMenu(plugins)
-
-		insertMenu = InsertMenu(self)
-		self.bar.addMenu(insertMenu)
 
 		save = QAction('&Save', self)
 		save.setShortcut('Ctrl+S')
@@ -702,15 +698,10 @@ class LevityMainWindow(QMainWindow):
 		setAsDefault.setStatusTip('Set the current dashboard as the default dashboard')
 		setAsDefault.triggered.connect(self.centralWidget().graphicsScene.base.setDefault)
 
-		fileMenu.addAction(save)
-		fileMenu.addAction(saveAs)
-		fileMenu.addAction(setAsDefault)
-
-		load = QAction('&Load', self)
+		load = QAction('&Open', self)
 		load.setShortcut('Ctrl+L')
 		load.setStatusTip('Load a dashboard')
 		load.triggered.connect(self.centralWidget().graphicsScene.base.load)
-		fileMenu.addAction(load)
 
 		reload = QAction('Reload', self)
 		reload.setShortcut('Ctrl+R')
@@ -721,37 +712,49 @@ class LevityMainWindow(QMainWindow):
 		refresh.setShortcut('Ctrl+Alt+R')
 		refresh.setStatusTip('Refresh the current dashboard')
 		refresh.triggered.connect(self.centralWidget().graphicsScene.update())
-		fileMenu.addAction(refresh)
 
 		fullscreen = QAction('&Fullscreen', self)
 		fullscreen.setShortcut('Ctrl+F')
 		fullscreen.setStatusTip('Toggle fullscreen')
 		fullscreen.triggered.connect(self.toggleFullScreen)
-		fileMenu.addAction(fullscreen)
 
 		from LevityDash.lib.ui.frontends.PySide.Modules.Menus import DashboardTemplates
-		fileMenu.addMenu(DashboardTemplates(self))
-
-		fileMenu.addSeparator()
 
 		fileConfigAction = QAction('Open Config Folder', self)
 		fileConfigAction.setStatusTip('Open the config folder')
 		fileConfigAction.setShortcut('Alt+C')
 		fileConfigAction.triggered.connect(self.openConfigFolder)
-		fileMenu.addAction(fileConfigAction)
 
-		clear = QAction('Clear Dashboard', self)
+		clear = QAction('Clear', self)
 		clear.setStatusTip('Clear the current dashboard')
 		clear.setShortcut('Ctrl+Alt+C')
 		clear.triggered.connect(self.centralWidget().graphicsScene.base.clear)
-
-		fileMenu.addAction(clear)
 
 		quitAct = QAction('Quit', self)
 		quitAct.setStatusTip('Quit the application')
 		quitAct.setShortcut('Ctrl+Q')
 		quitAct.triggered.connect(QApplication.instance().quit)
+
+		fileMenu.addAction(save)
+		fileMenu.addAction(saveAs)
+		fileMenu.addAction(load)
+		fileMenu.addMenu(DashboardTemplates(self))
+		fileMenu.addSeparator()
+		fileMenu.addAction(fullscreen)
+		fileMenu.addAction(fileConfigAction)
 		fileMenu.addAction(quitAct)
+
+		dashboardMenu = menubar.addMenu("Dashboard")
+		dashboardMenu.addAction(setAsDefault)
+		dashboardMenu.addAction(reload)
+		dashboardMenu.addAction(refresh)
+		dashboardMenu.addAction(clear)
+
+		plugins = PluginsMenu(self)
+		self.bar.addMenu(plugins)
+
+		insertMenu = InsertMenu(self)
+		self.bar.addMenu(insertMenu)
 
 		logsMenu = menubar.addMenu('&Logs')
 
@@ -849,10 +852,20 @@ class LevityMainWindow(QMainWindow):
 	def changeEvent(self, event: QEvent):
 		super().changeEvent(event)
 		if event.type() == QEvent.WindowStateChange and (platform.system() != 'Darwin'):
-			self.menuBarHoverArea.setEnabled(True)
 			self.menuBarHoverArea.size.setWidth(self.width())
 			self.menuBarHoverArea.update()
-			self.menuBarLeave()
+			menubar = self.bar
+			view = self.centralWidget()
+			if self.windowState() & Qt.WindowFullScreen:
+				self.setMenuWidget(menubar)
+				menubar.setParent(view)
+				self.menuBarHoverArea.setEnabled(True)
+				self.menuBarLeave()
+			else:
+				self.setMenuWidget(menubar)
+				menubar.setParent(self)
+				self.menuBarHover()
+				self.menuBarHoverArea.setEnabled(False)
 
 
 class ClockSignals(QObject):
