@@ -953,9 +953,9 @@ class ClockSignals(QObject):
 
 		now = datetime.now()
 
-		# Offset the timers by 50ms to ensure that refresh actions happen after the time change
+		# Offset the timers by 500ms to ensure that refresh actions happen after the time change
 		# otherwise, the time will be announced
-		timerOffset = 50
+		timerOffset = 500
 
 		timeToNextSecond = round((now.replace(second=now.second, microsecond=0) + timedelta(seconds=1) - now).total_seconds()*1000)
 		self.__secondTimer.singleShot(timeToNextSecond + timerOffset, self.__startSeconds)
