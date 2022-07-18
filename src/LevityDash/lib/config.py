@@ -1,7 +1,7 @@
 import os
 import platform
 import re
-from configparser import ConfigParser, SectionProxy, ParsingError
+from configparser import ConfigParser, SectionProxy, ParsingError, ExtendedInterpolation
 from datetime import timedelta
 from functools import cached_property
 from logging import getLogger, Logger
@@ -69,9 +69,14 @@ class LevityConfig(ConfigParser):
 
 	def __init__(self, *args, **kwargs):
 		path = getattr(self, 'fileName', None) or kwargs.pop('fileName', None) or kwargs.pop('path', None) or None
-		configSection = kwargs.pop('fromSection', None) or kwargs.pop('section', None) or kwargs.pop('config', None) or None
-		super(LevityConfig, self).__init__(allow_no_value=True, *args, **kwargs)
+		super(LevityConfig, self).__init__(
+			allow_no_value=True,
+			interpolation=ExtendedInterpolation(),
+			strict=False,
+			**kwargs
+		)
 		self.optionxform = str
+
 		from LevityDash import __dirs__
 		dirs = __dirs__
 
@@ -210,7 +215,10 @@ class LevityConfig(ConfigParser):
 
 	def getOrSet(self, section: str, key: str, default: str, getter: Callable | None = None) -> str:
 		try:
-			section = self[section]
+			if section == self.default_section:
+				section = self._defaults
+			else:
+				section = self[section]
 		except KeyError:
 			self.add_section(section)
 
