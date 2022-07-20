@@ -1120,6 +1120,7 @@ class GraphItemData(QObject, Stateful, tag=...):
 
 	@cached_property
 	def data(self) -> np.array:
+		# TODO: Add try/except for when the data is not sorted
 		arr = self.list
 
 		# create new period that covers five pixels
@@ -1284,6 +1285,10 @@ class Plot(QGraphicsPixmapItem, Stateful):
 	@weight.encode
 	def weight(value: float) -> float:
 		return round(value, 3)
+
+	@property
+	def weight_px(self) -> float:
+		return self.figure.parent.plotLineWeight()*self.weight
 
 	@StateProperty(default=DefaultGroup(colorPalette.windowText().color(), '#ffffff', 'ffffff'), allowNone=False, after=QGraphicsItem.update)
 	def color(self) -> QColor:
@@ -1566,7 +1571,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 
 	def _updateShape(self):
 		qp = QPainterPathStroker()
-		weight = self.figure.parent.plotLineWeight()*self.weight*2
+		weight = self.weight_px*2
 		qp.setWidth(max(weight, 30))
 		shape = qp.createStroke(self.path())
 		self.prepareGeometryChange()
@@ -1596,7 +1601,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 			painter = EffectPainter(pixmap)
 
 			pen = self.pen()
-			weight = self.figure.graph.plotLineWeight()*self.weight
+			weight = self.weight_px
 			pen.setWidthF(weight)
 			painter.setPen(pen)
 
@@ -1785,6 +1790,51 @@ class LinePlot(Plot):
 
 
 # Section Annotation Text
+
+@runtime_checkable
+class GraphItem(Protocol):
+
+	@property
+	@abstractmethod
+	def graphic(self) -> Plot:
+		...
+
+	@property
+	@abstractmethod
+	def figure(self) -> 'Figure':
+		...
+
+	@property
+	@abstractmethod
+	def graph(self) -> 'Graph':
+		...
+
+
+@runtime_checkable
+class LinePlotGraphItem(GraphItem, Protocol):
+
+	@property
+	@abstractmethod
+	def graphic(self) -> LinePlot:
+		...
+
+
+@runtime_checkable
+class HasWeight(Protocol):
+
+	@property
+	@abstractmethod
+	def weight(self) -> float:
+		...
+
+	@property
+	@abstractmethod
+	def weight_px(self) -> float:
+		...
+
+
+class LineWeight(Size.Width, relativeDecorator='lw'):
+	pass
 
 
 class AnnotationText(Text):
@@ -2104,16 +2154,18 @@ class AnnotationLabels(list[AnnotationText], Stateful, tag=...):
 	@property
 	def offset_px(self) -> float:
 		offset = self.offset
-		if isinstance(offset, Dimension):
-			if offset.absolute:
+		match offset, self.source:
+			case LineWeight(), GraphItem(graphic=HasWeight(weight_px=_) as p):
+				offset = offset.toAbsoluteF(p.weight_px)
+			case Dimension(absolute=True), _:
 				offset = float(offset)
-			else:
+			case Dimension(relative=True), _:
 				offset = float(offset.toAbsolute(self.surface.boundingRect().height()))
-		elif isinstance(offset, Length):
-			dpi = self.surface.scene().view.screen().physicalDotsPerInchY()
-			offset = float(offset.inch)*dpi
-		# if self.position == DisplayPosition.Above:
-		# 	offset = -offset
+			case Length(), _:
+				dpi = self.surface.scene().view.screen().physicalDotsPerInchY()
+				offset = float(offset.inch)*dpi
+			case _, _:
+				offset = float(offset)
 		return offset
 
 	@property
@@ -2161,8 +2213,7 @@ class AnnotationLabels(list[AnnotationText], Stateful, tag=...):
 			for _ in range(currentSize - newSize):
 				self.pop().delete()
 
-	@staticmethod
-	def parseSize(value: str | float | int, default) -> Length | Size.Height:
+	def parseSize(self, value: str | float | int, default) -> Length | Size.Height | Size.Width:
 		match value:
 			case str(value):
 				unit = ''.join(re.findall(r'[^\d\.\,]+', value)).strip(' ')
@@ -2186,6 +2237,13 @@ class AnnotationLabels(list[AnnotationText], Stateful, tag=...):
 						return Size.Height(float(value.strip(unit)), absolute=True)
 					case '%':
 						return Size.Height(float(value.strip(unit)), relative=True)
+					case 'lw':
+						match self.source:
+							case GraphItem(graphic=HasWeight(weight_px=_)):
+								value = float(value.strip(unit))
+								return LineWeight(value, relative=True)
+							case _:
+								return value
 					case _:
 						try:
 							return Centimeter(float(value))
@@ -2861,7 +2919,7 @@ class HourLabels(AnnotationLabels[TimestampLabel]):
 
 	__defaults__ = {
 		'position': DisplayPosition.Bottom,
-		'offset':   Size.Height(0, absolute=True),
+		'offset':   Size.Height(-5, absolute=True),
 		'height':   Centimeter(0.5),
 		'format':   '%H',
 	}
