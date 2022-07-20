@@ -25,7 +25,7 @@ from qasync import asyncSlot, QApplication
 from rich.repr import auto
 from scipy.constants import golden
 from scipy.interpolate import CubicSpline, interp1d
-from typing import Callable, ClassVar, Iterable, List, Optional, overload, Tuple, Union, Any, Type, TypeVar, Dict, ForwardRef
+from typing import Callable, ClassVar, Iterable, List, Optional, overload, Tuple, Union, Any, Type, TypeVar, Dict, ForwardRef, Protocol, runtime_checkable
 from uuid import uuid4
 
 from WeatherUnits import Measurement, Temperature, Probability, Length, Time, DerivedMeasurement
@@ -2095,7 +2095,9 @@ class AnnotationLabels(list[AnnotationText], Stateful, tag=...):
 	# ----------- offset ------------- #
 	@StateProperty(default=Size.Height('5px'), allowNone=False)
 	def offset(self) -> Length | Size.Height:
-		return getattr(self, '_offset', Unset) or type(self).offset.default(self)
+		if (offset := getattr(self, '_offset', Unset)) is not Unset:
+			return offset
+		return type(self).offset.default(self)
 
 	@offset.setter
 	def offset(self, value: Length | Size.Height):
@@ -2282,9 +2284,9 @@ class PlotLabel(AnnotationText):
 		y = self.__y
 		vertical = self.alignment.vertical
 		if vertical.isTop:
-			y += self.data.offset_px + self.data.source.graphic.pen().widthF()/2
+			y += self.data.offset_px + self.data.source.graphic.pen().widthF()*.25
 		elif vertical.isBottom:
-			y -= self.data.offset_px + self.data.source.graphic.pen().widthF()*1.5
+			y -= self.data.offset_px + self.data.source.graphic.pen().widthF()
 		return y
 
 	@y.setter
