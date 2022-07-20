@@ -16,7 +16,7 @@ from LevityDash.lib.plugins.errors import InvalidData
 
 class REST(Web, prototype=True):
 
-	async def __getData(self, url: str = None, params: dict = None, headers=None) -> Optional[dict]:
+	async def __getData(self, url: str = None, params: dict = None, headers=None) -> dict | APIError | TimeoutError:
 		async with aiohttp.ClientSession() as session:
 			async with session.get(url, params=params, headers=headers) as response:
 				if response.status == 200:

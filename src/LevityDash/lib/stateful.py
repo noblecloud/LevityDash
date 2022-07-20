@@ -465,7 +465,7 @@ class StateProperty(property):
 		expectedType = decodeFunc.__annotations__.get("return", Unset)
 		if isinstance(expectedType, str):
 			expectedType = None
-		if not isinstance(value, expectedType):
+		if not isinstance(value, self.parse_return_type(expectedType)):
 			existing = self.existing(obj)
 			if existing is not UnsetExisting and isinstance(existing, Stateful):
 				StateProperty.setItemState(existing, value)
@@ -1590,7 +1590,7 @@ class StatefulMetaclass(QObjectType, type):
 # Section Stateful
 @auto_rich_repr
 class Stateful(metaclass=StatefulMetaclass):
-	__state_items__: ClassVar[ChainMap]
+	__state_items__: ClassVar[ChainMap[Text, StateProperty]]
 	__defaults__: ClassVar[ChainMap[str, Any]]
 	__tag__: ClassVar[str] = "Stateful"
 	_set_state_items_: set

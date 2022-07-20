@@ -196,6 +196,8 @@ class _LevityLogger(logging.Logger):
 			level = 5
 		elif debugSum and debugSum > inDebug:
 			level = 10
+		elif debugSum:
+			level = 10 - (5 if verboseSum else 0 + max(envVerbose, argvVerbose, configVerbose))
 		else:
 			level = logging.getLevelName(self.__config__['level'].upper())
 		level -= self.verbosity(level)
@@ -346,7 +348,7 @@ class _LevityLogger(logging.Logger):
 
 
 logging.setLoggerClass(_LevityLogger)
-LevityLogger = logging.getLogger("Levity")
+LevityLogger: _LevityLogger = _LevityLogger('Levity')
 LevityLogger.setLevel(LevityLogger.determineLogLevel())
 
 LevityLogger.info(f"Log set to {logging.getLevelName(LevityLogger.level)}")

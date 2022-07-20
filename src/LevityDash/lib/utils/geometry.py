@@ -545,11 +545,6 @@ class DisplayPosition(str, Enum, metaclass=ClosestMatchEnumMeta):
 	Bottom = Below
 
 
-# class SplitDirection(IntFlag, metaclass=LocationEnumMeta):
-# 	Horizontal = 'horizontal'
-# 	Vertical = 'vertical'
-
-
 class MutableFloat:
 	__slots__ = ('__value')
 	__value: float
@@ -1884,7 +1879,12 @@ def polygon_area(path: Union[QPolygonF, QPolygon, QPainterPath, list, tuple]) ->
 	return 0.5*np.abs(main_area + correction)
 
 
-def parseSize(value: str | float | int, default, dimension: DimensionType = DimensionType.height) -> Length | Size.Height:
+SizeInput = str | float | int
+SizeOutput = Length | Size.Height | Size.Width
+SizeParserSignature = Callable[[SizeInput, SizeOutput, ...], SizeOutput]
+
+
+def parseSize(value: SizeInput, default: SizeOutput, /, defaultCaseHandler: SizeParserSignature | None = None, dimension: DimensionType = DimensionType.height) -> SizeOutput:
 	match value:
 		case str(value):
 			unit = ''.join(re.findall(r'[^\d\.\,]+', value)).strip(' ')
@@ -1913,7 +1913,7 @@ def parseSize(value: str | float | int, default, dimension: DimensionType = Dime
 					if dimension == DimensionType.height:
 						return Size.Height(numericValue, relative=True)
 					return Size.Width(numericValue, relative=True)
-				case _:
+				case _ if defaultCaseHandler is None:
 					try:
 						if dimension == DimensionType.height:
 							return Size.Height(float(value), absolute=True)
@@ -1921,6 +1921,8 @@ def parseSize(value: str | float | int, default, dimension: DimensionType = Dime
 					except Exception as e:
 						log.error(e)
 						return default
+				case _:
+					return defaultCaseHandler(value, default, dimension=dimension)
 		case float(value) | int(value):
 			if value <= 1:
 				if dimension == DimensionType.height:

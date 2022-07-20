@@ -89,9 +89,6 @@ class Label(Panel, tag='label'):
 		if event.mimeData().hasFormat('text/plain'):
 			event.accept()
 
-	def __repr__(self):
-		return f'<{self.__class__.__name__}>'
-
 	@cached_property
 	def contextMenu(self):
 		return LabelContextMenu(self)
