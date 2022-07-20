@@ -3,7 +3,7 @@ name = "LevityDash"
 authors = ["noblecloud <git@noblecloud.io>"]
 description = "A lightweight, desktop native, multi-source, modulear dashboard for macOS, Windows and Linux"
 
-version = "0.1.0-beta.8"
+version = "0.1.0-beta.10"
 readme = "README.md"
 license = "MIT"
 
@@ -39,7 +39,7 @@ LevityDash = 'LevityDash:__main__.run'
 [tool.poetry.dependencies]
 python = ">=3.10,<3.11"
 pylunar = "^0.6.0"
-WeatherUnits = "^0.6.0"
+WeatherUnits = "^0.6.3"
 numpy = "^1.18.0"
 pytz = "^2022.1"
 qasync = "^0.23.0"
@@ -60,8 +60,8 @@ appdirs = "^1.4.4"
 
 [tool.poetry.dev-dependencies]
 pyinstaller = "^5.1"
-certifi = "^2021.10.8"
-WeatherUnits = { develop = true, path = "../WeatherUnits"}
+certifi = "^2022"
+WeatherUnits = { develop = true, path = "../WeatherUnits" }
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
