@@ -28,7 +28,7 @@ from typing import (
 	get_origin,
 	get_type_hints,
 	_GenericAlias,
-	_UnionGenericAlias,
+	_UnionGenericAlias, Text,
 )
 from re import search
 from warnings import warn, warn_explicit
@@ -912,6 +912,10 @@ class StateProperty(property):
 		return self.__options.get("required", False)
 
 	@cached_property
+	def includeInRepr(self) -> bool | None:
+		return self.__options.get('repr', None)
+
+	@cached_property
 	def isStatefulReference(self) -> bool:
 		try:
 			return self._checkReturnType(Stateful, issubclass)
@@ -1132,18 +1136,18 @@ class StateProperty(property):
 				i for j in (p.returns for p in owner.statefulItems.values() if p.singleVal) for i in j
 			)
 			if isinstance(state, acceptedSingleValueTypes):
-				try:
-					item = [
-						v
-						for v in owner.statefulItems.values()
-						if v.actions & {"set"} and v.singleVal and isinstance(state, v.returns)
-					].pop()
-					item.setState(owner, state, afterPool=kwargs.get("afterPool", []))
-					return owner
-				except Exception as e:
-					log.exception(e)
-					log.error(f"Unable to set state for {state}")
-					return
+				# try:
+				item = [
+					v
+					for v in owner.statefulItems.values()
+					if v.actions & {"set"} and v.singleVal and isinstance(state, v.returns)
+				].pop()
+				item.setState(owner, state, afterPool=kwargs.get("afterPool", []))
+				return owner
+			# except Exception as e:
+			# 	log.exception(e)
+			# 	log.error(f"Unable to set state for {state}")
+			# 	return
 			raise TypeError(f"Unable to set state for {owner} with {state}")
 
 		items = {
@@ -1745,11 +1749,11 @@ class Stateful(metaclass=StatefulMetaclass):
 		return kwargs
 
 	def __rich_repr__(self, exclude: set = None):
-		if exclude is None:
-			exclude = set()
+		exclude = exclude or set()
 		for i in sorted(self.__state_items__.values(), key=lambda x: x.sortOrder(type(self))):
-			if {i, i.key, i.name} & i.excludedFrom(self, exclude):
+			excludeKey = {i, i.name, i.key} & i.excludedFrom(self, exclude) if i.includeInRepr is None else not i.includeInRepr
+			if excludeKey:
 				continue
 			if i.existing(self) is UnsetExisting:
 				continue
-			yield i.key, i.fget(self)
+			yield i.key, i.fget(self), i.default(self)
