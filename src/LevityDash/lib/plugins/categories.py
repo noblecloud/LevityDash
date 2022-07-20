@@ -753,8 +753,19 @@ class CategoryItem(tuple):
 	def representer(cls, dumper, data):
 		return dumper.represent_scalar('tag:yaml.org,2002:str', str(data))
 
+	@classmethod
+	def keysToDict(cls, keys: Iterable['CategoryItem'], levelKey: 'CategoryItem' = None) -> Dict[CategoryAtom, 'CategoryItem']:
+		if not keys:
+			return levelKey
+		levelKey = levelKey or CategoryItem.root
+		subLevels = {k & (levelKey + CategoryItem('*')) for k in keys if k < levelKey}
+		if subLevels:
+			return {key[-1]: cls.keysToDict({k for k in keys if k < key} - {key}, key) for key in subLevels}
+		return levelKey
+
 
 root = CategoryItem(':')
+CategoryItem.root = root
 
 
 class CategoryDict(dict):
