@@ -486,7 +486,6 @@ class TimeFrameWindow(QObject):
 		if value is None:
 			value = timedelta(**kwargs)
 		self._range = value
-		self.__displayPosition = self.start + self.offset
 
 	@cached_property
 	def seconds(self) -> int:
@@ -536,13 +535,7 @@ class TimeFrameWindow(QObject):
 
 	@property
 	def displayPosition(self):
-		return self.__displayPosition
-
-	@displayPosition.setter
-	def displayPosition(self, value):
-		if isinstance(value, timedelta):
-			value = self.start + value
-		self.__displayPosition = value
+		return self.start + self.offset
 
 	@property
 	def end(self):
@@ -665,7 +658,6 @@ class TimeFrameWindow(QObject):
 		if isinstance(value, dict):
 			value = timedelta(**value)
 		self._range = value
-		self.__displayPosition = self.start + self.offset
 		self.__clearCache()
 
 	def delayedEmit(self):
