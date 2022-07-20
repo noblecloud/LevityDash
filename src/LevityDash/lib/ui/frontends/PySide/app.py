@@ -8,6 +8,7 @@ from datetime import timedelta, datetime
 from email.generator import Generator
 from email.message import EmailMessage
 from functools import cached_property, partial
+from typing import Iterable, Dict
 
 import PySide2
 import sys
@@ -27,8 +28,9 @@ from LevityDash.lib.plugins.dispatcher import ValueDirectory as pluginManager
 from LevityDash.lib.ui.frontends.PySide.utils import colorPalette, SoftShadow, EffectPainter, itemClipsChildren, getAllParents
 from ....config import userConfig
 from . import qtLogger as guiLog
+from ....plugins.categories import CategoryItem, CategoryAtom
 
-from ....utils import clearCacheAttr, LocationFlag, Unset, parseSize, Size, DimensionType, BusyContext
+from ....utils import clearCacheAttr, LocationFlag, Unset, parseSize, Size, DimensionType, BusyContext, joinCase
 from time import time, perf_counter
 
 app: QApplication = QApplication.instance()
@@ -432,31 +434,42 @@ class PluginsMenu(QMenu):
 			plugin.stop()
 
 class InsertMenu(QMenu):
-	existing = set()
+	existing = Dict[CategoryItem, QMenu | QAction]
 	source = pluginManager
 
 	def __init__(self, parent):
 		super(InsertMenu, self).__init__(parent)
+		self.noItems = self.addAction('No items')
+		self.noItems.setEnabled(True)
+		self.existing = {}
 		self.setTitle('Items')
 		self.buildItems()
 		self.aboutToShow.connect(self.buildItems)
 
-	def showEvent(self, event) -> None:
-		self.buildItems()
-		super(InsertMenu, self).showEvent(event)
-
 	def buildItems(self):
-		self.clear()
 		items = sorted(pluginManager.containers(), key=lambda x: str(x.key))
 		if items:
-			for item in items:
-				action = InsertItemAction(self, key=item.key)
-				action.setEnabled(False)
-				self.addAction(action)
+			self.noItems.setVisible(False)
+			skel = CategoryItem.keysToDict([i.key for i in items])
+			self.buildLevel(skel, self)
 		else:
-			refresh = QAction('Refresh', self)
-			refresh.triggered.connect(self.refresh)
-			self.addAction(refresh)
+			self.noItems.setVisible(True)
+
+	def buildLevel(self, level: Dict[CategoryAtom, CategoryItem], menu: QMenu = None):
+		menu = menu or self
+		if isinstance(level, dict):
+			for name, subLevel in level.items():
+				if isinstance(subLevel, dict):
+					if (subMenu := self.existing.get(name, None)) is None:
+						self.existing[name] = subMenu = menu.addMenu(joinCase(name.name, itemFilter=str.title))
+					self.buildLevel(subLevel, subMenu)
+				elif subLevel not in self.existing:
+					self.existing[subLevel] = action = InsertItemAction(menu, key=subLevel)
+					menu.addAction(action)
+		else:
+			if (action := self.existing.get(level, None)) is None:
+				self.existing[level] = action = InsertItemAction(menu, key=level)
+				menu.addAction(action)
 
 	def refresh(self):
 		self.buildItems()
@@ -467,8 +480,7 @@ class InsertItemAction(QAction):
 	def __init__(self, parent, key):
 		super(InsertItemAction, self).__init__(parent)
 		self.key = key
-		self.setText(str(key))
-		self.triggered.connect(self.insert)
+		self.setText(joinCase(key[-1].name, itemFilter=str.title))
 
 	def insert(self):
 		value = self.parent().pluginManager[self.key]
