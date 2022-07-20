@@ -192,6 +192,7 @@ class Moon(Panel, tag="moon"):
 
 	def __init__(self, *args, **kwargs):
 		self.__phase = 0
+		self.__rotate = True
 		self.lat, self.lon = userConfig.loc
 		self._date = datetime.now(userConfig.tz)
 		self.refreshData()
@@ -331,8 +332,19 @@ class Moon(Panel, tag="moon"):
 		self.moonPath.draw()
 		self.moonFull.draw()
 
+	@StateProperty(default=True, allowNone=False, after=redrawMoon)
+	def rotate(self) -> bool:
+		return self.__rotate
+
+	@rotate.setter
+	def rotate(self, value: bool):
+		self.__rotate = value
+
 	def getAngle(self) -> float:
 		"""https://stackoverflow.com/a/45029216/2975046"""
+
+		if not self.__rotate:
+			return 0.0
 
 		sunalt = solar.get_altitude_fast(self.lat, self.lon, self._date)
 		sunaz = solar.get_azimuth_fast(self.lat, self.lon, self._date)
