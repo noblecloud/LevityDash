@@ -467,6 +467,7 @@ class CategoryAtom(str):
 
 # Section CategoryItem
 class CategoryItem(tuple):
+	root: ClassVar['CategoryItem']
 	__separator: str = '.'
 	__source: Optional[Hashable]
 	__existing__ = {}

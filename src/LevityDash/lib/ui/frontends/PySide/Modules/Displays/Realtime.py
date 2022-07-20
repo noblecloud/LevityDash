@@ -698,6 +698,7 @@ class MeasurementDisplayProperties(Stateful):
 	forcePrecision: bool
 	unitSpacer: str
 	unitPosition: DisplayPosition
+	unit: Type[Measurement] | None
 	suffix: str
 	decorator: str
 	shorten: bool

@@ -444,7 +444,7 @@ class ScheduledEvent(object):
 		self.__singleShot = singleShot
 		self.__fireImmediately = fireImmediately
 
-	def schedule(self, *, startTime: datetime = None, immediately: bool = False) -> 'ScheduledEvent':
+	def schedule(self, *, startTime: datetime | timedelta = None, immediately: bool = False) -> 'ScheduledEvent':
 		self.__fireImmediately = immediately
 		if self.__singleShot:
 			name = getattr(self.__owner, 'name', self.__owner.__class__.__name__)

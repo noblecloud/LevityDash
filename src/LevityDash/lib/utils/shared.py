@@ -1171,7 +1171,8 @@ def atomizeString(var: str | list[str], itemFilter: Callable = None) -> List[str
 	"""
 	if isinstance(var, (tuple, list)):
 		var = ' '.join(var)
-	var = re.findall(r'((?=[A-Z\_]?)[A-Z]?[A-Za-z][a-z]+)', var)
+	# TODO: Improve so that it breaks up on numbers.
+	var = re.findall(r'((?=[A-Z_\d]?)[A-Z\d]?[A-Za-z\d][a-z\d]+)', var)
 	if itemFilter is not None:
 		var = [itemFilter(i) for i in var]
 	return var
@@ -1199,7 +1200,7 @@ def camelCase(value: List[str] | str, titleCase=True, itemFilter: Callable = Non
 
 def joinCase(value: List[str] | str, joiner: str | List[str] = ' ', valueFilter: Callable = None, itemFilter: Callable = None) -> str | List[str]:
 	"""
-	Converts a list of words into a new case joined by string.
+	Converts a list or string of words into a new case joined by string.
 	:param value: The list of words to convert.
 	:type value: List[str]
 	:param joiner: The string to join the words with.

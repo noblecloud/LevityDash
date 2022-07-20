@@ -201,7 +201,6 @@ class Panel(_Panel, Stateful, tag='group'):
 		self._acceptsChildren = value
 
 	def __rich_repr__(self, **kwargs):
-		yield 'id', self.uuidShort
 		if self.rect().width() <= 10 or self.rect().height() <= 10:
 			yield 'rect', Size(*self.rect().size().toTuple())
 		if getattr(self, '_geometry', None):

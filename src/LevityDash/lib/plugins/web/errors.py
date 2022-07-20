@@ -8,7 +8,7 @@ class RateLimitExceeded(APIError):
 	pass
 
 
-class RequestTimeout(APIError):
+class RequestTimeout(APIError, TimeoutError):
 	pass
 
 

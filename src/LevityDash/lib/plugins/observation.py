@@ -193,8 +193,6 @@ class ObservationValue(TimeAwareValue):
 		self.__value = None
 		self.__convertFunc__: Callable = None
 		self.value = timeAware or value
-		if str(key) == 'environment.precipitation.precipitation':
-			self.convertFunc(self.rawValue).localize
 
 	def __getitem__(self, item):
 		if item.startswith('@'):
@@ -1270,7 +1268,7 @@ class ObservationDict(PublishedDict):
 				item = TimeSeriesItem(item, timestamp)
 			self[key] = item
 
-		self.calculateMissing()  # TODO: Use Requirements to handle this automatically based on schema
+		self.calculateMissing(set(data.keys()))  # TODO: Use Requirements to handle this automatically based on schema
 
 		if self.published:
 			self.accumulator.muted = False
@@ -1293,6 +1291,7 @@ class ObservationDict(PublishedDict):
 	def __setitem__(self, key, value):
 		if key in self.__sourceKeyMap__:
 			key = self.__sourceKeyMap__[key]
+		key = convertToCategoryItem(key)
 		noChange = False
 		if (existing := self.get(key, None)) is not None:
 			previousValue = existing.value

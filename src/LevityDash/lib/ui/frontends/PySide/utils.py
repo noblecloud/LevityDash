@@ -580,7 +580,7 @@ class DebugSwitch(type(QObject)):
 
 
 def DebugPaint(cls):
-	if debug and not utilLog.VERBOSITY:
+	if debug and not utilLog.VERBOSITY - 5:
 		e = None
 		try:
 			cls._normal_paint = cls.paint
