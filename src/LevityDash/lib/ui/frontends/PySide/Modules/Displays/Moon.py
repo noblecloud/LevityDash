@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from functools import cached_property
-from typing import Iterable, Tuple
+from typing import Iterable, Tuple, TYPE_CHECKING
 
 import numpy as np
 from pylunar import MoonInfo as _MoonInfo
@@ -12,9 +12,11 @@ from ephem import previous_new_moon, next_new_moon
 
 from LevityDash.lib.ui.frontends.PySide.utils import colorPalette
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
-from LevityDash.lib.utils.shared import clearCacheAttr
+from LevityDash.lib.utils.shared import clearCacheAttr, now
 from LevityDash.lib.stateful import StateProperty
 from LevityDash.lib.config import userConfig
+from LevityDash.lib.ui import UILogger
+from WeatherUnits import Angle, Time, Percentage
 
 golden = (1 + np.sqrt(5))/2
 dark = QColor(28, 29, 31, 255)
@@ -64,6 +66,9 @@ class ThreeDimensionalPoint:
 
 
 class MoonBack(QGraphicsPathItem):
+	if TYPE_CHECKING:
+		def parentItem(self) -> 'Moon':
+			...
 
 	def __init__(self, parent: 'Moon'):
 		super().__init__()
@@ -93,6 +98,9 @@ class MoonBack(QGraphicsPathItem):
 
 
 class MoonFront(QGraphicsPathItem):
+	if TYPE_CHECKING:
+		def parentItem(self) -> 'Moon':
+			...
 
 	def __init__(self, parent: 'Moon'):
 		super().__init__()
@@ -119,7 +127,7 @@ class MoonFront(QGraphicsPathItem):
 		# z = np.cos(ascension) * np.sin(values)
 		return np.array([x, y]).T
 
-	@cached_property
+	@property
 	def pathPoints(self):
 		## Todo: try to rewrite this to use an ellipse/curve rather than 240 lines
 		phase = self.parentItem().phase
@@ -205,6 +213,14 @@ class Moon(Panel, tag="moon"):
 
 	def refresh(self):
 		self.setRect(self.rect())
+
+	def __rich_repr__(self):
+		yield 'phase', self.phase
+		yield 'phaseName', self._moonInfo.phase_name()
+		yield 'rotation', Angle(self.getAngle())
+		yield 'date', self._date
+		yield 'nextRefresh', str(Time.Millisecond(self.timer.remainingTime()).s.auto)
+		yield from super().__rich_repr__()
 
 	@property
 	def isEmpty(self):
@@ -297,17 +313,21 @@ class Moon(Panel, tag="moon"):
 			case _:
 				raise ValueError(f"Invalid interval: {value}")
 
+	@property
+	def nextUpdate(self) -> Time:
+		return Time.Millisecond(self.timer.remainingTime()).s.auto
+
 	def refreshData(self):
-		self._date = datetime.now(timezone.utc)
+		self._date = now()
 		self._moonInfo.update(tuple(self._date.timetuple()[:-3]))
 		self._phase = self._moonInfo.fractional_age()*360
 
 	def updateMoon(self):
 		self.refreshData()
 		self.redrawMoon()
+		UILogger.verbose(f"Moon Updated: nextUpdate={self.nextUpdate!s}, phase={Percentage(self._moonInfo.fractional_phase())!s}, angle={Angle(self.getAngle())!s}", verbosity=4)
 
 	def redrawMoon(self):
-		clearCacheAttr(self, 'pathPoints')
 		self.moonPath.draw()
 		self.moonFull.draw()
 
