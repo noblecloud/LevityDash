@@ -11,7 +11,7 @@ import WeatherUnits as wu
 from PySide2.QtCore import QObject, Signal, Slot
 from pytz import timezone
 
-from LevityDash.lib.utils import abbreviatedIterable, SmartString, Now, KeyData, Mutable
+from LevityDash.lib.utils import abbreviatedIterable, SmartString, Now, KeyData, Mutable, now
 from LevityDash.lib.log import LevityPluginLog as log
 
 if TYPE_CHECKING:
@@ -457,6 +457,14 @@ class ScheduledEvent(object):
 		self.__run(startTime)
 		return self
 
+	def retry(self, after: timedelta | datetime = None) -> 'ScheduledEvent':
+		if after is None:
+			after = self.__interval
+		if isinstance(after, timedelta):
+			after = now() + after
+		self.__run(after)
+		return self
+
 	def start(self) -> 'ScheduledEvent':
 		self.schedule(immediately=True)
 		return self
@@ -531,6 +539,8 @@ class ScheduledEvent(object):
 			when = abs(datetime.now() - when)
 		if isinstance(when, timedelta):
 			when = when.total_seconds()
+		if (timer := getattr(self, 'timer', None)) is not None:
+			timer.cancel()
 		self.timer = loop.call_soon(self.__fire) if self.fireImmediately else loop.call_later(when, self.__fire)
 
 	# print(f'Scheduled {self.__func.__name__} to run at {when.strftime("%-I:%M:%S%p").lower()}')
