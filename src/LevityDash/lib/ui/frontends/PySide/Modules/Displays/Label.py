@@ -109,7 +109,7 @@ class Label(Panel, tag='label'):
 	def setFilter(self, filter: str, enabled: bool = True):
 		self.textBox.setFilter(filter, enabled)
 
-	@StateProperty(default=DefaultGroup('⋯', '', None), sortOrder=0, dependencies={'geometry', 'margins'})
+	@StateProperty(default=DefaultGroup('⋯', '', None), sortOrder=0, dependencies={'geometry', 'margins'}, repr=True)
 	def text(self) -> str:
 		return self.textBox.text
 
