@@ -812,6 +812,15 @@ class Dimension(MutableFloat):
 	__match_args__ = ('value', 'absolute', 'relative')
 	_absolute: bool
 
+	def __init_subclass__(cls, **kwargs):
+		super().__init_subclass__()
+		if (relativeDecorator := kwargs.get('relativeDecorator', None)) is not None:
+			cls.__relativeDecorator__ = relativeDecorator
+		if (absoluteDecorator := kwargs.get('absoluteDecorator', None)) is not None:
+			cls.__absoluteDecorator__ = absoluteDecorator
+		if (dimension := kwargs.get('dimension', None)) is not None:
+			cls.__dimension__ = dimension
+
 	@classmethod
 	def representer(cls, dumper: Dumper, data):
 		return dumper.represent_str(str(data))
