@@ -288,7 +288,6 @@ class WFWebsocket:
 
 	async def _handleMessage(self, data: str):
 		datagram = loads(data)
-		mesage = False
 		match datagram:
 			case {'type': 'connection_opened'}:
 				self.plugin.pluginLog.info("Websocket connected to WeatherFlow")
@@ -415,14 +414,22 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 	async def getRealtime(self):
 		urls = self.urls
 		endpoint = urls.realtime
-		data = await self.getData(endpoint)
-		asyncio.create_task(self.realtime.asyncUpdate(data, source=[self.name, self.urls.realtime]))
+		try:
+			data = await self.getData(endpoint)
+			asyncio.create_task(self.realtime.asyncUpdate(data, source=[self.name, self.urls.realtime]))
+		except TimeoutError as e:
+			self.pluginLog.warning(f'WeatherFlow: realtime request timed out: {e}')
+			self.realtimeTimer.retry(timedelta(minutes=1))
 
 	async def getForecast(self):
-		data = await self.getData(self.urls.forecast)
-		tasks = [observation.asyncUpdate(data) for observation in self.observations if observation.dataName in data]
-		for task in tasks:
-			asyncio.create_task(task)
+		try:
+			data = await self.getData(self.urls.forecast)
+			tasks = [observation.asyncUpdate(data) for observation in self.observations if observation.dataName in data]
+			for task in tasks:
+				asyncio.create_task(task)
+		except TimeoutError as e:
+			self.pluginLog.warning(f'WeatherFlow: forecast request timed out: {e}')
+			self.forecastTimer.retry(timedelta(minutes=1))
 
 	async def getHistorical(self, start: datetime = None, end: datetime = None):
 		if end is None:
@@ -433,8 +440,12 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 		start = start.astimezone(tz=timezone.utc)
 		end = end.astimezone(tz=timezone.utc)
 		params.update({'time_start': int(start.timestamp()), 'time_end': int(end.timestamp())})
-		data = await self.getData(self.urls.historical, params=params)
-		await self.log.asyncUpdate(data)
+		try:
+			data = await self.getData(self.urls.historical, params=params)
+			await self.log.asyncUpdate(data)
+		except TimeoutError as e:
+			self.pluginLog.warning(f'WeatherFlow: historical request timed out: {e}')
+			self.loggingTimer.retry(timedelta(minutes=1))
 
 	@property
 	def messenger(self):
