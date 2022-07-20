@@ -194,11 +194,15 @@ class LevityDatagram(dict):
 		return data
 
 	def replaceKeys(self, data: dict = None):
+		nullKeys = self.schema.nullAllowedKeys
 		for key, value in dict(data).items():
 			data.pop(key)
 			if key in self.schema._ignored:
 				continue
-			data[self.schema.sourceKeyMap.get(key, key)] = value
+			mappedKey = self.schema.sourceKeyMap.get(key, key)
+			if value is None and mappedKey not in nullKeys:
+				continue
+			data[mappedKey] = value
 		return data
 
 	def addDataKeyValues(self, data: dict):
@@ -258,7 +262,8 @@ class LevityDatagram(dict):
 						values = {k: value[k][i] for k in keys}
 						itemPath = basePath + (i,)
 						subdatagram = Subdatagram(parent=self, data=values, path=itemPath)
-						d.append(subdatagram)
+						if len(subdatagram):
+							d.append(subdatagram)
 					data[key] = d
 				case dict() as obs if storage.path in self.validPaths and any(key in self.schema.sourceKeys for key in obs):
 					data[key] = Subdatagram(parent=self, data=value, path=key)
@@ -268,6 +273,8 @@ class LevityDatagram(dict):
 					for i, item in enumerate(items):
 						match item:
 							case dict() as obs if any(key in self.schema.sourceKeys for key in obs):
+								if all(i is None for i in item.values()):
+									continue
 								itemPath = (*(path or ()), key, i)
 								value[i] = Subdatagram(parent=self, data=item, path=itemPath)
 							case _:
@@ -864,6 +871,10 @@ class Schema(CategoryDict):
 				else:
 					sourceKeys[sourceKey] = k
 		return sourceKeys
+
+	@cached_property
+	def nullAllowedKeys(self) -> Set[CategoryItem]:
+		return {key for key, metadata in self.flatDict.items() if metadata.get('allowNull', False)}
 
 	def __parseDateTime(self, measurementData, unitDefinition, value):
 		if isinstance(value, datetime):
