@@ -272,6 +272,10 @@
     y: 65.4%
 - type: realtime.text
   key: environment.light.sunrise
+  display:
+    value:
+      modifiers:
+        atTime: today
   title:
     text: Sunrise
     ratio: 0.33
@@ -350,6 +354,10 @@
         y: 58.6%
 - type: realtime.text
   key: environment.temperature.feelsLikeHigh
+  display:
+    value:
+      modifiers:
+        atTime: today
   title:
     text: High
     ratio: 0.33
@@ -360,9 +368,13 @@
     y: 75.1%
 - type: realtime.text
   key: environment.temperature.feelsLikeLow
+  display:
+    value:
+      modifiers:
+        atTime: today
   title:
     text: Low
-    ratio: 0.35
+    ratio: 0.33
   geometry:
     height: 12%
     width: 12%
