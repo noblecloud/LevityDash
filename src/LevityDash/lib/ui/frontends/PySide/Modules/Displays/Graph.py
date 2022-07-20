@@ -1581,7 +1581,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 			deviceScale = self.scene().view.devicePixelRatio()
 
 			rect = self.figure.rect()
-			rect.setWidth((self.data.data[0][-1] - self.data.data[0][0])*self.figure.graph.pixelsPerSecond)
+			rect.setWidth((self.data.data[0][-1] - min(self.data.data[0][0], self.figure.graph.timeframe.historicalStart.timestamp()))*self.figure.graph.pixelsPerSecond)
 			rect = (deviceTransform*viewTransform).mapRect(rect)
 			ratio = rect.width()/rect.height()
 			scaleTo = False
@@ -3241,7 +3241,7 @@ class GraphPanel(Panel, tag='graph'):
 		self.syncTimer.start()
 
 	def syncDisplay(self):
-		self.proxy.snapToTime(self.timeframe.displayPosition)
+		self.proxy.snapToTime(max(self.timeframe.displayPosition, min((figure.figureMinStart for figure in self.figures), default=self.timeframe.displayPosition)))
 
 	def timeToX(self, time: datetime):
 		pass
@@ -3249,6 +3249,7 @@ class GraphPanel(Panel, tag='graph'):
 	def refresh(self):
 		for figure in self.figures:
 			figure.parentResized(self.rect())
+		self.syncDisplay()
 
 	@property
 	def msPerPixel(self) -> int:
@@ -3452,8 +3453,11 @@ class GraphPanel(Panel, tag='graph'):
 
 	@cached_property
 	def contentsTimespan(self) -> timedelta:
+		timeframe: TimeFrameWindow = self.timeframe
 		if self.figures and any(figure.plots for figure in self.figures):
-			return max(figure.figureTimeRangeMax for figure in self.figures)
+			figureMinStart = (*(figure.figureMinStart for figure in self.figures), timeframe.historicalStart)
+			figureMaxEnd = (*(figure.figureMaxEnd for figure in self.figures), timeframe.end)
+			return max(figureMaxEnd) - min(figureMinStart)
 		return self.timeframe.range
 
 	@cached_property
