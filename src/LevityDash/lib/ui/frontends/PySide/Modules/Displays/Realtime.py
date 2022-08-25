@@ -790,7 +790,21 @@ class MeasurementDisplayProperties(Stateful):
 
 	@property
 	def __isValid(self) -> bool:
-		return self.__label.value is not None and hasattr(self.__label.value, '@unit')
+		return self.measurement is not None
+
+	@StateProperty(key='unit-string', default=Unset, allowNone=False)
+	def unit_string(self) -> str:
+		if self.__unit is Unset:
+			return getattr(self.measurement, 'unit', '')
+		return self.__unit
+
+	@unit_string.setter
+	def unit_string(self, value):
+		self.__unit = value
+
+	@unit_string.condition
+	def unit_string(self, value):
+		return value != getattr(self.measurement, 'unit', value)
 
 	@property
 	def hasUnit(self) -> bool:
