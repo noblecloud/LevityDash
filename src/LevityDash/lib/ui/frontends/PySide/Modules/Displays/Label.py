@@ -14,6 +14,8 @@ from LevityDash.lib.ui.frontends.PySide.Modules import Panel
 from LevityDash.lib.utils.geometry import Alignment, AlignmentFlag, Position, Size
 from LevityDash.lib.utils import clearCacheAttr
 from LevityDash.lib.stateful import DefaultTrue, DefaultFalse, DefaultGroup, StateProperty
+from LevityDash.lib.ui.icons import IconPack
+from LevityDash import __resources__
 
 log = guiLog.getChild(__name__)
 
@@ -111,7 +113,7 @@ class Label(Panel, tag='label'):
 
 	@StateProperty(default=DefaultGroup('⋯', '', None), sortOrder=0, dependencies={'geometry', 'margins'}, repr=True)
 	def text(self) -> str:
-		return self.textBox.text
+		return self.textBox.text if not self.hasIcon else None
 
 	@text.setter
 	def text(self, value):
@@ -120,6 +122,29 @@ class Label(Panel, tag='label'):
 	@text.condition
 	def text(value):
 		return bool(value)
+
+	@StateProperty(default=None, sortOrder=1, dependencies={'geometry', 'margins'}, repr=True)
+	def icon(self) -> str | None:
+		return getattr(self, '_icon', None)
+
+	@icon.setter
+	def icon(self, value):
+		self._icon = value
+		if value.startswith('icon:'):
+			value = value[5:]
+		iconPack, name = value.split('-', 1)
+		iconPack = IconPack[iconPack]
+		font = iconPack.getFont()
+		self.textBox.setFont(font)
+		value = iconPack.getIconChar(name, '')
+		self.textBox.value = value
+
+	@property
+	def hasIcon(self) -> bool:
+		return self.icon is not None
+
+	def allowDynamicUpdate(self) -> bool:
+		return self.icon is None
 
 	def setText(self, text: str):
 		self.text = text

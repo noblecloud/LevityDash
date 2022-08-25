@@ -414,6 +414,22 @@ class Text(QGraphicsPathItem):
 		return getattr(value, '@withoutUnit', None) or f'WithOutUnit{value}'
 
 
+class Icon(Text):
+	iconPack: IconPack
+	icon: str
+	style: Optional[str]
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+
+	@property
+	def iconPack(self) -> IconPack | None:
+		if self.icon is None:
+			return None
+		prefix = self.icon.split('-')[0]
+		return IconPack[prefix]
+
+
 class TextHelper(Text):
 	"""
 	This class does not have its own stored value, instead it is provided a value by the parent Text item.
