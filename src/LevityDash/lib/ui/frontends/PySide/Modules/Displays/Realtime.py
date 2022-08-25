@@ -159,7 +159,7 @@ class Realtime(Panel, tag='realtime'):
 	def timeOffsetLabel(self):
 		return TimeOffsetLabel(self)
 
-	@StateProperty(sortOrder=0, match=True, dependencies={'display', 'title'})
+	@StateProperty(sortOrder=0, match=True, dependencies={'display', 'title', 'forecast'})
 	def key(self) -> CategoryItem:
 		return getattr(self, '_key', None)
 
@@ -172,7 +172,7 @@ class Realtime(Panel, tag='realtime'):
 		self._key = value
 		self.container = ValueDirectory.getContainer(value)
 
-	@StateProperty(default=AnySource, dependencies={'key', 'display', 'title'}, values=Plugins.plugins)
+	@StateProperty(default=AnySource, dependencies={'key', 'display', 'title', 'forecast'}, values=Plugins.plugins)
 	def source(self) -> Plugin | SomePlugin:
 		return getattr(self, '_source', AnySource)
 
@@ -195,6 +195,16 @@ class Realtime(Panel, tag='realtime'):
 		if source is None:
 			log.info(f'{value} is not a valid source or the plugin is not Loaded')
 		return source
+
+	@StateProperty(default=False)
+	def forecast(self) -> bool:
+		return getattr(self, '_forecast', False)
+
+	@forecast.setter
+	def forecast(self, value: bool):
+		self._forecast = value
+		if self.container is not None:
+			self.container = ValueDirectory.getContainer(self.key)
 
 	@property
 	def currentSource(self) -> Plugin | None:
@@ -265,19 +275,29 @@ class Realtime(Panel, tag='realtime'):
 			raise NotImplementedError
 
 		async def startConnecting():
-			firstAttemptContainer: Container = self.container.getRealtimeContainer(self.source, realtimePossible)
+			if not self.forecast:
+				firstAttemptContainer: Container = self.container.getRealtimeContainer(self.source, realtimePossible)
+			else:
+				firstAttemptContainer: Container = self.container.getDaily(self.source)
+
 			if firstAttemptContainer is None:
 				# If no realtime provided the MultiSourceContainer to notify when new realtime
 				# sources are available.  For now accept anything that is available.
 				# It can be assumed from here forward that the MultiSourceContainer will
 				# have a realtime source available.
-				container.getPreferredSourceContainer(self, AnySource, firstRealtimeContainerAvailable())
+				if not self.forecast:
+					container.getPreferredSourceContainer(self, AnySource, firstRealtimeContainerAvailable())
+				else:
+					container.getDailyContainer(self, AnySource, firstRealtimeContainerAvailable())
 			else:
 				loop.create_task(firstRealtimeContainerAvailable())
 
 		async def firstRealtimeContainerAvailable():
 			# This should only be called once!
-			anyRealtimeContainer = self.container.getRealtimeContainer(self.source, realtimePossible) or self.container.getRealtimeContainer(self.source, False)
+			if not self.forecast:
+				anyRealtimeContainer = self.container.getRealtimeContainer(self.source, realtimePossible) or self.container.getRealtimeContainer(self.source, False)
+			else:
+				anyRealtimeContainer = self.container.getDaily(self.source)
 
 			# Not picky about the source, so just try to connect to anything
 			self.connectRealtime(anyRealtimeContainer)
@@ -291,30 +311,35 @@ class Realtime(Panel, tag='realtime'):
 					# eventually a 'connect to any true realtime source' will be implemented, and it will be
 					# necessary then.
 
-					def requirementCheck(sources: Iterable['Observation']):
-						return any(isinstance(obs, RealtimeSource) for obs in sources)
+					if not self.forecast:
+						def requirementCheck(sources: Iterable['Observation']):
+							return any(isinstance(obs, RealtimeSource) for obs in sources)
+					else:
+						def requirementCheck(sources: Iterable['Observation']):
+							return any(isinstance(obs, TimeseriesSource) and obs.period >= timedelta(days=0.8) for obs in sources)
 
 					connect = partial(self.connectRealtime, anyRealtimeContainer)
 					anyRealtimeContainer.notifyOnRequirementsMet(self, requirementCheck, connect)
 
 			elif (self.source is AnySource
+			      and not self.forecast
 			      and realtimePossible
 			      and anyRealtimeContainer.isRealtimeApproximate):
 				# A true real time source is possible and better than what is
 				# currently connected.
 				container.getTrueRealtimeContainer(self, AnySource, approximateRealtimeOnLastAttempt())
 
-
-			elif self.source != anyRealtimeContainer.source:
+			elif self.forecast and self.source != anyRealtimeContainer.source:
 				# There's a preferred source, but this ain't it...ask the MultiSourceContainer
 				# to notify when the preferred source is available.
 				container.getPreferredSourceContainer(self, self.source, notPreferredSourceOnLastAttempt())
 
-		# If it made it this far, the correct source is connected!
-
 		# This should be called when a source is specified or changed
 		async def notPreferredSourceOnLastAttempt():
-			preferredSourceContainer = self.container.getRealtimeContainer(self.source)
+			if not self.forecast:
+				preferredSourceContainer = self.container.getRealtimeContainer(self.source)
+			else:
+				preferredSourceContainer = self.container.getDaily(self.source)
 
 			# This should never happen
 			if preferredSourceContainer is None:
@@ -326,7 +351,7 @@ class Realtime(Panel, tag='realtime'):
 				return
 
 			# If the preferred source does not have a realtime value
-			if not preferredSourceContainer.isRealtime:
+			if not self.forecast and not preferredSourceContainer.isRealtime:
 				# However, the source plugin's schema says it never will
 				if preferredSourceContainer.isRealtimeApproximate:
 					self.connectRealtime(preferredSourceContainer)
@@ -414,8 +439,6 @@ class Realtime(Panel, tag='realtime'):
 			fontName = container.metadata['glyphFont']
 			if fontName == 'WeatherIcons':
 				self.display.valueTextBox.textBox.setFont(weatherGlyph)
-		if hasattr(self, 'display'):
-			self.display.value = container
 		if self.title.isEnabled() and self.title.allowDynamicUpdate():
 			title = container.value['title']
 			self.title.setText(title)
