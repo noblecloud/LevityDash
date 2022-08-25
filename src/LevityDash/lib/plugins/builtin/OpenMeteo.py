@@ -8,24 +8,6 @@ from datetime import datetime, timedelta
 from LevityDash.lib.config import userConfig
 from LevityDash.lib.plugins.web.errors import APIError
 
-"""
-Code	Description
-0	Clear sky
-1, 2, 3	Mainly clear, partly cloudy, and overcast
-45, 48	Fog and depositing rime fog
-51, 53, 55	Drizzle: Light, moderate, and dense intensity
-56, 57	Freezing Drizzle: Light and dense intensity
-61, 63, 65	Rain: Slight, moderate and heavy intensity
-66, 67	Freezing Rain: Light and heavy intensity
-71, 73, 75	Snow fall: Slight, moderate, and heavy intensity
-77	Snow grains
-80, 81, 82	Rain showers: Slight, moderate, and violent
-85, 86	Snow showers slight and heavy
-95 *	Thunderstorm: Slight or moderate
-96, 99 *	Thunderstorm with slight and heavy hail
-*) Thunderstorm forecast with hail is only available in Central Europe
-"""
-
 WMOCodes = {
 	0:  {'description': 'Clear', 'icon': ''},
 	1:  {'description': 'Light clouds', 'icon': ''},
@@ -58,42 +40,42 @@ WMOCodes = {
 }
 
 schema = {
-	'environment':                                  {'timeseriesOnly': True},
-	'environment.clouds.cover.cover':               {'type': 'cloudcover', 'sourceUnit': '%', 'title': 'Cloud Cover', 'description': 'Cloud Coverage', 'sourceKey': 'cloudcover', 'timeseriesOnly': True},
-	'environment.clouds.cover.high':                {'type': 'cloudcover', 'sourceUnit': '%', 'title': 'Cloud Cover High', 'description': 'Cloud cover high', 'sourceKey': 'cloudcover_high', 'timeseriesOnly': True},
-	'environment.clouds.cover.low':                 {'type': 'cloudcover', 'sourceUnit': '%', 'title': 'Cloud Cover Low', 'description': 'Cloud cover low', 'sourceKey': 'cloudcover_low', 'timeseriesOnly': True},
-	'environment.clouds.cover.mid':                 {'type': 'cloudcover', 'sourceUnit': '%', 'title': 'Cloud Cover Mid', 'description': 'Cloud cover mid', 'sourceKey': 'cloudcover_mid', 'timeseriesOnly': True},
+	'environment':                                {'timeseriesOnly': True},
+	'environment.clouds.cover.cover':             {'type': 'cloudcover', 'sourceUnit': '%', 'title': 'Cloud Cover', 'description': 'Cloud Coverage', 'sourceKey': 'cloudcover', 'timeseriesOnly': True},
+	'environment.clouds.cover.high':              {'type': 'cloudcover', 'sourceUnit': '%', 'title': 'Cloud Cover High', 'description': 'Cloud cover high', 'sourceKey': 'cloudcover_high', 'timeseriesOnly': True},
+	'environment.clouds.cover.low':               {'type': 'cloudcover', 'sourceUnit': '%', 'title': 'Cloud Cover Low', 'description': 'Cloud cover low', 'sourceKey': 'cloudcover_low', 'timeseriesOnly': True},
+	'environment.clouds.cover.mid':               {'type': 'cloudcover', 'sourceUnit': '%', 'title': 'Cloud Cover Mid', 'description': 'Cloud cover mid', 'sourceKey': 'cloudcover_mid', 'timeseriesOnly': True},
 
-	'environment.condition.weatherCode':            {'type': 'WeatherCode', 'sourceUnit': 'WeatherCode', 'title': 'Weather code', 'description': 'Weather code', 'sourceKey': 'weathercode', 'timeseriesOnly': True},
-	'environment.condition.icon':                   {
+	'environment.condition.weatherCode':          {'type': 'WeatherCode', 'sourceUnit': 'WeatherCode', 'title': 'Weather code', 'description': 'Weather code', 'sourceKey': 'weathercode', 'timeseriesOnly': True},
+	'environment.condition.icon':                 {
 		'type':      'icon', 'sourceUnit': 'int', 'title': 'Condition Icon', 'description': 'Condition Icon', 'dataKey': 'environment.condition.weatherCode', 'iconType': 'glyph',
 		'glyphFont': 'WeatherIcons',
 		'aliases':   '@conditionIcon'
 	},
-	'environment.condition.condition':              {'type': 'WeatherCode', 'sourceUnit': 'int', 'title': 'Condition', 'description': 'Condition', 'dataKey': 'environment.condition.weatherCode', 'aliases': '@condition'},
+	'environment.condition.condition':            {'type': 'WeatherCode', 'sourceUnit': 'int', 'title': 'Condition', 'description': 'Condition', 'dataKey': 'environment.condition.weatherCode', 'aliases': '@condition'},
 
-	'environment.humidity.humidity':                {'type': 'humidity', 'sourceUnit': '%', 'title': 'Humidity', 'description': 'Relative humidity at 2m height', 'sourceKey': 'relativehumidity_2m'},
+	'environment.humidity.humidity':              {'type': 'humidity', 'sourceUnit': '%', 'title': 'Humidity', 'description': 'Relative humidity at 2m height', 'sourceKey': 'relativehumidity_2m'},
 
-	'environment.light.irradiance.daily':           {'type': 'radiation', 'sourceUnit': 'W/m^2', 'title': 'Total Shortwave Radiation', 'description': 'Total shortwave radiation for the day', 'sourceKey': 'shortwave_radiation_sum'},
-	'environment.light.irradiance.diffuse':         {'type': 'irradiance', 'sourceUnit': 'W/m^2', 'title': 'Diffuse radiation', 'description': 'Diffuse radiation', 'sourceKey': 'diffuse_radiation', 'timeseriesOnly': True},
-	'environment.light.irradiance.diffuseNormal':   {'type': 'irradiance', 'sourceUnit': 'W/m^2', 'title': 'Diffuse normal irradiance', 'description': 'Diffuse normal irradiance', 'sourceKey': 'diffuse_normal_irradiance'},
-	'environment.light.irradiance.direct':          {'type': 'irradiance', 'sourceUnit': 'W/m^2', 'title': 'Direct radiation', 'description': 'Direct radiation', 'sourceKey': 'direct_radiation', 'timeseriesOnly': True},
-	'environment.light.irradiance.directNormal':    {'type': 'irradiance', 'sourceUnit': 'W/m^2', 'title': 'Direct normal irradiance', 'description': 'Direct normal irradiance', 'sourceKey': 'direct_normal_irradiance'},
-	'environment.light.irradiance.global':          {'type': 'irradiance', 'sourceUnit': 'W/m^2', 'title': 'Global irradiance', 'description': 'Global irradiance', 'sourceKey': 'global_irradiance', 'timeseriesOnly': True},
-	'environment.light.irradiance.irradiance':      {'type': 'irradiance', 'sourceUnit': 'W/m^2', 'title': 'Shortwave radiation', 'description': 'Shortwave radiation', 'sourceKey': 'shortwave_radiation', 'timeseriesOnly': True},
-	'environment.light.sunrise':                    {'type': 'datetime', 'sourceUnit': 'ISO8601', 'format': '%Y-%m-%dT%H:%M', 'title': 'Sunrise', 'description': 'Sunrise', 'sourceKey': 'sunrise', 'timeseriesOnly': True},
-	'environment.light.sunset':                     {'type': 'datetime', 'sourceUnit': 'ISO8601', 'format': '%Y-%m-%dT%H:%M', 'title': 'Sunset', 'description': 'Sunset', 'sourceKey': 'sunset', 'timeseriesOnly': True},
+	'environment.light.irradiance.daily':         {'type': 'radiation', 'sourceUnit': 'MJ/m^2', 'title': 'Total Shortwave Radiation', 'description': 'Total shortwave radiation for the day', 'sourceKey': 'shortwave_radiation_sum'},
+	'environment.light.irradiance.diffuse':       {'type': 'irradiance', 'sourceUnit': 'W/m^2', 'title': 'Diffuse radiation', 'description': 'Diffuse radiation', 'sourceKey': 'diffuse_radiation', 'timeseriesOnly': True},
+	'environment.light.irradiance.diffuseNormal': {'type': 'irradiance', 'sourceUnit': 'W/m^2', 'title': 'Diffuse normal irradiance', 'description': 'Diffuse normal irradiance', 'sourceKey': 'diffuse_normal_irradiance'},
+	'environment.light.irradiance.direct':        {'type': 'irradiance', 'sourceUnit': 'W/m^2', 'title': 'Direct radiation', 'description': 'Direct radiation', 'sourceKey': 'direct_radiation', 'timeseriesOnly': True},
+	'environment.light.irradiance.directNormal':  {'type': 'irradiance', 'sourceUnit': 'W/m^2', 'title': 'Direct normal irradiance', 'description': 'Direct normal irradiance', 'sourceKey': 'direct_normal_irradiance'},
+	'environment.light.irradiance.global':        {'type': 'irradiance', 'sourceUnit': 'W/m^2', 'title': 'Global irradiance', 'description': 'Global irradiance', 'sourceKey': 'global_irradiance', 'timeseriesOnly': True},
+	'environment.light.irradiance.irradiance':    {'type': 'irradiance', 'sourceUnit': 'W/m^2', 'title': 'Shortwave radiation', 'description': 'Shortwave radiation', 'sourceKey': 'shortwave_radiation', 'timeseriesOnly': True},
+	'environment.light.sunrise':                  {'type': 'datetime', 'sourceUnit': 'ISO8601', 'format': '%Y-%m-%dT%H:%M', 'title': 'Sunrise', 'description': 'Sunrise', 'sourceKey': 'sunrise', 'timeseriesOnly': True},
+	'environment.light.sunset':                   {'type': 'datetime', 'sourceUnit': 'ISO8601', 'format': '%Y-%m-%dT%H:%M', 'title': 'Sunset', 'description': 'Sunset', 'sourceKey': 'sunset', 'timeseriesOnly': True},
 
-	'environment.precipitation.daily':              {'type': 'precipitationDaily', 'sourceUnit': ['mm', 'day'], 'title': 'Precipitation Daily', 'description': 'Precipitation daily', 'sourceKey': 'precipitation_sum', 'timeseriesOnly': True},
-	'environment.precipitation.showers':            {'type': 'precipitationHourly', 'sourceUnit': ['mm', 'hr'], 'title': 'Showers', 'description': 'Showers', 'sourceKey': 'showers', 'timeseriesOnly': True},
-	'environment.precipitation.rain':               {'type': 'precipitationHourly', 'sourceUnit': ['mm', 'hr'], 'title': 'Rain', 'description': 'Rain', 'sourceKey': 'rain', 'timeseriesOnly': True},
-	'environment.precipitation.show':               {'type': 'precipitationHourly', 'sourceUnit': ['mm', 'hr'], 'title': 'Snow', 'description': 'Snow', 'sourceKey': 'snowfall', 'timeseriesOnly': True},
-	'environment.precipitation.showersDaily':       {'type': 'precipitationDaily', 'sourceUnit': ['mm', 'day'], 'title': 'Showers Daily', 'description': 'Showers Daily', 'sourceKey': 'showers', 'timeseriesOnly': True},
-	'environment.precipitation.rainDaily':          {'type': 'precipitationDaily', 'sourceUnit': ['mm', 'day'], 'title': 'Rain Daily', 'description': 'Rain Daily', 'sourceKey': 'rain', 'timeseriesOnly': True},
-	'environment.precipitation.showDaily':          {'type': 'precipitationDaily', 'sourceUnit': ['mm', 'day'], 'title': 'Snow Daily', 'description': 'Snow Daily', 'sourceKey': 'snowfall', 'timeseriesOnly': True},
-	'environment.precipitation.precipitation':      {'type': 'precipitationHourly', 'sourceUnit': ['mm', 'hr'], 'title': 'Precipitation', 'description': 'Precipitation', 'sourceKey': 'precipitation', 'timeseriesOnly': True},
-	'environment.precipitation.snowDepth':          {'type': 'precipitation', 'sourceUnit': 'm', 'title': 'Snow depth', 'description': 'Snow depth', 'sourceKey': 'snow_depth', 'timeseriesOnly': True},
-	'environment.precipitation.time':               {'type': 'time', 'sourceUnit': 'hr', 'title': 'Precipitation Time', 'description': 'Precipitation time', 'sourceKey': 'precipitation_hours', 'timeseriesOnly': True},
+	'environment.precipitation.daily':            {'type': 'precipitationDaily', 'sourceUnit': ['mm', 'day'], 'title': 'Precipitation Daily', 'description': 'Precipitation daily', 'sourceKey': 'precipitation_sum', 'timeseriesOnly': True},
+	'environment.precipitation.showers':          {'type': 'precipitationHourly', 'sourceUnit': ['mm', 'hr'], 'title': 'Showers', 'description': 'Showers', 'sourceKey': 'showers', 'timeseriesOnly': True},
+	'environment.precipitation.rain':             {'type': 'precipitationHourly', 'sourceUnit': ['mm', 'hr'], 'title': 'Rain', 'description': 'Rain', 'sourceKey': 'rain', 'timeseriesOnly': True},
+	'environment.precipitation.show':             {'type': 'precipitationHourly', 'sourceUnit': ['mm', 'hr'], 'title': 'Snow', 'description': 'Snow', 'sourceKey': 'snowfall', 'timeseriesOnly': True},
+	'environment.precipitation.showersDaily':     {'type': 'precipitationDaily', 'sourceUnit': ['mm', 'day'], 'title': 'Showers Daily', 'description': 'Showers Daily', 'sourceKey': 'showers', 'timeseriesOnly': True},
+	'environment.precipitation.rainDaily':        {'type': 'precipitationDaily', 'sourceUnit': ['mm', 'day'], 'title': 'Rain Daily', 'description': 'Rain Daily', 'sourceKey': 'rain', 'timeseriesOnly': True},
+	'environment.precipitation.showDaily':        {'type': 'precipitationDaily', 'sourceUnit': ['mm', 'day'], 'title': 'Snow Daily', 'description': 'Snow Daily', 'sourceKey': 'snowfall', 'timeseriesOnly': True},
+	'environment.precipitation.precipitation':    {'type': 'precipitationHourly', 'sourceUnit': ['mm', 'hr'], 'title': 'Precipitation', 'description': 'Precipitation', 'sourceKey': 'precipitation', 'timeseriesOnly': True},
+	'environment.precipitation.snowDepth':        {'type': 'precipitation', 'sourceUnit': 'm', 'title': 'Snow depth', 'description': 'Snow depth', 'sourceKey': 'snow_depth', 'timeseriesOnly': True},
+	'environment.precipitation.time':             {'type': 'time', 'sourceUnit': 'hr', 'title': 'Precipitation Time', 'description': 'Precipitation time', 'sourceKey': 'precipitation_hours', 'timeseriesOnly': True},
 
 	'environment.pressure.pressure':                {'type': 'pressure', 'sourceUnit': 'hPa', 'title': 'Pressure', 'description': 'Pressure at 2m height', 'sourceKey': 'pressure_msl'},
 	'environment.pressure.surface':                 {'type': 'pressure', 'sourceUnit': 'hPa', 'title': 'Pressure', 'description': 'Pressure at 2m height', 'sourceKey': 'surface_pressure'},
