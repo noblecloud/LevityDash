@@ -26,6 +26,12 @@ class TextItemSignals(QObject):
 	changed = Signal()
 
 
+class ScaleType(str, Enum, metaclass=ClosestMatchEnumMeta):
+	fill = 'fill'
+	auto = 'auto'
+	font = 'font'
+
+
 @DebugPaint
 class Text(QGraphicsPathItem):
 	_value: Container
@@ -409,36 +415,40 @@ class Text(QGraphicsPathItem):
 		self.updateTransform()
 
 	def __updatePath(self):
-		clearCacheAttr(self, 'textRect')
-
+		self.resetTransform()
 		fm = QFontMetricsF(self.font())
-		fontPath = QPainterPath()
-		fontPath.addText(0, 0, self.font(), f'|')
-
-		fm.fontPath = fontPath
 
 		path = QPainterPath()
 		path.setFillRule(Qt.WindingFill)
 		text = self.text
-		r = fm.tightBoundingRect(text)
-		r.setHeight(fm.fontPath.boundingRect().height())
 		path.addText(QPointF(0, 0), self.font(), text)
+		pathSizeHint = QPainterPath(path)
+		pathSizeHint.addText(QPointF(0, 0), self.font(), text)
+		match self._scaleType:
+			case ScaleType.fill:
+				pass
+			case ScaleType.auto:
+				pathSizeHint.addText(0, 0, self.font(), f'|')
+			case ScaleType.font:
+				pathSizeHint.moveTo(0, fm.ascent())
+				pathSizeHint.lineTo(0, fm.descent())
+			case _:
+				pass
+		r = pathSizeHint.boundingRect()
+		textCenter = r.center()
 
-		textCenter = path.boundingRect().center()
-
-		if self.font().family() != 'Weather Icons':
+		if self.font().family() != 'Weather Icons' and self._scaleType is not ScaleType.fill:
 			textCenter.setY(-fm.strikeOutPos())
 
 		path.translate(-textCenter)
 
-		pRect = path.boundingRect()
-		pRect.setBottom(fm.descent())
-
 		translation = self.alignment.translationFromCenter(r).asQPointF()
 		path.translate(translation)
-		pRect.translate(translation)
 
-		self._textRect = pRect
+		r.moveCenter(path.boundingRect().center())
+		rotation = self.rotation() or self.parent.rotation()
+		self._textRect = r if not abs(rotation) else QTransform().rotate(rotation).map(pathSizeHint).boundingRect()
+		self._sizeHintRect = r
 
 		self._path = path
 		self.setPath(path)
