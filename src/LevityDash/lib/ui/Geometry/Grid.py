@@ -9,7 +9,8 @@ from PySide2.QtWidgets import QGraphicsItem, QGraphicsRectItem, QGraphicsScene, 
 
 from ..Geometry import Geometry
 from LevityDash.lib.utils.shared import clearCacheAttr
-from LevityDash.lib.utils.geometry import GridItemPosition, GridItemSize, MultiDimension, Position
+from LevityDash.lib.utils.geometry import GridItemSize
+from . import Position, GridItemPosition, MultiDimension
 from .utils import GridItem
 
 __all__ = ['Grid', 'GridItems', 'GridItem']
