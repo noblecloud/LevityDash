@@ -1,34 +1,40 @@
-from functools import cached_property
+import asyncio
+import re
+from collections import defaultdict
+from functools import cached_property, reduce, partial
 from pprint import pprint
 from pathlib import Path
-from typing import Any, Callable, List, Optional, overload, Union, Sized, Set, ClassVar, Tuple
-from uuid import uuid4
+from typing import (Any, Callable, List, Optional, overload, Union, Sized, Set, ClassVar, Tuple, Dict, TYPE_CHECKING,
+                    NamedTuple, TypeVar, TypeAlias, ForwardRef)
+from uuid import uuid4, UUID
+from operator import or_
 
 from math import prod
-from PySide2.QtCore import QByteArray, QMimeData, QPointF, QRect, QRectF, QSize, QSizeF, Qt, QTimer, Slot, QPoint
+from PySide2.QtCore import (QByteArray, QMimeData, QPointF, QRect, QRectF, QSize, QSizeF, Qt, QTimer, Slot, QPoint,
+                            QMargins)
 from PySide2.QtGui import QColor, QDrag, QFocusEvent, QPainter, QPainterPath, QPixmap, QTransform, QBrush, QPen
 from PySide2.QtWidgets import (QApplication, QFileDialog, QGraphicsItem, QGraphicsItemGroup,
                                QGraphicsSceneDragDropEvent,
-                               QGraphicsSceneHoverEvent,
                                QGraphicsSceneMouseEvent,
-                               QStyleOptionGraphicsItem)
+                               QStyleOptionGraphicsItem, QGraphicsPathItem)
+from qasync import asyncSlot
 from rich.repr import auto
 
-from LevityDash.lib.ui.Geometry import Geometry
+from LevityDash.lib.ui.Geometry import (Geometry, Size, Position, Margins, Edge, LocationFlag, AlignmentFlag,
+                                        polygon_area, parseSize, Dimension, size_px)
 from LevityDash.lib.config import userConfig
 from LevityDash.lib.EasyPath import EasyPathFile
 from LevityDash.lib.utils.shared import (boolFilter, clearCacheAttr, disconnectSignal, getItemsWithType, Numeric,
                                          SimilarValue, _Panel, hasState)
 from LevityDash.lib.stateful import StateProperty, Stateful, DefaultGroup
-from LevityDash.lib.utils.geometry import Edge, LocationFlag, Margins, polygon_area, Position, Size
 from LevityDash.lib.ui import UILogger as log
-from LevityDash.lib.ui.colors import randomColor
+from LevityDash.lib.ui.colors import Color
+from WeatherUnits import Length
 from .Menus import BaseContextMenu
 from .Handles import Handle, HandleGroup
 from .Handles.Resize import ResizeHandles
-from ..utils import GraphicsItemSignals, colorPalette, selectionPen, itemLoader
+from ..utils import GraphicsItemSignals, colorPalette, selectionPen, itemLoader, GeometryManager
 from LevityDash.lib.log import debug
-from operator import or_
 
 if TYPE_CHECKING:
 	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import Text
@@ -36,7 +42,6 @@ if TYPE_CHECKING:
 loop = asyncio.get_running_loop()
 
 
-# class Border(QObjectType, tag=...):
 class Border(QGraphicsPathItem, Stateful, tag=...):
 	_offset: Size.Height = Size.Height(0, absolute=True)
 
@@ -357,6 +362,7 @@ class MatchAllSizeGroup(SizeGroup):
 PanelType = ForwardRef('Panel', is_class=True, module='Panel')
 Panel: TypeAlias = TypeVar('Panel', bound=PanelType)
 
+
 @auto
 class Panel(_Panel, Stateful, tag='group'):
 	collisionThreshold: ClassVar[float] = 0.5
@@ -381,6 +387,7 @@ class Panel(_Panel, Stateful, tag='group'):
 		'movable':   True,
 		'frozen':    False,
 		'locked':    False,
+		'margins': (0, 0, 0, 0)
 	}
 
 	# section Panel init
@@ -388,34 +395,32 @@ class Panel(_Panel, Stateful, tag='group'):
 		# !setting the parent through the QGraphicsItem __init__ causes early
 		# !isinstance checks to fail, so we do it manually later
 		super(Panel, self).__init__()
+		self._parent = parent
+		self._init_defaults_()
 		if debug:
-			self.debugColor = QColor(randomColor(min=50, max=200))
+			self.debugColor = Color.random(min=50, max=200).QColor
 			self.debugColor.setAlpha(200)
 			self.debugPen = QPen(self.debugColor)
 			brush = QBrush(self.debugColor)
 			self.debugPen.setBrush(brush)
-		self._parent = parent
-		kwargs = Stateful.prep_init(self, kwargs)
-		self._init_defaults_()
+
 		self.setParentItem(parent)
+		kwargs = Stateful.prep_init(self, kwargs)
 		self._init_args_(*args, **kwargs)
 		self.previousParent = self.parent
 		self.setFlag(self.ItemClipsChildrenToShape, False)
 		self.setFlag(self.ItemClipsToShape, False)
 
 	def _init_args_(self, *args, **kwargs) -> None:
-		self._name = kwargs.pop('name', None)
 		self.setAcceptedMouseButtons(Qt.AllButtons if kwargs.get('clickable', None) or kwargs.get('intractable', True) else Qt.NoButton)
 		self.state = kwargs
 
 	def _init_defaults_(self):
 		self._childIsMoving = False
 		self._contextMenuOpen = False
-		self.uuid = uuid4()
 		self.uuidShort = self.uuid.hex[-4:]
 		self.__hold = False
 		self.signals = GraphicsItemSignals()
-		self._geometry = None
 		self._fillParent = False
 		self.filePath = None
 		self._locked = False
@@ -427,32 +432,38 @@ class Panel(_Panel, Stateful, tag='group'):
 
 		self.resizeHandles.setEnabled(True)
 
-		self.hideTimer = QTimer(interval=1000*3, singleShot=True, timeout=self.hideHandles)
+		self.hideTimer = QTimer(interval=1000*5, singleShot=True, timeout=self.hideHandles)
 
 		self.setAcceptHoverEvents(False)
 		self.setAcceptDrops(True)
-		self.setFlag(QGraphicsItem.ItemIsSelectable, True)
-		self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
+		self.setFlag(QGraphicsItem.ItemIsSelectable)
+		self.setFlag(QGraphicsItem.ItemSendsGeometryChanges)
 		self.setFlag(QGraphicsItem.ItemSendsScenePositionChanges, False)
-		self.setFlag(QGraphicsItem.ItemIsFocusable, True)
+		self.setFlag(QGraphicsItem.ItemIsFocusable)
 
-		# self.setFlag(QGraphicsItem.ItemClipsToShape, True)
-		# self.setFlag(QGraphicsItem.ItemClipsChildrenToShape, False)
 		self.setBrush(Qt.NoBrush)
 		self.setPen(QColor(Qt.transparent))
-		self.setFlag(QGraphicsItem.ItemStopsClickFocusPropagation, True)
-		self.setFlag(QGraphicsItem.ItemStopsFocusHandling, True)
+		self.setFlag(QGraphicsItem.ItemStopsClickFocusPropagation)
+		self.setFlag(QGraphicsItem.ItemStopsFocusHandling)
 
 	def __eq__(self, other):
 		if isinstance(other, Panel):
 			return self.uuid == other.uuid
 		return False
 
+	@cached_property
+	def uuid(self) -> UUID:
+		return uuid4()
+
 	def __hash__(self):
 		return hash(self.uuid)
 
 	@classmethod
-	def validate(cls, item: dict):
+	def validate(cls, item: dict, context=None):
+		context = context or {}
+		if (parent := context.get('parent', None)) is not None:
+			if getattr(parent, '__tag__') in {'stack', 'value-stack'}:
+				return True
 		geometry = Geometry.validate(item.get('geometry', {}))
 		return geometry
 
@@ -531,12 +542,16 @@ class Panel(_Panel, Stateful, tag='group'):
 		self._acceptsChildren = value
 
 	def __rich_repr__(self, **kwargs):
-		if self.rect().width() <= 10 or self.rect().height() <= 10:
-			yield 'rect', Size(*self.rect().size().toTuple())
+		# Section .repr
+		if name := self.stateName is not None:
+			yield 'name', name
+		yield 'rect', Size(*self.rect().size().toTuple(), absolute=True)
 		if getattr(self, '_geometry', None):
+			yield 'geometry', self.geometry
 			yield 'position', self.geometry.position
 			yield 'size', self.geometry.size
-		yield from Stateful.__rich_repr__(self, exclude={'geometry'})
+		yield 'hierarchy', self.hierarchyString
+		yield from Stateful.__rich_repr__(self, exclude={'geometry', 'name'})
 
 	@property
 	def snapping(self) -> bool:
@@ -588,10 +603,20 @@ class Panel(_Panel, Stateful, tag='group'):
 		return handles
 
 	@cached_property
+	def marginHandles(self):
+		clearCacheAttr(self, 'allHandles')
+		from .Handles.MarginHandles import MarginHandles
+		if existing := next((handle for handle in self.allHandles if isinstance(handle, MarginHandles)), None):
+			return existing
+		handles: MarginHandles = MarginHandles(self)
+		# handles.signals.action.connect(self.refreshMargins)
+		return handles
+
+	@cached_property
 	def allHandles(self):
 		return [handleGroup for handleGroup in self.childItems() if isinstance(handleGroup, (Handle, HandleGroup))]
 
-	@StateProperty(default={'width': 1, 'height': 1, 'x': 0, 'y': 0}, match=True, allowNone=False)
+	@StateProperty(default=Geometry(**{'width': 1, 'height': 1, 'x': 0, 'y': 0}), match=True, allowNone=False)
 	def geometry(self) -> Geometry:
 		return self._geometry
 
@@ -600,21 +625,36 @@ class Panel(_Panel, Stateful, tag='group'):
 		self._geometry = geometry
 
 	@geometry.decode
-	def geometry(self, value: dict | None) -> Geometry:
+	def geometry(self, value: dict | None) -> dict:
 		match value:
 			case None:
-				return None
+				return {'surface': self}
 			case dict():
-				return Geometry(surface=self, **value)
+				return {'surface': self, **value}
 			case tuple():
 				x, y, w, h = value
-				return Geometry(surface=self, x=x, y=y, width=w, height=h)
+				return dict(surface=self, x=x, y=y, width=w, height=h)
 			case _:
 				raise ValueError('Invalid geometry', value)
+
+	@geometry.factory
+	def geometry(self) -> Geometry:
+		return Geometry(surface=self)
 
 	@geometry.after
 	def geometry(self):
 		self.geometry.updateSurface()
+
+	@geometry.condition(method='get')
+	def geometry(self) -> bool:
+		return not (isinstance(self.parent, GeometryManager) and self not in self.parent.fixedGeometries)
+
+	@geometry.score
+	def geometry(self, value) -> float:
+		g: Geometry = self.geometry
+		if isinstance(value, dict):
+			value = Geometry(**value)
+		g.scoreSimilarity(value)
 
 	@StateProperty(default=Margins.default(), allowNone=False, dependencies={'geometry'})
 	def margins(self) -> Margins:
@@ -624,7 +664,6 @@ class Panel(_Panel, Stateful, tag='group'):
 	def margins(self, value: Margins):
 		value.surface = self
 		self._margins = value
-		clearCacheAttr(self, 'marginRect')
 
 	@margins.decode
 	def margins(self, value: dict | list | tuple | str) -> dict | tuple:
@@ -765,9 +804,9 @@ class Panel(_Panel, Stateful, tag='group'):
 		return [child for child in self.childItems() if isinstance(child, _Panel) and hasState(child)]
 
 	@items.setter
-	def items(self, value):
+	def items(self, value: List[dict]):
 		self.geometry.updateSurface()
-		existing = self.items if 'items' in self._set_state_items_ else []
+		existing = self.items
 		itemLoader(self, value, existing=existing)
 
 	@items.condition(method='get')
@@ -813,14 +852,10 @@ class Panel(_Panel, Stateful, tag='group'):
 		else:
 			event.ignore()
 			return
-		# if self.scene().focusItem() is self.parent or bool(QApplication.mouseButtons() & Qt.LeftButton):
-		# 	event.ignore()
-		# 	return
-		# self.resizeHandles.forceDisplay = True
 		self.contextMenu.position = event.pos()
 		self.setSelected(True)
-		self.setFocus(Qt.MouseFocusReason)
 		self.contextMenu.exec_(event.screenPos())
+		self.setFocus(Qt.MouseFocusReason)
 		self.setSelected(True)
 
 	def underMouse(self):
@@ -899,7 +934,10 @@ class Panel(_Panel, Stateful, tag='group'):
 		return item
 
 	def focusInEvent(self, event: QFocusEvent) -> None:
-		self.refreshHandles()
+		if QApplication.queryKeyboardModifiers() & Qt.ShiftModifier or len(self.scene().selectedItems()) > 1:
+			pass
+		else:
+			self.refreshHandles()
 		super(Panel, self).focusInEvent(event)
 
 	def refreshHandles(self):
@@ -915,7 +953,10 @@ class Panel(_Panel, Stateful, tag='group'):
 		for handleGroup in self.allHandles:
 			handleGroup.hide()
 			handleGroup.setZValue(self.zValue() + 100)
-		self.setSelected(False)
+		if QApplication.queryKeyboardModifiers() & Qt.ShiftModifier or len(self.scene().selectedItems()) > 1:
+			pass
+		else:
+			self.setSelected(False)
 		super(Panel, self).focusOutEvent(event)
 
 	def stackOnTop(self, *above, recursive: bool = False):
@@ -974,30 +1015,24 @@ class Panel(_Panel, Stateful, tag='group'):
 		return self.parent.childHasFocus()
 
 	def mousePressEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
+		self.hideTimer.stop()
 		if mouseEvent.buttons() == Qt.LeftButton | Qt.RightButton:
 			mouseEvent.setButtons(Qt.LeftButton)
 			mouseEvent.setButton(Qt.LeftButton)
 			return self.mousePressEvent(mouseEvent)
-		elif mouseEvent.modifiers() & Qt.KeyboardModifier.ControlModifier:
-			self.clone()
-			mouseEvent.accept()
-			self.clearFocus()
-			return
 		elif mouseEvent.button() == Qt.RightButton and mouseEvent.buttons() ^ Qt.RightButton:
 			mouseEvent.accept()
 			return super(Panel, self).mousePressEvent(mouseEvent)
 		elif mouseEvent.button() == Qt.MouseButton.LeftButton:
-			# if self.resizeHandles.isEnabled() and self.resizeHandles.currentHandle is not None:
-			# 	mouseEvent.ignore()
-			# 	self.resizeHandles.mousePressEvent(mouseEvent)
-			# if self.scene().focusStack.focusAllowed(self):
-
 			if (self.scene().focusItem() is self.parent
 			    or self.parent is self.scene().base
 			    or self.hasFocus()
 			    or self.siblingHasFocus()) and self.canFocus:
-				self.scene().clearSelection()
-				self.setSelected(True)
+				if bool(mouseEvent.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+					self.setSelected(not self.isSelected())
+				else:
+					self.scene().clearSelection()
+					self.setSelected(True)
 				mouseEvent.accept()
 				self.setFocus(Qt.FocusReason.MouseFocusReason)
 				self.stackOnTop(recursive=True)
@@ -1023,9 +1058,6 @@ class Panel(_Panel, Stateful, tag='group'):
 	def mouseMoveEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
 		if self.__hold:
 			return
-		# if self.parentItem() is not self.scene().base:
-		# 	self.startingParent = self.parent
-		# 	self.setParentItem(self.scene().base)
 		filledParent = self.rect().size().toSize() == self.parent.rect().size().toSize()
 		if (filledParent or self.parent.hasFocus()) and isinstance(self.parent, (QGraphicsItemGroup, Panel)):
 			mouseEvent.ignore()
@@ -1037,12 +1069,10 @@ class Panel(_Panel, Stateful, tag='group'):
 		else:
 			if hasattr(self.parent, 'childIsMoving'):
 				self.parent.childIsMoving = True
-			# self.hoverPosition = mouseEvent.scenePos()
-			# if mouseEvent.lastPos() != mouseEvent.pos() and mouseEvent.buttons() & Qt.MouseButton.LeftButton:
-			# 	self.hoverTimer.start()
 			return super(Panel, self).mouseMoveEvent(mouseEvent)
 
 	def mouseReleaseEvent(self, mouseEvent: QGraphicsSceneMouseEvent) -> None:
+		self.hideTimer.start()
 		if wasMoving := getattr(self.parent, 'childIsMoving', False):
 			self.parent.childIsMoving = False
 
@@ -1059,21 +1089,12 @@ class Panel(_Panel, Stateful, tag='group'):
 					releaseParent = releaseParents[0]
 					self.setParentItem(releaseParent)
 					self.updateFromGeometry()
-		# self.geometry.setAbsolutePosition(self.pos())
 		if self.scene().focusItem() is not self:
 			self.setFocus(Qt.FocusReason.MouseFocusReason)
-		# if self.hoverPosition:
-		# 	self.stackOnTop()
-		# if self.nextParent:
-		# 	# newParent = self.findNewParent(mouseEvent.scenePos())
-		# 	# if newParent is not None:
-		# 	# 	if newParent is not self.parentItem():
-		# 	self.setParentItem(self.nextParent)
-		# 	self.parent.setFocus(Qt.FocusReason.OtherFocusReason)
-
-		# self.hoverFunc()
-		super().mouseReleaseEvent(mouseEvent)
-		# self.resizeHandles.currentHandle = None
+		if QApplication.queryKeyboardModifiers() & Qt.KeyboardModifier.ShiftModifier:
+			pass
+		else:
+			super().mouseReleaseEvent(mouseEvent)
 		self.previousParent = None
 		self.maxRect = None
 		self.startingParent = self.parent
@@ -1112,23 +1133,11 @@ class Panel(_Panel, Stateful, tag='group'):
 		spots.sort(key=lambda x: x.width()*x.height(), reverse=True)
 		return spots
 
-	def hoverEnterEvent(self, event: QGraphicsSceneHoverEvent):
-		# log.debug(f'hoverEnterEvent: {self}')
-		# self.hideTimer.stop()
-		# self.setFocus(Qt.FocusReason.MouseFocusReason)
-
-		super(Panel, self).hoverEnterEvent(event)
-
-	def hoverLeaveEvent(self, event: QGraphicsSceneHoverEvent):
-		# log.debug(f'hoverLeaveEvent: {self}')
-		super(Panel, self).hoverLeaveEvent(event)
-
 	def findNewParent(self, position: QPointF):
 		items = self.scene().items(position)
 		items = getItemsWithType(items, Panel)
 		items = [item for item in items if item is not self and item.acceptDrops()]
 		items.sort(key=lambda item: item.zValue(), reverse=True)
-		# log.debug(f'Items at {self.hoverPosition}: {items}')
 		if items:
 			return items[0]
 		else:
@@ -1159,13 +1168,27 @@ class Panel(_Panel, Stateful, tag='group'):
 		matchedEdges.sort(key=lambda x: x.differance)
 		return matchedEdges
 
-	def contentsRect(self) -> QRectF:
-		return self.geometry.absoluteRect()
-
-	@cached_property
+	@property
 	def marginRect(self) -> QRectF:
-		margins = self.contentsRect().marginsRemoved(self.margins.asQMarginF())
+		rect = getattr(self, 'contentsRect', self.rect())
+		margins = rect.marginsRemoved(self.margins.asQMarginF())
 		return margins
+
+	# def shape(self):
+	# 	path = QPainterPath()
+	# 	path.addRect(self.rect())
+	# 	if self.hasFocus() and self.resizeHandles.isEnabled():
+	# 		for handle in self.resizeHandles.childItems():
+	# 			path += self.mapFromItem(handle, handle.shape())
+	# 	return path.simplified()
+
+	def boundingRect(self) -> QRectF:
+		if self.hasFocus() and self.resizeHandles.isEnabled():
+			path = self.clipPath()
+			for handle in self.resizeHandles.childItems():
+				path += self.mapFromItem(handle, handle.shape())
+			return path.boundingRect()
+		return super().boundingRect()
 
 	def grandChildren(self) -> list['Panel']:
 		if self._frozen:
@@ -1194,47 +1217,10 @@ class Panel(_Panel, Stateful, tag='group'):
 		if change == QGraphicsItem.ItemSceneHasChanged:
 			clearCacheAttr(value, 'panels')
 
-		# if change == QGraphicsItem.ItemSelectedHasChanged:
-		# 	if hasattr(self, 'resizeHandles') and self.resizeHandles.isEnabled():
-		# 		self.resizeHandles.setVisible(value)
-		# 	if self.shouldShowGrid():
-		# 		if hasattr(self, 'gridAdjusters') and self.gridAdjusters.isEnabled():
-		# 			self.gridAdjusters.setVisible(value)
-		#
-		# 	if value:
-		# 		self.indicator.color = Qt.green
-		# 		# self.setFlag(self.ItemStopsClickFocusPropagation, False)
-		# 		# self.setFlag(self.ItemStopsFocusHandling, False)
-		# 		# self.setFiltersChildEvents(False)
-		# 		self.setHandlesChildEvents(True)
-		# 	else:
-		# 		# self.setFlag(self.ItemStopsClickFocusPropagation, True)
-		# 		# self.setFlag(self.ItemStopsFocusHandling, True)
-		# 		# self.setFiltersChildEvents(True)
-		# 		self.setHandlesChildEvents(False)
-		# 		self.indicator.color = Qt.white
-
 		elif change == QGraphicsItem.ItemPositionChange:
 			if QApplication.mouseButtons() & Qt.LeftButton and self.isSelected() and not self.focusProxy():
 				area = polygon_area(self.shape())
 				diff = value - self.pos()
-
-				# if self.debug:
-				# 	if self.parent is not self.scene().base:
-				# 		self.visualAid.setVisible(True)
-				# 		path = QPainterPath()
-				# 		parentPos = self.mapFromParent(diff)
-				# 		path.lineTo(parentPos)
-				# 		self.visualAid.setPath(path)
-				# 	else:
-				# 		self.visualAid.hide()
-
-				# if geoPosition.x.snapping:
-				# 	value.setX(self.geometry.absoluteX)
-				# if geoPosition.y.snapping:
-				# 	value.setY(self.geometry.absoluteY)
-				# if geoPosition.x.snapping and geoPosition.y.snapping:
-				# 	return super(Panel, self).itemChange(change, value)
 
 				rect = self.rect()
 				rect.moveTo(value)
@@ -1338,7 +1324,7 @@ class Panel(_Panel, Stateful, tag='group'):
 				# 		value = QPointF(x, y)
 				# else:
 				#
-				# 	self.indicator.color = Qt.green
+				# 	self.indicator.colors = Qt.green
 				# 	if self.parentItem() is not self.scene().base:
 				# 		self.setParentItem(self.scene().base)
 
@@ -1366,13 +1352,11 @@ class Panel(_Panel, Stateful, tag='group'):
 		# section Child Added
 		elif change == QGraphicsItem.ItemChildAddedChange:
 			# Whenever a Panel is added
-			if isinstance(value, Panel):
-				# if value.geometry.snapping:
-				# 	self.grid.gridItems.add(value.geometry)
-
-				self.signals.resized.connect(value.parentResized)
-				clearCacheAttr(self, 'childPanels')
-				self.signals.childAdded.emit()
+			if (resizedFunc := getattr(value, 'parentResized', None)) is not None:
+				self.signals.resized.connect(resizedFunc)
+				if isinstance(value, Panel):
+					clearCacheAttr(self, 'childPanels')
+					self.signals.childAdded.emit()
 
 			# Whenever Handles are added
 			elif isinstance(value, HandleGroup):
@@ -1383,10 +1367,11 @@ class Panel(_Panel, Stateful, tag='group'):
 		# section Child Removed
 		elif change == QGraphicsItem.ItemChildRemovedChange:
 			# Removing Panel
-			if isinstance(value, Panel):
-				disconnectSignal(self.signals.resized, value.parentResized)
-				clearCacheAttr(self, 'childPanels')
-				self.signals.childRemoved.emit()
+			if (resizedFunc := getattr(value, 'parentResized', None)) is not None:
+				disconnectSignal(self.signals.resized, resizedFunc)
+				if isinstance(value, Panel):
+					clearCacheAttr(self, 'childPanels')
+					self.signals.childRemoved.emit()
 
 			# Removing Handle
 			elif isinstance(value, HandleGroup):
@@ -1398,6 +1383,7 @@ class Panel(_Panel, Stateful, tag='group'):
 
 		# section Parent Changed
 		elif change == QGraphicsItem.ItemParentChange:
+			clearCacheAttr(self, 'localGroup', 'parentLocalGroup')
 			if value != self.parent and None not in (value, self.previousParent):
 				if self.geometry.size.relative and value is not None:
 					g = self.geometry.absoluteSize()/value.geometry.absoluteSize()
@@ -1414,18 +1400,8 @@ class Panel(_Panel, Stateful, tag='group'):
 			if hasattr(value, 'childIsMoving') and QApplication.mouseButtons() & Qt.LeftButton:
 				value.childIsMoving = True
 
-			# log.debug(f'Parent now {self.parent}')
-
 			if value is not None:
 				self.signals.parentChanged.emit()
-
-		# elif change == QGraphicsItem.ItemVisibleChange:
-		# if value:
-		# 	self.updateFromGeometry()
-
-		# elif change == QGraphicsItem.ItemVisibleChange:
-		# 	if value:
-		# 		self.geometry.updateSurface()
 
 		return super(Panel, self).itemChange(change, value)
 
@@ -1463,13 +1439,13 @@ class Panel(_Panel, Stateful, tag='group'):
 	@overload
 	def setRect(self, args: tuple[Numeric, Numeric, Numeric, Numeric]): ...
 
-	def setRect(self, rect):
+	def setRect(self, rect: QRectF | QRect) -> bool:
 		emit = self.rect().size() != rect.size()
 		super(Panel, self).setRect(rect)
 		if emit:
 			clearCacheAttr(self, 'marginRect')
-			clearCacheAttr(self, 'sharedFontSize')
 			self.signals.resized.emit(rect)
+		return emit
 
 	def updateRect(self, parentRect: QRectF = None):
 		self.setRect(self.geometry.absoluteRect())
@@ -1572,9 +1548,6 @@ class Panel(_Panel, Stateful, tag='group'):
 
 	# section paint
 	def paint(self, painter, option, widget):
-		if self.parent is None or self.scene() is None:
-			return
-		color = colorPalette.window().color()
 		# if debug:
 		# 	pen = painter.pen()
 		# 	brush = painter.brush()
@@ -1583,25 +1556,11 @@ class Panel(_Panel, Stateful, tag='group'):
 		# 	painter.drawRect(self.rect())
 		# 	painter.setPen(pen)
 		# 	painter.setBrush(brush)
-
-		if self._contextMenuOpen or self.isSelected():
+		if self.isSelected() or self.isEmpty or self.childIsMoving:
 			painter.setPen(selectionPen)
 			painter.setBrush(Qt.NoBrush)
-			painter.drawRect(self.boundingRect())
+			painter.drawRect(self.rect())
 			return
-
-		# if debug:
-		# 	if self.parent and not self.parent.frozen:
-		# 		painter.setBrush(self.color)
-		# 		painter.drawPath(self.shape())
-		# 	painter.setPen(debugPen)
-		# 	# painter.setBrush(color)
-		# 	painter.drawPath(self.shape())
-
-		if self.isEmpty or self.childIsMoving or self.isSelected() and not self.resizeHandles.isEnabled():
-			painter.setPen(selectionPen)
-			painter.setBrush(Qt.NoBrush)
-			painter.drawRect(self.rect().adjusted(2, 2, -2, -2))
 
 		super().paint(painter, option, widget)
 
@@ -1614,17 +1573,6 @@ class Panel(_Panel, Stateful, tag='group'):
 
 	@Slot(QPointF, QSizeF, QRectF, 'parentResized')
 	def parentResized(self, arg: Union[QPointF, QSizeF, QRectF]):
-		# if self.snapping.size and self.sizeRatio:
-		# 	self.gridItem.width = self.sizeRatio[0] * self.parentGrid.columns
-		# 	self.gridItem.height = self.sizeRatio[1] * self.parentGrid.rows
-		# if self.snapping.location and self.positionRatio:
-		# 	self.gridItem.column = self.positionRatio[0] * self.parentGrid.columns
-		# 	self.gridItem.row = self.positionRatio[1] * self.parentGrid.rows
-
-		# if self.geometry.size.relative or self.geometry.size.snapping:
-		# 	self.updateRect()
-		# if self.geometry.position.relative or self.geometry.position.snapping:
-
 		if isinstance(arg, (QRect, QRectF, QSize, QSizeF)):
 			self.geometry.updateSurface(arg)
 
@@ -1651,10 +1599,6 @@ class Panel(_Panel, Stateful, tag='group'):
 
 	def recursivePaint(self, painter: QPainter):
 		t = QTransform.fromTranslate(*self.scenePos().toPoint().toTuple())
-		# if hasattr(self.parentItem(), 'globalTransform'):
-		# 	painter.setTransform(self.parentItem().globalTransform)
-		# 	painter.setTransform(t, True)
-		# else:
 		painter.setTransform(t)
 		self.paint(painter, QStyleOptionGraphicsItem(), None)
 		for child in self.childItems():
@@ -1680,13 +1624,11 @@ class Panel(_Panel, Stateful, tag='group'):
 		if value != self._locked:
 			self.setFlag(QGraphicsItem.ItemIsMovable, not value)
 			self.setFlag(QGraphicsItem.ItemStopsClickFocusPropagation, not value)
-			# self.setFiltersChildEvents(value)
 			for handle in self.allHandles:
-				if not value:
+				if not value and self.isSelected():
 					handle.setVisible(not value)
 				handle.setEnabled(not value)
 				handle.update()
-		# self.setAcceptedMouseButtons(Qt.AllButtons if not value else Qt.RightButton)
 		self._locked = value
 		self.update()
 
@@ -1733,7 +1675,7 @@ class Panel(_Panel, Stateful, tag='group'):
 		return len(self.items) > 0 and getattr(self, 'includeChildrenInState', True)
 
 	def _save(self, path: Path = None, fileName: str = None):
-		raise NotImplementedError
+		raise log.warning('Single panel save not implemented')
 
 	def _saveAs(self):
 		path = userConfig.userPath.joinpath('saves', 'panels')
@@ -1771,6 +1713,21 @@ class Panel(_Panel, Stateful, tag='group'):
 		else:
 			event.ignore()
 		super(Panel, self).wheelEvent(event)
+
+	def editMargins(self):
+		self.parent.clearFocus()
+		self.parent.parent.clearFocus()
+
+		self.marginHandles.scene().clearFocus()
+		self.marginHandles.setEnabled(True)
+		self.marginHandles.show()
+		self.marginHandles.updatePosition(self.rect())
+		self.marginHandles.setFocus()
+
+	def clear(self):
+		items = [child for child in self.childPanels]
+		for item in items:
+			self.scene().removeItem(item)
 
 
 class NonInteractivePanel(Panel):
