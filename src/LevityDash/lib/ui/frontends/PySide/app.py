@@ -355,9 +355,17 @@ class LevitySceneView(QGraphicsView):
 		return super(LevitySceneView, self).eventFilter(obj, event)
 
 	def resizeDoneEvent(self):
+		self.resetTransform()
 		self.graphicsScene.invalidate(self.graphicsScene.sceneRect())
 		self.graphicsScene.update()
 		self.resizeFinished.emit()
+		from LevityDash.lib.ui.frontends.PySide.Modules.Containers.Stacks import Stack
+		rect = self.viewport().rect()
+		self.setSceneRect(rect)
+		self.scene().setSceneRect(rect)
+		self.graphicsScene.base.geometry.updateSurface()
+		for stack in Stack.toUpdate:
+			stack.setGeometries()
 
 	def load(self):
 		self.status = 'Loading'
@@ -378,8 +386,8 @@ class LevitySceneView(QGraphicsView):
 
 	def resizeEvent(self, event):
 		super(LevitySceneView, self).resizeEvent(event)
-		self.fitInView(self.base)
-		self.graphicsScene.busyBlocker.setRect(self.sceneRect)
+		self.fitInView(self.base, Qt.AspectRatioMode.KeepAspectRatio)
+		self.graphicsScene.busyBlocker.setRect(self.sceneRect())
 		self.resizeDone.start()
 		self.parent().menuBarHoverArea.size.setWidth(self.width())
 		self.parent().menuBarHoverArea.update()
