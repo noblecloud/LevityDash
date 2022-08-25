@@ -966,17 +966,96 @@ class MeasurementDisplayProperties(Stateful):
 	def valueUnitRatio(self):
 		return self.unitPosition != DisplayPosition.Hidden and self.unitPosition != DisplayPosition.Floating
 
-	@StateProperty(default=LocationFlag.Horizontal, allowNone=False)
-	def splitDirection(self) -> LocationFlag:
-		return self.__splitDirection
+	@StateProperty(key='format', default=None, allowNone=True)
+	def formatString(self) -> str | None:
+		try:
+			return self.__format
+		except AttributeError:
+			return None
 
-	@splitDirection.setter
-	def splitDirection(self, value: LocationFlag):
-		self.__splitDirection = value
+	@formatString.setter
+	def formatString(self, value: str):
+		self.__format = value
 
-	@splitDirection.decode
-	def splitDirection(self, value: str) -> LocationFlag:
-		return LocationFlag[value]
+	def format(self, value: Measurement) -> str:
+		if self.formatString is not None and isinstance(value, Measurement):
+			return f'{value: format:{self.formatString}}'
+		elif value is None:
+			return "⋯"
+		return str(value)
+
+	@property
+	def measurement(self) -> Measurement | datetime | None:
+		value = self.localGroup.value
+		if isinstance(value, ObservationValue):
+			value = value.value
+		# if isinstance(value, Measurement):
+		# 	pass
+		# elif isinstance(value, datetime):
+		# 	return value
+		# if not isinstance(value, Measurement):
+		# 	pass
+		if (convertTo := self.convertTo) is not None and value is not None:
+			try:
+				value = convertTo(value)
+			except Exception as e:
+				log.warning(f'Could not convert {value} to {convertTo}', exc_info=e)
+		if hash((value, type(value))) != self.__measurementHash:
+			self.__measurementHash = hash((value, type(value)))
+			list(i.textBox.refresh() for i in self.childItems() if isinstance(i, UnitLabel))
+		return value
+
+	@property
+	def text(self) -> str:
+		measurement = self.measurement
+		if isinstance(measurement, Measurement):
+			if (formatString := self.formatString) is not None and measurement is not None:
+				if isinstance(formatString, dict):
+					formatString = f'{", ".join(f"{k}: {value}" for k, value in formatString.items())}'
+				return f'{measurement:{formatString}}'
+			elif measurement is None:
+				return "⋯"
+			elif self.unitPosition != DisplayPosition.Inline:
+				return measurement.withoutUnit
+			return str(measurement).strip()
+		elif isinstance(measurement, datetime):
+			formatString = self.formatString or '%H:%M:%S'
+			return f'{measurement:{formatString}}'.lower()
+		elif measurement is None:
+			return "⋯"
+		return str(measurement).strip()
+
+	@StateProperty(default=None)
+	def convertTo(self) -> Type[Measurement] | None:
+		try:
+			return self.__convertTo
+		except AttributeError:
+			return None
+
+	@convertTo.setter
+	def convertTo(self, value: Type[Measurement] | None):
+		self.__convertTo = value
+
+	@convertTo.decode
+	def convertTo(self, value: str) -> Type[Measurement] | Type[timedelta]:
+		match value:
+			case 'relative-time' | 'relative-date' | 'relative-timestamp':
+				return Second
+			case _:
+				return autoMeasurement(value)
+
+	@convertTo.encode
+	def convertTo(self, value: Type[Measurement]) -> str | None:
+		# TODO: Add support for writing 'relative-time' and 'relative-date'
+		match value:
+			case type() if issubclass(value, Measurement):
+				return value.unit or value.id
+			case Measurement():
+				return type(value).unit or type(value).id
+			case timedelta():
+				return 'relative-timestamp'
+			case _:
+				return None
 
 	def toDict(self) -> dict:
 		attrs = {
