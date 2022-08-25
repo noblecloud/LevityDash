@@ -406,9 +406,15 @@
         width: 50.9%
         x: 0%
         y: 19.4%
+      display:
+        value:
+          textHeight: 20px
     - type: realtime.text
       key: environment.pressure.pressure
       title: 0.3
+      display:
+        value:
+          textHeight: 20px
       geometry:
         height: 43%
         width: 48.5%
@@ -416,6 +422,9 @@
         y: 19.4%
     - type: realtime.text
       key: environment.clouds.cover.cover
+      display:
+        value:
+          textHeight: 20px
       geometry:
         height: 33.2%
         width: 50.9%
@@ -423,6 +432,9 @@
         y: 66.8%
     - type: realtime.text
       key: environment.soil.moisture.moisture
+      display:
+        value:
+          textHeight: 20px
       geometry:
         height: 33.2%
         width: 48.2%
