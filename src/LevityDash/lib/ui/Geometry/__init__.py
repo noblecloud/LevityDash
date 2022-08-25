@@ -2100,6 +2100,25 @@ class Geometry:
 		# if self._size is None:
 		self._surface = value
 
+	def relativeToRect(self) -> QRectF | QRect:
+		try:
+			return self.surface.parent.rect()
+		except AttributeError:
+			pass
+		try:
+			return self.surface.parent.marginRect
+		except AttributeError:
+			pass
+		try:
+			return self.surface.parent.rect()
+		except AttributeError:
+			pass
+		try:
+			return self.surface.parent.boundingRect()
+		except AttributeError:
+			pass
+		raise ValueError("Could not determine relative rect")
+
 	@property
 	def size(self) -> Size:
 		return self._size
@@ -2146,7 +2165,7 @@ class Geometry:
 		"""
 		Toggles relative/absolute positioning.
 		"""
-		size = self.surface.parent.size().toTuple()
+		size = self.relativeToRect().size().toTuple()
 		if 'width' in T:
 			self.size.width.toggleRelative(size[0])
 		if 'height' in T:
@@ -2239,7 +2258,7 @@ class Geometry:
 
 	@absolute.setter
 	def absolute(self, value):
-		size = self.surface.parent.size().toTuple()
+		size = self.relativeToRect().size().toTuple()
 		if value:
 			sizeValues = [v.value if v.absolute else v.value*i for i, v in zip(size, self.size)]
 			positionValues = [v.value if v.absolute else v.value*i for i, v in zip(size, self.position)]
@@ -2263,7 +2282,7 @@ class Geometry:
 	def absoluteWidth(self) -> Size.Width:
 		if self.size.width.absolute:
 			return self.width
-		return self.width.toAbsolute(self.surface.parent.size().width())
+		return self.width.toAbsolute(self.relativeToRect().size().width())
 
 	@absoluteWidth.setter
 	def absoluteWidth(self, value):
@@ -2273,7 +2292,7 @@ class Geometry:
 	def relativeWidth(self) -> Size.Width:
 		if self.size.width.relative:
 			return self.width
-		return self.width.toRelative(self.surface.parent.size().width())
+		return self.width.toRelative(self.relativeToRect().size().width())
 
 	@relativeWidth.setter
 	def relativeWidth(self, value):
@@ -2293,7 +2312,7 @@ class Geometry:
 	def absoluteHeight(self) -> Size.Height:
 		if self.size.height.absolute:
 			return self.height
-		return self.height.toAbsolute(self.surface.parent.size().height())
+		return self.height.toAbsolute(self.relativeToRect().size().height())
 
 	@absoluteHeight.setter
 	def absoluteHeight(self, value):
@@ -2303,7 +2322,7 @@ class Geometry:
 	def relativeHeight(self) -> Size.Height:
 		if self.size.height.relative:
 			return self.height
-		return self.height.toRelative(self.surface.parent.size().height())
+		return self.height.toRelative(self.relativeToRect().size().height())
 
 	@relativeHeight.setter
 	def relativeHeight(self, value):
@@ -2321,7 +2340,7 @@ class Geometry:
 	def absoluteX(self) -> Position.X:
 		if self.position.x.absolute:
 			return self.x
-		return self.x.toAbsolute(self.surface.parent.size().width())
+		return self.x.toAbsolute(self.relativeToRect().size().width())
 
 	@absoluteX.setter
 	def absoluteX(self, value):
@@ -2331,7 +2350,7 @@ class Geometry:
 	def relativeX(self) -> Position.X:
 		if self.position.x.relative:
 			return self.x
-		return self.x.toRelative(self.surface.parent.size().width())
+		return self.x.toRelative(self.relativeToRect().size().width())
 
 	@relativeX.setter
 	def relativeX(self, value):
@@ -2349,7 +2368,7 @@ class Geometry:
 	def absoluteY(self) -> Position.Y:
 		if self.position.y.absolute:
 			return self.y
-		return self.y.toAbsolute(self.surface.parent.size().height())
+		return self.y.toAbsolute(self.relativeToRect().size().height())
 
 	@absoluteY.setter
 	def absoluteY(self, value):
@@ -2359,7 +2378,7 @@ class Geometry:
 	def relativeY(self) -> Position.Y:
 		if self.position.y.relative:
 			return self.y
-		return self.y.toRelative(self.surface.parent.size().height())
+		return self.y.toRelative(self.relativeToRect().size().height())
 
 	@relativeY.setter
 	def relativeY(self, value):
@@ -2382,11 +2401,11 @@ class Geometry:
 		height = rect.height()
 
 		if self.size.width.relative:
-			width = width/self.surface.parent.size().width()
+			width = width/self.relativeToRect().size().width()
 		self.size.width = width
 
 		if self.size.height.relative:
-			height = height/self.surface.parent.size().height()
+			height = height/self.relativeToRect().size().height()
 		self.size.height = height
 
 	def absoluteRect(self, parentRect: QRectF = None):
@@ -2436,11 +2455,11 @@ class Geometry:
 		y = pos.y()
 
 		if self.position.x.relative:
-			x = x/self.surface.parent.size().width()
+			x = x/self.relativeToRect().size().width()
 		self.position.x = x
 
 		if self.position.y.relative:
-			y = y/self.surface.parent.size().height()
+			y = y/self.relativeToRect().size().height()
 		self.position.y = y
 
 	def toTransform(self) -> QTransform:
