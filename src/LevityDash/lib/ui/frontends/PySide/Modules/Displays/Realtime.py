@@ -857,29 +857,36 @@ class MeasurementDisplayProperties(Stateful):
 
 	@StateProperty(default=DisplayPosition.Auto, allowNone=False, singleVal=True)
 	def unitPosition(self) -> DisplayPosition:
-		if self.__unitPosition == DisplayPosition.Auto:
-			if self.__isValid:
-				if self.__label.value['@showUnit']:
-					unitText = f'{self.__label.value.value:format: {"{unit}"}}'
-					if len(unitText) > 2:
-						return DisplayPosition.Auto
-					elif len(unitText) == 0:
-						return DisplayPosition.Hidden
-					return DisplayPosition.Inline
+		if self.__isValid and self.hasUnit:
+			if self._unitPosition == DisplayPosition.Auto:
+				if getattr(self.measurement, 'showUnit', False):
+					if self.titleSplitDirection == LocationFlag.Horizontal:
+						unitText = f'{self.measurement:format: {"{unit}"}}'
+						if len(unitText) > 2:
+							return DisplayPosition.Auto
+						elif len(unitText) == 0:
+							return DisplayPosition.Hidden
+						return DisplayPosition.Inline
+					else:
+						return DisplayPosition.Inline
 				return DisplayPosition.Hidden
-			return DisplayPosition.Hidden
+			return self._unitPosition
+		return DisplayPosition.Hidden
+
+	@StateProperty(key='unitPosition', default=DisplayPosition.Auto, allowNone=False, singleVal=True)
+	def _unitPosition(self) -> DisplayPosition:
 		return self.__unitPosition
 
-	@unitPosition.setter
-	def unitPosition(self, value: DisplayPosition):
-		if isinstance(value, str):
-			value = DisplayPosition[value]
+	@_unitPosition.setter
+	def _unitPosition(self, value: DisplayPosition):
 		self.__unitPosition = value
-		if hasattr(self.label, 'splitter'):
-			self.label.splitter.updateUnitDisplay()
+		try:
+			self.splitter.updateUnitDisplay()
+		except AttributeError:
+			pass
 
-	@unitPosition.decode
-	def unitPosition(self, value: str) -> DisplayPosition:
+	@_unitPosition.decode
+	def _unitPosition(self, value: str) -> DisplayPosition:
 		return DisplayPosition[value]
 
 	@unitPosition.condition
@@ -1137,6 +1144,19 @@ class UnitLabel(Label, tag=...):
 class DisplayLabel(Display):
 	deletable = False
 
+	_floatingOffset = Size.Height(5, absolute=True)
+
+	class ValueLabel(Label, tag=...):
+
+		@property
+		def unitSpace(self) -> QRectF:
+			textRect = self.textBox.sceneBoundingRect()
+			labelRect = self.mapRectFromScene(textRect)
+			ownRect = self.rect()
+			ownRect.setTop(labelRect.bottom() + self.parent.floatingOffset_px)
+			return ownRect
+
+	# Section DisplayLabel
 	def __init__(self, *args, **kwargs):
 		self.text = "⋯"
 		super().__init__(*args, **kwargs)
@@ -1150,12 +1170,43 @@ class DisplayLabel(Display):
 
 	def setUnitPosition(self, value: DisplayPosition):
 		self.displayProperties.unitPosition = value
+		if isinstance(value, str):
+			value = DisplayPosition[value]
+		if not isinstance(value, DisplayPosition):
+			raise TypeError('titlePosition must be a DisplayPosition')
+		if value.casefold() in {'left', 'right'}:
+			self.splitter.location = LocationFlag.Vertical
+			clearCacheAttr(self.splitter, 'cursor')
+			self.splitter.resetPath()
+		try:
+			self.splitter.setGeometries()
+		except Exception as e:
+			pass
+		self.refresh()
 
 	def contextMenuEvent(self, event):
 		event.ignore()
 		return
 
-	@StateProperty(key='value', sortOrder=0, allowNone=False, default=Stateful)
+	@StateProperty(key='floating-offset', default=_floatingOffset)
+	def floatingOffset(self) -> Size.Height | Length:
+		return self._floatingOffset
+
+	@floatingOffset.setter
+	def floatingOffset(self, value: Size.Height | Length):
+		self._floatingOffset = value
+		if isinstance(value, RelativeFloat):
+			value.relativeTo = self.parent
+
+	@floatingOffset.decode
+	def floatingOffset(self, value: str | int | float | Number) -> Size.Height | Length:
+		return parseSize(value, DisplayLabel.floatingOffset.default)
+
+	@property
+	def floatingOffset_px(self) -> float:
+		return size_px(self.floatingOffset, self.valueTextBox.textBox.boundingRect().height())
+
+	@StateProperty(key='valueLabel', sortOrder=0, allowNone=False, default=Stateful, dependancies={'geometry'})
 	def valueTextBox(self) -> Label:
 		return self._valueTextBox
 
@@ -1218,10 +1269,13 @@ class DisplayLabel(Display):
 
 	def refresh(self):
 		# self.a.setHtml(f'<div style="text-align: center; top: 50%;">{str(self.text)}</div>')
-		if self.displayProperties.hasUnit and self.displayProperties.unitPosition != DisplayPosition.Inline:
-			self.valueTextBox.textBox.setCustomFilterFunction(True)
-		else:
-			self.valueTextBox.textBox.setCustomFilterFunction(False)
+		if self.displayProperties.hasUnit:
+			if self.displayProperties.unitPosition is DisplayPosition.FloatUnder:
+				self.splitter.fitUnitUnder()
+			if self.displayProperties.unitPosition != DisplayPosition.Inline:
+				self.valueTextBox.textBox.setCustomFilterFunction(True)
+			else:
+				self.valueTextBox.textBox.setCustomFilterFunction(False)
 
 		self.valueTextBox.textBox.refresh()
 
