@@ -177,45 +177,72 @@ class Text(QGraphicsPathItem):
 	def limitRect(self) -> QRectF:
 		return self.parent.marginRect
 
-	@property
-	def atFontMinimum(self):
-		if self.minimumFontSize:
-			return self.suggestedFontPointSize <= self.minimumFontSize
-		return False
-
-	def updateTransform(self, rect: QRectF = None, *args):
+	# Section Transform
+	def updateTransform(self, rect: QRectF = None, updateShared: bool = True, *args):
 		transform = QTransform()
-		rect = self.boundingRect()
+		self.resetTransform()
 
-		# For consistency across other text boxes, the a '|' character is added when
-		# getting the text height
-		fm = QFontMetricsF(self.font())
-		fmRect = fm.tightBoundingRect(f'|{self.text}')
+		limitRect = self.limitRect
 
-		rect.setHeight(fmRect.height())
-		pRect = self.limitRect
-		m = QPointF(*self.align.multipliersAlt)
+		if (height := self.height_px) is not None:
+			center = limitRect.center()
+			limitRect.setHeight(height)
+			limitRect.moveCenter(center)
 
-		if rect.isValid() and pRect.isValid():
-			wScale = pRect.width()/rect.width()
-			hScale = pRect.height()/rect.height()
-			x, y = pRect.topLeft().toTuple()
-			origin = rect.center()
-			self.setTransformOriginPoint(origin)
-			x += m.x()*pRect.width()
-			y += m.y()*pRect.height()
-			transform.translate(x, y)
-			scale = self.scaleSelection(wScale, hScale)
+		rect = self._textRect
+		# if rect.isValid() and limitRect.isValid():
+		self.setTransformOriginPoint(rect.center())
+		x, y = self.getTextPosition(limitRect).toTuple()
+		if align := getattr(self, '_sized', None):
+			sceneY = align.sharedY(self)
+			y = self.mapFromScene(QPointF(0, sceneY)).y()
+		transform.translate(x, y)
+		if not self._fixedFontSize:
+			if group := getattr(self, '_sized', None):
+				scale = group.sharedSize(self)
+			else:
+				scale = self.getTextScale(rect, limitRect)
 			transform.scale(scale, scale)
-			transform.mapRect(pRect)
-			self.setTransform(transform)
+		self.setTransform(transform)
 
-	def sceneBoundingRect(self) -> QRectF:
-		return self.mapRectToScene(self.transform().mapRect(self.boundingRect()))
+	def setScenePosition(self, position: QPointF):
+		self.setPos(self.mapFromScene(position))
 
-	def autoFont(self, size: float):
-		if self.atFontMinimum:
-			return
+	def getTextScale(self, textRect: QRectF = None, limitRect: QRectF = None) -> float:
+		textRect = textRect or self._textRect
+		limitRect = limitRect or self.limitRect
+
+		width = (textRect.width()) or 1
+		height = (textRect.height()) or 1
+
+		rotation = abs(self.rotation() or self.parent.rotation())
+		if rotation < 45:
+			wScale = limitRect.width()/width
+			hScale = limitRect.height()/height
+		else:
+			wScale = limitRect.width()/height
+			hScale = limitRect.height()/width
+		return self.scaleSelection(wScale, hScale)
+
+	def getTextPosition(self, limitRect: QRectF = None) -> QPointF:
+		limitRect = limitRect or self.limitRect
+		m = QPointF(*self.align.multipliersAlt)
+		x, y = limitRect.topLeft().toTuple()
+		x += m.x()*limitRect.width()
+		y += m.y()*limitRect.height()
+		return QPointF(x, y)
+
+	def getTextScenePosition(self, limitRect: QRectF = None) -> QPointF:
+		limitRect = self.parent.mapRectToScene(limitRect or self.limitRect)
+		m = QPointF(*self.align.multipliersAlt)
+		x, y = limitRect.topLeft().toTuple()
+		x += m.x()*limitRect.width()
+		y += m.y()*limitRect.height()
+		return QPointF(x, y)
+
+	def getRelativeTextPosition(self, item: QGraphicsItem, limitRect: QRectF = None) -> QPointF:
+		pos = self.getTextPosition(limitRect)
+		return self.mapToItem(item, pos)
 
 	def refresh(self):
 		self._font.setPointSizeF(self.suggestedFontPixelSize)
@@ -309,8 +336,14 @@ class Text(QGraphicsPathItem):
 	def modifiers(self, value):
 		self.__modifier = value
 
+	def setTextAccessor(self, accessor: Callable[[], Any] | None):
+		self._textAccessor = accessor
+		self.updateText()
+
 	@property
-	def text(self):
+	def text(self) -> str:
+		if self._textAccessor is not None:
+			return self._textAccessor()
 		if self.__customFilterFunction:
 			text = self.withoutUnit()
 		else:
@@ -325,6 +358,8 @@ class Text(QGraphicsPathItem):
 
 	@property
 	def value(self):
+		if self._valueAccessor is not None:
+			return self._valueAccessor()
 		if self._value is None:
 			return 'NA'
 		if isinstance(self._value, (str, int, float, datetime, timedelta)):
@@ -363,6 +398,15 @@ class Text(QGraphicsPathItem):
 			self.updateTransform()
 		else:
 			self.updateTransform()
+
+	def setValueAccessor(self, accessor: Callable[[], Any] | None):
+		self._valueAccessor = accessor
+		self.__updatePath()
+
+	def setScaleType(self, value: ScaleType):
+		self._scaleType = value
+		self.__updatePath()
+		self.updateTransform()
 
 	def __updatePath(self):
 		clearCacheAttr(self, 'textRect')
