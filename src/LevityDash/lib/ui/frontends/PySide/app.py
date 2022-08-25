@@ -501,6 +501,7 @@ class LevityMainWindow(QMainWindow):
 		# rect.setSize(self.screen().size() * 0.8)
 		# rect.moveCenter(self.screen().availableGeometry().center())
 		# self.setGeometry(rect)
+		self.__init_ui__()
 		view = LevitySceneView(self)
 		self.setCentralWidget(view)
 		style = '''
@@ -594,7 +595,7 @@ class LevityMainWindow(QMainWindow):
 
 		self.buildMenu()
 
-		self.__init_ui__()
+		self.show()
 
 	def focusOutEvent(self, event):
 		super(LevityMainWindow, self).focusOutEvent(event)
@@ -624,15 +625,18 @@ class LevityMainWindow(QMainWindow):
 			display = userConfig['Display'].get('display', 'smallest')
 			match display:
 				case 'smallest':
-					return min(screens, key=lambda s: s.size().width()*s.size().height())
+					return min(screens, key=lambda s: prod(s.size().toTuple()))
 				case 'largest':
-					return max(screens, key=lambda s: s.size().width()*s.size().height())
+					return max(screens, key=lambda s: prod(s.size().toTuple()))
 				case 'primary' | 'main' | 'default':
 					return app.primaryScreen()
 				case 'current' | 'active':
 					return app.screenAt(QCursor.pos())
 				case str(i) if i.isdigit():
 					return screens[min(int(i), len(screens))]
+				case str(i) if matched := get_close_matches(i, [s.name() for s in screens], 1, 0.7):
+					matched = matched[0]
+					return next(s for s in screens if s.name() == matched)
 				case _:
 					if len(screens) == 1:
 						return screens[0]
@@ -681,8 +685,6 @@ class LevityMainWindow(QMainWindow):
 
 		if fullscreen:
 			self.showFullScreen()
-
-		self.show()
 
 		if '--fullscreen' in sys.argv:
 			self.showFullScreen()
