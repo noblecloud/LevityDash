@@ -1,22 +1,22 @@
 from asyncio import get_running_loop
-
 from datetime import datetime, timedelta
+from enum import Enum
+from typing import Any, Callable, Optional, Union, TYPE_CHECKING
 
 from dateutil.parser import parser
-from PySide2.QtCore import QObject, QPoint, QPointF, QRectF, Signal, Slot
+from PySide2.QtCore import QObject, QPoint, QPointF, QRectF, Signal
 from PySide2.QtGui import QBrush, QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPen, Qt, QTransform
-from PySide2.QtWidgets import QGraphicsItem, QGraphicsPathItem, QGraphicsTextItem, QStyleOptionGraphicsItem
-from typing import Any, Callable, Optional, Union, TYPE_CHECKING
+from PySide2.QtWidgets import QGraphicsItem, QGraphicsPathItem
 
 import WeatherUnits as wu
 from LevityDash.lib.config import userConfig
-
 from LevityDash.lib.plugins import Container
 from LevityDash.lib.plugins.dispatcher import MultiSourceContainer
-from LevityDash.lib.ui.fonts import defaultFont, compactFont, weatherGlyph
-from LevityDash.lib.utils.shared import clearCacheAttr, now, Now, strToOrdinal, toOrdinal, _Panel, TextFilter
-from LevityDash.lib.utils.geometry import Alignment, AlignmentFlag
-from LevityDash.lib.ui.frontends.PySide.utils import colorPalette, addCrosshair, DebugSwitch, DebugPaint
+from LevityDash.lib.ui.fonts import defaultFont
+from LevityDash.lib.ui.Geometry import Geometry, Size, AlignmentFlag, Alignment
+from LevityDash.lib.ui.icons import IconPack
+from LevityDash.lib.utils.shared import now, strToOrdinal, toOrdinal, _Panel, ClosestMatchEnumMeta
+from LevityDash.lib.ui.frontends.PySide.utils import colorPalette, addCrosshair, addRect, DebugPaint
 from LevityDash.lib.plugins.observation import TimeHash
 
 loop = get_running_loop()
@@ -41,6 +41,14 @@ class Text(QGraphicsPathItem):
 	scaleSelection = min
 	minimumDisplayHeight = wu.Length.Millimeter(10)
 	baseLabelRelativeHeight = 0.3
+	_fixedFontSize: int | float = 0
+	_scaleType: ScaleType = ScaleType.auto
+	_height: Size.Height | None = None
+	_relativeTo: Geometry | None = None
+	_height_px_cache: Optional[int] = None
+
+	_valueAccessor: Callable[[], Any] | None = None
+	_textAccessor: Callable[[], Any] | None = None
 
 	__filters: dict[str, Callable] = {'0Ordinal': toOrdinal, '0Add Ordinal': strToOrdinal, '1Lower': str.lower, '1Upper': str.upper, '2Title': str.title}
 	enabledFilters: set[str]
@@ -62,7 +70,7 @@ class Text(QGraphicsPathItem):
 		self._font = None
 		self.__customFilterFunction = None
 		self.__enabledFilters = set()
-		self.__modifier = modifier
+		self.__modifier = modifier or {}
 
 		super(Text, self).__init__(parent=None)
 		self.setPen(QPen(Qt.NoPen))
@@ -93,6 +101,47 @@ class Text(QGraphicsPathItem):
 		if hasattr(self.parent, 'signals') and hasattr(self.parent.signals, 'resized'):
 			self.parent.signals.resized.connect(self.updateTransform)
 
+	def __rich_repr__(self):
+		if (textRect := getattr(self, '_textRect', None)) is not None:
+			textRect = self.mapRectToScene(textRect)
+			yield 'textRect', textRect
+		yield 'limitRect', self.limitRect
+		yield 'fontSize', self._font.pointSizeF(), 16.0
+		yield 'transform', (self.transform().m11(), self.transform().m22())
+
+	def setRelativeHeight(self, height: Size.Height, relativeTo: Geometry):
+		self._height = height
+		self._height_px_cache = None
+		self._relativeTo = relativeTo
+
+	def setAbsoluteHeight(self, height: Size.Height):
+		self._height = height
+		self._relativeTo = None
+
+	@property
+	def height(self) -> Size.Height | wu.Length | None:
+		return self._height
+
+	@property
+	def height_px(self) -> float | None:
+		if self._height_px_cache is not None:
+			return self._height_px_cache
+		height: Size.Height = self._height
+		match height:
+			case Size.Height(absolute=True):
+				self._height_px_cache = height.value
+				return height.value
+			case Size.Height(relative=True):
+				if self._relativeTo is None:
+					raise ValueError('RelativeTo is not set')
+				return height.toAbsolute(self._relativeTo.absoluteHeight)
+			case wu.Length(), _:
+				dpi = self.surface.scene().view.screen().physicalDotsPerInchY()
+				value = float(height.inch)*dpi
+				self._height_px_cache = value
+				return value
+			case _:
+				return None
 
 	def setCustomFilterFunction(self, filterFunc: Callable):
 		self.__customFilterFunction = filterFunc
@@ -107,8 +156,20 @@ class Text(QGraphicsPathItem):
 		return max(self.limitRect.height(), 5)
 
 	@property
-	def suggestedFontPointSize(self):
-		return self.suggestedFontPixelSize/self.scene().view.physicalDpiY()
+	def fixedFontSize(self) -> float | int:
+		return self._fixedFontSize
+
+	@fixedFontSize.setter
+	def fixedFontSize(self, size: float | int):
+		self._fixedFontSize = size or 0.0
+		if self._fixedFontSize:
+			self._font.setPointSizeF(size)
+		else:
+			self._font.setPointSizeF(self.suggestedFontPixelSize)
+
+	@property
+	def fontSize(self) -> float | int:
+		return self.fixedFontSize or self.suggestedFontPixelSize
 
 	@property
 	def align(self) -> Alignment:
@@ -159,8 +220,6 @@ class Text(QGraphicsPathItem):
 		self.__enabledFilters = value
 
 	def setFont(self, font: Union[QFont, str]):
-		self.prepareGeometryChange()
-		clearCacheAttr(self, 'textRect')
 		if font is None:
 			font = QFont(defaultFont)
 		elif isinstance(font, str):
@@ -169,15 +228,21 @@ class Text(QGraphicsPathItem):
 			font = QFont(font)
 		else:
 			font = QFont(font)
-		if self.minimumFontSize and font.pointSizeF() < self.minimumFontSize:
-			font.setPointSizeF(self.minimumFontSize)
 		self._font = font
 		if self._value is not None:
 			self.__updatePath()
 			self.updateTransform()
 
+	def setFixedFontSize(self, size: float | int):
+		self.fixedFontSize = size
+
 	def font(self):
-		return self._font
+		font = QFont(self._font)
+		if g := getattr(self, '_sized', False):
+			font.setPointSizeF(g.sharedFontSize(self))
+		else:
+			font.setPointSize(self.fontSize)
+		return font
 
 	@property
 	def limitRect(self) -> QRectF:
@@ -251,7 +316,6 @@ class Text(QGraphicsPathItem):
 		return self.mapToItem(item, pos)
 
 	def refresh(self):
-		self._font.setPointSizeF(self.suggestedFontPixelSize)
 		self.__updatePath()
 		self.updateTransform()
 		value = getattr(self.value, 'value', self.value)
@@ -265,26 +329,12 @@ class Text(QGraphicsPathItem):
 			elif wu.Time.Hour(abs(value.hour)) < wu.Time.Hour(1):
 				self.refreshTask = loop.call_later(60, self.refresh)
 
-	# Section .paint
-	def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: Any) -> None:
-		painter.setRenderHint(QPainter.Antialiasing)
-		w = painter.worldTransform()
-		scale = min(w.m11(), w.m22())
-		w.scale(1/w.m11(), 1/w.m22())
-		w.scale(scale, scale)
-		painter.setTransform(w)
-		super().paint(painter, option, widget)
-
-	def _debug_paint(self, painter, option, widget):
+	def _debug_paint(self, painter: QPainter, option, widget):
+		size = 2.5
+		addCrosshair(painter, size=size, pos=QPoint(0, 0), color=self._debug_paint_color)
+		if (tr := getattr(self, '_textRect', None)) is not None:
+			addRect(painter, tr)
 		self._normal_paint(painter, option, widget)
-		painter.setOpacity(1)
-		addCrosshair(painter, pos=QPoint(0, 0), color=self._debug_paint_color)
-
-	def worldTransform(self) -> QTransform:
-		if self.scene():
-			return self.deviceTransform(self.scene().views()[0].transform())
-		else:
-			return self.transform()
 
 	@property
 	def physicalDisplaySize(self) -> tuple[wu.Length.Centimeter, wu.Length.Centimeter]:
@@ -309,13 +359,16 @@ class Text(QGraphicsPathItem):
 		self.setPen(Qt.NoPen)
 		self.setBrush(brush)
 
-	def estimateTextSize(self, font: QFont) -> tuple[float, float]:
+	def estimateTextSize(self, font: QFont | float | int) -> tuple[float, float]:
 		"""
 		Estimates the height and width of a string provided a font
 		:rtype: float, float
 		:param font:
 		:return: height and width of text
 		"""
+		if isinstance(font, (float, int)):
+			font = QFont(self.font())
+			font.setPointSizeF(font)
 		p = QPainterPath()
 		p.addText(QPoint(0, 0), font, self.text)
 		rect = p.boundingRect()
@@ -340,6 +393,9 @@ class Text(QGraphicsPathItem):
 
 	@modifiers.setter
 	def modifiers(self, value):
+		if value is None:
+			self.__modifier.clear()
+			return
 		self.__modifier = value
 
 	def setTextAccessor(self, accessor: Callable[[], Any] | None):
@@ -356,6 +412,8 @@ class Text(QGraphicsPathItem):
 			text = str(self.value)
 		for filter in self.enabledFilters:
 			text = self.__filters[filter](text)
+		if text is None:
+			return '⋯'
 		return text
 
 	@text.setter
@@ -367,7 +425,7 @@ class Text(QGraphicsPathItem):
 		if self._valueAccessor is not None:
 			return self._valueAccessor()
 		if self._value is None:
-			return 'NA'
+			return '⋯'
 		if isinstance(self._value, (str, int, float, datetime, timedelta)):
 			value = self._value
 		else:
@@ -375,7 +433,7 @@ class Text(QGraphicsPathItem):
 			if self.__modifier:
 				# if self.__modifier['type'] == 'attribute' and hasattr(value, f'@{self.__modifier["key"]}'):
 				# 	value = getattr(value, f'@{self.__modifier["key"]}')
-				if time := self.__modifier['atTime']:
+				if time := self.__modifier.get('atTime', None):
 					value = value.source.source[value.key]
 					if time == 'today':
 						time = now()
