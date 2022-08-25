@@ -1,8 +1,13 @@
+from pathlib import Path
+from typing import Tuple, Dict
+
 from PySide2.QtGui import QFont, QFontDatabase
 
 from LevityDash.lib.config import userConfig
 
 userFontPath = userConfig.userPath["fonts"]
+from LevityDash import __resources__
+from LevityDash.lib.EasyPath import EasyPath
 
 
 def recurseFonts(path):
@@ -22,9 +27,23 @@ userFonts = recurseFonts(userFontPath)
 database = QFontDatabase()
 fontDict = {}
 
-for font in userFonts:
-	_id = database.addApplicationFont(font.path.as_posix())
-	fontDict[str(font.name)] = database.applicationFontFamilies(_id)[0]
+
+def loadFonts(*fonts: EasyPath):
+	global fontDict
+	for font in fonts:
+		name, font = loadFont(font)
+		fontDict[name] = font
+
+
+def loadFont(font: EasyPath) -> Tuple[str, QFont]:
+	name = font.name
+	id_ = database.addApplicationFont(font.path.as_posix())
+	font = database.applicationFontFamilies(id_)[0]
+	return name, font
+
+
+loadFonts(*recurseFonts(EasyPath(__resources__/'fonts')))
+loadFonts(*userFonts)
 
 
 def __getFontFromConfig(name: str) -> QFont:
