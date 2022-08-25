@@ -1,27 +1,30 @@
 from functools import cached_property
 
 from PySide2.QtCore import QRectF, Qt
-from PySide2.QtGui import QFont
+from PySide2.QtGui import QFont, QPainter, QColor
 from PySide2.QtWidgets import QGraphicsItem, QLineEdit
 
-from ... import qtLogger as guiLog
-from .....Geometry import Geometry
-from .....fonts import compactFont, defaultFont
-from . import Text
+from LevityDash.lib.ui.frontends.PySide.utils import addRect, DebugPaint
+from WeatherUnits.length import Length
+from LevityDash.lib.ui.frontends.PySide.Modules.Panel import SizeGroup
+from LevityDash.lib.ui.frontends.PySide import qtLogger as guiLog
+from LevityDash.lib.ui.Geometry import Geometry, Size, Position, parseSize, AlignmentFlag, Alignment
+from LevityDash.lib.ui.fonts import compactFont, defaultFont
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Text
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.MarginHandles import MarginHandles
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import EditableLabelContextMenu, LabelContextMenu
 from LevityDash.lib.ui.frontends.PySide.Modules import Panel
-from LevityDash.lib.utils.geometry import Alignment, AlignmentFlag, Position, Size
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import ScaleType
 from LevityDash.lib.utils import clearCacheAttr
 from LevityDash.lib.stateful import DefaultTrue, DefaultFalse, DefaultGroup, StateProperty
 from LevityDash.lib.ui.icons import IconPack
-from LevityDash import __resources__
 
 log = guiLog.getChild(__name__)
 
-__all__ = ['Label', 'EditableLabel']
+__all__ = ['Label', 'EditableLabel', 'TitleLabel']
 
 
+@DebugPaint(color='#00ffaa')
 class Label(Panel, tag='label'):
 	_acceptsChildren = False
 
@@ -35,8 +38,13 @@ class Label(Panel, tag='label'):
 		super().__init__(*args, **kwargs)
 		self.marginHandles: MarginHandles = MarginHandles(self)
 		self.marginHandles.signals.action.connect(self.textBox.updateText)
+		self.marginHandles.setEnabled(False)
 		self.setAcceptDrops(False)
 		self.geometry.updateSurface()
+
+	def __rich_repr__(self):
+		yield 'textBox', self.textBox
+		yield from super().__rich_repr__()
 
 	@cached_property
 	def textBox(self):
@@ -73,7 +81,7 @@ class Label(Panel, tag='label'):
 
 		self.marginHandles.scene().clearFocus()
 		self.marginHandles.setEnabled(True)
-		self.marginHandles.show()
+		self.marginHandles.setVisible(True)
 		self.marginHandles.updatePosition(self.rect())
 		self.marginHandles.setFocus()
 
@@ -171,15 +179,95 @@ class Label(Panel, tag='label'):
 	def setRect(self, rect: QRectF):
 		super(Label, self).setRect(rect)
 		self.textBox.setPos(self.rect().topLeft())
-		self.textBox.updateTransform()
+		self.textBox.updateText()
 
-	@StateProperty(default=None, dependencies={'geometry', 'text', 'alignment'})
+	@StateProperty(default={}, dependencies={'geometry', 'text', 'alignment'})
 	def modifiers(self) -> dict:
 		return self.textBox.modifiers
 
 	@modifiers.setter
 	def modifiers(self, value: dict):
 		self.textBox.modifiers = value
+
+	@StateProperty(default=None, dependencies={'geometry', 'text', 'alignment'})
+	def textHeight(self) -> Size.Height | Length | None:
+		return self.textBox.height
+
+	@textHeight.setter
+	def textHeight(self, value: Size.Height):
+		if value.relative:
+			self.textBox.setRelativeHeight(value, self.localGroup.geometry)
+		else:
+			self.textBox.setAbsoluteHeight(value)
+		self.textBox.updateTransform()
+
+	@textHeight.decode
+	def textHeight(self, value: str | int | float) -> Size.Height | Length | None:
+		return parseSize(value, None)
+
+	@textHeight.encode
+	def textHeight(self, value: Size.Height) -> str:
+		if value is not None:
+			return str(value)
+
+	@StateProperty(default={}, dependencies={'geometry', 'text', 'alignment'})
+	def matchingGroup(self) -> dict:
+		return getattr(self, '_matchingGroup', {})
+
+	@matchingGroup.setter
+	def matchingGroup(self, value: dict):
+		self._matchingGroup = value
+
+	@matchingGroup.decode
+	def matchingGroup(value: str | dict) -> dict:
+		if isinstance(value, str):
+			return {'group': value}
+		return value
+
+	@matchingGroup.encode
+	def matchingGroup(value: SizeGroup | dict) -> str | dict:
+		match value:
+			case {'group': group} | str(group):
+				return group
+		return value
+
+	@matchingGroup.after
+	def matchingGroup(self):
+		v = self._matchingGroup or {}
+		group = v.get('group', None) if isinstance(v, dict) else v
+		matchAll = v.get('matchAll', False)
+		match group.split('.') if isinstance(group, str) else group:
+			case 'local', str(key):
+				group = self.localGroup.getAttrGroup(key, matchAll)
+			case 'global', str(key):
+				group = self.scene().base.getAttrGroup(key, matchAll)
+			case 'parent', str(key):
+				group = (self.parentLocalGroup or self.localGroup).getAttrGroup(key, matchAll)
+			case 'group', str(key):
+				group = self.getTaggedGroup('group').getAttrGroup(key, matchAll)
+			case str(tag), str(key):
+				group = self.getTaggedGroup(tag).getAttrGroup(key, matchAll)
+			case [str(named)] if '@' in named:
+				key, group = named.split('@')
+				group = self.getNamedGroup(group).getAttrGroup(key, matchAll)
+			case SizeGroup():
+				pass
+			case _:
+				raise ValueError(f'invalid group {group}')
+		if (g := getattr(self, '_matchingGroupGroup', None)) is group:
+			g.removeItem(self.textBox)
+		group.addItem(self.textBox)
+		self._matchingGroupGroup = group
+
+	# def paint(self, painter: QPainter, option, widget):
+
+	# Section .paint
+	def _debug_paint(self, painter: QPainter, option, widget):
+		# addCrosshair(painter, pos=QPoint(0, 0), color=self._debug_paint_color)
+		c = QColor(self._debug_paint_color)
+		c.setAlphaF(0.1)
+		addRect(painter, self.rect(), fill=c, offset=2)
+		self._normal_paint(painter, option, widget)
 
 
 class NonInteractiveLabel(Label, tag=...):
@@ -255,7 +343,7 @@ class EditableLabel(Label, tag='text'):
 		self.setAcceptHoverEvents(not True)
 
 	@classmethod
-	def validate(cls, item: dict) -> bool:
+	def validate(cls, item: dict, context=None) -> bool:
 		panelValidation = super(EditableLabel, cls).validate(item)
 		return panelValidation and 'text' in item
 
