@@ -39,6 +39,7 @@ class BaseContextMenu(QMenu):
 
 	@Slot()
 	def updateItems(self):
+		self.groupItems.setVisible(len(self.parent.scene().selectedItems()) > 1)
 		childMenus = [menu for menu in self.children() if isinstance(menu, QMenu)]
 		self.debugActions.setVisible(QApplication.queryKeyboardModifiers() & Qt.KeyboardModifier.AltModifier or debug)
 		for menu in childMenus:
@@ -75,6 +76,8 @@ class BaseContextMenu(QMenu):
 
 	def mainChunk(self):
 		self.addSeparator()
+
+		self.groupItems = self.addAction('Group Items', self.parent.groupItems)
 
 		resize = self.addAction('Resizable', self.parent.setResizable)
 		resize.setCheckable(True)
