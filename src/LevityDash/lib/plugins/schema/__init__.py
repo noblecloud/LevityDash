@@ -1,4 +1,5 @@
 from collections import ChainMap
+from copy import deepcopy
 from datetime import datetime
 from difflib import get_close_matches
 from enum import Enum
@@ -48,6 +49,10 @@ class LevityDatagram(dict):
 	metaData: dict
 
 	def __init__(self, data: dict, schema: 'Schema' = None, **kwargs):
+		if type(self) is LevityDatagram:
+			self.__raw = deepcopy(data)
+		else:
+			pass
 		self.__creationTime = kwargs.get('creationTime', None) or now()
 		self.__schema = schema
 		self.__sourceData = kwargs.get('sourceData', {})
@@ -127,6 +132,10 @@ class LevityDatagram(dict):
 
 		find(self)
 		return items
+
+	@property
+	def raw(self):
+		return self.__raw
 
 	@property
 	def sourceData(self):
