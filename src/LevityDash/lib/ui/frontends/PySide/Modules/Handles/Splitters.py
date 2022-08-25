@@ -1,13 +1,17 @@
-from PySide2.QtCore import QPointF, QRectF
-from PySide2.QtWidgets import QGraphicsItem
+from PySide2.QtCore import QPointF, QRectF, Qt
+from PySide2.QtWidgets import QGraphicsItem, QApplication
 
 from LevityDash.lib.stateful import Stateful, StateProperty
+from LevityDash.lib.utils import clamp, clearCacheAttr, ScaleFloat
+from LevityDash.lib.ui.Geometry import Size, parseSize, LocationFlag, DisplayPosition, RelativeFloat
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles import Handle
-from LevityDash.lib.utils import LocationFlag, disconnectSignal, clamp, DisplayPosition
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Label import TitleLabel
+from WeatherUnits import Length
 
 
 class Splitter(Handle):
 	_ratio: float = None
+	_inverted: bool = False
 
 	def __init__(self, surface, ratio=0.5, splitType: LocationFlag = LocationFlag.Horizontal, *args, **kwargs):
 		if isinstance(splitType, str):
@@ -26,7 +30,9 @@ class Splitter(Handle):
 
 		super(Splitter, self).__init__(surface, location=splitType, *args, **kwargs)
 
-		self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
+		self.surface.signals.resized.connect(self.updatePosition)
+
+		self.setFlag(QGraphicsItem.ItemSendsGeometryChanges)
 
 		if primary is None or secondary is None:
 			surfaceChildren = [child for child in self.surface.childPanels if child is not primary or child is not secondary]
@@ -41,6 +47,11 @@ class Splitter(Handle):
 		else:
 			self.primary = primary
 			self.secondary = secondary
+
+		if (primary := self.primary) is not None:
+			primary.locked = True
+		if (secondary := self.secondary) is not None:
+			secondary.locked = True
 
 		self.ratio = ratio
 		self.setPos(self.position)
@@ -71,6 +82,8 @@ class Splitter(Handle):
 		return center
 
 	def mousePressEvent(self, event) -> None:
+		if (timer := getattr(self.parentItem(), 'hideTimer', None)) is not None:
+			timer.stop()
 		event.accept()
 		self.setSelected(True)
 		super(Handle, self).mousePressEvent(event)
@@ -84,18 +97,24 @@ class Splitter(Handle):
 		self.swapSurfaces()
 
 	def mouseReleaseEvent(self, event) -> None:
+		if (timer := getattr(self.parentItem(), 'hideTimer', None)) is not None:
+			timer.start()
 		self.update()
 		super(Handle, self).mouseReleaseEvent(event)
 
 	def interactiveResize(self, mouseEvent):
 		eventPosition = self.parent.mapFromScene(mouseEvent.scenePos())
+		if self._inverted:
+			eventPosition.setY(self.parent.geometry.absoluteHeight - eventPosition.y())
 		value = eventPosition.x() if self.location.isVertical else eventPosition.y()
 		surfaceSize = float(self.surface.geometry.absoluteWidth if self.location.isVertical else self.surface.geometry.absoluteHeight)
 		value /= surfaceSize
+
 		# Snap value to 0.1 increments if within 0.03
-		valueRounded = round(value, 1)
-		if abs(valueRounded - value) < surfaceSize*0.0003:
-			value = valueRounded
+		if QApplication.queryKeyboardModifiers() & Qt.ShiftModifier:
+			valueRounded = round(value, 1)
+			if abs(valueRounded - value) < surfaceSize*0.0003:
+				value = valueRounded
 		self.ratio = value
 
 	def swapSurfaces(self):
@@ -119,19 +138,10 @@ class Splitter(Handle):
 				value.setY(self.position.y())
 			else:
 				value.setX(self.position.x())
-		elif change == QGraphicsItem.ItemVisibleChange:
-			if value and not self._resizeSignalConnected:
-				self.surface.signals.resized.connect(self.updatePosition)
-				self._resizeSignalConnected = True
-			elif not value and self._resizeSignalConnected:
-				disconnectSignal(self.surface.signals.resized, self.updatePosition)
-				self._resizeSignalConnected = False
 		return super(Handle, self).itemChange(change, value)
 
 	@property
-	def ratio(self) -> float:
-		# if self.primary is not None and self.secondary is not None and self.primary.isVisible() != self.secondary.isVisible():
-		# 	self._ratio = 0
+	def ratio(self) -> ScaleFloat:
 		if self._ratio is None:
 			if self.location.isVertical:
 				self._ratio = self.pos().x()/float(self.surface.rect().width())
@@ -147,16 +157,15 @@ class Splitter(Handle):
 			self.setGeometries()
 
 	def setGeometries(self):
-		value = clamp(self._ratio, 0, 1)
-
-		if value == 0:
-			selected = self.primary if self.primary.isVisible() else self.secondary
+		value = clamp(self.ratio, 0, 1)
+		primary, secondary = self.primary, self.secondary
+		primary.setVisible(value != 0)
+		secondary.setVisible(value != 1)
+		if value in {0, 1}:
+			selected = primary if value else secondary
 			selected.geometry.setRelativeGeometry(QRectF(0, 0, 1, 1))
 			selected.updateFromGeometry()
-			# self.surface.update()
 			return
-
-		primary, secondary = self.primary, self.secondary
 
 		if self.location.isVertical:
 			if primary is not None:
@@ -180,10 +189,10 @@ class Splitter(Handle):
 				secondary.geometry.relativeHeight = 1 - value
 				secondary.geometry.relativeY = value
 				secondary.geometry.relativeX = 0
+
 		for child in [primary, secondary]:
 			if child is not None:
 				child.updateFromGeometry()
-# self.surface.update()
 
 
 class TitleValueSplitter(Splitter, Stateful):
@@ -191,31 +200,39 @@ class TitleValueSplitter(Splitter, Stateful):
 		kwargs = self.prep_init(kwargs)
 		self.__manualText = None
 		self.location = LocationFlag.Horizontal
-		self.title = title
+		self.__title = title
 		self.value = value
 		ratio = kwargs.pop('ratio', 0.2)
-		self.titlePosition = position
-		self.manualText = kwargs.pop('text', None)
 		super(TitleValueSplitter, self).__init__(surface, primary=title, secondary=value, ratio=ratio)
-		self.setVisibility(kwargs.get('visible', True))
+		self.titlePosition = position
+		self.setVisibility(kwargs.pop('visible', True))
+		if kwargs:
+			self.state = kwargs
 
 	def _afterSetState(self):
 		self.setGeometries()
 
-	@StateProperty(key='text', default=None, singleVal=True, sortOrder=0)
-	def manualText(self) -> str:
-		return self.__manualText
+	@property
+	def state(self):
+		return Stateful.state.fget(self)
 
-	@manualText.setter
-	def manualText(self, value: str):
-		if value is None:
-			return
-		self.__manualText = str(value)
-		self.title.setManualValue(self.__manualText)
+	@state.setter
+	def state(self, value):
+		titleKeys = TitleLabel.statefulKeys - {'visible'}
 
-	@manualText.condition
-	def manualText(self) -> bool:
-		return self.title.isVisible()
+		titleState = {key: value[key] for key in titleKeys if key in value}
+		ownState = {key: value[key] for key in value if key not in titleKeys}
+
+		if ownState:
+			Stateful.state.fset(self, ownState)
+		if titleState:
+			self.title.state = titleState
+		if ownState or titleState:
+			self.setGeometries()
+
+	@StateProperty(unwrap=True, default=Stateful)
+	def title(self) -> TitleLabel:
+		return self.__title
 
 	def mouseDoubleClickEvent(self, event):
 		ratio = abs(1 - self.ratio)
@@ -231,9 +248,24 @@ class TitleValueSplitter(Splitter, Stateful):
 			return
 		self.setGeometries()
 
-	@StateProperty(default=0.2, singleVal=True, sortOrder=1, dependencies={'geometry', 'position', 'visible'})
-	def ratio(self) -> float:
-		pass
+	@StateProperty(key='rotate', default=False, sortOrder=2)
+	def rotation(self) -> bool:
+		return getattr(self, '_rotation', False)
+
+	@rotation.setter
+	def rotation(self, value: bool):
+		self._rotation = value
+		self.setGeometries()
+
+	@StateProperty(key='size', default=0.2, singleVal=True, sortOrder=1, dependencies={'geometry', 'position', 'visible'})
+	def ratio(self) -> ScaleFloat | float | None:
+		if self.height is not None:
+			if self.location.isVertical:
+				r = sorted((0, float(self.height_px)/float(self.surface.geometry.absoluteWidth), 1))[1]
+			else:
+				r = sorted((0, float(self.height_px)/float(self.surface.geometry.absoluteHeight), 1))[1]
+			return r if self.primary is self.title else 1 - r
+		return Splitter.ratio.fget(self)
 
 	@ratio.encode
 	def ratio(value: float) -> float:
@@ -241,11 +273,50 @@ class TitleValueSplitter(Splitter, Stateful):
 
 	@ratio.condition
 	def ratio(self) -> bool:
-		return self.title.isVisible()
+		return self.title.isVisible() and self.height is None
+
+	@StateProperty(default=None, singleVal=True, sortOrder=1, dependencies={'geometry', 'position', 'visible'})
+	def height(self) -> Size.Height | Length | None:
+		return getattr(self, '_height', None)
+
+	@height.setter
+	def height(self, value: Size.Height | Length | None):
+		self._height = value
+		self.setGeometries()
+
+	@height.decode
+	def height(self, value: str | int | float) -> Size.Height | Length:
+		return parseSize(value, type(self).height.default(self))
+
+	@height.encode
+	def height(self, value: Size.Height | Length) -> str | None:
+		return str(value) if value is not None else None
+
+	@property
+	def height_px(self) -> float:
+		height: Size.Height = self._height
+		match height:
+			case Size.Height(absolute=True):
+				return height.value
+			case Size.Height(relative=True):
+				if (self._relativeTo or self.value.localGroup) is None:
+					raise ValueError('RelativeTo is not set')
+				return height.toAbsolute(self._relativeTo.absoluteHeight)
+			case Length(), _:
+				dpi = self.surface.scene().view.screen().physicalDotsPerInchY()
+				return float(height.inch)*dpi
+			case _:
+				return None
+
+	def parseLength(self, value: str | int | float) -> Size.Height | Length:
+		if isinstance(value, str):
+			return Length(value)
+		else:
+			return Size.Height(value)
 
 	@StateProperty(default=DisplayPosition.Top, key='position', allowNone=False)
 	def titlePosition(self) -> DisplayPosition:
-		return self._titlePosition
+		return getattr(self, '_titlePosition', DisplayPosition.Top)
 
 	@titlePosition.setter
 	def titlePosition(self, value):
@@ -253,33 +324,57 @@ class TitleValueSplitter(Splitter, Stateful):
 			value = DisplayPosition[value]
 		if not isinstance(value, DisplayPosition):
 			raise TypeError('titlePosition must be a DisplayPosition')
+		flipped = value is self.titlePosition.getOpposite()
 		self._titlePosition = value
-		if self._ratio:
+
+		if self._titlePosition is DisplayPosition.Hidden:
+			self.hideTitle()
+		elif not self.title.isVisible():
+			self.showTitle()
+
+		if self._titlePosition.value.casefold() in {'left', 'right'}:
+			self.location = LocationFlag.Vertical
+			clearCacheAttr(self, 'cursor')
+			self.resetPath()
+		if flipped:
+			self.ratio = abs(1 - self.ratio)
+		else:
 			self.setGeometries()
 
 	@titlePosition.condition
 	def titlePosition(self):
 		return self.title.isVisible()
 
+	def setTitlePosition(self, position: DisplayPosition):
+		self.titlePosition = position
+
 	@Splitter.primary.getter
 	def primary(self):
-		return self.title if self.titlePosition == DisplayPosition.Top else self.value
+		if self.location.isHorizontal:
+			return self.title if self.titlePosition == DisplayPosition.Top else self.value
+		else:
+			return self.title if self.titlePosition == DisplayPosition.Left else self.value
 
 	@Splitter.secondary.getter
 	def secondary(self):
-		return self.title if self.titlePosition == DisplayPosition.Bottom else self.value
+		if self.location.isHorizontal:
+			return self.value if self.titlePosition == DisplayPosition.Top else self.title
+		else:
+			return self.value if self.titlePosition == DisplayPosition.Left else self.title
 
 	def hideTitle(self):
-		self.title.hide()
+		self._previousHeight = self.ratio
+		self.ratio = 1 if self.title is self.secondary else 0
 		self.setVisible(False)
 		self.setEnabled(False)
-		self.value.geometry.setRelativeGeometry(QRectF(0, 0, 1, 1))
 
 	def showTitle(self):
-		self.title.show()
+		if (previousRatio := getattr(self, '_previousHeight', None)) is not None:
+			self.ratio = previousRatio
 		self.setVisible(True)
 		self.setEnabled(True)
-		self.setGeometries()
+
+	# self.setGeometries()
 
 	def toggleTitle(self):
 		if self.title.isVisible():
@@ -301,13 +396,28 @@ class TitleValueSplitter(Splitter, Stateful):
 	def visible(self, value):
 		self.setVisibility(value)
 
-	@visible.condition
+	@visible.condition(method='get')
 	def visible(value: bool) -> bool:
 		return not value
 
 	@property
 	def enabled(self):
 		return self.title.isVisible()
+
+	def setGeometries(self):
+		title = self.title
+		title.setTransformOriginPoint(title.rect().center())
+		title.setRotation(0)
+		super().setGeometries()
+		if self.location.isVertical and self.title.isVisible():
+			if self.rotation and title.rect().width() < title.rect().height():
+				ratio = (1 - (title.rect().width()/title.rect().height()))*2
+				title.setTransformOriginPoint(title.rect().center())
+				angle = sorted((0, (90*ratio), 90))[1]
+				if angle > 70:
+					angle = 90
+				title.setRotation(angle + 0.01)
+				super().setGeometries()
 
 
 class MeasurementUnitSplitter(Splitter, Stateful):
@@ -334,26 +444,60 @@ class MeasurementUnitSplitter(Splitter, Stateful):
 			self.hide()
 			self.setEnabled(False)
 			return
-		elif self.displayProperties.unitPosition == 'floating':
+		elif self.displayProperties.unitPosition in {'floating', 'float-under'}:
 			self.unit.show()
 			self.unit.unlock()
 			self.value.geometry.setRelativeGeometry(QRectF(0, 0, 1, 1))
 			self.hide()
 			self.setEnabled(False)
+			if self.displayProperties.unitPosition == 'float-under':
+				self.fitUnitUnder()
 			return
 		self.unit.show()
 		self.setEnabled(True)
 		self.updatePosition(self.surface.rect())
 		self.setGeometries()
 
+	def fitUnitUnder(self):
+		self.unit.unlock()
+		self.value.geometry.setRelativeGeometry(QRectF(0, 0, 1, 1))
+		self.unit.geometry.setRelativeGeometry(QRectF(0, 0, 1, 1))
+		space = self.value.unitSpace
+		unitSize = self.displayProperties.valueUnitRatio
+		if isinstance(unitSize, RelativeFloat):
+			unitSize = float(unitSize*self.surface.rect().height())
+		if space.height() > unitSize:
+			space.setHeight(unitSize)
+		# pos = space.topLeft()
+		# self.unit.geometry.setAbsoluteRect(space)
+		# self.unit.setRect(space.normalized())
+		self.unit.contentsRect = space
+		# self.unit.setPos(pos)
+		self.unit.textBox.refresh()
+		totalRect = self.unit.textBox.sceneBoundingRect() | self.value.textBox.sceneBoundingRect()
+		offset = self.surface.sceneBoundingRect().center() - totalRect.center()
+		self.unit.moveBy(*offset.toTuple())
+		self.value.moveBy(*offset.toTuple())
+
 	@property
 	def _ratio(self):
-		if self.displayProperties.unitPosition in ['hidden', 'inline', 'floating']:
+		if self.displayProperties.unitPosition in {'hidden', 'inline', 'floating' 'fit'}:
 			return 1
-		elif self.primary is self.unit:
-			return self.displayProperties.valueUnitRatio
-		else:
+		if self.unit is self.secondary:
 			return 1 - self.displayProperties.valueUnitRatio
+		return self.displayProperties.valueUnitRatio
+
+	# else:
+	# 	return 1 - self.displayProperties.valueUnitRatio
+
+	def interactiveResize(self, mouseEvent):
+		if self.displayProperties.unitPosition in ['hidden', 'inline', 'floating']:
+			return
+		if self.primary is self.value:
+			self.ratio = 1 - mouseEvent.pos().x()/self.surface.rect().width()
+		super().interactiveResize(mouseEvent)
+		self.updatePosition(self.surface.rect())
+		self.setGeometries()
 
 	@_ratio.setter
 	def _ratio(self, value):
@@ -379,16 +523,17 @@ class MeasurementUnitSplitter(Splitter, Stateful):
 
 	@Splitter.primary.getter
 	def primary(self):
-		return self.value if self.displayProperties.unitPosition in ['below', 'auto', 'hidden', 'inline'] else self.unit
+		return self.value if self.displayProperties.unitPosition in DisplayPosition.secondaryPositions else self.unit
 
 	@Splitter.secondary.getter
 	def secondary(self):
-		return self.unit if self.displayProperties.unitPosition in ['below', 'auto', 'hidden', 'inline'] else self.value
+		return self.unit if self.displayProperties.unitPosition in DisplayPosition.secondaryPositions else self.value
 
 	def __decideAuto(self):
 		surfaceRect = self.surface.rect()
-		if surfaceRect.width() > surfaceRect.height():
-			value = 0.75
-		else:
-			value = 0.90
-		self.ratio = self.displayProperties.valueUnitRatio or value
+		if self.displayProperties.splitDirection == LocationFlag.Horizontal:
+			if surfaceRect.width() > surfaceRect.height():
+				value = 0.75
+			else:
+				value = 0.90
+			self.ratio = self.displayProperties.valueUnitRatio or value

@@ -2,11 +2,12 @@ from functools import cached_property
 from typing import Callable, List, Optional, Type, Union
 
 from PySide2.QtCore import QObject, QPointF, QRectF, QSize, Qt, Signal
-from PySide2.QtGui import QPainterPath, QPen
+from PySide2.QtGui import QPainterPath, QPen, QPainter, QTransform, QPainterPathStroker
 from PySide2.QtWidgets import QGraphicsItem, QGraphicsItemGroup, QGraphicsPathItem, QGraphicsRectItem, QGraphicsScene, QGraphicsSceneMouseEvent, QGraphicsView
 
+from LevityDash.lib.config import userConfig
 from LevityDash.lib.utils.shared import _Panel
-from LevityDash.lib.utils.geometry import LocationFlag, Position, Axis
+from LevityDash.lib.ui.Geometry import Position, Axis, LocationFlag
 from LevityDash.lib.ui.frontends.PySide.utils import colorPalette
 from ... import qtLogger
 
@@ -14,6 +15,7 @@ log = qtLogger.getChild('Handles')
 
 debug = log.level <= 10
 
+HITBOX_SIZE = userConfig.getOrSet('QtOptions', 'handleTouchSize', 4.0, userConfig.getfloat)
 
 class HandleItemSignals(QObject):
 	action = Signal(LocationFlag, Axis)
@@ -26,6 +28,9 @@ class Handle(QGraphicsPathItem):
 	surface: _Panel
 	signals: HandleItemSignals
 	_resizeSignalConnected: bool
+	_boundingRect_: QRectF = QRectF()
+	_shape_: QPainterPath = None
+	_path_: QPainterPath = None
 
 	def __init__(self, parent: 'HandleGroup', location: Union[LocationFlag, Position], alignment: LocationFlag = LocationFlag.Center):
 		super(Handle, self).__init__(parent=parent)
@@ -70,22 +75,21 @@ class Handle(QGraphicsPathItem):
 
 	def hoverEnterEvent(self, event):
 		self.setCursor(self.cursor)
-		self.setScale(1.5)
-		self.update()
-		self.surface.update()
+		path = QPainterPath(self._path)
+		path = QTransform.fromScale(1.5, 1.5).map(path)
+		self.setPath(path)
 		self.setZValue(self.zValue() + 100)
 		super(Handle, self).hoverEnterEvent(event)
 
 	def hoverLeaveEvent(self, event):
 		self.setCursor(Qt.ArrowCursor)
-		self.setScale(1.0)
-		self.update()
-		self.surface.update()
+		self.setPath(self._path)
 		self.setZValue(self.zValue() - 100)
 		super(Handle, self).hoverLeaveEvent(event)
 
 	def mousePressEvent(self, event):
 		event.accept()
+		print(event.pos())
 		super(Handle, self).mousePressEvent(event)
 
 	def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent) -> None:
@@ -197,60 +201,46 @@ class Handle(QGraphicsPathItem):
 		if not self.isUnderMouse() and self.isVisible():
 			self.setPos(self.location.action(rect))
 
-	@cached_property
-	def _shape(self) -> QPainterPath:
-		path = QPainterPath()
-		x = 0
-		y = 0
-		l = self.length
-		w = self.width
-		if self.location.isEdge:
-			l *= 3
-			w *= 2
-			x = -w/2
-			y = -l/2
-			if self.location.isHorizontal:
-				x, y = y, x
-				l, w = w, l
-		else:
-			x = -w
-			y = -w
-			w = l*2
-			l = l*2
-		if self.location.isBottom:
-			l = -l
-			y = -y
-		if self.location.isRight:
-			w = -w
-			x = -x
-		rect = QRectF(x*1.2, y*1.2, w*1.2, l*1.2)
-		path.addRect(rect)
-		path.translate(self.offset)
+	def updateShape(self):
+		self.prepareGeometryChange()
+		qp = QPainterPathStroker()
+		qp.setWidth(self.width*HITBOX_SIZE)
+		qp.setCapStyle(Qt.RoundCap)
+		qp.setJoinStyle(Qt.RoundJoin)
+		self._shape_ = path = qp.createStroke(self._path).simplified()
 		return path
 
-	@cached_property
+	@property
+	def _shape(self) -> QPainterPath:
+		if (path := self._shape_) is None:
+			path = self.updateShape()
+		return path
+
+	@property
 	def _path(self) -> QPainterPath:
-		path = QPainterPath()
-		l = self.length
-		z = 0
-		if self.location.isEdge:
-			if self.location.isHorizontal:
-				path.moveTo(-l, z)
-				path.lineTo(l, z)
+		if (path := self._path_) is None:
+			path = QPainterPath()
+			l = self.length
+			z = 0
+			if self.location.isEdge:
+				if self.location.isHorizontal:
+					path.moveTo(-l, z)
+					path.lineTo(l, z)
+				else:
+					path.moveTo(z, l)
+					path.lineTo(z, -l)
 			else:
-				path.moveTo(z, l)
-				path.lineTo(z, -l)
-		else:
-			hor = l
-			ver = l
-			if self.location & LocationFlag.Bottom:
-				hor = -l
-			if self.location & LocationFlag.Right:
-				ver = -l
-			path.moveTo(0, hor)
-			path.lineTo(0, 0)
-			path.lineTo(ver, 0)
-		path.translate(self.offset)
+				hor = l
+				ver = l
+				if self.location & LocationFlag.Bottom:
+					hor = -l
+				if self.location & LocationFlag.Right:
+					ver = -l
+				path.moveTo(0, hor)
+				path.lineTo(0, 0)
+				path.lineTo(ver, 0)
+			path.translate(self.offset)
+			self._path_ = path
 		return path
 
 	@property
@@ -262,6 +252,18 @@ class Handle(QGraphicsPathItem):
 	@property
 	def parent(self) -> 'HandleGroup':
 		return self.parentItem()
+
+	def resetPath(self):
+		self._path_ = None
+		self._shape_ = None
+		self.prepareGeometryChange()
+		self._shape.elementCount()
+		self.setPath(self._path)
+
+	def _debug_paint(self, painter: QPainter, option, widget):
+		self._normal_paint(painter, option, widget)
+		painter.setPen(QPen(self._debug_paint_color, 1))
+		painter.drawPath(self._shape)
 
 
 class HandleGroup(QGraphicsItemGroup):
@@ -324,6 +326,7 @@ class HandleGroup(QGraphicsItemGroup):
 		for value in locations:
 			h = self.handleClass(self, value)
 			self.handles.append(h)
+			h.setZValue(int(value in LocationFlag.edges()))
 			setattr(self, f'{h.location.name[0].lower()}{h.location.name[1:]}Handle', h)
 
 	@property
@@ -375,6 +378,9 @@ class HandleGroup(QGraphicsItemGroup):
 		self.__surfaceProxy = value
 		for handle in self.handles:
 			handle.surfaceProxy = value
+
+	def boundingRect(self) -> QRectF:
+		return self.childrenBoundingRect()
 
 
 from . import Various

@@ -8,7 +8,7 @@ from PySide2.QtWidgets import QGraphicsDropShadowEffect, QGraphicsSceneMouseEven
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Incrementer import IncrementerGroup, Incrementer
 
 from LevityDash.lib.utils.data import TimeFrameWindow
-from LevityDash.lib.utils.geometry import LocationFlag
+from LevityDash.lib.ui.Geometry import LocationFlag
 from LevityDash.lib.ui.frontends.PySide.utils import colorPalette
 
 __all__ = ["GraphZoom", "TimeframeIncrementer"]

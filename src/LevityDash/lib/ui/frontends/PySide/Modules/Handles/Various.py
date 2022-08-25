@@ -7,7 +7,7 @@ from PySide2.QtWidgets import QApplication, QGraphicsItem, QGraphicsPathItem, QG
 
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles import debug, Handle
 from LevityDash.lib.ui.frontends.PySide.utils import colorPalette
-from LevityDash.lib.utils.geometry import relativePosition, LocationFlag
+from LevityDash.lib.ui.Geometry import LocationFlag, relativePosition
 from LevityDash.lib.utils.shared import clamp
 
 __all__ = ["DrawerHandle", "HoverArea", "IndoorIcon"]
