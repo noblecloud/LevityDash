@@ -28,7 +28,334 @@ from .Handles import Handle, HandleGroup
 from .Handles.Resize import ResizeHandles
 from ..utils import GraphicsItemSignals, colorPalette, selectionPen, itemLoader
 from LevityDash.lib.log import debug
+from operator import or_
 
+if TYPE_CHECKING:
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import Text
+
+loop = asyncio.get_running_loop()
+
+
+# class Border(QObjectType, tag=...):
+class Border(QGraphicsPathItem, Stateful, tag=...):
+	_offset: Size.Height = Size.Height(0, absolute=True)
+
+	edges: LocationFlag
+	size: Size
+	weight: float
+
+	def __init__(self, parent: 'Panel', *args, **kwargs):
+		super().__init__()
+		self.parent = parent
+		self.setParentItem(parent)
+		self.setVisible(False)
+		self.setEnabled(False)
+		kwargs = self.prep_init(kwargs)
+		self.state = kwargs
+
+	@asyncSlot()
+	async def parentResized(self, *args):
+		self.updatePath()
+
+	def updatePath(self):
+		rect = self.parent.rect()
+		if o := self.offset_px:
+			rect.adjust(-o, -o, o, o)
+		path = self.path()
+		path.clear()
+		size = self.size
+		edges = self.edges
+		if edges == LocationFlag.Edges:
+			path.addRect(rect)
+		elif edges == LocationFlag.Center:
+			pass
+		else:
+			if edges & LocationFlag.Vertical:
+				top = rect.top()
+				bottom = rect.bottom()
+				if size < 1:
+					diff = (rect.height() - rect.height()*float(size))/2
+					top += diff
+					bottom -= diff
+				if edges & LocationFlag.Left:
+					path.moveTo(rect.left(), top)
+					path.lineTo(rect.left(), bottom)
+				if edges & LocationFlag.Right:
+					path.moveTo(rect.right(), top)
+					path.lineTo(rect.right(), bottom)
+
+			if edges & LocationFlag.Horizontal:
+				left = rect.left()
+				right = rect.right()
+				if size < 1:
+					diff = (rect.width() - rect.width()*float(size))/2
+					left += diff
+					right -= diff
+				if edges & LocationFlag.Top:
+					path.moveTo(left, rect.top())
+					path.lineTo(right, rect.top())
+				if edges & LocationFlag.Bottom:
+					path.moveTo(left, rect.bottom())
+					path.lineTo(right, rect.bottom())
+		self.setPath(path)
+		self.setEnabled(path.elementCount() > 0)
+
+	def updatePen(self):
+		pen = self.pen()
+		weight = self.weight
+		color = self.color
+		pen.setWidthF(weight)
+		pen.setColor(color.QColor)
+		self.setPen(pen)
+
+	@StateProperty(default=LocationFlag.Edges, allowNone=False, after=updatePath)
+	def edges(self) -> LocationFlag:
+		return self._edges
+
+	@edges.setter
+	def edges(self, value: LocationFlag):
+		self._edges = value
+
+	@edges.decode
+	def edges(self, value: str | int) -> LocationFlag:
+		if isinstance(value, str):
+			if value.casefold().startswith('all'):
+				return LocationFlag.Edges
+			elif value.casefold() == 'none':
+				return LocationFlag.Center
+			location = []
+			if 'left' in value.casefold():
+				location.append(LocationFlag.Left)
+			if 'right' in value.casefold():
+				location.append(LocationFlag.Right)
+			if 'top' in value.casefold():
+				location.append(LocationFlag.Top)
+			if 'bottom' in value.casefold():
+				location.append(LocationFlag.Bottom)
+			if len(location) in {0, 4}:
+				return LocationFlag.Edges
+			return LocationFlag(sum(location))
+		return LocationFlag(value)
+
+	@edges.encode
+	def edges(self, value: LocationFlag) -> str:
+		if value & LocationFlag.Edges == LocationFlag.Edges:
+			return 'all'
+		name = value.name
+		if name is None:
+			return ', '.join(str(x.name).lower() for x in LocationFlag.edges() if value & x)
+		return name.lower()
+
+	@StateProperty(default=Dimension(0, absolute=True), after=updatePath)
+	def offset(self) -> Dimension | Length:
+		return self._offset
+
+	@offset.setter
+	def offset(self, value: Dimension | Length):
+		self._offset = value
+
+	@offset.decode
+	def offset(self, value: str | int) -> float:
+		return parseSize(value, 0.0)
+
+	@property
+	def offset_px(self) -> float:
+		return size_px(self.offset, self.parent.geometry)
+
+	@StateProperty(default=Size.Height(1, absolute=False), allowNone=False, after=updatePath)
+	def size(self) -> Size.Height | Size.Width:
+		return self._size
+
+	@size.setter
+	def size(self, value: Size.Height | Size.Width):
+		self._size = value
+
+	@size.decode
+	def size(self, value: str | int) -> Size.Height | Size.Width:
+		return self.parseSize(value, Size.Height(1, relative=True))
+
+	@size.encode
+	def size(self, value: Size.Height | Size.Width) -> str:
+		return str(value)
+
+	def parseSize(self, value: str | float | int, default) -> Size.Height | Size.Width:
+		match value:
+			case str(value):
+				unit = ''.join(re.findall(r'[^\d\.\,]+', value)).strip(' ')
+				match unit:
+					case 'pt' | 'px':
+						return Size.Height(float(value.strip(unit)), absolute=True)
+					case '%':
+						return Size.Height(float(value.strip(unit))/100, relative=True)
+					case _:
+						try:
+							value = float(value.strip(unit))
+							return Size.Height(value)
+						except ValueError:
+							return default
+			case float(value) | int(value):
+				return Size.Height(value)
+			case _:
+				log.error(f'{value} is not a valid value for labelHeight.  Using default value of {default} for now.')
+				return default
+
+	@StateProperty(default=1.0, allowNone=False, after=updatePen)
+	def weight(self) -> float:
+		return getattr(self, '_weight', None)
+
+	@weight.setter
+	def weight(self, value: float):
+		self._weight = value
+
+	@weight.decode
+	def weight(self, value: str | int) -> float:
+		return float(value)
+
+	@weight.encode
+	def weight(self, value: float) -> float:
+		return round(value, 2)
+
+	@StateProperty(default=DefaultGroup(Color('#ffffff'), colorPalette.windowText().color(), '#ffffff', 'ffffff'), allowNone=False, after=updatePen)
+	def color(self) -> Color:
+		return getattr(self, '_color', None)
+
+	@color.setter
+	def color(self, value: Color):
+		self._color = value
+
+	@color.decode
+	def color(self, value: str | QColor) -> Color:
+		match value:
+			case str(value):
+				try:
+					return Color(value)
+				except Exception:
+					log.error(f'{value} is not a valid value for Color.  Using default value of #ffffff for now.')
+					return Color('#ffffff')
+			case QColor():
+				value: QColor
+				return Color(value.toRgb().toTuple())
+			case _:
+				log.error(f'{value} is not a valid value for Color.  Using default value of #ffffff for now.')
+				return Color('#ffffff')
+
+	@StateProperty(default=False, allowNone=False)
+	def enabled(self) -> bool:
+		return self.isEnabled() and self.isVisible()
+
+	@enabled.setter
+	def enabled(self, value: bool):
+		self.setEnabled(value)
+		self.setVisible(value)
+
+	@StateProperty(key='opacity', default=1.0)
+	def _opacity(self) -> float:
+		return self.opacity()
+
+	@_opacity.setter
+	def _opacity(self, value: float):
+		self.setOpacity(value)
+
+	@_opacity.decode
+	def _opacity(self, value: str | int) -> float:
+		if isinstance(value, int) and value > 1:
+			value /= 256
+		return sorted([float(value), 0.0, 1.0])[1]
+
+# @enabled.condition
+# def enabled(self) -> bool:
+# 	return not self.isEnabled()
+
+
+class SizeGroup:
+	items: Set['Text']
+	_lastSize: float = 0
+	_alignments: Dict[AlignmentFlag, float]
+
+	class ItemData(NamedTuple):
+		item: 'Text'
+		pos: QPointF
+
+		def __hash__(self):
+			return hash(self.item)
+
+	itemsToAdjust: Set[ItemData]
+
+	def __init__(self, parent: 'Panel', items: Set['Text'] = None):
+		self.updateTask = None
+		self.items = items or set()
+		self.itemsToAdjust = set()
+		self.parent = parent
+		self._alignments = defaultdict(float)
+		self.adjustSizes()
+
+		QApplication.instance().resizeFinished.connect(self.adjustSizes)
+
+	def adjustSizes(self, exclude=None, clear: bool = False):
+		# items = self.simlilarItems(similarTo) if similarTo is not None else self.items
+		for item in self.items:
+			if item is not exclude:
+				item.updateTransform()
+		if clear:
+			self.updateTask = None
+
+	def addItem(self, item: 'Text'):
+		self.items.add(item)
+		item._sized = self
+		self.adjustSizes()
+
+	def removeItem(self, item: 'Text'):
+		self.items.remove(item)
+		item._sized = None
+		self.adjustSizes()
+
+	def sharedFontSize(self, item) -> float:
+		items = [item.limitRect.height() for item in self.simlilarItems(item)]
+		height = sum(items)/len(items)
+		return max(height, 12)
+
+	def sharedSize(self, v):
+		s = min((item.getTextScale() for item in self.simlilarItems(v)), default=1)
+		if s != self._lastSize:
+			self._lastSize = s
+			if self.updateTask is None:
+				self.updateTask = loop.call_later(.5, partial(self.adjustSizes, v, clear=True))
+		return s
+
+	def testSimilar(self, rect: QRect | QRectF, other: 'Text') -> bool:
+		other = other.parent.sceneBoundingRect()
+		diff = (other.size() - rect.size())
+		area = 10
+		margins = QMargins(area, area, area, area)
+		return abs(diff.height()) < area and rect.marginsAdded(margins).intersects(other.marginsAdded(margins))
+
+	def simlilarItems(self, item: 'Text'):
+		ownSize = item.parent.sceneBoundingRect()
+		return {x for x in self.items if self.testSimilar(ownSize, x)}
+
+	def sharedY(self, item: 'Text') -> float:
+		alignedItems = self.getSimilarAlignedItems(item)
+		y = sum((i.pos.y() for i in alignedItems))/(len(alignedItems) or 1)
+		return y
+
+	def getSimilarAlignedItems(self, item: 'Text') -> Set[ItemData]:
+		position = item.getTextScenePosition()
+		y = position.y()
+		x = position.x()
+		tolerance = item.limitRect.height()*0.2
+		alignment = item.alignment.vertical
+		alignedItems = {SizeGroup.ItemData(i, p) for i in self.items if i.alignment.vertical & alignment and abs((p := i.getTextScenePosition()).y() - y) < tolerance}
+		return alignedItems
+
+
+class MatchAllSizeGroup(SizeGroup):
+
+	def simlilarItems(self, item: 'Text'):
+		return self.items
+
+
+PanelType = ForwardRef('Panel', is_class=True, module='Panel')
+Panel: TypeAlias = TypeVar('Panel', bound=PanelType)
 
 @auto
 class Panel(_Panel, Stateful, tag='group'):
@@ -45,6 +372,9 @@ class Panel(_Panel, Stateful, tag='group'):
 	signals: GraphicsItemSignals
 	filePath: Optional[EasyPathFile]
 	_childIsMoving: bool
+	_attrGroups: None | Set[str] = None
+
+	__groups__: Dict[str, 'Panel'] = {}
 
 	__defaults__ = {
 		'resizable': True,
@@ -297,16 +627,128 @@ class Panel(_Panel, Stateful, tag='group'):
 		clearCacheAttr(self, 'marginRect')
 
 	@margins.decode
-	def margins(self, value: dict | list | tuple | str) -> Margins:
-		match value:
-			case str(value):
-				return Margins(self, *value.split(','))
-			case list(value) | tuple(value):
-				return Margins(self, *value)
-			case dict(value):
-				return Margins(self, **value)
-			case _:
-				raise ValueError('Invalid margins', value)
+	def margins(self, value: dict | list | tuple | str) -> dict | tuple:
+		if isinstance(value, str):
+			value = value.split(',')
+		if isinstance(value, (tuple, list)):
+			value = {d: v for d, v in zip(Margins.__dimensions__, value)}
+		if not isinstance(value, dict):
+			raise ValueError('Invalid margins', value)
+		return value
+
+	@margins.factory
+	def margins(self) -> Margins:
+		return Margins(self)
+
+	@margins.after
+	def margins(self):
+		clearCacheAttr(self, 'marginRect')
+
+	@StateProperty(key='border', default=Stateful, allowNone=False, dependencies={'geometry'})
+	def borderProp(self) -> Border:
+		return self._border
+
+	@borderProp.setter
+	def borderProp(self, value: Border):
+		self._border = value
+
+	@borderProp.factory
+	def borderProp(self) -> Border:
+		return Border(self)
+
+	@borderProp.condition(method='get')
+	def borderProp(self) -> bool:
+		return self.borderProp.enabled
+
+	@cached_property
+	def localGroup(self) -> 'Panel':
+		if (up := self.parentItem()) is None:
+			return self
+		elif self.__tag__ is not ...:
+			return self
+		return up.localGroup
+
+	@cached_property
+	def parentLocalGroup(self) -> Panel | None:
+		parent = self.localGroup.parentItem()
+		if parent is None:
+			return None
+		return parent.localGroup
+
+	@property
+	def hierarchy(self) -> List['Panel']:
+		if (parent := self.parentItem()) is None:
+			return [self]
+		return parent.hierarchy + [self]
+
+	@property
+	def hierarchyString(self) -> str:
+		hierarchy = []
+		for i in self.hierarchy:
+			if (name := i.stateName) is not None:
+				hierarchy.append(name)
+			elif i.__tag__ is ...:
+				if hierarchy and hierarchy[-1] != '...':
+					hierarchy.append('...')
+			else:
+				hierarchy.append(i.__tag__)
+
+		return ' -> '.join(reversed(hierarchy))
+
+	def getTaggedGroup(self, tag: str) -> 'Panel':
+		x = self
+		while (t := getattr(x, '__tag__', None)) != tag and t is not None:
+			try:
+				x = x.parentItem()
+			except AttributeError:
+				break
+		return x
+
+	def getNamedGroup(self, name: str) -> 'Panel':
+		if (namedGroup := Panel.__groups__.get(name, None)) is None:
+			namedGroup = next((group for group in self.hierarchy if group.stateName == name), None)
+			if namedGroup is None:
+				return self.localGroup
+			Panel.__groups__[name] = namedGroup
+		return namedGroup
+
+	def getAttrGroup(self, key: str, matchAll: bool = False) -> SizeGroup:
+		if (attrGroups := getattr(self, '_attrGroups', None)) is None:
+			self._attrGroups = attrGroups = {}
+		if (group := attrGroups.get(key, None)) is None:
+			attrGroups[key] = group = SizeGroup(self) if not matchAll else MatchAllSizeGroup(self)
+		return group
+
+	@property
+	def titledName(self) -> str | None:
+		title = getattr(self, 'title', None)
+		if title is None:
+			return None
+		if isinstance(title, str):
+			return title
+		if titleText := getattr(title, 'textBox', None):
+			return str(titleText.text)
+		if titleText := getattr(title, 'text', None):
+			return str(titleText)
+		return None
+
+	@StateProperty(key='name', default=None, sortOrder=0)
+	def stateName(self) -> str | None:
+		if name := getattr(self, '_stateName', None):
+			return name
+		return title if (title := self.titledName) not in {'', 'Na', 'None', '. . .', '⋯'} else None
+
+	@stateName.setter
+	def stateName(self, value: str):
+		existing = getattr(self, '_stateName', None)
+		self._stateName = value
+		if existing != value:
+			Panel.__groups__.pop(existing, None)
+		Panel.__groups__[value] = self
+
+	@stateName.condition(method='get')
+	def stateName(self) -> bool:
+		return getattr(self, '_stateName', None) is not None
 
 	def show(self):
 		self.updateFromGeometry()
