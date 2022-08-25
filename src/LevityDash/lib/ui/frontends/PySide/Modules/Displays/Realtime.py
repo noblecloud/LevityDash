@@ -1,35 +1,38 @@
 from asyncio import get_event_loop, gather, get_running_loop, Task
 from abc import abstractmethod
-from datetime import timedelta
+from datetime import timedelta, datetime
 from functools import cached_property, partial
+from numbers import Number
+from typing import Iterable, Type, Dict
 
-from PySide2.QtCore import QByteArray, QMimeData, Qt, QTimer, Slot
+from PySide2.QtCore import QByteArray, QMimeData, Qt, QTimer, QRectF
 from PySide2.QtGui import QDrag, QFocusEvent, QFont, QPainter, QPixmap, QTransform
 from PySide2.QtWidgets import QGraphicsItem, QGraphicsSceneMouseEvent, QStyleOptionGraphicsItem
-from typing import Any, Iterable, Type, Dict
-
 from qasync import asyncSlot, QApplication
 
 from LevityDash.lib.config import DATETIME_NO_ZERO_CHAR
 from WeatherUnits.time_.time import Second
-
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins import Plugin, Plugins, Container
 from LevityDash.lib.plugins.plugin import AnySource, SomePlugin
 from LevityDash.lib.plugins.dispatcher import MultiSourceContainer, ValueDirectory
 from LevityDash.lib.ui.fonts import weatherGlyph
+from LevityDash.lib.ui.frontends.PySide import UILogger as guiLog
 from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, mouseHoldTimer
-from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import TextHelper
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Label import NonInteractiveLabel as Label, TitleLabel
-from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Resize import MeasurementUnitSplitter, ResizeHandle, TitleValueSplitter
+from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Resize import ResizeHandle
+from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Splitters import TitleValueSplitter, MeasurementUnitSplitter
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import RealtimeContextMenu
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
-from LevityDash.lib.utils.geometry import Alignment, AlignmentFlag, DisplayPosition, LocationFlag, Size
-from LevityDash.lib.utils.shared import clamp, disconnectSignal, Now, TitleCamelCase, Unset, OrUnset, connectSignal
-from LevityDash.lib.stateful import StateProperty, Stateful, DefaultGroup
-from LevityDash.lib.plugins.observation import RealtimeSource
+from LevityDash.lib.ui.Geometry import (Size, LocationFlag, AlignmentFlag, Alignment, DisplayPosition, parseSize,
+                                        RelativeFloat, size_px)
+from LevityDash.lib.utils.shared import (clamp, disconnectSignal, Now, TitleCamelCase, Unset, connectSignal,
+                                         clearCacheAttr)
+from LevityDash.lib.stateful import StateProperty, Stateful
+from LevityDash.lib.plugins.observation import RealtimeSource, ObservationValue, TimeseriesSource
+from WeatherUnits import Measurement, auto as autoMeasurement, Length
 
-from ... import UILogger as guiLog
+qApp: QApplication
 
 log = guiLog.getChild(__name__)
 
@@ -60,7 +63,12 @@ class InvalidSource(Exception):
 	pass
 
 
-# Section Realtime
+class RealtimeTitle(TitleLabel):
+	__defaults__ = {
+		'matchingGroup': {'group': 'group.title'}
+	}
+
+
 class Realtime(Panel, tag='realtime'):
 	_preferredSourceName: str
 	_acceptsChildren = False
@@ -86,6 +94,7 @@ class Realtime(Panel, tag='realtime'):
 	def subtag(self) -> str:
 		return self.display.displayType.value
 
+	# Section Realtime
 	def __init__(self, parent: Panel, **kwargs):
 		self.__connectedContainer: Container | None = None
 		self.__pendingActions: Dict[int, Task] = {}
@@ -125,6 +134,7 @@ class Realtime(Panel, tag='realtime'):
 
 	def __rich_repr__(self):
 		yield 'value', self.container
+		yield 'title', self.title
 		yield from super().__rich_repr__()
 
 	def __str__(self):
@@ -149,7 +159,8 @@ class Realtime(Panel, tag='realtime'):
 
 	@cached_property
 	def title(self):
-		return TitleLabel(self)
+		title = RealtimeTitle(self, stateKey=TitleValueSplitter.title)
+		return title
 
 	@cached_property
 	def contextMenu(self):
@@ -211,7 +222,7 @@ class Realtime(Panel, tag='realtime'):
 		if self.__connectedContainer is not None:
 			return self.__connectedContainer.source
 
-	@StateProperty(allowNone=False, default=Stateful)
+	@StateProperty(allowNone=False, default=Stateful, link=Display)
 	def display(self) -> Display:
 		return self._display
 
@@ -234,7 +245,7 @@ class Realtime(Panel, tag='realtime'):
 		value.hide()
 
 	@splitter.decode
-	def splitter(self, value: dict | bool | float | str) -> TitleValueSplitter:
+	def splitter(self, value: dict | bool | float | str) -> dict:
 		match value:
 			case bool(value):
 				value = {'visible': value}
@@ -244,7 +255,11 @@ class Realtime(Panel, tag='realtime'):
 				value = {'text': value}
 			case _:
 				pass
-		return TitleValueSplitter(surface=self, title=self.title, value=self.display, **value)
+		return value
+
+	@splitter.factory
+	def splitter(self) -> TitleValueSplitter:
+		return TitleValueSplitter(surface=self, title=self.title, value=self.display)
 
 	@cached_property
 	def __requestAttempts(self) -> int:
@@ -517,12 +532,11 @@ class Realtime(Panel, tag='realtime'):
 		self.update()
 
 	@property
-	def value(self):
-		return self.display.value
-
-	@value.setter
-	def value(self, value):
-		self.display.value = value
+	def value(self) -> ObservationValue | None:
+		try:
+			return self.__connectedContainer.value
+		except AttributeError:
+			return None
 
 	def mouseDoubleClickEvent(self, event: QGraphicsSceneMouseEvent):
 		if self.splitter.isUnderMouse():
@@ -573,8 +587,8 @@ class Realtime(Panel, tag='realtime'):
 		return f'{str(self._key.name)@TitleCamelCase}-0x{self.uuidShort.upper()}'
 
 	@classmethod
-	def validate(cls, item: dict):
-		panelValidation = super(Realtime, cls).validate(item)
+	def validate(cls, item: dict, context=None):
+		panelValidation = super(Realtime, cls).validate(item, context)
 		key = 'key' in item and item['key']
 		return panelValidation and key
 
@@ -649,6 +663,7 @@ class LockedRealtime(Realtime):
 		'locked':    True,
 	}
 
+	# Section LockedRealtime
 	def __init__(self, *args, **kwargs):
 		kwargs['showTitle'] = True
 		kwargs['margins'] = {'left': 0, 'right': 0, 'top': 0, 'bottom': 0}
@@ -712,81 +727,47 @@ class LockedRealtime(Realtime):
 
 
 class MeasurementDisplayProperties(Stateful):
-	# __slots__ = ('__label', '__maxLength', '__precision', '__forcePrecision', '__unitSpacer', '__unitPosition', '__suffix',
-	# '__decorator', '__shorten', '__decimalSeparator', '__radixPoint', '__valueMargins', '__unitMargins', '__dict__')
-
-	Label: 'DisplayLabel'
-	maxLength: int
-	precision: int
-	forcePrecision: bool
-	unitSpacer: str
-	unitPosition: DisplayPosition
-	unit: Type[Measurement] | None
-	suffix: str
-	decorator: str
-	shorten: bool
-	decimalSeparator: str
-	radixPoint: str
+	__measurementHash: int = 0
 
 	"""
 	Properties for how a label should display its value.  It is assumed that the value is a WeatherUnit Measurement.
 	Attributes that are unset will provide the default value for the Measurement as specified WeatherUnit config.
 
-	Attributes
+	Example Config
+	--------------
+	root:
+		maxLength: 2
+		precision: 1
+		unit: 'F'
+		format: '{value}{decorator}'
+		unitPosition: 'inline'
+		shorten: False
+		convertTo: 'Fahrenheit'
+		unitSize: 20%
+	"""
+
+	label: 'DisplayLabel'
+	maxLength: int
+	precision: int
+	unitPosition: DisplayPosition
+	unit_string: str | None
+	shorten: bool
+
+	# Section MeasurementDisplayProperties
+	"""
+	Parameters
 	----------
 	maxLength : int, optional
 		The maximum length of the label.  If the value is longer than this, it will be truncated.
 	precision : int, optional
 		The number of decimal places to display.  If the value is a float, it will be rounded to this number of decimal places.
-	unitSpacer : str, optional
-		The string to use between the value and the unit.
 	unitDisplayPosition : UnitDisplayPosition, default='Auto'
 		How the unit should be displayed.
-	suffix : str, optional
-		The string to use as the suffix.
-	decorator : str, optional
-		The string to use to 'decorate' the unit
-			Example: 'º' is used to decorate temperature values
 	shorten : bool, optional
 		If True, if the value is longer than the allowed length and there are no decimal places to round, the value will be
 		displayed in the next order of magnitude.
 			Example: '1024m' becomes '1.0km'
-	decimalSeparator : str, optional
-		The string to use as the decimal separator.  If not specified, the default is the decimal separator for the current locale.
-	radixPoint : str, optional
-		The string to use as the radix point (character between the values integer and float).  If not specified, the default 
-		is the radix point for the current locale.
 	"""
-
-	def __init__(self, label: 'DisplayLabel', **kwargs):
-		kwargs = self.prep_init(kwargs)
-		self.label = label
-		self.state = kwargs
-		if 'unit' in kwargs:
-			unitDict = kwargs['unit']
-			position = unitDict.pop('position', Unset)
-			if position is not Unset and self.__unitPosition is Unset:
-				self.unitPosition = position
-			hide = None
-			if 'hide' in unitDict:
-				hide = unitDict.pop('hide')
-			elif 'show' in unitDict:
-				hide = not unitDict.pop('show')
-			elif 'visible' in unitDict:
-				hide = not unitDict.pop('visible')
-			if hide:
-				self.unitPosition = DisplayPosition.Hidden
-
-	def __copy__(self):
-		return MeasurementDisplayProperties(self.label, **self.state)
-
-	@property
-	def label(self):
-		return self.__label
-
-	@label.setter
-	def label(self, value):
-		self.__label = value
 
 	@property
 	def __isValid(self) -> bool:
@@ -808,15 +789,12 @@ class MeasurementDisplayProperties(Stateful):
 
 	@property
 	def hasUnit(self) -> bool:
-		if self.__label.value is not None and hasattr(self.__label.value, '@unit'):
-			unit = self.__label.value['@unit']
-			return unit is not None or len(unit) == 0
-		return False
+		return self.unit_string is not Unset and self.unit_string
 
 	@StateProperty(default=Unset, allowNone=False)
 	def maxLength(self) -> int:
 		if self.__maxLength is Unset and self.__isValid:
-			return self.__label.value['@max']
+			return getattr(self.measurement, 'max', Unset)
 		return self.__maxLength
 
 	@maxLength.condition
@@ -830,7 +808,7 @@ class MeasurementDisplayProperties(Stateful):
 	@StateProperty(default=Unset, allowNone=False)
 	def precision(self) -> int:
 		if self.__precision is Unset and self.__isValid:
-			return self.__label.value['@precision']
+			return getattr(self.measurement, 'precision', Unset)
 		return self.__precision
 
 	@precision.setter
@@ -841,21 +819,29 @@ class MeasurementDisplayProperties(Stateful):
 	def precision(self) -> bool:
 		return getattr(self, '__precision', Unset) is not Unset
 
-	@StateProperty(default=Unset, allowNone=False)
-	def unitSpacer(self) -> str:
-		if self.__unitSpacer is Unset and self.__isValid:
-			return self.__label.value['@unitSpacer']
-		return self.__unitSpacer
+	@StateProperty(default=LocationFlag.Horizontal, allowNone=False)
+	def splitDirection(self) -> LocationFlag:
+		return self.__splitDirection
 
-	@unitSpacer.setter
-	def unitSpacer(self, value: str):
-		self.__unitSpacer = value
+	@splitDirection.setter
+	def splitDirection(self, value: LocationFlag):
+		self.__splitDirection = value
 
-	@unitSpacer.condition
-	def unitSpacer(self) -> bool:
-		return getattr(self, '__unitSpacer', Unset) is not Unset
+	@splitDirection.decode
+	def splitDirection(self, value: str) -> LocationFlag:
+		return LocationFlag[value]
 
-	@StateProperty(default=DisplayPosition.Auto, allowNone=False, singleVal=True)
+	@cached_property
+	def titleSplitter(self) -> TitleValueSplitter | None:
+		return self.localGroup.splitter
+
+	@property
+	def titleSplitDirection(self) -> LocationFlag:
+		if (titleSplitter := getattr(self, 'titleSplitter', None)) is not None:
+			return titleSplitter.location
+		return LocationFlag.Horizontal
+
+	@property
 	def unitPosition(self) -> DisplayPosition:
 		if self.__isValid and self.hasUnit:
 			if self._unitPosition == DisplayPosition.Auto:
@@ -889,42 +875,10 @@ class MeasurementDisplayProperties(Stateful):
 	def _unitPosition(self, value: str) -> DisplayPosition:
 		return DisplayPosition[value]
 
-	@unitPosition.condition
-	def unitPosition(self) -> bool:
-		return getattr(self, '__unitPosition', Unset) is not Unset
-
-	@StateProperty(default=Unset, allowNone=False)
-	def suffix(self) -> str:
-		if self.__suffix is Unset and self.__isValid:
-			return self.__label.value['@suffix']
-		return self.__suffix
-
-	@suffix.setter
-	def suffix(self, value: str):
-		self.__suffix = value
-
-	@suffix.condition
-	def suffix(self) -> bool:
-		return getattr(self, '__suffix', Unset) is not Unset
-
-	@StateProperty(default=Unset, allowNone=False)
-	def decorator(self) -> str:
-		if self.__decorator is Unset and self.__isValid:
-			return self.__label.value['@decorator']
-		return self.__decorator
-
-	@decorator.setter
-	def decorator(self, value: str):
-		self.__decorator = value
-
-	@decorator.condition
-	def decorator(self) -> bool:
-		return getattr(self, '__decorator', Unset) is not Unset
-
 	@StateProperty(default=Unset, allowNone=False)
 	def shorten(self) -> bool:
 		if self.__shorten is Unset and self.__isValid:
-			return self.__label.value['@shorten']
+			return getattr(self.measurement, 'shorten', Unset)
 		return self.__shorten
 
 	@shorten.setter
@@ -933,38 +887,9 @@ class MeasurementDisplayProperties(Stateful):
 
 	@shorten.condition
 	def shorten(self) -> bool:
-		return getattr(self, '__shorten', Unset) is not Unset
+		return self.__shorten is not Unset
 
-	# ! This is broken
-	@StateProperty(default=Unset, allowNone=False)
-	def decimalSeparator(self) -> str:
-		# if self.__decimalSeparator is None and self.__isValid:
-		# 	return self.__label.value['@decimalSeparator']
-		return self.__decimalSeparator
-
-	@decimalSeparator.setter
-	def decimalSeparator(self, value: str):
-		self.__decimalSeparator = value
-
-	@decimalSeparator.condition
-	def decimalSeparator(self) -> bool:
-		return getattr(self, '__decimalSeparator', Unset) is not Unset
-
-	@StateProperty(default=Unset, allowNone=False)
-	def radixPoint(self) -> str:
-		# if self.__radixPoint is None and self.__isValid:
-		# 	return self.__label.value['@radixPoint']
-		return self.__radixPoint
-
-	@radixPoint.setter
-	def radixPoint(self, value: str):
-		self.__radixPoint = value
-
-	@radixPoint.condition
-	def radixPoint(self) -> bool:
-		return getattr(self, '__radixPoint', Unset) is not Unset
-
-	@StateProperty(key='unitSize', default=0.2, singleVal=True, allowNone=False)
+	@StateProperty(key='unitSize', default=Size.Height('20%'), singleVal=True, allowNone=False)
 	def valueUnitRatio(self) -> Size.Height:
 		if self.__isValid:
 			return self.__valueUnitRatio
@@ -981,6 +906,10 @@ class MeasurementDisplayProperties(Stateful):
 
 	@valueUnitRatio.decode
 	def valueUnitRatio(value: str | int | float) -> Size.Height:
+		return Size.Height(value)
+
+	@valueUnitRatio.encode
+	def valueUnitRatio(value: str) -> Size.Height:
 		return Size.Height(value)
 
 	@valueUnitRatio.condition
@@ -1083,7 +1012,7 @@ class MeasurementDisplayProperties(Stateful):
 			'maxLength':        self.__maxLength,
 			'precision':        self.__precision,
 			'unitSpacer':       self.__unitSpacer,
-			'unitPosition':     self.__unitPosition.value if self.__unitPosition is not None else None,
+			'unitPosition':     self._unitPosition.value if self._unitPosition is not None else None,
 			'suffix':           self.__suffix,
 			'decorator':        self.__decorator,
 			'shorten':          self.__shorten,
@@ -1107,41 +1036,48 @@ class UnitLabel(Label, tag=...):
 
 	__exclude__ = {'items', 'geometry', 'locked', 'frozen', 'movable', 'resizable', 'text'}
 
+	# Section UnitLabel
 	def __init__(self, parent: Panel,
-		reference: Label,
+		properties: Label,
 		alignment: Alignment = None,
 		filters: list[str] = None,
 		font: QFont = None,
 		*args, **kwargs):
-		self.reference = reference
+		self.displayProperties = properties
 		super().__init__(parent=parent, alignment=alignment, filters=filters, font=font, *args, **kwargs)
-		self.setResizable(False)
-		self.setMovable(False)
+		self.textBox.setTextAccessor(self.unitText)
 
-	@StateProperty
-	def text(self) -> str:
-		pass
+	def unitText(self) -> str:
+		value = self.localGroup.value
+		if isinstance(value, ObservationValue):
+			value = value.value
+		return getattr(value, 'unit', '')
 
-	@text.condition
-	def text(self, value: str):
-		return value != getattr(self.referenceValue, '@unit', Unset) << OrUnset >> getattr(self.referenceValue, 'unit', None)
-
-	@property
-	def referenceValue(self) -> Any:
-		return self.parent.value
+	# @property
+	# def marginRect(self) -> QRectF:
+	# 	return super().marginRect()
 
 	@property
 	def isEmpty(self):
 		return False
 
-	@cached_property
-	def textBox(self):
-		box = TextHelper(self, self.reference.textBox)
-		box.setParentItem(self)
-		return box
 
+class DisplayLabel(Display, MeasurementDisplayProperties):
+	"""
+  display:
+    unitSize: 0.9
+    valueLabel:
+      alignment: center
+      margins: 0%, 0%, 0%, 0%
+    unitLabel:
+      alignment: top
+      margins:
+        top: 0%
+        right: 10px
+        bottom: 0%
+        left: 0%
+	"""
 
-class DisplayLabel(Display):
 	deletable = False
 
 	_floatingOffset = Size.Height(5, absolute=True)
@@ -1158,15 +1094,18 @@ class DisplayLabel(Display):
 
 	# Section DisplayLabel
 	def __init__(self, *args, **kwargs):
-		self.text = "⋯"
+		self.displayProperties = self
 		super().__init__(*args, **kwargs)
 		self.displayType = DisplayType.Text
-
-		self.splitter = MeasurementUnitSplitter(surface=self, value=self.valueTextBox, unit=self.unitTextBox)
 		self.setFlag(QGraphicsItem.ItemIsSelectable, False)
 		self.setFlag(QGraphicsItem.ItemIsFocusable, False)
 		self.setAcceptDrops(False)
-		self.value = "⋯"
+
+	def _init_args_(self, *args, **kwargs) -> None:
+		# self._valueTextBox = Label(self)
+		# self._unitTextBox = UnitLabel(self, self._valueTextBox)
+		super()._init_args_(*args, **kwargs)
+		self.splitter = MeasurementUnitSplitter(surface=self, value=self.valueTextBox, unit=self.unitTextBox)
 
 	def setUnitPosition(self, value: DisplayPosition):
 		self.displayProperties.unitPosition = value
@@ -1214,11 +1153,14 @@ class DisplayLabel(Display):
 	def valueTextBox(self, value: Label):
 		self._valueTextBox = value
 
-	@valueTextBox.decode
-	def valueTextBox(self, value: dict) -> Label:
-		return Label(self, clickable=False, **value)
+	@valueTextBox.factory
+	def valueTextBox(self) -> ValueLabel:
+		label = DisplayLabel.ValueLabel(self)
+		label.textBox.setValueAccessor(lambda: self.parent.value)
+		label.textBox.setTextAccessor(lambda: self.displayProperties.text)
+		return label
 
-	@StateProperty(key='unit', allowNone=False, default=Stateful)
+	@StateProperty(key='unitLabel', allowNone=False, default=Stateful, dependancies={'geometry', 'value'})
 	def unitTextBox(self) -> UnitLabel:
 		return self._unitTextBox
 
@@ -1226,42 +1168,18 @@ class DisplayLabel(Display):
 	def unitTextBox(self, value: UnitLabel):
 		self._unitTextBox = value
 
-	@unitTextBox.decode
-	def unitTextBox(self, value: dict) -> UnitLabel:
-		return UnitLabel(self, self.valueTextBox, clickable=False, **value)
-
-	@StateProperty(unwrap=True, allowNone=False, default=Stateful)
-	def displayProperties(self) -> MeasurementDisplayProperties:
-		return self._displayProperties
-
-	@displayProperties.setter
-	def displayProperties(self, value: MeasurementDisplayProperties):
-		self._displayProperties = value
-
-	@displayProperties.decode
-	def displayProperties(self, value: dict | float | str) -> MeasurementDisplayProperties:
-		match value:
-			case float(value):
-				value = {'valueUnitRatio': value}
-			case str(value):
-				value = {'unitPosition': DisplayPosition[value]}
-			case _:
-				pass
-		return MeasurementDisplayProperties(self, **value)
+	@unitTextBox.factory
+	def unitTextBox(self) -> UnitLabel:
+		label = UnitLabel(self, self.valueTextBox)
+		return label
 
 	@property
 	def type(self):
 		return self.displayProperties.displayType
 
 	@property
-	def value(self):
-		return self.valueTextBox.textBox.value
-
-	@value.setter
-	def value(self, value):
-		self.valueTextBox.textBox.value = value
-		self.unitTextBox.textBox.refresh()
-		self.splitter.updateUnitDisplay()
+	def value(self) -> ObservationValue | None:
+		return self.parent.value
 
 	def mouseDoubleClickEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
 		mouseEvent.ignore()
