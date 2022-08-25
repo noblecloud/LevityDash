@@ -406,23 +406,32 @@ class EditableLabel(Label, tag='text'):
 		super(EditableLabel, self).delete()
 
 
-class TitleLabel(Label):
+class TitleLabel(NonInteractiveLabel):
 	deletable = False
 
-	__exclude__ = {..., 'geometry', 'locked', 'frozen', 'movable', 'resizable', 'text'}
+	__exclude__ = {'geometry', 'locked', 'frozen', 'movable', 'resizable'}
+	_manualValue: str | None = None
 
 	def __init__(self, *args, **kwargs):
 		kwargs['geometry'] = Geometry(surface=self, size=(1, 0.2), position=Position(0, 0), absolute=False, snapping=False)
 		super().__init__(*args, **kwargs)
-		self.setMovable(False)
-		self._manualValue = kwargs.get('text', None)
+		self.textBox._scaleType = ScaleType.auto
+
+	@StateProperty(default=DefaultGroup('⋯', '', None), sortOrder=0, dependencies={'geometry', 'margins'}, repr=True)
+	def text(self) -> str:
+		pass
+
+	@text.setter
+	def text(self, value: str):
+		self._manualValue = value
+		Label.text.fset(self, value)
+
+	@text.condition
+	def text(self):
+		return not self.allowDynamicUpdate()
 
 	def allowDynamicUpdate(self) -> bool:
-		return not self._manualValue
-
-	def setManualValue(self, value: str):
-		self._manualValue = value
-		self.text = value
+		return super().allowDynamicUpdate() and not self._manualValue
 
 	@property
 	def isEmpty(self) -> bool:
