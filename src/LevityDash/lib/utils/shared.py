@@ -68,12 +68,17 @@ class _Panel(QGraphicsRectItem):
 
 
 class ClosestMatchEnumMeta(EnumMeta):
+	_allMembersUnique: bool
+	_firstLetters: Set[str]
 
 	def __new__(metacls, cls, bases, classdict, **kwds):
 		enum_class = super().__new__(metacls, cls, bases, classdict, **kwds)
 		for k, v in metacls.__dict__.items():
 			if not k.startswith('_'):
 				setattr(enum_class, k, v)
+		uniqueLetters = {k[0].casefold() for k in enum_class.__members__.keys()}
+		setattr(enum_class, '_firstLetters', uniqueLetters)
+		setattr(enum_class, '_allMembersUnique', len(uniqueLetters) == len(enum_class.__members__))
 		return enum_class
 
 	def __getitem__(cls, name):
@@ -81,7 +86,33 @@ class ClosestMatchEnumMeta(EnumMeta):
 			if name not in cls.__members__:
 				name = name.title()
 				if name not in cls.__members__:
-					name = closestStringInList(name, list(cls.__members__.keys()))
+					firstLetter = name[0].casefold()
+					if cls._allMembersUnique and firstLetter in cls._firstLetters:
+						weightedName = next(v for k, v in cls.__members__.items() if k.startswith(name[0]))
+						if len(name) == 1 and name.casefold() == weightedName.name[0].casefold():
+							return weightedName
+						weightedName = weightedName.name
+					else:
+						weightedName = None
+
+					# Truncate the member names to the length of the shortest member name
+					# This prevents bad matches where short names are scored lower than long names
+					# even when the short name is more similar to the long name
+					maxNameLength = min(len(k) for k in cls.__members__.keys())
+					truncatedNames = {i[:maxNameLength] for i in list(cls.__members__.keys())}
+					if len(truncatedNames) != len(cls.__members__):
+						# Unless it results in collisions, then pad all the names instead
+						minNameLength = max(len(k) for k in cls.__members__.keys())
+						truncatedNames = {f'{i:^{minNameLength}}' for i in list(cls.__members__.keys())}
+					truncatedNames = list(truncatedNames)
+					guessedMame = closestStringInList(name, truncatedNames).strip()
+					if weightedName is not None and weightedName != name:
+						weightedNameScore = levenshtein(name, weightedName)
+						guessedNameScore = levenshtein(name, guessedMame)
+						ratio = guessedNameScore/weightedNameScore
+						if ratio < 0.8:
+							return cls.__members__[weightedName]
+					return cls.__members__[guessedMame]
 			return cls.__members__[name]
 
 		if isinstance(name, int):
