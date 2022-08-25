@@ -1,10 +1,9 @@
 from functools import cached_property
 
-from PySide2.QtWidgets import QGraphicsSceneMouseEvent
 from PySide2.QtCore import QObject, QPointF, Qt, Signal
 from PySide2.QtGui import QPainterPath
 
-from LevityDash.lib.utils.geometry import Axis, LocationFlag
+from LevityDash.lib.ui.Geometry import Axis, LocationFlag
 
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles import Handle, HandleGroup
 

@@ -1,9 +1,8 @@
 from PySide2.QtCore import QObject, QRectF, Signal
-from PySide2.QtGui import QTransform
 from PySide2.QtWidgets import QGraphicsItem, QGraphicsScene
 
 from LevityDash.lib.utils.shared import clamp, clearCacheAttr
-from LevityDash.lib.utils.geometry import Axis, LocationFlag
+from LevityDash.lib.ui.Geometry import Axis, LocationFlag
 
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Resize import ResizeHandle, ResizeHandles
 
@@ -40,7 +39,7 @@ class MarginHandle(ResizeHandle):
 
 	@property
 	def surfaceRect(self) -> QRectF:
-		return self.surface.contentsRect()
+		return getattr(self.surface, 'contentsRect', self.surface.rect())
 
 	def surfaceBoundingRect(self) -> QRectF:
 		return self.surface.geometry.absoluteRect()
@@ -89,7 +88,7 @@ class MarginHandle(ResizeHandle):
 	def itemChange(self, change, value):
 		if change == QGraphicsItem.ItemPositionChange:
 			marginRect = self.marginRect()
-			surfaceRect = self.surface.contentsRect()
+			surfaceRect = getattr(self.surface, 'contentsRect', self.surface.rect())
 			y = value.y()
 			offset = self.parentItem().offset
 			if self.location.isHorizontal:
