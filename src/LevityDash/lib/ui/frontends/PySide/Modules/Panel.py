@@ -874,6 +874,30 @@ class Panel(_Panel, Stateful, tag='group'):
 		# drag.setParent(child)
 		drag.setMimeData(info)
 
+	def groupItems(self):
+		items = self.scene().selectedItems()
+		parent = self.findCommonAncestor(*items)
+
+		# combine all the rects
+		rect = reduce(or_, (item.mapRectToScene(item.rect()) for item in items))
+		rect = parent.mapRectFromScene(rect)
+		newParent = Panel(parent=parent)
+		newParent.geometry.setGeometry(rect)
+		newRects = [i.mapRectToItem(newParent, i.rect()) for i in items]
+		self.scene().clearSelection()
+		for item, rect in zip(items, newRects):
+			item.setParentItem(newParent)
+			item.geometry.setGeometry(rect)
+			item.update()
+
+		newParent.setFocus(Qt.MouseFocusReason)
+
+	def findCommonAncestor(self, *items) -> 'Panel':
+		item = self.parentItem() or self.scene().base()
+		while not all(item.isAncestorOf(i) for i in items):
+			item = item.parentItem() or item.scene().base()
+		return item
+
 	def focusInEvent(self, event: QFocusEvent) -> None:
 		self.refreshHandles()
 		super(Panel, self).focusInEvent(event)
