@@ -161,15 +161,6 @@ class LocationFlag(IntFlag, metaclass=LocationEnumMeta):
 
 	@cached_property
 	def action(self) -> Callable:
-		# left = lambda rect: QPointF(rect.left(), rect.center().y())
-		# right = lambda rect: QPointF(rect.right(), rect.center().y())
-		# top = lambda rect: QPointF(rect.center().x(), rect.top())
-		# bottom = lambda rect: QPointF(rect.center().x(), rect.bottom())
-		# center = lambda rect: rect.center()
-		# topLeft = lambda rect: QPointF(rect.topLeft())
-		# topRight = lambda rect: QPointF(rect.topRight())
-		# bottomLeft = lambda rect: QPointF(rect.bottomLeft())
-		# bottomRight = lambda rect: QPointF(rect.bottomRight())
 
 		def left(rect):
 			return QPointF(rect.left(), rect.center().y())
@@ -1970,25 +1961,24 @@ class Geometry:
 	_aspectRatio: Optional[float]
 	_fillParent: bool
 
-	def __init__(self, *_, **kwargs):
+	def __init__(self, /, **kwargs):
 		"""
-		:param surface: Parent surface
+		:key surface: Parent surface
 		:type surface: Panel
-		:param gridItem: GridItem to use for positioning
-		:type gridItem: GridItem
-		:param size: GSize of the geometry
-		:type size: GSize
-		:param position: GPosition of the geometry
-		:type position: GPosition
-		:param rect: Rect to use for positioning and sizing
+
+		:key size: Size of the geometry
+		:type size: Size
+		:key position: Position of the geometry
+		:type position: Position
+
+		:key rect: Rect to use for positioning and sizing
 		:type rect: QRectF
-		:param absolute: Absolute positioning enabled
+
+		:key absolute: Absolute positioning enabled
 		:type absolute: bool
-		:param relative: Relative positioning enabled
+		:key relative: Relative positioning enabled
 		:type relative: bool
 		"""
-		if _:
-			raise TypeError("Geometry takes no positional arguments")
 		self.surface = kwargs.get('surface', None)
 		self._aspectRatio = kwargs.get('aspectRatio', None)
 		self.signals = GeometrySignals()
@@ -2060,19 +2050,6 @@ class Geometry:
 			case _:
 				return Size(1, 1, absolute=False)
 
-	# if size is None:
-	# 	if 'width' in kwargs and 'height' in kwargs:
-	# 		size = (kwargs['width'], kwargs['height'])
-	# 	else:
-	# 		size = surface.rect().size()
-	# 		if prod(size.toTuple()) == 0:
-	# 			size = (100, 100)
-	# 			absolute = True
-	# 	size = Size(size, absolute=absolute)
-
-	# self.signals.moved.connect(self.repositionSurface)
-	# self.signals.resized.connect(self.resizeSurface)
-
 	@classmethod
 	def validate(cls, item: dict) -> bool:
 		"""
@@ -2097,14 +2074,13 @@ class Geometry:
 		return size and position
 
 	@classmethod
-	def representer(cls, dumper, data):
+	def representer(cls, dumper: 'StatefulDumper', data: 'Geometry') -> 'MappingNode':
 		value = {
 			'width':  data.size.width,
 			'height': data.size.height,
 			'x':      data.position.x,
 			'y':      data.position.y
 		}
-		# value =
 		if data.relativeWidth == 1 and data.relativeHeight == 1 and data.relativeX == 0 and data.relativeY == 0:
 			return dumper.represent_dict({'fillParent': True})
 		return dumper.represent_dict({k: str(v) for k, v in value.items()})
@@ -2557,16 +2533,14 @@ class Geometry:
 			case _:
 				return False
 
-	def __dict__(self):
-		return {
+	def __iter__(self):
+		return iter({
 			**self.position,
 			**self.size
-		}
+		}.items())
 
 	def __repr__(self):
 		return f'<{self.__class__.__name__}(position=({self.position}), size=({self.size}) for {type(self.surface).__name__})>'
-
-	# return f'<{self.__class__.__name__}(position=({self.position}), size=({self.size}) zPosition={round(self.surface.zValue(), 4)})>'
 
 	def addSubGeometry(self, geometry: 'Geometry'):
 		self.subGeometries.append(geometry)
@@ -2620,7 +2594,6 @@ class Geometry:
 	def state(self, value: dict):
 		self.size = self.__parseSize(value)
 		self.position = self.__parsePosition(value)
-		# self.absolute = value.get('absolute', self.position.absolute and self.size.absolute)
 		self.updateSurface()
 
 	def scoreSimilarity(self, other: 'Geometry') -> float:
