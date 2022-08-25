@@ -331,6 +331,11 @@ class Direction(int, Enum, metaclass=ClosestMatchEnumMeta):
 			return DimensionType.x
 
 
+@runtime_checkable
+class SupportsDirection(Protocol):
+	direction: Direction
+
+
 class AlignmentFlag(IntFlag, metaclass=LocationEnumMeta):
 	Auto = 0
 	Bottom = auto()
@@ -1766,11 +1771,6 @@ class Margins(MultiDimension, dimensions=('left', 'top', 'right', 'bottom'), sep
 		return Margins(_Panel(), 0.0, 0.0, 0.0, 0.0)
 
 
-@runtime_checkable
-class SupportsDirection(Protocol):
-	direction: Direction
-
-
 class Padding(Margins):
 	surface: SupportsDirection
 
@@ -2084,6 +2084,21 @@ class Geometry:
 		if data.relativeWidth == 1 and data.relativeHeight == 1 and data.relativeX == 0 and data.relativeY == 0:
 			return dumper.represent_dict({'fillParent': True})
 		return dumper.represent_dict({k: str(v) for k, v in value.items()})
+
+	def toDict(self) -> dict:
+		"""
+		Returns the geometry as a dictionary.
+
+		:return: Geometry as a dictionary
+		:rtype: dict
+		"""
+
+		return {
+			'width':  self.size.width,
+			'height': self.size.height,
+			'x':      self.position.x,
+			'y':      self.position.y
+		}
 
 	@property
 	def surface(self):
@@ -2679,3 +2694,341 @@ class StaticGeometry(Geometry):
 	@property
 	def absoluteY(self):
 		return self.position.y.value
+
+
+_Position = Union[QPoint, QPointF, Tuple[float, float], Position]
+_Size = TypeVar('_Size', QSize, QSizeF, Tuple[float, float], Size)
+_Rect = Union[QRect, QRectF, Tuple[float, float, float, float]]
+SimilarEdges = namedtuple('SimilarEdges', 'edge, otherEdge')
+Edge = namedtuple('Edge', 'parent, location, pix')
+
+
+class ResizeRect(QRectF):
+
+	def __normalizeInput(self, other: Union[QSize, QSizeF, QPoint, QPointF, QRect, QRectF, tuple, MultiDimension]) -> tuple[float, float]:
+		if isinstance(other, (QSize, QSizeF, QPoint, QPointF)):
+			other = other.toTuple()
+		elif isinstance(other, (QRect, QRectF)):
+			if any(other.topLeft().toTuple()):
+				other.translate(*(other.topLeft()*-1).toPoint().toTuple())
+			other = other.size().toTuple()
+		elif isinstance(other, Iterable):
+			other = tuple(other)
+		elif isinstance(other, MultiDimension):
+			other = tuple(other)
+		return other[:2]
+
+	def __add__(self, other: QPointF) -> 'ResizeRect':
+		other = self.__normalizeInput(other)
+		return ResizeRect(0, 0, self.width() + other[0], self.height() + other[1])
+
+	def __iadd__(self, other: QPointF) -> 'ResizeRect':
+		other = self.__normalizeInput(other)
+		self.setWidth(self.width() + other[0])
+		self.setHeight(self.height() + other[1])
+		return self
+
+	def __sub__(self, other: QPointF) -> 'ResizeRect':
+		other = self.__normalizeInput(other)
+		return ResizeRect(self.x(), self.y(), self.width() - other[0], self.height() - other[1])
+
+	def __isub__(self, other: QPointF) -> 'ResizeRect':
+		other = self.__normalizeInput(other)
+		self.setWidth(self.width() - other[0])
+		self.setHeight(self.height() - other[1])
+		return self
+
+	def __mul__(self, other: QPointF) -> 'ResizeRect':
+		other = self.__normalizeInput(other)
+		return ResizeRect(self.x(), self.y(), self.width()*other[0], self.height()*other[1])
+
+	def __imul__(self, other: QPointF) -> 'ResizeRect':
+		other = self.__normalizeInput(other)
+		self.setWidth(self.width()*other[0])
+		self.setHeight(self.height()*other[1])
+		return self
+
+	def __truediv__(self, other: QPointF) -> 'ResizeRect':
+		other = self.__normalizeInput(other)
+		return ResizeRect(self.x(), self.y(), self.width()/other[0], self.height()/other[1])
+
+	def __itruediv__(self, other: QPointF) -> 'ResizeRect':
+		other = self.__normalizeInput(other)
+		self.setWidth(self.width()/other[0])
+		self.setHeight(self.height()/other[1])
+		return self
+
+	def __floordiv__(self, other: QPointF) -> 'ResizeRect':
+		other = self.__normalizeInput(other)
+		return ResizeRect(self.x(), self.y(), self.width()//other[0], self.height()//other[1])
+
+	def __mod__(self, other: QPointF) -> 'ResizeRect':
+		other = self.__normalizeInput(other)
+		return ResizeRect(self.x(), self.y(), self.width()%other[0], self.height()%other[1])
+
+	def __divmod__(self, other: QPointF) -> 'ResizeRect':
+		other = self.__normalizeInput(other)
+		return ResizeRect(self.x(), self.y(), self.width()//other[0], self.height()//other[1])
+
+	def __pow__(self, other: QPointF) -> 'ResizeRect':
+		other = self.__normalizeInput(other)
+		return ResizeRect(self.x(), self.y(), self.width() ** other[0], self.height() ** other[1])
+
+	def __lt__(self, other):
+		other = self.__normalizeInput(other)
+		return self.width() < other[0] and self.height() < other[1]
+
+	def __le__(self, other):
+		other = self.__normalizeInput(other)
+		return self.width() <= other[0] and self.height() <= other[1]
+
+	def __gt__(self, other):
+		other = self.__normalizeInput(other)
+		return self.width() > other[0] or self.height() > other[1]
+
+	def __ge__(self, other):
+		other = self.__normalizeInput(other)
+		return self.width() >= other[0] or self.height() >= other[1]
+
+	def __eq__(self, other):
+		other = self.__normalizeInput(other)
+		return self.width() == other[0] and self.height() == other[1]
+
+	def __ne__(self, other):
+		other = self.__normalizeInput(other)
+		return self.width() != other[0] and self.height() != other[1]
+
+	def changeWidth(self, other):
+		other = self.__normalizeInput(other)
+		self.setWidth(self.width() + other[0])
+
+	def changeHeight(self, other):
+		other = self.__normalizeInput(other)
+		self.setHeight(self.height() + other[1])
+
+	def changeSize(self, other):
+		other = self.__normalizeInput(other)
+		self.setWidth(self.width() + other[0])
+		self.setHeight(self.height() + other[1])
+
+	def setLeft(self, other: float):
+		if self.right() - other < 20:
+			return
+		super(ResizeRect, self).setLeft(other)
+
+	def setRight(self, other: float):
+		if other - self.left() < 20:
+			return
+		super(ResizeRect, self).setRight(other)
+
+	def setTop(self, other: float):
+		if self.bottom() - other < 20:
+			return
+		super(ResizeRect, self).setTop(other)
+
+	def setBottom(self, other: float):
+		if other - self.top() < 20:
+			return
+		super(ResizeRect, self).setBottom(other)
+
+
+SizeInput = SupportsFloat | str
+SizeOutput = Length | Size.Width | Size.Height | Position.X | Position.Y
+SizeParserSignature = Callable[[SizeInput, SizeOutput, ...], SizeOutput]
+
+
+def parseSize(
+	value: SizeInput,
+	default: SizeOutput,
+	/,
+	defaultCaseHandler: SizeParserSignature | None = None,
+	dimension: DimensionType = DimensionType.height) -> SizeOutput:
+	"""
+	Converts a string size value to a real size type
+	:param value: value to convert
+	:type value: str | int | float
+	:param default: the value to use if unable to convert
+	:type default: SizeOutput
+	:param defaultCaseHandler: function to call instead of returning the default value
+	:type defaultCaseHandler: Callable[[SizeInput], SizeOutput]
+	:param dimension: Dimension of the size
+	:type dimension: DimensionType
+	:return: Parsed value
+	:rtype: SizeOutput
+	"""
+	match value:
+		case str(value):
+			unit = ''.join(re.findall(r'[^\d\.\,]+', value)).strip(' ')
+			match unit:
+				case 'cm':
+					value = Length.Centimeter(float(value.strip(unit)))
+					value.precision = 3
+					value.max = 10
+					return value
+				case 'mm':
+					value = Length.Millimeter(float(value.strip(unit)))
+					value.precision = 3
+					value.max = 10
+					return value
+				case 'in':
+					value = Length.Inch(float(value.strip(unit)))
+					value.precision = 3
+					value.max = 10
+					return value
+				case 'px':
+					if dimension == DimensionType.height:
+						return Size.Height(float(value.strip(unit)), absolute=True)
+					return Size.Width(float(value.strip(unit)), absolute=True)
+				case '%':
+					numericValue = float(value.strip(unit))/100
+					if dimension == DimensionType.height:
+						return Size.Height(numericValue, relative=True)
+					return Size.Width(numericValue, relative=True)
+				case _ if defaultCaseHandler is None:
+					try:
+						if dimension == DimensionType.height:
+							return Size.Height(float(value), absolute=True)
+						return Size.Width(float(value), absolute=True)
+					except Exception as e:
+						log.error(e)
+						return default
+				case _:
+					return default
+		case float(value) | int(value):
+			if value <= 1:
+				if dimension == DimensionType.height:
+					return Size.Height(value, relative=True)
+				return Size.Width(value, relative=True)
+			if dimension == DimensionType.height:
+				return Size.Height(value, absolute=True)
+			return Size.Width(value, absolute=True)
+		case _:
+			log.error(f'{value} is not a valid value for labelHeight.  Using default value of {default} for now.')
+			return default
+
+
+def size_px(value: SizeOutput, relativeTo: 'Geometry', dimension: DimensionType = DimensionType.height) -> float | int:
+	if isinstance(value, Dimension):
+		if value.absolute:
+			value = float(value)
+		else:
+			if isinstance(relativeTo, Geometry):
+				value = value.toAbsoluteF(relativeTo.absoluteHeight if dimension == DimensionType.height else relativeTo.absoluteWidth)
+			elif isinstance(relativeTo, Number):
+				value = value.toAbsoluteF(relativeTo)
+			else:
+				raise TypeError(f'{relativeTo} is not a valid type for relativeTo')
+	elif isinstance(value, Length):
+		dpi = relativeTo.surface.scene().view.screen().physicalDotsPerInchY()
+		value = float(value.inch)*dpi
+	return value
+
+
+def parseWidth(value: SizeInput, default: SizeOutput, /, defaultCaseHandler: SizeParserSignature | None = None) -> SizeOutput:
+	return parseSize(value, default, defaultCaseHandler, dimension=DimensionType.width)
+
+
+def parseHeight(value: SizeInput, default: SizeOutput, /, defaultCaseHandler: SizeParserSignature | None = None) -> SizeOutput:
+	return parseSize(value, default, defaultCaseHandler)
+
+
+def size_float(value: SizeOutput, relativeTo: 'Geometry', dimension: DimensionType = DimensionType.height) -> float:
+	"""
+	Returns the relative value of a size from an absolute value and a geometry
+	:param value: Absolute size to convert to relative
+	:type value: SizeOutput
+	:param relativeTo: Geometry to convert the size to relative to
+	:type relativeTo: Geometry
+	:param dimension: Dimension of the size
+	:type dimension: DimensionType
+	:return: Relative size
+	:rtype: float
+	"""
+	if isinstance(value, Dimension):
+		if isinstance(value, Length):
+			dpi = relativeTo.surface.scene().view.screen().physicalDotsPerInchY()
+			value = Dimension(float(value.inch)*dpi, absolute=True)
+		if value.relative:
+			value = float(value)
+		else:
+			size_ = relativeTo.absoluteHeight if dimension == DimensionType.height else relativeTo.absoluteWidth
+			value = float(value.toRelative(float(size_)))
+	return value
+
+
+def offsetAngle(point: tuple, angle: Union[float, int], offset: Union[float, int], radians: bool = False):
+	'''
+	:param point: tuple of x,y coordinates
+	:type point: tuple[int, int]
+	:param angle: angle in radians
+	:type angle: float, int
+	:param offset: distance to offset
+	:type offset: float, int
+	:return: x and y coordinates of point rotated by theta
+	:rtype: tuple
+	'''
+	if not radians:
+		angle = np.radians(angle)
+	return (point[0] + offset*np.cos(angle), point[1] + offset*np.sin(angle))
+
+
+def angleBetweenPoints(pointA: Union[QPointF, QPoint, tuple], pointB: Union[QPointF, QPoint, tuple] = None, degrees: bool = True) -> float:
+	if isinstance(pointA, (QPointF, QPoint)):
+		pointA = pointA.toTuple()
+	if isinstance(pointB, (QPointF, QPoint)):
+		pointB = pointB.toTuple()
+	if pointB is None:
+		pointB = (0, 0)
+
+	xDiff = pointB[0] - pointA[0]
+	yDiff = pointB[1] - pointA[1]
+	if degrees:
+		return mathDegrees(atan2(yDiff, xDiff))
+	return atan2(yDiff, xDiff)
+
+
+def relativePosition(item: 'Panel', relativeTo: QRectF = None) -> LocationFlag:
+	if isinstance(item, QGraphicsItem):
+		center = item.sceneRect().center()
+	elif isinstance(item, QPointF):
+		center = item
+	if relativeTo is None and isinstance(item, QGraphicsItem):
+		relativeTo = item.scene().sceneRect().center()
+	elif isinstance(relativeTo, QPointF):
+		pass
+	if center.x() < relativeTo.x():
+		x = LocationFlag.Left
+	else:
+		x = LocationFlag.Right
+	if center.y() < relativeTo.y():
+		y = LocationFlag.Top
+	else:
+		y = LocationFlag.Bottom
+	return x | y
+
+
+def polygon_area(path: Union[QPolygonF, QPolygon, QPainterPath, list, tuple]) -> float:
+	if isinstance(path, (QPolygonF, QPolygon)):
+		path = path.toList()
+	elif isinstance(path, QPainterPath):
+		path.closeSubpath()
+		path = path.toFillPolygon().toList()
+	if len(path) < 3:
+		return 0
+	x = [p.x() for p in path]
+	y = [p.y() for p in path]
+
+	"""https://stackoverflow.com/a/49129646/2975046"""
+	correction = x[-1]*y[0] - y[-1]*x[0]
+	main_area = np.dot(x[:-1], y[1:]) - np.dot(y[:-1], x[1:])
+	return 0.5*np.abs(main_area + correction)
+
+
+@runtime_checkable
+class RelativeFloat(Protocol):
+	relative: bool = True
+
+
+@runtime_checkable
+class AbsoluteFloat(Protocol):
+	absolute: bool = True
