@@ -917,8 +917,14 @@ class StateProperty(property):
 
 	@cached_property
 	def isStatefulReference(self) -> bool:
+		if self.__options.get("link", False):
+			return True
+		if (d := self.__options.get("default", None)) and isinstance(d, type) and issubclass(d, Stateful):
+			return True
 		try:
-			return self._checkReturnType(Stateful, issubclass)
+			if repr(self) == '@Stateful.shared':
+				return True
+			return self._varifyReturnType(Stateful)
 		except TypeError:
 			return False
 
@@ -1127,79 +1133,6 @@ class StateProperty(property):
 		self.__set__(owner, state, afterPool=afterPool)
 
 	@staticmethod
-	def setItemState(owner: "Stateful", state: Mapping[str, Any], *args, **kwargs):
-		if isinstance(state, Stateful):
-			state = state.state
-
-		if not isinstance(state, Mapping):
-			acceptedSingleValueTypes = tuple(
-				i for j in (p.returns for p in owner.statefulItems.values() if p.singleVal) for i in j
-			)
-			if isinstance(state, acceptedSingleValueTypes):
-				# try:
-				item = [
-					v
-					for v in owner.statefulItems.values()
-					if v.actions & {"set"} and v.singleVal and isinstance(state, v.returns)
-				].pop()
-				item.setState(owner, state, afterPool=kwargs.get("afterPool", []))
-				return owner
-			# except Exception as e:
-			# 	log.exception(e)
-			# 	log.error(f"Unable to set state for {state}")
-			# 	return
-			raise TypeError(f"Unable to set state for {owner} with {state}")
-
-		items = {
-			k: v
-			for k, v in owner.statefulItems.items()
-			if bool(v.actions & {"set"}) and (v.key in state or v.name in state or v.unwraps or v.singleVal)
-		}
-		getOnlyItems = {
-			v.key
-			for v in owner.statefulItems.values()
-			if "set" not in v.actions and not v._checkReturnType(Stateful, issubclass)
-		}
-
-		if isinstance(state, dict) and getOnlyItems:
-			for i in getOnlyItems & set(state.keys()):
-				state.pop(i, None)
-
-		afterPool = []
-		match state:
-			case dict():
-				unwraps = []
-				setKeys = set()
-				for prop in items.values():
-					if prop.unwraps:
-						unwraps.append(prop)
-						if len(state) == 1:
-							break
-						continue
-					propKey = prop.key
-					if propKey not in state:
-						continue
-					else:
-						prop.setState(owner, state.pop(propKey), afterPool=afterPool)
-					setKeys.add(propKey)
-				if len(unwraps) == 1:
-					prop = unwraps[0]
-					prop.setState(owner, state)
-				elif len(unwraps) > 1:
-					raise ValueError("Multiple unwrapped properties found", unwraps, state)
-
-			case list():
-				if prop := [i for i in items.values() if i.options.get("singleVal", False) == "force"]:
-					prop[0].setState(owner, state)
-
-		afterPool: List[Tuple[Callable, Stateful]]
-		if afterPool:
-			log.verbose(f"Executing {len(afterPool)} items in afterPool for {owner.__class__.__name__}", verbosity=5)
-			funcs = [partial(f, owner) for f, _ in afterPool]
-			for f in funcs:
-				f()
-
-		return
 
 	def setDefault(self, owner):
 		if default := self.default(owner) is None:
@@ -1587,8 +1520,16 @@ class StatefulMetaclass(QObjectType, type):
 		return dict(sorted(self.__state_items__.items(), key=lambda x: x[1].setOrder))
 
 	@property
-	def annotations(self):
-		return {k: v.annotations for k, v in self.__state_items__.items()}
+	def statefulKeys(self) -> Set[str]:
+		return set(i.key for i in self.__state_items__.values())
+
+	@property
+	def singleStatefulItems(cls) -> Dict[str, StateProperty]:
+		return {k: v for k, v in cls.statefulItems.items() if v.singleVal}
+
+	@property
+	def singleStatefulItemTypes(cls) -> Tuple[Type, ...]:
+		return tuple(i for j in (p.returns for p in cls.statefulItems.values() if p.singleVal) for i in j)
 
 
 # Section Stateful
@@ -1599,8 +1540,11 @@ class Stateful(metaclass=StatefulMetaclass):
 	__tag__: ClassVar[str] = "Stateful"
 	_set_state_items_: set
 
-	def __init__(self, parent: Any, *args, **kwargs):
-		pass
+	statefulItems = StatefulMetaclass.statefulItems
+	statefulKeys = StatefulMetaclass.statefulKeys
+
+	statefulParent: "Stateful"
+	__statefulParent = None
 
 	def _afterSetState(self):
 		pass
@@ -1610,14 +1554,16 @@ class Stateful(metaclass=StatefulMetaclass):
 			items = [i for i in self.statefulItems.values() if i.key in other or i.name in other]
 			for item in items:
 				if not item.isStatefulReference:
-					key, ownValue = item.getState(self, False)
+					key, ownValue = item.getState(self, True)
+					if key == 'shared':
+						key, ownValue = item.getState(self, True)
 					if key != "_":
 						otherValue = other.get(item.name, None)
 						if not ownValue == otherValue:
 							return False
 				else:
 					ownValue = item.fget(self)
-					otherValue = other.get(item.name, UnsetDefault)
+					otherValue = other.get(item.name if item.name in other else item.key, UnsetDefault)
 					if not ownValue.testDefault(otherValue):
 						return False
 			return True
@@ -1646,6 +1592,57 @@ class Stateful(metaclass=StatefulMetaclass):
 				return ownState == default
 			case _:
 				return ownState in defaultSingles
+
+	@property
+	def statefulParent(self) -> 'Stateful':
+		return self.__statefulParent
+
+	@statefulParent.setter
+	def statefulParent(self, value):
+		self.__statefulParent = value
+
+	# Section .shared
+	@StateProperty(key="shared", default=DeepChainMap(), sortOrder=0, repr=False)
+	def shared(self) -> DeepChainMap:
+		shared = getattr(self, "_shared", None)
+		if shared is None:
+			parent = self.statefulParent
+			if parent is None:
+				self._shared = shared = DeepChainMap(origin=self)
+			else:
+				parentShared = getattr(parent, 'shared', None)
+				ownKeys = set(self.statefulItems) - {'shared'}
+				if (key := getattr(self, '__state_key__', None)) is not None and key.key in parentShared:
+					localShared = parentShared[key.key]
+				else:
+					localShared = {}
+
+				localShared.update({k: v for k, v in parentShared.items() if k in ownKeys})
+				maps = []
+				if localShared:
+					maps.append(localShared)
+				if parentShared:
+					maps.append(parentShared)
+				self._shared = shared = DeepChainMap(*maps, origin=self)
+		return shared
+
+	@shared.setter
+	def shared(self, value: dict):
+		if value.pop('~clear', False):
+			self._shared = DeepChainMap()
+		self.shared.update(value)
+
+	@shared.condition(method={'get'})
+	def shared(self, value: DeepChainMap):
+		return len(value.originMap) > 0
+
+	@shared.encode
+	def shared(self, value: DeepChainMap) -> dict:
+		return value.originMap
+
+	@property
+	def ownShared(self) -> dict:
+		return recursiveRemove(dict(self._shared.originMap.items()), self._shared_values)
 
 	# Section .setItemState
 	def setItemState(self, state: Mapping[str, Any] | List, *args, **kwargs):
@@ -1829,13 +1826,52 @@ class Stateful(metaclass=StatefulMetaclass):
 
 	@property
 	def state(self) -> Dict[str, Any]:
-		return StateProperty.getItemState(self)
+		state = self.getItemState()
+		return state
+
+	def encodedState(self, exclude: Set[str] = None, deepExclude: bool | Set[str] = False) -> Dict[str, str | int | float | bool | None]:
+		exclude = exclude or set()
+		state = self.getItemState(exclude=exclude)
+		tag = self.__tag__
+		match deepExclude:
+			case bool() if deepExclude:
+				deepExclude = exclude
+			case str():
+				deepExclude = {deepExclude}
+			case _:
+				deepExclude = None
+		match state:
+			case dict():
+				if tag is not ... and tag != 'Stateful' and isinstance(state, Mapping):
+					state = {'type': tag, **state}
+		state = {
+			k: v.encodedState(exclude=deepExclude, deepExclude=deepExclude) if isinstance(v, Stateful) else v
+			for k, v in state.items()
+		}
+		return state
+
+	def encodedYAMLState(self, exclude: Set[str] = None, sort: bool = False) -> dict:
+		exclude = exclude or set()
+		with TemporaryFile(mode="w+", encoding='utf-8') as f:
+			try:
+				state = self.getItemState(exclude=exclude)
+				yaml.dump(state, f, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True)
+				f.seek(0)
+				loader = type(self).__loader__(f.read())
+				if sort:
+					return sortDict(loader.get_data())
+				return loader.get_data()
+			except Exception as e:
+				log.exception(e)
+				raise e
 
 	@state.setter
 	def state(self, state: Dict[str, Any]) -> None:
 		if (tag := getattr(type(self), "__tag__", ...)) is not ... and isinstance(state, dict):
 			state.pop("type", None)
-		StateProperty.setItemState(self, state)
+		if isinstance(state, dict) and (shared := state.pop("shared", None)) is not None:
+			self.shared = shared
+		self.setItemState(state)
 		self._afterSetState()
 
 	@classmethod
