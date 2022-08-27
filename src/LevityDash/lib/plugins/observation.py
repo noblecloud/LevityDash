@@ -1,4 +1,8 @@
 from asyncio import Lock, gather, iscoroutine, get_running_loop
+from collections.abc import Generator
+from numbers import Number
+
+from itertools import groupby
 from types import coroutine
 
 from builtins import isinstance
@@ -14,10 +18,9 @@ from abc import ABC, ABCMeta, abstractmethod
 from datetime import datetime, timedelta, timezone as _timezones, tzinfo
 from functools import cached_property, lru_cache, partial
 from typing import (Any, Callable, ClassVar, Hashable, Iterable, List, Mapping, Optional, OrderedDict, Set, Tuple,
-                    Type, Union, SupportsAbs, TYPE_CHECKING, Coroutine)
+                    Type, Union, SupportsAbs, TYPE_CHECKING, Coroutine, Sequence, Iterator, SupportsFloat)
 
 import numpy as np
-from qasync import QThreadExecutor
 
 import WeatherUnits as wu
 from dateutil.parser import parse
@@ -114,17 +117,10 @@ class PublishingInfo:
 	keys: Iterable
 
 
+# TODO: Change this to a Protocol
 class TimeAwareValue(ABC):
 	timestamp: datetime
 	value: Any
-
-	def __instancecheck__(self, instance):
-		timestamp = getattr(instance, 'timestamp', None)
-		value = getattr(instance, 'value', None)
-		return timestamp is not None and value is not None
-
-
-TimeAwareValue.register(wu.Measurement)
 
 
 class ArchivableValue(Archivable, TimeAwareValue, ABC):
@@ -226,9 +222,7 @@ class ObservationValue(TimeAwareValue):
 			if localized := getattr(value, 'localize', None):
 				value = localized
 			if not isinstance(self, ObservationTimestamp):
-				if isinstance(value, datetime):
-					value = wu.Time.Second((value - Now()).total_seconds()).autoAny
-				elif isinstance(value, timedelta):
+				if isinstance(value, timedelta):
 					value = wu.Time.Second(value.total_seconds()).autoAny
 			self.__value = value
 		return self.__value
@@ -349,7 +343,6 @@ class ObservationValue(TimeAwareValue):
 
 	def __iadd__(self, other):
 		return ObservationValueResult(self, other)
-
 
 @Archived.register
 class ArchivedObservationValue(ObservationValue):
@@ -638,14 +631,21 @@ class TimeSeriesItem(TimeAwareValue):
 		return 0
 
 	@classmethod
-	def average(cls, *items: 'TimeSeriesItem') -> 'TimeSeriesItem':
+	def average(cls, *items: Union['TimeSeriesItem', Generator]) -> 'TimeSeriesItem':
+		if len(items) == 1:
+			if isinstance(items[0], Generator | Iterator):
+				items = list(items[0])
+			elif isinstance(items[0], TimeSeriesItem):
+				return items[0]
+			elif isinstance(items[0], Iterable):
+				items = items[0]
 		valueCls = mostCommonClass(item.value for item in items)
 		if valueCls is str:
 			value = mostFrequentValue([str(item) for item in items])
 			times = [item.timestamp.timestamp() for item in items if str(item) == value]
 		else:
 			values = [item.value for item in items]
-			value = sum(values)/len(values)
+			value = float(sum(values))/len(values)
 			times = [item.timestamp.timestamp() for item in items]
 		timestamp = datetime.fromtimestamp(sum(times)/len(times)).astimezone(_timezones.utc).astimezone(tz=LOCAL_TIMEZONE)
 		if issubclass(valueCls, wu.Measurement) and {'denominator', 'numerator'}.intersection(valueCls.__init__.__annotations__.keys()):
@@ -656,6 +656,32 @@ class TimeSeriesItem(TimeAwareValue):
 			return TimeSeriesItem(value, timestamp)
 		return TimeSeriesItem(valueCls(value), timestamp)
 
+	@classmethod
+	def merge(cls, *items: Union['TimeSeriesItem', Generator], operator: Callable[[Number, Number], Number | SupportsFloat] = sum) -> 'TimeSeriesItem':
+		if len(items) == 1:
+			if isinstance(items[0], Generator | Iterator):
+				items = list(items[0])
+			elif isinstance(items[0], TimeSeriesItem):
+				return items[0]
+			elif isinstance(items[0], Iterable):
+				items = items[0]
+		valueCls = mostCommonClass(item.value for item in items)
+		try:
+			values = [item.value for item in items]
+			value = float(operator(*values))
+			times = [item.timestamp.timestamp() for item in items]
+		except TypeError:
+			value = mostFrequentValue([str(item) for item in items])
+			values = [value]
+			times = [item.timestamp.timestamp() for item in items if str(item) == value]
+		timestamp = datetime.fromtimestamp(max(times)).astimezone(_timezones.utc).astimezone(tz=LOCAL_TIMEZONE)
+		if issubclass(valueCls, wu.Measurement) and {'denominator', 'numerator'}.intersection(valueCls.__init__.__annotations__.keys()):
+			ref = values[0]
+			n = type(ref.n)
+			d = type(ref.d)(1)
+			value = valueCls(numerator=n(value), denominator=d)
+			return TimeSeriesItem(value, timestamp)
+		return TimeSeriesItem(valueCls(value), timestamp)
 
 @ArchivableValue.register
 class MultiValueTimeSeriesItem(TimeSeriesItem):
@@ -740,6 +766,9 @@ class MiniTimeSeries(deque):
 
 	@property
 	def timestamp(self):
+		if self.last is None:
+			# TODO: Find a better solution for when a MiniTimeSeries has no data but a timestamp is being requested
+			return now()
 		value = self.last.timestamp
 		value = roundToPeriod(value, self.__resolution)
 		return value
@@ -1001,7 +1030,7 @@ class RecordedObservationValue(ObservationValue):
 			value = self.convertFunc(rawValue.value)
 			sourceUnitValue = self.convertFunc(rawValue.value)
 		except Exception as e:
-			log.error(f'Error converting value {rawValue.value} to {self.convertFunc}', exc_info=e)
+			log.error(f'Error converting value {rawValue.value} to {self.convertFunc} for {self.key}', exc_info=e)
 			return None
 		if hasattr(value, 'localize'):
 			value = value.localize
@@ -2609,11 +2638,11 @@ class Container:
 
 	@property
 	def isDaily(self) -> bool:
-		return any(abs(obs.period) >= timedelta(days=1) for obs in self.source.observations if self.key in obs)
+		return any(abs(obs.period) >= timedelta(days=0.9) for obs in self.source.observations if self.key in obs)
 
 	@property
 	def isDailyForecast(self) -> bool:
-		return any(obs.period >= timedelta(days=1) for obs in self.source.observations if self.key in obs)
+		return any(obs.period >= timedelta(days=0.9) for obs in self.source.observations if self.key in obs)
 
 	@property
 	def isTimeseriesOnly(self) -> bool:
