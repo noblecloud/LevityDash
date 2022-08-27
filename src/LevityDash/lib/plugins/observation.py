@@ -2257,6 +2257,7 @@ class MeasurementTimeSeries(OrderedDict):
 			if key in self.keys():
 				return super().__getitem__(key)
 			if self.__withinExtendedRange(key):
+				key = roundToPeriod(key, self.period)
 				return self.__value(key, self._timeHashInvalidator, self.__lastHash)
 		elif isinstance(key, int):
 			return self.list[key]
@@ -2337,11 +2338,20 @@ class MeasurementTimeSeries(OrderedDict):
 			start = key.start or self.first.timestamp
 			stop = key.stop or self.last.timestamp
 			start, stop = sorted((start, stop))
+			step = key.step or None
 			if start.tzinfo is None:
 				start = start.replace(tzinfo=LOCAL_TIMEZONE)
 			if stop.tzinfo is None:
 				stop = stop.replace(tzinfo=LOCAL_TIMEZONE)
-			return [k for k in self if start <= k.timestamp <= stop]
+			values = [k for k in self if start <= k.timestamp <= stop]
+			if step is not None:
+				if isinstance(step, int):
+					return values[::step]
+				elif isinstance(step, timedelta):
+					values = groupby(values, key=lambda x: roundToPeriod(x.timestamp, step).timestamp())
+					values = [TimeSeriesItem.average(group) for _, group in values]
+					return values
+			return values
 
 	def __delitem__(self, key):
 		key = self.__convertKey(key)
@@ -2531,7 +2541,7 @@ class Container:
 		if self.hourly is not None:
 			return self.hourly[now()]
 		elif self.daily is not None:
-			return self.daily[now()]
+			return self.daily[roundToPeriod(now(), self.daily.period, method=int)]
 		return self.timeseriesAll[now()]
 
 	@cached_property
