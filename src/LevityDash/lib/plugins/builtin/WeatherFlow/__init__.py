@@ -1,15 +1,17 @@
 import asyncio
 from asyncio import create_task
 from json import loads, dumps
+from datetime import datetime, timedelta, timezone
 
-from aiohttp import ClientSession, WSMsgType, ClientWebSocketResponse, WSCloseCode
+from aiohttp import ClientSession, WSMsgType, ClientWebSocketResponse
+
+from LevityDash.lib.plugins.errors import InvalidData
 from LevityDash.lib.plugins.schema import LevityDatagram, SchemaSpecialKeys as tsk
+from LevityDash.lib.plugins.web.errors import APIError
 from LevityDash.lib.plugins.web.socket_ import UDPSocket
 from LevityDash.lib.plugins.utils import ScheduledEvent
 from LevityDash.lib.plugins.web import Auth, AuthType, Endpoint, REST, URLs
 from LevityDash.lib.utils.shared import LOCAL_TIMEZONE, Now
-
-from datetime import datetime, timedelta, timezone
 
 __all__ = ["WeatherFlow", '__plugin__']
 
@@ -420,6 +422,13 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 		except TimeoutError as e:
 			self.pluginLog.warning(f'WeatherFlow: realtime request timed out: {e}')
 			self.realtimeTimer.retry(timedelta(minutes=1))
+		except InvalidData as e:
+			self.pluginLog.error(f'WeatherFlow: realtime request failed')
+			self.pluginLog.exception(e)
+		except APIError as e:
+			self.pluginLog.exception(e)
+		except Exception as e:
+			self.pluginLog.exception(e)
 
 	async def getForecast(self):
 		try:
@@ -430,6 +439,13 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 		except TimeoutError as e:
 			self.pluginLog.warning(f'WeatherFlow: forecast request timed out: {e}')
 			self.forecastTimer.retry(timedelta(minutes=1))
+		except InvalidData as e:
+			self.pluginLog.error(f'WeatherFlow: realtime request failed')
+			self.pluginLog.exception(e)
+		except APIError as e:
+			self.pluginLog.exception(e)
+		except Exception as e:
+			self.pluginLog.exception(e)
 
 	async def getHistorical(self, start: datetime = None, end: datetime = None):
 		if end is None:
@@ -446,6 +462,13 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 		except TimeoutError as e:
 			self.pluginLog.warning(f'WeatherFlow: historical request timed out: {e}')
 			self.loggingTimer.retry(timedelta(minutes=1))
+		except InvalidData as e:
+			self.pluginLog.error(f'WeatherFlow: realtime request failed')
+			self.pluginLog.exception(e)
+		except APIError as e:
+			self.pluginLog.exception(e)
+		except Exception as e:
+			self.pluginLog.exception(e)
 
 	@property
 	def messenger(self):
