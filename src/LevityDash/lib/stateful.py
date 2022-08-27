@@ -1647,6 +1647,186 @@ class Stateful(metaclass=StatefulMetaclass):
 			case _:
 				return ownState in defaultSingles
 
+	# Section .setItemState
+	def setItemState(self, state: Mapping[str, Any] | List, *args, **kwargs):
+		if isinstance(state, Stateful):
+			state = state.state
+
+		if state is Unset or state is UnsetDefault:
+			return
+
+		if not isinstance(state, Mapping):
+			acceptedSingleValueTypes = tuple(
+				i for j in (p.returns for p in self.statefulItems.values() if p.singleVal) for i in j
+			)
+			if isinstance(state, acceptedSingleValueTypes):
+				# try:
+				item = [
+					v
+					for v in self.statefulItems.values()
+					if v.actions & {"set"} and v.singleVal and isinstance(state, v.returns)
+				].pop()
+				item.setState(self, state, afterPool=kwargs.get("afterPool", []))
+				return self
+			# except Exception as e:
+			# 	log.exception(e)
+			# 	log.error(f"Unable to set state for {state}")
+			# 	return
+			raise TypeError(f"Unable to set state for {self} with {state}")
+
+		items: Dict[str, StateProperty] = {
+			k: v
+			for k, v in self.statefulItems.items()
+			if bool(v.actions & {"set"}) and (v.key in state or v.name in state or v.unwraps or v.singleVal)
+		}
+		getOnlyItems = {
+			k
+			for k, v in self.statefulItems.items()
+			if "set" not in v.actions and not v._varifyReturnType(Stateful)
+		}
+
+		if isinstance(state, dict) and getOnlyItems:
+			for i in getOnlyItems & set(state.keys()):
+				state.pop(i, None)
+
+		shared = getattr(self, 'shared', Unset) or DeepChainMap()
+		afterPool: List[Tuple[Callable, Stateful]] = []
+		match state:
+			case dict() | DeepChainMap():
+				unwraps = []
+				setKeys = set()
+				for prop in items.values():
+					if prop.unwrappedKeys:
+						if prop.key not in prop.unwrappedKeys:
+							pass
+						elif prop.unwraps:
+							unwraps.append(prop)
+							if len(state) == 1:
+								break
+							continue
+					elif prop.unwraps:
+						unwraps.append(prop)
+						if len(state) == 1:
+							break
+						continue
+
+					propKey = prop.key
+					if propKey not in state:
+						continue
+					else:
+						value = state.pop(propKey)
+						if (sharedValue := shared.get(propKey, Unset)) is not Unset:
+							sharedType = type(sharedValue)
+							sharedType = sharedType if not issubclass(sharedType, DeepChainMap) else dict
+							if isinstance(value, sharedType):
+								match sharedValue:
+									case dict():
+										value = DeepChainMap(value, sharedValue).to_dict()
+									case DeepChainMap():
+										value = sharedValue.to_dict(value)
+									case _:
+										value = sharedValue
+							else:
+								statefulType = prop.returnsFilter(Stateful)
+								if (
+									prop.isStatefulReference
+									and isinstance(value, statefulType.singleStatefulItemTypes)
+									and statefulType is not UnsetReturn
+								):
+									statefulType: Type[Stateful]
+									subProp = statefulType.findPropForType(type(value))
+									if isinstance(sharedValue, DeepChainMap) and subProp is not None:
+										value = sharedValue.to_dict({subProp.key: value})
+
+						prop.setState(self, value, afterPool=afterPool)
+					setKeys.add(propKey)
+				if len(unwraps) == 1:
+					prop = unwraps[0]
+					prop.setState(self, state)
+				elif len(unwraps) > 1:
+					raise ValueError("Multiple unwrapped properties found", unwraps, state)
+
+			case list():
+				if prop := [i for i in items.values() if i.options.get("singleVal", False) == "force"]:
+					prop[0].setState(self, state)
+
+		if afterPool:
+			log.verbose(f"Executing {len(afterPool)} items in afterPool for {self.__class__.__name__}", verbosity=5)
+			funcs = [partial(f, self) for f, _ in afterPool]
+			for f in funcs:
+				f()
+		return
+
+	# Section .getItemState
+	def getItemState(self, encode: bool = True, **kwargs):
+		exclude = get(kwargs, "exclude", "remove", "hide", default=set(), castVal=True, expectedType=set)
+		exclude = exclude | getattr(self, "__exclude__", set())
+
+		if (parent := self.statefulParent) is not None:
+			exclude = exclude | getattr(parent, "__child_exclude__", set())
+
+		items = {k: v for k, v in self.statefulItems.items() if v.actions & {"get"}}
+		items = dict(sorted(items.items(), key=lambda i: (i[1].sortOrder(type(self)), i[0])))
+
+		values = []
+		for prop in items.values():
+			k, v = prop.getState(self, encode=encode)
+			values.append((k, v))
+
+		shared = self.shared
+
+		state = dict(values)
+		state.pop("_", None)
+
+		stateKeys = set(state.keys())
+
+		items = {kk.pop(): v for k, v in items.items() if (kk := {v.name, v.key} & stateKeys)}
+
+		s = {}
+		for prop, (key, value) in zip(items.values(), state.items()):
+			if key in exclude or prop.excluded:
+				continue
+			if (sharedValue := shared.get(key, None)) == value:
+				continue
+			elif sharedValue is not None and prop.encodeValue(sharedValue, self) == value:
+				continue
+			if prop.expands:
+				value = value.state
+			if prop.unwraps:
+				if (expected := prop.returnsFilter(Stateful, func=issubclass)) is not UnsetReturn:
+					if not isinstance(value, dict):
+						value = value.state
+					else:
+						i = [
+							p
+							for _, p in expected.__state_items__.items()
+							if p.singleVal and isinstance(value, p.returns)
+						]
+						if i:
+							value = {i[0].key: value}
+						else:
+							e = TypeError(f"Unable to determine key for {value} when unwrapping {prop}")
+							log.exception(e)
+							raise e
+				if isinstance(value, Mapping):
+					s.update(value)
+					continue
+
+			if prop.singleVal:  # TODO: Add support for 'singleForceCondition'
+				if prop.singleVal == "force":
+					return value
+				if len(state) == 1:
+					return value
+
+			# if the value has nothing, don't include it unless required
+			if isinstance(value, Sized) and len(value) == 0 and not prop.required:
+				continue
+			# elif isinstance(value, Stateful) and isinstance(s := value.getItemState(encode=False), Sized) and len(s) == 0 and not prop.required:
+			# 	continue
+			s[key] = value
+
+		return s
+
 	@property
 	def state(self) -> Dict[str, Any]:
 		return StateProperty.getItemState(self)
