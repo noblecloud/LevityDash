@@ -43,11 +43,13 @@ class MultiSourceContainer(dict):
 	waitingForAnyRealtime: Dict[Plugin | SomePlugin, Set[Request]]
 	waitingForTrueRealtime: Dict[Plugin | SomePlugin, Set[Request]]
 	waitingForTimeseries: Dict[Plugin | SomePlugin, Set[Request]]
+	waitingForDaily: Dict[Plugin | SomePlugin, Set[Request]]
 
 	def __init__(self, key, value: Container = None, preferredSource: str = None, timeOffset: timedelta = None):
 		self.waitingForAnyRealtime = defaultdict(set)
 		self.waitingForTimeseries = defaultdict(set)
 		self.waitingForTrueRealtime = defaultdict(set)
+		self.waitingForDaily = defaultdict(set)
 		self.preferredSource = preferredSource
 		self.key = key
 		self.relay = MultiSourceChannel(self, key)
@@ -185,6 +187,35 @@ class MultiSourceContainer(dict):
 		except IndexError:
 			return None
 
+	def getDaily(self, preferredSource: Plugin | SomePlugin = AnySource) -> Container | None:
+		"""
+		Returns a container that has a daily source.  If a source is specified, it will try to return that
+		source first, but will always fall back to any container with a daily source.
+		If strict is True, it will only return containers have daily data.
+
+		:param preferredSource: The preferred source to return.
+
+		:return: A container with daily data.
+		"""
+
+		try:
+			preferred = self[preferredSource if preferredSource is not AnySource else None or self.preferredSource]
+			if preferred.isDailyForecast:
+				return preferred
+		except KeyError:
+			pass
+		dailyContainers = sorted(
+			[
+				c for c in self.values()
+				if c.isDaily
+			],
+			key=lambda c: (c.isDailyForecast, len(c.source.config.defaultFor)), reverse=True
+		)
+		try:
+			return dailyContainers[0]
+		except IndexError:
+			return None
+
 	@property
 	def timeseriesOnly(self):
 		return all(container.metadata.get('isTimeseriesOnly', False) for container in self.values())
@@ -249,6 +280,13 @@ class MultiSourceContainer(dict):
 					log.debug(f"Issuing callback for {request.requester!s}")
 					loop.create_task(request.callback)
 
+		if self.waitingForDaily[plugin] or self.waitingForDaily[AnySource]:
+			if plugin[self.key].isDailyForecast:
+				log.debug(f"{plugin.name} daily is ready for {self.key}")
+				for request in (*self.waitingForDaily.pop(plugin, []), *self.waitingForDaily.pop(AnySource, [])):
+					log.debug(f"Issuing callback for {request.requester!s}")
+					loop.create_task(request.callback)
+
 	def addValue(self, plugin: Plugin, container: Container):
 		self[plugin.name] = container
 		self.relay.connectContainer(container)
@@ -278,15 +316,20 @@ class MultiSourceContainer(dict):
 	def getPreferredSourceContainer(self, requester, plugin: Plugin | SomePlugin, callback: Coroutine, timeseriesOnly: bool = False):
 		log.debug(f'{requester!s} is asking for {"a timeseries" if timeseriesOnly else "an approximate realtime value"} '
 		          f'from {"any source" if (plugin is AnySource) else str(plugin)} for {self.key.name}')
-		if not timeseriesOnly:
-			self.waitingForAnyRealtime[plugin].add(Request(requester, callback))
-		else:
+		if timeseriesOnly:
 			self.waitingForTimeseries[plugin].add(Request(requester, callback))
+		else:
+			self.waitingForAnyRealtime[plugin].add(Request(requester, callback))
 
 	def getTrueRealtimeContainer(self, requester, source: Plugin | SomePlugin, coro: Coroutine):
 		log.debug(f'{requester!s} is asking for a true realtime value from '
 		          f'{str(source) if source is not AnySource else "any source"} for {self.key.name}')
 		self.waitingForTrueRealtime[source].add(Request(requester, coro))
+
+	def getDailyContainer(self, requester, source: Plugin | SomePlugin, coro: Coroutine):
+		log.debug(f'{requester!s} is asking for a daily value from '
+		          f'{str(source) if source is not AnySource else "any source"} for {self.key.name}')
+		self.waitingForDaily[source].add(Request(requester, coro))
 
 	@property
 	def hasPendingRealtime(self):
