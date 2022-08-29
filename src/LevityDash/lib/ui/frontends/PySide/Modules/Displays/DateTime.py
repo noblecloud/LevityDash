@@ -6,6 +6,7 @@ from typing import Union, ClassVar, List
 from PySide2.QtCore import Qt, Signal
 from PySide2.QtWidgets import QDialog, QInputDialog
 
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import ScaleType
 from ... import app
 from ...utils import itemLoader
 from . import Label
@@ -53,6 +54,7 @@ class ClockComponent(Label, tag=...):
 		text = strftime(formatStr)
 		super(ClockComponent, self).__init__(parent, text=text, *args, **kwargs)
 		self.connectTimer()
+		self.textBox._scaleType = ScaleType.fill
 
 	def connectTimer(self):
 		connectSignal(self.timer, self.setTime)

@@ -1,13 +1,23 @@
 from enum import Enum
-from functools import cached_property
+from functools import cached_property, partial
 from pathlib import Path
 from shutil import get_terminal_size
-from typing import Any, Type, Union
+from typing import Any, Type, Union, TYPE_CHECKING
 
-from PySide2.QtCore import QPointF, Qt, Slot
+import yaml
+from PySide2.QtCore import QPointF, Qt, Slot, QRect
+from rich.box import SIMPLE_HEAVY
 from rich.console import Console
-from rich.panel import Panel
+from rich.highlighter import RegexHighlighter
+from rich.panel import Panel as RichPanel
 from rich.pretty import Pretty
+from rich.syntax import Syntax
+from rich.theme import Theme
+
+from LevityDash.lib.stateful import StatefulDumper
+
+if TYPE_CHECKING:
+	from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 
 try:
 	from PySide2.QtGui import QActionGroup
@@ -20,7 +30,15 @@ from LevityDash.lib.log import debug
 from LevityDash.lib.config import userConfig
 from LevityDash.lib.plugins import Plugins
 from LevityDash.lib.EasyPath import EasyPath
-from LevityDash.lib.utils.geometry import AlignmentFlag, Position
+from LevityDash.lib.ui.Geometry import Position, LocationFlag, AlignmentFlag
+
+
+class DimensionFloatHighlighter(RegexHighlighter):
+	base_style = "repr."
+	highlights = [r"(?P<number>\d+(\.\d+)?)\s?(?P<str>[a-zA-Z]\w*)"]
+
+
+theme = Theme({'dimension.number': 'bold magenta', 'dimension.unit': 'white'})
 
 
 class BaseContextMenu(QMenu):
@@ -57,11 +75,15 @@ class BaseContextMenu(QMenu):
 		if self.parent.hasChildren and self.parent._acceptsChildren:
 			self.freezePanelMenuAction()
 		if self.parent._acceptsChildren:
+			self.addAction('Edit Margins', self.parent.editMargins)
 			self.addMenu(InsertMenu(self))
-			self.saveLoadMenu()
+			# self.saveLoadMenu()
 			self.addSeparator()
 		self.debugActions.addAction(self.addAction('Print State', self.printState))
+		self.debugActions.addAction(self.addAction('Print State Dict', partial(self.printState, dict)))
 		self.debugActions.addAction(self.addAction('Print Repr', self.printRepr))
+		self.addMenu(ChildrenMenu(self.parent))
+		# self.debugActions.addMenu(ChildrenMenu(self))
 		if self.parent.deletable:
 			self.addAction('Delete', self.delete)
 
@@ -88,31 +110,33 @@ class BaseContextMenu(QMenu):
 		movable.setChecked(self.parent.movable)
 		self.geometryMenu()
 
-	def printState(self):
+	def printState(self, type_: Type = str):
 		console = Console(
 			soft_wrap=True,
 			tab_size=2,
 			no_color=False,
 			force_terminal=True,
 			width=get_terminal_size((100, 20)).columns - 5,
-			record=False,
-			log_time_format="%H:%M:%S",
 		)
-		pretty = Pretty(self.parent.state)
-		panel = Panel(pretty, title=f'{type(self.parent).__name__} - State')
+		state = self.parent.state if type_ is str else self.parent.encodedYAMLState()
+		yamlStr = yaml.dump(state, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True)
+		width = max(len(line) for line in yamlStr.split('\n')) + 2
+		pretty = Syntax(yamlStr, 'yaml', tab_size=2, background_color='default')
+		panel = RichPanel(pretty, title=f'{type(self.parent).__name__} - State', box=SIMPLE_HEAVY, width=width, padding=0)
 		console.print(panel)
 
 	def printRepr(self):
 		console = Console(
+			highlighter=DimensionFloatHighlighter(),
+			theme=theme,
 			soft_wrap=True,
 			tab_size=2,
 			no_color=False,
 			force_terminal=True,
 			width=get_terminal_size((100, 20)).columns - 5,
-			log_time_format="%H:%M:%S",
 		)
-		pretty = Pretty(self.parent)
-		panel = Panel(pretty, title=f'{type(self.parent).__name__} - Repr')
+		pretty = Pretty(self.parent, indent_size=2, indent_guides=True, max_depth=4)
+		panel = RichPanel(pretty, title=f'{type(self.parent).__name__} - Repr', box=SIMPLE_HEAVY, padding=0)
 		console.print(panel)
 
 	def saveLoadMenu(self):
@@ -121,8 +145,11 @@ class BaseContextMenu(QMenu):
 
 	def addPanel(self):
 		from LevityDash.lib.ui.frontends.PySide.Modules import Panel
-		position = Position(self.position)
+		position = Position(self.position, absolute=True)
 		item = Panel(self.parent, position=position)
+		item.geometry.setAbsoluteRect(QRect(0, 0, 150, 150))
+		item.borderProp.edges = LocationFlag.Edges
+		item.borderProp.enabled = True
 		item.setFocus(Qt.FocusReason.MouseFocusReason)
 
 	def addLabel(self):
@@ -244,6 +271,22 @@ class BaseContextMenu(QMenu):
 			self.parent.setParentItem(None)
 			self.parent.hide()
 
+	def addTitleMenu(self):
+		titleMenu = LabelContextMenu(self.parent.title, title="Title")
+		titlePositions = MenuFromEnum(
+			self.parent.splitter,
+			'titlePosition',
+			self.parent.splitter.setTitlePosition,
+			'Position',
+			exclude={'auto', 'inline', 'newline', 'floating', 'center'}
+		)
+		titleMenu.insertMenu(titleMenu.actions()[0], titlePositions)
+
+		# self.showTitle = self.addAction('Show Title', self.parent.toggleTitle)
+		# self.showTitle.setCheckable(True)
+		# self.showTitle.setChecked(self.parent.splitter.enabled)
+		self.addMenu(titleMenu)
+
 	@cached_property
 	def window(self):
 		return self.parent.scene().view
@@ -254,12 +297,36 @@ class BaseContextMenu(QMenu):
 		return QApplication.instance()
 
 
+class ChildrenMenu(QMenu):
+	parent: 'Panel'
+
+	def __init__(self, parent: 'Panel'):
+		self.parent: 'Panel' = parent
+		super().__init__()
+		self.setTitle('Children')
+		self.aboutToShow.connect(self._aboutToShow)
+
+	def _aboutToShow(self):
+		for child in self.parent.childPanels:
+			childMenu = getattr(child, 'contextMenu', None)
+			if childMenu is not None and childMenu not in self.actions():
+				name = getattr(child, 'stateName', None) or type(child).__name__
+				self.addMenu(name, childMenu)
+
+
 class LabelContextMenu(BaseContextMenu):
 
 	def uniqueItems(self):
 		self.alignmentMenu()
 		# self.textFilterMenu()
 		self.addAction('Edit Margins', self.parent.editMargins)
+		fillType = MenuFromEnum(
+			self.parent,
+			'textBox._scaleType',
+			self.parent.textBox.setScaleType,
+			'Scale Type',
+		)
+		self.addMenu(fillType)
 
 	def textFilterMenu(self):
 		filters = self.addMenu('Text Filters')
@@ -271,6 +338,17 @@ class LabelContextMenu(BaseContextMenu):
 			filterAction.setChecked(filter in self.parent.enabledFilters)
 
 
+class TitledPanelContextMenu(BaseContextMenu):
+	parent: 'TitledPanel'
+
+	def uniqueItems(self):
+		self.addTitleMenu()
+		bodyMenu = self.parent.contents.contextMenu
+		bodyMenu.setTitle('Body')
+		bodyMenu.addAction('Clear', self.parent.clear)
+		self.addMenu(bodyMenu)
+
+
 class EditableLabelContextMenu(LabelContextMenu):
 
 	def uniqueItems(self):
@@ -279,18 +357,37 @@ class EditableLabelContextMenu(LabelContextMenu):
 
 
 class RealtimeContextMenu(BaseContextMenu):
+	parent: 'Realtime'
 
 	def uniqueItems(self):
 		self.sources = SourceMenu(self)
 		self.addMenu(self.sources)
-		self.showTitle = self.addAction('Show Title', self.parent.toggleTitle)
-		self.showTitle.setCheckable(True)
-		self.showTitle.setChecked(self.parent.splitter.enabled)
-		showUnit = self.addAction('Show Unit', self.parent.display.toggleUnit)
-		showUnit.setCheckable(True)
-		showUnit.setChecked(self.parent.display.displayProperties.unitPosition != 'hidden')
-		self.addMenu(LabelContextMenu(self.parent.display.valueTextBox, title="Value"))
-		self.addMenu(LabelContextMenu(self.parent.display.unitTextBox, title="Unit"))
+
+		# showUnit = self.addAction('Show Unit', self.parent.display.toggleUnit)
+		# showUnit.setCheckable(True)
+		# showUnit.setChecked(self.parent.display.displayProperties.unitPosition != 'hidden')
+
+		valueContextMenu = self.parent.display.valueTextBox.contextMenu
+		valueContextMenu.setTitle('Value')
+
+		self.addTitleMenu()
+		self.addMenu(valueContextMenu)
+		self.addUnitMenu()
+
+	# self.directionItems()
+
+	def addUnitMenu(self):
+		unitMenu = self.parent.display.unitTextBox.contextMenu
+		unitMenu.setTitle('Unit')
+		unitPositions = MenuFromEnum(
+			self.parent.display,
+			'displayProperties.unitPosition',
+			self.parent.display.setUnitPosition,
+			'Position',
+			exclude={'floating'}
+		)
+		unitMenu.insertMenu(unitMenu.actions()[0], unitPositions)
+		self.addMenu(unitMenu)
 
 	def updateItems(self):
 		self.sources.update()
@@ -300,10 +397,30 @@ class RealtimeContextMenu(BaseContextMenu):
 			self.sources.setEnabled(False)
 		super(RealtimeContextMenu, self).updateItems()
 
+	def directionItems(self):
+		directionMenu = self.addMenu('Direction')
+		hor = directionMenu.addAction('Horizontal', lambda: self.setDirection('h'))
+		hor.setCheckable(True)
+		hor.setChecked(self.parent.splitter.location.isHorizontal)
+		vert = directionMenu.addAction('Vertical', lambda: self.setDirection('v'))
+		vert.setCheckable(True)
+		hor.setChecked(self.parent.splitter.location.isVertical)
+		group = QActionGroup(directionMenu)
+		group.addAction(hor)
+		group.addAction(vert)
+		group.setExclusive(True)
+
+	def setDirection(self, direction: str):
+		if direction == 'h':
+			self.parent.splitter.location = LocationFlag.Horizontal
+		else:
+			self.parent.splitter.location = LocationFlag.Vertical
+
 
 class MenuFromEnum(QMenu):
 
-	def __init__(self, parent, enum: Type[Enum], action=None, title=None):
+	def __init__(self, parent, enum: Type[Enum] | str, action=None, title=None, exclude=None):
+		self._exclude = exclude or set()
 		super(MenuFromEnum, self).__init__()
 		self.setMinimumWidth(150)
 		if isinstance(enum, str):
@@ -315,17 +432,20 @@ class MenuFromEnum(QMenu):
 				enum = result
 			else:
 				enum = getattr(parent, enum)
+		self.setTitle(title or enum.__name__)
 		self.parent = parent
 		self.enum = enum
 		self.action = action
-		self.selection = None
+		self.selection = enum
 		self.buildActions()
 
 	def buildActions(self):
 		actionGroup = QActionGroup(self)
 		actionGroup.setExclusive(True)
 		for value in type(self.enum):
-			action = self.addAction(value, lambda value=value: self.action(value))
+			if value in self._exclude:
+				continue
+			action = self.addAction(value.title(), lambda value=value: self.action(value))
 			action.setCheckable(True)
 			action.setChecked(value == self.selection)
 			actionGroup.addAction(action)

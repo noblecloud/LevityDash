@@ -95,6 +95,7 @@ class LevityScene(QGraphicsScene):
 		clearCacheAttr(self, 'geometry')
 		self.setBackgroundBrush(Qt.transparent)
 		self.busyBlocker = QGraphicsRectItem(self.sceneRect())
+		self.busyBlocker.setVisible(False)
 		self.addItem(self.busyBlocker)
 
 	def addBusyBlocker(self):
@@ -148,7 +149,7 @@ class LevityScene(QGraphicsScene):
 	@cached_property
 	def geometry(self):
 		from LevityDash.lib.ui.Geometry import StaticGeometry
-		return StaticGeometry(self, position=(0, 0), absolute=True, snapping=False, updateSurface=False)
+		return StaticGeometry(surface=self, position=(0, 0), absolute=True, snapping=False, updateSurface=False)
 
 	@cached_property
 	def window(self):
@@ -157,18 +158,16 @@ class LevityScene(QGraphicsScene):
 	def rect(self):
 		return self.sceneRect()
 
+	@property
+	def marginRect(self) -> QRectF | QRect:
+		return self.sceneRect()
+
 	def size(self):
 		return self.sceneRect().size()
 
 	@property
 	def frozen(self):
 		return False
-
-	def mousePressEvent(self, event: QMouseEvent):
-		super(LevityScene, self).mousePressEvent(event)
-
-	def mouseReleaseEvent(self, event):
-		super(LevityScene, self).mouseReleaseEvent(event)
 
 	@property
 	def containingRect(self):
@@ -262,6 +261,7 @@ class LevitySceneView(QGraphicsView):
 		self.lastEventTime = perf_counter()
 		super(LevitySceneView, self).__init__(*args, **kwargs)
 		opengl = userConfig.getOrSet('QtOptions', 'openGL', True, userConfig.getboolean)
+		QApplication.instance().resizeFinished = self.resizeFinished
 
 		antialiasing = userConfig.getOrSet('QtOptions', 'antialiasing', True, getter=userConfig.getboolean)
 		if opengl:
@@ -297,18 +297,14 @@ class LevitySceneView(QGraphicsView):
 		self.setBackgroundBrush(Qt.black)
 		self.setStyleSheet('QGraphicsView { border: 0px; }')
 
+		self.setRenderHints(QPainter.HighQualityAntialiasing | QPainter.SmoothPixmapTransform | QPainter.TextAntialiasing)
+
 	def deviceTransform(self) -> QTransform:
 		devicePixelRatio = self.devicePixelRatioF()
 		return QTransform.fromScale(devicePixelRatio, devicePixelRatio)
 
 	def postInit(self):
 		app.primaryScreenChanged.connect(self.__screenChange)
-		ratio = self.height()/self.width()
-		size = 1000
-		rect = QRect(0, 0, size, size*ratio)
-		self.graphicsScene.base.setRect(rect)
-		self.sceneRect = rect
-		self.graphicsScene.setSceneRect(rect)
 		self.base = self.graphicsScene.base
 		self.resizeDone = QTimer(interval=300, singleShot=True, timeout=self.resizeDoneEvent)
 		self.installEventFilter(self)
@@ -348,10 +344,6 @@ class LevitySceneView(QGraphicsView):
 					self.graphicsScene.clearFocus()
 					self.graphicsScene.clearSelection()
 			self.__lastKey = event.key(), loop.time()
-		# elif event.type() == QEvent.GraphicsSceneMousePress:
-		# 	SoftShadow.disable(delay=400)
-		# elif event.type() == QEvent.GraphicsSceneMouseRelease:
-		# 	SoftShadow.enable()
 		return super(LevitySceneView, self).eventFilter(obj, event)
 
 	def resizeDoneEvent(self):
@@ -441,6 +433,7 @@ class PluginsMenu(QMenu):
 		else:
 			plugin.stop()
 
+
 class InsertMenu(QMenu):
 	existing = Dict[CategoryItem, QMenu | QAction]
 	source = pluginManager
@@ -491,9 +484,12 @@ class InsertItemAction(QAction):
 		self.setText(joinCase(key[-1].name, itemFilter=str.title))
 
 	def insert(self):
-		value = self.parent().pluginManager[self.key]
-		print(repr(value))
-
+		info = QMimeData()
+		info.setText(str(self.key))
+		info.setData('text/plain', QByteArray(str(self.key).encode('utf-8')))
+		drag = QDrag(self.parent())
+		drag.setMimeData(info)
+		drag.exec_(Qt.CopyAction)
 
 class LevityMainWindow(QMainWindow):
 
@@ -501,14 +497,6 @@ class LevityMainWindow(QMainWindow):
 		super(LevityMainWindow, self).__init__(*args, **kwargs)
 		self.setWindowTitle('LevityDash')
 
-		# if width < 1:
-		# 	width = width * self.screen.width()
-		# if height < 1:
-		# 	height = height * self.screen.height()
-		# rect = QRect(0, 0, 800, 600)
-		# rect.setSize(self.screen().size() * 0.8)
-		# rect.moveCenter(self.screen().availableGeometry().center())
-		# self.setGeometry(rect)
 		self.__init_ui__()
 		view = LevitySceneView(self)
 		self.setCentralWidget(view)
@@ -597,7 +585,6 @@ class LevityMainWindow(QMainWindow):
 			self.__menubarHeight = self.menuBar().height()*2
 			self.bar = menubar
 			self.setMenuWidget(menubar)
-		# self.bar.setParent(view)
 		else:
 			self.bar = self.menuBar()
 
@@ -691,11 +678,9 @@ class LevityMainWindow(QMainWindow):
 		g.moveCenter(screen.availableGeometry().center())
 		self.setGeometry(g)
 
-		if fullscreen:
+		if fullscreen or '--fullscreen' in sys.argv:
 			self.showFullScreen()
 
-		if '--fullscreen' in sys.argv:
-			self.showFullScreen()
 
 	def buildMenu(self):
 		menubar = self.bar

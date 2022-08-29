@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import Enum, IntFlag, auto
 from functools import cached_property
 
 from dataclasses import asdict, dataclass, is_dataclass
@@ -10,7 +10,7 @@ from typing import Any, Iterable, List, NamedTuple, Tuple, Union, Callable, Type
 
 from datetime import datetime, timedelta
 import numpy as np
-from PySide2.QtCore import QObject, QTimer, Signal
+from PySide2.QtCore import QObject, QTimer, Signal, QSize, QSizeF
 from scipy.signal import savgol_filter
 from rich.repr import auto as auto_rich_repr
 
@@ -462,7 +462,8 @@ class TimeFrameWindow(QObject):
 	start: datetime
 	changed = Signal(Axis)
 
-	def __init__(self, value: timedelta = None,
+	def __init__(self,
+		value: timedelta = None,
 		offset: timedelta = timedelta(hours=-6),
 		lookback: timedelta = timedelta(hours=-18),
 		**kwargs):
@@ -485,26 +486,28 @@ class TimeFrameWindow(QObject):
 			value = timedelta(**value)
 		if value is None:
 			value = timedelta(**kwargs)
+		if value.total_seconds() == 0:
+			value = timedelta(days=2.5)
 		self._range = value
 
 	@cached_property
-	def seconds(self) -> int:
+	def seconds(self) -> int | float:
 		return self._range.total_seconds()
 
 	@cached_property
-	def minutes(self) -> int:
+	def minutes(self) -> int | float:
 		return self.seconds/60
 
 	@cached_property
-	def hours(self) -> int:
+	def hours(self) -> int | float:
 		return self.minutes/60
 
 	@cached_property
-	def days(self) -> int:
+	def days(self) -> int | float:
 		return self.hours/24
 
 	@cached_property
-	def weeks(self) -> int:
+	def weeks(self) -> int | float:
 		return self.days/7
 
 	@property
@@ -643,7 +646,7 @@ class TimeFrameWindow(QObject):
 		return result
 
 	@property
-	def state(self):
+	def state(self) -> Dict[str, int | Dict[str, int]]:
 		state = {
 			**self.__exportTimedelta(self.range),
 			'offset':   self.__exportTimedelta(self.offset),
@@ -959,10 +962,11 @@ class TemporalGroups(object):
 		return i, currentV, behind, ahead
 
 
-def findPeaksAndTroughs(array: Iterable, spread: timedelta = 12) -> tuple[list, list]:
+def findPeaksAndTroughs(array: Iterable, spread: timedelta = 12, groupingSize: timedelta | int = 6) -> tuple[list, list]:
 	peaks = []
 	troughs = []
-
+	if isinstance(groupingSize, int):
+		groupingSize = timedelta(hours=groupingSize)
 	groupGenerator = TemporalGroups(array, spread=spread)
 	for i, t, behind, ahead in groupGenerator:
 		if not ahead:
@@ -973,7 +977,7 @@ def findPeaksAndTroughs(array: Iterable, spread: timedelta = 12) -> tuple[list, 
 		if float(min(behind).value) >= t <= float(min(ahead).value):
 			if len(troughs) == 0:
 				troughs.append(t)
-			elif datetimeDiff(troughs[-1].timestamp, t.timestamp) <= timedelta(hours=6):
+			elif datetimeDiff(troughs[-1].timestamp, t.timestamp) <= groupingSize:
 				troughs[-1] += t
 				p = troughs[-1]
 			else:
@@ -982,7 +986,7 @@ def findPeaksAndTroughs(array: Iterable, spread: timedelta = 12) -> tuple[list, 
 		elif float(max(behind).value) <= t >= float(max(ahead).value):
 			if len(peaks) == 0:
 				peaks.append(t)
-			elif datetimeDiff(peaks[-1].timestamp, t.timestamp) <= timedelta(hours=6):
+			elif datetimeDiff(peaks[-1].timestamp, t.timestamp) <= groupingSize:
 				peaks[-1] += t
 				p = peaks[-1]
 			else:

@@ -1,8 +1,7 @@
 from abc import abstractmethod, ABC
-from builtins import isinstance
-from functools import lru_cache
+from difflib import SequenceMatcher
+from functools import lru_cache, cached_property, partial
 from gc import get_referrers
-from types import FunctionType, GeneratorType
 
 try:
 	from locale import setlocale, LC_ALL, nl_langinfo, RADIXCHAR, THOUSEP
@@ -17,7 +16,7 @@ except ImportError:
 import operator as __operator
 from sys import float_info
 
-from collections import namedtuple, defaultdict
+from collections import namedtuple, defaultdict, ChainMap
 
 import re
 import WeatherUnits as wu
@@ -32,8 +31,8 @@ from pytz import utc
 from WeatherUnits import Measurement
 
 from time import time
-from typing import Any, Callable, Hashable, Iterable, List, Mapping, Optional, Tuple, Type, TypeVar, Union, Set, Final, Sized, ClassVar, Dict, Protocol, runtime_checkable
-from types import NoneType
+from typing import Any, Callable, Hashable, Iterable, List, Mapping, Optional, Tuple, Type, TypeVar, Union, Set, Final, Sized, ClassVar, Dict, Protocol, runtime_checkable, MutableMapping, get_args
+from types import NoneType, GeneratorType, FunctionType
 
 from enum import auto, Enum, EnumMeta
 
@@ -1095,6 +1094,10 @@ def roundToPeriod(value: datetime, period: timedelta, method: Callable = round) 
 	return datetime.fromtimestamp((method(value.timestamp()/seconds)*seconds)).astimezone(tz)
 
 
+def floorToPeriod(value: datetime, period: timedelta) -> datetime:
+	return roundToPeriod(value, period, method=int)
+
+
 def isSorted(iterable: Iterable, key: Callable = None, reverse: bool = False) -> bool:
 	"""
 	Checks if an iterable is sorted.
@@ -1400,24 +1403,26 @@ def get(
 	getter: Callable = __get,
 ) -> Any:
 	"""
-	Returns the value of the key in the mapping.
+	Returns the value of the key in the mapping or object
 
 	:param obj: The mapping to search.
 	:param key: The keys to search for.
 	:param default: The default value to return if the key is not found.
 	:return: The value of the key in the mapping or the default value.
 	"""
-	values = {getter(obj, key, Unset) for key in keys}
-	values.discard(Unset)
+	values = tuple(r for key in keys if (r := getter(obj, key, Unset)) is not Unset)
 	match len(values):
 		case 0:
 			if default is Unset:
 				raise KeyError(f'{keys} not found in {obj}')
 			return default
 		case 1:
-			value = values.pop()
+			value = values[0]
 			if castVal:
-				return expectedType(value)
+				try:
+					return expectedType(value)
+				except TypeError as e:
+					utilLog.warning(f'Could not cast {value} to {expectedType}', e.__traceback__)
 			return value
 		case _:
 			utilLog.warning(f'Multiple values found for {keys} in {obj}, returning first value.')
@@ -1569,3 +1574,170 @@ class DotDict(dict):
 	def update(self, data: dict):
 		for key, value in data.items():
 			self[key] = value
+
+
+def recursiveDictUpdate(d: dict, u: dict, copy: bool = True) -> dict:
+	if copy:
+		d = dict(d)
+	for k, v in u.items():
+		if isinstance(v, dict):
+			d[k] = recursiveDictUpdate(d.get(k, {}), v)
+		else:
+			d[k] = v
+	return d
+
+
+def recursiveRemove(existingDict: dict, subtracting: dict) -> dict:
+	for key, subtractingValue in subtracting.items():
+		existing = existingDict.get(key, None)
+		if existing is None:
+			continue
+		if isinstance(subtractingValue, dict):
+			if isinstance(existing, dict):
+				if existing == subtractingValue:
+					existingDict.pop(key)
+				else:
+					existingDict[key] = recursiveRemove(existingDict.get(key, {}), subtractingValue)
+					if not existingDict[key]:
+						existingDict.pop(key)
+			elif subtractingValue:
+				existingDict[key] = subtractingValue
+			else:
+				existingDict.pop(key, None)
+			continue
+		if existing == subtractingValue:
+			existingDict.pop(key, None)
+	return existingDict
+
+
+def deepCopy(d: dict) -> dict:
+	return recursiveDictUpdate(dict(), d, copy=False)
+
+
+class DeepChainMap(ChainMap):
+	"""A recursive subclass of ChainMap"""
+
+	def __init__(self, *maps: Mapping, origin: 'Stateful' = None):
+		self._originMap = {}
+		self.origin = origin
+		super().__init__(self._originMap, *maps)
+
+	def __getitem__(self, key):
+		submaps = [mapping for mapping in self.maps if key in mapping]
+		if not submaps:
+			return self.__missing__(key)
+		if isinstance(submaps[0][key], Mapping):
+			return DeepChainMap(*(submap[key] for submap in submaps))
+		return super().__getitem__(key)
+
+	def to_dict(self, d: dict | Mapping = None) -> dict:
+		d = d or {}
+		for mapping in reversed(self.maps):
+			self._depth_first_update(d, mapping)
+		return d
+
+	def _depth_first_update(self, target: dict, source: Mapping) -> None:
+		for key, val in source.items():
+			if not isinstance(val, Mapping):
+				target[key] = val
+				continue
+			if key not in target:
+				target[key] = {}
+			self._depth_first_update(target[key], val)
+
+	@property
+	def originMap(self) -> dict:
+		return self._originMap
+
+	def new_child(self, origin: 'Stateful') -> 'DeepChainMap':
+		return self.__class__(*self.maps, origin=origin)
+
+
+class ScaleFloatMeta(type):
+
+	def __instancecheck__(self, instance):
+		return isinstance(instance, float | int) and 0 <= instance <= 1
+
+	def __subclasscheck__(self, subclass):
+		return issubclass(subclass, float | int)
+
+
+class ScaleFloat(metaclass=ScaleFloatMeta):
+
+	def __new__(cls, value):
+		value = sorted((value, 0, 1))[1]
+		return super().__new__(cls, value)
+
+
+def __scoreState(a, b):
+	return SequenceMatcher(lambda x: x == " ", str(a).casefold(), str(b).casefold()).ratio()
+
+
+def scoreNumber(n1, n2):
+	""" calculates a similarity score between 2 numbers """
+	return 1 - abs(n1 - n2)/(n1 + n2)
+
+
+def scoreDict(a, b):
+	sharedKeys = set(a.keys()) & set(b.keys())
+	score = 0
+	for key in sharedKeys:
+		aValue = a[key]
+		bValue = b[key]
+		if isinstance(aValue, type(bValue)):
+			match aValue:
+				case dict():
+					score += scoreDict(aValue, bValue)
+				case bool():
+					score += int(aValue == bValue)
+				case int() | float():
+					score += scoreNumber(aValue, bValue)
+
+	return score
+
+
+def sortDict(d: dict, reverse: bool = False) -> dict:
+	return {key: value for key, value in sorted(d.items(), key=lambda x: x[0], reverse=reverse)}
+
+
+def mostSimilarDict(ref: dict, choices: Iterable[dict], sharedKeysOnly: bool = True, cuttoff: float = 0.0) -> Tuple[int, dict]:
+	"""
+	Find the most similar dict in choices to reference.
+	:param ref: The reference dict.
+	:param choices: The choices to compare against.
+	:return: The index of the most similar dict, and the dict itself.
+	"""
+	if sharedKeysOnly:
+		choices = [{k: v for k, v in choice.items() if k in ref} if isinstance(choice, Mapping) else choice for choice in choices]
+	scores = [(i, choice, score) for i, choice in enumerate(choices) if (score := __scoreState(ref, choice)) >= cuttoff]
+	return max(scores, key=lambda x: x[2])[:2]
+
+
+class guarded_cached_property(cached_property):
+
+	def __new__(cls, *args, guardFunc: Callable[[Any], bool], default: Any):
+		if not args:
+			return partial(guarded_cached_property, guardFunc=guardFunc, default=default)
+		return cached_property.__new__(cls)
+
+	def __init__(self, *args, guardFunc: Callable[[Any], bool], default: Any):
+		super().__init__(*args)
+		self.guardFunc = guardFunc
+		self.default = default
+
+	def __call__(self, *args, **kwargs):
+		pass
+
+	def __get__(self, instance, owner=None):
+		value = super().__get__(instance, owner)
+		if self.guardFunc(value):
+			return value
+		else:
+			instance.__dict__.pop(self.attrname, None)
+			if isinstance(defaultFunc := self.default, Callable):
+				if 'self' in get_args(defaultFunc):
+					return defaultFunc(instance)
+				return self.default()
+			elif isinstance(defaultFunc, property):
+				return defaultFunc.__get__(instance, owner)
+			return self.default

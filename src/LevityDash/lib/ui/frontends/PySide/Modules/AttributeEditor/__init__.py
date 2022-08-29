@@ -4,7 +4,7 @@ from typing import List, Union
 from LevityDash.lib.plugins.dispatcher import MultiSourceContainer
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Incrementer import Incrementer
 from LevityDash.lib.ui.frontends.PySide.Modules import Label, Panel
-from LevityDash.lib.utils.geometry import LocationFlag, Position, Size
+from LevityDash.lib.ui.Geometry import Size, Position, LocationFlag
 from LevityDash.lib.utils import _Panel
 
 
