@@ -103,7 +103,7 @@ class _LevityLogger(logging.Logger):
 		super().__init__(name)
 		self.addFilter(_LevityLogger.duplicateFilter)
 	@classmethod
-
+	def install(cls) -> None:
 		if not userConfig.has_section("Logging"):
 			userConfig.read_dict(self.LOGGING_DEFAULT_CONFIG)
 			userConfig.read_dict(cls.LOGGING_DEFAULT_CONFIG)
@@ -417,8 +417,8 @@ urllogPool = logging.getLogger("urllib3.connectionpool")
 urllog.setLevel(logging.ERROR)
 urllogPool.setLevel(logging.ERROR)
 
-bleaklog = logging.getLogger("bleak")
-bleaklog.setLevel(logging.ERROR)
+_LevityLogger.install()
+LevityLogger: _LevityLogger = _LevityLogger('Levity')
 
 LevityPluginLog = LevityLogger.getChild("Plugins")
 LevityUtilsLog = LevityLogger.getChild("Utils")
