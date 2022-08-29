@@ -45,7 +45,7 @@ def objectRepresentor(dumper, obj):
 
 itemCount = 0
 itemSkip = 3
-
+INCREMENTAL_LOAD = True
 
 def loadGraphs(parent, items, parentItems, **kwargs):
 	global itemCount
@@ -77,7 +77,7 @@ def loadGraphs(parent, items, parentItems, **kwargs):
 				existing.remove(graph)
 
 		itemCount += 1
-		if itemCount%itemSkip == 0:
+		if INCREMENTAL_LOAD and itemCount%itemSkip == 0:
 			QApplication.processEvents()
 	for i in existing:
 		i.scene().removeItem(i)
@@ -114,7 +114,7 @@ def loadRealtime(parent, items, parentItems, **kwargs):
 			case _:
 				print('fail')
 		itemCount += 1
-		if itemCount%itemSkip == 0:
+		if INCREMENTAL_LOAD and itemCount%itemSkip == 0:
 			QApplication.processEvents()
 	for i in existing:
 		i.scene().removeItem(i)
@@ -146,7 +146,7 @@ def loadClock(parent, items, parentItems, **kwargs):
 				clock = sorted(existing, key=lambda g: (g.geometry.scoreSimilarity(ns.geometry), levenshtein(ns.format, g.format)))[0]
 				existing.remove(clock)
 		itemCount += 1
-		if itemCount%itemSkip == 0:
+		if INCREMENTAL_LOAD and itemCount%itemSkip == 0:
 			QApplication.processEvents()
 	for i in existing:
 		i.scene().removeItem(i)
@@ -177,7 +177,44 @@ def loadPanels(parent, items, parentItems, panelType, **kwargs) -> List[Stateful
 				panel = sorted(existing, key=lambda g: g.geometry.scoreSimilarity(ns.geometry))[0]
 				existing.remove(panel)
 		itemCount += 1
-		if itemCount%itemSkip == 0:
+		if INCREMENTAL_LOAD and itemCount%itemSkip == 0:
+			QApplication.processEvents()
+	for i in existing:
+		i.scene().removeItem(i)
+
+	return newItems
+
+
+def loadStacks(parent, items, parentItems, valueStack, **kwargs):
+	global itemCount
+
+	if valueStack:
+		from LevityDash.lib.ui.frontends.PySide.Modules.Containers import ValueStack as Stack
+	else:
+		from LevityDash.lib.ui.frontends.PySide.Modules.Containers import Stack
+
+	existing = [i for i in parentItems if type(i) is Stack]
+	newItems = []
+	while items:
+		item = items.pop(0)
+		if not Stack.validate(item):
+			log.error('Invalid state for stack:', item)
+		ns = SimpleNamespace(**item)
+		match existing:
+			case [panel]:
+				existing.remove(panel)
+				panel.state = item
+			case [Stack(geometry=ns.geometry) as panel, *_]:
+				existing.remove(panel)
+				panel.state = item
+			case []:
+				item = Stack(parent=parent, **item, cacheInitArgs=True)
+				newItems.append(item)
+			case [*_]:
+				panel = sorted(existing, key=lambda g: g.geometry.scoreSimilarity(ns.geometry))[0]
+				existing.remove(panel)
+		itemCount += 1
+		if INCREMENTAL_LOAD and itemCount%itemSkip == 0:
 			QApplication.processEvents()
 	for i in existing:
 		i.scene().removeItem(i)
@@ -218,7 +255,7 @@ def loadLabels(parent, items, parentItems, **kwargs):
 				label = sorted(existing, key=lambda g: (g.geometry.scoreSimilarity(ns.geometry)))[0]
 				existing.remove(label)
 		itemCount += 1
-		if itemCount%itemSkip == 0:
+		if INCREMENTAL_LOAD and itemCount%itemSkip == 0:
 			QApplication.processEvents()
 	for i in existing:
 		i.scene().removeItem(i)
@@ -249,7 +286,7 @@ def loadMoon(parent, items, parentItems, **kwargs):
 				existing.remove(moon)
 				moon.state = item
 		itemCount += 1
-		if itemCount%itemSkip == 0:
+		if INCREMENTAL_LOAD and itemCount%itemSkip == 0:
 			QApplication.processEvents()
 	for i in existing:
 		i.scene().removeItem(i)
@@ -521,7 +558,19 @@ def addCrosshair(painter: QPainter, color: QColor = Qt.red, size: int | float | 
 	pen = QPen(color, weight)
 	# pen.setCosmetic(Fa)
 	painter.setPen(pen)
-	verticalLine = QLineF(-size, 0, size, 0)
+	match size:
+		case float(s) | int(s):
+			x = size
+			y = size
+		case Size(s):
+			x = float(size.width)/2
+			y = float(size.height)/2
+		case QSize() | QSizeF():
+			x, y = (size/2).toTuple()
+		case _:
+			x, y = 2.5, 2.5
+
+	verticalLine = QLineF(-x, 0, x, 0)
 	verticalLine.translate(pos)
 	horizontalLine = QLineF(0, -y, 0, y)
 	horizontalLine.translate(pos)
@@ -589,8 +638,46 @@ class DebugSwitch(type(QObject)):
 		return super().__new__(cls, name, bases, attrs)
 
 
-def DebugPaint(cls):
-	if debug and not utilLog.VERBOSITY - 5:
+@runtime_checkable
+class DebugPaintable(Protocol):
+
+	def paint(self, painter: QPainter, option, widget=None):
+		...
+
+	def _debug_paint(self, painter: QPainter, option, widget=None):
+		...
+
+
+@overload
+def DebugPaint(enabled: bool, **kwargs): ...
+
+
+def DebugPaint(cls: Type[DebugPaintable] = None, **kwargs) -> Union[Callable, Type[DebugPaintable]]:
+	"""
+	A class decorator that toggles the between the normal paint and the debug paint based
+	on the environment variable LEVITY_DEBUG_PAINT.
+
+	The class should have both a paint() and a _debug_paint() method.
+
+	class Example(DebugPaintClass):
+
+		def paint(self, painter, option, widget):
+			...
+
+		def _debug_paint(self, painter, option, widget):
+			self._normal_paint(painter, option, widget)
+			...
+
+	:param cls: The class to decorate.
+	:type cls: QGraphicsItem
+	:return: The decorated class.
+	:rtype: QGraphicsItem
+	"""
+	if cls is None:
+		return partial(DebugPaint, **kwargs)
+	elif cls is False:
+		return lambda _: _
+	if debug and not log.VERBOSITY - 5 or int(environ.get('LEVITY_DEBUG_PAINT', 0)):
 		e = None
 		try:
 			cls._normal_paint = cls.paint
