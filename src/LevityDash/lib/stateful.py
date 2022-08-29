@@ -1,12 +1,19 @@
+import inspect
+import os
+from abc import abstractmethod
 from collections import ChainMap
+from collections.abc import MutableSequence
 from contextlib import contextmanager
 from copy import copy
+from dataclasses import dataclass
 from datetime import timedelta
+from enum import Enum
 from functools import lru_cache, cached_property, partial
-from inspect import Traceback, getframeinfo, getsource, getsourcefile, getsourcelines
+from inspect import Traceback, getframeinfo, getsource, getsourcefile, getsourcelines, get_annotations
 from operator import attrgetter
 from shutil import get_terminal_size
-from types import SimpleNamespace, GenericAlias
+from tempfile import TemporaryFile
+from types import SimpleNamespace, GenericAlias, UnionType
 from typing import (
 	Any,
 	ClassVar,
@@ -28,13 +35,14 @@ from typing import (
 	get_origin,
 	get_type_hints,
 	_GenericAlias,
-	_UnionGenericAlias, Text,
+	_UnionGenericAlias, Text, Sequence, Hashable,
 )
 from re import search
 from warnings import warn, warn_explicit
-
 from builtins import isinstance
 from sys import _getframe as getframe
+
+import yaml
 from PySide2.QtCore import QObject
 from rich.panel import Panel
 from yaml import SafeDumper, Dumper, ScalarNode, MappingNode
@@ -51,8 +59,10 @@ from yaml.scanner import Scanner
 
 from LevityDash.lib.log import LevityLogger, debug
 from LevityDash.lib.utils import Unset, get, OrUnset, levenshtein
-from LevityDash.lib.utils.shared import _Panel, clearCacheAttr, DotDict
+from LevityDash.lib.utils.shared import _Panel, clearCacheAttr, DotDict, DeepChainMap, recursiveRemove, sortDict, guarded_cached_property
 from LevityDash.lib.plugins.categories import CategoryItem
+
+STATEFUL_DEBUG = int(os.environ.get("STATEFUL_DEBUG", 0))
 
 console = Console(
 	soft_wrap=True,
@@ -173,7 +183,9 @@ class DefaultGroup:
 		self.values = values
 
 	def __eq__(self, other):
-		return other in self.values
+		if isinstance(other, Hashable):
+			return other in self.values
+		return other in list(self.values)
 
 	def __contains__(self, item):
 		return item in self.values
@@ -190,7 +202,12 @@ class DefaultGroup:
 
 	@property
 	def value(self) -> Any:
-		return next((i for i in self.values if i is not None), None)
+		value = next((i for i in self.values if i is not None), None)
+		try:
+			value = copy(value)
+		except TypeError:
+			warn(f"A default value was requested but is not a copyable type! There will be dragons!")
+		return value
 
 	@property
 	def types(self):
@@ -301,7 +318,7 @@ class Conditions(list):
 ForcedSingleVal = Literal["force"]
 StateAction = Literal["get", "set"]
 UnsetReturn: Final = Literal["UnsetReturn"]
-_T = TypeVar("_T")
+_T = TypeVar("_T", bound=type)
 
 
 class InvalidArguments(SyntaxError):
@@ -324,24 +341,58 @@ class StateProperty(property):
 
 	def __varifyKwargs(self, kwargs):
 		incorrect = []
+
 		if not kwargs.get("allowNone", True) and ("default" not in kwargs or self.default is UnsetDefault):
 			log.critical(f"{self.__class__.__name__} {self.name} has no default value and allowNone is False")
 			incorrect.append("- allowNone without default")
-		if sort := kwargs.get("sort", False) and not self._checkReturnType(Iterable, func=issubclass):
+
+		if sort := kwargs.get("sort", False) and not self._varifyReturnType(Iterable):
 			log.critical(f"{self.__class__.__name__} {self.name} cannot be sorted because it returns a non-iterable")
 			incorrect.append("- sort without iterable return")
+
+		default = kwargs.get("default", UnsetDefault)
+		# if self.isStatefulReference and isinstance(default, Mapping):
+		# 	pass
+		if default is not Unset and default is not UnsetDefault and not isinstance(default, type):
+			if (accepts := self.accepts) is not Unset:
+				try:
+					accepts = isinstance(default, accepts)
+				except TypeError:
+					accepts = False
+			else:
+				accepts = False
+			if not isinstance(default, DefaultGroup) and not accepts:
+				if not self._varifyReturnType(type(default)):
+					acceptedTypesString = '\n - '.join([i.__name__ for i in self.returns])
+					log.critical(
+						f"{inspect.getsourcefile(self.fget)}:{inspect.getsourcelines(self.fget)[1]}\n"
+						f"{self!r} has a default value {type(default).__name__}({default}) that is not of the correct type."
+						f"\nAccepted types are:\n"
+						f" - {acceptedTypesString}"
+						f"\n"
+					)
+
+		# TODO: add support for default groups
+
 		if incorrect:
 			errors = "\n".join(incorrect)
-			raise InvalidArguments(f"{self.__class__.__name__} {self.name} has invalid arguments: \n{errors}")
 
-	def __new__(cls, *args, **kwargs):
+	# raise InvalidArguments(f"{self.__class__.__name__} {self.name} has invalid arguments: \n{errors}")
+
+	# Section StateProperty
+	def __new__(cls, fget=None, **kwargs):
+		if kwargs and fget is None:
+			return partial(cls, **kwargs)
+
 		global _typeCache
 
-		inheritFrom = kwargs.pop("inheritFrom", None)
+		attrs = {"__existingValues__": DotDict()}
+
+		inheritFrom = kwargs.get("inheritFrom", None)
 		if inheritFrom is not None:
 			cls = type(inheritFrom)
+
 		owner = kwargs.pop("owner", Unset)
-		attrs = {"__existingValues__": DotDict()}
 		if owner is Unset:
 			frame = getframe(1)
 			ownerName = frame.f_locals["__qualname__"]
@@ -352,15 +403,19 @@ class StateProperty(property):
 			attrs.update(
 				{"__owner__": owner.__name__, "__ownerClass__": owner, "__ownerParentClass__": owner.__bases__[0]}
 			)
+		try:
+			cls = attrs['__ownerParentClass__'].__statePropertyClass__
+		except AttributeError:
+			pass
+		except KeyError:
+			pass
 
 		cls = makeType(name, (cls,), attrs)
 
 		if altKey := kwargs.pop("altKey", None):
 			cls.__alternate_keys__[cls] = altKey
 		prop = property.__new__(cls)
-		prop.__pre_init__(**kwargs)
-		if kwargs:
-			return prop.getter
+		prop.__pre_init__(fget, **kwargs)
 		return prop
 
 	def __pre_init__(self, fget=None, fset=None, fdel=None, doc=None, **kwargs):
@@ -371,6 +426,12 @@ class StateProperty(property):
 		if (after := kwargs.pop("after", None)) is not None:
 			if isinstance(after, Callable):
 				kwargs["after.func"] = after
+		if (encode := kwargs.pop("encoder", None)) is not None:
+			if isinstance(encode, Callable):
+				kwargs["encode.func"] = encode
+		if (decode := kwargs.pop("decoder", None)) is not None:
+			if isinstance(decode, Callable):
+				kwargs["decode.func"] = decode
 		self.optionsFromInit = DotDict(kwargs)
 		self.__state = kwargs.pop("state", None)
 
@@ -428,6 +489,10 @@ class StateProperty(property):
 		self.__preGetter(fget, **kwargs)
 		return self
 
+	def __set_name__(self, owner, name):
+		self._name_ = name
+
+	# Section .__repr__
 	def __repr__(self):
 		owner = type(self).__owner__
 		return f"@{owner}.{self.key}"
@@ -440,6 +505,7 @@ class StateProperty(property):
 		yield "default", self.default
 		yield "options", self.options
 
+	# Section .__get__
 	def __get__(self, obj, objtype=None):
 		if obj is None:
 			return self
@@ -447,9 +513,15 @@ class StateProperty(property):
 			raise AttributeError("unreadable attribute")
 		try:
 			return self.fget(obj)
-		except Exception as e:
+		except AttributeError as e:
 			if (factory := self.__options.get("factory.func", None)) is not None:
-				value = factory()
+				value = factory(obj)
+				self.fset(obj, value)
+				try:
+					value.__state_key__ = self
+				except AttributeError:
+					pass
+				return value
 			elif not self.allowNone:
 				raise e
 		return self.default(obj)
@@ -483,6 +555,7 @@ class StateProperty(property):
 		log.verbose(message, verbosity=5)
 		return value
 
+	# Section .__set__
 	def __set__(self, owner, value, **kwargs):
 		if (fset := self.fset) is None:
 			raise AttributeError("can't set attribute")
@@ -496,15 +569,25 @@ class StateProperty(property):
 			value = self.default(owner)
 			try:
 				value = copy(value)
-			except TypeError:
+			except TypeError as e:
+				if STATEFUL_DEBUG:
+					log.exception(e)
 				warn(f"A default value was requested but is not a copyable type! There will be dragons!")
+
+		if isinstance(value, DefaultGroup):
+			value = value.value
 
 		if self.conditions and not self.testConditions(value, owner, "set"):
 			return
 
 		value = self.__decode__(owner, value)
 
+		if isinstance(value, Stateful):
+			value.__state_key__ = self
+			value.__statefulParent = owner
+
 		self.fset(owner, value)
+
 		self.__existingValues__.pop(f"{self.key}.{id(owner):x}", None)
 		owner._set_state_items_.add(self.name)
 
@@ -517,20 +600,22 @@ class StateProperty(property):
 					log.verbose(f"Executing after method for {owner}", verbosity=5)
 					func(owner)
 
+	# Section .__delete__
 	def __delete__(self, obj):
 		if self.fdel is None:
 			raise AttributeError("can't delete attribute")
 		self.fdel(obj)
 
 	def __preGetter(self, func, **kwargs):
-		self.__varifyKwargs(kwargs)
 		if "match" in kwargs:
-			self.__options["match"] = kwargs.pop("match")
-		self.getter(func)
+			self.optionsFromInit["match"] = kwargs.pop("match")
+		self.getter(func, _kwargs=kwargs)
 
-	def getter(self, fget) -> property:
+	def getter(self, fget, _kwargs: dict = None) -> property:
 		if fget is None:
 			return self
+		elif fget is ...:
+			fget = self.parentCls.fget
 		clearCacheAttr(self, "fget")
 		self._get = fget
 		self.__doc__ = fget.__doc__
@@ -541,6 +626,8 @@ class StateProperty(property):
 
 		if "type" not in options and "return" in fget.__annotations__:
 			options["type"] = fget.__annotations__["return"]
+
+		self.__varifyKwargs(_kwargs)
 
 		return self
 
@@ -640,6 +727,7 @@ class StateProperty(property):
 				return getattr(type(self).__ownerParentClass__, self.name, Unset)
 		return Unset
 
+	# Section .default(owner)
 	def default(self, owner) -> Any | Literal[UnsetDefault]:
 		ownerDefaults = getattr(owner, "__defaults__", {})
 
@@ -648,12 +736,10 @@ class StateProperty(property):
 
 		if (default := self.options.maps[0].get("default", UnsetDefault)) is not UnsetDefault:
 			if default is Stateful and (returned := self.returnsFilter(Stateful, func=issubclass)) is not UnsetReturn:
-				if (existing := self.existing(owner)) is not UnsetExisting and issubclass(type(existing), returned):
-					return existing.default()
 				return returned.default()
-			if isinstance(default, DefaultGroup):
-				return default.value
 
+			if isinstance(default, DefaultGroup):
+				return default
 			return default
 
 		if (
@@ -666,22 +752,32 @@ class StateProperty(property):
 
 		return UnsetDefault
 
+	# Section .existing(owner)
 	def existing(self, owner) -> Any | Literal[UnsetExisting]:
-		cacheKey = f"{self.key}.{id(owner):x}"
+		if isinstance(owner, StatefulMetaclass):
+			return UnsetExisting
+		cacheKey = f"{self.key.replace(' ', '_')}.{id(owner):x}"
 		fromCache = self.__existingValues__.get(cacheKey, UnsetExisting)
 		fromOwner = Unset
 		if fromCache is UnsetExisting:
 			try:
 				fromOwner = self.fget(owner)
-				if not isinstance(fromOwner, self.returns):
+				if fromOwner is None:
+					if not self.allowNone:
+						fromOwner = Unset
+				elif not isinstance(fromOwner, self.returns) and fromOwner is not Unset:
 					raise TypeError(f"{self} returned {type(fromOwner)} instead of {self.returns}")
-			except Exception as e:
-				try:
-					if (factory := self.__options.get("factory.func", None)) is not None:
+			except AttributeError as e:
+				if (factory := self.__options.get("factory.func", None)) is not None:
+					try:
 						fromOwner = factory(owner)
+
+					except Exception as eF:
+						if STATEFUL_DEBUG:
+							log.exception(e)
+							log.exception(eF)
+					else:
 						self.fset(owner, fromOwner)
-				except Exception as e:
-					pass
 		if fromOwner is not Unset:
 			self.__existingValues__[cacheKey] = fromOwner
 			return fromOwner
@@ -716,7 +812,7 @@ class StateProperty(property):
 
 		return result
 
-	def testConditions(self, value: Any, owner: _Panel, method: str) -> bool:
+	def testConditions(self, value: Any, owner: 'Stateful', method: str) -> bool:
 		conditions = [i for i in self.options.get("conditions", []) if i.get("method", {}) & {method, "*"}]
 		if not conditions:
 			return True
@@ -826,6 +922,7 @@ class StateProperty(property):
 		self.__options["update.func"] = func
 		return self
 
+	# Section .encode
 	def encode(self, *args, **kwargs):  # TODO: Add warning when function is improperly named
 		if args:
 			func, *args = args
@@ -838,6 +935,7 @@ class StateProperty(property):
 
 		return self
 
+	# Section .decode
 	def decode(self, *args, **kwargs):
 		if args:
 			func, *args = args
@@ -850,12 +948,47 @@ class StateProperty(property):
 
 		return self
 
+	# Section .factory
 	def factory(self, func: Callable[[], "Stateful"]):
 		self.__options["factory.func"] = func
 		return self
 
+	def score(self, func: Callable[[Any], float] = None, **kwargs):
+		if kwargs:
+			return partial(self.score, **kwargs)
+		kwargs['func'] = func
+		self.__options["score"] = kwargs
+		return self
+
+	def scoreValue(self, owner, value) -> float:
+		if scoreFunc := self.__options.get("score.func", None):
+			varNames = scoreFunc.__code__.co_varnames[: scoreFunc.__code__.co_argcount]
+			match varNames:
+				case ["self", "value"]:
+					return scoreFunc(owner, value)
+				case ["self"]:
+					return scoreFunc(owner)
+				case [var] if var != "self":
+					return scoreFunc(value)
+				case _:
+					pass
+		ownerValue = getattr(owner, self.name)
+		try:
+			return int(ownerValue == value)
+		except TypeError:
+			return 0
+
 	def isDefault(self, _for) -> bool:
 		return self.default(_for) == self._get(_for)
+
+	@cached_property
+	def unwrappedKeys(self) -> Set[str]:
+		if not self.unwraps:
+			return set()
+		elif self.isStatefulReference:
+			statefulType = self.returnsFilter(Stateful)
+			return statefulType.statefulKeys
+		return set()
 
 	@lru_cache(maxsize=128)
 	def sortOrder(self, ownerType):
@@ -866,13 +999,13 @@ class StateProperty(property):
 		sort = fromOptions << OrUnset >> typeSortOrder + 1
 		return sort
 
-	@cached_property
-	def key(self):
-		return self.__options.get("key", None) or self.name
-
 	@property
 	def name(self):
 		return getattr(self, "_name_", None) or self.__findName()
+
+	@guarded_cached_property(guardFunc=lambda x: x is not None, default=name)
+	def key(self):
+		return self.__options.get("key", None)
 
 	def __findName(self):
 		if self._get is not None:
@@ -928,17 +1061,9 @@ class StateProperty(property):
 		except TypeError:
 			return False
 
-	def getState(self, owner, encode: bool = True):
-		options = self.__options
-		key = self.key
-		encoder = options.get("encode", {})
-
-		if self.__state is not None:
-			value = self.__state(owner)
-		else:
-			value = self.fget(owner)
-
-		if encode and (encodeFunc := encoder.get("func", False)):
+	def encodeValue(self, value, owner):
+		encoder = self.__options.get("encode", {})
+		if encodeFunc := encoder.get("func", False):
 			varNames = encodeFunc.__code__.co_varnames[: encodeFunc.__code__.co_argcount]
 			match varNames:
 				case ["self", "value"]:
@@ -949,19 +1074,58 @@ class StateProperty(property):
 					value = encodeFunc(value)
 				case _:
 					value = encodeFunc()
+		return value
 
-		# check default
-		if not self.required:
-			default = self.default(owner)
-			if value == default:
-				return "_", None
-			if isinstance(default, Default) and isinstance(value, Stateful):
-				if value.testDefault(default):
-					return "_", None
+	def decodeValue(self, value, owner):
+		decoder = self.__options.get("decode", {})
+		if decodeFunc := decoder.get("func", False):
+			varNames = decodeFunc.__code__.co_varnames[: decodeFunc.__code__.co_argcount]
+			match varNames:
+				case "self", "value":
+					value = decodeFunc(owner, value)
+				case "self", *rest:
+					if rest:
+						rest = value,
+					value = decodeFunc(owner, *rest)
+				case [var] if var != "self":
+					value = decodeFunc(value)
+				case _:
+					value = decodeFunc()
+		return value
+
+	# Section .getState()
+	def getState(self, owner, encode: bool = True):
+		options = self.__options
+		key = self.key
+
+		if self.__state is not None:
+			value = self.__state(owner)
+		else:
+			value = self.fget(owner)
 
 		# check conditions
 		if not self.testConditions(value, owner, "get"):
 			return "_", None
+
+		if encode:
+			value = self.encodeValue(value, owner)
+
+		# check default
+		if not self.required:
+			if isinstance(value, Stateful):
+				if value.state == {}:
+					return "_", None
+				if value.testDefault(value.default()):
+					return "_", None
+			default = self.default(owner)
+			match default:
+				case _ if default is UnsetDefault:
+					pass
+				case DefaultGroup():
+					if value == default:
+						return "_", None
+				case _ if value == default or value == self.encodeValue(default, owner):
+					return "_", None
 
 		if sortFunc := self.sortFunc:
 			try:
@@ -983,7 +1147,6 @@ class StateProperty(property):
 			except Exception as e:
 				log.warning(f"{self} tried to sort it's value, but contents are not comparable")
 				log.exception(e)
-
 		return key, value
 
 	@cached_property
@@ -991,7 +1154,7 @@ class StateProperty(property):
 		if sort := self.__options.get("sort", False):
 			if sortFunc := self.__options.get("sortKey"):
 				sort = sortFunc
-			if not self._checkReturnType(Iterable, func=issubclass):
+			if not self._varifyReturnType(Iterable):
 				log.warning(f"{self} is marked to be sorted, the return type is not iterable")
 			if isinstance(sort, Callable):
 				return partial(sorted, key=sort)
@@ -999,61 +1162,6 @@ class StateProperty(property):
 				return partial(sorted, key=attrgetter(sort))
 			else:
 				return sorted
-
-	@staticmethod
-	def getItemState(owner, **kwargs):
-		exclude = get(kwargs, "exclude", "remove", "hide", default=set(), castVal=True, expectedType=set)
-		exclude = exclude | getattr(owner, "__exclude__", set())
-
-		items = {k: v for k, v in owner.statefulItems.items() if v.actions & {"get"}}
-		items = dict(sorted(items.items(), key=lambda i: (i[1].sortOrder(type(owner)), i[0])))
-
-		values_ = [prop.getState(owner, encode=True) for prop in items.values()]
-		state = dict(values_)
-		state.pop("_", None)
-
-		stateKeys = set(state.keys())
-
-		items = {kk.pop(): v for k, v in items.items() if (kk := {v.name, v.key} & stateKeys)}
-
-		s = {}
-		for prop, (key, value) in zip(items.values(), state.items()):
-			if key in exclude or prop.excluded:
-				continue
-			if prop.expands:
-				value = value.state
-			if prop.unwraps:
-				if (expected := prop.returnsFilter(Stateful, func=issubclass)) is not UnsetReturn:
-					if not isinstance(value, dict):
-						value = value.state
-					else:
-						i = [
-							p
-							for _, p in expected.__state_items__.items()
-							if p.singleVal and isinstance(value, p.returns)
-						]
-						if i:
-							value = {i[0].key: value}
-						else:
-							e = TypeError(f"Unable to determine key for {value} when unwrapping {prop}")
-							log.exception(e)
-							raise e
-				if isinstance(value, Mapping):
-					s.update(value)
-					continue
-
-			if prop.singleVal:  # TODO: Add support for 'singleForceCondition'
-				if prop.singleVal == "force":
-					return value
-				if len(state) == 1:
-					return value
-
-			# if the value has nothing, don't include it unless required
-			if isinstance(value, Sized) and len(value) == 0 and not prop.required:
-				continue
-			s[key] = value
-
-		return s
 
 	@property
 	def actions(self) -> Set[str]:
@@ -1073,7 +1181,7 @@ class StateProperty(property):
 		return actions
 
 	@property
-	def returns(self) -> tuple[type] | UnsetReturn:
+	def returns(self) -> Tuple[Type, ...] | UnsetReturn:
 		expected = get_type_hints(self._get).get("return", None) or get_type_hints(self.fget).get("return", UnsetReturn)
 		expected = self.parse_return_type(expected)
 		expectedCombined = set()
@@ -1084,25 +1192,47 @@ class StateProperty(property):
 				expectedCombined.add(e)
 		return tuple(expectedCombined) or (UnsetReturn,)
 
+	@property
+	def accepts(self) -> Tuple[Type, ...]:
+		accepts = self.__options.get("accepts", [])
+		if not isinstance(accepts, tuple | list):
+			accepts = [accepts]
+		if (decoder := self.__options.get('decoder', None)) is not None and (decoder := decoder.get('func', None)) is not None:
+			hints = get_type_hints(decoder)
+		return tuple(accepts) or Unset
+
 	@staticmethod
 	def parse_return_type(expected) -> tuple[type]:
-		if isinstance(expected, (_UnionGenericAlias)):
+		if isinstance(expected, (_UnionGenericAlias, UnionType)):
 			expected = get_args(expected)
 			expected = tuple(StateProperty.parse_return_type(e) for e in expected)
 		elif isinstance(expected, (GenericAlias, _GenericAlias)):
 			expected = get_origin(expected)
+		if isinstance(expected, type) and issubclass(expected, Enum):
+			return expected,
 		if not isinstance(expected, Iterable):
 			expected = (expected,)
 		return expected
 
-	def _checkReturnType(self, _type: _T, func: Callable[[Any, type], bool] = isinstance) -> bool:
-		for _t in self.returns:
+	def _varifyReturnType(self, _type: _T, func: Callable[[_T, type], bool] = issubclass) -> bool:
+		if (returns := self.returns) is UnsetReturn:
+			return False
+		for _t in returns:
 			if isinstance(_t, (GenericAlias, _GenericAlias)):
 				_t = get_origin(_t)
+			if isinstance(_t, UnionType):
+				_t = get_args(_t)
 			if isinstance(_t, tuple):
-				return any(func(_t, _type) for _t in _t)
+				if any(func(_t, _type) for _t in _t):
+					return True
+				continue
 			if func(_t, _type):
 				return True
+			try:
+				if func(_type, _t):
+					return True
+			except TypeError:
+				continue
 		return False
 
 	def returnsFilter(self, _type: _T, func: Callable[[Any, type], bool] = None) -> _T | UnsetReturn:
@@ -1113,17 +1243,40 @@ class StateProperty(property):
 		except TypeError:
 			return UnsetReturn
 
+	# Section .setState()
 	def setState(self, owner, state, afterPool: list = None):
 		if UnsetReturn not in self.returns:
-			if (existing := self.existing(owner)) is not UnsetExisting:
+			if (existing := self.existing(owner)) is not UnsetExisting and existing is not state:
 				if updateFunc := self.__options.get("update.func", False):
+					# TODO: Add option for passing existing item to update function
 					updateFunc(owner, state)
 					return
-				if (stateVar := getattr(type(existing), "state", None)) and (
+				if (
+					stateVar := getattr(type(existing), "state", None)) and (
 					fset := getattr(stateVar, "fset", None)
 				) is not None:
 					try:
+						if isinstance(state, self.returns):
+							# TODO: Look in to removing this
+							# TODO: Bad code smell
+							state = state.state
+
+						if isinstance(existing, Stateful):
+							if not isinstance(state, Mapping):
+								state = self.decodeValue(state, owner)
+						else:
+							annotations = get_annotations(fset)
+							if len(annotations) == 1:
+								expected = list(annotations.values())[0]
+								if not isinstance(state, expected):
+									state = self.decodeValue(state, owner)
 						fset(existing, state)
+						if isinstance(existing, Stateful):
+							try:
+								existing.__state_key__ = self
+								existing.__statefulParent = owner
+							except AttributeError:
+								pass
 						return
 					except Exception as e:
 						log.exception(e)
@@ -1140,8 +1293,8 @@ class StateProperty(property):
 		self._set(owner, copy(default))
 
 
-QObjectType = type(QObject)
-
+class StatefulReferenceProperty(StateProperty):
+	_isStatefulReference = True
 
 # Section YAML
 class StatefulConstructor(SafeConstructor):
@@ -1435,6 +1588,109 @@ class StatefulLoader(Reader, Scanner, Parser, Composer, StatefulConstructor, Res
 		return self.node_stack[-1]
 
 
+QObjectType = type(QObject)
+
+T = TypeVar('T', str, int, float, tuple, dict, list)
+
+
+class StateData:
+	stateParent: 'Stateful'
+
+	__conversions = {}
+
+	@staticmethod
+	def _convertItem(item: T) -> T:
+		if (convertTo := StateData.__conversions.get(type(item), None)) is not None:
+			item = convertTo(item)
+		elif isinstance(item, tuple(StateData.__conversions.keys())):
+			matches = list(set(type(item).mro()) & set(StateData.__conversions.keys()))
+			matchedType = matches.pop()
+			item = matchedType(item)
+		return item
+
+	@classmethod
+	def registerConverstion(cls, key: Type, value: Type['StateData']):
+		cls.__conversions[key] = value
+
+
+class StateStr(StateData, str):
+	pass
+
+
+class StateInt(StateData, int):
+	pass
+
+
+class StateFloat(StateData, float):
+	...
+
+
+class StateDict(StateData, dict):
+
+	def __new__(cls, *args, **kwargs):
+		for arg in (*args, kwargs):
+			for key, value in arg.items():
+				arg[key] = cls._convertItem(value)
+		return super().__new__(*args, **kwargs)
+
+	def __setitem__(self, key, value):
+		value = self._convertItem(value)
+		super().__setitem__(key, value)
+
+
+class StateList(MutableSequence, StateData, list):
+
+	def __setitem__(self, key, value):
+		value = self._convertItem(value)
+		super().__setitem__(key, value)
+
+
+class StateTuple(Sequence, StateData, tuple):
+
+	def __new__(cls, *args, **kwargs):
+		args = [cls._convertItem(i) for i in args]
+		return super().__new__(*args, **kwargs)
+
+
+StateData.registerConverstion(str, StateStr)
+StateData.registerConverstion(int, StateInt)
+StateData.registerConverstion(float, StateFloat)
+StateData.registerConverstion(dict, StateDict)
+StateData.registerConverstion(list, StateList)
+StateData.registerConverstion(tuple, StateTuple)
+
+
+@dataclass
+class StateData:
+	state: Any
+	parent: 'Stateful'
+
+
+def gendoc(name: str, props: Iterable[StateProperty], cls_doc: str = '') -> str:
+	if not cls_doc.endswith('\n'):
+		cls_doc += '\n'
+
+	def genKeywordAguments() -> str:
+		items = []
+		for prop in props:
+			prop_doc_string = getattr(prop, "__doc__", "")
+			items.append(f':key {prop.key}: {prop_doc_string if prop_doc_string else ""}')
+			returns = tuple(i if i is not type(None) else None for i in prop.returns if i is not UnsetReturn)
+			if returns is not UnsetReturn:
+				items.append(f':type {prop.key}: {" | ".join((getattr(i, "__name__", str(i)) for i in returns))}')
+		return '\n'.join(items)
+
+	body = f"""
+{name}
+{cls_doc}
+Keyword arguments:
+{genKeywordAguments()}
+"""
+
+	return body
+
+
+# Section StatefulMeta
 class StatefulMetaclass(QObjectType, type):
 	__state_items__: ChainMap
 	__tags__: Set[str] = set()
@@ -1446,8 +1702,13 @@ class StatefulMetaclass(QObjectType, type):
 		global _typeCache
 
 		if name == "Stateful":
-			attrs["__state_items__"] = ChainMap(attrs.get("__state_items__", {}))
-			return super().__new__(mcs, name, bases, attrs, **kwargs)
+			items = {k: v for k, v in attrs.items() if isinstance(v, StateProperty)}
+			attrs["__state_items__"] = ChainMap(items)
+			newMcs = super().__new__(mcs, name, bases, attrs, **kwargs)
+			for item in set(type(i) for i in items.values()):
+				item.__owner__ = newMcs
+				item.__ownerClass__ = newMcs
+			return newMcs
 
 		parentCls = Stateful
 		statefulParents = [b for b in bases if issubclass(b, Stateful)]
@@ -1478,7 +1739,8 @@ class StatefulMetaclass(QObjectType, type):
 		exclude = set(attrs.get("__exclude__", {}))
 		if ... in exclude or not exclude:
 			exclude.discard(...)
-			exclude |= getattr(parentCls, "__exclude__", set())
+			for base in bases:
+				exclude |= getattr(base, "__exclude__", set())
 		attrs["__exclude__"] = exclude
 
 		__ownerParentClass__ = getattr(parentCls, "__ownerParentClass__", Stateful)
@@ -1488,7 +1750,7 @@ class StatefulMetaclass(QObjectType, type):
 		propClass = makeType(propName, (propParentClass,), propAttrs)
 		attrs["__statePropertyClass__"] = propClass
 
-		props = items.new_child({k: v for k, v in attrs.items() if isinstance(v, StateProperty)})
+		props = items.new_child({v.key: v for v in attrs.values() if isinstance(v, StateProperty)})
 
 		attrs["__state_items__"] = props
 
@@ -1512,8 +1774,13 @@ class StatefulMetaclass(QObjectType, type):
 		cls.__statePropertyClass__.__ownerClass__ = cls
 
 		log.verbose(f"Created stateful class {name}", verbosity=5)
-
 		return cls
+
+	@property
+	def __doc__(cls) -> str:
+		name = cls.__name__
+		props = cls.statefulItems
+		return gendoc(name, props.values())
 
 	@property
 	def statefulItems(self) -> Dict[str, StateProperty]:
@@ -1920,9 +2187,9 @@ class Stateful(metaclass=StatefulMetaclass):
 	def loadState(self, state):
 		yield self
 
-	@property
-	def statefulItems(self) -> Dict[str, StateProperty]:
-		return type(self).statefulItems
+	@classmethod
+	def findPropForType(cls, type_: Type) -> StateProperty:
+		return next((v for v in cls.singleStatefulItems.values() if v._varifyReturnType(type_, issubclass)), None)
 
 	@classmethod
 	def default(cls) -> DefaultState:
@@ -1935,21 +2202,50 @@ class Stateful(metaclass=StatefulMetaclass):
 		)
 
 	def defaultSingles(self) -> Dict[str, Any]:
-		return {v: v.default(self) for k, v in self.statefulItems.items() if v.singleVal}
+		return {v: v.default(self) for v in self.statefulItems.values() if v.singleVal}
 
+	# Section .prep_init
 	def prep_init(self, kwargs):
+		m = {'parent': kwargs.pop('stateParent', None), 'key': kwargs.pop('stateKey', None)}
+
+		# search the frame stack for the first instance of a Stateful object
+		outerFrames = inspect.getouterframes(inspect.currentframe())
+		for frame in outerFrames:
+			if 'self' in frame.frame.f_locals:
+				if m['parent'] is None and isinstance(frame.frame.f_locals['self'], Stateful):
+					statefulParent = frame.frame.f_locals['self']
+					if statefulParent is not self:
+						m['parent'] = statefulParent
+				elif frame.frame.f_locals['self'] is m['parent'] and m['key'] is None and m['parent'] is not None:
+					break
+				elif m['key'] is None and isinstance(frame.frame.f_locals['self'], StateProperty):
+					key = frame.frame.f_locals['self']
+					if key is getattr(type(m['parent']), key.name, None):
+						m['key'] = key
+			if all(i is not None for i in m.values()):
+				break
+
+		self.statefulParent = m['parent']
+		self.__state_key__ = m['key']
 		code = type(self).__init__.__code__
 		self._set_state_items_ = set()
 		initVars = set(code.co_varnames[: code.co_argcount])
 		for key, prop in (
 			(i.key, i) for i in self.__state_items__.values() if not i.allowNone and i.default(self) is not UnsetDefault
 		):
+			default = prop.default(self)
 			if key in initVars:
 				continue
 			elif key not in kwargs:
-				value = {} if prop.isStatefulReference else prop.default(self)
+				if prop.isStatefulReference:
+					if isinstance(default, Mapping) and not isinstance(default, DefaultState):
+						value = DeepChainMap(default).to_dict()
+					else:
+						value = {}
+				else:
+					value = default
 			elif kwargs[key] is UnsetDefault or kwargs[key] is None:
-				value = prop.default(self)
+				value = default
 			else:
 				value = kwargs[key]
 			if (d := getattr(value, "default", UnsetDefault)) is not UnsetDefault:
@@ -1964,6 +2260,19 @@ class Stateful(metaclass=StatefulMetaclass):
 				kwargs[key] = value
 		return kwargs
 
+	def rateConfig(self, config: Mapping[str, Any]) -> float:
+		props = {p.key: p for p in self.statefulItems.values() if p.key in config}
+		score = 0
+		for key, value in config.items():
+			prop = props[key]
+			ownValue = prop.fget(self)
+			if prop.isStatefulReference and isinstance(ownValue, Stateful):
+				score += ownValue.rateConfig(value)
+			else:
+				value = prop.decodeValue(value)
+				score += prop.scoreValue(self, value)
+		return score
+
 	def __rich_repr__(self, exclude: set = None):
 		exclude = exclude or set()
 		for i in sorted(self.__state_items__.values(), key=lambda x: x.sortOrder(type(self))):
@@ -1972,4 +2281,58 @@ class Stateful(metaclass=StatefulMetaclass):
 				continue
 			if i.existing(self) is UnsetExisting:
 				continue
-			yield i.key, i.fget(self), i.default(self)
+			try:
+				yield i.key, i.fget(self), i.default(self)
+			except Exception as e:
+				continue
+
+
+class QStatefulMetaclass(StatefulMetaclass, QObjectType):
+	pass
+
+
+class QStateful(QObject, Stateful, metaclass=QStatefulMetaclass):
+	pass
+
+
+OptionType = TypeVar('OptionType')
+
+
+class SharedOption(Stateful, tag='SharedOption'):
+	key: ClassVar[str]
+	value: OptionType = None
+
+	def __init_subclass__(cls):
+		super().__init_subclass__()
+		key = cls.__name__.replace('Shared', '')
+		cls.key = key
+		cls.__tag__ = f"Shared{key.title()}"
+		cls.__loader__.add_constructor(f"{cls.__tag__}", cls.loader)
+
+	# if optionType is not Unset:
+	# 	cls.__annotations__['value'] = optionType
+
+	@classmethod
+	def loader(cls, loader: StatefulLoader, data):
+		data = loader.construct_mapping(data)
+		return cls(**data)
+
+	def __init__(self, value: OptionType = Unset, default: Any = Unset):
+		self.value = value
+		self.default = default
+		super().__init__()
+
+	@StateProperty(default=Unset)
+	def value(self) -> OptionType:
+		return self._value
+
+	@value.setter
+	def value(self, value: OptionType):
+		changed = value != self._value
+		self._value = value
+		if changed:
+			self.valueChanged()
+
+	@abstractmethod
+	def valueChanged(self):
+		pass
