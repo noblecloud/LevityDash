@@ -14,10 +14,27 @@ from PySide2.QtCore import QObject, QTimer, Signal, QSize, QSizeF
 from scipy.signal import savgol_filter
 from rich.repr import auto as auto_rich_repr
 
-from LevityDash.lib.utils import Axis, clearCacheAttr, datetimeDiff, Infix, LOCAL_TIMEZONE, makeNumerical, Numeric, plural
+from LevityDash.lib.utils import clearCacheAttr, datetimeDiff, Infix, LOCAL_TIMEZONE, makeNumerical, Numeric, plural
 
 from LevityDash.lib.utils import utilLog as log, timedeltaToDict
 
+
+class Axis(IntFlag):
+	Neither = 0
+	Vertical = auto()
+	Horizontal = auto()
+	Both = Vertical | Horizontal
+	Y = Vertical
+	X = Horizontal
+
+	@classmethod
+	def fromSize(cls, size: Union[QSize, QSizeF]) -> 'Axis':
+		axis = Axis.Neither
+		if size.width() != 0:
+			axis |= Axis.Horizontal
+		if size.height() != 0:
+			axis |= Axis.Vertical
+		return axis
 
 class JsonEncoder(JSONEncoder):
 	def default(self, obj):

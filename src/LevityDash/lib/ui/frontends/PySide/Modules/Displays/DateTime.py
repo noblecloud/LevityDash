@@ -112,6 +112,8 @@ class ClockComponent(Label, tag=...):
 
 
 class Clock(Panel, tag='clock'):
+	defaultStackType = ClockComponent
+
 	def __init__(self, *args, **kwargs):
 		super(Clock, self).__init__(*args, **kwargs)
 
