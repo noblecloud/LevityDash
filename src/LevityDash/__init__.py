@@ -18,6 +18,9 @@ isCompiled = getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
 __lib__ = (Path(__file__).parent.parent if isCompiled else Path(__file__).parent).joinpath('lib')
 __resources__ = (Path(__file__).parent.parent if isCompiled else Path(__file__).parent).joinpath('resources')
 __dirs__ = AppDirs(appname='LevityDash', appauthor='LevityDash.app')
+__builtins__['__lib__'] = __lib__
+__builtins__['__dirs__'] = __dirs__
+__builtins__['__resources__'] = __resources__
 
 if isCompiled:
 	chdir(sys._MEIPASS)
