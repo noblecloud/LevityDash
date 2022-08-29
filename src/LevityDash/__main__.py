@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-from platform import system
 from signal import SIGINT, signal
 
 from sys import path, exit
@@ -68,7 +67,7 @@ async def main():
 			from LevityDash.lib.log import debug
 			if debug or signalQuit.count > 1:
 				quit()
-			qasync.QApplication.instance().quit()
+				qasync.QApplication.instance().quit()
 			remainingFutures = len(asyncio.tasks.all_tasks(asyncio.get_event_loop()))
 			print(f'Waiting for {remainingFutures} tasks to finish...')
 
@@ -96,7 +95,6 @@ async def main():
 		aboutToQuit.connect(partial(close_future, future, loop))
 	lib.plugins.start()
 
-	window.show()
 	await future
 	return True
 

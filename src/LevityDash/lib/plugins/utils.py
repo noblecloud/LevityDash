@@ -568,7 +568,7 @@ class ScheduledEvent(object):
 				for event in cls.instances[owner]:
 					event.stop()
 		else:
-			for event in cls.instances[owner]:
+			for event in cls.instances.get(owner, []):
 				event.stop()
 
 

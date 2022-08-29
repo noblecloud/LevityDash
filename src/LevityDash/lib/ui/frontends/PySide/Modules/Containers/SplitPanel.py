@@ -1,9 +1,9 @@
 
 from PySide2.QtWidgets import QGraphicsItem
 
-from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Resize import Splitter
+from ..Handles.Splitters import Splitter
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
-from LevityDash.lib.utils.geometry import LocationFlag, relativePosition
+from LevityDash.lib.ui.Geometry import LocationFlag, relativePosition
 from ... import UILogger as guiLog
 
 log = guiLog.getChild(__name__)

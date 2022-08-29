@@ -36,19 +36,12 @@ class Divisions:
 	length: float
 	#: The line width of each tick.
 	lineWidth: float
-	#: The color of the tick.
+	#: The colors of the tick.
 	color: QColor = None
 	#: The Alpha level.
 	alpha: float = 1.0
 
 	subdivison: 'Divisions' = None
-
-
-class savedCashedProperty(cached_property):
-
-	def __set_name__(self, owner, name):
-		owner._cashedValues.add(name)
-		super(savedCashedProperty, self).__set_name__(owner, name)
 
 
 class GaugeItem:

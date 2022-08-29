@@ -1,7 +1,9 @@
+from collections import defaultdict
 from dataclasses import asdict, is_dataclass
 from enum import Enum
-from functools import lru_cache
+from functools import lru_cache, partial
 from importlib import reload
+from os import environ
 
 from qasync import QApplication
 from time import process_time
@@ -10,17 +12,17 @@ from types import SimpleNamespace
 from PySide2.QtCore import QLineF, QObject, QPoint, QPointF, QRectF, QSize, QSizeF, Qt, QTimer, Signal, QEvent
 from PySide2.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QTransform, QPixmap, QImage, QBrush
 from PySide2.QtWidgets import QGraphicsScene, QGraphicsDropShadowEffect, QGraphicsSceneMouseEvent, QGraphicsPixmapItem, QGraphicsEffect, QGraphicsItem
-from typing import Callable, Union, List, ClassVar, Optional
+from typing import Callable, Union, List, ClassVar, Optional, Type, runtime_checkable, Protocol, Dict, Set, overload
 from yaml import SafeDumper, Dumper
 
-from LevityDash.lib.utils import ClosestMatchEnumMeta, getItemsWithType, utilLog
+from LevityDash.lib.utils import ClosestMatchEnumMeta, getItemsWithType, utilLog as log
 from LevityDash.lib.plugins.categories import CategoryItem
-from LevityDash.lib.utils import Unset, levenshtein, Position, Size
+from LevityDash.lib.utils import Unset, levenshtein
 
-from LevityDash.lib.ui.Geometry import Geometry
+from LevityDash.lib.ui.Geometry import Geometry, Size, Position
 from LevityDash.lib.stateful import Stateful
 from LevityDash.lib.log import debug
-from LevityDash.lib.ui.colors import randomColor
+from LevityDash.lib.ui.colors import Color
 
 
 def objectRepresentor(dumper, obj):
@@ -47,25 +49,28 @@ itemSkip = 3
 
 def loadGraphs(parent, items, parentItems, **kwargs):
 	global itemCount
-
-	from LevityDash.lib.ui.frontends.PySide.Modules import GraphPanel
-	existing = [i for i in parentItems if isinstance(i, GraphPanel)]
+	GraphType = kwargs.get('type', None)
+	if GraphType is not None:
+		from LevityDash.lib.ui.frontends.PySide.Modules import MiniGraph as GraphType
+	else:
+		from LevityDash.lib.ui.frontends.PySide.Modules import GraphPanel as GraphType
+	existing = [i for i in parentItems if isinstance(i, GraphType)]
 	newItems = []
 	while items:
 		item = items.pop(0)
-		if not GraphPanel.validate(item):
-			utilLog.error('Invalid state for graph:', item)
+		if not GraphType.validate(item):
+			log.error(f'Invalid state for graph: {item}', item)
 		ns = SimpleNamespace(**item)
 
 		match existing:
 			case [graph]:
 				existing.remove(graph)
 				graph.state = item
-			case [GraphPanel(geometry=ns.geometry) as graph, *existing]:
+			case [GraphType(geometry=ns.geometry) as graph, *existing]:
 				existing.remove(graph)
 				graph.state = item
 			case []:
-				item = GraphPanel(parent=parent, **item, cacheInitArgs=True)
+				item = GraphType(parent=parent, **item, cacheInitArgs=True)
 				newItems.append(item)
 			case [*_]:
 				graph = sorted(existing, key=lambda g: (g.geometry.scoreSimilarity(ns.geometry), abs(len(ns.figures) - len(g.figures))))[0]
@@ -88,11 +93,8 @@ def loadRealtime(parent, items, parentItems, **kwargs):
 	pop = getattr(type(items), 'popitem', None) or getattr(type(items), 'pop', Unset)
 	while items:
 		item = pop(items)
-		# if not Realtime.validate(item):
-		# 	utilLog.error('Invalid state for existingItem:', item)
-		# ns = SimpleNamespace(**item)
-		if not Realtime.validate(item):
-			utilLog.error('Invalid state for existingItem:', item)
+		if not Realtime.validate(item, context={'parent': parent}):
+			log.error('Invalid state for existingItem:', item)
 		item['key'] = CategoryItem(item['key'])
 		ns = SimpleNamespace(**item)
 		match existing:
@@ -128,7 +130,7 @@ def loadClock(parent, items, parentItems, **kwargs):
 	while items:
 		item = items.pop(0)
 		if not Clock.validate(item):
-			utilLog.error('Invalid state for clock:', item)
+			log.error('Invalid state for clock:', item)
 		ns = SimpleNamespace(**item)
 		match existing:
 			case [clock]:
@@ -151,16 +153,15 @@ def loadClock(parent, items, parentItems, **kwargs):
 	return newItems
 
 
-def loadPanels(parent, items, parentItems, **kwargs) -> List[Stateful]:
+def loadPanels(parent, items, parentItems, panelType, **kwargs) -> List[Stateful]:
 	global itemCount
-
-	from LevityDash.lib.ui.frontends.PySide.Modules import Panel
+	Panel = panelType
 	existing = [i for i in parentItems if type(i) is Panel]
 	newItems = []
 	while items:
 		item = items.pop(0)
 		if not Panel.validate(item):
-			utilLog.error('Invalid state for panel:', item)
+			log.error('Invalid state for panel:', item)
 		ns = SimpleNamespace(**item)
 		match existing:
 			case [panel]:
@@ -194,7 +195,7 @@ def loadLabels(parent, items, parentItems, **kwargs):
 	while items:
 		item = items.pop(0)
 		if not EditableLabel.validate(item):
-			utilLog.error('Invalid state for label:', item)
+			log.error('Invalid state for label:', item)
 			continue
 		ns = SimpleNamespace(**item)
 		match existing:
@@ -261,7 +262,7 @@ def itemLoader(parent, unsortedItems: list[dict], existing: list = None, **kwarg
 	if existing is None:
 		existing = []
 
-	sortedItems = dict()
+	sortedItems = defaultdict(list)
 
 	for i in unsortedItems:
 		_type = i.get('type', Unset)
@@ -271,9 +272,9 @@ def itemLoader(parent, unsortedItems: list[dict], existing: list = None, **kwarg
 			else:
 				_type = 'group'
 			i['type'] = _type
+		if _type.startswith('disabled-') or _type.startswith('hidden-') or _type.endswith('-disabled') or _type.endswith('-hidden'):
+			continue
 		_type = _type.split('.')[0]
-		if _type not in sortedItems:
-			sortedItems[_type] = []
 		sortedItems[_type].append(i)
 
 	newItems = []
@@ -282,16 +283,26 @@ def itemLoader(parent, unsortedItems: list[dict], existing: list = None, **kwarg
 		match _type:
 			case 'graph':
 				items = loadGraphs(parent, group, existing, **kwargs)
+			case 'mini-graph':
+				items = loadGraphs(parent, group, existing, type='mini', **kwargs)
 			case 'realtime':
 				items = loadRealtime(parent, group, existing, **kwargs)
 			case 'clock':
 				items = loadClock(parent, group, existing, **kwargs)
-			case 'group':
-				items = loadPanels(parent, group, existing, **kwargs)
 			case 'text' | 'label':
 				items = loadLabels(parent, group, existing, **kwargs)
 			case 'moon':
 				items = loadMoon(parent, group, existing, **kwargs)
+			case 'value-stack' | 'stack':
+				items = loadStacks(parent, group, existing, valueStack=_type == 'value-stack', **kwargs)
+			case str(panel):
+				match panel:
+					case 'titled-group':
+						from LevityDash.lib.ui.frontends.PySide.Modules.Containers.TitleContainer import TitledPanel as Panel
+					case _:
+						from LevityDash.lib.ui.frontends.PySide.Modules import Panel
+				panelType = Panel
+				items = loadPanels(parent, group, existing, panelType, **kwargs)
 			case _:
 				items = []
 		newItems.extend(items)
@@ -503,7 +514,7 @@ class mouseHoldTimer(mouseTimer):
 			super(mouseHoldTimer, self)._T()
 
 
-def addCrosshair(painter: QPainter, color: QColor = Qt.red, size: int | float = 2.5, weight=1, pos: QPointF = QPointF(0, 0)):
+def addCrosshair(painter: QPainter, color: QColor = Qt.red, size: int | float | Size | QSize | QSizeF = 2.5, weight=1, pos: QPointF = QPointF(0, 0)):
 	"""
 	Decorator that adds a crosshair paint function
 	"""
@@ -512,7 +523,7 @@ def addCrosshair(painter: QPainter, color: QColor = Qt.red, size: int | float = 
 	painter.setPen(pen)
 	verticalLine = QLineF(-size, 0, size, 0)
 	verticalLine.translate(pos)
-	horizontalLine = QLineF(0, -size, 0, size)
+	horizontalLine = QLineF(0, -y, 0, y)
 	horizontalLine.translate(pos)
 	painter.drawLine(verticalLine)
 	painter.drawLine(horizontalLine)
@@ -573,7 +584,6 @@ useCache = False
 class DebugSwitch(type(QObject)):
 	def __new__(cls, name, bases, attrs):
 		if '_debug_paint' in attrs and debug:
-			attrs['_debug_paint_color'] = QColor(randomColor())
 			attrs['_normal_paint'] = attrs.get('paint', None) or next(base.paint for base in bases if hasattr(base, 'paint'))
 			attrs['paint'] = attrs['_debug_paint']
 		return super().__new__(cls, name, bases, attrs)
@@ -585,12 +595,15 @@ def DebugPaint(cls):
 		try:
 			cls._normal_paint = cls.paint
 		except AttributeError as e:
-			print(f'{cls} has no paint function')
+			log.critical(f'{cls} has no paint function')
 		try:
 			cls.paint = cls._debug_paint
-			cls._debug_paint_color = QColor(randomColor())
+			color = kwargs.get('color', None)
+			if color is not None:
+				color = Color(color)
+			cls._debug_paint_color = (color or Color.random()).QColor
 		except AttributeError as e:
-			print(f'{cls} has no _debug_paint function')
+			log.critical(f'{cls} has no _debug_paint function')
 		if e:
 			raise e
 	return cls
@@ -714,3 +727,10 @@ class CachedSoftShadow(SoftShadow):
 
 # def boundingRect(self) -> QRectF:
 # 	return dynamic.boundingRect(self)
+
+
+@runtime_checkable
+class GeometryManager(Protocol):
+	geometries: Dict[int, Geometry]
+	_fixedGeometries: Dict['Panel', Geometry]
+	fixedGeometries: Set[Geometry]

@@ -5,13 +5,13 @@ from tempfile import NamedTemporaryFile
 
 from datetime import datetime
 from functools import cached_property
-from typing import Any, TypeVar
+from typing import Any, List
 
 import yaml
 from pathlib import Path
 
 from PySide2.QtCore import Qt, QRect, Slot
-from PySide2.QtWidgets import QFileDialog, QGraphicsItem, QGraphicsScene, QMessageBox, QGraphicsBlurEffect, QWidget, QApplication
+from PySide2.QtWidgets import QFileDialog, QGraphicsItem, QMessageBox
 
 from LevityDash.lib.ui.frontends.PySide.Modules.Drawer import RadialMenuItem
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import CentralPanelContextMenu
@@ -21,12 +21,12 @@ from LevityDash.lib.EasyPath import EasyPathFile
 from LevityDash.lib.log import debug
 
 from .. import UILogger as guiLog
-from LevityDash.lib.stateful import DefaultFalse, StateProperty, StatefulLoader, StatefulDumper
+from LevityDash.lib.stateful import StateProperty, StatefulDumper
 
 log = guiLog.getChild(__name__)
 
 
-class CentralPanel(Panel):
+class CentralPanel(Panel, tag="dashboard"):
 	_keepInFrame = True
 
 	__exclude__ = {'geometry', 'movable', 'resizable', 'locked', 'frozen'}
@@ -37,14 +37,14 @@ class CentralPanel(Panel):
 		'locked':     True,
 		'fillParent': True,
 		'geometry':   {'fillParent': True},
-		'margins':    ('10px', '10px', '10px', '10px'),
+		'margins':    ('0px', '0px', '0px', '0px'),
 	}
 
 	def __init__(self, parent: 'LevityScene'):
-		self._scene = parent
-		self.__boundingRect = QRect(-2000, -2000, 6000, 6000)
 		self._parent = parent
-		super(CentralPanel, self).__init__(None)
+		self.__boundingRect = QRect(-2000, -2000, 6000, 6000)
+		self._scene = parent
+		super(CentralPanel, self).__init__(None, stateParent=None)
 
 		self.setAcceptedMouseButtons(Qt.AllButtons)
 
@@ -64,6 +64,7 @@ class CentralPanel(Panel):
 		self.setFlag(self.ItemIsFocusable, False)
 		self.setFlag(self.ItemIsMovable, False)
 		self.setFlag(self.ItemIsSelectable, False)
+		__builtins__['CENTRAL_PANEL'] = self
 
 	@Slot()
 	def onFileLoaded(self):
@@ -87,8 +88,13 @@ class CentralPanel(Panel):
 		from PySide2.QtWidgets import QApplication
 		return QApplication.instance()
 
+	def contextMenuEvent(self, event):
+		menu = self.contextMenu
+		menu.exec_(event.screenPos())
+
 	def mousePresEvent(self, event):
 		self.scene().clearSelection()
+		super(CentralPanel, self).mousePresEvent(event)
 
 	def itemChange(self, change, value):
 		if change == QGraphicsItem.ItemPositionChange:
@@ -99,9 +105,9 @@ class CentralPanel(Panel):
 	def childPanels(self):
 		return [i for i in self.childItems() if isinstance(i, Panel) and not isinstance(i, RadialMenuItem)]
 
-	@StateProperty(singleVal='force')
+	@StateProperty(singleVal='force', inheritFrom=Panel.items)
 	def items(self) -> list[Panel]:
-		pass
+		...
 
 	@cached_property
 	def contextMenu(self):
@@ -149,10 +155,10 @@ class CentralPanel(Panel):
 
 				YAMLPreprocessor(f)
 				copyfile(f.name, str(path.joinpath(fileName)))
+				print('Saved!')
 			except Exception if not debug else DebugException as e:
 				print('Failed')
-				log.error(e)
-		print('Saved!')
+				log.exception(e)
 
 	def save(self):
 		self._save()
@@ -191,9 +197,9 @@ class CentralPanel(Panel):
 				if state is None:
 					raise yaml.YAMLError("Failed to load dashboard")
 		except yaml.YAMLError as error:
-			log.error(f"Error loading dashboard: {path}\n{error}")
+			log.exception(f"Error loading dashboard: {path}\n{error}")
 			QMessageBox.critical(self.scene().window, "Error", f"Error loading dashboard: {path}\n{error}")
-			return
+			raise error
 
 		if self.filePath is None or self.loadedFile != path:
 			self.filePath = EasyPathFile(path)
@@ -205,11 +211,6 @@ class CentralPanel(Panel):
 
 	def setDefault(self):
 		userConfig.dashboardPath = self.loadedFile
-
-	def clear(self):
-		items = [child for child in self.childPanels]
-		for item in items:
-			self.scene().removeItem(item)
 
 	def loadFile(self, path: Path = None):
 		path = path or self._selectFile()
@@ -250,14 +251,12 @@ class CentralPanel(Panel):
 	def representer(cls, dumper, data):
 		return dumper.represent_list(data.state)
 
+	@property
+	def hierarchy(self) -> List['Panel']:
+		return [self]
+
 	def boundingRect(self):
 		return self.__boundingRect
-# def paint(self, p, o, w):
-# 	p.setPen(Qt.white)
-# 	p.setBrush(QBrush(Qt.red))
-# 	p.drawRect(self.scene().sceneRect())
-# 	super().paint(p, o, w)
-
 
 colorPreprocessIn = r"(?<=color\:)\s*?#*?(?P<color>[A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})", " \\g<color>"
 
