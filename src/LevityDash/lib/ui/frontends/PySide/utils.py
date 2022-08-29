@@ -1,24 +1,18 @@
 from collections import defaultdict
 from dataclasses import asdict, is_dataclass
 from enum import Enum
-from functools import lru_cache, partial
-from importlib import reload
+from functools import partial
 from os import environ
-
-from qasync import QApplication
-from time import process_time
 from types import SimpleNamespace
-
-from PySide2.QtCore import QLineF, QObject, QPoint, QPointF, QRectF, QSize, QSizeF, Qt, QTimer, Signal, QEvent
-from PySide2.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QTransform, QPixmap, QImage, QBrush
-from PySide2.QtWidgets import QGraphicsScene, QGraphicsDropShadowEffect, QGraphicsSceneMouseEvent, QGraphicsPixmapItem, QGraphicsEffect, QGraphicsItem
 from typing import Callable, Union, List, ClassVar, Optional, Type, runtime_checkable, Protocol, Dict, Set, overload
+
+from PySide2.QtCore import QLineF, QObject, QPoint, QPointF, QRectF, QSize, QSizeF, Qt, QTimer, Signal
+from PySide2.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QTransform, QPixmap, QBrush
+from PySide2.QtWidgets import QGraphicsDropShadowEffect, QGraphicsSceneMouseEvent, QGraphicsPixmapItem, QGraphicsItem, QApplication
 from yaml import SafeDumper, Dumper
 
-from LevityDash.lib.utils import ClosestMatchEnumMeta, getItemsWithType, utilLog as log
+from LevityDash.lib.utils import ClosestMatchEnumMeta, getItemsWithType, utilLog as log, Unset, levenshtein
 from LevityDash.lib.plugins.categories import CategoryItem
-from LevityDash.lib.utils import Unset, levenshtein
-
 from LevityDash.lib.ui.Geometry import Geometry, Size, Position
 from LevityDash.lib.stateful import Stateful
 from LevityDash.lib.log import debug
@@ -45,7 +39,7 @@ def objectRepresentor(dumper, obj):
 
 itemCount = 0
 itemSkip = 3
-INCREMENTAL_LOAD = True
+INCREMENTAL_LOAD = False
 
 def loadGraphs(parent, items, parentItems, **kwargs):
 	global itemCount

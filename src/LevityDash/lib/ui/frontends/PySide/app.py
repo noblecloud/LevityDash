@@ -1,3 +1,4 @@
+from difflib import get_close_matches
 import asyncio
 import mimetypes
 import os
@@ -8,30 +9,32 @@ from datetime import timedelta, datetime
 from email.generator import Generator
 from email.message import EmailMessage
 from functools import cached_property, partial
-from typing import Iterable, Dict
-
-import PySide2
+from typing import Dict
 import sys
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from zipfile import ZipFile
+from time import time, perf_counter
 
-from PySide2.QtCore import QRectF, Signal, QTimer, Qt, QRect, QEvent, QObject, QPoint, QPointF, QSize, QUrl
-from PySide2.QtGui import QPainterPath, QMouseEvent, QPainter, QCursor, QIcon, QPixmapCache, QPixmap, QImage, QTransform, QSurfaceFormat, QScreen, QDesktopServices, QShowEvent
-from PySide2.QtWidgets import (QApplication, QGraphicsScene, QGraphicsItem, QGraphicsPathItem, QGraphicsView, QMenu,
-                               QAction, QMainWindow, QToolTip, QStyle, QStyleOptionGraphicsItem, QOpenGLWidget, QGraphicsEffect, QGraphicsPixmapItem, QGraphicsRectItem, QMenuBar)
+from math import prod
+import PySide2
+from PySide2 import QtGui
+from PySide2.QtCore import (QRectF, Signal, QTimer, Qt, QRect, QEvent, QObject, QPointF, QSize, QUrl, QMimeData,
+                            QByteArray)
+from PySide2.QtGui import (QPainterPath, QPainter, QCursor, QPixmapCache, QPixmap, QImage, QTransform, QSurfaceFormat,
+                           QScreen, QDesktopServices, QShowEvent, QDrag)
+from PySide2.QtWidgets import (QApplication, QGraphicsScene, QGraphicsItem, QGraphicsView, QMenu,
+                               QAction, QMainWindow, QOpenGLWidget, QGraphicsEffect, QGraphicsPixmapItem,
+                               QGraphicsRectItem, QMenuBar)
 
 from WeatherUnits import Length
-
 from LevityDash.lib.plugins.dispatcher import ValueDirectory as pluginManager
-
-from LevityDash.lib.ui.frontends.PySide.utils import colorPalette, SoftShadow, EffectPainter, itemClipsChildren, getAllParents
+from LevityDash.lib.ui.frontends.PySide.utils import colorPalette, EffectPainter, itemClipsChildren, getAllParents
 from ....config import userConfig
 from . import qtLogger as guiLog
 from ....plugins.categories import CategoryItem, CategoryAtom
-
-from ....utils import clearCacheAttr, LocationFlag, Unset, parseSize, Size, DimensionType, BusyContext, joinCase
-from time import time, perf_counter
+from ....utils import clearCacheAttr, BusyContext, joinCase
+from ...Geometry import Size, parseSize, LocationFlag, DimensionType
 
 app: QApplication = QApplication.instance()
 
