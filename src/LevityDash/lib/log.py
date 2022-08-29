@@ -19,12 +19,6 @@ from .config import userConfig
 import logging
 from typing import ClassVar
 
-logging.addLevelName(5, "VERBOSE")
-logging.addLevelName(4, "VERBOSE-1")
-logging.addLevelName(3, "VERBOSE-2")
-logging.addLevelName(2, "VERBOSE-3")
-logging.addLevelName(1, "VERBOSE-4")
-
 from LevityDash import __lib__, __dirs__
 import qasync
 from rich.console import Console
@@ -60,6 +54,8 @@ class RichRotatingLogHandlerProxy(RotatingFileHandler, RichHandler):
 
 class _LevityLogger(logging.Logger):
 	__config__: ClassVar[SectionProxy]
+	__initiated__: ClassVar[bool] = False
+	__config__: ClassVar[SectionProxy] = userConfig["Logging"]
 	logDir: ClassVar[Path] = Path(__dirs__.user_log_dir)
 	errorLogDir: ClassVar[Path]
 	logPath: ClassVar[Path]
@@ -106,9 +102,11 @@ class _LevityLogger(logging.Logger):
 		self.savePrettyErrors = True
 		super().__init__(name)
 		self.addFilter(_LevityLogger.duplicateFilter)
+	@classmethod
 
 		if not userConfig.has_section("Logging"):
 			userConfig.read_dict(self.LOGGING_DEFAULT_CONFIG)
+			userConfig.read_dict(cls.LOGGING_DEFAULT_CONFIG)
 			userConfig.save()
 
 		if not hasattr(self, "__config__"):
@@ -120,6 +118,16 @@ class _LevityLogger(logging.Logger):
 		_LevityLogger.errorLogDir = self.logDir.joinpath("prettyErrors")
 		self.__ensureFoldersExists()
 		self.getFile()
+
+		logging.addLevelName(5, "VERBOSE")
+		logging.addLevelName(4, "VERBOSE@1")
+		logging.addLevelName(3, "VERBOSE@2")
+		logging.addLevelName(2, "VERBOSE@3")
+		logging.addLevelName(1, "VERBOSE@4")
+
+		_LevityLogger.errorLogDir = cls.logDir.joinpath("prettyErrors")
+		cls.__ensureFoldersExists()
+		cls.getFile()
 		columns = shutil.get_terminal_size((120, 20)).columns - 5
 		fileColumns = userConfig.getOrSet('Logging', 'logFileWidth', '120', userConfig.getint)
 		timeFormat = userConfig.getOrSet('Logging', 'logTimeFormat', '%H:%M:%S', str)
@@ -156,11 +164,13 @@ class _LevityLogger(logging.Logger):
 			rich_tracebacks=True,
 			omit_repeated_times=True,
 			level=5 - self.verbosity(5),
+			level=5 - cls.verbosity(5),
 			tracebacks_suppress=[qasync, asyncio, bleak, shiboken2],
 			tracebacks_show_locals=True,
 			tracebacks_width=fileColumns,
 			locals_max_string=200,
 			filename=self.logPath,
+			filename=cls.logPath,
 			maxBytes=int(userConfig.getOrSet('Logging', 'rolloverSize', '10mb', userConfig.configToFileSize)),
 			backupCount=int(userConfig.getOrSet('Logging', 'rolloverCount', '5', userConfig.getint)),
 		)
@@ -179,6 +189,19 @@ class _LevityLogger(logging.Logger):
 			self.logDir.mkdir(parents=True)
 		if not self.errorLogDir.exists():
 			self.errorLogDir.mkdir(parents=True)
+		cls.propagate = True
+		cls.cleanupLogFolder()
+		richRotatingFileHandler.setLevel(1)
+		cls.fileHandler = richRotatingFileHandler
+		cls.consoleHandler = consoleHandler
+		logging.basicConfig(handlers=[cls.consoleHandler, cls.fileHandler], format="%(message)s")
+
+	@classmethod
+	def __ensureFoldersExists(cls):
+		if not cls.logDir.exists():
+			cls.logDir.mkdir(parents=True)
+		if not cls.errorLogDir.exists():
+			cls.errorLogDir.mkdir(parents=True)
 
 	def determineLogLevel(self) -> str:
 		inDebug = int(bool(gettrace()))
@@ -212,6 +235,8 @@ class _LevityLogger(logging.Logger):
 		return logging.getLevelName('VERBOSE') - self.verbosity(5)
 
 	def verbosity(self, forLevel: str | int = 20) -> int:
+	@classmethod
+	def verbosity(cls, forLevel: str | int = 20) -> int:
 		if isinstance(forLevel, str):
 			forLevel = logging.getLevelName(forLevel.upper())
 		if forLevel > 5:
@@ -221,6 +246,8 @@ class _LevityLogger(logging.Logger):
 			verb = 5 - forLevel
 			self.__config__['verbosity'] = str(verb)
 			self.__config__.parser.save()
+			cls.__config__['verbosity'] = str(verb)
+			cls.__config__.parser.save()
 		return verb
 
 	def verbose(self, msg: str, verbosity: int = 0, *args, **kwargs):
@@ -248,6 +275,8 @@ class _LevityLogger(logging.Logger):
 		return child
 
 	def folderSize(self, path, level=None, excludeFolders: bool = False) -> int:
+	@classmethod
+	def folderSize(cls, path, level=None, excludeFolders: bool = False) -> int:
 		if level is not None:
 			if level <= 0:
 				return 0
@@ -258,11 +287,14 @@ class _LevityLogger(logging.Logger):
 				if excludeFolders:
 					continue
 				totalFolderSize += self.folderSize(file, level)
+				totalFolderSize += cls.folderSize(file, level)
 			else:
 				totalFolderSize += file.stat().st_size
 		return totalFolderSize
 
 	def allFiles(self, path: Path, level=None, excludeFolders: bool = False) -> iter:
+	@classmethod
+	def allFiles(cls, path: Path, level=None, excludeFolders: bool = False) -> iter:
 		if level is not None:
 			if level <= 0:
 				return []
@@ -273,47 +305,68 @@ class _LevityLogger(logging.Logger):
 				if excludeFolders:
 					continue
 				for f in self.allFiles(file, level):
+				for f in cls.allFiles(file, level):
 					yield f
 			else:
 				yield file
 
 	def removeOldestFile(self, path):
 		files = list(self.allFiles(path, 1))
+	@classmethod
+	def removeOldestFile(cls, path):
+		files = list(cls.allFiles(path, 1))
 		files = sorted(files, key=lambda x: x.stat().st_mtime)
 		if len(files) > 0:
 			files[0].unlink()
 
 	def removeOlderThan(self, path, delta):
+	@classmethod
+	def removeOlderThan(cls, path, delta):
 		cutoff = datetime.now() - delta
 		for file in self.allFiles(path):
+		for file in cls.allFiles(path):
 			if datetime.fromtimestamp(file.stat().st_mtime) < cutoff:
 				os.remove(file)
 
 	def cleanupLogFolder(self):
+	@classmethod
+	def cleanupLogFolder(cls):
 		maxLogFolderSize = int(userConfig.getOrSet('Logging', 'maxLogFolderSize', '200mb', userConfig.configToFileSize))
 		maxAge: timedelta = userConfig.getOrSet('Logging', 'maxLogAge', '7 days', userConfig.configToTimeDelta)
 		maxPrettyErrorsSize = int(userConfig.getOrSet('Logging', 'maxPrettyErrorsFolderSize', '50mb', userConfig.configToFileSize))
 
 		if self.folderSize(self.logDir, 1) > maxLogFolderSize:
 			self.removeOldestFileToFitSize(self.logDir, maxLogFolderSize)
+		if cls.folderSize(cls.logDir, 1) > maxLogFolderSize:
+			cls.removeOldestFileToFitSize(cls.logDir, maxLogFolderSize)
 
 		if self.folderSize(self.errorLogDir) > maxPrettyErrorsSize:
 			self.removeOldestFileToFitSize(self.errorLogDir, maxPrettyErrorsSize)
+		if cls.folderSize(cls.errorLogDir) > maxPrettyErrorsSize:
+			cls.removeOldestFileToFitSize(cls.errorLogDir, maxPrettyErrorsSize)
 
 		self.removeOlderThan(self.logDir, maxAge)
 		self.removeOlderThan(self.errorLogDir, maxAge)
+		cls.removeOlderThan(cls.logDir, maxAge)
+		cls.removeOlderThan(cls.errorLogDir, maxAge)
 
 	def removeOldestFileToFitSize(self, path, maxSize):
 		def filesToRemoveToFitSize(path, amountToFree):
 			files = list(self.allFiles(path, excludeFolders=True))
+	@classmethod
+	def removeOldestFileToFitSize(cls, path, maxSize):
+		def filesToRemoveToFitSize(path_, amountToFree_):
+			files = list(cls.allFiles(path_, excludeFolders=True))
 			files = sorted(files, key=lambda x: x.stat().st_mtime, reverse=True)
 			total = 0
 			while total < amountToFree and files:
+			while total < amountToFree_ and files:
 				file = files.pop()
 				total += file.stat().st_size
 				yield file
 
 		if (amountToFree := self.folderSize(path, excludeFolders=True) - maxSize) > 0:
+		if (amountToFree := cls.folderSize(path, excludeFolders=True) - maxSize) > 0:
 			list(map(os.remove, filesToRemoveToFitSize(path, amountToFree)))
 
 	def genPrettyErrorFileName(self, _type, value, *_) -> Path:
@@ -327,6 +380,7 @@ class _LevityLogger(logging.Logger):
 			f"Uncaught exception: {_type.__name__}", exc_info=(_type, value, tb)
 		)
 		if self.savePrettyErrors:
+			console = self.fileHandler.console
 			console.save_html(path=self.genPrettyErrorFileName(_type, value, tb), inline_styles=False)
 
 	def setLevel(self, level: int | str) -> None:
