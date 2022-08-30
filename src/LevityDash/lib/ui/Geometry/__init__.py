@@ -2858,8 +2858,17 @@ def parseSize(
 	"""
 	match value:
 		case str(value):
-			unit = ''.join(re.findall(r'[^\d\.\,]+', value)).strip(' ')
+			unit = ''.join(re.findall(r'(?<=[\d.])[^\d.,]+', value)).strip(' ')
 			match unit:
+				case 'px':
+					if dimension == DimensionType.height:
+						return Size.Height(float(value.strip(unit)), absolute=True)
+					return Size.Width(float(value.strip(unit)), absolute=True)
+				case '%':
+					numericValue = float(value.strip(unit))/100
+					if dimension == DimensionType.height:
+						return Size.Height(numericValue, relative=True)
+					return Size.Width(numericValue, relative=True)
 				case 'cm':
 					value = Length.Centimeter(float(value.strip(unit)))
 					value.precision = 3
@@ -2875,15 +2884,6 @@ def parseSize(
 					value.precision = 3
 					value.max = 10
 					return value
-				case 'px':
-					if dimension == DimensionType.height:
-						return Size.Height(float(value.strip(unit)), absolute=True)
-					return Size.Width(float(value.strip(unit)), absolute=True)
-				case '%':
-					numericValue = float(value.strip(unit))/100
-					if dimension == DimensionType.height:
-						return Size.Height(numericValue, relative=True)
-					return Size.Width(numericValue, relative=True)
 				case _ if defaultCaseHandler is None:
 					try:
 						if dimension == DimensionType.height:
