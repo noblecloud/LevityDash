@@ -10,7 +10,6 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import ClassVar
 
-import bleak
 import qasync
 import shiboken2
 from rich.console import Console
@@ -23,7 +22,14 @@ from sys import argv, gettrace
 from LevityDash import __dirs__, __lib__
 from .config import userConfig
 
-suppressedModules = [qasync, asyncio, bleak, shiboken2]
+
+suppressedModules = [qasync, asyncio, shiboken2]
+
+try:
+	import bleak
+	suppressedModules.append(bleak)
+except ImportError:
+	pass
 
 
 def levelFilter(level: int):
@@ -33,7 +39,25 @@ def levelFilter(level: int):
 	return filter
 
 
-class RichRotatingLogHandlerProxy(RotatingFileHandler, RichHandler):
+class LevityHandler(RichHandler):
+
+	def get_level_text(self, record: logging.LogRecord) -> RichText:
+		"""Get the level name from the record.
+
+		Args:
+				record (LogRecord): LogRecord instance.
+
+		Returns:
+				Text: A tuple of the style and level name.
+		"""
+		level_name = record.levelname
+		level_text = RichText.styled(
+			level_name.ljust(9), f"logging.level.{level_name.lower()}"
+		)
+		return level_text
+
+
+class RichRotatingLogHandlerProxy(RotatingFileHandler, LevityHandler):
 	"""
 	RichRotatingLogHandler is a subclass of RotatingFileHandler that uses Rich's Log Handler and Console to format the record.
 	"""
@@ -42,7 +66,7 @@ class RichRotatingLogHandlerProxy(RotatingFileHandler, RichHandler):
 		RotatingFileHandler.__init__(self, **{kwarg: value for kwarg, value in kwargs.items() if kwarg in RotatingFileHandler.__init__.__code__.co_varnames})
 		RichHandler.__init__(self, **{kwarg: value for kwarg, value in kwargs.items() if kwarg in RichHandler.__init__.__annotations__})
 		self.console.file = self.stream
-		self._log_render.level_width = 9
+		self._log_render.level_width = 10
 
 	def emit(self, record: logging.LogRecord):
 		try:
@@ -55,7 +79,6 @@ class RichRotatingLogHandlerProxy(RotatingFileHandler, RichHandler):
 
 
 class _LevityLogger(logging.Logger):
-
 	__initiated__: ClassVar[bool] = False
 	__config__: ClassVar[SectionProxy] = userConfig["Logging"]
 	logDir: ClassVar[Path] = Path(__dirs__.user_log_dir)
@@ -70,15 +93,11 @@ class _LevityLogger(logging.Logger):
 			"level":                   "INFO",
 			"verbosity":               "0",
 			"encoding":                "utf-8",
-			"logFileFormat":           "%Y-%m-%d_%H-%M-%S",
-			"logTimeFormat":           "%H:%M:%S",
+			"logTimeFormat":           "%m/%d/%y %H:%M:%S",
 			"logFileWidth":            "120",
-			"maxLogFolderSize":        "200mb",
-			"maxLogAge":               timedelta(days=7),
-			"prettyErrors":            "False",
-			"maxPrettyErrorTotalSize": "50mb",
 		}
 	}
+
 
 	class DuplicateFilter(logging.Filter):
 		previousLogs = deque([[] for _ in range(5)], maxlen=5)
@@ -87,7 +106,7 @@ class _LevityLogger(logging.Logger):
 			if (path := record.pathname).endswith("__init__.py"):
 				record.pathname = path.replace("__init__.py", "")
 			p = Path(record.pathname)
-			if p.is_relative_to(libPath := Path(__lib__).parent):
+			if p.is_relative_to(libPath := Path(__lib__)):
 				record.pathname = str(p.relative_to(libPath)).replace("/", ".").rstrip(".py")
 			else:
 				record.pathname = str(p)
@@ -96,6 +115,7 @@ class _LevityLogger(logging.Logger):
 				return False
 			self.previousLogs.append(current_log)
 			return True
+
 
 	duplicateFilter: ClassVar[DuplicateFilter] = DuplicateFilter()
 
@@ -117,47 +137,67 @@ class _LevityLogger(logging.Logger):
 		logging.addLevelName(3, "VERBOSE@2")
 		logging.addLevelName(2, "VERBOSE@3")
 		logging.addLevelName(1, "VERBOSE@4")
+		logging.addLevelName(0, "SPAM")
+
+		theme = Theme(
+			{
+				"logging.level.verbose":   Style(color="#0b67b2"),
+				"logging.level.verbose@1": Style(color="#0b7ece"),
+				"logging.level.verbose@2": Style(color="#28835f"),
+				"logging.level.verbose@3": Style(color="#105e17"),
+				"logging.level.verbose@4": Style(color="#115016"),
+				"logging.level.spam":      Style(color="#0d4813"),
+			}
+		)
+
+		level = cls.determineLogLevel()
+
+		consoleLevel = cls.__config__.get("consoleLevel") or level
 
 		_LevityLogger.errorLogDir = cls.logDir.joinpath("prettyErrors")
 		cls.__ensureFoldersExists()
-		cls.getFile()
-		columns = shutil.get_terminal_size((120, 20)).columns - 5
+		cls.logPath = Path(cls.logDir, 'LevityDash.log')
+		columns = shutil.get_terminal_size((200, 20)).columns - 2
 		fileColumns = userConfig.getOrSet('Logging', 'logFileWidth', '120', userConfig.getint)
-		timeFormat = userConfig.getOrSet('Logging', 'logTimeFormat', '%H:%M:%S', str)
+		timeFormat = userConfig.getOrSet('Logging', 'logTimeFormat', '%m/%d/%y %H:%M:%S', str)
 
 		consoleFile = Console(
 			tab_size=2,
 			soft_wrap=True,
 			no_color=True,
 			width=fileColumns,
-			record=True,
 		)
-		consoleHandler = RichHandler(
+		consoleHandler = LevityHandler(
 			console=Console(
 				soft_wrap=True,
 				force_terminal=True,
+				no_color=False,
+				force_interactive=True,
 				tab_size=2,
 				width=columns,
 				log_time_format=timeFormat,
+				theme=theme,
 			),
 			log_time_format=timeFormat,
 			tracebacks_show_locals=True,
 			tracebacks_suppress=suppressedModules,
 			locals_max_length=15,
 			locals_max_string=200,
+			markup=True,
 			show_path=False,
 			tracebacks_width=columns,
 			rich_tracebacks=True,
+			level=consoleLevel,
 		)
 
 		richRotatingFileHandler = RichRotatingLogHandlerProxy(
 			encoding=userConfig.getOrSet('Logging', 'encoding', 'utf-8', str),
 			console=consoleFile,
 			show_path=False,
+			markup=True,
 			log_time_format=timeFormat,
 			rich_tracebacks=True,
 			omit_repeated_times=True,
-			level=5 - cls.verbosity(5),
 			tracebacks_suppress=suppressedModules,
 			tracebacks_show_locals=True,
 			tracebacks_width=fileColumns,
@@ -173,28 +213,28 @@ class _LevityLogger(logging.Logger):
 
 		cls.fileHandler = richRotatingFileHandler
 		cls.consoleHandler = consoleHandler
+		cls.console = consoleHandler.console
 
 		logging.setLoggerClass(_LevityLogger)
-		logging.basicConfig(handlers=[cls.consoleHandler, cls.fileHandler], format="%(message)s")
+		logging.basicConfig(handlers=[cls.consoleHandler, cls.fileHandler], format="%(message)s", level=level)
 
 	@classmethod
 	def __ensureFoldersExists(cls):
 		if not cls.logDir.exists():
 			cls.logDir.mkdir(parents=True)
-		if not cls.errorLogDir.exists():
-			cls.errorLogDir.mkdir(parents=True)
 
-	def determineLogLevel(self) -> str:
+	@classmethod
+	def determineLogLevel(cls) -> str:
 		inDebug = int(bool(gettrace()))
 
 		env = int(os.environ.get("DEBUG", 0))
 		argvDebug = int(any("debug" in arg for arg in argv))
-		configDebug = int(self.__config__['level'].upper() == "DEBUG")
+		configDebug = int(cls.__config__['level'].upper() == "DEBUG")
 		debugSum = env + argvDebug + configDebug
 
 		envVerbose = int(os.environ.get("VERBOSE", 0))
 		argvVerbose = int(any("verbose" in arg for arg in argv))
-		configVerbose = int(self.__config__['level'].upper() == "VERBOSE")
+		configVerbose = int(cls.__config__['level'].upper() == "VERBOSE")
 		verboseSum = envVerbose + argvVerbose + configVerbose
 		if verboseSum and verboseSum > debugSum:
 			level = 5
@@ -203,8 +243,8 @@ class _LevityLogger(logging.Logger):
 		elif debugSum:
 			level = 10 - (5 if verboseSum else 0 + max(envVerbose, argvVerbose, configVerbose))
 		else:
-			level = logging.getLevelName(self.__config__['level'].upper())
-		level -= self.verbosity(level)
+			level = logging.getLevelName(cls.__config__['level'].upper())
+		level -= cls.verbosity(level)
 		return logging.getLevelName(level)
 
 	@property
@@ -229,13 +269,7 @@ class _LevityLogger(logging.Logger):
 		return verb
 
 	def verbose(self, msg: str, verbosity: int = 0, *args, **kwargs):
-		self._log(self.VERBOSE - verbosity, msg, args, **kwargs)
-
-	@classmethod
-	def getFile(cls):
-		_format = cls.__config__["logFileFormat"]
-		logFile = Path(cls.logDir, 'LevityDash.log')
-		_LevityLogger.logPath = logFile
+		self._log(max(self.VERBOSE - verbosity, 0), msg, args, **kwargs)
 
 	@classmethod
 	def openLog(cls):
@@ -336,6 +370,7 @@ class _LevityLogger(logging.Logger):
 		)
 		super().setLevel(level)
 		self.consoleHandler.setLevel(level)
+		self.fileHandler.setLevel(level)
 
 	def setVerbosity(self, level: int):
 		self.fileHandler.setLevel(5 - level)
@@ -366,5 +401,8 @@ LevityUtilsLog = LevityLogger.getChild("Utils")
 userConfig.setLogger(LevityLogger.getChild('LevityConfig'))
 
 debug = LevityLogger.level <= logging.DEBUG
+
+__builtins__['DEBUG']: bool = debug
+__builtins__['console'] = _LevityLogger.consoleHandler.console
 
 __all__ = ["LevityLogger", "LevityPluginLog", "LevityUtilsLog", 'debug']
