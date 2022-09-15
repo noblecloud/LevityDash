@@ -81,7 +81,7 @@ class MoonBack(QGraphicsPathItem):
 		self.draw()
 
 	def draw(self):
-		bounds = self.parentItem().rect()
+		bounds = self.parentItem().marginRect
 		path = QPainterPath()
 		radius = min(bounds.width(), bounds.height())/2
 		path.addEllipse(QPointF(0, 0), radius, radius)
@@ -241,15 +241,15 @@ class Moon(Panel, tag="moon"):
 
 	@property
 	def visibleWidth(self):
-		return self.rect().width()
+		return self.marginRect.width()
 
 	@property
 	def visibleHeight(self):
-		return self.rect().height()
+		return self.marginRect.height()
 
 	@property
 	def radius(self) -> float:
-		return min(self.visibleHeight, self.visibleWidth)/2
+		return min(*self.marginRect.size().toTuple())/2
 
 	@StateProperty(default=True, allowNone=False, dependencies={'glowStrength'})
 	def glow(self) -> bool:
