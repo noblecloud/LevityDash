@@ -1,20 +1,20 @@
-import asyncio
-from asyncio import get_running_loop, sleep
 from abc import abstractmethod
 from datetime import datetime, timedelta
 from functools import cached_property, lru_cache
 from operator import attrgetter
-
-from typing import Iterable, Optional, Type, Union, Mapping
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, Dict, Iterable, Optional, Text, Type, Union
 
 from LevityDash.lib.config import pluginConfig, PluginConfig
-from LevityDash.lib.plugins.categories import CategoryDict, CategoryItem
-from LevityDash.lib.plugins.observation import (ArchivedObservationValue, Observation, ObservationDict,
-                                                ObservationLog, ObservationRealtime, RealtimeSource, ObservationTimeSeries, ObservationValue,
-                                                PublishedDict, RecordedObservationValue, Container)
-from LevityDash.lib.plugins.schema import Schema
+from LevityDash.lib.EasyPath import EasyPath, EasyPathFile
 from LevityDash.lib.log import LevityPluginLog as pluginLog
-from LevityDash.lib.utils.shared import closest, Period
+from LevityDash.lib.plugins.categories import CategoryDict, CategoryItem
+from LevityDash.lib.plugins.observation import (
+	ArchivedObservationValue, Container, Observation, ObservationDict, ObservationLog, ObservationRealtime,
+	ObservationTimeSeries, ObservationValue, PublishedDict, RealtimeSource, RecordedObservationValue
+)
+from LevityDash.lib.plugins.schema import Schema
 from LevityDash.lib.plugins.utils import Publisher
 from LevityDash.lib.utils.shared import closest, Period
 from WeatherUnits import Time
@@ -315,6 +315,29 @@ class Plugin(metaclass=PluginMeta):
 	async def asyncStop(self):
 		raise NotImplementedError
 
+	@property
+	@abstractmethod
+	def running(self) -> bool:
+		raise NotImplementedError
+
+	@property
+	def enabled(self) -> bool:
+		if self.config is None:
+			raise NotImplementedError
+		return bool(self.config.getOrSet('plugin', 'enabled', 'True', self.config.getboolean))
+
+	@enabled.setter
+	def enabled(self, value: bool):
+		raise NotImplementedError
+
+	@property
+	def disabled(self) -> bool:
+		return not self.enabled
+
+	@disabled.setter
+	def disabled(self, value: bool):
+		self.enabled = not value
+
 	@classmethod
 	def getDefaultConfig(cls, destination: EasyPath | EasyPathFile = None, replace: bool = True):
 		"""Gets the default config from the plugin's __defaultConfig__ attribute and places it in the config directory"""
@@ -356,24 +379,6 @@ class Plugin(metaclass=PluginMeta):
 		except Exception as e:
 			plugin.pluginLog.exception(e)
 		raise ValueError(f'No config for {cls.__name__}')
-
-	@classmethod
-	def _validateConfig(cls, cfg: pluginConfig):
-		return True
-
-	@property
-	def running(self) -> bool:
-		raise NotImplementedError
-
-	def enabled(self) -> bool:
-		return self.config['enabled']
-
-	def setEnabled(self, value: bool = None):
-		if value is None:
-			value = not self.enabled()
-		self.config.defaults()['enabled'] = value
-		if value:
-			self.start()
 
 	@property
 	def name(self) -> str:
