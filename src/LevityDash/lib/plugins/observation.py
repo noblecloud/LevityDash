@@ -2621,10 +2621,10 @@ class Container:
 	@property
 	def isTimeseries(self) -> bool:
 		return any(isinstance(obs, TimeseriesSource)
-			for obs in self.source.observations
-			if self.key in obs
-			   and len(obs) > 3
-			   and obs.period < timedelta(hours=6)
+		           for obs in self.source.observations
+		           if self.key in obs
+		           and len(obs) > 3
+		           and obs.period > timedelta(hours=6)
 		)
 
 	@property

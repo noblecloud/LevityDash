@@ -1,23 +1,21 @@
 from asyncio import gather, get_running_loop
-from itertools import groupby
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import timedelta
-from functools import cached_property, partial
-from types import coroutine
+from functools import cached_property
+from typing import Any, Coroutine, Dict, Iterable, List, Set
 
-from PySide2.QtCore import QObject, Signal, Slot
-from typing import Any, Union, Set, Dict, List, Type, Optional, Coroutine, Iterable
+from itertools import groupby
+from PySide2.QtCore import Signal, Slot
 from rich.repr import auto as auto_rich_repr
 
-from LevityDash.lib.plugins.observation import MeasurementTimeSeries, Observation
-from LevityDash.lib.plugins.plugin import Plugin, SomePlugin, AnySource
-from LevityDash.lib.plugins import Plugins, Container, MutableSignal
-from LevityDash.lib.plugins.categories import CategoryEndpointDict, CategoryItem
-from LevityDash.lib.utils.data import KeyData
-from LevityDash.lib.utils.shared import clearCacheAttr, Period, Now
 from LevityDash.lib.log import LevityPluginLog
-from LevityDash.lib.plugins import ChannelSignal
+from LevityDash.lib.plugins import ChannelSignal, Container, MutableSignal, Plugins
+from LevityDash.lib.plugins.categories import CategoryEndpointDict, CategoryItem
+from LevityDash.lib.plugins.observation import MeasurementTimeSeries, Observation
+from LevityDash.lib.plugins.plugin import AnySource, Plugin, SomePlugin
+from LevityDash.lib.utils.data import KeyData
+from LevityDash.lib.utils.shared import clearCacheAttr, Period
 
 log = LevityPluginLog.getChild('Dispatcher')
 
@@ -365,7 +363,7 @@ class MultiSourceContainer(dict):
 
 	@property
 	def isTimeseriesOnly(self):
-		return all(container.isTimeseries for container in self.values())
+		return all(container.isTimeseries and not container.isRealtime for container in self.values())
 
 	@property
 	def isDailyOnly(self):
