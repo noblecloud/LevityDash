@@ -9,34 +9,34 @@ from LevityDash.lib.config import userConfig
 from LevityDash.lib.plugins.web.errors import APIError
 
 WMOCodes = {
-	0:  {'description': 'Clear', 'icon': ''},
-	1:  {'description': 'Light clouds', 'icon': ''},
-	2:  {'description': 'Partly cloudy', 'icon': ''},
-	3:  {'description': 'Overcast', 'icon': ''},
-	45: {'description': 'Fog', 'icon': ''},
-	48: {'description': 'Depositing rime fog', 'icon': ''},
-	51: {'description': 'Light Drizzle', 'icon': ''},
-	53: {'description': 'Drizzle', 'icon': ''},
-	55: {'description': 'Heavy Drizzle', 'icon': ''},
-	56: {'description': 'Freezing Drizzle', 'icon': ''},
-	57: {'description': 'Heavy Freezing Drizzle', 'icon': ''},
-	61: {'description': 'Light Rain', 'icon': ''},
-	63: {'description': 'Rain', 'icon': ''},
-	65: {'description': 'Heavy Rain', 'icon': ''},
-	66: {'description': 'Light Freezing Rain', 'icon': ''},
-	67: {'description': 'Freezing Rain', 'icon': ''},
-	71: {'description': 'Light Snowfall', 'icon': ''},
-	73: {'description': 'Snowfall', 'icon': ''},
-	75: {'description': 'Heavy Snowfall', 'icon': ''},
-	77: {'description': 'Snow grains', 'icon': ''},
-	80: {'description': 'Light Rain showers', 'icon': ''},
-	81: {'description': 'Rain showers', 'icon': ''},
-	82: {'description': 'Heavy Rain showers', 'icon': ''},
-	85: {'description': 'Light Snow showers', 'icon': ''},
-	86: {'description': 'Heavy Snow showers', 'icon': ''},
-	95: {'description': 'Thunderstorm', 'icon': ''},
-	96: {'description': 'Thunderstorm with light hail', 'icon': ''},
-	99: {'description': 'Thunderstorm with heavy hail', 'icon': ''},
+	0:  {'description': 'Clear', 'icon': 'wi:day-sunny'},
+	1:  {'description': 'Light clouds', 'icon': 'wi:day-sunny-overcast'},
+	2:  {'description': 'Partly cloudy', 'icon': 'wi:day-sunny-overcast'},
+	3:  {'description': 'Overcast', 'icon': 'wi:cloudy'},
+	45: {'description': 'Fog', 'icon': 'wi:fog'},
+	48: {'description': 'Depositing rime fog', 'icon': 'wi:fog'},
+	51: {'description': 'Light Drizzle', 'icon': 'wi:sprinkle'},
+	53: {'description': 'Drizzle', 'icon': 'wi:sprinkle'},
+	55: {'description': 'Heavy Drizzle', 'icon': 'wi:showers'},
+	56: {'description': 'Freezing Drizzle', 'icon': 'wi:sleet'},
+	57: {'description': 'Heavy Freezing Drizzle', 'icon': 'wi:sleet'},
+	61: {'description': 'Light Rain', 'icon': 'wi:showers'},
+	63: {'description': 'Rain', 'icon': 'wi:rain'},
+	65: {'description': 'Heavy Rain', 'icon': 'wi:rain'},
+	66: {'description': 'Light Freezing Rain', 'icon': 'wi:sleet'},
+	67: {'description': 'Freezing Rain', 'icon': 'wi:sleet'},
+	71: {'description': 'Light Snowfall', 'icon': 'wi:snow'},
+	73: {'description': 'Snowfall', 'icon': 'wi:snow'},
+	75: {'description': 'Heavy Snowfall', 'icon': 'wi:snow'},
+	77: {'description': 'Snow grains', 'icon': 'wi:snow'},
+	80: {'description': 'Light Rain showers', 'icon': 'wi:showers'},
+	81: {'description': 'Rain showers', 'icon': 'wi:rain'},
+	82: {'description': 'Heavy Rain showers', 'icon': 'wi:rain'},
+	85: {'description': 'Light Snow showers', 'icon': 'wi:showers'},
+	86: {'description': 'Heavy Snow showers', 'icon': 'wi:showers'},
+	95: {'description': 'Thunderstorm', 'icon': 'wi:thunderstorm'},
+	96: {'description': 'Thunderstorm with light hail', 'icon': 'wi:thunderstorm'},
+	99: {'description': 'Thunderstorm with heavy hail', 'icon': 'wi:thunderstorm'}
 }
 
 schema = {
@@ -46,11 +46,10 @@ schema = {
 	'environment.clouds.cover.low':               {'type': 'cloudcover', 'sourceUnit': '%', 'title': 'Cloud Cover Low', 'description': 'Cloud cover low', 'sourceKey': 'cloudcover_low', 'timeseriesOnly': True},
 	'environment.clouds.cover.mid':               {'type': 'cloudcover', 'sourceUnit': '%', 'title': 'Cloud Cover Mid', 'description': 'Cloud cover mid', 'sourceKey': 'cloudcover_mid', 'timeseriesOnly': True},
 
-	'environment.condition.weatherCode':          {'type': 'WeatherCode', 'sourceUnit': 'WeatherCode', 'title': 'Weather code', 'description': 'Weather code', 'sourceKey': 'weathercode', 'timeseriesOnly': True},
-	'environment.condition.icon':                 {
-		'type':      'icon', 'sourceUnit': 'int', 'title': 'Condition Icon', 'description': 'Condition Icon', 'dataKey': 'environment.condition.weatherCode', 'iconType': 'glyph',
-		'glyphFont': 'WeatherIcons',
-		'aliases':   '@conditionIcon'
+	'environment.condition.weatherCode':            {'type': 'WeatherCode', 'sourceUnit': 'WeatherCode', 'title': 'Weather code', 'description': 'Weather code', 'sourceKey': 'weathercode', 'timeseriesOnly': True},
+	'environment.condition.icon':                   {
+		'type':    'icon', 'sourceUnit': 'int', 'title': 'Condition Icon', 'description': 'Condition Icon', 'dataKey': 'environment.condition.weatherCode', 'iconType': 'glyph',
+		'aliases': '@conditionIcon'
 	},
 	'environment.condition.condition':            {'type': 'WeatherCode', 'sourceUnit': 'int', 'title': 'Condition', 'description': 'Condition', 'dataKey': 'environment.condition.weatherCode', 'aliases': '@condition'},
 
