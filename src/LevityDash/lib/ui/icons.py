@@ -1,16 +1,16 @@
+from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 from typing import Dict, Optional, Callable, ClassVar, Union, TypeAlias, TypeVar
 
-from PySide2.QtGui import QFont
-from rich import pretty
-
-import LevityDash.lib.ui.fonts
-
-# pretty.install()
+from rich.repr import rich_repr
+from PySide2.QtGui import QFont, QFontMetrics
 
 from LevityDash.lib.EasyPath import EasyPath
 from LevityDash import __resources__
+from LevityDash.lib.log import LevityLogger
+
+log = LevityLogger.getChild('icons')
 
 ls = lambda x=None: [x.name for x in Path(x or '').iterdir()]
 
@@ -19,6 +19,28 @@ _CharMap = Union[T, Dict[str, str | dict | list | T]]
 CharMap: TypeAlias = _CharMap[_CharMap[_CharMap]]
 
 
+@dataclass
+class Icon:
+	iconPack: 'IconPack'
+	name: str
+	unicode: str
+	font: QFont
+
+	def __str__(self):
+		return self.unicode
+
+	def __hash__(self):
+		return hash((self.unicode, self.iconPack))
+
+	def __repr__(self):
+		return f'Icon(name={self.iconPack.prefix}:{self.name}, iconPack={self.iconPack!s}, unicode={self.unicode}, style={self.font.styleName()})'
+
+
+class FontNotFoundError(Exception):
+	pass
+
+
+@rich_repr
 class IconPack:
 	basePath = Path(f'{__resources__}/icons')
 
@@ -28,8 +50,10 @@ class IconPack:
 	charMapPath: Path
 	svgMap: Optional[Dict]
 	prefix: str
+	name: str
 	defaultStyle: Optional[str] = None
 	processor: Optional[Callable[[], None]]
+	metrics: ClassVar[Dict[str, QFontMetrics]] = {}
 
 	def __new__(cls):
 		if cls is IconPack:
@@ -38,6 +62,19 @@ class IconPack:
 		if (icon_pack := IconPack.__icon_packs__.get(prefix, None)) is None:
 			IconPack.__icon_packs__[prefix] = icon_pack = super().__new__(cls)
 		return icon_pack
+
+	def __hash__(self):
+		return hash(self.prefix)
+
+	def __str__(self):
+		return f'IconPack({self.name})'
+
+	def __rich_repr__(self):
+		yield 'name', self.name
+		yield 'prefix', self.prefix
+		yield 'defaultStyle', self.defaultStyle
+		yield 'styles', self.styles
+		yield 'charCount', max(len(i.get('chars', {})) for i in self.charMap.values())
 
 	def __class_getitem__(cls, item) -> Union['IconPack', str]:
 		if cls is IconPack:
@@ -69,14 +106,32 @@ class IconPack:
 				elif key == 'font':
 					value = value.format(**globals())
 					_, font = loadFont(EasyPath(Path(value)))
-					fonts_[level] = QFont(font)
+					font = QFont(font)
+					fonts_[level] = font
+					self.metrics[level] = QFontMetrics(font)
+					fonts_[level].setStyleName(level)
 
 			return fonts_
 
 		return recurse()
 
-	def getFont(self, style: str = None) -> QFont:
-		return self.fonts.get(style, None) or self.fonts[self.defaultStyle]
+	@cached_property
+	def styles(self) -> list[str]:
+		defaultStyle = getattr(self, 'defaultStyle', None)
+		return ([defaultStyle] if defaultStyle is not None else []) + [
+      x for x in self.charMap.keys() if x not in {"svg", "chars", defaultStyle}
+		]
+
+	def getFont(self, style: str = None, hasChar: str = None) -> QFont:
+		style = style or self.defaultStyle
+		defaultStyle = self.fonts[self.defaultStyle]
+		font = self.fonts.get(style, None) or defaultStyle
+		if hasChar is None and len(self.styles) > 1:
+			return font
+		styleWithChar = next((x for x in (style, *self.styles) if self.metrics[x].inFont(hasChar)), None)
+		if styleWithChar is None:
+			raise FontNotFoundError(f'No font found with char {hasChar}')
+		return self.fonts[styleWithChar]
 
 	def reload(self):
 		self.charMap = self.processor(self.charMapPath, force_reload=True)
@@ -98,8 +153,29 @@ class IconPack:
 		name = self.__trim_prefix(name)
 		if (style is None or style not in self.charMap) and self.defaultStyle is not None:
 			style = self.defaultStyle
-		style = self.charMap.get(style, self.charMap)
+		style = self.charMap.get(style, self.charMap[self.defaultStyle])
 		return style['chars'][name]
+
+	def getIcon(self, name: str, style: Optional[str] = None) -> Icon:
+
+		if (style is None or style not in self.charMap) and self.defaultStyle is not None:
+			style = self.defaultStyle
+
+		try:
+			char = self.getIconChar(name, style)
+		except KeyError:
+			styles = (self.defaultStyle, *(k for k, v in self.charMap.items() if k != self.defaultStyle and name in v.get('chars', {})))
+			style = next((x for x in styles if x is not None), None)
+			char = self.getIconChar(name, style)
+		try:
+			font = self.getFont(style, hasChar=char)
+			icon = Icon(self, name, char, font)
+		except FontNotFoundError:
+			font = self.getFont(style)
+			icon = Icon(self, name, char, font)
+			log.warning(f'No font found for {icon!r}')
+
+		return icon
 
 
 class FontAwesome(IconPack):
@@ -107,6 +183,7 @@ class FontAwesome(IconPack):
 	name = 'Font Awesome'
 	charMapPath = IconPack.basePath/Path('maps/font-awesome.toml')
 	defaultStyle = 'solid'
+	styles = {'brands', 'regular', 'solid'}
 
 	def processor(self, font_spec_output_path: Path = charMapPath, force_reload: bool = False):
 		from json import load as json_load
@@ -166,42 +243,51 @@ class MaterialDesignIcons(IconPack):
 	prefix = 'mdi'
 	name = 'Material Design Icons'
 	charMapPath = IconPack.basePath/Path('maps/mdi6.toml')
-	defaultStyle = 'solid'
-
-	styles = {'outline', 'solid'}
+	defaultStyle = 'regular'
 
 	def processor(self, font_spect_path: Path = charMapPath, force_reload: bool = False) -> Dict:
 		from tomli import load
 
 		with open(font_spect_path, 'rb') as f:
 			font_spec = load(f)['mdi6']
-		items = {k: dict(chars=dict()) for k in self.styles}
-		for name, value in font_spec.pop('chars').items():
-			items['chars'][name] = chr(int(value, 16))
-		return items
+		styles = {k: v for k, v in font_spec.items() if 'chars' in v or 'font' in v}
+		for style, style_spec in styles.items():
+			chars = style_spec['chars']
+			for name, char in chars.items():
+				chars[name] = chr(int(char, 16))
+		return styles
 
 
 class WeatherIcons(IconPack):
 	prefix = 'wi'
 	name = 'Weather Icons'
 	charMapPath = IconPack.basePath/Path('maps/weather.toml')
-	defaultStyle = ''
-
-	styles = {'regular', 'solid'}
+	defaultStyle = 'regular'
 
 	def processor(self, font_spect_path: Path = charMapPath, force_reload: bool = False) -> Dict:
 		from tomli import load
 
 		with open(font_spect_path, 'rb') as f:
 			font_spec = load(f)['weather-icons']
+		styles = {k: v for k, v in font_spec.items() if 'chars' in v or 'font' in v}
+		for style, style_spec in styles.items():
+			chars = style_spec['chars']
+			for name, char in chars.items():
+				chars[name] = chr(int(char, 16))
+		return styles
 
-		items = {}
 
-		for name, value in font_spec.pop('chars').items():
-			items[name] = chr(int(value, 16))
-		return {**font_spec, 'chars': items}
+def getIcon(name: str, style: Optional[str] = None) -> Icon:
+	name = name.lstrip('icon:').strip(' ')
+	pack, name = name.split(':', 1)
+	pack = IconPack.__icon_packs__.get(pack, None)
+	if pack is None:
+		raise Exception(f'Could not find icon pack {pack}')
+	return pack.getIcon(name, style)
 
 
 fa = FontAwesome()
 mdi = MaterialDesignIcons()
 wi = WeatherIcons()
+
+__all__ = ['fa', 'mdi', 'wi', 'getIcon', 'Icon', 'IconPack']

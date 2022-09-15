@@ -1,32 +1,39 @@
 from functools import cached_property
+from typing import List
 
 from PySide2.QtCore import QRectF, Qt
-from PySide2.QtGui import QFont, QPainter, QColor
+from PySide2.QtGui import QColor, QFont, QPainter
 from PySide2.QtWidgets import QGraphicsItem, QLineEdit
 
-from LevityDash.lib.ui.frontends.PySide.utils import addRect, DebugPaint
-from WeatherUnits.length import Length
-from LevityDash.lib.ui.frontends.PySide.Modules.Panel import SizeGroup
+from LevityDash.lib.stateful import DefaultFalse, DefaultTrue, StateProperty
+from LevityDash.lib.ui import Color
+from LevityDash.lib.ui.fonts import fontDict as fonts, FontWeight, getFontFamily
 from LevityDash.lib.ui.frontends.PySide import qtLogger as guiLog
-from LevityDash.lib.ui.Geometry import Geometry, Size, Position, parseSize, AlignmentFlag, Alignment
-from LevityDash.lib.ui.fonts import compactFont, defaultFont
+from LevityDash.lib.ui.frontends.PySide.Modules import Panel
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Text
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import ScaleType, TextFilter
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.MarginHandles import MarginHandles
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import EditableLabelContextMenu, LabelContextMenu
-from LevityDash.lib.ui.frontends.PySide.Modules import Panel
-from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import ScaleType
+from LevityDash.lib.ui.frontends.PySide.Modules.Panel import MatchAllSizeGroup, SizeGroup
+from LevityDash.lib.ui.frontends.PySide.utils import addRect, DebugPaint
+from LevityDash.lib.ui.Geometry import Alignment, AlignmentFlag, Geometry, parseSize, Position, Size
+from LevityDash.lib.ui.icons import getIcon, Icon
 from LevityDash.lib.utils import clearCacheAttr
-from LevityDash.lib.stateful import DefaultTrue, DefaultFalse, DefaultGroup, StateProperty
-from LevityDash.lib.ui.icons import IconPack
+from WeatherUnits.length import Length
 
 log = guiLog.getChild(__name__)
 
 __all__ = ['Label', 'EditableLabel', 'TitleLabel']
 
+defaultFont = fonts['default']
+compactFont = fonts['compact']
+titleFont = fonts['title']
 
-@DebugPaint(color='#00ffaa')
+
+@DebugPaint
 class Label(Panel, tag='label'):
 	_acceptsChildren = False
+	_fontWeight = FontWeight.Normal
 
 	__ratioFontSize = 100
 	_lineBreaking: bool
@@ -34,11 +41,20 @@ class Label(Panel, tag='label'):
 
 	__exclude__ = {..., 'items'}
 
+	_defaultText: str | None = None
+	_defaultIcon: Icon | None = None
+
+	def __init_subclass__(cls, **kwargs):
+		super().__init_subclass__(**kwargs)
+		cls._defaultIcon = kwargs.get('defaultIcon', None)
+		cls._defaultText = kwargs.get('defaultText', None)
+
+
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 		self.marginHandles: MarginHandles = MarginHandles(self)
 		self.marginHandles.signals.action.connect(self.textBox.updateText)
-		self.marginHandles.setEnabled(False)
+		self.marginHandles.setEnabled(True)
 		self.setAcceptDrops(False)
 		self.geometry.updateSurface()
 
@@ -47,43 +63,41 @@ class Label(Panel, tag='label'):
 		yield from super().__rich_repr__()
 
 	@cached_property
-	def textBox(self):
+	def textBox(self) -> Text:
 		box = Text(self)
 		box.setParentItem(self)
 		return box
 
-	@StateProperty(default=set(), allowNone=False, dependencies={'geometry', 'text', 'margins'})
-	def filters(self) -> set[str]:
+	@StateProperty(default=[], allowNone=False, dependencies={'geometry', 'text', 'margins'})
+	def filters(self) -> List[TextFilter]:
 		return self.textBox.enabledFilters
 
 	@filters.setter
-	def filters(self, value):
+	def filters(self, value: List[TextFilter]):
 		self.textBox.enabledFilters = value
 
+	@filters.decode
+	def filters(self, value: List[str]) -> List[TextFilter]:
+		return [TextFilter[f] for f in value]
+
 	@filters.encode
-	def filters(value) -> list:
-		match value:
-			case str(value):
-				value = [value]
-			case None:
-				value = list
-			case set(value) | tuple(value):
-				value = list(value)
-			case list(value):
-				pass
-			case _:
-				raise TypeError(f'filters must be a string, list, tuple or set, not {type(value)}')
-		return value
+	def filters(value: List[TextFilter]) -> List[str]:
+		return [f.name for f in value]
 
-	def editMargins(self):
-		self.parent.clearFocus()
-		self.parent.parent.clearFocus()
-
-		self.marginHandles.scene().clearFocus()
-		self.marginHandles.setEnabled(True)
-		self.marginHandles.setVisible(True)
-		self.marginHandles.updatePosition(self.rect())
-		self.marginHandles.setFocus()
+	def editMargins(self, toggle: bool = True):
+		if toggle:
+			self.parent.clearFocus()
+			self.parent.parent.clearFocus()
+			self.marginHandles.scene().clearFocus()
+			self.marginHandles.setEnabled(True)
+			self.marginHandles.setVisible(True)
+			self.marginHandles.forceDisplay = True
+			self.marginHandles.updatePosition(self.marginRect)
+			self.marginHandles.setFocus()
+		else:
+			self.marginHandles.forceDisplay = False
+			self.marginHandles.setEnabled(False)
+			self.marginHandles.setVisible(False)
 
 	@StateProperty
 	def margins(self):
@@ -93,7 +107,7 @@ class Label(Panel, tag='label'):
 	def margins(self):
 		clearCacheAttr(self, 'marginRect')
 		if hasattr(self, 'marginHandles'):
-			self.textBox.updateTransform()
+			self.textBox.updateTransform(updatePath=False)
 
 	def dragEnterEvent(self, event):
 		if event.mimeData().hasFormat('text/plain'):
@@ -113,46 +127,117 @@ class Label(Panel, tag='label'):
 
 	def setAlignment(self, alignment: AlignmentFlag):
 		self.textBox.setAlignment(alignment)
-		type(self).alignment.default(self)
+		type(self).alignment.default(type(self))
 		self.update()
 
 	def setFilter(self, filter: str, enabled: bool = True):
 		self.textBox.setFilter(filter, enabled)
 
-	@StateProperty(default=DefaultGroup('⋯', '', None), sortOrder=0, dependencies={'geometry', 'margins'}, repr=True)
+	@StateProperty(default=..., sortOrder=0, dependencies={'geometry', 'margins'}, repr=True)
 	def text(self) -> str:
-		return self.textBox.text if not self.hasIcon else None
+		return self.textBox.text if not self.hasIcon else ...
 
 	@text.setter
-	def text(self, value):
+	def text(self, value: str):
 		self.textBox.value = value
 
 	@text.condition
 	def text(value):
-		return bool(value)
+		return bool(value) and value is not ...
+
+	@property
+	def defaultText(self) -> str | None:
+		return self._defaultText
 
 	@StateProperty(default=None, sortOrder=1, dependencies={'geometry', 'margins'}, repr=True)
-	def icon(self) -> str | None:
-		return getattr(self, '_icon', None)
+	def icon(self) -> Icon | None:
+		return self.textBox.icon
 
 	@icon.setter
-	def icon(self, value):
-		self._icon = value
-		if value.startswith('icon:'):
-			value = value[5:]
-		iconPack, name = value.split('-', 1)
-		iconPack = IconPack[iconPack]
-		font = iconPack.getFont()
-		self.textBox.setFont(font)
-		value = iconPack.getIconChar(name, '')
+	def icon(self, value: Icon):
 		self.textBox.value = value
+
+	@icon.encode
+	def icon(self, value: Icon) -> str:
+		return f'{value.iconPack.prefix}:{value.name}' if value is not None else None
+
+	@icon.decode
+	def icon(self, value: str) -> Icon:
+		return getIcon(value)
+
+	@icon.condition
+	def icon(self):
+		return not self.textBox.hasDynamicValue
+
+	@property
+	def defaultIcon(self) -> Icon | None:
+		return self._defaultIcon
 
 	@property
 	def hasIcon(self) -> bool:
-		return self.icon is not None
+		return isinstance(self.textBox.value, Icon)
+
+	@StateProperty(allowNone=False, default=Color.text)
+	def color(self) -> Color:
+		return self.textBox.color
+
+	@color.setter
+	def color(self, value: Color):
+		self.textBox.setColor(value)
+
+	@color.decode
+	def color(self, value: str | dict | QColor) -> Color:
+		try:
+			return Color(value)
+		except ValueError as e:
+			raise e
+
+	@StateProperty(key='font', default=defaultFont.family(), repr=True, allowNone=False)
+	def fontFamily(self) -> str:
+		return self.textBox.font().family()
+
+	@fontFamily.setter
+	def fontFamily(self, value: str):
+		self.textBox.setFontFamily(value)
+
+	@fontFamily.decode
+	def fontFamily(self, value: str) -> str:
+		return getFontFamily(value)
+
+	@fontFamily.condition
+	def fontFamily(self) -> bool:
+		return not self.textBox.isIcon and not self.textBox.hasDynamicFontFamily
+
+	@fontFamily.condition
+	def fontFamily(self) -> bool:
+		return self.textBox.icon is not None and self.textBox.font().family() != self.textBox.icon.font.family()
+
+	@StateProperty(key='weight', default=FontWeight.Normal, repr=True, allowNone=False)
+	def fontWeight(self) -> FontWeight:
+		return FontWeight.fromQt5(self.textBox.font().weight())
+
+	@fontWeight.setter
+	def fontWeight(self, value: FontWeight):
+		existingFont = self.textBox.font(noIconFont=True)
+		weightedFont = FontWeight.macOSWeight(existingFont.family(), value)
+		self.textBox.setFont(weightedFont)
+
+	@fontWeight.decode
+	def fontWeight(self, value: str | int | float) -> FontWeight:
+		if isinstance(value, float):
+			value = int(value)
+		return FontWeight[value]
+
+	@fontWeight.encode
+	def fontWeight(value: FontWeight) -> str:
+		return value.name
+
+	@fontWeight.condition
+	def fontWeight(self) -> bool:
+		return not self.textBox.isIcon
 
 	def allowDynamicUpdate(self) -> bool:
-		return self.icon is None
+		return not self.textBox.isIcon
 
 	def setText(self, text: str):
 		self.text = text
@@ -177,9 +262,27 @@ class Label(Panel, tag='label'):
 		return self.font
 
 	def setRect(self, rect: QRectF):
-		super(Label, self).setRect(rect)
-		self.textBox.setPos(self.rect().topLeft())
-		self.textBox.updateText()
+		currentRect = self.rect()
+		if currentRect != rect:
+			super(Label, self).setRect(rect)
+			self.textBox.setPos(self.rect().topLeft())
+			self.textBox.updateText()
+
+	@StateProperty(key='text-scale-type', default=ScaleType.auto)
+	def textScaleType(self) -> ScaleType:
+		return self.textBox.textScaleType
+
+	@textScaleType.setter
+	def textScaleType(self, value: ScaleType):
+		self.textBox.textScaleType = value
+
+	@textScaleType.encode
+	def textScaleType(self, value: ScaleType) -> str:
+		return value.name
+
+	@textScaleType.decode
+	def textScaleType(self, value: str) -> ScaleType:
+		return ScaleType[value]
 
 	@StateProperty(default={}, dependencies={'geometry', 'text', 'alignment'})
 	def modifiers(self) -> dict:
@@ -188,6 +291,14 @@ class Label(Panel, tag='label'):
 	@modifiers.setter
 	def modifiers(self, value: dict):
 		self.textBox.modifiers = value
+
+	@StateProperty(key='format-hint', default = None)
+	def formatHint(self) -> str:
+		return getattr(self.textBox, '_formatHint', None)
+
+	@formatHint.setter
+	def formatHint(self, value: str):
+		self.textBox._formatHint = value
 
 	@StateProperty(default=None, dependencies={'geometry', 'text', 'alignment'})
 	def textHeight(self) -> Size.Height | Length | None:
@@ -210,56 +321,46 @@ class Label(Panel, tag='label'):
 		if value is not None:
 			return str(value)
 
-	@StateProperty(default={}, dependencies={'geometry', 'text', 'alignment'})
-	def matchingGroup(self) -> dict:
-		return getattr(self, '_matchingGroup', {})
+	@StateProperty(default=None, dependencies={'geometry', 'text', 'alignment'})
+	def matchingGroup(self) -> SizeGroup:
+		return getattr(self, '_matchingGroup', None)
 
 	@matchingGroup.setter
-	def matchingGroup(self, value: dict):
+	def matchingGroup(self, value: SizeGroup):
+		if (g := getattr(self, '_matchingGroup', None)) is not None and g is not value:
+			g.removeItem(self.textBox)
 		self._matchingGroup = value
+		value.addItem(self.textBox)
 
 	@matchingGroup.decode
-	def matchingGroup(value: str | dict) -> dict:
+	def matchingGroup(self, value: str | dict) -> SizeGroup:
 		if isinstance(value, str):
-			return {'group': value}
-		return value
+			value = {'group': value}
+		return self.getAttrGroup(**value)
 
 	@matchingGroup.encode
-	def matchingGroup(value: SizeGroup | dict) -> str | dict:
-		match value:
-			case {'group': group} | str(group):
-				return group
-		return value
+	def matchingGroup(self, value: SizeGroup) -> str | dict | None:
+		if value is None:
+			return None
+		if (g := self._rawItemState.get('matchingGroup')) is not None:
+			return g
+		parent = value.parent
+		if parent is self.localGroup:
+			prefix = 'local'
+		elif parent is self.scene().base:
+			prefix = 'global'
+		elif parent is self.parentLocalGroup:
+			prefix = 'parent'
+		elif parent is self.getTaggedGroup('group').getAttrGroup(value.key, True if isinstance(value, MatchAllSizeGroup) else False):
+			prefix = 'group'
+		elif parent in self.getTaggedGroups(value):
+			prefix = parent.name
+		elif parent in self.getNamedGroups():
+			prefix = f'{parent.name}@{parent.parent.name}'
+		else:
+			raise ValueError(f'invalid group {value}')
+		return {'group': f'{prefix}.{value.name}', 'matchAll': value.matchAll}
 
-	@matchingGroup.after
-	def matchingGroup(self):
-		v = self._matchingGroup or {}
-		group = v.get('group', None) if isinstance(v, dict) else v
-		matchAll = v.get('matchAll', False)
-		match group.split('.') if isinstance(group, str) else group:
-			case 'local', str(key):
-				group = self.localGroup.getAttrGroup(key, matchAll)
-			case 'global', str(key):
-				group = self.scene().base.getAttrGroup(key, matchAll)
-			case 'parent', str(key):
-				group = (self.parentLocalGroup or self.localGroup).getAttrGroup(key, matchAll)
-			case 'group', str(key):
-				group = self.getTaggedGroup('group').getAttrGroup(key, matchAll)
-			case str(tag), str(key):
-				group = self.getTaggedGroup(tag).getAttrGroup(key, matchAll)
-			case [str(named)] if '@' in named:
-				key, group = named.split('@')
-				group = self.getNamedGroup(group).getAttrGroup(key, matchAll)
-			case SizeGroup():
-				pass
-			case _:
-				raise ValueError(f'invalid group {group}')
-		if (g := getattr(self, '_matchingGroupGroup', None)) is group:
-			g.removeItem(self.textBox)
-		group.addItem(self.textBox)
-		self._matchingGroupGroup = group
-
-	# def paint(self, painter: QPainter, option, widget):
 
 	# Section .paint
 	def _debug_paint(self, painter: QPainter, option, widget):
@@ -267,6 +368,7 @@ class Label(Panel, tag='label'):
 		c = QColor(self._debug_paint_color)
 		c.setAlphaF(0.1)
 		addRect(painter, self.rect(), fill=c, offset=2)
+		addRect(painter, self.marginRect)
 		self._normal_paint(painter, option, widget)
 
 
@@ -333,6 +435,7 @@ class HiddenLineEdit(QLineEdit):
 
 
 class EditableLabel(Label, tag='text'):
+
 
 	def __init__(self, *args, **kwargs):
 		self._manualValue = None
@@ -406,18 +509,24 @@ class EditableLabel(Label, tag='text'):
 		super(EditableLabel, self).delete()
 
 
-class TitleLabel(NonInteractiveLabel):
+class TitleLabel(NonInteractiveLabel, defaultText='-'):
 	deletable = False
 
 	__exclude__ = {'geometry', 'locked', 'frozen', 'movable', 'resizable'}
 	_manualValue: str | None = None
+
+	__defaults__ = {
+		'weight': FontWeight.Light,
+		'color': '#eeeeee',
+		'font': 'Roboto',
+	}
 
 	def __init__(self, *args, **kwargs):
 		kwargs['geometry'] = Geometry(surface=self, size=(1, 0.2), position=Position(0, 0), absolute=False, snapping=False)
 		super().__init__(*args, **kwargs)
 		self.textBox._scaleType = ScaleType.auto
 
-	@StateProperty(default=DefaultGroup('⋯', '', None), sortOrder=0, dependencies={'geometry', 'margins'}, repr=True)
+	@StateProperty(default=..., sortOrder=0, dependencies={'geometry', 'margins'}, repr=True)
 	def text(self) -> str:
 		pass
 
