@@ -696,25 +696,8 @@ class Stack(Panel, tag='stack'):
 	def spacing_px(self) -> int | float:
 		return size_px(self.spacing, self.geometry)
 
-	@StateProperty(key='padding', default=Size.Height(0, absolute=True), after=setGeometries, dependancies={'geometry'})
-	def padding_data(self) -> Size.Height | Size.Width | Length:
-		"""
-		The padding around the stack.
-		"""
-		return getattr(self, '_padding', self.primaryDimension.size(0, absolute=True))
-
-	@padding_data.setter
-	def padding_data(self, value: Size.Height | Size.Width | Length):
-		self._padding = value
-
-	@padding_data.decode
-	def padding_data(value: str | int | float) -> Size.Height | Size.Width | Length:
-		return parseSize(value, Size.Height(0, absolute=True))
-
-	@property
-	def padding(self) -> Padding:
-		value = size_float(self.padding_data, self.geometry)
-		return Padding(self, value, value, value, value)
+	padding = Panel.padding
+	padding.after(setGeometries)
 
 	def getItemGeometry(self, index: int | None) -> Geometry:
 		if index is None:
