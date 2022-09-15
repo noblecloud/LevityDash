@@ -588,6 +588,7 @@ class LevityMainWindow(QMainWindow):
 			self.__menubarHeight = self.menuBar().height()*2
 			self.bar = menubar
 			self.setMenuWidget(menubar)
+			self.updateMenuBar()
 		else:
 			self.bar = self.menuBar()
 
@@ -863,20 +864,24 @@ class LevityMainWindow(QMainWindow):
 	def changeEvent(self, event: QEvent):
 		super().changeEvent(event)
 		if event.type() == QEvent.WindowStateChange and (platform.system() != 'Darwin'):
-			self.menuBarHoverArea.size.setWidth(self.width())
-			self.menuBarHoverArea.update()
+			self.updateMenuBar()
+
+	def updateMenuBar(self):
+		if (hba := getattr(self, 'menuBarHoverArea', None)) is not None:
+			hba.size.setWidth(self.width())
+			hba.update()
 			menubar = self.bar
 			view = self.centralWidget()
 			if self.windowState() & Qt.WindowFullScreen:
 				self.setMenuWidget(menubar)
 				menubar.setParent(view)
-				self.menuBarHoverArea.setEnabled(True)
+				hba.setEnabled(True)
 				self.menuBarLeave()
 			else:
 				self.setMenuWidget(menubar)
 				menubar.setParent(self)
 				self.menuBarHover()
-				self.menuBarHoverArea.setEnabled(False)
+				hba.setEnabled(False)
 
 
 class ClockSignals(QObject):
