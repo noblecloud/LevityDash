@@ -281,6 +281,10 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 
 class SizeGroup:
 	items: Set['Text']
+	parent: _Panel
+	key: str
+
+	locked: bool = False
 	_lastSize: float = 0
 	_alignments: Dict[AlignmentFlag, float]
 
@@ -293,45 +297,61 @@ class SizeGroup:
 
 	itemsToAdjust: Set[ItemData]
 
-	def __init__(self, parent: 'Panel', items: Set['Text'] = None):
+	def __new__(cls, *args, **kwargs):
+		matchAll = kwargs.pop('matchAll', False)
+		if matchAll:
+			cls = MatchAllSizeGroup
+		return super().__new__(cls)
+
+	def __init__(self, parent: 'Panel', key: str, items: Set['Text'] = None, matchAll: bool = False):
 		self.updateTask = None
+		self.key = key
 		self.items = items or set()
 		self.itemsToAdjust = set()
 		self.parent = parent
 		self._alignments = defaultdict(float)
-		self.adjustSizes()
+		self.adjustSizes(reason='init')
 
 		QApplication.instance().resizeFinished.connect(self.adjustSizes)
 
-	def adjustSizes(self, exclude=None, clear: bool = False):
-		# items = self.simlilarItems(similarTo) if similarTo is not None else self.items
-		for item in self.items:
-			if item is not exclude:
-				item.updateTransform()
-		if clear:
-			self.updateTask = None
+	def adjustSizes(self, exclude: Set['Text'] = None, reason=None):
+		# items = self.similarItems(similarTo) if similarTo is not None else self.items
+		# items = [i.text for i in self.items]
+		if self.locked or len(self.items) < 2:
+			return
+		self.locked = True
+		for group in self.sizes.values():
+			for item in group:
+				if item is not exclude:
+					item.updateTransform(updatePath=False)
+		self.locked = False
 
 	def addItem(self, item: 'Text'):
 		self.items.add(item)
 		item._sized = self
-		self.adjustSizes()
+		loop.call_later(.5, partial(self.adjustSizes, item))
 
 	def removeItem(self, item: 'Text'):
 		self.items.remove(item)
 		item._sized = None
-		self.adjustSizes()
+		self.adjustSizes(reason='remove')
 
-	def sharedFontSize(self, item) -> float:
-		items = [item.limitRect.height() for item in self.simlilarItems(item)]
-		height = sum(items)/len(items)
-		return max(height, 12)
+	def sharedFontSize(self, item) -> int:
+		sizes: List[int] = list(self.sizes)
+		if len(sizes) == 0:
+			self.__dict__.pop('sizes', None)
+			sizes = list(self.sizes)
+		if len(sizes) == 1:
+			return sizes[0]
+		itemHeight = item.limitRect.height()
+		return min(sizes, key=lambda x: abs(x - itemHeight))
 
 	def sharedSize(self, v):
 		s = min((item.getTextScale() for item in self.simlilarItems(v)), default=1)
-		if s != self._lastSize:
+		if not self.locked and abs(s - self._lastSize) > 0.01:
 			self._lastSize = s
-			if self.updateTask is None:
-				self.updateTask = loop.call_later(.5, partial(self.adjustSizes, v, clear=True))
+			self.__dict__.pop('sizes', None)
+			loop.call_later(.5, partial(self.adjustSizes, v, reason='shared-size-change'))
 		return s
 
 	def testSimilar(self, rect: QRect | QRectF, other: 'Text') -> bool:
@@ -344,6 +364,18 @@ class SizeGroup:
 	def simlilarItems(self, item: 'Text'):
 		ownSize = item.parent.sceneBoundingRect()
 		return {x for x in self.items if self.testSimilar(ownSize, x)}
+
+	@cached_property
+	def sizes(self) -> Dict[int, set['Text']]:
+		items = set(self.items)
+		groups = defaultdict(set)
+		while items:
+			randomItem = items.pop()
+			group = self.simlilarItems(randomItem)
+			items -= group
+			height = max(sum(i.limitRect.height() for i in group) / len(group), 10)
+			groups[round(height / 10) * 10] |= group
+		return dict(groups)
 
 	def sharedY(self, item: 'Text') -> float:
 		alignedItems = self.getSimilarAlignedItems(item)
@@ -385,7 +417,7 @@ class Panel(_Panel, Stateful, tag='group'):
 	signals: GraphicsItemSignals
 	filePath: Optional[EasyPathFile]
 	_childIsMoving: bool
-	_attrGroups: None | Set[str] = None
+	_attrGroups: None | Dict[str, SizeGroup] = None
 
 	__groups__: Dict[str, 'Panel'] = {}
 
@@ -758,12 +790,30 @@ class Panel(_Panel, Stateful, tag='group'):
 			Panel.__groups__[name] = namedGroup
 		return namedGroup
 
-	def getAttrGroup(self, key: str, matchAll: bool = False) -> SizeGroup:
-		if (attrGroups := getattr(self, '_attrGroups', None)) is None:
-			self._attrGroups = attrGroups = {}
-		if (group := attrGroups.get(key, None)) is None:
-			attrGroups[key] = group = SizeGroup(self) if not matchAll else MatchAllSizeGroup(self)
-		return group
+	def getAttrGroup(self, group: str | _Panel, matchAll: bool = False) -> SizeGroup:
+		kwargs = {}
+		match group.split('.') if isinstance(group, str) else group:
+			case 'local', str(key):
+				group = self.localGroup
+			case 'global', str(key):
+				group = self.scene().base
+			case 'parent', str(key):
+				group = (self.parentLocalGroup or self.localGroup)
+			case 'group', str(key):
+				group = self.getTaggedGroup('group')
+			case str(tag), str(key):
+				group = self.getTaggedGroup(tag)
+			case [str(named)] if '@' in named:
+				key, group = named.split('@')
+				kwargs['tag'] = group
+				group = self.getNamedGroup(group)
+			case _:
+				raise ValueError(f'invalid group {group}')
+
+		attrGroups = group.attrGroups
+		if (attrGroup := attrGroups.get(key, None)) is None:
+			attrGroups[key] = attrGroup = SizeGroup(parent=group, key=key, matchAll=matchAll)
+		return attrGroup
 
 	@property
 	def titledName(self) -> str | None:
