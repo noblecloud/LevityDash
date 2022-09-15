@@ -59,7 +59,7 @@ def loadGraphs(parent, items, parentItems, **kwargs):
 	newItems = []
 	while items:
 		item = items.pop(0)
-		if not GraphType.validate(item):
+		if not GraphType.validate(item, context={'parent': parent}):
 			log.error(f'Invalid state for graph: {item}', item)
 		ns = SimpleNamespace(**item)
 
@@ -78,7 +78,7 @@ def loadGraphs(parent, items, parentItems, **kwargs):
 				existing.remove(graph)
 
 		itemCount += 1
-		if INCREMENTAL_LOAD and itemCount%itemSkip == 0:
+		if INCREMENTAL_LOAD and itemCount % itemSkip == 0:
 			QApplication.processEvents()
 	for i in existing:
 		i.scene().removeItem(i)
@@ -115,7 +115,7 @@ def loadRealtime(parent, items, parentItems, **kwargs):
 			case _:
 				print('fail')
 		itemCount += 1
-		if INCREMENTAL_LOAD and itemCount%itemSkip == 0:
+		if INCREMENTAL_LOAD and itemCount % itemSkip == 0:
 			QApplication.processEvents()
 	for i in existing:
 		i.scene().removeItem(i)
@@ -147,7 +147,7 @@ def loadClock(parent, items, parentItems, **kwargs):
 				clock = sorted(existing, key=lambda g: (g.geometry.scoreSimilarity(ns.geometry), levenshtein(ns.format, g.format)))[0]
 				existing.remove(clock)
 		itemCount += 1
-		if INCREMENTAL_LOAD and itemCount%itemSkip == 0:
+		if INCREMENTAL_LOAD and itemCount % itemSkip == 0:
 			QApplication.processEvents()
 	for i in existing:
 		i.scene().removeItem(i)
@@ -178,7 +178,7 @@ def loadPanels(parent, items, parentItems, panelType, **kwargs) -> List[Stateful
 				panel = sorted(existing, key=lambda g: g.geometry.scoreSimilarity(ns.geometry))[0]
 				existing.remove(panel)
 		itemCount += 1
-		if INCREMENTAL_LOAD and itemCount%itemSkip == 0:
+		if INCREMENTAL_LOAD and itemCount % itemSkip == 0:
 			QApplication.processEvents()
 	for i in existing:
 		i.scene().removeItem(i)
@@ -198,7 +198,7 @@ def loadStacks(parent, items, parentItems, valueStack, **kwargs):
 	newItems = []
 	while items:
 		item = items.pop(0)
-		if not Stack.validate(item):
+		if not Stack.validate(item, context={'parent': parent}):
 			log.error('Invalid state for stack:', item)
 		ns = SimpleNamespace(**item)
 		match existing:
@@ -215,7 +215,7 @@ def loadStacks(parent, items, parentItems, valueStack, **kwargs):
 				panel = sorted(existing, key=lambda g: g.geometry.scoreSimilarity(ns.geometry))[0]
 				existing.remove(panel)
 		itemCount += 1
-		if INCREMENTAL_LOAD and itemCount%itemSkip == 0:
+		if INCREMENTAL_LOAD and itemCount % itemSkip == 0:
 			QApplication.processEvents()
 	for i in existing:
 		i.scene().removeItem(i)
@@ -256,7 +256,7 @@ def loadLabels(parent, items, parentItems, **kwargs):
 				label = sorted(existing, key=lambda g: (g.geometry.scoreSimilarity(ns.geometry)))[0]
 				existing.remove(label)
 		itemCount += 1
-		if INCREMENTAL_LOAD and itemCount%itemSkip == 0:
+		if INCREMENTAL_LOAD and itemCount % itemSkip == 0:
 			QApplication.processEvents()
 	for i in existing:
 		i.scene().removeItem(i)
@@ -287,7 +287,7 @@ def loadMoon(parent, items, parentItems, **kwargs):
 				existing.remove(moon)
 				moon.state = item
 		itemCount += 1
-		if INCREMENTAL_LOAD and itemCount%itemSkip == 0:
+		if INCREMENTAL_LOAD and itemCount % itemSkip == 0:
 			QApplication.processEvents()
 	for i in existing:
 		i.scene().removeItem(i)
@@ -564,10 +564,10 @@ def addCrosshair(painter: QPainter, color: QColor = Qt.red, size: int | float | 
 			x = size
 			y = size
 		case Size(s):
-			x = float(size.width)/2
-			y = float(size.height)/2
+			x = float(size.width) / 2
+			y = float(size.height) / 2
 		case QSize() | QSizeF():
-			x, y = (size/2).toTuple()
+			x, y = (size / 2).toTuple()
 		case _:
 			x, y = 2.5, 2.5
 
@@ -625,9 +625,9 @@ SafeDumper.add_multi_representer(object, objectRepresentor)
 Dumper.add_multi_representer(object, objectRepresentor)
 
 __all__ = ('DisplayType', 'GraphicsItemSignals', 'addCrosshair', 'estimateTextFontSize', 'estimateTextSize',
-'findSizePosition', 'getItemsWithType', 'hasState',
-'itemLoader', 'modifyTransformValues', 'mouseHoldTimer', 'mouseTimer', 'objectRepresentor',
-'colorPalette', 'selectionPen', 'debugPen', 'gridColor', 'gridPen')
+           'findSizePosition', 'getItemsWithType', 'hasState',
+           'itemLoader', 'modifyTransformValues', 'mouseHoldTimer', 'mouseTimer', 'objectRepresentor',
+           'colorPalette', 'selectionPen', 'debugPen', 'gridColor', 'gridPen')
 
 useCache = False
 
@@ -823,5 +823,15 @@ class CachedSoftShadow(SoftShadow):
 @runtime_checkable
 class GeometryManager(Protocol):
 	geometries: Dict[int, Geometry]
-	_fixedGeometries: Dict['Panel', Geometry]
-	fixedGeometries: Set[Geometry]
+
+	def setGeometries(self) -> None:
+		...
+
+
+@runtime_checkable
+class GeometryManaged(Protocol):
+	geometry: Geometry
+	parent: GeometryManager
+
+	def _geometryManagerPositionChange(self, value: QPoint | QPointF) -> Tuple[bool, QPoint | QPointF]:
+		...

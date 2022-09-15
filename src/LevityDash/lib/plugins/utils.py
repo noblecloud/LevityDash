@@ -508,10 +508,10 @@ class ScheduledEvent(object):
 			return timedelta()
 		when = self.__interval.total_seconds()
 		if self.__stagger:
-			seconds = self.__staggerAmount.seconds*(randomFloat()*2 - 1)
+			seconds = self.__staggerAmount.seconds * (randomFloat() * 2 - 1)
 			loopTime = get_event_loop().time()
 			if seconds + loopTime < 0:
-				seconds = self.__staggerAmount.seconds*randomFloat()
+				seconds = self.__staggerAmount.seconds * randomFloat()
 			when += seconds
 			when = timedelta(seconds=when)
 		return when
@@ -588,4 +588,4 @@ class ScheduledEvent(object):
 
 
 __all__ = ['unitDict', 'Accumulator', 'ChannelSignal', 'SchemaProperty', 'MutableSignal', 'ScheduledEvent',
-	'Publisher']
+           'Publisher']

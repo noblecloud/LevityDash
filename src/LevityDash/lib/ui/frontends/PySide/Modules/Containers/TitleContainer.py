@@ -1,15 +1,16 @@
 from functools import cached_property
-from typing import Any, List
+from typing import List
 
-from LevityDash.lib.stateful import StateProperty, Stateful, DefaultGroup
-from LevityDash.lib.ui.frontends.PySide.Modules import Panel
+from LevityDash.lib.stateful import DefaultGroup, Stateful, StateProperty
+from LevityDash.lib.ui.frontends.PySide.Modules import NonInteractivePanel, Panel
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Label import TitleLabel
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Splitters import TitleValueSplitter
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import TitledPanelContextMenu
 
 
 class TitledPanel(Panel, tag='titled-group'):
-	class ContentsPanel(Panel, tag=...):
+	class ContentsPanel(NonInteractivePanel, tag=...):
+		__exclude__ = {'geometry'}
 		pass
 
 	title: TitleLabel

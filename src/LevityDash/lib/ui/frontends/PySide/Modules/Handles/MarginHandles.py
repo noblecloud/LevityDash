@@ -144,6 +144,7 @@ class MarginHandles(ResizeHandles):
 		super(MarginHandles, self).updatePosition(self.surface.marginRect, *args, **kwargs)
 
 	def focusInEvent(self, event):
+		self.setZValue(self.surface.zValue() + 100)
 		if (resizeHandles := getattr(self.surface, 'resizeHandles', None)) is not None:
 			resizeHandles.setVisible(False)
 			current = self.surface
@@ -154,7 +155,7 @@ class MarginHandles(ResizeHandles):
 		super(MarginHandles, self).focusInEvent(event)
 
 	def focusOutEvent(self, event):
-		self.setVisible(False)
+		self.hide()
 
 
 class FigureHandle(MarginHandle):

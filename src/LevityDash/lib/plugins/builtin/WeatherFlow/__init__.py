@@ -33,6 +33,7 @@ class WFURLs(URLs, base='swd.weatherflow.com/swd'):
 	realtime = Endpoint(base=stationObservation)
 	historical = Endpoint(base=deviceObservation)
 
+
 schema = {
 	'environment.temperature':                           {'type': 'temperature', 'sourceUnit': 'c'},
 	'environment.temperature.temperature':               {'title': 'Temperature', 'sourceKey': 'air_temperature'},
@@ -141,24 +142,24 @@ schema = {
 	# '@wind':                                             {'type': 'vector', 'source': ['environment.wind.speed', 'environment.wind.direction.direction'], 'title': 'Wind'}
 
 	'ignored':                                           ['wind_direction_cardinal', 'lightning_strike_last_distance_msg',
-		'is_precip_local_day_rain_check', 'is_precip_local_yesterday_rain_check', 'firmware_revision', 'air_density',
-		'raining_minutes', 'pulse_adj_ob_time', 'pulse_adj_ob_wind_avg', 'pulse_adj_ob_temp'
-	],
+	                                                      'is_precip_local_day_rain_check', 'is_precip_local_yesterday_rain_check', 'firmware_revision', 'air_density',
+	                                                      'raining_minutes', 'pulse_adj_ob_time', 'pulse_adj_ob_wind_avg', 'pulse_adj_ob_temp'
+	                                                      ],
 
 	'keyMaps':                                           {
 		'obs_st':        {
 			'obs': {
 				18: (basic := ['timestamp', 'environment.wind.speed.lull', 'environment.wind.speed.speed', 'environment.wind.speed.gust', 'environment.wind.direction.direction',
-					'device.@deviceSerial.sampleInterval.wind', 'environment.pressure.pressure', 'environment.temperature.temperature', 'environment.humidity.humidity',
-					'environment.light.illuminance', 'environment.light.uvi', 'environment.light.irradiance', 'environment.precipitation.precipitation',
-					'environment.precipitation.type', 'environment.lightning.distance', 'environment.lightning.lightning',
-					'device.@deviceSerial.battery', 'device.@deviceSerial.sampleInterval.report']),
+				               'device.@deviceSerial.sampleInterval.wind', 'environment.pressure.pressure', 'environment.temperature.temperature', 'environment.humidity.humidity',
+				               'environment.light.illuminance', 'environment.light.uvi', 'environment.light.irradiance', 'environment.precipitation.precipitation',
+				               'environment.precipitation.type', 'environment.lightning.distance', 'environment.lightning.lightning',
+				               'device.@deviceSerial.battery', 'device.@deviceSerial.sampleInterval.report']),
 				22: [*basic,
-					'environment.precipitation.daily',
-					'environment.precipitation.precipitationNearCast',
-					'environment.precipitation.dailyNearCast',
-					'environment.yesterday.precipitation.analysis'
-				]
+				     'environment.precipitation.daily',
+				     'environment.precipitation.precipitationNearCast',
+				     'environment.precipitation.dailyNearCast',
+				     'environment.yesterday.precipitation.analysis'
+				     ]
 			},
 
 		},
@@ -166,16 +167,16 @@ schema = {
 		'obs_sky':       {
 			'obs': {
 				iter: ['timestamp', 'environment.light.illuminance', 'environment.light.uvi', 'environment.precipitation.precipitation',
-					'environment.wind.speed.lull', 'environment.wind.speed.speed', 'environment.wind.speed.gust', 'environment.wind.direction.direction',
-					'device.@deviceSerial.battery', 'device.@deviceSerial.sampleInterval.report', 'environment.light.irradiance', 'environment.precipitation.type',
-					'device.@deviceSerial.sampleInterval.wind']
+				       'environment.wind.speed.lull', 'environment.wind.speed.speed', 'environment.wind.speed.gust', 'environment.wind.direction.direction',
+				       'device.@deviceSerial.battery', 'device.@deviceSerial.sampleInterval.report', 'environment.light.irradiance', 'environment.precipitation.type',
+				       'device.@deviceSerial.sampleInterval.wind']
 			}
 		},
 
 		'obs_air':       {
 			'obs': {
 				iter: ['timestamp', 'environment.pressure.pressure', 'environment.temperature.temperature', 'environment.humidity.humidity',
-					'environment.lightning.lightning', 'environment.lightning.distance', 'device.@deviceSerial.battery', 'device.@deviceSerial.sampleInterval.report']
+				       'environment.lightning.lightning', 'environment.lightning.distance', 'device.@deviceSerial.battery', 'device.@deviceSerial.sampleInterval.report']
 			}
 		},
 
@@ -255,11 +256,13 @@ class WFWebsocket:
 		self.uuid = genUUID(8)
 
 	def _genMessage(self, messageType: str) -> str:
-		return dumps({
-			"type":      messageType,
-			"device_id": self.deviceID,
-			"id":        self.uuid
-		})
+		return dumps(
+			{
+				"type":      messageType,
+				"device_id": self.deviceID,
+				"id":        self.uuid
+			}
+		)
 
 	def start(self):
 		asyncio.create_task(self.run())
@@ -312,7 +315,9 @@ class WFWebsocket:
 
 	@property
 	def running(self) -> bool:
-		return not self.socket.closed
+		if self.socket is None:
+			return False
+		return self.socket.closed is False
 
 	@property
 	def url(self):
@@ -410,7 +415,7 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 		self.loggingTimer = ScheduledEvent(timedelta(minutes=1), self.logValues).schedule()
 
 		if self.config['fetchHistory']:
-			ScheduledEvent(timedelta(hours=6), self.getHistorical).start()
+			ScheduledEvent(timedelta(hours=6), self.getHistorical).delayedStart(timedelta(seconds=10))
 
 		self.pluginLog.info('WeatherFlow: started')
 
