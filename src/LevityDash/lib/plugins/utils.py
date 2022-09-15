@@ -405,7 +405,10 @@ class ScheduledEvent(object):
 	timer: TimerHandle
 	log = log.getChild('ScheduledEvent')
 
-	def __init__(self,
+	logThreshold: ClassVar[timedelta] = timedelta(minutes=1, seconds=30)
+
+	def __init__(
+		self,
 		interval: timedelta | int | float | Now,
 		func: Callable,
 		arguments: tuple = None,
@@ -562,7 +565,10 @@ class ScheduledEvent(object):
 			func = partial(self.__func, *self.__args, **self.__kwargs)
 			loop.call_soon(func)
 		name = getattr(self.__owner, 'name', self.__owner.__class__.__name__)
-		self.log.verbose(f'{self.__func.__name__}() fired for {name}', verbosity=0)
+		if self.interval >= self.logThreshold:
+			self.log.verbose(f'{self.__func.__name__}() fired for {name}', verbosity=4)
+		else:
+			self.log.verbose(f'{self.__func.__name__}() fired for {name}', verbosity=5)
 		if not self.__singleShot:
 			self.__run()
 
