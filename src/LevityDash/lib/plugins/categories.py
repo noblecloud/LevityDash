@@ -212,6 +212,16 @@ class UnitMetaData(dict):
 			pass
 		return alias.get(value, value)
 
+	@lru_cache(maxsize=64)
+	def mapIcon(self, value: str) -> 'Icon':
+		from LevityDash.lib.ui.icons import getIcon
+		value = self.mapAlias(value)
+		try:
+			return getIcon(value)
+		except ValueError as e:
+			log.warning(f'No icon pack found for {self.key}.  A mapping of icons must be provided in the schema.')
+			return getIcon('fa:circle-question')
+
 	@cached_property
 	def aliasDataType(self) -> Type:
 		aliasDict = self.get('alias', None)
