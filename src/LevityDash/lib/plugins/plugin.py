@@ -16,6 +16,8 @@ from LevityDash.lib.plugins.schema import Schema
 from LevityDash.lib.log import LevityPluginLog as pluginLog
 from LevityDash.lib.utils.shared import closest, Period
 from LevityDash.lib.plugins.utils import Publisher
+from LevityDash.lib.utils.shared import closest, Period
+from WeatherUnits import Time
 
 
 class ObservationList(list):
@@ -54,11 +56,14 @@ class ObservationList(list):
 		return hash(self.source.name)
 
 	@lru_cache(maxsize=12)
-	def grab(self, value: timedelta, sensitivity: timedelta = timedelta(minutes=5), timeseriesOnly: bool = False) -> Optional[ObservationDict]:
-		if isinstance(value, int):
-			value = timedelta(seconds=value)
-		if isinstance(value, Period):
-			value = value.value
+	def grab(self, value: timedelta | Period | int | float | Time, sensitivity: timedelta = timedelta(minutes=5), timeseriesOnly: bool = False) -> Optional[ObservationDict]:
+		if not isinstance(value, timedelta):
+			if isinstance(value, Time):
+				value = value.timedelta
+			elif isinstance(value, int | float):
+				value = timedelta(seconds=value)
+			elif isinstance(value, Period):
+				value = value.value
 
 		if isinstance(sensitivity, int):
 			sensitivity = timedelta(seconds=sensitivity)
@@ -71,7 +76,10 @@ class ObservationList(list):
 
 			low = value - sensitivity
 			high = value + sensitivity
-			if low < grabbed.period < high:
+			grabbedPeriod = grabbed.period
+			if isinstance(grabbedPeriod, Period):
+				grabbedPeriod = grabbedPeriod.value
+			if low <= grabbedPeriod <= high:
 				return grabbed
 			else:
 				return None
