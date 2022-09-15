@@ -1,7 +1,8 @@
 import asyncio
 import pkgutil
+from importlib import import_module
 from types import ModuleType
-from typing import Any, ClassVar, Dict, Iterator, List, Optional, Hashable
+from typing import Any, ClassVar, Dict, Iterator, Optional, Hashable
 
 from PySide2.QtCore import Qt
 
@@ -50,22 +51,23 @@ class GlobalSingleton(type):
 
 class PluginsLoader(metaclass=GlobalSingleton, name='Plugins'):
 	instance: ClassVar['Plugins'] = None
+
 	__plugins: Dict[str, Plugin] = {}
-	Plugin = Plugin
+	__defaultConfigs: ClassVar[Dict[Plugin, Any]] = {}
 
 	def __init__(self):
 		# find all the plugins that are enabled in the config
-		enabledPlugins = set(pluginConfig.enabledPlugins)
-		enabledPlugins.intersection_update(self.allPlugins())
-		pluginsToInit = {name: self.__loadPlugin(name) for name in enabledPlugins}
+		allPlugins = self.allPlugins()
+		pluginsToInit = {name: self._loadPlugin(name) for name in allPlugins}
 
-		for name, plugin in pluginsToInit.items():
-			if plugin is None:
+		for name, plugin_ in pluginsToInit.items():
+			if plugin_ is None:
 				continue
 			try:
-				pluginInstance = plugin.__plugin__()
+				pluginInstance = plugin_()
 				self.__plugins[name] = pluginInstance
-				pluginLog.info(f'Loaded plugin {name}')
+				statusColor = 'green' if pluginInstance.enabled else 'red'
+				pluginLog.info(f'Loaded plugin [{statusColor}]{name}[/{statusColor}]')
 			except ImportError as e:
 				pluginLog.debug(f'Unable to load {name} due to exception --> {e}')
 				continue
@@ -77,38 +79,51 @@ class PluginsLoader(metaclass=GlobalSingleton, name='Plugins'):
 			print('Alt is pressed, skipping plugins')
 			return
 		if pluginConfig['Options'].getboolean('enabled'):
-			print('--------------------- Starting plugins ---------------------')
-			asyncio.gather(*(plugin.asyncStart() for plugin in self))
+			pluginLog.info('Starting Plugins')
+			asyncio.gather(*(plugin_.asyncStart() for plugin_ in self if plugin_.enabled))
 
 	def stop(self):
 		print('--------------------- Stopping plugins ---------------------')
-		# asyncio.gather(*(plugin.asyncStop() for plugin in self))
 		for plugin in self:
 			plugin.stop()
 
 	@staticmethod
 	def allPlugins() -> Iterator[str]:
-		def search(paths: List[str]) -> Iterator:
-			plugins = (i for i in pkgutil.iter_modules(paths))
-			for _, name, ispkg in plugins:
-				yield name
 
 		from LevityDash import __lib__
 		pluginDirs = [f'{__lib__}/plugins/builtin']
 
-		return search(pluginDirs)
+		return (i.name for i in pkgutil.iter_modules(pluginDirs))
 
-	def __loadPlugin(self, name: str) -> Optional[Plugin]:
-		from LevityDash import __lib__
+	def _loadPlugin(self, name: str) -> Optional[Plugin]:
 		if name in self.__plugins:
 			return self.__plugins[name]
-		builtinNamespace = f'LevityDash.lib.plugins.builtin'
 		try:
-			exec(f'from {builtinNamespace} import {name}')
+			pluginModule = import_module(f'LevityDash.lib.plugins.builtin.{name}')
+
+			if hasattr(pluginModule, '__disabled__'):
+				raise errors.PluginDisabled(f'Plugin {name} is disabled')
+
+			if (plugin_ := getattr(pluginModule, '__plugin__', None)) is None:
+				raise errors.MissingPluginDeclaration
+
+			if (defaultConfig := getattr(pluginModule, 'defaultConfig', None)) is not None:
+				self.__defaultConfigs[plugin_] = defaultConfig
+
+			return plugin_
+
+		except errors.MissingPluginDeclaration as e:
+			pluginLog.error(
+				f'Unable to load {name} because it is missing the __plugin__ declaration.  '
+				f'Please ensure that the plugin uses __plugin__ as a reference to the plugin class.'
+			)
+		except errors.PluginDisabled as e:
+			pluginLog.info(f'Plugin {name} is disabled')
+
 		except Exception as e:
+			if pluginLog.level <= 10:
+				pluginLog.exception(e)
 			pluginLog.error(f'Failed to load plugin {name}: {e}')
-			return
-		return locals()[name]
 
 	def __getitem__(self, item: str) -> Plugin:
 		return self.__plugins[item]
