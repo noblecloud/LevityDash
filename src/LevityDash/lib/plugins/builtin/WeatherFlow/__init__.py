@@ -496,7 +496,7 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 
 	@property
 	def running(self):
-		return super().running or self.udp
+		return super().running or self.udp.running or self.websocket.running
 
 
 __plugin__ = WeatherFlow
