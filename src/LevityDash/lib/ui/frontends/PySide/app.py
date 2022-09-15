@@ -412,7 +412,7 @@ class PluginsMenu(QMenu):
 		for plugin in pluginManager:
 			action = QAction(plugin.name, self)
 			action.setCheckable(True)
-			action.setChecked(plugin.enabled())
+			action.setChecked(plugin.running)
 			action.plugin = plugin
 			action.togglePlugin = partial(self.togglePlugin, plugin)
 			action.toggled.connect(action.togglePlugin)
@@ -427,7 +427,7 @@ class PluginsMenu(QMenu):
 	def update(self):
 		for action in self.actions():
 			plugin = action.text()
-			action.setChecked(plugin.enabled())
+			action.setChecked(plugin.enabled)
 
 	@staticmethod
 	def togglePlugin(plugin, enabled):
