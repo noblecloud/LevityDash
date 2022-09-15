@@ -1,27 +1,26 @@
 import re
+from asyncio import get_running_loop
 from collections import defaultdict
 from dataclasses import dataclass
-from functools import partial, cached_property
-from typing import List, Dict, Any, Optional, Sequence, Type, Tuple, NamedTuple, SupportsFloat, Set, ClassVar
+from functools import cached_property, partial
+from typing import Any, Dict, List, Optional, Tuple, Type
 
-from PySide2.QtCore import QPoint, Qt, QPointF, QRectF
-from PySide2.QtGui import QGuiApplication, QPainter, QPen, QColor, QPainterPath
-from PySide2.QtWidgets import QGraphicsSceneWheelEvent, QGraphicsPathItem, QGraphicsItem
+from PySide2.QtCore import QPoint, QPointF, Qt
+from PySide2.QtGui import QColor, QPainter, QPen
+from PySide2.QtWidgets import QGraphicsItem, QGraphicsPathItem
 
 from LevityDash.lib.plugins.categories import CategoryItem
-from LevityDash.lib.stateful import StateProperty, Stateful
-from LevityDash.lib.ui import Color
+from LevityDash.lib.stateful import Stateful, StateProperty
+from LevityDash.lib.ui import Color, UILogger as log
 from LevityDash.lib.ui.frontends.PySide.Modules import NonInteractivePanel, Panel, Realtime
-from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, DebugPaint, itemLoader
-from LevityDash.lib.ui.Geometry import (Geometry, Size, Position, parseSize, size_px, LocationFlag, Direction, AlignmentFlag, Alignment, DisplayPosition, DimensionType, Dimension, size_float, TwoDimensional, parseHeight, parseWidth,
-                                        RelativeFloat, Padding)
-from LevityDash.lib.utils import recursiveDictUpdate, recursiveRemove, deepCopy, DeepChainMap, mostSimilarDict, sortDict
-from LevityDash.lib.ui import UILogger as log
+from LevityDash.lib.ui.frontends.PySide.utils import DebugPaint, DisplayType
+from LevityDash.lib.ui.Geometry import (
+	Alignment, AlignmentFlag, Dimension, Direction, DisplayPosition, Geometry, parseHeight, parseSize, parseWidth,
+	Position, Size, size_float, size_px
+)
+from LevityDash.lib.utils import DeepChainMap, mostSimilarDict, sortDict
 from WeatherUnits import Length
 
-import difflib
-
-from asyncio import get_running_loop
 loop = get_running_loop()
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -918,7 +917,7 @@ class ValueStack(Stack, tag='value-stack'):
 			'title':   {
 				'alignment':     Alignment(AlignmentFlag.Center),
 				'matchingGroup': {
-					'group':    'value-stack.text',
+					'group':    'value-stack.title',
 					'matchAll': True
 				},
 				'position':      DisplayPosition.Top,

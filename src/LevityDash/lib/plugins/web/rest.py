@@ -58,8 +58,9 @@ class REST(Web, prototype=True):
 				sourceData={'endpoint': endpoint},
 				dataMap=self.schema.dataMaps.get(endpoint.name, {})
 			)
+
 			if not len(datagram):
-				raise InvalidData(f'{self.name}\'s data {endpoint.name} request returned invalid data', endpoint)
+				raise InvalidData(f'{self.name}\'s data {endpoint.name} request returned invalid data', endpoint, datagram)
 			self.pluginLog.verbose(f'{self.name}\'s {endpoint.name} request was successful', verbosity=0)
 			self.pluginLog.verbose(f'and received parsed data: {datagram}', verbosity=5)
 			return datagram

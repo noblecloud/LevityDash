@@ -1,26 +1,23 @@
 import re
 from functools import cached_property
+from platform import system as syscheck
 from types import SimpleNamespace
-from typing import Union, ClassVar, List
+from typing import ClassVar, List
 
 from PySide2.QtCore import Qt, Signal
 from PySide2.QtWidgets import QDialog, QInputDialog
-
-from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import ScaleType
-from ... import app
-from ...utils import itemLoader
-from . import Label
-from LevityDash.lib.ui.frontends.PySide.Modules.Menus import TimeContextMenu
-from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from time import strftime
 
-__all__ = ['ClockComponent', 'Clock']
-
-from ... import UILogger as guiLog
-from LevityDash.lib.utils.shared import disconnectSignal, connectSignal, levenshtein
 from LevityDash.lib.stateful import StateProperty
-from platform import system as syscheck
+from LevityDash.lib.ui.frontends.PySide import app, UILogger as guiLog
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Label
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import ScaleType, Text
+from LevityDash.lib.ui.frontends.PySide.Modules.Menus import TimeContextMenu
+from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
+from LevityDash.lib.ui.frontends.PySide.utils import itemLoader
+from LevityDash.lib.utils.shared import connectSignal, disconnectSignal, levenshtein
 
+__all__ = ['ClockComponent', 'Clock']
 log = guiLog.getChild(__name__)
 
 
@@ -32,10 +29,16 @@ class ClockComponent(Label, tag=...):
 
 	__defaults__ = {
 		'format':  '%-I:%M',
-		'margins': (0, 0, 0, 0)
+		'margins': ('0.25mm', '0.25mm', '0.25mm', '0.25mm'),
+		'text-scale-type': ScaleType.fill
 	}
 
 	__exclude__ = {'text'}
+
+
+	class ClockTextBox(Text):
+		_scaleType = ScaleType.fill
+
 
 	def __init__(self, parent: Panel, *args, **kwargs):
 		"""
@@ -54,7 +57,12 @@ class ClockComponent(Label, tag=...):
 		text = strftime(formatStr)
 		super(ClockComponent, self).__init__(parent, text=text, *args, **kwargs)
 		self.connectTimer()
-		self.textBox._scaleType = ScaleType.fill
+
+	@cached_property
+	def textBox(self) -> ClockTextBox:
+		box = ClockComponent.ClockTextBox(self)
+		box.setParentItem(self)
+		return box
 
 	def connectTimer(self):
 		connectSignal(self.timer, self.setTime)

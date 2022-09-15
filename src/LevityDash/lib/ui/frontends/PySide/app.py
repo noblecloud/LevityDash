@@ -1,53 +1,52 @@
-from difflib import get_close_matches
 import asyncio
 import mimetypes
 import os
 import platform
 import webbrowser
 from collections import namedtuple
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta
 from email.generator import Generator
 from email.message import EmailMessage
 from functools import cached_property, partial
-from typing import Dict
-import sys
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from typing import Dict
 from zipfile import ZipFile
-from time import time, perf_counter
 
-from math import prod
 import PySide2
+import sys
 from PySide2 import QtGui
-from PySide2.QtCore import (QRectF, Signal, QTimer, Qt, QRect, QEvent, QObject, QPointF, QSize, QUrl, QMimeData,
-                            QByteArray)
-from PySide2.QtGui import (QPainterPath, QPainter, QCursor, QPixmapCache, QPixmap, QImage, QTransform, QSurfaceFormat,
-                           QScreen, QDesktopServices, QShowEvent, QDrag)
-from PySide2.QtWidgets import (QApplication, QGraphicsScene, QGraphicsItem, QGraphicsView, QMenu,
-                               QAction, QMainWindow, QOpenGLWidget, QGraphicsEffect, QGraphicsPixmapItem,
-                               QGraphicsRectItem, QMenuBar)
+from PySide2.QtCore import (
+	QByteArray, QEvent, QMimeData, QObject, QPointF, QRect, QRectF, QSize, Qt, QTimer, QUrl, Signal
+)
+from PySide2.QtGui import (
+	QCursor, QDesktopServices, QDrag, QImage, QPainter, QPainterPath, QPixmap, QPixmapCache, QScreen, QShowEvent,
+	QSurfaceFormat, QTransform
+)
+from PySide2.QtWidgets import (
+	QAction, QApplication, QGraphicsEffect, QGraphicsItem, QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsScene,
+	QGraphicsView, QMainWindow, QMenu, QMenuBar, QOpenGLWidget
+)
+from time import perf_counter, time
 
-from WeatherUnits import Length
 from LevityDash.lib.plugins.dispatcher import ValueDirectory as pluginManager
-from LevityDash.lib.ui.frontends.PySide.utils import colorPalette, EffectPainter, itemClipsChildren, getAllParents
-from ....config import userConfig
+from LevityDash.lib.ui.frontends.PySide.utils import colorPalette, EffectPainter, getAllParents, itemClipsChildren
+from WeatherUnits import Length
 from . import qtLogger as guiLog
-from ....plugins.categories import CategoryItem, CategoryAtom
-from ....utils import clearCacheAttr, BusyContext, joinCase
-from ...Geometry import Size, parseSize, LocationFlag, DimensionType
+from ...Geometry import AbsoluteFloat, DimensionType, findScreen, getDPI, LocationFlag, parseSize, RelativeFloat, Size
+from ....config import userConfig
+from ....plugins.categories import CategoryAtom, CategoryItem
+from ....utils import BusyContext, clearCacheAttr, joinCase
 
 app: QApplication = QApplication.instance()
 
 ACTIVITY_EVENTS = {QEvent.KeyPress, QEvent.MouseButtonPress, QEvent.MouseButtonRelease, QEvent.MouseMove, QEvent.GraphicsSceneMouseMove, QEvent.GraphicsSceneMouseRelease, QEvent.GraphicsSceneMousePress, QEvent.InputMethod,
-	QEvent.InputMethodQuery}
+                   QEvent.InputMethodQuery}
 
 loop = asyncio.get_running_loop()
 
 app.setQuitOnLastWindowClosed(True)
-
-print('-------------------------------')
-print('Loading Qt GUI...')
-print('-------------------------------')
+guiLog.info('Loading Qt GUI')
 
 
 class FocusStack(list):
@@ -282,8 +281,8 @@ class LevitySceneView(QGraphicsView):
 			self.setRenderHint(QPainter.TextAntialiasing, antialiasing)
 		self.viewport().setPalette(colorPalette)
 		self.maxTextureSize = userConfig.getOrSet('QtOptions', 'maxTextureSize', '20mb', getter=userConfig.configToFileSize)
-		guiLog.debug(f'Max texture size set to {self.maxTextureSize/1000:.0f}KB')
-		self.pixmapCacheSize = int(userConfig.getOrSet('QtOptions', 'pixmapCacheSize', '200mb', getter=userConfig.configToFileSize)/1024)
+		guiLog.debug(f'Max texture size set to {self.maxTextureSize / 1000:.0f}KB')
+		self.pixmapCacheSize = int(userConfig.getOrSet('QtOptions', 'pixmapCacheSize', '200mb', getter=userConfig.configToFileSize) / 1024)
 		QPixmapCache.setCacheLimit(self.pixmapCacheSize)
 		guiLog.debug(f'Pixmap cache size set to {self.pixmapCacheSize}KB')
 
@@ -354,27 +353,17 @@ class LevitySceneView(QGraphicsView):
 		self.graphicsScene.invalidate(self.graphicsScene.sceneRect())
 		self.graphicsScene.update()
 		self.resizeFinished.emit()
-		from LevityDash.lib.ui.frontends.PySide.Modules.Containers.Stacks import Stack
 		rect = self.viewport().rect()
 		self.setSceneRect(rect)
 		self.scene().setSceneRect(rect)
 		self.graphicsScene.base.geometry.updateSurface()
-		for stack in Stack.toUpdate:
-			stack.setGeometries()
 
 	def load(self):
-		self.status = 'Loading'
-		with BusyContext(pluginManager) as context:
-			self.graphicsScene.base.loadDefault()
-			self.graphicsScene.clearSelection()
-			self.status = 'Ready'
-		self.loadingFinished.emit()
+		self.graphicsScene.base.loadDefault()
 
 	@property
 	def dpi(self):
-		if app.activeWindow():
-			return app.activeWindow().screen().logicalDotsPerInch()
-		return 96
+		return getDPI(app.activeWindow().screen()) or 96
 
 	def __screenChange(self):
 		self.resizeDone.start()
@@ -494,6 +483,7 @@ class InsertItemAction(QAction):
 		drag.setMimeData(info)
 		drag.exec_(Qt.CopyAction)
 
+
 class LevityMainWindow(QMainWindow):
 
 	def __init__(self, *args, **kwargs):
@@ -572,7 +562,8 @@ class LevityMainWindow(QMainWindow):
 		view.postInit()
 
 		from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Various import HoverArea
-		self.menuBarHoverArea = HoverArea(view.graphicsScene.base,
+		self.menuBarHoverArea = HoverArea(
+			view.graphicsScene.base,
 			size=10,
 			rect=QRect(0, 0, self.width(), 50),
 			enterAction=self.menuBarHover,
@@ -585,7 +576,7 @@ class LevityMainWindow(QMainWindow):
 		self.menuBarHoverArea.setEnabled(False)
 		if platform.system() != 'Darwin':
 			menubar = MenuBar(self)
-			self.__menubarHeight = self.menuBar().height()*2
+			self.__menubarHeight = self.menuBar().height() * 2
 			self.bar = menubar
 			self.setMenuWidget(menubar)
 			self.updateMenuBar()
@@ -595,10 +586,6 @@ class LevityMainWindow(QMainWindow):
 		self.buildMenu()
 
 		self.show()
-
-	def focusOutEvent(self, event):
-		super(LevityMainWindow, self).focusOutEvent(event)
-		print('focus out')
 
 	def menuBarHover(self):
 		self.bar.setFixedHeight(self.bar.sizeHint().height())
@@ -619,64 +606,41 @@ class LevityMainWindow(QMainWindow):
 			except ValueError:
 				fullscreen = False
 
-		def findScreen():
-			screens = app.screens()
-			display = userConfig['Display'].get('display', 'smallest')
-			match display:
-				case 'smallest':
-					return min(screens, key=lambda s: prod(s.size().toTuple()))
-				case 'largest':
-					return max(screens, key=lambda s: prod(s.size().toTuple()))
-				case 'primary' | 'main' | 'default':
-					return app.primaryScreen()
-				case 'current' | 'active':
-					return app.screenAt(QCursor.pos())
-				case str(i) if i.isdigit():
-					return screens[min(int(i), len(screens))]
-				case str(i) if matched := get_close_matches(i, [s.name() for s in screens], 1, 0.7):
-					matched = matched[0]
-					return next(s for s in screens if s.name() == matched)
-				case _:
-					if len(screens) == 1:
-						return screens[0]
-					for screen in screens:
-						# if the screen is the primary screen, skip it
-						if app.primaryScreen() == screen:
-							continue
-						# if the screen is taller than it is wide, skip it
-						if screen.size().height() > screen.size().width():
-							continue
-			return screen
-
 		g = self.geometry()
 		screen: QScreen = findScreen()
+		guiLog.debug(f'Using screen {screen!r}')
 		screenGeometry = screen.geometry()
 		width = parseSize(userConfig.getOrSet('Display', 'width', '80%'), 0.8, dimension=DimensionType.width)
 		height = parseSize(userConfig.getOrSet('Display', 'height', '80%'), 0.8)
 
+		dpi = getDPI(screen)
+		sizeX = screenGeometry.width()
+		sizeY = screenGeometry.height()
+		physicalSizeX = Length.Inch(sizeX / dpi)
+		physicalSizeY = Length.Inch(sizeY / dpi)
+		guiLog.debug(f'Screen size: {sizeX}px x {sizeY}px ({physicalSizeX:.3} x {physicalSizeY:.3}) {dpi=:g}')
+
 		match width:
-			case Size.Width(w, absolute=True):
+			case AbsoluteFloat() as w:
 				width = min(w, screenGeometry.width())
-			case Size.Width(w, relative=True):
-				width = min(w*screen.availableSize().width(), screen.availableSize().width())
+			case RelativeFloat() as w:
+				width = min(w * screen.availableSize().width(), screen.availableSize().width())
 			case Length() as w:
 				w = float(w.inch)
-				xDPI = screen.physicalDotsPerInchX()
-				width = min(w*xDPI, screen.availableSize().width())
+				width = min(w * dpi, screenGeometry.size().width())
 			case _:
-				width = screen.availableSize().width()*0.8
+				width = screen.availableSize().width() * 0.8
 
 		match height:
 			case Size.Height(h, absolute=True):
 				height = min(h, screenGeometry.height())
 			case Size.Height(h, relative=True):
-				height = min(h*screen.availableSize().height(), screen.availableSize().height())
+				height = min(h * screen.availableSize().height(), screen.availableSize().height())
 			case Length() as h:
 				h = float(h.inch)
-				yDPI = screen.physicalDotsPerInchY()
-				height = min(h*yDPI, screen.availableSize().height())
+				height = min(h * dpi, screenGeometry.size().height())
 			case _:
-				height = screen.availableSize().height()*0.8
+				height = screen.availableSize().height() * 0.8
 
 		g.setSize(QSize(round(width), round(height)))
 		g.moveCenter(screen.availableGeometry().center())
@@ -684,7 +648,6 @@ class LevityMainWindow(QMainWindow):
 
 		if fullscreen or '--fullscreen' in sys.argv:
 			self.showFullScreen()
-
 
 	def buildMenu(self):
 		menubar = self.bar
@@ -725,6 +688,11 @@ class LevityMainWindow(QMainWindow):
 		refresh.setStatusTip('Refresh the current dashboard')
 		refresh.triggered.connect(self.centralWidget().graphicsScene.update())
 
+		printState = QAction('Print State', self)
+		printState.setShortcut('Ctrl+P')
+		printState.setStatusTip('Print the current state of the dashboard')
+		printState.triggered.connect(self.centralWidget().graphicsScene.base.contextMenu.printState)
+
 		fullscreen = QAction('&Fullscreen', self)
 		fullscreen.setShortcut('Ctrl+F')
 		fullscreen.setStatusTip('Toggle fullscreen')
@@ -761,6 +729,7 @@ class LevityMainWindow(QMainWindow):
 		dashboardMenu.addAction(reload)
 		dashboardMenu.addAction(refresh)
 		dashboardMenu.addAction(clear)
+		dashboardMenu.addAction(printState)
 
 		plugins = PluginsMenu(self)
 		self.bar.addMenu(plugins)
@@ -919,7 +888,7 @@ class ClockSignals(QObject):
 		# Ensures that the timers are synced to the current time every six hours
 		self.__syncTimer = QTimer()
 		self.__syncTimer.timeout.connect(self.__syncTimers)
-		self.__syncTimer.setInterval(1000*60*5)
+		self.__syncTimer.setInterval(1000 * 60 * 5)
 		self.__syncTimer.setTimerType(Qt.VeryCoarseTimer)
 		self.__syncTimer.setSingleShot(False)
 		self.__syncTimer.start()
@@ -959,6 +928,7 @@ class ClockSignals(QObject):
 
 	def __syncTimers(self):
 		"""Synchronizes the timers to the current time."""
+		guiLog.verbose(f'Syncing timers', verbosity=2)
 
 		self.sync.emit()
 
@@ -972,15 +942,15 @@ class ClockSignals(QObject):
 		# otherwise, the time will be announced
 		timerOffset = 500
 
-		timeToNextSecond = round((now.replace(second=now.second, microsecond=0) + timedelta(seconds=1) - now).total_seconds()*1000)
+		timeToNextSecond = round((now.replace(second=now.second, microsecond=0) + timedelta(seconds=1) - now).total_seconds() * 1000)
 		self.__secondTimer.singleShot(timeToNextSecond + timerOffset, self.__startSeconds)
 
-		timeToNextMinute = round((now.replace(minute=now.minute, second=0, microsecond=0) + timedelta(minutes=1) - now).total_seconds()*1000)
-		guiLog.verbose(f'Time to next minute: {timeToNextMinute/1000} seconds', verbosity=5)
+		timeToNextMinute = round((now.replace(minute=now.minute, second=0, microsecond=0) + timedelta(minutes=1) - now).total_seconds() * 1000)
+		guiLog.verbose(f'Time to next minute: {timeToNextMinute / 1000} seconds', verbosity=5)
 		self.__minuteTimer.singleShot(timeToNextMinute + timerOffset, self.__startMinutes)
 
-		timeToNextHour = round((now.replace(hour=now.hour, minute=0, second=0, microsecond=0) + timedelta(hours=1) - now).total_seconds()*1000)
-		guiLog.verbose(f'Time to next hour: {timeToNextHour/1000} seconds', verbosity=5)
+		timeToNextHour = round((now.replace(hour=now.hour, minute=0, second=0, microsecond=0) + timedelta(hours=1) - now).total_seconds() * 1000)
+		guiLog.verbose(f'Time to next hour: {timeToNextHour / 1000} seconds', verbosity=5)
 		self.__hourTimer.singleShot(timeToNextHour + timerOffset, self.__startHours)
 
 

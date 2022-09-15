@@ -534,6 +534,8 @@ class Realtime(Panel, tag='realtime'):
 
 	@property
 	def value(self) -> ObservationValue | None:
+		if self.__connectedContainer is None:
+			return None
 		try:
 			return self.__connectedContainer.value
 		except AttributeError:
@@ -576,8 +578,8 @@ class Realtime(Panel, tag='realtime'):
 
 	def focusOutEvent(self, event: QFocusEvent):
 		self.display.splitter.hide()
-		self.display.valueTextBox.marginHandles.hide()
-		self.display.unitTextBox.marginHandles.hide()
+		# self.display.valueTextBox.marginHandles.hide()
+		# self.display.unitTextBox.marginHandles.hide()
 		super(Realtime, self).focusOutEvent(event)
 
 	def changeSource(self, newSource: Plugin):
@@ -741,6 +743,8 @@ class LockedRealtime(Realtime):
 
 class MeasurementDisplayProperties(Stateful):
 	__measurementHash: int = 0
+	__valueUnitRatio: Size.Height = Size.Height(0.2, relative=True)
+	_floatingOffset = Size.Height(5, absolute=True)
 
 	"""
 	Properties for how a label should display its value.  It is assumed that the value is a WeatherUnit Measurement.

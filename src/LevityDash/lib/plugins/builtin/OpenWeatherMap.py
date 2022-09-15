@@ -1,15 +1,13 @@
-from LevityDash.lib.plugins.schema import LevityDatagram, SchemaSpecialKeys as tsk
-from LevityDash.lib.plugins.utils import ScheduledEvent
-from LevityDash.lib.plugins.web import Auth, AuthType, Endpoint, REST, URLs
-from LevityDash.lib import config
+from LevityDash.lib.plugins.schema import SchemaSpecialKeys as tsk
+from LevityDash.lib.plugins.web import REST, URLs
 
-from datetime import datetime, timedelta, timezone
-
+__disabled__ = True
 
 class OWMURLs(URLs, base='api.openweathermap.org/data/2.5/'):
-	auth = Auth(authType=AuthType.PARAMETER, authData={'appid': config.plugins.owm.apikey})
+	pass
+# auth = Auth(authType=AuthType.PARAMETER, authData={'appid': config.plugins.owm.apikey})
 
-	oneCall = Endpoint(url='onecall', protocol='https', refreshInterval=timedelta(minutes=15))
+# oneCall = Endpoint(url='onecall', protocol='https', refreshInterval=timedelta(minutes=15))
 
 
 schema = {
@@ -40,5 +38,10 @@ _defaultConfig = """[plugin]
 	enabled: false
 	"""
 
+
 class OpenWeatherMap(REST, realtime=True, daily=True, hourly=True, logged=False):
-	urls = OWMURLs()
+	__defaultConfig__ = _defaultConfig
+	schema = {}
+# urls = OWMURLs()
+
+# __plugin__ = OpenWeatherMap

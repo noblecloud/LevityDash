@@ -49,7 +49,6 @@ class Label(Panel, tag='label'):
 		cls._defaultIcon = kwargs.get('defaultIcon', None)
 		cls._defaultText = kwargs.get('defaultText', None)
 
-
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 		self.marginHandles: MarginHandles = MarginHandles(self)

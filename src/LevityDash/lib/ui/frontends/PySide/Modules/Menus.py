@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 try:
 	from PySide2.QtGui import QActionGroup
 except ImportError:
-	from PySide2.QtWidgets import QActionGroup, QApplication
+	from PySide2.QtWidgets import QAction, QActionGroup, QApplication
 
 from PySide2.QtWidgets import QMenu
 
@@ -311,15 +311,17 @@ class ChildrenMenu(QMenu):
 			childMenu = getattr(child, 'contextMenu', None)
 			if childMenu is not None and childMenu not in self.actions():
 				name = getattr(child, 'stateName', None) or type(child).__name__
-				self.addMenu(name, childMenu)
+				m = self.addMenu(childMenu)
+				m.setText(name)
 
 
 class LabelContextMenu(BaseContextMenu):
+	marginHandleToggle: QAction
 
 	def uniqueItems(self):
 		self.alignmentMenu()
 		# self.textFilterMenu()
-		self.addAction('Edit Margins', self.parent.editMargins)
+		self.marginHandleToggle = self.addAction('Show Margin Handles', self.parent.editMargins)
 		fillType = MenuFromEnum(
 			self.parent,
 			'textBox._scaleType',
@@ -336,6 +338,11 @@ class LabelContextMenu(BaseContextMenu):
 			# filterAction.triggered.connect(lambda value, filter=filter: self.parent.setFilter(filter, value))
 			filterAction.setCheckable(True)
 			filterAction.setChecked(filter in self.parent.enabledFilters)
+
+	def toggleMarginHandles(self):
+		shown = self.parent.marginHandles.forceDisplay
+		self.marginHandleToggle.setText('Hide Margin Handles' if shown else 'Show Margin Handles')
+		self.parent.editMargins(not shown)
 
 
 class TitledPanelContextMenu(BaseContextMenu):

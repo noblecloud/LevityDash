@@ -1,27 +1,26 @@
 import re
-
-from shutil import copyfile
-from tempfile import NamedTemporaryFile
-
 from datetime import datetime
 from functools import cached_property
+from pathlib import Path
+from shutil import copyfile
+from tempfile import NamedTemporaryFile
 from typing import Any, List
 
 import yaml
-from pathlib import Path
-
-from PySide2.QtCore import Qt, QRect, Slot
+from PySide2.QtCore import QRect, Qt, Slot
 from PySide2.QtWidgets import QFileDialog, QGraphicsItem, QMessageBox
+from time import perf_counter
 
-from LevityDash.lib.ui.frontends.PySide.Modules.Drawer import RadialMenuItem
-from LevityDash.lib.ui.frontends.PySide.Modules.Menus import CentralPanelContextMenu
-from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.config import userConfig
 from LevityDash.lib.EasyPath import EasyPathFile
 from LevityDash.lib.log import debug
-
+from LevityDash.lib.stateful import StatefulDumper, StateProperty
+from LevityDash.lib.ui.frontends.PySide.Modules.Drawer import RadialMenuItem
+from LevityDash.lib.ui.frontends.PySide.Modules.Menus import CentralPanelContextMenu
+from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
+from LevityDash.lib.utils import BusyContext
+from WeatherUnits import Time
 from .. import UILogger as guiLog
-from LevityDash.lib.stateful import StateProperty, StatefulDumper
 
 log = guiLog.getChild(__name__)
 
@@ -88,9 +87,9 @@ class CentralPanel(Panel, tag="dashboard"):
 		from PySide2.QtWidgets import QApplication
 		return QApplication.instance()
 
-	def contextMenuEvent(self, event):
-		menu = self.contextMenu
-		menu.exec_(event.screenPos())
+	# def contextMenuEvent(self, event):
+	# 	menu = self.contextMenu
+	# 	menu.exec_(event.screenPos())
 
 	def mousePresEvent(self, event):
 		self.scene().clearSelection()
@@ -179,6 +178,7 @@ class CentralPanel(Panel, tag="dashboard"):
 			self._save(path, fileName)
 
 	def _load(self, path: Path = None):
+		from LevityDash.lib.plugins import Plugins as pluginManager
 		name = path.name
 		self.scene().view.parentWidget().setWindowTitle(f"Levity Dashboard - {name}")
 		log.debug(f"Loading dashboard from {str(path)}")
@@ -204,7 +204,14 @@ class CentralPanel(Panel, tag="dashboard"):
 		if self.filePath is None or self.loadedFile != path:
 			self.filePath = EasyPathFile(path)
 			self.clear()
-			self.state = state
+			start = perf_counter()
+			self.scene().view.status = 'Loading'
+			with BusyContext(pluginManager) as context:
+				self.state = state
+				self.scene().clearSelection()
+			self.scene().view.status = 'Ready'
+			self.scene().view.loadingFinished.emit()
+			log.debug(f'Loading Time: {Time.Second(perf_counter() - start):.2f}')
 			self.loadedFile = EasyPathFile(path)
 		else:
 			self.state = state

@@ -1,6 +1,7 @@
-from abc import abstractmethod, ABC
+from abc import abstractmethod
 from difflib import SequenceMatcher
-from functools import lru_cache, cached_property, partial
+from functools import cached_property, lru_cache, partial
+
 from gc import get_referrers
 
 try:
@@ -31,13 +32,13 @@ from pytz import utc
 from WeatherUnits import Measurement
 
 from time import time
-from typing import Any, Callable, Hashable, Iterable, List, Mapping, Optional, Tuple, Type, TypeVar, Union, Set, Final, Sized, ClassVar, Dict, Protocol, runtime_checkable, MutableMapping, get_args
-from types import NoneType, GeneratorType, FunctionType
+from typing import Any, Callable, ForwardRef, Hashable, Iterable, List, Mapping, Optional, Tuple, Type, TypeVar, Union, Set, Final, ClassVar, Dict, Protocol, runtime_checkable, get_args
+from types import NoneType, GeneratorType, FunctionType, UnionType
 
-from enum import auto, Enum, EnumMeta
+from enum import Enum, EnumMeta, IntFlag
 
-from PySide2.QtCore import QObject, QPointF, QRectF, QSizeF, Signal, Qt
-from PySide2.QtWidgets import QGraphicsRectItem, QApplication, QGraphicsItem
+from PySide2.QtCore import QObject, QPointF, QRectF, QSizeF, QThread, Signal, Qt, Slot
+from PySide2.QtWidgets import QGraphicsRectItem, QGraphicsItem
 
 from LevityDash.lib.utils import utilLog
 
@@ -57,6 +58,9 @@ def simpleRequest(url: str) -> dict:
 		return loads(response.read())
 
 
+T_ = TypeVar('T_')
+
+
 class _Panel(QGraphicsRectItem):
 
 	def isValid(self) -> bool:
@@ -71,6 +75,8 @@ class ClosestMatchEnumMeta(EnumMeta):
 	_firstLetters: Set[str]
 
 	def __new__(metacls, cls, bases, classdict, **kwds):
+		if IntFlag in bases:
+			pass
 		enum_class = super().__new__(metacls, cls, bases, classdict, **kwds)
 		for k, v in metacls.__dict__.items():
 			if not k.startswith('_'):
@@ -97,13 +103,8 @@ class ClosestMatchEnumMeta(EnumMeta):
 					# Truncate the member names to the length of the shortest member name
 					# This prevents bad matches where short names are scored lower than long names
 					# even when the short name is more similar to the long name
-					maxNameLength = min(len(k) for k in cls.__members__.keys())
-					truncatedNames = {i[:maxNameLength] for i in list(cls.__members__.keys())}
-					if len(truncatedNames) != len(cls.__members__):
-						# Unless it results in collisions, then pad all the names instead
-						minNameLength = max(len(k) for k in cls.__members__.keys())
-						truncatedNames = {f'{i:^{minNameLength}}' for i in list(cls.__members__.keys())}
-					truncatedNames = list(truncatedNames)
+					maxNameLength = max(len(k) for k in cls.__members__.keys())
+					truncatedNames = [i.ljust(maxNameLength) for i in list(cls.__members__.keys())]
 					guessedMame = closestStringInList(name, truncatedNames).strip()
 					if weightedName is not None and weightedName != name:
 						weightedNameScore = levenshtein(name, weightedName)
@@ -120,17 +121,9 @@ class ClosestMatchEnumMeta(EnumMeta):
 			return cls(name)
 
 	def representer(cls, dumper, data):
+		if isinstance(data.value, str):
+			return dumper.represent_str(data.value)
 		return dumper.represent_scalar('tag:yaml.org,2002:str', data.name)
-
-
-class ClosestMatchEnumMeta2(EnumMeta):
-
-	def __new__(metacls, cls, bases, classdict, **kwds):
-		enum_class = super().__new__(metacls, cls, bases, classdict, **kwds)
-		for k, v in metacls.__dict__.items():
-			if not k.startswith('_'):
-				setattr(enum_class, k, v)
-		return enum_class
 
 
 def find_name(obj):
@@ -879,7 +872,7 @@ def addOrdinal(n: Union[int, str]) -> str:
 	:rtype: str
 	"""
 
-	if 10 <= n%100 < 20:
+	if 10 <= int(n) % 100 < 20:
 		return str(n) + 'th'
 	else:
 		return str(n) + {1: 'st', 2: 'nd', 3: 'rd'}.get(n%10, 'th')
@@ -911,24 +904,80 @@ def toOrdinal(n: Union[str, int]) -> str:
 	return 'th' if 10 <= n%100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n%10, 'th')
 
 
-class TextFilter(tuple, Enum, metaclass=ClosestMatchEnumMeta):
-	Ordinal = 'ordinal', toOrdinal
-	AddOrdinal = 'addOrdinal', addOrdinal
-	Lower = 'lower', str.lower
-	Upper = 'upper', str.upper
-	Title = 'title', str.title
+def chainFunctions(*functions: Callable[[T_], T_]) -> Callable[[T_], T_]:
+	"""
+	Combines multiple functions into one with each value passed to the next function
+	:param functions: The functions to combine
+	:type functions: Callable
+	:return: The combined function
+	:rtype: Callable
+	"""
+	def combinedFunction(value):
+		for function in functions:
+			value = function(value)
+		return value
+	return combinedFunction
 
-	def __new__(cls, value):
-		name, func = value
-		obj = super().__new__(cls, name)
-		obj.func = func
-		return obj
+
+class FunctionEnumFlagMeta(ClosestMatchEnumMeta):
+
+	class FlagFunctionDict(dict):
+
+		def __init__(self, enum, *args, **kwargs):
+			self.__enum = enum
+			super().__init__(*args, **kwargs)
+
+		@property
+		def enum(self):
+			enum = self.__enum
+			if isinstance(enum, str | ForwardRef):
+				if isinstance(enum, str):
+					enum = ForwardRef(enum)
+				self.__enum = enum = enum._evaluate(globals(), locals(), set())
+			return enum
+
+		def __missing__(self, key: int):
+			functions = []
+			for name, member in self.enum.__members__.items():
+				if member.value & key:
+					functions.append(self[member.value])
+			if not functions:
+				raise KeyError(key)
+			self[key] = chainFunctions(*functions)
+			return functions
+
+
+	def __new__(mcs, name, bases, namespace, **kwargs):
+		functions = FunctionEnumFlagMeta.FlagFunctionDict(name)
+		namespace._last_values.clear()
+		namespace._member_names.clear()
+		for key in (k for k, v in tuple(namespace.items()) if not k.startswith('_') and callable(v)):
+			func = namespace.pop(key)
+			value = IntFlag._generate_next_value_(name, 1, len(functions), functions)
+			functions[value] = func
+			namespace[key] = value
+
+		namespace['__functions__'] = functions
+
+		return super().__new__(mcs, name, bases, namespace, **kwargs)
+
+
+class TextFilter(IntFlag, metaclass=FunctionEnumFlagMeta):
+	__functions__: Dict[int, Callable[[str], str]]
+	value: int
+
+	Ordinal = toOrdinal
+	AddOrdinal = strToOrdinal
+	Lower = str.lower
+	Upper = str.upper
+	Title = str.title
+	Capitalize = str.capitalize
 
 	def __repr__(self):
-		return self.name
+		return f'TextFilter({self.name})'
 
 	def __call__(self, value):
-		return self.func(value)
+		return self.__functions__[self.value](value)
 
 
 def disconnectSignal(signal: Signal, slot: Callable):
@@ -937,6 +986,8 @@ def disconnectSignal(signal: Signal, slot: Callable):
 	except TypeError:
 		pass
 	except RuntimeError:
+		pass
+	except Exception:
 		pass
 
 
@@ -947,6 +998,8 @@ def connectSignal(signal: Signal, slot: Callable):
 		utilLog.warning('connectSignal: TypeError')
 	except RuntimeError:
 		utilLog.warning('connectSignal: RuntimeError')
+	except Exception as e:
+		utilLog.warning('connectSignal: %s', e)
 
 
 def replaceSignal(newSignal: Signal, oldSignal: Signal, slot: Callable):
@@ -1398,7 +1451,7 @@ def get(
 	obj: Mapping | object,
 	*keys: [Hashable],
 	default: Any = UnsetKwarg,
-	expectedType: Type = object,
+	expectedType: Type | UnionType | Tuple[Type, ...] = object,
 	castVal: bool = False,
 	getter: Callable = __get,
 ) -> Any:
@@ -1741,3 +1794,44 @@ class guarded_cached_property(cached_property):
 			elif isinstance(defaultFunc, property):
 				return defaultFunc.__get__(instance, owner)
 			return self.default
+
+
+def split(a, n):
+	k, m = divmod(len(a), n)
+	return (a[i*k+min(i, m):(i+1)*k+min(i+1, m)] for i in range(n))
+
+
+class ExecThread(QObject):
+	finished = Signal()
+	func = None
+	args = ()
+	kwargs = {}
+
+	def __init__(self, func, *args, **kwargs):
+		super().__init__()
+		self.func = func
+		self.args = args
+		self.kwargs = kwargs
+		self.thread = self.buildThread()
+
+	@Slot()
+	def run(self):
+		try:
+			self.func(*self.args, **self.kwargs)
+		except Exception as e:
+			pass
+			# (type, value, traceback) = exc_info()
+			# excepthook(type, value, traceback)
+		self.finished.emit()
+
+	def buildThread(self) -> QThread:
+		thread = QThread()
+		self.moveToThread(thread)
+		thread.started.connect(self.run)
+		self.finished.connect(thread.quit)
+		return thread
+
+	def __call__(self, *args, **kwargs):
+		self.args = args or self.args
+		self.kwargs = kwargs or self.kwargs
+		self.thread.start()

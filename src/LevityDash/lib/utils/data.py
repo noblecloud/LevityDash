@@ -36,6 +36,7 @@ class Axis(IntFlag):
 			axis |= Axis.Vertical
 		return axis
 
+
 class JsonEncoder(JSONEncoder):
 	def default(self, obj):
 		if hasattr(obj, 'toDict'):
@@ -591,7 +592,6 @@ class TimeFrameWindow(QObject):
 			self.__clearCache()
 			self._range = value
 			self.changed.emit(Axis.Horizontal)
-		print(self.range)
 
 	@property
 	def rangeSeconds(self) -> int:
@@ -944,6 +944,7 @@ class TemporalGroups(object):
 	def __iter__(self):
 		return self
 
+	##@profile
 	def __next__(self):
 		i = self.current
 		forI = i
@@ -1027,3 +1028,20 @@ def mostFrequentValue(iterable: Iterable) -> Any:
 
 
 isOlderThan = Infix(lambda x, y: (x - datetime.now(tz=x.tzinfo)) < -y)
+
+
+class AttrDict(Dict[str, Any]):
+	"""A simple dict extension that makes all values
+	accessible as attributes as well.
+	"""
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.__dict__ = self
+
+	def __setitem__(self, key: str, value: Any):
+		if not str(key)[0].isalpha():
+			raise ValueError('Key must start with a letter')
+		elif key.isidentifier():
+			raise ValueError('Key must be a valid identifier')
+		self.__dict__[key] = value
