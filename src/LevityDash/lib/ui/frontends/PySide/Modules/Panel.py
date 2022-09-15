@@ -288,12 +288,14 @@ class SizeGroup:
 	_lastSize: float = 0
 	_alignments: Dict[AlignmentFlag, float]
 
+
 	class ItemData(NamedTuple):
 		item: 'Text'
 		pos: QPointF
 
 		def __hash__(self):
 			return hash(self.item)
+
 
 	itemsToAdjust: Set[ItemData]
 
@@ -379,7 +381,7 @@ class SizeGroup:
 
 	def sharedY(self, item: 'Text') -> float:
 		alignedItems = self.getSimilarAlignedItems(item)
-		y = sum((i.pos.y() for i in alignedItems))/(len(alignedItems) or 1)
+		y = sum((i.pos.y() for i in alignedItems)) / (len(alignedItems) or 1)
 		return y
 
 	def getSimilarAlignedItems(self, item: 'Text') -> Set[ItemData]:
@@ -473,7 +475,7 @@ class Panel(_Panel, Stateful, tag='group'):
 
 		self.hideTimer = QTimer(interval=1000*5, singleShot=True, timeout=self.hideHandles)
 
-		self.setAcceptHoverEvents(False)
+		self.setAcceptHoverEvents(True)
 		self.setAcceptDrops(True)
 		self.setFlag(QGraphicsItem.ItemIsSelectable)
 		self.setFlag(QGraphicsItem.ItemSendsGeometryChanges)
@@ -655,7 +657,7 @@ class Panel(_Panel, Stateful, tag='group'):
 	def allHandles(self):
 		return [handleGroup for handleGroup in self.childItems() if isinstance(handleGroup, (Handle, HandleGroup))]
 
-	@StateProperty(default=Geometry(**{'width': 1, 'height': 1, 'x': 0, 'y': 0}), match=True, allowNone=False)
+	@StateProperty(default=Geometry(width=1, height=1, x=0, y=0), match=True, allowNone=False)
 	def geometry(self) -> Geometry:
 		return self._geometry
 
@@ -676,6 +678,10 @@ class Panel(_Panel, Stateful, tag='group'):
 			case _:
 				raise ValueError('Invalid geometry', value)
 
+	@geometry.encode
+	def geometry(self, value: Geometry) -> dict:
+		return value.state
+
 	@geometry.factory
 	def geometry(self) -> Geometry:
 		return Geometry(surface=self)
@@ -686,7 +692,7 @@ class Panel(_Panel, Stateful, tag='group'):
 
 	@geometry.condition(method='get')
 	def geometry(self) -> bool:
-		return not (isinstance(self.parent, GeometryManager) and self not in self.parent.fixedGeometries)
+		return not isinstance(self.parent, GeometryManager)
 
 	@geometry.score
 	def geometry(self, value) -> float:
@@ -695,7 +701,7 @@ class Panel(_Panel, Stateful, tag='group'):
 			value = Geometry(**value)
 		g.scoreSimilarity(value)
 
-	@StateProperty(default=Margins.default(), allowNone=False, dependencies={'geometry'})
+	@StateProperty(default=Margins.default(), allowNone=False, dependencies={'geometry'}, decoder=Margins.decode)
 	def margins(self) -> Margins:
 		return self._margins
 
@@ -704,23 +710,35 @@ class Panel(_Panel, Stateful, tag='group'):
 		value.surface = self
 		self._margins = value
 
-	@margins.decode
-	def margins(self, value: dict | list | tuple | str) -> dict | tuple:
-		if isinstance(value, str):
-			value = value.split(',')
-		if isinstance(value, (tuple, list)):
-			value = {d: v for d, v in zip(Margins.__dimensions__, value)}
-		if not isinstance(value, dict):
-			raise ValueError('Invalid margins', value)
-		return value
-
 	@margins.factory
 	def margins(self) -> Margins:
-		return Margins(self)
+		return Margins(self, 0.1, 0.1, 0.1, 0.1)
 
 	@margins.after
 	def margins(self):
 		clearCacheAttr(self, 'marginRect')
+
+	@StateProperty(
+		key='padding',
+		default=Padding.default(),
+		dependancies={'geometry'},
+		sortOrder=3,
+		decoder=Padding.decode
+	)
+	def padding(self) -> Padding:
+		"""
+		The padding around the panel.
+		"""
+		return self._padding
+
+	@padding.setter
+	def padding(self, value: Padding):
+		value.surface = self
+		self._padding = value
+
+	@padding.factory
+	def padding(self) -> Padding:
+		return Padding(self)
 
 	@StateProperty(key='border', default=Stateful, allowNone=False, dependencies={'geometry'})
 	def borderProp(self) -> Border:
@@ -757,6 +775,13 @@ class Panel(_Panel, Stateful, tag='group'):
 	def hierarchy(self) -> List['Panel']:
 		if (parent := self.parentItem()) is None:
 			return [self]
+
+		while parentHierarchy := getattr(parent, 'hierarchy', None) is None and isinstance(parent, QGraphicsItem):
+			parent = parent.parentItem()
+
+		if parentHierarchy is None:
+			return [self]
+
 		return parent.hierarchy + [self]
 
 	@property
@@ -772,6 +797,10 @@ class Panel(_Panel, Stateful, tag='group'):
 				hierarchy.append(i.__tag__)
 
 		return ' -> '.join(reversed(hierarchy))
+
+	@cached_property
+	def attrGroups(self) -> Dict[str, SizeGroup]:
+		return {}
 
 	def getTaggedGroup(self, tag: str) -> 'Panel':
 		x = self
@@ -856,7 +885,13 @@ class Panel(_Panel, Stateful, tag='group'):
 	def scene(self) -> 'LevityScene':
 		return super(Panel, self).scene()
 
-	@StateProperty(sort=True, sortKey=lambda x: x.geometry.sortValue, default=DefaultGroup(None, []), dependencies={'geometry', 'margins'})
+	@StateProperty(
+		sort=True,
+		sortKey=lambda x: x.geometry.sortValue,
+		default=DefaultGroup(None, []),
+		dependencies={'geometry', 'margins'},
+		sortOrder=-1,
+	)
 	def items(self) -> List['Panel']:
 		return [child for child in self.childItems() if isinstance(child, _Panel) and hasState(child)]
 
@@ -1081,7 +1116,7 @@ class Panel(_Panel, Stateful, tag='group'):
 			mouseEvent.accept()
 			return super(Panel, self).mousePressEvent(mouseEvent)
 		elif mouseEvent.button() == Qt.MouseButton.LeftButton:
-			if (self.scene().focusItem() is self.parent
+			if (self.scene().focusItem() is self.apparentParent
 			    or self.parent is self.scene().base
 			    or self.hasFocus()
 			    or self.siblingHasFocus()) and self.canFocus:
@@ -1129,7 +1164,7 @@ class Panel(_Panel, Stateful, tag='group'):
 			return super(Panel, self).mouseMoveEvent(mouseEvent)
 
 	def mouseReleaseEvent(self, mouseEvent: QGraphicsSceneMouseEvent) -> None:
-		self.hideTimer.start()
+		# self.hideTimer.start()
 		if wasMoving := getattr(self.parent, 'childIsMoving', False):
 			self.parent.childIsMoving = False
 
@@ -1290,18 +1325,18 @@ class Panel(_Panel, Stateful, tag='group'):
 				siblings.append(item)
 				areas.append(overlap)
 
-				collisions = [(item, area) for item, area in zip(siblings, areas) if item.acceptsChildren and area > item.collisionThreshold]
-				collisions.sort(key=lambda x: (x[0].zValue(), x[1]), reverse=True)
+		collisions = [(item, area) for item, area in zip(siblings, areas) if item.acceptsChildren and area > item.collisionThreshold]
+		collisions.sort(key=lambda x: (x[0].zValue(), x[1]), reverse=True)
 
-				if collisions and any([i[1] for i in collisions]):
-					p = self.parent
-					newParent = collisions[0][0]
-					if newParent is not p:
-						p.setHighlighted(False)
-						p.update()
-						newParent.setHighlighted(True)
-						self.setParentItem(newParent)
-						newParent.update()
+		if collisions and any([i[1] for i in collisions]):
+			p = self.parent
+			newParent = collisions[0][0]
+			if newParent is not p:
+				p.setHighlighted(False)
+				p.update()
+				newParent.setHighlighted(True)
+				self.setParentItem(newParent)
+				newParent.update()
 
 	def _handleKeepInFrame(self, area: float, value: QPoint | QPointF):
 		intersection = self.parent.shape().intersected(self.shape().translated(*value.toTuple()))
@@ -1390,10 +1425,10 @@ class Panel(_Panel, Stateful, tag='group'):
 		# 	if self.parentItem() is not self.scene().base:
 		# 		self.setParentItem(self.scene().base)
 
-				if self.startingParent is not None and self.startingParent is not self.parent:
-					destination = self.parent
-					start = self.startingParent
-					value = destination.mapFromItem(start, value)
+		if self.startingParent is not None and self.startingParent is not self.parent:
+			destination = self.parent
+			start = self.startingParent
+			value = destination.mapFromItem(start, value)
 
 		if self._keepInFrame:
 			self._handleKeepInFrame(area, value)
@@ -1799,14 +1834,14 @@ class Panel(_Panel, Stateful, tag='group'):
 			event.ignore()
 		super(Panel, self).wheelEvent(event)
 
-	def editMargins(self):
+	def editMargins(self, toggle: bool = True):
 		self.parent.clearFocus()
 		self.parent.parent.clearFocus()
 
 		self.marginHandles.scene().clearFocus()
 		self.marginHandles.setEnabled(True)
 		self.marginHandles.show()
-		self.marginHandles.updatePosition(self.rect())
+		self.marginHandles.updatePosition(self.marginRect)
 		self.marginHandles.setFocus()
 
 	def clear(self):
@@ -1814,33 +1849,44 @@ class Panel(_Panel, Stateful, tag='group'):
 		for item in items:
 			self.scene().removeItem(item)
 
+	def doFuncInThread(self, func, *args, **kwargs):
+		self.thread = QThread()
+		self.exec_thread = ExecThread()
+
+		self.exec_thread.args = args
+		self.exec_thread.kwargs = kwargs
+		self.exec_thread.func = func
+		self.exec_thread.moveToThread(self.thread)
+		self.thread.started.connect(self.exec_thread.run)
+		self.exec_thread.finished.connect(self.thread.quit)
+		self.thread.start()
+
 
 class NonInteractivePanel(Panel):
 
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
-		self.setFlag(QGraphicsItem.ItemIsMovable, False)
-		self.setFlag(QGraphicsItem.ItemIsSelectable, False)
-		self.setFlag(QGraphicsItem.ItemIsFocusable, False)
-		self.setFlag(QGraphicsItem.ItemStopsClickFocusPropagation, True)
-		self.setFlag(QGraphicsItem.ItemStopsFocusHandling, True)
+		self.setFlag(self.ItemIsMovable, False)
+		self.setFlag(self.ItemIsSelectable, False)
+		self.setFlag(self.ItemIsFocusable, False)
+		self.setAcceptedMouseButtons(Qt.NoButton)
 		self.setAcceptDrops(False)
 		self.setHandlesChildEvents(False)
 		self.setFiltersChildEvents(False)
 		self.setAcceptTouchEvents(False)
-		self.setAcceptedMouseButtons(Qt.NoButton)
+		self.setFlag(self.ItemHasNoContents)
 
-		def mousePressEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
-			mouseEvent.ignore()
-			return
+	def mousePressEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
+		mouseEvent.ignore()
+		return
 
-		def mouseMoveEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
-			mouseEvent.ignore()
-			return
+	def mouseMoveEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
+		mouseEvent.ignore()
+		return
 
-		def mouseReleaseEvent(self, mouseEvent):
-			mouseEvent.ignore()
-			return
+	def mouseReleaseEvent(self, mouseEvent):
+		mouseEvent.ignore()
+		return
 
 
 class PanelFromFile:
