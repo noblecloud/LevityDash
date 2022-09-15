@@ -11,12 +11,13 @@ from PySide2.QtWidgets import QGraphicsItem, QGraphicsSceneMouseEvent, QStyleOpt
 from qasync import asyncSlot, QApplication
 
 from LevityDash.lib.config import DATETIME_NO_ZERO_CHAR
+from LevityDash.lib.ui.icons import fa as FontAwesome, getIcon, Icon
 from WeatherUnits.time_.time import Second
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins import Plugin, Plugins, Container
 from LevityDash.lib.plugins.plugin import AnySource, SomePlugin
 from LevityDash.lib.plugins.dispatcher import MultiSourceContainer, ValueDirectory
-from LevityDash.lib.ui.fonts import weatherGlyph
+from LevityDash.lib.ui.fonts import FontWeight
 from LevityDash.lib.ui.frontends.PySide import UILogger as guiLog
 from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, mouseHoldTimer
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Label import NonInteractiveLabel as Label, TitleLabel
@@ -24,9 +25,11 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Resize import ResizeHand
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Splitters import TitleValueSplitter, MeasurementUnitSplitter
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import RealtimeContextMenu
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
-from LevityDash.lib.ui.Geometry import (Size, LocationFlag, AlignmentFlag, Alignment, DisplayPosition, parseSize,
-                                        RelativeFloat, size_px)
-from LevityDash.lib.utils.shared import (clamp, disconnectSignal, Now, TitleCamelCase, Unset, connectSignal,
+from LevityDash.lib.ui.Geometry import (
+	getDPI, Size, LocationFlag, AlignmentFlag, DisplayPosition, parseSize,
+	RelativeFloat, size_px
+)
+from LevityDash.lib.utils.shared import (disconnectSignal, Now, TitleCamelCase, Unset, connectSignal,
                                          clearCacheAttr)
 from LevityDash.lib.stateful import StateProperty, Stateful
 from LevityDash.lib.plugins.observation import RealtimeSource, ObservationValue, TimeseriesSource
@@ -64,9 +67,7 @@ class InvalidSource(Exception):
 
 
 class RealtimeTitle(TitleLabel):
-	__defaults__ = {
-		'matchingGroup': {'group': 'group.title'}
-	}
+	__defaults__ = {}
 
 
 class Realtime(Panel, tag='realtime'):
@@ -451,12 +452,9 @@ class Realtime(Panel, tag='realtime'):
 
 		# The logic for after a connection is made
 		if container.metadata['type'] == 'icon' and container.metadata['iconType'] == 'glyph':
-			fontName = container.metadata['glyphFont']
-			if fontName == 'WeatherIcons':
-				self.display.valueTextBox.textBox.setFont(weatherGlyph)
+			self.display.valueTextBox.textBox.setTextAccessor(None)
 		if self.title.isEnabled() and self.title.allowDynamicUpdate():
-			title = container.value['title']
-			self.title.setText(title)
+			self.title.textBox.setTextAccessor(lambda: container.value['title'])
 		self.lastUpdate = get_event_loop().time()
 		self.display.splitter.updateUnitDisplay()
 		self.__updateTimeOffsetLabel()
@@ -769,6 +767,22 @@ class MeasurementDisplayProperties(Stateful):
 			Example: '1024m' becomes '1.0km'
 	"""
 
+	def _afterSetState(self):
+
+		self.updateSplitter()
+
+	def updateSplitter(self):
+		try:
+			self.splitter.updateUnitDisplay()
+		except AttributeError:
+			pass
+
+	def updateLabels(self):
+		if self.__isValid:
+			self.valueTextBox.textBox.refresh()
+			if self.hasUnit:
+				self.unitTextBox.textBox.refresh()
+
 	@property
 	def __isValid(self) -> bool:
 		return self.measurement is not None
@@ -815,7 +829,7 @@ class MeasurementDisplayProperties(Stateful):
 	def precision(self, value: int):
 		self.__precision = value
 
-	@precision.condition
+	@precision.condition(method={'get'})
 	def precision(self) -> bool:
 		return getattr(self, '__precision', Unset) is not Unset
 
@@ -859,17 +873,17 @@ class MeasurementDisplayProperties(Stateful):
 			return self._unitPosition
 		return DisplayPosition.Hidden
 
-	@StateProperty(key='unitPosition', default=DisplayPosition.Auto, allowNone=False, singleVal=True)
+	@unitPosition.setter
+	def unitPosition(self, value: DisplayPosition):
+		self._unitPosition = value
+
+	@StateProperty(key='unitPosition', default=DisplayPosition.Auto, allowNone=False, after=updateSplitter)
 	def _unitPosition(self) -> DisplayPosition:
 		return self.__unitPosition
 
 	@_unitPosition.setter
 	def _unitPosition(self, value: DisplayPosition):
 		self.__unitPosition = value
-		try:
-			self.splitter.updateUnitDisplay()
-		except AttributeError:
-			pass
 
 	@_unitPosition.decode
 	def _unitPosition(self, value: str) -> DisplayPosition:
@@ -889,32 +903,90 @@ class MeasurementDisplayProperties(Stateful):
 	def shorten(self) -> bool:
 		return self.__shorten is not Unset
 
-	@StateProperty(key='unitSize', default=Size.Height('20%'), singleVal=True, allowNone=False)
+	@StateProperty(key='unitSize', default=__valueUnitRatio, allowNone=True)
+	def _unitSize(self) -> Size.Height:
+		return self.__valueUnitRatio
+
+	@_unitSize.setter
+	def _unitSize(self, value: Size.Height):
+		self.__valueUnitRatio = value
+
+	@_unitSize.decode
+	def _unitSize(self, value: str | int | float | Length) -> Size.Height:
+		value = parseSize(value, Size.Height(0.2, relative=True))
+		if isinstance(value, Length):
+			value = Size.Height(value)
+		return value
+
+	@_unitSize.encode
+	def _unitSize(self, value: Size.Height) -> str:
+		return str(value)
+
+	@_unitSize.condition
+	def _unitSize(self):
+		return self.unitPosition != DisplayPosition.Hidden \
+		       and self.unitPosition != DisplayPosition.Floating \
+		       and self.unitSize is not None
+
+	@property
 	def valueUnitRatio(self) -> Size.Height:
 		if self.__isValid:
-			return self.__valueUnitRatio
-		return Size.Height(1.0, relative=True)
+			value = self.__valueUnitRatio
+			if not isinstance(value, RelativeFloat):
+				value = value.toRelative(self.geometry.absoluteHeight)
+			return value
+		return Size.Height(0.0, relative=True)
 
 	@valueUnitRatio.setter
 	def valueUnitRatio(self, value: Size.Height):
-		if value is None:
-			self.__valueUnitRatio = value
-		else:
-			if value.relative:
-				value = clamp(value, 0.1, 0.9)
-			self.__valueUnitRatio = value
+		existing = self.__valueUnitRatio
+		if isinstance(existing, RelativeFloat):
+			pass
+		elif existing.isPhysicalMeasurement and isinstance(value, RelativeFloat):
+			value = Length.Inch(value.toAbsoluteF(self.geometry) / getDPI())
+			value = type(existing)(value)
+		elif existing.absolute and isinstance(value, RelativeFloat):
+			value = value.toAbsolute(self.geometry)
+		self.__valueUnitRatio = value
 
-	@valueUnitRatio.decode
-	def valueUnitRatio(value: str | int | float) -> Size.Height:
-		return Size.Height(value)
+	@property
+	def unitSize(self) -> Size.Height | None:
+		value = self.__valueUnitRatio
+		if value is MeasurementDisplayProperties._unitSize.default(type(self)):
+			return None
+		return value
 
-	@valueUnitRatio.encode
-	def valueUnitRatio(value: str) -> Size.Height:
-		return Size.Height(value)
+	@property
+	def unitSize_px(self) -> float | None:
+		if u := self.unitSize:
+			return u.toAbsoluteF(self.geometry.absoluteHeight)
 
-	@valueUnitRatio.condition
-	def valueUnitRatio(self):
-		return self.unitPosition != DisplayPosition.Hidden and self.unitPosition != DisplayPosition.Floating
+	@property
+	def relativeUnitSize(self) -> Size.Height | None:
+		value = self.__valueUnitRatio
+		if value is MeasurementDisplayProperties.valueUnitRatio.default(type(self)):
+			return None
+		if not isinstance(value, RelativeFloat):
+			value = value.toRelative(self.geometry.absoluteHeight)
+		return value
+
+	@StateProperty(key='floating-offset', default=_floatingOffset)
+	def floatingOffset(self) -> Size.Height | Length:
+		return self._floatingOffset
+
+	@floatingOffset.setter
+	def floatingOffset(self, value: Size.Height | Length):
+		self._floatingOffset = value
+		if isinstance(value, RelativeFloat):
+			value.relativeTo = self.parent
+
+	@floatingOffset.decode
+	def floatingOffset(self, value: str | int | float | Number) -> Size.Height | Length:
+		return parseSize(value, DisplayLabel.floatingOffset.default)
+
+	@property
+	def floatingOffset_px(self) -> float:
+		return size_px(self.floatingOffset, self.geometry)
 
 	@StateProperty(key='format', default=None, allowNone=True)
 	def formatString(self) -> str | None:
@@ -926,6 +998,14 @@ class MeasurementDisplayProperties(Stateful):
 	@formatString.setter
 	def formatString(self, value: str):
 		self.__format = value
+
+	@StateProperty(key='format-hint', default=None, allowNone=True, after=updateLabels)
+	def formatHint(self) -> str | None:
+		return getattr(self.valueTextBox.textBox, '_formatHint', None)
+
+	@formatHint.setter
+	def formatHint(self, value: str):
+		self.valueTextBox.textBox._formatHint = value
 
 	def format(self, value: Measurement) -> str:
 		if self.formatString is not None and isinstance(value, Measurement):
@@ -939,12 +1019,6 @@ class MeasurementDisplayProperties(Stateful):
 		value = self.localGroup.value
 		if isinstance(value, ObservationValue):
 			value = value.value
-		# if isinstance(value, Measurement):
-		# 	pass
-		# elif isinstance(value, datetime):
-		# 	return value
-		# if not isinstance(value, Measurement):
-		# 	pass
 		if (convertTo := self.convertTo) is not None and value is not None:
 			try:
 				value = convertTo(value)
@@ -956,15 +1030,27 @@ class MeasurementDisplayProperties(Stateful):
 		return value
 
 	@property
-	def text(self) -> str:
+	def icon(self) -> Icon | None:
+		value = self.localGroup.value
+		if isinstance(value, ObservationValue) and value.isIcon:
+			value = value.icon
+		else:
+			return None
+		icon = getIcon(value)
+		return icon
+
+	@property
+	def text(self) -> str | None:
 		measurement = self.measurement
 		if isinstance(measurement, Measurement):
+			if (precision := self.precision) is not Unset and measurement.precision != precision:
+				measurement.precision = precision
 			if (formatString := self.formatString) is not None and measurement is not None:
 				if isinstance(formatString, dict):
 					formatString = f'{", ".join(f"{k}: {value}" for k, value in formatString.items())}'
 				return f'{measurement:{formatString}}'
 			elif measurement is None:
-				return "⋯"
+				return None
 			elif self.unitPosition != DisplayPosition.Inline:
 				return measurement.withoutUnit
 			return str(measurement).strip()
@@ -972,7 +1058,7 @@ class MeasurementDisplayProperties(Stateful):
 			formatString = self.formatString or '%H:%M:%S'
 			return f'{measurement:{formatString}}'.lower()
 		elif measurement is None:
-			return "⋯"
+			return None
 		return str(measurement).strip()
 
 	@StateProperty(default=None)
@@ -1007,25 +1093,6 @@ class MeasurementDisplayProperties(Stateful):
 			case _:
 				return None
 
-	def toDict(self) -> dict:
-		attrs = {
-			'maxLength':        self.__maxLength,
-			'precision':        self.__precision,
-			'unitSpacer':       self.__unitSpacer,
-			'unitPosition':     self._unitPosition.value if self._unitPosition is not None else None,
-			'suffix':           self.__suffix,
-			'decorator':        self.__decorator,
-			'shorten':          self.__shorten,
-			'decimalSeparator': self.__decimalSeparator,
-			'radixPoint':       self.__radixPoint,
-			'valueUnitRatio':   self.__valueUnitRatio,
-			'splitDirection':   self.__splitDirection.value if self.__splitDirection is not None else None
-		}
-		return {k: v for k, v in attrs.items() if v is not None}
-
-	def __iter__(self):
-		return iter(self.toDict())
-
 
 def withoutUnit(self):
 	return self.value['@withoutUnit']
@@ -1039,12 +1106,9 @@ class UnitLabel(Label, tag=...):
 	# Section UnitLabel
 	def __init__(self, parent: Panel,
 		properties: Label,
-		alignment: Alignment = None,
-		filters: list[str] = None,
-		font: QFont = None,
 		*args, **kwargs):
 		self.displayProperties = properties
-		super().__init__(parent=parent, alignment=alignment, filters=filters, font=font, *args, **kwargs)
+		super().__init__(parent=parent, *args, **kwargs)
 		self.textBox.setTextAccessor(self.unitText)
 
 	def unitText(self) -> str:
@@ -1078,11 +1142,29 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
         left: 0%
 	"""
 
+	__exclude__ = {'items', 'geometry', 'locked', 'frozen', 'movable', 'resizable', 'text'}
+
 	deletable = False
 
-	_floatingOffset = Size.Height(5, absolute=True)
+	class ValueLabel(Label, tag=..., defaultIcon=FontAwesome.getIcon('ellipsis', 'regular')):
 
-	class ValueLabel(Label, tag=...):
+		__defaults__ = {
+			'weight': FontWeight.Regular,
+		}
+
+		__exclude__ = {..., 'format-hint'}
+
+		@property
+		def marginRect(self) -> QRectF:
+			rect = Label.marginRect.fget(self)
+			if p := self.parent:
+				if (u := p.displayProperties.unitSize_px) and p.displayProperties.unitPosition is DisplayPosition.FloatUnder:
+					r = QRectF(rect)
+					rr = self.rect()
+					r.setBottom(rr.bottom() - u - p.displayProperties.floatingOffset_px)
+					return r
+			return rect
+
 
 		@property
 		def unitSpace(self) -> QRectF:
@@ -1091,6 +1173,7 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 			ownRect = self.rect()
 			ownRect.setTop(labelRect.bottom() + self.parent.floatingOffset_px)
 			return ownRect
+
 
 	# Section DisplayLabel
 	def __init__(self, *args, **kwargs):
@@ -1126,24 +1209,6 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 	def contextMenuEvent(self, event):
 		event.ignore()
 		return
-
-	@StateProperty(key='floating-offset', default=_floatingOffset)
-	def floatingOffset(self) -> Size.Height | Length:
-		return self._floatingOffset
-
-	@floatingOffset.setter
-	def floatingOffset(self, value: Size.Height | Length):
-		self._floatingOffset = value
-		if isinstance(value, RelativeFloat):
-			value.relativeTo = self.parent
-
-	@floatingOffset.decode
-	def floatingOffset(self, value: str | int | float | Number) -> Size.Height | Length:
-		return parseSize(value, DisplayLabel.floatingOffset.default)
-
-	@property
-	def floatingOffset_px(self) -> float:
-		return size_px(self.floatingOffset, self.valueTextBox.textBox.boundingRect().height())
 
 	@StateProperty(key='valueLabel', sortOrder=0, allowNone=False, default=Stateful, dependancies={'geometry'})
 	def valueTextBox(self) -> Label:
@@ -1190,10 +1255,6 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 		if self.displayProperties.hasUnit:
 			if self.displayProperties.unitPosition is DisplayPosition.FloatUnder:
 				self.splitter.fitUnitUnder()
-			if self.displayProperties.unitPosition != DisplayPosition.Inline:
-				self.valueTextBox.textBox.setCustomFilterFunction(True)
-			else:
-				self.valueTextBox.textBox.setCustomFilterFunction(False)
 
 		self.valueTextBox.textBox.refresh()
 
