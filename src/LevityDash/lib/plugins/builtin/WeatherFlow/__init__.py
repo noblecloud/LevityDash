@@ -72,14 +72,14 @@ schema = {
 	'environment.precipitation.daily':                   {'type': 'precipitationDaily', 'sourceUnit': ['mm', 'day'], 'title': 'Daily', 'sourceKey': 'precip_accum_local_day'},
 	'environment.precipitation.dailyNearCast':           {'type': 'precipitationDaily', 'sourceUnit': ['mm', 'day'], 'title': 'Daily', 'sourceKey': 'precip_accum_local_day_final'},
 	'environment.precipitation.icon':                    {
-		'type':    'icon', 'sourceUnit': 'str', 'title': 'Precipitation Icon', 'timeseriesOnly': True, 'sourceKey': 'precip_icon', 'iconType': 'glyph', 'glyphFont': 'WeatherIcons',
+		'type':    'icon', 'sourceUnit': 'str', 'title': 'Precipitation Icon', 'timeseriesOnly': True, 'sourceKey': 'precip_icon', 'iconType': 'glyph', 'iconPack': 'WeatherIcons',
 		'aliases': '@precipitationIcon'
 	},
 	'environment.precipitation.time':                    {'type': 'time', 'sourceUnit': 'min', 'title': 'Minutes', 'sourceKey': 'precip_minutes_local_day'},
 	'environment.precipitation.type':                    {'type': 'precipitationType', 'sourceUnit': '*', 'title': 'Precipitation Type', 'sourceKey': 'precip_type'},
 	'environment.precipitation.analysis':                {'type': 'rainCheckType', 'sourceUnit': 'int', 'title': 'Type', 'sourceKey': 'precip_analysis_type'},
 	'environment.precipitation.probability':             {'type': 'probability', 'sourceUnit': '%p', 'title': 'Precipitation Probability', 'sourceKey': 'precip_probability'},
-	'environment.precipitation.description':             {'type': 'description', 'sourceUnit': 's', 'title': 'Precipitation Description', 'sourceKey': 'precip_description'},
+	'environment.precipitation.description':             {'type': 'description', 'sourceUnit': 'str', 'title': 'Precipitation Description', 'sourceKey': 'precip_description'},
 
 	'environment.yesterday.precipitation.precipitation': {'type': 'precipitationDaily', 'sourceUnit': ['mm', 'day'], 'title': 'Yesterday', 'sourceKey': ('precip_accum_local_yesterday_final', 'precip_accum_local_yesterday')},
 	'environment.yesterday.precipitation.time':          {'type': 'time', 'sourceUnit': 'min', 'title': 'Minutes Yesterday', 'sourceKey': 'precip_minutes_local_yesterday_final'},
@@ -114,7 +114,7 @@ schema = {
 	'device.@deviceSerial.debug':                        {'sourceUnit': 'bool', 'title': 'Debug', 'sourceKey': 'debug'},
 	'device.@deviceSerial.resetFlags':                   {'sourceUnit': 'str', 'title': 'Reset Flags', 'sourceKey': 'reset_flags'},
 	'environment.condition.icon':                        {
-		'type': 'icon', 'sourceUnit': 'str', 'title': 'Condition Icon', 'sourceKey': 'icon', 'iconType': 'glyph', 'glyphFont': 'WeatherIcons', 'aliases': '@conditionIcon'
+		'type': 'icon', 'sourceUnit': 'str', 'title': 'Condition Icon', 'sourceKey': 'icon', 'iconType': 'glyph', 'iconPack': 'WeatherIcons', 'aliases': '@conditionIcon'
 	},
 	'environment.condition.condition':                   {'type': 'description', 'sourceUnit': 'str', 'title': 'Condition', 'sourceKey': 'conditions'},
 	'environment.sunrise':                               {'type': 'date', 'sourceUnit': 'epoch', 'title': 'Sunrise', 'sourceKey': 'sunrise', 'timeseriesOnly': True},
@@ -204,40 +204,40 @@ schema = {
 		'hub_status':    {'realtime': ()}
 	},
 	'aliases':                                           {
-		'@conditionIcon': {
-			'wind':                        '',
-			'rain':                        '',
-			'cloud':                       '',
-			'pressure':                    '',
-			'humidity':                    '',
-			'lightning':                   '',
-			'temperature':                 '',
-			'light':                       '',
-			'condition':                   '',
-			'clear-day':                   '',
-			'clear-night':                 '',
-			'cloudy':                      '',
-			'foggy':                       '',
-			'partly-cloudy-day':           '',
-			'partly-cloudy-night':         '',
-			'possibly-rainy-day':          '',
-			'possibly-rainy-night':        '',
-			'possibly-sleet-day':          '',
-			'possibly-sleet-night':        '',
-			'possibly-snow-day':           '',
-			'possibly-snow-night':         '',
-			'possibly-thunderstorm-day':   '',
-			'possibly-thunderstorm-night': '',
-			'rainy':                       '',
-			'sleet':                       '',
-			'snow':                        '',
-			'thunderstorm':                '',
-			'windy':                       ''
+		'@conditionIcon':     {
+			'wind':                        'wi:strong-wind',
+			'rain':                        'wi:rain',
+			'cloud':                       'wi:cloud',
+			'pressure':                    'wi:barometer',
+			'humidity':                    'wi:humidity',
+			'lightning':                   'wi:thunderstorm',
+			'temperature':                 'wi:thermometer',
+			'light':                       'wi:day-sunny',
+			'condition':                   'wi:day-cloudy',
+			'clear-day':                   'wi:day-sunny',
+			'clear-night':                 'wi:night-clear',
+			'cloudy':                      'wi:cloudy',
+			'foggy':                       'wi:fog',
+			'partly-cloudy-day':           'wi:day-sunny-overcast',
+			'partly-cloudy-night':         'wi:night-alt-cloudy',
+			'possibly-rainy-day':          'wi:day-rain',
+			'possibly-rainy-night':        'wi:night-alt-rain',
+			'possibly-sleet-day':          'wi:day-sleet',
+			'possibly-sleet-night':        'wi:night-alt-sleet',
+			'possibly-snow-day':           'wi:day-snow',
+			'possibly-snow-night':         'wi:night-alt-snow-wind',
+			'possibly-thunderstorm-day':   'wi:day-thunderstorm',
+			'possibly-thunderstorm-night': 'wi:night-alt-thunderstorm',
+			'rainy':                       'wi:rain',
+			'sleet':                       'wi:sleet',
+			'snow':                        'wi:snow',
+			'thunderstorm':                'wi:thunderstorm',
+			'windy':                       'wi:strong-wind'
 		},
 		'@precipitationIcon': {
-			'chance-rain':  '',
-			'chance-snow':  '',
-			'chance-sleet': '',
+			'chance-rain':  'wi:rain',
+			'chance-snow':  'wi:snow',
+			'chance-sleet': 'wi:sleet'
 		}
 	}
 }
