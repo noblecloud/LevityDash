@@ -2,16 +2,16 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass
 from functools import partial, cached_property
-from typing import List, Dict, Any, Type, Tuple, NamedTuple, SupportsFloat, Set, ClassVar
+from typing import List, Dict, Any, Optional, Sequence, Type, Tuple, NamedTuple, SupportsFloat, Set, ClassVar
 
-from PySide2.QtCore import Qt, QPointF, QRectF
-from PySide2.QtGui import QPainter, QPen, QColor, QPainterPath
+from PySide2.QtCore import QPoint, Qt, QPointF, QRectF
+from PySide2.QtGui import QGuiApplication, QPainter, QPen, QColor, QPainterPath
 from PySide2.QtWidgets import QGraphicsSceneWheelEvent, QGraphicsPathItem, QGraphicsItem
 
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.stateful import StateProperty, Stateful
 from LevityDash.lib.ui import Color
-from LevityDash.lib.ui.frontends.PySide.Modules import Panel, Realtime
+from LevityDash.lib.ui.frontends.PySide.Modules import NonInteractivePanel, Panel, Realtime
 from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, DebugPaint, itemLoader
 from LevityDash.lib.ui.Geometry import (Geometry, Size, Position, parseSize, size_px, LocationFlag, Direction, AlignmentFlag, Alignment, DisplayPosition, DimensionType, Dimension, size_float, TwoDimensional, parseHeight, parseWidth,
                                         RelativeFloat, Padding)
@@ -21,6 +21,8 @@ from WeatherUnits import Length
 
 import difflib
 
+from asyncio import get_running_loop
+loop = get_running_loop()
 
 @dataclass(frozen=True, slots=True, order=True)
 class DimensionSizePosition:
@@ -77,19 +79,19 @@ class Divider(QGraphicsPathItem, Stateful, tag='divider'):
 		stackSize = stackSize.width() if direction == Direction.Horizontal else stackSize.height()
 
 		if self.size.relative:
-			lineSize = float(self.size*stackSize)
+			lineSize = float(self.size * stackSize)
 		else:
 			lineSize = float(self.size)
 
-		start = -lineSize/2
-		stop = lineSize/2
+		start = -lineSize / 2
+		stop = lineSize / 2
 
 		if self.direction.isVertical:
-			pos = float(self.position), stackSize/2
+			pos = float(self.position), stackSize / 2
 			startX, startY = start, 0
 			stopX, stopY = stop, 0
 		else:
-			pos = stackSize/2, float(self.position)
+			pos = stackSize / 2, float(self.position)
 			startX, startY = 0, start
 			stopX, stopY = 0, stop
 
@@ -295,11 +297,21 @@ class DividerProperties(Stateful, tag=...):
 class StackedItem(Stateful, tag=...):
 	__size = None
 	__sizeRatio = None
+	_keepInFrame = True
+	_index: Optional[int] = None
 
 	__type_cache__ = {}
 
 	statefulParent: 'Stack'
 	parent: 'Stack'
+
+	@property
+	def index(self) -> int | None:
+		return self._index
+
+	@index.setter
+	def index(self, value: int):
+		self._index = value
 
 	@property
 	def hasFixedSize(self) -> bool:
@@ -320,16 +332,19 @@ class StackedItem(Stateful, tag=...):
 	@property
 	def fixedSize(self) -> Size.Height | Size.Width | None:
 		size = self._fixedSize
+		if size is None:
+			return None
 		if not isinstance(size, Dimension):
 			size = size_px(size, self.parent.geometry, dimension=self.parent.direction.dimension)
+			size = self.parent.primaryDimension.size(size, absolute=True)
 		if size is not None:
 			return size
 		sizeRatio = self._sizeRatio
 		if sizeRatio is not None:
 			if self.parent.direction is Direction.Horizontal:
-				sizeRatio = self.geometry.height*sizeRatio
+				sizeRatio = self.geometry.height * sizeRatio
 			else:
-				sizeRatio = self.parent.geometry.absoluteWidth*self.scene().viewScale.x/sizeRatio
+				sizeRatio = self.parent.geometry.absoluteWidth * self.scene().viewScale.x / sizeRatio
 			sizeRatio = self.parent.primaryDimension.size(sizeRatio)
 		return sizeRatio
 
@@ -339,8 +354,6 @@ class StackedItem(Stateful, tag=...):
 
 	@_sizeRatio.setter
 	def _sizeRatio(self, value: float | None):
-		if value is not None:
-			Stack.toUpdate.add(self.parent)
 		self.__sizeRatio = value
 
 	@_sizeRatio.decode
@@ -365,16 +378,63 @@ class StackedItem(Stateful, tag=...):
 			cls.__type_cache__[sub_cls] = stacked_sub_cls = type(f'Stacked{sub_cls.__name__}', (sub_cls, StackedItem), {})
 		return stacked_sub_cls
 
+	def _geometryManagerPositionChange(self, value: QPoint | QPointF) -> Tuple[bool, QPoint | QPointF]:
+		originalValue = QPointF(value)
+		pos = self.pos()
+		value = self.sceneBoundingRect().translated(*(value - pos).toTuple()).center()
+		if self.parent.direction is Direction.Horizontal:
+			originalValue.setY(pos.y())
+			value = value.x()
+		else:
+			originalValue.setX(pos.x())
+			value = value.y()
+		index = self.geometry.index
 
-# @DebugPaint(False)
+		newIndex, newPos = min(
+      ((i, v) for i, v in enumerate(self.parent.itemPositions)), key=lambda i: abs(i[1] - value), default=(index,)
+		)
+
+		if newIndex == index or abs(newPos - value) > max(self.width() * .30, 20):
+			return True, self.pos()
+
+		self.setFlag(self.ItemSendsGeometryChanges, False)
+		self.parent.swap(index, newIndex)
+		self.setFlag(self.ItemSendsGeometryChanges, True)
+		return True, self.geometry.absolutePosition().asQPointF()
+
+
+class Spacer(NonInteractivePanel, StackedItem, tag='spacer'):
+	__exclude__ = {
+		'movable',
+		'frozen',
+		'locked'
+	}
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.setAcceptedMouseButtons(Qt.NoButton)
+		self.setAcceptHoverEvents(False)
+		self.setFlag(QGraphicsItem.ItemIsMovable, False)
+		self.setFlag(QGraphicsItem.ItemIsSelectable, False)
+		self.setFlag(QGraphicsItem.ItemIsFocusable, False)
+
+	@property
+	def key(self) -> str:
+		return 'spacer'
+
+	@classmethod
+	def representer(cls, dumper, data):
+		state = {'spacer': data.state}
+		return dumper.represent_dict(state.items())
+
+
+@DebugPaint
 class Stack(Panel, tag='stack'):
 	spacing: Size.Height | Size.Width | float | int | Length
 	size: Size.Height | Size.Width | float | int | Length
 	direction: Direction
 	geometries: Dict[int, Geometry]
 	items: List[Panel]
-
-	toUpdate: ClassVar[Set['Stack']] = set()
 
 	_direction: Direction = Direction.Vertical
 	_defaultType: Type[Panel] = None
@@ -387,8 +447,8 @@ class Stack(Panel, tag='stack'):
 	orthogonalDimension: DimensionSizePosition = DimensionSizePosition(Size.Width, Position.X)
 
 	presets: Dict[Direction, Dict[str, Dict]] = {
-		Direction.Vertical:   {'movable': False},
-		Direction.Horizontal: {'movable': False}
+		Direction.Vertical:   {},
+		Direction.Horizontal: {}
 	}
 
 	__defaults__ = {
@@ -411,7 +471,7 @@ class Stack(Panel, tag='stack'):
 		self.geometries = defaultdict(partial(Geometry, self))
 		Panel.__init__(self, *args, **kwargs)
 
-	# self.signals.resized.connect(self.updateGeometries)
+		self.scene().view.loadingFinished.connect(self.setGeometries)
 
 	@cached_property
 	def nonStackParent(self) -> Panel:
@@ -420,7 +480,12 @@ class Stack(Panel, tag='stack'):
 			up = up.parent
 		return up
 
-	@StateProperty(key='defaultType', sortOrder=0)
+	def refresh(self):
+		self.setGeometries()
+		for group in (self._attrGroups or {}).values():
+			group.adjustSizes(reason='refresh')
+
+	@StateProperty(key='defaultType', sortOrder=0, default=Panel)
 	def defaultType(self) -> Type[Panel]:
 		stackType = self._defaultType
 		if stackType is None and (parentStackType := getattr(self.nonStackParent, 'defaultStackType', None)) is not None:
@@ -438,17 +503,28 @@ class Stack(Panel, tag='stack'):
 	def defaultType(value: Type[Panel]) -> str:
 		if (subTag := getattr(value, 'subtag', None)) is not None and isinstance(subTag, str):
 			return f'{value.__tag__}.{subTag}'
-		return value.__tag__
+		return getattr(value, '__tag__', 'group')
 
 	@defaultType.decode
 	def defaultType(value: str) -> Type[Panel] | None:
-		subclasses = tuple(i for i in (Panel, *Panel.__subclasses__()) if getattr(i, "__tag__", '_') == value or i.__name__.casefold() == value.casefold())
-		if len(subclasses):
-			return subclasses[0]
-		return None
+		return Stateful.findTag(value)
 
-	def setGeometries(self, manualSize: Size.Height | Size.Width | float | int | Length = None):
-		if not self.geometries:
+	@defaultType.condition
+	def defaultType(self, value: Type[Panel]) -> bool:
+		if not isinstance(value, type):
+			return value is not None and value is not ...
+		return getattr(value, '__tag__', ...) is not ...
+
+	@property
+	def itemPositions(self) -> List[float]:
+		if self.direction is Direction.Vertical:
+			getter = lambda g: g.surface.sceneBoundingRect().center().y()
+		else:
+			getter = lambda g: g.surface.sceneBoundingRect().center().x()
+		return [getter(i) for i in sorted(self.geometries.values(), key=lambda i: i.index)]
+
+	def setGeometries(self, manualSize: Size.Height | Size.Width | float | int | Length = None, exclude=None):
+		if not self.geometries or self.scene().view.status != 'Ready':
 			return  # no items
 
 		self._dividers.clear()
@@ -457,7 +533,10 @@ class Stack(Panel, tag='stack'):
 
 		PrimarySize, PrimaryPosition = self.primaryDimension
 		OrthogonalSize, OrthogonalPosition = self.orthogonalDimension
-		fixedSizes = [f for i in self.geometries.values() if (f := getattr(i.surface, 'fixedSize', None)) is not None]
+
+		geometries = list(self.geometries.values())
+
+		fixedSizes = [f for i in geometries if (f := getattr(i.surface, 'fixedSize', None)) is not None]
 
 		def getSize(item: Panel) -> PrimarySize:
 			if self.direction == Direction.Vertical:
@@ -470,10 +549,10 @@ class Stack(Panel, tag='stack'):
 
 		spacing = self.spacing
 		if isinstance(spacing, Length):
-			spacing = size_px(self.spacing, self.geometry)
+			spacing = PrimarySize(size_px(spacing, self.geometry), absolute=True)
 
 		own_size_px, own_ortho_size_px = getSize(self)
-		totalFixeSizes = PrimarySize(sum(i.toRelativeF(own_size_px) for i in fixedSizes), absolute=False)
+		totalFixeSizes = PrimarySize(sum([i.toRelativeF(own_size_px) for i in fixedSizes]), absolute=False)
 
 		if manualSize is not None:
 			cellSize = manualSize
@@ -483,19 +562,20 @@ class Stack(Panel, tag='stack'):
 		if cellSize is not None and cellSize < 0:
 			self.setGeometries(manualSize=PrimarySize(1, absolute=False))
 			cellSize = getSize(max((i.boundingRect() for i in self._attrGroups['text'].items), key=lambda i: getSize(i)))
+		length = len(self.geometries)
 		if cellSize is None:
-			breaks = len(self.geometries) - 1
-			spacingTotal = breaks*absoluteSpacing
-			remainingSpace = padding.primarySpan - (float(spacingTotal)/own_size_px) - float(totalFixeSizes)
-			cellSize = PrimarySize(remainingSpace/((len(self.geometries) - len(fixedSizes)) or remainingSpace), absolute=False)
+			breaks = length - 1
+			spacingTotal = breaks * absoluteSpacing
+			remainingSpace = padding.primarySpan - (float(spacingTotal) / own_size_px) - float(totalFixeSizes)
+			cellSize = PrimarySize(remainingSpace / ((length - len(fixedSizes)) or remainingSpace), absolute=False)
 
 		if self.minCellSize is not None:
 			cellSize = max(cellSize, self.minCellSize)
 		if self.maxCellSize is not None:
-			cellSize = min(cellSize, self.maxCellSize)
+			cellSize = min(cellSize, self.meaxCellSize)
 
 		if isinstance(cellSize, (Length, int, float)):
-			size = size_px(cellSize, dimension)
+			size = size_px(cellSize, self.geometry, dimension)
 			cellSize = PrimarySize(size, absolute=True)
 
 		orthoOffset = OrthogonalPosition(0, absolute=False)  # This should always be 0 unless diagonal
@@ -508,7 +588,7 @@ class Stack(Panel, tag='stack'):
 			if isinstance(dividerSize, Length) or dividerSize.absolute:
 				dividerSize = size_float(dividerSize, self.geometry, dimension)
 
-			dividerOffset = (1 - dividerSize)/2
+			dividerOffset = (1 - dividerSize) / 2
 
 			dividerLeading = orthoLeading + dividerOffset
 			dividerTrailing = orthoTrailing - dividerOffset
@@ -523,11 +603,23 @@ class Stack(Panel, tag='stack'):
 
 		size = Size(cellSize, orthoSize, unsorted=True)
 
-		defaultOffset = Position(PrimaryPosition(cellSize + spacing), orthoOffset, unsorted=True)
-		position = Position(PrimarySize(0 + padding.primaryLeading), orthoPosition, unsorted=True)
+		defaultOffset = Position(PrimaryPosition(cellSize + spacing, absolute=cellSize.absolute), orthoOffset, unsorted=True)
+		position = Position(PrimarySize(0 + padding.primaryLeading, absolute=cellSize.absolute), orthoPosition, unsorted=True)
 
-		for index, geometry in enumerate(self.geometries.values()):
+		if size.width.absolute and position.x.relative:
+			position.x = position.x.toAbsolute(own_size_px)
+		elif size.width.relative and position.x.absolute:
+			position.x = position.x.toRelative(own_size_px)
+
+		if size.height.absolute and position.y.relative:
+			position.y = position.y.toAbsolute(own_ortho_size_px)
+		elif size.height.relative and position.y.absolute:
+			position.y = position.y.toRelative(own_ortho_size_px)
+
+		for index, geometry in enumerate(geometries):
+			geometry.index = index
 			geometry.position = Position(position)
+
 			if (fixedSize := getattr(geometry.surface, 'fixedSize', None)) is not None:
 				fixedSize = fixedSize.toRelativeF(own_size_px)
 				geometry.size = Size(PrimarySize(fixedSize), orthoSize, unsorted=True)
@@ -535,17 +627,38 @@ class Stack(Panel, tag='stack'):
 			else:
 				geometry.size = size
 				offset = defaultOffset
+
 			geometry.updateSurface()
 			position += offset
-			if dividers and index < len(self.geometries) - 1:
+
+			if dividers and index < length - 1:
 				if self._dividers:
-					firstPoint, secondPoint = [i + offset for i in self._dividers[-1]]
+					try:
+						firstPoint, secondPoint = [i + offset for i in self._dividers[-1]]
+					except RecursionError as e:
+						firstPoint, secondPoint = self._dividers[-1]
 				else:
 					itemSize, _ = getSize(geometry)
 					itemSize += padding.primaryLeading
-					firstPoint = Position(PrimaryPosition(itemSize + (spacing/2)), dividerLeading, unsorted=True)
-					secondPoint = Position(PrimaryPosition(itemSize + (spacing/2)), dividerTrailing, unsorted=True)
+					firstPoint = Position(PrimaryPosition(itemSize + (spacing / 2)), dividerLeading, unsorted=True)
+					secondPoint = Position(PrimaryPosition(itemSize + (spacing / 2)), dividerTrailing, unsorted=True)
 				self._dividers.append((firstPoint, secondPoint))
+
+	def swap(self, first: int, second: int) -> None:
+		"""Swap the positions of two items in the stack."""
+		(
+	    self.geometries[first],
+	    self.geometries[first].index,
+	    self.geometries[second],
+	    self.geometries[second].index,
+		) = (
+	    self.geometries[second],
+	    self.geometries[second].index,
+	    self.geometries[first],
+	    self.geometries[first].index,
+		)
+		self.geometries = {i: self.geometries[i] for i in sorted(self.geometries)}
+		self.setGeometries()
 
 	def updateValueTypes(self):
 		dimension = self.direction.dimension
@@ -597,26 +710,33 @@ class Stack(Panel, tag='stack'):
 
 			elif isinstance(item, dict):
 				match item:
+					case {'spacer': state} | {'type': 'spacer', **state}:
+						itemType = Spacer
+
 					case {'type': str(itemTypeStr), **state}:
 						itemType = Stack.defaultType.decodeValue(itemTypeStr, self)
 					case dict(state):
 						itemType = self.defaultType
 					case _:
 						continue
-				state = DeepChainMap(state, preset).to_dict()
+
+				if itemType is not Spacer:
+					state = DeepChainMap(state, preset).to_dict()
 
 				if (existingItem := self.extractExisting(state, existing)) is not None:
 					existingItem.state = state
 					item = existingItem
 				else:
-					itemType = StackedItem.get_subclass(itemType)
+					if itemType is not Spacer:
+						itemType = StackedItem.get_subclass(itemType)
 					item = itemType(self, **state)
 			else:
 				continue
 			if (geometry := getattr(item, 'geometry', None)) is not None:
 				self.geometries[index] = geometry
+				item.index = index
 			else:
-				print(f'{item} has no geometry')
+				log.debug(f'{item} has no geometry')
 
 	def extractExisting(self, state_: dict, existing_: List[Panel], itemType: Type[Panel] = None) -> Panel | None:
 		if itemType is None:
@@ -675,9 +795,10 @@ class Stack(Panel, tag='stack'):
 
 	@property
 	def size_px(self) -> int | float:
-		return size_px(self.size, self.geometry)
+		return size_px(self.size, self.geometry, self.direction.dimension)
 
-	@StateProperty(key='spacing', default=Size.Height(5, absolute=True), allowNone=False, after=setGeometries, dependancies={'geometry'})
+	@StateProperty(key='spacing', default=Size.Height(5, absolute=True), allowNone=False, after=setGeometries,
+		dependancies={'geometry'}, sortOrder=3)
 	def spacing(self) -> Size.Height | Size.Width | Length:
 		"""
 		The spacing between items in the list.
@@ -699,17 +820,13 @@ class Stack(Panel, tag='stack'):
 	padding = Panel.padding
 	padding.after(setGeometries)
 
-	def getItemGeometry(self, index: int | None) -> Geometry:
-		if index is None:
-			index = len(self.geometries)
-		index = sorted((0, index, len(self.geometries)))[1]
-		return self.geometries[index]
-
-	@StateProperty(key='direction',
+	@StateProperty(
+		key='direction',
 		default=Direction.Vertical,
 		after=setGeometries,
 		dependancies={'geometry'},
-		allowNone=False
+		allowNone=False,
+		sortOrder=1,
 	)
 	def direction(self) -> Direction:
 		"""
@@ -771,12 +888,25 @@ class ValueStack(Stack, tag='value-stack'):
 				},
 				'position':      DisplayPosition.Left,
 				'size':          0.5,
+				'margins': {
+					'left':  0,
+					'right': 0.05,
+					'top':   0.05,
+					'bottom': 0.05,
+				}
+
 			},
 			'display': {
 				'displayType': DisplayType.Text,
 				'valueLabel':
 				               {
 					               'alignment':     Alignment(AlignmentFlag.CenterRight),
+					               'margins': {
+						               'top':    0.05,
+						               'bottom': 0.05,
+						               'left':   0.05,
+						               'right':  0,
+					               },
 					               'matchingGroup': {
 						               'group':    'value-stack.text',
 						               'matchAll': True,
@@ -787,7 +917,10 @@ class ValueStack(Stack, tag='value-stack'):
 		Direction.Horizontal: {
 			'title':   {
 				'alignment':     Alignment(AlignmentFlag.Center),
-				'matchingGroup': {'group': 'value-stack.text'},
+				'matchingGroup': {
+					'group':    'value-stack.text',
+					'matchAll': True
+				},
 				'position':      DisplayPosition.Top,
 				'size':          0.2,
 			},
@@ -808,7 +941,7 @@ class ValueStack(Stack, tag='value-stack'):
 	_defaultType = Realtime
 
 	__defaults__ = {
-		'defaultType': Realtime
+		'defaultType': Realtime,
 	}
 
 	def setAlignments(self):
@@ -820,6 +953,10 @@ class ValueStack(Stack, tag='value-stack'):
 			if (display := getattr(item, 'display', None)) is not None:
 				if (valueLabel := getattr(display, 'valueTextBox', None)) is not None:
 					valueLabel.setAlignment(valueAlignment)
+
+	def setGeometries(self, manualSize: Size.Height | Size.Width | float | int | Length = None):
+		super().setGeometries(manualSize)
+		self.getAttrGroup('value-stack.text').adjustSizes('stack geometry changed')
 
 	def extractExisting(
 		self, state_: dict,
@@ -835,11 +972,14 @@ class ValueStack(Stack, tag='value-stack'):
 	def items(self) -> List[Dict[str, Dict | None] | CategoryItem]:
 		items = []
 		for item in Stack.items.fget(self):
-			match item.state:
+			item_state = item.state
+			match item_state:
 				case {'key': key, **state}:
 					items.append({key: state} if state else key)
 				case self.defaultType():
 					items.append(item)
+				case _ if isinstance(item, Spacer):
+					items.append({'spacer' : item_state})
 		return items
 
 	def itemSetter(self, defaultType, existing, preset, value):
@@ -848,10 +988,12 @@ class ValueStack(Stack, tag='value-stack'):
 		for index, item in enumerate(value):
 			state = {}
 			if isinstance(item, str) and re.match(r'(\w+\.)+?\w+?$', item):
-				state['key'] = CategoryItem(item)
+				state['key'] = CategoryItem(item) if item != 'spacer' else item
 			elif isinstance(item, dict):
 				firstKey, firstValue = item.popitem()
-				if re.match(r'(\w+\.)+?\w+?$', firstKey) or firstValue is None:
+				if firstKey == 'spacer':
+					state['key'] = 'spacer'
+				elif re.match(r'(\w+\.)+?\w+?$', firstKey) or firstValue is None:
 					state['key'] = CategoryItem(firstKey)
 				elif firstKey == 'type':
 					pass
@@ -861,22 +1003,15 @@ class ValueStack(Stack, tag='value-stack'):
 				elif isinstance(firstValue, dict) and set(firstValue) & stateKeys:
 					state.update(firstValue)
 
-			# case dict() if len((key:= list(item.items()))) == 1 and (key := key[0])[1] is None and re.match(r'(\w+\.)+?\w+?$', (key := key[0])):
-			# 	state = DeepChainMap({'key': CategoryItem(key)}, preset).to_dict()
-			# case {r'(\w+\.)+?\w+?$': dict(state)} if set(state) & set(self.statefulsItems):
-			# 	key, state = item.popitem()
-			# 	state = DeepChainMap(state, preset).to_dict()
-			# 	state['key'] = key
-			# case _:
-			# 	log.warning(f'Unknown item type: {item}')
-			# 	continue
-
 			state = DeepChainMap(state, preset).to_dict()
 			if (existingItem := self.extractExisting(state, existing)) is not None:
 				existingItem.state = state
 				item = existingItem
 			else:
-				item = defaultType(self, **state)
+				if state['key'] == 'spacer':
+					item = Spacer(self, **state)
+				else:
+					item = defaultType(self, **state)
 			if (geometry := getattr(item, 'geometry', None)) is not None:
 				self.geometries[index] = geometry
 			else:
@@ -891,7 +1026,7 @@ class ValueStack(Stack, tag='value-stack'):
 		"""
 		The alignment of the label.
 		"""
-		return getattr(self, '_labelAlignment', None) or ValueStack.labelAlignment.default(self)
+		return getattr(self, '_labelAlignment', None) or ValueStack.labelAlignment.default(type(self))
 
 	@labelAlignment.setter
 	def labelAlignment(self, value: Alignment | None):
@@ -903,9 +1038,9 @@ class ValueStack(Stack, tag='value-stack'):
 		return Alignment(vertical=AlignmentFlag.Center, horizontal=value)
 
 	@labelAlignment.encode
-	def labelAlignment(value: Alignment) -> str:
+	def labelAlignment(self, value: Alignment) -> str:
 		if value is None:
-			return ValueStack.labelAlignment.default(self).name
+			return ValueStack.labelAlignment.default(type(self)).name
 		return value.horizontal.name
 
 	@StateProperty(key='valueAlignment', default=Alignment(vertical=AlignmentFlag.Center, horizontal=AlignmentFlag.Right), after=setAlignments, dependancies={'geometry'})
@@ -913,7 +1048,7 @@ class ValueStack(Stack, tag='value-stack'):
 		"""
 		The alignment of the value.
 		"""
-		return getattr(self, '_valueAlignment', None) or ValueStack.valueAlignment.default(self)
+		return getattr(self, '_valueAlignment', None) or ValueStack.valueAlignment.default(type(self))
 
 	@valueAlignment.setter
 	def valueAlignment(self, value: Alignment | None):
@@ -927,5 +1062,5 @@ class ValueStack(Stack, tag='value-stack'):
 	@valueAlignment.encode
 	def valueAlignment(self, value: Alignment) -> str:
 		if value is None:
-			return ValueStack.valueAlignment.default(self).name
+			return ValueStack.valueAlignment.default(type(self)).name
 		return value.horizontal.name
