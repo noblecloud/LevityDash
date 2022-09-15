@@ -1,48 +1,94 @@
 import re
-from _warnings import warn
 from abc import ABC
 from collections import namedtuple
-from enum import IntFlag, auto, Enum, EnumMeta
+from difflib import get_close_matches
+from enum import auto, Enum, EnumMeta, IntFlag
 from functools import cached_property
 from numbers import Number
+from typing import (
+	Any, Callable, ClassVar, Dict, Iterable, List, Literal, Mapping, Optional, overload, Protocol, runtime_checkable,
+	Sequence, Set, SupportsFloat, Tuple, Type, TYPE_CHECKING, TypeAlias, TypeVar, Union
+)
 
 import numpy as np
-from math import sqrt, nan, inf, degrees as mathDegrees, atan2
-from PySide2.QtGui import QTransform, QPolygonF, QPolygon, QPainterPath
-
-from typing import Iterable, List, Optional, Union, Tuple, Set, ClassVar, Type, overload, Callable, TypeVar, TYPE_CHECKING, runtime_checkable, Protocol, Any, SupportsFloat
-
-from PySide2.QtCore import QObject, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Signal, QMarginsF, QMargins, Qt
-from PySide2.QtWidgets import QGraphicsItem
-from rich.console import Console
+from _warnings import warn
+from math import atan2, ceil, degrees as mathDegrees, floor, inf, nan, prod, sqrt
+from PySide2.QtCore import QMargins, QMarginsF, QObject, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt, Signal
+from PySide2.QtGui import QCursor, QPainterPath, QPolygon, QPolygonF, QScreen, QTransform
+from PySide2.QtWidgets import QApplication, QGraphicsItem
 from rich.repr import auto as auto_rich_repr
 from yaml import Dumper
 
+from LevityDash.lib.config import userConfig
 from LevityDash.lib.log import LevityUtilsLog as log
 from LevityDash.lib.ui import UILogger as guiLog
-from LevityDash.lib.utils import ClosestMatchEnumMeta, clearCacheAttr, camelCase, DType, IgnoreOr, Axis
-from WeatherUnits import Length
-
-from LevityDash.lib.utils.shared import mostly, clamp, _Panel, joinCase
+from LevityDash.lib.utils import Axis, camelCase, clearCacheAttr, ClosestMatchEnumMeta, DType, IgnoreOr
+from LevityDash.lib.utils.shared import _Panel, clamp, mostly
+from WeatherUnits import auto as auto_unit, Length, Measurement
 
 if TYPE_CHECKING:
 	from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 
 log = guiLog.getChild('geometry')
 
-
-def determineAbsolute(value) -> bool:
-	absolute = None
-	if isinstance(value, MultiDimension):
-		absolute = value.absolute
-	if isinstance(value, dict):
-		absolute = value.get("absolute", None)
-		if absolute is None:
-			absolute = not value.get("relative", None)
-	return absolute
+console = log.console
 
 
-console = Console()
+def findScreen(app: QApplication = None) -> QScreen:
+	app = app or QApplication.instance()
+	screens = app.screens()
+	display = userConfig['Display'].get('display', 'smallest')
+	match display:
+		case 'smallest':
+			return min(screens, key=lambda s: prod(s.size().toTuple()))
+		case 'lowest':
+			return max(screens, key=lambda s: s.geometry.rect().bottom())
+		case 'largest':
+			return max(screens, key=lambda s: prod(s.size().toTuple()))
+		case 'primary' | 'main' | 'default':
+			return app.primaryScreen()
+		case 'current' | 'active':
+			return app.screenAt(QCursor.pos())
+		case str(i) if i.isdigit():
+			return screens[min(int(i), len(screens))]
+		case str(i) if matched := get_close_matches(i, [s.name() for s in screens], 1, 0.7):
+			matched = matched[0]
+			return next(s for s in screens if s.name() == matched)
+		case _:
+			if len(screens) == 1:
+				return screens[0]
+			for s in screens:
+				# if the screen is the primary screen, skip it
+				if app.primaryScreen() == s:
+					continue
+				# if the screen is taller than it is wide, skip it
+				if s.size().height() > s.size().width():
+					continue
+				return s
+			else:
+				return app.primaryScreen()
+
+
+try:
+	configDPI = userConfig.get('Display', 'dpi', fallback=None)
+	if configDPI is None:
+		raise ValueError
+
+	configDPI = float(configDPI)
+
+
+	def getDPI(screen: QScreen = None) -> float:
+		return float(configDPI)
+
+except ValueError:
+	defaultScreen = findScreen()
+
+
+	def getDPI(screen: QScreen = None) -> float:
+		if screen is None and (window := QApplication.instance().activeWindow()):
+			return window.screen().physicalDotsPerInch()
+		screen = screen or defaultScreen
+		return screen.physicalDotsPerInch()
 
 
 class LocationEnumMeta(ClosestMatchEnumMeta):
@@ -161,7 +207,6 @@ class LocationFlag(IntFlag, metaclass=LocationEnumMeta):
 
 	@cached_property
 	def action(self) -> Callable:
-
 		def left(rect):
 			return QPointF(rect.left(), rect.center().y())
 
@@ -419,6 +464,7 @@ class AlignmentFlag(IntFlag, metaclass=LocationEnumMeta):
 
 @auto_rich_repr
 class Alignment:
+
 	# __slots__ = ('__horizontal', '__vertical', '__dict__')
 
 	@overload
@@ -532,7 +578,7 @@ class Alignment:
 		return Position(x, y)
 
 	def translationFromCenter(self, rect: QRectF) -> QPointF:
-		return self.multipliersCentered*rect.size()
+		return self.multipliersCentered * rect.size()
 
 	def __getstate__(self):
 		return self.asDict()
@@ -578,7 +624,7 @@ class Alignment:
 
 
 class DisplayPosition(str, Enum, metaclass=ClosestMatchEnumMeta):
-	# secondaryPositions: ClassVar[Set['DisplayPosition']]
+	secondaryPositions: ClassVar[Set['DisplayPosition']]
 
 	Auto = 'auto'  # Places the unit in a new line if results in better readability
 	Inline = 'inline'  # Always displays the unit in the same line as the value
@@ -615,32 +661,57 @@ DisplayPosition.secondaryPositions = {
 	DisplayPosition.Hidden,
 	DisplayPosition.Inline,
 	DisplayPosition.Floating,
-	DisplayPosition.FloatUnder
 }
 
 
+class RelativeAbsoluteProtocolMeta(type):
+
+	def __instancecheck__(self, instance):
+		values = {k: (v, self.__dict__[k]) for k, v in self.__annotations__.items()}
+		for attr, (type_, v) in values.items():
+			try:
+				otherValue = getattr(instance, attr)
+			except AttributeError:
+				return False
+			if not isinstance(otherValue, type_):
+				return False
+			if not v == otherValue:
+				return False
+		return True
+
+
+class RelativeFloat(metaclass=RelativeAbsoluteProtocolMeta):
+	relative: bool = True
+
+
+class AbsoluteFloat(metaclass=RelativeAbsoluteProtocolMeta):
+	absolute: bool = True
+
+
 class MutableFloat:
-	__slots__ = ('__value')
-	__value: float
+	__slots__ = ('_value')
+	_value: float | Length
 
 	def __init__(self, value: float):
 		self.value = value
 
 	@classmethod
 	def representer(cls, dumper, data):
-		return dumper.represent_float(round(data.__value, 5))
+		return dumper.represent_float(round(data._value, 5))
 
 	@property
 	def value(self) -> float:
-		if not isinstance(self.__value, float):
-			self.__value = float(self.__value)
-		return self.__value
+		return self._value
 
 	@value.setter
 	def value(self, value):
 		if isinstance(value, type(self)):
 			self._absolute = value._absolute
-		self.__value = self.__parseValue(value)
+			value = value.value
+		if isinstance(value, Length):
+			self._value = value
+		else:
+			self._value = self.__parseValue(value)
 
 	def _setValue(self, value):
 		if value is None:
@@ -649,7 +720,7 @@ class MutableFloat:
 			value = float.__float__(self, value)
 		except ValueError:
 			raise ValueError(f'{value} is not a number')
-		self.__value = value
+		self._value = value
 
 	def __parseValue(self, value) -> float:
 		# ! This function must only be used for the object's own value
@@ -667,65 +738,67 @@ class MutableFloat:
 				value = value.replace('px', '')
 			value = re.sub(r'[^0-9.]', '', value, 0, re.DOTALL)
 		try:
-			return float(value)*mul
+			return float(value) * mul
 		except ValueError:
 			raise ValueError(f'{value} is not a number')
 
-	def __parseOther(self, value: float | str | int) -> float:
+	@staticmethod
+	def _parseOther(value: float | str | int) -> float:
+		# TODO: Add support for physical measurements
 		mul = 1
 		if value is None:
 			return nan
 		if isinstance(value, str):
-			if '%' in value:
-				value = value.replace('%', '')
+			if value.endswith('%'):
+				value = value.strip('%')
 				mul = 0.01
-			elif 'px' in value:
-				value = value.replace('px', '')
-			value = re.sub(r'[^0-9.]', '', value, 0, re.DOTALL)
+			elif value.endswith('px'):
+				value = value.strip('px')
+			value = re.sub(r'[^0-9.\-+]', '', value, 0, re.DOTALL)
 		elif isinstance(value, MutableFloat):
 			value = value.value
 		elif isinstance(value, int | float | np.number):
 			pass
 		else:
 			raise ValueError(f'{value} is not a number')
-		return float(value)*mul
+		return float(value) * mul
 
 	def __call__(self):
-		return self.__value
+		return self._value
 
 	def __add__(self, other):
-		return self.__class__(self.__value + float(other))
+		return self.__class__(self._value + float(other))
 
 	def __radd__(self, other):
 		return self.__add__(other)
 
 	def __iadd__(self, other):
-		self.__value += float(other)
+		self._value += float(other)
 		return self
 
 	def __sub__(self, other):
-		return self.__class__(self.__value - float(other))
+		return self.__class__(self._value - float(other))
 
 	def __rsub__(self, other):
-		return self.__class__(float(other) - self.__value)
+		return self.__class__(float(other) - self._value)
 
 	def __isub__(self, other):
-		self.__value -= float(other)
+		self._value -= float(other)
 		return self
 
 	def __mul__(self, other):
-		return self.__class__(self.__value*float(other))
+		return self.__class__(self._value * float(other))
 
 	def __rmul__(self, other):
 		return self.__mul__(other)
 
 	def __imul__(self, other):
-		self.__value *= float(other)
+		self._value *= float(other)
 		return self
 
 	def __truediv__(self, other):
 		try:
-			return self.__class__(self.__value/float(other))
+			return self.__class__(self._value / float(other))
 		except ZeroDivisionError:
 			return self.__class__(0)
 
@@ -733,68 +806,68 @@ class MutableFloat:
 		return self.__truediv__(other)
 
 	def __itruediv__(self, other):
-		self.__value /= float(other)
+		self._value /= float(other)
 		return self
 
 	def __floordiv__(self, other):
-		return self.__class__(self.__value//float(other))
+		return self.__class__(self._value // float(other))
 
 	def __rfloordiv__(self, other):
 		return self.__floordiv__(other)
 
 	def __ifloordiv__(self, other):
-		self.__value //= float(other)
+		self._value //= float(other)
 		return self
 
 	def __mod__(self, other):
-		return self.__class__(self.__value%float(other))
+		return self.__class__(self._value % float(other))
 
 	def __rmod__(self, other):
 		return self.__mod__(other)
 
 	def __imod__(self, other):
-		self.__value %= float(other)
+		self._value %= float(other)
 		return self
 
 	def __pow__(self, other):
-		return self.__class__(self.__value ** float(other))
+		return self.__class__(self._value ** float(other))
 
 	def __rpow__(self, other):
 		return self.__pow__(other)
 
 	def __neg__(self):
-		return self.__class__(-self.__value)
+		return self.__class__(-self._value)
 
 	def __pos__(self):
-		return self.__class__(+self.__value)
+		return self.__class__(+self._value)
 
 	def __abs__(self):
-		return self.__class__(abs(self.__value))
+		return self.__class__(abs(self._value))
 
 	def __invert__(self):
-		return self.__class__(~self.__value)
+		return self.__class__(~self._value)
 
 	def __round__(self, n=None):
-		return self.__class__(round(self.__value, n))
+		return self.__class__(round(self._value, n))
 
 	def __floor__(self):
-		return self.__class__(self.__value.__floor__())
+		return self.__class__(self._value.__floor__())
 
 	def __ceil__(self):
-		return self.__class__(self.__value.__ceil__())
+		return self.__class__(self._value.__ceil__())
 
 	def __trunc__(self):
-		return self.__class__(self.__value.__trunc__())
+		return self.__class__(self._value.__trunc__())
 
 	def __lt__(self, other):
-		return self.__value < float(other)
+		return self._value < float(other)
 
 	def __le__(self, other):
-		return self.__value <= float(other)
+		return self._value <= float(other)
 
 	def __eq__(self, other):
 		try:
-			return self.__value == self.__parseOther(other)
+			return self._value == self._parseOther(other)
 		except TypeError:
 			return False
 		except ValueError:
@@ -804,40 +877,142 @@ class MutableFloat:
 		return not self.__eq__(other)
 
 	def __gt__(self, other):
-		return self.__value > float(other)
+		return self._value > float(other)
 
 	def __ge__(self, other):
-		return self.__value >= float(other)
+		return self._value >= float(other)
 
 	def __hash__(self):
-		return hash(self.__value)
+		return hash(self._value)
 
 	def __str__(self):
-		return str(round(self.__value, 3)).rstrip('0').rstrip('.')
+		return str(round(self._value, 3)).rstrip('0').rstrip('.')
 
 	def __repr__(self):
 		return f'<{self.__class__.__name__}({self.__str__()})>'
 
 	def __bool__(self):
-		return bool(self.__value)
+		return bool(self._value)
 
 	def __int__(self):
-		return int(self.__value)
+		return int(self._value)
 
 	def __float__(self):
-		return float(self.__value)
+		return float(self._value)
 
 	def __complex__(self):
-		return complex(self.__value)
+		return complex(self._value)
 
 	def __index__(self):
-		return int(self.__value)
+		return int(self._value)
 
 	def __len__(self):
 		return 1
 
 	def is_integer(self) -> bool:
-		return self.__value.is_integer()
+		return self._value.is_integer()
+
+
+ValueType = Literal['relative', 'absolute', 'length']
+
+
+class CompoundValue(MutableFloat):
+	__slots__ = ('_values', '_relativeTo')
+	_relativeTo: Number | Callable[[], Number] | None
+	_values: Dict[ValueType, MutableFloat]
+
+	def __init__(self, *values: MutableFloat):
+		valuesSorted: Dict[ValueType: List] = {
+			'relative': [],
+			'absolute': [],
+			'length':   []
+		}
+		for value in values:
+			if isinstance(value, RelativeFloat):
+				valuesSorted['relative'].append(value)
+			elif isinstance(value, AbsoluteFloat):
+				valuesSorted['absolute'].append(value)
+			elif isinstance(value, Length):
+				valuesSorted['length'].append(value)
+
+		self._values = {
+			i: MutableFloat(sum(j)) for i, j in valuesSorted.items()
+		}
+
+	@property
+	def relativeTo(self) -> float:
+		r = self._relativeTo
+		if isinstance(r, Callable):
+			return float(r())
+		elif isinstance(r, Number):
+			return float(r)
+		else:
+			return 0.0
+
+	@relativeTo.setter
+	def relativeTo(self, value):
+		self._relativeTo = value
+
+	@property
+	def _value(self) -> float:
+		v = 0
+		if r := self._values.get('relative'):
+			v += r * self.relativeTo
+		if a := self._values.get('absolute'):
+			v += float(a)
+		if l := self._values.get('length'):
+			l = Length.Inch(l)
+			v += float(l * getDPI())
+		return v
+
+	def __str__(self):
+		v = []
+		if l := self._values.get('length'):
+			v.append(l)
+		if a := self._values.get('absolute'):
+			v.append(a)
+		if r := self._values.get('relative'):
+			v.append(r)
+		return " + ".join(str(i) for i in v)
+
+	def __iadd__(self, other):
+		if not isinstance(other, CompoundValue | MutableFloat | Length):
+			if isinstance(other, str) and re.match('[^0-9.,]+?$', other):
+				if other.endswith('px') or other.endswith('%'):
+					other = self._parseOther(other)
+				else:
+					other = auto_unit(other, dimension=Length)
+		if isinstance(other, CompoundValue):
+			if a := other._values.get('absolute'):
+				if aP := self._values.get('absolute'):
+					aP += a
+				else:
+					self._values['absolute'] = a
+			if r := other._values.get('relative'):
+				if rP := self._values.get('relative'):
+					rP += r
+				else:
+					self._values['relative'] = r
+			if l := other._values.get('length'):
+				if lP := self._values.get('length'):
+					lP += l
+				else:
+					self._values['length'] = l
+		elif isinstance(other, AbsoluteFloat):
+			if aP := self._values.get('absolute'):
+				aP += other
+			else:
+				self._values['absolute'] = other
+		elif isinstance(other, RelativeFloat):
+			if rP := self._values.get('relative'):
+				rP += other
+			else:
+				self._values['relative'] = other
+		elif isinstance(other, Length):
+			if lP := self._values.get('length'):
+				lP += other
+			else:
+				self._values['length'] = other
 
 
 class DimensionTypeMeta(EnumMeta):
@@ -897,9 +1072,16 @@ class Dimension(MutableFloat):
 	def representer(cls, dumper: Dumper, data):
 		return dumper.represent_str(str(data))
 
-	def __init__(self, value: Union[int, float], absolute: bool = None, relative: bool = None):
+	def __init__(self, value: Union[int, float, 'Dimension', Length], absolute: bool = None, relative: bool = None):
 		super().__init__(value)
 		absolute = getattr(self, '_absolute', absolute) if absolute is None else absolute
+
+		# If the value is a physical dimension, it is absolute
+		if isinstance(value, Length):
+			absolute = True
+			if relative:
+				raise ValueError('Physical length cannot be relative')
+
 		# If absolute is not specified, absolute is True
 		if relative is None and absolute is None:
 			if hasattr(self, '_absolute'):
@@ -926,13 +1108,15 @@ class Dimension(MutableFloat):
 
 	def __str__(self):
 		if self._absolute:
+			if isinstance(self.value, Length):
+				return f"{self.value:unitSpacer=False}"
 			string = super(Dimension, self).__str__()
 			if self.__absoluteDecorator__:
 				string = f'{string}{self.__absoluteDecorator__}'
 			# string = Text.assemble((string, 'bold magenta'), (self.__absoluteDecorator__, 'white')).render(console)
 			return string
 
-		string = f'{str(round(self.value*100, 1)).rstrip("0").rstrip(".")}'
+		string = f'{str(round(self.value * 100, 1)).rstrip("0").rstrip(".")}'
 		if self.__relativeDecorator__:
 			string = f'{string}{self.__relativeDecorator__}'
 		return string
@@ -940,6 +1124,10 @@ class Dimension(MutableFloat):
 	@property
 	def absolute(self) -> bool:
 		return self._absolute
+
+	@property
+	def isPhysicalMeasurement(self) -> bool:
+		return isinstance(self.value, Length)
 
 	def toggleAbsolute(self, parentSize: Union[int, float] = None, value: bool = None):
 		if value is not None and parentSize is not None:
@@ -985,27 +1173,37 @@ class Dimension(MutableFloat):
 			'absolute': self._absolute,
 		}
 
-	def toAbsolute(self, value: float | Number) -> 'Dimension':
+	def toAbsolute(self, value: float | Number = None) -> 'Dimension':
 		if not self._absolute:
-			return self.__class__(self*value, True)
+			if value is None:
+				raise ValueError('Cannot convert to absolute without a comparison value')
+			return self.__class__(self * value, True)
+		if isinstance(self.value, Length):
+			return self.__class__(float(Length.Inch(self.value)) * getDPI(), absolute=True)
 		return self
 
-	def toAbsoluteF(self, value: float | Number) -> float:
+	def toAbsoluteF(self, value: Union[float, Number, 'Dimension'] | None = None) -> float:
 		if not self._absolute:
-			return self.value*value
+			if value is None:
+				raise ValueError('Cannot convert to absolute without a comparison value')
+			return self.value * value
+		if isinstance(self.value, Length):
+			return float(Length.Inch(self.value)) * getDPI()
+		return float(self.value)
+
+	def toRelative(self, value: float = None) -> 'Dimension':
+		if self._absolute:
+			return self.__class__(self.toAbsoluteF(value) / float(value), False)
 		return self
 
-	def toRelative(self, value: float) -> 'Dimension':
+	def toRelativeF(self, value: float = None) -> float:
 		if self._absolute:
-			return self.__class__(self/value, False)
-		return self
-
-	def toRelativeF(self, value: float) -> float:
-		if self._absolute:
+			if value is None:
+				raise ValueError('Cannot convert to relative without a comparison value')
 			if value:
-				return self.value/value
+				return self.toAbsoluteF(value) / float(value)
 			return 0
-		return self
+		return self.value
 
 	def setAbsolute(self, value: float):
 		self._absolute = True
@@ -1017,26 +1215,26 @@ class Dimension(MutableFloat):
 
 	def __truediv__(self, other):
 		if isinstance(other, Dimension):
-			return self.__class__(self.value/other.value, absolute=not (self.absolute and other.absolute))
+			return self.__class__(self.value / other.value, absolute=not (self.absolute and other.absolute))
 		absolute = self > 1 and other > 1
-		return self.__class__(self.value/other, absolute=absolute)
+		return self.__class__(self.value / other, absolute=absolute)
 
 	def __mul__(self, other):
 		if isinstance(other, Dimension):
-			return self.__class__(self.value*other.value, absolute=not (self.absolute and other.absolute))
+			return self.__class__(self.value * other.value, absolute=not (self.absolute and other.absolute))
 		absolute = other > 1
-		return self.__class__(self.value*other, absolute=absolute)
+		return self.__class__(self.value * other, absolute=absolute)
 
 	def __and__(self, other):
 		absolute = other > 1
 		if self.relative:
-			return self.__class__(self.value*float(other), absolute=absolute)
+			return self.__class__(self.value * float(other), absolute=absolute)
 		return self.__class__(other, absolute=absolute)
 
 	def __or__(self, other):
 		absolute = other > 1
 		if self.relative:
-			return self.__class__(self.value*float(other), absolute=absolute)
+			return self.__class__(self.value * float(other), absolute=absolute)
 		return self.__class__(self.value, absolute=absolute)
 
 
@@ -1181,20 +1379,27 @@ class MultiDimensionMeta(type):
 		raise ValueError('Dimension does not exist')
 
 
+MultiDimensionalAcceptedType: TypeAlias = (QPoint | QPointF | QSize | QSizeF |
+                                           Sequence[int | float | str] | int |
+                                           float | dict | Mapping)
+
+
 class MultiDimension(metaclass=MultiDimensionMeta):
 	__separator__: ClassVar[str]
 	__dimensions__: ClassVar[dict]
 	__count__: ClassVar[int]
 
-	def __init__(self,
+	def __init__(
+		self,
 		*V: Union[int, float, QPoint, QPointF, QSize, QSizeF, dict | Dimension],
 		absolute: bool = None,
 		relative: bool = None,
-		**kwargs):
+		**kwargs
+	):
 		if len(V) == 1:
 			V = V[0]
-		if isinstance(V, (int, float)):
-			V = [V]*len(self.__dimensions__)
+		if isinstance(V, (int, float, str)):
+			V = [V] * len(self.__dimensions__)
 		elif isinstance(V, dict):
 			V = tuple(V[k] for k in self.__dimensions__)
 		elif isinstance(V, (QPoint, QPointF, QSize, QSizeF)):
@@ -1213,21 +1418,6 @@ class MultiDimension(metaclass=MultiDimensionMeta):
 				warn(f'Dimensions were not in the correct order: {V_} -> {V}', UserWarning)
 				del V_
 
-		if relative is None and absolute is None:
-			# if relative and absolute are both unset, infer from the _values
-			# if any of the _values are integers and greater than 50, then the dimension is absolute
-			if isinstance(V, Iterable) and len(V) == 1:
-				_T = V[0]
-			else:
-				_T = V
-			if isinstance(_T, (QPoint, QPointF, QSize, QSizeF)):
-				_T = _T.toTuple()
-			elif any(isinstance(i, str) for i in _T):
-				_T = [float(i) for i in re.findall(r'[\d|\.]+', ''.join(str(i) for i in _T))]
-
-			if not len(re.findall(r'[^\d|^\.|^\,^\s]+', ''.join(str(i) for i in V))):
-				absolute = any((isinstance(t, int) or t.is_integer()) and t > 1 for t in _T)
-
 		elif relative is not None and absolute is not None:
 			raise ValueError('Cannot set both absolute and relative')
 		elif relative is not None:
@@ -1237,9 +1427,13 @@ class MultiDimension(metaclass=MultiDimensionMeta):
 
 		annotations = [i for k, i in self.__annotations__.items() if k in self.__dimensions__]
 		for cls, t, s in zip(annotations, V, self.__slots__):
-			# if isinstance(t, Dimension):
-			# 	if absolute is not None:
-			# 		t._absolute = absolute
+			if isinstance(t, str):
+				d = cls.__dimension__
+				t = parseSize(t, allowFloat=True, determineAbsolute=False, dimension=d)
+				if isinstance(t, Dimension):
+					absolute = t.absolute
+					t = t.value
+				t = {'value': t}
 			if not isinstance(t, dict):
 				t = {'value': t}
 			if absolute is not None:
@@ -1250,6 +1444,39 @@ class MultiDimension(metaclass=MultiDimensionMeta):
 	@classmethod
 	def representer(cls, dumper, data):
 		return dumper.represent_str(cls.__separator__.join(tuple(str(i) for i in data.toTuple())))
+
+	@classmethod
+	def decode(cls, value: str | int | float | tuple[str | int | float]) -> dict[str, Dimension | Length]:
+		if isinstance(value, str):
+			value = value.split(',')
+		elif isinstance(value, (int, float)):
+			value = [value] * len(cls.__dimensions__)
+
+		clsLen = len(cls.__dimensions__)
+
+		valueLen = len(value)
+
+		if not isinstance(value, Sequence):
+			raise ValueError(f'{type(value)} is not a valid input for {cls}')
+		elif valueLen > clsLen:
+			value = value[:clsLen]
+
+		if valueLen == 1:
+			value *= clsLen
+		elif clsLen // valueLen == 2:
+			value += value
+		elif clsLen // valueLen == 3:
+			value += value + value
+		elif valueLen == clsLen:
+			pass
+		else:
+			raise ValueError(f'{cls} does not support {valueLen} dimensions')
+
+		return {d: v for d, v in zip(Padding.__dimensions__, value)}
+
+	@property
+	def leading_args(self):
+		return ()
 
 	@property
 	def absolute(self) -> bool:
@@ -1346,14 +1573,17 @@ class MultiDimension(metaclass=MultiDimensionMeta):
 		if isinstance(other, MultiDimension):
 			pass
 		elif other is None:
-			return tuple([inf]*len(self))
-		elif isinstance(other, Iterable):
+			return tuple([inf] * len(self))
+		elif isinstance(other, str):
+			other = other.split(',')
+
+		if isinstance(other, Sequence):
 			other = tuple(other)
 		elif isinstance(other, (QPoint, QPointF, QSize, QSizeF)):
 			other = other.toTuple()
 		elif isinstance(other, (int, float)):
 			other = tuple(other)
-		elif isinstance(other, dict):
+		elif isinstance(other, (dict, Mapping)):
 			other = tuple(float(d) for d in other.values())
 		elif all(hasattr(other, dimension) for dimension in self.__dimensions__):
 			other = tuple(getattr(other, dimension) for dimension in self.__dimensions__)
@@ -1361,7 +1591,7 @@ class MultiDimension(metaclass=MultiDimensionMeta):
 		o = len(other)
 		if s == o or o == 1:
 			return other
-		elif s > o and (mul := s%o)%2 == 0:
+		elif s > o and (mul := s % o) % 2 == 0:
 			return tuple(i for j in ([*other] for x in range(mul)) for i in j)
 
 		raise TypeError(f'Cannot convert {type(other)} to Size')
@@ -1371,35 +1601,94 @@ class MultiDimension(metaclass=MultiDimensionMeta):
 
 	def __add__(self, other: 'MultiDimension') -> 'MultiDimension':
 		other = self.__wrapOther(other)
-		return self.cls(*map(lambda x, y: x + y, self, other))
+		return self.cls(*self.leading_args, *map(lambda x, y: x + y, self, other))
+
+	def __iadd__(self, other: 'MultiDimension') -> 'MultiDimension':
+		other = self.__wrapOther(other)
+		for od, d in zip(other, self):
+			d += od
+		return self
 
 	def __sub__(self, other: 'MultiDimension') -> 'MultiDimension':
 		other = self.__wrapOther(other)
-		return self.cls(*map(lambda x, y: x - y, self, other))
+		return self.cls(*self.leading_args, *map(lambda x, y: x - y, self, other))
 
-	def __mul__(self, other: int) -> 'MultiDimension':
+	def __isub__(self, other: 'MultiDimension') -> 'MultiDimension':
 		other = self.__wrapOther(other)
-		return self.cls(*map(lambda x, y: x*y, self, other))
+		for od, d in zip(other, self):
+			d -= od
+		return self
 
-	def __truediv__(self, other: int) -> 'MultiDimension':
+	def __mul__(self, other: 'MultiDimension') -> 'MultiDimension':
 		other = self.__wrapOther(other)
-		return self.cls(*map(lambda x, y: x/y, self, other))
+		return self.cls(*self.leading_args, *map(lambda x, y: x * y, self, other))
 
-	def __floordiv__(self, other: int) -> 'MultiDimension':
+	def __imul__(self, other: 'MultiDimension') -> 'MultiDimension':
 		other = self.__wrapOther(other)
-		return self.cls(*map(lambda x, y: x//y, self, other))
+		for od, d in zip(other, self):
+			d *= od
+		return self
 
-	def __mod__(self, other: int) -> 'MultiDimension':
+	def __truediv__(self, other: 'MultiDimension') -> 'MultiDimension':
 		other = self.__wrapOther(other)
-		return self.cls(*map(lambda x, y: x%y, self, other))
+		return self.cls(*self.leading_args, *map(lambda x, y: x / y, self, other))
+
+	def __itruediv__(self, other: 'MultiDimension') -> 'MultiDimension':
+		other = self.__wrapOther(other)
+		for od, d in zip(other, self):
+			d /= od
+		return self
+
+	def __floordiv__(self, other: 'MultiDimension') -> 'MultiDimension':
+		other = self.__wrapOther(other)
+		return self.cls(*self.leading_args, *map(lambda x, y: x // y, self, other))
+
+	def __ifloordiv__(self, other: 'MultiDimension') -> 'MultiDimension':
+		other = self.__wrapOther(other)
+		for od, d in zip(other, self):
+			d //= od
+		return self
+
+	def __mod__(self, other: 'MultiDimension') -> 'MultiDimension':
+		other = self.__wrapOther(other)
+		return self.cls(*self.leading_args, *map(lambda x, y: x % y, self, other))
+
+	def __imod__(self, other: 'MultiDimension') -> 'MultiDimension':
+		other = self.__wrapOther(other)
+		for od, d in zip(other, self):
+			d %= od
+		return self
 
 	def __pow__(self, other: int) -> 'MultiDimension':
 		other = self.__wrapOther(other)
-		return self.cls(*map(lambda x, y: x ** y, self, other))
+		return self.cls(*self.leading_args, *map(lambda x, y: x ** y, self, other))
 
-	def __gt__(self, other: 'MultiDimension') -> bool:
+	def __ipow__(self, other: int) -> 'MultiDimension':
 		other = self.__wrapOther(other)
-		return all(x > y for x, y in zip(self, other))
+		for od, d in zip(other, self):
+			d **= od
+		return self
+
+	def __neg__(self) -> 'MultiDimension':
+		return self.cls(*self.leading_args, *map(lambda x: -x, self))
+
+	def __pos__(self) -> 'MultiDimension':
+		return self.cls(*self.leading_args, *map(lambda x: +x, self))
+
+	def __abs__(self) -> 'MultiDimension':
+		return self.cls(*self.leading_args, *map(lambda x: abs(x), self))
+
+	def __round__(self, n: int = 0) -> 'MultiDimension':
+		return self.cls(*self.leading_args, *map(lambda x: round(x, n), self))
+
+	def __floor__(self) -> 'MultiDimension':
+		return self.cls(*self.leading_args, *map(lambda x: floor(x), self))
+
+	def __ceil__(self) -> 'MultiDimension':
+		return self.cls(*self.leading_args, *map(lambda x: ceil(x), self))
+
+	def __copy__(self) -> 'MultiDimension':
+		return self.cls(*self.leading_args, *self)
 
 	def __lt__(self, other: 'MultiDimension') -> bool:
 		other = self.__wrapOther(other)
@@ -1501,15 +1790,20 @@ class Position(MultiDimension, dimensions=('x', 'y'), separator=', '):
 
 class Margins(MultiDimension, dimensions=('left', 'top', 'right', 'bottom'), separator=', '):
 	surface: 'Panel'
-	default: 'Margins'
+
+	@property
+	def leading_args(self):
+		return self.surface,
 
 	@classmethod
 	def representer(cls, dumper, data):
-		if (defaults := getattr(data.surface, '__defaults__', {})) and (default := defaults.get('margins', None)):
-			nonDefaults = {k: v for i, (k, v) in enumerate(zip(data.__dimensions__, data)) if v != default[i]}
-			if len(nonDefaults) == len(data.__dimensions__) or nonDefaults:
-				return dumper.represent_dict(nonDefaults)
-		return dumper.represent_str(", ".join(tuple(str(i) for i in data.toTuple())))
+		state = data.encoded_state
+		if isinstance(state, dict):
+			return dumper.represent_dict(state)
+		elif isinstance(state, str):
+			return dumper.represent_str(state)
+		else:
+			raise NotImplementedError
 
 	@overload
 	def __init__(self, surface: 'Panel', /, left: float, top: float, right: float, bottom: float) -> None:
@@ -1593,7 +1887,7 @@ class Margins(MultiDimension, dimensions=('left', 'top', 'right', 'bottom'), sep
 					attr.value = values[i]
 				else:
 					other = surfaceSize.width.value if attr.name.lower() in ('left', 'right') else surfaceSize.height.value
-					attr.value = clamp(other*values[i], 0, other) if attr.absolute else clamp(values[i]/other, 0, 1)
+					attr.value = clamp(other * values[i], 0, other) if attr.absolute else clamp(values[i] / other, 0, 1)
 			return None
 
 		for i, attr in enumerate(attrs):
@@ -1603,7 +1897,7 @@ class Margins(MultiDimension, dimensions=('left', 'top', 'right', 'bottom'), sep
 				attrs[i] = attr.value
 			else:
 				other = surfaceSize.width.value if attr.name.lower() in ('left', 'right') else surfaceSize.height.value
-				attrs[i] = attr.value/other if attr.absolute else attr.value*other
+				attrs[i] = attr.value / other if attr.absolute else attr.value * other
 
 		if len(attrs) == 1:
 			return attrs[0]
@@ -1611,55 +1905,67 @@ class Margins(MultiDimension, dimensions=('left', 'top', 'right', 'bottom'), sep
 
 	@property
 	def absoluteLeft(self):
+		value = self.left.value
 		if self.left.absolute:
-			return self.left.value
-		return self.surface.rect().width()*self.left.value  # /self.surface.scene().viewScale.x
+			if isinstance(value, Measurement):
+				return size_px(value, self.surface.geometry, dimension=self.left.__dimension__)
+			return value
+		return self.surface.rect().width() * value
 
 	@absoluteLeft.setter
 	def absoluteLeft(self, value):
 		if self.left.absolute:
 			self.left = value
 		else:
-			self.left = value/self.surface.rect().width()
+			self.left = value / self.surface.rect().width()
 
 	@property
 	def absoluteTop(self):
+		value = self.top.value
 		if self.top.absolute:
-			return self.top
-		return self.surface.rect().height()*self.top.value
+			if isinstance(value, Measurement):
+				return size_px(value, self.surface.geometry, dimension=self.top.__dimension__)
+			return value
+		return self.surface.rect().height() * value
 
 	@absoluteTop.setter
 	def absoluteTop(self, value):
 		if self.top.absolute:
 			self.top = value
 		else:
-			self.top = value/self.surface.rect().height()
+			self.top = value / self.surface.rect().height()
 
 	@property
 	def absoluteRight(self):
+		value = self.right.value
 		if self.right.absolute:
-			return self.right.value
-		return self.surface.rect().width()*self.right.value  # /self.surface.scene().viewScale.x
+			if isinstance(value, Measurement):
+				return size_px(value, self.surface.geometry, dimension=self.right.__dimension__)
+			return value
+		return self.surface.rect().width() * value
 
 	@absoluteRight.setter
 	def absoluteRight(self, value):
 		if self.right.absolute:
 			self.right = value
 		else:
-			self.right = value/self.surface.rect().width()
+			self.right = value / self.surface.rect().width()
 
 	@property
 	def absoluteBottom(self):
+		value = self.bottom.value
 		if self.bottom.absolute:
-			return self.bottom
-		return self.surface.rect().height()*self.bottom.value
+			if isinstance(value, Measurement):
+				return size_px(value, self.surface.geometry, dimension=self.bottom.__dimension__)
+			return value
+		return self.surface.rect().height() * value
 
 	@absoluteBottom.setter
 	def absoluteBottom(self, value):
 		if self.bottom.absolute:
 			self.bottom = value
 		else:
-			self.bottom = value/self.surface.rect().height()
+			self.bottom = value / self.surface.rect().height()
 
 	@property
 	def relativeLeft(self):
@@ -1672,7 +1978,7 @@ class Margins(MultiDimension, dimensions=('left', 'top', 'right', 'bottom'), sep
 		if self.left.relative:
 			self.left = value
 		else:
-			self.left = value*self.surface.rect().width()
+			self.left = value * self.surface.rect().width()
 
 	@property
 	def relativeTop(self):
@@ -1685,7 +1991,7 @@ class Margins(MultiDimension, dimensions=('left', 'top', 'right', 'bottom'), sep
 		if self.top.relative:
 			self.top = value
 		else:
-			self.top = value*self.surface.rect().height()
+			self.top = value * self.surface.rect().height()
 
 	@property
 	def relativeRight(self):
@@ -1698,7 +2004,7 @@ class Margins(MultiDimension, dimensions=('left', 'top', 'right', 'bottom'), sep
 		if self.right.relative:
 			self.right = value
 		else:
-			self.right = value*self.surface.rect().width()
+			self.right = value * self.surface.rect().width()
 
 	@property
 	def relativeBottom(self):
@@ -1711,7 +2017,7 @@ class Margins(MultiDimension, dimensions=('left', 'top', 'right', 'bottom'), sep
 		if self.bottom.relative:
 			self.bottom = value
 		else:
-			self.bottom = value*self.surface.rect().height()
+			self.bottom = value * self.surface.rect().height()
 
 	def absoluteValues(self, edges: List[Union[str, LocationFlag]] = LocationFlag.edges()) -> List[float]:
 		return self.__values(*edges)
@@ -1739,7 +2045,19 @@ class Margins(MultiDimension, dimensions=('left', 'top', 'right', 'bottom'), sep
 		return QTransform().translate(x, y).scale(w, h)
 
 	@property
-	def state(self):
+	def encoded_state(self) -> dict | str:
+		if (defaults := getattr(self.surface, '__defaults__', {})) and (default := defaults.get('margins', None)) or (default := tuple(self.default())):
+			nonDefaults = {k: v for i, (k, v) in enumerate(zip(self.__dimensions__, self)) if v != default[i]}
+			if self.left == self.right and self.top == self.bottom:
+				if self.left == self.top:
+					return str(self.left)
+				return f'{self.left}, {self.top}'
+			if len(nonDefaults) == len(self.__dimensions__) or nonDefaults:
+				return nonDefaults
+		return ", ".join(tuple(str(i) for i in self.toTuple()))
+
+	@property
+	def state(self) -> dict:
 		return {
 			'left':   self.left,
 			'top':    self.top,
@@ -1748,10 +2066,13 @@ class Margins(MultiDimension, dimensions=('left', 'top', 'right', 'bottom'), sep
 		}
 
 	@state.setter
-	def state(self, value: dict):
+	def state(self, value: dict | tuple | list):
 		if isinstance(value, Margins):
 			value = value.state
-		self.__init__(self.surface, **value)
+		if isinstance(value, (tuple, list)):
+			self.__init__(self.surface, *value)
+		else:
+			self.__init__(self.surface, **value)
 
 	def isDefault(self) -> bool:
 		return self == self.default()
@@ -1762,7 +2083,10 @@ class Margins(MultiDimension, dimensions=('left', 'top', 'right', 'bottom'), sep
 
 	@classmethod
 	def default(cls):
-		return Margins(_Panel(), 0.0, 0.0, 0.0, 0.0)
+		return cls(_Panel(), 0.0, 0.0, 0.0, 0.0)
+
+
+_directionalSurface = type('DirectionalSurface', (object,), {'direction': Direction.Auto})()
 
 
 class Padding(Margins):
@@ -1789,10 +2113,10 @@ class Padding(Margins):
 				if isinstance(args, str):
 					args = args.split(',')
 				if isinstance(args, (float, int)):
-					args = [args]*4
+					args = [args] * 4
 
 			if len(args) == 1:
-				args = [args[0]]*4
+				args = [args[0]] * 4
 
 			elif len(args) == 2:
 				args *= 2
@@ -1818,38 +2142,42 @@ class Padding(Margins):
 	@property
 	def primarySpan(self) -> float:
 		if self.direction.isVertical:
-			return 1 - (self.top + self.bottom)
-		return 1 - (self.left + self.right)
+			return 1 - (self.relativeTop + self.relativeBottom)
+		return 1 - (self.relativeLeft + self.relativeRight)
 
 	@property
 	def orthogonalSpan(self) -> float:
 		if self.direction.isVertical:
-			return 1 - (self.left + self.right)
-		return 1 - (self.top + self.bottom)
+			return 1 - (self.relativeLeft + self.relativeRight)
+		return 1 - (self.relativeTop + self.relativeBottom)
 
 	@property
 	def primaryLeading(self) -> float:
 		if self.direction.isVertical:
-			return self.top
-		return self.left
+			return self.relativeTop
+		return self.relativeLeft
 
 	@property
 	def primaryTrailing(self) -> float:
 		if self.direction.isVertical:
-			return self.bottom
-		return self.right
+			return self.relativeBottom
+		return self.relativeRight
 
 	@property
 	def orthogonalLeading(self) -> float:
 		if self.direction.isVertical:
-			return self.left
-		return self.top
+			return self.relativeLeft
+		return self.relativeTop
 
 	@property
 	def orthogonalTrailing(self) -> float:
 		if self.direction.isVertical:
-			return self.right
-		return self.bottom
+			return self.relativeRight
+		return self.relativeBottom
+
+	@classmethod
+	def default(cls):
+		return cls(_directionalSurface, 0.0, 0.0, 0.0, 0.0)
 
 
 class SizeWatchDog:
@@ -1877,7 +2205,7 @@ class SizeWatchDog:
 		diff = any()
 
 	def setAbsoluteThresholds(self, relative: float):
-		self.thresholds = [int(x*relative) for x in self.value]
+		self.thresholds = [int(x * relative) for x in self.value]
 
 	def checkValue(self, value: Union[QSizeF, QSize, QPointF, QPoint, QRect, QRectF]):
 		if isinstance(value, (QRect, QRectF)):
@@ -1946,7 +2274,7 @@ class Geometry:
 	Represents the position and size of a Panel.
 	'''
 
-	__slots__ = ('_position', '_size', '_surface', '_absolute', 'subGeometries', 'signals', '_aspectRatio', '_fillParent')
+	__slots__ = ('index', '_position', '_size', '_surface', '_absolute', 'subGeometries', 'signals', '_aspectRatio', '_fillParent')
 	_size: Size
 	_position: Position
 	_surface: 'Panel'
@@ -2054,7 +2382,8 @@ class Geometry:
 		:return: True if the geometry item is valid, False otherwise
 		:rtype: bool
 		"""
-
+		if item.get('fillParent', False):
+			return True
 		size = False
 		position = False
 		if 'size' in item:
@@ -2086,7 +2415,8 @@ class Geometry:
 		:return: Geometry as a dictionary
 		:rtype: dict
 		"""
-
+		if self.fillParent:
+			return {'fillParent': True}
 		return {
 			'width':  self.size.width,
 			'height': self.size.height,
@@ -2160,13 +2490,13 @@ class Geometry:
 	def relative(self, value):
 		size = self.surface.parent.size().toTuple()
 		if value:
-			sizeValues = [v.value if v.relative else v.value/i for i, v in zip(size, self.size)]
-			positionValues = [v.value if v.relative else v.value/i for i, v in zip(size, self.position)]
+			sizeValues = [v.value if v.relative else v.value / i for i, v in zip(size, self.size)]
+			positionValues = [v.value if v.relative else v.value / i for i, v in zip(size, self.position)]
 			self.size.setRelative(*sizeValues)
 			self.position.setRelative(*positionValues)
 		else:
-			sizeValues = [v.value if v.absolute else v.value*i for i, v in zip(size, self.size)]
-			positionValues = [v.value if v.absolute else v.value*i for i, v in zip(size, self.position)]
+			sizeValues = [v.value if v.absolute else v.value * i for i, v in zip(size, self.size)]
+			positionValues = [v.value if v.absolute else v.value * i for i, v in zip(size, self.position)]
 			self.size.setAbsolute(*sizeValues)
 			self.position.setAbsolute(*positionValues)
 
@@ -2199,8 +2529,8 @@ class Geometry:
 		self.surface.updateFromGeometry()
 
 	def rectFromParentRect(self, parentRect: QRectF):
-		width = self.width if self.size.width.absolute else self.width*parentRect.width()
-		height = self.height if self.size.height.absolute else self.height*parentRect.height()
+		width = self.width if self.size.width.absolute else self.width * parentRect.width()
+		height = self.height if self.size.height.absolute else self.height * parentRect.height()
 		return QRectF(0, 0, width, height)
 
 	def updateSurface(self, parentRect: QRectF = None, set: bool = False):
@@ -2220,14 +2550,14 @@ class Geometry:
 		if self.position.x.absolute:
 			x = self.x
 		else:
-			x = self.x*parentRect.width()
+			x = self.x * parentRect.width()
 
 		# if self.position.y.snapping:
 		# 	y = self.gridItem.y
 		if self.position.y.absolute:
 			y = self.y
 		else:
-			y = self.y*parentRect.height()
+			y = self.y * parentRect.height()
 		return QPointF(x, y)
 
 	@property
@@ -2241,13 +2571,13 @@ class Geometry:
 				if self._aspectRatio:
 					pass
 				else:
-					self._aspectRatio = self.size.width.value/self.size.height.value
+					self._aspectRatio = self.size.width.value / self.size.height.value
 			else:
 				self._aspectRatio = False
 		elif isinstance(value, float):
 			self._aspectRatio = value
 		elif isinstance(value, int):
-			self._aspectRatio = value/100
+			self._aspectRatio = value / 100
 		elif isinstance(value, str):
 			contains = list(filter(lambda x: x in value, [':', 'x', '*', '/', '\\', '%', ' ', '-', '+']))
 			if len(contains) == 0:
@@ -2257,7 +2587,7 @@ class Geometry:
 					self._aspectRatio = False
 			if len(contains) == 1:
 				w, h = value.split(contains[0])
-				self._aspectRatio = int(w)/int(h)
+				self._aspectRatio = int(w) / int(h)
 		else:
 			self._aspectRatio = False
 
@@ -2269,13 +2599,13 @@ class Geometry:
 	def absolute(self, value):
 		size = self.relativeToRect().size().toTuple()
 		if value:
-			sizeValues = [v.value if v.absolute else v.value*i for i, v in zip(size, self.size)]
-			positionValues = [v.value if v.absolute else v.value*i for i, v in zip(size, self.position)]
+			sizeValues = [v.value if v.absolute else v.value * i for i, v in zip(size, self.size)]
+			positionValues = [v.value if v.absolute else v.value * i for i, v in zip(size, self.position)]
 			self.size.setAbsolute(*sizeValues)
 			self.position.setAbsolute(*positionValues)
 		else:
-			sizeValues = [v.value if v.relative else v.value/i for i, v in zip(size, self.size)]
-			positionValues = [v.value if v.relative else v.value/i for i, v in zip(size, self.position)]
+			sizeValues = [v.value if v.relative else v.value / i for i, v in zip(size, self.size)]
+			positionValues = [v.value if v.relative else v.value / i for i, v in zip(size, self.position)]
 			self.size.setRelative(*sizeValues)
 			self.position.setRelative(*positionValues)
 
@@ -2310,7 +2640,7 @@ class Geometry:
 	@property
 	def height(self) -> Size.Height:
 		if self.aspectRatio:
-			return self.size.width.value*self.aspectRatio
+			return self.size.width.value * self.aspectRatio
 		return self.size.height
 
 	@height.setter
@@ -2410,11 +2740,11 @@ class Geometry:
 		height = rect.height()
 
 		if self.size.width.relative:
-			width = width/self.relativeToRect().size().width()
+			width = width / self.relativeToRect().size().width()
 		self.size.width = width
 
 		if self.size.height.relative:
-			height = height/self.relativeToRect().size().height()
+			height = height / self.relativeToRect().size().height()
 		self.size.height = height
 
 	def absoluteRect(self, parentRect: QRectF = None):
@@ -2464,11 +2794,11 @@ class Geometry:
 		y = pos.y()
 
 		if self.position.x.relative:
-			x = x/self.relativeToRect().size().width()
+			x = x / self.relativeToRect().size().width()
 		self.position.x = x
 
 		if self.position.y.relative:
-			y = y/self.relativeToRect().size().height()
+			y = y / self.relativeToRect().size().height()
 		self.position.y = y
 
 	def toTransform(self) -> QTransform:
@@ -2481,7 +2811,7 @@ class Geometry:
 		sT = self.surface.sceneTransform()
 		currentRect = self.surface.rect()
 		transform = QTransform()
-		transform.scale(rect.width()/currentRect.width(), rect.height()/currentRect.height())
+		transform.scale(rect.width() / currentRect.width(), rect.height() / currentRect.height())
 		# transform.translate(sT.dx() - rect.x(), sT.dy() - rect.y())
 		return transform
 
@@ -2557,15 +2887,17 @@ class Geometry:
 			case {'x': x, 'y': y, 'width': width, 'height': height}:
 				return self.x == x and self.y == y and self.width == width and self.height == height
 			case Geometry():
-				return super().__eq__(other)
+				return self.size == other.size and self.position == other.position
 			case _:
 				return False
 
 	def __iter__(self):
-		return iter({
-			**self.position,
-			**self.size
-		}.items())
+		return iter(
+			{
+				**self.position,
+				**self.size
+			}.items()
+		)
 
 	def __repr__(self):
 		return f'<{self.__class__.__name__}(position=({self.position}), size=({self.size}) for {type(self.surface).__name__})>'
@@ -2594,25 +2926,25 @@ class Geometry:
 		if self.surface.parent is not None and hasattr(self.surface.parent, 'geometry') and hasattr(self.surface.parent.geometry, 'absoluteGeometrySize'):
 			parentGeometrySize = self.surface.parent.geometry.absoluteGeometrySize()
 			if self.size.relative:
-				return QSizeF(parentGeometrySize.width()*self.size.width, parentGeometrySize.height()*self.size.height)
+				return QSizeF(parentGeometrySize.width() * self.size.width, parentGeometrySize.height() * self.size.height)
 			else:
 				return QSizeF(self.size.width, self.size.height)
 
 	@property
 	def area(self):
-		return self.size.width*self.size.height
+		return self.size.width * self.size.height
 
 	@property
 	def absoluteArea(self):
-		return self.absoluteWidth*self.absoluteHeight
+		return self.absoluteWidth * self.absoluteHeight
 
 	@property
 	def relativeArea(self):
 		if self.parentGeometry:
-			return self.parentGeometry.absoluteArea/self.absoluteArea
-		w = 100*float(self.relativeWidth)
-		h = 100*float(self.relativeHeight)
-		return h*w/100
+			return self.parentGeometry.absoluteArea / self.absoluteArea
+		w = 100 * float(self.relativeWidth)
+		h = 100 * float(self.relativeHeight)
+		return h * w / 100
 
 	@property
 	def state(self):
@@ -2704,7 +3036,7 @@ class ResizeRect(QRectF):
 			other = other.toTuple()
 		elif isinstance(other, (QRect, QRectF)):
 			if any(other.topLeft().toTuple()):
-				other.translate(*(other.topLeft()*-1).toPoint().toTuple())
+				other.translate(*(other.topLeft() * -1).toPoint().toTuple())
 			other = other.size().toTuple()
 		elif isinstance(other, Iterable):
 			other = tuple(other)
@@ -2734,35 +3066,35 @@ class ResizeRect(QRectF):
 
 	def __mul__(self, other: QPointF) -> 'ResizeRect':
 		other = self.__normalizeInput(other)
-		return ResizeRect(self.x(), self.y(), self.width()*other[0], self.height()*other[1])
+		return ResizeRect(self.x(), self.y(), self.width() * other[0], self.height() * other[1])
 
 	def __imul__(self, other: QPointF) -> 'ResizeRect':
 		other = self.__normalizeInput(other)
-		self.setWidth(self.width()*other[0])
-		self.setHeight(self.height()*other[1])
+		self.setWidth(self.width() * other[0])
+		self.setHeight(self.height() * other[1])
 		return self
 
 	def __truediv__(self, other: QPointF) -> 'ResizeRect':
 		other = self.__normalizeInput(other)
-		return ResizeRect(self.x(), self.y(), self.width()/other[0], self.height()/other[1])
+		return ResizeRect(self.x(), self.y(), self.width() / other[0], self.height() / other[1])
 
 	def __itruediv__(self, other: QPointF) -> 'ResizeRect':
 		other = self.__normalizeInput(other)
-		self.setWidth(self.width()/other[0])
-		self.setHeight(self.height()/other[1])
+		self.setWidth(self.width() / other[0])
+		self.setHeight(self.height() / other[1])
 		return self
 
 	def __floordiv__(self, other: QPointF) -> 'ResizeRect':
 		other = self.__normalizeInput(other)
-		return ResizeRect(self.x(), self.y(), self.width()//other[0], self.height()//other[1])
+		return ResizeRect(self.x(), self.y(), self.width() // other[0], self.height() // other[1])
 
 	def __mod__(self, other: QPointF) -> 'ResizeRect':
 		other = self.__normalizeInput(other)
-		return ResizeRect(self.x(), self.y(), self.width()%other[0], self.height()%other[1])
+		return ResizeRect(self.x(), self.y(), self.width() % other[0], self.height() % other[1])
 
 	def __divmod__(self, other: QPointF) -> 'ResizeRect':
 		other = self.__normalizeInput(other)
-		return ResizeRect(self.x(), self.y(), self.width()//other[0], self.height()//other[1])
+		return ResizeRect(self.x(), self.y(), self.width() // other[0], self.height() // other[1])
 
 	def __pow__(self, other: QPointF) -> 'ResizeRect':
 		other = self.__normalizeInput(other)
@@ -2827,22 +3159,22 @@ class ResizeRect(QRectF):
 
 
 SizeInput = SupportsFloat | str
-SizeOutput = Length | Size.Width | Size.Height | Position.X | Position.Y
+SizeOutput = Length | Size.Width | Size.Height | Position.X | Position.Y | float
 SizeParserSignature = Callable[[SizeInput, SizeOutput, ...], SizeOutput]
+UNSET = object()
 
 
-def parseSize(
-	value: SizeInput,
-	default: SizeOutput,
-	/,
-	defaultCaseHandler: SizeParserSignature | None = None,
-	dimension: DimensionType = DimensionType.height) -> SizeOutput:
+def parseSize(value: SizeInput, default: SizeOutput = UNSET, allowFloat: bool = False, determineAbsolute: bool = True, defaultCaseHandler: SizeParserSignature | None = None, dimension: DimensionType = DimensionType.height) -> SizeOutput:
 	"""
 	Converts a string size value to a real size type
 	:param value: value to convert
 	:type value: str | int | float
 	:param default: the value to use if unable to convert
 	:type default: SizeOutput
+	:param allowFloat: whether to allow values without a unit to be returned as a float
+	:type allowFloat: bool
+	:param determineAbsolute: whether to determine if the value is absolute or not
+	:type determineAbsolute: bool
 	:param defaultCaseHandler: function to call instead of returning the default value
 	:type defaultCaseHandler: Callable[[SizeInput], SizeOutput]
 	:param dimension: Dimension of the size
@@ -2850,19 +3182,37 @@ def parseSize(
 	:return: Parsed value
 	:rtype: SizeOutput
 	"""
+
+	dimension = Size.Width if dimension == DimensionType.width else Size.Height
+
 	match value:
 		case str(value):
-			unit = ''.join(re.findall(r'(?<=[\d.])[^\d.,]+', value)).strip(' ')
+			unit = ''.join(re.findall(r'(?<=[\d.])[^\d.,]+', value)).strip(' ').casefold()
 			match unit:
+				case '':
+					try:
+						value = float(value)
+					except TypeError as e:
+						if default is not UNSET:
+							return default
+						elif defaultCaseHandler is not None:
+							return defaultCaseHandler(value)
+						raise e
+
+					except ValueError:
+						return default
+
+					if allowFloat:
+						return value
+					else:
+						absolute = value > 1 if determineAbsolute else None
+						return dimension(value, absolute=absolute)
+
 				case 'px':
-					if dimension == DimensionType.height:
-						return Size.Height(float(value.strip(unit)), absolute=True)
-					return Size.Width(float(value.strip(unit)), absolute=True)
+					return dimension(float(value.strip(unit)), absolute=True)
 				case '%':
-					numericValue = float(value.strip(unit))/100
-					if dimension == DimensionType.height:
-						return Size.Height(numericValue, relative=True)
-					return Size.Width(numericValue, relative=True)
+					numericValue = float(value.strip(unit)) / 100
+					return dimension(numericValue, absolute=False)
 				case 'cm':
 					value = Length.Centimeter(float(value.strip(unit)))
 					value.precision = 3
@@ -2880,28 +3230,37 @@ def parseSize(
 					return value
 				case _ if defaultCaseHandler is None:
 					try:
-						if dimension == DimensionType.height:
-							return Size.Height(float(value), absolute=True)
-						return Size.Width(float(value), absolute=True)
+						unit = auto_unit(unit, dimension=Length)
+						value = unit(float(value.strip(unit)))
+						value.precision = 3
+						value.max = 10
+						return value
 					except Exception as e:
 						log.error(e)
-						return default
+						if default is not UNSET:
+							return dimension(default)
+						raise e
+
 				case _:
-					return default
+					return defaultCaseHandler(value)
 		case float(value) | int(value):
-			if value <= 1:
-				if dimension == DimensionType.height:
-					return Size.Height(value, relative=True)
-				return Size.Width(value, relative=True)
-			if dimension == DimensionType.height:
-				return Size.Height(value, absolute=True)
-			return Size.Width(value, absolute=True)
+			if allowFloat:
+				return value
+			else:
+				absolute = value > 1 if determineAbsolute else None
+				return dimension(value, absolute=absolute)
 		case _:
-			log.error(f'{value} is not a valid value for labelHeight.  Using default value of {default} for now.')
-			return default
+			if default is not UNSET:
+				log.error(f'{value} is not a valid value.  Using default value of {default} for now.')
+				return default
+			raise ValueError(f'{value} is not a valid value and no default was set')
 
 
-def size_px(value: SizeOutput, relativeTo: 'Geometry', dimension: DimensionType = DimensionType.height) -> float | int:
+def size_px(
+	value: SizeOutput,
+	relativeTo: Union['Geometry', Number],
+	dimension: DimensionType = DimensionType.height
+) -> float | int:
 	if isinstance(value, Dimension):
 		if value.absolute:
 			value = float(value)
@@ -2912,9 +3271,12 @@ def size_px(value: SizeOutput, relativeTo: 'Geometry', dimension: DimensionType 
 				value = value.toAbsoluteF(relativeTo)
 			else:
 				raise TypeError(f'{relativeTo} is not a valid type for relativeTo')
-	elif isinstance(value, Length):
-		dpi = relativeTo.surface.scene().view.screen().physicalDotsPerInchY()
-		value = float(value.inch)*dpi
+	if isinstance(value, Length):
+		try:
+			screen = relativeTo.surface.scene().view.screen()
+		except AttributeError:
+			screen = None
+		value = float(value.inch) * getDPI(screen)
 	return value
 
 
@@ -2940,8 +3302,12 @@ def size_float(value: SizeOutput, relativeTo: 'Geometry', dimension: DimensionTy
 	"""
 	if isinstance(value, Dimension):
 		if isinstance(value, Length):
-			dpi = relativeTo.surface.scene().view.screen().physicalDotsPerInchY()
-			value = Dimension(float(value.inch)*dpi, absolute=True)
+			try:
+				screen = relativeTo.surface.scene().view.screen()
+			except AttributeError:
+				screen = None
+			dpi = getDPI(screen)
+			value = Dimension(float(value.inch) * dpi, absolute=True)
 		if value.relative:
 			value = float(value)
 		else:
@@ -2963,7 +3329,7 @@ def offsetAngle(point: tuple, angle: Union[float, int], offset: Union[float, int
 	'''
 	if not radians:
 		angle = np.radians(angle)
-	return (point[0] + offset*np.cos(angle), point[1] + offset*np.sin(angle))
+	return (point[0] + offset * np.cos(angle), point[1] + offset * np.sin(angle))
 
 
 def angleBetweenPoints(pointA: Union[QPointF, QPoint, tuple], pointB: Union[QPointF, QPoint, tuple] = None, degrees: bool = True) -> float:
@@ -3013,16 +3379,6 @@ def polygon_area(path: Union[QPolygonF, QPolygon, QPainterPath, list, tuple]) ->
 	y = [p.y() for p in path]
 
 	"""https://stackoverflow.com/a/49129646/2975046"""
-	correction = x[-1]*y[0] - y[-1]*x[0]
+	correction = x[-1] * y[0] - y[-1] * x[0]
 	main_area = np.dot(x[:-1], y[1:]) - np.dot(y[:-1], x[1:])
-	return 0.5*np.abs(main_area + correction)
-
-
-@runtime_checkable
-class RelativeFloat(Protocol):
-	relative: bool = True
-
-
-@runtime_checkable
-class AbsoluteFloat(Protocol):
-	absolute: bool = True
+	return 0.5 * np.abs(main_area + correction)
