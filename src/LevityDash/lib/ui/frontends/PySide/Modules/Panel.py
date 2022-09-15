@@ -500,10 +500,10 @@ class Panel(_Panel, Stateful, tag='group'):
 	@classmethod
 	def validate(cls, item: dict, context=None):
 		context = context or {}
-		if (parent := context.get('parent', None)) is not None:
-			if getattr(parent, '__tag__') in {'stack', 'value-stack'}:
+		if (parent := context.get('parent', type)) is not type:
+			if isinstance(parent, GeometryManager):
 				return True
-		geometry = Geometry.validate(item.get('geometry', {}))
+		geometry = Geometry.validate(item.get('geometry', {'fillParent': True}))
 		return geometry
 
 	@property
