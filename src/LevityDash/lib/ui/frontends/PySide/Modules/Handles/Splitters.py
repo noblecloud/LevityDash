@@ -1,9 +1,9 @@
-from PySide2.QtCore import QPointF, QRectF, Qt
+from PySide2.QtCore import QPointF, QRectF, QSizeF, Qt
 from PySide2.QtWidgets import QGraphicsItem, QApplication
 
 from LevityDash.lib.stateful import Stateful, StateProperty
 from LevityDash.lib.utils import clamp, clearCacheAttr, ScaleFloat
-from LevityDash.lib.ui.Geometry import Size, parseSize, LocationFlag, DisplayPosition, RelativeFloat
+from LevityDash.lib.ui.Geometry import getDPI, Size, parseSize, LocationFlag, DisplayPosition, RelativeFloat
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles import Handle
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Label import TitleLabel
 from WeatherUnits import Length
@@ -102,7 +102,7 @@ class Splitter(Handle):
 		self.update()
 		super(Handle, self).mouseReleaseEvent(event)
 
-	def interactiveResize(self, mouseEvent):
+	def interactiveResize(self, mouseEvent, invert: bool = False):
 		eventPosition = self.parent.mapFromScene(mouseEvent.scenePos())
 		if self._inverted:
 			eventPosition.setY(self.parent.geometry.absoluteHeight - eventPosition.y())
@@ -115,7 +115,7 @@ class Splitter(Handle):
 			valueRounded = round(value, 1)
 			if abs(valueRounded - value) < surfaceSize*0.0003:
 				value = valueRounded
-		self.ratio = value
+		self.ratio = value if not invert else 1 - value
 
 	def swapSurfaces(self):
 		self.primary, self.secondary = self.secondary, self.primary
@@ -283,13 +283,16 @@ class TitleValueSplitter(Splitter, Stateful):
 	def height(self, value: Size.Height | Length | None):
 		self._height = value
 		self.setGeometries()
+		self.surface.signals.resized.connect(self.parentResized)
 
 	@height.decode
 	def height(self, value: str | int | float) -> Size.Height | Length:
-		return parseSize(value, type(self).height.default(self))
+		return parseSize(value, type(self).height.default(type(self)))
 
 	@height.encode
 	def height(self, value: Size.Height | Length) -> str | None:
+		if isinstance(value, Length):
+			return f"{value:unitSpacer=False}"
 		return str(value) if value is not None else None
 
 	@property
@@ -302,9 +305,9 @@ class TitleValueSplitter(Splitter, Stateful):
 				if (self._relativeTo or self.value.localGroup) is None:
 					raise ValueError('RelativeTo is not set')
 				return height.toAbsolute(self._relativeTo.absoluteHeight)
-			case Length(), _:
-				dpi = self.surface.scene().view.screen().physicalDotsPerInchY()
-				return float(height.inch)*dpi
+			case Length():
+				dpi = getDPI(self.surface.scene().view.screen())
+				return float(height.inch) * dpi
 			case _:
 				return None
 
@@ -404,6 +407,9 @@ class TitleValueSplitter(Splitter, Stateful):
 	def enabled(self):
 		return self.title.isVisible()
 
+	def parentResized(self, *args):
+		self.setGeometries()
+
 	def setGeometries(self):
 		title = self.title
 		title.setTransformOriginPoint(title.rect().center())
@@ -411,7 +417,7 @@ class TitleValueSplitter(Splitter, Stateful):
 		super().setGeometries()
 		if self.location.isVertical and self.title.isVisible():
 			if self.rotation and title.rect().width() < title.rect().height():
-				ratio = (1 - (title.rect().width()/title.rect().height()))*2
+				ratio = (1 - (title.rect().width() / title.rect().height())) * 2
 				title.setTransformOriginPoint(title.rect().center())
 				angle = sorted((0, (90*ratio), 90))[1]
 				if angle > 70:
@@ -421,6 +427,7 @@ class TitleValueSplitter(Splitter, Stateful):
 
 
 class MeasurementUnitSplitter(Splitter, Stateful):
+	surface: 'Display'
 
 	def __init__(self, value, unit, *args, **kwargs):
 		self.value = value
@@ -436,6 +443,9 @@ class MeasurementUnitSplitter(Splitter, Stateful):
 		self.hide()
 
 	def updateUnitDisplay(self):
+		if self.displayProperties.unitPosition != 'float-under':
+			clearCacheAttr(self.value, 'contentsRect')
+			clearCacheAttr(self.unit, 'contentsRect')
 		if self.displayProperties.unitPosition == 'auto':
 			self.__decideAuto()
 		elif self.displayProperties.unitPosition in ['hidden', 'inline']:
@@ -447,32 +457,29 @@ class MeasurementUnitSplitter(Splitter, Stateful):
 		elif self.displayProperties.unitPosition in {'floating', 'float-under'}:
 			self.unit.show()
 			self.unit.unlock()
+			if self.displayProperties.unitPosition is DisplayPosition.FloatUnder:
+				self.setGeometries()
 			self.value.geometry.setRelativeGeometry(QRectF(0, 0, 1, 1))
 			self.hide()
 			self.setEnabled(False)
-			if self.displayProperties.unitPosition == 'float-under':
-				self.fitUnitUnder()
 			return
 		self.unit.show()
 		self.setEnabled(True)
 		self.updatePosition(self.surface.rect())
 		self.setGeometries()
+		if self.displayProperties.unitPosition == 'float-under':
+			self.fitUnitUnder()
 
 	def fitUnitUnder(self):
 		self.unit.unlock()
 		self.value.geometry.setRelativeGeometry(QRectF(0, 0, 1, 1))
 		self.unit.geometry.setRelativeGeometry(QRectF(0, 0, 1, 1))
 		space = self.value.unitSpace
-		unitSize = self.displayProperties.valueUnitRatio
-		if isinstance(unitSize, RelativeFloat):
-			unitSize = float(unitSize*self.surface.rect().height())
-		if space.height() > unitSize:
+
+		if (unitSize := self.displayProperties.unitSize_px) is not None and unitSize < space.height():
 			space.setHeight(unitSize)
-		# pos = space.topLeft()
-		# self.unit.geometry.setAbsoluteRect(space)
-		# self.unit.setRect(space.normalized())
+
 		self.unit.contentsRect = space
-		# self.unit.setPos(pos)
 		self.unit.textBox.refresh()
 
 		totalRect = self.unit.textBox.sceneBoundingRect() | self.value.textBox.sceneBoundingRect()
@@ -482,31 +489,20 @@ class MeasurementUnitSplitter(Splitter, Stateful):
 
 	@property
 	def _ratio(self):
-		if self.displayProperties.unitPosition in {'hidden', 'inline', 'floating' 'fit'}:
-			return 1
+		if self.displayProperties.unitPosition in {'hidden', 'inline', 'floating'}:
+			return 0
 		if self.unit is self.secondary:
 			return 1 - self.displayProperties.valueUnitRatio
 		return self.displayProperties.valueUnitRatio
 
-	# else:
-	# 	return 1 - self.displayProperties.valueUnitRatio
-
 	def interactiveResize(self, mouseEvent):
-		if self.displayProperties.unitPosition in ['hidden', 'inline', 'floating']:
+		if self.displayProperties.unitPosition in {'hidden', 'inline', 'floating'}:
 			return
-		if self.primary is self.value:
-			self.ratio = 1 - mouseEvent.pos().x()/self.surface.rect().width()
-		super().interactiveResize(mouseEvent)
-		self.updatePosition(self.surface.rect())
-		self.setGeometries()
+		super().interactiveResize(mouseEvent, invert=self.primary is self.value)
 
 	@_ratio.setter
 	def _ratio(self, value):
 		self.displayProperties.valueUnitRatio = value
-
-	@StateProperty(key='valueUnitRatio')
-	def ratio(self):
-		pass
 
 	@property
 	def displayProperties(self) -> 'MeasurementDisplayProperties':
