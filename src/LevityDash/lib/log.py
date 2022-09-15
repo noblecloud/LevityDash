@@ -1,29 +1,30 @@
 import asyncio
-from configparser import SectionProxy
+import logging
 import os
 import shutil
-
-import bleak
 import webbrowser
 from collections import deque
+from configparser import SectionProxy
 from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-
-import shiboken2
-from sys import argv, gettrace
-
-from .config import userConfig
-
-import logging
 from typing import ClassVar
 
-from LevityDash import __lib__, __dirs__
+import bleak
 import qasync
+import shiboken2
 from rich.console import Console
 from rich.logging import RichHandler
+from rich.style import Style
+from rich.text import Text as RichText
+from rich.theme import Theme
+from sys import argv, gettrace
+
+from LevityDash import __dirs__, __lib__
+from .config import userConfig
 
 suppressedModules = [qasync, asyncio, bleak, shiboken2]
+
 
 def levelFilter(level: int):
 	def filter(record):

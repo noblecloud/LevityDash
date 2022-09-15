@@ -1,20 +1,19 @@
 import asyncio
+import re
 from datetime import timedelta
 from types import FunctionType
 from typing import Callable, Dict, Optional, Union
 from uuid import UUID
-import re
 
 from bleak import BleakScanner
 from bleak.backends.device import BLEDevice
+from qasync import asyncClose
 
 from LevityDash.lib.log import LevityPluginLog
-
 from LevityDash.lib.plugins.plugin import Plugin
-from LevityDash.lib.plugins.utils import ScheduledEvent
 from LevityDash.lib.plugins.schema import LevityDatagram, Schema, SchemaSpecialKeys as tsk
+from LevityDash.lib.plugins.utils import ScheduledEvent
 from LevityDash.lib.utils.shared import getOr, now
-from qasync import asyncClose
 
 pluginLog = LevityPluginLog.getChild('Govee')
 
@@ -52,6 +51,7 @@ def parseMathString(mathString: str, functionName: str = 'mathExpression', **kwa
 
 
 class BLEPayloadParser:
+
 	def __init__(self, field: str, startingByte: int, endingByte: int, expression: Optional[Union[str, Callable]] = None, base: int = 16):
 		self.__field = field
 		self.__startingByte = startingByte
@@ -269,9 +269,6 @@ class Govee(Plugin, realtime=True, logged=True):
 	async def close(self):
 		await self.asyncStop()
 
-	def enabled(self) -> bool:
-		return self.config['enabled']
-
 	async def __discoverDevice(self, deviceConfig, timeout=15) -> Optional[BLEDevice]:
 		async def discover(timeout):
 			devices = await self.scanner.discover(timeout=timeout) or []
@@ -329,7 +326,7 @@ class Govee(Plugin, realtime=True, logged=True):
 			**self.__batteryParse(dataBytes),
 		}
 		data = LevityDatagram(results, schema=self.schema, dataMaps=self.schema.dataMaps)
-		pluginLog.debug(f'{self.__class__.__name__} received: {data["realtime"]}')
+		pluginLog.verbose(f'{self.__class__.__name__} received: {data["realtime"]}', verbosity=5)
 		self.realtime.update(data)
 		self.lastDatagram = data
 

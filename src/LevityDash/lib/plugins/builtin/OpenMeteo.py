@@ -1,11 +1,10 @@
-from asyncio import gather, create_task, get_event_loop
-
-from LevityDash.lib.plugins.utils import ScheduledEvent
-from LevityDash.lib.plugins.schema import SchemaSpecialKeys as tsk
-from LevityDash.lib.plugins.web import Endpoint, REST, URLs
-from datetime import datetime, timedelta
+from asyncio import create_task, get_event_loop
+from datetime import timedelta
 
 from LevityDash.lib.config import userConfig
+from LevityDash.lib.plugins.schema import SchemaSpecialKeys as tsk
+from LevityDash.lib.plugins.utils import ScheduledEvent
+from LevityDash.lib.plugins.web import Endpoint, REST, URLs
 from LevityDash.lib.plugins.web.errors import APIError
 
 WMOCodes = {

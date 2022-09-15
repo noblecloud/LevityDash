@@ -1,16 +1,16 @@
 import asyncio
 from asyncio import create_task
-from json import loads, dumps
 from datetime import datetime, timedelta, timezone
+from json import dumps, loads
 
-from aiohttp import ClientSession, WSMsgType, ClientWebSocketResponse
+from aiohttp import ClientSession, ClientWebSocketResponse, WSMsgType
 
 from LevityDash.lib.plugins.errors import InvalidData
 from LevityDash.lib.plugins.schema import LevityDatagram, SchemaSpecialKeys as tsk
-from LevityDash.lib.plugins.web.errors import APIError
-from LevityDash.lib.plugins.web.socket_ import UDPSocket
 from LevityDash.lib.plugins.utils import ScheduledEvent
 from LevityDash.lib.plugins.web import Auth, AuthType, Endpoint, REST, URLs
+from LevityDash.lib.plugins.web.errors import APIError
+from LevityDash.lib.plugins.web.socket_ import UDPSocket
 from LevityDash.lib.utils.shared import LOCAL_TIMEZONE, Now
 
 __all__ = ["WeatherFlow", '__plugin__']
@@ -354,6 +354,8 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 	schema = schema
 	name = 'WeatherFlow'
 	windIndex = 0
+
+	__defaultConfig__ = _defaultConfig
 	__configRequired = ['stationID', 'deviceID', 'token']
 
 	realtimeTimer: ScheduledEvent

@@ -690,12 +690,6 @@ class MutableFloat:
 			raise ValueError(f'{value} is not a number')
 		return float(value)*mul
 
-	# def __get__(self, instance, owner):
-	# 	return self.__value
-	#
-	# def __set__(self, instance, value):
-	# 	self._setValue(value)
-
 	def __call__(self):
 		return self.__value
 
