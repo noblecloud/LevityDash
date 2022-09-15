@@ -263,6 +263,8 @@ class Plugin(metaclass=PluginMeta):
 	realtime: Optional[ObservationRealtime]
 	log: Optional[ObservationLog]
 
+	__defaultConfig__: Dict[str, Any] | Path | Text
+
 	def __init__(self):
 		self.__running = False
 		self.containers = {}
@@ -306,38 +308,45 @@ class Plugin(metaclass=PluginMeta):
 		raise NotImplementedError
 
 	@classmethod
+	def getDefaultConfig(cls, destination: EasyPath | EasyPathFile = None, replace: bool = True):
+		"""Gets the default config from the plugin's __defaultConfig__ attribute and places it in the config directory"""
+		if destination is None:
+			destination = EasyPathFile(pluginConfig.userPluginsDir.path / f'{cls.name}.ini', make=True)
+		elif isinstance(destination, str | Path):
+			destination = EasyPath(destination)
+
+		if not destination.parent in pluginConfig.userPluginsDir:
+			destination = pluginConfig.userPluginsDir / destination
+		if not isinstance(destination, EasyPathFile):
+			destination /= f'{cls.name}.ini'
+
+		config = cls.__defaultConfig__
+		if isinstance(config, Path) and config.exists() and config.is_file() and config.endswith('.ini'):
+			raise NotImplementedError
+
+		if isinstance(config, dict):
+			raise NotImplementedError
+
+		if isinstance(config, Text):
+			config = PluginConfig.readString(config, path=destination)
+
+			return config
+
+	@classmethod
 	def getConfig(cls, plugin: 'Plugin'):
-		cls.configFileName = f'{cls.__name__}.ini'
+		ns = SimpleNamespace(file=f'{cls.__name__}.ini')
 
 		# Look in the userPlugins directory for config files.
 		# Plugin configs can either be in userPlugins/PluginName/config.ini or userPlugins/PluginName.ini
 		match pluginConfig.userPluginsDir.asDict(depth=2):
-			case {cls.__name__: {'config.ini': file}}:
-				del cls.configFileName
-				value = PluginConfig(path=file.path, plugin=plugin)
-				if plugin._validateConfig(value):
-					return value
-			case {cls.configFileName: file}:
-				del cls.configFileName
-				value = PluginConfig(path=file.path, plugin=plugin)
-				if plugin._validateConfig(value):
-					return value
-		del cls.configFileName
-		# configsDict = config.userPath['plugins'].asDict(depth=3)
-		# if cls.__name__ in configsDict and isinstance(d := configsDict[cls.__name__], dict) and 'config.ini' in d:
-		# 	value = PluginConfig(path=config.userPath['plugins'][cls.__name__].path, plugin=plugin)
-		# 	if plugin._validateConfig(value):
-		# 		return value
-		# elif cls.configFileName in configsDict and isinstance(d := configsDict[cls.configFileName], File):
-		# 	del cls.configFileName
-		# 	value = PluginConfig(path=config.userPath['plugins'][cls.configFileName].path, plugin=plugin)
-		# 	if plugin._validateConfig(value):
-		# 		return value
-
-		# Look in the userConfig file for sections with the plugin name
-		if pluginConfig.has_section(cls.__name__):
-			value = PluginConfig(plugin=plugin)
-			return value
+			case {cls.__name__: {'config.ini': file}} if file.stat().st_size:
+				return PluginConfig(path=file.path, plugin=plugin)
+			case {ns.file: file} if file.stat().st_size:
+				return PluginConfig(path=file.path, plugin=plugin)
+		try:
+			return cls.getDefaultConfig()
+		except Exception as e:
+			plugin.pluginLog.exception(e)
 		raise ValueError(f'No config for {cls.__name__}')
 
 	@classmethod

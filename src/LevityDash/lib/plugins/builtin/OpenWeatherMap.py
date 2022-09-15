@@ -36,6 +36,9 @@ schema = {
 
 }
 
+_defaultConfig = """[plugin] 
+	enabled: false
+	"""
 
 class OpenWeatherMap(REST, realtime=True, daily=True, hourly=True, logged=False):
 	urls = OWMURLs()

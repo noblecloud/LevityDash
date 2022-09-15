@@ -331,6 +331,24 @@ class WFWebsocket:
 		await ws.send_str(self._genMessage('listen_rapid_start'))
 
 
+_enableMessage = ("Enable WeatherFlow?  "
+                  "This will require an authentication token and a Tempest Weather station to connect.  "
+                  "You can find more information at https://levitydash.app/#/plugin_config?id=weatherflowtempest")
+
+_defaultConfig = \
+	f""";All independent configs must have a plugin section
+
+[plugin]
+enabled = @ask(bool:False).message({_enableMessage})
+token = @ask(str:).message(Enter Token)
+stationID = @ask(str:).message(Enter Station ID)
+deviceID = @ask(str:).message(Enter Device ID)
+socketUpdates = @ask(bool:True).message(Enable Socket Updates?)
+fetchHistory = @ask(bool:False).message(Enable History Fetching?)
+defaultFor = temperature wind pressure humidity light lightning
+"""
+
+
 class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 	urls: WFURLs = WFURLs()
 	schema = schema

@@ -1,21 +1,20 @@
 import os
 import platform
 import re
-from configparser import ConfigParser, SectionProxy, ParsingError, ExtendedInterpolation
+from configparser import ConfigParser, ExtendedInterpolation, ParsingError
 from datetime import timedelta
 from functools import cached_property
+from io import StringIO
 from logging import getLogger, Logger
 from pathlib import Path, PosixPath, PurePath
 from re import search
 from shutil import copytree
-from typing import Union, Callable, Any, ClassVar
+from typing import Callable, ClassVar, Text, Union
 
-from PySide2.QtCore import Qt
-from PySide2.QtWidgets import QInputDialog, QWidget, QMessageBox, QLineEdit
+from PySide2.QtWidgets import QInputDialog, QLineEdit, QMessageBox, QWidget
 from pytz import timezone
-from qasync import QApplication
 
-from .EasyPath import EasyPathFile, EasyPath
+from .EasyPath import EasyPath, EasyPathFile
 
 _backupLogger = getLogger('LevityConfig')
 
@@ -170,8 +169,6 @@ class LevityConfig(ConfigParser):
 			if choices is not None:
 				return QInputDialog.getItem(QWidget(), self.path.name, message, choices, 0, 'custom' in choices)[0]
 
-		print(value)
-
 	@classmethod
 	@property
 	def log(cls):
@@ -216,13 +213,13 @@ class LevityConfig(ConfigParser):
 	def getOrSet(self, section: str, key: str, default: str, getter: Callable | None = None) -> str:
 		try:
 			if section == self.default_section:
-				section = self._defaults
+				section = self._proxies[self.default_section]
 			else:
 				section = self[section]
 		except KeyError:
 			self.add_section(section)
 
-		if getter == self.getboolean:
+		if getter == self.getboolean or getter == bool:
 			if (value := section.getboolean(key)) is None:
 				section[key] = str(default)
 				self.save()
@@ -374,11 +371,23 @@ class PluginsConfig(LevityConfig):
 
 
 class PluginConfig(LevityConfig):
+	_plugin: 'Plugin'
+	__log: 'Logger' = None
 
 	def __init__(self, *args, **kwargs):
-		self.__plugin = kwargs.pop('plugin', None)
-		self.log = self.__plugin.pluginLog.getChild('Config')
-		super(PluginConfig, self).__init__(*args, **kwargs, default_section='Config')
+		self.plugin = kwargs.pop('plugin', None)
+		super(PluginConfig, self).__init__(*args, **kwargs, default_section='plugin')
+
+	@classmethod
+	def readString(cls, string: Text, **context):
+		path = context.pop('path', None)
+		config = cls(**context)
+		config.path = path
+		config.read_file(StringIO(string))
+
+		if config.path is not None:
+			config.save()
+		return config
 
 	def __getitem__(self, key):
 		value = unsetConfig
@@ -390,13 +399,13 @@ class PluginConfig(LevityConfig):
 			value = self.defaults()[key]
 		else:
 			try:
-				mainConfig = userConfig.plugins[self.__plugin.name]
+				mainConfig = userConfig.plugins[self._plugin.name]
 				if key in mainConfig:
 					value = mainConfig[key]
 			except KeyError:
 				pass
 		if value == '':
-			self.log.critical(f'No value for {key} in config for {self.__plugin.name}')
+			self.log.critical(f'No value for {key} in config for {self._plugin.name}')
 		elif value is unsetConfig:
 			raise KeyError
 		if isinstance(value, str):
@@ -432,7 +441,7 @@ class PluginConfig(LevityConfig):
 			value = ''
 			from rich.prompt import Prompt
 			while value == '':
-				value = Prompt.ask(f'{self.__plugin.name} requires \'{key}\' to continue.  Please enter a value.\n{key}')
+				value = Prompt.ask(f'{self._plugin.name} requires \'{key}\' to continue.  Please enter a value.\n{key}')
 			self[self.default_section][key] = value
 			self.save()
 
@@ -444,7 +453,19 @@ class PluginConfig(LevityConfig):
 
 	@property
 	def plugin(self) -> 'Plugin':
-		return self.__plugin
+		return self._plugin
+
+	@plugin.setter
+	def plugin(self, value: 'Plugin'):
+		self._plugin = value
+		try:
+			self.__log = self._plugin.pluginLog.getChild('Config')
+		except AttributeError:
+			pass
+
+	@property
+	def log(self) -> 'Logger':
+		return self.__log or self._log
 
 
 class Config(LevityConfig):
