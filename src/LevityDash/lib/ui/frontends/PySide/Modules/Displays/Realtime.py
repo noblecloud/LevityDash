@@ -481,6 +481,7 @@ class Realtime(Panel, tag='realtime'):
 			ValueDirectory.getChannel(self.key).disconnectSlot(self.testSlot)
 
 	def adjustContentStaleTimer(self):
+		self.__updateTimeOffsetLabel()
 		now = get_event_loop().time()
 		last = self.lastUpdate or get_event_loop().time()
 		self.updateFreqency = now - last
@@ -497,36 +498,38 @@ class Realtime(Panel, tag='realtime'):
 
 	@asyncSlot()
 	async def updateSlot(self, *args):
-		self.__updateTimeOffsetLabel()
 		self.setOpacity(1)
 		self.display.refresh()
+		self.updateToolTip()
 		self.adjustContentStaleTimer()
 
 	def updateToolTip(self):
 		try:
 			container = self.__connectedContainer
+			name = self.currentSource.name
+			if not container.isRealtime:
+				if (s := getattr(self.value, 'source', None)) is not None and (n := getattr(s, 'name', None)) is not None:
+					name += f': {n}'
 			if container.isDailyOnly:
-				self.setToolTip(f'{self.currentSource.name} {self.value.timestamp:%{DATETIME_NO_ZERO_CHAR}m/%{DATETIME_NO_ZERO_CHAR}d}')
+				self.setToolTip(f'{name} {self.value.timestamp:%{DATETIME_NO_ZERO_CHAR}m/%{DATETIME_NO_ZERO_CHAR}d}')
 			else:
-				self.setToolTip(f'{self.currentSource.name} @ {container.now.timestamp:%{DATETIME_NO_ZERO_CHAR}I:%M%p}')
+				self.setToolTip(f'{name} @ {container.now.timestamp:%{DATETIME_NO_ZERO_CHAR}I:%M%p}')
 
 		except AttributeError:
-			pass
+			self.setToolTip('')
 
 	def __updateTimeOffsetLabel(self):
-		# TODO: fix this
-		return
-		if self.container.timeseriesOnly:
+		value = self.value
+		if self.__connectedContainer.isDailyOnly:
 			self.timeOffsetLabel.setEnabled(False)
-		elif self.value.isValid and abs(offset := Now() - self.value.timestamp) > timedelta(minutes=15):
+		elif value.isValid and abs(Now() - value.timestamp) > (timedelta(minutes=15) if isinstance(value.source, RealtimeSource) else value.source.period):
 			self.timeOffsetLabel.setEnabled(True)
 		else:
 			self.timeOffsetLabel.setEnabled(False)
 
 	def contentStaled(self):
 		self.timeOffsetLabel.setEnabled(True)
-		opacity = self.opacity()
-		self.setOpacity(clamp(opacity - 0.1, 0.6, 1))
+		self.setOpacity(sorted((self.opacity() - 0.1, 0.6, 1))[0])
 		self.update()
 
 	@property
@@ -624,6 +627,8 @@ class Realtime(Panel, tag='realtime'):
 
 
 class TimeOffsetLabel(Label):
+	_connected: bool = False
+
 	def __init__(self, parent, *args, **kwargs):
 		kwargs['geometry'] = {'x': 0.7, 'y': 0.85, 'width': 0.3, 'height': 0.15, 'relative': True}
 		super(TimeOffsetLabel, self).__init__(parent, alignment=AlignmentFlag.BottomRight, *args, **kwargs)
@@ -643,11 +648,21 @@ class TimeOffsetLabel(Label):
 		super(TimeOffsetLabel, self).setEnabled(enabled)
 		if enabled:
 			self.show()
-			connectSignal(qApp.instance().clock.minute, self.refresh)
+			self.connectSignal()
 			self.refresh()
 		else:
 			self.hide()
+			self.disconnectSignal()
+
+	def connectSignal(self):
+		if not self._connected:
+			connectSignal(qApp.instance().clock.minute, self.refresh)
+			self._connected = True
+
+	def disconnectSignal(self):
+		if self._connected:
 			disconnectSignal(qApp.instance().clock.minute, self.refresh)
+			self._connected = False
 
 
 class LockedRealtime(Realtime):
