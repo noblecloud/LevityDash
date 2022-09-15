@@ -218,6 +218,11 @@ class OpenMeteo(REST, realtime=False, hourly=True, daily=True):
 	name = 'OpenMeteo'
 	requestTimer: ScheduledEvent
 
+	__defaultConfig__ = f"""
+	[plugin]
+	enabled = @ask(bool:True).message(Enable OpenMeteo Plugin?)
+	"""
+
 	def __init__(self, *args, **kwargs):
 		super(OpenMeteo, self).__init__(*args, **kwargs)
 

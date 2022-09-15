@@ -75,6 +75,25 @@ class BLEPayloadParser:
 
 loop = asyncio.get_event_loop()
 
+_defaultConfig = f"""
+[plugin] ; All independent configs must have a Config section
+enabled = @ask(bool:False).message(Enable Govee?)
+
+; At least one of these must be set for a device to be recognized
+device.id = @askChoose(str:closest,first,custom).message(Select method for finding a device or choose to input your own)
+device.model = @ask(str:GVH5102).message(Enter device model)
+;device.uuid =
+;device.mac =
+
+; These are the defaults for a GVH5102
+temperature.slice = [4:10]
+temperature.expression = val / 10000
+humidity.slice = [4:10]
+humidity.expression = payload % 1000 / 1000
+battery.slice = [10:12]
+"""
+
+
 class Govee(Plugin, realtime=True, logged=True):
 	name = 'Govee'
 	schema: Schema = {
@@ -96,6 +115,8 @@ class Govee(Plugin, realtime=True, logged=True):
 			}
 		}
 	}
+
+	__defaultConfig__ = _defaultConfig
 
 	def __init__(self):
 		super().__init__()
