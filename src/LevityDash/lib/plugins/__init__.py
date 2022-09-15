@@ -91,7 +91,6 @@ class PluginsLoader(metaclass=GlobalSingleton, name='Plugins'):
 		def search(paths: List[str]) -> Iterator:
 			plugins = (i for i in pkgutil.iter_modules(paths))
 			for _, name, ispkg in plugins:
-				print(f'Found plugin {name}')
 				yield name
 
 		from LevityDash import __lib__
@@ -141,6 +140,7 @@ class PluginsLoader(metaclass=GlobalSingleton, name='Plugins'):
 	@property
 	def plugins(self) -> Dict[str, Plugin]:
 		return self.__plugins
+
 
 def __getattr__(item: str) -> Plugin:
 	return getattr(Plugins, item, None) or locals()[item]

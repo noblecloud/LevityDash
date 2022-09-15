@@ -771,7 +771,7 @@ CategoryItem.root = root
 class CategoryDict(dict):
 	_cache: dict
 
-	def __init__(self, parent: dict = None, source: dict = None, category: str = None):
+	def __init__(self, parent: Mapping = None, source: dict = None, category: str = None):
 		self._cache = {}
 		self._parent = parent
 		self._category = CategoryItem(category)
@@ -833,12 +833,10 @@ class CategoryDict(dict):
 
 		if len(item) == 1:
 			return {key: value if not isinstance(value, CategoryDict) else value[item] for key, value in self._dict.items() if (isinstance(value, CategoryDict) and item in value) or isinstance(value, TimeAwareValue)}
-		# return {key: value if not isinstance(value, CategoryDict) else value[item] for key, value in self._dict.items() if item in value}
 		else:
 			k = item[1:]
 			item = item[0]
 			return {key: value if not isinstance(value, CategoryDict) else value[k] for key, value in self._dict.items() if key == item and isinstance(value, CategoryDict) and k in value}
-			# return {key: value if not isinstance(value, CategoryDict) else value[k] for key, value in self._dict.items() if key == item and k in value}
 			# if the item is a wildcard
 			if str(item) == '*':
 				pass

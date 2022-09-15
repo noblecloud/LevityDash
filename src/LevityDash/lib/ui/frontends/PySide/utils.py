@@ -4,19 +4,25 @@ from enum import Enum
 from functools import partial
 from os import environ
 from types import SimpleNamespace
-from typing import Callable, Union, List, ClassVar, Optional, Type, runtime_checkable, Protocol, Dict, Set, overload
+from typing import Callable, ClassVar, Dict, List, Optional, overload, Protocol, runtime_checkable, Tuple, Type, Union
 
 from PySide2.QtCore import QLineF, QObject, QPoint, QPointF, QRectF, QSize, QSizeF, Qt, QTimer, Signal
-from PySide2.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QTransform, QPixmap, QBrush
-from PySide2.QtWidgets import QGraphicsDropShadowEffect, QGraphicsSceneMouseEvent, QGraphicsPixmapItem, QGraphicsItem, QApplication
-from yaml import SafeDumper, Dumper
+from PySide2.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen, QPixmap, QTransform
+from PySide2.QtWidgets import (
+	QApplication, QGraphicsDropShadowEffect, QGraphicsItem, QGraphicsPixmapItem,
+	QGraphicsSceneMouseEvent
+)
+from yaml import Dumper, SafeDumper
 
-from LevityDash.lib.utils import ClosestMatchEnumMeta, getItemsWithType, utilLog as log, Unset, levenshtein
-from LevityDash.lib.plugins.categories import CategoryItem
-from LevityDash.lib.ui.Geometry import Geometry, Size, Position
-from LevityDash.lib.stateful import Stateful
 from LevityDash.lib.log import debug
+from LevityDash.lib.plugins.categories import CategoryItem
+from LevityDash.lib.stateful import Stateful
 from LevityDash.lib.ui.colors import Color
+from LevityDash.lib.ui.Geometry import Geometry, Position, Size
+from LevityDash.lib.utils import (
+	ClosestMatchEnumMeta, getItemsWithType, getItemsWithType, levenshtein, Unset,
+	utilLog as log
+)
 
 
 def objectRepresentor(dumper, obj):
@@ -40,6 +46,7 @@ def objectRepresentor(dumper, obj):
 itemCount = 0
 itemSkip = 3
 INCREMENTAL_LOAD = False
+
 
 def loadGraphs(parent, items, parentItems, **kwargs):
 	global itemCount
@@ -580,6 +587,7 @@ def addRect(painter: QPainter, rect: QRectF, color: QColor = Qt.red, fill: QColo
 	painter.setBrush(brush)
 	painter.drawRect(rect.adjusted(-offset, -offset, offset, offset))
 
+
 def addCrosshairDecorator(func: Callable, **dkwargs) -> Callable:
 	"""
 	A decorator that adds a crosshair to the item.
@@ -625,6 +633,7 @@ useCache = False
 
 
 class DebugSwitch(type(QObject)):
+
 	def __new__(cls, name, bases, attrs):
 		if '_debug_paint' in attrs and debug:
 			attrs['_normal_paint'] = attrs.get('paint', None) or next(base.paint for base in bases if hasattr(base, 'paint'))
@@ -805,6 +814,7 @@ class CachedSoftShadow(SoftShadow):
 		self.cache = None
 		self.update()
 		self.owner.update()
+
 
 # def boundingRect(self) -> QRectF:
 # 	return dynamic.boundingRect(self)

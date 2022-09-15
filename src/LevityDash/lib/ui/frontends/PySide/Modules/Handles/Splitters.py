@@ -474,6 +474,7 @@ class MeasurementUnitSplitter(Splitter, Stateful):
 		self.unit.contentsRect = space
 		# self.unit.setPos(pos)
 		self.unit.textBox.refresh()
+
 		totalRect = self.unit.textBox.sceneBoundingRect() | self.value.textBox.sceneBoundingRect()
 		offset = self.surface.sceneBoundingRect().center() - totalRect.center()
 		self.unit.moveBy(*offset.toTuple())

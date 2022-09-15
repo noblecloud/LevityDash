@@ -95,6 +95,7 @@ unitDict: Dict[str, Union[Type[wu.Measurement], Type[bool], Dict[str, Union[Type
 
 
 class SchemaProperty:
+
 	def __init__(self, source: 'ObservationDict', data: dict):
 		self.source = source
 		self.data = data

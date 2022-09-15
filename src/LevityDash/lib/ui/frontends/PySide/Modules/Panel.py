@@ -1,40 +1,47 @@
 import asyncio
 import re
 from collections import defaultdict
-from functools import cached_property, reduce, partial
-from pprint import pprint
-from pathlib import Path
-from typing import (Any, Callable, List, Optional, overload, Union, Sized, Set, ClassVar, Tuple, Dict, TYPE_CHECKING,
-                    NamedTuple, TypeVar, TypeAlias, ForwardRef)
-from uuid import uuid4, UUID
+from functools import cached_property, partial, reduce
 from operator import or_
+from pathlib import Path
+from pprint import pprint
+from typing import (
+	Any, Callable, ClassVar, Dict, ForwardRef, List, NamedTuple, Optional, overload, Set, Sized, Tuple, TYPE_CHECKING,
+	TypeAlias, TypeVar, Union
+)
+from uuid import UUID, uuid4
 
 from math import prod
-from PySide2.QtCore import (QByteArray, QMimeData, QPointF, QRect, QRectF, QSize, QSizeF, Qt, QTimer, Slot, QPoint,
-                            QMargins)
-from PySide2.QtGui import QColor, QDrag, QFocusEvent, QPainter, QPainterPath, QPixmap, QTransform, QBrush, QPen
-from PySide2.QtWidgets import (QApplication, QFileDialog, QGraphicsItem, QGraphicsItemGroup,
-                               QGraphicsSceneDragDropEvent,
-                               QGraphicsSceneMouseEvent,
-                               QStyleOptionGraphicsItem, QGraphicsPathItem)
+from PySide2.QtCore import (
+	QByteArray, QMargins, QMimeData, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt, QThread, QTimer, Slot
+)
+from PySide2.QtGui import QBrush, QColor, QDrag, QFocusEvent, QPainter, QPainterPath, QPen, QPixmap, QTransform
+from PySide2.QtWidgets import (
+	QApplication, QFileDialog, QGraphicsItem, QGraphicsItemGroup, QGraphicsPathItem, QGraphicsSceneDragDropEvent,
+	QGraphicsSceneMouseEvent, QStyleOptionGraphicsItem
+)
 from qasync import asyncSlot
 from rich.repr import auto
 
-from LevityDash.lib.ui.Geometry import (Geometry, Size, Position, Margins, Edge, LocationFlag, AlignmentFlag,
-                                        polygon_area, parseSize, Dimension, size_px)
 from LevityDash.lib.config import userConfig
 from LevityDash.lib.EasyPath import EasyPathFile
-from LevityDash.lib.utils.shared import (boolFilter, clearCacheAttr, disconnectSignal, getItemsWithType, Numeric,
-                                         SimilarValue, _Panel, hasState)
-from LevityDash.lib.stateful import StateProperty, Stateful, DefaultGroup
+from LevityDash.lib.log import debug
+from LevityDash.lib.stateful import DefaultGroup, Stateful, StateProperty
 from LevityDash.lib.ui import UILogger as log
 from LevityDash.lib.ui.colors import Color
+from LevityDash.lib.ui.Geometry import (
+	AlignmentFlag, Dimension, Edge, Geometry, LocationFlag, Margins, Padding, parseSize, polygon_area, Position, Size,
+	size_px
+)
+from LevityDash.lib.utils import ExecThread
+from LevityDash.lib.utils.shared import (
+	_Panel, boolFilter, clearCacheAttr, disconnectSignal, getItemsWithType, hasState, Numeric, SimilarValue
+)
 from WeatherUnits import Length
-from .Menus import BaseContextMenu
 from .Handles import Handle, HandleGroup
 from .Handles.Resize import ResizeHandles
-from ..utils import GraphicsItemSignals, colorPalette, selectionPen, itemLoader, GeometryManager
-from LevityDash.lib.log import debug
+from .Menus import BaseContextMenu
+from ..utils import colorPalette, GeometryManaged, GeometryManager, GraphicsItemSignals, itemLoader, selectionPen
 
 if TYPE_CHECKING:
 	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import Text

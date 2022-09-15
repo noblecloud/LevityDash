@@ -1,10 +1,9 @@
 from PySide2.QtCore import QObject, QRectF, Signal
 from PySide2.QtWidgets import QGraphicsItem, QGraphicsScene
 
-from LevityDash.lib.utils.shared import clamp, clearCacheAttr
-from LevityDash.lib.ui.Geometry import Axis, LocationFlag
-
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Resize import ResizeHandle, ResizeHandles
+from LevityDash.lib.ui.Geometry import Axis, LocationFlag
+from LevityDash.lib.utils.shared import clamp, clearCacheAttr
 
 __all__ = ['MarginHandle', 'MarginHandles', 'FigureHandle', 'FigureHandles']
 
