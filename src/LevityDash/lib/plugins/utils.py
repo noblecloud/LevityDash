@@ -429,8 +429,11 @@ class ScheduledEvent(object):
 				interval_float = interval.total_seconds()
 			else:
 				interval_float = interval
-			staggerAmount = timedelta(min(interval_float*0.1, 5*3600))
+			staggerAmount = timedelta(seconds=min(interval_float * 0.1, 5 * 3600))
 		self.__interval = interval
+
+		if not isinstance(interval, timedelta) and singleShot:
+			self.__interval = timedelta()
 
 		self.__owner = func.__self__
 		if self.__owner in self.instances:
@@ -447,13 +450,18 @@ class ScheduledEvent(object):
 
 	def schedule(self, *, startTime: datetime | timedelta = None, immediately: bool = False) -> 'ScheduledEvent':
 		self.__fireImmediately = immediately
-		if self.__singleShot:
-			name = getattr(self.__owner, 'name', self.__owner.__class__.__name__)
-			self.log.debug(f'{name} - Scheduled single shot event: {self.__func.__name__}')
-		else:
-			interval = wu.Time.Second(self.__interval.total_seconds())
-			stagger = wu.Time.Second(abs(self.__staggerAmount.total_seconds()))
-			self.log.debug(f'{self.__owner.name} - Scheduled recurring event: {self.__func.__name__} every {interval} ±{stagger}')
+		if self.interval >= self.logThreshold:
+			if self.__singleShot:
+				name = getattr(self.__owner, 'name', self.__owner.__class__.__name__)
+				self.log.debug(f'{name} - Scheduled single shot event: {self.__func.__name__}')
+			else:
+				interval = wu.Time.Second(self.__interval.total_seconds()).auto
+				stagger = wu.Time.Second(abs(self.__staggerAmount.total_seconds())).auto
+				if interval.unit == stagger.unit:
+					every = f'{interval.withoutUnit} ±{stagger}'
+				else:
+					every = f'{interval} ±{stagger}'
+				self.log.debug(f'{self.__owner.name} - Scheduled recurring event: {self.__func.__name__} every {every}')
 
 		self.__run(startTime)
 		return self
