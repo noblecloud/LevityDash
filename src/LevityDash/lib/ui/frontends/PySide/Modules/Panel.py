@@ -1270,57 +1270,25 @@ class Panel(_Panel, Stateful, tag='group'):
 
 	# section itemChange
 
-	def itemChange(self, change: QGraphicsItem.GraphicsItemChange, value: Any) -> Any:
-		if change == QGraphicsItem.ItemSceneHasChanged:
-			clearCacheAttr(value, 'panels')
+	def _handleParentChangeFromPositionChange(self, shape: QPainterPath, area: float):
+		siblings = []
+		areas = []
+		collidingItems = [i for i in self.scene().items(shape) if
+		                  i is not self and
+		                  isinstance(i, Panel) and
+		                  not self.isAncestorOf(i) and
+		                  i.acceptsChildren and
+		                  not i.onlyAddChildrenOnRelease and
+		                  not i._frozen]
 
-		elif change == QGraphicsItem.ItemPositionChange:
-			if QApplication.mouseButtons() & Qt.LeftButton and self.isSelected() and not self.focusProxy():
-				area = polygon_area(self.shape())
-				diff = value - self.pos()
-
-				rect = self.rect()
-				rect.moveTo(value)
-
-				similarEdges = [item for sublist in [self.similarEdges(n, rect=rect) for n in self.neighbors] for item in sublist]
-				for s in similarEdges:
-					loc = s.value.location
-					oLoc = s.otherValue.location
-					snapValue = s.otherValue.pix
-					if loc.isRight:
-						rect.moveRight(snapValue)
-					elif loc.isLeft:
-						rect.moveLeft(snapValue)
-					elif loc.isTop:
-						rect.moveTop(snapValue)
-					elif loc.isBottom:
-						rect.moveBottom(snapValue)
-				if similarEdges:
-					value = rect.topLeft()
-
-				translated = self.sceneShape().translated(*diff.toTuple())
-
-				if self.startingParent is not self.parent:
-					translated = self.parent.mapFromItem(self.startingParent, translated)
-
-				siblings = []
-				areas = []
-				collidingItems = [i for i in self.scene().items(translated) if
-					i is not self and
-					isinstance(i, Panel) and
-					not self.isAncestorOf(i) and
-					i.acceptsChildren and
-					not i.onlyAddChildrenOnRelease and
-					not i._frozen]
-
-				for item in collidingItems:
-					itemShape = translated.intersected(item.visibleArea())
-					overlap = round(polygon_area(itemShape)/area, 5)
-					if item.isUnderMouse():
-						overlap *= 1.5
-					if overlap:
-						siblings.append(item)
-						areas.append(overlap)
+		for item in collidingItems:
+			itemShape = shape.intersected(item.visibleArea())
+			overlap = round(polygon_area(itemShape) / area, 5)
+			if item.isUnderMouse():
+				overlap *= 1.5
+			if overlap:
+				siblings.append(item)
+				areas.append(overlap)
 
 				collisions = [(item, area) for item, area in zip(siblings, areas) if item.acceptsChildren and area > item.collisionThreshold]
 				collisions.sort(key=lambda x: (x[0].zValue(), x[1]), reverse=True)
@@ -1335,76 +1303,129 @@ class Panel(_Panel, Stateful, tag='group'):
 						self.setParentItem(newParent)
 						newParent.update()
 
-				# else:
-				# 	collisions = [i for i in collisions if i[0] is not self.scene().base]
-				# 	if collisions:
-				#
-				#
-				# 		# 	# collisionItem = self.mapFromParent(collisions[0].shape()).boundingRect()
-				# 		collisionItem = collisions[0][0].shape().boundingRect()
-				# 		# if self.startingParent is not self.parent:
-				#
-				# 			# collisionItem = collisions[0][0].mapRectToScene(collisionItem)
-				# 		# collisionItem = collisions[0][0].mapToScene(collisionItem).boundingRect()
-				#
-				#
-				# 		# innerRect = QRectF(collisionItem)
-				# 		panel = collisions.pop(0)
-				# 		# n = 20
-				# 		# innerRect.adjust(n, n, -n, -n)
-				# 		# if innerRect.contains(value):
-				# 		# 	# panel.resizeHandles.show()
-				# 		# 	collisions = False
-				# 		# 	self.setParentItem(panel)
-				# 		# 	break
-				#
-				# 		x, y = value.x(), value.y()
-				#
-				# 		shape = shape.boundingRect()
-				#
-				# 		f = [abs(collisionItem.top() - shape.center().y()), abs(collisionItem.bottom() - shape.center().y()), abs(collisionItem.left() - shape.center().x()), abs(collisionItem.right() - shape.center().x())]
-				# 		closestEdge = min(f)
-				# 		if closestEdge == abs(collisionItem.top() - shape.center().y()):
-				# 			y = collisionItem.top() - shape.height()
-				# 			if y < 0:
-				# 				y = collisionItem.bottom()
-				# 		elif closestEdge == abs(collisionItem.bottom() - shape.center().y()):
-				# 			y = collisionItem.bottom()
-				# 			if y + shape.height() > self.parent.containingRect.height():
-				# 				y = collisionItem.top() - shape.height()
-				# 		elif closestEdge == abs(collisionItem.left() - shape.center().x()):
-				# 			x = collisionItem.left() - shape.width()
-				# 			if x < 0:
-				# 				x = collisionItem.right()
-				# 		elif closestEdge == abs(collisionItem.right() - shape.center().x()):
-				# 			x = collisionItem.right()
-				# 		value = QPointF(x, y)
-				# else:
-				#
-				# 	self.indicator.colors = Qt.green
-				# 	if self.parentItem() is not self.scene().base:
-				# 		self.setParentItem(self.scene().base)
+	def _handleKeepInFrame(self, area: float, value: QPoint | QPointF):
+		intersection = self.parent.shape().intersected(self.shape().translated(*value.toTuple()))
+		overlap = prod(intersection.boundingRect().size().toTuple()) / area
+		if overlap >= 0.75:
+			frame = self.parent.rect()
+			maxX = frame.width() - min(self.rect().width(), frame.width())
+			maxY = frame.height() - min(self.rect().height(), frame.height())
+
+			x = min(max(value.x(), 0), maxX)
+			y = min(max(value.y(), 0), maxY)
+			value.setX(x)
+			value.setY(y)
+
+	def _handleItemSpecificPositionChange(self, value: QPoint | QPointF) -> Tuple[bool, QPoint | QPointF]:
+		return False, value
+
+	def _handlePositionChange(self, value: QPointF | QPoint) -> QPointF | QPoint:
+		if isinstance(self, GeometryManaged):
+			override, value, = self._geometryManagerPositionChange(value)
+			if override:
+				return value
+
+		area = polygon_area(self.shape())
+		diff = value - self.pos()
+
+		rect = self.rect()
+		rect.moveTo(value)
+
+		value = self._handleEdgeSnapping(value, rect)
+
+		translated = self.sceneShape().translated(*diff.toTuple())
+
+		if self.startingParent is not self.parent:
+			translated = self.parent.mapFromItem(self.startingParent, translated)
+
+		self._handleParentChangeFromPositionChange(translated, area)
+
+		# else:
+		# 	collisions = [i for i in collisions if i[0] is not self.scene().base]
+		# 	if collisions:
+		#
+		#
+		# 		# 	# collisionItem = self.mapFromParent(collisions[0].shape()).boundingRect()
+		# 		collisionItem = collisions[0][0].shape().boundingRect()
+		# 		# if self.startingParent is not self.parent:
+		#
+		# 			# collisionItem = collisions[0][0].mapRectToScene(collisionItem)
+		# 		# collisionItem = collisions[0][0].mapToScene(collisionItem).boundingRect()
+		#
+		#
+		# 		# innerRect = QRectF(collisionItem)
+		# 		panel = collisions.pop(0)
+		# 		# n = 20
+		# 		# innerRect.adjust(n, n, -n, -n)
+		# 		# if innerRect.contains(value):
+		# 		# 	# panel.resizeHandles.show()
+		# 		# 	collisions = False
+		# 		# 	self.setParentItem(panel)
+		# 		# 	break
+		#
+		# 		x, y = value.x(), value.y()
+		#
+		# 		shape = shape.boundingRect()
+		#
+		# 		f = [abs(collisionItem.top() - shape.center().y()), abs(collisionItem.bottom() - shape.center().y()), abs(collisionItem.left() - shape.center().x()), abs(collisionItem.right() - shape.center().x())]
+		# 		closestEdge = min(f)
+		# 		if closestEdge == abs(collisionItem.top() - shape.center().y()):
+		# 			y = collisionItem.top() - shape.height()
+		# 			if y < 0:
+		# 				y = collisionItem.bottom()
+		# 		elif closestEdge == abs(collisionItem.bottom() - shape.center().y()):
+		# 			y = collisionItem.bottom()
+		# 			if y + shape.height() > self.parent.containingRect.height():
+		# 				y = collisionItem.top() - shape.height()
+		# 		elif closestEdge == abs(collisionItem.left() - shape.center().x()):
+		# 			x = collisionItem.left() - shape.width()
+		# 			if x < 0:
+		# 				x = collisionItem.right()
+		# 		elif closestEdge == abs(collisionItem.right() - shape.center().x()):
+		# 			x = collisionItem.right()
+		# 		value = QPointF(x, y)
+		# else:
+		#
+		# 	self.indicator.colors = Qt.green
+		# 	if self.parentItem() is not self.scene().base:
+		# 		self.setParentItem(self.scene().base)
 
 				if self.startingParent is not None and self.startingParent is not self.parent:
 					destination = self.parent
 					start = self.startingParent
 					value = destination.mapFromItem(start, value)
 
-				if self._keepInFrame:
-					intersection = self.parent.shape().intersected(self.shape().translated(*value.toTuple()))
-					overlap = prod(intersection.boundingRect().size().toTuple())/area
+		if self._keepInFrame:
+			self._handleKeepInFrame(area, value)
 
-					if overlap >= 0.75:
-						frame = self.parent.rect()
-						maxX = frame.width() - min(self.rect().width(), frame.width())
-						maxY = frame.height() - min(self.rect().height(), frame.height())
+		self._geometry.setPos(value)
+		return value
 
-						x = min(max(value.x(), 0), maxX)
-						y = min(max(value.y(), 0), maxY)
-						value.setX(x)
-						value.setY(y)
+	def _handleEdgeSnapping(self, value, rect):
+		similarEdges = [item for sublist in [self.similarEdges(n, rect=rect) for n in self.neighbors] for item in sublist]
+		for s in similarEdges:
+			loc = s.value.location
+			oLoc = s.otherValue.location
+			snapValue = s.otherValue.pix
+			if loc.isRight:
+				rect.moveRight(snapValue)
+			elif loc.isLeft:
+				rect.moveLeft(snapValue)
+			elif loc.isTop:
+				rect.moveTop(snapValue)
+			elif loc.isBottom:
+				rect.moveBottom(snapValue)
+		if similarEdges:
+			value = rect.topLeft()
+		return value
 
-				self._geometry.setPos(value)
+	def itemChange(self, change: QGraphicsItem.GraphicsItemChange, value: Any) -> Any:
+		if change == QGraphicsItem.ItemSceneHasChanged:
+			clearCacheAttr(value, 'panels')
+
+		elif change == QGraphicsItem.ItemPositionChange:
+			if QApplication.mouseButtons() & Qt.LeftButton and self.isSelected() and not self.focusProxy():
+				value = self._handlePositionChange(value)
 
 		# section Child Added
 		elif change == QGraphicsItem.ItemChildAddedChange:
@@ -1473,6 +1494,13 @@ class Panel(_Panel, Stateful, tag='group'):
 	def parent(self, value: Union['Panel', 'LevityScene']):
 		if getattr(self, '_parent', None) is not value:
 			self._parent = value
+
+	@property
+	def apparentParent(self) -> 'Panel':
+		p = self.parentItem()
+		while p is not None and isinstance(p, NonInteractivePanel):
+			p = p.parentItem()
+		return p
 
 	def updateFromGeometry(self):
 		self.setRect(self.geometry.absoluteRect())
