@@ -1,8 +1,10 @@
 [weather-icons]
 prefix = "wi"
+
+[weather-icons.regular]
 font = "{__resources__}/icons/weathericons.ttf"
 
-[weather-icons.chars]
+[weather-icons.regular.chars]
 day-sunny = "0xf00d"
 day-cloudy = "0xf002"
 day-cloudy-gusts = "0xf000"

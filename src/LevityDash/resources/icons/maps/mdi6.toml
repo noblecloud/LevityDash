@@ -1,8 +1,10 @@
 [mdi6]
 prefix = "mdi6"
+
+[mdi6.regular]
 font = "{__resources__}/icons/materialdesignicons6-webfont.ttf"
 
-[mdi6.chars]
+[mdi6.regular.chars]
 ab-testing = "0xf01c9"
 abacus = "0xf16e0"
 abjad-arabic = "0xf1328"
