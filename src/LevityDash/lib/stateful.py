@@ -398,6 +398,13 @@ StateAction = Literal["get", "set"]
 UnsetReturn: Final = Literal["UnsetReturn"]
 _T = TypeVar("_T", bound=type)
 
+StatefulReturnType = TypeVar("StatefulReturnType")
+StatefulAcceptsType = TypeVar("StatefulAcceptsType")
+StatefulEncodesToType = TypeVar("StatefulEncodesToType")
+StatefulDecodesFromType = TypeVar("StatefulDecodesFromType")
+StatefulDecodedType = TypeVar("StatefulDecodedType")
+StatefulEncodedType = TypeVar("StatefulEncodedType")
+
 _Parse_Return_Type = Union[_T, Type | TypedIterable | Iterable[_T]]
 Parse_Return_Type: TypeAlias = _Parse_Return_Type[_Parse_Return_Type[_Parse_Return_Type]]
 
@@ -629,7 +636,7 @@ class StateProperty(property):
 		except TypeError:
 			return False
 
-	def __decode__(self, obj, value):
+	def __decode__(self, obj, value) -> StatefulAcceptsType:
 		decoder = self.__options.get("decode", {})
 
 		if not (decodeFunc := decoder.get("func", False)):
@@ -659,7 +666,7 @@ class StateProperty(property):
 		return value
 
 	# Section .__set__
-	def __set__(self, owner, value, **kwargs):
+	def __set__(self, owner: 'Stateful', value: StatefulAcceptsType, **kwargs):
 		if (fset := self.fset) is None:
 			raise AttributeError("can't set attribute")
 
@@ -716,7 +723,7 @@ class StateProperty(property):
 			self.optionsFromInit["match"] = kwargs.pop("match")
 		self.getter(func, _kwargs=kwargs)
 
-	def getter(self, fget, _kwargs: dict = None) -> property:
+	def getter(self, fget: Callable[[], StatefulReturnType], _kwargs: dict = None) -> 'StateProperty':
 		if fget is None:
 			return self
 		elif fget is ...:
@@ -758,7 +765,7 @@ class StateProperty(property):
 					pass
 		return func
 
-	def setter(self, fset):
+	def setter(self, fset: Callable[[StatefulAcceptsType], None]) -> 'StateProperty':
 		clearCacheAttr(self, "fget")
 		self._set = self.__checkInheritance(fset, "set")
 		fset.__name__ = f'{fset.__name__}.setter'
@@ -774,7 +781,7 @@ class StateProperty(property):
 		return self
 
 	@cached_property
-	def fget(self):
+	def fget(self) -> Callable[[], StatefulReturnType]:
 		func = self._get
 		if func is None or func.__code__.co_code == b"d\x00S\x00":
 			func = getattr(self.parentCls, "fget", None)
@@ -789,7 +796,7 @@ class StateProperty(property):
 		return func
 
 	@cached_property
-	def fset(self):
+	def fset(self) -> Callable[[StatefulAcceptsType], None]:
 		func = self._set
 		if func is None or func.__code__.co_code == b"d\x00S\x00":
 			return getattr(self.parentCls, "fset", None)
@@ -1066,7 +1073,7 @@ class StateProperty(property):
 			con["preview"] = getsource(con["func"])
 		return self
 
-	def after(self, func):
+	def after(self, func: Callable[[], None]) -> 'StateProperty':
 		self.__options["after.func"] = func
 		return self
 
@@ -1089,7 +1096,19 @@ class StateProperty(property):
 		return self
 
 	# Section .decode
-	def decode(self, *args, **kwargs):
+	def decode(self, *args, **kwargs) -> 'StateProperty':
+		"""Decorator for receiving the decode function
+
+		Parameters
+		----------
+		func : Callable[[StatefulAcceptsType], StatefulDecodedType]
+			The function to decode the value with.
+		*args : List[Any]
+			Arguments to pass to the decode function.
+		**kwargs : Dict[str, Any]
+			Keyword arguments to pass to the decode function.
+		"""
+
 		if args:
 			func, *args = args
 		else:
@@ -1102,7 +1121,14 @@ class StateProperty(property):
 		return self
 
 	# Section .factory
-	def factory(self, func: Callable[[], "Stateful"]):
+	def factory(self, func: Callable[[], StatefulReturnType]):
+		"""Decorator for receiving the factory function
+
+		Parameters
+		----------
+		func : Callable[[], StatefulReturnType]
+			The function to use to create a new value for this property.
+		"""
 		self.__options["factory.func"] = func
 		return self
 
