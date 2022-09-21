@@ -17,20 +17,22 @@ import PySide2
 import sys
 from PySide2 import QtGui
 from PySide2.QtCore import (
-	QByteArray, QEvent, QMimeData, QObject, QPointF, QRect, QRectF, QSize, Qt, QTimer, QUrl, Signal
+	QByteArray, QEvent, QMimeData, QObject, QRect, QRectF, QSize, Qt, QTimer, QUrl, Signal
 )
 from PySide2.QtGui import (
-	QCursor, QDesktopServices, QDrag, QImage, QPainter, QPainterPath, QPixmap, QPixmapCache, QScreen, QShowEvent,
+	QCursor, QDesktopServices, QDrag, QPainter, QPainterPath, QPixmapCache, QScreen, QShowEvent,
 	QSurfaceFormat, QTransform
 )
 from PySide2.QtWidgets import (
-	QAction, QApplication, QGraphicsEffect, QGraphicsItem, QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsScene,
+	QAction, QApplication, QGraphicsItem, QGraphicsRectItem, QGraphicsScene,
 	QGraphicsView, QMainWindow, QMenu, QMenuBar, QOpenGLWidget
 )
 from time import perf_counter, time
 
 from LevityDash.lib.plugins.dispatcher import ValueDirectory as pluginManager
-from LevityDash.lib.ui.frontends.PySide.utils import colorPalette, EffectPainter, getAllParents, itemClipsChildren
+from LevityDash.lib.ui.frontends.PySide.utils import (
+	colorPalette, RendererScene
+)
 from WeatherUnits import Length
 from . import qtLogger as guiLog
 from ...Geometry import AbsoluteFloat, DimensionType, findScreen, getDPI, LocationFlag, parseSize, RelativeFloat, Size
@@ -78,7 +80,7 @@ ViewScale = namedtuple('ViewScale', 'x y')
 
 
 # Section Scene
-class LevityScene(QGraphicsScene):
+class LevityScene(RendererScene):
 	preventCollisions = False
 	editingMode = False
 	frozen: bool
@@ -181,59 +183,6 @@ class LevityScene(QGraphicsScene):
 	@property
 	def clicked(self):
 		return QApplication.instance().mouseButtons() == Qt.LeftButton
-
-	def renderItem(self, item: QGraphicsItem, dispose: bool = False) -> QPixmap:
-		rect = self.view.deviceTransform().mapRect(item.boundingRect())
-		raster = QImage(rect.size().toSize(), QImage.Format_ARGB32)
-		raster.setDevicePixelRatio(self.view.devicePixelRatio())
-		raster.fill(Qt.transparent)
-		painter = EffectPainter(raster)
-		pos = item.pos()
-		renderingPosition = QPointF(10000, 10000)
-		item.setPos(renderingPosition - item.scenePos())
-		painter.setBackgroundMode(Qt.TransparentMode)
-		if wasClipped := item.isClipped():
-			clippingParents = getAllParents(item, filter=itemClipsChildren)
-			list(map(lambda i: i.setFlag(QGraphicsItem.ItemClipsChildrenToShape, False), clippingParents))
-		self.render(painter, rect, QRectF(renderingPosition, rect.size()))
-		if dispose:
-			painter.end()
-			self.removeItem(item)
-			return QPixmap.fromImage(raster)
-		item.setPos(pos)
-		painter.end()
-		if wasClipped:
-			list(map(lambda i: i.setFlag(QGraphicsItem.ItemClipsChildrenToShape, True), clippingParents))
-		return QPixmap.fromImage(raster)
-
-	def bakeEffects(self, item: QGraphicsItem | QPixmap, *effects: QGraphicsEffect) -> QPixmap:
-		# Convert the item to a GraphicsPixmapItem
-		if not isinstance(item, QGraphicsItem):
-			item = QGraphicsPixmapItem(item)
-
-		# Add the item to the scene
-		if item.scene() is not self:
-			self.addItem(item)
-
-		# Apply only the first effect and bake the pixmap
-		if effects:
-			effect, *effects = effects
-			if not issubclass(effect, QGraphicsEffect):
-				guiLog.error('Effect must be a QGraphicsEffect for baking')
-				return item
-			initVars = effect.__init__.__code__.co_varnames
-			if 'owner' in initVars:
-				effect = effect(owner=item)
-			else:
-				effect = effect()
-			item.setGraphicsEffect(effect)
-		item = self.renderItem(item, dispose=True)
-
-		# If there are still effects, recursively bake them
-		if effects:
-			item = self.bakeEffects(item, *effects)
-
-		return item
 
 
 class MenuBar(QMenuBar):
