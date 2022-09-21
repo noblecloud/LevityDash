@@ -1277,12 +1277,16 @@ class Panel(_Panel, Stateful, tag='group'):
 	# 			path += self.mapFromItem(handle, handle.shape())
 	# 	return path.simplified()
 
+	@cached_property
+	def _focusedBoundingRect(self) -> QRectF:
+		path = self.clipPath()
+		for handle in self.resizeHandles.childItems():
+			path += self.mapFromItem(handle, handle.shape())
+		return path.boundingRect()
+
 	def boundingRect(self) -> QRectF:
 		if self.hasFocus() and self.resizeHandles.isEnabled():
-			path = self.clipPath()
-			for handle in self.resizeHandles.childItems():
-				path += self.mapFromItem(handle, handle.shape())
-			return path.boundingRect()
+			return self._focusedBoundingRect
 		return super().boundingRect()
 
 	def grandChildren(self) -> list['Panel']:
@@ -1566,7 +1570,7 @@ class Panel(_Panel, Stateful, tag='group'):
 		emit = self.rect().size() != rect.size()
 		super(Panel, self).setRect(rect)
 		if emit:
-			clearCacheAttr(self, 'marginRect')
+			clearCacheAttr(self, 'marginRect', '_focusedBoundingRect')
 			self.signals.resized.emit(rect)
 		return emit
 
