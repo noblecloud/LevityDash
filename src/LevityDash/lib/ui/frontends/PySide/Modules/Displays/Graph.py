@@ -4,64 +4,70 @@ import platform
 import re
 from abc import abstractmethod
 from asyncio import Task
+from datetime import datetime, timedelta
 from difflib import get_close_matches
-from importlib import reload
-
-from builtins import isinstance
+from enum import Enum
+from functools import cached_property, partial, reduce
 from json import loads
 from types import SimpleNamespace
+from typing import (
+	Any, Callable, ClassVar, Dict, ForwardRef, Iterable, List, Optional, Protocol, runtime_checkable,
+	Sequence, Tuple, Type, TYPE_CHECKING, TypeVar, Union
+)
+from uuid import uuid4
 
 import numpy as np
-from datetime import datetime, timedelta
-from enum import Enum
-from functools import cached_property, reduce
-
+from builtins import isinstance
 from itertools import chain, zip_longest
 from math import inf, prod, sqrt
-from PySide2.QtCore import QLineF, QObject, QPoint, QPointF, QRectF, Qt, QThread, QTimer, Signal, Slot, QRect, QSizeF
-from PySide2.QtGui import QBrush, QColor, QPainter, QPainterPath, QPainterPathStroker, QPen, QPolygonF, QTransform, QCursor, QPixmap, QFontMetricsF
-from PySide2.QtWidgets import (QGraphicsItem, QGraphicsItemGroup, QGraphicsLineItem, QGraphicsRectItem, QGraphicsSceneDragDropEvent, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent, QGraphicsSceneWheelEvent, QToolTip, QMenu,
-                               QStyleOptionGraphicsItem, QGraphicsPixmapItem, QWidget,
-                               QGraphicsEffect)
-
+from PySide2.QtCore import QLineF, QObject, QPoint, QPointF, QRect, QRectF, QSizeF, Qt, QTimer, Signal, Slot
+from PySide2.QtGui import (
+	QBrush, QColor, QCursor, QFontMetricsF, QPainter, QPainterPath, QPainterPathStroker, QPen,
+	QPixmap, QPolygonF, QTransform
+)
+from PySide2.QtWidgets import (
+	QGraphicsEffect, QGraphicsItem, QGraphicsItemGroup, QGraphicsLineItem, QGraphicsPixmapItem, QGraphicsRectItem,
+	QGraphicsSceneDragDropEvent, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent, QGraphicsSceneWheelEvent, QMenu,
+	QStyleOptionGraphicsItem, QToolTip, QWidget
+)
 from qasync import asyncSlot, QApplication
 from rich.repr import auto
 from scipy.constants import golden
 from scipy.interpolate import CubicSpline, interp1d, UnivariateSpline
-from typing import Callable, ClassVar, Iterable, List, Literal, Optional, Sequence, Tuple, Union, Any, Type, TypeVar, Dict, ForwardRef, Protocol, runtime_checkable
-from uuid import uuid4
-
-from WeatherUnits import Measurement, Temperature, Probability, Length, Time, DerivedMeasurement
-from WeatherUnits.time_.time import Second
-from WeatherUnits.length import Centimeter, Millimeter, Inch
-
-from LevityDash.lib.plugins.observation import TimeAwareValue, TimeSeriesItem
-from LevityDash.lib.plugins import Plugins, Plugin, Container
-from LevityDash.lib.plugins.plugin import AnySource, SomePlugin
-from LevityDash.lib.plugins.categories import CategoryItem
-from LevityDash.lib.plugins.dispatcher import ValueDirectory, MultiSourceContainer
-from LevityDash.lib.ui.colors import Color, Gradient
-from LevityDash.lib.ui.frontends.PySide import app
-from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Text
-from LevityDash.lib.ui.frontends.PySide.Modules.Handles.MarginHandles import FigureHandles
-from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Incrementer import Incrementer, IncrementerGroup
-from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Timeframe import GraphZoom
-from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel, NonInteractivePanel, SizeGroup
-from LevityDash.lib.utils.shared import _Panel, ExecThread, LOCAL_TIMEZONE, Unset, closestStringInList, camelCase, joinCase, now, numberRegex, BusyContext
-from LevityDash.lib.stateful import DefaultGroup, StateProperty, Stateful
-from LevityDash.lib.utils.various import DateTimeRange
-from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, GraphicsItemSignals, modifyTransformValues, colorPalette, EffectPainter, SoftShadow, addRect, DebugPaint, addCrosshair
-from LevityDash.lib.utils.data import AxisMetaData, DataTimeRange, findPeaksAndTroughs, TimeFrameWindow, gaussianKernel
-from LevityDash.lib.utils.shared import clamp, clearCacheAttr, disconnectSignal, timestampToTimezone
-from LevityDash.lib.ui.Geometry import getDPI, Size, Margins, Axis, AlignmentFlag, Alignment, DisplayPosition, Dimension, parseSize, size_px, DimensionType
-from LevityDash.lib.plugins.observation import MeasurementTimeSeries
-from LevityDash.lib.config import DATETIME_NO_ZERO_CHAR
 from time import perf_counter, time
 
-from ..Menus import BaseContextMenu, SourceMenu
-from ... import UILogger
-
-from typing import TYPE_CHECKING
+from LevityDash.lib.config import DATETIME_NO_ZERO_CHAR
+from LevityDash.lib.plugins import Container, Plugin, Plugins
+from LevityDash.lib.plugins.categories import CategoryItem
+from LevityDash.lib.plugins.dispatcher import MultiSourceContainer, ValueDirectory
+from LevityDash.lib.plugins.observation import MeasurementTimeSeries, TimeAwareValue, TimeSeriesItem
+from LevityDash.lib.plugins.plugin import AnySource, SomePlugin
+from LevityDash.lib.stateful import DefaultGroup, Stateful, StateProperty
+from LevityDash.lib.ui.colors import Color, Gradient
+from LevityDash.lib.ui.frontends.PySide import app, UILogger
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Text
+from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Incrementer import Incrementer, IncrementerGroup
+from LevityDash.lib.ui.frontends.PySide.Modules.Handles.MarginHandles import FigureHandles
+from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Timeframe import GraphZoom
+from LevityDash.lib.ui.frontends.PySide.Modules.Menus import BaseContextMenu, SourceMenu
+from LevityDash.lib.ui.frontends.PySide.Modules.Panel import NonInteractivePanel, Panel
+from LevityDash.lib.ui.frontends.PySide.utils import (
+	addCrosshair, addRect, colorPalette, DebugPaint, DisplayType, EffectPainter, GraphicsItemSignals,
+	modifyTransformValues, RendererScene, SoftShadow
+)
+from LevityDash.lib.ui.Geometry import (
+	Alignment, AlignmentFlag, Axis, Dimension, DimensionType, DisplayPosition, getDPI, length_px, Margins, parseSize,
+	Size, size_px
+)
+from LevityDash.lib.utils.data import AxisMetaData, DataTimeRange, findPeaksAndTroughs, gaussianKernel, TimeFrameWindow
+from LevityDash.lib.utils.shared import (
+	_Panel, BusyContext, camelCase, clamp, clearCacheAttr, closestStringInList,
+	disconnectSignal, joinCase, LOCAL_TIMEZONE, now, numberRegex, timestampToTimezone, Unset
+)
+from LevityDash.lib.utils.various import DateTimeRange
+from WeatherUnits import DerivedMeasurement, Length, Measurement, Time
+from WeatherUnits.length import Centimeter, Inch, Millimeter
+from WeatherUnits.time_.time import Second
 
 if TYPE_CHECKING:
 	from LevityDash.lib.ui.frontends.PySide.app import LevityScene
@@ -76,7 +82,6 @@ SMOOTH_TYPES = {'linear', 'cubic', 'gaussian'}
 
 
 # Section Surface
-# @DebugPaint
 class Surface(QGraphicsItemGroup):
 	if TYPE_CHECKING:
 		def scene(self) -> LevityScene: ...
@@ -861,6 +866,32 @@ class GraphItemData(Stateful, tag=...):
 	def dataType(self) -> Type[Measurement] | Type[float] | None:
 		return type(self.timeseries.first.value) if self.hasData else None
 
+	def pos_px_to_value(self, x: QPoint | QPointF | int | float | datetime | timedelta) -> TimeSeriesItem | None:
+		if not self.hasData:
+			return None
+
+		time_from_now: timedelta
+
+		if isinstance(x, timedelta):
+			time_from_now = x
+		elif isinstance(x, datetime):
+			time_from_now = x - now()
+		elif isinstance(x, (int, float)):
+			time_from_now = timedelta(seconds=x * self.graph.secondsPerPixel)
+		elif isinstance(x, (QPoint, QPointF)):
+			time_from_now = timedelta(seconds=x.x() * self.graph.secondsPerPixel)
+		else:
+			raise ValueError(f'Invalid type for x: {type(x)}')
+
+		min_from_now = now() - self.timeframe.min
+
+		time_from_now += min_from_now
+
+
+		l = self.smoothed
+		index = round(time_from_now / self.timeframe.range * len(l))
+		i = sorted((0, index, len(l) - 1))[1]
+		return l[i]
 
 class PathType(Enum):
 	Linear = 0
@@ -1272,17 +1303,78 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		self._updateShape()
 
 	def path(self) -> QPainterPath:
-		if self.parent.hasData:
+		if self.data.hasData:
 			return self.mappedPath
 		return QPainterPath()
 
-	def _updateShape(self):
-		qp = QPainterPathStroker()
-		weight = self.weight_px * 2
-		qp.setWidth(max(weight, 30))
-		shape = qp.createStroke(self.mappedPath)
+	def split_path(self, single_path: QPainterPath) -> List[QPainterPath]:
+		start = single_path.elementAt(0)
+		unit_pixel = self.figure.unit_pixel
+		if unit_pixel < 1:
+			unit_pixel = 1
+
+		newPath = QPainterPath()
+		newPath.moveTo(start.x, start.y)
+		sub_paths = [newPath]
+
+		skip_count = 0
+		skipStart = start
+
+		for i in range(1, single_path.elementCount()):
+			current = single_path.elementAt(i)
+			previous = single_path.elementAt(i - 1)
+
+			if abs(current.y - previous.y) * unit_pixel < 1:
+				if skip_count == 0:
+					skipStart = previous
+				skip_count += 1
+			else:
+				if skip_count > 5:
+					if sub_paths[-1].elementCount() < 5:
+						sub_paths.pop()
+
+					skipped_section = QPainterPath()
+					skipped_section.moveTo(skipStart.x, skipStart.y)
+					skipped_section.lineTo(previous.x, previous.y)
+
+					sub_paths.append(skipped_section)
+					sub_paths.append(QPainterPath())
+					sub_paths[-1].moveTo(previous.x, previous.y)
+				skip_count = 0
+				sub_paths[-1].lineTo(current.x, current.y)
+		return sub_paths
+	# @profile
+	def _updateShape(self, path: QPainterPath = None , scale: float = 1):
+		log.verbose(f'{self.data.key.name}: updating shape')
+
 		self.prepareGeometryChange()
+		qp = QPainterPathStroker()
+		weight = self.weight_px
+		weight = sorted((weight, 30, length_px(Length.Centimeter(1))))[1]
+		qp.setWidth(weight)
+		qp.setCapStyle(Qt.RoundCap)
+		path = path or self.data.combinedTransform.map(self._path.translated(-self._path.elementAt(0).x, 0))
+
+		# For whatever reason, QPainterPath.simplify() removes significant chunks of the path
+		# when there are spans of straight lines. This function splits the path into multiple
+		# sub-paths, each of which is simplified individually.
+
+		path = self.merge_paths(self.split_path(path), qp)
+		log.verbose(f'Plot({self.data.key.name}) pixmap by {scale}, inverse {(scale := 1/scale)}')
+
+		path = QTransform.fromScale(scale, scale).map(path)
+		shape = path
 		self._shape = shape
+
+	def merge_paths(self, paths, qp):
+		log.verbose(f'{self.data.key.name}: merging {len(paths)} paths', verbosity=2)
+		path = QPainterPath()
+		path.setFillRule(Qt.WindingFill)
+		for p in paths:
+			p.setFillRule(Qt.WindingFill)
+			p = qp.createStroke(p)
+			path = path.united(p)
+		return path.simplified()
 
 	def scheduleRender(self):
 		if self.renderTask is not None:
@@ -3067,8 +3159,9 @@ class CurrentTimeIndicator(QGraphicsLineItem, Stateful, tag=...):
 		kwargs = self.prep_init(kwargs)
 		self.state = kwargs
 
-	def updatePath(self, *args):
-		self.setLine(0, 0, 0, self.parentItem().rect().height())
+	def updatePath(self, rect = None):
+		self.setLine(0, 0, 0, (rect or self.parentItem().rect()).height())
+		self.updatePosition()
 
 	def updatePosition(self):
 		self.setPos(self.currentPosition, 0)
@@ -3161,6 +3254,8 @@ class GraphPanel(Panel, tag='graph'):
 
 	_scrollable: bool = True
 
+	boundingRect = QGraphicsRectItem.rect
+
 	if TYPE_CHECKING:
 		def scene(self) -> LevityScene: ...
 
@@ -3174,6 +3269,7 @@ class GraphPanel(Panel, tag='graph'):
 		self.graphZoom.setEnabled(not self.frozen)
 		self.updateSyncTimer()
 		self.scene().view.resizeFinished.connect(self.updateSyncTimer)
+		self.setAcceptHoverEvents(True)
 
 	def _init_defaults_(self):
 		super()._init_defaults_()
@@ -3286,7 +3382,11 @@ class GraphPanel(Panel, tag='graph'):
 		self.syncTimer.start()
 
 	def syncDisplay(self):
-		self.proxy.snapToTime(max(self.timeframe.displayPosition, min((figure.figureMinStart for figure in self.figures), default=self.timeframe.displayPosition)))
+		t = max(
+			self.timeframe.displayPosition,
+			min((figure.figureMinStart for figure in self.figures), default=self.timeframe.displayPosition)
+		)
+		self.proxy.snapToTime(t)
 
 	def timeToX(self, time: datetime):
 		pass
@@ -3323,7 +3423,6 @@ class GraphPanel(Panel, tag='graph'):
 		:rtype: float
 		"""
 		return self.width() / (self._timeframe.minutes or self.width() or 1)
-
 
 	@property
 	def pixelsPerHour(self):
@@ -3608,6 +3707,7 @@ class MiniGraph(GraphPanel, tag='mini-graph'):
 		super().__init__(parent, **kwargs)
 		self.graphZoom.setEnabled(False)
 		self.graphZoom.setVisible(False)
+		self.setAcceptHoverEvents(True)
 
 	# @StateProperty(inheritFrom=GraphPanel.annotations, default=__defaults__['annotations'])
 	@StateProperty(default=__defaults__['annotations'])
@@ -3640,10 +3740,6 @@ class GraphProxy(QGraphicsItemGroup):
 		self.setFlag(self.ItemClipsToShape)
 
 		self.graph.timeframe.connectItem(self.onTimeFrameChange)
-
-		self.setHandlesChildEvents(False)
-		t = QTransform()
-		t.scale(1, -1)
 
 	@Slot(Axis)
 	def onTimeFrameChange(self, axis):
@@ -3730,39 +3826,61 @@ class GraphProxy(QGraphicsItemGroup):
 
 	def hoverEnterEvent(self, event: QGraphicsSceneHoverEvent) -> None:
 		event.accept()
-		super(GraphProxy, self).hoverEnterEvent(event)
 
 	def hoverLeaveEvent(self, event: QGraphicsSceneHoverEvent) -> None:
 		event.accept()
-		super(GraphProxy, self).hoverLeaveEvent(event)
 
-	# def hoverMoveEvent(self, event: QGraphicsSceneHoverEvent) -> None:
-	# 	if any(figure.marginRect.contains(event.pos()) for figure in self.graph.figures):
-	# 		event.accept()
-	#
-	# 		x = event.pos().x()
-	# 		x = self.graph.timeframe.min + timedelta(milliseconds=(x*self.graph.msPerPixel))
-	# 		differance = x - datetime.now(tz=LOCAL_TIMEZONE)
-	# 		time = Second(differance.total_seconds()).hour
-	# 		values = []
-	# 		for figure in (i for i in self.graph.figures if i.plots):
-	# 			if not figure.marginRect.contains(event.pos()):
-	# 				continue
-	# 			y = event.pos().y() - figure.marginRect.top()
-	# 			minVal = figure.dataValueRange.min
-	# 			maxVal = figure.dataValueRange.max
-	# 			y = maxVal - (maxVal - minVal)*(y/figure.marginRect.height())
-	# 			values.append((figure, figure.plots[0].dataType(y)))
-	# 		if len(values):
-	# 			values.sort(key=lambda x: len(x[0].plots), reverse=True)
-	# 			value = f'{time} | {" | ".join(f"{i[0].sharedKey.key}: {i[1]}" for i in values)}'
-	# 			QToolTip.showText(event.screenPos(), value)
-	# 	else:
-	# 		QToolTip.hideText()
+	def hoverMoveEvent(self, event: QGraphicsSceneHoverEvent) -> None:
+		values: List[Tuple[int, str]] = []
+		figure_trailing_values: Dict[Figure, str] = {}
+		event.ignore()
+		t = timedelta(seconds=event.pos().x() * self.graph.secondsPerPixel)
+		for figure in self.graph.figures:
+			plot_strings: List[str] = []
+			pos = self.mapToItem(figure, event.pos())
+			if not figure.marginRect.contains(pos):
+				continue
+			count = 0
+			figure_name = figure.sharedKey.name
+			for d in figure.plots:
+				if d.graphic.shape().contains(data_pos := d.graphic.mapFromItem(figure, pos)):
+					count += 1
+					d_name = d.key.name
+					matched_value = d.pos_px_to_value(t).value
 
-	def snapToTime(self, time: datetime):
-		# earliest = min(figure.figureMinStart() for figure in self.graph.figures)
-		timeOffset = self.graph.timeframe.start - time
+					if isinstance(matched_value, Measurement):
+						p = matched_value.precision
+						matched_value = round(matched_value, p)
+					value_string = str(matched_value)
+					if d_name.casefold() == figure_name.casefold():
+						figure_trailing = value_string
+					else:
+						d_name = d_name.lstrip(figure_name)
+						figure_trailing = f''
+						plot_strings.append(f'{d_name}: {value_string}')
+					figure_trailing_values[figure] = figure_trailing
+			if count:
+				if count == 1:
+					if figure_trailing_values.get(figure, '') == '':
+						plot_string = plot_strings[0]
+					else:
+						plot_string = f"{figure_name}: {figure_trailing_values.get(figure, '')}"
+				else:
+					plot_string = f"{figure_name}: {figure_trailing_values.get(figure, '')}\n  " + "\n  ".join(plot_strings)
+				values.append((count, plot_string))
+				event.accept()
+		if len(values):
+			values.sort(key=lambda x: x[0], reverse=True)
+			bottom_text = '\n'.join(i[1] for i in values)
+			t = Second(t).autoAny
+			leading = '+' if t >= 0 else '-'
+			value = f'{leading}{t: simple}\n{bottom_text}'
+			QToolTip.showText(event.screenPos(), value)
+		else:
+			QToolTip.hideText()
+
+	def snapToTime(self, time_: datetime):
+		timeOffset = self.graph.timeframe.start - time_
 		xOffset = timeOffset.total_seconds() * self.graph.pixelsPerSecond
 		self.setPos(xOffset, 0)
 
@@ -3827,6 +3945,8 @@ class Figure(NonInteractivePanel, tag=...):
 	isEmpty: bool = False
 	_acceptsChildren: bool = False
 	axisTransformed: AxisSignal
+
+	boundingRect = QGraphicsRectItem.rect
 
 	if TYPE_CHECKING:
 		def scene(self) -> LevityScene: ...
@@ -3947,7 +4067,7 @@ class Figure(NonInteractivePanel, tag=...):
 			plot.refresh()
 
 	@property
-	def plots(self):
+	def plots(self) -> List[GraphItemData]:
 		return [i for i in self.plotData if i.hasData]
 
 	@StateProperty(default=1.0)
@@ -4168,6 +4288,17 @@ class Figure(NonInteractivePanel, tag=...):
 			m = elastic(v, m)
 		return min(max(m, v), M)
 
+	@property
+	def pixels_per_unit(self) -> float:
+		return float(self.dataValueRange.range / self.margins.absoluteVerticalSpan)
+
+	@property
+	def units_per_pixel(self) -> float:
+		return float(self.margins.absoluteVerticalSpan / self.dataValueRange.range)
+
+	@property
+	def unit_pixel(self) -> float:
+		return float(self.dataValueRange.range / self.margins.absoluteVerticalSpan)
 
 # Section .paint
 # def paint(self, painter, option, widget):
