@@ -1304,7 +1304,10 @@ class Plot(QGraphicsPixmapItem, Stateful):
 			deviceScale = self.scene().view.devicePixelRatio()
 
 			rect = self.figure.rect()
-			rect.setWidth((self.data.data[0][-1] - min(self.data.data[0][0], self.figure.graph.timeframe.historicalStart.timestamp())) * self.figure.graph.pixelsPerSecond)
+			contentsWidth = (self.data.data[0][-1] - min(
+				self.data.data[0][0], self.figure.graph.timeframe.historicalStart.timestamp()
+			)) * self.figure.graph.pixelsPerSecond
+			rect.setWidth(contentsWidth)
 			rect = deviceTransform.mapRect(rect)
 			ratio = rect.width() / rect.height()
 			scaleTo = False
@@ -1328,20 +1331,45 @@ class Plot(QGraphicsPixmapItem, Stateful):
 
 			painter.drawPath(path)
 			painter.end()
-			pixmap = self.scene().bakeEffects(pixmap, *self.effects.values())
 
-			self.prepareGeometryChange()
-			self._updateShape()
+			def bake(pix: QPixmap, *effects: Effect):
+				scene = RendererScene()
+				return scene.bakeEffects(pix, *effects)
+
+			def finish(self, scaleTo_, pix: QPixmap):
+				self.prepareGeometryChange()
+				if scaleTo_:
+					pix = pix.scaledToWidth(scaleTo_.width(), Qt.SmoothTransformation)
+				self.setPixmap(pix)
+				QApplication.instance().processEvents()
+				self.update()
+
+			def send(pix: QPixmap):
+				QApplication.instance().pool.run_threaded_process(bake, pix, *self.effects.values(), callback=partial(finish, self, scaleTo))
+			loop.call_soon(send, pixmap)
+
 			if scaleTo:
-				scale = rect.width() / scaleTo.width()
-				pixmap = pixmap.scaled(scaleTo.toSize(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-				self.setScale(scale)
+				pixmap = pixmap.scaledToWidth(scaleTo.width(), Qt.SmoothTransformation)
+				self.setScale(rect.width() / scaleTo.width())
 			else:
 				self.setScale(1)
 
 			self.setPixmap(pixmap)
-			self.pixmapTransformCache = None
 
+			loop.call_soon(lambda: QApplication.instance().pool.run_threaded_process(
+				self._updateShape, path, rect.width() / scaleTo.width() if scaleTo else 1
+			))
+
+
+
+	def _debug_paint(self, painter, option, widget):
+		self._normal_paint(painter, option, widget)
+		# QPen(self.debugColor)
+		painter.setPen(self._debug_paint_color)
+		fill = painter.pen().color()
+		fill.setAlpha(50)
+		painter.setBrush(fill)
+		painter.drawPath(self._shape)
 
 # Section LinePlot
 class LinePlot(Plot):

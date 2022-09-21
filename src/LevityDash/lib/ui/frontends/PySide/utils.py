@@ -835,3 +835,117 @@ class GeometryManaged(Protocol):
 
 	def _geometryManagerPositionChange(self, value: QPoint | QPointF) -> Tuple[bool, QPoint | QPointF]:
 		...
+
+
+class RendererScene(QGraphicsScene):
+
+	def renderItem(self, item: QGraphicsItem, dispose: bool = False) -> QPixmap:
+		pixel_ratio = QApplication.instance().devicePixelRatio()
+		t = QTransform.fromScale(pixel_ratio, pixel_ratio)
+		rect = t.mapRect(item.boundingRect())
+		raster = QImage(rect.size().toSize(), QImage.Format_ARGB32)
+		raster.setDevicePixelRatio(pixel_ratio)
+		raster.fill(Qt.transparent)
+		painter = EffectPainter(raster)
+		pos = item.pos()
+		painter.setBackgroundMode(Qt.TransparentMode)
+		self.render(painter, rect, QRectF(QPoint(0, 0), rect.size()))
+		if dispose:
+			painter.end()
+			self.removeItem(item)
+			return QPixmap.fromImage(raster)
+		item.setPos(pos)
+		painter.end()
+		return QPixmap.fromImage(raster)
+
+	def bakeEffects(self, item: QGraphicsItem | QPixmap, *effects: QGraphicsEffect) -> QPixmap:
+		# Convert the item to a GraphicsPixmapItem
+		if not isinstance(item, QGraphicsItem):
+			item = QGraphicsPixmapItem(item)
+
+		# Add the item to the scene
+		if item.scene() is not self:
+			self.addItem(item)
+
+		# Apply only the first effect and bake the pixmap
+		if effects:
+			effect, *effects = effects
+			if isinstance(effect, type) and not issubclass(effect, QGraphicsEffect):
+				log.error('Effect must be a QGraphicsEffect for baking')
+				return item
+			initVars = effect.__init__.__code__.co_varnames
+			if 'owner' in initVars:
+				effect = effect(owner=item)
+			else:
+				effect = effect()
+			item.setGraphicsEffect(effect)
+		item = self.renderItem(item, dispose=True)
+
+		# If there are still effects, recursively bake them
+		if effects:
+			item = self.bakeEffects(item, *effects)
+		QApplication.instance().processEvents()
+		return item
+
+
+class Worker(QtCore.QRunnable):
+	"""Worker thread for running background tasks."""
+
+	def __init__(self, fn, *args, **kwargs):
+		super(Worker, self).__init__()
+		# Store constructor arguments (re-used for processing)
+		self.fn = fn
+		self.args = args
+		self.kwargs = kwargs
+		self.signals = WorkerSignals()
+
+	@Slot()
+	def run(self):
+		"""Initialise the runner function with passed args, kwargs."""
+		log.verbose(f'Running {self.fn.__name__}')
+		try:
+			result = self.fn(
+				*self.args, **self.kwargs,
+			)
+		except Exception as e:
+			traceback.print_exc()
+			exctype, value = sys.exc_info()[:2]
+			self.signals.error.emit((exctype, value, traceback.format_exc()))
+			log.error(f'Error running {self.fn.__name__}')
+			log.exception(e)
+		else:
+			self.signals.result.emit(result)
+		finally:
+			self.signals.finished.emit()
+			log.verbose(f'Finished {self.fn.__name__}')
+
+
+class WorkerSignals(QtCore.QObject):
+	"""
+	Defines the signals available from a running worker thread.
+	Supported signals are:
+	finished
+			No data
+	error
+			`tuple` (exctype, value, traceback.format_exc() )
+	result
+			`object` data returned from processing, anything
+	"""
+	finished = QtCore.Signal()
+	error = QtCore.Signal(tuple)
+	result = QtCore.Signal(object)
+	progress = QtCore.Signal(int)
+
+
+class Pool(QtCore.QThreadPool):
+
+	def run_threaded_process(self, func, *args, callback: Callable = None, **kwargs):
+		"""Execute a function in the background with a worker"""
+
+		worker = Worker(func, *args, **kwargs)
+		self.start(worker)
+		worker.signals.result.connect(callback)
+		# worker.signals.progress.connect(progress_fn)
+		return
+
+QApplication.instance().pool = Pool()
