@@ -61,7 +61,10 @@ from difflib import get_close_matches
 
 from LevityDash.lib.log import LevityLogger, debug
 from LevityDash.lib.utils import Unset, get, OrUnset, levenshtein
-from LevityDash.lib.utils.shared import _Panel, clearCacheAttr, DotDict, DeepChainMap, ExecThread, recursiveRemove, sortDict, guarded_cached_property
+from LevityDash.lib.utils.shared import (
+	_Panel, ActionPool, clearCacheAttr, DotDict, DeepChainMap, ExecThread, OrderedSet,
+	recursiveRemove, sortDict, guarded_cached_property
+)
 from LevityDash.lib.plugins.categories import CategoryItem
 
 STATEFUL_DEBUG = int(os.environ.get("STATEFUL_DEBUG", 0))
@@ -694,8 +697,10 @@ class StateProperty(property):
 		if after := self.__options.get("after", False):
 			if (func := after.get("func", None)) is not None:
 				if (pool := kwargs.get("afterPool", None)) is not None:
+					if pool.instance is not owner:
+						pool = pool.new(owner)
 					log.verbose(f"Adding function to after pool", verbosity=5)
-					pool.append((func, owner))
+					pool.add(func)
 				else:
 					log.verbose(f"Executing after method for {owner}", verbosity=5)
 					func(owner)
@@ -1071,6 +1076,7 @@ class StateProperty(property):
 
 	# Section .encode
 	def encode(self, *args, **kwargs):  # TODO: Add warning when function is improperly named
+		"""Encode the value of this property for storage in the database."""
 		if args:
 			func, *args = args
 		else:
@@ -1455,7 +1461,7 @@ class StateProperty(property):
 
 	# Section .setState()
 	##@profile
-	def setState(self, owner, state, afterPool: list = None):
+	def setState(self, owner, state, afterPool: OrderedSet = None):
 		if UnsetReturn not in self.returns:
 			if (existing := self.existing(owner)) is not UnsetExisting and existing is not state:
 				if updateFunc := self.__options.get("update.func", False):
@@ -2046,6 +2052,7 @@ class Stateful(metaclass=StatefulMetaclass):
 	__defaults__: ChainMap[str, Any]
 	__tag__: ClassVar[str] = "Stateful"
 	_set_state_items_: set
+	_unset_keys_: set = None
 	_rawItemState: Dict[str, Any]
 
 	statefulItems = StatefulMetaclass.statefulItems
@@ -2109,6 +2116,33 @@ class Stateful(metaclass=StatefulMetaclass):
 	def statefulParent(self, value):
 		self.__statefulParent = value
 
+	@property
+	def stateful_level(self) -> int:
+		try:
+			p = self.statefulParent
+			if p is None:
+				return 0
+			return p.stateful_level + 1
+		except AttributeError:
+			return 0
+
+	@property
+	def is_loading(self) -> bool:
+		return bool(self._unset_keys_)
+
+	@property
+	def state_is_loading(self) -> bool:
+		if self.statefulParent is None:
+			return self.is_loading or False
+		return self.is_loading or self.statefulParent.state_is_loading
+
+	@cached_property
+	def _actionPool(self) -> ActionPool:
+		try:
+			return self.statefulParent._actionPool.new(self)
+		except AttributeError:
+			return ActionPool(self, trace='acton')
+
 	# Section .shared
 	@StateProperty(key="shared", default=DeepChainMap(), sortOrder=0, repr=False)
 	def shared(self) -> DeepChainMap:
@@ -2152,6 +2186,7 @@ class Stateful(metaclass=StatefulMetaclass):
 	def ownShared(self) -> dict:
 		return recursiveRemove(dict(self._shared.originMap.items()), self._shared_values)
 
+	# Section .setItemState
 	def setItemState(self, state: Mapping[str, Any] | List, *args, **kwargs):
 		if isinstance(state, Stateful):
 			state = state.state
@@ -2170,18 +2205,14 @@ class Stateful(metaclass=StatefulMetaclass):
 			)
 			if isinstance(state, acceptedSingleValueTypes):
 				# try:
-				item = [
+				prop = [
 					v
 					for v in self.statefulItems.values()
 					if v.actions & {"set"} and v.singleVal and isinstance(state, v.returns)
 				].pop()
-				item.setState(self, state, afterPool=kwargs.get("afterPool", []))
-				return self
-			# except Exception as e:
-			# 	log.exception(e)
-			# 	log.error(f"Unable to set state for {state}")
-			# 	return
-			raise TypeError(f"Unable to set state for {self} with {state}")
+				state = {prop.key: state}
+			else:
+				raise TypeError(f"Unable to set state for {self} with {state}")
 
 		items: Dict[str, StateProperty] = {
 			k: v
@@ -2194,74 +2225,70 @@ class Stateful(metaclass=StatefulMetaclass):
 			if "set" not in v.actions and not v._varifyReturnType(Stateful)
 		}
 
+		self._unset_keys_ = set(items.values())
+
 		if isinstance(state, dict) and getOnlyItems:
 			for i in getOnlyItems & set(state.keys()):
 				state.pop(i, None)
 
 		shared = getattr(self, 'shared', Unset) or DeepChainMap()
-		afterPool: List[Tuple[Callable, Stateful]] = []
-		match state:
-			case dict() | DeepChainMap():
-				unwraps = []
-				for prop in items.values():
-					if prop.unwrappedKeys:
-						if prop.key not in prop.unwrappedKeys:
-							pass
-						elif prop.unwraps:
-							unwraps.append(prop)
-							if len(state) == 1:
-								break
-							continue
-					elif prop.unwraps:
-						unwraps.append(prop)
-						if len(state) == 1:
-							break
-						continue
+		afterPool: ActionPool = self._actionPool
+		unwraps = []
+		for prop in items.values():
+			if prop.unwrappedKeys:
+				if prop.key not in prop.unwrappedKeys:
+					pass
+				elif prop.unwraps:
+					unwraps.append(prop)
+					if len(state) == 1:
+						break
+					continue
+			elif prop.unwraps:
+				unwraps.append(prop)
+				if len(state) == 1:
+					break
+				continue
 
-					propKey = prop.key
-					if propKey not in state:
-						continue
+			propKey = prop.key
+			if propKey not in state:
+				self._unset_keys_.discard(prop)
+				continue
+			else:
+				value = state.pop(propKey)
+				if (sharedValue := shared.get(propKey, Unset)) is not Unset:
+					sharedType = type(sharedValue)
+					sharedType = sharedType if not issubclass(sharedType, DeepChainMap) else dict
+					if isinstance(value, sharedType):
+						match sharedValue:
+							case dict():
+								value = DeepChainMap(value, sharedValue).to_dict()
+							case DeepChainMap():
+								value = sharedValue.to_dict(value)
+							case _:
+								value = sharedValue
 					else:
-						value = state.pop(propKey)
-						if (sharedValue := shared.get(propKey, Unset)) is not Unset:
-							sharedType = type(sharedValue)
-							sharedType = sharedType if not issubclass(sharedType, DeepChainMap) else dict
-							if isinstance(value, sharedType):
-								match sharedValue:
-									case dict():
-										value = DeepChainMap(value, sharedValue).to_dict()
-									case DeepChainMap():
-										value = sharedValue.to_dict(value)
-									case _:
-										value = sharedValue
-							else:
-								statefulType = prop.returnsFilter(Stateful)
-								if (
-									prop.isStatefulReference
-									and isinstance(value, statefulType.singleStatefulItemTypes)
-									and statefulType is not UnsetReturn
-								):
-									statefulType: Type[Stateful]
-									subProp = statefulType.findPropForType(type(value))
-									if isinstance(sharedValue, DeepChainMap) and subProp is not None:
-										value = sharedValue.to_dict({subProp.key: value})
+						statefulType = prop.returnsFilter(Stateful)
+						if (
+							prop.isStatefulReference
+							and isinstance(value, statefulType.singleStatefulItemTypes)
+							and statefulType is not UnsetReturn
+						):
+							statefulType: Type[Stateful]
+							subProp = statefulType.findPropForType(type(value))
+							if isinstance(sharedValue, DeepChainMap) and subProp is not None:
+								value = sharedValue.to_dict({subProp.key: value})
 
-						prop.setState(self, value, afterPool=afterPool)
-				if len(unwraps) == 1:
-					prop = unwraps[0]
-					prop.setState(self, state)
-				elif len(unwraps) > 1:
-					raise ValueError("Multiple unwrapped properties found", unwraps, state)
+				prop.setState(self, value, afterPool=afterPool)
+				self._unset_keys_.discard(prop)
+		if len(unwraps) == 1:
+			prop = unwraps[0]
+			prop.setState(self, state)
+			self._unset_keys_.discard(prop)
+		elif len(unwraps) > 1:
+			raise ValueError("Multiple unwrapped properties found", unwraps, state)
 
-			case list():
-				if prop := [i for i in items.values() if i.options.get("singleVal", False) == "force"]:
-					prop[0].setState(self, state)
-
-		if afterPool:
-			log.verbose(f"Executing {len(afterPool)} items in afterPool for {self.__class__.__name__}", verbosity=5)
-			funcs = [partial(f, self) for f, _ in afterPool]
-			for f in funcs:
-				f()
+		if afterPool.can_execute:
+			afterPool.execute()
 		return
 
 	# Section .getItemState
@@ -2547,6 +2574,10 @@ class Stateful(metaclass=StatefulMetaclass):
 				value = prop.decodeValue(value)
 				score += prop.scoreValue(self, value)
 		return score
+
+	def __del__(self):
+		if self._actionPool.up is not self._actionPool:
+			self._actionPool.up.remove(self._actionPool)
 
 	def __rich_repr__(self, exclude: set = None):
 

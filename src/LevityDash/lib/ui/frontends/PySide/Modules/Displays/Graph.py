@@ -1683,6 +1683,7 @@ class AnnotationText(Text):
 	def delete(self):
 		if scene := self.scene():
 			scene.removeItem(self)
+			self._actionPool.delete()
 			return
 		if groupRemove := getattr(self.labelGroup, 'removeItem', None) is not None:
 			groupRemove(self)

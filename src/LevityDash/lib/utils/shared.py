@@ -1843,3 +1843,214 @@ class ExecThread(QObject):
 		self.args = args or self.args
 		self.kwargs = kwargs or self.kwargs
 		self.thread.start()
+
+
+T = TypeVar("T")
+
+
+Index = NamedTuple("Index", [("previous", Any), ("current", Any), ("next", Any)])
+
+@dataclass
+class Index:
+	previous: Optional['Index'] = None
+	current: 'Index' = None
+	next: Optional['Index'] = None
+
+
+class OrderedSet(MutableSet[T]):
+
+	map = cached_property(lambda self: {})
+	sub_maps = cached_property(lambda self: {})
+
+	def __init__(self, iterable=None):
+		self.end = end = []
+		end += [None, end, end]  # sentinel node for doubly linked list
+
+		if iterable is not None:
+			self |= iterable
+
+	def __len__(self):
+		return len(self.map)
+
+	def __contains__(self, key):
+		return key in self.map
+
+	def add(self, key: T):
+		if key not in self.map:
+			end = self.end
+			curr = end[1]
+			curr[2] = end[1] = self.map[key] = [key, curr, end]
+
+	def add_at_beginning(self, key: T):
+		if key not in self.map:
+			end = self.end
+			curr = end[2]
+			curr[1] = end[2] = self.map[key] = [key, end, curr]
+
+	def discard(self, key):
+		if key in self.map:
+			key, prev, next = self.map.pop(key)
+			prev[2] = next
+			next[1] = prev
+
+	def remove(self, key):
+		if key not in self.map:
+			raise KeyError(key)
+		self.discard(key)
+
+	def __iter__(self):
+		end = self.end
+		curr = end[2]
+		while curr is not end:
+			yield curr[0]
+			curr = curr[2]
+
+	def __reversed__(self):
+		end = self.end
+		curr = end[1]
+		while curr is not end:
+			yield curr[0]
+			curr = curr[1]
+
+	def pop(self, last=True):
+		if not self:
+			raise KeyError('set is empty')
+		key = next(reversed(self)) if last else next(iter(self))
+		self.discard(key)
+		return key
+
+	def clear(self) -> None:
+		self.map.clear()
+		self.end = end = []
+		end += [None, end, end]  # sentinel node for doubly linked list
+
+	def __repr__(self):
+		if not self:
+			return f'{self.__class__.__name__}()'
+		return f'{self.__class__.__name__}({list(self)!r})'
+
+	def __eq__(self, other):
+		if isinstance(other, OrderedSet):
+			return len(self) == len(other) and list(self) == list(other)
+		return set(self) == set(other)
+
+	def __del__(self):
+		self.clear()  # remove circular references
+
+	def __reduce__(self):
+		return self.__class__, (list(self),)
+
+
+class ActionPool(OrderedSet):
+	up: 'ActionPool'
+	__len: int = cached_property(lambda self: 0)
+	__contextLevel: int = cached_property(lambda self: 0)
+	__active: bool = cached_property(lambda self: False)
+
+	def __init__(self, instance: 'Stateful', trace = None):
+		self.instance = instance
+		self.root = self
+		self.up = self
+		super().__init__()
+
+	def __enter__(self):
+		self.__contextLevel += 1
+		return self
+
+	def __exit__(self, exc_type, exc_val, exc_tb):
+		self.__contextLevel -= 1
+		if self.__contextLevel <= 0:
+			self.__contextLevel = 0
+			if self.can_execute: self.execute()
+
+	def __repr__(self):
+		return f'{self.__class__.__name__}({type(self.instance).__name__} items: {len(list(self))}, total: {self.total_length})'
+
+	def __hash__(self):
+		return id(self)
+
+	def __len__(self):
+		return self.__len
+
+	def __true_len__(self):
+		return super().__len__()
+
+	def __bool__(self) -> bool:
+		return bool(self.__len) and all(bool(pool) for pool in self.sub_maps.values())
+
+	def new(self, instance: 'Stateful') -> 'ActionPool':
+		self.add(a := ActionPool(instance, trace='new'))
+		return a
+
+	def add_at_beginning(self, key: T):
+		super().add_at_beginning(key)
+
+	def add(self, other, first: bool = False):
+		super().add(other) if not first else self.add_at_beginning(other)
+		if isinstance(other, ActionPool):
+			other.up = self
+			other.root = self.root
+			self.sub_maps[other.instance] = other
+		self.__len += 1
+
+	def discard(self, other):
+		super().discard(other)
+		self.__len -= 1
+
+	def clear(self):
+		super().clear()
+		self.__len = 0
+
+	def pop(self, last=True):
+		popped = super().pop(last)
+		self.__len -= 1
+		return popped
+
+	def remove(self, key):
+		super().remove(key)
+		self.__len -= 1
+
+	@property
+	def total_length(self) -> int:
+		return sum(pool.total_length for pool in self.sub_maps.values()) + self.__len
+
+	@property
+	def can_execute(self) -> bool:
+		if self.up is self:
+			return not self.instance.is_loading and not self.__contextLevel and not self.__active
+		return not self.instance.state_is_loading and not self.__contextLevel and not self.__active# and self.up.can_execute
+
+	def execute(self):
+		self.__active = True
+		utilLog.verbose(f"Executing {len(self)} items in afterPool for {self.__class__.__name__}", verbosity=5)
+		if type(self.instance).__name__ in {'HourLabels', 'DayLabels', 'WeekLabels', 'MonthLabels', 'YearLabels'}:
+			return
+		for action in self:
+			self.discard(action)
+			if isinstance(action, ActionPool):
+				action.execute()
+			else:
+				action(self.instance)
+		self.__active = False
+
+	def delete(self):
+		self.__del__()
+
+	def __del__(self):
+		for pool in list(self.sub_maps.values()):
+			pool.__del__()
+		if self.up is not self:
+			self.up.discard(self)
+
+
+def defer(func):
+
+	@wraps(func)
+	def wrapper(self, *args, **kwargs):
+		if (pool := getattr(self, '_actionPool', None)) is not None:
+			if pool.can_execute:
+				return func(self, *args, **kwargs)
+			else:
+				pool.add(func)
+
+	return wrapper

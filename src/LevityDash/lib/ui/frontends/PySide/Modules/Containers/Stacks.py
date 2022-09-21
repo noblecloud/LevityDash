@@ -523,7 +523,7 @@ class Stack(Panel, tag='stack'):
 		return [getter(i) for i in sorted(self.geometries.values(), key=lambda i: i.index)]
 
 	def setGeometries(self, manualSize: Size.Height | Size.Width | float | int | Length = None, exclude=None):
-		if not self.geometries or self.scene().view.status != 'Ready':
+		if not self.geometries or self.state_is_loading:
 			return  # no items
 
 		self._dividers.clear()
@@ -615,33 +615,34 @@ class Stack(Panel, tag='stack'):
 		elif size.height.relative and position.y.absolute:
 			position.y = position.y.toRelative(own_ortho_size_px)
 
-		for index, geometry in enumerate(geometries):
-			geometry.index = index
-			geometry.position = Position(position)
+		with self._actionPool as pool:
+			for index, geometry in enumerate(geometries):
+				geometry.index = index
+				geometry.position = Position(position)
 
-			if (fixedSize := getattr(geometry.surface, 'fixedSize', None)) is not None:
-				fixedSize = fixedSize.toRelativeF(own_size_px)
-				geometry.size = Size(PrimarySize(fixedSize), orthoSize, unsorted=True)
-				offset = Position(PrimaryPosition(fixedSize + spacing), orthoOffset, unsorted=True)
-			else:
-				geometry.size = size
-				offset = defaultOffset
-
-			geometry.updateSurface()
-			position += offset
-
-			if dividers and index < length - 1:
-				if self._dividers:
-					try:
-						firstPoint, secondPoint = [i + offset for i in self._dividers[-1]]
-					except RecursionError as e:
-						firstPoint, secondPoint = self._dividers[-1]
+				if (fixedSize := getattr(geometry.surface, 'fixedSize', None)) is not None:
+					fixedSize = fixedSize.toRelativeF(own_size_px)
+					geometry.size = Size(PrimarySize(fixedSize), orthoSize, unsorted=True)
+					offset = Position(PrimaryPosition(fixedSize + spacing), orthoOffset, unsorted=True)
 				else:
-					itemSize, _ = getSize(geometry)
-					itemSize += padding.primaryLeading
-					firstPoint = Position(PrimaryPosition(itemSize + (spacing / 2)), dividerLeading, unsorted=True)
-					secondPoint = Position(PrimaryPosition(itemSize + (spacing / 2)), dividerTrailing, unsorted=True)
-				self._dividers.append((firstPoint, secondPoint))
+					geometry.size = size
+					offset = defaultOffset
+
+				geometry.updateSurface()
+				position += offset
+
+				if dividers and index < length - 1:
+					if self._dividers:
+						try:
+							firstPoint, secondPoint = [i + offset for i in self._dividers[-1]]
+						except RecursionError as e:
+							firstPoint, secondPoint = self._dividers[-1]
+					else:
+						itemSize, _ = getSize(geometry)
+						itemSize += padding.primaryLeading
+						firstPoint = Position(PrimaryPosition(itemSize + (spacing / 2)), dividerLeading, unsorted=True)
+						secondPoint = Position(PrimaryPosition(itemSize + (spacing / 2)), dividerTrailing, unsorted=True)
+					self._dividers.append((firstPoint, secondPoint))
 
 	def swap(self, first: int, second: int) -> None:
 		"""Swap the positions of two items in the stack."""
