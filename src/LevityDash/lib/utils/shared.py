@@ -1,6 +1,8 @@
 from abc import abstractmethod
+from collections.abc import MutableSet, Sequence
+from dataclasses import dataclass
 from difflib import SequenceMatcher
-from functools import cached_property, lru_cache, partial
+from functools import cached_property, lru_cache, partial, wraps
 
 from gc import get_referrers
 
@@ -32,7 +34,10 @@ from pytz import utc
 from WeatherUnits import Measurement
 
 from time import time
-from typing import Any, Callable, ForwardRef, Hashable, Iterable, List, Mapping, Optional, Tuple, Type, TypeVar, Union, Set, Final, ClassVar, Dict, Protocol, runtime_checkable, get_args
+from typing import (
+	Any, Callable, ForwardRef, Hashable, Iterable, List, Mapping, NamedTuple, Optional, Tuple, Type,
+	TypeVar, Union, Set, Final, ClassVar, Dict, Protocol, runtime_checkable, get_args
+)
 from types import NoneType, GeneratorType, FunctionType, UnionType
 
 from enum import Enum, EnumMeta, IntFlag
@@ -421,8 +426,11 @@ def formatDate(value, tz: Union[str, timezone], utc: bool = False, format: str =
 def clearCacheAttr(obj: object, *attr: str):
 	for a in attr:
 		try:
-			delattr(obj, a)
+			del obj.__dict__[a]
+			continue
 		except AttributeError:
+			pass
+		except KeyError:
 			pass
 
 
