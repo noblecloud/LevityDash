@@ -2619,8 +2619,6 @@ class Geometry:
 
 	@property
 	def absoluteWidth(self) -> Size.Width:
-		if self.size.width.absolute:
-			return self.width
 		return self.width.toAbsolute(self.relativeToRect().size().width())
 
 	@absoluteWidth.setter
@@ -2649,8 +2647,6 @@ class Geometry:
 
 	@property
 	def absoluteHeight(self) -> Size.Height:
-		if self.size.height.absolute:
-			return self.height
 		return self.height.toAbsolute(self.relativeToRect().size().height())
 
 	@absoluteHeight.setter
@@ -2705,8 +2701,6 @@ class Geometry:
 
 	@property
 	def absoluteY(self) -> Position.Y:
-		if self.position.y.absolute:
-			return self.y
 		return self.y.toAbsolute(self.relativeToRect().size().height())
 
 	@absoluteY.setter
@@ -3256,6 +3250,15 @@ def parseSize(value: SizeInput, default: SizeOutput = UNSET, allowFloat: bool = 
 			raise ValueError(f'{value} is not a valid value and no default was set')
 
 
+def length_px(value: Length, screen: QScreen = None, dpi: float = None) -> float | TypeError:
+	if not isinstance(value, Length):
+		raise TypeError(f'Expected Length, got {type(value)}')
+	if dpi is None:
+		dpi = getDPI(screen)
+	as_inch = Length.Inch(value)
+	return float(as_inch) * dpi
+
+
 def size_px(
 	value: SizeOutput,
 	relativeTo: Union['Geometry', Number],
@@ -3267,6 +3270,8 @@ def size_px(
 		else:
 			if isinstance(relativeTo, Geometry):
 				value = value.toAbsoluteF(relativeTo.absoluteHeight if dimension == DimensionType.height else relativeTo.absoluteWidth)
+			elif isinstance(relativeTo, QRect | QRectF):
+				value = value.toAbsoluteF(relativeTo.height() if dimension == DimensionType.height else relativeTo.width())
 			elif isinstance(relativeTo, Number):
 				value = value.toAbsoluteF(relativeTo)
 			else:
