@@ -595,7 +595,9 @@ class LevityMainWindow(QMainWindow):
 		g.moveCenter(screen.availableGeometry().center())
 		self.setGeometry(g)
 
-		if fullscreen or '--fullscreen' in sys.argv:
+		similarity = (g.width() / screen.availableSize().width() + g.height() / screen.availableSize().height()) / 2
+
+		if fullscreen or '--fullscreen' in sys.argv or similarity > 0.95:
 			self.showFullScreen()
 
 	def buildMenu(self):
