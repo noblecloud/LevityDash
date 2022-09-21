@@ -11,7 +11,7 @@ from typing import (
 )
 from uuid import UUID, uuid4
 
-from math import prod
+from math import inf, prod
 from PySide2.QtCore import (
 	QByteArray, QMargins, QMimeData, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt, QThread, QTimer, Slot
 )
@@ -69,7 +69,7 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 	async def parentResized(self, *args):
 		self.updatePath()
 
-	def updatePath(self):
+	def updatePath(self) -> None:
 		rect = self.parent.rect()
 		if o := self.offset_px:
 			rect.adjust(-o, -o, o, o)
@@ -112,7 +112,7 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 		self.setPath(path)
 		self.setEnabled(path.elementCount() > 0)
 
-	def updatePen(self):
+	def updatePen(self) -> None:
 		pen = self.pen()
 		weight = self.weight
 		color = self.color
@@ -331,7 +331,7 @@ class SizeGroup:
 	def addItem(self, item: 'Text'):
 		self.items.add(item)
 		item._sized = self
-		loop.call_later(.5, partial(self.adjustSizes, item))
+		loop.call_later(.5, partial(self.adjustSizes, item, reason='addItem'))
 
 	def removeItem(self, item: 'Text'):
 		self.items.remove(item)
@@ -341,7 +341,7 @@ class SizeGroup:
 	def sharedFontSize(self, item) -> int:
 		sizes: List[int] = list(self.sizes)
 		if len(sizes) == 0:
-			self.__dict__.pop('sizes', None)
+			clearCacheAttr(self, 'sizes')
 			sizes = list(self.sizes)
 		if len(sizes) == 1:
 			return sizes[0]
@@ -378,6 +378,9 @@ class SizeGroup:
 			height = max(sum(i.limitRect.height() for i in group) / len(group), 10)
 			groups[round(height / 10) * 10] |= group
 		return dict(groups)
+
+	def clearSizes(self):
+		self.__dict__.pop('sizes', None)
 
 	def sharedY(self, item: 'Text') -> float:
 		alignedItems = self.getSimilarAlignedItems(item)

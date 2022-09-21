@@ -8,6 +8,7 @@ from dateutil.parser import parser
 from PySide2.QtCore import QObject, QPoint, QPointF, QRectF, Signal
 from PySide2.QtGui import QBrush, QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPen, Qt, QTransform
 from PySide2.QtWidgets import QGraphicsItem, QGraphicsPathItem
+from qasync import asyncSlot
 from rich.repr import rich_repr
 
 import WeatherUnits as wu
@@ -19,7 +20,7 @@ from LevityDash.lib.ui.fonts import defaultFont, FontWeight
 from LevityDash.lib.ui.frontends.PySide.utils import addCrosshair, addRect, colorPalette, DebugPaint
 from LevityDash.lib.ui.Geometry import Alignment, AlignmentFlag, Geometry, getDPI, Size
 from LevityDash.lib.ui.icons import fa as FontAwesome, Icon
-from LevityDash.lib.utils.shared import _Panel, ClosestMatchEnumMeta, now, TextFilter
+from LevityDash.lib.utils.shared import _Panel, ActionPool, ClosestMatchEnumMeta, defer, now, TextFilter
 
 loop = get_running_loop()
 
@@ -38,8 +39,12 @@ class ScaleType(str, Enum, metaclass=ClosestMatchEnumMeta):
 @DebugPaint
 @rich_repr
 class Text(QGraphicsPathItem):
+
+	_actionPool: ActionPool = cached_property(lambda self: ActionPool(self, trace='TextItem'))
+
 	_value: Container
 	_parent: _Panel
+	_textRect: QRectF = None
 
 	__alignment: Alignment
 	__modifier: Optional[dict]
@@ -115,7 +120,33 @@ class Text(QGraphicsPathItem):
 			self.setFilter(_filter, True)
 
 		if hasattr(self.parent, 'signals') and hasattr(self.parent.signals, 'resized'):
-			self.parent.signals.resized.connect(self.updateTransform)
+			self.parent.signals.resized.connect(self.asyncUpdateTransform)
+
+	def setParentItem(self, parent: QGraphicsItem) -> None:
+		if (currentParent := self.parentItem()) is not parent:
+			try:
+				currentParent._actionPool.discard(self._actionPool)
+			except AttributeError:
+				pass
+		super(Text, self).setParentItem(parent)
+		if parent is not None:
+			try:
+				parent._actionPool.add(self._actionPool)
+			except AttributeError:
+				pass
+
+	@property
+	def is_loading(self) -> bool:
+		try:
+			return self.parent.is_loading
+		except AttributeError:
+			return self.topLevelItem().is_loading
+
+	@property
+	def state_is_loading(self) -> bool:
+		if self.parent is None:
+			return self.is_loading or False
+		return self.is_loading or self.parent.state_is_loading
 
 	def __rich_repr__(self):
 		yield 'text', self.text
@@ -285,7 +316,12 @@ class Text(QGraphicsPathItem):
 	def limitRect(self) -> QRectF:
 		return self.parent.marginRect
 
+	@asyncSlot()
+	async def asyncUpdateTransform(self, *args, **kwargs):
+		self.updateTransform(*args, **kwargs)
+
 	# Section Transform
+	@defer
 	def updateTransform(self, rect: QRectF = None, updateShared: bool = True, updatePath: bool = True, *args):
 		transform = QTransform()
 		self.resetTransform()
@@ -299,7 +335,7 @@ class Text(QGraphicsPathItem):
 			limitRect.setHeight(height)
 			limitRect.moveCenter(center)
 
-		rect = self._textRect
+		rect = self._textRect or self.__updatePath()
 		# if rect.isValid() and limitRect.isValid():
 		self.setTransformOriginPoint(rect.center())
 		x, y = self.getTextPosition(limitRect).toTuple()
@@ -319,7 +355,7 @@ class Text(QGraphicsPathItem):
 		self.setPos(self.mapFromScene(position))
 
 	def getTextScale(self, textRect: QRectF = None, limitRect: QRectF = None) -> float:
-		textRect = textRect or self._textRect
+		textRect = textRect or self._textRect or self.__updatePath()
 		limitRect = limitRect or self.limitRect
 
 		width = (textRect.width()) or 1
@@ -534,7 +570,7 @@ class Text(QGraphicsPathItem):
 
 	def setValueAccessor(self, accessor: Callable[[], Any] | None):
 		self._valueAccessor = accessor
-		self.__updatePath()
+		self.updateTransform()
 
 	@property
 	def hasDynamicValue(self) -> bool:
@@ -554,7 +590,7 @@ class Text(QGraphicsPathItem):
 		self._scaleType = value
 		self.updateTransform()
 
-	def __updatePath(self):
+	def __updatePath(self) -> QRectF:
 		self.resetTransform()
 		font = self.font()
 		fm = QFontMetricsF(font)
@@ -633,16 +669,26 @@ class Text(QGraphicsPathItem):
 
 		r.moveCenter(path.boundingRect().center())
 		rotation = self.rotation() or self.parent.rotation()
-		self._textRect = r if not abs(rotation) else QTransform().rotate(rotation).map(pathSizeHint).boundingRect()
+		newTextRect = r if not abs(rotation) else QTransform().rotate(rotation).map(pathSizeHint).boundingRect()
+		lastTextRect = self._textRect or newTextRect
+		if lastTextRect != newTextRect and (sizeGroup := getattr(self, '_sized', None)) is not None:
+			sizeGroup.clearSizes()
+		self._textRect = newTextRect
 		self._sizeHintRect = r
 		self._fmt_rect = fmt_hint_rect
 
 		self._path = path
 		self.setPath(path)
+		return r
 
+	@defer
 	def updateText(self):
 		self.__updatePath()
 		self.updateTransform(updatePath=False)
+
+	def __del__(self):
+		if self._actionPool.up is not self._actionPool:
+			self._actionPool.up.remove(self._actionPool)
 
 
 class TextHelper(Text):
