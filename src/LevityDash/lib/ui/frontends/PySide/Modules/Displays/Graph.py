@@ -1403,8 +1403,9 @@ class Plot(QGraphicsPixmapItem, Stateful):
 			rect = deviceTransform.mapRect(rect)
 			ratio = rect.width() / rect.height()
 			scaleTo = False
-			if prod(rect.size().toTuple()) * 4 >= self.scene().view.maxTextureSize:
-				newWidth = sqrt(8e6 * ratio)
+
+			if prod(rect.size().toTuple()) >= (maxPerChanel := self.scene().view.maxTextureSize / 4):
+				newWidth = sqrt(maxPerChanel * ratio)
 				newHeight = newWidth / ratio
 				scaleTo = QSizeF(newWidth, newHeight)
 
