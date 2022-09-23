@@ -11,8 +11,8 @@ from re import search
 from shutil import copytree
 from typing import Callable, ClassVar, Text, Union
 
-from PySide2.QtWidgets import QInputDialog, QLineEdit, QMessageBox, QWidget
 from pytz import timezone
+from rich import prompt
 
 from .EasyPath import EasyPath, EasyPathFile
 
@@ -90,7 +90,7 @@ class LevityConfig(ConfigParser):
 			self.path = self.userPath[path]
 			self.read(self.path.path)
 
-		for sectionName, section in self._sections.items():
+		for sectionName, section in {**self._sections, 'defaults': self._defaults}.items():
 			if (enabled := section.get('enabled', None)) is not None and enabled.startswith('@ask'):
 				enabled = self.askValue(enabled)
 				section['enabled'] = str(enabled)
@@ -139,35 +139,64 @@ class LevityConfig(ConfigParser):
 			choices = [default]
 		else:
 			choices = None
+
+		if choices is not None and choices != ['']:
+			default = choices[0]
+			kwargs = {'choices': choices, 'default': default}
+		else:
+			default = ''
+			kwargs = {}
+
 		if askType == 'askInput':
 			message = message or ''
-			default = choices[0] if choices is not None else ''
+
 			if valueType is bool:
 				default = default.lower() in ('true', 't', '1', 'y', 'yes')
-				result = QMessageBox(QWidget()).question(QWidget(),
-					self.path.name,
-					message,
-					QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes if default else QMessageBox.No,
-				) == QMessageBox.Yes
-				return result
+				# result = QMessageBox(QWidget()).question(QWidget(),
+				# 	self.path.name,
+				# 	message,
+				# 	QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes if default else QMessageBox.No,
+				# ) == QMessageBox.Yes
+
+				# Switch to using Rich for this
+
+				return prompt.Confirm.ask(message, default=default)
 			if valueType is str:
-				return QInputDialog.getText(QWidget(), self.path.name, message, QLineEdit.Normal, default)[0]
+				# return QInputDialog.getText(QWidget(), self.path.name, message, QLineEdit.Normal, default)[0]
+				return prompt.Prompt.ask(message, **kwargs)
 			if valueType is int:
 				try:
 					default = int(default)
 				except ValueError:
 					pass
-				return QInputDialog.getInt(QWidget(), self.path.name, message, default)[0]
+				# return QInputDialog.getInt(QWidget(), self.path.name, message, default)[0]
+				fails = 0
+				while fails < 3:
+					result = prompt.Prompt.ask(message, **kwargs)
+					fails += 1
+					try:
+						result = round(float(result))
+					except ValueError:
+						continue
+					return result
+				raise ValueError
 			if valueType is float:
 				try:
 					default = float(default)
 				except ValueError:
 					pass
-				return QInputDialog.getDouble(QWidget(), self.path.name, message, default)[0]
+				# return QInputDialog.getDouble(QWidget(), self.path.name, message, default)[0]
+				while True:
+					result = prompt.Prompt.ask(message, **kwargs)
+					try:
+						result = float(result)
+					except ValueError:
+						continue
 		elif askType == 'askChoose':
 			message = message or ''
 			if choices is not None:
-				return QInputDialog.getItem(QWidget(), self.path.name, message, choices, 0, 'custom' in choices)[0]
+				# return QInputDialog.getItem(QWidget(), self.path.name, message, choices, 0, 'custom' in choices)[0]
+				return prompt.Prompt.ask(message, **kwargs)
 
 	@classmethod
 	@property
