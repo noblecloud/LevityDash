@@ -2776,6 +2776,10 @@ class TimestampLabel(AnnotationText):
 
 	@property
 	def text(self) -> str:
+		if getattr(self.labelGroup, 'relativeTimes', False) and isinstance(v:=self.value, datetime):
+			seconds = (v - now()).total_seconds()
+			value = Hour(round(seconds / 3600))
+			return f'{value:+:shorten=False, plural=True}'
 		if self._value:
 			value = self.value.strftime(self.format or self.formatStrings[self.formatID])
 			if self.spread < timedelta(days=1):
@@ -2819,6 +2823,8 @@ class HourLabels(AnnotationLabels[TimestampLabel]):
 	markerIntervals = [1, 3, 6, 12, 24]
 	__spanIndex = 0
 
+	_use_relative_times: bool = False
+
 	__defaults__ = {
 		'position': DisplayPosition.Bottom,
 		'offset':   Size.Height(-5, absolute=True),
@@ -2856,6 +2862,14 @@ class HourLabels(AnnotationLabels[TimestampLabel]):
 	@ownMarkerIntervals.decode
 	def ownMarkerIntervals(self, value: str) -> List[int]:
 		return list(sorted(int(v) for v in value.split(',')))
+
+	@StateProperty(key='relative-times', default=False)
+	def relativeTimes(self) -> bool:
+		return self._use_relative_times
+
+	@relativeTimes.setter
+	def relativeTimes(self, value: bool):
+		self._use_relative_times = value
 
 	def labelFactory(self, **kwargs):
 		if 'spread' not in kwargs:
