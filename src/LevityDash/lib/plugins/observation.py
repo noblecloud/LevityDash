@@ -224,7 +224,7 @@ class ObservationValue(TimeAwareValue):
 				value = localized
 			if not isinstance(self, ObservationTimestamp):
 				if isinstance(value, timedelta):
-					value = wu.Time.Second(value.total_seconds()).autoAny
+					value = wu.Time.Second(value.total_seconds()).auto
 			self.__value = value
 		return self.__value
 
@@ -812,8 +812,8 @@ class MiniTimeSeries(deque):
 			earliest = self.startTime - len(self) * self.resolution.total_seconds()
 			outOfBoundsBy = earliest - key.timestamp()
 			if abs(outOfBoundsBy) > 900:
-				log.warning(f'TimeSeries tried to set a value out of bounds by {wu.Time.Second(outOfBoundsBy).autoAny}')
-			log.warning(f'TimeSeries tried to set a value out of bounds by {wu.Time.Second(outOfBoundsBy).autoAny}')
+				log.warning(f'TimeSeries tried to set a value out of bounds by {wu.Time.Second(outOfBoundsBy).auto}')
+			log.warning(f'TimeSeries tried to set a value out of bounds by {wu.Time.Second(outOfBoundsBy).auto}')
 			return
 		if not isinstance(value, TimeSeriesItem):
 			value = TimeSeriesItem(value, key)
@@ -1117,7 +1117,7 @@ class ObservationTimestamp(ObservationValue):
 				pluginLog.warning(
 					f"Timestamp {self} does not have a timezone.  "
 					f"Assuming Local Timezone and converting to UTC with a "
-					f"difference of {wu.Time.Second((abs((preVal - postVal)).total_seconds())).autoAny}"
+					f"difference of {wu.Time.Second((abs((preVal - postVal)).total_seconds())).auto}"
 				)
 
 	@ObservationValue.value.getter
