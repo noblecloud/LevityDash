@@ -65,9 +65,11 @@ from LevityDash.lib.utils.shared import (
 	disconnectSignal, joinCase, LOCAL_TIMEZONE, now, numberRegex, timestampToTimezone, Unset
 )
 from LevityDash.lib.utils.various import DateTimeRange
+
+from WeatherUnits.derived.precipitation import PrecipitationRate
 from WeatherUnits import DerivedMeasurement, Length, Measurement, Time
 from WeatherUnits.length import Centimeter, Inch, Millimeter
-from WeatherUnits.time_.time import Second
+from WeatherUnits.time_.time import Hour, Minute, Second
 
 if TYPE_CHECKING:
 	from LevityDash.lib.ui.frontends.PySide.app import LevityScene
@@ -3856,7 +3858,7 @@ class GraphProxy(QGraphicsItemGroup):
 			if not figure.marginRect.contains(pos):
 				continue
 			count = 0
-			figure_name = figure.sharedKey.name
+			figure_name = joinCase(figure.sharedKey.name, itemFilter=str.title)
 			for d in figure.plots:
 				if d.graphic.shape().contains(data_pos := d.graphic.mapFromItem(figure, pos)):
 					count += 1
@@ -3870,7 +3872,7 @@ class GraphProxy(QGraphicsItemGroup):
 					if d_name.casefold() == figure_name.casefold():
 						figure_trailing = value_string
 					else:
-						d_name = d_name.lstrip(figure_name)
+						d_name = d.connectedContainer.value['title']
 						figure_trailing = f''
 						plot_strings.append(f'{d_name}: {value_string}')
 					figure_trailing_values[figure] = figure_trailing
@@ -3887,10 +3889,9 @@ class GraphProxy(QGraphicsItemGroup):
 		if len(values):
 			values.sort(key=lambda x: x[0], reverse=True)
 			bottom_text = '\n'.join(i[1] for i in values)
-			t = Second(t).autoAny
-			leading = '+' if t >= 0 else '-'
-			value = f'{leading}{t: simple}\n{bottom_text}'
-			QToolTip.showText(event.screenPos(), value)
+			t = Second(t).auto
+			timestamp = f'{t:+:simple}' if abs(t.second.int) > 900 else f'now'
+			QToolTip.showText(event.screenPos(), f'{timestamp}\n{bottom_text}')
 		else:
 			QToolTip.hideText()
 
