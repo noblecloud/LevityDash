@@ -356,16 +356,9 @@ class PluginsMenu(QMenu):
 			action.toggled.connect(action.togglePlugin)
 			self.addAction(action)
 
-	def show(self):
-		from LevityDash.lib.plugins import Plugins as pluginManager
+	def refresh_toggles(self):
 		for action in self.actions():
-			plugin = action.text()
-			action.setChecked(pluginManager.get(plugin).enabled())
-
-	def update(self):
-		for action in self.actions():
-			plugin = action.text()
-			action.setChecked(plugin.enabled)
+			action.setChecked(action.plugin.running)
 
 	@staticmethod
 	def togglePlugin(plugin, enabled):
@@ -382,20 +375,47 @@ class InsertMenu(QMenu):
 	def __init__(self, parent):
 		super(InsertMenu, self).__init__(parent)
 		self.noItems = self.addAction('No items')
-		self.noItems.setEnabled(True)
+		self.noItemsBelow = self.addAction('')
+		self.noItems.setEnabled(False)
+		self.noItemsBelow.setEnabled(False)
+		self.noItemsBelow.setVisible(False)
 		self.existing = {}
 		self.setTitle('Items')
 		self.buildItems()
 		self.aboutToShow.connect(self.buildItems)
 
+
 	def buildItems(self):
 		items = sorted(pluginManager.containers(), key=lambda x: str(x.key))
 		if items:
-			self.noItems.setVisible(False)
-			skel = CategoryItem.keysToDict([i.key for i in items])
+			self.noItems.setText('Item key will be')
+			self.noItemsBelow.setText('copied to clipboard')
+			self.noItemsBelow.setVisible(True)
+			skel = CategoryItem.keysToDict([i.key for i in items], extendedKeys=True)
 			self.buildLevel(skel, self)
 		else:
-			self.noItems.setVisible(True)
+			self.noItems.setText('No items')
+			self.noItemsBelow.setText('')
+			self.noItemsBelow.setVisible(False)
+
+	def clearSubMenu(self, menu):
+		try:
+			menu.hovered_item.refresh_text()
+		except AttributeError:
+			pass
+
+	def handleMenuHovered(self, action):
+		try:
+			self.hovered_item.refresh_text()
+		except AttributeError:
+			pass
+
+		try:
+			action.hoverAction()
+		except AttributeError:
+			pass
+
+		self.hovered_item = action
 
 	def buildLevel(self, level: Dict[CategoryAtom, CategoryItem], menu: QMenu = None):
 		menu = menu or self
@@ -404,14 +424,27 @@ class InsertMenu(QMenu):
 				if isinstance(subLevel, dict):
 					if (subMenu := self.existing.get(name, None)) is None:
 						self.existing[name] = subMenu = menu.addMenu(joinCase(name.name, itemFilter=str.title))
+						# subMenu.setFont(QFont('monospace', self.font().pointSize()))
+						# subMenu.hovered.connect(lambda: self.clearSubMenu(subMenu))
+						subMenu.setToolTipsVisible(True)
+						subMenu.hovered.connect(self.handleMenuHovered)
 					self.buildLevel(subLevel, subMenu)
 				elif subLevel not in self.existing:
 					self.existing[subLevel] = action = InsertItemAction(menu, key=subLevel)
 					menu.addAction(action)
+					try:
+						action.refresh_text()
+					except AttributeError:
+						pass
 		else:
 			if (action := self.existing.get(level, None)) is None:
 				self.existing[level] = action = InsertItemAction(menu, key=level)
 				menu.addAction(action)
+			try:
+				action.refresh_text()
+			except AttributeError:
+				pass
+		menu.adjustSize()
 
 	def refresh(self):
 		self.buildItems()
@@ -422,7 +455,32 @@ class InsertItemAction(QAction):
 	def __init__(self, parent, key):
 		super(InsertItemAction, self).__init__(parent)
 		self.key = key
-		self.setText(joinCase(key[-1].name, itemFilter=str.title))
+		self.container = pluginManager.getContainer(key)
+		self.name = joinCase(key[-1].name, itemFilter=str.title)
+		self.setToolTip(f'Copy key \'{str(key)}\' to clipboard')
+		self.setStatusTip(self.toolTip())
+		self.triggered.connect(self.toClipboard)
+		# self.hovered.connect(self.hoverAction)
+
+	def toClipboard(self):
+		clip = QApplication.clipboard()
+		clip.setText(str(self.key))
+
+	def hoverAction(self):
+		self.setText(str(self.key))
+
+	def refresh_text(self):
+		# length = self.parent().width() // self.parent().fontMetrics().averageCharWidth()
+		# reminder = length - len(f'{self.name}: ')
+		# text = f'{self.name}: {self.value_str.ljust(reminder, "-")}'
+		text = f'{self.name}: {self.value_str}'
+		self.setText(text)
+
+	@property
+	def value_str(self) -> str:
+		if not self.container.isRealtime:
+			return str(self.container.nowFromTimeseries)
+		return str(self.container.realtime)
 
 	def insert(self):
 		info = QMimeData()
