@@ -349,6 +349,7 @@ token = @ask(str:).message(Enter Token)
 stationID = @ask(str:).message(Enter Station ID)
 deviceID = @ask(str:).message(Enter Device ID)
 socketUpdates = @ask(bool:True).message(Enable Socket Updates?)
+socketType = @askChoose(str:websocket,udp).message(Select a socket type)
 fetchHistory = @ask(bool:False).message(Enable History Fetching?)
 defaultFor = temperature wind pressure humidity light lightning
 """
@@ -473,6 +474,8 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 			self.pluginLog.exception(e)
 
 	async def getHistorical(self, start: datetime = None, end: datetime = None):
+		# TODO: Investigate possible crashing bug on first scheduled run after launch
+		#       run.  This has only been observed on some hardware
 		if end is None:
 			end = datetime.now(tz=LOCAL_TIMEZONE)
 		if start is None:
