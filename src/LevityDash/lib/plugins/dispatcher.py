@@ -220,9 +220,9 @@ class MultiSourceContainer(dict):
 
 	@property
 	def nowFromTimeseries(self) -> Observation | None:
-		if (default := self.defaultContainer).metadata['timeseriesOnly']:
+		if (default := self.defaultContainer).isTimeseriesOnly:
 			return default.nowFromTimeseries
-		return next((container.nowFromTimeseries for container in self.values() if container.metadata['timeseriesOnly']), None)
+		return next((container.nowFromTimeseries for container in self.values() if container.isTimeseriesOnly), None)
 
 	@property
 	def plugins(self) -> List['Plugin']:
