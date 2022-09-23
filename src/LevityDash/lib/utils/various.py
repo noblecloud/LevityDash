@@ -90,9 +90,9 @@ class DateTimeRange:
 
 	def __repr__(self):
 		s, e = sorted((self.__start, self.__end))
-		s = wu.Time.Second((s - now()).total_seconds()).autoAny
-		e = wu.Time.Second((e - now()).total_seconds()).autoAny
-		diff = (e - s).autoAny
+		s = wu.Time.Second((s - now()).total_seconds()).auto
+		e = wu.Time.Second((e - now()).total_seconds()).auto
+		diff = (e - s).auto
 		return f'<{self.__class__.__name__}[{diff}] {s} to {e}>'
 
 	def __contains__(self, val: datetime) -> bool:

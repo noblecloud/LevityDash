@@ -639,7 +639,7 @@ class TimeOffsetLabel(Label):
 		if not self.isEnabled():
 			return
 		offset = Now() - self.parent.value.timestamp
-		value = Second(offset.total_seconds()).autoAny
+		value = Second(offset.total_seconds()).auto
 		value.precision = 0
 		if value > 0:
 			self.text = f'{value:unit=False} {type(value).pluralUnit} ago'
