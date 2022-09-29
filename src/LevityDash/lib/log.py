@@ -39,6 +39,22 @@ def levelFilter(level: int):
 	return filter
 
 
+class StatusBarHandler(logging.Handler):
+
+	def emit(self, record):
+		if record.levelno < 1:
+			return
+		try:
+			self.statusBar.showMessage(f'{datetime.fromtimestamp(int(record.created)):%X} | {record.getMessage()}')
+		except Exception:
+			pass
+
+	@property
+	def statusBar(self) -> QStatusBar:
+		return QApplication.instance().activeWindow().statusBar()
+
+
+
 class LevityHandler(RichHandler):
 
 	def get_level_text(self, record: logging.LogRecord) -> RichText:
@@ -214,6 +230,9 @@ class _LevityLogger(logging.Logger):
 		cls.fileHandler = richRotatingFileHandler
 		cls.consoleHandler = consoleHandler
 		cls.console = consoleHandler.console
+		cls.statusBarHandler = StatusBarHandler()
+
+		handlers = [consoleHandler, richRotatingFileHandler, cls.statusBarHandler]
 
 		logging.setLoggerClass(_LevityLogger)
 		logging.basicConfig(handlers=[cls.consoleHandler, cls.fileHandler], format="%(message)s", level=level)
