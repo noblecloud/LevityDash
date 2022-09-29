@@ -1,9 +1,8 @@
 #!/usr/bin/env python
-from signal import SIGINT, signal
+from locale import LC_ALL, setlocale
+from signal import SIGINT, signal, SIGQUIT, SIGTERM
 
-from sys import path, exit
-
-from locale import setlocale, LC_ALL
+from sys import exit, path
 
 setlocale(LC_ALL, 'en_US.UTF-8')
 
@@ -58,41 +57,50 @@ async def main():
 
 	import LevityDash.lib as lib
 
+	log = lib.log.LevityLogger
+
 	window = lib.ui.LevityMainWindow()
 
 	def signalQuit(sig, frame):
+		log.info(f'Caught signal {sig}, exiting...')
 		signalQuit.count += 1
-		if sig == SIGINT:
-			print('Closing...')
+		if sig in (SIGINT, SIGTERM, SIGQUIT):
+			log.info('Closing...')
 			from LevityDash.lib.log import debug
-			if debug or signalQuit.count > 1:
-				quit()
+			if debug or signalQuit.count > 2:
 				qasync.QApplication.instance().quit()
 			remainingFutures = len(asyncio.tasks.all_tasks(asyncio.get_event_loop()))
-			print(f'Waiting for {remainingFutures} tasks to finish...')
+			log.info(f'Waiting for {remainingFutures} tasks to finish...')
 
 	signalQuit.count = 0
 
 	signal(SIGINT, signalQuit)
+	signal(SIGTERM, signalQuit)
+	signal(SIGQUIT, signalQuit)
 
 	def close_future(future, loop):
 		loop.call_later(10, future.cancel)
 		future.cancel()
 
+	def handel_exception(loop_, context):
+		from LevityDash.lib.log import LevityLogger
+
+		LevityLogger.exception(context["exception"])
+
 	loop = asyncio.get_event_loop()
+	loop.set_exception_handler(handel_exception)
 
 	def stopAndDisconnect():
 		lib.plugins.stop()
 		if (aboutToQuit_ := getattr(qasync.QApplication.instance(), "aboutToQuit", None)) is not None:
-			try:
-				aboutToQuit_.disconnect(stopAndDisconnect)
-			except Exception as e:
-				print(e)
+			lib.utils.disconnectSignal(aboutToQuit_, stopAndDisconnect)
+			lib.utils.disconnectSignal(aboutToQuit_, lib.utils.Pool.shutdown_all)
 
 	future = asyncio.Future()
 	if (aboutToQuit := getattr(qasync.QApplication.instance(), "aboutToQuit", None)) is not None:
-		aboutToQuit.connect(stopAndDisconnect)
-		aboutToQuit.connect(partial(close_future, future, loop))
+		lib.utils.connectSignal(aboutToQuit, stopAndDisconnect)
+		lib.utils.connectSignal(aboutToQuit, lib.utils.Pool.shutdown_all)
+		lib.utils.connectSignal(aboutToQuit, partial(close_future, future, loop))
 	lib.plugins.start()
 
 	await future
