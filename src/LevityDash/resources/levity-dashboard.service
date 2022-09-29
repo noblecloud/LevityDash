@@ -1,0 +1,14 @@
+[Unit]
+Wants=network-online.target
+After=network.target
+Description=LevityDashboard Service
+
+[Service]
+ExecStart=LevityDash
+Restart=on-failure
+RestartSec=30s
+StandardOutput=journal
+Type=simple
+
+[Install]
+WantedBy=default.target
