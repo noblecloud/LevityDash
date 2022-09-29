@@ -501,6 +501,9 @@ class LevityMainWindow(QMainWindow):
 		view = LevitySceneView(self)
 		self.setCentralWidget(view)
 		style = '''
+					QMainWindow {
+						background-color: #000000;
+					}
 					QMenuBar {
 						background-color: #2e2e2e;
 						padding: 5px;
@@ -554,6 +557,13 @@ class LevityMainWindow(QMainWindow):
 						font-size: 18px;
 						background-clip: border-radius;
 					}
+					QStatusBar {
+						font-family: ui-monospace, monospace;
+						background: #2e2e2e;
+						color: #ffffff;
+						border: 1px solid #5e5e5e;
+						border-radius: 5px;
+					}
 					'''
 		if platform.system() == 'Darwin':
 			style += '''
@@ -580,6 +590,15 @@ class LevityMainWindow(QMainWindow):
 			ignoredEdges=LocationFlag.Top,
 			delay=userConfig.getOrSet('MenuBar', 'delay', 0.3, userConfig.getfloat)
 		)
+
+		statusBarVisible = userConfig.getOrSet('QtOptions', 'status-bar', False, userConfig.getboolean)
+		if platform.system() == 'Darwin':
+			# set font to ui monospace on macos
+			statusBarFont = QFont('.AppleSystemUIFont')
+			statusBarFont.setStyleHint(QFont.Monospace)
+			self.statusBar().setFont(statusBarFont)
+		self.statusBar().setVisible(statusBarVisible)
+
 		self.menuBarHoverArea.setEnabled(False)
 		if platform.system() != 'Darwin':
 			menubar = MenuBar(self)
@@ -702,6 +721,17 @@ class LevityMainWindow(QMainWindow):
 		printState.setStatusTip('Print the current state of the dashboard')
 		printState.triggered.connect(self.centralWidget().graphicsScene.base.contextMenu.printState)
 
+		statusBarVisible = userConfig.getOrSet('QtOptions', 'status-bar', False, userConfig.getboolean)
+		showStatusBar = QAction('Show Status Bar', self)
+		showStatusBar.setShortcut('Ctrl+Shift+B')
+		showStatusBar.setStatusTip('Show the status bar')
+		showStatusBar.setCheckable(True)
+		showStatusBar.setChecked(statusBarVisible)
+		def toggle_status_bar(*args):
+			self.statusBar().setVisible(showStatusBar.isChecked())
+
+		showStatusBar.triggered.connect(toggle_status_bar)
+
 		fullscreen = QAction('&Fullscreen', self)
 		fullscreen.setShortcut('Ctrl+F')
 		fullscreen.setStatusTip('Toggle fullscreen')
@@ -739,6 +769,7 @@ class LevityMainWindow(QMainWindow):
 		dashboardMenu.addAction(refresh)
 		dashboardMenu.addAction(clear)
 		dashboardMenu.addAction(printState)
+		dashboardMenu.addAction(showStatusBar)
 
 		plugins = PluginsMenu(self)
 		self.bar.addMenu(plugins)
