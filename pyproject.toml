@@ -3,7 +3,7 @@ name = "LevityDash"
 authors = ["noblecloud <git@noblecloud.io>"]
 description = "A lightweight, desktop native, multi-source, modulear dashboard for macOS, Windows and Linux"
 
-version = "0.1.0-beta.10"
+version = "0.0.1"
 readme = "README.md"
 license = "MIT"
 
@@ -28,7 +28,10 @@ classifiers = [
 	"Intended Audience :: Information Technology",
 ]
 
-include = ['src/LevityDash/example-config']
+include = [
+	'src/LevityDash/resources'
+]
+
 packages = [
 	{ include = 'LevityDash', from = 'src' },
 ]
@@ -39,30 +42,51 @@ LevityDash = 'LevityDash:__main__.run'
 [tool.poetry.dependencies]
 python = ">=3.10,<3.11"
 pylunar = "^0.6.0"
-WeatherUnits = "^0.6.3"
-numpy = "^1.18.0"
-pytz = "^2022.1"
+WeatherUnits = "^0.6.4"
+numpy = "^1.23.3"
+pytz = "^2022.2.1"
 qasync = "^0.23.0"
-scipy = "^1.8.0"
+scipy = "^1.9.1"
 pysolar = "^0.10"
 python-dateutil = "^2.8.2"
-bleak = "^0.14.2"
+bleak = "^0.14.3"
 PyYAML = "^6.0"
-rich = "^12.3.0"
+rich = "^12.5.1"
 aiohttp = "^3.8.1"
-PySide2 = "^5.15.2"
+PySide2 = "^5.15.2.1"
 appdirs = "^1.4.4"
+tomli = "^2.0.1"
+tomli-w = "^1.0.0"
+sortedcontainers = "^2.4.0"
+
 
 [tool.poetry.urls]
 "Bug Tracker" = "https://github.com/noblecloud/LevityDash/issues"
 "Documentation" = "https://levitydash.app/#/getting-started"
 "Discussions" = "https://github.com/noblecloud/LevityDash/discussions"
 
-[tool.poetry.dev-dependencies]
-pyinstaller = "^5.1"
-certifi = "^2022"
+[tool.poetry.group.dev.dependencies]
+pyinstaller = "^5.4.1"
+certifi = "^2022.9.14"
 WeatherUnits = { develop = true, path = "../WeatherUnits" }
+pylint = "^2.15.2"
+python-semantic-release = "^7.32.0"
+
+[tool.poetry.group.profiling.dependencies]
+memray = "^1.3.1"
+
+[tool.poetry.group.pycharm.dependencies]
+line-profiler-pycharm = "^1.1.0"
+pydevd-pycharm = "^222.4167.33"
+
+
+[tool.poetry.group.monitoring.dependencies]
+sentry-sdk = "^1.9.9"
+logtail-python = "^0.1.3"
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
+requires = ["poetry-core>=1.1.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.semantic_release]
+version_variable = "pyproject.toml:version"
