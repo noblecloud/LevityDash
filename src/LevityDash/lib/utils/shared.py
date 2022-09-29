@@ -991,26 +991,30 @@ class TextFilter(IntFlag, metaclass=FunctionEnumFlagMeta):
 		return self.__functions__[self.value](value)
 
 
-def disconnectSignal(signal: Signal, slot: Callable):
+def disconnectSignal(signal: Signal, slot: Callable) -> bool:
 	try:
-		signal.disconnect(slot)
+		return signal.disconnect(slot)
 	except TypeError:
 		pass
 	except RuntimeError:
 		pass
-	except Exception:
-		pass
+	except Exception as e:
+		utilLog.warning("Error disconnecting signal", exc_info=True)
+		utilLog.exception(e)
+	return False
 
 
-def connectSignal(signal: Signal, slot: Callable):
+def connectSignal(signal: Signal, slot: Callable) -> bool:
 	try:
-		signal.connect(slot)
+		return signal.connect(slot)
 	except TypeError:
 		utilLog.warning('connectSignal: TypeError')
 	except RuntimeError:
 		utilLog.warning('connectSignal: RuntimeError')
 	except Exception as e:
 		utilLog.warning('connectSignal: %s', e)
+		utilLog.exception(e)
+	return False
 
 
 def replaceSignal(newSignal: Signal, oldSignal: Signal, slot: Callable):
