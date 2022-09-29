@@ -1,22 +1,26 @@
-from enum import Enum, IntFlag, auto
-from functools import cached_property
-
 from dataclasses import asdict, dataclass, is_dataclass
+from datetime import datetime, timedelta
+from enum import auto, Enum, IntFlag
+from functools import cached_property
 from json import JSONEncoder
+from typing import Any, Callable, Dict, Iterable, List, NamedTuple, Sequence, Set, Tuple, Type, TYPE_CHECKING, Union
 
+import numpy as np
+import time
 from math import ceil, floor, inf
 from numpy import ndarray
-from typing import Any, Iterable, List, NamedTuple, Tuple, Union, Callable, Type, Set, Dict
-
-from datetime import datetime, timedelta
-import numpy as np
-from PySide2.QtCore import QObject, QTimer, Signal, QSize, QSizeF
-from scipy.signal import savgol_filter
+from PySide2.QtCore import QObject, QSize, QSizeF, QTimer, Signal
 from rich.repr import auto as auto_rich_repr
+from scipy.signal import savgol_filter
 
-from LevityDash.lib.utils import clearCacheAttr, datetimeDiff, Infix, LOCAL_TIMEZONE, makeNumerical, Numeric, plural
+from LevityDash.lib.utils import (
+	clearCacheAttr, datetimeDiff, Infix, LOCAL_TIMEZONE, makeNumerical, Numeric, plural,
+	timedeltaToDict, utilLog as log
+)
 
-from LevityDash.lib.utils import utilLog as log, timedeltaToDict
+if TYPE_CHECKING:
+	from LevityDash.lib.plugins.observation import TimeAwareValue
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph import GraphItemData, Figure
 
 
 class Axis(IntFlag):
@@ -154,14 +158,14 @@ def smoothData(data: np.ndarray, window: int = 25, order: int = 1) -> np.ndarray
 
 @auto_rich_repr
 class DataTimeRange(QObject):
-	'''
-		DataTimeRange(source: GraphItemData)
-		Ultimately this class needs to watch an entire figure rather than just a single plot item.
+	"""
+	DataTimeRange(source: GraphItemData)
+	Ultimately this class needs to watch an entire figure rather than just a single plot item.
 
-		When a plot item changes, it should inform its instance of this class that it's cache is invalid.
-		Upon the next access, it compares the previous cached value to the current calculated value,
-		if the value is different, it emits an axis changed signal.
-	'''
+	When a plot item changes, it should inform its instance of this class that it's cache is invalid.
+	Upon the next access, it compares the previous cached value to the current calculated value,
+	if the value is different, it emits an axis changed signal.
+	"""
 
 	changed = Signal(Axis)
 	source: 'GraphItemData'
@@ -290,10 +294,10 @@ class AxisMetaData(QObject):
 	max: Numeric
 	range: Numeric
 	_link: 'Figure' = None
-	__min: Numeric = None
-	__max: Numeric = None
+	__min: Numeric = 0
+	__max: Numeric = 0
 
-	def __init__(self, link: 'FigureRect'):
+	def __init__(self, link: 'Figure'):
 		super().__init__()
 		self._link = link
 		self.__delayTimer = QTimer(singleShot=True, interval=500, timeout=self.__emitChanged)
@@ -348,14 +352,8 @@ class AxisMetaData(QObject):
 	def range(self):
 		return self.max - self.min
 
-	@property
-	def absoluteRange(self):
-		return
-
 	def emitChanged(self):
-		self.changed.emit(Axis.Vertical)
-
-	# self.__delayTimer.start()
+		self.__delayTimer.start()
 
 	def __emitChanged(self):
 		self.changed.emit(Axis.Vertical)
@@ -591,7 +589,7 @@ class TimeFrameWindow(QObject):
 				value = timedelta(hours=1)
 			self.__clearCache()
 			self._range = value
-			self.changed.emit(Axis.Horizontal)
+			self.__delayTimer.start()
 
 	@property
 	def rangeSeconds(self) -> int:
@@ -935,17 +933,17 @@ def findPeaks(*arrays: Union[list[Iterable], Iterable], spread: int = 2) -> tupl
 
 
 class TemporalGroups(object):
-	def __init__(self, data: List, spread: timedelta = timedelta(hours=12), step: int = 1):
+
+	def __init__(self, data: Sequence['TimeAwareValue'], spread: timedelta = timedelta(hours=12), step: int = 1):
 		self.data = data
 		self.spread = spread
 		self.current = 0
 		self.step = step
 
-	def __iter__(self):
+	def __iter__(self) -> Iterable['TimeAwareValue']:
 		return self
 
-	##@profile
-	def __next__(self):
+	def __next__(self) -> Tuple[int, 'TimeAwareValue', List['TimeAwareValue'], List['TimeAwareValue']]:
 		i = self.current
 		forI = i
 		backI = i
@@ -980,37 +978,53 @@ class TemporalGroups(object):
 		return i, currentV, behind, ahead
 
 
-def findPeaksAndTroughs(array: Iterable, spread: timedelta = 12, groupingSize: timedelta | int = 6) -> tuple[list, list]:
+def findPeaksAndTroughs(array: Sequence['TimeAwareValue'], spread: timedelta = 12, groupingSize: timedelta | int = 6) -> List['TimeAwareValue']:
+	start_time = time.perf_counter()
 	peaks = []
 	troughs = []
 	if isinstance(groupingSize, int):
 		groupingSize = timedelta(hours=groupingSize)
 	groupGenerator = TemporalGroups(array, spread=spread)
-	for i, t, behind, ahead in groupGenerator:
+	peak_flat = False
+	trough_flat = False
+	for i, node, behind, ahead in groupGenerator:
 		if not ahead:
 			ahead = [array[-1]]
 		if not behind:
 			behind = [array[0]]
 
-		if float(min(behind).value) >= t <= float(min(ahead).value):
-			if len(troughs) == 0:
-				troughs.append(t)
-			elif datetimeDiff(troughs[-1].timestamp, t.timestamp) <= groupingSize:
-				troughs[-1] += t
-				p = troughs[-1]
+		if float(min(behind).value) >= node <= float(min(ahead).value):
+			if troughs and datetimeDiff(troughs[-1].timestamp, node.timestamp) <= groupingSize:
+				troughs[-1] += node
+				trough_flat = True
 			else:
-				troughs.append(t)
+				if trough_flat:
+					troughs[-1] = troughs[-1].flattened
+					trough_flat = False
+				troughs.append(node)
 
-		elif float(max(behind).value) <= t >= float(max(ahead).value):
-			if len(peaks) == 0:
-				peaks.append(t)
-			elif datetimeDiff(peaks[-1].timestamp, t.timestamp) <= groupingSize:
-				peaks[-1] += t
-				p = peaks[-1]
+		elif float(max(behind).value) <= node >= float(max(ahead).value):
+			if peaks and datetimeDiff(peaks[-1].timestamp, node.timestamp) <= groupingSize:
+				peaks[-1] += node
+				peak_flat = True
 			else:
-				peaks.append(t)
+				if peak_flat:
+					peaks[-1] = peaks[-1].flattened
+					peak_flat = False
+				peaks.append(node)
+	log.debug(f"findPeaksAndTroughs() {time.perf_counter() - start_time: 0.3g}s for {len(array)} items")
 
-	return peaks, troughs
+	merged = []
+	peaks = sorted(peaks, key=lambda x: x.timestamp)
+	troughs = sorted(troughs, key=lambda x: x.timestamp)
+	index = 0
+	while peaks or troughs:
+		toPop = min(peaks, troughs, key=lambda x: x[0].timestamp.timestamp() if x else inf)
+		next_ = toPop.pop(0)
+		next_.isPeak = toPop is peaks
+		next_.index, index = index, index + 1
+		merged.append(next_)
+	return merged
 
 
 KeyData = NamedTuple('KeyData', sender='Plugin', keys=Set['CategoryItem'] | Dict['Plugin', Set['CategoryItem']])

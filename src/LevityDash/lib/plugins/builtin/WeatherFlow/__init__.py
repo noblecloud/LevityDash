@@ -1,6 +1,7 @@
 import asyncio
 from asyncio import create_task
 from datetime import datetime, timedelta, timezone
+from functools import partial
 from json import dumps, loads
 
 from aiohttp import ClientSession, ClientWebSocketResponse, WSMsgType
@@ -287,9 +288,14 @@ class WFWebsocket:
 				await self._open(ws)
 				async for msg in ws:
 					if msg.type == WSMsgType.TEXT:
-						await self._handleMessage(msg.data)
+						try:
+							await self._handleMessage(msg.data)
+						except Exception as e:
+							self.plugin.pluginLog.exception(f'WeatherFlow: error handling message: {e}')
 					elif msg.type == WSMsgType.ERROR:
 						break
+				else:
+					self.plugin.pluginLog.info('WeatherFlow: socket closed')
 
 	async def _handleMessage(self, data: str):
 		datagram = loads(data)
@@ -304,14 +310,14 @@ class WFWebsocket:
 				summaryDatagram = LevityDatagram({'type': 'summary', **summary}, schema=self.plugin.schema, sourceData={'websocket': self})
 				message = LevityDatagram(rest, schema=self.plugin.schema, sourceData={'websocket': self})
 				message['realtime'].update(summaryDatagram['realtime'])
-				asyncio.create_task(self.plugin.observations.realtime.asyncUpdate(message))
+				loop.call_soon_threadsafe(partial(self.plugin.observations.realtime.update, message))
 			case dict(datagram) if 'type' in datagram:
 				message = LevityDatagram(datagram, schema=self.plugin.schema, sourceData={'websocket': self})
 				asyncio.create_task(self.plugin.observations.realtime.asyncUpdate(message))
 			case {'type': 'connection_closed'}:
 				self.plugin.pluginLog.info("Websocket disconnected from WeatherFlow")
 			case _:
-				print(datagram)
+				self.plugin.pluginLog.warning(f"Unknown message from WeatherFlow: {datagram}")
 
 	@property
 	def running(self) -> bool:
@@ -340,8 +346,7 @@ _enableMessage = ("Enable WeatherFlow?  "
                   "This will require an authentication token and a Tempest Weather station to connect.  "
                   "You can find more information at https://levitydash.app/#/plugin_config?id=weatherflowtempest")
 
-_defaultConfig = \
-	f""";All independent configs must have a plugin section
+_defaultConfig = f""";All independent configs must have a plugin section
 
 [plugin]
 enabled = @ask(bool:False).message({_enableMessage})

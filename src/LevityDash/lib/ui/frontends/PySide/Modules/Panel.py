@@ -11,9 +11,9 @@ from typing import (
 )
 from uuid import UUID, uuid4
 
-from math import inf, prod
+from math import prod
 from PySide2.QtCore import (
-	QByteArray, QMargins, QMimeData, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt, QThread, QTimer, Slot
+	QByteArray, QMargins, QMimeData, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt, QTimer, Signal, Slot
 )
 from PySide2.QtGui import QBrush, QColor, QDrag, QFocusEvent, QPainter, QPainterPath, QPen, QPixmap, QTransform
 from PySide2.QtWidgets import (
@@ -33,9 +33,8 @@ from LevityDash.lib.ui.Geometry import (
 	AlignmentFlag, Dimension, Edge, Geometry, LocationFlag, Margins, Padding, parseSize, polygon_area, Position, Size,
 	size_px
 )
-from LevityDash.lib.utils import ExecThread
 from LevityDash.lib.utils.shared import (
-	_Panel, boolFilter, clearCacheAttr, disconnectSignal, getItemsWithType, hasState, Numeric, SimilarValue
+	_Panel, boolFilter, clearCacheAttr, connectSignal, disconnectSignal, getItemsWithType, hasState, Numeric, SimilarValue
 )
 from WeatherUnits import Length
 from .Handles import Handle, HandleGroup
@@ -65,8 +64,15 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 		kwargs = self.prep_init(kwargs)
 		self.state = kwargs
 
+	@cached_property
+	def resize_signal(self) -> Signal | None:
+		try:
+			return self.parent.signals.resized
+		except AttributeError:
+			return None
+
 	@asyncSlot()
-	async def parentResized(self, *args):
+	async def _parentResized(self, *args):
 		self.updatePath()
 
 	def updatePath(self) -> None:

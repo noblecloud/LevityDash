@@ -495,6 +495,7 @@ class LevityMainWindow(QMainWindow):
 
 	def __init__(self, *args, **kwargs):
 		super(LevityMainWindow, self).__init__(*args, **kwargs)
+		app.thread().setPriority(QThread.TimeCriticalPriority)
 		self.setWindowTitle('LevityDash')
 
 		self.__init_ui__()

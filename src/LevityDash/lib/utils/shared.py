@@ -1816,42 +1816,6 @@ def split(a, n):
 	return (a[i*k+min(i, m):(i+1)*k+min(i+1, m)] for i in range(n))
 
 
-class ExecThread(QObject):
-	finished = Signal()
-	func = None
-	args = ()
-	kwargs = {}
-
-	def __init__(self, func, *args, **kwargs):
-		super().__init__()
-		self.func = func
-		self.args = args
-		self.kwargs = kwargs
-		self.thread = self.buildThread()
-
-	@Slot()
-	def run(self):
-		try:
-			self.func(*self.args, **self.kwargs)
-		except Exception as e:
-			pass
-			# (type, value, traceback) = exc_info()
-			# excepthook(type, value, traceback)
-		self.finished.emit()
-
-	def buildThread(self) -> QThread:
-		thread = QThread()
-		self.moveToThread(thread)
-		thread.started.connect(self.run)
-		self.finished.connect(thread.quit)
-		return thread
-
-	def __call__(self, *args, **kwargs):
-		self.args = args or self.args
-		self.kwargs = kwargs or self.kwargs
-		self.thread.start()
-
-
 T = TypeVar("T")
 
 
