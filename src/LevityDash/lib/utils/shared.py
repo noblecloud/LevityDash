@@ -1,10 +1,13 @@
 from abc import abstractmethod
+from asyncio import get_event_loop, iscoroutine
 from collections.abc import MutableSet, Sequence
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from functools import cached_property, lru_cache, partial, wraps
+from traceback import format_exc, print_exc
 
 from gc import get_referrers
+from PySide2 import QtCore
 
 try:
 	from locale import setlocale, LC_ALL, nl_langinfo, RADIXCHAR, THOUSEP
@@ -17,7 +20,7 @@ except ImportError:
 	GROUPING_CHAR = ','
 
 import operator as __operator
-from sys import float_info
+from sys import exc_info, float_info
 
 from collections import namedtuple, defaultdict, ChainMap
 
@@ -35,15 +38,15 @@ from WeatherUnits import Measurement
 
 from time import time
 from typing import (
-	Any, Callable, ForwardRef, Hashable, Iterable, List, Mapping, NamedTuple, Optional, Tuple, Type,
-	TypeVar, Union, Set, Final, ClassVar, Dict, Protocol, runtime_checkable, get_args
+	Any, Awaitable, Callable, Coroutine, ForwardRef, Hashable, Iterable, List, Mapping, NamedTuple, Optional, Tuple, Type,
+	TYPE_CHECKING, TypeVar, Union, Set, Final, ClassVar, Dict, Protocol, runtime_checkable, get_args
 )
 from types import NoneType, GeneratorType, FunctionType, UnionType
 
 from enum import Enum, EnumMeta, IntFlag
 
 from PySide2.QtCore import QObject, QPointF, QRectF, QSizeF, QThread, Signal, Qt, Slot
-from PySide2.QtWidgets import QGraphicsRectItem, QGraphicsItem
+from PySide2.QtWidgets import QApplication, QGraphicsRectItem, QGraphicsItem
 
 from LevityDash.lib.utils import utilLog
 
@@ -2052,5 +2055,193 @@ def defer(func):
 				return func(self, *args, **kwargs)
 			else:
 				pool.add(func)
+
+	return wrapper
+
+
+class Worker(QtCore.QRunnable):
+	"""Worker thread for running background tasks."""
+
+	_debug: bool = False
+	pool: 'Pool'
+
+	class Status(Enum):
+		Idle = 0
+		Running = 1
+		Finished = 2
+		Aborted = 3
+		Failed = 4
+
+
+	status = Status.Idle
+
+	@classmethod
+	def new_immortal_worker(cls, func: Callable, *args, **kwargs) -> 'Worker':
+		worker = cls(func, *args, **kwargs)
+		worker.setAutoDelete(False)
+		return worker
+
+	def __init__(self, fn, *args, **kwargs):
+		super(Worker, self).__init__()
+		# Store constructor arguments (re-used for processing)
+		self.fn = fn
+		self.args = args
+		self.kwargs = kwargs
+		self.signals = WorkerSignals()
+
+	@Slot()
+	def run(self):
+		"""Initialise the runner function with passed args, kwargs."""
+		utilLog.verbose(f'Running {self.fn!r} in thread', verbosity=5)
+		try:
+			self.status = Worker.Status.Running
+			result = self.fn(
+				*self.args, **self.kwargs,
+			)
+		except Exception as e:
+			self.status = Worker.Status.Failed
+			print_exc()
+			exctype, value = exc_info()[:2]
+			self.signals.error.emit((exctype, value, format_exc()))
+			utilLog.error(f'Error running {self.fn.__name__}')
+			utilLog.exception(e)
+		else:
+			self.status = Worker.Status.Finished
+			self.signals.result.emit(result)
+		finally:
+			self.signals.finished.emit()
+			utilLog.verbose(f'Finished {self.fn!r} in thread', verbosity=5)
+
+	def cancel(self):
+		if self.status is Worker.Status.Running:
+			try:
+				self.pool.cancel(self)
+			except RuntimeError:
+				pass
+			except Exception as e:
+				utilLog.exception(e)
+
+class WorkerSignals(QtCore.QObject):
+	"""
+	Defines the signals available from a running worker thread.
+	Supported signals are:
+	finished
+			No data
+	error
+			`tuple` (exctype, value, traceback.format_exc() )
+	result
+			`object` data returned from processing, anything
+	"""
+	finished = QtCore.Signal()
+	error = QtCore.Signal(tuple)
+	result = QtCore.Signal(object)
+	progress = QtCore.Signal(int)
+
+loop = get_event_loop()
+
+
+class Pool(QtCore.QThreadPool):
+	__instances__: ClassVar[List['Pool']] = []
+
+	def __new__(cls, *args, **kwargs):
+		instance = super().__new__(cls)
+		cls.__instances__.append(instance)
+		return instance
+
+	@classmethod
+	def shutdown_all(cls):
+		utilLog.info(f"Shutting down {len(cls.__instances__)} thread pools")
+		for instance in cls.__instances__:
+			instance.shutdown()
+
+	def shutdown(self):
+		self.clear()
+		self.waitForDone(500)
+		if self.activeThreadCount():
+			utilLog.warning(f"Pool still has {self.activeThreadCount()} active threads after waiting 500ms")
+
+	def run_threaded_process(
+		self,
+		func: Callable | Awaitable,
+		*args,
+		on_finish: Callable[[], None] | Coroutine = None,
+		on_result: Callable[[T], Any] | Coroutine = None,
+		on_error: Callable[[Exception], Any] | Coroutine = None,
+		priority: int = 3,
+		**kwargs: Dict[str, Any]
+	) -> Worker:
+		"""Execute a function in the background with a worker"""
+
+		worker = self.create_worker(func, *args, on_finish=on_finish, on_result=on_result, on_error=on_error, **kwargs)
+		worker.pool = self
+
+		self.start(worker, priority)
+
+		return worker
+
+	@staticmethod
+	def create_worker(
+		func: Callable | Awaitable,
+		*args,
+		on_finish: Callable[[], None] | Coroutine = None,
+		on_result: Callable[[T], Any] | Coroutine = None,
+		on_error: Callable[[Exception], Any] | Coroutine = None,
+		immortal: bool = False,
+		**kwargs: Dict[str, Any]
+	) -> Worker:
+		worker = Worker(func, *args, **kwargs)
+		worker.setAutoDelete(immortal)
+		if on_finish is None:
+			pass
+		elif iscoroutine(on_finish):
+			connectSignal(
+				worker.signals.finished, lambda: loop.create_task(on_finish if on_finish.cr_running else on_finish())
+			)
+		else:
+			connectSignal(worker.signals.finished, on_finish)
+		if on_result is None:
+			pass
+		elif iscoroutine(on_result):
+			connectSignal(
+				worker.signals.result,
+				lambda result: loop.create_task(on_result(result) if on_result.cr_running else on_result(result))
+			)
+		else:
+			connectSignal(worker.signals.result, on_result)
+		if on_error is None:
+			pass
+		elif iscoroutine(on_error):
+			connectSignal(
+				worker.signals.error,
+				lambda error: loop.create_task(on_error(error) if on_error.cr_running else on_error(error))
+			)
+		else:
+			connectSignal(worker.signals.error, on_error)
+		return worker
+
+	run_in_thread = run_threaded_process
+
+	def start(self, runnable: QtCore.QRunnable, priority: int = 3):
+		runnable.pool = self
+		super().start(runnable, priority)
+
+	def run_with_worker(self, worker: Worker, callback: Callable = None) -> Worker:
+		"""Execute a function in the background with a worker"""
+		self.start(worker)
+		worker.signals.result.connect(callback)
+		return worker
+
+
+QApplication.instance().pool = Pool()
+threadPool = QApplication.instance().pool
+
+run_in_thread = QApplication.instance().pool.run_threaded_process
+
+def in_thread(func, priority=3):
+	"""Decorator to run a function in a background thread"""
+
+	@wraps(func)
+	def wrapper(*args, **kwargs):
+		return run_in_thread(func, *args, **kwargs, priority=priority)
 
 	return wrapper
