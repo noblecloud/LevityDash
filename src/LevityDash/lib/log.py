@@ -4,14 +4,15 @@ import os
 import shutil
 import webbrowser
 from collections import deque
-from configparser import SectionProxy
+from configparser import NoOptionError, SectionProxy
 from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, List
 
 import qasync
 import shiboken2
+from PySide2.QtWidgets import QApplication, QStatusBar
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.style import Style
@@ -23,13 +24,40 @@ from LevityDash import __dirs__, __lib__
 from .config import userConfig
 
 
-suppressedModules = [qasync, asyncio, shiboken2]
+suppressedModules = [asyncio, shiboken2]
 
 try:
 	import bleak
 	suppressedModules.append(bleak)
 except ImportError:
 	pass
+
+
+def install_sentry():
+	try:
+		endpoint = userConfig.get('Logging', 'sentry_endpoint')
+		if endpoint:
+			import sentry_sdk
+			sentry_sdk.init(
+				dsn=endpoint,
+				traces_sample_rate=1.0
+			)
+	except ImportError:
+		logging.warning("Sentry SDK not installed. Install with `pip install sentry-sdk` or `pip install LevityDash[monitoring]`")
+	except NoOptionError:
+		print(f"Logging.sentry_endpoint not set in config")
+
+
+def install_log_tail(handlers_: List[logging.Handler]):
+	try:
+		token = os.environ.get("LOGTAIL_SOURCE_TOKEN", None) or userConfig.get('Logging', 'logtail_token')
+		if token:
+			from logtail import LogtailHandler
+			handlers_.append(LogtailHandler(source_token=token))
+	except ImportError:
+		logging.warning("Logtail not installed. Install with `pip install logtail-python` or `pip install LevityDash[monitoring]`")
+	except NoOptionError:
+		print(f"No token found for Logtail. Set Logging.logtail_token in config or set LOGTAIL_SOURCE_TOKEN environment variable")
 
 
 def levelFilter(level: int):
@@ -235,7 +263,13 @@ class _LevityLogger(logging.Logger):
 		handlers = [consoleHandler, richRotatingFileHandler, cls.statusBarHandler]
 
 		logging.setLoggerClass(_LevityLogger)
-		logging.basicConfig(handlers=[cls.consoleHandler, cls.fileHandler], format="%(message)s", level=level)
+
+		install_sentry()
+		install_log_tail(handlers)
+
+		logging.basicConfig(handlers=handlers, format="%(message)s", level=level)
+
+
 
 	@classmethod
 	def __ensureFoldersExists(cls):
