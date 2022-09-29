@@ -269,21 +269,24 @@ class MultiSourceContainer(dict):
 			log.debug(f"{plugin!s} is ready with an approximate realtime value for {self.key.name}")
 			for request in (*self.waitingForAnyRealtime.pop(plugin, []), *self.waitingForAnyRealtime.pop(AnySource, [])):
 				log.debug(f"Issuing callback for {request.requester!s}")
-				loop.create_task(request.callback)
+				if container.isTimeseriesOnly:
+					container.prepare_for_ts_connection(request.callback)
+				else:
+					loop.create_task(request.callback)
 
 		if self.waitingForTimeseries[plugin] or self.waitingForTimeseries[AnySource]:
 			if plugin[self.key].isForecast:
 				log.debug(f"{plugin.name} timeseries is ready for {self.key}")
 				for request in (*self.waitingForTimeseries.pop(plugin, []), *self.waitingForTimeseries.pop(AnySource, [])):
 					log.debug(f"Issuing callback for {request.requester!s}")
-					loop.create_task(request.callback)
+					container.prepare_for_ts_connection(request.callback)
 
 		if self.waitingForDaily[plugin] or self.waitingForDaily[AnySource]:
 			if plugin[self.key].isDailyForecast:
 				log.debug(f"{plugin.name} daily is ready for {self.key}")
 				for request in (*self.waitingForDaily.pop(plugin, []), *self.waitingForDaily.pop(AnySource, [])):
 					log.debug(f"Issuing callback for {request.requester!s}")
-					loop.create_task(request.callback)
+					container.prepare_for_ts_connection(request.callback)
 
 	def addValue(self, plugin: Plugin, container: Container):
 		self[plugin.name] = container

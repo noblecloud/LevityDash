@@ -1,18 +1,24 @@
-from asyncio import get_event_loop, TimerHandle, create_task, get_running_loop, iscoroutinefunction
-from random import random as randomFloat
 from abc import abstractmethod
-from asyncio import iscoroutine, coroutine
+from asyncio import (
+	coroutine, create_task, get_event_loop, get_running_loop, iscoroutine, iscoroutinefunction,
+	TimerHandle
+)
 from collections import defaultdict
 from datetime import datetime, timedelta
 from functools import partial
-from typing import Any, Callable, Dict, Hashable, Mapping, Optional, Type, Union, Set, ClassVar, TYPE_CHECKING, Coroutine
+from random import random as randomFloat
+from typing import (
+	Any, Callable, ClassVar, Coroutine, Dict, Hashable, Mapping, Optional, Set, Type, TYPE_CHECKING,
+	Union
+)
 
-import WeatherUnits as wu
-from PySide2.QtCore import QObject, Signal, Slot
+from PySide2.QtCore import QObject, QThread, Signal, Slot
+from PySide2.QtWidgets import QApplication
 from pytz import timezone
 
-from LevityDash.lib.utils import abbreviatedIterable, SmartString, Now, KeyData, Mutable, now
+import WeatherUnits as wu
 from LevityDash.lib.log import LevityPluginLog as log
+from LevityDash.lib.utils import abbreviatedIterable, KeyData, loop, Now, now, SmartString
 
 if TYPE_CHECKING:
 	from LevityDash.lib.plugins.categories import CategoryItem
@@ -232,6 +238,9 @@ class ChannelSignal(MutableSignal):
 			self._emit()
 
 	def _emit(self):
+		if QThread.currentThread() != QApplication.instance().thread():
+			loop.call_soon_threadsafe(self._emit)
+			return
 		self._signal.emit(self._pending)
 		self._pending.clear()
 
@@ -299,12 +308,19 @@ class Accumulator(MutableSignal):
 			self._emit()
 
 	def _emit(self):
+		if QThread.currentThread() != QApplication.instance().thread():
+			loop.call_soon_threadsafe(self._emit)
+			return
 		if not self._pending and not self._pendingSilent:
 			return
-		if self._pending:
-			log.debug(f'{self.__observation.__class__.__name__} announcing ({len(self._pending)}) changed values: {abbreviatedIterable([key.name for key in self._pending])}')
+		message = f'{self.__observation.__class__.__name__} announcing ({len(self._pending)}) changed values: {abbreviatedIterable(key.name for key in self._pending)}'
+		if len(self._pending) > 3:
+			log.debug(message)
+		else:
+			log.verbose(message, verbosity=4)
 		self.__signal.emit(KeyData(self.__observation, {*self._pending, *self._pendingSilent}))
 		self._pending.clear()
+		self._pendingSilent.clear()
 
 	def connectSlot(self, slot: Callable):
 		self.__signal.connect(slot)
@@ -354,6 +370,11 @@ class Publisher(MutableSignal):
 			del self.keys[key]
 
 	def _emit(self):
+
+		if QThread.currentThread() != QApplication.instance().thread():
+			loop.call_soon_threadsafe(self._emit)
+			return
+
 		data = KeyData(self.source, self._pending)
 		if len(self.__channels):
 			keys = set([i for j in [d for d in data.keys.values()] for i in j])
@@ -553,9 +574,12 @@ class ScheduledEvent(object):
 			when = when.total_seconds()
 		if (timer := getattr(self, 'timer', None)) is not None:
 			timer.cancel()
-		self.timer = loop.call_soon(self.__fire) if self.fireImmediately else loop.call_later(when, self.__fire)
 
-	# print(f'Scheduled {self.__func.__name__} to run at {when.strftime("%-I:%M:%S%p").lower()}')
+		next_fire = wu.Time.Second(when)
+		if next_fire.timedelta >= self.logThreshold:
+			log.verbose(f'{getattr(self.__owner, "name", self.__owner)} - Scheduled event {self.__func.__name__} in {next_fire.auto:simple}', verbosity=0)
+
+		self.timer = loop.call_soon(self.__fire) if self.fireImmediately else loop.call_later(when, self.__fire)
 
 	def __fire(self):
 		if iscoroutine(self.__func) or iscoroutinefunction(self.__func):

@@ -7,65 +7,47 @@ from contextlib import contextmanager
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from datetime import timedelta
+from difflib import get_close_matches
 from enum import Enum
-from functools import lru_cache, cached_property, partial
-from inspect import Traceback, getframeinfo, getsource, getsourcefile, getsourcelines, get_annotations
+from functools import cached_property, lru_cache, partial
+from inspect import get_annotations, getframeinfo, getsource, getsourcefile, getsourcelines, Traceback
 from operator import attrgetter
+from re import search
 from shutil import get_terminal_size
 from tempfile import TemporaryFile
 from traceback import extract_stack
-from types import SimpleNamespace, GenericAlias, UnionType
+from types import GenericAlias, SimpleNamespace, UnionType
 from typing import (
-	Any,
-	ClassVar,
-	Type,
-	Callable,
-	Dict,
-	Sized,
-	Set,
-	List,
-	Tuple,
-	Mapping,
-	Final,
-	Literal,
-	TypeAlias, TypeVar,
-	Generic,
-	Iterable,
-	Union,
-	get_args,
-	get_origin,
-	get_type_hints,
-	_GenericAlias,
-	_UnionGenericAlias, Text, Sequence, Hashable,
+	_GenericAlias, _UnionGenericAlias, Any, Callable, ClassVar, Dict, Final, Generic, get_args, get_origin,
+	get_type_hints, Hashable, Iterable, List, Literal, Mapping, Sequence, Set, Sized, Text, Tuple, Type, TypeAlias,
+	TypeVar, Union
 )
-from re import search
 from warnings import warn, warn_explicit
-from builtins import isinstance
-from sys import _getframe as getframe
 
 import yaml
+from builtins import isinstance
 from PySide2.QtCore import QObject, QThread
+from rich.console import Console, Group
 from rich.panel import Panel
-from yaml import SafeDumper, Dumper, ScalarNode, MappingNode
+from rich.pretty import Pretty
+from rich.repr import auto as auto_rich_repr
+from rich.syntax import Syntax
+from sys import _getframe as getframe
+from yaml import Dumper, MappingNode, SafeDumper, ScalarNode
 from yaml.composer import Composer
 from yaml.constructor import SafeConstructor
-from rich.syntax import Syntax
-from rich.pretty import Pretty
-from rich.console import Console, Group
-from rich.repr import auto as auto_rich_repr
 from yaml.parser import Parser
 from yaml.reader import Reader
 from yaml.resolver import Resolver
 from yaml.scanner import Scanner
-from difflib import get_close_matches
 
-from LevityDash.lib.log import LevityLogger, debug
-from LevityDash.lib.utils import Unset, get, OrUnset, levenshtein
-from LevityDash.lib.utils.shared import (
-	_Panel, ActionPool, clearCacheAttr, DotDict, DeepChainMap, ExecThread, OrderedSet,
-	recursiveRemove, sortDict, guarded_cached_property
-)
+from LevityDash.lib.log import debug, LevityLogger
 from LevityDash.lib.plugins.categories import CategoryItem
+from LevityDash.lib.utils import get, levenshtein, OrUnset, Unset
+from LevityDash.lib.utils.shared import (
+	_Panel, ActionPool, clearCacheAttr, DeepChainMap, DotDict, guarded_cached_property, OrderedSet,
+	recursiveRemove, sortDict
+)
 
 STATEFUL_DEBUG = int(os.environ.get("STATEFUL_DEBUG", 0))
 
@@ -411,9 +393,6 @@ Parse_Return_Type: TypeAlias = _Parse_Return_Type[_Parse_Return_Type[_Parse_Retu
 
 class InvalidArguments(SyntaxError):
 	pass
-
-existingFsetCount = 0
-
 
 
 class StateProperty(property):
@@ -815,7 +794,7 @@ class StateProperty(property):
 		annotations.update(getattr(self._get, "__annotations__", {}))
 		return annotations
 
-	@property
+	@cached_property
 	def owningClass(self):
 		owncls = type(self)
 		if not hasattr(owncls, "__ownerClass__"):
@@ -828,7 +807,7 @@ class StateProperty(property):
 				return object
 		return owncls.__ownerClass__
 
-	@property
+	@cached_property
 	def parentCls(self):
 		if parentClass := getattr(type(self), "__parentClass__", False):
 			return parentClass
@@ -839,23 +818,6 @@ class StateProperty(property):
 				self.__ownerParentClass__ = self.__ownerClass__.__bases__[0]
 				return getattr(type(self).__ownerParentClass__, self.name, Unset)
 		return Unset
-
-	def doFuncInThread(self, func, *args, **kwargs):
-		if self.thread is None:
-			self.thread = QThread()
-
-		# if not self.thread.isFinished():
-		# 	while
-		self.thread = QThread()
-		self.exec_thread = ExecThread()
-
-		self.exec_thread.args = args
-		self.exec_thread.kwargs = kwargs
-		self.exec_thread.func = func
-		self.exec_thread.moveToThread(self.thread)
-		self.thread.started.connect(self.exec_thread.run)
-		self.exec_thread.finished.connect(self.thread.quit)
-		self.thread.start()
 
 	# Section .default(owner)
 	@lru_cache()
@@ -2356,7 +2318,7 @@ class Stateful(metaclass=StatefulMetaclass):
 					if sharedValue == encodedValue:
 						continue
 				else:
-					breakpoint()
+					raise TypeError(f'Failed parsing Shared Value')
 			elif sharedValue is not None and prop.encodeValue(sharedValue, self) == value:
 				continue
 			if prop.expands:

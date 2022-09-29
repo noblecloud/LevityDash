@@ -18,9 +18,9 @@ from uuid import uuid4
 
 import numpy as np
 from builtins import isinstance
-from itertools import chain, zip_longest
+from itertools import zip_longest
 from math import inf, prod, sqrt
-from PySide2.QtCore import QLineF, QObject, QPoint, QPointF, QRect, QRectF, QSizeF, Qt, QTimer, Signal, Slot
+from PySide2.QtCore import QLineF, QObject, QPoint, QPointF, QRect, QRectF, QSizeF, Qt, QThread, QTimer, Signal, Slot
 from PySide2.QtGui import (
 	QBrush, QColor, QCursor, QFontMetricsF, QPainter, QPainterPath, QPainterPathStroker, QPen,
 	QPixmap, QPolygonF, QTransform
@@ -34,6 +34,7 @@ from qasync import asyncSlot, QApplication
 from rich.repr import auto
 from scipy.constants import golden
 from scipy.interpolate import CubicSpline, interp1d, UnivariateSpline
+from scipy.signal import savgol_filter
 from time import perf_counter, time
 
 from LevityDash.lib.config import DATETIME_NO_ZERO_CHAR
@@ -61,15 +62,14 @@ from LevityDash.lib.ui.Geometry import (
 )
 from LevityDash.lib.utils.data import AxisMetaData, DataTimeRange, findPeaksAndTroughs, gaussianKernel, TimeFrameWindow
 from LevityDash.lib.utils.shared import (
-	_Panel, BusyContext, camelCase, clamp, clearCacheAttr, closestStringInList,
-	disconnectSignal, joinCase, LOCAL_TIMEZONE, now, numberRegex, timestampToTimezone, Unset
+	_Panel, BusyContext, camelCase, clamp, clearCacheAttr, closestStringInList, connectSignal, disconnectSignal, joinCase,
+	LOCAL_TIMEZONE, now, numberRegex, run_in_thread, threadPool, timestampToTimezone, Unset, Worker
 )
 from LevityDash.lib.utils.various import DateTimeRange
-
-from WeatherUnits.derived.precipitation import PrecipitationRate
 from WeatherUnits import DerivedMeasurement, Length, Measurement, Time
+from WeatherUnits.derived.precipitation import PrecipitationRate
 from WeatherUnits.length import Centimeter, Inch, Millimeter
-from WeatherUnits.time_.time import Hour, Minute, Second
+from WeatherUnits.time_.time import Hour, Second
 
 if TYPE_CHECKING:
 	from LevityDash.lib.ui.frontends.PySide.app import LevityScene
@@ -81,6 +81,60 @@ __all__ = ['GraphItemData', 'Figure', 'GraphPanel', 'MiniGraph']
 loop = asyncio.get_running_loop()
 
 SMOOTH_TYPES = {'linear', 'cubic', 'gaussian'}
+
+class TestData:
+
+	@staticmethod
+	def generate_random_rainstorm_rate(
+		interval: timedelta = timedelta(minutes=15),
+		intensity: float = 1,
+		timespan: timedelta = timedelta(days=3),
+		time_start: datetime = None
+	) -> List[TimeSeriesItem]:
+		"""
+		Generate a random rainstorm with a given intensity and timespan.  The rainstorm will ramp up and down over the timespan.
+		Numpy is used to generate the random data.
+		:param interval: The interval between rain measurements
+		:param intensity: The intensity of the rainstorm
+		:param timespan: The timespan of the rainstorm
+		:return: A list of rain rates between each interval in mm
+		"""
+		rainData = np.random.gamma(1, intensity, int(timespan.total_seconds() / interval.total_seconds()))
+		rainDataTotals = np.cumsum(rainData)
+		rate = []
+		time_start = time_start or now()
+		intervalWU = Time.Second(interval.total_seconds()).minute
+		for i in range(round(timespan.total_seconds() / interval.total_seconds())):
+			timestamp = time_start + timedelta(seconds=i * interval.total_seconds())
+			value = Millimeter(rainData[i])
+			thisRate = PrecipitationRate(value, intervalWU)
+			rate.append(TimeSeriesItem(thisRate, timestamp))
+		return rate
+
+	@staticmethod
+	def generate_random_rainstorm_accumulation(
+		interval: timedelta = timedelta(minutes=15),
+		intensity: float = 1,
+		timespan: timedelta = timedelta(days=3),
+		time_start: datetime = None
+	) -> List[TimeSeriesItem]:
+		"""
+		Generate a random rainstorm with a given intensity and timespan.  The rainstorm will ramp up and down over the timespan.
+		Numpy is used to generate the random data.
+		:param interval: The interval between rain measurements
+		:param intensity: The intensity of the rainstorm
+		:param timespan: The timespan of the rainstorm
+		:return: A list of rain rates between each interval in mm
+		"""
+		rainData = np.random.gamma(1, intensity, int(timespan.total_seconds() / interval.total_seconds()))
+		rainDataTotals = np.cumsum(rainData)
+		time_start = time_start or now()
+		rate = []
+		for i in range(round(timespan.total_seconds() / interval.total_seconds())):
+			timestamp = time_start + timedelta(seconds=i * interval.total_seconds())
+			value = Millimeter(rainDataTotals[i])
+			rate.append(TimeSeriesItem(value, timestamp))
+		return rate
 
 
 # Section Surface
@@ -141,7 +195,7 @@ class GraphItemData(Stateful, tag=...):
 	log = log.getChild('GraphItemData')
 
 	def __init__(self, parent: 'Figure' = None, **kwargs):
-		self.pendingUpdate = None
+		self.pendingUpdate: Worker | None = None
 		self._preferredSourceName = 'any'
 		self.__pendingActions = []
 		self._waitingForPreferredSourceTimeout = None
@@ -149,6 +203,7 @@ class GraphItemData(Stateful, tag=...):
 		self.__connectedContainer = None
 		super(GraphItemData, self).__init__()
 		self._set_state_items_ = set()
+		self.useTestData = kwargs.pop('useTestData', False)
 		kwargs = Stateful.prep_init(self, kwargs)
 		self.__init_defaults__()
 		self.figure = parent
@@ -169,7 +224,18 @@ class GraphItemData(Stateful, tag=...):
 		return hash(self.uuid)
 
 	def __str__(self):
+		return self.log_repr
+
+	@cached_property
+	def log_repr(self) -> str:
 		return f'GraphItem({self.key.name})'
+
+	def __cancel_pending(self):
+		try:
+			self.pendingUpdate.cancel()
+			log.debug(f'{self.log_repr}: Has pending update with status {self.pendingUpdate.status}, cancelling')
+		except AttributeError:
+			pass
 
 	@asyncSlot()
 	async def onResizeDone(self):
@@ -201,16 +267,13 @@ class GraphItemData(Stateful, tag=...):
 		"""
 		if not self.hasData:
 			return
-		# self.__updateTransform(axis)
 		self.graphic.onAxisTransform(axis)
 		if self.labels.enabled:
 			self.labels.onAxisTransform(axis)
 
+	@Slot(Container)
 	def connectTimeseries(self, container: Container):
-		try:
-			self.pendingUpdate.cancel()
-		except AttributeError:
-			pass
+
 		self.pendingUpdate = None
 		try:
 			disconnected = self.disconnectTimeseries()
@@ -218,13 +281,12 @@ class GraphItemData(Stateful, tag=...):
 			disconnected = True
 		if not disconnected:
 			raise ValueError('Failed to disconnect from existing timeseries')
-
 		with container.timeseries.signals as signal:
-			connected = signal.connectSlot(self.__onValueChange)
+			connected = signal.connectSlot(self.onValueChange)
 			if connected:
 				self.__connectedContainer = container
 				self.__connectedTimeseries = container.timeseries
-				self.pendingUpdate = loop.call_soon(self.__onValueChange)
+				self.pendingUpdate = run_in_thread(self.onValueChange, priority=1)
 				log.debug(f'GraphItem {self.key.name} connected to {self.__connectedTimeseries}')
 			else:
 				log.warning(f'GraphItem {self.key.name} failed to connect to {container}')
@@ -232,7 +294,7 @@ class GraphItemData(Stateful, tag=...):
 
 	def disconnectTimeseries(self) -> bool:
 		if self.__connectedTimeseries is not None:
-			disconnected = self.__connectedTimeseries.signals.disconnectSlot(self.__onValueChange)
+			disconnected = self.__connectedTimeseries.signals.disconnectSlot(self.onValueChange)
 			if disconnected:
 				log.debug(f'GraphItem {self.key.name} disconnected from {self.__connectedTimeseries}')
 				self.__connectedTimeseries = None
@@ -244,8 +306,8 @@ class GraphItemData(Stateful, tag=...):
 			return disconnected
 		raise ValueError('No timeseries connected')
 
-	@asyncSlot()
-	async def __onValueChange(self):
+	@Slot()
+	def onValueChange(self):
 		"""
 		Called when the value of the timeseries has changed.  Alerts parent figure
 		that its values have changed.  The figure briefly waits for other GraphItemData to
@@ -256,19 +318,15 @@ class GraphItemData(Stateful, tag=...):
 		"""
 		if not self.hasData:
 			return
-		if self.pendingUpdate is not None:
-			try:
-				self.pendingUpdate.cancel()
-			except Exception:
-				pass
+		self.__cancel_pending()
 
 		self.log.debug(f'Updating GraphItemData[{self.key.name}]... Reason: value change')
-		self.graph.onAxisChange(Axis.Both)
+		loop.call_soon_threadsafe(self.graph.onAxisChange, Axis.Both)
 		self.__clearAxis(Axis.Both)
 		self.graphic.onDataChange()
 		if self.labels.enabled:
-			clearCacheAttr(self, 'peaksAndTroughs')
-			loop.call_soon(self.labels.onValueChange, Axis.Both)
+			loop.call_soon_threadsafe(self.labels.onDataChange, Axis.Both)
+
 		self.__lastUpdate = now()
 
 		self.axisChanged.announce(Axis.Both, instant=True)
@@ -307,8 +365,7 @@ class GraphItemData(Stateful, tag=...):
 		self.__clearAxis(Axis.Both)
 		self.graphic.onDataChange()
 		if self.labels.enabled:
-			clearCacheAttr(self, 'peaksAndTroughs')
-			self.labels.onValueChange(Axis.Both)
+			self.labels.onDataChange(Axis.Both)
 		self.log.info(f'GraphItemData[{self.key.name}] refreshed')
 
 	@property
@@ -552,7 +609,9 @@ class GraphItemData(Stateful, tag=...):
 			except AttributeError:
 				pass
 			self._waitingForPreferredSourceTimeout = None
-			self.connectTimeseries(timeSeriesContainer)
+
+			loop.call_soon_threadsafe(self.connectTimeseries, timeSeriesContainer)
+
 			return
 		elif timeSeriesContainer is not None:
 			multiSourceContainer.getPreferredSourceContainer(self, self.source, self.setContainer('getPreferredSourceContainer'), timeseriesOnly=True)
@@ -686,11 +745,17 @@ class GraphItemData(Stateful, tag=...):
 		return DataTimeRange(self)
 
 	@cached_property
-	def peaksAndTroughs(self):
-		# TODO: this should not be a cached property
-		h = self.graph.timeframe.hours / 4
-		self.peaks, self.troughs = findPeaksAndTroughs(self.smoothed, spread=timedelta(hours=9), groupingSize=timedelta(hours=h))
-		return self.peaks, self.troughs
+	def _peakTroughWorker(self) -> Worker:
+		# TODO: Replace this with reusable immortal worker
+		return threadPool.create_worker
+
+	def refreshPeaksAndTroughs(self, callback: Callable[[], Tuple[list, list]]) -> Worker:
+		UILogger.verbose(f'GraphItem({self.key.name}): Calculating peaks and troughs')
+		h = self.graph.timeframe.hours / 5
+		return run_in_thread(
+			findPeaksAndTroughs, self.smoothed, spread=timedelta(hours=9), groupingSize=timedelta(hours=h),
+			on_result=callback, priority=2
+		)
 
 	@staticmethod
 	def __parseData(
@@ -797,16 +862,28 @@ class GraphItemData(Stateful, tag=...):
 
 	@cached_property
 	def smoothed(self) -> np.array:
+		"""Reduced and smoothed data set of the graph item"""
+
 		tz = LOCAL_TIMEZONE
 		dataType = self.dataType
+		x, y = self.data
+
+		newPeriod = int(round(self.graph.secondsPerPixel * self.resolution))
+		s = round((x[-1] - x[0]) / newPeriod / 5)
+
+		xS = np.linspace(x[0], x[-1], s)
+		y, x = interp1d(x, y)(xS), xS
+
 		if issubclass(dataType, DerivedMeasurement):
 			n = dataType.numeratorClass
 			d = dataType.denominatorClass(1)
-			return [TimeSeriesItem(self.dataType(n(y), d), timestampToTimezone(x, tz=tz)) for x, y in zip(*self.data)]
-		return [TimeSeriesItem(self.dataType(y), timestampToTimezone(x, tz=tz)) for x, y in zip(*self.data)]
+			return [TimeSeriesItem(dataType(n(y), d), timestampToTimezone(x, tz=tz)) for x, y in zip(x, y)]
+		return [TimeSeriesItem(dataType(y), timestampToTimezone(x, tz=tz)) for x, y in zip(x, y)]
 
 	@cached_property
 	def list(self):
+		if self.useTestData:
+			return TestData.generate_random_rainstorm_rate()
 		end = self.graph.timeframe.end + timedelta(hours=2) if not self.graph.scrollable else None
 		step = timedelta(minutes=10)
 		if self.hasData and len(sliced := self.timeseries[self.graph.timeframe.historicalStart:end:step]):
@@ -833,14 +910,16 @@ class GraphItemData(Stateful, tag=...):
 
 		if len(x) == 1:
 			return x, y
-		# Interpolate
 
+		# Interpolate
 		smooth = self.smooth
 		strength = self.smoothingStrength
 
 		dpi = getDPI(self.graph.scene().view.screen())
 
-		match self.smoothingType:
+		interpType, smoothType, *_ = *self.smoothingType.split('-', 1), 'savgol'
+
+		match interpType:
 			case 'linear':
 				interpField = interp1d(x, y)
 			case 'cubic':
@@ -854,9 +933,23 @@ class GraphItemData(Stateful, tag=...):
 
 		# Smooth
 		if smooth:
-			sf = max(int(round(dpi / (resolution * (4 / strength)))), 1)
-			kernel = gaussianKernel(sf, sf*2)
-			y = np.convolve(y, kernel, mode='valid')
+
+			sf = max(int(round(dpi / (resolution * strength * golden))), 1)
+
+			match smoothType:
+				case 'savgol':
+					yy = savgol_filter(y, sf, 2)
+				case None | 'gaussian' | 'convolve':
+					padding = int((sf-1)/2)
+					y = np.pad(y, (padding, padding), 'wrap')
+					kernel = gaussianKernel(sf, sf*2)
+					yy = np.convolve(y, kernel, mode='valid')
+					clipX = int((len(y) - len(yy)) / 2)
+					xS = xS[clipX:-clipX]
+				case _:
+					raise ValueError(f'Invalid smoothing type: {smoothType}')
+
+			y = yy.round(6)
 
 		# Clip values
 		if (limits := getattr(self.dataType, 'limits', None)) is not None:
@@ -975,6 +1068,10 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		yield 'minY', f'{self.path().elementAt(0).y:g}'
 		yield 'maxY', f'{self.path().elementAt(pathLen - 1).y:g}'
 		yield from super(Plot, self).__rich_repr__()
+
+	@property
+	def log_repr(self) -> str:
+		return f'{self.__class__.__name__}({self.data.key.name})'
 
 	def setZValue(self, value: int):
 		super(Plot, self).setZValue(self.figure.zValue() + 1)
@@ -1188,18 +1285,24 @@ class Plot(QGraphicsPixmapItem, Stateful):
 			return
 
 		pixmap = self.pixmap()
-		pixmap.scaled(self.figure.rect().size().toSize(), Qt.AspectRatioMode.KeepAspectRatio)
+		new_size = self.figure.rect().size().toSize()
+		render_axis = Axis.Neither
+		if (axis & Axis.Y) and abs(pixmap.height() - new_size.height()) > 10:
+			render_axis |= Axis.Y
+		if (axis & Axis.X) and abs(pixmap.width() - new_size.width()) > 10:
+			render_axis |= Axis.X
+		pixmap.scaled(new_size, Qt.AspectRatioMode.KeepAspectRatio)
 		self.setPixmap(pixmap)
-		self._updatePath()
-		self.updateTransform()
-		if self.gradient:
-			self.updateGradient()
-		self.scheduleRender()
+		if render_axis:
+			self.updateTransform()
+			if render_axis & Axis.Y:
+				if self.gradient:
+					self.updateGradient()
+			self.scheduleRender()
 
 	def onDataChange(self):
 		"""Called when the data is changed."""
-		log.debug(f'{self.data.key} onDataChange()')
-		self.prepareGeometryChange()
+		log.debug(f'{self.log_repr}: onDataChange()')
 		self._updatePath()
 		self.updateTransform()
 		if self.gradient:
@@ -1211,7 +1314,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		"""Called when the plot is resized but not while being actively resized."""
 		if not self.data.hasData:
 			return
-		log.debug(f'{self.data.key} onResizeDone()')
+		log.debug(f'{self.log_repr}: onResizeDone()')
 		self.prepareGeometryChange()
 		self._updatePath()
 
@@ -1345,9 +1448,9 @@ class Plot(QGraphicsPixmapItem, Stateful):
 				skip_count = 0
 				sub_paths[-1].lineTo(current.x, current.y)
 		return sub_paths
-	# @profile
+
 	def _updateShape(self, path: QPainterPath = None , scale: float = 1):
-		log.verbose(f'{self.data.key.name}: updating shape')
+		log.verbose(f'{self.log_repr}: Updating shape')
 
 		self.prepareGeometryChange()
 		qp = QPainterPathStroker()
@@ -1357,19 +1460,16 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		qp.setCapStyle(Qt.RoundCap)
 		path = path or self.data.combinedTransform.map(self._path.translated(-self._path.elementAt(0).x, 0))
 
-		# For whatever reason, QPainterPath.simplify() removes significant chunks of the path
-		# when there are spans of straight lines. This function splits the path into multiple
-		# sub-paths, each of which is simplified individually.
+		# ! For whatever reason, QPainterPath.simplify() removes significant chunks of the path
+		# ! when there are spans of straight lines. This function splits the path into multiple
+		# ! sub-paths, each of which is simplified individually.
 
 		path = self.merge_paths(self.split_path(path), qp)
-		log.verbose(f'Plot({self.data.key.name}) pixmap by {scale}, inverse {(scale := 1/scale)}')
 
-		path = QTransform.fromScale(scale, scale).map(path)
-		shape = path
-		self._shape = shape
+		self._shape = QTransform.fromScale(scale, scale).map(path)
 
 	def merge_paths(self, paths, qp):
-		log.verbose(f'{self.data.key.name}: merging {len(paths)} paths', verbosity=2)
+		log.verbose(f'{self.log_repr}: Merging {len(paths)} paths', verbosity=2)
 		path = QPainterPath()
 		path.setFillRule(Qt.WindingFill)
 		for p in paths:
@@ -1379,19 +1479,12 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		return path.simplified()
 
 	def scheduleRender(self):
-		if self.renderTask is not None:
-			log.verbose(f'Render task for {self.data.key} already scheduled', verbosity=2)
-			self.renderTask.cancel()
-		self.renderTask = loop.create_task(self.render())
+		log.debug(f'{self.log_repr}: Scheduling render')
+		self.render()
 
-		def callback(*args, **kwargs):
-			# self.resetTransform()
-			self.renderTask = None
-
-		self.renderTask.add_done_callback(callback)
-
-	async def render(self):
+	def render(self):
 		with BusyContext(task=self.render):
+			log.verbose(f'{self.log_repr}: Starting render', verbosity=3)
 			self.__dataTransformAtRender = self.figure.figureTransform
 
 			deviceTransform = self.scene().view.deviceTransform()
@@ -1427,21 +1520,17 @@ class Plot(QGraphicsPixmapItem, Stateful):
 			painter.drawPath(path)
 			painter.end()
 
-			def bake(pix: QPixmap, *effects: Effect):
-				scene = RendererScene()
-				return scene.bakeEffects(pix, *effects)
-
 			def finish(self, scaleTo_, pix: QPixmap):
+				log.verbose(f'{self.log_repr}: Rendering complete')
 				self.prepareGeometryChange()
 				if scaleTo_:
 					pix = pix.scaledToWidth(scaleTo_.width(), Qt.SmoothTransformation)
 				self.setPixmap(pix)
-				QApplication.instance().processEvents()
 				self.update()
 
-			def send(pix: QPixmap):
-				QApplication.instance().pool.run_threaded_process(bake, pix, *self.effects.values(), callback=partial(finish, self, scaleTo))
-			loop.call_soon(send, pixmap)
+			def bake(pix: QPixmap, *effects: Effect):
+				scene = RendererScene()
+				return scene.bakeEffects(pix, *effects)
 
 			if scaleTo:
 				pixmap = pixmap.scaledToWidth(scaleTo.width(), Qt.SmoothTransformation)
@@ -1451,15 +1540,19 @@ class Plot(QGraphicsPixmapItem, Stateful):
 
 			self.setPixmap(pixmap)
 
-			loop.call_soon(lambda: QApplication.instance().pool.run_threaded_process(
-				self._updateShape, path, rect.width() / scaleTo.width() if scaleTo else 1
-			))
+			run_in_thread(
+				self._updateShape, QPainterPath(path), scaleTo.width() / rect.width() if scaleTo else 1,
+				priority=2
+			)
 
-
+			run_in_thread(
+				bake, pixmap, *self.effects.values(),
+				on_result=partial(finish, self, scaleTo),
+				priority=1
+			)
 
 	def _debug_paint(self, painter, option, widget):
 		self._normal_paint(painter, option, widget)
-		# QPen(self.debugColor)
 		painter.setPen(self._debug_paint_color)
 		fill = painter.pen().color()
 		fill.setAlpha(50)
@@ -1776,7 +1869,7 @@ class AnnotationText(Text):
 		self.setPos(value)
 
 	@property
-	def graphSurface(self):
+	def graphSurface(self) -> 'GraphPanel':
 		return self.data.graph
 
 	# !TODO: Reimplement keeping text in containing rect
@@ -2133,6 +2226,15 @@ class PlotLabel(AnnotationText):
 
 	# self.setGraphicsEffect(AnnotationText.shadow())
 
+	@AnnotationText.value.setter
+	def value(self, value):
+		AnnotationText.value.fset(self, value)
+		if value is not None:
+			try:
+				self.setToolTip(f'{value.timestamp:%x %X} {value.value:.5g}')
+			except Exception as e:
+				log.error(e)
+
 	@property
 	def text(self) -> str:
 		return str(self.value)
@@ -2176,11 +2278,9 @@ class PlotLabel(AnnotationText):
 
 	@position.setter
 	def position(self, value):
-		match value:
-			case QPointF() | QPoint():
-				self.__x, self.__y = value.x(), value.y()
-			case (x, y):
-				self.__x, self.__y = x, y
+		if isinstance(value, (QPointF, QPoint)):
+			value = value.toTuple()
+		self.__x, self.__y = value
 		self.setPos(self.x, self.y)
 
 	@property
@@ -2219,9 +2319,12 @@ class PlotLabels(AnnotationLabels[PlotLabel]):
 	surface: Surface
 	isPeaks: bool = True
 	labelInterval: int | timedelta
-	data: Iterable[TimeAwareValue]
-	peaks: Optional[List[TimeAwareValue]]
-	troughs: Optional[List[TimeAwareValue]]
+	data: Sequence[TimeAwareValue] = None
+	peaks: Optional[List[TimeAwareValue]] = None
+	troughs: Optional[List[TimeAwareValue]] = None
+
+	waiting_for_data: bool = True
+	update_task: Worker = None
 
 	__xValues: list[float] | None = None  # Normalized x _values (0-1)
 	__yValues: list[float] | None = None  # Normalized y _values (0-1)
@@ -2246,6 +2349,10 @@ class PlotLabels(AnnotationLabels[PlotLabel]):
 	def __str__(self):
 		return f'{type(self).__name__}({self.source!s})'
 
+	@cached_property
+	def log_repr(self) -> str:
+		return f'GraphItem({self.source.key.name}).labels'
+
 	def post_init(self, **state):
 		super(PlotLabels, self).post_init(**state)
 		self.surface.setZValue(self.source.figure.zValue() + 100)
@@ -2260,37 +2367,53 @@ class PlotLabels(AnnotationLabels[PlotLabel]):
 	def alignment(self) -> bool:
 		return not self.peaksTroughs
 
+	def _intercept_peaks_troughs(self, peaks_troughs: List[TimeAwareValue], callback: Callable = None):
+		log.verbose(f'{self.log_repr}: Received peaks and troughs ({(p_len := len([i for i in peaks_troughs if i.isPeak]))} peaks, {len(peaks_troughs) - p_len} troughs)')
+		# merged: List = sorted([x for x in chain.from_iterable(zip_longest(peaks, troughs)) if x is not None], key=lambda x: x.timestamp)[1:-1]
+		peaks_troughs.pop(-1)
+		self.data = peaks_troughs
+		self.waiting_for_data = False
+		if callback is not None:
+			loop.call_soon_threadsafe(callback)
+
 	def onDataChange(self, axis: Axis):
 		# ! TODO: This could be optimized
-		self.resetAxis(axis)
-		self.refresh('onDataChange')
+		self.waiting_for_data = True
+
+		def continue_on_data_change():
+			log.verbose(f'{self.log_repr}: Continuing onDataChange()')
+			self.resetAxis(axis)
+			loop.call_soon_threadsafe(self.refresh, "Continue onDataChange()")
+
+		log.verbose(f'{self.log_repr}: Data changed, requesting {"peaks and troughs" if self.peaksTroughs else "labels"}')
+		continue_ = partial(self._intercept_peaks_troughs, callback=continue_on_data_change)
+		self.update_task = self.source.refreshPeaksAndTroughs(continue_)
 
 	def onAxisTransform(self, axis: Axis):
-		if axis is Axis.Vertical:
-			self.quickRefresh()
-			return
+		log.verbose(f'{self.log_repr}: {axis!r} changed')
 		self.resetAxis(axis)
-		self.refresh('onAxisTransform')
-
-	def quickRefresh(self):
-		positions = self.values
-		for label, value, pos in zip_longest(self, self.data, positions):
-			label.value = value
-			label.position = pos
+		if self.data is None:
+			try:
+				if self.update_task.status is Worker.Status.Running:
+					self.update_task.signals.finished.connect(partial(self.onAxisTransform, axis))
+			except AttributeError:
+				pass
+			return
+		self.quickRefresh()
 
 	def refresh(self, reason: str = None):
+		log.verbose(f'{self.log_repr}: Refreshing labels {reason if reason else ""}')
 		if self.enabled:
 			start = perf_counter()
 			if self.source.hasData and self.peaksTroughs:
 				self.normalizeValues()
-				peaks = set(self.source.peaks)
 				positions = self.values
 				self.resize(len(positions))
 				for label, value, pos in zip_longest(self, self.data, positions):
 					label.value = value
-					label.alignment = AlignmentFlag.Bottom if value in peaks else AlignmentFlag.Top
+					label.alignment = AlignmentFlag.Bottom if value.isPeak else AlignmentFlag.Top
 					label.position = pos
-				log.warning(f'{self} refresh took {perf_counter() - start:.3f}s: reason={reason}')
+				log.verbose(f'{self.log_repr}: Refresh Done taking {perf_counter() - start:.3f}s', verbosity=4)
 			elif not self.source.hasData:
 				return
 			else:
@@ -2299,15 +2422,26 @@ class PlotLabels(AnnotationLabels[PlotLabel]):
 			if self:
 				self.resize(0)
 
-	@property
-	def data(self):
-		self.peaks, self.troughs = peaks, troughs = self.source.peaksAndTroughs
-		data = [x for x in chain.from_iterable(zip_longest(peaks, troughs)) if x is not None]
-		return data
+	def threaded_refresh(self) -> Worker:
+		return run_in_thread(self.refresh)
 
-	def onValueChange(self, axis: Axis):
-		self.resetAxis(axis)
-		self.refresh('onValueChange')
+	def quickRefresh(self):
+		log.verbose(f'{self.log_repr}: Quick refresh')
+		positions = self.values
+		self.normalizeValues()
+		data = self.data
+		if len(data) != len(self):
+			self.resize(len(positions))
+
+		try:
+			for label, value, pos in zip_longest(self, data, positions):
+				label.value = value
+				label.position = pos
+		except AttributeError as e:
+			if len(data) == len(self) == len(positions):
+				raise e
+			else:
+				loop.call_soon_threadsafe(self.threaded_refresh)
 
 	def labelFactory(self, **kwargs):
 		return PlotLabel(labelGroup=self, data=self, **kwargs)
@@ -2453,7 +2587,7 @@ class TimestampGenerator:
 		return self
 
 	def __len__(self) -> int:
-		return int((self.end - self.start) / self.__interval)
+		return max(abs(int((self.end - self.start) / self.__interval)), 0)
 
 	def __next__(self) -> datetime:
 		if self.__current > self.end:
@@ -3140,6 +3274,9 @@ class AxisSignal(QObject):
 		self.timer.timeout.connect(self.__announce)
 
 	def announce(self, axis: Axis, instant: bool = False):
+		if QThread.currentThread() is not QApplication.instance().thread():
+			loop.call_soon_threadsafe(self.announce, axis, instant)
+			return
 		self.__axis |= axis
 		if instant:
 			self.__announce()
@@ -3147,15 +3284,17 @@ class AxisSignal(QObject):
 			self.timer.start()
 
 	def __announce(self):
+		if QThread.currentThread() is not QApplication.instance().thread():
+			loop.call_soon_threadsafe(self.__announce)
+			return
 		self.__signal.emit(self.__axis)
 		self.__axis = Axis.Neither
 
 	def connectSlot(self, slot: Callable):
-		# self.log.debug(f'Connecting slot {slot.__func__.__name__} to AxisSignal for {self.parent}')
-		self.__signal.connect(slot)
+		return connectSignal(self.__signal, slot)
 
 	def disconnectSlot(self, slot: Callable):
-		disconnectSignal(self.__signal, slot)
+		return disconnectSignal(self.__signal, slot)
 
 
 _Figure = ForwardRef('Figure')
@@ -3223,7 +3362,7 @@ class CurrentTimeIndicator(QGraphicsLineItem, Stateful, tag=...):
 				try:
 					value = Color(value)
 				except ValueError:
-					UILogger.warning(f'Invalid color \'{value}\' for time indicator')
+					log.warning(f'Invalid color \'{value}\' for time indicator')
 					value = Color('#ff9aa3')
 		elif isinstance(value, dict):
 			value = Color(**value)
@@ -3375,7 +3514,7 @@ class GraphPanel(Panel, tag='graph'):
 			self.__clearCache()
 			if annotations := getattr(self, '_annotations', None):
 				annotations.onFrameChange(axis)
-		self.updateSyncTimer()
+		loop.call_soon_threadsafe(self.updateSyncTimer)
 
 	def parentResized(self, *args):
 		super(GraphPanel, self).parentResized(*args)
@@ -3756,31 +3895,11 @@ class GraphProxy(QGraphicsItemGroup):
 		self.setFlag(self.ItemClipsChildrenToShape)
 		self.setFlag(self.ItemClipsToShape)
 
-		self.graph.timeframe.connectItem(self.onTimeFrameChange)
-
-	@Slot(Axis)
-	def onTimeFrameChange(self, axis):
-		self.updateTransform()
-
 	@Slot(Axis)
 	def onDataRangeChange(self, axis: Axis):
 		if axis & Axis.X:
 			clearCacheAttr(self.graph, 'timescalar')
 
-	@Slot(Axis)
-	def onFrameChange(self, axis):
-		self.updateTransform()
-
-	def updateTransform(self):
-		scale = [1, 1]
-		if self._previous:
-			previous = self._previous.size()
-			current = self.graph.rect().size()
-			if previous != current:
-				scale[0] = current.width() / previous.width()
-				scale[1] = current.height() / previous.height()
-				self._previous = self.graph.rect()
-		self.t.scale(*scale)
 
 	@cached_property
 	def pix(self) -> QPixmap:
@@ -3833,13 +3952,6 @@ class GraphProxy(QGraphicsItemGroup):
 		else:
 			event.accept()
 		super(GraphProxy, self).mouseMoveEvent(event)
-
-	# def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent) -> None:
-	# 	if (incrementer := next(
-	# 		(i for i in self.graph.graphZoom.childItems() if i.contains(i.mapFromScene(event.scenePos()))), None)
-	# 	) is not None:
-	# 		incrementer.mouseReleaseEvent(event)
-	# 	super(GraphProxy, self).mouseReleaseEvent(event)
 
 	def hoverEnterEvent(self, event: QGraphicsSceneHoverEvent) -> None:
 		event.accept()
