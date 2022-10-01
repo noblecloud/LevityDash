@@ -12,7 +12,8 @@ from ephem import previous_new_moon, next_new_moon
 
 from LevityDash.lib.ui.frontends.PySide.utils import colorPalette
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
-from LevityDash.lib.utils.shared import clearCacheAttr, now
+from LevityDash.lib.ui.Geometry import Alignment, AlignmentFlag
+from LevityDash.lib.utils.shared import now
 from LevityDash.lib.stateful import StateProperty
 from LevityDash.lib.config import userConfig
 from LevityDash.lib.ui import UILogger
@@ -314,6 +315,26 @@ class Moon(Panel, tag="moon"):
 			case _:
 				raise ValueError(f"Invalid interval: {value}")
 
+	@StateProperty(default=None, allowNone=False, after=refresh)
+	def alignment(self) -> Alignment | None:
+		return self._alignment
+
+	@alignment.setter
+	def alignment(self, value: Alignment | None):
+		self._alignment = value
+
+	@alignment.decode
+	def alignment(value: str | int | tuple[AlignmentFlag, AlignmentFlag] | AlignmentFlag) -> Alignment:
+		if isinstance(value, (str, int)):
+			alignment = AlignmentFlag[value]
+		elif value is None:
+			alignment = AlignmentFlag.Center
+		elif isinstance(value, tuple):
+			return Alignment(*value)
+		else:
+			alignment = AlignmentFlag.Center
+		return Alignment(alignment)
+
 	@property
 	def nextUpdate(self) -> Time:
 		return Time.Millisecond(self.timer.remainingTime()).s.auto
@@ -370,10 +391,21 @@ class Moon(Panel, tag="moon"):
 
 	def setRect(self, rect):
 		super().setRect(rect)
-		self.moonPath.setPos(rect.center())
+		pos = rect.center().toTuple()
+		moon_width = self.radius * 2
+		w_diff = rect.width() - moon_width
+		h_diff = rect.height() - moon_width
+		try:
+			pos = [k - (i * j) for i, j, k in zip(self.alignment.multipliersCentered, (w_diff, h_diff), pos)]
+		except AttributeError:
+			pass
+		# self.setPos(*pos)
+
+		self.moonPath.setPos(*pos)
 		self.moonPath.draw()
-		self.moonFull.setPos(rect.center())
+		self.moonFull.setPos(*pos)
 		self.moonFull.draw()
+
 		self.setCacheMode(QGraphicsItem.CacheMode.ItemCoordinateCache)
 		if self.glow and (effect := self.moonPath.graphicsEffect()):
 			effect.setBlurRadius(self.glowStrength*self.radius)
