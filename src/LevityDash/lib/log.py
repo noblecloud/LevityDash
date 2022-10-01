@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import logging
 import os
@@ -8,23 +9,28 @@ from configparser import NoOptionError, SectionProxy
 from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import ClassVar, List
+from typing import ClassVar, Dict, List
 
-import qasync
 import shiboken2
+from dotty_dict import Dotty as Dotty_
 from PySide2.QtWidgets import QApplication, QStatusBar
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.style import Style
 from rich.text import Text as RichText
 from rich.theme import Theme
-from sys import argv, gettrace
+from sys import gettrace
 
 from LevityDash import __dirs__, __lib__
 from .config import userConfig
 
-
 suppressedModules = [asyncio, shiboken2]
+
+class Dotty(Dotty_):
+
+	def __getattr__(self, item):
+		return self[item]
+
 
 try:
 	import bleak
@@ -32,6 +38,7 @@ try:
 except ImportError:
 	pass
 
+logging_levels = logging._nameToLevel
 
 def install_sentry():
 	try:
@@ -48,12 +55,12 @@ def install_sentry():
 		print(f"Logging.sentry_endpoint not set in config")
 
 
-def install_log_tail(handlers_: List[logging.Handler]):
+def install_log_tail(handlers_: List[logging.Handler], level: int = logging.DEBUG):
 	try:
 		token = os.environ.get("LOGTAIL_SOURCE_TOKEN", None) or userConfig.get('Logging', 'logtail_token')
 		if token:
 			from logtail import LogtailHandler
-			handlers_.append(LogtailHandler(source_token=token))
+			handlers_.append(LogtailHandler(source_token=token, level=level, include_extra_attributes=True))
 	except ImportError:
 		logging.warning("Logtail not installed. Install with `pip install logtail-python` or `pip install LevityDash[monitoring]`")
 	except NoOptionError:
@@ -84,6 +91,7 @@ class StatusBarHandler(logging.Handler):
 
 
 class LevityHandler(RichHandler):
+	__level = 0
 
 	def get_level_text(self, record: logging.LogRecord) -> RichText:
 		"""Get the level name from the record.
@@ -99,6 +107,14 @@ class LevityHandler(RichHandler):
 			level_name.ljust(9), f"logging.level.{level_name.lower()}"
 		)
 		return level_text
+
+	@property
+	def level(self):
+		return self.__level
+
+	@level.setter
+	def level(self, value):
+		self.__level = value
 
 
 class RichRotatingLogHandlerProxy(RotatingFileHandler, LevityHandler):
@@ -128,6 +144,15 @@ class _LevityLogger(logging.Logger):
 	logDir: ClassVar[Path] = Path(__dirs__.user_log_dir)
 	errorLogDir: ClassVar[Path]
 	logPath: ClassVar[Path]
+
+	_description_to_level: ClassVar[Dict[str, int]] = {
+		'verbose': 0,
+		'very-verbose': 1,
+		'extra-verbose': 2,
+		'extremely-verbose': 3,
+		'obnoxiously-verbose': 4,
+		'spam': 5,
+	}
 
 	fileHandler: ClassVar[RichHandler]
 	consoleHandler: ClassVar[RichHandler]
@@ -164,9 +189,14 @@ class _LevityLogger(logging.Logger):
 	duplicateFilter: ClassVar[DuplicateFilter] = DuplicateFilter()
 
 	def __init__(self, name: str, level: int | str = None):
-		level = level or self.determineLogLevel()
+		level = level or self.root.level
 		super().__init__(name, level=level)
 		self.addFilter(self.duplicateFilter)
+
+	@classmethod
+	def _test_log_level_name(cls, level: str) -> bool:
+		level = level.upper().split('@', 1)[0]
+		return level in logging._nameToLevel
 
 	@classmethod
 	def install(cls) -> None:
@@ -195,10 +225,16 @@ class _LevityLogger(logging.Logger):
 		)
 
 		level = cls.determineLogLevel()
+		console_level = cls.determineLogLevel('console', default=level)
+		file_level = cls.determineLogLevel('file', default=1)
+		status_bar_level = cls.determineLogLevel('status_bar', default=4)
+		logtail_level = cls.determineLogLevel('logtail', default=1)
 
-		consoleLevel = cls.__config__.get("consoleLevel") or level
+		handlers = []
+		install_sentry()
+		install_log_tail(handlers, logtail_level)
 
-		_LevityLogger.errorLogDir = cls.logDir.joinpath("prettyErrors")
+		# _LevityLogger.errorLogDir = cls.logDir.joinpath("prettyErrors")
 		cls.__ensureFoldersExists()
 		cls.logPath = Path(cls.logDir, 'LevityDash.log')
 		columns = shutil.get_terminal_size((200, 20)).columns - 2
@@ -231,7 +267,7 @@ class _LevityLogger(logging.Logger):
 			show_path=False,
 			tracebacks_width=columns,
 			rich_tracebacks=True,
-			level=consoleLevel,
+			level=console_level,
 		)
 
 		richRotatingFileHandler = RichRotatingLogHandlerProxy(
@@ -251,25 +287,20 @@ class _LevityLogger(logging.Logger):
 			backupCount=int(userConfig.getOrSet('Logging', 'rolloverCount', '5', userConfig.getint)),
 		)
 		cls.propagate = True
-		cls.cleanupLogFolder()
 
-		richRotatingFileHandler.setLevel(1)
+		richRotatingFileHandler.setLevel(file_level)
 
 		cls.fileHandler = richRotatingFileHandler
 		cls.consoleHandler = consoleHandler
 		cls.console = consoleHandler.console
 		cls.statusBarHandler = StatusBarHandler()
+		cls.statusBarHandler.setLevel(status_bar_level)
 
-		handlers = [consoleHandler, richRotatingFileHandler, cls.statusBarHandler]
+		handlers += [consoleHandler, richRotatingFileHandler, cls.statusBarHandler]
 
 		logging.setLoggerClass(_LevityLogger)
 
-		install_sentry()
-		install_log_tail(handlers)
-
 		logging.basicConfig(handlers=handlers, format="%(message)s", level=level)
-
-
 
 	@classmethod
 	def __ensureFoldersExists(cls):
@@ -277,28 +308,196 @@ class _LevityLogger(logging.Logger):
 			cls.logDir.mkdir(parents=True)
 
 	@classmethod
-	def determineLogLevel(cls) -> str:
-		inDebug = int(bool(gettrace()))
+	def determineLogLevel(
+		cls,
+		prefix: str = '',
+		env_prefix: str = None,
+		arg_prefix: str = None,
+		config_prefix: str = None,
+		default: str = None,
+	) -> str:
 
-		env = int(os.environ.get("DEBUG", 0))
-		argvDebug = int(any("debug" in arg for arg in argv))
-		configDebug = int(cls.__config__['level'].upper() == "DEBUG")
-		debugSum = env + argvDebug + configDebug
+		if prefix not in {'', 'console', 'status_bar', 'file', 'logtail'}:
+			key = ''
 
-		envVerbose = int(os.environ.get("VERBOSE", 0))
-		argvVerbose = int(any("verbose" in arg for arg in argv))
-		configVerbose = int(cls.__config__['level'].upper() == "VERBOSE")
-		verboseSum = envVerbose + argvVerbose + configVerbose
-		if verboseSum and verboseSum > debugSum:
+		# Priority: args > config > env > default
+
+		keys = cls._make_keys(arg_prefix, config_prefix, env_prefix, prefix)
+
+		level: int = -1
+		verbosity = None
+
+		inDebug = bool(gettrace())
+
+		# --- args ---
+
+		# determine verbosity level from args
+		args = cls._make_argparse(keys)
+		if args.verbosity is not None:
+			verbosity = cls._parse_verbosity(args.verbosity)
+
+		# parse -v flag
+		if (v := getattr(args, 'v', None)) is not None:
+			if verbosity is not None:
+				verbosity = max(v, verbosity)
+			else:
+				verbosity = v
+
+		# determine level from args
+		if args.verbose or (v is not None):
 			level = 5
-		elif debugSum and debugSum > inDebug:
+		elif args.debug:
 			level = 10
-		elif debugSum:
-			level = 10 - (5 if verboseSum else 0 + max(envVerbose, argvVerbose, configVerbose))
-		else:
-			level = logging.getLevelName(cls.__config__['level'].upper())
-		level -= cls.verbosity(level)
+		elif args.level is not None:
+			level = cls._parse_level(args.level)
+
+		# --- config ---
+		# determine level from config
+		if level == -1 and keys.config.level in cls.__config__:
+			level = cls.__config__[keys.config.level]
+			if isinstance(level, str):
+				if level.isdigit():
+					level = int(level)
+				elif level.upper() in logging_levels:
+					level = logging_levels[level.upper()]
+			elif isinstance(level, int):
+				level = sorted((0, level, 50))[0]
+
+		# determine verbosity from config
+		if verbosity is None and keys.config.verbosity in cls.__config__:
+			verbosity = cls._parse_verbosity(cls.__config__[keys.config.verbosity])
+
+		# --- env ---
+		# determine verbosity from env
+		if verbosity is None and keys.env.verbosity in os.environ:
+			verbosity = cls._parse_verbosity(os.environ[keys.env.verbosity])
+
+		# determine level from env
+		if level == -1:
+			# determine verbose from env
+			if env_verbose := os.environ.get(keys.env.verbose, False):
+				env_verbose = cls._parse_bool(env_verbose)
+				if env_verbose:
+					level = 5
+			# determine debug from env
+			elif env_debug := os.environ.get(keys.env.debug, False):
+				env_debug = cls._parse_bool(env_debug)
+				if env_debug:
+					level = 10
+			elif (level_env := os.environ.get(keys.env.level, None)) is not None:
+				level = cls._parse_level(level_env)
+
+		if verbosity is None or not isinstance(verbosity, int):
+			verbosity = 0
+
+		if level == -1 and default is not None:
+			if isinstance(default, str):
+				default = logging_levels.get(default.upper(), 20)
+			level = default
+
+		if verbosity and -1 < level <= 5:
+			level -= verbosity
+
 		return logging.getLevelName(level)
+
+	@classmethod
+	def _parse_verbosity(cls, verbosity_value: str | int) -> int:
+		if isinstance(verbosity_value, str):
+			if verbosity_value.isdigit():
+				return int(verbosity_value)
+			elif verbosity_value.upper() in logging_levels:
+				verbosity = verbosity_value.split('@')
+				if len(verbosity) == 1:
+					return 0 if verbosity[0].upper() == 'VERBOSE' else 5
+				else:
+					_, verbosity = *verbosity, 0
+					return int(verbosity)
+			elif (l := verbosity_value.lower()) in cls._description_to_level:
+				return cls._description_to_level[l]
+		elif isinstance(verbosity_value, int):
+			return verbosity_value
+		return 0
+
+	@staticmethod
+	def _parse_bool(value: str | int) -> bool | None:
+		if isinstance(value, str):
+			value = value.lower()
+			if value in {'1', 'true', 't', 'yes', 'y', 'on'}:
+				return True
+			elif value in {'0', 'false', 'f', 'no', 'n', 'off'}:
+				return False
+			else:
+				return None
+		elif isinstance(value, int):
+			return bool(value)
+
+	@classmethod
+	def _parse_level(cls, level: str | int) -> int:
+		if isinstance(level, str):
+			if level.isdigit():
+				return int(level)
+			elif level.upper() in logging_levels:
+				return logging_levels[level.upper()]
+		elif isinstance(level, int):
+			return sorted((0, level, 50))[0]
+		return 20
+
+	@classmethod
+	def _make_keys(cls, arg_prefix, config_prefix, env_prefix, prefix) -> Dotty:
+		keys = Dotty({
+			'prefix': prefix,
+			'args': Dotty({}),
+			'config': Dotty({}),
+			'env': Dotty({}),
+		})
+
+		if arg_prefix is None:
+			arg_prefix = prefix
+		if arg_prefix and not arg_prefix.endswith('-'):
+			arg_prefix += '-'
+		keys.args.debug = f"--{arg_prefix}debug"
+		keys.args.verbose = f"--{arg_prefix}verbose"
+		keys.args.verbosity = f"--{arg_prefix}verbosity"
+		keys.args.level = f"--{arg_prefix}level"
+
+		if config_prefix is None:
+			config_prefix = prefix
+		if config_prefix and not config_prefix.endswith('-'):
+			config_prefix += '-'
+		keys.config.level = f"{config_prefix}level"
+		keys.config.verbosity = f"{config_prefix}verbosity"
+
+		if env_prefix is None:
+			env_prefix = prefix.upper()
+		if env_prefix and not env_prefix.endswith('_'):
+			env_prefix += '_'
+		keys.env.debug = f"LEVITY_{env_prefix}DEBUG"
+		keys.env.verbose = f"LEVITY_{env_prefix}VERBOSE"
+		keys.env.level = f"LEVITY_{env_prefix}LOG_LEVEL"
+		keys.env.verbosity = f"LEVITY_{env_prefix}VERBOSITY"
+
+		return keys
+
+	@classmethod
+	def _make_argparse(cls, keys: Dotty) -> argparse.Namespace:
+		args_namespace = argparse.Namespace()
+		parser = argparse.ArgumentParser()
+
+		debug_flags = [keys.args.debug]
+		level_flags = [keys.args.level]
+
+		if keys.prefix == '':
+			parser.add_argument('-v', action='count')
+			level_flags.append('-l')
+			debug_flags.append('-d')
+
+		parser.add_argument(keys.args.verbose, action='store', default=None, dest='verbose')
+		parser.add_argument(keys.args.verbosity, action='store', default=None, dest='verbosity')
+		parser.add_argument(*debug_flags, action='store_true', default=None, dest='debug')
+		parser.add_argument(*level_flags, type=str, default=None, dest='level')
+
+		log_args = parser.parse_args(namespace=args_namespace)
+		return log_args
 
 	@property
 	def VERBOSE(self):
@@ -327,6 +526,28 @@ class _LevityLogger(logging.Logger):
 	@classmethod
 	def openLog(cls):
 		webbrowser.open(cls.logPath.as_uri())
+
+	def setLevel(self, level: int | str) -> None:
+		self.verbose(
+			f"Log {self.name} set to level {logging.getLevelName(level) if isinstance(level, int) else level}",
+			verbosity=5
+		)
+		super().setLevel(level)
+		self.consoleHandler.setLevel(level)
+		self.fileHandler.setLevel(level)
+
+	def setVerbosity(self, level: int):
+		self.fileHandler.setLevel(5 - level)
+		self.__config__['verbosity'] = str(level)
+		self.__config__.parser.save()
+		self.verbose(
+			f"Log {self.name} set to verbosity {level}",
+			verbosity=5
+		)
+
+
+class PrettyErrorLogger(_LevityLogger):
+
 
 	@classmethod
 	def folderSize(cls, path, level=None, excludeFolders: bool = False) -> int:
@@ -412,28 +633,9 @@ class _LevityLogger(logging.Logger):
 		self.exception(
 			f"Uncaught exception: {_type.__name__}", exc_info=(_type, value, tb)
 		)
-		if self.savePrettyErrors:
-			console = self.fileHandler.console
-			console.save_html(path=self.genPrettyErrorFileName(_type, value, tb), inline_styles=False)
-
-	def setLevel(self, level: int | str) -> None:
-		self.verbose(
-			f"Log {self.name} set to level {logging.getLevelName(level) if isinstance(level, int) else level}",
-			verbosity=5
-		)
-		super().setLevel(level)
-		self.consoleHandler.setLevel(level)
-		self.fileHandler.setLevel(level)
-
-	def setVerbosity(self, level: int):
-		self.fileHandler.setLevel(5 - level)
-		self.__config__['verbosity'] = str(level)
-		self.__config__.parser.save()
-		self.verbose(
-			f"Log {self.name} set to verbosity {level}",
-			verbosity=5
-		)
-
+		# if self.savePrettyErrors:
+		# 	console = self.fileHandler.console
+		# 	console.save_html(path=self.genPrettyErrorFileName(_type, value, tb), inline_styles=False)
 
 weatherUnitsLog = logging.getLogger("WeatherUnits")
 weatherUnitsLogUtils = weatherUnitsLog.getChild("utils")
