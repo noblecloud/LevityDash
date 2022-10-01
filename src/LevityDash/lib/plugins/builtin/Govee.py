@@ -6,7 +6,7 @@ from types import FunctionType
 from typing import Callable, Dict, Optional, Union
 from uuid import UUID
 
-from bleak import BleakScanner
+from bleak import BleakError, BleakScanner
 from bleak.backends.device import BLEDevice
 from qasync import asyncClose
 
@@ -269,11 +269,15 @@ class Govee(Plugin, realtime=True, logged=True):
 		try:
 			await self.__init_device__()
 		except Exception as e:
-			pluginLog.error(f'Error initializing device: {e}')
+			pluginLog.error(f'Error initializing device: {e.args[0]}')
 			return
-		await self.scanner.start()
-		pluginLog.info(f'{self.name} started!')
-		self.__running = True
+		try:
+			await self.scanner.start()
+			pluginLog.info(f'{self.name} started!')
+			self.__running = True
+		except BleakError as e:
+			pluginLog.error(f'Error starting scanner: {e}')
+			self.__running = False
 
 	def stop(self):
 		if self.running:
