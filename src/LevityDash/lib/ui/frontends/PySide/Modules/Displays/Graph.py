@@ -2403,10 +2403,16 @@ class PlotLabels(AnnotationLabels[PlotLabel]):
 		if self.enabled:
 			start = perf_counter()
 			if self.source.hasData and self.peaksTroughs:
-				self.normalizeValues()
 				positions = self.values
-				self.resize(len(positions))
-				for label, value, pos in zip_longest(self, self.data, positions):
+				data = self.data
+				if not len(positions) == len(data) == len(self):
+					if len(self) != len(data):
+						self.resize(len(data))
+					if len(data) != len(positions):
+						self.resetAxis(Axis.Both)
+						self.normalizeValues()
+						positions = self.values
+				for label, value, pos in zip_longest(self, data, positions):
 					label.value = value
 					label.alignment = AlignmentFlag.Bottom if value.isPeak else AlignmentFlag.Top
 					label.position = pos
