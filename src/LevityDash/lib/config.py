@@ -90,6 +90,9 @@ class LevityConfig(ConfigParser):
 			self.path = self.userPath[path]
 			self.read(self.path.path)
 
+		self._check_on_boardings()
+
+	def _check_on_boardings(self):
 		for sectionName, section in {**self._sections, 'defaults': self._defaults}.items():
 			if (enabled := section.get('enabled', None)) is not None and enabled.startswith('@ask'):
 				enabled = self.askValue(enabled)
@@ -131,7 +134,8 @@ class LevityConfig(ConfigParser):
 				valueType = int
 			case 'float':
 				valueType = float
-		message = value['message']
+		if message := value['message']:
+			message = message.replace('\\n', '\n')
 		if askType == 'askChoose':
 			choices = value['value']
 			choices = re.findall(r'\w+', choices)
@@ -415,6 +419,7 @@ class PluginConfig(LevityConfig):
 		config.read_file(StringIO(string))
 
 		if config.path is not None:
+			config._check_on_boardings()
 			config.save()
 		return config
 
