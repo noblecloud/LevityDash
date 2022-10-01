@@ -3515,7 +3515,7 @@ class GraphPanel(Panel, tag='graph'):
 
 	def parentResized(self, *args):
 		super(GraphPanel, self).parentResized(*args)
-		self.axisTransformed.announce(Axis.X)
+		self.axisTransformed.announce(Axis.Both)
 
 	def __clearCache(self):
 		clearCacheAttr(self, 'timescalar', 'contentsTimespan', 'contentsMaxTime', 'contentsMinTime', 'contentsRect')
@@ -3616,6 +3616,7 @@ class GraphPanel(Panel, tag='graph'):
 	def hoverEnterEvent(self, event: QGraphicsSceneHoverEvent):
 		if self.graphZoom.isEnabled():
 			self.graphZoom.setVisible(True)
+			self.graphZoom.updatePosition()
 		event.ignore()
 		super(GraphPanel, self).hoverEnterEvent(event)
 
@@ -3876,6 +3877,8 @@ class GraphProxy(QGraphicsItemGroup):
 
 	if TYPE_CHECKING:
 		def scene(self) -> LevityScene: ...
+		def parentItem(self) -> 'GraphPanel': ...
+
 
 	# Section #GraphProxy
 	def __init__(self, graph):
@@ -3932,6 +3935,7 @@ class GraphProxy(QGraphicsItemGroup):
 	def mousePressEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
 		self.parentItem().setSelected(True)
 		self.parentItem().setFocus()
+		self.parentItem().refreshHandles()
 		self.parentItem().stackOnTop()
 		self.mouseDown = True
 
