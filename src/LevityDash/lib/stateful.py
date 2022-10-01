@@ -27,6 +27,7 @@ from warnings import warn, warn_explicit
 import yaml
 from builtins import isinstance
 from PySide2.QtCore import QObject, QThread
+from rich.box import SIMPLE_HEAVY
 from rich.console import Console, Group
 from rich.panel import Panel
 from rich.pretty import Pretty
@@ -2280,7 +2281,8 @@ class Stateful(metaclass=StatefulMetaclass):
 		return
 
 	# Section .getItemState
-	def getItemState(self, encode: bool = True, **kwargs):
+	def getItemState(self, encode: bool = True, add_values: dict = None, **kwargs):
+		add_values = add_values or {}
 		exclude = get(kwargs, "exclude", "remove", "hide", default=set(), castVal=True, expectedType=set)
 		exclude = exclude | getattr(self, "__exclude__", set())
 
@@ -2288,7 +2290,7 @@ class Stateful(metaclass=StatefulMetaclass):
 			exclude = exclude | getattr(parent, "__child_exclude__", set())
 
 		items = {k: v for k, v in self.statefulItems.items() if v.actions & {"get"}}
-		items = dict(sorted(items.items(), key=lambda i: (i[1].sortOrder(type(self)), i[0])))
+		items = sorted_items = dict(sorted(items.items(), key=lambda i: (i[1].sortOrder(type(self)), i[0])))
 
 		values = []
 		for prop in items.values():
@@ -2355,6 +2357,15 @@ class Stateful(metaclass=StatefulMetaclass):
 			# elif isinstance(value, Stateful) and isinstance(s := value.getItemState(encode=False), Sized) and len(s) == 0 and not prop.required:
 			# 	continue
 			s[key] = value
+
+		if add_values:
+			should_resort = False
+			if isinstance(add_values, Mapping):
+				if set(add_values.keys()) & set(s.keys()) != set(add_values.keys()):
+					should_resort = True
+				s.update(add_values)
+			if should_resort:
+				s = {k: s[k] for k in sorted_items.keys() if k in s}
 		return s
 
 	@property
@@ -2383,11 +2394,11 @@ class Stateful(metaclass=StatefulMetaclass):
 		}
 		return state
 
-	def encodedYAMLState(self, exclude: Set[str] = None, sort: bool = False) -> dict:
+	def encodedYAMLState(self, exclude: Set[str] = None, state_override: dict = None, sort: bool = False) -> dict:
 		exclude = exclude or set()
 		with TemporaryFile(mode="w+", encoding='utf-8') as f:
 			try:
-				state = self.getItemState(exclude=exclude)
+				state = state_override or self.getItemState(exclude=exclude)
 				yaml.dump(state, f, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True)
 				f.seek(0)
 				loader = type(self).__loader__(f.read())
@@ -2577,6 +2588,30 @@ class Stateful(metaclass=StatefulMetaclass):
 				yield i.key, i.fget(self)
 			except Exception as e:
 				continue
+
+	def print_suggested_config(self, console: Console = None, **added_items):
+		console = console or Console(
+			soft_wrap=True,
+			tab_size=2,
+			no_color=False,
+			force_terminal=True,
+			width=get_terminal_size((100, 20)).columns - 5,
+			record=True,
+		)
+
+		state = self.getItemState(add_values=added_items)
+
+		state = self.parent.encodedYAMLState(state_override=state)
+
+		yamlStr = yaml.dump(state, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True)
+		width = max(len(line) for line in yamlStr.split('\n')) + 2
+		pretty = Syntax(yamlStr, 'yaml', tab_size=2, background_color='default')
+		panel = Panel(pretty, box=SIMPLE_HEAVY, title=f'Example Config', width=width, padding=0)
+		previous_record, console.record = console.record, True
+		with console.capture() as capture:
+			console.print(panel)
+		console.record = previous_record
+		return capture.get()
 
 
 class QStatefulMetaclass(StatefulMetaclass, QObjectType):
