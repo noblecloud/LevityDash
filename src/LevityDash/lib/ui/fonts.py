@@ -267,6 +267,7 @@ compactFont = locals()['compact']
 titleFont = locals()['title']
 weatherGlyph = database.font('Weather Icons', 'Normal', 16)
 
+system_default_font = QApplication.font()
 QApplication.setFont(defaultFont)
 
 
@@ -285,4 +286,4 @@ def getFontFamily(family: str) -> str:
 
 getFontWeight = FontWeight.getFontWeight
 
-__all__ = ['getFontFamily', 'getFontWeight', 'fontDict', 'database']
+__all__ = ['getFontFamily', 'getFontWeight', 'fontDict', 'database', 'system_default_font']
