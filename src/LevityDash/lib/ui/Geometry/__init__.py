@@ -767,7 +767,7 @@ class MutableFloat:
 		return self._value
 
 	def __add__(self, other):
-		return self.__class__(self._value + float(other))
+		return self.__class__(self._value + float(other), absolute=self._absolute)
 
 	def __radd__(self, other):
 		return self.__add__(other)
@@ -777,10 +777,10 @@ class MutableFloat:
 		return self
 
 	def __sub__(self, other):
-		return self.__class__(self._value - float(other))
+		return self.__class__(self._value - float(other), absolute=self._absolute)
 
 	def __rsub__(self, other):
-		return self.__class__(float(other) - self._value)
+		return self.__class__(float(other) - self._value, absolute=self._absolute)
 
 	def __isub__(self, other):
 		self._value -= float(other)
@@ -848,7 +848,7 @@ class MutableFloat:
 		return self.__class__(~self._value)
 
 	def __round__(self, n=None):
-		return self.__class__(round(self._value, n))
+		return self.__class__(round(self._value, n), absolute=self._absolute)
 
 	def __floor__(self):
 		return self.__class__(self._value.__floor__())
