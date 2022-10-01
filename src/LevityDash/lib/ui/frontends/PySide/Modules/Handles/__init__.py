@@ -76,14 +76,13 @@ class Handle(QGraphicsPathItem):
 	def hoverEnterEvent(self, event):
 		self.setCursor(self.cursor)
 		path = QPainterPath(self._path)
-		path = QTransform.fromScale(1.5, 1.5).map(path)
-		self.setPath(path)
+		self.setScale(1.5)
 		self.setZValue(self.zValue() + 100)
 		super(Handle, self).hoverEnterEvent(event)
 
 	def hoverLeaveEvent(self, event):
 		self.setCursor(Qt.ArrowCursor)
-		self.setPath(self._path)
+		self.setScale(1)
 		self.setZValue(self.zValue() - 100)
 		super(Handle, self).hoverLeaveEvent(event)
 
