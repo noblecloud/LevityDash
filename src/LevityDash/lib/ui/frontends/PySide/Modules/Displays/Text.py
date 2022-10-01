@@ -650,7 +650,7 @@ class Text(QGraphicsPathItem):
 			elif AlignmentFlag.Bottom & align.vertical:
 				fmt_bottom = fmt_hint_rect.bottom()
 				r_bottom = r.bottom()
-				if fmt_bottom > r_bottom:
+				if fmt_bottom < r_bottom:
 					r.setBottom(fmt_bottom)
 				else:
 					fmt_hint_rect.setBottom(r_bottom)
