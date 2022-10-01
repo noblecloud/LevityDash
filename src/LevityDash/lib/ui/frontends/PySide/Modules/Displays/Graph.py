@@ -2289,16 +2289,13 @@ class PlotLabel(AnnotationText):
 
 	def itemChange(self, change, value):
 		if change is QGraphicsItem.ItemPositionChange:
-			x, y = value.toTuple()
-			height = self.boundingRect().height()
-			containingRect = self.data.graph.containingRect
-			limit = max(containingRect.height() * 0.2, 2)
-			if y + height + limit > containingRect.height():
-				y = containingRect.height() - height - limit
-			elif y - height - limit < containingRect.top():
-				self.alignment = AlignmentFlag.Top
-				y = limit
-			value = QPointF(x, y)
+			topLeft: QPointF = value
+			bottomRight = self.boundingRect().bottomRight()
+			containingRect = self.mapRectFromItem((g:=self.data.graph), g.marginRect)
+			if bottomRight.y() >= containingRect.bottom():
+				value.setY(containingRect.bottom() - self.boundingRect().height())
+			elif topLeft.y() <= containingRect.top():
+				value.setY(containingRect.top())
 		return super(PlotLabel, self).itemChange(change, value)
 
 
