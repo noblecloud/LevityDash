@@ -217,6 +217,7 @@ def __getFontFromConfig(name: str) -> QFont:
 		fontConfig[name] = ff
 		fontConfig.update(disabledFontConfig)
 		userConfig.save()
+		f = ff
 
 	w = userConfig['Fonts'].get(f'{name}.weight', fallback='Normal')
 	i = userConfig['Fonts'].get(f'{name}.italic', fallback=False)
