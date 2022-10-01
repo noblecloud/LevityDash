@@ -17,28 +17,33 @@ import PySide2
 import sys
 from PySide2 import QtGui
 from PySide2.QtCore import (
-	QByteArray, QEvent, QMimeData, QObject, QRect, QRectF, QSize, Qt, QTimer, QUrl, Signal
+	QByteArray, QEvent, QMimeData, QObject, QRect, QRectF, QSize, Qt, QThread, QTimer, QUrl, Signal
 )
 from PySide2.QtGui import (
-	QCursor, QDesktopServices, QDrag, QPainter, QPainterPath, QPixmapCache, QScreen, QShowEvent,
+	QCursor, QDesktopServices, QDrag, QFont, QPainter, QPainterPath, QPixmapCache, QScreen, QShowEvent,
 	QSurfaceFormat, QTransform
 )
+from PySide2.QtNetwork import QNetworkConfigurationManager
 from PySide2.QtWidgets import (
 	QAction, QApplication, QGraphicsItem, QGraphicsRectItem, QGraphicsScene,
 	QGraphicsView, QMainWindow, QMenu, QMenuBar, QOpenGLWidget
 )
 from time import perf_counter, time
 
+from LevityDash.lib.config import userConfig
+from LevityDash.lib.plugins.categories import CategoryAtom, CategoryItem
 from LevityDash.lib.plugins.dispatcher import ValueDirectory as pluginManager
+from LevityDash.lib.ui.fonts import system_default_font
+from LevityDash.lib.ui.frontends.PySide import qtLogger as guiLog
 from LevityDash.lib.ui.frontends.PySide.utils import (
 	colorPalette, RendererScene
 )
+from LevityDash.lib.ui.Geometry import (
+	AbsoluteFloat, DimensionType, findScreen, getDPI, LocationFlag, parseSize,
+	RelativeFloat, Size
+)
+from LevityDash.lib.utils import BusyContext, clearCacheAttr, joinCase
 from WeatherUnits import Length
-from . import qtLogger as guiLog
-from ...Geometry import AbsoluteFloat, DimensionType, findScreen, getDPI, LocationFlag, parseSize, RelativeFloat, Size
-from ....config import userConfig
-from ....plugins.categories import CategoryAtom, CategoryItem
-from ....utils import BusyContext, clearCacheAttr, joinCase
 
 app: QApplication = QApplication.instance()
 
@@ -559,7 +564,7 @@ class LevityMainWindow(QMainWindow):
 						background-clip: border-radius;
 					}
 					QStatusBar {
-						font-family: ui-monospace, monospace;
+						font-family: monospace;
 						background: #2e2e2e;
 						color: #ffffff;
 						border: 1px solid #5e5e5e;
@@ -593,11 +598,9 @@ class LevityMainWindow(QMainWindow):
 		)
 
 		statusBarVisible = userConfig.getOrSet('QtOptions', 'status-bar', False, userConfig.getboolean)
-		if platform.system() == 'Darwin':
-			# set font to ui monospace on macos
-			statusBarFont = QFont('.AppleSystemUIFont')
-			statusBarFont.setStyleHint(QFont.Monospace)
-			self.statusBar().setFont(statusBarFont)
+		statusBarFont = QFont(system_default_font)
+		statusBarFont.setStyleHint(QFont.Monospace)
+		self.statusBar().setFont(statusBarFont)
 		self.statusBar().setVisible(statusBarVisible)
 
 		self.menuBarHoverArea.setEnabled(False)
