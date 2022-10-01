@@ -154,9 +154,9 @@ class CentralPanel(Panel, tag="dashboard"):
 
 				YAMLPreprocessor(f)
 				copyfile(f.name, str(path.joinpath(fileName)))
-				print('Saved!')
+				log.info('Saved!')
 			except Exception if not debug else DebugException as e:
-				print('Failed')
+				log.info('Failed')
 				log.exception(e)
 
 	def save(self):
@@ -204,17 +204,15 @@ class CentralPanel(Panel, tag="dashboard"):
 		if self.filePath is None or self.loadedFile != path:
 			self.filePath = EasyPathFile(path)
 			self.clear()
-			start = perf_counter()
-			self.scene().view.status = 'Loading'
-			with BusyContext(pluginManager) as context:
-				self.state = state
-				self.scene().clearSelection()
-			self.scene().view.status = 'Ready'
-			self.scene().view.loadingFinished.emit()
-			log.debug(f'Loading Time: {Time.Second(perf_counter() - start):.2f}')
 			self.loadedFile = EasyPathFile(path)
-		else:
+		start = perf_counter()
+		self.scene().view.status = 'Loading'
+		with BusyContext(pluginManager) as context:
 			self.state = state
+			self.scene().clearSelection()
+		self.scene().view.status = 'Ready'
+		self.scene().view.loadingFinished.emit()
+		log.debug(f'Loading Time: {Time.Second(perf_counter() - start):.2f}')
 
 	def setDefault(self):
 		userConfig.dashboardPath = self.loadedFile
