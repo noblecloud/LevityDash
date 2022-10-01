@@ -1,4 +1,5 @@
 import asyncio
+import platform
 import re
 from datetime import timedelta
 from types import FunctionType
@@ -75,12 +76,39 @@ class BLEPayloadParser:
 
 loop = asyncio.get_event_loop()
 
+_on_board_banner = '[bold]Govee BLE Plugin On-Boarding[/bold]'
+_plugin_description = (
+	"This plugin allows you to connect to Govee BLE thermometers.  "
+	"Currently GVH5102 is the only device model tested, but theoretically, "
+	"it should be compatible with any Govee BLE thermometer by adjusting "
+	"the payload parser in the config."
+)
+
+if platform.system() == "Darwin":
+	_on_board_platform_specific = (
+		"\n[yellow2][bold]macOS Note:[/bold][/yellow2] "
+		"[italic]Some terminals do not have the correct entitlements for Bluetooth "
+		"access and will cause an immediate crash on first connection attempt.  "
+		"Information on how to fix this can be found here: "
+		"https://bleak.readthedocs.io/en/latest/troubleshooting.html#macos-bugs[/italic]\n"
+	)
+else:
+	_on_board_platform_specific = ""
+
+_on_board_footer = "Enable Govee?"
+
+_on_board_message = f"""{_on_board_banner}
+
+{_plugin_description}
+{_on_board_platform_specific}
+{_on_board_footer}""".replace('\n', '\\n')
+
 _defaultConfig = f"""
 [plugin] ; All independent configs must have a Config section
-enabled = @ask(bool:False).message(Enable Govee?)
+enabled = @ask(bool:False).message({_on_board_message})
 
 ; At least one of these must be set for a device to be recognized
-device.id = @askChoose(str:closest,first,custom).message(Select method for finding a device or choose to input your own)
+device.id = @askChoose(str:closest,first,custom).message(Select method for finding a device or provide the MAC address of the device to connect to)
 device.model = @ask(str:GVH5102).message(Enter device model)
 ;device.uuid =
 ;device.mac =
@@ -97,19 +125,19 @@ battery.slice = [10:12]
 class Govee(Plugin, realtime=True, logged=True):
 	name = 'Govee'
 	schema: Schema = {
-		'timestamp':                      {'type': 'datetime', 'sourceUnit': 'epoch', 'title': 'Time', 'sourceKey': 'timestamp', tsk.metaData: True},
+		'timestamp': {'type': 'datetime', 'sourceUnit': 'epoch', 'title': 'Time', 'sourceKey': 'timestamp', tsk.metaData: True},
 		'indoor.temperature.temperature': {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Temperature', 'sourceKey': 'temperature'},
-		'indoor.temperature.dewpoint':    {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Dew Point', 'sourceKey': 'dewpoint'},
-		'indoor.temperature.heatIndex':   {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Heat Index', 'sourceKey': 'heatIndex'},
-		'indoor.humidity.humidity':       {'type': 'humidity', 'sourceUnit': '%h', 'title': 'Humidity', 'sourceKey': 'humidity'},
-		'indoor.@deviceName.battery':     {'type': 'battery', 'sourceUnit': '%bat', 'title': 'Battery', 'sourceKey': 'battery'},
-		'indoor.@deviceName.rssi':        {'type': 'rssi', 'sourceUnit': 'rssi', 'title': 'Signal', 'sourceKey': 'rssi'},
-		'@type':                          {'sourceKey': 'type', tsk.metaData: True, tsk.sourceData: True},
-		'@deviceName':                    {'sourceKey': 'deviceName', tsk.metaData: True, tsk.sourceData: True},
-		'@deviceAddress':                 {'sourceKey': 'deviceAddress', tsk.metaData: True, tsk.sourceData: True},
+		'indoor.temperature.dewpoint': {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Dew Point', 'sourceKey': 'dewpoint'},
+		'indoor.temperature.heatIndex': {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Heat Index', 'sourceKey': 'heatIndex'},
+		'indoor.humidity.humidity': {'type': 'humidity', 'sourceUnit': '%h', 'title': 'Humidity', 'sourceKey': 'humidity'},
+		'indoor.@deviceName.battery': {'type': 'battery', 'sourceUnit': '%bat', 'title': 'Battery', 'sourceKey': 'battery'},
+		'indoor.@deviceName.rssi': {'type': 'rssi', 'sourceUnit': 'rssi', 'title': 'Signal', 'sourceKey': 'rssi'},
+		'@type': {'sourceKey': 'type', tsk.metaData: True, tsk.sourceData: True},
+		'@deviceName': {'sourceKey': 'deviceName', tsk.metaData: True, tsk.sourceData: True},
+		'@deviceAddress': {'sourceKey': 'deviceAddress', tsk.metaData: True, tsk.sourceData: True},
 		# '@timezone':                      {'default': {'value': config.tz}, tsk.metaData: True},
 
-		'dataMaps':                       {
+		'dataMaps': {
 			'BLEAdvertisementData': {
 				'realtime': ()
 			}
@@ -144,7 +172,7 @@ class Govee(Plugin, realtime=True, logged=True):
 				self.scanner = BleakScanner()
 
 				while device is None:
-					scanTime = min(5*max(__scanAttempts, 1), 60)
+					scanTime = min(5 * max(__scanAttempts, 1), 60)
 					try:
 						pluginLog.info(f"Scanning for Govee devices for {scanTime} seconds")
 						device = await self.__discoverDevice(deviceConfig, timeout=scanTime)
@@ -216,7 +244,7 @@ class Govee(Plugin, realtime=True, logged=True):
 	@staticmethod
 	def __readDeviceConfig(config):
 		deviceConfig = {
-			"id":    getOr(config, "device.id", "device.uuid", "device.address", "id", "device", expectedType=str, default=None),
+			"id": getOr(config, "device.id", "device.uuid", "device.address", "id", "device", expectedType=str, default=None),
 			"model": getOr(config, "model", "device.model", "type", "device.type", expectedType=str, default=None),
 		}
 		return {k: v for k, v in deviceConfig.items() if v is not None}
@@ -315,11 +343,12 @@ class Govee(Plugin, realtime=True, logged=True):
 			dataBytes: bytes = data.manufacturer_data[1]
 		except KeyError:
 			pluginLog.error(f'Invalid data: {data!r}')
+			return
 		results = {
-			'timestamp':     now().timestamp(),
-			'type':          f'BLE{str(type(data).__name__)}',
-			'rssi':          int(device.rssi),
-			'deviceName':    str(device.name),
+			'timestamp': now().timestamp(),
+			'type': f'BLE{str(type(data).__name__)}',
+			'rssi': int(device.rssi),
+			'deviceName': str(device.name),
 			'deviceAddress': str(device.address),
 			**self.__temperatureParse(dataBytes),
 			**self.__humidityParse(dataBytes),
