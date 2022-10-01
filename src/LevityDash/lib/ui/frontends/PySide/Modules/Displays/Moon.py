@@ -27,7 +27,7 @@ __all__ = ["Moon"]
 
 class MoonInfo(_MoonInfo):
 	"""
-	Class to provide fractional age until pull request for pylunmar is accepted and merged
+	Class to provide fractional age until pull request for pylunar is accepted and merged
 	"""
 
 	def fractional_age(self) -> float:
