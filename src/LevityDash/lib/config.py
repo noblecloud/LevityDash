@@ -18,6 +18,7 @@ from .EasyPath import EasyPath, EasyPathFile
 
 _backupLogger = getLogger('LevityConfig')
 
+DATETIME_NO_ZERO_CHAR = '#' if platform.system() == 'Windows' else '-'
 
 def buildDirectories(path: Path, dirs: Union[list, str, dict[str, Union[str, list]]]) -> None:
 	'''
@@ -48,8 +49,6 @@ def buildDirectories(path: Path, dirs: Union[list, str, dict[str, Union[str, lis
 
 
 unsetConfig = object()
-
-DATETIME_NO_ZERO_CHAR = '#' if platform.system() == 'Windows' else '-'
 
 
 def guessLocation() -> tuple[str, str, str]:
@@ -82,7 +81,7 @@ class LevityConfig(ConfigParser):
 		userPath = Path(dirs.user_config_dir)
 		if not userPath.exists():
 			self.log.info(f'Creating user config directory: {userPath}')
-			copytree(self.rootPath['example-config'].path, userPath)
+			copytree(self.rootPath['resources']['example-config'].path, userPath)
 
 		self.userPath = userPath
 
