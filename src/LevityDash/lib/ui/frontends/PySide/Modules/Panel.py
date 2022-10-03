@@ -13,7 +13,7 @@ from uuid import UUID, uuid4
 
 from math import prod
 from PySide2.QtCore import (
-	QByteArray, QMargins, QMimeData, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt, QTimer, Signal, Slot
+	QByteArray, QMargins, QMimeData, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt, QThread, QTimer, Signal, Slot
 )
 from PySide2.QtGui import QBrush, QColor, QDrag, QFocusEvent, QPainter, QPainterPath, QPen, QPixmap, QTransform
 from PySide2.QtWidgets import (
@@ -337,7 +337,10 @@ class SizeGroup:
 	def addItem(self, item: 'Text'):
 		self.items.add(item)
 		item._sized = self
-		loop.call_later(.5, partial(self.adjustSizes, item, reason='addItem'))
+		if QThread.currentThread() is QApplication.instance().thread():
+			loop.call_soon_threadsafe(partial(self.adjustSizes, item, reason='addItem'))
+		else:
+			loop.call_later(.5, partial(self.adjustSizes, item, reason='addItem'))
 
 	def removeItem(self, item: 'Text'):
 		self.items.remove(item)
@@ -359,7 +362,10 @@ class SizeGroup:
 		if not self.locked and abs(s - self._lastSize) > 0.01:
 			self._lastSize = s
 			self.__dict__.pop('sizes', None)
-			loop.call_later(.5, partial(self.adjustSizes, v, reason='shared-size-change'))
+			if QThread.currentThread() is QApplication.instance().thread():
+				loop.call_soon_threadsafe(partial(self.adjustSizes, v, reason='shared-size-change'))
+			else:
+				loop.call_later(.5, partial(self.adjustSizes, v, reason='shared-size-change'))
 		return s
 
 	def testSimilar(self, rect: QRect | QRectF, other: 'Text') -> bool:
