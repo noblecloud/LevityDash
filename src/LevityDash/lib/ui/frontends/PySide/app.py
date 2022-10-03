@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import mimetypes
 import os
 import platform
@@ -10,7 +11,7 @@ from email.message import EmailMessage
 from functools import cached_property, partial
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Dict
+from typing import Dict, List, Mapping, Set, TYPE_CHECKING, Union
 from zipfile import ZipFile
 
 import PySide2
@@ -31,8 +32,10 @@ from PySide2.QtWidgets import (
 from time import perf_counter, time
 
 from LevityDash.lib.config import userConfig
+from LevityDash.lib.plugins import AnySource, Container
 from LevityDash.lib.plugins.categories import CategoryAtom, CategoryItem
-from LevityDash.lib.plugins.dispatcher import ValueDirectory as pluginManager
+from LevityDash.lib.plugins.dispatcher import MultiSourceContainer, ValueDirectory as pluginManager
+from LevityDash.lib.plugins.observation import TimeAwareValue
 from LevityDash.lib.ui.fonts import system_default_font
 from LevityDash.lib.ui.frontends.PySide import qtLogger as guiLog
 from LevityDash.lib.ui.frontends.PySide.utils import (
@@ -42,8 +45,10 @@ from LevityDash.lib.ui.Geometry import (
 	AbsoluteFloat, DimensionType, findScreen, getDPI, LocationFlag, parseSize,
 	RelativeFloat, Size
 )
-from LevityDash.lib.utils import BusyContext, clearCacheAttr, joinCase
-from WeatherUnits import Length
+from LevityDash.lib.utils import (
+	BusyContext, clearCacheAttr, connectSignal, joinCase, threadPool, Worker
+)
+from WeatherUnits import Length, Time
 
 app: QApplication = QApplication.instance()
 
@@ -376,32 +381,46 @@ class PluginsMenu(QMenu):
 class InsertMenu(QMenu):
 	existing = Dict[CategoryItem, QMenu | QAction]
 	source = pluginManager
+	items: Set[CategoryItem]
+	logger = guiLog.getChild('InsertMenu')
+	logger.setLevel(logging.INFO)
+
+	rebuild_worker: Worker = None
+
+	class SubInsertMenu(QMenu):
+
+		if TYPE_CHECKING:
+			def actions(self) -> List['InsertItemAction']: ...
+
+		def __init__(self, *args, **kwargs):
+			super(InsertMenu.SubInsertMenu, self).__init__(*args, **kwargs)
+			InsertMenu.logger.debug(f'Created sub menu {self.title()}')
+			self.aboutToShow.connect(self.refresh_items)
+
+		def refresh_items(self):
+			guiLog.debug(f'Refreshing items for {self.title()}')
+			for action in self.actions():
+				try:
+					loop.call_soon_threadsafe(action.issue_refresh)
+				except AttributeError:
+					pass
 
 	def __init__(self, parent):
 		super(InsertMenu, self).__init__(parent)
 		self.noItems = self.addAction('No items')
-		self.noItemsBelow = self.addAction('')
-		self.noItems.setEnabled(False)
-		self.noItemsBelow.setEnabled(False)
-		self.noItemsBelow.setVisible(False)
 		self.existing = {}
 		self.setTitle('Items')
-		self.buildItems()
-		self.aboutToShow.connect(self.buildItems)
+		self.items = set(pluginManager.keys())
+		self.aboutToShow.connect(self.issue_rebuild)
+		self.injust(self.items)
+		connectSignal(pluginManager.new_keys_signal, self.injust)
 
-
-	def buildItems(self):
-		items = sorted(pluginManager.containers(), key=lambda x: str(x.key))
-		if items:
-			self.noItems.setText('Item key will be')
-			self.noItemsBelow.setText('copied to clipboard')
-			self.noItemsBelow.setVisible(True)
-			skel = CategoryItem.keysToDict([i.key for i in items], extendedKeys=True)
-			self.buildLevel(skel, self)
-		else:
-			self.noItems.setText('No items')
-			self.noItemsBelow.setText('')
-			self.noItemsBelow.setVisible(False)
+	def injust(self, added_keys):
+		delta = set(added_keys) - self.items
+		if delta:
+			self.items.update(delta)
+			map_ = CategoryItem.keysToDict(sorted(delta, key=str), extendedKeys=True)
+			loop.call_soon_threadsafe(self.buildLevel, map_)
 
 	def clearSubMenu(self, menu):
 		try:
@@ -422,50 +441,84 @@ class InsertMenu(QMenu):
 
 		self.hovered_item = action
 
+	def issue_rebuild(self):
+		has_items = len(self.items) > 0
+		self.noItems.setVisible(not has_items)
+
+	@property
+	def is_rebuilding(self) -> bool:
+		return self.rebuild_worker is not None and self.rebuild_worker.status is Worker.Status.Running
+
 	def buildLevel(self, level: Dict[CategoryAtom, CategoryItem], menu: QMenu = None):
+		self.moveToThread(QThread.currentThread())
+		InsertMenu.logger.debug(f'{self.title()} building levels')
 		menu = menu or self
 		if isinstance(level, dict):
-			for name, subLevel in level.items():
+			if isinstance(menu, InsertItemAction):
+				name = menu.key
+				parent: InsertMenu.SubInsertMenu = menu.parent()
+				parent.removeAction(menu)
+				title = joinCase(name.name, itemFilter=str.title)
+				menu = InsertMenu.SubInsertMenu(title, parent)
+			last_action = next((i for i in reversed(menu.actions()) if isinstance(i, QMenu)), None)
+			for name, subLevel in sorted(level.items(), key=lambda x: str(x[0].name)):
+				InsertMenu.logger.debug(f'Building sub level {name}')
 				if isinstance(subLevel, dict):
 					if (subMenu := self.existing.get(name, None)) is None:
-						self.existing[name] = subMenu = menu.addMenu(joinCase(name.name, itemFilter=str.title))
-						# subMenu.setFont(QFont('monospace', self.font().pointSize()))
-						# subMenu.hovered.connect(lambda: self.clearSubMenu(subMenu))
+						title = joinCase(name.name, itemFilter=str.title)
+						self.existing[name] = subMenu = self.SubInsertMenu(title, menu)
+						last_action = menu.insertMenu(last_action, subMenu)
 						subMenu.setToolTipsVisible(True)
 						subMenu.hovered.connect(self.handleMenuHovered)
 					self.buildLevel(subLevel, subMenu)
 				elif subLevel not in self.existing:
 					self.existing[subLevel] = action = InsertItemAction(menu, key=subLevel)
 					menu.addAction(action)
-					try:
-						action.refresh_text()
-					except AttributeError:
-						pass
+
 		else:
 			if (action := self.existing.get(level, None)) is None:
 				self.existing[level] = action = InsertItemAction(menu, key=level)
 				menu.addAction(action)
-			try:
-				action.refresh_text()
-			except AttributeError:
-				pass
 		menu.adjustSize()
+		InsertMenu.logger.debug(f'{self.title()} finished building levels')
 
 	def refresh(self):
 		self.buildItems()
 
 
 class InsertItemAction(QAction):
+	container: Union['MultiSourceContainer', 'Container']
+	last_refresh: datetime = datetime.fromtimestamp(0)
+	refresh_worker: Worker | None = None
 
-	def __init__(self, parent, key):
-		super(InsertItemAction, self).__init__(parent)
+	container_actions: Dict[Container, 'InsertItemAction']
+
+	def __init__(self, parent, key, container: 'Container' = None):
+		super(InsertItemAction, self).__init__(parent, 'loading...')
 		self.key = key
-		self.container = pluginManager.getContainer(key)
-		self.name = joinCase(key[-1].name, itemFilter=str.title)
+		self.container = container or pluginManager.getContainer(key)
+		try:
+			self.name = self.container.title
+		except ValueError:
+
+			async def update():
+				print('contraire title call back')
+				self.name = self.container.title
+
+			self.container.getPreferredSourceContainer(self, AnySource, update)
+
 		self.setToolTip(f'Copy key \'{str(key)}\' to clipboard')
 		self.setStatusTip(self.toolTip())
 		self.triggered.connect(self.toClipboard)
-		# self.hovered.connect(self.hoverAction)
+		if isinstance(self.container, Mapping):
+			self.container_actions = {}
+			self.sub_menu = QMenu(self.parent())
+			copy_action = self.sub_menu.addAction('Copy key to clipboard').triggered.connect(self.toClipboard)
+			self.setMenu(self.sub_menu)
+			self.container_section = self.sub_menu.addSection('Sources')
+			self.no_sources = self.sub_menu.addAction('No active sources')
+			self.no_sources.setEnabled(False)
+			self.sub_menu.aboutToShow.connect(self.refresh_items)
 
 	def toClipboard(self):
 		clip = QApplication.clipboard()
@@ -474,20 +527,106 @@ class InsertItemAction(QAction):
 	def hoverAction(self):
 		self.setText(str(self.key))
 
+	def refresh_items(self):
+		try:
+			name = self.container.title
+		except Exception:
+			name = ''
+		InsertMenu.logger.debug(f'Refreshing items for {name}')
+
+		if isinstance(self.container, Mapping):
+			self.no_sources.setVisible(len(self.container_actions) == 0)
+
+		for action in self.container_actions.values():
+			try:
+				loop.call_soon_threadsafe(action.issue_refresh)
+			except AttributeError:
+				pass
+
+	@property
+	def sub_containers(self) -> None | List['Container']:
+		if isinstance(self.container, Mapping):
+			return [i for i in self.container.values() if getattr(i.source, 'running', True)]
+		return None
+
+	@property
+	def since_last_refresh(self) -> timedelta:
+		return datetime.now() - self.last_refresh
+
+	def issue_refresh(self):
+		if self.is_updating:
+			InsertMenu.logger.verbose(f'Not refreshing {self.key} as it is already updating', verbosity=4)
+			return
+		if self.since_last_refresh <= timedelta(seconds=30):
+			InsertMenu.logger.verbose(f'Not refreshing {self.key} since last refresh was {self.since_last_refresh}', verbosity=4)
+			return
+		self.setVisible(False)
+		self.refresh_worker = threadPool.run_threaded_process(self.refresh_text, on_finish=self.__complete_refresh, priority=2)
+		InsertMenu.logger.verbose(f'Issued refresh for {self.key}', verbosity=4)
+
+	@property
+	def is_updating(self) -> bool:
+		return self.refresh_worker is not None and self.refresh_worker.status is Worker.Status.Running
+
+	def __complete_refresh(self):
+		InsertMenu.logger.verbose(f'Completed refresh for {self.key}', verbosity=4)
+		self.setVisible(True)
+		self.last_refresh = datetime.now()
+		self.refresh_worker = None
+
+	def __refresh_error(self, e):
+		InsertMenu.logger.error(f'Error refreshing {self.key}: {e}')
+		self.setVisible(True)
+		self.setText(f'Error: {e}')
+		self.refresh_worker = None
+
 	def refresh_text(self):
-		# length = self.parent().width() // self.parent().fontMetrics().averageCharWidth()
-		# reminder = length - len(f'{self.name}: ')
-		# text = f'{self.name}: {self.value_str.ljust(reminder, "-")}'
-		text = f'{self.name}: {self.value_str}'
-		self.setText(text)
+		InsertMenu.logger.debug(f'Refreshing {self.key}')
+		self.last_refresh = datetime.now()
+		if (containers := self.sub_containers) is not None:
+			self.container: 'MultiSourceContainer'
+			text = f'{self.name}: {self.value_str}'
+			if len(containers) == 0:
+				self.sub_menu.setVisible(False)
+			menu = self.sub_menu
+			menu.setTitle(text)
+			for container in self.container.values():
+				if container not in self.container_actions:
+					def _(cont_):
+						self.container_actions[cont_] = action = InsertItemAction(menu, self.key, container=cont_)
+						InsertMenu.logger.verbose(f'adding action {cont_.source.name}: {cont_.title}', verbosity=4)
+						menu.insertAction(self.no_sources, action)
+					loop.call_soon_threadsafe(partial(_, container))
+		else:
+			self.setEnabled(running := self.container.source.running)
+
+			text = f'{self.container.source.name}: {self.value_str}'
+			is_realtime = self.container.isRealtime
+			if not running or not is_realtime:
+				text += ' ['
+				if not is_realtime:
+					text += 'from forecast '
+				text += f'{Time.Second(self.value.timestamp):ago}]'
+
+			self.setText(text)
+			InsertMenu.logger.debug(f'Set text for {self.key} to {text}')
+			InsertMenu.logger.verbose(f'Refreshed {self.key}', verbosity=4)
 
 	@property
 	def value_str(self) -> str:
+		value = self.value
+		return str(value)
+
+	@property
+	def value(self) -> TimeAwareValue:
 		if not self.container.isRealtime:
-			return str(self.container.nowFromTimeseries)
-		return str(self.container.realtime)
+			return self.container.nowFromTimeseries
+		return self.container.realtime
 
 	def insert(self):
+		text = f'key: {self.key}'
+		if not isinstance(self.container, Mapping):
+			text += f'\nsource: {self.container.source.name}'
 		info = QMimeData()
 		info.setText(str(self.key))
 		info.setData('text/plain', QByteArray(str(self.key).encode('utf-8')))
@@ -615,7 +754,13 @@ class LevityMainWindow(QMainWindow):
 
 		self.buildMenu()
 
+		self.network_manager = QNetworkConfigurationManager()
+		self.network_manager.onlineStateChanged.connect(self.updateOnlineState)
+
 		self.show()
+
+	def updateOnlineState(self, online):
+		guiLog.info(f'Online state changed to {online}')
 
 	def menuBarHover(self):
 		self.bar.setFixedHeight(self.bar.sizeHint().height())
