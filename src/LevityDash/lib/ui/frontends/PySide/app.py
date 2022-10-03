@@ -36,7 +36,7 @@ from LevityDash.lib.plugins import AnySource, Container
 from LevityDash.lib.plugins.categories import CategoryAtom, CategoryItem
 from LevityDash.lib.plugins.dispatcher import MultiSourceContainer, ValueDirectory as pluginManager
 from LevityDash.lib.plugins.observation import TimeAwareValue
-from LevityDash.lib.ui.fonts import system_default_font
+from LevityDash.lib.ui.fonts import monospaceFont, system_default_font
 from LevityDash.lib.ui.frontends.PySide import qtLogger as guiLog
 from LevityDash.lib.ui.frontends.PySide.utils import (
 	colorPalette, RendererScene
@@ -701,14 +701,14 @@ class LevityMainWindow(QMainWindow):
 						border-radius: 10px;
 						font-size: 18px;
 						background-clip: border-radius;
-					}
-					QStatusBar {
-						font-family: monospace;
+					}''' + f'''
+					QStatusBar {{
+						font-family: {monospaceFont.family()};
 						background: #2e2e2e;
 						color: #ffffff;
 						border: 1px solid #5e5e5e;
 						border-radius: 5px;
-					}
+					}}
 					'''
 		if platform.system() == 'Darwin':
 			style += '''

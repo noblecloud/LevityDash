@@ -55,6 +55,7 @@ _defaults = {
 	'default.weight': 'Normal',
 	'title':          'Roboto',
 	'title.weight':   'Light',
+	'monospace':      'Monospace',
 }
 
 _missing_defaults = {k: v for k, v in _defaults.items() if k not in fontConfig}
@@ -250,12 +251,15 @@ for namedFont in {i for i in fontConfig.keys() if '.' not in i}:
 	fontDict[namedFont] = font
 	locals()[namedFont] = font
 
+system_default_font = QApplication.font()
+system_default_monospace = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+
 defaultFont = locals().get('defaultFont', fontDict['Nunito'])
 compactFont = locals().get('compact', defaultFont)
+monospaceFont = locals().get('monospace', system_default_monospace)
 titleFont = locals().get('title', defaultFont)
-weatherGlyph = database.font('Weather Icons', 'Normal', 16)
 
-system_default_font = QApplication.font()
+
 QApplication.setFont(defaultFont)
 
 
@@ -277,4 +281,5 @@ getFontWeight = FontWeight.getFontWeight
 del _defaults
 del _missing_defaults
 
-__all__ = ['getFontFamily', 'getFontWeight', 'fontDict', 'database', 'system_default_font']
+__all__ = ['getFontFamily', 'getFontWeight', 'fontDict', 'database', 'system_default_font', 'defaultFont',
+					 'compactFont', 'monospaceFont', 'titleFont', 'system_default_monospace']
