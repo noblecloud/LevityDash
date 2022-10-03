@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone as _timezones, tzinfo
 from functools import cached_property, lru_cache, partial
 from numbers import Number
 from operator import add
+from os import environ
 from types import coroutine
 from typing import (
 	Any, Callable, ClassVar, Coroutine, Hashable, Iterable, Iterator, List, Mapping, Optional, OrderedDict, Set,
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
 	from LevityDash.lib.plugins.categories import UnitMetaData
 
 REALTIME_THRESHOLD = timedelta(hours=1.5)
+DATETIME_NO_ZERO_CHAR = environ['LEVITY_DATETIME_NO_ZERO_CHAR']
 
 loop = get_running_loop()
 threadPool = QApplication.instance().pool
@@ -292,7 +294,7 @@ class ObservationValue(TimeAwareValue):
 		if self.timestamp is None:
 			timestamp = ' Unknown Time'
 		elif self.timestamp != self.__source.timestamp:
-			timestamp = f' @{self.timestamp:"%-I:%M%p %m/%d"}'
+			timestamp = f' @{self.timestamp:"%{DATETIME_NO_ZERO_CHAR}I:%M%p %m/%d"}'
 		else:
 			timestamp = ''
 		return f'{{\'{self.value.__class__.__name__}\'}} {self.value}{timestamp}'
@@ -383,7 +385,7 @@ class ArchivedObservationValue(ObservationValue):
 		if self.timestamp is None:
 			return f'{self.value} @ UnknownTime'
 		if self.timestamp != self.source.timestamp:
-			timestamp = f' @{self.timestamp.strftime("%-I:%M%p %m/%d")}'
+			timestamp = f' @{self.timestamp:%{DATETIME_NO_ZERO_CHAR}I:%M%p %m/%d}'
 		else:
 			timestamp = ''
 		return f'{{\'{self.value.__class__.__name__}\'}} {self.value}{timestamp}'
@@ -1154,7 +1156,7 @@ class ObservationTimestamp(ObservationValue):
 		return value
 
 	def __repr__(self):
-		return f'{self.value.strftime("%-I:%M%p %m/%d")}'
+		return f'{self.value:%{DATETIME_NO_ZERO_CHAR}I:%M%p %m/%d)}'
 
 	def __str__(self):
 		return self.__repr__()
