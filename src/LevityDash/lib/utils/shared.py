@@ -1434,7 +1434,8 @@ class Now(datetime):
 		return getattr(self.now(), item)
 
 
-def __get(obj, key, default=UnsetKwarg):
+def __get(obj: Mapping, key, default=UnsetKwarg):
+	"""getter for mappings"""
 	if default is not UnsetKwarg:
 		return obj.get(key, default)
 	return obj.get(key)

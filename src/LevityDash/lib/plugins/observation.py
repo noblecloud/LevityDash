@@ -855,7 +855,7 @@ class MiniTimeSeries(deque):
 			outOfBoundsBy = earliest - key.timestamp()
 			if abs(outOfBoundsBy) > 900:
 				log.warning(f'TimeSeries tried to set a value out of bounds by {wu.Time.Second(outOfBoundsBy).auto}')
-			log.warning(f'TimeSeries tried to set a value out of bounds by {wu.Time.Second(outOfBoundsBy).auto}')
+			log.verbose(f'TimeSeries tried to set a value out of bounds by {wu.Time.Second(outOfBoundsBy).auto}', verbosity=1)
 			return
 		if not isinstance(value, TimeSeriesItem):
 			value = TimeSeriesItem(value, key)
@@ -1123,7 +1123,7 @@ class ObservationTimestamp(ObservationValue):
 	# TODO: Convert to class generated for each PublishedDict with a set 'source' therefore 'source' is not need for initialization.
 	#       Especially since the source is not the proper term here
 
-	def __init__(self, data: dict, source: 'ObservationDict', extract: bool = True, roundedTo: timedelta = None):
+	def __init__(self, data: dict, source: 'ObservationDict', extract: bool = True, roundedTo: timedelta | wu.Time = None):
 		self.__roundedTo = roundedTo
 
 		if isinstance(data, ObservationDict):
@@ -1626,6 +1626,7 @@ class ArchivedObservation(Observation, published=False, recorded=False):
 
 	def __init__(self, source: Optional[Archivable] = None, *args, **kwargs):
 		if source:
+			self.__dict__['_source'] = getattr(source, 'source', source)
 			values = {key: v for key, value in source.items() if (v := (value.archived if isinstance(value, ArchivableValue) else copy(value))) is not None}
 			if values:
 				times = [i.timestamp.timestamp() for i in values.values()]
@@ -1714,6 +1715,11 @@ class ObservationTimeSeriesItem(Observation, published=False):
 				if hasattr(value, 'history'):
 					value = value.history.archived
 				super(ObservationTimeSeriesItem, self).__setitem__(key, value)
+		self.__class__ = ArchivedTimeSeriesItem
+
+
+class ArchivedTimeSeriesItem(ArchivedObservation, ObservationTimeSeriesItem):
+	pass
 
 
 @TimeseriesSource.register
@@ -1796,9 +1802,28 @@ class ObservationTimeSeries(ObservationDict, published=True):
 		def process_item(item):
 			if not isinstance(item, Mapping):
 				item = {k: v for k, v in zip(keyMap, item)}
-			key = ObservationTimestamp(item, self, False, roundedTo=self.period)
-			obs = self.__timeseries__.get(key, None) or self.buildObservation(key)
-			obs.update(item, source=source)
+			if isinstance(item, ArchivedObservation):
+				if isinstance(item, ObservationTimeSeriesItem):
+					timestamp = next((j for i in item.values() if (j := getattr(i, 'timestamp', None)) is not None), None)
+					if timestamp is None:
+						breakpoint()
+					source.append(item_source := item.timeseries)
+				else:
+					timestamp = item.timestamp
+					source.append(item_source := item.source)
+
+				key = ObservationTimestamp(timestamp, item_source, False, roundedTo=self.period)
+				if isinstance(self.source, RealtimeSource):
+					obs = self.__timeseries__.get(key, None) or self.buildObservation(key)
+					for k, v in item.items():
+						obs[k] = v
+				else:
+					self.__timeseries__[key] = obs = item
+
+			else:
+				key = ObservationTimestamp(item, self, False, roundedTo=self.period)
+				obs = self.__timeseries__.get(key, None) or self.buildObservation(key)
+				obs.update(item, source=source)
 			keys.update(obs.keys())
 
 		def updateWithProgress(raw: List[Dict], progress: Progress | None):
@@ -1852,24 +1877,23 @@ class ObservationTimeSeries(ObservationDict, published=True):
 		return False
 
 	def removeOldObservations(self):
-		#! TODO: Re implement this
-		return
 		now_ = roundToPeriod(datetime.now(tz=LOCAL_TIMEZONE), self.period, method=int)
-		toPass = {}
-		for key in {(key, value) for key, value in self.__timeseries__.items() if key < now_}:
-			toPass[key] = self.destroyObservation(key)
+		outdated_keys = [i for i in self.__timeseries__ if i < now_]
+		toPass = [self.destroyObservation(key) for key in outdated_keys]
 		if toPass:
-			self.accumulator.publish(*toPass.keys())
-			self.source.ingestHistorical(toPass)
+			if (log_ := getattr(self.source, 'log', None)) is not None:
+				log_: ObservationLog
+				log_.update({'data': toPass})
 
 	def buildObservation(self, timestamp: ObservationTimestamp) -> Observation:
 		item = self.itemClass(timeseries=self, source=self.source, timestamp=timestamp, published=False, lock=self.lock)
 		self[timestamp] = item
 		return item
 
-	def destroyObservation(self, key: ObservationTimestamp):
-		return
-		return self.__timeseries__.pop(key)
+	def destroyObservation(self, key: ObservationTimestamp | DateKey) -> Observation:
+		obs = self.__timeseries__.pop(key)
+		obs.archive()
+		return obs
 
 	def calculatePeriod(self, data: list):
 		if isinstance(data[0], dict):
