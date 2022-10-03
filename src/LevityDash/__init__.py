@@ -3,6 +3,8 @@ from os import chdir
 from pathlib import Path
 from appdirs import AppDirs
 
+__version__ = "0.2.0-beta.1"
+
 __builtins__['CENTRAL_PANEL'] = None
 
 if sys.version_info < (3, 10, 0):
@@ -25,4 +27,4 @@ __builtins__['__resources__'] = __resources__
 if isCompiled:
 	chdir(sys._MEIPASS)
 
-__all__ = ('__lib__', '__dirs__', '__resources__')
+__all__ = ('__lib__', '__dirs__', '__resources__', '__version__')
