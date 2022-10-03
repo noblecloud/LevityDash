@@ -343,7 +343,7 @@ class Plugin(metaclass=PluginMeta):
 		self.enabled = not value
 
 	@classmethod
-	def getDefaultConfig(cls, destination: EasyPath | EasyPathFile = None, replace: bool = True):
+	def getDefaultConfig(cls, plugin: 'Plugin', destination: EasyPath | EasyPathFile = None, replace: bool = True):
 		"""Gets the default config from the plugin's __defaultConfig__ attribute and places it in the config directory"""
 		if destination is None:
 			destination = EasyPathFile(pluginConfig.userPluginsDir.path / f'{cls.name}.ini', make=True)
@@ -363,7 +363,7 @@ class Plugin(metaclass=PluginMeta):
 			raise NotImplementedError
 
 		if isinstance(config, Text):
-			config = PluginConfig.readString(config, path=destination)
+			config = PluginConfig.readString(config, plugin=plugin, path=destination)
 
 			return config
 
@@ -379,7 +379,7 @@ class Plugin(metaclass=PluginMeta):
 			case {ns.file: file} if file.stat().st_size:
 				return PluginConfig(path=file.path, plugin=plugin)
 		try:
-			return cls.getDefaultConfig()
+			return cls.getDefaultConfig(plugin)
 		except Exception as e:
 			plugin.pluginLog.exception(e)
 		raise ValueError(f'No config for {cls.__name__}')
