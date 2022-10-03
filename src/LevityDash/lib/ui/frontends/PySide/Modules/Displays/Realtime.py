@@ -5,7 +5,7 @@ from functools import cached_property, partial
 from numbers import Number
 from typing import Iterable, Type, Dict
 
-from PySide2.QtCore import QByteArray, QMimeData, Qt, QTimer, QRectF
+from PySide2.QtCore import QByteArray, QMimeData, Qt, QThread, QTimer, QRectF
 from PySide2.QtGui import QDrag, QFocusEvent, QFont, QPainter, QPixmap, QTransform
 from PySide2.QtWidgets import QGraphicsItem, QGraphicsSceneMouseEvent, QStyleOptionGraphicsItem
 from qasync import asyncSlot, QApplication
@@ -481,6 +481,10 @@ class Realtime(Panel, tag='realtime'):
 			ValueDirectory.getChannel(self.key).disconnectSlot(self.testSlot)
 
 	def adjustContentStaleTimer(self):
+		if QThread.currentThread() is QApplication.instance().thread():
+			loop.call_soon_threadsafe(self.adjustContentStaleTimer)
+			return
+
 		self.__updateTimeOffsetLabel()
 		now = get_event_loop().time()
 		last = self.lastUpdate or get_event_loop().time()
@@ -501,7 +505,7 @@ class Realtime(Panel, tag='realtime'):
 		self.setOpacity(1)
 		self.display.refresh()
 		self.updateToolTip()
-		self.adjustContentStaleTimer()
+		loop.call_soon_threadsafe(self.adjustContentStaleTimer)
 
 	def updateToolTip(self):
 		try:
