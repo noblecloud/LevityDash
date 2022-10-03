@@ -678,16 +678,20 @@ class StateProperty(property):
 
 		self.fset(owner, value)
 
+		self.schedule_after_func(owner, afterPool=kwargs.get('afterPool', None))
+
 		self.__existingValues__.pop(self.cacheKey(owner), None)
 		owner._set_state_items_.add(self.name)
 
+
+	def schedule_after_func(self, owner: 'Stateful', afterPool: 'ActionPool' = None, **kwargs):
 		if after := self.__options.get("after", False):
 			if (func := after.get("func", None)) is not None:
-				if (pool := kwargs.get("afterPool", None)) is not None:
-					if pool.instance is not owner:
-						pool = pool.new(owner)
-					log.verbose(f"Adding function to after pool", verbosity=5)
-					pool.add(func)
+				if afterPool is not None:
+					if afterPool.instance is not owner:
+						afterPool = afterPool.new(owner)
+					log.verbose(f"Adding after function for {self.key} to after pool", verbosity=5)
+					afterPool.add(func)
 				else:
 					log.verbose(f"Executing after method for {owner}", verbosity=5)
 					func(owner)
@@ -1486,6 +1490,7 @@ class StateProperty(property):
 								existing.__statefulParent = owner
 							except AttributeError:
 								pass
+						self.schedule_after_func(owner, afterPool)
 						return
 					except Exception as e:
 						log.exception(e)

@@ -1083,7 +1083,10 @@ class Plot(QGraphicsPixmapItem, Stateful):
 
 	# Section .properties
 
-	@StateProperty(default=None, dependencies={'colors'}, after=QGraphicsItem.update)
+	def updateAppearance(self) -> None:
+		self.scheduleRender()
+
+	@StateProperty(default=None, dependencies={'colors'}, after=updateAppearance)
 	def gradient(self) -> Optional[Gradient]:
 		if self._gradient:
 			return self._gradient
@@ -1109,7 +1112,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		if self._gradient:
 			return self._gradient.toQGradient(plot=self)
 
-	@StateProperty(default=1.0, after=QGraphicsItem.update)
+	@StateProperty(default=1.0, after=updateAppearance)
 	def weight(self) -> float:
 		return getattr(self, '_weight', 1.0)
 
@@ -1127,7 +1130,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 	def weight_px(self) -> float:
 		return self.figure.parent.plotLineWeight() * self.weight
 
-	@StateProperty(default=DefaultGroup(colorPalette.windowText().color(), '#ffffff', 'ffffff'), allowNone=False, after=QGraphicsItem.update)
+	@StateProperty(default=DefaultGroup(colorPalette.windowText().color(), '#ffffff', 'ffffff'), allowNone=False, after=updateAppearance)
 	def color(self) -> QColor:
 		if (color := getattr(self, '_color', None)) is None:
 			return colorPalette.windowText().color()
@@ -1207,7 +1210,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 			return value.value
 		return value
 
-	@StateProperty(default=DefaultGroup(Qt.SolidLine, 'solid', '', None), after=QGraphicsItem.update)
+	@StateProperty(default=DefaultGroup(Qt.SolidLine, 'solid', '', None), after=updateAppearance)
 	def dashPattern(self) -> list[int]:
 		if isinstance(self._dashPattern, Qt.PenStyle):
 			return QPen(self._dashPattern).dashPattern()
@@ -1248,7 +1251,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 			return ''
 		return ', '.join(str(v) for v in value)
 
-	@StateProperty(key='cap', default=DefaultGroup(Qt.RoundCap, 'round'), allowNone=False, after=QGraphicsItem.update)
+	@StateProperty(key='cap', default=DefaultGroup(Qt.RoundCap, 'round'), allowNone=False, after=updateAppearance)
 	def capStyle(self) -> Qt.PenCapStyle:
 		return self.pen().capStyle()
 
@@ -1481,7 +1484,8 @@ class Plot(QGraphicsPixmapItem, Stateful):
 
 	def scheduleRender(self):
 		log.debug(f'{self.log_repr}: Scheduling render')
-		self.render()
+		if self.data.hasData:
+			self.render()
 
 	def render(self):
 		with BusyContext(task=self.render):
