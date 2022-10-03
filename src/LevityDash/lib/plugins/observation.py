@@ -275,7 +275,31 @@ class ObservationValue(TimeAwareValue):
 		return self.metadata.getConvertFunc(self.source)
 
 	def __str__(self):
-		return str(self.value)
+		return f'{self:human}'
+
+	def __format__(self, format_spec):
+		value = self.value
+		format_spec: list[str] = format_spec.split(':')
+		try:
+			format_spec.remove('human')
+			if isinstance(value, datetime):
+				d = now()
+				timestamp = f'{value:%{DATETIME_NO_ZERO_CHAR}I:%M%p}'.lower()
+				if value.day == d.day:
+					pass
+				elif value.day + 1 == d.day:
+					timestamp = f'yesterday at {timestamp}'
+				elif value.day - 1 == d.day:
+					timestamp = f'tomorrow at {timestamp}'
+				else:
+					timestamp = f'{timestamp} on {value:%x}'
+				return f'{timestamp} [{wu.Time.Second(value).auto:ago}]'
+		except ValueError:
+			pass
+		finally:
+			format_spec: str = ':'.join(format_spec)
+
+		return value.__format__(format_spec)
 
 	@property
 	def key(self) -> CategoryItem:
