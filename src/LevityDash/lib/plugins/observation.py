@@ -2655,6 +2655,8 @@ class Container:
 
 	@property
 	def title(self):
+		if (t := self.metadata.get('title', None)) is not None:
+			return t
 		if hasattr(self.value, 'title'):
 			return self.value.title
 		return str(self.key).title()
