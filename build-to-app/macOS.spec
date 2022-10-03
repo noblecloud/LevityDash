@@ -3,6 +3,7 @@ from os import environ
 
 block_cipher = None
 from PyInstaller.utils.hooks import collect_data_files
+from LevityDash import __lib__, __resources__, __version__
 
 datas = [('../src/LevityDash', '.'), ('../src/LevityDash', 'LevityDash'), ('../src/LevityDash/example-config', 'example-config')]
 datas += collect_data_files('WeatherUnits', 'aiohttp', 'certifi')
@@ -56,7 +57,7 @@ app = BUNDLE(
 	name='LevityDash.app',
 	icon='macOS.icns',
 	bundle_identifier='dev.noblecloud.levity',
-	version='0.1.0b4',
+	version=__version__,
 	info_plist={
 		'NSBluetoothAlwaysUsageDescription':     'LevityDash would like to use your bluetooth for connecting to devices',
 		'NSBluetoothPeripheralUsageDescription': 'LevityDash would like to use your bluetooth for connecting to devices',

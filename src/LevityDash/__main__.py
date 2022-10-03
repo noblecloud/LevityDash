@@ -55,13 +55,14 @@ def install_signals():
 
 
 def init_app():
+	from LevityDash import __version__
 	from PySide2.QtGui import QIcon
 	iconPath = Path(__file__).parent.joinpath('lib', 'ui', 'icon.icns')
 	icon = QIcon(iconPath.as_posix())
 	qasync.QApplication.setWindowIcon(icon)
 	qasync.QApplication.setApplicationName('LevityDash')
 	qasync.QApplication.setApplicationDisplayName('LevityDash')
-	qasync.QApplication.setApplicationVersion('0.1.0-beta.8')
+	qasync.QApplication.setApplicationVersion(__version__)
 	qasync.QApplication.setOrganizationName('LevityDash')
 	qasync.QApplication.setOrganizationDomain('LevityDash.app')
 
@@ -89,6 +90,9 @@ async def main():
 			print('Config cleared!')
 		else:
 			print('Config not cleared')
+
+	from LevityDash import __version__
+	print(f'Starting LevityDash {__version__}')
 
 	import LevityDash.lib as lib
 
