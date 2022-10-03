@@ -454,6 +454,10 @@ class PluginValueDirectory(MutableSignal):
 		self.categories = CategoryEndpointDict(self, self._values, None)
 
 	@property
+	def new_keys_signal(self) -> Signal:
+		return self.__signal
+
+	@property
 	def muted(self):
 		return self._muted
 
@@ -522,9 +526,10 @@ class PluginValueDirectory(MutableSignal):
 
 	def update(self, values: dict[CategoryItem, Container]):
 		# log.debug(f'Updating {values}')
-		for key, value in values.items():
-			self[key] = value
-		self.publish(values)
+		with self as signal:
+			for key, value in values.items():
+				self[key] = value
+			self.publish(values)
 
 	def getChannel(self, key: CategoryItem) -> ChannelSignal:
 		if key not in self.__channels:

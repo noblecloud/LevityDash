@@ -17,6 +17,7 @@ from LevityDash.lib.plugins.observation import (
 from LevityDash.lib.plugins.schema import Schema
 from LevityDash.lib.plugins.utils import Publisher
 from LevityDash.lib.utils.shared import closest, Period
+from LevityDash.lib.utils.shared import get
 from WeatherUnits import Time
 
 
@@ -179,7 +180,7 @@ class PluginMeta(type):
 
 	def __new__(mcs, name, bases, attrs, **kwargs):
 		mcs.__APIKeyMap__ = {}
-
+		rt = False
 		if bases and not kwargs.get('prototype', False):
 			ObservationClass = type(f'{name}Observation', (ObservationDict,), {})
 			classes = {
@@ -189,16 +190,16 @@ class PluginMeta(type):
 				'RecordedValueClass': type(f'{name}RecordedValue', (RecordedObservationValue,), {}),
 			}
 
-			if kwargs.get('realtime', False):
+			if rt := kwargs.get('realtime', False):
 				realtime = type(f'{name}Realtime', (ObservationRealtime,), {}, sourceKeyMap=mcs.__APIKeyMap__, recorded=True)
 				classes['Realtime'] = realtime
 				attrs['realtime'] = property(lambda self: self.observations.realtime)
 
-			if l := kwargs.get('logged') or kwargs.get('recorded'):
+			if l := get(kwargs, 'logged', 'recorded', 'record', default=False, expectedType=bool):
 				if isinstance(l, timedelta):
 					period = l
 				elif isinstance(l, bool):
-					period = timedelta(minutes=5)
+					period = timedelta(minutes=5 if rt else 60)
 				elif isinstance(l, int):
 					period = timedelta(minutes=l)
 				else:
@@ -236,7 +237,10 @@ class PluginMeta(type):
 			attrs['classes'] = Classes(**classes)
 			attrs['pluginLog'] = pluginLog.getChild(name)
 
-		return super().__new__(mcs, name, bases, attrs)
+		new_cls = super().__new__(mcs, name, bases, attrs)
+		if rt:
+			RealtimeSource.register(new_cls)
+		return new_cls
 
 
 class SomePlugin(metaclass=PluginMeta, prototype=True):

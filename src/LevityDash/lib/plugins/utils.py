@@ -25,7 +25,8 @@ if TYPE_CHECKING:
 	from LevityDash.lib.plugins.observation import Observation
 	from LevityDash.lib.plugins import Plugin
 
-unitDict: Dict[str, Union[Type[wu.Measurement], Type[bool], Dict[str, Union[Type[wu.Measurement], Type[wu.DerivedMeasurement]]]]] = {
+unitDict: Dict[
+	str, Union[Type[wu.Measurement], Type[bool], Dict[str, Union[Type[wu.Measurement], Type[wu.DerivedMeasurement]]]]] = {
 	'f':                wu.temperature.Fahrenheit,
 	'c':                wu.temperature.Celsius,
 	'kelvin':           wu.temperature.Kelvin,
@@ -87,6 +88,7 @@ unitDict: Dict[str, Union[Type[wu.Measurement], Type[bool], Dict[str, Union[Type
 	"WeatherCode":      wu.Measurement,
 	'tz':               timezone,
 	'special':          {
+		'rate':                wu.derived.DistanceOverTime,
 		'precipitation':       wu.Precipitation,
 		'precipitationDaily':  wu.Precipitation.Daily,
 		'precipitationHourly': wu.Precipitation.Hourly,
@@ -370,7 +372,6 @@ class Publisher(MutableSignal):
 			del self.keys[key]
 
 	def _emit(self):
-
 		if QThread.currentThread() != QApplication.instance().thread():
 			loop.call_soon_threadsafe(self._emit)
 			return
@@ -577,7 +578,10 @@ class ScheduledEvent(object):
 
 		next_fire = wu.Time.Second(when)
 		if next_fire.timedelta >= self.logThreshold:
-			log.verbose(f'{getattr(self.__owner, "name", self.__owner)} - Scheduled event {self.__func.__name__} in {next_fire.auto:simple}', verbosity=0)
+			log.verbose(
+				f'{getattr(self.__owner, "name", self.__owner)} - Scheduled event {self.__func.__name__} in {next_fire.auto:simple}',
+				verbosity=0
+			)
 
 		self.timer = loop.call_soon(self.__fire) if self.fireImmediately else loop.call_later(when, self.__fire)
 
@@ -612,4 +616,4 @@ class ScheduledEvent(object):
 
 
 __all__ = ['unitDict', 'Accumulator', 'ChannelSignal', 'SchemaProperty', 'MutableSignal', 'ScheduledEvent',
-           'Publisher']
+					 'Publisher']
