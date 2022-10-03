@@ -1,6 +1,8 @@
 #!/usr/bin/env python
+import os
+import platform
 from locale import LC_ALL, setlocale
-from signal import SIGINT, signal, SIGQUIT, SIGTERM
+import signal
 
 from sys import exit, path
 
@@ -19,6 +21,37 @@ import qasync
 from pathlib import Path
 
 qasync.logger.setLevel('ERROR')
+
+
+def install_signals():
+
+	def signalQuit(sig, frame) -> None:
+		try:
+			from LevityDash.lib.log import LevityLogger as log
+		except ImportError:
+			from logging import getLogger
+			log = getLogger('LevityDash')
+		log.info(f'Caught signal {sig}, exiting...')
+		signalQuit.count += 1
+		if sig in (signal.SIGINT, signal.SIGTERM, signal.SIGQUIT):
+			log.info('Closing...')
+			from LevityDash.lib.log import debug
+			if debug or signalQuit.count > 2:
+				qasync.QApplication.instance().quit()
+			remainingFutures = len(asyncio.tasks.all_tasks(asyncio.get_event_loop()))
+			log.info(f'Waiting for {remainingFutures} tasks to finish...')
+
+	signalQuit.count = 0
+
+	signals = [signal.SIGINT, signal.SIGTERM]
+
+	if platform.system() == 'Windows':
+		signals += signal.CTRL_C_EVENT, signal.CTRL_BREAK_EVENT, signal.SIGBREAK, signal.SIGKILL
+	else:
+		signals += signal.SIGQUIT,
+
+	for s in signals:
+		signal.signal(s, signalQuit)
 
 
 def init_app():
@@ -59,34 +92,12 @@ async def main():
 
 	import LevityDash.lib as lib
 
-	log = lib.log.LevityLogger
-
-	window = lib.ui.LevityMainWindow()
-
-	def signalQuit(sig, frame):
-		log.info(f'Caught signal {sig}, exiting...')
-		signalQuit.count += 1
-		if sig in (SIGINT, SIGTERM, SIGQUIT):
-			log.info('Closing...')
-			from LevityDash.lib.log import debug
-			if debug or signalQuit.count > 2:
-				qasync.QApplication.instance().quit()
-			remainingFutures = len(asyncio.tasks.all_tasks(asyncio.get_event_loop()))
-			log.info(f'Waiting for {remainingFutures} tasks to finish...')
-
-	signalQuit.count = 0
-
-	signal(SIGINT, signalQuit)
-	signal(SIGTERM, signalQuit)
-	signal(SIGQUIT, signalQuit)
-
 	def close_future(future, loop):
 		loop.call_later(10, future.cancel)
 		future.cancel()
 
 	def handel_exception(loop_, context):
 		from LevityDash.lib.log import LevityLogger
-
 		LevityLogger.exception(context["exception"])
 
 	loop = asyncio.get_event_loop()
@@ -117,4 +128,5 @@ def run():
 
 
 if __name__ == '__main__':
+	install_signals()
 	run()
