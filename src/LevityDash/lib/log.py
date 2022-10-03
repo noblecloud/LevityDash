@@ -28,6 +28,16 @@ suppressedModules = [asyncio, shiboken2]
 
 class Dotty(Dotty_):
 
+	# def __init__(self, dictionary = None, separator='.', esc_char='\\', no_list=False):
+	# 	dictionary = self._recursive_to_dotty(dictionary or {})
+	# 	super().__init__(dictionary, separator, esc_char, no_list)
+	#
+	# def _recursive_to_dotty(self, value: dict) -> dict:
+	# 	for k, v in value.items():
+	# 		if isinstance(v, dict):
+	# 			value[k] = Dotty(v)
+	# 	return value
+
 	def __getattr__(self, item):
 		return self[item]
 
@@ -52,7 +62,11 @@ def install_sentry():
 	except ImportError:
 		logging.warning("Sentry SDK not installed. Install with `pip install sentry-sdk` or `pip install LevityDash[monitoring]`")
 	except NoOptionError:
-		print(f"Logging.sentry_endpoint not set in config")
+		try:
+			import sentry_sdk
+			print(f"Sentry is installed but Logging.sentry_endpoint not set in config")
+		except ImportError:
+			pass
 
 
 def install_log_tail(handlers_: List[logging.Handler], level: int = logging.DEBUG):
@@ -64,7 +78,11 @@ def install_log_tail(handlers_: List[logging.Handler], level: int = logging.DEBU
 	except ImportError:
 		logging.warning("Logtail not installed. Install with `pip install logtail-python` or `pip install LevityDash[monitoring]`")
 	except NoOptionError:
-		print(f"No token found for Logtail. Set Logging.logtail_token in config or set LOGTAIL_SOURCE_TOKEN environment variable")
+		try:
+			import logtail
+			print(f"Logtail is installed but no token was found. Set Logging.logtail_token in config or set LOGTAIL_SOURCE_TOKEN environment variable")
+		except ImportError:
+			pass
 
 
 def levelFilter(level: int):
@@ -495,8 +513,11 @@ class _LevityLogger(logging.Logger):
 		parser.add_argument(keys.args.verbosity, action='store', default=None, dest='verbosity')
 		parser.add_argument(*debug_flags, action='store_true', default=None, dest='debug')
 		parser.add_argument(*level_flags, type=str, default=None, dest='level')
-
-		log_args = parser.parse_args(namespace=args_namespace)
+		try:
+			log_args = parser.parse_args(namespace=args_namespace)
+		except Exception as e:
+			print(e)
+			return args_namespace
 		return log_args
 
 	@property
