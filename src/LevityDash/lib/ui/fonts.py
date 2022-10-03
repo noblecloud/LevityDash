@@ -35,30 +35,6 @@ if not userConfig.has_section("Fonts"):
 
 fontConfig = userConfig['Fonts']
 
-"""
-QFont::Thin	100	100
-QFont::ExtraLight	200	200
-QFont::Light	300	300
-QFont::Normal	400	400
-QFont::Medium	500	500
-QFont::DemiBold	600	600
-QFont::Bold	700	700
-QFont::ExtraBold	800	800
-QFont::Black	900	900
-"""
-
-'''
-QFont.Thin  0
-QFont.ExtraLight  12
-QFont.Light 25
-QFont.Normal  50
-QFont.Medium  57
-QFont.DemiBold  63
-QFont.Bold  75
-QFont.ExtraBold 81
-QFont.Black 87
-'''
-
 _Qt5FontWeights: Dict[int, int] = {
 	100:  10,
 	200:  12,
@@ -73,6 +49,18 @@ _Qt5FontWeights: Dict[int, int] = {
 }
 
 _reverseQt5FontWeights = {v: k for k, v in _Qt5FontWeights.items()}
+
+_defaults = {
+	'default':        'Nunito',
+	'default.weight': 'Normal',
+	'title':          'Roboto',
+	'title.weight':   'Light',
+}
+
+_missing_defaults = {k: v for k, v in _defaults.items() if k not in fontConfig}
+if _missing_defaults:
+	fontConfig.update(_missing_defaults)
+	fontConfig.parser.save()
 
 
 def _testIsRegular(fnt: QFont) -> bool:
@@ -262,9 +250,9 @@ for namedFont in {i for i in fontConfig.keys() if '.' not in i}:
 	fontDict[namedFont] = font
 	locals()[namedFont] = font
 
-defaultFont = locals()['default']
-compactFont = locals()['compact']
-titleFont = locals()['title']
+defaultFont = locals().get('defaultFont', fontDict['Nunito'])
+compactFont = locals().get('compact', defaultFont)
+titleFont = locals().get('title', defaultFont)
 weatherGlyph = database.font('Weather Icons', 'Normal', 16)
 
 system_default_font = QApplication.font()
@@ -285,5 +273,8 @@ def getFontFamily(family: str) -> str:
 
 
 getFontWeight = FontWeight.getFontWeight
+
+del _defaults
+del _missing_defaults
 
 __all__ = ['getFontFamily', 'getFontWeight', 'fontDict', 'database', 'system_default_font']
