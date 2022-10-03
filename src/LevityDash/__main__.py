@@ -6,6 +6,8 @@ from sys import exit, path
 
 setlocale(LC_ALL, 'en_US.UTF-8')
 
+os.environ['LEVITY_DATETIME_NO_ZERO_CHAR'] = '#' if platform.system() == 'Windows' else '-'
+
 try:
 	import PySide2
 except ImportError:

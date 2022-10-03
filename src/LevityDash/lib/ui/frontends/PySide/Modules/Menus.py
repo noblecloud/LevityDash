@@ -1,5 +1,6 @@
 from enum import Enum
 from functools import cached_property, partial
+from os import environ
 from pathlib import Path
 from shutil import get_terminal_size
 from typing import Any, Type, Union, TYPE_CHECKING
@@ -32,6 +33,7 @@ from LevityDash.lib.plugins import Plugins
 from LevityDash.lib.EasyPath import EasyPath
 from LevityDash.lib.ui.Geometry import Position, LocationFlag, AlignmentFlag
 
+DATETIME_NO_ZERO_CHAR = environ['LEVITY_DATETIME_NO_ZERO_CHAR']
 
 class DimensionFloatHighlighter(RegexHighlighter):
 	base_style = "repr."
@@ -463,7 +465,7 @@ class TimeContextMenu(BaseContextMenu):
 
 	def uniqueItems(self):
 		insert = self.addMenu('Insert')
-		insert.addAction('Time', lambda: self.parent.addItem('%-I:%M'))
+		insert.addAction('Time', lambda: self.parent.addItem(f'%{DATETIME_NO_ZERO_CHAR}I:%M'))
 		insert.addAction('Date', lambda: self.parent.addItem('%A, %B %-d'))
 		insert.addAction('AM/PM', lambda: self.parent.addItem('%p'))
 		insert.addAction('Day', lambda: self.parent.addItem('%-d'))
