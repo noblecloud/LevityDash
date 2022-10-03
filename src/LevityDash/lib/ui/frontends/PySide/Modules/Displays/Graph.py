@@ -26,7 +26,8 @@ from PySide2.QtGui import (
 	QPixmap, QPolygonF, QTransform
 )
 from PySide2.QtWidgets import (
-	QGraphicsEffect, QGraphicsItem, QGraphicsItemGroup, QGraphicsLineItem, QGraphicsPixmapItem, QGraphicsRectItem,
+	QAction, QActionGroup, QGraphicsEffect, QGraphicsItem, QGraphicsItemGroup, QGraphicsLineItem, QGraphicsPixmapItem,
+	QGraphicsRectItem,
 	QGraphicsSceneDragDropEvent, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent, QGraphicsSceneWheelEvent, QMenu,
 	QStyleOptionGraphicsItem, QToolTip, QWidget
 )
@@ -1542,13 +1543,13 @@ class Plot(QGraphicsPixmapItem, Stateful):
 
 			run_in_thread(
 				self._updateShape, QPainterPath(path), scaleTo.width() / rect.width() if scaleTo else 1,
-				priority=2
+				priority=0
 			)
 
 			run_in_thread(
 				bake, pixmap, *self.effects.values(),
 				on_result=partial(finish, self, scaleTo),
-				priority=1
+				priority=0
 			)
 
 	def _debug_paint(self, painter, option, widget):
@@ -4572,34 +4573,44 @@ class TimeseriesSourceMenu(SourceMenu):
 
 	def __init__(self, parentMenu, item):
 		self.item = item
+		self.source_actions: Dict[Plugin, QAction] = {}
 		super(TimeseriesSourceMenu, self).__init__(parentMenu)
 
 	def updateItems(self):
-		if self.sources:
-			self.setEnabled(True)
-		else:
-			self.setEnabled(False)
-		for action in self.actions():
+		for source in self.sources:
+			if (action := self.source_actions.get(source, None)) is None:
+				action = self.addSource(source)
+			action.setEnabled(source.running)
 			action.setChecked(action.source is self.item.currentSource)
+
+	def __contains__(self, item: Plugin | QAction):
+		if isinstance(item, Plugin):
+			return item in self.source_actions
+		elif isinstance(item, QAction):
+			return item in self.actions()
+		else:
+			return False
 
 	@property
 	def sources(self):
 		key = self.parent.item.key
 		if key is not None:
-			return [i for i in Plugins if key in i and i[key].isTimeseries]
+			return [i for i in Plugins if i.hasTimeseriesFor(key)]
 		return []
 
-	def addSources(self):
-		for k in self.sources:
-			name = k.name
-			action = self.addAction(name, lambda k=k: self.changeSource(k))
-			action.source = k
-			action.setCheckable(True)
+	def addSource(self, source):
+		name = source.name
+		self.source_actions[source] = action = self.addAction(name, partial(self.changeSource, source))
+		action.source = source
+		action.setCheckable(True)
+		self.group.addAction(action)
+		return action
 
 	# action.setChecked(k == self.item.currentSource)
 
 	def changeSource(self, source):
 		self.item.changeSource(source)
+		self.source_actions[source].setChecked(True)
 
 
 class GraphItemMenu(QMenu):
