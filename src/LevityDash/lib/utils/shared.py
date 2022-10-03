@@ -2003,6 +2003,9 @@ class ActionPool(OrderedSet):
 				action.execute()
 			else:
 				action(self.instance)
+		for pool in self.sub_maps.values():
+			if pool.can_execute:
+				pool.execute()
 		self.__active = False
 
 	def delete(self):
@@ -2034,6 +2037,8 @@ class Worker(QtCore.QRunnable):
 	_debug: bool = False
 	pool: 'Pool'
 
+	current_thread: Callable[[], QThread] = QThread.currentThread
+
 	class Status(Enum):
 		Idle = 0
 		Running = 1
@@ -2061,7 +2066,7 @@ class Worker(QtCore.QRunnable):
 	@Slot()
 	def run(self):
 		"""Initialise the runner function with passed args, kwargs."""
-		utilLog.verbose(f'Running {self.fn!r} in thread', verbosity=5)
+		utilLog.verbose(f'Running {self.fn!r} in thread: {self.current_thread()}', verbosity=5)
 		try:
 			self.status = Worker.Status.Running
 			result = self.fn(
