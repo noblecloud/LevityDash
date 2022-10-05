@@ -332,9 +332,7 @@ class LevitySceneView(QGraphicsView):
 		self.fitInView(self.base, Qt.AspectRatioMode.KeepAspectRatio)
 		self.graphicsScene.busyBlocker.setRect(self.sceneRect())
 		self.resizeDone.start()
-		self.parent().menuBarHoverArea.size.setWidth(self.width())
-		self.parent().menuBarHoverArea.update()
-		self.parent().bar.setGeometry(0, 0, self.width(), self.parent().bar.height())
+
 
 	def noActivity(self):
 		self.graphicsScene.clearSelection()
@@ -372,9 +370,9 @@ class PluginsMenu(QMenu):
 
 	@staticmethod
 	def togglePlugin(plugin, enabled):
-		if enabled:
+		if enabled and not plugin.running:
 			plugin.start()
-		else:
+		elif not enabled and plugin.running:
 			plugin.stop()
 
 
@@ -412,10 +410,10 @@ class InsertMenu(QMenu):
 		self.setTitle('Items')
 		self.items = set(pluginManager.keys())
 		self.aboutToShow.connect(self.issue_rebuild)
-		self.injust(self.items)
-		connectSignal(pluginManager.new_keys_signal, self.injust)
+		self.ingest(self.items)
+		connectSignal(pluginManager.new_keys_signal, self.ingest)
 
-	def injust(self, added_keys):
+	def ingest(self, added_keys):
 		delta = set(added_keys) - self.items
 		if delta:
 			self.items.update(delta)
@@ -723,18 +721,7 @@ class LevityMainWindow(QMainWindow):
 		app.setStyleSheet(style)
 		view.postInit()
 
-		from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Various import HoverArea
-		self.menuBarHoverArea = HoverArea(
-			view.graphicsScene.base,
-			size=10,
-			rect=QRect(0, 0, self.width(), 50),
-			enterAction=self.menuBarHover,
-			exitAction=self.menuBarLeave,
-			alignment=LocationFlag.Bottom,
-			position=LocationFlag.TopLeft,
-			ignoredEdges=LocationFlag.Top,
-			delay=userConfig.getOrSet('MenuBar', 'delay', 0.3, userConfig.getfloat)
-		)
+
 
 		statusBarVisible = userConfig.getOrSet('QtOptions', 'status-bar', False, userConfig.getboolean)
 		statusBarFont = QFont(system_default_font)
@@ -742,31 +729,45 @@ class LevityMainWindow(QMainWindow):
 		self.statusBar().setFont(statusBarFont)
 		self.statusBar().setVisible(statusBarVisible)
 
-		self.menuBarHoverArea.setEnabled(False)
 		if platform.system() != 'Darwin':
-			menubar = MenuBar(self)
+			from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Various import HoverArea
+			self.menuBarHoverArea = HoverArea(
+				view.graphicsScene.base,
+				size=10,
+				rect=QRect(0, 0, self.width(), 50),
+				enterAction=self.showMenuBar,
+				exitAction=self.hideMenuBar,
+				alignment=LocationFlag.Bottom,
+				position=LocationFlag.TopLeft,
+				ignoredEdges=LocationFlag.Top,
+				delay=userConfig.getOrSet('MenuBar', 'delay', 0.3, userConfig.getfloat)
+			)
+			self.menuBarHoverArea.setZValue(1000)
+			self.menuBarHoverArea.setEnabled(True)
+			self.bar = MenuBar(self)
+			self.setMenuBar(self.bar)
 			self.__menubarHeight = self.menuBar().height() * 2
-			self.bar = menubar
-			self.setMenuWidget(menubar)
-			self.updateMenuBar()
 		else:
 			self.bar = self.menuBar()
 
 		self.buildMenu()
 
-		self.network_manager = QNetworkConfigurationManager()
-		self.network_manager.onlineStateChanged.connect(self.updateOnlineState)
-
 		self.show()
+
+		if platform.system() != 'Darwin':
+			self.updateMenuBar('show')
+
 
 	def updateOnlineState(self, online):
 		guiLog.info(f'Online state changed to {online}')
 
-	def menuBarHover(self):
+	def showMenuBar(self):
+		print('showing menu bar')
 		self.bar.setFixedHeight(self.bar.sizeHint().height())
 		self.menuBarHoverArea.setPos(0, self.__menubarHeight)
 
-	def menuBarLeave(self):
+	def hideMenuBar(self):
+		print('hiding menu bar')
 		self.bar.setFixedHeight(0)
 		self.menuBarHoverArea.setPos(0, 0)
 
@@ -1019,27 +1020,43 @@ class LevityMainWindow(QMainWindow):
 			gen.flatten(email)
 			webbrowser.open(Path(f.name).as_uri())
 
-	def changeEvent(self, event: QEvent):
-		super().changeEvent(event)
-		if event.type() == QEvent.WindowStateChange and (platform.system() != 'Darwin'):
-			self.updateMenuBar()
+	if platform.system() != 'Darwin':
+		def changeEvent(self, event: QEvent):
+			super().changeEvent(event)
+			if event.type() == QEvent.WindowStateChange and (platform.system() != 'Darwin'):
+				self.updateMenuBar()
 
-	def updateMenuBar(self):
-		if (hba := getattr(self, 'menuBarHoverArea', None)) is not None:
+		def resizeEvent(self, event:PySide2.QtGui.QResizeEvent) -> None:
+			super().resizeEvent(event)
+			self.menuBarHoverArea.size.setWidth(self.width())
+			self.menuBarHoverArea.update()
+			self.bar.setGeometry(0, 0, self.width(), self.bar.height())
+
+		@property
+		def menu_bar_state(self) -> str:
+			isFullScreen = self.isFullScreen()
+			accessor, default = ('fullscreen', 'hide') if isFullScreen else ('normal', 'show')
+			return userConfig.get('MenuBar', accessor, fallback=default)
+
+
+		def updateMenuBar(self, state=None):
+			if (hba := getattr(self, 'menuBarHoverArea', None)) is None:
+				return
 			hba.size.setWidth(self.width())
 			hba.update()
 			menubar = self.bar
 			view = self.centralWidget()
-			if self.windowState() & Qt.WindowFullScreen:
-				self.setMenuWidget(menubar)
+			self.bar.setFixedHeight(self.bar.sizeHint().height())
+			if (state or self.menu_bar_state) == 'show':
+				self.showMenuBar()
 				menubar.setParent(view)
-				hba.setEnabled(True)
-				self.menuBarLeave()
+				self.setMenuWidget(menubar)
+				hba.setEnabled(False)
 			else:
 				self.setMenuWidget(menubar)
-				menubar.setParent(self)
-				self.menuBarHover()
-				hba.setEnabled(False)
+				menubar.setParent(view)
+				self.hideMenuBar()
+				hba.setEnabled(True)
 
 
 class ClockSignals(QObject):
