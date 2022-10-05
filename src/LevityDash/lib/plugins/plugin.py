@@ -267,6 +267,7 @@ SomePlugin.AnySource = AnySource
 
 
 class Plugin(metaclass=PluginMeta):
+	manager: 'PluginsLoader'
 	schema: Schema
 	publisher: Publisher
 	classes: Classes

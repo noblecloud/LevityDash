@@ -2,20 +2,19 @@ import asyncio
 import pkgutil
 from importlib import import_module
 from types import ModuleType
-from typing import Any, ClassVar, Dict, Iterator, Optional, Hashable
+from typing import Any, ClassVar, Dict, Hashable, Iterator, Optional
 
+import builtins
 from PySide2.QtCore import Qt
+from PySide2.QtNetwork import QNetworkConfigurationManager
 
-from LevityDash.lib.plugins.utils import *
-from LevityDash.lib.plugins import errors
-from LevityDash.lib.log import LevityPluginLog as pluginLog
 from LevityDash.lib.config import pluginConfig
-from LevityDash.lib.plugins import categories
-from LevityDash.lib.plugins import schema
-from LevityDash.lib.plugins import observation
+from LevityDash.lib.log import LevityPluginLog as pluginLog
+from LevityDash.lib.plugins import categories, errors, observation, schema
 from LevityDash.lib.plugins.observation import Container
-from LevityDash.lib.plugins.plugin import Plugin, AnySource, SomePlugin
-from LevityDash.lib.utils import UnsetKwarg
+from LevityDash.lib.plugins.plugin import AnySource, Plugin, SomePlugin
+from LevityDash.lib.plugins.utils import *
+from LevityDash.lib.utils import Pool, UnsetKwarg
 
 Plugins: 'PluginsLoader' = None
 
@@ -31,6 +30,7 @@ class GlobalSingleton(type):
 			if (root := mcs.root) is not None:
 				root.__setattr__(name, instance)
 			globals()[name] = instance
+			setattr(builtins, name, instance)
 			mcs.instances[name] = instance
 		return mcs.instances[name]
 
@@ -51,6 +51,10 @@ class GlobalSingleton(type):
 
 class PluginsLoader(metaclass=GlobalSingleton, name='Plugins'):
 	instance: ClassVar['Plugins'] = None
+	network_available: bool
+	network_manager = QNetworkConfigurationManager()
+	network_changed = network_manager.onlineStateChanged
+	plugins_thread_pool: ClassVar[Pool] = Pool()
 
 	__plugins: Dict[str, Plugin] = {}
 	__defaultConfigs: ClassVar[Dict[Plugin, Any]] = {}
@@ -59,12 +63,14 @@ class PluginsLoader(metaclass=GlobalSingleton, name='Plugins'):
 		# find all the plugins that are enabled in the config
 		allPlugins = self.allPlugins()
 		pluginsToInit = {name: self._loadPlugin(name) for name in allPlugins}
+		self._plugin_workers: Dict[str, PluginWorker] = {}
 
 		for name, plugin_ in pluginsToInit.items():
 			if plugin_ is None:
 				continue
 			try:
 				pluginInstance = plugin_()
+				pluginInstance.manager = self
 				self.__plugins[name] = pluginInstance
 				statusColor = 'green' if pluginInstance.enabled else 'red'
 				pluginLog.info(f'Loaded plugin [{statusColor}]{name}[/{statusColor}]')
@@ -85,7 +91,17 @@ class PluginsLoader(metaclass=GlobalSingleton, name='Plugins'):
 	def stop(self):
 		print('--------------------- Stopping plugins ---------------------')
 		for plugin in self:
-			plugin.stop()
+			if plugin.running:
+				plugin.stop()
+
+	@property
+	def network_available(self) -> bool:
+		return PluginsLoader.network_manager.isOnline()
+
+	def on_network_availility_change(self, available: bool):
+		if available and pluginConfig['Options'].getboolean('enabled') and self.network_available is None:
+			asyncio.gather(*(plugin_.asyncStart() for plugin_ in self if plugin_.enabled))
+		print(f'plugins Network availability changed to {available}')
 
 	@staticmethod
 	def allPlugins() -> Iterator[str]:
@@ -155,7 +171,6 @@ class PluginsLoader(metaclass=GlobalSingleton, name='Plugins'):
 	@property
 	def plugins(self) -> Dict[str, Plugin]:
 		return self.__plugins
-
 
 def __getattr__(item: str) -> Plugin:
 	return getattr(Plugins, item, None) or locals()[item]
