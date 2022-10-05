@@ -1,13 +1,18 @@
+import os
+import shutil
+
+import zipfile
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 from typing import Dict, Optional, Callable, ClassVar, Union, TypeAlias, TypeVar
+from urllib import request
 
 from rich.repr import rich_repr
 from PySide2.QtGui import QFont, QFontMetrics
 
 from LevityDash.lib.EasyPath import EasyPath
-from LevityDash import __resources__
+from LevityDash import __dirs__, __resources__
 from LevityDash.lib.log import LevityLogger
 
 log = LevityLogger.getChild('icons')
@@ -124,8 +129,7 @@ class IconPack:
 
 	def getFont(self, style: str = None, hasChar: str = None) -> QFont:
 		style = style or self.defaultStyle
-		defaultStyle = self.fonts[self.defaultStyle]
-		font = self.fonts.get(style, None) or defaultStyle
+		font = self.fonts.get(style, None) or self.fonts[self.defaultStyle]
 		if hasChar is None and len(self.styles) > 1:
 			return font
 		styleWithChar = next((x for x in (style, *self.styles) if self.metrics[x].inFont(hasChar)), None)
@@ -184,56 +188,93 @@ class FontAwesome(IconPack):
 	charMapPath = IconPack.basePath/Path('maps/font-awesome.toml')
 	defaultStyle = 'solid'
 	styles = {'brands', 'regular', 'solid'}
+	repo: str = 'https://github.com/FortAwesome/Font-Awesome'
 
-	def processor(self, font_spec_output_path: Path = charMapPath, force_reload: bool = False):
+	def get_spec(self, path) -> dict:
 		from json import load as json_load
-		from tomli import load
-		from tomli_w import dump
-
-		for folder in (i for i in IconPack.basePath.iterdir() if i.is_dir()):
+		for folder in (i for i in path.iterdir() if i.is_dir()):
 			match EasyPath(folder).asDict(depth=2):
 				case {'metadata': {'icons.json': iconFile, **metadata}, 'otfs': {**fonts}}:
+					with open(iconFile.path, 'r') as f:
+						font_spec = json_load(f)
+
 					_FA_FONT_PATHS = {
 						'solid':   fonts['Font Awesome 6 Free-Solid-900.otf'],
 						'regular': fonts['Font Awesome 6 Free-Regular-400.otf'],
-						'brands':  fonts['Font Awesome 6 Brands-Regular-400.otf']
+						'brands':  fonts['Font Awesome 6 Brands-Regular-400.otf'],
+						'metadata': font_spec
 					}
-					font_spec_path = iconFile.path
 					break
 				case _:
 					continue
 		else:
-			raise Exception('Could not find Font Awesome folder')
+			print('No font found')
+			print(path.absolute())
+			raise FileNotFoundError('Could not find Font Awesome folder')
+		return _FA_FONT_PATHS
 
-		sectionConstructor = lambda p: dict(font=f'{{__resources__}}/{p.path.absolute().relative_to(__resources__)!s}', chars=dict(), svg=dict())
-		items = {
-			'regular': sectionConstructor(_FA_FONT_PATHS['regular']),
-			'solid':   sectionConstructor(_FA_FONT_PATHS['solid']),
-			'brands':  sectionConstructor(_FA_FONT_PATHS['brands'])
-		}
+	def processor(self, font_spec_output_path: Path = charMapPath, force_reload: bool = False):
+
+		from tomli import load
+
 		if font_spec_output_path.exists() and not force_reload:
 			try:
 				with open(font_spec_output_path, 'rb') as f:
-					font_spec = load(f)['font-awesome']
+					return load(f)['font-awesome']
 			except Exception as e:
-				pass
-			else:
-				return font_spec
+				log.error(f'Could not load font spec {font_spec_output_path!s}: {e}')
+				return self._download()['font-awesome']
+		elif not font_spec_output_path.exists():
+			return self._download()['font-awesome']
 
-		with open(font_spec_path, 'r') as f:
-			font_spec = json_load(f)
-		for name, attrs in font_spec.items():
+	def _download(self) -> dict:
+		url = f'{self.repo}/archive/6.x.zip'
+
+		tmp_path = Path(__dirs__.user_cache_dir) / 'fa-download'
+		os.makedirs(tmp_path, exist_ok=True)
+
+		fa_folder = IconPack.basePath / 'Font-Awesome'
+
+		shutil.rmtree(fa_folder, ignore_errors=True)
+		fa_folder.mkdir(parents=True)
+
+		def reporthook(count, block_size, total_size):
+			print(f"\rDownloading Font-Awesome ... {count * block_size / (1024 * 1024):3.3g} MB", end="")
+		filehandle, _ = request.urlretrieve(url, filename=tmp_path / 'fa.zip', reporthook=reporthook)
+
+		with zipfile.ZipFile(filehandle) as zipped:
+			to_extract = [i for i in zipped.filelist if i.filename.endswith('.otf') or i.filename.endswith('icons.json')]
+			for member in to_extract:
+				zipped.extract(member, path=tmp_path)
+
+		paths = self.get_spec(tmp_path)
+
+		sectionConstructor = lambda p: dict(
+			font=f'{{__resources__}}/{p.path.absolute().relative_to(__resources__)!s}',
+			chars=dict(),
+			svg=dict()
+		)
+
+		metadata = paths.pop('metadata')
+
+		items = {'prefix': 'fa'}
+		items.update(
+			(name, sectionConstructor(
+				EasyPath(font.path.rename(fa_folder/f'fa-{name}.otf')))
+			 ) for name, font in paths.items()
+		)
+
+		shutil.rmtree(tmp_path)
+
+		for name, attrs in metadata.items():
 			for style in attrs['styles']:
 				items[style]['chars'][name] = chr(int(attrs['unicode'], 16))
 				items[style]['svg'][name] = attrs['svg'][style]['raw']
 
-		# output the processed font to a TOML file
-		parentFolder = font_spec_output_path.parent
-		if not parentFolder.exists():
-			parentFolder.mkdir(parents=True)
-
-		with open(font_spec_output_path, 'xb') as f:
-			f.flush()
+		spec_path = IconPack.basePath / 'maps' / 'font-awesome.toml'
+		os.makedirs(spec_path.parent, exist_ok=True)
+		with open(spec_path, 'wb') as f:
+			from tomli_w import dump
 			dump({'font-awesome': items}, f)
 
 		return items
@@ -285,9 +326,7 @@ def getIcon(name: str, style: Optional[str] = None) -> Icon:
 		raise Exception(f'Could not find icon pack {pack}')
 	return pack.getIcon(name, style)
 
-
 fa = FontAwesome()
 mdi = MaterialDesignIcons()
 wi = WeatherIcons()
-
 __all__ = ['fa', 'mdi', 'wi', 'getIcon', 'Icon', 'IconPack']
