@@ -182,7 +182,14 @@ class Realtime(Panel, tag='realtime'):
 		if value == getattr(self, '_key', None):
 			return
 		self._key = value
-		self.container = ValueDirectory.getContainer(value)
+		container = ValueDirectory.getContainer(value)
+
+		if self.title.allowDynamicUpdate():
+			self.title.textBox.setTextAccessor(lambda: container.title)
+			if not self.title.isEnabled():
+				self.title.textBox.setTextAccessor(None)
+		self.title.textBox.refresh()
+		self.container = container
 
 	@StateProperty(default=AnySource, dependencies={'key', 'display', 'title', 'forecast'}, values=Plugins.plugins)
 	def source(self) -> Plugin | SomePlugin:
