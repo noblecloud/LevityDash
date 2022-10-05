@@ -6,7 +6,7 @@ from PySide2.QtGui import QPainter, QPainterPath, QPen
 from PySide2.QtWidgets import QApplication, QGraphicsItem, QGraphicsPathItem, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent
 
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles import debug, Handle
-from LevityDash.lib.ui.frontends.PySide.utils import colorPalette
+from LevityDash.lib.ui.frontends.PySide.utils import addRect, colorPalette, DebugPaint
 from LevityDash.lib.ui.Geometry import LocationFlag, relativePosition
 from LevityDash.lib.utils.shared import clamp
 
@@ -149,7 +149,7 @@ class DrawerHandle(Handle):
 
 from LevityDash.lib.log import LevityUtilsLog as log
 
-
+@DebugPaint
 class HoverArea(QGraphicsPathItem):
 
 	def __init__(self, parent: 'Panel',
@@ -330,6 +330,10 @@ class HoverArea(QGraphicsPathItem):
 		self.moveBy(*self.offset.toTuple())
 		self.setPath(self._path)
 		super(HoverArea, self).update()
+
+	def _debug_paint(self, painter: QPainter, option, widget):
+		self._normal_paint(painter, option, widget)
+		addRect(painter, self.boundingRect(), Qt.red, Qt.red, 1)
 
 
 class IndoorIcon(QGraphicsPathItem):
