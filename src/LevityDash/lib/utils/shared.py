@@ -2031,6 +2031,7 @@ def defer(func):
 	return wrapper
 
 
+@rich_repr
 class Worker(QtCore.QRunnable):
 	"""Worker thread for running background tasks."""
 
@@ -2045,7 +2046,6 @@ class Worker(QtCore.QRunnable):
 		Finished = 2
 		Aborted = 3
 		Failed = 4
-
 
 	status = Status.Idle
 
@@ -2062,6 +2062,16 @@ class Worker(QtCore.QRunnable):
 		self.args = args
 		self.kwargs = kwargs
 		self.signals = WorkerSignals()
+
+	def __rich_repr__(self):
+		yield 'status', self.status.name
+		yield 'fn', self.fn
+		if self.args:
+			yield 'args', self.args
+		if self.kwargs:
+			yield 'kwargs', self.kwargs
+		if getattr(self, 'pool', None):
+			yield 'pool', self.pool
 
 	@Slot()
 	def run(self):
@@ -2138,6 +2148,7 @@ class Pool(QtCore.QThreadPool):
 		self,
 		func: Callable | Awaitable,
 		*args,
+		func_kwargs: dict = None,
 		on_finish: Callable[[], None] | Coroutine = None,
 		on_result: Callable[[T], Any] | Coroutine = None,
 		on_error: Callable[[Exception], Any] | Coroutine = None,
@@ -2146,7 +2157,7 @@ class Pool(QtCore.QThreadPool):
 	) -> Worker:
 		"""Execute a function in the background with a worker"""
 
-		worker = self.create_worker(func, *args, on_finish=on_finish, on_result=on_result, on_error=on_error, **kwargs)
+		worker = self.create_worker(func, *args, func_kwargs=func_kwargs, on_finish=on_finish, on_result=on_result, on_error=on_error, **kwargs)
 		worker.pool = self
 
 		self.start(worker, priority)
@@ -2157,13 +2168,16 @@ class Pool(QtCore.QThreadPool):
 	def create_worker(
 		func: Callable | Awaitable,
 		*args,
+		func_kwargs: Dict[str, Any] = None,
 		on_finish: Callable[[], None] | Coroutine = None,
 		on_result: Callable[[T], Any] | Coroutine = None,
 		on_error: Callable[[Exception], Any] | Coroutine = None,
 		immortal: bool = False,
 		**kwargs: Dict[str, Any]
 	) -> Worker:
-		worker = Worker(func, *args, **kwargs)
+		func_kwargs = func_kwargs or {}
+		func_kwargs.update(kwargs)
+		worker = Worker(func, *args, **func_kwargs)
 		worker.setAutoDelete(immortal)
 		if on_finish is None:
 			pass
@@ -2191,6 +2205,7 @@ class Pool(QtCore.QThreadPool):
 			)
 		else:
 			connectSignal(worker.signals.error, on_error)
+
 		return worker
 
 	run_in_thread = run_threaded_process
@@ -2205,9 +2220,12 @@ class Pool(QtCore.QThreadPool):
 		worker.signals.result.connect(callback)
 		return worker
 
+	def start_workers(self, *workers: Worker, priority: int = 3):
+		for worker in workers:
+			self.start(worker, priority)
 
 QApplication.instance().pool = Pool()
-threadPool = QApplication.instance().pool
+threadPool: Pool = QApplication.instance().pool
 
 run_in_thread = QApplication.instance().pool.run_threaded_process
 
