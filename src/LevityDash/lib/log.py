@@ -243,10 +243,10 @@ class _LevityLogger(logging.Logger):
 		)
 
 		level = cls.determineLogLevel()
-		console_level = cls.determineLogLevel('console', default=level)
-		file_level = cls.determineLogLevel('file', default=1)
-		status_bar_level = cls.determineLogLevel('status_bar', default=4)
-		logtail_level = cls.determineLogLevel('logtail', default=1)
+		console_level = 3 or cls.determineLogLevel('console', default=level)
+		file_level = 3 or cls.determineLogLevel('file', default=1)
+		status_bar_level = 3 or cls.determineLogLevel('status-bar', default=4)
+		logtail_level = 3 or cls.determineLogLevel('logtail', default=1)
 
 		handlers = []
 		install_sentry()
@@ -285,7 +285,7 @@ class _LevityLogger(logging.Logger):
 			show_path=False,
 			tracebacks_width=columns,
 			rich_tracebacks=True,
-			level=console_level,
+			level=3,
 		)
 
 		richRotatingFileHandler = RichRotatingLogHandlerProxy(
@@ -548,14 +548,22 @@ class _LevityLogger(logging.Logger):
 	def openLog(cls):
 		webbrowser.open(cls.logPath.as_uri())
 
-	def setLevel(self, level: int | str) -> None:
+	def setLevel(self, level: int | str, handler: str = None) -> None:
 		self.verbose(
-			f"Log {self.name} set to level {logging.getLevelName(level) if isinstance(level, int) else level}",
+			f"Log {handler or self.name} set to level {logging.getLevelName(level) if isinstance(level, int) else level}",
 			verbosity=5
 		)
-		super().setLevel(level)
-		self.consoleHandler.setLevel(level)
-		self.fileHandler.setLevel(level)
+		match handler:
+			case None:
+				super().setLevel(level)
+			case 'console':
+				self.console.setLevel(level)
+			case 'file':
+				self.file.setLevel(level)
+			case 'status-bar':
+				self.status_bar.setLevel(level)
+			case _:
+				super().setLevel(level)
 
 	def setVerbosity(self, level: int):
 		self.fileHandler.setLevel(5 - level)
