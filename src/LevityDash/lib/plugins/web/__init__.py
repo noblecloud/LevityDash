@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 
 from enum import Enum
 
+from PySide2.QtNetwork import QNetworkConfigurationManager
 from rich import repr
 
 from LevityDash.lib.config import PluginConfig
@@ -375,6 +376,8 @@ class Endpoint(object):
 
 class Web(Plugin, prototype=True):
 	urls: URLs
+
+	network_manager: QNetworkConfigurationManager
 
 	def __init__(self, *args, **kwargs):
 		super().__init__()
