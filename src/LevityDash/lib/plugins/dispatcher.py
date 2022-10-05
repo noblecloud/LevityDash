@@ -230,9 +230,26 @@ class MultiSourceContainer(dict):
 
 	@property
 	def title(self):
-		if hasattr(self.value, 'title'):
+		if self.plugins and hasattr(self.value, 'title'):
 			return self.value.title
-		return self.key
+		try:
+			return self.default_source.schema[self.key].title
+		except AttributeError:
+			return self.key
+
+	@cached_property
+	def default_source(self) -> Plugin | None:
+		for plugin in self.valid_sources:
+			for i in self.key[::-1]:
+				if i in plugin.config.defaultFor:
+					return plugin
+		return next(iter(self.valid_sources), None)
+
+	@property
+	def valid_sources(self) -> List[Plugin]:
+		_plugins = [i for i in Plugins if self.key in i.schema]
+		_plugins.sort(key=lambda p: (0 if not p.enabled else 2 if p.running else 1, len(p.config.defaultFor)), reverse=True)
+		return _plugins
 
 	@cached_property
 	def defaultContainer(self) -> 'Container':
@@ -250,7 +267,7 @@ class MultiSourceContainer(dict):
 		if len(options) == 1:
 			return options[0]
 		elif len(options) > 1:
-			options = sorted(options, key=lambda x: len(x.source.config.defaultFor), reverse=False)
+			options = sorted(options, key=lambda x: len(x.source.config.defaultFor), reverse=True)
 			return options[0]
 		else:
 			raise ValueError('No default container found for {}'.format(self.key))
@@ -291,8 +308,8 @@ class MultiSourceContainer(dict):
 	def addValue(self, plugin: Plugin, container: Container):
 		self[plugin.name] = container
 		self.relay.connectContainer(container)
-		clearCacheAttr(self, 'defaultContainer')
-		log.debug(f'Added {plugin.name} to {self.key}')
+		clearCacheAttr(self, 'defaultContainer', 'default_source')
+		log.verbose(f'Added {plugin.name} to {self.key}', verbosity=0)
 		self.checkAwaiting(container)
 
 	def onUpdates(self, observations: Iterable[Observation]):
@@ -555,5 +572,8 @@ class PluginValueDirectory(MutableSignal):
 
 
 ValueDirectory = PluginValueDirectory()
+import builtins
+builtins.values_directory = ValueDirectory
+globals()['values_directory'] = ValueDirectory
 
 __all__ = ("PluginValueDirectory", "MultiSourceContainer", "MultiSourceChannel", "ValueDirectory")
