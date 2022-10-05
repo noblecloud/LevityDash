@@ -288,7 +288,7 @@ class GraphItemData(Stateful, tag=...):
 				self.__connectedContainer = container
 				self.__connectedTimeseries = container.timeseries
 				self.pendingUpdate = run_in_thread(self.onValueChange, priority=1)
-				log.debug(f'GraphItem {self.key.name} connected to {self.__connectedTimeseries}')
+				log.verbose(f'GraphItem {self.key.name} connected to {self.__connectedTimeseries}', verbosity=1)
 			else:
 				log.warning(f'GraphItem {self.key.name} failed to connect to {container}')
 		return connected

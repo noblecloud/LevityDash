@@ -2246,7 +2246,7 @@ class MeasurementTimeSeries(OrderedDict):
 			log.verbose(f'Refreshing {self!s}', verbosity=3)
 			self.update()
 		else:
-			log.verbose(f'Aborting refresh for {self!s} due to lack of subscribers', verbosity=2)
+			log.verbose(f'Aborting refresh for {self!s} due to lack of subscribers', verbosity=4)
 		if callback is not None:
 			callback()
 
@@ -2313,17 +2313,25 @@ class MeasurementTimeSeries(OrderedDict):
 		else:
 			return len(self._source) > 3 and self.key in self._source
 
+	@property
+	def parent_reference_updating(self) -> bool:
+		return any(len(i) == 0 for i in self.__references if isinstance(i, MeasurementTimeSeries) and i.isMultiSource)
+
 	def update(self, changed: Set[Observation] = None) -> None:
 		# TODO: Add a lock to this operation
 		changed = changed or self.observations
 		with self.signals:
 			currentLength = len(self)
-			log.debug(f'Updating {type(self).__name__}({self.sourceName}:{self.key.name})')
+			if self.parent_reference_updating:
+				_logger = lambda msg, verbosity=4: log.verbose(msg, verbosity=verbosity)
+			else:
+				_logger = lambda msg, verbosity=0: log.debug(msg)
+			_logger(f'Updating {type(self).__name__}({self.sourceName}:{self.key.name})')
 			self.clear()
 			log.verbose(f'{self} cleared with length {len(self)}', verbosity=5)
 			key = self._key
 			if isinstance(self._source, ObservationTimeSeries):
-				log.verbose(f'{self} updating from single source of length {len(self._source.timeseries)}', verbosity=4)
+				_logger(f'{self} updating from single source of length {len(self._source.timeseries)}')
 				itemCount = 0
 				for item in [v[key] for v in self._source.timeseries.values() if key in v]:
 					itemCount += 1
@@ -2350,7 +2358,7 @@ class MeasurementTimeSeries(OrderedDict):
 
 			thisHash = self.__valuesHash()
 			if thisHash != self.__lastHash:
-				log.verbose(f'{self} has changed, clearing cache and publishing changes', verbosity=3)
+				_logger(f'{self} has changed, clearing cache and publishing changes', verbosity=3)
 				self.__clearCache()
 				if not self.isMultiSource:
 					self.signals.publish(self.observations)
@@ -2656,7 +2664,7 @@ class Container:
 					if iscoroutine(callback):
 						loop.create_task(callback(), name=f'P{requester}RequirementsMet')
 					else:
-						loop.call_soon(callback)
+						loop.call_soon_threadsafe(callback)
 					del self._awaitingRequirements[requester]
 
 	@lru_cache(maxsize=8)

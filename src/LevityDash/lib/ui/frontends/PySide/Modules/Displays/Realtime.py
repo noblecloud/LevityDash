@@ -67,6 +67,8 @@ class InvalidSource(Exception):
 
 
 class RealtimeTitle(TitleLabel):
+	parent: 'Realtime'
+
 	__defaults__ = {}
 
 
@@ -452,7 +454,7 @@ class Realtime(Panel, tag='realtime'):
 		connected = container.channel.connectSlot(self.updateSlot)
 		if connected:
 			self.__connectedContainer = container
-			log.debug(f'Realtime {self.key.name} connected to {self.__connectedContainer!r}')
+			log.verbose(f'Realtime {self.key.name} connected to {self.__connectedContainer!r}', verbosity=1)
 		else:
 			log.warning(f'Realtime {self.key.name} failed to connect to {container}')
 			return
@@ -1038,8 +1040,14 @@ class MeasurementDisplayProperties(Stateful):
 		self.valueTextBox.textBox._formatHint = value
 
 	def format(self, value: Measurement) -> str:
-		if self.formatString is not None and isinstance(value, Measurement):
-			return f'{value: format:{self.formatString}}'
+		formatString = self.formatString
+		if formatString is not None:
+			if isinstance(value, Measurement):
+				formatString = f'format:{formatString}'
+			elif isinstance(value, datetime):
+				other_ = '%-' if DATETIME_NO_ZERO_CHAR == '#' else '%#'
+				formatString = formatString.replace(other_, f'%{DATETIME_NO_ZERO_CHAR}')
+			return value.__format__(formatString)
 		elif value is None:
 			return "⋯"
 		return str(value)
@@ -1086,7 +1094,13 @@ class MeasurementDisplayProperties(Stateful):
 			return str(measurement).strip()
 		elif isinstance(measurement, datetime):
 			formatString = self.formatString or '%H:%M:%S'
-			return f'{measurement:{formatString}}'.lower()
+			other_ = '%-' if DATETIME_NO_ZERO_CHAR == '#' else '%#'
+			formatString = formatString.replace(other_, f'%{DATETIME_NO_ZERO_CHAR}')
+			try:
+				return f'{measurement:{formatString}}'.lower()
+			except ValueError:
+				print(f'Invalid format string: {formatString}')
+				return f'{measurement:%H:%M:%S}'.lower()
 		elif measurement is None:
 			return None
 		return str(measurement).strip()
@@ -1176,7 +1190,7 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 
 	deletable = False
 
-	class ValueLabel(Label, tag=..., defaultIcon=FontAwesome.getIcon('ellipsis', 'regular')):
+	class ValueLabel(Label, tag=..., defaultIcon=FontAwesome.getIcon('ellipsis', 'solid')):
 
 		__defaults__ = {
 			'weight': FontWeight.Regular,
