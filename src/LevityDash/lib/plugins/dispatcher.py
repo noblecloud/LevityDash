@@ -275,17 +275,17 @@ class MultiSourceContainer(dict):
 	def checkAwaiting(self, container: Container):
 		plugin = container.source
 		if container.isRealtime and (self.waitingForTrueRealtime[plugin] or self.waitingForTrueRealtime[AnySource]):
-			log.debug(f"{plugin.name} is ready with a strict realtime value for {self.key}")
+			log.verbose(f"{plugin.name} is ready with a strict realtime value for {self.key}", verbosity=1)
 			for request in (*self.waitingForTrueRealtime.pop(plugin, []), *self.waitingForTrueRealtime.pop(AnySource, [])):
-				log.debug(f"Issuing callback for {request.requester!s}")
+				log.verbose(f"Issuing callback for {request.requester!s}", verbosity=1)
 				loop.create_task(request.callback)
 
 		if (container.isRealtime or container.isRealtimeApproximate) and (
 			self.waitingForAnyRealtime[plugin] or self.waitingForAnyRealtime[AnySource]
 		):
-			log.debug(f"{plugin!s} is ready with an approximate realtime value for {self.key.name}")
+			log.verbose(f"{plugin!s} is ready with an approximate realtime value for {self.key.name}", verbosity=1)
 			for request in (*self.waitingForAnyRealtime.pop(plugin, []), *self.waitingForAnyRealtime.pop(AnySource, [])):
-				log.debug(f"Issuing callback for {request.requester!s}")
+				log.verbose(f"Issuing callback for {request.requester!s}", verbosity=1)
 				if container.isTimeseriesOnly:
 					container.prepare_for_ts_connection(request.callback)
 				else:
@@ -293,16 +293,16 @@ class MultiSourceContainer(dict):
 
 		if self.waitingForTimeseries[plugin] or self.waitingForTimeseries[AnySource]:
 			if plugin[self.key].isForecast:
-				log.debug(f"{plugin.name} timeseries is ready for {self.key}")
+				log.verbose(f"{plugin.name} timeseries is ready for {self.key}", verbosity=1)
 				for request in (*self.waitingForTimeseries.pop(plugin, []), *self.waitingForTimeseries.pop(AnySource, [])):
-					log.debug(f"Issuing callback for {request.requester!s}")
+					log.verbose(f"Issuing callback for {request.requester!s}", verbosity=1)
 					container.prepare_for_ts_connection(request.callback)
 
 		if self.waitingForDaily[plugin] or self.waitingForDaily[AnySource]:
 			if plugin[self.key].isDailyForecast:
-				log.debug(f"{plugin.name} daily is ready for {self.key}")
+				log.verbose(f"{plugin.name} daily is ready for {self.key}", verbosity=1)
 				for request in (*self.waitingForDaily.pop(plugin, []), *self.waitingForDaily.pop(AnySource, [])):
-					log.debug(f"Issuing callback for {request.requester!s}")
+					log.verbose(f"Issuing callback for {request.requester!s}", verbosity=1)
 					container.prepare_for_ts_connection(request.callback)
 
 	def addValue(self, plugin: Plugin, container: Container):
@@ -332,21 +332,21 @@ class MultiSourceContainer(dict):
 		return self.defaultContainer.valueChanged
 
 	def getPreferredSourceContainer(self, requester, plugin: Plugin | SomePlugin, callback: Coroutine, timeseriesOnly: bool = False):
-		log.debug(f'{requester!s} is asking for {"a timeseries" if timeseriesOnly else "an approximate realtime value"} '
-		          f'from {"any source" if (plugin is AnySource) else str(plugin)} for {self.key.name}')
+		log.verbose(f'{requester!s} is asking for {"a timeseries" if timeseriesOnly else "an approximate realtime value"} '
+		          f'from {"any source" if (plugin is AnySource) else str(plugin)} for {self.key.name}', verbosity=1)
 		if timeseriesOnly:
 			self.waitingForTimeseries[plugin].add(Request(requester, callback))
 		else:
 			self.waitingForAnyRealtime[plugin].add(Request(requester, callback))
 
 	def getTrueRealtimeContainer(self, requester, source: Plugin | SomePlugin, coro: Coroutine):
-		log.debug(f'{requester!s} is asking for a true realtime value from '
-		          f'{str(source) if source is not AnySource else "any source"} for {self.key.name}')
+		log.verbose(f'{requester!s} is asking for a true realtime value from '
+		          f'{str(source) if source is not AnySource else "any source"} for {self.key.name}', verbosity=1)
 		self.waitingForTrueRealtime[source].add(Request(requester, coro))
 
 	def getDailyContainer(self, requester, source: Plugin | SomePlugin, coro: Coroutine):
-		log.debug(f'{requester!s} is asking for a daily value from '
-		          f'{str(source) if source is not AnySource else "any source"} for {self.key.name}')
+		log.verbose(f'{requester!s} is asking for a daily value from '
+		          f'{str(source) if source is not AnySource else "any source"} for {self.key.name}', verbosity=1)
 		self.waitingForDaily[source].add(Request(requester, coro))
 
 	@property
