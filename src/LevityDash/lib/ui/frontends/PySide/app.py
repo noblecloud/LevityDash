@@ -746,30 +746,8 @@ class LevityMainWindow(QMainWindow):
 			self.menuBarHoverArea.setEnabled(True)
 			self.bar = MenuBar(self)
 			self.setMenuBar(self.bar)
-			self.__menubarHeight = self.menuBar().height() * 2
 		else:
 			self.bar = self.menuBar()
-
-		self.buildMenu()
-
-		self.show()
-
-		if platform.system() != 'Darwin':
-			self.updateMenuBar('show')
-
-
-	def updateOnlineState(self, online):
-		guiLog.info(f'Online state changed to {online}')
-
-	def showMenuBar(self):
-		print('showing menu bar')
-		self.bar.setFixedHeight(self.bar.sizeHint().height())
-		self.menuBarHoverArea.setPos(0, self.__menubarHeight)
-
-	def hideMenuBar(self):
-		print('hiding menu bar')
-		self.bar.setFixedHeight(0)
-		self.menuBarHoverArea.setPos(0, 0)
 
 	def __init_ui__(self):
 		envFullscreen = os.getenv('LEVITY_FULLSCREEN', None)
@@ -826,6 +804,7 @@ class LevityMainWindow(QMainWindow):
 
 		if fullscreen or '--fullscreen' in sys.argv or similarity > 0.95:
 			self.showFullScreen()
+
 
 	def buildMenu(self):
 		menubar = self.bar
@@ -1021,16 +1000,28 @@ class LevityMainWindow(QMainWindow):
 			webbrowser.open(Path(f.name).as_uri())
 
 	if platform.system() != 'Darwin':
+
+		@property
+		def menu_bar_height(self) -> int | float:
+			return self.bar.sizeHint().height()
+
+		def showMenuBar(self):
+			height = self.menu_bar_height
+			self.bar.setFixedHeight(height)
+			self.menuBarHoverArea.setPos(0, height)
+
+		def hideMenuBar(self):
+			self.bar.setFixedHeight(0)
+			self.menuBarHoverArea.setPos(0, 0)
+
 		def changeEvent(self, event: QEvent):
 			super().changeEvent(event)
-			if event.type() == QEvent.WindowStateChange and (platform.system() != 'Darwin'):
-				self.updateMenuBar()
+			self.updateMenuBar()
 
 		def resizeEvent(self, event:PySide2.QtGui.QResizeEvent) -> None:
+			self.menuBarHoverArea.size.setWidth(event.size().width())
+			self.bar.setFixedWidth(event.size().width())
 			super().resizeEvent(event)
-			self.menuBarHoverArea.size.setWidth(self.width())
-			self.menuBarHoverArea.update()
-			self.bar.setGeometry(0, 0, self.width(), self.bar.height())
 
 		@property
 		def menu_bar_state(self) -> str:
@@ -1038,23 +1029,20 @@ class LevityMainWindow(QMainWindow):
 			accessor, default = ('fullscreen', 'hide') if isFullScreen else ('normal', 'show')
 			return userConfig.get('MenuBar', accessor, fallback=default)
 
-
 		def updateMenuBar(self, state=None):
 			if (hba := getattr(self, 'menuBarHoverArea', None)) is None:
 				return
 			hba.size.setWidth(self.width())
-			hba.update()
 			menubar = self.bar
-			view = self.centralWidget()
-			self.bar.setFixedHeight(self.bar.sizeHint().height())
+			self.bar.setFixedHeight(self.menu_bar_height)
 			if (state or self.menu_bar_state) == 'show':
 				self.showMenuBar()
-				menubar.setParent(view)
+				menubar.setParent(self.view)
 				self.setMenuWidget(menubar)
 				hba.setEnabled(False)
 			else:
 				self.setMenuWidget(menubar)
-				menubar.setParent(view)
+				menubar.setParent(self.view)
 				self.hideMenuBar()
 				hba.setEnabled(True)
 
