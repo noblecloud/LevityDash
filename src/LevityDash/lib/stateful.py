@@ -296,9 +296,9 @@ class FrameIterator:
 
 	def __next__(self) -> tuple[Traceback, object]:
 		self.level += 1
-		if self.level > 10:
-			raise StopIteration
 		self.frame = self.frame.f_back
+		if self.level > 10 or self.frame is None:
+			raise StopIteration
 		if self.info:
 			return getframeinfo(self.frame), self.frame
 		return self.frame
