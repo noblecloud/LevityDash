@@ -1103,7 +1103,17 @@ class MeasurementDisplayProperties(Stateful):
 				return f'{measurement:%H:%M:%S}'.lower()
 		elif measurement is None:
 			return None
-		return str(measurement).strip()
+		if (not measurement) and self.nullValue is not None:
+			return self.nullValue
+		return str(measurement).strip() or self.nullValue
+
+	@StateProperty(key='null', default=None, after=updateLabels)
+	def nullValue(self) -> str | None:
+		return getattr(self, '__null', None)
+
+	@nullValue.setter
+	def nullValue(self, value: str | None):
+		self.__null = value
 
 	@StateProperty(default=None)
 	def convertTo(self) -> Type[Measurement] | None:
