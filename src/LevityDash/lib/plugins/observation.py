@@ -1748,6 +1748,9 @@ class ObservationTimeSeries(ObservationDict, published=True):
 		self.__knownKeys = set()
 		self.__timeseries__ = {}
 
+	def __len__(self) -> int:
+		return len(self.__timeseries__)
+
 	def calculateMissing(self):
 		# TODO: Add support for calculating high and lows from hourly and supplying them to daily observations
 		if 'precipitationAccumulation' not in self.knownKeys and (key := self.keySelector('precipitation', 'precipitationRate')):
