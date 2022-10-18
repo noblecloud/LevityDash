@@ -124,6 +124,9 @@ battery.slice = [10:12]
 
 class Govee(Plugin, realtime=True, logged=True):
 	name = 'Govee'
+
+	requirements = {'bluetooth'}
+
 	schema: Schema = {
 		'timestamp': {'type': 'datetime', 'sourceUnit': 'epoch', 'title': 'Time', 'sourceKey': 'timestamp', tsk.metaData: True},
 		'indoor.temperature.temperature': {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Temperature', 'sourceKey': 'temperature'},
@@ -152,6 +155,7 @@ class Govee(Plugin, realtime=True, logged=True):
 		self.lastDatagram: Optional[LevityDatagram] = None
 		self.historicalTimer: ScheduledEvent | None = None
 		self.scannerTask = None
+		self.devices_observations = {}
 		try:
 			self.__readConfig()
 		except Exception as e:
@@ -341,6 +345,13 @@ class Govee(Plugin, realtime=True, logged=True):
 			return device
 		else:
 			raise NoDevice(f'No device found for {deviceConfig}')
+
+	def get_device_observation(self, device: str):
+		if (obs := self.devices_observations.get(device, None)) is None:
+			RealtimeClass: Type[ObservationRealtime] = self.classes['Realtime']
+			obs = RealtimeClass(self, device)
+			(self, device)
+		return obs
 
 	def __dataParse(self, device, data):
 		try:
