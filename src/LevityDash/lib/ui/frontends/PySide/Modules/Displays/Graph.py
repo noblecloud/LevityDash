@@ -79,9 +79,8 @@ log = UILogger.getChild('Graph')
 
 __all__ = ['GraphItemData', 'Figure', 'GraphPanel', 'MiniGraph']
 
-loop = asyncio.get_running_loop()
-
-SMOOTH_TYPES = {'linear', 'cubic', 'gaussian'}
+SMOOTH_TYPES = {'cubic', 'gaussian', 'savgol'}
+INTERP_TYPES = {'linear', 'cubic', 'spline'}
 
 class TestData:
 
@@ -492,9 +491,9 @@ class GraphItemData(Stateful, tag=...):
 	def smoothingStrength(self):
 		return self.smooth
 
-	@StateProperty(key='smoothType', default='cubic', after=refresh)
+	@StateProperty(key='smooth-ype', default='savgol', after=refresh)
 	def smoothingType(self) -> str:
-		return getattr(self, '_smoothingType', 'cubic')
+		return self._smoothingType
 
 	@smoothingType.setter
 	def smoothingType(self, value: str):
@@ -502,6 +501,29 @@ class GraphItemData(Stateful, tag=...):
 
 	@smoothingType.decode
 	def smoothingType(value: str) -> str:
+		folded = value.casefold()
+		if value not in SMOOTH_TYPES:
+			folded = next(iter(get_close_matches(folded, SMOOTH_TYPES, n=1, cutoff=0.8)) or 'savgol')
+		return folded
+
+	@StateProperty(key='interpolate', default=True, after=refresh)
+	def interpolate(self) -> bool:
+		return self._interpolate
+
+	@interpolate.setter
+	def interpolate(self, value: bool):
+		self._interpolate = value
+
+	@StateProperty(key='interpolation-type', default='cubic', after=refresh)
+	def interpolationType(self) -> str:
+		return self._interpolation_type
+
+	@interpolationType.setter
+	def interpolationType(self, value: str):
+		self._interpolation_type = value
+
+	@interpolationType.decode
+	def interpolationType(value: str) -> str:
 		folded = value.casefold()
 		if value not in str:
 			folded = next(iter(get_close_matches(folded, str, n=1, cutoff=0.8)) or 'cubic')
@@ -912,43 +934,51 @@ class GraphItemData(Stateful, tag=...):
 		if len(x) == 1:
 			return x, y
 
+		resolution = self.resolution
+
 		# Interpolate
-		smooth = self.smooth
-		strength = self.smoothingStrength
 
-		dpi = getDPI(self.graph.scene().view.screen())
+		if self.interpolate and len(x) > 5:
 
-		interpType, smoothType, *_ = *self.smoothingType.split('-', 1), 'savgol'
+			# create new period for the given resolution
 
-		match interpType:
-			case 'linear':
-				interpField = interp1d(x, y)
-			case 'cubic':
-				interpField = CubicSpline(x, y)
-			case 'spline':
-				interpField = UnivariateSpline(x, y)
-			case _:
-				raise ValueError(f'Invalid smoothing type: {self.smoothingType}')
+			newPeriod = int(round(self.graph.secondsPerPixel * resolution))
 
-		y = interpField(xS)
+			x_interp = np.arange(arr[0][0], arr[-1][0], newPeriod)
+			interp_type = self._interpolation_type
+
+			match interp_type:
+				case 'linear':
+					interpField = interp1d(x, y)
+				case 'cubic':
+					interpField = CubicSpline(x, y)
+				case 'spline':
+					interpField = UnivariateSpline(x, y)
+				case _:
+					raise ValueError(f'Invalid smoothing type: {self.smoothingType}')
+			x = x_interp
+			y = interpField(x_interp)
 
 		# Smooth
-		if smooth:
+		if self.smooth and len(x) > 5:
+			smooth_type = self.smoothingType
+			strength = self.smoothingStrength
+			dpi = getDPI(self.graph.scene().view.screen())
 
 			sf = max(int(round(dpi / (resolution * strength * golden))), 1)
 
-			match smoothType:
+			match smooth_type:
 				case 'savgol':
 					yy = savgol_filter(y, sf, 2)
 				case None | 'gaussian' | 'convolve':
-					padding = int((sf-1)/2)
+					padding = int((sf - 1) / 2)
 					y = np.pad(y, (padding, padding), 'wrap')
-					kernel = gaussianKernel(sf, sf*2)
+					kernel = gaussianKernel(sf, sf * 2)
 					yy = np.convolve(y, kernel, mode='valid')
 					clipX = int((len(y) - len(yy)) / 2)
-					xS = xS[clipX:-clipX]
+					x = x[clipX:-clipX]
 				case _:
-					raise ValueError(f'Invalid smoothing type: {smoothType}')
+					raise ValueError(f'Invalid smoothing type: {smooth_type}')
 
 			y = yy.round(6)
 
@@ -956,7 +986,7 @@ class GraphItemData(Stateful, tag=...):
 		if (limits := getattr(self.dataType, 'limits', None)) is not None:
 			y = np.clip(y, *limits)
 
-		return xS, y
+		return x, y
 
 	@property
 	def dataType(self) -> Type[Measurement] | Type[float] | None:
