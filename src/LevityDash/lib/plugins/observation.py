@@ -108,10 +108,14 @@ class Archivable(ABC):
 class HashSlice:
 	start: Hashable = field(init=True, compare=True, repr=True, hash=True)
 	stop: Hashable = field(init=True, compare=True, repr=True, hash=True, default=None)
-	step: Hashable = field(init=True, compare=True, repr=True, hash=True, default=None)
+	step: Hashable = field(init=True, compare=True, repr=True, hash=True, default=1)
 
 	def __iter__(self) -> Iterable:
 		return iter((self.start, self.stop, self.step))
+
+	@property
+	def without_step(self) -> 'HashSlice':
+		return HashSlice(self.start, self.stop)
 
 
 @dataclass
@@ -508,6 +512,14 @@ class TimeSeriesItem(TimeAwareValue):
 		value = toLiteral(value)
 		self.value = value
 		self.timestamp = timestamp
+
+	@classmethod
+	def load_raw(cls, value, timestamp = None):
+		timestamp = timestamp or Now()
+		item = cls.__new__(cls)
+		item.value = value
+		item.timestamp = timestamp
+		return item
 
 	def __repr__(self):
 		return f'{self.value} @ {self.timestamp}'
@@ -1265,7 +1277,7 @@ class ObservationDict(PublishedDict):
 	__keyed: ClassVar[bool]
 	itemClass: ClassVar[Type[ObservationValue]]
 
-	accumulator: Accumulator
+	accumulator: Accumulator = cached_property(lambda self: Accumulator(self))
 	dataName: Optional[str]
 
 	@property
@@ -2444,7 +2456,7 @@ class MeasurementTimeSeries(OrderedDict):
 			self.update()
 		if isinstance(key, slice):
 			hashArgs = HashSlice(key.start, key.stop, key.step)
-			return self.__getSlice(hashArgs, self.__lastHash)
+			return self.getSlice(hashArgs)
 		if isinstance(key, (datetime, timedelta, Period)):
 			if isinstance(key, timedelta):
 				key = now() + key
@@ -2472,12 +2484,12 @@ class MeasurementTimeSeries(OrderedDict):
 		period = min(abs(period), 300)
 		return TimeHash(period)
 
-	@lru_cache()
+	@lru_cache(16)
 	def __now(self, timeHashInvalidator: TimeHash, valueHash: Optional[int] = 0) -> ObservationValue:
 		key = closest(list(self.keys()), now())
 		return super(MeasurementTimeSeries, self).__getitem__(key)
 
-	@lru_cache()
+	@lru_cache(16)
 	def __value(self, key, timeHashInvalidator: TimeHash, valueHash: Optional[int] = 0) -> ObservationValue:
 		key = closest(list(self.keys()), key)
 		return super(MeasurementTimeSeries, self).__getitem__(key)
@@ -2528,26 +2540,46 @@ class MeasurementTimeSeries(OrderedDict):
 			key = DateKey(key)
 		return key
 
-	@lru_cache(maxsize=64)
-	def __getSlice(self, key, lastHash: int = 0):
-		if any(isinstance(item, datetime) for item in key):
-			start = key.start or self.first.timestamp
-			stop = key.stop or self.last.timestamp
-			start, stop = sorted((start, stop))
-			step = key.step or None
-			if start.tzinfo is None:
-				start = start.replace(tzinfo=LOCAL_TIMEZONE)
-			if stop.tzinfo is None:
-				stop = stop.replace(tzinfo=LOCAL_TIMEZONE)
-			values = [k for k in self if start <= k.timestamp <= stop]
-			if step is not None:
-				if isinstance(step, int):
-					return values[::step]
-				elif isinstance(step, timedelta):
-					values = groupby(values, key=lambda x: roundToPeriod(x.timestamp, step).timestamp())
-					values = [TimeSeriesItem.average(group) for _, group in values]
-					return values
-			return values
+	@lru_cache(maxsize=16)
+	def __getSlice(self, start: int, stop: int = 0, lastHash: int = 0) -> List[TimeSeriesItem]:
+		if stop:
+			values = [k for k in self if start <= k.timestamp.timestamp() <= stop]
+		else:
+			values = [k for k in self if start <= k.timestamp.timestamp()]
+		return values
+
+	@lru_cache(maxsize=16)
+	def __reshaped(self, step: timedelta, start: int, stop: int = None, lastHash: int = 0) -> List[TimeSeriesItem]:
+		values = self.__getSlice(start, stop, lastHash)
+		values = groupby(values, key=lambda x: round(x.timestamp.timestamp() / step.total_seconds()))
+		values = [TimeSeriesItem.average(group) for _, group in values]
+		return values
+
+	def getSlice(self, key: HashSlice, truncate_at: int = 0) -> List[TimeSeriesItem]:
+		start = round((key.start or self.first.timestamp).timestamp())
+		stop = key.stop or self.last.timestamp
+
+		if isinstance(stop, int):
+			stop = timedelta(seconds=stop)
+		if isinstance(stop, timedelta):
+			stop = datetime.fromtimestamp(start) + stop
+
+		stop = round(stop.timestamp())
+		start, stop = sorted((start, stop))
+		step = key.step
+
+		if isinstance(step, timedelta):
+			sliced = self.__reshaped(step, start, stop, lastHash=self.__lastHash)
+		else:
+			sliced = self.__getSlice(start, stop, lastHash=self.__lastHash)
+
+		if isinstance(step, int):
+			sliced = sliced[::step]
+
+		if truncate_at:
+			sliced = sliced[:truncate_at]
+
+		return sliced
 
 	def __delitem__(self, key):
 		key = self.__convertKey(key)
@@ -2567,8 +2599,12 @@ class MeasurementTimeSeries(OrderedDict):
 		key = DateKey(value.timestamp)
 		self[key] = value
 
+	def get_slice_size(self, start: datetime, stop: datetime) -> int:
+		"""Check if the slice is valid for this timeseries"""
+		return len(self.__getSlice(round(start.timestamp()), round(stop.timestamp())))
+
 	@cached_property
-	def period(self):
+	def period(self) -> timedelta:
 		if self.isMultiSource:
 			return max(self._source.observations.timeseries, key=lambda x: len(x)).period
 		return self._source.period
