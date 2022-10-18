@@ -2,7 +2,7 @@ from PySide2.QtCore import QPointF, QRectF, QSizeF, Qt
 from PySide2.QtWidgets import QGraphicsItem, QApplication
 
 from LevityDash.lib.stateful import Stateful, StateProperty
-from LevityDash.lib.utils import clamp, clearCacheAttr, ScaleFloat
+from LevityDash.lib.utils import clamp, clearCacheAttr, ScaleFloat, defer
 from LevityDash.lib.ui.Geometry import getDPI, Size, parseSize, LocationFlag, DisplayPosition, RelativeFloat
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles import Handle
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Label import TitleLabel
@@ -248,14 +248,29 @@ class TitleValueSplitter(Splitter, Stateful):
 			return
 		self.setGeometries()
 
-	@StateProperty(key='rotate', default=False, sortOrder=2)
+	@defer
+	def setGeometries(self):
+		title = self.title
+		title.setTransformOriginPoint(title.rect().center())
+		title.setRotation(0)
+		super().setGeometries()
+		if self.location.isVertical and self.title.isVisible():
+			if self.rotation and title.rect().width() < title.rect().height():
+				ratio = (1 - (title.rect().width() / title.rect().height())) * 2
+				title.setTransformOriginPoint(title.rect().center())
+				angle = sorted((0, (90 * ratio), 90))[1]
+				if angle > 70:
+					angle = 90
+				title.setRotation(angle + 0.01)
+				super().setGeometries()
+
+	@StateProperty(key='rotate', default=False, sortOrder=2, after=setGeometries)
 	def rotation(self) -> bool:
 		return getattr(self, '_rotation', False)
 
 	@rotation.setter
 	def rotation(self, value: bool):
 		self._rotation = value
-		self.setGeometries()
 
 	@StateProperty(key='size', default=0.2, singleVal=True, sortOrder=1, dependencies={'geometry', 'position', 'visible'})
 	def ratio(self) -> ScaleFloat | float | None:
@@ -275,14 +290,13 @@ class TitleValueSplitter(Splitter, Stateful):
 	def ratio(self) -> bool:
 		return self.title.isVisible() and self.height is None
 
-	@StateProperty(default=None, singleVal=True, sortOrder=1, dependencies={'geometry', 'position', 'visible'})
+	@StateProperty(default=None, singleVal=True, sortOrder=1, dependencies={'geometry', 'position', 'visible'}, after=setGeometries)
 	def height(self) -> Size.Height | Length | None:
 		return getattr(self, '_height', None)
 
 	@height.setter
 	def height(self, value: Size.Height | Length | None):
 		self._height = value
-		self.setGeometries()
 		self.surface.signals.resized.connect(self.parentResized)
 
 	@height.decode
@@ -409,21 +423,6 @@ class TitleValueSplitter(Splitter, Stateful):
 
 	def parentResized(self, *args):
 		self.setGeometries()
-
-	def setGeometries(self):
-		title = self.title
-		title.setTransformOriginPoint(title.rect().center())
-		title.setRotation(0)
-		super().setGeometries()
-		if self.location.isVertical and self.title.isVisible():
-			if self.rotation and title.rect().width() < title.rect().height():
-				ratio = (1 - (title.rect().width() / title.rect().height())) * 2
-				title.setTransformOriginPoint(title.rect().center())
-				angle = sorted((0, (90*ratio), 90))[1]
-				if angle > 70:
-					angle = 90
-				title.setRotation(angle + 0.01)
-				super().setGeometries()
 
 
 class MeasurementUnitSplitter(Splitter, Stateful):
