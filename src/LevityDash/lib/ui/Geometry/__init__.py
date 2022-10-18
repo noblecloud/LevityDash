@@ -1261,7 +1261,7 @@ class Validator(ABC):
 		self.valueSet = False
 
 	def __set_name__(self, owner, name):
-		self.private_name = '__' + name
+		self.private_name = '_' + name
 
 	def __get__(self, obj, objtype=None):
 		return getattr(obj, self.private_name)
@@ -1337,9 +1337,9 @@ class MultiDimensionMeta(type):
 
 		attrs['__separator__'] = separator
 		attrs['__count__'] = len(__dimensions__)
+		attrs['__slots__'] = *tuple(f'_{i}' for i in __dimensions__), *attrs.get('__slots__', ())
 
 		mcs = type.__new__(mcs, name, bases, attrs)
-		mcs.__slots__ = tuple((*__dimensions__, *[f'__{i}' for i in __dimensions__]))
 		mcs.__match_args__ = tuple(__dimensions__.keys(), )
 		mcs.cls = mcs
 		return mcs
@@ -1425,8 +1425,8 @@ class MultiDimension(metaclass=MultiDimensionMeta):
 		elif absolute is not None:
 			pass
 
-		annotations = [i for k, i in self.__annotations__.items() if k in self.__dimensions__]
-		for cls, t, s in zip(annotations, V, self.__slots__):
+		annotations = [self.__annotations__[k] for k in self.__dimensions__]
+		for cls, t, s in zip(annotations, V, self.__dimensions__):
 			if isinstance(t, str):
 				d = cls.__dimension__
 				t = parseSize(t, allowFloat=True, determineAbsolute=False, dimension=d)
@@ -1789,6 +1789,7 @@ class Position(MultiDimension, dimensions=('x', 'y'), separator=', '):
 
 
 class Margins(MultiDimension, dimensions=('left', 'top', 'right', 'bottom'), separator=', '):
+	__slots__ = 'surface',
 	surface: 'Panel'
 
 	@property
@@ -3158,7 +3159,14 @@ SizeParserSignature = Callable[[SizeInput, SizeOutput, ...], SizeOutput]
 UNSET = object()
 
 
-def parseSize(value: SizeInput, default: SizeOutput = UNSET, allowFloat: bool = False, determineAbsolute: bool = True, defaultCaseHandler: SizeParserSignature | None = None, dimension: DimensionType = DimensionType.height) -> SizeOutput:
+def parseSize(
+	value: SizeInput,
+	default: SizeOutput = UNSET,
+	allowFloat: bool = False,
+	determineAbsolute: bool = True,
+	defaultCaseHandler: SizeParserSignature | None = None,
+	dimension: DimensionType = DimensionType.height
+) -> SizeOutput:
 	"""
 	Converts a string size value to a real size type
 	:param value: value to convert
