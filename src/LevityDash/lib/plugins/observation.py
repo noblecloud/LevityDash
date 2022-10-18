@@ -2172,6 +2172,22 @@ TimeHash.Minutely = TimeHash(timedelta(minutes=1))
 TimeHash.Secondly = TimeHash(timedelta(seconds=1))
 
 
+NowVal = TimeSeriesItem.load_raw(Now(), Now())
+PastVal = TimeSeriesItem.load_raw(Now(), Now())
+
+__weak_references: WeakValueDictionary[timedelta, TimeSeriesItem] = WeakValueDictionary()
+
+
+def offset_now(offset: timedelta) -> TimeSeriesItem:
+	try:
+		return __weak_references[offset]
+	except KeyError:
+		value = NowOffset.new_instance_offset(offset)
+		__weak_references[offset] = instance = TimeSeriesItem.load_raw(value, value)
+		return instance
+
+
+# Section TimeSeries
 @TimeseriesSource.register
 class MeasurementTimeSeries(OrderedDict):
 	_key: CategoryItem
@@ -2641,11 +2657,17 @@ class MeasurementTimeSeries(OrderedDict):
 
 	@property
 	def last(self):
-		return self.list[-1]
+		try:
+			return self.list[-1]
+		except IndexError:
+			return NowVal
 
 	@property
 	def first(self):
-		return self.list[0]
+		try:
+			return self.list[0]
+		except IndexError:
+			return offset_now(-self.period)
 
 
 class Container:
