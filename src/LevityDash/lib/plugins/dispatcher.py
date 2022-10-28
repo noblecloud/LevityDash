@@ -1,31 +1,23 @@
-from asyncio import gather, get_running_loop
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import timedelta
 from functools import cached_property
-from typing import Any, Coroutine, Dict, Iterable, List, Set
+from typing import Callable, Coroutine, Dict, Iterable, List, Set
 
 from itertools import groupby
-from PySide2.QtCore import Signal, Slot
+from PySide2.QtCore import Signal, Slot, QTimer
 from rich.repr import auto as auto_rich_repr
 
+from LevityDash import LevityDashboard
 from LevityDash.lib.log import LevityPluginLog
-from LevityDash.lib.plugins import ChannelSignal, Container, MutableSignal, Plugins
 from LevityDash.lib.plugins.categories import CategoryEndpointDict, CategoryItem
-from LevityDash.lib.plugins.observation import MeasurementTimeSeries, Observation
+from LevityDash.lib.plugins.observation import MeasurementTimeSeries, Observation, Container
 from LevityDash.lib.plugins.plugin import AnySource, Plugin, SomePlugin
+from LevityDash.lib.plugins.utils import Request, GuardedRequest, ChannelSignal, MutableSignal
 from LevityDash.lib.utils.data import KeyData
 from LevityDash.lib.utils.shared import clearCacheAttr, Period
 
 log = LevityPluginLog.getChild('Dispatcher')
-
-loop = get_running_loop()
-
-
-@dataclass(frozen=True)
-class Request:
-	requester: Any
-	callback: Coroutine
 
 
 @auto_rich_repr
@@ -50,6 +42,9 @@ class MultiSourceContainer(dict):
 		self.waitingForDaily = defaultdict(set)
 		self.preferredSource = preferredSource
 		self.key = key
+
+		# Relay listens to container updates
+		# data in > update > changed keys > plugin collects > relay updates > data out
 		self.relay = MultiSourceChannel(self, key)
 		self.timeOffset = timeOffset
 
@@ -77,6 +72,9 @@ class MultiSourceContainer(dict):
 			yield 'isDaily', self.isDaily
 		else:
 			yield 'sources', 'None'
+
+	def __bool__(self) -> bool:
+		return len(self) > 0
 
 	@property
 	def value(self) -> Container:
@@ -235,7 +233,7 @@ class MultiSourceContainer(dict):
 		try:
 			return self.default_source.schema[self.key].title
 		except AttributeError:
-			return self.key
+			return str(self.key.name)
 
 	@cached_property
 	def default_source(self) -> Plugin | None:
@@ -247,7 +245,7 @@ class MultiSourceContainer(dict):
 
 	@property
 	def valid_sources(self) -> List[Plugin]:
-		_plugins = [i for i in Plugins if self.key in i.schema]
+		_plugins = [i for i in LevityDashboard.plugins if self.key in i.schema]
 		_plugins.sort(key=lambda p: (0 if not p.enabled else 2 if p.running else 1, len(p.config.defaultFor)), reverse=True)
 		return _plugins
 
@@ -255,13 +253,13 @@ class MultiSourceContainer(dict):
 	def defaultContainer(self) -> 'Container':
 		if len(self) == 1:
 			return list(self.values())[0]
-		_plugins = [i for i in Plugins if i.config['enabled'] and i.name in self]
+		_plugins = [i for i in LevityDashboard.plugins if i.config['enabled'] and i.name in self]
 		for i in self.key[::-1]:
 			for plugin in _plugins:
 				if i in plugin.config.defaultFor:
 					return self[plugin.name]
 		for plugin in _plugins:
-			if ValueDirectory[plugin.name] in self:
+			if LevityDashboard.dispatcher[plugin.name] in self:
 				return self[plugin.name]
 		options = list(self.values())
 		if len(options) == 1:
@@ -278,7 +276,9 @@ class MultiSourceContainer(dict):
 			log.verbose(f"{plugin.name} is ready with a strict realtime value for {self.key}", verbosity=1)
 			for request in (*self.waitingForTrueRealtime.pop(plugin, []), *self.waitingForTrueRealtime.pop(AnySource, [])):
 				log.verbose(f"Issuing callback for {request.requester!s}", verbosity=1)
-				loop.create_task(request.callback)
+				# LevityDashboard.main_thread_pool.run_in_thread(request.callback)
+				# request.callback()
+				QTimer.singleShot(1, request.callback)
 
 		if (container.isRealtime or container.isRealtimeApproximate) and (
 			self.waitingForAnyRealtime[plugin] or self.waitingForAnyRealtime[AnySource]
@@ -289,14 +289,24 @@ class MultiSourceContainer(dict):
 				if container.isTimeseriesOnly:
 					container.prepare_for_ts_connection(request.callback)
 				else:
-					loop.create_task(request.callback)
+					# LevityDashboard.main_thread_pool.run_in_thread(request.callback)
+					QTimer.singleShot(1, request.callback)
 
-		if self.waitingForTimeseries[plugin] or self.waitingForTimeseries[AnySource]:
+		if requesters := (self.waitingForTimeseries[plugin] or self.waitingForTimeseries[AnySource]):
 			if plugin[self.key].isForecast:
 				log.verbose(f"{plugin.name} timeseries is ready for {self.key}", verbosity=1)
 				for request in (*self.waitingForTimeseries.pop(plugin, []), *self.waitingForTimeseries.pop(AnySource, [])):
 					log.verbose(f"Issuing callback for {request.requester!s}", verbosity=1)
 					container.prepare_for_ts_connection(request.callback)
+			elif plugin is not AnySource:
+				plugin_container = self[plugin]
+
+				for request in requesters:
+
+					if isinstance(request, Request):
+						request = GuardedRequest.from_request(request, guard = lambda container: container.isTimeseries)
+
+					plugin_container.notifyOnRequirementsMet(request)
 
 		if self.waitingForDaily[plugin] or self.waitingForDaily[AnySource]:
 			if plugin[self.key].isDailyForecast:
@@ -307,7 +317,7 @@ class MultiSourceContainer(dict):
 
 	def addValue(self, plugin: Plugin, container: Container):
 		self[plugin.name] = container
-		self.relay.connectContainer(container)
+		self.relay.listen_to_container(container)
 		clearCacheAttr(self, 'defaultContainer', 'default_source')
 		log.verbose(f'Added {plugin.name} to {self.key}', verbosity=0)
 		self.checkAwaiting(container)
@@ -331,23 +341,23 @@ class MultiSourceContainer(dict):
 	def valueChanged(self):
 		return self.defaultContainer.valueChanged
 
-	def getPreferredSourceContainer(self, requester, plugin: Plugin | SomePlugin, callback: Coroutine, timeseriesOnly: bool = False):
-		log.verbose(f'{requester!s} is asking for {"a timeseries" if timeseriesOnly else "an approximate realtime value"} '
-		          f'from {"any source" if (plugin is AnySource) else str(plugin)} for {self.key.name}', verbosity=1)
+	def getPreferredSourceContainer(self, requester, plugin: Plugin | SomePlugin, callback: Callable, timeseriesOnly: bool = False):
+		log.verbose(f'{requester!s} requested {"timeseries" if timeseriesOnly else "approximate realtime value"} '
+		          f'from {"any source" if (plugin is AnySource) else str(plugin)} for {self.key.name}', verbosity=4)
 		if timeseriesOnly:
 			self.waitingForTimeseries[plugin].add(Request(requester, callback))
 		else:
 			self.waitingForAnyRealtime[plugin].add(Request(requester, callback))
 
-	def getTrueRealtimeContainer(self, requester, source: Plugin | SomePlugin, coro: Coroutine):
-		log.verbose(f'{requester!s} is asking for a true realtime value from '
-		          f'{str(source) if source is not AnySource else "any source"} for {self.key.name}', verbosity=1)
-		self.waitingForTrueRealtime[source].add(Request(requester, coro))
+	def getTrueRealtimeContainer(self, requester, source: Plugin | SomePlugin, callback: Callable):
+		log.verbose(f'{requester!s} requested true realtime value from '
+		          f'{str(source) if source is not AnySource else "any source"} for {self.key.name}', verbosity=4)
+		self.waitingForTrueRealtime[source].add(Request(requester, callback))
 
-	def getDailyContainer(self, requester, source: Plugin | SomePlugin, coro: Coroutine):
-		log.verbose(f'{requester!s} is asking for a daily value from '
-		          f'{str(source) if source is not AnySource else "any source"} for {self.key.name}', verbosity=1)
-		self.waitingForDaily[source].add(Request(requester, coro))
+	def getDailyContainer(self, requester, source: Plugin | SomePlugin, callback: Callable):
+		log.verbose(f'{requester!s} requested daily value from '
+		          f'{str(source) if source is not AnySource else "any source"} for {self.key.name}', verbosity=4)
+		self.waitingForDaily[source].add(Request(requester, callback))
 
 	@property
 	def hasPendingRealtime(self):
@@ -420,7 +430,7 @@ class MultiSourceChannel(ChannelSignal):
 		self._source.onUpdates(self._pending)
 		self._pending.clear()
 
-	def connectContainer(self, container: 'Container'):
+	def listen_to_container(self, container: 'Container'):
 		container.channel.connectSlot(self.publish)
 
 
@@ -446,7 +456,7 @@ class MonitoredKey:
 
 
 class PluginValueDirectory(MutableSignal):
-	__plugins = Plugins
+	__plugins = 'Plugins'
 	__singleton = None
 	__signal = Signal(set)
 	categories = None
@@ -459,16 +469,23 @@ class PluginValueDirectory(MutableSignal):
 	def __new__(cls, *args, **kwargs):
 		if cls.__singleton is None:
 			cls.__singleton = super(PluginValueDirectory, cls).__new__(cls, *args, **kwargs)
+			LevityDashboard.dispatcher = cls.__singleton
+			LevityDashboard.get_container = cls.__singleton.getContainer
+			LevityDashboard.get_channel = cls.__singleton.getChannel
 		return cls.__singleton
 
-	def __init__(self):
+	def __init__(self, manager: 'Plugins'):
 		super(PluginValueDirectory, self).__init__()
 		self._pending = defaultdict(set)
+		self.__plugins = manager
 		for plugin in self.plugins:
 			if plugin is AnySource:
 				continue
 			plugin.publisher.connectSlot(self.keyAdded)
 		self.categories = CategoryEndpointDict(self, self._values, None)
+
+	def connect_plugin(self, plugin: Plugin) -> bool:
+		return plugin.publisher.connectSlot(self.keyAdded)
 
 	@property
 	def new_keys_signal(self) -> Signal:
@@ -496,7 +513,7 @@ class PluginValueDirectory(MutableSignal):
 			# Publish to global channel
 			self._emit()
 
-	def keys(self):
+	def keys(self) -> Iterable[CategoryItem]:
 		return self._values.keys()
 
 	def values(self):
@@ -521,7 +538,7 @@ class PluginValueDirectory(MutableSignal):
 		values = {key: data.sender[key] for key in keys}
 		self.update(values)
 		for key in keys & set(self.__awaitingKey.keys()):
-			gather(*self.__awaitingKey.pop(key))
+			raise NotImplementedError('Awaiting keys not implemented')
 
 	def __getitem__(self, item):
 		if item in self.__plugins:
@@ -533,7 +550,7 @@ class PluginValueDirectory(MutableSignal):
 			container = self._values[key] = MultiSourceContainer(key)
 		return container
 
-	def getContainer(self, key, default=None):
+	def getContainer(self, key, default=None) -> MultiSourceContainer:
 		return self._values.get(key, default) or self.__getContainer(key)
 
 	def __setitem__(self, key, value):
@@ -567,13 +584,7 @@ class PluginValueDirectory(MutableSignal):
 			self._values[key] = state[key]
 
 	@property
-	def plugins(self) -> Plugins:
+	def plugins(self) -> 'Plugins':
 		return self.__plugins
 
-
-ValueDirectory = PluginValueDirectory()
-import builtins
-builtins.values_directory = ValueDirectory
-globals()['values_directory'] = ValueDirectory
-
-__all__ = ("PluginValueDirectory", "MultiSourceContainer", "MultiSourceChannel", "ValueDirectory")
+__all__ = ("PluginValueDirectory", "MultiSourceContainer", "MultiSourceChannel")

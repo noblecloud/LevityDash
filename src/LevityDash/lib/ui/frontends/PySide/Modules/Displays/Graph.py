@@ -1,14 +1,36 @@
-import asyncio
+from asyncio import Task
+
+import numpy as np
 import operator
 import platform
 import re
+from PySide2.QtCore import (
+	QLineF, QObject, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt, QThread, QTimer, Signal,
+	Slot
+)
+from PySide2.QtGui import (
+	QBrush, QColor, QCursor, QFontMetricsF, QPainter, QPainterPath, QPainterPathStroker, QPen,
+	QPixmap, QPolygonF, QTransform
+)
+from PySide2.QtWidgets import (
+	QAction, QGraphicsEffect, QGraphicsItem, QGraphicsItemGroup, QGraphicsLineItem, QGraphicsPixmapItem,
+	QGraphicsRectItem,
+	QGraphicsSceneDragDropEvent, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent, QGraphicsSceneWheelEvent, QMenu,
+	QStyleOptionGraphicsItem, QToolTip, QWidget, QApplication
+)
 from abc import abstractmethod
-from asyncio import Task
+from builtins import isinstance
 from datetime import datetime, timedelta
 from difflib import get_close_matches
 from enum import Enum
 from functools import cached_property, partial, reduce
-from json import loads
+from itertools import zip_longest
+from math import inf, prod, sqrt
+from rich.repr import auto
+from scipy.constants import golden
+from scipy.interpolate import CubicSpline, interp1d, UnivariateSpline
+from scipy.signal import savgol_filter
+from time import perf_counter, time
 from types import SimpleNamespace
 from typing import (
 	Any, Callable, ClassVar, Dict, ForwardRef, Iterable, List, Optional, Protocol, runtime_checkable,
@@ -16,37 +38,19 @@ from typing import (
 )
 from uuid import uuid4
 
-import numpy as np
-from builtins import isinstance
-from itertools import zip_longest
-from math import inf, prod, sqrt
-from PySide2.QtCore import QLineF, QObject, QPoint, QPointF, QRect, QRectF, QSizeF, Qt, QThread, QTimer, Signal, Slot
-from PySide2.QtGui import (
-	QBrush, QColor, QCursor, QFontMetricsF, QPainter, QPainterPath, QPainterPathStroker, QPen,
-	QPixmap, QPolygonF, QTransform
-)
-from PySide2.QtWidgets import (
-	QAction, QActionGroup, QGraphicsEffect, QGraphicsItem, QGraphicsItemGroup, QGraphicsLineItem, QGraphicsPixmapItem,
-	QGraphicsRectItem,
-	QGraphicsSceneDragDropEvent, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent, QGraphicsSceneWheelEvent, QMenu,
-	QStyleOptionGraphicsItem, QToolTip, QWidget
-)
-from qasync import asyncSlot, QApplication
-from rich.repr import auto
-from scipy.constants import golden
-from scipy.interpolate import CubicSpline, interp1d, UnivariateSpline
-from scipy.signal import savgol_filter
-from time import perf_counter, time
-
-from LevityDash.lib.config import DATETIME_NO_ZERO_CHAR
-from LevityDash.lib.plugins import Container, Plugin, Plugins
+from LevityDash import LevityDashboard
+from LevityDash.lib.plugins import Container, Plugin
 from LevityDash.lib.plugins.categories import CategoryItem
-from LevityDash.lib.plugins.dispatcher import MultiSourceContainer, ValueDirectory
+from LevityDash.lib.plugins.dispatcher import MultiSourceContainer
 from LevityDash.lib.plugins.observation import MeasurementTimeSeries, TimeAwareValue, TimeSeriesItem
 from LevityDash.lib.plugins.plugin import AnySource, SomePlugin
 from LevityDash.lib.stateful import DefaultGroup, Stateful, StateProperty
+from LevityDash.lib.ui.Geometry import (
+	Alignment, AlignmentFlag, Axis, Dimension, DimensionType, DisplayPosition, getDPI, length_px, Margins, parseSize,
+	Size, size_px
+)
 from LevityDash.lib.ui.colors import Color, Gradient
-from LevityDash.lib.ui.frontends.PySide import app, UILogger
+from LevityDash.lib.ui.frontends.PySide import UILogger
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Text
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Incrementer import Incrementer, IncrementerGroup
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.MarginHandles import FigureHandles
@@ -57,14 +61,11 @@ from LevityDash.lib.ui.frontends.PySide.utils import (
 	addCrosshair, addRect, colorPalette, DebugPaint, DisplayType, EffectPainter, GraphicsItemSignals,
 	modifyTransformValues, RendererScene, SoftShadow
 )
-from LevityDash.lib.ui.Geometry import (
-	Alignment, AlignmentFlag, Axis, Dimension, DimensionType, DisplayPosition, getDPI, length_px, Margins, parseSize,
-	Size, size_px
-)
 from LevityDash.lib.utils.data import AxisMetaData, DataTimeRange, findPeaksAndTroughs, gaussianKernel, TimeFrameWindow
 from LevityDash.lib.utils.shared import (
-	_Panel, BusyContext, camelCase, clamp, clearCacheAttr, closestStringInList, connectSignal, disconnectSignal, joinCase,
-	LOCAL_TIMEZONE, now, numberRegex, run_in_thread, threadPool, timestampToTimezone, Unset, Worker
+	_Panel, camelCase, clamp, clearCacheAttr, closestStringInList, connectSignal, defer, disconnectSignal,
+	joinCase,
+	LOCAL_TIMEZONE, now, numberRegex, run_in_thread, thread_safe, timestampToTimezone, Unset, Worker
 )
 from LevityDash.lib.utils.various import DateTimeRange
 from WeatherUnits import DerivedMeasurement, Length, Measurement, Time
@@ -176,7 +177,9 @@ class GraphItemData(Stateful, tag=...):
 
 	_smooth: bool
 	_figure: 'Figure'
-	_interpolate: bool
+	_interpolate: bool = True
+	_interpolation_type: str = 'cubic'
+	_smoothingType: str = 'savgol'
 	_pathType: 'PathType'
 	_graphic: Optional[QGraphicsItem]
 	__normalX: np.array
@@ -209,8 +212,7 @@ class GraphItemData(Stateful, tag=...):
 		self.figure = parent
 		self.state = kwargs
 		parent.scene().view.loadingFinished.connect(self.waitForLoadComplete)
-
-		# parent.scene().view.resizeFinished.connect(self.onResizeDone)
+		parent.scene().view.resizeFinished.connect(self.onResizeDone)
 
 	def __init_defaults__(self):
 		self.__lastUpdate = None
@@ -231,31 +233,37 @@ class GraphItemData(Stateful, tag=...):
 		return f'GraphItem({self.key.name})'
 
 	def __cancel_pending(self):
+		if self.pendingUpdate is None:
+			return
 		try:
 			self.pendingUpdate.cancel()
+			del self.pendingUpdate
+			self.pendingUpdate = None
 			log.debug(f'{self.log_repr}: Has pending update with status {self.pendingUpdate.status}, cancelling')
 		except AttributeError:
 			pass
 
-	@asyncSlot()
-	async def onResizeDone(self):
+	@Slot()
+	def onResizeDone(self):
 		self.__clearCache()
 		self.graphic.onResizeDone()
 
 	# Section .events
-	@asyncSlot()
-	async def waitForLoadComplete(self):
+	@Slot()
+	def waitForLoadComplete(self):
 		if not len(self.__pendingActions):
 			return
-		await asyncio.gather(*self.__pendingActions)
+		for action in self.__pendingActions:
+			action()
+
 		self.__pendingActions.clear()
 		try:
 			self.figure.scene().view.loadingFinished.disconnect(self.waitForLoadComplete)
 		except Exception:
 			pass
 
-	@asyncSlot()
-	async def __onAxisTransform(self, axis: Axis):
+	@Slot()
+	def __onAxisTransform(self, axis: Axis):
 		"""
 		Called when given the signal that the parent figure's axis spread has changed
 		either due to a graph zoom or figure margin change.
@@ -271,7 +279,6 @@ class GraphItemData(Stateful, tag=...):
 		if self.labels.enabled:
 			self.labels.onAxisTransform(axis)
 
-	@Slot(Container)
 	def connectTimeseries(self, container: Container):
 
 		self.pendingUpdate = None
@@ -286,7 +293,9 @@ class GraphItemData(Stateful, tag=...):
 			if connected:
 				self.__connectedContainer = container
 				self.__connectedTimeseries = container.timeseries
-				self.pendingUpdate = run_in_thread(self.onValueChange, priority=1)
+				if self.hasData:
+					self.__clearCache()
+					self.__onValueChange()
 				log.verbose(f'GraphItem {self.key.name} connected to {self.__connectedTimeseries}', verbosity=1)
 			else:
 				log.warning(f'GraphItem {self.key.name} failed to connect to {container}')
@@ -318,21 +327,22 @@ class GraphItemData(Stateful, tag=...):
 		"""
 		if not self.hasData:
 			return
-		self.__cancel_pending()
+		return self.__onValueChange()
 
-		self.log.debug(f'Updating GraphItemData[{self.key.name}]... Reason: value change')
-		loop.call_soon_threadsafe(self.graph.onAxisChange, Axis.Both)
+	def __onValueChange(self):
+		self.log.debug(f'Updating GraphItemData\[{self.key.name}]... Reason: value change')
+		self.graph.onAxisChange(Axis.Both)
 		self.__clearAxis(Axis.Both)
 		self.graphic.onDataChange()
 		if self.labels.enabled:
-			loop.call_soon_threadsafe(self.labels.onDataChange, Axis.Both)
+			self.labels.onDataChange(Axis.Both)
 
 		self.__lastUpdate = now()
 
 		self.axisChanged.announce(Axis.Both, instant=True)
 
-	@asyncSlot(MultiSourceContainer)
-	async def listenForKey(self, container: MultiSourceContainer):
+	@Slot(MultiSourceContainer)
+	def listenForKey(self, container: MultiSourceContainer):
 		self.container = container
 		LevityDashboard.get_channel(self.key).disconnectSlot(self.listenForKey)
 
@@ -350,14 +360,14 @@ class GraphItemData(Stateful, tag=...):
 			self.normalizeData()
 
 	def __clearCache(self):
-		clearCacheAttr(self, 'data', 'list', 'smoothed')
+		clearCacheAttr(self, 'data', 'list', 'smoothed', 'dataTransform')
 
 	def refresh(self):
 		if self.container is None:
 			return
 		if not self.hasData:
 			if self.container.getTimeseries(self.key) is not None:
-				asyncio.create_task(self.setContainer('refresh'))
+				self.setContainer('refresh')
 			return
 		log.debug(f'refreshing {self.key}')
 		self.timeseries.refresh()
@@ -365,7 +375,7 @@ class GraphItemData(Stateful, tag=...):
 		self.__clearAxis(Axis.Both)
 		self.graphic.onDataChange()
 		if self.labels.enabled:
-			self.labels.onDataChange(Axis.Both)
+			self.labels.refresh()
 		self.log.info(f'GraphItemData[{self.key.name}] refreshed')
 
 	@property
@@ -543,9 +553,9 @@ class GraphItemData(Stateful, tag=...):
 
 	@key.after
 	def key(self):
-		self.container = ValueDirectory.getContainer(self._key, None)
+		self.container = LevityDashboard.get_container(self._key, None)
 
-	@StateProperty(default=AnySource, dependencies={'labeled', 'interpolate', 'smooth', 'smoothingStrength'}, values=Plugins.plugins)
+	@StateProperty(default=AnySource, dependencies={'labeled', 'interpolate', 'smooth', 'smoothingStrength'})
 	def source(self) -> Plugin | SomePlugin:
 		return getattr(self, '_source', AnySource)
 
@@ -554,9 +564,10 @@ class GraphItemData(Stateful, tag=...):
 		self._source = value or AnySource
 
 	@source.after
+	@thread_safe
 	def source(self):
 		if getattr(self, '_container', None):
-			asyncio.create_task(self.setContainer('Source Change Menu'))
+			self.setContainer('Source Change Menu')
 
 	@source.encode
 	def source(value: Plugin) -> str:
@@ -564,7 +575,7 @@ class GraphItemData(Stateful, tag=...):
 
 	@source.decode
 	def source(self, value: str) -> Plugin:
-		source = Plugins.get(value, AnySource)
+		source = LevityDashboard.plugins.get(value, AnySource)
 		self._preferredSourceName = value
 		if source is None:
 			log.info(f'{value} is not a valid source or the plugin is not Loaded')
@@ -606,23 +617,23 @@ class GraphItemData(Stateful, tag=...):
 		if self._waitingForPreferredSourceTimeout is not None:
 			self._waitingForPreferredSourceTimeout.cancel()
 
-		loop.create_task(self.setContainer())
+		self.setContainer()
 
-	async def setContainer(self, trigger=None) -> None:
+	def setContainer(self, trigger=None) -> None:
 		if self.figure.scene().view.status != 'Ready':
-			self.__pendingActions.append(self.setContainer('pendingActions'))
+			self.__pendingActions.append(partial(self.setContainer, 'pendingActions'))
 			return
 
-		multiSourceContainer = self.container or ValueDirectory.getContainer(self.key, None)
+		multiSourceContainer = self.container or LevityDashboard.get_container(self.key, None)
 		if multiSourceContainer is None:
-			ValueDirectory.notifyWhenKeyAdded(self.key, self.setContainer('notifyWhenAdded'))
+			LevityDashboard.dispatcher.notifyWhenKeyAdded(self.key, partial(self.setContainer, 'notifyWhenAdded'))
 			return
 
 		correctSource = False
 		timeSeriesContainer = multiSourceContainer.getTimeseries(self.source, strict=True)
 
 		if timeSeriesContainer is None:
-			multiSourceContainer.getPreferredSourceContainer(self, self.source, self.setContainer('getPreferredSourceContainer'), timeseriesOnly=True)
+			multiSourceContainer.getPreferredSourceContainer(self, self.source, partial(self.setContainer, 'getPreferredSourceContainer'), timeseriesOnly=True)
 		elif timeSeriesContainer.source is self.source or self.source is AnySource:
 			correctSource = True
 
@@ -633,14 +644,14 @@ class GraphItemData(Stateful, tag=...):
 				pass
 			self._waitingForPreferredSourceTimeout = None
 
-			loop.call_soon_threadsafe(self.connectTimeseries, timeSeriesContainer)
+			self.connectTimeseries(timeSeriesContainer)
 
 			return
 		elif timeSeriesContainer is not None:
-			multiSourceContainer.getPreferredSourceContainer(self, self.source, self.setContainer('getPreferredSourceContainer'), timeseriesOnly=True)
+			multiSourceContainer.getPreferredSourceContainer(self, self.source, partial(self.setContainer, 'getPreferredSourceContainer'), timeseriesOnly=True)
 
 		if self._waitingForPreferredSourceTimeout is None:
-			async def giveupAsync():
+			def giveupAsync():
 				log.debug(f'Giving up waiting for preferred source {self.source.name}[{self.key}]')
 				fallbackContainer = multiSourceContainer.getTimeseries(self.source, strict=True)
 				if fallbackContainer is None:
@@ -653,10 +664,6 @@ class GraphItemData(Stateful, tag=...):
 				log.debug(f'Using {fallbackContainer!r} instead.')
 				self.connectTimeseries(fallbackContainer)
 
-			def giveup():
-				loop.create_task(giveupAsync())
-
-			self._waitingForPreferredSourceTimeout = loop.call_later(60, giveup)
 
 	@StateProperty(default=5, allowNone=False, after=refresh)
 	def resolution(self) -> int:
@@ -668,8 +675,20 @@ class GraphItemData(Stateful, tag=...):
 		self._resolution = value
 
 	@property
-	def hasData(self) -> bool:
-		return getattr(self.timeseries, 'hasTimeseries', False)
+	def hasDataAvalible(self) -> bool:
+		try:
+			return self.__connectedContainer.isTimeseries
+		except Exception:
+			return False
+
+	@property
+	def hasData(self):
+		if self.__connectedContainer is None:
+			return False
+		try:
+			return self.__connectedContainer.isTimeseries and len(self.list)
+		except Exception as e:
+			return False
 
 	def __rich_repr__(self):
 		if key := getattr(self, '_key', None):
@@ -722,11 +741,11 @@ class GraphItemData(Stateful, tag=...):
 	def lastUpdate(self) -> datetime | None:
 		return self.__lastUpdate
 
-	@property
+	@cached_property
 	def dataTransform(self) -> QTransform:
 		t = QTransform()
 		graphTimeRange = self.figure.graph.timeframe.rangeSeconds
-		if self.plotValues:
+		if self.hasData:
 			T = (self.data[1] - self.figure.dataValueRange.min) / self.figure.dataValueRange.range
 			t.translate(0, T.min())
 			t.scale((self.timeframe.range.total_seconds() / graphTimeRange), T.ptp())
@@ -767,18 +786,11 @@ class GraphItemData(Stateful, tag=...):
 	def timeframe(self) -> DataTimeRange:
 		return DataTimeRange(self)
 
-	@cached_property
-	def _peakTroughWorker(self) -> Worker:
-		# TODO: Replace this with reusable immortal worker
-		return threadPool.create_worker
-
-	def refreshPeaksAndTroughs(self, callback: Callable[[], Tuple[list, list]]) -> Worker:
+	def refreshPeaksAndTroughs(self, callback: Callable[[], Tuple[list, list]]):
 		UILogger.verbose(f'GraphItem({self.key.name}): Calculating peaks and troughs')
 		h = self.graph.timeframe.hours / 5
-		return run_in_thread(
-			findPeaksAndTroughs, self.smoothed, spread=timedelta(hours=9), groupingSize=timedelta(hours=h),
-			on_result=callback, priority=2
-		)
+		result = findPeaksAndTroughs(self.smoothed, spread=timedelta(hours=9), groupingSize=timedelta(hours=h))
+		callback(result)
 
 	@staticmethod
 	def __parseData(
@@ -826,6 +838,8 @@ class GraphItemData(Stateful, tag=...):
 		:return: tuple of normalized points (_values between 0 and 1)
 		"""
 		x, y = self.__parseData(**data)
+		if (x is not None and not len(x)) or (y is not None and not len(y)):
+			return [0], [0]
 
 		if y is not None:
 			y = (y - y.min()) / (y.ptp() or 1)
@@ -907,29 +921,18 @@ class GraphItemData(Stateful, tag=...):
 	def list(self):
 		if self.useTestData:
 			return TestData.generate_random_rainstorm_rate()
-		end = self.graph.timeframe.end + timedelta(hours=2) if not self.graph.scrollable else None
-		step = timedelta(minutes=10)
-		if self.hasData and len(sliced := self.timeseries[self.graph.timeframe.historicalStart:end:step]):
+		end = self.graph.timeframe.end + timedelta(hours=1) if not self.graph.scrollable else None
+		if self.hasDataAvalible and len(sliced := self.timeseries[self.graph.timeframe.historicalStart:end]):
 			return sliced
 		return []
 
 	@cached_property
 	def data(self) -> np.array:
 		# TODO: Add try/except for when the data is not sorted
-		arr = self.list
-		if len(arr) < 5:
-			return np.array([[], []])
-
-
-		# create new period that covers five pixels
-		resolution = self.resolution
-		newPeriod = int(round(self.graph.secondsPerPixel * resolution))
-
-		xS = np.arange(arr[0].timestamp.timestamp(), arr[-1].timestamp.timestamp(), newPeriod)
-		arrL = np.array([(i.timestamp.timestamp(), float(i.value)) for i in arr])
+		arr = np.array([(i.timestamp.timestamp(), float(i.value)) for i in self.list])
 
 		# remove duplicates x values
-		x, y = np.unique(arrL, axis=0).T
+		x, y = np.unique(arr, axis=0).T
 
 		if len(x) == 1:
 			return x, y
@@ -1042,12 +1045,14 @@ PlotShadow = SoftShadow
 
 
 # Section Plot
+@auto
+@DebugPaint
 class Plot(QGraphicsPixmapItem, Stateful):
 	""" The graphical plot of GraphItemData.
 	All updates are handled by the GraphItemData.
 	"""
-
-	_shape = QPainterPath()
+	_shape: QPainterPath
+	_shape_normal: QPainterPath
 
 	_dashPattern: list[int]
 	_type: PathType
@@ -1065,6 +1070,8 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		def scene(self) -> LevityScene: ...
 
 	def __init__(self, parent: GraphItemData, **kwargs):
+		self._shape = QPainterPath()
+		self._shape_normal = QPainterPath()
 		self.renderTask: None | Task = None
 		self.__dataTransformAtRender = QTransform()
 		self.__path = QPainterPath()
@@ -1077,6 +1084,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		self.effects = {}
 		super().__init__(None)
 		self.setParentItem(parent.figure)
+		self.render_delay = QTimer(singleShot=True, timeout=self.render, interval=333)
 		self._normalPath = QPainterPath()
 
 		kwargs = self.prep_init(kwargs)
@@ -1089,6 +1097,9 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		self.figure.signals.clicked.connect(self.showToolTip)
 		self.setTransformationMode(Qt.SmoothTransformation)
 		self.setShapeMode(QGraphicsPixmapItem.BoundingRectShape)
+
+	def __repr__(self):
+		return f'{self.__class__.__name}({self.data.key})'
 
 	def __rich_repr__(self, **kwargs):
 		pathLen = self.path().elementCount()
@@ -1307,44 +1318,39 @@ class Plot(QGraphicsPixmapItem, Stateful):
 	# Section .events
 	def onAxisTransform(self, axis: Axis):
 		"""Called when an axis is transformed."""
-		log.debug(f'{self.data.key} onAxisTransform({axis.name})')
+		log.debug(f'{self.log_repr} onAxisTransform({axis.name})')
 		self.prepareGeometryChange()
 
 		if QApplication.mouseButtons() & Qt.MouseButton.LeftButton:
 			if self.renderTask is not None:
 				self.renderTask.cancel()
-			t = self.__dataTransformAtRender.inverted()[0] * self.figure.figureTransform
-			timeOffsetTranslate = self.figure.contentsX
-			t.translate(timeOffsetTranslate * self.scene().viewScale.x, 0)
 			return
 
-		pixmap = self.pixmap()
-		new_size = self.figure.rect().size().toSize()
-		render_axis = Axis.Neither
-		if (axis & Axis.Y) and abs(pixmap.height() - new_size.height()) > 10:
-			render_axis |= Axis.Y
-		if (axis & Axis.X) and abs(pixmap.width() - new_size.width()) > 10:
-			render_axis |= Axis.X
-		pixmap.scaled(new_size, Qt.AspectRatioMode.KeepAspectRatio)
-		self.setPixmap(pixmap)
-		if render_axis:
-			self.updateTransform()
-			if render_axis & Axis.Y:
-				if self.gradient:
-					self.updateGradient()
+		if not (pixmap := self.pixmap()).isNull():
+			new_size = self.figure.rect().size().toSize()
+			render_axis = Axis.Neither
+			if (axis & Axis.Y) and abs(pixmap.height() - new_size.height()) > 10:
+				render_axis |= Axis.Y
+			if (axis & Axis.X) and abs(pixmap.width() - new_size.width()) > 10:
+				render_axis |= Axis.X
+			self.setPixmap(pixmap)
+			if render_axis:
+				if render_axis & Axis.Y:
+					if self.gradient:
+						self.updateGradient()
 			self.scheduleRender()
 
 	def onDataChange(self):
 		"""Called when the data is changed."""
 		log.debug(f'{self.log_repr}: onDataChange()')
 		self._updatePath()
-		self.updateTransform()
+		# self.updateTransform()
 		if self.gradient:
 			self.updateGradient()
 		self.scheduleRender()
 
-	@asyncSlot()
-	async def onResizeDone(self):
+	@Slot()
+	def onResizeDone(self):
 		"""Called when the plot is resized but not while being actively resized."""
 		if not self.data.hasData:
 			return
@@ -1356,13 +1362,13 @@ class Plot(QGraphicsPixmapItem, Stateful):
 			self.updateGradient()
 		self.scheduleRender()
 
-	def updateTransform(self):
-		self.resetTransform()
-		t = QTransform()
-		t.translate(self.mappedPath.elementAt(0).x, 0)
-		self.setTransform(t)
-		self.prepareGeometryChange()
-		self.update()
+	# def updateTransform(self):
+	# 	self.resetTransform()
+	# 	t = QTransform()
+	# 	t.translate(self.mapped_path.elementAt(0).x, 0)
+	# 	self.setTransform(t)
+	# 	self.prepareGeometryChange()
+	# 	self.update()
 
 	def updateGradient(self):
 		if not self.data.hasData:
@@ -1427,11 +1433,21 @@ class Plot(QGraphicsPixmapItem, Stateful):
 	def _path(self):
 		if self._normalPath.elementCount() == 0 and self.data.timeseries:
 			self._updatePath()
-		return self._normalPath
+		return self.data.dataTransform.map(self._normalPath)
 
 	@property
-	def mappedPath(self):
-		return self.data.combinedTransform.map(self._path)
+	def mapped_path(self):
+		if self._normalPath.elementCount() == 0 and self.data.timeseries:
+			self._updatePath()
+		return self.data.combinedTransform.map(self._normalPath)
+
+	@property
+	def translated_mapped_path(self):
+		path = self.mapped_path
+		padding = self.img_padding
+		path.translate(-path.elementAt(0).x, 0)
+		path.translate(padding.width() / 2, padding.height() / 2)
+		return path
 
 	def _updatePath(self):
 		self.prepareGeometryChange()
@@ -1439,11 +1455,10 @@ class Plot(QGraphicsPixmapItem, Stateful):
 
 	def setPath(self, path: QPainterPath):
 		self.__path = path
-		self._updateShape()
 
 	def path(self) -> QPainterPath:
 		if self.data.hasData:
-			return self.mappedPath
+			return self.mapped_path
 		return QPainterPath()
 
 	def split_path(self, single_path: QPainterPath) -> List[QPainterPath]:
@@ -1483,7 +1498,10 @@ class Plot(QGraphicsPixmapItem, Stateful):
 				sub_paths[-1].lineTo(current.x, current.y)
 		return sub_paths
 
-	def _updateShape(self, path: QPainterPath = None , scale: float = 1):
+	def _fix_shape(self) -> List[QPainterPath]:
+		# ! For whatever reason, QPainterPath.simplify() removes significant chunks of the path
+		# ! when there are spans of straight lines. This function splits the path into multiple
+		# ! sub-paths, each of which is simplified individually.
 		log.verbose(f'{self.log_repr}: Updating shape')
 
 		self.prepareGeometryChange()
@@ -1492,15 +1510,37 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		weight = sorted((weight, 30, length_px(Length.Centimeter(1))))[1]
 		qp.setWidth(weight)
 		qp.setCapStyle(Qt.RoundCap)
-		path = path or self.data.combinedTransform.map(self._path.translated(-self._path.elementAt(0).x, 0))
+		path = QPainterPath(self.translated_mapped_path)
+		path_split = self.split_path(path)
+		return self.merge_paths(path_split, qp)
 
-		# ! For whatever reason, QPainterPath.simplify() removes significant chunks of the path
-		# ! when there are spans of straight lines. This function splits the path into multiple
-		# ! sub-paths, each of which is simplified individually.
+	@Slot(QPainterPath)
+	def _set_shape(self, shape_):
+		self.prepareGeometryChange()
+		# shape_.translate(shape_.elementAt(0).x, 0)
+		# padding = self.img_padding
+		# shape_.translate(-padding.width() / 2, -padding.height() / 2)
+		self._shape = shape_
 
-		path = self.merge_paths(self.split_path(path), qp)
 
-		self._shape = QTransform.fromScale(scale, scale).map(path)
+	def updateScale(self):
+		if self.pixmap().isNull():
+			return QGraphicsPixmapItem.setScale(self, 1)
+
+		padding = self.img_padding
+		pixmap_height = self.pixmap().height() - padding.height()
+		pixmap_height /= LevityDashboard.view.devicePixelRatioF()
+
+		expected_height = self.expected_size.height()
+
+		scale = expected_height / pixmap_height
+
+		t = QTransform.fromTranslate(self.mapped_path.elementAt(0).x, 0)
+		t.translate(-padding.width()/2, -padding.height()/2)
+		t.scale(scale, scale)
+		self.setTransform(t)
+
+		# self._shape = self._shape_normal.translated(*weight_offset.toTuple())
 
 	def merge_paths(self, paths, qp):
 		log.verbose(f'{self.log_repr}: Merging {len(paths)} paths', verbosity=2)
@@ -1513,78 +1553,115 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		return path.simplified()
 
 	def scheduleRender(self):
-		log.debug(f'{self.log_repr}: Scheduling render')
 		if self.data.hasData:
-			self.render()
+			log.debug(f'{self.log_repr}: Scheduling render')
+			if self.painter.status.is_active:
+				self.painter.cancel()
+			if self.baker.status.is_active:
+				self.baker.cancel()
+			if self.shaper.status.is_active:
+				self.shaper.cancel()
+			self.render_delay.start()
+
+	@Slot(object)
+	def _setPixmap(self, pixmap: QPixmap) -> None:
+		pixmap or self.pixmap()
+		w, h = pixmap.size().toTuple()
+
+		if (channel_size := w * h) * (pixmap.depth() // 8) >= self.scene().view.maxTextureSize:
+			ratio = w / h
+			new_width = sqrt(channel_size * ratio)
+			QGraphicsPixmapItem.setPixmap(self, pixmap.scaledToWidth(new_width))
+		else:
+			QGraphicsPixmapItem.setPixmap(self, pixmap)
+
+		self.updateScale()
+
+	@property
+	def expected_size(self) -> QSize:
+		contentsWidth = (self.data.data[0][-1] - min(
+			self.data.data[0][0], self.figure.graph.timeframe.historicalStart.timestamp()
+		)) * self.figure.graph.pixelsPerSecond
+		contentsWidth = min(contentsWidth, self.mapped_path.boundingRect().width())
+		return QSizeF(contentsWidth, self.figure.height()).toSize()
+
+	@property
+	def img_padding(self) -> QSize:
+		weight = int(self.weight_px) + 1
+		weight *= self.scene().view.devicePixelRatio()
+		return QSize(weight, weight)
+
+	def _render_paint(self) -> QPixmap:
+		log.debug(f'{self.log_repr}: Rendering')
+		weight = self.weight_px
+
+		if self.gradient: self.updateGradient()
+
+		size = self.expected_size
+
+		# Multiply the size by the device pixel ratio
+		size *= self.scene().view.devicePixelRatio()
+
+		# Add a bit of padding to the sides
+		padding = self.img_padding
+		size += padding
+
+		pix = QPixmap(size)
+		pix.setDevicePixelRatio(self.scene().view.devicePixelRatio())
+		pix.fill(Qt.transparent)
+		painter = EffectPainter(pix)
+
+		pen = self.pen()
+		pen.setWidthF(weight)
+		painter.setPen(pen)
+		path = self.mapped_path
+
+		path.translate(-path.elementAt(0).x, 0)
+		path.translate(padding.width() / 2, padding.height() / 2)
+
+		painter.drawPath(path)
+		painter.end()
+
+		return pix
+
+	def _render_finish(self, pix: QPixmap):
+		log.verbose(f'{self.log_repr}: Rendering complete', verbosity=3)
+		self._setPixmap(pix)
+		self.data.pendingUpdate = None
+
+	def _render_bake_effects(self, pix: QPixmap):
+		log.debug(f'{self.log_repr}: Baking effects')
+		result = RendererScene().bakeEffects(pix, *self.effects.values())
+		return result
+
+	@cached_property
+	def _render_workers(self) -> Tuple[Worker, Worker]:
+		paint_worker = Worker.create_worker(self._render_paint, on_result=self._setPixmap, immortal=True)
+		bake_worker = Worker.create_worker(self._render_bake_effects, on_result=self._render_finish, immortal=True)
+		paint_worker.link_worker_result(bake_worker, priority=1)
+		return paint_worker, bake_worker
+
+	@cached_property
+	def painter(self) -> Worker:
+		return self._render_workers[0]
+
+	@cached_property
+	def baker(self) -> Worker:
+		return self._render_workers[1]
+
+	@cached_property
+	def shaper(self) -> Worker:
+		return Worker.create_worker(self._fix_shape, on_result=self._set_shape, immortal=True)
 
 	def render(self):
-		with BusyContext(task=self.render):
-			log.verbose(f'{self.log_repr}: Starting render', verbosity=3)
-			self.__dataTransformAtRender = self.figure.figureTransform
+		log.verbose(f'{self.log_repr}: Starting render', verbosity=3)
 
-			deviceTransform = self.scene().view.deviceTransform()
-			deviceScale = self.scene().view.devicePixelRatio()
+		paint_worker = self.painter
+		paint_worker.start(priority=0)
+		self.shaper.start(priority=0)
 
-			rect = self.figure.rect()
-			contentsWidth = (self.data.data[0][-1] - min(
-				self.data.data[0][0], self.figure.graph.timeframe.historicalStart.timestamp()
-			)) * self.figure.graph.pixelsPerSecond
-			rect.setWidth(contentsWidth)
-			rect = deviceTransform.mapRect(rect)
-			ratio = rect.width() / rect.height()
-			scaleTo = False
+		return
 
-			if prod(rect.size().toTuple()) >= (maxPerChanel := self.scene().view.maxTextureSize / 4):
-				newWidth = sqrt(maxPerChanel * ratio)
-				newHeight = newWidth / ratio
-				scaleTo = QSizeF(newWidth, newHeight)
-
-			pixmap = QPixmap(rect.size().toSize())
-			pixmap.setDevicePixelRatio(deviceScale)
-			pixmap.fill(Qt.transparent)
-			painter = EffectPainter(pixmap)
-
-			pen = self.pen()
-			weight = self.weight_px
-			pen.setWidthF(weight)
-			painter.setPen(pen)
-
-			path = self._path.translated(-self._path.elementAt(0).x, 0)
-			path = self.data.combinedTransform.map(path)
-
-			painter.drawPath(path)
-			painter.end()
-
-			def finish(self, scaleTo_, pix: QPixmap):
-				log.verbose(f'{self.log_repr}: Rendering complete')
-				self.prepareGeometryChange()
-				if scaleTo_:
-					pix = pix.scaledToWidth(scaleTo_.width(), Qt.SmoothTransformation)
-				self.setPixmap(pix)
-				self.update()
-
-			def bake(pix: QPixmap, *effects: Effect):
-				scene = RendererScene()
-				return scene.bakeEffects(pix, *effects)
-
-			if scaleTo:
-				pixmap = pixmap.scaledToWidth(scaleTo.width(), Qt.SmoothTransformation)
-				self.setScale(rect.width() / scaleTo.width())
-			else:
-				self.setScale(1)
-
-			self.setPixmap(pixmap)
-
-			run_in_thread(
-				self._updateShape, QPainterPath(path), scaleTo.width() / rect.width() if scaleTo else 1,
-				priority=0
-			)
-
-			run_in_thread(
-				bake, pixmap, *self.effects.values(),
-				on_result=partial(finish, self, scaleTo),
-				priority=0
-			)
 
 	def _debug_paint(self, painter, option, widget):
 		self._normal_paint(painter, option, widget)
@@ -1614,13 +1691,13 @@ class LinePlot(Plot):
 		x = sum((value.x() for value in values[:3])) / 3 - values[0].x()
 		y = sum((value.y() for value in values[:3])) / 3 - values[0].y()
 		start = values[0] - QPointF(x, y)
+		end = values[-1]
 		path = self._normalPath
 		path.clear()
 		path.moveTo(start)
 		for value in values:
-			# if value.y() <= 0:
-			# 	self._normalPath.moveTo(value)
 			path.lineTo(value)
+		path.lineTo(end)
 
 	def __spline(self):
 		'''Currently broken.  Needs to be updated to the format found in __linear()'''
@@ -1935,6 +2012,7 @@ class AnnotationText(Text):
 		if scene := self.scene():
 			scene.removeItem(self)
 			self._actionPool.delete()
+			del self._actionPool
 			return
 		if groupRemove := getattr(self.labelGroup, 'removeItem', None) is not None:
 			groupRemove(self)
@@ -2324,13 +2402,17 @@ class PlotLabel(AnnotationText):
 
 	def itemChange(self, change, value):
 		if change is QGraphicsItem.ItemPositionChange:
-			topLeft: QPointF = value
-			bottomRight = self.boundingRect().bottomRight()
-			containingRect = self.mapRectFromItem((g:=self.data.graph), g.marginRect)
-			if bottomRight.y() >= containingRect.bottom():
-				value.setY(containingRect.bottom() - self.boundingRect().height())
-			elif topLeft.y() <= containingRect.top():
-				value.setY(containingRect.top())
+			current = self.pos()
+			path = self.mapToScene(self.path()).translated(*(value - current).toTuple())
+			graph_margins_path = self.data.graph.scene_margin_path
+			diff = path - graph_margins_path
+			diff_rect = diff.boundingRect()
+			if diff_rect.height():
+				if diff_rect.center().y() > graph_margins_path.boundingRect().center().y():
+					value.setY(value.y() - diff_rect.height())
+				else:
+					value.setY(value.y() + diff_rect.height())
+
 		return super(PlotLabel, self).itemChange(change, value)
 
 
@@ -2389,8 +2471,6 @@ class PlotLabels(AnnotationLabels[PlotLabel]):
 		super(PlotLabels, self).post_init(**state)
 		self.surface.setZValue(self.source.figure.zValue() + 100)
 
-	# loop.call_later(5, self.refresh)
-
 	@StateProperty(default=Alignment.default(), allowNone=True)  # , inheritFrom=AnnotationLabels.alignment)
 	def alignment(self) -> Alignment:
 		pass
@@ -2406,7 +2486,7 @@ class PlotLabels(AnnotationLabels[PlotLabel]):
 		self.data = peaks_troughs
 		self.waiting_for_data = False
 		if callback is not None:
-			loop.call_soon_threadsafe(callback)
+			callback()
 
 	def onDataChange(self, axis: Axis):
 		# ! TODO: This could be optimized
@@ -2415,7 +2495,7 @@ class PlotLabels(AnnotationLabels[PlotLabel]):
 		def continue_on_data_change():
 			log.verbose(f'{self.log_repr}: Continuing onDataChange()')
 			self.resetAxis(axis)
-			loop.call_soon_threadsafe(self.refresh, "Continue onDataChange()")
+			self.refresh("Continue onDataChange()")
 
 		log.verbose(f'{self.log_repr}: Data changed, requesting {"peaks and troughs" if self.peaksTroughs else "labels"}')
 		continue_ = partial(self._intercept_peaks_troughs, callback=continue_on_data_change)
@@ -2479,7 +2559,7 @@ class PlotLabels(AnnotationLabels[PlotLabel]):
 			if len(data) == len(self) == len(positions):
 				raise e
 			else:
-				loop.call_soon_threadsafe(self.threaded_refresh)
+				self.threaded_refresh()
 
 	def labelFactory(self, **kwargs):
 		return PlotLabel(labelGroup=self, data=self, **kwargs)
@@ -2877,7 +2957,7 @@ def useHeight(_, *args):
 class TimestampLabel(AnnotationText):
 	formatID: int
 	defaultFormatID = 3
-	formatStrings = ['%H:%M:%S.%f', '%H:%M:%S', '%H:%M', f'%{DATETIME_NO_ZERO_CHAR}I%p', '%a', '%A', '']
+	formatStrings = ['%H:%M:%S.%f', '%H:%M:%S', '%H:%M', f'%-I%p', '%a', '%A', '']
 	labelGroup: 'DayAnnotations'
 	scaleToFit = False
 
@@ -3081,6 +3161,7 @@ class HourLabels(AnnotationLabels[TimestampLabel]):
 			for i in range(24):
 				item = self.labelFactory(value=s.replace(hour=i), spread=spread)
 				self.append(item)
+
 		scale = min(i.getTextScale() for i in self[:min(len(self), 12)])
 		labelWidth = max(i.boundingRect().width() * scale for i in self[:min(len(self), 12)])
 		viewScale = self.surface.scene().viewScale
@@ -3093,7 +3174,6 @@ class HourLabels(AnnotationLabels[TimestampLabel]):
 		idx = (np.abs(labelIntervals - labelScreenWidth)).argmin()
 		if labelIntervals[idx] < labelScreenWidth:
 			idx += 1
-		scaleToFit = max(labelIntervals) < labelWidth
 
 		span = self.markerIntervals[min(idx, len(self.markerIntervals) - 1)]
 		t = timedelta(hours=span)
@@ -3191,6 +3271,7 @@ class DayAnnotations(Surface, Stateful, tag=...):
 	def __init__(self, graph: 'GraphPanel', **kwargs):
 		self.graph = graph.parentItem()
 		super(DayAnnotations, self).__init__(parent=graph)
+		self.statefulParent = self.graph
 
 		self.hourLabels = HourLabels(graph=self.graph, surface=self)
 		self._dayLabels = DayLabels(graph=self.graph, surface=self)
@@ -3198,7 +3279,7 @@ class DayAnnotations(Surface, Stateful, tag=...):
 
 		self.state = self.prep_init(kwargs)
 
-		app.clock.sync.connect(self.updateItem)
+		LevityDashboard.clock.sync.connect(self.updateItem)
 		self.setFlag(QGraphicsItem.ItemClipsChildrenToShape)
 		self.setFlag(QGraphicsItem.ItemClipsToShape)
 
@@ -3207,8 +3288,6 @@ class DayAnnotations(Surface, Stateful, tag=...):
 		self.graph.signals.resized.connect(self.onFrameChange)
 		self.setZValue(-100)
 		self.setCacheMode(QGraphicsItem.ItemCoordinateCache)
-
-	# self.setVisible(False)
 
 	@property
 	def surface(self) -> 'GraphProxy':
@@ -3311,10 +3390,8 @@ class AxisSignal(QObject):
 		self.timer = QTimer(singleShot=True, interval=200)
 		self.timer.timeout.connect(self.__announce)
 
+	@thread_safe
 	def announce(self, axis: Axis, instant: bool = False):
-		if QThread.currentThread() is not QApplication.instance().thread():
-			loop.call_soon_threadsafe(self.announce, axis, instant)
-			return
 		self.__axis |= axis
 		if instant:
 			self.__announce()
@@ -3322,8 +3399,8 @@ class AxisSignal(QObject):
 			self.timer.start()
 
 	def __announce(self):
-		if QThread.currentThread() is not QApplication.instance().thread():
-			loop.call_soon_threadsafe(self.__announce)
+		if QThread.currentThread() is not LevityDashboard.app.thread():
+			self.__announce()
 			return
 		self.__signal.emit(self.__axis)
 		self.__axis = Axis.Neither
@@ -3341,11 +3418,12 @@ _Figure = ForwardRef('Figure')
 # Section CurrentTimeIndicator
 class CurrentTimeIndicator(QGraphicsLineItem, Stateful, tag=...):
 
+	_time = partial(datetime.now, tz=LOCAL_TIMEZONE)
 
-	def __init__(self, graph: 'GraphPanel', **kwargs):
+	def __init__(self, graph: 'GraphPanel', signal: Signal = None, **kwargs):
 		self.graph = graph
-		self.graph.signals.resized.connect(self.updatePath)
 		super(CurrentTimeIndicator, self).__init__()
+		connectSignal(signal, self.updatePosition)
 		self.setParentItem(graph.proxy)
 		self.setPen(QPen(Qt.red, 1))
 		self.updatePath()
@@ -3364,9 +3442,16 @@ class CurrentTimeIndicator(QGraphicsLineItem, Stateful, tag=...):
 		color = self.color
 		self.setPen(QPen(color.QColor, self.weight_px))
 
+	def set_time_method(self, func: Callable):
+		if func is None:
+			del self._time
+			return
+		self._time = func
+
 	@property
 	def currentPosition(self) -> float:
-		return (datetime.now(tz=LOCAL_TIMEZONE) - self.graph.timeframe.start).total_seconds() * self.graph.pixelsPerSecond
+		t = self._time()
+		return (t - self.graph.timeframe.start).total_seconds() * self.graph.pixelsPerSecond
 
 	@StateProperty(key='enabled', default=True, allowNone=False, singleValue=True)
 	def enabled(self) -> bool:
@@ -3464,6 +3549,19 @@ class GraphPanel(Panel, tag='graph'):
 		self.updateSyncTimer()
 		self.scene().view.resizeFinished.connect(self.updateSyncTimer)
 		self.setAcceptHoverEvents(True)
+		# self.extra = CurrentTimeIndicator(self, signal=self.signals.resized)
+		#
+		# def time_func() -> datetime:
+		# 	try:
+		# 		t: Figure
+		# 		t = [i for i in self.graph.figures if any(j.key == 'environment.temperature.temperature' for j in i.plots)][0]
+		# 		t: datetime = t.figureMinStart
+		# 	except Exception:
+		# 		t = now()
+		# 	return t
+		#
+		# self.extra.set_time_method(time_func)
+		# self.extra.state = {'color': Color('#8f6aae')}
 
 	def _init_defaults_(self):
 		super()._init_defaults_()
@@ -3511,6 +3609,11 @@ class GraphPanel(Panel, tag='graph'):
 	def scrollable(self) -> bool:
 		return self._scrollable
 
+	@scrollable.setter
+	def scrollable(self, value: bool):
+		self._scrollable = value
+		self.proxy.setFlag(self.ItemIsMovable, value)
+
 	@StateProperty(default=Stateful, allowNone=False)
 	def indicator(self) -> 'CurrentTimeIndicator':
 		return self._indicator
@@ -3521,16 +3624,11 @@ class GraphPanel(Panel, tag='graph'):
 
 	@indicator.factory
 	def indicator(self) -> 'CurrentTimeIndicator':
-		return CurrentTimeIndicator(self)
+		return CurrentTimeIndicator(self, signal=self.signals.resized)
 
 	@property
 	def indicatorEnabled(self) -> bool:
 		return getattr(self, '_indicator', None) is not None
-
-	@scrollable.setter
-	def scrollable(self, value: bool):
-		self._scrollable = value
-		self.proxy.setFlag(self.ItemIsMovable, value)
 
 	def highlightFigure(self, figure: 'Figure'):
 		for i in self.figures:
@@ -3546,13 +3644,13 @@ class GraphPanel(Panel, tag='graph'):
 
 	@Slot(Axis)
 	def onAxisChange(self, axis: Axis):
-		# @asyncSlot(Axis)
-		# async def onAxisChange(self, axis: Axis):
+		# @Slot(Axis)
+		# def onAxisChange(self, axis: Axis):
 		if axis & Axis.X:
 			self.__clearCache()
 			if annotations := getattr(self, '_annotations', None):
 				annotations.onFrameChange(axis)
-		loop.call_soon_threadsafe(self.updateSyncTimer)
+		self.updateSyncTimer()
 
 	def parentResized(self, *args):
 		super(GraphPanel, self).parentResized(*args)
@@ -3587,7 +3685,7 @@ class GraphPanel(Panel, tag='graph'):
 
 	def refresh(self):
 		for figure in self.figures:
-			figure.parentResized(self.rect())
+			figure.refresh()
 		self.syncDisplay()
 
 	@property
@@ -3645,12 +3743,16 @@ class GraphPanel(Panel, tag='graph'):
 	def wheelEvent(self, event: QGraphicsSceneWheelEvent):
 		delta = 1 if event.delta() > 0 else -1
 
+		if not self._scrollable and not event.modifiers() & Qt.ControlModifier:
+			event.ignore()
+			return
+
 		if event.modifiers() & Qt.ControlModifier:
-			multiplier = self.pixelsPerHour
+			multiplier = self.pixelsPerHour * 3
 		elif event.modifiers() & Qt.ShiftModifier:
-			multiplier = self.pixelsPerMinute
+			multiplier = self.pixelsPerHour
 		else:
-			multiplier = self.pixelsPerMinute * 5
+			multiplier = self.pixelsPerMinute * 15
 
 		self.proxy.moveBy(delta * multiplier, 0)
 
@@ -3699,26 +3801,6 @@ class GraphPanel(Panel, tag='graph'):
 			return
 		event.ignore()
 		super().dragEnterEvent(event)
-
-	def dropEvent(self, event: QGraphicsSceneDragDropEvent):
-		data = loads(event.mimeData().data('application/panel-valueLink').data(), object_hook=hook)
-		if 'valueLink' not in data:
-			event.ignore()
-			return
-		value = data['valueLink']
-		figures = [figure for figure in self.figures if figure.sharedKey > value.key.category]
-		if len(figures) == 1:
-			figure = figures[0]
-			figure.addItem(value)
-		elif len(figures) > 1:
-			raise Exception('Too many figures')
-		else:
-			if value.hourly:
-				a = Figure(self)
-				a.addItem(value)
-				a.show()
-			else:
-				event.ignore()
 
 	@property
 	def fontSize(self):
@@ -4167,7 +4249,6 @@ class Figure(NonInteractivePanel, tag=...):
 		if change is QGraphicsItem.ItemChildAddedChange:
 			if isinstance(value, Plot):
 				self.plotSurface.addToGroup(value)
-		# print('added plot')
 		return super(Figure, self).itemChange(change, value)
 
 	def highlightItem(self, item):
@@ -4181,8 +4262,12 @@ class Figure(NonInteractivePanel, tag=...):
 		for i in self.plotData:
 			i.graphic.setOpacity(i.graphic.opacity)
 
+	@property
+	def log_repr(self) -> str:
+		return f'{self.__class__.__name__}({self.name})'
+
 	@cached_property
-	def contextMenu(self):
+	def contextMenuFigure(self):
 		return FigureMenu(self.graph, self)
 
 	@cached_property
@@ -4195,22 +4280,22 @@ class Figure(NonInteractivePanel, tag=...):
 
 	# Section Figure Events
 
-	@asyncSlot(Axis)
-	async def onGraphItemUpdate(self, axis: Axis):
+	@Slot(Axis)
+	def onGraphItemUpdate(self, axis: Axis = None):
 		"""Called by a child GraphItem when its value has changed so that it can notify the other children to update"""
 		clearCacheAttr(self, 'marginRect')
 		# self.axisTransformed.announce(axis)
 		self.setRect(self.rect())
 
-	@asyncSlot(Axis)
-	async def onAxisTransform(self, axis: Axis):
+	@Slot(Axis)
+	def onAxisTransform(self, axis: Axis):
 		# Inform the graph that the axis has changed so that it can invalidate the timescale
 		# eventually, further action should wait for the graph to announce the change
 		clearCacheAttr(self, 'marginRect')
 		self.graph.axisTransformed.announce(axis)
 
-	@asyncSlot(Axis)
-	async def onAxisResized(self, axis: Axis):
+	@Slot(Axis)
+	def onAxisResized(self, axis: Axis):
 		clearCacheAttr(self, 'marginRect')
 		self.axisTransformed.announce(axis, instant=True)
 
@@ -4299,6 +4384,10 @@ class Figure(NonInteractivePanel, tag=...):
 	@lowerLimit.setter
 	def lowerLimit(self, value: float):
 		self._lowerLimit = value
+
+	@StateProperty(after=onGraphItemUpdate)
+	def margins(self) -> Alignment:
+		pass
 
 	def debugBreak(self):
 		a = self.plotData[0]
@@ -4460,15 +4549,15 @@ class Figure(NonInteractivePanel, tag=...):
 
 	@property
 	def pixels_per_unit(self) -> float:
-		return float(self.dataValueRange.range / self.margins.absoluteVerticalSpan)
+		return float(self.dataValueRange.range / (self.margins.absoluteVerticalSpan or 1))
 
 	@property
 	def units_per_pixel(self) -> float:
-		return float(self.margins.absoluteVerticalSpan / self.dataValueRange.range)
+		return float(self.margins.absoluteVerticalSpan / (self.dataValueRange.range or 1))
 
 	@property
 	def unit_pixel(self) -> float:
-		return float(self.dataValueRange.range / self.margins.absoluteVerticalSpan)
+		return float(self.dataValueRange.range / (self.margins.absoluteVerticalSpan or 1))
 
 # Section .paint
 # def paint(self, painter, option, widget):
@@ -4499,7 +4588,7 @@ class GraphMenu(BaseContextMenu):
 	def uniqueItems(self):
 		self.figures = self.addMenu('Figures')
 		for figure in reversed(self.graph.figures):
-			self.figures.addMenu(figure.contextMenu)
+			self.figures.addMenu(figure.contextMenuFigure)
 			figure.contextMenu.parentMenu = self
 		self.figures.adjustSize()
 		sizeHint = self.figures.sizeHint()
@@ -4559,6 +4648,12 @@ class FigureMenu(QMenu):
 		self.aboutToShow.connect(self.highlight)
 		self.aboutToHide.connect(self.restoreOpacity)
 
+		self.panelItems = figure.contextMenu
+		self.panelItems.setTitle('Panel Menu')
+		self.panelItems.figure = figure
+
+		self.insertMenu(self.actions()[-1], self.panelItems)
+
 		if self.items:
 			self._currentItem = self.items[0].item
 		else:
@@ -4596,7 +4691,7 @@ class FigureMenu(QMenu):
 
 	def mouseMoveEvent(self, event):
 		menuItem = self.actionAt(event.pos())
-		if menuItem and (parent := menuItem.parent()) is not self and parent is not self._currentItem:
+		if menuItem and self.panelItems is not menuItem.menu() and (parent := menuItem.parent()) is not self and parent is not self._currentItem:
 			self._currentItem.figure.highlightItem(parent.item)
 			self._currentItem = parent.item
 		super(FigureMenu, self).mouseMoveEvent(event)

@@ -1,14 +1,12 @@
-from asyncio import get_running_loop
 from datetime import datetime, timedelta
 from enum import Enum
 from functools import cached_property
 from typing import Any, Callable, List, Optional, TYPE_CHECKING, Union
 
 from dateutil.parser import parser
-from PySide2.QtCore import QObject, QPoint, QPointF, QRectF, Signal
+from PySide2.QtCore import QObject, QPoint, QPointF, QRectF, QThread, Signal, Slot
 from PySide2.QtGui import QBrush, QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPen, Qt, QTransform
-from PySide2.QtWidgets import QGraphicsItem, QGraphicsPathItem
-from qasync import asyncSlot
+from PySide2.QtWidgets import QApplication, QGraphicsItem, QGraphicsPathItem
 from rich.repr import rich_repr
 
 import WeatherUnits as wu
@@ -20,13 +18,12 @@ from LevityDash.lib.ui.fonts import defaultFont, FontWeight
 from LevityDash.lib.ui.frontends.PySide.utils import addCrosshair, addRect, colorPalette, DebugPaint
 from LevityDash.lib.ui.Geometry import Alignment, AlignmentFlag, Geometry, getDPI, Size
 from LevityDash.lib.ui.icons import fa as FontAwesome, Icon
-from LevityDash.lib.utils.shared import _Panel, ActionPool, ClosestMatchEnumMeta, defer, now, TextFilter
-
-loop = get_running_loop()
+from LevityDash.lib.utils.shared import _Panel, ActionPool, ClosestMatchEnumMeta, defer, now, TextFilter, thread_safe
 
 
 class TextItemSignals(QObject):
 	changed = Signal()
+	transformed = Signal(QTransform)
 
 
 class ScaleType(str, Enum, metaclass=ClosestMatchEnumMeta):
@@ -97,6 +94,8 @@ class Text(QGraphicsPathItem):
 		super(Text, self).__init__(parent=None)
 		self.setPen(QPen(Qt.NoPen))
 		self.signals = TextItemSignals()
+
+		self.signals.transformed.connect(self.__transformSlot)
 
 		self._parent = parent
 		if isinstance(parent, QGraphicsItem):
@@ -316,17 +315,21 @@ class Text(QGraphicsPathItem):
 	def limitRect(self) -> QRectF:
 		return self.parent.marginRect
 
-	@asyncSlot()
-	async def asyncUpdateTransform(self, *args, **kwargs):
+	@Slot()
+	def asyncUpdateTransform(self, *args, **kwargs):
 		self.updateTransform(*args, **kwargs)
+
+	@Slot(QTransform)
+	def __transformSlot(self, t: QTransform):
+		self.setTransform(t)
 
 	# Section Transform
 	@defer
 	def updateTransform(self, rect: QRectF = None, updateShared: bool = True, updatePath: bool = True, *args):
 		transform = QTransform()
-		self.resetTransform()
-		if updatePath:
-			self.__updatePath()
+		self.setTransform(transform)
+
+		if updatePath: self.__updatePath()
 
 		limitRect = self.limitRect
 
@@ -337,7 +340,7 @@ class Text(QGraphicsPathItem):
 
 		rect = self._textRect or self.__updatePath()
 		# if rect.isValid() and limitRect.isValid():
-		self.setTransformOriginPoint(rect.center())
+		self.setTransformOriginPoint(0, 0)
 		x, y = self.getTextPosition(limitRect).toTuple()
 		if align := getattr(self, '_sized', None):
 			sceneY = align.sharedY(self)
@@ -392,16 +395,16 @@ class Text(QGraphicsPathItem):
 
 	def refresh(self):
 		self.updateTransform()
-		value = getattr(self.value, 'value', self.value)
-		if isinstance(value, wu.Time) and userConfig.getOrSet('Display', 'liveUpdateTimedeltas', True, userConfig.getboolean):
-			refreshTask = getattr(self, 'refreshTask', None)
-			if refreshTask is not None:
-				refreshTask.cancel()
+		# value = getattr(self.value, 'value', self.value)
+		# if isinstance(value, wu.Time) and userConfig.getOrSet('Display', 'liveUpdateTimedeltas', True, userConfig.getboolean):
+		# 	refreshTask = getattr(self, 'refreshTask', None)
+		# 	if refreshTask is not None:
+		# 		refreshTask.cancel()
 			# TODO: change this to properly use abs once WeatherUnits has it implemented
-			if wu.Time.Minute(abs(value.minute)) < wu.Time.Minute(1):
-				self.refreshTask = loop.call_later(1, self.refresh)
-			elif wu.Time.Hour(abs(value.hour)) < wu.Time.Hour(1):
-				self.refreshTask = loop.call_later(60, self.refresh)
+			# if wu.Time.Minute(abs(value.minute)) < wu.Time.Minute(1):
+			# 	self.refreshTask = loop.call_later(1, self.refresh)
+			# elif wu.Time.Hour(abs(value.hour)) < wu.Time.Hour(1):
+			# 	self.refreshTask = loop.call_later(60, self.refresh)
 
 	def _debug_paint(self, painter: QPainter, option, widget):
 		size = 2.5

@@ -1,8 +1,8 @@
 import asyncio
-from asyncio import create_task
 from datetime import datetime, timedelta, timezone
 from functools import partial
 from json import dumps, loads
+from typing import Callable
 
 from aiohttp import ClientSession, ClientWebSocketResponse, WSMsgType
 
@@ -15,9 +15,6 @@ from LevityDash.lib.plugins.web.socket_ import UDPSocket
 from LevityDash.lib.utils.shared import LOCAL_TIMEZONE, Now
 
 __all__ = ["WeatherFlow", '__plugin__']
-
-loop = asyncio.get_running_loop()
-
 
 class WFURLs(URLs, base='swd.weatherflow.com/swd'):
 	auth = Auth(authType=AuthType.PARAMETER, authData={'token': '{token}'})
@@ -253,6 +250,7 @@ class WFWebsocket:
 	def __init__(self, plugin: 'WeatherFlow', *args, **kwargs):
 		self.socket = None
 		self.plugin = plugin
+		self.loop = plugin.loop
 		from secrets import token_urlsafe as genUUID
 		self.uuid = genUUID(8)
 
@@ -266,10 +264,10 @@ class WFWebsocket:
 		)
 
 	def start(self):
-		asyncio.create_task(self.run())
+		self.loop.create_task(self.run())
 
 	def stop(self):
-		create_task(self.astop())
+		self.loop.create_task(self.astop())
 
 	async def astop(self):
 		if self.socket is None:
@@ -310,7 +308,7 @@ class WFWebsocket:
 				summaryDatagram = LevityDatagram({'type': 'summary', **summary}, schema=self.plugin.schema, sourceData={'websocket': self})
 				message = LevityDatagram(rest, schema=self.plugin.schema, sourceData={'websocket': self})
 				message['realtime'].update(summaryDatagram['realtime'])
-				loop.call_soon_threadsafe(partial(self.plugin.observations.realtime.update, message))
+				self.loop.call_soon(partial(self.plugin.observations.realtime.update, message))
 			case dict(datagram) if 'type' in datagram:
 				message = LevityDatagram(datagram, schema=self.plugin.schema, sourceData={'websocket': self})
 				asyncio.create_task(self.plugin.observations.realtime.asyncUpdate(message))
@@ -407,42 +405,59 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 		self.pluginLog.verbose(f'{self.name} received {message}', verbosity=5)
 
 	def start(self):
+
 		self.pluginLog.info('WeatherFlow: starting')
-		if self.config['socketUpdates']:
-			section = self.config.default_section
-			if self.config.getOrSet(section, 'socketType', 'web') == 'web':
-				ScheduledEvent(Now(), self.websocket.start, singleShot=True).start()
-			else:
-				ScheduledEvent(Now(), self.udp.start, singleShot=True).start()
 
-		realtimeRefreshInterval = self.urls.realtime.refreshInterval
-		self.realtimeTimer = ScheduledEvent(realtimeRefreshInterval, self.getRealtime).start()
-		self.forecastTimer = ScheduledEvent(timedelta(minutes=15), self.getForecast).start()
-		self.loggingTimer = ScheduledEvent(timedelta(minutes=1), self.logValues).schedule()
+		async def async_bootstrap():
+			loop = self.loop
 
-		if self.config['fetchHistory']:
-			ScheduledEvent(timedelta(hours=6), self.getHistorical).delayedStart(timedelta(seconds=10))
+			if self.config['socketUpdates']:
+				section = self.config.default_section
+				if self.config.getOrSet(section, 'socketType', 'web') == 'web':
+					ScheduledEvent(Now(), self.websocket.start, singleShot=True, loop=loop).start()
+				else:
+					ScheduledEvent(Now(), self.udp.start, singleShot=True, loop=loop).start()
 
-		self.pluginLog.info('WeatherFlow: started')
+			realtimeRefreshInterval = self.urls.realtime.refreshInterval
+			self.realtimeTimer = ScheduledEvent(realtimeRefreshInterval, self.getRealtime, loop=loop).start()
+			self.forecastTimer = ScheduledEvent(timedelta(minutes=15), self.getForecast, loop=loop).start()
+			self.loggingTimer = ScheduledEvent(timedelta(minutes=1), self.logValues, loop=loop).schedule()
 
-	async def asyncStart(self):
-		loop.call_soon(self.start)
+			if self.config['fetchHistory']:
+				ScheduledEvent(timedelta(hours=6), self.getHistorical, loop=loop).delayedStart(timedelta(seconds=10))
 
-	def stop(self):
+			self.pluginLog.info('WeatherFlow: started')
+			await self.future
+
+		def bootstrap():
+			self._task = async_bootstrap()
+			self.loop.run_until_complete(self._task)
+			del self.loop
+			self.pluginLog.info('WeatherFlow: shutdown complete')
+
+		self.loop.run_in_executor(None, bootstrap)
+
+		return self
+
+	def stop(self, callback: Callable = None):
 		self.pluginLog.info('WeatherFlow: stopping')
-		ScheduledEvent.cancelAll(self)
-		try:
-			self.websocket.stop()
-		except AttributeError:
-			pass
-		try:
-			self.udp.stop()
-		except AttributeError:
-			pass
-		self.pluginLog.info('WeatherFlow: stopped')
 
-	async def asyncStop(self):
-		loop.call_soon(self.stop)
+		async def continue_shutdown():
+			self.future.set_result(True)
+			self.future.cancel()
+			await self.loop.shutdown_asyncgens()
+			ScheduledEvent.cancelAll(self)
+			try:
+				await self.websocket.asyncStop()
+			except AttributeError:
+				pass
+			try:
+				self.udp.stop()
+			except AttributeError:
+				pass
+
+		asyncio.run_coroutine_threadsafe(continue_shutdown(), self.loop)
+		self.pluginLog.info('WeatherFlow: starting shutdown')
 
 	async def getRealtime(self):
 		urls = self.urls
@@ -464,9 +479,9 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 	async def getForecast(self):
 		try:
 			data = await self.getData(self.urls.forecast)
-			tasks = [observation.asyncUpdate(data) for observation in self.observations if observation.dataName in data]
-			for task in tasks:
-				asyncio.create_task(task)
+			for obs in self.observations:
+				if obs.dataName in data:
+					obs.update(data)
 		except TimeoutError as e:
 			self.pluginLog.warning(f'WeatherFlow: forecast request timed out: {e}')
 			self.forecastTimer.retry(timedelta(minutes=1))

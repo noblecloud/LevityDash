@@ -1,23 +1,22 @@
-from asyncio import get_event_loop, gather, get_running_loop, Task
 from abc import abstractmethod
 from datetime import timedelta, datetime
 from functools import cached_property, partial
 from numbers import Number
-from typing import Iterable, Type, Dict
+from time import process_time
+from typing import Any, Iterable, Type, Dict
 
-from PySide2.QtCore import QByteArray, QMimeData, Qt, QThread, QTimer, QRectF
+from PySide2.QtCore import QByteArray, QMimeData, Qt, QThread, QTimer, QRectF, Slot
 from PySide2.QtGui import QDrag, QFocusEvent, QFont, QPainter, QPixmap, QTransform
-from PySide2.QtWidgets import QGraphicsItem, QGraphicsSceneMouseEvent, QStyleOptionGraphicsItem
-from qasync import asyncSlot, QApplication
+from PySide2.QtWidgets import QApplication, QGraphicsItem, QGraphicsSceneMouseEvent, QStyleOptionGraphicsItem
 
 from LevityDash import LevityDashboard
 from LevityDash.lib.config import DATETIME_NO_ZERO_CHAR
 from LevityDash.lib.ui.icons import fa as FontAwesome, getIcon, Icon
 from WeatherUnits.time_.time import Second
 from LevityDash.lib.plugins.categories import CategoryItem
-from LevityDash.lib.plugins import Plugin, Plugins, Container
+from LevityDash.lib.plugins import Plugin, Container
 from LevityDash.lib.plugins.plugin import AnySource, SomePlugin
-from LevityDash.lib.plugins.dispatcher import MultiSourceContainer, ValueDirectory
+from LevityDash.lib.plugins.dispatcher import MultiSourceContainer
 from LevityDash.lib.ui.fonts import FontWeight
 from LevityDash.lib.ui.frontends.PySide import UILogger as guiLog
 from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, mouseHoldTimer
@@ -30,8 +29,10 @@ from LevityDash.lib.ui.Geometry import (
 	getDPI, Size, LocationFlag, AlignmentFlag, DisplayPosition, parseSize,
 	RelativeFloat, size_px
 )
-from LevityDash.lib.utils.shared import (disconnectSignal, Now, TitleCamelCase, Unset, connectSignal,
-                                         clearCacheAttr)
+from LevityDash.lib.utils.shared import (
+	disconnectSignal, Now, now, parse_bool, thread_safe, threadPool, TitleCamelCase, Unset, connectSignal,
+	clearCacheAttr
+)
 from LevityDash.lib.stateful import StateProperty, Stateful
 from LevityDash.lib.plugins.observation import RealtimeSource, ObservationValue, TimeseriesSource
 from WeatherUnits import Measurement, auto as autoMeasurement, Length
@@ -40,7 +41,6 @@ qApp: QApplication
 
 log = guiLog.getChild(__name__)
 
-loop = get_running_loop()
 
 
 class Display(Panel, tag=...):
@@ -101,7 +101,7 @@ class Realtime(Panel, tag='realtime'):
 	# Section Realtime
 	def __init__(self, parent: Panel, **kwargs):
 		self.__connectedContainer: Container | None = None
-		self.__pendingActions: Dict[int, Task] = {}
+		self.__pendingActions: Dict[int, Any] = {}
 		super(Realtime, self).__init__(parent=parent, **kwargs)
 		self.lastUpdate = None
 		self.display.valueTextBox.marginHandles.surfaceProxy = self
@@ -110,11 +110,12 @@ class Realtime(Panel, tag='realtime'):
 		self.timeOffsetLabel.setEnabled(False)
 		self.scene().view.loadingFinished.connect(self.onLoadFinished)
 
-	@asyncSlot()
-	async def onLoadFinished(self):
+	@Slot()
+	def onLoadFinished(self):
 		if not self.__pendingActions:
 			return
-		await gather(*self.__pendingActions)
+		for action in self.__pendingActions.values():
+			action()
 
 	def _init_defaults_(self):
 		super()._init_defaults_()
@@ -134,7 +135,11 @@ class Realtime(Panel, tag='realtime'):
 		super(Realtime, self)._init_args_(*args, **kwargs)
 
 	def __repr__(self):
-		return f'Realtime(key={self.key.name}, display={self.display.displayType.value})'
+		try:
+			keyName = self.key.name
+		except AttributeError:
+			keyName = 'NotKeyed'
+		return f'Realtime(key={keyName}, display={self.display.displayType.value})'
 
 	def __rich_repr__(self):
 		yield 'value', self.container
@@ -160,6 +165,9 @@ class Realtime(Panel, tag='realtime'):
 		if event.mimeData().hasFormat('text/plain'):
 			self.key = event.mimeData().text()
 			event.accept()
+
+	def refresh(self):
+		self.display.refresh()
 
 	@cached_property
 	def title(self):
@@ -297,10 +305,10 @@ class Realtime(Panel, tag='realtime'):
 		self._container = container
 		trueRealtimePreferred = False  # This is a placeholder for a future option.
 
-		async def setupScheduledCheck():
+		def setupScheduledCheck():
 			raise NotImplementedError
 
-		async def startConnecting():
+		def startConnecting():
 			if not self.forecast:
 				firstAttemptContainer: Container = self.container.getRealtimeContainer(self.source, realtimePossible)
 			else:
@@ -312,13 +320,13 @@ class Realtime(Panel, tag='realtime'):
 				# It can be assumed from here forward that the MultiSourceContainer will
 				# have a realtime source available.
 				if not self.forecast:
-					container.getPreferredSourceContainer(self, AnySource, firstRealtimeContainerAvailable())
+					container.getPreferredSourceContainer(self, AnySource, firstRealtimeContainerAvailable)
 				else:
-					container.getDailyContainer(self, AnySource, firstRealtimeContainerAvailable())
+					container.getDailyContainer(self, AnySource, firstRealtimeContainerAvailable)
 			else:
-				loop.create_task(firstRealtimeContainerAvailable())
+				firstRealtimeContainerAvailable()
 
-		async def firstRealtimeContainerAvailable():
+		def firstRealtimeContainerAvailable():
 			# This should only be called once!
 			if not self.forecast:
 				anyRealtimeContainer = self.container.getRealtimeContainer(self.source, realtimePossible) or self.container.getRealtimeContainer(self.source, False)
@@ -353,15 +361,15 @@ class Realtime(Panel, tag='realtime'):
 			      and anyRealtimeContainer.isRealtimeApproximate):
 				# A true real time source is possible and better than what is
 				# currently connected.
-				container.getTrueRealtimeContainer(self, AnySource, approximateRealtimeOnLastAttempt())
+				container.getTrueRealtimeContainer(self, AnySource, approximateRealtimeOnLastAttempt)
 
 			elif self.forecast and self.source != anyRealtimeContainer.source:
 				# There's a preferred source, but this ain't it...ask the MultiSourceContainer
 				# to notify when the preferred source is available.
-				container.getPreferredSourceContainer(self, self.source, notPreferredSourceOnLastAttempt())
+				container.getPreferredSourceContainer(self, self.source, notPreferredSourceOnLastAttempt)
 
 		# This should be called when a source is specified or changed
-		async def notPreferredSourceOnLastAttempt():
+		def notPreferredSourceOnLastAttempt():
 			if not self.forecast:
 				preferredSourceContainer = self.container.getRealtimeContainer(self.source)
 			else:
@@ -373,7 +381,7 @@ class Realtime(Panel, tag='realtime'):
 
 			# This should also never happen
 			if preferredSourceContainer.source is not self.source:
-				container.getPreferredSourceContainer(self, self.source, notPreferredSourceOnLastAttempt())
+				container.getPreferredSourceContainer(self, self.source, notPreferredSourceOnLastAttempt)
 				return
 
 			# If the preferred source does not have a realtime value
@@ -391,10 +399,10 @@ class Realtime(Panel, tag='realtime'):
 					return any(isinstance(obs, RealtimeSource) for obs in sources)
 
 				# We have the correct source, but a realtime value has not been received yet
-				preferredSourceContainer.notifyOnRequirementsMet(self, requirementCheck, wasPreferredSourceButNotTrueRealtime())
+				preferredSourceContainer.notifyOnRequirementsMet(self, requirementCheck, wasPreferredSourceButNotTrueRealtime)
 
 		# This should be called when any source will be accepted
-		async def approximateRealtimeOnLastAttempt():
+		def approximateRealtimeOnLastAttempt():
 			# ask for containers again, but only those with true realtime sources
 			trueRealtimeContainer = self.container.getRealtimeContainer(AnySource, strict=True)
 
@@ -414,7 +422,7 @@ class Realtime(Panel, tag='realtime'):
 			# 		pass
 			#
 			# # Accept a realtime approximate source and connect to it if not already
-			# loop.create_task(self.connectToAny())
+			# self.connectToAny()
 
 			# If the preferred source does not have a realtime value
 			if trueRealtimeContainer.isRealtimeApproximate:
@@ -436,12 +444,16 @@ class Realtime(Panel, tag='realtime'):
 			# Everything checks out, connect to the realtime source
 			self.connectRealtime(trueRealtimeContainer)
 
-		async def wasPreferredSourceButNotTrueRealtime():
+		def wasPreferredSourceButNotTrueRealtime():
 			preferredTrueRealtimeContainer = self.container.getRealtimeContainer(self.source, strict=True)
 			self.connectRealtime(preferredTrueRealtimeContainer)
 
-		loop.create_task(startConnecting())
+		if self._actionPool.can_execute:
+			startConnecting()
+		else:
+			self._actionPool.add(startConnecting)
 
+	# @thread_safe
 	def connectRealtime(self, container: Container):
 		if self.__connectedContainer is container:
 			return True
@@ -452,25 +464,24 @@ class Realtime(Panel, tag='realtime'):
 		if not disconnected:
 			raise ValueError('Failed to disconnect from existing timeseries')
 
-		connected = container.channel.connectSlot(self.updateSlot)
-		if connected:
+		if connected := container.channel.connectSlot(self.updateSlot):
 			self.__connectedContainer = container
-			log.verbose(f'Realtime {self.key.name} connected to {self.__connectedContainer!r}', verbosity=1)
+			log.verbose(f'Realtime {self.key.name} connected to {self.__connectedContainer.log_repr}', verbosity=1)
 		else:
-			log.warning(f'Realtime {self.key.name} failed to connect to {container}')
+			log.warning(f'Realtime {self.key.name} failed to connect to {container.log_repr}')
 			return
 
-		# The logic for after a connection is made
 		if container.metadata['type'] == 'icon' and container.metadata['iconType'] == 'glyph':
 			self.display.valueTextBox.textBox.setTextAccessor(None)
 		if self.title.isEnabled() and self.title.allowDynamicUpdate():
-			self.title.textBox.setTextAccessor(lambda: container.value['title'])
-		self.lastUpdate = get_event_loop().time()
+			self.title.textBox.setTextAccessor(lambda: container.title)
+		self.lastUpdate = process_time()
 		self.display.splitter.updateUnitDisplay()
 		self.__updateTimeOffsetLabel()
 
 		self.display.refresh()
 		self.updateToolTip()
+
 		return connected
 
 	def disconnectRealtime(self) -> bool:
@@ -484,21 +495,17 @@ class Realtime(Panel, tag='realtime'):
 			return disconnected
 		raise ValueError('No timeseries connected')
 
-	@asyncSlot(MultiSourceContainer)
-	async def testSlot(self, container: MultiSourceContainer):
+	@Slot(MultiSourceContainer)
+	def testSlot(self, container: MultiSourceContainer):
 		if isinstance(container, MultiSourceContainer):
 			self.container = container
 			LevityDashboard.get_channel(self.key).disconnectSlot(self.testSlot)
 
 	def adjustContentStaleTimer(self):
-		if QThread.currentThread() is QApplication.instance().thread():
-			loop.call_soon_threadsafe(self.adjustContentStaleTimer)
-			return
 
 		self.__updateTimeOffsetLabel()
-		now = get_event_loop().time()
-		last = self.lastUpdate or get_event_loop().time()
-		self.updateFreqency = now - last
+		last = self.lastUpdate or process_time()
+		self.updateFreqency = process_time() - last
 
 		def resumeRegularInterval():
 			self.contentStaleTimer.stop()
@@ -510,12 +517,12 @@ class Realtime(Panel, tag='realtime'):
 		self.contentStaleTimer.setInterval(1000*(self.updateFreqency + 15))
 		self.contentStaleTimer.start()
 
-	@asyncSlot()
-	async def updateSlot(self, *args):
+	@Slot(object)
+	def updateSlot(self, *args):
 		self.setOpacity(1)
 		self.display.refresh()
 		self.updateToolTip()
-		loop.call_soon_threadsafe(self.adjustContentStaleTimer)
+		# loop.call_soon_threadsafe(self.adjustContentStaleTimer)
 
 	def updateToolTip(self):
 		try:
@@ -525,9 +532,9 @@ class Realtime(Panel, tag='realtime'):
 				if (s := getattr(self.value, 'source', None)) is not None and (n := getattr(s, 'name', None)) is not None:
 					name += f': {n}'
 			if container.isDailyOnly:
-				self.setToolTip(f'{name} {self.value.timestamp:%{DATETIME_NO_ZERO_CHAR}m/%{DATETIME_NO_ZERO_CHAR}d}')
+				self.setToolTip(f'{name} {self.value.timestamp:%-m/%-d}\nUpdated: {now():%-I:%M%p}')
 			else:
-				self.setToolTip(f'{name} @ {container.now.timestamp:%{DATETIME_NO_ZERO_CHAR}I:%M%p}')
+				self.setToolTip(f'{name} @ {container.now.timestamp:%-I:%M%p}')
 
 		except AttributeError:
 			self.setToolTip('')
@@ -818,7 +825,7 @@ class MeasurementDisplayProperties(Stateful):
 
 	@property
 	def __isValid(self) -> bool:
-		return self.measurement is not None
+		return self.localGroup.value is not None
 
 	@StateProperty(key='unit-string', default=Unset, allowNone=False)
 	def unit_string(self) -> str:
@@ -838,7 +845,7 @@ class MeasurementDisplayProperties(Stateful):
 	def hasUnit(self) -> bool:
 		return self.unit_string is not Unset and self.unit_string
 
-	@StateProperty(default=Unset, allowNone=False)
+	@StateProperty(key='max-length',default=Unset, allowNone=False)
 	def maxLength(self) -> int:
 		if self.__maxLength is Unset and self.__isValid:
 			return getattr(self.measurement, 'max', Unset)
@@ -1065,8 +1072,23 @@ class MeasurementDisplayProperties(Stateful):
 				log.warning(f'Could not convert {value} to {convertTo}', exc_info=e)
 		if hash((value, type(value))) != self.__measurementHash:
 			self.__measurementHash = hash((value, type(value)))
-			list(i.textBox.refresh() for i in self.childItems() if isinstance(i, UnitLabel))
+			QTimer.singleShot(0, self.unitTextBox.textBox.refresh)
+		if isinstance(value, Measurement):
+			value.__dict__.update(self.unit_dict)
 		return value
+
+	@property
+	def unit_dict(self) -> dict[str, str|int]:
+		unit_props = {}
+		if self.__shorten is not Unset:
+			unit_props['_shorten'] = parse_bool(self.__shorten)
+		if self.__unit is not Unset:
+			unit_props['_unit'] = self.__unit
+		if self.__precision is not Unset:
+			unit_props['_precision'] = int(self.__precision)
+		if self.__maxLength is not Unset:
+			unit_props['_max'] = int(self.__maxLength)
+		return unit_props
 
 	@property
 	def icon(self) -> Icon | None:
@@ -1086,7 +1108,7 @@ class MeasurementDisplayProperties(Stateful):
 				measurement.precision = precision
 			if (formatString := self.formatString) is not None and measurement is not None:
 				if isinstance(formatString, dict):
-					formatString = f'{", ".join(f"{k}: {value}" for k, value in formatString.items())}'
+					formatString = f'{", ".join(f"{k}={value}" for k, value in formatString.items())}'
 				return f'{measurement:{formatString}}'
 			elif measurement is None:
 				return None
@@ -1305,6 +1327,7 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 		mouseEvent.ignore()
 		return
 
+	# @thread_safe
 	def refresh(self):
 		# self.a.setHtml(f'<div style="text-align: center; top: 50%;">{str(self.text)}</div>')
 		if self.displayProperties.hasUnit:

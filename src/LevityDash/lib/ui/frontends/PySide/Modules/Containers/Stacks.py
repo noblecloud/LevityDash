@@ -1,5 +1,4 @@
 import re
-from asyncio import get_running_loop
 from collections import defaultdict
 from dataclasses import dataclass
 from functools import cached_property, partial
@@ -21,7 +20,6 @@ from LevityDash.lib.ui.Geometry import (
 from LevityDash.lib.utils import DeepChainMap, mostSimilarDict, sortDict
 from WeatherUnits import Length
 
-loop = get_running_loop()
 
 @dataclass(frozen=True, slots=True, order=True)
 class DimensionSizePosition:
@@ -416,6 +414,7 @@ class Spacer(NonInteractivePanel, StackedItem, tag='spacer'):
 		self.setFlag(QGraphicsItem.ItemIsMovable, False)
 		self.setFlag(QGraphicsItem.ItemIsSelectable, False)
 		self.setFlag(QGraphicsItem.ItemIsFocusable, False)
+		self.setFlag(self.ItemHasNoContents)
 
 	@property
 	def key(self) -> str:
