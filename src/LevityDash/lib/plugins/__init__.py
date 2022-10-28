@@ -18,7 +18,15 @@ from LevityDash.lib.utils import PluginPool, PluginThread, UnsetKwarg
 
 Plugins: 'PluginsLoader'
 
-Plugins: 'PluginsLoader' = None
+@dataclass
+class PluginData:
+	name: str = field(hash=True)
+	instance: Plugin = field(repr=False)
+	thread: PluginThread = field(default=None, hash=False, repr=False, init=False)
+	requires: Optional[Dict[str, Any]] = field(default_factory=dict, hash=False, repr=False)
+
+	def __post_init__(self):
+		self.thread = self.instance.thread
 
 
 class GlobalSingleton(type):
