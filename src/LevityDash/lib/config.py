@@ -14,6 +14,7 @@ from typing import Callable, ClassVar, Text, Union
 from pytz import timezone
 from rich import prompt
 
+from . import LevityDashboard
 from .EasyPath import EasyPath, EasyPathFile
 
 _backupLogger = getLogger('LevityConfig')
@@ -75,8 +76,7 @@ class LevityConfig(ConfigParser):
 		)
 		self.optionxform = str
 
-		from LevityDash import __dirs__
-		dirs = __dirs__
+		dirs = LevityDashboard.paths
 
 		userPath = Path(dirs.user_config_dir)
 		if not userPath.exists():
@@ -212,8 +212,7 @@ class LevityConfig(ConfigParser):
 
 	@cached_property
 	def rootPath(self) -> EasyPath:
-		from LevityDash import __lib__
-		return EasyPath(__lib__.parent)
+		return EasyPath(LevityDashboard.paths.user_config_dir)
 
 	def save(self):
 		with self.path.path.open('w') as f:
@@ -296,13 +295,13 @@ class LevityConfig(ConfigParser):
 			case 'b' | 'byte' | 'bytes':
 				return int(_val)
 			case 'k' | 'kb' | 'kilobyte' | 'kilobytes':
-				return _val*1024
+				return _val * 10e2
 			case 'm' | 'mb' | 'megabyte' | 'megabytes':
-				return _val*1024 ** 2
+				return _val* 10e5
 			case 'g' | 'gb' | 'gigabyte' | 'gigabytes':
-				return _val*1024 ** 3
+				return _val * 10e8
 			case '_val' | 'tb' | 'terabyte' | 'terabytes':
-				return _val*1024 ** 4
+				return _val * 10e11
 			case _:
 				raise AttributeError(f'Unable to parse maxSize: {value}')
 

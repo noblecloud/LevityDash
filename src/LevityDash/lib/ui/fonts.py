@@ -7,7 +7,7 @@ from typing import Dict, List, Set, Tuple
 from PySide2.QtGui import QFont, QFontDatabase
 from PySide2.QtWidgets import QApplication
 
-from LevityDash import __resources__
+from LevityDash import LevityDashboard
 from LevityDash.lib.config import userConfig
 from LevityDash.lib.EasyPath import EasyPath
 from LevityDash.lib.log import LevityLogger
@@ -17,7 +17,7 @@ log = LevityLogger.getChild('fonts')
 database = QFontDatabase()
 
 userFontPath = userConfig.userPath["fonts"]
-builtInFontsPath = EasyPath(Path(__resources__) / 'fonts')
+builtInFontsPath = EasyPath(Path(LevityDashboard.resources) / 'fonts')
 
 if not userConfig.has_section("Fonts"):
 	defaultConfig = {
@@ -185,7 +185,7 @@ def loadFont(fontPath: EasyPath) -> Tuple[str, str]:
 	name = fontPath.name
 	id_ = database.addApplicationFont(fontPath.path.as_posix())
 	fontPath = database.applicationFontFamilies(id_)[0]
-	log.verbose(f'Loaded font {fontPath}', verbosity=2)
+	log.verbose(f'Loaded font {name}', verbosity=2)
 	return name, fontPath
 
 

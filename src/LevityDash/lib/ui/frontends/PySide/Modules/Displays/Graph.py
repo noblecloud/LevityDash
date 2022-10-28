@@ -334,7 +334,7 @@ class GraphItemData(Stateful, tag=...):
 	@asyncSlot(MultiSourceContainer)
 	async def listenForKey(self, container: MultiSourceContainer):
 		self.container = container
-		ValueDirectory.getChannel(self.key).disconnectSlot(self.listenForKey)
+		LevityDashboard.get_channel(self.key).disconnectSlot(self.listenForKey)
 
 	def __clearAxis(self, axis: Axis, rebuild: bool = True):
 		# TODO: Add a check to see if the axis value actually changed and only announce if it did
@@ -597,7 +597,7 @@ class GraphItemData(Stateful, tag=...):
 		# TODO: Figure out why windSpeed is not being set
 
 		if container is None:
-			ValueDirectory.notifyWhenKeyAdded(self.key, self.setContainer())
+			LevityDashboard.dispatcher.notifyWhenKeyAdded(self.key, self.setContainer)
 			return
 		if self.container is container:
 			return
@@ -4629,7 +4629,7 @@ class TimeseriesSourceMenu(SourceMenu):
 	def sources(self):
 		key = self.parent.item.key
 		if key is not None:
-			return [i for i in Plugins if i.hasTimeseriesFor(key)]
+			return [i for i in LevityDashboard.plugins if i.hasTimeseriesFor(key)]
 		return []
 
 	def addSource(self, source):

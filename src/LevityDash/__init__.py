@@ -1,30 +1,97 @@
+from types import ModuleType
+from typing import Type, TYPE_CHECKING
+
+from . import shims
+
+import builtins
+
 import sys
-from os import chdir
+from functools import cached_property
 from pathlib import Path
 from appdirs import AppDirs
 
 __version__ = "0.2.0-beta.1"
 
-__builtins__['CENTRAL_PANEL'] = None
-
 if sys.version_info < (3, 10, 0):
 	sys.exit(
 		"Python 3.10 or later is required. "
-		"See https://levityDash.app/gettinhg-started"
+		"See https://LevityDash.app/gettinhg-started"
 		"for installation instructions."
 	)
 
+if TYPE_CHECKING:
+	from PySide2.QtCore import QThread
 
-isCompiled = getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
 
-__lib__ = (Path(__file__).parent.parent if isCompiled else Path(__file__).parent).joinpath('lib')
-__resources__ = (Path(__file__).parent.parent if isCompiled else Path(__file__).parent).joinpath('resources')
-__dirs__ = AppDirs(appname='LevityDash', appauthor='LevityDash.app')
-__builtins__['__lib__'] = __lib__
-__builtins__['__dirs__'] = __dirs__
-__builtins__['__resources__'] = __resources__
+class _LevityAppDirs(AppDirs):
+	root: Path
+	lib: Path
+	resources: Path
+	shims: Path
+	data: Path = AppDirs.user_data_dir
+	config: Path = AppDirs.user_config_dir
+	cache: Path = AppDirs.user_cache_dir
+	log: Path = AppDirs.user_log_dir
+	site_data: Path = AppDirs.site_data_dir
+	site_config: Path = AppDirs.site_config_dir
 
-if isCompiled:
-	chdir(sys._MEIPASS)
+	def __init__(self, root: Path):
+		super().__init__(appname="LevityDash", appauthor="LevityDash.app")
+		self.root = root
+		self.lib = root / "lib"
+		self.resources = root / "resources"
+		self.shims = self.lib / "shims"
+		self.user_plugins = Path(self.site_data) / "plugins"
+		self.builtin_plugins = self.lib / "plugins" / "builtin"
 
-__all__ = ('__lib__', '__dirs__', '__resources__', '__version__')
+
+class _LevityDashboard(object):
+
+	__version__ = __version__
+	__slots__ = ('app', '__lib', 'config', 'pluginConfig', 'plugins', 'dispatcher',
+							 'log', 'get_channel', 'get_container', 'clock', 'status_bar', 'splash',
+							 'main_window', 'view', 'plugin_config', 'pluginPool', 'pluginThread',
+							 'main_action_pool', 'main_thread_pool', 'CENTRAL_PANEL','scene',
+							 'load_dashboard', 'main_thread')
+
+	plugins: 'LevityDashboard.lib.PluginsLoader'
+	dispatcher: 'LevityDashboard.lib.PluginValueDirectory'
+	config: 'LevityDashboard.lib.config.Config'
+	plugin_config: 'LevityDashboard.lib.config.PluginConfig'
+	log: Type['LevityDashboard.lib.log.LevityLogger']
+	app: 'LevityDashboard.lib.ui.PySide.LevityDashApp'
+	splash: 'LevityDashboard.lib.ui.PySide.SplashScreen'
+	main_thread_pool: 'LevityDashboard.lib.utils.shared.Pool'
+	main_thread: 'QThread'
+
+	__lib: ModuleType
+
+	isCompiled: bool = getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")
+	root = Path(__file__).parent.parent if isCompiled else Path(__file__).parent
+	paths = _LevityAppDirs(root)
+
+	resources = paths.resources
+	shims = shims
+
+	def __setattr__(self, key, value):
+		if key in self.__slots__:
+			try:
+				getattr(self, key)
+			except AttributeError:
+				return super().__setattr__(key, value)
+		raise TypeError("LevityDashboard is immutable")
+
+	def init(self):
+		import LevityDash.lib
+		object.__setattr__(self, '_LevityDashboard__lib', LevityDash.lib)
+
+	@property
+	def lib(self):
+		return self.__lib
+
+
+LevityDashboard = _LevityDashboard()
+builtins.LevityDashboard = LevityDashboard
+
+__all__ = ["__version__", "LevityDashboard"]
+del AppDirs, Path, sys, cached_property, builtins
