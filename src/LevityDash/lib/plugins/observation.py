@@ -1,17 +1,22 @@
+import asyncio
 from abc import ABC, ABCMeta, abstractmethod
-from asyncio import get_running_loop, iscoroutine, Lock
 from collections import deque
 from collections.abc import Generator
 from copy import copy
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone as _timezones, tzinfo
 from functools import cached_property, lru_cache, partial
+from inspect import Parameter, Signature
+from multiprocessing import Lock
 from numbers import Number
 from operator import add
 from os import environ
+from weakref import WeakValueDictionary
+
+from time import process_time
 from types import coroutine
 from typing import (
-	Any, Callable, ClassVar, Coroutine, Hashable, Iterable, Iterator, List, Mapping, Optional, OrderedDict, Set,
+	Any, Callable, ClassVar, Coroutine, Dict, Hashable, Iterable, Iterator, List, Mapping, Optional, OrderedDict, Set,
 	SupportsAbs, SupportsFloat, Tuple, Type, TYPE_CHECKING, TypeAlias, TypeVar, Union
 )
 from uuid import uuid4
@@ -20,21 +25,20 @@ import numpy as np
 from builtins import isinstance
 from dateutil.parser import parse
 from itertools import groupby
-from math import isinf
+from math import inf, isinf
 from PySide2.QtCore import QThread, Signal, Slot
 from PySide2.QtWidgets import QApplication
 from rich.progress import Progress
 
 import WeatherUnits as wu
 from LevityDash.lib.log import LevityPluginLog as log
-from LevityDash.lib.plugins import Accumulator, pluginLog, SchemaProperty, unitDict
 from LevityDash.lib.plugins.categories import CategoryDict, CategoryItem
 from LevityDash.lib.plugins.schema import LevityDatagram
-from LevityDash.lib.plugins.utils import ChannelSignal
+from LevityDash.lib.plugins.utils import ChannelSignal, Request, GuardedRequest, Accumulator, SchemaProperty, unitDict
 from LevityDash.lib.utils import (
 	clearCacheAttr, closest, connectSignal, DateKey, isa, LOCAL_TIMEZONE, mostCommonClass, mostFrequentValue,
 	NoValue, now,
-	Now, Period, roundToPeriod, toLiteral, UTC
+	Now, NowOffset, Period, Pool, roundToPeriod, thread_safe, toLiteral, UTC, Worker
 )
 
 if TYPE_CHECKING:
@@ -42,11 +46,9 @@ if TYPE_CHECKING:
 	from LevityDash.lib.plugins.categories import UnitMetaData
 
 REALTIME_THRESHOLD = timedelta(hours=1.5)
-DATETIME_NO_ZERO_CHAR = environ['LEVITY_DATETIME_NO_ZERO_CHAR']
+TIMESERIES_CUTOFF = timedelta(seconds=59)
+DAILY_CUTOFF = timedelta(days=1, minutes=-15)
 
-loop = get_running_loop()
-threadPool = QApplication.instance().pool
-Pool = type(threadPool)
 
 __all__ = [
 	"ObservationDict",
@@ -69,7 +71,7 @@ __all__ = [
 	"Container",
 ]
 
-log = pluginLog.getChild('Observation')
+log = log.getChild('Observation')
 
 def convertToCategoryItem(key, source: Hashable = None):
 	if not isinstance(key, CategoryItem):
@@ -84,7 +86,6 @@ class RealtimeSource(ABC):
 
 
 class TimeseriesSource(ABC):
-
 
 	@property
 	@abstractmethod
@@ -288,7 +289,7 @@ class ObservationValue(TimeAwareValue):
 			format_spec.remove('human')
 			if isinstance(value, datetime):
 				d = now()
-				timestamp = f'{value:%{DATETIME_NO_ZERO_CHAR}I:%M%p}'.lower()
+				timestamp = f'{value:%-I:%M%p}'.lower()
 				if value.day == d.day:
 					pass
 				elif value.day + 1 == d.day:
@@ -322,7 +323,7 @@ class ObservationValue(TimeAwareValue):
 		if self.timestamp is None:
 			timestamp = ' Unknown Time'
 		elif self.timestamp != self.__source.timestamp:
-			timestamp = f' @{self.timestamp:"%{DATETIME_NO_ZERO_CHAR}I:%M%p %m/%d"}'
+			timestamp = f' @{self.timestamp:"%-I:%M%p %m/%d"}'
 		else:
 			timestamp = ''
 		return f'{{\'{self.value.__class__.__name__}\'}} {self.value}{timestamp}'
@@ -413,7 +414,7 @@ class ArchivedObservationValue(ObservationValue):
 		if self.timestamp is None:
 			return f'{self.value} @ UnknownTime'
 		if self.timestamp != self.source.timestamp:
-			timestamp = f' @{self.timestamp:%{DATETIME_NO_ZERO_CHAR}I:%M%p %m/%d}'
+			timestamp = f' @{self.timestamp:%-I:%M%p %m/%d}'
 		else:
 			timestamp = ''
 		return f'{{\'{self.value.__class__.__name__}\'}} {self.value}{timestamp}'
@@ -1168,7 +1169,7 @@ class ObservationTimestamp(ObservationValue):
 				preVal = self.__value
 				self.__value = self.__value.astimezone().astimezone(_timezones.utc)
 				postVal = self.__value.replace(tzinfo=None)
-				pluginLog.warning(
+				log.warning(
 					f"Timestamp {self} does not have a timezone.  "
 					f"Assuming Local Timezone and converting to UTC with a "
 					f"difference of {wu.Time.Second((abs((preVal - postVal)).total_seconds())).auto}"
@@ -1192,7 +1193,7 @@ class ObservationTimestamp(ObservationValue):
 		return value
 
 	def __repr__(self):
-		return f'{self.value:%{DATETIME_NO_ZERO_CHAR}I:%M%p %m/%d)}'
+		return f'{self.value:%-I:%M%p %m/%d)}'
 
 	def __str__(self):
 		return self.__repr__()
@@ -1320,7 +1321,7 @@ class ObservationDict(PublishedDict):
 			else:
 				cls.itemClass = type(cls.__name__ + 'Value', (ObservationValue,), {})
 
-		cls.log = pluginLog.getChild(cls.__name__)
+		cls.log = log.getChild(cls.__name__)
 		return super(ObservationDict, cls).__init_subclass__()
 
 	def __init__(self, published: bool = None, recorded: bool = None, timestamp: Optional[ObservationTimestamp] = None, *args, **kwargs):
@@ -1330,9 +1331,6 @@ class ObservationDict(PublishedDict):
 		self._published = published
 		self._recorded = recorded
 		self.__dataName = None
-
-		if self.published:
-			self.accumulator = Accumulator(self)
 
 		if not self.__class__.__recorded and recorded:
 			RecordedObservation.register(self)
@@ -1351,7 +1349,7 @@ class ObservationDict(PublishedDict):
 		return super(ObservationDict, self).__contains__(item)
 
 	async def asyncUpdate(self, data, **kwargs):
-		global threadPool
+		threadPool = self.source.thread_pool
 		threadPool.run_threaded_process(self.update, data, **kwargs)
 
 	def update(self, data: dict, **kwargs):
@@ -1411,6 +1409,7 @@ class ObservationDict(PublishedDict):
 				value = self.itemClass(value=value, key=key, source=self, container=self)  # Eventually 'source' should be the gathered from 'update()
 				valueKey = convertToCategoryItem(value.key)
 				key = valueKey
+				assert isinstance(hash(valueKey), int)
 				super(ObservationDict, self).__setitem__(valueKey, value)
 			else:
 				super(ObservationDict, self).__setitem__(key, None)
@@ -1590,15 +1589,14 @@ class ObservationDict(PublishedDict):
 		return {value['sourceKey']: key for key, value in self.schema.items() if 'sourceKey' in value}
 
 	@property
-	def source(self):
+	def source(self) -> 'Plugin':
 		return self._source
 
 	@source.setter
 	def source(self, value):
 		if hasattr(value, 'observations'):
 			self._source = value
-			if self.published:
-				self.accumulator.connectSlot(value.publisher.publish)
+			self.accumulator.connectSlot(value.publisher.publish)
 
 	@cached_property
 	def categories(self):
@@ -1741,7 +1739,9 @@ class ObservationTimeSeries(ObservationDict, published=True):
 	period: timedelta
 	timeframe: timedelta
 	__timeseries__: dict[DateKey, Observation]
-	thread_pool: Pool
+	thread_pool: Pool = cached_property(lambda self: self.source.thread_pool)
+	plugin: 'Plugin'
+	_subscribed_items: Set[CategoryItem]
 
 	itemClass: Type[ObservationTimeSeriesItem]
 
@@ -1756,6 +1756,7 @@ class ObservationTimeSeries(ObservationDict, published=True):
 
 	def __init__(self, source: 'Plugin', *args, **kwargs):
 		self._source = source
+		self._subscribed_items = set()
 		super(ObservationTimeSeries, self).__init__(*args, **kwargs)
 		self.__knownKeys = set()
 		self.__timeseries__ = {}
@@ -1772,23 +1773,66 @@ class ObservationTimeSeries(ObservationDict, published=True):
 				obs['precipitationAccumulation'] = accumulation
 		self['datetime'] = [time.datetime for time in self['time'].keys()]
 
+	@property
+	def subscribed_items(self) -> Set[CategoryItem]:
+		return self._subscribed_items
+
+	def add_subscribed_item(self, item: CategoryItem):
+		self._subscribed_items.add(item)
+		if item in self.__knownKeys:
+			self[item].refresh()
+
 	def keySelector(self, *keys) -> Union[bool, str]:
 		s = set(keys).intersection(self.knownKeys)
 		if s:
 			return list(s)[0]
 		return False
 
-	@cached_property
-	def thread_pool(self) -> Pool:
-		return Pool()
-
 	@property
 	def knownKeys(self):
 		return self.__knownKeys
 
-	def update(self, data: dict, **kwargs):
-		keyMap = data.get('keyMap', {})
+	def process_item(self, item, keys, keyMap, source):
+		if not isinstance(item, Mapping):
+			item = {k: v for k, v in zip(keyMap, item)}
+		if isinstance(item, ArchivedObservation):
+			if isinstance(item, ObservationTimeSeriesItem):
+				timestamp = next((j for i in item.values() if (j := getattr(i, 'timestamp', None)) is not None), None)
+				if timestamp is None:
+					breakpoint()
+				source.append(item_source := item.timeseries)
+			else:
+				timestamp = item.timestamp
+				source.append(item_source := item.source)
 
+			key = ObservationTimestamp(timestamp, item_source, False, roundedTo=self.period)
+			if isinstance(self.source, RealtimeSource):
+				obs = self.__timeseries__.get(key, None) or self.buildObservation(key)
+				for k, v in item.items():
+					obs[k] = v
+			else:
+				self.__timeseries__[key] = obs = item
+
+		else:
+			key = ObservationTimestamp(item, self, False, roundedTo=self.period)
+			obs = self.__timeseries__.get(key, None) or self.buildObservation(key)
+			obs.update(item, source=source)
+		keys.update(obs.keys())
+
+	def update(self, data: dict, **kwargs):
+		# pre_worker = Worker.create_worker(self.__pre_update, data, func_kwargs=kwargs)
+		# pre_worker.pool = self.thread_pool
+		# pre_worker.link_worker_result(self.update_worker)
+		# self.thread_pool.start(pre_worker, priority=3)
+
+		self.__post_update(self.__update(*self.__pre_update(data, **kwargs)))
+
+	@cached_property
+	def update_worker(self) -> Worker:
+		return Worker.create_worker(self.__update, on_result=self.__post_update, immortal=True)
+
+	def __pre_update(self, data: dict, **kwargs) -> tuple[list, set[Any], dict[Any, Any] | Any, list[str | Any]]:
+		keyMap = data.get('keyMap', {})
 		source = [self.source.name]
 		if 'source' in kwargs:
 			source.append(*kwargs['source'])
@@ -1814,66 +1858,32 @@ class ObservationTimeSeries(ObservationDict, published=True):
 		if not isinstance(raw, List):
 			raise ValueError('ObservationTimeSeries.update: data must be a dict or a list of dicts')
 
-		def process_item(item):
-			if not isinstance(item, Mapping):
-				item = {k: v for k, v in zip(keyMap, item)}
-			if isinstance(item, ArchivedObservation):
-				if isinstance(item, ObservationTimeSeriesItem):
-					timestamp = next((j for i in item.values() if (j := getattr(i, 'timestamp', None)) is not None), None)
-					if timestamp is None:
-						breakpoint()
-					source.append(item_source := item.timeseries)
-				else:
-					timestamp = item.timestamp
-					source.append(item_source := item.source)
+		return raw, keys, keyMap, source
 
-				key = ObservationTimestamp(timestamp, item_source, False, roundedTo=self.period)
-				if isinstance(self.source, RealtimeSource):
-					obs = self.__timeseries__.get(key, None) or self.buildObservation(key)
-					for k, v in item.items():
-						obs[k] = v
-				else:
-					self.__timeseries__[key] = obs = item
+	def __update(self, raw, keys, keyMap, source) -> set:
 
-			else:
-				key = ObservationTimestamp(item, self, False, roundedTo=self.period)
-				obs = self.__timeseries__.get(key, None) or self.buildObservation(key)
-				obs.update(item, source=source)
-			keys.update(obs.keys())
+		for item in raw:
+			self.process_item(item, keys, keyMap, source)
 
-		def updateWithProgress(raw: List[Dict], progress: Progress | None):
-			func_kwargs = dict(priority=5)
-			if progress is not None:
-				func_kwargs['on_finish'] = partial(progress.update, task, advance=1, refresh=True)
-			for rawObs in raw:
-				self.thread_pool.run_threaded_process(process_item, rawObs, **func_kwargs)
+		return keys
 
-			self.thread_pool.waitForDone()
-
-			if progress is not None:
-				progress.update(task, complete=True, refresh=True)
-
-		if len(raw) > 5:
-			progress = Observation.progress
-			task = progress.add_task(f'Updating [blue]{source[0]}.{self.dataName}', total=len(raw), transient=True)
-			progress.start_task(task)
-			updateWithProgress(raw, None)
-			progress.stop_task(task)
-		else:
-			updateWithProgress(raw, None)
-
+	def __post_update(self, keys):
 		self.__knownKeys.update(keys)
 
 		keys = {key for key in keys if key.category not in self._ignoredFields and key.category ^ 'time'}
 
-		self.removeOldObservations()
-		if self.published:
-			for key in keys.intersection(self.keys()):
+		# self.thread_pool.run_in_thread(self.removeOldObservations, priority=2)
+
+		keys_to_publish = keys
+		if not self.published:
+			keys_to_publish = keys & self._subscribed_items
+		if keys_to_publish:
+			for key in keys_to_publish:
 				self[key].refresh()
-			self.accumulator.publish(*keys)
+			self.accumulator.publish(*keys_to_publish)
 
 	def __missing__(self, key):
-		if key in self.__knownKeys:
+		if key in self.__knownKeys or key in self.source.schema:
 			timeseries = MeasurementTimeSeries(self, key)
 			dict.__setitem__(self, key, timeseries)
 			return timeseries
@@ -1980,8 +1990,8 @@ class ObservationTimeSeries(ObservationDict, published=True):
 	def timeseriesItems(self):
 		return self.__timeseries__.items()
 
-	def keys(self):
-		return self.__knownKeys
+	def keys(self) -> frozenset[CategoryItem]:
+		return frozenset(self.__knownKeys)
 
 	def __iter__(self):
 		return self.__timeseries__.__iter__()
@@ -1991,10 +2001,7 @@ class ObservationTimeSeries(ObservationDict, published=True):
 
 	def __getitem__(self, key) -> Union[List[wu.Measurement], Observation]:
 		if isinstance(key, CategoryItem):
-			if key in self.__knownKeys:
-				return super(ObservationTimeSeries, self).__getitem__(key)
-			else:
-				raise KeyError(f'{key} is not a known key')
+			return super(ObservationTimeSeries, self).__getitem__(key)
 		if isinstance(key, (ObservationTimestamp, datetime)):
 			return self.__timeseries__[key]
 		return super(ObservationTimeSeries, self).__getitem__(key)
@@ -2021,7 +2028,7 @@ class ObservationTimeSeries(ObservationDict, published=True):
 	def sortKey(self):
 		return self.period
 
-
+# Section ObservationLog
 @TimeseriesSource.register
 class ObservationLog(ObservationTimeSeries, published=False, recorded=True):
 	archiveAfter: timedelta = timedelta(minutes=15)  # TODO: Make this a configurable option
@@ -2100,9 +2107,6 @@ class TimeSeriesSignal(ChannelSignal):
 		ChannelSignal.muted.fset(self, value)
 
 	def _emit(self):
-		if QThread.currentThread() != QApplication.instance().thread():
-			loop.call_soon_threadsafe(self._emit)
-			return
 		if self._references and self._pending:
 			self._bubble_up.emit(self._pending)
 		self._signal.emit()
@@ -2138,6 +2142,7 @@ class TimeSeriesSignal(ChannelSignal):
 		return connected
 
 	def connectReference(self, reference: 'TimeSeriesSignal'):
+		"""Connects a reference to bubble up signal"""
 		if connectSignal(self._bubble_up, reference.collect_from_references):
 			self._references[reference._source] = reference.collect_from_references
 			return True
@@ -2161,7 +2166,7 @@ class TimeHash:
 		self.__interval = interval
 
 	def __hash__(self):
-		return int(loop.time() // self.__interval)
+		return int(process_time() // self.__interval)
 
 
 TimeHash.Daily = TimeHash(timedelta(days=1))
@@ -2193,7 +2198,7 @@ class MeasurementTimeSeries(OrderedDict):
 	_key: CategoryItem
 	_source: Union[Observation, 'Plugin']
 	offset = 0
-	log = pluginLog.getChild('MeasurementTimeSeries')
+	log = log.getChild('MeasurementTimeSeries')
 	__lastHash: int
 	__references: Set[Hashable]
 	__nullValue: Optional[TimeAwareValue]
@@ -2218,6 +2223,11 @@ class MeasurementTimeSeries(OrderedDict):
 		if self.isMultiSource:
 			source: 'Plugin'
 			source.publisher.connectChannel(self.key, self.sourceChanged)
+			for obs in source.observations:
+				if isinstance(obs, ObservationTimeSeries):
+					ts: MeasurementTimeSeries = obs[self.key]
+					ts.addReference(self)
+					obs.add_subscribed_item(self.key)
 
 	def __valuesHash(self) -> int:
 		return hash(tuple(getattr(i, 'rawValue', i) for i in self.values()))
@@ -2265,6 +2275,7 @@ class MeasurementTimeSeries(OrderedDict):
 		pass
 
 	def addReference(self, reference: Hashable):
+		# Informs the time series that it is being referenced by another time series
 		if reference in self.__references:
 			return
 		self.__references.add(reference)
@@ -2295,16 +2306,16 @@ class MeasurementTimeSeries(OrderedDict):
 
 	@property
 	def hasTimeseries(self):
-		if isinstance(self._source, ObservationTimeSeries):
-			return True
-		return any(
-			item.hasTimeseries and item.hasValues
-			for item in (e[self._key] for e in self._source.observations
-			             if self._key in e
-			             and hasattr(e[self._key], 'hasTimeseries'))
-		)
+		source = self._source
+		if isinstance(source, ObservationTimeSeries):
+			source = source.plugin
+		try:
+			container: 'Container' = source[self.key]
+			return container.isTimeseries
+		except Exception:
+			return False
 
-	def filter(self, obs: Observation) -> bool:
+	def filter(self, obs: ObservationDict) -> bool:
 		minPeriod = self.__minPeriod or timedelta(days=-400)
 		maxPeriod = self.__maxPeriod or timedelta(days=400)
 		return minPeriod <= obs.period <= maxPeriod
@@ -2312,7 +2323,7 @@ class MeasurementTimeSeries(OrderedDict):
 	@property
 	def sources(self) -> Set[Union['Observation', 'MeasurementTimeSeries']]:
 		if self.isMultiSource:
-			return {e[self._key] for e in self._source.observations if self._key in e and self.filter(e)}
+			return {e[self._key] for e in self._source.observations if self._key in e}
 		else:
 			return {self._source}
 
@@ -2364,7 +2375,7 @@ class MeasurementTimeSeries(OrderedDict):
 			if isinstance(self._source, ObservationTimeSeries):
 				_logger(f'{self} updating from single source of length {len(self._source.timeseries)}')
 				itemCount = 0
-				for item in [v[key] for v in self._source.timeseries.values() if key in v]:
+				for item in [v[key] for v in tuple(self._source.timeseries.values()) if key in v]:
 					itemCount += 1
 					self[item.timestamp] = item
 				log.verbose(
@@ -2376,6 +2387,7 @@ class MeasurementTimeSeries(OrderedDict):
 				)
 			else:
 				values = self.__sourcePull()
+
 
 				for item in values:
 					self[item.timestamp] = item
@@ -2391,10 +2403,9 @@ class MeasurementTimeSeries(OrderedDict):
 			if thisHash != self.__lastHash:
 				_logger(f'{self} has changed, clearing cache and publishing changes', verbosity=3)
 				self.__clearCache()
-				if not self.isMultiSource:
-					self.signals.publish(self.observations)
 			else:
-				log.verbose(f'{self} has not changed', verbosity=5)
+				log.verbose(f'{self} has not changed', verbosity=4)
+			self.signals.publish(changed)
 			self.__lastHash = thisHash
 
 	def __sourcePull(self) -> list[ObservationValue]:
@@ -2404,7 +2415,6 @@ class MeasurementTimeSeries(OrderedDict):
 		log.verbose(f'{self} refreshing sources', verbosity=3)
 		for item in sources:
 			if isinstance(item, MeasurementTimeSeries):
-				item.addReference(self)
 				item.refresh()
 				log.verbose(f'{self} refreshed {item.source.dataName} source', verbosity=4)
 
@@ -2673,7 +2683,7 @@ class MeasurementTimeSeries(OrderedDict):
 class Container:
 	__containers__ = {}
 
-	_awaitingRequirements: Dict[Hashable, Tuple[Callable[[Set['Observation']], bool], Callable]]
+	_awaitingRequirements: Dict[Hashable, GuardedRequest]
 
 	source: 'Plugin'
 	key: CategoryItem
@@ -2720,13 +2730,26 @@ class Container:
 		if any(not isinstance(source, RealtimeSource) for source in sources):
 			self.__clearCache()
 		if self._awaitingRequirements:
-			for requester, (requirement, callback) in self._awaitingRequirements.items():
-				if requirement(sources):
-					if iscoroutine(callback):
-						loop.create_task(callback(), name=f'P{requester}RequirementsMet')
+			for request in list(self._awaitingRequirements.values()):
+				match request.guard_signature:
+					case {'sources': Parameter(name='sources')}:
+						guarded = not request.guard(sources)
+					case {'plugin': Parameter(name='plugin')}:
+						guarded = not request.guard(self.source)
+					case {'container': Parameter(name='container')}:
+						guarded = not request.guard(self)
+					case _:
+						guarded = True
+				if not guarded:
+					try:
+						request.callback()
+					except Exception as e:
+						log.error(f'Failed to call callback for {request.requester}: {e}')
 					else:
-						loop.call_soon_threadsafe(callback)
-					del self._awaitingRequirements[requester]
+						try:
+							del self._awaitingRequirements[request.requester]
+						except KeyError:
+							pass
 
 	@lru_cache(maxsize=8)
 	def getFromTime(self, time: timedelta | datetime, timehash: TimeHash = TimeHash.Minutely) -> Optional[Observation]:
@@ -2736,6 +2759,10 @@ class Container:
 
 	def __repr__(self):
 		return f'Container({self.source.name}:{self.key[-1]} {self.value})'
+
+	@property
+	def log_repr(self):
+		return f'Container({self.source.name}:{self.key.name})'
 
 	def __rich_repr__(self):
 		yield 'key', self.key.name
@@ -2764,13 +2791,10 @@ class Container:
 
 	def prepare_for_ts_connection(self, callback: Callable):
 		log.verbose(f'Preparing for timeseries connection: {self.key}')
-		if iscoroutine(callback):
-			loop.create_task(callback, name='PrepareForTSConnection')
-		else:
-			global threadPool
-			threadPool.run_threaded_process(
-				self.timeseries.update, on_finish=callback, priority=2
-			)
+		threadPool = self.source.thread_pool
+		threadPool.run_threaded_process(
+			self.timeseries.update, on_finish=callback, priority=2
+		)
 
 	@property
 	def title(self):
@@ -2840,46 +2864,60 @@ class Container:
 	def metadata(self) -> 'UnitMetadata':
 		return self.source.schema.getExact(self.key)
 
+	def __realtime_guard(self, realtime: ObservationDict):
+		return isinstance(realtime, RealtimeSource) and self.key in realtime
+
 	@property
 	def isRealtime(self) -> bool:
-		return any(isinstance(obs, RealtimeSource) for obs in self.source.observations if self.key in obs)
+		return any(self.__realtime_guard(obs) for obs in self.source.observations)
 
 	@property
 	def isRealtimeApproximate(self) -> bool:
 		return (
 			not self.isRealtime
 			and self.isTimeseriesOnly
-			and any(obs.period < REALTIME_THRESHOLD
+			and any(
+			obs.period < REALTIME_THRESHOLD
 			for obs in self.source.observations
-			if self.key in obs)
+			if self.key in obs
+		)
 			or self.isDailyOnly
+		)
+
+	def __time_series_guard(self, timeseries: ObservationDict):
+		return self.key in timeseries and len(timeseries) > 3
+
+	@property
+	def isForecast(self) -> bool:
+		return any(
+			obs.period > timedelta(minutes=1)
+			for obs in self.source.observations
+			if self.__time_series_guard(obs)
 		)
 
 	@property
 	def isTimeseries(self) -> bool:
-		return any(isinstance(obs, TimeseriesSource)
-		           for obs in self.source.observations
-		           if self.key in obs
-		           and len(obs) > 3
-		           and obs.period > timedelta(hours=6)
+		return any(
+			obs.period > TIMESERIES_CUTOFF
+			for obs in self.source.observations
+			if self.__time_series_guard(obs)
 		)
 
 	@property
-	def isForecast(self) -> bool:
-		for obs in self.source.observations:
-			if self.key in obs and isinstance(obs, TimeseriesSource):
-				if len(obs.__timeseries__) > 3:
-					if obs.period < timedelta(hours=6):
-						return True
-		return False
-
-	@property
 	def isDaily(self) -> bool:
-		return any(abs(obs.period) >= timedelta(days=0.9) for obs in self.source.observations if self.key in obs)
+		return any(
+			abs(obs.period) >= DAILY_CUTOFF
+			for obs in self.source.observations
+			if self.__time_series_guard(obs)
+		)
 
 	@property
 	def isDailyForecast(self) -> bool:
-		return any(obs.period >= timedelta(days=0.9) for obs in self.source.observations if self.key in obs)
+		return any(
+			obs.period > DAILY_CUTOFF
+			for obs in self.source.observations
+			if self.__time_series_guard(obs)
+		)
 
 	@property
 	def isTimeseriesOnly(self) -> bool:
@@ -2887,7 +2925,47 @@ class Container:
 
 	@property
 	def isDailyOnly(self) -> bool:
-		return all(obs.period >= timedelta(days=1) for obs in self.source.observations if self.key in obs)
+		return all(
+			abs(obs.period) >= DAILY_CUTOFF
+			for obs in self.source.observations
+			if self.__time_series_guard(obs)
+		)
 
-	def notifyOnRequirementsMet(self, requester: Hashable, requirements: Callable[[Set['Observation']], bool], callback: Coroutine):
-		self._awaitingReuqirements[requester] = (requirements, callback)
+	@property
+	def isDailyForcastOnly(self):
+		return all(
+			obs.period > DAILY_CUTOFF
+			for obs in self.source.observations
+			if self.__time_series_guard(obs)
+		)
+
+	def notifyOnRequirementsMet(
+		self,
+		requester: Hashable = None,
+		guard: Callable[[Set['Observation']], bool] = None,
+		callback: Callable = None,
+		guarded_request: GuardedRequest = None,
+	):
+		signature = {}
+		if requester is not None:
+			signature['requester'] = requester
+		if guard is not None:
+			signature['guard'] = guard
+		if callback is not None:
+			signature['callback'] = callback
+		if guarded_request is not None:
+			signature['guarded_request'] = guarded_request
+
+		match signature:
+			case {'requester': GuardedRequest() as request, **rest} | {'guarded_request': GuardedRequest() as request, **rest}:
+				if guard := rest.get('guard', None):
+					request = request.with_guard(guard)
+			case {'requester': Request() as request, **rest} | {'guarded_request': Request() as request, **rest}:
+				if guard := rest.get('guard', None):
+					request = GuardedRequest.from_request(request, guard)
+			case {'requester': requester, 'callback': callback, 'guard': guard}:
+				request = GuardedRequest(**signature)
+			case _:
+				raise TypeError(f'Invalid signature: {signature}')
+
+		self._awaitingRequirements[request.requester] = request

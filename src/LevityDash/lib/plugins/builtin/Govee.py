@@ -3,18 +3,19 @@ import platform
 import re
 from datetime import timedelta
 from types import FunctionType
-from typing import Callable, Dict, Optional, Union
+from typing import Callable, Dict, Optional, Type, Union
 from uuid import UUID
 
 from bleak import BleakError, BleakScanner
 from bleak.backends.device import BLEDevice
-from qasync import asyncClose
 
 from LevityDash.lib.log import LevityPluginLog
+from LevityDash.lib.plugins.observation import ObservationRealtime
 from LevityDash.lib.plugins.plugin import Plugin
 from LevityDash.lib.plugins.schema import LevityDatagram, Schema, SchemaSpecialKeys as tsk
 from LevityDash.lib.plugins.utils import ScheduledEvent
 from LevityDash.lib.utils.shared import getOr, now
+
 
 pluginLog = LevityPluginLog.getChild('Govee')
 
@@ -254,16 +255,34 @@ class Govee(Plugin, realtime=True, logged=True):
 		return {k: v for k, v in deviceConfig.items() if v is not None}
 
 	def start(self):
-		asyncio.create_task(self.asyncStart())
+		loop = self.loop
+
+		def bootstrap():
+			self._task = self.asyncStart()
+			self.loop.run_until_complete(self._task)
+			pluginLog.info(f'{self.name} stopped!')
+			self.loop.stop()
+			del self.loop
+			self.pluginLog.info('Govee: shutdown complete')
+
+		loop.run_in_executor(None, bootstrap)
+
+		return self
 
 	async def asyncStart(self):
 		pluginLog.info(f'{self.name} starting...')
-		await self.run()
 
 		if self.historicalTimer is None:
 			self.historicalTimer = ScheduledEvent(timedelta(seconds=15), self.logValues).schedule()
 		else:
 			self.historicalTimer.schedule()
+
+		await self.run()
+
+		await self.future
+		self.pluginLog.info(f'{self.name}: shutdown started')
+
+
 
 	@property
 	def running(self) -> bool:
@@ -273,22 +292,23 @@ class Govee(Plugin, realtime=True, logged=True):
 		try:
 			await self.__init_device__()
 		except Exception as e:
-			pluginLog.error(f'Error initializing device: {e.args[0]}')
+			self.pluginLog.error(f'Error initializing device: {e.args[0]}')
 			return
 		try:
 			await self.scanner.start()
-			pluginLog.info(f'{self.name} started!')
+			self.pluginLog.info(f'{self.name} started!')
 			self.__running = True
 		except BleakError as e:
-			pluginLog.error(f'Error starting scanner: {e}')
+			self.pluginLog.error(f'Error starting scanner: {e}')
 			self.__running = False
 
 	def stop(self):
-		if self.running:
-			asyncio.create_task(self.asyncStop())
+		asyncio.run_coroutine_threadsafe(self.asyncStop(), self.loop)
 
 	async def asyncStop(self):
-		pluginLog.info(f'{self.name} stopping...')
+		self.pluginLog.info(f'{self.name} stopping...')
+		self.future.set_result(True)
+		self.future.cancel()
 		self.__running = False
 		try:
 			self.scanner.register_detection_callback(None)
@@ -299,9 +319,9 @@ class Govee(Plugin, realtime=True, logged=True):
 			pluginLog.error(f'Error stopping scanner: {e}')
 		if self.historicalTimer is not None and self.historicalTimer.running:
 			self.historicalTimer.stop()
-		pluginLog.info(f'{self.name} stopped!')
+		self.pluginLog.info(f'{self.name} stopped')
 
-	@asyncClose
+
 	async def close(self):
 		await self.asyncStop()
 

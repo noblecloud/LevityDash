@@ -1,13 +1,16 @@
+from asyncio import AbstractEventLoop, Future
+
+import asyncio
 from abc import abstractmethod
 from datetime import datetime, timedelta
 from functools import cached_property, lru_cache
 from operator import attrgetter
 from pathlib import Path
-from types import SimpleNamespace
-from typing import Any, Dict, Iterable, Optional, Text, Type, Union
+from types import SimpleNamespace, TracebackType
+from typing import Any, Dict, Iterable, Optional, Set, Text, Tuple, Type, TYPE_CHECKING, Union
 
-from LevityDash.lib.config import pluginConfig, PluginConfig
 from LevityDash.lib.EasyPath import EasyPath, EasyPathFile
+from LevityDash.lib.config import pluginConfig, PluginConfig
 from LevityDash.lib.log import LevityPluginLog as pluginLog
 from LevityDash.lib.plugins.categories import CategoryDict, CategoryItem
 from LevityDash.lib.plugins.observation import (
@@ -16,9 +19,12 @@ from LevityDash.lib.plugins.observation import (
 )
 from LevityDash.lib.plugins.schema import Schema
 from LevityDash.lib.plugins.utils import Publisher
-from LevityDash.lib.utils.shared import closest, Period
+from LevityDash.lib.utils.shared import closest, Period, PluginThread, Pool, Worker
 from LevityDash.lib.utils.shared import get
 from WeatherUnits import Time
+
+if TYPE_CHECKING:
+	from LevityDash.lib.plugins import PluginsLoader
 
 
 class ObservationList(list):
@@ -243,7 +249,7 @@ class PluginMeta(type):
 		return new_cls
 
 
-class SomePlugin(metaclass=PluginMeta, prototype=True):
+class SomePlugin(metaclass=PluginMeta):
 	name = 'any'
 
 	def __eq__(self, other):
@@ -271,7 +277,10 @@ class Plugin(metaclass=PluginMeta):
 	schema: Schema
 	publisher: Publisher
 	classes: Classes
-	observations: ObservationList[ObservationDict]
+	observations: ObservationList[ObservationRealtime | ObservationTimeSeries]
+
+	runner: Worker
+	loop: AbstractEventLoop
 
 	realtime: Optional[ObservationRealtime]
 	log: Optional[ObservationLog]
@@ -298,11 +307,29 @@ class Plugin(metaclass=PluginMeta):
 				continue
 			o = value(source=self)
 			o.dataName = key.lower()
-			if o.published:
-				o.accumulator.connectSlot(self.publisher.publish)
+			o.accumulator.connectSlot(self.publisher.publish)
 			self.observations.append(o)
 
 		self.config = self.getConfig(self)
+
+	def error_handler(self, exception: Exception, exc_info: Tuple[Type[Exception], Exception, TracebackType]):
+		self.pluginLog.exception(exception, exc_info=exc_info)
+
+	@cached_property
+	def thread(self) -> PluginThread:
+		return PluginThread(self)
+
+	@cached_property
+	def thread_pool(self) -> Pool:
+		return Pool()
+
+	@cached_property
+	def loop(self) -> AbstractEventLoop:
+		return asyncio.new_event_loop()
+
+	@cached_property
+	def future(self) -> Future:
+		return self.loop.create_future()
 
 	@abstractmethod
 	def start(self):

@@ -1,24 +1,25 @@
-from abc import abstractmethod
-from asyncio import (
-	coroutine, create_task, get_event_loop, get_running_loop, iscoroutine, iscoroutinefunction,
-	TimerHandle
-)
+from asyncio import TimerHandle, iscoroutinefunction, iscoroutine
+
 from collections import defaultdict
+
+from PySide2.QtCore import QObject, QThread, QTimer, Signal, Slot
+from PySide2.QtWidgets import QApplication
+from abc import abstractmethod
+from dataclasses import dataclass
 from datetime import datetime, timedelta
-from functools import partial
+from functools import cached_property, partial
+from inspect import Parameter, signature as get_signature
+from pytz import timezone
 from random import random as randomFloat
+from time import process_time
 from typing import (
 	Any, Callable, ClassVar, Coroutine, Dict, Hashable, Mapping, Optional, Set, Type, TYPE_CHECKING,
 	Union
 )
 
-from PySide2.QtCore import QObject, QThread, Signal, Slot
-from PySide2.QtWidgets import QApplication
-from pytz import timezone
-
 import WeatherUnits as wu
 from LevityDash.lib.log import LevityPluginLog as log
-from LevityDash.lib.utils import abbreviatedIterable, KeyData, loop, Now, now, SmartString
+from LevityDash.lib.utils import abbreviatedIterable, KeyData, Now, now, SmartString
 
 if TYPE_CHECKING:
 	from LevityDash.lib.plugins.categories import CategoryItem
@@ -240,9 +241,6 @@ class ChannelSignal(MutableSignal):
 			self._emit()
 
 	def _emit(self):
-		if QThread.currentThread() != QApplication.instance().thread():
-			loop.call_soon_threadsafe(self._emit)
-			return
 		self._signal.emit(self._pending)
 		self._pending.clear()
 
@@ -264,17 +262,13 @@ class ChannelSignal(MutableSignal):
 	def key(self):
 		return self._key
 
-	def addCallback(self, callback: coroutine, guardHash=None):
-		if not iscoroutine(callback):
-			raise TypeError(f'{callback} is not a coroutine')
+	def addCallback(self, callback: Callable, guardHash=None):
 		guardHash = guardHash or hash(callback)
 		if (existing := self._singleShots.pop(guardHash, None)) is not None:
 			existing.close()
 		self._singleShots[guardHash] = callback
 
-	def addConditionalCallback(self, callback: coroutine, condition: Callable[['MeasurementTimeSeries'], bool]):
-		if not iscoroutine(callback):
-			raise TypeError(f'{callback} is not a coroutine')
+	def addConditionalCallback(self, callback: Callable, condition: Callable[['MeasurementTimeSeries'], bool]):
 		self._conditionalSingleShots[callback] = condition
 
 
@@ -310,9 +304,6 @@ class Accumulator(MutableSignal):
 			self._emit()
 
 	def _emit(self):
-		if QThread.currentThread() != QApplication.instance().thread():
-			loop.call_soon_threadsafe(self._emit)
-			return
 		if not self._pending and not self._pendingSilent:
 			return
 		message = f'{self.__observation.__class__.__name__} announcing ({len(self._pending)}) changed values: {abbreviatedIterable(key.name for key in self._pending)}'
@@ -439,14 +430,12 @@ class ScheduledEvent(object):
 		staggerAmount: timedelta = None,
 		fireImmediately: bool = True,
 		singleShot: bool = False,
-		pool=None
+		loop=None,
 	):
 		if arguments is None:
 			arguments = ()
 		if keywordArguments is None:
 			keywordArguments = {}
-		if stagger is None:
-			stagger = False
 		if staggerAmount is None:
 			if isinstance(interval, Now):
 				interval_float = 0.0
@@ -455,7 +444,10 @@ class ScheduledEvent(object):
 			else:
 				interval_float = interval
 			staggerAmount = timedelta(seconds=min(interval_float * 0.1, 5 * 3600))
+		if stagger is None:
+			stagger = bool(staggerAmount)
 		self.__interval = interval
+		self.loop = loop
 
 		if not isinstance(interval, timedelta) and singleShot:
 			self.__interval = timedelta()
@@ -522,7 +514,17 @@ class ScheduledEvent(object):
 
 	@property
 	def running(self) -> bool:
-		return self.timer is not None and not self.timer.cancelled()
+		try:
+			timer = self.timer
+			if isinstance(timer, QTimer):
+				return timer.isActive()
+			return self.timer is not None and not self.timer.cancelled()
+		except AttributeError:
+			return False
+
+	@cached_property
+	def stagger_amount(self):
+		return self.__staggerAmount.seconds * (randomFloat() * 2 - 1)
 
 	@property
 	def when(self) -> datetime | timedelta:
@@ -530,11 +532,12 @@ class ScheduledEvent(object):
 			return timedelta()
 		when = self.__interval.total_seconds()
 		if self.__stagger:
-			seconds = self.__staggerAmount.seconds * (randomFloat() * 2 - 1)
-			loopTime = get_event_loop().time()
-			if seconds + loopTime < 0:
-				seconds = self.__staggerAmount.seconds * randomFloat()
-			when += seconds
+
+			loopTime = process_time()
+			staggered_by = self.stagger_amount
+			if when + staggered_by + loopTime <= loopTime + 1:
+				staggered_by = -staggered_by
+			when += staggered_by
 			when = timedelta(seconds=when)
 		return when
 
@@ -567,7 +570,7 @@ class ScheduledEvent(object):
 			self.log.exception(e)
 
 	def __run(self, startTime: datetime = None):
-		loop = get_event_loop()
+		self.__dict__.pop('stagger_amount', None)
 		when = self.when if startTime is None else startTime
 		if isinstance(when, datetime):
 			when = abs(datetime.now() - when)
@@ -579,19 +582,27 @@ class ScheduledEvent(object):
 		next_fire = wu.Time.Second(when)
 		if next_fire.timedelta >= self.logThreshold:
 			log.verbose(
-				f'{getattr(self.__owner, "name", self.__owner)} - Scheduled event {self.__func.__name__} in {next_fire.auto:simple}',
+				f'{getattr(self.__owner, "name", self.__owner)} - Scheduled event {self.__func.__name__} in {next_fire:simple}',
 				verbosity=0
 			)
 
-		self.timer = loop.call_soon(self.__fire) if self.fireImmediately else loop.call_later(when, self.__fire)
+		if (loop := self.loop) is None:
+			log.warn(f'{self.__owner} - No event loop found for {self.__func!r}')
+			if self.fireImmediately:
+				self.__fire()
+				return
+			self.timer = QTimer(singleShot=True)
+			self.timer.timeout.connect(self.__fire)
+			self.timer.start(when * 1000)
+		else:
+			self.timer = loop.call_soon(self.__fire) if self.fireImmediately else loop.call_later(when, self.__fire)
 
 	def __fire(self):
 		if iscoroutine(self.__func) or iscoroutinefunction(self.__func):
-			create_task(self.__func(*self.__args, **self.__kwargs))
+			self.loop.create_task(self.__func(*self.__args, **self.__kwargs))
 		else:
-			loop = get_running_loop()
 			func = partial(self.__func, *self.__args, **self.__kwargs)
-			loop.call_soon(func)
+			self.loop.call_soon(func)
 		name = getattr(self.__owner, 'name', self.__owner.__class__.__name__)
 		if self.interval >= self.logThreshold:
 			self.log.verbose(f'{self.__func.__name__}() fired for {name}', verbosity=4)
@@ -617,3 +628,35 @@ class ScheduledEvent(object):
 
 __all__ = ['unitDict', 'Accumulator', 'ChannelSignal', 'SchemaProperty', 'MutableSignal', 'ScheduledEvent',
 					 'Publisher']
+
+
+@dataclass(frozen=True, slots=True)
+class Request:
+	requester: Any
+	callback: Callable
+
+	@property
+	def as_dict(self) -> Dict[str, Hashable|Callable]:
+		return {'requester': self.requester, 'callback': self.callback}
+
+
+@dataclass(frozen=True, slots=True)
+class GuardedRequest(Request):
+	requester: Hashable
+	callback: Callable[[], None]
+	guard: Callable[[Optional[Any]], bool]
+
+	@classmethod
+	def from_request(cls, request: Request, guard: Callable[[Optional[Any]], bool]) -> 'GuardedRequest':
+		return cls(requester=request.requester, callback=request.callback, guard=guard)
+
+	@property
+	def as_dict(self) -> Dict[str, Hashable|Callable]:
+		return {'requester': self.requester, 'callback': self.callback, 'guard': self.guard}
+
+	def with_guard(self, guard: Callable[[Optional[Any]], bool]) -> 'GuardedRequest':
+		return GuardedRequest(self.requester, self.callback, guard)
+
+	@property
+	def guard_signature(self) -> Dict[str, Parameter]:
+		return dict(get_signature(self.guard).parameters)
