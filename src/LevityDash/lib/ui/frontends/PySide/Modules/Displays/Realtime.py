@@ -10,6 +10,7 @@ from PySide2.QtGui import QDrag, QFocusEvent, QFont, QPainter, QPixmap, QTransfo
 from PySide2.QtWidgets import QGraphicsItem, QGraphicsSceneMouseEvent, QStyleOptionGraphicsItem
 from qasync import asyncSlot, QApplication
 
+from LevityDash import LevityDashboard
 from LevityDash.lib.config import DATETIME_NO_ZERO_CHAR
 from LevityDash.lib.ui.icons import fa as FontAwesome, getIcon, Icon
 from WeatherUnits.time_.time import Second
@@ -184,7 +185,7 @@ class Realtime(Panel, tag='realtime'):
 		if value == getattr(self, '_key', None):
 			return
 		self._key = value
-		container = ValueDirectory.getContainer(value)
+		container = LevityDashboard.get_container(value)
 
 		if self.title.allowDynamicUpdate():
 			self.title.textBox.setTextAccessor(lambda: container.title)
@@ -211,7 +212,7 @@ class Realtime(Panel, tag='realtime'):
 
 	@source.decode
 	def source(self, value: str) -> Plugin | SomePlugin:
-		source = Plugins.get(value, AnySource)
+		source = LevityDashboard.plugins.get(value, AnySource)
 		self._preferredSourceName = value
 		if source is None:
 			log.info(f'{value} is not a valid source or the plugin is not Loaded')
@@ -225,7 +226,7 @@ class Realtime(Panel, tag='realtime'):
 	def forecast(self, value: bool):
 		self._forecast = value
 		if self.container is not None:
-			self.container = ValueDirectory.getContainer(self.key)
+			self.container = LevityDashboard.get_container(self.key)
 
 	@property
 	def currentSource(self) -> Plugin | None:
@@ -289,7 +290,7 @@ class Realtime(Panel, tag='realtime'):
 
 		realtimePossible = any(
 			not metadata.get('timeseriesOnly', False)
-				for plugin in ValueDirectory.plugins
+				for plugin in LevityDashboard.plugins.enabled_plugins
 				if (metadata := plugin.schema.getExact(self.key, silent=True)) is not None
 				   and any(isinstance(obs, RealtimeSource) for obs in plugin.observations)
 		)
@@ -487,7 +488,7 @@ class Realtime(Panel, tag='realtime'):
 	async def testSlot(self, container: MultiSourceContainer):
 		if isinstance(container, MultiSourceContainer):
 			self.container = container
-			ValueDirectory.getChannel(self.key).disconnectSlot(self.testSlot)
+			LevityDashboard.get_channel(self.key).disconnectSlot(self.testSlot)
 
 	def adjustContentStaleTimer(self):
 		if QThread.currentThread() is QApplication.instance().thread():

@@ -8,6 +8,7 @@ from PySide2.QtCore import Qt, Signal
 from PySide2.QtWidgets import QDialog, QInputDialog
 from time import strftime
 
+from LevityDash import LevityDashboard
 from LevityDash.lib.stateful import StateProperty
 from LevityDash.lib.ui.frontends.PySide import app, UILogger as guiLog
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Label
@@ -75,13 +76,13 @@ class ClockComponent(Label, tag=...):
 		matches = re.finditer(r"\%-?\w", self._format, re.MULTILINE)
 		matches = {x.group().replace('-', '').lower() for x in matches}
 		if '%s' in matches:
-			return app.clock.second
+			return LevityDashboard.clock.second
 		elif '%m' in matches:
-			return app.clock.minute
+			return LevityDashboard.clock.minute
 		elif self.__hourlyFormats__.intersection(matches):
-			return app.clock.hour
+			return LevityDashboard.clock.hour
 		else:
-			return app.clock.minute
+			return LevityDashboard.clock.minute
 
 	def setTime(self, *args):
 		self.text = strftime(self.format)

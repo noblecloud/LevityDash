@@ -11,9 +11,12 @@ from urllib import request
 from rich.repr import rich_repr
 from PySide2.QtGui import QFont, QFontMetrics
 
+from LevityDash import LevityDashboard
 from LevityDash.lib.EasyPath import EasyPath
-from LevityDash import __dirs__, __resources__
 from LevityDash.lib.log import LevityLogger
+
+__dirs__ = LevityDashboard.paths
+__resources__ = LevityDashboard.resources
 
 log = LevityLogger.getChild('icons')
 
