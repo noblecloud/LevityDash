@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import mimetypes
 import os
@@ -21,20 +20,21 @@ from PySide2.QtCore import (
 	QByteArray, QEvent, QMimeData, QObject, QRect, QRectF, QSize, Qt, QThread, QTimer, QUrl, Signal
 )
 from PySide2.QtGui import (
-	QCursor, QDesktopServices, QDrag, QFont, QPainter, QPainterPath, QPixmapCache, QScreen, QShowEvent,
-	QSurfaceFormat, QTransform
+	QCursor, QDesktopServices, QDrag, QFont, QIcon, QPainter, QPainterPath, QPixmapCache, QScreen, QShowEvent,
+	QSurfaceFormat, QTransform, QPixmap
 )
 from PySide2.QtNetwork import QNetworkConfigurationManager
 from PySide2.QtWidgets import (
 	QAction, QApplication, QGraphicsItem, QGraphicsRectItem, QGraphicsScene,
-	QGraphicsView, QMainWindow, QMenu, QMenuBar, QOpenGLWidget
+	QGraphicsView, QMainWindow, QMenu, QMenuBar, QOpenGLWidget, QSplashScreen
 )
-from time import perf_counter, time
+from time import perf_counter, process_time, time
 
+from LevityDash import LevityDashboard
 from LevityDash.lib.config import userConfig
 from LevityDash.lib.plugins import AnySource, Container
 from LevityDash.lib.plugins.categories import CategoryAtom, CategoryItem
-from LevityDash.lib.plugins.dispatcher import MultiSourceContainer, ValueDirectory as pluginManager
+from LevityDash.lib.plugins.dispatcher import MultiSourceContainer
 from LevityDash.lib.plugins.observation import TimeAwareValue
 from LevityDash.lib.ui.fonts import monospaceFont, system_default_font
 from LevityDash.lib.ui.frontends.PySide import qtLogger as guiLog
@@ -43,21 +43,16 @@ from LevityDash.lib.ui.frontends.PySide.utils import (
 )
 from LevityDash.lib.ui.Geometry import (
 	AbsoluteFloat, DimensionType, findScreen, getDPI, LocationFlag, parseSize,
-	RelativeFloat, Size
+	RelativeFloat, Size, size_px
 )
 from LevityDash.lib.utils import (
-	BusyContext, clearCacheAttr, connectSignal, joinCase, threadPool, Worker
+	BusyContext, clearCacheAttr, connectSignal, joinCase, threadPool, Worker, Pool
 )
 from WeatherUnits import Length, Time
-
-app: QApplication = QApplication.instance()
 
 ACTIVITY_EVENTS = {QEvent.KeyPress, QEvent.MouseButtonPress, QEvent.MouseButtonRelease, QEvent.MouseMove, QEvent.GraphicsSceneMouseMove, QEvent.GraphicsSceneMouseRelease, QEvent.GraphicsSceneMousePress, QEvent.InputMethod,
                    QEvent.InputMethodQuery}
 
-loop = asyncio.get_running_loop()
-
-app.setQuitOnLastWindowClosed(True)
 guiLog.info('Loading Qt GUI')
 
 
@@ -219,6 +214,8 @@ class LevitySceneView(QGraphicsView):
 
 	def __init__(self, *args, **kwargs):
 		self.status = 'Initializing'
+		LevityDashboard.view = self
+		LevityDashboard.load_dashboard = self.load
 		self.lastEventTime = perf_counter()
 		super(LevitySceneView, self).__init__(*args, **kwargs)
 		opengl = userConfig.getOrSet('QtOptions', 'openGL', True, userConfig.getboolean)
@@ -249,9 +246,11 @@ class LevitySceneView(QGraphicsView):
 		self.noActivityTimer.setSingleShot(True)
 		self.noActivityTimer.timeout.connect(self.noActivity)
 		self.noActivityTimer.setInterval(15000)
-		self.setGeometry(0, 0, *self.window().size().toTuple())
+		w, h = self.window().size().toTuple()
+		self.setGeometry(0, 0, w, h)
 		self.graphicsScene = LevityScene(self)
 		self.setScene(self.graphicsScene)
+		LevityDashboard.scene = self.graphicsScene
 		self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 		self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 		self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
@@ -265,12 +264,14 @@ class LevitySceneView(QGraphicsView):
 		return QTransform.fromScale(devicePixelRatio, devicePixelRatio)
 
 	def postInit(self):
-		app.primaryScreenChanged.connect(self.__screenChange)
+		LevityDashboard.app.primaryScreenChanged.connect(self.__screenChange)
 		self.base = self.graphicsScene.base
 		self.resizeDone = QTimer(interval=300, singleShot=True, timeout=self.resizeDoneEvent)
 		self.installEventFilter(self)
 		self.graphicsScene.installEventFilter(self)
-		loop.call_soon(self.load)
+		self.graphicsScene.setSceneRect(self.rect())
+		self.base.geometry.updateSurface(self.rect())
+		self.fitInView(self.base, Qt.AspectRatioMode.KeepAspectRatio)
 
 	def eventFilter(self, obj, event):
 		if event.type() in ACTIVITY_EVENTS:
@@ -280,9 +281,7 @@ class LevitySceneView(QGraphicsView):
 			if event.key() == Qt.Key_R:
 				pos = self.mapToScene(self.mapFromGlobal(QCursor.pos()))
 				items = self.graphicsScene.items(pos)
-				for item in items:
-					if hasattr(item, 'refresh'):
-						item.refresh()
+				self.refresh(*items)
 			shiftHeld = event.modifiers() & Qt.ShiftModifier
 			if event.key() == Qt.Key_Down:
 				if getattr(self.graphicsScene.focusItem(), 'movable', False):
@@ -304,8 +303,19 @@ class LevitySceneView(QGraphicsView):
 				if self.graphicsScene.focusItem():
 					self.graphicsScene.clearFocus()
 					self.graphicsScene.clearSelection()
-			self.__lastKey = event.key(), loop.time()
+			self.__lastKey = event.key(), process_time()
 		return super(LevitySceneView, self).eventFilter(obj, event)
+
+	def refresh(self, *items):
+		if not items:
+			items = self.graphicsScene.items()
+			for item in items:
+				if getattr(item, '__tag__', ...) is not ... and hasattr(item, 'refresh'):
+					item.refresh()
+		else:
+			for item in items:
+				if hasattr(item, 'refresh'):
+					item.refresh()
 
 	def resizeDoneEvent(self):
 		self.resetTransform()
@@ -329,10 +339,11 @@ class LevitySceneView(QGraphicsView):
 
 	def resizeEvent(self, event):
 		super(LevitySceneView, self).resizeEvent(event)
-		self.fitInView(self.base, Qt.AspectRatioMode.KeepAspectRatio)
-		self.graphicsScene.busyBlocker.setRect(self.sceneRect())
-		self.resizeDone.start()
-
+		try:
+			self.fitInView(self.base, Qt.AspectRatioMode.KeepAspectRatio)
+			self.resizeDone.start()
+		except AttributeError:
+			pass
 
 	def noActivity(self):
 		self.graphicsScene.clearSelection()
@@ -345,17 +356,11 @@ class PluginsMenu(QMenu):
 	def __init__(self, parent):
 		super(PluginsMenu, self).__init__(parent)
 		self.setTitle('Plugins')
-		# self.setIcon(QIcon.fromTheme('preferences-plugin'))
-		# self.setToolTipsVisible(True)
-		# self.setToolTip('Plugins')
-		# refresh = QAction(text='Refresh', triggered=self.refresh)
-		# refresh.setCheckable(False)
-		# self.addAction(refresh)
 		self.buildItems()
+		self.aboutToShow.connect(self.refresh_toggles)
 
 	def buildItems(self):
-		from LevityDash.lib.plugins import Plugins as pluginManager
-		for plugin in pluginManager:
+		for plugin in LevityDashboard.plugins:
 			action = QAction(plugin.name, self)
 			action.setCheckable(True)
 			action.setChecked(plugin.running)
@@ -378,7 +383,7 @@ class PluginsMenu(QMenu):
 
 class InsertMenu(QMenu):
 	existing = Dict[CategoryItem, QMenu | QAction]
-	source = pluginManager
+	source = LevityDashboard.dispatcher
 	items: Set[CategoryItem]
 	logger = guiLog.getChild('InsertMenu')
 	logger.setLevel(logging.INFO)
@@ -399,7 +404,7 @@ class InsertMenu(QMenu):
 			guiLog.debug(f'Refreshing items for {self.title()}')
 			for action in self.actions():
 				try:
-					loop.call_soon_threadsafe(action.issue_refresh)
+					action.issue_refresh()
 				except AttributeError:
 					pass
 
@@ -408,17 +413,17 @@ class InsertMenu(QMenu):
 		self.noItems = self.addAction('No items')
 		self.existing = {}
 		self.setTitle('Items')
-		self.items = set(pluginManager.keys())
+		self.items = set(LevityDashboard.dispatcher.keys())
 		self.aboutToShow.connect(self.issue_rebuild)
 		self.ingest(self.items)
-		connectSignal(pluginManager.new_keys_signal, self.ingest)
+		connectSignal(LevityDashboard.dispatcher.new_keys_signal, self.ingest)
 
 	def ingest(self, added_keys):
 		delta = set(added_keys) - self.items
 		if delta:
 			self.items.update(delta)
 			map_ = CategoryItem.keysToDict(sorted(delta, key=str), extendedKeys=True)
-			loop.call_soon_threadsafe(self.buildLevel, map_)
+			self.buildLevel(map_)
 
 	def clearSubMenu(self, menu):
 		try:
@@ -448,7 +453,7 @@ class InsertMenu(QMenu):
 		return self.rebuild_worker is not None and self.rebuild_worker.status is Worker.Status.Running
 
 	def buildLevel(self, level: Dict[CategoryAtom, CategoryItem], menu: QMenu = None):
-		self.moveToThread(QThread.currentThread())
+		self.moveToThread(QApplication.instance().thread())
 		InsertMenu.logger.debug(f'{self.title()} building levels')
 		menu = menu or self
 		if isinstance(level, dict):
@@ -494,13 +499,12 @@ class InsertItemAction(QAction):
 	def __init__(self, parent, key, container: 'Container' = None):
 		super(InsertItemAction, self).__init__(parent, 'loading...')
 		self.key = key
-		self.container = container or pluginManager.getContainer(key)
+		self.container = container or LevityDashboard.dispatcher.getContainer(key)
 		try:
 			self.name = self.container.title
 		except ValueError:
 
 			async def update():
-				print('contraire title call back')
 				self.name = self.container.title
 
 			self.container.getPreferredSourceContainer(self, AnySource, update)
@@ -535,9 +539,9 @@ class InsertItemAction(QAction):
 		if isinstance(self.container, Mapping):
 			self.no_sources.setVisible(len(self.container_actions) == 0)
 
-		for action in self.container_actions.values():
+		for container, action in self.container_actions.items():
 			try:
-				loop.call_soon_threadsafe(action.issue_refresh)
+				action.issue_refresh()
 			except AttributeError:
 				pass
 
@@ -551,6 +555,15 @@ class InsertItemAction(QAction):
 	def since_last_refresh(self) -> timedelta:
 		return datetime.now() - self.last_refresh
 
+	@cached_property
+	def refresh_worker(self) -> Worker:
+		return Worker.create_worker(
+			self.__prepare,
+			on_finish=self.__complete_refresh,
+			on_result=self.refresh_text,
+			immortal=True,
+		)
+
 	def issue_refresh(self):
 		if self.is_updating:
 			InsertMenu.logger.verbose(f'Not refreshing {self.key} as it is already updating', verbosity=4)
@@ -558,8 +571,7 @@ class InsertItemAction(QAction):
 		if self.since_last_refresh <= timedelta(seconds=30):
 			InsertMenu.logger.verbose(f'Not refreshing {self.key} since last refresh was {self.since_last_refresh}', verbosity=4)
 			return
-		self.setVisible(False)
-		self.refresh_worker = threadPool.run_threaded_process(self.refresh_text, on_finish=self.__complete_refresh, priority=2)
+		threadPool.start(self.refresh_worker)
 		InsertMenu.logger.verbose(f'Issued refresh for {self.key}', verbosity=4)
 
 	@property
@@ -578,27 +590,31 @@ class InsertItemAction(QAction):
 		self.setText(f'Error: {e}')
 		self.refresh_worker = None
 
-	def refresh_text(self):
+	def __prepare(self):
+		clearCacheAttr(self, 'value_str')
+		return self.value_str
+
+	def refresh_text(self, value_str: str = None):
+		value_str = value_str or self.value_str
 		InsertMenu.logger.debug(f'Refreshing {self.key}')
 		self.last_refresh = datetime.now()
 		if (containers := self.sub_containers) is not None:
 			self.container: 'MultiSourceContainer'
-			text = f'{self.name}: {self.value_str}'
+			text = f'{self.name}: {value_str}'
 			if len(containers) == 0:
 				self.sub_menu.setVisible(False)
 			menu = self.sub_menu
 			menu.setTitle(text)
 			for container in self.container.values():
 				if container not in self.container_actions:
-					def _(cont_):
-						self.container_actions[cont_] = action = InsertItemAction(menu, self.key, container=cont_)
-						InsertMenu.logger.verbose(f'adding action {cont_.source.name}: {cont_.title}', verbosity=4)
-						menu.insertAction(self.no_sources, action)
-					loop.call_soon_threadsafe(partial(_, container))
+					self.moveToThread(QThread.currentThread())
+					self.container_actions[container] = action = InsertItemAction(menu, self.key, container=container)
+					InsertMenu.logger.verbose(f'adding action {container.source.name}: {self.key}', verbosity=4)
+					menu.insertAction(self.no_sources, action)
 		else:
 			self.setEnabled(running := self.container.source.running)
 
-			text = f'{self.container.source.name}: {self.value_str}'
+			text = f'{self.container.source.name}: {value_str}'
 			is_realtime = self.container.isRealtime
 			if not running or not is_realtime:
 				text += ' ['
@@ -610,7 +626,7 @@ class InsertItemAction(QAction):
 			InsertMenu.logger.debug(f'Set text for {self.key} to {text}')
 			InsertMenu.logger.verbose(f'Refreshed {self.key}', verbosity=4)
 
-	@property
+	@cached_property
 	def value_str(self) -> str:
 		value = self.value
 		return str(value)
@@ -637,117 +653,20 @@ class LevityMainWindow(QMainWindow):
 
 	def __init__(self, *args, **kwargs):
 		super(LevityMainWindow, self).__init__(*args, **kwargs)
-		app.thread().setPriority(QThread.TimeCriticalPriority)
-		self.setWindowTitle('LevityDash')
 
 		self.__init_ui__()
-		view = LevitySceneView(self)
-		self.setCentralWidget(view)
-		style = '''
-					QMainWindow {
-						background-color: #000000;
-					}
-					QMenuBar {
-						background-color: #2e2e2e;
-						padding: 5px;
-						color: #fafafa;
-					}
-					QMenuBar::item {
-						padding: 3px 10px;
-						margin: 5px;
-						background-color: #2e2e2e;
-						color: #fafafa;
-					}
-					QMenuBar::item:selected {
-						background-color: #6e6e6e;
-						color: #fafafa;
-						border-radius: 2.5px;
-					}
-					QMenuBar::item:disabled {
-						background-color: #2e2e2e;
-						color: #aaaaaa;
-					}
-					QMenu {
-						background-color: #2e2e2e;
-						color: #fafafa;
-						padding: 2.5px;
-						border: 1px solid #5e5e5e;
-						border-radius: 5px;
-					}
-					QMenu::item {
-						padding: 2.5px 5px;
-						margin: 1px;
-						background-color: #2e2e2e;
-						color: #fafafa;
-					}
-					QMenu::item:selected {
-						background-color: #6e6e6e;
-						color: #fafafa;
-						border-radius: 2.5px;
-					}
-					QMenu::item:disabled {
-						background-color: #2e2e2e;
-						color: #aaaaaa;
-					}
-					QToolTip {
-						background-color: #2e2e2e;
-						color: #fafafa;
-						padding: 2.5px;
-						border-width: 1px;
-						border-color: #5e5e5e;
-						border-style: solid;
-						border-radius: 10px;
-						font-size: 18px;
-						background-clip: border-radius;
-					}''' + f'''
-					QStatusBar {{
-						font-family: {monospaceFont.family()};
-						background: #2e2e2e;
-						color: #ffffff;
-						border: 1px solid #5e5e5e;
-						border-radius: 5px;
-					}}
-					'''
-		if platform.system() == 'Darwin':
-			style += '''
-					QMenu::item::unchecked {
-						padding-left: -0.8em;
-						margin-left: 0px;
-					}
-					QMenu::item::checked {
-						padding-left: 0px;
-						margin-left: 0px;
-					}'''
-		app.setStyleSheet(style)
-		view.postInit()
+		self.view = LevitySceneView(self)
+		self.view.postInit()
+		self.buildMenu()
 
-
-
-		statusBarVisible = userConfig.getOrSet('QtOptions', 'status-bar', False, userConfig.getboolean)
-		statusBarFont = QFont(system_default_font)
-		statusBarFont.setStyleHint(QFont.Monospace)
-		self.statusBar().setFont(statusBarFont)
-		self.statusBar().setVisible(statusBarVisible)
+		self.setCentralWidget(self.view)
+		self.show()
 
 		if platform.system() != 'Darwin':
-			from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Various import HoverArea
-			self.menuBarHoverArea = HoverArea(
-				view.graphicsScene.base,
-				size=10,
-				rect=QRect(0, 0, self.width(), 50),
-				enterAction=self.showMenuBar,
-				exitAction=self.hideMenuBar,
-				alignment=LocationFlag.Bottom,
-				position=LocationFlag.TopLeft,
-				ignoredEdges=LocationFlag.Top,
-				delay=userConfig.getOrSet('MenuBar', 'delay', 0.3, userConfig.getfloat)
-			)
-			self.menuBarHoverArea.setZValue(1000)
-			self.menuBarHoverArea.setEnabled(True)
-			self.bar = MenuBar(self)
-			self.setMenuBar(self.bar)
-		else:
-			self.bar = self.menuBar()
+			self.updateMenuBar('show')
+
+	def updateOnlineState(self, online):
+		guiLog.info(f'Online state changed to {online}')
 
 	def __init_ui__(self):
 		envFullscreen = os.getenv('LEVITY_FULLSCREEN', None)
@@ -805,8 +724,115 @@ class LevityMainWindow(QMainWindow):
 		if fullscreen or '--fullscreen' in sys.argv or similarity > 0.95:
 			self.showFullScreen()
 
+		style = '''
+							QMainWindow {
+								background-color: #000000;
+							}
+							QMenuBar {
+								background-color: #2e2e2e;
+								padding: 5px;
+								color: #fafafa;
+							}
+							QMenuBar::item {
+								padding: 3px 10px;
+								margin: 5px;
+								background-color: #2e2e2e;
+								color: #fafafa;
+							}
+							QMenuBar::item:selected {
+								background-color: #6e6e6e;
+								color: #fafafa;
+								border-radius: 2.5px;
+							}
+							QMenuBar::item:disabled {
+								background-color: #2e2e2e;
+								color: #aaaaaa;
+							}
+							QMenu {
+								background-color: #2e2e2e;
+								color: #fafafa;
+								padding: 2.5px;
+								border: 1px solid #5e5e5e;
+								border-radius: 5px;
+							}
+							QMenu::item {
+								padding: 2.5px 5px;
+								margin: 1px;
+								background-color: #2e2e2e;
+								color: #fafafa;
+							}
+							QMenu::item:selected {
+								background-color: #6e6e6e;
+								color: #fafafa;
+								border-radius: 2.5px;
+							}
+							QMenu::item:disabled {
+								background-color: #2e2e2e;
+								color: #aaaaaa;
+							}
+							QToolTip {
+								background-color: #2e2e2e;
+								color: #fafafa;
+								padding: 2.5px;
+								border-width: 1px;
+								border-color: #5e5e5e;
+								border-style: solid;
+								border-radius: 10px;
+								font-size: 18px;
+								background-clip: border-radius;
+							}''' + f'''
+							QStatusBar {{
+								font-family: {monospaceFont.family()};
+								background: #2e2e2e;
+								color: #ffffff;
+								border: 1px solid #5e5e5e;
+								border-radius: 5px;
+							}}
+							'''
+		if platform.system() == 'Darwin':
+			style += '''
+							QMenu::item::unchecked {
+								padding-left: -0.8em;
+								margin-left: 0px;
+							}
+							QMenu::item::checked {
+								padding-left: 0px;
+								margin-left: 0px;
+							}'''
+		LevityDashboard.app.setStyleSheet(style)
+
+		statusBarVisible = userConfig.getOrSet('QtOptions', 'status-bar', False, userConfig.getboolean)
+		statusBarFont = QFont(system_default_font)
+		statusBarFont.setStyleHint(QFont.Monospace)
+		status_bar = self.statusBar()
+		status_bar.setFont(statusBarFont)
+		status_bar.setVisible(statusBarVisible)
+		LevityDashboard.status_bar = status_bar
+
+		self.setWindowTitle('LevityDash')
 
 	def buildMenu(self):
+
+		if platform.system() != 'Darwin':
+			from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Various import HoverArea
+			self.menuBarHoverArea = HoverArea(
+				self.view.graphicsScene.base,
+				size=10,
+				rect=QRect(0, 0, self.width(), 50),
+				enterAction=self.showMenuBar,
+				exitAction=self.hideMenuBar,
+				alignment=LocationFlag.Bottom,
+				position=LocationFlag.TopLeft,
+				ignoredEdges=LocationFlag.Top,
+				delay=userConfig.getOrSet('MenuBar', 'delay', 0.3, userConfig.getfloat)
+			)
+			self.menuBarHoverArea.setZValue(1000)
+			self.menuBarHoverArea.setEnabled(True)
+			self.bar = MenuBar(self)
+			self.setMenuBar(self.bar)
+		else:
+			self.bar = self.menuBar()
+
 		menubar = self.bar
 		fileMenu = menubar.addMenu('&File')
 
@@ -819,36 +845,36 @@ class LevityMainWindow(QMainWindow):
 		save = QAction('&Save', self)
 		save.setShortcut('Ctrl+S')
 		save.setStatusTip('Save the current dashboard')
-		save.triggered.connect(self.centralWidget().graphicsScene.base.save)
+		save.triggered.connect(self.view.graphicsScene.base.save)
 
 		saveAs = QAction('&Save As', self)
 		saveAs.setShortcut('Ctrl+Shift+S')
 		saveAs.setStatusTip('Save the current dashboard as a new file')
-		saveAs.triggered.connect(self.centralWidget().graphicsScene.base.saveAs)
+		saveAs.triggered.connect(self.view.graphicsScene.base.saveAs)
 
 		setAsDefault = QAction('Set Default', self)
 		setAsDefault.setStatusTip('Set the current dashboard as the default dashboard')
-		setAsDefault.triggered.connect(self.centralWidget().graphicsScene.base.setDefault)
+		setAsDefault.triggered.connect(self.view.graphicsScene.base.setDefault)
 
 		load = QAction('&Open', self)
 		load.setShortcut('Ctrl+L')
 		load.setStatusTip('Load a dashboard')
-		load.triggered.connect(self.centralWidget().graphicsScene.base.load)
+		load.triggered.connect(self.view.graphicsScene.base.load)
 
 		reload = QAction('Reload', self)
 		reload.setShortcut('Ctrl+R')
 		reload.setStatusTip('Reload the current dashboard')
-		reload.triggered.connect(self.centralWidget().graphicsScene.base.reload)
+		reload.triggered.connect(self.view.graphicsScene.base.reload)
 
 		refresh = QAction('Refresh', self)
 		refresh.setShortcut('Ctrl+Alt+R')
 		refresh.setStatusTip('Refresh the current dashboard')
-		refresh.triggered.connect(self.centralWidget().graphicsScene.update())
+		refresh.triggered.connect(self.view.refresh)
 
 		printState = QAction('Print State', self)
 		printState.setShortcut('Ctrl+P')
 		printState.setStatusTip('Print the current state of the dashboard')
-		printState.triggered.connect(self.centralWidget().graphicsScene.base.contextMenu.printState)
+		printState.triggered.connect(self.view.graphicsScene.base.contextMenu.printState)
 
 		statusBarVisible = userConfig.getOrSet('QtOptions', 'status-bar', False, userConfig.getboolean)
 		showStatusBar = QAction('Show Status Bar', self)
@@ -856,6 +882,7 @@ class LevityMainWindow(QMainWindow):
 		showStatusBar.setStatusTip('Show the status bar')
 		showStatusBar.setCheckable(True)
 		showStatusBar.setChecked(statusBarVisible)
+
 		def toggle_status_bar(*args):
 			self.statusBar().setVisible(showStatusBar.isChecked())
 
@@ -876,7 +903,7 @@ class LevityMainWindow(QMainWindow):
 		clear = QAction('Clear', self)
 		clear.setStatusTip('Clear the current dashboard')
 		clear.setShortcut('Ctrl+Alt+C')
-		clear.triggered.connect(self.centralWidget().graphicsScene.base.clear)
+		clear.triggered.connect(self.view.graphicsScene.base.clear)
 
 		quitAct = QAction('Quit', self)
 		quitAct.setStatusTip('Quit the application')
@@ -899,6 +926,11 @@ class LevityMainWindow(QMainWindow):
 		dashboardMenu.addAction(clear)
 		dashboardMenu.addAction(printState)
 		dashboardMenu.addAction(showStatusBar)
+
+		clearCacheAction = QAction('Clear Pixmap Cache', self)
+		clearCacheAction.setStatusTip('Clear the cache')
+		clearCacheAction.triggered.connect(QPixmapCache.clear)
+		dashboardMenu.addAction(clearCacheAction)
 
 		plugins = PluginsMenu(self)
 		self.bar.addMenu(plugins)
@@ -1148,4 +1180,35 @@ class ClockSignals(QObject):
 		self.__hourTimer.singleShot(timeToNextHour + timerOffset, self.__startHours)
 
 
-app.clock = ClockSignals()
+LevityDashboard.clock = ClockSignals()
+
+
+class LoadingSplash(QSplashScreen):
+	def __init__(self, parent=None):
+		super().__init__(parent)
+		self.setPixmap(QPixmap(str((LevityDashboard.paths.resources / 'ui-elements' / 'icon512.png').absolute())))
+		# self.setWindowFlags(Qt.SplashScreen | Qt.FramelessWindowHint)
+		# self.setAttribute(Qt.WA_TranslucentBackground)
+		# self.setMask(self.pixmap().mask())
+		self.show()
+
+	# 	self.__initTimers()
+	#
+	# def __initTimers(self):
+	# 	self.__hideTimer = QTimer()
+	# 	self.__hideTimer.setSingleShot(True)
+	# 	self.__hideTimer.timeout.connect(self.hide)
+	#
+	# 	self.__showTimer = QTimer()
+	# 	self.__showTimer.setSingleShot(True)
+	# 	self.__showTimer.timeout.connect(self.show)
+	#
+	# def show(self):
+	# 	super().show()
+	# 	self.__hideTimer.start(3000)
+	#
+	# def hide(self):
+	# 	super().hide()
+	# 	self.__showTimer.start(1000)
+
+# LevityDashboard.splash = LoadingSplash()

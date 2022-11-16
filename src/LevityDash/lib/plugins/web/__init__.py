@@ -376,6 +376,7 @@ class Endpoint(object):
 
 class Web(Plugin, prototype=True):
 	urls: URLs
+	requirements = {'internet'}
 
 	network_manager: QNetworkConfigurationManager
 

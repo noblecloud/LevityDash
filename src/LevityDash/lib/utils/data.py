@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, Iterable, List, NamedTuple, Sequence, Se
 
 import numpy as np
 import time
-from math import ceil, floor, inf
+from math import ceil, floor, inf, isinf
 from numpy import ndarray
 from PySide2.QtCore import QObject, QSize, QSizeF, QTimer, Signal
 from rich.repr import auto as auto_rich_repr
@@ -175,9 +175,6 @@ class DataTimeRange(QObject):
 		self.__varify = True
 		self.__range = None
 		super(DataTimeRange, self).__init__()
-
-	# self.__timer = QTimer(singleShot=True, interval=200)
-	# self.__timer.timeout.connect(self.__emitChange)
 
 	def invalidate(self):
 		self.__varify = True
@@ -350,7 +347,16 @@ class AxisMetaData(QObject):
 
 	@property
 	def range(self):
-		return self.max - self.min
+		if (r := (self.max - self.min)) == 0:
+			if all(not isinf(i) for i in self.__limits):
+				return self.__limits[1] - self.__limits[0]
+			log.error(
+f"""The range for {self._link.log_repr} is 0.  This can be remedied by setting the limits manually in the figure settings.
+{self._link.print_suggested_config(min='min_value_here', max='max_value_here')}
+"""
+			)
+			raise ValueError('Range cannot be zero')
+		return r
 
 	def emitChanged(self):
 		self.__delayTimer.start()
@@ -1012,7 +1018,7 @@ def findPeaksAndTroughs(array: Sequence['TimeAwareValue'], spread: timedelta = 1
 					peaks[-1] = peaks[-1].flattened
 					peak_flat = False
 				peaks.append(node)
-	log.debug(f"findPeaksAndTroughs() {time.perf_counter() - start_time: 0.3g}s for {len(array)} items")
+	log.verbose(f"findPeaksAndTroughs() {time.perf_counter() - start_time: 0.3g}s for {len(array)} items", verbosity=4)
 
 	merged = []
 	peaks = sorted(peaks, key=lambda x: x.timestamp)

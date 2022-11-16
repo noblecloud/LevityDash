@@ -202,7 +202,7 @@ class Realtime(Panel, tag='realtime'):
 		self.title.textBox.refresh()
 		self.container = container
 
-	@StateProperty(default=AnySource, dependencies={'key', 'display', 'title', 'forecast'}, values=Plugins.plugins)
+	@StateProperty(default=AnySource, dependencies={'key', 'display', 'title', 'forecast'})
 	def source(self) -> Plugin | SomePlugin:
 		return getattr(self, '_source', AnySource)
 
@@ -1052,9 +1052,6 @@ class MeasurementDisplayProperties(Stateful):
 		if formatString is not None:
 			if isinstance(value, Measurement):
 				formatString = f'format:{formatString}'
-			elif isinstance(value, datetime):
-				other_ = '%-' if DATETIME_NO_ZERO_CHAR == '#' else '%#'
-				formatString = formatString.replace(other_, f'%{DATETIME_NO_ZERO_CHAR}')
 			return value.__format__(formatString)
 		elif value is None:
 			return "⋯"
@@ -1117,8 +1114,6 @@ class MeasurementDisplayProperties(Stateful):
 			return str(measurement).strip()
 		elif isinstance(measurement, datetime):
 			formatString = self.formatString or '%H:%M:%S'
-			other_ = '%-' if DATETIME_NO_ZERO_CHAR == '#' else '%#'
-			formatString = formatString.replace(other_, f'%{DATETIME_NO_ZERO_CHAR}')
 			try:
 				return f'{measurement:{formatString}}'.lower()
 			except ValueError:

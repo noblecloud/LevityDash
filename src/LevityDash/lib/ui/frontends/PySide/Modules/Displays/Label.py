@@ -380,7 +380,7 @@ class NonInteractiveLabel(Label, tag=...):
 	__exclude__ = {..., 'geometry', 'locked', 'frozen', 'movable', 'resizable', 'text'}
 
 	__defaults__ = {
-		'margins':   ('10%', '10%', '10%', '10%'),
+		'margins':   ('11%', '11%', '11%', '11%'),
 		'movable':   False,
 		'resizable': False,
 		'locked':    True

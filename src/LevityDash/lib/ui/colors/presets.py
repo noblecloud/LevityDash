@@ -55,7 +55,7 @@ class Presets:
 
 TemperatureGradient = Gradient[Temperature.Celsius](
 	name='TemperatureGradient',
-	freezing=(-10, '#94B7FF'),
+	freezingam=(-10, '#94B7FF'),
 	cold=(7, '#B2CBFF'),
 	chilly=(12, '#F2F2FF'),
 	comfortableStart=(17, '#F2F2FF'),
@@ -82,7 +82,7 @@ FabledSunsetGradientLux = Gradient[Lux](
 FabledSunsetGradientWattsPerSquareMeter = Gradient[Irradiance](
 	'FabledSunsetGradientWattsPerSquareMeter',
 	(0, '#23155700'),
-	(30, '#44107A55'),
+	(30, '#44107A15'),
 	(50, '#8F6AAEAA '),
 	(60, '#CC6B8E'),
 	(90, '#F3A469'),
@@ -107,9 +107,8 @@ RipeMalinkaGradient = Gradient[MilesPerHour](
 PrecipitationProbabilityGradient = Gradient[Probability](
 	name='PrecipitationProbabilityGradient',
 	none=(0, '#00c6fb00'),
-	Low=(.10, '#00c6fb'),
-	high=(1, '#005bea'),
-	one=(1, '#7b00d4'),
+	Low=(1, 'e7f0fd'),
+	one=(100, 'accbee'),
 )
 
 # Source https://webgradients.com/ 061 Sweet PeriodGet
