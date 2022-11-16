@@ -1822,11 +1822,23 @@ T = TypeVar("T")
 
 Index = NamedTuple("Index", [("previous", Any), ("current", Any), ("next", Any)])
 
-@dataclass
+@dataclass(slots=True)
 class Index:
-	previous: Optional['Index'] = None
-	current: 'Index' = None
-	next: Optional['Index'] = None
+
+	value: Hashable | None = field(hash=True)
+	previous: Optional['Index'] = field(hash=False, compare=False, default=None)
+	next: Optional['Index'] = field(hash=False, compare=False, default=None)
+
+	def __post_init__(self):
+		if self.previous is None:
+			self.previous = self
+		if self.next is None:
+			self.next = self
+
+	def __iter__(self):
+		yield self.value
+		yield self.previous
+		yield self.next
 
 
 class OrderedSet(MutableSet[T]):
@@ -1835,8 +1847,7 @@ class OrderedSet(MutableSet[T]):
 	sub_maps = cached_property(lambda self: {})
 
 	def __init__(self, iterable=None):
-		self.end = end = []
-		end += [None, end, end]  # sentinel node for doubly linked list
+		self.end = end = Index(None)
 
 		if iterable is not None:
 			self |= iterable
@@ -1850,20 +1861,20 @@ class OrderedSet(MutableSet[T]):
 	def add(self, key: T):
 		if key not in self.map:
 			end = self.end
-			curr = end[1]
-			curr[2] = end[1] = self.map[key] = [key, curr, end]
+			curr = end.previous
+			curr.next = end.previous = self.map[key] = Index(key, curr, end)
 
 	def add_at_beginning(self, key: T):
 		if key not in self.map:
 			end = self.end
-			curr = end[2]
-			curr[1] = end[2] = self.map[key] = [key, end, curr]
+			curr = end.next
+			curr.previous = end.next = self.map[key] = Index(key, end, curr)
 
 	def discard(self, key):
 		if key in self.map:
-			key, prev, next = self.map.pop(key)
-			prev[2] = next
-			next[1] = prev
+			key, prev, nxt = self.map.pop(key)
+			prev.next = nxt
+			nxt.previous = prev
 
 	def remove(self, key):
 		if key not in self.map:
@@ -1872,17 +1883,17 @@ class OrderedSet(MutableSet[T]):
 
 	def __iter__(self):
 		end = self.end
-		curr = end[2]
+		curr = end.next
 		while curr is not end:
-			yield curr[0]
-			curr = curr[2]
+			yield curr.value
+			curr = curr.next
 
 	def __reversed__(self):
 		end = self.end
-		curr = end[1]
+		curr = end.previous
 		while curr is not end:
-			yield curr[0]
-			curr = curr[1]
+			yield curr.value
+			curr = curr.previous
 
 	def pop(self, last=True):
 		if not self:
@@ -1918,8 +1929,21 @@ class ActionPool(OrderedSet):
 	__len: int = cached_property(lambda self: 0)
 	__contextLevel: int = cached_property(lambda self: 0)
 	__active: bool = cached_property(lambda self: False)
+	__callbacks: List[Tuple[Callable, Tuple, Dict]] = cached_property(lambda self: [])
+
+
+	class Status(Enum):
+		Idle = 0
+		Queued = 1
+		Running = 2
+		Finished = 3
+		Canceled = 4
+		Failed = 5
+		Removed = 6
+
 
 	def __init__(self, instance: 'Stateful', trace = None):
+		self.status = self.Status.Idle
 		self.instance = instance
 		self.root = self
 		self.up = self
@@ -1967,9 +1991,11 @@ class ActionPool(OrderedSet):
 
 	def discard(self, other):
 		super().discard(other)
-		self.__len -= 1
+		self.__len = self.__true_len__()
 
 	def clear(self):
+		list(map(ActionPool.clear, self.sub_maps.values()))
+		self.sub_maps.clear()
 		super().clear()
 		self.__len = 0
 
@@ -2002,20 +2028,31 @@ class ActionPool(OrderedSet):
 			if isinstance(action, ActionPool):
 				action.execute()
 			else:
-				action(self.instance)
-		for pool in self.sub_maps.values():
-			if pool.can_execute:
-				pool.execute()
+				if action.__code__.co_argcount:
+					action(self.instance)
+				else:
+					action()
+		while self.__callbacks:
+			callback, args, kwargs = self.__callbacks.pop(0)
+			callback(*args, **kwargs)
 		self.__active = False
 
 	def delete(self):
-		self.__del__()
+		self.__delete__(self)
 
-	def __del__(self):
+	def __delete__(self, instance):
+		self.status = self.Status.Canceled
 		for pool in list(self.sub_maps.values()):
 			pool.__del__()
-		if self.up is not self:
-			self.up.discard(self)
+		self.up.discard(self)
+		try:
+			instance.discard(self)
+		except:
+			pass
+		self.clear()
+
+	def add_callback(self, callback: Callable, *args, **kwargs):
+		self.__callbacks.append((callback, args, kwargs))
 
 
 def defer(func):
@@ -2031,37 +2068,64 @@ def defer(func):
 	return wrapper
 
 
-@rich_repr
-class Worker(QtCore.QRunnable):
-	"""Worker thread for running background tasks."""
+def thread_safe(func):
 
-	_debug: bool = False
-	pool: 'Pool'
+	@wraps(func)
+	def wrapper(self, *args, **kwargs):
+		return func(self, *args, **kwargs)
 
-	current_thread: Callable[[], QThread] = QThread.currentThread
+	return wrapper
+
+
+class WorkerSignals(QtCore.QObject):
+	finished = QtCore.Signal()
+	error = QtCore.Signal(tuple)
+	result = QtCore.Signal(object)
+	progress = QtCore.Signal(int)
+
+
+class _BaseWorker:
 
 	class Status(Enum):
 		Idle = 0
-		Running = 1
-		Finished = 2
-		Aborted = 3
-		Failed = 4
+		Queued = 1
+		Running = 2
+		Finished = 3
+		Canceled = 4
+		Failed = 5
 
-	status = Status.Idle
+		@property
+		def is_active(self) -> bool:
+			return 0 < self._value_ < 3
 
-	@classmethod
-	def new_immortal_worker(cls, func: Callable, *args, **kwargs) -> 'Worker':
-		worker = cls(func, *args, **kwargs)
-		worker.setAutoDelete(False)
-		return worker
+	signals: WorkerSignals
+	status: Status = Status.Idle
 
-	def __init__(self, fn, *args, **kwargs):
-		super(Worker, self).__init__()
-		# Store constructor arguments (re-used for processing)
+
+class Worker(Generic[Self], _BaseWorker, QtCore.QRunnable):
+
+	_pool: 'Pool' = None
+	args: Tuple[Any, ...]
+	kwargs: Dict[str, Any]
+
+	_direct: bool = False
+
+	_on_finish: List[Callable[[], None]]
+	_on_result: List[Callable[[Any], None]]
+	on_error: Callable[[Exception], None] = None
+	on_progress: Callable[[int|float], None] = None
+
+	_debug: bool = False
+	current_thread: Callable[[], QThread] = QThread.currentThread
+
+	def __init__(self: Self, fn, *args, **kwargs):
+		super().__init__()
+		self.status = Worker.Status.Idle
 		self.fn = fn
 		self.args = args
 		self.kwargs = kwargs
 		self.signals = WorkerSignals()
+		self.signals.moveToThread(LevityDashboard.app.thread())
 
 	def __rich_repr__(self):
 		yield 'status', self.status.name
@@ -2070,67 +2134,228 @@ class Worker(QtCore.QRunnable):
 			yield 'args', self.args
 		if self.kwargs:
 			yield 'kwargs', self.kwargs
-		if getattr(self, 'pool', None):
-			yield 'pool', self.pool
+		if p := getattr(self, 'pool', None):
+			yield 'pool', p
+
+	def __copy__(self: Self) -> Self:
+		clone = Worker.create_worker(self.fn, *self.args, **self.kwargs)
+		clone.setAutoDelete(self.autoDelete())
+		return clone
+
+	@cached_property
+	def _on_finish(self) -> List[Callable[[], None]]:
+		return []
+
+	def on_finish(self):
+		for func in self._on_finish:
+			func()
+
+	@cached_property
+	def _on_result(self) -> List[Callable[[Any], None]]:
+		return []
+
+	def on_result(self, result):
+		for func in self._on_result:
+			func(result)
+
+	@classmethod
+	def new_immortal_worker(cls, func: Callable, *args, **kwargs) -> 'Worker':
+		worker = cls(func, *args, **kwargs)
+		worker.setAutoDelete(False)
+		return worker
+
+	@property
+	def pool(self) -> 'Pool':
+		return self._pool or Pool.globalInstance()
+
+	@pool.setter
+	def pool(self, pool: 'Pool'):
+		self._pool = pool
+
+	def start(self, priority: int = None):
+		if priority is not None:
+			args = self, priority
+		else:
+			try:
+				args = self, self.priority
+			except AttributeError:
+				args = self,
+		pool = self.pool
+		pool.start(*args)
 
 	@Slot()
 	def run(self):
+		self.status = Worker.Status.Running
 		"""Initialise the runner function with passed args, kwargs."""
 		utilLog.verbose(f'Running {self.fn!r} in thread: {self.current_thread()}', verbosity=5)
+		if QApplication.instance().thread() is self.signals.thread():
+			self.signals.moveToThread(QApplication.instance().thread())
 		try:
-			self.status = Worker.Status.Running
 			result = self.fn(
 				*self.args, **self.kwargs,
 			)
+			QApplication.sync()
+			self.current_thread().yieldCurrentThread()
 		except Exception as e:
 			self.status = Worker.Status.Failed
 			print_exc()
-			exctype, value = exc_info()[:2]
-			self.signals.error.emit((exctype, value, format_exc()))
+			exec_type, value = exc_info()[:2]
+			if self._direct and self.on_error:
+				self.on_error(e)
+			else:
+				self.signals.error.emit((exec_type, value, format_exc()))
 			utilLog.error(f'Error running {self.fn.__name__}')
 			utilLog.exception(e)
 		else:
 			self.status = Worker.Status.Finished
-			self.signals.result.emit(result)
+			if self._direct and self.on_result:
+				self.on_result(result)
+			else:
+				self.signals.result.emit(result)
 		finally:
-			self.signals.finished.emit()
+			if self._direct and self.on_finish:
+				self.on_finish()
+			else:
+				self.signals.finished.emit()
 			utilLog.verbose(f'Finished {self.fn!r} in thread', verbosity=5)
 
 	def cancel(self):
 		if self.status is Worker.Status.Running:
 			try:
 				self.pool.cancel(self)
+				self.status = Worker.Status.Canceled
 			except RuntimeError:
 				pass
 			except Exception as e:
 				utilLog.exception(e)
 
-class WorkerSignals(QtCore.QObject):
-	"""
-	Defines the signals available from a running worker thread.
-	Supported signals are:
-	finished
-			No data
-	error
-			`tuple` (exctype, value, traceback.format_exc() )
-	result
-			`object` data returned from processing, anything
-	"""
-	finished = QtCore.Signal()
-	error = QtCore.Signal(tuple)
-	result = QtCore.Signal(object)
-	progress = QtCore.Signal(int)
+	@classmethod
+	def create_worker(
+		cls: Type[Self],
 
-loop = get_event_loop()
+		func: Callable | Awaitable,
+		*args,
+		func_kwargs: Dict[str, Any] = None,
+
+		on_finish: Callable[[], None] = None,
+		on_result: Callable[[T], Any] = None,
+		on_error: Callable[[Exception], Any] = None,
+
+		immortal: bool = False,
+		**kwargs: Dict[str, Any],
+
+	) -> Self:
+		func_kwargs = func_kwargs or {}
+		func_kwargs.update(kwargs)
+		worker = cls(func, *args, **func_kwargs)
+		worker.setAutoDelete(not immortal)
+
+		if on_finish is not None:
+			worker._on_finish.append(on_finish)
+			connectSignal(worker.signals.finished, on_finish)
+
+		if on_result is not None:
+			worker._on_result.append(on_result)
+			connectSignal(worker.signals.result, on_result)
+
+		if on_error is not None:
+			worker.on_error = on_error
+			connectSignal(worker.signals.error, on_error)
+
+		return worker
+
+	def link_worker(self, worker: 'Worker'):
+		connectSignal(worker.signals.finished, self.start)
+		return worker
+
+	def link_worker_result(
+		self,
+		worker: 'Worker' = None,
+		arg_index: int = None,
+		kwarg_name: str = None,
+		pre_func: Callable[['Worker', Any], 'Worker'] = None,
+		inplace: bool = True,
+		priority: int = None,
+	):
+
+		if not inplace:
+			worker = worker.__copy__()
+
+		def _on_result(result, worker_: 'Worker' = None):
+			if pre_func is not None:
+				pre_func(worker_, result)
+			elif arg_index is not None:
+				worker_args = getfullargspec(worker.fn).args
+				try:
+					worker_args[arg_index] = result
+				except IndexError:
+					worker_args.append(result)
+				worker_.args = *worker_args,
+			elif kwarg_name is not None:
+				worker_.kwargs[kwarg_name] = result
+			else:
+				if isinstance(result, str):
+					result = result,
+				worker_.args = result,
+			self.current_thread().yieldCurrentThread()
+			QTimer.singleShot(100, lambda: worker_.start(priority=priority))
 
 
-class Pool(QtCore.QThreadPool):
-	__instances__: ClassVar[List['Pool']] = []
+		connectSignal(self.signals.result, partial(_on_result, worker_=worker))
+		return worker
+
+	@cached_property
+	def handoff_delay(self):
+		return QTimer(singleShot=True, interval=100)
+
+
+@rich_repr
+class PluginThread(Thread):
+	"""PluginThread"""
+
+	plugin: 'Plugin'
+
+	def __init__(self, plugin: 'Plugin'):
+		super().__init__()
+		self.signals = WorkerSignals()
+		self.plugin = plugin
+		self._target = plugin.start
+
+_PoolTypeVar: TypeAlias = TypeVar('_PoolTypeVar', bound='_BasePool')
+
+
+class _BasePool:
+
+	worker_class: ClassVar[Type[Worker|PluginThread]]
+	__instances__: ClassVar[List[_PoolTypeVar]]
+	__global_instance: ClassVar[_PoolTypeVar]
+
+	def __init_subclass__(cls):
+		cls.__instances__ = []
 
 	def __new__(cls, *args, **kwargs):
 		instance = super().__new__(cls)
 		cls.__instances__.append(instance)
 		return instance
+
+	@classmethod
+	def globalInstance(cls) -> _PoolTypeVar:
+		try:
+			instance = cls.__global_instance
+			try:
+				instance.activeThreadCount()
+			except RuntimeError:
+				del cls.__global_instance
+				del instance
+				raise AttributeError
+		except AttributeError:
+			instance = cls.__global_instance = cls()
+
+		return instance
+
+class Pool(_BasePool, QtCore.QThreadPool):
+
+	worker_class: ClassVar[Type[Worker]] = Worker
 
 	@classmethod
 	def shutdown_all(cls):
@@ -2140,9 +2365,10 @@ class Pool(QtCore.QThreadPool):
 
 	def shutdown(self):
 		self.clear()
-		self.waitForDone(500)
+		self.waitForDone(1000)
 		if self.activeThreadCount():
 			utilLog.warning(f"Pool still has {self.activeThreadCount()} active threads after waiting 500ms")
+			self.thread().quit()
 
 	def run_threaded_process(
 		self,
@@ -2153,65 +2379,35 @@ class Pool(QtCore.QThreadPool):
 		on_result: Callable[[T], Any] | Coroutine = None,
 		on_error: Callable[[Exception], Any] | Coroutine = None,
 		priority: int = 3,
+		immortal: bool = False,
 		**kwargs: Dict[str, Any]
 	) -> Worker:
 		"""Execute a function in the background with a worker"""
 
-		worker = self.create_worker(func, *args, func_kwargs=func_kwargs, on_finish=on_finish, on_result=on_result, on_error=on_error, **kwargs)
+		worker = self.worker_class.create_worker(
+			func,
+			*args,
+			func_kwargs=func_kwargs,
+			on_finish=on_finish,
+			on_result=on_result,
+			on_error=on_error,
+			immortal=immortal,
+			**kwargs
+		)
 		worker.pool = self
 
 		self.start(worker, priority)
 
 		return worker
 
-	@staticmethod
-	def create_worker(
-		func: Callable | Awaitable,
-		*args,
-		func_kwargs: Dict[str, Any] = None,
-		on_finish: Callable[[], None] | Coroutine = None,
-		on_result: Callable[[T], Any] | Coroutine = None,
-		on_error: Callable[[Exception], Any] | Coroutine = None,
-		immortal: bool = False,
-		**kwargs: Dict[str, Any]
-	) -> Worker:
-		func_kwargs = func_kwargs or {}
-		func_kwargs.update(kwargs)
-		worker = Worker(func, *args, **func_kwargs)
-		worker.setAutoDelete(immortal)
-		if on_finish is None:
-			pass
-		elif iscoroutine(on_finish):
-			connectSignal(
-				worker.signals.finished, lambda: loop.create_task(on_finish if on_finish.cr_running else on_finish())
-			)
-		else:
-			connectSignal(worker.signals.finished, on_finish)
-		if on_result is None:
-			pass
-		elif iscoroutine(on_result):
-			connectSignal(
-				worker.signals.result,
-				lambda result: loop.create_task(on_result(result) if on_result.cr_running else on_result(result))
-			)
-		else:
-			connectSignal(worker.signals.result, on_result)
-		if on_error is None:
-			pass
-		elif iscoroutine(on_error):
-			connectSignal(
-				worker.signals.error,
-				lambda error: loop.create_task(on_error(error) if on_error.cr_running else on_error(error))
-			)
-		else:
-			connectSignal(worker.signals.error, on_error)
-
-		return worker
-
 	run_in_thread = run_threaded_process
 
-	def start(self, runnable: QtCore.QRunnable, priority: int = 3):
+	def start(self, runnable: Worker, priority: int = 3):
 		runnable.pool = self
+		try:
+			runnable.status = Worker.Status.Queued
+		except Exception:
+			pass
 		super().start(runnable, priority)
 
 	def run_with_worker(self, worker: Worker, callback: Callable = None) -> Worker:
@@ -2224,10 +2420,17 @@ class Pool(QtCore.QThreadPool):
 		for worker in workers:
 			self.start(worker, priority)
 
-QApplication.instance().pool = Pool()
-threadPool: Pool = QApplication.instance().pool
 
-run_in_thread = QApplication.instance().pool.run_threaded_process
+pool = Pool()
+threadPool: Pool = pool
+LevityDashboard.main_thread_pool = pool
+run_in_thread = pool.run_threaded_process
+
+
+class PluginPool(_BasePool, ThreadPool):
+
+	worker_class: ClassVar[Type[PluginThread]] = PluginThread
+
 
 def in_thread(func, priority=3):
 	"""Decorator to run a function in a background thread"""
@@ -2237,3 +2440,26 @@ def in_thread(func, priority=3):
 		return run_in_thread(func, *args, **kwargs, priority=priority)
 
 	return wrapper
+
+
+def parse_bool(value: str | int) -> bool | None:
+	if isinstance(value, str):
+		value = value.lower()
+		if value in {'1', 'true', 't', 'yes', 'y', 'on'}:
+			return True
+		elif value in {'0', 'false', 'f', 'no', 'n', 'off'}:
+			return False
+		else:
+			return None
+	elif isinstance(value, int):
+		return bool(value)
+
+
+def pseudo_bound_method(instance: Any = None, func: Callable = None) -> MethodType:
+	"""
+	Bind a function to an instance, but without actually binding it.
+	Similar to functools.partial, but with a different signature.
+	"""
+	if func is None:
+		return partial(pseudo_bound_method, instance)
+	return MethodType(func, instance)
