@@ -21,8 +21,7 @@ from rich.text import Text as RichText
 from rich.theme import Theme
 from sys import gettrace
 
-from LevityDash import __dirs__, __lib__
-from .config import userConfig
+from . import LevityDashboard as lvdash
 
 suppressedModules = [asyncio, shiboken2]
 
@@ -52,7 +51,7 @@ logging_levels = logging._nameToLevel
 
 def install_sentry():
 	try:
-		endpoint = userConfig.get('Logging', 'sentry_endpoint')
+		endpoint = lvdash.config.get('Logging', 'sentry_endpoint')
 		if endpoint:
 			import sentry_sdk
 			sentry_sdk.init(
@@ -61,6 +60,8 @@ def install_sentry():
 			)
 	except ImportError:
 		logging.warning("Sentry SDK not installed. Install with `pip install sentry-sdk` or `pip install LevityDash[monitoring]`")
+	except AttributeError:
+		pass
 	except NoOptionError:
 		try:
 			import sentry_sdk
@@ -71,7 +72,7 @@ def install_sentry():
 
 def install_log_tail(handlers_: List[logging.Handler], level: int = logging.DEBUG):
 	try:
-		token = os.environ.get("LOGTAIL_SOURCE_TOKEN", None) or userConfig.get('Logging', 'logtail_token')
+		token = os.environ.get("LOGTAIL_SOURCE_TOKEN", None) or lvdash.config.get('Logging', 'logtail_token')
 		if token:
 			from logtail import LogtailHandler
 			handlers_.append(LogtailHandler(source_token=token, level=level, include_extra_attributes=True))
@@ -104,7 +105,7 @@ class StatusBarHandler(logging.Handler):
 
 	@property
 	def statusBar(self) -> QStatusBar:
-		return QApplication.instance().activeWindow().statusBar()
+		return getattr(lvdash, 'status_bar', None) or QApplication.instance().activeWindow().statusBar()
 
 
 
@@ -158,8 +159,8 @@ class RichRotatingLogHandlerProxy(RotatingFileHandler, LevityHandler):
 
 class _LevityLogger(logging.Logger):
 	__initiated__: ClassVar[bool] = False
-	__config__: ClassVar[SectionProxy] = userConfig["Logging"]
-	logDir: ClassVar[Path] = Path(__dirs__.user_log_dir)
+	__config__: ClassVar[SectionProxy] = lvdash.config["Logging"]
+	logDir: ClassVar[Path] = Path(lvdash.paths.user_log_dir)
 	errorLogDir: ClassVar[Path]
 	logPath: ClassVar[Path]
 
@@ -193,7 +194,7 @@ class _LevityLogger(logging.Logger):
 			if (path := record.pathname).endswith("__init__.py"):
 				record.pathname = path.replace("__init__.py", "")
 			p = Path(record.pathname)
-			if p.is_relative_to(libPath := Path(__lib__)):
+			if p.is_relative_to(libPath := Path(lvdash.paths.lib)):
 				record.pathname = str(p.relative_to(libPath)).replace("/", ".").rstrip(".py")
 			else:
 				record.pathname = str(p)
@@ -218,9 +219,9 @@ class _LevityLogger(logging.Logger):
 
 	@classmethod
 	def install(cls) -> None:
-		if not userConfig.has_section("Logging"):
-			userConfig.read_dict(cls.LOGGING_DEFAULT_CONFIG)
-			userConfig.save()
+		if not lvdash.config.has_section("Logging"):
+			lvdash.config.read_dict(cls.LOGGING_DEFAULT_CONFIG)
+			lvdash.config.save()
 
 		os.environ["PYTHONIOENCODING"] = 'utf-8'
 
@@ -243,21 +244,22 @@ class _LevityLogger(logging.Logger):
 		)
 
 		level = cls.determineLogLevel()
-		console_level = 3 or cls.determineLogLevel('console', default=level)
-		file_level = 3 or cls.determineLogLevel('file', default=1)
-		status_bar_level = 3 or cls.determineLogLevel('status-bar', default=4)
-		logtail_level = 3 or cls.determineLogLevel('logtail', default=1)
+		console_level = cls.determineLogLevel('console', default=level)
+		file_level = cls.determineLogLevel('file', default=1)
+		status_bar_level = cls.determineLogLevel('status-bar', default=4)
+		logtail_level = cls.determineLogLevel('logtail', default=1)
 
 		handlers = []
-		install_sentry()
-		install_log_tail(handlers, logtail_level)
 
-		# _LevityLogger.errorLogDir = cls.logDir.joinpath("prettyErrors")
+		if cls._parse_bool(os.environ.get('LEVITY_TELEMETRY', '0')):
+			install_sentry()
+			install_log_tail(handlers, logtail_level)
+
 		cls.__ensureFoldersExists()
 		cls.logPath = Path(cls.logDir, 'LevityDash.log')
 		columns = shutil.get_terminal_size((200, 20)).columns - 2
-		fileColumns = userConfig.getOrSet('Logging', 'logFileWidth', '120', userConfig.getint)
-		timeFormat = userConfig.getOrSet('Logging', 'logTimeFormat', '%m/%d/%y %H:%M:%S', str)
+		fileColumns = lvdash.config.getOrSet('Logging', 'logFileWidth', '120', lvdash.config.getint)
+		timeFormat = lvdash.config.getOrSet('Logging', 'logTimeFormat', '%m/%d/%y %H:%M:%S', str)
 
 		consoleFile = Console(
 			tab_size=2,
@@ -279,30 +281,32 @@ class _LevityLogger(logging.Logger):
 			log_time_format=timeFormat,
 			tracebacks_show_locals=True,
 			tracebacks_suppress=suppressedModules,
-			locals_max_length=15,
+			locals_max_length=5,
 			locals_max_string=200,
 			markup=True,
 			show_path=False,
 			tracebacks_width=columns,
 			rich_tracebacks=True,
-			level=3,
+			omit_repeated_times=False,
+			level=console_level,
+			#! change the trace backs to true!!
 		)
 
 		richRotatingFileHandler = RichRotatingLogHandlerProxy(
-			encoding=userConfig.getOrSet('Logging', 'encoding', 'utf-8', str),
+			encoding=lvdash.config.getOrSet('Logging', 'encoding', 'utf-8', str),
 			console=consoleFile,
 			show_path=False,
 			markup=True,
 			log_time_format=timeFormat,
 			rich_tracebacks=True,
-			omit_repeated_times=True,
+			omit_repeated_times=False,
 			tracebacks_suppress=suppressedModules,
 			tracebacks_show_locals=True,
 			tracebacks_width=fileColumns,
 			locals_max_string=200,
 			filename=cls.logPath,
-			maxBytes=int(userConfig.getOrSet('Logging', 'rolloverSize', '10mb', userConfig.configToFileSize)),
-			backupCount=int(userConfig.getOrSet('Logging', 'rolloverCount', '5', userConfig.getint)),
+			maxBytes=int(lvdash.config.getOrSet('Logging', 'rolloverSize', '10mb', lvdash.config.configToFileSize)),
+			backupCount=int(lvdash.config.getOrSet('Logging', 'rolloverCount', '5', lvdash.config.getint)),
 		)
 		cls.propagate = True
 
@@ -548,22 +552,21 @@ class _LevityLogger(logging.Logger):
 	def openLog(cls):
 		webbrowser.open(cls.logPath.as_uri())
 
-	def setLevel(self, level: int | str, handler: str = None) -> None:
+	def setLevel(self, level: int | str, *handler: str) -> None:
 		self.verbose(
 			f"Log {handler or self.name} set to level {logging.getLevelName(level) if isinstance(level, int) else level}",
 			verbosity=5
 		)
-		match handler:
-			case None:
-				super().setLevel(level)
-			case 'console':
-				self.console.setLevel(level)
-			case 'file':
-				self.file.setLevel(level)
-			case 'status-bar':
-				self.status_bar.setLevel(level)
-			case _:
-				super().setLevel(level)
+		if not handler:
+			super().setLevel(level)
+		if 'console' in handler:
+			self.console.setLevel(level)
+		if 'file' in handler:
+			self.file.setLevel(level)
+		if 'status-bar' in handler:
+			self.status_bar.setLevel(level)
+		if 'all' in handler:
+			self.setLevel(level, 'console', 'file', 'status-bar')
 
 	def setVerbosity(self, level: int):
 		self.fileHandler.setLevel(5 - level)
@@ -626,9 +629,9 @@ class PrettyErrorLogger(_LevityLogger):
 
 	@classmethod
 	def cleanupLogFolder(cls):
-		maxLogFolderSize = int(userConfig.getOrSet('Logging', 'maxLogFolderSize', '200mb', userConfig.configToFileSize))
-		maxAge: timedelta = userConfig.getOrSet('Logging', 'maxLogAge', '7 days', userConfig.configToTimeDelta)
-		maxPrettyErrorsSize = int(userConfig.getOrSet('Logging', 'maxPrettyErrorsFolderSize', '50mb', userConfig.configToFileSize))
+		maxLogFolderSize = int(lvdash.config.getOrSet('Logging', 'maxLogFolderSize', '200mb', lvdash.config.configToFileSize))
+		maxAge: timedelta = lvdash.config.getOrSet('Logging', 'maxLogAge', '7 days', lvdash.config.configToTimeDelta)
+		maxPrettyErrorsSize = int(lvdash.config.getOrSet('Logging', 'maxPrettyErrorsFolderSize', '50mb', lvdash.config.configToFileSize))
 
 		if cls.folderSize(cls.logDir, 1) > maxLogFolderSize:
 			cls.removeOldestFileToFitSize(cls.logDir, maxLogFolderSize)
@@ -682,7 +685,7 @@ LevityLogger: _LevityLogger = _LevityLogger('Levity')
 
 LevityPluginLog = LevityLogger.getChild("Plugins")
 LevityUtilsLog = LevityLogger.getChild("Utils")
-userConfig.setLogger(LevityLogger.getChild('LevityConfig'))
+lvdash.config.setLogger(LevityLogger.getChild('LevityConfig'))
 
 debug = LevityLogger.level <= logging.DEBUG
 

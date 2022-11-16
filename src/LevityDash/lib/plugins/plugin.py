@@ -3,6 +3,7 @@ from asyncio import AbstractEventLoop, Future
 import asyncio
 from abc import abstractmethod
 from datetime import datetime, timedelta
+from enum import Enum
 from functools import cached_property, lru_cache
 from operator import attrgetter
 from pathlib import Path
@@ -243,6 +244,31 @@ class PluginMeta(type):
 			attrs['classes'] = Classes(**classes)
 			attrs['pluginLog'] = pluginLog.getChild(name)
 
+			own_requirements: Set[Plugin.Requirement] = attrs.get('requirements', set())
+
+			if not isinstance(own_requirements, set):
+				if isinstance(own_requirements, str):
+					own_requirements = {own_requirements}
+				else:
+					try:
+						own_requirements = set(own_requirements)
+					except TypeError:
+						raise TypeError(f'Plugin {name} requirements must be a set or a string or an iterable of strings')
+
+			for i in list(own_requirements):
+				if not isinstance(i, Plugin.Requirement):
+					own_requirements.remove(i)
+					try:
+						own_requirements.add(Plugin.Requirement(i))
+					except ValueError:
+						raise ValueError(f'Invalid requirement for plugin {name}: {i}')
+
+			for base in bases:
+				if (base_req := getattr(base, 'requirements', None)) is not None:
+					own_requirements.update(base_req)
+
+			attrs['requirements'] = own_requirements
+
 		new_cls = super().__new__(mcs, name, bases, attrs)
 		if rt:
 			RealtimeSource.register(new_cls)
@@ -273,6 +299,21 @@ SomePlugin.AnySource = AnySource
 
 
 class Plugin(metaclass=PluginMeta):
+
+	class Requirement(str, Enum):
+		"""Requirements for """
+		Display = 'display'
+		Network = 'network'
+		Internet = 'internet'
+		Bluetooth = 'bluetooth'
+		Zigbee = 'zigbee'
+		ZWave = 'z-wave'
+		Serial = 'serial'
+		Sensor = 'sensor'
+		PlatformSpecific = 'platform-specific'
+
+	requirements: Set[Requirement]
+
 	manager: 'PluginsLoader'
 	schema: Schema
 	publisher: Publisher

@@ -545,7 +545,7 @@ class CategoryItem(tuple):
 	def category(self) -> 'CategoryItem':
 		return self[:-1]
 
-	@property
+	@cached_property
 	def name(self) -> str:
 		values = tuple(self)
 		if len(values) == 0:

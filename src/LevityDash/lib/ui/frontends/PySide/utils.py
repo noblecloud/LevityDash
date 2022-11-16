@@ -1,16 +1,18 @@
 from collections import defaultdict
 from dataclasses import asdict, is_dataclass
 from enum import Enum
-from functools import partial
+from functools import cached_property, partial
 from os import environ
 from types import SimpleNamespace
 from typing import Callable, ClassVar, Dict, List, Optional, overload, Protocol, runtime_checkable, Tuple, Type, Union
 
-from PySide2.QtCore import QLineF, QObject, QPoint, QPointF, QRectF, QSize, QSizeF, Qt, QTimer, Signal
-from PySide2.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen, QPixmap, QTransform
+import numpy as np
+from PySide2 import QtCore
+from PySide2.QtCore import QLineF, QObject, QPoint, QPointF, QRectF, QSize, QSizeF, Qt, QTimer, Signal, QThread
+from PySide2.QtGui import QBrush, QColor, QFont, QImage, QPainter, QPainterPath, QPen, QPixmap, QTransform, QPixmapCache
 from PySide2.QtWidgets import (
-	QApplication, QGraphicsDropShadowEffect, QGraphicsItem, QGraphicsPixmapItem,
-	QGraphicsSceneMouseEvent
+	QApplication, QGraphicsDropShadowEffect, QGraphicsEffect, QGraphicsItem, QGraphicsPixmapItem,
+	QGraphicsScene, QGraphicsSceneMouseEvent
 )
 from yaml import Dumper, SafeDumper
 
@@ -24,6 +26,20 @@ from LevityDash.lib.utils import (
 	utilLog as log
 )
 
+
+def asArray(img) -> np.array:
+	if isinstance(img, QPixmap):
+		img = img.toImage()
+	elif isinstance(img, QGraphicsPixmapItem):
+		img = img.pixmap().toImage()
+	incomingImage = img.convertToFormat(QImage.Format.Format_RGB32)
+
+	width = incomingImage.width()
+	height = incomingImage.height()
+
+	ptr = incomingImage.constBits()
+	arr = np.array(ptr).reshape((height, width, 4))
+	return arr
 
 def objectRepresentor(dumper, obj):
 	if hasattr(obj, 'representer'):
@@ -45,7 +61,7 @@ def objectRepresentor(dumper, obj):
 
 itemCount = 0
 itemSkip = 3
-INCREMENTAL_LOAD = False
+INCREMENTAL_LOAD = True
 
 
 def loadGraphs(parent, items, parentItems, **kwargs):
@@ -74,12 +90,14 @@ def loadGraphs(parent, items, parentItems, **kwargs):
 				item = GraphType(parent=parent, **item, cacheInitArgs=True)
 				newItems.append(item)
 			case [*_]:
-				graph = sorted(existing, key=lambda g: (g.geometry.scoreSimilarity(ns.geometry), abs(len(ns.figures) - len(g.figures))))[0]
+				graph = sorted(
+					existing, key=lambda g: (g.geometry.scoreSimilarity(ns.geometry), abs(len(ns.figures) - len(g.figures)))
+				)[0]
 				existing.remove(graph)
 
 		itemCount += 1
 		if INCREMENTAL_LOAD and itemCount % itemSkip == 0:
-			QApplication.processEvents()
+			QThread.yieldCurrentThread()
 	for i in existing:
 		i.scene().removeItem(i)
 	return newItems
@@ -109,14 +127,16 @@ def loadRealtime(parent, items, parentItems, **kwargs):
 				existing.remove(existingItem)
 				existingItem.state = item
 			case [*_]:
-				existingItem = sorted(existing, key=lambda g: (g.geometry.scoreSimilarity(ns.geometry), levenshtein(str(ns.key), str(g.key))))[0]
+				existingItem = sorted(
+						existing, key=lambda g: (g.geometry.scoreSimilarity(ns.geometry), levenshtein(str(ns.key), str(g.key)))
+					)[0]
 				existing.remove(existingItem)
 				existingItem.state = item
 			case _:
 				print('fail')
 		itemCount += 1
 		if INCREMENTAL_LOAD and itemCount % itemSkip == 0:
-			QApplication.processEvents()
+			QThread.yieldCurrentThread()
 	for i in existing:
 		i.scene().removeItem(i)
 	return newItems
@@ -148,7 +168,7 @@ def loadClock(parent, items, parentItems, **kwargs):
 				existing.remove(clock)
 		itemCount += 1
 		if INCREMENTAL_LOAD and itemCount % itemSkip == 0:
-			QApplication.processEvents()
+			QThread.yieldCurrentThread()
 	for i in existing:
 		i.scene().removeItem(i)
 	return newItems
@@ -179,7 +199,7 @@ def loadPanels(parent, items, parentItems, panelType, **kwargs) -> List[Stateful
 				existing.remove(panel)
 		itemCount += 1
 		if INCREMENTAL_LOAD and itemCount % itemSkip == 0:
-			QApplication.processEvents()
+			QThread.yieldCurrentThread()
 	for i in existing:
 		i.scene().removeItem(i)
 
@@ -216,7 +236,7 @@ def loadStacks(parent, items, parentItems, valueStack, **kwargs):
 				existing.remove(panel)
 		itemCount += 1
 		if INCREMENTAL_LOAD and itemCount % itemSkip == 0:
-			QApplication.processEvents()
+			QThread.yieldCurrentThread()
 	for i in existing:
 		i.scene().removeItem(i)
 
@@ -257,7 +277,7 @@ def loadLabels(parent, items, parentItems, **kwargs):
 				existing.remove(label)
 		itemCount += 1
 		if INCREMENTAL_LOAD and itemCount % itemSkip == 0:
-			QApplication.processEvents()
+			QThread.yieldCurrentThread()
 	for i in existing:
 		i.scene().removeItem(i)
 	return newItems
@@ -288,7 +308,7 @@ def loadMoon(parent, items, parentItems, **kwargs):
 				moon.state = item
 		itemCount += 1
 		if INCREMENTAL_LOAD and itemCount % itemSkip == 0:
-			QApplication.processEvents()
+			QThread.yieldCurrentThread()
 	for i in existing:
 		i.scene().removeItem(i)
 	return newItems
@@ -310,7 +330,9 @@ def itemLoader(parent, unsortedItems: list[dict], existing: list = None, **kwarg
 			else:
 				_type = 'group'
 			i['type'] = _type
-		if _type.startswith('disabled-') or _type.startswith('hidden-') or _type.endswith('-disabled') or _type.endswith('-hidden'):
+		if _type.startswith('disabled-') or _type.startswith('hidden-') or _type.endswith('-disabled') or _type.endswith(
+			'-hidden'
+		):
 			continue
 		_type = _type.split('.')[0]
 		sortedItems[_type].append(i)
@@ -318,9 +340,8 @@ def itemLoader(parent, unsortedItems: list[dict], existing: list = None, **kwarg
 	newItems = []
 
 	for _type, group in sortedItems.items():
+
 		match _type:
-			case 'graph':
-				items = loadGraphs(parent, group, existing, **kwargs)
 			case 'mini-graph':
 				items = loadGraphs(parent, group, existing, type='mini', **kwargs)
 			case 'realtime':
@@ -331,6 +352,8 @@ def itemLoader(parent, unsortedItems: list[dict], existing: list = None, **kwarg
 				items = loadLabels(parent, group, existing, **kwargs)
 			case 'moon':
 				items = loadMoon(parent, group, existing, **kwargs)
+			case 'graph':
+				items = loadGraphs(parent, group, existing, **kwargs)
 			case 'value-stack' | 'stack':
 				items = loadStacks(parent, group, existing, valueStack=_type == 'value-stack', **kwargs)
 			case str(panel):
@@ -443,7 +466,9 @@ def modifyTransformValues(
 	return transform
 
 
-def estimateTextFontSize(font: QFont, string: str, maxWidth: Union[float, int], maxHeight: Union[float, int], resize: bool = True) -> tuple[QRectF, QFont]:
+def estimateTextFontSize(
+	font: QFont, string: str, maxWidth: Union[float, int], maxHeight: Union[float, int], resize: bool = True
+) -> tuple[QRectF, QFont]:
 	font = QFont(font)
 	p = QPainterPath()
 	p.addText(QtCore.QPoint(0, 0), font, string)
@@ -552,7 +577,10 @@ class mouseHoldTimer(mouseTimer):
 			super(mouseHoldTimer, self)._T()
 
 
-def addCrosshair(painter: QPainter, color: QColor = Qt.red, size: int | float | Size | QSize | QSizeF = 2.5, weight=1, pos: QPointF = QPointF(0, 0)):
+def addCrosshair(
+	painter: QPainter, color: QColor = Qt.red, size: int | float | Size | QSize | QSizeF = 2.5, weight=1,
+	pos: QPointF = QPointF(0, 0)
+):
 	"""
 	Decorator that adds a crosshair paint function
 	"""
@@ -579,7 +607,9 @@ def addCrosshair(painter: QPainter, color: QColor = Qt.red, size: int | float | 
 	painter.drawLine(horizontalLine)
 
 
-def addRect(painter: QPainter, rect: QRectF, color: QColor = Qt.red, fill: QColor = Qt.transparent, offset: float | int = 0):
+def addRect(
+	painter: QPainter, rect: QRectF, color: QColor = Qt.red, fill: QColor = Qt.transparent, offset: float | int = 0
+):
 	pen = QPen(color or Qt.white)
 	brush = QBrush(fill or Qt.transparent)
 	pen.setCosmetic(True)
@@ -625,9 +655,9 @@ SafeDumper.add_multi_representer(object, objectRepresentor)
 Dumper.add_multi_representer(object, objectRepresentor)
 
 __all__ = ('DisplayType', 'GraphicsItemSignals', 'addCrosshair', 'estimateTextFontSize', 'estimateTextSize',
-           'findSizePosition', 'getItemsWithType', 'hasState',
-           'itemLoader', 'modifyTransformValues', 'mouseHoldTimer', 'mouseTimer', 'objectRepresentor',
-           'colorPalette', 'selectionPen', 'debugPen', 'gridColor', 'gridPen')
+					 'findSizePosition', 'getItemsWithType', 'hasState', 'itemLoader', 'modifyTransformValues', 'mouseHoldTimer',
+					 'mouseTimer', 'objectRepresentor', 'colorPalette', 'selectionPen', 'debugPen', 'gridColor', 'gridPen',
+					 'RendererScene', 'DebugPaint', 'DebugPaintable', 'DebugSwitch')
 
 useCache = False
 
@@ -762,7 +792,10 @@ class CachedSoftShadow(SoftShadow):
 		self.owner = owner
 		super(CachedSoftShadow, self).__init__(owner, *args, **kwargs)
 
-	def sourcePixmap(self, system: Qt.CoordinateSystem = ..., offset: Optional[QPoint] = ..., mode: QGraphicsDropShadowEffect.PixmapPadMode = ...) -> QPixmap:
+	def sourcePixmap(
+		self, system: Qt.CoordinateSystem = ..., offset: Optional[QPoint] = ...,
+		mode: QGraphicsDropShadowEffect.PixmapPadMode = ...
+	) -> QPixmap:
 		system = Qt.CoordinateSystem.LogicalCoordinates
 		mode = QGraphicsDropShadowEffect.NoPad
 		return super(CachedSoftShadow, self).sourcePixmap(system=system, mode=mode)
@@ -842,7 +875,7 @@ class RendererScene(QGraphicsScene):
 	def renderItem(self, item: QGraphicsItem, dispose: bool = False) -> QPixmap:
 		pixel_ratio = QApplication.instance().devicePixelRatio()
 		t = QTransform.fromScale(pixel_ratio, pixel_ratio)
-		rect = t.mapRect(item.boundingRect())
+		rect = t.mapRect(item.sceneBoundingRect())
 		raster = QImage(rect.size().toSize(), QImage.Format_ARGB32)
 		raster.setDevicePixelRatio(pixel_ratio)
 		raster.fill(Qt.transparent)
@@ -853,10 +886,14 @@ class RendererScene(QGraphicsScene):
 		if dispose:
 			painter.end()
 			self.removeItem(item)
-			return QPixmap.fromImage(raster)
+			result = QPixmap.fromImage(raster)
+			del raster
+			return result
 		item.setPos(pos)
 		painter.end()
-		return QPixmap.fromImage(raster)
+		result = QPixmap.fromImage(raster)
+		del raster
+		return result
 
 	def bakeEffects(self, item: QGraphicsItem | QPixmap, *effects: QGraphicsEffect) -> QPixmap:
 		# Convert the item to a GraphicsPixmapItem
@@ -868,7 +905,7 @@ class RendererScene(QGraphicsScene):
 			self.addItem(item)
 
 		# Apply only the first effect and bake the pixmap
-		if effects:
+		while effects:
 			effect, *effects = effects
 			if isinstance(effect, type) and not issubclass(effect, QGraphicsEffect):
 				log.error('Effect must be a QGraphicsEffect for baking')
@@ -881,8 +918,5 @@ class RendererScene(QGraphicsScene):
 			item.setGraphicsEffect(effect)
 		item = self.renderItem(item, dispose=True)
 
-		# If there are still effects, recursively bake them
-		if effects:
-			item = self.bakeEffects(item, *effects)
-		QApplication.instance().processEvents()
+		self.clear()
 		return item

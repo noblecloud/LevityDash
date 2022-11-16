@@ -683,7 +683,6 @@ class StateProperty(property):
 		self.__existingValues__.pop(self.cacheKey(owner), None)
 		owner._set_state_items_.add(self.name)
 
-
 	def schedule_after_func(self, owner: 'Stateful', afterPool: 'ActionPool' = None, **kwargs):
 		if after := self.__options.get("after", False):
 			if (func := after.get("func", None)) is not None:
@@ -874,7 +873,6 @@ class StateProperty(property):
 		return f"{self.key}.{id(obj):x}"
 
 	# Section .existing(owner)
-	##@profile
 	def existing(self, owner) -> Any | Literal[UnsetExisting]:
 		if isinstance(owner, StatefulMetaclass):
 			return UnsetExisting
@@ -1453,7 +1451,6 @@ class StateProperty(property):
 			return UnsetReturn
 
 	# Section .setState()
-	##@profile
 	def setState(self, owner, state, afterPool: OrderedSet = None):
 		if UnsetReturn not in self.returns:
 			if (existing := self.existing(owner)) is not UnsetExisting and existing is not state:
@@ -2108,7 +2105,14 @@ class Stateful(metaclass=StatefulMetaclass):
 
 	@statefulParent.setter
 	def statefulParent(self, value):
+		if value is not None and not isinstance(value, Stateful):
+			raise TypeError(f"statefulParent must be a Stateful, not {type(value)}")
 		self.__statefulParent = value
+		try:
+			if self._actionPool.up is not value._actionPool:
+				value._actionPool.add(self._actionPool)
+		except:
+			pass
 
 	@property
 	def stateful_level(self) -> int:
@@ -2134,7 +2138,7 @@ class Stateful(metaclass=StatefulMetaclass):
 	def _actionPool(self) -> ActionPool:
 		try:
 			return self.statefulParent._actionPool.new(self)
-		except AttributeError:
+		except Exception:
 			return ActionPool(self, trace='acton')
 
 	# Section .shared
@@ -2511,7 +2515,6 @@ class Stateful(metaclass=StatefulMetaclass):
 		return {v: v.default(type(self)) for v in self.statefulItems.values() if v.singleVal}
 
 	# Section .prep_init
-	##@profile
 	def prep_init(self, kwargs):
 		m = {'parent': kwargs.pop('stateParent', None), 'key': kwargs.pop('stateKey', None)}
 

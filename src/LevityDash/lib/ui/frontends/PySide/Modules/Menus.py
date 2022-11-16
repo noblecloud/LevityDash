@@ -15,6 +15,7 @@ from rich.pretty import Pretty
 from rich.syntax import Syntax
 from rich.theme import Theme
 
+from LevityDash import LevityDashboard
 from LevityDash.lib.stateful import StatefulDumper
 
 if TYPE_CHECKING:
@@ -29,11 +30,9 @@ from PySide2.QtWidgets import QMenu
 
 from LevityDash.lib.log import debug
 from LevityDash.lib.config import userConfig
-from LevityDash.lib.plugins import Plugins
 from LevityDash.lib.EasyPath import EasyPath
 from LevityDash.lib.ui.Geometry import Position, LocationFlag, AlignmentFlag
 
-DATETIME_NO_ZERO_CHAR = environ['LEVITY_DATETIME_NO_ZERO_CHAR']
 
 class DimensionFloatHighlighter(RegexHighlighter):
 	base_style = "repr."
@@ -84,8 +83,9 @@ class BaseContextMenu(QMenu):
 		self.debugActions.addAction(self.addAction('Print State', self.printState))
 		self.debugActions.addAction(self.addAction('Print State Dict', partial(self.printState, dict)))
 		self.debugActions.addAction(self.addAction('Print Repr', self.printRepr))
-		self.addMenu(ChildrenMenu(self.parent))
-		# self.debugActions.addMenu(ChildrenMenu(self))
+		self.debugActions.addAction(self.addAction('Copy Fingerprint', lambda: QApplication.clipboard().setText(f'{id(self.parent):x}')))
+		self.debugActions.addAction(self.addMenu(ChildrenMenu(self)))
+
 		if self.parent.deletable:
 			self.addAction('Delete', self.delete)
 
@@ -309,12 +309,30 @@ class ChildrenMenu(QMenu):
 		self.aboutToShow.connect(self._aboutToShow)
 
 	def _aboutToShow(self):
-		for child in self.parent.childPanels:
-			childMenu = getattr(child, 'contextMenu', None)
-			if childMenu is not None and childMenu not in self.actions():
+		existing = {a.parent: a for a in self.actions() if isinstance(a, BaseContextMenu)}
+		self.setVisible(True)
+		for child in self.parent.parent.childItems():
+			if child in existing:
+				continue
+			if (childMenu := getattr(child, 'contextMenu', None)) is not None:
 				name = getattr(child, 'stateName', None) or type(child).__name__
 				m = self.addMenu(childMenu)
 				m.setText(name)
+			else:
+				for grand_child in child.childItems():
+					if grand_child in existing:
+						continue
+					if (childMenu := getattr(grand_child, 'contextMenu', None)) is not None:
+						name = getattr(grand_child, 'stateName', None) or type(grand_child).__name__
+						m = self.addMenu(childMenu)
+						m.setText(name)
+		self.adjustSize()
+		if len(self.actions()) == 0:
+			self.setVisible(False)
+
+	@cached_property
+	def parent_item(self):
+		return
 
 
 class LabelContextMenu(BaseContextMenu):
@@ -465,7 +483,7 @@ class TimeContextMenu(BaseContextMenu):
 
 	def uniqueItems(self):
 		insert = self.addMenu('Insert')
-		insert.addAction('Time', lambda: self.parent.addItem(f'%{DATETIME_NO_ZERO_CHAR}I:%M'))
+		insert.addAction('Time', lambda: self.parent.addItem(f'%-I:%M'))
 		insert.addAction('Date', lambda: self.parent.addItem('%A, %B %-d'))
 		insert.addAction('AM/PM', lambda: self.parent.addItem('%p'))
 		insert.addAction('Day', lambda: self.parent.addItem('%-d'))
@@ -564,9 +582,11 @@ class SourceMenu(QMenu):
 		self.parent = parent
 		super(SourceMenu, self).__init__(parent)
 		self.aboutToShow.connect(self.updateItems)
+		self.group = QActionGroup(self)
+		self.group.setExclusive(True)
 		self.setMinimumWidth(150)
 		self.setTitle('Source')
-		self.addSources()
+		self.updateItems()
 
 	def updateItems(self):
 		if self.sources:
@@ -579,7 +599,7 @@ class SourceMenu(QMenu):
 	@property
 	def sources(self):
 		if self.parent.parent.key is not None:
-			return [i for i in Plugins if self.parent.parent.key in i]
+			return [i for i in LevityDashboard.plugins if self.parent.parent.key in i]
 		return []
 
 	def addSources(self):

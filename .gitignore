@@ -133,11 +133,12 @@ venv.bak/
 /.idea/
 /.idea
 
-/tests
-/tests/*
-
 /.vscode/
 scraches
 node_modules/
 build/.signature
-skratch/
+stash/
+.config
+
+memray*
+/docs/.obsidian/

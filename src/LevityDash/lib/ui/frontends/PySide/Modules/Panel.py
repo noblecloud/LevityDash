@@ -20,7 +20,6 @@ from PySide2.QtWidgets import (
 	QApplication, QFileDialog, QGraphicsItem, QGraphicsItemGroup, QGraphicsPathItem, QGraphicsSceneDragDropEvent,
 	QGraphicsSceneMouseEvent, QStyleOptionGraphicsItem
 )
-from qasync import asyncSlot
 from rich.repr import auto
 
 from LevityDash.lib.config import userConfig
@@ -34,7 +33,8 @@ from LevityDash.lib.ui.Geometry import (
 	size_px
 )
 from LevityDash.lib.utils.shared import (
-	_Panel, boolFilter, clearCacheAttr, connectSignal, disconnectSignal, getItemsWithType, hasState, Numeric, SimilarValue
+	_Panel, boolFilter, clearCacheAttr, connectSignal, defer, disconnectSignal, getItemsWithType, hasState, Numeric,
+	SimilarValue
 )
 from WeatherUnits import Length
 from .Handles import Handle, HandleGroup
@@ -44,8 +44,6 @@ from ..utils import colorPalette, GeometryManaged, GeometryManager, GraphicsItem
 
 if TYPE_CHECKING:
 	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import Text
-
-loop = asyncio.get_running_loop()
 
 
 class Border(QGraphicsPathItem, Stateful, tag=...):
@@ -71,7 +69,7 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 		except AttributeError:
 			return None
 
-	@asyncSlot()
+	@Slot()
 	async def _parentResized(self, *args):
 		self.updatePath()
 
@@ -128,6 +126,29 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 
 	@StateProperty(default=LocationFlag.Edges, allowNone=False, after=updatePath)
 	def edges(self) -> LocationFlag:
+		"""The edges of the parent that the border is on.
+
+		Value
+		-----
+		LocationFlag
+
+		Decoding
+		--------
+		str : 'left', 'right', 'top', 'bottom' or a combination of them along with 'all' and 'edges'
+		int : The int value of the LocationFlag associated with the edge
+
+		Encoding
+		--------
+		str : Comma separated list of the edges or 'all' if all edges are selected
+
+		Example Config
+		--------------
+		edges: top, left
+
+		edges: all
+
+		edges: top-left
+		"""
 		return self._edges
 
 	@edges.setter
@@ -137,22 +158,21 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 	@edges.decode
 	def edges(self, value: str | int) -> LocationFlag:
 		if isinstance(value, str):
-			if value.casefold().startswith('all'):
+			value = value.casefold()
+			if value.startswith('all'):
 				return LocationFlag.Edges
-			elif value.casefold() == 'none':
+			elif value == 'none':
 				return LocationFlag.Center
-			location = []
-			if 'left' in value.casefold():
-				location.append(LocationFlag.Left)
-			if 'right' in value.casefold():
-				location.append(LocationFlag.Right)
-			if 'top' in value.casefold():
-				location.append(LocationFlag.Top)
-			if 'bottom' in value.casefold():
-				location.append(LocationFlag.Bottom)
-			if len(location) in {0, 4}:
-				return LocationFlag.Edges
-			return LocationFlag(sum(location))
+			location = LocationFlag(0)
+			if 'left' in value:
+				location |= LocationFlag.Left
+			if 'right' in value:
+				location |= LocationFlag.Right
+			if 'top' in value:
+				location |= LocationFlag.Top
+			if 'bottom' in value:
+				location |= LocationFlag.Bottom
+			return location if int(location) else LocationFlag.Center
 		return LocationFlag(value)
 
 	@edges.encode
@@ -166,6 +186,31 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 
 	@StateProperty(default=Dimension(0, absolute=True), after=updatePath)
 	def offset(self) -> Dimension | Length:
+		"""The offset of the border from the parent.
+
+		Value
+		-----
+		Dimension | Length
+
+		Decoding
+		--------
+		str : A string representation of a Dimension or Length
+			Examples: '10px', '10%', '1mm', '0.1in'
+		int : The offset in pixels
+
+		Encoding
+		--------
+		str : A string representation of the offset
+
+		Example Config
+		--------------
+		offset: 10px
+
+		offset: 10%
+
+		offset: 1mm
+		"""
+
 		return self._offset
 
 	@offset.setter
@@ -182,6 +227,24 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 
 	@StateProperty(default=Size.Height(1, absolute=False), allowNone=False, after=updatePath)
 	def size(self) -> Size.Height | Size.Width:
+		"""The size of the border.
+
+		Value
+		-----
+		Size.Height | Size.Width
+
+		Decoding
+		--------
+		str : A string representation of a absolute pixel value or a relative percentage.  Relative values are
+		      relative to the parent's height or width depending on the value of the 'edges' property.
+			Examples: '10px', '10%'
+		int : The size in pixels
+
+		Encoding
+		--------
+		str : A string representation of the size
+		"""
+
 		return self._size
 
 	@size.setter
@@ -280,9 +343,14 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 			value /= 256
 		return sorted([float(value), 0.0, 1.0])[1]
 
-# @enabled.condition
-# def enabled(self) -> bool:
-# 	return not self.isEnabled()
+	def itemChange(self, change: QGraphicsItem.GraphicsItemChange, value: Any) -> Any:
+		if change is self.ItemVisibleHasChanged:
+			if (sig := self.resize_signal) is not None:
+				if change:
+					connectSignal(sig, self.updatePath)
+				else:
+					disconnectSignal(sig, self.updatePath)
+		return super().itemChange(change, value)
 
 
 class SizeGroup:
@@ -294,6 +362,8 @@ class SizeGroup:
 	_lastSize: float = 0
 	_alignments: Dict[AlignmentFlag, float]
 
+	area = 10
+	margins = QMargins(area, area, area, area)
 
 	class ItemData(NamedTuple):
 		item: 'Text'
@@ -321,6 +391,13 @@ class SizeGroup:
 		self.adjustSizes(reason='init')
 
 		QApplication.instance().resizeFinished.connect(self.adjustSizes)
+		try:
+			self.parent.resized.connect(self.adjustSizes)
+		except AttributeError:
+			pass
+
+	def post_loading(self):
+		self.adjustSizes(reason='post_loading')
 
 	def adjustSizes(self, exclude: Set['Text'] = None, reason=None):
 		# items = self.similarItems(similarTo) if similarTo is not None else self.items
@@ -330,17 +407,19 @@ class SizeGroup:
 		self.locked = True
 		for group in self.sizes.values():
 			for item in group:
-				if item is not exclude:
-					item.updateTransform(updatePath=False)
+				if item is not exclude and hasattr(item, 'updateTransform'):
+					try:
+						item.updateTransform(updatePath=False)
+					except AttributeError:
+						pass
+					except Exception as e:
+						log.exception(e)
 		self.locked = False
 
 	def addItem(self, item: 'Text'):
 		self.items.add(item)
 		item._sized = self
-		if QThread.currentThread() is QApplication.instance().thread():
-			loop.call_soon_threadsafe(partial(self.adjustSizes, item, reason='addItem'))
-		else:
-			loop.call_later(.5, partial(self.adjustSizes, item, reason='addItem'))
+		self.adjustSizes(item, reason='addItem')
 
 	def removeItem(self, item: 'Text'):
 		self.items.remove(item)
@@ -357,23 +436,18 @@ class SizeGroup:
 		itemHeight = item.limitRect.height()
 		return min(sizes, key=lambda x: abs(x - itemHeight))
 
-	def sharedSize(self, v):
+	def sharedSize(self, v) -> float:
 		s = min((item.getTextScale() for item in self.simlilarItems(v)), default=1)
 		if not self.locked and abs(s - self._lastSize) > 0.01:
 			self._lastSize = s
 			self.__dict__.pop('sizes', None)
-			if QThread.currentThread() is QApplication.instance().thread():
-				loop.call_soon_threadsafe(partial(self.adjustSizes, v, reason='shared-size-change'))
-			else:
-				loop.call_later(.5, partial(self.adjustSizes, v, reason='shared-size-change'))
+			self.adjustSizes(v, reason='shared-size-change')
 		return s
 
 	def testSimilar(self, rect: QRect | QRectF, other: 'Text') -> bool:
 		other = other.parent.sceneBoundingRect()
 		diff = (other.size() - rect.size())
-		area = 10
-		margins = QMargins(area, area, area, area)
-		return abs(diff.height()) < area and rect.marginsAdded(margins).intersects(other.marginsAdded(margins))
+		return abs(diff.height()) < SizeGroup.area and rect.marginsAdded(SizeGroup.margins).intersects(other.marginsAdded(SizeGroup.margins))
 
 	def simlilarItems(self, item: 'Text'):
 		ownSize = item.parent.sceneBoundingRect()
@@ -804,6 +878,7 @@ class Panel(_Panel, Stateful, tag='group'):
 		hierarchy = []
 		for i in self.hierarchy:
 			if (name := i.stateName) is not None:
+				name = f'{type(i).__name__}({name})'
 				hierarchy.append(name)
 			elif i.__tag__ is ...:
 				if hierarchy and hierarchy[-1] != '...':
@@ -1281,6 +1356,20 @@ class Panel(_Panel, Stateful, tag='group'):
 		margins = rect.marginsRemoved(self.margins.asQMarginF())
 		return margins
 
+	@property
+	def sceneMarginRect(self) -> QRectF:
+		return self.mapRectToScene(self.marginRect)
+
+	@property
+	def margin_path(self) -> QPainterPath:
+		path = QPainterPath()
+		path.addRect(self.marginRect)
+		return path
+
+	@property
+	def scene_margin_path(self):
+		return self.mapToScene(self.margin_path)
+
 	# def shape(self):
 	# 	path = QPainterPath()
 	# 	path.addRect(self.rect())
@@ -1713,7 +1802,12 @@ class Panel(_Panel, Stateful, tag='group'):
 	@Slot(QPointF, QSizeF, QRectF, 'parentResized')
 	def parentResized(self, arg: Union[QPointF, QSizeF, QRectF]):
 		if isinstance(arg, (QRect, QRectF, QSize, QSizeF)):
-			self.geometry.updateSurface(arg)
+			pool = self._actionPool
+			if pool.can_execute:
+				self.geometry.updateSurface(arg)
+			else:
+				pool.add(self.geometry.updateSurface)
+
 
 	@property
 	def containingRect(self):
@@ -1867,19 +1961,6 @@ class Panel(_Panel, Stateful, tag='group'):
 		items = [child for child in self.childPanels]
 		for item in items:
 			self.scene().removeItem(item)
-
-	def doFuncInThread(self, func, *args, **kwargs):
-		self.thread = QThread()
-		self.exec_thread = ExecThread()
-
-		self.exec_thread.args = args
-		self.exec_thread.kwargs = kwargs
-		self.exec_thread.func = func
-		self.exec_thread.moveToThread(self.thread)
-		self.thread.started.connect(self.exec_thread.run)
-		self.exec_thread.finished.connect(self.thread.quit)
-		self.thread.start()
-
 
 class NonInteractivePanel(Panel):
 

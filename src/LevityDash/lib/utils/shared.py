@@ -1,13 +1,18 @@
 from abc import abstractmethod
-from asyncio import get_event_loop, iscoroutine
 from collections.abc import MutableSet, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from functools import cached_property, lru_cache, partial, wraps
+from inspect import getfullargspec
+from multiprocessing.pool import ThreadPool
+from threading import Thread
 from traceback import format_exc, print_exc
 
 from gc import get_referrers
 from PySide2 import QtCore
+from rich.repr import rich_repr
+
+from LevityDash import LevityDashboard
 
 try:
 	from locale import setlocale, LC_ALL, nl_langinfo, RADIXCHAR, THOUSEP
@@ -38,14 +43,17 @@ from WeatherUnits import Measurement
 
 from time import time
 from typing import (
-	Any, Awaitable, Callable, Coroutine, ForwardRef, Hashable, Iterable, List, Mapping, NamedTuple, Optional, Tuple, Type,
-	TYPE_CHECKING, TypeVar, Union, Set, Final, ClassVar, Dict, Protocol, runtime_checkable, get_args
+	Any, Awaitable, Callable, Coroutine, ForwardRef, Generic, Hashable, Iterable, List, Mapping, NamedTuple,
+	Optional,
+	Tuple,
+	Type,
+	TypeAlias, TypeVar, Union, Set, Final, ClassVar, Dict, Protocol, runtime_checkable, get_args
 )
-from types import NoneType, GeneratorType, FunctionType, UnionType
+from types import MethodType, NoneType, GeneratorType, FunctionType, UnionType
 
 from enum import Enum, EnumMeta, IntFlag
 
-from PySide2.QtCore import QObject, QPointF, QRectF, QSizeF, QThread, Signal, Qt, Slot
+from PySide2.QtCore import QObject, QPointF, QRectF, QSizeF, QThread, QTimer, Signal, Qt, Slot
 from PySide2.QtWidgets import QApplication, QGraphicsRectItem, QGraphicsItem
 
 from LevityDash.lib.utils import utilLog
@@ -67,6 +75,7 @@ def simpleRequest(url: str) -> dict:
 
 
 T_ = TypeVar('T_')
+Self: TypeAlias = TypeVar('Self')
 
 
 class _Panel(QGraphicsRectItem):
@@ -192,7 +201,7 @@ Unset: Final = IgnoreOr('Unset')
 UnsetKwarg: Final = IgnoreOr('UnsetKwarg')
 
 Auto = object()
-DType = TypeVar('DimensionType')
+DType = TypeVar('DType')
 Numeric = Union[int, float, complex, np.number]
 LOCAL_TIMEZONE = datetime.now(timezone.utc).astimezone().tzinfo
 
@@ -846,6 +855,9 @@ class Period(Enum):
 	def __abs__(self):
 		return abs(self.value.second)
 
+	def __neg__(self):
+		return -self.value
+
 	def total_seconds(self):
 		return int(self.value.second)
 
@@ -1300,7 +1312,7 @@ def camelCase(value: List[str] | str, titleCase=True, itemFilter: Callable = Non
 	return value
 
 
-def joinCase(value: List[str] | str, joiner: str | List[str] = ' ', valueFilter: Callable = None, itemFilter: Callable = None) -> str | List[str]:
+def joinCase(value: Sequence[str] | str, joiner: str | List[str] = ' ', valueFilter: Callable = None, itemFilter: Callable = None) -> str | List[str]:
 	"""
 	Converts a list or string of words into a new case joined by string.
 	:param value: The list of words to convert.
@@ -1382,6 +1394,10 @@ class Now(datetime):
 			cls.__instance = super(Now, cls).__new__(cls, 1970, 1, 1, 0, 0, 0, 0, tzinfo=timezone.utc)
 		return cls.__instance
 
+	@classmethod
+	def new_instance(cls: Type[Self]) -> 'Now':
+		return super(Now, cls).__new__(cls, 1970, 1, 1, 0, 0, 0, 0, tzinfo=timezone.utc)
+
 	def __eq__(self, other):
 		return self.now() == other
 
@@ -1401,7 +1417,7 @@ class Now(datetime):
 		return self.now() >= other
 
 	def __hash__(self):
-		return hash(self.now())
+		return hash(round(Now.now().timestamp()))
 
 	def __str__(self):
 		return str(self.now())
@@ -1425,13 +1441,46 @@ class Now(datetime):
 		return float(self.now().timestamp())
 
 	@classmethod
-	def now(cls):
-		return datetime.now().astimezone()
+	def now(cls, **kwargs):
+		return datetime.now(**kwargs).astimezone()
 
 	def __getattr__(self, item):
 		if item == 'now':
 			return super().__getattribute__(item)
 		return getattr(self.now(), item)
+
+
+class NowOffset(Now):
+	__offset_instances: Dict[timedelta, 'NowOffset'] = {}
+
+	def __new__(cls, offset: timedelta):
+		if (offset_now := cls.__offset_instances.get(offset, None)) is None:
+			return offset_now
+		cls.__offset_instances[offset] = super(NowOffset, cls).__new__(cls)
+		return cls.__offset_instances[offset]
+
+	def __init__(self, offset: timedelta):
+		if isinstance(offset, int | float):
+			offset = timedelta(seconds=round(offset))
+		self.__offset = offset
+
+	def __hash__(self):
+		return hash(round(Now.now().timestamp())) + hash(self.__offset)
+
+	def now(self, **kwargs):
+		return roundToPeriod(datetime.now(**kwargs) + self.__offset, period=timedelta(seconds=15)).astimezone()
+
+	@property
+	def offset(self) -> timedelta:
+		return self.__offset
+
+	@classmethod
+	def new_instance_offset(cls: Type[Self], offset: timedelta) -> 'NowOffset':
+		instance = cls.new_instance()
+		instance.__offset = offset
+		return instance
+
+
 
 
 def __get(obj: Mapping, key, default=UnsetKwarg):
@@ -1811,6 +1860,29 @@ class guarded_cached_property(cached_property):
 				return defaultFunc.__get__(instance, owner)
 			return self.default
 
+
+class del_action_cached_property(cached_property):
+	_fdel: Callable[[Any], None] = None
+
+	def fdel(self, func):
+		self._fdel = func
+		return self
+
+	def __delete__(self, instance):
+		if self._fdel is not None:
+			self._fdel(instance)
+		instance.__dict__.pop(self.attrname, None)
+
+def named_partial(func: Callable, *args, func_name: str = None, **kwargs) -> Callable:
+	"""Create a partial function with a name."""
+	try:
+		func_name = func_name or func.__name__
+	except AttributeError:
+		pass
+	func_name = func_name or 'unknown_function'
+	partial_ = partial(func, *args, **kwargs)
+	partial_.__name__ = func_name
+	return partial_
 
 def split(a, n):
 	k, m = divmod(len(a), n)

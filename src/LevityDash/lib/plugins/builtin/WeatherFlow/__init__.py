@@ -28,7 +28,7 @@ class WFURLs(URLs, base='swd.weatherflow.com/swd'):
 
 	forecast = Endpoint(base=rest, url='better_forecast', params={'station_id': '{{stationID}}'}, period=[timedelta(hours=1), timedelta(days=1)])
 
-	realtime = Endpoint(base=stationObservation)
+	realtime = Endpoint(base=stationObservation, refreshInterval=timedelta(minutes=5))
 	historical = Endpoint(base=deviceObservation)
 
 
