@@ -3673,8 +3673,9 @@ class GraphPanel(Panel, tag='graph'):
 			log.debug(f"Graph update frequency changed to {updateFrequency:format={'{value}'}} {type(updateFrequency).pluralName.lower()}")
 		self.syncTimer.start()
 
+	@defer
 	def syncDisplay(self):
-		t = max(
+		t = min(
 			self.timeframe.displayPosition,
 			min((figure.figureMinStart for figure in self.figures), default=self.timeframe.displayPosition)
 		)
@@ -4286,6 +4287,7 @@ class Figure(NonInteractivePanel, tag=...):
 		clearCacheAttr(self, 'marginRect')
 		# self.axisTransformed.announce(axis)
 		self.setRect(self.rect())
+		self.graph.syncDisplay()
 
 	@Slot(Axis)
 	def onAxisTransform(self, axis: Axis):
