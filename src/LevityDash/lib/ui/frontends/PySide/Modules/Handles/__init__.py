@@ -8,7 +8,7 @@ from PySide2.QtWidgets import QGraphicsItem, QGraphicsItemGroup, QGraphicsPathIt
 from LevityDash.lib.config import userConfig
 from LevityDash.lib.utils.shared import _Panel
 from LevityDash.lib.ui.Geometry import Position, Axis, LocationFlag
-from LevityDash.lib.ui.frontends.PySide.utils import colorPalette
+from LevityDash.lib.ui.frontends.PySide.utils import colorPalette, DebugPaint
 from ... import qtLogger
 
 log = qtLogger.getChild('Handles')
@@ -22,6 +22,7 @@ class HandleItemSignals(QObject):
 	resized = Signal(Axis, QRectF, QRectF)
 
 
+@DebugPaint
 class Handle(QGraphicsPathItem):
 	location: Union[LocationFlag, Position]
 	cursor: Qt.CursorShape
@@ -88,7 +89,6 @@ class Handle(QGraphicsPathItem):
 
 	def mousePressEvent(self, event):
 		event.accept()
-		print(event.pos())
 		super(Handle, self).mousePressEvent(event)
 
 	def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent) -> None:

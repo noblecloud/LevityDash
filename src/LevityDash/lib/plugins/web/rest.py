@@ -1,5 +1,4 @@
 import errno
-from typing import Optional
 
 import aiohttp
 from aiohttp import ClientOSError

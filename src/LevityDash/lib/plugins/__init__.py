@@ -153,7 +153,7 @@ class PluginsLoader(metaclass=GlobalSingleton, name='plugins'):
 
 		except errors.PluginDisabled as e:
 			pluginLog.info(f'Plugin {name} is disabled')
-			pluginLog.debug(f"{name} tried to load but was disabled with the '__disabled' attribute")
+			pluginLog.debug(f"{name} tried to load but was disabled with the '__disabled__' attribute")
 			raise e
 
 		except Exception as e:

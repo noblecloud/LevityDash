@@ -129,8 +129,6 @@ class EasyPath:
 			return path.startswith(self.path.absolute().as_posix())
 		return False
 
-
-
 	def __eq__(self, other):
 		own = self._basePath.absolute()
 		match other:
