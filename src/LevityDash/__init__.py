@@ -1,3 +1,4 @@
+import os
 from types import ModuleType
 from typing import Type, TYPE_CHECKING
 
@@ -28,12 +29,35 @@ class _LevityAppDirs(AppDirs):
 	lib: Path
 	resources: Path
 	shims: Path
-	data: Path = AppDirs.user_data_dir
-	config: Path = AppDirs.user_config_dir
-	cache: Path = AppDirs.user_cache_dir
-	log: Path = AppDirs.user_log_dir
-	site_data: Path = AppDirs.site_data_dir
-	site_config: Path = AppDirs.site_config_dir
+
+	if CONFIG_DEBUG := int(os.environ.get("LEVITYDASH_CONFIG_DEBUG", 0)):
+
+		from tempfile import TemporaryDirectory
+
+		user_data_temp_dir = TemporaryDirectory(prefix="levitydash-user-data-")
+		data: Path = Path(user_data_temp_dir.name)
+
+		config_temp_dir = TemporaryDirectory(prefix="levitydash-config-")
+		config: Path = Path(config_temp_dir.name)
+
+		cache_temp_dir = TemporaryDirectory(prefix="levitydash-cache-")
+		cache: Path = Path(cache_temp_dir.name)
+
+		log: Path = AppDirs.user_log_dir
+
+		site_data_temp_dir = TemporaryDirectory(prefix="levitydash-site-data-")
+		site_data: Path = Path(site_data_temp_dir.name)
+
+		site_config_temp_dir = TemporaryDirectory(prefix="levitydash-site-config-")
+		site_config: Path = Path(site_config_temp_dir.name)
+
+	else:
+		data: Path = AppDirs.user_data_dir
+		config: Path = AppDirs.user_config_dir
+		cache: Path = AppDirs.user_cache_dir
+		log: Path = AppDirs.user_log_dir
+		site_data: Path = AppDirs.site_data_dir
+		site_config: Path = AppDirs.site_config_dir
 
 	def __init__(self, root: Path):
 		super().__init__(appname="LevityDash", appauthor="LevityDash.app")
