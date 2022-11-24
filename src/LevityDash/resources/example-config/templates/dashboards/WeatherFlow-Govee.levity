@@ -19,57 +19,57 @@
       size: 99%
     items:
     - type: stack
+      name: clock
       size: 33%
       spacing: 5mm
       items:
       - type: clock
-        name: clock
         size: 33%
         items:
+        - type: stack
+          items:
+          - format: '%A, %B %-d'
+            size: 27%
+            alignment: CenterRight
+            filters:
+            - AddOrdinal
+            margins:
+              left: 2mm
+              top: 1mm
+              right: 2mm
+              bottom: 0.25mm
+            weight: Light
           - type: stack
+            direction: Horizontal
             items:
-              - format: '%A, %B %-d'
-                size: 27%
-                alignment: CenterRight
-                filters:
-                  - AddOrdinal
+            - format: '%-I:%M'
+              size: 80%
+              alignment: CenterRight
+              format-hint: '10:00'
+              margins:
+                left: 1mm
+                right: 2.5%
+                top: 1mm
+                bottom: 0.25mm
+            - type: stack
+              spacing: .25 mm
+              items:
+              - type: moon
+                size: 55%
+                glowStrength: 2
+                interval:
+                  minutes: 30
+                margins: 0.25mm
+                rotate: true
+              - format: '%p'
+                format-hint: 'am'
+                text-scale-type: fill
+                alignment: BottomLeft
                 margins:
-                  left: 2mm
-                  top: 1mm
+                  bottom: 0.1mm
                   right: 2mm
-                  bottom: 0.25mm
-                weight: Light
-              - type: stack
-                direction: Horizontal
-                items:
-                  - format: '%-I:%M'
-                    size: 80%
-                    alignment: CenterRight
-                    format-hint: '10:00'
-                    margins:
-                      left: 1mm
-                      right: 2.5%
-                      top: 1mm
-                      bottom: 0.25mm
-                  - type: stack
-                    spacing: .25 mm
-                    items:
-                      - type: moon
-                        size: 55%
-                        glowStrength: 2
-                        interval:
-                          minutes: 30
-                        margins: 0.25mm
-                        rotate: true
-                      - format: '%p'
-                        format-hint: 'am'
-                        text-scale-type: fill
-                        alignment: BottomLeft
-                        margins:
-                          bottom: 0.1mm
-                          right: 2mm
-                        filters:
-                          - Lower
+                filters:
+                - Lower
       - type: stack
         name: temperature
         border:
@@ -92,7 +92,90 @@
         items:
         - type: titled-group
           title:
-            text: Temperature
+            text: Indoor
+          items:
+            - type: realtime.text
+              key: indoor.temperature.temperature
+              title: false
+              display:
+                valueLabel:
+                  margins: 5%
+              geometry:
+                height: 50%
+                width: 100%
+                x: 0%
+                y: 0%
+#            - type: mini-graph
+#              timeframe:
+#                hours: 1
+#                lookback:
+#                  hours: 1
+#              annotations:
+#                dayLabels:
+#                  enabled: false
+#                hourLabels:
+#                  enabled: false
+#                lines:
+#                  enabled: false
+#              indicator:
+#                enabled: false
+#              figures:
+#                - figure:
+#                  margins:
+#                    top: 5px
+#                    bottom: 5px
+#                  indoor.temperature.temperature:
+#                    plot:
+#                      type: plot
+#                      weight: 0.3
+#                      opacity: 0.5
+#                    smooth: false
+#                    interpolate: true
+#              geometry:
+#                height: 15%
+#                width: 100%
+#                x: 0%
+#                y: 32.5%
+            - type: group
+              geometry:
+                height: 50%
+                width: 100%
+                x: 0%
+                y: 50%
+              shared:
+                title:
+                  height: 5mm
+              items:
+                - type: realtime.text
+                  key: indoor.temperature.dewpoint
+                  title:
+                    text: Dew Point
+                  geometry:
+                    height: 100%
+                    width: 55%
+                    x: 0%
+                    y: 0%
+                - type: realtime.text
+                  key: indoor.temperature.heatIndex
+                  title:
+                    text: Apparent
+                  geometry:
+                    height: 50%
+                    width: 45%
+                    x: 55%
+                    y: 0%
+                - type: realtime.text
+                  key: indoor.humidity.humidity
+                  title:
+                    text: Humidity
+                  geometry:
+                    height: 50%
+                    width: 45%
+                    x: 55%
+                    y: 50%
+        - type: titled-group
+          title:
+            text: Outdoor
           items:
           - type: realtime.text
             key: environment.temperature.temperature
@@ -107,6 +190,37 @@
               width: 100%
               x: 0%
               y: 0%
+          - type: mini-graph
+            timeframe:
+              hours: 12
+              lookback:
+                hours: 12
+            annotations:
+              dayLabels:
+                enabled: false
+              hourLabels:
+                enabled: false
+              lines:
+                enabled: false
+            indicator:
+              enabled: false
+            figures:
+              - figure:
+                margins:
+                  top: 5px
+                  bottom: 5px
+                environment.temperature.temperature:
+                  plot:
+                    type: plot
+                    weight: 0.3
+                    opacity: 0.5
+                  smooth: false
+                  interpolate: true
+            geometry:
+              height: 40%
+              width: 100%
+              x: 0%
+              y: 10%
           - type: group
             shared:
               title:
@@ -121,6 +235,10 @@
               key: environment.temperature.dewpoint
               title:
                 text: Dew Point
+              display:
+                valueLabel:
+                  matchingGroup:
+                    group: display@temperature
               geometry:
                 height: 100%
                 width: 55%
@@ -144,67 +262,6 @@
                 width: 45%
                 x: 55%
                 y: 50%
-        - type: titled-group
-          title:
-            text: Wind Speed
-          items:
-          - type: realtime.text
-            key: environment.wind.speed.speed
-            title:
-              visible: false
-            display:
-              valueLabel:
-                margins: 5%
-              unitPosition: hidden
-            geometry:
-              height: 50%
-              width: 100%
-              x: 0%
-              y: 0%
-          - type: group
-            shared:
-              title:
-                height: 5mm
-            geometry:
-              height: 47.5%
-              width: 100%
-              x: 0%
-              y: 50%
-            items:
-            - type: realtime.text
-              key: environment.wind.direction.direction
-              title:
-                text: Direction
-              display:
-                max-length: 2
-              geometry:
-                height: 100%
-                width: 55%
-                x: 0%
-                y: 0%
-            - type: realtime.text
-              key: environment.wind.speed.lull
-              title:
-                text: Lull
-              display:
-                unitPosition: hidden
-              geometry:
-                height: 50%
-                width: 45%
-                x: 55%
-                y: 50%
-            - type: realtime.text
-              key: environment.wind.speed.gust
-              source: WeatherFlow
-              title:
-                text: Gust
-              display:
-                unitPosition: hidden
-              geometry:
-                height: 50%
-                width: 45%
-                x: 55%
-                y: 0%
     - type: graph
       timeframe:
         days: 2
@@ -223,6 +280,17 @@
         margins:
           bottom: 10%
           top: 25%
+        indoor.temperature.temperature:
+          labels:
+            enabled: true
+            height: 15mm
+          plot:
+            type: plot
+            dashPattern: 5, 5
+            weight: 0.6
+            gradient: TemperatureGradient
+          resolution: 2
+          source: Govee
         environment.temperature.temperature:
           labels:
             enabled: true
@@ -300,7 +368,6 @@
       size: 98%
     items:
     - type: titled-group
-      size: 28%
       title:
         height: 1.25cm
         text: Condition
@@ -381,6 +448,103 @@
                 size: 0.33
                 text: Low
     - type: titled-group
+      title:
+        text: Wind Speed
+      items:
+        - type: mini-graph
+          timeframe:
+            hours: 1
+            lookback:
+              hours: 1
+          annotations:
+            dayLabels:
+              enabled: false
+            hourLabels:
+              enabled: false
+            lines:
+              enabled: false
+          indicator:
+            enabled: false
+          figures:
+            - figure:
+              margins:
+                top: 5px
+                bottom: 5px
+              environment.wind.speed.speed:
+                plot:
+                  type: plot
+                  weight: 0.3
+                  opacity: 0.5
+                smooth: false
+                interpolate: true
+                interpolation-type: spline
+          geometry:
+            height: 15%
+            width: 100%
+            x: 0%
+            y: 32.5%
+        - type: realtime.text
+          key: environment.wind.speed.speed
+          title:
+            visible: false
+          display:
+            valueLabel:
+              margins: 5%
+            unitPosition: hidden
+          geometry:
+            height: 60%
+            width: 100%
+            x: 0%
+            y: 0%
+        - type: group
+          shared:
+            title:
+              height: 5mm
+          geometry:
+            height: 40.0%
+            width: 100%
+            x: 0%
+            y: 60%
+          items:
+            - type: realtime.text
+              key: environment.wind.direction.direction
+              title:
+                text: Direction
+              display:
+                max-length: 2
+                format-hint: 'EE'
+              geometry:
+                height: 100%
+                width: 55%
+                x: 0%
+                y: 0%
+            - type: realtime.text
+              key: environment.wind.speed.gust
+              title:
+                text: Gust
+              display:
+                unitPosition: inline
+                valueLabel:
+                  margins: 12%, 15%
+              geometry:
+                height: 50%
+                width: 45%
+                x: 55%
+                y: 0%
+            - type: realtime.text
+              key: environment.wind.speed.gustMax
+              title:
+                text: Gusts Max
+              display:
+                unitPosition: inline
+                valueLabel:
+                  margins: 12%, 15%
+              geometry:
+                height: 50%
+                width: 45%
+                x: 55%
+                y: 50%
+    - type: titled-group
       name: precipitation
       title:
         height: 1.25cm
@@ -393,7 +557,7 @@
             enabled: false
           hourLabels:
             alignment: TopCenter
-            height: 3.0 mm
+            height: 3.000 mm
             offset: 5px
             position: above
             relative-times: true
@@ -476,6 +640,7 @@
               text: Last Strike
     - type: titled-group
       name: atmosphere
+      size: 25%
       title:
         height: 1.25cm
         text: Atmosphere
