@@ -78,10 +78,10 @@ class LevityConfig(ConfigParser):
 
 		dirs = LevityDashboard.paths
 
-		userPath = Path(dirs.user_config_dir)
-		if not userPath.exists():
+		userPath = Path(dirs.config)
+		if not userPath.exists() or len(os.listdir(userPath)) == 0:
 			self.log.info(f'Creating user config directory: {userPath}')
-			copytree(self.rootPath['resources']['example-config'].path, userPath)
+			copytree(LevityDashboard.paths.resources / 'example-config', userPath, dirs_exist_ok=True)
 
 		self.userPath = userPath
 
@@ -212,7 +212,7 @@ class LevityConfig(ConfigParser):
 
 	@cached_property
 	def rootPath(self) -> EasyPath:
-		return EasyPath(LevityDashboard.paths.user_config_dir)
+		return EasyPath(LevityDashboard.paths.config)
 
 	def save(self):
 		with self.path.path.open('w') as f:
@@ -554,9 +554,10 @@ class Config(LevityConfig):
 		if not path:
 			return None
 		userSaves = self.userPath['saves']['dashboards']
-		if path in userSaves:
-			return userSaves[path].path.absolute()
-		return Path(path).absolute()
+		p = Path(path)
+		if p.parent == Path():
+			p = userSaves.path / path
+		return p.absolute()
 
 	@dashboardPath.setter
 	def dashboardPath(self, path: Path):

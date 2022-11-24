@@ -48,7 +48,17 @@ class CentralPanel(Panel, tag="dashboard"):
 		self.setAcceptedMouseButtons(Qt.AllButtons)
 
 		defaultDashboardPath = userConfig.dashboardPath
-		self.filePath = EasyPathFile(defaultDashboardPath) if defaultDashboardPath is not None else None
+		try:
+			if defaultDashboardPath is not None:
+				if not defaultDashboardPath.exists():
+					# copy the file from _determine_default_dashboard to defaultDashboardPath
+					defaultDashboardPath.parent.mkdir(parents=True, exist_ok=True)
+					copyfile(str(self._determine_default_dashboard()), str(defaultDashboardPath))
+				self.filePath = EasyPathFile(defaultDashboardPath)
+			else:
+				self.filePath = None
+		except FileNotFoundError:
+			self._determine_default_dashboard()
 		self.loadedFile: Any = None
 
 		self.setFlag(QGraphicsItem.ItemStopsClickFocusPropagation, False)
@@ -176,6 +186,17 @@ class CentralPanel(Panel, tag="dashboard"):
 			fileName = dialog.selectedFiles()[0].split('/')[-1]
 			self._save(path, fileName)
 
+	def _determine_default_dashboard(self):
+		plugins = LevityDashboard.plugins
+		base = LevityDashboard.resources / 'example-config' / 'templates' / 'dashboards'
+		if (wf := plugins.get('WeatherFlow', None)) is not None and wf.enabled:
+			if (govee := plugins.get('Govee', None)) is not None and govee.enabled:
+				return base / 'WeatherFlow-Govee.levity'
+			return base / 'WeatherFlow.levity'
+		if (om := plugins.get('OpenMeteo', None)) is not None and om.enabled:
+			return base / 'OpenMeteo.levity'
+		return base / 'Empty.levity'
+
 	def _load(self, path: Path = None):
 		name = path.name
 		self.scene().view.parentWidget().setWindowTitle(f"Levity Dashboard - {name}")
@@ -183,6 +204,7 @@ class CentralPanel(Panel, tag="dashboard"):
 		if isinstance(path, EasyPathFile):
 			path = path.path
 		if path is None:
+			self._determine_default_dashboard()
 			path = userConfig.userPath.joinpath('saves', 'dashboards', 'default.levity')
 		if not path.exists():
 			QMessageBox.critical(self.scene().view, "Error", f"Dashboard file not found: {path}").exec_()

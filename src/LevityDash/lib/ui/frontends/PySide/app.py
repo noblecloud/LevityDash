@@ -976,8 +976,7 @@ class LevityMainWindow(QMainWindow):
 			self.showFullScreen()
 
 	def openConfigFolder(self):
-		from LevityDash import __dirs__
-		QDesktopServices.openUrl(QUrl.fromLocalFile(Path(__dirs__.user_config_dir).as_posix()))
+		QDesktopServices.openUrl(QUrl.fromLocalFile(Path(LevityDashboard.paths.config).as_posix()))
 
 	def openLogFile(self):
 		guiLog.openLog()

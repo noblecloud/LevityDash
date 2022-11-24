@@ -1,482 +1,584 @@
-- type: clock
-  frozen: true
-  geometry:
-    height: 22.2%
-    width: 36.5%
-    x: 0%
-    y: 1.6%
+- type: stack
+  defaultType: group
+  name: main
+  padding: 1mm
+  spacing: 2 mm
+  dividers:
+    enabled: true
+    opacity: 70%
+    size: 99%
   items:
-    - format: '%A, %B %-d'
-      alignment: CenterRight
-      filters:
-        - 0Add Ordinal
-      geometry:
-        height: 27%
-        width: 100%
-        x: 0%
-        y: 0%
-      margins:
-        left: 10px
-    - format: '%-I:%M'
-      alignment: CenterRight
-      geometry:
-        height: 73%
-        width: 80%
-        x: 1.2%
-        y: 27%
-      margins:
-        right: 10px
-    - type: moon
-      geometry:
-        height: 45%
-        width: 18.8%
-        x: 81.2%
-        y: 27%
-      glowStrength: 2
-      interval:
-        minutes: 20
-    - format: '%p'
-      filters:
-        - 1Lower
-      geometry:
-        height: 29.6%
-        width: 18.8%
-        x: 81.2%
-        y: 70.4%
-- type: group
-  geometry:
-    height: 41.5%
-    width: 18.8%
-    x: 0%
-    y: 23.9%
-  items:
-    - type: realtime.text
-      key: indoor.temperature.temperature
-      title: Indoor
-      display:
-        value:
-          margins:
-            bottom: 0%
-            left: 0%
-            right: 0%
-            top: 0%
-      geometry:
-        height: 60%
-        width: 100%
-        x: 0%
-        y: 0%
-    - type: realtime.text
-      key: indoor.temperature.dewpoint
-      title: Dew Point
-      geometry:
-        height: 40%
-        width: 55%
-        x: 0%
-        y: 60%
-    - type: realtime.text
-      key: indoor.temperature.heatIndex
-      title:
-        text: Apparent
-        ratio: 0.3
-      geometry:
-        height: 20.5%
-        width: 43.6%
-        x: 55%
-        y: 61.3%
-      margins: 0px, 0px, 0px, 0px
-    - type: realtime.text
-      key: indoor.humidity.humidity
-      title: Humidity
-      display:
-        value:
-          margins:
-            bottom: 0%
-            left: 0%
-            right: 0%
-            top: 0%
-      geometry:
-        height: 18.2%
-        width: 43.6%
-        x: 55%
-        y: 81.8%
-- type: group
-  geometry:
-    height: 41.5%
-    width: 18.8%
-    x: 18.8%
-    y: 23.9%
-  items:
-    - type: realtime.text
-      key: environment.temperature.temperature
-      title: Outdoor
-      display:
-        value:
-          margins:
-            bottom: 0%
-            left: 0%
-            right: 0%
-            top: 0%
-      geometry:
-        height: 60%
-        width: 98.6%
-        x: 0%
-        y: 1.3%
-    - type: realtime.text
-      key: environment.temperature.dewpoint
-      title: Dew Point
-      geometry:
-        height: 40%
-        width: 55%
-        x: 0%
-        y: 60%
-    - type: realtime.text
-      key: environment.temperature.feelsLike
-      title:
-        text: Apparent
-        ratio: 0.3
-      geometry:
-        height: 20.5%
-        width: 43.6%
-        x: 55%
-        y: 61.3%
-      margins: 0px, 0px, 0px, 0px
-    - type: realtime.text
-      key: environment.humidity.humidity
-      title: Humidity
-      display:
-        value:
-          margins:
-            bottom: 0%
-            left: 0%
-            right: 0%
-            top: 0%
-      geometry:
-        height: 18.2%
-        width: 43.6%
-        x: 55%
-        y: 81.8%
-- type: graph
-  timeframe:
-    days: 2
-    hours: 18
-  annotations:
-    dayLabels:
-      alignment: TopCenter
-      opacity: 20%
-    hourLabels:
-      alignment: BottomCenter
-      opacity: 100%
-    lines:
-      weight: 0.3
-  geometry:
-    height: 63.9%
-    width: 61.9%
-    x: 37.8%
-    y: 0%
-  figures:
-    - figure: temperature
-      margins:
-        bottom: 22.1%
-        top: 25.5%
-      environment.temperature.dewpoint:
-        plot:
-          type: plot
-          cap: square
-          color: #5882ff
-          dashPattern: 5, 5
-          weight: 0.322
-      environment.temperature.feelsLike:
-        plot:
-          type: plot
-          cap: round
-          gradient: TemperatureGradient
-          weight: 0.6
-        resolution: 2
-      environment.temperature.temperature:
-        labels:
-          enabled: true
-          opacity: 100%
-        plot:
-          type: plot
-          cap: round
-          gradient: TemperatureGradient
-        resolution: 2
-    - figure: precipitation
-      margins:
-        bottom: 30px
-        top: 50%
-      environment.precipitation.precipitation:
-        plot:
-          type: plot
-          cap: round
-          gradient: PrecipitationRateGradient
-          weight: 0.3
-      max: 0.5
-    - figure: lightIrradiance
-      margins:
-        bottom: 30px
-        top: 75%
-      environment.light.irradiance.irradiance:
-        plot:
-          type: plot
-          cap: round
-          gradient: FabledSunsetGradientWattsPerSquareMeter
-          weight: 0.3
-      max: 840
-    - figure: windSpeed
-      margins:
-        bottom: 30px
-        top: 70%
-      environment.wind.speed.speed:
-        plot:
-          type: plot
-          cap: round
-          dashPattern: 2, 4
-          gradient: RipeMalinkaGradient
-          opacity: 0.7
-          weight: 0.3
-      max: 10
-- type: realtime.text
-  key: environment.condition.icon
-  title: false
-  display:
-    value:
-      margins:
-        bottom: 2%
-        left: 0%
-        right: 0%
-        top: 2%
-  geometry:
-    height: 26.7%
-    width: 20.7%
-    x: 0%
-    y: 65.4%
-- type: realtime.text
-  key: environment.light.sunrise
-  title:
-    text: Sunrise
-    ratio: 0.33
-  display:
-    value:
-      modifiers:
-        atTime: today
-  geometry:
-    height: 9.7%
-    width: 6%
-    x: 20.7%
-    y: 65.4%
-- type: realtime.text
-  key: environment.light.sunset
-  title:
-    text: Sunset
-    ratio: 0.33
-  display:
-    value:
-      modifiers:
-        atTime: today
-  geometry:
-    height: 9.7%
-    width: 6%
-    x: 26.7%
-    y: 65.4%
-- type: group
-  geometry:
-    height: 33.1%
-    width: 27.3%
-    x: 32.7%
-    y: 65.4%
-  items:
-    - type: text
-      text: Precipitation
-      geometry:
-        height: 32px
-        width: 100%
-        x: 0%
-        y: 0%
-      margins: 0%, 0%, 0%, 0%
-    - type: realtime.text
-      key: environment.precipitation.precipitation
-      title: Hourly
-      geometry:
-        height: 79.3%
-        width: 44.2%
-        x: 0%
-        y: 20.7%
-    - type: group
-      geometry:
-        height: 79.3%
-        width: 54.9%
-        x: 44.2%
-        y: 20.7%
+  - type: stack
+    name: top
+    direction: Horizontal
+    size: 57.5%
+    spacing: 20px
+    dividers:
+      opacity: 70%
+      size: 99%
+    items:
+    - type: stack
+      size: 33%
+      spacing: 2mm
       items:
-        - type: realtime.text
-          key: environment.precipitation.daily
-          title: All Daily
-          geometry:
-            height: 50%
-            width: 50%
-            x: 0%
-            y: 0%
-        - type: realtime.text
-          key: environment.precipitation.showersDaily
-          title: Showers
-          geometry:
-            height: 50%
-            width: 50%
-            x: 50%
-            y: 0%
-        - type: realtime.text
-          key: environment.precipitation.rainDaily
-          title: Rain
-          geometry:
-            height: 50%
-            width: 50%
-            x: 0%
-            y: 50%
-        - type: realtime.text
-          key: environment.precipitation.time
-          title: Precip Time
-          geometry:
-            height: 50%
-            width: 50%
-            x: 50%
-            y: 50%
-- type: realtime.text
-  key: environment.temperature.feelsLikeHigh
-  display:
-    value:
-      modifiers:
-        atTime: today
-  title:
-    text: High
-    ratio: 0.33
-  geometry:
-    height: 12%
-    width: 12%
-    x: 20.7%
-    y: 75.1%
-- type: realtime.text
-  key: environment.temperature.feelsLikeLow
-  display:
-    value:
-      modifiers:
-        atTime: today
-  title:
-    text: Low
-    ratio: 0.33
-  geometry:
-    height: 12%
-    width: 12%
-    x: 20.7%
-    y: 87.1%
-- type: realtime.text
-  key: environment.condition.condition
-  title: false
-  display:
-    value:
-      margins:
-        bottom: 0%
-        left: 0%
-        right: 0%
-        top: 0%
-  geometry:
-    height: 6.4%
-    width: 20.7%
-    x: 0%
-    y: 92.1%
-- type: group
-  geometry:
-    height: 33.2%
-    width: 25.5%
-    x: 60%
-    y: 65.3%
-  items:
-    - type: text
-      text: Atmosphere
-      geometry:
-        height: 32px
-        width: 100%
-        x: 0%
-        y: 0%
-      margins: 0%, 0%, 0%, 0%
-    - type: realtime.text
-      key: environment.light.irradiance.irradiance
-      geometry:
-        height: 43%
-        width: 50.9%
-        x: 0%
-        y: 19.4%
-      display:
-        value:
-          textHeight: 20px
-    - type: realtime.text
-      key: environment.pressure.pressure
-      title: 0.3
-      display:
-        value:
-          textHeight: 20px
-      geometry:
-        height: 43%
-        width: 48.5%
-        x: 50.9%
-        y: 19.4%
-    - type: realtime.text
-      key: environment.clouds.cover.cover
-      display:
-        value:
-          textHeight: 20px
-      geometry:
-        height: 33.2%
-        width: 50.9%
-        x: 0%
-        y: 66.8%
-    - type: realtime.text
-      key: environment.soil.moisture.moisture
-      display:
-        value:
-          textHeight: 20px
-      geometry:
-        height: 33.2%
-        width: 48.2%
-        x: 50.9%
-        y: 66.8%
-- type: realtime.text
-  key: environment.wind.speed.speed
-  title:
-    text: Wind
-    ratio: 0.26
-  display:
-    unit:
-      alignment: CenterLeft
-      margins:
-        bottom: 22.5%
-        left: 5.7%
-        right: 0%
-        top: 0%
-  geometry:
-    height: 20.6%
-    width: 14.5%
-    x: 85.5%
-    y: 65.4%
-- type: realtime.text
-  key: environment.wind.speed.gust
-  geometry:
-    height: 12.6%
-    width: 7.5%
-    x: 85.5%
-    y: 86%
-- type: realtime.text
-  key: environment.wind.direction.direction
-  title: false
-  geometry:
-    height: 4.3%
-    width: 6.1%
-    x: 93.9%
-    y: 81.7%
-- type: realtime.text
-  key: environment.wind.speed.gustMax
-  geometry:
-    height: 12.6%
-    width: 7%
-    x: 93%
-    y: 86%
+      - type: clock
+        name: clock
+        size: 33%
+        items:
+          - type: stack
+            items:
+              - format: '%A, %B %-d'
+                size: 27%
+                alignment: CenterRight
+                filters:
+                  - AddOrdinal
+                margins:
+                  left: 2mm
+                  top: 1mm
+                  right: 2mm
+                  bottom: 0.25mm
+                weight: Light
+              - type: stack
+                direction: Horizontal
+                items:
+                  - format: '%-I:%M'
+                    size: 80%
+                    alignment: CenterRight
+                    format-hint: '10:00'
+                    margins:
+                      left: 1mm
+                      right: 2.5%
+                      top: 1mm
+                      bottom: 0.25mm
+                  - type: stack
+                    spacing: .25 mm
+                    items:
+                      - type: moon
+                        size: 55%
+                        glowStrength: 2
+                        interval:
+                          minutes: 30
+                        margins: 0.25mm
+                        rotate: true
+                      - format: '%p'
+                        format-hint: 'am'
+                        text-scale-type: fill
+                        alignment: BottomLeft
+                        margins:
+                          bottom: 0.1mm
+                          right: 2mm
+                        filters:
+                          - Lower
+      - type: stack
+        name: temperature
+        shared:
+          display:
+            valueLabel:
+              matchingGroup:
+                group: display@temperature
+          title:
+            matchingGroup: title@temperature
+        direction: Horizontal
+        items:
+        - type: titled-group
+          title:
+            text: Indoor
+          items:
+          - type: realtime.text
+            key: indoor.temperature.temperature
+            title: false
+            display:
+              valueLabel:
+                margins: 5%
+            geometry:
+              height: 50%
+              width: 100%
+              x: 0%
+              y: 0%
+          - type: group
+            shared:
+              title:
+                height: 4mm
+            geometry:
+              height: 50%
+              width: 100%
+              x: 0%
+              y: 50%
+            items:
+            - type: realtime.text
+              key: indoor.temperature.dewpoint
+              title:
+                text: Dew Point
+              geometry:
+                height: 100%
+                width: 55%
+                x: 0%
+                y: 0%
+            - type: realtime.text
+              key: indoor.temperature.heatIndex
+              title:
+                text: Apparent
+              geometry:
+                height: 50%
+                width: 45%
+                x: 55%
+                y: 0%
+            - type: realtime.text
+              key: indoor.humidity.humidity
+              title:
+                text: Humidity
+              geometry:
+                height: 50%
+                width: 45%
+                x: 55%
+                y: 50%
+        - type: titled-group
+          title:
+            text: Outdoor
+          items:
+          - type: realtime.text
+            key: environment.temperature.temperature
+            title:
+              text: Temperature
+              visible: false
+            display:
+              valueLabel:
+                margins: 5%
+            geometry:
+              height: 50%
+              width: 100%
+              x: 0%
+              y: 0%
+          - type: group
+            shared:
+              title:
+                height: 4mm
+            geometry:
+              height: 47.5%
+              width: 100%
+              x: 0%
+              y: 50%
+            items:
+            - type: realtime.text
+              key: environment.temperature.dewpoint
+              title:
+                text: Dew Point
+              geometry:
+                height: 100%
+                width: 55%
+                x: 0%
+                y: 0%
+            - type: realtime.text
+              key: environment.temperature.feelsLike
+              title:
+                text: Apparent
+              geometry:
+                height: 50%
+                width: 45%
+                x: 55%
+                y: 0%
+            - type: realtime.text
+              key: environment.humidity.humidity
+              title:
+                text: Humidity
+              geometry:
+                height: 50%
+                width: 45%
+                x: 55%
+                y: 50%
+    - type: graph
+      timeframe:
+        days: 2
+        hours: 18
+      annotations:
+        dayLabels:
+          alignment: TopCenter
+        hourLabels:
+          alignment: BottomCenter
+          spacingIntervals: 1, 3, 6
+        lines:
+          spacing: 8 mm
+          weight: 0.8
+      figures:
+      - figure: temperature
+        margins:
+          bottom: 10%
+          top: 25%
+        environment.temperature.temperature:
+          labels:
+            enabled: true
+          plot:
+            type: plot
+            gradient: TemperatureGradient
+          resolution: 2
+        environment.temperature.feelsLike:
+          plot:
+            type: plot
+            gradient: TemperatureGradient
+            weight: 0.6
+          resolution: 2
+        environment.temperature.dewpoint:
+          plot:
+            type: plot
+            cap: square
+            color: #5882ff
+            dashPattern: 5, 5
+            weight: 0.322
+      - figure: precipitation
+        margins:
+          bottom: 0%
+          top: 50%
+        environment.precipitation.precipitation:
+          plot:
+            type: plot
+            gradient: PrecipitationRateGradient
+            weight: 0.3
+        max: 1
+      - figure: precipitationProbability
+        margins:
+          bottom: 0%
+          top: 50%
+        environment.precipitation.probability:
+          plot:
+            type: plot
+            gradient: PrecipitationProbabilityGradient
+            weight: 0.4
+        min: 0
+        max: 1.0
+      - figure: lightIrradiance
+        margins:
+          bottom: 0%
+          top: 75%
+        environment.light.irradiance.irradiance:
+          plot:
+            type: plot
+            gradient: FabledSunsetGradientWattsPerSquareMeter
+            weight: 0.3
+        max: 840
+      - figure: windSpeed
+        margins:
+          bottom: 0%
+          top: 70%
+        environment.wind.speed.speed:
+          plot:
+            type: plot
+            dashPattern: 2, 4
+            gradient: RipeMalinkaGradient
+            opacity: 0.7
+            weight: 0.3
+        max: 10
+  - type: stack
+    name: bottom
+    direction: Horizontal
+    spacing: 20px
+    dividers:
+      enabled: true
+      opacity: 70%
+      size: 98%
+    items:
+    - type: titled-group
+      title:
+        height: 0.75cm
+        text: Condition
+      items:
+      - type: stack
+        direction: vertical
+        spacing: 3mm
+        padding:
+          top: 2mm
+        items:
+        - type: stack
+          size: 10%
+          name: conditions-sun
+          direction: horizontal
+          items:
+            - type: realtime.text
+              key: environment.light.sunrise
+              title:
+                size: 0.33
+                alignment: right
+                position: left
+                icon: wi:sunrise
+                margins:
+                  left: 0px
+              display:
+                format: '%-I:%M%p'
+                valueLabel:
+                  alignment: left
+            - type: realtime.text
+              key: environment.light.sunset
+              title:
+                size: 0.33
+                alignment: right
+                position: left
+                icon: wi:sunset
+                margins:
+                  right: 0px
+              display:
+                valueLabel:
+                  alignment: left
+                format: '%-I:%M%p'
+        - type: stack
+          defaultType: group
+          direction: Horizontal
+          items:
+          - type: stack
+            name: conditions-left
+            size: 63%
+            padding:
+              bottom: 1.5mm
+            items:
+            - type: realtime.text
+              key: environment.condition.icon
+              title: false
+              size: 77%
+              display:
+                valueLabel:
+                  margins: 6mm, 2mm
+            - type: realtime.text
+              key: environment.condition.condition
+              title: false
+              display:
+                valueLabel:
+                  margins: 2mm, .5mm
+          - type: stack
+            name: conditions-right
+            items:
+            - type: realtime.text
+              key: environment.temperature.high
+              source: WeatherFlow
+              title:
+                size: 0.33
+                text: High
+            - type: realtime.text
+              key: environment.temperature.low
+              source: WeatherFlow
+              title:
+                size: 0.33
+                text: Low
+    - type: titled-group
+      title:
+        height: 0.75cm
+        text: Wind
+      size: 15%
+      items:
+      - type: realtime.text
+        key: environment.wind.speed.speed
+        title: false
+        display:
+          unitLabel:
+            alignment: CenterLeft
+            matchingGroup: global.direction
+        geometry:
+          height: 62%
+          width: 100%
+          x: 0%
+          y: 0%
+      - type: realtime.text
+        key: environment.wind.direction.direction
+        title: false
+        display:
+          unitLabel:
+            filters:
+            - Lower
+        geometry:
+          height: 13%
+          width: 42.1%
+          x: 57.9%
+          y: 49.1%
+      - type: value-stack
+        direction: Horizontal
+        geometry:
+          height: 35%
+          width: 100%
+          x: 0%
+          y: 66%
+        items:
+        - environment.wind.speed.gust:
+            display:
+              unitPosition: hidden
+            title:
+              text: Gust
+        - environment.wind.speed.gustMax:
+            display:
+              unitPosition: hidden
+            title:
+              text: Gusts Max
+    - type: titled-group
+      name: precipitation
+      title:
+        height: 0.75cm
+        text: Precipitation
+      items:
+      - type: mini-graph
+        annotations:
+          dayLabels:
+            alignment: TopCenter
+            enabled: false
+          hourLabels:
+            alignment: TopCenter
+            height: 3.000 mm
+            offset: 5px
+            position: above
+            relative-times: true
+        geometry:
+          height: 50%
+          width: 100%
+          x: 0%
+          y: 0%
+        indicator:
+          color: white
+          opacity: 0.3
+        margins:
+          top: 26%
+        figures:
+        - figure: precipitation
+          environment.precipitation.precipitation:
+            plot:
+              type: plot
+              gradient: PrecipitationRateGradient
+              weight: 0.3
+            smooth: false
+          max: 0.5
+        - figure: precipitationProbability
+          environment.precipitation.probability:
+            plot:
+              type: plot
+              gradient: PrecipitationProbabilityGradient
+              weight: 0.3
+            smooth: false
+          max: 1.0
+      - type: realtime.text
+        key: environment.precipitation.precipitation
+        title: false
+        display:
+          format-hint: '0.0'
+          unitPosition: float-under
+        geometry:
+          height: 50%
+          width: 40%
+          x: 0%
+          y: 50%
+      - type: value-stack
+        padding:
+          left: 0.5mm
+          right: 0.5mm
+          bottom: 5%
+        spacing: 0.5 mm
+        geometry:
+          height: 50%
+          width: 60%
+          x: 40%
+          y: 50%
+        items:
+        - environment.precipitation.daily:
+            display:
+              format: format={value}{self.numerator.unit}, precision=2
+            title:
+              text: Today
+        - environment.precipitation.daily:
+            display:
+              format: format={value}in, precision=2
+            forecast: true
+            title:
+              text: Expected
+        - environment.precipitation.time:
+            display:
+              format: precision=0
+            title:
+              text: time
+        - environment.lightning.lightning:
+            display:
+              format: precision=0
+            title:
+              text: Lightning
+        - environment.lightning.last:
+            display:
+              convertTo: s
+              format: simple
+            title:
+              text: Last Strike
+    - type: titled-group
+      name: atmosphere
+      title:
+        height: 0.75cm
+        text: Atmosphere
+      size: 30%
+      items:
+      - type: realtime.text
+        key: environment.clouds.cover.cover
+        title:
+          text: Cloud Cover
+          matchingGroup: title@atmosphere
+        display:
+          valueLabel:
+            matchingGroup: value@atmosphere
+          format-hint: 100%
+          unitPosition: float-under
+        geometry:
+          height: 50%
+          width: 40%
+          x: 0%
+          y: 0%
+      - type: realtime.text
+        key: environment.pressure.pressure
+        title:
+          matchingGroup: title@atmosphere
+        display:
+          valueLabel:
+            matchingGroup: value@atmosphere
+          format-hint: '00.00'
+          unitPosition: float-under
+        geometry:
+          height: 50%
+          width: 40%
+          x: 0%
+          y: 50%
+      - type: titled-group
+        title:
+          height: 4mm
+          text: Details
+          alignment: CenterLeft
+          border:
+            color: '#ffffff'
+            edges: bottom
+            enabled: true
+            offset: 0.4 mm
+            opacity: 0.4
+          margins:
+            bottom: 0%
+            left: 0.25mm
+            right: 0%
+            top: 0%
+          matchingGroup: title@atmosphere
+        geometry:
+          height: 100%
+          width: 60%
+          x: 40%
+          y: 5px
+        items:
+        - type: value-stack
+          padding:
+            left: 0.25mm
+            right: 1.25mm
+            top: 1mm
+            bottom: 5%
+          spacing: 1 mm
+          items:
+          - environment.light.irradiance.irradiance:
+              title:
+                text: Direct
+          - environment.light.irradiance.diffuse:
+              title:
+                text: Diffuse
+          - environment.light.irradiance.direct:
+              title:
+                text: Direct
+          - environment.clouds.cover.high
+          - environment.clouds.cover.low
+          - spacer:
+              size: 1.5 mm
+          - environment.pressure.pressure
+          - environment.pressure.surface:
+              title:
+                text: Sea Level
