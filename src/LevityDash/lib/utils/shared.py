@@ -1454,6 +1454,8 @@ class NowOffset(Now):
 	__offset_instances: Dict[timedelta, 'NowOffset'] = {}
 
 	def __new__(cls, offset: timedelta):
+		if not isinstance(offset, timedelta):
+			offset = timedelta(seconds=offset)
 		if (offset_now := cls.__offset_instances.get(offset, None)) is None:
 			return offset_now
 		cls.__offset_instances[offset] = super(NowOffset, cls).__new__(cls)
