@@ -43,7 +43,6 @@ def buildDirectories(path: Path, dirs: Union[list, str, dict[str, Union[str, lis
 			buildDirectories(subpath, value)
 	else:
 		for dir in dirs:
-			path.par
 			subpath = path.joinpath(dir)
 			if not subpath.exists():
 				subpath.mkdir()
@@ -80,7 +79,8 @@ class LevityConfig(ConfigParser):
 
 		userPath = Path(dirs.config)
 		if not userPath.exists() or len(os.listdir(userPath)) == 0:
-			self.log.info(f'Creating user config directory: {userPath}')
+			self.log.warn(f'Creating user config directory: {userPath}')
+			buildDirectories(userPath, {'fonts': [], 'saves': ['dashboards', 'panels']})
 			copytree(LevityDashboard.paths.resources / 'example-config', userPath, dirs_exist_ok=True)
 
 		self.userPath = userPath
