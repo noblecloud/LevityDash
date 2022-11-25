@@ -10,7 +10,7 @@
   </p>
 </p>
 
-![Screenshot](https://user-images.githubusercontent.com/6209052/166817312-8401c7dc-f1c9-47c0-b99d-d24b4280d560.png)
+![Screenshot](https://github.com/noblecloud/LevityDash/raw/main/docs/_images/screenshot-readme.png)
 
 LevityDash aims to be a lightweight, desktop native, multisource dashboard without a required web frontend. The current version only supports PySide2/Qt. However, a key goal of this project is to support multiple frontends and
 platforms, including embedded.
