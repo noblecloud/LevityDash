@@ -16,7 +16,13 @@ from LevityDash.lib.utils.shared import ClosestMatchEnumMeta
 log = LevityLogger.getChild('fonts')
 database = QFontDatabase()
 
-userFontPath = userConfig.userPath["fonts"]
+try:
+	userFontPath = userConfig.userPath["fonts"]
+except FileNotFoundError:
+	userFontsPath = userConfig.userPath.path / "fonts"
+	userFontsPath.mkdir(parents=True, exist_ok=True)
+	userFontPath = userConfig.userPath["fonts"]
+
 builtInFontsPath = EasyPath(Path(LevityDashboard.resources) / 'fonts')
 
 if not userConfig.has_section("Fonts"):
