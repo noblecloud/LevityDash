@@ -1798,8 +1798,8 @@ class ObservationTimeSeries(ObservationDict, published=True):
 		if isinstance(item, ArchivedObservation):
 			if isinstance(item, ObservationTimeSeriesItem):
 				timestamp = next((j for i in item.values() if (j := getattr(i, 'timestamp', None)) is not None), None)
-				if timestamp is None:
-					breakpoint()
+				# if timestamp is None:
+				# 	breakpoint()
 				source.append(item_source := item.timeseries)
 			else:
 				timestamp = item.timestamp
