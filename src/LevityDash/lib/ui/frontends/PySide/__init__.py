@@ -12,7 +12,7 @@ class LevityDashApp(QApplication):
 	def init_app(self):
 		self.setQuitOnLastWindowClosed(True)
 		self.main_window = LevityMainWindow()
-		iconPath = LevityDashboard.resources / 'ui' / 'icon.icns'
+		iconPath = LevityDashboard.resources / 'ui-elements' / 'icon.icns'
 		icon = QIcon(iconPath.as_posix())
 		QApplication.setWindowIcon(icon)
 		QApplication.setApplicationName('LevityDashboard')
