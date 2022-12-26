@@ -243,11 +243,15 @@ class _LevityLogger(logging.Logger):
 			}
 		)
 
-		level = cls.determineLogLevel()
-		console_level = cls.determineLogLevel('console', default=level)
-		file_level = cls.determineLogLevel('file', default=1)
-		status_bar_level = cls.determineLogLevel('status-bar', default=4)
-		logtail_level = cls.determineLogLevel('logtail', default=1)
+		# If the ENV variable LEVITY_BUILDING is set, log levels should be set to ERROR
+		if not lvdash.isBuilding:
+			level = cls.determineLogLevel()
+			console_level = cls.determineLogLevel('console', default=level)
+			file_level = cls.determineLogLevel('file', default=1)
+			status_bar_level = cls.determineLogLevel('status-bar', default=4)
+			logtail_level = cls.determineLogLevel('logtail', default=1)
+		else:
+			level = console_level = file_level = status_bar_level = logtail_level = logging.ERROR
 
 		handlers = []
 
@@ -336,7 +340,7 @@ class _LevityLogger(logging.Logger):
 		env_prefix: str = None,
 		arg_prefix: str = None,
 		config_prefix: str = None,
-		default: str = None,
+		default: str | int = None,
 	) -> str:
 
 		if prefix not in {'', 'console', 'status_bar', 'file', 'logtail'}:
@@ -355,8 +359,11 @@ class _LevityLogger(logging.Logger):
 
 		# determine verbosity level from args
 		args = cls._make_argparse(keys)
-		if args.verbosity is not None:
-			verbosity = cls._parse_verbosity(args.verbosity)
+		keys_prefix = f"{keys.prefix}_" if keys.prefix else ''
+
+		verbosity_arg = getattr(args, f'{keys_prefix}verbosity', None)
+		if verbosity_arg is not None:
+			verbosity = cls._parse_verbosity(verbosity_arg)
 
 		# parse -v flag
 		if (v := getattr(args, 'v', None)) is not None:
@@ -366,12 +373,15 @@ class _LevityLogger(logging.Logger):
 				verbosity = v
 
 		# determine level from args
-		if args.verbose or (v is not None):
+		verbose_arg = getattr(args, f'{keys_prefix}verbose', None)
+		debug_arg = getattr(args, f'{keys_prefix}debug', None)
+		level_arg = getattr(args, f'{keys_prefix}level', None)
+		if verbose_arg or (v is not None):
 			level = 5
-		elif args.debug:
+		elif debug_arg:
 			level = 10
-		elif args.level is not None:
-			level = cls._parse_level(args.level)
+		elif level_arg is not None:
+			level = cls._parse_level(level_arg)
 
 		# --- config ---
 		# determine level from config
@@ -502,8 +512,7 @@ class _LevityLogger(logging.Logger):
 
 	@classmethod
 	def _make_argparse(cls, keys: Dotty) -> argparse.Namespace:
-		args_namespace = argparse.Namespace()
-		parser = argparse.ArgumentParser()
+		parser = lvdash.args.logging_group
 
 		debug_flags = [keys.args.debug]
 		level_flags = [keys.args.level]
@@ -513,16 +522,11 @@ class _LevityLogger(logging.Logger):
 			level_flags.append('-l')
 			debug_flags.append('-d')
 
-		parser.add_argument(keys.args.verbose, action='store', default=None, dest='verbose')
-		parser.add_argument(keys.args.verbosity, action='store', default=None, dest='verbosity')
-		parser.add_argument(*debug_flags, action='store_true', default=None, dest='debug')
-		parser.add_argument(*level_flags, type=str, default=None, dest='level')
-		try:
-			log_args = parser.parse_args(namespace=args_namespace)
-		except Exception as e:
-			print(e)
-			return args_namespace
-		return log_args
+		parser.add_argument(keys.args.verbose, action='store', default=None)
+		parser.add_argument(keys.args.verbosity, action='store', default=None, type=int, choices=range(0, 6))
+		parser.add_argument(*debug_flags, action='store_true', default=None)
+		parser.add_argument(*level_flags, type=str, default=None, choices=['verbose', 'debug', 'info', 'warning', 'error', 'critical'])
+		return lvdash.parse_args()
 
 	@property
 	def VERBOSE(self):

@@ -1,21 +1,19 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
 import os
 import platform
-
+import signal
 import sys
 from locale import LC_ALL, setlocale
-import signal
 from pathlib import Path
+from sys import exit
 
 from PySide2.QtWidgets import QApplication
-from sys import exit, path as PYTHONPATH
-import builtins
 
 setlocale(LC_ALL, 'en_US.UTF-8')
 
 exit_signals = {signal.SIGINT, signal.SIGTERM}
+
 
 def install_signals():
 
@@ -44,8 +42,6 @@ def install_signals():
 		signal.signal(s, signalQuit)
 
 
-APP_STATE = 'LOADING'
-
 def main():
 
 	from LevityDash import LevityDashboard
@@ -68,14 +64,31 @@ def main():
 
 if __name__ == '__main__':
 
+	if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+		from os import chdir
+		from multiprocessing import freeze_support
+		freeze_support()
+		chdir(sys._MEIPASS)
+
 	try:
 		from LevityDash import __version__
 	except ImportError:
+
+		from sys import path
+		path.append(os.curdir)
+
 		cwd = Path()
 		local_module = cwd / 'src/LevityDash/__main__.py'
 		if local_module.exists():
 			print('Running from source')
 			os.chdir((cwd / 'src').as_posix())
-			PYTHONPATH.append(os.curdir)
+
+		try:
+			from LevityDash import __version__
+		except ImportError:
+			print('Failed to import LevityDash')
+			print(f'Current working directory: {cwd.absolute()}')
+			print(f'Python path: {path}')
+			exit(1)
 
 	main()

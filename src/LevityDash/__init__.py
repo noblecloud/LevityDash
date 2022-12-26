@@ -1,6 +1,8 @@
+import argparse
 import os
+from argparse import ArgumentParser
 from types import ModuleType
-from typing import Type, TYPE_CHECKING
+from typing import Type, TYPE_CHECKING, ClassVar
 
 from . import shims
 
@@ -69,13 +71,38 @@ class _LevityAppDirs(AppDirs):
 		self.builtin_plugins = self.lib / "plugins" / "builtin"
 
 
+class _LevityArgParser(ArgumentParser):
+
+	def __init__(self, *args, **kwargs):
+		kwargs.update(
+			{
+				'prog': "levitydash-cli",
+				'epilog': "For more information, see https://LevityDash.app",
+				'exit_on_error': False,
+			}
+		)
+		super(_LevityArgParser, self).__init__(*args, **kwargs)
+		self.__add_args()
+		self.__add_logging_parsers()
+		self.parse_known_args()
+
+	def __add_args(self):
+		self.add_argument('--reset-config', action='store_true', help='Reset the configuration directory to default')
+		self.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
+
+	def __add_logging_parsers(self):
+		self.logging_group = self.add_argument_group('logging', 'Logging options')
+
+
 class _LevityDashboard(object):
+	args: _LevityArgParser = _LevityArgParser()
+	parsed_args: argparse.Namespace = args.parse_known_args()
 
 	__version__ = __version__
 	__slots__ = ('app', '__lib', 'config', 'pluginConfig', 'plugins', 'dispatcher',
 							 'log', 'get_channel', 'get_container', 'clock', 'status_bar', 'splash',
 							 'main_window', 'view', 'plugin_config', 'pluginPool', 'pluginThread',
-							 'main_action_pool', 'main_thread_pool', 'CENTRAL_PANEL','scene',
+							 'main_action_pool', 'main_thread_pool', 'CENTRAL_PANEL', 'scene',
 							 'load_dashboard', 'main_thread')
 
 	plugins: 'LevityDashboard.lib.PluginsLoader'
@@ -91,7 +118,16 @@ class _LevityDashboard(object):
 	__lib: ModuleType
 
 	isCompiled: bool = getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")
-	root = Path(__file__).parent.parent if isCompiled else Path(__file__).parent
+	isBuilding: bool = os.getenv("LEVITY_BUILDING", "FALSE") == "TRUE"
+
+	if not isBuilding and isCompiled:
+		root = Path(sys._MEIPASS) / 'LevityDash'
+		from datetime import datetime
+		compile_date = datetime.now()
+		__version__ = f'{__version__} (Compiled {compile_date:%X on %x})'
+	else:
+		root = Path(__file__).parent
+
 	paths = _LevityAppDirs(root)
 
 	resources = paths.resources
@@ -112,6 +148,18 @@ class _LevityDashboard(object):
 	@property
 	def lib(self):
 		return self.__lib
+
+	@classmethod
+	def parse_args(cls):
+		cls.parsed_args = cls.args.parse_known_args()[0]
+
+	def update_args(self):
+		self.args.parse_args()
+
+	def build_imports(self):
+		import LevityDash.lib.plugins.builtin
+		print("Builtins loaded")
+
 
 
 LevityDashboard = _LevityDashboard()
