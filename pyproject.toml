@@ -39,6 +39,8 @@ packages = [
 
 [tool.poetry.scripts]
 LevityDash = 'LevityDash:__main__.main'
+LevityDash-reset-config = 'LevityDash:__main__.reset_config'
+
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.11"
