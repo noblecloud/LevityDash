@@ -46,9 +46,10 @@ def main():
 
 	from LevityDash import LevityDashboard
 
-	if LevityDashboard.isCompiled:
-		from os import chdir
-		chdir(sys._MEIPASS)
+	LevityDashboard.parse_args()
+
+	if LevityDashboard.parsed_args.reset_config:
+		reset_config()
 
 	print(f'Starting LevityDash {LevityDashboard.__version__} on {platform.system()}')
 
@@ -60,6 +61,54 @@ def main():
 	LevityDashboard.lib.plugins.load_all()
 
 	LevityDashboard.app.start()
+
+
+def reset_config():
+	from LevityDash import LevityDashboard
+	from rich import prompt
+	import shutil
+	config_dir = Path(LevityDashboard.paths.config)
+
+	if platform.system() != 'Windows':
+		user_home = Path.home()
+		if config_dir.is_relative_to(user_home):
+			config_dir = config_dir.relative_to(user_home)
+			config_dir = f'~/{config_dir}'
+	else:
+		app_data_path = Path("%APPDATA%")
+		if config_dir.is_relative_to(app_data_path):
+			config_dir = config_dir.relative_to(app_data_path)
+			config_dir = f'%APPDATA%\\{config_dir}'
+	if not isinstance(config_dir, Path):
+		config_dir = Path(config_dir)
+
+	prompt_message = f"""
+[bold][underline][green]LevityDash Configuration Reset[/underline][/bold][/green]
+	
+[bold red]WARNING[/bold red]: This will delete all your configuration files and reset them to default.
+Are you sure you want to continue? [bold red]This cannot be undone![/bold red]
+
+Config Directory: [bold blue]{config_dir}[/bold blue]
+"""
+
+	if prompt.Confirm.ask(
+		prompt_message,
+		default=False,
+	):
+		print(f'Removing {config_dir}...')
+		shutil.rmtree(config_dir)
+		if config_dir.exists():
+			print(f'Failed to remove {config_dir}')
+		else:
+			print('Config directory reset!')
+	else:
+		print('\nConfig reset canceled...')
+
+	if not prompt.Confirm.ask(
+		'Continue to [bold][green]LevityDash[/bold][/green]?',
+		default=True,
+	):
+		exit(0)
 
 
 if __name__ == '__main__':
