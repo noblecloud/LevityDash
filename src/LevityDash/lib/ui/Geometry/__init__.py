@@ -36,6 +36,8 @@ console = log.console
 
 def findScreen(app: QApplication = None) -> QScreen:
 	app = app or QApplication.instance()
+	if app is None:
+		return QScreen()
 	screens = app.screens()
 	display = userConfig['Display'].get('display', 'smallest')
 	match display:

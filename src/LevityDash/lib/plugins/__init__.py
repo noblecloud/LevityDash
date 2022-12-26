@@ -114,14 +114,15 @@ class PluginsLoader(metaclass=GlobalSingleton, name='plugins'):
 	def network_available(self) -> bool:
 		return PluginsLoader.network_manager.isOnline()
 
-	def on_network_availility_change(self, available: bool):
-		if available and pluginConfig['Options'].getboolean('enabled') and self.network_available is None:
-			asyncio.gather(*(plugin_.asyncStart() for plugin_ in self if plugin_.enabled))
-		print(f'plugins Network availability changed to {available}')
+	# def on_network_availility_change(self, available: bool):
+	# 	if available and pluginConfig['Options'].getboolean('enabled') and self.network_available is None:
+	# 		asyncio.gather(*(plugin_.asyncStart() for plugin_ in self if plugin_.enabled))
+	# 	print(f'plugins Network availability changed to {available}')
 
 	@staticmethod
 	def allPlugins() -> Iterator[str]:
-
+		if LevityDashboard.isBuilding:
+			return iter(())
 		pluginDirs = [str(LevityDashboard.paths.builtin_plugins.absolute())]
 
 		return (i.name for i in pkgutil.iter_modules(pluginDirs))

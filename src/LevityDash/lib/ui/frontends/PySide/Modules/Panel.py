@@ -1808,7 +1808,6 @@ class Panel(_Panel, Stateful, tag='group'):
 			else:
 				pool.add(self.geometry.updateSurface)
 
-
 	@property
 	def containingRect(self):
 		return self.rect()

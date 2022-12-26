@@ -1,6 +1,7 @@
 import inspect
 import os
 from abc import abstractmethod
+from builtins import isinstance
 from collections import ChainMap
 from collections.abc import MutableSequence
 from contextlib import contextmanager
@@ -14,6 +15,7 @@ from inspect import get_annotations, getframeinfo, getsource, getsourcefile, get
 from operator import attrgetter
 from re import search
 from shutil import get_terminal_size
+from sys import _getframe as getframe
 from tempfile import TemporaryFile
 from traceback import extract_stack
 from types import GenericAlias, SimpleNamespace, UnionType
@@ -25,7 +27,6 @@ from typing import (
 from warnings import warn, warn_explicit
 
 import yaml
-from builtins import isinstance
 from PySide2.QtCore import QObject, QThread
 from rich.box import SIMPLE_HEAVY
 from rich.console import Console, Group
@@ -33,7 +34,6 @@ from rich.panel import Panel
 from rich.pretty import Pretty
 from rich.repr import auto as auto_rich_repr
 from rich.syntax import Syntax
-from sys import _getframe as getframe
 from yaml import Dumper, MappingNode, SafeDumper, ScalarNode
 from yaml.composer import Composer
 from yaml.constructor import SafeConstructor
