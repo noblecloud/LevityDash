@@ -399,7 +399,7 @@ class SizeGroup:
 	def post_loading(self):
 		self.adjustSizes(reason='post_loading')
 
-	def adjustSizes(self, exclude: Set['Text'] = None, reason=None):
+	def adjustSizes(self, exclude: 'Text' = None, reason=None):
 		# items = self.similarItems(similarTo) if similarTo is not None else self.items
 		# items = [i.text for i in self.items]
 		if self.locked or len(self.items) < 2:
@@ -407,9 +407,9 @@ class SizeGroup:
 		self.locked = True
 		for group in self.sizes.values():
 			for item in group:
-				if item is not exclude and hasattr(item, 'updateTransform'):
+				if item.text and item is not exclude and hasattr(item, 'updateTransform'):
 					try:
-						item.updateTransform(updatePath=False)
+						item.updateTransform(updatePath=True)
 					except AttributeError:
 						pass
 					except Exception as e:
@@ -437,7 +437,7 @@ class SizeGroup:
 		return min(sizes, key=lambda x: abs(x - itemHeight))
 
 	def sharedSize(self, v) -> float:
-		s = min((item.getTextScale() for item in self.simlilarItems(v)), default=1)
+		s = min((item.getTextScale() for item in self.simlilarItems(v) if item.text), default=1)
 		if not self.locked and abs(s - self._lastSize) > 0.01:
 			self._lastSize = s
 			self.__dict__.pop('sizes', None)
