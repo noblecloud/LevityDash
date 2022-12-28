@@ -53,7 +53,7 @@ os.chdir(src)
 
 
 a = Analysis(
-	['../src/LevityDash/__main__.py'],
+	['../../src/LevityDash/__main__.py'],
 	binaries=[],
 	datas=datas,
 	hiddenimports=[*collect_submodules('LevityDash', filter=lambda x: not x.startswith('LevityDash.lib.plugins.builtin'))],
@@ -88,9 +88,9 @@ cli = EXE(
 	disable_windowed_traceback=False,
 	argv_emulation=True,
 	codesign_identity=environ['CODE_SIGN_IDENTITY'],
-	entitlements_file='../assets/entitlements.plist',
+	entitlements_file='../build-to-app/assets/entitlements.plist',
 	target_arch='x86_64',
-	icon='assets/macOS.icns',
+	icon='../build-to-app/assets/macOS.icns',
 )
 
 # exe = EXE(

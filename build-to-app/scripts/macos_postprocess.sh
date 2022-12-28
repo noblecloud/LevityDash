@@ -4,34 +4,33 @@
 # NOTE: This script is experimental #
 #-----------------------------------#
 
-APP=".dist/LevityDash.app"
-DMG_PATH=".dist/LevityDash_macOS.dmg"
-ZIP_PATH=".dist/LevityDash_macOS.zip"
-DMG_DIST_PATH="./dist/dmg"
-SIGNATURE=""
+APP="./dist/LevityDashCLI"
+#DMG_PATH=".dist/LevityDash_macOS.dmg"
+ZIP_PATH="./dist/LevityDashCLI_macOS.zip"
+#DMG_DIST_PATH="./dist/dmg"
+SIGNATURE="15961410B85E7DA378F8B9ACD169BC43EC5FA05C"
+ENTITLEMENTS="./assets/entitlements.plist"
 
 # check signature
 check_sig() {
-	echo 1
-		if [ -z "$SIGNATURE" ]; then
-				echo "No signature provided, skipping code signing"
-				echo "To sign, change the SIGNATURE variable in the script"
-				exit 1
-		fi
-		echo "Using signature: $SIGNATURE"
-		return 0
+	if [ -z "$SIGNATURE" ]; then
+		echo "No signature provided, skipping code signing"
+		echo "To sign, change the SIGNATURE variable in the script"
+		exit 1
+	fi
+	echo "Using signature: $SIGNATURE"
+	return 0
 }
 
 check_file_sig() {
-		# check if ../.signature exists
-		echo 2
-		if [ ! -f "../.signature" ]; then
-				echo "No signature file found, skipping code signing"
-				return 0
-		fi
-		# check if signature is valid
-		SIGNATURE=$(cat ../.signature)
-		check_sig
+	# check if ../.signature exists
+	if [ ! -f "../.signature" ]; then
+		echo "No signature file found, skipping code signing"
+		return 0
+	fi
+	# check if signature is valid
+	SIGNATURE=$(cat ../.signature)
+	check_sig
 }
 
 # sign the app
@@ -40,10 +39,8 @@ sign_app() {
 
 	check_sig
 
-	codesign --deep --force --options=runtime --entitlements ./entitlements.plist --sign "$SIGNATURE" --timestamp "$APP"
+	codesign --deep --force --options=runtime --entitlements "$ENTITLEMENTS" --sign "$SIGNATURE" --timestamp "$APP"
 }
-
-check_file_sig || check_sig || return 1
 
 zip_app() {
 	echo "Creating zip file..."
@@ -66,8 +63,7 @@ staple() {
 build_dmg() {
 
 	# test if create-dmg is installed
-	if ! command -v create-dmg &> /dev/null
-	then
+	if ! command -v create-dmg &>/dev/null; then
 		echo "create-dmg is required to build the dmg file"
 		echo "install with: brew install create-dmg"
 		exit 1
@@ -97,4 +93,9 @@ build_dmg() {
 		--app-drop-link 600 185 \
 		"$DMG_PATH" \
 		"$DMG_DIST_PATH"
-	}
+}
+
+
+zip_cli() {
+	# check if
+}
