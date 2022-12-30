@@ -1,4 +1,7 @@
-# Plugins
+
+<ml-generated>
+LevityDash is designed for use with multiple plugins.  Plugins are used to pull data from various sources and provide it to the dashboard.  The dashboard is then able to display the data in a variety of ways.  Plugins are also used to provide the dashboard with information about the data that is being pulled.  This information is used to automatically parse the data and provide it to the dashboard in a usable format.
+</ml-generated>
 
 ## Built-In Plugins  <!-- {docsify-ignore} -->
 

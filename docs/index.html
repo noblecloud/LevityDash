@@ -1,40 +1,90 @@
 <!DOCTYPE html>
-<html lang="en">
+<!--suppress HtmlUnknownTarget -->
+<html lang="en" xmlns="http://www.w3.org/1999/html">
 <link href="/_images/favicons/apple-touch-icon.png" rel="apple-touch-icon" sizes="180x180">
 <link href="/_images/favicons/favicon-32x32.png" rel="icon" sizes="32x32" type="image/png">
 <link href="/_images/favicons/favicon-16x16.png" rel="icon" sizes="16x16" type="image/png">
 <link href="/_images/favicons/site.webmanifest" rel="manifest">
+
 <head>
 	<meta charset="UTF-8">
 	<meta content="IE=edge,chrome=1" http-equiv="X-UA-Compatible">
-	<link href="https://fonts.googleapis.com/css?family=Nunito" rel="stylesheet">
+	<link href="https://fonts.googleapis.com/css?family=Nunito:100,200,300,400,500,600,700,800,900" rel="stylesheet">
+	<link href="https://fonts.googleapis.com/css?family=M+PLUS+Rounded+1c" rel="stylesheet">
 	<meta content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0" name="viewport">
 
 	<title>LevityDash</title>
 	<meta content="Documentation for the LevityDashboard" name="description">
+	 <meta name="theme-color" content="#f6f8fa" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#161b22" media="(prefers-color-scheme: dark)">
 
 
 	<!-- Theme: Simple (latest v0.x.x) -->
 	<link href="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/css/theme-simple-dark.css" rel="stylesheet">
-	<link href="style.css" rel="stylesheet">
 
+	<!-- Themes (light + dark) -->
+	<!--	<link rel="stylesheet" media="(prefers-color-scheme: dark)" href="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/css/theme-simple-dark.css">-->
+	<!--	<link rel="stylesheet" media="(prefers-color-scheme: light)" href="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/css/theme-simple.css">-->
+
+	<link href="style.css" rel="stylesheet">
+	<link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/treeview/prism-treeview.min.css" rel="stylesheet">
+	<!--	<link href="_fonts/national-park/webfont.css" rel="stylesheet">-->
 
 </head>
 
 <body>
-<!--<nav>-->
-<!--  <a href="#/">github</a>-->
-<!--</nav>-->
-<div id="app">please wait...</div>
-
+<div id="app"></div>
 <script>
+	var app = document.getElementById('app');
 	var repoUrl = "https://github.com/noblecloud/LevityDash"; // TODO: Update.
 	var editPath = repoUrl + "/blob/master/docs/";
 	var editMsg = "📝 Edit on GitHub";
+
+	function place_continue(target) {
+		try {
+			if (target.className === 'pagination-item pagination-item--next' && document.getElementById('next-section')) {
+				next_section = document.getElementById('next-section');
+				next_section_button = target.cloneNode(true);
+
+				next_section_button.label = next_section_button.children[0].children[0].children[0];
+				next_section_button.section_name = next_section_button.children[0].children[1];
+				next_section_button.subtitle = next_section_button.children[0].children[2];
+				next_section_button.getElementsByTagName('a')[0].href = next_section.href;
+				next_section_button.section_name.innerHTML = next_section.textContent;
+				next_section_button.label.innerHTML = window.$docsify['pagination']['skipChapterText'].toUpperCase();
+				let to_replace = next_section.parentNode;
+				let article = to_replace.parentNode;
+				article.replaceChild(next_section_button, to_replace);
+				if (target.parentElement.childElementCount === 2) {
+					next_section_button.className = 'pagination-item pagination-item--continue';
+					article.insertBefore(next_section_button, article.childNodes[0]);
+				} else {
+					next_section_button.className = 'pagination-item pagination-item--continue';
+					target.parentElement.insertBefore(next_section_button, target);
+					let filler_node = document.createElement('dev');
+					filler_node.className = 'pagination-item pagination-item--filler';
+					target.parentElement.insertBefore(filler_node, next_section_button);
+				}
+
+			}
+		} catch (e) {
+			console.log(e);
+		}
+	}
+
 	window.$docsify = {
 		name: "LevityDash", // TODO: Update.
 		repo: repoUrl,
+		homepage: 'index.md',
 		ga: "UA-40561114-1",
+
+		accordify: {
+			prerenderComments: true,                    // default
+			selectors: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'], // default value
+			debug: false,                               // default value
+		},
+		loadNavbar: false,
+
 		tabs: {
 			persist: true,      // default
 			sync: true,      // default
@@ -42,6 +92,7 @@
 			tabComments: true,      // default
 			tabHeadings: true       // default
 		},
+
 		readyTransition: true, // default
 		responsiveTables: true,  // default
 
@@ -49,48 +100,208 @@
 			style: 'flat'
 		},
 
-		remoteMarkdown: {
-			tag: 'remote-md',
-		},
-
-
 		coverpage: 'coverpage.html',
-
 		auto2top: true,
 		loadSidebar: true,
-		subMaxLevel: 0,
+		autoHeader: true,
+		subMaxLevel: 3,
+		maxLevel: 3,
 		sidebarDisplayLevel: 0,
 		logo: "_images/logo-simple.svg",
+		catchPluginErrors: true,
+		themeable: {
+			readyTransition: true,
+			responsiveTables: true
+		},
+		pagination: {
+			crossChapter: true,
+			crossChapterText: true,
+			skipChapterText: 'Skip To'
+		},
+		alias: {
+			'/changes/v(.*)': 'changelogs/v$1.md',
+			'/.*/_sidebar.md': '/_sidebar.md', // See #301
+			'/intro': '/index.md',
+		},
 
 		copyCode: {
 			buttonText: 'Copy to clipboard',
 			errorText: 'Error',
 			successText: 'Copied'
-		}
+		},
+
+		footer: {
+			main: {
+				left: "Made with ♥︎️ by <a href=\"https://github.com/noblecloud\">NobleCloud</a>",
+				center: "LevityDash <strong>v0.2.0b1</strong> is currently <strong>in beta</strong> and requires <strong>Python 3.10</strong>.",
+				right: '© 2022 LevityDash'
+			},
+		},
+
+		plugins: [
+			function (hook, vm) {
+				hook.ready(function () {
+					toggleDash();
+					// Place the continue button.
+					place_continue(document.getElementsByClassName('pagination-item pagination-item--next')[0]);
+				});
+
+				hook.doneEach(function () {
+					// Place the continue button.
+					toggleDash();
+					place_continue(document.getElementsByClassName('pagination-item pagination-item--next')[0]);
+					// let main_header_element = document.createElement("div");
+					// _main = document.querySelector('main');
+					// main_header_element.id = 'alert-header';
+					// main_header_element.innerHTML = '<div class="alert-title"><small>test</small></div>';
+					// _main.insertBefore(main_header_element, _main.childNodes[0]);
+				});
+
+				// adds mono-header class to all the headers that contains a > span > code
+				// hook.afterEach(function (html) {
+				// 	// Get all header elements
+				// 	var headers = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+				//
+				// 	// Loop through the header elements
+				// 	for (var i = 0; i < headers.length; i++) {
+				// 		var header = headers[i];
+				// 		// Check if the header element has a code tag within it
+				// 		if (header.querySelector('code')) {
+				// 			// Add the 'mono-header' class to the header element
+				// 			header.classList.add('mono-header');
+				// 		}
+				// 	}
+				//
+				// });
+
+			}
+
+		]
 	}
 
 </script>
-
 </body>
-<script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/ga.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/js/docsify-themeable.min.js"></script>
-<script defer src="//unpkg.com/docsify/lib/docsify.min.js"></script>
-<script src="//unpkg.com/docsify-remote-markdown/dist/docsify-remote-markdown.min.js"></script>
-<!-- Edit on GitHub plugin. -->
-<!--Plugins-->
-<script src="https://unpkg.com/docsify-copy-code@2"></script>
-<script src="https://unpkg.com/docsify-plugin-flexible-alerts"></script>
-<script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/search.min.js"></script>
-<!--  <script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/emoji.min.js"></script>-->
-<script src="//cdn.jsdelivr.net/npm/docsify-sidebar-collapse/dist/docsify-sidebar-collapse.min.js"></script>
-<script src="//unpkg.com/docsify-edit-on-github/index.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/docsify-tabs@1"></script>
 
-<!-- Syntax highlighting.-->
-<script defer src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-markdown.min.js"></script>
-<script defer src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
-<script defer src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-python.min.js"></script>
-<script defer src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-yaml.min.js"></script>
-<script defer src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-ini.min.js"></script>
+<footer>
+
+	<script src="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/js/docsify-themeable.min.js"></script>
+	<script defer src="//unpkg.com/docsify/lib/docsify.js"></script>
+
+	<script type="text/javascript">
+
+		const options = {
+			capture: true,
+		}
+
+
+		const textIsOverflow = (tag) => {
+			let org_style = tag.style;
+
+			tag.style.whiteSpace = 'nowrap';
+			tag.style.overflow = 'hidden';
+			tag.style.textOverflow = 'ellipsis';
+
+			let result = tag.scrollWidth > tag.clientWidth;
+			tag.style = org_style;
+			return result;
+		}
+
+		function toggleDash() {
+			try {
+				let h1 = document.querySelector("body > section > div.cover-main > h1");
+
+				if (!h1) return;
+
+				let dash = h1.querySelector(".dash");
+				dash.innerHTML = "Dashboard"
+				if (textIsOverflow(h1)) {
+					dash.innerHTML = "Dash"
+					if (textIsOverflow(h1)) {
+						dash.innerHTML = ""
+					}
+				} else {
+					dash.innerHTML = "Dashboard"
+				}
+			} catch (e) {
+				console.log(e);
+			}
+		}
+
+		let container = document.body;
+
+		let cover = document.querySelector("cover-main");
+
+		if (cover === null) {
+			document.addEventListener('DOMNodeInserted', function (params) {
+				if (params.target.className === 'cover-main') {
+					toggleDash()
+					// container.removeEventListener('DOMNodeInserted', arguments.callee, options);
+				}
+			}, options);
+		} else {
+			toggleDash()
+		}
+
+		let resizeTimer;
+
+		window.onresize = function () {
+			clearTimeout(resizeTimer);
+			resizeTimer = setTimeout(toggleDash, 10);
+		}
+	</script>
+
+	<plugins>
+
+		<!-- Google Analytics -->
+		<script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/ga.min.js"></script>
+
+		<!-- Accordify -->
+		<script src="//unpkg.com/docsify-accordify/src/index.js"></script>
+
+		<!-- Pagination -->
+		<script src="//unpkg.com/docsify-pagination/dist/docsify-pagination.min.js"></script>
+
+		<!-- Footer -->
+		<script src="_scripts/simple-footer.js"></script>
+
+		<!-- Example Panels -->
+		<script src="//unpkg.com/docsify-example-panels"></script>
+
+		<!-- Copy Code -->
+		<script src="//unpkg.com/docsify-copy-code@2"></script>
+
+		<!-- Flexible Alerts -->
+		<script src="//unpkg.com/docsify-plugin-flexible-alerts"></script>
+
+		<!-- Search -->
+		<script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/search.min.js"></script>
+
+		<!-- Sidebar Collapse -->
+		<script src="//cdn.jsdelivr.net/npm/docsify-sidebar-collapse/dist/docsify-sidebar-collapse.min.js"></script>
+
+		<!-- Edit on GitHub -->
+		<script src="//unpkg.com/docsify-edit-on-github/index.js"></script>
+
+		<!-- Tabs -->
+		<script src="//unpkg.com/docsify-tabs"></script>
+
+		<!-- Syntax highlighting.-->
+		<script defer src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-markdown.min.js"></script>
+		<script defer src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
+		<script defer src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-powershell.min.js"></script>
+		<script defer src="//cdn.jsdelivr.net/npm/prismjs@1/plugins/treeview/prism-treeview.min.js"></script>
+		<script defer src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-shell-session.min.js"></script>
+		<script defer src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-python.min.js"></script>
+		<script defer src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-yaml.min.js"></script>
+		<script defer src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-ini.min.js"></script>
+
+		<!--		<script src="//unpkg.com/@rakutentech/docsify-code-inline/dist/index.min.js"></script>-->
+
+		<!--		<script src="//cdn.jsdelivr.net/npm/@sy-records/docsify-footnotes/lib/index.min.js"></script>-->
+
+
+	</plugins>
+
+</footer>
 
 </html>

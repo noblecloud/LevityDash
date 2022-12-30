@@ -1,6 +1,6 @@
 {
 	"name": "levity-dash-docs",
-	"version": "0.0.1",
+	"version": "0.2.0",
 	"description": "Docs for LevityDash.app",
 	"main": "index.html",
 	"scripts": {
@@ -17,6 +17,6 @@
 	},
 	"homepage": "https://github.com/noblecloud/LevityDash#readme",
 	"dependencies": {
-		"docsify-cli": "^4.4.4"
+		"docsify-cli": "^4.13.0"
 	}
 }
