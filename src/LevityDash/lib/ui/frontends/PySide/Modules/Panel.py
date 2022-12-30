@@ -407,7 +407,7 @@ class SizeGroup:
 		self.locked = True
 		for group in self.sizes.values():
 			for item in group:
-				if item.text and item is not exclude and hasattr(item, 'updateTransform'):
+				if item is not exclude and hasattr(item, 'updateTransform'):
 					try:
 						item.updateTransform(updatePath=True)
 					except AttributeError:
@@ -437,7 +437,7 @@ class SizeGroup:
 		return min(sizes, key=lambda x: abs(x - itemHeight))
 
 	def sharedSize(self, v) -> float:
-		s = min((item.getTextScale() for item in self.simlilarItems(v) if item.text), default=1)
+		s = min((item.getTextScale() for item in self.simlilarItems(v)), default=1)
 		if not self.locked and abs(s - self._lastSize) > 0.01:
 			self._lastSize = s
 			self.__dict__.pop('sizes', None)
