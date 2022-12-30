@@ -56,7 +56,7 @@ datas.extend(
 )
 
 a = Analysis(
-	['../src/LevityDash/__main__.py'],
+	['../../src/LevityDash/__main__.py'],
 	binaries=[],
 	datas=datas,
 	hiddenimports=hiddenimports,
@@ -111,7 +111,7 @@ cli = EXE(
 	console=True,
 	disable_windowed_traceback=False,
 	argv_emulation=True,
-	icon='assets/windows.ico',
+	icon='../assets/windows.ico',
 	exclude_binaries=False,
 )
 
