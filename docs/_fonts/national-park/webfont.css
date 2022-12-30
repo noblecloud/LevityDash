@@ -1,0 +1,47 @@
+@font-face {
+  font-family: "National Park Variable";
+	font-style: normal;
+  src: url('NationalPark-VariableVF.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: "National Park ExtraLight";
+	font-weight: 200;
+  src: url("NationalPark-ExtraLight.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "National Park Light";
+	font-weight: 300;
+	src: url("NationalPark-Light.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "National Park Regular";
+	font-weight: 400;
+  src: url("NationalPark-Regular.woff2") format("woff2");");
+}
+
+@font-face {
+  font-family: "National Park Medium";
+	font-weight: 500;
+  src: url("NationalPark-Medium.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "National Park SemiBold";
+	font-weight: 600;
+  src: url("NationalPark-SemiBold.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "National Park Bold";
+	font-weight: 700;
+  src: url("NationalPark-Bold.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "National Park ExtraBold";
+	font-weight: 800;
+  src: url("NationalPark-ExtraBold.woff2") format("woff2");
+}

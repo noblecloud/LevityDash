@@ -1,8 +1,8 @@
-# WeatherFlow/Tempest
+## WeatherFlow/Tempest
 
 The current implementation only supports one station and has no GUI for configuring it.
 
-### Access Token:
+### Access Token
 
 You can find or generate your access token here: https://tempestwx.com/settings/tokens
 
@@ -17,10 +17,13 @@ From there you can find both the station ID and the device ID.
 > [!NOTE]
 > Since only one device ID is supported, I imagine using data from both Air and Sky is not possible. Thankfully, the device ID is only used for getting historical data.
 
-### Example
+<details>
+
+<summary>
+Example (Click to expand)
+</summary>
 
 ```ini
-
 [Config] ; Since the config file is an INI, a main section must be provided
 enabled = False
 
@@ -45,3 +48,5 @@ token = {API Token}
 ;Defines that this plugin should take priority as the data source
 defaultFor = temperature wind ... 
 ```
+
+</details>
