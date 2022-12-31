@@ -7,8 +7,8 @@ from tempfile import NamedTemporaryFile
 from typing import Any, List
 
 import yaml
-from PySide2.QtCore import QRect, Qt, Slot
-from PySide2.QtWidgets import QFileDialog, QGraphicsItem, QMessageBox
+from PySide6.QtCore import QRect, Qt, Slot
+from PySide6.QtWidgets import QFileDialog, QGraphicsItem, QMessageBox
 from time import perf_counter
 
 from LevityDash import LevityDashboard
@@ -66,11 +66,11 @@ class CentralPanel(Panel, tag="dashboard"):
 		self.setFlag(QGraphicsItem.ItemHasNoContents)
 		self.resizeHandles.setVisible(False)
 		self.resizeHandles.setEnabled(False)
-		self.setFlag(self.ItemClipsChildrenToShape, False)
-		self.setFlag(self.ItemClipsToShape, False)
-		self.setFlag(self.ItemIsFocusable, False)
-		self.setFlag(self.ItemIsMovable, False)
-		self.setFlag(self.ItemIsSelectable, False)
+		self.setFlag(self.GraphicsItemFlag.ItemClipsChildrenToShape, False)
+		self.setFlag(self.GraphicsItemFlag.ItemClipsToShape, False)
+		self.setFlag(self.GraphicsItemFlag.ItemIsFocusable, False)
+		self.setFlag(self.GraphicsItemFlag.ItemIsMovable, False)
+		self.setFlag(self.GraphicsItemFlag.ItemIsSelectable, False)
 		LevityDashboard.CENTRAL_PANEL = self
 		LevityDashboard.main_action_pool = self._actionPool
 
@@ -93,7 +93,7 @@ class CentralPanel(Panel, tag="dashboard"):
 
 	@cached_property
 	def app(self):
-		from PySide2.QtWidgets import QApplication
+		from PySide6.QtWidgets import QApplication
 		return QApplication.instance()
 
 	# def contextMenuEvent(self, event):

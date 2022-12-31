@@ -13,9 +13,9 @@ from typing import (
 import numpy as np
 from _warnings import warn
 from math import atan2, ceil, degrees as mathDegrees, floor, inf, nan, prod, sqrt
-from PySide2.QtCore import QMargins, QMarginsF, QObject, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt, Signal
-from PySide2.QtGui import QCursor, QPainterPath, QPolygon, QPolygonF, QScreen, QTransform
-from PySide2.QtWidgets import QApplication, QGraphicsItem
+from PySide6.QtCore import QMargins, QMarginsF, QObject, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt, Signal
+from PySide6.QtGui import QCursor, QPainterPath, QPolygon, QPolygonF, QScreen, QTransform
+from PySide6.QtWidgets import QApplication, QGraphicsItem
 from rich.repr import auto as auto_rich_repr
 from yaml import Dumper
 
@@ -1113,7 +1113,7 @@ class Dimension(MutableFloat):
 			if isinstance(self.value, Length):
 				return f"{self.value:unitSpacer=False}"
 			string = super(Dimension, self).__str__()
-			if self.__absoluteDecorator__:
+			if (abs_dec := getattr(self, '__absoluteDecorator__', None)) is not None:
 				string = f'{string}{self.__absoluteDecorator__}'
 			# string = Text.assemble((string, 'bold magenta'), (self.__absoluteDecorator__, 'white')).render(console)
 			return string

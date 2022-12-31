@@ -12,11 +12,11 @@ from typing import (
 from uuid import UUID, uuid4
 
 from math import prod
-from PySide2.QtCore import (
+from PySide6.QtCore import (
 	QByteArray, QMargins, QMimeData, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt, QThread, QTimer, Signal, Slot
 )
-from PySide2.QtGui import QBrush, QColor, QDrag, QFocusEvent, QPainter, QPainterPath, QPen, QPixmap, QTransform
-from PySide2.QtWidgets import (
+from PySide6.QtGui import QBrush, QColor, QDrag, QFocusEvent, QPainter, QPainterPath, QPen, QPixmap, QTransform
+from PySide6.QtWidgets import (
 	QApplication, QFileDialog, QGraphicsItem, QGraphicsItemGroup, QGraphicsPathItem, QGraphicsSceneDragDropEvent,
 	QGraphicsSceneMouseEvent, QStyleOptionGraphicsItem
 )
@@ -344,7 +344,7 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 		return sorted([float(value), 0.0, 1.0])[1]
 
 	def itemChange(self, change: QGraphicsItem.GraphicsItemChange, value: Any) -> Any:
-		if change is self.ItemVisibleHasChanged:
+		if change is self.GraphicsItemChange.ItemVisibleHasChanged:
 			if (sig := self.resize_signal) is not None:
 				if change:
 					connectSignal(sig, self.updatePath)
@@ -538,8 +538,8 @@ class Panel(_Panel, Stateful, tag='group'):
 		kwargs = Stateful.prep_init(self, kwargs)
 		self._init_args_(*args, **kwargs)
 		self.previousParent = self.parent
-		self.setFlag(self.ItemClipsChildrenToShape, False)
-		self.setFlag(self.ItemClipsToShape, False)
+		self.setFlag(self.GraphicsItemFlag.ItemClipsChildrenToShape, False)
+		self.setFlag(self.GraphicsItemFlag.ItemClipsToShape, False)
 
 	def _init_args_(self, *args, **kwargs) -> None:
 		self.setAcceptedMouseButtons(Qt.AllButtons if kwargs.get('clickable', None) or kwargs.get('intractable', True) else Qt.NoButton)
@@ -1961,19 +1961,20 @@ class Panel(_Panel, Stateful, tag='group'):
 		for item in items:
 			self.scene().removeItem(item)
 
+
 class NonInteractivePanel(Panel):
 
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
-		self.setFlag(self.ItemIsMovable, False)
-		self.setFlag(self.ItemIsSelectable, False)
-		self.setFlag(self.ItemIsFocusable, False)
+		self.setFlag(self.GraphicsItemFlag.ItemIsMovable, False)
+		self.setFlag(self.GraphicsItemFlag.ItemIsSelectable, False)
+		self.setFlag(self.GraphicsItemFlag.ItemIsFocusable, False)
 		self.setAcceptedMouseButtons(Qt.NoButton)
 		self.setAcceptDrops(False)
 		self.setHandlesChildEvents(False)
 		self.setFiltersChildEvents(False)
 		self.setAcceptTouchEvents(False)
-		self.setFlag(self.ItemHasNoContents)
+		self.setFlag(self.GraphicsItemFlag.ItemHasNoContents)
 
 	def mousePressEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
 		mouseEvent.ignore()

@@ -5,9 +5,9 @@ from numbers import Number
 from time import process_time
 from typing import Any, Iterable, Type, Dict
 
-from PySide2.QtCore import QByteArray, QMimeData, Qt, QThread, QTimer, QRectF, Slot
-from PySide2.QtGui import QDrag, QFocusEvent, QFont, QPainter, QPixmap, QTransform
-from PySide2.QtWidgets import QApplication, QGraphicsItem, QGraphicsSceneMouseEvent, QStyleOptionGraphicsItem
+from PySide6.QtCore import QByteArray, QMimeData, Qt, QThread, QTimer, QRectF, Slot
+from PySide6.QtGui import QDrag, QFocusEvent, QFont, QPainter, QPixmap, QTransform
+from PySide6.QtWidgets import QApplication, QGraphicsItem, QGraphicsSceneMouseEvent, QStyleOptionGraphicsItem
 
 from LevityDash import LevityDashboard
 from LevityDash.lib.config import DATETIME_NO_ZERO_CHAR
@@ -120,7 +120,7 @@ class Realtime(Panel, tag='realtime'):
 	def _init_defaults_(self):
 		super()._init_defaults_()
 		self.contentStaleTimer = QTimer(singleShot=True)
-		self.setFlag(self.ItemIsSelectable, True)
+		self.setFlag(self.GraphicsItemFlag.ItemIsSelectable, True)
 		self.setAcceptHoverEvents(not True)
 		self.setAcceptDrops(True)
 		self._container = None
@@ -1260,7 +1260,9 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 		# self._valueTextBox = Label(self)
 		# self._unitTextBox = UnitLabel(self, self._valueTextBox)
 		super()._init_args_(*args, **kwargs)
-		self.splitter = MeasurementUnitSplitter(surface=self, value=self.valueTextBox, unit=self.unitTextBox)
+		box = self.valueTextBox
+		text_box = self.unitTextBox
+		self.splitter = MeasurementUnitSplitter(surface=self, value=box, unit=text_box)
 
 	def setUnitPosition(self, value: DisplayPosition):
 		self.displayProperties.unitPosition = value

@@ -7,10 +7,10 @@ from types import SimpleNamespace
 from typing import Callable, ClassVar, Dict, List, Optional, overload, Protocol, runtime_checkable, Tuple, Type, Union
 
 import numpy as np
-from PySide2 import QtCore
-from PySide2.QtCore import QLineF, QObject, QPoint, QPointF, QRectF, QSize, QSizeF, Qt, QTimer, Signal, QThread
-from PySide2.QtGui import QBrush, QColor, QFont, QImage, QPainter, QPainterPath, QPen, QPixmap, QTransform, QPixmapCache
-from PySide2.QtWidgets import (
+from PySide6 import QtCore
+from PySide6.QtCore import QLineF, QObject, QPoint, QPointF, QRectF, QSize, QSizeF, Qt, QTimer, Signal, QThread
+from PySide6.QtGui import QBrush, QColor, QFont, QImage, QPainter, QPainterPath, QPen, QPixmap, QTransform, QPixmapCache
+from PySide6.QtWidgets import (
 	QApplication, QGraphicsDropShadowEffect, QGraphicsEffect, QGraphicsItem, QGraphicsPixmapItem,
 	QGraphicsScene, QGraphicsSceneMouseEvent
 )
@@ -631,15 +631,15 @@ def addCrosshairDecorator(func: Callable, **dkwargs) -> Callable:
 	return wrapper
 
 
-from PySide2.QtGui import QPalette
+from PySide6.QtGui import QPalette
 
 colorPalette = QPalette()
-colorPalette.setColor(QPalette.Window, QColor(0, 0, 0))
-colorPalette.setColor(QPalette.Base, QColor(0, 0, 0))
-colorPalette.setColor(QPalette.Background, QColor(0, 0, 0))
+colorPalette.setColor(QPalette.ColorRole.Window, QColor(0, 0, 0))
+colorPalette.setColor(QPalette.ColorRole.Base, QColor(0, 0, 0))
 
-colorPalette.setColor(QPalette.WindowText, QColor(255, 255, 255))
-colorPalette.setColor(QPalette.ButtonText, QColor(255, 255, 255))
+colorPalette.setColor(QPalette.ColorRole.WindowText, QColor(255, 255, 255))
+colorPalette.setColor(QPalette.ColorRole.ButtonText, QColor(255, 255, 255))
+colorPalette.setColor(QPalette.ColorRole.Text, QColor(255, 255, 255))
 
 selectionPen = QPen(QColor(colorPalette.windowText().color()), 1)
 selectionPen.setDashPattern([5, 5])
@@ -764,8 +764,8 @@ class SoftShadow(QGraphicsDropShadowEffect):
 		self.setColor(Qt.black)
 
 
-# def sourceChanged(self, flags: PySide2.QtWidgets.QGraphicsEffect.ChangeFlags) -> None:
-# 	print(int(PySide2.QtWidgets.QGraphicsEffect.SourceInvalidated & flags))
+# def sourceChanged(self, flags: PySide6.QtWidgets.QGraphicsEffect.ChangeFlags) -> None:
+# 	print(int(PySide6.QtWidgets.QGraphicsEffect.SourceInvalidated & flags))
 # 	super().sourceChanged(flags)
 
 # def event(self, event: QEvent) -> bool:

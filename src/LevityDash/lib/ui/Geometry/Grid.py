@@ -4,8 +4,8 @@ from typing import Iterable, List, Optional, overload, Union, TYPE_CHECKING, Cal
 
 import numpy as np
 from math import ceil, floor
-from PySide2.QtCore import QObject, QPoint, QPointF, QRectF, Signal
-from PySide2.QtWidgets import QGraphicsItem, QGraphicsRectItem, QGraphicsScene, QWidget
+from PySide6.QtCore import QObject, QPoint, QPointF, QRectF, Signal
+from PySide6.QtWidgets import QGraphicsItem, QGraphicsRectItem, QGraphicsScene, QWidget
 
 from ..Geometry import Geometry
 from LevityDash.lib.utils.shared import clearCacheAttr, ColorStr

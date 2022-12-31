@@ -4,8 +4,6 @@ from importlib import import_module
 from types import ModuleType
 from typing import Any, ClassVar, Dict, Hashable, Iterator, Optional, Type
 
-from PySide2.QtNetwork import QNetworkConfigurationManager
-
 from LevityDash import LevityDashboard
 from LevityDash.lib.config import pluginConfig
 from LevityDash.lib.log import LevityPluginLog as pluginLog
@@ -61,8 +59,8 @@ class GlobalSingleton(type):
 class PluginsLoader(metaclass=GlobalSingleton, name='plugins'):
 	instance: ClassVar['Plugins'] = None
 	network_available: bool
-	network_manager = QNetworkConfigurationManager()
-	network_changed = network_manager.onlineStateChanged
+	# network_manager = QNetworkConfigurationManager()
+	# network_changed = network_manager.onlineStateChanged
 	plugins_thread_pool: ClassVar[PluginPool] = PluginPool()
 
 	_plugin_workers: ClassVar[Dict[Plugin, PluginThread]] = {}
@@ -110,9 +108,9 @@ class PluginsLoader(metaclass=GlobalSingleton, name='plugins'):
 			if plugin.running:
 				plugin.stop()
 
-	@property
-	def network_available(self) -> bool:
-		return PluginsLoader.network_manager.isOnline()
+	# @property
+	# def network_available(self) -> bool:
+	# 	return PluginsLoader.network_manager.isOnline()
 
 	# def on_network_availility_change(self, available: bool):
 	# 	if available and pluginConfig['Options'].getboolean('enabled') and self.network_available is None:

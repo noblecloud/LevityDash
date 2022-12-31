@@ -11,9 +11,8 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import ClassVar, Dict, List
 
-import shiboken2
 from dotty_dict import Dotty as Dotty_
-from PySide2.QtWidgets import QApplication, QStatusBar
+from PySide6.QtWidgets import QApplication, QStatusBar
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.style import Style
@@ -23,7 +22,7 @@ from sys import gettrace
 
 from . import LevityDashboard as lvdash
 
-suppressedModules = [asyncio, shiboken2]
+suppressedModules = [asyncio]
 
 class Dotty(Dotty_):
 

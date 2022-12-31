@@ -6,10 +6,10 @@ from operator import attrgetter
 from typing import Optional, Type, Union
 
 from numpy import ceil, cos, pi, radians, sin, sqrt
-from PySide2 import QtCore
-from PySide2.QtCore import Property, QAbstractAnimation, QEasingCurve, QLineF, QObject, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSizeF, Qt, QTimer, Signal, Slot
-from PySide2.QtGui import QBrush, QColor, QFont, QFontMetrics, QFontMetricsF, QPainter, QPainterPath, QPen, QPolygonF
-from PySide2.QtWidgets import (QCheckBox, QFormLayout, QGraphicsItem, QGraphicsItemGroup, QGraphicsObject, QGraphicsPathItem, QGraphicsScene, QGraphicsSceneDragDropEvent, QGraphicsSceneMouseEvent, QGraphicsTextItem, QGraphicsView, QLabel,
+from PySide6 import QtCore
+from PySide6.QtCore import Property, QAbstractAnimation, QEasingCurve, QLineF, QObject, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSizeF, Qt, QTimer, Signal, Slot
+from PySide6.QtGui import QBrush, QColor, QFont, QFontMetrics, QFontMetricsF, QPainter, QPainterPath, QPen, QPolygonF
+from PySide6.QtWidgets import (QCheckBox, QFormLayout, QGraphicsItem, QGraphicsItemGroup, QGraphicsObject, QGraphicsPathItem, QGraphicsScene, QGraphicsSceneDragDropEvent, QGraphicsSceneMouseEvent, QGraphicsTextItem, QGraphicsView, QLabel,
                                QStyleOptionGraphicsItem,
                                QVBoxLayout, QWidget)
 from WeatherUnits import Direction, DistanceOverTime, Measurement, Angle
@@ -1555,8 +1555,7 @@ class Gauge(Panel):
 
 	def draw(self):
 		paint = QPainter(self)
-		paint.setRenderHint(QPainter.HighQualityAntialiasing)
-		paint.setRenderHint(QPainter.Antialiasing)
+		paint.setRenderHint(QPainter.RenderHint.Antialiasing)
 		cx, cy = QPointF(self.rect().center()).toTuple()
 		radius = self.radius
 		needleLength = self.needleLength*radius
@@ -1814,7 +1813,7 @@ class WindVein(Gauge):
 		# config = ConfigWindow(self)
 		self.setAcceptDrops(False)
 		self._direction = 0.0
-		self.setRenderHint(QPainter.HighQualityAntialiasing)
+		self.setRenderHint(QPainter.RenderHint.Antialiasing)
 		self._scene = QGraphicsScene()
 		self._pen = QPen(self.defaultColor)
 		self.setAttribute(Qt.WA_TranslucentBackground)

@@ -1,5 +1,5 @@
-from PySide2.QtCore import QPointF, QRectF, QSizeF, Qt
-from PySide2.QtWidgets import QGraphicsItem, QApplication
+from PySide6.QtCore import QPointF, QRectF, QSizeF, Qt
+from PySide6.QtWidgets import QGraphicsItem, QApplication
 
 from LevityDash.lib.stateful import Stateful, StateProperty
 from LevityDash.lib.utils import clamp, clearCacheAttr, ScaleFloat, defer
@@ -21,11 +21,12 @@ class Splitter(Handle):
 		self.length = 10
 		self.location = splitType
 
+		# TODO: Improve logic here
 		primary = kwargs.pop('primary', None)
-		if primary is not None and primary.parent is not surface:
+		if isinstance(primary, QGraphicsItem) and primary is not None and primary.parent is not surface:
 			primary.setParentItem(surface)
 		secondary = kwargs.pop('secondary', None)
-		if secondary is not None and secondary.parent is not surface:
+		if isinstance(primary, QGraphicsItem) and secondary is not None and secondary.parent is not surface:
 			secondary.setParentItem(surface)
 
 		super(Splitter, self).__init__(surface, location=splitType, *args, **kwargs)
@@ -33,6 +34,12 @@ class Splitter(Handle):
 		self.surface.signals.resized.connect(self.updatePosition)
 
 		self.setFlag(QGraphicsItem.ItemSendsGeometryChanges)
+
+		# TODO: Improve logic here
+		if isinstance(primary, dict) and primary == {}:
+			primary = None
+		if isinstance(secondary, dict) and secondary == {}:
+			secondary = None
 
 		if primary is None or secondary is None:
 			surfaceChildren = [child for child in self.surface.childPanels if child is not primary or child is not secondary]

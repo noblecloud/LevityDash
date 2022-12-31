@@ -2,8 +2,8 @@ from functools import cached_property
 from typing import TypeVar, ClassVar, Dict, Type, Any, Tuple, Callable, Union, List
 
 import numpy as np
-from PySide2.QtCore import QPoint, QPointF
-from PySide2.QtGui import QLinearGradient
+from PySide6.QtCore import QPoint, QPointF
+from PySide6.QtGui import QLinearGradient
 
 from yaml import SafeDumper
 

@@ -1,9 +1,9 @@
 from functools import cached_property
 from typing import List
 
-from PySide2.QtCore import QRectF, Qt
-from PySide2.QtGui import QColor, QFont, QPainter
-from PySide2.QtWidgets import QGraphicsItem, QLineEdit
+from PySide6.QtCore import QRectF, Qt
+from PySide6.QtGui import QColor, QFont, QPainter
+from PySide6.QtWidgets import QGraphicsItem, QLineEdit
 
 from LevityDash.lib.stateful import DefaultFalse, DefaultTrue, StateProperty
 from LevityDash.lib.ui import Color
@@ -16,7 +16,7 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Handles.MarginHandles import Mar
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import EditableLabelContextMenu, LabelContextMenu
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import MatchAllSizeGroup, SizeGroup
 from LevityDash.lib.ui.frontends.PySide.utils import addRect, DebugPaint
-from LevityDash.lib.ui.Geometry import Alignment, AlignmentFlag, Geometry, parseSize, Position, Size
+from LevityDash.lib.ui.Geometry import Alignment, AlignmentFlag, Geometry, parseSize, Position, Size, Margins
 from LevityDash.lib.ui.icons import getIcon, Icon
 from LevityDash.lib.utils import clearCacheAttr
 from WeatherUnits.length import Length
@@ -99,7 +99,7 @@ class Label(Panel, tag='label'):
 			self.marginHandles.setVisible(False)
 
 	@StateProperty
-	def margins(self):
+	def margins(self) -> Margins:
 		pass
 
 	@margins.after
@@ -218,8 +218,9 @@ class Label(Panel, tag='label'):
 	@fontWeight.setter
 	def fontWeight(self, value: FontWeight):
 		existingFont = self.textBox.font(noIconFont=True)
-		weightedFont = FontWeight.macOSWeight(existingFont.family(), value)
-		self.textBox.setFont(weightedFont)
+		existingFont.setWeight(value.Qt6Weight)
+		# weightedFont = FontWeight.macOSWeight(existingFont.family(), value)
+		self.textBox.setFont(existingFont)
 
 	@fontWeight.decode
 	def fontWeight(self, value: str | int | float) -> FontWeight:

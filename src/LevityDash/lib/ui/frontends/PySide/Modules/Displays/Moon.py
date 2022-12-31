@@ -4,9 +4,9 @@ from typing import Iterable, Tuple, TYPE_CHECKING
 
 import numpy as np
 from pylunar import MoonInfo as _MoonInfo
-from PySide2.QtCore import QPointF, Qt, QTimer, Signal
-from PySide2.QtGui import QBrush, QColor, QPainter, QPainterPath, QPen, QTransform
-from PySide2.QtWidgets import QGraphicsPathItem, QGraphicsItem, QGraphicsDropShadowEffect
+from PySide6.QtCore import QPointF, Qt, QTimer, Signal
+from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPen, QTransform
+from PySide6.QtWidgets import QGraphicsPathItem, QGraphicsItem, QGraphicsDropShadowEffect
 from pysolar import solar
 from ephem import previous_new_moon, next_new_moon
 
@@ -203,7 +203,7 @@ class Moon(Panel, tag="moon"):
 		self.timer.setTimerType(Qt.VeryCoarseTimer)
 		super(Moon, self).__init__(*args, **kwargs)
 		self.timer.timeout.connect(self.updateMoon)
-		self.setFlag(self.ItemHasNoContents)
+		self.setFlag(self.GraphicsItemFlag.ItemHasNoContents)
 		self.moonFull.setParentItem(self)
 		self.moonPath.setParentItem(self)
 		self.moonPath.setPos(self.boundingRect().center())
