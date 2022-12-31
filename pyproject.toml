@@ -105,3 +105,9 @@ version_variable = [
 	"pyproject.toml:version",
 	"src/LevityDash/__init__.py:__version__",
 ]
+
+[tool.pyinstaller.hooks]
+pyinstaller40 = [
+	"hook-dirs = LevityDash.build-to-app.__pyinstaller:get_hook_dirs",
+	"tests = LevityDash.__pyinstaller:get_PyInstaller_tests"
+]
