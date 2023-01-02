@@ -102,18 +102,21 @@ details[open] summary p::before {
 .sidebar-toggle-button {
 	backdrop-filter: blur(5px);
 	-webkit-backdrop-filter: blur(5px);
+	z-index: 2000;
+}
+
+body {
+	background: linear-gradient(to top, #09203F 0%, #505285 100%) repeat-x scroll 0 0;
 }
 
 main {
-	background: linear-gradient(to top, #09203F 0%, #505285 100%) repeat-x scroll 0% 0% #0C6027;
+	background: linear-gradient(to top, #09203F 0%, #505285 100%) repeat-x scroll 0 0;
 	/*background-position: top;*/
 	/*background-repeat: no-repeat;*/
 	/*background-size: 100%;*/
 }
 
 .app-name-link img {
-	color: green;
-	/*  !*filter: drop-shadow(0 0 0.5rem rgba(0, 0, 0, 0.5));*!*/
 	filter: drop-shadow(1px 1px 10px rgba(0, 0, 0, 0.5));
 }
 
