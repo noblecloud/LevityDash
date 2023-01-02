@@ -2,8 +2,8 @@ from asyncio import TimerHandle, iscoroutinefunction, iscoroutine
 
 from collections import defaultdict
 
-from PySide2.QtCore import QObject, QThread, QTimer, Signal, Slot
-from PySide2.QtWidgets import QApplication
+from PySide6.QtCore import QObject, QThread, QTimer, Signal, Slot
+from PySide6.QtWidgets import QApplication
 from abc import abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta

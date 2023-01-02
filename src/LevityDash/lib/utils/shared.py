@@ -9,7 +9,7 @@ from threading import Thread
 from traceback import format_exc, print_exc
 
 from gc import get_referrers
-from PySide2 import QtCore
+from PySide6 import QtCore
 from rich.repr import rich_repr
 
 from LevityDash import LevityDashboard
@@ -37,7 +37,7 @@ import numpy as np
 from dateutil.parser import parse as dateParser
 from math import inf
 from numpy import cos, radians, sin
-from PySide2.QtGui import QPainterPath, QVector2D
+from PySide6.QtGui import QPainterPath, QVector2D
 from pytz import utc
 from WeatherUnits import Measurement
 
@@ -53,8 +53,8 @@ from types import MethodType, NoneType, GeneratorType, FunctionType, UnionType
 
 from enum import Enum, EnumMeta, IntFlag
 
-from PySide2.QtCore import QObject, QPointF, QRectF, QSizeF, QThread, QTimer, Signal, Qt, Slot
-from PySide2.QtWidgets import QApplication, QGraphicsRectItem, QGraphicsItem
+from PySide6.QtCore import QObject, QPointF, QRectF, QSizeF, QThread, QTimer, Signal, Qt, Slot
+from PySide6.QtWidgets import QApplication, QGraphicsRectItem, QGraphicsItem
 
 from LevityDash.lib.utils import utilLog
 
@@ -2299,6 +2299,8 @@ class Worker(Generic[Self], _BaseWorker, QtCore.QRunnable):
 				self.pool.cancel(self)
 				self.status = Worker.Status.Canceled
 			except RuntimeError:
+				pass
+			except AttributeError:
 				pass
 			except Exception as e:
 				utilLog.exception(e)

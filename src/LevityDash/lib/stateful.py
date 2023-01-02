@@ -27,7 +27,7 @@ from typing import (
 from warnings import warn, warn_explicit
 
 import yaml
-from PySide2.QtCore import QObject, QThread
+from PySide6.QtCore import QObject, QThread
 from rich.box import SIMPLE_HEAVY
 from rich.console import Console, Group
 from rich.panel import Panel
@@ -49,6 +49,11 @@ from LevityDash.lib.utils.shared import (
 	_Panel, ActionPool, clearCacheAttr, DeepChainMap, DotDict, guarded_cached_property, OrderedSet,
 	recursiveRemove, sortDict
 )
+
+def PASS_FUNC():
+	pass
+
+PASS_FUNC = PASS_FUNC.__code__.co_code
 
 STATEFUL_DEBUG = int(os.environ.get("STATEFUL_DEBUG", 0))
 
@@ -729,7 +734,7 @@ class StateProperty(property):
 	def __checkInheritance(self, func, method: str):
 		if func is None:
 			return func
-		if func.__code__.co_code == b"d\x00S\x00":
+		if func.__code__.co_code == PASS_FUNC:
 			parent = getattr(self.__ownerParentClass__, func.__name__)
 			match method:
 				case "get":
@@ -763,10 +768,10 @@ class StateProperty(property):
 		self.__state = func
 		return self
 
-	@cached_property
+	@property
 	def fget(self) -> Callable[[], StatefulReturnType]:
 		func = self._get
-		if func is None or func.__code__.co_code == b"d\x00S\x00":
+		if func is None or func.__code__.co_code == PASS_FUNC:
 			func = getattr(self.parentCls, "fget", None)
 		if func is not None and "return" not in func.__annotations__:
 			warn_explicit(
@@ -781,14 +786,14 @@ class StateProperty(property):
 	@cached_property
 	def fset(self) -> Callable[[StatefulAcceptsType], None]:
 		func = self._set
-		if func is None or func.__code__.co_code == b"d\x00S\x00":
+		if func is None or func.__code__.co_code == PASS_FUNC:
 			return getattr(self.parentCls, "fset", None)
 		return self._set
 
 	@cached_property
 	def fdel(self):
 		func = self._del
-		if func is None or func.__code__.co_code == b"d\x00S\x00":
+		if func is None or func.__code__.co_code == PASS_FUNC:
 			return getattr(self.parentCls, "fdel", None)
 		return self._del
 
@@ -896,6 +901,7 @@ class StateProperty(property):
 						if STATEFUL_DEBUG:
 							log.exception(e)
 							log.exception(eF)
+							raise eF
 					else:
 						self.fset(owner, fromOwner)
 		if fromOwner is not Unset:
@@ -1497,7 +1503,6 @@ class StateProperty(property):
 		self.__set__(owner, state, afterPool=afterPool)
 
 	@staticmethod
-
 	def setDefault(self, owner):
 		if default := self.default(type(owner)) is None:
 			raise ValueError("Default value is not set")

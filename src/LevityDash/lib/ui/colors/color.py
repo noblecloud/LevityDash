@@ -2,7 +2,7 @@ import re
 from numbers import Number
 from typing import ClassVar, Dict, Literal, Tuple, Iterable
 
-from PySide2.QtGui import QColor
+from PySide6.QtGui import QColor
 from rich.repr import rich_repr
 
 from LevityDash.lib.ui.colors.utils import randomColor, kelvinToRGB

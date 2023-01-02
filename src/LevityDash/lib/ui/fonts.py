@@ -4,8 +4,8 @@ from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
-from PySide2.QtGui import QFont, QFontDatabase
-from PySide2.QtWidgets import QApplication
+from PySide6.QtGui import QFont, QFontDatabase
+from PySide6.QtWidgets import QApplication
 
 from LevityDash import LevityDashboard
 from LevityDash.lib.config import userConfig
@@ -54,7 +54,21 @@ _Qt5FontWeights: Dict[int, int] = {
 	1000: 100,
 }
 
+_Qt6FontWeights: Dict[int, QFont.Weight] = {
+	100:  QFont.Weight.Thin,
+	200:  QFont.Weight.ExtraLight,
+	300:  QFont.Weight.Light,
+	400:  QFont.Weight.Normal,
+	500:  QFont.Weight.Medium,
+	600:  QFont.Weight.DemiBold,
+	700:  QFont.Weight.Bold,
+	800:  QFont.Weight.ExtraBold,
+	900:  QFont.Weight.Black,
+	1000: QFont.Weight.Black,
+}
+
 _reverseQt5FontWeights = {v: k for k, v in _Qt5FontWeights.items()}
+_reverseQt6FontWeights = {v: k for k, v in _Qt6FontWeights.items()}
 
 _defaults = {
 	'default':        'Nunito',
@@ -76,6 +90,7 @@ def _testIsRegular(fnt: QFont) -> bool:
 
 class FontWeight(int, Enum, metaclass=ClosestMatchEnumMeta):
 	Qt5Weight: int
+	Qt6Weight: QFont.Weight
 
 	Thin = 100
 	ExtraLight = 200
@@ -145,8 +160,8 @@ class FontWeight(int, Enum, metaclass=ClosestMatchEnumMeta):
 	def macOSWeight(cls, family: str, weight: int) -> QFont:
 		return cls.closestWeightStyle(family, weight)
 
-
 for member in FontWeight._member_map_.values():
+	member.Qt6Weight = _Qt6FontWeights[member]
 	member.Qt5Weight = _Qt5FontWeights[member]
 
 

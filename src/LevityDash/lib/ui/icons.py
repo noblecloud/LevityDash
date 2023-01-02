@@ -9,7 +9,7 @@ from typing import Dict, Optional, Callable, ClassVar, Union, TypeAlias, TypeVar
 from urllib import request
 
 from rich.repr import rich_repr
-from PySide2.QtGui import QFont, QFontMetrics
+from PySide6.QtGui import QFont, QFontMetrics
 
 from LevityDash import LevityDashboard
 from LevityDash.lib.EasyPath import EasyPath

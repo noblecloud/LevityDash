@@ -1,5 +1,5 @@
-from PySide2.QtGui import QPainterPath, QPalette, Qt, QColor
-from PySide2.QtWidgets import QApplication, QGraphicsPathItem
+from PySide6.QtGui import QPainterPath, QPalette, Qt, QColor
+from PySide6.QtWidgets import QApplication, QGraphicsPathItem
 
 
 class Glyph(QGraphicsPathItem):

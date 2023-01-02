@@ -13,20 +13,21 @@ from tempfile import NamedTemporaryFile
 from typing import Dict, List, Mapping, Set, TYPE_CHECKING, Union
 from zipfile import ZipFile
 
-import PySide2
+import PySide6
 import sys
-from PySide2 import QtGui
-from PySide2.QtCore import (
+from PySide6 import QtGui
+from PySide6.QtCore import (
 	QByteArray, QEvent, QMimeData, QObject, QRect, QRectF, QSize, Qt, QThread, QTimer, QUrl, Signal
 )
-from PySide2.QtGui import (
+from PySide6.QtGui import (
 	QCursor, QDesktopServices, QDrag, QFont, QIcon, QPainter, QPainterPath, QPixmapCache, QScreen, QShowEvent,
-	QSurfaceFormat, QTransform, QPixmap
+	QSurfaceFormat, QTransform, QPixmap, QAction
 )
-from PySide2.QtNetwork import QNetworkConfigurationManager
-from PySide2.QtWidgets import (
-	QAction, QApplication, QGraphicsItem, QGraphicsRectItem, QGraphicsScene,
-	QGraphicsView, QMainWindow, QMenu, QMenuBar, QOpenGLWidget, QSplashScreen
+from PySide6.QtOpenGLWidgets import QOpenGLWidget
+
+from PySide6.QtWidgets import (
+	QApplication, QGraphicsItem, QGraphicsRectItem, QGraphicsScene,
+	QGraphicsView, QMainWindow, QMenu, QMenuBar, QSplashScreen
 )
 from time import perf_counter, process_time, time
 
@@ -201,7 +202,7 @@ class MenuBar(QMenuBar):
 		for menu in self.findChildren(QMenu):
 			menu.adjustSize()
 
-	def mouseMoveEvent(self, arg__1: PySide2.QtGui.QMouseEvent) -> None:
+	def mouseMoveEvent(self, arg__1: PySide6.QtGui.QMouseEvent) -> None:
 		super().mouseMoveEvent(arg__1)
 		self.parent().mouseMoveEvent(arg__1)
 
@@ -257,7 +258,7 @@ class LevitySceneView(QGraphicsView):
 		self.setBackgroundBrush(Qt.black)
 		self.setStyleSheet('QGraphicsView { border: 0px; }')
 
-		self.setRenderHints(QPainter.HighQualityAntialiasing | QPainter.SmoothPixmapTransform | QPainter.TextAntialiasing)
+		self.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.SmoothPixmapTransform | QPainter.TextAntialiasing)
 
 	def deviceTransform(self) -> QTransform:
 		devicePixelRatio = self.devicePixelRatioF()
@@ -1049,7 +1050,7 @@ class LevityMainWindow(QMainWindow):
 			super().changeEvent(event)
 			self.updateMenuBar()
 
-		def resizeEvent(self, event:PySide2.QtGui.QResizeEvent) -> None:
+		def resizeEvent(self, event:PySide6.QtGui.QResizeEvent) -> None:
 			self.menuBarHoverArea.size.setWidth(event.size().width())
 			self.bar.setFixedWidth(event.size().width())
 			super().resizeEvent(event)

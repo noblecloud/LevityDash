@@ -23,7 +23,7 @@ if sys.version_info < (3, 10, 0):
 	)
 
 if TYPE_CHECKING:
-	from PySide2.QtCore import QThread
+	from PySide6.QtCore import QThread
 
 
 class _LevityAppDirs(AppDirs):

@@ -4,8 +4,8 @@ from platform import system as syscheck
 from types import SimpleNamespace
 from typing import ClassVar, List
 
-from PySide2.QtCore import Qt, Signal
-from PySide2.QtWidgets import QDialog, QInputDialog
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QDialog, QInputDialog
 from time import strftime
 
 from LevityDash import LevityDashboard

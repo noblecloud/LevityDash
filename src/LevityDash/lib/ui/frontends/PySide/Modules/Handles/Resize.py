@@ -1,5 +1,5 @@
-from PySide2.QtCore import QObject, QPointF, QRectF, Signal, QTimer
-from PySide2.QtWidgets import QGraphicsItem, QGraphicsSceneMouseEvent
+from PySide6.QtCore import QObject, QPointF, QRectF, Signal, QTimer
+from PySide6.QtWidgets import QGraphicsItem, QGraphicsSceneMouseEvent
 
 from LevityDash.lib.ui.Geometry import Axis
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles import Handle, HandleGroup

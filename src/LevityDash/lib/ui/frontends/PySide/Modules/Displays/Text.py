@@ -4,9 +4,9 @@ from functools import cached_property
 from typing import Any, Callable, List, Optional, TYPE_CHECKING, Union
 
 from dateutil.parser import parser
-from PySide2.QtCore import QObject, QPoint, QPointF, QRectF, QThread, Signal, Slot
-from PySide2.QtGui import QBrush, QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPen, Qt, QTransform
-from PySide2.QtWidgets import QApplication, QGraphicsItem, QGraphicsPathItem
+from PySide6.QtCore import QObject, QPoint, QPointF, QRectF, QThread, Signal, Slot
+from PySide6.QtGui import QBrush, QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPen, Qt, QTransform
+from PySide6.QtWidgets import QApplication, QGraphicsItem, QGraphicsPathItem
 from rich.repr import rich_repr
 
 import WeatherUnits as wu

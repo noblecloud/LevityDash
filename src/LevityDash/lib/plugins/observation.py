@@ -26,8 +26,8 @@ from builtins import isinstance
 from dateutil.parser import parse
 from itertools import groupby
 from math import inf, isinf
-from PySide2.QtCore import QThread, Signal, Slot
-from PySide2.QtWidgets import QApplication
+from PySide6.QtCore import QThread, Signal, Slot
+from PySide6.QtWidgets import QApplication
 from rich.progress import Progress
 
 import WeatherUnits as wu

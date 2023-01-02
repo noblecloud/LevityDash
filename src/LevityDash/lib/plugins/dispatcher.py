@@ -5,7 +5,7 @@ from functools import cached_property
 from typing import Callable, Coroutine, Dict, Iterable, List, Set
 
 from itertools import groupby
-from PySide2.QtCore import Signal, Slot, QTimer
+from PySide6.QtCore import Signal, Slot, QTimer
 from rich.repr import auto as auto_rich_repr
 
 from LevityDash import LevityDashboard

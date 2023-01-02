@@ -1,9 +1,9 @@
 from functools import cached_property
 from typing import Any, Callable, Optional
 
-from PySide2.QtCore import QPointF, QRectF, Qt, QTimer, QRect, QPoint
-from PySide2.QtGui import QPainter, QPainterPath, QPen
-from PySide2.QtWidgets import QApplication, QGraphicsItem, QGraphicsPathItem, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent
+from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, QRect, QPoint
+from PySide6.QtGui import QPainter, QPainterPath, QPen
+from PySide6.QtWidgets import QApplication, QGraphicsItem, QGraphicsPathItem, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent
 
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles import debug, Handle
 from LevityDash.lib.ui.frontends.PySide.utils import addRect, colorPalette, DebugPaint
@@ -36,8 +36,8 @@ class DrawerHandle(Handle):
 		self.setBrush(QApplication.palette().foreground().color())
 		self.setPen(pen)
 		self.setAcceptHoverEvents(not True)
-		self.setFlag(self.ItemIsMovable, True)
-		self.setFlag(self.ItemSendsGeometryChanges, True)
+		self.setFlag(self.GraphicsItemFlag.ItemIsMovable, True)
+		self.setFlag(self.GraphicsItemFlag.ItemSendsGeometryChanges, True)
 		self.setAcceptedMouseButtons(Qt.LeftButton)
 
 		self.setPath(self._path)
@@ -85,9 +85,9 @@ class DrawerHandle(Handle):
 		self.moveBy(diff.x(), diff.y())
 
 	def itemChange(self, change: int, value: Any) -> Any:
-		if change == self.ItemPositionChange or change == self.ItemPositionHasChanged:
+		if change == self.GraphicsItemChange.ItemPositionChange or change == self.GraphicsItemChange.ItemPositionHasChanged:
 			parentRect = self.parent.rect()
-		if change == self.ItemPositionChange:
+		if change == self.GraphicsItemChange.ItemPositionChange:
 			value.setX(self.position.x())
 			maxY = parentRect.height()
 			minY = 0
@@ -188,8 +188,8 @@ class HoverArea(QGraphicsPathItem):
 			self._delayTimer.setInterval(delay*1000)
 		self.setPath(self._path)
 		self.setAcceptHoverEvents(True)
-		self.setFlag(self.ItemIsMovable, False)
-		self.setFlag(self.ItemSendsGeometryChanges, False)
+		self.setFlag(self.GraphicsItemFlag.ItemIsMovable, False)
+		self.setFlag(self.GraphicsItemFlag.ItemSendsGeometryChanges, False)
 		self.setAcceptedMouseButtons(Qt.NoButton)
 		self.update()
 

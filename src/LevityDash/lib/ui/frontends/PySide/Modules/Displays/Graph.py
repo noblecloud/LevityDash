@@ -4,16 +4,16 @@ import numpy as np
 import operator
 import platform
 import re
-from PySide2.QtCore import (
+from PySide6.QtCore import (
 	QLineF, QObject, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt, QThread, QTimer, Signal,
 	Slot
 )
-from PySide2.QtGui import (
+from PySide6.QtGui import (
 	QBrush, QColor, QCursor, QFontMetricsF, QPainter, QPainterPath, QPainterPathStroker, QPen,
-	QPixmap, QPolygonF, QTransform
+	QPixmap, QPolygonF, QTransform, QAction
 )
-from PySide2.QtWidgets import (
-	QAction, QGraphicsEffect, QGraphicsItem, QGraphicsItemGroup, QGraphicsLineItem, QGraphicsPixmapItem,
+from PySide6.QtWidgets import (
+	QGraphicsEffect, QGraphicsItem, QGraphicsItemGroup, QGraphicsLineItem, QGraphicsPixmapItem,
 	QGraphicsRectItem,
 	QGraphicsSceneDragDropEvent, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent, QGraphicsSceneWheelEvent, QMenu,
 	QStyleOptionGraphicsItem, QToolTip, QWidget, QApplication
@@ -1082,7 +1082,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		self.data: GraphItemData = parent
 		self.figure: 'Figure' = parent.figure
 		self.effects = {}
-		super().__init__(None)
+		super().__init__()
 		self.setParentItem(parent.figure)
 		self.render_delay = QTimer(singleShot=True, timeout=self.render, interval=333)
 		self._normalPath = QPainterPath()
@@ -1310,7 +1310,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 
 	@capStyle.decode
 	def capStyle(value) -> Qt.PenCapStyle:
-		caps: dict[str, Qt.PenCapStyle] = Qt.PenCapStyle.values
+		caps: dict[str, Qt.PenCapStyle] = dict(Qt.PenCapStyle.__members__)
 		capNames = list(caps.keys())
 		cap = closestStringInList(value, capNames)
 		return caps[cap]
@@ -3566,8 +3566,8 @@ class GraphPanel(Panel, tag='graph'):
 	def _init_defaults_(self):
 		super()._init_defaults_()
 		self.isEmpty = False
-		self.setFlag(self.ItemClipsChildrenToShape, True)
-		self.setFlag(self.ItemClipsToShape, True)
+		self.setFlag(self.GraphicsItemFlag.ItemClipsChildrenToShape, True)
+		self.setFlag(self.GraphicsItemFlag.ItemClipsToShape, True)
 		self.setAcceptDrops(True)
 		self.setAcceptHoverEvents(True)
 		self.syncTimer = QTimer(timeout=self.syncDisplay, interval=300000)
@@ -3612,7 +3612,7 @@ class GraphPanel(Panel, tag='graph'):
 	@scrollable.setter
 	def scrollable(self, value: bool):
 		self._scrollable = value
-		self.proxy.setFlag(self.ItemIsMovable, value)
+		self.proxy.setFlag(self.GraphicsItemFlag.ItemIsMovable, value)
 
 	@StateProperty(default=Stateful, allowNone=False)
 	def indicator(self) -> 'CurrentTimeIndicator':
@@ -4016,8 +4016,8 @@ class GraphProxy(QGraphicsItemGroup):
 		self.setFlag(QGraphicsItem.ItemSendsGeometryChanges)
 		self.setFlag(QGraphicsItem.ItemIsFocusable, False)
 		self.setAcceptHoverEvents(True)
-		self.setFlag(self.ItemClipsChildrenToShape)
-		self.setFlag(self.ItemClipsToShape)
+		self.setFlag(self.GraphicsItemFlag.ItemClipsChildrenToShape)
+		self.setFlag(self.GraphicsItemFlag.ItemClipsToShape)
 
 	@Slot(Axis)
 	def onDataRangeChange(self, axis: Axis):
@@ -4229,7 +4229,7 @@ class Figure(NonInteractivePanel, tag=...):
 
 		self.resizeHandles.setParentItem(None)
 		self.setFlag(QGraphicsItem.ItemHasNoContents, False)
-		self.setFlag(self.ItemSendsGeometryChanges, False)
+		self.setFlag(self.GraphicsItemFlag.ItemSendsGeometryChanges, False)
 		self.marginHandles = FigureHandles(self)
 		self.marginHandles.setParentItem(self)
 		self.setAcceptedMouseButtons(Qt.NoButton)

@@ -6,7 +6,7 @@ from shutil import get_terminal_size
 from typing import Any, Type, Union, TYPE_CHECKING
 
 import yaml
-from PySide2.QtCore import QPointF, Qt, Slot, QRect
+from PySide6.QtCore import QPointF, Qt, Slot, QRect
 from rich.box import SIMPLE_HEAVY
 from rich.console import Console
 from rich.highlighter import RegexHighlighter
@@ -22,11 +22,11 @@ if TYPE_CHECKING:
 	from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 
 try:
-	from PySide2.QtGui import QActionGroup
+	from PySide6.QtGui import QActionGroup, QAction
 except ImportError:
-	from PySide2.QtWidgets import QAction, QActionGroup, QApplication
+	from PySide6.QtWidgets import QAction, QActionGroup, QApplication
 
-from PySide2.QtWidgets import QMenu
+from PySide6.QtWidgets import QMenu
 
 from LevityDash.lib.log import debug
 from LevityDash.lib.config import userConfig
@@ -295,7 +295,7 @@ class BaseContextMenu(QMenu):
 
 	@cached_property
 	def app(self):
-		from PySide2.QtWidgets import QApplication
+		from PySide6.QtWidgets import QApplication
 		return QApplication.instance()
 
 

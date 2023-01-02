@@ -9,7 +9,7 @@ import numpy as np
 import time
 from math import ceil, floor, inf, isinf
 from numpy import ndarray
-from PySide2.QtCore import QObject, QSize, QSizeF, QTimer, Signal
+from PySide6.QtCore import QObject, QSize, QSizeF, QTimer, Signal
 from rich.repr import auto as auto_rich_repr
 from scipy.signal import savgol_filter
 

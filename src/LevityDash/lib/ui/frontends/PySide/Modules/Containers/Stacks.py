@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from functools import cached_property, partial
 from typing import Any, Dict, List, Optional, Tuple, Type
 
-from PySide2.QtCore import QPoint, QPointF, Qt
-from PySide2.QtGui import QColor, QPainter, QPen
-from PySide2.QtWidgets import QGraphicsItem, QGraphicsPathItem
+from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem
 
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.stateful import Stateful, StateProperty
@@ -394,9 +394,9 @@ class StackedItem(Stateful, tag=...):
 		if newIndex == index or abs(newPos - value) > max(self.width() * .30, 20):
 			return True, self.pos()
 
-		self.setFlag(self.ItemSendsGeometryChanges, False)
+		self.setFlag(self.GraphicsItemFlag.ItemSendsGeometryChanges, False)
 		self.parent.swap(index, newIndex)
-		self.setFlag(self.ItemSendsGeometryChanges, True)
+		self.setFlag(self.GraphicsItemFlag.ItemSendsGeometryChanges, True)
 		return True, self.geometry.absolutePosition().asQPointF()
 
 
@@ -414,7 +414,7 @@ class Spacer(NonInteractivePanel, StackedItem, tag='spacer'):
 		self.setFlag(QGraphicsItem.ItemIsMovable, False)
 		self.setFlag(QGraphicsItem.ItemIsSelectable, False)
 		self.setFlag(QGraphicsItem.ItemIsFocusable, False)
-		self.setFlag(self.ItemHasNoContents)
+		self.setFlag(self.GraphicsItemFlag.ItemHasNoContents)
 
 	@property
 	def key(self) -> str:
@@ -847,7 +847,7 @@ class Stack(Panel, tag='stack'):
 
 	# Section: itemChange
 	def itemChange(self, change: QGraphicsItem.GraphicsItemChange, value: Any) -> Any:
-		if change is self.ItemTransformHasChanged and any(i.surface.hasFixedSize for i in self.geometries.values()):
+		if change is self.GraphicsItemChange.ItemTransformHasChanged and any(i.surface.hasFixedSize for i in self.geometries.values()):
 			self.updateGeometries()
 		return super().itemChange(change, value)
 

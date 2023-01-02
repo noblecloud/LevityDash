@@ -8,7 +8,7 @@ from locale import LC_ALL, setlocale
 from pathlib import Path
 from sys import exit
 
-from PySide2.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication
 
 setlocale(LC_ALL, 'en_US.UTF-8')
 
