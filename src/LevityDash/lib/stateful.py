@@ -2551,11 +2551,10 @@ class Stateful(metaclass=StatefulMetaclass):
 				continue
 			elif key not in kwargs:
 				if prop.isStatefulReference:
-					if isinstance(default, Mapping):
-						# if not isinstance(default, DefaultState):
+					if isinstance(default, Mapping) and not isinstance(default, DefaultState):
 						value = DeepChainMap(default).to_dict()
-						# else:
-						# 	value = default
+					else:
+						value = {}
 				else:
 					value = default
 			elif kwargs[key] is UnsetDefault or kwargs[key] is None:
