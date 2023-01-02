@@ -1082,7 +1082,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		self.data: GraphItemData = parent
 		self.figure: 'Figure' = parent.figure
 		self.effects = {}
-		super().__init__(None)
+		super().__init__()
 		self.setParentItem(parent.figure)
 		self.render_delay = QTimer(singleShot=True, timeout=self.render, interval=333)
 		self._normalPath = QPainterPath()
@@ -1310,7 +1310,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 
 	@capStyle.decode
 	def capStyle(value) -> Qt.PenCapStyle:
-		caps: dict[str, Qt.PenCapStyle] = Qt.PenCapStyle.values
+		caps: dict[str, Qt.PenCapStyle] = dict(Qt.PenCapStyle.__members__)
 		capNames = list(caps.keys())
 		cap = closestStringInList(value, capNames)
 		return caps[cap]

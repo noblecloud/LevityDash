@@ -2300,6 +2300,8 @@ class Worker(Generic[Self], _BaseWorker, QtCore.QRunnable):
 				self.status = Worker.Status.Canceled
 			except RuntimeError:
 				pass
+			except AttributeError:
+				pass
 			except Exception as e:
 				utilLog.exception(e)
 

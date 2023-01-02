@@ -1227,7 +1227,7 @@ class Panel(_Panel, Stateful, tag='group'):
 	@property
 	def canFocus(self) -> bool:
 		parentIsFrozen = isinstance(self.parent, Panel) and self.parent.frozen
-		return bool(int(self.flags() & QGraphicsItem.ItemIsFocusable)) and not parentIsFrozen
+		return bool(int((self.flags() & QGraphicsItem.ItemIsFocusable).value)) and not parentIsFrozen
 
 	def hold(self):
 		self.setFlag(QGraphicsItem.ItemIsMovable, False)
