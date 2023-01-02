@@ -8,7 +8,7 @@ APP="./dist/LevityDashCLI"
 #DMG_PATH=".dist/LevityDash_macOS.dmg"
 ZIP_PATH="./dist/LevityDashCLI_macOS.zip"
 #DMG_DIST_PATH="./dist/dmg"
-SIGNATURE="15961410B85E7DA378F8B9ACD169BC43EC5FA05C"
+SIGNATURE=""
 ENTITLEMENTS="./assets/entitlements.plist"
 
 # check signature
@@ -44,7 +44,13 @@ sign_app() {
 
 zip_app() {
 	echo "Creating zip file..."
-	ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP_PATH"
+
+	if [[ $APP == *.app ]]; then
+		ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP_PATH"
+	else
+		ditto -c -k --sequesterRsrc "$APP" "$ZIP_PATH"
+	fi
+
 	echo "Zip file created at $ZIP_PATH"
 }
 

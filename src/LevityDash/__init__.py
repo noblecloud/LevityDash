@@ -13,7 +13,7 @@ from functools import cached_property
 from pathlib import Path
 from appdirs import AppDirs
 
-__version__ = "0.2.0-beta.1"
+__version__ = "0.2.0-beta.2"
 
 if sys.version_info < (3, 10, 0):
 	sys.exit(
