@@ -85,7 +85,8 @@ if _missing_defaults:
 
 
 def _testIsRegular(fnt: QFont) -> bool:
-	return not bool(sum(int(i) for i in fnt.key().split(',')[5:-1]))
+	return fnt.style() == QFont.Style.StyleNormal
+	# return not bool(sum(int(i) for i in fnt.key().split(',')[5:-1]))
 
 
 class FontWeight(int, Enum, metaclass=ClosestMatchEnumMeta):
@@ -125,7 +126,7 @@ class FontWeight(int, Enum, metaclass=ClosestMatchEnumMeta):
 	# @lru_cache()
 	def styleWeights(cls, family: str) -> Dict[int, QFont]:
 		styles = [fnt for style in database.styles(family) if _testIsRegular(fnt := database.font(family, style, 10))]
-		return {FontWeight[i.styleName()] if i.styleName() in FontWeight._member_map_ else cls.fromQt5(i.weight()): i.styleName() for i in styles}
+		return {FontWeight[i.styleName()] if i.styleName() in FontWeight._member_map_ else cls.fromQt(i.weight()): i.styleName() for i in styles}
 
 	@classmethod
 	# @lru_cache()
@@ -150,10 +151,10 @@ class FontWeight(int, Enum, metaclass=ClosestMatchEnumMeta):
 		return weight
 
 	@classmethod
-	def fromQt5(cls, weight: int) -> 'FontWeight':
-		w = _reverseQt5FontWeights.get(weight, None)
+	def fromQt(cls, weight: int) -> 'FontWeight':
+		w = _reverseQt6FontWeights.get(weight, None)
 		if w is None:
-			w = _reverseQt5FontWeights[min(_reverseQt5FontWeights, key=lambda x: abs(x - weight))]
+			w = _reverseQt6FontWeights[min(_reverseQt6FontWeights, key=lambda x: abs(x - weight))]
 		return cls(w)
 
 	@classmethod

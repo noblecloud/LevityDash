@@ -213,14 +213,16 @@ class Label(Panel, tag='label'):
 
 	@StateProperty(key='weight', default=FontWeight.Normal, repr=True, allowNone=False)
 	def fontWeight(self) -> FontWeight:
-		return FontWeight.fromQt5(self.textBox.font().weight())
+		return FontWeight.fromQt(self.textBox.font().weight())
 
 	@fontWeight.setter
 	def fontWeight(self, value: FontWeight):
-		existingFont = self.textBox.font(noIconFont=True)
-		existingFont.setWeight(value.Qt6Weight)
-		# weightedFont = FontWeight.macOSWeight(existingFont.family(), value)
-		self.textBox.setFont(existingFont)
+		self.textBox.setFont(
+			FontWeight.macOSWeight(
+				self.textBox.font(noIconFont=True).family(),
+				value
+			)
+		)
 
 	@fontWeight.decode
 	def fontWeight(self, value: str | int | float) -> FontWeight:

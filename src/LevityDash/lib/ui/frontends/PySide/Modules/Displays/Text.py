@@ -154,7 +154,7 @@ class Text(QGraphicsPathItem):
 			yield 'textRect', textRect
 		yield 'limitRect', self.limitRect
 		yield 'fontSize', self.font().pointSizeF(), 16.0
-		yield 'fontWeight', FontWeight.fromQt5(self._font.weight()), FontWeight.Normal
+		yield 'fontWeight', FontWeight.fromQt(self._font.weight()), FontWeight.Normal
 		yield 'font', self.font()
 		yield 'transform', (self.transform().m11(), self.transform().m22())
 
