@@ -124,7 +124,7 @@ class _LevityDashboard(object):
 		root = Path(sys._MEIPASS) / 'LevityDash'
 		from datetime import datetime
 		compile_date = datetime.now()
-		__version__ = f'{__version__} (Compiled {compile_date:%X on %x})'
+		__version__ = f'{__version__} (Compiled {compile_date:%X on %x} with Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro})'
 	else:
 		root = Path(__file__).parent
 
