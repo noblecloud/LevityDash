@@ -168,9 +168,9 @@ class Govee(Plugin, realtime=True, logged=True):
 		device = deviceConfig['id']
 		match device:
 			case str() if self._varifyDeviceID(device):
-				self.scanner = BleakScanner(service_uuids=(device,))
+				self.scanner = BleakScanner(service_uuids=[device], detection_callback=self.__dataParse)
 			case str() if ',' in device and (devices := tuple([i for i in device.split(',') if self._varifyDeviceID(i)])):
-				self.scanner = BleakScanner(service_uuids=devices)
+				self.scanner = BleakScanner(service_uuids=devices, detection_callback=self.__dataParse)
 			case _:
 				device = None
 				__scanAttempts = 0
@@ -198,7 +198,7 @@ class Govee(Plugin, realtime=True, logged=True):
 					delattr(self, 'scanner')
 				except Exception as e:
 					pass
-				self.scanner = BleakScanner(service_uuids=tuple(device.metadata['uuids']))
+				self.scanner = BleakScanner(service_uuids=tuple(device.metadata['uuids']), detection_callback=self.__dataParse)
 				name = f'GoveeBLE [{device.name}]'
 				self.name = name
 				self.config[name]['device.name'] = str(device.name)
@@ -208,7 +208,6 @@ class Govee(Plugin, realtime=True, logged=True):
 				self.config.defaults().pop('device.mac', None)
 				self.config.defaults().pop('device.model', None)
 				self.config.save()
-		self.scanner.register_detection_callback(self.__dataParse)
 		pluginLog.info(f'{self.name} initialized for device {device}')
 
 	@classmethod
@@ -273,7 +272,7 @@ class Govee(Plugin, realtime=True, logged=True):
 		pluginLog.info(f'{self.name} starting...')
 
 		if self.historicalTimer is None:
-			self.historicalTimer = ScheduledEvent(timedelta(seconds=15), self.logValues).schedule()
+			self.historicalTimer = ScheduledEvent(timedelta(seconds=15), self.logValues, loop=self.loop).schedule()
 		else:
 			self.historicalTimer.schedule()
 
