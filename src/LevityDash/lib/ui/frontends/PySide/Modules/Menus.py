@@ -7,6 +7,8 @@ from typing import Any, Type, Union, TYPE_CHECKING
 
 import yaml
 from PySide6.QtCore import QPointF, Qt, Slot, QRect
+from PySide6.QtGui import QActionGroup, QAction
+from PySide6.QtWidgets import QMenu, QApplication
 from rich.box import SIMPLE_HEAVY
 from rich.console import Console
 from rich.highlighter import RegexHighlighter
@@ -20,13 +22,6 @@ from LevityDash.lib.stateful import StatefulDumper
 
 if TYPE_CHECKING:
 	from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
-
-try:
-	from PySide6.QtGui import QActionGroup, QAction
-except ImportError:
-	from PySide6.QtWidgets import QAction, QActionGroup, QApplication
-
-from PySide6.QtWidgets import QMenu
 
 from LevityDash.lib.log import debug
 from LevityDash.lib.config import userConfig
@@ -573,7 +568,7 @@ class InsertMenu(QMenu):
 
 
 class PlotContextMenu(BaseContextMenu):
-	parent: 'PlotPanel'
+	parent: 'Plot'
 
 
 class SourceMenu(QMenu):
@@ -593,8 +588,10 @@ class SourceMenu(QMenu):
 			self.setEnabled(True)
 		else:
 			self.setEnabled(False)
-		for action in self.actions():
-			action.setChecked(action.source == self.parent.parent.currentSource)
+		self.clear()
+		self.addSources()
+		# for action in self.actions():
+		# 	action.setChecked(action.source == self.parent.parent.currentSource)
 
 	@property
 	def sources(self):

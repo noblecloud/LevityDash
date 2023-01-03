@@ -212,7 +212,9 @@ class Realtime(Panel, tag='realtime'):
 
 	@source.after
 	def source(self):
-		return
+		new_container = self.container.get(self._source, None)
+		if new_container is not None and self.__connectedContainer is not new_container:
+			self.connectRealtime(new_container)
 
 	@source.encode
 	def source(value: Plugin) -> str:
