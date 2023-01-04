@@ -9,11 +9,8 @@
   	A lightweight, desktop native, multi-source dashboard for macOS, Windows and Linux
   </p>
 
-	<picture>
-		<source srcset="docs/_images/screenshotTransparent.webp" type="image/webp">
-		<source srcset="docs/_images/screenshotTransparent.avif" type="image/avif">
-		<img alt="Screenshot" class="screenshotAlpha" src="docs/_images/screenshotTransparent.png">
-	</picture>
+	<img alt="Screenshot" class="screenshotAlpha" src="docs/_images/screenshot-readme.png">
+
 </div>
 
 LevityDash aims to be a lightweight, desktop native, multi-source dashboard without a required web frontend that is fun and easy to use. The current version only supports PySide2/Qt. However, a key goal of this project is to support
@@ -26,7 +23,7 @@ platforms, including embedded.
 <img src="https://img.shields.io/badge/license-MIT-blueviolet">
 <img src="https://img.shields.io/badge/Python-3.11-blueviolet">
 <img src="https://img.shields.io/badge/aiohttp-3.6-blueviolet">
-<img src="https://img.shields.io/badge/PySide2-6.4-blueviolet">
+<img src="https://img.shields.io/badge/PySide6-6.4-blueviolet">
 
 </p>
 
