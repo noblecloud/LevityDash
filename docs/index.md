@@ -16,7 +16,7 @@ Quick Start
 
 [quick-start](quick-start.md ':include')
 
-<small>Requires Python 3.10. Python 3.11 support is coming soon!</small>
+<small>Requires Python 3.10+. Python 3.11 is now supported!</small>
 </details>
 
 Continue to [Learn More](about.md) to learn more about LevityDashboard or skip directly to the more detailed instructions in [Getting Started](getting-started.md).

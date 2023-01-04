@@ -7,7 +7,7 @@ There are a few common issues that you may run into when installing LevityDash. 
 
 ### Unsupported Preinstalled Python Version
 
-LevityDash is only compatible with Python 3.10 and newer.  Python 3.10 can be downloaded directly from https://python.org, but
+LevityDash is only compatible with Python 3.10 and newer.  Python 3.11 can be downloaded directly from https://python.org, but
 I've found pyenv to be the best way to install another version of Python. RealPython.com has a great article about it
 pyenv [here](https://realpython.com/intro-to-pyenv/).
 

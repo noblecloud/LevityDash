@@ -1,9 +1,9 @@
-LevityDash's only requirement is Python 3.10.
+LevityDash's only requirement is Python 3.10 or newer.
 There are many ways to install python that will be covered later, but for now, we will check what versions, if any, are already installed.
 
 <small>
 
-Python 3.11 is currently unsupported as it is not supported by PySide2.
+Python 3.11 is now Supported!.
 
 </small>
 
@@ -73,7 +73,7 @@ and installation instructions for pyenv can be found here: https://github.com/py
 Windows 10 comes with a built-in package manager called "Windows Package Manager."  It can be installed by running the following command in PowerShell:
 
 ```powershell
-winget install Microsoft.Python.Python.3.10
+winget install Microsoft.Python.Python.3.11
 ```
 
 Chocolatey is another package manager for Windows.  It can be installed by running the following command in PowerShell:
@@ -94,12 +94,12 @@ Homebrew is the most popular package manager for macOS.  It can be installed by 
 Once homebrew is installed, python can be installed by running the following command in Terminal:
 
 ```bash
-brew install python@3.10
+brew install python@3.11
 ```
 
 #### Linux
 
-Linux distributions have a wide variety of package managers.  The most popular are apt, pacman, and dnf.  The following commands will install python 3.10 on each of these package managers:
+Linux distributions have a wide variety of package managers.  The most popular are apt, pacman, and dnf.  The following commands will install python 3.11 on each of these package managers:
 <!-- tabs:start -->
 
 ### **Debian**
@@ -119,14 +119,14 @@ sudo pacman -S python
 ### **Fedora**
 
 ```bash
-sudo dnf install python3-pyside2
+sudo dnf install python3-pyside6
 ```
 
 <!-- tabs:end -->
 
 
-If your distribution's package manager does not have python 3.10, many times you can find community maintained packages for it.
-If your package manager has a search feature, you can search for "python3.10" or "python3.10-dev" to find the package.
+If your distribution's package manager does not have Python 3.10 or newer, many times you can find community maintained packages for it.
+If your package manager has a search feature, you can search for "python3.11" or "python3.11-dev" to find the package.
 Additionally, your package manager may have a way to specify a specific version of a package to install.
 
 ### From Source <!-- {docsify-ignore-all} -->
@@ -173,7 +173,7 @@ sudo dnf install gcc zlib-devel bzip2 bzip2-devel readline-devel sqlite sqlite-d
 #### Download the Source Code
 
 ```bash
-MINOR=10
+MINOR=11
 PATCH=9
 
 wget https://www.python.org/ftp/python/3.$MINOR.$PATCH/Python-3.$MINOR.$PATCH.tar.xz

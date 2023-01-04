@@ -7,7 +7,7 @@ pip install LevityDash
 Or, for a more foolproof installation...
 
 ```bash
-python3.10 -m pip install --upgrade --user LevityDash
+python3 -m pip install --upgrade --user LevityDash
 ```
 
 
@@ -51,26 +51,26 @@ PySide2 does not have an ARM compatible module available in the PyPi repository,
 use [piwheels.org](https://piwheels.org/) for non 64bit builds, or use your OS's package manager, which is recommended method.
 
 Depending on your distro, you may be able to install PySide2 with your package manager.
-If you are using a distro not listed below, you can try searching for "python-pyside2" in your package manager.
+If you are using a distro not listed below, you can try searching for "python-pyside6" in your package manager.
 
 <!-- tabs:start -->
 
 ### **Debian**
 
 ```bash
-sudo apt-get install python3-pyside2
+sudo apt-get install python3-pyside6
 ```
 
 ### **Arch**
 
 ```bash
-sudo pacman -S python-pyside2
+sudo pacman -S python-pyside6
 ```
 
 ### **Fedora**
 
 ```bash
-sudo dnf install python3-pyside2
+sudo dnf install python3-pyside6
 ```
 
 <!-- tabs:end -->

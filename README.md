@@ -1,27 +1,32 @@
-<p align="center">
+<div>
 	<p align="center">
-   <img width="200" height="200" src="https://github.com/noblecloud/LevityDash/raw/gh-pages/docs/_images/favicons/android-chrome-512x512.png" alt="Logo">
+   <img src="docs/_images/favicons/android-chrome-192x192.png" alt="Logo">
   </p>
 	<h1 align="center" color="505050">
 		<strong><b>LevityDash</b></strong>
 	</h1>
   <p align="center">
-  	A lightweight, desktop native, multisource dashboard for macOS, Windows and Linux
+  	A lightweight, desktop native, multi-source dashboard for macOS, Windows and Linux
   </p>
-</p>
 
-![Screenshot](https://github.com/noblecloud/LevityDash/raw/main/docs/_images/screenshot-readme.png)
+	<picture>
+		<source srcset="docs/_images/screenshotTransparent.webp" type="image/webp">
+		<source srcset="docs/_images/screenshotTransparent.avif" type="image/avif">
+		<img alt="Screenshot" class="screenshotAlpha" src="docs/_images/screenshotTransparent.png">
+	</picture>
+</div>
 
-LevityDash aims to be a lightweight, desktop native, multi-source dashboard without a required web frontend that is fun and easy to use. The current version only supports PySide2/Qt. However, a key goal of this project is to support multiple frontends and
+LevityDash aims to be a lightweight, desktop native, multi-source dashboard without a required web frontend that is fun and easy to use. The current version only supports PySide2/Qt. However, a key goal of this project is to support
+multiple frontends and
 platforms, including embedded.
 
 *Note: This project is very much in the proof of concept stage – it functions, but it is far from the goal of a lightweight dashboard.*
 
 <p align="right">
 <img src="https://img.shields.io/badge/license-MIT-blueviolet">
-<img src="https://img.shields.io/badge/Python-3.10-blueviolet">
+<img src="https://img.shields.io/badge/Python-3.11-blueviolet">
 <img src="https://img.shields.io/badge/aiohttp-3.6-blueviolet">
-<img src="https://img.shields.io/badge/PySide2-5.12-blueviolet">
+<img src="https://img.shields.io/badge/PySide2-6.4-blueviolet">
 
 </p>
 
