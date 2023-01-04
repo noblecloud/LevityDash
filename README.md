@@ -9,7 +9,11 @@
   	A lightweight, desktop native, multi-source dashboard for macOS, Windows and Linux
   </p>
 
-	<img alt="Screenshot" class="screenshotAlpha" src="docs/_images/screenshot-readme.png">
+<picture>
+	<source srcset="docs/_images/screenshot-readme.webp" type="image/webp">
+	<source srcset="docs/_images/screenshot-readme.avif" type="image/avif">
+	<img alt="Screenshot" src="docs/_images/screenshot-readme.png">
+</picture>
 
 </div>
 
