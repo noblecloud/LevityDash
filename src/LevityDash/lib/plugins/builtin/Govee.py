@@ -208,6 +208,7 @@ class Govee(Plugin, realtime=True, logged=True):
 				self.config.defaults().pop('device.mac', None)
 				self.config.defaults().pop('device.model', None)
 				self.config.save()
+		self.name = self.config['device.name']
 		pluginLog.info(f'{self.name} initialized for device {device}')
 
 	@classmethod
@@ -320,7 +321,6 @@ class Govee(Plugin, realtime=True, logged=True):
 			self.historicalTimer.stop()
 		self.pluginLog.info(f'{self.name} stopped')
 
-
 	async def close(self):
 		await self.asyncStop()
 
@@ -373,6 +373,12 @@ class Govee(Plugin, realtime=True, logged=True):
 		return obs
 
 	def __dataParse(self, device, data):
+		try:
+			if device.name != self.name:
+				return
+		except AttributeError:
+			return
+
 		try:
 			dataBytes: bytes = data.manufacturer_data[1]
 		except KeyError:
