@@ -1,27 +1,26 @@
-import utils.data
-from LevityDash.lib import logging
 from dataclasses import dataclass
 from functools import cached_property
 from operator import attrgetter
 from typing import Optional, Type, Union
 
-from numpy import ceil, cos, pi, radians, sin, sqrt
 from PySide6 import QtCore
-from PySide6.QtCore import Property, QAbstractAnimation, QEasingCurve, QLineF, QObject, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSizeF, Qt, QTimer, Signal, Slot
+from PySide6.QtCore import Property, QEasingCurve, QObject, QPoint, QPointF, QPropertyAnimation, QRectF, QSizeF, Qt, \
+	QTimer, Signal, Slot
 from PySide6.QtGui import QBrush, QColor, QFont, QFontMetrics, QFontMetricsF, QPainter, QPainterPath, QPen, QPolygonF
-from PySide6.QtWidgets import (QCheckBox, QFormLayout, QGraphicsItem, QGraphicsItemGroup, QGraphicsObject, QGraphicsPathItem, QGraphicsScene, QGraphicsSceneDragDropEvent, QGraphicsSceneMouseEvent, QGraphicsTextItem, QGraphicsView, QLabel,
-                               QStyleOptionGraphicsItem,
-                               QVBoxLayout, QWidget)
-from WeatherUnits import Direction, DistanceOverTime, Measurement, Angle
+from PySide6.QtWidgets import (QCheckBox, QFormLayout, QGraphicsItem, QGraphicsItemGroup, QGraphicsPathItem,
+															 QGraphicsScene, QGraphicsSceneMouseEvent, QGraphicsTextItem, QLabel,
+															 QStyleOptionGraphicsItem,
+															 QVBoxLayout, QWidget)
+from numpy import ceil, cos, pi, radians, sin, sqrt
 
-from LevityDash.lib.fonts import defaultFont
-from LevityDash.lib.utils import Subscription
-from Modules import estimateTextSize
+from LevityDash.lib.ui import UILogger, Color
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.DisplayBase import Display
+from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, addCrosshair
 from LevityDash.lib.utils.data import MinMax
-from LevityDash.lib.utils.shared import half, Numeric, radialPoint
-from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
+from LevityDash.lib.utils.shared import half, Numeric, radialPoint, clearCacheAttr
+from WeatherUnits import Measurement, Direction, Angle
 
-log = logging.getLogger(__name__)
+log = UILogger.getChild('Gauge')
 
 
 @dataclass
@@ -51,7 +50,7 @@ class GaugeItem:
 	def __init__(self, gauge: 'Gauge'):
 		self._cache = []
 		self._gauge = gauge
-		super(GaugeItem, self).__init__()
+		super(GaugeItem, self).__init__(gauge)
 
 	def _clearCache(self):
 		while self._cache:
@@ -86,7 +85,7 @@ class GaugeArc(GaugePathItem):
 		pen = self.pen()
 		pen.setCapStyle(Qt.RoundCap)
 		self.setPen(pen)
-		self.update()
+		self.draw()
 
 	def mousePressEvent(self, event):
 		print('click')
@@ -115,10 +114,6 @@ class GaugeArc(GaugePathItem):
 	@property
 	def fullAngle(self) -> float:
 		return self.endAngle - self.startAngle
-
-	def update(self):
-		super(GaugeArc, self).update()
-		self.draw()
 
 	def makeShape(self):
 		iShape = QRectF(self.gauge.gaugeRect)
@@ -164,7 +159,7 @@ class Tick(QGraphicsPathItem):
 		pen = QPen(self.gauge.pen.color())
 		pen.setCapStyle(Qt.RoundCap)
 		self.setPen(pen)
-		self.draw()
+		self.refresh()
 		self.setAcceptedMouseButtons(Qt.LeftButton)
 
 	def mousePressEvent(self, event):
@@ -182,11 +177,10 @@ class Tick(QGraphicsPathItem):
 	def group(self) -> Union['TickGroup', 'SubTickGroup']:
 		return self._group
 
-	def update(self):
+	def refresh(self):
 		pen = self.pen()
 		pen.setWidthF(self.properties.lineWidth*self.gauge.baseWidth)
 		self.setPen(pen)
-		super(Tick, self).update()
 		self.draw()
 
 	@cached_property
@@ -202,6 +196,7 @@ class Tick(QGraphicsPathItem):
 		if hasattr(self, 'angle'):
 			delattr(self, 'angle')
 		self._index = value
+		self.refresh()
 
 	@property
 	def radius(self):
@@ -259,13 +254,17 @@ class TickGroup(QGraphicsItemGroup):
 		self._properties = properties
 		self.scale = 1
 		super(TickGroup, self).__init__()
+		# self.setPos(self.gauge.arc.center)
 		self.draw()
+
+	def paint(self, painter, option, widget):
+		super().paint(painter, option, widget)
+		addCrosshair(painter, Color.presets.yellow.QColor, pos=self._gauge.arc.center)
+		addCrosshair(painter, pos=option.rect.center())
 
 	def draw(self):
 		for i in range(0, self.count + 1):
 			tick = Tick(self, i)
-			self.addToGroup(tick)
-			self._ticks.insert(i, tick)
 		if self._properties.subdivison is not None:
 			self.addToGroup(SubTickGroup(self, self._gauge, self._properties.subdivison))
 
@@ -301,8 +300,19 @@ class TickGroup(QGraphicsItemGroup):
 			self.removeFromGroup(item)
 
 	def rebuild(self):
-		self.clear()
-		self.draw()
+		exisiting = [i for i in self.childItems() if isinstance(i, Tick)]
+		size = len(exisiting)
+		new_range = self.count
+		if size > new_range:
+			for item in exisiting[new_range:]:
+				self.removeFromGroup(item)
+
+		elif size < new_range:
+			for i in range(size, new_range):
+				self.addToGroup(Tick(self, i))
+
+		for i, tick in enumerate(j for j in self.childItems() if isinstance(j, Tick)):
+			tick.index = i
 
 	def update(self):
 		while self._cache:
@@ -341,7 +351,7 @@ class SubTickGroup(TickGroup):
 		return items
 
 	def draw(self):
-		items = self.items
+		items = [i for i in self.items if hasattr(i, 'angle')]
 		items.sort(key=attrgetter('angle'))
 		for tick in items[:-1]:
 			for i in range(1, self.count):
@@ -376,6 +386,8 @@ class Needle(GaugePathItem):
 		pen.setJoinStyle(Qt.RoundJoin)
 		self.setPen(Qt.NoPen)
 		# self.setPen(QPen(Qt.red))
+		self.draw()
+		self.setPos(self.gauge.arc.center)
 		self.setBrush(QBrush(self.gauge.defaultColor))
 
 	# self.setTransformOriginPoint(*self.gauge.arc.center.toTuple())
@@ -383,11 +395,6 @@ class Needle(GaugePathItem):
 	def mousePressEvent(self, event):
 		print(event.pos())
 		super(Needle, self).mousePressEvent(event)
-
-	def update(self):
-		super(Needle, self).update()
-		# self.setTransformOriginPoint(*self.gauge.arc.center.toTuple())
-		self.draw()
 
 	@cached_property
 	def needleWidth(self) -> float:
@@ -924,104 +931,104 @@ class CustomText(QGraphicsPathItem):
 # 	super(CustomText, self).setPos(point)
 
 
-class GaugeSpeedText(GaugeText):
-	_value: DistanceOverTime = DistanceOverTime(0)
-	_valueClass: Type[DistanceOverTime] = DistanceOverTime
-
-	def __init__(self, gauge: 'Gauge', value: DistanceOverTime = None, subscription: Subscription = None, *args, **kwargs):
-		super(GaugeSpeedText, self).__init__(gauge, *args, **kwargs)
-
-	def setClass(self, value):
-		assert value is Measurement
-		self._valueClass = value
-
-	@property
-	def string(self):
-		valueClass = self._valueClass
-		value = self._value
-		if isinstance(valueClass, tuple):
-			valueClass, n, d = valueClass
-			value = valueClass(n(value), d(1)).withoutUnit
-		elif issubclass(valueClass, Measurement):
-			value = valueClass(value).withoutUnit
-		else:
-			value = str(round(value, 2))
-		return value
-
-	@property
-	def value(self):
-		return self._value
-
-	@value.setter
-	def value(self, value):
-		self._value = value
-
-	def draw(self):
-		font = self.gauge.tickFont
-		font.setPixelSize(self.gauge.radius*0.4)
-		self.setFont(font)
-
-	# self.setHtml(self.string)
-	# textRect = self.boundingRect()
-	# point = radialPoint(self.gauge.arc.center, 0, 90)
-	# point.setY(point.y() + textRect.height() / 2)
-	# textRect.moveCenter(point)
-	# self.setPos(textRect.topLeft())
-	# textRect.translate(-textRect.width() / 2, 0)
-
-	def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget):
-		painter.drawRect(self.boundingRect())
-		painter.setFont(self.font())
-		fm = painter.fontMetrics()
-		tightRect = fm.tightBoundingRect(self.string)
-		tightRect.moveCenter(self.gauge.arc.center.toPoint())
-		painter.drawRect(tightRect)
-		super(GaugeSpeedText, self).paint(painter, option, widget)
-
-	def update(self):
-		self.draw()
-		super(GaugeSpeedText, self).update()
-
-
-class GaugeDirectionText(GaugeText):
-	_value: Direction = Direction(0)
-	_valueClass: Type[DistanceOverTime] = Direction
-
-	def __init__(self, gauge: 'Gauge', value: DistanceOverTime = None, subscription: Subscription = None, *args, **kwargs):
-		super(GaugeDirectionText, self).__init__(gauge, *args, **kwargs)
-
-	@property
-	def string(self):
-		valueClass = self._valueClass
-		value = self._value
-		if isinstance(valueClass, tuple):
-			valueClass, n, d = valueClass
-			value = valueClass(n(value), d(1)).withoutUnit
-		elif issubclass(valueClass, Measurement):
-			value = valueClass(value).withoutUnit
-		else:
-			value = str(round(value, 2))
-		return value
-
-	@property
-	def value(self):
-		return self._value
-
-	@value.setter
-	def value(self, value):
-		self._value = value
-
-	def draw(self):
-		font = self.gauge.tickFont
-		font.setPixelSize(self.gauge.radius*0.2)
-		self.setFont(font)
-		self.setHtml(self.string)
-
-	# textRect.translate(-textRect.width() / 2, 0)
-
-	def update(self):
-		self.draw()
-		super(GaugeDirectionText, self).update()
+# class GaugeSpeedText(GaugeText):
+# 	_value: DistanceOverTime = DistanceOverTime(0)
+# 	_valueClass: Type[DistanceOverTime] = DistanceOverTime
+#
+# 	def __init__(self, gauge: 'Gauge', value: DistanceOverTime = None, subscription: Subscription = None, *args, **kwargs):
+# 		super(GaugeSpeedText, self).__init__(gauge, *args, **kwargs)
+#
+# 	def setClass(self, value):
+# 		assert value is Measurement
+# 		self._valueClass = value
+#
+# 	@property
+# 	def string(self):
+# 		valueClass = self._valueClass
+# 		value = self._value
+# 		if isinstance(valueClass, tuple):
+# 			valueClass, n, d = valueClass
+# 			value = valueClass(n(value), d(1)).withoutUnit
+# 		elif issubclass(valueClass, Measurement):
+# 			value = valueClass(value).withoutUnit
+# 		else:
+# 			value = str(round(value, 2))
+# 		return value
+#
+# 	@property
+# 	def value(self):
+# 		return self._value
+#
+# 	@value.setter
+# 	def value(self, value):
+# 		self._value = value
+#
+# 	def draw(self):
+# 		font = self.gauge.tickFont
+# 		font.setPixelSize(self.gauge.radius*0.4)
+# 		self.setFont(font)
+#
+# 	# self.setHtml(self.string)
+# 	# textRect = self.boundingRect()
+# 	# point = radialPoint(self.gauge.arc.center, 0, 90)
+# 	# point.setY(point.y() + textRect.height() / 2)
+# 	# textRect.moveCenter(point)
+# 	# self.setPos(textRect.topLeft())
+# 	# textRect.translate(-textRect.width() / 2, 0)
+#
+# 	def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget):
+# 		painter.drawRect(self.boundingRect())
+# 		painter.setFont(self.font())
+# 		fm = painter.fontMetrics()
+# 		tightRect = fm.tightBoundingRect(self.string)
+# 		tightRect.moveCenter(self.gauge.arc.center.toPoint())
+# 		painter.drawRect(tightRect)
+# 		super(GaugeSpeedText, self).paint(painter, option, widget)
+#
+# 	def update(self):
+# 		self.draw()
+# 		super(GaugeSpeedText, self).update()
+#
+#
+# class GaugeDirectionText(GaugeText):
+# 	_value: Direction = Direction(0)
+# 	_valueClass: Type[DistanceOverTime] = Direction
+#
+# 	def __init__(self, gauge: 'Gauge', value: DistanceOverTime = None, subscription: Subscription = None, *args, **kwargs):
+# 		super(GaugeDirectionText, self).__init__(gauge, *args, **kwargs)
+#
+# 	@property
+# 	def string(self):
+# 		valueClass = self._valueClass
+# 		value = self._value
+# 		if isinstance(valueClass, tuple):
+# 			valueClass, n, d = valueClass
+# 			value = valueClass(n(value), d(1)).withoutUnit
+# 		elif issubclass(valueClass, Measurement):
+# 			value = valueClass(value).withoutUnit
+# 		else:
+# 			value = str(round(value, 2))
+# 		return value
+#
+# 	@property
+# 	def value(self):
+# 		return self._value
+#
+# 	@value.setter
+# 	def value(self, value):
+# 		self._value = value
+#
+# 	def draw(self):
+# 		font = self.gauge.tickFont
+# 		font.setPixelSize(self.gauge.radius*0.2)
+# 		self.setFont(font)
+# 		self.setHtml(self.string)
+#
+# 	# textRect.translate(-textRect.width() / 2, 0)
+#
+# 	def update(self):
+# 		self.draw()
+# 		super(GaugeDirectionText, self).update()
 
 
 class GaugeUnit(GaugeText):
@@ -1057,12 +1064,12 @@ class GaugeTickText(GaugeText):
 	_flipUpsideDown = (False, True)
 	_scale: Optional[float] = None
 
-	def __init__(self, tick, group, *args, **kwargs):
+	def __init__(self, gauge, tick, group, *args, **kwargs):
 		self.group = group
 		self.offset = 0.75
 		self.tick = tick
-		super(GaugeTickText, self).__init__(utils.data.group.gauge, *args, **kwargs)
-		font = QFont(defaultFont)
+		super(GaugeTickText, self).__init__(gauge, *args, **kwargs)
+		font = QFont()
 		font.setPointSizeF(70)
 		self.setFont(font)
 		self.rect = QGraphicsPathItem()
@@ -1134,7 +1141,7 @@ class GaugeTickText(GaugeText):
 				if valueClass is Direction:
 					return value.cardinal.twoLetter
 			if isinstance(value, Measurement):
-				value = value.decoratedInt
+				value = value.withoutUnit
 		return str(value)
 
 	def draw(self):
@@ -1201,15 +1208,15 @@ class GaugeTickText(GaugeText):
 class GaugeTickTextGroup(QGraphicsItemGroup):
 	tickScale = 1.0
 
-	def __init__(self, ticks: TickGroup):
+	def __init__(self, gauge, ticks: TickGroup):
 		self._ticks = ticks
-		super(GaugeTickTextGroup, self).__init__()
+		super(GaugeTickTextGroup, self).__init__(gauge)
 		for tick in self.ticks:
-			text = GaugeTickText(tick, self)
+			text = GaugeTickText(gauge, tick, self)
 			self.addToGroup(text)
 			self.addToGroup(text.rect)
 		self.setTickScale()
-
+		
 	def setTickScale(self):
 		self.tickScale = 1.0
 		for item in self.childItems():
@@ -1222,12 +1229,11 @@ class GaugeTickTextGroup(QGraphicsItemGroup):
 				cols = [x for x in item.collidingItems(Qt.ItemSelectionMode.IntersectsItemShape) if isinstance(x, (item.__class__, Tick))]
 			item.update()
 
-	def update(self):
+	def rebuild(self):
 		if self.hasCollisions():
 			self.setTickScale()
 		for item in self.childItems():
 			item.update()
-		super(GaugeTickTextGroup, self).update()
 
 	def getFontSizeRatio(self):
 		scale = min([item.fontSizeCalc() for item in self.childItems() if isinstance(item, GaugeTickText)])
@@ -1254,7 +1260,7 @@ class GaugeTickTextGroup(QGraphicsItemGroup):
 		return self._ticks.ticks
 
 
-class Gauge(Panel):
+class Gauge(Display):
 	__value: float = 0.0
 	_needleAnimation: QPropertyAnimation
 	valueChanged = Signal(float)
@@ -1290,17 +1296,36 @@ class Gauge(Panel):
 	_cache: list
 	rotatedLabels = True
 
-	def __init__(self, *args, **kwargs):
+	def _init_defaults_(self):
+		super()._init_defaults_()
 		self._cache = []
-		super(Gauge, self).__init__(*args, **kwargs)
 		# config = ConfigWindow(self)
 		self.__value: Union[Numeric, Measurement]
 		self._pen = QPen(self.defaultColor)
-		# self.setStyleSheet('background-color: black; color: white')
 
-		# self.scene().setStyleSheet('background - color: black; color: white')
+		self.arc = GaugeArc(self)
+		self.ticks = TickGroup(self, self.majorDivisions)
+		self.labels = GaugeTickTextGroup(self, self.ticks)
+		self.needle = Needle(self)
+		self.unitLabel = GaugeUnit(self)
+		self.valueLabel = GaugeValueText(self)
 
-		self.image.setParentItem(self)
+	@property
+	def type(self):
+		return DisplayType.Gauge
+
+	@property
+	def displayType(self):
+		return DisplayType.Gauge
+
+	def __init__(self, parent, *args, **kwargs):
+		self.previousParent = None
+		super(Gauge, self).__init__(parent)
+
+	def parentResized(self, arg: Union[QPointF, QSizeF, QRectF]):
+		super().parentResized(arg)
+		self.arc.draw()
+		self.ticks.draw()
 
 	# self.arc.moveBy(*offset.toTuple())
 	# self.r = self.scene().addRect(rect, QPen(Qt.red))
@@ -1327,18 +1352,6 @@ class Gauge(Panel):
 	# 			items.append(item)
 	# 	# print([x for x in s.items() if x.contains(event.pos())])
 
-	def update(self):
-		try:
-			self.image.update()
-		except AttributeError:
-			pass
-
-	# self.scene().update(self.rect())
-
-	@property
-	def state(self):
-		return {}
-
 	@property
 	def value(self):
 		return self._value
@@ -1351,24 +1364,8 @@ class Gauge(Panel):
 			if isinstance(value, Measurement):
 				self.setUnit(value)
 
-	@cached_property
-	def image(self):
-		group = QGraphicsItemGroup()
-		self.arc = GaugeArc(self)
-		self.ticks = TickGroup(self, self.majorDivisions)
-		self.labels = GaugeTickTextGroup(self.ticks)
-		self.needle = Needle(self)
-		self.unitLabel = GaugeUnit(self)
-		self.valueLabel = GaugeValueText(self)
-		group.addToGroup(self.arc)
-		group.addToGroup(self.ticks)
-		group.addToGroup(self.labels)
-		group.addToGroup(self.unitLabel)
-		group.addToGroup(self.valueLabel)
-		group.addToGroup(self.needle)
-		return group
 
-	@Property(float)
+	@property
 	def _value(self):
 		return self.__value
 
@@ -1376,8 +1373,8 @@ class Gauge(Panel):
 	def _value(self, value: float):
 		value = max(self._range.min, min(self._range.max, value))
 		angle = (value - self._range.min)/self._range.range*self.fullAngle + self.startAngle
-		self.needle.setRotation(angle)
-		self.valueLabel.update()
+		# self.needle.setRotation(angle)
+		# self.valueLabel.update()
 		self.__value = value
 
 	@property
@@ -1397,12 +1394,6 @@ class Gauge(Panel):
 					self.startAngle = 0
 					self.endAngle = 360
 					self.range = self.ranges['angle']
-
-	def setValue(self, value: Union[Measurement, Numeric]):
-		if isinstance(value, Measurement):
-			self.valueClass = value
-			self.setUnit(value)
-		self.animateValue(self.__value, value)
 
 	@Slot(float)
 	def updateSlot(self, value: Union[Measurement, Numeric]):
@@ -1476,25 +1467,8 @@ class Gauge(Panel):
 			return self.ranges['default']
 
 	def rebuild(self):
-		while self._cache:
-			delattr(self, self._cache.pop())
-		self.image.removeFromGroup(self.ticks)
-		self.scene().removeItem(self.ticks)
-		self.image.removeFromGroup(self.labels)
-		self.scene().removeItem(self.labels)
-		self.image.removeFromGroup(self.unitLabel)
-		self.scene().removeItem(self.unitLabel)
-		self.image.removeFromGroup(self.valueLabel)
-		self.scene().removeItem(self.valueLabel)
-
-		self.ticks = TickGroup(self, self.majorDivisions)
-		self.labels = GaugeTickTextGroup(self.ticks)
-		self.unitLabel = GaugeUnit(self)
-		self.valueLabel = GaugeValueText(self)
-		self.image.addToGroup(self.ticks)
-		self.image.addToGroup(self.labels)
-		self.image.addToGroup(self.unitLabel)
-		self.image.addToGroup(self.valueLabel)
+		self.ticks.rebuild()
+		self.labels.rebuild()
 
 	@Slot(int)
 	def setMajorTicks(self, value: int):
@@ -1544,14 +1518,20 @@ class Gauge(Panel):
 	@property
 	def defaultColor(self):
 		# return Qt.white
-		return self.scene().palette().text().color()
+		return Color.presets.white.QColor
 
 	@cached_property
 	def tickFont(self):
 		self._cache.append('tickFont')
-		font = QFont(defaultFont)
+		font = QFont()
 		font.setPixelSize(max(self.radius*.1, 18))
 		return font
+
+	def setRect(self, *args, **kwargs):
+		super().setRect(*args, **kwargs)
+		clearCacheAttr(self, *self._cache)
+		self._cache.clear()
+		self.rebuild()
 
 	def draw(self):
 		paint = QPainter(self)
@@ -1822,9 +1802,6 @@ class WindVein(Gauge):
 		self.setScene(self._scene)
 		# self.scene().setStyleSheet('background - color: black; color: white')
 
-		self.scene().addItem(self.image)
-		self.image.setFlag(QGraphicsItem.ItemIsMovable, False)
-		self.image.removeFromGroup(self.speedLabel)
 		self.directionLabel = CustomText(self)
 		self.directionLabel.moveBy(0, -10)
 		self.scene().addItem(self.directionLabel)
@@ -1888,6 +1865,7 @@ class WindVein(Gauge):
 
 	@cached_property
 	def image(self) -> QGraphicsItemGroup:
+		breakpoint('this needs to be updated!')
 		self.items()
 		group = QGraphicsItemGroup()
 		self.arc = GaugeArc(self)

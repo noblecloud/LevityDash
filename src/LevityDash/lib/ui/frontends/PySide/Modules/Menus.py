@@ -389,8 +389,9 @@ class RealtimeContextMenu(BaseContextMenu):
 		# showUnit.setCheckable(True)
 		# showUnit.setChecked(self.parent.display.displayProperties.unitPosition != 'hidden')
 
-		valueContextMenu = self.parent.display.valueTextBox.contextMenu
-		valueContextMenu.setTitle('Value')
+		if self.parent.display.displayType is DisplayType.Text:
+			valueContextMenu = self.parent.display.valueTextBox.contextMenu
+			valueContextMenu.setTitle('Value')
 
 		self.addTitleMenu()
 		self.addMenu(valueContextMenu)

@@ -1,16 +1,16 @@
-from abc import abstractmethod
 from datetime import timedelta, datetime
 from functools import cached_property, partial
 from numbers import Number
 from time import process_time
 from typing import Any, Iterable, Type, Dict
 
-from PySide6.QtCore import QByteArray, QMimeData, Qt, QThread, QTimer, QRectF, Slot
-from PySide6.QtGui import QDrag, QFocusEvent, QFont, QPainter, QPixmap, QTransform
+from PySide6.QtCore import QByteArray, QMimeData, Qt, QTimer, QRectF, Slot
+from PySide6.QtGui import QDrag, QFocusEvent, QPainter, QPixmap, QTransform
 from PySide6.QtWidgets import QApplication, QGraphicsItem, QGraphicsSceneMouseEvent, QStyleOptionGraphicsItem
 
 from LevityDash import LevityDashboard
-from LevityDash.lib.config import DATETIME_NO_ZERO_CHAR
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.DisplayBase import Display
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Gauge import Gauge
 from LevityDash.lib.ui.icons import fa as FontAwesome, getIcon, Icon
 from WeatherUnits.time_.time import Second
 from LevityDash.lib.plugins.categories import CategoryItem
@@ -30,7 +30,7 @@ from LevityDash.lib.ui.Geometry import (
 	RelativeFloat, size_px
 )
 from LevityDash.lib.utils.shared import (
-	disconnectSignal, Now, now, parse_bool, thread_safe, threadPool, TitleCamelCase, Unset, connectSignal,
+	disconnectSignal, Now, now, parse_bool, TitleCamelCase, Unset, connectSignal,
 	clearCacheAttr
 )
 from LevityDash.lib.stateful import StateProperty, Stateful
@@ -40,27 +40,6 @@ from WeatherUnits import Measurement, auto as autoMeasurement, Length
 qApp: QApplication
 
 log = guiLog.getChild(__name__)
-
-
-
-class Display(Panel, tag=...):
-	__exclude__ = {'items', 'geometry', 'locked', 'frozen', 'movable', 'resizable', 'text'}
-
-	__defaults__ = {
-		'displayType': DisplayType.Text,
-		'geometry':    {'x': 0, 'y': 0.2, 'width': 1.0, 'height': 0.8},
-		'movable':     False,
-		'resizable':   False,
-		'locked':      True,
-	}
-
-	@property
-	@abstractmethod
-	def type(self) -> DisplayType: ...
-
-	@classmethod
-	def default(cls):
-		return super().default()
 
 
 class InvalidSource(Exception):
@@ -104,9 +83,14 @@ class Realtime(Panel, tag='realtime'):
 		self.__pendingActions: Dict[int, Any] = {}
 		super(Realtime, self).__init__(parent=parent, **kwargs)
 		self.lastUpdate = None
-		self.display.valueTextBox.marginHandles.surfaceProxy = self
-		self.display.unitTextBox.marginHandles.surfaceProxy = self
-		self.display.unitTextBox.resizeHandles.surfaceProxy = self
+
+		try:
+			self.display.valueTextBox.marginHandles.surfaceProxy = self
+			self.display.unitTextBox.marginHandles.surfaceProxy = self
+			self.display.unitTextBox.resizeHandles.surfaceProxy = self
+		except AttributeError:
+			pass
+
 		self.timeOffsetLabel.setEnabled(False)
 		self.scene().view.loadingFinished.connect(self.onLoadFinished)
 
@@ -254,7 +238,14 @@ class Realtime(Panel, tag='realtime'):
 	@display.decode
 	def display(self, value) -> Panel:
 		if isinstance(value, dict):
-			return DisplayLabel(parent=self, **value)
+			display_type = value.pop('displayType', DisplayType.Text)
+			match display_type:
+				case DisplayType.Text:
+					return DisplayLabel(parent=self, **value)
+				case DisplayType.Gauge:
+					return Gauge(parent=self, **value)
+				case _:
+					raise ValueError(f'Unknown Display Type: {display_type}')
 
 	@StateProperty(key='title', sortOrder=1, allowNone=False, default=Stateful)
 	def splitter(self) -> TitleValueSplitter:
@@ -473,15 +464,16 @@ class Realtime(Panel, tag='realtime'):
 			log.warning(f'Realtime {self.key.name} failed to connect to {container.log_repr}')
 			return
 
-		if container.metadata['type'] == 'icon' and container.metadata['iconType'] == 'glyph':
-			self.display.valueTextBox.textBox.setTextAccessor(None)
-		if self.title.isEnabled() and self.title.allowDynamicUpdate():
-			self.title.textBox.setTextAccessor(lambda: container.title)
-		self.lastUpdate = process_time()
-		self.display.splitter.updateUnitDisplay()
-		self.__updateTimeOffsetLabel()
+		if self.display.displayType == DisplayType.Text:
+			if container.metadata['type'] == 'icon' and container.metadata['iconType'] == 'glyph':
+				self.display.valueTextBox.textBox.setTextAccessor(None)
+			if self.title.isEnabled() and self.title.allowDynamicUpdate():
+				self.title.textBox.setTextAccessor(lambda: container.title)
+			self.display.splitter.updateUnitDisplay()
+			self.display.refresh()
 
-		self.display.refresh()
+		self.lastUpdate = process_time()
+		self.__updateTimeOffsetLabel()
 		self.updateToolTip()
 
 		return connected
@@ -522,7 +514,11 @@ class Realtime(Panel, tag='realtime'):
 	@Slot(object)
 	def updateSlot(self, *args):
 		self.setOpacity(1)
-		self.display.refresh()
+		if self.display.displayType is DisplayType.Text:
+			self.display.refresh()
+		elif self.display.displayType is DisplayType.Gauge:
+			value = self.container.value.now.value
+			self.display.value = value
 		self.updateToolTip()
 		# loop.call_soon_threadsafe(self.adjustContentStaleTimer)
 
@@ -579,11 +575,12 @@ class Realtime(Panel, tag='realtime'):
 					item.hide()
 				self.setFocusProxy(None)
 				self.setFocus(Qt.MouseFocusReason)
-		if self.display.displayProperties.unitPosition == 'floating' and self.display.unitTextBox.isAncestorOf(self.scene().itemAt(mouseEvent.scenePos(), QTransform())):
-			self.display.unitTextBox.setFocus(Qt.MouseFocusReason)
-			self.display.unitTextBox.mousePressEvent(mouseEvent)
-			self.setFocusProxy(self.display.unitTextBox)
-			return
+		if self.display.displayType is DisplayType.Text:
+			if self.display.displayProperties.unitPosition == 'floating' and self.display.unitTextBox.isAncestorOf(self.scene().itemAt(mouseEvent.scenePos(), QTransform())):
+				self.display.unitTextBox.setFocus(Qt.MouseFocusReason)
+				self.display.unitTextBox.mousePressEvent(mouseEvent)
+				self.setFocusProxy(self.display.unitTextBox)
+				return
 		super().mousePressEvent(mouseEvent)
 
 	def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent):
@@ -593,16 +590,18 @@ class Realtime(Panel, tag='realtime'):
 		super(Realtime, self).mouseMoveEvent(event)
 
 	def focusInEvent(self, event: QFocusEvent):
-		if self.display.splitter.isEnabled():
-			self.display.splitter.show()
-		if self.display.displayProperties.unitPosition == 'floating':
-			self.display.unitTextBox.resizeHandles.show()
+		if self.display.displayType is DisplayType.Text:
+			if self.display.splitter.isEnabled():
+				self.display.splitter.show()
+			if self.display.displayProperties.unitPosition == 'floating':
+				self.display.unitTextBox.resizeHandles.show()
 		super(Realtime, self).focusInEvent(event)
 
 	def focusOutEvent(self, event: QFocusEvent):
-		self.display.splitter.hide()
-		# self.display.valueTextBox.marginHandles.hide()
-		# self.display.unitTextBox.marginHandles.hide()
+		if self.display.displayType is DisplayType.Text:
+			self.display.splitter.hide()
+			# self.display.valueTextBox.marginHandles.hide()
+			# self.display.unitTextBox.marginHandles.hide()
 		super(Realtime, self).focusOutEvent(event)
 
 	def changeSource(self, newSource: Plugin):
@@ -1323,8 +1322,7 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 		return self.parent.value
 
 	def mouseDoubleClickEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
-		mouseEvent.ignore()
-		return
+		return mouseEvent.ignore()
 
 	# @thread_safe
 	def refresh(self):
@@ -1334,9 +1332,6 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 				self.splitter.fitUnitUnder()
 
 		self.valueTextBox.textBox.refresh()
-
-	def setRect(self, *args):
-		super().setRect(*args)
 
 	def hideUnit(self):
 		self.displayProperties.unitPosition = DisplayPosition.Hidden

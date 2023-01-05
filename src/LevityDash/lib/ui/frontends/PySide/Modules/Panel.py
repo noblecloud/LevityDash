@@ -535,9 +535,9 @@ class Panel(_Panel, Stateful, tag='group'):
 			self.debugPen.setBrush(brush)
 
 		self.setParentItem(parent)
+		self.previousParent = self.parent
 		kwargs = Stateful.prep_init(self, kwargs)
 		self._init_args_(*args, **kwargs)
-		self.previousParent = self.parent
 		self.setFlag(self.GraphicsItemFlag.ItemClipsChildrenToShape, False)
 		self.setFlag(self.GraphicsItemFlag.ItemClipsToShape, False)
 
