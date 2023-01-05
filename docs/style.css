@@ -21,6 +21,8 @@
 	--docsifytabs-content-background: rgba(0, 0, 0, 0.2);
 	--sidebar-nav-link-text-decoration: none;
 
+	--search-input-background-color: rgba(0, 0, 0, 0.2);
+
 	--base-font-family: -apple-system, BlinkMacSystemFont, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
 	--base-font-size: 16px;
 	--base-font-weight: normal;
