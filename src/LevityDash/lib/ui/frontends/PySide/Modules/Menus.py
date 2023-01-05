@@ -55,7 +55,7 @@ class BaseContextMenu(QMenu):
 	def updateItems(self):
 		self.groupItems.setVisible(len(self.parent.scene().selectedItems()) > 1)
 		childMenus = [menu for menu in self.children() if isinstance(menu, QMenu)]
-		self.debugActions.setVisible(QApplication.queryKeyboardModifiers() & Qt.KeyboardModifier.AltModifier or debug)
+		self.debugActions.setVisible((QApplication.queryKeyboardModifiers() & Qt.KeyboardModifier.AltModifier).value or debug)
 		for menu in childMenus:
 			menu.update()
 		if hasattr(self, 'freeze'):
