@@ -19,6 +19,7 @@ from rich.theme import Theme
 
 from LevityDash import LevityDashboard
 from LevityDash.lib.stateful import StatefulDumper
+from LevityDash.lib.ui.frontends.PySide.utils import DisplayType
 
 if TYPE_CHECKING:
 	from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
@@ -79,6 +80,7 @@ class BaseContextMenu(QMenu):
 		self.debugActions.addAction(self.addAction('Print State Dict', partial(self.printState, dict)))
 		self.debugActions.addAction(self.addAction('Print Repr', self.printRepr))
 		self.debugActions.addAction(self.addAction('Copy Fingerprint', lambda: QApplication.clipboard().setText(f'{id(self.parent):x}')))
+		self.debugActions.addAction(self.addAction('Breakpoint', lambda: breakpoint()))
 		self.debugActions.addAction(self.addMenu(ChildrenMenu(self)))
 
 		if self.parent.deletable:
@@ -393,9 +395,9 @@ class RealtimeContextMenu(BaseContextMenu):
 			valueContextMenu = self.parent.display.valueTextBox.contextMenu
 			valueContextMenu.setTitle('Value')
 
-		self.addTitleMenu()
-		self.addMenu(valueContextMenu)
-		self.addUnitMenu()
+			self.addTitleMenu()
+			self.addMenu(valueContextMenu)
+			self.addUnitMenu()
 
 	# self.directionItems()
 
