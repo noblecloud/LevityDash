@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from functools import cached_property
+from functools import cached_property, reduce
+from operator import or_
 from typing import Optional, Type, Union
 
 from PySide6 import QtCore
@@ -9,7 +10,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
 	QBrush, QColor, QFont, QFontMetrics, QFontMetricsF, QPainter, QPainterPath,
-	QPen, QPolygonF
+	QPen, QPolygonF, QTransform
 )
 from PySide6.QtWidgets import (
 	QCheckBox, QFormLayout, QGraphicsItem, QGraphicsItemGroup, QGraphicsPathItem,
@@ -19,8 +20,9 @@ from PySide6.QtWidgets import (
 )
 from numpy import ceil, cos, pi, radians, sin, sqrt
 
+from LevityDash.lib.stateful import Stateful
 from LevityDash.lib.ui import UILogger, Color
-from LevityDash.lib.ui.frontends.PySide.Modules.Displays import SurfaceCentered
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays import SurfaceCentered, Surface
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.DisplayBase import Display
 from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, addCrosshair, DebugPaint
 from LevityDash.lib.utils.data import MinMax
@@ -131,7 +133,7 @@ class GaugeArc(GaugePathItem):
 
 	@property
 	def center(self):
-		return QPointF(self.gauge.rect().center())
+		return self.gauge.rect().center()
 
 	@property
 	def offset(self):
@@ -365,7 +367,7 @@ class SubTick(Tick):
 		return self._superTick.angle + self._index * self.properties.spacing
 
 
-class TickSurface(SurfaceCentered):
+class TickSurface(SurfaceCentered, GaugeItem):
 	_properties: Divisions
 	_ticks: list[Tick] = cached_property(lambda self: [])
 
@@ -1222,11 +1224,15 @@ class GaugeTickText(GaugeText):
 
 	@property
 	def rotated(self):
-		return self.gauge.rotatedLabels
+		return self.parentItem().rotation
 
 
-class GaugeTickTextGroup(QGraphicsItemGroup):
+class GaugeTickTextGroup(Surface, GaugeItem, Stateful):
 	tickScale = 1.0
+
+	@property
+	def rotation(self):
+		return False
 
 	def __init__(self, gauge, ticks: TickSurface):
 		self._gauge = gauge
@@ -1273,22 +1279,13 @@ class GaugeTickTextGroup(QGraphicsItemGroup):
 			item.setFont(font)
 			item.draw()
 
-	# for item in self.childItems():
-	# 	item.update()
-
-	def getFontSizeRatio(self):
-		scale = min([item.fontSizeCalc() for item in self.childItems() if isinstance(item, GaugeTickText)])
-		for item in self.childItems():
-			item.setScale(scale)
-		return scale
-
 	def collidesWithTicks(self) -> bool:
 		return any([item.collidesWithItem(item.tick) for item in self.childItems() if isinstance(item, GaugeTickText)])
 
 	def hasCollisions(self):
-		collidesWitTicks = self.collidesWithTicks()
-		if collidesWitTicks:
-			return True
+		# collidesWitTicks = self.collidesWithTicks()
+		# if collidesWitTicks:
+		# 	return True
 		for item in self.childItems():
 			if isinstance(item, GaugeTickText) and item.collidingNeighbors():
 				return True
@@ -1338,7 +1335,6 @@ class Gauge(Display):
 	_scene: QGraphicsScene
 	_pen: QPen
 	_cache: list
-	rotatedLabels = True
 
 	def _init_defaults_(self):
 
@@ -1368,11 +1364,13 @@ class Gauge(Display):
 		self._pen = QPen(self.defaultColor)
 
 		self.arc = GaugeArc(self)
+		self.recenter()
 		self.ticks = TickSurface(self, self.majorDivisions)
 		self.labels = GaugeTickTextGroup(self, self.ticks)
 		self.needle = Needle(self)
 		self.unitLabel = GaugeUnit(self)
 		self.valueLabel = GaugeValueText(self)
+
 
 	@property
 	def type(self):
@@ -1395,11 +1393,19 @@ class Gauge(Display):
 		self.needle.refresh()
 		self.unitLabel.draw()
 
+	def recenter(self):
+		arc_rect = self.mapRectFromItem(self.arc, self.arc.boundingRect())
+		margin_rect = self.marginRect
+		if arc_rect.center() != margin_rect.center():
+			diff = margin_rect.center() - arc_rect.center()
+			self.moveBy(diff.x() / 2, diff.y() / 2)
+
 	def rebuild(self):
 		self.ticks.rebuild()
 		self.labels.rebuild()
 		self.unitLabel.draw()
 		self.needle.refresh()
+		self.recenter()
 
 	def refresh(self):
 		self.ticks.refresh()
@@ -1561,6 +1567,12 @@ class Gauge(Display):
 	@property
 	def baseWidth(self):
 		return sqrt(self.height() ** 2 + self.width() ** 2) * 0.008
+
+	def height(self) -> float:
+		return self.marginRect.height()
+
+	def width(self) -> float:
+		return self.marginRect.width()
 
 	@property
 	def radius(self):
