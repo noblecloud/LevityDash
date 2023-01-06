@@ -18,3 +18,8 @@ class Display(Panel, tag=...):
 	@property
 	@abstractmethod
 	def type(self) -> DisplayType: ...
+
+	@property
+	def isEmpty(self):
+		return False
+
