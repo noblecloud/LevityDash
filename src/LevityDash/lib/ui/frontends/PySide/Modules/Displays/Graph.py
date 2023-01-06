@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 	QGraphicsEffect, QGraphicsItem, QGraphicsItemGroup, QGraphicsLineItem, QGraphicsPixmapItem,
 	QGraphicsRectItem,
 	QGraphicsSceneDragDropEvent, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent, QGraphicsSceneWheelEvent, QMenu,
-	QStyleOptionGraphicsItem, QToolTip, QWidget, QApplication
+	QStyleOptionGraphicsItem, QToolTip, QApplication
 )
 from abc import abstractmethod
 from builtins import isinstance
@@ -51,6 +51,7 @@ from LevityDash.lib.ui.Geometry import (
 )
 from LevityDash.lib.ui.colors import Color, Gradient
 from LevityDash.lib.ui.frontends.PySide import UILogger
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Surface
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Text
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Incrementer import Incrementer, IncrementerGroup
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.MarginHandles import FigureHandles
@@ -58,7 +59,7 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Timeframe import GraphZo
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import BaseContextMenu, SourceMenu
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import NonInteractivePanel, Panel
 from LevityDash.lib.ui.frontends.PySide.utils import (
-	addCrosshair, addRect, colorPalette, DebugPaint, DisplayType, EffectPainter, GraphicsItemSignals,
+	addCrosshair, colorPalette, DebugPaint, DisplayType, EffectPainter, GraphicsItemSignals,
 	modifyTransformValues, RendererScene, SoftShadow
 )
 from LevityDash.lib.utils.data import AxisMetaData, DataTimeRange, findPeaksAndTroughs, gaussianKernel, TimeFrameWindow
@@ -136,28 +137,6 @@ class TestData:
 			value = Millimeter(rainDataTotals[i])
 			rate.append(TimeSeriesItem(value, timestamp))
 		return rate
-
-
-# Section Surface
-class Surface(QGraphicsItemGroup):
-	if TYPE_CHECKING:
-		def scene(self) -> LevityScene: ...
-
-	def __init__(self, parent: QGraphicsItem):
-		super().__init__(parent)
-
-	def boundingRect(self):
-		return self.parentItem().rect()
-
-	def boundingRegion(self, itemToDeviceTransform):
-		return self.parentItem().boundingRegion(itemToDeviceTransform)
-
-	def shape(self) -> QPainterPath:
-		return self.parentItem().shape()
-
-	def _debug_paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget):
-		self._normal_paint(painter, option, widget)
-		addRect(painter, self.boundingRect(), color=self._debug_paint_color, offset=1)
 
 
 X_ = TypeVar('X_', int, float, np.ndarray)
