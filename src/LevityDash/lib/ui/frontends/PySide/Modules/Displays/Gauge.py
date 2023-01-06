@@ -1,23 +1,30 @@
 from dataclasses import dataclass
 from functools import cached_property
-from operator import attrgetter
 from typing import Optional, Type, Union
 
 from PySide6 import QtCore
-from PySide6.QtCore import Property, QEasingCurve, QObject, QPoint, QPointF, QPropertyAnimation, QRectF, QSizeF, Qt, \
-	QTimer, Signal, Slot
-from PySide6.QtGui import QBrush, QColor, QFont, QFontMetrics, QFontMetricsF, QPainter, QPainterPath, QPen, QPolygonF
-from PySide6.QtWidgets import (QCheckBox, QFormLayout, QGraphicsItem, QGraphicsItemGroup, QGraphicsPathItem,
-															 QGraphicsScene, QGraphicsSceneMouseEvent, QGraphicsTextItem, QLabel,
-															 QStyleOptionGraphicsItem,
-															 QVBoxLayout, QWidget)
+from PySide6.QtCore import (
+	Property,	QEasingCurve, QObject, QPoint, QPointF,	QPropertyAnimation,
+	QRectF,	QSizeF,	Qt,	QTimer,	Signal,	Slot
+)
+from PySide6.QtGui import (
+	QBrush, QColor, QFont, QFontMetrics, QFontMetricsF, QPainter, QPainterPath,
+	QPen, QPolygonF
+)
+from PySide6.QtWidgets import (
+	QCheckBox, QFormLayout, QGraphicsItem, QGraphicsItemGroup, QGraphicsPathItem,
+	QGraphicsScene, QGraphicsSceneMouseEvent, QGraphicsTextItem, QLabel,
+	QStyleOptionGraphicsItem,
+	QVBoxLayout, QWidget
+)
 from numpy import ceil, cos, pi, radians, sin, sqrt
 
 from LevityDash.lib.ui import UILogger, Color
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays import SurfaceCentered
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.DisplayBase import Display
-from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, addCrosshair
+from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, addCrosshair, DebugPaint
 from LevityDash.lib.utils.data import MinMax
-from LevityDash.lib.utils.shared import half, Numeric, radialPoint, clearCacheAttr
+from LevityDash.lib.utils.shared import half, Numeric, radialPoint
 from WeatherUnits import Measurement, Direction, Angle
 
 log = UILogger.getChild('Gauge')
@@ -30,78 +37,105 @@ class Divisions:
 	"""
 
 	#: The number of divisions.
-	count: Optional[int]
+	_count: int = None
 	#: The length of each tick.
-	length: float
+	length: float = 1.0
 	#: The line width of each tick.
-	lineWidth: float
+	lineWidth: float = 1.0
 	#: The colors of the tick.
 	color: QColor = None
 	#: The Alpha level.
 	alpha: float = 1.0
 
-	subdivison: 'Divisions' = None
+	scale: float = 1.0
+
+	sub_division: 'Divisions' = None
+
+	super_division: 'Divisions' = None
+
+	surface: 'TickSurface' = None
+
+	gauge: 'Gauge' = None
+
+	def __post_init__(self):
+		if (sub_divisions := self.sub_division) is not None:
+			sub_divisions.super_division = self
+
+	@property
+	def spacing(self):
+		return self.angle_range / self.count
+
+	@property
+	def angle_range(self) -> float:
+		if self.super_division is None:
+			return self.gauge.fullAngle
+		else:
+			return self.super_division.angle_range / self.super_division.count
+
+	@property
+	def count(self):
+		count = self._count
+		if count is None:
+			count = self.gauge.range.range
+			if count == 360:
+				return 8
+			while count > 15:
+				count /= 10
+				self.scale *= 10
+			count = int(ceil(count))
+		return count
+
+	@count.setter
+	def count(self, value: int | None):
+		self._count = value
+
+	@property
+	def startAngle(self):
+		return self.gauge.startAngle - 90
 
 
 class GaugeItem:
 	_gauge: 'Gauge'
-	_cache: list
 
 	def __init__(self, gauge: 'Gauge'):
-		self._cache = []
 		self._gauge = gauge
 		super(GaugeItem, self).__init__(gauge)
-
-	def _clearCache(self):
-		while self._cache:
-			delattr(self, self._cache.pop())
-
-	def update(self):
-		self._clearCache()
-		super(GaugeItem, self).update()
 
 	@property
 	def gauge(self) -> 'Gauge':
 		return self._gauge
 
+	def remove(self):
+		self.gauge.scene().removeItem(self)
+
 
 class GaugePathItem(GaugeItem, QGraphicsPathItem):
+	_weight_scale: float = 1.0
 
 	def __init__(self, *args, **kwargs):
 		super(GaugePathItem, self).__init__(*args, **kwargs)
 		self.setPen(self.gauge.pen)
 
-	def update(self):
-		super(GaugePathItem, self).update()
-		p = self.pen()
-		p.setWidthF(self.gauge.pen.widthF())
-		self.setPen(p)
+	def refresh(self):
+		pen = QPen(self.gauge.pen)
+		pen.setWidthF(self.gauge.baseWidth * self._weight_scale)
+		self.setPen(pen)
 
 
 class GaugeArc(GaugePathItem):
+	_weight_scale = 0.75
 
 	def __init__(self, *args, **kwargs):
 		super(GaugeArc, self).__init__(*args, **kwargs)
-		pen = self.pen()
-		pen.setCapStyle(Qt.RoundCap)
-		self.setPen(pen)
-		self.draw()
-
-	def mousePressEvent(self, event):
-		print('click')
-		event.ignore()
-		super(GaugeArc, self).mousePressEvent(event)
+		self.refresh()
 
 	@property
 	def center(self):
 		return QPointF(self.gauge.rect().center())
 
-	# return self.boundingRect().center()
-
-	@cached_property
+	@property
 	def offset(self):
-		self._cache.append('offset')
-		return self.pen().widthF()/4*360/(2*pi*self._gauge.radius)*0.85
+		return self.pen().widthF() / 4 * 360 / (2 * pi * self._gauge.radius) * 0.85
 
 	@property
 	def startAngle(self) -> float:
@@ -115,14 +149,26 @@ class GaugeArc(GaugePathItem):
 	def fullAngle(self) -> float:
 		return self.endAngle - self.startAngle
 
+	@property
+	def centered_gauge_rect(self):
+		rect = QRectF(self.gauge.gaugeRect)
+		rect.moveCenter(QPoint(0, 0))
+		return rect
+
 	def makeShape(self):
-		iShape = QRectF(self.gauge.gaugeRect)
-		oShape = QRectF(self.gauge.gaugeRect)
-		x, y = self.gauge.gaugeRect.size().toTuple()
-		small = self.gauge.radius*1.95
-		large = self.gauge.radius*2.05
+		rect = self.centered_gauge_rect
+
+		iShape = QRectF(rect)
+		oShape = QRectF(rect)
+
+		radius = self.gauge.radius
+
+		small = radius * 1.95
+		large = radius * 2.05
+
 		iShape.setSize(QSizeF(small, small))
 		oShape.setSize(QSizeF(large, large))
+
 		path = QPainterPath()
 		path.arcMoveTo(iShape, -self.startAngle + 90)
 		path.arcTo(iShape, -self.startAngle + 90, -self.fullAngle)
@@ -135,32 +181,59 @@ class GaugeArc(GaugePathItem):
 		self._shape = self.makeShape()
 		path = self.path()
 		path.clear()
-		path.arcMoveTo(self.gauge.gaugeRect, -self.startAngle + 90)
-		path.arcTo(self.gauge.gaugeRect, -self.startAngle + 90, -self.fullAngle)
+		rect = self.centered_gauge_rect
+		path.arcMoveTo(rect, -self.startAngle + 90)
+		path.arcTo(rect, -self.startAngle + 90, -self.fullAngle)
 		self.setPath(path)
+
+	def refresh(self):
+		super().refresh()
+		self.draw()
+		self.setPos(self.gauge.rect().center())
 
 	def shape(self):
 		return self._shape
 
 
-class Tick(QGraphicsPathItem):
+@DebugPaint
+class Tick(GaugePathItem):
 	_index: float
 	_center: QPointF
 	_radius: float
 	_properties: Divisions
 	_offsetAngle: float
+	_label: 'GaugeTickText' = None
 	startPoint: QPointF
 	endPoint: QPointF
 
-	def __init__(self, group: 'TickGroup', index: float):
+	@cached_property
+	def _sub_ticks(self) -> list['SubTick']:
+		return []
+
+	def __init__(self, gauge: 'Gauge', surface: 'TickSurface', index: float):
 		self._index = index
-		self._group = group
-		super(Tick, self).__init__()
+		super(Tick, self).__init__(gauge)
+		self.setParentItem(surface)
+
 		pen = QPen(self.gauge.pen.color())
 		pen.setCapStyle(Qt.RoundCap)
 		self.setPen(pen)
-		self.refresh()
+		self.rebuild()
 		self.setAcceptedMouseButtons(Qt.LeftButton)
+
+	def _debug_paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget):
+		super().paint(painter, option, widget)
+		zero = QPoint(0, 0)
+		addCrosshair(painter, pos=zero, color=self._debug_paint_color)
+
+	def remove(self):
+		for subtick in self._sub_ticks:
+			subtick.remove()
+		self._sub_ticks.clear()
+		if self.label is not None:
+			self.label.remove()
+		self._group.removeTick(self)
+		super(Tick, self).remove()
 
 	def mousePressEvent(self, event):
 		event.accept()
@@ -169,23 +242,43 @@ class Tick(QGraphicsPathItem):
 	def mouseMoveEvent(self, event):
 		print(event.pos())
 
-	@property
-	def gauge(self):
-		return self._group.gauge
-
-	@property
-	def group(self) -> Union['TickGroup', 'SubTickGroup']:
-		return self._group
-
-	def refresh(self):
+	def refresh(self, recursive=True):
 		pen = self.pen()
-		pen.setWidthF(self.properties.lineWidth*self.gauge.baseWidth)
+		pen.setWidthF(self.properties.lineWidth * self.gauge.baseWidth)
 		self.setPen(pen)
 		self.draw()
+		if recursive:
+			for sub_tick in self._sub_ticks:
+				sub_tick.refresh()
 
-	@cached_property
+	def rebuild(self):
+		self.refresh(False)
+		self.rebuild_sub_ticks()
+
+	def rebuild_sub_ticks(self):
+
+		tick_count = self.sub_tick_count
+		existing = self._sub_ticks[:]
+
+		if tick_count == 0:
+			return
+
+		self._sub_ticks.clear()
+
+		for i in range(self.sub_tick_count):
+			if existing:
+				sub_tick = existing.pop(0)
+				sub_tick.rebuild()
+			else:
+				sub_tick = SubTick(self, i)
+			self._sub_ticks.append(sub_tick)
+
+		for sub_tick in existing:
+			sub_tick.remove()
+
+	@property
 	def angle(self):
-		return self.group.startAngle + self._index*self.group.spacing
+		return self.properties.startAngle + self._index * self.properties.spacing
 
 	@property
 	def index(self):
@@ -193,10 +286,26 @@ class Tick(QGraphicsPathItem):
 
 	@index.setter
 	def index(self, value):
-		if hasattr(self, 'angle'):
-			delattr(self, 'angle')
 		self._index = value
 		self.refresh()
+
+	@property
+	def sub_tick_spacing(self) -> float:
+		return self.properties.sub_division.spacing
+
+	@property
+	def sub_tick_count(self):
+
+		# Prevent the last tick from having sub ticks
+		if self._index == self.properties.count:
+			# But only if there is no super tick
+			if self.properties.super_division is None:
+				return 0
+
+		try:
+			return self.properties.sub_division.count
+		except AttributeError:
+			return 0
 
 	@property
 	def radius(self):
@@ -204,165 +313,121 @@ class Tick(QGraphicsPathItem):
 
 	@property
 	def properties(self):
-		return self._group._properties
+		return self.gauge.majorDivisions
 
 	def draw(self):
 		path = QPainterPath()
 		angle = radians(self.angle)
 		cosI, sinI = cos(angle), sin(angle)
-		center = self.gauge.arc.center
+		center = QPointF(0, 0)
 		cx = center.x()
 		cy = center.y()
 		radius = self.radius
-		length = self.properties.length*radius
+		length = self.properties.length * radius
 
-		x1 = cx + radius*cosI
-		y1 = cy + radius*sinI
-		x2 = cx + (radius - length)*cosI
-		y2 = cy + (radius - length)*sinI
+		x1 = cx + radius * cosI
+		y1 = cy + radius * sinI
+		x2 = cx + (radius - length) * cosI
+		y2 = cy + (radius - length) * sinI
 		p1 = QPointF(x1, y1)
 		self.startPoint = p1
 		p2 = QPointF(x2, y2)
 		self.endPoint = p2
 		path.moveTo(p1)
 		path.lineTo(p2)
-		# path.closeSubpath()
 		self.setPath(path)
+
+	def setLabel(self, label: 'GaugeTickText'):
+		self._label = label
+
+	@property
+	def label(self) -> 'GaugeTickText':
+		return self._label
+
+	@label.setter
+	def label(self, label: 'GaugeTickText'):
+		self._label = label
 
 
 class SubTick(Tick):
 	_superTick: Tick
 
-	def __init__(self, superTick: Tick, *args, **kwargs):
+	def __init__(self, superTick: Tick, index: float):
 		self._superTick = superTick
-		super(SubTick, self).__init__(*args, **kwargs)
-
-	@cached_property
-	def angle(self):
-		return self._superTick.angle + self._index*self.group.spacing
-
-
-class TickGroup(QGraphicsItemGroup):
-	_properties: Divisions
-	_cache: list
-	_ticks: list[Tick]
-
-	def __init__(self, gauge: 'Gauge', properties: Divisions):
-		self._cache = []
-		self._ticks = []
-		self._gauge = gauge
-		self._properties = properties
-		self.scale = 1
-		super(TickGroup, self).__init__()
-		# self.setPos(self.gauge.arc.center)
-		self.draw()
-
-	def paint(self, painter, option, widget):
-		super().paint(painter, option, widget)
-		addCrosshair(painter, Color.presets.yellow.QColor, pos=self._gauge.arc.center)
-		addCrosshair(painter, pos=option.rect.center())
-
-	def draw(self):
-		for i in range(0, self.count + 1):
-			tick = Tick(self, i)
-		if self._properties.subdivison is not None:
-			self.addToGroup(SubTickGroup(self, self._gauge, self._properties.subdivison))
+		super(SubTick, self).__init__(superTick.gauge, superTick.parentItem(), index)
 
 	@property
-	def ticks(self):
+	def properties(self):
+		return self._superTick.properties.sub_division
+
+	@property
+	def angle(self):
+		return self._superTick.angle + self._index * self.properties.spacing
+
+
+class TickSurface(SurfaceCentered):
+	_properties: Divisions
+	_ticks: list[Tick] = cached_property(lambda self: [])
+
+	def __init__(self, gauge: 'Gauge', properties: Divisions):
+		self._gauge = gauge
+		self._properties = properties
+		self._properties.surface = self
+		self.scale = 1
+		super(TickSurface, self).__init__(gauge)
+		self.rebuild()
+
+	def refresh(self):
+		self.setPos(self.gauge.rect().center())
+		for tick in self.childItems():
+			try:
+				tick.refresh()
+			except AttributeError:
+				pass
+
+	def rebuild(self):
+		tick_count = self.count
+		existing = self._ticks[:]
+
+		if tick_count == 1:
+			return
+
+		self._ticks.clear()
+
+		for i in range(self.count + 1):
+			if existing:
+				tick = existing.pop(0)
+				tick.rebuild()
+			else:
+				tick = Tick(self.gauge, self, i)
+			self._ticks.append(tick)
+
+		try:
+			for sub_tick in self._ticks[-1]._sub_ticks:
+				sub_tick.remove()
+		except AttributeError:
+			pass
+		except IndexError:
+			pass
+
+		for tick in existing:
+			tick.remove()
+
+	@property
+	def ticks(self) -> list[Tick]:
 		return self._ticks
 
 	@property
-	def gauge(self):
+	def gauge(self) -> 'Gauge':
 		return self._gauge
 
-	@cached_property
+	@property
 	def spacing(self) -> float:
-		self._cache.append('spacing')
-		return self._gauge.fullAngle/self.count
-
-	@cached_property
-	def count(self):
-		self._cache.append('count')
-		count = self._properties.count
-		if count is None:
-			count = self.gauge.range.range
-			if count == 360:
-				return 8
-			while count > 15:
-				count /= 10
-				self.scale *= 10
-			count = int(ceil(count))
-		return count
-
-	def clear(self):
-		for item in self.childItems():
-			self.removeFromGroup(item)
-
-	def rebuild(self):
-		exisiting = [i for i in self.childItems() if isinstance(i, Tick)]
-		size = len(exisiting)
-		new_range = self.count
-		if size > new_range:
-			for item in exisiting[new_range:]:
-				self.removeFromGroup(item)
-
-		elif size < new_range:
-			for i in range(size, new_range):
-				self.addToGroup(Tick(self, i))
-
-		for i, tick in enumerate(j for j in self.childItems() if isinstance(j, Tick)):
-			tick.index = i
-
-	def update(self):
-		while self._cache:
-			delattr(self, self._cache.pop())
-		for item in self.childItems():
-			item.update()
-		super(TickGroup, self).update()
+		return self._properties.spacing
 
 	@property
-	def startAngle(self):
-		return self._gauge.startAngle - 90
-
-
-class SubTickGroup(TickGroup):
-	superTickGroup: TickGroup
-
-	def __init__(self, superTickGroup, *args, **kwargs):
-		self.superTickGroup = superTickGroup
-		super(SubTickGroup, self).__init__(*args, **kwargs)
-
-	@cached_property
-	def count(self):
+	def count(self) -> int:
 		return self._properties.count
-
-	@cached_property
-	def spacing(self) -> float:
-		return self.superTickGroup.spacing/self.count
-
-	@property
-	def items(self):
-		items = self.superTickGroup.childItems()
-		group = self.superTickGroup
-		while isinstance(group, SubTickGroup):
-			group = group.superTickGroup
-			items.extend(group.childItems())
-		return items
-
-	def draw(self):
-		items = [i for i in self.items if hasattr(i, 'angle')]
-		items.sort(key=attrgetter('angle'))
-		for tick in items[:-1]:
-			for i in range(1, self.count):
-				item = SubTick(tick, self, i)
-				self.addToGroup(item)
-		if self._properties.subdivison is not None:
-			self.addToGroup(SubTickGroup(self, self._gauge, self._properties.subdivison))
-
-
-# item.setPos(parent.arc.center)
-# item = QGraphicsTextItem(str(i))
 
 
 class NeedleAnimation(QPropertyAnimation):
@@ -385,30 +450,18 @@ class Needle(GaugePathItem):
 		pen = QPen()
 		pen.setJoinStyle(Qt.RoundJoin)
 		self.setPen(Qt.NoPen)
-		# self.setPen(QPen(Qt.red))
-		self.draw()
-		self.setPos(self.gauge.arc.center)
-		self.setBrush(QBrush(self.gauge.defaultColor))
+		self.refresh()
 
-	# self.setTransformOriginPoint(*self.gauge.arc.center.toTuple())
-
-	def mousePressEvent(self, event):
-		print(event.pos())
-		super(Needle, self).mousePressEvent(event)
-
-	@cached_property
+	@property
 	def needleWidth(self) -> float:
-		self._cache.append('needleWidth')
-		return self.gauge.needleWidth*self.gauge.radius
+		return self.gauge.needleWidth * self.gauge.radius
 
-	@cached_property
+	@property
 	def needleLength(self) -> float:
-		self._cache.append('needleLength')
-		return self.gauge.needleLength*self.gauge.radius
+		return self.gauge.needleLength * self.gauge.radius
 
-	@cached_property
+	@property
 	def needleSize(self) -> QSizeF:
-		self._cache.append('needleSize')
 		return QSizeF(self.needleWidth, self.needleLength)
 
 	def draw(self):
@@ -417,12 +470,12 @@ class Needle(GaugePathItem):
 		cy = 0
 		middle = QPointF(cx, cy - self.needleLength)
 		needleWidth = self.needleWidth
-		left = QPointF(cx - needleWidth/2, cy)
-		right = QPointF(cx + needleWidth/2, cy)
+		left = QPointF(cx - needleWidth / 2, cy)
+		right = QPointF(cx + needleWidth / 2, cy)
 		arcStart = QPointF(left)
-		arcStart.setY(left.y() + needleWidth*0.6)
+		arcStart.setY(left.y() + needleWidth * 0.6)
 		arcEnd = QPointF(right)
-		arcEnd.setY(right.y() + needleWidth*0.6)
+		arcEnd.setY(right.y() + needleWidth * 0.6)
 		arcRect = QRectF(arcStart, QSizeF(needleWidth, -needleWidth))
 
 		needlePath = QPainterPath()
@@ -437,6 +490,11 @@ class Needle(GaugePathItem):
 		# needlePath.lineTo(1000,1000)
 		# needlePath.closeSubpath()
 		self.setPath(needlePath.simplified())
+
+	def refresh(self):
+		self.setBrush(QBrush(self.gauge.defaultColor))
+		self.draw()
+		self.setPos(self.gauge.arc.center)
 
 
 class Arrow(Needle):
@@ -465,7 +523,7 @@ class Arrow(Needle):
 	def safeZone(self):
 		path = QPainterPath()
 		radius = self.gauge.radius
-		path.addEllipse(QPoint(0, 0), radius*0.6, radius*0.6)
+		path.addEllipse(QPoint(0, 0), radius * 0.6, radius * 0.6)
 		return path
 
 	# super(Arrow, self).paint(painter, option, widget)
@@ -477,7 +535,7 @@ class Arrow(Needle):
 
 		# Draw Circle
 		radius = self.gauge.radius
-		pointerHeight = radius*0.178
+		pointerHeight = radius * 0.178
 		radius = radius - pointerHeight
 		base = pointerHeight
 		path = QPainterPath()
@@ -504,37 +562,10 @@ class Arrow(Needle):
 		# path.setFillRule(Qt.FillRule.WindingFill)
 
 		# Draw Center Circle
-		path.addEllipse(QPoint(0, 0), radius*0.8, radius*0.8)
+		path.addEllipse(QPoint(0, 0), radius * 0.8, radius * 0.8)
 		path.setFillRule(Qt.FillRule.OddEvenFill)
 
 		self.setPath(path)
-
-
-# center = self._gauge.arc.center
-# cx = center.x()
-# cy = center.y()
-# middle = QPointF(cx, cy - self.needleLength)
-# needleWidth = self.needleWidth
-# left = QPointF(cx - needleWidth / 2, cy)
-# right = QPointF(cx + needleWidth / 2, cy)
-# arcStart = QPointF(left)
-# arcStart.setY(left.y() + needleWidth * 0.6)
-# arcEnd = QPointF(right)
-# arcEnd.setY(right.y() + needleWidth * 0.6)
-# arcRect = QRectF(arcStart, QSizeF(needleWidth, -needleWidth))
-#
-# needlePath = QPainterPath()
-# needlePath.arcMoveTo(arcRect, 0)
-# needlePath.lineTo(middle)
-# # needlePath.lineTo(arcRect.center())
-# # needlePath.lineTo(center)
-# # needlePath.lineTo(cx, cy + 10)
-# needlePath.arcTo(arcRect, 180, -180)
-# # needlePath.arcMoveTo(arcRect, 180)
-# # needlePath.lineTo(right)
-# # needlePath.lineTo(1000,1000)
-# # needlePath.closeSubpath()
-# self.setPath(needlePath.simplified())
 
 
 class GaugeText(GaugeItem, QGraphicsTextItem):
@@ -542,9 +573,6 @@ class GaugeText(GaugeItem, QGraphicsTextItem):
 		super(GaugeText, self).__init__(*args, **kwargs)
 		self.setFont(self.gauge.tickFont)
 		self.setDefaultTextColor(self.gauge.defaultColor)
-
-	def update(self):
-		super(GaugeText, self).update()
 
 
 class GaugeValueText(GaugeText):
@@ -581,11 +609,11 @@ class GaugeValueText(GaugeText):
 
 	def draw(self):
 		font = self.gauge.tickFont
-		font.setPixelSize(self.gauge.radius*0.2)
+		font.setPixelSize(self.gauge.radius * 0.2)
 		self.setFont(font)
 		self.setHtml(self.string)
 		textRect = self.boundingRect()
-		textRect.moveCenter(radialPoint(self.gauge.arc.center, self.gauge.radius*0.35, self.gauge.startAngle + 90 + (self.gauge.fullAngle/2)))
+		textRect.moveCenter(radialPoint(self.gauge.arc.center, self.gauge.radius * 0.35, self.gauge.startAngle + 90 + (self.gauge.fullAngle / 2)))
 		# textRect.translate(-textRect.width() / 2, 0)
 		self.setPos(textRect.topLeft())
 
@@ -637,7 +665,6 @@ class CustomText(QGraphicsPathItem):
 		self.setPen(QPen(self.gauge.defaultColor))
 		self.setBrush(QBrush(self.gauge.defaultColor))
 		self.color = self.gauge.defaultColor
-		self._cachedValues = []
 		self._font = self.gauge.tickFont
 		# self.animationBridge = AnimationBridge(self)
 
@@ -651,13 +678,13 @@ class CustomText(QGraphicsPathItem):
 	# fm.tightBoundingRect(self.text)
 
 	def updateFontSize(self):
-		self.textWidthRatio = self.fontMetrics.width(self.text)/100
-		self._maxFontSize = min(font.pointSizeF()*self._ratio, self.height()*.7)
+		self.textWidthRatio = self.fontMetrics.width(self.text) / 100
+		self._maxFontSize = min(font.pointSizeF() * self._ratio, self.height() * .7)
 
 	def widthForHeight(self, height: float):
 		return self.text
 
-	@cached_property
+	@property
 	def fontMetrics(self):
 		font = self.font
 		font.setPixelSize(100)
@@ -774,7 +801,7 @@ class CustomText(QGraphicsPathItem):
 		if point is None:
 			point = QPoint(0, 0)
 
-		nudge = (self.mapToScene(self.boundingRect().center()) - self.boundingRect().center())*.03
+		nudge = (self.mapToScene(self.boundingRect().center()) - self.boundingRect().center()) * .03
 		self.moveBy(-nudge.x(), -nudge.y())
 
 	@property
@@ -898,8 +925,7 @@ class CustomText(QGraphicsPathItem):
 
 	@property
 	def fontSize(self) -> float:
-		self._cachedValues.append('fontSize')
-		return self.gauge.radius*self.fontScale
+		return self.gauge.radius * self.fontScale
 
 	def update(self):
 		tightRect = self.fontMetrics.tightBoundingRect(self.string)
@@ -911,7 +937,7 @@ class CustomText(QGraphicsPathItem):
 		# p = QPointF(0,0)
 		# p.setX(p.x() - tightRect.width() / 2)
 		# p.setY(p.y() + tightRect.height() / 2)
-		path.addText(0 - tightRect.width()*1.05/2, tightRect.height()/2, self.dynamicFont, self.string)
+		path.addText(0 - tightRect.width() * 1.05 / 2, tightRect.height() / 2, self.dynamicFont, self.string)
 		# path.moveTo(p)
 
 		self.setPath(path)
@@ -923,12 +949,6 @@ class CustomText(QGraphicsPathItem):
 
 		# self.setRotation(45)
 		super(CustomText, self).update()
-
-
-# def setPos(self, point: QPointF):
-# 	point.setX(point.x() - self.boundingRect().width() / 2)
-# 	point.setY(point.y() + self.boundingRect().height() / 2)
-# 	super(CustomText, self).setPos(point)
 
 
 # class GaugeSpeedText(GaugeText):
@@ -1043,11 +1063,11 @@ class GaugeUnit(GaugeText):
 
 	def draw(self):
 		font = self.gauge.tickFont
-		font.setPixelSize(self.gauge.radius*0.3)
+		font.setPixelSize(self.gauge.radius * 0.3)
 		self.setFont(font)
 		self.setHtml(self.string)
 		textRect = self.boundingRect()
-		textRect.moveCenter(radialPoint(self.gauge.arc.center, self.gauge.radius*0.35, self.gauge.startAngle - 90 + (self.gauge.fullAngle/2)))
+		textRect.moveCenter(radialPoint(self.gauge.arc.center, self.gauge.radius * 0.35, self.gauge.startAngle - 90 + (self.gauge.fullAngle / 2)))
 		# textRect.translate(-textRect.width() / 2, 0)
 		self.setPos(textRect.topLeft())
 
@@ -1076,7 +1096,7 @@ class GaugeTickText(GaugeText):
 
 	@property
 	def ax(self):
-		return self.tick.radius*0.35
+		return self.tick.radius * 0.35
 
 	def fontSizeCalc(self):
 		# if self._scale is not None:
@@ -1107,7 +1127,7 @@ class GaugeTickText(GaugeText):
 		self.setPlainText(self.string)
 		textRect = self.boundingRect()
 		textRect.moveCenter(self.position())
-		self.setTransformOriginPoint(0 + textRect.width()/2, textRect.height()/2)
+		self.setTransformOriginPoint(0 + textRect.width() / 2, textRect.height() / 2)
 		self.setPos(textRect.topLeft())
 
 	# collides = collidingNeighbors(self)
@@ -1117,7 +1137,7 @@ class GaugeTickText(GaugeText):
 		return v
 
 	def position(self):
-		return radialPoint(self.gauge.arc.center, self.tick.radius*self.offset, self.tick.angle)
+		return radialPoint(self.gauge.arc.center, self.tick.radius * self.offset, self.tick.angle)
 
 	# def shape(self):
 	# 	return self.mapToScene(super(GaugeTickText, self).shape())
@@ -1128,7 +1148,7 @@ class GaugeTickText(GaugeText):
 
 	@property
 	def string(self):
-		value = self.gauge.range.range/self.gauge.fullAngle*self.angleValue + self.gauge.range.min
+		value = self.gauge.range.range / self.gauge.fullAngle * self.angleValue + self.gauge.range.min
 		valueClass = self.gauge.valueClass
 		if valueClass is float:
 			if value.is_integer():
@@ -1152,7 +1172,7 @@ class GaugeTickText(GaugeText):
 		textRect = self.boundingRect()
 
 		textRect.moveCenter(self.position())
-		self.setTransformOriginPoint(0 + textRect.width()/2, textRect.height()/2)
+		self.setTransformOriginPoint(0 + textRect.width() / 2, textRect.height() / 2)
 		self.setPos(textRect.topLeft())
 
 	# self.setScale(1)
@@ -1191,7 +1211,7 @@ class GaugeTickText(GaugeText):
 		if self.group.tickScale is not None:
 			# self.setScale(self.group.tickScale)
 			font = self.font()
-			font.setPointSizeF(self.ax*self.group.tickScale)
+			font.setPointSizeF(self.ax * self.group.tickScale)
 			self.setFont(font)
 		self.draw()
 		if self.rotated:
@@ -1208,15 +1228,28 @@ class GaugeTickText(GaugeText):
 class GaugeTickTextGroup(QGraphicsItemGroup):
 	tickScale = 1.0
 
-	def __init__(self, gauge, ticks: TickGroup):
+	def __init__(self, gauge, ticks: TickSurface):
+		self._gauge = gauge
 		self._ticks = ticks
 		super(GaugeTickTextGroup, self).__init__(gauge)
-		for tick in self.ticks:
-			text = GaugeTickText(gauge, tick, self)
-			self.addToGroup(text)
-			self.addToGroup(text.rect)
+		self.build()
 		self.setTickScale()
-		
+
+	@property
+	def gauge(self) -> 'Gauge':
+		return self._gauge
+
+	@property
+	def unlabeled_ticks(self) -> list[Tick]:
+		return [i for i in self._ticks.childItems() if type(i) is Tick and i.label is None]
+
+	def build(self):
+		tick_list = self.unlabeled_ticks
+		while tick_list:
+			tick = tick_list.pop()
+			tick.label = GaugeTickText(self.gauge, tick, self)
+			self.addToGroup(tick.label)
+
 	def setTickScale(self):
 		self.tickScale = 1.0
 		for item in self.childItems():
@@ -1230,10 +1263,18 @@ class GaugeTickTextGroup(QGraphicsItemGroup):
 			item.update()
 
 	def rebuild(self):
+		self.setPos(0, 0)
+		self.build()
 		if self.hasCollisions():
 			self.setTickScale()
+		font = self.gauge.tickFont
+		font.setPointSizeF(min([i.font().pointSizeF() for i in self.childItems()], default=16))
 		for item in self.childItems():
-			item.update()
+			item.setFont(font)
+			item.draw()
+
+	# for item in self.childItems():
+	# 	item.update()
 
 	def getFontSizeRatio(self):
 		scale = min([item.fontSizeCalc() for item in self.childItems() if isinstance(item, GaugeTickText)])
@@ -1259,6 +1300,9 @@ class GaugeTickTextGroup(QGraphicsItemGroup):
 			return [i for i in self._ticks.ticks if i.angle + 90 != 360]
 		return self._ticks.ticks
 
+	def refresh(self):
+		self.setPos(self.gauge.arc.center)
+
 
 class Gauge(Display):
 	__value: float = 0.0
@@ -1266,26 +1310,26 @@ class Gauge(Display):
 	valueChanged = Signal(float)
 
 	ranges = {
-		'inhg':       MinMax(27, 31),
-		'mmhg':       MinMax(730, 790),
-		'mbar':       MinMax(970, 1060),
-		'f':          MinMax(0, 120),
-		'c':          MinMax(-20, 50),
-		'mph':        MinMax(0, 15),
-		'in/hr':      MinMax(0, 3),
-		'mm/hr':      MinMax(0, 75),
-		'v':          MinMax(2.5, 3.3),
-		'default':    MinMax(0, 100),
-		'lux':        MinMax(0, 100000),
-		'angle':      MinMax(0, 360),
+		'inhg': MinMax(27, 31),
+		'mmhg': MinMax(730, 790),
+		'mbar': MinMax(970, 1060),
+		'f': MinMax(0, 120),
+		'c': MinMax(-20, 50),
+		'mph': MinMax(0, 15),
+		'in/hr': MinMax(0, 3),
+		'mm/hr': MinMax(0, 75),
+		'v': MinMax(2.5, 3.3),
+		'default': MinMax(0, 120),
+		'lux': MinMax(0, 100000),
+		'angle': MinMax(0, 360),
 		'percentage': MinMax(0, 1)
 	}
 
 	startAngle = -120
 	endAngle = 120
-	microDivisions = Divisions(count=5, length=0.04, lineWidth=0.2)
-	minorDivisions = Divisions(count=2, length=0.075, lineWidth=0.4, subdivison=microDivisions)
-	majorDivisions = Divisions(count=None, length=0.1, lineWidth=0.6, subdivison=minorDivisions)
+	microDivisions: Divisions
+	minorDivisions: Divisions
+	majorDivisions: Divisions
 	needleLength = 1.0
 	needleWidth = 0.1
 	_range = MinMax(0, 100)
@@ -1297,14 +1341,34 @@ class Gauge(Display):
 	rotatedLabels = True
 
 	def _init_defaults_(self):
+
+		self.majorDivisions = Divisions(
+			gauge=self,
+			length=0.1,
+			lineWidth=0.6,
+			sub_division=(minor := Divisions(
+				gauge=self,
+				_count=2,
+				length=0.075,
+				lineWidth=0.4,
+				sub_division=(micro := Divisions(
+					gauge=self,
+					_count=5,
+					length=0.04,
+					lineWidth=0.2
+				))
+			))
+		)
+		self.minorDivisions = minor
+		self.microDivisions = micro
+
 		super()._init_defaults_()
-		self._cache = []
 		# config = ConfigWindow(self)
 		self.__value: Union[Numeric, Measurement]
 		self._pen = QPen(self.defaultColor)
 
 		self.arc = GaugeArc(self)
-		self.ticks = TickGroup(self, self.majorDivisions)
+		self.ticks = TickSurface(self, self.majorDivisions)
 		self.labels = GaugeTickTextGroup(self, self.ticks)
 		self.needle = Needle(self)
 		self.unitLabel = GaugeUnit(self)
@@ -1322,35 +1386,34 @@ class Gauge(Display):
 		self.previousParent = None
 		super(Gauge, self).__init__(parent)
 
+	def _afterSetState(self):
+		super()._afterSetState()
+		self.arc.refresh()
+
+		self.rebuild()
+
+		self.needle.refresh()
+		self.unitLabel.draw()
+
+	def rebuild(self):
+		self.ticks.rebuild()
+		self.labels.rebuild()
+		self.unitLabel.draw()
+		self.needle.refresh()
+
+	def refresh(self):
+		self.ticks.refresh()
+		self.labels.refresh()
+		self.unitLabel.draw()
+		self.needle.refresh()
+
 	def parentResized(self, arg: Union[QPointF, QSizeF, QRectF]):
 		super().parentResized(arg)
-		self.arc.draw()
-		self.ticks.draw()
-
-	# self.arc.moveBy(*offset.toTuple())
-	# self.r = self.scene().addRect(rect, QPen(Qt.red))
-
-	# def mousePressEvent(self, event):
-	# 	print(self.itemAt(event.pos()))
-	# 	if self.items(event.pos()):
-	# 		event.ignore()
-	# 		super(Gauge, self).mousePressEvent(event)
-	# 	else:
-	# 		event.accept()
-	# 		super(Gauge, self).mousePressEvent(event)
-
-	# 	s = self.scene()
-	# 	x = self.items(event.pos())
-	# 	items = []
-	# 	for item in x:
-	# 		if isinstance(item, QGraphicsItemGroup):
-	# 			for i in item.childItems():
-	# 				i: QGraphicsItem
-	# 				if i.contains(event.pos()):
-	# 					items.append(i)
-	# 		else:
-	# 			items.append(item)
-	# 	# print([x for x in s.items() if x.contains(event.pos())])
+		self.arc.refresh()
+		self.ticks.refresh()
+		self.labels.rebuild()
+		self.needle.draw()
+		self.unitLabel.draw()
 
 	@property
 	def value(self):
@@ -1364,7 +1427,6 @@ class Gauge(Display):
 			if isinstance(value, Measurement):
 				self.setUnit(value)
 
-
 	@property
 	def _value(self):
 		return self.__value
@@ -1372,9 +1434,9 @@ class Gauge(Display):
 	@_value.setter
 	def _value(self, value: float):
 		value = max(self._range.min, min(self._range.max, value))
-		angle = (value - self._range.min)/self._range.range*self.fullAngle + self.startAngle
-		# self.needle.setRotation(angle)
-		# self.valueLabel.update()
+		angle = (value - self._range.min) / self._range.range * self.fullAngle + self.startAngle
+		self.needle.setRotation(angle)
+		self.valueLabel.update()
 		self.__value = value
 
 	@property
@@ -1447,7 +1509,6 @@ class Gauge(Display):
 		if self._range != value:
 			self._range = value
 			self.rebuild()
-			self.update()
 
 	def getRange(self, value):
 		toTry = []
@@ -1465,10 +1526,6 @@ class Gauge(Display):
 				pass
 		else:
 			return self.ranges['default']
-
-	def rebuild(self):
-		self.ticks.rebuild()
-		self.labels.rebuild()
 
 	@Slot(int)
 	def setMajorTicks(self, value: int):
@@ -1493,26 +1550,30 @@ class Gauge(Display):
 	def showArc(self, value):
 		self.arc.setVisible(value)
 
-	@cached_property
+	@property
+	def center(self) -> QPointF:
+		return self.rect().center()
+
+	@property
+	def scene_center(self) -> QPointF:
+		return self.mapToScene(self.center)
+
+	@property
 	def baseWidth(self):
-		self._cache.append('baseWidth')
-		return sqrt(self.height() ** 2 + self.width() ** 2)*0.008
+		return sqrt(self.height() ** 2 + self.width() ** 2) * 0.008
 
-	@cached_property
+	@property
 	def radius(self):
-		self._cache.append('radius')
-		return min(self.height(), self.width())/2 - 10
+		return min(self.height(), self.width()) / 2 - 10
 
-	@cached_property
+	@property
 	def gaugeRect(self) -> QRectF:
-		self._cache.append('gaugeRect')
-		f = QRectF(0.0, 0.0, self.radius*2, self.radius*2)
+		f = QRectF(0.0, 0.0, self.radius * 2, self.radius * 2)
 		f.moveCenter(self.rect().center())
 		return f
 
-	@cached_property
+	@property
 	def fullAngle(self):
-		self._cache.append('fullAngle')
 		return self.endAngle + -self.startAngle
 
 	@property
@@ -1520,28 +1581,25 @@ class Gauge(Display):
 		# return Qt.white
 		return Color.presets.white.QColor
 
-	@cached_property
+	@property
 	def tickFont(self):
-		self._cache.append('tickFont')
 		font = QFont()
-		font.setPixelSize(max(self.radius*.1, 18))
+		font.setPixelSize(max(self.radius * .1, 18))
 		return font
 
 	def setRect(self, *args, **kwargs):
 		super().setRect(*args, **kwargs)
-		clearCacheAttr(self, *self._cache)
-		self._cache.clear()
-		self.rebuild()
+		self.refresh()
 
 	def draw(self):
 		paint = QPainter(self)
 		paint.setRenderHint(QPainter.RenderHint.Antialiasing)
 		cx, cy = QPointF(self.rect().center()).toTuple()
 		radius = self.radius
-		needleLength = self.needleLength*radius
-		needleWidth = self.needleWidth*radius
+		needleLength = self.needleLength * radius
+		needleWidth = self.needleWidth * radius
 
-		penWidth = sqrt(self.height() ** 2 + self.width() ** 2)*0.008
+		penWidth = sqrt(self.height() ** 2 + self.width() ** 2) * 0.008
 		brush = QBrush(self.defaultColor)
 		paint.pen().setColor(self.defaultColor)
 
@@ -1562,27 +1620,27 @@ class Gauge(Display):
 				scale *= 10
 			count = int(ceil(count))
 
-		majorSpacing = fullAngle/count
-		minorSpacing = majorSpacing/minor.count
-		microSpacing = minorSpacing/micro.count
+		majorSpacing = fullAngle / count
+		minorSpacing = majorSpacing / minor.count
+		microSpacing = minorSpacing / micro.count
 
 		start = self.startAngle - 90
 
-		majorLength = major.length*radius
-		minorLength = minor.length*radius
-		microLength = micro.length*radius
+		majorLength = major.length * radius
+		minorLength = minor.length * radius
+		microLength = micro.length * radius
 
 		arcPen = QPen(self.defaultColor)
 		arcPen.setWidthF(penWidth)
 		arcPen.setCapStyle(Qt.FlatCap)
 
-		majorPen = QPen(self.defaultColor, major.lineWidth*penWidth)
+		majorPen = QPen(self.defaultColor, major.lineWidth * penWidth)
 		majorPen.setCapStyle(Qt.RoundCap)
 
-		minorPen = QPen(self.defaultColor, minor.lineWidth*penWidth)
+		minorPen = QPen(self.defaultColor, minor.lineWidth * penWidth)
 		minorPen.setCapStyle(Qt.RoundCap)
 
-		microPen = QPen(self.defaultColor, micro.lineWidth*penWidth)
+		microPen = QPen(self.defaultColor, micro.lineWidth * penWidth)
 		microPen.setCapStyle(Qt.RoundCap)
 
 		needlePen = QPen(self.defaultColor, 1)
@@ -1608,19 +1666,19 @@ class Gauge(Display):
 		minorTicksPath = QPainterPath()
 		microTicksPath = QPainterPath()
 
-		majorOffset = penWidth/2 - (major.lineWidth/2*penWidth)
-		minorOffset = penWidth/2 - (minor.lineWidth/2*penWidth)
-		microOffset = penWidth/2 - (micro.lineWidth/2*penWidth)
+		majorOffset = penWidth / 2 - (major.lineWidth / 2 * penWidth)
+		minorOffset = penWidth / 2 - (minor.lineWidth / 2 * penWidth)
+		microOffset = penWidth / 2 - (micro.lineWidth / 2 * penWidth)
 		paint.setFont(self.tickFont)
 
 		def drawTick(i, path, length, offset, withValue: bool = False):
 			radI = radians(i)
 			cosI, sinI = cos(radI), sin(radI)
 
-			x1 = cx + (radius + offset)*cosI
-			y1 = cy + (radius + offset)*sinI
-			x2 = cx + (radius - length)*cosI
-			y2 = cy + (radius - length)*sinI
+			x1 = cx + (radius + offset) * cosI
+			y1 = cy + (radius + offset) * sinI
+			x2 = cx + (radius - length) * cosI
+			y2 = cy + (radius - length) * sinI
 			p1 = QPointF(x1, y1)
 			p2 = QPointF(x2, y2)
 			path.moveTo(p1)
@@ -1628,10 +1686,10 @@ class Gauge(Display):
 
 			# add value text
 			if withValue:
-				x3 = cx + (radius - length*2)*cosI
-				y3 = cy + (radius - length*2)*sinI
+				x3 = cx + (radius - length * 2) * cosI
+				y3 = cy + (radius - length * 2) * sinI
 				p3 = QPointF(x3, y3)
-				textValue = (i - start)/fullAngle*count*scale
+				textValue = (i - start) / fullAngle * count * scale
 				text = str(int(textValue))
 
 				textRect = estimateTextSize(self.tickFont, text)
@@ -1640,9 +1698,9 @@ class Gauge(Display):
 
 		# Draw first and last marker
 		drawTick(start, majorTicksPath, majorLength, majorOffset, True)
-		drawTick(start + count*majorSpacing, majorTicksPath, majorLength, majorOffset, True)
+		drawTick(start + count * majorSpacing, majorTicksPath, majorLength, majorOffset, True)
 
-		i = start + count*majorSpacing
+		i = start + count * majorSpacing
 		paint.setPen(majorPen)
 		paint.drawPath(majorTicksPath)
 		paint.setPen(minorPen)
@@ -1657,15 +1715,15 @@ class Gauge(Display):
 		value = self.value - self._range.min
 		print(f' {value}')
 		if value >= 0:
-			rotation = value/count/scale*fullAngle + self.startAngle
+			rotation = value / count / scale * fullAngle + self.startAngle
 		else:
 			rotation = self.startAngle
 		paint.rotate(rotation)
 		paint.translate(-cx, -cy)
 
 		middle = QPointF(cx, cy - radius)
-		left = QPointF(cx - needleWidth/2, cy)
-		right = QPointF(cx + needleWidth/2, cy)
+		left = QPointF(cx - needleWidth / 2, cy)
+		right = QPointF(cx + needleWidth / 2, cy)
 		arcRect = QRectF(left, QSizeF(needleWidth, needleWidth))
 
 		needlePath = QPainterPath()
@@ -1748,13 +1806,13 @@ class ConfigWindow(QWidget):
 		cnf = [
 			{
 				'label': 'Show Labels',
-				'type':  'checkbox',
-				'slot':  'showLabels'
+				'type': 'checkbox',
+				'slot': 'showLabels'
 			},
 			{
 				'label': 'Show Arc',
-				'type':  'checkbox',
-				'slot':  'showArc'
+				'type': 'checkbox',
+				'slot': 'showArc'
 			}
 		]
 
@@ -1777,9 +1835,7 @@ class WindVein(Gauge):
 
 	startAngle = 0
 	endAngle = 360
-	microDivisions = Divisions(count=5, length=0.04, lineWidth=0.2)
-	minorDivisions = Divisions(count=2, length=0.075, lineWidth=0.4, subdivison=microDivisions)
-	majorDivisions = Divisions(count=8, length=0.1, lineWidth=0.6, subdivison=minorDivisions)
+
 	needleLength = 1.0
 	needleWidth = 0.1
 	_range = MinMax(0, 360)
@@ -1787,8 +1843,26 @@ class WindVein(Gauge):
 	_unit = None
 	rotatedLabels = False
 
+	def _init_defaults_(self):
+		self.majorDivisions = Divisions(
+			_count=8,
+			length=0.1,
+			lineWidth=0.6,
+			sub_division=(
+				Divisions(
+					_count=2,
+					length=0.075,
+					lineWidth=0.4,
+					sub_division=(
+						Divisions(_count=5,
+											length=0.04,
+											lineWidth=0.2)
+					)
+				)
+			)
+		)
+
 	def __init__(self, *args, **kwargs):
-		self._cache = []
 		super(Gauge, self).__init__(*args, **kwargs)
 		# config = ConfigWindow(self)
 		self.setAcceptDrops(False)
@@ -1841,8 +1915,6 @@ class WindVein(Gauge):
 			self.speedLabel.update()
 
 	def resizeEvent(self, event):
-		while self._cache:
-			delattr(self, self._cache.pop())
 
 		rect: QRectF = self.needle.boundingRect()
 		offset = (self.rect().center().y() - rect.center().y())
@@ -1863,7 +1935,7 @@ class WindVein(Gauge):
 		self.update()
 		super(Gauge, self).resizeEvent(event)
 
-	@cached_property
+	@property
 	def image(self) -> QGraphicsItemGroup:
 		breakpoint('this needs to be updated!')
 		self.items()
