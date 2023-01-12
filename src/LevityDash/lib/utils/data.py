@@ -243,10 +243,7 @@ class MinMax:
 		self.max = max(arr)
 
 	def __clearCache(self):
-		if hasattr(self, 'range'):
-			delattr(self, 'range')
-		if hasattr(self, 'rawRange'):
-			delattr(self, 'rawRange')
+		clearCacheAttr(self, 'range', 'rawRange')
 
 	@property
 	def min(self) -> Numeric:

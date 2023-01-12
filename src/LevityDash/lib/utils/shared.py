@@ -2,7 +2,7 @@ from abc import abstractmethod
 from collections.abc import MutableSet, Sequence
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
-from functools import cached_property, lru_cache, partial, wraps
+from functools import cached_property, lru_cache, partial, wraps, reduce
 from inspect import getfullargspec
 from multiprocessing.pool import ThreadPool
 from threading import Thread
@@ -2539,3 +2539,15 @@ def pseudo_bound_method(instance: Any = None, func: Callable = None) -> MethodTy
 	if func is None:
 		return partial(pseudo_bound_method, instance)
 	return MethodType(func, instance)
+
+
+@lru_cache(maxsize=1024)
+def factors(n: int) -> Set[int]:
+	n = abs(round(n))
+	return set(reduce(list.__add__, ([i, n//i] for i in range(1, int(n ** 0.5) + 1) if n % i == 0)))
+
+
+@lru_cache(maxsize=2048)
+def is_prime(n: int) -> bool:
+	"""Check if a number is prime"""
+	return len(factors(n)) == 2
