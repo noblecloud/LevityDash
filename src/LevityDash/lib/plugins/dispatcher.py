@@ -2,7 +2,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import timedelta
 from functools import cached_property
-from typing import Callable, Coroutine, Dict, Iterable, List, Set
+from typing import Callable, Coroutine, Dict, Iterable, List, Set, Type
 
 from itertools import groupby
 from PySide6.QtCore import Signal, Slot, QTimer
@@ -16,6 +16,7 @@ from LevityDash.lib.plugins.plugin import AnySource, Plugin, SomePlugin
 from LevityDash.lib.plugins.utils import Request, GuardedRequest, ChannelSignal, MutableSignal
 from LevityDash.lib.utils.data import KeyData
 from LevityDash.lib.utils.shared import clearCacheAttr, Period
+from WeatherUnits import Measurement, auto as wu_auto
 
 log = LevityPluginLog.getChild('Dispatcher')
 
@@ -234,6 +235,18 @@ class MultiSourceContainer(dict):
 			return self.default_source.schema[self.key].title
 		except AttributeError:
 			return str(self.key.name)
+
+	@property
+	def value_type(self) -> Type[Measurement]:
+		if self:
+			return self.value.value_type
+		else:
+			try:
+				return type(self.default_source.schema[self.key].getConvertFunc()(0).localize)
+			except Exception as e:
+				#! TODO: Add option to search through all valid plugins
+				#! and return the most common
+				return Measurement
 
 	@cached_property
 	def default_source(self) -> Plugin | None:

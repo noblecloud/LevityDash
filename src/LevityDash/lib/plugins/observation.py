@@ -2817,6 +2817,17 @@ class Container:
 		return None
 
 	@property
+	def value_type(self) -> Type[wu.Measurement]:
+		value = self.value
+		try:
+			return type(value.value)
+		except Exception:
+			value = type(self.metadata.getConvertFunc()(0))
+			if issubclass(value, wu.Measurement):
+				return value
+			return wu.Measurement
+
+	@property
 	def now(self) -> Optional[Observation]:
 		if self.isRealtime:
 			return self.source.realtime[self.key]
