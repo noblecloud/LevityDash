@@ -12,7 +12,7 @@ from LevityDash.lib.plugins.utils import SchemaProperty, unitDict
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.utils.shared import (clearCacheAttr, ColorStr, get, getOrSet, LOCAL_TIMEZONE, matchWildCard, operatorDict,
                                          removeSimilar, subsequenceCheck, Unset)
-from WeatherUnits import Measurement
+from WeatherUnits import Measurement, auto as wu_auto
 
 log = LevityPluginLog.getChild('Categories')
 
@@ -427,9 +427,6 @@ class CategoryWildcard(str):
 		if (value := cls.__knownWildcards.get(value, None)) is None:
 			value = cls.__knownWildcards[value] = super().__new__(cls, value)
 		return value
-
-	def __str__(self):
-		return f'{ColorStr.italic(self)}'
 
 	def __repr__(self):
 		return f'{self}'
