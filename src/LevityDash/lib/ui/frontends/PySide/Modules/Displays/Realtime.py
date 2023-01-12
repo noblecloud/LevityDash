@@ -172,6 +172,7 @@ class Realtime(Panel, tag='realtime'):
 
 	@key.setter
 	def key(self, value):
+		#! self.display can not be accessed here
 		if isinstance(value, str):
 			value = CategoryItem(value)
 		if value == getattr(self, '_key', None):
@@ -227,7 +228,7 @@ class Realtime(Panel, tag='realtime'):
 		if self.__connectedContainer is not None:
 			return self.__connectedContainer.source
 
-	@StateProperty(allowNone=False, default=Stateful, link=Display)
+	@StateProperty(allowNone=False, default=Stateful, link=Display, dependencies={'key', 'source', 'forecast'})
 	def display(self) -> Display:
 		return self._display
 
@@ -247,7 +248,7 @@ class Realtime(Panel, tag='realtime'):
 				case _:
 					raise ValueError(f'Unknown Display Type: {display_type}')
 
-	@StateProperty(key='title', sortOrder=1, allowNone=False, default=Stateful)
+	@StateProperty(key='title', sortOrder=1, allowNone=False, default=Stateful, dependencies={'display', 'key', 'source', 'forecast'})
 	def splitter(self) -> TitleValueSplitter:
 		return self._splitter
 
