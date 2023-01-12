@@ -419,7 +419,7 @@ class StateProperty(property):
 	def __varifyKwargs(self, kwargs):
 		incorrect = []
 
-		if not kwargs.get("allowNone", True) and ("default" not in kwargs or self.default(type(self)) is UnsetDefault):
+		if not kwargs.get("allowNone", True) and ("default" not in kwargs or self.class_default(type(self)) is UnsetDefault):
 			log.critical(f"{self.__class__.__name__} {self.name} has no default value and allowNone is False")
 			incorrect.append("- allowNone without default")
 
@@ -601,7 +601,7 @@ class StateProperty(property):
 				return value
 			elif not self.allowNone:
 				raise e
-		return self.default(type(obj))
+		return self.default(type(obj), obj)
 
 	@staticmethod
 	def checkType(instance: Any, type_: Type | _GenericAlias | GenericAlias| _UnionGenericAlias):
@@ -661,7 +661,7 @@ class StateProperty(property):
 		elif value is None and not self.__options.get("allowNone", True):
 			if "default" not in self.__options:
 				raise AttributeError(f"{repr(self)} is not allowed to be None but no default was set")
-			value = self.default(type(owner))
+			value = self.default(type(owner), owner)
 			try:
 				value = copy(value)
 			except TypeError as e:
@@ -830,7 +830,7 @@ class StateProperty(property):
 
 	# Section .default(owner)
 	@lru_cache()
-	def default(self, owner: Type['Stateful']) -> Any | Literal[UnsetDefault]:
+	def class_default(self, owner: Type['Stateful']) -> Any | Literal[UnsetDefault]:
 		ownerDefaults = getattr(owner, "__defaults__", {})
 
 		if (ownerDefault := ownerDefaults.get(self.key, UnsetDefault)) is not UnsetDefault:
@@ -854,8 +854,13 @@ class StateProperty(property):
 
 		return UnsetDefault
 
+	def default(self, owner: Type['Stateful'], instance: 'Stateful' = None) -> Any | Literal[UnsetDefault]:
+		if instance is not None and (instanceDefault := self.get_item_default(instance)) is not UnsetDefault:
+			return instanceDefault
+		return self.class_default(owner)
+
 	@lru_cache()
-	def hasDefault(self, owner) -> bool:
+	def hasDefault(self, owner: Type['Stateful']) -> bool:
 		ownerDefaults = getattr(owner, "__defaults__", {})
 
 		if (ownerDefault := ownerDefaults.get(self.key, UnsetDefault)) is not UnsetDefault:
@@ -1284,7 +1289,7 @@ class StateProperty(property):
 					return "_", None
 				if value.testDefault(value.default()):
 					return "_", None
-			default = self.default(type(owner))
+			default = self.default(type(owner), owner)
 
 			if isinstance(default, DefaultGroup) or default is UnsetDefault:
 				pass
@@ -1504,9 +1509,35 @@ class StateProperty(property):
 
 	@staticmethod
 	def setDefault(self, owner):
-		if default := self.default(type(owner)) is None:
+		if default := self.class_default(type(owner)) is None:
 			raise ValueError("Default value is not set")
 		self._set(owner, copy(default))
+
+	def item_default(self, *args, **kwargs):
+		if args:
+			func, *args = args
+		else:
+			func = None
+		if args or kwargs:
+			self.__options["item_default.args"] = (func, *args)
+			self.__options["item_default.kwargs"] = kwargs
+		self.__options["item_default.func"] = func
+
+		return self
+
+	def get_item_default(self, item: 'Stateful') -> UnsetDefault | Any:
+		if (item_default := self.__options.get("item_default", None)) is None:
+			return UnsetDefault
+		if (func := item_default.get("func", None)) is None:
+			return UnsetDefault
+		args = item_default.get("args", ())
+		kwargs = item_default.get("kwargs", {})
+
+		arg_spec = inspect.getfullargspec(func)
+		if 'self' in arg_spec.args:
+			args = (item, *args)
+
+		return func(*args, **kwargs)
 
 
 class StatefulReferenceProperty(property):
@@ -2491,14 +2522,14 @@ class Stateful(metaclass=StatefulMetaclass):
 				{
 					v.name: d
 					for v in cls.__state_items__.values()
-					if (d := v.default(cls)) is not UnsetDefault and not v.excludedFrom(cls) or v.required
+					if (d := v.class_default(cls)) is not UnsetDefault and not v.excludedFrom(cls) or v.required
 				}
 			)
 			return default
 
 	@classmethod
 	@lru_cache()
-	def _defaults(cls) -> dict:
+	def _defaults(cls) -> dict[str, StateProperty]:
 		return {i.key: i for i in cls.__state_items__.values() if not i.allowNone and i.hasDefault(cls)}
 
 	@classmethod
@@ -2517,7 +2548,7 @@ class Stateful(metaclass=StatefulMetaclass):
 
 	@cached_property
 	def defaultSingles(self) -> Dict[str, Any]:
-		return {v: v.default(type(self)) for v in self.statefulItems.values() if v.singleVal}
+		return {v: v.class_default(type(self)) for v in self.statefulItems.values() if v.singleVal}
 
 	# Section .prep_init
 	def prep_init(self, kwargs):
@@ -2546,7 +2577,7 @@ class Stateful(metaclass=StatefulMetaclass):
 		self._set_state_items_ = set()
 		initVars = set(code.co_varnames[: code.co_argcount])
 		for key, prop in type(self)._defaults().items():
-			default = prop.default(type(self))
+			default = prop.default(type(self), self)
 			if key in initVars:
 				continue
 			elif key not in kwargs:
