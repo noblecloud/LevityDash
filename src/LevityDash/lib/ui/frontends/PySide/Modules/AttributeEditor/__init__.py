@@ -155,3 +155,43 @@
 # 			attr = AttributeEditor(parent=self, attribute=attribute)
 # 			self.signals.resized.connect(attr.repositionIncrementers)
 # 			attr.repositionIncrementers()
+# from PySide6.QtWidgets import QWidget, QCheckBox, QVBoxLayout, QFormLayout, QLabel
+#
+#
+# class ConfigWindow(QWidget):
+# 	types = {'checkbox': QCheckBox}
+#
+# 	def __init__(self, parent):
+# 		super(ConfigWindow, self).__init__(parent)
+# 		self.resize(300, 300)
+# 		self.verticalLayout = QVBoxLayout(self)
+# 		self.formLayout = QFormLayout(self)
+# 		self.verticalLayout.addLayout(self.formLayout)
+# 		self.build()
+# 		self.show()
+#
+# 	def build(self):
+# 		parent = self.parent()
+# 		cnf = [
+# 			{
+# 				'label': 'Show Labels',
+# 				'type': 'checkbox',
+# 				'slot': 'showLabels'
+# 			},
+# 			{
+# 				'label': 'Show Arc',
+# 				'type': 'checkbox',
+# 				'slot': 'showArc'
+# 			}
+# 		]
+#
+# 		for item in cnf:
+# 			self.addItem(item)
+#
+# 	def addItem(self, item: dict):
+# 		label = QLabel(self, text=item['label'])
+# 		value: QCheckBox = self.types[item['type']]()
+# 		index = self.formLayout.count()
+# 		self.formLayout.setWidget(index, QFormLayout.LabelRole, label)
+# 		self.formLayout.setWidget(index, QFormLayout.FieldRole, value)
+# 		value.stateChanged.connect(getattr(self.parent(), item['slot']))
