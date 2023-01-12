@@ -472,6 +472,12 @@ class Realtime(Panel, tag='realtime'):
 			self.display.splitter.updateUnitDisplay()
 			self.display.refresh()
 
+		if self.display.displayType == DisplayType.Gauge:
+			self.display: 'Gauge'
+			self.display.valueClass = container.value_type
+			value = container.now.value
+			self.display.value = value
+
 		self.lastUpdate = process_time()
 		self.__updateTimeOffsetLabel()
 		self.updateToolTip()
