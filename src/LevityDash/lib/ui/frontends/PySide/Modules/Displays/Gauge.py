@@ -1,6 +1,8 @@
 from dataclasses import dataclass
+from enum import Enum
 from functools import cached_property, lru_cache
-from typing import Optional, Type, Union, Tuple
+from types import SimpleNamespace
+from typing import Optional, Type, Union, Tuple, MutableMapping, Iterator, Iterable, Sequence, Mapping, TypeVar, TYPE_CHECKING
 
 from PySide6 import QtCore
 from PySide6.QtCore import (
@@ -16,154 +18,38 @@ from PySide6.QtWidgets import (
 	QGraphicsScene, QGraphicsSceneMouseEvent, QGraphicsTextItem, QStyleOptionGraphicsItem,
 	QWidget
 )
-from math import isinf, floor
+from math import isinf, floor, inf, log10
 from numpy import ceil, cos, pi, radians, sin, sqrt
 
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.stateful import Stateful, StateProperty
 from LevityDash.lib.ui import UILogger, Color
+from LevityDash.lib.ui.Geometry import RelativeFloat, parseSize, DimensionType, size_px, parseHeight, AbsoluteFloat
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays import SurfaceCentered, Surface
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.DisplayBase import Display
 from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, addCrosshair, DebugPaint, modifyTransformValues
 from LevityDash.lib.utils.data import MinMax
-from LevityDash.lib.utils.shared import half, Numeric, radialPoint, defer, factors, is_prime
-from WeatherUnits import Measurement, Direction, Angle, Wind, Humidity, auto as auto_wu
+from LevityDash.lib.utils.shared import half, Numeric, radialPoint, defer, factors, is_prime, Unset, clearCacheAttr
+from WeatherUnits import Measurement, Direction, Angle, Wind, Humidity, auto as auto_wu, Length, Percentage
 
 log = UILogger.getChild('Gauge')
 
 
-@lru_cache(maxsize=2048)
-def generate_ticks(
-	lower: int,
-	upper: int,
-	min_ticks: int = 2,
-	max_ticks: int = 12,
-	min_interval: int = 1,
-	max_interval: int = 12,
-	require_interval_factors: set[int] = None,
-	exclude_interval_factors: set[int] = None,
-) -> Tuple[int, int, list[int]]:
-	"""
+def filter_factors(
+	numbers: Iterable[int],
+	required_factors: set[int] = None,
+	included_factors: set[int] = None,
+	excluded_factors: set[int] = None,
+) -> set[int]:
+	if required_factors is None:
+		required_factors = set()
 
-	This function is used to generate a list of tick marks for a gauge.
-
-	:param lower:int: Set the lower bound of the range
-	:param upper:int: Specify the upper bound of the range
-	:param min_ticks:int=2: Set the minimum number of ticks that will be shown on the axis
-	:param max_ticks:int=10: Set the maximum number of ticks that will be generated
-	:param min_interval:int=1: Set the minimum interval between ticks
-	:param max_interval:int=10: Specify the maximum interval between tick marks
-	:param require_interval_factors:set[int]=None: Specify that the tick interval must have a factor in this set
-	:param exclude_interval_factors:set[int]=None: Exclude certain factors from being used as tick intervals
-
-	:param : Determine the number of ticks to generate
-	:return: A tuple containing the tick interval, number of ticks, and a list of tick values
-	:rtype: tuple[int, int, list[int]]
-	"""
-	lower = int(lower)
-	upper = int(upper)
-
-	require_interval_factors = require_interval_factors or set()
-	exclude_interval_factors = exclude_interval_factors or set()
-
-	range_size = abs(upper - lower)
-
-	tick_interval = max(min_interval, 1)
-
-	if is_prime(range_size):
-		range_size += 1
-
-	num_ticks = int(ceil(range_size / tick_interval))
-
-	range_factors = sorted(factors(range_size) - {1, range_size} - exclude_interval_factors)
-
-	while num_ticks >= max_ticks and range_factors:
-		next_factor = range_factors.pop(0)
-
-		if next_factor > max_interval:
-			break
-
-		if require_interval_factors and not factors(next_factor) & require_interval_factors:
-			continue
-
-		tick_interval = next_factor
-		num_ticks = int(ceil(range_size / tick_interval))
-
-	return tick_interval, num_ticks, [i for i in range(lower, upper + tick_interval, tick_interval)]
-
-
-@dataclass
-class Divisions:
-	"""
-	Divisions for a gauge.
-	"""
-
-	#: The number of divisions.
-	_count: int = None
-	#: The length of each tick.
-	length: float = 1.0
-	#: The line width of each tick.
-	lineWidth: float = 1.0
-	#: Sub-divisions for this division (if any).
-	sub_division: 'Divisions' = None
-	#: The super division for this division (if any).
-	super_division: 'Divisions' = None
-	#: The gauge the divisions belong to.
-	gauge: 'Gauge' = None
-	#: The minimum number of divisions.
-	min_count: int = 3
-	#: The maximum number of divisions.
-	max_count: int = 10
-
-	def __post_init__(self):
-		if (sub_divisions := self.sub_division) is not None:
-			sub_divisions.super_division = self
-
-	@property
-	def spacing(self):
-		return self.angle_range / self.count
-
-	@property
-	def angle_range(self) -> float:
-		if self.super_division is None:
-			return self.gauge.fullAngle
-		else:
-			return self.super_division.angle_range / self.super_division.count
-
-	@property
-	def count(self):
-		if (count := self._count) is None:
-			_, count, _ = generate_ticks(
-				self.gauge.range.rounded_min,
-				self.gauge.range.rounded_max,
-				self.min_count,
-				self.max_count
-			)
-		return count
-
-	@count.setter
-	def count(self, value: int | None):
-		self._count = value
-
-	@property
-	def interval(self) -> int:
-		return generate_ticks(
-			self.gauge.range.rounded_min,
-			self.gauge.range.rounded_max,
-			self.min_count, self.max_count
-		)[1]
-
-	@property
-	def tick_values(self) -> list[int | float]:
-		return generate_ticks(
-			self.gauge.range.rounded_min,
-			self.gauge.range.rounded_max,
-			self.min_count, self.max_count
-		)[2]
-
-	@property
-	def startAngle(self):
-		return self.gauge.startAngle - 90
+	return {
+		n for n in numbers
+		if required_factors <= (f := factors(n))
+		and (not included_factors or included_factors & f)
+		and (not excluded_factors or not excluded_factors & f)
+	}
 
 
 class GaugeItem:
@@ -171,7 +57,7 @@ class GaugeItem:
 
 	def __init__(self, gauge: 'Gauge'):
 		self._gauge = gauge
-		super(GaugeItem, self).__init__(gauge)
+		super(GaugeItem, self).__init__()
 
 	@property
 	def gauge(self) -> 'Gauge':
@@ -179,6 +65,630 @@ class GaugeItem:
 
 	def remove(self):
 		self.gauge.scene().removeItem(self)
+
+
+GaugeValue = TypeVar('GaugeValue', bound=Numeric)
+
+
+class Graduations(Stateful, GaugeItem):
+	"""
+	Divisions for a gauge.  This class uses configured options and value information
+	to determine the interval between graduations or the number of graduations to show
+	on the gauge.  Intervals should always be integers unless the range is small (less than 3).
+	If both the interval and count are set, the count will be ignored unless the provided
+	interval is unsuitable.
+
+
+	Parameters
+	----------
+
+		gauge : Gauge
+			The gauge that this graduation belongs to
+		**state: Mapping, optional
+			The state to use for this graduation
+
+
+	State Properties
+	----------
+
+		All of the following properties are stateful and can be set in the config file.
+
+		enabled : bool
+			Whether this graduation is enabled
+
+		length : Angle, Length, Percentage, AbsoluteFloat (default: 0.1)
+			The length of each tick mark. Angle units are converted to arch length pixels.
+			Percentage units are converted to a percentage of the gauge radius.
+		width : float
+			The line width of each tick. Angle units are converted to arch length pixels.
+			Percentage units are converted to a percentage of the tick length.
+
+		count : int, optional
+			The number of ticks on the gauge. If this is set, the tick interval will be calculated automatically.
+		min_count : int, optional (default=Unset)
+			The minimum number of ticks on the gauge.
+		max_usr_count : int, optional (default=Unset)
+			The maximum number of ticks on the gauge.
+
+		interval : int, optional
+			The interval between ticks. If this is set, the number of ticks will be calculated automatically.
+		min_interval : int, optional (default=Unset)
+			The minimum interval between ticks.
+		max_interval : int, optional (default=inf)
+			The maximum interval between ticks.
+
+		spacing : Angle, Length, Percentage, AbsoluteFloat, optional (default=Unset)
+			The amount of visual space between ticks.
+		min_spacing : Angle, Length, Percentage, AbsoluteFloat, optional (default=Unset)
+			The minimum amount of visual space between ticks.
+		max_spacing : Angle, Length, Percentage, AbsoluteFloat, optional (default=Unset)
+			The maximum amount of visual space between ticks.
+
+		required_interval_factors : set[int], optional (default=Unset)
+			Require one of these factors to be a factor of the tick interval.
+		excluded_interval_factors : set[int], optional (default=Unset)
+			Exclude tick intervals that have any of these factors.
+
+
+	Properties
+	----------
+		_min_spacing_dg : float
+			The actual minimum spacing in degrees calculated from the tick length and width.
+		length_px: float
+			The length of each tick mark in pixels.
+		width_px: float
+			The width of each tick mark in pixels.
+		spacing_px: float
+			The spacing between each tick mark in pixels.
+
+
+	"""
+	enabled: bool
+	count: int
+	min_count: int
+	max_usr_count: int
+	interval: int
+	min_interval: int
+	max_interval: int
+	spacing: int
+	min_spacing: int
+	max_spacing: int
+	required_interval_factors: set[int]
+	excluded_interval_factors: set[int]
+
+	class Type(Enum):
+		Major = 0
+		Minor = 1
+		Micro = 2
+
+	def __init__(self, gauge: 'Gauge', **kwargs):
+		GaugeItem.__init__(self, gauge)
+		self.tick_type = kwargs.pop('type', self.Type.Major)
+		self.state = self.prep_init(kwargs)
+
+	@StateProperty(key='enabled', default=True)
+	def enabled(self) -> bool:
+		return self._enabled
+
+	@enabled.setter
+	def enabled(self, value: bool):
+		self._enabled = value
+
+	@StateProperty(key='number-base', default=10)
+	def number_base(self) -> int:
+		return self._number_base
+
+	@number_base.setter
+	def number_base(self, value: int):
+		self._number_base = value
+
+	@number_base.decode
+	def number_base(self, value: str | float):
+		try:
+			return int(value)
+		except Exception as e:
+			log.error(f'Invalid number base: {value}')
+			log.exception(e)
+			return 10
+
+	@StateProperty(key='count', default=None, dependancies={'interval'})
+	def usr_count(self) -> int:
+		return self._usr_count
+
+	@usr_count.setter
+	def usr_count(self, value: int | None):
+		self._usr_count = value
+
+	@StateProperty(key='min-count', default=None)
+	def min_usr_count(self) -> int:
+		return self._min_usr_count
+
+	@min_usr_count.setter
+	def min_usr_count(self, value: int | float | None):
+		if isinf(value):
+			value = None
+		elif isinstance(value, float):
+			value = int(value) + 1
+		self._min_usr_count = value
+
+	@StateProperty(key='max-count', default=None)
+	def max_usr_count(self) -> int:
+		return self._max_usr_count
+
+	@max_usr_count.setter
+	def max_usr_count(self, value: int | float | None):
+		if isinf(value):
+			value = None
+		elif isinstance(value, float):
+			value = int(value) + 1
+		self._max_usr_count = value
+
+	@StateProperty(key='length', default=0.1, allowNone=False)
+	def length(self) -> float:
+		return self._length
+
+	@length.setter
+	def length(self, value: float):
+		self._length = value
+
+	@property
+	def length_px(self) -> float:
+		return size_px(self.length, self.gauge.baseWidth)
+
+	@StateProperty(key='width', default=0.1, allowNone=False)
+	def width(self) -> float:
+		return self._width
+
+	@width.setter
+	def width(self, value: float):
+		self._width = value
+
+	@property
+	def width_px(self) -> float:
+		return self.width * self.gauge.baseWidth
+
+	@StateProperty(key='required-interval-factors', allowNone=False)
+	def required_interval_factors(self) -> set[int | float]:
+		return self._required_interval_factors
+
+	@required_interval_factors.setter
+	def required_interval_factors(self, value: set[int | float] | None):
+		self._required_interval_factors = value
+
+	@required_interval_factors.item_default
+	def required_interval_factors(self) -> set[int | float]:
+		return {1}
+
+	@required_interval_factors.decode
+	def required_interval_factors(self, value: list | tuple | str | int | float) -> set[int | float]:
+		if isinstance(value, (list, tuple)):
+			return set(value)
+		if isinstance(value, str):
+			return set(float(v) for v in value.split(','))
+		return {value}
+
+	@StateProperty(key='excluded-interval-factors', allowNone=False)
+	def excluded_interval_factors(self) -> set[int | float]:
+		return self._excluded_interval_factors
+
+	@excluded_interval_factors.setter
+	def excluded_interval_factors(self, value: set[int | float] | None):
+		self._excluded_interval_factors = value
+
+	@excluded_interval_factors.item_default
+	def excluded_interval_factors(self) -> set[int | float]:
+		return set()
+
+	@excluded_interval_factors.decode
+	def excluded_interval_factors(self, value: list | tuple | str | int | float) -> set[int | float]:
+		if isinstance(value, (list, tuple)):
+			return set(value)
+		if isinstance(value, str):
+			return set(float(v) for v in value.split(','))
+		return {value}
+
+	@StateProperty(key='included-interval-factors', allowNone=False)
+	def included_interval_factors(self) -> set[int | float]:
+		return self._included_interval_factors
+
+	@included_interval_factors.setter
+	def included_interval_factors(self, value: set[int | float] | None):
+		self._included_interval_factors = value
+
+	@included_interval_factors.item_default
+	def included_interval_factors(self) -> set[int | float]:
+		return set()
+
+	@included_interval_factors.decode
+	def included_interval_factors(self, value: list | tuple | str | int | float) -> set[int | float]:
+		if isinstance(value, (list, tuple)):
+			return set(value)
+		if isinstance(value, str):
+			return set(float(v) for v in value.split(','))
+		return {value}
+
+	@StateProperty(key='interval', allowNone=False)
+	def usr_interval(self) -> Measurement | Unset:
+		return self._usr_interval
+
+	@usr_interval.setter
+	def usr_interval(self, value: Measurement | Unset):
+		self._usr_interval = value
+
+	@usr_interval.item_default
+	def usr_interval(self) -> GaugeValue:
+		if issubclass(self.gauge.valueClass, Percentage):
+			return Percentage(0.1)
+		return self.gauge.valueClass(1)
+
+	@property
+	def usr_interval_deg(self) -> Angle | Unset:
+		gauge_angle_range = self.gauge.endAngle - self.gauge.startAngle
+
+		if (interval := getattr(self, '_usr_interval', Unset)) is not Unset:
+			pass
+		elif (count := getattr(self, '_usr_count', Unset)) is not Unset:
+			interval = self.gauge.range.roudend_range / count
+		elif spacing := self.spacing_deg is not Unset:
+			interval = spacing
+		else:
+			return Unset
+
+		if isinstance(interval, self.gauge.valueClass | int | float):
+			if not isinstance(interval, self.gauge.valueClass):
+				interval_val = self.gauge.valueClass(interval)
+			else:
+				interval_val = interval
+			interval_deg = float(self.gauge.range.roundend_range / interval_val) * gauge_angle_range
+			return Angle(interval_deg, 'deg')
+		elif isinstance(interval, Percentage | RelativeFloat):
+			interval_px = self.width_px * interval
+			interval_deg = float(gauge_angle_range * interval_px / self.gauge.radius)
+			return Angle(interval_deg)
+		elif isinstance(interval, Length):
+			interval_px = size_px(interval, self.gauge.baseWidth)
+			interval_deg = float(gauge_angle_range * interval_px / self.gauge.radius)
+			return Angle(interval_deg)
+		elif isinstance(interval, Angle):
+			return interval
+		return Unset
+
+	@cached_property
+	def interval(self) -> int | float:
+		return self.determine_interval()
+
+	@property
+	def interval_degree(self) -> Angle:
+		interval = self.interval
+		gauge_angle_range = self.gauge.endAngle - self.gauge.startAngle
+		rounded_range = self.gauge.range.rounded_range
+		return Angle(float(interval / rounded_range * gauge_angle_range))
+
+	@StateProperty(key='min-interval')
+	def usr_min_interval(self) -> int | float:
+		return self._usr_min_interval
+
+	@usr_min_interval.setter
+	def usr_min_interval(self, value: int | float):
+		self._usr_min_interval = value
+
+	@usr_min_interval.item_default
+	def usr_min_interval(self) -> float:
+		return self._usr_min_interval
+
+	@property
+	def min_interval(self) -> Measurement | Unset:
+
+		gauge_angle_range = self.gauge.endAngle - self.gauge.startAngle
+		ValueClass = self.gauge.valueClass
+
+		if (min_interval := getattr(self, '_usr_min_interval', Unset)) is not Unset:
+			min_interval = ValueClass(min_interval)
+		elif (count := getattr(self, '_usr_max_count', Unset)) is not Unset:
+			min_interval = ValueClass(float(self.gauge.range.roudend_range) / count)
+		elif (spacing := getattr(self, '_usr_min_spacing', Unset)) is not Unset:
+			min_interval = ValueClass(float(self.gauge.range.roundend_range / spacing) * gauge_angle_range)
+		else:
+			min_interval = self._min_interval
+
+		if isinstance(min_interval, self.gauge.valueClass | int | float):
+			if not isinstance(min_interval, self.gauge.valueClass):
+				min_interval = self.gauge.valueClass(min_interval)
+			return min_interval
+		elif isinstance(min_interval, Percentage | RelativeFloat):
+			min_interval_px = self.width_px * min_interval
+			min_interval_deg = float(self.gauge.range.roundend_range * min_interval_px / self.gauge.radius)
+			return self.gauge.valueClass(max(min_interval_deg, self._min_interval))
+		elif isinstance(min_interval, Length):
+			min_interval_px = size_px(min_interval, self.gauge.baseWidth)
+			min_interval_deg = float(self.gauge.range.roundend_range * min_interval_px / self.gauge.radius)
+			return self.gauge.valueClass(max(min_interval_deg, self._min_interval))
+		elif isinstance(min_interval, Angle):
+			return self.gauge.valueClass(max(min_interval, self._min_interval))
+		return self.gauge.valueClass(max(min_interval, self._min_interval))
+
+	@property
+	def max_interval(self) -> Measurement | Unset:
+		gauge_angle_range = self.gauge.endAngle - self.gauge.startAngle
+
+		if (max_interval := getattr(self, '_usr_max_interval', Unset)) is not Unset:
+			pass
+		elif (count := getattr(self, '_usr_min_count', Unset)) is not Unset:
+			max_interval = self.gauge.range.roudend_range / count
+		elif (spacing := getattr(self, '_usr_max_spacing', Unset)) is not Unset:
+			max_interval = float(self.gauge.range.roundend_range / spacing) * gauge_angle_range
+		else:
+			max_interval = self.gauge.range.rounded_range
+
+		if isinstance(max_interval, self.gauge.valueClass | int | float):
+			if not isinstance(max_interval, self.gauge.valueClass):
+				max_interval = self.gauge.valueClass(max_interval)
+			return max_interval
+		elif isinstance(max_interval, Percentage | RelativeFloat):
+			max_interval_px = self.width_px * max_interval
+			max_interval_deg = float(self.gauge.range.roundend_range * max_interval_px / self.gauge.radius)
+			return self.gauge.valueClass(max(max_interval_deg, self._min_interval))
+		elif isinstance(max_interval, Length):
+			max_interval_px = size_px(max_interval, self.gauge.baseWidth)
+			max_interval_deg = float(self.gauge.range.roundend_range * max_interval_px / self.gauge.radius)
+			return self.gauge.valueClass(max(max_interval_deg, self._min_interval))
+		elif isinstance(max_interval, Angle):
+			return self.gauge.valueClass(max(max_interval, self._min_interval))
+		return self.gauge.valueClass(max(max_interval, self._min_interval))
+
+	@property
+	def _min_interval(self) -> GaugeValue:
+		"""
+		The minimum interval between graduations given that allows
+		for the ticks to be at least one width apart.
+		"""
+		min_spacing_degrees = self.min_spacing_deg
+		gauge_value_range = self.gauge.range.rounded_range
+		if isinstance(gauge_value_range, Percentage):
+			gauge_value_range = float(gauge_value_range)
+		gauge_angle_range = self.gauge.endAngle - self.gauge.startAngle
+		value = gauge_value_range / (gauge_angle_range / min_spacing_degrees)
+		return self.gauge.valueClass(value)
+
+	@StateProperty(key='min-spacing', default=1.0, allowNone=False)
+	def min_spacing(self) -> Angle | Length | Percentage:
+		"""
+		The minimum arc length spacing between graduations.
+		All floats and percentages are interpreted as a fraction of the tick-width.
+
+		Returns
+		-------
+		Angle | Length | Percentage
+		"""
+		return self._min_spacing
+
+	@min_spacing.setter
+	def min_spacing(self, value: float):
+		self._min_spacing = value
+
+	@min_spacing.decode
+	def min_spacing(self, value: str | int | float) -> Angle | Length | Percentage:
+		match value:
+			case float(value):
+				return Percentage(value)
+			case int(value):
+				return Angle(value)
+			case str(value):
+				value = parseSize(value, DimensionType.width)
+				return value
+			case _:
+				raise ValueError(f'Invalid value for min-spacing: {value!r}')
+
+	@property
+	def spacing_deg(self) -> Angle | Unset:
+		"""
+		The spacing between graduations in degrees.
+		Returns
+		-------
+		Angle
+		"""
+
+		if (usr_spacing := getattr(self, '_spacing', Unset)) is Unset:
+			return usr_spacing
+
+		radius = self.gauge.radius - self.length_px
+
+		return self.gauge.value_to_angle_degrees(
+			usr_spacing,
+			radius_px=radius,
+			relative_px=self.width_px,
+		)
+
+	@property
+	def min_spacing_deg(self) -> Angle:
+		"""
+		The minimum spacing between graduations in degrees.
+		Returns
+		-------
+		Angle
+		"""
+		if (usr_spacing := getattr(self, '_min_spacing', Unset)) is Unset:
+			return usr_spacing
+
+		radius = self.gauge.radius - self.length_px
+		tick_width = self.width_px * 2
+		arc_length_px = float(radius * self.gauge.fullAngle / 180 * pi)
+
+		tick_gauge_coverage = tick_width / arc_length_px
+
+		return Angle(self.gauge.fullAngle * tick_gauge_coverage)
+
+
+	@property
+	def min_spacing_val(self) -> float:
+		return
+
+	@StateProperty(key='max-spacing', default=None, allowNone=False)
+	def max_spacing(self) -> float:
+		return self._max_spacing
+
+	@property
+	def angle_range(self) -> float:
+		if self.super_grad is None:
+			return self.gauge.fullAngle
+		else:
+			return self.super_grad.angle_range / self.super_grad.count
+
+	@property
+	def min_interval_deg(self) -> Angle | Unset:
+		if (min_interval := getattr(self, '_min_interval', Unset)) is not Unset:
+			pass
+		elif (max_usr_count := getattr(self, '_max_usr_count', Unset)) is not Unset:
+			min_interval = self.gauge.range.rounded_range / max_usr_count
+		elif max_spacing := getattr(self, '_max_spacing', Unset) is not Unset:
+			min_interval = max_spacing
+
+		return Unset
+
+	@property
+	def count(self):
+		interval = self.interval
+		return int(self.gauge.range.rounded_range / interval)
+
+	@property
+	def tick_values(self) -> list[int | float]:
+		return determine_interval(
+			self.gauge.range.rounded_min,
+			self.gauge.range.rounded_max,
+			self.min_usr_count, self.max_usr_count
+		)[2]
+
+	@property
+	def startAngle(self):
+		return self.gauge.startAngle - 90
+
+	@property
+	def compatible_intervals(self) -> set[GaugeValue]:
+		gauge = self.gauge
+		range_value = gauge.range.rounded_range
+		if isinstance(range_value, Percentage):
+			range_value = float(range_value) * 100
+		# multiplier = 1
+		# while range_value <= 1:
+		# 	multiplier *= 10
+		# 	range_value *= 10
+
+		include_interval_factors = self.included_interval_factors
+		require_interval_factors = self.required_interval_factors
+		exclude_interval_factors = self.excluded_interval_factors
+
+		factors_list = factors(range_value)
+		compatible_intervals = set()
+		while not compatible_intervals:
+			compatible_intervals = filter_factors(
+				factors_list,
+				included_factors=include_interval_factors,
+				required_factors=require_interval_factors,
+				excluded_factors=exclude_interval_factors)
+
+			if not compatible_intervals:
+				include_interval_factors = None
+				require_interval_factors = None
+			if not compatible_intervals:
+				excluded_factors = None
+
+		val_cls = self.gauge.valueClass
+		if issubclass(val_cls, Percentage):
+			compatible_intervals = {interval/100 for interval in compatible_intervals}
+		return compatible_intervals
+
+	def interval_to_deg(self, interval: GaugeValue) -> Angle:
+		return self.gauge.value_to_angle_degrees(interval, self.gauge.radius)
+
+	def determine_interval(self) -> GaugeValue:
+		gauge = self.gauge
+
+		match self.tick_type:
+			case Graduations.Type.Minor:
+				return self.gauge.valueClass(5)
+			case Graduations.Type.Micro:
+				return self.gauge.valueClass(1)
+			case _:
+				pass
+
+		range_value = float(gauge.range.rounded_range)
+		gauge_max_angle_deg = gauge.startAngle
+		gauge_min_angle_deg = gauge.endAngle
+
+		multiplier = 1
+		# while range_value <= 1:
+		# 	multiplier *= 10
+		# 	range_value *= 10
+
+		min_gauge_interval_val = self._min_interval
+
+		min_interval = self.min_interval
+		min_interval_deg = self.gauge.value_to_angle_degrees(min_interval)
+
+		max_interval = self.max_interval
+		max_interval_deg = self.gauge.value_to_angle_degrees(max_interval)
+
+		preferred_intervals = []
+
+		usr_interval = self.usr_interval
+		if usr_interval is not None:
+			preferred_intervals.append(usr_interval)
+
+		usr_count = self.usr_count
+		usr_spacing_deg = self.spacing_deg
+
+		if gauge.majorDivisions is self:
+			return gauge.valueClass(self.gauge.range.round_to)
+
+		if usr_spacing_deg is not Unset:
+			preferred_intervals.append(usr_spacing_deg / gauge_max_angle_deg * range_value)
+		# else:
+		# 	_min_deg = self.min_spacing_deg or min_interval_deg
+		# 	_max_deg = max_interval_deg
+		# 	if _min_deg == min_interval_deg and _max_deg == max_interval_deg:
+		# 		pass
+		# 	else:
+		# 		_interval_deg = (_min_deg + _max_deg) / 2
+		# 		preferred_intervals.append(_interval_deg / self.gauge.fullAngle)
+
+		if usr_count not in [Unset, None]:
+			preferred_intervals.append(range_value / usr_count)
+		else:
+			_min_count = self.min_usr_count or 3 if self.tick_type == Graduations.Type.Major else 1
+			_max_count = self.max_usr_count or self.gauge.range.rounded_range
+			if _min_count == 1 and _max_count == self.gauge.range.rounded_range:
+				pass
+			else:
+				preferred_intervals.append(range_value / (_min_count + _max_count) / 2)
+
+		compatible_intervals = self.compatible_intervals
+		compatible_intervals = [
+			self.gauge.valueClass(i) for i in sorted(compatible_intervals)
+			if float(min_interval) <= i <= float(max_interval)
+		]
+
+		if issubclass(gauge.valueClass, Percentage):
+			preferred_intervals = [abs(i) if isinstance(i, gauge.valueClass) else gauge.valueClass(abs(i) / 100) for i in preferred_intervals]
+
+		round_to = self.gauge.range.round_to
+
+		interval_candidates = []
+
+		# for each preferred interval, find the closest compatible interval
+		for preferred_interval in preferred_intervals:
+			if preferred_interval in compatible_intervals:
+				interval_candidates.append(preferred_interval)
+				continue
+			preferred_interval = float(preferred_interval)
+			closest_interval = min(compatible_intervals, key=lambda i: abs(i - preferred_interval))
+			interval_candidates.append(closest_interval)
+
+		if len(interval_candidates) > 1:
+			return gauge.valueClass(min(interval_candidates, key=lambda interval: abs(interval - min_gauge_interval_val)))
+		elif len(interval_candidates) == 1:
+			return gauge.valueClass(interval_candidates[0])
+		else:
+			return gauge.valueClass(closest_interval(min_gauge_interval_val))
 
 
 class GaugePathItem(GaugeItem, QGraphicsPathItem):
@@ -279,7 +789,7 @@ class Tick(GaugePathItem):
 	_index: float
 	_center: QPointF
 	_radius: float
-	_properties: Divisions
+	_properties: Graduations
 	_offsetAngle: float
 	_label: 'GaugeTickText' = None
 	startPoint: QPointF
@@ -322,8 +832,9 @@ class Tick(GaugePathItem):
 
 	def refresh(self, recursive=True):
 		pen = self.pen()
-		pen.setWidthF(self.properties.lineWidth * self.gauge.baseWidth)
+		pen.setWidthF(self.properties.width_px * self.gauge.baseWidth)
 		self.setPen(pen)
+		clearCacheAttr(self, 'angle')
 		self.draw()
 		if recursive:
 			for sub_tick in self._sub_ticks:
@@ -331,7 +842,7 @@ class Tick(GaugePathItem):
 
 	def rebuild(self):
 		self.refresh(False)
-		self.rebuild_sub_ticks()
+		# self.rebuild_sub_ticks()
 
 	def rebuild_sub_ticks(self):
 
@@ -354,9 +865,9 @@ class Tick(GaugePathItem):
 		for sub_tick in existing:
 			sub_tick.remove()
 
-	@property
+	@cached_property
 	def angle(self):
-		return self.properties.startAngle + self._index * self.properties.spacing
+		return self.properties.startAngle + self._index * float(self.properties.interval_degree)
 
 	@property
 	def index(self):
@@ -369,7 +880,7 @@ class Tick(GaugePathItem):
 
 	@property
 	def sub_tick_spacing(self) -> float:
-		return self.properties.sub_division.spacing
+		return self.properties.sub_grad.spacing
 
 	@property
 	def sub_tick_count(self):
@@ -377,11 +888,11 @@ class Tick(GaugePathItem):
 		# Prevent the last tick from having sub ticks
 		if self._index == self.properties.count:
 			# But only if there is no super tick
-			if self.properties.super_division is None:
+			if self.properties.super_grad is None:
 				return 0
 
 		try:
-			return self.properties.sub_division.count
+			return self.properties.sub_grad.count
 		except AttributeError:
 			return 0
 
@@ -436,18 +947,52 @@ class SubTick(Tick):
 
 	@property
 	def properties(self):
-		return self._superTick.properties.sub_division
+		return self._superTick.properties.sub_grad
 
 	@property
 	def angle(self):
 		return self._superTick.angle + self._index * self.properties.spacing
 
 
+class GraduatedMixin(Stateful):
+	_gauge: 'Gauge'
+	_major_ticks: Graduations
+	_minor_ticks: Graduations
+	_micro_ticks: Graduations
+
+	def __new__(cls, *args, **kwargs):
+		obj = super().__new__(cls)
+		obj._major_ticks = Graduations(
+			sub_grad=(
+				minor_ticks := Graduations(
+					sub_grad=(
+						micro_ticks := Graduations()
+					))
+			))
+		micro_ticks._super_grad = minor_ticks
+		minor_ticks._super_grad = obj._major_ticks
+		obj._minor_ticks = minor_ticks
+		obj._micro_ticks = micro_ticks
+		return obj
+
+	@property
+	def major_ticks(self) -> Graduations:
+		return self._major_ticks
+
+	@property
+	def minor_ticks(self) -> Graduations:
+		return self._minor_ticks
+
+	@property
+	def micro_ticks(self) -> Graduations:
+		return self._micro_ticks
+
+
 class TickSurface(SurfaceCentered, GaugeItem):
-	_properties: Divisions
+	_properties: Graduations
 	_ticks: list[Tick] = cached_property(lambda self: [])
 
-	def __init__(self, gauge: 'Gauge', properties: Divisions):
+	def __init__(self, gauge: 'Gauge', properties: Graduations):
 		self._gauge = gauge
 		self._properties = properties
 		self.scale = 1
@@ -463,6 +1008,8 @@ class TickSurface(SurfaceCentered, GaugeItem):
 				pass
 
 	def rebuild(self):
+		if not self.gauge.gaugeRect.isValid() or self.gauge.gaugeRect.width() < 10 or self.gauge.gaugeRect.height() < 10:
+			return
 		tick_count = self.count
 		existing = self._ticks[:]
 
@@ -471,12 +1018,15 @@ class TickSurface(SurfaceCentered, GaugeItem):
 
 		self._ticks.clear()
 
+		added = 0
+
 		for i in range(self.count + 1):
 			if existing:
 				tick = existing.pop(0)
 				tick.rebuild()
 			else:
 				tick = Tick(self.gauge, self, i)
+				added += 1
 			self._ticks.append(tick)
 
 		try:
@@ -487,8 +1037,10 @@ class TickSurface(SurfaceCentered, GaugeItem):
 		except IndexError:
 			pass
 
+		len_existing = len(existing)
 		for tick in existing:
 			tick.remove()
+		print(f'{self.gauge.parent.key}: total ticks: {len(self._ticks)}, added: {added}, removed: {len_existing}')
 
 	@property
 	def ticks(self) -> list[Tick]:
@@ -1242,7 +1794,55 @@ def decode_measurement(self, value: str | int | float) -> Measurement:
 	return value
 
 
+value_range = 1
+factor = 1
+preferred_factors = [1, 2, 5, 10]
+best_factors = min([(value_range // factor + 1) * factor for factor in preferred_factors], key=lambda x: abs(x - value_range), default=10)
+
 class Gauge(Display):
+
+
+	"""
+	I need an algorithm that will determine the best number of major, minor, and micro ticks on a gauge.
+
+	Known:
+	- radius of the gauge
+	- the starting and end angle of the gauge arc
+	- min/max values that will be displayed
+
+	It needs to take in to effect the following options:
+	 - tick width so that ticks don't overlap
+	 - an optional min number of ticks for each level
+	 - an optional max number of ticks for each level
+	 - an optional number of preferred ticks which will override min tick
+	 - a set of required interval factors
+	 - a set of preferred interval factors
+	 - a set of ignored factors
+
+	Example:
+		min: -2
+		max: 22
+		value range: 24
+		factors: 1, 2, 3, 4, 6, 8, 12, 24
+		preferred factors: 5, 10
+
+		Since, none of the factors are in the preferred factors, use the
+		preferred factors to find the smallest value range that
+		is a multiple of any preferred factors.
+
+		value_range = 24
+		preferred_factors = [5, 10]
+		new_range = min([((value_range // factor) + 1) * factor for factor in preferred_factors], key=lambda x: abs(x - value_range), default=10)
+
+
+		preferred_factors: (5, 10)
+
+
+	If value range is a prime number then the algorithm will need to be able to handle that.
+	Ideally it would find the next non-prime number and use that as the max value.
+	"""
+
+
 	__value: float = 0.0
 	_needleAnimation: QPropertyAnimation
 	valueChanged = Signal(float)
@@ -1250,7 +1850,6 @@ class Gauge(Display):
 	class GaugeRange(Stateful):
 		_min: Measurement
 		_max: Measurement
-		_round_to: int | float = 1
 		valueClass: Type[Measurement]
 
 		ranges = {
@@ -1292,13 +1891,26 @@ class Gauge(Display):
 			self._gauge = gauge
 			self.state = self.prep_init(state)
 
-		@StateProperty(key='round_to', default=1)
+		@StateProperty(key='round-to')
 		def round_to(self) -> int | float:
 			return self._round_to
 
 		@round_to.setter
 		def round_to(self, value: int | float):
 			self._round_to = value
+
+		@round_to.item_default
+		def round_to(self) -> int | float:
+			_value_range = float(self.max - self.min)
+
+			_power = int(log10(_value_range)) + 1
+
+			while _value_range % 10 ** _power > 0:
+				_power -= 1
+
+			# if 0.5 < _power < 1:
+			# 	return 1
+			return 10 ** round(_power)
 
 		@StateProperty(key='min')
 		def min(self) -> Measurement:
@@ -1307,6 +1919,8 @@ class Gauge(Display):
 		@min.setter
 		def min(self, value: Measurement):
 			self._min = value
+			# def min(self) -> Measurement:
+			# 	return self._min
 
 		min.decode(decode_measurement)
 
@@ -1358,6 +1972,14 @@ class Gauge(Display):
 			return value != type(value).typedLimits.max
 
 		@property
+		def nearest_simple_factor(self) -> int:
+			simple_factors: tuple[int, ...] = (1, 2, 5, 10)
+			value_range = self._rounded_range
+			range_factors = factors(value_range)
+			new_range = min([((value_range // factor) + 1) * factor for factor in preferred_factors], key=lambda x: abs(x - value_range), default=10)
+			return value_range
+
+		@property
 		def _rounded_max(self) -> Measurement:
 			round_to = self.round_to
 			if not round_to:
@@ -1385,6 +2007,10 @@ class Gauge(Display):
 		@property
 		def _rounded_range(self) -> Measurement:
 			return abs(self._rounded_max - self.rounded_min)
+
+		@property
+		def range_int(self) -> int:
+			return int(self.rounded_range)
 
 		@property
 		def default_range(self) -> MinMax:
@@ -1420,9 +2046,7 @@ class Gauge(Display):
 
 	startAngle = -120
 	endAngle = 120
-	microDivisions: Divisions
-	minorDivisions: Divisions
-	majorDivisions: Divisions
+	grads: Graduations
 	needleLength = 1.0
 	needleWidth = 0.1
 	_valueClass: type = float
@@ -1433,20 +2057,20 @@ class Gauge(Display):
 
 	def _init_defaults_(self):
 
-		self.majorDivisions = Divisions(
+		self.majorDivisions = Graduations(
 			gauge=self,
-			length=0.1,
-			lineWidth=0.6,
-			sub_division=(minor := Divisions(
+			sub_division=(minor := Graduations(
 				gauge=self,
-				_count=2,
+				interval=5,
 				length=0.075,
 				lineWidth=0.4,
-				sub_division=(micro := Divisions(
+				type=Graduations.Type.Minor,
+				sub_division=(micro := Graduations(
 					gauge=self,
-					_count=5,
+					interval=1,
 					length=0.04,
-					lineWidth=0.2
+					lineWidth=0.2,
+					type=Graduations.Type.Micro
 				))
 			))
 		)
@@ -1454,13 +2078,16 @@ class Gauge(Display):
 		self.microDivisions = micro
 		self._valueClass = self.parent.container.value_type
 		super()._init_defaults_()
-		# config = ConfigWindow(self)
 		self.__value: Union[Numeric, Measurement]
 		self._pen = QPen(self.defaultColor)
 
 		self.arc = GaugeArc(self)
 		self.recenter()
 		self.ticks = TickSurface(self, self.majorDivisions)
+		self.minor_ticks = TickSurface(self, self.minorDivisions)
+		self.micro_ticks = TickSurface(self, self.microDivisions)
+		self.minor_ticks.hide()
+		# self.micro_ticks.hide()
 		self.labels = GaugeTickTextGroup(self, self.ticks)
 		self.needle = Needle(self)
 		self.unitLabel = GaugeUnit(self)
@@ -1495,7 +2122,11 @@ class Gauge(Display):
 
 	@defer
 	def rebuild(self):
+		clearCacheAttr(self.majorDivisions, 'interval', 'interval_degree')
 		self.ticks.rebuild()
+		self.minor_ticks.rebuild()
+		self.micro_ticks.rebuild()
+
 		self.labels.rebuild()
 		self.unitLabel.draw()
 		self.needle.refresh()
@@ -1503,6 +2134,9 @@ class Gauge(Display):
 
 	def refresh(self):
 		self.ticks.refresh()
+		self.minor_ticks.refresh()
+		self.micro_ticks.refresh()
+
 		self.labels.refresh()
 		self.unitLabel.draw()
 		self.needle.refresh()
@@ -1511,12 +2145,15 @@ class Gauge(Display):
 		super().parentResized(arg)
 		self.arc.refresh()
 		self.ticks.refresh()
+		self.minor_ticks.refresh()
+		self.micro_ticks.refresh()
+
 		self.labels.rebuild()
 		self.needle.draw()
 		self.unitLabel.draw()
 
 	@property
-	def value(self):
+	def value(self) -> GaugeValue:
 		return self._value
 
 	@value.setter
@@ -1525,7 +2162,7 @@ class Gauge(Display):
 			self._value = value
 			self.valueClass = value
 			if isinstance(value, Measurement):
-				self.setUnit(value)
+				self.unit = value
 
 	@property
 	def _value(self):
@@ -1540,7 +2177,7 @@ class Gauge(Display):
 		self.valueLabel.update()
 
 	@property
-	def valueClass(self):
+	def valueClass(self) -> Type[GaugeValue]:
 		return self._valueClass
 
 	@valueClass.setter
@@ -1560,7 +2197,7 @@ class Gauge(Display):
 		if isinstance(value, (int, float)):
 			self.valueClass = value
 			if isinstance(value, Measurement):
-				self.setUnit(value)
+				self.unit = value
 			self.animateValue(self.__value, value)
 
 	def animateValue(self, start: Numeric, end: Numeric):
@@ -1574,13 +2211,6 @@ class Gauge(Display):
 	def pen(self):
 		return self._pen
 
-	@Slot(str)
-	def setUnit(self, value: Union[str, Measurement]):
-		if isinstance(value, (Measurement, str)):
-			self.unit = value
-		else:
-			log.warning(f'{value} is not a valid string')
-
 	@property
 	def unit(self):
 		return self._unit
@@ -1588,15 +2218,12 @@ class Gauge(Display):
 	@unit.setter
 	def unit(self, value):
 		if value != self._unit:
-			self._setUnit(value)
+			if isinstance(value, Measurement):
+				self._unit = value.unit
+			elif isinstance(value, str):
+				self._unit = value.strip()
 			self.unitLabel.update()
 			self.rebuild()
-
-	def _setUnit(self, value):
-		if isinstance(value, Measurement):
-			self._unit = value.unit
-		elif isinstance(value, str):
-			self._unit = value.strip()
 
 	range: GaugeRange
 
@@ -1611,46 +2238,6 @@ class Gauge(Display):
 	@range.factory
 	def range(self):
 		return Gauge.GaugeRange(self)
-
-	def getRange(self, value):
-		toTry = []
-		if isinstance(value, str):
-			toTry.append(value)
-		elif isinstance(value, Measurement):
-			if not isinstance(value.type, tuple):
-				typeString = str(value.type).strip("<class' >").split('.')[-1].lower()
-				toTry.append(typeString)
-			toTry.extend([value.unit.lower(), value.localize.unit.lower()])
-		for attempt in toTry:
-			try:
-				return self.ranges[attempt]
-			except KeyError:
-				pass
-		else:
-			return self.ranges['default']
-
-	@Slot(int)
-	def setMajorTicks(self, value: int):
-		self.majorDivisions.count = value
-		self.update()
-
-	@Slot(int)
-	def setMinorTicks(self, value: int):
-		self.minorDivisions.count = value
-		self.update()
-
-	@Slot(int)
-	def setMicroTicks(self, value):
-		self.microDivisions.count = value
-		self.update()
-
-	@Slot(bool)
-	def showLabels(self, value):
-		self.labels.setVisible(value)
-
-	@Slot(bool)
-	def showArc(self, value):
-		self.arc.setVisible(value)
 
 	@property
 	def center(self) -> QPointF:
@@ -1672,7 +2259,7 @@ class Gauge(Display):
 
 	@property
 	def radius(self):
-		return min(self.height(), self.width()) / 2 - 10
+		return max(min(self.height(), self.width()) / 2 - self.baseWidth, 1)
 
 	@property
 	def gaugeRect(self) -> QRectF:
@@ -1717,3 +2304,46 @@ class Gauge(Display):
 			self._needleAnimation.setEasingCurve(value)
 		else:
 			print('Not a valid easing curve')
+
+	@property
+	def arc_length(self) -> float:
+		radius_px = self.radius
+		return float(radius_px * self.fullAngle / 180 * pi)
+
+	def value_to_angle_degrees(
+		self,
+		value: Numeric | Percentage | RelativeFloat | Length,
+		relative_angle: Angle = None,
+		relative_px: float = None,
+		radius_px: float = None,
+	) -> Angle:
+		radius = radius_px or self.radius
+		arc_length_px = float(radius * self.fullAngle / 180 * pi)
+
+		if isinstance(value, Percentage):
+			if relative_angle is not None:
+				return Angle(relative_angle * value)
+			elif relative_px is not None:
+				return Angle(relative_px * value / arc_length_px * self.fullAngle)
+			# elif issubclass(self.valueClass, Percentage):
+			# 	value = float(value)
+
+		if isinstance(value, (int, float, self.valueClass)):
+			if isinstance(value, Percentage):
+				value = float(value)
+			value_arc_coverage = float(value / self._range.rounded_range)
+			value_deg = value_arc_coverage * self.fullAngle
+			return Angle(value_deg)
+
+		elif isinstance(value, Percentage | RelativeFloat):
+			# TODO: Add support for custom radius
+			return Angle(value * relative_angle or self.fullAngle)
+		elif isinstance(value, Length):
+			value_px = size_px(value, relative_px or self.gauge.baseWidth)
+			value = value_px / radius * 180 / pi
+			return Angle(value)
+		elif isinstance(value, Angle):
+			return value
+
+	def interval_to_count_float(self, interval: GaugeValue) -> float:
+		return self._range.rounded_range / interval
