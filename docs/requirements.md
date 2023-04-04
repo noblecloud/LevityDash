@@ -119,7 +119,7 @@ sudo pacman -S python
 ### **Fedora**
 
 ```bash
-sudo dnf install python3-pyside6
+sudo dnf install python3
 ```
 
 <!-- tabs:end -->
@@ -150,7 +150,7 @@ Install the following dependencies:
 
 #### Dependencies <!-- {docsify-ignore} -->
 
-##### **Debian/Ubuntu**
+##### **Debian**
 
 ```bash
 sudo apt install build-essential zlib1g-dev libncurses5-dev libgdbm-devlibnss3-dev libssl-dev libreadline-dev libffi-dev wget git
