@@ -202,7 +202,7 @@ UnsetKwarg: Final = IgnoreOr('UnsetKwarg')
 
 Auto = object()
 DType = TypeVar('DType')
-Numeric = Union[int, float, complex, np.number]
+Numeric = Union[int, float, complex, np.number, Measurement]
 LOCAL_TIMEZONE = datetime.now(timezone.utc).astimezone().tzinfo
 
 
