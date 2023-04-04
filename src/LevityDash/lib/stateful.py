@@ -89,6 +89,14 @@ class DefaultMeta(type):
 		return super().__new__(mcs, name, bases, attrs)
 
 
+class SourceType(Enum):
+	Default = "default"
+	Factory = "factory"
+	ItemDefault = "item_default"
+	UserConfig = "user_config"
+	Shared = "shared"
+
+
 class Default(Generic[DefaultType], metaclass=DefaultMeta):
 	def __new__(cls, value, **kwargs):
 		if cls is Default:
@@ -457,7 +465,7 @@ class StateProperty(property):
 	# raise InvalidArguments(f"{self.__class__.__name__} {self.name} has invalid arguments: \n{errors}")
 
 	# Section StateProperty
-	def __new__(cls, fget=None, **kwargs):
+	def __new__(cls, fget=None, **kwargs) -> "StateProperty":
 		if kwargs and fget is None:
 			return partial(cls, **kwargs)
 
@@ -582,9 +590,19 @@ class StateProperty(property):
 		# yield "options", self.options
 
 	# Section .__get__
-	def __get__(self, obj, objtype=None):
+	def __get__(self, obj: 'Stateful', objtype=None):
 		if obj is None:
 			return self
+		if self.key not in obj._user_set_state_items_:
+			try:
+				obj_sources = obj._state_item_sources
+				if obj_sources.get(self, Unset) is SourceType.ItemDefault:
+					return self.get_item_default(obj)
+
+			except AttributeError:
+				pass
+		else:
+			print('test')
 		if self.fget is None:
 			raise AttributeError("unreadable attribute")
 		try:
@@ -592,6 +610,7 @@ class StateProperty(property):
 		except AttributeError as e:
 			if (factory := self.__options.get("factory.func", None)) is not None:
 				value = factory(obj)
+				obj._state_item_sources[self] = SourceType.Factory
 				self.__existingValues__[self.cacheKey(obj)] = value
 				self.fset(obj, value)
 				try:
@@ -601,10 +620,10 @@ class StateProperty(property):
 				return value
 			elif not self.allowNone:
 				raise e
-		return self.default(type(obj), obj)
+		return self.default(type(obj), obj, update_source=True)
 
 	@staticmethod
-	def checkType(instance: Any, type_: Type | _GenericAlias | GenericAlias| _UnionGenericAlias):
+	def checkType(instance: Any, type_: Type | _GenericAlias | GenericAlias | _UnionGenericAlias):
 		if type_ is UnsetReturn:
 			return False
 		if isinstance(type_, _UnionGenericAlias):
@@ -661,7 +680,7 @@ class StateProperty(property):
 		elif value is None and not self.__options.get("allowNone", True):
 			if "default" not in self.__options:
 				raise AttributeError(f"{repr(self)} is not allowed to be None but no default was set")
-			value = self.default(type(owner), owner)
+			value = self.default(type(owner), owner, update_source=True)
 			try:
 				value = copy(value)
 			except TypeError as e:
@@ -768,7 +787,7 @@ class StateProperty(property):
 		self.__state = func
 		return self
 
-	@property
+	@cached_property
 	def fget(self) -> Callable[[], StatefulReturnType]:
 		func = self._get
 		if func is None or func.__code__.co_code == PASS_FUNC:
@@ -854,8 +873,10 @@ class StateProperty(property):
 
 		return UnsetDefault
 
-	def default(self, owner: Type['Stateful'], instance: 'Stateful' = None) -> Any | Literal[UnsetDefault]:
+	def default(self, owner: Type['Stateful'], instance: 'Stateful' = None, update_source: bool = True) -> Any | Literal[UnsetDefault]:
 		if instance is not None and (instanceDefault := self.get_item_default(instance)) is not UnsetDefault:
+			if update_source:
+				instance._state_item_sources[self] = SourceType.ItemDefault
 			return instanceDefault
 		return self.class_default(owner)
 
@@ -901,7 +922,7 @@ class StateProperty(property):
 				if (factory := self.__options.get("factory.func", None)) is not None:
 					try:
 						fromOwner = factory(owner)
-
+						owner._state_item_sources[self] = SourceType.Factory
 					except Exception as eF:
 						if STATEFUL_DEBUG:
 							log.exception(e)
@@ -1289,7 +1310,7 @@ class StateProperty(property):
 					return "_", None
 				if value.testDefault(value.default()):
 					return "_", None
-			default = self.default(type(owner), owner)
+			default = self.default(type(owner), owner, update_source=False)
 
 			if isinstance(default, DefaultGroup) or default is UnsetDefault:
 				pass
@@ -2078,9 +2099,11 @@ class Stateful(metaclass=StatefulMetaclass):
 	__state_items__: ClassVar[ChainMap[Text, StateProperty]]
 	__defaults__: ChainMap[str, Any]
 	__tag__: ClassVar[str] = "Stateful"
-	_set_state_items_: set
+	_set_state_items_: set = cached_property(lambda self: set())
+	_user_set_state_items_: set = cached_property(lambda self: set())
 	_unset_keys_: set = None
 	_rawItemState: Dict[str, Any]
+	_state_item_sources: Dict[StateProperty, SourceType] = cached_property(lambda self: {})
 
 	statefulItems = StatefulMetaclass.statefulItems
 	statefulKeys = StatefulMetaclass.statefulKeys
@@ -2269,6 +2292,10 @@ class Stateful(metaclass=StatefulMetaclass):
 		afterPool: ActionPool = self._actionPool
 		unwraps = []
 		for prop in items.values():
+
+			if prop not in self._state_item_sources:
+				self._state_item_sources[prop] = SourceType.Default
+
 			if prop.unwrappedKeys:
 				if prop.key not in prop.unwrappedKeys:
 					pass
@@ -2290,9 +2317,11 @@ class Stateful(metaclass=StatefulMetaclass):
 			else:
 				value = state.pop(propKey)
 				if (sharedValue := shared.get(propKey, Unset)) is not Unset:
+
 					sharedType = type(sharedValue)
 					sharedType = sharedType if not issubclass(sharedType, DeepChainMap) else dict
 					if isinstance(value, sharedType):
+						self._state_item_sources[prop] = SourceType.Shared
 						match sharedValue:
 							case dict():
 								value = DeepChainMap(value, sharedValue).to_dict()
@@ -2300,6 +2329,7 @@ class Stateful(metaclass=StatefulMetaclass):
 								value = sharedValue.to_dict(value)
 							case _:
 								value = sharedValue
+
 					else:
 						statefulType = prop.returnsFilter(Stateful)
 						if (
@@ -2307,9 +2337,9 @@ class Stateful(metaclass=StatefulMetaclass):
 							and isinstance(value, statefulType.singleStatefulItemTypes)
 							and statefulType is not UnsetReturn
 						):
-							statefulType: Type[Stateful]
 							subProp = statefulType.findPropForType(type(value))
 							if isinstance(sharedValue, DeepChainMap) and subProp is not None:
+								self._state_item_sources[subProp] = SourceType.Shared
 								value = sharedValue.to_dict({subProp.key: value})
 
 				prop.setState(self, value, afterPool=afterPool)
@@ -2532,6 +2562,11 @@ class Stateful(metaclass=StatefulMetaclass):
 	def _defaults(cls) -> dict[str, StateProperty]:
 		return {i.key: i for i in cls.__state_items__.values() if not i.allowNone and i.hasDefault(cls)}
 
+	def _item_defaults(self) -> dict[str, StateProperty]:
+		cls_defaults = self._defaults()
+		cls_defaults.update({i.key: i for i in self.__state_items__.values() if not i.allowNone and i.get_item_default(self) is not UnsetDefault})
+		return cls_defaults
+
 	@classmethod
 	@lru_cache()
 	def findTag(cls, tag: str) -> Type['Stateful'] | None:
@@ -2576,8 +2611,9 @@ class Stateful(metaclass=StatefulMetaclass):
 		code = type(self).__init__.__code__
 		self._set_state_items_ = set()
 		initVars = set(code.co_varnames[: code.co_argcount])
-		for key, prop in type(self)._defaults().items():
-			default = prop.default(type(self), self)
+		for key, prop in self._item_defaults().items():
+			default = prop.default(type(self), self, update_source=True)
+
 			if key in initVars:
 				continue
 			elif key not in kwargs:
@@ -2590,13 +2626,20 @@ class Stateful(metaclass=StatefulMetaclass):
 					value = default
 			elif kwargs[key] is UnsetDefault or kwargs[key] is None:
 				value = default
+				self._set_state_items_.add(key)
+				self._user_set_state_items_.discard(key)
 			else:
 				value = kwargs[key]
+				self._set_state_items_.add(key)
+				self._user_set_state_items_.add(key)
+
 			if (d := getattr(value, "default", UnsetDefault)) is not UnsetDefault:
 				if isinstance(d, Callable) and d.__code__.co_argcount <= 1:
 					value = d()
 				else:
 					value = d
+				self._user_set_state_items_.discard(key)
+				self._set_state_items_.add(key)
 
 			if prop.unwraps and isinstance(value, Mapping):
 				kwargs.update(value)
