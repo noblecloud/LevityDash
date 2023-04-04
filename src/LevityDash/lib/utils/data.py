@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from enum import auto, Enum, IntFlag
 from functools import cached_property
 from json import JSONEncoder
+from types import GenericAlias
 from typing import Any, Callable, Dict, Iterable, List, NamedTuple, Sequence, Set, Tuple, Type, TYPE_CHECKING, Union
 
 import numpy as np
@@ -219,6 +220,9 @@ TimeLineCollection = NamedTuple('TimeLineCollection', [('max', datetime), ('min'
 
 @dataclass
 class MinMax:
+
+	__class_getitem__ = classmethod(GenericAlias)
+
 	min: Numeric
 	max: Numeric
 
