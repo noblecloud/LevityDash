@@ -610,7 +610,7 @@ files = [
 name = "executing"
 version = "1.2.0"
 description = "Get the currently executing AST node of a frame, and other information"
-category = "dev"
+category = "main"
 optional = false
 python-versions = "*"
 files = [
@@ -1948,6 +1948,24 @@ files = [
 ]
 
 [[package]]
+name = "sentinel"
+version = "1.0.0"
+description = "Create sentinel objects, akin to None, NotImplemented, Ellipsis"
+category = "main"
+optional = false
+python-versions = ">=3.6,<4.0"
+files = [
+    {file = "sentinel-1.0.0-py3-none-any.whl", hash = "sha256:24f02a34cc9f0fcba5a666a23b6c7f56aff332fc624632ee442e7237751a9f60"},
+    {file = "sentinel-1.0.0.tar.gz", hash = "sha256:190928f9951af6e94a1f84eefcaed791c28097dd152b88e988906be300451fd2"},
+]
+
+[package.dependencies]
+varname = {version = ">=0.1", optional = true, markers = "extra == \"varname\""}
+
+[package.extras]
+varname = ["varname (>=0.1)"]
+
+[[package]]
 name = "sentry-sdk"
 version = "1.12.1"
 description = "Python client for Sentry (https://sentry.io)"
@@ -2154,6 +2172,24 @@ secure = ["certifi", "cryptography (>=1.3.4)", "idna (>=2.0.0)", "ipaddress", "p
 socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
 
 [[package]]
+name = "varname"
+version = "0.10.0"
+description = "Dark magics about variable names in python."
+category = "main"
+optional = false
+python-versions = ">=3.6,<4.0"
+files = [
+    {file = "varname-0.10.0-py3-none-any.whl", hash = "sha256:20748d5cd3e125350726cd39d2cbd0e3000f30b3e0d3d5fe827efa0e71729809"},
+    {file = "varname-0.10.0.tar.gz", hash = "sha256:045f7a409b3e91a760ab10a5539aabbb292db9d685f3011920b85fd4dbc5b9e3"},
+]
+
+[package.dependencies]
+executing = ">=1.1,<2.0"
+
+[package.extras]
+all = ["asttokens (>=2.0.0,<3.0.0)", "pure_eval (<1.0.0)"]
+
+[[package]]
 name = "weatherunits"
 version = "0.7.1"
 description = "Easy conversion for common units"
@@ -2323,4 +2359,4 @@ monitoring = ["sentry-sdk", "logtail-python"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.12"
-content-hash = "3915f0d7a60619525a1ebe1b0d9b1c248a26272f7194aaae7cb69c3fe395f37b"
+content-hash = "42f202d265b85ec2d39e5d89dad92109a0b4a85be36102ee9e94ad4ea329bf67"

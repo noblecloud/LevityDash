@@ -142,3 +142,4 @@ stash/
 
 memray*
 /docs/.obsidian/
+*.ignore
