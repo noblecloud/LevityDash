@@ -2224,7 +2224,7 @@ class MeasurementTimeSeries(OrderedDict):
 			source: 'Plugin'
 			source.publisher.connectChannel(self.key, self.sourceChanged)
 			for obs in source.observations:
-				if isinstance(obs, ObservationTimeSeries):
+				if isinstance(obs, ObservationTimeSeries) and self.__minPeriod < abs(obs.period) < self.__maxPeriod:
 					ts: MeasurementTimeSeries = obs[self.key]
 					ts.addReference(self)
 					obs.add_subscribed_item(self.key)
@@ -2323,7 +2323,12 @@ class MeasurementTimeSeries(OrderedDict):
 	@property
 	def sources(self) -> Set[Union['Observation', 'MeasurementTimeSeries']]:
 		if self.isMultiSource:
-			return {e[self._key] for e in self._source.observations if self._key in e}
+			return {
+				e[self._key]
+				for e in self._source.observations
+				if self._key in e and
+				self.__minPeriod < abs(e.period) < self.__maxPeriod
+			}
 		else:
 			return {self._source}
 
@@ -2387,7 +2392,6 @@ class MeasurementTimeSeries(OrderedDict):
 				)
 			else:
 				values = self.__sourcePull()
-
 
 				for item in values:
 					self[item.timestamp] = item
