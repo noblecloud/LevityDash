@@ -123,7 +123,7 @@ schema = {
 	},
 
 	'aliases': {
-		'@conditionIcon': {
+		'@conditionIcons': {
 			'clear-day': 'wi:day-sunny',
 			'clear-night': 'wi:night-clear',
 			'rain': 'wi:rain',
@@ -152,7 +152,7 @@ _defaultConfig = f""";All independent configs must have a plugin section
 [plugin]
 enabled = @ask(bool:False).message({_enableMessage})
 apikey = @ask(str:).message(Enter API Key)
-defaultFor = temperature wind pressure humidity light lightning
+defaultFor = temperature precipitation wind pressure humidity storm
 """
 
 
