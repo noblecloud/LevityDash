@@ -34,7 +34,8 @@ class Handle(QGraphicsPathItem):
 	_path_: QPainterPath = None
 
 	def __init__(self, parent: 'HandleGroup', location: Union[LocationFlag, Position], alignment: LocationFlag = LocationFlag.Center):
-		super(Handle, self).__init__(parent=parent)
+		super(Handle, self).__init__()
+		self.setParentItem(parent)
 		self.location = location
 		self.alignment = alignment
 		self.__init_defaults__()

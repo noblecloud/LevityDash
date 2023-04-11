@@ -338,8 +338,8 @@ class Publisher(MutableSignal):
 	Publishes changes within a plugin to the global publisher.
 	"""
 
-	__added = Signal(dict)
-	__changed = Signal(dict)
+	__added = Signal(KeyData)
+	__changed = Signal(KeyData)
 	_pending: dict['Observation', Set['CategoryItem']]
 	__channels: dict['CategoryItem', ChannelSignal]
 

@@ -4,7 +4,8 @@ from PySide6.QtWidgets import QApplication, QGraphicsPathItem
 
 class Glyph(QGraphicsPathItem):
 	def __init__(self, parent=None, weight=None, color=None, size=None):
-		super().__init__(parent)
+		super().__init__()
+		self.setParentItem(parent)
 
 		if size is None:
 			size = 0.8

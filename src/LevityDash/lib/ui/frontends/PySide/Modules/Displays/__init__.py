@@ -13,7 +13,8 @@ class Surface(QGraphicsItemGroup):
 		def parentItem(self) -> Panel: ...
 
 	def __init__(self, parent: 'Panel'):
-		super().__init__(parent)
+		super().__init__()
+		self.setParentItem(parent)
 
 	def boundingRect(self):
 		return self.parentItem().rect()

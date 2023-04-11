@@ -2719,7 +2719,8 @@ class TimeMarkers(QGraphicsRectItem, Stateful, tag=...):
 		self.time = time()
 		self.graph = parent.graph
 		self.pens = {}
-		super(TimeMarkers, self).__init__(parent)
+		super(TimeMarkers, self).__init__()
+		self.setParentItem(parent)
 		self.state = self.prep_init({})
 		self.parentItem().parentItem().parentItem().signals.resized.connect(self.updateRect)
 		self.parentItem().parentItem().graph.timeframe.connectItem(self.onAxisChange)
@@ -2876,7 +2877,8 @@ class TimeMarkers(QGraphicsRectItem, Stateful, tag=...):
 class HourLines(QGraphicsItemGroup):
 
 	def __init__(self, parent: TimeMarkers, period: timedelta | int):
-		super(HourLines, self).__init__(parent)
+		super(HourLines, self).__init__()
+		self.setParentItem(parent)
 		if isinstance(period, timedelta):
 			period = round(period.total_seconds() / 3600)
 		self.period = period
