@@ -387,7 +387,7 @@ class Govee(Plugin, realtime=True, logged=True):
 		results = {
 			'timestamp': now().timestamp(),
 			'type': f'BLE{str(type(data).__name__)}',
-			'rssi': int(device.rssi),
+			'rssi': int(data.rssi),
 			'deviceName': str(device.name),
 			'deviceAddress': str(device.address),
 			**self.__temperatureParse(dataBytes),
