@@ -999,7 +999,11 @@ class StateProperty(property):
 
 	@cached_property
 	def conditions(self) -> Conditions:
-		return self.__options.get("conditions")
+		if (conditions := self.__options.maps[0].get('conditions', None)) is None:
+			self.__options["conditions"] = conditions = Conditions(self)
+			inheritedConditions = next((i['conditions'] for i in self.options.maps if 'conditions' in i), [])
+			conditions.extend(inheritedConditions)
+		return conditions
 
 	@cached_property
 	def __options(self):
@@ -1051,10 +1055,7 @@ class StateProperty(property):
 		elif isinstance(method, (list, tuple)):
 			method = set(method)
 
-		if (conditions := self.__options.maps[0].get('conditions', None)) is None:
-			self.__options["conditions"] = conditions = Conditions(self)
-			inheritedConditions = next((i['conditions'] for i in self.options.maps if 'conditions' in i), [])
-			conditions.extend(inheritedConditions)
+		conditions = self.conditions
 
 		con = DotDict()
 		conditions.append(con)
