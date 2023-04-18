@@ -1036,16 +1036,20 @@ class StateProperty(property):
 	def hasConditions(self) -> bool:
 		return bool(self.__options.get("conditions", False))
 
-	def condition(self, *args, **kwargs):
-		method = kwargs.pop("method", Unset)
+	def condition(self, func: Callable = Unset, *args, method: str | Iterable[str] = Unset, **kwargs):
+		# if the function is not set
+		if func is Unset:
+			# check if there is a method/function in args
+			if (func_from_args := next((isinstance(i, Callable) for i in args), Unset)) is not Unset:
+				func = func_from_args
+
+			elif method is Unset:
+				raise TypeError("Must provide a function to condition or use as a decorator")
+
 		if isinstance(method, str):
 			method = {method}
 		elif isinstance(method, (list, tuple)):
 			method = set(method)
-		if args:
-			func, *args = args
-		else:
-			func = Unset
 
 		if (conditions := self.__options.maps[0].get('conditions', None)) is None:
 			self.__options["conditions"] = conditions = Conditions(self)
@@ -1055,6 +1059,7 @@ class StateProperty(property):
 		con = DotDict()
 		conditions.append(con)
 		con["method"] = method or {"get"}
+
 		if func is Unset:
 			def continueCondition(func):
 				con["func"] = func
