@@ -127,7 +127,7 @@ class Realtime(Panel, tag='realtime'):
 
 	def __rich_repr__(self):
 		yield 'value', self.container
-		yield 'title', self.title
+		yield 'title', self.title_label
 		yield from super().__rich_repr__()
 
 	def __str__(self):
@@ -154,7 +154,7 @@ class Realtime(Panel, tag='realtime'):
 		self.display.refresh()
 
 	@cached_property
-	def title(self):
+	def title_label(self):
 		title = RealtimeTitle(self, stateKey=TitleValueSplitter.title)
 		return title
 
@@ -180,11 +180,11 @@ class Realtime(Panel, tag='realtime'):
 		self._key = value
 		container = LevityDashboard.get_container(value)
 
-		if self.title.allowDynamicUpdate():
-			self.title.textBox.setTextAccessor(lambda: container.title)
-			if not self.title.isEnabled():
-				self.title.textBox.setTextAccessor(None)
-		self.title.textBox.refresh()
+		if self.title_label.allowDynamicUpdate():
+			self.title_label.textBox.setTextAccessor(lambda: container.title)
+			if not self.title_label.isEnabled():
+				self.title_label.textBox.setTextAccessor(None)
+		self.title_label.textBox.refresh()
 		self.container = container
 
 	@StateProperty(default=AnySource, dependencies={'key', 'display', 'title', 'forecast'})
@@ -272,7 +272,7 @@ class Realtime(Panel, tag='realtime'):
 
 	@splitter.factory
 	def splitter(self) -> TitleValueSplitter:
-		return TitleValueSplitter(surface=self, title=self.title, value=self.display)
+		return TitleValueSplitter(surface=self, title=self.title_label, value=self.display)
 
 	@cached_property
 	def __requestAttempts(self) -> int:
@@ -468,8 +468,8 @@ class Realtime(Panel, tag='realtime'):
 		if self.display.displayType == DisplayType.Text:
 			if container.metadata['type'] == 'icon' and container.metadata['iconType'] == 'glyph':
 				self.display.valueTextBox.textBox.setTextAccessor(None)
-			if self.title.isEnabled() and self.title.allowDynamicUpdate():
-				self.title.textBox.setTextAccessor(lambda: container.title)
+			if self.title_label.isEnabled() and self.title_label.allowDynamicUpdate():
+				self.title_label.textBox.setTextAccessor(lambda: container.title)
 			self.display.splitter.updateUnitDisplay()
 			self.display.refresh()
 

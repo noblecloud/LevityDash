@@ -271,7 +271,7 @@ class BaseContextMenu(QMenu):
 			self.parent.hide()
 
 	def addTitleMenu(self):
-		titleMenu = LabelContextMenu(self.parent.title, title="Title")
+		titleMenu = LabelContextMenu(self.parent.title_label, title="Title")
 		titlePositions = MenuFromEnum(
 			self.parent.splitter,
 			'titlePosition',

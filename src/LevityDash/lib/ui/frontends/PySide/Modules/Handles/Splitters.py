@@ -1,3 +1,5 @@
+from typing import Mapping, Any, List
+
 from PySide6.QtCore import QPointF, QRectF, QSizeF, Qt
 from PySide6.QtWidgets import QGraphicsItem, QApplication
 
@@ -219,21 +221,16 @@ class TitleValueSplitter(Splitter, Stateful):
 	def _afterSetState(self):
 		self.setGeometries()
 
-	@property
-	def state(self):
-		return Stateful.state.fget(self)
-
-	@state.setter
-	def state(self, value):
+	def setItemState(self, state: Mapping[str, Any] | List, *args, **kwargs):
 		titleKeys = TitleLabel.statefulKeys - {'visible'}
 
-		titleState = {key: value[key] for key in titleKeys if key in value}
-		ownState = {key: value[key] for key in value if key not in titleKeys}
+		titleState = {key: state[key] for key in titleKeys if key in state}
+		ownState = {key: state[key] for key in state if key not in titleKeys}
 
 		if ownState:
-			Stateful.state.fset(self, ownState)
+			super(TitleValueSplitter, self).setItemState(ownState, *args, **kwargs)
 		if titleState:
-			self.title.state = titleState
+			self.title.setItemState(titleState)
 		if ownState or titleState:
 			self.setGeometries()
 

@@ -530,16 +530,27 @@ class TitleLabel(NonInteractiveLabel, defaultText='-'):
 
 	@StateProperty(default=..., sortOrder=0, dependencies={'geometry', 'margins'}, repr=True)
 	def text(self) -> str:
-		pass
+		...
 
 	@text.setter
 	def text(self, value: str):
-		self._manualValue = value
+		self._manualValue = True
+		self.textBox.setTextAccessor(lambda: value)
 		Label.text.fset(self, value)
 
 	@text.condition
 	def text(self):
 		return not self.allowDynamicUpdate()
+
+	@StateProperty(default=None, sortOrder=1, dependencies={'geometry', 'margins'}, repr=True)
+	def icon(self) -> Icon | None:
+		...
+
+	@icon.setter
+	def icon(self, value: Icon | None):
+		self._manualValue = True
+		self.textBox.setTextAccessor(None)
+		Label.icon.fset(self, value)
 
 	def allowDynamicUpdate(self) -> bool:
 		return super().allowDynamicUpdate() and not self._manualValue
