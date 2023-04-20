@@ -22,7 +22,7 @@ from types import GenericAlias, SimpleNamespace, UnionType
 from typing import (
 	_GenericAlias, _UnionGenericAlias, Any, Callable, ClassVar, Dict, Final, Generic, get_args, get_origin,
 	get_type_hints, Hashable, Iterable, List, Literal, Mapping, Sequence, Set, Sized, Text, Tuple, Type, TypeAlias,
-	TypeVar, Union
+	TypeVar, Union, _UnpackGenericAlias
 )
 from warnings import warn, warn_explicit
 
@@ -403,6 +403,8 @@ StatefulEncodedType = TypeVar("StatefulEncodedType")
 
 _Parse_Return_Type = Union[_T, Type | TypedIterable | Iterable[_T]]
 Parse_Return_Type: TypeAlias = _Parse_Return_Type[_Parse_Return_Type[_Parse_Return_Type]]
+Parse_Special_Type: TypeAlias = Type | GenericAlias | _UnionGenericAlias | _GenericAlias | Iterable[Type | GenericAlias | _UnionGenericAlias | _GenericAlias]
+GET_SET = Literal["get", "set", '*']
 
 
 class InvalidArguments(SyntaxError):
@@ -1451,12 +1453,32 @@ class StateProperty(property):
 	def parse_return_type_special(expected: Type | GenericAlias | _UnionGenericAlias | _GenericAlias | Iterable[Type | GenericAlias | _UnionGenericAlias | _GenericAlias]) -> Parse_Return_Type:
 		if isinstance(expected, _UnionGenericAlias):
 			return tuple(StateProperty.parse_return_type_special(t) for t in get_args(expected))
-		elif isinstance(expected, Iterable) and not isinstance(expected, str) and all(isinstance(t, Type | GenericAlias | _UnionGenericAlias | _GenericAlias | Iterable) for t in expected):
-			return tuple(StateProperty.parse_return_type_special(t) for t in expected)
 		if isinstance(expected, _GenericAlias | GenericAlias):
 			origin = get_origin(expected)
 			if issubclass(origin, Iterable) and expected.__args__:
 				return makeTypedIterable(expected)
+			else:
+				return origin
+
+		# The logic here is really dumb...
+		# TODO: optimize logic
+		if isinstance(expected, Iterable) and not isinstance(expected, str):
+			is_valid = True
+
+			# Ensure all the items in the iterable are types
+			# Doing this in a list comprehension causes a recursion error
+			for t in expected:
+				try:
+					if not isinstance(t, Type | GenericAlias | _UnionGenericAlias | _GenericAlias | Iterable):
+						is_valid = False
+						break
+				except Exception:
+					is_valid = False
+					break
+
+			if is_valid:
+				return tuple(StateProperty.parse_return_type_special(exp) if not isinstance(exp, _UnpackGenericAlias) else exp for exp in expected)
+
 		return expected
 
 	def _varifyReturnType(self, _type: _T, func: Callable[[_T, type], bool] = issubclass) -> bool:
