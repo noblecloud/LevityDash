@@ -603,8 +603,6 @@ class StateProperty(property):
 
 			except AttributeError:
 				pass
-		else:
-			print('test')
 		if self.fget is None:
 			raise AttributeError("unreadable attribute")
 		try:
@@ -620,6 +618,8 @@ class StateProperty(property):
 				except AttributeError:
 					pass
 				return value
+			elif STATEFUL_DEBUG:
+				raise e
 			elif not self.allowNone:
 				raise e
 		return self.default(type(obj), obj, update_source=True)
@@ -1534,13 +1534,14 @@ class StateProperty(property):
 							existing._rawItemState = deepcopy(state)
 							if not isinstance(state, Mapping):
 								state = self.decodeValue(state, owner)
+							existing.setItemState(state)
 						else:
 							annotations = get_annotations(fset)
 							if len(annotations) == 1:
 								expected = list(annotations.values())[0]
 								if not isinstance(state, expected):
 									state = self.decodeValue(state, owner)
-						fset(existing, state)
+							fset(existing, state)
 						if isinstance(existing, Stateful):
 							try:
 								existing.__state_key__ = self
@@ -2321,8 +2322,13 @@ class Stateful(metaclass=StatefulMetaclass):
 		unwraps = []
 		for prop in items.values():
 
+			# Set state item source
 			if prop not in self._state_item_sources:
-				self._state_item_sources[prop] = SourceType.Default
+				# TODO: Add better conditions for this
+				if prop.key in state:
+					self._state_item_sources[prop] = SourceType.UserConfig
+				else:
+					self._state_item_sources[prop] = SourceType.Default
 
 			if prop.unwrappedKeys:
 				if prop.key not in prop.unwrappedKeys:
