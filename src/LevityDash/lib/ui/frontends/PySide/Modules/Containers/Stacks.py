@@ -708,12 +708,15 @@ class Stack(Panel, tag='stack'):
 				item = self.extractExisting(state, existing) or defaultType(self, **state)
 
 			elif isinstance(item, dict):
+				# Determine the type of the item
 				match item:
 					case {'spacer': state} | {'type': 'spacer', **state}:
 						itemType = Spacer
 
 					case {'type': str(itemTypeStr), **state}:
 						itemType = Stack.defaultType.decodeValue(itemTypeStr, self)
+						state['type'] = itemTypeStr
+
 					case dict(state):
 						itemType = self.defaultType
 					case _:
@@ -953,9 +956,6 @@ class ValueStack(Stack, tag='value-stack'):
 				if (valueLabel := getattr(display, 'valueTextBox', None)) is not None:
 					valueLabel.setAlignment(valueAlignment)
 
-	def setGeometries(self, manualSize: Size.Height | Size.Width | float | int | Length = None):
-		super().setGeometries(manualSize)
-		self.getAttrGroup('value-stack.text').adjustSizes('stack geometry changed')
 
 	def extractExisting(
 		self, state_: dict,
