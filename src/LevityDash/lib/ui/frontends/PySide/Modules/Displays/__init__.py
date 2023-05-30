@@ -1,7 +1,8 @@
 from typing import TYPE_CHECKING
 
 from PySide6.QtGui import QPainterPath, QPainter
-from PySide6.QtWidgets import QGraphicsItemGroup, QGraphicsItem, QStyleOptionGraphicsItem, QWidget
+from PySide6.QtWidgets import QGraphicsItemGroup, QStyleOptionGraphicsItem, QWidget
+from .protocols import *
 
 
 class Surface(QGraphicsItemGroup):
@@ -44,6 +45,7 @@ class SurfaceCentered(Surface):
 
 from .Text import *
 from .Label import *
+from .Annotations import *
 from .DateTime import *
 from .Gauge import *
 from .Realtime import Realtime

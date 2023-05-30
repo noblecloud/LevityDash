@@ -618,8 +618,8 @@ class StateProperty(property):
 				except AttributeError:
 					pass
 				return value
-			elif STATEFUL_DEBUG:
-				raise e
+			elif not self.allowNone and not self.hasDefault(objtype):
+				raise SyntaxError(f"Property {self} has no default value and is not set")
 			elif not self.allowNone:
 				raise e
 		return self.default(type(obj), obj, update_source=True)
@@ -673,6 +673,9 @@ class StateProperty(property):
 
 	# Section .__set__
 	def __set__(self, owner: 'Stateful', value: StatefulAcceptsType, **kwargs):
+
+		_source = SourceType.UserConfig
+
 		if (fset := self.fset) is None:
 			raise AttributeError("can't set attribute")
 
@@ -690,7 +693,10 @@ class StateProperty(property):
 					log.exception(e)
 				warn(f"A default value was requested but is not a copyable type! There will be dragons!")
 
+			_source = SourceType.Default
+
 		if isinstance(value, DefaultGroup):
+			_source = SourceType.Default
 			value = value.value
 
 		if self.conditions and not self.testConditions(value, owner, "set"):
@@ -703,6 +709,14 @@ class StateProperty(property):
 			value.__statefulParent = owner
 
 		self.fset(owner, value)
+
+		try:
+			owner_sources = owner._state_item_sources
+			if owner_sources.get(self, Unset) is SourceType.ItemDefault:
+				owner_sources[self] = _source
+
+		except AttributeError:
+			pass
 
 		self.schedule_after_func(owner, afterPool=kwargs.get('afterPool', None))
 
@@ -886,6 +900,9 @@ class StateProperty(property):
 	def hasDefault(self, owner: Type['Stateful']) -> bool:
 		ownerDefaults = getattr(owner, "__defaults__", {})
 
+		if self.has_item_default:
+			return True
+
 		if (ownerDefault := ownerDefaults.get(self.key, UnsetDefault)) is not UnsetDefault:
 			return True
 
@@ -901,6 +918,14 @@ class StateProperty(property):
 			return True
 
 		return False
+
+	@property
+	def has_item_default(self) -> bool:
+		if (item_default := self.__options.get("item_default", None)) is None:
+			return False
+		if item_default.get("func", None) is None:
+			return False
+		return True
 
 	def cacheKey(self, obj) -> str:
 		return f"{self.key}.{id(obj):x}"
@@ -1121,6 +1146,10 @@ class StateProperty(property):
 		if args or kwargs:
 			self.__options["decode.args"] = (func, *args)
 			self.__options["decode.kwargs"] = kwargs
+
+		# TODO: Add syntax warning if decode is used on a Stateful item.  Decoding should be
+		# handled by the Stateful item's class instead.
+
 		self.__options["decode.func"] = func
 
 		return self
@@ -2324,7 +2353,8 @@ class Stateful(metaclass=StatefulMetaclass):
 
 			# Set state item source
 			if prop not in self._state_item_sources:
-				# TODO: Add better conditions for this
+				# TODO: Add better conditions for this.  I believe Currently items added in
+				#  the prep_kwargs stage are flagged as user config here?
 				if prop.key in state:
 					self._state_item_sources[prop] = SourceType.UserConfig
 				else:
