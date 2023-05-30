@@ -1825,6 +1825,40 @@ class LinePlotGraphItem(GraphItem, Protocol):
 class GraphAnnotationText(AnnotationText):
 	labelGroup: 'GraphAnnotationLabels'
 
+	def __init__(self, *args, **kwargs):
+		super(GraphAnnotationText, self).__init__(*args, **kwargs)
+		self.setOpacity(getattr(self.labelGroup, 'opacity', 1))
+		self.setFlag(QGraphicsItem.ItemSendsGeometryChanges)
+		self.setFlag(QGraphicsItem.ItemSendsScenePositionChanges)
+
+	@property
+	def graphSurface(self) -> 'GraphPanel':
+		return self.labelGroup.graph
+
+	# !TODO: Reimplement keeping text in containing rect
+	def itemChange(self, change, value):
+		if change is QGraphicsItem.ItemScenePositionHasChanged:
+			# Shrink and fade out as the item moves out of view
+			opacity = getattr(self.labelGroup, 'opacity', 1)
+			sRect = self.mapRectToScene(self.boundingRect())
+			grRect = self.graphSurface.mapRectToScene(self.graphSurface.containingRect)
+			if not grRect.contains(sRect):
+				if grRect.contains(sRect.center()):
+					subRect = grRect.intersected(sRect)
+					relativePos = subRect.center() - sRect.center()
+					if relativePos.x() > 0:
+						diff = subRect.topLeft() - sRect.topLeft()
+					else:
+						diff = subRect.topRight() - sRect.topRight()
+					fract = abs(diff.x()) / ((sRect.width() / 2) or diff.x() or 100)
+					self.setScale(1 - fract * 0.5)
+					self.setOpacity((1 - fract) * opacity)
+
+			else:
+				self.setScale(1)
+				self.setOpacity(opacity)
+		return QGraphicsItem.itemChange(self, change, value)
+
 
 # Section Annotation Labels
 
@@ -2474,7 +2508,7 @@ def useHeight(_, *args):
 
 
 # Section Timestamp Label
-class TimestampLabel(AnnotationText):
+class TimestampLabel(GraphAnnotationText):
 	formatID: int
 	defaultFormatID = 3
 	formatStrings = ['%H:%M:%S.%f', '%H:%M:%S', '%H:%M', f'%-I%p', '%a', '%A', '']
@@ -2495,6 +2529,10 @@ class TimestampLabel(AnnotationText):
 		self.formatID = formatID if formatID is not None else -1
 		self.format = format
 		super(TimestampLabel, self).__init__(labelGroup=labelGroup, **kwargs)
+
+	@property
+	def x(self) -> float:
+		return (self.timestamp - now()).total_seconds() * self.graph.pixelsPerSecond
 
 	@property
 	def y(self) -> float:

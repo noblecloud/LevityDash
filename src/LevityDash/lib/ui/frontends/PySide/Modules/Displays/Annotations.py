@@ -29,14 +29,16 @@ class AnnotationText(Text):
 	scaleToFit: bool = True
 
 	# Section Annotation Text
-	def __init__(self, labelGroup: 'AnnotationLabels', *args, **kwargs):
+	def __init__(self, labelGroup: 'AnnotationLabels' = None, **kwargs):
+		if labelGroup is None:
+			raise TypeError('labelGroup must be passed as a keyword argument')
 		self.labelGroup = labelGroup
 		if (scaleToFit := kwargs.pop('scaleToFit', None)) is not None:
 			self.scaleToFit = scaleToFit
-		super(AnnotationText, self).__init__(parent=labelGroup.surface, **kwargs)
-		self.setFlag(QGraphicsItem.ItemSendsGeometryChanges)
-		self.setFlag(QGraphicsItem.ItemSendsScenePositionChanges)
-		self.setOpacity(getattr(self.labelGroup, 'opacity', 1))
+		try:
+			super(AnnotationText, self).__init__(parent=labelGroup.surface, **kwargs)
+		except TypeError as e:
+			raise AttributeError(f'Error initializing {self.__class__.__name__}: {e}')
 
 	# self.setCacheMode(QGraphicsItem.ItemCoordinateCache)
 
@@ -53,9 +55,6 @@ class AnnotationText(Text):
 		self._value = value
 		self.refresh()
 
-	def refresh(self):
-		super(AnnotationText, self).refresh()
-
 	@property
 	def surface(self):
 		return self.labelGroup.surface
@@ -63,10 +62,6 @@ class AnnotationText(Text):
 	@property
 	def allowedWidth(self):
 		return 400
-
-	def getTextScale(self, textRect: QRectF = None, limitRect: QRectF = None) -> float:
-		scale = super(AnnotationText, self).getTextScale(textRect, limitRect)
-		return scale
 
 	def getTextPosition(self, limitRect: QRectF = None) -> QPointF:
 		return QPoint(0, 0)
@@ -97,7 +92,7 @@ class AnnotationText(Text):
 
 	@property
 	def x(self) -> float:
-		return (self.timestamp - now()).total_seconds() * self.graphSurface.pixelsPerSecond
+		return self.pos().x()
 
 	@property
 	def y(self) -> float:
@@ -110,34 +105,6 @@ class AnnotationText(Text):
 	@position.setter
 	def position(self, value):
 		self.setPos(value)
-
-	@property
-	def graphSurface(self) -> 'GraphPanel':
-		return self.labelGroup.graph
-
-	# !TODO: Reimplement keeping text in containing rect
-	def itemChange(self, change, value):
-		if change is QGraphicsItem.ItemScenePositionHasChanged:
-			# Shrink and fade out as the item moves out of view
-			opacity = getattr(self.labelGroup, 'opacity', 1)
-			sRect = self.mapRectToScene(self.boundingRect())
-			grRect = self.graphSurface.mapRectToScene(self.graphSurface.containingRect)
-			if not grRect.contains(sRect):
-				if grRect.contains(sRect.center()):
-					subRect = grRect.intersected(sRect)
-					relativePos = subRect.center() - sRect.center()
-					if relativePos.x() > 0:
-						diff = subRect.topLeft() - sRect.topLeft()
-					else:
-						diff = subRect.topRight() - sRect.topRight()
-					fract = abs(diff.x()) / ((sRect.width() / 2) or diff.x() or 100)
-					self.setScale(1 - fract * 0.5)
-					self.setOpacity((1 - fract) * opacity)
-
-			else:
-				self.setScale(1)
-				self.setOpacity(opacity)
-		return QGraphicsItem.itemChange(self, change, value)
 
 	def delete(self):
 		if scene := self.scene():
@@ -188,6 +155,84 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, tag=...):
 
 	def post_init(self, **state: dict):
 		pass
+
+	# ======= abstract methods ======== #
+	@abstractmethod
+	def refresh(self):
+		...
+
+	@abstractmethod
+	def onDataChange(self, axis: Axis):
+		...
+
+	""" Called when the data of the axis changes. """
+
+	@abstractmethod
+	def onAxisTransform(self, axis: Axis):
+		...
+
+	""" 
+	Called when the axis transform changes.
+	For example, when the graph timeframe window changes. 
+	"""
+
+	@abstractmethod
+	def labelFactory(self, **kwargs) -> 'AnnotationText':
+		...
+
+	""" Creates labels for the data."""
+
+	# ======= shared methods ======== #
+	def resize(self, newSize: int):
+		currentSize = len(self)
+		if newSize > currentSize:
+			self.extend([self.labelFactory() for _ in range(newSize - currentSize)])
+		elif newSize < currentSize:
+			for _ in range(currentSize - newSize):
+				self.pop().delete()
+
+	def parseSize(self, value: str | float | int, default) -> Length | Size.Height | Size.Width:
+		match value:
+			case str(value):
+				unit = ''.join(re.findall(r'[^\d\.\,]+', value)).strip(' ')
+				match unit:
+					case 'cm':
+						value = Centimeter(float(value.strip(unit)))
+						value.precision = 3
+						value.max = 10
+						return value
+					case 'mm':
+						value = Millimeter(float(value.strip(unit)))
+						value.precision = 3
+						value.max = 10
+						return value
+					case 'in':
+						value = Inch(float(value.strip(unit)))
+						value.precision = 3
+						value.max = 10
+						return value
+					case 'pt' | 'px':
+						return Size.Height(float(value.strip(unit)), absolute=True)
+					case '%':
+						return Size.Height(float(value.strip(unit)) / 100, relative=True)
+					case 'lw':
+						match self.source:
+							case GraphItem(graphic=HasWeight(weight_px=_)):
+								value = float(value.strip(unit))
+								return LineWeight(value, relative=True)
+							case _:
+								return value
+					case _:
+						try:
+							return Centimeter(float(value))
+						except Exception as e:
+							log.error(e)
+							return Centimeter(1)
+			case float(value) | int(value):
+				return Centimeter(float(value))
+			case _:
+				log.error(f'{value} is not a valid value for labelHeight.  Using default value of 1cm for now.')
+				return default
 
 	# Section .properties
 	# ======= state properties ======== #
@@ -368,77 +413,3 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, tag=...):
 				return Alignment(AlignmentFlag.CenterLeft)
 			case DisplayPosition.Center | DisplayPosition.Auto:
 				return Alignment(AlignmentFlag.Center)
-
-	# ======= abstract methods ======== #
-	@abstractmethod
-	def refresh(self): ...
-
-	@abstractmethod
-	def onDataChange(self, axis: Axis): ...
-
-	""" Called when the data of the axis changes. """
-
-	@abstractmethod
-	def onAxisTransform(self, axis: Axis): ...
-
-	""" 
-	Called when the axis transform changes.
-	For example, when the graph timeframe window changes. 
-	"""
-
-	@abstractmethod
-	def labelFactory(self, **kwargs) -> 'AnnotationText': ...
-
-	""" Creates labels for the data."""
-
-	# ======= shared methods ======== #
-	def resize(self, newSize: int):
-		currentSize = len(self)
-		if newSize > currentSize:
-			self.extend([self.labelFactory() for _ in range(newSize - currentSize)])
-		elif newSize < currentSize:
-			for _ in range(currentSize - newSize):
-				self.pop().delete()
-
-	def parseSize(self, value: str | float | int, default) -> Length | Size.Height | Size.Width:
-		match value:
-			case str(value):
-				unit = ''.join(re.findall(r'[^\d\.\,]+', value)).strip(' ')
-				match unit:
-					case 'cm':
-						value = Centimeter(float(value.strip(unit)))
-						value.precision = 3
-						value.max = 10
-						return value
-					case 'mm':
-						value = Millimeter(float(value.strip(unit)))
-						value.precision = 3
-						value.max = 10
-						return value
-					case 'in':
-						value = Inch(float(value.strip(unit)))
-						value.precision = 3
-						value.max = 10
-						return value
-					case 'pt' | 'px':
-						return Size.Height(float(value.strip(unit)), absolute=True)
-					case '%':
-						return Size.Height(float(value.strip(unit) / 100), relative=True)
-					case 'lw':
-						match self.source:
-							case GraphItem(graphic=HasWeight(weight_px=_)):
-								value = float(value.strip(unit))
-								return LineWeight(value, relative=True)
-							case _:
-								return value
-					case _:
-						try:
-							return Centimeter(float(value))
-						except Exception as e:
-							log.error(e)
-							return Centimeter(1)
-			case float(value) | int(value):
-				return Centimeter(float(value))
-			case _:
-				log.error(f'{value} is not a valid value for labelHeight.  Using default value of 1cm for now.')
-				return default
