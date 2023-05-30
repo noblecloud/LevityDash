@@ -5,12 +5,11 @@ from typing import Any, Callable, List, Optional, TYPE_CHECKING, Union
 
 from dateutil.parser import parser
 from PySide6.QtCore import QObject, QPoint, QPointF, QRectF, QThread, Signal, Slot
-from PySide6.QtGui import QBrush, QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPen, Qt, QTransform
-from PySide6.QtWidgets import QApplication, QGraphicsItem, QGraphicsPathItem
+from PySide6.QtGui import QBrush, QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPen, Qt, QTransform, QPolygonF, QPolygon, QPainterPathStroker
+from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem
 from rich.repr import rich_repr
 
 import WeatherUnits as wu
-from LevityDash.lib.config import userConfig
 from LevityDash.lib.plugins import Container
 from LevityDash.lib.plugins.observation import TimeHash
 from LevityDash.lib.ui import Color
@@ -342,10 +341,7 @@ class Text(QGraphicsPathItem):
 		rect = self._textRect or self._update_path()
 		self.setTransformOriginPoint(0, 0)
 		x, y = self.getTextPosition(limitRect).toTuple()
-		if align := getattr(self, '_sized', None):
-			sceneY = align.sharedY(self)
-			y = self.mapFromScene(QPointF(0, sceneY)).y()
-		transform.translate(x, y)
+		self._apply_group_transform(transform, x, y)
 		if not self._fixedFontSize:
 			if group := getattr(self, '_sized', None):
 				scale = group.sharedSize(self)
@@ -353,6 +349,12 @@ class Text(QGraphicsPathItem):
 				scale = self.getTextScale(rect, limitRect, transform=transform)
 			transform.scale(scale, scale)
 		self.setTransform(transform)
+
+	def _apply_group_transform(self, transform: QTransform, x: float, y: float):
+		if align := getattr(self, '_sized', None):
+			sceneY = align.sharedY(self)
+			y = self.mapFromScene(QPointF(0, sceneY)).y()
+		transform.translate(x, y)
 
 	def setScenePosition(self, position: QPointF):
 		self.setPos(self.mapFromScene(position))
