@@ -1,5 +1,5 @@
 from functools import cached_property
-from typing import List
+from typing import List, Type, ClassVar
 
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter
@@ -34,6 +34,7 @@ titleFont = fonts['title']
 class Label(Panel, tag='label'):
 	_acceptsChildren = False
 	_fontWeight = FontWeight.Normal
+	TextBox: ClassVar[Type[Text]] = Text
 
 	__ratioFontSize = 100
 	_lineBreaking: bool
@@ -46,6 +47,15 @@ class Label(Panel, tag='label'):
 
 	def __init_subclass__(cls, **kwargs):
 		super().__init_subclass__(**kwargs)
+
+		try:
+			super_text_box_class = cls.mro()[1].TextBox
+
+			text_box_class = cls.TextBox
+			if text_box_class is not super_text_box_class:
+				text_box_class.__name__ = f'{cls.__name__}TextBox'
+		except AttributeError:
+			pass
 		cls._defaultIcon = kwargs.get('defaultIcon', None)
 		cls._defaultText = kwargs.get('defaultText', None)
 
@@ -63,7 +73,7 @@ class Label(Panel, tag='label'):
 
 	@cached_property
 	def textBox(self) -> Text:
-		box = Text(self)
+		box = self.TextBox(self)
 		box.setParentItem(self)
 		return box
 
@@ -389,8 +399,8 @@ class NonInteractiveLabel(Label, tag=...):
 		'locked':    True
 	}
 
-	def __init__(self, parent: 'Panel', *args, **kwargs):
-		Label.__init__(self, parent=parent, *args, **kwargs)
+	def __init__(self, *args, **kwargs):
+		Label.__init__(self, *args, **kwargs)
 		self.locked = DefaultTrue
 		self.movable = DefaultFalse
 		self.resizable = DefaultFalse
