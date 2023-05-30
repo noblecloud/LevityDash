@@ -1,20 +1,19 @@
 import re
 
 from PySide6.QtCore import QRectF, QPointF, QPoint
-from PySide6.QtWidgets import QGraphicsItem
 from datetime import datetime
 
 from abc import abstractmethod
 
-from typing import runtime_checkable, Protocol, Any, TypeVar, ClassVar, Type, Callable
+from typing import Any, TypeVar, ClassVar, Type, Callable
 
 from LevityDash.lib.stateful import Stateful, StateProperty, DefaultGroup
 from LevityDash.lib.ui import UILogger
 from LevityDash.lib.ui.Geometry import Size, DisplayPosition, Alignment, AlignmentFlag, Dimension, getDPI
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Text, Surface, LineWeight, GraphItem, HasWeight
 from LevityDash.lib.ui.frontends.PySide.utils import SoftShadow
-from LevityDash.lib.utils import now, numberRegex, Unset, Axis
-from WeatherUnits import Length
+from LevityDash.lib.utils import numberRegex, Unset, Axis
+from WeatherUnits import Length, Percentage, Measurement
 from WeatherUnits.length import Centimeter, Millimeter, Inch
 
 log = UILogger.getChild('Annotations')
@@ -250,6 +249,28 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, tag=...):
 	def enabled(self) -> Callable:
 		return self.refresh
 
+	# ----------- format ------------- #
+	@StateProperty(key='format', default=None, allowNone=False)
+	def format_spec(self) -> str | dict:
+		return getattr(self, '_format_spec', None)
+
+	@format_spec.setter
+	def format_spec(self, value: str | dict):
+		self._format_spec = value
+
+	def format_value(self, value: Measurement) -> str:
+		format_spec = self.format_spec
+		if format_spec is not None:
+			if isinstance(value, Measurement):
+				match format_spec:
+					case str():
+						return value.__format__(format_spec)
+					case dict():
+						return value.__format__('', **format_spec)
+		elif value is None:
+			return "⋯"
+		return str(value)
+
 	# ----------- opacity ------------- #
 	@StateProperty(default=DefaultGroup('100%', 1.0), allowNone=False)
 	def opacity(self) -> float:
@@ -324,13 +345,13 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, tag=...):
 
 	# ----------- offset ------------- #m
 	@StateProperty(default=Size.Height('5px'), allowNone=False)
-	def offset(self) -> Length | Size.Height:
+	def offset(self) -> Length | Size.Height | Percentage:
 		if (offset := getattr(self, '_offset', Unset)) is not Unset:
 			return offset
 		return type(self).offset.default(type(self))
 
 	@offset.setter
-	def offset(self, value: Length | Size.Height):
+	def offset(self, value: Length | Size.Height | Percentage):
 		self._offset = value
 
 	@offset.decode
@@ -376,12 +397,16 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, tag=...):
 			if textHeight.absolute:
 				textHeight = float(textHeight)
 			else:
-				textHeight = float(textHeight.toAbsolute(self.surface.height()))
+				textHeight = float(textHeight.toAbsolute(self.text_size_relative_to))
 		elif isinstance(textHeight, Length):
 			dpi = getDPI(self.surface.scene().view.screen())
 			# dpi = 1080 / Centimeter(13.5).inch
 			textHeight = float(textHeight.inch) * dpi
 		return textHeight
+
+	@property
+	def text_size_relative_to(self) -> Length | Size.Height | float:
+		return self.surface.boundingRect().height()
 
 	@property
 	def offset_px(self) -> float:
@@ -392,13 +417,19 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, tag=...):
 			case Dimension(absolute=True), _:
 				offset = float(offset)
 			case Dimension(relative=True), _:
-				offset = float(offset.toAbsolute(self.surface.boundingRect().height()))
+				offset = float(offset.toAbsolute(self.offset_relative_to))
 			case Length(), _:
 				dpi = getDPI(self.surface.scene().view.screen())
 				offset = float(offset.inch) * dpi
+			case Percentage(), _:
+				offset = float(offset) * self.offset_relative_to
 			case _, _:
 				offset = float(offset)
 		return offset
+
+	@property
+	def offset_relative_to(self) -> Length | Dimension:
+		return self.surface.boundingRect().height()
 
 	@property
 	def alignmentAuto(self) -> Alignment:
