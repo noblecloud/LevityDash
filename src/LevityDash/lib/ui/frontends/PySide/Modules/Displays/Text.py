@@ -411,8 +411,8 @@ class Text(QGraphicsPathItem):
 	def _debug_paint(self, painter: QPainter, option, widget):
 		size = 2.5
 		addCrosshair(painter, size=size, pos=QPoint(0, 0), color=self._debug_paint_color)
-		# if (tr := getattr(self, '_textRect', None)) is not None:
-		# 	addRect(painter, tr)
+		if (tr := getattr(self, '_textRect', None)) is not None:
+			addRect(painter, tr)
 		if (fmt_rect := getattr(self, 'fmt_rect_hint', None)) is not None:
 			addRect(painter, fmt_rect)
 		self._normal_paint(painter, option, widget)
