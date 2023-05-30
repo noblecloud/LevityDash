@@ -10,7 +10,6 @@ from PySide6.QtWidgets import QApplication, QGraphicsItem, QGraphicsSceneMouseEv
 
 from LevityDash import LevityDashboard
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.DisplayBase import Display
-from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Gauge import Gauge
 from LevityDash.lib.ui.icons import fa as FontAwesome, getIcon, Icon
 from WeatherUnits.time_.time import Second
 from LevityDash.lib.plugins.categories import CategoryItem
@@ -114,7 +113,7 @@ class Realtime(Panel, tag='realtime'):
 	def _init_args_(self, *args, **kwargs):
 		displayType = kwargs.pop('type', 'realtime.text')
 		display = kwargs.pop('display')
-		display['displayType'] = DisplayType[displayType.split('.')[-1]]
+		display['displayType'] = DisplayType[displayType.strip('realtime.')]
 		kwargs['display'] = display
 		super(Realtime, self)._init_args_(*args, **kwargs)
 
@@ -237,13 +236,15 @@ class Realtime(Panel, tag='realtime'):
 		self._display = value
 
 	@display.decode
-	def display(self, value) -> Panel:
+	def display(self, value) -> Display:
+		# TODO: This should not create a new display
 		if isinstance(value, dict):
 			display_type = value.pop('displayType', DisplayType.Text)
 			match display_type:
 				case DisplayType.Text:
 					return DisplayLabel(parent=self, **value)
 				case DisplayType.Gauge:
+					from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Gauge import Gauge
 					return Gauge(parent=self, **value)
 				case _:
 					raise ValueError(f'Unknown Display Type: {display_type}')
