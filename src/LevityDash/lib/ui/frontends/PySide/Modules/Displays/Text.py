@@ -228,6 +228,9 @@ class Text(QGraphicsPathItem):
 	def setAlignment(self, alignment: Alignment | AlignmentFlag):
 		self.alignment = alignment
 
+	def _setAlignment(self, alignment: Alignment):
+		self.__alignment = alignment
+
 	@property
 	def alignment(self) -> Alignment:
 		return self.__alignment
@@ -505,15 +508,17 @@ class Text(QGraphicsPathItem):
 		        self.__defaultText or
 		        self.__defaultIcon)
 
-	def advance(self, phase:int) -> None:
-		super().advance(phase)
-		print('advance', phase)
+	def set_formatting_func(self, func: Callable[[Any], str]):
+		self._format_value_func = func
 
 	@property
 	def text(self) -> str | None:
-		text = str(self.value) if (func := self._textAccessor) is None else func()
-		if text is None:
+		value = self.value if (func := self._textAccessor) is None else func()
+		if value is None:
 			return None
+
+		text = self._format_value_func(value) if self._format_value_func is not None else str(value)
+
 		for filterFunc in self.enabledFilters:
 			text = filterFunc(text)
 		return text
@@ -525,7 +530,11 @@ class Text(QGraphicsPathItem):
 	@property
 	def value(self) -> Container | str | int | float | datetime | timedelta | Icon | None:
 		if self._valueAccessor is not None:
-			return self._valueAccessor()
+			try:
+				return self._valueAccessor()
+			except Exception as e:
+				self.log.error(f'Error getting value from accessor: {e}')
+
 		if self._value is None:
 			return self.default
 		if isinstance(self._value, (str, int, float, datetime, timedelta, Icon)):
