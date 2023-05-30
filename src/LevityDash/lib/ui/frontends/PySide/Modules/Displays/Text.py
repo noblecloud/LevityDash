@@ -37,6 +37,7 @@ class ScaleType(str, Enum, metaclass=ClosestMatchEnumMeta):
 @rich_repr
 class Text(QGraphicsPathItem):
 
+	_format_value_func: Callable[[Any], str] = None
 	_actionPool: ActionPool = cached_property(lambda self: ActionPool(self, trace='TextItem'))
 
 	_value: Container
@@ -64,7 +65,7 @@ class Text(QGraphicsPathItem):
 	_value: Container | str | int | float | datetime | timedelta | Icon | None = None
 
 	_valueAccessor: Callable[[], Any] | None = None
-	_textAccessor: Callable[[], Any] | None = None
+	_textAccessor: Callable[[], str] | None = None
 	_fontAccessor: Callable[[], QFont] | None = None
 
 	_defaultIcon: Optional[Icon] = None
@@ -329,7 +330,7 @@ class Text(QGraphicsPathItem):
 		transform = QTransform()
 		self.setTransform(transform)
 
-		if updatePath: self.__updatePath()
+		if updatePath: self._update_path()
 
 		limitRect = self.limitRect
 
@@ -338,8 +339,7 @@ class Text(QGraphicsPathItem):
 			limitRect.setHeight(height)
 			limitRect.moveCenter(center)
 
-		rect = self._textRect or self.__updatePath()
-		# if rect.isValid() and limitRect.isValid():
+		rect = self._textRect or self._update_path()
 		self.setTransformOriginPoint(0, 0)
 		x, y = self.getTextPosition(limitRect).toTuple()
 		if align := getattr(self, '_sized', None):
@@ -350,15 +350,15 @@ class Text(QGraphicsPathItem):
 			if group := getattr(self, '_sized', None):
 				scale = group.sharedSize(self)
 			else:
-				scale = self.getTextScale(rect, limitRect)
+				scale = self.getTextScale(rect, limitRect, transform=transform)
 			transform.scale(scale, scale)
 		self.setTransform(transform)
 
 	def setScenePosition(self, position: QPointF):
 		self.setPos(self.mapFromScene(position))
 
-	def getTextScale(self, textRect: QRectF = None, limitRect: QRectF = None) -> float:
-		textRect = textRect or self._textRect or self.__updatePath()
+	def getTextScale(self, textRect: QRectF = None, limitRect: QRectF = None, transform=None) -> float:
+		textRect = textRect or self._textRect or self._update_path()
 		limitRect = limitRect or self.limitRect
 
 		width = (textRect.width()) or 1
@@ -465,7 +465,7 @@ class Text(QGraphicsPathItem):
 		# if rawString == self.text:
 		# 	self.enabledFilters.discard(filter)
 		# 	self.log.warning(f'Filter {filter[1:]} is not applicable to "{rawString}"')
-		self.__updatePath()
+		self._update_path()
 
 	@property
 	def modifiers(self):
@@ -598,16 +598,16 @@ class Text(QGraphicsPathItem):
 		font = self.font()
 		fm = QFontMetricsF(font)
 
-		if (fmt_hint := getattr(self, '_formatHint', None)) is not None:
-			fmt_hint_rect = fm.tightBoundingRect(fmt_hint)
-		else:
-			fmt_hint_rect = QRectF()
-
 		path = QPainterPath()
 		path.setFillRule(Qt.WindingFill)
 		text = self.text if self.icon is None else str(self.icon)
 		path.addText(QPointF(0, 0), font, text)
 		pathSizeHint = QPainterPath(path)
+
+		if (fmt_hint := getattr(self, '_formatHint', None)) is not None:
+			fmt_hint_rect = fm.tightBoundingRect(fmt_hint)
+		else:
+			fmt_hint_rect = fm.tightBoundingRect(text)
 
 		scaleType = ScaleType.fill if self.isIcon else self._scaleType
 		if fm.tightBoundingRect('|').isEmpty():
@@ -623,70 +623,70 @@ class Text(QGraphicsPathItem):
 				pathSizeHint.lineTo(0, fm.descent())
 			case _:
 				pass
-		r = pathSizeHint.boundingRect()
+		size_hint_rect = pathSizeHint.boundingRect()
 		if fmt_hint_rect.isValid():
 			align = self.alignment
 			if AlignmentFlag.Left & align.horizontal:
 				fmt_left = fmt_hint_rect.left()
-				r_left = r.left()
+				r_left = size_hint_rect.left()
 				if fmt_left > r_left:
-					r.setLeft(fmt_left)
+					size_hint_rect.setLeft(fmt_left)
 				else:
 					fmt_hint_rect.setLeft(r_left)
 			elif AlignmentFlag.Right & align.horizontal:
 				fmt_right = fmt_hint_rect.right()
-				r_right = r.right()
+				r_right = size_hint_rect.right()
 				if fmt_right < r_right:
-					r.setRight(fmt_right)
+					size_hint_rect.setRight(fmt_right)
 				else:
 					fmt_hint_rect.setRight(r_right)
 			else:
-				fmt_hint_rect.moveCenter(r.center())
+				fmt_hint_rect.moveCenter(size_hint_rect.center())
 
 			if AlignmentFlag.Top & align.vertical:
 				fmt_top = fmt_hint_rect.top()
-				r_top = r.top()
+				r_top = size_hint_rect.top()
 				if fmt_top < r_top:
-					r.setTop(fmt_top)
+					size_hint_rect.setTop(fmt_top)
 				else:
 					fmt_hint_rect.setTop(r_top)
 			elif AlignmentFlag.Bottom & align.vertical:
 				fmt_bottom = fmt_hint_rect.bottom()
-				r_bottom = r.bottom()
+				r_bottom = size_hint_rect.bottom()
 				if fmt_bottom < r_bottom:
-					r.setBottom(fmt_bottom)
+					size_hint_rect.setBottom(fmt_bottom)
 				else:
 					fmt_hint_rect.setBottom(r_bottom)
 			else:
-				fmt_hint_rect.moveCenter(r.center())
-			r = r.united(fmt_hint_rect)
-		textCenter = r.center()
+				fmt_hint_rect.moveCenter(size_hint_rect.center())
+			size_hint_rect = size_hint_rect.united(fmt_hint_rect)
+		textCenter = size_hint_rect.center()
 
 		if scaleType is not ScaleType.fill:
 			textCenter.setY(-fm.strikeOutPos())
 
 		path.translate(-textCenter)
 
-		translation = self.alignment.translationFromCenter(r).asQPointF()
+		translation = self.alignment.translationFromCenter(size_hint_rect).asQPointF()
 		path.translate(translation)
 
-		r.moveCenter(path.boundingRect().center())
+		size_hint_rect.moveCenter(path.boundingRect().center())
 		rotation = self.rotation() or self.parent.rotation()
-		newTextRect = r if not abs(rotation) else QTransform().rotate(rotation).map(pathSizeHint).boundingRect()
+		newTextRect = size_hint_rect #if not abs(rotation) else QTransform().rotate(rotation).map(pathSizeHint).boundingRect()
 		lastTextRect = self._textRect or newTextRect
 		if lastTextRect != newTextRect and (sizeGroup := getattr(self, '_sized', None)) is not None:
 			sizeGroup.clearSizes()
 		self._textRect = newTextRect
-		self._sizeHintRect = r
+		self._sizeHintRect = size_hint_rect
 		self._fmt_rect = fmt_hint_rect
 
 		self._path = path
 		self.setPath(path)
-		return r
+		return size_hint_rect
 
 	@defer
 	def updateText(self):
-		self.__updatePath()
+		self._update_path()
 		self.updateTransform(updatePath=False)
 
 	def __del__(self):
