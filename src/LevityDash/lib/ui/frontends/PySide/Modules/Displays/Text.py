@@ -604,7 +604,7 @@ class Text(QGraphicsPathItem):
 		self._scaleType = value
 		self.updateTransform()
 
-	def __updatePath(self) -> QRectF:
+	def _update_path(self) -> QRectF:
 		self.resetTransform()
 		font = self.font()
 		fm = QFontMetricsF(font)
