@@ -272,9 +272,9 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, tag=...):
 		return str(value)
 
 	# ----------- opacity ------------- #
-	@StateProperty(default=DefaultGroup('100%', 1.0), allowNone=False)
+	@StateProperty(default=DefaultGroup('100%', 1.0), allowNone=False, after=refresh)
 	def opacity(self) -> float:
-		return getattr(self, '_opacity', 1.0)
+		return self._opacity
 
 	@opacity.setter
 	def opacity(self, value: float):
@@ -314,10 +314,6 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, tag=...):
 	@position.decode
 	def position(self, value: str) -> DisplayPosition:
 		return DisplayPosition[value]
-
-	@position.after
-	def position(self) -> Callable:
-		return self.refresh
 
 	# ----------- height ------------- #
 	@StateProperty(key='height', default=Centimeter(0.5), allowNone=False)
