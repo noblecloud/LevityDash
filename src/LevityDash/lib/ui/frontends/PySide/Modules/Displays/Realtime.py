@@ -1235,9 +1235,9 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 
 		__exclude__ = {..., 'format-hint'}
 
-		@property
+		@cached_property
 		def marginRect(self) -> QRectF:
-			rect = Label.marginRect.fget(self)
+			rect = super().marginRect
 			if p := self.parent:
 				if (u := p.displayProperties.unitSize_px) and p.displayProperties.unitPosition is DisplayPosition.FloatUnder:
 					r = QRectF(rect)

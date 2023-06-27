@@ -1350,7 +1350,7 @@ class Panel(_Panel, Stateful, tag='group'):
 		matchedEdges.sort(key=lambda x: x.differance)
 		return matchedEdges
 
-	@property
+	@cached_property
 	def marginRect(self) -> QRectF:
 		rect = getattr(self, 'contentsRect', self.rect())
 		margins = rect.marginsRemoved(self.margins.asQMarginF())
@@ -1671,7 +1671,7 @@ class Panel(_Panel, Stateful, tag='group'):
 		emit = self.rect().size() != rect.size()
 		super(Panel, self).setRect(rect)
 		if emit:
-			clearCacheAttr(self, 'marginRect', '_focusedBoundingRect')
+			clearCacheAttr(self, 'marginRect', '_focusedBoundingRect', 'marginRect')
 			self.signals.resized.emit(rect)
 		return emit
 
