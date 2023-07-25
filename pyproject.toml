@@ -82,7 +82,7 @@ scalene = "^1.5.16"
 
 [tool.poetry.group.build-to-app.dependencies]
 pyinstaller = "^5.7.0"
-certifi = "^2022.12.7"
+certifi = "^2023.7.22"
 
 [tool.poetry.group.pycharm.dependencies]
 line-profiler-pycharm = "^1.1.0"
