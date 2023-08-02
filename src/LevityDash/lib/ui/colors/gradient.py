@@ -330,5 +330,41 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 			return dumper.represent_scalar(u'tag:yaml.org,2002:str', name)
 		return dumper.represent_mapping(cls.__name__, {k: v.value for k, v in data.items()})
 
+	@classmethod
+	def constructor(cls, loader: SafeLoader, node):
+		match node:
+			case MappingNode():
+				data = loader.construct_mapping(node)
+				return cls(colors=data)
+			case SequenceNode():
+				data = loader.construct_sequence(node)
+				return cls(*data)
+			case ScalarNode():
+				if (preset := cls.__presets__.get(loader.construct_scalar(node), None)) is not None:
+					return preset
+				return cls.__presets__['RainbowDefault']
+			case _:
+				raise NotImplementedError
+
+	@classmethod
+	def decode(cls, data: str | dict | list | tuple) -> 'Gradient':
+		match data:
+			case {'name': name, **rest}:
+				return cls(name=name, colors=rest)
+			case dict():
+				return cls(colors=data)
+			case [str(name), *rest]:
+				return cls(name=name, *rest)
+			case [*colors]:
+				return cls(*colors)
+			case str(name):
+				if (preset := cls.__presets__.get(name, None)) is not None:
+					return preset
+				return cls.__presets__.get(next(iter(get_close_matches(name, cls.__presets__.keys(), n=1)), 'RainbowDefault'))
+			case _:
+				raise NotImplementedError
+
+
+StatefulLoader.add_constructor('!gradient', Gradient.constructor)
 
 __all__ = ('Gradient', 'MappedGradientValue')
