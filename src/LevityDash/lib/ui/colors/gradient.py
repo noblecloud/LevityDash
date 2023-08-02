@@ -1,24 +1,40 @@
-from functools import cached_property
-from typing import TypeVar, ClassVar, Dict, Type, Any, Tuple, Callable, Union, List
-
 import numpy as np
 from PySide6.QtCore import QPoint, QPointF
-from PySide6.QtGui import QLinearGradient
+from PySide6.QtGui import QLinearGradient, QConicalGradient, QPainter, Qt
+from difflib import get_close_matches
+from functools import cached_property, lru_cache
+from numbers import Number
+from rich.repr import auto as auto_repr
+from typing import TypeVar, ClassVar, Dict, Type, Tuple, Callable, Union, List, runtime_checkable, Protocol
+from yaml import SafeDumper, SafeLoader, SequenceNode, MappingNode, ScalarNode
 
-from yaml import SafeDumper
-
-from LevityDash.lib.stateful import StateProperty
+from LevityDash.lib.stateful import StatefulLoader
+from LevityDash.lib.ui.colors.color import Color
 from LevityDash.lib.utils import getOrSet
-from .color import Color
+from LevityDash.shims.Qt import QImage
+from WeatherUnits import Measurement, Percentage
 
-GradientValueType = TypeVar('GradientValueType')
+GradientValueType = TypeVar('GradientValueType', bound=Number)
 
 
+@runtime_checkable
+class SupportsMath(Protocol):
+	def __add__(self, other) -> 'SupportsMath': ...
+	def __sub__(self, other) -> 'SupportsMath': ...
+	def __mul__(self, other) -> 'SupportsMath': ...
+	def __truediv__(self, other) -> 'SupportsMath': ...
+
+
+@auto_repr
 class MappedGradientValue:
 	__slots__ = ('__color', '__value')
 	__types__: ClassVar[Dict[Type, Type]] = {}
-	__item__: ClassVar[Type]
+	__item__: ClassVar[Type] = GradientValueType
+
+	__value: GradientValueType
 	value: GradientValueType
+
+	__color: Color
 	color: Color
 
 	def __class_getitem__(cls, item):
@@ -31,9 +47,16 @@ class MappedGradientValue:
 			cls.__types__[item] = t
 		return cls.__types__[item]
 
-	def __init__(self, value: Any, color: Color | str | Tuple[int | float]):
+	def __init__(self, value: Number, color: Color | str | Tuple[int | float]):
 		self.value = value
 		self.color = color if isinstance(color, Color) else Color(color)
+
+	def __rich_repr__(self):
+		yield 'value', str(self.value)
+		yield 'color', self.color
+
+	def __hash__(self) -> int:
+		return hash((self.value, self.color, self.expectedType))
 
 	@property
 	def color(self):
@@ -75,7 +98,7 @@ class MappedGradientValue:
 class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 	__types__: ClassVar[Dict[Type, Type]] = {}
 	__presets__: ClassVar[Dict[str, 'Gradient']] = {}
-	__item__: ClassVar[Type]
+	__item__: ClassVar[Type] = MappedGradientValue[float]
 
 	class QtGradient(QLinearGradient):
 		def __init__(self, plot: 'Plot', values):
@@ -94,9 +117,9 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 		def localized(self):
 			try:
 				unitType = self.plot.data.dataType
-				values = [unitType(t.value) for t in self.values.list]
+				values = [unitType(t.value) for t in self.values.as_list]
 			except Exception:
-				values = [t.value for t in self.values.list]
+				values = [t.value for t in self.values.as_list]
 			return np.array(values)
 
 		@property
@@ -134,27 +157,69 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 			return cls.__presets__[name]
 		return super().__new__(cls, *args, **kwargs)
 
-	def __init__(self, name: str = None, *color, **colors: Tuple[int | float, Color | str | Tuple[int | float]]):
+	def __hash__(self) -> int:
+		return hash(tuple(self.keys()))
+
+	def __init__(
+		self,
+		name: str = None,
+		*color,
+		colors: dict[GradientValueType, Color | str | Tuple[int | float | GradientValueType]] = None,
+		**kwargs: dict[str, Color | str | Tuple[int | float | GradientValueType]]
+	):
 		super().__init__()
-		itemType = self.itemCls()
+
+		itemType = type(self).itemCls
+
+		try:
+			value_type = itemType.__item__
+		except AttributeError:
+			value_type = float
+
+		colors = colors or {}
+
+		if len(kwargs) > 0:
+			colors = {**colors, **kwargs}
+
 		for key, item in colors.items():
-			self[key] = itemType(*item)
+			if isinstance(key, Number):
+				if not isinstance(key, value_type):
+					key = value_type(key)
+				self[str(key)] = itemType(key, item)
+			elif isinstance(key, str) and isinstance(item, (tuple, list)) and len(item) == 2:
+				value, color = item
+				self[key] = itemType(value, color)
+
 		for color in color:
 			match color:
-				case int(p) | float(p), Color(c) | str(c) | tuple(c):
+				case (Number() as p, Color() as c):
 					self[str(c)] = itemType(p, c)
-				case _:
-					raise TypeError(f'{color} is not a valid colors')
+				case (Number() as p,  str() | tuple() as c):
+					c = Color(c)
+					self[str(c)] = itemType(p, c)
 
-	@StateProperty(unwrap=True)
-	def data(self) -> Dict:
-		return self
+	def as_type(self, type_: Type[Measurement], _min: Measurement, _max: Measurement) -> 'Gradient':
+		cls = Gradient[type_]
+		own_min = float(self.min.value)
+		own_max = float(self.max.value)
+		own_range = own_max - own_min
+
+		own_normalized_values = {(float(item.value) - own_min) / own_range: item.color for item in self.values()}
+
+		other_min = float(_min)
+		other_max = float(_max)
+		other_range = other_max - other_min
+
+		new_values_from_normals = dict((type_(other_min + (other_range * k)), v) for k, v in own_normalized_values.items())
+
+		return cls(colors=new_values_from_normals)
 
 	@classmethod
-	def itemCls(cls) -> GradientValueType:
+	@property
+	def itemCls(cls) -> Type[MappedGradientValue]:
 		if hasattr(cls, '__item__'):
 			return cls.__item__
-		return Any
+		return MappedGradientValue[float]
 
 	@classmethod
 	def presets(cls) -> List[str]:
