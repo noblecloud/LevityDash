@@ -613,12 +613,19 @@ class Text(QGraphicsPathItem):
 		path.setFillRule(Qt.WindingFill)
 		text = self.text if self.icon is None else str(self.icon)
 		path.addText(QPointF(0, 0), font, text)
-		pathSizeHint = QPainterPath(path)
+
+		shape_path = QPainterPath(path)
+		shape_path.setFillRule(Qt.WindingFill)
 
 		if (fmt_hint := getattr(self, '_formatHint', None)) is not None:
+			shape_path.addText(QPointF(0, 0), font, fmt_hint)
+			self._shapePath = shape_path
 			fmt_hint_rect = fm.tightBoundingRect(fmt_hint)
 		else:
+			if hasattr(self, '_shapePath'): delattr(self, '_shapePath')
 			fmt_hint_rect = fm.tightBoundingRect(text)
+
+		pathSizeHint = QPainterPath(path)
 
 		scaleType = ScaleType.fill if self.isIcon else self._scaleType
 		if fm.tightBoundingRect('|').isEmpty():
@@ -635,14 +642,18 @@ class Text(QGraphicsPathItem):
 			case _:
 				pass
 		size_hint_rect = pathSizeHint.boundingRect()
+
 		if fmt_hint_rect.isValid():
 			align = self.alignment
+
 			if AlignmentFlag.Left & align.horizontal:
 				fmt_left = fmt_hint_rect.left()
 				r_left = size_hint_rect.left()
 				if fmt_left > r_left:
+					shape_path.translate(fmt_left - r_left, 0)
 					size_hint_rect.setLeft(fmt_left)
 				else:
+					shape_path.translate(r_left - fmt_left, 0)
 					fmt_hint_rect.setLeft(r_left)
 			elif AlignmentFlag.Right & align.horizontal:
 				fmt_right = fmt_hint_rect.right()
@@ -670,6 +681,7 @@ class Text(QGraphicsPathItem):
 					fmt_hint_rect.setBottom(r_bottom)
 			else:
 				fmt_hint_rect.moveCenter(size_hint_rect.center())
+				shape_path.translate(0, fmt_hint_rect.top() - size_hint_rect.top())
 			size_hint_rect = size_hint_rect.united(fmt_hint_rect)
 		textCenter = size_hint_rect.center()
 
@@ -677,9 +689,11 @@ class Text(QGraphicsPathItem):
 			textCenter.setY(-fm.strikeOutPos())
 
 		path.translate(-textCenter)
+		shape_path.translate(-textCenter)
 
 		translation = self.alignment.translationFromCenter(size_hint_rect).asQPointF()
 		path.translate(translation)
+		shape_path.translate(translation)
 
 		size_hint_rect.moveCenter(path.boundingRect().center())
 		rotation = self.rotation() or self.parent.rotation()
@@ -692,6 +706,7 @@ class Text(QGraphicsPathItem):
 		self._fmt_rect = fmt_hint_rect
 
 		self._path = path
+
 		self.setPath(path)
 		return size_hint_rect
 
