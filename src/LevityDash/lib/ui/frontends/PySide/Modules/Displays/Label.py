@@ -2,11 +2,11 @@ from functools import cached_property
 from typing import List, Type, ClassVar
 
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QPainter
+from PySide6.QtGui import QColor, QFont, QPainter, QBrush
 from PySide6.QtWidgets import QGraphicsItem, QLineEdit
 
 from LevityDash.lib.stateful import DefaultFalse, DefaultTrue, StateProperty
-from LevityDash.lib.ui import Color
+from LevityDash.lib.stateful_mixins import ColorMixin
 from LevityDash.lib.ui.fonts import fontDict as fonts, FontWeight, getFontFamily
 from LevityDash.lib.ui.frontends.PySide import qtLogger as guiLog
 from LevityDash.lib.ui.frontends.PySide.Modules import Panel
@@ -31,7 +31,7 @@ titleFont = fonts['title']
 
 
 @DebugPaint
-class Label(Panel, tag='label'):
+class Label(Panel, ColorMixin, tag='label'):
 	_acceptsChildren = False
 	_fontWeight = FontWeight.Normal
 	TextBox: ClassVar[Type[Text]] = Text
@@ -186,20 +186,8 @@ class Label(Panel, tag='label'):
 	def hasIcon(self) -> bool:
 		return isinstance(self.textBox.value, Icon)
 
-	@StateProperty(allowNone=False, default=Color.text)
-	def color(self) -> Color:
-		return self.textBox.color
-
-	@color.setter
-	def color(self, value: Color):
-		self.textBox.setColor(value)
-
-	@color.decode
-	def color(self, value: str | dict | QColor) -> Color:
-		try:
-			return Color(value)
-		except ValueError as e:
-			raise e
+	def _set_fill_brush(self, brush: QBrush):
+		self.textBox.fill_brush = brush
 
 	@StateProperty(key='font', default=defaultFont.family(), repr=True, allowNone=False)
 	def fontFamily(self) -> str:
