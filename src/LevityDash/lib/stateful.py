@@ -1,8 +1,11 @@
+from collections import ChainMap
+
 import inspect
 import os
+import yaml
+from PySide6.QtCore import QObject, QThread
 from abc import abstractmethod
 from builtins import isinstance
-from collections import ChainMap
 from collections.abc import MutableSequence
 from contextlib import contextmanager
 from copy import copy, deepcopy
@@ -14,26 +17,23 @@ from functools import cached_property, lru_cache, partial
 from inspect import get_annotations, getframeinfo, getsource, getsourcefile, getsourcelines, Traceback
 from operator import attrgetter
 from re import search
-from shutil import get_terminal_size
-from sys import _getframe as getframe
-from tempfile import TemporaryFile
-from traceback import extract_stack
-from types import GenericAlias, SimpleNamespace, UnionType
-from typing import (
-	_GenericAlias, _UnionGenericAlias, Any, Callable, ClassVar, Dict, Final, Generic, get_args, get_origin,
-	get_type_hints, Hashable, Iterable, List, Literal, Mapping, Sequence, Set, Sized, Text, Tuple, Type, TypeAlias,
-	TypeVar, Union, _UnpackGenericAlias
-)
-from warnings import warn, warn_explicit
-
-import yaml
-from PySide6.QtCore import QObject, QThread
 from rich.box import SIMPLE_HEAVY
 from rich.console import Console, Group
 from rich.panel import Panel
 from rich.pretty import Pretty
 from rich.repr import auto as auto_rich_repr
 from rich.syntax import Syntax
+from shutil import get_terminal_size
+from sys import _getframe as getframe
+from tempfile import TemporaryFile
+from traceback import extract_stack
+from types import GenericAlias, SimpleNamespace, UnionType, FunctionType
+from typing import (
+	_GenericAlias, _UnionGenericAlias, Any, Callable, ClassVar, Dict, Final, Generic, get_args, get_origin,
+	get_type_hints, Hashable, Iterable, List, Literal, Mapping, Sequence, Set, Sized, Text, Tuple, Type, TypeAlias,
+	TypeVar, Union, _UnpackGenericAlias
+)
+from warnings import warn, warn_explicit
 from yaml import Dumper, MappingNode, SafeDumper, ScalarNode
 from yaml.composer import Composer
 from yaml.constructor import SafeConstructor
@@ -49,6 +49,7 @@ from LevityDash.lib.utils.shared import (
 	_Panel, ActionPool, clearCacheAttr, DeepChainMap, DotDict, guarded_cached_property, OrderedSet,
 	recursiveRemove, sortDict
 )
+
 
 def PASS_FUNC():
 	pass
@@ -510,9 +511,27 @@ class StateProperty(property):
 		self._set = fset
 		self._del = fdel
 		self.doc = doc
-		if (after := kwargs.pop("after", None)) is not None:
-			if isinstance(after, Callable):
-				kwargs["after.func"] = after
+		match kwargs.pop("after", None):
+			case FunctionType() as func:
+				kwargs["after.func"] = func
+			case {"func": func, **rest}:
+				kwargs["after.func"] = func
+				match rest:
+					case {'args': args, 'kwargs': kwargs}:
+						kwargs["after.args"] = args
+						kwargs["after.kwargs"] = kwargs
+					case {"args": args, **kwargs}:
+						kwargs["after.args"] = args
+					case {"kwargs": kwargs}:
+						kwargs["after.kwargs"] = kwargs
+					case {}:
+						pass
+			case StateProperty() as prop if prop is not self:
+				if isinstance(prop_after := prop.options["after"], ChainMap):
+					kwargs['after'] = prop_after.new_child(DotDict())
+				else:
+					kwargs['after'] = ChainMap(DotDict({}), prop_after)
+
 		if (encode := kwargs.pop("encoder", None)) is not None:
 			if isinstance(encode, Callable):
 				kwargs["encode.func"] = encode
@@ -608,7 +627,9 @@ class StateProperty(property):
 		try:
 			return self.fget(obj)
 		except AttributeError as e:
+			# the object does not have the property set
 			if (factory := self.__options.get("factory.func", None)) is not None:
+				# try to build from factory
 				value = factory(obj)
 				obj._state_item_sources[self] = SourceType.Factory
 				self.__existingValues__[self.cacheKey(obj)] = value
@@ -618,10 +639,11 @@ class StateProperty(property):
 				except AttributeError:
 					pass
 				return value
-			elif not self.allowNone and not self.hasDefault(objtype):
-				raise SyntaxError(f"Property {self} has no default value and is not set")
 			elif not self.allowNone:
-				raise e
+				# the property is not allowed to be None but the object has no value
+				if not self.hasDefault(objtype):
+					# the property does not have a default value
+					raise SyntaxError(f"Property {self} has no default value and is not set")
 		return self.default(type(obj), obj, update_source=True)
 
 	@staticmethod
@@ -645,12 +667,14 @@ class StateProperty(property):
 	def __decode__(self, obj, value) -> StatefulAcceptsType:
 		decoder = self.__options.get("decode", {})
 
-		if not (decodeFunc := decoder.get("func", False)):
+		if isinstance(decoder, Callable):
+			func = decoder
+		elif not (func := decoder.get("func", False)):
 			return value
 
 		message = f"Decoding {self.key} for {obj.__class__.__name__} from {type(value).__name__}"
 
-		expectedType = get_type_hints(decodeFunc).get("return", Unset)
+		expectedType = get_type_hints(func).get("return", Unset)
 		if isinstance(expectedType, str):
 			expectedType = None
 		if not self.checkType(value, expectedType):
@@ -659,14 +683,21 @@ class StateProperty(property):
 				StateProperty.setItemState(existing, value)
 				return existing
 
-			parameters = decodeFunc.__code__.co_varnames[: decodeFunc.__code__.co_argcount]
+			parameters = func.__code__.co_varnames[: func.__code__.co_argcount]
+			if getattr(func, '__self__', obj) is not obj:
+				parameters = parameters[1:]
 			match parameters:
-				case ["self", _]:
-					value = decodeFunc(obj, value)
-				case [var] if var != "self":
-					value = decodeFunc(value)
-				case var:
-					raise NotImplementedError(var)
+				case ["self", *_]:
+					value = func(obj, value)
+				case ['cls']:
+					breakpoint("Should never get here, if you did, something is wrong, fix it")
+					value = func(type(obj), value)
+				case [var]:
+					value = func(value)
+				case [self.key | self.name, *args]:
+					value = func(value)
+				case _:
+					raise TypeError(f"Invalid arguments for {func.__name__}: {parameters}")
 		message = f"{message} -> {type(value).__name__}"
 		log.verbose(message, verbosity=5)
 		return value
@@ -726,11 +757,17 @@ class StateProperty(property):
 	def schedule_after_func(self, owner: 'Stateful', afterPool: 'ActionPool' = None, **kwargs):
 		if after := self.__options.get("after", False):
 			if (func := after.get("func", None)) is not None:
-				if afterPool is not None:
+				if isinstance(afterPool, ActionPool):
 					if afterPool.instance is not owner:
 						afterPool = afterPool.new(owner)
-					log.verbose(f"Adding after function for {self.key} to after pool", verbosity=5)
-					afterPool.add(func)
+					if afterPool.can_execute:
+						func(owner)
+					elif afterPool.running and len(afterPool) > 0:
+						log.verbose(f"Adding after function for {self.key} to running after pool", verbosity=5)
+						afterPool.add(func)
+					else:
+						log.verbose(f"Adding after function for {self.key} to after pool", verbosity=5)
+						afterPool.add(func)
 				else:
 					log.verbose(f"Executing after method for {owner}", verbosity=5)
 					func(owner)
@@ -2181,6 +2218,7 @@ class StatefulMetaclass(QObjectType, type):
 			subclasses.extend(sub.__subclasses__(deep=deep))
 		return subclasses
 
+
 # Section Stateful
 @auto_rich_repr
 class Stateful(metaclass=StatefulMetaclass):
@@ -2706,11 +2744,12 @@ class Stateful(metaclass=StatefulMetaclass):
 		self._set_state_items_ = set()
 		initVars = set(code.co_varnames[: code.co_argcount])
 		for key, prop in self._item_defaults().items():
-			default = prop.default(type(self), self, update_source=True)
-
+			# if prop.returns is not UnsetReturn and not isinstance(default, prop.returns):
+			# 	default = prop.decodeValue(default, self)
 			if key in initVars:
 				continue
 			elif key not in kwargs:
+				default = prop.default(type(self), self, update_source=True)
 				if prop.isStatefulReference:
 					if isinstance(default, Mapping) and not isinstance(default, DefaultState):
 						value = DeepChainMap(default).to_dict()
@@ -2719,6 +2758,7 @@ class Stateful(metaclass=StatefulMetaclass):
 				else:
 					value = default
 			elif kwargs[key] is UnsetDefault or kwargs[key] is None:
+				default = prop.default(type(self), self, update_source=True)
 				value = default
 				self._set_state_items_.add(key)
 				self._user_set_state_items_.discard(key)
@@ -2726,6 +2766,7 @@ class Stateful(metaclass=StatefulMetaclass):
 				value = kwargs[key]
 				self._set_state_items_.add(key)
 				self._user_set_state_items_.add(key)
+				self._state_item_sources[prop] = SourceType.UserConfig
 
 			if (d := getattr(value, "default", UnsetDefault)) is not UnsetDefault:
 				if isinstance(d, Callable) and d.__code__.co_argcount <= 1:
@@ -2763,12 +2804,19 @@ class Stateful(metaclass=StatefulMetaclass):
 
 		exclude = exclude or set()
 		for i in sorted(self.__repr_keys__, key=lambda x: x.sortOrder(type(self))):
-			if i.key in exclude:
+			key = i.key
+			if key in exclude:
 				continue
+
 			try:
-				yield i.key, i.fget(self)
+				default = i.default(type(self), self, update_source=False)
 			except Exception as e:
-				continue
+				default = UnsetDefault
+
+			try:
+				yield key, i.fget(self), default
+			except Exception as e:
+				yield key, Unset, default
 
 	def print_suggested_config(self, console: Console = None, **added_items):
 		console = console or Console(
