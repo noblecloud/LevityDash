@@ -12,7 +12,7 @@ from typing import (
 
 import numpy as np
 from _warnings import warn
-from math import atan2, ceil, degrees as mathDegrees, floor, inf, nan, prod, sqrt
+from math import atan2, ceil, degrees as mathDegrees, floor, inf, nan, prod, sqrt, tan, hypot
 from PySide6.QtCore import QMargins, QMarginsF, QObject, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt, Signal
 from PySide6.QtGui import QCursor, QPainterPath, QPolygon, QPolygonF, QScreen, QTransform
 from PySide6.QtWidgets import QApplication, QGraphicsItem
@@ -23,7 +23,7 @@ from LevityDash.lib.config import userConfig
 from LevityDash.lib.log import LevityUtilsLog as log
 from LevityDash.lib.ui import UILogger as guiLog
 from LevityDash.lib.utils import Axis, camelCase, clearCacheAttr, ClosestMatchEnumMeta, DType, IgnoreOr
-from LevityDash.lib.utils.shared import _Panel, clamp, mostly
+from LevityDash.lib.utils.shared import _Panel, clamp, mostly, get
 from WeatherUnits import auto as auto_unit, Length, Measurement
 
 if TYPE_CHECKING:
@@ -141,7 +141,7 @@ class LocationEnumMeta(ClosestMatchEnumMeta):
 
 	@cached_property
 	def isCorner(self):
-		return bool(self & (self.Left | self.Right | self.Top | self.Bottom)) & (bool(self & self.Vertical) == bool(self & self.Horizontal))
+		return bool(self & (self.TopLeft | self.TopRight | self.BottomLeft | self.BottomRight)) and not self.isCentered
 
 	@cached_property
 	def isEdge(self):
@@ -440,7 +440,7 @@ class AlignmentFlag(IntFlag, metaclass=LocationEnumMeta):
 		elif self.isHorizontal:
 			return self.asHorizontal
 		elif self.isCenter:
-			return self.Center.a
+			return self.Center
 		return self
 
 	@cached_property
@@ -511,6 +511,10 @@ class Alignment:
 		assert value.isVertical, 'Vertical alignment must be a vertical flag'
 		self.__vertical = value
 		clearCacheAttr(self, 'multipliers', 'multipliersAlt')
+
+	@property
+	def combined(self) -> AlignmentFlag:
+		return self.horizontal | self.vertical
 
 	def asDict(self):
 		return {'horizontal': self.horizontal.simplified.name, 'vertical': self.vertical.simplified.name}
@@ -626,7 +630,6 @@ class Alignment:
 
 
 class DisplayPosition(str, Enum, metaclass=ClosestMatchEnumMeta):
-	secondaryPositions: ClassVar[Set['DisplayPosition']]
 
 	Auto = 'auto'  # Places the unit in a new line if results in better readability
 	Inline = 'inline'  # Always displays the unit in the same line as the value
@@ -634,36 +637,39 @@ class DisplayPosition(str, Enum, metaclass=ClosestMatchEnumMeta):
 	Above = 'above'  # Displays the unit above the value
 	Below = 'below'  # Displays the unit below the value
 	Hidden = 'hidden'  # Hides the unit completely
+	Inside = 'inside'
+	Outside = 'outside'
 	Floating = 'floating'  # Displays the unit in a separate label that can be placed anywhere
 	FloatUnder = 'float-under'
+	FloatAbove = 'float-above'
 	Center = 'center'  # Displays the unit in the center of the value
 	Left = 'left'  # Displays the unit to the left of the value
 	Right = 'right'  # Displays the unit to the right of the value
 	Top = Above
 	Bottom = Below
 
-	def getOpposite(self):
-		if self is DisplayPosition.Above:
-			return DisplayPosition.Below
-		elif self is DisplayPosition.Below:
-			return DisplayPosition.Above
-		elif self is DisplayPosition.Left:
-			return DisplayPosition.Right
-		elif self is DisplayPosition.Right:
-			return DisplayPosition.Left
-		elif self is DisplayPosition.Inline:
-			return DisplayPosition.NewLine
-		else:
-			return None
+	__opposites: ClassVar[Dict['DisplayPosition', 'DisplayPosition']] = {
+		Above: Below,
+		Below: Above,
+		Left: Right,
+		Right: Left,
+		Inline: NewLine,
+		NewLine: Inline,
+		Floating: Floating,
+	}
 
+	secondaryPositions: ClassVar[Set['DisplayPosition']] = {
+		Below,
+		Auto,
+		Hidden,
+		Inline,
+		Floating,
+		FloatAbove,
+		FloatUnder
+	}
 
-DisplayPosition.secondaryPositions = {
-	DisplayPosition.Below,
-	DisplayPosition.Auto,
-	DisplayPosition.Hidden,
-	DisplayPosition.Inline,
-	DisplayPosition.Floating,
-}
+	def getOpposite(self) -> 'DisplayPosition':
+		return self.__opposites.get(self, None)
 
 
 class RelativeAbsoluteProtocolMeta(type):
@@ -1043,6 +1049,7 @@ class DimensionType(int, Enum, metaclass=DimensionTypeMeta):
 	t = w
 	width = x
 	height = y
+	length = y
 	depth = z
 	column = x
 	row = y
@@ -1750,6 +1757,10 @@ class Size(MultiDimension, dimensions=('width', 'height'), separator=', '):
 		return QSizeF(self.x, self.y)
 
 
+class LineWeight(Size.Width, relativeDecorator='lw'):
+	pass
+
+
 class Position(MultiDimension, dimensions=('x', 'y'), separator=', '):
 	X: ClassVar[Type[Dimension]]
 	Y: ClassVar[Type[Dimension]]
@@ -2277,7 +2288,7 @@ class Geometry:
 	Represents the position and size of a Panel.
 	'''
 
-	__slots__ = ('index', '_position', '_size', '_surface', '_absolute', 'subGeometries', 'signals', '_aspectRatio', '_fillParent')
+	__slots__ = ('index', '_position', '_size', '_surface', '_absolute', 'subGeometries', 'signals', '_aspectRatio', '_fillParent', '_relativeToRect')
 	_size: Size
 	_position: Position
 	_surface: 'Panel'
@@ -2304,6 +2315,7 @@ class Geometry:
 		:key relative: Relative positioning enabled
 		:type relative: bool
 		"""
+		self._relativeToRect = None
 		self.surface = kwargs.get('surface', None)
 		self._aspectRatio = kwargs.get('aspectRatio', None)
 		self.signals = GeometrySignals()
@@ -2442,21 +2454,35 @@ class Geometry:
 		# if self._size is None:
 		self._surface = value
 
+	# _relativeToRect: Callable[[], QRectF | QRect] | None = None
+
+	def set_relative_to_rect(self, func: Callable[[], QRectF | QRect]):
+		self._relativeToRect = func
+
 	def relativeToRect(self) -> QRectF | QRect:
+		if func := self._relativeToRect:
+			return func()
+
+		surface = self.surface
+
 		try:
-			return self.surface.parent.rect()
+			parent = surface.parent
+		except AttributeError:
+			raise ValueError("Could not determine relative rect")
+
+		try:
+			self._relativeToRect = func = parent.rect
+			return func()
 		except AttributeError:
 			pass
 		try:
-			return self.surface.parent.marginRect
+			self._relativeToRect = func = lambda: parent.marginRect
+			return func()
 		except AttributeError:
 			pass
 		try:
-			return self.surface.parent.rect()
-		except AttributeError:
-			pass
-		try:
-			return self.surface.parent.boundingRect()
+			self._relativeToRect = func = parent.boundingRect
+			return func()
 		except AttributeError:
 			pass
 		raise ValueError("Could not determine relative rect")
@@ -2536,7 +2562,7 @@ class Geometry:
 		height = self.height if self.size.height.absolute else self.height * parentRect.height()
 		return QRectF(0, 0, width, height)
 
-	def updateSurface(self, parentRect: QRectF = None, set: bool = False):
+	def updateSurface(self, parentRect: QRectF = None, update_geometry: bool = False):
 		if parentRect is not None:
 			if self.size.relative:
 				self.surface.setRect(self.rectFromParentRect(parentRect))
@@ -3253,6 +3279,8 @@ def parseSize(
 			else:
 				absolute = value > 1 if determineAbsolute else None
 				return dimension(value, absolute=absolute)
+		case Dimension(value):
+			return dimension(value)
 		case _:
 			if default is not UNSET:
 				log.error(f'{value} is not a valid value.  Using default value of {default} for now.')
@@ -3296,11 +3324,19 @@ def size_px(
 
 
 def parseWidth(value: SizeInput, default: SizeOutput, /, defaultCaseHandler: SizeParserSignature | None = None) -> SizeOutput:
-	return parseSize(value, default, defaultCaseHandler, dimension=DimensionType.width)
+	return parseSize(value, default, defaultCaseHandler=defaultCaseHandler, dimension=DimensionType.width)
 
 
 def parseHeight(value: SizeInput, default: SizeOutput, /, defaultCaseHandler: SizeParserSignature | None = None) -> SizeOutput:
-	return parseSize(value, default, defaultCaseHandler)
+	return parseSize(value, default, defaultCaseHandler=defaultCaseHandler)
+
+
+def parseX(value: SizeInput, default: SizeOutput, /, defaultCaseHandler: SizeParserSignature | None = None) -> SizeOutput:
+	return parseSize(value, default, defaultCaseHandler=defaultCaseHandler, dimension=DimensionType.x)
+
+
+def parseY(value: SizeInput, default: SizeOutput, /, defaultCaseHandler: SizeParserSignature | None = None) -> SizeOutput:
+	return parseSize(value, default, defaultCaseHandler=defaultCaseHandler, dimension=DimensionType.y)
 
 
 def size_float(value: SizeOutput, relativeTo: 'Geometry', dimension: DimensionType = DimensionType.height) -> float:
@@ -3397,3 +3433,10 @@ def polygon_area(path: Union[QPolygonF, QPolygon, QPainterPath, list, tuple]) ->
 	correction = x[-1] * y[0] - y[-1] * x[0]
 	main_area = np.dot(x[:-1], y[1:]) - np.dot(y[:-1], x[1:])
 	return 0.5 * np.abs(main_area + correction)
+
+
+def distance(p1: QPoint|QPointF, p2: QPoint|QPointF) -> float:
+	return hypot(p2.x() - p1.x(), p2.y() - p1.y())
+
+def abs_distance(p1: QPoint|QPointF, p2: QPoint|QPointF) -> float:
+	return hypot(abs(p2.x() - p1.x()), abs(p2.y() - p1.y()))
