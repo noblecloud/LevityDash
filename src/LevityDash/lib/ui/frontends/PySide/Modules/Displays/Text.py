@@ -351,6 +351,26 @@ class Text(QGraphicsPathItem):
 			else:
 				scale = self.getTextScale(rect, limitRect, transform=transform)
 			transform.scale(scale, scale)
+
+		if DEBUG:
+			font = self.font()
+			tool_tip_text = [
+				'font:',
+				f'  family: {font.family()}',
+				f'  size: {font.pointSizeF():.2f}',
+				'transform:',
+			]
+
+			if transform.isScaling():
+				tool_tip_text.append(f'  scale: {transform.m11():.2f}')
+			if transform.isRotating():
+				tool_tip_text.append(f'  rotation: {transform.rotation():.2f}')
+			if transform.isTranslating():
+				tool_tip_text.append(f'  translate:\n    x: {transform.dx():.2f}\n    y: {transform.dy():.2f}')
+			if tool_tip_text[-1] == 'transform:':
+				tool_tip_text.append('  none')
+			self.setToolTip('\n'.join(tool_tip_text))
+
 		self.setTransform(transform)
 
 	def _apply_group_transform(self, transform: QTransform, x: float, y: float):
