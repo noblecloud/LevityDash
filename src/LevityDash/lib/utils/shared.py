@@ -1,16 +1,15 @@
+from PySide6 import QtCore
 from abc import abstractmethod
 from collections.abc import MutableSet, Sequence
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from functools import cached_property, lru_cache, partial, wraps, reduce
+from gc import get_referrers
 from inspect import getfullargspec
 from multiprocessing.pool import ThreadPool
+from rich.repr import rich_repr
 from threading import Thread
 from traceback import format_exc, print_exc
-
-from gc import get_referrers
-from PySide6 import QtCore
-from rich.repr import rich_repr
 
 from LevityDash import LevityDashboard
 
@@ -35,7 +34,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import numpy as np
 from dateutil.parser import parse as dateParser
-from math import inf
+from math import inf, sqrt, degrees, atan2
 from numpy import cos, radians, sin
 from PySide6.QtGui import QPainterPath, QVector2D
 from pytz import utc
@@ -64,6 +63,9 @@ numberRegex = re.compile(fr"""
 	([\d{GROUPING_CHAR}]+)?
 	([{RADIX_CHAR}]\d+)?)
 	""", re.VERBOSE)
+
+golden = GOLDEN_RATIO = (1 + sqrt(5))/2
+inverse_golden = INVERSE_GOLDEN_RATIO = 1/golden
 
 
 def simpleRequest(url: str) -> dict:
@@ -446,6 +448,19 @@ def clearCacheAttr(obj: object, *attr: str):
 			pass
 
 
+@lru_cache(maxsize=256)
+def _findCachedAttrs(cls: Type) -> Tuple[str, ...]:
+	# Find all the class attributes that are a functools.cached_property
+	return tuple([k for k, v in cls.__dict__.items() if isinstance(v, cached_property)])
+
+
+def clearAllCacheAttr(obj: object):
+	obj_cls = obj.__class__
+	for cls in obj_cls.__mro__:
+		if attrs := _findCachedAttrs(cls):
+			clearCacheAttr(obj, *attrs)
+
+
 def flattenArray(array: List[List[Any]]) -> List[Any]:
 	return [item for sublist in array for item in sublist]
 
@@ -734,6 +749,20 @@ def radialPoint(center: QPointF, radius: Numeric, angle: Numeric) -> QPointF:
 	x = cx + radius*cos(radI)
 	y = cy + radius*sin(radI)
 	return QPointF(x, y)
+
+
+def point_to_degrees(center: QPointF, point: QPointF) -> Numeric:
+	"""
+	Returns the angle of a point in degrees.
+	:param center: Center of circle
+	:type center: QPointF
+	:param point: Point on circle
+	:type point: QPointF
+	:return: Angle in degrees
+	:rtype: Numeric
+	"""
+	rad = atan2(*(point - center).toTuple())
+	return degrees(rad)
 
 
 class SmartString(str):
@@ -1483,8 +1512,6 @@ class NowOffset(Now):
 		return instance
 
 
-
-
 def __get(obj: Mapping, key, default=UnsetKwarg):
 	"""getter for mappings"""
 	if default is not UnsetKwarg:
@@ -1516,20 +1543,42 @@ def unwrap(arr: List[str | List[str]]) -> Set[str]:
 
 def get(
 	obj: Mapping | object,
-	*keys: [Hashable],
+	*keys: [Hashable, ...],
 	default: Any = UnsetKwarg,
 	expectedType: Type | UnionType | Tuple[Type, ...] = object,
 	castVal: bool = False,
 	getter: Callable = __get,
 ) -> Any:
 	"""
-	Returns the value of the key in the mapping or object
+	This function gets the value of a given key or iterable of keys from an object or mapping.
+	It can also cast the value to a specified type and return a default value if the key is not found.
+	Additionally, an expected type can be specified for determining the correct value if there is multiple keys.
 
-	:param obj: The mapping to search.
-	:param key: The keys to search for.
-	:param default: The default value to return if the key is not found.
-	:return: The value of the key in the mapping or the default value.
+	Parameters
+	----------
+	obj : Mapping or object
+			The object from which to retrieve the value.
+	keys : Hashable
+			One or more keys to retrieve the value.
+	default : Any, optional
+			The default value to return if the key is not found,
+			by default UnsetKwarg.
+	expectedType : type, optional
+			The expected type of the value, by default object.
+			This is used to determine the correct value if there are multiple keys/values.
+	castVal : bool, optional
+			A boolean value indicating whether to cast the value to the expected type,
+			by default False.
+	getter : callable, optional
+			A callable function that retrieves the value from the object,
+			by default __get.
+
+	Returns
+	-------
+	Any
+			The value of the key in the object.
 	"""
+
 	values = tuple(r for key in keys if (r := getter(obj, key, Unset)) is not Unset)
 	match len(values):
 		case 0:
@@ -1554,30 +1603,30 @@ def get(
 
 operators = [getattr(__operator, op) for op in dir(__operator) if not op.startswith('__')]
 operatorList = [
-	(__operator.add, ('+')),
-	(__operator.sub, ('-')),
-	(__operator.mul, ('*', 'x', 'X')),
+	(__operator.add, ('+',)),
+	(__operator.sub, ('-',)),
+	(__operator.mul, ('*', '×', 'x', 'X')),
 	(__operator.truediv, ('/', '÷')),
 	(__operator.floordiv, ('//', '÷')),
 	(__operator.mod, ('mod', '%')),
 	(__operator.pow, ('^', '**')),
 	(__operator.lshift, ('<<',)),
 	(__operator.rshift, ('>>',)),
-	(__operator.and_, ('&', 'and')),
-	(__operator.or_, ('|', 'or')),
-	(__operator.xor, ('^', 'xor')),
+	(__operator.and_, ('&', '∧', 'and')),
+	(__operator.or_, ('|', '∨', 'or')),
+	(__operator.xor, ('^', '⊕', 'xor')),
 	(__operator.neg, ('-', 'neg')),
 	(__operator.pos, ('+', 'pos')),
-	(__operator.invert, ('~', 'invert')),
+	(__operator.invert, ('~', '¬', 'invert')),
 	(__operator.lt, ('<', 'lt', 'min', 'minimum')),
-	(__operator.le, ('<=', 'le', 'min=', 'minimum=')),
+	(__operator.le, ('<=', '≤', 'le', 'min=', 'minimum=')),
 	(__operator.eq, ('==', '=', 'eq', 'equal', 'equals')),
-	(__operator.ne, ('!=', '<>', 'ne', 'neq', 'not equal', 'not equals')),
-	(__operator.ge, ('>=', 'ge', 'max=', 'maximum=')),
+	(__operator.ne, ('!=', '≠', '<>', 'ne', 'neq', 'not equal', 'not equals')),
+	(__operator.ge, ('>=', '≥', 'ge', 'max=', 'maximum=')),
 	(__operator.gt, ('>', 'gt', 'max', 'maximum')),
 	(__operator.is_, ('is', 'is_', 'is a', 'is an', 'is_a', 'is_an', 'isA', 'isAn', 'isinstance')),
 	(__operator.is_not, ('is not', 'is_not', 'is not a', 'is not an', 'is_not_a', 'is_not_an', 'isNot', 'isNotA', 'isNotAn', 'isnot', 'isnotA', 'isnotAn', 'not idinstance')),
-	(__operator.contains, ('in', 'contains', 'contains', 'range')),
+	(__operator.contains, ('in', 'contains', 'range')),
 ]
 operatorDict = {**{name: op for op, names in operatorList for name in names}, **{func: names[0] for func, names in operatorList}}
 
@@ -1630,8 +1679,9 @@ class DotDict(dict):
 
 	@property
 	def key(self):
-		if self.parent:
+		if self.parent is not Unset:
 			return '.'.join([self.parent.key, self.__key])
+		return self.__key or ':'
 
 	@key.setter
 	def key(self, value):
@@ -2004,6 +2054,7 @@ class ActionPool(OrderedSet):
 	__contextLevel: int = cached_property(lambda self: 0)
 	__active: bool = cached_property(lambda self: False)
 	__callbacks: List[Tuple[Callable, Tuple, Dict]] = cached_property(lambda self: [])
+	__executions: Dict[Callable, int] = cached_property(lambda self: defaultdict(int))
 
 
 	class Status(Enum):
@@ -2035,6 +2086,18 @@ class ActionPool(OrderedSet):
 
 	def __repr__(self):
 		return f'{self.__class__.__name__}({type(self.instance).__name__} items: {len(list(self))}, total: {self.total_length})'
+
+	def stats(self):
+		name = f'{self.__class__.__name__}({type(self.instance).__name__}'
+		stats = {
+			'item count': len(list(self)),
+			'items': list(self),
+			'total': self.total_length,
+			'active': self.__active,
+			'callbacks': len(self.__callbacks),
+			'executions': {k.__qualname__: v for k, v in self.__executions.items()},
+		}
+		return name, stats
 
 	def __hash__(self):
 		return id(self)
@@ -2092,12 +2155,19 @@ class ActionPool(OrderedSet):
 			return not self.instance.is_loading and not self.__contextLevel and not self.__active
 		return not self.instance.state_is_loading and not self.__contextLevel and not self.__active# and self.up.can_execute
 
+	@property
+	def running(self) -> bool:
+		return self.__active
+
 	def execute(self):
 		self.__active = True
 		utilLog.verbose(f"Executing {len(self)} items in afterPool for {self.__class__.__name__}", verbosity=5)
 		if type(self.instance).__name__ in {'HourLabels', 'DayLabels', 'WeekLabels', 'MonthLabels', 'YearLabels'}:
 			return
+
 		for action in self:
+			# Note: This for loop should handle changes in length during execution
+			#       since OrderedSet.__iter__ uses a while loop
 			self.discard(action)
 			if isinstance(action, ActionPool):
 				action.execute()
@@ -2106,6 +2176,7 @@ class ActionPool(OrderedSet):
 					action(self.instance)
 				else:
 					action()
+			self.__executions[action] += 1
 		while self.__callbacks:
 			callback, args, kwargs = self.__callbacks.pop(0)
 			callback(*args, **kwargs)
@@ -2132,14 +2203,14 @@ class ActionPool(OrderedSet):
 def defer(func):
 
 	@wraps(func)
-	def wrapper(self, *args, **kwargs):
+	def deferred_wrapper(self, *args, **kwargs):
 		if (pool := getattr(self, '_actionPool', None)) is not None:
 			if pool.can_execute:
 				return func(self, *args, **kwargs)
 			else:
 				pool.add(func)
 
-	return wrapper
+	return deferred_wrapper
 
 
 def thread_safe(func):
@@ -2542,12 +2613,15 @@ def pseudo_bound_method(instance: Any = None, func: Callable = None) -> MethodTy
 
 
 @lru_cache(maxsize=1024)
-def factors(n: int) -> Set[int]:
-	n = abs(round(n))
+def factors(n: int | float) -> Set[int]:
+	n = abs(int(round(n)))
 	return set(reduce(list.__add__, ([i, n//i] for i in range(1, int(n ** 0.5) + 1) if n % i == 0)))
 
 
 @lru_cache(maxsize=2048)
 def is_prime(n: int) -> bool:
 	"""Check if a number is prime"""
-	return len(factors(n)) == 2
+	return n > 1 and all(n % i for i in range(2, int(n ** 0.5) + 1))
+
+def is_pos(n: int | float) -> bool:
+	return n > 0
