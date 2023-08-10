@@ -1,23 +1,23 @@
+from PySide6.QtCore import QObject, QPoint, QPointF, QRectF, Signal, Slot
+from PySide6.QtGui import QBrush, QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPen, Qt, QTransform, QGradient
+from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem
 from datetime import datetime, timedelta
+from dateutil.parser import parser
 from enum import Enum
 from functools import cached_property
-from typing import Any, Callable, List, Optional, TYPE_CHECKING, Union
-
-from dateutil.parser import parser
-from PySide6.QtCore import QObject, QPoint, QPointF, QRectF, QThread, Signal, Slot
-from PySide6.QtGui import QBrush, QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPen, Qt, QTransform, QPolygonF, QPolygon, QPainterPathStroker
-from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem
 from rich.repr import rich_repr
+from typing import Any, Callable, List, Optional, TYPE_CHECKING, Union, get_type_hints
 
 import WeatherUnits as wu
 from LevityDash.lib.plugins import Container
 from LevityDash.lib.plugins.observation import TimeHash
 from LevityDash.lib.ui import Color
-from LevityDash.lib.ui.fonts import defaultFont, FontWeight
-from LevityDash.lib.ui.frontends.PySide.utils import addCrosshair, addRect, colorPalette, DebugPaint
 from LevityDash.lib.ui.Geometry import Alignment, AlignmentFlag, Geometry, getDPI, Size
+from LevityDash.lib.ui.fonts import defaultFont, FontWeight
+from LevityDash.lib.ui.frontends.PySide.utils import addCrosshair, addRect, colorPalette, DebugPaint, addPath
 from LevityDash.lib.ui.icons import fa as FontAwesome, Icon
-from LevityDash.lib.utils.shared import _Panel, ActionPool, ClosestMatchEnumMeta, defer, now, TextFilter, thread_safe
+from LevityDash.lib.utils.shared import _Panel, ActionPool, ClosestMatchEnumMeta, defer, now, TextFilter
+from utils import DEBUG
 
 
 class TextItemSignals(QObject):
@@ -29,7 +29,6 @@ class ScaleType(str, Enum, metaclass=ClosestMatchEnumMeta):
 	fill = 'fill'
 	auto = 'auto'
 	font = 'font'
-
 
 
 @DebugPaint
@@ -73,6 +72,20 @@ class Text(QGraphicsPathItem):
 	enabledFilters: List[TextFilter]
 	__enabledFilters: List[TextFilter]
 
+	surface: Optional[QGraphicsItem]
+
+	@cached_property
+	def surface(self) -> QGraphicsItem:
+		surface_type = get_type_hints(type(self)).get('surface', None)
+		parent_item = self.parentItem()
+		try:
+			surface_type = surface_type.__args__
+		except AttributeError:
+			pass
+		while parent_item is not None and not isinstance(parent_item, surface_type):
+			parent_item = parent_item.parentItem()
+		return parent_item
+
 	if TYPE_CHECKING:
 		from LevityDash.lib.ui.frontends.PySide.app import LevityScene
 		def scene(self) -> LevityScene: ...
@@ -110,7 +123,7 @@ class Text(QGraphicsPathItem):
 		self.__alignment = alignment
 
 		self.setFont(font)
-		self.setColor(color)
+		self.setFillBrush(color)
 		self.value = value
 		self.setAlignment(alignment)
 		self.updateTransform()
@@ -177,16 +190,18 @@ class Text(QGraphicsPathItem):
 			return self._height_px_cache
 		height: Size.Height = self._height
 		match height:
+			case None:
+				return None
 			case Size.Height(absolute=True):
-				self._height_px_cache = height.value
-				return height.value
+				self._height_px_cache = v = height.value
+				return v
 			case Size.Height(relative=True):
 				if self._relativeTo is None:
 					raise ValueError('RelativeTo is not set')
 				return height.toAbsolute(self._relativeTo.absoluteHeight)
 			case wu.Length(), _:
 				dpi = getDPI(self.surface.scene().view.screen())
-				value = float(height.inch)*dpi
+				value = float(height.inch) * dpi
 				self._height_px_cache = value
 				return value
 			case _:
@@ -449,20 +464,17 @@ class Text(QGraphicsPathItem):
 		physicalWidth = wu.Length.Inch(rect.width()/window.physicalDpiX()).cm
 		return physicalWidth, physicalHeight
 
-	def setColor(self, value: Color):
+	def setFillBrush(self, value: QBrush):
 		if value is None:
-			value = Color(colorPalette.windowText().color())
-		self._color = value
-		brush = QBrush(value.QColor)
-		self.setBrush(brush)
-
+			value = QBrush(Color.text.QColor)
+		self.setBrush(value)
 	@property
-	def color(self) -> Color:
-		return self._color
+	def fill_brush(self) -> QBrush:
+		return self.brush()
 
-	@color.setter
-	def color(self, value):
-		self.setColor(value)
+	@fill_brush.setter
+	def fill_brush(self, value: QBrush):
+		self.setFillBrush(value)
 
 	def estimateTextSize(self, font: QFont | float | int) -> tuple[float, float]:
 		"""
