@@ -26,6 +26,7 @@ from LevityDash.lib.stateful import Stateful, StateProperty
 from LevityDash.lib.ui import UILogger, Color
 from LevityDash.lib.ui.Geometry import RelativeFloat, parseSize, DimensionType, size_px, parseHeight, AbsoluteFloat
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays import SurfaceCentered, Surface
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Annotations import AnnotationText, AnnotationLabels
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.DisplayBase import Display
 from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, addCrosshair, DebugPaint, modifyTransformValues
 from LevityDash.lib.utils.data import MinMax

@@ -10,9 +10,10 @@ from LevityDash.lib.stateful import Stateful, StateProperty, DefaultGroup
 from LevityDash.lib.stateful_mixins import ColorGradientMixin
 from LevityDash.lib.ui import UILogger, Color
 from LevityDash.lib.ui.Geometry import Size, DisplayPosition, Alignment, AlignmentFlag, Dimension, getDPI, LineWeight
-from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Text, Surface, GraphItem, HasWeight
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Text, Surface
 from LevityDash.lib.ui.frontends.PySide.utils import SoftShadow
 from LevityDash.lib.utils import numberRegex, Unset, Axis
+from LevityDash.lib.utils.protocols import GraphItem, HasWeight
 from WeatherUnits import Length, Percentage, Measurement
 from WeatherUnits.length import Centimeter, Millimeter, Inch
 
