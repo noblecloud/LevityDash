@@ -2031,6 +2031,21 @@ Keyword arguments:
 
 	return body
 
+
+class StatefulMixin:
+	__state_items__: ClassVar[ChainMap]
+
+	@classmethod
+	@property
+	def __state_items__(cls):
+		return dict(ChainMap(
+			*[{k: v for k, v in dict(i.__dict__).items() if isinstance(v, StateProperty)} for i in
+				(i for i in cls.__mro__
+				 if issubclass(i, StatefulMixin)
+				 and i is not StatefulMixin)
+				]
+		))
+
 # Section StatefulMeta
 class StatefulMetaclass(QObjectType, type):
 	__state_items__: ChainMap
@@ -2052,20 +2067,35 @@ class StatefulMetaclass(QObjectType, type):
 				item.__ownerClass__ = newMcs
 			return newMcs
 
+		_bases, bases, mixins = bases, [], []
+
+		for base in _bases:
+			if issubclass(base, StatefulMixin) and not issubclass(base, Stateful):
+				mixins.append(base)
+			else:
+				bases.append(base)
+		else:
+			bases = tuple(bases)
+			mixins = tuple(mixins)
+
 		parentCls = Stateful
-		statefulParents = [b for b in bases if issubclass(b, Stateful)]
+		statefulParents = [b for b in bases if issubclass(b, (Stateful, StatefulMixin))]
 		for base in statefulParents:
 			parentCls = base
 
 		if len(statefulParents) == 1:
-			items = parentCls.__state_items__.new_child()
+			items = parentCls.__state_items__.new_child({v.key: v for v in attrs.values() if isinstance(v, StateProperty)})
 		elif len(statefulParents) > 1:
 			i = [i.__state_items__ for i in statefulParents]
-			items = ChainMap({}, *i)
+			items = ChainMap({v.key: v for v in attrs.values() if isinstance(v, StateProperty)}, *i)
 		else:
 			raise TypeError(f"Stateful class {name} must inherit from Stateful")
 
 		propName = f"{name}StateProperty"
+
+		if mixins:
+			for mixin in reversed(mixins):
+				items.maps.insert(0, mixin.__state_items__)
 
 		# Create defaults and inherit parent's defaults
 		defaults = attrs.get("__defaults__", {})
@@ -2095,12 +2125,12 @@ class StatefulMetaclass(QObjectType, type):
 
 		props = items.new_child({v.key: v for v in attrs.values() if isinstance(v, StateProperty)})
 
-		attrs["__state_items__"] = props
-		attrs["__repr_keys__"] = [prop for prop in props.values() if prop.includeInRepr]
+		attrs["__state_items__"] = items
+		attrs["__repr_keys__"] = [prop for prop in items.values() if prop.includeInRepr]
 
-		cls = super().__new__(mcs, name, bases, attrs)
+		cls = super().__new__(mcs, name, (*mixins, *bases), attrs)
 
-		for propType in {type(v) for v in props.maps[0].values()}:
+		for propType in {type(v) for v in items.maps[0].values()}:
 			if (ownerClass := getattr(propType, "__ownerClass__", None)) is not cls:
 				if ownerClass is not None:
 					continue
