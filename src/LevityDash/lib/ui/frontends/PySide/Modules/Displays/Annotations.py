@@ -1,16 +1,16 @@
 import re
-
 from PySide6.QtCore import QRectF, QPointF, QPoint
-from datetime import datetime
-
+from PySide6.QtGui import QBrush
 from abc import abstractmethod
-
-from typing import Any, TypeVar, ClassVar, Type, Callable
+from datetime import datetime
+from numbers import Number
+from typing import Any, TypeVar, ClassVar, Type, Callable, Dict
 
 from LevityDash.lib.stateful import Stateful, StateProperty, DefaultGroup
-from LevityDash.lib.ui import UILogger
-from LevityDash.lib.ui.Geometry import Size, DisplayPosition, Alignment, AlignmentFlag, Dimension, getDPI
-from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Text, Surface, LineWeight, GraphItem, HasWeight
+from LevityDash.lib.stateful_mixins import ColorGradientMixin
+from LevityDash.lib.ui import UILogger, Color
+from LevityDash.lib.ui.Geometry import Size, DisplayPosition, Alignment, AlignmentFlag, Dimension, getDPI, LineWeight
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Text, Surface, GraphItem, HasWeight
 from LevityDash.lib.ui.frontends.PySide.utils import SoftShadow
 from LevityDash.lib.utils import numberRegex, Unset, Axis
 from WeatherUnits import Length, Percentage, Measurement
@@ -75,7 +75,7 @@ class AnnotationText(Text):
 	def limitRect(self) -> QRectF:
 		viewScale = self.scene().viewScale
 		rect = QRectF(0, 0, self.allowedWidth / viewScale.x, self.labelGroup.textSize_px / viewScale.y)
-		rect.moveCenter(self.boundingRect().center())
+		rect.moveCenter(QPointF(0, 0))
 		return rect
 
 	@property
@@ -119,7 +119,7 @@ class AnnotationText(Text):
 AnnotationTextVar = TypeVar('AnnotationTextVar', bound=AnnotationText)
 
 
-class AnnotationLabels(list[AnnotationTextVar], Stateful, tag=...):
+class AnnotationLabels(list[AnnotationTextVar], Stateful, ColorGradientMixin, tag=...):
 	__typeCache__: ClassVar[dict[Type[AnnotationTextVar], Type[list[AnnotationTextVar]]]] = {}
 	__labelClass: ClassVar[Type[AnnotationTextVar]] = AnnotationText
 
@@ -237,7 +237,7 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, tag=...):
 	# ======= state properties ======== #
 
 	# ----------- enabled ------------- #
-	@StateProperty(default=True, allowNone=False, singleValue=True)
+	@StateProperty(default=True, allowNone=False, singleVal=True)
 	def enabled(self) -> bool:
 		return getattr(self, '_enabled', True)
 
@@ -302,8 +302,24 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, tag=...):
 	def opacity(value: float) -> str:
 		return f'{value * 100:.4g}%'
 
+	@property
+	def fill_brush(self) -> Dict[Number, QBrush]:
+		values = self._ticks.tick_values
+		if (gradient := self.gradient) is not None:
+			return {value: QBrush(gradient.get_color_for_value(value).QColor) for value in values}
+		return {value: QBrush(self.color.QColor) for value in values}
+
+	def _set_fill_brush(self, brushes: Dict[Number, QBrush]):
+		for label in self:
+			label.setBrush(brushes[label.value])
+
+	def get_label_color(self, label: AnnotationText) -> Color:
+		if (gradient := self.gradient) is not None:
+			return gradient.get_color_for_value(label.value)
+		return self.color
+
 	# ---------- position ------------ #
-	@StateProperty(default=DisplayPosition.Auto, allowNone=False, singleValue=True)
+	@StateProperty(default=DisplayPosition.Auto, allowNone=False, singleVal=True)
 	def position(self) -> DisplayPosition:
 		return getattr(self, '_position', Unset) or type(self).position.default(type(self))
 
@@ -340,7 +356,7 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, tag=...):
 		return self.refresh
 
 	# ----------- offset ------------- #m
-	@StateProperty(default=Size.Height('5px'), allowNone=False)
+	@StateProperty(default=Size.Height(5, absolute=True), allowNone=False)
 	def offset(self) -> Length | Size.Height | Percentage:
 		if (offset := getattr(self, '_offset', Unset)) is not Unset:
 			return offset
