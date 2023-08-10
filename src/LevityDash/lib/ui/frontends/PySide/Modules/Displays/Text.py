@@ -388,6 +388,57 @@ class Text(QGraphicsPathItem):
 
 		self.setTransform(transform)
 
+	def find_character_bounding_rect(
+		self,
+		index: int = None,
+		font: QFont = None,
+		font_metrics: QFontMetricsF = None,
+		string: str = None,
+	) -> QRectF:
+
+		string = string or self.text
+		if len(string) <= 1:
+			return self.path().boundingRect()
+
+		if index is None:
+			h_align = self.alignment.horizontal
+			text_len = len(self.text)
+			if h_align.isLeft:
+				index = 0
+			elif h_align.isRight:
+				index = text_len - 1
+			elif h_align.isCenter:
+				if text_len == 2:
+					return self.path().boundingRect()
+				index = text_len / 2 if (text_len % 2 == 0) else text_len // 2
+			else:
+				raise ValueError(f'Invalid alignment: {self.alignment.horizontal}')
+
+		font = font or self.font()
+		font_metrics = font_metrics or QFontMetricsF(font)
+
+		if isinstance(index, float):
+			index = int(index)
+			character = string[index:index + 1]
+		else:
+			index = int(index)
+			character = string[index]
+
+		text_rect = self.path().boundingRect()
+
+		left_text, right_text = string[:index], string[index + len(character):]
+
+		bounding_rect = font_metrics.boundingRect(string)
+		bounding_rect.moveCenter(text_rect.center())
+
+		left_width = font_metrics.horizontalAdvance(left_text)
+
+		char_rect = font_metrics.boundingRectChar(character)
+		char_rect.moveCenter(text_rect.center())
+		char_rect.moveLeft(text_rect.left() + left_width)
+
+		return char_rect
+
 	def _apply_group_transform(self, transform: QTransform, x: float, y: float):
 		if align := getattr(self, '_sized', None):
 			sceneY = align.sharedY(self)
