@@ -829,7 +829,7 @@ class Panel(_Panel, Stateful, tag='group'):
 	def padding(self) -> Padding:
 		return Padding(self)
 
-	@StateProperty(key='border', default=Stateful, allowNone=False, dependencies={'geometry'})
+	@StateProperty(key='border', default=Stateful, allowNone=True, dependencies={'geometry'})
 	def borderProp(self) -> Border:
 		return self._border
 
@@ -1794,9 +1794,8 @@ class Panel(_Panel, Stateful, tag='group'):
 
 	@cached_property
 	def sharedFontSize(self):
+		raise DeprecationWarning('sharedFontSize is deprecated')
 		labels = [x for x in self.childPanels if hasattr(x, 'text')]
-		if False:
-			return sum([x.fontSize for x in labels])/len(labels)
 		return min([x.fontSize for x in labels])
 
 	@Slot(QPointF, QSizeF, QRectF, 'parentResized')

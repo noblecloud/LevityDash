@@ -163,7 +163,7 @@ class LevityScene(RendererScene):
 
 	@cached_property
 	def window(self):
-		return app.activeWindow()
+		return LevityDashboard.app.activeWindow()
 
 	def rect(self):
 		return self.sceneRect()

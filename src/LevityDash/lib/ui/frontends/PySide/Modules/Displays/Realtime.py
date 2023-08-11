@@ -1185,11 +1185,8 @@ class UnitLabel(Label, tag=...):
 	__exclude__ = {'items', 'geometry', 'locked', 'frozen', 'movable', 'resizable', 'text'}
 
 	# Section UnitLabel
-	def __init__(self, parent: Panel,
-		properties: Label,
-		*args, **kwargs):
-		self.displayProperties = properties
-		super().__init__(parent=parent, *args, **kwargs)
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
 		self.textBox.setTextAccessor(self.unitText)
 
 	def unitText(self) -> str:

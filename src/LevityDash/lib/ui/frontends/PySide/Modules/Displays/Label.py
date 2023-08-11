@@ -115,7 +115,7 @@ class Label(Panel, ColorMixin, tag='label'):
 	@margins.after
 	def margins(self):
 		clearCacheAttr(self, 'marginRect')
-		if hasattr(self, 'marginHandles'):
+		if not self.textBox.path().isEmpty() and hasattr(self, 'marginHandles'):
 			self.textBox.updateTransform(updatePath=False)
 
 	def dragEnterEvent(self, event):
@@ -126,9 +126,9 @@ class Label(Panel, ColorMixin, tag='label'):
 	def contextMenu(self):
 		return LabelContextMenu(self)
 
-	@StateProperty(default=Alignment.default(), dependencies={'geometry', 'text', 'margins'}, allowNone=False)
+	@StateProperty(default=Alignment.default(), dependencies={'geometry', 'text', 'margins'}, allowNone=False, repr=True)
 	def alignment(self) -> Alignment:
-		return self.textBox.align
+		return self.textBox.alignment
 
 	@alignment.setter
 	def alignment(self, value):
@@ -136,8 +136,6 @@ class Label(Panel, ColorMixin, tag='label'):
 
 	def setAlignment(self, alignment: AlignmentFlag):
 		self.textBox.setAlignment(alignment)
-		type(self).alignment.default(type(self))
-		self.update()
 
 	def setFilter(self, filter: str, enabled: bool = True):
 		self.textBox.setFilter(filter, enabled)
@@ -265,7 +263,6 @@ class Label(Panel, ColorMixin, tag='label'):
 		currentRect = self.rect()
 		if currentRect != rect:
 			super(Label, self).setRect(rect)
-			self.textBox.setPos(self.rect().topLeft())
 			self.textBox.updateText()
 
 	@StateProperty(key='text-scale-type', default=ScaleType.auto)

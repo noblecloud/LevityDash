@@ -1,3 +1,4 @@
+
 from PySide6.QtCore import QObject, QPoint, QPointF, QRectF, Signal, Slot
 from PySide6.QtGui import QBrush, QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPen, Qt, QTransform, QGradient
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem
@@ -17,7 +18,7 @@ from LevityDash.lib.ui.fonts import defaultFont, FontWeight
 from LevityDash.lib.ui.frontends.PySide.utils import addCrosshair, addRect, colorPalette, DebugPaint, addPath
 from LevityDash.lib.ui.icons import fa as FontAwesome, Icon
 from LevityDash.lib.utils.shared import _Panel, ActionPool, ClosestMatchEnumMeta, defer, now, TextFilter
-from utils import DEBUG
+from LevityDash.lib.log import debug as DEBUG
 
 
 class TextItemSignals(QObject):
@@ -500,10 +501,20 @@ class Text(QGraphicsPathItem):
 	def _debug_paint(self, painter: QPainter, option, widget):
 		size = 2.5
 		addCrosshair(painter, size=size, pos=QPoint(0, 0), color=self._debug_paint_color)
+		addRect(painter, self.find_character_bounding_rect(), color=QColor(Qt.yellow), label_text=f'char_rect: {self.text}')
+		if (dbug_shap := getattr(self, '_debug_paint_shape', None)) is not None:
+			addPath(painter, dbug_shap, fill=self._debug_paint_color, color=Qt.transparent, label_text='dbg_shp')
 		if (tr := getattr(self, '_textRect', None)) is not None:
 			addRect(painter, tr)
 		if (fmt_rect := getattr(self, 'fmt_rect_hint', None)) is not None:
-			addRect(painter, fmt_rect)
+			addRect(painter, fmt_rect, label_text='fmt_rect')
+		else:
+			color = QColor(self._debug_paint_color)
+			color.setRed(color.red()//2)
+			color.setGreen(color.green()//2)
+			color.setBlue(color.blue()//2)
+			color.setAlphaF(0.8)
+			addRect(painter, self.limitRect, color=color, label_text='limit_rect')
 		self._normal_paint(painter, option, widget)
 
 	@property
@@ -779,7 +790,7 @@ class Text(QGraphicsPathItem):
 		shape_path.translate(translation)
 
 		size_hint_rect.moveCenter(path.boundingRect().center())
-		rotation = self.rotation() or self.parent.rotation()
+		# rotation = self.rotation() or self.parent.rotation()
 		newTextRect = size_hint_rect #if not abs(rotation) else QTransform().rotate(rotation).map(pathSizeHint).boundingRect()
 		lastTextRect = self._textRect or newTextRect
 		if lastTextRect != newTextRect and (sizeGroup := getattr(self, '_sized', None)) is not None:
@@ -812,8 +823,6 @@ class TextHelper(Text):
 	def __init__(self, parent, reference: Text, font: QFont = None, alignment: Alignment = None, enabledFilters: set = None, *args, **kwargs):
 		self.reference = reference
 		super().__init__(parent, '', font, alignment, enabledFilters, *args, **kwargs)
-
-	# connectSignal(reference.signals.changed, self.refresh)
 
 	@property
 	def value(self):

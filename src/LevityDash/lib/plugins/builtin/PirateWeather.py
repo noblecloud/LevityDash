@@ -49,19 +49,19 @@ schema = {
 
 	'environment.humidity.humidity': {'type': 'humidity', 'sourceUnit': '%', 'title': 'Humidity', 'sourceKey': 'humidity'},
 
+	# Pressure
 	'environment.pressure': {'type': 'pressure', 'sourceUnit': 'hPa'},
 	'environment.pressure.pressure': {'title': 'Pressure', 'sourceKey': 'pressure'},
 
 	# Wind
-
 	'environment.wind': {'type': 'wind', 'sourceUnit': ('m', 's')},
 	'environment.wind.speed.speed': {'title': 'Wind speed', 'sourceKey': 'windSpeed'},
 	'environment.wind.speed.gust': {'title': 'Wind gust', 'sourceKey': 'windGust'},
 	'environment.wind.direction': {'type': 'direction', 'sourceUnit': 'deg', 'title': 'Wind direction', 'sourceKey': 'windBearing'},
 
+	# Clouds
 	'environment.clouds.coverage': {'type': 'cloudCover', 'sourceUnit': '%', 'title': 'Cloud coverage', 'sourceKey': 'cloudCover'},
 	'environment.light.uvi': {'type': 'index', 'sourceUnit': 'uvi', 'title': 'UV Index', 'sourceKey': 'uvIndex'},
-
 	'environment.visibility': {'type': 'distance', 'sourceUnit': 'km', 'title': 'Visibility', 'sourceKey': 'visibility'},
 
 	'environment.ozone': {'type': 'length', 'sourceUnit': 'mm', 'title': 'Ozone Thickness', 'sourceKey': 'ozone'},
@@ -176,24 +176,24 @@ class PirateWeather(REST, realtime=True, daily=True, hourly=True, minutely=True,
 				if obs.dataName in data:
 					obs.update(data)
 		except TimeoutError as e:
-			self.pluginLog.warning(f'PirateWeather: update request timed out: {e}')
+			self.pluginLog.warning(f'Pirate Weather: update request timed out: {e}')
 			self.forecastTimer.retry(timedelta(minutes=1))
 		except InvalidData as e:
-			self.pluginLog.error('PirateWeather: request failed due to invalid data')
+			self.pluginLog.error('Pirate Weather: request failed due to invalid data')
 			self.pluginLog.exception(e)
 		except APIError as e:
-			self.pluginLog.error('PirateWeather: request failed due to an API error')
+			self.pluginLog.error('Pirate Weather: request failed due to an API error')
 			self.pluginLog.exception(e)
 		except Exception as e:
-			self.pluginLog.error(f'PirateWeather: request failed due to an unknown error {e.__class__.__name__}')
+			self.pluginLog.error(f'Pirate Weather: request failed due to an unknown error {e.__class__.__name__}')
 			self.pluginLog.exception(e)
 
 	def start(self):
 
-		self.pluginLog.info("Starting PirateWeather")
+		self.pluginLog.info("Starting Pirate Weather")
 
 		if self.running:
-			self.pluginLog.info("PirateWeather already running")
+			self.pluginLog.info("Pirate Weather already running")
 			return self
 
 		async def async_bootstrap():
@@ -214,7 +214,6 @@ class PirateWeather(REST, realtime=True, daily=True, hourly=True, minutely=True,
 		return self
 
 	def stop(self, callback: Callable = None):
-		self.pluginLog.info('PirateWeather: stopping')
 
 		async def continue_shutdown():
 			self.future.set_result(True)
@@ -223,7 +222,7 @@ class PirateWeather(REST, realtime=True, daily=True, hourly=True, minutely=True,
 			ScheduledEvent.cancelAll(self)
 
 		asyncio.run_coroutine_threadsafe(continue_shutdown(), self.loop)
-		self.pluginLog.info('PirateWeather: starting shutdown')
+		self.pluginLog.info('Pirate Weather: stopping')
 
 
 __plugin__ = PirateWeather

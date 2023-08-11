@@ -210,7 +210,10 @@ class GraphItemData(Stateful, tag=...):
 
 	@cached_property
 	def log_repr(self) -> str:
-		return f'GraphItem({self.key.name})'
+		try:
+			return f'GraphItem({self.key.name})'
+		except AttributeError:
+			return f'GraphItem({self.uuid})'
 
 	def __cancel_pending(self):
 		if self.pendingUpdate is None:
@@ -525,6 +528,7 @@ class GraphItemData(Stateful, tag=...):
 
 	@key.setter
 	def key(self, value):
+		clearCacheAttr(self, 'log_repr')
 		if isinstance(value, str):
 			value = CategoryItem(value)
 		if getattr(self, '_key', Unset) == value:
@@ -1286,7 +1290,10 @@ class Plot(QGraphicsPixmapItem, Stateful):
 	def capStyle(value) -> str:
 		if value is None:
 			return 'round'
-		return camelCase(value.name.decode().strip('Cap'), titleCase=False)
+		try:
+			return camelCase(value.name.decode().strip('Cap'), titleCase=False)
+		except AttributeError:
+			return camelCase(value.name.strip('Cap'), titleCase=False)
 
 	@capStyle.decode
 	def capStyle(value) -> Qt.PenCapStyle:
@@ -2869,7 +2876,7 @@ class DayAnnotations(Surface, Stateful, tag=...):
 		self.hourLines.onAxisChange(axis)
 		self.dayLabels.onDataChange(axis)
 
-	@StateProperty(key='enabled', default=True, allowNone=False, singleValue=True)
+	@StateProperty(key='enabled', default=True, allowNone=False, singleVal=True)
 	def enabled(self) -> bool:
 		return self.isVisible() and self.isEnabled()
 
@@ -3012,7 +3019,7 @@ class CurrentTimeIndicator(QGraphicsLineItem, Stateful, tag=...):
 		t = self._time()
 		return (t - self.graph.timeframe.start).total_seconds() * self.graph.pixelsPerSecond
 
-	@StateProperty(key='enabled', default=True, allowNone=False, singleValue=True)
+	@StateProperty(key='enabled', default=True, allowNone=False, singleVal=True)
 	def enabled(self) -> bool:
 		return self.isVisible() and self.isEnabled()
 
@@ -3021,7 +3028,7 @@ class CurrentTimeIndicator(QGraphicsLineItem, Stateful, tag=...):
 		self.setVisible(value)
 		self.setEnabled(value)
 
-	@StateProperty(key='color', default=Color('#ff9aa3'), allowNone=False, singleValue=True, after=updateAppearance)
+	@StateProperty(key='color', default=Color('#ff9aa3'), allowNone=False, singleVal=True, after=updateAppearance)
 	def color(self) -> Color:
 		return self._color
 

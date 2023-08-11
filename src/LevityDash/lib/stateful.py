@@ -1630,6 +1630,20 @@ class StateProperty(property):
 		self._set(owner, copy(default))
 
 	def item_default(self, *args, **kwargs):
+		"""Decorator used to set the item_fault value function for a StateProperty:
+
+		Usage:
+		------
+		class Test(Stateful):
+
+			@StateProperty
+			def var(self): ...
+
+			@var.item_default
+			def var(self):
+				return "default value"
+		"""
+
 		if args:
 			func, *args = args
 		else:

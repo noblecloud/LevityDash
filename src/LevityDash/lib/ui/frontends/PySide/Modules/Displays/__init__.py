@@ -2,7 +2,6 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtGui import QPainterPath, QPainter
 from PySide6.QtWidgets import QGraphicsItemGroup, QStyleOptionGraphicsItem, QWidget
-from .protocols import *
 
 
 class Surface(QGraphicsItemGroup):
@@ -14,7 +13,7 @@ class Surface(QGraphicsItemGroup):
 		def parentItem(self) -> Panel: ...
 
 	def __init__(self, parent: 'Panel'):
-		super().__init__()
+		QGraphicsItemGroup.__init__(self)
 		self.setParentItem(parent)
 
 	def boundingRect(self):
@@ -51,5 +50,3 @@ from .Gauge import *
 from .Realtime import Realtime
 from .Moon import Moon
 from .Graph import *
-from ... import LevityScene
-from ...utils import addRect

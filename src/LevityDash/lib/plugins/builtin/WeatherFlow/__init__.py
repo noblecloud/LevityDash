@@ -16,6 +16,7 @@ from LevityDash.lib.utils.shared import LOCAL_TIMEZONE, Now
 
 __all__ = ["WeatherFlow", '__plugin__']
 
+
 class WFURLs(URLs, base='swd.weatherflow.com/swd'):
 	auth = Auth(authType=AuthType.PARAMETER, authData={'token': '{token}'})
 
@@ -26,7 +27,8 @@ class WFURLs(URLs, base='swd.weatherflow.com/swd'):
 	deviceObservation = Endpoint(base=rest, url=f'observations/device/{{deviceID}}')
 	station = Endpoint(base=rest, url='stations')
 
-	forecast = Endpoint(base=rest, url='better_forecast', params={'station_id': '{{stationID}}'}, period=[timedelta(hours=1), timedelta(days=1)])
+	forecast = Endpoint(base=rest, url='better_forecast', params={'station_id': '{{stationID}}'},
+											period=[timedelta(hours=1), timedelta(days=1)])
 
 	realtime = Endpoint(base=stationObservation, refreshInterval=timedelta(minutes=5))
 	historical = Endpoint(base=deviceObservation)
@@ -116,8 +118,8 @@ schema = {
 		'type': 'icon', 'sourceUnit': 'str', 'title': 'Condition Icon', 'sourceKey': 'icon', 'iconType': 'glyph', 'iconPack': 'WeatherIcons', 'aliases': '@conditionIcon'
 	},
 	'environment.condition.condition':                   {'type': 'description', 'sourceUnit': 'str', 'title': 'Condition', 'sourceKey': 'conditions'},
-	'environment.sunrise':                               {'type': 'date', 'sourceUnit': 'epoch', 'title': 'Sunrise', 'sourceKey': 'sunrise', 'timeseriesOnly': True},
-	'environment.sunset':                                {'type': 'date', 'sourceUnit': 'epoch', 'title': 'Sunset', 'sourceKey': 'sunset', 'timeseriesOnly': True},
+	'astronomy.sun.rise':                               {'type': 'date', 'sourceUnit': 'epoch', 'title': 'Sunrise', 'sourceKey': 'sunrise', 'timeseriesOnly': True},
+	'astronomy.sun.set':                                {'type': 'date', 'sourceUnit': 'epoch', 'title': 'Sunset', 'sourceKey': 'sunset', 'timeseriesOnly': True},
 	'@type':                                             {'sourceKey': 'type', tsk.metaData: True, tsk.sourceData: True},
 	'@period':                                           {
 		'key':        'device.@deviceSerial.sampleInterval.report',
@@ -145,6 +147,7 @@ schema = {
 	                                                      ],
 
 	'keyMaps':                                           {
+		# Key Maps are for assigning keys to data blocks provided as an array
 		'obs_st':        {
 			'obs': {
 				18: (basic := ['timestamp', 'environment.wind.speed.lull', 'environment.wind.speed.speed', 'environment.wind.speed.gust', 'environment.wind.direction.direction',
@@ -184,6 +187,7 @@ schema = {
 		'hub_status':    {filter: ['type', 'serial_number', 'timestamp', 'uptime', 'rssi']}
 	},
 	'dataMaps':                                          {
+		# Data Maps tell where the sources for the data are located in the data
 		'realtime':      {
 			'realtime': ('obs', 0)
 		},
@@ -486,7 +490,7 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 			self.pluginLog.warning(f'WeatherFlow: forecast request timed out: {e}')
 			self.forecastTimer.retry(timedelta(minutes=1))
 		except InvalidData as e:
-			self.pluginLog.error(f'WeatherFlow: realtime request failed')
+			self.pluginLog.error(f'WeatherFlow: forecast request failed')
 			self.pluginLog.exception(e)
 		except APIError as e:
 			self.pluginLog.exception(e)

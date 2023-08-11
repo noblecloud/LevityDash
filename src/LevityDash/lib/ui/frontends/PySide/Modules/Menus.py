@@ -20,6 +20,7 @@ from rich.theme import Theme
 from LevityDash import LevityDashboard
 from LevityDash.lib.stateful import StatefulDumper
 from LevityDash.lib.ui.frontends.PySide.utils import DisplayType
+from LevityDash.lib.utils import get
 
 if TYPE_CHECKING:
 	from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
@@ -271,7 +272,8 @@ class BaseContextMenu(QMenu):
 			self.parent.hide()
 
 	def addTitleMenu(self):
-		titleMenu = LabelContextMenu(self.parent.title_label, title="Title")
+		title_label = get(self.parent, 'title_label', 'title', getter=getattr)
+		titleMenu = LabelContextMenu(title_label, title="Title")
 		titlePositions = MenuFromEnum(
 			self.parent.splitter,
 			'titlePosition',

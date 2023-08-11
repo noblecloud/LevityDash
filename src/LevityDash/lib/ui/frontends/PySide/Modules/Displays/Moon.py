@@ -19,7 +19,6 @@ from LevityDash.lib.config import userConfig
 from LevityDash.lib.ui import UILogger
 from WeatherUnits import Angle, Time, Percentage
 
-golden = (1 + np.sqrt(5))/2
 dark = QColor(28, 29, 31, 255)
 
 __all__ = ["Moon"]

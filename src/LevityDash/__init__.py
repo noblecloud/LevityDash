@@ -103,7 +103,7 @@ class _LevityDashboard(object):
 							 'log', 'get_channel', 'get_container', 'clock', 'status_bar', 'splash',
 							 'main_window', 'view', 'plugin_config', 'pluginPool', 'pluginThread',
 							 'main_action_pool', 'main_thread_pool', 'CENTRAL_PANEL', 'scene',
-							 'load_dashboard', 'main_thread')
+							 'load_dashboard', 'main_thread', 'presets')
 
 	plugins: 'LevityDashboard.lib.PluginsLoader'
 	dispatcher: 'LevityDashboard.lib.PluginValueDirectory'

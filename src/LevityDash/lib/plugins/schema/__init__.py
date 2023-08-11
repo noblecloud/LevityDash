@@ -743,6 +743,7 @@ class Schema(CategoryDict):
 		if key not in self:
 			key = self.sourceKeyMap.get(key, None)
 			if key is None:
+				#TODO: Add better error handling
 				log.warning(f'{key} was not found in {self}')
 				return None
 		metaData = self.getExact(key)
