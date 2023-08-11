@@ -2,30 +2,39 @@ from functools import lru_cache
 
 import re
 from numbers import Number
-from typing import ClassVar, Dict, Literal, Tuple, Iterable, Union, Sequence, Type
+from typing import ClassVar, Dict, Literal, Tuple, Iterable, Union, Sequence, Optional, TYPE_CHECKING
 
 from PySide6.QtGui import QColor
 from rich.repr import rich_repr
 
 from LevityDash.lib.ui.colors.utils import randomColor, kelvinToRGB
 from LevityDash.lib.utils import get, split
+from LevityDash.lib.ui import UILogger as log
+
+if TYPE_CHECKING:
+	from LevityDash.lib.ui.colors.presets import Preset
+
+log = log.getChild('Color')
 
 _knownColors: Dict[str, 'Color'] = {}
 
 _BASE_COLOR = Literal['r', 'g', 'b', 'a', 'red', 'green', 'blue', 'alpha']
-_ColorDict = Dict[_BASE_COLOR, int | float]
+ColorDict = Dict[_BASE_COLOR, int | float]
+
+COLOR_REG = re.compile(r"([A-Fa-f0-9]{8}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{4}|[A-Fa-f0-9]{3})")
 
 
 @rich_repr
 class Color:
 
 	__slots__ = ('__red', '__green', '__blue', '__alpha', '__name')
-	__match_args__ = ('')
+	__match_args__ = ('red', 'green', 'blue', 'alpha')
+
 	__red: int
 	__green: int
 	__blue: int
 	__alpha: int
-	__name: str
+	__name: Optional[str]
 
 	presets: ClassVar['Preset']
 
@@ -54,7 +63,7 @@ class Color:
 
 	def __init__(
 		self,
-		color: str | Tuple[int | float, ...] | _ColorDict = None, /,
+		color: str | Tuple[int | float, ...] | ColorDict = None, /,
 		red: Number = None,
 		green: Number = None,
 		blue: Number = None,
@@ -81,7 +90,12 @@ class Color:
 			return hash((self.__name, self.hex, type(self)))
 		return hash((self.__name, type(self)))
 
-	def __parse(self, color: str | Tuple[int | float, ...] | _ColorDict):
+	def __parse(self, color: str | Tuple[int | float, ...] | ColorDict):
+		colors = self.__decode(color)
+		self.__red, self.__green, self.__blue, self.__alpha = tuple(self.__ensureCorrectValue(i) for i in colors)
+
+	@staticmethod
+	def __decode(color) -> Tuple[int, int, int, int]:
 		match color:
 			case str(color):
 				if hexVal := next(iter(re.findall(r"[A-Fa-f0-9]+", color)), None):
@@ -92,28 +106,36 @@ class Color:
 					hexVal = [i.rjust(2, '0') for i in split(hexVal, n)]
 					if len(hexVal) == 3:
 						hexVal = *hexVal, 'ff'
-					colors = tuple(int(i, 16) for i in hexVal)
+					return tuple(int(i, 16) for i in hexVal)
 				else:
 					raise ValueError(f'Invalid colors string: {color}')
 			case [int(red), int(green), int(blue)] as rgb:
-				colors = rgb + (255,)
+				return *rgb, 255
 			case [int(red), int(green), int(blue), int(alpha)] as rgba:
-				colors = rgba
+				return rgba
 			case QColor() as qc:
-				colors = qc.getRgb()
-			case dict() if set(color) & set(_ColorDict.__args__):
-				colors = tuple(
-					get(color, *i, expectedType=float|int, default=255)
+				return qc.getRgb()
+			case dict() if set(color) & set(ColorDict.__args__):
+				rgb = tuple(
+					get(color, *i, expectedType=float | int, default=0)
 					for i in (
 						('r', 'red'),
 						('g', 'green'),
 						('b', 'blue'),
-						('a', 'alpha')
 					)
 				)
+				a = get(color, 'a', 'alpha', expectedType=float | int, default=255)
+				return *rgb, a
+			case int(i) if i <= 255:
+				return (i, i, i, 255)
+			case int(rgba_hex) if 0xffffff < rgba_hex <= 0xffffffff:
+				return tuple(int(i, 16) for i in split(hex(rgba_hex)[2:], 2))
+			case int(rgb_hex) if rgb_hex <= 0xffffff:
+				return tuple(int(i, 16) for i in split(hex(rgb_hex)[2:], 2)) + (255,)
+
 			case _:
 				raise ValueError(f'Invalid colors string: {color}')
-		self.__red, self.__green, self.__blue, self.__alpha = tuple(self.__ensureCorrectValue(i) for i in colors)
+		return colors
 
 	@staticmethod
 	def __ensureCorrectValue(value: int | float | Number) -> int:
@@ -290,6 +312,14 @@ class Color:
 		return self
 
 	@classmethod
+	def decode(cls, color: str | Tuple[int | float, ...] | ColorDict, name: str = None) -> 'Color':
+		try:
+			name = color.pop('name')
+		except Exception:
+			pass
+		return cls(**{k: v for k, v in zip(('red', 'green', 'blue', 'alpha'), cls.__decode(color))}, name=name)
+
+	@classmethod
 	def representer(cls, dumper, data):
 		return dumper.represent_str(str(data))
 
@@ -320,7 +350,7 @@ SupportsColor = Union[
 	Tuple[Number, Number, Number],
 	Tuple[Number, Number, Number, Number],
 	str,
-	_ColorDict
+	ColorDict
 ]
 
 
