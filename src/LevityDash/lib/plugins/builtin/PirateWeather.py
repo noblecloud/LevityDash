@@ -60,7 +60,7 @@ schema = {
 	'environment.wind.direction': {'type': 'direction', 'sourceUnit': 'deg', 'title': 'Wind direction', 'sourceKey': 'windBearing'},
 
 	# Clouds
-	'environment.clouds.coverage': {'type': 'cloudCover', 'sourceUnit': '%', 'title': 'Cloud coverage', 'sourceKey': 'cloudCover'},
+	'environment.clouds.cover': {'type': 'cloudCover', 'sourceUnit': '%', 'title': 'Cloud coverage', 'sourceKey': 'cloudCover'},
 	'environment.light.uvi': {'type': 'index', 'sourceUnit': 'uvi', 'title': 'UV Index', 'sourceKey': 'uvIndex'},
 	'environment.visibility': {'type': 'distance', 'sourceUnit': 'km', 'title': 'Visibility', 'sourceKey': 'visibility'},
 
