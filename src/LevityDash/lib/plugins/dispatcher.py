@@ -602,4 +602,10 @@ class PluginValueDirectory(MutableSignal):
 	def plugins(self) -> 'Plugins':
 		return self.__plugins
 
+	@property
+	def all_valid_keys(self) -> Set[CategoryItem]:
+		key_extractor = lambda x: set(x.schema.flatDict.keys())
+		return set.union(*map(key_extractor, self.plugins))
+
+
 __all__ = ("PluginValueDirectory", "MultiSourceContainer", "MultiSourceChannel")
