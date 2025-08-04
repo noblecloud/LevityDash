@@ -89,17 +89,81 @@ class _Panel(QGraphicsRectItem):
 		return self.rect().size()
 
 
-class ClosestMatchEnumMeta(EnumMeta):
-	_allMembersUnique: bool
+class ClosestMatchEnumMeta(EnumType):
+	"""
+	EnumMeta that allows for fuzzy matching of enum members.
+	There are a lot of improvements that need to be done, but it works for now.
+
+	TODO
+	----
+	- [ ] Allow for matching member values instead of just names with keyword argument
+	- [ ] Refactor fuzzy matching out of __getitem__ into it's own method
+	"""
+
 	_firstLetters: Set[str]
+	# The first letter of each member name used for quick matching
+
+	_allMembersUnique: bool
+	# Whether all the first letters of the members are unique
+
+	@classmethod
+	def decode(cls, value):
+		return cls[value]
+
+	@staticmethod
+	def _check_for_existing_members_(class_name, bases):
+		for chain in bases:
+			for base in chain.__mro__:
+				if isinstance(base, ClosestMatchEnumMeta):
+					continue
+				if issubclass(base, Enum) and base._member_names_:
+					raise TypeError(
+						"%s: cannot extend enumeration %r"
+						% (class_name, base.__name__)
+					)
+
+	@staticmethod
+	def _get_mixins_(class_name, bases):
+		"""
+		Returns the type for creating enum members, and the first inherited
+		enum class.
+
+		bases: the tuple of bases that was given to __new__
+		"""
+		santized_bases = []
+		extracted_bases = set()
+		for base in bases:
+			if not isinstance(base, ClosestMatchEnumMeta):
+				santized_bases.append(base)
+			else:
+				for mixin in base.__bases__:
+					if mixin not in extracted_bases:
+						extracted_bases.add(mixin)
+						santized_bases.append(mixin)
+		return EnumMeta._get_mixins_(class_name, tuple(santized_bases))
+
+	def __instancecheck__(self, instance):
+		return super().__instancecheck__(instance) or isinstance(type(instance), ClosestMatchEnumMeta)
 
 	def __new__(metacls, cls, bases, classdict, **kwds):
-		if IntFlag in bases:
-			pass
 		enum_class = super().__new__(metacls, cls, bases, classdict, **kwds)
+
 		for k, v in metacls.__dict__.items():
 			if not k.startswith('_'):
 				setattr(enum_class, k, v)
+
+		extended_from = next((base for base in bases if isinstance(base, ClosestMatchEnumMeta)), None)
+
+		if extended_from is not None:
+			enum_class._member_names_ = [*extended_from._member_names_, *enum_class._member_names_]
+
+		if not isinstance(enum_class._member_map_, ChainMap):
+			if extended_from is None:
+				enum_class._member_map_ = ChainMap(enum_class._member_map_)
+			else:
+				assert isinstance(extended_from._member_map_, ChainMap)
+				enum_class._member_map_ = extended_from._member_map_.new_child(enum_class._member_map_)
+
 		uniqueLetters = {k[0].casefold() for k in enum_class.__members__.keys()}
 		setattr(enum_class, '_firstLetters', uniqueLetters)
 		setattr(enum_class, '_allMembersUnique', len(uniqueLetters) == len(enum_class.__members__))
