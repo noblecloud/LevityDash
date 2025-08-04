@@ -1,6 +1,7 @@
 from collections import ChainMap
 
 import inspect
+from inspect import FrameInfo, getsourcefile, currentframe, getfullargspec, getsourcelines
 import os
 import yaml
 from PySide6.QtCore import QObject, QThread
@@ -27,12 +28,18 @@ from shutil import get_terminal_size
 from sys import _getframe as getframe
 from tempfile import TemporaryFile
 from traceback import extract_stack
-from types import GenericAlias, SimpleNamespace, UnionType, FunctionType
+from types import GenericAlias, SimpleNamespace, UnionType, FunctionType, FrameType
 from typing import (
-	_GenericAlias, _UnionGenericAlias, Any, Callable, ClassVar, Dict, Final, Generic, get_args, get_origin,
+	Any, Callable, ClassVar, Dict, Final, Generic, get_args, get_origin,
 	get_type_hints, Hashable, Iterable, List, Literal, Mapping, Sequence, Set, Sized, Text, Tuple, Type, TypeAlias,
-	TypeVar, Union, _UnpackGenericAlias
+	TypeVar, Union, Optional, Iterator,
 )
+try:
+	from typing import _GenericAlias, _UnionGenericAlias
+except ImportError:
+	from typing import _GenericAlias
+	from typing import _UnionGenericAlias
+
 from warnings import warn, warn_explicit
 from yaml import Dumper, MappingNode, SafeDumper, ScalarNode
 from yaml.composer import Composer
@@ -47,7 +54,7 @@ from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.utils import get, levenshtein, OrUnset, Unset
 from LevityDash.lib.utils.shared import (
 	_Panel, ActionPool, clearCacheAttr, DeepChainMap, DotDict, guarded_cached_property, OrderedSet,
-	recursiveRemove, sortDict
+	recursiveRemove, sortDict, remove_empty_dicts
 )
 
 
@@ -83,13 +90,6 @@ def isA(t: Type[Any] | str, value: Any) -> bool:
 
 __builtins__["isA"] = isA
 
-class DefaultMeta(type):
-	def __new__(mcs, name, bases, attrs, **kwargs):
-		subType = next((i for i in bases if issubclass(i, DefaultType.__constraints__)), object)
-		attrs["__subtype__"] = subType
-		return super().__new__(mcs, name, bases, attrs)
-
-
 class SourceType(Enum):
 	Default = "default"
 	Factory = "factory"
@@ -98,7 +98,16 @@ class SourceType(Enum):
 	Shared = "shared"
 
 
+class DefaultMeta(type):
+	def __new__(mcs, name, bases, attrs, **kwargs):
+		subType = next((i for i in bases if issubclass(i, DefaultType.__constraints__)), object)
+		attrs["__subtype__"] = subType
+		return super().__new__(mcs, name, bases, attrs)
+
+
 class Default(Generic[DefaultType], metaclass=DefaultMeta):
+	__subtype__: ClassVar[Type[Any]]
+
 	def __new__(cls, value, **kwargs):
 		if cls is Default:
 			match value:
@@ -478,6 +487,20 @@ class InvalidArguments(SyntaxError):
 	pass
 
 
+""" 
+TODO
+---- 
+
+- Add hooks or one time after functions that can be added from another StateProperty
+- hooks can be added to:
+	- first, next, or every access
+	- first, next, or every set
+
+This item would allow for other stateful items to be updated when a stateful item is accessed or set
+
+"""
+
+
 class StateProperty(property):
 	__owner__: ClassVar[Type]
 	__ownerParentClass__: ClassVar[Type]
@@ -519,7 +542,7 @@ class StateProperty(property):
 				if not self._varifyReturnType(type(default)):
 					acceptedTypesString = '\n - '.join([i.__name__ for i in self.returns])
 					log.critical(
-						f"{inspect.getsourcefile(self.fget)}:{inspect.getsourcelines(self.fget)[1]}\n"
+						f"{getsourcefile(self.fget)}:{getsourcelines(self.fget)[1]}\n"
 						f"{self!r} has a default value {type(default).__name__}({default}) that is not of the correct type."
 						f"\nAccepted types are:\n"
 						f" - {acceptedTypesString}"
@@ -592,11 +615,11 @@ class StateProperty(property):
 						kwargs["after.kwargs"] = kwargs
 					case {}:
 						pass
-			case StateProperty() as prop if prop is not self:
-				if isinstance(prop_after := prop.options["after"], ChainMap):
-					kwargs['after'] = prop_after.new_child(DotDict())
-				else:
-					kwargs['after'] = ChainMap(DotDict({}), prop_after)
+			# case StateProperty() as prop if prop is not self:
+			# 	if isinstance(prop_after := prop.options["after"], ChainMap):
+			# 		kwargs['after'] = prop_after.new_child(self)
+			# 	else:
+			# 		kwargs['after'] = ChainMap(DotDict({}), prop_after)
 
 		if (encode := kwargs.pop("encoder", None)) is not None:
 			if isinstance(encode, Callable):
@@ -647,7 +670,7 @@ class StateProperty(property):
 		:keyword extend: When true, the value's state will be included in the item's state instead of the value itself
 		:type extend bool:
 		:keyword repr: Include the value in the repr of the item
-		:type repr bool:
+		:type repr bool:wex
 		:keyword dependencies: A set of other keys that the value depends on being already set
 		:type dependencies set[str]
 
@@ -677,7 +700,7 @@ class StateProperty(property):
 		# yield "options", self.options
 
 	# Section .__get__
-	def __get__(self, obj: 'Stateful', objtype=None):
+	def __get__(self, obj: 'Stateful', objtype=None) -> Any:
 		if obj is None:
 			return self
 		if self.key not in obj._user_set_state_items_:
@@ -801,6 +824,11 @@ class StateProperty(property):
 
 		value = self.__decode__(owner, value)
 
+		if (after_pool := kwargs.get('afterPool', None)) is None:
+			after_pool = getattr(owner, "action_pool", None)
+			if after_pool is None:
+				after_pool = getattr(value, "action_pool", None)
+
 		if isinstance(value, Stateful):
 			value.__state_key__ = self
 			value.__statefulParent = owner
@@ -815,28 +843,42 @@ class StateProperty(property):
 		except AttributeError:
 			pass
 
-		self.schedule_after_func(owner, afterPool=kwargs.get('afterPool', None))
+		self.schedule_after_func(owner, afterPool=after_pool)
 
 		self.__existingValues__.pop(self.cacheKey(owner), None)
 		owner._set_state_items_.add(self.name)
 
 	def schedule_after_func(self, owner: 'Stateful', afterPool: 'ActionPool' = None, **kwargs):
 		if after := self.__options.get("after", False):
+			args = after.get("args", ())
+			kwargs = {**after.get("kwargs", {}), **kwargs}
 			if (func := after.get("func", None)) is not None:
+
+				if isinstance(get_annotations(func).get("return", Unset), Callable):
+					func = func(owner)
+
 				if isinstance(afterPool, ActionPool):
-					if afterPool.instance is not owner:
-						afterPool = afterPool.new(owner)
+					if (after_pool_instance := afterPool.instance) is not owner:
+						hashable_owner = owner
+						while not isinstance(hashable_owner, Hashable):
+							hashable_owner = hashable_owner.statefulParent
+						if hashable_owner is after_pool_instance:
+							pass
+						else:
+							afterPool = owner.action_pool
+
 					if afterPool.can_execute:
-						func(owner)
+						func(owner, *args, **kwargs)
 					elif afterPool.running and len(afterPool) > 0:
 						log.verbose(f"Adding after function for {self.key} to running after pool", verbosity=5)
-						afterPool.add(func)
+						afterPool.add(func, caller=self, args=args, kwargs=kwargs)
 					else:
 						log.verbose(f"Adding after function for {self.key} to after pool", verbosity=5)
-						afterPool.add(func)
+						afterPool.add(func, caller=self, args=args, kwargs=kwargs)
 				else:
 					log.verbose(f"Executing after method for {owner}", verbosity=5)
-					func(owner)
+
+					func(owner, *args, **kwargs)
 
 	# Section .__delete__
 	def __delete__(self, obj):
@@ -922,7 +964,7 @@ class StateProperty(property):
 		return func
 
 	@cached_property
-	def fset(self) -> Callable[[StatefulAcceptsType], None]:
+	def fset(self) -> Callable[['Stateful', StatefulAcceptsType], None]:
 		func = self._set
 		if func is None or func.__code__.co_code == PASS_FUNC:
 			return getattr(self.parentCls, "fset", None)
@@ -992,12 +1034,35 @@ class StateProperty(property):
 
 		return UnsetDefault
 
-	def default(self, owner: Type['Stateful'], instance: 'Stateful' = None, update_source: bool = True) -> Any | Literal[UnsetDefault]:
+	def default(
+		self,
+		owner: Type['Stateful'],
+		instance: 'Stateful' = None,
+		update_source: bool = True,
+		encode: bool = False,
+	) -> Any | Literal[UnsetDefault]:
 		if instance is not None and (instanceDefault := self.get_item_default(instance)) is not UnsetDefault:
 			if update_source:
 				instance._state_item_sources[self] = SourceType.ItemDefault
 			return instanceDefault
 		return self.class_default(owner)
+
+	def _is_decoded_value(self, value: Any) -> bool:
+		if (encoded_type := self.returnsFilter(value)) and encoded_type is not UnsetReturn:
+			return False
+		return True
+
+	def is_default(self, instance: 'Stateful') -> bool:
+		default = self.default(type(instance), instance, update_source=False)
+		instance_value = self.fget(instance)
+		if not self._is_decoded_value(default):
+			default = self.__decode__(instance, default)
+		if instance_value is None and self.allowNone:
+			return True
+		if not self._is_decoded_value(instance_value):
+			instance_value = self.__decode__(instance, instance_value)
+
+		return default == instance_value or instance_value == default
 
 	@lru_cache()
 	def hasDefault(self, owner: Type['Stateful']) -> bool:
@@ -1141,8 +1206,8 @@ class StateProperty(property):
 		ownOptions = self.optionsFromInit
 		ownOptions["conditions"] = Conditions(self)
 		if parentOptions is Unset:
-			return ChainMap(DotDict(ownOptions))
-		return parentOptions.new_child(ownOptions)
+			return DeepChainMap(origin=self, origin_map=DotDict(ownOptions))
+		return parentOptions.new_child(self, child_map=ownOptions)
 
 	@cached_property
 	def dependencies(self) -> Set[str]:
@@ -1170,7 +1235,7 @@ class StateProperty(property):
 	def hasConditions(self) -> bool:
 		return bool(self.__options.get("conditions", False))
 
-	def condition(self, func: Callable = Unset, *args, method: str | Iterable[str] = Unset, **kwargs):
+	def condition(self, func: Callable = Unset, *args, method: str | Iterable[str] = Unset, **kwargs) -> 'StateProperty':
 		# if the function is not set
 		if func is Unset:
 			# check if there is a method/function in args
@@ -1210,12 +1275,12 @@ class StateProperty(property):
 		self.__options["after.func"] = func
 		return self
 
-	def update(self, func):
+	def update(self, func) -> 'StateProperty':
 		self.__options["update.func"] = func
 		return self
 
 	# Section .encode
-	def encode(self, *args, **kwargs):  # TODO: Add warning when function is improperly named
+	def encode(self, *args, **kwargs) -> 'StateProperty':  # TODO: Add warning when function is improperly named
 		"""Encode the value of this property for storage in the database."""
 		if args:
 			func, *args = args
@@ -1231,6 +1296,8 @@ class StateProperty(property):
 	# Section .decode
 	def decode(self, *args, **kwargs) -> 'StateProperty':
 		"""Decorator for receiving the decode function
+
+		Note: Decoding should never return a Stateful object
 
 		Parameters
 		----------
@@ -1258,7 +1325,7 @@ class StateProperty(property):
 		return self
 
 	# Section .factory
-	def factory(self, func: Callable[[], StatefulReturnType]):
+	def factory(self, func: Callable[[], StatefulReturnType]) -> 'StateProperty':
 		"""Decorator for receiving the factory function
 
 		Parameters
@@ -1268,6 +1335,32 @@ class StateProperty(property):
 		"""
 		self.__options["factory.func"] = func
 		return self
+
+	def from_factory(self, obj: 'Stateful', update_source: bool = True) -> StatefulReturnType | UnsetReturn:
+		if (factory := self.__options.get("factory.func", None)) is not None:
+			try:
+				value = factory(obj)
+				if update_source:
+					obj._state_item_sources[self] = SourceType.Factory
+				self.__existingValues__[self.cacheKey(obj)] = value
+
+				try:
+					value.__state_key__ = self
+				except AttributeError:
+					pass
+
+			except Exception as e:
+				if STATEFUL_DEBUG:
+					log.exception(e)
+				raise e
+
+			return value
+		return UnsetReturn
+
+	@cached_property
+	def has_factory(self) -> bool:
+		return (factory := self.__options.get("factory.func", None)) is not None and callable(factory)
+
 
 	def score(self, func: Callable[[Any], float] = None, **kwargs):
 		if kwargs:
@@ -1318,7 +1411,7 @@ class StateProperty(property):
 
 	@guarded_cached_property(guardFunc=lambda x: x is not None, default=name)
 	def key(self):
-		return self.__options.get("key", None)
+		return self.optionsFromInit.get("key", None)
 
 	def __findName(self):
 		if self._get is not None:
@@ -1448,8 +1541,8 @@ class StateProperty(property):
 			if isinstance(value, Stateful):
 				if value.state == {}:
 					return "_", None
-				if value.testDefault(value.default()):
-					return "_", None
+				# if value.is_default(value.default_state):
+				# 	return "_", None
 			default = self.default(type(owner), owner, update_source=False)
 
 			if isinstance(default, DefaultGroup) or default is UnsetDefault:
@@ -1550,7 +1643,12 @@ class StateProperty(property):
 	@cached_property
 	def decodesTo(self) -> Tuple[Type, ...] | UnsetReturn:
 		try:
-			decoder = self.__options["decode"]['func']
+			decoder_data = self.__options["decode"]
+			match decoder_data:
+				case {"func": decoder, **rest}:
+					pass
+				case FunctionType as decoder:
+					pass
 			annotations = get_annotations(decoder).get("return", None) or get_type_hints(decoder).get("return", UnsetReturn)
 			if annotations is not UnsetReturn:
 				return self.parse_return_type_special(annotations)
@@ -1609,7 +1707,7 @@ class StateProperty(property):
 					break
 
 			if is_valid:
-				return tuple(StateProperty.parse_return_type_special(exp) if not isinstance(exp, _UnpackGenericAlias) else exp for exp in expected)
+				return tuple(StateProperty.parse_return_type_special(exp) if not isinstance(exp, _GenericAlias) else exp for exp in expected)
 
 		return expected
 
@@ -1663,7 +1761,6 @@ class StateProperty(property):
 							state = state.state
 
 						if isinstance(existing, Stateful):
-							existing._rawItemState = deepcopy(state)
 							if not isinstance(state, Mapping):
 								state = self.decodeValue(state, owner)
 							existing.setItemState(state)
@@ -1686,6 +1783,11 @@ class StateProperty(property):
 						log.exception(e)
 						log.error(f"Unable to set state for {existing}")
 						raise e
+				elif existing is None:
+					# Construct stateful item from factory if it exists
+					if self.has_factory and self.isStatefulReference and isinstance(from_factory := self.from_factory(owner), Stateful):
+						self.fset(owner, from_factory)
+						return self.setState(owner, state, afterPool=afterPool)
 
 		self.__set__(owner, state, afterPool=afterPool)
 
@@ -1695,19 +1797,22 @@ class StateProperty(property):
 			raise ValueError("Default value is not set")
 		self._set(owner, copy(default))
 
-	def item_default(self, *args, **kwargs):
-		"""Decorator used to set the item_fault value function for a StateProperty:
+	def item_default(self, *args, **kwargs) -> 'StateProperty':
+		"""
+		Decorator used to set the item_fault function for a StateProperty.
+		This default is instance-specific rather than class specific
 
-		Usage:
-		------
-		class Test(Stateful):
-
-			@StateProperty
-			def var(self): ...
-
-			@var.item_default
-			def var(self):
-				return "default value"
+		Example
+		-------
+		>>> class Example(Stateful):
+		...
+		...     @StateProperty
+		...     def var(self) -> StateType:
+		...         ...
+		...
+		...     @var.item_default
+		...     def var(self) -> StateType:
+		...         ...
 		"""
 
 		if args:
@@ -1729,11 +1834,38 @@ class StateProperty(property):
 		args = item_default.get("args", ())
 		kwargs = item_default.get("kwargs", {})
 
-		arg_spec = inspect.getfullargspec(func)
+		arg_spec = getfullargspec(func)
 		if 'self' in arg_spec.args:
 			args = (item, *args)
 
 		return func(*args, **kwargs)
+
+	@cached_property
+	def docstring(self) -> str:
+		return 'shit'
+		strings = [self.fget.__doc__ or '']
+
+		def extract_doc_string(func_data: DotDict | FunctionType) -> str:
+			match func_data:
+				case {'doc': str(doc_string)}:
+					return doc_string
+				case {'doc': FunctionType() as func} if func.__doc__:
+					return func.__doc__
+				case {'func': FunctionType() as func} if func.__doc__:
+					return func.__doc__
+				case FunctionType() as func if func.__doc__:
+					return func.__doc__
+				case _:
+					return ''
+
+		if decoder_func := self.__options.get('decode', {}):
+			strings.append('Decoder\n-------')
+			strings.append(extract_doc_string(decoder_func))
+		if encoder_func := self.__options.get('encode', {}):
+			strings.append('Encoder\n-------')
+			strings.append(extract_doc_string(encoder_func))
+		return '\n'.join(strings)
+
 
 
 class StatefulReferenceProperty(property):
@@ -1951,6 +2083,9 @@ class StatefulConstructor(SafeConstructor):
 		-------
 		Union[LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph.GraphPanel, None, LevityDash.lib.ui.frontends.PySide.Modules.Displays.Moon.Moon, LevityDash.lib.ui.frontends.PySide.Modules.DateTime.Clock, LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime.Realtime, LevityDash.lib.ui.frontends.PySide.Modules.Panel.Panel, LevityDash.lib.ui.frontends.PySide.Modules.Label.EditableLabel]
 		"""
+
+		#! NEEDS TO BE REPLACED WITH itemLoader func in utils
+
 		if not unsortedItems:
 			return
 		if parentItems is None:
@@ -2150,7 +2285,82 @@ Keyword arguments:
 
 
 class StatefulMixin:
+	"""
+	This is a base class for making mixins that add commonly used StatefulProperties to a class.
+
+	Since a Stateful instance can manage itself or other items, Mixins and Submixins should only modify the
+	internal state of the instance and any method in a `StatefulMixin` that modifies the presentation or behaviour
+	of the item must remain declared as an abstract method until the mixin is mixed into a true Stateful class.
+
+	Example Usage
+	-------------
+
+	```python
+	class NameMixin(StatefulMixin):
+		# Define the methods needed to modify the target item since they will be most
+		# likely used as the 'after' argument in a StateProperty
+		@abstractmethod
+		def do_something(self):
+				# Custom implementation based on the requirements of NameMixin
+				pass
+
+		@StateProperty(key='name', default='John Doe', after=do_something)
+		def name(self) -> str:
+				return self._name
+
+		@name.setter
+		def name(self, value: str):
+				self._name = value
+
+	class Person(NameMixin):
+		@abstractmethod
+		def do_something(self):
+			# Custom implementation based on the requirements of the submixin
+			# This method is redeclared as an abstract method
+			pass
+	
+	# Valid Usage
+	class Employee(Person, Stateful):
+		# The do_something method is no longer abstract since it is defined in Person
+		# and must be defined
+		def do_something(self):
+			# Custom implementation based on the requirements of the submixin
+			pass
+	
+	# Invalid Usage
+	# Any method in a StatefulMixin that modifies the item must remain abstract until 
+	# the mixin is used with a Stateful class.
+	class Customer(Person):
+		def do_something(self):
+			...
+	
+	```
+	"""
+
 	__state_items__: ClassVar[ChainMap]
+
+	@classmethod
+	def __get_abstract_methods__(cls) -> Set[str]:
+		abstract_methods = set()
+		for parent in cls.__mro__[1:]:
+			if hasattr(parent, "__abstractmethods__"):
+				abstract_methods |= parent.__abstractmethods__
+			else:
+				parent_abstract_methods = {k for k, v in parent.__dict__.items() if getattr(v, "__isabstractmethod__", False)}
+				abstract_methods |= parent_abstract_methods
+		return abstract_methods
+
+	@classmethod
+	def __init_subclass__(cls, **kwargs):
+		super().__init_subclass__(**kwargs)
+		if not issubclass(cls, Stateful):
+			abstract_methods = cls.__get_abstract_methods__()
+			not_abstract_but_should_be = {k: v for k, v in cls.__dict__.items() if isinstance(v, Callable) and k in abstract_methods and not getattr(v, "__isabstractmethod__", False)}
+			if not_abstract_but_should_be:
+				raise TypeError(
+					f"Class {cls.__name__} must be a subclass of Stateful or all abstract methods must be declared as abstract."
+					f"Ensure there is no logic and add the `@abstractmethod` decorator to {', '.join(not_abstract_but_should_be)}", not_abstract_but_should_be
+				)
 
 	@classmethod
 	@property
@@ -2163,10 +2373,12 @@ class StatefulMixin:
 				]
 		))
 
+
 # Section StatefulMeta
 class StatefulMetaclass(QObjectType, type):
 	__state_items__: ChainMap
-	__tags__: Set[str] = set()
+	__tags__: Set[str] = set()  # TODO: Change this to a Dict[str, Type[Stateful]]
+	__sub_tags__: Set[str] = set()
 	__loader__ = StatefulLoader
 	__dumper__ = StatefulDumper
 	__default_states__: Dict[Type['Stateful'], DefaultState]
@@ -2254,13 +2466,32 @@ class StatefulMetaclass(QObjectType, type):
 				propType.__ownerClass__ = cls
 
 		if tag := kwargs.get("tag", None):
+			if isinstance(tag, str) and '.' in tag:
+				parent_tag, tag = tag.split('.', 1)
+				assert parent_tag == parentCls.__tag__
+
+				# check to see if the parent has a __tags__ attribute
+				if (parent_sub_tags := parentCls.__dict__.get('__sub_tags__', None)) is None:
+					parent_sub_tags = parentCls.__sub_tags__ = set()
+
+				assert tag not in parent_sub_tags
+				assert issubclass(cls, parentCls)
+				parent_sub_tags.add(tag)
+
+				setattr(parentCls, tag.title(), cls)
+
+				tag = f'{parent_tag}.{tag}'
+
 			mcs.__tags__.add(tag)
 			cls.__tag__ = tag
+
+		if (representer := attrs.get('representer', None)) is not None:
+			dumper = getattr(cls, '__dumper__', None) or StatefulDumper
 			if isinstance(cls.__dumper__, list):
-				for dumper in cls.__dumper__:
-					dumper.add_representer(cls, cls.representer)
+				for d in dumper:
+					d.add_representer(cls, representer)
 			else:
-				cls.__dumper__.add_representer(cls, cls.representer)
+				dumper.add_representer(cls, representer)
 
 		cls.__statePropertyClass__.__ownerClass__ = cls
 
@@ -2268,14 +2499,10 @@ class StatefulMetaclass(QObjectType, type):
 		return cls
 
 	@property
-	def __doc__(cls) -> str:
-		name = cls.__name__
-		props = cls.statefulItems
-		return gendoc(name, props.values())
-
-	@property
 	def statefulItems(self) -> Dict[str, StateProperty]:
-		return dict(sorted(self.__state_items__.items(), key=lambda x: x[1].setOrder))
+		if not isinstance(self, type):
+			self = type(self)
+		return dict(sorted(self.__state_items__.items(), key=lambda x: x[1].sortOrder(self)))
 
 	@property
 	def statefulKeys(self) -> Set[str]:
@@ -2320,49 +2547,9 @@ class Stateful(metaclass=StatefulMetaclass):
 	def _afterSetState(self):
 		pass
 
-	def testDefault(self, other):
-		if isinstance(other, DefaultState):
-			items = [i for i in self.statefulItems.values() if i.key in other or i.name in other]
-			for item in items:
-				if not item.isStatefulReference:
-					key, ownValue = item.getState(self, True)
-					if key == 'shared':
-						key, ownValue = item.getState(self, True)
-					if key != "_":
-						otherValue = other.get(item.name, None)
-						if not ownValue == otherValue:
-							return False
-				else:
-					ownValue = item.fget(self)
-					otherValue = other.get(item.name if item.name in other else item.key, UnsetDefault)
-					if not ownValue.testDefault(otherValue):
-						return False
-			return True
-
-		ownState = self.state
-		if isinstance(ownState, dict):
-			for k, v in other.items():
-				if k not in ownState:
-					continue
-				ownValue = ownState[k]
-				prop = self.__state_items__[k]
-				if isinstance(ownValue, Stateful):
-					if not ownValue.testDefault(v):
-						return False
-				elif ownValue != v:
-					return False
-			return True
-		defaultSingles = self.defaultSingles()
-		matchedType = [
-			default for prop, default in defaultSingles.items() if isinstance(ownState, (type(default), *prop.returns))
-		]
-		match matchedType:
-			case []:
-				return False
-			case [default]:
-				return ownState == default
-			case _:
-				return ownState in defaultSingles
+	def is_default(self, state_data: Mapping = None) -> bool:
+		# TODO: Implement this
+		return False
 
 	@property
 	def statefulParent(self) -> 'Stateful':
@@ -2370,14 +2557,28 @@ class Stateful(metaclass=StatefulMetaclass):
 
 	@statefulParent.setter
 	def statefulParent(self, value):
+		"""
+		Setter for stateful_parent.
+		This method ensures the child's action pool is moved from an existing stateful_parent
+		to the new parent's action pool when the stateful parent is set.
+		"""
+
 		if value is not None and not isinstance(value, Stateful):
 			raise TypeError(f"statefulParent must be a Stateful, not {type(value)}")
+		parent_action_pool: ActionPool = getattr(value, 'action_pool', None)
+
+		if parent_action_pool is not None:
+			if (own_action_pool := getattr(self, '_action_pool', None)) is not None:
+				own_action_pool.move_to(parent_action_pool)
+				assert own_action_pool.up is (parent_action_pool if value is not None else own_action_pool)
+			else:
+				self._action_pool = parent_action_pool.new(self)
+		else:
+			if (own_action_pool := getattr(self, '_action_pool', None)) is not None:
+				own_action_pool.move_to(None)
+				assert own_action_pool.up is own_action_pool
+
 		self.__statefulParent = value
-		try:
-			if self._actionPool.up is not value._actionPool:
-				value._actionPool.add(self._actionPool)
-		except:
-			pass
 
 	@property
 	def stateful_level(self) -> int:
@@ -2395,16 +2596,29 @@ class Stateful(metaclass=StatefulMetaclass):
 
 	@property
 	def state_is_loading(self) -> bool:
-		if self.statefulParent is None:
-			return self.is_loading or False
-		return self.is_loading or self.statefulParent.state_is_loading
+		loading = self.is_loading
+		if (stateful_parent := self.statefulParent) is not None:
+			if stateful_parent is self:
+				return loading
+			parent_loading = stateful_parent.state_is_loading
+		else:
+			parent_loading = False
+		return loading | parent_loading
 
-	@cached_property
-	def _actionPool(self) -> ActionPool:
-		try:
-			return self.statefulParent._actionPool.new(self)
-		except Exception:
-			return ActionPool(self, trace='acton')
+	@property
+	def action_pool(self) -> ActionPool:
+
+		if (existing := getattr(self, '_action_pool', None)) is None:
+			if (parent := self.statefulParent) is not None:
+				self._action_pool = existing = parent.action_pool.new(self)
+			else:
+				self._action_pool = existing = ActionPool(self)
+		return existing
+
+		# pool = existing
+		# parent_action_pool: ActionPool = getattr(parent := self.statefulParent, 'action_pool', None)
+		# assert pool.up is (parent_action_pool if parent is not None else pool)
+		# return pool
 
 	# Section .shared
 	@StateProperty(key="shared", default=DeepChainMap(), sortOrder=0, repr=False)
@@ -2414,27 +2628,25 @@ class Stateful(metaclass=StatefulMetaclass):
 			parent = self.statefulParent
 			if parent is None:
 				self._shared = shared = DeepChainMap(origin=self)
-			else:
-				parentShared = getattr(parent, 'shared', None)
+			elif (parentShared := getattr(parent, 'shared', None)) is not None:
 				ownKeys = set(self.statefulItems) - {'shared'}
+
 				if (key := getattr(self, '__state_key__', None)) is not None and key.key in parentShared:
 					localShared = parentShared[key.key]
 				else:
 					localShared = {}
 
 				localShared.update({k: v for k, v in parentShared.items() if k in ownKeys})
-				maps = []
-				if localShared:
-					maps.append(localShared)
-				if parentShared:
-					maps.append(parentShared)
-				self._shared = shared = DeepChainMap(*maps, origin=self)
+				assert isinstance(parentShared, DeepChainMap)
+				self._shared = shared = parentShared.new_child(origin=self, child_map=localShared)
+			else:
+				self._shared = shared = DeepChainMap(origin=self)
 		return shared
 
 	@shared.setter
 	def shared(self, value: dict):
 		if value.pop('~clear', False):
-			self._shared = DeepChainMap()
+			self._shared = DeepChainMap(origin=self)
 		self.shared.update(value)
 
 	@shared.condition(method={'get'})
@@ -2448,6 +2660,14 @@ class Stateful(metaclass=StatefulMetaclass):
 	@property
 	def ownShared(self) -> dict:
 		return recursiveRemove(dict(self._shared.originMap.items()), self._shared_values)
+
+	@StateProperty(key="type")
+	def type(self) -> str:
+		return type(self).__tag__
+
+	@type.condition(method='get')
+	def type(self, value: str) -> bool:
+		return value not in {..., None, Stateful, 'Stateful'}
 
 	# Section .setItemState
 	def setItemState(self, state: Mapping[str, Any] | List, *args, **kwargs):
@@ -2494,8 +2714,11 @@ class Stateful(metaclass=StatefulMetaclass):
 			for i in getOnlyItems & set(state.keys()):
 				state.pop(i, None)
 
+		if isinstance(state, DeepChainMap):
+			state = state.to_dict()
+
 		shared = getattr(self, 'shared', Unset) or DeepChainMap()
-		afterPool: ActionPool = self._actionPool
+		afterPool: ActionPool = self._action_pool
 		unwraps = []
 		for prop in items.values():
 
@@ -2511,9 +2734,11 @@ class Stateful(metaclass=StatefulMetaclass):
 			if prop.unwrappedKeys:
 				if prop.key not in prop.unwrappedKeys:
 					pass
-				elif prop.unwraps:
+				elif prop.unwraps and prop.isStatefulReference and (sub_prop_keys := prop.unwrappedKeys) & set(state.keys()) - {prop.key}:
+					return_type = prop.returnsFilter(Stateful)
 					unwraps.append(prop)
 					if len(state) == 1:
+						self._unset_keys_.clear()
 						break
 					continue
 			elif prop.unwraps:
@@ -2529,7 +2754,7 @@ class Stateful(metaclass=StatefulMetaclass):
 			else:
 				value = state.pop(propKey)
 				if (sharedValue := shared.get(propKey, Unset)) is not Unset:
-
+					# Update the item with the shared value if it is the same type
 					sharedType = type(sharedValue)
 					sharedType = sharedType if not issubclass(sharedType, DeepChainMap) else dict
 					if isinstance(value, sharedType):
@@ -2555,21 +2780,35 @@ class Stateful(metaclass=StatefulMetaclass):
 								value = sharedValue.to_dict({subProp.key: value})
 
 				prop.setState(self, value, afterPool=afterPool)
+				value: Stateful
 				self._unset_keys_.discard(prop)
-		if len(unwraps) == 1:
-			prop = unwraps[0]
-			prop.setState(self, state)
-			self._unset_keys_.discard(prop)
-		elif len(unwraps) > 1:
-			raise ValueError("Multiple unwrapped properties found", unwraps, state)
+		match len(unwraps):
+			case 0:
+				pass
+			case 1:
+				prop = unwraps[0]
+				if isinstance(prop_value := prop.fget(self), Stateful):
+					prop_value.setItemState(state, afterPool=afterPool)
+				elif isinstance(state, Mapping):
+					prop.setState(self, state, afterPool=afterPool)
+				else:
+
+					raise NotImplementedError(f"Unable to set state for type '{type(self).__name__}' with state: {state}")
+				self._unset_keys_.discard(prop)
+			case _:
+				raise ValueError("Multiple unwrapped properties found", unwraps, state)
+
+		assert len(self._unset_keys_) == 0, f"Unable to set state for {self} with {state}"
+		self._unset_keys_.clear()
 
 		if afterPool.can_execute:
 			afterPool.execute()
 		return
 
 	# Section .getItemState
-	def getItemState(self, encode: bool = True, add_values: dict = None, **kwargs):
+	def getItemState(self, encode: bool = True, add_values: dict = None, remove_values: dict = None, **kwargs):
 		add_values = add_values or {}
+		remove_values = remove_values or {}
 		exclude = get(kwargs, "exclude", "remove", "hide", default=set(), castVal=True, expectedType=set)
 		exclude = exclude | getattr(self, "__exclude__", set())
 
@@ -2597,17 +2836,22 @@ class Stateful(metaclass=StatefulMetaclass):
 		for prop, (key, value) in zip(items.values(), state.items()):
 			if key in exclude or prop.excluded:
 				continue
-			if (sharedValue := shared.get(key, None)) is not None and not isinstance(value, Stateful):
-				if isinstance(sharedValue, DeepChainMap):
-					sharedValue = sharedValue.to_dict()
-				if isinstance(value, type(sharedValue)) and value == sharedValue:
-					continue
-				if prop.checkType(sharedValue, prop.decodesTo):
-					encodedValue = prop.encodeValue(value, self)
-					if sharedValue == encodedValue:
+			if (sharedValue := shared.get(key, None)) is not None:
+				if not isinstance(value, Stateful):
+					if isinstance(sharedValue, DeepChainMap):
+						sharedValue = sharedValue.to_dict()
+					if isinstance(value, type(sharedValue)) and value == sharedValue:
 						continue
-				else:
-					raise TypeError(f'Failed parsing Shared Value')
+					if prop.checkType(sharedValue, prop.decodesTo):
+						encodedValue = prop.encodeValue(value, self)
+						if sharedValue == encodedValue:
+							continue
+					else:
+						raise TypeError(f'Failed parsing Shared Value')
+				elif isinstance(value, Stateful) and value.state == sharedValue:
+					continue
+				elif sharedValue is not None and prop.encodeValue(sharedValue, self) == value:
+					continue
 			elif sharedValue is not None and prop.encodeValue(sharedValue, self) == value:
 				continue
 			if prop.expands:
@@ -2660,26 +2904,29 @@ class Stateful(metaclass=StatefulMetaclass):
 		state = self.getItemState()
 		return state
 
-	def encodedState(self, exclude: Set[str] = None, deepExclude: bool | Set[str] = False) -> Dict[str, str | int | float | bool | None]:
+	def encodedState(self, exclude: Set[str] = None, deep_exclude: bool | Set[str] = False, exclude_value_map: dict = None) -> Dict[str, str | int | float | bool | None]:
 		exclude = exclude or set()
+		exclude_value_map = exclude_value_map or {}
 		state = self.getItemState(exclude=exclude)
 		tag = self.__tag__
-		match deepExclude:
-			case bool() if deepExclude:
-				deepExclude = exclude
+		match deep_exclude:
+			case bool() if deep_exclude:
+				deep_exclude = exclude
 			case str():
-				deepExclude = {deepExclude}
+				deep_exclude = {deep_exclude}
 			case _:
-				deepExclude = None
-		match state:
-			case dict():
-				if tag is not ... and tag != 'Stateful' and isinstance(state, Mapping):
-					state = {'type': tag, **state}
-		state = {
-			k: v.encodedState(exclude=deepExclude, deepExclude=deepExclude) if isinstance(v, Stateful) else v
-			for k, v in state.items()
-		}
-		return state
+				deep_exclude = None
+
+		if isinstance(state, Mapping):
+			state = {
+				k: v.encodedState(exclude=deep_exclude, deep_exclude=deep_exclude, exclude_value_map=exclude_value_map.get(k, None)) if isinstance(v, Stateful) else v
+				for k, v in state.items() if v != exclude_value_map.get(k, Unset)
+			}
+			# remove all the keys that have mapped to empty dictionaries
+			return remove_empty_dicts(state)
+		elif isinstance(state, type(self).singleStatefulItemTypes):
+			return state
+		raise TypeError(f"Unable to encode state for {self} with {state}")
 
 	def encodedYAMLState(self, exclude: Set[str] = None, state_override: dict = None, sort: bool = False) -> dict:
 		exclude = exclude or set()
@@ -2702,23 +2949,27 @@ class Stateful(metaclass=StatefulMetaclass):
 			state.pop("type", None)
 		if isinstance(state, dict) and (shared := state.pop("shared", None)) is not None:
 			self.shared = shared
-		self.setItemState(state)
+		with self.action_pool:
+			self.setItemState(state)
 		self._afterSetState()
 
 	@classmethod
 	def representer(cls, dumper: Dumper, data):
-		state = data.state
-		tag = getattr(type(data), "__tag__", None)
-		if tag is not None:
-			subtag = getattr(data, "subtag", None)
-			if subtag is not None:
-				tag = f"{tag}.{subtag}"
+		if isinstance(data, cls):
+			state = data.state
+		else:
+			state = data
+		# tag = getattr(type(data), "__tag__", None)
+		# if tag is not None:
+		# 	subtag = getattr(data, "subtag", None)
+		# 	if subtag is not None and not tag.endswith(subtag):
+		# 		tag = f"{tag}.{subtag}"
 		match state:
 			case bool(d):
 				return dumper.represent_bool(d)
 			case dict(d):
-				if tag not in {..., "Stateful"}:
-					d = {"type": tag, **d}
+				# if tag not in {..., "Stateful"}:
+				# 	d = {"type": tag, **d}
 				return dumper.represent_dict(d.items())
 			case str(d):
 				return dumper.represent_str(d)
@@ -2756,23 +3007,31 @@ class Stateful(metaclass=StatefulMetaclass):
 		return next((v for v in cls.singleStatefulItems.values() if v._varifyReturnType(type_, issubclass)), None)
 
 	@classmethod
+	@lru_cache(maxsize=128)
 	def default(cls) -> DefaultState:
-		try:
-			return cls.__default_states__[cls]
-		except KeyError:
-			cls.__default_states__[cls] = default = DefaultState(
-				{
-					v.name: d
-					for v in cls.__state_items__.values()
-					if (d := v.class_default(cls)) is not UnsetDefault and not v.excludedFrom(cls) or v.required
-				}
-			)
-			return default
+		return DefaultState(
+			{
+				v.name: d
+				for v in cls.__state_items__.values()
+				if (d := v.class_default(cls)) is not UnsetDefault and not v.excludedFrom(cls) or v.required
+			}
+		)
+
+	@property
+	def default_state(self) -> DefaultState:
+		cls_defaults = type(self).default()
+		cls_defaults.update({
+			prop.name: d for prop in self._item_defaults().values() if (d := prop.get_item_default(self)) is not UnsetDefault
+		})
+		return DefaultState(cls_defaults)
 
 	@classmethod
 	@lru_cache()
 	def _defaults(cls) -> dict[str, StateProperty]:
-		return {i.key: i for i in cls.__state_items__.values() if not i.allowNone and i.hasDefault(cls)}
+		"""
+		Returns a dictionary of all the stateful properties that have defaults
+		"""
+		return {i.key: i for i in cls.__state_items__.values() if not i.allowNone and i.hasDefault(cls) and not i.excludedFrom(cls)}
 
 	def _item_defaults(self) -> dict[str, StateProperty]:
 		cls_defaults = self._defaults()
@@ -2782,7 +3041,8 @@ class Stateful(metaclass=StatefulMetaclass):
 	@classmethod
 	@lru_cache()
 	def findTag(cls, tag: str) -> Type['Stateful'] | None:
-		tag, *sub_tag = tag.split('.', 1)
+		if tag is Ellipsis:
+			return None
 		subclasses = sorted(
 			(
 				i
@@ -2797,31 +3057,78 @@ class Stateful(metaclass=StatefulMetaclass):
 	def defaultSingles(self) -> Dict[str, Any]:
 		return {v: v.class_default(type(self)) for v in self.statefulItems.values() if v.singleVal}
 
-	# Section .prep_init
-	def prep_init(self, kwargs):
-		m = {'parent': kwargs.pop('stateParent', None), 'key': kwargs.pop('stateKey', None)}
+	@classmethod
+	def set_stateful_info_for_instance(
+		cls,
+		instance: 'Stateful',
+		/,
+		parent: 'Stateful' = None,
+		key: str | StateProperty = None,
+		relationship: str = None,
+		args: tuple = None,
+		kwargs: dict = None
+	) -> None:
+
+		if relationship == 'child':
+			if isinstance(parent, Stateful):
+				instance.statefulParent = parent
+				return
+			raise TypeError(f"Stateful instance must be a Stateful, not {type(parent)} if relationship is 'child'")
+
+		args = args or ()
+		kwargs = kwargs or {}
+
+		if isinstance(key, str):
+			key = getattr(type(parent), key, None)
+		if isinstance(key, StateProperty):
+			if not isinstance(instance, key.returns):
+				raise TypeError(f"Stateful instance must be of type {key.returns}, not {type(instance)}")
+
+		m = {'parent': parent, 'key': key}
 
 		# search the frame stack for the first instance of a Stateful object
 		# outerFrames = inspect.getouterframes()
-		for frame in FrameIterator(inspect.currentframe(), info=False):
+		count = 0
+
+		for frame in FrameIterator(currentframe(), info=False):
 			if 'self' in frame.f_locals:
 				if m['parent'] is None and isinstance(frame.f_locals['self'], Stateful):
 					statefulParent = frame.f_locals['self']
-					if statefulParent is not self:
+					if statefulParent is not instance:
 						m['parent'] = statefulParent
-				elif frame.f_locals['self'] is m['parent'] and m['key'] is None and m['parent'] is not None:
-					break
 				elif m['key'] is None and isinstance(frame.f_locals['self'], StateProperty):
 					key = frame.f_locals['self']
 					if key is getattr(type(m['parent']), key.name, None):
+						if not isinstance(instance, key.returns):
+							continue
 						m['key'] = key
+				elif frame.f_locals['self'] is m['parent'] and m['key'] is None and m['parent'] is not None:
+					count += 1
+					if count > 2:
+						break
 			if all(i is not None for i in m.values()):
 				break
 
-		self.statefulParent = m['parent']
-		self.__state_key__ = m['key']
-		code = type(self).__init__.__code__
+		instance.statefulParent = m['parent']
+		instance.__state_key__ = m['key']
+
+	# Section .prep_init
+	def prep_init(
+		self,
+		args: tuple = None,
+		kwargs: dict = None,
+		stateful_parent: 'Stateful' = None,
+		stateful_key: str = None,
+		relationship: str = None,
+	) -> None:
 		self._set_state_items_ = set()
+		Stateful.set_stateful_info_for_instance(
+			self, parent=stateful_parent, key=stateful_key, args=args, kwargs=kwargs, relationship=relationship
+		)
+
+	def add_defaults_to_state(self, kwargs: dict) -> dict:
+
+		code = type(self).__init__.__code__
 		initVars = set(code.co_varnames[: code.co_argcount])
 		for key, prop in self._item_defaults().items():
 			# if prop.returns is not UnsetReturn and not isinstance(default, prop.returns):
@@ -2877,8 +3184,8 @@ class Stateful(metaclass=StatefulMetaclass):
 		return score
 
 	def __del__(self):
-		if self._actionPool.up is not self._actionPool:
-			self._actionPool.up.remove(self._actionPool)
+		if self._action_pool.up is not self._action_pool:
+			self._action_pool.up.remove(self._action_pool)
 
 	def __rich_repr__(self, exclude: set = None):
 
