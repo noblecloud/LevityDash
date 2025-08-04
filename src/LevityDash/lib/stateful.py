@@ -300,22 +300,88 @@ def ownerParentClass(ownerName, frame=None):
 
 
 class FrameIterator:
-	def __init__(self, frame=None, info: bool = True):
-		self.level = 0
-		self.info = info
-		self.frame = frame or getframe(1)
+	_show_info: bool = True
+	_current_frame: Optional[FrameType]
+	_current_level: int
+	max_depth: int
 
-	def __iter__(self):
+	def __init__(
+		self,
+		frame: Optional[FrameType] = None,
+		info: bool = True,
+		max_depth: int = 10,
+	):
+		self._show_info = info
+		self._current_frame: FrameType = frame or getframe(0).f_back
+		self.max_depth = max_depth
+
+		# if the self in the current frame is this instance
+		# then we need to go up one more frame
+		if (
+			self._current_frame is not None
+			and self._current_frame.f_locals.get("self", None) is self
+		):
+			self._current_frame = self._current_frame.f_back
+
+		self._current_level = 0
+
+	def __iter__(self) -> Iterator[FrameType]:
 		return self
 
-	def __next__(self) -> tuple[Traceback, object]:
-		self.level += 1
-		self.frame = self.frame.f_back
-		if self.level > 10 or self.frame is None:
+	def __next__(self) -> FrameType | tuple[tuple[Traceback, Traceback], FrameType]:
+		if self._current_frame is None:
 			raise StopIteration
-		if self.info:
-			return getframeinfo(self.frame), self.frame
-		return self.frame
+
+		next_frame = self._current_frame.f_back
+		if next_frame is not None:
+			self._current_frame = next_frame
+			self._current_level += 1
+		else:
+			raise StopIteration
+
+		if self._current_level >= self.max_depth:
+			raise StopIteration
+
+		if self._show_info:
+			return getframeinfo(self._current_frame), self._current_frame
+		else:
+			return self._current_frame
+
+
+def search_stack(
+	*, name: Optional[str] = None,
+	attr: Optional[str] = None,
+	frame: Optional[FrameType] = None,
+	expected_type: Type[Any] = Any,
+	guard: Optional[Callable[[Any], bool]] = None,
+) -> Any:
+	stack = FrameIterator(frame=frame, info=False)
+	for frame in stack:
+		obj = frame.f_locals.get(name)
+		if obj is not None:
+			if attr is None:
+				if isinstance(obj, expected_type) and (guard is None or guard(obj)):
+					return obj
+				found_items = {}
+				for attribute_name, attribute_value in obj.__dict__.items():
+					if isinstance(attribute_value, expected_type) and (guard is None or guard(attribute_value)):
+						return attribute_value
+					found_items[attribute_name] = attribute_value
+				if found_items:
+					return found_items
+			else:
+				if hasattr(obj, attr):
+					attribute_value = getattr(obj, attr)
+					if isinstance(attribute_value, expected_type) and (guard is None or guard(attribute_value)):
+						return attribute_value
+					found_items = {}
+					for attribute_name, attribute_value in attribute_value.__dict__.items():
+						if isinstance(attribute_value, expected_type) and (guard is None or guard(attribute_value)):
+							return attribute_value
+						found_items[attribute_name] = attribute_value
+					if found_items:
+						return found_items
+	return None
 
 
 class Conditions(list):
