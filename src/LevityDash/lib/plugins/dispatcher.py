@@ -1,7 +1,7 @@
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import timedelta
-from functools import cached_property
+from functools import cached_property, partial
 from typing import Callable, Coroutine, Dict, Iterable, List, Set, Type
 
 from itertools import groupby
@@ -285,32 +285,34 @@ class MultiSourceContainer(dict):
 
 	def checkAwaiting(self, container: Container):
 		plugin = container.source
+		# Ideal situation
 		if container.isRealtime and (self.waitingForTrueRealtime[plugin] or self.waitingForTrueRealtime[AnySource]):
 			log.verbose(f"{plugin.name} is ready with a strict realtime value for {self.key}", verbosity=1)
 			for request in (*self.waitingForTrueRealtime.pop(plugin, []), *self.waitingForTrueRealtime.pop(AnySource, [])):
-				log.verbose(f"Issuing callback for {request.requester!s}", verbosity=1)
+				log.verbose(f"Issuing callback for {request.requester!s}", verbosity=2)
 				# LevityDashboard.main_thread_pool.run_in_thread(request.callback)
 				# request.callback()
 				QTimer.singleShot(1, request.callback)
 
+		# Less than an ideal situation
 		if (container.isRealtime or container.isRealtimeApproximate) and (
 			self.waitingForAnyRealtime[plugin] or self.waitingForAnyRealtime[AnySource]
 		):
 			log.verbose(f"{plugin!s} is ready with an approximate realtime value for {self.key.name}", verbosity=1)
 			for request in (*self.waitingForAnyRealtime.pop(plugin, []), *self.waitingForAnyRealtime.pop(AnySource, [])):
-				log.verbose(f"Issuing callback for {request.requester!s}", verbosity=1)
+				log.verbose(f"Issuing callback for {request.requester!s}", verbosity=2)
 				if container.isTimeseriesOnly:
-					container.prepare_for_ts_connection(request.callback)
+					container.prepare_for_ts_connection(request)
 				else:
 					# LevityDashboard.main_thread_pool.run_in_thread(request.callback)
 					QTimer.singleShot(1, request.callback)
 
 		if requesters := (self.waitingForTimeseries[plugin] or self.waitingForTimeseries[AnySource]):
 			if plugin[self.key].isForecast:
-				log.verbose(f"{plugin.name} timeseries is ready for {self.key}", verbosity=1)
+				log.verbose(f"{plugin.name} timeseries is ready for {self.key}", verbosity=2)
 				for request in (*self.waitingForTimeseries.pop(plugin, []), *self.waitingForTimeseries.pop(AnySource, [])):
-					log.verbose(f"Issuing callback for {request.requester!s}", verbosity=1)
-					container.prepare_for_ts_connection(request.callback)
+					log.verbose(f"Issuing callback for {request.requester!s}", verbosity=2)
+					container.prepare_for_ts_connection(request)
 			elif plugin is not AnySource:
 				plugin_container = self[plugin]
 
@@ -323,10 +325,10 @@ class MultiSourceContainer(dict):
 
 		if self.waitingForDaily[plugin] or self.waitingForDaily[AnySource]:
 			if plugin[self.key].isDailyForecast:
-				log.verbose(f"{plugin.name} daily is ready for {self.key}", verbosity=1)
+				log.verbose(f"{plugin.name} daily is ready for {self.key}", verbosity=2)
 				for request in (*self.waitingForDaily.pop(plugin, []), *self.waitingForDaily.pop(AnySource, [])):
-					log.verbose(f"Issuing callback for {request.requester!s}", verbosity=1)
-					container.prepare_for_ts_connection(request.callback)
+					log.verbose(f"Issuing callback for {request.requester!s}", verbosity=2)
+					container.prepare_for_ts_connection(request)
 
 	def addValue(self, plugin: Plugin, container: Container):
 		self[plugin.name] = container
@@ -356,7 +358,7 @@ class MultiSourceContainer(dict):
 
 	def getPreferredSourceContainer(self, requester, plugin: Plugin | SomePlugin, callback: Callable, timeseriesOnly: bool = False):
 		log.verbose(f'{requester!s} requested {"timeseries" if timeseriesOnly else "approximate realtime value"} '
-		          f'from {"any source" if (plugin is AnySource) else str(plugin)} for {self.key.name}', verbosity=4)
+		          f'from {"any source" if (plugin is AnySource) else str(plugin)} for {self.key.name}', verbosity=2)
 		if timeseriesOnly:
 			self.waitingForTimeseries[plugin].add(Request(requester, callback))
 		else:
@@ -364,12 +366,12 @@ class MultiSourceContainer(dict):
 
 	def getTrueRealtimeContainer(self, requester, source: Plugin | SomePlugin, callback: Callable):
 		log.verbose(f'{requester!s} requested true realtime value from '
-		          f'{str(source) if source is not AnySource else "any source"} for {self.key.name}', verbosity=4)
+		          f'{str(source) if source is not AnySource else "any source"} for {self.key.name}', verbosity=2)
 		self.waitingForTrueRealtime[source].add(Request(requester, callback))
 
 	def getDailyContainer(self, requester, source: Plugin | SomePlugin, callback: Callable):
 		log.verbose(f'{requester!s} requested daily value from '
-		          f'{str(source) if source is not AnySource else "any source"} for {self.key.name}', verbosity=4)
+		          f'{str(source) if source is not AnySource else "any source"} for {self.key.name}', verbosity=2)
 		self.waitingForDaily[source].add(Request(requester, callback))
 
 	@property
@@ -440,7 +442,7 @@ class MultiSourceChannel(ChannelSignal):
 
 	def _emit(self):
 		self._signal.emit(self._source)
-		self._source.onUpdates(self._pending)
+		self._source.onUpdates(self._pending)  # Send updated data to source container to check for awaiting requests
 		self._pending.clear()
 
 	def listen_to_container(self, container: 'Container'):
