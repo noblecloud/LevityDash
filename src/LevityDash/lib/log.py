@@ -690,9 +690,9 @@ LevityPluginLog = LevityLogger.getChild("Plugins")
 LevityUtilsLog = LevityLogger.getChild("Utils")
 lvdash.config.setLogger(LevityLogger.getChild('LevityConfig'))
 
-debug = LevityLogger.level <= logging.DEBUG
+debug_log = LevityLogger.level <= logging.DEBUG
 
-__builtins__['DEBUG']: bool = debug
+__builtins__['DEBUG']: bool = (debug := debug_log or bool(os.environ.get('DEBUG', False)))
 __builtins__['console'] = _LevityLogger.consoleHandler.console
 
 __all__ = ["LevityLogger", "LevityPluginLog", "LevityUtilsLog", 'debug']
