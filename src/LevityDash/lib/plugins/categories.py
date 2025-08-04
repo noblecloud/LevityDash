@@ -1237,4 +1237,25 @@ class ValueNotFound(Exception):
 	pass
 
 
-__all__ = ['CategoryDict', 'CategoryEndpointDict', 'SubCategory', 'ValueNotFound', 'UnitMetaData']
+class SomeValidKey(type):
+
+	from LevityDash import LevityDashboard as lvd
+
+	def __instancecheck__(self, instance) -> bool:
+		if not self.lvd.dispatcher.all_valid_keys.contains(instance):
+			return False
+		if isinstance(instance, CategoryItem):
+			return True
+		elif isinstance(instance, str):
+			return True
+
+	def __subclasscheck__(self, subclass) -> bool:
+		if not self.lvd.dispatcher.all_valid_keys.contains(subclass):
+			return False
+		if issubclass(subclass, CategoryItem):
+			return True
+		elif issubclass(subclass, str):
+			return True
+
+
+__all__ = ['CategoryDict', 'CategoryEndpointDict', 'SubCategory', 'ValueNotFound', 'UnitMetaData', 'SomeValidKey', 'CategoryItem', 'CategoryAtom', 'CategoryWildcard']
