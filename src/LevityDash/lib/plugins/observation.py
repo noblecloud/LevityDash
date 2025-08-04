@@ -5,7 +5,7 @@ from collections.abc import Generator
 from copy import copy
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone as _timezones, tzinfo
-from functools import cached_property, lru_cache, partial
+from functools import cached_property, lru_cache, partial, wraps
 from inspect import Parameter, Signature
 from multiprocessing import Lock
 from numbers import Number
@@ -26,7 +26,7 @@ from builtins import isinstance
 from dateutil.parser import parse
 from itertools import groupby
 from math import inf, isinf
-from PySide6.QtCore import QThread, Signal, Slot
+from PySide6.QtCore import QThread, Signal, Slot, QTimer
 from PySide6.QtWidgets import QApplication
 from rich.progress import Progress
 
@@ -38,7 +38,7 @@ from LevityDash.lib.plugins.utils import ChannelSignal, Request, GuardedRequest,
 from LevityDash.lib.utils import (
 	clearCacheAttr, closest, connectSignal, DateKey, isa, LOCAL_TIMEZONE, mostCommonClass, mostFrequentValue,
 	NoValue, now,
-	Now, NowOffset, Period, Pool, roundToPeriod, thread_safe, toLiteral, UTC, Worker
+	Now, NowOffset, Period, Pool, roundToPeriod, thread_safe, toLiteral, UTC, Worker, run_in_thread
 )
 
 if TYPE_CHECKING:
@@ -2105,6 +2105,8 @@ class TimeSeriesSignal(ChannelSignal):
 				source.signals.muted = value
 
 		ChannelSignal.muted.fset(self, value)
+		if not self._muteLevel and (self._singleShots | self._conditionalSingleShots):
+			self._emit()
 
 	def _emit(self):
 		if self._references and self._pending:
@@ -2113,24 +2115,18 @@ class TimeSeriesSignal(ChannelSignal):
 		self._pending.clear()
 		if self._singleShots and self._source.hasTimeseries:
 			for coro in self._singleShots.values():
-				loop.create_task(coro)
+				run_in_thread(coro)
 		self._singleShots.clear()
 		coroutines = [coro for coro, condition in self._conditionalSingleShots.items() if condition(self._source)]
 		list(self._conditionalSingleShots.pop(coro, None) for coro in coroutines)
 		for coro in coroutines:
-			loop.create_task(coro)
+			run_in_thread(coro)
 
-	def addCallback(self, callback: coroutine, guardHash=None):
-		if not iscoroutine(callback):
-			raise TypeError(f'{callback} is not a coroutine')
+	def addCallback(self, callback: Callable[[], None], guardHash: Hashable = None):
 		guardHash = guardHash or hash(callback)
-		if (existing := self._singleShots.pop(guardHash, None)) is not None:
-			existing.close()
 		self._singleShots[guardHash] = callback
 
-	def addConditionalCallback(self, callback: coroutine, condition: Callable[['MeasurementTimeSeries'], bool]):
-		if not iscoroutine(callback):
-			raise TypeError(f'{callback} is not a coroutine')
+	def addConditionalCallback(self, callback: Callable[[], None], condition: Callable[['MeasurementTimeSeries'], bool]):
 		# if (existing := self._conditionalSingleShots.pop(callback, None)) is not None:
 		# 	callback.close()
 		self._conditionalSingleShots[callback] = condition
@@ -2793,12 +2789,34 @@ class Container:
 	def __clearCache(self):
 		clearCacheAttr(self, 'nowFromTimeseries', 'hourly', 'daily')
 
-	def prepare_for_ts_connection(self, callback: Callable):
-		log.verbose(f'Preparing for timeseries connection: {self.key}')
+	def prepare_for_ts_connection(self, request: Request):
 		threadPool = self.source.thread_pool
-		threadPool.run_threaded_process(
-			self.timeseries.update, on_finish=callback, priority=2
+		log.verbose(f'Preparing for timeseries connection: {self.key}')
+
+		@Slot(object)
+		def callback_wrapper():
+			log.verbose(f'⚠️Finished timeseries connection: {self.key}')
+			log.verbose(f'⚠️Calling callback for {request.requester}')
+			try:
+				request.callback()
+				log.verbose(f'⚠️Callback for {request.requester} called successfully')
+			except Exception as e:
+				log.error(f'⚠️Failed to call callback for {request.requester}: {e}')
+
+		response_worker = threadPool.prepare_worker(request.callback)
+		action_worker = threadPool.run_threaded_process(
+			self.timeseries.update, on_finish=response_worker.start, direct=True
 		)
+
+		# worker = threadPool.run_threaded_process(
+		# 	self.timeseries.update, on_finish=callback_wrapper,
+		# )
+
+		# worker.setAutoDelete(True)
+		# worker.autoDelete()
+
+		# self.timeseries.signals.addCallback(request.callback, request.requester)
+		# self.timeseries.update()
 
 	@property
 	def title(self):
