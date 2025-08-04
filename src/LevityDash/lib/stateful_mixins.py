@@ -9,48 +9,116 @@ from LevityDash.lib.utils import defer
 
 Brush = TypeVar('Brush')
 
+"""
+Mixins for to support stateful properties in LevityDash. 
+"""
 
-class ColorMixin(StatefulMixin):
+
+class FillBrushMixin(StatefulMixin):
 	"""
-	A mixin class for items that have a color.
+	A mixin class for items that have a fill brush.
+	The fill brush can be a color, gradient, pattern or any other type of brush that would be used to fill the item.
 
-	This mixin provides a `color` property that can be used to set the color of an item.
+	Subclasses must implement the `_set_fill_brush` method for this mixin to work.
+	This method is responsible for setting the appearance of the item's fill paintbrush,
+	which can be modified by multiple state properties in subclasses.
 
-	Subclasses must implement the `_set_color` method to set the item's color.
-
-	Attributes
+	Properties
 	----------
-	color : Color
-			The color of the item.
+	fill_brush : Brush
+		The fill brush for the item
 
-	Methods
-	-------
-	_set_color(color: Color)
-			Set the color of the item.
+	Abstract Methods
+	----------------
+	_set_fill_brush(brush: Brush)
+		Sets the appearance of the item's fill paintbrush using the provided brush.
+
+	Notes
+	-----
+	- The fill_brush property can be overloaded by subclasses or submixins to change how the fill is determined.
+		For example, the subclass `ColorGradientMixin` overloads it to give priority to the gradient.
+
 	"""
 
 	@defer
-	def __update_color(self) -> None:
+	def _update_appearance(self) -> None:
 		"""
-		This method is called after the color is changed.  It is a protected method
-		that should never be overridden to ensure the call is deferred.
-
-		Returns
-		-------
-		Color
+		This method is called after the brush is changed.  It is a protected method
+		that should never be overridden to ensure the call is deferred unless you
+		are absolutely sure you know what you are doing.
 		"""
 		self._set_fill_brush(self.fill_brush)
 
-	@StateProperty(key='color', default=Color.default, allowNone=False, after=__update_color, decode=Color.decode)
+		Returns
+		-------
+		Brush
+		"""
+		raise NotImplementedError('Subclasses must implement fill_brush')
+
+	@abstractmethod
+	def _set_fill_brush(self, brush: Brush):
+		"""
+		Sets the appearance of the item's fill paintbrush using the provided brush.
+
+		Since the actual application of the brush cannot be assumed, this method must remain an abstract method when it
+		is overloaded by a submixin.
+
+		This method should be overridden by subclasses to customize how the fill brush is set.
+		The brush type hint should be changed to the appropriate type for the subclass.
+
+		Parameters
+		----------
+		brush : Brush
+			The brush to set as the fill paintbrush for the item.
+		"""
+		raise NotImplementedError("Subclasses must implement _set_fill_brush(brush: Brush)")
+
+
+class ColorMixin(FillBrushMixin):
+	"""
+	A mixin that adds a color StateProperty to a Stateful class.
+
+	This mixin expects its Brush type to be QBrush since currently only PySide6/Qt6 is supported in LevityDash.
+	A super class will need to be created to support other UI frameworks,
+	and this mixin will need to be renamed to something like `QtColorMixin` or `QColorMixin`.
+
+	State Properties
+	----------------
+	color : Color
+		The color of the item
+
+	Note
+	----
+	The fill_brush property can be overloaded by subclasses or submixins to change how the fill is determined.
+	For example, the subclass `ColorGradientMixin` overloads it to give priority to the gradient.
+
+	"""
+
+	@StateProperty(key='color', default=Color.default, allowNone=False, after=FillBrushMixin._update_appearance, decode=Color.decode)
 	def color(self) -> Color:
 		"""
-		The color of the item.
+		Color to use for the item's fill brush
+
+		Valid values
+		------------
+		- Hexadecimal color codes (with or without the leading '#')
+		- Comma-separated RGB[A] values
+		- Web Color names (case-insensitive)
+
+		Example Config
+		--------------
+
+		```yaml
+		color: '#ff0000'
+		color: white
+		color: 255, 0, 0
+		```
 
 		Returns
 		-------
 		Color
-				The color value.
 		"""
+
 		return self._color
 
 	@color.setter
@@ -62,17 +130,8 @@ class ColorMixin(StatefulMixin):
 		return QBrush(self.color.QColor)
 
 	@abstractmethod
-	def _set_fill_brush(self, brush: Brush):
-		"""
-		This method should be overridden to fit the needs of how the subclass sets its
-		fill brush.
-
-		Parameters
-		----------
-		brush : QBrush
-				The color to set.
-		"""
-		raise NotImplementedError('Mixin must implement _set_fill_brush()')
+	def _set_fill_brush(self, brush: QBrush):
+		raise NotImplementedError('Subclasses must implement _set_fill_brush(brush: QBrush)')
 
 
 class ColorGradientMixin(ColorMixin):
@@ -87,21 +146,23 @@ class ColorGradientMixin(ColorMixin):
 	is implemented, the item's color will be solid and not a gradient. If `_map_gradient` is implemented, the item's
 	color will be a gradient.
 
-	Attributes
-	----------
-	color : Color
-		The color of the item.
-	gradient : Gradient | None
+	State Properties
+	----------------
+	gradient: Gradient | None
 		The gradient of the item.
 
-	Methods
-	-------
+	Properties
+	----------
+	fill_brush : QBrush
+		The fill brush for the item (either a color or gradient) determined by the `color` and `gradient` properties,
+		with the gradient taking priority.
+
+	Abstract Methods
+	----------------
 	_get_color_value() -> Number
-		Get the value used to determine a single color from the gradient to use for the item's color.
+		Used to get the value that determines a single color from the gradient to use for the item's color.
 	_map_gradient(gradient: Gradient) -> QGradient
-		Map a gradient to a QGradient relative to the item.
-	_set_color(color: Color)
-		Set the color of the item.
+		Used to map the gradient to a QGradient relative to the item.
 	"""
 
 	@StateProperty(key='gradient', default=None, after=ColorMixin.color, decoder=Gradient.decode)
@@ -161,20 +222,12 @@ class ColorGradientMixin(ColorMixin):
 
 	@abstractmethod
 	def _set_fill_brush(self, color: Brush):
-		"""
-		Set the color of the item.
-
-		This method is called after the color is updated and must
-		be overridden to set the color of the item.
-
-		Parameters
-		----------
-		color : Color
-		"""
+		"""{insert appropriate docstring}"""
 		raise NotImplementedError('Mixin must implement _set_fill_brush()')
 
 	@property
 	def fill_brush(self) -> Brush:
+		"""{insert appropriate docstring}"""
 		if (gradient := self.gradient) is not None:
 			try:
 				return QBrush(self._map_gradient(gradient))
