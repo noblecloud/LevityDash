@@ -1,9 +1,8 @@
-from functools import lru_cache
-
 import re
 from numbers import Number
 from typing import ClassVar, Dict, Literal, Tuple, Iterable, Union, Sequence, Optional, TYPE_CHECKING
 
+import numpy as np
 from PySide6.QtGui import QColor
 from rich.repr import rich_repr
 
@@ -134,17 +133,17 @@ class Color:
 				return tuple(int(i, 16) for i in split(hex(rgb_hex)[2:], 2)) + (255,)
 
 			case _:
-				raise ValueError(f'Invalid colors string: {color}')
+				raise ValueError(f'Invalid color value: {type(color).__name__}({color})')
 		return colors
 
 	@staticmethod
 	def __ensureCorrectValue(value: int | float | Number) -> int:
 		match value:
-			case int(value):
+			case int(value) | np.integer(value):
 				return sorted((0, value, 255))[1]
 			case float(value) if value <= 1:
 				return int(round(value * 255))
-			case float(value) | Number(value):
+			case float(value):
 				return sorted((0, int(round(value)), 255))[1]
 			case _:
 				return 255
@@ -190,6 +189,47 @@ class Color:
 		if self.alpha == 255:
 			return f'#{self.__red:02x}{self.__green:02x}{self.__blue:02x}'
 		return f'#{self.__red:02x}{self.__green:02x}{self.__blue:02x}{self.__alpha:02x}'
+
+	@property
+	def hue(self) -> float:
+		# TODO: AI Generated - varify accuracy
+		r, g, b = self.rgbF
+		maximum = max(r, g, b)
+		minimum = min(r, g, b)
+		if maximum == minimum:
+			return 0
+		elif maximum == r:
+			hue = (g - b) / (maximum - minimum)
+		elif maximum == g:
+			hue = 2 + (b - r) / (maximum - minimum)
+		else:
+			hue = 4 + (r - g) / (maximum - minimum)
+		hue *= 60
+		if hue < 0:
+			hue += 360
+		return hue
+
+	@property
+	def saturation(self) -> float:
+		# TODO: AI Generated - varify accuracy
+		r, g, b = self.rgbF
+		maximum = max(r, g, b)
+		minimum = min(r, g, b)
+		if maximum == 0:
+			return 0
+		return (maximum - minimum) / maximum
+
+	@property
+	def lightness(self) -> float:
+		# TODO: AI Generated - varify accuracy
+		r, g, b = self.rgbF
+		return (max(r, g, b) + min(r, g, b)) / 2
+
+	@property
+	def gamma(self) -> float:
+		# TODO: AI Generated - varify accuracy
+		r, g, b = self.rgbF
+		return (r + g + b) / 3
 
 	@property
 	def name(self) -> str:
@@ -313,6 +353,46 @@ class Color:
 
 	@classmethod
 	def decode(cls, color: str | Tuple[int | float, ...] | ColorDict, name: str = None) -> 'Color':
+		"""Decode method for deserializing a color from various formats.
+
+		Accepts
+		-------
+		- Strings
+			- RBG/RGBA hex strings (e.g. '#FF0000', '#FF0000FF', '0xFF0000')
+			- RGB/RGBA values (e.g. '255 0 0', '255, 0, 0, 255')
+			- Web color names (e.g. 'red', 'green', 'blue', 'white', 'black', etc.)
+		- List
+			- RGB/RGBA integers [0-255] (e.g. [255, 0, 0], [255, 0, 0, 255])
+			- RGB/RGBA floats [0-1] (e.g. [1.0, 0.0, 0.0], [1.0, 0.0, 0.0, 1.0])
+		- Mapping
+			- RGB/RGBA dicts (e.g. {'red': 255, 'green': 0, 'blue': 0}, {'red': 255, 'green': 0, 'blue': 0, 'alpha': 255})
+
+		Parameters
+		----------
+		color : SupportsColor
+			Value to decode into a color object.
+		name: str, optional
+			Optional name to give the decoded color object.
+
+		Returns
+		-------
+		Color
+			A Color object initialized with the given color.
+
+		Examples
+		--------
+		>>> Color.decode('#FF0000')
+		Color('#FF0000')
+
+		>>> Color.decode((255, 0, 0))
+		Color('#FF0000')
+
+		>>> Color.decode({'red': 255, 'green': 0, 'blue': 0})
+		Color('#FF0000')
+
+		>>> Color.decode('red')
+		Color('#FF0000')
+		"""
 		try:
 			name = color.pop('name')
 		except Exception:
@@ -323,24 +403,11 @@ class Color:
 	def representer(cls, dumper, data):
 		return dumper.represent_str(str(data))
 
-	@classmethod
-	# @lru_cache(maxsize=128)
-	def interp_colors(cls, c1: 'Color', c2: 'Color', mid_point: float) -> 'Color':
-		"""
-		Interpolate between two colors.
+	def cubehelix_colors(self, count: int = 3) -> Sequence[QColor]:
+		from .cubehelix import cubehelix
+		colors = cubehelix(count, hue=self.hue/360*3, reverse=True, lightness=(0.1, 0.9), rotations=6)
+		return [Color([int(c) for c in i]).QColor for i in colors]
 
-		:param c1: The first color.
-		:param c2: The second color.
-		:param mid_point: The midpoint of the interpolation.
-		:return: The interpolated color.
-		"""
-		red1, green1, blue1, alpha1 = c1.rgbaF
-		red2, green2, blue2, alpha2 = c2.rgbaF
-		red = red1 + (red2 - red1) * mid_point
-		green = green1 + (green2 - green1) * mid_point
-		blue = blue1 + (blue2 - blue1) * mid_point
-		alpha = alpha1 + (alpha2 - alpha1) * mid_point
-		return Color(red=red, green=green, blue=blue, alpha=alpha)
 
 
 SupportsColor = Union[
@@ -354,4 +421,4 @@ SupportsColor = Union[
 ]
 
 
-__all__ = ('Color',)
+__all__ = ('Color', 'SupportsColor')

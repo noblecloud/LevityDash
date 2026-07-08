@@ -320,14 +320,18 @@ webcolors = {
 }
 
 
-def __getattr__(name):
-	if name == 'gradients':
-		return [i for i in locals() if isinstance(i, Gradient)]
-	elif name == 'colors':
-		return [i for i in locals() if isinstance(i, Color)]
-	elif name in webcolors:
-		return webcolors[name]
+# def __getattr__(name):
+# 	try:
+# 		return locals()[name]
+# 	except Exception as e:
+# 		if name == 'gradients':
+# 			return [i for i in locals() if isinstance(i, Gradient)]
+# 		elif name == 'colors':
+# 			return [i for i in locals() if isinstance(i, Color)]
+# 		elif name in webcolors:
+# 			return webcolors[name]
+# 		raise e
 
 
+__all__ = ['Presets']
 Color.presets = Presets(web=webcolors)
-__all__ = tuple(i for i in locals() if isinstance(i, (Gradient, Color)))
