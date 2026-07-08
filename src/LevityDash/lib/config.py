@@ -150,6 +150,24 @@ class LevityConfig(ConfigParser):
 			default = ''
 			kwargs = {}
 
+		# non-interactive sessions (no TTY) can't prompt; take the default
+		import sys
+		if not (sys.stdin and sys.stdin.isatty()):
+			self.log.warning(f'Non-interactive session; using default {default!r} for prompt {message!r}')
+			if valueType is bool:
+				return str(default).lower() in ('true', 't', '1', 'y', 'yes')
+			if valueType is int:
+				try:
+					return round(float(default))
+				except (TypeError, ValueError):
+					return 0
+			if valueType is float:
+				try:
+					return float(default)
+				except (TypeError, ValueError):
+					return 0.0
+			return default
+
 		if askType == 'askInput':
 			message = message or ''
 
@@ -530,7 +548,21 @@ class Config(LevityConfig):
 			from LevityDash.lib.log import LevityUtilsLog as log
 			log = log.getChild('config')
 			log.info('No location set in config.  Guessing location based on IP address.')
-			lat, lon, tz = guessLocation()
+			try:
+				lat, lon, tz = guessLocation()
+			except Exception as e:
+				log.warning(
+					f'Unable to determine location from IP ({e}).  '
+					f'Falling back to 0,0/UTC for this session; set [Location] in config.ini to silence this.'
+				)
+				# session-only fallback: deliberately not saved so a transient
+				# network failure never persists a bogus location
+				self['Location'] = {
+					'timezone': timezone or 'UTC',
+					'latitude': latitude or '0.0',
+					'longitude': longitude or '0.0',
+				}
+				return float(self['Location']['latitude']), float(self['Location']['longitude'])
 			self['Location'] = {'timezone': timezone or tz, 'latitude': latitude or lat, 'longitude': longitude or lon}
 			self.save()
 		return float(self['Location']['latitude']), float(self['Location']['longitude'])
