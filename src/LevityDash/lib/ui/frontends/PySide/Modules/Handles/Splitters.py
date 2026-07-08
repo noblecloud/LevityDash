@@ -1,14 +1,18 @@
-from typing import Mapping, Any, List
+from typing import Mapping, Any, List, TYPE_CHECKING, ClassVar
 
 from PySide6.QtCore import QPointF, QRectF, QSizeF, Qt
 from PySide6.QtWidgets import QGraphicsItem, QApplication
 
 from LevityDash.lib.stateful import Stateful, StateProperty
-from LevityDash.lib.utils import clamp, clearCacheAttr, ScaleFloat, defer
+from LevityDash.lib.utils import clamp, clearCacheAttr, ScaleFloat, defer, DeepChainMap
 from LevityDash.lib.ui.Geometry import getDPI, Size, parseSize, LocationFlag, DisplayPosition, RelativeFloat
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles import Handle
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Label import TitleLabel
 from WeatherUnits import Length
+
+if TYPE_CHECKING:
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import DisplayLabel, MeasurementDisplayProperties
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Display
 
 
 class Splitter(Handle):
@@ -170,34 +174,38 @@ class Splitter(Handle):
 		primary, secondary = self.primary, self.secondary
 		primary.setVisible(value != 0)
 		secondary.setVisible(value != 1)
+
+		# If one or the other is hidden, set the other to fill the entire surface
 		if value in {0, 1}:
 			selected = primary if value else secondary
 			selected.geometry.setRelativeGeometry(QRectF(0, 0, 1, 1))
 			selected.updateFromGeometry()
 			return
 
+		primary_geometry = primary.geometry if primary is not None else None
+		secondary_geometry = secondary.geometry if secondary is not None else None
 		if self.location.isVertical:
 			if primary is not None:
-				primary.geometry.relativeWidth = value
-				primary.geometry.relativeHeight = 1
-				primary.geometry.relativeX = 0
-				primary.geometry.relativeY = 0
+				primary_geometry.relativeWidth = value
+				primary_geometry.relativeHeight = 1
+				primary_geometry.relativeX = 0
+				primary_geometry.relativeY = 0
 			if secondary is not None:
-				secondary.geometry.relativeWidth = 1 - value
-				secondary.geometry.relativeHeight = 1
-				secondary.geometry.relativeX = value
-				secondary.geometry.relativeY = 0
+				secondary_geometry.relativeWidth = 1 - value
+				secondary_geometry.relativeHeight = 1
+				secondary_geometry.relativeX = value
+				secondary_geometry.relativeY = 0
 		else:
 			if primary is not None:
-				primary.geometry.relativeWidth = 1
-				primary.geometry.relativeHeight = value
-				primary.geometry.relativeY = 0
-				primary.geometry.relativeX = 0
+				primary_geometry.relativeWidth = 1
+				primary_geometry.relativeHeight = value
+				primary_geometry.relativeY = 0
+				primary_geometry.relativeX = 0
 			if secondary is not None:
-				secondary.geometry.relativeWidth = 1
-				secondary.geometry.relativeHeight = 1 - value
-				secondary.geometry.relativeY = value
-				secondary.geometry.relativeX = 0
+				secondary_geometry.relativeWidth = 1
+				secondary_geometry.relativeHeight = 1 - value
+				secondary_geometry.relativeY = value
+				secondary_geometry.relativeX = 0
 
 		for child in [primary, secondary]:
 			if child is not None:
@@ -206,10 +214,10 @@ class Splitter(Handle):
 
 class TitleValueSplitter(Splitter, Stateful):
 	def __init__(self, surface, title, value, position=DisplayPosition.Top, **kwargs):
-		kwargs = self.prep_init(kwargs)
-		self.__manualText = None
-		self.location = LocationFlag.Horizontal
 		self.__title = title
+		self.prep_init(args=(surface, title, value, position), kwargs=kwargs, stateful_parent=surface)
+		self.add_defaults_to_state(kwargs)
+		self.location = LocationFlag.Horizontal
 		self.value = value
 		ratio = kwargs.pop('ratio', 0.2)
 		super(TitleValueSplitter, self).__init__(surface, primary=title, secondary=value, ratio=ratio)
@@ -221,22 +229,43 @@ class TitleValueSplitter(Splitter, Stateful):
 	def _afterSetState(self):
 		self.setGeometries()
 
-	def setItemState(self, state: Mapping[str, Any] | List, *args, **kwargs):
-		titleKeys = TitleLabel.statefulKeys - {'visible'}
+	# def setItemState(self, state: Mapping[str, Any] | List, *args, **kwargs):
+	#
+	# 	title_keys = TitleLabel.statefulKeys - {'visible'}
+	# 	own_keys = set(self.statefulKeys) - {'visible'}
+	#
+	# 	if isinstance(state, Mapping):
+	# 		match state:
+	# 			case {'text': dict() as text_state, **own_state}:
+	# 				# move title state keys from own_state to text_state
+	# 				to_merge = {key: own_state.pop(key) for key in title_keys if key in own_state and key not in own_keys}
+	# 				text_state = DeepChainMap(text_state, to_merge).to_dict()
+	# 			case {'text': str(text_state), **own_state}:
+	# 				# move title state keys from own_state to text_state
+	# 				text_state = {'text': text_state}
+	# 				to_merge = {key: own_state.pop(key) for key in title_keys if key in own_state and key not in own_keys}
+	# 				text_state = DeepChainMap(text_state, to_merge).to_dict()
+	# 			case _:
+	# 				text_state = {}
+	# 				own_state = state
+	# 	else:
+	# 		own_state = state
+	# 		text_state = {}
+	# 	own_state['text'] = text_state
+	# 	if own_state:
+	# 		super(TitleValueSplitter, self).setItemState(own_state, *args, **kwargs)
+	# 	# if text_state:
+	# 	# 	self.__title.state = text_state
+	# 	if own_state or text_state:
+	# 		self.setGeometries()
 
-		titleState = {key: state[key] for key in titleKeys if key in state}
-		ownState = {key: state[key] for key in state if key not in titleKeys}
-
-		if ownState:
-			super(TitleValueSplitter, self).setItemState(ownState, *args, **kwargs)
-		if titleState:
-			self.title.setItemState(titleState)
-		if ownState or titleState:
-			self.setGeometries()
-
-	@StateProperty(unwrap=True, default=Stateful)
+	@StateProperty(key='text', unwrap=True, default=Stateful)
 	def title(self) -> TitleLabel:
 		return self.__title
+
+	@title.condition(method='get')
+	def title(self) -> bool:
+		return self.visible
 
 	def mouseDoubleClickEvent(self, event):
 		ratio = abs(1 - self.ratio)
@@ -301,7 +330,7 @@ class TitleValueSplitter(Splitter, Stateful):
 	@height.setter
 	def height(self, value: Size.Height | Length | None):
 		self._height = value
-		self.surface.signals.resized.connect(self.parentResized)
+		# self.surface.signals.resized.connect(self.parentResized)
 
 	@height.decode
 	def height(self, value: str | int | float) -> Size.Height | Length:
@@ -430,19 +459,27 @@ class TitleValueSplitter(Splitter, Stateful):
 
 
 class MeasurementUnitSplitter(Splitter, Stateful):
-	surface: 'Display'
 
-	def __init__(self, value, unit, *args, **kwargs):
+	if TYPE_CHECKING:
+		from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import DisplayLabel, MeasurementDisplayProperties
+
+	surface: 'Display'
+	value: 'DisplayLabel.ValueLabel'
+	unit: 'DisplayLabel.UnitLabel'
+
+	__presets__: ClassVar[dict[DisplayPosition, float]] = {
+
+	}
+
+	# TODO: Refactor/move this class to the Realtime module
+
+	def __init__(self, value: 'DisplayLabel.ValueLabel', unit: 'DisplayLabel.UnitLabel', *args, **kwargs):
 		self.value = value
 		self.unit = unit
 		properties: 'MeasurementDisplayProperties' = kwargs['surface'].displayProperties
-		kwargs = self.prep_init(kwargs)
 		kwargs['splitType'] = properties.splitDirection or LocationFlag.Horizontal
 		kwargs['ratio'] = properties.valueUnitRatio
 		super(MeasurementUnitSplitter, self).__init__(*args, **kwargs, primary=value, secondary=unit)
-
-		self.value.textBox.signals.changed.connect(self.updateUnitDisplay)
-		self.unit.signals.resized.connect(self.updateUnitDisplay)
 		self.hide()
 
 	def updateUnitDisplay(self):
@@ -460,9 +497,9 @@ class MeasurementUnitSplitter(Splitter, Stateful):
 		elif self.displayProperties.unitPosition in {'floating', 'float-under'}:
 			self.unit.show()
 			self.unit.unlock()
-			if self.displayProperties.unitPosition is DisplayPosition.FloatUnder:
-				self.setGeometries()
 			self.value.geometry.setRelativeGeometry(QRectF(0, 0, 1, 1))
+			self.unit.geometry.setRelativeGeometry(QRectF(0, 0, 1, 1))
+			self.unit.textBox.refresh()
 			self.hide()
 			self.setEnabled(False)
 			return
@@ -470,25 +507,6 @@ class MeasurementUnitSplitter(Splitter, Stateful):
 		self.setEnabled(True)
 		self.updatePosition(self.surface.rect())
 		self.setGeometries()
-		if self.displayProperties.unitPosition == 'float-under':
-			self.fitUnitUnder()
-
-	def fitUnitUnder(self):
-		self.unit.unlock()
-		self.value.geometry.setRelativeGeometry(QRectF(0, 0, 1, 1))
-		self.unit.geometry.setRelativeGeometry(QRectF(0, 0, 1, 1))
-		space = self.value.unitSpace
-
-		if (unitSize := self.displayProperties.unitSize_px) is not None and unitSize < space.height():
-			space.setHeight(unitSize)
-
-		self.unit.contentsRect = space
-		self.unit.textBox.refresh()
-
-		totalRect = self.unit.textBox.sceneBoundingRect() | self.value.textBox.sceneBoundingRect()
-		offset = self.surface.sceneBoundingRect().center() - totalRect.center()
-		self.unit.moveBy(*offset.toTuple())
-		self.value.moveBy(*offset.toTuple())
 
 	@property
 	def _ratio(self):
@@ -518,7 +536,7 @@ class MeasurementUnitSplitter(Splitter, Stateful):
 			self.displayProperties.unitPosition = DisplayPosition.Above
 		else:
 			return
-		self.updateUnitDisplay()
+		# self.updateUnitDisplay()
 		self.setGeometries()
 
 	@Splitter.primary.getter

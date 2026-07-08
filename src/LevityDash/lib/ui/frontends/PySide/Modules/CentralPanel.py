@@ -18,7 +18,7 @@ from LevityDash.lib.log import debug
 from LevityDash.lib.stateful import StatefulDumper, StateProperty
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import CentralPanelContextMenu
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
-from LevityDash.lib.utils import BusyContext
+from LevityDash.lib.utils import BusyContext, ActionPool
 from WeatherUnits import Time
 from .. import UILogger as guiLog
 
@@ -39,11 +39,16 @@ class CentralPanel(Panel, tag="dashboard"):
 		'margins':    ('0px', '0px', '0px', '0px'),
 	}
 
+	def prep_init(self, *args, **kwargs):
+		self._set_state_items_ = set()
+		self.statefulParent = None
+
 	def __init__(self, parent: 'LevityScene'):
 		self._parent = parent
+		self._action_pool = ActionPool(self, trace='CentralPanel')
 		self.__boundingRect = QRect(-2000, -2000, 6000, 6000)
 		self._scene = parent
-		super(CentralPanel, self).__init__(None, stateParent=None)
+		super(CentralPanel, self).__init__(None)
 
 		self.setAcceptedMouseButtons(Qt.AllButtons)
 
@@ -72,7 +77,7 @@ class CentralPanel(Panel, tag="dashboard"):
 		self.setFlag(self.GraphicsItemFlag.ItemIsMovable, False)
 		self.setFlag(self.GraphicsItemFlag.ItemIsSelectable, False)
 		LevityDashboard.CENTRAL_PANEL = self
-		LevityDashboard.main_action_pool = self._actionPool
+		LevityDashboard.main_action_pool = self._action_pool
 
 	@Slot()
 	def onFileLoaded(self):
@@ -113,7 +118,7 @@ class CentralPanel(Panel, tag="dashboard"):
 	def childPanels(self):
 		return [i for i in self.childItems() if isinstance(i, Panel)]
 
-	@StateProperty(singleVal='force', inheritFrom=Panel.items)
+	@StateProperty(singleVal=True, inheritFrom=Panel.items)
 	def items(self) -> list[Panel]:
 		...
 

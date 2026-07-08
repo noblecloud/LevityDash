@@ -1,15 +1,20 @@
 import asyncio
+import contextlib
 import re
+from abc import abstractmethod
 from collections import defaultdict
-from functools import cached_property, partial, reduce
+from dataclasses import dataclass, field
+from functools import cached_property, partial, reduce, lru_cache
+from numbers import Number
 from operator import or_
 from pathlib import Path
 from pprint import pprint
 from typing import (
 	Any, Callable, ClassVar, Dict, ForwardRef, List, NamedTuple, Optional, overload, Set, Sized, Tuple, TYPE_CHECKING,
-	TypeAlias, TypeVar, Union
+	TypeAlias, TypeVar, Union, Iterable, Protocol, runtime_checkable
 )
 from uuid import UUID, uuid4
+from warnings import WarningMessage, warn
 
 from math import prod
 from PySide6.QtCore import (
@@ -27,14 +32,15 @@ from LevityDash.lib.EasyPath import EasyPathFile
 from LevityDash.lib.log import debug
 from LevityDash.lib.stateful import DefaultGroup, Stateful, StateProperty
 from LevityDash.lib.ui import UILogger as log
+from LevityDash.lib.ui.Groups import SizeGroup
 from LevityDash.lib.ui.colors import Color
 from LevityDash.lib.ui.Geometry import (
 	AlignmentFlag, Dimension, Edge, Geometry, LocationFlag, Margins, Padding, parseSize, polygon_area, Position, Size,
-	size_px
+	size_px, PositionLiteral
 )
 from LevityDash.lib.utils.shared import (
 	_Panel, boolFilter, clearCacheAttr, connectSignal, defer, disconnectSignal, getItemsWithType, hasState, Numeric,
-	SimilarValue
+	SimilarValue, block_pools
 )
 from WeatherUnits import Length
 from .Handles import Handle, HandleGroup
@@ -59,7 +65,8 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 		self.setParentItem(parent)
 		self.setVisible(False)
 		self.setEnabled(False)
-		kwargs = self.prep_init(kwargs)
+		self.prep_init(args=args, kwargs=kwargs, stateful_parent=parent)
+		self.add_defaults_to_state(kwargs)
 		self.state = kwargs
 
 	@cached_property
@@ -126,28 +133,32 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 
 	@StateProperty(default=LocationFlag.Edges, allowNone=False, after=updatePath)
 	def edges(self) -> LocationFlag:
-		"""The edges of the parent that the border is on.
+		"""
+		The edges of the parent that the border is on.
 
-		Value
-		-----
-		LocationFlag
+		Returns
+		-------
+		`PositionLiteral` | `LevityDash.lib.ui.Geometry.LocationFlag`
 
 		Decoding
 		--------
-		str : 'left', 'right', 'top', 'bottom' or a combination of them along with 'all' and 'edges'
+		`str` : `left`, `right`, `top`, `bottom` or a combination of them along with `all` and `edges`
+
 		int : The int value of the LocationFlag associated with the edge
 
 		Encoding
 		--------
-		str : Comma separated list of the edges or 'all' if all edges are selected
+		str : Comma separated list of the edges or `all` if all edges are selected
 
 		Example Config
 		--------------
+		```yaml
 		edges: top, left
-
+		...
 		edges: all
-
-		edges: top-left
+		...
+		edges: top-left # same as 'top, left' but relies on fuzzy matching
+		```
 		"""
 		return self._edges
 
@@ -156,7 +167,7 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 		self._edges = value
 
 	@edges.decode
-	def edges(self, value: str | int) -> LocationFlag:
+	def edges(self, value: PositionLiteral | int) -> LocationFlag:
 		if isinstance(value, str):
 			value = value.casefold()
 			if value.startswith('all'):
@@ -188,15 +199,17 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 	def offset(self) -> Dimension | Length:
 		"""The offset of the border from the parent.
 
-		Value
+		Returns
 		-----
-		Dimension | Length
+		`LevityDash.lib.ui.Geometry.Dimension` | `WeatherUnits.Length`
 
 		Decoding
 		--------
-		str : A string representation of a Dimension or Length
-			Examples: '10px', '10%', '1mm', '0.1in'
-		int : The offset in pixels
+		`str` : A string representation of a Dimension or Length
+
+		> Example: '10px', '10%', '1mm', '0.1in'
+
+		`int` | `float`: The offset in pixels
 
 		Encoding
 		--------
@@ -353,142 +366,6 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 		return super().itemChange(change, value)
 
 
-class SizeGroup:
-	items: Set['Text']
-	parent: _Panel
-	key: str
-
-	locked: bool = False
-	_lastSize: float = 0
-	_alignments: Dict[AlignmentFlag, float]
-
-	area = 10
-	margins = QMargins(area, area, area, area)
-
-	class ItemData(NamedTuple):
-		item: 'Text'
-		pos: QPointF
-
-		def __hash__(self):
-			return hash(self.item)
-
-
-	itemsToAdjust: Set[ItemData]
-
-	def __new__(cls, *args, **kwargs):
-		matchAll = kwargs.pop('matchAll', False)
-		if matchAll:
-			cls = MatchAllSizeGroup
-		return super().__new__(cls)
-
-	def __init__(self, parent: 'Panel', key: str, items: Set['Text'] = None, matchAll: bool = False):
-		self.updateTask = None
-		self.key = key
-		self.items = items or set()
-		self.itemsToAdjust = set()
-		self.parent = parent
-		self._alignments = defaultdict(float)
-		self.adjustSizes(reason='init')
-
-		QApplication.instance().resizeFinished.connect(self.adjustSizes)
-		try:
-			self.parent.resized.connect(self.adjustSizes)
-		except AttributeError:
-			pass
-
-	def post_loading(self):
-		self.adjustSizes(reason='post_loading')
-
-	def adjustSizes(self, exclude: 'Text' = None, reason=None):
-		# items = self.similarItems(similarTo) if similarTo is not None else self.items
-		# items = [i.text for i in self.items]
-		if self.locked or len(self.items) < 2:
-			return
-		self.locked = True
-		for group in self.sizes.values():
-			for item in group:
-				if item is not exclude and hasattr(item, 'updateTransform'):
-					try:
-						item.updateTransform(updatePath=True)
-					except AttributeError:
-						pass
-					except Exception as e:
-						log.exception(e)
-		self.locked = False
-
-	def addItem(self, item: 'Text'):
-		self.items.add(item)
-		item._sized = self
-		self.adjustSizes(item, reason='addItem')
-
-	def removeItem(self, item: 'Text'):
-		self.items.remove(item)
-		item._sized = None
-		self.adjustSizes(reason='remove')
-
-	def sharedFontSize(self, item) -> int:
-		sizes: List[int] = list(self.sizes)
-		if len(sizes) == 0:
-			clearCacheAttr(self, 'sizes')
-			sizes = list(self.sizes)
-		if len(sizes) == 1:
-			return sizes[0]
-		itemHeight = item.limitRect.height()
-		return min(sizes, key=lambda x: abs(x - itemHeight))
-
-	def sharedSize(self, v) -> float:
-		s = min((item.getTextScale() for item in self.simlilarItems(v)), default=1)
-		if not self.locked and abs(s - self._lastSize) > 0.01:
-			self._lastSize = s
-			self.__dict__.pop('sizes', None)
-			self.adjustSizes(v, reason='shared-size-change')
-		return s
-
-	def testSimilar(self, rect: QRect | QRectF, other: 'Text') -> bool:
-		other = other.parent.sceneBoundingRect()
-		diff = (other.size() - rect.size())
-		return abs(diff.height()) < SizeGroup.area and rect.marginsAdded(SizeGroup.margins).intersects(other.marginsAdded(SizeGroup.margins))
-
-	def simlilarItems(self, item: 'Text'):
-		ownSize = item.parent.sceneBoundingRect()
-		return {x for x in self.items if self.testSimilar(ownSize, x)}
-
-	@cached_property
-	def sizes(self) -> Dict[int, set['Text']]:
-		items = set(self.items)
-		groups = defaultdict(set)
-		while items:
-			randomItem = items.pop()
-			group = self.simlilarItems(randomItem)
-			items -= group
-			height = max(sum(i.limitRect.height() for i in group) / len(group), 10)
-			groups[round(height / 10) * 10] |= group
-		return dict(groups)
-
-	def clearSizes(self):
-		self.__dict__.pop('sizes', None)
-
-	def sharedY(self, item: 'Text') -> float:
-		alignedItems = self.getSimilarAlignedItems(item)
-		y = sum((i.pos.y() for i in alignedItems)) / (len(alignedItems) or 1)
-		return y
-
-	def getSimilarAlignedItems(self, item: 'Text') -> Set[ItemData]:
-		position = item.getTextScenePosition()
-		y = position.y()
-		x = position.x()
-		tolerance = item.limitRect.height()*0.2
-		alignment = item.alignment.vertical
-		alignedItems = {SizeGroup.ItemData(i, p) for i in self.items if i.alignment.vertical & alignment and abs((p := i.getTextScenePosition()).y() - y) < tolerance}
-		return alignedItems
-
-
-class MatchAllSizeGroup(SizeGroup):
-
-	def simlilarItems(self, item: 'Text'):
-		return self.items
-
-
 PanelType = ForwardRef('Panel', is_class=True, module='Panel')
 Panel: TypeAlias = TypeVar('Panel', bound=PanelType)
 
@@ -525,18 +402,19 @@ class Panel(_Panel, Stateful, tag='group'):
 		# !setting the parent through the QGraphicsItem __init__ causes early
 		# !isinstance checks to fail, so we do it manually later
 		super(Panel, self).__init__()
-		self._parent = parent
-		self._init_defaults_()
 		if debug:
 			self.debugColor = Color.random(min=50, max=200).QColor
 			self.debugColor.setAlpha(200)
 			self.debugPen = QPen(self.debugColor)
 			brush = QBrush(self.debugColor)
 			self.debugPen.setBrush(brush)
+		self.prep_init(args=args, kwargs=kwargs, stateful_parent=parent)
+		self._parent = parent
+		self._init_defaults_()
 
 		self.setParentItem(parent)
 		self.previousParent = self.parent
-		kwargs = Stateful.prep_init(self, kwargs)
+		self.add_defaults_to_state(kwargs)
 		self._init_args_(*args, **kwargs)
 		self.setFlag(self.GraphicsItemFlag.ItemClipsChildrenToShape, False)
 		self.setFlag(self.GraphicsItemFlag.ItemClipsToShape, False)
@@ -831,7 +709,7 @@ class Panel(_Panel, Stateful, tag='group'):
 
 	@StateProperty(key='border', default=Stateful, allowNone=True, dependencies={'geometry'})
 	def borderProp(self) -> Border:
-		return self._border
+		return getattr(self, '_border', None)
 
 	@borderProp.setter
 	def borderProp(self, value: Border):
@@ -843,7 +721,7 @@ class Panel(_Panel, Stateful, tag='group'):
 
 	@borderProp.condition(method='get')
 	def borderProp(self) -> bool:
-		return self.borderProp.enabled
+		return (border := self.borderProp) is not None and border.enabled
 
 	@cached_property
 	def localGroup(self) -> 'Panel':
@@ -892,24 +770,91 @@ class Panel(_Panel, Stateful, tag='group'):
 	def attrGroups(self) -> Dict[str, SizeGroup]:
 		return {}
 
-	def getTaggedGroup(self, tag: str) -> 'Panel':
-		x = self
-		while (t := getattr(x, '__tag__', None)) != tag and t is not None:
+	def get_tagged_ancestor(self, tag: str) -> 'Panel':
+		"""
+		Gets the first ancestor Panel with the given tag.
+
+    Parameters
+    ----------
+    tag : str
+        The tag to search for.
+
+    Returns
+    -------
+    Panel
+        The first ancestor Panel that has the provided tag,
+        or self if no ancestor has the given tag."""
+		tagged_group = self
+		while (t := getattr(tagged_group, '__tag__', None)) != tag and t is not None:
 			try:
-				x = x.parentItem()
+				tagged_group = tagged_group.parentItem()
 			except AttributeError:
 				break
-		return x
+		return tagged_group
 
-	def getNamedGroup(self, name: str) -> 'Panel':
-		if (namedGroup := Panel.__groups__.get(name, None)) is None:
-			namedGroup = next((group for group in self.hierarchy if group.stateName == name), None)
-			if namedGroup is None:
+	def get_named_ancestor(self, name: str) -> 'Panel':
+		"""
+		Gets a named Panel group.
+
+    Checks Panel.__groups__ for the given name, and caches the group there
+    if not found. If no match is found, returns self.localGroup.
+
+    Parameters
+    ----------
+    name : str
+        The name of the group to retrieve.
+
+    Returns
+    -------
+    Panel
+        The cached named group if found, otherwise the first
+        ancestor in the hierarchy with matching stateName, or
+        self.localGroup if no match is found.
+		"""
+		if (named_ancestor := Panel.__groups__.get(name, None)) is None:
+			named_ancestor = next((group for group in self.hierarchy if group.stateName == name), None)
+			if named_ancestor is None:
 				return self.localGroup
-			Panel.__groups__[name] = namedGroup
-		return namedGroup
+			Panel.__groups__[name] = named_ancestor
+		return named_ancestor
 
 	def getAttrGroup(self, group: str | _Panel, matchAll: bool = False) -> SizeGroup:
+		"""
+		Retrieves an attribute group based on the provided group parameter.
+
+		The group parameter, if it is a string, can be in two formats:
+
+		- Using the format {key}@{named_group}: This format indicates a named group. The string is split by '@' and the attribute group is set to the named group.
+		- Using the format {relation}.{key}: This format indicates accessing an attribute group based on its relationship to the current item. The string is split by '.' and matched against different cases to determine the attribute group. Here, 'relation' could be 'local', 'parent', 'group', or any valid panel type tag. Please note that 'somePanelType' is used here as a placeholder, and it should be replaced with one of the valid panel type tags in actual use. 'group' and any valid panel type tag both find the earliest ancestor with that panel type or tag.
+
+		If the group parameter is an instance of _Panel, it is directly passed to the match cases.
+
+		Parameters
+		----------
+		group : str | _Panel
+		    The group parameter.
+		matchAll : bool, optional
+		    Specifies whether all matches should be considered. Defaults to False.
+
+		Returns
+		-------
+		SizeGroup
+		    The attribute group that matches the provided group parameter.
+
+		Raises
+		------
+		ValueError
+		    If the group parameter does not match any of the defined cases.
+
+		Examples
+		--------
+		>>> getAttrGroup('local.key') # Get the local attribute group
+		>>> getAttrGroup('global.key') # Get the global attribute group
+		>>> getAttrGroup('parent.key') # Get the parent attribute group
+		>>> getAttrGroup('group.key') # Get the group tagged 'group'
+		>>> getAttrGroup('somePanelType.key') # Get the keyed group from the first ancestor with somePanelType
+		>>> getAttrGroup('key@namedGroup') # Get a named group. '@' is used to indicate a named group.
+		"""
 		kwargs = {}
 		match group.split('.') if isinstance(group, str) else group:
 			case 'local', str(key):
@@ -919,13 +864,13 @@ class Panel(_Panel, Stateful, tag='group'):
 			case 'parent', str(key):
 				group = (self.parentLocalGroup or self.localGroup)
 			case 'group', str(key):
-				group = self.getTaggedGroup('group')
+				group = self.get_tagged_ancestor('group')
 			case str(tag), str(key):
-				group = self.getTaggedGroup(tag)
+				group = self.get_tagged_ancestor(tag)
 			case [str(named)] if '@' in named:
 				key, group = named.split('@')
 				kwargs['tag'] = group
-				group = self.getNamedGroup(group)
+				group = self.get_named_ancestor(group)
 			case _:
 				raise ValueError(f'invalid group {group}')
 
@@ -1637,6 +1582,7 @@ class Panel(_Panel, Stateful, tag='group'):
 	def parent(self, value: Union['Panel', 'LevityScene']):
 		if getattr(self, '_parent', None) is not value:
 			self._parent = value
+			clearCacheAttr(self, 'nonStackParent')
 
 	@property
 	def apparentParent(self) -> 'Panel':
@@ -1672,8 +1618,12 @@ class Panel(_Panel, Stateful, tag='group'):
 		super(Panel, self).setRect(rect)
 		if emit:
 			clearCacheAttr(self, 'marginRect', '_focusedBoundingRect', 'marginRect')
-			self.signals.resized.emit(rect)
-		return emit
+			if attr_groups := self.attrGroups:
+				with self.action_pool:
+					self.signals.resized.emit(rect)
+			else:
+				self.signals.resized.emit(rect)
+		return True
 
 	def updateRect(self, parentRect: QRectF = None):
 		self.setRect(self.geometry.absoluteRect())
@@ -1798,14 +1748,14 @@ class Panel(_Panel, Stateful, tag='group'):
 		labels = [x for x in self.childPanels if hasattr(x, 'text')]
 		return min([x.fontSize for x in labels])
 
-	@Slot(QPointF, QSizeF, QRectF, 'parentResized')
+	@Slot(QPointF, QSizeF, QRectF)
 	def parentResized(self, arg: Union[QPointF, QSizeF, QRectF]):
 		if isinstance(arg, (QRect, QRectF, QSize, QSizeF)):
-			pool = self._actionPool
+			pool = self._action_pool
 			if pool.can_execute:
 				self.geometry.updateSurface(arg)
 			else:
-				pool.add(self.geometry.updateSurface)
+				pool.add(self.geometry.updateSurface, caller=type(self).parentResized, args=(arg))
 
 	@property
 	def containingRect(self):
@@ -1994,4 +1944,4 @@ class PanelFromFile:
 		raise NotImplementedError
 
 
-__all__ = ['Panel', 'NonInteractivePanel', 'PanelFromFile']
+__all__ = ['Panel', 'NonInteractivePanel', 'PanelFromFile', 'Border']

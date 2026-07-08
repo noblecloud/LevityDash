@@ -38,7 +38,7 @@ class LevityDashApp(QApplication):
 
 	def start_plugins(self):
 		self.main_window.centralWidget().loadingFinished.disconnect(self.start_plugins)
-		QTimer.singleShot(10, LevityDashboard.lib.plugins.start)
+		QTimer.singleShot(10, LevityDashboard.plugins.start)
 
 
 LevityDashAppInstance = LevityDashApp()

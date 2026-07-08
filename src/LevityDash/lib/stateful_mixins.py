@@ -49,6 +49,10 @@ class FillBrushMixin(StatefulMixin):
 		"""
 		self._set_fill_brush(self.fill_brush)
 
+	@property
+	@abstractmethod
+	def fill_brush(self) -> Brush:
+		"""
 		Returns
 		-------
 		Brush
@@ -126,7 +130,7 @@ class ColorMixin(FillBrushMixin):
 		self._color = value
 
 	@property
-	def fill_brush(self) -> Brush:
+	def fill_brush(self) -> QBrush:
 		return QBrush(self.color.QColor)
 
 	@abstractmethod
@@ -229,10 +233,12 @@ class ColorGradientMixin(ColorMixin):
 	def fill_brush(self) -> Brush:
 		"""{insert appropriate docstring}"""
 		if (gradient := self.gradient) is not None:
+			# Try to map the gradient to a QGradient
 			try:
 				return QBrush(self._map_gradient(gradient))
 			except NotImplementedError:
 				pass
+			# Try to get the color value from the gradient
 			try:
 				return QBrush(gradient.get_color_for_value(self._get_color_value()).QColor)
 			except NotImplementedError:

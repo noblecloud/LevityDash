@@ -5,6 +5,7 @@ from difflib import get_close_matches
 from enum import auto, Enum, EnumMeta, IntFlag
 from functools import cached_property
 from numbers import Number
+from types import DynamicClassAttribute
 from typing import (
 	Any, Callable, ClassVar, Dict, Iterable, List, Literal, Mapping, Optional, overload, Protocol, runtime_checkable,
 	Sequence, Set, SupportsFloat, Tuple, Type, TYPE_CHECKING, TypeAlias, TypeVar, Union
@@ -90,7 +91,11 @@ except ValueError:
 		if screen is None and (window := QApplication.instance().activeWindow()):
 			return window.screen().physicalDotsPerInch()
 		screen = screen or defaultScreen
-		return screen.physicalDotsPerInch()
+		try:
+			return screen.physicalDotsPerInch()
+		except RuntimeError:
+			screen = findScreen()
+			return screen.physicalDotsPerInch()
 
 
 class LocationEnumMeta(ClosestMatchEnumMeta):
@@ -166,6 +171,9 @@ class Directional(Protocol[T]):
 	asAxis: Axis
 
 
+PositionLiteral = Literal['left', 'right', 'top', 'bottom', 'center', 'l', 'r', 't', 'b']
+
+
 class LocationFlag(IntFlag, metaclass=LocationEnumMeta):
 	Bottom = auto()
 	Top = auto()
@@ -189,6 +197,19 @@ class LocationFlag(IntFlag, metaclass=LocationEnumMeta):
 
 	Center = VerticalCenter | HorizontalCenter
 	Edges = Top | Bottom | Left | Right
+
+	isLeft: bool
+	isRight: bool
+	isTop: bool
+	isBottom: bool
+	isCenter: bool
+	isCentered: bool
+	isTopLeft: bool
+	isTopRight: bool
+	isBottomLeft: bool
+	isBottomRight: bool
+	isCorner: bool
+	isEdge: bool
 
 	@cached_property
 	def isVertical(self) -> bool:
@@ -517,7 +538,18 @@ class Alignment:
 		return self.horizontal | self.vertical
 
 	def asDict(self):
-		return {'horizontal': self.horizontal.simplified.name, 'vertical': self.vertical.simplified.name}
+		vertical = self.vertical.simplified
+		if vertical.isCentered:
+			vertical ^= AlignmentFlag.VerticalCenter
+
+		horizontal = self.horizontal.simplified
+		if horizontal.isCentered:
+			horizontal ^= AlignmentFlag.HorizontalCenter
+
+		return {
+			'horizontal': horizontal.name,
+			'vertical': vertical.name
+		}
 
 	@property
 	def asQtAlignment(self):
@@ -618,7 +650,13 @@ class Alignment:
 	@classmethod
 	def representer(cls, dumper, data: 'Alignment'):
 		vertical = data.vertical.simplified
+		if vertical.isCentered:
+			vertical ^= AlignmentFlag.VerticalCenter
+
 		horizontal = data.horizontal.simplified
+		if horizontal.isCentered:
+			horizontal ^= AlignmentFlag.HorizontalCenter
+
 		if (a := (horizontal | vertical)) in AlignmentFlag:
 			return dumper.represent_str(a.name)
 		d = data.asDict()
@@ -629,7 +667,17 @@ class Alignment:
 		return dumper.represent_dict(d)
 
 
+class DisplayPositionMeta(ClosestMatchEnumMeta):
+
+	def opposite(self) -> 'DisplayPosition':
+		return getattr(self, '__opposites__', {}).get(self, self)
+
+
 class DisplayPosition(str, Enum, metaclass=ClosestMatchEnumMeta):
+
+	@DynamicClassAttribute
+	def opposite(self) -> 'DisplayPosition':
+		return getattr(self, '__opposites__', {}).get(self, self)
 
 	Auto = 'auto'  # Places the unit in a new line if results in better readability
 	Inline = 'inline'  # Always displays the unit in the same line as the value
@@ -648,7 +696,9 @@ class DisplayPosition(str, Enum, metaclass=ClosestMatchEnumMeta):
 	Top = Above
 	Bottom = Below
 
-	__opposites: ClassVar[Dict['DisplayPosition', 'DisplayPosition']] = {
+	secondaryPositions: ClassVar[Set['DisplayPosition']]
+
+	__opposites__: ClassVar[Dict['DisplayPosition', 'DisplayPosition']] = {
 		Above: Below,
 		Below: Above,
 		Left: Right,
@@ -658,18 +708,34 @@ class DisplayPosition(str, Enum, metaclass=ClosestMatchEnumMeta):
 		Floating: Floating,
 	}
 
-	secondaryPositions: ClassVar[Set['DisplayPosition']] = {
-		Below,
-		Auto,
-		Hidden,
-		Inline,
-		Floating,
-		FloatAbove,
-		FloatUnder
+	def getOpposite(self) -> 'DisplayPosition':
+		return type(self).__opposites__.get(self, None)
+
+
+DisplayPosition.secondaryPositions = {
+		DisplayPosition.Below,
+		DisplayPosition.Auto,
+		DisplayPosition.Hidden,
+		DisplayPosition.Inline,
+		DisplayPosition.Floating,
+		DisplayPosition.FloatAbove,
+		DisplayPosition.FloatUnder
 	}
 
-	def getOpposite(self) -> 'DisplayPosition':
-		return self.__opposites.get(self, None)
+
+class ValueDisplayPosition(DisplayPosition):
+	AsIndicator = 'as-indicator'
+
+
+class UnitDisplayPosition(DisplayPosition):
+	TrailingValue = 'trailing-value'
+	LeadingValue = 'leading-value'
+
+	__opposites__: ClassVar[Dict['UnitDisplayPosition', 'UnitDisplayPosition']] = {
+		TrailingValue: LeadingValue,
+		LeadingValue: TrailingValue,
+		**DisplayPosition.__opposites__
+	}
 
 
 class RelativeAbsoluteProtocolMeta(type):

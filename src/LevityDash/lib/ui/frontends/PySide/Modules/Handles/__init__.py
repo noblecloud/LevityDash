@@ -389,7 +389,7 @@ from . import Incrementer
 from . import Timeframe
 from . import MarginHandles
 
-__all__ = ['Handle', 'HandleGroup', 'Various', 'Resize', 'Incrementer', 'Grid', 'Timeframe', 'MarginHandles', 'debug']
+__all__ = ['Handle', 'HandleGroup', 'Various', 'Resize', 'Incrementer', 'Timeframe', 'MarginHandles', 'debug']
 
 if __name__ == '__main__':
 	from PySide6.QtWidgets import QApplication
