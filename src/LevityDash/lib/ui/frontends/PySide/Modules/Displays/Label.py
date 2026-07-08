@@ -1,5 +1,5 @@
 from functools import cached_property
-from typing import List, Type, ClassVar
+from typing import List, Type, ClassVar, Callable
 
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QBrush
@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QGraphicsItem, QLineEdit
 
 from LevityDash.lib.stateful import DefaultFalse, DefaultTrue, StateProperty
 from LevityDash.lib.stateful_mixins import ColorMixin
+from LevityDash.lib.ui.Groups import SizeGroup, MatchAllSizeGroup
 from LevityDash.lib.ui.fonts import fontDict as fonts, FontWeight, getFontFamily
 from LevityDash.lib.ui.frontends.PySide import qtLogger as guiLog
 from LevityDash.lib.ui.frontends.PySide.Modules import Panel
@@ -14,7 +15,6 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Text
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import ScaleType, TextFilter
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.MarginHandles import MarginHandles
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import EditableLabelContextMenu, LabelContextMenu
-from LevityDash.lib.ui.frontends.PySide.Modules.Panel import MatchAllSizeGroup, SizeGroup
 from LevityDash.lib.ui.frontends.PySide.utils import addRect, DebugPaint
 from LevityDash.lib.ui.Geometry import Alignment, AlignmentFlag, Geometry, parseSize, Position, Size, Margins
 from LevityDash.lib.ui.icons import getIcon, Icon
@@ -116,7 +116,7 @@ class Label(Panel, ColorMixin, tag='label'):
 	def margins(self):
 		clearCacheAttr(self, 'marginRect')
 		if not self.textBox.path().isEmpty() and hasattr(self, 'marginHandles'):
-			self.textBox.updateTransform(updatePath=False)
+			self.textBox.updateTransform(updatePath=False, reason='margins-changed')
 
 	def dragEnterEvent(self, event):
 		if event.mimeData().hasFormat('text/plain'):
@@ -140,13 +140,17 @@ class Label(Panel, ColorMixin, tag='label'):
 	def setFilter(self, filter: str, enabled: bool = True):
 		self.textBox.setFilter(filter, enabled)
 
-	@StateProperty(default=..., sortOrder=0, dependencies={'geometry', 'margins'}, repr=True)
+	@StateProperty(default=..., sortOrder=0, dependencies={'geometry', 'margins', 'format-hint'}, repr=True, singleVal=True)
 	def text(self) -> str:
 		return self.textBox.text if not self.hasIcon else ...
 
 	@text.setter
 	def text(self, value: str):
 		self.textBox.value = value
+
+	@text.after
+	def text(self) -> Callable:
+		return self.textBox.updateText
 
 	@text.condition
 	def text(value):
@@ -262,8 +266,9 @@ class Label(Panel, ColorMixin, tag='label'):
 	def setRect(self, rect: QRectF):
 		currentRect = self.rect()
 		if currentRect != rect:
+			# with self.action_pool:
 			super(Label, self).setRect(rect)
-			self.textBox.updateText()
+				# self.textBox.updateText()
 
 	@StateProperty(key='text-scale-type', default=ScaleType.auto)
 	def textScaleType(self) -> ScaleType:
@@ -289,7 +294,7 @@ class Label(Panel, ColorMixin, tag='label'):
 	def modifiers(self, value: dict):
 		self.textBox.modifiers = value
 
-	@StateProperty(key='format-hint', default = None)
+	@StateProperty(key='format-hint', default=None)
 	def formatHint(self) -> str:
 		return getattr(self.textBox, '_formatHint', None)
 
@@ -297,7 +302,7 @@ class Label(Panel, ColorMixin, tag='label'):
 	def formatHint(self, value: str):
 		self.textBox._formatHint = value
 
-	@StateProperty(default=None, dependencies={'geometry', 'text', 'alignment'})
+	@StateProperty(key='text-height', default=None, dependencies={'geometry', 'text', 'alignment'})
 	def textHeight(self) -> Size.Height | Length | None:
 		return self.textBox.height
 
@@ -307,7 +312,6 @@ class Label(Panel, ColorMixin, tag='label'):
 			self.textBox.setRelativeHeight(value, self.localGroup.geometry)
 		else:
 			self.textBox.setAbsoluteHeight(value)
-		self.textBox.updateTransform()
 
 	@textHeight.decode
 	def textHeight(self, value: str | int | float) -> Size.Height | Length | None:
@@ -320,6 +324,14 @@ class Label(Panel, ColorMixin, tag='label'):
 
 	@StateProperty(default=None, dependencies={'geometry', 'text', 'alignment'})
 	def matchingGroup(self) -> SizeGroup:
+		"""
+		Group to match the height of the label to.
+
+
+		Returns
+		-------
+
+		"""
 		return getattr(self, '_matchingGroup', None)
 
 	@matchingGroup.setter
@@ -348,24 +360,23 @@ class Label(Panel, ColorMixin, tag='label'):
 			prefix = 'global'
 		elif parent is self.parentLocalGroup:
 			prefix = 'parent'
-		elif parent is self.getTaggedGroup('group').getAttrGroup(value.key, True if isinstance(value, MatchAllSizeGroup) else False):
+		elif parent is self.get_tagged_ancestor('group').getAttrGroup(value.key, True if isinstance(value, MatchAllSizeGroup) else False):
 			prefix = 'group'
-		elif parent in self.getTaggedGroups(value):
-			prefix = parent.name
-		elif parent in self.getNamedGroups():
-			prefix = f'{parent.name}@{parent.parent.name}'
+		# elif parent in self.get_tagged_ancestor(value):
+		# 	prefix = parent.name
+		# elif parent in self.get_named_ancestor(value):
+		# 	prefix = f'{parent.name}@{parent.parent.name}'
 		else:
 			raise ValueError(f'invalid group {value}')
 		return {'group': f'{prefix}.{value.name}', 'matchAll': value.matchAll}
 
-
 	# Section .paint
 	def _debug_paint(self, painter: QPainter, option, widget):
 		# addCrosshair(painter, pos=QPoint(0, 0), color=self._debug_paint_color)
-		c = QColor(self._debug_paint_color)
-		c.setAlphaF(0.1)
-		addRect(painter, self.rect(), fill=c, offset=2)
-		addRect(painter, self.marginRect)
+		# c = QColor(self._debug_paint_color)
+		# c.setAlphaF(0.1)
+		# addRect(painter, self.rect(), fill=c, offset=2)
+		# addRect(painter, self.marginRect)
 		self._normal_paint(painter, option, widget)
 
 
@@ -510,7 +521,6 @@ class TitleLabel(NonInteractiveLabel, defaultText='-'):
 	deletable = False
 
 	__exclude__ = {'geometry', 'locked', 'frozen', 'movable', 'resizable'}
-	_manualValue: str | None = None
 
 	__defaults__ = {
 		'weight': FontWeight.Light,
@@ -529,9 +539,8 @@ class TitleLabel(NonInteractiveLabel, defaultText='-'):
 
 	@text.setter
 	def text(self, value: str):
-		self._manualValue = True
-		self.textBox.setTextAccessor(lambda: value)
-		Label.text.fset(self, value)
+		self.textBox.setTextAccessor(None)
+		Label.text.__set__(self, value)
 
 	@text.condition
 	def text(self):
@@ -543,12 +552,11 @@ class TitleLabel(NonInteractiveLabel, defaultText='-'):
 
 	@icon.setter
 	def icon(self, value: Icon | None):
-		self._manualValue = True
 		self.textBox.setTextAccessor(None)
 		Label.icon.fset(self, value)
 
 	def allowDynamicUpdate(self) -> bool:
-		return super().allowDynamicUpdate() and not self._manualValue
+		return super().allowDynamicUpdate() and self.textBox.allow_dynamic_value
 
 	@property
 	def isEmpty(self) -> bool:

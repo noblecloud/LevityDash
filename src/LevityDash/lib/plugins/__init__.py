@@ -83,6 +83,9 @@ class PluginsLoader(metaclass=GlobalSingleton, name='plugins'):
 				continue
 			if plugin_ is None:
 				continue
+		for plugin in self:
+			if plugin.running:
+				plugin.stop()
 			try:
 				pluginInstance = plugin_()
 				pluginInstance.manager = self
@@ -98,15 +101,13 @@ class PluginsLoader(metaclass=GlobalSingleton, name='plugins'):
 	def start(self):
 		pluginLog.info(' Starting Plugins '.center(80, '-'))
 		plugin_threads = [i for i in self if i.enabled]
+
 		for plugin_ in plugin_threads:
 			plugin_.thread.start()
 		pluginLog.info(' Thread Pool Started '.center(80, '-'))
 
 	def stop(self):
 		pluginLog.info('--------------------- Stopping plugins ---------------------')
-		for plugin in self:
-			if plugin.running:
-				plugin.stop()
 
 	# @property
 	# def network_available(self) -> bool:
@@ -196,7 +197,3 @@ class PluginsLoader(metaclass=GlobalSingleton, name='plugins'):
 	@property
 	def enabled_plugins(self):
 		return {p for p in self.__plugin_instances.values() if p.enabled}
-
-
-def __getattr__(item: str) -> Plugin:
-	return getattr(LevityDashboard.plugins, item, None) or locals()[item]

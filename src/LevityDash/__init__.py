@@ -1,7 +1,7 @@
 import argparse
 import os
 from argparse import ArgumentParser
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from typing import Type, TYPE_CHECKING, ClassVar
 
 from . import shims
@@ -159,8 +159,6 @@ class _LevityDashboard(object):
 	def build_imports(self):
 		import LevityDash.lib.plugins.builtin
 		print("Builtins loaded")
-
-
 
 LevityDashboard = _LevityDashboard()
 builtins.LevityDashboard = LevityDashboard

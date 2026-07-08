@@ -56,9 +56,10 @@ def main():
 	install_signals()
 
 	LevityDashboard.init()
+	LevityDashboard.app: QApplication
 	LevityDashboard.app.processEvents()
 
-	LevityDashboard.lib.plugins.load_all()
+	LevityDashboard.plugins.load_all()
 
 	LevityDashboard.app.start()
 

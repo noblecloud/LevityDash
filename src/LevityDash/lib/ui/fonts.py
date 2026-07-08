@@ -167,11 +167,11 @@ for member in FontWeight._member_map_.values():
 
 
 class FontCase(str, Enum, metaclass=ClosestMatchEnumMeta):
-	MixedCase = 'MixedCase'
-	AllUppercase = 'Uppercase'
-	AllLowercase = 'Lowercase'
-	SmallCaps = 'SmallCaps'
-	Capitalize = 'Capitalize'
+	MixedCase = 'mixed case'
+	AllUppercase = 'uppercase'
+	AllLowercase = 'lowercase'
+	SmallCaps = 'small caps'
+	Capitalize = 'capitalized'
 
 
 def __recurseFonts(path: EasyPath) -> List[EasyPath]:

@@ -11,7 +11,7 @@ from LevityDash.lib.stateful_mixins import ColorGradientMixin
 from LevityDash.lib.ui import UILogger, Color
 from LevityDash.lib.ui.Geometry import Size, DisplayPosition, Alignment, AlignmentFlag, Dimension, getDPI, LineWeight
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Text, Surface
-from LevityDash.lib.ui.frontends.PySide.utils import SoftShadow
+from LevityDash.lib.ui.frontends.PySide.utils import SoftShadow, ViewScale
 from LevityDash.lib.utils import numberRegex, Unset, Axis
 from LevityDash.lib.utils.protocols import GraphItem, HasWeight
 from WeatherUnits import Length, Percentage, Measurement
@@ -63,7 +63,7 @@ class AnnotationText(Text):
 	def allowedWidth(self):
 		return 400
 
-	def getTextPosition(self, limitRect: QRectF = None) -> QPointF:
+	def getTextPosition(self) -> QPointF:
 		return QPoint(0, 0)
 
 	def scaleSelection(self, x, y):
@@ -74,15 +74,23 @@ class AnnotationText(Text):
 
 	@property
 	def limitRect(self) -> QRectF:
-		viewScale = self.scene().viewScale
+		try:
+			viewScale = self.scene().viewScale
+		except AttributeError:
+			viewScale = ViewScale(1, 1)
 		rect = QRectF(0, 0, self.allowedWidth / viewScale.x, self.labelGroup.textSize_px / viewScale.y)
 		rect.moveCenter(QPointF(0, 0))
 		return rect
 
 	@property
+	def height_limit(self):
+		return self.limitRect.height()
+
+	@property
 	def displayPosition(self) -> DisplayPosition:
 		return self.labelGroup.position
 
+	@property
 	def containingRect(self) -> QRectF:
 		return self.surface.rect()
 
@@ -109,8 +117,9 @@ class AnnotationText(Text):
 	def delete(self):
 		if scene := self.scene():
 			scene.removeItem(self)
-			self._actionPool.delete()
-			del self._actionPool
+		if (pool := self.action_pool) is not None:
+			if pool.instance is self:
+				pool.delete()
 			return
 		if groupRemove := getattr(self.labelGroup, 'removeItem', None) is not None:
 			groupRemove(self)
@@ -144,10 +153,11 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, ColorGradientMixin, ta
 	def pre_init(self, source, surface, **kwargs) -> dict:
 		self.source = source
 		self.surface = surface
-		kwargs = self.prep_init(kwargs)
+		self.add_defaults_to_state(kwargs)
 		return kwargs
 
 	def __init__(self, source: Any, surface: Surface, *args, **kwargs):
+		self.prep_init(args=args, kwargs=kwargs)
 		kwargs = self.pre_init(source, surface, **kwargs)
 		super(AnnotationLabels, self).__init__()
 		self.post_init(**kwargs)
@@ -194,7 +204,7 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, ColorGradientMixin, ta
 	def parseSize(self, value: str | float | int, default) -> Length | Size.Height | Size.Width:
 		match value:
 			case str(value):
-				unit = ''.join(re.findall(r'[^\d\.\,]+', value)).strip(' ')
+				unit = ''.join(re.findall(r'[^\d\.\,\-\+]+', value)).strip(' ')
 				match unit:
 					case 'cm':
 						value = Centimeter(float(value.strip(unit)))
@@ -238,17 +248,13 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, ColorGradientMixin, ta
 	# ======= state properties ======== #
 
 	# ----------- enabled ------------- #
-	@StateProperty(default=True, allowNone=False, singleVal=True)
+	@StateProperty(default=True, allowNone=False, singleVal=True, after=refresh)
 	def enabled(self) -> bool:
 		return getattr(self, '_enabled', True)
 
 	@enabled.setter
 	def enabled(self, value):
 		self._enabled = value
-
-	@enabled.after
-	def enabled(self) -> Callable:
-		return self.refresh
 
 	# ----------- format ------------- #
 	@StateProperty(key='format', default=None, allowNone=False)
@@ -304,8 +310,13 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, ColorGradientMixin, ta
 		return f'{value * 100:.4g}%'
 
 	@property
+	@abstractmethod
+	def values(self) -> list[Number]:
+		raise NotImplementedError('Subclasses must implement values')
+
+	@property
 	def fill_brush(self) -> Dict[Number, QBrush]:
-		values = self._ticks.tick_values
+		values = self.values
 		if (gradient := self.gradient) is not None:
 			return {value: QBrush(gradient.get_color_for_value(value).QColor) for value in values}
 		return {value: QBrush(self.color.QColor) for value in values}
@@ -333,7 +344,7 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, ColorGradientMixin, ta
 		return DisplayPosition[value]
 
 	# ----------- height ------------- #
-	@StateProperty(key='height', default=Centimeter(0.5), allowNone=False)
+	@StateProperty(key='height', default=Centimeter(0.5), allowNone=False, after=refresh)
 	def labelHeight(self) -> Length | Size.Height:
 		value = getattr(self, '_labelHeight', Unset) or type(self).labelHeight.default(type(self))
 		return value
@@ -352,12 +363,8 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, ColorGradientMixin, ta
 			return f'{value:.3f}'
 		return value
 
-	@labelHeight.after
-	def labelHeight(self) -> Callable:
-		return self.refresh
-
 	# ----------- offset ------------- #m
-	@StateProperty(default=Size.Height(5, absolute=True), allowNone=False)
+	@StateProperty(default=Size.Height(5, absolute=True), allowNone=False, after=refresh)
 	def offset(self) -> Length | Size.Height | Percentage:
 		if (offset := getattr(self, '_offset', Unset)) is not Unset:
 			return offset
@@ -376,10 +383,6 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, ColorGradientMixin, ta
 		if isinstance(value, Length) or hasattr(value, 'precision'):
 			return f'{value:.3f}'
 		return value
-
-	@offset.after
-	def offset(self) -> Callable:
-		return self.refresh
 
 	# --------- alignment ------------ #
 	@StateProperty(default=None, allowNone=True)
@@ -401,6 +404,10 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, ColorGradientMixin, ta
 		else:
 			alignment = AlignmentFlag.Center
 		return Alignment(alignment)
+
+	@alignment.condition
+	def alignment(self, value: Alignment | None) -> bool:
+		return value is not None and value != self.alignmentAuto
 
 	# ======= label properties ======= #
 	@property

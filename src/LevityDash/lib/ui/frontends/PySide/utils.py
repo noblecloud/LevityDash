@@ -1,4 +1,5 @@
-from collections import defaultdict
+from collections import defaultdict, namedtuple
+from contextlib import contextmanager
 from dataclasses import asdict, is_dataclass
 from enum import Enum
 from functools import cached_property, partial
@@ -20,11 +21,18 @@ from LevityDash.lib.log import debug
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.stateful import Stateful
 from LevityDash.lib.ui.colors import Color
-from LevityDash.lib.ui.Geometry import Geometry, Position, Size
+from LevityDash.lib.ui.Geometry import Geometry, Position, Size, LocationFlag
 from LevityDash.lib.utils import (
 	ClosestMatchEnumMeta, getItemsWithType, getItemsWithType, levenshtein, Unset,
 	utilLog as log
 )
+
+
+@contextmanager
+def painter_restore(painter: QPainter):
+	painter.save()
+	yield painter
+	painter.restore()
 
 
 def asArray(img) -> np.array:
@@ -40,6 +48,7 @@ def asArray(img) -> np.array:
 	ptr = incomingImage.constBits()
 	arr = np.array(ptr).reshape((height, width, 4))
 	return arr
+
 
 def objectRepresentor(dumper, obj):
 	if hasattr(obj, 'representer'):
@@ -577,6 +586,25 @@ class mouseHoldTimer(mouseTimer):
 			super(mouseHoldTimer, self)._T()
 
 
+def size_to_wh(
+	size: int | float | Size | QSize | QSizeF, /,
+	default: tuple[float, float] = None
+) -> tuple[float, float]:
+	match size:
+		case float(s) | int(s):
+			w = h = s
+		case Size(s):
+			w = float(s.width)
+			h = float(s.height)
+		case QSize() | QSizeF():
+			w, h = (size / 2).toTuple()
+		case _:
+			if default is None:
+				raise ValueError(f'Invalid size: {size}')
+			w, h = default
+	return w, h
+
+
 def addCrosshair(
 	painter: QPainter,
 	color: QColor = Qt.red,
@@ -591,22 +619,50 @@ def addCrosshair(
 	pen = QPen(color, weight)
 	# pen.setCosmetic(Fa)
 	painter.setPen(pen)
-	match size:
-		case float(s) | int(s):
-			x = size
-			y = size
-		case Size(s):
-			x = float(size.width) / 2
-			y = float(size.height) / 2
-		case QSize() | QSizeF():
-			x, y = (size / 2).toTuple()
-		case _:
-			x, y = 2.5, 2.5
+
+	x, y = size_to_wh(size, default=(2.5, 2.5))
 
 	verticalLine = QLineF(-x, 0, x, 0)
 	verticalLine.translate(pos)
 	horizontalLine = QLineF(0, -y, 0, y)
 	horizontalLine.translate(pos)
+	painter.drawLine(verticalLine)
+	painter.drawLine(horizontalLine)
+	painter.restore()
+
+
+def add_corner_at_point(
+	painter: QPainter,
+	point: QPointF,
+	color: QColor = Qt.red,
+	size: int | float | Size | QSize | QSizeF = 2.5,
+	weight=1,
+	location: LocationFlag = LocationFlag.BottomLeft,
+):
+	"""
+	Adds a corner to the painter.
+	"""
+
+	painter.save()
+	pen = QPen(color, weight)
+	painter.setPen(pen)
+
+	w, h = size_to_wh(size)
+
+	x_origin, y_origin = x_vertical, y_vertical = x_horizontal, y_horizontal = point.toTuple()
+
+	if location.isLeft:
+		x_vertical += w
+	elif location.isRight:
+		x_vertical -= w
+	if location.isTop:
+		y_horizontal += h
+	elif location.isBottom:
+		y_horizontal -= h
+
+	verticalLine = QLineF(x_origin, y_origin, x_vertical, y_vertical)
+	horizontalLine = QLineF(x_origin, y_origin, x_horizontal, y_horizontal)
+
 	painter.drawLine(verticalLine)
 	painter.drawLine(horizontalLine)
 	painter.restore()
@@ -647,7 +703,7 @@ def addText(
 	/,
 	color: QColor = None,
 	font: QFont = None,
-	font_size: int | float = 6,
+	font_size: int | float = 12,
 	pos: QPointF = QPointF(0, 0),
 	rect: QRectF = None,
 	alignment: Qt.AlignmentFlag | Qt.Alignment = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
@@ -665,7 +721,6 @@ def addText(
 
 	font = font or QFont('monospace')
 	t_scale = painter.combinedTransform().m22()
-	font_size = font_size
 
 	font.setPointSizeF(font_size / (t_scale or 1))
 	painter.setFont(font)
@@ -697,7 +752,9 @@ def addPath(
 	painter.restore()
 
 	if label_text:
-		addText(painter, label_text, rect=path.boundingRect())
+		label_font = label_font or QFont()
+		label_font.setPixelSize(8)
+		addText(painter, label_text, rect=path.boundingRect(), font=label_font)
 
 
 def addGrid(
@@ -768,6 +825,24 @@ def addGrid(
 	# 		painter.drawLine(x, y, x + w, y)
 
 
+def path_to_QImage(
+	path: QPainterPath,
+	size: QSizeF,
+	color: QColor = Qt.white,
+	fill: QColor = Qt.transparent
+) -> QImage:
+
+	image = QImage(size.toSize(), QImage.Format.Format_ARGB32)
+	image.fill(fill)
+	painter = QPainter(image)
+	painter.setRenderHint(QPainter.Antialiasing)
+	painter.setRenderHint(QPainter.SmoothPixmapTransform)
+	painter.setRenderHint(QPainter.TextAntialiasing)
+	painter.setPen(QPen(color))
+	painter.setBrush(QBrush(fill))
+	painter.drawPath(path)
+	painter.end()
+	return image
 
 
 def addCrosshairDecorator(func: Callable, **dkwargs) -> Callable:
@@ -873,7 +948,9 @@ def DebugPaint(cls: Type[DebugPaintable] = None, **kwargs) -> Union[Callable, Ty
 			color = kwargs.get('color', None)
 			if color is not None:
 				color = Color(color)
-			cls._debug_paint_color = (color or Color.random()).QColor
+			debug_color = color or Color.random()
+			cls._debug_paint_color = debug_color.QColor
+			cls._debug_paint_alt_colors = debug_color.cubehelix_colors(10)
 		except AttributeError as e:
 			log.critical(f'{cls} has no _debug_paint function')
 		if e:
@@ -1121,3 +1198,20 @@ class CollisionTest(QGraphicsPathItem):
 				raise TypeError(f'Invalid type {type(item)}')
 
 		super().__init__(path)
+
+
+def move_shape_into_rect(shape: QPainterPath, rect: QRectF):
+	"""
+	Moves the shape into the rect by translating the shape to the rect center.
+	"""
+	shape.translate(*(shape.boundingRect().center() - rect.center()).toTuple())
+
+
+def near_point(point: QPointF, *points: Iterable[QPointF], distance: float = 10) -> bool:
+	"""
+	Checks if the point is near any of the points in the list.
+	"""
+	return any((point - p).manhattanLength() < distance for p in points)
+
+
+ViewScale = namedtuple('ViewScale', 'x y')

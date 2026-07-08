@@ -1,3 +1,6 @@
+from contextlib import contextmanager
+from uuid import UUID, uuid4
+
 from PySide6 import QtCore
 from abc import abstractmethod
 from collections.abc import MutableSet, Sequence
@@ -12,6 +15,7 @@ from threading import Thread
 from traceback import format_exc, print_exc
 
 from LevityDash import LevityDashboard
+from LevityDash.lib.utils.protocols import ActionPoolItemInstance
 
 try:
 	from locale import setlocale, LC_ALL, nl_langinfo, RADIXCHAR, THOUSEP
@@ -50,7 +54,7 @@ from typing import (
 )
 from types import MethodType, NoneType, GeneratorType, FunctionType, UnionType
 
-from enum import Enum, EnumMeta, IntFlag
+from enum import Enum, EnumMeta, IntFlag, EnumType, IntEnum
 
 from PySide6.QtCore import QObject, QPointF, QRectF, QSizeF, QThread, QTimer, Signal, Qt, Slot
 from PySide6.QtWidgets import QApplication, QGraphicsRectItem, QGraphicsItem
@@ -78,6 +82,10 @@ def simpleRequest(url: str) -> dict:
 
 T_ = TypeVar('T_')
 Self: TypeAlias = TypeVar('Self')
+
+__pdoc__ = {
+	'_Panel': False
+}
 
 
 class _Panel(QGraphicsRectItem):
@@ -1759,10 +1767,11 @@ class DotDict(dict):
 		self.__key = value
 
 	@staticmethod
+	@lru_cache(maxsize=1024)
 	def makeKey(key: str) -> tuple:
 		if isinstance(key, tuple):
 			return key
-		elif isinstance(key, Hashable) and not isinstance(key, str):
+		elif not isinstance(key, str) and isinstance(key, Hashable):
 			return key,
 		return tuple(re.findall(rf"[\w|\-|\_]+", key), )
 
@@ -1844,6 +1853,10 @@ def recursiveRemove(existingDict: dict, subtracting: dict) -> dict:
 	return existingDict
 
 
+def remove_empty_dicts(d: dict) -> dict:
+	return {k: remove_empty_dicts(v) if isinstance(v, dict) else v for k, v in d.items() if v != {}}
+
+
 def deepCopy(d: dict) -> dict:
 	return recursiveDictUpdate(dict(), d, copy=False)
 
@@ -1851,8 +1864,8 @@ def deepCopy(d: dict) -> dict:
 class DeepChainMap(ChainMap):
 	"""A recursive subclass of ChainMap"""
 
-	def __init__(self, *maps: Mapping, origin: 'Stateful' = None):
-		self._originMap = {}
+	def __init__(self, *maps: Mapping, origin: Any = None, origin_map: Mapping = None):
+		self._originMap = origin_map or {}
 		self.origin = origin
 		super().__init__(self._originMap, *maps)
 
@@ -1867,24 +1880,32 @@ class DeepChainMap(ChainMap):
 	def to_dict(self, d: dict | Mapping = None) -> dict:
 		d = d or {}
 		for mapping in reversed(self.maps):
+			if type(mapping) is not dict:
+				mapping = dict(mapping)
 			self._depth_first_update(d, mapping)
 		return d
 
 	def _depth_first_update(self, target: dict, source: Mapping) -> None:
-		for key, val in source.items():
-			if not isinstance(val, Mapping):
-				target[key] = val
+		if isinstance(source, DeepChainMap):
+			source = source.to_dict()
+		for key, src_val in source.items():
+			if not isinstance(src_val, Mapping):
+				target[key] = src_val
 				continue
 			if key not in target:
 				target[key] = {}
-			self._depth_first_update(target[key], val)
+			target_val = target.get(key, {})
+			if isinstance(target_val, Mapping):
+				self._depth_first_update(target_val, src_val)
+			else:
+				target[key] = src_val
 
 	@property
 	def originMap(self) -> dict:
 		return self._originMap
 
-	def new_child(self, origin: 'Stateful') -> 'DeepChainMap':
-		return self.__class__(*self.maps, origin=origin)
+	def new_child(self, origin: 'Stateful', child_map: Mapping = None) -> 'DeepChainMap':
+		return self.__class__(*self.maps, origin=origin, origin_map=child_map)
 
 
 class ScaleFloatMeta(type):
@@ -1949,14 +1970,17 @@ def mostSimilarDict(ref: dict, choices: Iterable[dict], sharedKeysOnly: bool = T
 
 class guarded_cached_property(cached_property):
 
-	def __new__(cls, *args, guardFunc: Callable[[Any], bool], default: Any):
+	def __new__(cls, *args, guardFunc: Callable[[Any], bool] = None, default: Any = None):
 		if not args:
 			return partial(guarded_cached_property, guardFunc=guardFunc, default=default)
 		return cached_property.__new__(cls)
 
-	def __init__(self, *args, guardFunc: Callable[[Any], bool], default: Any):
+	def _guardFunc(self, instance):
+		return instance is not None
+
+	def __init__(self, *args, guardFunc: Callable[[Any], bool] = None, default: Any = None):
 		super().__init__(*args)
-		self.guardFunc = guardFunc
+		self.guardFunc = guardFunc or self._guardFunc
 		self.default = default
 
 	def __call__(self, *args, **kwargs):
@@ -1989,6 +2013,16 @@ class del_action_cached_property(cached_property):
 			self._fdel(instance)
 		instance.__dict__.pop(self.attrname, None)
 
+
+@lru_cache(maxsize=128)
+def attr_is_cached_property(cls: Type, attr: str) -> bool:
+	return isinstance(getattr(cls, attr, None), cached_property)
+
+
+def attr_is_cached(obj: object, attr: str) -> bool:
+	return attr_is_cached_property(type(obj), attr) and attr in obj.__dict__
+
+
 def named_partial(func: Callable, *args, func_name: str = None, **kwargs) -> Callable:
 	"""Create a partial function with a name."""
 	try:
@@ -2000,6 +2034,7 @@ def named_partial(func: Callable, *args, func_name: str = None, **kwargs) -> Cal
 	partial_.__name__ = func_name
 	return partial_
 
+
 def split(a, n):
 	k, m = divmod(len(a), n)
 	return (a[i*k+min(i, m):(i+1)*k+min(i+1, m)] for i in range(n))
@@ -2007,8 +2042,6 @@ def split(a, n):
 
 T = TypeVar("T")
 
-
-Index = NamedTuple("Index", [("previous", Any), ("current", Any), ("next", Any)])
 
 @dataclass(slots=True)
 class Index:
@@ -2028,13 +2061,24 @@ class Index:
 		yield self.previous
 		yield self.next
 
+	def link_after(self, index: 'Index'):
+		self.next = index.next
+		self.previous = index
+		index.next.previous = self
+		index.next = self
+
+	def link_before(self, index: 'Index'):
+		self.previous = index.previous
+		self.next = index
+		index.previous.next = self
+		index.previous = self
+
 
 class OrderedSet(MutableSet[T]):
 
 	map = cached_property(lambda self: {})
-	sub_maps = cached_property(lambda self: {})
 
-	def __init__(self, iterable=None):
+	def __init__(self, iterable: Iterable[T] = None):
 		self.end = end = Index(None)
 
 		if iterable is not None:
@@ -2043,20 +2087,20 @@ class OrderedSet(MutableSet[T]):
 	def __len__(self):
 		return len(self.map)
 
-	def __contains__(self, key):
+	def __contains__(self, key: T):
 		return key in self.map
 
-	def add(self, key: T):
+	def add(self, key: T, at_beginning: bool = False) -> bool:
 		if key not in self.map:
 			end = self.end
-			curr = end.previous
-			curr.next = end.previous = self.map[key] = Index(key, curr, end)
-
-	def add_at_beginning(self, key: T):
-		if key not in self.map:
-			end = self.end
-			curr = end.next
-			curr.previous = end.next = self.map[key] = Index(key, end, curr)
+			if at_beginning:
+				curr = end.previous
+				curr.next = end.previous = self.map[key] = Index(key, curr, end)
+			else:
+				curr = end.next
+				curr.previous = end.next = self.map[key] = Index(key, end, curr)
+			return True
+		return False
 
 	def discard(self, key):
 		if key in self.map:
@@ -2092,8 +2136,7 @@ class OrderedSet(MutableSet[T]):
 
 	def clear(self) -> None:
 		self.map.clear()
-		self.end = end = []
-		end += [None, end, end]  # sentinel node for doubly linked list
+		self.end = end = Index(None)
 
 	def __repr__(self):
 		if not self:
@@ -2112,14 +2155,23 @@ class OrderedSet(MutableSet[T]):
 		return self.__class__, (list(self),)
 
 
-class ActionPool(OrderedSet):
+SubActionPool = TypeVar('SubActionPool', bound='ActionPool')
+
+
+class ActionPool(OrderedSet[Callable, SubActionPool]):
+
+	all_pools: ClassVar[Dict[int, 'ActionPool']] = {}
+
 	up: 'ActionPool'
 	__len: int = cached_property(lambda self: 0)
 	__contextLevel: int = cached_property(lambda self: 0)
-	__active: bool = cached_property(lambda self: False)
 	__callbacks: List[Tuple[Callable, Tuple, Dict]] = cached_property(lambda self: [])
-	__executions: Dict[Callable, int] = cached_property(lambda self: defaultdict(int))
-
+	__called_by: Dict[Callable | SubActionPool, Set['StateProperty']] = cached_property(lambda self: defaultdict(set))
+	__last_called_by: Dict[Callable | SubActionPool, Set['StateProperty']] = cached_property(lambda self: defaultdict(set))
+	sub_maps: Dict[int, SubActionPool] = cached_property(lambda self: {})
+	__item_lookup: Dict[ActionPoolItemInstance, Union[SubActionPool, Callable]] = cached_property(lambda self: {})
+	__context: Dict[Callable, Tuple[tuple, dict]] = cached_property(lambda self: {})
+	uuid: UUID = cached_property(lambda self: uuid4())
 
 	class Status(Enum):
 		Idle = 0
@@ -2130,23 +2182,139 @@ class ActionPool(OrderedSet):
 		Failed = 5
 		Removed = 6
 
+	class Priority(IntEnum):
+		Low = -1
+		Normal = 0
+		High = 1
 
-	def __init__(self, instance: 'Stateful', trace = None):
+	def __new__(
+		cls,
+		instance: ActionPoolItemInstance,
+		up: 'ActionPool' = None, root
+		: 'ActionPool' = None,
+		priority: Priority = Priority.Normal,
+		trace=None
+	):
+		if (existing := cls.all_pools.get(id(instance), None)) is None:
+			cls.all_pools[id(instance)] = existing = super().__new__(cls)
+			return existing
+		return existing
+
+	def __init__(
+		self,
+		instance: ActionPoolItemInstance,
+		up: 'ActionPool' = None,
+		root: 'ActionPool' = None,
+		priority: Priority = None,
+		trace=None
+	):
 		self.status = self.Status.Idle
 		self.instance = instance
-		self.root = self
-		self.up = self
+		self.root = root if root is not None else self
+		self.up = up if up is not None else self
+		self.priority = priority
 		super().__init__()
+
+	@property
+	def context(self) -> Dict[Callable, Tuple[tuple, dict]]:
+		return self.__context
+
+	@property
+	def priority(self) -> Priority:
+		return self._priority
+
+	@priority.setter
+	def priority(self, value: Priority):
+		self._priority = value
+
+	@property
+	def up(self):
+		return self._up
+
+	@up.setter
+	def up(self, value):
+		self._up = value
+
+	def _raise_context_level(self):
+		self.__contextLevel += 1
 
 	def __enter__(self):
 		self.__contextLevel += 1
 		return self
 
 	def __exit__(self, exc_type, exc_val, exc_tb):
+		self._lower_context_level()
+
+	def _lower_context_level(self):
 		self.__contextLevel -= 1
 		if self.__contextLevel <= 0:
 			self.__contextLevel = 0
-			if self.can_execute: self.execute()
+			if self.can_execute:
+				# self.execute()
+				self._unsafe_execute()
+			match self.status:
+				case ActionPool.Status.Finished:
+					self.status = ActionPool.Status.Idle
+				case ActionPool.Status.Running:
+					# TODO: This might be a problem...
+					if bool(self) and self.up.status is self.Status.Running:
+						self.status = ActionPool.Status.Queued
+					else:
+						self.status = ActionPool.Status.Failed
+				case ActionPool.Status.Queued:
+					if self.can_execute:
+						match self.up.status:
+							case ActionPool.Status.Running | ActionPool.Status.Queued:
+								pass
+							case _:
+								raise NotImplementedError(
+									f"ActionPool exited with status {self.status} with items remaining"
+									f" but exiting with a parent status of {self.up.status} is not implemented"
+								)
+				case ActionPool.Status.Idle:
+					if self:
+						if not self.can_execute:
+							self.status = ActionPool.Status.Queued
+						else:
+							raise RuntimeError(f'ActionPool exited with status {self.status} with items remaining')
+				case _:
+					raise RuntimeError(f'ActionPool exited with status {self.status}')
+
+	@property
+	def context_level(self) -> int:
+		if self is self.up:
+			return self.__contextLevel
+		return self.up.context_level + self.__contextLevel
+
+	@property
+	def own_context_level(self) -> int:
+		return self.__contextLevel
+
+	def _trickle_up_execute(self):
+		up = self.up
+		if len(up) and up.status is self.Status.Idle:
+			up.execute()
+
+	def __getitem__(self, item: ActionPoolItemInstance | int) -> SubActionPool:
+		if (sub_pool := self.sub_maps.get(id(item), None)) is not None:
+			return sub_pool
+		raise TypeError("ActionPool only supports indexing by ActionPoolItemInstance")
+
+	def __contains__(self, item: Union[SubActionPool, Callable]) -> bool:
+		if isinstance(item, ActionPool):
+			return id(item.instance) in self.sub_maps
+		return super().__contains__(item)
+
+	def __iter__(self):
+		sub_pools: Dict[ActionPool.Priority, ActionPoolItemInstance | ActionPool] = defaultdict(list)
+		for item in super().__iter__():
+			if isinstance(item, ActionPool):
+				sub_pools[item.priority].append(item)
+			else:
+				yield item
+		for priority in sorted(sub_pools.keys(), reverse=True):
+			for item in sub_pools[priority]:
+				yield item
 
 	def __repr__(self):
 		return f'{self.__class__.__name__}({type(self.instance).__name__} items: {len(list(self))}, total: {self.total_length})'
@@ -2157,14 +2325,14 @@ class ActionPool(OrderedSet):
 			'item count': len(list(self)),
 			'items': list(self),
 			'total': self.total_length,
-			'active': self.__active,
+			'status': self.status.name,
 			'callbacks': len(self.__callbacks),
-			'executions': {k.__qualname__: v for k, v in self.__executions.items()},
+			'callers': self.__called_by
 		}
 		return name, stats
 
 	def __hash__(self):
-		return id(self)
+		return self.uuid.int
 
 	def __len__(self):
 		return self.__len
@@ -2173,78 +2341,188 @@ class ActionPool(OrderedSet):
 		return super().__len__()
 
 	def __bool__(self) -> bool:
-		return bool(self.__len) and all(bool(pool) for pool in self.sub_maps.values())
+		return bool(self.__len) or any(bool(p) for p in self.sub_maps.values())
 
-	def new(self, instance: 'Stateful') -> 'ActionPool':
-		self.add(a := ActionPool(instance, trace='new'))
+	def iter_up(self) -> Iterable['ActionPool']:
+		current = self
+		while (up := current.up) not in {self, None}:
+			yield up
+			current = up
+
+	def new(self, instance: ActionPoolItemInstance, at_beginning: bool = False, priority: Priority = Priority.Normal) -> 'ActionPool':
+		instance_id = id(instance)
+		if (existing := self.sub_maps.get(instance_id, None)) is not None:
+			assert existing.up is self
+			existing.priority = priority
+			return existing
+		else:
+			self.add((a := ActionPool(instance, trace='new', up=self, root=self.root, priority=priority)), at_beginning=at_beginning)
 		return a
 
-	def add_at_beginning(self, key: T):
-		super().add_at_beginning(key)
+	def move_to(self, dest: 'ActionPool'):
+		if self.up is dest:
+			return
+		if self.up is not self:
+			self.up.remove(self)
 
-	def add(self, other, first: bool = False):
-		super().add(other) if not first else self.add_at_beginning(other)
-		if isinstance(other, ActionPool):
-			other.up = self
-			other.root = self.root
-			self.sub_maps[other.instance] = other
-		self.__len += 1
+		if dest is self or dest is None:
+			self.up = self
+			self.root = self
+		else:
+			dest.add(self)
+
+	def get_context(self, action: Callable) -> Tuple[tuple, dict]:
+		return self.__context.get(action, ((), {}))
+
+	def set_context(self, action: Callable, args: tuple = None, kwargs: dict = None):
+		self.__context[action] = (args, kwargs)
+
+	def update_context(self, action: Callable, args: tuple = None, kwargs: dict = None):
+		# replaces the args and updates the kwargs
+		_, e_kwargs = self.__context.get(action, ((), {}))
+		e_kwargs.update(kwargs)
+		self.__context[action] = (args, e_kwargs)
+
+	def add(
+		self,
+		action: Callable | SubActionPool,
+		at_beginning: bool = False,
+		caller: Hashable = None,
+		kwargs: dict = None,
+		update_kwargs: bool = False,
+		args: tuple = None,
+		append_args: bool = False,
+	) -> bool:
+		added = super().add(action, at_beginning=at_beginning)
+		match action:
+			case FunctionType() | MethodType() | partial():
+				self.__called_by[action].add(caller)
+
+				e_args, e_kwargs = self.__context.get(action, ((), {}))
+				if update_kwargs:
+					e_kwargs.update(kwargs)
+				else:
+					e_kwargs = kwargs if kwargs is not None else e_kwargs
+
+				if append_args:
+					e_args = (*e_args, *args)
+
+				self.__context[action] = (e_args, e_kwargs)
+
+			case ActionPool():
+				action.up = self
+				action.root = self.root
+				self.sub_maps[id(action.instance)] = action
+
+			case _:
+				raise TypeError()
+
+		self.__len = self.__true_len__()
+		return added
 
 	def discard(self, other):
 		super().discard(other)
+		if isinstance(other, ActionPool):
+			other.up = other
+			other.root = other
+			self.sub_maps.pop(id(other.instance), None)
+		else:
+			self.__called_by.pop(other, None)
+			self.__context.pop(other, None)
+
 		self.__len = self.__true_len__()
 
 	def clear(self):
 		list(map(ActionPool.clear, self.sub_maps.values()))
 		self.sub_maps.clear()
 		super().clear()
+		self.__called_by.clear()
+		self.__context.clear()
+		self.__callbacks.clear()
+		self.__last_called_by.clear()
 		self.__len = 0
 
 	def pop(self, last=True):
 		popped = super().pop(last)
-		self.__len -= 1
+
+		if isinstance(popped, ActionPool):
+			self.sub_maps.pop(id(popped.instance))
+			popped.up = popped
+			popped.root = popped
+		else:
+			self.__called_by.pop(popped, None)
+			self.__context.pop(popped, None)
+
+		self.__len = self.__true_len__()
 		return popped
 
 	def remove(self, key):
 		super().remove(key)
-		self.__len -= 1
+
+		if isinstance(key, ActionPool):
+			sub_pool = self.sub_maps.pop(id(key.instance))
+			sub_pool.up = sub_pool
+			sub_pool.root = sub_pool
+		else:
+			self.__called_by.pop(key, None)
+			self.__context.pop(key, None)
+
+		self.__len = self.__true_len__()
 
 	@property
 	def total_length(self) -> int:
-		return sum(pool.total_length for pool in self.sub_maps.values()) + self.__len
+		return sum(sub_map.total_length for sub_map in self.sub_maps.values()) + (self.__true_len__() - len(self.sub_maps))
 
 	@property
 	def can_execute(self) -> bool:
 		if self.up is self:
-			return not self.instance.is_loading and not self.__contextLevel and not self.__active
-		return not self.instance.state_is_loading and not self.__contextLevel and not self.__active# and self.up.can_execute
+			return not self.context_level and not self.instance.is_loading and all(sub_map.can_execute for sub_map in self.sub_maps.values())
+		return not self.context_level and not self.instance.state_is_loading and all(sub_map.can_execute for sub_map in self.sub_maps.values())
 
 	@property
 	def running(self) -> bool:
-		return self.__active
+		return self.status == self.Status.Running
 
 	def execute(self):
-		self.__active = True
 		utilLog.verbose(f"Executing {len(self)} items in afterPool for {self.__class__.__name__}", verbosity=5)
-		if type(self.instance).__name__ in {'HourLabels', 'DayLabels', 'WeekLabels', 'MonthLabels', 'YearLabels'}:
-			return
 
+		with self:
+			self._unsafe_execute()
+		# self._trickle_up_execute()
+
+		utilLog.verbose(f"Finished executing {len(self)} items in afterPool for {self.__class__.__name__}", verbosity=5)
+
+	def _unsafe_execute(self):
+		self.status = self.Status.Running
 		for action in self:
 			# Note: This for loop should handle changes in length during execution
 			#       since OrderedSet.__iter__ uses a while loop
-			self.discard(action)
+
+			self.__last_called_by[action] = last_called_by = tuple(self.__called_by[action])
+			args, kwargs = self.get_context(action)
+			args = args or ()
+			kwargs = kwargs or {}
 			if isinstance(action, ActionPool):
-				action.execute()
+				if not action.own_context_level:
+					action.execute()
+			elif isinstance(action, partial):
+				action()
+				self.discard(action)
 			else:
 				if action.__code__.co_argcount:
-					action(self.instance)
+					if getattr('action', '__self__', None) is not None:
+						action(*args, **kwargs)
+					elif isinstance(action, MethodType):
+						action(*args, **kwargs)
+					else:
+						action(self.instance, *args, **kwargs)
 				else:
 					action()
-			self.__executions[action] += 1
+				self.discard(action)
 		while self.__callbacks:
 			callback, args, kwargs = self.__callbacks.pop(0)
 			callback(*args, **kwargs)
-		self.__active = False
+		self.status = self.Status.Finished
 
 	def delete(self):
 		self.__delete__(self)
@@ -2264,15 +2542,43 @@ class ActionPool(OrderedSet):
 		self.__callbacks.append((callback, args, kwargs))
 
 
-def defer(func):
+@contextmanager
+def block_pools(*pools: ActionPool):
+	for pool in pools:
+		pool._raise_context_level()
+	try:
+		yield
+	finally:
+		for pool in pools:
+			pool._lower_context_level()
+
+
+def get_sub_attr(obj: Any, attr: str, default: Any = Unset) -> Any:
+	try:
+		return eval(f'obj.{attr}', __locals={'obj': obj})
+	except Exception as e:
+		if default is not Unset:
+			return default
+		raise e
+
+
+def defer(func: Callable = None, /, pool_attr='action_pool'):
+	if func is None:
+		return partial(defer, pool_attr=pool_attr)
 
 	@wraps(func)
 	def deferred_wrapper(self, *args, **kwargs):
-		if (pool := getattr(self, '_actionPool', None)) is not None:
+		if (pool := getattr(self, pool_attr, None)) is not None:
+			pool: ActionPool
 			if pool.can_execute:
-				return func(self, *args, **kwargs)
+				func(self, *args, **kwargs)
 			else:
-				pool.add(func)
+				if pool.instance is not self:
+					pool.add(getattr(self, func.__name__), args=args, kwargs=kwargs)
+				else:
+					pool.add(func, args=args, kwargs=kwargs)
+		else:
+			func(self, *args, **kwargs)
 
 	return deferred_wrapper
 
@@ -2322,7 +2628,7 @@ class Worker(Generic[Self], _BaseWorker, QtCore.QRunnable):
 	_on_finish: List[Callable[[], None]]
 	_on_result: List[Callable[[Any], None]]
 	on_error: Callable[[Exception], None] = None
-	on_progress: Callable[[int|float], None] = None
+	on_progress: Callable[[int | float], None] = None
 
 	_debug: bool = False
 	current_thread: Callable[[], QThread] = QThread.currentThread
@@ -2334,7 +2640,7 @@ class Worker(Generic[Self], _BaseWorker, QtCore.QRunnable):
 		self.args = args
 		self.kwargs = kwargs
 		self.signals = WorkerSignals()
-		self.signals.moveToThread(LevityDashboard.app.thread())
+		self.signals.moveToThread(LevityDashboard.main_thread)
 
 	def __rich_repr__(self):
 		yield 'status', self.status.name
@@ -2357,7 +2663,7 @@ class Worker(Generic[Self], _BaseWorker, QtCore.QRunnable):
 
 	def on_finish(self):
 		for func in self._on_finish:
-			func()
+			self.pool.run_threaded_process(func)
 
 	@cached_property
 	def _on_result(self) -> List[Callable[[Any], None]]:
@@ -2397,8 +2703,8 @@ class Worker(Generic[Self], _BaseWorker, QtCore.QRunnable):
 		self.status = Worker.Status.Running
 		"""Initialise the runner function with passed args, kwargs."""
 		utilLog.verbose(f'Running {self.fn!r} in thread: {self.current_thread()}', verbosity=5)
-		if QApplication.instance().thread() is self.signals.thread():
-			self.signals.moveToThread(QApplication.instance().thread())
+		# if QApplication.instance().thread() is self.signals.thread():
+		# 	self.signals.moveToThread(QApplication.instance().thread())
 		try:
 			result = self.fn(
 				*self.args, **self.kwargs,
@@ -2422,11 +2728,13 @@ class Worker(Generic[Self], _BaseWorker, QtCore.QRunnable):
 			else:
 				self.signals.result.emit(result)
 		finally:
-			if self._direct and self.on_finish:
+			if self._direct and self._on_finish:
 				self.on_finish()
 			else:
-				self.signals.finished.emit()
-			utilLog.verbose(f'Finished {self.fn!r} in thread', verbosity=5)
+				signals = self.signals
+				signals.moveToThread(LevityDashboard.main_thread)
+				signals.finished.emit()
+			utilLog.verbose(f'Finished {self.fn!s} in thread', verbosity=5)
 
 	def cancel(self):
 		if self.status is Worker.Status.Running:
@@ -2511,7 +2819,6 @@ class Worker(Generic[Self], _BaseWorker, QtCore.QRunnable):
 			self.current_thread().yieldCurrentThread()
 			QTimer.singleShot(100, lambda: worker_.start(priority=priority))
 
-
 		connectSignal(self.signals.result, partial(_on_result, worker_=worker))
 		return worker
 
@@ -2564,6 +2871,7 @@ class _BasePool:
 
 		return instance
 
+
 class Pool(_BasePool, QtCore.QThreadPool):
 
 	worker_class: ClassVar[Type[Worker]] = Worker
@@ -2586,14 +2894,77 @@ class Pool(_BasePool, QtCore.QThreadPool):
 		func: Callable | Awaitable,
 		*args,
 		func_kwargs: dict = None,
-		on_finish: Callable[[], None] | Coroutine = None,
-		on_result: Callable[[T], Any] | Coroutine = None,
-		on_error: Callable[[Exception], Any] | Coroutine = None,
+		on_finish: Callable[[], None] | Worker = None,
+		on_result: Callable[[T], Any] | Worker = None,
+		on_error: Callable[[Exception], Any] | Worker = None,
 		priority: int = 3,
 		immortal: bool = False,
+		direct: bool = False,
 		**kwargs: Dict[str, Any]
 	) -> Worker:
 		"""Execute a function in the background with a worker"""
+
+		worker = self.prepare_worker(
+			func,
+			*args,
+			func_kwargs=func_kwargs,
+			on_finish=on_finish,
+			on_result=on_result,
+			on_error=on_error,
+			immortal=immortal,
+			direct=direct,
+			**kwargs
+		)
+
+		self.start(worker, priority)
+		worker.current_thread().yieldCurrentThread()
+
+		return worker
+
+	run_in_thread = run_threaded_process
+
+	def prepare_worker(
+		self,
+		func: Callable | Awaitable,
+		*args,
+		func_kwargs: dict = None,
+		on_finish: Callable[[], None] | Worker = None,
+		on_result: Callable[[T], Any] | Worker = None,
+		on_error: Callable[[Exception], Any] | Worker = None,
+		immortal: bool = False,
+		direct: bool = False,
+		**kwargs: Dict[str, Any]
+	) -> Worker:
+		"""Create a worker without running it"""
+		worker = self.worker_class.create_worker(
+			func,
+			*args,
+			func_kwargs=func_kwargs,
+			on_finish=on_finish,
+			on_result=on_result,
+			on_error=on_error,
+			immortal=immortal,
+			**kwargs
+		)
+		worker.pool = self
+
+		if direct:
+			worker._direct = True
+
+		return worker
+
+	def try_run_threaded_process(
+		self,
+		func: Callable | Awaitable,
+		*args,
+		func_kwargs: dict = None,
+		on_finish: Callable[[], None] | Coroutine = None,
+		on_result: Callable[[T], Any] | Coroutine = None,
+		on_error: Callable[[Exception], Any] | Coroutine = None,
+		immortal: bool = False,
+		max_wait: int = -1,
+		**kwargs: Dict[str, Any]
+	) -> Worker | bool:
 
 		worker = self.worker_class.create_worker(
 			func,
@@ -2607,11 +2978,11 @@ class Pool(_BasePool, QtCore.QThreadPool):
 		)
 		worker.pool = self
 
-		self.start(worker, priority)
-
-		return worker
-
-	run_in_thread = run_threaded_process
+		if self.tryStart(worker):
+			return worker
+		elif max_wait > 0 and (self.waitForDone(max_wait) | (worker := self.tryStart(worker))):
+			return worker
+		return False
 
 	def start(self, runnable: Worker, priority: int = 3):
 		runnable.pool = self
@@ -2634,6 +3005,7 @@ class Pool(_BasePool, QtCore.QThreadPool):
 
 pool = Pool()
 threadPool: Pool = pool
+pool.setMaxThreadCount(50)
 LevityDashboard.main_thread_pool = pool
 run_in_thread = pool.run_threaded_process
 
@@ -2689,3 +3061,16 @@ def is_prime(n: int) -> bool:
 
 def is_pos(n: int | float) -> bool:
 	return n > 0
+
+
+def dict_in_dict(this_dict: dict, has: dict) -> bool:
+	for k, v in has.items():
+		if k not in this_dict:
+			return False
+		if isinstance(v, dict):
+			if not dict_in_dict(this_dict[k], v):
+				return False
+		else:
+			if this_dict[k] != v:
+				return False
+	return True

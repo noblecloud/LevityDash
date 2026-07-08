@@ -5,6 +5,16 @@ from . import config
 LevityDashboard.config = config.userConfig
 LevityDashboard.plugin_config = config.pluginConfig
 
+__pdoc__ = {
+	'config': False,
+	'log': False,
+	'stateful': False,
+	'plugins': False,
+	'ui': True,
+	'utils': False,
+}
+
+
 from . import log
 LevityDashboard.log = log.LevityLogger
 config.log = log.LevityLogger.getChild('config')

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Welcome to LevityDashboard’s documentation! &#8212; LevityDashboard  documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=4f649999" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=039e1c02" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js?v=b3ba4146"></script>
+    <script src="_static/doctools.js?v=888ff710"></script>
+    <script src="_static/sphinx_highlight.js?v=4825356b"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="module-LevityDash.lib.stateful_mixins">
+<span id="welcome-to-levitydashboard-s-documentation"></span><h1>Welcome to LevityDashboard’s documentation!<a class="headerlink" href="#module-LevityDash.lib.stateful_mixins" title="Permalink to this heading">¶</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="LevityDash.lib.stateful_mixins.Brush">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">LevityDash.lib.stateful_mixins.</span></span><span class="sig-name descname"><span class="pre">Brush</span></span><a class="headerlink" href="#LevityDash.lib.stateful_mixins.Brush" title="Permalink to this definition">¶</a></dt>
+<dd><p>Mixins for to support stateful properties in LevityDash.</p>
+<p>alias of TypeVar(‘Brush’)</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="LevityDash.lib.stateful_mixins.FillBrushMixin">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">LevityDash.lib.stateful_mixins.</span></span><span class="sig-name descname"><span class="pre">FillBrushMixin</span></span><a class="reference internal" href="_modules/LevityDash/lib/stateful_mixins.html#FillBrushMixin"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#LevityDash.lib.stateful_mixins.FillBrushMixin" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">StatefulMixin</span></code></p>
+<p>A mixin class for items that have a fill brush.
+The fill brush can be a color, gradient, pattern or any other type of brush that would be used to fill the item.</p>
+<p>Subclasses must implement the <cite>_set_fill_brush</cite> method for this mixin to work.
+This method is responsible for setting the appearance of the item’s fill paintbrush,
+which can be modified by multiple state properties in subclasses.</p>
+<section id="properties">
+<h2>Properties<a class="headerlink" href="#properties" title="Permalink to this heading">¶</a></h2>
+<dl class="simple">
+<dt>fill_brush<span class="classifier">Brush</span></dt><dd><p>The fill brush for the item</p>
+</dd>
+</dl>
+</section>
+<section id="abstract-methods">
+<h2>Abstract Methods<a class="headerlink" href="#abstract-methods" title="Permalink to this heading">¶</a></h2>
+<dl class="simple">
+<dt>_set_fill_brush(brush: Brush)</dt><dd><p>Sets the appearance of the item’s fill paintbrush using the provided brush.</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<ul class="simple">
+<li><dl class="simple">
+<dt>The fill_brush property can be overloaded by subclasses or submixins to change how the fill is determined.</dt><dd><p>For example, the subclass <cite>ColorGradientMixin</cite> overloads it to give priority to the gradient.</p>
+</dd>
+</dl>
+</li>
+</ul>
+<dl class="py method">
+<dt class="sig sig-object py" id="LevityDash.lib.stateful_mixins.FillBrushMixin._update_appearance">
+<span class="sig-name descname"><span class="pre">_update_appearance</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="_modules/LevityDash/lib/stateful_mixins.html#FillBrushMixin._update_appearance"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#LevityDash.lib.stateful_mixins.FillBrushMixin._update_appearance" title="Permalink to this definition">¶</a></dt>
+<dd><p>This method is called after the brush is changed.  It is a protected method
+that should never be overridden to ensure the call is deferred unless you
+are absolutely sure you know what you are doing.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="LevityDash.lib.stateful_mixins.FillBrushMixin.fill_brush">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">fill_brush</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#LevityDash.lib.stateful_mixins.Brush" title="LevityDash.lib.stateful_mixins.Brush"><span class="pre">Brush</span></a></em><a class="headerlink" href="#LevityDash.lib.stateful_mixins.FillBrushMixin.fill_brush" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#LevityDash.lib.stateful_mixins.Brush" title="LevityDash.lib.stateful_mixins.Brush">Brush</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="LevityDash.lib.stateful_mixins.FillBrushMixin._set_fill_brush">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_set_fill_brush</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">brush</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#LevityDash.lib.stateful_mixins.Brush" title="LevityDash.lib.stateful_mixins.Brush"><span class="pre">Brush</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/LevityDash/lib/stateful_mixins.html#FillBrushMixin._set_fill_brush"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#LevityDash.lib.stateful_mixins.FillBrushMixin._set_fill_brush" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sets the appearance of the item’s fill paintbrush using the provided brush.</p>
+<p>Since the actual application of the brush cannot be assumed, this method must remain an abstract method when it
+is overloaded by a submixin.</p>
+<p>This method should be overridden by subclasses to customize how the fill brush is set.
+The brush type hint should be changed to the appropriate type for the subclass.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>brush</strong> (<a class="reference internal" href="#LevityDash.lib.stateful_mixins.Brush" title="LevityDash.lib.stateful_mixins.Brush"><em>Brush</em></a>) – The brush to set as the fill paintbrush for the item.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="LevityDash.lib.stateful_mixins.ColorMixin">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">LevityDash.lib.stateful_mixins.</span></span><span class="sig-name descname"><span class="pre">ColorMixin</span></span><a class="reference internal" href="_modules/LevityDash/lib/stateful_mixins.html#ColorMixin"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#LevityDash.lib.stateful_mixins.ColorMixin" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#LevityDash.lib.stateful_mixins.FillBrushMixin" title="LevityDash.lib.stateful_mixins.FillBrushMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">FillBrushMixin</span></code></a></p>
+<p>A mixin that adds a color StateProperty to a Stateful class.</p>
+<p>This mixin expects its Brush type to be QBrush since currently only PySide6/Qt6 is supported in LevityDash.
+A super class will need to be created to support other UI frameworks,
+and this mixin will need to be renamed to something like <cite>QtColorMixin</cite> or <cite>QColorMixin</cite>.</p>
+<section id="state-properties">
+<h2>State Properties<a class="headerlink" href="#state-properties" title="Permalink to this heading">¶</a></h2>
+<dl class="simple">
+<dt>color<span class="classifier">Color</span></dt><dd><p>The color of the item</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The fill_brush property can be overloaded by subclasses or submixins to change how the fill is determined.
+For example, the subclass <cite>ColorGradientMixin</cite> overloads it to give priority to the gradient.</p>
+</div>
+<dl class="py property">
+<dt class="sig sig-object py" id="LevityDash.lib.stateful_mixins.ColorMixin.fill_brush">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">fill_brush</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">QBrush</span></em><a class="headerlink" href="#LevityDash.lib.stateful_mixins.ColorMixin.fill_brush" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#LevityDash.lib.stateful_mixins.Brush" title="LevityDash.lib.stateful_mixins.Brush">Brush</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="LevityDash.lib.stateful_mixins.ColorMixin._set_fill_brush">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_set_fill_brush</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">brush</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">QBrush</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/LevityDash/lib/stateful_mixins.html#ColorMixin._set_fill_brush"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#LevityDash.lib.stateful_mixins.ColorMixin._set_fill_brush" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sets the appearance of the item’s fill paintbrush using the provided brush.</p>
+<p>Since the actual application of the brush cannot be assumed, this method must remain an abstract method when it
+is overloaded by a submixin.</p>
+<p>This method should be overridden by subclasses to customize how the fill brush is set.
+The brush type hint should be changed to the appropriate type for the subclass.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>brush</strong> (<a class="reference internal" href="#LevityDash.lib.stateful_mixins.Brush" title="LevityDash.lib.stateful_mixins.Brush"><em>Brush</em></a>) – The brush to set as the fill paintbrush for the item.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="LevityDash.lib.stateful_mixins.ColorGradientMixin">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">LevityDash.lib.stateful_mixins.</span></span><span class="sig-name descname"><span class="pre">ColorGradientMixin</span></span><a class="reference internal" href="_modules/LevityDash/lib/stateful_mixins.html#ColorGradientMixin"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#LevityDash.lib.stateful_mixins.ColorGradientMixin" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#LevityDash.lib.stateful_mixins.ColorMixin" title="LevityDash.lib.stateful_mixins.ColorMixin"><code class="xref py py-class docutils literal notranslate"><span class="pre">ColorMixin</span></code></a></p>
+<p>A mixin class for items that have a color and/or gradient.</p>
+<p>This mixin provides a <cite>color</cite> property and a <cite>gradient</cite> property that can be used to set the color and/or gradient
+of an item. The <cite>color</cite> property is a solid color, while the <cite>gradient</cite> property is a gradient that can be mapped
+to a QGradient relative to the item’s position and size.</p>
+<p>Subclasses must implement either the <cite>_get_color_value</cite> method or the <cite>_map_gradient</cite> method. If <cite>_get_color_value</cite>
+is implemented, the item’s color will be solid and not a gradient. If <cite>_map_gradient</cite> is implemented, the item’s
+color will be a gradient.</p>
+<section id="id1">
+<h2>State Properties<a class="headerlink" href="#id1" title="Permalink to this heading">¶</a></h2>
+<dl class="simple">
+<dt>gradient: Gradient | None</dt><dd><p>The gradient of the item.</p>
+</dd>
+</dl>
+</section>
+<section id="id2">
+<h2>Properties<a class="headerlink" href="#id2" title="Permalink to this heading">¶</a></h2>
+<dl class="simple">
+<dt>fill_brush<span class="classifier">QBrush</span></dt><dd><p>The fill brush for the item (either a color or gradient) determined by the <cite>color</cite> and <cite>gradient</cite> properties,
+with the gradient taking priority.</p>
+</dd>
+</dl>
+</section>
+<section id="id3">
+<h2>Abstract Methods<a class="headerlink" href="#id3" title="Permalink to this heading">¶</a></h2>
+<dl class="simple">
+<dt>_get_color_value() -&gt; Number</dt><dd><p>Used to get the value that determines a single color from the gradient to use for the item’s color.</p>
+</dd>
+<dt>_map_gradient(gradient: Gradient) -&gt; QGradient</dt><dd><p>Used to map the gradient to a QGradient relative to the item.</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="LevityDash.lib.stateful_mixins.ColorGradientMixin._get_color_value">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_get_color_value</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Number</span></span></span><a class="reference internal" href="_modules/LevityDash/lib/stateful_mixins.html#ColorGradientMixin._get_color_value"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#LevityDash.lib.stateful_mixins.ColorGradientMixin._get_color_value" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get the value used to determine a single color from the gradient
+to use for the item’s color.</p>
+<p>When this method is overridden and a gradient is provided, the
+color will be determined by the color value on the gradient
+associated with the value returned by this method.</p>
+<p>Using this method, the item’s color will be solid and not a gradient.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Number</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="LevityDash.lib.stateful_mixins.ColorGradientMixin._map_gradient">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_map_gradient</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gradient</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">QGradient</span></span></span><a class="reference internal" href="_modules/LevityDash/lib/stateful_mixins.html#ColorGradientMixin._map_gradient"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#LevityDash.lib.stateful_mixins.ColorGradientMixin._map_gradient" title="Permalink to this definition">¶</a></dt>
+<dd><p>Map a gradient to a QGradient relative to the item.</p>
+<p>When this method is overridden and a gradient is provided, the gradient
+will be mapped to a QGradient relative to the item’s position and size.</p>
+<p>Using this method, the item’s color will be a gradient.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>QGradient</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="LevityDash.lib.stateful_mixins.ColorGradientMixin._set_fill_brush">
+<em class="property"><span class="pre">abstract</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">_set_fill_brush</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">color</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#LevityDash.lib.stateful_mixins.Brush" title="LevityDash.lib.stateful_mixins.Brush"><span class="pre">Brush</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/LevityDash/lib/stateful_mixins.html#ColorGradientMixin._set_fill_brush"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#LevityDash.lib.stateful_mixins.ColorGradientMixin._set_fill_brush" title="Permalink to this definition">¶</a></dt>
+<dd><p>{insert appropriate docstring}</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="LevityDash.lib.stateful_mixins.ColorGradientMixin.fill_brush">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">fill_brush</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#LevityDash.lib.stateful_mixins.Brush" title="LevityDash.lib.stateful_mixins.Brush"><span class="pre">Brush</span></a></em><a class="headerlink" href="#LevityDash.lib.stateful_mixins.ColorGradientMixin.fill_brush" title="Permalink to this definition">¶</a></dt>
+<dd><p>{insert appropriate docstring}</p>
+</dd></dl>
+
+</section>
+</dd></dl>
+
+<div class="toctree-wrapper compound">
+</div>
+</section>
+<section id="indices-and-tables">
+<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this heading">¶</a></h1>
+<ul class="simple">
+<li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
+<li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></p></li>
+<li><p><a class="reference internal" href="search.html"><span class="std std-ref">Search Page</span></a></p></li>
+</ul>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="#">LevityDashboard</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="#">Documentation overview</a><ul>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2023, noblecloud.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 7.1.2</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.13</a>
+      
+      |
+      <a href="_sources/index.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

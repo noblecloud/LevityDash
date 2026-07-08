@@ -1,3 +1,5 @@
+__pdoc__ = {}
+
 import numpy as np
 from functools import cached_property
 from json import dumps
@@ -9,20 +11,20 @@ from PySide6.QtGui import QColor, QDrag, QFocusEvent, QPainter, QPainterPath, QP
 from PySide6.QtWidgets import QGraphicsBlurEffect, QGraphicsItem, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent, QGraphicsSceneWheelEvent
 
 from LevityDash.lib.plugins.observation import TimeAwareValue
+from LevityDash.lib.ui.Geometry import Geometry, Size, Position, angleBetweenPoints
+from LevityDash.lib.ui.Geometry.Grid import Grid
+from LevityDash.lib.ui.frontends.PySide.Modules import Label
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import LockedRealtime
 from LevityDash.lib.ui.frontends.PySide.Modules.glyphs import BackArrow, Plus
 from LevityDash.lib.plugins.categories import CategoryDict, CategoryItem
-from LevityDash.lib.Geometry.Grid import Grid
-from LevityDash.lib.Geometry import Geometry, GridItem
 from LevityDash.lib.ui.frontends.PySide.utils import GraphicsItemSignals, mouseHoldTimer, mouseTimer
 from LevityDash.lib.utils.shared import clearCacheAttr, levenshtein
-from LevityDash.lib.utils.geometry import Alignment, angleBetweenPoints, GridItemSize, Margins, Position, Size
-from LevityDash.lib.plugins.dispatcher import ValueDirectory, MultiSourceContainer
 
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Various import DrawerHandle, HoverArea, IndoorIcon
-from LevityDash.lib.ui.frontends.PySide.Modules.Label import Label, TitleLabel
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 
+from LevityDash import LevityDashboard as lv
+ValueDirectory = lv.dispatcher
 
 class ScrollRect(Panel):
 	savable = False
