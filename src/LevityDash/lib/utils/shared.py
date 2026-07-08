@@ -2592,6 +2592,33 @@ def thread_safe(func):
 	return wrapper
 
 
+def startTimerSafe(timer: QTimer, msec: int = None):
+	"""
+	Start a QTimer from any thread.
+
+	QTimer.start silently fails (with only a console warning) when called from
+	a thread other than the timer's owner; data updates delivered on plugin
+	worker threads must queue the start onto the timer's thread instead.
+	Passing msec uses the start(int) slot, which also sets the interval.
+	"""
+	if QThread.currentThread() is timer.thread():
+		timer.start() if msec is None else timer.start(msec)
+	elif msec is None:
+		QtCore.QMetaObject.invokeMethod(timer, 'start', Qt.ConnectionType.QueuedConnection)
+	else:
+		QtCore.QMetaObject.invokeMethod(
+			timer, 'start', Qt.ConnectionType.QueuedConnection, QtCore.Q_ARG(int, msec)
+		)
+
+
+def stopTimerSafe(timer: QTimer):
+	"""Stop a QTimer from any thread. See startTimerSafe."""
+	if QThread.currentThread() is timer.thread():
+		timer.stop()
+	else:
+		QtCore.QMetaObject.invokeMethod(timer, 'stop', Qt.ConnectionType.QueuedConnection)
+
+
 class WorkerSignals(QtCore.QObject):
 	finished = QtCore.Signal()
 	error = QtCore.Signal(tuple)

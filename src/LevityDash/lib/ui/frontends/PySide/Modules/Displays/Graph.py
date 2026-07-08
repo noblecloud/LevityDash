@@ -5,8 +5,8 @@ import operator
 import platform
 import re
 from PySide6.QtCore import (
-	QLineF, QObject, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt, QThread, QTimer, Signal,
-	Slot
+	QLineF, QMetaObject, QObject, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt, QThread, QTimer,
+	Signal, Slot
 )
 from PySide6.QtGui import (
 	QBrush, QColor, QCursor, QFontMetricsF, QPainter, QPainterPath, QPainterPathStroker, QPen,
@@ -67,7 +67,8 @@ from LevityDash.lib.utils.data import AxisMetaData, DataTimeRange, findPeaksAndT
 from LevityDash.lib.utils.shared import (
 	_Panel, camelCase, clamp, clearCacheAttr, closestStringInList, connectSignal, defer, disconnectSignal,
 	joinCase,
-	LOCAL_TIMEZONE, now, run_in_thread, thread_safe, timestampToTimezone, Unset, Worker
+	LOCAL_TIMEZONE, now, run_in_thread, startTimerSafe, stopTimerSafe, thread_safe, timestampToTimezone,
+	Unset, Worker
 )
 from LevityDash.lib.utils.various import DateTimeRange
 from WeatherUnits import DerivedMeasurement, Length, Measurement, Time
@@ -323,7 +324,8 @@ class GraphItemData(Stateful, tag=...):
 
 		self.__lastUpdate = now()
 
-		self.axisChanged.announce(Axis.Both, instant=True)
+		# not instant: let AxisSignal's timer coalesce multi-source update storms
+		self.axisChanged.announce(Axis.Both)
 
 	@Slot(MultiSourceContainer)
 	def listenForKey(self, container: MultiSourceContainer):
@@ -1047,7 +1049,6 @@ class Plot(QGraphicsPixmapItem, Stateful):
 	_weight: float
 	pathType: PathType
 	_temperatureGradient: Optional[Gradient] = None
-	__useCache: bool = False
 	__path: QPainterPath
 	effects: Dict[str, Dict[str, Effect | Any]]
 
@@ -1057,7 +1058,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 	def __init__(self, parent: GraphItemData, **kwargs):
 		self._shape = QPainterPath()
 		self._shape_normal = QPainterPath()
-		self.renderTask: None | Task = None
+		self._pathDirty = False
 		self.__dataTransformAtRender = QTransform()
 		self.__path = QPainterPath()
 		self._shape = QPainterPath()
@@ -1310,8 +1311,8 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		self.prepareGeometryChange()
 
 		if QApplication.mouseButtons() & Qt.MouseButton.LeftButton:
-			if self.renderTask is not None:
-				self.renderTask.cancel()
+			# actively resizing: hold off any pending debounced render
+			stopTimerSafe(self.render_delay)
 			return
 
 		if not (pixmap := self.pixmap()).isNull():
@@ -1331,10 +1332,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 	def onDataChange(self):
 		"""Called when the data is changed."""
 		log.debug(f'{self.log_repr}: onDataChange()')
-		self._updatePath()
-		# self.updateTransform()
-		if self.gradient:
-			self.updateGradient()
+		self._pathDirty = True
 		self.scheduleRender()
 
 	@Slot()
@@ -1344,10 +1342,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 			return
 		log.debug(f'{self.log_repr}: onResizeDone()')
 		self.prepareGeometryChange()
-		self._updatePath()
-
-		if self.gradient:
-			self.updateGradient()
+		self._pathDirty = True
 		self.scheduleRender()
 
 	# def updateTransform(self):
@@ -1549,7 +1544,9 @@ class Plot(QGraphicsPixmapItem, Stateful):
 				self.baker.cancel()
 			if self.shaper.status.is_active:
 				self.shaper.cancel()
-			self.render()
+			# trailing-edge debounce: restarting on every call coalesces bursts
+			# (multi-source startup, rapid updates) into a single render
+			startTimerSafe(self.render_delay)
 
 	@Slot(object)
 	def _setPixmap(self, pixmap: QPixmap) -> None:
@@ -1643,6 +1640,12 @@ class Plot(QGraphicsPixmapItem, Stateful):
 
 	def render(self):
 		log.verbose(f'{self.log_repr}: Starting render', verbosity=3)
+
+		if self._pathDirty:
+			self._pathDirty = False
+			self._updatePath()
+			if self.gradient:
+				self.updateGradient()
 
 		paint_worker = self.painter
 		paint_worker.start(priority=0)
@@ -2978,7 +2981,8 @@ class AxisSignal(QObject):
 		if instant:
 			self.__announce()
 		else:
-			self.timer.start()
+			# announcements arrive from plugin worker threads
+			startTimerSafe(self.timer)
 
 	def __announce(self):
 		# if QThread.currentThread() is not LevityDashboard.app.thread():
@@ -3246,14 +3250,15 @@ class GraphPanel(Panel, tag='graph'):
 		self.__clearCache()
 
 	def updateSyncTimer(self):
-		self.syncTimer.stop()
 		interval = self.syncTimer.interval()
 		newInterval = self.msPerPixel
 		if int(newInterval / 1000) < int(interval / 1000):
-			self.syncTimer.setInterval(newInterval)
 			updateFrequency = Second(newInterval / 1000).auto
 			log.debug(f"Graph update frequency changed to {updateFrequency:format={'{value}'}} {type(updateFrequency).pluralName.lower()}")
-		self.syncTimer.start()
+			# start(msec) sets the interval and (re)starts in one thread-safe call
+			startTimerSafe(self.syncTimer, newInterval)
+		else:
+			startTimerSafe(self.syncTimer)
 
 	@defer
 	def syncDisplay(self):

@@ -18,6 +18,7 @@ from LevityDash.lib.utils import (
 	clearCacheAttr, datetimeDiff, Infix, LOCAL_TIMEZONE, makeNumerical, Numeric, plural,
 	timedeltaToDict, utilLog as log
 )
+from LevityDash.lib.utils.shared import startTimerSafe
 
 if TYPE_CHECKING:
 	from LevityDash.lib.plugins.observation import TimeAwareValue
@@ -360,7 +361,8 @@ f"""The range for {self._link.log_repr} is 0.  This can be remedied by setting t
 		return r
 
 	def emitChanged(self):
-		self.__delayTimer.start()
+		# value updates arrive on plugin worker threads; see startTimerSafe
+		startTimerSafe(self.__delayTimer)
 
 	def __emitChanged(self):
 		self.changed.emit(Axis.Vertical)
@@ -596,7 +598,7 @@ class TimeFrameWindow(QObject):
 				value = timedelta(hours=1)
 			self.__clearCache()
 			self._range = value
-			self.__delayTimer.start()
+			startTimerSafe(self.__delayTimer)
 
 	@property
 	def rangeSeconds(self) -> int:
@@ -686,7 +688,7 @@ class TimeFrameWindow(QObject):
 		self.__clearCache()
 
 	def delayedEmit(self):
-		self.__delayTimer.start()
+		startTimerSafe(self.__delayTimer)
 
 	def __emitChanged(self):
 		self.changed.emit(Axis.Horizontal)
