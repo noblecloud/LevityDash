@@ -2,13 +2,14 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass
 from functools import cached_property, partial
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, List, Optional, Tuple, Type, Mapping
 
 from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem
 
-from LevityDash.lib.plugins.categories import CategoryItem
+from LevityDash import LevityDashboard
+from LevityDash.lib.plugins.categories import CategoryItem, SomeValidKey
 from LevityDash.lib.stateful import Stateful, StateProperty
 from LevityDash.lib.ui import Color, UILogger as log
 from LevityDash.lib.ui.frontends.PySide.Modules import NonInteractivePanel, Panel, Realtime
@@ -18,7 +19,7 @@ from LevityDash.lib.ui.Geometry import (
 	Position, Size, size_float, size_px
 )
 from LevityDash.lib.utils import DeepChainMap, mostSimilarDict, sortDict
-from WeatherUnits import Length
+from WeatherUnits import Length, Percentage
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -66,7 +67,10 @@ class Divider(QGraphicsPathItem, Stateful, tag='divider'):
 		self.position = 0
 		self.leading = None
 		self.trailing = None
-		self.state = self.prep_init(**kwargs)
+
+		self.prep_init(kwargs=kwargs, stateful_parent=stack)
+		self.add_defaults_to_state(kwargs)
+		self.state = kwargs
 
 	def updatePath(self):
 		path = self.path()
@@ -194,8 +198,10 @@ class DividerProperties(Stateful, tag=...):
 
 	def __init__(self, stack: 'Stack', **kwargs):
 		super().__init__()
+		self.prep_init(kwargs=kwargs, stateful_parent=stack, stateful_key='dividers')
+		self.add_defaults_to_state(kwargs)
+		self.state = kwargs
 		self.stack = stack
-		self.state = self.prep_init(kwargs)
 
 	def __bool__(self) -> bool:
 		return self._enabled
@@ -367,13 +373,51 @@ class StackedItem(Stateful, tag=...):
 	def sizeRatio(self) -> float | None:
 		return self._sizeRatio
 
+	@StateProperty(key='type', inheritFrom=Stateful.type)
+	def type(self) -> str:
+		pass
+
+	@type.condition(method='get')
+	def type(self, value: str) -> bool:
+		return value != self.parent.defaultType.__tag__
+
 	@classmethod
 	def get_subclass(cls, sub_cls: Type[Stateful]) -> Type['StackedItem']:
 		if issubclass(sub_cls, StackedItem):
 			return sub_cls
 		if (stacked_sub_cls := StackedItem.__type_cache__.get(sub_cls, None)) is None:
-			cls.__type_cache__[sub_cls] = stacked_sub_cls = type(f'Stacked{sub_cls.__name__}', (sub_cls, StackedItem), {})
+			cls.__type_cache__[sub_cls] = stacked_sub_cls = type(f'Stacked{sub_cls.__name__}', (sub_cls, StackedItem), {
+				'type': StackedItem.type,
+			})
 		return stacked_sub_cls
+
+	@property
+	def combined_shared(self) -> Dict[str, Any]:
+		return self.shared.new_child(self, child_map=self.parent.combined_preset).to_dict()
+
+	@classmethod
+	def representer(cls, dumper, data):
+		exclude_data = data.combined_shared
+		state = data.encodedState(exclude_value_map=exclude_data)
+		match state:
+
+			case {'key': key} if len(state) == 1:
+				return dumper.represent_str(str(key))
+
+			case {'key': key, **rest} if len(rest) >= 1:
+				return dumper.represent_dict({key: rest})
+
+			case {'type': _type} if len(state) == 1:
+				return dumper.represent_str(_type)
+
+			case {'type': _type, **rest} if len(rest) >= 1:
+				return dumper.represent_dict({_type: rest})
+
+			case _:
+				pass
+
+		result = super().representer(dumper, state)
+		return result
 
 	def _geometryManagerPositionChange(self, value: QPoint | QPointF) -> Tuple[bool, QPoint | QPointF]:
 		originalValue = QPointF(value)
@@ -420,19 +464,18 @@ class Spacer(NonInteractivePanel, StackedItem, tag='spacer'):
 	def key(self) -> str:
 		return 'spacer'
 
-	@classmethod
-	def representer(cls, dumper, data):
-		state = {'spacer': data.state}
-		return dumper.represent_dict(state.items())
-
 
 @DebugPaint
 class Stack(Panel, tag='stack'):
 	spacing: Size.Height | Size.Width | float | int | Length
 	size: Size.Height | Size.Width | float | int | Length
 	direction: Direction
+	orthogonalDirection: Direction
 	geometries: Dict[int, Geometry]
 	items: List[Panel]
+
+	Item: Type[StackedItem] = StackedItem
+	Spacer: Type[Spacer] = Spacer
 
 	_direction: Direction = Direction.Vertical
 	_defaultType: Type[Panel] = None
@@ -444,10 +487,10 @@ class Stack(Panel, tag='stack'):
 	primaryDimension: DimensionSizePosition = DimensionSizePosition(Size.Height, Position.Y)
 	orthogonalDimension: DimensionSizePosition = DimensionSizePosition(Size.Width, Position.X)
 
-	presets: Dict[Direction, Dict[str, Dict]] = {
+	presets: DeepChainMap[Direction, Dict[str, Dict]] = DeepChainMap(origin='stack', origin_map={
 		Direction.Vertical:   {},
 		Direction.Horizontal: {}
-	}
+	})
 
 	__defaults__ = {
 		'defaultType': _defaultType,
@@ -460,9 +503,23 @@ class Stack(Panel, tag='stack'):
 
 	def __init_subclass__(cls, **kwargs):
 		super().__init_subclass__(**kwargs)
-		presetDicts = DeepChainMap(*[preset_ for i in cls.mro()[1:] if issubclass(i, Stack) and (preset_ := getattr(i, 'presets', None)) is not None])
-		presetDicts.update(cls.presets)
-		cls.presets = presetDicts
+
+		# If the subclass has a 'presets' attribute, add the presets to the class's presets
+		# with a new child of the super_presets.
+		super_preset = next((i_presets for i in cls.__mro__[1:] if (i_presets := i.__dict__.get('presets', None)) is not None), None)
+
+		if super_preset is None:
+			super_preset = {
+				Direction.Vertical:   {},
+				Direction.Horizontal: {}
+			}
+
+		if not isinstance(super_preset, DeepChainMap):
+			super_preset = DeepChainMap(super_preset)
+		if (own_preset := cls.presets) is not super_preset:
+			if isinstance(own_preset, DeepChainMap):
+				own_preset = own_preset.to_dict()
+			cls.presets = super_preset.new_child(origin=cls, child_map=own_preset)
 
 	def __init__(self, *args, **kwargs):
 		self._dividers: List[Tuple[Position, ...]] = []
@@ -499,7 +556,7 @@ class Stack(Panel, tag='stack'):
 
 	@defaultType.encode
 	def defaultType(value: Type[Panel]) -> str:
-		if (subTag := getattr(value, 'subtag', None)) is not None and isinstance(subTag, str):
+		if (subTag := getattr(value, 'subtag', None)) is not None and isinstance(subTag, str) and not value.__tag__.endswith(subTag):
 			return f'{value.__tag__}.{subTag}'
 		return getattr(value, '__tag__', 'group')
 
@@ -614,7 +671,7 @@ class Stack(Panel, tag='stack'):
 		elif size.height.relative and position.y.absolute:
 			position.y = position.y.toRelative(own_ortho_size_px)
 
-		with self._actionPool as pool:
+		with self.action_pool:
 			for index, geometry in enumerate(geometries):
 				geometry.index = index
 				geometry.position = Position(position)
@@ -682,8 +739,12 @@ class Stack(Panel, tag='stack'):
 	def hasChildren(self) -> bool:
 		return len(self.geometries) > 0
 
-	@StateProperty(after=setGeometries, sort=False, dependancies={..., 'size', 'spacing', 'padding', 'dividers'})
-	def items(self) -> List[Dict[str, Any]]:
+	@property
+	def _local_overrides(self) -> dict:
+		return {}
+
+	@StateProperty(after=setGeometries, sort=False, dependancies={..., 'size', 'spacing', 'padding', 'dividers', 'direction'})
+	def items(self) -> List[StackedItem]:
 		items = list(geometry.surface for geometry in self.geometries.values())
 		return items
 
@@ -691,49 +752,115 @@ class Stack(Panel, tag='stack'):
 	def items(self, value: List[CategoryItem]):
 		existing = [item for item in self.childPanels]
 		self.geometries.clear()
-		direction = self.direction
-		preset = self.presets[direction]
+		preset = self.combined_preset
 		defaultType = self.defaultType
+
+		if not issubclass(defaultType, StackedItem):
+			defaultType = type(self).Item.get_subclass(defaultType)
+
+		if isinstance(preset, DeepChainMap):
+			preset = preset.to_dict()
 
 		self.itemSetter(defaultType, existing, preset, value)
 
 		for item in existing:
 			self.scene().removeItem(item)
 
-	def itemSetter(self, defaultType, existing, preset, value):
-		for index, item in enumerate(value):
-			if isinstance(item, str):
-				key = CategoryItem(item)
-				state = DeepChainMap({'key': key}, preset).to_dict()
-				item = self.extractExisting(state, existing) or defaultType(self, **state)
+	@items.encode
+	def items(self, value: List[Panel]) -> List[CategoryItem]:
+		return value
 
-			elif isinstance(item, dict):
+	def itemSetter(self, default_type, existing, preset, value):
+		for index, item in enumerate(value):
+			item_type = default_type
+
+			# If the item is a string, assume that it's a key to be passed to the default type
+			# along with the shared state and the preset for the direction.
+			if isinstance(item, str):
+				if item == 'spacer':
+					item = Spacer(self)
+				else:
+					key = CategoryItem(item)
+					state = DeepChainMap({'key': key}, preset, self.shared.to_dict()).to_dict()
+					item = self.extractExisting(state, existing) or default_type(self, **state)
+
+			elif isinstance(item, Mapping):
 				# Determine the type of the item
 				match item:
 					case {'spacer': state} | {'type': 'spacer', **state}:
-						itemType = Spacer
+						item_type = Spacer
 
-					case {'type': str(itemTypeStr), **state}:
-						itemType = Stack.defaultType.decodeValue(itemTypeStr, self)
-						state['type'] = itemTypeStr
+					# Check to see if the type is specified in the config
+					case {'type': str(itemTypeStr), **state} if (state_specified_type := Stateful.findTag(itemTypeStr)) is not None:
+						item_type = state_specified_type
 
-					case dict(state):
-						itemType = self.defaultType
+					# Check to if the item in the format of {CategoryItem(key): state} and is contained in all_valid_keys
 					case _:
-						continue
 
-				if itemType is not Spacer:
-					state = DeepChainMap(state, preset).to_dict()
+						state = {}
 
-				if (existingItem := self.extractExisting(state, existing)) is not None:
+						# Items can be in the format of:
+						# Key first: {CategoryItem(key): state} or {CategoryItem(key): None, **state}
+						# Type first: {type: state} or {type: None, **state}
+						#
+						# Because of this, the structure of the item must be determined before the state can be extracted.
+
+						first_key, first_value = next(iter(item.items()))
+
+						if first_key in {'spacer', ''}:
+							item_type = Spacer
+
+						# When the first key is the type
+						elif (tag := Stateful.findTag(first_key)) is not None:
+							item_type = tag
+
+							# If the first value is None, then the first key is the type and the state is the rest of the item.
+							if first_value is None and len(item) > 1:
+								state['type'] = first_key
+								item.pop(first_key)
+								state.update(item)
+							elif first_value is not None and len(item) == 1:
+								state['type'] = first_key
+								state.update(first_value)
+
+						elif CategoryItem(first_key) in LevityDashboard.dispatcher.all_valid_keys:
+							item_type = default_type
+
+							# If the first value is None, then the first key is the key and the state is the rest of the item.
+							if first_value is None and len(item) > 1:
+								state['key'] = first_key
+								item.pop(first_key)
+								state.update(item)
+							elif first_value is not None and len(item) == 1:
+								state['key'] = first_key
+								state.update(first_value)
+
+						elif first_key in getattr(default_type, 'statefulKeys', {}):
+							item_type = default_type
+							state = item
+
+						item_type = Stateful.findTag(item.get('type', default_type.__tag__)) or default_type
+
+				if item_type is not Spacer:
+					# Update the state with the shared state and the preset for the direction.
+					# User-specified shared values will override the preset values.
+					shared_state = self.shared.new_child(self, child_map=preset)
+
+					# Swap the order of the maps so that the shared state is the first map.
+					shared_state.maps[0], shared_state.maps[1] = shared_state.maps[1], shared_state.maps[0]
+
+					state = shared_state.new_child(origin=self, child_map=state).to_dict()
+
+				if (existingItem := self.extractExisting(state, existing)) is not None and isinstance(existingItem, item_type):
 					existingItem.state = state
 					item = existingItem
 				else:
-					if itemType is not Spacer:
-						itemType = StackedItem.get_subclass(itemType)
-					item = itemType(self, **state)
+					# Ensure that the item type is a subclass of StackedItem
+					if not issubclass(item_type, Spacer) and not issubclass(item_type, type(self).Item):
+						item_type = type(self).Item.get_subclass(item_type)
+					item = item_type(self, **state)
 			else:
-				continue
+				log.warn(f'Invalid item state type {type(item)} for {item}.  Skipping...')
 			if (geometry := getattr(item, 'geometry', None)) is not None:
 				self.geometries[index] = geometry
 				item.index = index
@@ -761,6 +888,31 @@ class Stack(Panel, tag='stack'):
 	def _parseCellSize(self, value: str) -> Size.Height | Size.Width | Length:
 		dimension = self.primaryDimension.size
 		return parseSize(value, dimension(0, absolute=False), dimension=self.direction.dimension)
+
+	@StateProperty(key='preset', sortOrder=0, dependancies={'direction'}, allowNone=True, default=None, after=setGeometries)
+	def preset(self) -> Dict[str, Dict] | str | None:
+		"""Values to be applied to each item of the stack.
+		Can be a string or a dict.
+		If a string, it must be a key in the `presets` dict."""
+		return getattr(self, '_preset', None)
+
+	@preset.setter
+	def preset(self, value: Dict[str, Dict]):
+		self._preset = value
+
+	@property
+	def combined_preset(self) -> Dict[str, Dict]:
+		local_override = self._local_overrides
+		default_preset = self.presets[self.direction]
+		conf_preset = {}
+		match self.preset:
+			case None:
+				conf_preset = {}
+			case str(value) if value in self.presets:
+				conf_preset = dict(self.presets[value].items())
+			case dict(value):
+				conf_preset = value
+		return DeepChainMap(conf_preset, local_override, default_preset).to_dict()
 
 	@StateProperty(key='item-size', default=None, after=setGeometries, dependancies={'geometry'}, decoder=_parseCellSize)
 	def cellSize(self) -> Size.Height | Size.Width | Length | None:
@@ -797,7 +949,7 @@ class Stack(Panel, tag='stack'):
 
 	@property
 	def size_px(self) -> int | float:
-		return size_px(self.size, self.geometry, self.direction.dimension)
+		return size_px(self.cellSize, self.geometry, self.direction.dimension)
 
 	@StateProperty(key='spacing', default=Size.Height(5, absolute=True), allowNone=False, after=setGeometries,
 		dependancies={'geometry'}, sortOrder=3)
@@ -866,7 +1018,7 @@ class Stack(Panel, tag='stack'):
 				first, second = [i.toAbsolute(*ownSize.toTuple()).asQPointF() for i in divider]
 				painter.drawLine(first, second)
 
-	def _debug_paint(self, painter, *args, **kwargs):
+	def _debug_paint(self, painter: QPainter, *args, **kwargs):
 		self._normal_paint(painter, *args, **kwargs)
 		pen = painter.pen()
 		pen.setColor(self.debugColor)
@@ -875,87 +1027,111 @@ class Stack(Panel, tag='stack'):
 			if hasattr(item, '_debug_paint'):
 				continue
 			rect = item.mapRectToParent(item.rect())
-			painter.setPen(item.debugPen)
-			painter.drawRect(rect.adjusted(1, 1, -1, -1))
+			debug_pen = item.debugPen
+			debug_pen.setDashPattern([3, 2])
+			painter.setPen(debug_pen)
+			painter.drawRect(rect)
 
 
 class ValueStack(Stack, tag='value-stack'):
+
+	"""
+	value stacks are defined as such
+
+	TODO: Extract subclass for a value stack that creates a list of Realtime.Text items from this class to
+		allow for more value stack presets to be defined.
+
+	type: value-stack
+	items:
+	- environment.light.irradiance.irradiance:
+			title:
+				text: Direct
+	- environment.light.irradiance.diffuse:
+			title:
+				text: Diffuse
+	- environment.light.irradiance.direct:
+			title:
+				text: Direct
+	- environment.clouds.cover.high
+	- environment.clouds.cover.low
+	- spacer:
+			size: 1.5 mm
+	- environment.pressure.pressure
+	- environment.pressure.surface:
+			title:
+				text: Sea Level
+
+	items are to be in the format
+	"""
+
 	presets = {
-		Direction.Vertical:   {
-			'title':   {
-				'alignment':     Alignment(AlignmentFlag.CenterLeft),
+		Direction.Vertical: {
+			'title': {
 				'matchingGroup': {
-					'group':    'value-stack.text',
+					'group': 'value-stack.title',
 					'matchAll': True
 				},
-				'position':      DisplayPosition.Left,
-				'size':          0.5,
+				'position': DisplayPosition.Left,
 				'margins': {
-					'left':  0,
+					'left': 0,
 					'right': 0.05,
-					'top':   0.05,
+					'top': 0.05,
 					'bottom': 0.05,
 				}
 
 			},
 			'display': {
-				'displayType': DisplayType.Text,
 				'valueLabel':
-				               {
-					               'alignment':     Alignment(AlignmentFlag.CenterRight),
-					               'margins': {
-						               'top':    0.05,
-						               'bottom': 0.05,
-						               'left':   0.05,
-						               'right':  0,
-					               },
-					               'matchingGroup': {
-						               'group':    'value-stack.text',
-						               'matchAll': True,
-					               },
-				               }
+					{
+						'alignment': Alignment(AlignmentFlag.CenterRight),
+						'margins': {
+							'top': 0.05,
+							'bottom': 0.05,
+							'left': 0.05,
+							'right': 0,
+						},
+						'matchingGroup': {
+							'group': 'value-stack.text',
+							'matchAll': True,
+						},
+					}
 			}
 		},
 		Direction.Horizontal: {
-			'title':   {
-				'alignment':     Alignment(AlignmentFlag.Center),
+			'title': {
+				'alignment': Alignment(AlignmentFlag.Center),
 				'matchingGroup': {
-					'group':    'value-stack.title',
+					'group': 'value-stack.title',
 					'matchAll': True
 				},
-				'position':      DisplayPosition.Top,
-				'size':          0.2,
+				'position': DisplayPosition.Top,
 			},
 			'display': {
-				'displayType': DisplayType.Text,
 				'valueLabel':
-				               {
-					               'alignment':     Alignment(AlignmentFlag.Center),
-					               'matchingGroup': {
-						               'group':    'value-stack.text',
-						               'matchAll': True,
-					               },
-				               }
+					{
+						'alignment': Alignment(AlignmentFlag.Center),
+						'matchingGroup': {
+							'group': 'value-stack.text',
+							'matchAll': True,
+						},
+					}
 			}
 		}
 	}
 
-	_defaultType = Realtime
+	_defaultType = Realtime.Text
 
 	__defaults__ = {
-		'defaultType': Realtime,
+		'defaultType': Realtime.Text,
 	}
 
 	def setAlignments(self):
-		labelAlignment = self.labelAlignment
-		valueAlignment = self.valueAlignment
 		for item in self.childPanels:
 			if (title := getattr(item, 'title', None)) is not None:
-				title.setAlignment(labelAlignment)
+				title.setAlignment(self.labelAlignment)
 			if (display := getattr(item, 'display', None)) is not None:
 				if (valueLabel := getattr(display, 'valueTextBox', None)) is not None:
-					valueLabel.setAlignment(valueAlignment)
-
+					valueLabel.setAlignment(self.valueAlignment)
 
 	def extractExisting(
 		self, state_: dict,
@@ -967,65 +1143,36 @@ class ValueStack(Stack, tag='value-stack'):
 				return existing_.pop(i)
 		return None
 
-	@StateProperty()
-	def items(self) -> List[Dict[str, Dict | None] | CategoryItem]:
-		items = []
-		for item in Stack.items.fget(self):
-			item_state = item.state
-			match item_state:
-				case {'key': key, **state}:
-					items.append({key: state} if state else key)
-				case self.defaultType():
-					items.append(item)
-				case _ if isinstance(item, Spacer):
-					items.append({'spacer' : item_state})
-		return items
+	# @StateProperty()
+	# def items(self) -> List[Dict[str, Dict | None] | CategoryItem]:
+	# 	"""
+	# 	Items must return a list rather than a dictionary since there can be multiple items with the same key or 'spacer' can be defined multiple times
+	# 	Returns
+	# 	-------
+	#
+	# 	"""
+	# 	items = []
+	# 	item_preset = self.combined_preset
+	# 	for item in Stack.items.fget(self):
+	# 		# use item.get_item_state and add a shared_state to get_item_state that is a child of the shared state
+	# 		item_state = item.getItemState()
+	#
+	# 	return items
 
-	def itemSetter(self, defaultType, existing, preset, value):
-		defaultType = StackedItem.get_subclass(defaultType)
-		stateKeys = set(defaultType.statefulItems)
-		for index, item in enumerate(value):
-			state = {}
-			if isinstance(item, str) and re.match(r'(\w+\.)+?\w+?$', item):
-				state['key'] = CategoryItem(item) if item != 'spacer' else item
-			elif isinstance(item, dict):
-				firstKey, firstValue = item.popitem()
-				if firstKey == 'spacer':
-					state['key'] = 'spacer'
-				elif re.match(r'(\w+\.)+?\w+?$', firstKey) or firstValue is None:
-					state['key'] = CategoryItem(firstKey)
-				elif firstKey == 'type':
-					pass
-
-				if set(item) & stateKeys:
-					state.update(item)
-				elif isinstance(firstValue, dict) and set(firstValue) & stateKeys:
-					state.update(firstValue)
-
-			state = DeepChainMap(state, preset).to_dict()
-			if (existingItem := self.extractExisting(state, existing)) is not None:
-				existingItem.state = state
-				item = existingItem
-			else:
-				if state['key'] == 'spacer':
-					item = Spacer(self, **state)
-				else:
-					item = defaultType(self, **state)
-			if (geometry := getattr(item, 'geometry', None)) is not None:
-				self.geometries[index] = geometry
-			else:
-				print(f'{item} has no geometry')
-
-	@property
-	def shared(self):
-		return self.presets[self.direction]
-
-	@StateProperty(key='labelAlignment', default=Alignment(vertical=AlignmentFlag.Center, horizontal=AlignmentFlag.Left), after=setAlignments, dependancies={'geometry'})
+	@StateProperty(key='labelAlignment', after=setAlignments, dependancies={'geometry', 'direction'})
 	def labelAlignment(self) -> Alignment | None:
 		"""
 		The alignment of the label.
 		"""
-		return getattr(self, '_labelAlignment', None) or ValueStack.labelAlignment.default(type(self))
+		return self._labelAlignment
+
+	@labelAlignment.item_default
+	def labelAlignment(self) -> Alignment:
+		match self.direction:
+			case Direction.Vertical:
+				return Alignment(vertical=AlignmentFlag.Center, horizontal=AlignmentFlag.Left)
+			case Direction.Horizontal:
+				return Alignment(vertical=AlignmentFlag.Center, horizontal=AlignmentFlag.Center)
 
 	@labelAlignment.setter
 	def labelAlignment(self, value: Alignment | None):
@@ -1042,12 +1189,20 @@ class ValueStack(Stack, tag='value-stack'):
 			return ValueStack.labelAlignment.default(type(self)).name
 		return value.horizontal.name
 
-	@StateProperty(key='valueAlignment', default=Alignment(vertical=AlignmentFlag.Center, horizontal=AlignmentFlag.Right), after=setAlignments, dependancies={'geometry'})
+	@StateProperty(key='valueAlignment', after=setAlignments, dependancies={'geometry', 'direction'})
 	def valueAlignment(self) -> Alignment | None:
 		"""
 		The alignment of the value.
 		"""
-		return getattr(self, '_valueAlignment', None) or ValueStack.valueAlignment.default(type(self))
+		return self._valueAlignment
+
+	@valueAlignment.item_default
+	def valueAlignment(self) -> Alignment:
+		match self.direction:
+			case Direction.Vertical:
+				return Alignment(vertical=AlignmentFlag.Center, horizontal=AlignmentFlag.Right)
+			case Direction.Horizontal:
+				return Alignment(vertical=AlignmentFlag.Center, horizontal=AlignmentFlag.Center)
 
 	@valueAlignment.setter
 	def valueAlignment(self, value: Alignment | None):
@@ -1063,3 +1218,55 @@ class ValueStack(Stack, tag='value-stack'):
 		if value is None:
 			return ValueStack.valueAlignment.default(type(self)).name
 		return value.horizontal.name
+
+	@StateProperty(key='label-size', after=Stack.setGeometries, dependancies={'geometry', 'direction'})
+	def labelSize(self) -> Size.Height | Size.Width | Length | Percentage:
+		"""
+		The size of the label.
+		"""
+		return self._labelSize
+
+	@labelSize.setter
+	def labelSize(self, value: Size.Height | Size.Width | Length | Percentage):
+		self._labelSize = value
+
+	@labelSize.decode
+	def labelSize(self, value: str | int | float) -> Size.Height | Size.Width | Length | Percentage:
+
+		return parseSize(value, None, dimension=self.direction.dimension)
+
+	@labelSize.item_default
+	def labelSize(self) -> Size.Height | Size.Width | Length | Percentage:
+		match self.direction:
+			case Direction.Vertical:
+				return Percentage(0.5)
+			case Direction.Horizontal:
+				return Percentage(0.2)
+
+	@property
+	def label_size_ratio(self) -> float:
+		match self.direction:
+			case Direction.Vertical:
+				ortho_size = self.rect().height()
+				label_size_px = size_px(self.labelSize, ortho_size, Direction.Horizontal)
+			case Direction.Horizontal:
+				ortho_size = self.rect().width()
+				label_size_px = size_px(self.labelSize, ortho_size, Direction.Vertical)
+			case _:
+				return 1.0
+		return sorted((0, label_size_px / ortho_size, 1))[1]
+
+	@property
+	def _local_overrides(self) -> dict:
+		return {
+			'display': {
+				'valueLabel': {
+					'alignment': self.valueAlignment,
+				}
+			},
+			'title': {
+				'alignment': self.labelAlignment,
+				'size': self.label_size_ratio
+			}
+
+		}
