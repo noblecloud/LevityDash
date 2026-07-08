@@ -83,9 +83,6 @@ class PluginsLoader(metaclass=GlobalSingleton, name='plugins'):
 				continue
 			if plugin_ is None:
 				continue
-		for plugin in self:
-			if plugin.running:
-				plugin.stop()
 			try:
 				pluginInstance = plugin_()
 				pluginInstance.manager = self
@@ -95,6 +92,11 @@ class PluginsLoader(metaclass=GlobalSingleton, name='plugins'):
 				pluginLog.info(f'Loaded plugin [{statusColor}]{name}[/{statusColor}]')
 			except ImportError as e:
 				pluginLog.debug(f'Unable to load {name} due to exception --> {e}')
+				continue
+			except Exception as e:
+				pluginLog.error(f'Failed to initialize plugin {name}: {e}')
+				if pluginLog.level <= 10:
+					pluginLog.exception(e)
 				continue
 		pluginLog.info(f'Loaded {len(self.__plugin_instances)} plugins')
 
