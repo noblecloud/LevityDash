@@ -15,7 +15,7 @@ from LevityDash.lib.plugins.web.socket_ import UDPSocket
 from LevityDash.lib.utils.shared import LOCAL_TIMEZONE, Now
 
 __all__ = ["WeatherFlow", '__plugin__']
-
+__pdoc__ = {'socket': False}
 
 class WFURLs(URLs, base='swd.weatherflow.com/swd'):
 	auth = Auth(authType=AuthType.PARAMETER, authData={'token': '{token}'})
