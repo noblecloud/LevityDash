@@ -265,20 +265,36 @@ class LevitySceneView(QGraphicsView):
 
 	def _scheduleFirstFit(self):
 		"""
-		Arm a one-shot re-fit of every SizeGroup for the next settled resize.
+		Arm a one-shot re-fit of all text for the next settled resize.
 
 		Loading finishes before the base surface geometry does (resizeDoneEvent
-		runs on a 300ms debounce), so groups are solved against pre-layout
+		runs on a 300ms debounce), so text is laid out against pre-layout
 		geometry and the re-fit must wait for updateSurface. Starting resizeDone
 		guarantees the event fires even when the window is never resized.
-		rebucket_and_update_all is idempotent, so re-arming on every dashboard
-		load (or a double fire) is harmless.
+		_firstFit is idempotent, so re-arming on every dashboard load (or a
+		double fire) is harmless.
 		"""
 		self.resizeFinished.connect(
-			SizeGroup.rebucket_and_update_all,
+			self._firstFit,
 			Qt.ConnectionType.SingleShotConnection,
 		)
 		self.resizeDone.start()
+
+	def _firstFit(self):
+		"""Re-fit grouped text, then rebuild any ungrouped text items.
+
+		SizeGroup re-fitting only touches items that belong to a group. Ungrouped
+		text (titles, clock, standalone labels) builds its path lazily via
+		updateTransform, which on first launch is deferred and never produces a
+		path - only a real, geometry-changing resize fires the parent's resized
+		signal to trigger it. Without this, those items render blank until the
+		user manually resizes a panel. Rebuild them explicitly here.
+		"""
+		from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import Text
+		SizeGroup.rebucket_and_update_all()
+		for item in self.graphicsScene.items():
+			if isinstance(item, Text) and getattr(item, '_sized', None) is None:
+				item.updateTransform(updatePath=True, updateShared=False, reason='first-fit')
 
 	def deviceTransform(self) -> QTransform:
 		devicePixelRatio = self.devicePixelRatioF()

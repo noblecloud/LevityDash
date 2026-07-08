@@ -720,6 +720,13 @@ class SizeGroup:
 
 	def on_item_resize(self, item: SizeGroupItem, reason: str = 'item-resized'):
 		item_group = self.get_item_sub_group(item)
+		if item_group is None:
+			# item is tracked by the group but not yet assigned to a sub-group;
+			# place it before trying to re-fit
+			self.addItem(item)
+			item_group = self.get_item_sub_group(item)
+			if item_group is None:
+				return
 
 		height = item.suggestedFontPixelSize
 		if height not in item_group.group_size_limits:
