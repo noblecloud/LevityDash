@@ -187,8 +187,9 @@ class GraphItemData(Stateful, tag=...):
 		super(GraphItemData, self).__init__()
 		self._set_state_items_ = set()
 		self.useTestData = kwargs.pop('useTestData', False)
-		kwargs = Stateful.prep_init(self, kwargs)
+		self.prep_init(stateful_parent=parent, relationship='child')
 		self.__init_defaults__()
+		self.add_defaults_to_state(kwargs)
 		self.figure = parent
 		self.state = kwargs
 		parent.scene().view.loadingFinished.connect(self.waitForLoadComplete)
@@ -1071,8 +1072,8 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		self.render_delay = QTimer(singleShot=True, timeout=self.render, interval=333)
 		self._normalPath = QPainterPath()
 
-		kwargs = self.prep_init(kwargs)
-		self.state = kwargs
+		self.prep_init(stateful_parent=parent.figure, relationship='child')
+		self.state = self.add_defaults_to_state(kwargs)
 		self.setAcceptHoverEvents(True)
 		self.setParentItem(self.figure)
 		self.setFlag(QGraphicsItem.ItemIsMovable, False)
@@ -1548,7 +1549,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 				self.baker.cancel()
 			if self.shaper.status.is_active:
 				self.shaper.cancel()
-			self.render_delay.start()
+			self.render()
 
 	@Slot(object)
 	def _setPixmap(self, pixmap: QPixmap) -> None:
@@ -2077,7 +2078,7 @@ class PlotLabels(GraphAnnotationLabels[PlotLabel]):
 		if self.enabled:
 			start = perf_counter()
 			if self.source.hasData and self.peaksTroughs:
-				positions = self.values
+				positions = self.value_points
 				data = self.data
 				if not len(positions) == len(data) == len(self):
 					if len(self) != len(data):
@@ -2085,7 +2086,7 @@ class PlotLabels(GraphAnnotationLabels[PlotLabel]):
 					if len(data) != len(positions):
 						self.resetAxis(Axis.Both)
 						self.normalizeValues()
-						positions = self.values
+						positions = self.value_points
 				for label, value, pos in zip_longest(self, data, positions):
 					label.value = value
 					label.alignment = AlignmentFlag.Bottom if value.isPeak else AlignmentFlag.Top
@@ -2104,7 +2105,7 @@ class PlotLabels(GraphAnnotationLabels[PlotLabel]):
 
 	def quickRefresh(self):
 		log.verbose(f'{self.log_repr}: Quick refresh')
-		positions = self.values
+		positions = self.value_points
 		self.normalizeValues()
 		data = self.data
 		if len(data) != len(self):
@@ -2173,7 +2174,11 @@ class PlotLabels(GraphAnnotationLabels[PlotLabel]):
 		return QPolygonF([QPointF(*i) for i in zip(self.normalizedX, self.normalizedY)])
 
 	@property
-	def values(self) -> QPolygonF:
+	def values(self):
+		return [i.value for i in (self.data if self.data is not None else ())]
+
+	@property
+	def value_points(self) -> QPolygonF:
 		return self.source.combinedTransform.map(self.polygon)
 
 	def isVisible(self):
@@ -2301,7 +2306,8 @@ class TimeMarkers(QGraphicsRectItem, Stateful, tag=...):
 		self.pens = {}
 		super(TimeMarkers, self).__init__()
 		self.setParentItem(parent)
-		self.state = self.prep_init({})
+		self.prep_init(stateful_parent=parent.graph, stateful_key='lines')
+		self.state = self.add_defaults_to_state({})
 		self.parentItem().parentItem().parentItem().signals.resized.connect(self.updateRect)
 		self.parentItem().parentItem().graph.timeframe.connectItem(self.onAxisChange)
 		self.parentItem().parentItem().graph.axisTransformed.connectSlot(self.onAxisChange)
@@ -2543,7 +2549,7 @@ class TimestampLabel(GraphAnnotationText):
 
 	@property
 	def y(self) -> float:
-		containingRect = self.containingRect()
+		containingRect = self.containingRect
 		match self.labelGroup.position:
 			case DisplayPosition.Top:
 				return containingRect.top() + self.offset
@@ -2666,6 +2672,17 @@ class HourLabels(AnnotationLabels[TimestampLabel]):
 		graph = self.surface.graph
 		graph.timeframe.connectItem(self.onDataChange)
 		graph.axisTransformed.connectSlot(self.onAxisTransform)
+
+	def _set_fill_brush(self, brushes: Dict[datetime, QBrush]):
+		brush = QBrush(self.color.QColor)
+		for label in self:
+			label.setBrush(brush)
+
+	@property
+	def values(self) -> List[datetime]:
+		s = self.source
+		s.reset()
+		return [i for i in s]
 
 	@StateProperty(key='spacingIntervals', default=markerIntervals)
 	def ownMarkerIntervals(self) -> List[int]:
@@ -2842,8 +2859,8 @@ class DayAnnotations(Surface, Stateful, tag=...):
 		self.hourLabels = HourLabels(graph=self.graph, surface=self)
 		self._dayLabels = DayLabels(graph=self.graph, surface=self)
 		self.hourLines = TimeMarkers(self)
-
-		self.state = self.prep_init(kwargs)
+		self.prep_init(stateful_parent=self.graph, stateful_key='annotations')
+		self.state = self.add_defaults_to_state(kwargs)
 
 		LevityDashboard.clock.sync.connect(self.updateItem)
 		self.setFlag(QGraphicsItem.ItemClipsChildrenToShape)
@@ -2956,7 +2973,6 @@ class AxisSignal(QObject):
 		self.timer = QTimer(singleShot=True, interval=200)
 		self.timer.timeout.connect(self.__announce)
 
-	@thread_safe
 	def announce(self, axis: Axis, instant: bool = False):
 		self.__axis |= axis
 		if instant:
@@ -2965,9 +2981,9 @@ class AxisSignal(QObject):
 			self.timer.start()
 
 	def __announce(self):
-		if QThread.currentThread() is not LevityDashboard.app.thread():
-			self.__announce()
-			return
+		# if QThread.currentThread() is not LevityDashboard.app.thread():
+		# 	self.__announce()
+		# 	return
 		self.__signal.emit(self.__axis)
 		self.__axis = Axis.Neither
 
@@ -2994,8 +3010,8 @@ class CurrentTimeIndicator(QGraphicsLineItem, Stateful, tag=...):
 		self.setPen(QPen(Qt.red, 1))
 		self.updatePath()
 		self.updatePosition()
-		kwargs = self.prep_init(kwargs)
-		self.state = kwargs
+		self.prep_init(stateful_parent=graph, stateful_key='indicator')
+		self.state = self.add_defaults_to_state(kwargs)
 
 	def updatePath(self, rect = None):
 		self.setLine(0, 0, 0, (rect or self.parentItem().rect()).height())
@@ -4194,14 +4210,15 @@ class GraphMenu(BaseContextMenu):
 
 
 class FigureMenu(QMenu):
-	parent: GraphMenu
+	parent_graph: GraphPanel
+	parent_menu: GraphMenu
 	figure: Figure
 	figureItems: List[GraphItemData]
 
-	def __init__(self, parent: GraphMenu, figure: Figure):
+	def __init__(self, parent_graph: GraphPanel, figure: Figure):
 		super(FigureMenu, self).__init__()
 		self.items = []
-		self.parent = parent
+		self.parent_graph = parent_graph
 		self.figure = figure
 		title = joinCase(figure.name, valueFilter=str.title)
 		self.setTitle(title)
@@ -4228,11 +4245,15 @@ class FigureMenu(QMenu):
 			self._currentItem = None
 
 	def restoreOpacity(self):
-		if parentMenu := getattr(self, 'parentMenu', None):
+		if parentMenu := getattr(self, 'parent_menu', None):
 			parentMenu.restoreOpacity(self.figure)
 
 	def highlight(self):
-		self.parent.highlightFigure(self.figure)
+		self.parent_graph.highlightFigure(self.figure)
+
+	@property
+	def parent_menu(self) -> GraphMenu:
+		return self.parent_graph.contextMenu
 
 	def updateItems(self):
 		items = [GraphItemMenu(parent=self, item=item) for item in reversed(self.figure.plotData)]
@@ -4267,11 +4288,10 @@ class FigureMenu(QMenu):
 
 class TimeseriesSourceMenu(SourceMenu):
 
-
-	def __init__(self, parentMenu, item):
+	def __init__(self, parent_menu, item):
 		self.item = item
 		self.source_actions: Dict[Plugin, QAction] = {}
-		super(TimeseriesSourceMenu, self).__init__(parentMenu)
+		super(TimeseriesSourceMenu, self).__init__(parent_menu)
 
 	def updateItems(self):
 		for source in self.sources:
@@ -4290,7 +4310,7 @@ class TimeseriesSourceMenu(SourceMenu):
 
 	@property
 	def sources(self):
-		key = self.parent.item.key
+		key = self.parent_menu.item.key
 		if key is not None:
 			return [i for i in LevityDashboard.plugins if i.hasTimeseriesFor(key)]
 		return []
