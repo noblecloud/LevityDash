@@ -381,7 +381,7 @@ class SizeGroup:
 					self.make_adjustments(exclude=invalided_by, reason='neighbor_item_resized')
 
 		def _reset(self):
-			clearCacheAttr(self, 'group_scale_range', 'group_font_size')
+			clearCacheAttr(self, 'group_scale_range', 'group_font_size', 'group_size_range', 'size_clusters')
 
 		def add(self, item: SizeGroupItem) -> None:
 			log.debug(f'Adding {self.__item_repr__(item)} to size group {self._group_key}')
@@ -522,6 +522,19 @@ class SizeGroup:
 			for sub_group in group.sub_groups.values():
 				sub_group.make_adjustments(reason='update-all')
 
+	@classmethod
+	def rebucket_and_update_all(cls):
+		"""
+		Re-fit every group against current geometry.
+
+		Unlike update_all, this also re-buckets items whose suggested size no
+		longer matches their sub-group — necessary after loading, when items were
+		bucketed against pre-layout geometry. Idempotent, so re-running is safe.
+		"""
+		for group in cls.__groups__:
+			for item in tuple(group.items):
+				group.on_item_resize(item, reason='post-load-refit')
+
 	def __new__(cls, *args, **kwargs):
 		matchAll = kwargs.pop('matchAll', False)
 		if matchAll:
@@ -535,13 +548,6 @@ class SizeGroup:
 		self.key = key
 		self.items = items or set()
 		self.parent = parent
-		# self.defer_timer = QTimer()
-
-		# QApplication.instance().resizeFinished.connect(partial(self.adjustSizes, reason='resizeFinished'))
-	# 		# try:
-	# 		# 	self.parent.signals.resized.connect(partial(self.adjustSizes, reason='parent-resized'))
-	# 		# except AttributeError:
-	# 		# 	pass
 
 	@cached_property
 	def action_pool(self) -> ActionPool:
@@ -607,9 +613,6 @@ class SizeGroup:
 			own_action_pool.root = own_action_pool
 		else:
 			parent_action_pool.discard(own_action_pool)
-
-	def post_loading(self):
-		self.adjustSizes(reason='post_loading')
 
 	def adjustSizes(self, exclude: 'Text' = None, reason=None):
 		if len(self.items) < 1:
@@ -778,9 +781,6 @@ class SizeGroup:
 class MatchAllSizeGroup(SizeGroup):
 
 	class SubGroup(SizeGroup.SubGroup):
-
-		def _reset(self):
-			clearCacheAttr(self, 'group_scale_range', 'group_size_range', 'size_clusters')
 
 		def get_similar_aligned_items(self, item: SizeGroupItem) -> Set[SizeGroupItem]:
 			return frozenset(self)

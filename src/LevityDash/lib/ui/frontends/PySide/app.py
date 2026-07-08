@@ -261,7 +261,24 @@ class LevitySceneView(QGraphicsView):
 
 		self.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.SmoothPixmapTransform | QPainter.TextAntialiasing)
 
-		# self.loadingFinished.connect(SizeGroup.update_all)  # Disabled for now, while working with new size groups
+		self.loadingFinished.connect(self._scheduleFirstFit)
+
+	def _scheduleFirstFit(self):
+		"""
+		Arm a one-shot re-fit of every SizeGroup for the next settled resize.
+
+		Loading finishes before the base surface geometry does (resizeDoneEvent
+		runs on a 300ms debounce), so groups are solved against pre-layout
+		geometry and the re-fit must wait for updateSurface. Starting resizeDone
+		guarantees the event fires even when the window is never resized.
+		rebucket_and_update_all is idempotent, so re-arming on every dashboard
+		load (or a double fire) is harmless.
+		"""
+		self.resizeFinished.connect(
+			SizeGroup.rebucket_and_update_all,
+			Qt.ConnectionType.SingleShotConnection,
+		)
+		self.resizeDone.start()
 
 	def deviceTransform(self) -> QTransform:
 		devicePixelRatio = self.devicePixelRatioF()
@@ -325,11 +342,12 @@ class LevitySceneView(QGraphicsView):
 		self.resetTransform()
 		self.graphicsScene.invalidate(self.graphicsScene.sceneRect())
 		self.graphicsScene.update()
-		self.resizeFinished.emit()
 		rect = self.viewport().rect()
 		self.setSceneRect(rect)
 		self.scene().setSceneRect(rect)
 		self.graphicsScene.base.geometry.updateSurface()
+		# emitted last so connected slots see post-updateSurface geometry
+		self.resizeFinished.emit()
 
 	def load(self):
 		self.graphicsScene.base.loadDefault()
@@ -949,7 +967,7 @@ class LevityMainWindow(QMainWindow):
 		dashboardMenu.addAction(clearCacheAction)
 
 		refresh_all_sizegroups = QAction('Refresh All SizeGroups', self)
-		refresh_all_sizegroups.triggered.connect(SizeGroup.update_all)
+		refresh_all_sizegroups.triggered.connect(SizeGroup.rebucket_and_update_all)
 		dashboardMenu.addAction(refresh_all_sizegroups)
 
 		plugins = PluginsMenu(self)
