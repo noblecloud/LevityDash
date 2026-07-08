@@ -1580,6 +1580,14 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		log.debug(f'{self.log_repr}: Rendering')
 		weight = self.weight_px
 
+		if self._pathDirty:
+			# path prep (scipy interpolation + QPainterPath build) is pure
+			# computation, so it runs here on the painter worker instead of
+			# blocking the GUI thread; a data change during paint re-marks the
+			# flag and the debounce schedules another render right after
+			self._pathDirty = False
+			self._updatePath()
+
 		if self.gradient: self.updateGradient()
 
 		size = self.expected_size
@@ -1640,12 +1648,6 @@ class Plot(QGraphicsPixmapItem, Stateful):
 
 	def render(self):
 		log.verbose(f'{self.log_repr}: Starting render', verbosity=3)
-
-		if self._pathDirty:
-			self._pathDirty = False
-			self._updatePath()
-			if self.gradient:
-				self.updateGradient()
 
 		paint_worker = self.painter
 		paint_worker.start(priority=0)
