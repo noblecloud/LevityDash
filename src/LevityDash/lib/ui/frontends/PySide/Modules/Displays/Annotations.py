@@ -63,7 +63,7 @@ class AnnotationText(Text):
 	def allowedWidth(self):
 		return 400
 
-	def getTextPosition(self) -> QPointF:
+	def getTextPosition(self, limitRect: QRectF = None) -> QPointF:
 		return QPoint(0, 0)
 
 	def scaleSelection(self, x, y):

@@ -345,8 +345,15 @@ class Text(QGraphicsPathItem):
 		"""
 		The limitRect is the area in which the text is allowed to be drawn.
 		Typically, this is the parent's marginRect, but it can be overridden.
+
+		Must NOT depend on this item's own transform. mapRectFromItem divides
+		by the item's current scale, so reading limitRect while a scale is
+		applied distorts it and corrupts the fit (this was the resize/refresh
+		regression vs. main). The item is a direct child of its parent, so
+		translating the parent's marginRect by -pos gives it in this item's
+		coordinate space at identity scale.
 		"""
-		return self.mapRectFromItem(self.parent, self.parent.marginRect)
+		return self.parent.marginRect.translated(-self.pos())
 
 	@property
 	def sceneLimitRect(self) -> QRectF:
@@ -414,7 +421,9 @@ class Text(QGraphicsPathItem):
 
 		rect = self._textRect or self._update_path()
 		self.setTransformOriginPoint(0, 0)
-		x, y = self.getTextPosition().toTuple()
+		# thread the one (height-adjusted) limitRect through both helpers so
+		# position and scale are computed against the same rect
+		x, y = self.getTextPosition(limitRect).toTuple()
 		transform.translate(x, y)
 		if not self._fixedFontSize:
 			if group := getattr(self, '_sized', None):
@@ -422,7 +431,7 @@ class Text(QGraphicsPathItem):
 				sub_group = group.get_item_sub_group(self)
 				scale = sub_group.group_scale
 			else:
-				scale = self.getTextScale()
+				scale = self.getTextScale(rect, limitRect)
 			transform.scale(scale, scale)
 
 		if DEBUG:
@@ -533,17 +542,13 @@ class Text(QGraphicsPathItem):
 	def setScenePosition(self, position: QPointF):
 		self.setPos(self.mapFromScene(position))
 
-	def getTextScale(self) -> float:
-		textRect = self._textRect or self._update_path(update_others=False)
-
-		# t = self.transform()
-		self.resetTransform()
-		textRect = self._textRect
-
-		if textRect is None:
-			textRect = self._update_path(update_others=False)
-
-		limitRect = self.limitRect
+	def getTextScale(self, textRect: QRectF = None, limitRect: QRectF = None) -> float:
+		# Pure: never mutates the transform. limitRect is transform-independent,
+		# so no reset is needed; leaving the transform alone means computing one
+		# item's scale (e.g. during a group's shared-size pass) can't corrupt
+		# another item's transform.
+		textRect = textRect or self._textRect or self._update_path(update_others=False)
+		limitRect = limitRect if limitRect is not None else self.limitRect
 
 		width = (textRect.width()) or 1
 		height = (textRect.height()) or 1
@@ -555,18 +560,16 @@ class Text(QGraphicsPathItem):
 		else:
 			wScale = limitRect.width()/height
 			hScale = limitRect.height()/width
-		# self.setTransform(t)
 		return round(self.scaleSelection(wScale, hScale), 4)
 
-	def getTextPosition(self) -> QPointF:
-		t = self.transform()
-		self.resetTransform()
-		limitRect = self.limitRect
+	def getTextPosition(self, limitRect: QRectF = None) -> QPointF:
+		# Pure: takes the caller's limitRect (e.g. the height-adjusted one from
+		# updateTransform) and never touches the transform.
+		limitRect = limitRect if limitRect is not None else self.limitRect
 		m = QPointF(*self.align.multipliersAlt)
 		x, y = limitRect.topLeft().toTuple()
 		x += m.x()*limitRect.width()
 		y += m.y()*limitRect.height()
-		self.setTransform(t)
 		return QPointF(x, y)
 
 	def getTextScenePosition(self) -> QPointF:

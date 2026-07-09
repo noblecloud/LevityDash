@@ -1909,7 +1909,7 @@ class GaugeValueLabel(GaugeLabel):
 			# self._debug_paint_shape = rect_to_shape(r)
 			return r
 
-		def getTextPosition(self) -> QPointF:
+		def getTextPosition(self, limitRect: QRectF = None) -> QPointF:
 
 			gauge: Gauge = self.parent.parent
 			arc: GaugeArc = gauge.arc
@@ -1942,7 +1942,7 @@ class GaugeValueLabel(GaugeLabel):
 		def _valueAccessor(self):
 			return self.parent.parent.value
 
-		def getTextScale(self) -> float:
+		def getTextScale(self, textRect: QRectF = None, limitRect: QRectF = None) -> float:
 
 			"""
 			Modifies the local transform until no there are no collisions, restores the original transform and returns the scale.
@@ -2157,7 +2157,7 @@ class GaugeUnit(GaugeLabel):
 				position = self.parent.position_auto()
 			return position
 
-		def getTextPosition(self) -> QPointF:
+		def getTextPosition(self, limitRect: QRectF = None) -> QPointF:
 			match self._position:
 				case UnitDisplayPosition.Below:
 					return self._position_below()
@@ -2501,7 +2501,7 @@ class GaugeTickText(GaugeItem, AnnotationText):
 	def alignment(self, value: Alignment):
 		pass
 
-	def getTextScale(self) -> float:
+	def getTextScale(self, textRect: QRectF = None, limitRect: QRectF = None) -> float:
 		textRect = textRect or self._textRect or self._update_path()
 		limitRect = limitRect or self.limitRect
 
