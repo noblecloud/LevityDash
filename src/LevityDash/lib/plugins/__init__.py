@@ -110,6 +110,12 @@ class PluginsLoader(metaclass=GlobalSingleton, name='plugins'):
 
 	def stop(self):
 		pluginLog.info('--------------------- Stopping plugins ---------------------')
+		for plugin in self:
+			try:
+				if plugin.running:
+					plugin.stop()
+			except Exception as e:
+				pluginLog.error(f'Error stopping plugin {plugin.name}: {e}')
 
 	# @property
 	# def network_available(self) -> bool:
