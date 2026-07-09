@@ -533,7 +533,10 @@ class SizeGroup:
 		"""
 		for group in cls.__groups__:
 			for item in tuple(group.items):
-				group.on_item_resize(item, reason='post-load-refit')
+				try:
+					group.on_item_resize(item, reason='post-load-refit')
+				except Exception as e:
+					log.warning(f'Could not re-fit {item!r} in size group {group.key!r}: {e}')
 
 	def __new__(cls, *args, **kwargs):
 		matchAll = kwargs.pop('matchAll', False)

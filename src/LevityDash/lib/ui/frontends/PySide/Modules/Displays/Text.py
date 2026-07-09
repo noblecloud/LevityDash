@@ -648,7 +648,14 @@ class Text(QGraphicsPathItem):
 		return neighbors
 
 	def refresh(self):
-		self.updateTransform(reason='refresh')
+		# An explicit refresh of a grouped item should re-fit the whole group,
+		# not just this item: the shared size depends on every member, and the
+		# will_cause_invalidation guard would otherwise skip siblings unless
+		# this item's own size happened to change.
+		if (group := getattr(self, '_sized', None)) is not None:
+			group.on_item_resize(self, reason='refresh')
+		else:
+			self.updateTransform(reason='refresh')
 		# value = getattr(self.value, 'value', self.value)
 		# if isinstance(value, wu.Time) and userConfig.getOrSet('Display', 'liveUpdateTimedeltas', True, userConfig.getboolean):
 		# 	refreshTask = getattr(self, 'refreshTask', None)
