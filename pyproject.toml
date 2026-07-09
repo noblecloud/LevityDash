@@ -78,6 +78,7 @@ deepmerge = "^1.1.1"
 [tool.poetry.group.dev.dependencies]
 WeatherUnits = { develop = true, path = "../WeatherUnits" }
 python-semantic-release = "^7.34.6"
+pytest = ">=8.0"
 
 [tool.poetry.group.profiling.dependencies]
 memray = "^1.9.1"
@@ -104,6 +105,17 @@ numpydoc = "^1.5.0"
 [tool.poetry.extras]
 monitoring = ["sentry-sdk", "logtail-python"]
 build = ["pyinstaller", "certifi"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# QT_QPA_PLATFORM=offscreen and LEVITYDASH_CONFIG_DEBUG=1 are set in
+# tests/conftest.py before any Qt import (no pytest-env dependency needed).
+markers = [
+	"unwired: behavior the size-group engine does not yet implement (xfail until wired)",
+]
+filterwarnings = [
+	"ignore::DeprecationWarning",
+]
 
 [build-system]
 requires = ["poetry-core>=1.1.0"]
