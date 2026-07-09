@@ -25,6 +25,48 @@ def pump(app, seconds: float) -> None:
 		time.sleep(0.005)
 
 
+# A fixed, unremarkable instant used to make time-dependent widgets (clock,
+# date) deterministic across runs. 2025-06-18 is a Wednesday at 14:30.
+import datetime as _dt
+
+FROZEN_TIME = _dt.datetime(2025, 6, 18, 14, 30, 0, tzinfo=_dt.timezone.utc).astimezone()
+
+
+@pytest.fixture
+def frozen_time(monkeypatch):
+	"""Freeze the app clock at FROZEN_TIME for time-sensitive tests.
+
+	Freezes every current-time source the visible widgets actually use:
+	- ``shared.now`` / ``shared.Now.now`` (used by app logic),
+	- the ``strftime`` the DateTime clock renders with (it reads the system
+	  clock directly, not ``Now``),
+	- ``datetime.now`` in the Moon module.
+	Opt-in (not autouse): request it, then trigger a refresh to observe a
+	stable clock/date/moon. Value injection (fixed measurements) is deferred
+	to the TestData plugin - see plan Phase 1.5.
+	"""
+	from LevityDash.lib.utils import shared
+
+	monkeypatch.setattr(shared, "now", lambda: FROZEN_TIME)
+	monkeypatch.setattr(shared.Now, "now", classmethod(lambda cls, **kw: FROZEN_TIME))
+
+	# DateTime renders via `strftime(fmt)` (system clock); freeze it.
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays import DateTime as _DateTime
+	monkeypatch.setattr(_DateTime, "strftime", lambda fmt: FROZEN_TIME.strftime(fmt), raising=False)
+
+	# Moon reads `datetime.now(tz)` directly; freeze via a stub datetime.
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Moon as _Moon
+
+	class _FrozenDatetime(_dt.datetime):
+		@classmethod
+		def now(cls, tz=None):
+			return FROZEN_TIME.astimezone(tz) if tz else FROZEN_TIME
+
+	monkeypatch.setattr(_Moon, "datetime", _FrozenDatetime, raising=False)
+
+	return FROZEN_TIME
+
+
 @pytest.fixture(scope="session")
 def dashboard():
 	"""A booted, settled dashboard.
