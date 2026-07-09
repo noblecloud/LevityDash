@@ -538,7 +538,7 @@ class Stack(Panel, tag='stack'):
 	def refresh(self):
 		self.setGeometries()
 		for group in (self._attrGroups or {}).values():
-			group.adjustSizes(reason='refresh')
+			group.apply()
 
 	@StateProperty(key='defaultType', sortOrder=0, default=Panel)
 	def defaultType(self) -> Type[Panel]:

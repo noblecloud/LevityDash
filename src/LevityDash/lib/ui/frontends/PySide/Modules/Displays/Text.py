@@ -317,8 +317,7 @@ class Text(QGraphicsPathItem):
 		font = QFont(self._font)
 		font = QFont(icon.font) if (icon := self.icon) is not None and not noIconFont else font
 		if g := getattr(self, '_sized', False):
-			g = g.get_item_sub_group(self)
-			font.setPointSizeF(g.group_font_size)
+			font.setPointSizeF(g.font_size_for(self))
 		else:
 			font.setPointSize(self.fontSize)
 		return font
@@ -377,22 +376,12 @@ class Text(QGraphicsPathItem):
 
 	@Slot(QRectF)
 	def asyncUpdateTransform(self, rect: QRectF):
+		# The parent resized; the group's fit is stale. Invalidate it, then
+		# re-apply this item - updateTransform pulls a fresh fit (which recomputes
+		# the whole group once). Sibling items re-apply through their own
+		# parent-resized connections.
 		if (group := self.size_group) is not None:
-			if (action_pool := group.action_pool).can_execute and self.action_pool.can_execute:
-				group.on_item_resize(self, reason='asyncUpdateTransform')
-			else:
-
-				# Get the action pool that cannot execute since it will be the one that will be executed upon unblocking.
-				# Priority is given to the groups action pool
-
-				best_pool = next((pool for pool in (group.action_pool, self.action_pool) if not pool.can_execute), None) or action_pool
-				# best_pool = self.action_pool
-				best_pool.add(
-					group.on_item_resize,
-					kwargs=(dict(item=self, reason='deferred_asyncUpdateTransform')),
-					update_kwargs=True,
-					caller=self.asyncUpdateTransform)
-			return
+			group.mark_dirty()
 		self.updateTransform(updatePath=True, updateShared=False, reason='asyncUpdateTransform')
 
 	@Slot(QTransform)
@@ -424,14 +413,17 @@ class Text(QGraphicsPathItem):
 		# thread the one (height-adjusted) limitRect through both helpers so
 		# position and scale are computed against the same rect
 		x, y = self.getTextPosition(limitRect).toTuple()
+		fit = None
+		if (group := getattr(self, '_sized', None)) is not None:
+			group: 'SizeGroup'
+			fit = group.fit_for(self)
+			# baseline alignment: share the group's scene-y (computed at identity
+			# here, since the transform is reset - same hygiene as limitRect)
+			if fit.baseline_y is not None:
+				y = self.mapFromScene(QPointF(0, fit.baseline_y)).y()
 		transform.translate(x, y)
 		if not self._fixedFontSize:
-			if group := getattr(self, '_sized', None):
-				group: 'SizeGroup'
-				sub_group = group.get_item_sub_group(self)
-				scale = sub_group.group_scale
-			else:
-				scale = self.getTextScale(rect, limitRect)
+			scale = fit.scale if fit is not None else self.getTextScale(rect, limitRect)
 			transform.scale(scale, scale)
 
 		if DEBUG:
@@ -460,14 +452,13 @@ class Text(QGraphicsPathItem):
 				tool_tip_text.append(f'  translate:\n    x: {transform.dx():.2f}\n    y: {transform.dy():.2f}')
 			if tool_tip_text[-1] == 'transform:':
 				tool_tip_text.append('  none')
-			if (group := locals().get('group', None)) is not None:
+			if (group := locals().get('group', None)) is not None and fit is not None:
 				group: 'SizeGroup'
-				sub_group = group.get_item_sub_group(self)
-				group_name = f'{group.parent.__tag__}.{group.key}#{sub_group.group_key}({len(sub_group)})'
+				group_name = f'{getattr(group.parent, "__tag__", "?")}.{group.key}'
 				tool_tip_text.extend((
-					f'group: {group_name}',
-					f'  scale: {sub_group.group_scale:.2f}',
-					f'  font_size: {sub_group.group_font_size:.2f}')
+					f'group: {group_name} ({len(group.items)})',
+					f'  scale: {fit.scale:.2f}',
+					f'  font_size: {fit.font_size:.2f}')
 				)
 			self.setToolTip('\n'.join(tool_tip_text))
 
@@ -523,21 +514,6 @@ class Text(QGraphicsPathItem):
 		char_rect.moveLeft(text_rect.left() + left_width)
 
 		return char_rect
-
-	def _apply_group_transform(self):
-
-		if matching_group := getattr(self, '_sized', None) is None:
-			return
-
-		current_transform = self.transform()
-		current_x, current_y = current_transform.dx(), current_transform.dy()
-		current_scale = current_transform.m11()
-
-		sub_group = matching_group.get_item_sub_group(self)
-		y = self.mapFromScene(QPointF(0, sub_group.group_y(self))).y()
-		scale = sub_group.group_scale
-
-		self.setTransform(QTransform().translate(current_x, y).scale(scale, scale))
 
 	def setScenePosition(self, position: QPointF):
 		self.setPos(self.mapFromScene(position))
@@ -602,10 +578,7 @@ class Text(QGraphicsPathItem):
 	def get_neighbors(self, reach: int, from_items: Set['Text'] = None, exclude: Set['Text'] = None) -> Set['Text']:
 		if from_items is None and (size_group := getattr(self, '_sized', None)) is not None:
 			size_group: 'SizeGroup'
-			if (sub_group := size_group.get_item_sub_group(self)) is not None:
-				from_items = set(sub_group)
-			else:
-				raise ValueError('SizeGroup is not initialized')
+			from_items = set(size_group.items)
 
 		neighbors = set()
 
@@ -648,12 +621,11 @@ class Text(QGraphicsPathItem):
 		return neighbors
 
 	def refresh(self):
-		# An explicit refresh of a grouped item should re-fit the whole group,
-		# not just this item: the shared size depends on every member, and the
-		# will_cause_invalidation guard would otherwise skip siblings unless
-		# this item's own size happened to change.
+		# An explicit refresh of a grouped item re-fits the whole group: the
+		# shared size/baseline depend on every member, so refitting just this
+		# item would leave siblings stale.
 		if (group := getattr(self, '_sized', None)) is not None:
-			group.on_item_resize(self, reason='refresh')
+			group.apply()
 		else:
 			self.updateTransform(reason='refresh')
 		# value = getattr(self.value, 'value', self.value)
@@ -1050,11 +1022,9 @@ class Text(QGraphicsPathItem):
 
 		if update_others and (group := getattr(self, '_sized', None)) is not None:
 			group: 'SizeGroup'
-			sub_group = group.get_item_sub_group(self)
-			if sub_group.will_cause_invalidation(self):
-				if group.action_pool.can_execute:
-					# with block_pools(self.action_pool, group.action_pool):
-					group.on_item_resize(item=self, reason='updateText')
+			# this item's text/size changed; the group's shared fit is stale.
+			# Mark it dirty so the next fit pull recomputes for all members.
+			group.mark_dirty()
 
 		return newTextRect
 
