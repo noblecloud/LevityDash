@@ -1045,6 +1045,15 @@ class MeasurementDisplayProperties(Stateful):
 		self.__valueUnitRatio = value
 
 	@property
+	def default_unit_ratio(self) -> float:
+		"""Relative unit height used when no explicit unitSize is configured."""
+		default = MeasurementDisplayProperties._unitSize.default(type(self))
+		try:
+			return float(default)
+		except (TypeError, ValueError):
+			return 0.2
+
+	@property
 	def unitSize(self) -> Size.Height | None:
 		value = self.__valueUnitRatio
 		if value is MeasurementDisplayProperties._unitSize.default(type(self)):
@@ -1332,8 +1341,14 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 			ownRect.setTop(textRect.bottom() + self.parent.floatingOffset_px)
 
 			if (display_props := self.parent.displayProperties).unitPosition is DisplayPosition.FloatUnder:
-				if display_props.unitSize_px and ownRect.top() + display_props.unitSize_px < labelRect.bottom():
-					ownRect.setBottom(ownRect.top() + display_props.unitSize_px)
+				# unitSize_px is None when no explicit unit size is configured
+				# (the default 20% ratio reads back as None). Fall back to that
+				# default band instead of filling to the label's bottom, which
+				# would size the unit at ~half the panel - nearly as big as the
+				# value.
+				unitSize = display_props.unitSize_px or labelRect.height() * float(display_props.default_unit_ratio)
+				if ownRect.top() + unitSize < labelRect.bottom():
+					ownRect.setBottom(ownRect.top() + unitSize)
 				else:
 					ownRect.setBottom(labelRect.bottom())
 
