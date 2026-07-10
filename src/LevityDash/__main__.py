@@ -51,7 +51,10 @@ def main():
 	if LevityDashboard.parsed_args.reset_config:
 		reset_config()
 
-	print(f'Starting LevityDash {LevityDashboard.__version__} on {platform.system()}')
+	# git describe (when run from source) is a complete version string
+	# (tag-commitsSince-gHash[-dirty]); fall back to the static version otherwise.
+	_ver = LevityDashboard.revision or LevityDashboard.__version__
+	print(f'Starting LevityDash {_ver} on {platform.system()}')
 
 	install_signals()
 

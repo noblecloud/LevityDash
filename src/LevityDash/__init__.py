@@ -15,6 +15,26 @@ from appdirs import AppDirs
 
 __version__ = "0.2.0-beta.2"
 
+
+def _git_revision(repo_dir: Path) -> str | None:
+	"""The running git revision, e.g. 'v0.2.0-beta.2-104-g7328926-dirty'.
+
+	Resolved dynamically at startup from the checkout so the exact commit is
+	always known without needing to bake it into a release. Returns None when
+	not run from a git checkout (e.g. an installed wheel).
+	"""
+	try:
+		import subprocess
+		result = subprocess.run(
+			["git", "describe", "--tags", "--always", "--dirty"],
+			cwd=str(repo_dir), capture_output=True, text=True, timeout=2,
+		)
+		if result.returncode == 0 and (rev := result.stdout.strip()):
+			return rev
+	except Exception:
+		pass
+	return None
+
 if sys.version_info < (3, 10, 0):
 	sys.exit(
 		"Python 3.10 or later is required. "
@@ -99,6 +119,7 @@ class _LevityDashboard(object):
 	parsed_args: argparse.Namespace = args.parse_known_args()
 
 	__version__ = __version__
+	revision: ClassVar[str | None] = None  # git revision, resolved below when run from source
 	__slots__ = ('app', '__lib', 'config', 'pluginConfig', 'plugins', 'dispatcher',
 							 'log', 'get_channel', 'get_container', 'clock', 'status_bar', 'splash',
 							 'main_window', 'view', 'plugin_config', 'pluginPool', 'pluginThread',
@@ -127,6 +148,7 @@ class _LevityDashboard(object):
 		__version__ = f'{__version__} (Compiled {compile_date:%X on %x} with Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro})'
 	else:
 		root = Path(__file__).parent
+		revision = _git_revision(root)
 
 	paths = _LevityAppDirs(root)
 
