@@ -9,7 +9,7 @@ from PySide6.QtCore import (
 	Signal, Slot
 )
 from PySide6.QtGui import (
-	QBrush, QColor, QCursor, QFontMetricsF, QPainter, QPainterPath, QPainterPathStroker, QPen,
+	QBrush, QColor, QCursor, QFontMetricsF, QImage, QPainter, QPainterPath, QPainterPathStroker, QPen,
 	QPixmap, QPolygonF, QTransform, QAction
 )
 from PySide6.QtWidgets import (
@@ -1576,33 +1576,34 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		weight *= self.scene().view.devicePixelRatio()
 		return QSize(weight, weight)
 
-	def _render_paint(self) -> QPixmap:
+	def _render_paint(self) -> QImage:
+		# Runs on the painter worker thread. Everything here is thread-safe:
+		# scipy interpolation + QPainterPath build (pure computation) and
+		# painting into a QImage (Qt supports QImage painting off the GUI
+		# thread; QPixmap it does NOT - painting one here silently produced no
+		# pixmap, which is why graph lines stopped rendering). The QImage is
+		# converted to a QPixmap on the GUI thread in _render_finish.
 		log.debug(f'{self.log_repr}: Rendering')
 		weight = self.weight_px
 
 		if self._pathDirty:
-			# path prep (scipy interpolation + QPainterPath build) is pure
-			# computation, so it runs here on the painter worker instead of
-			# blocking the GUI thread; a data change during paint re-marks the
-			# flag and the debounce schedules another render right after
 			self._pathDirty = False
 			self._updatePath()
 
 		if self.gradient: self.updateGradient()
 
+		dpr = self.scene().view.devicePixelRatio()
 		size = self.expected_size
-
-		# Multiply the size by the device pixel ratio
-		size *= self.scene().view.devicePixelRatio()
+		size *= dpr
 
 		# Add a bit of padding to the sides
 		padding = self.img_padding
 		size += padding
 
-		pix = QPixmap(size)
-		pix.setDevicePixelRatio(self.scene().view.devicePixelRatio())
-		pix.fill(Qt.transparent)
-		painter = EffectPainter(pix)
+		img = QImage(size, QImage.Format.Format_ARGB32_Premultiplied)
+		img.setDevicePixelRatio(dpr)
+		img.fill(Qt.transparent)
+		painter = EffectPainter(img)
 
 		pen = self.pen()
 		pen.setWidthF(weight)
@@ -1615,45 +1616,43 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		painter.drawPath(path)
 		painter.end()
 
-		return pix
+		return img
 
-	def _render_finish(self, pix: QPixmap):
+	def _render_finish(self, image: QImage):
+		# GUI thread (Worker on_result). The paint worker produced a QImage;
+		# converting to a QPixmap and baking the shadow (QGraphicsScene.render)
+		# are GUI-thread-only operations, so they happen here.
 		log.verbose(f'{self.log_repr}: Rendering complete', verbosity=3)
+		pix = QPixmap.fromImage(image) if isinstance(image, QImage) else image
+		if self.effects:
+			pix = RendererScene().bakeEffects(pix, *self.effects.values())
 		self._setPixmap(pix)
 		self.data.pendingUpdate = None
 
-	def _render_bake_effects(self, pix: QPixmap):
-		log.debug(f'{self.log_repr}: Baking effects')
-		result = RendererScene().bakeEffects(pix, *self.effects.values())
-		return result
-
-	@cached_property
-	def _render_workers(self) -> Tuple[Worker, Worker]:
-		paint_worker = Worker.create_worker(self._render_paint, on_result=self._setPixmap, immortal=True)
-		bake_worker = Worker.create_worker(self._render_bake_effects, on_result=self._render_finish, immortal=True)
-		paint_worker.link_worker_result(bake_worker, priority=1)
-		return paint_worker, bake_worker
-
 	@cached_property
 	def painter(self) -> Worker:
-		return self._render_workers[0]
+		return Worker.create_worker(self._render_paint, on_result=self._render_finish, immortal=True)
 
+	# Retained for scheduleRender's cancel() checks; the bake now runs inline in
+	# _render_finish, so the "baker" is just the paint worker.
 	@cached_property
 	def baker(self) -> Worker:
-		return self._render_workers[1]
+		return self.painter
 
 	@cached_property
 	def shaper(self) -> Worker:
 		return Worker.create_worker(self._fix_shape, on_result=self._set_shape, immortal=True)
 
 	def render(self):
+		# The paint touches the scene graph (scene()/view, mapped_path,
+		# updateGradient, the item's pen) throughout, none of which is safe off
+		# the GUI thread - running it on a worker silently produced no pixmap.
+		# The debounce (render_delay) already coalesces bursts into one render
+		# per settle, so a synchronous GUI-thread paint here is cheap enough.
+		# Only the shape stroking (pure QPainterPath geometry) stays off-thread.
 		log.verbose(f'{self.log_repr}: Starting render', verbosity=3)
-
-		paint_worker = self.painter
-		paint_worker.start(priority=0)
+		self._render_finish(self._render_paint())
 		self.shaper.start(priority=0)
-
-		return
 
 
 	def _debug_paint(self, painter, option, widget):
