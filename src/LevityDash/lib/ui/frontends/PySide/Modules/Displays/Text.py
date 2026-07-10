@@ -621,13 +621,14 @@ class Text(QGraphicsPathItem):
 		return neighbors
 
 	def refresh(self):
-		# An explicit refresh of a grouped item re-fits the whole group: the
-		# shared size/baseline depend on every member, so refitting just this
-		# item would leave siblings stale.
+		# refresh() is the value-arrival path (a container update calls it), so
+		# the displayed text may have changed: rebuild this item's path with
+		# updatePath=True - otherwise a late-arriving value never replaces the
+		# '...' placeholder. If grouped, re-fit the whole group afterwards so
+		# the shared size/baseline pick up the new text.
+		self.updateTransform(reason='refresh', updatePath=True, updateShared=False)
 		if (group := getattr(self, '_sized', None)) is not None:
 			group.apply()
-		else:
-			self.updateTransform(reason='refresh')
 		# value = getattr(self.value, 'value', self.value)
 		# if isinstance(value, wu.Time) and userConfig.getOrSet('Display', 'liveUpdateTimedeltas', True, userConfig.getboolean):
 		# 	refreshTask = getattr(self, 'refreshTask', None)
