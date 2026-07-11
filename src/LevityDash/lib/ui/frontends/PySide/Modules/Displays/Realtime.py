@@ -20,6 +20,7 @@ from LevityDash.lib.ui.fonts import FontWeight
 from LevityDash.lib.ui.frontends.PySide import UILogger as guiLog
 from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, mouseHoldTimer, DebugPaint, addRect
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Label import NonInteractiveLabel as Label, TitleLabel
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import Text
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Resize import ResizeHandle
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Splitters import TitleValueSplitter, MeasurementUnitSplitter
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import RealtimeContextMenu
@@ -1273,27 +1274,8 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 			def updateTransform(self, rect: QRectF = None, updateShared: bool = True, updatePath: bool = True, reason: str = None, *args):
 				super().updateTransform(rect, updateShared, updatePath, reason=reason, *args)
 				display = self.surface.parent
-				position = display.displayProperties.unitPosition
-				if position is DisplayPosition.FloatUnder:
-					# Modify the transform of value and unit text boxes combined center to be at the value textbox's original center
-					value_text_box = display.valueTextBox.textBox
-					unit_text_box = self
-
-					value_scene_path = value_text_box.scenePath()
-					unit_scene_path = unit_text_box.scenePath()
-
-					combined_path = value_scene_path | unit_scene_path
-
-					value_center = value_text_box.boundingRect().center()
-					unit_center = unit_text_box.boundingRect().center()
-
-					# Calculate the transform to move the combined path to the value text box's center
-					transform = QTransform()
-					transform.translate(value_center.x() - unit_center.x(), value_center.y() - unit_center.y())
-
-					unit_text_box.setTransform(transform, combine=True)
-					value_text_box.setTransform(transform, combine=True)
-
+				if display.displayProperties.unitPosition is DisplayPosition.FloatUnder:
+					display._syncFloatUnderPair(self)
 
 		# Section UnitLabel
 		def __init__(self, *args, **kwargs):
@@ -1321,6 +1303,15 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 		}
 
 		__exclude__ = {..., 'format-hint'}
+
+		class TextBox(Label.TextBox):
+
+			@defer(pool_attr='action_pool')
+			def updateTransform(self, rect: QRectF = None, updateShared: bool = True, updatePath: bool = True, reason: str = None, *args):
+				super().updateTransform(rect, updateShared, updatePath, reason=reason, *args)
+				display = self.surface.parent
+				if display.displayProperties.unitPosition is DisplayPosition.FloatUnder:
+					display._syncFloatUnderPair(self)
 
 		# @cached_property
 		# def marginRect(self) -> QRectF:
@@ -1362,6 +1353,49 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 		self.setFlag(QGraphicsItem.ItemIsSelectable, False)
 		self.setFlag(QGraphicsItem.ItemIsFocusable, False)
 		self.setAcceptDrops(False)
+
+	def _syncFloatUnderPair(self, source: Text):
+		"""Keep the value+unit text boxes centered as one block (unitPosition
+		FloatUnder only).
+
+		Both boxes' own updateTransform fully resets their transform from
+		scratch and never combine=True's on top of a prior state, so whichever
+		box last completes its own natural layout silently discards any
+		correction previously applied to it here. Triggered from both
+		ValueLabel.TextBox and UnitLabel.TextBox so the pair self-heals
+		regardless of which one updates last; the other box is forced back to
+		its own natural transform right before measuring so this always
+		starts from a clean baseline instead of compounding on a stale
+		correction (that compounding was why the pair visibly jumped to a bad
+		position on every other refresh). The in-progress guard stops the two
+		sides from re-triggering each other.
+		"""
+		if getattr(self, '_syncingFloatUnder', False):
+			return
+		value_text_box = self.valueTextBox.textBox
+		unit_text_box = self.unitTextBox.textBox
+		other = unit_text_box if source is value_text_box else value_text_box
+
+		self._syncingFloatUnder = True
+		try:
+			Text.updateTransform.__wrapped__(other, updatePath=False, updateShared=False, reason='float-under-sync')
+
+			value_scene_rect = value_text_box.scenePath().boundingRect()
+			unit_scene_rect = unit_text_box.scenePath().boundingRect()
+
+			# bbox(A | B) == bbox(A) | bbox(B) - union the (cheap) rects
+			# rather than the paths; QPainterPath.united() is a full boolean
+			# clip over glyph curves and can be pathologically slow.
+			target_center = value_scene_rect.center()
+			current_center = (value_scene_rect | unit_scene_rect).center()
+
+			transform = QTransform()
+			transform.translate(target_center.x() - current_center.x(), target_center.y() - current_center.y())
+
+			unit_text_box.setTransform(transform, combine=True)
+			value_text_box.setTransform(transform, combine=True)
+		finally:
+			self._syncingFloatUnder = False
 
 	def _init_args_(self, *args, **kwargs) -> None:
 		# self._valueTextBox = Label(self)

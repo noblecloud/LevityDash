@@ -282,10 +282,25 @@ class LevitySceneView(QGraphicsView):
 		explicitly. Idempotent - safe to run on every settled resize.
 		"""
 		from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import Text
+		from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import DisplayLabel
+		from LevityDash.lib.ui.Geometry import DisplayPosition
 		SizeGroup.rebucket_and_update_all()
 		for item in self.graphicsScene.items():
 			if isinstance(item, Text) and getattr(item, '_sized', None) is None:
 				item.updateTransform(updatePath=True, updateShared=False, reason='refit')
+			elif isinstance(item, DisplayLabel):
+				# FloatUnder value+unit pairs are positioned via a correction
+				# that only fires from the boxes' own updateTransform (see
+				# DisplayLabel._syncFloatUnderPair); those boxes listen for
+				# their parent panel's resized signal, which - like SizeGroup
+				# above - never fires on a whole-window resize. Force one
+				# final resync per display so the pair is correct after every
+				# settled resize, not just after a manual refresh ('r').
+				try:
+					if item.displayProperties.unitPosition is DisplayPosition.FloatUnder:
+						item._syncFloatUnderPair(item.valueTextBox.textBox)
+				except AttributeError:
+					pass
 
 	def deviceTransform(self) -> QTransform:
 		devicePixelRatio = self.devicePixelRatioF()
