@@ -1030,6 +1030,18 @@ class PlotTip(QToolTip):
 Effect = TypeVar('Effect', bound=QGraphicsEffect)
 PlotShadow = SoftShadow
 
+_shadow_renderer_scene: Optional['RendererScene'] = None
+
+
+def _get_shadow_renderer_scene() -> 'RendererScene':
+	# Shared across all Plot instances - bakeEffects always runs on the GUI
+	# thread (Worker on_result), sequentially, so reuse avoids constructing a
+	# fresh QGraphicsScene for every shadow bake.
+	global _shadow_renderer_scene
+	if _shadow_renderer_scene is None:
+		_shadow_renderer_scene = RendererScene()
+	return _shadow_renderer_scene
+
 
 # Section Plot
 @auto
@@ -1576,46 +1588,20 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		weight *= self.scene().view.devicePixelRatio()
 		return QSize(weight, weight)
 
-	def _render_paint(self) -> QImage:
-		# Runs on the painter worker thread. Everything here is thread-safe:
-		# scipy interpolation + QPainterPath build (pure computation) and
-		# painting into a QImage (Qt supports QImage painting off the GUI
-		# thread; QPixmap it does NOT - painting one here silently produced no
-		# pixmap, which is why graph lines stopped rendering). The QImage is
-		# converted to a QPixmap on the GUI thread in _render_finish.
+	def _render_paint(self, size: QSize, dpr: float, pen: QPen, path: QPainterPath) -> QImage:
+		# Runs on the painter worker thread. Everything the caller passes in
+		# is a plain value (no live scene-graph references), so this is pure
+		# computation + painting into a QImage - Qt supports QImage painting
+		# off the GUI thread; QPixmap it does NOT. The QImage is converted to
+		# a QPixmap on the GUI thread in _render_finish.
 		log.debug(f'{self.log_repr}: Rendering')
-		weight = self.weight_px
-
-		if self._pathDirty:
-			self._pathDirty = False
-			self._updatePath()
-
-		if self.gradient: self.updateGradient()
-
-		dpr = self.scene().view.devicePixelRatio()
-		size = self.expected_size
-		size *= dpr
-
-		# Add a bit of padding to the sides
-		padding = self.img_padding
-		size += padding
-
 		img = QImage(size, QImage.Format.Format_ARGB32_Premultiplied)
 		img.setDevicePixelRatio(dpr)
 		img.fill(Qt.transparent)
 		painter = EffectPainter(img)
-
-		pen = self.pen()
-		pen.setWidthF(weight)
 		painter.setPen(pen)
-		path = self.mapped_path
-
-		path.translate(-path.elementAt(0).x, 0)
-		path.translate(padding.width() / 2, padding.height() / 2)
-
 		painter.drawPath(path)
 		painter.end()
-
 		return img
 
 	def _render_finish(self, image: QImage):
@@ -1625,7 +1611,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		log.verbose(f'{self.log_repr}: Rendering complete', verbosity=3)
 		pix = QPixmap.fromImage(image) if isinstance(image, QImage) else image
 		if self.effects:
-			pix = RendererScene().bakeEffects(pix, *self.effects.values())
+			pix = _get_shadow_renderer_scene().bakeEffects(pix, *self.effects.values())
 		self._setPixmap(pix)
 		self.data.pendingUpdate = None
 
@@ -1644,14 +1630,50 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		return Worker.create_worker(self._fix_shape, on_result=self._set_shape, immortal=True)
 
 	def render(self):
-		# The paint touches the scene graph (scene()/view, mapped_path,
-		# updateGradient, the item's pen) throughout, none of which is safe off
-		# the GUI thread - running it on a worker silently produced no pixmap.
-		# The debounce (render_delay) already coalesces bursts into one render
-		# per settle, so a synchronous GUI-thread paint here is cheap enough.
-		# Only the shape stroking (pure QPainterPath geometry) stays off-thread.
+		# Resolve everything scene-graph-derived here, on the GUI thread:
+		# path/gradient rebuild (prepareGeometryChange, item pen/brush state),
+		# and reading scene()/view/figure geometry. What's left (size, dpr,
+		# pen, path) are plain values with no live scene-graph references, so
+		# handing them to the paint worker is safe - see _render_paint.
+		if self.painter.status is Worker.Status.Running:
+			# A previous run is still genuinely executing. scheduleRender's
+			# cancel() can't interrupt an already-running QRunnable (only a
+			# still-queued one) - it just force-sets status to Canceled
+			# without actually stopping the thread. Overwriting
+			# self.painter.args here would race with that in-flight run
+			# reading/using the old QPainterPath, which crashed intermittently
+			# (SIGSEGV in QPainterPath::elementAt while rich's
+			# tracebacks_show_locals reprs the args of an unrelated error).
+			# Retry once it's had a chance to finish instead of touching args.
+			startTimerSafe(self.render_delay)
+			return
+
 		log.verbose(f'{self.log_repr}: Starting render', verbosity=3)
-		self._render_finish(self._render_paint())
+		weight = self.weight_px
+
+		if self._pathDirty:
+			self._pathDirty = False
+			self._updatePath()
+
+		if self.gradient: self.updateGradient()
+
+		dpr = self.scene().view.devicePixelRatio()
+		size = self.expected_size
+		size *= dpr
+
+		# Add a bit of padding to the sides
+		padding = self.img_padding
+		size += padding
+
+		pen = self.pen()
+		pen.setWidthF(weight)
+		path = self.mapped_path
+
+		path.translate(-path.elementAt(0).x, 0)
+		path.translate(padding.width() / 2, padding.height() / 2)
+
+		self.painter.args = (size, dpr, pen, path)
+		self.painter.start()
 		self.shaper.start(priority=0)
 
 
