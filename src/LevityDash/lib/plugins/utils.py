@@ -2,7 +2,7 @@ from asyncio import TimerHandle, iscoroutinefunction, iscoroutine
 
 from collections import defaultdict
 
-from PySide6.QtCore import QObject, QThread, QTimer, Signal, Slot
+from PySide6.QtCore import QMetaObject, QObject, Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication
 from abc import abstractmethod
 from dataclasses import dataclass
@@ -362,9 +362,18 @@ class Publisher(MutableSignal):
 			self.removed.emit(self.keys[key])
 			del self.keys[key]
 
+	@Slot()
 	def _emit(self):
 		if QThread.currentThread() != QApplication.instance().thread():
-			loop.call_soon_threadsafe(self._emit)
+			# publish() is connected as a slot to signals emitted from each
+			# plugin's own PluginThread, so this branch is genuinely
+			# reachable, not just defensive - `loop` was never defined
+			# here (a plain NameError waiting to happen). QMetaObject.
+			# invokeMethod queues _emit onto this object's own thread
+			# (the GUI thread, since Publisher lives there), which is the
+			# same "hop across to the right thread" intent the dead
+			# asyncio call was reaching for.
+			QMetaObject.invokeMethod(self, '_emit', Qt.ConnectionType.QueuedConnection)
 			return
 
 		data = KeyData(self.source, self._pending)
