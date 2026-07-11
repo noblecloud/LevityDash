@@ -9,11 +9,51 @@ from . import shims
 import builtins
 
 import sys
+import functools
 from functools import cached_property
 from pathlib import Path
 from appdirs import AppDirs
 
 __version__ = "0.2.0-beta.2"
+
+
+def _unlock_cached_property():
+	"""Strip the per-descriptor lock from functools.cached_property.
+
+	Python 3.11 and earlier guard cached_property with a single RLock shared
+	by every instance of that descriptor. If a background thread holds it
+	while blocked on the GUI thread (e.g. via a Qt cross-thread signal), and
+	the GUI thread then tries to read the same cached_property (e.g. during
+	SizeGroup.refit(), which runs on every paint), both threads deadlock -
+	reproduced live via plugin data racing GUI-thread geometry recompute.
+	Python 3.12 removed this lock outright for the same reason (a race just
+	means occasional redundant recomputation, which cached_property's own
+	docs already call out as acceptable); this backports that behavior.
+	"""
+	_NOT_FOUND = object()
+
+	def __get__(self, instance, owner=None):
+		if instance is None:
+			return self
+		cache = instance.__dict__
+		val = cache.get(self.attrname, _NOT_FOUND)
+		if val is _NOT_FOUND:
+			val = self.func(instance)
+			try:
+				cache[self.attrname] = val
+			except TypeError:
+				msg = (
+					f"The '__dict__' attribute on {type(instance).__name__!r} instance "
+					f"does not support item assignment for caching {self.attrname!r} property."
+				)
+				raise TypeError(msg) from None
+		return val
+
+	functools.cached_property.__get__ = __get__
+
+
+if sys.version_info < (3, 12):
+	_unlock_cached_property()
 
 
 def _git_revision(repo_dir: Path) -> str | None:
