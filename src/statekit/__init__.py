@@ -17,6 +17,15 @@ from .introspect import (
 	Conditions, FrameIterator, ownerParentClass, search_stack, TypedIterable, makeType, makeTypedIterable,
 	tryAndLog,
 )
+from ._compat import (
+	ActionPool, ActionPoolItemInstance, block_pools, classproperty, clearCacheAttr, DeepChainMap, defer, DotDict,
+	get, guarded_cached_property, IgnoreOr, Index, Infix, OrderedSet, OrUnset, recursiveRemove, remove_empty_dicts,
+	sortDict, SubActionPool, Unset, UnsetKwarg,
+)
+from .core import (
+	InvalidArguments, SingletonConstant, Stateful, StateProperty, StatefulMetaclass, StatefulMixin,
+	StatefulReferenceProperty, gendoc,
+)
 
 __all__ = [
 	"Default", "DefaultDict", "DefaultFalse", "DefaultFloat", "DefaultGroup", "DefaultInt", "DefaultList",
@@ -26,4 +35,9 @@ __all__ = [
 	"StatefulConstructor", "StatefulDumper", "StatefulLoader",
 	"Conditions", "FrameIterator", "ownerParentClass", "search_stack", "TypedIterable", "makeType",
 	"makeTypedIterable", "tryAndLog",
+	"ActionPool", "ActionPoolItemInstance", "block_pools", "classproperty", "clearCacheAttr", "DeepChainMap",
+	"defer", "DotDict", "get", "guarded_cached_property", "IgnoreOr", "Index", "Infix", "OrderedSet", "OrUnset",
+	"recursiveRemove", "remove_empty_dicts", "sortDict", "SubActionPool", "Unset", "UnsetKwarg",
+	"InvalidArguments", "SingletonConstant", "Stateful", "StateProperty", "StatefulMetaclass", "StatefulMixin",
+	"StatefulReferenceProperty", "gendoc",
 ]

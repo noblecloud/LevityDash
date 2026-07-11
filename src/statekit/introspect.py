@@ -186,20 +186,14 @@ def ownerParentClass(ownerName, frame=None):
 						# Unwrap to its origin and guard against non-types.
 						base = item if isinstance(item, type) else getattr(item, "__origin__", None)
 						if isinstance(base, type):
-							# TODO(phase-3c): Stateful still lives in
-							# LevityDash.lib.stateful (not yet moved into
-							# statekit), so this import points there for now -
-							# flip to `from .core import Stateful` once
-							# StateProperty/Stateful/StatefulMetaclass move
-							# into statekit (they're a genuine
-							# strongly-connected unit; see core.py's module
-							# docstring once it exists). Deferred to right
-							# before use (not module/function top) since this
-							# branch is only reached for a bracketed-generic
-							# base - most calls, including ones from within
-							# Stateful's own still-executing class body,
-							# never take it.
-							from LevityDash.lib.stateful import Stateful
+							# Deferred to right before use (not module top)
+							# since this branch is only reached for a
+							# bracketed-generic base - most calls, including
+							# ones from within Stateful's own still-executing
+							# class body, never take it. A module-top import
+							# would also be circular: core.py imports this
+							# module.
+							from .core import Stateful
 							if issubclass(base, Stateful):
 								return item
 					if item != "Stateful" and item in _frame.f_locals:
