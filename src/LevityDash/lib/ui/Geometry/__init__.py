@@ -25,7 +25,7 @@ from LevityDash.lib.log import LevityUtilsLog as log
 from LevityDash.lib.ui import UILogger as guiLog
 from LevityDash.lib.utils import Axis, camelCase, clearCacheAttr, ClosestMatchEnumMeta, DType, IgnoreOr
 from LevityDash.lib.utils.shared import _Panel, clamp, mostly, get, classproperty
-from WeatherUnits import auto as auto_unit, Length, Measurement
+from WeatherUnits import auto as auto_unit, Length, Measurement, Percentage
 
 if TYPE_CHECKING:
 	from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
@@ -3365,6 +3365,23 @@ def size_px(
 	relativeTo: Union['Geometry', Number],
 	dimension: DimensionType = DimensionType.height
 ) -> float | int:
+	if isinstance(value, Percentage):
+		# Percentage is a WeatherUnits measurement, not a Dimension/Length -
+		# neither branch below matches it, so without this it passed through
+		# unconverted (still a Percentage object, not pixels). Callers that
+		# divide the result by `relativeTo` expecting a plain float (e.g.
+		# Stacks.py's label_size_ratio) got a Percentage back instead, which
+		# then leaked into saved state and came back as a raw "20.0%" string
+		# with no decoder to parse it - see the ValueStack ratio crash fix.
+		if isinstance(relativeTo, Geometry):
+			ref = relativeTo.absoluteHeight if dimension == DimensionType.height else relativeTo.absoluteWidth
+		elif isinstance(relativeTo, QRect | QRectF):
+			ref = relativeTo.height() if dimension == DimensionType.height else relativeTo.width()
+		elif isinstance(relativeTo, Number):
+			ref = relativeTo
+		else:
+			raise TypeError(f'{relativeTo} is not a valid type for relativeTo')
+		return float(value) * float(ref)
 	if isinstance(value, Dimension):
 		if value.absolute:
 			value = float(value)

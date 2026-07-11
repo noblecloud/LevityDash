@@ -1955,7 +1955,12 @@ class Stateful(metaclass=StatefulMetaclass):
 
 	@shared.encode
 	def shared(self, value: DeepChainMap) -> dict:
-		return value.originMap
+		# originMap can hold nested DeepChainMap objects as values (e.g.
+		# inherited from a parent's shared map via new_child()/localShared) -
+		# flatten those down to plain dicts, otherwise they reach the YAML
+		# dumper's generic object fallback and get silently stringified via
+		# repr(), corrupting the save file.
+		return DeepChainMap(origin_map=value.originMap).to_dict()
 
 	@property
 	def ownShared(self) -> dict:
