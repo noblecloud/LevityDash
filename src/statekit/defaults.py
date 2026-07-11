@@ -61,12 +61,15 @@ class Default(Generic[DefaultType], metaclass=DefaultMeta):
 					return DefaultTuple.__new__(DefaultTuple, value)
 				case str(value):
 					return DefaultString.__new__(DefaultString, value)
+				# bool must come before int - bool is an int subclass, so
+				# `case int(value)` would otherwise always match first and
+				# this branch would be unreachable dead code.
+				case bool(value):
+					return DefaultTrue if value else DefaultFalse
 				case int(value):
 					return DefaultInt.__new__(DefaultInt, value)
 				case float(value):
 					return DefaultFloat.__new__(DefaultFloat, value)
-				case bool(value):
-					return DefaultTrue if value else DefaultFalse
 				case None:
 					return DefaultNone
 				case _:

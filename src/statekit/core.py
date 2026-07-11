@@ -2023,7 +2023,14 @@ class Stateful(metaclass=StatefulMetaclass):
 			state = state.to_dict()
 
 		shared = getattr(self, 'shared', Unset) or DeepChainMap()
-		afterPool: ActionPool = self._action_pool
+		# self.action_pool (not self._action_pool) - the property lazily
+		# initializes the pool on first access; a freshly constructed object
+		# that hasn't touched it yet has no _action_pool set at all, and
+		# state is very often assigned right at construction time (e.g.
+		# Panel._init_args_'s `self.state = kwargs`), so the raw attribute
+		# access was a real, reachable AttributeError, not just a
+		# theoretical one.
+		afterPool: ActionPool = self.action_pool
 		unwraps = []
 		for prop in items.values():
 
@@ -2489,8 +2496,13 @@ class Stateful(metaclass=StatefulMetaclass):
 		return score
 
 	def __del__(self):
-		if self._action_pool.up is not self._action_pool:
-			self._action_pool.up.remove(self._action_pool)
+		# getattr, not self._action_pool directly: an object whose
+		# .action_pool property was never accessed (nothing to tear down)
+		# would otherwise raise AttributeError out of __del__, which Python
+		# only reports as an ignored "Exception ignored" warning rather than
+		# a real error - silently masking the same underlying gap.
+		if (pool := getattr(self, '_action_pool', None)) is not None and pool.up is not pool:
+			pool.up.remove(pool)
 
 	def __rich_repr__(self, exclude: set = None):
 
