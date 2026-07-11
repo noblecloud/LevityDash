@@ -879,7 +879,18 @@ class MeasurementDisplayProperties(Stateful):
 	@StateProperty(key='unit-string', default=Unset, allowNone=False)
 	def unit_string(self) -> str:
 		if self.__unit is Unset:
-			return getattr(self.measurement, 'unit', '')
+			measurement = self.measurement
+			# Respect the measurement's own showUnit default (e.g. Temperature
+			# is False since its decorator - deg symbol - already conveys a
+			# unit): without this, hasUnit ends up True for any measurement
+			# with a non-empty .unit regardless of showUnit, since
+			# .unit is a raw attribute unaffected by the flag that's
+			# specifically meant to answer this "should the unit typically be
+			# shown" question. Only applies to this unconfigured default -
+			# an explicit unit-string in a dashboard's YAML still wins.
+			if not getattr(measurement, 'showUnit', True):
+				return ''
+			return getattr(measurement, 'unit', '')
 		return self.__unit
 
 	@unit_string.setter
