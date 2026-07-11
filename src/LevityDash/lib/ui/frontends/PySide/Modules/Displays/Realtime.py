@@ -113,7 +113,12 @@ class Realtime(Panel, tag='realtime'):
 		if type(self) is Realtime:
 			displayType = kwargs.pop('type', 'realtime.text')
 			display = kwargs.pop('display')
-			display['displayType'] = DisplayType[displayType.strip('realtime.')]
+			# .strip('realtime.') strips any of those *characters* from both
+			# ends, not the literal prefix - for a bare value like "text" it
+			# mangled the string down to nothing and crashed downstream in
+			# DisplayType.__getitem__. removeprefix() is a no-op when the
+			# prefix isn't present, so both "realtime.text" and "text" work.
+			display['displayType'] = DisplayType[displayType.removeprefix('realtime.')]
 			kwargs['display'] = display
 		super(Realtime, self)._init_args_(*args, **kwargs)
 
