@@ -735,7 +735,7 @@ class GraphItemData(Stateful, tag=...):
 		if self.hasData:
 			T = (self.data[1] - self.figure.dataValueRange.min) / self.figure.dataValueRange.range
 			t.translate(0, T.min())
-			t.scale((self.timeframe.range.total_seconds() / graphTimeRange), T.ptp())
+			t.scale((self.timeframe.range.total_seconds() / graphTimeRange), np.ptp(T))
 		return t
 
 	def __updateTransform(self, axis: Axis):
@@ -746,7 +746,7 @@ class GraphItemData(Stateful, tag=...):
 		if axis & Axis.Y:
 			T = (self.data[1] - self.figure.dataValueRange.min) / self.figure.dataValueRange.range
 			yTranslate = T.min()
-			yScale = T.ptp()
+			yScale = np.ptp(T)
 		modifyTransformValues(self.dataTransform, xTranslate, yTranslate, xScale, yScale)
 
 	@property
@@ -766,7 +766,7 @@ class GraphItemData(Stateful, tag=...):
 			minMax = self.figure.dataValueRange[i:j]
 			T = (self.data[1][i:j] - minMax.min) / minMax.range * (self.figure.dataValueRange.range / minMax.range)
 			t.translate(-timeOffset, T.min())
-			t.scale(1, T.ptp())
+			t.scale(1, np.ptp(T))
 		return t
 
 	@cached_property
@@ -829,7 +829,7 @@ class GraphItemData(Stateful, tag=...):
 			return [0], [0]
 
 		if y is not None:
-			y = (y - y.min()) / (y.ptp() or 1)
+			y = (y - y.min()) / (np.ptp(y) or 1)
 		if x is not None:
 			start = self.graph.timeframe.start
 			seconds = self.figure.figureTimeRangeMaxMin.total_seconds()
@@ -3005,7 +3005,12 @@ _Figure = ForwardRef('Figure')
 # Section CurrentTimeIndicator
 class CurrentTimeIndicator(QGraphicsLineItem, Stateful, tag=...):
 
-	_time = partial(datetime.now, tz=LOCAL_TIMEZONE)
+	# staticmethod is required as of Python 3.14: functools.partial gained
+	# descriptor support, so a bare partial() as a class attribute now binds
+	# self as its first positional arg when accessed via an instance - which
+	# datetime.now(tz=...) doesn't accept, raising "takes at most 1 argument
+	# (2 given)". staticmethod restores the old "plain callable" behavior.
+	_time = staticmethod(partial(datetime.now, tz=LOCAL_TIMEZONE))
 
 	def __init__(self, graph: 'GraphPanel', signal: Signal = None, **kwargs):
 		self.graph = graph

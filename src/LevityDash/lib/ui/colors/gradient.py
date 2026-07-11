@@ -10,7 +10,7 @@ from yaml import SafeDumper, SafeLoader, SequenceNode, MappingNode, ScalarNode
 
 from LevityDash.lib.stateful import StatefulLoader
 from LevityDash.lib.ui.colors.color import Color
-from LevityDash.lib.utils import getOrSet
+from LevityDash.lib.utils import getOrSet, classproperty
 from LevityDash.shims.Qt import QImage
 from WeatherUnits import Measurement, Percentage
 
@@ -109,7 +109,7 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 
 		def __genGradient(self):
 			T = self.localized
-			locations = (T - T.min())/T.ptp()
+			locations = (T - T.min())/np.ptp(T)
 			for position, value in zip(locations, self.values):
 				self.setColorAt(position, value.color.QColor)
 
@@ -124,7 +124,7 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 
 		@property
 		def gradientPoints(self) -> Tuple[QPoint, QPoint]:
-			T = (self.localized - self.plot.data.data[1].min())/(self.plot.data.data[1].ptp() or 1)
+			T = (self.localized - self.plot.data.data[1].min())/(np.ptp(self.plot.data.data[1]) or 1)
 			t = self.plot.data.combinedTransform*self.plot.scene().view.transform()
 			bottom = QPointF(0, T.max())
 			top = QPointF(0, T.min())
@@ -214,8 +214,7 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 
 		return cls(colors=new_values_from_normals)
 
-	@classmethod
-	@property
+	@classproperty
 	def itemCls(cls) -> Type[MappedGradientValue]:
 		if hasattr(cls, '__item__'):
 			return cls.__item__

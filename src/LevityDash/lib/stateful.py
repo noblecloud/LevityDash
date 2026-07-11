@@ -53,7 +53,7 @@ from LevityDash.lib.log import debug, LevityLogger
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.utils import get, levenshtein, OrUnset, Unset
 from LevityDash.lib.utils.shared import (
-	_Panel, ActionPool, clearCacheAttr, DeepChainMap, DotDict, guarded_cached_property, OrderedSet,
+	_Panel, ActionPool, classproperty, clearCacheAttr, DeepChainMap, DotDict, guarded_cached_property, OrderedSet,
 	recursiveRemove, sortDict, remove_empty_dicts
 )
 
@@ -76,7 +76,12 @@ console = Console(
 
 log = LevityLogger.getChild("Cerial")
 
-DefaultType = TypeVar("DefaultType", str, int, float, bool, None, dict, list, tuple, set, frozenset)
+# Explicit class tuple: Python 3.14 keeps a literal `None` in
+# TypeVar.__constraints__ (3.11 coerced it to NoneType), which breaks the
+# issubclass() check in DefaultMeta below - so drive that check off this tuple
+# (which uses type(None)) rather than off __constraints__.
+_DEFAULT_TYPES = (str, int, float, bool, type(None), dict, list, tuple, set, frozenset)
+DefaultType = TypeVar("DefaultType", *_DEFAULT_TYPES)
 
 DefaultNone: Final[DefaultType] = None
 DefaultTrue: Final[DefaultType] = True
@@ -100,7 +105,7 @@ class SourceType(Enum):
 
 class DefaultMeta(type):
 	def __new__(mcs, name, bases, attrs, **kwargs):
-		subType = next((i for i in bases if issubclass(i, DefaultType.__constraints__)), object)
+		subType = next((i for i in bases if issubclass(i, _DEFAULT_TYPES)), object)
 		attrs["__subtype__"] = subType
 		return super().__new__(mcs, name, bases, attrs)
 
@@ -301,7 +306,11 @@ def ownerParentClass(ownerName, frame=None):
 					if item.count("[") == item.count("]") != 0:
 						# This isn't ideal...  This whole thing needs to be reworked, I'm sure there is a better way to do this
 						item = eval(item, _frame.f_locals)
-						if issubclass(item, Stateful):
+						# A parameterised base like `list[Foo]` evals to a GenericAlias,
+						# not a class; issubclass() rejects that (hard error since 3.14).
+						# Unwrap to its origin and guard against non-types.
+						base = item if isinstance(item, type) else getattr(item, "__origin__", None)
+						if isinstance(base, type) and issubclass(base, Stateful):
 							return item
 					if item != "Stateful" and item in _frame.f_locals:
 						return _frame.f_locals[item]
@@ -2362,8 +2371,7 @@ class StatefulMixin:
 					f"Ensure there is no logic and add the `@abstractmethod` decorator to {', '.join(not_abstract_but_should_be)}", not_abstract_but_should_be
 				)
 
-	@classmethod
-	@property
+	@classproperty
 	def __state_items__(cls):
 		return dict(ChainMap(
 			*[{k: v for k, v in dict(i.__dict__).items() if isinstance(v, StateProperty)} for i in

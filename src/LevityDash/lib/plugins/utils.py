@@ -587,7 +587,7 @@ class ScheduledEvent(object):
 			)
 
 		if (loop := self.loop) is None:
-			log.warn(f'{self.__owner} - No event loop found for {self.__func!r}')
+			log.warning(f'{self.__owner} - No event loop found for {self.__func!r}')
 			if self.fireImmediately:
 				self.__fire()
 				return

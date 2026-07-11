@@ -48,8 +48,14 @@ def parseMathString(mathString: str, functionName: str = 'mathExpression', **kwa
 		mathString = mathString.replace(key, str(value))
 
 	funcString = f'''def {functionName}({', '.join(remainingVars)}):\n\treturn {mathString}'''
-	exec(compile(funcString, "<string>", "exec"))
-	return locals()[functionName]
+	# exec into an explicit namespace rather than relying on locals() picking
+	# up the def: PEP 667 (Python 3.13+) makes a function's locals() an
+	# independent snapshot on each call, so the def made by exec() here was
+	# never guaranteed to show up in a later, separate locals() call - it
+	# happened to work pre-3.13 as an implementation detail, not by contract.
+	namespace = {}
+	exec(compile(funcString, "<string>", "exec"), namespace)
+	return namespace[functionName]
 
 
 class BLEPayloadParser:
@@ -74,8 +80,6 @@ class BLEPayloadParser:
 			value = payload
 		return {self.__field: value}
 
-
-loop = asyncio.get_event_loop()
 
 _on_board_banner = '[bold]Govee BLE Plugin On-Boarding[/bold]'
 _plugin_description = (

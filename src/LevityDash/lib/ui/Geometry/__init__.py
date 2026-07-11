@@ -24,7 +24,7 @@ from LevityDash.lib.config import userConfig
 from LevityDash.lib.log import LevityUtilsLog as log
 from LevityDash.lib.ui import UILogger as guiLog
 from LevityDash.lib.utils import Axis, camelCase, clearCacheAttr, ClosestMatchEnumMeta, DType, IgnoreOr
-from LevityDash.lib.utils.shared import _Panel, clamp, mostly, get
+from LevityDash.lib.utils.shared import _Panel, clamp, mostly, get, classproperty
 from WeatherUnits import auto as auto_unit, Length, Measurement
 
 if TYPE_CHECKING:
@@ -1227,18 +1227,15 @@ class Dimension(MutableFloat):
 	def relative(self) -> bool:
 		return not self._absolute
 
-	@classmethod
-	@property
+	@classproperty
 	def name(cls) -> str:
 		return cls.__name__.split('.')[-1]
 
-	@classmethod
-	@property
+	@classproperty
 	def fullName(cls):
 		return cls.__name__
 
-	@classmethod
-	@property
+	@classproperty
 	def dimension(cls) -> DimensionType:
 		return cls.__dimension__
 
@@ -2819,10 +2816,10 @@ class Geometry:
 
 	def setRect(self, rect: QRectF):
 		if any(i < 0 for i in rect.size().toTuple()):
-			log.warn(f"Trying to set a negative size for panel {self.surface.name}")
+			log.warning(f"Trying to set a negative size for panel {self.surface.name}")
 			# rect.setRect(rect.x(), rect.y(), 0, 0)
 			if any(i < 0 for i in rect.topLeft().toTuple()):
-				log.warn(f"Trying to set a negative position for panel {self.surface.name}")
+				log.warning(f"Trying to set a negative position for panel {self.surface.name}")
 		# rect.setRect(0, 0, rect.width(), rect.height())
 
 		width = rect.width()
@@ -2877,7 +2874,7 @@ class Geometry:
 
 	def setPos(self, pos: QPointF):
 		if any(i < 0 for i in pos.toTuple()):
-			log.warn(f"Trying to set a negative position for panel {self.surface.name}")
+			log.warning(f"Trying to set a negative position for panel {self.surface.name}")
 
 		x = pos.x()
 		y = pos.y()

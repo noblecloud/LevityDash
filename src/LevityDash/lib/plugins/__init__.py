@@ -12,7 +12,7 @@ from LevityDash.lib.plugins.utils import Request, GuardedRequest
 from LevityDash.lib.plugins.observation import Container
 from LevityDash.lib.plugins.plugin import AnySource, Plugin, SomePlugin
 from LevityDash.lib.plugins.dispatcher import PluginValueDirectory
-from LevityDash.lib.utils import PluginPool, PluginThread, UnsetKwarg
+from LevityDash.lib.utils import PluginPool, PluginThread, UnsetKwarg, classproperty
 
 Plugins: 'PluginsLoader'
 
@@ -41,8 +41,7 @@ class GlobalSingleton(type):
 			mcs.instances[name] = instance
 		return mcs.instances[name]
 
-	@classmethod
-	@property
+	@classproperty
 	def root(mcs):
 		try:
 			return mcs.__root

@@ -695,7 +695,7 @@ class OpenMeteo(REST, realtime=False, hourly=True, daily=True, recorded=True):
 		try:
 			data = await self.getData(self.urls.forecast)
 		except APIError as e:
-			self.pluginLog.warn('OpenMeteo: No data received')
+			self.pluginLog.warning('OpenMeteo: No data received')
 			return
 		data['source'] = [self.name, self.urls.forecast]
 		self.loop.create_task(self.hourly.asyncUpdate(data))

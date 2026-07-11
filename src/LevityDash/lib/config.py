@@ -16,6 +16,7 @@ from rich import prompt
 
 from . import LevityDashboard
 from .EasyPath import EasyPath, EasyPathFile
+from ._descriptors import classproperty
 
 _backupLogger = getLogger('LevityConfig')
 
@@ -79,7 +80,7 @@ class LevityConfig(ConfigParser):
 
 		userPath = Path(dirs.config)
 		if not userPath.exists() or len(os.listdir(userPath)) == 0:
-			self.log.warn(f'Creating user config directory: {userPath}')
+			self.log.warning(f'Creating user config directory: {userPath}')
 			buildDirectories(userPath, {'fonts': [], 'saves': ['dashboards', 'panels']})
 			copytree(LevityDashboard.paths.resources / 'example-config', userPath, dirs_exist_ok=True)
 
@@ -219,8 +220,7 @@ class LevityConfig(ConfigParser):
 				# return QInputDialog.getItem(QWidget(), self.path.name, message, choices, 0, 'custom' in choices)[0]
 				return prompt.Prompt.ask(message, **kwargs)
 
-	@classmethod
-	@property
+	@classproperty
 	def log(cls):
 		return getattr(cls, '_log', None)
 

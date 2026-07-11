@@ -71,6 +71,11 @@ numberRegex = re.compile(fr"""
 golden = GOLDEN_RATIO = (1 + sqrt(5))/2
 inverse_golden = INVERSE_GOLDEN_RATIO = 1/golden
 
+# Re-exported so existing `from ...utils(.shared) import classproperty` sites
+# keep working; defined in a dependency-free leaf module so it can also be
+# imported during very early init (config.py) without the utils/log chain.
+from LevityDash.lib._descriptors import classproperty
+
 
 def simpleRequest(url: str) -> dict:
 	from urllib.request import urlopen, Request
@@ -616,8 +621,7 @@ class BusyContext:
 			if isinstance(self._mutable, Mutable):
 				self._mutable.muted = False
 
-	@classmethod
-	@property
+	@classproperty
 	def isBusy(cls) -> bool:
 		return sum(cls._tasks.values()) > 0
 

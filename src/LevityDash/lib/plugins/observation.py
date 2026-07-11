@@ -1158,7 +1158,7 @@ class ObservationTimestamp(ObservationValue):
 			value = data
 			key = CategoryItem('timestamp')
 		else:
-			log.warn(f'Unable to find valid timestamp in {data}.  Using current time.')
+			log.warning(f'Unable to find valid timestamp in {data}.  Using current time.')
 			value = datetime.now().astimezone(_timezones.utc)
 			key = CategoryItem('timestamp')
 		super(ObservationTimestamp, self).__init__(value, key, container=source, source=source)
@@ -2219,8 +2219,10 @@ class MeasurementTimeSeries(OrderedDict):
 		if self.isMultiSource:
 			source: 'Plugin'
 			source.publisher.connectChannel(self.key, self.sourceChanged)
+			minPeriod = self.__minPeriod or timedelta(days=-400)
+			maxPeriod = self.__maxPeriod or timedelta(days=400)
 			for obs in source.observations:
-				if isinstance(obs, ObservationTimeSeries) and self.__minPeriod < abs(obs.period) < self.__maxPeriod:
+				if isinstance(obs, ObservationTimeSeries) and minPeriod < abs(obs.period) < maxPeriod:
 					ts: MeasurementTimeSeries = obs[self.key]
 					ts.addReference(self)
 					obs.add_subscribed_item(self.key)
@@ -2319,11 +2321,13 @@ class MeasurementTimeSeries(OrderedDict):
 	@property
 	def sources(self) -> Set[Union['Observation', 'MeasurementTimeSeries']]:
 		if self.isMultiSource:
+			minPeriod = self.__minPeriod or timedelta(days=-400)
+			maxPeriod = self.__maxPeriod or timedelta(days=400)
 			return {
 				e[self._key]
 				for e in self._source.observations
 				if self._key in e and
-				self.__minPeriod < abs(e.period) < self.__maxPeriod
+				minPeriod < abs(e.period) < maxPeriod
 			}
 		else:
 			return {self._source}

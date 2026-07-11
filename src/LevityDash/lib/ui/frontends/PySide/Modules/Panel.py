@@ -1236,7 +1236,7 @@ class Panel(_Panel, Stateful, tag='group'):
 
 	def fillParent(self, setGeometry: bool = False):
 		if self.parent is None:
-			log.warn('No parent to fill')
+			log.warning('No parent to fill')
 			return QRect(0, 0, 0, 0)
 		area = self.parent.fillArea(self)
 		if area:

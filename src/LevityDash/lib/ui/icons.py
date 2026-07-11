@@ -135,7 +135,16 @@ class IconPack:
 		font = self.fonts.get(style, None) or self.fonts[self.defaultStyle]
 		if hasChar is None and len(self.styles) > 1:
 			return font
-		styleWithChar = next((x for x in (style, *self.styles) if self.metrics[x].inFont(hasChar)), None)
+		# PySide6 6.10 changed QFontMetrics.inFont: a single-char *str* argument
+		# now returns False for Private-Use-Area glyphs (which every icon char is);
+		# the integer codepoint overload still works, so pass ord(). Also skip any
+		# style whose font never loaded (e.g. commented-out 'regular' -> present in
+		# self.styles but absent from self.metrics), which otherwise KeyErrors here.
+		def _inFont(_x: str) -> bool:
+			m = self.metrics.get(_x)
+			return m is not None and m.inFont(ord(hasChar) if len(hasChar) == 1 else hasChar)
+
+		styleWithChar = next((x for x in (style, *self.styles) if _inFont(x)), None)
 		if styleWithChar is None:
 			raise FontNotFoundError(f'No font found with char {hasChar}')
 		return self.fonts[styleWithChar]

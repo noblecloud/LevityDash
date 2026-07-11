@@ -7,7 +7,7 @@ from PySide6.QtGui import QColor
 from rich.repr import rich_repr
 
 from LevityDash.lib.ui.colors.utils import randomColor, kelvinToRGB
-from LevityDash.lib.utils import get, split
+from LevityDash.lib.utils import get, split, classproperty
 from LevityDash.lib.ui import UILogger as log
 
 if TYPE_CHECKING:
@@ -37,8 +37,7 @@ class Color:
 
 	presets: ClassVar['Preset']
 
-	@classmethod
-	@property
+	@classproperty
 	def randomColor(cls) -> 'Color':
 		return cls(randomColor())
 
@@ -50,13 +49,11 @@ class Color:
 	def fromTemperature(cls, temp: int | float) -> 'Color':
 		return cls(kelvinToRGB(temp))
 
-	@classmethod
-	@property
+	@classproperty
 	def text(cls) -> 'Color':
 		return cls.presets.white
 
-	@classmethod
-	@property
+	@classproperty
 	def default(cls) -> 'Color':
 		return cls.presets.white
 

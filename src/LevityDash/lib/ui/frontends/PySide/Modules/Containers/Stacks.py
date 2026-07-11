@@ -860,7 +860,7 @@ class Stack(Panel, tag='stack'):
 						item_type = type(self).Item.get_subclass(item_type)
 					item = item_type(self, **state)
 			else:
-				log.warn(f'Invalid item state type {type(item)} for {item}.  Skipping...')
+				log.warning(f'Invalid item state type {type(item)} for {item}.  Skipping...')
 			if (geometry := getattr(item, 'geometry', None)) is not None:
 				self.geometries[index] = geometry
 				item.index = index
