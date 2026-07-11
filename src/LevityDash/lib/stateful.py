@@ -1699,6 +1699,18 @@ class StateProperty(property):
 			else:
 				return origin
 
+		# Enum/Flag classes are themselves Iterable (over their members), and
+		# a composite/canonical Flag member decomposes via __iter__ too (a
+		# single-bit member yields itself) - falling into the generic
+		# iterable-of-types check below would recurse into that
+		# self-referential iteration forever. Bail out here the same way
+		# parse_return_type already does for the class case; also guard
+		# instances (e.g. a Flag member reached via recursion) the same way.
+		if isinstance(expected, type) and issubclass(expected, Enum):
+			return expected,
+		if isinstance(expected, Enum):
+			return type(expected),
+
 		# The logic here is really dumb...
 		# TODO: optimize logic
 		if isinstance(expected, Iterable) and not isinstance(expected, str):
