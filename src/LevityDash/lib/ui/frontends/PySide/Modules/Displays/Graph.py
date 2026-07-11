@@ -3295,6 +3295,13 @@ class GraphPanel(Panel, tag='graph'):
 			min((figure.figureMinStart for figure in self.figures), default=self.timeframe.displayPosition)
 		)
 		self.proxy.snapToTime(t)
+		# The "now" indicator only repositions on an actual panel resize
+		# (its updatePosition is wired to self.signals.resized, never to a
+		# timer) - piggyback on this timer, already ticking at msPerPixel
+		# (one pixel of movement per fire, scaled to zoom), instead of
+		# running a second independent timer for the same cadence.
+		if (indicator := getattr(self, '_indicator', None)) is not None:
+			indicator.updatePosition()
 
 	def timeToX(self, time: datetime):
 		pass
