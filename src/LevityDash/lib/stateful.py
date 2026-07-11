@@ -17,8 +17,9 @@ from abc import abstractmethod
 from PySide6.QtCore import QObject
 
 import statekit
-from statekit import DefaultFalse, DefaultGroup, DefaultTrue, SourceType, StatefulDumper, StatefulLoader, StatefulMixin, Unset
+from statekit import DefaultFalse, DefaultGroup, DefaultTrue, SourceType, StatefulDumper, StatefulLoader, StatefulMixin
 from statekit import StateProperty
+from qolkit import Unset
 
 QObjectType = type(QObject)
 

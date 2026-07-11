@@ -52,10 +52,11 @@ from warnings import warn, warn_explicit
 import yaml
 from yaml import Dumper, MappingNode, ScalarNode
 
-from ._compat import (
-	ActionPool, classproperty, clearCacheAttr, DeepChainMap, DotDict, get, guarded_cached_property, OrderedSet,
-	OrUnset, recursiveRemove, remove_empty_dicts, sortDict, Unset,
+from qolkit import (
+	classproperty, clearCacheAttr, DeepChainMap, DotDict, get, guarded_cached_property, OrderedSet, OrUnset,
+	recursiveRemove, remove_empty_dicts, sortDict, Unset,
 )
+from .actions import ActionPool
 from .defaults import (
 	Default, DefaultGroup, DefaultState, DefaultValue, SourceType, UnsetDefault, UnsetExisting,
 )

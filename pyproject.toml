@@ -36,6 +36,7 @@ include = [
 packages = [
 	{ include = 'LevityDash', from = 'src' },
 	{ include = 'statekit', from = 'src' },
+	{ include = 'qolkit', from = 'src' },
 ]
 
 [tool.poetry.scripts]
