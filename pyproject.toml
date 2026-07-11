@@ -3,7 +3,7 @@ name = "LevityDash"
 authors = ["noblecloud <git@noblecloud.dev>"]
 description = "A lightweight, easy to use, desktop native, multi-source, modular dashboard for macOS, Windows and Linux"
 
-version = "0.2.0-beta.2"
+version = "0.2.0-beta.3"
 readme = "README.md"
 license = "MIT"
 
