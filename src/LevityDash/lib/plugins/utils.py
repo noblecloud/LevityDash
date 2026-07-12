@@ -462,10 +462,7 @@ class ScheduledEvent(object):
 			self.__interval = timedelta()
 
 		self.__owner = func.__self__
-		if self.__owner in self.instances:
-			self.instances[self.__owner].append(self)
-		else:
-			self.instances[self.__owner] = [self]
+		self.instances.setdefault(self.__owner, []).append(self)
 		self.__func = func
 		self.__args = arguments
 		self.__kwargs = keywordArguments
