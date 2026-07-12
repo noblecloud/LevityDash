@@ -33,6 +33,7 @@ from rich.progress import Progress
 import WeatherUnits as wu
 from LevityDash.lib.log import LevityPluginLog as log
 from LevityDash.lib.plugins.categories import CategoryDict, CategoryItem
+from LevityDash.lib.plugins.errors import InvalidData
 from LevityDash.lib.plugins.schema import LevityDatagram
 from LevityDash.lib.plugins.utils import ChannelSignal, Request, GuardedRequest, Accumulator, SchemaProperty, unitDict
 from LevityDash.lib.utils import (
@@ -172,6 +173,8 @@ class ObservationValue(TimeAwareValue):
 			timeAware = None
 		if metadata is None:
 			metadata = source.schema.getUnitMetaData(key, source)
+			if metadata is None:
+				raise InvalidData(f'No schema metadata found for key {key!r} in {source!r}; unable to construct an ObservationValue for it.')
 			if metadata['key'] != key:
 				metadata['sourceKey'] = key
 				if isinstance(key, CategoryItem):
@@ -1369,7 +1372,10 @@ class ObservationDict(PublishedDict):
 			key = convertToCategoryItem(key, source=None)
 			if not isinstance(item, TimeAwareValue):
 				item = TimeSeriesItem(item, timestamp)
-			self[key] = item
+			try:
+				self[key] = item
+			except InvalidData as e:
+				log.warning(f'Skipping unmapped key {key!r} for {self}: {e}')
 
 		self.calculateMissing(set(data.keys()))  # TODO: Use Requirements to handle this automatically based on schema
 
@@ -1460,7 +1466,7 @@ class ObservationDict(PublishedDict):
 			if 'environment.humidity.humidity' in keys:
 				humidity = self['environment.humidity.humidity']
 
-				if 'environment.temperature.dewpoint' not in keys:
+				if 'environment.temperature.dewpoint' not in keys and self.schema.get('environment.temperature.dewpoint', None):
 					self._calculatedKeys.add('environment.temperature.dewpoint')
 					dewpoint = temperature.dewpoint(humidity.value)
 					dewpoint.key = CategoryItem('environment.temperature.dewpoint')
