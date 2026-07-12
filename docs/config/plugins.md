@@ -41,4 +41,12 @@ Each plugin can have its own config file of the same name or a `config.ini` file
 
 ---
 
+[pw](plugins/PirateWeather.md ':include')
+
+---
+
 [gov](plugins/Govee.md ':include')
+
+---
+
+[owm](plugins/OpenWeatherMap.md ':include')
