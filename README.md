@@ -24,6 +24,37 @@ LevityDash aims to be a lightweight, desktop native, multi-source dashboard with
 
 </p>
 
+# Getting Started
+
+## Requirements
+
+- Python 3.11 – 3.14 (3.14 recommended — it's noticeably faster)
+- [Poetry](https://python-poetry.org) for installing from source
+
+## Install
+
+> **Note:** The package on PyPI is an old 0.1.x release from the PySide2 era. Until 0.2.0 ships, install from source.
+
+```bash
+git clone https://github.com/noblecloud/LevityDash.git
+cd LevityDash
+poetry install --without dev
+```
+
+The `dev` dependency group expects a sibling checkout of the WeatherUnits repo (`../WeatherUnits`) for library development; `--without dev` skips it and uses the released WeatherUnits from PyPI.
+
+## Running
+
+```bash
+poetry run LevityDash              # or: poetry run python -m LevityDash
+```
+
+To start over with a fresh configuration, use `poetry run LevityDash-reset-config`.
+
+PySide6 ships prebuilt ARM64 wheels (macOS universal2 and, in recent releases, Linux aarch64), so a 64-bit OS such as Raspberry Pi OS 64-bit installs like any other platform. 32-bit ARM is not supported by Qt 6.
+
+See the [documentation site](https://levitydash.app) for configuration, plugin setup, and troubleshooting.
+
 # Current Features
 
 ## Backend
