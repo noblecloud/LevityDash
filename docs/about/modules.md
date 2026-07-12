@@ -3,7 +3,11 @@ There are several modules already available for use. However, you can also build
 
 ## Realtime
 
-Single line text with support for showing units and titles and mapping glyphs/emojis to values
+Single line text with support for showing units and titles and mapping glyphs/emojis to values. The display can also be a gauge (`displayType: gauge`).
+
+## Gauge
+
+A radial gauge display for realtime values with customizable arcs, tick marks, needles, and value-mapped gradient coloring.
 
 ## Graph
 
@@ -22,7 +26,7 @@ Any scalar value can be plotted as a line. The line can be colored by a scalar v
 Not fully implemented
 
 ## Mini-Graph
-An extension of Graph with defaults meant for a small graph displaying only a few hours.
+An extension of Graph (`type: mini-graph`) with defaults meant for a small graph displaying only a few hours.
 
 ## Clock
 
@@ -39,13 +43,21 @@ A group is a collection of display modules. Groups can be resized within the gra
 ## Titled Group
 The same as Group, but has a title.
 
+## Stack
+
+Lays children out automatically in a vertical or horizontal stack, with optional dividers and spacers.
+
+## Value Stack
+
+A stack purpose-built for lists of labeled realtime values.
+
 
 ## Planned Modules
 
-- Gauges [nearly complete]
 - Weather Radar
 - Multiline Text
 - RSS Feeds
 - Calendar
-- Mini Graphs
 - More plot types
+
+See the [roadmap](/development/roadmap.md) for the full picture.
