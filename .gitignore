@@ -158,5 +158,8 @@ __MACOSX/
 ai-prompt.md
 .run/
 
+# Compiled LevityDash artifacts (cache, regenerable)
+**/*.levity.json
+
 # Generated Sphinx output
 docs/source/.build/

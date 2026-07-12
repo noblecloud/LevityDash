@@ -1,0 +1,5326 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://levitydash.app/schemas/levity-dashboard.json",
+  "title": "LevityDashboard",
+  "description": "Schema for LevityDashboard .levity configuration files",
+  "type": "object",
+  "additionalProperties": false,
+  "minProperties": 1,
+  "patternProperties": {
+    "^(?!type$|shared$).+$": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "clock": {
+              "$ref": "#/$defs/Clock"
+            }
+          },
+          "required": [
+            "clock"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "clock": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Clock"
+              }
+            }
+          },
+          "required": [
+            "clock"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "dashboard": {
+              "$ref": "#/$defs/CentralPanel"
+            }
+          },
+          "required": [
+            "dashboard"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "dashboard": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CentralPanel"
+              }
+            }
+          },
+          "required": [
+            "dashboard"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "divider": {
+              "$ref": "#/$defs/Divider"
+            }
+          },
+          "required": [
+            "divider"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "divider": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Divider"
+              }
+            }
+          },
+          "required": [
+            "divider"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "$ref": "#/$defs/GraphPanel"
+            }
+          },
+          "required": [
+            "graph"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "graph": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/GraphPanel"
+              }
+            }
+          },
+          "required": [
+            "graph"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group": {
+              "$ref": "#/$defs/Panel"
+            }
+          },
+          "required": [
+            "group"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Panel"
+              }
+            }
+          },
+          "required": [
+            "group"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group": {
+              "$ref": "#/$defs/NonInteractivePanel"
+            }
+          },
+          "required": [
+            "group"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/NonInteractivePanel"
+              }
+            }
+          },
+          "required": [
+            "group"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group": {
+              "$ref": "#/$defs/SplitPanel"
+            }
+          },
+          "required": [
+            "group"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "group": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SplitPanel"
+              }
+            }
+          },
+          "required": [
+            "group"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "label": {
+              "$ref": "#/$defs/Label"
+            }
+          },
+          "required": [
+            "label"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Label"
+              }
+            }
+          },
+          "required": [
+            "label"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mini-graph": {
+              "$ref": "#/$defs/MiniGraph"
+            }
+          },
+          "required": [
+            "mini-graph"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mini-graph": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/MiniGraph"
+              }
+            }
+          },
+          "required": [
+            "mini-graph"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "moon": {
+              "$ref": "#/$defs/Moon"
+            }
+          },
+          "required": [
+            "moon"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "moon": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Moon"
+              }
+            }
+          },
+          "required": [
+            "moon"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "realtime": {
+              "$ref": "#/$defs/Realtime"
+            }
+          },
+          "required": [
+            "realtime"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "realtime": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Realtime"
+              }
+            }
+          },
+          "required": [
+            "realtime"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "realtime": {
+              "$ref": "#/$defs/LockedRealtime"
+            }
+          },
+          "required": [
+            "realtime"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "realtime": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/LockedRealtime"
+              }
+            }
+          },
+          "required": [
+            "realtime"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "realtime.gauge": {
+              "$ref": "#/$defs/RealtimeGauge"
+            }
+          },
+          "required": [
+            "realtime.gauge"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "realtime.gauge": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/RealtimeGauge"
+              }
+            }
+          },
+          "required": [
+            "realtime.gauge"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "realtime.text": {
+              "$ref": "#/$defs/RealtimeText"
+            }
+          },
+          "required": [
+            "realtime.text"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "realtime.text": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/RealtimeText"
+              }
+            }
+          },
+          "required": [
+            "realtime.text"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "spacer": {
+              "$ref": "#/$defs/Spacer"
+            }
+          },
+          "required": [
+            "spacer"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "spacer": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Spacer"
+              }
+            }
+          },
+          "required": [
+            "spacer"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "stack": {
+              "$ref": "#/$defs/Stack"
+            }
+          },
+          "required": [
+            "stack"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "stack": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Stack"
+              }
+            }
+          },
+          "required": [
+            "stack"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "$ref": "#/$defs/EditableLabel"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/EditableLabel"
+              }
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "titled-group": {
+              "$ref": "#/$defs/TitledPanel"
+            }
+          },
+          "required": [
+            "titled-group"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "titled-group": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/TitledPanel"
+              }
+            }
+          },
+          "required": [
+            "titled-group"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value-stack": {
+              "$ref": "#/$defs/ValueStack"
+            }
+          },
+          "required": [
+            "value-stack"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value-stack": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ValueStack"
+              }
+            }
+          },
+          "required": [
+            "value-stack"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "ValueStack": {
+      "type": "object",
+      "properties": {
+        "geometry": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Length"
+            },
+            "y": {
+              "$ref": "#/$defs/Length"
+            },
+            "width": {
+              "$ref": "#/$defs/Length"
+            },
+            "height": {
+              "$ref": "#/$defs/Length"
+            },
+            "fillParent": {
+              "type": "boolean",
+              "description": "Fill parent container"
+            }
+          },
+          "additionalProperties": false
+        },
+        "margins": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Uniform margin"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$",
+              "description": "Comma-separated: top,right,bottom,left"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "padding": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "border": {
+          "$ref": "#/$defs/Border"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "$ref": "#/$defs/StackedItem"
+        },
+        "movable": {
+          "type": "boolean"
+        },
+        "resizable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "defaultType": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dividers": {
+          "$ref": "#/$defs/DividerProperties"
+        },
+        "preset": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "item-size": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "item-size-min": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "item-size-max": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "spacing": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "Vertical",
+            "Horizontal"
+          ],
+          "description": "Layout direction"
+        },
+        "labelAlignment": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Text alignment key (e.g. CenterRight, BottomLeft, top_center)"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "horizontal": {
+                  "type": "string",
+                  "enum": [
+                    "Left",
+                    "Center",
+                    "Right",
+                    "Justify"
+                  ]
+                },
+                "vertical": {
+                  "type": "string",
+                  "enum": [
+                    "Top",
+                    "Center",
+                    "Bottom"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "valueAlignment": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Text alignment key (e.g. CenterRight, BottomLeft, top_center)"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "horizontal": {
+                  "type": "string",
+                  "enum": [
+                    "Left",
+                    "Center",
+                    "Right",
+                    "Justify"
+                  ]
+                },
+                "vertical": {
+                  "type": "string",
+                  "enum": [
+                    "Top",
+                    "Center",
+                    "Bottom"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "label-size": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "DividerProperties": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "size": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "weight": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "color": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^#?[0-9a-fA-F]{0,6}$",
+              "description": "Hex color (with or without #)"
+            },
+            {
+              "type": "string",
+              "description": "Named web color"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 4,
+              "description": "RGBA values (0-255)"
+            }
+          ]
+        },
+        "opacity": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "StackedItem": {
+      "type": "object",
+      "properties": {
+        "size": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "size-ratio": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "Border": {
+      "type": "object",
+      "properties": {
+        "edges": {
+          "type": "string",
+          "description": "Edge-anchor flags string"
+        },
+        "offset": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "size": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "weight": {
+          "type": "number"
+        },
+        "color": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^#?[0-9a-fA-F]{0,6}$",
+              "description": "Hex color (with or without #)"
+            },
+            {
+              "type": "string",
+              "description": "Named web color"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 4,
+              "description": "RGBA values (0-255)"
+            }
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "opacity": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "TitledPanel": {
+      "type": "object",
+      "properties": {
+        "geometry": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Length"
+            },
+            "y": {
+              "$ref": "#/$defs/Length"
+            },
+            "width": {
+              "$ref": "#/$defs/Length"
+            },
+            "height": {
+              "$ref": "#/$defs/Length"
+            },
+            "fillParent": {
+              "type": "boolean",
+              "description": "Fill parent container"
+            }
+          },
+          "additionalProperties": false
+        },
+        "margins": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Uniform margin"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$",
+              "description": "Comma-separated: top,right,bottom,left"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "padding": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "border": {
+          "$ref": "#/$defs/Border"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "$ref": "#/$defs/Panel"
+        },
+        "movable": {
+          "type": "boolean"
+        },
+        "resizable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "title": {
+          "$ref": "#/$defs/TitleValueSplitter"
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "TitleValueSplitter": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "$ref": "#/$defs/TitleLabel"
+        },
+        "rotate": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "size": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "height": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "position": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "inline",
+            "below",
+            "hidden",
+            "float-under",
+            "float"
+          ],
+          "default": "auto"
+        },
+        "visible": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "TitleLabel": {
+      "type": "object",
+      "properties": {
+        "geometry": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Length"
+            },
+            "y": {
+              "$ref": "#/$defs/Length"
+            },
+            "width": {
+              "$ref": "#/$defs/Length"
+            },
+            "height": {
+              "$ref": "#/$defs/Length"
+            },
+            "fillParent": {
+              "type": "boolean",
+              "description": "Fill parent container"
+            }
+          },
+          "additionalProperties": false
+        },
+        "margins": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Uniform margin"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$",
+              "description": "Comma-separated: top,right,bottom,left"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "padding": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "border": {
+          "$ref": "#/$defs/Border"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "$ref": "#/$defs/Panel"
+        },
+        "movable": {
+          "type": "boolean"
+        },
+        "resizable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "filters": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "alignment": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Text alignment key (e.g. CenterRight, BottomLeft, top_center)"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "horizontal": {
+                  "type": "string",
+                  "enum": [
+                    "Left",
+                    "Center",
+                    "Right",
+                    "Justify"
+                  ]
+                },
+                "vertical": {
+                  "type": "string",
+                  "enum": [
+                    "Top",
+                    "Center",
+                    "Bottom"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "font": {
+          "type": "string"
+        },
+        "weight": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "Thin",
+                "Light",
+                "Normal",
+                "Medium",
+                "SemiBold",
+                "Bold",
+                "Black"
+              ]
+            },
+            {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 900
+            }
+          ]
+        },
+        "text-scale-type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "auto",
+            "fill",
+            "font",
+            "string"
+          ],
+          "default": "auto"
+        },
+        "modifiers": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "format-hint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text-height": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "matchingGroup": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "color": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^#?[0-9a-fA-F]{0,6}$",
+              "description": "Hex color (with or without #)"
+            },
+            {
+              "type": "string",
+              "description": "Named web color"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 4,
+              "description": "RGBA values (0-255)"
+            }
+          ]
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "Panel": {
+      "type": "object",
+      "properties": {
+        "geometry": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Length"
+            },
+            "y": {
+              "$ref": "#/$defs/Length"
+            },
+            "width": {
+              "$ref": "#/$defs/Length"
+            },
+            "height": {
+              "$ref": "#/$defs/Length"
+            },
+            "fillParent": {
+              "type": "boolean",
+              "description": "Fill parent container"
+            }
+          },
+          "additionalProperties": false
+        },
+        "margins": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Uniform margin"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$",
+              "description": "Comma-separated: top,right,bottom,left"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "padding": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "border": {
+          "$ref": "#/$defs/Border"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "$ref": "#/$defs/Panel"
+        },
+        "movable": {
+          "type": "boolean"
+        },
+        "resizable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "EditableLabel": {
+      "type": "object",
+      "properties": {
+        "geometry": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Length"
+            },
+            "y": {
+              "$ref": "#/$defs/Length"
+            },
+            "width": {
+              "$ref": "#/$defs/Length"
+            },
+            "height": {
+              "$ref": "#/$defs/Length"
+            },
+            "fillParent": {
+              "type": "boolean",
+              "description": "Fill parent container"
+            }
+          },
+          "additionalProperties": false
+        },
+        "margins": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Uniform margin"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$",
+              "description": "Comma-separated: top,right,bottom,left"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "padding": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "border": {
+          "$ref": "#/$defs/Border"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "$ref": "#/$defs/Panel"
+        },
+        "movable": {
+          "type": "boolean"
+        },
+        "resizable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "filters": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "alignment": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Text alignment key (e.g. CenterRight, BottomLeft, top_center)"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "horizontal": {
+                  "type": "string",
+                  "enum": [
+                    "Left",
+                    "Center",
+                    "Right",
+                    "Justify"
+                  ]
+                },
+                "vertical": {
+                  "type": "string",
+                  "enum": [
+                    "Top",
+                    "Center",
+                    "Bottom"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "font": {
+          "type": "string"
+        },
+        "weight": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "Thin",
+                "Light",
+                "Normal",
+                "Medium",
+                "SemiBold",
+                "Bold",
+                "Black"
+              ]
+            },
+            {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 900
+            }
+          ]
+        },
+        "text-scale-type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "auto",
+            "fill",
+            "font",
+            "string"
+          ],
+          "default": "auto"
+        },
+        "modifiers": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "format-hint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text-height": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "matchingGroup": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "color": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^#?[0-9a-fA-F]{0,6}$",
+              "description": "Hex color (with or without #)"
+            },
+            {
+              "type": "string",
+              "description": "Named web color"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 4,
+              "description": "RGBA values (0-255)"
+            }
+          ]
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "Stack": {
+      "type": "object",
+      "properties": {
+        "geometry": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Length"
+            },
+            "y": {
+              "$ref": "#/$defs/Length"
+            },
+            "width": {
+              "$ref": "#/$defs/Length"
+            },
+            "height": {
+              "$ref": "#/$defs/Length"
+            },
+            "fillParent": {
+              "type": "boolean",
+              "description": "Fill parent container"
+            }
+          },
+          "additionalProperties": false
+        },
+        "margins": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Uniform margin"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$",
+              "description": "Comma-separated: top,right,bottom,left"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "padding": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "border": {
+          "$ref": "#/$defs/Border"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "$ref": "#/$defs/StackedItem"
+        },
+        "movable": {
+          "type": "boolean"
+        },
+        "resizable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "defaultType": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dividers": {
+          "$ref": "#/$defs/DividerProperties"
+        },
+        "preset": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "item-size": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "item-size-min": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "item-size-max": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "spacing": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "Vertical",
+            "Horizontal"
+          ],
+          "description": "Layout direction"
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "Spacer": {
+      "type": "object",
+      "properties": {
+        "size": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "size-ratio": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "geometry": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Length"
+            },
+            "y": {
+              "$ref": "#/$defs/Length"
+            },
+            "width": {
+              "$ref": "#/$defs/Length"
+            },
+            "height": {
+              "$ref": "#/$defs/Length"
+            },
+            "fillParent": {
+              "type": "boolean",
+              "description": "Fill parent container"
+            }
+          },
+          "additionalProperties": false
+        },
+        "margins": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Uniform margin"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$",
+              "description": "Comma-separated: top,right,bottom,left"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "padding": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "border": {
+          "$ref": "#/$defs/Border"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "$ref": "#/$defs/Panel"
+        },
+        "movable": {
+          "type": "boolean"
+        },
+        "resizable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "RealtimeText": {
+      "type": "object",
+      "properties": {
+        "geometry": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Length"
+            },
+            "y": {
+              "$ref": "#/$defs/Length"
+            },
+            "width": {
+              "$ref": "#/$defs/Length"
+            },
+            "height": {
+              "$ref": "#/$defs/Length"
+            },
+            "fillParent": {
+              "type": "boolean",
+              "description": "Fill parent container"
+            }
+          },
+          "additionalProperties": false
+        },
+        "margins": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Uniform margin"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$",
+              "description": "Comma-separated: top,right,bottom,left"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "padding": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "border": {
+          "$ref": "#/$defs/Border"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "$ref": "#/$defs/Panel"
+        },
+        "movable": {
+          "type": "boolean"
+        },
+        "resizable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "key": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-zA-Z]+(\\.[a-zA-Z0-9_]+)*$",
+          "description": "Dotted data key path (e.g. environment.temperature.temperature)"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "forecast": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "display": {
+          "$ref": "#/$defs/Display"
+        },
+        "title": {
+          "$ref": "#/$defs/TitleValueSplitter"
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "Display": {
+      "type": "object",
+      "properties": {
+        "geometry": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Length"
+            },
+            "y": {
+              "$ref": "#/$defs/Length"
+            },
+            "width": {
+              "$ref": "#/$defs/Length"
+            },
+            "height": {
+              "$ref": "#/$defs/Length"
+            },
+            "fillParent": {
+              "type": "boolean",
+              "description": "Fill parent container"
+            }
+          },
+          "additionalProperties": false
+        },
+        "margins": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Uniform margin"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$",
+              "description": "Comma-separated: top,right,bottom,left"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "padding": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "border": {
+          "$ref": "#/$defs/Border"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "$ref": "#/$defs/Panel"
+        },
+        "movable": {
+          "type": "boolean"
+        },
+        "resizable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "RealtimeGauge": {
+      "type": "object",
+      "properties": {
+        "geometry": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Length"
+            },
+            "y": {
+              "$ref": "#/$defs/Length"
+            },
+            "width": {
+              "$ref": "#/$defs/Length"
+            },
+            "height": {
+              "$ref": "#/$defs/Length"
+            },
+            "fillParent": {
+              "type": "boolean",
+              "description": "Fill parent container"
+            }
+          },
+          "additionalProperties": false
+        },
+        "margins": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Uniform margin"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$",
+              "description": "Comma-separated: top,right,bottom,left"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "padding": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "border": {
+          "$ref": "#/$defs/Border"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "$ref": "#/$defs/Panel"
+        },
+        "movable": {
+          "type": "boolean"
+        },
+        "resizable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "key": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-zA-Z]+(\\.[a-zA-Z0-9_]+)*$",
+          "description": "Dotted data key path (e.g. environment.temperature.temperature)"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "forecast": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "display": {
+          "$ref": "#/$defs/Display"
+        },
+        "title": {
+          "$ref": "#/$defs/TitleValueSplitter"
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "LockedRealtime": {
+      "type": "object",
+      "properties": {
+        "geometry": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Length"
+            },
+            "y": {
+              "$ref": "#/$defs/Length"
+            },
+            "width": {
+              "$ref": "#/$defs/Length"
+            },
+            "height": {
+              "$ref": "#/$defs/Length"
+            },
+            "fillParent": {
+              "type": "boolean",
+              "description": "Fill parent container"
+            }
+          },
+          "additionalProperties": false
+        },
+        "margins": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Uniform margin"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$",
+              "description": "Comma-separated: top,right,bottom,left"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "padding": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "border": {
+          "$ref": "#/$defs/Border"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "$ref": "#/$defs/Panel"
+        },
+        "movable": {
+          "type": "boolean"
+        },
+        "resizable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "key": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-zA-Z]+(\\.[a-zA-Z0-9_]+)*$",
+          "description": "Dotted data key path (e.g. environment.temperature.temperature)"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "forecast": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "display": {
+          "$ref": "#/$defs/Display"
+        },
+        "title": {
+          "$ref": "#/$defs/TitleValueSplitter"
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "Realtime": {
+      "type": "object",
+      "properties": {
+        "geometry": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Length"
+            },
+            "y": {
+              "$ref": "#/$defs/Length"
+            },
+            "width": {
+              "$ref": "#/$defs/Length"
+            },
+            "height": {
+              "$ref": "#/$defs/Length"
+            },
+            "fillParent": {
+              "type": "boolean",
+              "description": "Fill parent container"
+            }
+          },
+          "additionalProperties": false
+        },
+        "margins": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Uniform margin"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$",
+              "description": "Comma-separated: top,right,bottom,left"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "padding": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "border": {
+          "$ref": "#/$defs/Border"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "$ref": "#/$defs/Panel"
+        },
+        "movable": {
+          "type": "boolean"
+        },
+        "resizable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "key": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-zA-Z]+(\\.[a-zA-Z0-9_]+)*$",
+          "description": "Dotted data key path (e.g. environment.temperature.temperature)"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "forecast": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "display": {
+          "$ref": "#/$defs/Display"
+        },
+        "title": {
+          "$ref": "#/$defs/TitleValueSplitter"
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "Moon": {
+      "type": "object",
+      "properties": {
+        "geometry": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Length"
+            },
+            "y": {
+              "$ref": "#/$defs/Length"
+            },
+            "width": {
+              "$ref": "#/$defs/Length"
+            },
+            "height": {
+              "$ref": "#/$defs/Length"
+            },
+            "fillParent": {
+              "type": "boolean",
+              "description": "Fill parent container"
+            }
+          },
+          "additionalProperties": false
+        },
+        "margins": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Uniform margin"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$",
+              "description": "Comma-separated: top,right,bottom,left"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "padding": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "border": {
+          "$ref": "#/$defs/Border"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "$ref": "#/$defs/Panel"
+        },
+        "movable": {
+          "type": "boolean"
+        },
+        "resizable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "glow": {
+          "type": "boolean"
+        },
+        "glowStrength": {
+          "type": "number"
+        },
+        "interval": {
+          "type": "string"
+        },
+        "alignment": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Text alignment key (e.g. CenterRight, BottomLeft, top_center)"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "horizontal": {
+                  "type": "string",
+                  "enum": [
+                    "Left",
+                    "Center",
+                    "Right",
+                    "Justify"
+                  ]
+                },
+                "vertical": {
+                  "type": "string",
+                  "enum": [
+                    "Top",
+                    "Center",
+                    "Bottom"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "rotate": {
+          "type": "boolean"
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "MiniGraph": {
+      "type": "object",
+      "properties": {
+        "geometry": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Length"
+            },
+            "y": {
+              "$ref": "#/$defs/Length"
+            },
+            "width": {
+              "$ref": "#/$defs/Length"
+            },
+            "height": {
+              "$ref": "#/$defs/Length"
+            },
+            "fillParent": {
+              "type": "boolean",
+              "description": "Fill parent container"
+            }
+          },
+          "additionalProperties": false
+        },
+        "margins": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Uniform margin"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$",
+              "description": "Comma-separated: top,right,bottom,left"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "padding": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "border": {
+          "$ref": "#/$defs/Border"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "$ref": "#/$defs/Panel"
+        },
+        "movable": {
+          "type": "boolean"
+        },
+        "resizable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "annotations": {
+          "$ref": "#/$defs/DayAnnotations"
+        },
+        "scrollable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "indicator": {
+          "$ref": "#/$defs/CurrentTimeIndicator"
+        },
+        "figures": {
+          "$ref": "#/$defs/Figure"
+        },
+        "timeframe": {
+          "type": "string"
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "Figure": {
+      "type": "object",
+      "properties": {
+        "geometry": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Length"
+            },
+            "y": {
+              "$ref": "#/$defs/Length"
+            },
+            "width": {
+              "$ref": "#/$defs/Length"
+            },
+            "height": {
+              "$ref": "#/$defs/Length"
+            },
+            "fillParent": {
+              "type": "boolean",
+              "description": "Fill parent container"
+            }
+          },
+          "additionalProperties": false
+        },
+        "margins": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Text alignment key (e.g. CenterRight, BottomLeft, top_center)"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "horizontal": {
+                  "type": "string",
+                  "enum": [
+                    "Left",
+                    "Center",
+                    "Right",
+                    "Justify"
+                  ]
+                },
+                "vertical": {
+                  "type": "string",
+                  "enum": [
+                    "Top",
+                    "Center",
+                    "Bottom"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "padding": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "border": {
+          "$ref": "#/$defs/Border"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "$ref": "#/$defs/GraphItemData"
+        },
+        "movable": {
+          "type": "boolean"
+        },
+        "resizable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "opacity": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "max": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "min": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "GraphItemData": {
+      "type": "object",
+      "properties": {
+        "z": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "plot": {
+          "$ref": "#/$defs/Plot"
+        },
+        "labels": {
+          "$ref": "#/$defs/PlotLabels"
+        },
+        "interpolate": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "smooth": {
+          "type": "boolean"
+        },
+        "smoothingStrength": {
+          "type": "number"
+        },
+        "smooth-ype": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "interpolation-type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-zA-Z]+(\\.[a-zA-Z0-9_]+)*$",
+          "description": "Dotted data key path (e.g. environment.temperature.temperature)"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resolution": {
+          "type": "integer"
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "PlotLabels": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "format": {
+          "type": "string"
+        },
+        "opacity": {
+          "type": "number"
+        },
+        "position": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "inline",
+            "below",
+            "hidden",
+            "float-under",
+            "float"
+          ],
+          "default": "auto"
+        },
+        "height": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "offset": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "alignment": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Text alignment key (e.g. CenterRight, BottomLeft, top_center)"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "horizontal": {
+                  "type": "string",
+                  "enum": [
+                    "Left",
+                    "Center",
+                    "Right",
+                    "Justify"
+                  ]
+                },
+                "vertical": {
+                  "type": "string",
+                  "enum": [
+                    "Top",
+                    "Center",
+                    "Bottom"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "color": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^#?[0-9a-fA-F]{0,6}$",
+              "description": "Hex color (with or without #)"
+            },
+            {
+              "type": "string",
+              "description": "Named web color"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 4,
+              "description": "RGBA values (0-255)"
+            }
+          ]
+        },
+        "gradient": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "Plot": {
+      "type": "object",
+      "properties": {
+        "gradient": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "weight": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "color": {
+          "type": "string"
+        },
+        "opacity": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "dashPattern": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "object"
+          }
+        },
+        "cap": {
+          "type": "string"
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "CurrentTimeIndicator": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "color": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^#?[0-9a-fA-F]{0,6}$",
+              "description": "Hex color (with or without #)"
+            },
+            {
+              "type": "string",
+              "description": "Named web color"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 4,
+              "description": "RGBA values (0-255)"
+            }
+          ]
+        },
+        "opacity": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "weight": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "DayAnnotations": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "lines": {
+          "$ref": "#/$defs/TimeMarkers"
+        },
+        "hourLabels": {
+          "$ref": "#/$defs/HourLabels"
+        },
+        "dayLabels": {
+          "$ref": "#/$defs/DayLabels"
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "DayLabels": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "format": {
+          "type": "string"
+        },
+        "opacity": {
+          "type": "number"
+        },
+        "position": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "inline",
+            "below",
+            "hidden",
+            "float-under",
+            "float"
+          ],
+          "default": "auto"
+        },
+        "height": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "offset": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "alignment": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Text alignment key (e.g. CenterRight, BottomLeft, top_center)"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "horizontal": {
+                  "type": "string",
+                  "enum": [
+                    "Left",
+                    "Center",
+                    "Right",
+                    "Justify"
+                  ]
+                },
+                "vertical": {
+                  "type": "string",
+                  "enum": [
+                    "Top",
+                    "Center",
+                    "Bottom"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "color": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^#?[0-9a-fA-F]{0,6}$",
+              "description": "Hex color (with or without #)"
+            },
+            {
+              "type": "string",
+              "description": "Named web color"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 4,
+              "description": "RGBA values (0-255)"
+            }
+          ]
+        },
+        "gradient": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "spacingIntervals": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "object"
+          }
+        },
+        "relative-times": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "HourLabels": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "format": {
+          "type": "string"
+        },
+        "opacity": {
+          "type": "number"
+        },
+        "position": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "inline",
+            "below",
+            "hidden",
+            "float-under",
+            "float"
+          ],
+          "default": "auto"
+        },
+        "height": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "offset": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "alignment": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Text alignment key (e.g. CenterRight, BottomLeft, top_center)"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "horizontal": {
+                  "type": "string",
+                  "enum": [
+                    "Left",
+                    "Center",
+                    "Right",
+                    "Justify"
+                  ]
+                },
+                "vertical": {
+                  "type": "string",
+                  "enum": [
+                    "Top",
+                    "Center",
+                    "Bottom"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "color": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^#?[0-9a-fA-F]{0,6}$",
+              "description": "Hex color (with or without #)"
+            },
+            {
+              "type": "string",
+              "description": "Named web color"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 4,
+              "description": "RGBA values (0-255)"
+            }
+          ]
+        },
+        "gradient": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "spacingIntervals": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "object"
+          }
+        },
+        "relative-times": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "TimeMarkers": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "weight": {
+          "type": "number"
+        },
+        "color": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^#?[0-9a-fA-F]{0,6}$",
+              "description": "Hex color (with or without #)"
+            },
+            {
+              "type": "string",
+              "description": "Named web color"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 4,
+              "description": "RGBA values (0-255)"
+            }
+          ]
+        },
+        "spacing": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "Label": {
+      "type": "object",
+      "properties": {
+        "geometry": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Length"
+            },
+            "y": {
+              "$ref": "#/$defs/Length"
+            },
+            "width": {
+              "$ref": "#/$defs/Length"
+            },
+            "height": {
+              "$ref": "#/$defs/Length"
+            },
+            "fillParent": {
+              "type": "boolean",
+              "description": "Fill parent container"
+            }
+          },
+          "additionalProperties": false
+        },
+        "margins": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Uniform margin"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$",
+              "description": "Comma-separated: top,right,bottom,left"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "padding": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "border": {
+          "$ref": "#/$defs/Border"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "$ref": "#/$defs/Panel"
+        },
+        "movable": {
+          "type": "boolean"
+        },
+        "resizable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "filters": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "alignment": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Text alignment key (e.g. CenterRight, BottomLeft, top_center)"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "horizontal": {
+                  "type": "string",
+                  "enum": [
+                    "Left",
+                    "Center",
+                    "Right",
+                    "Justify"
+                  ]
+                },
+                "vertical": {
+                  "type": "string",
+                  "enum": [
+                    "Top",
+                    "Center",
+                    "Bottom"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "font": {
+          "type": "string"
+        },
+        "weight": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "Thin",
+                "Light",
+                "Normal",
+                "Medium",
+                "SemiBold",
+                "Bold",
+                "Black"
+              ]
+            },
+            {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 900
+            }
+          ]
+        },
+        "text-scale-type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "auto",
+            "fill",
+            "font",
+            "string"
+          ],
+          "default": "auto"
+        },
+        "modifiers": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "format-hint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text-height": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "matchingGroup": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "color": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^#?[0-9a-fA-F]{0,6}$",
+              "description": "Hex color (with or without #)"
+            },
+            {
+              "type": "string",
+              "description": "Named web color"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 4,
+              "description": "RGBA values (0-255)"
+            }
+          ]
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "SplitPanel": {
+      "type": "object",
+      "properties": {
+        "geometry": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Length"
+            },
+            "y": {
+              "$ref": "#/$defs/Length"
+            },
+            "width": {
+              "$ref": "#/$defs/Length"
+            },
+            "height": {
+              "$ref": "#/$defs/Length"
+            },
+            "fillParent": {
+              "type": "boolean",
+              "description": "Fill parent container"
+            }
+          },
+          "additionalProperties": false
+        },
+        "margins": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Uniform margin"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$",
+              "description": "Comma-separated: top,right,bottom,left"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "padding": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "border": {
+          "$ref": "#/$defs/Border"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "$ref": "#/$defs/Panel"
+        },
+        "movable": {
+          "type": "boolean"
+        },
+        "resizable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "NonInteractivePanel": {
+      "type": "object",
+      "properties": {
+        "geometry": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Length"
+            },
+            "y": {
+              "$ref": "#/$defs/Length"
+            },
+            "width": {
+              "$ref": "#/$defs/Length"
+            },
+            "height": {
+              "$ref": "#/$defs/Length"
+            },
+            "fillParent": {
+              "type": "boolean",
+              "description": "Fill parent container"
+            }
+          },
+          "additionalProperties": false
+        },
+        "margins": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Uniform margin"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$",
+              "description": "Comma-separated: top,right,bottom,left"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "padding": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "border": {
+          "$ref": "#/$defs/Border"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "$ref": "#/$defs/Panel"
+        },
+        "movable": {
+          "type": "boolean"
+        },
+        "resizable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "GraphPanel": {
+      "type": "object",
+      "properties": {
+        "geometry": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Length"
+            },
+            "y": {
+              "$ref": "#/$defs/Length"
+            },
+            "width": {
+              "$ref": "#/$defs/Length"
+            },
+            "height": {
+              "$ref": "#/$defs/Length"
+            },
+            "fillParent": {
+              "type": "boolean",
+              "description": "Fill parent container"
+            }
+          },
+          "additionalProperties": false
+        },
+        "margins": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Uniform margin"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$",
+              "description": "Comma-separated: top,right,bottom,left"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "padding": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "border": {
+          "$ref": "#/$defs/Border"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "$ref": "#/$defs/Panel"
+        },
+        "movable": {
+          "type": "boolean"
+        },
+        "resizable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "annotations": {
+          "$ref": "#/$defs/DayAnnotations"
+        },
+        "scrollable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "indicator": {
+          "$ref": "#/$defs/CurrentTimeIndicator"
+        },
+        "figures": {
+          "$ref": "#/$defs/Figure"
+        },
+        "timeframe": {
+          "type": "string"
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "Divider": {
+      "type": "object",
+      "properties": {
+        "size": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "weight": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "color": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^#?[0-9a-fA-F]{0,6}$",
+              "description": "Hex color (with or without #)"
+            },
+            {
+              "type": "string",
+              "description": "Named web color"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 4,
+              "description": "RGBA values (0-255)"
+            }
+          ]
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "CentralPanel": {
+      "type": "object",
+      "properties": {
+        "geometry": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Length"
+            },
+            "y": {
+              "$ref": "#/$defs/Length"
+            },
+            "width": {
+              "$ref": "#/$defs/Length"
+            },
+            "height": {
+              "$ref": "#/$defs/Length"
+            },
+            "fillParent": {
+              "type": "boolean",
+              "description": "Fill parent container"
+            }
+          },
+          "additionalProperties": false
+        },
+        "margins": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Uniform margin"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$",
+              "description": "Comma-separated: top,right,bottom,left"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "padding": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "border": {
+          "$ref": "#/$defs/Border"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "$ref": "#/$defs/Panel"
+        },
+        "movable": {
+          "type": "boolean"
+        },
+        "resizable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "Clock": {
+      "type": "object",
+      "properties": {
+        "geometry": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Length"
+            },
+            "y": {
+              "$ref": "#/$defs/Length"
+            },
+            "width": {
+              "$ref": "#/$defs/Length"
+            },
+            "height": {
+              "$ref": "#/$defs/Length"
+            },
+            "fillParent": {
+              "type": "boolean",
+              "description": "Fill parent container"
+            }
+          },
+          "additionalProperties": false
+        },
+        "margins": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Uniform margin"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$",
+              "description": "Comma-separated: top,right,bottom,left"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "padding": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "border": {
+          "$ref": "#/$defs/Border"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "$ref": "#/$defs/ClockComponent"
+        },
+        "movable": {
+          "type": "boolean"
+        },
+        "resizable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": null,
+      "additionalProperties": false
+    },
+    "ClockComponent": {
+      "type": "object",
+      "properties": {
+        "geometry": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Length"
+            },
+            "y": {
+              "$ref": "#/$defs/Length"
+            },
+            "width": {
+              "$ref": "#/$defs/Length"
+            },
+            "height": {
+              "$ref": "#/$defs/Length"
+            },
+            "fillParent": {
+              "type": "boolean",
+              "description": "Fill parent container"
+            }
+          },
+          "additionalProperties": false
+        },
+        "margins": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Uniform margin"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$",
+              "description": "Comma-separated: top,right,bottom,left"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "padding": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "top": {
+                  "$ref": "#/$defs/Length"
+                },
+                "right": {
+                  "$ref": "#/$defs/Length"
+                },
+                "bottom": {
+                  "$ref": "#/$defs/Length"
+                },
+                "left": {
+                  "$ref": "#/$defs/Length"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "border": {
+          "$ref": "#/$defs/Border"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "$ref": "#/$defs/Panel"
+        },
+        "movable": {
+          "type": "boolean"
+        },
+        "resizable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "frozen": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "filters": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "alignment": {
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Text alignment key (e.g. CenterRight, BottomLeft, top_center)"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "horizontal": {
+                  "type": "string",
+                  "enum": [
+                    "Left",
+                    "Center",
+                    "Right",
+                    "Justify"
+                  ]
+                },
+                "vertical": {
+                  "type": "string",
+                  "enum": [
+                    "Top",
+                    "Center",
+                    "Bottom"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "font": {
+          "type": "string"
+        },
+        "weight": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "Thin",
+                "Light",
+                "Normal",
+                "Medium",
+                "SemiBold",
+                "Bold",
+                "Black"
+              ]
+            },
+            {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 900
+            }
+          ]
+        },
+        "text-scale-type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "auto",
+            "fill",
+            "font",
+            "string"
+          ],
+          "default": "auto"
+        },
+        "modifiers": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "format-hint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text-height": {
+          "oneOf": [
+            {
+              "type": "number",
+              "description": "Value in pixels"
+            },
+            {
+              "type": "string",
+              "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+              "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+            }
+          ]
+        },
+        "matchingGroup": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "color": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^#?[0-9a-fA-F]{0,6}$",
+              "description": "Hex color (with or without #)"
+            },
+            {
+              "type": "string",
+              "description": "Named web color"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 4,
+              "description": "RGBA values (0-255)"
+            }
+          ]
+        },
+        "format": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "format"
+      ],
+      "additionalProperties": false
+    },
+    "Length": {
+      "oneOf": [
+        {
+          "type": "number",
+          "description": "Value in pixels"
+        },
+        {
+          "type": "string",
+          "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+          "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+        }
+      ]
+    },
+    "Size.Height": {
+      "oneOf": [
+        {
+          "type": "number",
+          "description": "Value in pixels"
+        },
+        {
+          "type": "string",
+          "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+          "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+        }
+      ]
+    },
+    "Size.Width": {
+      "oneOf": [
+        {
+          "type": "number",
+          "description": "Value in pixels"
+        },
+        {
+          "type": "string",
+          "pattern": "^[\\d.]+(px|%|cm|mm|in|pt)?$",
+          "description": "Number with optional unit (px, %, cm, mm, in, pt)"
+        }
+      ]
+    },
+    "Margins": {
+      "oneOf": [
+        {
+          "type": "number",
+          "description": "Uniform margin"
+        },
+        {
+          "type": "string",
+          "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$",
+          "description": "Comma-separated: top,right,bottom,left"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "top": {
+              "$ref": "#/$defs/Length"
+            },
+            "right": {
+              "$ref": "#/$defs/Length"
+            },
+            "bottom": {
+              "$ref": "#/$defs/Length"
+            },
+            "left": {
+              "$ref": "#/$defs/Length"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Padding": {
+      "oneOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "pattern": "^[\\d.]+(?:px|%|cm|mm|in|pt)?(?:,\\s*[\\d.]+(?:px|%|cm|mm|in|pt)?){0,3}$"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "top": {
+              "$ref": "#/$defs/Length"
+            },
+            "right": {
+              "$ref": "#/$defs/Length"
+            },
+            "bottom": {
+              "$ref": "#/$defs/Length"
+            },
+            "left": {
+              "$ref": "#/$defs/Length"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Geometry": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "$ref": "#/$defs/Length"
+        },
+        "y": {
+          "$ref": "#/$defs/Length"
+        },
+        "width": {
+          "$ref": "#/$defs/Length"
+        },
+        "height": {
+          "$ref": "#/$defs/Length"
+        },
+        "fillParent": {
+          "type": "boolean",
+          "description": "Fill parent container"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Direction": {
+      "type": "string",
+      "enum": [
+        "Vertical",
+        "Horizontal"
+      ],
+      "description": "Layout direction"
+    },
+    "Alignment": {
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "Text alignment key (e.g. CenterRight, BottomLeft, top_center)"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "horizontal": {
+              "type": "string",
+              "enum": [
+                "Left",
+                "Center",
+                "Right",
+                "Justify"
+              ]
+            },
+            "vertical": {
+              "type": "string",
+              "enum": [
+                "Top",
+                "Center",
+                "Bottom"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ScaleType": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "fill",
+        "font",
+        "string"
+      ],
+      "default": "auto"
+    },
+    "DisplayPosition": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "inline",
+        "below",
+        "hidden",
+        "float-under",
+        "float"
+      ],
+      "default": "auto"
+    },
+    "DisplayType": {
+      "type": "string",
+      "enum": [
+        "Text",
+        "Gauge"
+      ],
+      "default": "Text"
+    },
+    "Color": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^#?[0-9a-fA-F]{0,6}$",
+          "description": "Hex color (with or without #)"
+        },
+        {
+          "type": "string",
+          "description": "Named web color"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 4,
+          "description": "RGBA values (0-255)"
+        }
+      ]
+    },
+    "FontWeight": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "Thin",
+            "Light",
+            "Normal",
+            "Medium",
+            "SemiBold",
+            "Bold",
+            "Black"
+          ]
+        },
+        {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 900
+        }
+      ]
+    },
+    "CategoryItem": {
+      "type": "string",
+      "pattern": "^[a-zA-Z]+(\\.[a-zA-Z0-9_]+)*$",
+      "description": "Dotted data key path (e.g. environment.temperature.temperature)"
+    },
+    "LocationFlag": {
+      "type": "string",
+      "description": "Edge-anchor flags string"
+    },
+    "DimensionType": {
+      "type": "string",
+      "enum": [
+        "Absolute",
+        "Relative"
+      ]
+    },
+    "Measurement": {
+      "type": "number",
+      "description": "Numeric measurement value (unit conversion handled by the schema)"
+    }
+  }
+}
