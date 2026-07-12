@@ -229,6 +229,7 @@ class ObservationValue(TimeAwareValue):
 			try:
 				value = self.convertFunc(self.rawValue)
 			except Exception as e:
+				log.warning(f'{self.__metadata.get("key")}: failed to convert raw value {self.rawValue!r} ({e}); using raw value as-is')
 				value = self.rawValue
 			if localized := getattr(value, 'localize', None):
 				value = localized

@@ -1,6 +1,5 @@
 from collections import ChainMap
 from copy import deepcopy
-from datetime import datetime
 from difflib import get_close_matches
 from enum import Enum
 from functools import cached_property, lru_cache
@@ -748,7 +747,7 @@ class Schema(CategoryDict):
 				return None
 		metaData = self.getExact(key)
 		if metaData is None:
-			keys = [str(key) for k in self._source.keys()]
+			keys = [str(k) for k in self._source.keys()]
 			closestMatch = get_close_matches(str(key), keys, n=1, cutoff=0.5)
 			if closestMatch:
 				log.warning(f'{key} was not found in {self} but {closestMatch[0]} was found as it\'s closest match')
@@ -885,18 +884,3 @@ class Schema(CategoryDict):
 	@cached_property
 	def nullAllowedKeys(self) -> Set[CategoryItem]:
 		return {key for key, metadata in self.flatDict.items() if metadata.get('allowNull', False)}
-
-	def __parseDateTime(self, measurementData, unitDefinition, value):
-		if isinstance(value, datetime):
-			return value
-		else:
-			if unitDefinition == 'epoch':
-				if abs(value) <= 0xffffffff:
-					value /= 1000
-				cls = datetime.fromtimestamp
-			elif unitDefinition == 'ISO8601':
-				cls = datetime.strptime
-				kwargs = {'format': measurementData['format']}
-			else:
-				raise ValueError(f'Unknown date format: {unitDefinition}')
-		return cls(value, **kwargs)
