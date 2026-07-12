@@ -1,6 +1,6 @@
 # LevityDash — developer notes
 
-A desktop-native, multi-source weather dashboard. Qt (PySide6) QGraphicsScene frontend; plugin-driven data layer. Beta, used daily. Direction lives in [docs/roadmap.md](docs/roadmap.md). For the schema subsystem (plugin data ingestion/mapping/units) see [AGENTS.md](AGENTS.md).
+A desktop-native, multi-source weather dashboard. Qt (PySide6) QGraphicsScene frontend; plugin-driven data layer. Beta, used daily. Direction lives in [docs/roadmap.md](docs/roadmap.md). [AGENTS.md](AGENTS.md) covers the same repo for other AI agents (OpenCode/DeepSeek) — the two should stay roughly in sync.
 
 ## Layout
 
