@@ -61,6 +61,16 @@ The frontend that Levity will use. Currently, only Qt (PySide6) is supported —
 
 When ```True```, Levity will run in fullscreen mode.
 
+#### <div class=mono>display:</div>
+
+Which screen the window opens on, for multi-monitor setups. Accepts:
+
+- `smallest` / `largest` — pick by resolution (default: `smallest`)
+- `lowest` — the screen whose geometry extends furthest down
+- `primary` / `main` / `default` — the OS primary screen
+- `current` / `active` — the screen the cursor is on
+- a screen index (`0`, `1`, …) or a (fuzzy-matched) screen name
+
 #### <div class=mono>width/height:</div>
 
 The starting width and height of the window in pixels `px`, percentage `%`, centimeters `cm`, millimeters `mm`, inches `in` or pretty much any length unit supported by WeatherUnits. For values without a unit, integers are assumed to be
@@ -109,6 +119,25 @@ the original size.
 
 The maximum size of the pixmap cache in `[giga|mega|kilo]bytes`. A few of the Qt modules, except items that render their own textures like Graph Plots, use caching to speed up performance and reduce redundant rendering. All of these bitmaps
 are stored in a QPixmapCache, this option limits the size of that cache.
+
+#### <div class=mono>status-bar:</div>
+
+When `True`, shows a status bar along the bottom of the window with plugin/log activity. Default is `False`.
+
+#### <div class=mono>handleTouchSize:</div>
+
+The size of the invisible grab area around resize/drag handles, making them easier to hit on touch screens. Accepts a length unit like the other size options.
+
+## Menu Bar
+
+```ini
+[MenuBar]
+fullscreen = hidden
+normal = show
+delay = 1.0
+```
+
+Controls menu bar visibility per window state: `fullscreen` and `normal` each accept `show` or `hidden`. When hidden, moving the mouse to the top edge of the window reveals the menu bar after `delay` seconds (default `0.3`).
 
 ## Fonts
 
