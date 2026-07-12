@@ -36,14 +36,20 @@ The current options are:
 
 <div class="multi-column">
 
-- realtime[text]
+- realtime[.text|.gauge]
+- text / label
 - group
+- titled-group
+- stack
+- value-stack
 - graph
-- text
+- mini-graph
 - clock
 - moon
 
 </div>
+
+Additionally, a `spacer` can be used inside a stack's `items` list, and prefixing any type with `disabled-` (or `hidden-`) skips that item at load time without deleting it from the file.
 
 <!-- div:right-panel -->
 
@@ -277,7 +283,7 @@ Like Font, the anchor point is the "strikeout" postition, but the height is eith
 
 ## Realtime
 
-Realtime currently only supports displaying text but other display types will be added in the future. For now, the type must be set to `realtime` or `realtime.text`.
+Realtime can display its value as text (`realtime.text`) or as a radial gauge (`realtime.gauge`, or set `displayType: gauge` under `display:`). It defaults to text.
 
 The Realtime module essentially a grouping that contains a title and a display submodule.
 
@@ -345,6 +351,8 @@ display:
 <div class="indent">
 
 #### <div class=mono>type: str[fuzzy]</div>
+
+The display type. `text` (the default) renders the value as text; `gauge` renders it as a radial gauge. `type: realtime.gauge` on the parent module is shorthand for setting this to `gauge`.
 
 #### <div class=mono>unit-string: str</div>
 
@@ -560,7 +568,7 @@ Currently only supports hard coded, named gradients.
 
 The available options are:
 
-<span class=mono-bold>TemperatureGradient, PrecipitationProbabilityGradient, PrecipitationRateGradient</span>
+<span class=mono-bold>TemperatureGradient, RainbowTemperature, PrecipitationProbabilityGradient, PrecipitationRateGradient, RipeMalinkaGradient, PurpleSunset, PlumPlate, HappyFisher, FabledSunsetGradientLux, FabledSunsetGradientWattsPerSquareMeter, RainbowDefault, RainbowPercentage</span>
 
 ```yaml
 gradient: TemperatureGradient
