@@ -55,3 +55,4 @@ LEVITYDASH_CONFIG_DEBUG=1 poetry run python -m LevityDash   # pristine temp conf
 - Tabs for indentation in Python (existing style).
 - Commit messages: `type(Scope): summary`, e.g. `fix(UI.Graph): …`, `feat(Stateful): …`.
 - `.levity` dashboard files are YAML; example config/templates under `src/LevityDash/resources/example-config/`.
+- **Task handoffs live in `docs/tasks/`** — self-contained briefs (context, expected change, verification, suggested branch/worktree) for work meant to be picked up in a fresh session or by another agent. If working from one of these, sync your branch with `dev` first (`git merge dev`) since new briefs and unrelated fixes land there continuously.

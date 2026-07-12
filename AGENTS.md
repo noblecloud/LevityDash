@@ -4,6 +4,18 @@ Schema subsystem of LevityDash — plugin data ingestion, transformation, mappin
 
 > Repo-wide developer notes (package layout, dependency rules, environment gotchas) live in [CLAUDE.md](CLAUDE.md); this file focuses on the schema engine.
 
+## Before you start a task
+
+- **Task briefs live in `docs/tasks/`.** Each file there is a self-contained brief for one piece of work (bug fix, cleanup, investigation) with context, the concrete change expected, verification steps, and a suggested git workflow. If you were pointed at this repo for a specific task, check there first — the human maintainer uses this directory to hand off work.
+- **Sync before you branch.** Your worktree/branch may have been created before the latest commits landed on `dev` (task briefs get added to `docs/tasks/` continuously, and other fixes land independently). Before starting, from inside your worktree:
+  ```sh
+  git fetch . dev  # or, if your worktree already has direct access to the main repo's refs: just `git merge dev`
+  git merge dev
+  ```
+  If `git merge dev` reports "Already up to date," you're good. If it fast-forwards or merges cleanly, you're good. If it conflicts, stop and flag it rather than resolving blindly — that likely means someone else's in-flight work overlaps with yours.
+- **Work on your own branch, not `dev` directly.** Each task brief includes a suggested branch name and a `git worktree add` command. When done, leave the branch for the maintainer to review and merge (don't merge into `dev` yourself unless explicitly asked to).
+- **Stay inside the task's stated scope.** Several task briefs explicitly call out what NOT to touch (usually because that code is tracked separately, or because it's mid-refactor elsewhere). Respect those boundaries even if you notice something else that looks wrong nearby — flag it instead of fixing it.
+
 ## Commands
 
 ```sh
