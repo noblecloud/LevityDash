@@ -1,3 +1,6 @@
+# When Things go Wrong
+
+LevityDash is still in its infancy so you're bound to run in to a bug or two.
 
 ## Reporting an issue
 
