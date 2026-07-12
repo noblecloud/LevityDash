@@ -1,3 +1,4 @@
+import os
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -9,6 +10,7 @@ from PySide6.QtCore import Signal, Slot, QTimer
 from rich.repr import auto as auto_rich_repr
 
 from LevityDash import LevityDashboard
+from LevityDash.lib.config import userConfig
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.plugins.categories import CategoryEndpointDict, CategoryItem
 from LevityDash.lib.plugins.observation import MeasurementTimeSeries, Observation, Container
@@ -16,6 +18,7 @@ from LevityDash.lib.plugins.plugin import AnySource, Plugin, SomePlugin
 from LevityDash.lib.plugins.utils import Request, GuardedRequest, ChannelSignal, MutableSignal
 from LevityDash.lib.utils.data import KeyData
 from LevityDash.lib.utils.shared import clearCacheAttr, Period
+from LevityDash.lib.wire.bridge import LoopbackBridge
 from WeatherUnits import Measurement, auto as wu_auto
 
 log = LevityPluginLog.getChild('Dispatcher')
@@ -493,13 +496,33 @@ class PluginValueDirectory(MutableSignal):
 		super(PluginValueDirectory, self).__init__()
 		self._pending = defaultdict(set)
 		self.__plugins = manager
+		# [Backend] mode = live (default, unchanged behavior) | loopback -
+		# loopback proves the wire codec + RemoteContainer round-trip
+		# in-process (Phase 4.1) by routing every plugin's real output
+		# through LoopbackBridge instead of connecting it directly here.
+		#
+		# PluginValueDirectory is constructed as a side effect of the first
+		# `import LevityDash` (PluginsLoader's GlobalSingleton metaclass
+		# instantiates it immediately at class-body-execution time), before
+		# any application code gets a chance to run - so there is no
+		# reliable window to flip this via in-memory config writes; only a
+		# value already on disk, or this env var (mirroring the existing
+		# LEVITYDASH_CONFIG_DEBUG convention), can actually reach it.
+		mode = os.environ.get('LEVITYDASH_BACKEND_MODE') or userConfig.getOrSet('Backend', 'mode', 'live')
+		self.bridge = LoopbackBridge(self) if mode == 'loopback' else None
 		for plugin in self.plugins:
 			if plugin is AnySource:
 				continue
-			plugin.publisher.connectSlot(self.keyAdded)
+			if self.bridge is not None:
+				self.bridge.attach(plugin)
+			else:
+				plugin.publisher.connectSlot(self.keyAdded)
 		self.categories = CategoryEndpointDict(self, self._values, None)
 
 	def connect_plugin(self, plugin: Plugin) -> bool:
+		if self.bridge is not None:
+			self.bridge.attach(plugin)
+			return True
 		return plugin.publisher.connectSlot(self.keyAdded)
 
 	@property
