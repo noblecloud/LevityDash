@@ -33,12 +33,18 @@ The type of module. This is used to determine which module is used to display th
 
 The current options are:
 
-- realtime[text]
+- realtime[.text|.gauge]
+- text / label
 - group
+- titled-group
+- stack
+- value-stack
 - graph
-- text
+- mini-graph
 - clock
 - moon
+
+Additionally, a `spacer` can be used inside a stack's `items` list, and prefixing any type with `disabled-` (or `hidden-`) skips that item at load time without deleting it from the file.
 
 ### <div class=mono>key:</div>
 
@@ -119,13 +125,12 @@ For example: `topLeft` or `bottom_center` will both work. However, on save, it w
 Text modules, and all modules that contain text for that matter, also have a `filter` option.  
 The current available filters are:
 
-- <span class=mono>0Ordinal:</span> Converts any number to its ordinal suffix, '1' -> 'st'
-- <span class=mono>0Add Ordinal:</span> Adds the ordinal suffix to every number, '3' -> '3rd'
-- <span class=mono>1Lower:</span> Converts the text to all lower case
-- <span class=mono>1Upper:</span> Converts the text to all UPPER CASE
-- <span class=mono>2Title:</span> Converts the text to Title Case
-
-The numbers at the beginning are used to determine the order of operation and are fixed.
+- <span class=mono>Ordinal:</span> Converts any number to its ordinal suffix, '1' -> 'st'
+- <span class=mono>AddOrdinal:</span> Adds the ordinal suffix to every number, '3' -> '3rd'
+- <span class=mono>Lower:</span> Converts the text to all lower case
+- <span class=mono>Upper:</span> Converts the text to all UPPER CASE
+- <span class=mono>Title:</span> Converts the text to Title Case
+- <span class=mono>Capitalize:</span> Capitalizes the first letter
 
 > [!NOTE]
 > The current implementation of feature is very rough and could use some improvement. Pull requests are greatly encouraged.
@@ -176,10 +181,8 @@ Like its parent module, the `text` display type is a grouping containing a **val
 Since they are both text modules, the display options are similar to the parent module where there is a ratio, position, and visibility options.
 To avoid confusion, the position option is `unitPosition` and the ratio is `valueUnitRatio`.
 
-In addition to `Above` and `Below`, the position option can also be `Inline`, `Auto`, `Hidden` or `Floating`. The `auto` option will place the unit inline if there is enough space, otherwise it will place it below, this is also the
-default.
-
-Note: The `Floating` option is not fully implemented yet.
+In addition to `Above` and `Below`, the position option can also be `Inline`, `NewLine`, `Auto`, `Hidden`, `FloatUnder` or `FloatAbove`. The `auto` option will place the unit inline if there is enough space, otherwise it will place it below, this is also the
+default. The `float-under` option renders the unit as a small label floating beneath the value.
 
 ```yaml
 - type: realtime.text
@@ -201,11 +204,11 @@ Note: The `Floating` option is not fully implemented yet.
 
 #### <div class=mono>.gauge</div>
 
-This display type is nearly complete, but was shelved for the initial release.
+A radial gauge display for the value. Set `displayType: gauge` (or use `type: realtime.gauge`) to use it.
 
 #### <div class=mono>.mini-graph</div>
 
-Not implemented yet, but nothing is stopping you from making a really tiny graph!
+Available as its own top-level module — use `type: mini-graph`.
 
 ## Graph
 
@@ -326,7 +329,7 @@ Currently only supports hard coded, named gradients.
 
 The available options are:
 
-<span class=mono-bold>TemperatureGradient, PrecipitationProbabilityGradient, PrecipitationRateGradient</span>
+<span class=mono-bold>TemperatureGradient, RainbowTemperature, PrecipitationProbabilityGradient, PrecipitationRateGradient, RipeMalinkaGradient, PurpleSunset, PlumPlate, HappyFisher, FabledSunsetGradientLux, FabledSunsetGradientWattsPerSquareMeter, RainbowDefault, RainbowPercentage</span>
 
 ``` yaml
 gradient: TemperatureGradient

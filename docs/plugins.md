@@ -8,6 +8,12 @@ https://open-meteo.com/
 
 Free API with no API key required. Provides global weather data sourced from National Weather Services.
 
+### PirateWeather  <!-- {docsify-ignore} -->
+
+https://pirateweather.net/
+
+A drop-in replacement for the retired Dark Sky API. Requires a free API key. Provides realtime, hourly, and daily forecast data.
+
 ### WeatherFlow Tempest  <!-- {docsify-ignore} -->
 
 https://tempestwx.com/
@@ -18,7 +24,13 @@ Additionally, WeatherFlow provides historical data and both hourly and daily 10 
 
 ### Govee BLE  <!-- {docsify-ignore} -->
 
-Currently only implemented for [GVH5102](https://www.amazon.com/Govee-Hygrometer-Thermometer-Temperature-Notification/dp/B087313N8F?th=1) but extending to other Govee BLE devices should be fairly simple.
+Reads Govee BLE thermometer/hygrometer advertisements. Tested with the [GVH5102](https://www.amazon.com/Govee-Hygrometer-Thermometer-Temperature-Notification/dp/B087313N8F?th=1); device selection supports `closest`, `first`, or explicit MAC/UUID/name, and the payload parsing is configurable, so extending to other Govee BLE devices is usually just config.
+
+### OpenWeatherMap  <!-- {docsify-ignore} -->
+
+https://openweathermap.org/
+
+Experimental — present in the builtin plugins but not yet polished or documented.
 
 ## Build Your Own  <!-- {docsify-ignore} -->
 

@@ -1,65 +1,50 @@
 # Getting Started
 
+## Requirements  <!-- {docsify-ignore} -->
+
+- Python 3.11 – 3.14 (3.14 recommended — it's noticeably faster)
+- [Poetry](https://python-poetry.org) for installing from source
+
 ## Install  <!-- {docsify-ignore} -->
 
-Installing LevityDash is easy with pip:
+> [!WARNING]
+> The package on PyPI is an old 0.1.x release from the PySide2 era. Until 0.2.0 ships, install from source.
 
 ```bash
-pip install LevityDash
+git clone https://github.com/noblecloud/LevityDash.git
+cd LevityDash
+poetry install --without dev
 ```
 
-or update your current installation with:
-
-```bash
-pip install --upgrade LevityDash
-```
+> [!NOTE]
+> The `dev` dependency group expects a sibling checkout of the WeatherUnits repo (`../WeatherUnits`) for library development. `--without dev` skips it and uses the released WeatherUnits from PyPI.
 
 ## Running LevityDash  <!-- {docsify-ignore} -->
 
-If you have your `PATH` set correctly, you can run it directly with:
-
 ```bash
-LevityDash
+poetry run LevityDash
 ```
 
-Otherwise, it can be run as with the module flag:
+or with the module flag:
 
 ```bash
-python -m LevityDash
+poetry run python -m LevityDash
+```
+
+To start over with a fresh configuration:
+
+```bash
+poetry run LevityDash-reset-config
 ```
 
 ## Running on ARM  <!-- {docsify-ignore} -->
 
-PySide2 does not have an ARM compatible module available in the PyPi repository, to fix this, you can either build the module yourself (See [here](https://github.com/piwheels/packages/issues/4#issuecomment-772058821) for more information),
-use [piwheels.org](https://piwheels.org/) for non 64bit builds, or use your OS's package manager, which is recommended method. Also,
-PySide2 must be installed before installing LevityDash.
-
-<!-- tabs:start -->
-
-### **Arch**
-
-```bash
-sudo pacman -S python-pyside2
-```
-
-### **Debian**
-
-```bash
-sudo apt-get install python3-pyside2
-```
-
-### **Fedora**
-
-```bash
-sudo dnf install python3-pyside2
-```
-
-<!-- tabs:end -->
+PySide6 ships prebuilt ARM64 wheels (macOS universal2 and, in recent releases, Linux aarch64), so a 64-bit OS — e.g. Raspberry Pi OS 64-bit — installs like any other platform. 32-bit ARM is not supported by Qt 6.
 
 ## Config/Setup  <!-- {docsify-ignore} -->
 
 On first run, LevityDash will create a configuration from the default settings and guess your location based on your IP address.
-The default dashboard is only data provided by Open-Meteo since it does not require authentication.
+The default dashboard only uses data provided by Open-Meteo since it does not require authentication.
 
 You can enable more sources/plugins by providing API keys and enabling them in their respective config files. See [here](/plugin_config.md) for more in-depth information
 
@@ -78,38 +63,13 @@ Once you find a module you want to use, you can click and hold until it pops out
 
 ## Common Issues <!-- {docsify-ignore} -->
 
-### Missing the Qt5 Runtime
+### Unsupported Python Version
 
-The Qt5 runtime must be installed for LevityDash to run, if PySide2 was installed with your OS's package manager rather than pip, it should already be installed.
-If not, you can install it with:
-<!-- tabs:start -->
+LevityDash requires Python 3.11 or newer (up to 3.14). If your OS ships an older Python, [pyenv](https://realpython.com/intro-to-pyenv/) is the easiest way to install a newer one alongside it.
 
-### **Arch**
+### macOS Bluetooth Permission
 
-```bash
-sudo pacman -S qt5
-```
-
-### **Debian/Ubuntu/Mint/...**
-
-```bash
-sudo apt-get install qt5-default
-```
-
-### **Fedora**
-
-```bash
-sudo dnf install qt5-qtbase
-```
-
-<!-- tabs:end -->
-
-### Unsupported Preinstalled Python Version
-
-LevityDash is not compatible with Python 3.10. Despite 3.10 being released over 8 months ago, it seems most OS's still
-come with Python some version of 3.9 or even 3.8. Python 3.10 can be downloaded directly from https://python.org, but
-I've found pyenv to be the best way to install another version of Python. RealPython.com has a great article about it
-pyenv [here](https://realpython.com/intro-to-pyenv/).
+If the Govee BLE plugin is enabled, macOS requires the *launching* application (your terminal) to have Bluetooth permission — without it the app is killed with an abort on startup. Grant it under **System Settings → Privacy & Security → Bluetooth**, or disable the Govee plugin.
 
 ### Unable to load QPA Platform Plugin
 
@@ -123,12 +83,12 @@ export QT_QPA_PLATFORM=your_selection_here
 
 ## Compiling to an App  <!-- {docsify-ignore} -->
 
-PyInstaller is used to build the app to a single file or a standalone executable. It is still in development, so it is not recommended for use.
+PyInstaller is used to build the app to a single file or a standalone executable. This flow has not been re-verified since the Python 3.14/Qt 6 migration, so expect to get your hands dirty.
 
 ```bash
 git clone https://github.com/noblecloud/LevityDash.git
 cd LevityDash
-poetry install
-cd build
+poetry install --with build-to-app
+cd build-to-app
 poetry run python build.py
 ```

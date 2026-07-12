@@ -55,7 +55,7 @@ The file name or path of the default dashboard.
 
 #### <div class=mono>frontend:</div>
 
-The frontend that Levity will use. Currently, only PySide2 is supported.
+The frontend that Levity will use. Currently, only Qt (PySide6) is supported — supporting more frontends is a core goal of the [roadmap](/roadmap.md).
 
 #### <div class=mono>fullscreen:</div>
 

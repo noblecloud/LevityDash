@@ -58,6 +58,7 @@
 		- [WeatherFlow](/plugin_config.md#WeatherFlowTempest)
 		- [OpenMeteo](/plugin_config.md#open-meteo)
 		- [GoveeBLE](/plugin_config.md#Govee)
+- [Roadmap](/roadmap.md)
 - [Bug Reports](/issues.md)
 	- [Reporting](/issues.md#reporting-an-issue)
 	- [Contributing](/issues.md#fixing-an-issue)

@@ -1,3 +1,6 @@
+> [!NOTE]
+> This is the raw idea list. The organized, triaged version lives in [roadmap.md](roadmap.md) — every item here is placed, marked done, or parked there.
+
 - conditional dashboards
 - conditional Panels
 - scrolling in overfilled stacks

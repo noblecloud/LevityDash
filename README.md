@@ -12,16 +12,15 @@
 
 ![Screenshot](https://github.com/noblecloud/LevityDash/raw/main/docs/_images/screenshot-readme.png)
 
-LevityDash aims to be a lightweight, desktop native, multi-source dashboard without a required web frontend that is fun and easy to use. The current version only supports PySide2/Qt. However, a key goal of this project is to support multiple frontends and
-platforms, including embedded.
+LevityDash aims to be a lightweight, desktop native, multi-source dashboard without a required web frontend that is fun and easy to use. The current frontend is built on PySide6/Qt 6. A key goal of this project is to support multiple frontends and platforms, including embedded — the backend/frontend process split that enables this is actively in progress (see the [roadmap](docs/roadmap.md)).
 
-*Note: This project is very much in the proof of concept stage – it functions, but it is far from the goal of a lightweight dashboard.*
+*Note: This project is in beta – it works and is used daily, but expect rough edges.*
 
 <p align="right">
 <img src="https://img.shields.io/badge/license-MIT-blueviolet">
-<img src="https://img.shields.io/badge/Python-3.10-blueviolet">
-<img src="https://img.shields.io/badge/aiohttp-3.6-blueviolet">
-<img src="https://img.shields.io/badge/PySide2-5.12-blueviolet">
+<img src="https://img.shields.io/badge/Python-3.11–3.14-blueviolet">
+<img src="https://img.shields.io/badge/Qt-6-blueviolet">
+<img src="https://img.shields.io/badge/aiohttp-3.14-blueviolet">
 
 </p>
 
@@ -44,8 +43,10 @@ platforms, including embedded.
 ### Builtin Plugins
 
 - [Open-Meteo](https://open-meteo.com) [REST]
-- [WeatherFlow Tempest](https://tempestwx.com) [REST, UDP, Websocket(incomplete)]
+- [PirateWeather](https://pirateweather.net) [REST]
+- [WeatherFlow Tempest](https://tempestwx.com) [REST, UDP, Websocket]
 - Govee BLE Thermometers/Hygrometers [[GVH5102](https://www.amazon.com/Govee-Hygrometer-Thermometer-Temperature-Notification/dp/B087313N8F?th=1)]
+- OpenWeatherMap [REST, experimental]
 
 ## Frontend
 
@@ -59,18 +60,19 @@ platforms, including embedded.
 
 ## Current Modules
 
-- Realtime single line text with support for showing units and titles and mapping glyphs/emojis to values
-- Timeseries Graph
+- Realtime text with support for showing units and titles and mapping glyphs/emojis to values
+- Gauges
+- Timeseries Graph and Mini Graph
 - Customizable Clock
 - Moon Phase
-- Submodule Group for organizing modules
+- Groups, titled groups, stacks, and value stacks for organizing modules
 
 ## Planned Modules
 
-- Gauges [nearly complete]
 - Weather Radar
 - Multiline Text
 - RSS Feeds
 - Calendar
-- Mini Graphs
 - More plot types
+
+See the full [roadmap](docs/roadmap.md) for what's done, in progress, and planned.

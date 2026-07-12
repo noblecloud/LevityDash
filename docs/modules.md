@@ -4,7 +4,11 @@ There are several modules already available for use. However, you can also build
 
 ## Realtime  <!-- {docsify-ignore} -->
 
-Single line text with support for showing units and titles and mapping glyphs/emojis to values
+Single line text with support for showing units and titles and mapping glyphs/emojis to values. The display can also be a gauge (`displayType: gauge`).
+
+## Gauge  <!-- {docsify-ignore} -->
+
+A radial gauge display for realtime values with customizable arcs, tick marks, needles, and value-mapped gradient coloring.
 
 ## Graph  <!-- {docsify-ignore} -->
 
@@ -22,6 +26,10 @@ Any scalar value can be plotted as a line. The line can be colored by a scalar v
 
 Not fully implemented
 
+## Mini Graph  <!-- {docsify-ignore} -->
+
+A compact graph (`type: mini-graph`) for embedding a small timeseries plot inside other layouts.
+
 ## Clock  <!-- {docsify-ignore} -->
 
 A customizable clock that can have whatever formatting you want and values can be placed wherever you want.
@@ -30,26 +38,33 @@ A customizable clock that can have whatever formatting you want and values can b
 
 Displays the current moon phase and its rotation.
 
-## Groups  <!-- {docsify-ignore} -->
+## Groups & Stacks  <!-- {docsify-ignore} -->
 
-A group is a collection of display modules. Groups can be resized within the graph and contain multiple display modules.
+Containers for organizing display modules:
+
+- **group** — free-form container; children use their own geometry
+- **titled-group** — a group with a built-in title bar
+- **stack** — lays children out automatically in a vertical or horizontal stack, with optional dividers and spacers
+- **value-stack** — a stack purpose-built for lists of labeled realtime values
 
 ## Planned Modules  <!-- {docsify-ignore} -->
 
-- Gauges [nearly complete]
 - Weather Radar
 - Multiline Text
 - RSS Feeds
 - Calendar
-- Mini Graphs
 - More plot types
+
+See the [roadmap](/roadmap.md) for the full picture.
 
 ## Other Features  <!-- {docsify-ignore} -->
 
 - Drag and drop dashboard design (This can be a little funky at times)
 - YAML based dashboard specifications with support for both absolute and relative size/positioning
-- Module grouping
+- Module grouping with shared/preset styling
+- Size-matching groups that keep related text consistently sized across panels
 - Editable Margins for text modules
 - Resizable graph figures
 - Custom, value mapped, gradients for figure items
-- Text filters (i.e. lower, title, upper, digit to ordinal, etc.)
+- Icon packs: Font Awesome (`fa:`), Material Design Icons (`mdi:`), Weather Icons (`wi:`)
+- Text filters (lower, upper, title, capitalize, ordinal, add-ordinal)
