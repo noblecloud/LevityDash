@@ -91,7 +91,6 @@ Triaged from `_planned-features.md`, grouped by area. ~~Struck~~ items are alrea
 - **Watchdogs / health checks** — auto-restart and heartbeat for wedged plugins. The dead `health_check_worker` scaffold in `lib/backend.py` gets rebuilt properly as part of the split (backend milestone 4.2).
 - **Network failure/recovery hardening** — REST plugins already retry (`ScheduledEvent.retry`); the UDP socket path only logs `connection_lost` and never reconnects.
 - **Govee: broader device support** — `closest`/`first`/MAC/UUID selection all work; only GVH5102 is tested. Extend model coverage and parsing presets.
-- **OpenWeatherMap plugin** — exists in `builtin/` but is undocumented and unpolished; finish or fold in.
 - **Bluetooth-unavailable handling** — test/degrade gracefully when the adapter is missing or permission-blocked (macOS TCC).
 
 ### App & platform
@@ -118,6 +117,7 @@ Triaged from `_planned-features.md`, grouped by area. ~~Struck~~ items are alrea
 | Keys that include a source | Partially — `CategoryItem.source` exists; full `@`/`#` addressing is in "Next" |
 | refresh handles iterating all children | Fixed (was marked "probably fixed" — confirmed during the revival) |
 | Fix delayed/blocked parent-resized signals while loading | Effectively resolved by the size-group engine rewrite + settle-time refits |
+| OpenWeatherMap plugin | Done — was a disabled skeleton (schema shadowed by an empty class attr); rebuilt against the free Current Weather Data endpoint (One Call requires a paid plan), with a `normalizeData` flatten step for its nested response shape. Verified live against the real API. |
 
 ## Parked (kept for reference, no current plan)
 

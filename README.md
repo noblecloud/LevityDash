@@ -46,7 +46,7 @@ LevityDash aims to be a lightweight, desktop native, multi-source dashboard with
 - [PirateWeather](https://pirateweather.net) [REST]
 - [WeatherFlow Tempest](https://tempestwx.com) [REST, UDP, Websocket]
 - Govee BLE Thermometers/Hygrometers [[GVH5102](https://www.amazon.com/Govee-Hygrometer-Thermometer-Temperature-Notification/dp/B087313N8F?th=1)]
-- OpenWeatherMap [REST, experimental]
+- [OpenWeatherMap](https://openweathermap.org) [REST, current conditions only — the free tier doesn't include forecast data]
 
 ## Frontend
 

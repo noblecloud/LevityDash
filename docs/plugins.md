@@ -30,7 +30,7 @@ Reads Govee BLE thermometer/hygrometer advertisements. Tested with the [GVH5102]
 
 https://openweathermap.org/
 
-Experimental — present in the builtin plugins but not yet polished or documented.
+Uses the free Current Weather Data endpoint (`data/2.5/weather`) — current conditions only, no hourly/daily forecast. OpenWeatherMap's One Call API (which does include forecasts) requires a separate paid subscription and isn't supported. Requires a free API key.
 
 ## Build Your Own  <!-- {docsify-ignore} -->
 
