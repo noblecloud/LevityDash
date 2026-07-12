@@ -267,6 +267,7 @@ class LevityConfig(ConfigParser):
 				section = self[section]
 		except KeyError:
 			self.add_section(section)
+			section = self[section]
 
 		if getter == self.getboolean or getter == bool:
 			if (value := section.getboolean(key)) is None:
