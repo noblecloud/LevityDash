@@ -28,7 +28,7 @@ Settled design decisions:
 - **Timeseries never stream as objects** — request/response with columnar payloads, which also eliminates today's UI-thread series rebuilds.
 - **Key-first subscriptions** — a panel can subscribe to any number of keys, so future dynamic property bindings (below) aren't blocked by the protocol.
 
-Milestones: wire codec (`lib/wire/codec.py`, started) → `RemoteContainer` + in-process loopback mode → standalone backend process → frontend WS client with spawn/reconnect → timeseries + plugin control plane.
+Milestones: ~~wire codec~~ → ~~`RemoteContainer` + in-process loopback mode~~ (both done — verified live against real plugin data with `[Backend] mode = loopback`) → standalone backend process → frontend WS client with spawn/reconnect → timeseries + plugin control plane.
 
 This milestone also absorbs two items from the old list: **"truly separate processes for plugins"** (this is exactly that) and **"replace MeasurementTimeSeries"** (the split makes the frontend copy obsolete rather than optimizing it in place).
 
