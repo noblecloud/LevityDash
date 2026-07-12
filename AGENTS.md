@@ -23,6 +23,8 @@ poetry run pytest -xvs tests/ui/test_smoke.py
 poetry run pytest -m unwired            # xfail-marked (unimplemented) tests
 ```
 
+No linter, no formatter, no pre-commit hooks — `pytest` is the only gating command. Poetry uses an in-project `.venv` per directory, not a shared one: a fresh clone or worktree needs its own `poetry install` before anything runs (`poetry run pytest` failing with "command not found" means this step was skipped, not a real error).
+
 ## Project structure
 
 ```
@@ -68,9 +70,10 @@ Plugin data ingestion, transformation, mapping, unit conversion, and validation.
 
 - **`conftest.py`** sets `QT_QPA_PLATFORM=offscreen` and `LEVITYDASH_CONFIG_DEBUG=1` **before any PySide6 import** (top-level, not in a fixture).
 - Session-scoped `dashboard` fixture boots a real Qt app headlessly without entering `exec_()`. Plugins loaded, never started.
-- `frozen_time` fixture freezes `shared.now`, `strftime`, `datetime.now` to `2025-06-18 14:30`.
+- `frozen_time` fixture freezes `shared.now`, `strftime`, `datetime.now`, and the Moon module's `datetime.now(tz)` (patched separately — it reads the module directly) to `2025-06-18 14:30`.
 - `pump(app, seconds)` helper processes Qt events without `exec_()`.
 - `unwired` marker = xfail (behaviour not yet implemented).
+- Plugin tests exercise `normalizeData`/schema as unbound logic against captured, sanitized real API responses as golden fixtures — no network, no full `Plugin` bootstrap needed (see `tests/plugins/test_openweathermap.py` for the pattern).
 
 ## Style & config
 
