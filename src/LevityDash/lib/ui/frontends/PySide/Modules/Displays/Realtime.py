@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QApplication, QGraphicsItem, QGraphicsSceneMouseEv
 from LevityDash import LevityDashboard
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.DisplayBase import Display
 from LevityDash.lib.ui.icons import fa as FontAwesome, getIcon, Icon
+from LevityDash.lib.utils.shared import singleShotSafe
 from WeatherUnits.time_.time import Second
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins import Plugin, Container
@@ -1151,7 +1152,7 @@ class MeasurementDisplayProperties(Stateful):
 				log.warning(f'Could not convert {value} to {convertTo}', exc_info=e)
 		if hash((value, type(value))) != self.__measurementHash:
 			self.__measurementHash = hash((value, type(value)))
-			QTimer.singleShot(0, self.unitTextBox.textBox.refresh)
+			singleShotSafe(0, self.unitTextBox.textBox.refresh)
 		if isinstance(value, Measurement):
 			value.__dict__.update(self.unit_dict)
 		return value

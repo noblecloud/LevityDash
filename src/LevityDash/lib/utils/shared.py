@@ -1776,6 +1776,53 @@ def stopTimerSafe(timer: QTimer):
 		QtCore.QMetaObject.invokeMethod(timer, 'stop', Qt.ConnectionType.QueuedConnection)
 
 
+class _MainThreadCall(QtCore.QObject):
+	"""Queues a callable onto the main thread's event loop.
+
+	QTimer.singleShot creates a QTimer on the calling thread, which fails
+	when called from a plugin worker thread.  This dispatches the callback
+	onto the main thread first so the timer is created there.
+	"""
+
+	_invokeRequested = Signal(object)
+
+	def __init__(self):
+		super().__init__()
+		self._invokeRequested.connect(self._on_invoke, Qt.ConnectionType.QueuedConnection)
+
+	@Slot(object)
+	def _on_invoke(self, callback: Callable):
+		callback()
+
+	def invoke(self, callback: Callable):
+		self._invokeRequested.emit(callback)
+
+
+_mainThreadCall = _MainThreadCall()
+
+
+def singleShotSafe(msec: int, callback: Callable):
+	"""Call QTimer.singleShot from any thread.
+
+	QTimer.singleShot creates a QTimer on the calling thread, which fails with
+	"QBasicTimer::start: Timers cannot be started from another thread" when
+	called from a plugin worker thread with no Qt event loop.  This marshals
+	the call to the main thread where the timer is created and serviced.
+	"""
+	app = QtCore.QCoreApplication.instance()
+	if app is not None and QThread.currentThread() is app.thread():
+		QTimer.singleShot(msec, callback)
+		return
+	if app is None:
+		QTimer.singleShot(msec, callback)
+		return
+
+	def _on_main():
+		QTimer.singleShot(msec, callback)
+
+	_mainThreadCall.invoke(_on_main)
+
+
 class WorkerSignals(QtCore.QObject):
 	finished = QtCore.Signal()
 	error = QtCore.Signal(tuple)

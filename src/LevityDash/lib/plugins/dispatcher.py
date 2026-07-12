@@ -17,7 +17,7 @@ from LevityDash.lib.plugins.observation import MeasurementTimeSeries, Observatio
 from LevityDash.lib.plugins.plugin import AnySource, Plugin, SomePlugin
 from LevityDash.lib.plugins.utils import Request, GuardedRequest, ChannelSignal, MutableSignal
 from LevityDash.lib.utils.data import KeyData
-from LevityDash.lib.utils.shared import clearCacheAttr, Period
+from LevityDash.lib.utils.shared import clearCacheAttr, Period, singleShotSafe
 from LevityDash.lib.wire.bridge import LoopbackBridge
 from WeatherUnits import Measurement, auto as wu_auto
 
@@ -293,9 +293,7 @@ class MultiSourceContainer(dict):
 			log.verbose(f"{plugin.name} is ready with a strict realtime value for {self.key}", verbosity=1)
 			for request in (*self.waitingForTrueRealtime.pop(plugin, []), *self.waitingForTrueRealtime.pop(AnySource, [])):
 				log.verbose(f"Issuing callback for {request.requester!s}", verbosity=2)
-				# LevityDashboard.main_thread_pool.run_in_thread(request.callback)
-				# request.callback()
-				QTimer.singleShot(1, request.callback)
+				singleShotSafe(1, request.callback)
 
 		# Less than an ideal situation
 		if (container.isRealtime or container.isRealtimeApproximate) and (
@@ -307,8 +305,7 @@ class MultiSourceContainer(dict):
 				if container.isTimeseriesOnly:
 					container.prepare_for_ts_connection(request)
 				else:
-					# LevityDashboard.main_thread_pool.run_in_thread(request.callback)
-					QTimer.singleShot(1, request.callback)
+					singleShotSafe(1, request.callback)
 
 		if requesters := (self.waitingForTimeseries[plugin] or self.waitingForTimeseries[AnySource]):
 			if plugin[self.key].isForecast:

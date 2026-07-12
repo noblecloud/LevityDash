@@ -20,6 +20,7 @@ from typing import (
 import WeatherUnits as wu
 from LevityDash.lib.log import LevityPluginLog as log
 from LevityDash.lib.utils import abbreviatedIterable, KeyData, Now, now, SmartString
+from LevityDash.lib.utils.shared import startTimerSafe
 
 if TYPE_CHECKING:
 	from LevityDash.lib.plugins.categories import CategoryItem
@@ -599,7 +600,7 @@ class ScheduledEvent(object):
 				return
 			self.timer = QTimer(singleShot=True)
 			self.timer.timeout.connect(self.__fire)
-			self.timer.start(when * 1000)
+			startTimerSafe(self.timer, int(when * 1000))
 		else:
 			self.timer = loop.call_soon(self.__fire) if self.fireImmediately else loop.call_later(when, self.__fire)
 
