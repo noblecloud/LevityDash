@@ -6,14 +6,15 @@ Schema subsystem of LevityDash — plugin data ingestion, transformation, mappin
 
 ## Before you start a task
 
-- **Task briefs live in `docs/tasks/`.** Each file there is a self-contained brief for one piece of work (bug fix, cleanup, investigation) with context, the concrete change expected, verification steps, and a suggested git workflow. If you were pointed at this repo for a specific task, check there first — the human maintainer uses this directory to hand off work.
-- **Sync before you branch.** Your worktree/branch may have been created before the latest commits landed on `dev` (task briefs get added to `docs/tasks/` continuously, and other fixes land independently). Before starting, from inside your worktree:
-  ```sh
-  git fetch . dev  # or, if your worktree already has direct access to the main repo's refs: just `git merge dev`
-  git merge dev
-  ```
-  If `git merge dev` reports "Already up to date," you're good. If it fast-forwards or merges cleanly, you're good. If it conflicts, stop and flag it rather than resolving blindly — that likely means someone else's in-flight work overlaps with yours.
-- **Work on your own branch, not `dev` directly.** Each task brief includes a suggested branch name and a `git worktree add` command. When done, leave the branch for the maintainer to review and merge (don't merge into `dev` yourself unless explicitly asked to).
+- **Task briefs live in `docs/tasks/`.** Each file there is a self-contained brief for one piece of work (bug fix, cleanup, investigation) with context, the concrete change expected, verification steps, and a suggested branch name. If you were pointed at this repo for a specific task, check there first — the human maintainer uses this directory to hand off work.
+- **Sync before you branch** — new task briefs and unrelated fixes land continuously, so don't assume your checkout is current:
+  - **If this is a clone with an `origin` remote** (check with `git remote -v` — this is the normal case for a persistent working copy): `git fetch origin && git checkout dev && git merge origin/dev` (or just `git pull origin dev`).
+  - **If this is a local worktree sharing another checkout's `.git`** (no separate remote to fetch from): `git merge dev` from inside the worktree.
+  - Either way: if the sync reports "Already up to date," fast-forwards, or merges cleanly, you're good. If it conflicts, stop and flag it rather than resolving blindly — that likely means someone else's in-flight work overlaps with yours.
+- **Work on your own branch, off `dev`.** Never commit directly to `dev` or `main`. Each task brief includes a suggested branch name.
+- **When you're done:**
+  - **If you have `origin` push access and `gh`** (check `gh auth status`): push your branch and open a pull request against `dev` — `git push origin <branch-name>`, then `gh pr create --base dev --head <branch-name> --title "..." --body "..."`. **Do not merge your own PR** — leave it for review.
+  - **If you're in a local-only worktree with nothing to push to:** leave the branch committed for the maintainer to review and merge locally.
 - **Stay inside the task's stated scope.** Several task briefs explicitly call out what NOT to touch (usually because that code is tracked separately, or because it's mid-refactor elsewhere). Respect those boundaries even if you notice something else that looks wrong nearby — flag it instead of fixing it.
 
 ## Commands
