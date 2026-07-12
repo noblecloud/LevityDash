@@ -1,7 +1,5 @@
 
-<ml-generated>
 LevityDash is designed for use with multiple plugins.  Plugins are used to pull data from various sources and provide it to the dashboard.  The dashboard is then able to display the data in a variety of ways.  Plugins are also used to provide the dashboard with information about the data that is being pulled.  This information is used to automatically parse the data and provide it to the dashboard in a usable format.
-</ml-generated>
 
 ## Built-In Plugins  <!-- {docsify-ignore} -->
 
@@ -10,6 +8,12 @@ LevityDash is designed for use with multiple plugins.  Plugins are used to pull 
 https://open-meteo.com/
 
 Free API with no API key required. Provides global weather data sourced from National Weather Services.
+
+### PirateWeather  <!-- {docsify-ignore} -->
+
+https://pirateweather.net/
+
+A drop-in replacement for the retired Dark Sky API. Requires a free API key. Provides realtime, hourly, and daily forecast data.
 
 ### WeatherFlow Tempest  <!-- {docsify-ignore} -->
 
@@ -21,7 +25,13 @@ Additionally, WeatherFlow provides historical data and both hourly and daily 10 
 
 ### Govee BLE  <!-- {docsify-ignore} -->
 
-Currently only implemented for [GVH5102](https://www.amazon.com/Govee-Hygrometer-Thermometer-Temperature-Notification/dp/B087313N8F?th=1) but extending to other Govee BLE devices should be fairly simple.
+Reads Govee BLE thermometer/hygrometer advertisements. Tested with the [GVH5102](https://www.amazon.com/Govee-Hygrometer-Thermometer-Temperature-Notification/dp/B087313N8F?th=1); device selection supports `closest`, `first`, or explicit MAC/UUID/name, and the payload parsing is configurable, so extending to other Govee BLE devices is usually just config.
+
+### OpenWeatherMap  <!-- {docsify-ignore} -->
+
+https://openweathermap.org/
+
+Uses the free Current Weather Data endpoint (`data/2.5/weather`) — current conditions only, no hourly/daily forecast. OpenWeatherMap's One Call API (which does include forecasts) requires a separate paid subscription and isn't supported. Requires a free API key.
 
 ## Build Your Own  <!-- {docsify-ignore} -->
 
