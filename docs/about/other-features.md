@@ -1,7 +1,9 @@
 - Drag and drop dashboard design (This can be a little funky at times)
 - YAML based dashboard specifications with support for both absolute and relative size/positioning
-- Module grouping
+- Module grouping with shared/preset styling
+- Size-matching groups that keep related text consistently sized across panels
 - Editable Margins for text modules
 - Resizable graph figures
 - Custom, value mapped, gradients for figure items
-- Text filters (i.e. lower, title, upper, digit to ordinal, etc.)
+- Icon packs: Font Awesome (`fa:`), Material Design Icons (`mdi:`), Weather Icons (`wi:`)
+- Text filters (lower, upper, title, capitalize, ordinal, add-ordinal)
