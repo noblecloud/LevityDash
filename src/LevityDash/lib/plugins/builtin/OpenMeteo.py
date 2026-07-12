@@ -335,7 +335,7 @@ schema = {
 	},
 	'environment.soil.temperature.6cm':             {
 		'type':           'soil',
-		'sourceUnit':     '°C',
+		'sourceUnit':     'c',
 		'title':          'Soil Temperature [6cm]',
 		'description':    'Soil temperature at 6cm depth',
 		'sourceKey':      'soil_temperature_6cm',
@@ -343,7 +343,7 @@ schema = {
 	},
 	'environment.soil.temperature.18cm':            {
 		'type':           'soil',
-		'sourceUnit':     '°C',
+		'sourceUnit':     'c',
 		'title':          'Soil Temperature [12cm]',
 		'description':    'Soil temperature at 18cm depth',
 		'sourceKey':      'soil_temperature_18cm',
@@ -351,7 +351,7 @@ schema = {
 	},
 	'environment.soil.temperature.54cm':            {
 		'type':           'soil',
-		'sourceUnit':     '°C',
+		'sourceUnit':     'c',
 		'title':          'Soil Temperature [54cm]',
 		'description':    'Soil temperature at 54cm depth',
 		'sourceKey':      'soil_temperature_54cm',
@@ -359,7 +359,7 @@ schema = {
 	},
 	'environment.soil.temperature.temperature':     {
 		'type':           'soil',
-		'sourceUnit':     '°C',
+		'sourceUnit':     'c',
 		'title':          'Soil Temperature',
 		'description':    'Soil temperature',
 		'sourceKey':      'soil_temperature_0cm',
