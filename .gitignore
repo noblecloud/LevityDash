@@ -160,3 +160,6 @@ ai-prompt.md
 
 # Generated Sphinx output
 docs/source/.build/
+
+# Benchmark answer key - must never sync to candidate-accessible clones
+docs/benchmark/ANSWER-KEY.md
