@@ -4,6 +4,11 @@ One column per candidate model. Grade against `ANSWER-KEY.md` (local-only, gitig
 
 | Item | Dimension | Max | Model: ______ | Model: ______ | Model: ______ |
 |---|---|---:|---|---|---|
+| 0.1 project identification | Basic comprehension | 3 | | | |
+| 0.2 startTimerSafe | Basic comprehension | 3 | | | |
+| 0.3 IgnoreOr sentinel | Basic comprehension | 3 | | | |
+| 0.4 .levity clock block | Basic comprehension | 3 | | | |
+| **Tier 0 total** (gate: ≥8; excluded from grand total) | | **12** | | | |
 | A1 timer affinity | Comprehension | 2 | | | |
 | A2 import legality | Comprehension | 2 | | | |
 | A3 encoder leak | Comprehension | 2 | | | |
@@ -43,6 +48,7 @@ One column per candidate model. Grade against `ANSWER-KEY.md` (local-only, gitig
 
 | Dimension | Max | Model: ______ | Model: ______ | Model: ______ |
 |---|---:|---|---|---|
+| Basic comprehension (Tier 0, gate only) | 12 | | | |
 | Comprehension (A) | 12 | | | |
 | Bug hunting (B) | 20 | | | |
 | Navigation (C) | 16 | | | |

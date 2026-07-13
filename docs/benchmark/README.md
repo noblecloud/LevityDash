@@ -6,12 +6,19 @@ A repeatable audition for candidate AI models, testing the abilities that predic
 
 | File | Committed? | Who sees it |
 |---|---|---|
+| `tier0-basics.md` | yes | pasted to candidates (small/local models especially) |
 | `tier1-screener.md` | yes | pasted to candidates (no repo access needed) |
 | `tier2-repo-eval.md` | yes | candidates with the repo checked out |
 | `scorecard.md` | yes | you, while grading |
 | `ANSWER-KEY.md` | **NO — gitignored** | you only |
 
 The answer key is gitignored because everything committed on `dev` syncs to candidate-accessible clones. If it ever goes missing, ask Fable to regenerate it (the answers derive from real fixed bugs in git history plus current-code facts).
+
+## Running Tier 0 (basic comprehension, ~15 min of candidate effort)
+
+The floor check, built for small local models (e.g. 7–14B quantized on the Mac Mini): four short paste-only items — identify the project from its README, explain a small function, explain a small class, describe what a YAML layout block renders. The whole pack is deliberately tiny so it fits limited context windows; paste it alone into a fresh session with no system-prompt extras.
+
+**Gate: ≥8/12 to bother with Tier 1.** Tier 0 is a pure gate — it doesn't count toward the 78-point total. A model that fails it can't reliably read code at all, and no further tier will change that conclusion. For frontier/API models you can skip Tier 0 entirely and start at Tier 1.
 
 ## Running Tier 1 (chat screener, ~30 min of candidate effort)
 
