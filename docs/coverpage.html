@@ -1,8 +1,6 @@
 <style>
 
 	:root {
-		/*--base-background-color: gray;*/
-		/*--base-color: var(--mono-shade2);*/
 		--base-font-family: "Nunito", -apple-system, BlinkMacSystemFont, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
 		--base-font-size: 16px;
 		--base-font-weight: normal;
@@ -15,142 +13,158 @@
 		--cover-height: unset;
 		--cover-max-height: unset;
 		--cover-min-height: 10vh;
-		/*--cover-text-align: center;*/
 
-		/*!* Background *!*/
-		/*--cover-background-blend-mode: screen;*/
-		/*--cover-background-image: linear-gradient(to bottom, #7028e4 0%, #e5b2ca 100%);*/
-		/*--cover-background-image: linear-gradient(to top, #5f72bd 0%, #9b23ea 100%);*/
-		--cover-background-image: linear-gradient(to top,
-		#505285 0%,
-		#585E92 12%,
-		#65689F 25%,
-		#7474B0 37%,
-		#7E7EBB 50%,
-		#8389C7 62%,
-		#9795D4 80%,
-		#A2A1DC 90%,
-		#B5AEE4 100%
-		)
-	;
+		/* A crisp cool morning sky: soft periwinkle-blue easing down into the
+		   light reading surface. All one temperature so it sits in harmony
+		   with the lavender accent instead of fighting it. */
+		--cover-background-image:
+			radial-gradient(880px 520px at 80% -8%, rgba(196, 206, 255, 0.6), rgba(196, 206, 255, 0) 62%),
+			linear-gradient(to bottom,
+				#d2ddfb 0%,
+				#d9e4fb 12%,
+				#e3edfb 40%,
+				#ecf2fd 70%,
+				#f6fafe 100%
+			);
 
-		/*--cover-background-mask-color: #fff;*/
 		--cover-background-mask-opacity: 0;
-		/*--cover-background-mask-visibility: ;*/
 		--cover-background-position: center center;
-		/*--cover-background-repeat: no-repeat;*/
-		/*--cover-background-size: cover;*/
 
-		/* Blockquote (Subtitle) */
-		/*--cover-blockquote-color: ;*/
-		/*--cover-blockquote-font-size: var(--font-size-l);*/
-
-		/*!* Border *!*/
 		--cover-border-inset: 0;
 		--cover-border-width: 0;
 
-		/*!* Heading *!*/
-		/*--cover-heading-color: var(--theme-color);*/
 		--cover-heading-font-size: unset;
-		/*--cover-heading-filter: drop-shadow(0 0 0.5rem rgba(0, 0, 0, 0.5));*/
 		--cover-heading-font-size-min: unset;
 		--cover-heading-font-size-max: unset;
-		/*--cover-heading-font-weight: normal;*/
 	}
-
-	/*@media (orientation: landscape) {*/
-	/*	:root {*/
-	/*		--cover-height: auto;*/
-	/*		--cover-max-height: unset;*/
-	/*		--cover-min-height: 60vh;*/
-	/*	}*/
-
-	/*	.cover {*/
-
-	/*	}*/
-	/*}*/
-
-	/*@media (orientation: portrait) {*/
-	/*	:root {*/
-	/*		--cover-height: auto;*/
-	/*		--cover-max-height: 100vh;*/
-	/*		--cover-min-height: unset;*/
-	/*	}*/
-
-	/*	.cover {*/
-	/*		height: 100px !important;*/
-	/*	}*/
-
-	/*}*/
 
 	.cover {
 		min-height: auto;
-		padding-top: 2em;
-		padding-bottom: 1em;
-		color: #FFFFFF;
+		padding-top: 2.2em;
+		padding-bottom: 1.4em;
+		color: #1e2a3a;
 	}
 
 	.first-container {
-	  max-height: 100%;
-	  padding: 5% 0;
+		max-height: 100%;
+		padding: 4% 0 3%;
+	}
+
+	/* Wordmark: deep ink "Levity", sunny gradient "Dashboard" */
+	.cover h1 {
+		color: #1e2a3a;
+		font-family: "Nunito", -apple-system, sans-serif;
+		overflow: visible;
+		text-overflow: ellipsis;
+		font-size: clamp(2.2em, 9.5vh, 92px);
+		font-weight: 800;
+		line-height: 1.05;
+		padding-bottom: .18em;
+		letter-spacing: -0.02em;
 	}
 
 	.dash {
-
-		color: #494c81;
-		font-weight: 700;
-	}
-
-	/* if there is enough space add board to dash to make dashboard*/
-
-	.cover h1 {
-		color: #2C2E50;
-		filter: drop-shadow(0px 0px .25em rgba(255, 255, 255, 0.5));
-		font-family: "Nunito",serif;
-		/*white-space: nowrap;*/
-    overflow: visible;
-		text-overflow: ellipsis;
-		font-size: clamp(1em, 10vh, 100px);
-		/*font-size: 100px;*/
-		font-weight: 550;
-		/*font-size: 8rem;*/
-		line-height: 1.1;
-		padding-bottom: .2em;
+		background: var(--dash-gradient, linear-gradient(100deg, #f6a121 0%, #ef7f3a 55%, #ef6f57 100%));
+		-webkit-background-clip: text;
+		background-clip: text;
+		-webkit-text-fill-color: transparent;
+		font-weight: 800;
 	}
 
 	.cover h2 {
-		filter: drop-shadow(0px 0px 4px rgba(0, 0, 0, 0.5)) ;
-		font-weight: normal;
-		font-family: "Nunito",serif;
-		/*max-font-size: 10vmin;*/
-		/*min-font-size: 6vmax;*/
-		font-size: clamp(1em, 3vh, 30px);
-		/*padding: 0 1em;*/
-		padding-bottom: .4em;
-		margin: auto;
-		/*color: var(--theme-color) !important;*/
-		color: rgba(255, 255, 255, 1) !important;
-
+		font-weight: 600;
+		font-family: "Nunito", -apple-system, sans-serif;
+		font-size: clamp(1em, 2.9vh, 27px);
+		padding-bottom: .5em;
+		margin: 0.2em auto 0;
+		color: #45566b !important;
 	}
 
-	/* css to make a div look like a macos window in dark mode	*/
+	/* perspective lives on the parent so the panel turns in real 3D space
+	   without the transform ballooning it */
+	.cover picture {
+		display: inline-block;
+		perspective: 1600px;
+	}
+
+	/* The dark dashboard floats on the sky — contrast = pop, and a slow
+	   tvOS-style parallax hover for a little levity. */
+	.screenshotAlpha {
+		background-color: transparent;
+		padding: 0;
+		border: none;
+		display: block;
+		margin: 1.2em auto 0.4em;
+		border-radius: 16px;
+		box-shadow:
+			0 40px 70px -28px rgba(28, 52, 90, 0.5),
+			0 16px 30px -18px rgba(47, 143, 216, 0.28);
+		/* pivot sits behind the panel so it swings in a gentle arc */
+		transform-origin: 50% 50% -340px;
+		animation: levityHover 12s ease-in-out infinite;
+		will-change: transform;
+	}
+
+	/* X and Y tilt cycle out of phase so the face traces a slow orbit,
+	   with a gentle bob layered on top */
+	@keyframes levityHover {
+		0%   { transform: translateY(0px)   rotateX(0deg)    rotateY(-3.4deg); }
+		25%  { transform: translateY(-7px)  rotateX(1.8deg)  rotateY(0deg); }
+		50%  { transform: translateY(-11px) rotateX(0deg)    rotateY(3.4deg); }
+		75%  { transform: translateY(-7px)  rotateX(-1.8deg) rotateY(0deg); }
+		100% { transform: translateY(0px)   rotateX(0deg)    rotateY(-3.4deg); }
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.screenshotAlpha { animation: none; transform: none; }
+	}
+
+	.cover small.mono {
+		display: inline-block;
+		max-width: 46em;
+		margin-top: 1em;
+		color: #6d7988;
+		line-height: 1.5;
+	}
+
+	.cover small.mono strong {
+		color: #45566b;
+	}
+
+	/* macOS-style window chrome, if ever used */
 	.macOSWindowDark {
-		background-color: rgba(0, 0, 0, 0.5);
-		border-radius: 10px;
-		box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.5);
+		background-color: rgba(255, 255, 255, 0.6);
+		border-radius: 16px;
+		box-shadow: 0 30px 60px -24px rgba(28, 52, 90, 0.35);
 		padding: 1em;
 	}
 
-	.screenshotAlpha {
-		background-color: rgba(0, 0, 0, 0.4);
-		padding: clamp(10px, 1%, 30px);
-		border: 1px solid rgba(70, 70, 70, 0.8);
-  	box-shadow: 0px 4px 8px 0px rgba(0, 0, 0, 0.75);
-		/*border-top-color: rgba(200, 200, 200, 0.3);*/
-		/*border-left-color: rgba(200, 200, 200, 0.1);*/
-		/*border-style: solid;*/
-		margin: 0;
-		border-radius: 10px;
+	/* ---- Night: a warm-lit twilight sky over deep dark ---- */
+	@media (prefers-color-scheme: dark) {
+		:root {
+			--cover-background-image:
+				radial-gradient(820px 470px at 84% -4%, rgba(255, 178, 84, 0.30), transparent 58%),
+				linear-gradient(to bottom,
+					#1c1811 0%,
+					#171420 26%,
+					#11101b 55%,
+					#0c0d16 82%,
+					#0b0d13 100%
+				);
+		}
+
+		.cover { color: #eef1f7; }
+		.cover h1 { color: #eef1f7; }
+		.cover h2 { color: #b7bfce !important; }
+		.cover small.mono { color: #868fa0; }
+		.cover small.mono strong { color: #c3cad7; }
+
+		.screenshotAlpha {
+			box-shadow:
+				0 40px 80px -30px rgba(0, 0, 0, 0.85),
+				0 0 0 1px rgba(255, 255, 255, 0.06),
+				0 0 70px rgba(255, 180, 84, 0.10);
+		}
 	}
 
 </style>
@@ -164,8 +178,8 @@
 		A lightweight, easy to use, desktop native, multi-source dashboard for macOS, Windows and Linux
 	</h2>
 	<picture>
-		<source srcset="_images/screenshotTransparent.webp" type="image/webp">
-		<source srcset="_images/screenshotTransparent.avif" type="image/avif">
-		<img alt="Screenshot" class="screenshotAlpha" src="_images/screenshotTransparent.png">
+		<source srcset="_images/screenshot.webp" type="image/webp">
+		<source srcset="_images/screenshot.avif" type="image/avif">
+		<img alt="Screenshot" class="screenshotAlpha" src="_images/screenshot.png">
 	</picture>
-<small class="mono">LevityDash <strong>v0.2.0b2</strong> is currently <strong>in beta</strong> and requires <strong>Python 3.10+</strong>.  Please note that some features may not be fully functional and there may be bugs.  <strong>Python 3.11</strong> is now supported!</small>
+<small class="mono">LevityDash <strong>v0.2.0-beta.3</strong> is currently <strong>in beta</strong> — expect rough edges. Requires <strong>Python 3.11–3.14</strong> (<strong>3.14</strong> recommended).</small>

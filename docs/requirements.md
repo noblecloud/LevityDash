@@ -1,4 +1,4 @@
-LevityDash's only requirement is Python 3.10 or newer.
+LevityDash requires Python 3.11–3.14 (3.14 recommended).
 There are many ways to install python that will be covered later, but for now, we will check what versions, if any, are already installed.
 
 <small>
@@ -125,8 +125,8 @@ sudo dnf install python3
 <!-- tabs:end -->
 
 
-If your distribution's package manager does not have Python 3.10 or newer, many times you can find community maintained packages for it.
-If your package manager has a search feature, you can search for "python3.11" or "python3.11-dev" to find the package.
+If your distribution's package manager does not have Python 3.11 or newer, many times you can find community maintained packages for it.
+If your package manager has a search feature, you can search for "python3.14" or "python3.14-dev" to find the package.
 Additionally, your package manager may have a way to specify a specific version of a package to install.
 
 ### From Source <!-- {docsify-ignore-all} -->
