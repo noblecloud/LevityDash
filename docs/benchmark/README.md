@@ -47,7 +47,7 @@ The floor check, built for small local models (e.g. 7–14B quantized on the Mac
 
 Fill a column per model in `scorecard.md`. The dimension rollup at the bottom matters more than the grand total: a model strong on comprehension but weak on task execution is a reviewer, not a contributor; the reverse is a contributor who needs tight briefs.
 
-Bands (out of 78): **≥62** trust with `docs/tasks/` briefs unsupervised · **47–61** useful with review · **31–46** QA/rubber-duck only · **<31** pass.
+Bands (out of 83): **≥66** trust with `docs/tasks/` briefs unsupervised · **50–65** useful with review · **33–49** QA/rubber-duck only · **<33** pass.
 
 ## Integrity notes
 

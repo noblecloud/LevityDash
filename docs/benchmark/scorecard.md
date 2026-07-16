@@ -34,15 +34,16 @@ One column per candidate model. Grade against `ANSWER-KEY.md` (local-only, gitig
 | D1 value trace | Trace/reasoning | 5 | | | |
 | D2 QBasicTimer burst | Trace/reasoning | 5 | | | |
 | D3 off-thread painting | Trace/reasoning | 5 | | | |
-| **Section D subtotal** | | **15** | | | |
+| D4 StatefulMetaclass semantics | Trace/reasoning | 5 | | | |
+| **Section D subtotal** | | **20** | | | |
 | E branch workflow | Task execution | 3 | | | |
 | E conventions | Task execution | 3 | | | |
 | E suite green | Task execution | 5 | | | |
 | E scope discipline | Task execution | 2 | | | |
 | E test quality | Task execution | 2 | | | |
 | **Section E subtotal** | | **15** | | | |
-| **Tier 2 total** | | **46** | | | |
-| **GRAND TOTAL** | | **78** | | | |
+| **Tier 2 total** | | **51** | | | |
+| **GRAND TOTAL** | | **83** | | | |
 
 ## Dimension rollup
 
@@ -52,7 +53,7 @@ One column per candidate model. Grade against `ANSWER-KEY.md` (local-only, gitig
 | Comprehension (A) | 12 | | | |
 | Bug hunting (B) | 20 | | | |
 | Navigation (C) | 16 | | | |
-| Trace/reasoning (D) | 15 | | | |
+| Trace/reasoning (D) | 20 | | | |
 | Task execution (E) | 15 | | | |
 
-Bands: ≥62 trust with briefs unsupervised · 47–61 useful with review · 31–46 QA-only · <31 pass.
+Bands: ≥66 trust with briefs unsupervised · 50–65 useful with review · 33–49 QA-only · <33 pass.

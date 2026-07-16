@@ -40,13 +40,40 @@ What does the empty tuple mean here, and why does it make sense for this particu
 
 ---
 
-## Section D — Trace and reasoning (3 questions, 5 points each)
+## Section D — Trace and reasoning (4 questions, 5 points each)
 
 **D1.** Trace the path of a single realtime value — say, outdoor temperature from the Open-Meteo plugin — from the moment the HTTP response arrives to the moment the number changes on screen in a `Realtime` text panel. Name each major hop (class/mechanism) the value passes through and which thread each hop runs on where relevant. You don't need line numbers; you do need the actual class names in order.
 
 **D2.** On startup with a graph-containing dashboard, the console prints a burst of `QBasicTimer::start: Timers cannot be started from another thread` warnings that stops once the dashboard finishes populating. With a clock-only dashboard, there is no burst. Explain: (a) why the burst correlates with graph dashboards and asynchronous data arrival, (b) why the app still works despite it, and (c) which documented design decision in `docs/roadmap.md` is expected to eliminate this class of bug, and why it does.
 
 **D3.** This codebase has an "off-thread painting" rule: worker threads may paint into a `QImage`, but every read of the scene graph must be resolved to plain values on the GUI thread *before* the work is handed to a `Worker`. Explain why the resolve-before-handoff step is necessary (what goes wrong without it), and describe how `Graph.py`'s render path implements the pattern.
+
+**D4.** `statekit`'s `Stateful` classes are constructed by `StatefulMetaclass` (`src/statekit/core.py`), which does not follow ordinary Python class semantics. Given these definitions (assume standard getter/setter pairs for each property):
+
+```python
+class Solar(Stateful, tag='solar'):
+	__defaults__ = {'unit': 'lux'}
+	@StateProperty(key='glow', default=1)
+	def glow(self) -> int: ...
+
+class GlowMixin(StatefulMixin):
+	@StateProperty(key='glow', default=3)
+	def glow(self) -> int: ...
+
+class Lunar(Stateful, tag='lunar'):
+	__defaults__ = {'unit': 'W/m2'}
+	@StateProperty(key='glow', default=2)
+	def glow(self) -> int: ...
+
+class Sky(Solar, GlowMixin, Lunar, tag='sky'):
+	@StateProperty(key='glow', default=4)
+	def glow(self) -> int: ...
+```
+
+Answer by reading the metaclass (cite the relevant logic in `StatefulMetaclass.__new__`):
+(a) What is `Sky.__bases__` — actual content and order — and why does it differ from what was written?
+(b) Four classes define a state property under the key `'glow'`. Which one's descriptor does `Sky.__state_items__['glow']` resolve to, and what is the full precedence order among the four?
+(c) What is `Sky.__defaults__['unit']`, and which parent supplied it? Why that parent?
 
 ---
 
@@ -75,4 +102,4 @@ When done, report: branch name, files added, test results, and anything you flag
 
 ---
 
-*End of Tier 2. Total: 46 points (C: 16, D: 15, E: 15).*
+*End of Tier 2. Total: 51 points (C: 16, D: 20, E: 15).*
