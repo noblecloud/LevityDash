@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 
 from LevityDash.lib.log import LevityPluginLog
-from LevityDash.lib.wire.codec import decode_value, encode_value
+from LevityDash.lib.wire.codec import WIRE_VERSION, decode_value, encode_value
 from LevityDash.lib.wire.containers import ContainerFlags, RemoteContainer
 
 if TYPE_CHECKING:
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 log = LevityPluginLog.getChild('Wire').getChild('Messages')
 
-__all__ = ['encode_container', 'apply_container_update']
+__all__ = ['encode_container', 'apply_container_update', 'encode_update_message', 'parse_update_message']
 
 # The flag fields a container advertises across the wire (isRealtime,
 # isForecast, ...) - read off the live Container by name on encode, rebuilt
@@ -76,3 +76,30 @@ def apply_container_update(remoteContainer: RemoteContainer, incoming: dict) -> 
 		title=incoming['title'],
 		icon_alias=incoming['icon_alias'],
 	)
+
+
+# --- envelope level: a full 'update' message wrapping per-key container dicts ---
+
+def encode_update_message(*, name: str, defaultFor=None, enabled: bool = True, running: bool = True, updates: dict) -> dict:
+	"""Wrap already-encoded container dicts in a full 'update' wire message.
+
+	``updates`` maps ``str(key) -> encode_container(container)``. Kept separate
+	from encode_container so the per-key encode and the envelope stay independent
+	(the server encodes each changed container, then wraps the batch here).
+	"""
+	return {
+		'v': WIRE_VERSION,
+		'type': 'update',
+		'source': {
+			'name': name,
+			'defaultFor': sorted(defaultFor or ()),
+			'enabled': bool(enabled),
+			'running': bool(running),
+		},
+		'updates': updates,
+	}
+
+
+def parse_update_message(message: dict) -> tuple[dict, dict]:
+	"""Split an 'update' message into ``(source_info, {str(key): container_dict})``."""
+	return message['source'], message['updates']
