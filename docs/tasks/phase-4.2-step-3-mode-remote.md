@@ -12,10 +12,11 @@
 
 ## What Step 3 connects (mostly wiring existing pieces)
 
-1. **Frontend adapter** (`mode=remote`) — a `WireBridge`-style class mirroring `LoopbackBridge._on_published`, but fed by `WireClient.on_message` instead of a local `Publisher`: parse the envelope → `getOrCreate` the `RemoteSource` (name/defaultFor/enabled/running from `message['source']`) → `apply_container_update` per key → `dispatcher.update(remoteValues)`. Wire it in `dispatcher.py` where `mode == 'loopback'` picks `LoopbackBridge` (~line 508): add `mode == 'remote'` → run a `WireClient` pointed at the backend.
-2. **`encode_update_message`** — add to `messages.py` (the envelope builder Step 2 deferred): `{v, type:'update', source:{...}, updates:{str(key): encode_container(c)}}`. The backend calls it on each plugin publish, then `WireServer.broadcast()`.
-3. **Backend process** — rebuild `lib/backend.py`'s `main()`: run the `PluginManager` + plugins **headless** and feed publishes into `WireServer.broadcast()`.
-4. **Reconnect/backoff** in `WireClient` (or the adapter).
+1. ~~**Frontend adapter**~~ ✅ **DONE** (`c66cfa8`) — `wire/frontend.py` `RemoteFrontend`: `handle_message(update)` → `getOrCreate` `RemoteSource` → `apply_container_update` per key → hands `{key: RemoteContainer}` to a callback. Tested standalone.
+2. ~~**`encode_update_message`**~~ ✅ **DONE** (`c66cfa8`) — envelope builder + `parse_update_message` in `messages.py`.
+3. **Wire `RemoteFrontend` into `dispatcher.py`** under `mode == 'remote'` (where `mode == 'loopback'` picks `LoopbackBridge`, ~line 508): run a `WireClient` pointed at the backend with `on_message = RemoteFrontend(self.update).handle_message`. **Not done** — needs the app's asyncio loop running the client.
+4. **Backend process** — build messages from live plugin publishes (`encode_update_message` + `encode_container` per changed key) → `WireServer.broadcast()`; rebuild `lib/backend.py`'s `main()` to run the `PluginManager` + plugins **headless** and serve. **Not done — the hard part.**
+5. **Reconnect/backoff** in `WireClient` (or the adapter). **Not done.**
 
 ## The real risk (flagged in the roadmap)
 
