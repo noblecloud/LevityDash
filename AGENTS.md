@@ -1,6 +1,6 @@
 # AGENTS.md — LevityDash
 
-A desktop-native, multi-source weather dashboard. Qt (PySide6) QGraphicsScene frontend; plugin-driven data layer. Beta, used daily. This file is general-purpose guidance for AI agents (OpenCode/DeepSeek and similar) working anywhere in this repo — it isn't scoped to one subsystem.
+A desktop-native, multi-source weather dashboard. Qt (PySide6) QGraphicsScene frontend; plugin-driven data layer. Beta, used daily. This file is general-purpose guidance for AI agents (OpenCode/DeepSeek, Kimi, and similar) working anywhere in this repo — it isn't scoped to one subsystem.
 
 > [CLAUDE.md](CLAUDE.md) covers the same repo from Claude Code's side (package layout, dependency direction, environment gotchas) — the two should stay roughly in sync. Direction/roadmap lives in [docs/roadmap.md](docs/roadmap.md). Deep-dive investigations, including a full trace of the schema/data-ingestion engine, live in `docs/reviews/` (see `docs/reviews/schema-pipeline.md`).
 
