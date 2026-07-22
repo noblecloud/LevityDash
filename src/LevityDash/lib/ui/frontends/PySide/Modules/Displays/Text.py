@@ -1029,7 +1029,12 @@ class Text(QGraphicsPathItem):
 
 		return newTextRect
 
-	def updateText(self):
+	def updateText(self, *_ignored):
+		# Tolerates extra positional args from both call conventions that reach
+		# it: statekit's schedule_after_func direct-call branch passes the owner
+		# (the deferred ActionPool branch calls with no args), and Label.py:65's
+		# marginHandles 'action(QRectF,PyObject)' signal connection passes its
+		# signal args.
 		self.updateTransform(updatePath=True, updateShared=True, reason='updateText')
 
 	_shapePath: QPainterPath = QPainterPath()

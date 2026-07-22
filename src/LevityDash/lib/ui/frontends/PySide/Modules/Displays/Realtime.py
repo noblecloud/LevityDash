@@ -704,11 +704,19 @@ class RealtimeGauge(Realtime, tag='realtime.gauge'):
 
 
 class TimeOffsetLabel(Label):
-	_connected: bool = False
 
 	def __init__(self, parent, *args, **kwargs):
 		kwargs['geometry'] = {'x': 0.7, 'y': 0.85, 'width': 0.3, 'height': 0.15, 'relative': True}
 		super(TimeOffsetLabel, self).__init__(parent, alignment=AlignmentFlag.BottomRight, *args, **kwargs)
+		# Refreshes its own "x ago" text once a minute on a LOCAL timer -
+		# deliberately not the app-global ClockSignals: a panel's stale label
+		# is a purely local concern (time never crosses the wire), and the
+		# global clock isn't guaranteed to exist when a stale value enables
+		# the label during startup (crashed mode=remote dashboard loads).
+		# (unparented: this is a QGraphicsItem, not a QObject, so the timer
+		# can't be parented to it - the Python reference keeps it alive)
+		self._refreshTimer = QTimer(interval=60_000)
+		self._refreshTimer.timeout.connect(self.refresh)
 
 	def refresh(self):
 		if not self.isEnabled():
@@ -725,21 +733,11 @@ class TimeOffsetLabel(Label):
 		super(TimeOffsetLabel, self).setEnabled(enabled)
 		if enabled:
 			self.show()
-			self.connectSignal()
+			self._refreshTimer.start()
 			self.refresh()
 		else:
 			self.hide()
-			self.disconnectSignal()
-
-	def connectSignal(self):
-		if not self._connected:
-			connectSignal(qApp.instance().clock.minute, self.refresh)
-			self._connected = True
-
-	def disconnectSignal(self):
-		if self._connected:
-			disconnectSignal(qApp.instance().clock.minute, self.refresh)
-			self._connected = False
+			self._refreshTimer.stop()
 
 
 class LockedRealtime(Realtime):
