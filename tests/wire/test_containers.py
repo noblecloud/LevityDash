@@ -220,3 +220,33 @@ def test_remote_observation_value_source_matches_realtime_flag():
 	polled = remote.value.source
 	assert not isinstance(polled, RealtimeSource)
 	assert polled.period == timedelta(minutes=15)
+
+
+def test_remote_source_plugin_surface():
+	# MultiSourceContainer's reconciliation fallbacks and the status bar's
+	# value path (app.py StatusBarItem.value -> container.realtime) read
+	# source.hasRealtimeFor/hasTimeseriesFor/.hourly/.daily - RemoteSource
+	# must provide them (their absence crashed mode=remote's real GUI).
+	key = CategoryItem('indoor.temperature.temperature')
+	source = RemoteSource(name='Govee')
+	assert source.hasRealtimeFor(key) is False  # no container yet
+
+	remote = source.getOrCreate(key)
+	assert source.hasRealtimeFor(key) is False  # container, no realtime flag
+	remote._update(value=wu.Temperature.Fahrenheit(70), flags=ContainerFlags(isRealtime=True))
+	assert source.hasRealtimeFor(key) is True
+	assert source.hasTimeseriesFor(key) is False
+	assert source.hasDailyFor(key) is False
+	assert source.hourly is None
+	assert source.daily is None
+
+
+def test_multisource_container_realtime_via_remote_source():
+	# The exact dispatcher.py:141 path from the menubar crash log.
+	key = CategoryItem('environment.temperature.temperature')
+	multi = MultiSourceContainer(key)
+	source = RemoteSource(name='OpenMeteo')
+	remote = source.getOrCreate(key)
+	remote._update(value=wu.Temperature.Fahrenheit(74), flags=ContainerFlags(isRealtime=True, isTimeseriesOnly=False))
+	multi.addValue(source, remote)
+	assert multi.realtime is remote.value

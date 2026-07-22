@@ -490,12 +490,20 @@ class MeasurementUnitSplitter(Splitter, Stateful):
 			self.__decideAuto()
 		elif self.displayProperties.unitPosition in ['hidden', 'inline']:
 			self.unit.hide()
+			# Show the value explicitly: it fills the whole surface in these
+			# modes, but the base Splitter.__init__ runs ratio->setGeometries
+			# before this branch configures, and can hide the value when the
+			# splitter is first created mid-load with a degenerate ratio (the
+			# mode=remote connect-during-load path).
+			self.value.show()
 			self.value.geometry.setRelativeGeometry(QRectF(0, 0, 1, 1))
 			self.hide()
 			self.setEnabled(False)
 			return
 		elif self.displayProperties.unitPosition in {'floating', 'float-under'}:
 			self.unit.show()
+			# See above - the value must be visible in this mode too.
+			self.value.show()
 			self.unit.unlock()
 			self.value.geometry.setRelativeGeometry(QRectF(0, 0, 1, 1))
 			self.unit.geometry.setRelativeGeometry(QRectF(0, 0, 1, 1))

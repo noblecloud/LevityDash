@@ -225,6 +225,31 @@ class RemoteSource:
 	def enabled(self) -> bool:
 		return self.config['enabled']
 
+	# --- the slice of Plugin's observation-surface that MultiSourceContainer
+	# reads during reconciliation (dispatcher.py's .realtime/.timeseries/
+	# .hourly/.daily fallbacks) and the status bar's value path (app.py
+	# StatusBarItem.value -> container.realtime). Timeseries don't cross the
+	# wire yet (Phase 4.4), so those report unavailable.
+
+	@property
+	def hourly(self):
+		return None
+
+	@property
+	def daily(self):
+		return None
+
+	def hasRealtimeFor(self, key) -> bool:
+		container = self._containers.get(key)
+		return container is not None and container.isRealtime
+
+	def hasTimeseriesFor(self, key) -> bool:
+		return False
+
+	def hasDailyFor(self, key) -> bool:
+		container = self._containers.get(key)
+		return container is not None and (container.isDaily or container.isDailyForecast)
+
 	def getOrCreate(self, key: CategoryItem) -> 'RemoteContainer':
 		container = self._containers.get(key)
 		if container is None:
