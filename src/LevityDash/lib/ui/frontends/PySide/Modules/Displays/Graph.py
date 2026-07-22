@@ -4,19 +4,19 @@ import numpy as np
 import operator
 import platform
 import re
-from PySide2.QtCore import (
-	QLineF, QObject, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt, QThread, QTimer, Signal,
-	Slot
+from PySide6.QtCore import (
+	QLineF, QMetaObject, QObject, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt, QThread, QTimer,
+	Signal, Slot
 )
-from PySide2.QtGui import (
-	QBrush, QColor, QCursor, QFontMetricsF, QPainter, QPainterPath, QPainterPathStroker, QPen,
-	QPixmap, QPolygonF, QTransform
+from PySide6.QtGui import (
+	QBrush, QColor, QCursor, QFontMetricsF, QImage, QPainter, QPainterPath, QPainterPathStroker, QPen,
+	QPixmap, QPolygonF, QTransform, QAction
 )
-from PySide2.QtWidgets import (
-	QAction, QGraphicsEffect, QGraphicsItem, QGraphicsItemGroup, QGraphicsLineItem, QGraphicsPixmapItem,
+from PySide6.QtWidgets import (
+	QGraphicsEffect, QGraphicsItem, QGraphicsItemGroup, QGraphicsLineItem, QGraphicsPixmapItem,
 	QGraphicsRectItem,
 	QGraphicsSceneDragDropEvent, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent, QGraphicsSceneWheelEvent, QMenu,
-	QStyleOptionGraphicsItem, QToolTip, QWidget, QApplication
+	QStyleOptionGraphicsItem, QToolTip, QApplication
 )
 from abc import abstractmethod
 from builtins import isinstance
@@ -51,26 +51,29 @@ from LevityDash.lib.ui.Geometry import (
 )
 from LevityDash.lib.ui.colors import Color, Gradient
 from LevityDash.lib.ui.frontends.PySide import UILogger
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Surface, GraphItem
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Text
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays import AnnotationText, AnnotationLabels
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Incrementer import Incrementer, IncrementerGroup
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.MarginHandles import FigureHandles
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Timeframe import GraphZoom
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import BaseContextMenu, SourceMenu
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import NonInteractivePanel, Panel
 from LevityDash.lib.ui.frontends.PySide.utils import (
-	addCrosshair, addRect, colorPalette, DebugPaint, DisplayType, EffectPainter, GraphicsItemSignals,
+	addCrosshair, colorPalette, DebugPaint, DisplayType, EffectPainter, GraphicsItemSignals,
 	modifyTransformValues, RendererScene, SoftShadow
 )
 from LevityDash.lib.utils.data import AxisMetaData, DataTimeRange, findPeaksAndTroughs, gaussianKernel, TimeFrameWindow
 from LevityDash.lib.utils.shared import (
 	_Panel, camelCase, clamp, clearCacheAttr, closestStringInList, connectSignal, defer, disconnectSignal,
 	joinCase,
-	LOCAL_TIMEZONE, now, numberRegex, run_in_thread, thread_safe, timestampToTimezone, Unset, Worker
+	LOCAL_TIMEZONE, now, run_in_thread, startTimerSafe, stopTimerSafe, thread_safe, timestampToTimezone,
+	Unset, Worker
 )
 from LevityDash.lib.utils.various import DateTimeRange
 from WeatherUnits import DerivedMeasurement, Length, Measurement, Time
 from WeatherUnits.derived.precipitation import PrecipitationRate
-from WeatherUnits.length import Centimeter, Inch, Millimeter
+from WeatherUnits.length import Centimeter, Millimeter
 from WeatherUnits.time_.time import Hour, Second
 
 if TYPE_CHECKING:
@@ -138,28 +141,6 @@ class TestData:
 		return rate
 
 
-# Section Surface
-class Surface(QGraphicsItemGroup):
-	if TYPE_CHECKING:
-		def scene(self) -> LevityScene: ...
-
-	def __init__(self, parent: QGraphicsItem):
-		super().__init__(parent)
-
-	def boundingRect(self):
-		return self.parentItem().rect()
-
-	def boundingRegion(self, itemToDeviceTransform):
-		return self.parentItem().boundingRegion(itemToDeviceTransform)
-
-	def shape(self) -> QPainterPath:
-		return self.parentItem().shape()
-
-	def _debug_paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget):
-		self._normal_paint(painter, option, widget)
-		addRect(painter, self.boundingRect(), color=self._debug_paint_color, offset=1)
-
-
 X_ = TypeVar('X_', int, float, np.ndarray)
 Y_ = TypeVar('Y_', int, float, np.ndarray)
 Array_ = TypeVar('Array_')
@@ -207,8 +188,9 @@ class GraphItemData(Stateful, tag=...):
 		super(GraphItemData, self).__init__()
 		self._set_state_items_ = set()
 		self.useTestData = kwargs.pop('useTestData', False)
-		kwargs = Stateful.prep_init(self, kwargs)
+		self.prep_init(stateful_parent=parent, relationship='child')
 		self.__init_defaults__()
+		self.add_defaults_to_state(kwargs)
 		self.figure = parent
 		self.state = kwargs
 		parent.scene().view.loadingFinished.connect(self.waitForLoadComplete)
@@ -230,7 +212,10 @@ class GraphItemData(Stateful, tag=...):
 
 	@cached_property
 	def log_repr(self) -> str:
-		return f'GraphItem({self.key.name})'
+		try:
+			return f'GraphItem({self.key.name})'
+		except AttributeError:
+			return f'GraphItem({self.uuid})'
 
 	def __cancel_pending(self):
 		if self.pendingUpdate is None:
@@ -288,7 +273,14 @@ class GraphItemData(Stateful, tag=...):
 			disconnected = True
 		if not disconnected:
 			raise ValueError('Failed to disconnect from existing timeseries')
-		with container.timeseries.signals as signal:
+		if (timeseries := container.timeseries) is None:
+			# RemoteContainer (mode=remote) advertises timeseries-ness via its
+			# wire flags, but the series itself doesn't cross the wire yet
+			# (Phase 4.4). Stay empty exactly as if no source had data yet -
+			# the documented behavior - instead of crashing on None.signals.
+			log.info(f'GraphItem {self.key.name}: no timeseries data available yet (mode=remote: series do not cross the wire yet)')
+			return False
+		with timeseries.signals as signal:
 			connected = signal.connectSlot(self.onValueChange)
 			if connected:
 				self.__connectedContainer = container
@@ -339,7 +331,8 @@ class GraphItemData(Stateful, tag=...):
 
 		self.__lastUpdate = now()
 
-		self.axisChanged.announce(Axis.Both, instant=True)
+		# not instant: let AxisSignal's timer coalesce multi-source update storms
+		self.axisChanged.announce(Axis.Both)
 
 	@Slot(MultiSourceContainer)
 	def listenForKey(self, container: MultiSourceContainer):
@@ -545,6 +538,7 @@ class GraphItemData(Stateful, tag=...):
 
 	@key.setter
 	def key(self, value):
+		clearCacheAttr(self, 'log_repr')
 		if isinstance(value, str):
 			value = CategoryItem(value)
 		if getattr(self, '_key', Unset) == value:
@@ -748,7 +742,7 @@ class GraphItemData(Stateful, tag=...):
 		if self.hasData:
 			T = (self.data[1] - self.figure.dataValueRange.min) / self.figure.dataValueRange.range
 			t.translate(0, T.min())
-			t.scale((self.timeframe.range.total_seconds() / graphTimeRange), T.ptp())
+			t.scale((self.timeframe.range.total_seconds() / graphTimeRange), np.ptp(T))
 		return t
 
 	def __updateTransform(self, axis: Axis):
@@ -759,7 +753,7 @@ class GraphItemData(Stateful, tag=...):
 		if axis & Axis.Y:
 			T = (self.data[1] - self.figure.dataValueRange.min) / self.figure.dataValueRange.range
 			yTranslate = T.min()
-			yScale = T.ptp()
+			yScale = np.ptp(T)
 		modifyTransformValues(self.dataTransform, xTranslate, yTranslate, xScale, yScale)
 
 	@property
@@ -779,7 +773,7 @@ class GraphItemData(Stateful, tag=...):
 			minMax = self.figure.dataValueRange[i:j]
 			T = (self.data[1][i:j] - minMax.min) / minMax.range * (self.figure.dataValueRange.range / minMax.range)
 			t.translate(-timeOffset, T.min())
-			t.scale(1, T.ptp())
+			t.scale(1, np.ptp(T))
 		return t
 
 	@cached_property
@@ -842,7 +836,7 @@ class GraphItemData(Stateful, tag=...):
 			return [0], [0]
 
 		if y is not None:
-			y = (y - y.min()) / (y.ptp() or 1)
+			y = (y - y.min()) / (np.ptp(y) or 1)
 		if x is not None:
 			start = self.graph.timeframe.start
 			seconds = self.figure.figureTimeRangeMaxMin.total_seconds()
@@ -1043,6 +1037,18 @@ class PlotTip(QToolTip):
 Effect = TypeVar('Effect', bound=QGraphicsEffect)
 PlotShadow = SoftShadow
 
+_shadow_renderer_scene: Optional['RendererScene'] = None
+
+
+def _get_shadow_renderer_scene() -> 'RendererScene':
+	# Shared across all Plot instances - bakeEffects always runs on the GUI
+	# thread (Worker on_result), sequentially, so reuse avoids constructing a
+	# fresh QGraphicsScene for every shadow bake.
+	global _shadow_renderer_scene
+	if _shadow_renderer_scene is None:
+		_shadow_renderer_scene = RendererScene()
+	return _shadow_renderer_scene
+
 
 # Section Plot
 @auto
@@ -1062,7 +1068,6 @@ class Plot(QGraphicsPixmapItem, Stateful):
 	_weight: float
 	pathType: PathType
 	_temperatureGradient: Optional[Gradient] = None
-	__useCache: bool = False
 	__path: QPainterPath
 	effects: Dict[str, Dict[str, Effect | Any]]
 
@@ -1072,7 +1077,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 	def __init__(self, parent: GraphItemData, **kwargs):
 		self._shape = QPainterPath()
 		self._shape_normal = QPainterPath()
-		self.renderTask: None | Task = None
+		self._pathDirty = False
 		self.__dataTransformAtRender = QTransform()
 		self.__path = QPainterPath()
 		self._shape = QPainterPath()
@@ -1082,13 +1087,13 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		self.data: GraphItemData = parent
 		self.figure: 'Figure' = parent.figure
 		self.effects = {}
-		super().__init__(None)
+		super().__init__()
 		self.setParentItem(parent.figure)
 		self.render_delay = QTimer(singleShot=True, timeout=self.render, interval=333)
 		self._normalPath = QPainterPath()
 
-		kwargs = self.prep_init(kwargs)
-		self.state = kwargs
+		self.prep_init(stateful_parent=parent.figure, relationship='child')
+		self.state = self.add_defaults_to_state(kwargs)
 		self.setAcceptHoverEvents(True)
 		self.setParentItem(self.figure)
 		self.setFlag(QGraphicsItem.ItemIsMovable, False)
@@ -1306,11 +1311,14 @@ class Plot(QGraphicsPixmapItem, Stateful):
 	def capStyle(value) -> str:
 		if value is None:
 			return 'round'
-		return camelCase(value.name.decode().strip('Cap'), titleCase=False)
+		try:
+			return camelCase(value.name.decode().strip('Cap'), titleCase=False)
+		except AttributeError:
+			return camelCase(value.name.strip('Cap'), titleCase=False)
 
 	@capStyle.decode
 	def capStyle(value) -> Qt.PenCapStyle:
-		caps: dict[str, Qt.PenCapStyle] = Qt.PenCapStyle.values
+		caps: dict[str, Qt.PenCapStyle] = dict(Qt.PenCapStyle.__members__)
 		capNames = list(caps.keys())
 		cap = closestStringInList(value, capNames)
 		return caps[cap]
@@ -1322,8 +1330,8 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		self.prepareGeometryChange()
 
 		if QApplication.mouseButtons() & Qt.MouseButton.LeftButton:
-			if self.renderTask is not None:
-				self.renderTask.cancel()
+			# actively resizing: hold off any pending debounced render
+			stopTimerSafe(self.render_delay)
 			return
 
 		if not (pixmap := self.pixmap()).isNull():
@@ -1343,10 +1351,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 	def onDataChange(self):
 		"""Called when the data is changed."""
 		log.debug(f'{self.log_repr}: onDataChange()')
-		self._updatePath()
-		# self.updateTransform()
-		if self.gradient:
-			self.updateGradient()
+		self._pathDirty = True
 		self.scheduleRender()
 
 	@Slot()
@@ -1356,10 +1361,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 			return
 		log.debug(f'{self.log_repr}: onResizeDone()')
 		self.prepareGeometryChange()
-		self._updatePath()
-
-		if self.gradient:
-			self.updateGradient()
+		self._pathDirty = True
 		self.scheduleRender()
 
 	# def updateTransform(self):
@@ -1561,7 +1563,9 @@ class Plot(QGraphicsPixmapItem, Stateful):
 				self.baker.cancel()
 			if self.shaper.status.is_active:
 				self.shaper.cancel()
-			self.render_delay.start()
+			# trailing-edge debounce: restarting on every call coalesces bursts
+			# (multi-source startup, rapid updates) into a single render
+			startTimerSafe(self.render_delay)
 
 	@Slot(object)
 	def _setPixmap(self, pixmap: QPixmap) -> None:
@@ -1591,76 +1595,93 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		weight *= self.scene().view.devicePixelRatio()
 		return QSize(weight, weight)
 
-	def _render_paint(self) -> QPixmap:
+	def _render_paint(self, size: QSize, dpr: float, pen: QPen, path: QPainterPath) -> QImage:
+		# Runs on the painter worker thread. Everything the caller passes in
+		# is a plain value (no live scene-graph references), so this is pure
+		# computation + painting into a QImage - Qt supports QImage painting
+		# off the GUI thread; QPixmap it does NOT. The QImage is converted to
+		# a QPixmap on the GUI thread in _render_finish.
 		log.debug(f'{self.log_repr}: Rendering')
-		weight = self.weight_px
-
-		if self.gradient: self.updateGradient()
-
-		size = self.expected_size
-
-		# Multiply the size by the device pixel ratio
-		size *= self.scene().view.devicePixelRatio()
-
-		# Add a bit of padding to the sides
-		padding = self.img_padding
-		size += padding
-
-		pix = QPixmap(size)
-		pix.setDevicePixelRatio(self.scene().view.devicePixelRatio())
-		pix.fill(Qt.transparent)
-		painter = EffectPainter(pix)
-
-		pen = self.pen()
-		pen.setWidthF(weight)
+		img = QImage(size, QImage.Format.Format_ARGB32_Premultiplied)
+		img.setDevicePixelRatio(dpr)
+		img.fill(Qt.transparent)
+		painter = EffectPainter(img)
 		painter.setPen(pen)
-		path = self.mapped_path
-
-		path.translate(-path.elementAt(0).x, 0)
-		path.translate(padding.width() / 2, padding.height() / 2)
-
 		painter.drawPath(path)
 		painter.end()
+		return img
 
-		return pix
-
-	def _render_finish(self, pix: QPixmap):
+	def _render_finish(self, image: QImage):
+		# GUI thread (Worker on_result). The paint worker produced a QImage;
+		# converting to a QPixmap and baking the shadow (QGraphicsScene.render)
+		# are GUI-thread-only operations, so they happen here.
 		log.verbose(f'{self.log_repr}: Rendering complete', verbosity=3)
+		pix = QPixmap.fromImage(image) if isinstance(image, QImage) else image
+		if self.effects:
+			pix = _get_shadow_renderer_scene().bakeEffects(pix, *self.effects.values())
 		self._setPixmap(pix)
 		self.data.pendingUpdate = None
 
-	def _render_bake_effects(self, pix: QPixmap):
-		log.debug(f'{self.log_repr}: Baking effects')
-		result = RendererScene().bakeEffects(pix, *self.effects.values())
-		return result
-
-	@cached_property
-	def _render_workers(self) -> Tuple[Worker, Worker]:
-		paint_worker = Worker.create_worker(self._render_paint, on_result=self._setPixmap, immortal=True)
-		bake_worker = Worker.create_worker(self._render_bake_effects, on_result=self._render_finish, immortal=True)
-		paint_worker.link_worker_result(bake_worker, priority=1)
-		return paint_worker, bake_worker
-
 	@cached_property
 	def painter(self) -> Worker:
-		return self._render_workers[0]
+		return Worker.create_worker(self._render_paint, on_result=self._render_finish, immortal=True)
 
+	# Retained for scheduleRender's cancel() checks; the bake now runs inline in
+	# _render_finish, so the "baker" is just the paint worker.
 	@cached_property
 	def baker(self) -> Worker:
-		return self._render_workers[1]
+		return self.painter
 
 	@cached_property
 	def shaper(self) -> Worker:
 		return Worker.create_worker(self._fix_shape, on_result=self._set_shape, immortal=True)
 
 	def render(self):
+		# Resolve everything scene-graph-derived here, on the GUI thread:
+		# path/gradient rebuild (prepareGeometryChange, item pen/brush state),
+		# and reading scene()/view/figure geometry. What's left (size, dpr,
+		# pen, path) are plain values with no live scene-graph references, so
+		# handing them to the paint worker is safe - see _render_paint.
+		if self.painter.status is Worker.Status.Running:
+			# A previous run is still genuinely executing. scheduleRender's
+			# cancel() can't interrupt an already-running QRunnable (only a
+			# still-queued one) - it just force-sets status to Canceled
+			# without actually stopping the thread. Overwriting
+			# self.painter.args here would race with that in-flight run
+			# reading/using the old QPainterPath, which crashed intermittently
+			# (SIGSEGV in QPainterPath::elementAt while rich's
+			# tracebacks_show_locals reprs the args of an unrelated error).
+			# Retry once it's had a chance to finish instead of touching args.
+			startTimerSafe(self.render_delay)
+			return
+
 		log.verbose(f'{self.log_repr}: Starting render', verbosity=3)
+		weight = self.weight_px
 
-		paint_worker = self.painter
-		paint_worker.start(priority=0)
+		if self._pathDirty:
+			self._pathDirty = False
+			self._updatePath()
+
+		if self.gradient: self.updateGradient()
+
+		dpr = self.scene().view.devicePixelRatio()
+		size = self.expected_size
+		size *= dpr
+
+		# Add a bit of padding to the sides
+		padding = self.img_padding
+		size += padding
+
+		pen = self.pen()
+		pen.setWidthF(weight)
+		path = self.mapped_path
+
+		path.translate(-path.elementAt(0).x, 0)
+		path.translate(padding.width() / 2, padding.height() / 2)
+
+		self.painter.args = (size, dpr, pen, path)
+		self.painter.start()
 		self.shaper.start(priority=0)
-
-		return
 
 
 	def _debug_paint(self, painter, option, widget):
@@ -1832,27 +1853,6 @@ class LinePlot(Plot):
 #
 # 		return raw
 
-
-@runtime_checkable
-class GraphItem(Protocol):
-
-
-	@property
-	@abstractmethod
-	def graphic(self) -> Plot:
-		...
-
-	@property
-	@abstractmethod
-	def figure(self) -> 'Figure':
-		...
-
-	@property
-	@abstractmethod
-	def graph(self) -> 'Graph':
-		...
-
-
 @runtime_checkable
 class LinePlotGraphItem(GraphItem, Protocol):
 
@@ -1863,126 +1863,18 @@ class LinePlotGraphItem(GraphItem, Protocol):
 		...
 
 
-@runtime_checkable
-class HasWeight(Protocol):
+class GraphAnnotationText(AnnotationText):
+	labelGroup: 'GraphAnnotationLabels'
 
-
-	@property
-	@abstractmethod
-	def weight(self) -> float:
-		...
-
-	@property
-	@abstractmethod
-	def weight_px(self) -> float:
-		...
-
-
-class LineWeight(Size.Width, relativeDecorator='lw'):
-	pass
-
-
-class AnnotationText(Text):
-	textSize: Length | Size.Height
-	shadow = SoftShadow
-	data: GraphItemData | Iterable
-	labelGroup: 'AnnotationLabels'
-	limits: Axis = Axis.Y
-	value: Any
-	timestamp: datetime
-	scaleToFit: bool = True
-
-	# Section Annotation Text
-	def __init__(self, labelGroup: 'AnnotationLabels', data: GraphItemData | Iterable, *args, **kwargs):
-		self.labelGroup = labelGroup
-		self.data = data
-		if (scaleToFit := kwargs.pop('scaleToFit', None)) is not None:
-			self.scaleToFit = scaleToFit
-		super(AnnotationText, self).__init__(parent=labelGroup.surface, **kwargs)
+	def __init__(self, *args, **kwargs):
+		super(GraphAnnotationText, self).__init__(*args, **kwargs)
+		self.setOpacity(getattr(self.labelGroup, 'opacity', 1))
 		self.setFlag(QGraphicsItem.ItemSendsGeometryChanges)
 		self.setFlag(QGraphicsItem.ItemSendsScenePositionChanges)
-		self.setOpacity(getattr(self.labelGroup, 'opacity', 1))
-
-	# self.setCacheMode(QGraphicsItem.ItemCoordinateCache)
-
-	def setZValue(self, z: float) -> None:
-		z = max(i.graphic.zValue() for i in self.figure.plots) + 10
-		super(Text, self).setZValue(z)
-
-	@property
-	def value(self):
-		return self._value
-
-	@value.setter
-	def value(self, value):
-		self._value = value
-		self.refresh()
-
-	def refresh(self):
-		super(AnnotationText, self).refresh()
-
-	@property
-	def surface(self):
-		return self.labelGroup.surface
-
-	@property
-	def allowedWidth(self):
-		return 400
-
-	@property
-	def textSize(self) -> float:
-		return self.data.textSize
-
-	def getTextScale(self, textRect: QRectF = None, limitRect: QRectF = None) -> float:
-		scale = super(AnnotationText, self).getTextScale(textRect, limitRect)
-		return scale
-
-	def getTextPosition(self, limitRect: QRectF = None) -> QPointF:
-		return QPoint(0, 0)
-
-	def scaleSelection(self, x, y):
-		if self.scaleToFit:
-			if y * self._sizeHintRect.width() > self.allowedWidth and y > x:
-				return x
-		return y
-
-	@property
-	def limitRect(self) -> QRectF:
-		viewScale = self.scene().viewScale
-		rect = QRectF(0, 0, self.allowedWidth / viewScale.x, self.data.textSize_px / viewScale.y)
-		rect.moveCenter(self.boundingRect().center())
-		return rect
-
-	@property
-	def displayPosition(self) -> DisplayPosition:
-		return self.data.position
-
-	def containingRect(self) -> QRectF:
-		return self.surface.rect()
-
-	@property
-	def offset(self) -> float:
-		return self.data.offset_px
-
-	@property
-	def x(self) -> float:
-		return (self.timestamp - now()).total_seconds() * self.graphSurface.pixelsPerSecond
-
-	@property
-	def y(self) -> float:
-		return self.pos().y()
-
-	@property
-	def position(self) -> QPointF:
-		return QPointF(self.x, self.y)
-
-	@position.setter
-	def position(self, value):
-		self.setPos(value)
 
 	@property
 	def graphSurface(self) -> 'GraphPanel':
-		return self.data.graph
+		return self.labelGroup.graph
 
 	# !TODO: Reimplement keeping text in containing rect
 	def itemChange(self, change, value):
@@ -2008,323 +1900,24 @@ class AnnotationText(Text):
 				self.setOpacity(opacity)
 		return QGraphicsItem.itemChange(self, change, value)
 
-	def delete(self):
-		if scene := self.scene():
-			scene.removeItem(self)
-			self._actionPool.delete()
-			del self._actionPool
-			return
-		if groupRemove := getattr(self.labelGroup, 'removeItem', None) is not None:
-			groupRemove(self)
-			return
-
-
-AnnotationTextVar = TypeVar('AnnotationTextVar', bound=AnnotationText)
-
 
 # Section Annotation Labels
-class AnnotationLabels(list[AnnotationTextVar], Stateful, tag=...):
-	__typeCache__: ClassVar[dict[Type[AnnotationTextVar], Type[list[AnnotationTextVar]]]] = {}
-	__labelClass: ClassVar[Type[AnnotationTextVar]] = AnnotationText
 
-	source: Any
-	surface: Surface
+
+class GraphAnnotationLabels(AnnotationLabels):
 	graph: 'GraphPanel'
 
-	enabled: bool
-	position: DisplayPosition
-	labelHeight: Length | Size.Height
-	offset: Length | Size.Height
-
-	_enabled: bool
-	xAxisValues: np.ndarray
-	yAxisValues: np.ndarray
-
-	def __class_getitem__(cls, item: Type[AnnotationText]):
-		if not issubclass(item, AnnotationText):
-			raise TypeError('item must be a subclass of PlotLabels')
-		if item not in cls.__typeCache__:
-			cls.__typeCache__[item] = type(f'{item.__name__}Labels', (cls,), {'__labelClass': item})
-		return cls.__typeCache__[item]
-
 	def pre_init(self, source, surface, **kwargs) -> dict:
-		self.source = source
-		self.surface = surface
-
 		# Find the graph panel
 		graph = surface
 		while graph is not None and not isinstance(graph, GraphPanel):
 			graph = graph.parentItem()
 		self.graph = graph
-
-		kwargs = self.prep_init(kwargs)
-		return kwargs
-
-	def __init__(self, source: Any, surface: Surface, *args, **kwargs):
-		kwargs = self.pre_init(source, surface, **kwargs)
-		super(AnnotationLabels, self).__init__()
-		self.post_init(state=kwargs)
-
-	def post_init(self, state: dict, *args, **kwargs):
-		self.state = state
-
-	# Section .properties
-	# ======= state properties ======== #
-
-	# ----------- enabled ------------- #
-	@StateProperty(default=True, allowNone=False, singleValue=True)
-	def enabled(self) -> bool:
-		return getattr(self, '_enabled', True)
-
-	@enabled.setter
-	def enabled(self, value):
-		self._enabled = value
-
-	@enabled.after
-	def enabled(self) -> Callable:
-		return self.refresh
-
-	# ----------- opacity ------------- #
-	@StateProperty(default=DefaultGroup('100%', 1.0), allowNone=False)
-	def opacity(self) -> float:
-		return getattr(self, '_opacity', 1.0)
-
-	@opacity.setter
-	def opacity(self, value: float):
-		if getattr(self, '_opacity', 1) != value:
-			list(map(lambda x: x.setOpacity(value), self))
-		self._opacity = value
-
-	@opacity.decode
-	def opacity(value: int | str) -> float:
-		if isinstance(value, str):
-			number = float((numberRegex.search(value) or {'number': 1})['number'])
-			if '%' in value:
-				value = (number or 100) / 100
-				value = sorted((value, 0, 1))[1]
-			else:
-				value = number
-		if value > 100:
-			value /= 255
-		if value >= 100:
-			value /= 100
-		value = sorted((0, value, 1))[1]
-		return value
-
-	@opacity.encode
-	def opacity(value: float) -> str:
-		return f'{value * 100:.4g}%'
-
-	# ---------- position ------------ #
-	@StateProperty(default=DisplayPosition.Auto, allowNone=False, singleValue=True)
-	def position(self) -> DisplayPosition:
-		return getattr(self, '_position', Unset) or type(self).position.default(type(self))
-
-	@position.setter
-	def position(self, value: DisplayPosition):
-		self._position = value
-
-	@position.decode
-	def position(self, value: str) -> DisplayPosition:
-		return DisplayPosition[value]
-
-	@position.after
-	def position(self) -> Callable:
-		return self.refresh
-
-	# ----------- height ------------- #
-	@StateProperty(key='height', default=Centimeter(0.5), allowNone=False)
-	def labelHeight(self) -> Length | Size.Height:
-		value = getattr(self, '_labelHeight', Unset) or type(self).labelHeight.default(type(self))
-		return value
-
-	@labelHeight.setter
-	def labelHeight(self, value: Length | Size.Height):
-		self._labelHeight = value
-
-	@labelHeight.decode
-	def labelHeight(self, value: str | float | int) -> Length | Size.Height:
-		return self.parseSize(value, type(self).labelHeight.default(type(self)))
-
-	@labelHeight.encode
-	def labelHeight(self, value: Length | Size.Height) -> str:
-		if isinstance(value, Length) or hasattr(value, 'precision'):
-			return f'{value:.3f}'
-		return value
-
-	@labelHeight.after
-	def labelHeight(self) -> Callable:
-		return self.refresh
-
-	# ----------- offset ------------- #m
-	@StateProperty(default=Size.Height('5px'), allowNone=False)
-	def offset(self) -> Length | Size.Height:
-		if (offset := getattr(self, '_offset', Unset)) is not Unset:
-			return offset
-		return type(self).offset.default(type(self))
-
-	@offset.setter
-	def offset(self, value: Length | Size.Height):
-		self._offset = value
-
-	@offset.decode
-	def offset(self, value: str | float | int) -> Length | Size.Height:
-		return self.parseSize(value, type(self).offset.default(type(self)))
-
-	@offset.encode
-	def offset(self, value: Length | Size.Height) -> str:
-		if isinstance(value, Length) or hasattr(value, 'precision'):
-			return f'{value:.3f}'
-		return value
-
-	@offset.after
-	def offset(self) -> Callable:
-		return self.refresh
-
-	# --------- alignment ------------ #
-	@StateProperty(default=None, allowNone=True)
-	def alignment(self) -> Alignment | None:
-		return getattr(self, '_alignment', Unset) or type(self).alignment.default(type(self)) or self.alignmentAuto
-
-	@alignment.setter
-	def alignment(self, value: Alignment | None):
-		self._alignment = value
-
-	@alignment.decode
-	def alignment(value: str | int | tuple[AlignmentFlag, AlignmentFlag] | AlignmentFlag) -> Alignment:
-		if isinstance(value, (str, int)):
-			alignment = AlignmentFlag[value]
-		elif value is None:
-			alignment = AlignmentFlag.Center
-		elif isinstance(value, tuple):
-			return Alignment(*value)
-		else:
-			alignment = AlignmentFlag.Center
-		return Alignment(alignment)
-
-	# ======= label properties ======= #
-	@property
-	def textSize_px(self) -> float:
-		textHeight = self.labelHeight
-		if isinstance(textHeight, Dimension):
-			if textHeight.absolute:
-				textHeight = float(textHeight)
-			else:
-				textHeight = float(textHeight.toAbsolute(self.surface.height()))
-		elif isinstance(textHeight, Length):
-			dpi = getDPI(self.surface.scene().view.screen())
-			# dpi = 1080 / Centimeter(13.5).inch
-			textHeight = float(textHeight.inch) * dpi
-		return textHeight
-
-	@property
-	def offset_px(self) -> float:
-		offset = self.offset
-		match offset, self.source:
-			case LineWeight(), GraphItem(graphic=HasWeight(weight_px=_) as p):
-				offset = offset.toAbsoluteF(p.weight_px)
-			case Dimension(absolute=True), _:
-				offset = float(offset)
-			case Dimension(relative=True), _:
-				offset = float(offset.toAbsolute(self.surface.boundingRect().height()))
-			case Length(), _:
-				dpi = getDPI(self.surface.scene().view.screen())
-				offset = float(offset.inch) * dpi
-			case _, _:
-				offset = float(offset)
-		return offset
-
-	@property
-	def alignmentAuto(self) -> Alignment:
-		match self.position:
-			case DisplayPosition.Top:
-				return Alignment(AlignmentFlag.TopCenter)
-			case DisplayPosition.Bottom:
-				return Alignment(AlignmentFlag.BottomCenter)
-			case DisplayPosition.Left:
-				return Alignment(AlignmentFlag.CenterRight)
-			case DisplayPosition.Right:
-				return Alignment(AlignmentFlag.CenterLeft)
-			case DisplayPosition.Center | DisplayPosition.Auto:
-				return Alignment(AlignmentFlag.Center)
-
-	# ======= abstract methods ======== #
-	@abstractmethod
-	def refresh(self): ...
-
-	@abstractmethod
-	def onDataChange(self, axis: Axis): ...
-
-	""" Called when the data of the axis changes. """
-
-	@abstractmethod
-	def onAxisTransform(self, axis: Axis): ...
-
-	""" 
-	Called when the axis transform changes.
-	For example, when the graph timeframe window changes. 
-	"""
-
-	@abstractmethod
-	def labelFactory(self, **kwargs): ...
-
-	""" Creates labels for the data."""
-
-	# ======= shared methods ======== #
-	def resize(self, newSize: int):
-		currentSize = len(self)
-		if newSize > currentSize:
-			self.extend([self.labelFactory() for _ in range(newSize - currentSize)])
-		elif newSize < currentSize:
-			for _ in range(currentSize - newSize):
-				self.pop().delete()
-
-	def parseSize(self, value: str | float | int, default) -> Length | Size.Height | Size.Width:
-		match value:
-			case str(value):
-				unit = ''.join(re.findall(r'[^\d\.\,]+', value)).strip(' ')
-				match unit:
-					case 'cm':
-						value = Centimeter(float(value.strip(unit)))
-						value.precision = 3
-						value.max = 10
-						return value
-					case 'mm':
-						value = Millimeter(float(value.strip(unit)))
-						value.precision = 3
-						value.max = 10
-						return value
-					case 'in':
-						value = Inch(float(value.strip(unit)))
-						value.precision = 3
-						value.max = 10
-						return value
-					case 'pt' | 'px':
-						return Size.Height(float(value.strip(unit)), absolute=True)
-					case '%':
-						return Size.Height(float(value.strip(unit) / 100), relative=True)
-					case 'lw':
-						match self.source:
-							case GraphItem(graphic=HasWeight(weight_px=_)):
-								value = float(value.strip(unit))
-								return LineWeight(value, relative=True)
-							case _:
-								return value
-					case _:
-						try:
-							return Centimeter(float(value))
-						except Exception as e:
-							log.error(e)
-							return Centimeter(1)
-			case float(value) | int(value):
-				return Centimeter(float(value))
-			case _:
-				log.error(f'{value} is not a valid value for labelHeight.  Using default value of 1cm for now.')
-				return default
+		return super(GraphAnnotationLabels, self).pre_init(source, surface, **kwargs)
 
 
 # Section Plot Label
-class PlotLabel(AnnotationText):
+class PlotLabel(GraphAnnotationText):
 	_scaleSelection: ClassVar[Callable[[Iterable], Any]] = min
 
 	def __init__(self, **kwargs):
@@ -2358,10 +1951,10 @@ class PlotLabel(AnnotationText):
 		y = 0
 		if vertical.isBottom:
 			# is peak
-			y -= self.data.offset_px + (self.data.source.graphic.pen().widthF() * 0.25)
+			y -= self.labelGroup.offset_px + (self.labelGroup.source.graphic.pen().widthF() * 0.25)
 		else:
 			# is valley
-			y += self.data.offset_px + (self.data.source.graphic.pen().widthF() * 0.25)
+			y += self.labelGroup.offset_px + (self.labelGroup.source.graphic.pen().widthF() * 0.25)
 		return y
 
 	@property
@@ -2404,7 +1997,7 @@ class PlotLabel(AnnotationText):
 		if change is QGraphicsItem.ItemPositionChange:
 			current = self.pos()
 			path = self.mapToScene(self.path()).translated(*(value - current).toTuple())
-			graph_margins_path = self.data.graph.scene_margin_path
+			graph_margins_path = self.labelGroup.graph.scene_margin_path
 			diff = path - graph_margins_path
 			diff_rect = diff.boundingRect()
 			if diff_rect.height():
@@ -2417,7 +2010,7 @@ class PlotLabel(AnnotationText):
 
 
 # Section Plot Labels
-class PlotLabels(AnnotationLabels[PlotLabel]):
+class PlotLabels(GraphAnnotationLabels[PlotLabel]):
 	# TODO: While saving a without plugins loaded, the labels are not saved.
 	"""
 	Loaded file had:
@@ -2518,7 +2111,7 @@ class PlotLabels(AnnotationLabels[PlotLabel]):
 		if self.enabled:
 			start = perf_counter()
 			if self.source.hasData and self.peaksTroughs:
-				positions = self.values
+				positions = self.value_points
 				data = self.data
 				if not len(positions) == len(data) == len(self):
 					if len(self) != len(data):
@@ -2526,7 +2119,7 @@ class PlotLabels(AnnotationLabels[PlotLabel]):
 					if len(data) != len(positions):
 						self.resetAxis(Axis.Both)
 						self.normalizeValues()
-						positions = self.values
+						positions = self.value_points
 				for label, value, pos in zip_longest(self, data, positions):
 					label.value = value
 					label.alignment = AlignmentFlag.Bottom if value.isPeak else AlignmentFlag.Top
@@ -2545,7 +2138,7 @@ class PlotLabels(AnnotationLabels[PlotLabel]):
 
 	def quickRefresh(self):
 		log.verbose(f'{self.log_repr}: Quick refresh')
-		positions = self.values
+		positions = self.value_points
 		self.normalizeValues()
 		data = self.data
 		if len(data) != len(self):
@@ -2614,7 +2207,11 @@ class PlotLabels(AnnotationLabels[PlotLabel]):
 		return QPolygonF([QPointF(*i) for i in zip(self.normalizedX, self.normalizedY)])
 
 	@property
-	def values(self) -> QPolygonF:
+	def values(self):
+		return [i.value for i in (self.data if self.data is not None else ())]
+
+	@property
+	def value_points(self) -> QPolygonF:
 		return self.source.combinedTransform.map(self.polygon)
 
 	def isVisible(self):
@@ -2740,8 +2337,10 @@ class TimeMarkers(QGraphicsRectItem, Stateful, tag=...):
 		self.time = time()
 		self.graph = parent.graph
 		self.pens = {}
-		super(TimeMarkers, self).__init__(parent)
-		self.state = self.prep_init({})
+		super(TimeMarkers, self).__init__()
+		self.setParentItem(parent)
+		self.prep_init(stateful_parent=parent.graph, stateful_key='lines')
+		self.state = self.add_defaults_to_state({})
 		self.parentItem().parentItem().parentItem().signals.resized.connect(self.updateRect)
 		self.parentItem().parentItem().graph.timeframe.connectItem(self.onAxisChange)
 		self.parentItem().parentItem().graph.axisTransformed.connectSlot(self.onAxisChange)
@@ -2897,7 +2496,8 @@ class TimeMarkers(QGraphicsRectItem, Stateful, tag=...):
 class HourLines(QGraphicsItemGroup):
 
 	def __init__(self, parent: TimeMarkers, period: timedelta | int):
-		super(HourLines, self).__init__(parent)
+		super(HourLines, self).__init__()
+		self.setParentItem(parent)
 		if isinstance(period, timedelta):
 			period = round(period.total_seconds() / 3600)
 		self.period = period
@@ -2954,7 +2554,7 @@ def useHeight(_, *args):
 
 
 # Section Timestamp Label
-class TimestampLabel(AnnotationText):
+class TimestampLabel(GraphAnnotationText):
 	formatID: int
 	defaultFormatID = 3
 	formatStrings = ['%H:%M:%S.%f', '%H:%M:%S', '%H:%M', f'%-I%p', '%a', '%A', '']
@@ -2977,9 +2577,13 @@ class TimestampLabel(AnnotationText):
 		super(TimestampLabel, self).__init__(labelGroup=labelGroup, **kwargs)
 
 	@property
+	def x(self) -> float:
+		return (self.timestamp - now()).total_seconds() * self.graph.pixelsPerSecond
+
+	@property
 	def y(self) -> float:
-		containingRect = self.containingRect()
-		match self.data.position:
+		containingRect = self.containingRect
+		match self.labelGroup.position:
 			case DisplayPosition.Top:
 				return containingRect.top() + self.offset
 			case DisplayPosition.Bottom | DisplayPosition.Auto:
@@ -3010,7 +2614,7 @@ class TimestampLabel(AnnotationText):
 
 	@property
 	def alignment(self) -> Alignment:
-		return self.data.alignment
+		return self.labelGroup.alignment
 
 	@alignment.setter
 	def alignment(self, value: Alignment):
@@ -3087,6 +2691,7 @@ class HourLabels(AnnotationLabels[TimestampLabel]):
 	}
 
 	def __init__(self, surface: 'HourLabels', graph: 'GraphPanel' = None, source: TimestampGenerator = None, **kwargs):
+		self.graph = graph
 		if graph is not None and source is None:
 			source = TimestampGenerator(graph)
 		elif graph is None and source is None:
@@ -3095,11 +2700,22 @@ class HourLabels(AnnotationLabels[TimestampLabel]):
 		self.sizeGroup.items = self
 		super(HourLabels, self).__init__(surface=surface, source=source, **kwargs)
 
-	def post_init(self, **kwargs):
-		super(HourLabels, self).post_init(**kwargs)
+	def post_init(self, **state):
+		super(HourLabels, self).post_init(**state)
 		graph = self.surface.graph
 		graph.timeframe.connectItem(self.onDataChange)
 		graph.axisTransformed.connectSlot(self.onAxisTransform)
+
+	def _set_fill_brush(self, brushes: Dict[datetime, QBrush]):
+		brush = QBrush(self.color.QColor)
+		for label in self:
+			label.setBrush(brush)
+
+	@property
+	def values(self) -> List[datetime]:
+		s = self.source
+		s.reset()
+		return [i for i in s]
 
 	@StateProperty(key='spacingIntervals', default=markerIntervals)
 	def ownMarkerIntervals(self) -> List[int]:
@@ -3276,8 +2892,8 @@ class DayAnnotations(Surface, Stateful, tag=...):
 		self.hourLabels = HourLabels(graph=self.graph, surface=self)
 		self._dayLabels = DayLabels(graph=self.graph, surface=self)
 		self.hourLines = TimeMarkers(self)
-
-		self.state = self.prep_init(kwargs)
+		self.prep_init(stateful_parent=self.graph, stateful_key='annotations')
+		self.state = self.add_defaults_to_state(kwargs)
 
 		LevityDashboard.clock.sync.connect(self.updateItem)
 		self.setFlag(QGraphicsItem.ItemClipsChildrenToShape)
@@ -3310,7 +2926,7 @@ class DayAnnotations(Surface, Stateful, tag=...):
 		self.hourLines.onAxisChange(axis)
 		self.dayLabels.onDataChange(axis)
 
-	@StateProperty(key='enabled', default=True, allowNone=False, singleValue=True)
+	@StateProperty(key='enabled', default=True, allowNone=False, singleVal=True)
 	def enabled(self) -> bool:
 		return self.isVisible() and self.isEnabled()
 
@@ -3390,18 +3006,18 @@ class AxisSignal(QObject):
 		self.timer = QTimer(singleShot=True, interval=200)
 		self.timer.timeout.connect(self.__announce)
 
-	@thread_safe
 	def announce(self, axis: Axis, instant: bool = False):
 		self.__axis |= axis
 		if instant:
 			self.__announce()
 		else:
-			self.timer.start()
+			# announcements arrive from plugin worker threads
+			startTimerSafe(self.timer)
 
 	def __announce(self):
-		if QThread.currentThread() is not LevityDashboard.app.thread():
-			self.__announce()
-			return
+		# if QThread.currentThread() is not LevityDashboard.app.thread():
+		# 	self.__announce()
+		# 	return
 		self.__signal.emit(self.__axis)
 		self.__axis = Axis.Neither
 
@@ -3418,7 +3034,12 @@ _Figure = ForwardRef('Figure')
 # Section CurrentTimeIndicator
 class CurrentTimeIndicator(QGraphicsLineItem, Stateful, tag=...):
 
-	_time = partial(datetime.now, tz=LOCAL_TIMEZONE)
+	# staticmethod is required as of Python 3.14: functools.partial gained
+	# descriptor support, so a bare partial() as a class attribute now binds
+	# self as its first positional arg when accessed via an instance - which
+	# datetime.now(tz=...) doesn't accept, raising "takes at most 1 argument
+	# (2 given)". staticmethod restores the old "plain callable" behavior.
+	_time = staticmethod(partial(datetime.now, tz=LOCAL_TIMEZONE))
 
 	def __init__(self, graph: 'GraphPanel', signal: Signal = None, **kwargs):
 		self.graph = graph
@@ -3428,8 +3049,8 @@ class CurrentTimeIndicator(QGraphicsLineItem, Stateful, tag=...):
 		self.setPen(QPen(Qt.red, 1))
 		self.updatePath()
 		self.updatePosition()
-		kwargs = self.prep_init(kwargs)
-		self.state = kwargs
+		self.prep_init(stateful_parent=graph, stateful_key='indicator')
+		self.state = self.add_defaults_to_state(kwargs)
 
 	def updatePath(self, rect = None):
 		self.setLine(0, 0, 0, (rect or self.parentItem().rect()).height())
@@ -3453,7 +3074,7 @@ class CurrentTimeIndicator(QGraphicsLineItem, Stateful, tag=...):
 		t = self._time()
 		return (t - self.graph.timeframe.start).total_seconds() * self.graph.pixelsPerSecond
 
-	@StateProperty(key='enabled', default=True, allowNone=False, singleValue=True)
+	@StateProperty(key='enabled', default=True, allowNone=False, singleVal=True)
 	def enabled(self) -> bool:
 		return self.isVisible() and self.isEnabled()
 
@@ -3462,7 +3083,7 @@ class CurrentTimeIndicator(QGraphicsLineItem, Stateful, tag=...):
 		self.setVisible(value)
 		self.setEnabled(value)
 
-	@StateProperty(key='color', default=Color('#ff9aa3'), allowNone=False, singleValue=True, after=updateAppearance)
+	@StateProperty(key='color', default=Color('#ff9aa3'), allowNone=False, singleVal=True, after=updateAppearance)
 	def color(self) -> Color:
 		return self._color
 
@@ -3566,8 +3187,8 @@ class GraphPanel(Panel, tag='graph'):
 	def _init_defaults_(self):
 		super()._init_defaults_()
 		self.isEmpty = False
-		self.setFlag(self.ItemClipsChildrenToShape, True)
-		self.setFlag(self.ItemClipsToShape, True)
+		self.setFlag(self.GraphicsItemFlag.ItemClipsChildrenToShape, True)
+		self.setFlag(self.GraphicsItemFlag.ItemClipsToShape, True)
 		self.setAcceptDrops(True)
 		self.setAcceptHoverEvents(True)
 		self.syncTimer = QTimer(timeout=self.syncDisplay, interval=300000)
@@ -3612,7 +3233,7 @@ class GraphPanel(Panel, tag='graph'):
 	@scrollable.setter
 	def scrollable(self, value: bool):
 		self._scrollable = value
-		self.proxy.setFlag(self.ItemIsMovable, value)
+		self.proxy.setFlag(self.GraphicsItemFlag.ItemIsMovable, value)
 
 	@StateProperty(default=Stateful, allowNone=False)
 	def indicator(self) -> 'CurrentTimeIndicator':
@@ -3664,14 +3285,15 @@ class GraphPanel(Panel, tag='graph'):
 		self.__clearCache()
 
 	def updateSyncTimer(self):
-		self.syncTimer.stop()
 		interval = self.syncTimer.interval()
 		newInterval = self.msPerPixel
 		if int(newInterval / 1000) < int(interval / 1000):
-			self.syncTimer.setInterval(newInterval)
 			updateFrequency = Second(newInterval / 1000).auto
 			log.debug(f"Graph update frequency changed to {updateFrequency:format={'{value}'}} {type(updateFrequency).pluralName.lower()}")
-		self.syncTimer.start()
+			# start(msec) sets the interval and (re)starts in one thread-safe call
+			startTimerSafe(self.syncTimer, newInterval)
+		else:
+			startTimerSafe(self.syncTimer)
 
 	@defer
 	def syncDisplay(self):
@@ -3680,6 +3302,13 @@ class GraphPanel(Panel, tag='graph'):
 			min((figure.figureMinStart for figure in self.figures), default=self.timeframe.displayPosition)
 		)
 		self.proxy.snapToTime(t)
+		# The "now" indicator only repositions on an actual panel resize
+		# (its updatePosition is wired to self.signals.resized, never to a
+		# timer) - piggyback on this timer, already ticking at msPerPixel
+		# (one pixel of movement per fire, scaled to zoom), instead of
+		# running a second independent timer for the same cadence.
+		if (indicator := getattr(self, '_indicator', None)) is not None:
+			indicator.updatePosition()
 
 	def timeToX(self, time: datetime):
 		pass
@@ -4016,8 +3645,8 @@ class GraphProxy(QGraphicsItemGroup):
 		self.setFlag(QGraphicsItem.ItemSendsGeometryChanges)
 		self.setFlag(QGraphicsItem.ItemIsFocusable, False)
 		self.setAcceptHoverEvents(True)
-		self.setFlag(self.ItemClipsChildrenToShape)
-		self.setFlag(self.ItemClipsToShape)
+		self.setFlag(self.GraphicsItemFlag.ItemClipsChildrenToShape)
+		self.setFlag(self.GraphicsItemFlag.ItemClipsToShape)
 
 	@Slot(Axis)
 	def onDataRangeChange(self, axis: Axis):
@@ -4229,7 +3858,7 @@ class Figure(NonInteractivePanel, tag=...):
 
 		self.resizeHandles.setParentItem(None)
 		self.setFlag(QGraphicsItem.ItemHasNoContents, False)
-		self.setFlag(self.ItemSendsGeometryChanges, False)
+		self.setFlag(self.GraphicsItemFlag.ItemSendsGeometryChanges, False)
 		self.marginHandles = FigureHandles(self)
 		self.marginHandles.setParentItem(self)
 		self.setAcceptedMouseButtons(Qt.NoButton)
@@ -4628,14 +4257,15 @@ class GraphMenu(BaseContextMenu):
 
 
 class FigureMenu(QMenu):
-	parent: GraphMenu
+	parent_graph: GraphPanel
+	parent_menu: GraphMenu
 	figure: Figure
 	figureItems: List[GraphItemData]
 
-	def __init__(self, parent: GraphMenu, figure: Figure):
+	def __init__(self, parent_graph: GraphPanel, figure: Figure):
 		super(FigureMenu, self).__init__()
 		self.items = []
-		self.parent = parent
+		self.parent_graph = parent_graph
 		self.figure = figure
 		title = joinCase(figure.name, valueFilter=str.title)
 		self.setTitle(title)
@@ -4662,11 +4292,15 @@ class FigureMenu(QMenu):
 			self._currentItem = None
 
 	def restoreOpacity(self):
-		if parentMenu := getattr(self, 'parentMenu', None):
+		if parentMenu := getattr(self, 'parent_menu', None):
 			parentMenu.restoreOpacity(self.figure)
 
 	def highlight(self):
-		self.parent.highlightFigure(self.figure)
+		self.parent_graph.highlightFigure(self.figure)
+
+	@property
+	def parent_menu(self) -> GraphMenu:
+		return self.parent_graph.contextMenu
 
 	def updateItems(self):
 		items = [GraphItemMenu(parent=self, item=item) for item in reversed(self.figure.plotData)]
@@ -4701,11 +4335,10 @@ class FigureMenu(QMenu):
 
 class TimeseriesSourceMenu(SourceMenu):
 
-
-	def __init__(self, parentMenu, item):
+	def __init__(self, parent_menu, item):
 		self.item = item
 		self.source_actions: Dict[Plugin, QAction] = {}
-		super(TimeseriesSourceMenu, self).__init__(parentMenu)
+		super(TimeseriesSourceMenu, self).__init__(parent_menu)
 
 	def updateItems(self):
 		for source in self.sources:
@@ -4724,7 +4357,7 @@ class TimeseriesSourceMenu(SourceMenu):
 
 	@property
 	def sources(self):
-		key = self.parent.item.key
+		key = self.parent_menu.item.key
 		if key is not None:
 			return [i for i in LevityDashboard.plugins if i.hasTimeseriesFor(key)]
 		return []

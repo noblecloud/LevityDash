@@ -1,171 +1,1225 @@
-import utils.data
-from LevityDash.lib import logging
-from dataclasses import dataclass
+import PySide6.QtGui
+import numpy as np
+from PySide6 import QtCore
+from PySide6.QtCore import QPointF, QRectF, QPoint, QPropertyAnimation, Signal, QEasingCurve, QSizeF, Slot, QLineF
+from PySide6.QtGui import (
+	QBrush, QFont, QPainter, QPainterPath,
+	QPen, QPolygonF, QTransform, QRadialGradient, QGradient, QColor, Qt, QConicalGradient
+)
+from PySide6.QtWidgets import (
+	QGraphicsPathItem,
+	QGraphicsScene, QStyleOptionGraphicsItem,
+	QWidget, QGraphicsItemGroup
+)
+from enum import Enum
 from functools import cached_property
-from operator import attrgetter
-from typing import Optional, Type, Union
+from math import isinf, floor, log10
+from numbers import Number
+from numpy import ceil, cos, pi, radians, sin, sqrt, number as np_number
+from typing import Optional, Type, Union, Iterator, Iterable, TypeVar, Sequence, Dict
 
-from numpy import ceil, cos, pi, radians, sin, sqrt
-from PySide2 import QtCore
-from PySide2.QtCore import Property, QAbstractAnimation, QEasingCurve, QLineF, QObject, QPoint, QPointF, QPropertyAnimation, QRect, QRectF, QSizeF, Qt, QTimer, Signal, Slot
-from PySide2.QtGui import QBrush, QColor, QFont, QFontMetrics, QFontMetricsF, QPainter, QPainterPath, QPen, QPolygonF
-from PySide2.QtWidgets import (QCheckBox, QFormLayout, QGraphicsItem, QGraphicsItemGroup, QGraphicsObject, QGraphicsPathItem, QGraphicsScene, QGraphicsSceneDragDropEvent, QGraphicsSceneMouseEvent, QGraphicsTextItem, QGraphicsView, QLabel,
-                               QStyleOptionGraphicsItem,
-                               QVBoxLayout, QWidget)
-from WeatherUnits import Direction, DistanceOverTime, Measurement, Angle
-
-from LevityDash.lib.fonts import defaultFont
-from LevityDash.lib.utils import Subscription
-from Modules import estimateTextSize
+from LevityDash.lib.plugins.categories import CategoryItem
+from LevityDash.lib.stateful import Stateful, StateProperty, SourceType
+from LevityDash.lib.stateful_mixins import ColorGradientMixin
+from LevityDash.lib.ui import UILogger, Color, Gradient
+from LevityDash.lib.ui.Geometry import RelativeFloat, parseSize, DimensionType, size_px, Dimension, Size, Alignment, \
+	AlignmentFlag, DisplayPosition, parseWidth, parseX, parseY, parseHeight, UnitDisplayPosition, ValueDisplayPosition
+from LevityDash.lib.ui.frontends.PySide.Modules import Panel
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays import SurfaceCentered, Surface
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Annotations import AnnotationText, AnnotationLabels
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.DisplayBase import Display
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Label import NonInteractiveLabel
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import Text
+from LevityDash.lib.ui.frontends.PySide.Modules.Handles import Handle
+from LevityDash.lib.ui.frontends.PySide.Modules.Panel import SizeGroup
+from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, addCrosshair, DebugPaint, SoftShadow, outline_path, \
+	modifyTransformValues, rect_to_shape, addPath
+from LevityDash.lib.utils import Axis
 from LevityDash.lib.utils.data import MinMax
-from LevityDash.lib.utils.shared import half, Numeric, radialPoint
-from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
+from LevityDash.lib.utils.shared import radialPoint, defer, factors, is_prime, Unset, clearCacheAttr, \
+	INVERSE_GOLDEN_RATIO, closestStringInList, camelCase, guarded_cached_property, get, ClosestMatchEnumMeta
+from WeatherUnits import Measurement, Angle, Wind, Humidity, auto as auto_wu, Length, Percentage
 
-log = logging.getLogger(__name__)
+log = UILogger.getChild('Gauge')
 
 
-@dataclass
-class Divisions:
-	"""
-	Divisions for a gauge.
-	"""
+def filter_factors(
+	numbers: Iterable[int],
+	required_factors: set[int] = None,
+	included_factors: set[int] = None,
+	excluded_factors: set[int] = None,
+) -> set[int]:
+	if required_factors is None:
+		required_factors = set()
 
-	#: The number of divisions.
-	count: Optional[int]
-	#: The length of each tick.
-	length: float
-	#: The line width of each tick.
-	lineWidth: float
-	#: The colors of the tick.
-	color: QColor = None
-	#: The Alpha level.
-	alpha: float = 1.0
-
-	subdivison: 'Divisions' = None
+	return {
+		n for n in numbers
+		if required_factors <= (f := factors(int(n)))
+		and (not included_factors or included_factors & f)
+		and (not excluded_factors or not excluded_factors & f)
+	}
 
 
 class GaugeItem:
+	"""
+	Base class for all gauge items.  This class provides a reference to the gauge that the item belongs to
+	and will raise a ValueError if no gauge is provided.
+	"""
+
 	_gauge: 'Gauge'
-	_cache: list
 
-	def __init__(self, gauge: 'Gauge'):
-		self._cache = []
-		self._gauge = gauge
-		super(GaugeItem, self).__init__()
+	def __extract_gauge(self, args, kwargs):
+		gauge = get(kwargs, 'gauge' 'parent', default=None, expectedType=Gauge)
+		if gauge is None:
+			gauge = next((arg for arg in args if isinstance(arg, Gauge)), None)
+		if gauge is None:
+			gauge = next((kwarg for kwarg in kwargs.values() if isinstance(kwarg, Gauge)), None)
+		if gauge is None:
+			raise ValueError(f'No gauge provided for {self.__class__.__name__}')
+		return gauge
 
-	def _clearCache(self):
-		while self._cache:
-			delattr(self, self._cache.pop())
+	def __init__(self, *args, **kwargs):
 
-	def update(self):
-		self._clearCache()
-		super(GaugeItem, self).update()
+		self._gauge = self.__extract_gauge(args, kwargs)
+
+		try:
+			super().__init__(*args, **kwargs)
+		except TypeError:
+			super().__init__()
 
 	@property
 	def gauge(self) -> 'Gauge':
 		return self._gauge
 
+	def remove(self):
+		self.gauge.scene().removeItem(self)
+
+
+Numeric = Union[int, float, complex, np_number, Measurement]
+GaugeValue = TypeVar('GaugeValue', bound=Numeric, covariant=True)
+
+
+class StatefulGaugeItem(GaugeItem, Stateful):
+
+	def __init__(self, *args, **kwargs):
+		super(StatefulGaugeItem, self).__init__(*args, **kwargs)
+		self.prep_init(args=args, kwargs=kwargs, stateful_parent=self.gauge)
+
+
+class Graduations(ColorGradientMixin, StatefulGaugeItem):
+	"""
+	Divisions for a gauge.  This class uses configured options and value information
+	to determine the interval between graduations or the number of graduations to show
+	on the gauge.  Intervals should always be integers unless the range is small (less than 3).
+	If both the interval and count are set, the count will be ignored unless the provided
+	interval is unsuitable.
+
+
+	Parameters
+	----------
+	gauge : Gauge
+		The gauge that this graduation belongs to
+	**state: Mapping, optional
+		The state to use for this graduation
+	"""
+
+	enabled: bool
+	count: int
+	min_count: int
+	max_usr_count: int
+	interval: int
+	min_interval: int
+	max_interval: int
+	spacing: int
+	min_spacing: int
+	max_spacing: int
+	required_interval_factors: set[int]
+	excluded_interval_factors: set[int]
+
+	class Type(Enum):
+		Major = 0
+		Minor = 1
+		Micro = 2
+
+	def __init__(self, gauge: 'Gauge', **kwargs):
+		self.tick_type = kwargs.pop('type', self.Type.Major)
+		super().__init__(gauge, **kwargs)
+		self.add_defaults_to_state(kwargs)
+		self.state = kwargs
+
+	def __rich_repr__(self, exclude: set = None):
+		yield 'type', self.tick_type.name
+		yield from Stateful.__rich_repr__(self, exclude)
+
+	@property
+	def super_grad(self) -> Optional['Graduations']:
+		if self.tick_type == self.Type.Major:
+			return None
+		elif self.tick_type == self.Type.Minor:
+			return self.gauge.majorDivisions
+		elif self.tick_type == self.Type.Micro:
+			return self.gauge.minorDivisions
+
+	@property
+	def sub_grad(self) -> Optional['Graduations']:
+		if self.tick_type == self.Type.Major:
+			return self.gauge.minorDivisions
+		elif self.tick_type == self.Type.Minor:
+			return self.gauge.microDivisions
+		elif self.tick_type == self.Type.Micro:
+			return None
+
+	@property
+	def surface(self) -> 'TickSurface':
+		return getattr(self.gauge, f'{self.tick_type.name.lower()}_ticks_surface', None)
+
+	@StateProperty(key='enabled', default=True, repr=True, allowNone=False, singleVal=True)
+	def enabled(self) -> bool:
+		return self._enabled
+
+	@enabled.setter
+	def enabled(self, value: bool):
+		self._enabled = value
+		clearCacheAttr(self, 'interval')
+
+	@StateProperty(key='labels', repr=True)
+	def labels(self) -> 'GaugeTickTextGroup':
+		"""
+		The labels for the graduations.
+
+		Major ticks are labeled by default.
+		"""
+		return self._labels
+
+	@labels.factory
+	def labels(self) -> 'GaugeTickTextGroup':
+		labels = GaugeTickTextGroup(self, self.surface)
+		return labels
+
+	@labels.setter
+	def labels(self, value: 'GaugeTickTextGroup'):
+		self._labels = value
+
+	@labels.setter
+	def labels(self, value: 'GaugeTickTextGroup'):
+		self._labels = value
+
+	@StateProperty(key='count', default=None, dependancies={'interval'})
+	def usr_count(self) -> int:
+		"""
+		The number of graduations to show on the gauge (including the first and last graduations).
+		"""
+		return self._usr_count
+
+	@usr_count.setter
+	def usr_count(self, value: int | None):
+		self._usr_count = value
+
+	@StateProperty(key='min-count', default=None)
+	def min_usr_count(self) -> int:
+		"""
+		The minimum number of graduations to show on the gauge (including the first and last graduations).
+		"""
+		return self._min_usr_count
+
+	@min_usr_count.setter
+	def min_usr_count(self, value: int | float | None):
+		if isinf(value):
+			value = None
+		elif isinstance(value, float):
+			value = int(value) + 1
+		self._min_usr_count = value
+
+	@StateProperty(key='max-count', default=None)
+	def max_usr_count(self) -> int:
+		"""
+		The maximum number of graduations to show on the gauge (including the first and last graduations).
+		"""
+		return self._max_usr_count
+
+	@max_usr_count.setter
+	def max_usr_count(self, value: int | float | None):
+		if isinf(value):
+			value = None
+		elif isinstance(value, float):
+			value = int(value) + 1
+		self._max_usr_count = value
+
+	@StateProperty(key='position', allowNone=False, default=DisplayPosition.Inside, decoder=DisplayPosition.decode)
+	def position(self) -> DisplayPosition:
+		"""
+		The position of ticks relative (inside or outside) to the arc path.
+
+		Example Config
+		--------------
+		```yaml
+		position: 'inside' | outside | "out"
+		```
+		"""
+		return self._position
+
+	@position.setter
+	def position(self, value: DisplayPosition):
+		self._position = value
+
+	@StateProperty(key='length', allowNone=False)
+	def length(self) -> Percentage | Length:
+		"""
+		The length of the ticks.
+
+		Values can be specified as a percentage, a physical length ('1in', '0.3mm`, etc.), or a number.
+		Numerical values are treated as pixel lengths except for float values between 0.0 and 1.0, which are handled as percentages.
+
+		For major ticks, percentages are relative to the gauge's radius.
+		With minor and micro ticks it is relative to the pixel length of the major or minor ticks, respectively.
+
+		Example Config
+		--------------
+		```yaml
+		gauge:
+			major-ticks:
+				length: 0.1  # 10% of the gauge's radius
+			minor-ticks:
+				length: 70%  # 70% the length of the major ticks
+			micro-ticks:
+				length: 2mm  # Two millimeters
+		```
+		"""
+		return self._length
+
+	@length.item_default
+	def length(self) -> Percentage | Length:
+		match self.tick_type:
+			case self.Type.Major:
+				return Percentage(0.1)
+			case self.Type.Minor | self.Type.Micro:
+				return Percentage(0.7)
+			case _:
+				raise ValueError(f'Invalid tick type: {self.tick_type}')
+
+	@length.setter
+	def length(self, value: float):
+		self._length = value
+
+	@length.decode
+	def length(self, value: str | float) -> Dimension | Length | Percentage:
+		parsed_value = parseSize(value, default=Unset, allowFloat=True, dimension=DimensionType.length)
+		if parsed_value is Unset:
+			parsed_value = type(self).length.default(type(self))
+		if type(parsed_value) is float:
+			parsed_value = Percentage(parsed_value)
+		return parsed_value
+
+	@length.encode
+	def length(self, value: Percentage | Length) -> str:
+		return str(value)
+
+	@property
+	def length_px(self) -> float:
+		match self.tick_type:
+			case self.Type.Major:
+				value = size_px(self.length, relative_to := self.gauge.radius)
+			case self.Type.Minor:
+				value = size_px(self.length, relative_to := self.gauge.majorDivisions.length_px)
+			case self.Type.Micro:
+				value = size_px(self.length, relative_to := self.gauge.minorDivisions.length_px)
+			case _:
+				raise ValueError(f'Invalid tick type: {self.tick_type}')
+
+		if isinstance(value, Percentage):
+			return float(value * relative_to)
+
+		return float(value)
+
+	@StateProperty(key='width', allowNone=False)
+	def width(self) -> Dimension | Length | Percentage:
+		"""
+		The width of the ticks.
+
+		Values can be specified as a percentage, a physical length (`0.3cm`, `2mm`, etc.), or a number.
+		Numerical values are treated as pixel lengths except for float values between 0.0 and 1.0, which are handled as percentages.
+		"""
+		return self._width
+
+	@width.setter
+	def width(self, value: float):
+		self._width = value
+
+	@width.decode
+	def width(self, value: str) -> Dimension | Length | Percentage:
+		parsed_value = parseSize(value, default=Unset, allowFloat=True, dimension=DimensionType.length)
+		if parsed_value is Unset:
+			parsed_value = type(self).width.default(type(self))
+		if type(parsed_value) is float:
+			parsed_value = Percentage(parsed_value)
+		return parsed_value
+
+	@width.item_default
+	def width(self) -> float:
+		match self.tick_type:
+			case self.Type.Major:
+				return Percentage(INVERSE_GOLDEN_RATIO)
+			case self.Type.Minor | self.Type.Micro:
+				return Percentage(INVERSE_GOLDEN_RATIO * INVERSE_GOLDEN_RATIO)
+			case _:
+				raise ValueError(f'Invalid tick type: {self.tick_type}')
+
+	@property
+	def width_px(self) -> float:
+		match self.tick_type:
+			case self.Type.Major:
+				value = size_px(self.width, relative_to := self.gauge.baseWidth)
+			case self.Type.Minor:
+				value = size_px(self.width, relative_to := self.gauge.majorDivisions.width_px)
+			case self.Type.Micro:
+				value = size_px(self.width, relative_to := self.gauge.minorDivisions.width_px)
+			case _:
+				raise ValueError(f'Invalid tick type: {self.tick_type}')
+
+		if isinstance(value, Percentage):
+			return float(value * relative_to)
+
+		return float(value)
+
+	@StateProperty(key='required-interval-factors', allowNone=False)
+	def required_interval_factors(self) -> set[int | float]:
+		"""
+		The interval must be a multiple of all the specified factors.
+		Default is `{1}` to allow for any integer interval.
+
+		Note: This is currently experimental
+		"""
+		return self._required_interval_factors
+
+	@required_interval_factors.setter
+	def required_interval_factors(self, value: set[int | float] | None):
+		self._required_interval_factors = value
+
+	@required_interval_factors.item_default
+	def required_interval_factors(self) -> set[int | float]:
+		return {1}
+
+	@required_interval_factors.decode
+	def required_interval_factors(self, value: list | tuple | str | int | float) -> set[int | float]:
+		if isinstance(value, (list, tuple)):
+			return set(value)
+		if isinstance(value, str):
+			return set(float(v) for v in value.split(','))
+		return {value}
+
+	@StateProperty(key='excluded-interval-factors', allowNone=False)
+	def excluded_interval_factors(self) -> set[int | float]:
+		"""
+		The interval must not be a multiple of any of the specified factors.
+		Default is `{}` to allow for any interval.
+		"""
+		return self._excluded_interval_factors
+
+	@excluded_interval_factors.setter
+	def excluded_interval_factors(self, value: set[int | float] | None):
+		self._excluded_interval_factors = value
+
+	@excluded_interval_factors.item_default
+	def excluded_interval_factors(self) -> set[int | float]:
+		return set()
+
+	@excluded_interval_factors.decode
+	def excluded_interval_factors(self, value: list | tuple | str | int | float) -> set[int | float]:
+		if isinstance(value, (list, tuple)):
+			return set(value)
+		if isinstance(value, str):
+			return set(float(v) for v in value.split(','))
+		return {value}
+
+	@StateProperty(key='included-interval-factors', allowNone=False)
+	def included_interval_factors(self) -> set[int | float]:
+		"""
+		The interval must be a multiple of at least one of the specified factors.
+		Default is `{}` to allow for any interval.
+		"""
+		return self._included_interval_factors
+
+	@included_interval_factors.setter
+	def included_interval_factors(self, value: set[int | float] | None):
+		self._included_interval_factors = value
+
+	@included_interval_factors.item_default
+	def included_interval_factors(self) -> set[int | float]:
+		return set()
+
+	@included_interval_factors.decode
+	def included_interval_factors(self, value: list | tuple | str | int | float) -> set[int | float]:
+		if isinstance(value, (list, tuple)):
+			return set(value)
+		if isinstance(value, str):
+			return set(float(v) for v in value.split(','))
+		return {value}
+
+	@StateProperty(key='interval', allowNone=False)
+	def usr_interval(self) -> Measurement | Unset:
+		"""
+		The interval between graduations.
+
+		If an interval is provided by the configuration and has the correct factors, it will be used.
+		Otherwise, the nearest allowed interval will be used.
+		"""
+		return self._usr_interval
+
+	@usr_interval.setter
+	def usr_interval(self, value: Measurement | Unset):
+		self._usr_interval = value
+
+	@usr_interval.item_default
+	def usr_interval(self) -> GaugeValue:
+
+		value_class = self.gauge.valueClass
+
+		value_range = self.gauge.range.rounded_range
+		if not issubclass(value_class, Percentage):
+			if value_range <= 10:
+				if self.tick_type is Graduations.Type.Major:
+					return value_class(1)
+				elif self.tick_type is Graduations.Type.Minor:
+					return value_class(0.5)
+				elif self.tick_type is Graduations.Type.Micro:
+					return value_class(0.1)
+		else:
+			if value_range <= 0.1:
+				if self.tick_type is Graduations.Type.Major:
+					return value_class(0.01)
+				elif self.tick_type is Graduations.Type.Minor:
+					return value_class(0.005)
+				elif self.tick_type is Graduations.Type.Micro:
+					return value_class(0.001)
+
+		if self.tick_type == Graduations.Type.Major:
+			if issubclass(value_class, Percentage):
+				return value_class(0.1)
+			return value_class(10)
+		elif self.tick_type == Graduations.Type.Minor:
+			if issubclass(value_class, Percentage):
+				return value_class(0.05)
+			return value_class(5)
+		elif self.tick_type == Graduations.Type.Micro:
+			if issubclass(value_class, Percentage):
+				return value_class(0.01)
+			return value_class(1)
+
+	@usr_interval.decode
+	def usr_interval(self, value: str | int | float | Measurement | Unset) -> Measurement | Unset:
+		value = decode_measurement(value, self.gauge.valueClass)
+		if isinstance(value, self.gauge.valueClass):
+			return value
+		else:
+			try:
+				return self.gauge.valueClass(float(value))
+			except ValueError:
+				pass
+		return Unset
+
+	@property
+	def usr_interval_deg(self) -> Angle | Unset:
+		gauge_angle_range = self.gauge.endAngle - self.gauge.startAngle
+
+		if (interval := getattr(self, '_usr_interval', Unset)) is not Unset:
+			pass
+		elif (count := getattr(self, '_usr_count', Unset)) is not Unset:
+			interval = self.gauge.range.roudend_range / count
+		elif spacing := self.spacing_deg is not Unset:
+			interval = spacing
+		else:
+			return Unset
+
+		if isinstance(interval, self.gauge.valueClass | int | float):
+			if not isinstance(interval, self.gauge.valueClass):
+				interval_val = self.gauge.valueClass(interval)
+			else:
+				interval_val = interval
+			interval_deg = float(self.gauge.range.roundend_range / interval_val) * gauge_angle_range
+			return Angle(interval_deg, 'deg')
+		elif isinstance(interval, Percentage | RelativeFloat):
+			interval_px = self.width_px * interval
+			interval_deg = float(gauge_angle_range * interval_px / self.gauge.radius)
+			return Angle(interval_deg)
+		elif isinstance(interval, Length):
+			interval_px = size_px(interval, self.gauge.baseWidth)
+			interval_deg = float(gauge_angle_range * interval_px / self.gauge.radius)
+			return Angle(interval_deg)
+		elif isinstance(interval, Angle):
+			return interval
+		return Unset
+
+	@cached_property
+	def interval(self) -> int | float:
+		if self.enabled:
+			return self.determine_interval()
+		return self.gauge.range.rounded_range
+
+	@property
+	def interval_degree(self) -> Angle:
+		interval = float(self.interval)
+		gauge_angle_range = float(self.gauge.endAngle - self.gauge.startAngle)
+		rounded_range = float(self.gauge.range.rounded_range)
+		return Angle(float(interval / rounded_range * gauge_angle_range))
+
+	@StateProperty(key='min-interval')
+	def usr_min_interval(self) -> int | float:
+		"""
+		The minimum interval between graduations.
+		"""
+		return self._usr_min_interval
+
+	@usr_min_interval.setter
+	def usr_min_interval(self, value: int | float):
+		self._usr_min_interval = value
+
+	@usr_min_interval.item_default
+	def usr_min_interval(self) -> float:
+		return self._usr_min_interval
+
+	@property
+	def min_interval(self) -> Measurement | Unset:
+
+		gauge_angle_range = self.gauge.endAngle - self.gauge.startAngle
+		ValueClass = self.gauge.valueClass
+
+		if (min_interval := getattr(self, '_usr_min_interval', Unset)) is not Unset:
+			min_interval = ValueClass(min_interval)
+		elif (count := getattr(self, '_usr_max_count', Unset)) is not Unset:
+			min_interval = ValueClass(float(self.gauge.range.roudend_range) / count)
+		elif (spacing := getattr(self, '_usr_min_spacing', Unset)) is not Unset:
+			min_interval = ValueClass(float(self.gauge.range.roundend_range / spacing) * gauge_angle_range)
+		else:
+			min_interval = self._min_interval
+
+		if isinstance(min_interval, self.gauge.valueClass | int | float):
+			if not isinstance(min_interval, self.gauge.valueClass):
+				min_interval = self.gauge.valueClass(min_interval)
+			return min_interval
+		elif isinstance(min_interval, Percentage | RelativeFloat):
+			min_interval_px = self.width_px * min_interval
+			min_interval_deg = float(self.gauge.range.roundend_range * min_interval_px / self.gauge.radius)
+			return self.gauge.valueClass(max(min_interval_deg, self._min_interval))
+		elif isinstance(min_interval, Length):
+			min_interval_px = size_px(min_interval, self.gauge.baseWidth)
+			min_interval_deg = float(self.gauge.range.roundend_range * min_interval_px / self.gauge.radius)
+			return self.gauge.valueClass(max(min_interval_deg, self._min_interval))
+		elif isinstance(min_interval, Angle):
+			return self.gauge.valueClass(max(min_interval, self._min_interval))
+		return self.gauge.valueClass(max(min_interval, self._min_interval))
+
+	@property
+	def max_interval(self) -> Measurement | Unset:
+		gauge_angle_range = self.gauge.endAngle - self.gauge.startAngle
+
+		if (max_interval := getattr(self, '_usr_max_interval', Unset)) is not Unset:
+			pass
+		elif (count := getattr(self, '_usr_min_count', Unset)) is not Unset:
+			max_interval = self.gauge.range.roudend_range / count
+		elif (spacing := getattr(self, '_usr_max_spacing', Unset)) is not Unset:
+			max_interval = float(self.gauge.range.roundend_range / spacing) * gauge_angle_range
+		else:
+			max_interval = self.gauge.range.rounded_range
+
+		if isinstance(max_interval, self.gauge.valueClass | int | float):
+			if not isinstance(max_interval, self.gauge.valueClass):
+				max_interval = self.gauge.valueClass(max_interval)
+			return max_interval
+		elif isinstance(max_interval, Percentage | RelativeFloat):
+			max_interval_px = self.width_px * max_interval
+			max_interval_deg = float(self.gauge.range.roundend_range * max_interval_px / self.gauge.radius)
+			return self.gauge.valueClass(max(max_interval_deg, self._min_interval))
+		elif isinstance(max_interval, Length):
+			max_interval_px = size_px(max_interval, self.gauge.baseWidth)
+			max_interval_deg = float(self.gauge.range.roundend_range * max_interval_px / self.gauge.radius)
+			return self.gauge.valueClass(max(max_interval_deg, self._min_interval))
+		elif isinstance(max_interval, Angle):
+			return self.gauge.valueClass(max(max_interval, self._min_interval))
+		return self.gauge.valueClass(max(max_interval, self._min_interval))
+
+	@property
+	def _min_interval(self) -> GaugeValue:
+		"""
+		The minimum interval between graduations given that allows
+		for the ticks to be at least one width apart.
+		"""
+		min_spacing_degrees = self.min_spacing_deg
+		gauge_value_range = self.gauge.range.rounded_range
+		if isinstance(gauge_value_range, Percentage):
+			gauge_value_range = float(gauge_value_range)
+		gauge_angle_range = self.gauge.endAngle - self.gauge.startAngle
+		value = gauge_value_range / (gauge_angle_range / min_spacing_degrees)
+		return self.gauge.valueClass(value)
+
+	@StateProperty(key='min-spacing', default=1.0, allowNone=False)
+	def min_spacing(self) -> Angle | Length | Percentage:
+		"""
+		The minimum arc length spacing between graduations.
+		All floats and percentages are interpreted as a fraction of the tick-width.
+		"""
+		return self._min_spacing
+
+	@min_spacing.setter
+	def min_spacing(self, value: float):
+		self._min_spacing = value
+
+	@min_spacing.decode
+	def min_spacing(self, value: str | int | float) -> Angle | Length | Percentage:
+		match value:
+			case float(value):
+				return Percentage(value)
+			case int(value):
+				return Angle(value)
+			case str(value):
+				value = parseSize(value, DimensionType.width)
+				return value
+			case _:
+				raise ValueError(f'Invalid value for min-spacing: {value!r}')
+
+	@property
+	def spacing_deg(self) -> Angle | Unset:
+		"""
+		The spacing between graduations in degrees.
+		Returns
+		-------
+		Angle
+		"""
+
+		if (usr_spacing := getattr(self, '_spacing', Unset)) is Unset:
+			return usr_spacing
+
+		radius = self.gauge.radius - self.length_px
+
+		return self.gauge.value_to_angle_degrees(
+			usr_spacing,
+			radius_px=radius,
+			relative_px=self.width_px,
+		)
+
+	@property
+	def min_spacing_deg(self) -> Angle:
+		"""
+		The minimum spacing between graduations in degrees.
+		Returns
+		-------
+		Angle
+		"""
+		if (usr_spacing := getattr(self, '_min_spacing', Unset)) is Unset:
+			return usr_spacing
+
+		radius = self.gauge.radius - self.length_px
+		tick_width = self.width_px * 2
+		arc_length_px = float(radius * self.gauge.fullAngle / 180 * pi)
+
+		tick_gauge_coverage = tick_width / arc_length_px
+
+		return Angle(self.gauge.fullAngle * tick_gauge_coverage)
+
+	@property
+	def min_spacing_val(self) -> float:
+		return
+
+	@StateProperty(key='max-spacing', default=None, allowNone=False)
+	def max_spacing(self) -> float:
+		"""
+		The maximum arc length/degree spacing between graduations.
+		All floats and percentages are interpreted as a fraction of the tick-width.
+		"""
+		return self._max_spacing
+
+	@property
+	def angle_range(self) -> float:
+		if self.super_grad is None:
+			return self.gauge.fullAngle
+		else:
+			return self.super_grad.angle_range / self.super_grad.count
+
+	@property
+	def min_interval_deg(self) -> Angle | Unset:
+		if (min_interval := getattr(self, '_min_interval', Unset)) is not Unset:
+			pass
+		elif (max_usr_count := getattr(self, '_max_usr_count', Unset)) is not Unset:
+			min_interval = self.gauge.range.rounded_range / max_usr_count
+		elif max_spacing := getattr(self, '_max_spacing', Unset) is not Unset:
+			min_interval = max_spacing
+
+		return Unset
+
+	@property
+	def count(self):
+		if self.enabled:
+			interval = self.interval
+			count = int(self.gauge.range.rounded_range / interval) + 1
+			if count <= 1 and self.tick_type is Graduations.Type.Major:
+				return 2
+			return count
+		return 0
+
+	@property
+	def startAngle(self):
+		return self.gauge.startAngle - 90
+
+	@property
+	def compatible_intervals(self) -> set[float]:
+		gauge = self.gauge
+		range_value = gauge.range.rounded_range if self.tick_type is Graduations.Type.Major else self.super_grad.interval
+		if isinstance(range_value, Percentage):
+			range_value = float(range_value) * 100
+
+		multiplier = 1
+		while range_value <= 1:
+			multiplier *= 10
+			range_value *= 10
+
+		include_interval_factors = self.included_interval_factors
+		require_interval_factors = self.required_interval_factors
+		exclude_interval_factors = self.excluded_interval_factors
+
+		factors_list = factors(int(range_value))
+		compatible_intervals = set()
+		while not compatible_intervals:
+			compatible_intervals = filter_factors(
+				factors_list,
+				included_factors=include_interval_factors,
+				required_factors=require_interval_factors,
+				excluded_factors=exclude_interval_factors
+			)
+
+			if not compatible_intervals:
+				include_interval_factors = None
+				require_interval_factors = None
+			if not compatible_intervals:
+				excluded_factors = None
+
+		val_cls = self.gauge.valueClass
+		if issubclass(val_cls, Percentage):
+			compatible_intervals = {interval/100 for interval in compatible_intervals}
+
+		if multiplier != 1:
+			compatible_intervals = {interval / multiplier for interval in compatible_intervals}
+
+		return compatible_intervals
+
+	@property
+	def tick_values(self) -> set[GaugeValue]:
+
+		interval = self.interval
+		gauge = self.gauge
+		value_class = gauge.valueClass
+		gauge_range = gauge.range
+
+		if (super_grad := self.super_grad) is not None:
+			super_tick_values = super_grad.tick_values
+		else:
+			super_tick_values = set()
+		values = set(value_class(i) for i in np.arange(
+			float(gauge_range.rounded_min),
+			float(gauge_range.rounded_max),
+			float(interval)
+		)) - super_tick_values
+		if self.tick_type is Graduations.Type.Major:
+			values.add(gauge_range.rounded_max)
+		return values
+
+	def interval_to_deg(self, interval: GaugeValue) -> Angle:
+		return self.gauge.value_to_angle_degrees(interval, self.gauge.radius)
+
+	def determine_interval(self) -> GaugeValue:
+
+		gauge = self.gauge
+
+		match self.tick_type:
+			case Graduations.Type.Major:
+				return self._determine_interval()
+			case Graduations.Type.Minor:
+				return self._determine_interval(
+					range_value=gauge.range.rounded_range / gauge.majorDivisions.count,
+					gauge_max_angle_deg=gauge.majorDivisions.angle_range / gauge.majorDivisions.count,
+				)
+
+			case Graduations.Type.Micro:
+				return self._determine_interval(
+					range_value=gauge.range.rounded_range / gauge.minorDivisions.count,
+					gauge_max_angle_deg=gauge.minorDivisions.angle_range / gauge.minorDivisions.count,
+				)
+			case _:
+				raise ValueError(f'Invalid tick type: {self.tick_type}')
+
+	def _determine_interval(
+		self,
+		range_value: float | int = None,
+		gauge_max_angle_deg: float | int = None,
+		min_interval: float | int = None,
+		max_interval: float | int = None,
+		usr_interval: float | int = None,
+		usr_count: int = None,
+		usr_spacing_deg: float | int = None,
+	) -> GaugeValue:
+
+		# TODO: If the user has configured an interval, and no min/max interval or count, then use
+		# the user's interval to determine the range.  This will have to be part of Gauge.GaugeRange
+
+		gauge = self.gauge
+
+		range_value = float(gauge.range.rounded_range) if range_value is None else range_value
+
+		gauge_max_angle_deg = gauge.startAngle if gauge_max_angle_deg is None else gauge_max_angle_deg
+
+		min_interval = self.min_interval if min_interval is None else min_interval
+		max_interval = self.max_interval if max_interval is None else max_interval
+
+		usr_interval = self.usr_interval if usr_interval is None else usr_interval
+		usr_count = self.usr_count if usr_count is None else usr_count
+
+		usr_spacing_deg = self.spacing_deg if usr_spacing_deg is None else usr_spacing_deg
+
+		preferred_intervals = []
+
+		if usr_count not in {Unset, None}:
+			if usr_interval is None or self._state_item_sources[type(self).usr_interval] is SourceType.UserConfig:
+				usr_interval = range_value / ((usr_count - 1) or 1)
+		else:
+			_min_count = self.min_usr_count or 2 if self.tick_type == Graduations.Type.Major else 1
+			_max_count = self.max_usr_count or self.gauge.range.rounded_range
+
+			# TODO: Finish the logic to use min and max count to add all intervals between min and max
+			# to the preferred intervals list.  Then, if the user has specified an interval, add that
+			# to the list.
+			#
+			# if self._state_item_sources[type(self).usr_interval] is not SourceType.UserConfig:
+			# ...
+
+			# if _min_count == 1 and _max_count == self.gauge.range.rounded_range:
+			# 	pass
+			# else:
+			# 	preferred_intervals.append(range_value / _max_count)
+
+		if usr_interval is not None:
+			preferred_intervals.append(usr_interval)
+
+		if usr_spacing_deg is not Unset:
+			preferred_intervals.append(usr_spacing_deg / gauge_max_angle_deg * range_value)
+
+		compatible_intervals = self.compatible_intervals
+
+		if self._state_item_sources.get(Graduations.usr_interval, SourceType.ItemDefault) is SourceType.UserConfig:
+			if usr_interval not in compatible_intervals and float(range_value / usr_interval).is_integer():
+				gauge_repr = f'Gauge.{gauge.valueClass.name.replace(" ", "")}(min={gauge.range.min}, max={gauge.range.max})'
+				log.warning(f'User specified interval: {usr_interval} for {gauge_repr} is not compatible with the gauge range {gauge.range}')
+
+		compatible_intervals = [
+			self.gauge.valueClass(i) for i in sorted(compatible_intervals)
+			if float(min_interval) <= i <= float(max_interval)
+		]
+
+		if issubclass(gauge.valueClass, Percentage):
+			preferred_intervals = [abs(i) if isinstance(i, gauge.valueClass) else gauge.valueClass(abs(i) / 100) for i in preferred_intervals]
+
+		interval_candidates = []
+
+		# for each preferred interval, find the closest compatible interval
+		for preferred_interval in preferred_intervals:
+			if preferred_interval in compatible_intervals:
+				interval_candidates.append(preferred_interval)
+				continue
+			elif float(range_value / preferred_interval).is_integer():
+				interval_candidates.append(preferred_interval)
+				continue
+			preferred_interval = float(preferred_interval)
+			closest_interval = min(compatible_intervals, key=lambda i: abs(i - preferred_interval))
+			interval_candidates.append(closest_interval)
+
+		if len(interval_candidates) > 1:
+			return gauge.valueClass(min(interval_candidates, key=lambda interval: abs(interval - usr_interval)))
+		elif len(interval_candidates) == 1:
+			return gauge.valueClass(interval_candidates[0])
+		else:
+			closest_interval = min(compatible_intervals, key=lambda i: abs(i - usr_interval))
+			if not isinstance(closest_interval, gauge.valueClass):
+				closest_interval = gauge.valueClass(closest_interval)
+			return closest_interval
+
+	def _get_color_value(self) -> Number:
+		return self.gauge.value
+
+	def _set_fill_brush(self, color: Color):
+		pen = self.surface.pen
+		for tick in self.surface.ticks:
+			tick.setPen(pen)
+
+	def _map_gradient(self, gradient: Gradient) -> QGradient:
+		return self.gauge.map_gradient_to(gradient, self.surface)
+
 
 class GaugePathItem(GaugeItem, QGraphicsPathItem):
+
+	_weight_scale: float = 1.0
+	_shape: QPainterPath = QPainterPath()
 
 	def __init__(self, *args, **kwargs):
 		super(GaugePathItem, self).__init__(*args, **kwargs)
 		self.setPen(self.gauge.pen)
 
-	def update(self):
-		super(GaugePathItem, self).update()
-		p = self.pen()
-		p.setWidthF(self.gauge.pen.widthF())
-		self.setPen(p)
+	def _set_color(self, color: Color):
+		self.setBrush(color.QColor)
+
+	@guarded_cached_property(guardFunc=lambda x: x is not None, default=None)
+	def gauge(self) -> 'Gauge':
+		try:
+			return self._gauge
+		except AttributeError:
+			pass
+
+		parent = self.parentItem()
+		while not isinstance(parent, Gauge):
+			try:
+				parent = parent.parentItem()
+			except AttributeError:
+				return None
+		return parent
 
 
-class GaugeArc(GaugePathItem):
+class StatefulGaugePathItem(Stateful, GaugePathItem):
+
+	def __init__(self, *args, **kwargs):
+		super(StatefulGaugePathItem, self).__init__(*args, **kwargs)
+		self.prep_init(args=args, kwargs=kwargs, stateful_parent=self.gauge)
+
+
+@DebugPaint
+class GaugeArc(StatefulGaugePathItem):
+
+	_weight_scale = 0.75
+
+	@property
+	def safe_area(self) -> QPainterPath:
+		return QPainterPath(self.shape())
+
+	@property
+	def scene_safe_area(self) -> QPainterPath:
+		return self.mapToScene(self.shape())
 
 	def __init__(self, *args, **kwargs):
 		super(GaugeArc, self).__init__(*args, **kwargs)
-		pen = self.pen()
-		pen.setCapStyle(Qt.RoundCap)
-		self.setPen(pen)
-		self.update()
+		self.add_defaults_to_state(kwargs)
+		self.state = kwargs
 
-	def mousePressEvent(self, event):
-		print('click')
-		event.ignore()
-		super(GaugeArc, self).mousePressEvent(event)
+	def _debug_paint(self, painter: QPainter, opt, widget):
+		color = QColor(Qt.GlobalColor.yellow)
+		color.setAlphaF(0.5)
+		addPath(painter, self.shape(), fill=color, color=QColor(Qt.GlobalColor.transparent))
+		self._normal_paint(painter, opt, widget)
+		# addCrosshair(painter, pos=self.path().boundingRect().center(), color=color, weight=4, size=10)
+
+	def setPen(self, pen, *args, **kwargs):
+		super(GaugeArc, self).setPen(pen, *args, **kwargs)
 
 	@property
 	def center(self):
-		return QPointF(self.gauge.rect().center())
-
-	# return self.boundingRect().center()
-
-	@cached_property
-	def offset(self):
-		self._cache.append('offset')
-		return self.pen().widthF()/4*360/(2*pi*self._gauge.radius)*0.85
+		return self.gauge.rect().center()
 
 	@property
-	def startAngle(self) -> float:
-		return self.gauge.startAngle + self.offset
+	def center_offset(self) -> QPointF:
+		return self._center_offset
 
 	@property
-	def endAngle(self):
-		return self.gauge.endAngle - self.offset
+	def centered_gauge_rect(self):
+		rect = QRectF(self.gauge.gaugeRect)
+		rect.moveCenter(QPoint(0, 0))
+		return rect
 
-	@property
-	def fullAngle(self) -> float:
-		return self.endAngle - self.startAngle
-
-	def update(self):
-		super(GaugeArc, self).update()
-		self.draw()
-
+	@defer
 	def makeShape(self):
-		iShape = QRectF(self.gauge.gaugeRect)
-		oShape = QRectF(self.gauge.gaugeRect)
-		x, y = self.gauge.gaugeRect.size().toTuple()
-		small = self.gauge.radius*1.95
-		large = self.gauge.radius*2.05
-		iShape.setSize(QSizeF(small, small))
-		oShape.setSize(QSizeF(large, large))
+		inner_safe_radius = self.gauge.safe_radius
+		outer_safe_radius = self.gauge.exterior_safe_radius
+
+		width = outer_safe_radius - inner_safe_radius
+
 		path = QPainterPath()
-		path.arcMoveTo(iShape, -self.startAngle + 90)
-		path.arcTo(iShape, -self.startAngle + 90, -self.fullAngle)
-		path.arcMoveTo(oShape, -self.startAngle + 90)
-		path.arcTo(oShape, -self.startAngle + 90, -self.fullAngle)
+		path.setFillRule(Qt.FillRule.WindingFill)
+
+		inner_rect = QRectF(-inner_safe_radius, -inner_safe_radius, inner_safe_radius * 2, inner_safe_radius * 2)
+		radius_rect = QRectF(-outer_safe_radius, -outer_safe_radius, outer_safe_radius * 2, outer_safe_radius * 2)
+
+		# draw the inner arc
+		angle = self.startAngle
+		path.arcMoveTo(inner_rect, -angle + 90)
+		start_pos = path.currentPosition()
+		path.arcTo(inner_rect, -angle + 90, -self.fullAngle)
+
+		# draw a line going out from the inner arc to the outer arc
+		current_pos = path.currentPosition()
+		width_vector = radialPoint(QPointF(0, 0), width, self.endAngle - 90)
+		path.lineTo(current_pos + width_vector)
+
+		# draw the outer arc but in the opposite direction
+		path.arcTo(radius_rect, -self.endAngle + 90, self.fullAngle)
+
+		# draw a line going back to the inner arc
+		path.lineTo(start_pos)
+
 		path.closeSubpath()
-		return path
+
+		rect = self.parentItem().boundingRect()
+		rect.moveCenter(path.boundingRect().center())
+		pen = self.pen()
+		path.addPath(outline_path(
+			self.path(),
+			weight=pen.widthF(),
+			cap_style=pen.capStyle(),
+			join_style=pen.joinStyle(),
+			dash_pattern=pen.dashPattern()
+		))
+		self._shape = path
 
 	def draw(self):
-		self._shape = self.makeShape()
-		path = self.path()
-		path.clear()
-		path.arcMoveTo(self.gauge.gaugeRect, -self.startAngle + 90)
-		path.arcTo(self.gauge.gaugeRect, -self.startAngle + 90, -self.fullAngle)
+		self.resetTransform()
+		path = QPainterPath()
+		rect = self.centered_gauge_rect
+		path.arcMoveTo(rect, -self.startAngle + 90)
+		path.arcTo(rect, -self.startAngle + 90, -self.fullAngle)
+		self._center_offset = path.boundingRect().center()
+		self.gauge.update_center_offset(self._center_offset)
 		self.setPath(path)
+		self.makeShape()
+
+	def refresh(self):
+		self.draw()
+		self.updateAppearance()
+		self.setPos(self.gauge.center)
+		self.setZValue(-800)
+
+	def updateAppearance(self):
+		pen = QPen(self.gauge.pen)
+		if weight := self.weight_px:
+			pen.setWidthF(weight)
+			pen.setCapStyle(self.capStyle)
+			if (gradient := self.gradient) is not None:
+				brush = self.gauge.map_gradient_to(gradient, self)
+				pen.setBrush(brush)
+		else:
+			pen.setWidthF(0)
+			pen.setBrush(Qt.NoBrush)
+
+		self.setPen(pen)
+		self.makeShape()
+		self.setPos(self.gauge.center)
 
 	def shape(self):
 		return self._shape
 
+	@StateProperty(key='gradient', default=None, after=refresh, decoder=Gradient.decode)
+	def gradient(self) -> Gradient | None:
+		return getattr(self, '_gradient', None)
 
-class Tick(QGraphicsPathItem):
+	@gradient.setter
+	def gradient(self, value: Gradient | None):
+		self._gradient = value
+
+	@StateProperty(key='weight', default=Size.Width(0.05, relative=True), after=refresh, allowNone=False, repr=True)
+	def weight(self) -> Size.Width | Length:
+		return self._weight
+
+	@weight.setter
+	def weight(self, value: Size.Width | Length):
+		self._weight = value
+
+	@weight.decode
+	def weight(self, value: Size.Width | Length) -> float:
+		return parseWidth(value, type(self).weight.default(type(self), self, update_source=False))
+
+	@property
+	def weight_px(self) -> float:
+		return size_px(self.weight, self.gauge.radius, dimension=DimensionType.width)
+
+	@StateProperty(key='start-angle', default=-120, after=refresh, allowNone=False, repr=True)
+	def startAngle(self) -> float | int:
+		return self._start_angle
+
+	@startAngle.setter
+	def startAngle(self, value: float | int):
+		self._start_angle = value
+
+	@StateProperty(key='end-angle', default=120, after=refresh, allowNone=False, repr=True)
+	def endAngle(self) -> float | int:
+		return self._end_angle
+
+	@endAngle.setter
+	def endAngle(self, value: float | int):
+		self._end_angle = value
+
+	@StateProperty(key='cap', default=Qt.PenCapStyle.FlatCap, after=refresh, allowNone=False)
+	def capStyle(self) -> Qt.PenCapStyle:
+		return self._cap_style
+
+	@capStyle.setter
+	def capStyle(self, value: Qt.PenCapStyle):
+		self._cap_style = value
+
+	@capStyle.decode
+	def capStyle(value) -> Qt.PenCapStyle:
+		caps: dict[str, Qt.PenCapStyle] = dict(Qt.PenCapStyle.__members__)
+		capNames = list(caps.keys())
+		cap = closestStringInList(value, capNames)
+		return caps[cap]
+
+	@capStyle.encode
+	def capStyle(value) -> str:
+		if value is None:
+			return 'round'
+		try:
+			return camelCase(value.name.decode().strip('Cap'), titleCase=False)
+		except AttributeError:
+			return camelCase(value.name.strip('Cap'), titleCase=False)
+
+	@property
+	def fullAngle(self) -> float | int:
+		return self.endAngle - self.startAngle
+
+	@property
+	def inverted(self) -> bool:
+		"""Returns a bool of if the start angle is greater than the end angle"""
+		return self.startAngle > self.endAngle
+
+
+@DebugPaint
+class Tick(GaugePathItem):
 	_index: float
 	_center: QPointF
 	_radius: float
-	_properties: Divisions
+	_properties: Graduations
 	_offsetAngle: float
+	_label: 'GaugeTickText' = None
 	startPoint: QPointF
 	endPoint: QPointF
 
-	def __init__(self, group: 'TickGroup', index: float):
+	@cached_property
+	def _sub_ticks(self) -> list['SubTick']:
+		return []
+
+	def __init__(self, gauge: 'Gauge', surface: 'TickSurface', index: float):
 		self._index = index
-		self._group = group
-		super(Tick, self).__init__()
+		super(Tick, self).__init__(gauge)
+		self.setParentItem(surface)
+
 		pen = QPen(self.gauge.pen.color())
 		pen.setCapStyle(Qt.RoundCap)
 		self.setPen(pen)
-		self.draw()
+		self.rebuild()
 		self.setAcceptedMouseButtons(Qt.LeftButton)
+
+	def _debug_paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget):
+		super().paint(painter, option, widget)
+		zero = QPoint(0, 0)
+		addCrosshair(painter, pos=zero, color=self._debug_paint_color)
+
+	def remove(self):
+		for subtick in self._sub_ticks:
+			subtick.remove()
+		self._sub_ticks.clear()
+		if self.label is not None:
+			self.label.remove()
+		super(Tick, self).remove()
 
 	def mousePressEvent(self, event):
 		event.accept()
@@ -174,24 +1228,44 @@ class Tick(QGraphicsPathItem):
 	def mouseMoveEvent(self, event):
 		print(event.pos())
 
-	@property
-	def gauge(self):
-		return self._group.gauge
-
-	@property
-	def group(self) -> Union['TickGroup', 'SubTickGroup']:
-		return self._group
-
-	def update(self):
-		pen = self.pen()
-		pen.setWidthF(self.properties.lineWidth*self.gauge.baseWidth)
+	def refresh(self):
+		pen = self.parentItem().pen
 		self.setPen(pen)
-		super(Tick, self).update()
+		clearCacheAttr(self, 'angle', 'value')
 		self.draw()
+
+	def rebuild(self):
+		self.refresh()
+		# self.rebuild_sub_ticks()
+
+	def rebuild_sub_ticks(self):
+
+		tick_count = self.sub_tick_count
+		existing = self._sub_ticks[:]
+
+		if tick_count == 0:
+			return
+
+		self._sub_ticks.clear()
+
+		for i in range(self.sub_tick_count):
+			if existing:
+				sub_tick = existing.pop(0)
+				sub_tick.rebuild()
+			else:
+				sub_tick = SubTick(self, i)
+			self._sub_ticks.append(sub_tick)
+
+		for sub_tick in existing:
+			sub_tick.remove()
 
 	@cached_property
 	def angle(self):
-		return self.group.startAngle + self._index*self.group.spacing
+		return self.properties.startAngle + self._index * float(self.properties.interval_degree)
+
+	@cached_property
+	def value(self) -> GaugeValue:
+		return self._index * self.properties.interval + self.gauge.range.rounded_min
 
 	@property
 	def index(self):
@@ -199,9 +1273,26 @@ class Tick(QGraphicsPathItem):
 
 	@index.setter
 	def index(self, value):
-		if hasattr(self, 'angle'):
-			delattr(self, 'angle')
 		self._index = value
+		self.refresh()
+
+	@property
+	def sub_tick_spacing(self) -> float:
+		return self.properties.sub_grad.spacing
+
+	@property
+	def sub_tick_count(self):
+
+		# Prevent the last tick from having sub ticks
+		if self._index == self.properties.count:
+			# But only if there is no super tick
+			if self.properties.super_grad is None:
+				return 0
+
+		try:
+			return self.properties.sub_grad.count
+		except AttributeError:
+			return 0
 
 	@property
 	def radius(self):
@@ -209,165 +1300,197 @@ class Tick(QGraphicsPathItem):
 
 	@property
 	def properties(self):
-		return self._group._properties
+		return self.parentItem()._properties
 
 	def draw(self):
 		path = QPainterPath()
 		angle = radians(self.angle)
 		cosI, sinI = cos(angle), sin(angle)
-		center = self.gauge.arc.center
+		center = QPointF(0, 0)
 		cx = center.x()
 		cy = center.y()
 		radius = self.radius
-		length = self.properties.length*radius
+		length = self.properties.length_px
 
-		x1 = cx + radius*cosI
-		y1 = cy + radius*sinI
-		x2 = cx + (radius - length)*cosI
-		y2 = cy + (radius - length)*sinI
+		x1 = x2 = radius * cosI
+		y1 = y2 = radius * sinI
+
+		match self.properties.position:
+			case DisplayPosition.Below | DisplayPosition.Inside:
+				x2 -= length * cosI
+				y2 -= length * sinI
+			case DisplayPosition.Above | DisplayPosition.Outside:
+				x2 += length * cosI
+				y2 += length * sinI
+			case DisplayPosition.Center | _:
+				half_x = length * cosI / 2
+				half_y = length * sinI / 2
+
+				x2 += half_x
+				x1 -= half_x
+
+				y2 += half_y
+				y1 -= half_y
+
+				if length > 0: # keeps the outermost as the end point
+					x1, y1, x2, y2 = x2, y2, x1, y1
+
 		p1 = QPointF(x1, y1)
 		self.startPoint = p1
 		p2 = QPointF(x2, y2)
 		self.endPoint = p2
 		path.moveTo(p1)
 		path.lineTo(p2)
-		# path.closeSubpath()
 		self.setPath(path)
+		# width = self.pen().widthF()
+		# rect = QRectF(x2, y2, width, length + self.pen().widthF())
+
+	def setLabel(self, label: 'GaugeTickText'):
+		self._label = label
+
+	@property
+	def label(self) -> 'GaugeTickText':
+		return self._label
+
+	@label.setter
+	def label(self, label: 'GaugeTickText'):
+		self._label = label
 
 
 class SubTick(Tick):
 	_superTick: Tick
 
-	def __init__(self, superTick: Tick, *args, **kwargs):
+	def __init__(self, superTick: Tick, index: float):
 		self._superTick = superTick
-		super(SubTick, self).__init__(*args, **kwargs)
+		super(SubTick, self).__init__(superTick.gauge, superTick.parentItem(), index)
 
-	@cached_property
+	@property
+	def properties(self):
+		return self._superTick.properties.sub_grad
+
+	@property
 	def angle(self):
-		return self._superTick.angle + self._index*self.group.spacing
+		return self._superTick.angle + self._index * self.properties.spacing
 
 
-class TickGroup(QGraphicsItemGroup):
-	_properties: Divisions
-	_cache: list
-	_ticks: list[Tick]
+@DebugPaint
+class TickSurface(GaugeItem, SurfaceCentered):
+	_properties: Graduations
+	_ticks: list[Tick] = cached_property(lambda self: [])
 
-	def __init__(self, gauge: 'Gauge', properties: Divisions):
-		self._cache = []
-		self._ticks = []
+	def __init__(self, gauge: 'Gauge', properties: Graduations, *args, **kwargs):
 		self._gauge = gauge
 		self._properties = properties
 		self.scale = 1
-		super(TickGroup, self).__init__()
-		self.draw()
+		GaugeItem.__init__(self, gauge)
+		self.rebuild()
 
-	def draw(self):
-		for i in range(0, self.count + 1):
-			tick = Tick(self, i)
-			self.addToGroup(tick)
-			self._ticks.insert(i, tick)
-		if self._properties.subdivison is not None:
-			self.addToGroup(SubTickGroup(self, self._gauge, self._properties.subdivison))
+	def _debug_paint(self, painter, option, widget):
+		self._normal_paint(painter, option, widget)
+		addCrosshair(painter, pos=self.boundingRect().center())
+
+	def refresh(self):
+		self.setPos(self.gauge.center)
+
+		clearCacheAttr(self, 'tick_path')
+		for tick in self._ticks:
+			# try:
+			tick.refresh()
+			# except AttributeError:
+			# 	pass
+
+		self._properties.labels.refresh()
+
+	def rebuild(self):
+		self.setZValue(-1000)
+		if not self.gauge.gaugeRect.isValid() or self.gauge.gaugeRect.width() < 10 or self.gauge.gaugeRect.height() < 10:
+			return
+
+		self.resetTransform()
+
+		tick_count = self.count
+		existing = self._ticks[:]
+
+		if tick_count == 1:
+			return
+
+		self._ticks.clear()
+
+		added = 0
+
+		tick_values = self._properties.tick_values
+
+		interval = self._properties.interval
+		for i in range(self.count + 1):
+			if i * interval + self.gauge.range.rounded_min not in tick_values:
+				continue
+			if existing:
+				tick = existing.pop(0)
+				tick.index = i
+			else:
+				tick = Tick(self.gauge, self, i)
+				added += 1
+			self._ticks.append(tick)
+
+		len_existing = len(existing)
+		for tick in existing:
+			tick.remove()
+
+		self._ticks.sort(key=lambda t: t.index)
+
+		if self._properties.labels.enabled:
+			self._properties.labels.rebuild()
+
+		tick_type = self._properties.tick_type.name.lower()
+		print(f'{self.gauge.parent.key}: total {tick_type} ticks: {len(self._ticks)}, added: {added}, removed: {len_existing}')
 
 	@property
-	def ticks(self):
+	def ticks(self) -> list[Tick]:
 		return self._ticks
 
 	@property
-	def gauge(self):
+	def gauge(self) -> 'Gauge':
 		return self._gauge
 
-	@cached_property
+	@property
 	def spacing(self) -> float:
-		self._cache.append('spacing')
-		return self._gauge.fullAngle/self.count
-
-	@cached_property
-	def count(self):
-		self._cache.append('count')
-		count = self._properties.count
-		if count is None:
-			count = self.gauge.range.range
-			if count == 360:
-				return 8
-			while count > 15:
-				count /= 10
-				self.scale *= 10
-			count = int(ceil(count))
-		return count
-
-	def clear(self):
-		for item in self.childItems():
-			self.removeFromGroup(item)
-
-	def rebuild(self):
-		self.clear()
-		self.draw()
-
-	def update(self):
-		while self._cache:
-			delattr(self, self._cache.pop())
-		for item in self.childItems():
-			item.update()
-		super(TickGroup, self).update()
+		return self._properties.spacing
 
 	@property
-	def startAngle(self):
-		return self._gauge.startAngle - 90
-
-
-class SubTickGroup(TickGroup):
-	superTickGroup: TickGroup
-
-	def __init__(self, superTickGroup, *args, **kwargs):
-		self.superTickGroup = superTickGroup
-		super(SubTickGroup, self).__init__(*args, **kwargs)
-
-	@cached_property
-	def count(self):
+	def count(self) -> int:
 		return self._properties.count
 
 	@cached_property
-	def spacing(self) -> float:
-		return self.superTickGroup.spacing/self.count
+	def tick_path(self) -> QPainterPath:
+		p = QPainterPath()
+		labels_enabled = self._properties.labels.enabled
+		for tick in self.ticks:
+			p = p.united(tick.mapToScene(tick.path()))
+			if labels_enabled and (label := tick.label) is not None:
+				p = p.united(label.mapToScene(label.path()))
+		return self.mapFromScene(p)
 
 	@property
-	def items(self):
-		items = self.superTickGroup.childItems()
-		group = self.superTickGroup
-		while isinstance(group, SubTickGroup):
-			group = group.superTickGroup
-			items.extend(group.childItems())
-		return items
+	def pen(self) -> QPen:
+		pen = QPen(self.gauge.pen)
+		pen.setWidthF(self._properties.width_px)
+		pen.setBrush(self._properties.fill_brush)
+		return pen
 
-	def draw(self):
-		items = self.items
-		items.sort(key=attrgetter('angle'))
-		for tick in items[:-1]:
-			for i in range(1, self.count):
-				item = SubTick(tick, self, i)
-				self.addToGroup(item)
-		if self._properties.subdivison is not None:
-			self.addToGroup(SubTickGroup(self, self._gauge, self._properties.subdivison))
+	def update_color(self):
+		for tick in self.ticks:
+			tick.update_color()
 
 
-# item.setPos(parent.arc.center)
-# item = QGraphicsTextItem(str(i))
-
-
-class NeedleAnimation(QPropertyAnimation):
-
-	def __init__(self, parent, varName=b"rotation"):
-		super(NeedleAnimation, self).__init__(parent, varName)
-		self.setStartValue(0)
-		self.setDuration(3000)
-		self.setEasingCurve(QEasingCurve.OutCubic)
-
-
-class Needle(GaugePathItem):
+class Needle(StatefulGaugePathItem):
 	_animation: QPropertyAnimation
 	_animationSignal = Signal(float)
-	_value: float = 0.0
+
+	class Type(str, Enum, metaclass=ClosestMatchEnumMeta):
+		Needle = 'needle'
+		Circle = 'circle'
+		Triangle = 'triangle'
+		Diamond = 'diamond'
 
 	def __init__(self, *args, **kwargs):
 		super(Needle, self).__init__(*args, **kwargs)
@@ -375,61 +1498,239 @@ class Needle(GaugePathItem):
 		pen = QPen()
 		pen.setJoinStyle(Qt.RoundJoin)
 		self.setPen(Qt.NoPen)
-		# self.setPen(QPen(Qt.red))
-		self.setBrush(QBrush(self.gauge.defaultColor))
-
-	# self.setTransformOriginPoint(*self.gauge.arc.center.toTuple())
-
-	def mousePressEvent(self, event):
-		print(event.pos())
-		super(Needle, self).mousePressEvent(event)
-
-	def update(self):
-		super(Needle, self).update()
-		# self.setTransformOriginPoint(*self.gauge.arc.center.toTuple())
-		self.draw()
-
-	@cached_property
-	def needleWidth(self) -> float:
-		self._cache.append('needleWidth')
-		return self.gauge.needleWidth*self.gauge.radius
-
-	@cached_property
-	def needleLength(self) -> float:
-		self._cache.append('needleLength')
-		return self.gauge.needleLength*self.gauge.radius
-
-	@cached_property
-	def needleSize(self) -> QSizeF:
-		self._cache.append('needleSize')
-		return QSizeF(self.needleWidth, self.needleLength)
+		self.add_defaults_to_state(kwargs)
+		self.refresh()
+		shadow = SoftShadow(owner=self)
+		self.setGraphicsEffect(shadow)
 
 	def draw(self):
-		center = self._gauge.arc.center
+		match self.type:
+			case Needle.Type.Needle | 'needle':
+				path = self._default()
+			case Needle.Type.Circle | 'circle':
+				path = self._edge_circle()
+			case Needle.Type.Triangle | 'triangle':
+				path = self._edge_triangle()
+			case Needle.Type.Diamond | 'diamond':
+				path = self._edge_diamond()
+			case _:
+				path = self._default()
+		self.setPath(path)
+
+	def refresh(self):
+		gauge = self.gauge
+
+		self.resetTransform()
+		self.setBrush(QBrush(gauge.defaultColor))
+		self.draw()
+
+		self.setRotation(
+			gauge.value_to_angle(gauge.value)
+		)
+		self.setPos(gauge.center)
+		self.setZValue(-500)
+
+	@StateProperty(key='type', default=Type.Needle, allowNone=False, repr=True, after=refresh)
+	def type(self) -> Type:
+		return self._type
+
+	@type.setter
+	def type(self, value: Type):
+		self._type = value
+
+	@type.decode
+	def type(self, value: str) -> Type:
+		return Needle.Type[value]
+
+	@StateProperty(key='width', default=Size.Width(0.1, relative=True), allowNone=False, repr=True, after=refresh)
+	def width(self) -> Size.Width | Length:
+		return self._width
+
+	@width.setter
+	def width(self, value: Size.Width | Length):
+		self._width = value
+
+	@width.decode
+	def width(self, value: str | float | int) -> Size.Width | Length:
+		return parseWidth(value, type(self).width.default(type(self), self, update_source=False))
+
+	@property
+	def width_px(self) -> float:
+		return size_px(self.width, self.gauge.radius, dimension=DimensionType.width)
+
+	@StateProperty(key='length', allowNone=False, repr=True, dependencies={'type'}, after=refresh)
+	def length(self) -> Size.Height | Length:
+		return self._length
+
+	@length.setter
+	def length(self, value: Size.Height | Length):
+		self._length = value
+
+	@length.item_default
+	def length(self) -> Size.Height | Length:
+		match self.type:
+			case Needle.Type.Needle | 'needle':
+				return Size.Height(1.0, relative=True)
+			case Needle.Type.Circle | 'circle':
+				return Size.Height(0.2, relative=True)
+			case Needle.Type.Triangle | 'triangle':
+				return Size.Height(0.2, relative=True)
+			case Needle.Type.Diamond | 'diamond':
+				return Size.Height(0.2, relative=True)
+			case _:
+				return Size.Height(1.0, relative=True)
+
+	@length.decode
+	def length(self, value: str | float | int) -> Size.Height | Length:
+		return parseHeight(value, type(self).length.default(type(self), self, update_source=False))
+
+	@property
+	def length_px(self) -> float:
+		return size_px(self.length, self.gauge.radius, dimension=DimensionType.height)
+
+	@property
+	def needleSize(self) -> QSizeF:
+		return QSizeF(self.width_px, self.length_px)
+
+	@StateProperty(key='offset', default=Size.Height(0, relative=True), allowNone=False, repr=True, after=refresh)
+	def offset(self) -> Size.Height | Length:
+		return self._offset
+
+	@offset.setter
+	def offset(self, value: Size.Height | Length):
+		self._offset = value
+
+	@offset.decode
+	def offset(self, value: str | float | int) -> Size.Height | Length:
+		return parseHeight(value, type(self).offset.default(type(self), self, update_source=False))
+
+	@property
+	def offset_px(self) -> float:
+		return size_px(self.offset, self.gauge.radius, dimension=DimensionType.height)
+
+	_shape: QPainterPath = QPainterPath()
+
+	def shape(self) -> QPainterPath:
+		return self._shape or self.path()
+
+	def _default(self) -> QPainterPath:
+		"""
+		Returns a standard tapering needle with a rounded bottom.
+
+		Length: Controls the length of the needle
+		Width: Controls the width of the needle
+		Offset: Controls the offset of the needle from the center of the gauge
+		"""
+
 		cx = 0
-		cy = 0
-		middle = QPointF(cx, cy - self.needleLength)
-		needleWidth = self.needleWidth
-		left = QPointF(cx - needleWidth/2, cy)
-		right = QPointF(cx + needleWidth/2, cy)
+		cy = self.offset_px
+		middle = QPointF(cx, cy - self.length_px)
+		needleWidth = self.width_px
+		left = QPointF(cx - needleWidth / 2, cy)
+		right = QPointF(cx + needleWidth / 2, cy)
 		arcStart = QPointF(left)
-		arcStart.setY(left.y() + needleWidth*0.6)
+		arcStart.setY(left.y() + needleWidth * 0.6)
 		arcEnd = QPointF(right)
-		arcEnd.setY(right.y() + needleWidth*0.6)
+		arcEnd.setY(right.y() + needleWidth * 0.6)
 		arcRect = QRectF(arcStart, QSizeF(needleWidth, -needleWidth))
 
 		needlePath = QPainterPath()
 		needlePath.arcMoveTo(arcRect, 0)
 		needlePath.lineTo(middle)
-		# needlePath.lineTo(arcRect.center())
-		# needlePath.lineTo(center)
-		# needlePath.lineTo(cx, cy + 10)
 		needlePath.arcTo(arcRect, 180, -180)
-		# needlePath.arcMoveTo(arcRect, 180)
-		# needlePath.lineTo(right)
-		# needlePath.lineTo(1000,1000)
-		# needlePath.closeSubpath()
-		self.setPath(needlePath.simplified())
+		needlePath.addEllipse(QPointF(cx, cy), needleWidth / 3, needleWidth / 3)
+
+		# Set the needle's bounding rect and shape
+		self._shape = shape = QPainterPath()
+		bounding_rect = QRectF(0, 0, needleWidth, needleWidth)
+		bounding_rect.moveCenter(QPointF(cx, cy))
+		shape.addEllipse(bounding_rect)
+		self._bounding_rect = shape.boundingRect()
+
+		return needlePath
+
+	def _edge_circle(self) -> QPainterPath:
+		"""
+		Returns a circle that is used as the indicator instead of a needle.
+
+		Length: Not used
+		Width: Controls the diameter of the circle
+		Offset: Controls the offset of the circle from the arch path of the gauge
+		"""
+
+		cx = 0
+		cy = self.offset_px
+		pos = QPointF(cx, cy - self.gauge.radius)
+
+		path = QPainterPath()
+		path.addEllipse(pos, self.width_px / 2, self.width_px / 2)
+
+		# Set the needle's bounding rect and shape
+		self._shape = shape = QPainterPath(path)
+		# bounding_rect = QRectF(0, 0, self.width_px, self.width_px)
+		# bounding_rect.moveCenter(QPointF(pos))
+		# shape.addEllipse(bounding_rect)
+		self._bounding_rect = shape.boundingRect()
+
+		return path
+
+	def _edge_triangle(self) -> QPainterPath:
+		"""
+		Returns a triangle that is used as the indicator instead of a needle.
+
+		Length: Controls the length of the triangle.  Positive values will point in, negative values will point out.
+		Width: Controls the base width of the triangle
+		Offset: Controls the offset of the triangle from the arch path of the gauge
+
+		"""
+		cx = 0
+		cy = self.offset_px
+		l = self.length_px
+		w = self.width_px
+		pos = QPointF(cx, cy - self.gauge.radius)
+		shape = QPainterPath()
+		tri_point = QPointF(pos + QPointF(0, l))
+		tri_base_y = pos.y()
+		tri_base_left = QPointF(pos.x() - w / 2, tri_base_y)
+		tri_base_right = QPointF(pos.x() + w / 2, tri_base_y)
+		shape.moveTo(tri_point)
+		shape.lineTo(tri_base_left)
+		shape.lineTo(tri_base_right)
+		shape.lineTo(tri_point)
+		shape.closeSubpath()
+		self._shape = QPainterPath(shape)
+		self._bounding_rect = shape.boundingRect()
+		return shape
+
+	def _edge_diamond(self) -> QPainterPath:
+		"""
+		Returns a diamond that is used as the indicator instead of a needle.
+
+		Length: Controls the height of the diamond
+		Width: Controls the width of the diamond
+		Offset: Controls the offset of the diamond from the arch path of the gauge
+
+		"""
+		cx = 0
+		cy = self.offset_px
+		l = self.length_px
+		w = self.width_px
+		pos = QPointF(cx, cy - self.gauge.radius)
+		shape = QPainterPath()
+		diamond_top = QPointF(pos.x(), pos.y() - l / 2)
+		diamond_left = QPointF(pos.x() - w / 2, pos.y())
+		diamond_bottom = QPointF(pos.x(), pos.y() + l / 2)
+		diamond_right = QPointF(pos.x() + w / 2, pos.y())
+		shape.moveTo(diamond_top)
+		shape.lineTo(diamond_left)
+		shape.lineTo(diamond_bottom)
+		shape.lineTo(diamond_right)
+		shape.lineTo(diamond_top)
+		shape.closeSubpath()
+		self._shape = QPainterPath(shape)
+		self._bounding_rect = shape.boundingRect()
+		return shape
+
 
 
 class Arrow(Needle):
@@ -458,7 +1759,7 @@ class Arrow(Needle):
 	def safeZone(self):
 		path = QPainterPath()
 		radius = self.gauge.radius
-		path.addEllipse(QPoint(0, 0), radius*0.6, radius*0.6)
+		path.addEllipse(QPoint(0, 0), radius * 0.6, radius * 0.6)
 		return path
 
 	# super(Arrow, self).paint(painter, option, widget)
@@ -470,7 +1771,7 @@ class Arrow(Needle):
 
 		# Draw Circle
 		radius = self.gauge.radius
-		pointerHeight = radius*0.178
+		pointerHeight = radius * 0.178
 		radius = radius - pointerHeight
 		base = pointerHeight
 		path = QPainterPath()
@@ -492,925 +1793,1594 @@ class Arrow(Needle):
 		# arrow.append(right)
 		# path.addPolygon(arrow)
 
-		path = path.simplified()
 
 		# path.setFillRule(Qt.FillRule.WindingFill)
 
 		# Draw Center Circle
-		path.addEllipse(QPoint(0, 0), radius*0.8, radius*0.8)
+		path.addEllipse(QPoint(0, 0), radius * 0.8, radius * 0.8)
 		path.setFillRule(Qt.FillRule.OddEvenFill)
 
 		self.setPath(path)
 
 
-# center = self._gauge.arc.center
-# cx = center.x()
-# cy = center.y()
-# middle = QPointF(cx, cy - self.needleLength)
-# needleWidth = self.needleWidth
-# left = QPointF(cx - needleWidth / 2, cy)
-# right = QPointF(cx + needleWidth / 2, cy)
-# arcStart = QPointF(left)
-# arcStart.setY(left.y() + needleWidth * 0.6)
-# arcEnd = QPointF(right)
-# arcEnd.setY(right.y() + needleWidth * 0.6)
-# arcRect = QRectF(arcStart, QSizeF(needleWidth, -needleWidth))
-#
-# needlePath = QPainterPath()
-# needlePath.arcMoveTo(arcRect, 0)
-# needlePath.lineTo(middle)
-# # needlePath.lineTo(arcRect.center())
-# # needlePath.lineTo(center)
-# # needlePath.lineTo(cx, cy + 10)
-# needlePath.arcTo(arcRect, 180, -180)
-# # needlePath.arcMoveTo(arcRect, 180)
-# # needlePath.lineTo(right)
-# # needlePath.lineTo(1000,1000)
-# # needlePath.closeSubpath()
-# self.setPath(needlePath.simplified())
-
-
-class GaugeText(GaugeItem, QGraphicsTextItem):
+class GaugeText(AnnotationText, GaugeItem):
 	def __init__(self, *args, **kwargs):
 		super(GaugeText, self).__init__(*args, **kwargs)
-		self.setFont(self.gauge.tickFont)
-		self.setDefaultTextColor(self.gauge.defaultColor)
-
-	def update(self):
-		super(GaugeText, self).update()
 
 
-class GaugeValueText(GaugeText):
-	_value: Numeric = Measurement(0)
-	_valueClass: Type[Measurement] = Measurement
+class GaugeLabel(NonInteractiveLabel, ColorGradientMixin, GaugeItem):
 
-	def setClass(self, value):
-		assert value is Measurement
-		self._valueClass = value
+	def __init__(self, *args, **kwargs):
+		GaugeItem.__init__(self, *args, **kwargs)
+		assert isinstance(self.gauge, Gauge)
+		NonInteractiveLabel.__init__(self, *args, **kwargs)
 
-	def mousePressEvent(self, event):
-		print(self.string)
+	def _get_color_value(self) -> Number:
+		return self.gauge.value
+
+	def _set_fill_brush(self, color: Color):
+		self.textBox.setBrush(QBrush(color))
+
+
+class GaugeValueLabel(GaugeLabel):
+
+	parent: 'Gauge'
+
+	_debug_paint_color = Color.randomColor.QColor
+
+	__defaults__ = {
+		'format': {
+			'showUnit': False,
+			'decorator': False,
+		},
+		'geometry': {
+			'x': '0px',
+			'y': '0px',
+			'width': '100px',
+			'height': '100px',
+		},
+		'margins': ('0', '0', '0', '0'),
+	}
+
+	class TextBox(Text):
+		parent: 'GaugeValueLabel'
+		surface: 'Gauge'
+
+		@Text.alignment.getter
+		def alignment(self):
+			return self.parent.alignment
+
+		@property
+		def _position(self) -> ValueDisplayPosition:
+			if (position := self.parent.position) is ValueDisplayPosition.Auto:
+				position = self.parent.position_auto()
+			return position
+
+		def __rich_repr__(self):
+			yield from super().__rich_repr__()
+			yield 'alignment', self.alignment
+
+		def _format_value_func(self, value):
+			try:
+				return self.parent.format_value(value.value)
+			except AttributeError:
+				return self.parent.format_value(value)
+
+		# def paint(self, painter: QPainter, option, widget):
+		# 	f = QRadialGradient(rainbow)
+		# 	f.setRadius(max(self.boundingRect().width(), self.boundingRect().height()))
+		# 	# f.setCenter(-self.boundingRect().topLeft())
+		# 	# f.setFocalPoint(-self.boundingRect().topLeft())
+		# 	f.setCoordinateMode(QGradient.CoordinateMode.LogicalMode)
+		# 	painter.save()
+		# 	# painter.setOpacity(0.5)
+		# 	# painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Screen)
+		#
+		# 	shape = self.shape()
+		# 	addPath(painter, shape, fill=f, color=Qt.GlobalColor.transparent)
+		#
+		# 	# shape = self.mapFromParent(self.parentItem()._gauge_path())
+		# 	# addPath(painter, shape, fill=QBrush(Qt.GlobalColor.red), color=Qt.GlobalColor.transparent)
+		#
+		# 	painter.restore()
+		# 	super().paint(painter, option, widget)
+		#
+		# 	painter.setBrush(QBrush(Qt.white))
+		# painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Difference)
+
+		# gauge = self.parent.parent
+		# for collision_item in self.collidingItems():
+		# 	if not gauge.isAncestorOf(collision_item):
+		# 		continue
+		# 	item_path = self.mapFromItem(collision_item, collision_item.shape())
+		# 	painter.drawPath(item_path)
+
+		@property
+		def limitRect(self) -> QRectF:
+			arc = self.parent.parent.arc.sceneBoundingRect()
+			# r = max(arc.width(), arc.height()) / sqrt(2)
+			# g = self.parent.parent
+			# r = g.radius
+			# r /= self.transform().m11()
+			# r = QRectF(0, 0, r, r)
+			# r.moveCenter(self.mapFromItem(g, g.center))
+			r = self.mapRectFromScene(arc)
+
+			# self._debug_paint_shape = rect_to_shape(r)
+			return r
+
+		def getTextPosition(self, limitRect: QRectF = None) -> QPointF:
+
+			gauge: Gauge = self.parent.parent
+			arc: GaugeArc = gauge.arc
+
+			min_angle, max_angle = sorted((arc.startAngle, arc.endAngle))
+
+			angle_spread = max_angle - min_angle
+
+			# if angle_spread <= 200:
+			# 	return gauge.center
+
+			arc_center = arc.mapToParent(arc.path().boundingRect().center())
+			gauge_center = gauge.center
+
+			match self._position:
+				case ValueDisplayPosition.Inline:
+					diff = arc_center - gauge_center
+					return arc_center - (diff * (angle_spread / 360))
+				case ValueDisplayPosition.Center:
+					return gauge.center
+				case ValueDisplayPosition.Top:
+					return gauge.center + QPointF(0, max(-gauge.safe_radius, self.mapRectFromItem(gauge, gauge.gaugeRect).top()))
+					# return gauge.center + QPointF(0, -gauge.safe_radius)
+				case ValueDisplayPosition.Bottom:
+					return gauge.center + QPointF(0, min(gauge.safe_radius, gauge.arc.boundingRect().bottom()))
+					# return gauge.center + QPointF(0, gauge.safe_radius)
+				case _:
+					raise NotImplementedError
+
+		def _valueAccessor(self):
+			return self.parent.parent.value
+
+		def getTextScale(self, textRect: QRectF = None, limitRect: QRectF = None) -> float:
+
+			"""
+			Modifies the local transform until no there are no collisions, restores the original transform and returns the scale.
+			"""
+
+			scale = super(GaugeValueLabel.TextBox, self).getTextScale()
+
+			modifyTransformValues(transform, xScale=scale, yScale=scale)
+			self.setTransform(transform)
+
+			gauge = self.parent.parent
+			gauge_path = gauge._gauge_path()
+
+			if self._position is DisplayPosition.Inline:
+				gauge_path.addPath(gauge.mapFromItem(gauge.needle, gauge.needle.shape()))
+
+			def colliding() -> bool:
+
+				if not self.mapRectFromItem(gauge, gauge.gaugeRect).contains(self.boundingRect()):
+					return True
+
+				try:
+					return self.collidesWithPath(self.mapFromParent(gauge_path))
+				except AttributeError:
+					pass
+				items = {i for i in self.collidingItems() if not isinstance(i, Handle) is gauge.isAncestorOf(i) and not isinstance(i, NonInteractiveLabel)}
+				if self._position is not DisplayPosition.Inline:
+					try:
+						items -= {self.parentItem().needle}
+					except AttributeError:
+						pass
+				return len(items) > 1
+
+			while colliding() and scale > 0.2:
+				scale *= 0.95
+				modifyTransformValues(transform, xScale=scale, yScale=scale)
+				self.setTransform(transform, combine=False)
+
+			# Restore original transform scaleing
+			modifyTransformValues(transform, xScale=1, yScale=1)
+
+			return scale
+
+		_shapePath: QPainterPath = QPainterPath()
+
+		def setPath(self, path: QPainterPath):
+			matrix = self.transform()
+			scale_x = matrix.m11() * self.scale()
+			scale_y = matrix.m22() * self.scale()
+			scale_value = (self.scaleSelection(scale_x, scale_y) or 1)
+			self._debug_paint_shape = self._shape = outline_path(self._shapePath or path, self.parent.value_padding_px / scale_value)
+			super().setPath(path)
+
+		_shape: QPainterPath = QPainterPath()
+
+		def setTransform(self, matrix: QTransform, **kwargs) -> None:
+			super().setTransform(matrix, **kwargs)
+			scale_x = matrix.m11() * self.scale()
+			scale_y = matrix.m22() * self.scale()
+			scale_value = (self.scaleSelection(scale_x, scale_y) or 1)
+			self.prepareGeometryChange()
+			self._shape = outline_path(self._shapePath or self.path(), self.parent.value_padding_px / scale_value)
+
+		def shape(self) -> QPainterPath:
+			return QPainterPath(self._shape)
+
+		def boundingRect(self) -> QRectF:
+			return self._shape.boundingRect()
+
+		def sceneBoundingRect(self) -> QRectF:
+			return self.mapToScene(self._shape).boundingRect()
+
+	@StateProperty(key='alignment', allowNone=True, dependencies={'geometry', 'text', 'margins'})
+	def alignment(self) -> Alignment:
+		return getattr(self, '_alignment', None) or self.alignment_auto()
+
+	@alignment.condition(method='get')
+	def alignment(self) -> bool:
+		return getattr(self, '_alignment', None) is not None
+
+	@alignment.setter
+	def alignment(self, value: Alignment):
+		self._alignment = value
+
+	@alignment.decode
+	def alignment(self, value: str) -> Alignment:
+		return Alignment(AlignmentFlag[value])
+
+	@StateProperty(key='format', default=None, allowNone=False)
+	def format_spec(self) -> str | dict:
+		return getattr(self, '_format_spec', None)
+
+	@format_spec.setter
+	def format_spec(self, value: str | dict):
+		self._format_spec = value
+
+	def format_value(self, value: Measurement) -> str:
+		format_spec = self.format_spec
+		if format_spec is not None:
+			if isinstance(value, Measurement):
+				match format_spec:
+					case str():
+						return value.__format__(format_spec)
+					case dict():
+						return value.__format__('', **format_spec)
+		elif value is None:
+			return "⋯"
+		return str(value)
+
+	@StateProperty(key='value-padding', default=Size.Height(0.05, relative=True), allowNone=False)
+	def value_padding(self) -> Length | Dimension | None:
+		return self._value_padding
+
+	@value_padding.setter
+	def value_padding(self, value: Length | Dimension | None):
+		self._value_padding = value
+
+	@value_padding.decode
+	def value_padding(self, value: str | int | float) -> Length | Dimension | None:
+		return parseSize(value, default=None)
 
 	@property
-	def string(self):
-		valueClass = self.gauge.valueClass
-		value = self.gauge.value
-		if isinstance(valueClass, tuple):
-			valueClass, n, d = valueClass
-			value = valueClass(n(value), d(1)).withoutUnit
-		elif issubclass(valueClass, Measurement):
-			value = valueClass(value).withoutUnit
-		else:
-			value = str(round(value, 2))
-		return value
+	def value_padding_px(self) -> float | int:
+		value_padding = self.value_padding
+		if value_padding is None:
+			return 5
+		return size_px(value_padding, (self.textBox._textRect or self.textBox.limitRect).height())
 
-	@property
-	def value(self):
-		return self._value
+	@StateProperty(key='position', allowNone=False, default=ValueDisplayPosition.Auto, repr=True)
+	def position(self) -> ValueDisplayPosition:
+		return self._position
 
-	@value.setter
-	def value(self, value):
-		self._value = value
+	@position.setter
+	def position(self, value: ValueDisplayPosition):
+		self._position = value
 
-	def draw(self):
-		font = self.gauge.tickFont
-		font.setPixelSize(self.gauge.radius*0.2)
-		self.setFont(font)
-		self.setHtml(self.string)
-		textRect = self.boundingRect()
-		textRect.moveCenter(radialPoint(self.gauge.arc.center, self.gauge.radius*0.35, self.gauge.startAngle + 90 + (self.gauge.fullAngle/2)))
-		# textRect.translate(-textRect.width() / 2, 0)
-		self.setPos(textRect.topLeft())
+	@position.decode
+	def position(self, value: str) -> ValueDisplayPosition:
+		return ValueDisplayPosition[value]
 
-	def update(self):
-		self.draw()
-		super(GaugeValueText, self).update()
+	def alignment_auto(self) -> Alignment:
+		# TODO: This a quick and slopy implementation and needs improvement
 
+		# match self.position:
+		# 	case ValueDisplayPosition.Inline:
+		# 		return Alignment(AlignmentFlag.Bottom)
+		# 	case _:
+		# 		pass
+		align = self.parent.alignment.combined
 
-class AnimationBridge(QObject):
+		if (position := self.position) is ValueDisplayPosition.Auto:
+			position = self.position_auto()
 
-	def __init__(self, object, *args, **kwargs):
-		super(AnimationBridge, self).__init__(*args, **kwargs)
-		self.object = object
-		self._testAnim = 0
+		min_angle, max_angle = sorted((self.parent.startAngle, self.parent.endAngle))
 
-		self._scaleAnimation = QPropertyAnimation(self, b'testAnim')
-		self._scaleAnimation.setDuration(1000)
-		self._scaleAnimation.setStartValue(0.01)
-		self._scaleAnimation.setEasingCurve(QEasingCurve.OutQuad)
-		self._scaleAnimation.setEndValue(0.75)
+		angle_spread = max_angle - min_angle
+		if angle_spread > 180 and position is not ValueDisplayPosition.Inline:
+			return Alignment(align)
 
-	def start(self):
-		self._scaleAnimation.start()
+		angle_mid = ((min_angle + max_angle) / 2 + 90) % 360
 
-	@Property(float)
-	def testAnim(self):
-		return self._testAnim
+		if 60 >= angle_mid or angle_mid >= 300:
+			align |= AlignmentFlag.Right
+		elif 240 >= angle_mid >= 120:
+			align |= AlignmentFlag.Left
 
-	@testAnim.setter
-	def testAnim(self, value):
-		self._testAnim = value
-		self.object.fontScale = value
-		self.object.update()
+		if 135 >= angle_mid >= 45:
+			align |= AlignmentFlag.Bottom
+		elif 315 >= angle_mid >= 225:
+			align |= AlignmentFlag.Top
+
+		return Alignment(align)
+
+	def position_auto(self) -> ValueDisplayPosition:
+		if self.gauge.needle.type is Needle.Type.Needle and self.gauge.arc.fullAngle > 180:
+			return ValueDisplayPosition.Inline
+		return ValueDisplayPosition.Center
 
 
-class CustomText(QGraphicsPathItem):
-	gauge: 'Gauge'
-	_fontScale = 0.2
-	_text: str = '0.0'
-	_font: QFont
+class GaugeUnit(GaugeLabel):
 
-	def __init__(self, gauge: 'Gauge', *args, **kwargs):
-		super(CustomText, self).__init__(*args, **kwargs)
-		self.mouseDown = False
-		self.setFlag(QGraphicsItem.ItemIsMovable, True)
-		self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
-		self.setFlag(QGraphicsItem.ItemSendsScenePositionChanges, True)
-		self.gauge = gauge
-		self.setPen(QPen(self.gauge.defaultColor))
-		self.setBrush(QBrush(self.gauge.defaultColor))
-		self.color = self.gauge.defaultColor
-		self._cachedValues = []
-		self._font = self.gauge.tickFont
-		# self.animationBridge = AnimationBridge(self)
+	surface: 'Gauge'
+	__exclude__ = {'alignment'}
 
-		self.animationTimer = QTimer()
-		self.animationTimer.timeout.connect(self.grav)
-		self.animationTimer.setInterval(20)
+	_debug_paint_color = Color.randomColor.QColor
 
-		self.animationTimer.start()
+	__defaults__ = {
+		'geometry': {
+			'x': '0px',
+			'y': '0px',
+			'width': '100px',
+			'height': '100px',
+		},
+		'margins': ('0', '0', '0', '0'),
+	}
 
-	# fm = QFontMetrics(self.font())
-	# fm.tightBoundingRect(self.text)
+	class TextBox(Text):
 
-	def updateFontSize(self):
-		self.textWidthRatio = self.fontMetrics.width(self.text)/100
-		self._maxFontSize = min(font.pointSizeF()*self._ratio, self.height()*.7)
+		surface: 'Gauge'
 
-	def widthForHeight(self, height: float):
-		return self.text
+		@property
+		def alignment(self) -> Alignment:
+			return Alignment(AlignmentFlag.Center | AlignmentFlag.Top)
+
+		@alignment.setter
+		def alignment(self, value):
+			pass
+
+		@property
+		def _position(self) -> UnitDisplayPosition:
+			if (position := self.parent.position) is UnitDisplayPosition.Auto:
+				position = self.parent.position_auto()
+			return position
+
+		def getTextPosition(self, limitRect: QRectF = None) -> QPointF:
+			match self._position:
+				case UnitDisplayPosition.Below:
+					return self._position_below()
+				case UnitDisplayPosition.TrailingValue:
+					return self._position_trailing_value()
+				case _:
+					raise NotImplementedError
+
+		def _position_below(self) -> QPointF:
+			try:
+				value_label = self.surface.valueLabel.textBox.sceneBoundingRect()
+				p = value_label.center()
+				p.setY(value_label.bottom())
+				p = self.mapFromScene(p)
+				return p
+			except AttributeError:
+				pass
+
+			return self.parent.parent.center
+
+		def _position_trailing_value(self) -> QPointF:
+			try:
+				value_label = self.surface.valueLabel.textBox.sceneBoundingRect()
+				p = value_label.bottomLeft()
+				return self.mapFromScene(p)
+			except AttributeError:
+				pass
+
+			return self.parent.parent.center
+
+		def _position_leading_value(self) -> QPointF:
+			raise NotImplementedError
+
+		def setPath(self, path):
+			self._shape = outline_path(path, self.parent.value_padding_px)
+			super().setPath(path)
+
+		_shape: QPainterPath = QPainterPath()
+
+		def shape(self) -> QPainterPath:
+			return self._shape
+
+		def boundingRect(self) -> QRectF:
+			return self.shape().boundingRect()
+
+		def setTransform(self, *args, **kwargs):
+			super().setTransform(*args, **kwargs)
+
+			move_direction = QPointF(0, 1)
+
+			moved_count = 0
+
+			if not self.parentItem().alignment == AlignmentFlag.Center:
+				return
+
+			max_travel_distance = int(ceil(sqrt(sum(i ** 2 for i in self.limitRect.size().toTuple()))))
+
+			# Move the unit label away from the value label if it collides with the needle
+			# TODO: Make this use transformations rather than moveBy
+			while self.collidesWithItem(self.surface.needle) and abs(moved_count) < max_travel_distance:
+				self.moveBy(move_direction.x(), move_direction.y())
+				moved_count += 1
+
+		def _textAccessor(self) -> str:
+			value_class = self.parent.parent.valueClass
+			return value_class.unit or value_class.decorator
+
+		@property
+		def limitRect(self) -> QRectF:
+			arc = self.surface.arc.boundingRect()
+			r = max(arc.width(), arc.height()) / sqrt(2)
+			r = QRectF(0, 0, r, r)
+			r.setHeight(self.parent.height_px)
+			return r
 
 	@cached_property
-	def fontMetrics(self):
-		font = self.font
-		font.setPixelSize(100)
-		return QFontMetrics(font)
+	def value_label(self) -> GaugeValueLabel:
+		return self.gauge.valueLabel
+
+	@StateProperty(key='height', default=Length.Millimeter(5), allowNone=False)
+	def height(self) -> Measurement | Dimension | None:
+		return self._height
+
+	@height.setter
+	def height(self, value: Measurement | Dimension | None):
+		self._height = value
+
+	@height.decode
+	def height(self, value: str | int | float) -> Measurement | Dimension | None:
+		return parseSize(value, default=None, allowFloat=False)
 
 	@property
-	def safeZone(self) -> QPainterPath:
-		return self.mapFromParent(self.gauge.safeZone)
+	def height_px(self) -> float | int:
+		height = self.height
+		if height is None:
+			return 0
+		return size_px(height, self.height_relative_to)
 
 	@property
-	def fontMetrics(self):
-		return QFontMetrics(self.dynamicFont)
+	def height_relative_to(self) -> float | int:
+		return self.parent.radius
+
+	@StateProperty(key='value-padding', default=Size.Height(0.05, relative=True), allowNone=False)
+	def value_padding(self) -> Length | Dimension | None:
+		return self._value_padding
+
+	@value_padding.setter
+	def value_padding(self, value: Length | Dimension | None):
+		self._value_padding = value
+
+	@value_padding.decode
+	def value_padding(self, value: str | int | float) -> Length | Dimension | None:
+		return parseSize(value, default=None)
 
 	@property
-	def string(self):
-		value = self.text
-		return str(value)
+	def value_padding_px(self) -> float | int:
+		value_padding = self.value_padding
+		if value_padding is None:
+			return 5
+		return size_px(value_padding, (self.textBox._textRect or self.textBox.limitRect).height())
+
+	@StateProperty(key='position', default=UnitDisplayPosition.Auto, allowNone=False, repr=True)
+	def position(self) -> UnitDisplayPosition:
+		return self._position
+
+	@position.setter
+	def position(self, value: UnitDisplayPosition):
+		self._position = value
+
+	# @position.item_default
+	# def position(self) -> UnitDisplayPosition:
+	# 	label_position = self.value_label.position
+	# 	match label_position:
+	# 		case ValueDisplayPosition.Auto:
+	# 			return self.position_auto()
+	# 		case ValueDisplayPosition.Inline | ValueDisplayPosition.Center:
+	# 			return UnitDisplayPosition.Below
+	#
+	# 	return UnitDisplayPosition.Below
+
+	@position.decode
+	def position(self, value: str) -> UnitDisplayPosition:
+		return UnitDisplayPosition[value]
+
+	def position_auto(self) -> UnitDisplayPosition:
+		value_label_position = self.value_label.position
+		if value_label_position is ValueDisplayPosition.Auto:
+			value_label_position = self.value_label.position_auto()
+		match value_label_position:
+			case ValueDisplayPosition.Inline | ValueDisplayPosition.Center:
+				return UnitDisplayPosition.Below
+			case _:
+				return UnitDisplayPosition.TrailingValue
+
+
+class GaugeTickText(GaugeItem, AnnotationText):
+
+	"""
+	TODO
+	----
+	When the item is not rotated, the alignment should be center
+	"""
 
-	@property
-	def text(self):
-		return self._text
-
-	@text.setter
-	def text(self, value):
-		self._text = value
-
-	# self.autoResize()
-
-	@property
-	def font(self):
-		self._font.setPointSizeF(self.fontSize)
-		return self._font
-
-	@font.setter
-	def font(self, value):
-		self._font = value
-
-	@property
-	def color(self):
-		return self._color
-
-	@color.setter
-	def color(self, value):
-		self._color = value
-
-	@property
-	def dynamicFont(self):
-		return self.font
-
-	def autoResize(self):
-		if not self.insideSafeZone:
-			self.animationBridge._scaleAnimation.setStartValue(self.fontScale)
-			self.animationBridge._scaleAnimation.setEndValue(0.5)
-			self.animationBridge._scaleAnimation.start()
-		else:
-			self.animationBridge._scaleAnimation.setStartValue(self.fontScale)
-			self.animationBridge._scaleAnimation.setEndValue(.75)
-			self.animationBridge._scaleAnimation.start()
-
-	def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget):
-		# # if self.path().intersects(self.safeZone.path()):
-		# sPath = self.mapToScene(self.path())
-		# zPath = self.mapToScene(self.safeZone)
-		# # x = self.path().intersected(zPath)
-		# painter.setBrush(QBrush(Qt.blue))
-		# painter.setPen(QPen(Qt.red, 1))
-		# painter.drawPath(self.overlap)
-		super(CustomText, self).paint(painter, option, widget)
-
-	@property
-	def overlap(self) -> QPainterPath:
-		return self.path().subtracted(self.safeZone)
-
-	@property
-	def fontScale(self) -> float:
-		if self._fontScale is None:
-			self._fontScale = 0.0
-		return self._fontScale
-
-	@fontScale.setter
-	def fontScale(self, value):
-		old = self._fontScale
-		self._fontScale = value
-		self.update()
-		# if self.animationBridge._scaleAnimation.state() == QAbstractAnimation.Running:
-		# 	if self.animationBridge._scaleAnimation.startValue() < self.animationBridge._scaleAnimation.endValue():
-		# 		if not self.insideSafeZone:
-		# 			self._fontScale = old
-		# 			self.animationBridge._scaleAnimation.stop()
-		# 	else:
-		# 		if self.insideSafeZone:
-		# 			self._fontScale = old
-		# 			self.animationBridge._scaleAnimation.stop()
-		# else:
-		if value > old:
-			if not self.insideSafeZone:
-				self._fontScale = old
-				self.gravitateTo()
-				self.update()
-
-	def grav(self):
-		self.gravitateTo()
-
-	def gravitateTo(self, point: QPointF = None):
-		'''
-			Gravitates the text to the given point by a slight amout
-		:param self:
-		:type self:
-		:param point:
-		:type point:
-		:return:
-		:rtype:
-		'''
-		if point is None:
-			point = QPoint(0, 0)
-
-		nudge = (self.mapToScene(self.boundingRect().center()) - self.boundingRect().center())*.03
-		self.moveBy(-nudge.x(), -nudge.y())
-
-	@property
-	def insideSafeZone(self):
-		return self.collidesWihPath(self.safeZone, Qt.ContainsItemShape)
-
-	@property
-	def hasCollisions(self):
-		return [x for x in self.collidingItems() if x.__class__ == self.__class__]
-
-	def resize(self):
-		oldScale = self.fontScale
-		self.prepareGeometryChange()
-
-	# self.setPos(QPoint(0,0))
-	# while self.insideSafeZone:
-	# 	self.fontScale *= 1.05
-	# 	self.update()
-	# while not self.collidesWithPath(self.safeZone, Qt.ContainsItemShape):
-	# 	self.fontScale *= 0.99
-	# 	self.update()
-	# self.setPos(QPoint(0,0))
-	# print(self.overlap.boundingRect())
-
-	# def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent):
-	# 	if not self.insideSafeZone:
-	# 		self.setFlag(QGraphicsItem.ItemIsMovable, False)
-	# 		self.gravitateTo()
-	# 		self.hasLeft = True
-	# 	if not self.flags() & QGraphicsItem.ItemIsMovable:
-	# 		if self.boundingRect().contains(event.pos()) and not self.hasLeft:
-	# 			self.setFlag(QGraphicsItem.ItemIsMovable, True)
-	# 			self.setTransformOriginPoint(event.pos())
-	# 			self.hasLeft = False
-	# 	super(CustomText, self).mouseMoveEvent(event)
-
-	def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget):
-		super(CustomText, self).paint(painter, option, widget)
-		fm = QFontMetrics(self.font)
-		rect = fm.tightBoundingRect(self.text)
-		rect.moveCenter(QPoint(0, 0))
-		painter.setPen(QPen(Qt.white, 1))
-		painter.drawRect(rect)
-
-	def mousePressEvent(self, event: QGraphicsSceneMouseEvent):
-		self.animationTimer.stop()
-		self.mouseDown = True
-
-		# points: list[QPointF] = []
-		# polygon: QPolygonF = self.shape().toFillPolygon()
-
-		'''QPolygonF
-		polygon = outerArc.toFillPolygon();
-		foreach(auto
-		point, polygon)
-		{
-			points.push_back(point);
-		}
-		QList < QPointF > pointsResult;
-		makeOffsetFace(points, -0.25 * mMaxelSize, pointsResult);
-		QPolygonF
-		polygonOffset;
-		foreach(auto
-		point, pointsResult)
-		{
-			polygonOffset << point;
-		}
-		if (!polygonOffset.isEmpty())
-		{
-			mOuterFillPath.addPolygon(polygonOffset);
-		}'''
-		super(CustomText, self).mousePressEvent(event)
-
-	def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent):
-		if self.boundingRect().contains(event.pos()):
-			if self.x == False:
-				self.y = True
-			else:
-				self.y = False
-			self.x = True
-		else:
-			self.x = False
-		super(CustomText, self).mouseMoveEvent(event)
-
-	def itemChange(self, change, value):
-		if change == QGraphicsItem.ItemPositionChange:
-			collisions = self.hasCollisions
-			if not self.mouseDown and collisions:
-				offset = sum((self.mapToScene(self.boundingRect().center()) - collisions[0].mapToScene(collisions[0].boundingRect().center())).toTuple())
-				# if offset < 10:
-				# 	return self.pos() + QPoint(*self.boundingRect().size().toTuple())
-				# else:
-				return self.pos()
-			# cols = self.hasCollisions
-			# if cols:
-			# 	i = cols[0]
-			# 	p = self.pos()
-			# 	p.setY(p.y() - i.pos().y() + i.boundingRect().height() + 5)
-			# 	return p
-			if not self.insideSafeZone:
-				if value.manhattanLength() < self.pos().manhattanLength():
-					return super(CustomText, self).itemChange(change, value)
-				return self.pos()
-
-		return super(CustomText, self).itemChange(change, value)
-
-	def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent):
-		self.mouseDown = False
-		self.setFlag(QGraphicsItem.ItemIsMovable, True)
-		self.animationTimer.start()
-		super(CustomText, self).mouseReleaseEvent(event)
-
-	@property
-	def dynamicFontSize(self):
-		font = self.font
-
-	# self.setFont(font)
-	# self.textWidth = self.fontMetrics().width(self.textSizeHint)
-	# self._ratio = self.width() / self.textWidth
-	# self._maxFontSize = min(font.pointSizeF() * self._ratio, self.height() * .7)
-
-	@property
-	def fontSize(self) -> float:
-		self._cachedValues.append('fontSize')
-		return self.gauge.radius*self.fontScale
-
-	def update(self):
-		tightRect = self.fontMetrics.tightBoundingRect(self.string)
-		wid = self.fontMetrics.width(self.string)
-		tightRect.moveCenter(self.gauge.arc.center.toPoint())
-
-		path = QPainterPath()
-		p = self.gauge.arc.center.toPoint()
-		# p = QPointF(0,0)
-		# p.setX(p.x() - tightRect.width() / 2)
-		# p.setY(p.y() + tightRect.height() / 2)
-		path.addText(0 - tightRect.width()*1.05/2, tightRect.height()/2, self.dynamicFont, self.string)
-		# path.moveTo(p)
-
-		self.setPath(path)
-		t = QPointF(*half(tightRect.size()).toTuple())
-		self.setTransformOriginPoint(tightRect.center())
-		# t.setY(t.y() * -1)
-		self.setTransformOriginPoint(t)
-		# self.setPos(p)
-
-		# self.setRotation(45)
-		super(CustomText, self).update()
-
-
-# def setPos(self, point: QPointF):
-# 	point.setX(point.x() - self.boundingRect().width() / 2)
-# 	point.setY(point.y() + self.boundingRect().height() / 2)
-# 	super(CustomText, self).setPos(point)
-
-
-class GaugeSpeedText(GaugeText):
-	_value: DistanceOverTime = DistanceOverTime(0)
-	_valueClass: Type[DistanceOverTime] = DistanceOverTime
-
-	def __init__(self, gauge: 'Gauge', value: DistanceOverTime = None, subscription: Subscription = None, *args, **kwargs):
-		super(GaugeSpeedText, self).__init__(gauge, *args, **kwargs)
-
-	def setClass(self, value):
-		assert value is Measurement
-		self._valueClass = value
-
-	@property
-	def string(self):
-		valueClass = self._valueClass
-		value = self._value
-		if isinstance(valueClass, tuple):
-			valueClass, n, d = valueClass
-			value = valueClass(n(value), d(1)).withoutUnit
-		elif issubclass(valueClass, Measurement):
-			value = valueClass(value).withoutUnit
-		else:
-			value = str(round(value, 2))
-		return value
-
-	@property
-	def value(self):
-		return self._value
-
-	@value.setter
-	def value(self, value):
-		self._value = value
-
-	def draw(self):
-		font = self.gauge.tickFont
-		font.setPixelSize(self.gauge.radius*0.4)
-		self.setFont(font)
-
-	# self.setHtml(self.string)
-	# textRect = self.boundingRect()
-	# point = radialPoint(self.gauge.arc.center, 0, 90)
-	# point.setY(point.y() + textRect.height() / 2)
-	# textRect.moveCenter(point)
-	# self.setPos(textRect.topLeft())
-	# textRect.translate(-textRect.width() / 2, 0)
-
-	def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget):
-		painter.drawRect(self.boundingRect())
-		painter.setFont(self.font())
-		fm = painter.fontMetrics()
-		tightRect = fm.tightBoundingRect(self.string)
-		tightRect.moveCenter(self.gauge.arc.center.toPoint())
-		painter.drawRect(tightRect)
-		super(GaugeSpeedText, self).paint(painter, option, widget)
-
-	def update(self):
-		self.draw()
-		super(GaugeSpeedText, self).update()
-
-
-class GaugeDirectionText(GaugeText):
-	_value: Direction = Direction(0)
-	_valueClass: Type[DistanceOverTime] = Direction
-
-	def __init__(self, gauge: 'Gauge', value: DistanceOverTime = None, subscription: Subscription = None, *args, **kwargs):
-		super(GaugeDirectionText, self).__init__(gauge, *args, **kwargs)
-
-	@property
-	def string(self):
-		valueClass = self._valueClass
-		value = self._value
-		if isinstance(valueClass, tuple):
-			valueClass, n, d = valueClass
-			value = valueClass(n(value), d(1)).withoutUnit
-		elif issubclass(valueClass, Measurement):
-			value = valueClass(value).withoutUnit
-		else:
-			value = str(round(value, 2))
-		return value
-
-	@property
-	def value(self):
-		return self._value
-
-	@value.setter
-	def value(self, value):
-		self._value = value
-
-	def draw(self):
-		font = self.gauge.tickFont
-		font.setPixelSize(self.gauge.radius*0.2)
-		self.setFont(font)
-		self.setHtml(self.string)
-
-	# textRect.translate(-textRect.width() / 2, 0)
-
-	def update(self):
-		self.draw()
-		super(GaugeDirectionText, self).update()
-
-
-class GaugeUnit(GaugeText):
-
-	def __init__(self, *args, **kwargs):
-		super(GaugeText, self).__init__(*args, **kwargs)
-		self.draw()
-
-	@property
-	def string(self):
-		return str(self.gauge.unit)
-
-	def draw(self):
-		font = self.gauge.tickFont
-		font.setPixelSize(self.gauge.radius*0.3)
-		self.setFont(font)
-		self.setHtml(self.string)
-		textRect = self.boundingRect()
-		textRect.moveCenter(radialPoint(self.gauge.arc.center, self.gauge.radius*0.35, self.gauge.startAngle - 90 + (self.gauge.fullAngle/2)))
-		# textRect.translate(-textRect.width() / 2, 0)
-		self.setPos(textRect.topLeft())
-
-	# self.setPos(radialPoint(self.gauge.arc.center, self.gauge.radius * 0.35, self.gauge.startAngle - 90 + (self.gauge.fullAngle / 2)))
-
-	def update(self):
-		self.draw()
-		self.setVisible(self.gauge.unit is not None)
-		super(GaugeUnit, self).update()
-
-
-class GaugeTickText(GaugeText):
 	_rotated: bool = True
-	_flipUpsideDown = (False, True)
+	_flipUpsideDown = (True, True)
 	_scale: Optional[float] = None
 
-	def __init__(self, tick, group, *args, **kwargs):
+	group: 'GaugeTickTextGroup'
+	tick: 'Tick'
+
+	def _apply_group_transform(self, transform: QTransform, x: float, y: float):
+		pass
+
+	def __init__(self, gauge, tick, group, *args, **kwargs):
 		self.group = group
-		self.offset = 0.75
 		self.tick = tick
-		super(GaugeTickText, self).__init__(utils.data.group.gauge, *args, **kwargs)
-		font = QFont(defaultFont)
-		font.setPointSizeF(70)
-		self.setFont(font)
-		self.rect = QGraphicsPathItem()
+		tick.label = self
+		kwargs['gauge'] = gauge
+		kwargs['value'] = gauge.valueClass(tick.index * group.source.interval + gauge.range.rounded_min)
+		# group.size_group.addItem(self)
+		self.set_formatting_func(group.format_value)
+		kwargs['labelGroup'] = group
+		super(GaugeTickText, self).__init__(*args, **kwargs)
+
+	def _valueAccessor(self) -> str:
+		value = self.tick.value
+		return value
+
+	def setTransform(self, matrix: PySide6.QtGui.QTransform, *args) -> None:
+		super().setTransform(matrix, *args)
+		scale_x = matrix.m11() * self.scale()
+		scale_y = matrix.m22() * self.scale()
+		scale_value = (self.scaleSelection(scale_x, scale_y) or 1)
+		self.prepareGeometryChange()
+		self._shape = outline_path(self.path(), self.group.offset_px / scale_value)
 
 	@property
-	def ax(self):
-		return self.tick.radius*0.35
+	def offset_relative_to(self) -> float:
+		return self.group.textSize_px
 
-	def fontSizeCalc(self):
-		# if self._scale is not None:
-		# 	font.setPointSizeF(self.tick.radius * self._scale)
-		# else:
-		count = 0
-		scale = 1.0
+	def position(self, display_position: DisplayPosition = None) -> QPointF:
 
-		# def hasCollisions(rect):
-		# return rect.intersects(self.tick.boundingRect()) or collidingNeighbors(self, rect)
-		# return collidingNeighbors(self, rect)
+		position = display_position or self.display_position
 
-		# font = self.font()
-		# font.setPointSizeF(self.ax)
-		# fm = QFontMetricsF(font)
-		# rect = fm.boundingRect(self.string)
-		# rect.moveCenter(self.position())
-		# collides = hasCollisions(rect)
-		# while collides and scale > 0.3:
-		# 	scale *= 0.9
-		# 	font.setPointSizeF(self.ax * scale)
-		# 	fm = QFontMetricsF(font)
-		# 	rect = fm.tightBoundingRect(self.string)
-		# 	rect.moveCenter(self.position())
-		# 	collides = hasCollisions(rect)
-		# 	count += 1
-		# return scale
-		self.setPlainText(self.string)
-		textRect = self.boundingRect()
-		textRect.moveCenter(self.position())
-		self.setTransformOriginPoint(0 + textRect.width()/2, textRect.height()/2)
-		self.setPos(textRect.topLeft())
+		if self.group.source.position in {DisplayPosition.Above, DisplayPosition.Outside}:
+			position = position.opposite
 
-	# collides = collidingNeighbors(self)
-
-	def collidingNeighbors(self):
-		v = [x for x in self.collidingItems(Qt.ItemSelectionMode.IntersectsItemShape) if isinstance(x, self.__class__)]
-		return v
-
-	def position(self):
-		return radialPoint(self.gauge.arc.center, self.tick.radius*self.offset, self.tick.angle)
-
-	# def shape(self):
-	# 	return self.mapToScene(super(GaugeTickText, self).shape())
+		match position:
+			case DisplayPosition.Below:
+				value = self.tick.endPoint
+			case DisplayPosition.Above:
+				value = self.tick.startPoint
+			case DisplayPosition.Center:
+				value = self.tick.endPoint / 2 + self.tick.startPoint / 2
+			case DisplayPosition.Left:
+				value = min(self.tick.startPoint, self.tick.endPoint, key=lambda p: p.x())
+			case DisplayPosition.Right:
+				value = max(self.tick.startPoint, self.tick.endPoint, key=lambda p: p.x())
+			case _:
+				raise ValueError(f'Invalid position: {position}')
+		# return self.transform().map(value)
+		return value
 
 	@property
-	def angleValue(self):
-		return self.tick.angle - self.gauge.startAngle + 90
+	def display_position(self) -> DisplayPosition:
+		if self.tick is self.surface.ticks[0]:
+			return self.group.position_trailing
+		elif self.tick is self.surface.ticks[-1]:
+			return self.group.position_leading
+		return self.group.position
 
-	@property
-	def string(self):
-		value = self.gauge.range.range/self.gauge.fullAngle*self.angleValue + self.gauge.range.min
-		valueClass = self.gauge.valueClass
-		if valueClass is float:
-			if value.is_integer():
-				value = int(value)
+	def setPath(self, path: QPainterPath):
+		self._shape = outline_path(path, self.group.offset_px)
+		self._debug_paint_shape = QPainterPath(self._shape)
+		super(GaugeTickText, self).setPath(path)
+
+	_shape: QPainterPath = QPainterPath()
+
+	def shape(self) -> QPainterPath:
+		return QPainterPath(self._shape)
+
+	def boundingRect(self) -> QRectF:
+		return self._shape.boundingRect()
+
+	def setPos(self, pos: QPointF):
+		"""This method is overridden to ensure that the text is not placed overlapping arc or tick."""
+		super(GaugeTickText, self).setPos(pos)
+		angle = self.tick.angle
+
+		direction = 1 if self.group.position in {DisplayPosition.Above, DisplayPosition.Outside} else -1
+		direction = 1
+
+		disp_pos = self.display_position
+		match disp_pos:
+			case DisplayPosition.Below:
+				move_direction = radialPoint(QPointF(0, 0), -1 * direction, angle)
+			case DisplayPosition.Above:
+				move_direction = radialPoint(QPointF(0, 0), 1 * direction, angle)
+			case DisplayPosition.Center:
+				move_direction = QPointF(0, 1 * direction)
+			case DisplayPosition.Left:
+				move_direction = QPointF(1 * direction, 0)
+			case DisplayPosition.Right:
+				move_direction = QPointF(-1 * direction, 0)
+			case _:
+				move_direction = radialPoint(QPointF(0, 0), 1 * direction, angle)
+
+		moved_count = 0
+
+		max_travel_distance = int(ceil(sqrt(sum(i**2 for i in self.limitRect.size().toTuple()))))
+		self.prepareGeometryChange()
+		# self._shape = outline_path(self.path(), self.group.offset_px)
+
+		arc = self.gauge.arc
+		arc_weight = arc.pen().width() / 2
+		if pos == self.tick.startPoint and self.tick.startPoint != self.tick.endPoint:
+			self.moveBy(*(move_direction * arc_weight).toTuple())
 		else:
-			if isinstance(valueClass, tuple):
-				value = valueClass[0](valueClass[1](value), valueClass[2](1))
-			else:
-				value = valueClass(value)
-				if valueClass is Direction:
-					return value.cardinal.twoLetter
-			if isinstance(value, Measurement):
-				value = value.decoratedInt
-		return str(value)
+			if arc_weight > abs(self.group.source.length_px):
+				diff = arc_weight - abs(self.group.source.length_px)
+				self.moveBy(*(move_direction * diff).toTuple())
 
-	def draw(self):
-		# font = self.font()
-		# font.setPointSizeF(self.tick.radius * 0.15)
-		# self.setFont(font)
-		self.setPlainText(self.string)
-		textRect = self.boundingRect()
+		# self.moveBy(*(move_direction * self.offset).toTuple())
 
-		textRect.moveCenter(self.position())
-		self.setTransformOriginPoint(0 + textRect.width()/2, textRect.height()/2)
-		self.setPos(textRect.topLeft())
+		def colliding(other_item) -> bool:
+			other_scene_path = other_item.mapToScene(other_item.shape())
+			own_scene_path = self.mapToScene(self.shape())
+			return own_scene_path.intersects(other_scene_path)
 
-	# self.setScale(1)
-	# while self.collidesWithItem(self.tick, Qt.IntersectsItemShape) and count < 10:
-	# # while self.collidesWithPath(self.tick.path(), Qt.IntersectsItemShape) and count < 50:
-	# 	self.shrinkFont()
-	# 	count += 1
-	# print()
+		while (self.collidesWithItem(arc) or self.collidesWithItem(self.tick)) and moved_count < max_travel_distance:
+			self.moveBy(move_direction.x(), move_direction.y())
+			moved_count += 1
 
-	def shape(self):
-		# return super(GaugeTickText, self).shape()
-		path = QPainterPath()
-		fm = QFontMetricsF(self.font())
-		rect = fm.tightBoundingRect(self.string)
-		rect.moveCenter(self.boundingRect().center().toPoint())
-		path.addRect(rect)
-		return path
+		# self.prepareGeometryChange()
+		# self._shape = outline_path(self.path(), 5)
 
-	def shrinkFont(self):
-		scale = self.scale()
-		self.setScale(scale - 0.05)
+	def refresh(self):
+		if (interval := self.group.interval) > 1 and self.tick.index % interval:
+			self.hide()
+			return
+		else:
+			self.show()
 
-	# def setScale(self, value: float):
-	# 	font = self.font()
-	# 	self._scale = value
-	# 	font.setPointSizeF(self.ax * value)
-	# 	self.setFont(font)
-	# 	self.update()
-
-	def update(self):
-		# scale = self.fontSizeCalc()
-		# font = self.font()
-		# font.setPointSizeF(self.ax * scale)
-		# self.setFont(font)
-		# self.draw()
-		if self.group.tickScale is not None:
-			# self.setScale(self.group.tickScale)
-			font = self.font()
-			font.setPointSizeF(self.ax*self.group.tickScale)
-			self.setFont(font)
-		self.draw()
 		if self.rotated:
-			angle = self.tick.angle + 90
-			if (-90 > angle and self._flipUpsideDown[0]) or (angle > 90 and self._flipUpsideDown[1]):
-				angle -= 180
-			self.setRotation(angle)
+			self.setRotation(self.tick.angle + 90)
+
+		super(GaugeTickText, self).refresh()
+		self.setPos(self.position())
+		if self.is_endcap:
+			self.setToolTip("Endcap")
+
+	@property
+	def allowedWidth(self) -> float:
+
+		radius = self.gauge.safe_radius if self.group.position == DisplayPosition.Below else self.gauge.exterior_safe_radius
+		interval = self.group.source.interval
+
+		arch_length_px = float(radius * self.gauge.fullAngle / 180 * pi)
+
+		interval_arch_coverage = float(interval / self.gauge.range.rounded_range)
+
+		return arch_length_px * interval_arch_coverage
 
 	@property
 	def rotated(self):
-		return self.gauge.rotatedLabels
-
-
-class GaugeTickTextGroup(QGraphicsItemGroup):
-	tickScale = 1.0
-
-	def __init__(self, ticks: TickGroup):
-		self._ticks = ticks
-		super(GaugeTickTextGroup, self).__init__()
-		for tick in self.ticks:
-			text = GaugeTickText(tick, self)
-			self.addToGroup(text)
-			self.addToGroup(text.rect)
-		self.setTickScale()
-
-	def setTickScale(self):
-		self.tickScale = 1.0
-		for item in self.childItems():
-			cols = [x for x in item.collidingItems(Qt.ItemSelectionMode.IntersectsItemShape) if isinstance(x, (item.__class__, Tick))]
-			while cols and self.tickScale > 0.3:
-				cols.append(item)
-				self.tickScale *= 0.9
-				for x in cols:
-					x.update()
-				cols = [x for x in item.collidingItems(Qt.ItemSelectionMode.IntersectsItemShape) if isinstance(x, (item.__class__, Tick))]
-			item.update()
-
-	def update(self):
-		if self.hasCollisions():
-			self.setTickScale()
-		for item in self.childItems():
-			item.update()
-		super(GaugeTickTextGroup, self).update()
-
-	def getFontSizeRatio(self):
-		scale = min([item.fontSizeCalc() for item in self.childItems() if isinstance(item, GaugeTickText)])
-		for item in self.childItems():
-			item.setScale(scale)
-		return scale
-
-	def collidesWithTicks(self) -> bool:
-		return any([item.collidesWithItem(item.tick) for item in self.childItems() if isinstance(item, GaugeTickText)])
-
-	def hasCollisions(self):
-		collidesWitTicks = self.collidesWithTicks()
-		if collidesWitTicks:
-			return True
-		for item in self.childItems():
-			if isinstance(item, GaugeTickText) and item.collidingNeighbors():
-				return True
-		return False
+		if self.tick is self.surface.ticks[0]:
+			return self.group.rotation_trailing
+		if self.tick is self.surface.ticks[-1]:
+			return self.group.rotation_leading
+		return self.group.rotation
 
 	@property
-	def ticks(self):
-		if self._ticks.gauge.fullAngle >= 360:
-			return [i for i in self._ticks.ticks if i.angle + 90 != 360]
-		return self._ticks.ticks
+	def alignment(self) -> Alignment:
+		if self.tick is self.surface.ticks[0]:
+			return Alignment(self.group.align_leading)
+		if self.tick is self.surface.ticks[-1]:
+			return Alignment(self.group.align_leading)
+		return self.group.alignment
+
+	@alignment.setter
+	def alignment(self, value: Alignment):
+		pass
+
+	def getTextScale(self, textRect: QRectF = None, limitRect: QRectF = None) -> float:
+		textRect = textRect or self._textRect or self._update_path()
+		limitRect = limitRect or self.limitRect
+
+		width = (textRect.width()) or 1
+		height = (textRect.height()) or 1
+
+		wScale = limitRect.width() / width
+		hScale = limitRect.height() / height
+		return round(self.scaleSelection(wScale, hScale), 4)
+
+	def scaleSelection(self, x, y):
+		return y
+
+	@property
+	def is_endcap(self) -> bool:
+		return self.tick is self.surface.ticks[0] or self.tick is self.surface.ticks[-1]
 
 
-class Gauge(Panel):
+class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
+
+	__defaults__ = {
+		'height': Size.Height(0.15, relative=True),
+		'position': DisplayPosition.Below,
+		'offset': Size.Height(0.1, relative=True),
+	}
+
+	font_scale: float = cached_property(lambda self: 1.0)
+	radius_scale: float = cached_property(lambda self: 1.0)
+
+	surface: 'TickSurface'
+	source: 'Graduations'
+
+	def shape(self) -> QPainterPath:
+		path = QPainterPath()
+		for label in self:
+			sub_path = self.surface.mapFromItem(label, label.path())
+			path.addPath(sub_path)
+		return path
+
+	@property
+	def fill_brush(self) -> Dict[Number, QBrush]:
+		values = self._ticks.tick_values
+		if (gradient := self.gradient) is not None:
+			return {value: QBrush(gradient.get_color_for_value(value).QColor) for value in values}
+		return {value: QBrush(self.color.QColor) for value in values}
+
+	@property
+	def text_size_relative_to(self) -> Length | Size.Height | float:
+		return self.gauge.radius
+
+	@property
+	def offset_relative_to(self) -> Length | Dimension:
+		return self.source.length_px or self.textSize_px
+
+	@StateProperty
+	def format_spec(self) -> str | dict:
+		pass
+
+	@format_spec.item_default
+	def format_spec(self) -> dict | str:
+		return {'showUnit': False, 'decorator': False}
+
+	@cached_property
+	def size_group(self) -> SizeGroup:
+		tick_type = self._ticks.tick_type.name.lower()
+		return self.gauge.localGroup.getAttrGroup(f'local.{tick_type}-textSize', matchAll=True)
+
+	def onAxisTransform(self, axis: Axis):
+		print('onAxisTransform', axis)
+
+	def onDataChange(self, axis: Axis):
+		print('onDataChange', axis)
+
+	def refresh(self):
+		for label in self:
+			label.refresh()
+
+	def __init__(self, graduations: Graduations, surface: 'TickSurface'):
+		self._gauge = graduations.gauge
+		self._ticks = graduations
+		super(GaugeTickTextGroup, self).__init__(graduations, surface)
+
+	@cached_property
+	def label_kwargs_generator(self) -> Iterator[dict[str, GaugeItem]]:
+		all_ticks = self.labeled_ticks
+		brush = self.fill_brush
+		for tick in sorted(all_ticks, key=lambda t: t.index):
+			yield dict(gauge=self._gauge, tick=tick, group=self, color=brush[tick.value])
+
+	def resize(self, newSize: int):
+
+		while newSize < (current_size := len(self)):
+			self.pop().delete()
+
+		if newSize > current_size:
+			clearCacheAttr(self, 'label_kwargs_generator')
+			for options in self.label_kwargs_generator:
+				self.append(GaugeTickText(**options))
+
+		# self._set_fill_brush(self.fill_brush)
+		self.sort(key=lambda l: l.tick.index)
+
+	def labelFactory(self, **kwargs) -> 'GaugeTickText':
+		return GaugeTickText(**{**next(self.label_kwargs_generator), **kwargs})
+
+	@StateProperty(key='position', allowNone=False, repr=True)
+	def position(self) -> DisplayPosition:
+		...
+
+	@position.setter
+	def position(self, value: DisplayPosition):
+		self._position = value
+
+	@StateProperty(key='enabled', allowNone=False, singleVal=True)
+	def enabled(self) -> bool:
+		return self._enabled
+
+	@enabled.setter
+	def enabled(self, value: bool):
+		self._enabled = value
+		self.resize(len(self.all_ticks) if value else 0)
+
+	@enabled.item_default
+	def enabled(self) -> bool:
+		match self._ticks.tick_type:
+			case Graduations.Type.Major:
+				return True
+			case Graduations.Type.Minor:
+				return False
+			case Graduations.Type.Micro:
+				return False
+
+	@StateProperty(key='rotate', allowNone=False, default=True, repr=True, after=refresh)
+	def rotation(self) -> bool:
+		return self._rotation
+
+	@rotation.setter
+	def rotation(self, value: bool):
+		self._rotation = value
+
+	def _get_max_label(self) -> GaugeTickText:
+		return max(self, key=lambda label: label.value)
+
+	@StateProperty(key='position-leading', dependancies={'position'}, after=refresh)
+	def position_leading(self) -> DisplayPosition:
+		return getattr(self, '_position_leading', Unset) or self.position
+
+	@position_leading.setter
+	def position_leading(self, value: DisplayPosition):
+		self._position_leading = value
+
+	@position_leading.decode
+	def position_leading(self, value: str) -> DisplayPosition:
+		return DisplayPosition[value]
+
+	@position_leading.condition(method='get')
+	def position_leading(self, value: DisplayPosition) -> bool:
+		return value is not self.position
+
+	@StateProperty(key='position-trailing', dependancies={'position'}, after=refresh)
+	def position_trailing(self) -> DisplayPosition:
+		return getattr(self, '_position_trailing', Unset) or self.position
+
+	@position_trailing.setter
+	def position_trailing(self, value: DisplayPosition):
+		self._position_trailing = value
+
+	@position_trailing.decode
+	def position_trailing(self, value: str) -> DisplayPosition:
+		return DisplayPosition[value]
+
+	@position_trailing.condition(method='get')
+	def position_trailing(self, value: DisplayPosition) -> bool:
+		return value is not self.position
+
+	@StateProperty(key='rotate-leading', allowNone=False, default=False)
+	def rotation_leading(self) -> bool:
+		return self._rotation_leading
+
+	@rotation_leading.setter
+	def rotation_leading(self, value: bool):
+		self._rotation_leading = value
+
+	@StateProperty(key='rotate-trailing', allowNone=False, default=False)
+	def rotation_trailing(self) -> bool:
+		return self._rotation_trailing
+
+	@rotation_trailing.setter
+	def rotation_trailing(self, value: bool):
+		self._rotation_trailing = value
+
+	def _align_trailing_auto(self) -> AlignmentFlag:
+		if self.rotation_trailing:
+			return self.alignment.combined
+		return AlignmentFlag.Center
+
+	@StateProperty(key='align-trailing')
+	def align_trailing(self) -> AlignmentFlag:
+		return getattr(self, '_align_trailing', Unset) or self._align_trailing_auto()
+
+	@align_trailing.setter
+	def align_trailing(self, value: AlignmentFlag):
+		self._align_trailing = value
+
+	@align_trailing.decode
+	def align_trailing(self, value: str) -> AlignmentFlag:
+		return AlignmentFlag[value]
+
+	@align_trailing.condition(method='get')
+	def align_trailing(self, value: AlignmentFlag) -> bool:
+		return value != self.alignment.combined
+
+	def _align_leading_auto(self) -> AlignmentFlag:
+		if self.rotation_leading:
+			return self.alignment.combined
+		return AlignmentFlag.Center
+
+	@StateProperty(key='align-leading')
+	def align_leading(self) -> AlignmentFlag:
+		return getattr(self, '_align_leading', Unset) or self._align_leading_auto()
+
+	@align_leading.setter
+	def align_leading(self, value: AlignmentFlag):
+		self._align_leading = value
+
+	@align_leading.decode
+	def align_leading(self, value: str) -> AlignmentFlag:
+		return AlignmentFlag[value]
+
+	@align_leading.condition(method='get')
+	def align_leading(self, value: AlignmentFlag) -> bool:
+		return value != self.alignment.combined
+
+	@property
+	def gauge(self) -> 'Gauge':
+		return self._gauge
+
+	@StateProperty(key='every', default=1, allowNone=False)
+	def interval(self) -> int:
+		return self._interval
+
+	@interval.setter
+	def interval(self, value: int):
+		self._interval = value
+
+	@property
+	def labeled_ticks(self) -> list[Tick]:
+		inverval = self.interval
+		return [i for i in self.surface.childItems() if type(i) is Tick and i.label is None and not i.index % inverval]
+
+	@property
+	def all_ticks(self) -> list[Tick]:
+		return [i for i in self.surface.childItems() if type(i) is Tick]
+
+	@defer
+	def build(self):
+		clearCacheAttr(self, 'label_kwargs_generator')
+		self.resize(len(self.all_ticks) if self.enabled else 0)
+
+	@defer
+	def rebuild(self):
+		if self.enabled:
+			self.build()
+		self.refresh()
+
+	@property
+	def alignmentAuto(self) -> Alignment:
+		if not self.rotation:
+			return Alignment(AlignmentFlag.Center)
+		match self.position:
+			case DisplayPosition.Top:
+				return Alignment(AlignmentFlag.BottomCenter)
+			case DisplayPosition.Bottom:
+				return Alignment(AlignmentFlag.TopCenter)
+			case DisplayPosition.Left:
+				return Alignment(AlignmentFlag.CenterLeft)
+			case DisplayPosition.Right:
+				return Alignment(AlignmentFlag.CenterRight)
+			case DisplayPosition.Center | DisplayPosition.Auto:
+				return Alignment(AlignmentFlag.Center)
+			case _:
+				return Alignment(AlignmentFlag.Center)
+
+
+def decode_measurement(value: str | int | float, default_type: Type[Measurement] = Unset) -> Measurement:
+	match value:
+		case str(v):
+			value = auto_wu(v)
+		case int(v) | float(v):
+			value = default_type(v)
+		case _:
+			raise TypeError(f'Invalid type for min: {type(value)}')
+	return value
+
+
+@DebugPaint
+class Gauge(Display):
+
+	_center_offset: QPointF | QPointF = QPointF(0, 0)
+
 	__value: float = 0.0
 	_needleAnimation: QPropertyAnimation
 	valueChanged = Signal(float)
+	arc: GaugeArc
 
-	ranges = {
-		'inhg':       MinMax(27, 31),
-		'mmhg':       MinMax(730, 790),
-		'mbar':       MinMax(970, 1060),
-		'f':          MinMax(0, 120),
-		'c':          MinMax(-20, 50),
-		'mph':        MinMax(0, 15),
-		'in/hr':      MinMax(0, 3),
-		'mm/hr':      MinMax(0, 75),
-		'v':          MinMax(2.5, 3.3),
-		'default':    MinMax(0, 100),
-		'lux':        MinMax(0, 100000),
-		'angle':      MinMax(0, 360),
-		'percentage': MinMax(0, 1)
-	}
+	class GaugeRange(StatefulGaugeItem):
+		_min: Measurement
+		_max: Measurement
+		valueClass: Type[Measurement]
 
-	startAngle = -120
-	endAngle = 120
-	microDivisions = Divisions(count=5, length=0.04, lineWidth=0.2)
-	minorDivisions = Divisions(count=2, length=0.075, lineWidth=0.4, subdivison=microDivisions)
-	majorDivisions = Divisions(count=None, length=0.1, lineWidth=0.6, subdivison=minorDivisions)
+		ranges = {
+			'inhg': MinMax(27, 31),
+			'mmhg': MinMax(730, 790),
+			'mbar': MinMax(970, 1060),
+			'f': MinMax(0, 120),
+			'c': MinMax(-20, 50),
+			'mph': MinMax(0, 15),
+			'in/hr': MinMax(0, 3),
+			'mm/hr': MinMax(0, 75),
+			'v': MinMax(2.5, 3.3),
+			'default': MinMax(0, 120),
+			'lux': MinMax(0, 100000),
+			'angle': MinMax(0, 360),
+			'percentage': MinMax(0, 1),
+
+			CategoryItem('*.humidity.*'):
+				MinMax(
+					Humidity(0),
+					Humidity(1)
+				),
+
+			CategoryItem('environment.wind.speed'):
+				MinMax(
+					Wind.MetersPerSecond(0),
+					Wind.MetersPerSecond(10)
+				),
+
+			CategoryItem('environment.wind.speed.gust'):
+				MinMax(
+					Wind.MetersPerSecond(0),
+					Wind.MetersPerSecond(35)
+				),
+
+		}
+
+		def __init__(self, gauge: 'Gauge', **state):
+			super().__init__(gauge, **state)
+			self.add_defaults_to_state(state)
+			self.state = state
+
+		@StateProperty(key='round-to', repr=True)
+		def round_to(self) -> int | float:
+			return self._round_to
+
+		@round_to.setter
+		def round_to(self, value: int | float):
+			self._round_to = value
+
+		@round_to.item_default
+		def round_to(self) -> int | float:
+			_value_range = abs(float(self.max - self.min))
+
+			if 99 < _value_range <= 350:
+				return 10
+
+			if log10(_value_range).is_integer():
+				return _value_range / 10
+
+			_power = int(log10(_value_range)) + 1
+
+			while _value_range % 10 ** _power > 0:
+				_power -= 1
+
+			# if 0.5 < _power < 1:
+			# 	return 1
+			return 10 ** round(_power)
+
+		@StateProperty(key='min', repr=True)
+		def min(self) -> Measurement:
+			return self._min
+
+		@min.setter
+		def min(self, value: Measurement):
+			self._reset_cache()
+			self._min = value
+
+		@min.decode
+		def min(self, value: str | int | float) -> Measurement:
+			return decode_measurement(value, self._gauge.valueClass)
+
+		@min.item_default
+		def min(self) -> Measurement:
+			_type = self._gauge.valueClass
+			try:
+				limits_min = _type(self.default_range.min)
+			except AttributeError:
+				limits_min = 0
+			if isinf(limits_min):
+				limits_min = 0
+			return _type(limits_min)
+
+		@min.condition(method='get')
+		def min(self, value: Measurement):
+			return value != type(value).typedLimits.min
+
+		@cached_property
+		def rounded_min(self) -> Measurement:
+			round_to = self.round_to
+			if not round_to:
+				return self.min
+			return self._gauge.valueClass(floor(float(self.min) / round_to) * round_to)
+
+		@StateProperty(key='max', repr=True)
+		def max(self) -> Measurement:
+			return self._max
+
+		@max.setter
+		def max(self, value: Measurement):
+			self._reset_cache()
+			self._max = value
+
+		@max.decode
+		def max(self, value: str | int | float) -> Measurement:
+			return decode_measurement(value, self._gauge.valueClass)
+
+		@max.item_default
+		def max(self) -> Measurement:
+			_type = self._gauge.valueClass
+			try:
+				limits_max = _type(self.default_range.max)
+			except AttributeError:
+				limits_max = 100
+			if isinf(limits_max):
+				limits_max = 100
+			return _type(limits_max)
+
+		@max.condition(method='get')
+		def max(self, value: Measurement):
+			return value != type(value).typedLimits.max
+
+		@cached_property
+		def _rounded_max(self) -> Measurement:
+			round_to = self.round_to
+			if not round_to:
+				return self.max
+			return self._gauge.valueClass(ceil(float(self.max) / round_to) * round_to)
+
+		@cached_property
+		def rounded_max(self):
+			rounded_range = self._rounded_range
+			if isinstance(rounded_range, int) or (isinstance(rounded_range, float) and rounded_range.is_integer()):
+				if is_prime(rounded_range):
+					return self._rounded_max + 1
+				return self._rounded_max
+
+			scaled_range = rounded_range
+			while scaled_range < 1:
+				scaled_range *= 10
+
+			scaled_amount = scaled_range / rounded_range
+
+			scaled_range = ceil(scaled_range)
+
+			if is_prime(scaled_range):
+				scaled_range += 1
+
+			scaled_range /= scaled_amount
+
+			return scaled_range
+
+		@property
+		def range(self) -> Measurement:
+			return abs(self.max - self.min)
+
+		@range.setter
+		def range(self, value: MinMax):
+			self.min, self.max = value
+
+		@cached_property
+		def rounded_range(self) -> Measurement:
+			return abs(self.rounded_max - self.rounded_min)
+
+		@cached_property
+		def _rounded_range(self) -> Measurement:
+			return abs(self._rounded_max - self.rounded_min)
+
+		@cached_property
+		def range_int(self) -> int:
+			return int(self.rounded_range)
+
+		@property
+		def default_range(self) -> MinMax:
+			_type = self._gauge.valueClass
+
+			try:
+				similar_keys = [
+					i for i in self.ranges
+					if not isinstance(i, str)
+						 and self._gauge.parent.key < i
+				]
+				similar_keys.sort(key=lambda i: len(i), reverse=True)
+				for key in similar_keys:
+					try:
+						return self.ranges[key]
+					except KeyError:
+						pass
+			except AttributeError:
+				pass
+
+			try:
+				if (preset_range := self.ranges.get(_type.unit.lower(), None)) is not None:
+					return preset_range
+			except AttributeError:
+				pass
+
+			try:
+				return MinMax(_type.typedLimits.min, _type.typedLimits.max)
+			except AttributeError:
+				pass
+
+			return MinMax(0, 100)
+
+		def _reset_cache(self):
+			clearCacheAttr(self, 'rounded_min', 'rounded_max', '_rounded_max', 'rounded_range', '_rounded_range', 'range_int')
+
+	grads: Graduations
 	needleLength = 1.0
 	needleWidth = 0.1
-	_range = MinMax(0, 100)
-	_valueClass: type = float
+	_valueClass: Type[GaugeValue] = float
 	_unit: Optional[str] = None
 	_scene: QGraphicsScene
 	_pen: QPen
 	_cache: list
-	rotatedLabels = True
+	__value: Union[Numeric, Measurement]
 
-	def __init__(self, *args, **kwargs):
-		self._cache = []
-		super(Gauge, self).__init__(*args, **kwargs)
-		# config = ConfigWindow(self)
-		self.__value: Union[Numeric, Measurement]
+	def _init_defaults_(self):
+		self._valueClass = self.parent.container.value_type
+		super()._init_defaults_()
+		self.__value = value = self._valueClass(0)
+
 		self._pen = QPen(self.defaultColor)
-		# self.setStyleSheet('background-color: black; color: white')
 
-		# self.scene().setStyleSheet('background - color: black; color: white')
+		self.major_ticks_surface = TickSurface(self, self.majorDivisions)
+		self.minor_ticks_surface = TickSurface(self, self.minorDivisions)
+		self.micro_ticks_surface = TickSurface(self, self.microDivisions)
+		self.hide()
+	# a = self.arc
+	# self.unitLabel = unit_label = GaugeUnit(self)
 
-		self.image.setParentItem(self)
+	@StateProperty(key='range', link=GaugeRange, allowNone=False, repr=True, sortOrder=-2)
+	def range(self) -> GaugeRange:
+		return self._range
 
-	# self.arc.moveBy(*offset.toTuple())
-	# self.r = self.scene().addRect(rect, QPen(Qt.red))
+	@range.setter
+	def range(self, value: GaugeRange):
+		self._range = value
 
-	# def mousePressEvent(self, event):
-	# 	print(self.itemAt(event.pos()))
-	# 	if self.items(event.pos()):
-	# 		event.ignore()
-	# 		super(Gauge, self).mousePressEvent(event)
+	@range.factory
+	def range(self) -> GaugeRange:
+		return Gauge.GaugeRange(self)
+
+	@range.after
+	def range(self):
+		self.rebuild()
+
+	@StateProperty(key='radius', default=Size.Height(1.0, relative=True), allowNone=False, repr=True, sortOrder=-1)
+	def _radius(self) -> Length | Size.Height:
+		return self._s_radius
+
+	@_radius.setter
+	def _radius(self, value: Length | Size.Height):
+		self._s_radius = value
+
+	@_radius.decode
+	def _radius(self, value: int | float | str) -> Length | Size.Height:
+		return parseSize(value, allowFloat=False, dimension=DimensionType.height)
+
+	@_radius.encode
+	def _radius(self, value: Length | Size.Height) -> str:
+		return str(value)
+
+	@StateProperty(key='arc', repr=True, dependancies={'radius'})
+	def arc(self) -> GaugeArc:
+		return self._arc
+
+	@arc.factory
+	def arc(self) -> GaugeArc:
+		return GaugeArc(self)
+
+	@arc.setter
+	def arc(self, value: GaugeArc):
+		self._arc = value
+
+	@StateProperty(key='needle', repr=True)
+	def needle(self) -> Needle:
+		return self._needle
+
+	@needle.factory
+	def needle(self) -> Needle:
+		return Needle(self)
+
+	@needle.setter
+	def needle(self, value: Needle):
+		self._needle = value
+
+	@StateProperty(key='major', repr=True, dependancies={'range'})
+	def majorDivisions(self) -> Graduations:
+		return self._majorDivisions
+
+	@majorDivisions.factory
+	def majorDivisions(self):
+		return Graduations(gauge=self, type=Graduations.Type.Major)
+
+	@majorDivisions.setter
+	def majorDivisions(self, value: Graduations):
+		self._majorDivisions = value
+
+	@StateProperty(key='minor', repr=True, dependancies={'majorDivisions'})
+	def minorDivisions(self) -> Graduations:
+		return self._minorDivisions
+
+	@minorDivisions.factory
+	def minorDivisions(self):
+		return Graduations(gauge=self, type=Graduations.Type.Minor)
+
+	@minorDivisions.setter
+	def minorDivisions(self, value: Graduations):
+		self._minorDivisions = value
+
+	@StateProperty(key='micro', repr=True, dependancies={'minorDivisions'})
+	def microDivisions(self) -> Graduations:
+		return self._microDivisions
+
+	@microDivisions.factory
+	def microDivisions(self):
+		return Graduations(gauge=self, type=Graduations.Type.Micro)
+
+	@microDivisions.setter
+	def microDivisions(self, value: Graduations):
+		self._microDivisions = value
+
+	@StateProperty(key='value-label', repr=True)
+	def valueLabel(self) -> GaugeValueLabel:
+		return self._valueLabel
+
+	@valueLabel.factory
+	def valueLabel(self) -> GaugeValueLabel:
+		label = GaugeValueLabel(self)
+		label.textBox.setParentItem(self)
+		label.hide()
+		return label
+
+	@valueLabel.setter
+	def valueLabel(self, value: GaugeValueLabel):
+		self._valueLabel = value
+
+	@StateProperty(key='unit-label', repr=True)
+	def unitLabel(self) -> GaugeUnit:
+		return self._unitLabel
+
+	@unitLabel.factory
+	def unitLabel(self) -> GaugeUnit:
+		label = GaugeUnit(self)
+		label.textBox.setParentItem(self)
+		label.hide()
+		label.textBox.hide()
+		return label
+
+	@unitLabel.setter
+	def unitLabel(self, value: GaugeUnit):
+		self._unitLabel = value
+
+	@property
+	def type(self):
+		return DisplayType.Gauge
+
+	@property
+	def displayType(self):
+		return DisplayType.Gauge
+
+	def __init__(self, parent, *args, **kwargs):
+		self.previousParent = None
+		super(Gauge, self).__init__(parent, *args, **kwargs)
+
+	@property
+	def startAngle(self) -> float:
+		return self.arc.startAngle
+
+	@property
+	def leading_angle(self) -> float:
+		"""Left side of the arc."""
+		angle = sorted([self.startAngle, self.endAngle])[1]
+		return angle % 360
+
+	@property
+	def endAngle(self) -> float:
+		return self.arc.endAngle
+
+	@property
+	def trailing_angle(self) -> float:
+		"""Right side of the arc."""
+		angle = sorted([self.startAngle, self.endAngle])[0]
+		return angle % 360
+
+	def convert_gradient(self, gradient: 'Gradient') -> QConicalGradient:
+		_type = self.valueClass
+		rounded_min = self._range.rounded_min
+		rounded_max = self._range.rounded_max
+		if not issubclass(gradient.itemCls.__item__, _type):
+			gradient = gradient.as_type(_type, rounded_min, rounded_max)
+		return gradient.toQConicalGradient(
+			start_angle=self.startAngle,
+			stop_angle=self.endAngle,
+			min_value=rounded_min,
+			max_value=rounded_max,
+		)
+
+	def map_gradient_to(self, gradient: 'Gradient', item: QGraphicsPathItem | Surface = None) -> QConicalGradient:
+		gradient = self.convert_gradient(gradient)
+		gradient.setCenter(self._center_transform.map(self.mapToItem(item or self, self.center)))
+		return gradient
+
+	def _afterSetState(self):
+		super()._afterSetState()
+
+		self.refresh()
+
+	_center_transform: QTransform = QTransform()
+
+	# def paint(self, painter, option, widget):
+	# 	super().paint(painter, option, widget)
+	#
+	# 	if issubclass(self.valueClass, Temperature):
+	# 		f = self.get_gradient_for(self)
 	# 	else:
-	# 		event.accept()
-	# 		super(Gauge, self).mousePressEvent(event)
+	# 		f = QColor(self.defaultColor)
+	#
+	# 	# shape = self._shape()
+	# 	shape = QPainterPath()
+	# 	rect = self.gaugeRect
+	# 	rect.moveCenter(self.center)
+	# 	shape.addEllipse(rect)
+	# 	addPath(painter, shape, fill=f)
+	# 	addCrosshair(painter, pos=self._shape().boundingRect().center())
+	# 	addCrosshair(painter, pos=option.rect.center())
 
-	# 	s = self.scene()
-	# 	x = self.items(event.pos())
-	# 	items = []
-	# 	for item in x:
-	# 		if isinstance(item, QGraphicsItemGroup):
-	# 			for i in item.childItems():
-	# 				i: QGraphicsItem
-	# 				if i.contains(event.pos()):
-	# 					items.append(i)
-	# 		else:
-	# 			items.append(item)
-	# 	# print([x for x in s.items() if x.contains(event.pos())])
+	def recenter(self):
 
-	def update(self):
-		try:
-			self.image.update()
-		except AttributeError:
-			pass
+		bounds_rect = self.rect()
 
-	# self.scene().update(self.rect())
+		self._update_shape()
+		own_shape = self.full_gauge_path
+		own_shape_rect = own_shape.boundingRect()
+
+		panel_center = bounds_rect.center()
+		shape_center = own_shape_rect.center()
+		center_offset = shape_center - panel_center
+
+		t = QTransform()
+
+		alignment = self.alignment
+
+		if alignment.vertical.isCenter:
+			t.translate(0, -center_offset.y())
+		else:
+			if own_shape_rect.height() >= bounds_rect.height():
+				t.translate(0, bounds_rect.center().y() - own_shape_rect.center().y())
+			elif own_shape_rect.top() <= bounds_rect.top():
+				t.translate(0, bounds_rect.top() - own_shape_rect.top())
+			elif own_shape_rect.bottom() >= bounds_rect.bottom():
+				t.translate(0, bounds_rect.bottom() - own_shape_rect.bottom())
+
+		if alignment.horizontal.isCenter:
+			t.translate(-center_offset.x(), 0)
+		else:
+			if own_shape_rect.width() >= bounds_rect.width():
+				t.translate(bounds_rect.center().x() - own_shape_rect.center().x(), 0)
+			elif own_shape_rect.left() <= bounds_rect.left():
+				t.translate(bounds_rect.left() - own_shape_rect.left(), 0)
+			elif own_shape_rect.right() >= bounds_rect.right():
+				t.translate(bounds_rect.right() - own_shape_rect.right(), 0)
+
+		self._center_transform = QTransform()
+
+		self.needle.setTransform(t, combine=False)
+		self.arc.setTransform(t, combine=False)
+
+		# TODO: After transformation is set, the labels are not moved
+		# correctly thus the 'refresh' method must be called after.
+		# This needs to be corrected
+		self.major_ticks_surface.setTransform(t, combine=False)
+		self.majorDivisions.labels.refresh()
+		self.minor_ticks_surface.setTransform(t, combine=False)
+		self.minorDivisions.labels.refresh()
+		self.micro_ticks_surface.setTransform(t, combine=False)
+		self.microDivisions.labels.refresh()
+
+		self.valueLabel.textBox.updateTransform(updatePath=False, reason='recenter')
+		self.valueLabel.textBox.setTransform(t, combine=True)
+
+		self.unitLabel.textBox.updateTransform(updatePath=False, reason='recenter')
+		self.unitLabel.textBox.setTransform(t, combine=True)
+
+		# Only update the unit label location if it's not relative to the value label
+		# if False and self.unitLabel:
+		# 	self.unitLabel.textBox.setTransform(t, combine=True)
+		# else:
+		# 	# existing_t = self.unitLabel.textBox.transform()
+		# 	self.unitLabel.textBox.setTransform(t, combine=True)
+
+	@defer
+	def rebuild(self):
+		self.major_ticks_surface.rebuild()
+		self.minor_ticks_surface.rebuild()
+		self.micro_ticks_surface.rebuild()
+
+		self.refresh()
+
+	def refresh(self):
+		self.arc.refresh()
+		self.needle.refresh()
+
+		self.major_ticks_surface.refresh()
+		self.minor_ticks_surface.refresh()
+		self.micro_ticks_surface.refresh()
+
+		self._update_shape()
+		self.valueLabel.textBox.refresh()
+		self.unitLabel.textBox.refresh()
+		self.recenter()
+
+	def _update_shape(self):
+		clearCacheAttr(self, 'value_text_box_area_rect', 'full_gauge_path')
+
+	def parentResized(self, arg: Union[QPointF, QSizeF, QRectF]):
+		super().parentResized(arg)
+		self.refresh()
+
+	_value: GaugeValue = 0
 
 	@property
-	def state(self):
-		return {}
-
-	@property
-	def value(self):
+	def value(self) -> GaugeValue:
 		return self._value
 
 	@value.setter
 	def value(self, value):
 		if isinstance(value, (int, float)):
-			self._value = value
 			self.valueClass = value
-			if isinstance(value, Measurement):
-				self.setUnit(value)
+			if float(value) == float(self._value):
+				return
+			self._value = value
+			self.valueLabel.textBox.refresh()
+			self.unitLabel.textBox.refresh()
+			self.needle.refresh()
+			self._update_shape()
 
-	@cached_property
-	def image(self):
-		group = QGraphicsItemGroup()
-		self.arc = GaugeArc(self)
-		self.ticks = TickGroup(self, self.majorDivisions)
-		self.labels = GaugeTickTextGroup(self.ticks)
-		self.needle = Needle(self)
-		self.unitLabel = GaugeUnit(self)
-		self.valueLabel = GaugeValueText(self)
-		group.addToGroup(self.arc)
-		group.addToGroup(self.ticks)
-		group.addToGroup(self.labels)
-		group.addToGroup(self.unitLabel)
-		group.addToGroup(self.valueLabel)
-		group.addToGroup(self.needle)
-		return group
-
-	@Property(float)
-	def _value(self):
-		return self.__value
-
-	@_value.setter
-	def _value(self, value: float):
-		value = max(self._range.min, min(self._range.max, value))
-		angle = (value - self._range.min)/self._range.range*self.fullAngle + self.startAngle
-		self.needle.setRotation(angle)
-		self.valueLabel.update()
-		self.__value = value
+	def value_to_angle(self, value: Numeric) -> Angle:
+		angle = float(value - self._range.rounded_min) / self._range.rounded_range * self.fullAngle + self.startAngle
+		return Angle(sorted((self.startAngle, angle, self.endAngle))[1])
 
 	@property
-	def valueClass(self):
+	def valueClass(self) -> Type[GaugeValue]:
 		return self._valueClass
 
 	@valueClass.setter
 	def valueClass(self, value):
-		if isinstance(value, type):
-			self._valueClass = value
-		else:
-			if hasattr(value, 'denominator'):
-				self._valueClass = (value.__class__, value.numerator.__class__, value.denominator.__class__)
-			else:
-				self._valueClass = value.__class__
-				if issubclass(self._valueClass, Angle):
-					self.startAngle = 0
-					self.endAngle = 360
-					self.range = self.ranges['angle']
+		if not isinstance(value, type):
+			value = type(value)
+		if value is self._valueClass:
+			return
 
-	def setValue(self, value: Union[Measurement, Numeric]):
-		if isinstance(value, Measurement):
-			self.valueClass = value
-			self.setUnit(value)
-		self.animateValue(self.__value, value)
+		self._valueClass = value
+
+		self.rebuild()
 
 	@Slot(float)
 	def updateSlot(self, value: Union[Measurement, Numeric]):
 		if isinstance(value, (int, float)):
 			self.valueClass = value
-			if isinstance(value, Measurement):
-				self.setUnit(value)
-			self.animateValue(self.__value, value)
 
 	def animateValue(self, start: Numeric, end: Numeric):
 		if self._needleAnimation.state() == QtCore.QAbstractAnimation.Running:
@@ -1423,286 +3393,121 @@ class Gauge(Panel):
 	def pen(self):
 		return self._pen
 
-	@Slot(str)
-	def setUnit(self, value: Union[str, Measurement]):
-		if isinstance(value, (Measurement, str)):
-			self.unit = value
+	@StateProperty(key='alignment', allowNone=False, after=rebuild, repr=True)
+	def alignment(self) -> Alignment:
+		return self._alignment
+
+	@alignment.setter
+	def alignment(self, value: Alignment):
+		self._alignment = value
+
+	@alignment.item_default
+	def alignment(self) -> Alignment:
+		return Alignment(AlignmentFlag.Center)
+
+	@alignment.decode
+	def alignment(self, value: str | int | tuple[AlignmentFlag, AlignmentFlag] | AlignmentFlag) -> Alignment:
+		if isinstance(value, (str, int)):
+			alignment = AlignmentFlag[value]
+		elif value is None:
+			alignment = AlignmentFlag.Center
+		elif isinstance(value, tuple):
+			return Alignment(*value)
 		else:
-			log.warning(f'{value} is not a valid string')
+			alignment = AlignmentFlag.Center
+		return Alignment(alignment)
 
-	@property
-	def unit(self):
-		return self._unit
+	def update_center_offset(self, offset: QPointF):
+		self._center_offset = offset
 
-	@unit.setter
-	def unit(self, value):
-		self._setUnit(value)
-		self.unitLabel.update()
+	@StateProperty(key='center_offset', allowNone=True, after=rebuild, repr=True)
+	def center_offset(self) -> QPointF:
+		return getattr(self, '_center_offset', QPointF())
 
-	def _setUnit(self, value):
-		if isinstance(value, Measurement):
-			self.range = self.getRange(value)
-		if isinstance(value, Measurement):
-			self._unit = value.unit
-		elif isinstance(value, str):
-			self._unit = value.strip()
+	@center_offset.setter
+	def center_offset(self, value: QPointF):
+		self._center_offset = value
 
-	@property
-	def range(self):
-		return self._range
-
-	@range.setter
-	def range(self, value):
-		if self._range != value:
-			self._range = value
-			self.rebuild()
-			self.update()
-
-	def getRange(self, value):
-		toTry = []
+	@center_offset.decode
+	def center_offset(self, value: str | Sequence | dict) -> QPointF:
 		if isinstance(value, str):
-			toTry.append(value)
-		elif isinstance(value, Measurement):
-			if not isinstance(value.type, tuple):
-				typeString = str(value.type).strip("<class' >").split('.')[-1].lower()
-				toTry.append(typeString)
-			toTry.extend([value.unit.lower(), value.localize.unit.lower()])
-		for attempt in toTry:
-			try:
-				return self.ranges[attempt]
-			except KeyError:
-				pass
+			value = value.split(',')
+
+		if len(value) != 2:
+			raise ValueError(f'center_offset must be a sequence or mapping of length 2, got {len(value)}')
+
+		if isinstance(value, dict):
+			x = parseX(value.get('x', 0), 0)
+			y = parseY(value.get('y', 0), 0)
 		else:
-			return self.ranges['default']
+			x = parseX(value[0], 0)
+			y = parseY(value[1], 0)
+		return QPointF(x, y)
 
-	def rebuild(self):
-		while self._cache:
-			delattr(self, self._cache.pop())
-		self.image.removeFromGroup(self.ticks)
-		self.scene().removeItem(self.ticks)
-		self.image.removeFromGroup(self.labels)
-		self.scene().removeItem(self.labels)
-		self.image.removeFromGroup(self.unitLabel)
-		self.scene().removeItem(self.unitLabel)
-		self.image.removeFromGroup(self.valueLabel)
-		self.scene().removeItem(self.valueLabel)
+	@center_offset.encode
+	def center_offset(self, value: QPointF) -> dict[str, float]:
+		return {'x': round(value.x(), 3), 'y': round(value.y(), 3)}
 
-		self.ticks = TickGroup(self, self.majorDivisions)
-		self.labels = GaugeTickTextGroup(self.ticks)
-		self.unitLabel = GaugeUnit(self)
-		self.valueLabel = GaugeValueText(self)
-		self.image.addToGroup(self.ticks)
-		self.image.addToGroup(self.labels)
-		self.image.addToGroup(self.unitLabel)
-		self.image.addToGroup(self.valueLabel)
+	@property
+	def center(self) -> QPointF:
 
-	@Slot(int)
-	def setMajorTicks(self, value: int):
-		self.majorDivisions.count = value
-		self.update()
+		p = self.alignment.multipliersAlt
+		rect = self.boundingRect()
+		x = rect.width() * p[0]
+		y = rect.height() * p[1]
+		p = QPointF(x, y)
 
-	@Slot(int)
-	def setMinorTicks(self, value: int):
-		self.minorDivisions.count = value
-		self.update()
+		p -= self._center_offset
+		margin_rect = self.marginRect
+		# keep p within the bounding rect
+		p.setX(sorted((margin_rect.left(), p.x(), margin_rect.right()))[1])
+		p.setY(sorted((margin_rect.top(), p.y(), margin_rect.bottom()))[1])
 
-	@Slot(int)
-	def setMicroTicks(self, value):
-		self.microDivisions.count = value
-		self.update()
+		return p
 
-	@Slot(bool)
-	def showLabels(self, value):
-		self.labels.setVisible(value)
+	@property
+	def scene_center(self) -> QPointF:
+		return self.mapToScene(self.center)
 
-	@Slot(bool)
-	def showArc(self, value):
-		self.arc.setVisible(value)
-
-	@cached_property
+	@property
 	def baseWidth(self):
-		self._cache.append('baseWidth')
-		return sqrt(self.height() ** 2 + self.width() ** 2)*0.008
+		return sqrt(self.height() ** 2 + self.width() ** 2) * INVERSE_GOLDEN_RATIO * 0.01
 
-	@cached_property
+	@property
+	def radius_max(self):
+		return max(min(self.height(), self.width()) / 2 - self.baseWidth, 1)
+
+	@property
 	def radius(self):
-		self._cache.append('radius')
-		return min(self.height(), self.width())/2 - 10
+		return min(self.radius_max, self._radius)
 
-	@cached_property
+	@property
+	def radius(self) -> float:
+		radius_max = self.radius_max
+		return min(size_px(self._radius, radius_max), radius_max * 2)
+
+	@property
 	def gaugeRect(self) -> QRectF:
-		self._cache.append('gaugeRect')
-		f = QRectF(0.0, 0.0, self.radius*2, self.radius*2)
+		f = QRectF(0.0, 0.0, self.radius * 2, self.radius * 2)
 		f.moveCenter(self.rect().center())
 		return f
 
-	@cached_property
+	@property
 	def fullAngle(self):
-		self._cache.append('fullAngle')
-		return self.endAngle + -self.startAngle
+		return abs(self.endAngle + -self.startAngle)
 
 	@property
 	def defaultColor(self):
-		# return Qt.white
-		return self.scene().palette().text().color()
+		return Color.text.QColor
 
-	@cached_property
+	@property
 	def tickFont(self):
-		self._cache.append('tickFont')
-		font = QFont(defaultFont)
-		font.setPixelSize(max(self.radius*.1, 18))
+		font = QFont()
+		font.setPointSizeF(max(self.radius * .1, 18))
 		return font
 
-	def draw(self):
-		paint = QPainter(self)
-		paint.setRenderHint(QPainter.HighQualityAntialiasing)
-		paint.setRenderHint(QPainter.Antialiasing)
-		cx, cy = QPointF(self.rect().center()).toTuple()
-		radius = self.radius
-		needleLength = self.needleLength*radius
-		needleWidth = self.needleWidth*radius
-
-		penWidth = sqrt(self.height() ** 2 + self.width() ** 2)*0.008
-		brush = QBrush(self.defaultColor)
-		paint.pen().setColor(self.defaultColor)
-
-		fullAngle = self.endAngle + -self.startAngle
-
-		# Gauge divisions setup
-		major = self.majorDivisions
-		minor = self.minorDivisions
-		micro = self.microDivisions
-
-		# Set spacing for divisions
-		count = major.count
-		scale = 1
-		if count is None:
-			count = self._range.range
-			while count > 10:
-				count /= 10
-				scale *= 10
-			count = int(ceil(count))
-
-		majorSpacing = fullAngle/count
-		minorSpacing = majorSpacing/minor.count
-		microSpacing = minorSpacing/micro.count
-
-		start = self.startAngle - 90
-
-		majorLength = major.length*radius
-		minorLength = minor.length*radius
-		microLength = micro.length*radius
-
-		arcPen = QPen(self.defaultColor)
-		arcPen.setWidthF(penWidth)
-		arcPen.setCapStyle(Qt.FlatCap)
-
-		majorPen = QPen(self.defaultColor, major.lineWidth*penWidth)
-		majorPen.setCapStyle(Qt.RoundCap)
-
-		minorPen = QPen(self.defaultColor, minor.lineWidth*penWidth)
-		minorPen.setCapStyle(Qt.RoundCap)
-
-		microPen = QPen(self.defaultColor, micro.lineWidth*penWidth)
-		microPen.setCapStyle(Qt.RoundCap)
-
-		needlePen = QPen(self.defaultColor, 1)
-		needlePen.setCapStyle(Qt.RoundCap)
-		needlePen.setJoinStyle(Qt.RoundJoin)
-
-		# Draw gauge arc
-		paint.setPen(arcPen)
-		arcPath = QPainterPath()
-		arcPath.arcMoveTo(self.gaugeRect, (self.startAngle + 90))
-		arcPath.arcTo(self.gaugeRect, (self.startAngle + 90), fullAngle)
-
-		# Center drawing first
-		translate = list((arcPath.boundingRect().center() - self.rect().center()).toTuple())
-		translate[1] *= -1
-		paint.translate(*translate)
-
-		# Draw
-		paint.drawPath(arcPath)
-
-		gaugePath = QPainterPath()
-		majorTicksPath = QPainterPath()
-		minorTicksPath = QPainterPath()
-		microTicksPath = QPainterPath()
-
-		majorOffset = penWidth/2 - (major.lineWidth/2*penWidth)
-		minorOffset = penWidth/2 - (minor.lineWidth/2*penWidth)
-		microOffset = penWidth/2 - (micro.lineWidth/2*penWidth)
-		paint.setFont(self.tickFont)
-
-		def drawTick(i, path, length, offset, withValue: bool = False):
-			radI = radians(i)
-			cosI, sinI = cos(radI), sin(radI)
-
-			x1 = cx + (radius + offset)*cosI
-			y1 = cy + (radius + offset)*sinI
-			x2 = cx + (radius - length)*cosI
-			y2 = cy + (radius - length)*sinI
-			p1 = QPointF(x1, y1)
-			p2 = QPointF(x2, y2)
-			path.moveTo(p1)
-			path.lineTo(p2)
-
-			# add value text
-			if withValue:
-				x3 = cx + (radius - length*2)*cosI
-				y3 = cy + (radius - length*2)*sinI
-				p3 = QPointF(x3, y3)
-				textValue = (i - start)/fullAngle*count*scale
-				text = str(int(textValue))
-
-				textRect = estimateTextSize(self.tickFont, text)
-				textRect.moveCenter(p3)
-				paint.drawText(textRect, Qt.AlignCenter, text)
-
-		# Draw first and last marker
-		drawTick(start, majorTicksPath, majorLength, majorOffset, True)
-		drawTick(start + count*majorSpacing, majorTicksPath, majorLength, majorOffset, True)
-
-		i = start + count*majorSpacing
-		paint.setPen(majorPen)
-		paint.drawPath(majorTicksPath)
-		paint.setPen(minorPen)
-		paint.drawPath(minorTicksPath)
-		paint.setPen(microPen)
-		paint.drawPath(microTicksPath)
-
-		# Draw Needle
-
-		# Rotate drawing angle
-		paint.translate(cx, cy)
-		value = self.value - self._range.min
-		print(f' {value}')
-		if value >= 0:
-			rotation = value/count/scale*fullAngle + self.startAngle
-		else:
-			rotation = self.startAngle
-		paint.rotate(rotation)
-		paint.translate(-cx, -cy)
-
-		middle = QPointF(cx, cy - radius)
-		left = QPointF(cx - needleWidth/2, cy)
-		right = QPointF(cx + needleWidth/2, cy)
-		arcRect = QRectF(left, QSizeF(needleWidth, needleWidth))
-
-		needlePath = QPainterPath()
-		needlePath.moveTo(right)
-		needlePath.lineTo(middle)
-		needlePath.lineTo(left)
-		needlePath.arcTo(arcRect, -180, 180)
-		needlePath.closeSubpath()
-
-		paint.setPen(needlePen)
-		paint.setBrush(brush)
-		paint.drawPath(needlePath)
-		paint.translate(cx, cy)
-		paint.rotate(-rotation)
-
-		paint.end()
+	def setRect(self, *args, **kwargs):
+		super().setRect(*args, **kwargs)
 
 	@property
 	def duration(self):
@@ -1723,198 +3528,218 @@ class Gauge(Panel):
 		else:
 			print('Not a valid easing curve')
 
+	@property
+	def arc_length(self) -> float:
+		radius_px = self.radius
+		return float(radius_px * self.fullAngle / 180 * pi)
 
-class AirPressureGauge(Gauge):
+	def value_to_angle(self, value: Numeric) -> float:
+		_range = self._range
+		s = self.startAngle
+		e = self.endAngle
+		angle = float(value - _range.rounded_min) / _range.rounded_range * self.fullAngle + s
+		return sorted((s, angle, e))[1]
 
-	def __init__(self, parent, pressureType: Union[str, Measurement, None] = None):
-		if pressureType is not None:
-			self.range = self.getRange(pressureType)
-		super(AirPressureGauge, self).__init__(parent)
+	def value_to_angle_degrees(
+		self,
+		value: Numeric | Percentage | RelativeFloat | Length,
+		relative_angle: Angle = None,
+		relative_px: float = None,
+		radius_px: float = None,
+	) -> Angle:
+		radius = radius_px or self.radius
+		arc_length_px = float(radius * self.fullAngle / 180 * pi)
 
-	def getRange(self, value):
-		toTry = []
-		if isinstance(value, str):
-			toTry.append(value)
-		elif isinstance(value, Measurement):
-			toTry.extend([value.unit.lower(), value.localize.unit.lower()])
-		for attempt in toTry:
-			try:
-				return self.ranges[attempt]
-			except KeyError:
-				pass
+		if isinstance(value, Percentage):
+			if relative_angle is not None:
+				return Angle(relative_angle * value)
+			elif relative_px is not None:
+				return Angle(relative_px * value / arc_length_px * self.fullAngle)
+		# elif issubclass(self.valueClass, Percentage):
+		# 	value = float(value)
+
+		if isinstance(value, (int, float, self.valueClass)):
+			if isinstance(value, Percentage):
+				value = float(value)
+			value_arc_coverage = float(value / self._range.rounded_range)
+			value_deg = value_arc_coverage * self.fullAngle
+			return Angle(value_deg)
+
+		elif isinstance(value, Percentage | RelativeFloat):
+			# TODO: Add support for custom radius
+			return Angle(value * relative_angle or self.fullAngle)
+		elif isinstance(value, Length):
+			value_px = size_px(value, relative_px or self.gauge.baseWidth)
+			value = value_px / radius * 180 / pi
+			return Angle(value)
+		elif isinstance(value, Angle):
+			return value
+
+	def angle_degrees_to_value(
+		self,
+		angle: Angle | float | int,
+		relative_angle: Angle = None,
+		relative_px: float = None,
+		radius_px: float = None,
+	) -> float:
+
+		radius = radius_px or self.radius
+		arc_length_px = float(radius * self.fullAngle / 180 * pi)
+
+		if isinstance(angle, Angle):
+			angle = float(angle)
+		elif isinstance(angle, (int, float)):
+			angle = float(angle)
 		else:
-			return self.ranges['mbar']
+			raise TypeError(f'Invalid angle type: {type(angle)}')
 
-	def _setUnit(self, value):
-		if isinstance(value, Measurement):
-			self.range = self.getRange(value)
-		super(AirPressureGauge, self)._setUnit(value)
-		self.update()
+		if isinstance(angle, (int, float)):
+			if relative_angle is not None:
+				angle = angle / float(relative_angle)
+			elif relative_px is not None:
+				angle = angle / relative_px * arc_length_px
 
+			return angle / self.fullAngle * self._range.rounded_range
 
-class ConfigWindow(QWidget):
-	types = {'checkbox': QCheckBox}
-
-	def __init__(self, parent):
-		super(ConfigWindow, self).__init__(parent)
-		self.resize(300, 300)
-		self.verticalLayout = QVBoxLayout(self)
-		self.formLayout = QFormLayout(self)
-		self.verticalLayout.addLayout(self.formLayout)
-		self.build()
-		self.show()
-
-	def build(self):
-		parent = self.parent()
-		cnf = [
-			{
-				'label': 'Show Labels',
-				'type':  'checkbox',
-				'slot':  'showLabels'
-			},
-			{
-				'label': 'Show Arc',
-				'type':  'checkbox',
-				'slot':  'showArc'
-			}
-		]
-
-		for item in cnf:
-			self.addItem(item)
-
-	def addItem(self, item: dict):
-		label = QLabel(self, text=item['label'])
-		value: QCheckBox = self.types[item['type']]()
-		index = self.formLayout.count()
-		self.formLayout.setWidget(index, QFormLayout.LabelRole, label)
-		self.formLayout.setWidget(index, QFormLayout.FieldRole, value)
-		value.stateChanged.connect(getattr(self.parent(), item['slot']))
-
-
-class WindVein(Gauge):
-	__value: float = 0.0
-	_needleAnimation: QPropertyAnimation
-	valueChanged = Signal(float)
-
-	startAngle = 0
-	endAngle = 360
-	microDivisions = Divisions(count=5, length=0.04, lineWidth=0.2)
-	minorDivisions = Divisions(count=2, length=0.075, lineWidth=0.4, subdivison=microDivisions)
-	majorDivisions = Divisions(count=8, length=0.1, lineWidth=0.6, subdivison=minorDivisions)
-	needleLength = 1.0
-	needleWidth = 0.1
-	_range = MinMax(0, 360)
-	_valueClass: type = Direction
-	_unit = None
-	rotatedLabels = False
-
-	def __init__(self, *args, **kwargs):
-		self._cache = []
-		super(Gauge, self).__init__(*args, **kwargs)
-		# config = ConfigWindow(self)
-		self.setAcceptDrops(False)
-		self._direction = 0.0
-		self.setRenderHint(QPainter.HighQualityAntialiasing)
-		self._scene = QGraphicsScene()
-		self._pen = QPen(self.defaultColor)
-		self.setAttribute(Qt.WA_TranslucentBackground)
-		# self.setStyleSheet('background-color: black; color: white')
-
-		self.setScene(self._scene)
-		# self.scene().setStyleSheet('background - color: black; color: white')
-
-		self.scene().addItem(self.image)
-		self.image.setFlag(QGraphicsItem.ItemIsMovable, False)
-		self.image.removeFromGroup(self.speedLabel)
-		self.directionLabel = CustomText(self)
-		self.directionLabel.moveBy(0, -10)
-		self.scene().addItem(self.directionLabel)
-
-		self.directionAnimation = QPropertyAnimation(self, b'direction')
-		self.directionAnimation.setDuration(1000)
-		self.directionAnimation.setEasingCurve(QEasingCurve.InOutQuad)
-		self.directionAnimation.setStartValue(0)
-		self.directionAnimation.setEndValue(360)
-
-	# self._needleAnimation = NeedleAnimation(self, b'_value')
-
-	@Property(float)
-	def direction(self):
-		return self._direction
-
-	@direction.setter
-	def direction(self, value):
-		self._direction = value
-		self.needle.setRotation(value)
-
-	@Slot(float)
-	def setDirection(self, value):
-		self.needle.setRotation(value)
-
-	# print('setDirection', value, self._direction)
-	# self.directionAnimation.setStartValue(self._direction)
-	# self.directionAnimation.setEndValue(value)
-	# self.directionAnimation.start()
-
-	def wheelEvent(self, event):
-		if event.angleDelta().y() > 0:
-			self.speedLabel.fontScale *= 1.05
-			self.speedLabel.update()
-		else:
-			self.speedLabel.fontScale *= 0.95
-			self.speedLabel.update()
-
-	def resizeEvent(self, event):
-		while self._cache:
-			delattr(self, self._cache.pop())
-
-		rect: QRectF = self.needle.boundingRect()
-		offset = (self.rect().center().y() - rect.center().y())
-		# rect.moveCenter(QPointF(self.rect().center().x(), self.rect().center().y() - offset))
-		# self.speedLabel.resize()
-		# rect.translate(0, -offset)
-		n = self.needle
-		s = self.speedLabel
-		# s.setPos(0, 0)
-		# self.scene().setSceneRect(rect)
-		# if self.isVisible() and sum(n.boundingRect().size().toTuple()):
-		# 	while not s.collidesWithItem(self.safeSpace) and s.y() < self.radius:
-		# 		ps = s.pos()
-		# 		p = QPointF(s.pos().x(), s.pos().y() + s.boundingRect().height() / 4)
-		# 		s.setPos(p)
-		self.scene().setSceneRect(rect)
-		self.pen.setWidthF(self.baseWidth)
-		self.update()
-		super(Gauge, self).resizeEvent(event)
-
-	@cached_property
-	def image(self) -> QGraphicsItemGroup:
-		self.items()
-		group = QGraphicsItemGroup()
-		self.arc = GaugeArc(self)
-		# self.ticks = TickGroup(self, self.majorDivisions)
-		# self.labels = GaugeTickTextGroup(self.ticks)
-		self.needle = Arrow(self)
-		self.needle.setFlag(QGraphicsItem.ItemIsMovable, True)
-		path = QPainterPath()
-		path.addEllipse(QPoint(0, 0), self.radius - 10, self.radius - 10)
-		# self.unitLabel = GaugeUnit(self)
-		# self.valueLabel = CustomText(self)
-		self.speedLabel = CustomText(self)
-		# group.addToGroup(self.arc)
-		# group.addToGroup(self.ticks)
-		# group.addToGroup(self.labels)
-		# group.addToGroup(self.unitLabel)
-		# group.addToGroup(self.valueLabel)
-		group.addToGroup(self.needle)
-		# group.addToGroup(self.valueLabel)
-		group.addToGroup(self.speedLabel)
-		return group
+	def interval_to_count_float(self, interval: GaugeValue) -> float:
+		return self._range.rounded_range / interval
 
 	@property
-	def safeZone(self):
-		return self.needle.safeZone
+	def safe_radius(self):
+		major: Graduations = self.majorDivisions
+		minor: Graduations = self.minorDivisions
+		micro: Graduations = self.microDivisions
 
-	@Slot(float)
-	def updateSlot(self, value: float):
-		self.speedLabel.text = str(value.withoutUnit)
+		arc_line_width = self.arc.pen().widthF()
+
+		trim = max(arc_line_width / 2, 0)
+
+		if major.enabled and major.position in {DisplayPosition.Below, DisplayPosition.Inside}:
+			trim = max(major.length_px + major.width_px / 2, trim)
+		if minor.enabled and minor.position in {DisplayPosition.Below, DisplayPosition.Inside}:
+			trim = max(minor.length_px + minor.width_px / 2, trim)
+		if micro.enabled and micro.position in {DisplayPosition.Below, DisplayPosition.Inside}:
+			trim = max(micro.length_px + micro.width_px / 2, trim)
+
+		return self.radius - trim
+
+	@property
+	def exterior_safe_radius(self):
+		major: Graduations = self.majorDivisions
+		minor: Graduations = self.minorDivisions
+		micro: Graduations = self.microDivisions
+
+		arc_line_width = self.arc.pen().widthF()
+
+		extend = max(arc_line_width / 2, 0)
+
+		if major.enabled and major.position in {DisplayPosition.Above, DisplayPosition.Outside}:
+			extend = max(major.length_px + major.width_px / 2, extend)
+		if minor.enabled and minor.position in {DisplayPosition.Above, DisplayPosition.Outside}:
+			extend = max(minor.length_px + minor.width_px / 2, extend)
+		if micro.enabled and micro.position in {DisplayPosition.Above, DisplayPosition.Outside}:
+			extend = max(micro.length_px + micro.width_px / 2, extend)
+
+		return self.radius + extend
+
+	@property
+	def value_safe_radius(self):
+
+		major: Graduations = self.majorDivisions
+		minor: Graduations = self.minorDivisions
+		micro: Graduations = self.microDivisions
+
+		trim = 0
+
+		safe_radius = self.safe_radius
+		if major.labels.enabled:
+			labels: GaugeTickTextGroup = major.labels
+			trim = max(labels.textSize_px + labels.offset_px, trim)
+		if minor.labels.enabled:
+			labels: GaugeTickTextGroup = minor.labels
+			trim = max(labels.textSize_px + labels.offset_px, trim)
+		if micro.labels.enabled:
+			labels: GaugeTickTextGroup = micro.labels
+			trim = max(labels.textSize_px + labels.offset_px, trim)
+
+		return safe_radius - trim
+
+	@property
+	def safe_area(self) -> QPainterPath:
+		return self.arc.mapToParent(self.arc.shape())
+
+	def _debug_paint(self, painter: QPainter, option, widget):
+
+		def add_gradient():
+			painter.save()
+			if (gradient := self.arc.gradient) is not None:
+				painter.setBrush(self.map_gradient_to(gradient, self))
+				painter.drawRect(option.rect)
+			painter.restore()
+
+		self._normal_paint(painter, option, widget)
+	# addPath(painter, self.mapFromItem(self.arc, self.arc.shape(z)), type(self)._debug_paint_color, fill=type(self)._debug_paint_color)
+	# f = QRadialGradient(rainbow)
+	# f.setRadius(max(self.boundingRect().width(), self.boundingRect().height()) / 2)
+	# f.setCenter(self.center)
+	# f.setFocalPoint(self.center)
+	# f.setCoordinateMode(QGradient.CoordinateMode.LogicalMode)
+	# p = self._shape()
+	# # addRect(painter, self.full_gauge_rect(), fill=f, opacity=.2)
+	# p = outline_path(p, 5)
+	# # self._normal_paint(painter, option, widget)
+	# addPath(painter, p, fill=f)
+	# addRect(painter, self.rect(), color=Qt.cyan, offset=-2, width=3)
+
+	def _gauge_path(self) -> QPainterPath:
+		"""Returns the path of the gauge, including the arc, ticks, and tick labels"""
+
+		gauge_path = QPainterPath()
+		gauge_path.setFillRule(Qt.WindingFill)
+
+		# add arc
+		gauge_path.addPath(self.mapFromItem(self.arc, self.arc.shape()))
+
+		# add major ticks
+		try:
+			gauge_path.addPath(self.mapFromItem(self.major_ticks_surface, self.major_ticks_surface.tick_path))
+
+			# add major tick labels
+			if self.majorDivisions.labels.enabled:
+				gauge_path.addPath(self.mapFromItem(self.major_ticks_surface, self.majorDivisions.labels.shape()))
+		except AttributeError:
+			pass
+
+		# add minor ticks
+		try:
+			gauge_path.addPath(self.mapFromItem(self.minor_ticks_surface, self.minor_ticks_surface.tick_path))
+
+			# add minor tick labels
+			if self.minorDivisions.labels.enabled:
+				gauge_path.addPath(self.mapFromItem(self.minor_ticks_surface, self.minorDivisions.labels.shape()))
+		except AttributeError:
+			pass
+
+		# add micro ticks
+		try:
+			gauge_path.addPath(self.mapFromItem(self.micro_ticks_surface, self.micro_ticks_surface.tick_path))
+
+			# add micro tick labels
+			if self.microDivisions.labels.enabled:
+				gauge_path.addPath(self.mapFromItem(self.micro_ticks_surface, self.microDivisions.labels.shape()))
+		except AttributeError:
+			pass
+
+		return gauge_path
+
+	@cached_property
+	def full_gauge_path(self) -> QPainterPath:
+		path = self._gauge_path()
+		path.setFillRule(Qt.WindingFill)
+		path.addPath(self.mapFromItem(self.valueLabel.textBox, self.valueLabel.textBox.shape()))
+		path.addPath(self.mapFromItem(self.unitLabel.textBox, self.unitLabel.textBox.shape()))
+		# path.addPath(self.mapFromItem(self.needle, self.needle.shape()))
+		return path.simplified()
+
+	def full_gauge_rect(self) -> QRectF:
+		return self.full_gauge_path.boundingRect()

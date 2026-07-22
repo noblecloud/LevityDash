@@ -1,18 +1,21 @@
+from PySide6 import QtCore
 from abc import abstractmethod
-from collections.abc import MutableSet, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Sequence
 from difflib import SequenceMatcher
-from functools import cached_property, lru_cache, partial, wraps
+from functools import cached_property, lru_cache, partial, wraps, reduce
+from gc import get_referrers
 from inspect import getfullargspec
 from multiprocessing.pool import ThreadPool
+from rich.repr import rich_repr
 from threading import Thread
 from traceback import format_exc, print_exc
 
-from gc import get_referrers
-from PySide2 import QtCore
-from rich.repr import rich_repr
-
 from LevityDash import LevityDashboard
+from statekit import ActionPool, ActionPoolItemInstance, block_pools, defer, SubActionPool
+from qolkit import (
+	clearCacheAttr, DeepChainMap, DotDict, get, guarded_cached_property, IgnoreOr, Index, Infix, OrderedSet,
+	OrUnset, recursiveRemove, remove_empty_dicts, sortDict, Unset, UnsetKwarg,
+)
 
 try:
 	from locale import setlocale, LC_ALL, nl_langinfo, RADIXCHAR, THOUSEP
@@ -35,26 +38,26 @@ from datetime import date, datetime, timedelta, timezone
 
 import numpy as np
 from dateutil.parser import parse as dateParser
-from math import inf
+from math import inf, sqrt, degrees, atan2
 from numpy import cos, radians, sin
-from PySide2.QtGui import QPainterPath, QVector2D
+from PySide6.QtGui import QPainterPath, QVector2D
 from pytz import utc
 from WeatherUnits import Measurement
 
 from time import time
 from typing import (
-	Any, Awaitable, Callable, Coroutine, ForwardRef, Generic, Hashable, Iterable, List, Mapping, NamedTuple,
+	Any, Awaitable, Callable, Coroutine, ForwardRef, Generic, Hashable, Iterable, List, Mapping,
 	Optional,
 	Tuple,
 	Type,
-	TypeAlias, TypeVar, Union, Set, Final, ClassVar, Dict, Protocol, runtime_checkable, get_args
+	TypeAlias, TypeVar, Union, Set, ClassVar, Dict, Protocol, runtime_checkable,
 )
-from types import MethodType, NoneType, GeneratorType, FunctionType, UnionType
+from types import MethodType, NoneType, GeneratorType, FunctionType
 
-from enum import Enum, EnumMeta, IntFlag
+from enum import Enum, EnumMeta, IntFlag, EnumType
 
-from PySide2.QtCore import QObject, QPointF, QRectF, QSizeF, QThread, QTimer, Signal, Qt, Slot
-from PySide2.QtWidgets import QApplication, QGraphicsRectItem, QGraphicsItem
+from PySide6.QtCore import QObject, QPointF, QRectF, QSizeF, QThread, QTimer, Signal, Qt, Slot
+from PySide6.QtWidgets import QApplication, QGraphicsRectItem, QGraphicsItem
 
 from LevityDash.lib.utils import utilLog
 
@@ -64,6 +67,14 @@ numberRegex = re.compile(fr"""
 	([\d{GROUPING_CHAR}]+)?
 	([{RADIX_CHAR}]\d+)?)
 	""", re.VERBOSE)
+
+golden = GOLDEN_RATIO = (1 + sqrt(5))/2
+inverse_golden = INVERSE_GOLDEN_RATIO = 1/golden
+
+# Re-exported so existing `from ...utils(.shared) import classproperty` sites
+# keep working; defined in a dependency-free leaf module so it can also be
+# imported during very early init (config.py) without the utils/log chain.
+from LevityDash.lib._descriptors import classproperty
 
 
 def simpleRequest(url: str) -> dict:
@@ -77,6 +88,10 @@ def simpleRequest(url: str) -> dict:
 T_ = TypeVar('T_')
 Self: TypeAlias = TypeVar('Self')
 
+__pdoc__ = {
+	'_Panel': False
+}
+
 
 class _Panel(QGraphicsRectItem):
 
@@ -87,17 +102,81 @@ class _Panel(QGraphicsRectItem):
 		return self.rect().size()
 
 
-class ClosestMatchEnumMeta(EnumMeta):
-	_allMembersUnique: bool
+class ClosestMatchEnumMeta(EnumType):
+	"""
+	EnumMeta that allows for fuzzy matching of enum members.
+	There are a lot of improvements that need to be done, but it works for now.
+
+	TODO
+	----
+	- [ ] Allow for matching member values instead of just names with keyword argument
+	- [ ] Refactor fuzzy matching out of __getitem__ into it's own method
+	"""
+
 	_firstLetters: Set[str]
+	# The first letter of each member name used for quick matching
+
+	_allMembersUnique: bool
+	# Whether all the first letters of the members are unique
+
+	@classmethod
+	def decode(cls, value):
+		return cls[value]
+
+	@staticmethod
+	def _check_for_existing_members_(class_name, bases):
+		for chain in bases:
+			for base in chain.__mro__:
+				if isinstance(base, ClosestMatchEnumMeta):
+					continue
+				if issubclass(base, Enum) and base._member_names_:
+					raise TypeError(
+						"%s: cannot extend enumeration %r"
+						% (class_name, base.__name__)
+					)
+
+	@staticmethod
+	def _get_mixins_(class_name, bases):
+		"""
+		Returns the type for creating enum members, and the first inherited
+		enum class.
+
+		bases: the tuple of bases that was given to __new__
+		"""
+		santized_bases = []
+		extracted_bases = set()
+		for base in bases:
+			if not isinstance(base, ClosestMatchEnumMeta):
+				santized_bases.append(base)
+			else:
+				for mixin in base.__bases__:
+					if mixin not in extracted_bases:
+						extracted_bases.add(mixin)
+						santized_bases.append(mixin)
+		return EnumMeta._get_mixins_(class_name, tuple(santized_bases))
+
+	def __instancecheck__(self, instance):
+		return super().__instancecheck__(instance) or isinstance(type(instance), ClosestMatchEnumMeta)
 
 	def __new__(metacls, cls, bases, classdict, **kwds):
-		if IntFlag in bases:
-			pass
 		enum_class = super().__new__(metacls, cls, bases, classdict, **kwds)
+
 		for k, v in metacls.__dict__.items():
 			if not k.startswith('_'):
 				setattr(enum_class, k, v)
+
+		extended_from = next((base for base in bases if isinstance(base, ClosestMatchEnumMeta)), None)
+
+		if extended_from is not None:
+			enum_class._member_names_ = [*extended_from._member_names_, *enum_class._member_names_]
+
+		if not isinstance(enum_class._member_map_, ChainMap):
+			if extended_from is None:
+				enum_class._member_map_ = ChainMap(enum_class._member_map_)
+			else:
+				assert isinstance(extended_from._member_map_, ChainMap)
+				enum_class._member_map_ = extended_from._member_map_.new_child(enum_class._member_map_)
+
 		uniqueLetters = {k[0].casefold() for k in enum_class.__members__.keys()}
 		setattr(enum_class, '_firstLetters', uniqueLetters)
 		setattr(enum_class, '_allMembersUnique', len(uniqueLetters) == len(enum_class.__members__))
@@ -152,57 +231,12 @@ def find_name(obj):
 	return None
 
 
-class IgnoreOr(object):
-
-	def __init__(self, name: str):
-		self.__name__ = name
-
-	def copy(self):
-		return self
-
-	def __copy__(self):
-		return self
-
-	def __repr__(self):
-		return f'<{self.__name__}>'
-
-	def __or__(self, other):
-		return other
-
-	def __ror__(self, other):
-		return other
-
-	def __bool__(self):
-		return False
-
-	def __neg__(self):
-		return self
-
-	def __invert__(self):
-		return self
-
-	def __eq__(self, other):
-		return self is other
-
-	def __ne__(self, other):
-		return self is not other
-
-	def __hash__(self):
-		return hash((self.__name__, type(self)))
-
-	def __instancecheck__(self, instance):
-		return self is instance
-
-	def get(self, *args, **kwargs):
-		return self
 
 
-Unset: Final = IgnoreOr('Unset')
-UnsetKwarg: Final = IgnoreOr('UnsetKwarg')
 
 Auto = object()
 DType = TypeVar('DType')
-Numeric = Union[int, float, complex, np.number]
+Numeric = Union[int, float, complex, np.number, Measurement]
 LOCAL_TIMEZONE = datetime.now(timezone.utc).astimezone().tzinfo
 
 
@@ -435,15 +469,19 @@ def formatDate(value, tz: Union[str, timezone], utc: bool = False, format: str =
 	return utcCorrect(time, tz) if utc else time.astimezone(tz)
 
 
-def clearCacheAttr(obj: object, *attr: str):
-	for a in attr:
-		try:
-			del obj.__dict__[a]
-			continue
-		except AttributeError:
-			pass
-		except KeyError:
-			pass
+
+
+@lru_cache(maxsize=256)
+def _findCachedAttrs(cls: Type) -> Tuple[str, ...]:
+	# Find all the class attributes that are a functools.cached_property
+	return tuple([k for k, v in cls.__dict__.items() if isinstance(v, cached_property)])
+
+
+def clearAllCacheAttr(obj: object):
+	obj_cls = obj.__class__
+	for cls in obj_cls.__mro__:
+		if attrs := _findCachedAttrs(cls):
+			clearCacheAttr(obj, *attrs)
 
 
 def flattenArray(array: List[List[Any]]) -> List[Any]:
@@ -529,8 +567,7 @@ class BusyContext:
 			if isinstance(self._mutable, Mutable):
 				self._mutable.muted = False
 
-	@classmethod
-	@property
+	@classproperty
 	def isBusy(cls) -> bool:
 		return sum(cls._tasks.values()) > 0
 
@@ -734,6 +771,20 @@ def radialPoint(center: QPointF, radius: Numeric, angle: Numeric) -> QPointF:
 	x = cx + radius*cos(radI)
 	y = cy + radius*sin(radI)
 	return QPointF(x, y)
+
+
+def point_to_degrees(center: QPointF, point: QPointF) -> Numeric:
+	"""
+	Returns the angle of a point in degrees.
+	:param center: Center of circle
+	:type center: QPointF
+	:param point: Point on circle
+	:type point: QPointF
+	:return: Angle in degrees
+	:rtype: Numeric
+	"""
+	rad = atan2(*(point - center).toTuple())
+	return degrees(rad)
 
 
 class SmartString(str):
@@ -1215,30 +1266,6 @@ def filterInstance(instance: object, filterType: Type) -> Optional[object]:
 	return None
 
 
-class Infix:
-	def __init__(self, function):
-		self.function = function
-
-	def __ror__(self, other):
-		return Infix(lambda x, self=self, other=other: self.function(other, x))
-
-	def __or__(self, other):
-		return self.function(other)
-
-	def __rlshift__(self, other):
-		return Infix(lambda x, self=self, other=other: self.function(other, x))
-
-	def __rshift__(self, other):
-		return self.function(other)
-
-	def __call__(self, value1, value2):
-		return self.function(value1, value2)
-
-	def __rmatmul__(self, other):
-		return Infix(lambda x, self=self, other=other: self.function(other, x))
-
-	def __matmul__(self, other):
-		return self.function(other)
 
 
 class InfixModifier:
@@ -1267,12 +1294,6 @@ class InfixModifier:
 		pass
 
 
-def __or__(a, b):
-	if isinstance(a, IgnoreOr):
-		return b
-	elif isinstance(b, IgnoreOr):
-		return a
-	return a
 
 
 def atomizeString(var: str | list[str], itemFilter: Callable = None) -> List[str]:
@@ -1336,7 +1357,6 @@ TitleCamelCase = InfixModifier(camelCase)
 isa = Infix(lambda x, y: (isinstance(x, y) and x))
 isnot = Infix(lambda x, y: not isinstance(x, y) and x)
 hasEx = Infix(lambda x, y: hasattr(x, y) and getattr(x, y))
-OrUnset = Infix(__or__)
 
 
 def mostCommonClass(iterable: Iterable) -> Type:
@@ -1485,13 +1505,6 @@ class NowOffset(Now):
 
 
 
-def __get(obj: Mapping, key, default=UnsetKwarg):
-	"""getter for mappings"""
-	if default is not UnsetKwarg:
-		return obj.get(key, default)
-	return obj.get(key)
-
-
 @lru_cache(maxsize=128)
 def genAltVarNames(varName: str) -> Iterable[str]:
 	camel = camelCase(varName)
@@ -1514,70 +1527,34 @@ def unwrap(arr: List[str | List[str]]) -> Set[str]:
 	return result
 
 
-def get(
-	obj: Mapping | object,
-	*keys: [Hashable],
-	default: Any = UnsetKwarg,
-	expectedType: Type | UnionType | Tuple[Type, ...] = object,
-	castVal: bool = False,
-	getter: Callable = __get,
-) -> Any:
-	"""
-	Returns the value of the key in the mapping or object
-
-	:param obj: The mapping to search.
-	:param key: The keys to search for.
-	:param default: The default value to return if the key is not found.
-	:return: The value of the key in the mapping or the default value.
-	"""
-	values = tuple(r for key in keys if (r := getter(obj, key, Unset)) is not Unset)
-	match len(values):
-		case 0:
-			if default is Unset:
-				raise KeyError(f'{keys} not found in {obj}')
-			return default
-		case 1:
-			value = values[0]
-			if castVal:
-				try:
-					return expectedType(value)
-				except TypeError as e:
-					utilLog.warning(f'Could not cast {value} to {expectedType}', e.__traceback__)
-			return value
-		case _:
-			utilLog.warning(f'Multiple values found for {keys} in {obj}, returning first value.')
-			for value in (k for key in keys if isinstance(k := getter(obj, key, Unset), expectedType) or (castVal and k is not Unset)):
-				if castVal:
-					return expectedType(value)
-				return value
 
 
 operators = [getattr(__operator, op) for op in dir(__operator) if not op.startswith('__')]
 operatorList = [
-	(__operator.add, ('+')),
-	(__operator.sub, ('-')),
-	(__operator.mul, ('*', 'x', 'X')),
+	(__operator.add, ('+',)),
+	(__operator.sub, ('-',)),
+	(__operator.mul, ('*', '×', 'x', 'X')),
 	(__operator.truediv, ('/', '÷')),
 	(__operator.floordiv, ('//', '÷')),
 	(__operator.mod, ('mod', '%')),
 	(__operator.pow, ('^', '**')),
 	(__operator.lshift, ('<<',)),
 	(__operator.rshift, ('>>',)),
-	(__operator.and_, ('&', 'and')),
-	(__operator.or_, ('|', 'or')),
-	(__operator.xor, ('^', 'xor')),
+	(__operator.and_, ('&', '∧', 'and')),
+	(__operator.or_, ('|', '∨', 'or')),
+	(__operator.xor, ('^', '⊕', 'xor')),
 	(__operator.neg, ('-', 'neg')),
 	(__operator.pos, ('+', 'pos')),
-	(__operator.invert, ('~', 'invert')),
+	(__operator.invert, ('~', '¬', 'invert')),
 	(__operator.lt, ('<', 'lt', 'min', 'minimum')),
-	(__operator.le, ('<=', 'le', 'min=', 'minimum=')),
+	(__operator.le, ('<=', '≤', 'le', 'min=', 'minimum=')),
 	(__operator.eq, ('==', '=', 'eq', 'equal', 'equals')),
-	(__operator.ne, ('!=', '<>', 'ne', 'neq', 'not equal', 'not equals')),
-	(__operator.ge, ('>=', 'ge', 'max=', 'maximum=')),
+	(__operator.ne, ('!=', '≠', '<>', 'ne', 'neq', 'not equal', 'not equals')),
+	(__operator.ge, ('>=', '≥', 'ge', 'max=', 'maximum=')),
 	(__operator.gt, ('>', 'gt', 'max', 'maximum')),
 	(__operator.is_, ('is', 'is_', 'is a', 'is an', 'is_a', 'is_an', 'isA', 'isAn', 'isinstance')),
 	(__operator.is_not, ('is not', 'is_not', 'is not a', 'is not an', 'is_not_a', 'is_not_an', 'isNot', 'isNotA', 'isNotAn', 'isnot', 'isnotA', 'isnotAn', 'not idinstance')),
-	(__operator.contains, ('in', 'contains', 'contains', 'range')),
+	(__operator.contains, ('in', 'contains', 'range')),
 ]
 operatorDict = {**{name: op for op, names in operatorList for name in names}, **{func: names[0] for func, names in operatorList}}
 
@@ -1617,83 +1594,6 @@ def hasState(obj):
 	return 'state' in dir(obj) and getattr(obj, 'savable', False)
 
 
-class DotDict(dict):
-
-	def __init__(self, *args, **kwargs):
-		args = list(args)
-		self.parent = kwargs.get('parent', Unset)
-		self.key = kwargs.get('key', Unset)
-		dicts = [args.pop(i) for i, item in enumerate(list(args)) if isinstance(item, dict)]
-		super(DotDict, self).__init__(*args, **kwargs)
-		for d in dicts:
-			self.update(d)
-
-	@property
-	def key(self):
-		if self.parent:
-			return '.'.join([self.parent.key, self.__key])
-
-	@key.setter
-	def key(self, value):
-		value = self.makeKey(value)
-		if self.parent:
-			parentKey = self.parent.key
-		else:
-			parentKey = ()
-		if len(value) > 1 and value[:-1] == parentKey:
-			value = value[-1]
-		self.__key = value
-
-	@staticmethod
-	def makeKey(key: str) -> tuple:
-		if isinstance(key, tuple):
-			return key
-		elif isinstance(key, Hashable) and not isinstance(key, str):
-			return key,
-		return tuple(re.findall(rf"[\w|\-|\_]+", key), )
-
-	def __setitem__(self, key, value):
-		key = self.makeKey(key)
-		if len(key) == 1:
-			dict.__setitem__(self, key[0], value)
-		else:
-			if key[0] not in self:
-				self[key[0]] = DotDict(key=key[0], parent=self)
-			dict.__getitem__(self, key[0]).__setitem__(key[1:], value)
-
-	def __contains__(self, key):
-		key = self.makeKey(key)
-		if len(key) == 1:
-			return dict.__contains__(self, key[0])
-		else:
-			if key[0] not in self:
-				return False
-			return dict.__getitem__(self, key[0]).__contains__(key[1:])
-
-	def popValue(self):
-		return self.popitem()[1]
-
-	def __getitem__(self, item):
-		key = self.makeKey(item)
-		if len(key) == 1:
-			return dict.__getitem__(self, key[0])
-		else:
-			if key[0] not in self:
-				raise KeyError(key)
-			return dict.__getitem__(self, key[0]).__getitem__(key[1:])
-
-	def get(self, key, default: Any = UnsetKwarg):
-		key = self.makeKey(key)
-		if key in self:
-			return self[key]
-		else:
-			if default is UnsetKwarg:
-				raise KeyError
-			return default
-
-	def update(self, data: dict):
-		for key, value in data.items():
-			self[key] = value
 
 
 def recursiveDictUpdate(d: dict, u: dict, copy: bool = True) -> dict:
@@ -1707,70 +1607,14 @@ def recursiveDictUpdate(d: dict, u: dict, copy: bool = True) -> dict:
 	return d
 
 
-def recursiveRemove(existingDict: dict, subtracting: dict) -> dict:
-	for key, subtractingValue in subtracting.items():
-		existing = existingDict.get(key, None)
-		if existing is None:
-			continue
-		if isinstance(subtractingValue, dict):
-			if isinstance(existing, dict):
-				if existing == subtractingValue:
-					existingDict.pop(key)
-				else:
-					existingDict[key] = recursiveRemove(existingDict.get(key, {}), subtractingValue)
-					if not existingDict[key]:
-						existingDict.pop(key)
-			elif subtractingValue:
-				existingDict[key] = subtractingValue
-			else:
-				existingDict.pop(key, None)
-			continue
-		if existing == subtractingValue:
-			existingDict.pop(key, None)
-	return existingDict
+
+
 
 
 def deepCopy(d: dict) -> dict:
 	return recursiveDictUpdate(dict(), d, copy=False)
 
 
-class DeepChainMap(ChainMap):
-	"""A recursive subclass of ChainMap"""
-
-	def __init__(self, *maps: Mapping, origin: 'Stateful' = None):
-		self._originMap = {}
-		self.origin = origin
-		super().__init__(self._originMap, *maps)
-
-	def __getitem__(self, key):
-		submaps = [mapping for mapping in self.maps if key in mapping]
-		if not submaps:
-			return self.__missing__(key)
-		if isinstance(submaps[0][key], Mapping):
-			return DeepChainMap(*(submap[key] for submap in submaps))
-		return super().__getitem__(key)
-
-	def to_dict(self, d: dict | Mapping = None) -> dict:
-		d = d or {}
-		for mapping in reversed(self.maps):
-			self._depth_first_update(d, mapping)
-		return d
-
-	def _depth_first_update(self, target: dict, source: Mapping) -> None:
-		for key, val in source.items():
-			if not isinstance(val, Mapping):
-				target[key] = val
-				continue
-			if key not in target:
-				target[key] = {}
-			self._depth_first_update(target[key], val)
-
-	@property
-	def originMap(self) -> dict:
-		return self._originMap
-
-	def new_child(self, origin: 'Stateful') -> 'DeepChainMap':
-		return self.__class__(*self.maps, origin=origin)
 
 
 class ScaleFloatMeta(type):
@@ -1816,8 +1660,6 @@ def scoreDict(a, b):
 	return score
 
 
-def sortDict(d: dict, reverse: bool = False) -> dict:
-	return {key: value for key, value in sorted(d.items(), key=lambda x: x[0], reverse=reverse)}
 
 
 def mostSimilarDict(ref: dict, choices: Iterable[dict], sharedKeysOnly: bool = True, cuttoff: float = 0.0) -> Tuple[int, dict]:
@@ -1833,34 +1675,6 @@ def mostSimilarDict(ref: dict, choices: Iterable[dict], sharedKeysOnly: bool = T
 	return max(scores, key=lambda x: x[2])[:2]
 
 
-class guarded_cached_property(cached_property):
-
-	def __new__(cls, *args, guardFunc: Callable[[Any], bool], default: Any):
-		if not args:
-			return partial(guarded_cached_property, guardFunc=guardFunc, default=default)
-		return cached_property.__new__(cls)
-
-	def __init__(self, *args, guardFunc: Callable[[Any], bool], default: Any):
-		super().__init__(*args)
-		self.guardFunc = guardFunc
-		self.default = default
-
-	def __call__(self, *args, **kwargs):
-		pass
-
-	def __get__(self, instance, owner=None):
-		value = super().__get__(instance, owner)
-		if self.guardFunc(value):
-			return value
-		else:
-			instance.__dict__.pop(self.attrname, None)
-			if isinstance(defaultFunc := self.default, Callable):
-				if 'self' in get_args(defaultFunc):
-					return defaultFunc(instance)
-				return self.default()
-			elif isinstance(defaultFunc, property):
-				return defaultFunc.__get__(instance, owner)
-			return self.default
 
 
 class del_action_cached_property(cached_property):
@@ -1875,6 +1689,16 @@ class del_action_cached_property(cached_property):
 			self._fdel(instance)
 		instance.__dict__.pop(self.attrname, None)
 
+
+@lru_cache(maxsize=128)
+def attr_is_cached_property(cls: Type, attr: str) -> bool:
+	return isinstance(getattr(cls, attr, None), cached_property)
+
+
+def attr_is_cached(obj: object, attr: str) -> bool:
+	return attr_is_cached_property(type(obj), attr) and attr in obj.__dict__
+
+
 def named_partial(func: Callable, *args, func_name: str = None, **kwargs) -> Callable:
 	"""Create a partial function with a name."""
 	try:
@@ -1886,6 +1710,7 @@ def named_partial(func: Callable, *args, func_name: str = None, **kwargs) -> Cal
 	partial_.__name__ = func_name
 	return partial_
 
+
 def split(a, n):
 	k, m = divmod(len(a), n)
 	return (a[i*k+min(i, m):(i+1)*k+min(i+1, m)] for i in range(n))
@@ -1894,252 +1719,25 @@ def split(a, n):
 T = TypeVar("T")
 
 
-Index = NamedTuple("Index", [("previous", Any), ("current", Any), ("next", Any)])
-
-@dataclass(slots=True)
-class Index:
-
-	value: Hashable | None = field(hash=True)
-	previous: Optional['Index'] = field(hash=False, compare=False, default=None)
-	next: Optional['Index'] = field(hash=False, compare=False, default=None)
-
-	def __post_init__(self):
-		if self.previous is None:
-			self.previous = self
-		if self.next is None:
-			self.next = self
-
-	def __iter__(self):
-		yield self.value
-		yield self.previous
-		yield self.next
 
 
-class OrderedSet(MutableSet[T]):
-
-	map = cached_property(lambda self: {})
-	sub_maps = cached_property(lambda self: {})
-
-	def __init__(self, iterable=None):
-		self.end = end = Index(None)
-
-		if iterable is not None:
-			self |= iterable
-
-	def __len__(self):
-		return len(self.map)
-
-	def __contains__(self, key):
-		return key in self.map
-
-	def add(self, key: T):
-		if key not in self.map:
-			end = self.end
-			curr = end.previous
-			curr.next = end.previous = self.map[key] = Index(key, curr, end)
-
-	def add_at_beginning(self, key: T):
-		if key not in self.map:
-			end = self.end
-			curr = end.next
-			curr.previous = end.next = self.map[key] = Index(key, end, curr)
-
-	def discard(self, key):
-		if key in self.map:
-			key, prev, nxt = self.map.pop(key)
-			prev.next = nxt
-			nxt.previous = prev
-
-	def remove(self, key):
-		if key not in self.map:
-			raise KeyError(key)
-		self.discard(key)
-
-	def __iter__(self):
-		end = self.end
-		curr = end.next
-		while curr is not end:
-			yield curr.value
-			curr = curr.next
-
-	def __reversed__(self):
-		end = self.end
-		curr = end.previous
-		while curr is not end:
-			yield curr.value
-			curr = curr.previous
-
-	def pop(self, last=True):
-		if not self:
-			raise KeyError('set is empty')
-		key = next(reversed(self)) if last else next(iter(self))
-		self.discard(key)
-		return key
-
-	def clear(self) -> None:
-		self.map.clear()
-		self.end = end = []
-		end += [None, end, end]  # sentinel node for doubly linked list
-
-	def __repr__(self):
-		if not self:
-			return f'{self.__class__.__name__}()'
-		return f'{self.__class__.__name__}({list(self)!r})'
-
-	def __eq__(self, other):
-		if isinstance(other, OrderedSet):
-			return len(self) == len(other) and list(self) == list(other)
-		return set(self) == set(other)
-
-	def __del__(self):
-		self.clear()  # remove circular references
-
-	def __reduce__(self):
-		return self.__class__, (list(self),)
 
 
-class ActionPool(OrderedSet):
-	up: 'ActionPool'
-	__len: int = cached_property(lambda self: 0)
-	__contextLevel: int = cached_property(lambda self: 0)
-	__active: bool = cached_property(lambda self: False)
-	__callbacks: List[Tuple[Callable, Tuple, Dict]] = cached_property(lambda self: [])
 
 
-	class Status(Enum):
-		Idle = 0
-		Queued = 1
-		Running = 2
-		Finished = 3
-		Canceled = 4
-		Failed = 5
-		Removed = 6
 
 
-	def __init__(self, instance: 'Stateful', trace = None):
-		self.status = self.Status.Idle
-		self.instance = instance
-		self.root = self
-		self.up = self
-		super().__init__()
-
-	def __enter__(self):
-		self.__contextLevel += 1
-		return self
-
-	def __exit__(self, exc_type, exc_val, exc_tb):
-		self.__contextLevel -= 1
-		if self.__contextLevel <= 0:
-			self.__contextLevel = 0
-			if self.can_execute: self.execute()
-
-	def __repr__(self):
-		return f'{self.__class__.__name__}({type(self.instance).__name__} items: {len(list(self))}, total: {self.total_length})'
-
-	def __hash__(self):
-		return id(self)
-
-	def __len__(self):
-		return self.__len
-
-	def __true_len__(self):
-		return super().__len__()
-
-	def __bool__(self) -> bool:
-		return bool(self.__len) and all(bool(pool) for pool in self.sub_maps.values())
-
-	def new(self, instance: 'Stateful') -> 'ActionPool':
-		self.add(a := ActionPool(instance, trace='new'))
-		return a
-
-	def add_at_beginning(self, key: T):
-		super().add_at_beginning(key)
-
-	def add(self, other, first: bool = False):
-		super().add(other) if not first else self.add_at_beginning(other)
-		if isinstance(other, ActionPool):
-			other.up = self
-			other.root = self.root
-			self.sub_maps[other.instance] = other
-		self.__len += 1
-
-	def discard(self, other):
-		super().discard(other)
-		self.__len = self.__true_len__()
-
-	def clear(self):
-		list(map(ActionPool.clear, self.sub_maps.values()))
-		self.sub_maps.clear()
-		super().clear()
-		self.__len = 0
-
-	def pop(self, last=True):
-		popped = super().pop(last)
-		self.__len -= 1
-		return popped
-
-	def remove(self, key):
-		super().remove(key)
-		self.__len -= 1
-
-	@property
-	def total_length(self) -> int:
-		return sum(pool.total_length for pool in self.sub_maps.values()) + self.__len
-
-	@property
-	def can_execute(self) -> bool:
-		if self.up is self:
-			return not self.instance.is_loading and not self.__contextLevel and not self.__active
-		return not self.instance.state_is_loading and not self.__contextLevel and not self.__active# and self.up.can_execute
-
-	def execute(self):
-		self.__active = True
-		utilLog.verbose(f"Executing {len(self)} items in afterPool for {self.__class__.__name__}", verbosity=5)
-		if type(self.instance).__name__ in {'HourLabels', 'DayLabels', 'WeekLabels', 'MonthLabels', 'YearLabels'}:
-			return
-		for action in self:
-			self.discard(action)
-			if isinstance(action, ActionPool):
-				action.execute()
-			else:
-				if action.__code__.co_argcount:
-					action(self.instance)
-				else:
-					action()
-		while self.__callbacks:
-			callback, args, kwargs = self.__callbacks.pop(0)
-			callback(*args, **kwargs)
-		self.__active = False
-
-	def delete(self):
-		self.__delete__(self)
-
-	def __delete__(self, instance):
-		self.status = self.Status.Canceled
-		for pool in list(self.sub_maps.values()):
-			pool.__del__()
-		self.up.discard(self)
-		try:
-			instance.discard(self)
-		except:
-			pass
-		self.clear()
-
-	def add_callback(self, callback: Callable, *args, **kwargs):
-		self.__callbacks.append((callback, args, kwargs))
 
 
-def defer(func):
+def get_sub_attr(obj: Any, attr: str, default: Any = Unset) -> Any:
+	try:
+		return eval(f'obj.{attr}', __locals={'obj': obj})
+	except Exception as e:
+		if default is not Unset:
+			return default
+		raise e
 
-	@wraps(func)
-	def wrapper(self, *args, **kwargs):
-		if (pool := getattr(self, '_actionPool', None)) is not None:
-			if pool.can_execute:
-				return func(self, *args, **kwargs)
-			else:
-				pool.add(func)
 
-	return wrapper
 
 
 def thread_safe(func):
@@ -2149,6 +1747,80 @@ def thread_safe(func):
 		return func(self, *args, **kwargs)
 
 	return wrapper
+
+
+def startTimerSafe(timer: QTimer, msec: int = None):
+	"""
+	Start a QTimer from any thread.
+
+	QTimer.start silently fails (with only a console warning) when called from
+	a thread other than the timer's owner; data updates delivered on plugin
+	worker threads must queue the start onto the timer's thread instead.
+	Passing msec uses the start(int) slot, which also sets the interval.
+	"""
+	if QThread.currentThread() is timer.thread():
+		timer.start() if msec is None else timer.start(msec)
+	elif msec is None:
+		QtCore.QMetaObject.invokeMethod(timer, 'start', Qt.ConnectionType.QueuedConnection)
+	else:
+		QtCore.QMetaObject.invokeMethod(
+			timer, 'start', Qt.ConnectionType.QueuedConnection, QtCore.Q_ARG(int, msec)
+		)
+
+
+def stopTimerSafe(timer: QTimer):
+	"""Stop a QTimer from any thread. See startTimerSafe."""
+	if QThread.currentThread() is timer.thread():
+		timer.stop()
+	else:
+		QtCore.QMetaObject.invokeMethod(timer, 'stop', Qt.ConnectionType.QueuedConnection)
+
+
+class _MainThreadCall(QtCore.QObject):
+	"""Queues a callable onto the main thread's event loop.
+
+	QTimer.singleShot creates a QTimer on the calling thread, which fails
+	when called from a plugin worker thread.  This dispatches the callback
+	onto the main thread first so the timer is created there.
+	"""
+
+	_invokeRequested = Signal(object)
+
+	def __init__(self):
+		super().__init__()
+		self._invokeRequested.connect(self._on_invoke, Qt.ConnectionType.QueuedConnection)
+
+	@Slot(object)
+	def _on_invoke(self, callback: Callable):
+		callback()
+
+	def invoke(self, callback: Callable):
+		self._invokeRequested.emit(callback)
+
+
+_mainThreadCall = _MainThreadCall()
+
+
+def singleShotSafe(msec: int, callback: Callable):
+	"""Call QTimer.singleShot from any thread.
+
+	QTimer.singleShot creates a QTimer on the calling thread, which fails with
+	"QBasicTimer::start: Timers cannot be started from another thread" when
+	called from a plugin worker thread with no Qt event loop.  This marshals
+	the call to the main thread where the timer is created and serviced.
+	"""
+	app = QtCore.QCoreApplication.instance()
+	if app is not None and QThread.currentThread() is app.thread():
+		QTimer.singleShot(msec, callback)
+		return
+	if app is None:
+		QTimer.singleShot(msec, callback)
+		return
+
+	def _on_main():
+		QTimer.singleShot(msec, callback)
+
+	_mainThreadCall.invoke(_on_main)
 
 
 class WorkerSignals(QtCore.QObject):
@@ -2187,7 +1859,7 @@ class Worker(Generic[Self], _BaseWorker, QtCore.QRunnable):
 	_on_finish: List[Callable[[], None]]
 	_on_result: List[Callable[[Any], None]]
 	on_error: Callable[[Exception], None] = None
-	on_progress: Callable[[int|float], None] = None
+	on_progress: Callable[[int | float], None] = None
 
 	_debug: bool = False
 	current_thread: Callable[[], QThread] = QThread.currentThread
@@ -2199,7 +1871,7 @@ class Worker(Generic[Self], _BaseWorker, QtCore.QRunnable):
 		self.args = args
 		self.kwargs = kwargs
 		self.signals = WorkerSignals()
-		self.signals.moveToThread(LevityDashboard.app.thread())
+		self.signals.moveToThread(LevityDashboard.main_thread)
 
 	def __rich_repr__(self):
 		yield 'status', self.status.name
@@ -2222,7 +1894,7 @@ class Worker(Generic[Self], _BaseWorker, QtCore.QRunnable):
 
 	def on_finish(self):
 		for func in self._on_finish:
-			func()
+			self.pool.run_threaded_process(func)
 
 	@cached_property
 	def _on_result(self) -> List[Callable[[Any], None]]:
@@ -2262,8 +1934,8 @@ class Worker(Generic[Self], _BaseWorker, QtCore.QRunnable):
 		self.status = Worker.Status.Running
 		"""Initialise the runner function with passed args, kwargs."""
 		utilLog.verbose(f'Running {self.fn!r} in thread: {self.current_thread()}', verbosity=5)
-		if QApplication.instance().thread() is self.signals.thread():
-			self.signals.moveToThread(QApplication.instance().thread())
+		# if QApplication.instance().thread() is self.signals.thread():
+		# 	self.signals.moveToThread(QApplication.instance().thread())
 		try:
 			result = self.fn(
 				*self.args, **self.kwargs,
@@ -2287,11 +1959,13 @@ class Worker(Generic[Self], _BaseWorker, QtCore.QRunnable):
 			else:
 				self.signals.result.emit(result)
 		finally:
-			if self._direct and self.on_finish:
+			if self._direct and self._on_finish:
 				self.on_finish()
 			else:
-				self.signals.finished.emit()
-			utilLog.verbose(f'Finished {self.fn!r} in thread', verbosity=5)
+				signals = self.signals
+				signals.moveToThread(LevityDashboard.main_thread)
+				signals.finished.emit()
+			utilLog.verbose(f'Finished {self.fn!s} in thread', verbosity=5)
 
 	def cancel(self):
 		if self.status is Worker.Status.Running:
@@ -2299,6 +1973,8 @@ class Worker(Generic[Self], _BaseWorker, QtCore.QRunnable):
 				self.pool.cancel(self)
 				self.status = Worker.Status.Canceled
 			except RuntimeError:
+				pass
+			except AttributeError:
 				pass
 			except Exception as e:
 				utilLog.exception(e)
@@ -2374,7 +2050,6 @@ class Worker(Generic[Self], _BaseWorker, QtCore.QRunnable):
 			self.current_thread().yieldCurrentThread()
 			QTimer.singleShot(100, lambda: worker_.start(priority=priority))
 
-
 		connectSignal(self.signals.result, partial(_on_result, worker_=worker))
 		return worker
 
@@ -2427,6 +2102,7 @@ class _BasePool:
 
 		return instance
 
+
 class Pool(_BasePool, QtCore.QThreadPool):
 
 	worker_class: ClassVar[Type[Worker]] = Worker
@@ -2449,14 +2125,77 @@ class Pool(_BasePool, QtCore.QThreadPool):
 		func: Callable | Awaitable,
 		*args,
 		func_kwargs: dict = None,
-		on_finish: Callable[[], None] | Coroutine = None,
-		on_result: Callable[[T], Any] | Coroutine = None,
-		on_error: Callable[[Exception], Any] | Coroutine = None,
+		on_finish: Callable[[], None] | Worker = None,
+		on_result: Callable[[T], Any] | Worker = None,
+		on_error: Callable[[Exception], Any] | Worker = None,
 		priority: int = 3,
 		immortal: bool = False,
+		direct: bool = False,
 		**kwargs: Dict[str, Any]
 	) -> Worker:
 		"""Execute a function in the background with a worker"""
+
+		worker = self.prepare_worker(
+			func,
+			*args,
+			func_kwargs=func_kwargs,
+			on_finish=on_finish,
+			on_result=on_result,
+			on_error=on_error,
+			immortal=immortal,
+			direct=direct,
+			**kwargs
+		)
+
+		self.start(worker, priority)
+		worker.current_thread().yieldCurrentThread()
+
+		return worker
+
+	run_in_thread = run_threaded_process
+
+	def prepare_worker(
+		self,
+		func: Callable | Awaitable,
+		*args,
+		func_kwargs: dict = None,
+		on_finish: Callable[[], None] | Worker = None,
+		on_result: Callable[[T], Any] | Worker = None,
+		on_error: Callable[[Exception], Any] | Worker = None,
+		immortal: bool = False,
+		direct: bool = False,
+		**kwargs: Dict[str, Any]
+	) -> Worker:
+		"""Create a worker without running it"""
+		worker = self.worker_class.create_worker(
+			func,
+			*args,
+			func_kwargs=func_kwargs,
+			on_finish=on_finish,
+			on_result=on_result,
+			on_error=on_error,
+			immortal=immortal,
+			**kwargs
+		)
+		worker.pool = self
+
+		if direct:
+			worker._direct = True
+
+		return worker
+
+	def try_run_threaded_process(
+		self,
+		func: Callable | Awaitable,
+		*args,
+		func_kwargs: dict = None,
+		on_finish: Callable[[], None] | Coroutine = None,
+		on_result: Callable[[T], Any] | Coroutine = None,
+		on_error: Callable[[Exception], Any] | Coroutine = None,
+		immortal: bool = False,
+		max_wait: int = -1,
+		**kwargs: Dict[str, Any]
+	) -> Worker | bool:
 
 		worker = self.worker_class.create_worker(
 			func,
@@ -2470,11 +2209,11 @@ class Pool(_BasePool, QtCore.QThreadPool):
 		)
 		worker.pool = self
 
-		self.start(worker, priority)
-
-		return worker
-
-	run_in_thread = run_threaded_process
+		if self.tryStart(worker):
+			return worker
+		elif max_wait > 0 and (self.waitForDone(max_wait) | (worker := self.tryStart(worker))):
+			return worker
+		return False
 
 	def start(self, runnable: Worker, priority: int = 3):
 		runnable.pool = self
@@ -2497,6 +2236,7 @@ class Pool(_BasePool, QtCore.QThreadPool):
 
 pool = Pool()
 threadPool: Pool = pool
+pool.setMaxThreadCount(50)
 LevityDashboard.main_thread_pool = pool
 run_in_thread = pool.run_threaded_process
 
@@ -2537,3 +2277,31 @@ def pseudo_bound_method(instance: Any = None, func: Callable = None) -> MethodTy
 	if func is None:
 		return partial(pseudo_bound_method, instance)
 	return MethodType(func, instance)
+
+
+@lru_cache(maxsize=1024)
+def factors(n: int | float) -> Set[int]:
+	n = abs(int(round(n)))
+	return set(reduce(list.__add__, ([i, n//i] for i in range(1, int(n ** 0.5) + 1) if n % i == 0)))
+
+
+@lru_cache(maxsize=2048)
+def is_prime(n: int) -> bool:
+	"""Check if a number is prime"""
+	return n > 1 and all(n % i for i in range(2, int(n ** 0.5) + 1))
+
+def is_pos(n: int | float) -> bool:
+	return n > 0
+
+
+def dict_in_dict(this_dict: dict, has: dict) -> bool:
+	for k, v in has.items():
+		if k not in this_dict:
+			return False
+		if isinstance(v, dict):
+			if not dict_in_dict(this_dict[k], v):
+				return False
+		else:
+			if this_dict[k] != v:
+				return False
+	return True

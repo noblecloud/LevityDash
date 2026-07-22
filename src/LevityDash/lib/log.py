@@ -11,9 +11,8 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import ClassVar, Dict, List
 
-import shiboken2
 from dotty_dict import Dotty as Dotty_
-from PySide2.QtWidgets import QApplication, QStatusBar
+from PySide6.QtWidgets import QApplication, QStatusBar
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.style import Style
@@ -23,7 +22,7 @@ from sys import gettrace
 
 from . import LevityDashboard as lvdash
 
-suppressedModules = [asyncio, shiboken2]
+suppressedModules = [asyncio]
 
 class Dotty(Dotty_):
 
@@ -183,6 +182,8 @@ class _LevityLogger(logging.Logger):
 			"encoding":                "utf-8",
 			"logTimeFormat":           "%m/%d/%y %H:%M:%S",
 			"logFileWidth":            "120",
+			"plain":                   "0",
+			"tracebackLocals":         "0",
 		}
 	}
 
@@ -265,60 +266,92 @@ class _LevityLogger(logging.Logger):
 		fileColumns = lvdash.config.getOrSet('Logging', 'logFileWidth', '120', lvdash.config.getint)
 		timeFormat = lvdash.config.getOrSet('Logging', 'logTimeFormat', '%m/%d/%y %H:%M:%S', str)
 
-		consoleFile = Console(
-			tab_size=2,
+		# rich's per-record markup parsing and (especially) its traceback
+		# repr of every local variable are expensive and, worse, unsafe:
+		# reprs a live Qt object mid-exception from whatever thread raised,
+		# which can crash if that object is concurrently mutated elsewhere
+		# (see the Graph.py render-race SIGSEGV). Both are opt-in now -
+		# tracebacks_show_locals defaults off outright since it's a
+		# correctness hazard, not just a perf one.
+		plainLogging = cls._parse_bool(
+			os.environ.get('LEVITY_LOG_PLAIN', lvdash.config.getOrSet('Logging', 'plain', '0', str))
+		) or False
+		showLocals = cls._parse_bool(
+			os.environ.get('LEVITY_LOG_SHOW_LOCALS', lvdash.config.getOrSet('Logging', 'tracebackLocals', '0', str))
+		) or False
+
+		# Kept independent of plainLogging - used for ad hoc console.print()
+		# debug calls (stateful.py, Menus.py), not the hot logging path.
+		richConsole = Console(
 			soft_wrap=True,
-			no_color=True,
-			width=fileColumns,
-		)
-		consoleHandler = LevityHandler(
-			console=Console(
-				soft_wrap=True,
-				force_terminal=True,
-				no_color=False,
-				force_interactive=True,
-				tab_size=2,
-				width=columns,
-				log_time_format=timeFormat,
-				theme=theme,
-			),
+			force_terminal=True,
+			no_color=False,
+			force_interactive=True,
+			tab_size=2,
+			width=columns,
 			log_time_format=timeFormat,
-			tracebacks_show_locals=True,
-			tracebacks_suppress=suppressedModules,
-			locals_max_length=5,
-			locals_max_string=200,
-			markup=True,
-			show_path=False,
-			tracebacks_width=columns,
-			rich_tracebacks=True,
-			omit_repeated_times=False,
-			level=console_level,
-			#! change the trace backs to true!!
+			theme=theme,
 		)
 
-		richRotatingFileHandler = RichRotatingLogHandlerProxy(
-			encoding=lvdash.config.getOrSet('Logging', 'encoding', 'utf-8', str),
-			console=consoleFile,
-			show_path=False,
-			markup=True,
-			log_time_format=timeFormat,
-			rich_tracebacks=True,
-			omit_repeated_times=False,
-			tracebacks_suppress=suppressedModules,
-			tracebacks_show_locals=True,
-			tracebacks_width=fileColumns,
-			locals_max_string=200,
-			filename=cls.logPath,
-			maxBytes=int(lvdash.config.getOrSet('Logging', 'rolloverSize', '10mb', lvdash.config.configToFileSize)),
-			backupCount=int(lvdash.config.getOrSet('Logging', 'rolloverCount', '5', lvdash.config.getint)),
-		)
+		if plainLogging:
+			formatter = logging.Formatter(fmt='%(asctime)s %(levelname)-9s %(pathname)s: %(message)s', datefmt=timeFormat)
+
+			consoleHandler = logging.StreamHandler()
+			consoleHandler.setFormatter(formatter)
+			consoleHandler.setLevel(console_level)
+
+			richRotatingFileHandler = RotatingFileHandler(
+				filename=cls.logPath,
+				encoding=lvdash.config.getOrSet('Logging', 'encoding', 'utf-8', str),
+				maxBytes=int(lvdash.config.getOrSet('Logging', 'rolloverSize', '10mb', lvdash.config.configToFileSize)),
+				backupCount=int(lvdash.config.getOrSet('Logging', 'rolloverCount', '5', lvdash.config.getint)),
+			)
+			richRotatingFileHandler.setFormatter(formatter)
+		else:
+			consoleFile = Console(
+				tab_size=2,
+				soft_wrap=True,
+				no_color=True,
+				width=fileColumns,
+			)
+			consoleHandler = LevityHandler(
+				console=richConsole,
+				log_time_format=timeFormat,
+				tracebacks_show_locals=showLocals,
+				tracebacks_suppress=suppressedModules,
+				locals_max_length=5,
+				locals_max_string=200,
+				markup=True,
+				show_path=False,
+				tracebacks_width=columns,
+				rich_tracebacks=True,
+				omit_repeated_times=False,
+				level=console_level,
+			)
+
+			richRotatingFileHandler = RichRotatingLogHandlerProxy(
+				encoding=lvdash.config.getOrSet('Logging', 'encoding', 'utf-8', str),
+				console=consoleFile,
+				show_path=False,
+				markup=True,
+				log_time_format=timeFormat,
+				rich_tracebacks=True,
+				omit_repeated_times=False,
+				tracebacks_suppress=suppressedModules,
+				tracebacks_show_locals=showLocals,
+				tracebacks_width=fileColumns,
+				locals_max_string=200,
+				filename=cls.logPath,
+				maxBytes=int(lvdash.config.getOrSet('Logging', 'rolloverSize', '10mb', lvdash.config.configToFileSize)),
+				backupCount=int(lvdash.config.getOrSet('Logging', 'rolloverCount', '5', lvdash.config.getint)),
+			)
 		cls.propagate = True
 
 		richRotatingFileHandler.setLevel(file_level)
 
 		cls.fileHandler = richRotatingFileHandler
 		cls.consoleHandler = consoleHandler
-		cls.console = consoleHandler.console
+		cls.console = richConsole
 		cls.statusBarHandler = StatusBarHandler()
 		cls.statusBarHandler.setLevel(status_bar_level)
 
@@ -691,9 +724,9 @@ LevityPluginLog = LevityLogger.getChild("Plugins")
 LevityUtilsLog = LevityLogger.getChild("Utils")
 lvdash.config.setLogger(LevityLogger.getChild('LevityConfig'))
 
-debug = LevityLogger.level <= logging.DEBUG
+debug_log = LevityLogger.level <= logging.DEBUG
 
-__builtins__['DEBUG']: bool = debug
-__builtins__['console'] = _LevityLogger.consoleHandler.console
+__builtins__['DEBUG']: bool = (debug := debug_log or bool(os.environ.get('DEBUG', False)))
+__builtins__['console'] = _LevityLogger.console
 
 __all__ = ["LevityLogger", "LevityPluginLog", "LevityUtilsLog", 'debug']

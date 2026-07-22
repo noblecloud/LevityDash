@@ -13,20 +13,21 @@ from tempfile import NamedTemporaryFile
 from typing import Dict, List, Mapping, Set, TYPE_CHECKING, Union
 from zipfile import ZipFile
 
-import PySide2
+import PySide6
 import sys
-from PySide2 import QtGui
-from PySide2.QtCore import (
-	QByteArray, QEvent, QMimeData, QObject, QRect, QRectF, QSize, Qt, QThread, QTimer, QUrl, Signal
+from PySide6 import QtGui
+from PySide6.QtCore import (
+	QByteArray, QEvent, QMimeData, QObject, QRect, QRectF, QSize, Qt, QThread, QTimer, QUrl, Signal, Slot
 )
-from PySide2.QtGui import (
+from PySide6.QtGui import (
 	QCursor, QDesktopServices, QDrag, QFont, QIcon, QPainter, QPainterPath, QPixmapCache, QScreen, QShowEvent,
-	QSurfaceFormat, QTransform, QPixmap
+	QSurfaceFormat, QTransform, QPixmap, QAction
 )
-from PySide2.QtNetwork import QNetworkConfigurationManager
-from PySide2.QtWidgets import (
-	QAction, QApplication, QGraphicsItem, QGraphicsRectItem, QGraphicsScene,
-	QGraphicsView, QMainWindow, QMenu, QMenuBar, QOpenGLWidget, QSplashScreen
+from PySide6.QtOpenGLWidgets import QOpenGLWidget
+
+from PySide6.QtWidgets import (
+	QApplication, QGraphicsItem, QGraphicsRectItem, QGraphicsScene,
+	QGraphicsView, QMainWindow, QMenu, QMenuBar, QSplashScreen
 )
 from time import perf_counter, process_time, time
 
@@ -38,8 +39,9 @@ from LevityDash.lib.plugins.dispatcher import MultiSourceContainer
 from LevityDash.lib.plugins.observation import TimeAwareValue
 from LevityDash.lib.ui.fonts import monospaceFont, system_default_font
 from LevityDash.lib.ui.frontends.PySide import qtLogger as guiLog
+from LevityDash.lib.ui.frontends.PySide.Modules import SizeGroup
 from LevityDash.lib.ui.frontends.PySide.utils import (
-	colorPalette, RendererScene
+	colorPalette, RendererScene, ViewScale
 )
 from LevityDash.lib.ui.Geometry import (
 	AbsoluteFloat, DimensionType, findScreen, getDPI, LocationFlag, parseSize,
@@ -55,6 +57,9 @@ ACTIVITY_EVENTS = {QEvent.KeyPress, QEvent.MouseButtonPress, QEvent.MouseButtonR
 
 guiLog.info('Loading Qt GUI')
 
+__pdoc__ = {
+	'ViewScale': False
+}
 
 class FocusStack(list):
 
@@ -79,9 +84,6 @@ class FocusStack(list):
 		if not parent in self[-2:]:
 			return False
 		return parent in self or any(i in self for i in parent.childItems())
-
-
-ViewScale = namedtuple('ViewScale', 'x y')
 
 
 # Section Scene
@@ -162,7 +164,7 @@ class LevityScene(RendererScene):
 
 	@cached_property
 	def window(self):
-		return app.activeWindow()
+		return LevityDashboard.app.activeWindow()
 
 	def rect(self):
 		return self.sceneRect()
@@ -201,7 +203,7 @@ class MenuBar(QMenuBar):
 		for menu in self.findChildren(QMenu):
 			menu.adjustSize()
 
-	def mouseMoveEvent(self, arg__1: PySide2.QtGui.QMouseEvent) -> None:
+	def mouseMoveEvent(self, arg__1: PySide6.QtGui.QMouseEvent) -> None:
 		super().mouseMoveEvent(arg__1)
 		self.parent().mouseMoveEvent(arg__1)
 
@@ -257,7 +259,48 @@ class LevitySceneView(QGraphicsView):
 		self.setBackgroundBrush(Qt.black)
 		self.setStyleSheet('QGraphicsView { border: 0px; }')
 
-		self.setRenderHints(QPainter.HighQualityAntialiasing | QPainter.SmoothPixmapTransform | QPainter.TextAntialiasing)
+		self.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.SmoothPixmapTransform | QPainter.TextAntialiasing)
+
+		# Re-fit all text after every settled resize. Size groups only react
+		# to their parent panel's resized signal, so a window resize (which
+		# scales the whole scene but doesn't emit per-panel resizes) would
+		# otherwise never re-fit them - this matches the original design where
+		# SizeGroup listened to the view's resizeFinished. _refitAllText is
+		# idempotent, so running it on every resize (and on load) is safe.
+		self.resizeFinished.connect(self._refitAllText)
+		# First launch never fires a user resize; kick the debounce once so the
+		# re-fit runs after the initial surface settles. (resizeDone is created
+		# in postInit, so reach it lazily.)
+		self.loadingFinished.connect(lambda: self.resizeDone.start())
+
+	def _refitAllText(self):
+		"""Re-fit grouped text, then rebuild any ungrouped text items.
+
+		Grouped text is re-fit by rebucket_and_update_all. Ungrouped text
+		(titles, clock, standalone labels) builds its path lazily via
+		updateTransform and isn't a group member, so it must be rebuilt
+		explicitly. Idempotent - safe to run on every settled resize.
+		"""
+		from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import Text
+		from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import DisplayLabel
+		from LevityDash.lib.ui.Geometry import DisplayPosition
+		SizeGroup.rebucket_and_update_all()
+		for item in self.graphicsScene.items():
+			if isinstance(item, Text) and getattr(item, '_sized', None) is None:
+				item.updateTransform(updatePath=True, updateShared=False, reason='refit')
+			elif isinstance(item, DisplayLabel):
+				# FloatUnder value+unit pairs are positioned via a correction
+				# that only fires from the boxes' own updateTransform (see
+				# DisplayLabel._syncFloatUnderPair); those boxes listen for
+				# their parent panel's resized signal, which - like SizeGroup
+				# above - never fires on a whole-window resize. Force one
+				# final resync per display so the pair is correct after every
+				# settled resize, not just after a manual refresh ('r').
+				try:
+					if item.displayProperties.unitPosition is DisplayPosition.FloatUnder:
+						item._syncFloatUnderPair(item.valueTextBox.textBox)
+				except AttributeError:
+					pass
 
 	def deviceTransform(self) -> QTransform:
 		devicePixelRatio = self.devicePixelRatioF()
@@ -321,11 +364,12 @@ class LevitySceneView(QGraphicsView):
 		self.resetTransform()
 		self.graphicsScene.invalidate(self.graphicsScene.sceneRect())
 		self.graphicsScene.update()
-		self.resizeFinished.emit()
 		rect = self.viewport().rect()
 		self.setSceneRect(rect)
 		self.scene().setSceneRect(rect)
 		self.graphicsScene.base.geometry.updateSurface()
+		# emitted last so connected slots see post-updateSurface geometry
+		self.resizeFinished.emit()
 
 	def load(self):
 		self.graphicsScene.base.loadDefault()
@@ -369,6 +413,7 @@ class PluginsMenu(QMenu):
 			action.toggled.connect(action.togglePlugin)
 			self.addAction(action)
 
+	@Slot()
 	def refresh_toggles(self):
 		for action in self.actions():
 			action.setChecked(action.plugin.running)
@@ -866,8 +911,18 @@ class LevityMainWindow(QMainWindow):
 		reload.setStatusTip('Reload the current dashboard')
 		reload.triggered.connect(self.view.graphicsScene.base.reload)
 
+		force_reload = QAction('Force Reload', self)
+		force_reload.setShortcut('Ctrl+Shift+R')
+		force_reload.setStatusTip('Force reload the current dashboard')
+
+		def force_reload_func():
+			self.view.graphicsScene.base.clear()
+			self.view.graphicsScene.base.reload()
+
+		force_reload.triggered.connect(force_reload_func)
+
 		refresh = QAction('Refresh', self)
-		refresh.setShortcut('Ctrl+Alt+R')
+		refresh.setShortcut('Alt+R')
 		refresh.setStatusTip('Refresh the current dashboard')
 		refresh.triggered.connect(self.view.refresh)
 
@@ -922,6 +977,7 @@ class LevityMainWindow(QMainWindow):
 		dashboardMenu = menubar.addMenu("Dashboard")
 		dashboardMenu.addAction(setAsDefault)
 		dashboardMenu.addAction(reload)
+		dashboardMenu.addAction(force_reload)
 		dashboardMenu.addAction(refresh)
 		dashboardMenu.addAction(clear)
 		dashboardMenu.addAction(printState)
@@ -931,6 +987,10 @@ class LevityMainWindow(QMainWindow):
 		clearCacheAction.setStatusTip('Clear the cache')
 		clearCacheAction.triggered.connect(QPixmapCache.clear)
 		dashboardMenu.addAction(clearCacheAction)
+
+		refresh_all_sizegroups = QAction('Refresh All SizeGroups', self)
+		refresh_all_sizegroups.triggered.connect(SizeGroup.rebucket_and_update_all)
+		dashboardMenu.addAction(refresh_all_sizegroups)
 
 		plugins = PluginsMenu(self)
 		self.bar.addMenu(plugins)
@@ -1049,7 +1109,7 @@ class LevityMainWindow(QMainWindow):
 			super().changeEvent(event)
 			self.updateMenuBar()
 
-		def resizeEvent(self, event:PySide2.QtGui.QResizeEvent) -> None:
+		def resizeEvent(self, event:PySide6.QtGui.QResizeEvent) -> None:
 			self.menuBarHoverArea.size.setWidth(event.size().width())
 			self.bar.setFixedWidth(event.size().width())
 			super().resizeEvent(event)
@@ -1086,80 +1146,86 @@ class ClockSignals(QObject):
 
 	syncInterval = timedelta(minutes=5)
 
+	_instance: 'ClockSignals'
+
 	def __new__(cls):
 		if not hasattr(cls, '_instance'):
-			cls._instance = super().__new__(cls)
+			cls._instance = super().__new__(cls, LevityDashboard.app)
 		return cls._instance
 
 	def __init__(self):
-		super().__init__()
-		self.__init_timers_()
+		super().__init__(LevityDashboard.app)
+		self.init_timers()
 
-	def __init_timers_(self):
-		self.__secondTimer = QTimer()
-		self.__secondTimer.setTimerType(Qt.PreciseTimer)
-		self.__secondTimer.setInterval(1000)
-		self.__secondTimer.timeout.connect(self.__emitSecond)
+	def init_timers(self):
+		self._secondTimer = QTimer(self)
+		self._secondTimer.setTimerType(Qt.PreciseTimer)
+		self._secondTimer.setInterval(1000)
+		self._secondTimer.timeout.connect(self._emitSecond)
 
-		self.__minuteTimer = QTimer()
-		self.__minuteTimer.setInterval(60000)
-		self.__minuteTimer.timeout.connect(self.__emitMinute)
-		self.__hourTimer = QTimer()
-		self.__hourTimer.setInterval(3600000)
-		self.__hourTimer.timeout.connect(self.__emitHour)
+		self._minuteTimer = QTimer(self)
+		self._minuteTimer.setInterval(60000)
+		self._minuteTimer.timeout.connect(self._emitMinute)
+		self._hourTimer = QTimer(self)
+		self._hourTimer.setInterval(3600000)
+		self._hourTimer.timeout.connect(self._emitHour)
 
-		self.__syncTimers()
+		self._syncTimers()
 
 		# Ensures that the timers are synced to the current time every six hours
-		self.__syncTimer = QTimer()
-		self.__syncTimer.timeout.connect(self.__syncTimers)
-		self.__syncTimer.setInterval(1000 * 60 * 5)
-		self.__syncTimer.setTimerType(Qt.VeryCoarseTimer)
-		self.__syncTimer.setSingleShot(False)
-		self.__syncTimer.start()
+		self._syncTimer = QTimer(self)
+		self._syncTimer.timeout.connect(self._syncTimers)
+		self._syncTimer.setInterval(1000 * 60 * 5)
+		self._syncTimer.setTimerType(Qt.VeryCoarseTimer)
+		self._syncTimer.setSingleShot(False)
+		self._syncTimer.start()
 
-	def __startSeconds(self):
-		self.__emitSecond()
-		self.__secondTimer.setSingleShot(False)
-		self.__secondTimer.start()
+	def _startSeconds(self):
+		self._emitSecond()
+		self._secondTimer.setSingleShot(False)
+		self._secondTimer.start()
 		guiLog.verbose('Second timer started', verbosity=4)
 
-	def __startMinutes(self):
-		self.__emitMinute()
-		self.__minuteTimer.setSingleShot(False)
-		self.__minuteTimer.start()
+	def _startMinutes(self):
+		self._emitMinute()
+		self._minuteTimer.setSingleShot(False)
+		self._minuteTimer.start()
 		guiLog.verbose('Minute timer started', verbosity=4)
 
-	def __startHours(self):
-		self.__emitHour()
-		self.__hourTimer.setSingleShot(False)
-		self.__hourTimer.start()
+	def _startHours(self):
+		self._emitHour()
+		self._hourTimer.setSingleShot(False)
+		self._hourTimer.start()
 		guiLog.verbose('Hour timer started', verbosity=4)
 
-	def __emitSecond(self):
+	@Slot()
+	def _emitSecond(self):
 		# now = datetime.now()
 		# diff = now.replace(second=now.second + 1, microsecond=0) - now
 		self.second.emit(datetime.now().second)
 
-	def __emitMinute(self):
+	@Slot()
+	def _emitMinute(self):
 		minute = datetime.now().minute
 		guiLog.verbose(f'Minute timer emitted with value {minute}', verbosity=5)
 		self.minute.emit(minute)
 
-	def __emitHour(self):
+	@Slot()
+	def _emitHour(self):
 		hour = datetime.now().hour
 		guiLog.verbose(f'Hour timer emitted with value {hour}', verbosity=5)
 		self.hour.emit(hour)
 
-	def __syncTimers(self):
+	@Slot()
+	def _syncTimers(self):
 		"""Synchronizes the timers to the current time."""
 		guiLog.verbose(f'Syncing timers', verbosity=2)
 
 		self.sync.emit()
 
-		self.__secondTimer.stop()
-		self.__minuteTimer.stop()
-		self.__hourTimer.stop()
+		self._secondTimer.stop()
+		self._minuteTimer.stop()
+		self._hourTimer.stop()
 
 		now = datetime.now()
 
@@ -1168,15 +1234,15 @@ class ClockSignals(QObject):
 		timerOffset = 500
 
 		timeToNextSecond = round((now.replace(second=now.second, microsecond=0) + timedelta(seconds=1) - now).total_seconds() * 1000)
-		self.__secondTimer.singleShot(timeToNextSecond + timerOffset, self.__startSeconds)
+		self._secondTimer.singleShot(timeToNextSecond + timerOffset, self._startSeconds)
 
 		timeToNextMinute = round((now.replace(minute=now.minute, second=0, microsecond=0) + timedelta(minutes=1) - now).total_seconds() * 1000)
 		guiLog.verbose(f'Time to next minute: {timeToNextMinute / 1000} seconds', verbosity=5)
-		self.__minuteTimer.singleShot(timeToNextMinute + timerOffset, self.__startMinutes)
+		self._minuteTimer.singleShot(timeToNextMinute + timerOffset, self._startMinutes)
 
 		timeToNextHour = round((now.replace(hour=now.hour, minute=0, second=0, microsecond=0) + timedelta(hours=1) - now).total_seconds() * 1000)
 		guiLog.verbose(f'Time to next hour: {timeToNextHour / 1000} seconds', verbosity=5)
-		self.__hourTimer.singleShot(timeToNextHour + timerOffset, self.__startHours)
+		self._hourTimer.singleShot(timeToNextHour + timerOffset, self._startHours)
 
 
 LevityDashboard.clock = ClockSignals()

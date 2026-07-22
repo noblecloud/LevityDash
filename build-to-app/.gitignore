@@ -2,3 +2,4 @@
 /build
 /.signature
 /*venv/
+/releases/

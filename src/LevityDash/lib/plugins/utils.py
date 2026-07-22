@@ -2,8 +2,8 @@ from asyncio import TimerHandle, iscoroutinefunction, iscoroutine
 
 from collections import defaultdict
 
-from PySide2.QtCore import QObject, QThread, QTimer, Signal, Slot
-from PySide2.QtWidgets import QApplication
+from PySide6.QtCore import QMetaObject, QObject, Qt, QThread, QTimer, Signal, Slot
+from PySide6.QtWidgets import QApplication
 from abc import abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -20,6 +20,7 @@ from typing import (
 import WeatherUnits as wu
 from LevityDash.lib.log import LevityPluginLog as log
 from LevityDash.lib.utils import abbreviatedIterable, KeyData, Now, now, SmartString
+from LevityDash.lib.utils.shared import startTimerSafe
 
 if TYPE_CHECKING:
 	from LevityDash.lib.plugins.categories import CategoryItem
@@ -338,8 +339,8 @@ class Publisher(MutableSignal):
 	Publishes changes within a plugin to the global publisher.
 	"""
 
-	__added = Signal(dict)
-	__changed = Signal(dict)
+	__added = Signal(KeyData)
+	__changed = Signal(KeyData)
 	_pending: dict['Observation', Set['CategoryItem']]
 	__channels: dict['CategoryItem', ChannelSignal]
 
@@ -362,9 +363,18 @@ class Publisher(MutableSignal):
 			self.removed.emit(self.keys[key])
 			del self.keys[key]
 
+	@Slot()
 	def _emit(self):
 		if QThread.currentThread() != QApplication.instance().thread():
-			loop.call_soon_threadsafe(self._emit)
+			# publish() is connected as a slot to signals emitted from each
+			# plugin's own PluginThread, so this branch is genuinely
+			# reachable, not just defensive - `loop` was never defined
+			# here (a plain NameError waiting to happen). QMetaObject.
+			# invokeMethod queues _emit onto this object's own thread
+			# (the GUI thread, since Publisher lives there), which is the
+			# same "hop across to the right thread" intent the dead
+			# asyncio call was reaching for.
+			QMetaObject.invokeMethod(self, '_emit', Qt.ConnectionType.QueuedConnection)
 			return
 
 		data = KeyData(self.source, self._pending)
@@ -453,10 +463,7 @@ class ScheduledEvent(object):
 			self.__interval = timedelta()
 
 		self.__owner = func.__self__
-		if self.__owner in self.instances:
-			self.instances[self.__owner].append(self)
-		else:
-			self.instances[self.__owner] = [self]
+		self.instances.setdefault(self.__owner, []).append(self)
 		self.__func = func
 		self.__args = arguments
 		self.__kwargs = keywordArguments
@@ -587,13 +594,13 @@ class ScheduledEvent(object):
 			)
 
 		if (loop := self.loop) is None:
-			log.warn(f'{self.__owner} - No event loop found for {self.__func!r}')
+			log.warning(f'{self.__owner} - No event loop found for {self.__func!r}')
 			if self.fireImmediately:
 				self.__fire()
 				return
 			self.timer = QTimer(singleShot=True)
 			self.timer.timeout.connect(self.__fire)
-			self.timer.start(when * 1000)
+			startTimerSafe(self.timer, int(when * 1000))
 		else:
 			self.timer = loop.call_soon(self.__fire) if self.fireImmediately else loop.call_later(when, self.__fire)
 

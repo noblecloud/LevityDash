@@ -5,7 +5,7 @@ from collections.abc import Generator
 from copy import copy
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone as _timezones, tzinfo
-from functools import cached_property, lru_cache, partial
+from functools import cached_property, lru_cache, partial, wraps
 from inspect import Parameter, Signature
 from multiprocessing import Lock
 from numbers import Number
@@ -26,19 +26,20 @@ from builtins import isinstance
 from dateutil.parser import parse
 from itertools import groupby
 from math import inf, isinf
-from PySide2.QtCore import QThread, Signal, Slot
-from PySide2.QtWidgets import QApplication
+from PySide6.QtCore import QThread, Signal, Slot, QTimer
+from PySide6.QtWidgets import QApplication
 from rich.progress import Progress
 
 import WeatherUnits as wu
 from LevityDash.lib.log import LevityPluginLog as log
 from LevityDash.lib.plugins.categories import CategoryDict, CategoryItem
+from LevityDash.lib.plugins.errors import InvalidData
 from LevityDash.lib.plugins.schema import LevityDatagram
 from LevityDash.lib.plugins.utils import ChannelSignal, Request, GuardedRequest, Accumulator, SchemaProperty, unitDict
 from LevityDash.lib.utils import (
 	clearCacheAttr, closest, connectSignal, DateKey, isa, LOCAL_TIMEZONE, mostCommonClass, mostFrequentValue,
 	NoValue, now,
-	Now, NowOffset, Period, Pool, roundToPeriod, thread_safe, toLiteral, UTC, Worker
+	Now, NowOffset, Period, Pool, roundToPeriod, thread_safe, toLiteral, UTC, Worker, run_in_thread
 )
 
 if TYPE_CHECKING:
@@ -172,6 +173,8 @@ class ObservationValue(TimeAwareValue):
 			timeAware = None
 		if metadata is None:
 			metadata = source.schema.getUnitMetaData(key, source)
+			if metadata is None:
+				raise InvalidData(f'No schema metadata found for key {key!r} in {source!r}; unable to construct an ObservationValue for it.')
 			if metadata['key'] != key:
 				metadata['sourceKey'] = key
 				if isinstance(key, CategoryItem):
@@ -229,6 +232,7 @@ class ObservationValue(TimeAwareValue):
 			try:
 				value = self.convertFunc(self.rawValue)
 			except Exception as e:
+				log.warning(f'{self.__metadata.get("key")}: failed to convert raw value {self.rawValue!r} ({e}); using raw value as-is')
 				value = self.rawValue
 			if localized := getattr(value, 'localize', None):
 				value = localized
@@ -1158,7 +1162,7 @@ class ObservationTimestamp(ObservationValue):
 			value = data
 			key = CategoryItem('timestamp')
 		else:
-			log.warn(f'Unable to find valid timestamp in {data}.  Using current time.')
+			log.warning(f'Unable to find valid timestamp in {data}.  Using current time.')
 			value = datetime.now().astimezone(_timezones.utc)
 			key = CategoryItem('timestamp')
 		super(ObservationTimestamp, self).__init__(value, key, container=source, source=source)
@@ -1368,7 +1372,10 @@ class ObservationDict(PublishedDict):
 			key = convertToCategoryItem(key, source=None)
 			if not isinstance(item, TimeAwareValue):
 				item = TimeSeriesItem(item, timestamp)
-			self[key] = item
+			try:
+				self[key] = item
+			except InvalidData as e:
+				log.warning(f'Skipping unmapped key {key!r} for {self}: {e}')
 
 		self.calculateMissing(set(data.keys()))  # TODO: Use Requirements to handle this automatically based on schema
 
@@ -1459,7 +1466,7 @@ class ObservationDict(PublishedDict):
 			if 'environment.humidity.humidity' in keys:
 				humidity = self['environment.humidity.humidity']
 
-				if 'environment.temperature.dewpoint' not in keys:
+				if 'environment.temperature.dewpoint' not in keys and self.schema.get('environment.temperature.dewpoint', None):
 					self._calculatedKeys.add('environment.temperature.dewpoint')
 					dewpoint = temperature.dewpoint(humidity.value)
 					dewpoint.key = CategoryItem('environment.temperature.dewpoint')
@@ -2105,6 +2112,8 @@ class TimeSeriesSignal(ChannelSignal):
 				source.signals.muted = value
 
 		ChannelSignal.muted.fset(self, value)
+		if not self._muteLevel and (self._singleShots | self._conditionalSingleShots):
+			self._emit()
 
 	def _emit(self):
 		if self._references and self._pending:
@@ -2113,24 +2122,18 @@ class TimeSeriesSignal(ChannelSignal):
 		self._pending.clear()
 		if self._singleShots and self._source.hasTimeseries:
 			for coro in self._singleShots.values():
-				loop.create_task(coro)
+				run_in_thread(coro)
 		self._singleShots.clear()
 		coroutines = [coro for coro, condition in self._conditionalSingleShots.items() if condition(self._source)]
 		list(self._conditionalSingleShots.pop(coro, None) for coro in coroutines)
 		for coro in coroutines:
-			loop.create_task(coro)
+			run_in_thread(coro)
 
-	def addCallback(self, callback: coroutine, guardHash=None):
-		if not iscoroutine(callback):
-			raise TypeError(f'{callback} is not a coroutine')
+	def addCallback(self, callback: Callable[[], None], guardHash: Hashable = None):
 		guardHash = guardHash or hash(callback)
-		if (existing := self._singleShots.pop(guardHash, None)) is not None:
-			existing.close()
 		self._singleShots[guardHash] = callback
 
-	def addConditionalCallback(self, callback: coroutine, condition: Callable[['MeasurementTimeSeries'], bool]):
-		if not iscoroutine(callback):
-			raise TypeError(f'{callback} is not a coroutine')
+	def addConditionalCallback(self, callback: Callable[[], None], condition: Callable[['MeasurementTimeSeries'], bool]):
 		# if (existing := self._conditionalSingleShots.pop(callback, None)) is not None:
 		# 	callback.close()
 		self._conditionalSingleShots[callback] = condition
@@ -2223,8 +2226,10 @@ class MeasurementTimeSeries(OrderedDict):
 		if self.isMultiSource:
 			source: 'Plugin'
 			source.publisher.connectChannel(self.key, self.sourceChanged)
+			minPeriod = self.__minPeriod or timedelta(days=-400)
+			maxPeriod = self.__maxPeriod or timedelta(days=400)
 			for obs in source.observations:
-				if isinstance(obs, ObservationTimeSeries):
+				if isinstance(obs, ObservationTimeSeries) and minPeriod < abs(obs.period) < maxPeriod:
 					ts: MeasurementTimeSeries = obs[self.key]
 					ts.addReference(self)
 					obs.add_subscribed_item(self.key)
@@ -2323,7 +2328,14 @@ class MeasurementTimeSeries(OrderedDict):
 	@property
 	def sources(self) -> Set[Union['Observation', 'MeasurementTimeSeries']]:
 		if self.isMultiSource:
-			return {e[self._key] for e in self._source.observations if self._key in e}
+			minPeriod = self.__minPeriod or timedelta(days=-400)
+			maxPeriod = self.__maxPeriod or timedelta(days=400)
+			return {
+				e[self._key]
+				for e in self._source.observations
+				if self._key in e and
+				minPeriod < abs(e.period) < maxPeriod
+			}
 		else:
 			return {self._source}
 
@@ -2387,7 +2399,6 @@ class MeasurementTimeSeries(OrderedDict):
 				)
 			else:
 				values = self.__sourcePull()
-
 
 				for item in values:
 					self[item.timestamp] = item
@@ -2789,12 +2800,34 @@ class Container:
 	def __clearCache(self):
 		clearCacheAttr(self, 'nowFromTimeseries', 'hourly', 'daily')
 
-	def prepare_for_ts_connection(self, callback: Callable):
-		log.verbose(f'Preparing for timeseries connection: {self.key}')
+	def prepare_for_ts_connection(self, request: Request):
 		threadPool = self.source.thread_pool
-		threadPool.run_threaded_process(
-			self.timeseries.update, on_finish=callback, priority=2
+		log.verbose(f'Preparing for timeseries connection: {self.key}')
+
+		@Slot(object)
+		def callback_wrapper():
+			log.verbose(f'⚠️Finished timeseries connection: {self.key}')
+			log.verbose(f'⚠️Calling callback for {request.requester}')
+			try:
+				request.callback()
+				log.verbose(f'⚠️Callback for {request.requester} called successfully')
+			except Exception as e:
+				log.error(f'⚠️Failed to call callback for {request.requester}: {e}')
+
+		response_worker = threadPool.prepare_worker(request.callback)
+		action_worker = threadPool.run_threaded_process(
+			self.timeseries.update, on_finish=response_worker.start, direct=True
 		)
+
+		# worker = threadPool.run_threaded_process(
+		# 	self.timeseries.update, on_finish=callback_wrapper,
+		# )
+
+		# worker.setAutoDelete(True)
+		# worker.autoDelete()
+
+		# self.timeseries.signals.addCallback(request.callback, request.requester)
+		# self.timeseries.update()
 
 	@property
 	def title(self):
@@ -2815,6 +2848,17 @@ class Container:
 		elif self.timeseries is not None:
 			return self.timeseries[Now()]
 		return None
+
+	@property
+	def value_type(self) -> Type[wu.Measurement]:
+		value = self.value
+		try:
+			return type(value.value)
+		except Exception:
+			value = type(self.metadata.getConvertFunc()(0))
+			if issubclass(value, wu.Measurement):
+				return value
+			return wu.Measurement
 
 	@property
 	def now(self) -> Optional[Observation]:

@@ -1,5 +1,5 @@
 
-from PySide2.QtWidgets import QGraphicsItem
+from PySide6.QtWidgets import QGraphicsItem
 
 from ..Handles.Splitters import Splitter
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel

@@ -1,7 +1,7 @@
 from collections import ChainMap
 from typing import MutableMapping
 
-from WeatherUnits import Probability, Temperature
+from WeatherUnits import Probability, Temperature, Percentage
 from WeatherUnits.derived.precipitation import Hourly
 from WeatherUnits.derived.rate import MilesPerHour
 from WeatherUnits.length import Millimeter
@@ -68,6 +68,25 @@ TemperatureGradient = Gradient[Temperature.Celsius](
 	d=(50, '#8f6aae'),
 )
 
+PurpleSunset = Gradient[float](
+	'PurpleSunset',
+	(0, '#8F6AAE'),
+	(0.5, '#F3A469'),
+	(1, '#F7B731')
+)
+
+PlumPlate = Gradient[float](
+	'PlumPlate',
+	(0, '#667eea'),
+	(1, '#764ba2')
+)
+
+HappyFisher = Gradient[float](
+	'HappyFisher',
+	(0, '#89f7fe'),
+	(1, '#66a6ff')
+)
+
 FabledSunsetGradientLux = Gradient[Lux](
 	'FabledSunsetGradientLux',
 	(0, '#23155700'),
@@ -102,6 +121,30 @@ RipeMalinkaGradient = Gradient[MilesPerHour](
 	(80, '#0052f3'),
 	(90, '#0f00f9'),
 	(100, '#7b00d4'),
+)
+
+RainbowTemperature = Gradient[Temperature.Fahrenheit](
+	'RainbowTemperature',
+	(160, '#ff0000'),
+	(90, '#ffff00'),
+	(20, '#00c0ff'),
+	(-40, '#c000ff'),
+)
+
+RainbowDefault = Gradient[float](
+	'RainbowDefault',
+	(1, '#ff0000'),
+	(0.66, '#ffff00'),
+	(0.33, '#00c0ff'),
+	(0, '#c000ff'),
+)
+
+RainbowPercentage = Gradient[Percentage](
+	'RainbowPercentage',
+	(1, '#ff0000'),
+	(0.66, '#ffff00'),
+	(0.33, '#00c0ff'),
+	(0, '#c000ff'),
 )
 
 PrecipitationProbabilityGradient = Gradient[Probability](
@@ -277,14 +320,18 @@ webcolors = {
 }
 
 
-def __getattr__(name):
-	if name == 'gradients':
-		return [i for i in locals() if isinstance(i, Gradient)]
-	elif name == 'colors':
-		return [i for i in locals() if isinstance(i, Color)]
-	elif name in webcolors:
-		return webcolors[name]
+# def __getattr__(name):
+# 	try:
+# 		return locals()[name]
+# 	except Exception as e:
+# 		if name == 'gradients':
+# 			return [i for i in locals() if isinstance(i, Gradient)]
+# 		elif name == 'colors':
+# 			return [i for i in locals() if isinstance(i, Color)]
+# 		elif name in webcolors:
+# 			return webcolors[name]
+# 		raise e
 
 
+__all__ = ['Presets']
 Color.presets = Presets(web=webcolors)
-__all__ = tuple(i for i in locals() if isinstance(i, (Gradient, Color)))

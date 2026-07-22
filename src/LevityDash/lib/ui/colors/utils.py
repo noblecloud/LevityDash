@@ -1,7 +1,7 @@
 from math import log
 from typing import Tuple
 
-from PySide2.QtGui import QColor
+from PySide6.QtGui import QColor
 
 
 def __clampChannel(value, bits: int = 8) -> int:

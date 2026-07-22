@@ -1,6 +1,6 @@
+import os
 from collections import ChainMap
 from copy import deepcopy
-from datetime import datetime
 from difflib import get_close_matches
 from enum import Enum
 from functools import cached_property, lru_cache
@@ -16,6 +16,34 @@ from LevityDash.lib.plugins.categories import CategoryDict, CategoryItem, UnitMe
 from LevityDash.lib.plugins.errors import InvalidData
 
 log = LevityPluginLog.getChild('Schema')
+
+# ---------------------------------------------------------------------------
+# Loud-failure dev mode
+#
+# The schema engine is deliberately lenient in production: when a key isn't
+# found it fuzzy-matches to the closest known key (or falls back to a default)
+# so a schema mistake degrades to a cosmetic oddity instead of crashing the app
+# someone is using to check the weather. The cost is that a mistyped `sourceKey`
+# in a plugin schema silently binds to the wrong metadata with no clear signal.
+#
+# Set LEVITYDASH_SCHEMA_DEBUG=1 during plugin development to surface those
+# fuzzy-matches/fallbacks loudly (ERROR level, greppable "SCHEMA-DEBUG:" prefix)
+# so they're caught. Off by default — production behaviour is byte-identical.
+# Read once at import, like LEVITYDASH_CONFIG_DEBUG; set it before importing
+# LevityDash.
+# ---------------------------------------------------------------------------
+SCHEMA_DEBUG = os.environ.get("LEVITYDASH_SCHEMA_DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _schema_debug_alert(message: str):
+	"""Surface a schema fuzzy-match / fallback loudly, but only in schema-debug mode.
+
+	A no-op unless ``LEVITYDASH_SCHEMA_DEBUG`` is enabled, so it can be sprinkled
+	at fallback sites without touching production behaviour. Referenced through the
+	module global (not captured) so tests can flip it with ``monkeypatch.setattr``.
+	"""
+	if SCHEMA_DEBUG:
+		log.error(f"SCHEMA-DEBUG: {message}")
 
 
 class SchemaSpecialKeys(str, Enum):
@@ -83,7 +111,17 @@ class LevityDatagram(dict):
 						return key
 			elif timeKey in data:
 				return timeKey
-			return (get_close_matches('timestamp', list(data), n=1, cutoff=0.5) or ['timestamp'])[0]
+			match = get_close_matches('timestamp', list(data), n=1, cutoff=0.5)
+			if match:
+				_schema_debug_alert(
+					f"findTimeKey: no declared time key in {sorted(map(str, data))}; "
+					f"fuzzy-matched {match[0]!r} (cutoff=0.5)"
+				)
+				return match[0]
+			_schema_debug_alert(
+				f"findTimeKey: no time key in {sorted(map(str, data))}; defaulting to 'timestamp'"
+			)
+			return 'timestamp'
 		else:
 			return 'timestamp'
 
@@ -654,6 +692,10 @@ class Schema(CategoryDict):
 			elif not silent:
 				if len(wildcardKeys) > 1:
 					log.warning(f'{key} has wildcard which results in multiple values for {key}')
+					_schema_debug_alert(
+						f"{key!r} matched multiple wildcard keys {[str(k) for k in wildcardKeys]} in {self}; "
+						f"the resolved value is ambiguous."
+					)
 				else:
 					log.warning(f'{key} was not found in {self}')
 		return result
@@ -743,14 +785,19 @@ class Schema(CategoryDict):
 		if key not in self:
 			key = self.sourceKeyMap.get(key, None)
 			if key is None:
+				#TODO: Add better error handling
 				log.warning(f'{key} was not found in {self}')
 				return None
 		metaData = self.getExact(key)
 		if metaData is None:
-			keys = [str(key) for k in self._source.keys()]
+			keys = [str(k) for k in self._source.keys()]
 			closestMatch = get_close_matches(str(key), keys, n=1, cutoff=0.5)
 			if closestMatch:
 				log.warning(f'{key} was not found in {self} but {closestMatch[0]} was found as it\'s closest match')
+				_schema_debug_alert(
+					f"{key!r} not found in {self}; fuzzy-matched to {closestMatch[0]!r} (cutoff=0.5). "
+					f"A mistyped sourceKey will silently bind to the wrong unit metadata."
+				)
 				return self.getUnitMetaData(closestMatch[0], source)
 			else:
 				log.warning(f'{key} was not found in {self}')
@@ -884,18 +931,3 @@ class Schema(CategoryDict):
 	@cached_property
 	def nullAllowedKeys(self) -> Set[CategoryItem]:
 		return {key for key, metadata in self.flatDict.items() if metadata.get('allowNull', False)}
-
-	def __parseDateTime(self, measurementData, unitDefinition, value):
-		if isinstance(value, datetime):
-			return value
-		else:
-			if unitDefinition == 'epoch':
-				if abs(value) <= 0xffffffff:
-					value /= 1000
-				cls = datetime.fromtimestamp
-			elif unitDefinition == 'ISO8601':
-				cls = datetime.strptime
-				kwargs = {'format': measurementData['format']}
-			else:
-				raise ValueError(f'Unknown date format: {unitDefinition}')
-		return cls(value, **kwargs)

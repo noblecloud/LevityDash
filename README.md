@@ -17,19 +17,48 @@
 
 </div>
 
-LevityDash aims to be a lightweight, desktop native, multi-source dashboard without a required web frontend that is fun and easy to use. The current version only supports PySide6/Qt. However, a key goal of this project is to support
-multiple frontends and
-platforms, including embedded.
+LevityDash aims to be a lightweight, desktop native, multi-source dashboard without a required web frontend that is fun and easy to use. The current frontend is built on PySide6/Qt 6. A key goal of this project is to support multiple frontends and platforms, including embedded — the backend/frontend process split that enables this is actively in progress (see the [roadmap](docs/roadmap.md)).
 
-*Note: This project is very much in the proof of concept stage – it functions, but it is far from the goal of a lightweight dashboard.*
+*Note: This project is in beta – it works and is used daily, but expect rough edges.*
 
 <p align="right">
 <img src="https://img.shields.io/badge/license-MIT-blueviolet">
-<img src="https://img.shields.io/badge/Python-3.11-blueviolet">
-<img src="https://img.shields.io/badge/aiohttp-3.6-blueviolet">
-<img src="https://img.shields.io/badge/PySide6-6.4-blueviolet">
+<img src="https://img.shields.io/badge/Python-3.11–3.14-blueviolet">
+<img src="https://img.shields.io/badge/Qt-6-blueviolet">
+<img src="https://img.shields.io/badge/aiohttp-3.14-blueviolet">
 
 </p>
+
+# Getting Started
+
+## Requirements
+
+- Python 3.11 – 3.14 (3.14 recommended — it's noticeably faster)
+- [Poetry](https://python-poetry.org) for installing from source
+
+## Install
+
+> **Note:** The package on PyPI is an old 0.1.x release from the PySide2 era. Until 0.2.0 ships, install from source.
+
+```bash
+git clone https://github.com/noblecloud/LevityDash.git
+cd LevityDash
+poetry install --without dev
+```
+
+The `dev` dependency group expects a sibling checkout of the WeatherUnits repo (`../WeatherUnits`) for library development; `--without dev` skips it and uses the released WeatherUnits from PyPI.
+
+## Running
+
+```bash
+poetry run LevityDash              # or: poetry run python -m LevityDash
+```
+
+To start over with a fresh configuration, use `poetry run LevityDash-reset-config`.
+
+PySide6 ships prebuilt ARM64 wheels (macOS universal2 and, in recent releases, Linux aarch64), so a 64-bit OS such as Raspberry Pi OS 64-bit installs like any other platform. 32-bit ARM is not supported by Qt 6.
+
+See the [documentation site](https://levitydash.app) for configuration, plugin setup, and troubleshooting.
 
 # Current Features
 
@@ -50,8 +79,10 @@ platforms, including embedded.
 ### Builtin Plugins
 
 - [Open-Meteo](https://open-meteo.com) [REST]
-- [WeatherFlow Tempest](https://tempestwx.com) [REST, UDP, Websocket(incomplete)]
+- [PirateWeather](https://pirateweather.net) [REST]
+- [WeatherFlow Tempest](https://tempestwx.com) [REST, UDP, Websocket]
 - Govee BLE Thermometers/Hygrometers [[GVH5102](https://www.amazon.com/Govee-Hygrometer-Thermometer-Temperature-Notification/dp/B087313N8F?th=1)]
+- [OpenWeatherMap](https://openweathermap.org) [REST, current conditions only — the free tier doesn't include forecast data]
 
 ## Frontend
 
@@ -65,18 +96,19 @@ platforms, including embedded.
 
 ## Current Modules
 
-- Realtime single line text with support for showing units and titles and mapping glyphs/emojis to values
-- Timeseries Graph
+- Realtime text with support for showing units and titles and mapping glyphs/emojis to values
+- Gauges
+- Timeseries Graph and Mini Graph
 - Customizable Clock
 - Moon Phase
-- Submodule Group for organizing modules
+- Groups, titled groups, stacks, and value stacks for organizing modules
 
 ## Planned Modules
 
-- Gauges [nearly complete]
 - Weather Radar
 - Multiline Text
 - RSS Feeds
 - Calendar
-- Mini Graphs
 - More plot types
+
+See the full [roadmap](docs/roadmap.md) for what's done, in progress, and planned.

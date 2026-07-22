@@ -1,9 +1,9 @@
 from datetime import timedelta
 from functools import cached_property
 
-from PySide2.QtCore import Qt, Signal
-from PySide2.QtGui import QPen, QTransform
-from PySide2.QtWidgets import QGraphicsDropShadowEffect, QGraphicsSceneMouseEvent
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QPen, QTransform
+from PySide6.QtWidgets import QGraphicsDropShadowEffect, QGraphicsSceneMouseEvent
 
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Incrementer import IncrementerGroup, Incrementer
 

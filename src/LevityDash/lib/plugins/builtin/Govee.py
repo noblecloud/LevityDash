@@ -48,8 +48,14 @@ def parseMathString(mathString: str, functionName: str = 'mathExpression', **kwa
 		mathString = mathString.replace(key, str(value))
 
 	funcString = f'''def {functionName}({', '.join(remainingVars)}):\n\treturn {mathString}'''
-	exec(compile(funcString, "<string>", "exec"))
-	return locals()[functionName]
+	# exec into an explicit namespace rather than relying on locals() picking
+	# up the def: PEP 667 (Python 3.13+) makes a function's locals() an
+	# independent snapshot on each call, so the def made by exec() here was
+	# never guaranteed to show up in a later, separate locals() call - it
+	# happened to work pre-3.13 as an implementation detail, not by contract.
+	namespace = {}
+	exec(compile(funcString, "<string>", "exec"), namespace)
+	return namespace[functionName]
 
 
 class BLEPayloadParser:
@@ -74,8 +80,6 @@ class BLEPayloadParser:
 			value = payload
 		return {self.__field: value}
 
-
-loop = asyncio.get_event_loop()
 
 _on_board_banner = '[bold]Govee BLE Plugin On-Boarding[/bold]'
 _plugin_description = (
@@ -168,9 +172,9 @@ class Govee(Plugin, realtime=True, logged=True):
 		device = deviceConfig['id']
 		match device:
 			case str() if self._varifyDeviceID(device):
-				self.scanner = BleakScanner(service_uuids=(device,))
+				self.scanner = BleakScanner(service_uuids=[device], detection_callback=self.__dataParse)
 			case str() if ',' in device and (devices := tuple([i for i in device.split(',') if self._varifyDeviceID(i)])):
-				self.scanner = BleakScanner(service_uuids=devices)
+				self.scanner = BleakScanner(service_uuids=devices, detection_callback=self.__dataParse)
 			case _:
 				device = None
 				__scanAttempts = 0
@@ -198,7 +202,7 @@ class Govee(Plugin, realtime=True, logged=True):
 					delattr(self, 'scanner')
 				except Exception as e:
 					pass
-				self.scanner = BleakScanner(service_uuids=tuple(device.metadata['uuids']))
+				self.scanner = BleakScanner(service_uuids=tuple(device.metadata['uuids']), detection_callback=self.__dataParse)
 				name = f'GoveeBLE [{device.name}]'
 				self.name = name
 				self.config[name]['device.name'] = str(device.name)
@@ -208,7 +212,7 @@ class Govee(Plugin, realtime=True, logged=True):
 				self.config.defaults().pop('device.mac', None)
 				self.config.defaults().pop('device.model', None)
 				self.config.save()
-		self.scanner.register_detection_callback(self.__dataParse)
+		self.name = self.config['device.name']
 		pluginLog.info(f'{self.name} initialized for device {device}')
 
 	@classmethod
@@ -273,7 +277,7 @@ class Govee(Plugin, realtime=True, logged=True):
 		pluginLog.info(f'{self.name} starting...')
 
 		if self.historicalTimer is None:
-			self.historicalTimer = ScheduledEvent(timedelta(seconds=15), self.logValues).schedule()
+			self.historicalTimer = ScheduledEvent(timedelta(seconds=15), self.logValues, loop=self.loop).schedule()
 		else:
 			self.historicalTimer.schedule()
 
@@ -320,7 +324,6 @@ class Govee(Plugin, realtime=True, logged=True):
 		if self.historicalTimer is not None and self.historicalTimer.running:
 			self.historicalTimer.stop()
 		self.pluginLog.info(f'{self.name} stopped')
-
 
 	async def close(self):
 		await self.asyncStop()
@@ -375,6 +378,12 @@ class Govee(Plugin, realtime=True, logged=True):
 
 	def __dataParse(self, device, data):
 		try:
+			if device.name != self.name:
+				return
+		except AttributeError:
+			return
+
+		try:
 			dataBytes: bytes = data.manufacturer_data[1]
 		except KeyError:
 			pluginLog.error(f'Invalid data: {data!r}')
@@ -382,7 +391,7 @@ class Govee(Plugin, realtime=True, logged=True):
 		results = {
 			'timestamp': now().timestamp(),
 			'type': f'BLE{str(type(data).__name__)}',
-			'rssi': int(device.rssi),
+			'rssi': int(data.rssi),
 			'deviceName': str(device.name),
 			'deviceAddress': str(device.address),
 			**self.__temperatureParse(dataBytes),

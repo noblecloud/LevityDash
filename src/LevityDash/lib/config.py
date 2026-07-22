@@ -16,6 +16,7 @@ from rich import prompt
 
 from . import LevityDashboard
 from .EasyPath import EasyPath, EasyPathFile
+from ._descriptors import classproperty
 
 _backupLogger = getLogger('LevityConfig')
 
@@ -79,7 +80,7 @@ class LevityConfig(ConfigParser):
 
 		userPath = Path(dirs.config)
 		if not userPath.exists() or len(os.listdir(userPath)) == 0:
-			self.log.warn(f'Creating user config directory: {userPath}')
+			self.log.warning(f'Creating user config directory: {userPath}')
 			buildDirectories(userPath, {'fonts': [], 'saves': ['dashboards', 'panels']})
 			copytree(LevityDashboard.paths.resources / 'example-config', userPath, dirs_exist_ok=True)
 
@@ -150,6 +151,24 @@ class LevityConfig(ConfigParser):
 			default = ''
 			kwargs = {}
 
+		# non-interactive sessions (no TTY) can't prompt; take the default
+		import sys
+		if not (sys.stdin and sys.stdin.isatty()):
+			self.log.warning(f'Non-interactive session; using default {default!r} for prompt {message!r}')
+			if valueType is bool:
+				return str(default).lower() in ('true', 't', '1', 'y', 'yes')
+			if valueType is int:
+				try:
+					return round(float(default))
+				except (TypeError, ValueError):
+					return 0
+			if valueType is float:
+				try:
+					return float(default)
+				except (TypeError, ValueError):
+					return 0.0
+			return default
+
 		if askType == 'askInput':
 			message = message or ''
 
@@ -201,8 +220,7 @@ class LevityConfig(ConfigParser):
 				# return QInputDialog.getItem(QWidget(), self.path.name, message, choices, 0, 'custom' in choices)[0]
 				return prompt.Prompt.ask(message, **kwargs)
 
-	@classmethod
-	@property
+	@classproperty
 	def log(cls):
 		return getattr(cls, '_log', None)
 
@@ -249,6 +267,7 @@ class LevityConfig(ConfigParser):
 				section = self[section]
 		except KeyError:
 			self.add_section(section)
+			section = self[section]
 
 		if getter == self.getboolean or getter == bool:
 			if (value := section.getboolean(key)) is None:
@@ -530,7 +549,21 @@ class Config(LevityConfig):
 			from LevityDash.lib.log import LevityUtilsLog as log
 			log = log.getChild('config')
 			log.info('No location set in config.  Guessing location based on IP address.')
-			lat, lon, tz = guessLocation()
+			try:
+				lat, lon, tz = guessLocation()
+			except Exception as e:
+				log.warning(
+					f'Unable to determine location from IP ({e}).  '
+					f'Falling back to 0,0/UTC for this session; set [Location] in config.ini to silence this.'
+				)
+				# session-only fallback: deliberately not saved so a transient
+				# network failure never persists a bogus location
+				self['Location'] = {
+					'timezone': timezone or 'UTC',
+					'latitude': latitude or '0.0',
+					'longitude': longitude or '0.0',
+				}
+				return float(self['Location']['latitude']), float(self['Location']['longitude'])
 			self['Location'] = {'timezone': timezone or tz, 'latitude': latitude or lat, 'longitude': longitude or lon}
 			self.save()
 		return float(self['Location']['latitude']), float(self['Location']['longitude'])

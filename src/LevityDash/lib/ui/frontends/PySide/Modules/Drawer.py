@@ -1,28 +1,30 @@
+__pdoc__ = {}
+
 import numpy as np
 from functools import cached_property
 from json import dumps
 from typing import Any, Callable, Iterable, Optional, Union
 
 import math
-from PySide2.QtCore import QByteArray, QMimeData, QPoint, QPointF, QRect, QRectF, Qt, QTimer, Slot
-from PySide2.QtGui import QColor, QDrag, QFocusEvent, QPainter, QPainterPath, QPen, QPixmap
-from PySide2.QtWidgets import QGraphicsBlurEffect, QGraphicsItem, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent, QGraphicsSceneWheelEvent
+from PySide6.QtCore import QByteArray, QMimeData, QPoint, QPointF, QRect, QRectF, Qt, QTimer, Slot
+from PySide6.QtGui import QColor, QDrag, QFocusEvent, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtWidgets import QGraphicsBlurEffect, QGraphicsItem, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsRectItem, QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent, QGraphicsSceneWheelEvent
 
 from LevityDash.lib.plugins.observation import TimeAwareValue
+from LevityDash.lib.ui.Geometry import Geometry, Size, Position, angleBetweenPoints
+from LevityDash.lib.ui.Geometry.Grid import Grid
+from LevityDash.lib.ui.frontends.PySide.Modules import Label
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import LockedRealtime
 from LevityDash.lib.ui.frontends.PySide.Modules.glyphs import BackArrow, Plus
 from LevityDash.lib.plugins.categories import CategoryDict, CategoryItem
-from LevityDash.lib.Geometry.Grid import Grid
-from LevityDash.lib.Geometry import Geometry, GridItem
 from LevityDash.lib.ui.frontends.PySide.utils import GraphicsItemSignals, mouseHoldTimer, mouseTimer
 from LevityDash.lib.utils.shared import clearCacheAttr, levenshtein
-from LevityDash.lib.utils.geometry import Alignment, angleBetweenPoints, GridItemSize, Margins, Position, Size
-from LevityDash.lib.plugins.dispatcher import ValueDirectory, MultiSourceContainer
 
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Various import DrawerHandle, HoverArea, IndoorIcon
-from LevityDash.lib.ui.frontends.PySide.Modules.Label import Label, TitleLabel
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 
+from LevityDash import LevityDashboard as lv
+ValueDirectory = lv.dispatcher
 
 class ScrollRect(Panel):
 	savable = False
@@ -104,7 +106,7 @@ class ScrollRect(Panel):
 		super(ScrollRect, self).mouseReleaseEvent(event)
 
 	def itemChange(self, change: int, value: Any) -> Any:
-		if change == self.ItemPositionChange:
+		if change == self.GraphicsItemChange.ItemPositionChange:
 			frame = self.rect()
 			maxX = self.parent.width() - frame.width()
 			maxY = self.parent.height() - frame.height()
@@ -113,7 +115,7 @@ class ScrollRect(Panel):
 			value.setX(x)
 			value.setY(y)
 			return super(QGraphicsRectItem, self).itemChange(change, value)
-		if change == self.ItemPositionHasChanged:
+		if change == self.GraphicsItemChange.ItemPositionHasChanged:
 			return super(QGraphicsRectItem, self).itemChange(change, value)
 		return super().itemChange(change, value)
 
@@ -453,10 +455,10 @@ class RadialMenuItem(Panel):
 		self.path.setPath(path)
 		self.prepareGeometryChange()
 		self.path.show()
-		self.path.setFlag(self.ItemClipsChildrenToShape, True)
-		# self.setFlag(self.ItemHasNoContents, True)
+		self.path.setFlag(self.GraphicsItemFlag.ItemClipsChildrenToShape, True)
+		# self.setFlag(self.GraphicsItemFlag.ItemHasNoContents, True)
 
-		# self.setFlag(self.ItemHasNoContents, False)
+		# self.setFlag(self.GraphicsItemFlag.ItemHasNoContents, False)
 		effect = QGraphicsBlurEffect()
 		effect.setBlurRadius(30)
 		self.backgroundImage.setGraphicsEffect(effect)
@@ -691,7 +693,7 @@ class PanelDrawer(Panel):
 		self.resizeHandles.setEnabled(False)
 		self.resizeHandles.setVisible(False)
 		self.setFiltersChildEvents(True)
-		self.setFlag(self.ItemClipsChildrenToShape, False)
+		self.setFlag(self.GraphicsItemFlag.ItemClipsChildrenToShape, False)
 		self.setAcceptHoverEvents(True)
 		self.handle = DrawerHandle(self)
 		self.handle.update()
@@ -718,7 +720,7 @@ class PanelDrawer(Panel):
 		return grid
 
 	def itemChange(self, change: int, value: Any) -> Any:
-		if change == self.ItemPositionChange:
+		if change == self.GraphicsItemChange.ItemPositionChange:
 			value.setX(0)
 			maxY = -self.height()
 			if value.y() < maxY:
@@ -726,7 +728,7 @@ class PanelDrawer(Panel):
 			if value.y() > 0:
 				value.setY(0)
 			return super(Panel, self).itemChange(change, value)
-		if change == self.ItemPositionHasChanged:
+		if change == self.GraphicsItemChange.ItemPositionHasChanged:
 			panelPos = QPointF(value)
 			panelPos.setY(value.y() + self.height())
 			self.centralPanel.setPos(panelPos)

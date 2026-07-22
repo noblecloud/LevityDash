@@ -1,23 +1,38 @@
+import os
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import timedelta
-from functools import cached_property
-from typing import Callable, Coroutine, Dict, Iterable, List, Set
+from functools import cached_property, partial
+from typing import Callable, Coroutine, Dict, Iterable, List, Set, Type
 
 from itertools import groupby
-from PySide2.QtCore import Signal, Slot, QTimer
+from PySide6.QtCore import Signal, Slot, QTimer
 from rich.repr import auto as auto_rich_repr
 
 from LevityDash import LevityDashboard
+from LevityDash.lib.config import userConfig
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.plugins.categories import CategoryEndpointDict, CategoryItem
 from LevityDash.lib.plugins.observation import MeasurementTimeSeries, Observation, Container
 from LevityDash.lib.plugins.plugin import AnySource, Plugin, SomePlugin
 from LevityDash.lib.plugins.utils import Request, GuardedRequest, ChannelSignal, MutableSignal
 from LevityDash.lib.utils.data import KeyData
-from LevityDash.lib.utils.shared import clearCacheAttr, Period
+from LevityDash.lib.utils.shared import clearCacheAttr, Period, singleShotSafe
+from LevityDash.lib.wire.bridge import LoopbackBridge
+from WeatherUnits import Measurement, auto as wu_auto
 
 log = LevityPluginLog.getChild('Dispatcher')
+
+
+def backend_mode() -> str:
+	"""The resolved [Backend] mode: live (default) | loopback | remote.
+
+	Single source of truth - the dispatcher wires itself with it at import
+	time, and LevityDashApp.start consults it to skip local plugin auto-start
+	in remote mode. Env var wins over config (see the comment in
+	PluginValueDirectory.__init__ for why only on-disk/env values can work).
+	"""
+	return os.environ.get('LEVITYDASH_BACKEND_MODE') or userConfig.getOrSet('Backend', 'mode', 'live')
 
 
 @auto_rich_repr
@@ -235,6 +250,18 @@ class MultiSourceContainer(dict):
 		except AttributeError:
 			return str(self.key.name)
 
+	@property
+	def value_type(self) -> Type[Measurement]:
+		if self:
+			return self.value.value_type
+		else:
+			try:
+				return type(self.default_source.schema[self.key].getConvertFunc()(0).localize)
+			except Exception as e:
+				#! TODO: Add option to search through all valid plugins
+				#! and return the most common
+				return Measurement
+
 	@cached_property
 	def default_source(self) -> Plugin | None:
 		for plugin in self.valid_sources:
@@ -272,32 +299,31 @@ class MultiSourceContainer(dict):
 
 	def checkAwaiting(self, container: Container):
 		plugin = container.source
+		# Ideal situation
 		if container.isRealtime and (self.waitingForTrueRealtime[plugin] or self.waitingForTrueRealtime[AnySource]):
 			log.verbose(f"{plugin.name} is ready with a strict realtime value for {self.key}", verbosity=1)
 			for request in (*self.waitingForTrueRealtime.pop(plugin, []), *self.waitingForTrueRealtime.pop(AnySource, [])):
-				log.verbose(f"Issuing callback for {request.requester!s}", verbosity=1)
-				# LevityDashboard.main_thread_pool.run_in_thread(request.callback)
-				# request.callback()
-				QTimer.singleShot(1, request.callback)
+				log.verbose(f"Issuing callback for {request.requester!s}", verbosity=2)
+				singleShotSafe(1, request.callback)
 
+		# Less than an ideal situation
 		if (container.isRealtime or container.isRealtimeApproximate) and (
 			self.waitingForAnyRealtime[plugin] or self.waitingForAnyRealtime[AnySource]
 		):
 			log.verbose(f"{plugin!s} is ready with an approximate realtime value for {self.key.name}", verbosity=1)
 			for request in (*self.waitingForAnyRealtime.pop(plugin, []), *self.waitingForAnyRealtime.pop(AnySource, [])):
-				log.verbose(f"Issuing callback for {request.requester!s}", verbosity=1)
+				log.verbose(f"Issuing callback for {request.requester!s}", verbosity=2)
 				if container.isTimeseriesOnly:
-					container.prepare_for_ts_connection(request.callback)
+					container.prepare_for_ts_connection(request)
 				else:
-					# LevityDashboard.main_thread_pool.run_in_thread(request.callback)
-					QTimer.singleShot(1, request.callback)
+					singleShotSafe(1, request.callback)
 
 		if requesters := (self.waitingForTimeseries[plugin] or self.waitingForTimeseries[AnySource]):
 			if plugin[self.key].isForecast:
-				log.verbose(f"{plugin.name} timeseries is ready for {self.key}", verbosity=1)
+				log.verbose(f"{plugin.name} timeseries is ready for {self.key}", verbosity=2)
 				for request in (*self.waitingForTimeseries.pop(plugin, []), *self.waitingForTimeseries.pop(AnySource, [])):
-					log.verbose(f"Issuing callback for {request.requester!s}", verbosity=1)
-					container.prepare_for_ts_connection(request.callback)
+					log.verbose(f"Issuing callback for {request.requester!s}", verbosity=2)
+					container.prepare_for_ts_connection(request)
 			elif plugin is not AnySource:
 				plugin_container = self[plugin]
 
@@ -310,10 +336,10 @@ class MultiSourceContainer(dict):
 
 		if self.waitingForDaily[plugin] or self.waitingForDaily[AnySource]:
 			if plugin[self.key].isDailyForecast:
-				log.verbose(f"{plugin.name} daily is ready for {self.key}", verbosity=1)
+				log.verbose(f"{plugin.name} daily is ready for {self.key}", verbosity=2)
 				for request in (*self.waitingForDaily.pop(plugin, []), *self.waitingForDaily.pop(AnySource, [])):
-					log.verbose(f"Issuing callback for {request.requester!s}", verbosity=1)
-					container.prepare_for_ts_connection(request.callback)
+					log.verbose(f"Issuing callback for {request.requester!s}", verbosity=2)
+					container.prepare_for_ts_connection(request)
 
 	def addValue(self, plugin: Plugin, container: Container):
 		self[plugin.name] = container
@@ -343,7 +369,22 @@ class MultiSourceContainer(dict):
 
 	def getPreferredSourceContainer(self, requester, plugin: Plugin | SomePlugin, callback: Callable, timeseriesOnly: bool = False):
 		log.verbose(f'{requester!s} requested {"timeseries" if timeseriesOnly else "approximate realtime value"} '
-		          f'from {"any source" if (plugin is AnySource) else str(plugin)} for {self.key.name}', verbosity=4)
+		          f'from {"any source" if (plugin is AnySource) else str(plugin)} for {self.key.name}', verbosity=2)
+		# A qualifying container may already be here - in mode=remote a replayed
+		# snapshot typically lands while panels are still registering their
+		# waits, and without this check the request would hold until the
+		# source's next publish (a full poll cycle). Mirror checkAwaiting's
+		# fire conditions and short-circuit instead of queueing.
+		ready = (lambda c: c.isForecast) if timeseriesOnly else (lambda c: c.isRealtime or c.isRealtimeApproximate)
+		candidates = self.values() if plugin is AnySource else ([self[plugin]] if plugin in self else [])
+		for container in candidates:
+			if ready(container):
+				request = Request(requester, callback)
+				if container.isTimeseriesOnly:
+					container.prepare_for_ts_connection(request)
+				else:
+					singleShotSafe(1, request.callback)
+				return
 		if timeseriesOnly:
 			self.waitingForTimeseries[plugin].add(Request(requester, callback))
 		else:
@@ -351,12 +392,12 @@ class MultiSourceContainer(dict):
 
 	def getTrueRealtimeContainer(self, requester, source: Plugin | SomePlugin, callback: Callable):
 		log.verbose(f'{requester!s} requested true realtime value from '
-		          f'{str(source) if source is not AnySource else "any source"} for {self.key.name}', verbosity=4)
+		          f'{str(source) if source is not AnySource else "any source"} for {self.key.name}', verbosity=2)
 		self.waitingForTrueRealtime[source].add(Request(requester, callback))
 
 	def getDailyContainer(self, requester, source: Plugin | SomePlugin, callback: Callable):
 		log.verbose(f'{requester!s} requested daily value from '
-		          f'{str(source) if source is not AnySource else "any source"} for {self.key.name}', verbosity=4)
+		          f'{str(source) if source is not AnySource else "any source"} for {self.key.name}', verbosity=2)
 		self.waitingForDaily[source].add(Request(requester, callback))
 
 	@property
@@ -427,7 +468,7 @@ class MultiSourceChannel(ChannelSignal):
 
 	def _emit(self):
 		self._signal.emit(self._source)
-		self._source.onUpdates(self._pending)
+		self._source.onUpdates(self._pending)  # Send updated data to source container to check for awaiting requests
 		self._pending.clear()
 
 	def listen_to_container(self, container: 'Container'):
@@ -478,13 +519,47 @@ class PluginValueDirectory(MutableSignal):
 		super(PluginValueDirectory, self).__init__()
 		self._pending = defaultdict(set)
 		self.__plugins = manager
-		for plugin in self.plugins:
-			if plugin is AnySource:
-				continue
-			plugin.publisher.connectSlot(self.keyAdded)
+		# [Backend] mode = live (default, unchanged behavior) | loopback |
+		# remote. loopback proves the wire codec + RemoteContainer round-trip
+		# in-process (Phase 4.1); remote attaches to an already-running
+		# standalone backend (LevityDash-backend) over a WebSocket and leaves
+		# local plugins unattached AND unstarted (see LevityDashApp.start) -
+		# the bundle-is-live / remote-is-attach-only decision in the roadmap.
+		#
+		# PluginValueDirectory is constructed as a side effect of the first
+		# `import LevityDash` (PluginsLoader's GlobalSingleton metaclass
+		# instantiates it immediately at class-body-execution time), before
+		# any application code gets a chance to run - so there is no
+		# reliable window to flip this via in-memory config writes; only a
+		# value already on disk, or this env var (mirroring the existing
+		# LEVITYDASH_CONFIG_DEBUG convention), can actually reach it.
+		mode = self.backend_mode = backend_mode()
+		self.bridge = LoopbackBridge(self) if mode == 'loopback' else None
+		self.remote = None
+		if mode == 'remote':
+			# Data arrives from the backend over the wire; RemoteConnection
+			# marshals every message onto the GUI thread before it reaches
+			# update() (the roadmap's single-hop requirement for this seam).
+			from LevityDash.lib.wire.remote import RemoteConnection
+			url = os.environ.get('LEVITYDASH_BACKEND_URL') or userConfig.getOrSet('Backend', 'url', 'ws://127.0.0.1:8667/ws')
+			self.remote = RemoteConnection(self, url)
+		else:
+			for plugin in self.plugins:
+				if plugin is AnySource:
+					continue
+				if self.bridge is not None:
+					self.bridge.attach(plugin)
+				else:
+					plugin.publisher.connectSlot(self.keyAdded)
 		self.categories = CategoryEndpointDict(self, self._values, None)
 
 	def connect_plugin(self, plugin: Plugin) -> bool:
+		if self.backend_mode == 'remote':
+			# remote frontends never consume local plugins
+			return True
+		if self.bridge is not None:
+			self.bridge.attach(plugin)
+			return True
 		return plugin.publisher.connectSlot(self.keyAdded)
 
 	@property
@@ -586,5 +661,11 @@ class PluginValueDirectory(MutableSignal):
 	@property
 	def plugins(self) -> 'Plugins':
 		return self.__plugins
+
+	@property
+	def all_valid_keys(self) -> Set[CategoryItem]:
+		key_extractor = lambda x: set(x.schema.flatDict.keys())
+		return set.union(*map(key_extractor, self.plugins))
+
 
 __all__ = ("PluginValueDirectory", "MultiSourceContainer", "MultiSourceChannel")

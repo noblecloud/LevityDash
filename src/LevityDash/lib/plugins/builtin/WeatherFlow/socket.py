@@ -1,13 +1,13 @@
 import re
 
-import utils.data
-from LevityDash.lib import logging
+from LevityDash.lib.plugins.schema.units import unitDict
+from WeatherUnits import Measurement, Time
+from LevityDash.lib import config, utils
 
-from WeatherUnits import Measurement
-from LevityDash.lib import config
+from LevityDash.lib.log import LevityPluginLog as logging
+from WeatherUnits.defaults.WeatherFlow import UDPClasses
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG)
 
 
 class UDPMessage(dict):
@@ -77,14 +77,14 @@ class UDPMessage(dict):
 		for key, value in zip(self.atlas, data):
 			newClass = UDPClasses[key]
 			if isinstance(newClass, str):
-				t = unitDefinitions[key]
+				t = unitDict[key]
 				newClass, nClass, dClass = UDPClasses[newClass]
 				n = nClass(value)
 				d = dClass(1)
 				newValue = newClass(n, d, title=t['title'], key=key)
 			else:
 				if issubclass(newClass, Measurement):
-					t = unitDefinitions[key]
+					t = unitDict[key]
 					newValue = newClass(value, title=t['title'], key=key)
 				else:
 					newValue = newClass(value)
@@ -97,7 +97,7 @@ class UDPMessage(dict):
 		return converted
 
 	def __setitem__(self, *args):
-		logging.error('UDP Messages are immutable')
+		log.error('UDP Messages are immutable')
 
 	def __repr__(self):
 		return f'{self.name}'

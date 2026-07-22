@@ -1,18 +1,19 @@
-from collections import defaultdict
+from collections import defaultdict, namedtuple
+from contextlib import contextmanager
 from dataclasses import asdict, is_dataclass
 from enum import Enum
 from functools import cached_property, partial
 from os import environ
 from types import SimpleNamespace
-from typing import Callable, ClassVar, Dict, List, Optional, overload, Protocol, runtime_checkable, Tuple, Type, Union
+from typing import Callable, ClassVar, Dict, List, Optional, overload, Protocol, runtime_checkable, Tuple, Type, Union, Iterable
 
 import numpy as np
-from PySide2 import QtCore
-from PySide2.QtCore import QLineF, QObject, QPoint, QPointF, QRectF, QSize, QSizeF, Qt, QTimer, Signal, QThread
-from PySide2.QtGui import QBrush, QColor, QFont, QImage, QPainter, QPainterPath, QPen, QPixmap, QTransform, QPixmapCache
-from PySide2.QtWidgets import (
+from PySide6 import QtCore
+from PySide6.QtCore import QLineF, QObject, QPoint, QPointF, QRectF, QSize, QSizeF, Qt, QTimer, Signal, QThread, QRect
+from PySide6.QtGui import QBrush, QColor, QFont, QImage, QPainter, QPainterPath, QPen, QPixmap, QTransform, QPixmapCache, QPainterPathStroker
+from PySide6.QtWidgets import (
 	QApplication, QGraphicsDropShadowEffect, QGraphicsEffect, QGraphicsItem, QGraphicsPixmapItem,
-	QGraphicsScene, QGraphicsSceneMouseEvent
+	QGraphicsScene, QGraphicsSceneMouseEvent, QGraphicsPathItem
 )
 from yaml import Dumper, SafeDumper
 
@@ -20,11 +21,18 @@ from LevityDash.lib.log import debug
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.stateful import Stateful
 from LevityDash.lib.ui.colors import Color
-from LevityDash.lib.ui.Geometry import Geometry, Position, Size
+from LevityDash.lib.ui.Geometry import Geometry, Position, Size, LocationFlag
 from LevityDash.lib.utils import (
 	ClosestMatchEnumMeta, getItemsWithType, getItemsWithType, levenshtein, Unset,
 	utilLog as log
 )
+
+
+@contextmanager
+def painter_restore(painter: QPainter):
+	painter.save()
+	yield painter
+	painter.restore()
 
 
 def asArray(img) -> np.array:
@@ -40,6 +48,7 @@ def asArray(img) -> np.array:
 	ptr = incomingImage.constBits()
 	arr = np.array(ptr).reshape((height, width, 4))
 	return arr
+
 
 def objectRepresentor(dumper, obj):
 	if hasattr(obj, 'representer'):
@@ -314,7 +323,7 @@ def loadMoon(parent, items, parentItems, **kwargs):
 	return newItems
 
 
-def itemLoader(parent, unsortedItems: list[dict], existing: list = None, **kwargs):
+def itemLoader(parent: 'Panel', unsortedItems: list[dict], existing: list = None, **kwargs):
 	if not unsortedItems:
 		return
 	if existing is None:
@@ -577,27 +586,41 @@ class mouseHoldTimer(mouseTimer):
 			super(mouseHoldTimer, self)._T()
 
 
+def size_to_wh(
+	size: int | float | Size | QSize | QSizeF, /,
+	default: tuple[float, float] = None
+) -> tuple[float, float]:
+	match size:
+		case float(s) | int(s):
+			w = h = s
+		case Size(s):
+			w = float(s.width)
+			h = float(s.height)
+		case QSize() | QSizeF():
+			w, h = (size / 2).toTuple()
+		case _:
+			if default is None:
+				raise ValueError(f'Invalid size: {size}')
+			w, h = default
+	return w, h
+
+
 def addCrosshair(
-	painter: QPainter, color: QColor = Qt.red, size: int | float | Size | QSize | QSizeF = 2.5, weight=1,
+	painter: QPainter,
+	color: QColor = Qt.red,
+	size: int | float | Size | QSize | QSizeF = 2.5,
+	weight=1,
 	pos: QPointF = QPointF(0, 0)
 ):
 	"""
-	Decorator that adds a crosshair paint function
+	Adds a crosshair to the painter.
 	"""
+	painter.save()
 	pen = QPen(color, weight)
 	# pen.setCosmetic(Fa)
 	painter.setPen(pen)
-	match size:
-		case float(s) | int(s):
-			x = size
-			y = size
-		case Size(s):
-			x = float(size.width) / 2
-			y = float(size.height) / 2
-		case QSize() | QSizeF():
-			x, y = (size / 2).toTuple()
-		case _:
-			x, y = 2.5, 2.5
+
+	x, y = size_to_wh(size, default=(2.5, 2.5))
 
 	verticalLine = QLineF(-x, 0, x, 0)
 	verticalLine.translate(pos)
@@ -605,17 +628,221 @@ def addCrosshair(
 	horizontalLine.translate(pos)
 	painter.drawLine(verticalLine)
 	painter.drawLine(horizontalLine)
+	painter.restore()
+
+
+def add_corner_at_point(
+	painter: QPainter,
+	point: QPointF,
+	color: QColor = Qt.red,
+	size: int | float | Size | QSize | QSizeF = 2.5,
+	weight=1,
+	location: LocationFlag = LocationFlag.BottomLeft,
+):
+	"""
+	Adds a corner to the painter.
+	"""
+
+	painter.save()
+	pen = QPen(color, weight)
+	painter.setPen(pen)
+
+	w, h = size_to_wh(size)
+
+	x_origin, y_origin = x_vertical, y_vertical = x_horizontal, y_horizontal = point.toTuple()
+
+	if location.isLeft:
+		x_vertical += w
+	elif location.isRight:
+		x_vertical -= w
+	if location.isTop:
+		y_horizontal += h
+	elif location.isBottom:
+		y_horizontal -= h
+
+	verticalLine = QLineF(x_origin, y_origin, x_vertical, y_vertical)
+	horizontalLine = QLineF(x_origin, y_origin, x_horizontal, y_horizontal)
+
+	painter.drawLine(verticalLine)
+	painter.drawLine(horizontalLine)
+	painter.restore()
 
 
 def addRect(
-	painter: QPainter, rect: QRectF, color: QColor = Qt.red, fill: QColor = Qt.transparent, offset: float | int = 0
+	painter: QPainter,
+	rect: QRectF,
+	color: QColor = Qt.red,
+	fill: QColor = Qt.transparent,
+	opacity: float = None,
+	offset: float | int = 0,
+	width: float | int = 1,
+	label_text: str = None,
+	label_font: QFont = None,
 ):
-	pen = QPen(color or Qt.white)
+	painter.save()
+
+	if opacity is not None:
+		painter.setOpacity(opacity)
+
+	pen = QPen(color)
+	pen.setWidth(width)
 	brush = QBrush(fill or Qt.transparent)
 	pen.setCosmetic(True)
 	painter.setPen(pen)
 	painter.setBrush(brush)
 	painter.drawRect(rect.adjusted(-offset, -offset, offset, offset))
+	painter.restore()
+
+	if label_text:
+		addText(painter, label_text, rect=rect)
+
+
+def addText(
+	painter: QPainter,
+	text: str,
+	/,
+	color: QColor = None,
+	font: QFont = None,
+	font_size: int | float = 12,
+	pos: QPointF = QPointF(0, 0),
+	rect: QRectF = None,
+	alignment: Qt.AlignmentFlag | Qt.Alignment = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
+):
+	painter.save()
+
+	if color is None:
+		color = Qt.white
+		# painter.setCompositionMode(QPainter.CompositionMode_Difference)
+
+	pen = QPen(color)
+	pen.setCosmetic(True)
+	pen.setBrush(color)
+	painter.setPen(pen)
+
+	font = font or QFont('monospace')
+	t_scale = painter.combinedTransform().m22()
+
+	font.setPointSizeF(font_size / (t_scale or 1))
+	painter.setFont(font)
+
+	if rect:
+		painter.drawText(rect, alignment, text)
+	else:
+		painter.drawText(pos, text)
+
+	painter.restore()
+
+
+def addPath(
+	painter: QPainter,
+	path: QPainterPath,
+	color: QColor | Qt.GlobalColor = Qt.red,
+	fill: QColor = Qt.transparent,
+	weight: float | int = 1,
+	label_text: str = None,
+	label_font: QFont = None,
+):
+	painter.save()
+	pen = QPen(color)
+	brush = QBrush(fill or Qt.transparent)
+	pen.setWidth(weight)
+	painter.setPen(pen)
+	painter.setBrush(brush)
+	painter.drawPath(path)
+	painter.restore()
+
+	if label_text:
+		label_font = label_font or QFont()
+		label_font.setPixelSize(8)
+		addText(painter, label_text, rect=path.boundingRect(), font=label_font)
+
+
+def addGrid(
+	painter: QPainter,
+	rect: QRectF,
+	pen: QPen = None,
+	color: QColor = None,
+	opacity: float | int = None,
+	weight: float | int = None,
+	spacing: float | int = 10,
+	label_interval: float | int = 50,
+	label_font: QFont = None,
+):
+
+	painter.save()
+
+	label_font = label_font or QFont()
+
+	label_font.setPointSize(8)
+	painter.setFont(label_font)
+
+	pen = pen or painter.pen()
+
+	if weight is not None:
+		pen.setWidth(weight)
+
+	color = color or pen.color()
+	if opacity is not None:
+		color = QColor(color)
+		color.setAlpha(opacity)
+
+	painter.setPen(pen)
+
+	# Draw the grid lines based on pixel spacing.
+	if spacing > 1 or isinstance(spacing, int):
+		try:
+			rect = rect.toRect()
+		except AttributeError:
+			pass
+		x = rect.x()
+		y = rect.y()
+		w = rect.width()
+		h = rect.height()
+
+		for x in range(x, x + w, spacing):
+			painter.drawLine(x, y, x, y + h)
+			if x % label_interval == 0:
+				painter.drawText(x, y + h + 10, str(x))
+
+		for y in range(y, y + h, spacing):
+			painter.drawLine(x, y, x + w, y)
+			if y % label_interval == 0:
+				painter.drawText(x - 30, y, str(y))
+
+	painter.restore()
+
+	# # Draw the grid lines based on relative spacing.
+	# elif isinstance(spacing, float):
+	# 	x = rect.x()
+	# 	y = rect.y()
+	# 	w = rect.width()
+	# 	h = rect.height()
+	#
+	# 	for x in range(x, x + w, int(w * spacing)):
+	# 		painter.drawLine(x, y, x, y + h)
+	#
+	# 	for y in range(y, y + h, int(h * spacing)):
+	# 		painter.drawLine(x, y, x + w, y)
+
+
+def path_to_QImage(
+	path: QPainterPath,
+	size: QSizeF,
+	color: QColor = Qt.white,
+	fill: QColor = Qt.transparent
+) -> QImage:
+
+	image = QImage(size.toSize(), QImage.Format.Format_ARGB32)
+	image.fill(fill)
+	painter = QPainter(image)
+	painter.setRenderHint(QPainter.Antialiasing)
+	painter.setRenderHint(QPainter.SmoothPixmapTransform)
+	painter.setRenderHint(QPainter.TextAntialiasing)
+	painter.setPen(QPen(color))
+	painter.setBrush(QBrush(fill))
+	painter.drawPath(path)
+	painter.end()
+	return image
 
 
 def addCrosshairDecorator(func: Callable, **dkwargs) -> Callable:
@@ -631,15 +858,15 @@ def addCrosshairDecorator(func: Callable, **dkwargs) -> Callable:
 	return wrapper
 
 
-from PySide2.QtGui import QPalette
+from PySide6.QtGui import QPalette
 
 colorPalette = QPalette()
-colorPalette.setColor(QPalette.Window, QColor(0, 0, 0))
-colorPalette.setColor(QPalette.Base, QColor(0, 0, 0))
-colorPalette.setColor(QPalette.Background, QColor(0, 0, 0))
+colorPalette.setColor(QPalette.ColorRole.Window, QColor(0, 0, 0))
+colorPalette.setColor(QPalette.ColorRole.Base, QColor(0, 0, 0))
 
-colorPalette.setColor(QPalette.WindowText, QColor(255, 255, 255))
-colorPalette.setColor(QPalette.ButtonText, QColor(255, 255, 255))
+colorPalette.setColor(QPalette.ColorRole.WindowText, QColor(255, 255, 255))
+colorPalette.setColor(QPalette.ColorRole.ButtonText, QColor(255, 255, 255))
+colorPalette.setColor(QPalette.ColorRole.Text, QColor(255, 255, 255))
 
 selectionPen = QPen(QColor(colorPalette.windowText().color()), 1)
 selectionPen.setDashPattern([5, 5])
@@ -721,7 +948,9 @@ def DebugPaint(cls: Type[DebugPaintable] = None, **kwargs) -> Union[Callable, Ty
 			color = kwargs.get('color', None)
 			if color is not None:
 				color = Color(color)
-			cls._debug_paint_color = (color or Color.random()).QColor
+			debug_color = color or Color.random()
+			cls._debug_paint_color = debug_color.QColor
+			cls._debug_paint_alt_colors = debug_color.cubehelix_colors(10)
 		except AttributeError as e:
 			log.critical(f'{cls} has no _debug_paint function')
 		if e:
@@ -764,8 +993,8 @@ class SoftShadow(QGraphicsDropShadowEffect):
 		self.setColor(Qt.black)
 
 
-# def sourceChanged(self, flags: PySide2.QtWidgets.QGraphicsEffect.ChangeFlags) -> None:
-# 	print(int(PySide2.QtWidgets.QGraphicsEffect.SourceInvalidated & flags))
+# def sourceChanged(self, flags: PySide6.QtWidgets.QGraphicsEffect.ChangeFlags) -> None:
+# 	print(int(PySide6.QtWidgets.QGraphicsEffect.SourceInvalidated & flags))
 # 	super().sourceChanged(flags)
 
 # def event(self, event: QEvent) -> bool:
@@ -920,3 +1149,69 @@ class RendererScene(QGraphicsScene):
 
 		self.clear()
 		return item
+
+
+def rect_to_shape(rect: QRectF | QRect) -> QPainterPath:
+	path = QPainterPath()
+	path.addRect(rect)
+	return path
+
+QRectF.toShape = rect_to_shape
+QRect.toShape = rect_to_shape
+
+
+def getSceneShape(item: QGraphicsItem, path: QPainterPath = None) -> QPainterPath:
+	path = path or item.shape()
+	if item.scene() is None:
+		raise ValueError('Item must be in a scene')
+	return item.mapToScene(path)
+
+
+def outline_path(
+	path: QPainterPath,
+	weight: float | int,
+	cap_style: Qt.PenCapStyle = Qt.RoundCap,
+	join_style: Qt.PenJoinStyle = Qt.RoundJoin,
+	dash_pattern: Qt.PenStyle = Qt.SolidLine,
+) -> QPainterPath:
+
+	stroker = QPainterPathStroker()
+	stroker.setWidth(weight)
+	stroker.setCapStyle(cap_style)
+	stroker.setJoinStyle(join_style)
+	stroker.setDashPattern(dash_pattern)
+	return stroker.createStroke(path)
+
+
+class CollisionTest(QGraphicsPathItem):
+
+	def __init__(self, *items: Iterable[QGraphicsItem|QPainterPath]):
+
+		path = QPainterPath()
+
+		for item in items:
+			if isinstance(item, QGraphicsItem):
+				path.addPath(item.mapToScene(item.shape()))
+			elif isinstance(item, QPainterPath):
+				path.addPath(item)
+			else:
+				raise TypeError(f'Invalid type {type(item)}')
+
+		super().__init__(path)
+
+
+def move_shape_into_rect(shape: QPainterPath, rect: QRectF):
+	"""
+	Moves the shape into the rect by translating the shape to the rect center.
+	"""
+	shape.translate(*(shape.boundingRect().center() - rect.center()).toTuple())
+
+
+def near_point(point: QPointF, *points: Iterable[QPointF], distance: float = 10) -> bool:
+	"""
+	Checks if the point is near any of the points in the list.
+	"""
+	return any((point - p).manhattanLength() < distance for p in points)
+
+
+ViewScale = namedtuple('ViewScale', 'x y')

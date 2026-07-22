@@ -335,7 +335,7 @@ schema = {
 	},
 	'environment.soil.temperature.6cm':             {
 		'type':           'soil',
-		'sourceUnit':     '°C',
+		'sourceUnit':     'c',
 		'title':          'Soil Temperature [6cm]',
 		'description':    'Soil temperature at 6cm depth',
 		'sourceKey':      'soil_temperature_6cm',
@@ -343,7 +343,7 @@ schema = {
 	},
 	'environment.soil.temperature.18cm':            {
 		'type':           'soil',
-		'sourceUnit':     '°C',
+		'sourceUnit':     'c',
 		'title':          'Soil Temperature [12cm]',
 		'description':    'Soil temperature at 18cm depth',
 		'sourceKey':      'soil_temperature_18cm',
@@ -351,7 +351,7 @@ schema = {
 	},
 	'environment.soil.temperature.54cm':            {
 		'type':           'soil',
-		'sourceUnit':     '°C',
+		'sourceUnit':     'c',
 		'title':          'Soil Temperature [54cm]',
 		'description':    'Soil temperature at 54cm depth',
 		'sourceKey':      'soil_temperature_54cm',
@@ -359,7 +359,7 @@ schema = {
 	},
 	'environment.soil.temperature.temperature':     {
 		'type':           'soil',
-		'sourceUnit':     '°C',
+		'sourceUnit':     'c',
 		'title':          'Soil Temperature',
 		'description':    'Soil temperature',
 		'sourceKey':      'soil_temperature_0cm',
@@ -668,12 +668,11 @@ class OpenMeteo(REST, realtime=False, hourly=True, daily=True, recorded=True):
 			self.loop.run_until_complete(self._task)
 			self.stop()
 			del self.loop
-			self.pluginLog.info('WeatherFlow: shutdown complete')
+			self.pluginLog.info('OpenMeteo: shutdown complete')
 
 		self.loop.run_in_executor(None, bootstrap)
 
 		return self
-
 
 	async def asyncStart(self):
 		self.loop.call_soon(self.start)
@@ -696,7 +695,7 @@ class OpenMeteo(REST, realtime=False, hourly=True, daily=True, recorded=True):
 		try:
 			data = await self.getData(self.urls.forecast)
 		except APIError as e:
-			self.pluginLog.warn('OpenMeteo: No data received')
+			self.pluginLog.warning('OpenMeteo: No data received')
 			return
 		data['source'] = [self.name, self.urls.forecast]
 		self.loop.create_task(self.hourly.asyncUpdate(data))

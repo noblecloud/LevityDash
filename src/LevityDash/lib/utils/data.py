@@ -3,13 +3,14 @@ from datetime import datetime, timedelta
 from enum import auto, Enum, IntFlag
 from functools import cached_property
 from json import JSONEncoder
+from types import GenericAlias
 from typing import Any, Callable, Dict, Iterable, List, NamedTuple, Sequence, Set, Tuple, Type, TYPE_CHECKING, Union
 
 import numpy as np
 import time
 from math import ceil, floor, inf, isinf
 from numpy import ndarray
-from PySide2.QtCore import QObject, QSize, QSizeF, QTimer, Signal
+from PySide6.QtCore import QObject, QSize, QSizeF, QTimer, Signal
 from rich.repr import auto as auto_rich_repr
 from scipy.signal import savgol_filter
 
@@ -17,6 +18,7 @@ from LevityDash.lib.utils import (
 	clearCacheAttr, datetimeDiff, Infix, LOCAL_TIMEZONE, makeNumerical, Numeric, plural,
 	timedeltaToDict, utilLog as log
 )
+from LevityDash.lib.utils.shared import startTimerSafe
 
 if TYPE_CHECKING:
 	from LevityDash.lib.plugins.observation import TimeAwareValue
@@ -127,8 +129,8 @@ def savitzky_golay(y, window_size, order, deriv=0, rate=1):
 	from math import factorial
 
 	try:
-		window_size = np.abs(np.int(window_size))
-		order = np.abs(np.int(order))
+		window_size = np.abs(int(window_size))
+		order = np.abs(int(order))
 	except ValueError as msg:
 		raise ValueError("window_size and order have to be of type int")
 	if window_size%2 != 1 or window_size < 1:
@@ -219,6 +221,9 @@ TimeLineCollection = NamedTuple('TimeLineCollection', [('max', datetime), ('min'
 
 @dataclass
 class MinMax:
+
+	__class_getitem__ = classmethod(GenericAlias)
+
 	min: Numeric
 	max: Numeric
 
@@ -243,10 +248,7 @@ class MinMax:
 		self.max = max(arr)
 
 	def __clearCache(self):
-		if hasattr(self, 'range'):
-			delattr(self, 'range')
-		if hasattr(self, 'rawRange'):
-			delattr(self, 'rawRange')
+		clearCacheAttr(self, 'range', 'rawRange')
 
 	@property
 	def min(self) -> Numeric:
@@ -359,7 +361,8 @@ f"""The range for {self._link.log_repr} is 0.  This can be remedied by setting t
 		return r
 
 	def emitChanged(self):
-		self.__delayTimer.start()
+		# value updates arrive on plugin worker threads; see startTimerSafe
+		startTimerSafe(self.__delayTimer)
 
 	def __emitChanged(self):
 		self.changed.emit(Axis.Vertical)
@@ -595,7 +598,7 @@ class TimeFrameWindow(QObject):
 				value = timedelta(hours=1)
 			self.__clearCache()
 			self._range = value
-			self.__delayTimer.start()
+			startTimerSafe(self.__delayTimer)
 
 	@property
 	def rangeSeconds(self) -> int:
@@ -685,7 +688,7 @@ class TimeFrameWindow(QObject):
 		self.__clearCache()
 
 	def delayedEmit(self):
-		self.__delayTimer.start()
+		startTimerSafe(self.__delayTimer)
 
 	def __emitChanged(self):
 		self.changed.emit(Axis.Horizontal)
@@ -753,8 +756,8 @@ def cubic_interp1d(x0, x, y):
 
 	additional ref: www.math.uh.edu/~jingqiu/math4364/spline.pdf
 	"""
-	x = np.asfarray(x)
-	y = np.asfarray(y)
+	x = np.asarray(x, dtype=np.float64)
+	y = np.asarray(y, dtype=np.float64)
 
 	# remove non finite _values
 	# indexes = np.isfinite(x)

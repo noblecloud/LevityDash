@@ -4,8 +4,6 @@ from importlib import import_module
 from types import ModuleType
 from typing import Any, ClassVar, Dict, Hashable, Iterator, Optional, Type
 
-from PySide2.QtNetwork import QNetworkConfigurationManager
-
 from LevityDash import LevityDashboard
 from LevityDash.lib.config import pluginConfig
 from LevityDash.lib.log import LevityPluginLog as pluginLog
@@ -14,7 +12,7 @@ from LevityDash.lib.plugins.utils import Request, GuardedRequest
 from LevityDash.lib.plugins.observation import Container
 from LevityDash.lib.plugins.plugin import AnySource, Plugin, SomePlugin
 from LevityDash.lib.plugins.dispatcher import PluginValueDirectory
-from LevityDash.lib.utils import PluginPool, PluginThread, UnsetKwarg
+from LevityDash.lib.utils import PluginPool, PluginThread, UnsetKwarg, classproperty
 
 Plugins: 'PluginsLoader'
 
@@ -43,8 +41,7 @@ class GlobalSingleton(type):
 			mcs.instances[name] = instance
 		return mcs.instances[name]
 
-	@classmethod
-	@property
+	@classproperty
 	def root(mcs):
 		try:
 			return mcs.__root
@@ -61,8 +58,8 @@ class GlobalSingleton(type):
 class PluginsLoader(metaclass=GlobalSingleton, name='plugins'):
 	instance: ClassVar['Plugins'] = None
 	network_available: bool
-	network_manager = QNetworkConfigurationManager()
-	network_changed = network_manager.onlineStateChanged
+	# network_manager = QNetworkConfigurationManager()
+	# network_changed = network_manager.onlineStateChanged
 	plugins_thread_pool: ClassVar[PluginPool] = PluginPool()
 
 	_plugin_workers: ClassVar[Dict[Plugin, PluginThread]] = {}
@@ -95,11 +92,17 @@ class PluginsLoader(metaclass=GlobalSingleton, name='plugins'):
 			except ImportError as e:
 				pluginLog.debug(f'Unable to load {name} due to exception --> {e}')
 				continue
+			except Exception as e:
+				pluginLog.error(f'Failed to initialize plugin {name}: {e}')
+				if pluginLog.level <= 10:
+					pluginLog.exception(e)
+				continue
 		pluginLog.info(f'Loaded {len(self.__plugin_instances)} plugins')
 
 	def start(self):
 		pluginLog.info(' Starting Plugins '.center(80, '-'))
 		plugin_threads = [i for i in self if i.enabled]
+
 		for plugin_ in plugin_threads:
 			plugin_.thread.start()
 		pluginLog.info(' Thread Pool Started '.center(80, '-'))
@@ -107,12 +110,15 @@ class PluginsLoader(metaclass=GlobalSingleton, name='plugins'):
 	def stop(self):
 		pluginLog.info('--------------------- Stopping plugins ---------------------')
 		for plugin in self:
-			if plugin.running:
-				plugin.stop()
+			try:
+				if plugin.running:
+					plugin.stop()
+			except Exception as e:
+				pluginLog.error(f'Error stopping plugin {plugin.name}: {e}')
 
-	@property
-	def network_available(self) -> bool:
-		return PluginsLoader.network_manager.isOnline()
+	# @property
+	# def network_available(self) -> bool:
+	# 	return PluginsLoader.network_manager.isOnline()
 
 	# def on_network_availility_change(self, available: bool):
 	# 	if available and pluginConfig['Options'].getboolean('enabled') and self.network_available is None:
@@ -198,7 +204,3 @@ class PluginsLoader(metaclass=GlobalSingleton, name='plugins'):
 	@property
 	def enabled_plugins(self):
 		return {p for p in self.__plugin_instances.values() if p.enabled}
-
-
-def __getattr__(item: str) -> Plugin:
-	return getattr(LevityDashboard.plugins, item, None) or locals()[item]

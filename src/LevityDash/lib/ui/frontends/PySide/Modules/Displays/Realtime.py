@@ -1,17 +1,17 @@
-from abc import abstractmethod
 from datetime import timedelta, datetime
 from functools import cached_property, partial
 from numbers import Number
 from time import process_time
 from typing import Any, Iterable, Type, Dict
 
-from PySide2.QtCore import QByteArray, QMimeData, Qt, QThread, QTimer, QRectF, Slot
-from PySide2.QtGui import QDrag, QFocusEvent, QFont, QPainter, QPixmap, QTransform
-from PySide2.QtWidgets import QApplication, QGraphicsItem, QGraphicsSceneMouseEvent, QStyleOptionGraphicsItem
+from PySide6.QtCore import QByteArray, QMimeData, Qt, QTimer, QRectF, Slot, QPointF
+from PySide6.QtGui import QDrag, QFocusEvent, QPainter, QPixmap, QTransform
+from PySide6.QtWidgets import QApplication, QGraphicsItem, QGraphicsSceneMouseEvent, QStyleOptionGraphicsItem
 
 from LevityDash import LevityDashboard
-from LevityDash.lib.config import DATETIME_NO_ZERO_CHAR
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.DisplayBase import Display
 from LevityDash.lib.ui.icons import fa as FontAwesome, getIcon, Icon
+from LevityDash.lib.utils.shared import singleShotSafe
 from WeatherUnits.time_.time import Second
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins import Plugin, Container
@@ -19,19 +19,20 @@ from LevityDash.lib.plugins.plugin import AnySource, SomePlugin
 from LevityDash.lib.plugins.dispatcher import MultiSourceContainer
 from LevityDash.lib.ui.fonts import FontWeight
 from LevityDash.lib.ui.frontends.PySide import UILogger as guiLog
-from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, mouseHoldTimer
+from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, mouseHoldTimer, DebugPaint, addRect
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Label import NonInteractiveLabel as Label, TitleLabel
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import Text
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Resize import ResizeHandle
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Splitters import TitleValueSplitter, MeasurementUnitSplitter
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import RealtimeContextMenu
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.ui.Geometry import (
 	getDPI, Size, LocationFlag, AlignmentFlag, DisplayPosition, parseSize,
-	RelativeFloat, size_px
+	RelativeFloat, size_px, Dimension
 )
 from LevityDash.lib.utils.shared import (
-	disconnectSignal, Now, now, parse_bool, thread_safe, threadPool, TitleCamelCase, Unset, connectSignal,
-	clearCacheAttr
+	disconnectSignal, Now, now, parse_bool, TitleCamelCase, Unset, connectSignal,
+	clearCacheAttr, defer
 )
 from LevityDash.lib.stateful import StateProperty, Stateful
 from LevityDash.lib.plugins.observation import RealtimeSource, ObservationValue, TimeseriesSource
@@ -40,27 +41,6 @@ from WeatherUnits import Measurement, auto as autoMeasurement, Length
 qApp: QApplication
 
 log = guiLog.getChild(__name__)
-
-
-
-class Display(Panel, tag=...):
-	__exclude__ = {'items', 'geometry', 'locked', 'frozen', 'movable', 'resizable', 'text'}
-
-	__defaults__ = {
-		'displayType': DisplayType.Text,
-		'geometry':    {'x': 0, 'y': 0.2, 'width': 1.0, 'height': 0.8},
-		'movable':     False,
-		'resizable':   False,
-		'locked':      True,
-	}
-
-	@property
-	@abstractmethod
-	def type(self) -> DisplayType: ...
-
-	@classmethod
-	def default(cls):
-		return super().default()
 
 
 class InvalidSource(Exception):
@@ -92,8 +72,6 @@ class Realtime(Panel, tag='realtime'):
 		'locked':    False,
 	}
 
-	__exclude__ = {'items'}
-
 	@property
 	def subtag(self) -> str:
 		return self.display.displayType.value
@@ -104,9 +82,14 @@ class Realtime(Panel, tag='realtime'):
 		self.__pendingActions: Dict[int, Any] = {}
 		super(Realtime, self).__init__(parent=parent, **kwargs)
 		self.lastUpdate = None
-		self.display.valueTextBox.marginHandles.surfaceProxy = self
-		self.display.unitTextBox.marginHandles.surfaceProxy = self
-		self.display.unitTextBox.resizeHandles.surfaceProxy = self
+
+		try:
+			self.display.valueTextBox.marginHandles.surfaceProxy = self
+			self.display.unitTextBox.marginHandles.surfaceProxy = self
+			self.display.unitTextBox.resizeHandles.surfaceProxy = self
+		except AttributeError:
+			pass
+
 		self.timeOffsetLabel.setEnabled(False)
 		self.scene().view.loadingFinished.connect(self.onLoadFinished)
 
@@ -120,7 +103,7 @@ class Realtime(Panel, tag='realtime'):
 	def _init_defaults_(self):
 		super()._init_defaults_()
 		self.contentStaleTimer = QTimer(singleShot=True)
-		self.setFlag(self.ItemIsSelectable, True)
+		self.setFlag(self.GraphicsItemFlag.ItemIsSelectable, True)
 		self.setAcceptHoverEvents(not True)
 		self.setAcceptDrops(True)
 		self._container = None
@@ -128,10 +111,16 @@ class Realtime(Panel, tag='realtime'):
 		self._source = AnySource
 
 	def _init_args_(self, *args, **kwargs):
-		displayType = kwargs.pop('type', 'realtime.text')
-		display = kwargs.pop('display')
-		display['displayType'] = DisplayType[displayType.split('.')[-1]]
-		kwargs['display'] = display
+		if type(self) is Realtime:
+			displayType = kwargs.pop('type', 'realtime.text')
+			display = kwargs.pop('display')
+			# .strip('realtime.') strips any of those *characters* from both
+			# ends, not the literal prefix - for a bare value like "text" it
+			# mangled the string down to nothing and crashed downstream in
+			# DisplayType.__getitem__. removeprefix() is a no-op when the
+			# prefix isn't present, so both "realtime.text" and "text" work.
+			display['displayType'] = DisplayType[displayType.removeprefix('realtime.')]
+			kwargs['display'] = display
 		super(Realtime, self)._init_args_(*args, **kwargs)
 
 	def __repr__(self):
@@ -143,7 +132,7 @@ class Realtime(Panel, tag='realtime'):
 
 	def __rich_repr__(self):
 		yield 'value', self.container
-		yield 'title', self.title
+		yield 'title', self.title_label
 		yield from super().__rich_repr__()
 
 	def __str__(self):
@@ -170,7 +159,7 @@ class Realtime(Panel, tag='realtime'):
 		self.display.refresh()
 
 	@cached_property
-	def title(self):
+	def title_label(self):
 		title = RealtimeTitle(self, stateKey=TitleValueSplitter.title)
 		return title
 
@@ -188,6 +177,7 @@ class Realtime(Panel, tag='realtime'):
 
 	@key.setter
 	def key(self, value):
+		#! self.display can not be accessed here
 		if isinstance(value, str):
 			value = CategoryItem(value)
 		if value == getattr(self, '_key', None):
@@ -195,11 +185,14 @@ class Realtime(Panel, tag='realtime'):
 		self._key = value
 		container = LevityDashboard.get_container(value)
 
-		if self.title.allowDynamicUpdate():
-			self.title.textBox.setTextAccessor(lambda: container.title)
-			if not self.title.isEnabled():
-				self.title.textBox.setTextAccessor(None)
-		self.title.textBox.refresh()
+		if self.title_label.allowDynamicUpdate():
+			if self.title_label.isEnabled():
+				self.title_label.textBox.setTextAccessor(lambda: container.title)
+			else:
+				self.title_label.textBox.setTextAccessor(None)
+		else:
+			self.title_label.textBox.updateText()
+		# self.title_label.textBox.refresh()
 		self.container = container
 
 	@StateProperty(default=AnySource, dependencies={'key', 'display', 'title', 'forecast'})
@@ -212,7 +205,9 @@ class Realtime(Panel, tag='realtime'):
 
 	@source.after
 	def source(self):
-		return
+		new_container = self.container.get(self._source, None)
+		if new_container is not None and self.__connectedContainer is not new_container:
+			self.connectRealtime(new_container)
 
 	@source.encode
 	def source(value: Plugin) -> str:
@@ -241,7 +236,7 @@ class Realtime(Panel, tag='realtime'):
 		if self.__connectedContainer is not None:
 			return self.__connectedContainer.source
 
-	@StateProperty(allowNone=False, default=Stateful, link=Display)
+	@StateProperty(allowNone=False, sortOrder=1, default=Stateful, link=Display, dependencies={'key', 'source', 'forecast'})
 	def display(self) -> Display:
 		return self._display
 
@@ -250,11 +245,20 @@ class Realtime(Panel, tag='realtime'):
 		self._display = value
 
 	@display.decode
-	def display(self, value) -> Panel:
+	def display(self, value) -> Display:
+		# TODO: This should not create a new display
 		if isinstance(value, dict):
-			return DisplayLabel(parent=self, **value)
+			display_type = value.pop('displayType', DisplayType.Text)
+			match display_type:
+				case DisplayType.Text:
+					return DisplayLabel(parent=self, **value)
+				case DisplayType.Gauge:
+					from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Gauge import Gauge
+					return Gauge(parent=self, **value)
+				case _:
+					raise ValueError(f'Unknown Display Type: {display_type}')
 
-	@StateProperty(key='title', sortOrder=1, allowNone=False, default=Stateful)
+	@StateProperty(key='title', sortOrder=3, allowNone=False, default=Stateful, dependencies={'display', 'key', 'source', 'forecast'})
 	def splitter(self) -> TitleValueSplitter:
 		return self._splitter
 
@@ -278,7 +282,7 @@ class Realtime(Panel, tag='realtime'):
 
 	@splitter.factory
 	def splitter(self) -> TitleValueSplitter:
-		return TitleValueSplitter(surface=self, title=self.title, value=self.display)
+		return TitleValueSplitter(surface=self, title=self.title_label, value=self.display)
 
 	@cached_property
 	def __requestAttempts(self) -> int:
@@ -448,10 +452,10 @@ class Realtime(Panel, tag='realtime'):
 			preferredTrueRealtimeContainer = self.container.getRealtimeContainer(self.source, strict=True)
 			self.connectRealtime(preferredTrueRealtimeContainer)
 
-		if self._actionPool.can_execute:
+		if self._action_pool.can_execute:
 			startConnecting()
 		else:
-			self._actionPool.add(startConnecting)
+			self._action_pool.add(startConnecting)
 
 	# @thread_safe
 	def connectRealtime(self, container: Container):
@@ -471,15 +475,21 @@ class Realtime(Panel, tag='realtime'):
 			log.warning(f'Realtime {self.key.name} failed to connect to {container.log_repr}')
 			return
 
-		if container.metadata['type'] == 'icon' and container.metadata['iconType'] == 'glyph':
-			self.display.valueTextBox.textBox.setTextAccessor(None)
-		if self.title.isEnabled() and self.title.allowDynamicUpdate():
-			self.title.textBox.setTextAccessor(lambda: container.title)
-		self.lastUpdate = process_time()
-		self.display.splitter.updateUnitDisplay()
-		self.__updateTimeOffsetLabel()
+		if self.display.displayType == DisplayType.Text:
+			if container.metadata['type'] == 'icon' and container.metadata['iconType'] == 'glyph':
+				self.display.valueTextBox.textBox.setTextAccessor(None)
+			if self.title_label.isEnabled() and self.title_label.allowDynamicUpdate():
+				self.title_label.textBox.setTextAccessor(lambda: container.title)
+			self.display.refresh()
 
-		self.display.refresh()
+		if self.display.displayType == DisplayType.Gauge:
+			self.display: 'Gauge'
+			self.display.valueClass = container.value_type
+			value = container.now.value
+			self.display.value = value
+
+		self.lastUpdate = process_time()
+		self.__updateTimeOffsetLabel()
 		self.updateToolTip()
 
 		return connected
@@ -520,7 +530,11 @@ class Realtime(Panel, tag='realtime'):
 	@Slot(object)
 	def updateSlot(self, *args):
 		self.setOpacity(1)
-		self.display.refresh()
+		if self.display.displayType is DisplayType.Text:
+			self.display.refresh()
+		elif self.display.displayType is DisplayType.Gauge:
+			value = self.container.value.now.value
+			self.display.value = value
 		self.updateToolTip()
 		# loop.call_soon_threadsafe(self.adjustContentStaleTimer)
 
@@ -577,11 +591,12 @@ class Realtime(Panel, tag='realtime'):
 					item.hide()
 				self.setFocusProxy(None)
 				self.setFocus(Qt.MouseFocusReason)
-		if self.display.displayProperties.unitPosition == 'floating' and self.display.unitTextBox.isAncestorOf(self.scene().itemAt(mouseEvent.scenePos(), QTransform())):
-			self.display.unitTextBox.setFocus(Qt.MouseFocusReason)
-			self.display.unitTextBox.mousePressEvent(mouseEvent)
-			self.setFocusProxy(self.display.unitTextBox)
-			return
+		if self.display.displayType is DisplayType.Text:
+			if self.display.displayProperties.unitPosition == 'floating' and self.display.unitTextBox.isAncestorOf(self.scene().itemAt(mouseEvent.scenePos(), QTransform())):
+				self.display.unitTextBox.setFocus(Qt.MouseFocusReason)
+				self.display.unitTextBox.mousePressEvent(mouseEvent)
+				self.setFocusProxy(self.display.unitTextBox)
+				return
 		super().mousePressEvent(mouseEvent)
 
 	def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent):
@@ -591,16 +606,18 @@ class Realtime(Panel, tag='realtime'):
 		super(Realtime, self).mouseMoveEvent(event)
 
 	def focusInEvent(self, event: QFocusEvent):
-		if self.display.splitter.isEnabled():
-			self.display.splitter.show()
-		if self.display.displayProperties.unitPosition == 'floating':
-			self.display.unitTextBox.resizeHandles.show()
+		if self.display.displayType is DisplayType.Text:
+			if self.display.splitter.isEnabled():
+				self.display.splitter.show()
+			if self.display.displayProperties.unitPosition == 'floating':
+				self.display.unitTextBox.resizeHandles.show()
 		super(Realtime, self).focusInEvent(event)
 
 	def focusOutEvent(self, event: QFocusEvent):
-		self.display.splitter.hide()
-		# self.display.valueTextBox.marginHandles.hide()
-		# self.display.unitTextBox.marginHandles.hide()
+		if self.display.displayType is DisplayType.Text:
+			self.display.splitter.hide()
+			# self.display.valueTextBox.marginHandles.hide()
+			# self.display.unitTextBox.marginHandles.hide()
 		super(Realtime, self).focusOutEvent(event)
 
 	def changeSource(self, newSource: Plugin):
@@ -649,12 +666,57 @@ class Realtime(Panel, tag='realtime'):
 		super(Realtime, self).__del__()
 
 
+class RealtimeText(Realtime, tag='realtime.text'):
+
+	@property
+	def subtag(self) -> str:
+		return 'text'
+
+	@StateProperty(key='display')
+	def display(self) -> 'DisplayLabel':
+		pass
+
+	@display.decode
+	def display(self, value) -> Display:
+		# TODO: This should not create a new display, move creation to factory
+		if isinstance(value, dict):
+			value.pop('displayType', DisplayType.Text)
+			return DisplayLabel(parent=self, **value)
+
+
+class RealtimeGauge(Realtime, tag='realtime.gauge'):
+
+	@property
+	def subtag(self) -> str:
+		return 'gauge'
+
+	@StateProperty(key='display')
+	def display(self) -> Display:
+		pass
+
+	@display.decode
+	def display(self, value) -> Display:
+		# TODO: This should not create a new display
+		if isinstance(value, dict):
+				value.pop('displayType', DisplayType.Gauge)
+				from LevityDash.lib.ui.frontends.PySide.Modules import Gauge
+				return Gauge(parent=self, **value)
+
+
 class TimeOffsetLabel(Label):
-	_connected: bool = False
 
 	def __init__(self, parent, *args, **kwargs):
 		kwargs['geometry'] = {'x': 0.7, 'y': 0.85, 'width': 0.3, 'height': 0.15, 'relative': True}
 		super(TimeOffsetLabel, self).__init__(parent, alignment=AlignmentFlag.BottomRight, *args, **kwargs)
+		# Refreshes its own "x ago" text once a minute on a LOCAL timer -
+		# deliberately not the app-global ClockSignals: a panel's stale label
+		# is a purely local concern (time never crosses the wire), and the
+		# global clock isn't guaranteed to exist when a stale value enables
+		# the label during startup (crashed mode=remote dashboard loads).
+		# (unparented: this is a QGraphicsItem, not a QObject, so the timer
+		# can't be parented to it - the Python reference keeps it alive)
+		self._refreshTimer = QTimer(interval=60_000)
+		self._refreshTimer.timeout.connect(self.refresh)
 
 	def refresh(self):
 		if not self.isEnabled():
@@ -671,21 +733,11 @@ class TimeOffsetLabel(Label):
 		super(TimeOffsetLabel, self).setEnabled(enabled)
 		if enabled:
 			self.show()
-			self.connectSignal()
+			self._refreshTimer.start()
 			self.refresh()
 		else:
 			self.hide()
-			self.disconnectSignal()
-
-	def connectSignal(self):
-		if not self._connected:
-			connectSignal(qApp.instance().clock.minute, self.refresh)
-			self._connected = True
-
-	def disconnectSignal(self):
-		if self._connected:
-			disconnectSignal(qApp.instance().clock.minute, self.refresh)
-			self._connected = False
+			self._refreshTimer.stop()
 
 
 class LockedRealtime(Realtime):
@@ -811,11 +863,12 @@ class MeasurementDisplayProperties(Stateful):
 
 		self.updateSplitter()
 
+	@defer
 	def updateSplitter(self):
 		try:
 			self.splitter.updateUnitDisplay()
-		except AttributeError:
-			pass
+		except AttributeError as e:
+			log.debug(f'Failed to update splitter: {e}')
 
 	def updateLabels(self):
 		if self.__isValid:
@@ -830,7 +883,18 @@ class MeasurementDisplayProperties(Stateful):
 	@StateProperty(key='unit-string', default=Unset, allowNone=False)
 	def unit_string(self) -> str:
 		if self.__unit is Unset:
-			return getattr(self.measurement, 'unit', '')
+			measurement = self.measurement
+			# Respect the measurement's own showUnit default (e.g. Temperature
+			# is False since its decorator - deg symbol - already conveys a
+			# unit): without this, hasUnit ends up True for any measurement
+			# with a non-empty .unit regardless of showUnit, since
+			# .unit is a raw attribute unaffected by the flag that's
+			# specifically meant to answer this "should the unit typically be
+			# shown" question. Only applies to this unconfigured default -
+			# an explicit unit-string in a dashboard's YAML still wins.
+			if not getattr(measurement, 'showUnit', True):
+				return ''
+			return getattr(measurement, 'unit', '')
 		return self.__unit
 
 	@unit_string.setter
@@ -845,7 +909,7 @@ class MeasurementDisplayProperties(Stateful):
 	def hasUnit(self) -> bool:
 		return self.unit_string is not Unset and self.unit_string
 
-	@StateProperty(key='max-length',default=Unset, allowNone=False)
+	@StateProperty(key='max-length', default=Unset, allowNone=False)
 	def maxLength(self) -> int:
 		if self.__maxLength is Unset and self.__isValid:
 			return getattr(self.measurement, 'max', Unset)
@@ -949,6 +1013,7 @@ class MeasurementDisplayProperties(Stateful):
 
 	@_unitSize.setter
 	def _unitSize(self, value: Size.Height):
+		assert isinstance(value, Size.Height)
 		self.__valueUnitRatio = value
 
 	@_unitSize.decode
@@ -972,22 +1037,37 @@ class MeasurementDisplayProperties(Stateful):
 	def valueUnitRatio(self) -> Size.Height:
 		if self.__isValid:
 			value = self.__valueUnitRatio
-			if not isinstance(value, RelativeFloat):
+			if not isinstance(value, RelativeFloat) and isinstance(value, Dimension):
 				value = value.toRelative(self.geometry.absoluteHeight)
+			elif not isinstance(value, Dimension):
+				value = Size.Height(float(value), relative=True)
 			return value
 		return Size.Height(0.0, relative=True)
 
 	@valueUnitRatio.setter
 	def valueUnitRatio(self, value: Size.Height):
 		existing = self.__valueUnitRatio
-		if isinstance(existing, RelativeFloat):
-			pass
-		elif existing.isPhysicalMeasurement and isinstance(value, RelativeFloat):
-			value = Length.Inch(value.toAbsoluteF(self.geometry) / getDPI())
-			value = type(existing)(value)
-		elif existing.absolute and isinstance(value, RelativeFloat):
-			value = value.toAbsolute(self.geometry)
+		if isinstance(existing, Dimension):
+			if isinstance(existing, RelativeFloat):
+				pass
+			elif existing.isPhysicalMeasurement and isinstance(value, RelativeFloat):
+				value = Length.Inch(value.toAbsoluteF(self.geometry) / getDPI())
+				value = type(existing)(value)
+			elif existing.absolute and isinstance(value, RelativeFloat):
+				value = value.toAbsolute(self.geometry)
+		elif not isinstance(value, Dimension):
+			value = Size.Height(float(value), relative=True)
+
 		self.__valueUnitRatio = value
+
+	@property
+	def default_unit_ratio(self) -> float:
+		"""Relative unit height used when no explicit unitSize is configured."""
+		default = MeasurementDisplayProperties._unitSize.default(type(self))
+		try:
+			return float(default)
+		except (TypeError, ValueError):
+			return 0.2
 
 	@property
 	def unitSize(self) -> Size.Height | None:
@@ -1066,10 +1146,11 @@ class MeasurementDisplayProperties(Stateful):
 			try:
 				value = convertTo(value)
 			except Exception as e:
+				breakpoint()
 				log.warning(f'Could not convert {value} to {convertTo}', exc_info=e)
 		if hash((value, type(value))) != self.__measurementHash:
 			self.__measurementHash = hash((value, type(value)))
-			QTimer.singleShot(0, self.unitTextBox.textBox.refresh)
+			singleShotSafe(0, self.unitTextBox.textBox.refresh)
 		if isinstance(value, Measurement):
 			value.__dict__.update(self.unit_dict)
 		return value
@@ -1170,34 +1251,7 @@ def withoutUnit(self):
 	return self.value['@withoutUnit']
 
 
-class UnitLabel(Label, tag=...):
-	deletable = False
-
-	__exclude__ = {'items', 'geometry', 'locked', 'frozen', 'movable', 'resizable', 'text'}
-
-	# Section UnitLabel
-	def __init__(self, parent: Panel,
-		properties: Label,
-		*args, **kwargs):
-		self.displayProperties = properties
-		super().__init__(parent=parent, *args, **kwargs)
-		self.textBox.setTextAccessor(self.unitText)
-
-	def unitText(self) -> str:
-		value = self.localGroup.value
-		if isinstance(value, ObservationValue):
-			value = value.value
-		return getattr(value, 'unit', '')
-
-	# @property
-	# def marginRect(self) -> QRectF:
-	# 	return super().marginRect()
-
-	@property
-	def isEmpty(self):
-		return False
-
-
+@DebugPaint
 class DisplayLabel(Display, MeasurementDisplayProperties):
 	"""
   display:
@@ -1218,6 +1272,45 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 
 	deletable = False
 
+	class UnitLabel(Label, tag=...):
+		deletable = False
+
+		__exclude__ = {'items', 'geometry', 'locked', 'frozen', 'movable', 'resizable', 'text'}
+
+		class TextBox(Label.TextBox):
+
+			@property
+			def limitRect(self):
+				if self.surface.parent.displayProperties.unitPosition is DisplayPosition.FloatUnder:
+					return self.parent.parent.valueTextBox.unitSpace
+				return super().limitRect
+
+			@defer(pool_attr='action_pool')
+			def updateTransform(self, rect: QRectF = None, updateShared: bool = True, updatePath: bool = True, reason: str = None, *args):
+				super().updateTransform(rect, updateShared, updatePath, reason=reason, *args)
+				display = self.surface.parent
+				if display.displayProperties.unitPosition is DisplayPosition.FloatUnder:
+					display._syncFloatUnderPair(self)
+
+		# Section UnitLabel
+		def __init__(self, *args, **kwargs):
+			super().__init__(*args, **kwargs)
+			self.textBox.setTextAccessor(self.unitText)
+
+		def unitText(self) -> str:
+			value = self.localGroup.value
+			if isinstance(value, ObservationValue):
+				value = value.value
+			return getattr(value, 'unit', '')
+
+		# @property
+		# def marginRect(self) -> QRectF:
+		# 	return super().marginRect()
+
+		@property
+		def isEmpty(self):
+			return False
+
 	class ValueLabel(Label, tag=..., defaultIcon=FontAwesome.getIcon('ellipsis', 'solid')):
 
 		__defaults__ = {
@@ -1226,26 +1319,46 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 
 		__exclude__ = {..., 'format-hint'}
 
-		@property
-		def marginRect(self) -> QRectF:
-			rect = Label.marginRect.fget(self)
-			if p := self.parent:
-				if (u := p.displayProperties.unitSize_px) and p.displayProperties.unitPosition is DisplayPosition.FloatUnder:
-					r = QRectF(rect)
-					rr = self.rect()
-					r.setBottom(rr.bottom() - u - p.displayProperties.floatingOffset_px)
-					return r
-			return rect
+		class TextBox(Label.TextBox):
 
+			@defer(pool_attr='action_pool')
+			def updateTransform(self, rect: QRectF = None, updateShared: bool = True, updatePath: bool = True, reason: str = None, *args):
+				super().updateTransform(rect, updateShared, updatePath, reason=reason, *args)
+				display = self.surface.parent
+				if display.displayProperties.unitPosition is DisplayPosition.FloatUnder:
+					display._syncFloatUnderPair(self)
+
+		# @cached_property
+		# def marginRect(self) -> QRectF:
+		# 	rect = super().marginRect
+		# 	if p := self.parent:
+		# 		if (u := p.displayProperties.unitSize_px) and p.displayProperties.unitPosition is DisplayPosition.FloatUnder:
+		# 			r = QRectF(rect)
+		# 			rr = self.rect()
+		# 			r.setBottom(rr.bottom() - u - p.displayProperties.floatingOffset_px)
+		# 			return r
+		# 	return rect
 
 		@property
 		def unitSpace(self) -> QRectF:
-			textRect = self.textBox.sceneBoundingRect()
-			labelRect = self.mapRectFromScene(textRect)
+			labelRect = self.mapRectFromScene(self.textBox.sceneLimitRect)
+			textRect = self.mapRectFromScene(self.textBox.sceneBoundingRect())
 			ownRect = self.rect()
-			ownRect.setTop(labelRect.bottom() + self.parent.floatingOffset_px)
-			return ownRect
+			ownRect.setTop(textRect.bottom() + self.parent.floatingOffset_px)
 
+			if (display_props := self.parent.displayProperties).unitPosition is DisplayPosition.FloatUnder:
+				# unitSize_px is None when no explicit unit size is configured
+				# (the default 20% ratio reads back as None). Fall back to that
+				# default band instead of filling to the label's bottom, which
+				# would size the unit at ~half the panel - nearly as big as the
+				# value.
+				unitSize = display_props.unitSize_px or labelRect.height() * float(display_props.default_unit_ratio)
+				if ownRect.top() + unitSize < labelRect.bottom():
+					ownRect.setBottom(ownRect.top() + unitSize)
+				else:
+					ownRect.setBottom(labelRect.bottom())
+
+			return ownRect
 
 	# Section DisplayLabel
 	def __init__(self, *args, **kwargs):
@@ -1256,11 +1369,63 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 		self.setFlag(QGraphicsItem.ItemIsFocusable, False)
 		self.setAcceptDrops(False)
 
+	def _syncFloatUnderPair(self, source: Text):
+		"""Keep the value+unit text boxes centered as one block (unitPosition
+		FloatUnder only).
+
+		Both boxes' own updateTransform fully resets their transform from
+		scratch and never combine=True's on top of a prior state, so whichever
+		box last completes its own natural layout silently discards any
+		correction previously applied to it here. Triggered from both
+		ValueLabel.TextBox and UnitLabel.TextBox so the pair self-heals
+		regardless of which one updates last; the other box is forced back to
+		its own natural transform right before measuring so this always
+		starts from a clean baseline instead of compounding on a stale
+		correction (that compounding was why the pair visibly jumped to a bad
+		position on every other refresh). The in-progress guard stops the two
+		sides from re-triggering each other.
+		"""
+		if getattr(self, '_syncingFloatUnder', False):
+			return
+		value_text_box = self.valueTextBox.textBox
+		unit_text_box = self.unitTextBox.textBox
+		other = unit_text_box if source is value_text_box else value_text_box
+
+		self._syncingFloatUnder = True
+		try:
+			Text.updateTransform.__wrapped__(other, updatePath=False, updateShared=False, reason='float-under-sync')
+
+			value_scene_rect = value_text_box.scenePath().boundingRect()
+			unit_scene_rect = unit_text_box.scenePath().boundingRect()
+
+			# bbox(A | B) == bbox(A) | bbox(B) - union the (cheap) rects
+			# rather than the paths; QPainterPath.united() is a full boolean
+			# clip over glyph curves and can be pathologically slow.
+			target_center = value_scene_rect.center()
+			current_center = (value_scene_rect | unit_scene_rect).center()
+
+			transform = QTransform()
+			transform.translate(target_center.x() - current_center.x(), target_center.y() - current_center.y())
+
+			unit_text_box.setTransform(transform, combine=True)
+			value_text_box.setTransform(transform, combine=True)
+		finally:
+			self._syncingFloatUnder = False
+
 	def _init_args_(self, *args, **kwargs) -> None:
 		# self._valueTextBox = Label(self)
 		# self._unitTextBox = UnitLabel(self, self._valueTextBox)
 		super()._init_args_(*args, **kwargs)
-		self.splitter = MeasurementUnitSplitter(surface=self, value=self.valueTextBox, unit=self.unitTextBox)
+		# box = self.valueTextBox
+		# text_box = self.unitTextBox
+		# self.splitter = MeasurementUnitSplitter(surface=self, value=box, unit=text_box)
+
+	def _debug_paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget):
+		Label._debug_paint(self, painter, option, widget)
+		self._normal_paint(painter, option, widget)
+		value_rect = self.valueTextBox.marginRect
+		unit_rect = self.valueTextBox.unitSpace
+		addRect(painter, rect=unit_rect, color=Qt.blue, label_text='unit_rect')
 
 	def setUnitPosition(self, value: DisplayPosition):
 		self.displayProperties.unitPosition = value
@@ -1283,11 +1448,11 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 		return
 
 	@StateProperty(key='valueLabel', sortOrder=0, allowNone=False, default=Stateful, dependancies={'geometry'})
-	def valueTextBox(self) -> Label:
+	def valueTextBox(self) -> ValueLabel:
 		return self._valueTextBox
 
 	@valueTextBox.setter
-	def valueTextBox(self, value: Label):
+	def valueTextBox(self, value: ValueLabel):
 		self._valueTextBox = value
 
 	@valueTextBox.factory
@@ -1307,8 +1472,20 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 
 	@unitTextBox.factory
 	def unitTextBox(self) -> UnitLabel:
-		label = UnitLabel(self, self.valueTextBox)
+		label = DisplayLabel.UnitLabel(self, self.valueTextBox)
 		return label
+
+	@StateProperty(dependancies={'geometry'})
+	def splitter(self) -> MeasurementUnitSplitter:
+		return self._splitter
+
+	@splitter.setter
+	def splitter(self, value: MeasurementUnitSplitter):
+		self._splitter = value
+
+	@splitter.factory
+	def splitter(self) -> MeasurementUnitSplitter:
+		return MeasurementUnitSplitter(surface=self, value=self.valueTextBox, unit=self.unitTextBox)
 
 	@property
 	def type(self):
@@ -1319,20 +1496,13 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 		return self.parent.value
 
 	def mouseDoubleClickEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
-		mouseEvent.ignore()
-		return
+		return mouseEvent.ignore()
 
 	# @thread_safe
 	def refresh(self):
-		# self.a.setHtml(f'<div style="text-align: center; top: 50%;">{str(self.text)}</div>')
-		if self.displayProperties.hasUnit:
-			if self.displayProperties.unitPosition is DisplayPosition.FloatUnder:
-				self.splitter.fitUnitUnder()
-
 		self.valueTextBox.textBox.refresh()
-
-	def setRect(self, *args):
-		super().setRect(*args)
+		self.unitTextBox.textBox.refresh()
+		self.splitter.updateUnitDisplay()
 
 	def hideUnit(self):
 		self.displayProperties.unitPosition = DisplayPosition.Hidden

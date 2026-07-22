@@ -1,9 +1,9 @@
 from functools import cached_property
 from typing import Callable, List, Optional, Type, Union
 
-from PySide2.QtCore import QObject, QPointF, QRectF, QSize, Qt, Signal
-from PySide2.QtGui import QPainterPath, QPen, QPainter, QTransform, QPainterPathStroker
-from PySide2.QtWidgets import QGraphicsItem, QGraphicsItemGroup, QGraphicsPathItem, QGraphicsRectItem, QGraphicsScene, QGraphicsSceneMouseEvent, QGraphicsView
+from PySide6.QtCore import QObject, QPointF, QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QPainterPath, QPen, QPainter, QTransform, QPainterPathStroker
+from PySide6.QtWidgets import QGraphicsItem, QGraphicsItemGroup, QGraphicsPathItem, QGraphicsRectItem, QGraphicsScene, QGraphicsSceneMouseEvent, QGraphicsView
 
 from LevityDash.lib.config import userConfig
 from LevityDash.lib.utils.shared import _Panel
@@ -34,7 +34,8 @@ class Handle(QGraphicsPathItem):
 	_path_: QPainterPath = None
 
 	def __init__(self, parent: 'HandleGroup', location: Union[LocationFlag, Position], alignment: LocationFlag = LocationFlag.Center):
-		super(Handle, self).__init__(parent=parent)
+		super(Handle, self).__init__()
+		self.setParentItem(parent)
 		self.location = location
 		self.alignment = alignment
 		self.__init_defaults__()
@@ -388,10 +389,10 @@ from . import Incrementer
 from . import Timeframe
 from . import MarginHandles
 
-__all__ = ['Handle', 'HandleGroup', 'Various', 'Resize', 'Incrementer', 'Grid', 'Timeframe', 'MarginHandles', 'debug']
+__all__ = ['Handle', 'HandleGroup', 'Various', 'Resize', 'Incrementer', 'Timeframe', 'MarginHandles', 'debug']
 
 if __name__ == '__main__':
-	from PySide2.QtWidgets import QApplication
+	from PySide6.QtWidgets import QApplication
 	import sys
 
 	app = QApplication(sys.argv)

@@ -12,7 +12,7 @@ from LevityDash.lib.plugins.utils import SchemaProperty, unitDict
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.utils.shared import (clearCacheAttr, ColorStr, get, getOrSet, LOCAL_TIMEZONE, matchWildCard, operatorDict,
                                          removeSimilar, subsequenceCheck, Unset)
-from WeatherUnits import Measurement
+from WeatherUnits import Measurement, auto as wu_auto
 
 log = LevityPluginLog.getChild('Categories')
 
@@ -23,6 +23,15 @@ LHS = TypeVar('LHS')
 
 
 class Requirement:
+
+	"""
+	This class is used to represent a requirement which is a logical expression.
+	The requirement consists of an operator, left-hand side (LHS) and right-hand side (RHS) values,
+	and a boolean value indicating whether it should be negated.
+	It also contains a result field which can be either a boolean or an RHS or LHS object, an
+	operation name string and a stored result field.
+	"""
+
 	operator: Callable
 	rhs: RHS
 	lhs: LHS
@@ -31,7 +40,33 @@ class Requirement:
 	__operationName: str
 	__storedResult: Union[bool, RHS, LHS]
 
-	def __init__(self, *_, operator: Union[Callable, str], lhs: Any, lhsName: str = None, rhs: Any, rhsName: str = None, negated: bool = False):
+	def __init__(
+		self,
+		*_,
+		operator: Union[Callable, str],
+		lhs: Any,
+		lhsName: str = None,
+		rhs: Any,
+		rhsName: str = None,
+		negated: bool = False,
+	):
+		"""
+		Parameters
+		---------
+		operator: Callable
+			The operator to use for the comparison
+		lhs: Any
+			The left hand side of the comparison
+		lhsName: str
+			The name of the left hand side of the comparison
+		rhs: Any
+			The right hand side of the comparison
+		rhsName: str
+			The name of the right hand side of the comparison
+		negated: bool
+			Whether the comparison should be negated
+		"""
+
 		self.__operationName = operator if isinstance(operator, str) else operator.__name__
 		self.__storedResult = Unset
 		if not isinstance(operator, Callable):
@@ -48,11 +83,13 @@ class Requirement:
 
 	@property
 	def result(self):
+		"""The result of the comparison"""
 		if self.__storedResult is Unset:
 			self.__storedResult = self.operator(self.lhs, self.rhs)
 		return self.__storedResult
 
 	def reset(self):
+		"""Reset the result of the comparison"""
 		self.__storedResult = Unset
 
 	def __str__(self):
@@ -68,7 +105,6 @@ class Requirement:
 		return f'{"︎︎✔︎" if self else "✘"} | {lhs} {operatorDict[self.operator]} {rhs}'
 
 
-@repr.auto
 class UnitMetaData(dict):
 
 	def __init__(self, **kwargs):
@@ -100,13 +136,11 @@ class UnitMetaData(dict):
 		super(UnitMetaData, self).__init__(value)
 
 	def __repr__(self):
-		match dict(self):
-			case {'key': CategoryItem(key) | key, **rest}:
-				return f'UnitMetaData({key.name})'
-			case {'sourceKey': key, **rest}:
-				return f'UnitMetaData({key})'
-			case _:
-				return f'UnitMetaData({self})'
+		if (key := self.get('key', None)) is not None:
+			return f'UnitMetaData({key.name})'
+		elif sourceKey := self.get('sourceKey', None):
+			return f'UnitMetaData({sourceKey})'
+		return f'UnitMetaData({self})'
 
 	def __hash__(self):
 		return hash(self.key)
@@ -427,9 +461,6 @@ class CategoryWildcard(str):
 		if (value := cls.__knownWildcards.get(value, None)) is None:
 			value = cls.__knownWildcards[value] = super().__new__(cls, value)
 		return value
-
-	def __str__(self):
-		return f'{ColorStr.italic(self)}'
 
 	def __repr__(self):
 		return f'{self}'
@@ -1138,7 +1169,7 @@ class SubCategory(CategoryDict):
 		self._category = category
 		if len(category) > 1:
 			precount = len({k for k in values.keys() if self.category in k})
-			values = {k/category if category.hasWildcard else k: v for k, v in values.items() if k in self.category}
+			values = {k / category if category.hasWildcard else k: v for k, v in values.items() if k in self.category}
 			postCount = len(values)
 			if postCount != precount:
 				log.warning(f'{precount - postCount} out of {precount} items were removed from subcategory {self.category}')
@@ -1206,4 +1237,25 @@ class ValueNotFound(Exception):
 	pass
 
 
-__all__ = ['CategoryDict', 'CategoryEndpointDict', 'SubCategory', 'ValueNotFound', 'UnitMetaData']
+class SomeValidKey(type):
+
+	from LevityDash import LevityDashboard as lvd
+
+	def __instancecheck__(self, instance) -> bool:
+		if not self.lvd.dispatcher.all_valid_keys.contains(instance):
+			return False
+		if isinstance(instance, CategoryItem):
+			return True
+		elif isinstance(instance, str):
+			return True
+
+	def __subclasscheck__(self, subclass) -> bool:
+		if not self.lvd.dispatcher.all_valid_keys.contains(subclass):
+			return False
+		if issubclass(subclass, CategoryItem):
+			return True
+		elif issubclass(subclass, str):
+			return True
+
+
+__all__ = ['CategoryDict', 'CategoryEndpointDict', 'SubCategory', 'ValueNotFound', 'UnitMetaData', 'SomeValidKey', 'CategoryItem', 'CategoryAtom', 'CategoryWildcard']

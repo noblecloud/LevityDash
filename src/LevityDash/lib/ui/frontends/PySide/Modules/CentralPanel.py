@@ -7,8 +7,8 @@ from tempfile import NamedTemporaryFile
 from typing import Any, List
 
 import yaml
-from PySide2.QtCore import QRect, Qt, Slot
-from PySide2.QtWidgets import QFileDialog, QGraphicsItem, QMessageBox
+from PySide6.QtCore import QRect, Qt, Slot
+from PySide6.QtWidgets import QFileDialog, QGraphicsItem, QMessageBox
 from time import perf_counter
 
 from LevityDash import LevityDashboard
@@ -18,7 +18,7 @@ from LevityDash.lib.log import debug
 from LevityDash.lib.stateful import StatefulDumper, StateProperty
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import CentralPanelContextMenu
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
-from LevityDash.lib.utils import BusyContext
+from LevityDash.lib.utils import BusyContext, ActionPool
 from WeatherUnits import Time
 from .. import UILogger as guiLog
 
@@ -39,11 +39,16 @@ class CentralPanel(Panel, tag="dashboard"):
 		'margins':    ('0px', '0px', '0px', '0px'),
 	}
 
+	def prep_init(self, *args, **kwargs):
+		self._set_state_items_ = set()
+		self.statefulParent = None
+
 	def __init__(self, parent: 'LevityScene'):
 		self._parent = parent
+		self._action_pool = ActionPool(self, trace='CentralPanel')
 		self.__boundingRect = QRect(-2000, -2000, 6000, 6000)
 		self._scene = parent
-		super(CentralPanel, self).__init__(None, stateParent=None)
+		super(CentralPanel, self).__init__(None)
 
 		self.setAcceptedMouseButtons(Qt.AllButtons)
 
@@ -66,13 +71,13 @@ class CentralPanel(Panel, tag="dashboard"):
 		self.setFlag(QGraphicsItem.ItemHasNoContents)
 		self.resizeHandles.setVisible(False)
 		self.resizeHandles.setEnabled(False)
-		self.setFlag(self.ItemClipsChildrenToShape, False)
-		self.setFlag(self.ItemClipsToShape, False)
-		self.setFlag(self.ItemIsFocusable, False)
-		self.setFlag(self.ItemIsMovable, False)
-		self.setFlag(self.ItemIsSelectable, False)
+		self.setFlag(self.GraphicsItemFlag.ItemClipsChildrenToShape, False)
+		self.setFlag(self.GraphicsItemFlag.ItemClipsToShape, False)
+		self.setFlag(self.GraphicsItemFlag.ItemIsFocusable, False)
+		self.setFlag(self.GraphicsItemFlag.ItemIsMovable, False)
+		self.setFlag(self.GraphicsItemFlag.ItemIsSelectable, False)
 		LevityDashboard.CENTRAL_PANEL = self
-		LevityDashboard.main_action_pool = self._actionPool
+		LevityDashboard.main_action_pool = self._action_pool
 
 	@Slot()
 	def onFileLoaded(self):
@@ -93,7 +98,7 @@ class CentralPanel(Panel, tag="dashboard"):
 
 	@cached_property
 	def app(self):
-		from PySide2.QtWidgets import QApplication
+		from PySide6.QtWidgets import QApplication
 		return QApplication.instance()
 
 	# def contextMenuEvent(self, event):
@@ -113,7 +118,7 @@ class CentralPanel(Panel, tag="dashboard"):
 	def childPanels(self):
 		return [i for i in self.childItems() if isinstance(i, Panel)]
 
-	@StateProperty(singleVal='force', inheritFrom=Panel.items)
+	@StateProperty(singleVal=True, inheritFrom=Panel.items)
 	def items(self) -> list[Panel]:
 		...
 

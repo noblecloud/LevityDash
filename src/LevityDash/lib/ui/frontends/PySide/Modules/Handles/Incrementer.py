@@ -1,7 +1,7 @@
 from functools import cached_property
 
-from PySide2.QtCore import QObject, QPointF, Qt, Signal
-from PySide2.QtGui import QPainterPath
+from PySide6.QtCore import QObject, QPointF, Qt, Signal
+from PySide6.QtGui import QPainterPath
 
 from LevityDash.lib.ui.Geometry import Axis, LocationFlag
 
@@ -21,7 +21,7 @@ class Incrementer(Handle):
 	def __init__(self, parent, location, **kwargs):
 		super().__init__(parent, location, **kwargs)
 		self.setTransformOriginPoint(self.offset)
-		self.setFlag(self.ItemIsMovable, False)
+		self.setFlag(self.GraphicsItemFlag.ItemIsMovable, False)
 
 	@cached_property
 	def cursor(self):
@@ -64,7 +64,7 @@ class Incrementer(Handle):
 		self.surface.update()
 
 	def itemChange(self, change, value):
-		if change == self.ItemPositionChange:
+		if change == self.GraphicsItemChange.ItemPositionChange:
 			value = self.position
 		return super().itemChange(change, value)
 

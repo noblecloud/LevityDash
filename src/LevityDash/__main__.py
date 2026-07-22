@@ -8,7 +8,7 @@ from locale import LC_ALL, setlocale
 from pathlib import Path
 from sys import exit
 
-from PySide2.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication
 
 setlocale(LC_ALL, 'en_US.UTF-8')
 
@@ -51,14 +51,18 @@ def main():
 	if LevityDashboard.parsed_args.reset_config:
 		reset_config()
 
-	print(f'Starting LevityDash {LevityDashboard.__version__} on {platform.system()}')
+	# git describe (when run from source) is a complete version string
+	# (tag-commitsSince-gHash[-dirty]); fall back to the static version otherwise.
+	_ver = LevityDashboard.revision or LevityDashboard.__version__
+	print(f'Starting LevityDash {_ver} on {platform.system()}')
 
 	install_signals()
 
 	LevityDashboard.init()
+	LevityDashboard.app: QApplication
 	LevityDashboard.app.processEvents()
 
-	LevityDashboard.lib.plugins.load_all()
+	LevityDashboard.plugins.load_all()
 
 	LevityDashboard.app.start()
 

@@ -142,3 +142,24 @@ stash/
 
 memray*
 /docs/.obsidian/
+*.ignore
+
+# macOS Junk Files
+.DS_Store
+.AppleDouble
+.LSOverride
+__MACOSX/
+
+# Profiling / repo-surgery leftovers
+*.profraw
+.git.old/
+
+# Local-only working notes and IDE run configs
+ai-prompt.md
+.run/
+
+# Generated Sphinx output
+docs/source/.build/
+
+# Benchmark answer key - must never sync to candidate-accessible clones
+docs/benchmark/ANSWER-KEY.md

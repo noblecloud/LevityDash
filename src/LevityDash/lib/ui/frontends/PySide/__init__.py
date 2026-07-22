@@ -1,4 +1,4 @@
-from PySide2.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication
 
 from ... import UILogger
 
@@ -27,7 +27,12 @@ class LevityDashApp(QApplication):
 		QTimer.singleShot(10, LevityDashboard.load_dashboard)
 
 		keyboardModifiers = self.queryKeyboardModifiers()
-		if LevityDashboard.plugin_config['Options'].getboolean('enabled'):
+		from LevityDash.lib.plugins.dispatcher import backend_mode
+		if backend_mode() == 'remote':
+			# remote-is-attach-only: data comes from the standalone backend's
+			# wire connection; local plugins stay loaded but never started
+			qtLogger.info('mode=remote: local plugins are not started; data comes from the backend connection')
+		elif LevityDashboard.plugin_config['Options'].getboolean('enabled'):
 			if keyboardModifiers & Qt.AltModifier:
 				print('Alt is pressed, plugin auto start disabled')
 				return
@@ -38,7 +43,7 @@ class LevityDashApp(QApplication):
 
 	def start_plugins(self):
 		self.main_window.centralWidget().loadingFinished.disconnect(self.start_plugins)
-		QTimer.singleShot(10, LevityDashboard.lib.plugins.start)
+		QTimer.singleShot(10, LevityDashboard.plugins.start)
 
 
 LevityDashAppInstance = LevityDashApp()

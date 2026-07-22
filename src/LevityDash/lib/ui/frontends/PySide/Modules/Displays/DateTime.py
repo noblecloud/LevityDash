@@ -4,8 +4,8 @@ from platform import system as syscheck
 from types import SimpleNamespace
 from typing import ClassVar, List
 
-from PySide2.QtCore import Qt, Signal
-from PySide2.QtWidgets import QDialog, QInputDialog
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QDialog, QInputDialog
 from time import strftime
 
 from LevityDash import LevityDashboard
@@ -16,7 +16,7 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import ScaleType, 
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import TimeContextMenu
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.ui.frontends.PySide.utils import itemLoader
-from LevityDash.lib.utils.shared import connectSignal, disconnectSignal, levenshtein
+from LevityDash.lib.utils.shared import connectSignal, disconnectSignal, levenshtein, Now
 
 __all__ = ['ClockComponent', 'Clock']
 log = guiLog.getChild(__name__)
@@ -36,10 +36,21 @@ class ClockComponent(Label, tag=...):
 
 	__exclude__ = {'text'}
 
-
 	class ClockTextBox(Text):
 		_scaleType = ScaleType.fill
 
+		@property
+		def value(self) -> Now:
+			return Now()
+
+		@value.setter
+		def value(self, value):
+			pass
+
+		def _format_value_func(self, *args, **kwargs) -> str:
+			return strftime(self.parent.format)
+
+	TextBox = ClockTextBox
 
 	def __init__(self, parent: Panel, *args, **kwargs):
 		"""
@@ -50,20 +61,15 @@ class ClockComponent(Label, tag=...):
 		:param filters:
 		:type list[str|Callable]:
 		"""
-		formatStr = kwargs.pop('format', None)
-		if syscheck() == 'Windows':
-			formatStr = formatStr.replace('%-', '%#')
-		self._format = formatStr
+		# formatStr = kwargs.pop('format', None)
+		# if syscheck() == 'Windows':
+		# 	formatStr = formatStr.replace('%-', '%#')
+		#
+		# self._format = formatStr
 
-		text = strftime(formatStr)
-		super(ClockComponent, self).__init__(parent, text=text, *args, **kwargs)
+		# text = strftime(formatStr)
+		super(ClockComponent, self).__init__(parent, *args, **kwargs)
 		self.connectTimer()
-
-	@cached_property
-	def textBox(self) -> ClockTextBox:
-		box = ClockComponent.ClockTextBox(self)
-		box.setParentItem(self)
-		return box
 
 	def connectTimer(self):
 		connectSignal(self.timer, self.setTime)
@@ -73,7 +79,7 @@ class ClockComponent(Label, tag=...):
 
 	@property
 	def timer(self) -> Signal:
-		matches = re.finditer(r"\%-?\w", self._format, re.MULTILINE)
+		matches = re.finditer(r"\%-?\w", self.format, re.MULTILINE)
 		matches = {x.group().replace('-', '').lower() for x in matches}
 		if '%s' in matches:
 			return LevityDashboard.clock.second
@@ -85,21 +91,21 @@ class ClockComponent(Label, tag=...):
 			return LevityDashboard.clock.minute
 
 	def setTime(self, *args):
-		self.text = strftime(self.format)
+		self.textBox.updateText()
 
-	@StateProperty(sortOrder=0, required=True)
+	@StateProperty(sortOrder=0, required=True, allowNone=False, default='%-I:%M')
 	def format(self) -> str:
 		return self._format
 
 	@format.setter
-	def format(self, value):
-		if self._format != value:
-			if syscheck() == "Windows":
-				value = value.replace('%-', '%#')
-			disconnectSignal(self.timer, self.setTime)
-			self._format = value
-			self.setTime()
-			self.timer.connect(self.setTime)
+	def format(self, value: str):
+		disconnectSignal(self.timer, self.setTime)
+		self._format = value
+		connectSignal(self.timer, self.setTime)
+
+	@format.after
+	def format(self):
+		self.textBox.updateText()
 
 	def setFormat(self):
 		dialog = QInputDialog()
@@ -142,7 +148,7 @@ class Clock(Panel, tag='clock'):
 		for item in value:
 			ns = SimpleNamespace(**item)
 			match item:
-				case {'format': _, **rest}:
+				case {'format': _, **rest} | {'type': 'clock', **rest}:
 					match existingClocks:
 						case []:
 							ClockComponent(self, **item)

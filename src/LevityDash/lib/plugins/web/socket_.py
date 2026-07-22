@@ -6,7 +6,7 @@ import logging
 from abc import ABC, abstractmethod
 
 from aiohttp import ClientSession
-from PySide2.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal
 from typing import Optional
 
 from LevityDash.lib.plugins.web import Endpoint
