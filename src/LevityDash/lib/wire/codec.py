@@ -88,7 +88,18 @@ def decode_measurement(payload: dict) -> Measurement | float:
 		# rather than raising, so a single unrecognized measurement doesn't
 		# take down an entire snapshot/update message.
 		return value
-	measurement = cls(value)
+	try:
+		measurement = cls(value)
+	except Exception:
+		# The class resolved but can't be built from a bare number: derived/
+		# rate units (e.g. Wind = Distance/Time) resolve to their GENERIC
+		# class, whose constructor wants numerator/denominator measurements -
+		# the wire's {unit, cls} pair can't identify the specialized subclass
+		# yet. Honor the same degrade-to-float contract as above; proper
+		# derived-unit reconstruction over the wire is a known follow-up
+		# (surfaced by mode=remote - loopback had been silently skipping
+		# these keys via its per-key relay guard all along).
+		return value
 	ts = payload.get('ts')
 	if ts and hasattr(measurement, 'timestamp'):
 		# Measurement.timestamp is a read-only property backed by
