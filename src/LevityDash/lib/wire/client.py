@@ -51,6 +51,15 @@ class WireClient:
 		except asyncio.CancelledError:
 			pass
 
+	async def wait_closed(self) -> None:
+		"""Block until the read loop ends (server closed the socket, error, or
+		close()) - lets a reconnect loop await the lifetime of a connection."""
+		if self._task is not None:
+			try:
+				await self._task
+			except asyncio.CancelledError:
+				pass
+
 	async def close(self) -> None:
 		if self._task is not None:
 			self._task.cancel()
