@@ -14,9 +14,6 @@
 		--cover-max-height: unset;
 		--cover-min-height: 10vh;
 
-		/* A crisp cool morning sky: soft periwinkle-blue easing down into the
-		   light reading surface. All one temperature so it sits in harmony
-		   with the lavender accent instead of fighting it. */
 		--cover-background-image:
 			radial-gradient(880px 520px at 80% -8%, rgba(196, 206, 255, 0.6), rgba(196, 206, 255, 0) 62%),
 			linear-gradient(to bottom,
@@ -50,7 +47,6 @@
 		padding: 4% 0 3%;
 	}
 
-	/* Wordmark: deep ink "Levity", sunny gradient "Dashboard" */
 	.cover h1 {
 		color: #1e2a3a;
 		font-family: "Nunito", -apple-system, sans-serif;
@@ -80,15 +76,11 @@
 		color: #45566b !important;
 	}
 
-	/* perspective lives on the parent so the panel turns in real 3D space
-	   without the transform ballooning it */
 	.cover picture {
 		display: inline-block;
 		perspective: 1600px;
 	}
 
-	/* The dark dashboard floats on the sky — contrast = pop, and a slow
-	   tvOS-style parallax hover for a little levity. */
 	.screenshotAlpha {
 		background-color: transparent;
 		padding: 0;
@@ -99,24 +91,11 @@
 		box-shadow:
 			0 40px 70px -28px rgba(28, 52, 90, 0.5),
 			0 16px 30px -18px rgba(47, 143, 216, 0.28);
-		/* pivot sits behind the panel so it swings in a gentle arc */
 		transform-origin: 50% 50% -340px;
-		animation: levityHover 12s ease-in-out infinite;
-		will-change: transform;
-	}
-
-	/* X and Y tilt cycle out of phase so the face traces a slow orbit,
-	   with a gentle bob layered on top */
-	@keyframes levityHover {
-		0%   { transform: translateY(0px)   rotateX(0deg)    rotateY(-3.4deg); }
-		25%  { transform: translateY(-7px)  rotateX(1.8deg)  rotateY(0deg); }
-		50%  { transform: translateY(-11px) rotateX(0deg)    rotateY(3.4deg); }
-		75%  { transform: translateY(-7px)  rotateX(-1.8deg) rotateY(0deg); }
-		100% { transform: translateY(0px)   rotateX(0deg)    rotateY(-3.4deg); }
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.screenshotAlpha { animation: none; transform: none; }
+		.screenshotAlpha { animation: none; transform: none !important; }
 	}
 
 	.cover small.mono {
@@ -131,7 +110,6 @@
 		color: #45566b;
 	}
 
-	/* macOS-style window chrome, if ever used */
 	.macOSWindowDark {
 		background-color: rgba(255, 255, 255, 0.6);
 		border-radius: 16px;
@@ -139,7 +117,6 @@
 		padding: 1em;
 	}
 
-	/* ---- Night: a warm-lit twilight sky over deep dark ---- */
 	@media (prefers-color-scheme: dark) {
 		:root {
 			--cover-background-image:
@@ -169,17 +146,65 @@
 
 </style>
 
-<!--JavaScript to change Dash to Dashboard if there is enough room-->
-
-	<h1>
-		Levity<span class="dash">Dashboard</span>
-	</h1>
-	<h2>
-		A lightweight, easy to use, desktop native, multi-source dashboard for macOS, Windows and Linux
-	</h2>
-	<picture>
-		<source srcset="_images/screenshot.webp" type="image/webp">
-		<source srcset="_images/screenshot.avif" type="image/avif">
-		<img alt="Screenshot" class="screenshotAlpha" src="_images/screenshot.png">
-	</picture>
+<h1>
+	Levity<span class="dash">Dashboard</span>
+</h1>
+<h2>
+	A lightweight, easy to use, desktop native, multi-source dashboard for macOS, Windows and Linux
+</h2>
+<picture>
+	<source srcset="_images/screenshot.webp" type="image/webp">
+	<source srcset="_images/screenshot.avif" type="image/avif">
+	<img alt="Screenshot" class="screenshotAlpha" src="_images/screenshot.png">
+</picture>
 <small class="mono">LevityDash <strong>v0.3.0-beta.1</strong> is currently <strong>in beta</strong> — expect rough edges. Requires <strong>Python 3.13–3.14</strong> (<strong>3.14</strong> recommended).</small>
+
+<script>
+(function() {
+	var img = document.querySelector('.screenshotAlpha');
+	if (!img) return;
+
+	var mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+	if (mq.matches) return;
+
+	var state = { ty: 0, rx: 0, ry: 0 };
+
+	function rand(max) {
+		return (Math.random() * 2 - 1) * max;
+	}
+
+	function next() {
+		var dur = 6000 + Math.random() * 10000;
+		var ty = rand(11);
+		var rx = rand(3.4);
+		var ry = rand(3.4);
+
+		var from = 'translateY(' + state.ty + 'px) rotateX(' + state.rx + 'deg) rotateY(' + state.ry + 'deg)';
+		var to = 'translateY(' + ty + 'px) rotateX(' + rx + 'deg) rotateY(' + ry + 'deg)';
+
+		state = { ty: ty, rx: rx, ry: ry };
+
+		var anim = img.animate([
+			{ transform: from },
+			{ transform: to }
+		], {
+			duration: dur,
+			easing: 'cubic-bezier(0.25, 0.1, 0.25, 1)',
+			fill: 'forwards'
+		});
+
+		anim.onfinish = next;
+	}
+
+	next();
+
+	mq.addEventListener('change', function(e) {
+		if (e.matches) {
+			img.getAnimations().forEach(function(a) { a.cancel(); });
+			img.style.transform = 'none';
+		} else {
+			next();
+		}
+	});
+})();
+</script>
