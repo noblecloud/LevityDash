@@ -370,6 +370,21 @@ class MultiSourceContainer(dict):
 	def getPreferredSourceContainer(self, requester, plugin: Plugin | SomePlugin, callback: Callable, timeseriesOnly: bool = False):
 		log.verbose(f'{requester!s} requested {"timeseries" if timeseriesOnly else "approximate realtime value"} '
 		          f'from {"any source" if (plugin is AnySource) else str(plugin)} for {self.key.name}', verbosity=2)
+		# A qualifying container may already be here - in mode=remote a replayed
+		# snapshot typically lands while panels are still registering their
+		# waits, and without this check the request would hold until the
+		# source's next publish (a full poll cycle). Mirror checkAwaiting's
+		# fire conditions and short-circuit instead of queueing.
+		ready = (lambda c: c.isForecast) if timeseriesOnly else (lambda c: c.isRealtime or c.isRealtimeApproximate)
+		candidates = self.values() if plugin is AnySource else ([self[plugin]] if plugin in self else [])
+		for container in candidates:
+			if ready(container):
+				request = Request(requester, callback)
+				if container.isTimeseriesOnly:
+					container.prepare_for_ts_connection(request)
+				else:
+					singleShotSafe(1, request.callback)
+				return
 		if timeseriesOnly:
 			self.waitingForTimeseries[plugin].add(Request(requester, callback))
 		else:

@@ -250,3 +250,29 @@ def test_multisource_container_realtime_via_remote_source():
 	remote._update(value=wu.Temperature.Fahrenheit(74), flags=ContainerFlags(isRealtime=True, isTimeseriesOnly=False))
 	multi.addValue(source, remote)
 	assert multi.realtime is remote.value
+
+
+def test_get_preferred_source_short_circuits_when_data_already_present():
+	# mode=remote race: a replayed snapshot lands before panels register
+	# their waits; getPreferredSourceContainer must fire immediately instead
+	# of holding the request until the next publish.
+	from LevityDash.lib.plugins.plugin import AnySource
+	key = CategoryItem('environment.temperature.temperature')
+	multi = MultiSourceContainer(key)
+	source = RemoteSource(name='OpenMeteo')
+	remote = source.getOrCreate(key)
+	remote._update(
+		value=wu.Temperature.Fahrenheit(74),
+		flags=ContainerFlags(isRealtimeApproximate=True, isTimeseriesOnly=True),
+	)
+	multi.addValue(source, remote)
+
+	fired = []
+	multi.getPreferredSourceContainer('requester', AnySource, lambda: fired.append(True), timeseriesOnly=False)
+	assert fired == [True]  # isTimeseriesOnly -> prepare_for_ts_connection fires synchronously
+
+	# with no qualifying container, the request queues instead of firing
+	multi2 = MultiSourceContainer(CategoryItem('environment.wind.speed.speed'))
+	fired2 = []
+	multi2.getPreferredSourceContainer('requester', AnySource, lambda: fired2.append(True), timeseriesOnly=False)
+	assert fired2 == []
