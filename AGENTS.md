@@ -69,6 +69,7 @@ Plugin data ingestion, transformation, mapping, unit conversion, and validation.
 ## Test quirks
 
 - **`conftest.py`** sets `QT_QPA_PLATFORM=offscreen` and `LEVITYDASH_CONFIG_DEBUG=1` **before any PySide6 import** (top-level, not in a fixture).
+- **`LEVITYDASH_CONFIG_SEED`** (also set by conftest) points at `tests/resources/config-seed/` — an *established* user config (onboarding pre-answered, real OpenMeteo dashboard with graphs) layered over the throwaway debug config dir, so integration tests exercise real render paths instead of the fresh-install/`Empty.levity` state. Unset it for tests that specifically want the onboarding path.
 - Session-scoped `dashboard` fixture boots a real Qt app headlessly without entering `exec_()`. Plugins loaded, never started.
 - `frozen_time` fixture freezes `shared.now`, `strftime`, `datetime.now`, and the Moon module's `datetime.now(tz)` (patched separately — it reads the module directly) to `2025-06-18 14:30`.
 - `pump(app, seconds)` helper processes Qt events without `exec_()`.
