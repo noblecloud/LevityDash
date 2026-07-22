@@ -9,10 +9,16 @@ This formalizes the throwaway harnesses used during the size-group debugging
 """
 import os
 import time
+from pathlib import Path
 
 # Must be set before any PySide6/Qt import happens anywhere in the import graph.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("LEVITYDASH_CONFIG_DEBUG", "1")
+# Seed the throwaway config dir with an *established* user config (onboarding
+# answered, real dashboard) rather than a fresh-install one - see
+# tests/resources/config-seed/. Unset LEVITYDASH_CONFIG_SEED for tests that
+# specifically want the onboarding/fresh-install path.
+os.environ.setdefault("LEVITYDASH_CONFIG_SEED", str(Path(__file__).parent / "resources" / "config-seed"))
 
 import pytest
 

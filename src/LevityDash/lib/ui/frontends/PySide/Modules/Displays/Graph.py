@@ -273,7 +273,14 @@ class GraphItemData(Stateful, tag=...):
 			disconnected = True
 		if not disconnected:
 			raise ValueError('Failed to disconnect from existing timeseries')
-		with container.timeseries.signals as signal:
+		if (timeseries := container.timeseries) is None:
+			# RemoteContainer (mode=remote) advertises timeseries-ness via its
+			# wire flags, but the series itself doesn't cross the wire yet
+			# (Phase 4.4). Stay empty exactly as if no source had data yet -
+			# the documented behavior - instead of crashing on None.signals.
+			log.info(f'GraphItem {self.key.name}: no timeseries data available yet (mode=remote: series do not cross the wire yet)')
+			return False
+		with timeseries.signals as signal:
 			connected = signal.connectSlot(self.onValueChange)
 			if connected:
 				self.__connectedContainer = container

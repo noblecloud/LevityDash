@@ -113,6 +113,20 @@ class _LevityAppDirs(AppDirs):
 		site_config_temp_dir = TemporaryDirectory(prefix="levitydash-site-config-")
 		site_config: Path = Path(site_config_temp_dir.name)
 
+		# Optional seed for the throwaway config dir: LEVITYDASH_CONFIG_SEED
+		# points at a directory whose contents are copied over the fresh temp
+		# config before anything reads it. Lets tests run against an
+		# *established* config (onboarding already answered, a real dashboard
+		# present) instead of the fresh-install state every debug-config run
+		# otherwise starts from - see tests/resources/config-seed/.
+		if _seed := os.environ.get("LEVITYDASH_CONFIG_SEED"):
+			# Layer example-config first (config.ini, templates, plugins.ini)
+			# since a seeded dir is non-empty and LevityConfig's fresh-dir
+			# check will skip its own example-config copy; the seed overlays it.
+			from shutil import copytree
+			copytree(Path(__file__).parent / "resources" / "example-config", config, dirs_exist_ok=True)
+			copytree(_seed, config, dirs_exist_ok=True)
+
 	else:
 		data: Path = AppDirs.user_data_dir
 		config: Path = AppDirs.user_config_dir

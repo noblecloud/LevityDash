@@ -42,6 +42,7 @@ packages = [
 [tool.poetry.scripts]
 LevityDash = 'LevityDash:__main__.main'
 LevityDash-reset-config = 'LevityDash:__main__.reset_config'
+LevityDash-backend = 'LevityDash.backend:main'
 
 
 [tool.poetry.dependencies]
@@ -89,17 +90,11 @@ WeatherUnits = { develop = true, path = "../WeatherUnits" }
 python-semantic-release = "^7.34.6"
 pytest = ">=8.0"
 
-[tool.poetry.group.profiling.dependencies]
-memray = "^1.9.1"
-heartrate = "^0.2.2"
-scalene = "^1.5.19"
-
 [tool.poetry.group.build-to-app.dependencies]
 pyinstaller = "^6.0"
 certifi = "^2022.12.7"
 
 [tool.poetry.group.pycharm.dependencies]
-line-profiler-pycharm = "^1.1.0"
 pydevd-pycharm = "^222.4554.11"
 
 [tool.poetry.group.monitoring.dependencies]

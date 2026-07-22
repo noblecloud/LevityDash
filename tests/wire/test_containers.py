@@ -19,9 +19,10 @@ import WeatherUnits as wu
 # comment for why (shims/_datetime_shim.install() swaps sys.modules['datetime']).
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.dispatcher import MultiSourceContainer
+from LevityDash.lib.plugins.observation import RealtimeSource
 from LevityDash.lib.wire.bridge import LoopbackBridge
 from LevityDash.lib.wire.containers import ContainerFlags, RemoteContainer, RemoteSource
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 
 class FakeObservationValue:
@@ -200,3 +201,78 @@ def test_multisourcechannel_relay_fires_through_remote_container_update():
 	remote._update(value=wu.Temperature.Fahrenheit(72), flags=ContainerFlags(isRealtime=True))
 
 	assert fired == [multi]
+
+
+def test_remote_observation_value_source_matches_realtime_flag():
+	# Realtime.py's stale-label logic (and its tooltip) read value.source:
+	# isinstance(RealtimeSource) picks the staleness threshold, .period is
+	# the threshold for polled sources. The stand-in must mirror both.
+	key = CategoryItem('environment.temperature.temperature')
+	source = RemoteSource(name='Govee')
+	remote = source.getOrCreate(key)
+
+	remote._update(value=wu.Temperature.Fahrenheit(70), flags=ContainerFlags(isRealtime=True))
+	streaming = remote.value.source
+	assert isinstance(streaming, RealtimeSource)
+	assert streaming.name == 'Govee'
+
+	remote._update(value=wu.Temperature.Fahrenheit(71), flags=ContainerFlags(isRealtime=False))
+	polled = remote.value.source
+	assert not isinstance(polled, RealtimeSource)
+	assert polled.period == timedelta(minutes=15)
+
+
+def test_remote_source_plugin_surface():
+	# MultiSourceContainer's reconciliation fallbacks and the status bar's
+	# value path (app.py StatusBarItem.value -> container.realtime) read
+	# source.hasRealtimeFor/hasTimeseriesFor/.hourly/.daily - RemoteSource
+	# must provide them (their absence crashed mode=remote's real GUI).
+	key = CategoryItem('indoor.temperature.temperature')
+	source = RemoteSource(name='Govee')
+	assert source.hasRealtimeFor(key) is False  # no container yet
+
+	remote = source.getOrCreate(key)
+	assert source.hasRealtimeFor(key) is False  # container, no realtime flag
+	remote._update(value=wu.Temperature.Fahrenheit(70), flags=ContainerFlags(isRealtime=True))
+	assert source.hasRealtimeFor(key) is True
+	assert source.hasTimeseriesFor(key) is False
+	assert source.hasDailyFor(key) is False
+	assert source.hourly is None
+	assert source.daily is None
+
+
+def test_multisource_container_realtime_via_remote_source():
+	# The exact dispatcher.py:141 path from the menubar crash log.
+	key = CategoryItem('environment.temperature.temperature')
+	multi = MultiSourceContainer(key)
+	source = RemoteSource(name='OpenMeteo')
+	remote = source.getOrCreate(key)
+	remote._update(value=wu.Temperature.Fahrenheit(74), flags=ContainerFlags(isRealtime=True, isTimeseriesOnly=False))
+	multi.addValue(source, remote)
+	assert multi.realtime is remote.value
+
+
+def test_get_preferred_source_short_circuits_when_data_already_present():
+	# mode=remote race: a replayed snapshot lands before panels register
+	# their waits; getPreferredSourceContainer must fire immediately instead
+	# of holding the request until the next publish.
+	from LevityDash.lib.plugins.plugin import AnySource
+	key = CategoryItem('environment.temperature.temperature')
+	multi = MultiSourceContainer(key)
+	source = RemoteSource(name='OpenMeteo')
+	remote = source.getOrCreate(key)
+	remote._update(
+		value=wu.Temperature.Fahrenheit(74),
+		flags=ContainerFlags(isRealtimeApproximate=True, isTimeseriesOnly=True),
+	)
+	multi.addValue(source, remote)
+
+	fired = []
+	multi.getPreferredSourceContainer('requester', AnySource, lambda: fired.append(True), timeseriesOnly=False)
+	assert fired == [True]  # isTimeseriesOnly -> prepare_for_ts_connection fires synchronously
+
+	# with no qualifying container, the request queues instead of firing
+	multi2 = MultiSourceContainer(CategoryItem('environment.wind.speed.speed'))
+	fired2 = []
+	multi2.getPreferredSourceContainer('requester', AnySource, lambda: fired2.append(True), timeseriesOnly=False)
+	assert fired2 == []

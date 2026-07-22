@@ -64,19 +64,28 @@ def encode_measurement(value: Measurement) -> dict:
 
 
 def _resolve_measurement_class(cls_name: Optional[str], unit: Optional[str]):
-	# Prefer the exact class name (unambiguous); unit is a fallback for
-	# payloads from a backend that only sent a symbol, and doubles as a
-	# sanity source when cls_name doesn't resolve (renamed/unknown class).
+	# Two resolution paths: exact class name (unambiguous - the right call
+	# for symbols several dimensions share, like a bare '%'), and unit
+	# symbol. But a name hit can still be wrong for RECONSTRUCTION: derived/
+	# rate units (Wind = Distance/Time) register their GENERIC class under
+	# 'wind', and the generic constructor wants numerator/denominator
+	# measurements, not a bare number - while the symbol ('mph') resolves
+	# the SPECIALIZED class (MilesPerHour), which builds fine. So prefer a
+	# non-generic candidate, name first, symbol second.
 	registry = UnitRegistry
-	if cls_name:
-		found = registry._units_by_name.get(cls_name.lower())
-		if found is not None:
-			return found
+	by_name = registry._units_by_name.get(cls_name.lower()) if cls_name else None
+	if by_name is not None and not getattr(by_name, 'isGeneric', False):
+		return by_name
 	if unit:
-		found = registry.get(unit)
-		if found is not None:
-			return found
-	return None
+		# by-symbol can return the parametrized GENERIC form of a derived
+		# unit (can't build from a bare number) - scan for the specialized
+		# class carrying that symbol instead.
+		by_symbol = next((u for u in registry._all_units if getattr(u, '_unit', None) and u._unit.lower() == unit.lower() and not getattr(u, 'isGeneric', False)), None)
+		if by_symbol is not None:
+			return by_symbol
+	if by_name is not None:
+		return by_name
+	return registry.get(unit) if unit else None
 
 
 def decode_measurement(payload: dict) -> Measurement | float:
@@ -88,7 +97,18 @@ def decode_measurement(payload: dict) -> Measurement | float:
 		# rather than raising, so a single unrecognized measurement doesn't
 		# take down an entire snapshot/update message.
 		return value
-	measurement = cls(value)
+	try:
+		measurement = cls(value)
+	except Exception:
+		# The class resolved but can't be built from a bare number: derived/
+		# rate units (e.g. Wind = Distance/Time) resolve to their GENERIC
+		# class, whose constructor wants numerator/denominator measurements -
+		# the wire's {unit, cls} pair can't identify the specialized subclass
+		# yet. Honor the same degrade-to-float contract as above; proper
+		# derived-unit reconstruction over the wire is a known follow-up
+		# (surfaced by mode=remote - loopback had been silently skipping
+		# these keys via its per-key relay guard all along).
+		return value
 	ts = payload.get('ts')
 	if ts and hasattr(measurement, 'timestamp'):
 		# Measurement.timestamp is a read-only property backed by

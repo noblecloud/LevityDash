@@ -9,6 +9,11 @@ containers.py - RemoteContainer/RemoteSource/RemotePublisher: frontend-side
                  state rather than owning live plugin connections. Full
                  timeseries support (.hourly/.daily/.timeseries) is
                  deferred to Phase 4.4 - see the module docstring.
+messages.py   - encode_container/apply_container_update: the container-level
+                 wire message pair, one layer above codec.py's value-level
+                 encode/decode. Shared by the loopback bridge (both halves)
+                 and the real WireServer/WireClient (Phase 4.2, one half each)
+                 so they can't drift - this pair *is* the message contract.
 bridge.py     - LoopbackBridge: proves the codec + RemoteContainer
                  round-trip in-process (Phase 4.1, `[Backend] mode =
                  loopback` / LEVITYDASH_BACKEND_MODE=loopback), ahead of

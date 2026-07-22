@@ -22,10 +22,12 @@ explicitly deferred to Phase 4.4's `RemoteTimeSeries`; graphs bound to a
 remote-backed key simply stay empty until then, matching that milestone's
 own stated scope ("accept empty until first fetch initially").
 """
+from datetime import timedelta
 from typing import Any, Callable, Dict, Hashable, NamedTuple, Optional, Set, Type
 
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.plugins.categories import CategoryItem
+from LevityDash.lib.plugins.observation import RealtimeSource
 from LevityDash.lib.plugins.utils import ChannelSignal, GuardedRequest, Request
 
 log = LevityPluginLog.getChild('Wire')
@@ -48,6 +50,29 @@ class ContainerFlags(NamedTuple):
 	isTimeseriesOnly: bool = True
 
 
+class _RemoteValueSource:
+	"""Stand-in for the ObservationDict a pushed value came from (what
+	`ObservationValue.source` returns live). Widget code (Realtime.py's stale
+	label, `__updateTimeOffsetLabel`) reads exactly two things off it:
+	``isinstance(source, RealtimeSource)`` to pick the staleness threshold,
+	and ``.period`` as that threshold for polled sources. Remote mode can't
+	know the backend's poll period, so polled values reuse the same 15-minute
+	fallback streaming sources get - if the label needs live parity there,
+	the period has to cross the wire, not be guessed here."""
+
+	period = timedelta(minutes=15)
+
+	def __init__(self, name: str):
+		self.name = name
+
+
+@RealtimeSource.register
+class _RemoteRealtimeValueSource(_RemoteValueSource):
+	"""The streaming variant - registered so ``isinstance(source, RealtimeSource)``
+	holds, exactly as it would for a live WeatherFlow/Govee value. Chosen per
+	update from the container's wire-pushed ``isRealtime`` flag."""
+
+
 class RemoteObservationValue:
 	"""Stand-in for `observation.ObservationValue`. Holds an already
 	backend-converted value (a real WeatherUnits Measurement, a datetime, or
@@ -61,13 +86,18 @@ class RemoteObservationValue:
 	never on the backend.
 	"""
 
-	__slots__ = ('_value', '_timestamp', '_metadata', '_icon_alias')
+	__slots__ = ('_value', '_timestamp', '_metadata', '_icon_alias', '_source')
 
-	def __init__(self, value: Any, timestamp=None, metadata: Optional[dict] = None, icon_alias: Optional[str] = None):
+	def __init__(self, value: Any, timestamp=None, metadata: Optional[dict] = None, icon_alias: Optional[str] = None, source: Optional[_RemoteValueSource] = None):
 		self._value = value
 		self._timestamp = timestamp
 		self._metadata = metadata if metadata is not None else {}
 		self._icon_alias = icon_alias
+		self._source = source
+
+	@property
+	def source(self) -> Optional[_RemoteValueSource]:
+		return self._source
 
 	@property
 	def value(self) -> Any:
@@ -195,6 +225,31 @@ class RemoteSource:
 	def enabled(self) -> bool:
 		return self.config['enabled']
 
+	# --- the slice of Plugin's observation-surface that MultiSourceContainer
+	# reads during reconciliation (dispatcher.py's .realtime/.timeseries/
+	# .hourly/.daily fallbacks) and the status bar's value path (app.py
+	# StatusBarItem.value -> container.realtime). Timeseries don't cross the
+	# wire yet (Phase 4.4), so those report unavailable.
+
+	@property
+	def hourly(self):
+		return None
+
+	@property
+	def daily(self):
+		return None
+
+	def hasRealtimeFor(self, key) -> bool:
+		container = self._containers.get(key)
+		return container is not None and container.isRealtime
+
+	def hasTimeseriesFor(self, key) -> bool:
+		return False
+
+	def hasDailyFor(self, key) -> bool:
+		container = self._containers.get(key)
+		return container is not None and (container.isDaily or container.isDailyForecast)
+
 	def getOrCreate(self, key: CategoryItem) -> 'RemoteContainer':
 		container = self._containers.get(key)
 		if container is None:
@@ -246,9 +301,10 @@ class RemoteContainer:
 	):
 		"""Called by the wire bridge (loopback or, later, a real socket
 		client) when a new value arrives for this (source, key)."""
-		self._value = RemoteObservationValue(value, timestamp=timestamp, metadata=metadata, icon_alias=icon_alias)
 		if flags is not None:
 			self._flags = flags
+		source_cls = _RemoteRealtimeValueSource if self._flags.isRealtime else _RemoteValueSource
+		self._value = RemoteObservationValue(value, timestamp=timestamp, metadata=metadata, icon_alias=icon_alias, source=source_cls(self.source.name))
 		if title is not None:
 			self._title = title
 		self.channel.publish({self})
@@ -284,12 +340,32 @@ class RemoteContainer:
 					self._awaitingRequirements.pop(request.requester, None)
 
 	def notifyOnRequirementsMet(self, requester: Hashable = None, guard: Callable = None, callback: Callable = None, guarded_request: GuardedRequest = None):
+		# Signature normalization mirrors observation.Container's exactly -
+		# dispatcher.checkAwaiting calls this positionally with a bare
+		# GuardedRequest, so the stand-in has to accept every shape the real
+		# one does.
+		signature = {}
+		if requester is not None:
+			signature['requester'] = requester
+		if guard is not None:
+			signature['guard'] = guard
+		if callback is not None:
+			signature['callback'] = callback
 		if guarded_request is not None:
-			request = guarded_request
-		elif requester is not None and callback is not None:
-			request = GuardedRequest(requester=requester, callback=callback, guard=guard or (lambda _: True))
-		else:
-			raise TypeError('notifyOnRequirementsMet requires either guarded_request or requester+callback')
+			signature['guarded_request'] = guarded_request
+
+		match signature:
+			case {'requester': GuardedRequest() as request, **rest} | {'guarded_request': GuardedRequest() as request, **rest}:
+				if guard := rest.get('guard', None):
+					request = request.with_guard(guard)
+			case {'requester': Request() as request, **rest} | {'guarded_request': Request() as request, **rest}:
+				if guard := rest.get('guard', None):
+					request = GuardedRequest.from_request(request, guard)
+			case {'requester': requester, 'callback': callback, 'guard': guard}:
+				request = GuardedRequest(**signature)
+			case _:
+				raise TypeError(f'Invalid signature: {signature}')
+
 		if self._value is not None:
 			try:
 				met = request.guard(self)

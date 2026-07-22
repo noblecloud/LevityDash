@@ -24,6 +24,17 @@ from WeatherUnits import Measurement, auto as wu_auto
 log = LevityPluginLog.getChild('Dispatcher')
 
 
+def backend_mode() -> str:
+	"""The resolved [Backend] mode: live (default) | loopback | remote.
+
+	Single source of truth - the dispatcher wires itself with it at import
+	time, and LevityDashApp.start consults it to skip local plugin auto-start
+	in remote mode. Env var wins over config (see the comment in
+	PluginValueDirectory.__init__ for why only on-disk/env values can work).
+	"""
+	return os.environ.get('LEVITYDASH_BACKEND_MODE') or userConfig.getOrSet('Backend', 'mode', 'live')
+
+
 @auto_rich_repr
 class MultiSourceContainer(dict):
 	key: CategoryItem
@@ -359,6 +370,21 @@ class MultiSourceContainer(dict):
 	def getPreferredSourceContainer(self, requester, plugin: Plugin | SomePlugin, callback: Callable, timeseriesOnly: bool = False):
 		log.verbose(f'{requester!s} requested {"timeseries" if timeseriesOnly else "approximate realtime value"} '
 		          f'from {"any source" if (plugin is AnySource) else str(plugin)} for {self.key.name}', verbosity=2)
+		# A qualifying container may already be here - in mode=remote a replayed
+		# snapshot typically lands while panels are still registering their
+		# waits, and without this check the request would hold until the
+		# source's next publish (a full poll cycle). Mirror checkAwaiting's
+		# fire conditions and short-circuit instead of queueing.
+		ready = (lambda c: c.isForecast) if timeseriesOnly else (lambda c: c.isRealtime or c.isRealtimeApproximate)
+		candidates = self.values() if plugin is AnySource else ([self[plugin]] if plugin in self else [])
+		for container in candidates:
+			if ready(container):
+				request = Request(requester, callback)
+				if container.isTimeseriesOnly:
+					container.prepare_for_ts_connection(request)
+				else:
+					singleShotSafe(1, request.callback)
+				return
 		if timeseriesOnly:
 			self.waitingForTimeseries[plugin].add(Request(requester, callback))
 		else:
@@ -493,10 +519,12 @@ class PluginValueDirectory(MutableSignal):
 		super(PluginValueDirectory, self).__init__()
 		self._pending = defaultdict(set)
 		self.__plugins = manager
-		# [Backend] mode = live (default, unchanged behavior) | loopback -
-		# loopback proves the wire codec + RemoteContainer round-trip
-		# in-process (Phase 4.1) by routing every plugin's real output
-		# through LoopbackBridge instead of connecting it directly here.
+		# [Backend] mode = live (default, unchanged behavior) | loopback |
+		# remote. loopback proves the wire codec + RemoteContainer round-trip
+		# in-process (Phase 4.1); remote attaches to an already-running
+		# standalone backend (LevityDash-backend) over a WebSocket and leaves
+		# local plugins unattached AND unstarted (see LevityDashApp.start) -
+		# the bundle-is-live / remote-is-attach-only decision in the roadmap.
 		#
 		# PluginValueDirectory is constructed as a side effect of the first
 		# `import LevityDash` (PluginsLoader's GlobalSingleton metaclass
@@ -505,18 +533,30 @@ class PluginValueDirectory(MutableSignal):
 		# reliable window to flip this via in-memory config writes; only a
 		# value already on disk, or this env var (mirroring the existing
 		# LEVITYDASH_CONFIG_DEBUG convention), can actually reach it.
-		mode = os.environ.get('LEVITYDASH_BACKEND_MODE') or userConfig.getOrSet('Backend', 'mode', 'live')
+		mode = self.backend_mode = backend_mode()
 		self.bridge = LoopbackBridge(self) if mode == 'loopback' else None
-		for plugin in self.plugins:
-			if plugin is AnySource:
-				continue
-			if self.bridge is not None:
-				self.bridge.attach(plugin)
-			else:
-				plugin.publisher.connectSlot(self.keyAdded)
+		self.remote = None
+		if mode == 'remote':
+			# Data arrives from the backend over the wire; RemoteConnection
+			# marshals every message onto the GUI thread before it reaches
+			# update() (the roadmap's single-hop requirement for this seam).
+			from LevityDash.lib.wire.remote import RemoteConnection
+			url = os.environ.get('LEVITYDASH_BACKEND_URL') or userConfig.getOrSet('Backend', 'url', 'ws://127.0.0.1:8667/ws')
+			self.remote = RemoteConnection(self, url)
+		else:
+			for plugin in self.plugins:
+				if plugin is AnySource:
+					continue
+				if self.bridge is not None:
+					self.bridge.attach(plugin)
+				else:
+					plugin.publisher.connectSlot(self.keyAdded)
 		self.categories = CategoryEndpointDict(self, self._values, None)
 
 	def connect_plugin(self, plugin: Plugin) -> bool:
+		if self.backend_mode == 'remote':
+			# remote frontends never consume local plugins
+			return True
 		if self.bridge is not None:
 			self.bridge.attach(plugin)
 			return True

@@ -12,7 +12,6 @@ decode-on-the-other dance this bridge does on both sides at once - this
 file is the reference for what that client's decode half needs to do.
 """
 import json
-from datetime import datetime
 from typing import Dict, Optional, TYPE_CHECKING
 
 from PySide6.QtCore import Slot
@@ -20,8 +19,8 @@ from PySide6.QtCore import Slot
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.utils.data import KeyData
-from LevityDash.lib.wire.codec import decode_value, encode_value
-from LevityDash.lib.wire.containers import ContainerFlags, RemoteContainer, RemoteSource
+from LevityDash.lib.wire.containers import RemoteContainer, RemoteSource
+from LevityDash.lib.wire.messages import apply_container_update, encode_container
 
 if TYPE_CHECKING:
 	from LevityDash.lib.plugins.dispatcher import PluginValueDirectory
@@ -31,8 +30,6 @@ if TYPE_CHECKING:
 log = LevityPluginLog.getChild('Wire').getChild('Loopback')
 
 __all__ = ['LoopbackBridge']
-
-_FLAG_NAMES = ContainerFlags._fields
 
 
 class LoopbackBridge:
@@ -79,43 +76,19 @@ class LoopbackBridge:
 			self._dispatcher.update(remoteValues)
 
 	def _relay(self, remoteSource: RemoteSource, key: CategoryItem, container: 'Container') -> Optional[RemoteContainer]:
-		observationValue = container.value
-		if observationValue is None:
+		# encode_container / apply_container_update are the shared wire-message
+		# pair (lib/wire/messages.py). The real WireServer/WireClient (Phase
+		# 4.2) call the same two functions, one on each side of a socket; the
+		# loopback bridge calls both, with a genuine JSON bytes round-trip
+		# between them - which is the actual point of 4.1, not just calling
+		# encode/decode back to back in memory.
+		outgoing = encode_container(container)
+		if outgoing is None:
 			return None
 
-		metadata = container.metadata or {}
-		icon_alias = None
-		rawValue = observationValue.value
-		if metadata.get('type') == 'icon':
-			# Icon objects carry a QFont and aren't wire-safe - push the
-			# alias string and let the frontend resolve it lazily (see
-			# containers.py's RemoteObservationValue.icon_alias).
-			try:
-				icon_alias = metadata.mapAlias(observationValue.rawValue)
-			except Exception as e:
-				log.warning(f'{key}: failed to resolve icon alias for loopback push: {e}')
-			rawValue = None
-
-		outgoing = {
-			'value': encode_value(rawValue) if rawValue is not None else None,
-			'timestamp': encode_value(observationValue.timestamp) if isinstance(observationValue.timestamp, datetime) else None,
-			'title': container.title,
-			'metadata': {k: metadata[k] for k in ('title', 'type', 'iconType') if k in metadata},
-			'icon_alias': icon_alias,
-			'flags': {name: getattr(container, name) for name in _FLAG_NAMES},
-		}
-		# A genuine bytes round-trip - this is the actual point of 4.1, not
-		# just calling encode_value/decode_value back to back in memory.
 		wireBytes = json.dumps(outgoing).encode('utf-8')
 		incoming = json.loads(wireBytes.decode('utf-8'))
 
 		remoteContainer = remoteSource.getOrCreate(key)
-		remoteContainer._update(
-			value=decode_value(incoming['value']) if incoming['value'] is not None else None,
-			timestamp=decode_value(incoming['timestamp']) if incoming['timestamp'] is not None else None,
-			metadata=incoming['metadata'],
-			flags=ContainerFlags(**incoming['flags']),
-			title=incoming['title'],
-			icon_alias=incoming['icon_alias'],
-		)
+		apply_container_update(remoteContainer, incoming)
 		return remoteContainer
