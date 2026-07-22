@@ -11,6 +11,22 @@ latitude = 37.8
 longitude = -76.1
 ```
 
+## Backend
+
+```ini
+[Backend]
+mode = live
+```
+
+Controls whether the frontend runs its own plugins or attaches to a standalone backend process.
+
+### <div class=mono>mode</div>
+
+- `live` (default) — plugins, data pipeline, and the Qt window all run in one process.
+- `remote` — the Qt window acts as a frontend only, connecting to a standalone backend (`LevityDash-backend`) over WebSocket. Graphs are realtime-only in remote mode (timeseries is a planned milestone).
+
+The standalone backend ignores this setting — it always ingests plugins live.
+
 ## Display
 
 ```ini

@@ -1,6 +1,6 @@
 # Roadmap
 
-*Last updated: 2026-07-22 (v0.3.0-beta.1).*
+*Last updated: 2026-07-22 (v0.3.0-beta.1, Phase 4.2 merged).*
 
 This organizes and supersedes the raw idea list in [`_planned-features.md`](_planned-features.md) — every item from that list is either placed in a section below, marked as already done, or parked with a reason. Status notes reference the code so claims stay checkable.
 
@@ -16,24 +16,22 @@ The 2026 revival brought the project from a long-dormant WIP tree to a healthy, 
 - **`statekit` + `qolkit` extracted** — the declarative state/YAML-persistence layer (`src/statekit/`) and generic Python utilities (`src/qolkit/`) are now standalone, Qt-free, in-repo packages with pure-Python test suites. `lib/stateful.py` remains as a thin Qt facade, so no consumer code changed.
 - **First real test harness** — `tests/` covers statekit, qolkit, and headless (offscreen) UI/dashboard behavior.
 
-## Now: the backend/frontend process split
+## Now: timeseries over the wire + plugin control plane
 
-The active project. Plugins, observations, schemas, and unit conversion move to a headless backend process; the Qt app becomes one (of eventually several) frontends, connected over a WebSocket wire protocol.
-
-Settled design decisions:
+Settled design decisions carried forward from Phase 4.2 (the full split is now merged):
 
 - **Seam**: Publisher → dispatcher boundary. The dispatcher, `MultiSourceContainer`, and all widget wiring stay frontend-side.
-- **Source reconciliation stays frontend** — the "best available value until the preferred source arrives" logic runs unchanged, operating on `RemoteContainer` stand-ins fed by raw per-source pushes. The wire carries facts, never negotiations.
-- **Value approximation runs backend** — interpolating "now" from a forecast timeseries happens where the series lives; the result is pushed as an ordinary source value.
+- **Source reconciliation stays frontend** — the "best available value until the preferred source arrives" logic runs unchanged, operating on `RemoteContainer` stand-ins fed by raw per-source pushes.
 - **Timeseries never stream as objects** — request/response with columnar payloads, which also eliminates today's UI-thread series rebuilds.
-- **Key-first subscriptions** — a panel can subscribe to any number of keys, so future dynamic property bindings (below) aren't blocked by the protocol.
-- **Data crosses onto the GUI thread at the wire boundary** — every update the frontend receives from the backend is marshaled onto the GUI thread *once*, at the wire→frontend seam, before it touches any scene object. Today's plugin worker threads deliver data straight into scene-connected objects, which kicks Qt timers/animations off-thread during the first populate — that's the `QBasicTimer::start: Timers cannot be started from another thread` burst seen on startup with a graph dashboard (harmless — the timers re-arm correctly a moment later — but noisy). A single enforced hop at this boundary removes that whole class of bug; it is a design requirement of this milestone, not an automatic side effect, and it supersedes the piecemeal `startTimerSafe`/`singleShotSafe` wrapping (partial fix `766f359`) in the current architecture.
+- **Key-first subscriptions** — a panel can subscribe to any number of keys.
+- **Data crosses onto the GUI thread at the wire boundary** — every update is marshaled once at the wire→frontend seam.
+- **`live` mode unchanged; `remote` is attach-only** — no spawned local backend subprocess.
 
-- **The bundle is `live`; `remote` is attach-only — no spawned local backend.** The single-command experience is the bundled desktop app running `live`: one process, plugins straight to the dispatcher, no wire at all — simplest and most robust for the common case, and what a casual user double-clicks. `remote` mode is purely *attach to an already-running standalone backend* (a service on the deploy box, a Pi, etc.), for the multi-frontend / always-on / embedded-HUD vision. Deliberately **no** "frontend spawns and babysits a local backend subprocess" path: it buys nothing `live` doesn't already give a single machine, while adding process-lifecycle, port, and orphan-process complexity. Crash isolation for a wedged plugin is handled by in-backend watchdogs, not process separation. Consequence: the plugin→dispatcher hop keeps two paths (direct in `live`, wire in `remote`) — acceptable, and already true of `live` vs `loopback`.
+Active milestones:
 
-Milestones: ~~wire codec~~ → ~~`RemoteContainer` + in-process loopback mode~~ → ~~standalone backend process~~ → ~~frontend WS client (reconnect/attach)~~ (all done — the split is live: `LevityDash-backend` + `[Backend] mode = remote` renders the full dashboard on first paint, verified against a real config) → timeseries + plugin control plane.
+- ~~wire codec~~ → ~~`RemoteContainer` + in-process loopback~~ → ~~standalone backend process~~ → ~~frontend WS client (reconnect/attach)~~ → **timeseries over WebSocket (request/response)** → **plugin control plane (start/stop/health)**
 
-This milestone also absorbs two items from the old list: **"truly separate processes for plugins"** (this is exactly that) and **"replace MeasurementTimeSeries"** (the split makes the frontend copy obsolete rather than optimizing it in place).
+Timeseries is the Phase 4.4 gap: graphs are empty in remote mode today (realtime-only; `Graph.connectTimeseries` has the documented None-guard). The control plane adds watchdog heartbeats and remote plugin lifecycle.
 
 ## Next, after the split
 
@@ -91,7 +89,7 @@ Triaged from `_planned-features.md`, grouped by area. ~~Struck~~ items are alrea
 
 ### Plugins
 
-- **Watchdogs / health checks** — auto-restart and heartbeat for wedged plugins. The dead `health_check_worker` scaffold in `lib/backend.py` gets rebuilt properly as part of the split (backend milestone 4.2).
+- **Watchdogs / health checks** — auto-restart and heartbeat for wedged plugins. The `health_check_worker` scaffold in `lib/backend.py` needs rebuilding now that backend.py is the live headless process.
 - **Network failure/recovery hardening** — REST plugins already retry (`ScheduledEvent.retry`); the UDP socket path only logs `connection_lost` and never reconnects.
 - **Govee: broader device support** — `closest`/`first`/MAC/UUID selection all work; only GVH5102 is tested. Extend model coverage and parsing presets.
 - **Bluetooth-unavailable handling** — test/degrade gracefully when the adapter is missing or permission-blocked (macOS TCC).
@@ -121,6 +119,7 @@ Triaged from `_planned-features.md`, grouped by area. ~~Struck~~ items are alrea
 | refresh handles iterating all children | Fixed (was marked "probably fixed" — confirmed during the revival) |
 | Fix delayed/blocked parent-resized signals while loading | Effectively resolved by the size-group engine rewrite + settle-time refits |
 | OpenWeatherMap plugin | Done — was a disabled skeleton (schema shadowed by an empty class attr); rebuilt against the free Current Weather Data endpoint (One Call requires a paid plan), with a `normalizeData` flatten step for its nested response shape. Verified live against the real API. |
+| Phase 4.2 backend/frontend process split | Done — wire codec (`lib/wire/codec.py`), typed messages (`messages.py`), aiohttp WebSocket server (`server.py`) + client (`client.py`), `RemoteBackend`/`RemoteFrontend` adapters, `RemoteContainer`/`RemoteObservationValue` stand-ins, `GuiMarshal` single-hop bridge, standalone backend entry point (`LevityDash-backend` / `python -m LevityDash.backend`). Merge `fce2568`. Full dashboard renders on first paint in remote mode; 125-pass test suite. Follow-ups tracked in `docs/tasks/phase-4.2-follow-ups.md`. |
 
 ## Parked (kept for reference, no current plan)
 

@@ -21,15 +21,45 @@ poetry install --without dev
 
 ## Running LevityDash  <!-- {docsify-ignore} -->
 
+LevityDash has two modes:
+
+- **`live`** (default) — runs everything in one process: plugins, data pipeline, and the Qt window.
+- **`remote`** — runs the Qt window as a frontend that attaches to a standalone backend over WebSocket.
+
+### Live mode (single process)
+
+```bash
+poetry run LevityDash
+# or
+poetry run python -m LevityDash
+```
+
+### Remote mode (two processes)
+
+Start the headless backend first:
+
+```bash
+poetry run LevityDash-backend
+# or
+poetry run python -m LevityDash.backend
+```
+
+Then set the frontend to attach to it. This is done in the config file (`config.ini`, `[Backend]` section):
+
+```ini
+[Backend]
+mode = remote
+```
+
+Now launch the frontend normally — it connects to the backend and renders the dashboard:
+
 ```bash
 poetry run LevityDash
 ```
 
-or with the module flag:
+The backend serves all five built-in plugins (OpenMeteo, PirateWeather, WeatherFlow, Govee BLE, OpenWeatherMap) and pushes realtime updates to any number of frontends.
 
-```bash
-poetry run python -m LevityDash
-```
+### Other commands
 
 To start over with a fresh configuration:
 
