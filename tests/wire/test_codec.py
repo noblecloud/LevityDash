@@ -145,3 +145,28 @@ def test_plain_dict_passes_through_unchanged():
 def test_wire_version_is_a_positive_int():
 	assert isinstance(WIRE_VERSION, int)
 	assert WIRE_VERSION >= 1
+
+
+def test_derived_unit_generic_cls_uses_symbol():
+	# Derived/rate units register their GENERIC class under 'wind' etc., and
+	# the generic constructor can't build from a bare number - the symbol
+	# ('mph') resolves the specialized class that can. This was the
+	# degrade-to-float path that made remote wind values unitless.
+	payload = json.loads(json.dumps(encode_measurement(wu.Wind.MilesPerHour(5.5))))
+	assert payload['cls'] == 'MilesPerHour'
+	result = decode_measurement(payload)
+	assert isinstance(result, wu.Wind.MilesPerHour)
+	assert float(result) == 5.5
+
+	# same unit arriving with the GENERIC class name (e.g. values whose
+	# runtime type is the parametrized generic) must not degrade either
+	generic_payload = {'value': 5.5, 'unit': 'mph', 'cls': 'Wind'}
+	result = decode_measurement(generic_payload)
+	assert isinstance(result, wu.Wind.MilesPerHour)
+	assert float(result) == 5.5
+
+
+def test_ambiguous_symbol_prefers_cls_name():
+	# '%' is shared by several dimensions, so the class name must win
+	humidity = encode_measurement(wu.Humidity(66))
+	assert decode_measurement(json.loads(json.dumps(humidity))) == wu.Humidity(66)
