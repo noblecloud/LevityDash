@@ -315,12 +315,32 @@ class RemoteContainer:
 					self._awaitingRequirements.pop(request.requester, None)
 
 	def notifyOnRequirementsMet(self, requester: Hashable = None, guard: Callable = None, callback: Callable = None, guarded_request: GuardedRequest = None):
+		# Signature normalization mirrors observation.Container's exactly -
+		# dispatcher.checkAwaiting calls this positionally with a bare
+		# GuardedRequest, so the stand-in has to accept every shape the real
+		# one does.
+		signature = {}
+		if requester is not None:
+			signature['requester'] = requester
+		if guard is not None:
+			signature['guard'] = guard
+		if callback is not None:
+			signature['callback'] = callback
 		if guarded_request is not None:
-			request = guarded_request
-		elif requester is not None and callback is not None:
-			request = GuardedRequest(requester=requester, callback=callback, guard=guard or (lambda _: True))
-		else:
-			raise TypeError('notifyOnRequirementsMet requires either guarded_request or requester+callback')
+			signature['guarded_request'] = guarded_request
+
+		match signature:
+			case {'requester': GuardedRequest() as request, **rest} | {'guarded_request': GuardedRequest() as request, **rest}:
+				if guard := rest.get('guard', None):
+					request = request.with_guard(guard)
+			case {'requester': Request() as request, **rest} | {'guarded_request': Request() as request, **rest}:
+				if guard := rest.get('guard', None):
+					request = GuardedRequest.from_request(request, guard)
+			case {'requester': requester, 'callback': callback, 'guard': guard}:
+				request = GuardedRequest(**signature)
+			case _:
+				raise TypeError(f'Invalid signature: {signature}')
+
 		if self._value is not None:
 			try:
 				met = request.guard(self)
