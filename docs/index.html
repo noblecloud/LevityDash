@@ -143,6 +143,7 @@
 			function (hook, vm) {
 				hook.ready(function () {
 					toggleDash();
+					startCoverHover();
 					// Place the continue button.
 					place_continue(document.getElementsByClassName('pagination-item pagination-item--next')[0]);
 				});
@@ -150,6 +151,7 @@
 				hook.doneEach(function () {
 					// Place the continue button.
 					toggleDash();
+					startCoverHover();
 					place_continue(document.getElementsByClassName('pagination-item pagination-item--next')[0]);
 					// let main_header_element = document.createElement("div");
 					// _main = document.querySelector('main');
@@ -243,13 +245,55 @@
 			toggleDash()
 		}
 
-		let resizeTimer;
+	let resizeTimer;
 
-		window.onresize = function () {
-			clearTimeout(resizeTimer);
-			resizeTimer = setTimeout(toggleDash, 10);
+	window.onresize = function () {
+		clearTimeout(resizeTimer);
+		resizeTimer = setTimeout(toggleDash, 10);
+	}
+
+	function startCoverHover() {
+		var img = document.querySelector('.cover .screenshotAlpha');
+		if (!img || img.dataset.hoverActive) return;
+		img.dataset.hoverActive = '1';
+
+		var mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+		if (mq.matches) return;
+
+		function rand(max) { return (Math.random() * 2 - 1) * max; }
+		function rng(min, max) { return min + Math.random() * (max - min); }
+
+		var yaw = rand(8);
+		var index = 0;
+
+		function float() {
+			var dur = rng(5000, 10000);
+			var y = rng(-20, 10);
+			var rx = y * 0.08 + rand(1.5);
+			var ry = yaw + rand(4);
+			var s = rng(0.985, 1.015);
+
+			yaw = ry + rand(1);
+
+			img.style.setProperty('--hover-dur', dur + 'ms');
+			img.style.transform = 'translateY(' + y + 'px) rotateX(' + rx + 'deg) rotateY(' + ry + 'deg) scale(' + s + ')';
+
+			index++;
+			setTimeout(float, dur);
 		}
-	</script>
+
+		float();
+
+		mq.addEventListener('change', function(e) {
+			if (e.matches) {
+				img.style.transition = 'none';
+				img.style.transform = 'none';
+			} else {
+				float();
+			}
+		});
+	}
+</script>
 
 	<plugins>
 

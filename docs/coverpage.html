@@ -92,10 +92,11 @@
 			0 40px 70px -28px rgba(28, 52, 90, 0.5),
 			0 16px 30px -18px rgba(47, 143, 216, 0.28);
 		transform-origin: 50% 50% -340px;
+		transition: transform var(--hover-dur, 5s) cubic-bezier(0.33, 0, 0.66, 1);
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.screenshotAlpha { animation: none; transform: none !important; }
+		.screenshotAlpha { transition: none; transform: none !important; }
 	}
 
 	.cover small.mono {
@@ -159,52 +160,4 @@
 </picture>
 <small class="mono">LevityDash <strong>v0.3.0-beta.1</strong> is currently <strong>in beta</strong> — expect rough edges. Requires <strong>Python 3.13–3.14</strong> (<strong>3.14</strong> recommended).</small>
 
-<script>
-(function() {
-	var img = document.querySelector('.screenshotAlpha');
-	if (!img) return;
 
-	var mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-	if (mq.matches) return;
-
-	var state = { ty: 0, rx: 0, ry: 0 };
-
-	function rand(max) {
-		return (Math.random() * 2 - 1) * max;
-	}
-
-	function next() {
-		var dur = 6000 + Math.random() * 10000;
-		var ty = rand(11);
-		var rx = rand(3.4);
-		var ry = rand(3.4);
-
-		var from = 'translateY(' + state.ty + 'px) rotateX(' + state.rx + 'deg) rotateY(' + state.ry + 'deg)';
-		var to = 'translateY(' + ty + 'px) rotateX(' + rx + 'deg) rotateY(' + ry + 'deg)';
-
-		state = { ty: ty, rx: rx, ry: ry };
-
-		var anim = img.animate([
-			{ transform: from },
-			{ transform: to }
-		], {
-			duration: dur,
-			easing: 'cubic-bezier(0.25, 0.1, 0.25, 1)',
-			fill: 'forwards'
-		});
-
-		anim.onfinish = next;
-	}
-
-	next();
-
-	mq.addEventListener('change', function(e) {
-		if (e.matches) {
-			img.getAnimations().forEach(function(a) { a.cancel(); });
-			img.style.transform = 'none';
-		} else {
-			next();
-		}
-	});
-})();
-</script>
