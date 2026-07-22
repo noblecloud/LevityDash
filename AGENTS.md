@@ -80,7 +80,7 @@ Plugin data ingestion, transformation, mapping, unit conversion, and validation.
 
 - **Indentation**: tabs (2-width) for `.py`, spaces for `.yaml`/`.spec` (`.editorconfig`).
 - **Max line length**: 240.
-- **Python**: 3.11–3.14.
+- **Python**: 3.13–3.14.
 - **Config**: `ConfigParser` with `ExtendedInterpolation`; `LEVITYDASH_CONFIG_DEBUG=1` redirects paths to temp dirs.
 - **Logging**: Custom verbosity levels (0–5), Rich console + rotating file handler. Traceback locals off by default (live Qt objects crash on concurrent repr).
 

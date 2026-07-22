@@ -75,9 +75,9 @@ def _git_revision(repo_dir: Path) -> str | None:
 		pass
 	return None
 
-if sys.version_info < (3, 10, 0):
+if sys.version_info < (3, 13, 0):
 	sys.exit(
-		"Python 3.10 or later is required. "
+		"Python 3.13 or later is required. "
 		"See https://LevityDash.app/gettinhg-started"
 		"for installation instructions."
 	)

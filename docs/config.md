@@ -4,7 +4,7 @@ This section will cover the configuration options for LevityDash and the how to 
 There are two main types of configuration options: application/plugin and dashboard/panel. 
 Currently, application/plugin configuration options use the ini format, while dashboard/panel configuration options use the YAML format.
 
-## Location <!-- {docsify-ignore} -->
+## Config Folder Location <!-- {docsify-ignore} -->
 
 The location of the config folder is platform specific so the easiest way access it is by clicking the option in the File menu.
 
@@ -32,7 +32,7 @@ The location of the config folder is platform specific so the easiest way access
 
 <!-- tabs:end -->
 
-## Location  <!-- {docsify-ignore} -->
+## Geographic Location  <!-- {docsify-ignore} -->
 
 This section is pretty self explanatory. If blank, Levity will guess the location based on the devices IP address.
 

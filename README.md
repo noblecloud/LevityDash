@@ -23,7 +23,7 @@ LevityDash aims to be a lightweight, desktop native, multi-source dashboard with
 
 <p align="right">
 <img src="https://img.shields.io/badge/license-MIT-blueviolet">
-<img src="https://img.shields.io/badge/Python-3.11–3.14-blueviolet">
+<img src="https://img.shields.io/badge/Python-3.13–3.14-blueviolet">
 <img src="https://img.shields.io/badge/Qt-6-blueviolet">
 <img src="https://img.shields.io/badge/aiohttp-3.14-blueviolet">
 
@@ -33,7 +33,7 @@ LevityDash aims to be a lightweight, desktop native, multi-source dashboard with
 
 ## Requirements
 
-- Python 3.11 – 3.14 (3.14 recommended — it's noticeably faster)
+- Python 3.13 – 3.14 (3.14 recommended — it's noticeably faster)
 - [Poetry](https://python-poetry.org) for installing from source
 
 ## Install

@@ -26,7 +26,7 @@ Dependency direction is strict: `qolkit ← statekit ← LevityDash`. Never impo
 
 ## Environment
 
-- Poetry; Python `>=3.11,<3.15` (developed and run on 3.14).
+- Poetry; Python `>=3.13,<3.15` (developed and run on 3.14).
 - The `dev` dependency group path-depends on a sibling checkout `../WeatherUnits` (develop mode). Without it, `poetry install --without dev`.
 - After dependency churn, the editable install can come unlinked — fix with `poetry run pip install -e . --no-deps`.
 - Keep `pyside6` at its pinned floor; loose upgrades have pulled broken Qt builds before.

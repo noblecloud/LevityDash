@@ -11,7 +11,7 @@ I am hoping to have an auto migration tool in place before the switch, but I can
 
 </small>
 
-## Platform Specific Config Locations  <!-- {docsify-ignore} -->
+## Platform Specific Config Locations
 
 <!-- tabs:start -->
 
@@ -35,7 +35,7 @@ I am hoping to have an auto migration tool in place before the switch, but I can
 
 <!-- tabs:end -->
 
-## Location  <!-- {docsify-ignore} -->
+## Geographic Location
 
 This section is pretty self-explanatory. If blank, Levity will guess the location based on the devices IP address.
 

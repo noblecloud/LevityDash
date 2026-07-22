@@ -1,12 +1,5 @@
-LevityDash requires Python 3.11–3.14 (3.14 recommended).
+LevityDash requires Python 3.13–3.14 (3.14 recommended).
 There are many ways to install python that will be covered later, but for now, we will check what versions, if any, are already installed.
-
-<small>
-
-Python 3.11 is now Supported!.
-
-</small>
-
 
 ## Checking Python Version
 
@@ -73,7 +66,7 @@ and installation instructions for pyenv can be found here: https://github.com/py
 Windows 10 comes with a built-in package manager called "Windows Package Manager."  It can be installed by running the following command in PowerShell:
 
 ```powershell
-winget install Microsoft.Python.Python.3.11
+winget install Microsoft.Python.Python.3.13
 ```
 
 Chocolatey is another package manager for Windows.  It can be installed by running the following command in PowerShell:
@@ -94,12 +87,12 @@ Homebrew is the most popular package manager for macOS.  It can be installed by 
 Once homebrew is installed, python can be installed by running the following command in Terminal:
 
 ```bash
-brew install python@3.11
+brew install python@3.13
 ```
 
 #### Linux
 
-Linux distributions have a wide variety of package managers.  The most popular are apt, pacman, and dnf.  The following commands will install python 3.11 on each of these package managers:
+Linux distributions have a wide variety of package managers.  The most popular are apt, pacman, and dnf.  The following commands will install python 3.13 on each of these package managers:
 <!-- tabs:start -->
 
 ### **Debian**
@@ -125,7 +118,7 @@ sudo dnf install python3
 <!-- tabs:end -->
 
 
-If your distribution's package manager does not have Python 3.11 or newer, many times you can find community maintained packages for it.
+If your distribution's package manager does not have Python 3.13 or newer, many times you can find community maintained packages for it.
 If your package manager has a search feature, you can search for "python3.14" or "python3.14-dev" to find the package.
 Additionally, your package manager may have a way to specify a specific version of a package to install.
 
@@ -173,8 +166,8 @@ sudo dnf install gcc zlib-devel bzip2 bzip2-devel readline-devel sqlite sqlite-d
 #### Download the Source Code
 
 ```bash
-MINOR=11
-PATCH=9
+MINOR=13
+PATCH=1
 
 wget https://www.python.org/ftp/python/3.$MINOR.$PATCH/Python-3.$MINOR.$PATCH.tar.xz
 tar -xf Python-3.$MINOR.$PATCH.tar.xz

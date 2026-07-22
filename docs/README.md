@@ -16,4 +16,4 @@ poetry install --without dev
 poetry run LevityDash
 ```
 
-Python 3.11–3.14 is required (3.14 recommended). See [Getting Started](/getting-started.md) for details.
+Python 3.13–3.14 is required (3.14 recommended). See [Getting Started](/getting-started.md) for details.
