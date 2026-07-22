@@ -80,20 +80,12 @@ BOOT_SCRIPT = textwrap.dedent("""
 	# loads with a value old enough to trigger every stale-value code path
 	broadcast(minutes_old=30)
 
-	# Load the real OpenMeteo dashboard template (graph + mini-graph + realtime
-	# panels) instead of the debug default (Empty.levity - plugins are disabled
-	# in debug config, and _determine_default_dashboard picks by enabled
-	# plugin). Without graph panels, Graph.setContainer/connectTimeseries never
-	# runs and the 'NoneType has no signals' crash goes unseen.
-	import shutil
-	from LevityDash.lib.config import userConfig
-	saves = userConfig.userPath['saves']['dashboards'].path
-	saves.mkdir(parents=True, exist_ok=True)
-	shutil.copyfile(
-		LevityDashboard.resources / 'example-config' / 'templates' / 'dashboards' / 'OpenMeteo.levity',
-		saves / 'default.levity',
-	)
-	userConfig['Display']['dashboard'] = 'default.levity'
+	# The config seed (tests/resources/config-seed, applied via
+	# LEVITYDASH_CONFIG_SEED from conftest) already provides default.levity =
+	# the OpenMeteo template (graph + mini-graph + realtime panels) - the
+	# debug default would otherwise be Empty.levity (plugins disabled in a
+	# fresh config, and auto-selection keys off enabled plugins), which has
+	# no graphs and lets the Phase 4.4 NoneType.signals crash go unseen.
 
 	# --- the real boot path (see __main__.main / LevityDashApp.start) ---
 	LevityDashboard.init()
