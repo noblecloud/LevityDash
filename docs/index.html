@@ -262,8 +262,10 @@
 
 		function rand(max) { return (Math.random() * 2 - 1) * max; }
 		function rng(min, max) { return min + Math.random() * (max - min); }
+		function clamp(v, max) { return Math.max(-max, Math.min(max, v)); }
 
-		var yaw = rand(8);
+		var YAW_MAX = 8;
+		var yaw = rand(YAW_MAX);
 		var index = 0;
 
 		function float() {
@@ -273,7 +275,7 @@
 			var ry = yaw + rand(4);
 			var s = rng(0.985, 1.015);
 
-			yaw = ry + rand(1);
+			yaw = clamp(ry + rand(1), YAW_MAX);
 
 			img.style.setProperty('--hover-dur', dur + 'ms');
 			img.style.transform = 'translateY(' + y + 'px) rotateX(' + rx + 'deg) rotateY(' + ry + 'deg) scale(' + s + ')';
