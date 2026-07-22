@@ -22,10 +22,12 @@ explicitly deferred to Phase 4.4's `RemoteTimeSeries`; graphs bound to a
 remote-backed key simply stay empty until then, matching that milestone's
 own stated scope ("accept empty until first fetch initially").
 """
+from datetime import timedelta
 from typing import Any, Callable, Dict, Hashable, NamedTuple, Optional, Set, Type
 
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.plugins.categories import CategoryItem
+from LevityDash.lib.plugins.observation import RealtimeSource
 from LevityDash.lib.plugins.utils import ChannelSignal, GuardedRequest, Request
 
 log = LevityPluginLog.getChild('Wire')
@@ -48,6 +50,29 @@ class ContainerFlags(NamedTuple):
 	isTimeseriesOnly: bool = True
 
 
+class _RemoteValueSource:
+	"""Stand-in for the ObservationDict a pushed value came from (what
+	`ObservationValue.source` returns live). Widget code (Realtime.py's stale
+	label, `__updateTimeOffsetLabel`) reads exactly two things off it:
+	``isinstance(source, RealtimeSource)`` to pick the staleness threshold,
+	and ``.period`` as that threshold for polled sources. Remote mode can't
+	know the backend's poll period, so polled values reuse the same 15-minute
+	fallback streaming sources get - if the label needs live parity there,
+	the period has to cross the wire, not be guessed here."""
+
+	period = timedelta(minutes=15)
+
+	def __init__(self, name: str):
+		self.name = name
+
+
+@RealtimeSource.register
+class _RemoteRealtimeValueSource(_RemoteValueSource):
+	"""The streaming variant - registered so ``isinstance(source, RealtimeSource)``
+	holds, exactly as it would for a live WeatherFlow/Govee value. Chosen per
+	update from the container's wire-pushed ``isRealtime`` flag."""
+
+
 class RemoteObservationValue:
 	"""Stand-in for `observation.ObservationValue`. Holds an already
 	backend-converted value (a real WeatherUnits Measurement, a datetime, or
@@ -61,13 +86,18 @@ class RemoteObservationValue:
 	never on the backend.
 	"""
 
-	__slots__ = ('_value', '_timestamp', '_metadata', '_icon_alias')
+	__slots__ = ('_value', '_timestamp', '_metadata', '_icon_alias', '_source')
 
-	def __init__(self, value: Any, timestamp=None, metadata: Optional[dict] = None, icon_alias: Optional[str] = None):
+	def __init__(self, value: Any, timestamp=None, metadata: Optional[dict] = None, icon_alias: Optional[str] = None, source: Optional[_RemoteValueSource] = None):
 		self._value = value
 		self._timestamp = timestamp
 		self._metadata = metadata if metadata is not None else {}
 		self._icon_alias = icon_alias
+		self._source = source
+
+	@property
+	def source(self) -> Optional[_RemoteValueSource]:
+		return self._source
 
 	@property
 	def value(self) -> Any:
@@ -246,9 +276,10 @@ class RemoteContainer:
 	):
 		"""Called by the wire bridge (loopback or, later, a real socket
 		client) when a new value arrives for this (source, key)."""
-		self._value = RemoteObservationValue(value, timestamp=timestamp, metadata=metadata, icon_alias=icon_alias)
 		if flags is not None:
 			self._flags = flags
+		source_cls = _RemoteRealtimeValueSource if self._flags.isRealtime else _RemoteValueSource
+		self._value = RemoteObservationValue(value, timestamp=timestamp, metadata=metadata, icon_alias=icon_alias, source=source_cls(self.source.name))
 		if title is not None:
 			self._title = title
 		self.channel.publish({self})

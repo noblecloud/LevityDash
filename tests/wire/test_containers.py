@@ -19,9 +19,10 @@ import WeatherUnits as wu
 # comment for why (shims/_datetime_shim.install() swaps sys.modules['datetime']).
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.dispatcher import MultiSourceContainer
+from LevityDash.lib.plugins.observation import RealtimeSource
 from LevityDash.lib.wire.bridge import LoopbackBridge
 from LevityDash.lib.wire.containers import ContainerFlags, RemoteContainer, RemoteSource
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 
 class FakeObservationValue:
@@ -200,3 +201,22 @@ def test_multisourcechannel_relay_fires_through_remote_container_update():
 	remote._update(value=wu.Temperature.Fahrenheit(72), flags=ContainerFlags(isRealtime=True))
 
 	assert fired == [multi]
+
+
+def test_remote_observation_value_source_matches_realtime_flag():
+	# Realtime.py's stale-label logic (and its tooltip) read value.source:
+	# isinstance(RealtimeSource) picks the staleness threshold, .period is
+	# the threshold for polled sources. The stand-in must mirror both.
+	key = CategoryItem('environment.temperature.temperature')
+	source = RemoteSource(name='Govee')
+	remote = source.getOrCreate(key)
+
+	remote._update(value=wu.Temperature.Fahrenheit(70), flags=ContainerFlags(isRealtime=True))
+	streaming = remote.value.source
+	assert isinstance(streaming, RealtimeSource)
+	assert streaming.name == 'Govee'
+
+	remote._update(value=wu.Temperature.Fahrenheit(71), flags=ContainerFlags(isRealtime=False))
+	polled = remote.value.source
+	assert not isinstance(polled, RealtimeSource)
+	assert polled.period == timedelta(minutes=15)
