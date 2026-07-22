@@ -1,6 +1,6 @@
 # Roadmap
 
-*Last updated: 2026-07-11 (v0.2.0-beta.3).*
+*Last updated: 2026-07-22 (v0.3.0-beta.1).*
 
 This organizes and supersedes the raw idea list in [`_planned-features.md`](_planned-features.md) — every item from that list is either placed in a section below, marked as already done, or parked with a reason. Status notes reference the code so claims stay checkable.
 

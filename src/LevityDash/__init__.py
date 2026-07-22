@@ -14,7 +14,7 @@ from functools import cached_property
 from pathlib import Path
 from appdirs import AppDirs
 
-__version__ = "0.2.0-beta.3"
+__version__ = "0.3.0-beta.1"
 
 
 def _unlock_cached_property():
