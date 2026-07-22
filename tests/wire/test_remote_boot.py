@@ -59,9 +59,12 @@ BOOT_SCRIPT = textwrap.dedent("""
 			# Realtime.py's Text-display branch reads metadata['type'] directly
 			'metadata': {{'type': 'value'}},
 			'icon_alias': None,
+			# flags mirror a real OpenMeteo container: it advertises forecast/
+			# timeseries - which is exactly what sends Graph.connectTimeseries
+			# at a RemoteContainer whose .timeseries is None (Phase 4.4 gap)
 			'flags': {{
-				'isRealtime': True, 'isRealtimeApproximate': False, 'isForecast': False,
-				'isTimeseries': False, 'isDaily': False, 'isDailyForecast': False,
+				'isRealtime': True, 'isRealtimeApproximate': False, 'isForecast': True,
+				'isTimeseries': True, 'isDaily': False, 'isDailyForecast': False,
 				'isDailyOnly': False, 'isTimeseriesOnly': False,
 			}},
 		}}
@@ -76,6 +79,21 @@ BOOT_SCRIPT = textwrap.dedent("""
 	# stale value first: replayed to the frontend on connect, so the dashboard
 	# loads with a value old enough to trigger every stale-value code path
 	broadcast(minutes_old=30)
+
+	# Load the real OpenMeteo dashboard template (graph + mini-graph + realtime
+	# panels) instead of the debug default (Empty.levity - plugins are disabled
+	# in debug config, and _determine_default_dashboard picks by enabled
+	# plugin). Without graph panels, Graph.setContainer/connectTimeseries never
+	# runs and the 'NoneType has no signals' crash goes unseen.
+	import shutil
+	from LevityDash.lib.config import userConfig
+	saves = userConfig.userPath['saves']['dashboards'].path
+	saves.mkdir(parents=True, exist_ok=True)
+	shutil.copyfile(
+		LevityDashboard.resources / 'example-config' / 'templates' / 'dashboards' / 'OpenMeteo.levity',
+		saves / 'default.levity',
+	)
+	userConfig['Display']['dashboard'] = 'default.levity'
 
 	# --- the real boot path (see __main__.main / LevityDashApp.start) ---
 	LevityDashboard.init()
