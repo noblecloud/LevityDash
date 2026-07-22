@@ -17,9 +17,10 @@ Process anatomy — every piece mirrors a pattern the GUI app already uses:
 
 This process always ingests **live** internally (the in-process dispatcher
 idles alongside, holding containers nobody renders — harmless). ``mode=remote``
-is a *frontend* setting; if it leaks into this process's environment it is
-forced back to live, otherwise the dispatcher would try to be a frontend of
-ourselves.
+is a *frontend* setting; it is pinned back to live here unconditionally, since
+it can leak in through the shared config file (the natural place a user puts
+their *frontend* into remote mode) just as easily as through the environment —
+otherwise the dispatcher would try to be a frontend of ourselves.
 
 Launch: ``LevityDash-backend`` (or ``python -m LevityDash.lib.backend``).
 Bind host/port: ``[Backend] host/port`` in config, or the
@@ -42,8 +43,11 @@ def main() -> int:
 	# constructed during init()'s `import LevityDash.lib` chain (the package
 	# import itself is Qt-free), and the platform can't change afterwards.
 	os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
-	if os.environ.get('LEVITYDASH_BACKEND_MODE') == 'remote':
-		os.environ['LEVITYDASH_BACKEND_MODE'] = 'live'
+	# Pin to live unconditionally: backend_mode() prefers this env var over the
+	# shared config file, so setting it here (before LevityDashboard.init()'s
+	# import chain constructs the dispatcher) covers both leak paths - a
+	# 'mode = remote' in [Backend] config AND a stray env var.
+	os.environ['LEVITYDASH_BACKEND_MODE'] = 'live'
 
 	from LevityDash import LevityDashboard
 	from LevityDash.lib.config import userConfig
