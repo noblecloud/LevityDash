@@ -31,7 +31,7 @@ Active milestones:
 
 - ~~wire codec~~ → ~~`RemoteContainer` + in-process loopback~~ → ~~standalone backend process~~ → ~~frontend WS client (reconnect/attach)~~ → **timeseries over WebSocket (request/response)** → **plugin control plane (start/stop/health)**
 
-Timeseries is the Phase 4.4 gap: graphs are empty in remote mode today (realtime-only; `Graph.connectTimeseries` has the documented None-guard). The control plane adds watchdog heartbeats and remote plugin lifecycle.
+Timeseries is the next milestone's gap: graphs are empty in remote mode today (realtime-only; `Graph.connectTimeseries` has the documented None-guard). The control plane adds watchdog heartbeats and remote plugin lifecycle.
 
 ## Next, after the split
 
