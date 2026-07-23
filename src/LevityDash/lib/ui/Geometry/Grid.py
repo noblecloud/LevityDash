@@ -736,6 +736,8 @@ class GridItems(list):
 		self._size -= 1
 		self.pop(index)
 
+	# Same preserved WIP grid-packing feature as the note near clearCached
+	# (~L914) - not dead code, leave it.
 	# end = self.grid.columns * self.grid.rows
 	# amount = c.width
 	# toPull = self[index:]
@@ -871,6 +873,8 @@ class Grid(QObject):
 	def place(self, gridItem: GridItem, *args: Union[QPoint, tuple[int], int, GridItemPosition]):
 		if args:
 			location = self.getColumnRow(*args)
+		# Same preserved WIP grid-packing feature as the note near
+		# clearCached (~L914) - not dead code, leave it.
 		# else:
 		# 	if self.__column is not None:
 		# 		self.column = self.__column
@@ -911,6 +915,15 @@ class Grid(QObject):
 			clearCacheAttr(self, '_ROWS')
 		clearCacheAttr(self, 'gridItemSize')
 
+	# INTENTIONALLY PRESERVED, NOT DEAD CODE. Two prior WIP attempts (below,
+	# and the near-duplicate around `test()`/the second `buildGrid` a bit
+	# further down) at a snap-to-grid placement + automatic grid-packing
+	# feature - items locking into a grid instead of free placement. Parked
+	# for a later feature/option, deliberately kept commented rather than
+	# deleted or finished. A dead-code sweep is not the place to judge WIP
+	# intent from the code alone (this has already been mistakenly flagged
+	# as abandoned/dead more than once) - if it looks stale, check with the
+	# maintainer before touching it, don't assume.
 	# def buildGrid(self, afterIndex: int = None, clear: bool = True):
 	#
 	# 	items = self.GridItems
@@ -999,6 +1012,11 @@ class Grid(QObject):
 	# 	# self.gridItemSize = QSize(int(w / columns), int(h / self.rows))
 	# 	self.lastColumnCount = self.columns
 
+	# Also WIP grid-packing (see the note above clearCached, ~L914) - reaches
+	# an unreachable `while not foundSpace: pass` and an undefined `i` if
+	# ever called, and has zero call sites today. Still not a cleanup target:
+	# same in-progress feature, not abandoned/dead - leave it for whoever
+	# picks that feature back up.
 	def test(self):
 		def willExceedColumns(gridItem: GridItem) -> bool:
 			return gridItem.column + gridItem.w > self.columns

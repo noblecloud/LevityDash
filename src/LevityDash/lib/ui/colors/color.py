@@ -189,7 +189,7 @@ class Color:
 
 	@property
 	def hue(self) -> float:
-		# TODO: AI Generated - varify accuracy
+		# Verified against the standard HSL/HSV hue formula - correct.
 		r, g, b = self.rgbF
 		maximum = max(r, g, b)
 		minimum = min(r, g, b)
@@ -208,23 +208,34 @@ class Color:
 
 	@property
 	def saturation(self) -> float:
-		# TODO: AI Generated - varify accuracy
+		# Was the HSV saturation formula ((max-min)/max) in a class that's
+		# otherwise HSL (see `lightness` below) - no callers anywhere in the
+		# tree, so zero regression risk fixing it to the correct HSL formula
+		# (delta / (1 - |2L-1|), equivalently delta/(max+min) for L<=0.5 or
+		# delta/(2-max-min) for L>0.5).
 		r, g, b = self.rgbF
 		maximum = max(r, g, b)
 		minimum = min(r, g, b)
-		if maximum == 0:
+		delta = maximum - minimum
+		lightness = (maximum + minimum) / 2
+		if delta == 0 or lightness in (0, 1):
 			return 0
-		return (maximum - minimum) / maximum
+		return delta / (maximum + minimum) if lightness <= 0.5 else delta / (2 - maximum - minimum)
 
 	@property
 	def lightness(self) -> float:
-		# TODO: AI Generated - varify accuracy
+		# Verified against the standard HSL lightness formula - correct.
 		r, g, b = self.rgbF
 		return (max(r, g, b) + min(r, g, b)) / 2
 
 	@property
 	def gamma(self) -> float:
-		# TODO: AI Generated - varify accuracy
+		# Not actually a gamma-correction value (there's no exponent/curve
+		# applied here) - this is an unweighted mean of the RGB channels, a
+		# crude brightness approximation at best (real luminance weights
+		# channels unequally, e.g. ITU-R BT.601's 0.299/0.587/0.114). No
+		# callers anywhere in the tree; left as-is rather than guessing what
+		# a "real" gamma property should compute here.
 		r, g, b = self.rgbF
 		return (r + g + b) / 3
 
