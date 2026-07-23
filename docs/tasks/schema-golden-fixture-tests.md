@@ -1,6 +1,6 @@
 # Golden-fixture tests for the remaining plugin schemas
 
-**Status:** open, not started
+**Status:** done for the three REST plugins (OpenMeteo, PirateWeather, WeatherFlow) — 21 new tests, `tests/plugins/test_{openmeteo,pirateweather,weatherflow}.py`. Govee (BLE payload parsing, explicitly lower-priority per this brief) not attempted. None of the three had a `normalizeData` override, so tests go through a real `Schema` + `LevityDatagram` construction (same call `REST.getData` makes) rather than an unbound-method call — a `FakePlugin` stands in for the one real `Plugin` reference `Schema`/`Properties` need (name, hashability, and a working `__contains__` — verified against the real `Plugin.__contains__` before relying on it). One real, separate latent bug found and flagged (not fixed, per this brief's own scope): a missing `TimeAwareValue` import in `categories.py`'s `CategoryDict.__getitem__` wildcard-matching fallback, `NameError` on the rare code path that reaches it.
 **Scope:** new tests only, no source changes expected
 **Suggested workflow:** own branch/worktree (see below), not `dev` directly
 
