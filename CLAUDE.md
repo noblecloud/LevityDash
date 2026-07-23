@@ -24,6 +24,8 @@ src/
                                backend.py (pins mode=live before any lib import)
     lib/ui/frontends/PySide/   the Qt frontend (app.py, Modules/Displays/…)
     lib/ui/Groups.py           size-group text-fitting engine (stateless refit)
+    devtools/                  dev-only tooling, never imported by the shipped app
+                               (backend_watch.py — auto-restart-on-change watcher)
 ```
 
 Dependency direction is strict: `qolkit ← statekit ← LevityDash`. Never import Qt or LevityDash from statekit/qolkit.
@@ -40,6 +42,7 @@ Dependency direction is strict: `qolkit ← statekit ← LevityDash`. Never impo
 ```bash
 poetry run LevityDash                 # or: poetry run python -m LevityDash (mode=live by default)
 poetry run LevityDash-backend         # standalone headless backend (WebSocket server)
+poetry run LevityDash-backend-watch   # dev only: debounced restart-on-change, gated on pytest passing
 poetry run pytest                     # offscreen Qt is configured in pyproject
 LEVITYDASH_CONFIG_DEBUG=1 poetry run python -m LevityDash   # pristine temp config
 ```
@@ -47,6 +50,7 @@ LEVITYDASH_CONFIG_DEBUG=1 poetry run python -m LevityDash   # pristine temp conf
 - `LEVITYDASH_CONFIG_DEBUG=1` creates a throwaway config and triggers onboarding — use it for fresh-install behavior, NOT for testing against real dashboards/plugins (run without it; real config is in the platform config dir, e.g. `~/Library/Application Support/LevityDash` on macOS).
 - `tests/qolkit` and `tests/statekit` are pure Python; `tests/ui` boots a headless dashboard via `tests/conftest.py`; `tests/wire` mostly uses hand-built stand-ins over real sockets rather than a full app bootstrap.
 - Two-process manual check: `LevityDash-backend`, then `LevityDash` with `[Backend] mode = remote` in config (or `LEVITYDASH_BACKEND_MODE=remote` env). To screenshot a remote-mode run instead of eyeballing a window: boot via `LevityDashboard.init()`/`app.init_app()` (mirrors `tests/conftest.py`'s `dashboard` fixture, minus `exec_()`), pump events, then `view.grab().save(path)` — works under `QT_QPA_PLATFORM=offscreen` once `[QtOptions] openGL` is forced off (offscreen has no real GL context, so the default `QOpenGLWidget` viewport grabs as blank white).
+- **`LevityDash-backend-watch`** (dev only, `devtools/backend_watch.py`): watches `src/LevityDash`/`tests` for `.py` changes, debounces (default 2s, `--debounce-ms`), runs the full suite, and restarts the supervised backend only if it's green — a failing suite leaves the previous backend running and reports `tests_failing` instead. Serves a small standard status API on `http://127.0.0.1:8669` (`--host`/`--port`, or `LEVITYDASH_WATCH_STATUS_HOST`/`_PORT`): `GET /health` (plain 200/503, for any generic uptime tool or menu-bar widget) and `GET /status` (full JSON state). The frontend's own in-app connection indicator (top-right dot, mode=remote only) is independent of this tool — it reflects `RemoteConnection.connectionStateChanged` (`lib/wire/remote.py`) directly, so it's correct whether or not the backend happens to be running under the watcher.
 
 ## Gotchas
 

@@ -101,6 +101,7 @@ Triaged and grouped by area. ~~Struck~~ items are already done (see the last sec
 - **Dashboard-level config overrides** — per-dashboard settings that override global config.
 - **Event notifications** — user-facing alerts (lightning nearby, rain starting, etc.).
 - **Self-installer & packaging** — PyInstaller flow is unblocked (6.x) but unverified on the 3.14 stack; multi-OS builds via GitHub Actions.
+- ~~Dev auto-restart watcher~~ — done: `poetry run LevityDash-backend-watch` (`devtools/backend_watch.py`) watches `src/LevityDash`/`tests`, debounces, restarts the supervised backend only if the test suite passes, and serves a standard `GET /health`/`GET /status` API on `:8669` for any generic monitor/widget. The frontend's own in-app connection indicator (top-right dot, mode=remote only) is separate — driven directly by `RemoteConnection.connectionStateChanged` (`lib/wire/remote.py`), not by polling this tool.
 
 ---
 

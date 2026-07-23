@@ -19,6 +19,7 @@ A desktop-native, multi-source weather dashboard. Qt (PySide6) QGraphicsScene fr
 poetry install                          # install deps (has local dev dep: ../WeatherUnits)
 poetry run LevityDash                   # run desktop app (mode=live by default)
 poetry run LevityDash-backend           # standalone headless backend (WebSocket server)
+poetry run LevityDash-backend-watch     # dev only: debounced restart-on-change, gated on pytest passing
 poetry run pytest                       # run all tests
 poetry run pytest -xvs tests/ui/test_smoke.py
 poetry run pytest -m unwired            # xfail-marked (unimplemented) tests
@@ -53,6 +54,10 @@ src/
     backend.py                 package-level entry module — pins mode=live before
                                any lib import (see "Wire protocol"); LevityDash-backend
                                console script points here, not at lib/backend.py
+    devtools/                  dev-only tooling, never imported by the shipped app —
+                               backend_watch.py: watches src/tests, restarts the
+                               backend on change gated on pytest passing (debounced),
+                               serves GET /health + /status on :8669
     __init__.py                LevityDashboard singleton (immutable after init)
     __main__.py                entrypoint (main())
 ```
@@ -114,7 +119,13 @@ for the settled design decisions.
   a `WireClient` inside a reconnect/backoff loop; every message crosses to the
   GUI thread *exactly once* via `_GuiMarshal` (a queued Qt signal) before
   `RemoteFrontend` touches anything the scene graph can see — a design
-  requirement, not an optimization (see `docs/roadmap.md`).
+  requirement, not an optimization (see `docs/roadmap.md`). `RemoteConnection`
+  also exposes `.state`/`.connectionStateChanged` (`'connecting'`/
+  `'connected'`/`'disconnected'`) — a plain last-known-state attribute
+  alongside the Signal, so a late subscriber (the frontend's own in-app
+  status dot, `app.py`'s `BackendConnectionIndicator`, mode=remote only) can
+  seed itself correctly instead of assuming a state that may have already
+  changed before it existed.
 - **`containers.py`**: `RemoteSource`/`RemoteContainer`/`RemoteObservationValue`/
   `RemoteTimeSeries` — frontend stand-ins mirroring the live
   `Plugin`/`Container`/`ObservationValue`/`MeasurementTimeSeries` interfaces

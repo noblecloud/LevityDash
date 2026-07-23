@@ -27,7 +27,7 @@ from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 from PySide6.QtWidgets import (
 	QApplication, QGraphicsItem, QGraphicsRectItem, QGraphicsScene,
-	QGraphicsView, QMainWindow, QMenu, QMenuBar, QSplashScreen
+	QGraphicsView, QLabel, QMainWindow, QMenu, QMenuBar, QSplashScreen
 )
 from time import perf_counter, process_time, time
 
@@ -35,7 +35,7 @@ from LevityDash import LevityDashboard
 from LevityDash.lib.config import userConfig
 from LevityDash.lib.plugins import AnySource, Container
 from LevityDash.lib.plugins.categories import CategoryAtom, CategoryItem
-from LevityDash.lib.plugins.dispatcher import MultiSourceContainer
+from LevityDash.lib.plugins.dispatcher import backend_mode, MultiSourceContainer
 from LevityDash.lib.plugins.observation import TimeAwareValue
 from LevityDash.lib.ui.fonts import monospaceFont, system_default_font
 from LevityDash.lib.ui.frontends.PySide import qtLogger as guiLog
@@ -694,6 +694,60 @@ class InsertItemAction(QAction):
 		drag.exec_(Qt.CopyAction)
 
 
+class BackendConnectionIndicator(QLabel):
+	"""Small always-visible dot showing the mode=remote backend connection
+	state (RemoteConnection.connectionStateChanged, lib/wire/remote.py) -
+	green=connected, yellow=connecting/reconnecting, red=disconnected.
+
+	Parented directly to the main window rather than the QStatusBar (hidden
+	by default, and toggled for an unrelated reason - log verbosity) or the
+	graphics scene (wouldn't survive a dashboard reload). Repositions via an
+	event filter on the window instead of overriding its resizeEvent, since
+	LevityMainWindow already conditionally defines one (non-Darwin platforms
+	only, further down this class body) - adding a second unconditional
+	override here would silently shadow or be shadowed by that one depending
+	on definition order.
+	"""
+
+	_COLORS = {
+		'connecting':   '#e0a030',
+		'connected':    '#30c060',
+		'disconnected': '#d04040',
+	}
+
+	def __init__(self, parent: QMainWindow, connection: 'RemoteConnection'):
+		super().__init__(parent)
+		self.setFixedSize(14, 14)
+		# Seed from the connection's already-known state rather than
+		# hardcoding 'connecting': the wire thread starts connecting the
+		# moment RemoteConnection is constructed (well before this widget
+		# exists), so it may already be connected by now - relying solely on
+		# the next *future* Signal emission would leave the indicator stuck
+		# on a stale guess until the next state change, if any.
+		self._applyState(connection.state)
+		connection.connectionStateChanged.connect(self._applyState)
+		parent.installEventFilter(self)
+		self._reposition()
+		self.show()
+		self.raise_()
+
+	def eventFilter(self, watched, event):
+		if watched is self.parent() and event.type() == QEvent.Type.Resize:
+			self._reposition()
+		return super().eventFilter(watched, event)
+
+	def _reposition(self):
+		margin = 10
+		parentRect = self.parent().rect()
+		self.move(parentRect.width() - self.width() - margin, margin)
+		self.raise_()
+
+	def _applyState(self, state: str):
+		color = self._COLORS.get(state, '#808080')
+		self.setStyleSheet(f'background-color: {color}; border-radius: 7px;')
+		self.setToolTip(f'Backend: {state}')
+
+
 class LevityMainWindow(QMainWindow):
 
 	def __init__(self, *args, **kwargs):
@@ -705,7 +759,18 @@ class LevityMainWindow(QMainWindow):
 		self.buildMenu()
 
 		self.setCentralWidget(self.view)
+		self._initConnectionIndicator()
 		self.show()
+
+	def _initConnectionIndicator(self):
+		# Only meaningful in mode=remote - mode=live has no backend
+		# connection concept at all.
+		if backend_mode() != 'remote':
+			return
+		connection = getattr(LevityDashboard.dispatcher, 'remote', None)
+		if connection is None:
+			return
+		self.connectionIndicator = BackendConnectionIndicator(self, connection)
 
 		if platform.system() != 'Darwin':
 			self.updateMenuBar('show')

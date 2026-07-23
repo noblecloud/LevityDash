@@ -46,9 +46,17 @@ _RECONNECT_MAX_SECONDS = 30
 class _GuiMarshal(QObject):
 	"""Queues a callable onto the thread this object was created on (the GUI
 	thread) via a queued signal - same shape as shared.py's _MainThreadCall,
-	owned here so the wire layer controls its affinity explicitly."""
+	owned here so the wire layer controls its affinity explicitly.
+
+	Also carries ``connectionStateChanged``: Qt's queued-connection
+	cross-thread delivery is already proven safe by ``_invoke`` (emitted from
+	the wire thread, delivered on this object's GUI-thread affinity), so a
+	second Signal on the same QObject reuses that guarantee rather than
+	needing its own marshal.
+	"""
 
 	_invoke = Signal(object)
+	connectionStateChanged = Signal(str)  # 'connecting' | 'connected' | 'disconnected'
 
 	def __init__(self):
 		super().__init__()
@@ -71,6 +79,16 @@ class RemoteConnection:
 		self._client: Optional[WireClient] = None
 		self._loop: Optional[asyncio.AbstractEventLoop] = None
 		self._thread = threading.Thread(target=self._run, name='WireClientThread', daemon=True)
+		self.connectionStateChanged = self._marshal.connectionStateChanged
+		# Plain-attribute "last known state", not just the fire-and-forget
+		# Signal: the wire thread starts connecting immediately, so a late
+		# observer (e.g. a UI indicator built well after this constructor
+		# returns) needs to read where things already stand rather than only
+		# ever seeing whatever transition happens to fire *after* it
+		# subscribes. Written from the wire thread, read from the GUI thread -
+		# a single str attribute swap is atomic enough under the GIL without
+		# a lock.
+		self.state = 'connecting'
 		self._thread.start()
 		log.info(f'mode=remote: connecting to backend at {url}')
 
@@ -89,19 +107,27 @@ class RemoteConnection:
 		finally:
 			loop.close()
 
+	def _set_state(self, state: str) -> None:
+		self.state = state
+		self._marshal.connectionStateChanged.emit(state)
+
 	async def _connect_loop(self) -> None:
 		backoff = 1
 		while not self._stop.is_set():
+			self._set_state('connecting')
 			client = WireClient(self.url, self._on_message)
 			self._client = client
 			try:
 				await client.connect()
 				log.info(f'connected to backend at {self.url}')
+				self._set_state('connected')
 				backoff = 1
 				await client.wait_closed()
 				log.warning('backend connection closed')
+				self._set_state('disconnected')
 			except Exception as e:
 				log.warning(f'backend connection failed ({e!r}); retrying in {backoff}s')
+				self._set_state('disconnected')
 			finally:
 				self._client = None
 				try:
