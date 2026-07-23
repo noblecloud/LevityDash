@@ -963,21 +963,29 @@ class GraphItemData(Stateful, tag=...):
 			dpi = getDPI(self.graph.scene().view.screen())
 
 			sf = max(int(round(dpi / (resolution * strength * golden))), 1)
+			# savgol_filter requires an odd window_length <= len(y) and >
+			# polyorder (2 here); sf is sized assuming a live-mode-length
+			# series, but a short window (a sparse remote fetch, or any
+			# thinly-populated series) can have far fewer points than that -
+			# clamp rather than crash the render. Below the polyorder floor,
+			# there's nothing meaningful to smooth, so skip it entirely.
+			sf = min(sf, len(y) if len(y) % 2 == 1 else len(y) - 1)
 
-			match smooth_type:
-				case 'savgol':
-					yy = savgol_filter(y, sf, 2)
-				case None | 'gaussian' | 'convolve':
-					padding = int((sf - 1) / 2)
-					y = np.pad(y, (padding, padding), 'wrap')
-					kernel = gaussianKernel(sf, sf * 2)
-					yy = np.convolve(y, kernel, mode='valid')
-					clipX = int((len(y) - len(yy)) / 2)
-					x = x[clipX:-clipX]
-				case _:
-					raise ValueError(f'Invalid smoothing type: {smooth_type}')
+			if sf > 2:
+				match smooth_type:
+					case 'savgol':
+						yy = savgol_filter(y, sf, 2)
+					case None | 'gaussian' | 'convolve':
+						padding = int((sf - 1) / 2)
+						y = np.pad(y, (padding, padding), 'wrap')
+						kernel = gaussianKernel(sf, sf * 2)
+						yy = np.convolve(y, kernel, mode='valid')
+						clipX = int((len(y) - len(yy)) / 2)
+						x = x[clipX:-clipX]
+					case _:
+						raise ValueError(f'Invalid smoothing type: {smooth_type}')
 
-			y = yy.round(6)
+				y = yy.round(6)
 
 		# Clip values
 		if (limits := getattr(self.dataType, 'limits', None)) is not None:
