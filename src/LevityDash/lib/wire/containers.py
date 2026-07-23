@@ -480,7 +480,30 @@ class RemoteContainer:
 					self._timeseries = RemoteTimeSeries(self.source, self.key, items)
 			request.callback()
 
-		self.source.request_timeseries(self.key, _DEFAULT_MIN_PERIOD, _DEFAULT_MAX_PERIOD, on_response)
+		minPeriod, maxPeriod = self._resolve_ts_period(request)
+		self.source.request_timeseries(self.key, minPeriod, maxPeriod, on_response)
+
+	@staticmethod
+	def _resolve_ts_period(request: Request) -> tuple:
+		# Duck-typed capability query: a requester (e.g. Graph.py's
+		# GraphItemData) can expose `.wireTimeseriesPeriod -> (min, max)` to
+		# get a fetch matching its own configured timeframe instead of the
+		# generic default - without RemoteContainer/RemoteSource ever
+		# importing Graph.py or anything UI-specific. `request.requester` is
+		# otherwise only ever used for identity (hashing/logging, see
+		# dispatcher.py/utils.py's Request), so this is a deliberate, narrow
+		# extension of that contract, not a pre-existing one.
+		period = getattr(request.requester, 'wireTimeseriesPeriod', None)
+		if period is None:
+			return _DEFAULT_MIN_PERIOD, _DEFAULT_MAX_PERIOD
+		try:
+			minPeriod, maxPeriod = period
+			if not isinstance(minPeriod, timedelta) or not isinstance(maxPeriod, timedelta):
+				raise TypeError
+			return minPeriod, maxPeriod
+		except (TypeError, ValueError) as e:
+			log.warning(f'requester {request.requester!r} provided an invalid wireTimeseriesPeriod {period!r} ({e!r}), using the default window')
+			return _DEFAULT_MIN_PERIOD, _DEFAULT_MAX_PERIOD
 
 	@property
 	def log_repr(self) -> str:

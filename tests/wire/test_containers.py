@@ -20,6 +20,7 @@ import WeatherUnits as wu
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.dispatcher import MultiSourceContainer
 from LevityDash.lib.plugins.observation import RealtimeSource, TimeSeriesItem
+from LevityDash.lib.plugins.utils import Request
 from LevityDash.lib.wire.bridge import LoopbackBridge
 from LevityDash.lib.wire.containers import ContainerFlags, RemoteContainer, RemoteSource, RemoteTimeSeries
 from datetime import datetime, timedelta, timezone
@@ -311,3 +312,93 @@ def test_get_timeseries_ignores_a_forecast_flagged_container_before_data_is_fetc
 	remote._timeseries = RemoteTimeSeries(source, key, [TimeSeriesItem.load_raw(70.0, datetime(2026, 7, 22, tzinfo=timezone.utc))])
 	assert multi.getTimeseries(source, strict=True) is remote
 	assert multi.getTimeseries(strict=True) is remote
+
+
+def test_prepare_for_ts_connection_uses_default_period_without_a_requester_hint():
+	# A requester with no wireTimeseriesPeriod attribute (the common case,
+	# and every requester before this feature existed) falls back to the
+	# fixed default window.
+	key = CategoryItem('environment.temperature.temperature')
+	source = RemoteSource(name='OpenMeteo')
+	remote = source.getOrCreate(key)
+
+	captured = []
+	source._ts_request_fn = lambda message, on_response: captured.append(message)
+
+	request = Request(requester=object(), callback=lambda: None)
+	remote.prepare_for_ts_connection(request)
+
+	assert len(captured) == 1
+	assert captured[0]['minPeriod'] == timedelta(hours=-3).total_seconds()
+	assert captured[0]['maxPeriod'] == timedelta(hours=3).total_seconds()
+
+
+def test_prepare_for_ts_connection_honors_requester_wire_timeseries_period():
+	# The actual point of this feature: a requester (Graph.py's
+	# GraphItemData in real usage) can expose .wireTimeseriesPeriod to get a
+	# fetch matching its own configured timeframe instead of the default.
+	key = CategoryItem('environment.temperature.temperature')
+	source = RemoteSource(name='OpenMeteo')
+	remote = source.getOrCreate(key)
+
+	captured = []
+	source._ts_request_fn = lambda message, on_response: captured.append(message)
+
+	class FakeGraphItemData:
+		wireTimeseriesPeriod = (timedelta(hours=-18), timedelta(hours=24))
+
+	request = Request(requester=FakeGraphItemData(), callback=lambda: None)
+	remote.prepare_for_ts_connection(request)
+
+	assert len(captured) == 1
+	assert captured[0]['minPeriod'] == timedelta(hours=-18).total_seconds()
+	assert captured[0]['maxPeriod'] == timedelta(hours=24).total_seconds()
+
+
+def test_prepare_for_ts_connection_degrades_to_default_on_malformed_period_hint():
+	# A requester providing garbage for wireTimeseriesPeriod must not crash
+	# the request - degrade to the default window instead.
+	key = CategoryItem('environment.temperature.temperature')
+	source = RemoteSource(name='OpenMeteo')
+	remote = source.getOrCreate(key)
+
+	captured = []
+	source._ts_request_fn = lambda message, on_response: captured.append(message)
+
+	class BadGraphItemData:
+		wireTimeseriesPeriod = 'not a tuple'
+
+	request = Request(requester=BadGraphItemData(), callback=lambda: None)
+	remote.prepare_for_ts_connection(request)  # must not raise
+
+	assert len(captured) == 1
+	assert captured[0]['minPeriod'] == timedelta(hours=-3).total_seconds()
+	assert captured[0]['maxPeriod'] == timedelta(hours=3).total_seconds()
+
+
+def test_prepare_for_ts_connection_still_fires_callback_and_populates_timeseries():
+	# The period-resolution addition must not disturb the existing
+	# request/response flow: response arrives -> _timeseries populated ->
+	# callback fires.
+	key = CategoryItem('environment.temperature.temperature')
+	source = RemoteSource(name='OpenMeteo')
+	remote = source.getOrCreate(key)
+
+	from LevityDash.lib.wire.messages import encode_ts_response
+
+	def fake_ts_request_fn(message, on_response):
+		items = [TimeSeriesItem.load_raw(72.0, datetime(2026, 7, 22, tzinfo=timezone.utc))]
+		on_response(encode_ts_response(request_id=message['id'], source='OpenMeteo', key=message['key'], ok=True, items=items))
+
+	source._ts_request_fn = fake_ts_request_fn
+
+	class FakeGraphItemData:
+		wireTimeseriesPeriod = (timedelta(hours=-18), timedelta(hours=24))
+
+	fired = []
+	request = Request(requester=FakeGraphItemData(), callback=lambda: fired.append(True))
+	remote.prepare_for_ts_connection(request)
+
+	assert fired == [True]
+	assert remote.timeseries is not None
+	assert len(remote.timeseries) == 1

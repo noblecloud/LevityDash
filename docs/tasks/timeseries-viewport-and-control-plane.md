@@ -10,31 +10,39 @@ instead of the permanent None-guard. Full path verified against a real
 two-process run (`LevityDash-backend` + `LevityDash` with `mode=remote`), not
 just unit tests.
 
-That real run also surfaced two things intentionally left out of that
+That real run also surfaced things intentionally left out of that
 milestone's scope — tracked here rather than assumed solved.
 
-## 1. Wire-fetched window isn't viewport-aware
+## 1. ~~Wire-fetched window isn't viewport-aware~~ — fixed
 
-`RemoteContainer.prepare_for_ts_connection` always requests a fixed ±3h
-window (`_DEFAULT_MIN_PERIOD`/`_DEFAULT_MAX_PERIOD` in both `containers.py`
-and `messages.py`), mirroring `Container.timeseries`'s own construction
-default. But a real `Container`'s `MeasurementTimeSeries`, once populated,
-holds all available history — `Graph.py`'s own slicing
-(`self.timeseries[self.graph.timeframe.historicalStart:end]`) is what
-narrows that down to whatever the Graph panel is actually configured to
-show (which can be much wider than 3h either side of now). A
-`RemoteContainer` has no equivalent: whatever ±3h the backend sent is *all*
-it will ever have, so a Graph configured for e.g. a 24h view will render a
-visibly truncated series in remote mode.
+`RemoteContainer.prepare_for_ts_connection` used to always request a fixed
+±3h window (`_DEFAULT_MIN_PERIOD`/`_DEFAULT_MAX_PERIOD`), mirroring
+`Container.timeseries`'s own construction default. But a real `Container`'s
+`MeasurementTimeSeries`, once populated, holds all available history —
+`Graph.py`'s own slicing (`self.timeseries[self.graph.timeframe.historicalStart:end]`)
+is what narrows that down to whatever the Graph panel is actually configured
+to show. A `RemoteContainer` had no equivalent: whatever ±3h the backend
+sent was *all* it would ever have, so a Graph configured for a wider view
+rendered a visibly truncated series in remote mode (confirmed: a real
+temperature curve reduced to a tiny sliver against a multi-day axis).
 
-Real fix needs either:
-- Threading the Graph's actual configured timeframe into the wire request
-  (Graph would need to expose it somewhere `prepare_for_ts_connection` can
-  reach, without importing Graph.py into `lib/wire/` — probably a param on
-  `MultiSourceContainer.getPreferredSourceContainer`/`prepare_for_ts_connection`
-  itself), or
-- Re-fetching on pan/zoom when the requested slice exceeds what's cached
-  (closer to how a real paginated API client would behave).
+Fixed via a duck-typed capability query rather than threading a new param
+through `dispatcher.py`'s shared `getPreferredSourceContainer` plumbing
+(lower blast radius, zero risk to the live-mode path): `GraphItemData` now
+exposes `.wireTimeseriesPeriod -> (timedelta, timedelta)` (Graph.py, derived
+from `self.graph.timeframe.lookback`/`.range` — the exact same fields
+`.list` already uses to slice), and `RemoteContainer.prepare_for_ts_connection`
+reads it off `request.requester` via `getattr(..., 'wireTimeseriesPeriod', None)`,
+falling back to the old default when absent or malformed. `request.requester`
+was previously only ever used for identity (hashing/logging) — this is a
+deliberate, narrow, backward-compatible extension of that contract, not a
+pre-existing one, and it required zero changes to `dispatcher.py` or the
+backend (which already honored whatever `minPeriod`/`maxPeriod` a request
+carried). Verified both by unit test (`tests/wire/test_containers.py`) and
+visually — a real remote-mode screenshot (via an on-screen-then-`.grab()`
+harness, no browser/computer-use tooling needed) now shows the temperature/
+cloud-cover curves spanning the full multi-day configured timeframe instead
+of a sliver near "now".
 
 ## 2. ~~Graph.py's smoothing isn't robust to too-few-points~~ — fixed
 
@@ -53,4 +61,16 @@ remote mode.
 ## 3. Plugin control plane
 
 Not started: watchdog heartbeats and remote start/stop/health lifecycle for
-backend-hosted plugins. Independent of the two items above.
+backend-hosted plugins. Independent of the items above. This is the one
+remaining open item from this milestone's original scope.
+
+## Still open, not yet tackled
+
+- **No re-fetch on pan/zoom.** The fix above matches the *initial* fetch to
+  the Graph's configured timeframe, but if a user pans/zooms a scrollable
+  Graph beyond that window in remote mode, there's still no re-fetch —
+  `RemoteTimeSeries` is a one-shot snapshot (see its docstring). Real fix
+  would need `Graph.py` to notice a requested slice exceeds what's cached
+  and re-issue a request, closer to how a paginated API client behaves. Not
+  attempted here — lower priority than the control plane, and no evidence
+  yet that any real dashboard actually scrolls a remote-backed Graph.

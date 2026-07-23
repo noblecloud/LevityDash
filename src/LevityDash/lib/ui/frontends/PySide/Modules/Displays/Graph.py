@@ -911,6 +911,18 @@ class GraphItemData(Stateful, tag=...):
 			return [TimeSeriesItem(dataType(n(y), d), timestampToTimezone(x, tz=tz)) for x, y in zip(x, y)]
 		return [TimeSeriesItem(dataType(y), timestampToTimezone(x, tz=tz)) for x, y in zip(x, y)]
 
+	@property
+	def wireTimeseriesPeriod(self) -> tuple[timedelta, timedelta]:
+		"""Duck-typed contract read by RemoteContainer.prepare_for_ts_connection
+		(lib/wire/containers.py) via getattr(request.requester, 'wireTimeseriesPeriod',
+		None) - lets a mode=remote wire fetch match this panel's actual configured
+		timeframe instead of a generic default. Returns the same (min, max) bounds
+		`.list` below already uses to slice locally-available data
+		(historicalStart = now + lookback, end = now + range), just as timedeltas
+		relative to now rather than absolute datetimes - the wire request is built
+		from a period, not a point in time (see messages.build_ts_request)."""
+		return self.graph.timeframe.lookback, self.graph.timeframe.range
+
 	@cached_property
 	def list(self):
 		if self.useTestData:
