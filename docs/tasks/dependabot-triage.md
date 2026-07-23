@@ -1,6 +1,6 @@
 # Dependabot alert triage
 
-**Status:** open, not started
+**Status:** done — full triage at [`docs/reviews/dependabot-triage.md`](../reviews/dependabot-triage.md). 48 alerts cleared via safe transitive/optional bumps, 18 needed zero action (already resolved or no longer a dependency), 43 flagged for a deliberate follow-up decision rather than bumped (`aiohttp` — direct, non-trivial dependency; `certifi` — an unexplained direct pin that's also silently blocking a `requests` alert).
 **Scope:** research/reporting first; only apply dependency bumps that are clearly safe and well-tested
 **Suggested workflow:** own branch/worktree for any actual dependency changes; the triage/report step itself can happen anywhere with `gh` access
 
