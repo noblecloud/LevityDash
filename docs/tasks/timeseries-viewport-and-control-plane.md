@@ -36,26 +36,19 @@ Real fix needs either:
 - Re-fetching on pan/zoom when the requested slice exceeds what's cached
   (closer to how a real paginated API client would behave).
 
-## 2. Graph.py's smoothing isn't robust to too-few-points
+## 2. ~~Graph.py's smoothing isn't robust to too-few-points~~ — fixed
 
-Confirmed live: with a small dataset in the ±3h window above (OpenMeteo
-hourly data ≈ 6-7 points across 6h), `GraphItemData.data`'s smoothing branch
-(`Graph.py`, `savgol_filter(y, sf, 2)`) can raise
+Confirmed live against a real two-process remote-mode session: with a small
+dataset in the ±3h window above (OpenMeteo hourly data ≈ 6-7 points across
+6h), `GraphItemData.data`'s smoothing branch raised
 `ValueError: If mode is 'interp', window_length must be less than or equal
-to the size of x` when the computed smoothing window (`sf`, derived from
-DPI/resolution/strength) exceeds the point count. The existing guard
-(`if self.smooth and len(x) > 5`) only checks for "more than 5 points," not
-"enough points for this specific `sf`."
-
-Not remote-specific — a live Container fed a similarly sparse window would
-hit the same crash — but item 1 above makes it more likely to actually
-occur in remote mode until viewport-aware fetching lands. Currently
-non-fatal (the thread-pool worker's exception path catches and logs it,
-confirmed via a real run — the app keeps running, just skips that redraw),
-so this is a robustness/noise issue, not a crash-the-app one. Fix: clamp
-`sf` to `min(sf, len(x) - (len(x) % 2 == 0))` (savgol needs an odd window
-length ≤ sample count) before calling `savgol_filter`, or skip smoothing
-entirely when `sf` doesn't fit.
+to the size of x` repeatedly (once per redraw, printed to stderr - not
+silently swallowed as first assumed). Fixed by clamping `sf` to the
+available odd point count and skipping smoothing below the polyorder floor,
+rather than assuming a live-mode-sized series. Not remote-specific in
+principle (a live Container fed a similarly sparse window would hit the
+same crash), but item 1 above made it far more likely to actually occur in
+remote mode.
 
 ## 3. Plugin control plane
 

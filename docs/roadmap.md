@@ -31,7 +31,7 @@ Active milestones:
 
 - ~~wire codec~~ → ~~`RemoteContainer` + in-process loopback~~ → ~~standalone backend process~~ → ~~frontend WS client (reconnect/attach)~~ → ~~timeseries over WebSocket (request/response)~~ (all done — `RemoteContainer.timeseries` is now populated by a real request/response round trip; graphs render in remote mode, verified against a real two-process run) → **plugin control plane (start/stop/health)**
 
-Timeseries shipped with two known gaps tracked in `docs/tasks/timeseries-viewport-and-control-plane.md`: the wire-fetched window is a fixed ±3h, not viewport-aware, and a pre-existing `Graph.py` smoothing fragility surfaces more easily against that narrower window. The control plane adds watchdog heartbeats and remote plugin lifecycle.
+Timeseries shipped with one known gap tracked in `docs/tasks/timeseries-viewport-and-control-plane.md`: the wire-fetched window is a fixed ±3h, not viewport-aware to whatever timeframe the Graph panel actually shows (a real-mode run also caught a Graph.py smoothing crash on sparse point counts - fixed alongside this milestone). The control plane adds watchdog heartbeats and remote plugin lifecycle.
 
 ## Next, after the split
 
