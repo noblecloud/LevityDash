@@ -180,16 +180,27 @@ class MultiSourceContainer(dict):
 		:return: A container with timeseries data.
 		"""
 
+		# `c.timeseries is not None` matters only for RemoteContainer (mode=remote):
+		# a real Container.timeseries is a cached_property that never returns
+		# None - the first access always builds a (possibly still-empty)
+		# MeasurementTimeSeries, populated lazily later by .list. A
+		# RemoteContainer's .timeseries stays None until an explicit wire
+		# fetch (prepare_for_ts_connection) completes, so without this guard
+		# a flag-ready-but-not-yet-fetched RemoteContainer would be handed
+		# back here and never actually trigger that fetch - Graph.py never
+		# calls prepare_for_ts_connection itself, only
+		# getPreferredSourceContainer does. This condition is always true for
+		# a live Container, so live-mode behavior is unchanged.
 		try:
 			preferred = self[preferredSource if preferredSource is not AnySource else None or self.preferredSource]
-			if preferred.isForecast or (not strict and (preferred.isTimeseries or preferred.isDaily)):
+			if preferred.timeseries is not None and (preferred.isForecast or (not strict and (preferred.isTimeseries or preferred.isDaily))):
 				return preferred
 		except KeyError:
 			pass
 		timeseriesContainers = sorted(
 			[
 				c for c in self.values()
-				if c.isForecast or ((c.isTimeseries or c.isDaily) and not strict)
+				if c.timeseries is not None and (c.isForecast or ((c.isTimeseries or c.isDaily) and not strict))
 			],
 			key=lambda c: (c.isForecast, len(c.source.config.defaultFor)), reverse=True
 		)

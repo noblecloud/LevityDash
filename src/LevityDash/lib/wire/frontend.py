@@ -7,7 +7,7 @@ socket and the dispatcher: a ``WireClient`` feeds ``handle_message`` and the
 callback is ``dispatcher.update`` — that wiring lands with the backend process,
 so this logic stays testable without Qt plumbing or a live socket.
 """
-from typing import Callable, Dict
+from typing import Callable, Dict, Optional
 
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.plugins.categories import CategoryItem
@@ -20,10 +20,19 @@ __all__ = ['RemoteFrontend']
 
 
 class RemoteFrontend:
-	def __init__(self, on_update: Callable[[Dict[CategoryItem, RemoteContainer]], None]):
+	def __init__(
+		self, on_update: Callable[[Dict[CategoryItem, RemoteContainer]], None],
+		ts_request_fn: Optional[Callable[[dict, Callable], None]] = None,
+	):
 		# on_update receives {key: RemoteContainer} - dispatcher.update in
 		# mode=remote, exactly what LoopbackBridge hands its dispatcher today.
 		self._on_update = on_update
+		# Threaded into every RemoteSource this creates (see _get_source) so
+		# RemoteContainer.prepare_for_ts_connection has a way to reach the
+		# live wire connection without RemoteContainer/RemoteSource knowing
+		# anything about sockets/asyncio themselves - see remote.py's
+		# RemoteConnection.request_timeseries for what this actually is.
+		self._ts_request_fn = ts_request_fn
 		self._sources: Dict[str, RemoteSource] = {}
 
 	def handle_message(self, message: dict) -> None:
@@ -54,5 +63,6 @@ class RemoteFrontend:
 				defaultFor=set(info.get('defaultFor') or ()),
 				enabled=info.get('enabled', True),
 				running=info.get('running', True),
+				ts_request_fn=self._ts_request_fn,
 			)
 		return source

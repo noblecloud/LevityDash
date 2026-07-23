@@ -7,9 +7,10 @@ notes (this file's history at `1592e15`).
 
 ## Open items
 
-1. **Timeseries + plugin control plane** — the next roadmap milestone. Graphs
-   in remote mode stay empty by design until it lands (realtime-only today;
-   `Graph.connectTimeseries` has the documented None-guard for this gap).
+1. ~~Timeseries + plugin control plane~~ — timeseries half shipped (see
+   `docs/tasks/timeseries-viewport-and-control-plane.md` for what's left:
+   viewport-aware re-fetch, the plugin control plane, and a Graph.py
+   smoothing fragility the real-mode test run surfaced).
 2. **`WireServer._latest` cumulative snapshot** — replay is last-batch-per-
    source; fine while plugins publish full batches, but the merge-into-a-
    cumulative-snapshot TODO in `lib/wire/server.py` stands before any plugin

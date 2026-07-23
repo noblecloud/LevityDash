@@ -12,13 +12,20 @@ Owns everything between the socket and the dispatcher:
   container the scene graph can see. This is the roadmap's design requirement
   for this seam (it's what retires the QBasicTimer off-thread startup burst in
   the remote architecture) — not an optimization.
+- ``request_timeseries`` (timeseries-over-wire milestone): the GUI-thread ->
+  wire-thread direction. Called from ``RemoteContainer.prepare_for_ts_
+  connection`` (containers.py), it hops onto the wire thread via
+  ``call_soon_threadsafe``, sends a request through the live ``WireClient``,
+  awaits the matching response, then marshals the result back through the
+  same ``_GuiMarshal`` used for received 'update' messages - so a caller on
+  the GUI thread never touches the socket/asyncio loop directly either way.
 
 Constructed on the GUI thread (dispatcher __init__ runs there), which pins the
 marshal QObject's thread affinity correctly.
 """
 import asyncio
 import threading
-from typing import Callable, TYPE_CHECKING
+from typing import Callable, Optional, TYPE_CHECKING
 
 from PySide6.QtCore import QObject, Qt, Signal, Slot
 
@@ -58,9 +65,11 @@ class _GuiMarshal(QObject):
 class RemoteConnection:
 	def __init__(self, dispatcher: 'PluginValueDirectory', url: str):
 		self.url = url
-		self._frontend = RemoteFrontend(on_update=dispatcher.update)
+		self._frontend = RemoteFrontend(on_update=dispatcher.update, ts_request_fn=self.request_timeseries)
 		self._marshal = _GuiMarshal()  # created here -> GUI-thread affinity
 		self._stop = threading.Event()
+		self._client: Optional[WireClient] = None
+		self._loop: Optional[asyncio.AbstractEventLoop] = None
 		self._thread = threading.Thread(target=self._run, name='WireClientThread', daemon=True)
 		self._thread.start()
 		log.info(f'mode=remote: connecting to backend at {url}')
@@ -73,6 +82,7 @@ class RemoteConnection:
 
 	def _run(self) -> None:
 		loop = asyncio.new_event_loop()
+		self._loop = loop
 		asyncio.set_event_loop(loop)
 		try:
 			loop.run_until_complete(self._connect_loop())
@@ -83,6 +93,7 @@ class RemoteConnection:
 		backoff = 1
 		while not self._stop.is_set():
 			client = WireClient(self.url, self._on_message)
+			self._client = client
 			try:
 				await client.connect()
 				log.info(f'connected to backend at {self.url}')
@@ -92,6 +103,7 @@ class RemoteConnection:
 			except Exception as e:
 				log.warning(f'backend connection failed ({e!r}); retrying in {backoff}s')
 			finally:
+				self._client = None
 				try:
 					await client.close()
 				except Exception:
@@ -102,6 +114,36 @@ class RemoteConnection:
 			backoff = min(backoff * 2, _RECONNECT_MAX_SECONDS)
 
 	# -- GUI thread ---------------------------------------------------------
+
+	def request_timeseries(self, message: dict, on_response: Callable[[Optional[dict]], None]) -> None:
+		"""Issue a ts_request on the wire thread; ``on_response`` fires on the
+		GUI thread exactly once with the ts_response dict, or ``None`` on
+		failure/no connection - the single GUI-thread hop this seam requires
+		(same ``_marshal`` already used for ordinary 'update' messages)."""
+		if self._loop is None:
+			# connection thread hasn't reached _run yet (started() not called
+			# out) - vanishingly unlikely given __init__ starts the thread
+			# immediately, but fail soft rather than crash the caller.
+			on_response(None)
+			return
+
+		def submit() -> None:
+			client = self._client
+			if client is None:
+				self._marshal.invoke(lambda: on_response(None))
+				return
+
+			async def _do() -> None:
+				try:
+					response = await client.request(message)
+				except Exception as e:
+					log.warning(f'timeseries request {message.get("id")} failed: {e!r}')
+					response = None
+				self._marshal.invoke(lambda: on_response(response))
+
+			asyncio.ensure_future(_do())
+
+		self._loop.call_soon_threadsafe(submit)
 
 	def stop(self) -> None:
 		self._stop.set()

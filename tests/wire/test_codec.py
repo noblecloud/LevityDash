@@ -18,10 +18,11 @@ import WeatherUnits as wu
 # same class the rest of the app uses.
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.wire.codec import (
-	decode_category_item, decode_datetime, decode_measurement, decode_value,
-	encode_category_item, encode_datetime, encode_measurement, encode_value, WIRE_VERSION,
+	decode_category_item, decode_datetime, decode_measurement, decode_timeseries_values, decode_value,
+	encode_category_item, encode_datetime, encode_measurement, encode_timeseries_values, encode_value, WIRE_VERSION,
 )
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 
 def roundtrip(value):
@@ -170,3 +171,57 @@ def test_ambiguous_symbol_prefers_cls_name():
 	# '%' is shared by several dimensions, so the class name must win
 	humidity = encode_measurement(wu.Humidity(66))
 	assert decode_measurement(json.loads(json.dumps(humidity))) == wu.Humidity(66)
+
+
+# --- columnar timeseries values (encode_timeseries_values/decode_timeseries_values) ---
+
+def _item(value, timestamp):
+	# TimeSeriesItem duck-typing - encode_timeseries_values only reads
+	# .value/.timestamp, so a bare namespace exercises that without pulling
+	# in observation.py's real class.
+	return SimpleNamespace(value=value, timestamp=timestamp)
+
+
+def test_timeseries_values_roundtrip_preserves_class_and_values():
+	items = [
+		_item(wu.Temperature.Fahrenheit(70.0), datetime(2026, 7, 22, 12, tzinfo=timezone.utc)),
+		_item(wu.Temperature.Fahrenheit(72.5), datetime(2026, 7, 22, 13, tzinfo=timezone.utc)),
+	]
+	payload = json.loads(json.dumps(encode_timeseries_values(items)))
+	decoded = decode_timeseries_values(payload)
+	assert [ts for ts, _ in decoded] == [i.timestamp for i in items]
+	assert isinstance(decoded[0][1], wu.Temperature.Fahrenheit)
+	assert float(decoded[0][1]) == 70.0
+	assert float(decoded[1][1]) == 72.5
+
+
+def test_timeseries_values_unit_and_cls_appear_once_not_per_point():
+	# The entire reason for the columnar shape over repeating
+	# encode_measurement per point - a compactness regression guard.
+	items = [_item(wu.Temperature.Fahrenheit(v), datetime(2026, 1, 1, tzinfo=timezone.utc)) for v in (60.0, 61.0, 62.0)]
+	payload = encode_timeseries_values(items)
+	assert payload['cls'] == 'Fahrenheit'
+	assert payload['unit'] == wu.Temperature.Fahrenheit(60.0).unit
+	assert set(payload) == {'v', 'unit', 'cls', 'timestamps', 'values'}
+	assert len(payload['timestamps']) == len(payload['values']) == 3
+
+
+def test_empty_timeseries_encodes_to_none():
+	assert encode_timeseries_values([]) is None
+	assert decode_timeseries_values(None) == []
+
+
+def test_timeseries_values_unresolvable_unit_degrades_point_to_float():
+	payload = {'v': WIRE_VERSION, 'unit': 'not-a-real-unit', 'cls': 'NotARealClass', 'timestamps': [0.0], 'values': [42.0]}
+	decoded = decode_timeseries_values(payload)
+	assert len(decoded) == 1
+	assert decoded[0][1] == 42.0
+
+
+def test_timeseries_values_plain_float_items_have_no_unit_metadata():
+	items = [_item(21.0, datetime(2026, 1, 1, tzinfo=timezone.utc))]
+	payload = encode_timeseries_values(items)
+	assert payload['unit'] is None
+	assert payload['cls'] is None
+	decoded = decode_timeseries_values(json.loads(json.dumps(payload)))
+	assert decoded[0][1] == 21.0

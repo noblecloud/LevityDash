@@ -11,12 +11,19 @@ Phase 4.2 — the real ``WireServer`` (encode half) and ``WireClient`` (decode
 half), all share one implementation and can't drift apart. The dict shape
 produced by ``encode_container`` and consumed by ``apply_container_update`` is
 the wire message contract.
+
+Also defines the 'ts_request'/'ts_response' pair (build_ts_request/
+encode_ts_response/decode_ts_response) - the frontend->backend->frontend
+counterpart to 'update' messages above, which only ever flow backend->
+frontend. See lib/wire/server.py's unicast reply path and client.py's
+request/response correlation for how these actually cross the wire.
 """
-from datetime import datetime
-from typing import Optional, TYPE_CHECKING
+from datetime import datetime, timedelta
+from typing import Any, List, Optional, Sequence, Tuple, TYPE_CHECKING
+from uuid import uuid4
 
 from LevityDash.lib.log import LevityPluginLog
-from LevityDash.lib.wire.codec import WIRE_VERSION, decode_value, encode_value
+from LevityDash.lib.wire.codec import WIRE_VERSION, decode_timeseries_values, encode_timeseries_values, decode_value, encode_value
 from LevityDash.lib.wire.containers import ContainerFlags, RemoteContainer
 
 if TYPE_CHECKING:
@@ -24,7 +31,10 @@ if TYPE_CHECKING:
 
 log = LevityPluginLog.getChild('Wire').getChild('Messages')
 
-__all__ = ['encode_container', 'apply_container_update', 'encode_update_message', 'parse_update_message']
+__all__ = [
+	'encode_container', 'apply_container_update', 'encode_update_message', 'parse_update_message',
+	'build_ts_request', 'encode_ts_response', 'decode_ts_response',
+]
 
 # The flag fields a container advertises across the wire (isRealtime,
 # isForecast, ...) - read off the live Container by name on encode, rebuilt
@@ -103,3 +113,49 @@ def encode_update_message(*, name: str, defaultFor=None, enabled: bool = True, r
 def parse_update_message(message: dict) -> tuple[dict, dict]:
 	"""Split an 'update' message into ``(source_info, {str(key): container_dict})``."""
 	return message['source'], message['updates']
+
+
+# --- timeseries request/response: the frontend->backend->frontend counterpart
+# to the backend->frontend-only 'update' messages above ---
+
+def build_ts_request(*, source: str, key: str, min_period: Optional[timedelta], max_period: Optional[timedelta]) -> dict:
+	"""Build a 'ts_request' message asking a concrete source (never AnySource -
+	dispatcher-side resolution already picked one, see dispatcher.py's
+	getPreferredSourceContainer) for a columnar timeseries snapshot of one key.
+
+	min_period/max_period mirror Container.timeseries' own construction
+	(observation.py, default ±3h) rather than an explicit start/end - the
+	wire protocol doesn't need to know about a Graph's viewport, which
+	re-slices client-side out of whatever window it's handed either way.
+	"""
+	return {
+		'v': WIRE_VERSION,
+		'type': 'ts_request',
+		'id': str(uuid4()),
+		'source': source,
+		'key': key,
+		'minPeriod': min_period.total_seconds() if min_period is not None else None,
+		'maxPeriod': max_period.total_seconds() if max_period is not None else None,
+	}
+
+
+def encode_ts_response(*, request_id: str, source: str, key: str, ok: bool, items: Optional[Sequence[Any]] = None, error: Optional[str] = None) -> dict:
+	"""Build the matching 'ts_response' - same `id` as the request it answers,
+	so the client can correlate it (see client.py's pending-futures map)."""
+	return {
+		'v': WIRE_VERSION,
+		'type': 'ts_response',
+		'id': request_id,
+		'ok': ok,
+		'error': error,
+		'source': source,
+		'key': key,
+		'timeseries': encode_timeseries_values(items) if (ok and items is not None) else None,
+	}
+
+
+def decode_ts_response(message: dict) -> Tuple[bool, List[Tuple[datetime, Any]], Optional[str]]:
+	"""Decode a 'ts_response' into (ok, [(timestamp, value), ...], error).
+	Always returns a (possibly empty) list - never raises - so callers don't
+	need a separate empty/error branch beyond checking `ok`."""
+	return message['ok'], decode_timeseries_values(message.get('timeseries')), message.get('error')

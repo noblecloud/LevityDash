@@ -19,9 +19,9 @@ import WeatherUnits as wu
 # comment for why (shims/_datetime_shim.install() swaps sys.modules['datetime']).
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.dispatcher import MultiSourceContainer
-from LevityDash.lib.plugins.observation import RealtimeSource
+from LevityDash.lib.plugins.observation import RealtimeSource, TimeSeriesItem
 from LevityDash.lib.wire.bridge import LoopbackBridge
-from LevityDash.lib.wire.containers import ContainerFlags, RemoteContainer, RemoteSource
+from LevityDash.lib.wire.containers import ContainerFlags, RemoteContainer, RemoteSource, RemoteTimeSeries
 from datetime import datetime, timedelta, timezone
 
 
@@ -276,3 +276,38 @@ def test_get_preferred_source_short_circuits_when_data_already_present():
 	fired2 = []
 	multi2.getPreferredSourceContainer('requester', AnySource, lambda: fired2.append(True), timeseriesOnly=False)
 	assert fired2 == []
+
+
+def test_get_timeseries_ignores_a_forecast_flagged_container_before_data_is_fetched():
+	# Regression guard for a real bug caught only by running the actual app
+	# (not by static review or unit tests against stubs): getTimeseries used
+	# to hand back any container whose flags looked forecast-ready, which is
+	# always safe for a live Container (`.timeseries` is a cached_property
+	# that never returns None - the first access always builds a, possibly
+	# still-empty, MeasurementTimeSeries; real population happens lazily via
+	# .list). A RemoteContainer's `.timeseries` stays None until an explicit
+	# wire fetch (prepare_for_ts_connection) completes - so returning it here
+	# let GraphItemData.setContainer call connectTimeseries directly on a
+	# container with no data, WITHOUT ever having gone through
+	# getPreferredSourceContainer (the only thing that actually calls
+	# prepare_for_ts_connection). Graphs in mode=remote stayed permanently
+	# empty as a result, even once the backend genuinely had data.
+	key = CategoryItem('environment.temperature.temperature')
+	multi = MultiSourceContainer(key)
+	source = RemoteSource(name='OpenMeteo', defaultFor={'temperature'})
+	remote = source.getOrCreate(key)
+	remote._update(
+		value=wu.Temperature.Fahrenheit(70),
+		flags=ContainerFlags(isForecast=True, isTimeseriesOnly=True),
+	)
+	multi.addValue(source, remote)
+
+	assert remote.timeseries is None  # not fetched yet - the crux of the bug
+	assert multi.getTimeseries(source, strict=True) is None
+	assert multi.getTimeseries(strict=True) is None  # the AnySource/fallback path too
+
+	# once prepare_for_ts_connection (or in this test, direct assignment)
+	# populates it, the same container becomes a valid result again
+	remote._timeseries = RemoteTimeSeries(source, key, [TimeSeriesItem.load_raw(70.0, datetime(2026, 7, 22, tzinfo=timezone.utc))])
+	assert multi.getTimeseries(source, strict=True) is remote
+	assert multi.getTimeseries(strict=True) is remote

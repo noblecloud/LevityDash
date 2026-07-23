@@ -1,6 +1,6 @@
 # Roadmap
 
-*Last updated: 2026-07-22 (v0.3.0-beta.1, Phase 4.2 merged).*
+*Last updated: 2026-07-22 (v0.3.0-beta.1, timeseries over the wire merged).*
 
 This organizes and supersedes the raw idea list in [`_planned-features.md`](_planned-features.md) — every item from that list is either placed in a section below, marked as already done, or parked with a reason. Status notes reference the code so claims stay checkable.
 
@@ -16,7 +16,7 @@ The 2026 revival brought the project from a long-dormant WIP tree to a healthy, 
 - **`statekit` + `qolkit` extracted** — the declarative state/YAML-persistence layer (`src/statekit/`) and generic Python utilities (`src/qolkit/`) are now standalone, Qt-free, in-repo packages with pure-Python test suites. `lib/stateful.py` remains as a thin Qt facade, so no consumer code changed.
 - **First real test harness** — `tests/` covers statekit, qolkit, and headless (offscreen) UI/dashboard behavior.
 
-## Now: timeseries over the wire + plugin control plane
+## Now: plugin control plane
 
 Settled design decisions carried forward from Phase 4.2 (the full split is now merged):
 
@@ -29,9 +29,9 @@ Settled design decisions carried forward from Phase 4.2 (the full split is now m
 
 Active milestones:
 
-- ~~wire codec~~ → ~~`RemoteContainer` + in-process loopback~~ → ~~standalone backend process~~ → ~~frontend WS client (reconnect/attach)~~ → **timeseries over WebSocket (request/response)** → **plugin control plane (start/stop/health)**
+- ~~wire codec~~ → ~~`RemoteContainer` + in-process loopback~~ → ~~standalone backend process~~ → ~~frontend WS client (reconnect/attach)~~ → ~~timeseries over WebSocket (request/response)~~ (all done — `RemoteContainer.timeseries` is now populated by a real request/response round trip; graphs render in remote mode, verified against a real two-process run) → **plugin control plane (start/stop/health)**
 
-Timeseries is the next milestone's gap: graphs are empty in remote mode today (realtime-only; `Graph.connectTimeseries` has the documented None-guard). The control plane adds watchdog heartbeats and remote plugin lifecycle.
+Timeseries shipped with two known gaps tracked in `docs/tasks/timeseries-viewport-and-control-plane.md`: the wire-fetched window is a fixed ±3h, not viewport-aware, and a pre-existing `Graph.py` smoothing fragility surfaces more easily against that narrower window. The control plane adds watchdog heartbeats and remote plugin lifecycle.
 
 ## Next, after the split
 
@@ -120,6 +120,7 @@ Triaged from `_planned-features.md`, grouped by area. ~~Struck~~ items are alrea
 | Fix delayed/blocked parent-resized signals while loading | Effectively resolved by the size-group engine rewrite + settle-time refits |
 | OpenWeatherMap plugin | Done — was a disabled skeleton (schema shadowed by an empty class attr); rebuilt against the free Current Weather Data endpoint (One Call requires a paid plan), with a `normalizeData` flatten step for its nested response shape. Verified live against the real API. |
 | Phase 4.2 backend/frontend process split | Done — wire codec (`lib/wire/codec.py`), typed messages (`messages.py`), aiohttp WebSocket server (`server.py`) + client (`client.py`), `RemoteBackend`/`RemoteFrontend` adapters, `RemoteContainer`/`RemoteObservationValue` stand-ins, `GuiMarshal` single-hop bridge, standalone backend entry point (`LevityDash-backend` / `python -m LevityDash.backend`). Merge `fce2568`. Full dashboard renders on first paint in remote mode; 125-pass test suite. Follow-ups tracked in `docs/tasks/phase-4.2-follow-ups.md`. |
+| Timeseries over the wire | Done — columnar codec (`encode_timeseries_values`/`decode_timeseries_values`), `ts_request`/`ts_response` messages, unicast dispatch in `WireServer`, request correlation in `WireClient`, `RemoteBackend.handle_ts_request`'s Qt-thread/thread-pool/asyncio-thread hop (mirrors `Container.prepare_for_ts_connection`'s own thread-pool pattern), `RemoteTimeSeries` stand-in. Verified against a real two-process run, not just unit tests — which is also how a `dispatcher.getTimeseries` fast-path bug (returned a flag-ready-but-not-yet-fetched `RemoteContainer` without ever triggering the fetch) got caught; fixed with a `timeseries is not None` guard, no-op for live mode. 150-pass test suite. Known gaps in `docs/tasks/timeseries-viewport-and-control-plane.md`. |
 
 ## Parked (kept for reference, no current plan)
 

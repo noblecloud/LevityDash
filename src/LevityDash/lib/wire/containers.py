@@ -13,26 +13,32 @@ approximation itself, it only reconciles *which source's* pushed value to
 show (that logic lives unchanged in `MultiSourceContainer`, operating on
 these stand-ins instead of real `Container`s).
 
-Scope note: `.hourly`/`.daily`/`.timeseries`/`.timeseriesAll` return `None`
-here. Widget code that reads them shallow (MultiSourceContainer's fallback
-chain, Container.value/.now) degrades gracefully to "no timeseries data
-yet". Graph's usage is deep (slicing by datetime, iteration, a live
-`.signals` context manager - see the 4.1 widget-surface inventory) and is
-explicitly deferred to Phase 4.4's `RemoteTimeSeries`; graphs bound to a
-remote-backed key simply stay empty until then, matching that milestone's
-own stated scope ("accept empty until first fetch initially").
+Scope note: `.hourly`/`.daily` still return `None` (no daily/hourly wire
+support yet). `.timeseries`/`.timeseriesAll` are now backed by
+`RemoteTimeSeries` (the timeseries-over-wire milestone) - populated once
+`RemoteContainer.prepare_for_ts_connection` gets a response back from the
+backend; `None` until then, exactly like a real `Container` before its
+first `.timeseries.update()`.
 """
-from datetime import timedelta
-from typing import Any, Callable, Dict, Hashable, NamedTuple, Optional, Set, Type
+from datetime import datetime, timedelta
+from typing import Any, Callable, Dict, Hashable, List, NamedTuple, Optional, Set, Type
 
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.plugins.categories import CategoryItem
-from LevityDash.lib.plugins.observation import RealtimeSource
+from LevityDash.lib.plugins.observation import RealtimeSource, TimeSeriesItem
 from LevityDash.lib.plugins.utils import ChannelSignal, GuardedRequest, Request
+
+# NOTE: messages.py imports ContainerFlags/RemoteContainer from this module -
+# build_ts_request/decode_ts_response are imported lazily inside the methods
+# that use them (RemoteSource.request_timeseries, Container.prepare_for_ts_
+# connection) to avoid a circular import at module load time.
 
 log = LevityPluginLog.getChild('Wire')
 
-__all__ = ['ContainerFlags', 'RemoteObservationValue', 'RemotePublisher', 'RemoteSource', 'RemoteContainer']
+__all__ = ['ContainerFlags', 'RemoteObservationValue', 'RemotePublisher', 'RemoteSource', 'RemoteContainer', 'RemoteTimeSeries']
+
+_DEFAULT_MIN_PERIOD = timedelta(hours=-3)
+_DEFAULT_MAX_PERIOD = timedelta(hours=3)
 
 
 class ContainerFlags(NamedTuple):
@@ -214,16 +220,32 @@ class RemoteSource:
 	stands in as its own "observation" for that lookup.
 	"""
 
-	def __init__(self, name: str, defaultFor: Optional[Set[str]] = None, enabled: bool = True, running: bool = True):
+	def __init__(
+		self, name: str, defaultFor: Optional[Set[str]] = None, enabled: bool = True, running: bool = True,
+		ts_request_fn: Optional[Callable[[dict, Callable], None]] = None,
+	):
 		self.name = name
 		self.config = _RemoteConfig(defaultFor=defaultFor, enabled=enabled)
 		self.running = running
 		self.publisher = RemotePublisher(self)
 		self._containers: Dict[CategoryItem, 'RemoteContainer'] = {}
+		# The actual cross-thread request primitive (RemoteConnection.
+		# request_timeseries) - None when there's no live connection (e.g. in
+		# tests), in which case request_timeseries degrades to "no data"
+		# synchronously rather than hanging.
+		self._ts_request_fn = ts_request_fn
 
 	@property
 	def enabled(self) -> bool:
 		return self.config['enabled']
+
+	def request_timeseries(self, key: CategoryItem, min_period: Optional[timedelta], max_period: Optional[timedelta], on_response: Callable[[Optional[dict]], None]) -> None:
+		if self._ts_request_fn is None:
+			on_response(None)
+			return
+		from LevityDash.lib.wire.messages import build_ts_request  # deferred - see module note
+		message = build_ts_request(source=self.name, key=str(key), min_period=min_period, max_period=max_period)
+		self._ts_request_fn(message, on_response)
 
 	# --- the slice of Plugin's observation-surface that MultiSourceContainer
 	# reads during reconciliation (dispatcher.py's .realtime/.timeseries/
@@ -244,7 +266,12 @@ class RemoteSource:
 		return container is not None and container.isRealtime
 
 	def hasTimeseriesFor(self, key) -> bool:
-		return False
+		# Mirrors hasRealtimeFor's pattern: consult the flag the backend
+		# already pushed for this container, rather than trying to replicate
+		# the real Plugin.hasTimeseriesFor's endpoint-capability check (this
+		# stand-in has no endpoint concept, only per-container flags).
+		container = self._containers.get(key)
+		return container is not None and container.isForecast
 
 	def hasDailyFor(self, key) -> bool:
 		container = self._containers.get(key)
@@ -277,6 +304,62 @@ class RemoteSource:
 		return self.name
 
 
+class RemoteTimeSeries:
+	"""Frontend stand-in for `observation.MeasurementTimeSeries` (the
+	timeseries-over-wire milestone). Built once from a decoded ts_response's
+	columnar arrays - a fully materialized snapshot, not a live/incrementally
+	updating series (there's no re-fetch on pan/zoom yet - a follow-up).
+
+	Reuses `TimeSeriesItem` (a plain value holder, no Qt/plugin coupling) and
+	`ChannelSignal` (the same generic pub/sub primitive `RemoteContainer.channel`
+	already reuses) rather than the real `MeasurementTimeSeries`, which
+	subclasses `OrderedDict` and is deeply entangled with `Observation`/
+	multi-source merge logic that doesn't exist wire-side.
+
+	Matches exactly the surface `Graph.py` reads off a real timeseries:
+	`.signals` (context manager + connect/disconnectSlot), datetime slicing
+	(`__getitem__`), `.first`, `len()` (also covers the truthiness checks at
+	`Graph.py`'s `if self.data.timeseries` sites - no separate `__bool__`
+	needed), and a no-op-but-safe `.refresh()`.
+	"""
+
+	__slots__ = ('source', 'key', '_items', 'signals')
+
+	def __init__(self, source: 'RemoteSource', key: CategoryItem, items: List[TimeSeriesItem]):
+		self.source = source
+		self.key = key
+		self._items = sorted(items, key=lambda i: i.timestamp)
+		self.signals = ChannelSignal(source, key)
+
+	def __getitem__(self, item):
+		if isinstance(item, slice):
+			lo = item.start.timestamp() if item.start is not None else float('-inf')
+			hi = item.stop.timestamp() if item.stop is not None else float('inf')
+			return [i for i in self._items if lo <= i.timestamp.timestamp() <= hi]
+		raise TypeError(f'RemoteTimeSeries only supports datetime slicing, not {item!r}')
+
+	def __iter__(self):
+		return iter(self._items)
+
+	def __len__(self):
+		return len(self._items)
+
+	@property
+	def first(self) -> Optional[TimeSeriesItem]:
+		return self._items[0] if self._items else None
+
+	def refresh(self, callback: Optional[Callable] = None) -> None:
+		# A materialized snapshot, not a live series - no periodic re-fetch
+		# this milestone (a follow-up). No-op beyond firing callback, so
+		# GraphItemData.refresh (Graph.py, self.timeseries.refresh()) doesn't
+		# crash if ever reached in remote mode.
+		if callback is not None:
+			callback()
+
+	def __repr__(self):
+		return f'RemoteTimeSeries({self.source.name}:{self.key.name}, {len(self._items)} points)'
+
+
 class RemoteContainer:
 	"""Stand-in for `observation.Container` - see the module docstring for
 	the scope this covers and the rationale for what it doesn't (yet)."""
@@ -288,6 +371,7 @@ class RemoteContainer:
 		self._flags = ContainerFlags()
 		self._title: Optional[str] = None
 		self._awaitingRequirements: Dict[Hashable, GuardedRequest] = {}
+		self._timeseries: Optional[RemoteTimeSeries] = None
 		self.__hash_key = CategoryItem(key, source=[source.name])
 
 	def _update(
@@ -377,10 +461,26 @@ class RemoteContainer:
 		self._awaitingRequirements[request.requester] = request
 
 	def prepare_for_ts_connection(self, request: Request):
-		# No real timeseries fetch to kick off yet (Phase 4.4) - the value
-		# this container holds already reflects whatever the backend could
-		# resolve, so the requester's callback can fire immediately.
-		request.callback()
+		# The timeseries-over-wire counterpart to Container.prepare_for_ts_
+		# connection (observation.py): issues a real request instead of firing
+		# back immediately. request.callback() only fires once a response
+		# (or a definitive "no connection") comes back, exactly like the live
+		# path only calls back once MeasurementTimeSeries.update() finishes.
+		from LevityDash.lib.wire.messages import decode_ts_response  # deferred - see module note
+
+		def on_response(response: Optional[dict]) -> None:
+			if response is None:
+				log.debug(f'{self.log_repr}: no ts_response (no connection or request failed)')
+			else:
+				ok, points, error = decode_ts_response(response)
+				if not ok:
+					log.warning(f'{self.log_repr}: ts_request failed: {error}')
+				elif points:
+					items = [TimeSeriesItem.load_raw(value, timestamp) for timestamp, value in points]
+					self._timeseries = RemoteTimeSeries(self.source, self.key, items)
+			request.callback()
+
+		self.source.request_timeseries(self.key, _DEFAULT_MIN_PERIOD, _DEFAULT_MAX_PERIOD, on_response)
 
 	@property
 	def log_repr(self) -> str:
@@ -433,12 +533,12 @@ class RemoteContainer:
 		return None
 
 	@property
-	def timeseries(self):
-		return None
+	def timeseries(self) -> Optional[RemoteTimeSeries]:
+		return self._timeseries
 
-	@property
-	def timeseriesAll(self):
-		return None
+	# Same snapshot - no separate "all history" fetch this milestone (a
+	# follow-up); the columnar response already covers the requested window.
+	timeseriesAll = timeseries
 
 	@property
 	def metadata(self) -> dict:

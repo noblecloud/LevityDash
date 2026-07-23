@@ -7,12 +7,16 @@ late joiner isn't blank.
 
 This is the transport counterpart to ``LoopbackBridge``'s send half: loopback
 hands the encoded dict straight to the decode half in-process; the WireServer
-puts it on a real socket instead. Wiring live plugin ``Publisher`` output into
-``broadcast`` (and the frontend->backend subscribe/request channel) lands in
-the mode=remote integration step — this class is just the pipe.
+puts it on a real socket instead.
+
+Frontend->backend messages ('ts_request', the timeseries-over-wire milestone)
+are dispatched through the optional ``on_request`` hook rather than handled
+here directly — this class stays ignorant of message-shape specifics beyond
+"it's JSON"; response-shaping (including error cases) lives in the handler
+(lib/wire/backend.py) and messages.py.
 """
 import json
-from typing import Dict, Optional, Set
+from typing import Awaitable, Callable, Dict, Optional, Set
 
 from aiohttp import WSMsgType, web
 
@@ -24,12 +28,20 @@ __all__ = ['WireServer']
 
 
 class WireServer:
-	def __init__(self, host: str = '127.0.0.1', port: int = 0, path: str = '/ws'):
+	def __init__(
+		self, host: str = '127.0.0.1', port: int = 0, path: str = '/ws',
+		on_request: Optional[Callable[[dict], Awaitable[dict]]] = None,
+	):
 		# port=0 lets the OS pick a free port; the bound port is resolved in
 		# start() so tests (and eventually a spawned frontend) can read it back.
 		self.host = host
 		self.port = port
 		self.path = path
+		# Handles a parsed frontend->backend request dict, returns the
+		# finished response dict. Settable post-construction too (see
+		# lib/backend.py, where the handler needs a RemoteBackend that isn't
+		# built yet at server-construction time).
+		self.on_request = on_request
 		self._clients: Set[web.WebSocketResponse] = set()
 		# Last update message seen per source, replayed to new clients. NOTE:
 		# updates are incremental (changed keys only); merging them into a true
@@ -66,6 +78,20 @@ class WireServer:
 			self._runner = None
 			self._site = None
 
+	async def _safe_send(self, ws: web.WebSocketResponse, payload: str) -> bool:
+		"""Send an already-serialized payload to one connection, dropping it
+		from ``_clients`` on failure (a dead/closing socket) rather than
+		raising - shared by broadcast's fan-out and the unicast ts_response
+		reply below. Takes a pre-serialized string, not a dict, so broadcast
+		can still serialize once and reuse it across every client."""
+		try:
+			await ws.send_str(payload)
+			return True
+		except Exception as e:
+			log.warning(f'dropping client after send failure: {e!r}')
+			self._clients.discard(ws)
+			return False
+
 	async def broadcast(self, message: dict) -> None:
 		if message.get('type') == 'update' and (name := message.get('source', {}).get('name')) is not None:
 			self._latest[name] = message
@@ -73,11 +99,7 @@ class WireServer:
 			return
 		payload = json.dumps(message)
 		for ws in list(self._clients):
-			try:
-				await ws.send_str(payload)
-			except Exception as e:
-				log.warning(f'dropping client after send failure: {e!r}')
-				self._clients.discard(ws)
+			await self._safe_send(ws, payload)
 
 	async def _handle_ws(self, request: web.Request) -> web.WebSocketResponse:
 		ws = web.WebSocketResponse(heartbeat=30)
@@ -85,15 +107,35 @@ class WireServer:
 		self._clients.add(ws)
 		# replay current snapshot so a late-joining frontend starts populated
 		for message in self._latest.values():
-			await ws.send_str(json.dumps(message))
+			await self._safe_send(ws, json.dumps(message))
 		try:
 			async for msg in ws:
-				# frontend -> backend messages (subscribe/request) are handled
-				# in a later step; for now just keep the socket alive and read
-				# to notice a disconnect.
-				if msg.type == WSMsgType.ERROR:
+				if msg.type == WSMsgType.TEXT:
+					await self._handle_incoming(ws, msg.data)
+				elif msg.type == WSMsgType.ERROR:
 					log.warning(f'client socket error: {ws.exception()!r}')
 					break
 		finally:
 			self._clients.discard(ws)
 		return ws
+
+	async def _handle_incoming(self, ws: web.WebSocketResponse, raw: str) -> None:
+		try:
+			incoming = json.loads(raw)
+		except Exception as e:
+			log.warning(f'failed to parse client message: {e!r}')
+			return
+		if incoming.get('type') != 'ts_request':
+			# subscribe/other frontend->backend message types are a later step;
+			# unrecognized messages are ignored rather than erroring, so an
+			# older/newer client can't crash this connection.
+			return
+		if self.on_request is None:
+			log.warning(f'ts_request {incoming.get("id")} received but no handler is wired up')
+			return
+		try:
+			response = await self.on_request(incoming)
+		except Exception as e:
+			log.error(f'on_request handler raised for {incoming.get("id")}: {e!r}')
+			return
+		await self._safe_send(ws, json.dumps(response))

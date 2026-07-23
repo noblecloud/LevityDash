@@ -4,7 +4,7 @@ boundary to and from plain JSON-safe dicts/strings.
 Versioned (schema `v`) so the wire format can evolve without breaking an
 older frontend talking to a newer backend or vice versa - see WIRE_VERSION.
 
-Three things get encoded today:
+Four things get encoded today:
   - CategoryItem <-> its string form. Round-trips correctly for anonymous
     keys (no `.source` set) - the only kind MultiSourceContainer/dispatcher
     keys are today. NOT yet correct for a CategoryItem with `.source` set:
@@ -26,6 +26,11 @@ Three things get encoded today:
     reading) - those cross the wire as plain datetimes, not Measurement's
     optional per-value `.timestamp` metadata (which piggybacks on the
     measurement envelope above).
+  - A full timeseries <-> columnar `{"unit", "cls", "timestamps", "values"}`
+    arrays (encode_timeseries_values/decode_timeseries_values). Unlike a
+    single Measurement, unit/cls are resolved once for the whole batch
+    instead of once per point - a series is homogeneous, so repeating that
+    metadata (and paying a registry lookup) per point would be pure waste.
 
 Deliberately NOT handled here: anything Qt-touching (e.g. an icon-type
 value's resolved `Icon`, which carries a QFont). That resolution happens
@@ -33,7 +38,7 @@ frontend-side, in lib/wire/containers.py, specifically to keep this module
 free of UI imports - see RemoteObservationValue's icon_alias handling.
 """
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, List, Optional, Sequence, Tuple
 
 from WeatherUnits import Measurement
 from WeatherUnits.base.Registry import UnitRegistry
@@ -120,6 +125,59 @@ def decode_measurement(payload: dict) -> Measurement | float:
 		except ValueError:
 			pass
 	return measurement
+
+
+def encode_timeseries_values(items: Sequence[Any]) -> Optional[dict]:
+	"""Encode a full timeseries as columnar arrays (timestamps chosen, values
+	chosen) with `unit`/`cls` resolved ONCE from the first item, not repeated
+	per point like encode_measurement would - a series is homogeneous, and
+	that's the entire point of this shape over reusing encode_measurement per
+	item. `items` is any sequence of objects exposing `.value`/`.timestamp`
+	(TimeSeriesItem duck-typing - this module doesn't import observation.py,
+	same layering as everything else here)."""
+	if not items:
+		return None
+	first_value = items[0].value
+	is_measurement = isinstance(first_value, Measurement)
+	timestamps = []
+	values = []
+	for item in items:
+		timestamps.append(item.timestamp.astimezone(timezone.utc).timestamp())
+		values.append(float(item.value))
+	return {
+		'v': WIRE_VERSION,
+		'unit': getattr(first_value, 'unit', None) if is_measurement else None,
+		'cls': type(first_value).__name__ if is_measurement else None,
+		'timestamps': timestamps,
+		'values': values,
+	}
+
+
+def decode_timeseries_values(payload: Optional[dict]) -> List[Tuple[datetime, Any]]:
+	"""Decode a columnar timeseries payload back into (timestamp, value)
+	pairs. Resolves the measurement class ONCE for the whole batch (the
+	expensive part - a registry scan), then constructs each point directly.
+	A single point's construction failure degrades just that point to a
+	plain float, matching decode_measurement's per-value resilience - don't
+	move class resolution back inside the loop even though it would look
+	similar to decode_measurement's shape, that would undo the compactness/
+	perf win columnar encoding exists for."""
+	if payload is None:
+		return []
+	cls = _resolve_measurement_class(payload.get('cls'), payload.get('unit'))
+	timestamps = payload.get('timestamps') or []
+	values = payload.get('values') or []
+	result: List[Tuple[datetime, Any]] = []
+	for ts, v in zip(timestamps, values):
+		timestamp = datetime.fromtimestamp(ts, tz=timezone.utc)
+		if cls is None:
+			result.append((timestamp, v))
+			continue
+		try:
+			result.append((timestamp, cls(v)))
+		except Exception:
+			result.append((timestamp, v))
+	return result
 
 
 def encode_datetime(value: datetime) -> str:

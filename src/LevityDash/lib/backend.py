@@ -91,6 +91,11 @@ def main() -> int:
 	)
 	for plugin in LevityDashboard.plugins:
 		bridge.attach(plugin)
+	# set post-construction rather than passed to WireServer(...) above: the
+	# server starts (and its thread begins reading connections) before a
+	# RemoteBackend exists to answer requests. No race - a frontend can't
+	# connect and send a ts_request until well after this line runs.
+	server.on_request = bridge.handle_ts_request
 
 	app = LevityDashboard.app
 

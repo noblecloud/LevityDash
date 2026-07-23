@@ -4,16 +4,19 @@ An aiohttp WebSocket client that connects to a ``WireServer``, reads update
 messages off the socket, and hands each decoded message dict to a callback.
 Transport counterpart to ``LoopbackBridge``'s receive half.
 
-This class owns only the transport: connect, read loop, clean shutdown. Turning
-a received message into ``RemoteContainer`` updates against a ``RemoteSource``
-registry and pushing them to the dispatcher (mirroring
+This class owns only the transport: connect, read loop, clean shutdown, plus
+a thin request/response correlation layer (``request()``) for messages that
+expect a reply keyed by `id` (currently just 'ts_response', see messages.py) -
+still pure transport, no knowledge of what a timeseries or a Container is.
+Turning an 'update' message into ``RemoteContainer`` updates against a
+``RemoteSource`` registry and pushing them to the dispatcher (mirroring
 ``LoopbackBridge._on_published``) is the mode=remote integration step; that
 logic lives above this, in the ``on_message`` callback. Reconnect/backoff also
 lands there.
 """
 import asyncio
 import json
-from typing import Callable, Optional
+from typing import Callable, Dict, Optional
 
 import aiohttp
 
@@ -31,6 +34,7 @@ class WireClient:
 		self._session: Optional[aiohttp.ClientSession] = None
 		self._ws: Optional[aiohttp.ClientWebSocketResponse] = None
 		self._task: Optional[asyncio.Task] = None
+		self._pending: Dict[str, asyncio.Future] = {}
 
 	async def connect(self) -> None:
 		self._session = aiohttp.ClientSession()
@@ -38,12 +42,40 @@ class WireClient:
 		self._task = asyncio.create_task(self._read_loop())
 		log.info(f'WireClient connected to {self.url}')
 
+	async def send(self, message: dict) -> None:
+		await self._ws.send_str(json.dumps(message))
+
+	async def request(self, message: dict, *, timeout: float = 10.0) -> dict:
+		"""Send a message carrying an `id` and await the matching response
+		(matched by that same `id` in _read_loop below), or raise
+		asyncio.TimeoutError if nothing answers in time."""
+		request_id = message['id']
+		future: asyncio.Future = asyncio.get_running_loop().create_future()
+		self._pending[request_id] = future
+		try:
+			await self.send(message)
+			return await asyncio.wait_for(future, timeout)
+		finally:
+			self._pending.pop(request_id, None)
+
 	async def _read_loop(self) -> None:
 		try:
 			async for msg in self._ws:
 				if msg.type == aiohttp.WSMsgType.TEXT:
 					try:
-						self._on_message(json.loads(msg.data))
+						message = json.loads(msg.data)
+					except Exception as e:
+						log.warning(f'failed to parse wire message: {e!r}')
+						continue
+					if message.get('type') == 'ts_response':
+						future = self._pending.get(message.get('id'))
+						if future is not None and not future.done():
+							future.set_result(message)
+						# else: unmatched (already timed out and popped, or a
+						# stray) - nobody's awaiting it anymore, drop silently.
+						continue
+					try:
+						self._on_message(message)
 					except Exception as e:
 						log.warning(f'failed to handle wire message: {e!r}')
 				elif msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.CLOSING):
@@ -74,3 +106,8 @@ class WireClient:
 		if self._session is not None:
 			await self._session.close()
 			self._session = None
+		# fail fast instead of leaving any in-flight request() to time out
+		for future in self._pending.values():
+			if not future.done():
+				future.set_exception(ConnectionError('WireClient closed while a request was pending'))
+		self._pending.clear()
