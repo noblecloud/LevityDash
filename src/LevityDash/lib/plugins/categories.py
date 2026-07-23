@@ -873,6 +873,12 @@ class CategoryDict(dict):
 		# Own category is not wildcard
 
 		if len(item) == 1:
+			# Deferred import: observation.py imports CategoryDict/CategoryItem
+			# from this module at module level, so a top-level import here
+			# would be circular. TimeAwareValue is only needed in this one
+			# branch, so import it locally rather than restructuring either
+			# module's layering for one isinstance check.
+			from LevityDash.lib.plugins.observation import TimeAwareValue
 			return {key: value if not isinstance(value, CategoryDict) else value[item] for key, value in self._dict.items() if (isinstance(value, CategoryDict) and item in value) or isinstance(value, TimeAwareValue)}
 		else:
 			k = item[1:]
