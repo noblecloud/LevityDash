@@ -24,6 +24,12 @@ import os
 # the import order.
 os.environ['LEVITYDASH_BACKEND_MODE'] = 'live'
 
+# Read by lib/log.py to give this process its own log file - frontend and
+# backend used to share one path (LevityDash.log) and race each other's log
+# rotation, which could wedge a handler's file object closed permanently
+# (see the RichRotatingLogHandlerProxy fix).
+os.environ.setdefault('LEVITYDASH_PROCESS_ROLE', 'backend')
+
 
 def main() -> int:
 	from LevityDash.lib.backend import main as _main

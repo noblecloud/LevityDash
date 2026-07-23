@@ -270,7 +270,16 @@ class _LevityLogger(logging.Logger):
 			install_log_tail(handlers, logtail_level)
 
 		cls.__ensureFoldersExists()
-		cls.logPath = Path(cls.logDir, 'LevityDash.log')
+		# Frontend and backend used to share one file (LevityDash.log): two
+		# independent RotatingFileHandlers rotating the same path could race
+		# each other's close/rename/reopen - see RichRotatingLogHandlerProxy's
+		# emit() fix. Giving each process its own file removes the race
+		# outright rather than just tolerating it. LEVITYDASH_PROCESS_ROLE is
+		# set by the package-level LevityDash/backend.py entry point, before
+		# anything else in the import chain runs.
+		role = os.environ.get('LEVITYDASH_PROCESS_ROLE', 'frontend')
+		logName = 'LevityDash.log' if role == 'frontend' else f'LevityDash-{role}.log'
+		cls.logPath = Path(cls.logDir, logName)
 		columns = shutil.get_terminal_size((200, 20)).columns - 2
 		fileColumns = lvdash.config.getOrSet('Logging', 'logFileWidth', '120', lvdash.config.getint)
 		timeFormat = lvdash.config.getOrSet('Logging', 'logTimeFormat', '%m/%d/%y %H:%M:%S', str)
