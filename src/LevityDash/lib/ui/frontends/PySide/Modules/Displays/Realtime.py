@@ -36,11 +36,25 @@ from LevityDash.lib.utils.shared import (
 )
 from LevityDash.lib.stateful import StateProperty, Stateful
 from LevityDash.lib.plugins.observation import RealtimeSource, ObservationValue, TimeseriesSource
+from LevityDash.lib.wire.containers import RemoteObservationValue
 from WeatherUnits import Measurement, auto as autoMeasurement, Length
 
 qApp: QApplication
 
 log = guiLog.getChild(__name__)
+
+# ObservationValue (live mode) and RemoteObservationValue (mode=remote,
+# lib/wire/containers.py) are unrelated classes - the wire stand-in
+# deliberately doesn't subclass ObservationValue to avoid pulling in its
+# schema/source/container-coupled constructor. Every place below that used
+# to check isinstance(value, ObservationValue) alone silently fell through
+# to the generic str(value) fallback for a wire-sourced value instead of
+# unwrapping to the real WeatherUnits Measurement - hiding the separate unit
+# box (hasUnit read false) while baking the unit into the value text anyway
+# (str() on the wrapper delegates to the wrapped measurement's own __str__).
+# Reproduced live: mode=remote's wind speed showed "3.6 mph" merged into the
+# value box instead of "3.6" + a separate "mph" label.
+_OBSERVATION_VALUE_TYPES = (ObservationValue, RemoteObservationValue)
 
 
 class InvalidSource(Exception):
@@ -1140,7 +1154,7 @@ class MeasurementDisplayProperties(Stateful):
 	@property
 	def measurement(self) -> Measurement | datetime | None:
 		value = self.localGroup.value
-		if isinstance(value, ObservationValue):
+		if isinstance(value, _OBSERVATION_VALUE_TYPES):
 			value = value.value
 		if (convertTo := self.convertTo) is not None and value is not None:
 			try:
@@ -1171,7 +1185,7 @@ class MeasurementDisplayProperties(Stateful):
 	@property
 	def icon(self) -> Icon | None:
 		value = self.localGroup.value
-		if isinstance(value, ObservationValue) and value.isIcon:
+		if isinstance(value, _OBSERVATION_VALUE_TYPES) and value.isIcon:
 			value = value.icon
 		else:
 			return None
@@ -1299,7 +1313,7 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 
 		def unitText(self) -> str:
 			value = self.localGroup.value
-			if isinstance(value, ObservationValue):
+			if isinstance(value, _OBSERVATION_VALUE_TYPES):
 				value = value.value
 			return getattr(value, 'unit', '')
 
