@@ -150,7 +150,16 @@ class RichRotatingLogHandlerProxy(RotatingFileHandler, LevityHandler):
 		try:
 			if self.shouldRollover(record):
 				self.doRollover()
-				self.console.file = self.stream
+			# Resynced unconditionally, not only on a successful rollover: two
+			# processes sharing one log path (e.g. frontend + backend, both
+			# logging to the same LevityDash.log) can race a rollover's
+			# rename/reopen, closing self.stream out from under this handler.
+			# console.file was left stale-and-closed in that case, and since
+			# it's only ever reassigned here, every subsequent emit() failed
+			# with "I/O operation on closed file" until the log happened to
+			# grow enough to trigger (and this time win) another rollover -
+			# reproduced directly by forcing a failed rollover mid-emit.
+			self.console.file = self.stream
 			RichHandler.emit(self, record)
 		except Exception as e:
 			RichHandler.handleError(self, record)
