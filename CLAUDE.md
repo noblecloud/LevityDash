@@ -17,7 +17,11 @@ src/
                                dispatcher ({key → MultiSourceContainer})
     lib/plugins/builtin/       OpenMeteo, PirateWeather, WeatherFlow, Govee (BLE),
                                OpenWeatherMap (experimental)
-    lib/wire/                  backend/frontend split wire protocol (in progress)
+    lib/wire/                  backend/frontend split wire protocol — codec, messages,
+                               server/client transport, RemoteBackend/RemoteFrontend,
+                               RemoteConnection, RemoteContainer stand-ins, LoopbackBridge
+    lib/backend.py             headless backend process; entry point is the sibling
+                               backend.py (pins mode=live before any lib import)
     lib/ui/frontends/PySide/   the Qt frontend (app.py, Modules/Displays/…)
     lib/ui/Groups.py           size-group text-fitting engine (stateless refit)
 ```
@@ -34,13 +38,15 @@ Dependency direction is strict: `qolkit ← statekit ← LevityDash`. Never impo
 ## Run / test
 
 ```bash
-poetry run LevityDash                 # or: poetry run python -m LevityDash
+poetry run LevityDash                 # or: poetry run python -m LevityDash (mode=live by default)
+poetry run LevityDash-backend         # standalone headless backend (WebSocket server)
 poetry run pytest                     # offscreen Qt is configured in pyproject
 LEVITYDASH_CONFIG_DEBUG=1 poetry run python -m LevityDash   # pristine temp config
 ```
 
 - `LEVITYDASH_CONFIG_DEBUG=1` creates a throwaway config and triggers onboarding — use it for fresh-install behavior, NOT for testing against real dashboards/plugins (run without it; real config is in the platform config dir, e.g. `~/Library/Application Support/LevityDash` on macOS).
-- `tests/qolkit` and `tests/statekit` are pure Python; `tests/ui` boots a headless dashboard via `tests/conftest.py`.
+- `tests/qolkit` and `tests/statekit` are pure Python; `tests/ui` boots a headless dashboard via `tests/conftest.py`; `tests/wire` mostly uses hand-built stand-ins over real sockets rather than a full app bootstrap.
+- Two-process manual check: `LevityDash-backend`, then `LevityDash` with `[Backend] mode = remote` in config (or `LEVITYDASH_BACKEND_MODE=remote` env). To screenshot a remote-mode run instead of eyeballing a window: boot via `LevityDashboard.init()`/`app.init_app()` (mirrors `tests/conftest.py`'s `dashboard` fixture, minus `exec_()`), pump events, then `view.grab().save(path)` — works under `QT_QPA_PLATFORM=offscreen` once `[QtOptions] openGL` is forced off (offscreen has no real GL context, so the default `QOpenGLWidget` viewport grabs as blank white).
 
 ## Gotchas
 

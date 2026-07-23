@@ -17,10 +17,12 @@ A desktop-native, multi-source weather dashboard. Qt (PySide6) QGraphicsScene fr
 
 ```sh
 poetry install                          # install deps (has local dev dep: ../WeatherUnits)
-poetry run LevityDash                   # run desktop app
+poetry run LevityDash                   # run desktop app (mode=live by default)
+poetry run LevityDash-backend           # standalone headless backend (WebSocket server)
 poetry run pytest                       # run all tests
 poetry run pytest -xvs tests/ui/test_smoke.py
 poetry run pytest -m unwired            # xfail-marked (unimplemented) tests
+poetry run pytest tests/wire/           # wire-protocol tests (codec, transport, containers)
 ```
 
 No linter, no formatter, no pre-commit hooks — `pytest` is the only gating command. Poetry uses an in-project `.venv` per directory, not a shared one: a fresh clone or worktree needs its own `poetry install` before anything runs (`poetry run pytest` failing with "command not found" means this step was skipped, not a real error).
@@ -42,11 +44,15 @@ src/
                                see "Schema engine" below, or docs/reviews/schema-pipeline.md
     lib/plugins/builtin/       OpenMeteo, PirateWeather, WeatherFlow, Govee (BLE),
                                OpenWeatherMap
-    lib/wire/                  backend/frontend split wire protocol (in progress)
+    lib/wire/                  backend/frontend split wire protocol — see "Wire
+                               protocol" below
     lib/ui/frontends/PySide/   the Qt frontend (app.py, Modules/Displays/…)
     lib/config.py              ConfigParser with ExtendedInterpolation
-    lib/backend.py             UNWIRED scaffold for the headless backend (nothing
-                               imports it yet; being rebuilt — see docs/roadmap.md)
+    lib/backend.py             headless backend process (live Plugins + WireServer);
+                               entry point is the sibling backend.py, below
+    backend.py                 package-level entry module — pins mode=live before
+                               any lib import (see "Wire protocol"); LevityDash-backend
+                               console script points here, not at lib/backend.py
     __init__.py                LevityDashboard singleton (immutable after init)
     __main__.py                entrypoint (main())
 ```
@@ -66,6 +72,62 @@ Plugin data ingestion, transformation, mapping, unit conversion, and validation.
 - **Schema config**: each plugin declares its schema as a Python dict in its own module (e.g. `builtin/OpenMeteo.py` `schema = {...}`) with `sourceKey`, `dataMaps`, `keyMaps`, `properties`, `metaData`, and `ignored` keys — not YAML.
 - It's deliberately lenient in production (fuzzy-matches/degrades rather than crashing) — see `docs/tasks/loud-failure-dev-mode.md` if that's the task at hand.
 
+## Wire protocol (backend/frontend process split, `lib/wire/`)
+
+Splits the GUI app from a headless plugin backend over a WebSocket. Two modes:
+`live` (single process, plugins straight to the dispatcher — what `LevityDash-backend`
+always runs, and the GUI app's default) and `remote` (a *frontend*-only setting —
+the Qt app attaches to an already-running standalone backend instead of starting
+plugins itself; no spawned-local-backend path exists). See `docs/roadmap.md`
+for the settled design decisions.
+
+- **`codec.py`**: plain-value codec, Measurement/datetime/CategoryItem ↔ JSON-safe
+  dicts (JSON, not msgpack). `_resolve_measurement_class` prefers a non-generic
+  specialized class (by name, then by unit symbol) so derived units like Wind
+  reconstruct correctly instead of degrading to a bare float.
+  `encode_timeseries_values`/`decode_timeseries_values`: a columnar
+  `{unit, cls, timestamps, values}` shape for a full series — unit/cls resolved
+  once per batch, not once per point.
+- **`messages.py`**: plain dict-building functions, not message dataclasses —
+  `encode_container`/`apply_container_update` (per-key) wrapped by
+  `encode_update_message`/`parse_update_message` (the backend→frontend-only
+  envelope), plus `build_ts_request`/`encode_ts_response`/`decode_ts_response`
+  (the frontend↔backend request/response pair for timeseries, correlated by a
+  `uuid` `id`).
+- **`server.py`** (`WireServer`) / **`client.py`** (`WireClient`): transport.
+  Server broadcasts `'update'` messages to every connected client and replays
+  the last snapshot to late joiners; an optional `on_request` hook answers
+  `'ts_request'` unicast (not broadcast) to the requesting connection only.
+  Client's `request()` correlates a request/response pair via a pending-futures
+  map keyed by `id`; ordinary `'update'` messages still flow to `on_message`
+  unaffected.
+- **`backend.py`** (`RemoteBackend`): send side — attaches to each real
+  plugin's `Publisher`, encodes changed containers on publish.
+  `handle_ts_request` answers a timeseries request: a `_QtInvoker` marshals the
+  plugin/container lookup onto the Qt main thread, then
+  `plugin.thread_pool.run_threaded_process(..., direct=True)` runs the
+  potentially-slow full-series rebuild off *both* the Qt and asyncio loops —
+  mirrors `Container.prepare_for_ts_connection`'s own thread-pool pattern
+  (`lib/plugins/observation.py`) rather than a new threading idiom.
+- **`frontend.py`** (`RemoteFrontend`) / **`remote.py`** (`RemoteConnection`):
+  receive side. `RemoteConnection` owns a dedicated thread + asyncio loop with
+  a `WireClient` inside a reconnect/backoff loop; every message crosses to the
+  GUI thread *exactly once* via `_GuiMarshal` (a queued Qt signal) before
+  `RemoteFrontend` touches anything the scene graph can see — a design
+  requirement, not an optimization (see `docs/roadmap.md`).
+- **`containers.py`**: `RemoteSource`/`RemoteContainer`/`RemoteObservationValue`/
+  `RemoteTimeSeries` — frontend stand-ins mirroring the live
+  `Plugin`/`Container`/`ObservationValue`/`MeasurementTimeSeries` interfaces
+  closely enough that `MultiSourceContainer` reconciliation and widgets (Graph
+  included) run *unmodified* against them. `RemoteContainer.prepare_for_ts_
+  connection` reads an optional `wireTimeseriesPeriod` duck-typed off the
+  requester (Graph.py's `GraphItemData` implements it) to match a wire fetch to
+  whatever timeframe the requester actually needs, falling back to a fixed
+  default window when absent.
+- **`bridge.py`** (`LoopbackBridge`): `mode=loopback` — both halves in-process,
+  still a genuine JSON round-trip through the same codec/messages functions,
+  for fast dev-loop testing without a real socket.
+
 ## Test quirks
 
 - **`conftest.py`** sets `QT_QPA_PLATFORM=offscreen` and `LEVITYDASH_CONFIG_DEBUG=1` **before any PySide6 import** (top-level, not in a fixture).
@@ -75,6 +137,7 @@ Plugin data ingestion, transformation, mapping, unit conversion, and validation.
 - `pump(app, seconds)` helper processes Qt events without `exec_()`.
 - `unwired` marker = xfail (behaviour not yet implemented).
 - Plugin tests exercise `normalizeData`/schema as unbound logic against captured, sanitized real API responses as golden fixtures — no network, no full `Plugin` bootstrap needed (see `tests/plugins/test_openweathermap.py` for the pattern).
+- `tests/wire/` mostly avoids a full app/plugin bootstrap too — hand-built `Plugin`/`Container`/timeseries stand-ins over real `WireServer`/`WireClient`/`RemoteBackend` sockets (see `test_wire_ts_end_to_end.py` for the fullest example). `test_remote_boot.py` is the exception: a real subprocess boots a real `WireServer` against real (fabricated) OpenMeteo-shaped data, asserting zero tracebacks on stderr.
 
 ## Style & config
 
