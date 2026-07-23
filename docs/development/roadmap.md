@@ -96,7 +96,7 @@ Triaged and grouped by area. ~~Struck~~ items are already done (see the last sec
 
 ### App & platform
 
-- **Keep-awake option** — `caffeinate` (macOS), `xdg-screensaver`/`systemd-inhibit` (Linux), `powercfg`/`SetThreadExecutionState` (Windows).
+- **Keep-awake option** — prevent *system/display* sleep for an always-on kiosk display: `caffeinate` (macOS), `xdg-screensaver`/`systemd-inhibit` (Linux), `powercfg`/`SetThreadExecutionState` (Windows). Distinct from macOS App Nap (a per-process background-timer throttle, independent of system sleep settings) — App Nap is already opted out of unconditionally at startup via `preventAppNap()` (`lib/utils/shared.py`), both frontend and backend.
 - **Runtime log-level menu** — change log level (and status-bar update level) from the menu bar; the Logs menu currently only opens/submits logs.
 - **Dashboard-level config overrides** — per-dashboard settings that override global config.
 - **Event notifications** — user-facing alerts (lightning nearby, rain starting, etc.).

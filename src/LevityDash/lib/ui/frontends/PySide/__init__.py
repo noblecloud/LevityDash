@@ -10,6 +10,8 @@ class LevityDashApp(QApplication):
 	main_window: 'LevityMainWindow'
 
 	def init_app(self):
+		from LevityDash.lib.utils.shared import preventAppNap
+		preventAppNap()
 		self.setQuitOnLastWindowClosed(True)
 		self.main_window = LevityMainWindow()
 		iconPath = LevityDashboard.resources / 'ui-elements' / 'icon.icns'

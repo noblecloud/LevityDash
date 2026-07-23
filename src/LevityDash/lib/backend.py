@@ -49,9 +49,11 @@ def main() -> int:
 	from LevityDash.lib.log import LevityPluginLog
 	from LevityDash.lib.wire.backend import RemoteBackend
 	from LevityDash.lib.wire.server import WireServer
+	from LevityDash.lib.utils.shared import preventAppNap
 	from PySide6.QtCore import QTimer
 
 	log = LevityPluginLog.getChild('Backend')
+	preventAppNap()
 
 	LevityDashboard.init()
 	LevityDashboard.plugins.load_all()

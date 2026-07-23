@@ -28,7 +28,7 @@ except ImportError:
 	GROUPING_CHAR = ','
 
 import operator as __operator
-from sys import exc_info, float_info
+from sys import exc_info, float_info, platform as _platform
 
 from collections import namedtuple, defaultdict, ChainMap
 
@@ -1747,6 +1747,45 @@ def thread_safe(func):
 		return func(self, *args, **kwargs)
 
 	return wrapper
+
+
+_appNapActivity = None
+
+
+def preventAppNap() -> None:
+	"""macOS-only, best-effort: opts this process out of App Nap.
+
+	App Nap throttles a background/unfocused GUI process's timers (this
+	app's own clock display, and separately the wire reconnect backoff in
+	lib/wire/remote.py) down to multi-minute coalesced wake bursts - this is
+	a per-process, per-app decision macOS makes independently of system
+	sleep/display-sleep settings, confirmed live over a real overnight run
+	where both frontend and backend were affected identically despite the
+	system being configured to never sleep. `caffeinate`/preventing system
+	sleep (the roadmap's older "keep-awake" idea) does not fix this - it's
+	the wrong mechanism for App Nap specifically.
+
+	`NSProcessInfo.beginActivityWithOptions_reason_` returns a token that
+	must be kept alive for as long as the exemption should last; stored at
+	module scope (never releases it) since this app always wants to run at
+	full timer fidelity for its whole lifetime, not just for a scoped
+	operation. Call once, at startup, from both the frontend and the
+	standalone backend.
+	"""
+	global _appNapActivity
+	if _appNapActivity is not None or _platform != 'darwin':
+		return
+	try:
+		from Foundation import NSActivityIdleSystemSleepDisabled, NSActivityUserInitiated, NSProcessInfo
+	except ImportError:
+		# pyobjc's Foundation bindings aren't guaranteed (currently pulled in
+		# transitively via bleak's macOS CoreBluetooth backend) - degrade to
+		# a no-op rather than adding a hard new dependency for this.
+		return
+	_appNapActivity = NSProcessInfo.processInfo().beginActivityWithOptions_reason_(
+		NSActivityUserInitiated | NSActivityIdleSystemSleepDisabled,
+		'LevityDash must stay fully responsive as an always-on ambient display',
+	)
 
 
 def startTimerSafe(timer: QTimer, msec: int = None):
