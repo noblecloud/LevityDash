@@ -694,6 +694,13 @@ class InsertItemAction(QAction):
 		drag.exec_(Qt.CopyAction)
 
 
+_CONNECTION_STATE_COLORS = {
+	'connecting':   '#e0a030',
+	'connected':    '#30c060',
+	'disconnected': '#d04040',
+}
+
+
 class BackendConnectionIndicator(QLabel):
 	"""Small always-visible dot showing the mode=remote backend connection
 	state (RemoteConnection.connectionStateChanged, lib/wire/remote.py) -
@@ -707,13 +714,11 @@ class BackendConnectionIndicator(QLabel):
 	only, further down this class body) - adding a second unconditional
 	override here would silently shadow or be shadowed by that one depending
 	on definition order.
-	"""
 
-	_COLORS = {
-		'connecting':   '#e0a030',
-		'connected':    '#30c060',
-		'disconnected': '#d04040',
-	}
+	Alongside `BackendConnectionStatusBarLabel` below - that one only shows
+	when the status bar itself is visible (hidden by default), so this one
+	exists specifically to always be visible regardless of that toggle.
+	"""
 
 	def __init__(self, parent: QMainWindow, connection: 'RemoteConnection'):
 		super().__init__(parent)
@@ -743,9 +748,26 @@ class BackendConnectionIndicator(QLabel):
 		self.raise_()
 
 	def _applyState(self, state: str):
-		color = self._COLORS.get(state, '#808080')
+		color = _CONNECTION_STATE_COLORS.get(state, '#808080')
 		self.setStyleSheet(f'background-color: {color}; border-radius: 7px;')
 		self.setToolTip(f'Backend: {state}')
+
+
+class BackendConnectionStatusBarLabel(QLabel):
+	"""Text companion to `BackendConnectionIndicator`, added to the QStatusBar
+	as a permanent widget (`addPermanentWidget` - otherwise unused anywhere in
+	this codebase) so the connection state also reads out in words whenever
+	the user has the status bar shown."""
+
+	def __init__(self, parent: QMainWindow, connection: 'RemoteConnection'):
+		super().__init__(parent)
+		self._applyState(connection.state)
+		connection.connectionStateChanged.connect(self._applyState)
+
+	def _applyState(self, state: str):
+		color = _CONNECTION_STATE_COLORS.get(state, '#808080')
+		self.setText(f'Backend: {state}')
+		self.setStyleSheet(f'color: {color};')
 
 
 class LevityMainWindow(QMainWindow):
@@ -762,6 +784,9 @@ class LevityMainWindow(QMainWindow):
 		self._initConnectionIndicator()
 		self.show()
 
+		if platform.system() != 'Darwin':
+			self.updateMenuBar('show')
+
 	def _initConnectionIndicator(self):
 		# Only meaningful in mode=remote - mode=live has no backend
 		# connection concept at all.
@@ -771,9 +796,8 @@ class LevityMainWindow(QMainWindow):
 		if connection is None:
 			return
 		self.connectionIndicator = BackendConnectionIndicator(self, connection)
-
-		if platform.system() != 'Darwin':
-			self.updateMenuBar('show')
+		self.connectionStatusBarLabel = BackendConnectionStatusBarLabel(self, connection)
+		self.statusBar().addPermanentWidget(self.connectionStatusBarLabel)
 
 	def updateOnlineState(self, online):
 		guiLog.info(f'Online state changed to {online}')
