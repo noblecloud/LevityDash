@@ -85,7 +85,7 @@ Triaged from `_planned-features.md`, grouped by area. ~~Struck~~ items are alrea
 - **Filter functions by key** — registerable functions that transform values matching a key.
 - **Live value smoothing** — generalize `rollingAverage` (`observation.py:954`; currently used only for wind speed feeding wind-chill) into a per-key plugin-scheme option.
 - **WeatherUnits: expose conversion factors.**
-- **WeatherUnits `.withUnit` force-show defect** — format-spec parameter threading doesn't override instance defaults (documented as an expected-failure test in WeatherUnits' `test_temperature.py`).
+- ~~**WeatherUnits `.withUnit` force-show defect**~~ — fixed in WeatherUnits `7b59613`. Root cause was narrower than "parameter threading": `FormatSpec.params` only matched `key=value`, so `.withUnit`'s `showUnit: True` spec was silently discarded and forced nothing. Same bug also made `format: {unit}` (used by `Realtime.unitPosition` to isolate a bare unit symbol) return the whole rendered measurement. The `expectedFailure` marker in `test_temperature.py` is gone and `tests/test_format_spec.py` guards both.
 
 ### Plugins
 
