@@ -630,7 +630,14 @@ air_quality_eu_only_params = [
 
 
 class OpenMeteoURLs(URLs, base='api.open-meteo.com/v1'):
-	params = {'latitude': userConfig.lat, 'longitude': userConfig.lon, 'timezone': str(userConfig.tz), 'past_days': 1}
+	# forecast_days defaults to 7 when omitted, which is what this plugin had
+	# been silently getting. 16 is the API maximum for the standard forecast
+	# endpoint; verified live that every param below is still returned at that
+	# length (17 daily entries with past_days=1, 408 hourly points).
+	params = {
+		'latitude': userConfig.lat, 'longitude': userConfig.lon, 'timezone': str(userConfig.tz),
+		'past_days': 1, 'forecast_days': 16,
+	}
 	forecast = Endpoint(url='forecast', params={'hourly': allParams, 'daily': dailyParams})
 	air_quality = Endpoint(url='https://air-quality-api.open-meteo.com/v1/', params={'hourly': air_quality_params})
 

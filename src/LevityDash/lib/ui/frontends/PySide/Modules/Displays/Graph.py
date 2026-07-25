@@ -86,6 +86,15 @@ __all__ = ['GraphItemData', 'Figure', 'GraphPanel', 'MiniGraph']
 SMOOTH_TYPES = {'cubic', 'gaussian', 'savgol'}
 INTERP_TYPES = {'linear', 'cubic', 'spline'}
 
+# Floors for a mode=remote timeseries fetch (see
+# GraphItemData.wireTimeseriesPeriod). A graph's `timeframe` is what it
+# *displays*; it scrolls, so the fetch must not be bounded by it. Sized to
+# cover any builtin plugin's horizon - OpenMeteo's forecast tops out at 16
+# days - since an hourly columnar payload of that length is only a few
+# hundred points.
+_WIRE_FETCH_LOOKBACK = timedelta(days=-2)
+_WIRE_FETCH_HORIZON = timedelta(days=16)
+
 class TestData:
 
 	@staticmethod
@@ -920,8 +929,18 @@ class GraphItemData(Stateful, tag=...):
 		`.list` below already uses to slice locally-available data
 		(historicalStart = now + lookback, end = now + range), just as timedeltas
 		relative to now rather than absolute datetimes - the wire request is built
-		from a period, not a point in time (see messages.build_ts_request)."""
-		return self.graph.timeframe.lookback, self.graph.timeframe.range
+		from a period, not a point in time (see messages.build_ts_request).
+
+		Deliberately fetches WIDER than the visible timeframe. The timeframe is
+		a display window, not a data limit - the graph scrolls, so bounding the
+		request to it left nothing to scroll into and made mode=remote show less
+		data than mode=live for the same dashboard. The floors below cover any
+		builtin plugin's horizon (OpenMeteo tops out at 16 forecast days), and
+		the payload is columnar and hourly, so over-fetching costs a few hundred
+		points. Panning beyond even this still has no re-fetch - see
+		docs/tasks/timeseries-viewport-and-control-plane.md."""
+		frame = self.graph.timeframe
+		return min(frame.lookback, _WIRE_FETCH_LOOKBACK), max(frame.range, _WIRE_FETCH_HORIZON)
 
 	@cached_property
 	def list(self):
