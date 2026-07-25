@@ -1830,8 +1830,8 @@ class GaugeValueLabel(GaugeLabel):
 
 	__defaults__ = {
 		'format': {
-			'showUnit': False,
-			'decorator': False,
+			'show_unit': False,
+			'unit_symbol': False,
 		},
 		'geometry': {
 			'x': '0px',
@@ -2223,7 +2223,7 @@ class GaugeUnit(GaugeLabel):
 
 		def _textAccessor(self) -> str:
 			value_class = self.parent.parent.valueClass
-			return value_class.unit or value_class.decorator
+			return value_class.unit or value_class.unit_symbol
 
 		@property
 		def limitRect(self) -> QRectF:
@@ -2562,7 +2562,7 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 
 	@format_spec.item_default
 	def format_spec(self) -> dict | str:
-		return {'showUnit': False, 'decorator': False}
+		return {'show_unit': False, 'unit_symbol': False}
 
 	@cached_property
 	def size_group(self) -> SizeGroup:

@@ -1184,7 +1184,7 @@ class Dimension(MutableFloat):
 	def __str__(self):
 		if self._absolute:
 			if isinstance(self.value, Length):
-				return f"{self.value:unitSpacer=False}"
+				return f"{self.value:unit_spacer=False}"
 			string = super(Dimension, self).__str__()
 			if (abs_dec := getattr(self, '__absoluteDecorator__', None)) is not None:
 				string = f'{string}{self.__absoluteDecorator__}'
