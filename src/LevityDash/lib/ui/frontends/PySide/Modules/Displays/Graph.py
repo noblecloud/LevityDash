@@ -4377,10 +4377,21 @@ class TimeseriesSourceMenu(SourceMenu):
 
 	@property
 	def sources(self):
+		# Enumerate the sources actually holding data for this key, not the
+		# local plugin registry: in mode=remote local plugins are loaded but
+		# never started (see PySide/__init__.py's start()), so they hold no
+		# containers and `hasTimeseriesFor` was False for every one of them -
+		# leaving this menu empty and giving no way to see which source a
+		# graph was using. The dispatcher's container is populated in both
+		# modes, and its `.source` is the same object `currentSource`
+		# returns, so the checkmark matches too.
 		key = self.parent_menu.item.key
-		if key is not None:
-			return [i for i in LevityDashboard.plugins if i.hasTimeseriesFor(key)]
-		return []
+		if key is None:
+			return []
+		container = LevityDashboard.get_container(key, None)
+		if container is None:
+			return []
+		return [c.source for c in container.values() if c.isForecast or c.isTimeseries]
 
 	def addSource(self, source):
 		name = source.name

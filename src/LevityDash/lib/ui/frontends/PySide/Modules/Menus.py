@@ -601,9 +601,17 @@ class SourceMenu(QMenu):
 
 	@property
 	def sources(self):
-		if self.parent_menu.parent_menu.key is not None:
-			return [i for i in LevityDashboard.plugins if self.parent_menu.parent_menu.key in i]
-		return []
+		# See TimeseriesSourceMenu.sources in Displays/Graph.py - same fix:
+		# local plugins are loaded but never started in mode=remote, so
+		# `key in plugin` was False for all of them and this menu came up
+		# empty. The dispatcher's container is populated in both modes.
+		key = self.parent_menu.parent_menu.key
+		if key is None:
+			return []
+		container = LevityDashboard.get_container(key, None)
+		if container is None:
+			return []
+		return [c.source for c in container.values()]
 
 	def addSources(self):
 		for k in self.sources:

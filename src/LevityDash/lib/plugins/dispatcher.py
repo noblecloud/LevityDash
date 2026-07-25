@@ -66,15 +66,23 @@ class MultiSourceContainer(dict):
 		super(MultiSourceContainer, self).__init__(value if value else {})
 
 	def __getitem__(self, item: str | Plugin) -> Container:
-		if isinstance(item, Plugin):
-			item = item.name
+		# Duck-typed on `.name` rather than isinstance(Plugin): in mode=remote
+		# a container's source is a RemoteSource (lib/wire/containers.py),
+		# which stands in for a Plugin everywhere else but is not a subclass.
+		# Without this, looking a container up by its own `.source` raised
+		# KeyError, so anything round-tripping a source object - the Source
+		# context menus, an explicit source= on a panel - silently found
+		# nothing in remote mode.
+		if not isinstance(item, str):
+			item = getattr(item, 'name', item)
 		return super(MultiSourceContainer, self).__getitem__(item)
 
 	def __hash__(self):
 		return hash((self.key, type(self)))
 
 	def __contains__(self, item) -> bool:
-		return super(MultiSourceContainer, self).__contains__(item) or any(i.name == item for i in self.plugins)
+		name = item if isinstance(item, str) else getattr(item, 'name', item)
+		return super(MultiSourceContainer, self).__contains__(name) or any(i.name == name for i in self.plugins)
 
 	def __rich_repr__(self):
 		yield 'key', self.key.name
