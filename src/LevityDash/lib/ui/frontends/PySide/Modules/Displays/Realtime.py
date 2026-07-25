@@ -906,7 +906,7 @@ class MeasurementDisplayProperties(Stateful):
 			# specifically meant to answer this "should the unit typically be
 			# shown" question. Only applies to this unconfigured default -
 			# an explicit unit-string in a dashboard's YAML still wins.
-			if not getattr(measurement, 'showUnit', True):
+			if not getattr(measurement, 'show_unit', True):
 				return ''
 			return getattr(measurement, 'unit', '')
 		return self.__unit
@@ -926,7 +926,7 @@ class MeasurementDisplayProperties(Stateful):
 	@StateProperty(key='max-length', default=Unset, allowNone=False)
 	def maxLength(self) -> int:
 		if self.__maxLength is Unset and self.__isValid:
-			return getattr(self.measurement, 'max', Unset)
+			return getattr(self.measurement, 'digit_budget', Unset)
 		return self.__maxLength
 
 	@maxLength.condition
@@ -977,7 +977,7 @@ class MeasurementDisplayProperties(Stateful):
 	def unitPosition(self) -> DisplayPosition:
 		if self.__isValid and self.hasUnit:
 			if self._unitPosition == DisplayPosition.Auto:
-				if getattr(self.measurement, 'showUnit', False):
+				if getattr(self.measurement, 'show_unit', False):
 					if self.titleSplitDirection == LocationFlag.Horizontal:
 						unitText = f'{self.measurement:format: {"{unit}"}}'
 						if len(unitText) > 2:
