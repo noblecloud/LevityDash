@@ -339,7 +339,7 @@ class TitleValueSplitter(Splitter, Stateful):
 	@height.encode
 	def height(self, value: Size.Height | Length) -> str | None:
 		if isinstance(value, Length):
-			return f"{value:unitSpacer=False}"
+			return f"{value:unit_spacer=False}"
 		return str(value) if value is not None else None
 
 	@property
