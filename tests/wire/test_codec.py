@@ -243,14 +243,18 @@ def test_parametrized_derived_unit_survives_the_round_trip():
 
 	assert not isinstance(decoded, float) or isinstance(decoded, wu.Measurement), \
 		f'degraded to a bare float: {decoded!r}'
-	assert str(decoded) == '0.04 in/hr'
+	# Asserts the reconstructed TYPE, not a rendered string - how it renders
+	# depends on the app's [UnitProperties] config (precision/max/leadingZero),
+	# which is a formatting concern covered by WeatherUnits' own suite.
 	assert decoded.unit == 'in/hr'
+	assert abs(float(decoded) - 0.0416496062992126) < 1e-9
 
 
 def test_parametrized_derived_unit_metric_variant():
 	rate = wu.Precipitation.Hourly(wu.Length.Millimeter(1.0577))
 	decoded = decode_measurement(json.loads(json.dumps(encode_measurement(rate))))
-	assert str(decoded) == '1.06 mm/hr'
+	assert decoded.unit == 'mm/hr'
+	assert abs(float(decoded) - 1.0577) < 1e-9
 
 
 def test_unresolvable_parametrized_name_still_degrades_to_float():
