@@ -46,13 +46,58 @@ Inch(0.004)  ->  '0.00'  at max=3, max=2, AND max=1   # 3 digits on a 1-digit bu
 Inch(1.25)   ->  '1.2'   at max=1                     # correctly clamped
 ```
 
-This is the likeliest contributor to the panel overflow, and it makes any
-width reasoning downstream meaningless. Fix first.
+### ⚠️ Attempted 2026-07-25 and reverted — items 1 and 2 must land TOGETHER
+
+The one-line fix is easy (`precision = max(min(p, max - intLength), 0)` in
+the `else` branch) and the behavior matrix showed it doing exactly the right
+thing. **It was reverted because it regresses the live dashboard.**
+
+The shipped config (`resources/example-config/config.ini:97`, and the
+author's live `config.ini:99`) says:
+
+```ini
+precipitationRate = precision=2, max=2
+```
+
+That is **internally contradictory**: `precision=2` asks for hundredths,
+but `0.01` needs *three* digits (`0`,`0`,`1`) and `max=2` allows two. It
+has only ever "worked" because `max` was inert here — precision won by
+default and the value rendered one digit over its stated budget.
+
+Enforce `max` on its own and precipitation goes `0.01` → **`0.0`**, i.e.
+unreadable. Strictly worse than the bug.
+
+This also sharpens the diagnosis of the panel overflow: the value is
+rendering **wider than its own configured budget**, so any layout sized
+from that budget will be overrun by exactly one digit. That is consistent
+with the observed "overlaps a lil".
+
+**Resolution — `leadingZero` is what makes the config coherent.** With the
+leading zero dropped, `.01` is two digits: it satisfies `max=2` *and*
+`precision=2` simultaneously, which is evidently what the config always
+meant.
+
+| | `max=2`, `precision=2` |
+|---|---|
+| today (max inert) | `0.01` — right value, 3 digits, over budget |
+| item 1 alone | `0.0` — in budget, **information destroyed** |
+| items 1 + 2 | `.01` — right value, 2 digits, in budget ✅ |
+
+So the ordering in this brief is a **dependency, not a sequence**: ship 1
+and 2 in one change, or neither.
+
+**Also found:** `Length.Foot(5120)` currently renders `'0.970 mi'` — four
+digits on Length's 3-digit budget, with a trailing zero carrying no
+information. Item 1 correctly makes it `'0.97 mi'`. Harmless, but it means
+`tests/test_formatting.py::test_values_are_rescaled_to_fit_the_max_digit_budget`
+needs updating as part of the change, not working around.
 
 **Care required:** this changes rendered output for every sub-1 value in the
 app. Guard with the before/after behavior matrix (8 unit types × ~33 specs,
 the harness used for the `:`-separator and `type=f` fixes) and a live
-dashboard render diff.
+dashboard render diff. Note the LevityDash suite is the one that catches
+config-dependent breakage — `tests/wire/test_codec.py`'s precipitation
+assertion failed only under the app's config, not WeatherUnits' own.
 
 ## 2. `leadingZero` (WeatherUnits) — already written, commented out
 
