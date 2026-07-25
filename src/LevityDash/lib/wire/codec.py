@@ -37,6 +37,7 @@ value's resolved `Icon`, which carries a QFont). That resolution happens
 frontend-side, in lib/wire/containers.py, specifically to keep this module
 free of UI imports - see RemoteObservationValue's icon_alias handling.
 """
+import re
 from datetime import datetime, timezone
 from typing import Any, List, Optional, Sequence, Tuple
 
@@ -68,7 +69,48 @@ def encode_measurement(value: Measurement) -> dict:
 	return payload
 
 
+_PARAMETRIZED_CLS = re.compile(r'^(?P<base>\w+)\[(?P<numerator>[^/\]]+)/(?P<denominator>[^/\]]+)\]$')
+
+
+def _resolve_parametrized_class(cls_name: Optional[str]):
+	"""Resolve a dynamically-parametrized derived unit, e.g.
+	``PrecipitationRate[mm/hr]``.
+
+	Derived units (Length/Time and friends) get a class generated per
+	numerator/denominator pair. That generated name is NOT in the registry,
+	and its composed unit symbol ('mm/hr') isn't a registered symbol either,
+	so both lookups in ``_resolve_measurement_class`` miss and the value
+	degrades to a bare float - losing precision/max/unit and rendering raw
+	float64 digits (a precipitation rate showed up on the dashboard as
+	'0.041649606299212590').
+
+	The GENERIC *is* registered, under a spaced lowercase name
+	('precipitation rate'), and re-parametrizing it with the two unit symbols
+	yields a class that accepts a plain number - which is exactly what the
+	wire carries.
+
+	Note this only reaches units whose generic is registered; anything else
+	still degrades to float as before.
+	"""
+	match = _PARAMETRIZED_CLS.match(cls_name or '')
+	if match is None:
+		return None
+	# 'PrecipitationRate' -> 'precipitation rate'
+	base = re.sub(r'(?<!^)(?=[A-Z])', ' ', match['base']).lower()
+	generic = UnitRegistry._units_by_name.get(base)
+	if generic is None:
+		return None
+	try:
+		return generic[match['numerator']:match['denominator']]
+	except Exception:
+		return None
+
+
 def _resolve_measurement_class(cls_name: Optional[str], unit: Optional[str]):
+	# A bracketed name is an unambiguous parametrized derived unit; neither
+	# lookup below can reach it, so try reconstruction first.
+	if (parametrized := _resolve_parametrized_class(cls_name)) is not None:
+		return parametrized
 	# Two resolution paths: exact class name (unambiguous - the right call
 	# for symbols several dimensions share, like a bare '%'), and unit
 	# symbol. But a name hit can still be wrong for RECONSTRUCTION: derived/

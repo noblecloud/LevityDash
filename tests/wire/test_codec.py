@@ -225,3 +225,36 @@ def test_timeseries_values_plain_float_items_have_no_unit_metadata():
 	assert payload['cls'] is None
 	decoded = decode_timeseries_values(json.loads(json.dumps(payload)))
 	assert decoded[0][1] == 21.0
+
+
+def test_parametrized_derived_unit_survives_the_round_trip():
+	"""A precipitation rate must come back as a Measurement, not a bare float.
+
+	Derived units get a class generated per numerator/denominator pair
+	('PrecipitationRate[in/hr]'). That generated name isn't in the registry
+	and its composed 'in/hr' symbol isn't a registered symbol, so both
+	lookups missed and the value degraded to a plain float - which has no
+	precision/max/unit, so the frontend rendered raw float64 digits. Seen
+	live in mode=remote: a precipitation rate displayed as
+	'0.041649606299212590' sprawling across the dashboard.
+	"""
+	rate = wu.Precipitation.Hourly(wu.Length.Inch(0.0416496062992126))
+	decoded = decode_measurement(json.loads(json.dumps(encode_measurement(rate))))
+
+	assert not isinstance(decoded, float) or isinstance(decoded, wu.Measurement), \
+		f'degraded to a bare float: {decoded!r}'
+	assert str(decoded) == '0.04 in/hr'
+	assert decoded.unit == 'in/hr'
+
+
+def test_parametrized_derived_unit_metric_variant():
+	rate = wu.Precipitation.Hourly(wu.Length.Millimeter(1.0577))
+	decoded = decode_measurement(json.loads(json.dumps(encode_measurement(rate))))
+	assert str(decoded) == '1.06 mm/hr'
+
+
+def test_unresolvable_parametrized_name_still_degrades_to_float():
+	# The reconstruction only reaches units whose generic is registered;
+	# everything else keeps the pre-existing degrade-to-float contract.
+	payload = {'value': 42.0, 'unit': 'zz/yy', 'cls': 'NotARealThing[zz/yy]'}
+	assert decode_measurement(payload) == 42.0
