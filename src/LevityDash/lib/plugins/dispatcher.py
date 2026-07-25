@@ -387,7 +387,19 @@ class MultiSourceContainer(dict):
 		# source's next publish (a full poll cycle). Mirror checkAwaiting's
 		# fire conditions and short-circuit instead of queueing.
 		ready = (lambda c: c.isForecast) if timeseriesOnly else (lambda c: c.isRealtime or c.isRealtimeApproximate)
-		candidates = self.values() if plugin is AnySource else ([self[plugin]] if plugin in self else [])
+		if plugin is AnySource:
+			# Rank by the same key getTimeseries/getRealtimeContainer/getDaily
+			# use, so a source declaring itself default for more keys wins.
+			# Previously this took whichever container merely came first in
+			# insertion order, which meant a user's `defaultFor` config was
+			# silently ignored on the one path Graph.py actually calls -
+			# a graph could render PirateWeather while the config named
+			# OpenMeteo, and the other three accessors disagreed with it.
+			candidates = sorted(
+				self.values(), key=lambda c: len(c.source.config.defaultFor), reverse=True
+			)
+		else:
+			candidates = [self[plugin]] if plugin in self else []
 		for container in candidates:
 			if ready(container):
 				request = Request(requester, callback)

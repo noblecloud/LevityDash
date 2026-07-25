@@ -18,6 +18,7 @@ import WeatherUnits as wu
 # Import LevityDash before `datetime` - see test_codec.py's import-order
 # comment for why (shims/_datetime_shim.install() swaps sys.modules['datetime']).
 from LevityDash.lib.plugins.categories import CategoryItem
+from LevityDash.lib.plugins import AnySource
 from LevityDash.lib.plugins.dispatcher import MultiSourceContainer
 from LevityDash.lib.plugins.observation import RealtimeSource, TimeSeriesItem
 from LevityDash.lib.plugins.utils import Request
@@ -402,3 +403,45 @@ def test_prepare_for_ts_connection_still_fires_callback_and_populates_timeseries
 	assert fired == [True]
 	assert remote.timeseries is not None
 	assert len(remote.timeseries) == 1
+
+
+def test_getPreferredSourceContainer_ranks_by_defaultFor():
+	"""AnySource must honour `defaultFor`, not insertion order.
+
+	`getTimeseries`/`getRealtimeContainer`/`getDaily` all rank candidates by
+	`len(source.config.defaultFor)`, but `getPreferredSourceContainer` - the
+	one path Graph.py actually calls - iterated `self.values()` and took the
+	first ready container. So a graph could render a source the user had
+	explicitly cleared from `defaultFor` while the other three accessors
+	disagreed, and no amount of config would change it.
+
+	Observes the real choice: with isTimeseriesOnly set, the function calls
+	`prepare_for_ts_connection` on whichever container it picked. The weak
+	source is registered FIRST, so insertion order and the correct answer
+	are in conflict.
+	"""
+	key = CategoryItem('environment.temperature.temperature')
+	flags = ContainerFlags(isForecast=True, isTimeseries=True, isTimeseriesOnly=True)
+
+	weak = RemoteSource(name='PirateWeather', defaultFor=set())
+	strong = RemoteSource(name='OpenMeteo', defaultFor={'temperature', 'precipitation', 'wind'})
+
+	multi = MultiSourceContainer(key)
+	picked = []
+	for src in (weak, strong):                       # weak first, deliberately
+		container = src.getOrCreate(key)
+		container._flags = flags
+		container.prepare_for_ts_connection = (
+			lambda request, _name=src.name: picked.append(_name)
+		)
+		multi[src.name] = container
+
+	multi.getPreferredSourceContainer(
+		requester=object(), plugin=AnySource,
+		callback=lambda: None, timeseriesOnly=True,
+	)
+
+	assert picked == ['OpenMeteo'], (
+		f'picked {picked}; PirateWeather was registered first, so insertion '
+		f'order would have chosen it'
+	)
