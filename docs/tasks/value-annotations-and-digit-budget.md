@@ -46,7 +46,22 @@ Inch(0.004)  ->  '0.00'  at max=3, max=2, AND max=1   # 3 digits on a 1-digit bu
 Inch(1.25)   ->  '1.2'   at max=1                     # correctly clamped
 ```
 
-### ⚠️ Attempted 2026-07-25 and reverted — items 1 and 2 must land TOGETHER
+### ✅ DONE 2026-07-25 — items 1 and 2 shipped together
+
+WeatherUnits `59bb0cf` (enforcement + `leadingZero`) and `5a5a4c1` (the
+adaptive `auto` rule), LevityDash `acada93` (config). `max` now applies
+below 1, and `leadingZero` is three-state with an `auto` default.
+
+**The `auto` rule is subtler than it looks** and two plausible
+simplifications of it are both wrong — see `WeatherUnits/docs/formatting.md`
+§ *leadingZero and the borrowed digit*, which documents both rejected
+versions. Named regression tests guard each.
+
+Item 3 (annotations) remains open. The history below is kept because it
+explains why the two had to ship together.
+
+<details>
+<summary>Original: attempted and reverted (items 1 and 2 are a dependency, not a sequence)</summary>
 
 The one-line fix is easy (`precision = max(min(p, max - intLength), 0)` in
 the `else` branch) and the behavior matrix showed it doing exactly the right
@@ -98,6 +113,8 @@ the harness used for the `:`-separator and `type=f` fixes) and a live
 dashboard render diff. Note the LevityDash suite is the one that catches
 config-dependent breakage — `tests/wire/test_codec.py`'s precipitation
 assertion failed only under the app's config, not WeatherUnits' own.
+
+</details>
 
 ## 2. `leadingZero` (WeatherUnits) — already written, commented out
 
