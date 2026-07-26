@@ -944,9 +944,34 @@ class Text(QGraphicsPathItem):
 		self._text_pos = text_pos = text_rect.bottomLeft() - text_bearing
 		self._fmt_text_pos = fmt_text_pos = fmt_hint_rect.bottomLeft() - fmt_hint_bearing
 
-		# Move offset the text position for the center to be at the strikeout position
-		text_pos.setY(text_pos.y() - (text_rect.height() / 2 - fm.strikeOutPos()))
-		fmt_text_pos.setY(fmt_text_pos.y() - (fmt_hint_rect.height() / 2 - fm.strikeOutPos()))
+		# `addText` takes the BASELINE origin, and the rects above are ink
+		# extents from tightBoundingRect - they hug the glyphs, so '12p' has a
+		# lower bottom and a taller height than '6a' purely because of the
+		# descender. Deriving the baseline from them makes vertical placement
+		# depend on which glyphs a string happens to contain, which is why the
+		# graph's hour labels sat at two different heights: '12p'/'6p' ~3.8px
+		# above '6a'/'12a' at 32pt.
+		#
+		# Font metrics are the fix - ascent/descent are constant for a given
+		# font and size, so every string lands on the same baseline. Ink
+		# extents are still right for *fitting* text into a box (below), just
+		# not for aligning it.
+		match align.vertical:
+			case AlignmentFlag.Top:
+				# rects were moved to top=0, so the baseline sits one ascent down
+				text_pos.setY(fm.ascent())
+				fmt_text_pos.setY(fm.ascent())
+			case AlignmentFlag.Bottom:
+				# rects were moved to bottom=0; the descender line is the bottom
+				text_pos.setY(-fm.descent())
+				fmt_text_pos.setY(-fm.descent())
+			case _:
+				# Centring already cancels the per-string height - the rect is
+				# centred on 0, so bottom is h/2 and the h/2 term below removes
+				# it, leaving strikeOutPos for every string. Left exactly as it
+				# was rather than rewritten, since it was never the bug.
+				text_pos.setY(text_pos.y() - (text_rect.height() / 2 - fm.strikeOutPos()))
+				fmt_text_pos.setY(fmt_text_pos.y() - (fmt_hint_rect.height() / 2 - fm.strikeOutPos()))
 
 		# Draw the value and format hint text
 		fmt_hint_text_path.addText(fmt_text_pos, font, fmt_hint_text)
