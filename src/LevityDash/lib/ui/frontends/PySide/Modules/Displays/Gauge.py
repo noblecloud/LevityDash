@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
 )
 from enum import Enum
 from functools import cached_property
-from math import isinf, floor, log10
+from math import isfinite, isinf, floor, log10
 from numbers import Number
 from numpy import ceil, cos, pi, radians, sin, sqrt, number as np_number
 from typing import Optional, Type, Union, Iterator, Iterable, TypeVar, Sequence, Dict
@@ -766,6 +766,15 @@ class Graduations(ColorGradientMixin, StatefulGaugeItem):
 		if isinstance(range_value, Percentage):
 			range_value = float(range_value) * 100
 
+		# A range that is NaN, infinite or zero has no meaningful factors, and
+		# both of the things below go badly wrong on one: `int(NaN)` raises,
+		# and the scaling loop never terminates for 0 because 0 * 10 is still
+		# 0. This happens legitimately during construction, before a gauge's
+		# range has resolved - so yield a single unit interval and let the
+		# real one be computed once there is a range to compute it from.
+		if not isfinite(range_value) or range_value <= 0:
+			return {1.0}
+
 		multiplier = 1
 		while range_value <= 1:
 			multiplier *= 10
@@ -907,10 +916,19 @@ class Graduations(ColorGradientMixin, StatefulGaugeItem):
 				gauge_repr = f'Gauge.{gauge.valueClass.name.replace(" ", "")}(min={gauge.range.min}, max={gauge.range.max})'
 				log.warning(f'User specified interval: {usr_interval} for {gauge_repr} is not compatible with the gauge range {gauge.range}')
 
+		unfiltered_intervals = sorted(compatible_intervals)
 		compatible_intervals = [
-			self.gauge.valueClass(i) for i in sorted(compatible_intervals)
+			self.gauge.valueClass(i) for i in unfiltered_intervals
 			if float(min_interval) <= i <= float(max_interval)
 		]
+
+		# The min/max window can exclude every factor - a pressure gauge
+		# spanning 27-31 inHg has few factors to choose from, and all of them
+		# can fall outside it. The `min()` further down then raises on an
+		# empty sequence. Preferring a badly-sized interval to no gauge at
+		# all, fall back to the unfiltered set.
+		if not compatible_intervals:
+			compatible_intervals = [self.gauge.valueClass(i) for i in unfiltered_intervals]
 
 		if issubclass(gauge.valueClass, Percentage):
 			preferred_intervals = [abs(i) if isinstance(i, gauge.valueClass) else gauge.valueClass(abs(i) / 100) for i in preferred_intervals]
@@ -1833,11 +1851,15 @@ class GaugeValueLabel(GaugeLabel):
 			'show_unit': False,
 			'unit_symbol': False,
 		},
+		# Relative, not the absolute 100px this used to be: a gauge is sized
+		# by its panel, so a fixed-pixel label is correct at exactly one gauge
+		# size and wildly wrong everywhere else - in a small panel it drew the
+		# value several times larger than the dial it belonged to.
 		'geometry': {
 			'x': '0px',
 			'y': '0px',
-			'width': '100px',
-			'height': '100px',
+			'width': '45%',
+			'height': '28%',
 		},
 		'margins': ('0', '0', '0', '0'),
 	}
@@ -2130,11 +2152,12 @@ class GaugeUnit(GaugeLabel):
 	_debug_paint_color = Color.randomColor.QColor
 
 	__defaults__ = {
+		# Relative for the same reason as GaugeValueLabel above.
 		'geometry': {
 			'x': '0px',
 			'y': '0px',
-			'width': '100px',
-			'height': '100px',
+			'width': '30%',
+			'height': '14%',
 		},
 		'margins': ('0', '0', '0', '0'),
 	}
@@ -2992,6 +3015,27 @@ class Gauge(Display):
 		def range_int(self) -> int:
 			return int(self.rounded_range)
 
+		@staticmethod
+		def _as_value_class(preset: MinMax, value_class) -> MinMax:
+			"""Express a preset range in the unit the gauge actually displays.
+
+			The CategoryItem presets are written in the unit the author
+			happened to think in - `environment.wind.speed` is stored in m/s -
+			but a gauge shows whatever the config localizes to. A US config
+			displays mph, so the gauge got a 0-10 range while its needle moved
+			in mph, and the graduations came out wrong (the wind dial rendered
+			as a bare arc with no ticks at all).
+
+			Conversion, not reinterpretation: MetersPerSecond(10) becomes
+			MilesPerHour(22.4), so the dial spans the same real-world range.
+			"""
+			try:
+				return MinMax(value_class(preset.min), value_class(preset.max))
+			except Exception:
+				# Not convertible (a plain number, or an unrelated dimension) -
+				# use it as written rather than losing the preset entirely.
+				return preset
+
 		@property
 		def default_range(self) -> MinMax:
 			_type = self._gauge.valueClass
@@ -3005,7 +3049,7 @@ class Gauge(Display):
 				similar_keys.sort(key=lambda i: len(i), reverse=True)
 				for key in similar_keys:
 					try:
-						return self.ranges[key]
+						return self._as_value_class(self.ranges[key], _type)
 					except KeyError:
 						pass
 			except AttributeError:
@@ -3152,6 +3196,13 @@ class Gauge(Display):
 		label = GaugeValueLabel(self)
 		label.textBox.setParentItem(self)
 		label.hide()
+		# The textBox was just reparented to the gauge, so it is no longer a
+		# child of the label and `label.hide()` does not reach it - the value
+		# text kept painting, unpositioned, while the label it belongs to was
+		# hidden. That is what drew a giant stray number outside the dial.
+		# See the 'labels are not moved correctly' TODO in _center_transform:
+		# positioning here is known-unfinished, so the default is dial-only.
+		label.textBox.hide()
 		return label
 
 	@valueLabel.setter
