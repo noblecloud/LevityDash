@@ -333,5 +333,74 @@ webcolors = {
 # 		raise e
 
 
+
+# ---------------------------------------------------------------- meaningful
+# Gradients that encode what a value MEANS rather than just cycling hues.
+# A rainbow ramp looks lively and says nothing: on a humidity dial, purple at
+# 0% and red at 100% carry no intuition about dry vs muggy. These map to the
+# conventional reading of each measurement, so colour is information.
+
+#: The WHO/EPA UV index scale, and the one case where the colours are a
+#: published standard rather than a choice: green 0-2, yellow 3-5, orange 6-7,
+#: red 8-10, violet 11+.
+UVIndexGradient = Gradient[float](
+	'UVIndexGradient',
+	(0, '#3EA72D'),    # low - green
+	(2, '#3EA72D'),
+	(3, '#FFF300'),    # moderate - yellow
+	(5, '#FFF300'),
+	(6, '#F18B00'),    # high - orange
+	(7, '#F18B00'),
+	(8, '#E53210'),    # very high - red
+	(10, '#E53210'),
+	(11, '#B567A4'),   # extreme - violet
+	(14, '#8B5FA8'),
+)
+
+#: Wind in mph, read as sensation rather than magnitude: still air stays
+#: quiet and recessive, and only picks up urgency once it is actually windy.
+WindSpeedGradient = Gradient[MilesPerHour](
+	'WindSpeedGradient',
+	(0, '#5B7C99'),    # calm - muted slate, deliberately unattention-grabbing
+	(5, '#7FB2C4'),    # light breeze
+	(12, '#94D2A5'),   # pleasant
+	(20, '#F2D06B'),   # fresh
+	(30, '#E8963C'),   # strong
+	(45, '#D1495B'),   # gale
+)
+
+#: Pressure in inHg around the ~29.92 standard. Low reads stormy and cool,
+#: high reads settled and warm, with the middle deliberately neutral so the
+#: needle sitting near normal does not shout.
+PressureGradient = Gradient[float](
+	'PressureGradient',
+	(28.0, '#6C7A9C'),   # low - overcast slate
+	(29.2, '#8FA5BF'),
+	(29.92, '#E8E6DF'),  # standard - near-neutral
+	(30.4, '#F0C987'),
+	(31.0, '#E8A552'),   # high - settled, warm
+)
+
+#: Humidity as comfort: dry is warm-dry, the comfortable band is calm, and
+#: muggy trends heavy and green-blue.
+HumidityGradient = Gradient[Percentage](
+	'HumidityGradient',
+	(0, '#E8B87D'),    # arid
+	(25, '#F0DFC0'),
+	(45, '#DCEAE4'),   # comfortable
+	(60, '#8FC7BE'),
+	(80, '#4E9C93'),   # humid
+	(100, '#2E6E73'),  # saturated
+)
+
+#: Cloud cover: clear sky to overcast, straightforwardly.
+CloudCoverGradient = Gradient[Percentage](
+	'CloudCoverGradient',
+	(0, '#5BA3D0'),    # clear
+	(30, '#A8C4D8'),
+	(60, '#C9CDD2'),
+	(100, '#7E858C'),  # overcast
+)
+
 __all__ = ['Presets']
 Color.presets = Presets(web=webcolors)

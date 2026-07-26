@@ -1848,8 +1848,16 @@ class GaugeValueLabel(GaugeLabel):
 
 	__defaults__ = {
 		'format': {
+			# `show_unit` hides the WORD unit - 'mph', 'inHg' - which reads
+			# fine as its own label beneath the dial.
+			#
+			# `unit_symbol` is deliberately NOT set here. It used to be False,
+			# which also stripped '%' and '°' - symbols that belong glued to
+			# the number, so a humidity gauge read a bare '56'. And it cannot
+			# simply be flipped to True: unit_symbol is a *string*, not a
+			# flag, so True renders the literal word ('61True'). Omitting it
+			# lets each unit class supply its own symbol, which is the point.
 			'show_unit': False,
-			'unit_symbol': False,
 		},
 		# Relative, not the absolute 100px this used to be: a gauge is sized
 		# by its panel, so a fixed-pixel label is correct at exactly one gauge
@@ -1994,7 +2002,18 @@ class GaugeValueLabel(GaugeLabel):
 			# path through a trial transform gives the candidate outline
 			# without touching anything.
 			base_path = self.path()
-			bounds = gauge.gaugeRect
+			# Which box the label has to stay inside depends on where it sits.
+			# A Center/Inline label lives among the dial's own parts, so the
+			# dial's square is the right constraint. A Below/Above one is
+			# deliberately OUTSIDE the dial, and judging it against gaugeRect
+			# rejected every size that cleared the graduations - the wind value
+			# measured 'outside the dial but colliding with nothing' and was
+			# shrunk anyway, all the way to the floor. Those positions belong
+			# to the panel, not the dial.
+			if self._position in (DisplayPosition.Center, DisplayPosition.Inline):
+				bounds = gauge.gaugeRect
+			else:
+				bounds = gauge.rect()
 
 			def collides_at(trial: float) -> bool:
 				t = QTransform(self.transform())

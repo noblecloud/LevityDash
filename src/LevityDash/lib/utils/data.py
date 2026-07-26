@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, Iterable, List, NamedTuple, Sequence, Se
 
 import numpy as np
 import time
-from math import ceil, floor, inf, isinf
+from math import ceil, floor, inf, isfinite, isinf
 from numpy import ndarray
 from PySide6.QtCore import QObject, QSize, QSizeF, QTimer, Signal
 from rich.repr import auto as auto_rich_repr
@@ -252,7 +252,13 @@ class MinMax:
 
 	@property
 	def min(self) -> Numeric:
-		if self.rawRange > 1:
+		# floor()/ceil() raise OverflowError on a non-finite bound, and an
+		# unbounded range is legitimate: a measurement whose unit declares no
+		# limits (UV index, for one) resolves to +/-inf until something
+		# narrows it. Rounding an infinity has no meaning anyway, so pass it
+		# through rather than taking down whatever is reading the range - the
+		# dashboard load used to abort entirely on this.
+		if self.rawRange > 1 and isfinite(self._min):
 			return floor(self._min)
 		return self._min
 
@@ -266,7 +272,7 @@ class MinMax:
 
 	@property
 	def max(self) -> Numeric:
-		if self.rawRange > 1:
+		if self.rawRange > 1 and isfinite(self._max):
 			return ceil(self._max)
 		return self._max
 
