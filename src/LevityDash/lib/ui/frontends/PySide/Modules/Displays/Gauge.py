@@ -1972,6 +1972,11 @@ class GaugeValueLabel(GaugeLabel):
 
 			scale = super(GaugeValueLabel.TextBox, self).getTextScale()
 
+			# `transform` was never bound - every call raised NameError. The
+			# method shrinks the label until it stops colliding with the dial,
+			# then puts the original transform back, so it needs the item's
+			# own transform to modify and restore.
+			transform = self.transform()
 			modifyTransformValues(transform, xScale=scale, yScale=scale)
 			self.setTransform(transform)
 
@@ -3303,6 +3308,22 @@ class Gauge(Display):
 
 		bounds_rect = self.rect()
 
+		# Measure at identity. `full_gauge_path` maps every child through its
+		# CURRENT transform, so measuring while a previous centering is still
+		# applied reports an already-centred shape, yields ~zero offset, and
+		# the `setTransform(t, combine=False)` below then REPLACES the good
+		# transform with a near-identity one - snapping the ticks back to
+		# their uncentred position while the arc, drawn centred in its own
+		# local space, appears to stay put. That is the "correct for a split
+		# second, then jump" behaviour: the first pass centres correctly and
+		# the second undoes it.
+		centred_items = (
+			self.needle, self.arc,
+			self.major_ticks_surface, self.minor_ticks_surface, self.micro_ticks_surface,
+		)
+		for item in centred_items:
+			item.resetTransform()
+
 		self._update_shape()
 		own_shape = self.full_gauge_path
 		own_shape_rect = own_shape.boundingRect()
@@ -3787,8 +3808,13 @@ class Gauge(Display):
 	def full_gauge_path(self) -> QPainterPath:
 		path = self._gauge_path()
 		path.setFillRule(Qt.WindingFill)
-		path.addPath(self.mapFromItem(self.valueLabel.textBox, self.valueLabel.textBox.shape()))
-		path.addPath(self.mapFromItem(self.unitLabel.textBox, self.unitLabel.textBox.shape()))
+		# Only labels that are actually drawn: a hidden textBox still has a
+		# shape, and counting it drags the computed centre toward something
+		# the viewer cannot see.
+		for label in (self.valueLabel, self.unitLabel):
+			box = label.textBox
+			if box.isVisible():
+				path.addPath(self.mapFromItem(box, box.shape()))
 		# path.addPath(self.mapFromItem(self.needle, self.needle.shape()))
 		return path.simplified()
 
