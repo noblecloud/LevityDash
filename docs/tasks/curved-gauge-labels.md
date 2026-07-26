@@ -4,14 +4,16 @@
 
 ## What
 
-Gauge graduation labels should **curve with the arc** — each glyph sitting on
-the curve with its own rotation — rather than the whole label string being
-rotated as one rigid block, which is what happens today.
+Gauge graduation labels should **curve with the arc** — the glyph outlines
+themselves deformed, so vertical stems fan out along radii and horizontal
+strokes become arcs. Today the whole label string is rotated as one rigid
+block.
 
-The difference is most obvious on a wide dial: at the moment `100` on a
-240° arc is a straight run of three characters tilted to roughly match the
-tangent. Bent, each character would follow the curve, the way it reads on a
-real instrument face.
+At the moment `100` on a 240° arc is a straight run of three characters
+tilted to roughly match the tangent. Properly bent, the characters would be
+*shaped* by the curve, the way numerals sit on a real instrument face — not
+merely arranged along it. That distinction is the whole task; see
+[NOT per-glyph placement](#not-per-glyph-placement) below.
 
 ## Why it is tractable
 
@@ -89,8 +91,8 @@ unchanged if the output is the same kind of object.
 - **Text on the lower half of a dial needs flipping** or it renders upside
   down. Check how the current rotation handles that before replacing it.
 - **Leave the `_center_transform` TODO alone.** There is a known-unfinished
-  "labels are not moved correctly" note there; scope here is glyph
-  placement only.
+  "labels are not moved correctly" note there; scope here is the shape of the
+  glyphs, not where the label sits.
 
 ## Verification — visual, not readable
 
