@@ -72,3 +72,5 @@ Kept briefly so the same ground isn't re-covered.
   keys). Closer to a small expression language than a display option; the
   design questions are where it evaluates, when it recomputes, and what unit
   the result carries.
+
+- **[experimental-maybe-never.md](experimental-maybe-never.md)** - ideas recorded but not scheduled; currently distance-tolerant size matching.
