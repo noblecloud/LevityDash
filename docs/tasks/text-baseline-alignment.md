@@ -1,6 +1,22 @@
 # Graph hour labels aren't vertically aligned (descenders shift them)
 
-**Status:** reported 2026-07-25, not investigated. Low priority — cosmetic.
+> ✅ **FIXED 2026-07-26.** `_update_path` derived the `addText` baseline
+> origin from `tightBoundingRect` (ink extents), so a descender moved both
+> the origin and the height correction. Vertical placement now uses
+> ascent/descent for Top and Bottom; `VerticalCenter` was already correct
+> (centring cancels the height term) and was left alone. Measured in a
+> booted dashboard: the hour labels went from two clusters 2.18px apart,
+> split precisely by descender presence, to a shared baseline.
+> Pinned by `tests/ui/test_label_baselines.py`.
+>
+> ⚠️ **One residual, unrelated:** two of the nineteen hour labels sit ~3px
+> below the rest *as a pair* — `6a` at 263.235 and `12p` at 263.295 while
+> the other seventeen are at 260.394. They are internally consistent with
+> each other and the split does not follow descender presence, so it is a
+> different cause (likely edge labels at a different scale, or mid
+> transition). Not investigated.
+
+**Status:** reported 2026-07-25, fixed 2026-07-26.
 
 ## Symptom
 

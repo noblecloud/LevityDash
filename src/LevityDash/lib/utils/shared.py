@@ -38,7 +38,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import numpy as np
 from dateutil.parser import parse as dateParser
-from math import inf, sqrt, degrees, atan2
+from math import inf, isfinite, sqrt, degrees, atan2
 from numpy import cos, radians, sin
 from PySide6.QtGui import QPainterPath, QVector2D
 from pytz import utc
@@ -2326,7 +2326,16 @@ def factors(n: int | float) -> Set[int]:
 
 @lru_cache(maxsize=2048)
 def is_prime(n: int) -> bool:
-	"""Check if a number is prime"""
+	"""Check if a number is prime.
+
+	Non-finite input is not prime rather than an error. `int(inf)` raises
+	`OverflowError` from inside `range()`, which surfaced far from the cause:
+	a gauge asked whether its range was prime while that range was still
+	unresolved (and therefore infinite), and the traceback pointed here
+	instead of at the ordering problem that produced it.
+	"""
+	if not isfinite(n):
+		return False
 	return n > 1 and all(n % i for i in range(2, int(n ** 0.5) + 1))
 
 def is_pos(n: int | float) -> bool:
