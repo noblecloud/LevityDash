@@ -74,3 +74,4 @@ Kept briefly so the same ground isn't re-covered.
   the result carries.
 
 - **[experimental-maybe-never.md](experimental-maybe-never.md)** - ideas recorded but not scheduled; currently distance-tolerant size matching.
+- **[curved-gauge-labels.md](curved-gauge-labels.md)** - bend gauge graduation labels along the arc so each glyph follows the curve, rather than rotating the whole string as one block. Tractable because the text is already a QPainterPath.
