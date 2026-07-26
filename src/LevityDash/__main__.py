@@ -4,6 +4,7 @@ import os
 import platform
 import signal
 import sys
+import time
 from locale import LC_ALL, setlocale
 from pathlib import Path
 from sys import exit
@@ -14,6 +15,9 @@ setlocale(LC_ALL, 'en_US.UTF-8')
 
 exit_signals = {signal.SIGINT, signal.SIGTERM}
 
+#: Seconds a first Ctrl+C stays 'armed' before the count resets.
+CONFIRM_QUIT_WINDOW = 3.0
+
 
 def install_signals():
 
@@ -23,16 +27,43 @@ def install_signals():
 		except ImportError:
 			from logging import getLogger
 			log = getLogger('LevityDash')
-		log.info(f'Caught signal {sig}, exiting...')
+		# Confirm-to-quit: one press warns, a second within the window quits.
+		# The window is a COOLDOWN, not a running total - an interrupt hours
+		# after an earlier one starts over rather than silently counting as
+		# the second half of a confirmation nobody remembers giving.
+		#
+		# This used to read `if debug or signalQuit.count > 2`, and `debug` is
+		# False in a normal run, so it took THREE presses and looked broken.
+		now = time.monotonic()
+		if now - signalQuit.last > CONFIRM_QUIT_WINDOW:
+			signalQuit.count = 0
+		signalQuit.last = now
 		signalQuit.count += 1
-		log.info('Closing...')
-		from LevityDash.lib.log import debug
-		if debug or signalQuit.count > 2:
+
+		if signalQuit.count == 1:
+			# stderr, not the logger: this has to be visible immediately in the
+			# terminal the user is pressing Ctrl+C in.
+			print(
+				f'\nPress Ctrl+C again within {CONFIRM_QUIT_WINDOW:.0f}s to quit LevityDash.',
+				file=sys.stderr, flush=True,
+			)
+			return
+
+		log.info(f'Caught signal {sig}, closing...')
+		if signalQuit.count == 2:
 			QApplication.instance().quit()
-		if signalQuit.count > 4:
+		elif signalQuit.count == 3:
+			# The event loop is not coming back - close the windows out from
+			# under it so exec_() returns.
+			log.warning('Still closing - forcing the window shut')
+			for window in QApplication.instance().topLevelWindows():
+				window.close()
+		else:
+			log.warning('Exiting immediately')
 			os._exit(1)
 
 	signalQuit.count = 0
+	signalQuit.last = 0.0
 
 	if platform.system() != 'Windows':
 		os.nice(10)
