@@ -289,3 +289,18 @@ def test_payloads_without_a_type_still_resolve():
 	result = decode_measurement({'value': 5.5, 'unit': 'mph', 'cls': 'MilesPerHour'})
 	assert float(result) == 5.5
 	assert getattr(result, 'unit', None) == 'mph'
+
+
+def test_symbol_resolution_is_deterministic_without_a_type():
+	"""Two classes carry 'mph'; the choice must not depend on scan order.
+
+	`Wind.MilesPerHour` specializes `DistanceOverTime.MilesPerHour`, and the
+	registry has no guaranteed iteration order, so a payload with no recorded
+	type resolved to whichever came first - passing or failing depending on
+	what else had run. The specialized class wins, because it is the one that
+	can localize.
+	"""
+	payload = {'value': 5.5, 'unit': 'mph', 'cls': 'Wind'}
+	results = {type(decode_measurement(payload)) for _ in range(5)}
+	assert len(results) == 1
+	assert isinstance(decode_measurement(payload), wu.Wind.MilesPerHour)

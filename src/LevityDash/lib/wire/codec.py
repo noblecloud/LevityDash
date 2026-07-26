@@ -156,10 +156,22 @@ def _resolve_measurement_class(cls_name: Optional[str], unit: Optional[str], typ
 			if getattr(u, '_unit', None) and u._unit.lower() == unit.lower()
 			and not getattr(u, 'isGeneric', False)
 		]
-		# Prefer one belonging to the recorded unit type. Several types share
-		# a symbol - 'mph' is carried by both Wind.MilesPerHour and
-		# DistanceOverTime.MilesPerHour - and the plain scan returns whichever
-		# comes first, which for wind meant a class that cannot localize.
+		# Several unit types share a symbol - 'mph' is carried by both
+		# Wind.MilesPerHour and DistanceOverTime.MilesPerHour - so this scan
+		# has to make a choice, and `registry._all_units` has no guaranteed
+		# order. Pick deterministically, in this order:
+		#
+		#   1. a candidate belonging to the unit type the payload recorded
+		#   2. failing that (older payloads carry no type), the most
+		#      SPECIFIC class - Wind.MilesPerHour specializes
+		#      DistanceOverTime.MilesPerHour, and the specialized one is what
+		#      can localize
+		#   3. name, purely to break ties totally
+		#
+		# Without 2 and 3 the result varied between runs once a second class
+		# started carrying 'mph', which surfaced as an order-dependent test
+		# failure rather than anything a user would see reproducibly.
+		candidates.sort(key=lambda u: (-len(getattr(u, '__mro__', ())), u.__name__))
 		by_symbol = next((u for u in candidates if _matches_type(u, type_name)), None)
 		if by_symbol is None:
 			by_symbol = next(iter(candidates), None)
