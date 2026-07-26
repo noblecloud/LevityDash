@@ -65,3 +65,10 @@ Kept briefly so the same ground isn't re-covered.
   rate rendered as raw float64 digits.
 - [dead-code-sweep](dead-code-sweep.md), [dependabot-triage](dependabot-triage.md),
   [schema-golden-fixture-tests](schema-golden-fixture-tests.md) — done.
+
+- **[computed-values-in-dashboard-config.md](computed-values-in-dashboard-config.md)**
+  — define a value by expression in a `.levity` file
+  (`average(environment.temperature.temperature, 24hr)`, arithmetic between
+  keys). Closer to a small expression language than a display option; the
+  design questions are where it evaluates, when it recomputes, and what unit
+  the result carries.
