@@ -1461,7 +1461,7 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 		event.ignore()
 		return
 
-	@StateProperty(key='valueLabel', sortOrder=0, allowNone=False, default=Stateful, dependancies={'geometry'})
+	@StateProperty(key='valueLabel', sortOrder=0, allowNone=False, default=Stateful, dependencies={'geometry'})
 	def valueTextBox(self) -> ValueLabel:
 		return self._valueTextBox
 
@@ -1476,7 +1476,7 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 		label.textBox.setTextAccessor(lambda: self.displayProperties.text)
 		return label
 
-	@StateProperty(key='unitLabel', allowNone=False, default=Stateful, dependancies={'geometry', 'value'})
+	@StateProperty(key='unitLabel', allowNone=False, default=Stateful, dependencies={'geometry', 'value'})
 	def unitTextBox(self) -> UnitLabel:
 		return self._unitTextBox
 
@@ -1489,7 +1489,7 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 		label = DisplayLabel.UnitLabel(self, self.valueTextBox)
 		return label
 
-	@StateProperty(dependancies={'geometry'})
+	@StateProperty(dependencies={'geometry'})
 	def splitter(self) -> MeasurementUnitSplitter:
 		return self._splitter
 

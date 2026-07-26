@@ -688,7 +688,7 @@ class Panel(_Panel, Stateful, tag='group'):
 	@StateProperty(
 		key='padding',
 		default=Padding.default(),
-		dependancies={'geometry'},
+		dependencies={'geometry'},
 		sortOrder=3,
 		decoder=Padding.decode
 	)

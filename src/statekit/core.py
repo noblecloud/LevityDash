@@ -539,7 +539,35 @@ class StateProperty(property):
 			raise AttributeError("can't delete attribute")
 		self.fdel(obj)
 
+	#: Every option key read anywhere in this module, plus the ones set
+	#: internally rather than passed in. Unknown keys are a silent no-op
+	#: otherwise: a misspelled `dependancies=` sat in 21 declarations across
+	#: LevityDash, disabling ordering wherever it appeared, and nothing ever
+	#: said so.
+	KNOWN_OPTIONS: ClassVar[frozenset] = frozenset({
+		# Every option name this module actually reads, gathered from its
+		# __options.get / kwargs.get / options[...] sites.
+		'accepts', 'after', 'afterPool', 'allowNone', 'altKey', 'conditions',
+		'decode', 'decoder', 'default', 'dependencies', 'encode', 'encoder',
+		'exclude', 'expand', 'factory.func', 'inheritFrom', 'item_default',
+		'link', 'match', 'owner', 'repr', 'required', 'score.func',
+		'singleVal', 'sort', 'sortKey', 'sortOrder', 'tag', 'type', 'unwrap',
+		'update.func',
+		# forwarded from __init__ rather than supplied by a caller
+		'fset', 'fdel', 'key', 'name', 'sortOrder.func',
+		# declared-but-unimplemented, kept deliberately - statekit carries a
+		# 'TODO: Add support for singleForceCondition' at its singleVal branch
+		'singleForceCondition',
+	})
+
 	def __preGetter(self, func, **kwargs):
+		if unknown := set(kwargs) - self.KNOWN_OPTIONS:
+			raise TypeError(
+				f'{type(self).__name__} got unknown option(s): {sorted(unknown)}. '
+				f'Unknown options are stored but never read, so a typo silently '
+				f'disables the behaviour it was meant to configure. '
+				f'Known options: {sorted(self.KNOWN_OPTIONS)}'
+			)
 		if "match" in kwargs:
 			self.optionsFromInit["match"] = kwargs.pop("match")
 		self.getter(func, _kwargs=kwargs)

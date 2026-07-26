@@ -743,7 +743,7 @@ class Stack(Panel, tag='stack'):
 	def _local_overrides(self) -> dict:
 		return {}
 
-	@StateProperty(after=setGeometries, sort=False, dependancies={..., 'size', 'spacing', 'padding', 'dividers', 'direction'})
+	@StateProperty(after=setGeometries, sort=False, dependencies={..., 'size', 'spacing', 'padding', 'dividers', 'direction'})
 	def items(self) -> List[StackedItem]:
 		items = list(geometry.surface for geometry in self.geometries.values())
 		return items
@@ -889,7 +889,7 @@ class Stack(Panel, tag='stack'):
 		dimension = self.primaryDimension.size
 		return parseSize(value, dimension(0, absolute=False), dimension=self.direction.dimension)
 
-	@StateProperty(key='preset', sortOrder=0, dependancies={'direction'}, allowNone=True, default=None, after=setGeometries)
+	@StateProperty(key='preset', sortOrder=0, dependencies={'direction'}, allowNone=True, default=None, after=setGeometries)
 	def preset(self) -> Dict[str, Dict] | str | None:
 		"""Values to be applied to each item of the stack.
 		Can be a string or a dict.
@@ -914,7 +914,7 @@ class Stack(Panel, tag='stack'):
 				conf_preset = value
 		return DeepChainMap(conf_preset, local_override, default_preset).to_dict()
 
-	@StateProperty(key='item-size', default=None, after=setGeometries, dependancies={'geometry'}, decoder=_parseCellSize)
+	@StateProperty(key='item-size', default=None, after=setGeometries, dependencies={'geometry'}, decoder=_parseCellSize)
 	def cellSize(self) -> Size.Height | Size.Width | Length | None:
 		"""
 		The size for each item in the list.
@@ -925,7 +925,7 @@ class Stack(Panel, tag='stack'):
 	def cellSize(self, value: Size.Height | Size.Width | Length | None):
 		self._size = value
 
-	@StateProperty(key='item-size-min', default=None, after=setGeometries, dependancies={'geometry'}, decoder=_parseCellSize)
+	@StateProperty(key='item-size-min', default=None, after=setGeometries, dependencies={'geometry'}, decoder=_parseCellSize)
 	def minCellSize(self) -> Size.Height | Size.Width | Length | None:
 		"""
 		The minimum size for each item in the list.
@@ -936,7 +936,7 @@ class Stack(Panel, tag='stack'):
 	def minCellSize(self, value: Size.Height | Size.Width | Length | None):
 		self._minSize = value
 
-	@StateProperty(key='item-size-max', default=None, after=setGeometries, dependancies={'geometry'}, decoder=_parseCellSize)
+	@StateProperty(key='item-size-max', default=None, after=setGeometries, dependencies={'geometry'}, decoder=_parseCellSize)
 	def maxCellSize(self) -> Size.Height | Size.Width | Length | None:
 		"""
 		The maximum size for each item in the list.
@@ -952,7 +952,7 @@ class Stack(Panel, tag='stack'):
 		return size_px(self.cellSize, self.geometry, self.direction.dimension)
 
 	@StateProperty(key='spacing', default=Size.Height(5, absolute=True), allowNone=False, after=setGeometries,
-		dependancies={'geometry'}, sortOrder=3)
+		dependencies={'geometry'}, sortOrder=3)
 	def spacing(self) -> Size.Height | Size.Width | Length:
 		"""
 		The spacing between items in the list.
@@ -978,7 +978,7 @@ class Stack(Panel, tag='stack'):
 		key='direction',
 		default=Direction.Vertical,
 		after=setGeometries,
-		dependancies={'geometry'},
+		dependencies={'geometry'},
 		allowNone=False,
 		sortOrder=1,
 	)
@@ -1159,7 +1159,7 @@ class ValueStack(Stack, tag='value-stack'):
 	#
 	# 	return items
 
-	@StateProperty(key='labelAlignment', after=setAlignments, dependancies={'geometry', 'direction'})
+	@StateProperty(key='labelAlignment', after=setAlignments, dependencies={'geometry', 'direction'})
 	def labelAlignment(self) -> Alignment | None:
 		"""
 		The alignment of the label.
@@ -1189,7 +1189,7 @@ class ValueStack(Stack, tag='value-stack'):
 			return ValueStack.labelAlignment.default(type(self)).name
 		return value.horizontal.name
 
-	@StateProperty(key='valueAlignment', after=setAlignments, dependancies={'geometry', 'direction'})
+	@StateProperty(key='valueAlignment', after=setAlignments, dependencies={'geometry', 'direction'})
 	def valueAlignment(self) -> Alignment | None:
 		"""
 		The alignment of the value.
@@ -1219,7 +1219,7 @@ class ValueStack(Stack, tag='value-stack'):
 			return ValueStack.valueAlignment.default(type(self)).name
 		return value.horizontal.name
 
-	@StateProperty(key='label-size', after=Stack.setGeometries, dependancies={'geometry', 'direction'})
+	@StateProperty(key='label-size', after=Stack.setGeometries, dependencies={'geometry', 'direction'})
 	def labelSize(self) -> Size.Height | Size.Width | Length | Percentage:
 		"""
 		The size of the label.

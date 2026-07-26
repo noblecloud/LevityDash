@@ -204,7 +204,7 @@ class Graduations(ColorGradientMixin, StatefulGaugeItem):
 	def labels(self, value: 'GaugeTickTextGroup'):
 		self._labels = value
 
-	@StateProperty(key='count', default=None, dependancies={'interval'})
+	@StateProperty(key='count', default=None, dependencies={'interval'})
 	def usr_count(self) -> int:
 		"""
 		The number of graduations to show on the gauge (including the first and last graduations).
@@ -2645,7 +2645,7 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 	def _get_max_label(self) -> GaugeTickText:
 		return max(self, key=lambda label: label.value)
 
-	@StateProperty(key='position-leading', dependancies={'position'}, after=refresh)
+	@StateProperty(key='position-leading', dependencies={'position'}, after=refresh)
 	def position_leading(self) -> DisplayPosition:
 		return getattr(self, '_position_leading', Unset) or self.position
 
@@ -2661,7 +2661,7 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 	def position_leading(self, value: DisplayPosition) -> bool:
 		return value is not self.position
 
-	@StateProperty(key='position-trailing', dependancies={'position'}, after=refresh)
+	@StateProperty(key='position-trailing', dependencies={'position'}, after=refresh)
 	def position_trailing(self) -> DisplayPosition:
 		return getattr(self, '_position_trailing', Unset) or self.position
 
@@ -3083,7 +3083,7 @@ class Gauge(Display):
 	def _radius(self, value: Length | Size.Height) -> str:
 		return str(value)
 
-	@StateProperty(key='arc', repr=True, dependancies={'radius'})
+	@StateProperty(key='arc', repr=True, dependencies={'radius'})
 	def arc(self) -> GaugeArc:
 		return self._arc
 
@@ -3107,7 +3107,7 @@ class Gauge(Display):
 	def needle(self, value: Needle):
 		self._needle = value
 
-	@StateProperty(key='major', repr=True, dependancies={'range'})
+	@StateProperty(key='major', repr=True, dependencies={'range'})
 	def majorDivisions(self) -> Graduations:
 		return self._majorDivisions
 
@@ -3119,7 +3119,7 @@ class Gauge(Display):
 	def majorDivisions(self, value: Graduations):
 		self._majorDivisions = value
 
-	@StateProperty(key='minor', repr=True, dependancies={'majorDivisions'})
+	@StateProperty(key='minor', repr=True, dependencies={'majorDivisions'})
 	def minorDivisions(self) -> Graduations:
 		return self._minorDivisions
 
@@ -3131,7 +3131,7 @@ class Gauge(Display):
 	def minorDivisions(self, value: Graduations):
 		self._minorDivisions = value
 
-	@StateProperty(key='micro', repr=True, dependancies={'minorDivisions'})
+	@StateProperty(key='micro', repr=True, dependencies={'minorDivisions'})
 	def microDivisions(self) -> Graduations:
 		return self._microDivisions
 
