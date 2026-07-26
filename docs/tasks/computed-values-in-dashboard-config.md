@@ -65,6 +65,46 @@ Not starting from nothing:
    makes it available to everything, including other plugins. The second is
    more useful and more work.
 
+## First consumer: gauge min/max
+
+Recorded 2026-07-26. A gauge's range should be able to come from the data
+rather than a static table — **wind especially**, where any fixed ceiling is
+a guess.
+
+Today the range comes from `GaugeRange.ranges`, a hardcoded table keyed by
+unit string (`'mph': MinMax(0, 15)`) and by `CategoryItem` pattern, falling
+back to the unit's `typedLimits` and finally `MinMax(0, 100)`. A US config
+currently gives wind 0–24 mph, which is arbitrary: it is a m/s preset
+converted, not anything about the actual weather.
+
+What is wanted instead is a range *expressed*, with a choice of how:
+
+```yaml
+display:
+  range:
+    min: 0
+    max: max(environment.wind.speed.gust, today)
+```
+
+and eventually a set of options for the calculation — today's high/low, a
+rolling window, a percentile to keep gusts from flattening the dial, a
+padded round-up so the needle does not sit at the very end.
+
+This is the same evaluation problem as the rest of this document, with two
+extra wrinkles:
+
+- **It feeds layout, not just text.** A changing range changes the
+  graduations, so recomputing it is more expensive than recomputing a
+  displayed number, and it wants to settle rather than jitter minute to
+  minute.
+- **Gradients are mapped against absolute values.** `RipeMalinkaGradient`
+  spans 0–100 mph, so a gauge covering 0–24 only ever shows one slice of it.
+  Once the range moves with the data, gradients almost certainly want to
+  map onto the *gauge's* range rather than absolute values — otherwise the
+  colours shift meaning as the range does. Worth deciding alongside.
+
+See [gauge-display.md](gauge-display.md) for the current range resolution.
+
 ## Suggested first slice
 
 `average(key, <timeframe>)` only, evaluated backend-side, exposed as a

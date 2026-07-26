@@ -121,6 +121,15 @@ This overlaps with
 [computed-values-in-dashboard-config.md](computed-values-in-dashboard-config.md)
 — both want a display fed by something other than exactly one plugin key.
 
+## Wanted: data-driven min/max
+
+The range presets are static. They should be able to track the data — the
+day's high/low, a rolling window — with options for how the bound is
+calculated. Recorded under
+[computed-values-in-dashboard-config.md](computed-values-in-dashboard-config.md),
+since it is the same expression machinery consumed by the range rather than
+by a displayed value.
+
 ## Suggested order
 
 1. Harden `is_prime` against non-finite input (trivial, removes a crash).
