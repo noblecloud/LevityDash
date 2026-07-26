@@ -202,7 +202,10 @@ def test_timeseries_values_unit_and_cls_appear_once_not_per_point():
 	payload = encode_timeseries_values(items)
 	assert payload['cls'] == 'Fahrenheit'
 	assert payload['unit'] == wu.Temperature.Fahrenheit(60.0).unit
-	assert set(payload) == {'v', 'unit', 'cls', 'timestamps', 'values'}
+	# 'type' is the unit TYPE ('Temperature'), needed because a class name can
+	# be shared by a unit type and the one it specializes. Like unit/cls it is
+	# resolved once for the batch, so the compactness point stands.
+	assert set(payload) == {'v', 'unit', 'cls', 'type', 'timestamps', 'values'}
 	assert len(payload['timestamps']) == len(payload['values']) == 3
 
 
@@ -262,3 +265,27 @@ def test_unresolvable_parametrized_name_still_degrades_to_float():
 	# everything else keeps the pre-existing degrade-to-float contract.
 	payload = {'value': 42.0, 'unit': 'zz/yy', 'cls': 'NotARealThing[zz/yy]'}
 	assert decode_measurement(payload) == 42.0
+
+
+def test_wind_survives_the_wire_as_wind():
+	"""A class name alone can't identify the unit TYPE.
+
+	`Wind.MilesPerHour` and `DistanceOverTime.MilesPerHour` both encode as
+	'MilesPerHour', and resolving by name/symbol returned whichever the
+	registry scan reached first. Landing on the general one loses the type
+	that localization looks up in the config, so a wind reading arrived
+	unable to localize and stayed in its source unit - which is exactly the
+	front/back split showing m/s against a `wind = mph` config.
+	"""
+	payload = json.loads(json.dumps(encode_measurement(wu.Wind.MilesPerHour(5.5))))
+	assert payload['type'] == 'Wind'
+	result = decode_measurement(payload)
+	assert type(result).type.name == 'Wind'
+	assert isinstance(result, wu.Wind.MilesPerHour)
+
+
+def test_payloads_without_a_type_still_resolve():
+	"""Back-compat: the field is optional, older payloads behave as before."""
+	result = decode_measurement({'value': 5.5, 'unit': 'mph', 'cls': 'MilesPerHour'})
+	assert float(result) == 5.5
+	assert getattr(result, 'unit', None) == 'mph'

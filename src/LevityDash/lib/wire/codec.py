@@ -63,6 +63,17 @@ def encode_measurement(value: Measurement) -> dict:
 		'unit': getattr(value, 'unit', None),
 		'cls': type(value).__name__,
 	}
+	# The class name alone is ambiguous: a unit type that specializes another
+	# reuses its subclass names, so `Wind.MilesPerHour` and
+	# `DistanceOverTime.MilesPerHour` both encode as 'MilesPerHour'. Resolving
+	# that by name picks whichever the registry scan reaches first, and
+	# landing on the general one loses the unit TYPE - which is the name
+	# localization looks up in the config, so a wind reading would arrive
+	# unable to localize and stay in its source unit. Optional: payloads
+	# without it resolve exactly as before.
+	if (unit_type := getattr(type(value), 'type', None)) is not None:
+		if (type_name := getattr(unit_type, 'name', None)):
+			payload['type'] = type_name
 	timestamp = getattr(value, 'timestamp', None)
 	if isinstance(timestamp, datetime):
 		payload['ts'] = timestamp.astimezone(timezone.utc).isoformat()
@@ -106,7 +117,20 @@ def _resolve_parametrized_class(cls_name: Optional[str]):
 		return None
 
 
-def _resolve_measurement_class(cls_name: Optional[str], unit: Optional[str]):
+def _matches_type(candidate, type_name: Optional[str]) -> bool:
+	"""Whether a candidate class belongs to the named unit type.
+
+	Used to disambiguate names shared by a unit type and the one it
+	specializes ('MilesPerHour' exists under both Wind and DistanceOverTime).
+	With no type recorded - older payloads - nothing is rejected.
+	"""
+	if not type_name:
+		return True
+	unit_type = getattr(candidate, 'type', None)
+	return getattr(unit_type, 'name', None) == type_name
+
+
+def _resolve_measurement_class(cls_name: Optional[str], unit: Optional[str], type_name: Optional[str] = None):
 	# A bracketed name is an unambiguous parametrized derived unit; neither
 	# lookup below can reach it, so try reconstruction first.
 	if (parametrized := _resolve_parametrized_class(cls_name)) is not None:
@@ -121,13 +145,24 @@ def _resolve_measurement_class(cls_name: Optional[str], unit: Optional[str]):
 	# non-generic candidate, name first, symbol second.
 	registry = UnitRegistry
 	by_name = registry._units_by_name.get(cls_name.lower()) if cls_name else None
-	if by_name is not None and not getattr(by_name, 'isGeneric', False):
+	if by_name is not None and not getattr(by_name, 'isGeneric', False) and _matches_type(by_name, type_name):
 		return by_name
 	if unit:
 		# by-symbol can return the parametrized GENERIC form of a derived
 		# unit (can't build from a bare number) - scan for the specialized
 		# class carrying that symbol instead.
-		by_symbol = next((u for u in registry._all_units if getattr(u, '_unit', None) and u._unit.lower() == unit.lower() and not getattr(u, 'isGeneric', False)), None)
+		candidates = [
+			u for u in registry._all_units
+			if getattr(u, '_unit', None) and u._unit.lower() == unit.lower()
+			and not getattr(u, 'isGeneric', False)
+		]
+		# Prefer one belonging to the recorded unit type. Several types share
+		# a symbol - 'mph' is carried by both Wind.MilesPerHour and
+		# DistanceOverTime.MilesPerHour - and the plain scan returns whichever
+		# comes first, which for wind meant a class that cannot localize.
+		by_symbol = next((u for u in candidates if _matches_type(u, type_name)), None)
+		if by_symbol is None:
+			by_symbol = next(iter(candidates), None)
 		if by_symbol is not None:
 			return by_symbol
 	if by_name is not None:
@@ -136,7 +171,7 @@ def _resolve_measurement_class(cls_name: Optional[str], unit: Optional[str]):
 
 
 def decode_measurement(payload: dict) -> Measurement | float:
-	cls = _resolve_measurement_class(payload.get('cls'), payload.get('unit'))
+	cls = _resolve_measurement_class(payload.get('cls'), payload.get('unit'), payload.get('type'))
 	value = payload['value']
 	if cls is None:
 		# Unknown unit type (e.g. a frontend running behind on a WeatherUnits
@@ -186,13 +221,18 @@ def encode_timeseries_values(items: Sequence[Any]) -> Optional[dict]:
 	for item in items:
 		timestamps.append(item.timestamp.astimezone(timezone.utc).timestamp())
 		values.append(float(item.value))
-	return {
+	payload = {
 		'v': WIRE_VERSION,
 		'unit': getattr(first_value, 'unit', None) if is_measurement else None,
 		'cls': type(first_value).__name__ if is_measurement else None,
 		'timestamps': timestamps,
 		'values': values,
 	}
+	# Same disambiguation as encode_measurement: resolved once for the batch.
+	if is_measurement and (unit_type := getattr(type(first_value), 'type', None)) is not None:
+		if (type_name := getattr(unit_type, 'name', None)):
+			payload['type'] = type_name
+	return payload
 
 
 def decode_timeseries_values(payload: Optional[dict]) -> List[Tuple[datetime, Any]]:
@@ -206,7 +246,7 @@ def decode_timeseries_values(payload: Optional[dict]) -> List[Tuple[datetime, An
 	perf win columnar encoding exists for."""
 	if payload is None:
 		return []
-	cls = _resolve_measurement_class(payload.get('cls'), payload.get('unit'))
+	cls = _resolve_measurement_class(payload.get('cls'), payload.get('unit'), payload.get('type'))
 	timestamps = payload.get('timestamps') or []
 	values = payload.get('values') or []
 	result: List[Tuple[datetime, Any]] = []
