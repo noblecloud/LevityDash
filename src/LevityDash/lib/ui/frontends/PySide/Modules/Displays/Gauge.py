@@ -1972,46 +1972,42 @@ class GaugeValueLabel(GaugeLabel):
 
 			scale = super(GaugeValueLabel.TextBox, self).getTextScale()
 
-			# `transform` was never bound - every call raised NameError. The
-			# method shrinks the label until it stops colliding with the dial,
-			# then puts the original transform back, so it needs the item's
-			# own transform to modify and restore.
-			transform = self.transform()
-			modifyTransformValues(transform, xScale=scale, yScale=scale)
-			self.setTransform(transform)
-
 			gauge = self.parent.parent
 			gauge_path = gauge._gauge_path()
 
 			if self._position is DisplayPosition.Inline:
 				gauge_path.addPath(gauge.mapFromItem(gauge.needle, gauge.needle.shape()))
 
-			def colliding() -> bool:
+			# PURE. The base class documents that getTextScale must not mutate
+			# the transform, because a SizeGroup calls it on every member to
+			# pick a shared scale - and this override used to violate that,
+			# applying each trial scale to the live item and asking the scene
+			# "am I colliding now?". Probing one member moved it in the scene,
+			# which changed the answers for the others, and the group then
+			# applied a shared scale that invalidated whatever the probe had
+			# concluded. That is why collision fitting and size groups fought
+			# each other.
+			#
+			# The test is the same, done arithmetically: this item's parent IS
+			# the gauge (the factory reparents textBox to it), so its own
+			# transform already maps into gauge coordinates. Mapping the glyph
+			# path through a trial transform gives the candidate outline
+			# without touching anything.
+			base_path = self.path()
+			bounds = gauge.gaugeRect
 
-				if not self.mapRectFromItem(gauge, gauge.gaugeRect).contains(self.boundingRect()):
+			def collides_at(trial: float) -> bool:
+				t = QTransform(self.transform())
+				modifyTransformValues(t, xScale=trial, yScale=trial)
+				candidate = t.map(base_path)
+				if not bounds.contains(candidate.boundingRect()):
 					return True
+				return candidate.intersects(gauge_path)
 
-				try:
-					return self.collidesWithPath(self.mapFromParent(gauge_path))
-				except AttributeError:
-					pass
-				items = {i for i in self.collidingItems() if not isinstance(i, Handle) is gauge.isAncestorOf(i) and not isinstance(i, NonInteractiveLabel)}
-				if self._position is not DisplayPosition.Inline:
-					try:
-						items -= {self.parentItem().needle}
-					except AttributeError:
-						pass
-				return len(items) > 1
-
-			while colliding() and scale > 0.2:
+			while scale > 0.2 and collides_at(scale):
 				scale *= 0.95
-				modifyTransformValues(transform, xScale=scale, yScale=scale)
-				self.setTransform(transform, combine=False)
 
-			# Restore original transform scaleing
-			modifyTransformValues(transform, xScale=1, yScale=1)
-
-			return scale
+			return round(scale, 4)
 
 		_shapePath: QPainterPath = QPainterPath()
 
@@ -3201,13 +3197,10 @@ class Gauge(Display):
 		label = GaugeValueLabel(self)
 		label.textBox.setParentItem(self)
 		label.hide()
-		# The textBox was just reparented to the gauge, so it is no longer a
-		# child of the label and `label.hide()` does not reach it - the value
-		# text kept painting, unpositioned, while the label it belongs to was
-		# hidden. That is what drew a giant stray number outside the dial.
-		# See the 'labels are not moved correctly' TODO in _center_transform:
-		# positioning here is known-unfinished, so the default is dial-only.
-		label.textBox.hide()
+		# NB: the textBox was reparented to the gauge above, so it is no longer
+		# a child of the label and `label.hide()` does not reach it. The value
+		# text is what the viewer actually sees, so it stays visible - the
+		# label wrapper being hidden is incidental.
 		return label
 
 	@valueLabel.setter
