@@ -17,8 +17,8 @@ real instrument face.
 
 Text here is already **vector, not raster**. `Text._update_path`
 (`Displays/Text.py`, look for `path.addText(text_pos, font, text)`) builds a
-`QPainterPath` from the font outline. So this is a matter of placing glyphs
-individually along a curve, not warping an image — no rasterisation, no
+`QPainterPath` from the font outline — so the glyph geometry is available as
+points to be moved, which is exactly what this needs. No rasterisation, no
 quality loss, and the result stays a path.
 
 ## Where the labels live
@@ -30,21 +30,51 @@ quality loss, and the result stays a path.
 | arc geometry | `GaugeArc`, `startAngle` / `endAngle` / `fullAngle`, `gauge.radius`, `gauge.center` |
 | `AnnotationText` base | `Displays/Annotations.py` |
 
-## Suggested approach
+## NOT per-glyph placement
 
-Per label, instead of one `addText(pos, font, string)` plus a rotation:
+⚠️ **Placing each character separately along the curve has been tried and it
+looks bad.** Each glyph stays internally straight, so the string reads as a
+faceted polygon approximating the arc — visible gaps opening at the outer
+edge between characters, pinching at the inner edge, and the taller the text
+or tighter the radius, the worse it gets. Do not re-attempt it.
 
-1. Walk the characters, taking each glyph's advance from
-   `QFontMetricsF.horizontalAdvance`.
-2. Convert cumulative advance to an angle — `angle = arc_length / radius` —
-   centred so the string stays centred on its tick.
-3. For each glyph, build a `QTransform` that rotates by that angle about the
-   gauge centre and translates out to the radius, then `addText` the single
-   character through it into one combined path.
+## Suggested approach: warp the outlines
 
-**Keep the result a single `QPainterPath` per label.** Hit-testing,
-`shape()`, and the existing collision/fitting logic all read that path, and
-they keep working unchanged if the output shape is the same kind of object.
+The glyph **outlines themselves** must be deformed — vertical stems fanning
+out along radii, horizontal strokes becoming arcs. This is a **non-affine**
+transformation, so `QTransform` cannot express it (it is affine only). The
+points have to be remapped individually.
+
+1. Build the whole string flat: baseline on `y = 0`, `x` running `0 → width`.
+2. **Flatten the path to polygons** — `QPainterPath.toSubpathPolygons()`
+   converts béziers to line segments. Necessary because a warp applied to
+   bézier *control points* distorts the curve rather than following it.
+3. Map every point from flat text space into polar space about the gauge
+   centre:
+   - `theta = start_angle + (x / radius)` — arc length over radius, so
+     spacing is preserved along the curve
+   - `r = radius - y` — text-space `y` is negative above the baseline, so
+     ascenders move outward and descenders inward
+   - `point = center + (r·cos(theta), r·sin(theta))`
+4. Rebuild a single `QPainterPath` from the mapped polygons.
+
+### The bit that decides whether it looks good
+
+**Flattening resolution.** After mapping, every straight segment becomes a
+straight *chord* across the arc. A long horizontal stroke — the crossbar of a
+`4`, the top of a `5`, the middle of a `0` — will visibly cut across the
+curve unless it was subdivided before mapping. `toSubpathPolygons` flattens
+béziers but leaves genuinely straight edges as single segments, so those need
+subdividing to a maximum segment length chosen from the radius (shorter
+segments for tighter arcs).
+
+Getting this wrong is the difference between "curved text" and "text that
+looks slightly broken", and it will not show up on a large radius — test on a
+small dial.
+
+**Keep the result a single `QPainterPath` per label.** Hit-testing, `shape()`,
+and the existing collision/fitting logic all read that path and keep working
+unchanged if the output is the same kind of object.
 
 ## Gotchas, including two fixed today
 
@@ -78,7 +108,10 @@ This cannot be checked by reading code. Render offscreen and look at the PNG:
   or the grab is blank white
 
 Compare before/after crops of a dial at several radii and font sizes, on a
-wide arc (240°, the default) and a narrow one. Then `poetry run pytest -q`.
+wide arc (240°, the default) and a narrow one. **Small radii are the real
+test** — a large dial hides insufficient flattening, a small one exposes it
+immediately. Digits with long horizontal strokes (`4`, `5`, `7`, `0`) are the
+ones to look at. Then `poetry run pytest -q`.
 
 ## Config reminder
 
