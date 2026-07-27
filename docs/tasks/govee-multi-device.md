@@ -184,6 +184,47 @@ old key — including the author's current one. Two options:
    existing `.levity` files, and gives ugly key names unless aliases are also
    substituted.
 
+## ⚠️ OPEN BUG: scoped keys never leave the backend
+
+Both thermometers reach the observation — the control plane reports
+`GVH5102_6736: keys=9` — but **`lastPublish=None`**: nothing is ever
+published, so a `mode=remote` frontend shows blank Indoor *and* Terrarium
+panels while the network plugins update normally.
+
+Backend log (2026-07-27 12:33):
+
+```
+indoor.temperature.temperature#terrarium was not found in
+    {timestamp: {...}, indoor: {}}
+GVH5102_6736:indoor.temperature.temperature#terrarium: failed to encode for
+    wire push, skipping this key: AttributeError("'NoneType' object has no
+    attribute 'get'")
+```
+
+Chain: `RemoteBackend._on_published` calls `encode_container(plugin[key])`;
+`Plugin.__getitem__` falls off the end and returns **None** for a scoped key
+(neither the `item in self` nor the endpoint branch matches);
+`encode_container(None)` raises; the per-key `except` skips it; every key
+skips, so `updates` is empty and the method returns **before** recording
+`lastPublish`.
+
+**Root cause: there is a second schema lookup that does not strip identity.**
+`Schema.getUnitMetaData` was fixed (which is why values reach the observation
+at all — 9 keys), but the containment/lookup path used by
+`Plugin.__contains__` → `item in endpoint` → schema resolution has its own
+"not found" site at `schema/__init__.py:738` (the wildcard-match branch,
+~L689–738) that still sees the raw `…#terrarium` key.
+
+Fix direction: strip identity at that lookup too — ideally factor a single
+`_base_key(key)` helper used by every schema lookup, rather than a third
+ad-hoc `withoutIdentity` call. Note the log's `indoor: {}` — worth confirming
+which `Schema` instance is being consulted there, since an empty `indoor`
+subtree suggests it may not be the plugin's fully-built schema.
+
+Verify with: `poetry run python <scratchpad>/probe.py ws://127.0.0.1:8667/ws`
+— `lastPublish` must become a timestamp, not None. The control plane is the
+fastest way to see this; the backend log is the second.
+
 ## Still to do — the plugin's data path
 
 Nothing below is designed away; it's the four root causes at the top, and
