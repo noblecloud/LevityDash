@@ -1839,6 +1839,21 @@ class GaugeLabel(NonInteractiveLabel, ColorGradientMixin, GaugeItem):
 	def _set_fill_brush(self, color: Color):
 		self.textBox.setBrush(QBrush(color))
 
+	@StateProperty(key='visible', default=True, allowNone=False, singleVal=True)
+	def visible(self) -> bool:
+		# The textBox is reparented to the gauge (see the `valueLabel` factory),
+		# so the label wrapper's own visibility says nothing about what is drawn
+		# - the textBox is the thing the viewer sees.
+		return self.textBox.isVisible()
+
+	@visible.setter
+	def visible(self, value: bool):
+		self.textBox.setVisible(value)
+		if (gauge := self.gauge) is not None:
+			# full_gauge_path counts only visible labels, so the cached centre
+			# is stale the moment this changes.
+			gauge.__dict__.pop('full_gauge_path', None)
+
 
 class GaugeValueLabel(GaugeLabel):
 
