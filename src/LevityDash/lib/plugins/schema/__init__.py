@@ -720,6 +720,14 @@ class Schema(CategoryDict):
 	def getExact(self, key: str | CategoryItem, silent: bool = False) -> Optional[UnitMetaData]:
 		if not isinstance(key, CategoryItem):
 			key = CategoryItem(key)
+		# `_source` is keyed by base keys. Identity ('…temperature#terrarium')
+		# is runtime scoping, so strip it here as well as in getUnitMetaData -
+		# this is the lookup Container construction reaches, and without the
+		# strip it returned None, which a caller then did `.get` on, so every
+		# scoped key failed to encode and nothing was ever published.
+		# NB: `.anonymous` strips *source*, not identity - they are separate.
+		if key.hasIdentity:
+			key = key.withoutIdentity
 		result = self._source.get(key, None) or self._source.get(key.anonymous, None)
 		if result is None:
 			if str(key) in self.properties:
