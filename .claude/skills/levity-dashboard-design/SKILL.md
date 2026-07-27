@@ -173,6 +173,17 @@ Discovered the hard way; each one cost a full build/render cycle.
   plus a sibling `realtime.text`), which also gives you full control of placement.
 - **Units are strings, not booleans.** `unit_symbol: True` renders the literal
   word `True` (`61True`). Omit the key or give it a real string.
+- **`title: {position: bottom}` is inert.** `DisplayPosition` has no `Top` or
+  `Bottom` member (it has `Above`/`Below`), and `ClosestMatchEnumMeta` silently
+  fuzzy-matches `bottom` → `Below` rather than erroring — which the splitter's
+  layout then ignores. `Splitters.py` itself compares against
+  `DisplayPosition.Top`, which also doesn't exist. **Title side is currently not
+  controllable from config**; proximity has to come from geometry.
+- **Shrinking a cell's height does not pull its value up to its title.** The
+  value centres in whatever space it gets, so a shorter cell just centres it in
+  a smaller box — the label→value gap barely moves, and you gain clutter as
+  other elements (like the staleness indicator) find room. The lever that
+  actually governs this is the title/value **splitter ratio**, not the cell.
 - **A `.levity` value can be sized in `%`, `px`, `mm`, or `cm`** — mixing them
   within a group is how you get inconsistent-looking titles. Pick one per concern.
 
