@@ -184,7 +184,19 @@ class ObservationValue(TimeAwareValue):
 				if metadata['key'] == key and metadata['key'].vars:
 					pass
 				else:
-					key = CategoryItem(metadata['key'], kSource)
+					# Rebuilding from the schema's key would drop the identity
+					# the datagram just attached (…temperature#bedroom), putting
+					# every device's reading back on one key. Only the wildcard
+					# entries escaped this, via the `vars` branch above - which
+					# is why battery/rssi stayed scoped and temperature did not.
+					#
+					# kSource is passed by keyword deliberately: positionally it
+					# is read as another path *atom*, not the source.
+					key = CategoryItem(
+						metadata['key'],
+						source=kSource,
+						identity=key.identity if isinstance(key, CategoryItem) else None,
+					)
 				source.__sourceKeyMap__[metadata['sourceKey']] = metadata['key']
 			metadata['key'] = key
 		if isinstance(value, wu.Measurement):

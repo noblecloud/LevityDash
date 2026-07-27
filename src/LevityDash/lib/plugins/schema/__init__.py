@@ -98,6 +98,7 @@ class LevityDatagram(dict):
 		data = self.parseData(data=data)
 		data = self.replaceKeys(data)
 		data = self.replaceKeyVars(data)
+		data = self.attachIdentity(data)
 		data = self.addDataKeyValues(data)
 		self.update(data)
 
@@ -238,6 +239,37 @@ class LevityDatagram(dict):
 				data.pop(key)
 				key = key.replaceVar(**keyVars)
 			data[key] = value
+		return data
+
+	def attachIdentity(self, data: dict) -> dict:
+		"""Scope this datagram's value keys to the device that produced it.
+
+		No-op unless the schema declares an ``identityKey``. Identity rather
+		than an extra path segment, so the unscoped key keeps existing and a
+		dashboard pointing at ``indoor.temperature.temperature`` is not broken
+		by a second sensor appearing.
+
+		Metadata keys are deliberately left alone: ``timestamp`` and the
+		``@…`` source fields describe the batch, not a reading, and scoping
+		them would produce a ``timestamp#bedroom`` that nothing looks for.
+		"""
+		identityKey = getattr(self.schema, 'identityKey', None)
+		if identityKey is None:
+			return data
+		identity = self.sourceData.get(identityKey, None) or self.metaData.get(identityKey, None)
+		if not identity:
+			return data
+
+		for key, value in dict(data).items():
+			if not isinstance(key, CategoryItem) or key.hasIdentity or str(key).startswith('@'):
+				continue
+			try:
+				if self.schema[key].get(tsk.metaData, False):
+					continue
+			except (KeyError, TypeError, AttributeError):
+				pass
+			data.pop(key)
+			data[key.withIdentity(str(identity))] = value
 		return data
 
 	def replaceKeys(self, data: dict = None):
@@ -660,6 +692,12 @@ class Schema(CategoryDict):
 		self.properties = Properties(plugin=plugin, source=source)
 		self.keyMaps = source.pop('keyMaps', {})
 		self.dataMaps = source.pop('dataMaps', {})
+		# Optional: names the datagram field holding *which device/sensor* this
+		# batch came from, e.g. 'identityKey': '@deviceIdentity'. Every value
+		# key in the datagram is then scoped with it (…temperature#bedroom), so
+		# several devices behind one plugin stay separate instead of
+		# overwriting each other. See docs/tasks/govee-multi-device.md.
+		self.identityKey = source.pop('identityKey', None)
 		self.calculations = source.pop('calculations', {})
 		self.aliases = source.pop('aliases', {})
 		super(Schema, self).__init__(None, source, category)
@@ -782,6 +820,15 @@ class Schema(CategoryDict):
 				key = data.get('key', key)
 				return self.getUnitMetaData(key, source)
 			return data
+		# A schema is keyed by the *base* key. Identity ('…temperature#bedroom')
+		# is a runtime scoping applied per datagram (see attachIdentity), so it
+		# must be stripped before looking metadata up or every scoped key is
+		# reported as unmapped. Wildcard schema entries happened to match
+		# anyway - subsequenceCheck short-circuits before the identity
+		# comparison - which is why only the plain entries broke.
+		if isinstance(key, CategoryItem) and key.hasIdentity:
+			key = key.withoutIdentity
+
 		if key not in self:
 			key = self.sourceKeyMap.get(key, None)
 			if key is None:

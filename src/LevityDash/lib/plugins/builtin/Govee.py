@@ -212,12 +212,22 @@ class Govee(Plugin, realtime=True, logged=True):
 		'indoor.temperature.dewpoint': {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Dew Point', 'sourceKey': 'dewpoint'},
 		'indoor.temperature.heatIndex': {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Heat Index', 'sourceKey': 'heatIndex'},
 		'indoor.humidity.humidity': {'type': 'humidity', 'sourceUnit': '%h', 'title': 'Humidity', 'sourceKey': 'humidity'},
-		'indoor.@deviceName.battery': {'type': 'battery', 'sourceUnit': '%bat', 'title': 'Battery', 'sourceKey': 'battery'},
-		'indoor.@deviceName.rssi': {'type': 'rssi', 'sourceUnit': 'rssi', 'title': 'Signal', 'sourceKey': 'rssi'},
+		# Plain keys, not 'indoor.@deviceName.battery': identity now scopes
+		# these per device (…battery#terrarium), so the @deviceName segment is
+		# redundant. It was also *wrong* once two devices reported - the var
+		# resolved to the same configured name for both, so a terrarium reading
+		# came back as indoor.GVH5102_6736.battery#terrarium.
+		'indoor.battery.battery': {'type': 'battery', 'sourceUnit': '%bat', 'title': 'Battery', 'sourceKey': 'battery'},
+		'indoor.rssi.rssi': {'type': 'rssi', 'sourceUnit': 'rssi', 'title': 'Signal', 'sourceKey': 'rssi'},
 		'@type': {'sourceKey': 'type', tsk.metaData: True, tsk.sourceData: True},
 		'@deviceName': {'sourceKey': 'deviceName', tsk.metaData: True, tsk.sourceData: True},
+		'@deviceIdentity': {'sourceKey': 'deviceIdentity', tsk.metaData: True, tsk.sourceData: True},
 		'@deviceAddress': {'sourceKey': 'deviceAddress', tsk.metaData: True, tsk.sourceData: True},
 		# '@timezone':                      {'default': {'value': config.tz}, tsk.metaData: True},
+
+		# Scopes every value key to the device that produced it, so two
+		# thermometers behind this one plugin don't overwrite each other.
+		'identityKey': '@deviceIdentity',
 
 		'dataMaps': {
 			'BLEAdvertisementData': {
@@ -235,6 +245,9 @@ class Govee(Plugin, realtime=True, logged=True):
 		self.historicalTimer: ScheduledEvent | None = None
 		self.scannerTask = None
 		self.devices_observations = {}
+		#: {alias: {settings}} from [device:<alias>] config sections. Populated
+		#: by __readConfig below; empty until then.
+		self.devices: Dict[str, dict] = {}
 		try:
 			self.__readConfig()
 		except Exception as e:
@@ -316,7 +329,26 @@ class Govee(Plugin, realtime=True, logged=True):
 		self.__humidityParse = BLEPayloadParser(**getValues('humidity'))
 		self.__batteryParse = BLEPayloadParser(**getValues('battery'))
 
+		# Read off the whole config object, not `self.config` (which is already
+		# scoped to [plugin]), since the device declarations are sibling
+		# sections. Falls back to the legacy flat device.name, so an existing
+		# single-device config keeps working.
+		self.devices = parse_device_sections(getattr(pluginConfig, 'parser', pluginConfig))
+		if self.devices:
+			pluginLog.info(f'Govee: {len(self.devices)} device(s) configured: {", ".join(sorted(self.devices))}')
+
 		return pluginConfig
+
+	def accepts_device(self, advertisedName: str) -> bool:
+		"""Whether an advertisement should be parsed.
+
+		With no devices configured, accept anything the scanner surfaced - the
+		scanner is already filtered to the Govee service UUID, and rejecting
+		everything would make an unconfigured plugin silently dead.
+		"""
+		if not self.devices:
+			return True
+		return any(settings.get('name') == advertisedName for settings in self.devices.values())
 
 	@staticmethod
 	def _varifyDeviceID(deviceID: str) -> bool:
@@ -452,9 +484,18 @@ class Govee(Plugin, realtime=True, logged=True):
 
 	def __dataParse(self, device, data):
 		try:
-			if device.name != self.name:
-				return
+			advertisedName = device.name
 		except AttributeError:
+			return
+		if advertisedName is None:
+			return
+
+		# This used to be `if device.name != self.name: return`, and self.name
+		# was set to the configured device's name - so with two thermometers
+		# advertising, whichever one won the config was the only one that got
+		# past this line. Now every *known* device is accepted; identity keeps
+		# their readings apart downstream.
+		if not self.accepts_device(advertisedName):
 			return
 
 		try:
@@ -468,6 +509,9 @@ class Govee(Plugin, realtime=True, logged=True):
 			'rssi': int(data.rssi),
 			'deviceName': str(device.name),
 			'deviceAddress': str(device.address),
+			# Consumed by the schema's identityKey - scopes every value key in
+			# this batch to the device that sent it (…temperature#terrarium).
+			'deviceIdentity': resolve_device_identity(advertisedName, self.devices),
 			**self.__temperatureParse(dataBytes),
 			**self.__humidityParse(dataBytes),
 			**self.__batteryParse(dataBytes),
