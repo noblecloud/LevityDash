@@ -11,12 +11,23 @@ from sys import exit
 
 from PySide6.QtWidgets import QApplication
 
+from qolkit.hotkeys import CTRL_R, HotkeyListener, restart_process
+
 setlocale(LC_ALL, 'en_US.UTF-8')
+
+#: Whether the Ctrl+R hotkey is actually listening - False when stdin is not a
+#: TTY, in which case the Ctrl+C hint should not advertise it.
+_hotkeys_active = False
 
 exit_signals = {signal.SIGINT, signal.SIGTERM}
 
 #: Seconds a first Ctrl+C stays 'armed' before the count resets.
 CONFIRM_QUIT_WINDOW = 3.0
+
+#: Set by the Ctrl+R hotkey; consumed by main() once the Qt loop has returned.
+#: Restarting from the reader thread would mean exec()ing out from under a live
+#: event loop, so the flag is deferred to a clean exit instead.
+_restart_requested = False
 
 
 def install_signals():
@@ -43,10 +54,9 @@ def install_signals():
 		if signalQuit.count == 1:
 			# stderr, not the logger: this has to be visible immediately in the
 			# terminal the user is pressing Ctrl+C in.
-			print(
-				f'\nPress Ctrl+C again within {CONFIRM_QUIT_WINDOW:.0f}s to quit LevityDash.',
-				file=sys.stderr, flush=True,
-			)
+			hint = f'\nPress Ctrl+C again within {CONFIRM_QUIT_WINDOW:.0f}s to quit LevityDash'
+			hint += ', or Ctrl+R to restart.' if _hotkeys_active else '.'
+			print(hint, file=sys.stderr, flush=True)
 			return
 
 		log.info(f'Caught signal {sig}, closing...')
@@ -62,8 +72,24 @@ def install_signals():
 			log.warning('Exiting immediately')
 			os._exit(1)
 
+	def requestRestart() -> None:
+		# Runs on the hotkey reader thread. Only armed inside the same window a
+		# second Ctrl+C would quit in, so Ctrl+R is a *substitute* for that
+		# second press rather than a always-live restart key.
+		if signalQuit.count < 1 or (time.monotonic() - signalQuit.last) > CONFIRM_QUIT_WINDOW:
+			return
+		global _restart_requested
+		_restart_requested = True
+		print('\nRestarting LevityDash...', file=sys.stderr, flush=True)
+		QApplication.instance().quit()
+
 	signalQuit.count = 0
 	signalQuit.last = 0.0
+
+	global _hotkeys_active
+	listener = HotkeyListener()
+	listener.bind(CTRL_R, requestRestart)
+	_hotkeys_active = listener.start()
 
 	if platform.system() != 'Windows':
 		os.nice(10)
@@ -96,6 +122,9 @@ def main():
 	LevityDashboard.plugins.load_all()
 
 	LevityDashboard.app.start()
+
+	if _restart_requested:
+		restart_process()
 
 
 def reset_config():

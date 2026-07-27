@@ -28,6 +28,8 @@ from typing import List, Optional, Tuple
 import watchfiles
 from aiohttp import web
 
+from qolkit.hotkeys import CTRL_R, HotkeyListener
+
 __all__ = ['cli']
 
 DEFAULT_DEBOUNCE_MS = 2000
@@ -183,6 +185,29 @@ async def _run(args: argparse.Namespace) -> None:
 	for sig in (signal.SIGINT, signal.SIGTERM):
 		signal.signal(sig, lambda *_: stop_event.set())
 
+	# Ctrl+R: restart the supervised backend now, without waiting for a file
+	# change. Unlike the frontend's Ctrl+C-then-Ctrl+R, this needs no arming -
+	# there is nothing destructive about restarting a supervised child.
+	#
+	# Tests are deliberately NOT run first: this is the manual override for
+	# "just bounce it", and the file-change path already gates on them.
+	loop = asyncio.get_running_loop()
+
+	async def manual_restart() -> None:
+		print('[watch] Ctrl+R - restarting backend (tests skipped)')
+		state.state = 'restarting'
+		await supervisor.restart()
+		state.last_restart_at = datetime.now(timezone.utc).isoformat()
+		state.state = 'running'
+		print(f'[watch] backend restarted (pid={supervisor.proc.pid})')
+
+	# The hotkey callback runs on the reader thread, so hop to the loop rather
+	# than touching the supervisor from off-thread.
+	hotkeys = HotkeyListener()
+	hotkeys.bind(CTRL_R, lambda: asyncio.run_coroutine_threadsafe(manual_restart(), loop))
+	if hotkeys.start():
+		print('[watch] press Ctrl+R to restart the backend immediately')
+
 	watch_task = asyncio.create_task(
 		_watch_loop(watch_paths, args.debounce_ms, state, supervisor, REPO_ROOT, stop_event)
 	)
@@ -191,6 +216,7 @@ async def _run(args: argparse.Namespace) -> None:
 	print('[watch] shutting down')
 	state.state = 'stopped'
 	watch_task.cancel()
+	hotkeys.stop()
 	await supervisor.stop()
 	await runner.cleanup()
 
