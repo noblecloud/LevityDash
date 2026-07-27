@@ -885,7 +885,27 @@ class CategoryItem(tuple):
 		levelKey = levelKey or CategoryItem.root
 		subLevels = {k & (levelKey + CategoryItem('*')) for k in keys if k < levelKey}
 		if subLevels:
-			return {key if extendedKeys else key[-1]: cls.keysToDict({k for k in keys if k < key} - {key}, key, extendedKeys=extendedKeys) for key in subLevels}
+			# The descent must *strip identity* to terminate. Recursion shrinks
+			# the key set via `- {key}`, which is a set difference and so uses
+			# __eq__/__hash__ - both identity-aware. `key` here comes from the
+			# `&` above and is therefore always identity-free, so a scoped key
+			# ('…temperature#bedroom') never compares equal to it, is never
+			# removed, and the set stops shrinking -> RecursionError.
+			#
+			# `__lt__` compares atoms only and ignores identity, so a scoped
+			# key stays `< key` forever. That asymmetry between ordering and
+			# equality is the actual trap; matching it here by comparing on the
+			# base key is what makes the descent finite again.
+			#
+			# Identity is not a level in the category tree - two sensors share
+			# one branch - so collapsing it for structure is also correct, not
+			# merely convenient.
+			return {
+				key if extendedKeys else key[-1]: cls.keysToDict(
+					{k for k in keys if k < key and k.withoutIdentity != key}, key, extendedKeys=extendedKeys
+				)
+				for key in subLevels
+			}
 		return levelKey
 
 

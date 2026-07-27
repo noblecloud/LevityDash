@@ -153,3 +153,49 @@ class TestSourceIsNotExploded:
 
 	def test_str_form_is_readable(self):
 		assert str(CategoryItem('a.b', source='Govee')) == 'Govee:a.b'
+
+
+class TestKeysToDictTerminatesWithIdentity:
+	"""keysToDict recursed forever once identity-scoped keys existed.
+
+	The descent shrinks its key set with `- {key}`, a set difference, so it
+	uses __eq__/__hash__ - both identity-aware. `key` is always identity-free
+	(it comes from the `&`), so a scoped key never compared equal, was never
+	removed, and the set stopped shrinking. Meanwhile __lt__ compares atoms
+	only and ignores identity, so the scoped key stayed `< key` forever.
+
+	Symptom was a RecursionError ~978 frames deep out of app.py's `ingest`,
+	every time the frontend reconnected to the backend.
+	"""
+
+	def test_scoped_keys_do_not_recurse_forever(self):
+		import sys
+
+		keys = [
+			CategoryItem('indoor.temperature.temperature#bedroom'),
+			CategoryItem('indoor.temperature.temperature#terrarium'),
+			CategoryItem('indoor.humidity.humidity#bedroom'),
+		]
+		limit = sys.getrecursionlimit()
+		sys.setrecursionlimit(200)  # fail fast rather than hanging the suite
+		try:
+			result = CategoryItem.keysToDict(sorted(keys, key=str), extendedKeys=True)
+		finally:
+			sys.setrecursionlimit(limit)
+		assert 'indoor' in {str(k) for k in result}
+
+	def test_a_single_scoped_key_also_terminates(self):
+		# One scoped key is enough: it never equals the identity-free `key`.
+		import sys
+
+		limit = sys.getrecursionlimit()
+		sys.setrecursionlimit(200)
+		try:
+			CategoryItem.keysToDict([CategoryItem('indoor.temperature.temperature#bedroom')], extendedKeys=True)
+		finally:
+			sys.setrecursionlimit(limit)
+
+	def test_unscoped_keys_still_build_the_same_tree(self):
+		keys = [CategoryItem('environment.temperature.temperature'), CategoryItem('environment.humidity.humidity')]
+		result = CategoryItem.keysToDict(sorted(keys, key=str), extendedKeys=True)
+		assert {str(k) for k in result} == {'environment'}
