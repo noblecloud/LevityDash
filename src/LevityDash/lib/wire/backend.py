@@ -31,8 +31,9 @@ worker, then worker thread -> asyncio thread (via
 rebuild finishes.
 """
 import asyncio
-from datetime import timedelta
-from typing import Awaitable, Callable, Dict, TYPE_CHECKING
+from datetime import datetime, timedelta
+from time import monotonic
+from typing import Awaitable, Callable, Dict, Optional, TYPE_CHECKING
 
 from PySide6.QtCore import QObject, Qt, Signal, Slot
 
@@ -40,7 +41,7 @@ from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.utils.data import KeyData
 from LevityDash.lib.utils.shared import now
-from LevityDash.lib.wire.messages import encode_container, encode_ts_response, encode_update_message
+from LevityDash.lib.wire.messages import encode_container, encode_heartbeat, encode_plugin_status, encode_ts_response, encode_update_message
 
 if TYPE_CHECKING:
 	from LevityDash.lib.plugins.plugin import Plugin
@@ -81,6 +82,16 @@ class RemoteBackend:
 		# loop) - it is called from the thread publisher signals land on.
 		self._send = send
 		self._plugins: Dict[str, 'Plugin'] = {}
+		# When each plugin was last seen publishing. Sourced here rather than
+		# from Plugin because this object already observes every publish and
+		# nothing on Plugin records it - see PluginState.lastPublish.
+		self._lastPublish: Dict[str, datetime] = {}
+		# Last plugin_status payload actually sent, so an unchanged snapshot
+		# isn't rebroadcast every tick. Liveness rides on 'heartbeat' precisely
+		# so this one can stay silent when nothing has changed.
+		self._lastStatus: Optional[dict] = None
+		self._heartbeatSeq = 0
+		self._started = monotonic()
 		# Constructed here rather than lazily: RemoteBackend is built on the Qt
 		# main thread (lib/backend.py:main(), before app.exec()), which pins
 		# this QObject's thread affinity correctly, same as remote.py's
@@ -113,6 +124,8 @@ class RemoteBackend:
 		if not updates:
 			return
 
+		self._lastPublish[plugin.name] = now()
+
 		message = encode_update_message(
 			name=plugin.name,
 			defaultFor=set(plugin.config.defaultFor),
@@ -124,6 +137,46 @@ class RemoteBackend:
 			self._send(message)
 		except Exception as e:
 			log.warning(f'{plugin.name}: failed to hand off wire message to sender: {e!r}')
+
+	# -- control plane ------------------------------------------------------
+
+	def plugin_status_message(self) -> dict:
+		"""Build a 'plugin_status' snapshot of every attached plugin.
+
+		Reads live plugin state, so it must be called on the Qt main thread -
+		which is where lib/backend.py's QTimer already runs it.
+		"""
+		return encode_plugin_status(plugins=list(self._plugins.values()), lastPublish=self._lastPublish)
+
+	def tick(self) -> None:
+		"""One control-plane beat: always a heartbeat, plus a plugin_status if
+		the snapshot changed since the last one sent.
+
+		Driven by a QTimer on the backend's Qt main thread (lib/backend.py), so
+		this reads plugin state on the thread that owns it and hands only
+		finished JSON-safe dicts to ``_send``, exactly like the publish path.
+		"""
+		self._heartbeatSeq += 1
+		try:
+			self._send(encode_heartbeat(seq=self._heartbeatSeq, uptime=monotonic() - self._started))
+		except Exception as e:
+			log.warning(f'failed to hand off heartbeat to sender: {e!r}')
+
+		try:
+			status = self.plugin_status_message()
+		except Exception as e:
+			log.warning(f'failed to build plugin_status: {e!r}')
+			return
+		if status == self._lastStatus:
+			return
+		try:
+			self._send(status)
+		except Exception as e:
+			log.warning(f'failed to hand off plugin_status to sender: {e!r}')
+			return
+		# Only recorded once the send actually succeeded, so a failed push is
+		# retried on the next tick instead of being suppressed as "unchanged".
+		self._lastStatus = status
 
 	async def handle_ts_request(self, message: dict) -> dict:
 		"""The coroutine WireServer awaits per 'ts_request' (server.py's

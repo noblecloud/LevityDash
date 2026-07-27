@@ -38,6 +38,12 @@ DEFAULT_HOST = '127.0.0.1'
 DEFAULT_PORT = 8667
 
 
+#: Seconds between control-plane beats. Paired with remote.py's
+#: _HEARTBEAT_STALE_AFTER, which allows two missed beats before reporting a
+#: fault - keep them in step if either changes.
+_HEARTBEAT_INTERVAL = 5.0
+
+
 def main() -> int:
 	# Must be set before LevityDashboard.init(): the QApplication instance is
 	# constructed during init()'s `import LevityDash.lib` chain (the package
@@ -116,6 +122,16 @@ def main() -> int:
 	# mirror the GUI's own startup ordering (PySide/__init__.py): plugins start
 	# once the Qt loop is running, so their publisher hops have a loop to land on
 	QTimer.singleShot(10, LevityDashboard.plugins.start)
+
+	# Control plane. Deliberately a QTimer on the Qt main thread rather than a
+	# task on the server loop: tick() reads live plugin state, which is owned
+	# by this thread. It also means a wedged Qt loop stops the heartbeat -
+	# which is the point, since that is exactly the failure an aiohttp-level
+	# ping would keep reporting as healthy.
+	control = QTimer()
+	control.timeout.connect(bridge.tick)
+	control.start(int(_HEARTBEAT_INTERVAL * 1000))
+	QTimer.singleShot(50, bridge.tick)  # first beat without waiting a full interval
 
 	code = app.exec()
 

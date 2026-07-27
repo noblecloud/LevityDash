@@ -12,7 +12,7 @@ from typing import Callable, Dict, Optional
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.wire.containers import RemoteContainer, RemoteSource
-from LevityDash.lib.wire.messages import apply_container_update, parse_update_message
+from LevityDash.lib.wire.messages import PluginState, apply_container_update, parse_heartbeat, parse_plugin_status, parse_update_message
 
 log = LevityPluginLog.getChild('Wire').getChild('Frontend')
 
@@ -23,6 +23,8 @@ class RemoteFrontend:
 	def __init__(
 		self, on_update: Callable[[Dict[CategoryItem, RemoteContainer]], None],
 		ts_request_fn: Optional[Callable[[dict, Callable], None]] = None,
+		on_plugin_status: Optional[Callable[[Dict[str, PluginState]], None]] = None,
+		on_heartbeat: Optional[Callable[[int, float], None]] = None,
 	):
 		# on_update receives {key: RemoteContainer} - dispatcher.update in
 		# mode=remote, exactly what LoopbackBridge hands its dispatcher today.
@@ -33,11 +35,29 @@ class RemoteFrontend:
 		# anything about sockets/asyncio themselves - see remote.py's
 		# RemoteConnection.request_timeseries for what this actually is.
 		self._ts_request_fn = ts_request_fn
+		# Control plane (backend->frontend only). Both optional so the existing
+		# update-only construction in tests keeps working untouched.
+		self._on_plugin_status = on_plugin_status
+		self._on_heartbeat = on_heartbeat
 		self._sources: Dict[str, RemoteSource] = {}
+		#: Latest per-plugin health snapshot, replayed by the server on connect.
+		self.plugin_states: Dict[str, PluginState] = {}
 
 	def handle_message(self, message: dict) -> None:
-		if message.get('type') != 'update':
-			return
+		match message.get('type'):
+			case 'update':
+				pass
+			case 'plugin_status':
+				self.plugin_states = parse_plugin_status(message)
+				if self._on_plugin_status is not None:
+					self._on_plugin_status(self.plugin_states)
+				return
+			case 'heartbeat':
+				if self._on_heartbeat is not None:
+					self._on_heartbeat(*parse_heartbeat(message))
+				return
+			case _:
+				return
 		source_info, updates = parse_update_message(message)
 		source = self._get_source(source_info)
 		remoteValues: Dict[CategoryItem, RemoteContainer] = {}

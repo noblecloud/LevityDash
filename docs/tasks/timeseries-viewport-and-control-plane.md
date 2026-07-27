@@ -58,11 +58,53 @@ principle (a live Container fed a similarly sparse window would hit the
 same crash), but item 1 above made it far more likely to actually occur in
 remote mode.
 
-## 3. Plugin control plane
+## 3. Plugin control plane — health done, start/stop still open
 
-Not started: watchdog heartbeats and remote start/stop/health lifecycle for
-backend-hosted plugins. Independent of the items above. This is the one
-remaining open item from this milestone's original scope.
+**Landed 2026-07-27: the read-only half.** Two backend→frontend message types
+in `messages.py`, deliberately separate:
+
+- **`heartbeat`** — small, unconditional, every `_HEARTBEAT_INTERVAL` (5s,
+  `lib/backend.py`). Carries `seq` + `uptime`. This is the liveness signal;
+  silence on the update channel is *normal* for a weather backend on a slow
+  poll, so update traffic says nothing about health.
+- **`plugin_status`** — per-plugin `{enabled, running, keyCount, lastPublish}`,
+  sent **on change only**, plus replayed by `WireServer` to each late joiner
+  (`_latestStatus`). A heartbeat is deliberately *not* retained for replay —
+  it would assert liveness the backend hasn't demonstrated.
+
+Frontend: `RemoteConnection.plugins` (`{name: PluginState}`) + `pluginsChanged`
+Signal, paired the same way `state`/`connectionStateChanged` already are.
+`backendAlive` is the watchdog — distinct from `state == 'connected'`, because
+a wedged Qt loop keeps its socket open. That's also why `tick()` is a QTimer on
+the **Qt main thread**: a wedged loop stops the heartbeat, which an
+aiohttp-level ping would keep reporting as healthy.
+
+A backwards `seq` means a different backend process is answering (restart under
+a surviving socket); the frontend clears its plugin snapshot rather than
+showing the old process's state.
+
+### Two bugs the two-process run caught that unit tests did not
+
+- **`len(plugin)` raises `TypeError`.** `Plugin` defines no `__len__` — the
+  one nearby in `plugin.py` belongs to its observation-class dict. An
+  over-broad `except` reported **0 keys for every plugin**, including busy
+  ones. Real source is `plugin.keys()`; verified live at 451/270/15 keys.
+- **A failed `plugin_status` send must not update the "unchanged" cache**, or
+  one transient failure suppresses that snapshot permanently. Now only
+  recorded after the send succeeds.
+
+Live verification (`LevityDash-backend` + a real `WireClient`): heartbeats
+ticking with incrementing seq, late joiner receiving the replayed status
+immediately, one status in 12s (change-suppression holding), and
+`OpenWeatherMap` showing `keys=15, lastPublish=None` — registered but not yet
+publishing, a distinction that only exists because these are separate fields.
+
+⚠️ Reproducing this needs a Govee-free config (`LEVITYDASH_CONFIG_SEED`) —
+otherwise the backend `SIGABRT`s at startup on Bluetooth/TCC, per CLAUDE.md.
+
+**Still open:** frontend→backend `start`/`stop`/`restart` commands, and any UI.
+The health half was built first deliberately — commands land on top of it
+without reshaping anything above.
 
 ## Still open, not yet tackled
 

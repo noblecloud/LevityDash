@@ -47,6 +47,11 @@ Multiple frontend types on different platforms — desktop Qt, web, and small em
 - The client/server boundary blurs toward a broker/bus topology — MQTT deserves a serious look (note: `#` is MQTT's wildcard, so key↔topic mapping must escape it).
 - The core state/notification layer must stay Qt-free — statekit already is.
 - Open problem: `.levity` layout files are Qt-rendering-coupled; heterogeneous frontends need their own layout model or a shared abstract one.
+- **Candidate answer — a "fixed"/baked layout mode.** *Not a priority; recorded so the option isn't rediscovered from scratch.* Once a dashboard is locked, bake the resolved layout — absolute rects, font sizes, baselines — and ship *that* over the wire. A thin frontend then does no layout at all: it draws strings at known coordinates and swaps values as messages arrive. That is a far smaller thing to implement than a second LevityDash, and it's what would make genuinely low-end heads (a Pi-class board, a framebuffer/LVGL renderer, a plain web page) viable, since the hardest component to port is `lib/ui/Groups.py`'s clustering/shared-scale fitting.
+  - Secondary win on the Qt side too: it removes the startup fit cascade (the biggest chunk of time-to-first-paint) and stops value-driven refits — a shared scale of `min(...)` means one value widening (`9.0` → `10.0`) currently shrinks its whole group, which is both a recompute and a visible glitch on data arrival.
+  - **Bake against worst case, not current values**, or the first three-digit reading breaks the layout. The widest possible rendering per field is derivable rather than observed: `digit_budget` caps the digit count and the format spec pins unit and separators.
+  - Keep it a **sidecar, not part of the `.levity`** — the dashboard file stays portable and hand-editable while the bake stays machine-specific and disposable. Fingerprint on `(viewport, DPI, font families actually resolved)` and recompute on mismatch; a silently-stale bake fails as overflowing or floating text with no error.
+  - Fixed-width digits make a bake meaningfully safer (a numeric field's width stops depending on *which* digits), which the current dashboard already leans on.
 
 ---
 

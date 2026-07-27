@@ -25,13 +25,15 @@ marshal QObject's thread affinity correctly.
 """
 import asyncio
 import threading
-from typing import Callable, Optional, TYPE_CHECKING
+from time import monotonic
+from typing import Callable, Dict, Optional, TYPE_CHECKING
 
 from PySide6.QtCore import QObject, Qt, Signal, Slot
 
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.wire.client import WireClient
 from LevityDash.lib.wire.frontend import RemoteFrontend
+from LevityDash.lib.wire.messages import PluginState
 
 if TYPE_CHECKING:
 	from LevityDash.lib.plugins.dispatcher import PluginValueDirectory
@@ -41,6 +43,14 @@ log = LevityPluginLog.getChild('Wire').getChild('Remote')
 __all__ = ['RemoteConnection']
 
 _RECONNECT_MAX_SECONDS = 30
+
+#: How long without a heartbeat before the backend is treated as stale. The
+#: backend beats every _HEARTBEAT_INTERVAL (lib/backend.py); this allows two
+#: missed beats plus slack, so a single dropped/late beat is not reported as a
+#: fault. A stale connection is NOT the same as a closed one - the socket can
+#: stay open while the backend's Qt loop is wedged, which is exactly the case
+#: an aiohttp-level ping cannot detect and this watchdog can.
+_HEARTBEAT_STALE_AFTER = 16.0
 
 
 class _GuiMarshal(QObject):
@@ -57,6 +67,7 @@ class _GuiMarshal(QObject):
 
 	_invoke = Signal(object)
 	connectionStateChanged = Signal(str)  # 'connecting' | 'connected' | 'disconnected'
+	pluginsChanged = Signal(dict)  # {name: PluginState}
 
 	def __init__(self):
 		super().__init__()
@@ -73,7 +84,12 @@ class _GuiMarshal(QObject):
 class RemoteConnection:
 	def __init__(self, dispatcher: 'PluginValueDirectory', url: str):
 		self.url = url
-		self._frontend = RemoteFrontend(on_update=dispatcher.update, ts_request_fn=self.request_timeseries)
+		self._frontend = RemoteFrontend(
+			on_update=dispatcher.update,
+			ts_request_fn=self.request_timeseries,
+			on_plugin_status=self._on_plugin_status,
+			on_heartbeat=self._on_heartbeat,
+		)
 		self._marshal = _GuiMarshal()  # created here -> GUI-thread affinity
 		self._stop = threading.Event()
 		self._client: Optional[WireClient] = None
@@ -89,6 +105,16 @@ class RemoteConnection:
 		# a single str attribute swap is atomic enough under the GIL without
 		# a lock.
 		self.state = 'connecting'
+		#: Latest per-plugin health, and the Signal that fires when it changes.
+		#: Same plain-attribute-plus-Signal pairing as `state` above, for the
+		#: same reason: an observer built after the fact needs to read where
+		#: things stand, not only see later transitions.
+		self.plugins: Dict[str, PluginState] = {}
+		self.pluginsChanged = self._marshal.pluginsChanged
+		# monotonic(), not wall clock - staleness is an elapsed-time question
+		# and must not be skewed by an NTP step or a DST change.
+		self._lastHeartbeat: Optional[float] = None
+		self._heartbeatSeq: Optional[int] = None
 		self._thread.start()
 		log.info(f'mode=remote: connecting to backend at {url}')
 
@@ -138,6 +164,46 @@ class RemoteConnection:
 				break
 			await asyncio.sleep(backoff)
 			backoff = min(backoff * 2, _RECONNECT_MAX_SECONDS)
+
+	# -- control plane (GUI thread: both callbacks arrive via _marshal) ------
+
+	def _on_plugin_status(self, states: Dict[str, PluginState]) -> None:
+		self.plugins = states
+		self._marshal.pluginsChanged.emit(states)
+
+	def _on_heartbeat(self, seq: int, uptime: float) -> None:
+		# A sequence that goes backwards means a different backend process is
+		# answering - it restarted while the socket happened to survive, or a
+		# second backend took the port. Worth surfacing: the plugin snapshot
+		# we're holding belongs to the old process.
+		if self._heartbeatSeq is not None and seq < self._heartbeatSeq:
+			log.warning(f'backend heartbeat sequence went backwards ({self._heartbeatSeq} -> {seq}); backend likely restarted')
+			self.plugins = {}
+			self._marshal.pluginsChanged.emit(self.plugins)
+		self._heartbeatSeq = seq
+		self._lastHeartbeat = monotonic()
+
+	@property
+	def secondsSinceHeartbeat(self) -> Optional[float]:
+		"""Seconds since the last heartbeat, or None if none has arrived yet."""
+		if self._lastHeartbeat is None:
+			return None
+		return monotonic() - self._lastHeartbeat
+
+	@property
+	def backendAlive(self) -> bool:
+		"""Whether the backend is both connected and beating.
+
+		Distinct from ``state == 'connected'``: a wedged backend keeps its
+		socket open, so the transport looks healthy while nothing is actually
+		being served. Callers wanting "can I trust this data" want this.
+		"""
+		if self.state != 'connected':
+			return False
+		since = self.secondsSinceHeartbeat
+		# None => connected but no beat yet; treat as alive during the first
+		# interval rather than flapping to 'stale' on every fresh connection.
+		return since is None or since < _HEARTBEAT_STALE_AFTER
 
 	# -- GUI thread ---------------------------------------------------------
 

@@ -19,7 +19,7 @@ frontend. See lib/wire/server.py's unicast reply path and client.py's
 request/response correlation for how these actually cross the wire.
 """
 from datetime import datetime, timedelta
-from typing import Any, List, Optional, Sequence, Tuple, TYPE_CHECKING
+from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, TYPE_CHECKING
 from uuid import uuid4
 
 from LevityDash.lib.log import LevityPluginLog
@@ -34,6 +34,8 @@ log = LevityPluginLog.getChild('Wire').getChild('Messages')
 __all__ = [
 	'encode_container', 'apply_container_update', 'encode_update_message', 'parse_update_message',
 	'build_ts_request', 'encode_ts_response', 'decode_ts_response',
+	'PluginState', 'encode_plugin_status', 'parse_plugin_status',
+	'encode_heartbeat', 'parse_heartbeat',
 ]
 
 # The flag fields a container advertises across the wire (isRealtime,
@@ -159,3 +161,123 @@ def decode_ts_response(message: dict) -> Tuple[bool, List[Tuple[datetime, Any]],
 	Always returns a (possibly empty) list - never raises - so callers don't
 	need a separate empty/error branch beyond checking `ok`."""
 	return message['ok'], decode_timeseries_values(message.get('timeseries')), message.get('error')
+
+
+# --- control plane: plugin health + liveness -------------------------------
+#
+# Two message types, both backend->frontend broadcast, deliberately separate:
+#
+# 'heartbeat' is small and unconditional. It answers "is the backend process
+# still alive and pumping?" even when no plugin has published for a while -
+# which is the normal state for a weather backend on a slow poll interval, so
+# silence on the update channel says nothing about health.
+#
+# 'plugin_status' is the per-plugin snapshot and is sent on change (plus once
+# to each newly-connected client, replayed by WireServer). It is NOT a
+# liveness signal: an unchanged status is not resent, so its absence is
+# expected. Read staleness off the heartbeat, never off this.
+
+
+class PluginState(NamedTuple):
+	"""One plugin's health as seen from the frontend."""
+
+	name: str
+	enabled: bool
+	running: bool
+	keyCount: int
+	#: When the backend last saw this plugin publish, or None if never. Sourced
+	#: from RemoteBackend's own view of publishes rather than from Plugin
+	#: internals - the backend already sees every publish, and nothing on
+	#: Plugin tracks this today.
+	lastPublish: Optional[datetime] = None
+
+
+def _plugin_key_count(plugin: Any) -> int:
+	"""How many keys a plugin currently exposes.
+
+	``Plugin`` defines no ``__len__`` (the ``__len__`` nearby in plugin.py
+	belongs to its observation-class dict, not the plugin), so ``len(plugin)``
+	raises TypeError - which an over-broad except silently reported as 0 for
+	every plugin, including busy ones. ``keys()`` is the real published
+	surface; the fallbacks keep lightweight test stand-ins working.
+	"""
+	for source in (
+		lambda: len(plugin.keys()),
+		lambda: len(plugin.containers),
+		lambda: len(plugin),
+	):
+		try:
+			return int(source())
+		except Exception:
+			continue
+	return 0
+
+
+def encode_plugin_status(*, plugins: Sequence[Any], lastPublish: Optional[dict] = None) -> dict:
+	"""Build a 'plugin_status' message from live plugin objects.
+
+	Attributes are read duck-typed (``name``/``enabled``/``running``, and
+	``len()`` for the key count) so tests can pass stand-ins without
+	constructing a real ``Plugin`` - the same approach ``tests/wire`` already
+	takes for containers.
+	"""
+	lastPublish = lastPublish or {}
+	entries = []
+	for plugin in plugins:
+		name = getattr(plugin, 'name', None)
+		if name is None:
+			continue
+		keyCount = _plugin_key_count(plugin)
+		published = lastPublish.get(name)
+		entries.append({
+			'name': name,
+			'enabled': bool(getattr(plugin, 'enabled', False)),
+			'running': bool(getattr(plugin, 'running', False)),
+			'keyCount': keyCount,
+			'lastPublish': encode_value(published) if isinstance(published, datetime) else None,
+		})
+	return {
+		'v': WIRE_VERSION,
+		'type': 'plugin_status',
+		'plugins': sorted(entries, key=lambda e: e['name']),
+	}
+
+
+def parse_plugin_status(message: dict) -> Dict[str, PluginState]:
+	"""Decode a 'plugin_status' message into ``{name: PluginState}``.
+
+	Never raises on a malformed entry - a plugin the frontend can't understand
+	is skipped rather than sinking the whole snapshot, matching the per-key
+	resilience the update path already relays with.
+	"""
+	states: Dict[str, PluginState] = {}
+	for entry in message.get('plugins') or ():
+		try:
+			published = entry.get('lastPublish')
+			states[entry['name']] = PluginState(
+				name=entry['name'],
+				enabled=bool(entry.get('enabled', False)),
+				running=bool(entry.get('running', False)),
+				keyCount=int(entry.get('keyCount') or 0),
+				lastPublish=decode_value(published) if published is not None else None,
+			)
+		except Exception as e:
+			log.warning(f'skipping malformed plugin_status entry {entry!r}: {e!r}')
+	return states
+
+
+def encode_heartbeat(*, seq: int, uptime: float) -> dict:
+	"""Build a 'heartbeat'. ``seq`` increments per beat so a frontend can spot
+	a backend restart (the sequence going backwards) as distinct from a
+	reconnect, and ``uptime`` is seconds since the backend started."""
+	return {
+		'v': WIRE_VERSION,
+		'type': 'heartbeat',
+		'seq': int(seq),
+		'uptime': float(uptime),
+	}
+
+
+def parse_heartbeat(message: dict) -> Tuple[int, float]:
+	"""Decode a 'heartbeat' into ``(seq, uptime)``."""
+	return int(message.get('seq') or 0), float(message.get('uptime') or 0.0)

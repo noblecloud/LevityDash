@@ -48,6 +48,10 @@ class WireServer:
 		# cumulative snapshot is a mode=remote-step refinement (TODO), this
 		# keeps only the most recent batch for now.
 		self._latest: Dict[str, dict] = {}
+		# Most recent 'plugin_status', replayed alongside _latest on connect.
+		# Heartbeats are deliberately NOT retained - replaying a stale one
+		# would assert liveness the backend hasn't actually demonstrated.
+		self._latestStatus: Optional[dict] = None
 		self._app = web.Application()
 		self._app.router.add_get(path, self._handle_ws)
 		self._runner: Optional[web.AppRunner] = None
@@ -93,8 +97,15 @@ class WireServer:
 			return False
 
 	async def broadcast(self, message: dict) -> None:
-		if message.get('type') == 'update' and (name := message.get('source', {}).get('name')) is not None:
-			self._latest[name] = message
+		match message.get('type'):
+			case 'update' if (name := message.get('source', {}).get('name')) is not None:
+				self._latest[name] = message
+			case 'plugin_status':
+				# Replayed to late joiners for the same reason updates are: the
+				# backend only re-sends this on *change*, so a frontend that
+				# connects during a quiet period would otherwise show no plugins
+				# at all until something happened to toggle.
+				self._latestStatus = message
 		if not self._clients:
 			return
 		payload = json.dumps(message)
@@ -108,6 +119,8 @@ class WireServer:
 		# replay current snapshot so a late-joining frontend starts populated
 		for message in self._latest.values():
 			await self._safe_send(ws, json.dumps(message))
+		if self._latestStatus is not None:
+			await self._safe_send(ws, json.dumps(self._latestStatus))
 		try:
 			async for msg in ws:
 				if msg.type == WSMsgType.TEXT:
