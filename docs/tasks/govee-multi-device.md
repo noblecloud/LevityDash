@@ -1,15 +1,17 @@
 # Two Govee thermometers at once (`#identity` keys)
 
-**Status:** 2026-07-27 — `#identity` and the config/identity layer are
-**done and tested**. What remains is the plugin's own data path (§"Still to
-do" at the bottom): unbinding `self.name` from the device and routing each
-device into its own observation.
+**Status:** ✅ **Working as of 2026-07-27.** Both thermometers report
+independently on the live dashboard — Terrarium populated on its own, minutes
+before the room did, rather than one value being fanned out to both. That
+separation *is* the feature: two identities are never merged.
+
+Remaining loose ends are listed at the bottom; none of them block use.
 
 The author has two GVH5102 thermometers. With both powered on, the data "isn't
 handled very well" — because the plugin is **single-device by construction**,
 not because of a key collision alone.
 
-## Why it fails today
+## Why it used to fail (all four now fixed)
 
 Four separate things, in the order data hits them:
 
@@ -184,74 +186,48 @@ old key — including the author's current one. Two options:
    existing `.levity` files, and gives ugly key names unless aliases are also
    substituted.
 
-## ⚠️ OPEN BUG: scoped keys never leave the backend
+## Fixed: scoped keys now reach the frontend
 
-Both thermometers reach the observation — the control plane reports
-`GVH5102_6736: keys=9` — but **`lastPublish=None`**: nothing is ever
-published, so a `mode=remote` frontend shows blank Indoor *and* Terrarium
-panels while the network plugins update normally.
+Symptom was `keys=10` but `lastPublish=None` — the observation held both
+devices, but nothing was ever published, so a `mode=remote` frontend showed
+blank Indoor *and* Terrarium panels while network plugins updated normally.
 
-Backend log (2026-07-27 12:33):
+Three separate bugs, in the order they were peeled back. **Every one was
+diagnosed from the backend log, and none of them from a test.**
 
-```
-indoor.temperature.temperature#terrarium was not found in
-    {timestamp: {...}, indoor: {}}
-GVH5102_6736:indoor.temperature.temperature#terrarium: failed to encode for
-    wire push, skipping this key: AttributeError("'NoneType' object has no
-    attribute 'get'")
-```
+1. **`Schema.getExact` did not strip identity.** `_source` is keyed by base
+   keys; `getUnitMetaData` already stripped, but `getExact` — the lookup
+   `Container` construction actually reaches — did not, so it returned `None`
+   and a caller did `.get` on it. `RemoteBackend._on_published` catches that
+   per key and skips, so *every* key was skipped, `updates` came out empty,
+   and the method returned before recording a publish.
+   ⚠️ `.anonymous` sits on the adjacent line and strips **source**, not
+   identity — the easy wrong fix.
 
-Chain: `RemoteBackend._on_published` calls `encode_container(plugin[key])`;
-`Plugin.__getitem__` falls off the end and returns **None** for a scoped key
-(neither the `item in self` nor the endpoint branch matches);
-`encode_container(None)` raises; the per-key `except` skips it; every key
-skips, so `updates` is empty and the method returns **before** recording
-`lastPublish`.
+2. **The identity itself was stale.** `attachIdentity` resolved it from
+   `sourceData`/`metaData`, which are carried on the datagram and can still
+   hold the *previous* batch's value. With two sensors alternating that is a
+   consistent one-off swap, which looks exactly like mislabelled config — it
+   cost a detour through swapping (and unswapping) `Govee.ini`, and a false
+   accusation that the aliases were wrong. Fixed by passing identity
+   explicitly: the plugin knows which device it just heard from.
 
-**Root cause: there is a second schema lookup that does not strip identity.**
-`Schema.getUnitMetaData` was fixed (which is why values reach the observation
-at all — 9 keys), but the containment/lookup path used by
-`Plugin.__contains__` → `item in endpoint` → schema resolution has its own
-"not found" site at `schema/__init__.py:738` (the wildcard-match branch,
-~L689–738) that still sees the raw `…#terrarium` key.
+3. **`self.__identity` name-mangled to `_LevityDatagram__identity`,** and
+   `Subdatagram` subclasses `LevityDatagram` without running its `__init__`,
+   so every sub-item raised `AttributeError`. The realtime payload *lives* in
+   a sub-item, so the keys that matter were never scoped. Now an unmangled
+   class-level default, with sub-items inheriting the parent's identity — the
+   same chaining `Subdatagram` already does for `sourceData`/`metaData`.
 
-Fix direction: strip identity at that lookup too — ideally factor a single
-`_base_key(key)` helper used by every schema lookup, rather than a third
-ad-hoc `withoutIdentity` call. Note the log's `indoor: {}` — worth confirming
-which `Schema` instance is being consulted there, since an empty `indoor`
-subtree suggests it may not be the plugin's fully-built schema.
+Also fixed en route: `CategoryItem.keysToDict` recursed ~978 frames deep on
+any identity-scoped key, crashing the frontend's `ingest` on **every
+reconnect**. The descent shrinks its set with `- {key}` (equality, which is
+identity-aware) while filtering with `k < key` (ordering, which is not), so
+once those disagreed the set never shrank. One scoped key was enough.
 
-Verify with: `poetry run python <scratchpad>/probe.py ws://127.0.0.1:8667/ws`
-— `lastPublish` must become a timestamp, not None. The control plane is the
-fastest way to see this; the backend log is the second.
+## Still to do
 
-## Known gap: calculated values are identity-unaware
-
-**Dewpoint and heatIndex stopped appearing** once keys became identity-scoped,
-and the author spotted why: they are *derived*, not measured.
-
-`ObservationDict.calculateMissing` (observation.py ~1456) tests literal base
-keys — `if 'environment.temperature.temperature' in keys`,
-`if 'environment.temperature.dewpoint' not in keys` — against a key set that
-now contains only `…temperature#bedroom`. Nothing matches, so nothing is
-computed. Confirmed against the pre-change baseline, which had
-`indoor.temperature.dewpoint` and `indoor.temperature.heatIndex`; both are
-absent from the scoped set.
-
-The fix is not simply stripping identity at the check: a derived value must be
-computed **per identity** and written back with that same identity, or the
-bedroom's humidity would combine with the terrarium's temperature. So
-`calculateMissing` needs to group the key set by identity and run once per
-group, emitting `…dewpoint#bedroom` and `…dewpoint#terrarium`.
-
-That generalises past Govee — it is what any multi-sensor plugin will need,
-and it is the same "group by identity" shape the dispatcher will eventually
-want.
-
-## Still to do — the plugin's data path
-
-Nothing below is designed away; it's the four root causes at the top, and
-none of it is touched yet:
+Nothing below blocks the feature; it all works today.
 
 1. **Unbind `self.name` from the device** so `__dataParse`'s
    `device.name != self.name` guard stops dropping the second thermometer.

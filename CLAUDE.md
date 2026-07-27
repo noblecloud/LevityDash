@@ -25,7 +25,8 @@ src/
     lib/ui/frontends/PySide/   the Qt frontend (app.py, Modules/Displays/…)
     lib/ui/Groups.py           size-group text-fitting engine (stateless refit)
     devtools/                  dev-only tooling, never imported by the shipped app
-                               (backend_watch.py — auto-restart-on-change watcher)
+                               (backend_watch.py — auto-restart-on-change watcher;
+                                ble_scan.py — BLE scan / "can this host do Bluetooth?")
 ```
 
 Dependency direction is strict: `qolkit ← statekit ← LevityDash`. Never import Qt or LevityDash from statekit/qolkit.
@@ -47,6 +48,7 @@ poetry run pytest                     # offscreen Qt is configured in pyproject
 LEVITYDASH_CONFIG_DEBUG=1 poetry run python -m LevityDash   # pristine temp config
 ```
 
+- **`Ctrl+R` restarts** — in the frontend it replaces the *second* `Ctrl+C` (one `Ctrl+C` arms, then `Ctrl+R` restarts instead of quitting); under `LevityDash-backend-watch` a plain `Ctrl+R` bounces the backend immediately, deliberately skipping the test gate that the file-change path uses. Implemented in `src/qolkit/hotkeys.py` — cbreak, not raw, so `ISIG` stays on and `Ctrl+C` is unaffected; a no-op when stdin isn't a TTY.
 - `LEVITYDASH_CONFIG_DEBUG=1` creates a throwaway config and triggers onboarding — use it for fresh-install behavior, NOT for testing against real dashboards/plugins (run without it; real config is in the platform config dir, e.g. `~/Library/Application Support/LevityDash` on macOS).
 - `tests/qolkit` and `tests/statekit` are pure Python; `tests/ui` boots a headless dashboard via `tests/conftest.py`; `tests/wire` mostly uses hand-built stand-ins over real sockets rather than a full app bootstrap.
 - Two-process manual check: `LevityDash-backend`, then `LevityDash` with `[Backend] mode = remote` in config (or `LEVITYDASH_BACKEND_MODE=remote` env). To screenshot a remote-mode run instead of eyeballing a window: boot via `LevityDashboard.init()`/`app.init_app()` (mirrors `tests/conftest.py`'s `dashboard` fixture, minus `exec_()`), pump events, then `view.grab().save(path)` — works under `QT_QPA_PLATFORM=offscreen` once `[QtOptions] openGL` is forced off (offscreen has no real GL context, so the default `QOpenGLWidget` viewport grabs as blank white).
@@ -58,7 +60,7 @@ LEVITYDASH_CONFIG_DEBUG=1 poetry run python -m LevityDash   # pristine temp conf
 - **Cross-thread timers**: never call `QTimer.start()` from a non-owner thread — it silently does nothing. Use `startTimerSafe`/`stopTimerSafe` from `lib/utils/shared.py` in any data-callback path.
 - **Off-thread painting**: workers may paint `QImage` only; all scene-graph reads must be resolved to plain values on the GUI thread before handing work to a `Worker` (see `Graph.py` `render()` for the pattern).
 - **StateProperty encoders**: anything reaching the YAML dumper must be a plain type; leaked objects (e.g. `DeepChainMap`, measurement objects) get silently `repr()`'d into the save file and corrupt it. Flatten in `.encode`.
-- **Keys**: `CategoryItem` is a tuple subclass with an optional `source`; string form round-trips via `str()`/constructor. The dispatcher reconciles multiple sources per anonymous key via `MultiSourceContainer`.
+- **Keys**: `CategoryItem` is a tuple subclass carrying two orthogonal extras — `source` (*who* provided it; reconciled across providers by `MultiSourceContainer`) and `identity` (*which* value it is — `…temperature#bedroom`; **never** merged). Identity participates in equality, hashing *and* the `__existing__` interning cache. ⚠️ Only the identity form round-trips through `str()`/constructor: `str()` renders a source as a `:`-prefix (`Govee:indoor.…`) that the constructor does **not** parse back, so sourced keys are not round-trip safe. Schema lookups are keyed by the *base* key, so identity must be stripped before any schema lookup (`getExact`, `getUnitMetaData`).
 
 ## Conventions
 
