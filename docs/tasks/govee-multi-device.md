@@ -225,6 +225,29 @@ Verify with: `poetry run python <scratchpad>/probe.py ws://127.0.0.1:8667/ws`
 — `lastPublish` must become a timestamp, not None. The control plane is the
 fastest way to see this; the backend log is the second.
 
+## Known gap: calculated values are identity-unaware
+
+**Dewpoint and heatIndex stopped appearing** once keys became identity-scoped,
+and the author spotted why: they are *derived*, not measured.
+
+`ObservationDict.calculateMissing` (observation.py ~1456) tests literal base
+keys — `if 'environment.temperature.temperature' in keys`,
+`if 'environment.temperature.dewpoint' not in keys` — against a key set that
+now contains only `…temperature#bedroom`. Nothing matches, so nothing is
+computed. Confirmed against the pre-change baseline, which had
+`indoor.temperature.dewpoint` and `indoor.temperature.heatIndex`; both are
+absent from the scoped set.
+
+The fix is not simply stripping identity at the check: a derived value must be
+computed **per identity** and written back with that same identity, or the
+bedroom's humidity would combine with the terrarium's temperature. So
+`calculateMissing` needs to group the key set by identity and run once per
+group, emitting `…dewpoint#bedroom` and `…dewpoint#terrarium`.
+
+That generalises past Govee — it is what any multi-sensor plugin will need,
+and it is the same "group by identity" shape the dispatcher will eventually
+want.
+
 ## Still to do — the plugin's data path
 
 Nothing below is designed away; it's the four root causes at the top, and
