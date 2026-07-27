@@ -156,6 +156,34 @@ never matched, meaning the wildcard branches in `observation.py:1445` and
 tests still pass. This had to come first — `#identity` matching builds directly
 on wildcards.
 
+## Confirmed: separate observations are NOT needed
+
+Verified 2026-07-27 by reading the substitution path rather than assuming.
+`schema/__init__.py:236` resolves a key's `@var` atoms from **that datagram's
+own** `sourceData`/`metaData` (`findVar`) and rewrites the key with
+`replaceVar`. `__dataParse` already puts `deviceName` in every result dict and
+the schema marks `@deviceName` as `sourceData`, so substitution happens
+per-advertisement.
+
+So a single shared `self.realtime` can hold both devices under distinct keys.
+`get_device_observation` / `devices_observations` — the half-built
+per-device-observation route — is **not required** for this, which removes the
+deepest part of the original plan.
+
+⚠️ **But `@deviceName` substitutes a path *segment*, not an identity.** Using
+it directly renames `indoor.temperature.temperature` to
+`indoor.GVH5102_527D.temperature`, which breaks any dashboard pointing at the
+old key — including the author's current one. Two options:
+
+1. **Attach identity in the datagram path** (preferred): keep the key shape and
+   add `#<alias>`, so `indoor.temperature.temperature` keeps existing and
+   `…#terrarium` appears alongside. Needs a new hook parallel to `replaceVar` —
+   `device_scoped_key` already exists to do the attaching, it just isn't called
+   from anywhere in the datagram path yet.
+2. Use `@deviceName` and migrate the dashboard. Cheaper to implement, breaks
+   existing `.levity` files, and gives ugly key names unless aliases are also
+   substituted.
+
 ## Still to do — the plugin's data path
 
 Nothing below is designed away; it's the four root causes at the top, and
@@ -164,9 +192,9 @@ none of it is touched yet:
 1. **Unbind `self.name` from the device** so `__dataParse`'s
    `device.name != self.name` guard stops dropping the second thermometer.
    The plugin's name should be `Govee`; the device is a separate axis.
-2. **Route per device** — call `get_device_observation()` (and give it the
-   assignment its no-op `(self, device)` line was meant to be) instead of the
-   single shared `self.realtime`.
+2. ~~**Route per device** via `get_device_observation()`~~ — **not needed**,
+   see the section above; per-datagram var substitution already separates the
+   devices within one observation. Leave the half-built code alone regardless.
 3. **Scope the schema keys** — temperature/humidity/dewpoint/heatIndex need
    identity attached at update time via `device_scoped_key`.
 4. **Scanner setup** must accept several devices rather than one
