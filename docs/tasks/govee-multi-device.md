@@ -1,7 +1,9 @@
 # Two Govee thermometers at once (`#identity` keys)
 
-**Status:** designed and agreed 2026-07-27, acceptance tests written and
-failing. Groundwork landed; the rework itself is not started.
+**Status:** 2026-07-27 — `#identity` and the config/identity layer are
+**done and tested**. What remains is the plugin's own data path (§"Still to
+do" at the bottom): unbinding `self.name` from the device and routing each
+device into its own observation.
 
 The author has two GVH5102 thermometers. With both powered on, the data "isn't
 handled very well" — because the plugin is **single-device by construction**,
@@ -84,21 +86,65 @@ Why sections rather than a flat `[devices]` name→alias map:
 (`#GVH5102_6736`), so two thermometers work out of the box and aliasing is a
 readability upgrade, not a requirement.
 
-## Acceptance tests (written, currently xfail-strict)
+## Landed: `#identity` on `CategoryItem`
+
+`categories.py` now carries an `identity` alongside `source`, separated by
+`#` (not `@`, which is a registered wildcard used for schema placeholders
+like `@deviceName`):
+
+```python
+CategoryItem('indoor.temperature.temperature#bedroom').identity  # 'bedroom'
+key.withIdentity('garage')      # scope a key to a device
+key.withoutIdentity             # the 'any device' form
+```
+
+Semantics: **source is reconciled, identity never is.** Two sources for one
+key merge into a single value; two identities are different values. So
+identity participates in equality and hashing, and an unqualified key is not
+a stand-in for a qualified one — callers wanting "any device" ask via
+`withoutIdentity`.
+
+Three things that needed care, each now covered by a regression test:
+
+- **`#` must be split before the atom regex.** `#` is outside the atom
+  character class, so a naive parse silently drops the separator and leaves
+  the identity as an extra path segment (`a.b#bedroom` → `('a','b','bedroom')`).
+- **Identity is part of the `__existing__` interning key.** `CategoryItem`
+  caches instances by `hash((*atoms, *source))`; without identity in that
+  tuple, `…#bedroom` and `…#terrarium` would be *the same object*.
+- **Rebuilds must carry it through.** `anonymous` and `replaceVar`
+  reconstruct the key and would otherwise drop identity silently.
+
+## Landed: `__ne__` was bypassing `__eq__` entirely
+
+Found while testing the above, and it **predates identity**. `CategoryItem`
+subclasses `tuple`, and tuple supplies its own `__ne__`; Python only derives
+`__ne__` from `__eq__` when the base class doesn't provide one. So `!=` was
+doing an element-wise tuple comparison that ignored **source and identity**,
+and `a == b` / `a != b` could both be False simultaneously — two keys from
+different sources included. Fixed with an explicit `__ne__`.
+
+## Landed: config device sections
+
+`parse_device_sections`, `resolve_device_identity`, `device_scoped_key` in
+`Govee.py`, all pure functions of config + advertised name, so they test
+without a Plugin bootstrap. Legacy flat `device.name` under `[plugin]` is
+surfaced as a single device aliased to its own advertised name, so the
+shipped single-device `Govee.ini` keeps working untouched.
+
+## Acceptance tests
 
 `tests/plugins/test_govee.py` — real captured advertisements, not invented
-bytes. The three `xfail(strict=True)` cases define the target API and will
-error if they start passing unnoticed:
+bytes. Pins the shipped GVH5102 slices against both payloads, with a guard
+that the two fixtures genuinely differ (otherwise the multi-device tests
+could pass vacuously), plus identity resolution and device-section parsing.
+`tests/plugins/test_categories.py` covers `#identity` and the `__ne__` fix.
 
-- `resolve_device_identity(name, devices)` prefers a configured alias
-- …and falls back to the advertised name when unconfigured
-- `device_scoped_key(...)` produces `indoor.temperature.temperature#bedroom`
+⚠️ These were written first as `xfail(strict=True)` and flipped to passing
+once implemented — strict is what made them announce themselves rather than
+sit around as stale xfails.
 
-The passing tests pin the shipped GVH5102 slices against both real payloads,
-plus a guard that the two fixtures genuinely differ — otherwise the
-multi-device tests could pass vacuously.
-
-## Already landed
+## Also landed earlier
 
 **`CategoryWildcard` was returning the string `'None'` for every wildcard** — a
 walrus in `__new__` rebound `value` to `None` before it was used as both the
@@ -110,15 +156,29 @@ never matched, meaning the wildcard branches in `observation.py:1445` and
 tests still pass. This had to come first — `#identity` matching builds directly
 on wildcards.
 
-## Still to design
+## Still to do — the plugin's data path
 
-- **`#identity` in `CategoryItem` itself.** Parser + hashing in `categories.py`,
-  and the rule that an identity-bearing key is *never* merged across devices
-  (unlike `@source`, which is reconciled). Note `str()`/constructor round-trip
-  is currently **broken for sourced keys** — `source='WeatherFlow'` is exploded
-  character-by-character by the `source` setter (`isinstance(value, Iterable)`
-  catches `str`), yielding `W:e:a:t:h:e:r:F:l:o:w:…`. CLAUDE.md documents that
-  round-trip as the contract. Fix alongside.
+Nothing below is designed away; it's the four root causes at the top, and
+none of it is touched yet:
+
+1. **Unbind `self.name` from the device** so `__dataParse`'s
+   `device.name != self.name` guard stops dropping the second thermometer.
+   The plugin's name should be `Govee`; the device is a separate axis.
+2. **Route per device** — call `get_device_observation()` (and give it the
+   assignment its no-op `(self, device)` line was meant to be) instead of the
+   single shared `self.realtime`.
+3. **Scope the schema keys** — temperature/humidity/dewpoint/heatIndex need
+   identity attached at update time via `device_scoped_key`.
+4. **Scanner setup** must accept several devices rather than one
+   `device.id`.
+
+## Still open, unrelated to the above
+
+- **`str()` round-trip is broken for sourced keys.** `source='WeatherFlow'`
+  is exploded character-by-character by the `source` setter
+  (`isinstance(value, Iterable)` catches `str`), yielding
+  `W:e:a:t:h:e:r:F:l:o:w:…`. CLAUDE.md documents that round-trip as the
+  contract. Identity round-trips correctly; source does not.
 - How an unqualified `indoor.temperature.temperature` resolves when several
   identities exist — a configured default device, or ambiguous-and-loud.
 

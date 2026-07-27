@@ -514,6 +514,12 @@ class CategoryAtom(str):
 		return str.__hash__(self)
 
 
+#: Separates a key from its identity - *which* value this is (which device,
+#: which sensor). Deliberately not '@': that is already a registered wildcard
+#: and is used by schemas for variable placeholders like '@deviceName'.
+IDENTITY_SEPARATOR = '#'
+
+
 # Section CategoryItem
 class CategoryItem(tuple):
 	root: ClassVar['CategoryItem']
@@ -521,7 +527,7 @@ class CategoryItem(tuple):
 	__source: Optional[Hashable]
 	__existing__ = {}
 
-	def __new__(cls, *values: Union[tuple, list, str], separator: Optional[str] = None, source: Any = None, **kwargs):
+	def __new__(cls, *values: Union[tuple, list, str], separator: Optional[str] = None, source: Any = None, identity: Optional[str] = None, **kwargs):
 		if separator is not None:
 			cls.__separator = separator
 		valueArray = []
@@ -529,11 +535,23 @@ class CategoryItem(tuple):
 			if value is None:
 				continue
 			elif isinstance(value, str):
+				# '#identity' must be split off before the findall below: '#'
+				# is not in the atom character class, so it would otherwise be
+				# dropped and the identity absorbed as an ordinary path atom
+				# ('a.b#bedroom' -> ('a', 'b', 'bedroom')).
+				value, _, parsedIdentity = value.partition(IDENTITY_SEPARATOR)
+				if parsedIdentity and identity is None:
+					identity = parsedIdentity
 				valueArray.extend(re.findall(rf"[\w|{CategoryWildcard.regexMatchPattern()}|\-]+", value))
 			else:
 				valueArray.extend(value)
+				if identity is None:
+					identity = getattr(value, 'identity', None)
 		source = tuple(source) if isinstance(source, list) else (source,)
-		id = hash((*tuple(valueArray), *source))
+		# identity is part of the interning key: two keys differing only by
+		# identity are *different* keys (a bedroom reading is never a garage
+		# reading), so they must not share an interned instance.
+		id = hash((*tuple(valueArray), *source, identity))
 		if id in cls.__existing__:
 			return cls.__existing__[id]
 		kwargs['id'] = id
@@ -542,8 +560,17 @@ class CategoryItem(tuple):
 		cls.__existing__[id] = value
 		return value
 
-	def __init__(self, *values: Union[tuple, list, str], separator: Optional[str] = None, source: Any = None, **kwargs):
+	def __init__(self, *values: Union[tuple, list, str], separator: Optional[str] = None, source: Any = None, identity: Optional[str] = None, **kwargs):
 		self.source = source
+		if identity is None:
+			for value in values:
+				if isinstance(value, str) and IDENTITY_SEPARATOR in value:
+					identity = value.partition(IDENTITY_SEPARATOR)[2] or None
+					break
+				if isinstance(value, CategoryItem) and value.identity is not None:
+					identity = value.identity
+					break
+		self.__identity = identity
 		self.__id = kwargs.pop('id', None)
 		self.__hash = None
 
@@ -603,19 +630,48 @@ class CategoryItem(tuple):
 	def key(self) -> str:
 		return self[-1]
 
+	@property
+	def identity(self) -> Optional[str]:
+		"""Which value this is - a specific device/sensor, e.g. 'bedroom'.
+
+		Orthogonal to `source`, and the opposite of it in intent: several
+		sources for the same key are *reconciled* into one value, whereas two
+		identities are never merged (a bedroom reading is not a garage
+		reading). Identity therefore participates in equality and hashing.
+		"""
+		return self.__identity
+
+	@cached_property
+	def hasIdentity(self) -> bool:
+		return self.__identity is not None
+
+	@cached_property
+	def withoutIdentity(self) -> 'CategoryItem':
+		"""The same key with its identity stripped - the 'any device' form."""
+		if self.__identity is None:
+			return self
+		return CategoryItem(tuple(self), separator=self.__separator, source=self.__source, identity=None)
+
+	def withIdentity(self, identity: Optional[str]) -> 'CategoryItem':
+		"""This key, scoped to a particular device/sensor."""
+		return CategoryItem(tuple(self), separator=self.__separator, source=self.__source, identity=identity)
+
 	def __hash__(self):
 		if self.__hash is None:
 			if self.__source is None:
 				value = hash(str(self))
 			else:
-				value = hash((self.__source, self.__separator.join(self)))
+				value = hash((self.__source, self.__separator.join(self), self.__identity))
 			self.__hash = value
 		return self.__hash
 
 	def __str__(self):
+		# str() is the round-trip form - the constructor parses back whatever
+		# this produces, identity included.
+		identity = f'{IDENTITY_SEPARATOR}{self.__identity}' if self.__identity is not None else ''
 		if self.__source is None:
-			return self.__separator.join(self)
-		return f'{":".join(str(_) for _ in self.__source)}:{self.__separator.join(self)}'
+			return f'{self.__separator.join(self)}{identity}'
+		return f'{":".join(str(_) for _ in self.__source)}:{self.__separator.join(self)}{identity}'
 
 	def __repr__(self):
 		if self:
@@ -682,9 +738,22 @@ class CategoryItem(tuple):
 			return False
 		if self.hasWildcard or other.hasWildcard:
 			return subsequenceCheck(list(self), list(other), strict=True)
+		# Two identities are never the same value, and an unqualified key is
+		# not a stand-in for a qualified one - callers wanting 'any device'
+		# ask for it explicitly via `withoutIdentity`.
+		if self.__identity != other.identity:
+			return False
 		if self.source is not None and other.source is not None:
 			return hash(self) == hash(other) and self.source == other.source
 		return hash(self) == hash(other)
+
+	def __ne__(self, other):
+		# tuple defines its own __ne__, so overriding only __eq__ left `!=`
+		# doing an element-wise tuple comparison that ignores source and
+		# identity entirely - `a == b` and `a != b` could both be False at the
+		# same time. Python only auto-derives __ne__ from __eq__ when the base
+		# class doesn't supply one, which tuple does.
+		return not self.__eq__(other)
 
 	def __add__(self, other):
 		return CategoryItem([*self, *other])
@@ -785,7 +854,7 @@ class CategoryItem(tuple):
 		return str(self)
 
 	def replaceVar(self, **vars):
-		return CategoryItem([vars.get(f'{i}', i) for i in self], separator=self.__separator, source=self.__source)
+		return CategoryItem([vars.get(f'{i}', i) for i in self], separator=self.__separator, source=self.__source, identity=self.__identity)
 
 	@cached_property
 	def vars(self):

@@ -10,6 +10,7 @@ from bleak import BleakError, BleakScanner
 from bleak.backends.device import BLEDevice
 
 from LevityDash.lib.log import LevityPluginLog
+from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.observation import ObservationRealtime
 from LevityDash.lib.plugins.plugin import Plugin
 from LevityDash.lib.plugins.schema import LevityDatagram, Schema, SchemaSpecialKeys as tsk
@@ -20,6 +21,10 @@ from LevityDash.lib.utils.shared import getOr, now
 pluginLog = LevityPluginLog.getChild('Govee')
 
 __all__ = ["Govee"]
+
+#: Config sections declaring a device: ``[device:bedroom]``. The text after the
+#: prefix is the human-readable identity used in keys.
+_DEVICE_SECTION_PREFIX = 'device:'
 
 
 def getBadActors(string: str) -> list[str]:
@@ -79,6 +84,75 @@ class BLEPayloadParser:
 		else:
 			value = payload
 		return {self.__field: value}
+
+
+def parse_device_sections(config) -> Dict[str, dict]:
+	"""Read ``[device:<alias>]`` sections into ``{alias: {settings}}``.
+
+	The section header *is* the human-readable identity, so a device is
+	declared as::
+
+	    [device:bedroom]
+	    name = GVH5102_6736
+
+	Sections rather than a flat alias->name mapping because a device can then
+	override the payload parser it inherits from ``[plugin]`` - a different
+	model needs different byte slices, which is exactly what the plugin
+	description promises is configurable.
+
+	A legacy flat ``device.name`` under ``[plugin]`` is surfaced as a single
+	device aliased to its own advertised name, so existing single-device
+	configs keep working untouched.
+	"""
+	devices: Dict[str, dict] = {}
+	for section in getattr(config, 'sections', lambda: ())():
+		if not str(section).startswith(_DEVICE_SECTION_PREFIX):
+			continue
+		alias = str(section)[len(_DEVICE_SECTION_PREFIX):].strip()
+		if alias:
+			devices[alias] = dict(config[section])
+
+	if not devices:
+		try:
+			legacyName = config['plugin']['device.name']
+		except (KeyError, TypeError):
+			legacyName = None
+		if legacyName:
+			devices[str(legacyName)] = {'name': str(legacyName)}
+	return devices
+
+
+def resolve_device_identity(advertisedName: str, devices: Dict[str, dict]) -> str:
+	"""Map an advertised BLE name onto the identity used in keys.
+
+	Falls back to the advertised name when no alias is configured, so two
+	thermometers work out of the box and aliasing is a readability upgrade
+	rather than a requirement.
+
+	Matching is on ``name`` rather than address: on macOS the address is a
+	per-machine generated UUID, not a hardware MAC, so an address-keyed config
+	would not survive moving to another machine. ``address``, when given, is
+	only a same-machine tiebreaker for two devices advertising the same name.
+	"""
+	for alias, settings in (devices or {}).items():
+		if settings.get('name') == advertisedName:
+			return alias
+	return advertisedName
+
+
+def device_scoped_key(key, identity: Optional[str]) -> CategoryItem:
+	"""Attach a device identity to a key: ``…temperature#bedroom``.
+
+	Identity rather than an extra path segment so the base key keeps existing -
+	a dashboard asking for ``indoor.temperature.temperature`` is not broken by
+	a second sensor appearing, and identities are never merged across devices
+	the way sources are reconciled.
+	"""
+	if not isinstance(key, CategoryItem):
+		key = CategoryItem(key)
+	if identity is None:
+		return key
+	return key.withIdentity(identity)
 
 
 _on_board_banner = '[bold]Govee BLE Plugin On-Boarding[/bold]'

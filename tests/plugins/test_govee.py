@@ -54,21 +54,8 @@ class TestPayloadDecode:
 		assert TERRARIUM['name'] != ROOM['name']
 
 
-# --- the rework's acceptance criteria ---------------------------------------
-# These describe behaviour that does not exist yet. Today the plugin is
-# single-device by construction:
-#   - `self.name` IS the device name, and __dataParse drops anything whose
-#     device.name doesn't match it, so a second thermometer never gets in;
-#   - get_device_observation() is never called - __dataParse writes to one
-#     shared self.realtime;
-#   - only battery/rssi carry @deviceName in the schema, so temperature and
-#     humidity have nowhere to put an identity.
-# See docs/tasks/govee-multi-device.md.
+# --- device identity --------------------------------------------------------
 
-pytestmark_reason = 'multi-device Govee support not implemented yet'
-
-
-@pytest.mark.xfail(reason=pytestmark_reason, strict=True)
 def test_device_identity_prefers_configured_alias():
 	from LevityDash.lib.plugins.builtin.Govee import resolve_device_identity
 
@@ -77,7 +64,6 @@ def test_device_identity_prefers_configured_alias():
 	assert resolve_device_identity(TERRARIUM['name'], devices) == 'terrarium'
 
 
-@pytest.mark.xfail(reason=pytestmark_reason, strict=True)
 def test_device_identity_falls_back_to_advertised_name():
 	# Two thermometers must work out of the box; aliasing is a readability
 	# upgrade, not a requirement.
@@ -86,9 +72,66 @@ def test_device_identity_falls_back_to_advertised_name():
 	assert resolve_device_identity(ROOM['name'], {}) == 'GVH5102_6736'
 
 
-@pytest.mark.xfail(reason=pytestmark_reason, strict=True)
 def test_keys_carry_the_device_identity():
 	from LevityDash.lib.plugins.builtin.Govee import resolve_device_identity, device_scoped_key
 
 	key = device_scoped_key('indoor.temperature.temperature', resolve_device_identity(ROOM['name'], {'bedroom': {'name': ROOM['name']}}))
 	assert str(key) == 'indoor.temperature.temperature#bedroom'
+
+
+class FakeConfig(dict):
+	"""Minimal stand-in for the plugin config object: section access plus a
+	`sections()` listing, which is all parse_device_sections reads."""
+
+	def sections(self):
+		return [k for k in self if k != 'plugin']
+
+
+class TestDeviceSections:
+
+	def test_reads_device_sections_keyed_by_alias(self):
+		from LevityDash.lib.plugins.builtin.Govee import parse_device_sections
+
+		config = FakeConfig({
+			'plugin': {'enabled': 'True'},
+			'device:bedroom': {'name': 'GVH5102_6736'},
+			'device:terrarium': {'name': 'GVH5102_527D', 'address': TERRARIUM['address']},
+		})
+		devices = parse_device_sections(config)
+		assert set(devices) == {'bedroom', 'terrarium'}
+		assert devices['terrarium']['address'] == TERRARIUM['address']
+
+	def test_ignores_unrelated_sections(self):
+		from LevityDash.lib.plugins.builtin.Govee import parse_device_sections
+
+		config = FakeConfig({'plugin': {}, 'logging': {'level': 'INFO'}, 'device:bedroom': {'name': 'x'}})
+		assert set(parse_device_sections(config)) == {'bedroom'}
+
+	def test_legacy_flat_config_still_yields_one_device(self):
+		# The shipped single-device Govee.ini has no [device:*] sections at all;
+		# it must keep working, aliased to its own advertised name.
+		from LevityDash.lib.plugins.builtin.Govee import parse_device_sections, resolve_device_identity
+
+		config = FakeConfig({'plugin': {'device.name': 'GVH5102_6736'}})
+		devices = parse_device_sections(config)
+		assert devices == {'GVH5102_6736': {'name': 'GVH5102_6736'}}
+		assert resolve_device_identity('GVH5102_6736', devices) == 'GVH5102_6736'
+
+	def test_two_devices_resolve_to_separate_keys(self):
+		from LevityDash.lib.plugins.builtin.Govee import parse_device_sections, resolve_device_identity, device_scoped_key
+
+		config = FakeConfig({
+			'plugin': {},
+			'device:bedroom': {'name': ROOM['name']},
+			'device:terrarium': {'name': TERRARIUM['name']},
+		})
+		devices = parse_device_sections(config)
+		keys = {
+			device_scoped_key('indoor.temperature.temperature', resolve_device_identity(d['name'], devices))
+			for d in (ROOM, TERRARIUM)
+		}
+		assert {str(k) for k in keys} == {
+			'indoor.temperature.temperature#bedroom',
+			'indoor.temperature.temperature#terrarium',
+		}
+		assert len(keys) == 2
