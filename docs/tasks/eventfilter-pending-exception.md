@@ -1,8 +1,8 @@
-# SystemError in LevitySceneView.eventFilter (parked — awaiting a recurrence)
+# SystemError in LevitySceneView.eventFilter (recurred — no longer a one-off)
 
-**Status:** parked, not fixed. Observed once, non-fatal, could not be
-reproduced. Written up so a second sighting starts with context instead of a
-cold re-derivation.
+**Status:** seen **twice**, not fixed, still non-fatal. No longer "observed
+once and unreproducible" — the second sighting (below) shares a specific
+trigger shape with the first, which is the most useful thing we know.
 
 ## What was seen
 
@@ -113,3 +113,49 @@ constructed or non-`DisplayLabel` item.
 3. Worth checking whether it correlates with a specific interaction
    (resize, dashboard reload via the `r` key / Dashboard menu, panel drag) —
    the one sighting was at startup, which the `_refitAllText` suspect fits.
+
+---
+
+## Second sighting — 2026-07-27
+
+Same traceback, byte for byte (`statekit/core.py:368` `__get__` raising
+`AttributeError("unreadable attribute")`, surfacing through
+`EnumType.__call__` as a `SystemError` at `app.py:320`). Again non-fatal.
+
+**What is different, and why it matters:** the first sighting was at
+*startup*, just after the dashboard finished loading. This one was at
+*shutdown*, immediately before `Stopping plugins`, after a ~27 minute
+`mode=remote` session.
+
+**What is the same:** both happened during **mass container churn**. Startup
+builds every container at once; shutdown tears them all down. And this time
+the log shows something more specific — moments earlier:
+
+```
+backend heartbeat sequence went backwards (281 -> 2); backend likely restarted
+```
+
+So the backend had just restarted under a surviving socket (the watcher
+rebuilding it), which makes `RemoteConnection` clear its snapshot and the
+dispatcher swap containers wholesale.
+
+**Working hypothesis:** a `StateProperty` is read from the Qt event filter
+while its owning object is mid-replacement — the descriptor's underlying
+attribute is momentarily absent, so `__get__` raises. The event filter runs
+on *every* event, so it is overwhelmingly likely to be the observer that
+catches an object in that half-torn-down state; it is the messenger, not the
+cause.
+
+That points the fix at one of:
+
+- guarding the read in `app.py:320`'s `eventFilter` (cheap, hides rather than
+  solves), or
+- making `StateProperty.__get__` distinguish "not yet set" from "owner is
+  gone" (`statekit/core.py:368`), or
+- ordering teardown/swap so containers are not observable mid-replacement
+  (the real fix, and the largest).
+
+**Reproduction lead:** restarting the backend under a live `mode=remote`
+frontend now looks like a way to provoke it — `LevityDash-backend-watch` does
+exactly that on any source change, which is how it was hit. That is far more
+promising than the first sighting's "could not be reproduced".
