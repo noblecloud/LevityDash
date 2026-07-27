@@ -76,6 +76,11 @@ class LevityDatagram(dict):
 	sourceData: dict
 	metaData: dict
 
+	#: Class-level default, deliberately NOT name-mangled. Subdatagram
+	#: subclasses this but does not run its __init__, so a `self.__identity`
+	#: written only in __init__ raises AttributeError on every sub-item.
+	_identity = None
+
 	def __init__(self, data: dict, schema: 'Schema' = None, **kwargs):
 		if type(self) is LevityDatagram:
 			self.__raw = deepcopy(data)
@@ -88,6 +93,12 @@ class LevityDatagram(dict):
 		self.__static = kwargs.get('static', False)
 		self.__subItems = []
 		self.__dataMap = kwargs.get('dataMap', None)
+		# Explicit per-batch identity. Discovery from sourceData/metaData is
+		# unreliable - those are carried on the datagram and can still hold the
+		# previous batch's value, which with two alternating sensors produces a
+		# consistent one-off swap. A producer that knows which device it just
+		# heard from should say so outright.
+		self._identity = kwargs.get('identity', None)
 		super().__init__()
 		self.__init_data__(data)
 		self.mapData()
@@ -256,7 +267,28 @@ class LevityDatagram(dict):
 		identityKey = getattr(self.schema, 'identityKey', None)
 		if identityKey is None:
 			return data
-		identity = self.sourceData.get(identityKey, None) or self.metaData.get(identityKey, None)
+		# Resolve from THIS batch first. sourceData/metaData are carried on the
+		# datagram and can still hold the previous batch's value, so consulting
+		# them first gave every reading the *previous* device's identity - with
+		# two sensors alternating that is a consistent one-off swap, which
+		# looks exactly like mislabelled config rather than a staleness bug.
+		# (Diagnosed 2026-07-27: the plugin resolved GVH5102_6736 -> 'bedroom'
+		# correctly, yet its readings published as '#terrarium'.)
+		identity = self._identity
+		if identity is None and (parent := getattr(self, 'parent', None)) is not None:
+			# Sub-items carry the parent's identity, the same way Subdatagram
+			# already chains sourceData/metaData to its parent. The realtime
+			# payload lives in a sub-item, so without this the keys that
+			# actually matter never get scoped.
+			identity = getattr(parent, '_identity', None)
+		if identity is None:
+			for candidate in (identityKey, str(identityKey).lstrip('@')):
+				if candidate in data:
+					identity = data[candidate]
+					break
+			else:
+				# Last resort, and the unreliable one - see __init__.
+				identity = self.sourceData.get(identityKey, None) or self.metaData.get(identityKey, None)
 		if not identity:
 			return data
 

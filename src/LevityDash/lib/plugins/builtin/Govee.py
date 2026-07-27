@@ -516,7 +516,13 @@ class Govee(Plugin, realtime=True, logged=True):
 			**self.__humidityParse(dataBytes),
 			**self.__batteryParse(dataBytes),
 		}
-		data = LevityDatagram(results, schema=self.schema, dataMaps=self.schema.dataMaps)
+		# Pass the identity explicitly rather than letting the datagram discover
+		# it: we know exactly which device this advertisement came from, and
+		# discovery was picking up the *previous* device's value.
+		data = LevityDatagram(
+			results, schema=self.schema, dataMaps=self.schema.dataMaps,
+			identity=results['deviceIdentity'],
+		)
 		pluginLog.verbose(f'{self.__class__.__name__} received: {data["realtime"]}', verbosity=5)
 		self.realtime.update(data)
 		self.lastDatagram = data
