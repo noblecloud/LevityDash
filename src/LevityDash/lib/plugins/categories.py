@@ -458,9 +458,17 @@ class CategoryWildcard(str):
 	def __new__(cls, value: str):
 		if len(value) > 1:
 			value = f'*{value.strip("*")}*'
-		if (value := cls.__knownWildcards.get(value, None)) is None:
-			value = cls.__knownWildcards[value] = super().__new__(cls, value)
-		return value
+		# NB: the walrus target must NOT be `value` - it used to be, which
+		# rebound value to None before it was used as both the dict key and the
+		# string contents. Every wildcard came out as the string 'None' (so
+		# `str(CategoryItem('a.*.b'))` was 'a.None.b'), the registry grew a
+		# spurious None entry, and `hasWildcard` never matched because it
+		# compares against '*'. It went unnoticed because __eq__ below returns
+		# True between any two wildcards.
+		if (existing := cls.__knownWildcards.get(value, None)) is not None:
+			return existing
+		wildcard = cls.__knownWildcards[value] = super().__new__(cls, value)
+		return wildcard
 
 	def __repr__(self):
 		return f'{self}'
