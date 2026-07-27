@@ -80,6 +80,9 @@ Triaged from `_planned-features.md`, grouped by area. ~~Struck~~ items are alrea
 
 ### Display modules
 
+- **Stale-value indicator is too eager.** The "X mins ago" marker appears whenever a value is older than a fixed threshold, but "old" only means anything relative to *that source's* refresh period — a BLE thermometer advertising every ~20s and an hourly forecast poll are both perfectly fresh at 5 minutes. It should stay hidden while a value is within the plugin's expected interval and only surface once a refresh has actually been *missed*.
+  - Regular sources can declare their period. **Irregular ones (BLE, push) should infer it** from observed update intervals — a rolling median of recent gaps, so the threshold adapts instead of being guessed. That also makes the indicator meaningful: it then means "this source has gone quiet relative to its own habits", which is the thing worth knowing.
+  - Related: the backend now tracks `lastPublish` per plugin for the control plane (`lib/wire/messages.py`), which is the same measurement one layer up — worth sharing the inference rather than computing staleness twice.
 - **Graph Y-axis labeling** — the graph only labels peaks/troughs and the time axis today.
 - **Carousel-style direction display** — `[w N e]` sliding compass.
 - **String plots with a placement key** — plot glyph/condition strings positioned by a second key; combined with position-matched offset plots this enables mini forecast infographics.
