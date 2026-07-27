@@ -56,6 +56,7 @@ Multiple frontend types on different platforms — desktop Qt, web, and small em
   - **Bake against worst case, not current values**, or the first three-digit reading breaks the layout. The widest possible rendering per field is derivable rather than observed: `digit_budget` caps the digit count and the format spec pins unit and separators.
   - Keep it a **sidecar, not part of the `.levity`** — the dashboard file stays portable and hand-editable while the bake stays machine-specific and disposable. Fingerprint on `(viewport, DPI, font families actually resolved)` and recompute on mismatch; a silently-stale bake fails as overflowing or floating text with no error.
   - Fixed-width digits make a bake meaningfully safer (a numeric field's width stops depending on *which* digits), which the current dashboard already leans on.
+  - **Lighter still: push rendered *surfaces* rather than layout.** The client blits images and draws no text at all — no fonts, no shaping, no `Groups.py`. See [render-service-and-surface-frontend.md](tasks/render-service-and-surface-frontend.md), which also proposes the warm render service that is both a dev convenience and the prototype of this. Baked layout suits a client that *can* draw and wants low bandwidth; surfaces suit a client that can barely do anything (e-ink, microcontroller). Not rivals.
 
 ---
 
