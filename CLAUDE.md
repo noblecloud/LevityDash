@@ -54,7 +54,7 @@ LEVITYDASH_CONFIG_DEBUG=1 poetry run python -m LevityDash   # pristine temp conf
 
 ## Gotchas
 
-- **macOS Bluetooth/TCC**: with the Govee plugin enabled, launching from a terminal that lacks Bluetooth permission aborts the process (SIGABRT) at startup. Not a code bug.
+- **macOS Bluetooth/TCC**: with the Govee plugin enabled, the process dies with `SIGABRT` (exit 134) and **no output at all** at startup. Not a code bug, and *not* a missing permission grant — granting Bluetooth in System Settings does not fix it. macOS kills any process touching Bluetooth when the **responsible process's bundle** lacks `NSBluetoothAlwaysUsageDescription` in its `Info.plist`, and that check runs *before* the TCC grant is consulted. The crash report says `Termination Reason: Namespace TCC` and names the missing key. iTerm and PyCharm ship it; some hosts (including Claude Code's `claude-code` helper bundle) do not — so run BLE work from a terminal that has it. `devtools/ble_scan.py` is a dependency-free way to check whether a given host can do BLE at all. Never patch a signed app's `Info.plist` to work around this; it breaks the code signature.
 - **Cross-thread timers**: never call `QTimer.start()` from a non-owner thread — it silently does nothing. Use `startTimerSafe`/`stopTimerSafe` from `lib/utils/shared.py` in any data-callback path.
 - **Off-thread painting**: workers may paint `QImage` only; all scene-graph reads must be resolved to plain values on the GUI thread before handing work to a `Worker` (see `Graph.py` `render()` for the pattern).
 - **StateProperty encoders**: anything reaching the YAML dumper must be a plain type; leaked objects (e.g. `DeepChainMap`, measurement objects) get silently `repr()`'d into the save file and corrupt it. Flatten in `.encode`.

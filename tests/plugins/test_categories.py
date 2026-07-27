@@ -134,3 +134,22 @@ class TestInequalityMirrorsEquality:
 		b = CategoryItem('a.b.c')
 		assert (a == b) is True
 		assert (a != b) is False
+
+
+class TestSourceIsNotExploded:
+	"""`source` is Iterable-checked, and str is Iterable.
+
+	A bare source name used to be split into characters -
+	source='Govee' -> ('G','o','v','e','e'), rendering 'G:o:v:e:e:a.b'.
+	Callers passing a list (observation.py's `source=[source.name]`) were
+	unaffected, which is why it went unnoticed.
+	"""
+
+	def test_string_source_stays_whole(self):
+		assert CategoryItem('a.b', source='Govee').source == ('Govee',)
+
+	def test_string_and_list_sources_agree(self):
+		assert CategoryItem('a.b', source='Govee') == CategoryItem('a.b', source=['Govee'])
+
+	def test_str_form_is_readable(self):
+		assert str(CategoryItem('a.b', source='Govee')) == 'Govee:a.b'

@@ -583,7 +583,14 @@ class CategoryItem(tuple):
 		if value is None:
 			self.__source = value
 			return
-		if isinstance(value, Iterable):
+		# str is Iterable, so a bare source name used to be exploded into its
+		# characters - source='Govee' became ('G','o','v','e','e') and str()
+		# rendered 'G:o:v:e:e:a.b'. Callers passing a list (the common path,
+		# e.g. observation.py's source=[source.name]) were unaffected, which is
+		# why it survived.
+		if isinstance(value, (str, bytes)):
+			value = (value,)
+		elif isinstance(value, Iterable):
 			value = tuple(value)
 		if not isinstance(value, Hashable):
 			raise TypeError('source must be hashable')
