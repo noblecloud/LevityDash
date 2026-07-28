@@ -1,5 +1,63 @@
 # SystemError in LevitySceneView.eventFilter (recurred — no longer a one-off)
 
+**Status: FIXED 2026-07-28.** Root cause found and fixed in `statekit`; the
+history below is kept because the diagnosis in it was half right and half
+misleading, and the misleading half is worth not repeating.
+
+## Resolution
+
+`StateProperty.parentCls` (`statekit/core.py`) never consulted an explicit
+`inheritFrom=`. The option was read once in `StateProperty.__new__`, only to
+choose which class the property object itself was built from; it never reached
+getter/setter resolution.
+
+The inference path that *was* used cannot cover the failing case:
+`ownerParentClass` (`statekit/introspect.py:199`) deliberately skips a base
+literally spelled `Stateful` and falls back to `object`. So a **direct** subclass
+of `Stateful` can never inherit a Stateful-declared getter by inference.
+
+`StackedItem.type` (`Modules/Containers/Stacks.py`) is declared exactly that way
+— empty body, `inheritFrom=Stateful.type`, direct subclass of `Stateful`. So
+`fget` resolved to `None` and **every read of `.type` on every stacked panel
+raised `AttributeError("unreadable attribute")`.**
+
+`parentCls` now honours `inheritFrom` first, reading it from `optionsFromInit`
+rather than `self.__options` (building `__options` walks `parentCls`, so the
+obvious version recurses). Covered by `tests/statekit/test_inherit_from.py`.
+
+### It was never a race
+
+**Reproduced deterministically:** boot the dashboard, read `.type` on every
+`StackedItem` — before the fix, 28 of 28 raised; after, 28 of 28 succeed. No
+interaction, no timing, no mid-teardown object required.
+
+So the "leading suspect" and "working hypothesis" below are both **wrong**, and
+the two reproduction attempts recorded as failures failed only because they
+never *read the property*. What was right, and what saved the investigation, is
+the mechanism section: the exception is raised somewhere else and surfaces at
+the next C→Python boundary, and `eventFilter` is the messenger. Startup and
+shutdown are simply when `.type` is read en masse.
+
+**The lesson worth keeping:** `AttributeError("unreadable attribute")` is
+raised at `if self.fget is None` — that is a *declaration* defect, fixed at
+class-definition time, not a lifecycle race. Enumerating every `StateProperty`
+whose `fget` is None found the culprit in seconds; two live-repro attempts had
+already failed.
+
+### The bigger bug underneath
+
+Because `.type` raised, the key was silently omitted from each stacked panel's
+serialized state. On the real dashboard **17 of 28 stacked items** were dropping
+a `type:` they should have written — a `titled-group`, a `graph`, the `moon`,
+and six `stack`s — so **saving a dashboard from the app lost the type of every
+stacked item, and they would reload as the stack's default type.** That is a
+data-loss bug, not a cosmetic one, and it is the reason this was worth chasing.
+See [dashboard-wont-load.md](dashboard-wont-load.md).
+
+---
+
+## Original report (superseded — see Resolution above)
+
 **Status:** seen **twice**, not fixed, still non-fatal. No longer "observed
 once and unreproducible" — the second sighting (below) shares a specific
 trigger shape with the first, which is the most useful thing we know.

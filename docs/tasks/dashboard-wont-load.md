@@ -36,6 +36,32 @@ Two things that narrow it instead:
 from a real failing run (the pasted traceback started mid-cascade). Until then
 everything below is history.
 
+## New lead, 2026-07-28: saving used to drop `type:` from stacked items
+
+Found while fixing [eventfilter-pending-exception.md](eventfilter-pending-exception.md),
+and it fits the author's "partial sync" hunch better than anything else so far.
+
+`StackedItem.type` raised `AttributeError` on **every** read, so the key was
+silently omitted from each stacked panel's serialized state. On the real
+dashboard, **17 of 28 stacked items** were dropping a `type:` they should have
+written. Saving a dashboard from the app therefore wrote stack items with no
+type, and reloading rebuilt them as the stack's **default** type — a
+`titled-group` coming back as a `group`, a `graph` as a `group`, and so on.
+
+**Why that could produce this exact crash:** a panel rebuilt as the wrong class
+still receives its `display:` block from the file. A `value-label:` mapping
+handed to a class that has no `value-label` StateProperty lands somewhere it was
+never meant to — which is precisely the reported symptom, `self.valueLabel`
+holding the raw config dict.
+
+**How to check:** does the failing `default.levity` still carry `type:` on the
+items inside its stacks? If a save has stripped them, that is the corruption,
+and the timestamped backups are the clean copies. Note the *currently installed*
+file does still have its `type:` keys and loads fine here, so this is a lead to
+test against the failing machine's copy — not a confirmed diagnosis.
+
+Fixed going forward, so a save from now on writes the types correctly.
+
 ## Symptom
 
 `loadDefault` aborts partway through, leaving a broken board:

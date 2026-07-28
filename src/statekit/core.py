@@ -679,6 +679,21 @@ class StateProperty(property):
 
 	@cached_property
 	def parentCls(self):
+		# An explicit `inheritFrom=` states the intent directly, so it wins over
+		# anything inferred from the owner's bases. Without this the option only
+		# affected which class the property object itself was built from
+		# (__new__) and never reached getter/setter resolution, so a property
+		# declared with an empty body and `inheritFrom=` inherited nothing and
+		# raised AttributeError("unreadable attribute") on every read.
+		#
+		# The inference below cannot cover this case: ownerParentClass()
+		# deliberately skips a base literally spelled `Stateful` (introspect.py)
+		# and falls back to `object`, so a direct subclass of Stateful can never
+		# inherit a Stateful-declared getter by inference alone.
+		# Read the raw init kwargs, NOT self.__options: building __options walks
+		# parentCls for inherited options, so consulting it here recurses.
+		if (inheritFrom := getattr(self, "optionsFromInit", {}).get("inheritFrom", None)) is not None:
+			return inheritFrom
 		if parentClass := getattr(type(self), "__parentClass__", False):
 			return parentClass
 		if self.name:
