@@ -27,6 +27,38 @@ unit placement, stacks, gradients, sizing groups. Read it when you need an optio
 name or want to know whether an idea is even expressible. This file is about
 judgment.
 
+## Two modes — pick the right one first
+
+**Revision mode is the default when the author tells you what's wrong.**
+"That title looks wrong", "this feels empty", "the gap is too big" is a
+*diagnosis*, not a commission. The author is doing the thinking. Your job is to
+name the smallest edits that could produce the effect they want and let them
+choose:
+
+> The `Wind` title binds to the gauge below it rather than the value above.
+> Three ways to change that, smallest first:
+>
+> - `title: {height: 2.2mm}` — shrinks the title so the gap above it reads as
+>   larger. One line, no layout shift elsewhere.
+> - swap the splitter ratio to `0.28` — moves the title/value boundary, which is
+>   the lever that actually governs this gap (see Traps).
+> - move the title below the value — unambiguous, but breaks the convention the
+>   other five cells follow.
+
+Rules for this mode:
+
+- **Offer 2–3 options, not a redesign.** Smallest first, each one or two lines.
+- **Say what each costs**, especially whether it disturbs neighbouring cells.
+- **Don't rewrite a block to fix a line.** If the fix genuinely needs
+  restructuring, say so in a sentence and ask before doing it.
+- **Don't pad the answer with reasoning.** State the cause in one line, then the
+  options. The author knows this codebase better than you do.
+- **One change at a time**, then look. Two at once and neither of you can tell
+  which one worked.
+
+**Design mode — the loop below — is for a blank slate or an explicit
+"redesign this."** Everything after this section assumes design mode.
+
 ## The loop
 
 1. **Look at the current dashboard.** Screenshot or render it. You cannot
@@ -208,6 +240,13 @@ They know this codebase deeply and will tell you plainly when something looks
 wrong — *"a lil messy"*, *"kinda boring"*, *"the titles don't look like they're
 for the right value"*. Take that as precise signal, not vague dissatisfaction, and
 find the structural cause rather than nudging percentages.
+
+**When they tell you what's wrong, that is revision mode** (see the top of this
+file): name the cause, offer the smallest edits, let them pick. Their words for
+what they want instead of a long solo redesign: *"rather than having you design
+entirely on your own, it would be nice if you could do single line modifications
+based on what I tell you is wrong rather than doing a whole lot of thinking —
+let me do the thinking, you just present the options."*
 
 When they suggest a feature ("maybe add gradients", "you can do mini gauges"),
 they're offering a *possibility*, not an instruction to apply it everywhere. Use it
