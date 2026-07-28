@@ -1,6 +1,7 @@
 # Render service → surface-pushing frontend
 
-**Status:** design note, nothing built. Recorded 2026-07-27.
+**Status:** **step 1 shipped 2026-07-27** (`devtools/render_service.py`); step 2
+is still a design note. Recorded 2026-07-27.
 
 Author's framing: *"a lil service that runs in the background that keeps things
 warm rather than creating a fresh instance"* and *"a backend that does the
@@ -27,7 +28,38 @@ a per-region render path. This codebase already has both:
 
 So the work is mostly *connecting* things, not inventing them.
 
-## Step 1 — the warm render service
+## Step 1 — the warm render service ✅ shipped
+
+`devtools/render_service.py`, on `127.0.0.1:8670`. Endpoints came out as
+proposed (`/render`, `/render/<name>`, `/items`, `/reload`) plus `/health` and
+`/status` for parity with `backend_watch.py`.
+
+**Measured:** ~85ms per full 1800×1015 render, ~52ms for a single item at 3×,
+against ~6s of boot for a one-shot `render_dashboard.py` run (9.5s wall). So
+roughly a 70× improvement on the iterate-on-a-layout loop.
+
+**Verified** as the section below proposed — same dashboard through the service
+and through `render_dashboard.py`: identical dimensions and pixel-identical
+layout, type and spacing. A byte-diff is *not* achievable and shouldn't be
+expected: the clock advances and live values move between two renders, so ~5% of
+sampled pixels differ for legitimate reasons.
+
+**Surprise worth keeping:** the `QGraphicsEffect` caveat is a *cold*-render
+problem, not a `scene.render()` problem. The moon's glow renders flat in a
+one-shot render but correctly through the warm service — the effect has had time
+to initialise. That makes the warm service the more faithful renderer, and it
+also removes the main worry this approach carried for step 2 (see the effects
+bullet below, now substantially less scary).
+
+Threading came out as designed: aiohttp on its own thread, Qt on the main thread
+running `exec()`, renders marshaled across by queued signal — the same two-hop
+shape as `RemoteBackend.handle_ts_request`, deliberately not a second idiom.
+
+Tests (`tests/devtools/test_render_service.py`) cover the routing/argument
+contract against a stand-in renderer via aiohttp's `TestClient`; they never boot
+Qt, since a 6s boot per test is the exact cost this tool exists to remove.
+
+### Original design notes
 
 A long-lived process holding a booted, loaded dashboard, exposing "render this
 and give me a PNG."

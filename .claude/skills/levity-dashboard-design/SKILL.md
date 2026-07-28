@@ -132,6 +132,20 @@ poetry run python src/LevityDash/devtools/render_dashboard.py OUT.png \
     --levity CANDIDATE.levity --seed <config-copy>
 ```
 
+**If you are going to look more than once, start the warm service instead** —
+each one-shot render costs ~6s of Qt boot, and paying that per look is what
+pushes a design session into changing several things at once, after which you
+can't tell which change did what:
+
+```bash
+poetry run python src/LevityDash/devtools/render_service.py --seed <config-copy>
+```
+
+Then `curl -s localhost:8670/render -o board.png` (~85ms),
+`curl -s 'localhost:8670/render/NAME?scale=3&pad=8' -o cell.png`,
+`curl -s localhost:8670/items` for the names, and `curl -sX POST
+localhost:8670/reload` after editing the `.levity`.
+
 Omit `--seed` to render the real config (real data, but on macOS the Govee
 plugin needs a Bluetooth-capable host — see CLAUDE.md). Add `--plugins` for
 live values, `--size WxH` to match the actual window.
@@ -140,8 +154,9 @@ It renders the scene straight into a `QImage` via `QGraphicsScene.render()`, so
 there is no window and no GL context. Prefer it over `view.grab()`, which
 captures the *viewport* and therefore needs the window shown and
 `[QtOptions] openGL = False` — otherwise the grab comes back blank white.
-⚠️ `QGraphicsEffect`s don't composite identically this way (the moon's glow
-renders flat); layout, type, spacing and colour are faithful, effects are not.
+⚠️ `QGraphicsEffect`s don't composite identically in a *one-shot* render (the
+moon's glow comes out flat) — the warm service renders them correctly, having
+had time to initialise. Layout, type, spacing and colour are faithful either way.
 
 Two things that make a render lie:
 

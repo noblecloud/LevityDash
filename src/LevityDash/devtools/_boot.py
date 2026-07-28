@@ -82,8 +82,8 @@ def pump(app, seconds: float) -> None:
 		time.sleep(0.005)
 
 
-def render_rect(scene, source_rect, out: str, scale: float = 1.0) -> bool:
-	"""Render a region of the scene to a PNG.
+def render_image(scene, source_rect, scale: float = 1.0):
+	"""Render a region of the scene and return the `QImage`.
 
 	Uses `QGraphicsScene.render()` rather than `view.grab()`: it paints the
 	items directly, so there is no viewport and no GL context to go wrong.
@@ -93,6 +93,8 @@ def render_rect(scene, source_rect, out: str, scale: float = 1.0) -> bool:
 	⚠️ `QGraphicsEffect`s do not composite identically this way (the moon's glow
 	renders flat). Layout, type, spacing and colour are faithful; effects are
 	approximate.
+
+	Must run on the Qt thread - it reads the scene graph.
 	"""
 	from PySide6.QtCore import QRectF, Qt
 	from PySide6.QtGui import QImage, QPainter
@@ -104,7 +106,25 @@ def render_rect(scene, source_rect, out: str, scale: float = 1.0) -> bool:
 	painter.setRenderHint(QPainter.Antialiasing)
 	scene.render(painter, QRectF(image.rect()), source_rect)
 	painter.end()
-	return image.save(out)
+	return image
+
+
+def render_png_bytes(scene, source_rect, scale: float = 1.0) -> bytes:
+	"""`render_image`, encoded as PNG in memory - for serving over HTTP."""
+	from PySide6.QtCore import QBuffer, QByteArray
+
+	image = render_image(scene, source_rect, scale=scale)
+	data = QByteArray()
+	buffer = QBuffer(data)
+	buffer.open(QBuffer.OpenModeFlag.WriteOnly)
+	image.save(buffer, 'PNG')
+	buffer.close()
+	return bytes(data)
+
+
+def render_rect(scene, source_rect, out: str, scale: float = 1.0) -> bool:
+	"""Render a region of the scene to a PNG file."""
+	return render_image(scene, source_rect, scale=scale).save(out)
 
 
 def named_items(scene):
