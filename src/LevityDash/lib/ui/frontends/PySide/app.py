@@ -61,6 +61,31 @@ __pdoc__ = {
 	'ViewScale': False
 }
 
+
+#: A window this close to filling the screen starts fullscreen on its own, so a
+#: near-maximised window doesn't sit under a title bar for no reason.
+FULLSCREEN_SIMILARITY_THRESHOLD = 0.95
+
+
+def shouldStartFullscreen(fullscreen: bool, isExplicit: bool, forcedByArgv: bool, similarity: float) -> bool:
+	"""Decide whether the main window opens fullscreen.
+
+	`similarity` is how much of the screen the computed window covers, averaged
+	over both axes.
+
+	The size heuristic is a *default*, not an override: it only applies when the
+	user has said nothing. Configured window sizes are clamped to the screen, so
+	on a display smaller than the requested size both axes clamp to the screen
+	bounds and similarity reaches ~1.0 - which used to force fullscreen even with
+	`fullscreen = False` written in config.ini. That is the whole bug this guard
+	exists to prevent, and it only showed up on the smaller of two machines.
+	"""
+	if forcedByArgv:
+		return True
+	if isExplicit:
+		return fullscreen
+	return fullscreen or similarity > FULLSCREEN_SIMILARITY_THRESHOLD
+
 class FocusStack(list):
 
 	def __init__(self, scene: QGraphicsScene):
@@ -804,6 +829,9 @@ class LevityMainWindow(QMainWindow):
 
 	def __init_ui__(self):
 		envFullscreen = os.getenv('LEVITY_FULLSCREEN', None)
+		# Ask before getOrSet, which writes the key when it is missing - after
+		# that first run every config has it and "explicit" would always be true.
+		fullscreenIsExplicit = envFullscreen is not None or userConfig.has_option('Display', 'fullscreen')
 		configFullscreen = userConfig.getOrSet('Display', 'fullscreen', False, getter=userConfig.getboolean)
 		if envFullscreen is None:
 			fullscreen = configFullscreen
@@ -855,8 +883,16 @@ class LevityMainWindow(QMainWindow):
 
 		similarity = (g.width() / screen.availableSize().width() + g.height() / screen.availableSize().height()) / 2
 
-		if fullscreen or '--fullscreen' in sys.argv or similarity > 0.95:
+		if shouldStartFullscreen(
+			fullscreen=fullscreen,
+			isExplicit=fullscreenIsExplicit,
+			forcedByArgv='--fullscreen' in sys.argv,
+			similarity=similarity,
+		):
+			guiLog.debug(f'Starting fullscreen ({fullscreen=}, {fullscreenIsExplicit=}, {similarity=:.3f})')
 			self.showFullScreen()
+		else:
+			guiLog.debug(f'Starting windowed ({fullscreen=}, {fullscreenIsExplicit=}, {similarity=:.3f})')
 
 		style = '''
 							QMainWindow {
