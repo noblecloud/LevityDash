@@ -1470,46 +1470,62 @@ class ObservationDict(PublishedDict):
 			keys = set(self.keys()) - self._calculatedKeys
 		light = {'environment.light.illuminance', 'environment.light.irradiance'}
 
-		if 'environment.temperature.temperature' in keys:
-			temperature = self['environment.temperature.temperature']
+		# Derived values are per-identity: a bedroom dewpoint comes from the
+		# bedroom's own temperature and humidity, never from another device's.
+		# Identity participates in hashing, so a bare 'indoor.temperature.
+		# temperature' matches none of the identity-scoped keys - running once
+		# over the whole set silently skipped every Govee thermometer.
+		for identity in {getattr(key, 'identity', None) for key in keys}:
+			self._calculateMissingFor(keys, identity)
+
+	def _calculateMissingFor(self, keys: set, identity: str | None) -> None:
+		"""Fill in derived values for one identity (`None` = the unscoped keys)."""
+
+		def key(base: str) -> CategoryItem | str:
+			# Schema lookups still take the *base* key - the schema is keyed
+			# without identity - so only the data-side keys get scoped.
+			return CategoryItem(base).withIdentity(identity) if identity is not None else base
+
+		if key('environment.temperature.temperature') in keys:
+			temperature = self[key('environment.temperature.temperature')]
 			timestamp = temperature.timestamp
 			temperature = temperature.sourceUnitValue
 
-			if 'environment.humidity.humidity' in keys:
-				humidity = self['environment.humidity.humidity']
+			if key('environment.humidity.humidity') in keys:
+				humidity = self[key('environment.humidity.humidity')]
 
-				if 'environment.temperature.dewpoint' not in keys and self.schema.get('environment.temperature.dewpoint', None):
-					self._calculatedKeys.add('environment.temperature.dewpoint')
+				if key('environment.temperature.dewpoint') not in keys and self.schema.get('environment.temperature.dewpoint', None):
+					self._calculatedKeys.add(key('environment.temperature.dewpoint'))
 					dewpoint = temperature.dewpoint(humidity.value)
-					dewpoint.key = CategoryItem('environment.temperature.dewpoint')
+					dewpoint.key = CategoryItem('environment.temperature.dewpoint').withIdentity(identity)
 					dewpoint = TimeSeriesItem(dewpoint, timestamp=timestamp)
-					self['environment.temperature.dewpoint'] = dewpoint
+					self[key('environment.temperature.dewpoint')] = dewpoint
 
-				if 'environment.temperature.heatIndex' not in keys and self.schema.get('environment.temperature.heatIndex', None):
-					self._calculatedKeys.add('environment.temperature.heatIndex')
+				if key('environment.temperature.heatIndex') not in keys and self.schema.get('environment.temperature.heatIndex', None):
+					self._calculatedKeys.add(key('environment.temperature.heatIndex'))
 					heatIndex = temperature.heatIndex(humidity.value)
-					heatIndex.key = CategoryItem('environment.temperature.heatIndex')
+					heatIndex.key = CategoryItem('environment.temperature.heatIndex').withIdentity(identity)
 					heatIndex = TimeSeriesItem(heatIndex, timestamp=timestamp)
-					self['environment.temperature.heatIndex'] = heatIndex
-					keys.add('environment.temperature.heatIndex')
+					self[key('environment.temperature.heatIndex')] = heatIndex
+					keys.add(key('environment.temperature.heatIndex'))
 
-			if 'environment.wind.speed.speed' in keys:
-				windSpeed = self['environment.wind.speed.speed']
+			if key('environment.wind.speed.speed') in keys:
+				windSpeed = self[key('environment.wind.speed.speed')]
 				if isinstance(windSpeed, RecordedObservationValue):
 					windSpeed = windSpeed.rollingAverage(timedelta(minutes=-5)) or windSpeed
-				if 'environment.temperature.windChill' not in keys and self.schema.get('environment.temperature.windChill', None):
-					self._calculatedKeys.add('environment.temperature.windChill')
+				if key('environment.temperature.windChill') not in keys and self.schema.get('environment.temperature.windChill', None):
+					self._calculatedKeys.add(key('environment.temperature.windChill'))
 					windChill = temperature.windChill(windSpeed.value)
-					windChill.key = CategoryItem('environment.temperature.windChill')
+					windChill.key = CategoryItem('environment.temperature.windChill').withIdentity(identity)
 					windChill = TimeSeriesItem(windChill, timestamp=timestamp)
-					self['environment.temperature.windChill'] = windChill
-					keys.add('environment.temperature.windChill')
+					self[key('environment.temperature.windChill')] = windChill
+					keys.add(key('environment.temperature.windChill'))
 
-			if 'environment.temperature.feelsLike' not in keys and all(i in keys for i in ['environment.temperature.windChill', 'environment.temperature.heatIndex']):
-				self._calculatedKeys.add('environment.temperature.feelsLike')
-				heatIndex = locals().get('heatIndex', None) or self['environment.temperature.heatIndex']
-				windChill = locals().get('windChill', None) or self['environment.temperature.windChill']
-				humidity = locals().get('humidity', None) or self['environment.humidity.humidity']
+			if key('environment.temperature.feelsLike') not in keys and all(key(i) in keys for i in ['environment.temperature.windChill', 'environment.temperature.heatIndex']):
+				self._calculatedKeys.add(key('environment.temperature.feelsLike'))
+				heatIndex = locals().get('heatIndex', None) or self[key('environment.temperature.heatIndex')]
+				windChill = locals().get('windChill', None) or self[key('environment.temperature.windChill')]
+				humidity = locals().get('humidity', None) or self[key('environment.humidity.humidity')]
 				if temperature.f > 80 and humidity.value > 40:
 					feelsLike = heatIndex.value
 				elif temperature.f < 50:
@@ -1517,29 +1533,29 @@ class ObservationDict(PublishedDict):
 				else:
 					feelsLike = temperature
 				feelsLike = TimeSeriesItem(float(feelsLike), timestamp=timestamp)
-				self['environment.temperature.feelsLike'] = feelsLike
+				self[key('environment.temperature.feelsLike')] = feelsLike
 
-		if 'indoor.temperature.temperature' in keys:
-			temperature = self['indoor.temperature.temperature']
-			timestamp = self['indoor.temperature.temperature'].timestamp
+		if key('indoor.temperature.temperature') in keys:
+			temperature = self[key('indoor.temperature.temperature')]
+			timestamp = self[key('indoor.temperature.temperature')].timestamp
 			temperature = temperature.sourceUnitValue
 
-			if 'indoor.humidity.humidity' in keys:
-				humidity = self['indoor.humidity.humidity']
+			if key('indoor.humidity.humidity') in keys:
+				humidity = self[key('indoor.humidity.humidity')]
 
-				if 'indoor.temperature.dewpoint' not in keys:
-					self._calculatedKeys.add('indoor.temperature.dewpoint')
+				if key('indoor.temperature.dewpoint') not in keys:
+					self._calculatedKeys.add(key('indoor.temperature.dewpoint'))
 					dewpoint = temperature.dewpoint(humidity.value)
-					dewpoint.key = CategoryItem('indoor.temperature.dewpoint')
+					dewpoint.key = CategoryItem('indoor.temperature.dewpoint').withIdentity(identity)
 					dewpoint = TimeSeriesItem(dewpoint, timestamp=timestamp)
-					self['indoor.temperature.dewpoint'] = dewpoint
+					self[key('indoor.temperature.dewpoint')] = dewpoint
 
-				if 'indoor.temperature.heatIndex' not in keys:
-					self._calculatedKeys.add('indoor.temperature.heatIndex')
+				if key('indoor.temperature.heatIndex') not in keys:
+					self._calculatedKeys.add(key('indoor.temperature.heatIndex'))
 					heatIndex = temperature.heatIndex(humidity.value)
-					heatIndex.key = CategoryItem('indoor.temperature.heatIndex')
+					heatIndex.key = CategoryItem('indoor.temperature.heatIndex').withIdentity(identity)
 					heatIndex = TimeSeriesItem(heatIndex, timestamp=timestamp)
-					self['indoor.temperature.heatIndex'] = heatIndex
+					self[key('indoor.temperature.heatIndex')] = heatIndex
 
 	def timeKey(self, data) -> str:
 		if 'timestamp' in data:
