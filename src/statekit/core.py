@@ -2065,6 +2065,10 @@ class Stateful(metaclass=StatefulMetaclass):
 		if isinstance(state, DeepChainMap):
 			state = state.to_dict()
 
+		# Captured before the loop below, which pops keys off `state` as it
+		# consumes them - by the end there is no record of what was provided.
+		providedKeys = set(state.keys()) if isinstance(state, Mapping) else set()
+
 		shared = getattr(self, 'shared', Unset) or DeepChainMap()
 		# self.action_pool (not self._action_pool) - the property lazily
 		# initializes the pool on first access; a freshly constructed object
@@ -2156,9 +2160,82 @@ class Stateful(metaclass=StatefulMetaclass):
 		assert len(self._unset_keys_) == 0, f"Unable to set state for {self} with {state}"
 		self._unset_keys_.clear()
 
+		self._revertOmittedKeys(providedKeys, afterPool=afterPool)
+
 		if afterPool.can_execute:
 			afterPool.execute()
 		return
+
+	# Section .revertOmittedKeys
+	def _revertOmittedKeys(self, providedKeys: set, afterPool: 'ActionPool' = None) -> None:
+		"""Return keys the incoming state omitted to their default.
+
+		Absent means default. Without this, deleting a line from a `.levity`
+		does nothing until the app is restarted: `setItemState` only visits
+		properties that appear in the incoming state (see the `items` filter
+		above), so a value set by a *previous* load simply persists.
+
+		Only properties currently sourced from `UserConfig` are reverted -
+		i.e. ones an earlier load actually set. That is what keeps this from
+		trampling values inherited from a `shared:`/preset block (tagged
+		`SourceType.Shared`), factory-built children, or item defaults.
+		"""
+		ownerType = type(self)
+		sources = getattr(self, '_state_item_sources', None)
+		if not sources:
+			return
+
+		for prop in self.statefulItems.values():
+			if 'set' not in prop.actions:
+				continue
+			if prop.key in providedKeys or prop.name in providedKeys:
+				continue
+			# unwraps/singleVal consume the whole mapping rather than one key,
+			# so "absent" is not meaningful for them.
+			if prop.unwraps or prop.singleVal:
+				continue
+			# Child lifecycle belongs to the caller doing the reconciling, not
+			# here - reverting `items` would fight it.
+			if prop.isStatefulReference:
+				continue
+			if sources.get(prop, None) is not SourceType.UserConfig:
+				continue
+			if not prop.hasDefault(ownerType):
+				# Nothing to revert to. Leaving the stale value is bad, but
+				# guessing at a cleared one is worse.
+				log.debug(f'{self}: {prop.key} was removed from state but has no default; leaving as-is')
+				continue
+			default = prop.class_default(ownerType)
+			if default is UnsetDefault:
+				continue
+
+			try:
+				current = prop.fget(self)
+			except Exception:
+				current = Unset
+			try:
+				# No-op guard: the common case is a key that was already at its
+				# default, and firing setters needlessly is expensive on a live
+				# scene (geometry resurfacing, text refits, signal fan-out).
+				if current is not Unset and bool(current == default):
+					sources[prop] = SourceType.Default
+					continue
+			except Exception:
+				pass
+
+			try:
+				value = copy(default)
+			except TypeError:
+				value = default
+			try:
+				prop.__set__(self, value, afterPool=afterPool)
+			except Exception as e:
+				log.warning(f'{self}: failed to revert {prop.key} to its default: {e!r}')
+				continue
+			# __set__ marks a plain value as UserConfig; this one came from the
+			# class default, and mislabelling it would make the next reload
+			# revert it again rather than skip it.
+			sources[prop] = SourceType.Default
 
 	# Section .getItemState
 	def getItemState(self, encode: bool = True, add_values: dict = None, remove_values: dict = None, **kwargs):
