@@ -64,18 +64,24 @@ LEVITYDASH_CONFIG_DEBUG=1 poetry run python -m LevityDash   # pristine temp conf
 display, with the same layout — `~/Code/{LevityDash,WeatherUnits}` and
 `~/Library/Application Support/LevityDash`.
 
-It **was** kept in sync by PyCharm rsync, which left it with no `.git` and no way
-to tell what revision it was on — a partial sync is invisible. It is now a real
-git checkout, updated by pushing to it over SSH (no GitHub round trip):
+Both **were** kept in sync by PyCharm rsync, which left them with no `.git` and no
+way to tell what revision they were on — a partial sync is invisible. Both are now
+real git checkouts on `dev`, updated by pushing to them over SSH (no GitHub round
+trip). Each repo has its own `lambda` remote:
 
 ```bash
-git push lambda dev      # remote: lambda:Code/LevityDash
+git push lambda dev      # from LevityDash  -> lambda:Code/LevityDash
+git push lambda dev      # from WeatherUnits -> lambda:Code/WeatherUnits
 ```
 
-`receive.denyCurrentBranch=updateInstead` is set there, so a push updates its
+`receive.denyCurrentBranch=updateInstead` is set in both, so a push updates the
 working tree directly — but **only if that tree is clean**; a push onto a dirty
-tree is refused. Turn PyCharm's auto-upload off for this project, or it will
-fight the checkout.
+tree is refused. Turn PyCharm's auto-upload off for both projects, or it will
+fight the checkouts.
+
+Note LevityDash's `dev` group path-depends on `../WeatherUnits` in develop mode
+there as well, so pushing WeatherUnits changes what LevityDash resolves on that
+box — push both when they move together.
 
 `poetry` isn't on `PATH` for non-interactive SSH there; use `.venv/bin/python -m
 pytest` (or `.venv/bin/LevityDash`). Two size-group tests currently fail on that
