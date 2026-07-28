@@ -791,9 +791,11 @@
               "description": "Number with optional unit (px, %, cm, mm, in, pt)"
             }
           ]
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "DividerProperties": {
@@ -858,9 +860,11 @@
             "number",
             "null"
           ]
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "StackedItem": {
@@ -884,9 +888,11 @@
             "number",
             "null"
           ]
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "Border": {
@@ -955,9 +961,11 @@
             "number",
             "null"
           ]
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "TitledPanel": {
@@ -1080,9 +1088,11 @@
         },
         "title": {
           "$ref": "#/$defs/TitleValueSplitter"
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "TitleValueSplitter": {
@@ -1133,9 +1143,11 @@
             "boolean",
             "null"
           ]
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "TitleLabel": {
@@ -1393,9 +1405,11 @@
               "description": "RGBA values (0-255)"
             }
           ]
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "Panel": {
@@ -1515,9 +1529,11 @@
             "boolean",
             "null"
           ]
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "EditableLabel": {
@@ -1775,9 +1791,11 @@
               "description": "RGBA values (0-255)"
             }
           ]
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "Stack": {
@@ -1972,9 +1990,11 @@
             "Horizontal"
           ],
           "description": "Layout direction"
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "Spacer": {
@@ -2113,9 +2133,11 @@
             "boolean",
             "null"
           ]
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "RealtimeText": {
@@ -2261,9 +2283,11 @@
         },
         "title": {
           "$ref": "#/$defs/TitleValueSplitter"
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "Display": {
@@ -2383,9 +2407,11 @@
             "boolean",
             "null"
           ]
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "RealtimeGauge": {
@@ -2531,9 +2557,11 @@
         },
         "title": {
           "$ref": "#/$defs/TitleValueSplitter"
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "LockedRealtime": {
@@ -2679,9 +2707,11 @@
         },
         "title": {
           "$ref": "#/$defs/TitleValueSplitter"
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "Realtime": {
@@ -2827,9 +2857,11 @@
         },
         "title": {
           "$ref": "#/$defs/TitleValueSplitter"
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "Moon": {
@@ -2991,9 +3023,11 @@
         },
         "rotate": {
           "type": "boolean"
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "MiniGraph": {
@@ -3131,9 +3165,11 @@
         },
         "timeframe": {
           "type": "string"
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "Figure": {
@@ -3270,9 +3306,11 @@
             "number",
             "null"
           ]
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "GraphItemData": {
@@ -3330,9 +3368,11 @@
         },
         "resolution": {
           "type": "integer"
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "PlotLabels": {
@@ -3442,9 +3482,11 @@
             "string",
             "null"
           ]
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "Plot": {
@@ -3482,9 +3524,11 @@
         },
         "cap": {
           "type": "string"
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "CurrentTimeIndicator": {
@@ -3533,9 +3577,11 @@
               "description": "Number with optional unit (px, %, cm, mm, in, pt)"
             }
           ]
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "DayAnnotations": {
@@ -3552,9 +3598,11 @@
         },
         "dayLabels": {
           "$ref": "#/$defs/DayLabels"
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "DayLabels": {
@@ -3679,9 +3727,11 @@
             "boolean",
             "null"
           ]
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "HourLabels": {
@@ -3806,9 +3856,11 @@
             "boolean",
             "null"
           ]
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "TimeMarkers": {
@@ -3857,9 +3909,11 @@
               "description": "Number with optional unit (px, %, cm, mm, in, pt)"
             }
           ]
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "Label": {
@@ -4117,9 +4171,11 @@
               "description": "RGBA values (0-255)"
             }
           ]
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "SplitPanel": {
@@ -4239,9 +4295,11 @@
             "boolean",
             "null"
           ]
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "NonInteractivePanel": {
@@ -4361,9 +4419,11 @@
             "boolean",
             "null"
           ]
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "GraphPanel": {
@@ -4501,9 +4561,11 @@
         },
         "timeframe": {
           "type": "string"
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "Divider": {
@@ -4556,9 +4618,11 @@
               "description": "RGBA values (0-255)"
             }
           ]
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "CentralPanel": {
@@ -4678,9 +4742,11 @@
             "boolean",
             "null"
           ]
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "Clock": {
@@ -4800,9 +4866,11 @@
             "boolean",
             "null"
           ]
+        },
+        "type": {
+          "type": "string"
         }
       },
-      "required": null,
       "additionalProperties": false
     },
     "ClockComponent": {
@@ -5063,6 +5131,9 @@
         },
         "format": {
           "type": "string"
+        },
+        "type": {
+          "type": "string"
         }
       },
       "required": [
@@ -5187,6 +5258,9 @@
         "fillParent": {
           "type": "boolean",
           "description": "Fill parent container"
+        },
+        "type": {
+          "type": "string"
         }
       },
       "additionalProperties": false

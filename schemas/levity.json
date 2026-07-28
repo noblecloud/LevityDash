@@ -1,0 +1,282 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://levitydash.app/schemas/levity.json",
+  "title": "LevityDash dashboard",
+  "description": "Entry point for .levity files: a list of items discriminated by `type`. Per-type shapes are $ref'd out of the generated levity-dashboard.json, whose own root models the compiler's type-as-key authoring format instead.",
+  "type": "array",
+  "items": {
+    "$ref": "#/definitions/item"
+  },
+  "definitions": {
+    "typeName": {
+      "type": "string",
+      "description": "An item type, optionally disabled/hidden via a prefix or suffix.",
+      "pattern": "^(disabled-|hidden-)?(dashboard|group|titled-group|stack|value-stack|divider|spacer|realtime|realtime\\.text|realtime\\.gauge|graph|mini-graph|clock|moon|label|text)(-disabled|-hidden)?$"
+    },
+    "item": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/typeName"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "dashboard"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "$ref": "levity-dashboard.json#/$defs/CentralPanel"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "group"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "$ref": "levity-dashboard.json#/$defs/Panel"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "titled-group"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "$ref": "levity-dashboard.json#/$defs/TitledPanel"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "stack"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "$ref": "levity-dashboard.json#/$defs/Stack"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "value-stack"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "$ref": "levity-dashboard.json#/$defs/ValueStack"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "divider"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "$ref": "levity-dashboard.json#/$defs/Divider"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "spacer"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "$ref": "levity-dashboard.json#/$defs/Spacer"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "realtime"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "$ref": "levity-dashboard.json#/$defs/Realtime"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "realtime.text"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "$ref": "levity-dashboard.json#/$defs/RealtimeText"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "realtime.gauge"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "$ref": "levity-dashboard.json#/$defs/RealtimeGauge"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "graph"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "$ref": "levity-dashboard.json#/$defs/GraphPanel"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "mini-graph"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "$ref": "levity-dashboard.json#/$defs/MiniGraph"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "clock"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "$ref": "levity-dashboard.json#/$defs/Clock"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "moon"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "$ref": "levity-dashboard.json#/$defs/Moon"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "label"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "$ref": "levity-dashboard.json#/$defs/Label"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "text"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "$ref": "levity-dashboard.json#/$defs/EditableLabel"
+          }
+        },
+        {
+          "if": {
+            "not": {
+              "required": [
+                "type"
+              ]
+            },
+            "required": [
+              "key"
+            ]
+          },
+          "then": {
+            "$ref": "levity-dashboard.json#/$defs/RealtimeText"
+          }
+        }
+      ]
+    }
+  }
+}
