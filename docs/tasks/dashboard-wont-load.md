@@ -1,7 +1,40 @@
-# 🔴 Dashboard fails to load — gauge value-label is a dict
+# Dashboard fails to load — gauge value-label is a dict
 
-**Status:** open, blocking. Found 2026-07-27 while trying to run the dashboard
-on a room display. **Start here next session.**
+**Status:** open, no longer blocking. Found 2026-07-27; the room display is
+running on the gauge-free OpenMeteo template in the meantime.
+
+## ⚠️ The prime suspect below is WRONG — cleared 2026-07-27
+
+Rendered the *installed* `default.levity` (real config copied to a seed) under
+`STATEFUL_DEBUG=1`, so statekit's silently-swallowed factory exceptions would
+surface:
+
+```
+poetry run python src/LevityDash/devtools/render_dashboard.py OUT.png --seed <config-copy>
+→ rendered OUT.png (1800x1015 @1x)
+```
+
+No `AttributeError`, nothing swallowed. Every gauge using
+`value-label: {visible: false}` — wind, humidity, cloud, UV, terrarium — built
+correctly and drew as a bare ring. **`a6be510` is not the cause and the ordering
+theory does not reproduce on this path.**
+
+Two things that narrow it instead:
+
+- **The traceback never reached a log file.** Zero matches for
+  `attribute 'textBox'` or `no attribute 'displayType'` across
+  `~/Library/Logs/LevityDash/LevityDash.log{,.1,.2,.3}`. It was terminal-only,
+  so the failing run wasn't logging the way a normal `poetry run LevityDash`
+  does — that difference is a lead.
+- **The difference is the environment, not the `.levity`.** The offscreen render
+  has no window, no started plugins and no remote backend; the failing run had
+  all three. Author's own hunch: *"there's like a partial sync going on"* — i.e.
+  the dashboard file being read while something else is writing it. That fits a
+  half-decoded `value-label` far better than a code ordering bug does.
+
+**Next step is capture, not theory:** get the *first* exception of the cascade
+from a real failing run (the pasted traceback started mid-cascade). Until then
+everything below is history.
 
 ## Symptom
 
