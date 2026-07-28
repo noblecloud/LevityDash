@@ -58,6 +58,29 @@ LEVITYDASH_CONFIG_DEBUG=1 poetry run python -m LevityDash   # pristine temp conf
 - **Rendering a dashboard headlessly** (dev only): `render_dashboard.py` (whole board) and `render_widget.py` (one named item, `--list` to see names) each pay ~6s of Qt boot per render. **`render_service.py` holds a booted dashboard warm and serves renders over HTTP in ~85ms** — `GET /render` (`?w=&h=&scale=`), `GET /render/<name>` (`?scale=&pad=`), `GET /items`, `POST /reload` (re-reads the `.levity` without restarting Qt), plus `/health` and `/status`, on `127.0.0.1:8670` (`--host`/`--port`, or `LEVITYDASH_RENDER_HOST`/`_PORT`). Prefer it whenever you'll look more than once. All three use `QGraphicsScene.render()` rather than `view.grab()`, so there's no window and no GL context — but ⚠️ a *cold* render composites `QGraphicsEffect`s poorly (the moon's glow comes out flat), while the warm service renders them correctly, having had time to initialise. Layout, type, spacing and colour are faithful either way.
 - **`LevityDash-backend-watch`** (dev only, `devtools/backend_watch.py`): watches `src/LevityDash`/`tests` for `.py` changes, debounces (default 2s, `--debounce-ms`), runs the full suite, and restarts the supervised backend only if it's green — a failing suite leaves the previous backend running and reports `tests_failing` instead. Serves a small standard status API on `http://127.0.0.1:8669` (`--host`/`--port`, or `LEVITYDASH_WATCH_STATUS_HOST`/`_PORT`): `GET /health` (plain 200/503, for any generic uptime tool or menu-bar widget) and `GET /status` (full JSON state). The frontend's own in-app connection indicator (top-right dot, mode=remote only) is independent of this tool — it reflects `RemoteConnection.connectionStateChanged` (`lib/wire/remote.py`) directly, so it's correct whether or not the backend happens to be running under the watcher.
 
+## The second machine (`lambda`)
+
+`lambda` (in `~/.ssh/config`; Intel Mac) runs the same dashboard on a room
+display, with the same layout — `~/Code/{LevityDash,WeatherUnits}` and
+`~/Library/Application Support/LevityDash`.
+
+It **was** kept in sync by PyCharm rsync, which left it with no `.git` and no way
+to tell what revision it was on — a partial sync is invisible. It is now a real
+git checkout, updated by pushing to it over SSH (no GitHub round trip):
+
+```bash
+git push lambda dev      # remote: lambda:Code/LevityDash
+```
+
+`receive.denyCurrentBranch=updateInstead` is set there, so a push updates its
+working tree directly — but **only if that tree is clean**; a push onto a dirty
+tree is refused. Turn PyCharm's auto-upload off for this project, or it will
+fight the checkout.
+
+`poetry` isn't on `PATH` for non-interactive SSH there; use `.venv/bin/python -m
+pytest` (or `.venv/bin/LevityDash`). Two size-group tests currently fail on that
+box and pass on ARM — see [docs/tasks/lambda-sizegroup-test-failures.md](docs/tasks/lambda-sizegroup-test-failures.md).
+
 ## Gotchas
 
 - **macOS Bluetooth/TCC**: with the Govee plugin enabled, the process dies with `SIGABRT` (exit 134) and **no output at all** at startup. Not a code bug, and *not* a missing permission grant — granting Bluetooth in System Settings does not fix it. macOS kills any process touching Bluetooth when the **responsible process's bundle** lacks `NSBluetoothAlwaysUsageDescription` in its `Info.plist`, and that check runs *before* the TCC grant is consulted. The crash report says `Termination Reason: Namespace TCC` and names the missing key. iTerm and PyCharm ship it; some hosts (including Claude Code's `claude-code` helper bundle) do not — so run BLE work from a terminal that has it. `devtools/ble_scan.py` is a dependency-free way to check whether a given host can do BLE at all. Never patch a signed app's `Info.plist` to work around this; it breaks the code signature.
