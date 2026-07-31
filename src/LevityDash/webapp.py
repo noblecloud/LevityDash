@@ -15,6 +15,7 @@ afterwards. Same rule as render_service.py.
 """
 import argparse
 import os
+import signal
 import sys
 from pathlib import Path
 
@@ -57,10 +58,30 @@ def main() -> int:
 	log.info(f'LevityWeb booted with {len(dashboard.plugins.enabled_plugins)} plugins')
 	print(f'{len(dashboard.plugins.enabled_plugins)} plugins started', flush=True)
 
+	from PySide6.QtCore import QTimer
+
+	def _request_shutdown(*_args):
+		# Python's KeyboardInterrupt can't reach the main thread while it is
+		# parked inside app.exec() (C++ event loop, no bytecode boundary), so
+		# the default handler makes Ctrl+C look dead. Install explicit signal
+		# handlers that schedule a Qt quit instead.
+		QTimer.singleShot(0, app.quit)
+
+	signal.signal(signal.SIGINT, _request_shutdown)
+	signal.signal(signal.SIGTERM, _request_shutdown)
+
 	try:
-		return app.exec()
+		exit_code = app.exec()
 	except KeyboardInterrupt:
-		return 0
+		exit_code = 0
+
+	log.info('LevityWeb shutting down')
+	service.stop()
+	try:
+		dashboard.plugins.stop()
+	except Exception:
+		pass
+	return exit_code
 
 
 if __name__ == '__main__':

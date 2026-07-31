@@ -121,6 +121,8 @@ class WebService:
 		self._snapshot: Optional[list] = None
 		self._size: Tuple[int, int] = DEFAULT_SIZE
 		self._ready = threading.Event()
+		self._stop: Optional[asyncio.Event] = None
+		self._runners: set = set()
 
 	# -- Qt-thread half -----------------------------------------------------
 
@@ -324,14 +326,16 @@ class WebService:
 				site = web.TCPSite(runner, self._host, self._port)
 				await site.start()
 				self._loop = asyncio.get_running_loop()
+				self._runners.add(runner)
 				self._port = site._server.sockets[0].getsockname()[1] if self._port == 0 else self._port
 				await self._drain_outbox()
 				log.info(f'LevityWeb on http://{self._host}:{self._port}  (ws at /ws-web)')
 				print(f'LevityWeb on http://{self._host}:{self._port}  (ws at /ws-web)', flush=True)
 				self._ready.set()
-				asyncio.create_task(self._heartbeat_loop())
-				while True:
-					await asyncio.sleep(3600)
+				self._stop = asyncio.Event()
+				asyncio.create_task(self._heartbeat_loop(), name='levity-web-heartbeat')
+				while not self._stop.is_set():
+					await self._stop.wait()
 
 			asyncio.new_event_loop().run_until_complete(run())
 
@@ -339,3 +343,26 @@ class WebService:
 		thread.start()
 		if not self._ready.wait(timeout=30):
 			raise RuntimeError('LevityWeb http server failed to start')
+
+	def stop(self) -> None:
+		"""Shut the aiohttp thread down cleanly, called from the Qt thread
+		after exec() returns: cancel the heartbeat task, close the site so
+		browsers see a clean disconnect, then release the thread."""
+		loop = self._loop
+		if loop is None:
+			return
+		self._loop = None
+		try:
+			asyncio.run_coroutine_threadsafe(self._shutdown_site(), loop).result(timeout=5)
+		except Exception:
+			log.exception('LevityWeb http shutdown failed')
+
+	async def _shutdown_site(self) -> None:
+		for task in asyncio.all_tasks():
+			if task is not asyncio.current_task() and task.get_name() == 'levity-web-heartbeat':
+				task.cancel()
+		for runner in list(self._runners):
+			await runner.cleanup()
+		self._runners.clear()
+		if self._stop is not None:
+			self._stop.set()
