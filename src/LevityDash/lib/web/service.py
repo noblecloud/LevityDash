@@ -126,6 +126,12 @@ class WebService:
 
 	# -- Qt-thread half -----------------------------------------------------
 
+	@property
+	def port(self) -> int:
+		"""The bound port (resolved once start() is live - differs from the
+		requested port when 0 was passed)."""
+		return self._port
+
 	def _resize(self, size: Tuple[int, int]) -> None:
 		"""Resize the window and let layout settle. A changed size changes
 		layout, not just output scale - same rule as the render service."""

@@ -17,6 +17,7 @@ import argparse
 import os
 import signal
 import sys
+import warnings
 from pathlib import Path
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
@@ -29,6 +30,34 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 os.environ['LEVITYDASH_BACKEND_MODE'] = 'live'
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# Boot noise that is specific to running offscreen, where no paint surface
+# exists and the import-time dashboard gets torn down when _boot rebuilds it:
+#  - "libpyside: Failed to disconnect" RuntimeWarnings (signal.disconnect on
+#    already-destroyed widgets - harmless teardown, giant reprs)
+#  - pysolar's np.datetime64 timezone UserWarnings (cosmetic)
+warnings.filterwarnings('ignore', message='.*libpyside: Failed to disconnect.*')
+warnings.filterwarnings('ignore', message='.*timezones available for np.datetime64.*')
+
+# Qt messages go through qInstallMessageHandler, not Python's warnings
+# machinery. The offscreen platform can't paint widgets at all, so every
+# "QPainter::" / QOpenGLWidget / propagateSizeHints message is expected noise
+# (tens of thousands of lines during the boot settle); the service only reads
+# scene geometry, and real failures still surface as Python exceptions.
+# Everything else passes through to the Levity logger so it lands in
+# LevityDash.log too. Installed before boot so the settle phase is quiet.
+from PySide6.QtCore import qInstallMessageHandler
+
+
+def _qt_message(_type, _context, message: str):
+	if message.startswith('QPainter::') or 'QOpenGLWidget' in message or 'propagateSizeHints' in message:
+		return
+	from LevityDash.lib.log import LevityLogger as log
+
+	log.info('[Qt] %s', message)
+
+
+qInstallMessageHandler(_qt_message)
 
 
 def main() -> int:
@@ -49,14 +78,15 @@ def main() -> int:
 
 	app, dashboard = boot(seed=args.seed, levity=args.levity, size=size, settle=6.0, plugins=True)
 
+	from LevityDash.lib.log import LevityLogger as log
+
 	service = WebService(app, dashboard, host=args.host, port=args.port, settle=args.settle)
 	service.start()
 	service._watch_scene()
 
-	from LevityDash.lib.log import LevityLogger as log
-
 	log.info(f'LevityWeb booted with {len(dashboard.plugins.enabled_plugins)} plugins')
 	print(f'{len(dashboard.plugins.enabled_plugins)} plugins started', flush=True)
+	print(f'\nLevityWeb → http://{args.host}:{service.port}  (frontend + ws at /ws-web)\n', flush=True)
 
 	from PySide6.QtCore import QTimer
 
