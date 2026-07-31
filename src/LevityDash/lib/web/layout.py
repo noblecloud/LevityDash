@@ -232,23 +232,52 @@ def _dedupe_keys(keys: List[str]) -> List[str]:
 
 
 def _value_payload(key_str: str) -> Optional[dict]:
-	"""The bound container's wire payload (encode_container shape) plus a
-	'formatted' smart-display string, or None when the container has no value
-	yet. Runs on the Qt thread with the live dispatcher - the same values the
-	Qt frontend renders."""
+	"""The bound MultiSourceContainer's current read-surface as a JSON-safe
+	dict, or None when nothing has arrived yet. Runs on the Qt thread with
+	the live dispatcher - the same values the Qt frontend renders.
+
+	Built directly off the live container, not encode_container: the wire
+	encoder targets RemoteContainer (frontend stand-ins) and assumes a
+	`.metadata` attribute the live MultiSourceContainer does not have. The
+	wire payload *shape* is kept - ContainerFlags field names, value/title -
+	so the browser treats both modes identically.
+	"""
 	try:
 		from LevityDash import LevityDashboard
 		from LevityDash.lib.plugins.categories import CategoryItem
-		from LevityDash.lib.wire.messages import encode_container
+		from LevityDash.lib.wire.codec import encode_value
+		from LevityDash.lib.wire.containers import ContainerFlags
 
 		container = LevityDashboard.dispatcher.getContainer(CategoryItem(key_str))
-		payload = encode_container(container)
-		if payload is None:
+		if not container:
 			return None
+		value = container.value  # the preferred/default per-source Container
+		if value is None:
+			return None
+		observation = value.value  # the ObservationValue
+		if observation is None:
+			return None
+		raw = observation.value
+		payload = {
+			'value': None,
+			'key': key_str,
+			'title': container.title,
+			'flags': {name: getattr(container, name, False) for name in ContainerFlags._fields},
+		}
+		if raw is not None:
+			try:
+				encoded = encode_value(raw)
+				if isinstance(encoded, (int, float, str, bool, type(None), dict, list)):
+					payload['value'] = encoded
+			except Exception:
+				pass  # icons carry QFonts and are not wire-safe; the glyph
+				# string is in the texts[] payload anyway
 		try:
-			value = container.value.value
-			if value is not None:
-				payload['formatted'] = str(value)
+			payload['source'] = value.source.name
+		except Exception:
+			pass
+		try:
+			payload['formatted'] = str(raw)
 		except Exception:
 			pass
 		return payload

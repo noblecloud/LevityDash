@@ -14,7 +14,7 @@ import time
 
 import pytest
 
-from LevityDash.lib.web.layout import _dedupe_keys, diff, snapshot
+from LevityDash.lib.web.layout import _dedupe_keys, _value_payload, diff, snapshot
 
 
 @pytest.fixture(scope='module')
@@ -176,3 +176,56 @@ def test_diff_matches_by_name_not_by_position():
 	old = [_payload('Outdoor', value=21.5), _payload('wind', value=3.0)]
 	new = [old[1], old[0]]
 	assert diff(old, new) == {}
+
+
+# -- the live-value path: _value_payload against a real MultiSourceContainer --
+
+def _fake_multisource(key_str, measurement=None):
+	"""A real MultiSourceContainer (the dispatcher's type) holding one fake
+	per-source Container, the shape the live plugins produce."""
+	from types import SimpleNamespace
+
+	from LevityDash.lib.plugins.categories import CategoryItem
+	from LevityDash.lib.plugins.dispatcher import MultiSourceContainer
+
+	container = MultiSourceContainer(CategoryItem(key_str))
+	if measurement is not None:
+		container['FakeSource'] = SimpleNamespace(
+			value=SimpleNamespace(value=measurement),
+			source=SimpleNamespace(name='FakeSource'),
+		)
+	return container
+
+
+def test_value_payload_resolves_a_live_multisource_container(monkeypatch):
+	from LevityDash import LevityDashboard
+
+	monkeypatch.setattr(
+		LevityDashboard.dispatcher,
+		'getContainer',
+		lambda key: _fake_multisource(str(key), measurement=21.5),
+	)
+	payload = _value_payload('environment.temperature.temperature')
+	assert payload is not None
+	assert payload['value'] == 21.5
+	assert payload['formatted'] == '21.5'
+	assert payload['source'] == 'FakeSource'
+	assert payload['key'] == 'environment.temperature.temperature'
+	assert payload['flags']['isTimeseries'] is False
+
+
+def test_value_payload_is_none_for_an_empty_container(monkeypatch):
+	from LevityDash import LevityDashboard
+
+	monkeypatch.setattr(LevityDashboard.dispatcher, 'getContainer', lambda key: _fake_multisource('environment.light.sunrise'))
+	assert _value_payload('environment.light.sunrise') is None
+
+
+def test_value_payload_is_none_when_dispatcher_raises(monkeypatch):
+	from LevityDash import LevityDashboard
+
+	def boom(_key):
+		raise ValueError('No default container found')
+
+	monkeypatch.setattr(LevityDashboard.dispatcher, 'getContainer', boom)
+	assert _value_payload('environment.temperature.temperature') is None
