@@ -139,7 +139,7 @@ def _text_payload(item: Any) -> Optional[dict]:
 				hex_color = item.pen().color().name()
 			except Exception:
 				hex_color = None
-	if hex_color is not None and hex_color != '#000000':
+	if hex_color is not None:
 		payload['color'] = hex_color
 	return payload
 
