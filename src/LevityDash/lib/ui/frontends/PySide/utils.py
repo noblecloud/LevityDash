@@ -73,6 +73,50 @@ itemSkip = 3
 INCREMENTAL_LOAD = True
 
 
+def _claim(existing: list, parentItems: list, panel) -> None:
+	"""Take a panel out of both the loader's candidates and the shared parent list.
+
+	`itemLoader` owns teardown and deletes whatever is left in `parentItems`
+	once every type has run, so a reused panel has to be removed from *both*
+	lists. Previously each loader deleted its own leftovers from a private
+	copy, which meant a type absent from the incoming file was never visited
+	and its panels were never torn down at all.
+	"""
+	try:
+		existing.remove(panel)
+	except ValueError:
+		pass
+	try:
+		parentItems.remove(panel)
+	except ValueError:
+		pass
+
+
+def _geometry(ns) -> Optional[Geometry]:
+	"""The incoming item's geometry, or None when the file omitted it.
+
+	`geometry:` is optional in a `.levity`, but the match patterns below read
+	`ns.geometry` as a value pattern - which raised AttributeError whenever it
+	was missing and two or more candidates existed.
+	"""
+	return getattr(ns, 'geometry', None)
+
+
+def _bestMatch(existing: list, geometry, tiebreak: Callable = None):
+	"""The closest existing panel to an incoming item.
+
+	Sorts by `Geometry.scoreSimilarity` - 4-D euclidean distance over
+	(x, y, w, h) - with an optional per-type secondary key. With no geometry to
+	compare against there is nothing meaningful to score, so the first
+	remaining candidate wins rather than the call blowing up.
+	"""
+	if geometry is None:
+		return sorted(existing, key=tiebreak)[0] if tiebreak is not None else existing[0]
+	if tiebreak is None:
+		return sorted(existing, key=lambda p: p.geometry.scoreSimilarity(geometry))[0]
+	return sorted(existing, key=lambda p: (p.geometry.scoreSimilarity(geometry), tiebreak(p)))[0]
+
+
 def loadGraphs(parent, items, parentItems, **kwargs):
 	global itemCount
 	GraphType = kwargs.get('type', None)
@@ -87,28 +131,30 @@ def loadGraphs(parent, items, parentItems, **kwargs):
 		if not GraphType.validate(item, context={'parent': parent}):
 			log.error(f'Invalid state for graph: {item}', item)
 		ns = SimpleNamespace(**item)
+		geometry = _geometry(ns)
+		figures = getattr(ns, 'figures', None)
 
 		match existing:
 			case [graph]:
-				existing.remove(graph)
+				_claim(existing, parentItems, graph)
 				graph.state = item
-			case [GraphType(geometry=ns.geometry) as graph, *existing]:
-				existing.remove(graph)
+			case [GraphType() as graph, *_] if geometry is not None and graph.geometry == geometry:
+				_claim(existing, parentItems, graph)
 				graph.state = item
 			case []:
 				item = GraphType(parent=parent, **item, cacheInitArgs=True)
 				newItems.append(item)
 			case [*_]:
-				graph = sorted(
-					existing, key=lambda g: (g.geometry.scoreSimilarity(ns.geometry), abs(len(ns.figures) - len(g.figures)))
-				)[0]
-				existing.remove(graph)
+				graph = _bestMatch(
+					existing, geometry,
+					tiebreak=None if figures is None else (lambda g: abs(len(figures) - len(g.figures))),
+				)
+				_claim(existing, parentItems, graph)
+				graph.state = item
 
 		itemCount += 1
 		if INCREMENTAL_LOAD and itemCount % itemSkip == 0:
 			QThread.yieldCurrentThread()
-	for i in existing:
-		i.scene().removeItem(i)
 	return newItems
 
 
@@ -125,29 +171,26 @@ def loadRealtime(parent, items, parentItems, **kwargs):
 			log.error('Invalid state for existingItem:', item)
 		item['key'] = CategoryItem(item['key'])
 		ns = SimpleNamespace(**item)
+		geometry = _geometry(ns)
 		match existing:
 			case []:
 				item = Realtime(parent=parent, **item, cacheInitArgs=True)
 				newItems.append(item)
 			case [existingItem]:
-				existing.remove(existingItem)
+				_claim(existing, parentItems, existingItem)
 				existingItem.state = item
-			case [Realtime(key=ns.key, geometry=ns.geometry) as existingItem, *_]:
-				existing.remove(existingItem)
+			case [Realtime(key=ns.key) as existingItem, *_] if geometry is not None and existingItem.geometry == geometry:
+				_claim(existing, parentItems, existingItem)
 				existingItem.state = item
 			case [*_]:
-				existingItem = sorted(
-						existing, key=lambda g: (g.geometry.scoreSimilarity(ns.geometry), levenshtein(str(ns.key), str(g.key)))
-					)[0]
-				existing.remove(existingItem)
+				existingItem = _bestMatch(
+					existing, geometry, tiebreak=lambda g: levenshtein(str(ns.key), str(g.key))
+				)
+				_claim(existing, parentItems, existingItem)
 				existingItem.state = item
-			case _:
-				print('fail')
 		itemCount += 1
 		if INCREMENTAL_LOAD and itemCount % itemSkip == 0:
 			QThread.yieldCurrentThread()
-	for i in existing:
-		i.scene().removeItem(i)
 	return newItems
 
 
@@ -162,24 +205,28 @@ def loadClock(parent, items, parentItems, **kwargs):
 		if not Clock.validate(item):
 			log.error('Invalid state for clock:', item)
 		ns = SimpleNamespace(**item)
+		geometry = _geometry(ns)
+		format_ = getattr(ns, 'format', None)
 		match existing:
 			case [clock]:
+				_claim(existing, parentItems, clock)
 				clock.state = item
-				existing.remove(clock)
-			case [Clock(geometry=ns.geometry) as clock, *existing]:
+			case [Clock() as clock, *_] if geometry is not None and clock.geometry == geometry:
+				_claim(existing, parentItems, clock)
 				clock.state = item
-				existing.remove(clock)
 			case []:
 				item = Clock(parent=parent, **item)
 				newItems.append(item)
 			case [*_]:
-				clock = sorted(existing, key=lambda g: (g.geometry.scoreSimilarity(ns.geometry), levenshtein(ns.format, g.format)))[0]
-				existing.remove(clock)
+				clock = _bestMatch(
+					existing, geometry,
+					tiebreak=None if format_ is None else (lambda g: levenshtein(format_, g.format)),
+				)
+				_claim(existing, parentItems, clock)
+				clock.state = item
 		itemCount += 1
 		if INCREMENTAL_LOAD and itemCount % itemSkip == 0:
 			QThread.yieldCurrentThread()
-	for i in existing:
-		i.scene().removeItem(i)
 	return newItems
 
 
@@ -193,25 +240,24 @@ def loadPanels(parent, items, parentItems, panelType, **kwargs) -> List[Stateful
 		if not Panel.validate(item):
 			log.error('Invalid state for panel:', item)
 		ns = SimpleNamespace(**item)
+		geometry = _geometry(ns)
 		match existing:
 			case [panel]:
-				existing.remove(panel)
+				_claim(existing, parentItems, panel)
 				panel.state = item
-			case [Panel(geometry=ns.geometry) as panel, *_]:
-				existing.remove(panel)
+			case [Panel() as panel, *_] if geometry is not None and panel.geometry == geometry:
+				_claim(existing, parentItems, panel)
 				panel.state = item
 			case []:
 				item = Panel(parent=parent, **item, cacheInitArgs=True)
 				newItems.append(item)
 			case [*_]:
-				panel = sorted(existing, key=lambda g: g.geometry.scoreSimilarity(ns.geometry))[0]
-				existing.remove(panel)
+				panel = _bestMatch(existing, geometry)
+				_claim(existing, parentItems, panel)
+				panel.state = item
 		itemCount += 1
 		if INCREMENTAL_LOAD and itemCount % itemSkip == 0:
 			QThread.yieldCurrentThread()
-	for i in existing:
-		i.scene().removeItem(i)
-
 	return newItems
 
 
@@ -230,25 +276,24 @@ def loadStacks(parent, items, parentItems, valueStack, **kwargs):
 		if not Stack.validate(item, context={'parent': parent}):
 			log.error('Invalid state for stack:', item)
 		ns = SimpleNamespace(**item)
+		geometry = _geometry(ns)
 		match existing:
 			case [panel]:
-				existing.remove(panel)
+				_claim(existing, parentItems, panel)
 				panel.state = item
-			case [Stack(geometry=ns.geometry) as panel, *_]:
-				existing.remove(panel)
+			case [Stack() as panel, *_] if geometry is not None and panel.geometry == geometry:
+				_claim(existing, parentItems, panel)
 				panel.state = item
 			case []:
 				item = Stack(parent=parent, **item, cacheInitArgs=True)
 				newItems.append(item)
 			case [*_]:
-				panel = sorted(existing, key=lambda g: g.geometry.scoreSimilarity(ns.geometry))[0]
-				existing.remove(panel)
+				panel = _bestMatch(existing, geometry)
+				_claim(existing, parentItems, panel)
+				panel.state = item
 		itemCount += 1
 		if INCREMENTAL_LOAD and itemCount % itemSkip == 0:
 			QThread.yieldCurrentThread()
-	for i in existing:
-		i.scene().removeItem(i)
-
 	return newItems
 
 
@@ -256,7 +301,7 @@ def loadLabels(parent, items, parentItems, **kwargs):
 	global itemCount
 
 	from LevityDash.lib.ui.frontends.PySide.Modules import EditableLabel
-	parentItems = parentItems or getattr(parent, 'items', [])
+	parentItems = parentItems if parentItems is not None else getattr(parent, 'items', [])
 	existing = [i for i in parentItems if isinstance(i, EditableLabel)]
 	newItems = []
 	while items:
@@ -265,30 +310,33 @@ def loadLabels(parent, items, parentItems, **kwargs):
 			log.error('Invalid state for label:', item)
 			continue
 		ns = SimpleNamespace(**item)
+		geometry = _geometry(ns)
+		text = getattr(ns, 'text', None)
 		match existing:
 			case [label]:
-				existing.remove(label)
+				_claim(existing, parentItems, label)
 				label.state = item
-			case [EditableLabel(text=ns.text, geometry=ns.geometry) as label, *_]:
-				existing.remove(label)
+			case [EditableLabel() as label, *_] if (
+				text is not None and geometry is not None and label.text == text and label.geometry == geometry
+			):
+				_claim(existing, parentItems, label)
 				label.state = item
-			case [EditableLabel(geometry=ns.geometry) as label, *_]:
-				existing.remove(label)
+			case [EditableLabel() as label, *_] if geometry is not None and label.geometry == geometry:
+				_claim(existing, parentItems, label)
 				label.state = item
-			case [EditableLabel(text=ns.text) as label, *_]:
-				existing.remove(label)
+			case [EditableLabel() as label, *_] if text is not None and label.text == text:
+				_claim(existing, parentItems, label)
 				label.state = item
 			case []:
 				item = EditableLabel(parent=parent, **item)
 				newItems.append(item)
 			case [*_]:
-				label = sorted(existing, key=lambda g: (g.geometry.scoreSimilarity(ns.geometry)))[0]
-				existing.remove(label)
+				label = _bestMatch(existing, geometry)
+				_claim(existing, parentItems, label)
+				label.state = item
 		itemCount += 1
 		if INCREMENTAL_LOAD and itemCount % itemSkip == 0:
 			QThread.yieldCurrentThread()
-	for i in existing:
-		i.scene().removeItem(i)
 	return newItems
 
 
@@ -301,33 +349,46 @@ def loadMoon(parent, items, parentItems, **kwargs):
 	while items:
 		item = items.pop(0)
 		ns = SimpleNamespace(**item)
+		geometry = _geometry(ns)
 		match existing:
 			case [moon]:
-				existing.remove(moon)
+				_claim(existing, parentItems, moon)
 				moon.state = item
-			case [Moon(geometry=ns.geometry) as moon, *_]:
-				existing.remove(moon)
+			case [Moon() as moon, *_] if geometry is not None and moon.geometry == geometry:
+				_claim(existing, parentItems, moon)
 				moon.state = item
 			case []:
 				item = Moon(parent=parent, **item)
 				newItems.append(item)
 			case [*_]:
-				moon = sorted(existing, key=lambda g: g.geometry.scoreSimilarity(ns.geometry))[0]
-				existing.remove(moon)
+				moon = _bestMatch(existing, geometry)
+				_claim(existing, parentItems, moon)
 				moon.state = item
 		itemCount += 1
 		if INCREMENTAL_LOAD and itemCount % itemSkip == 0:
 			QThread.yieldCurrentThread()
-	for i in existing:
-		i.scene().removeItem(i)
 	return newItems
 
 
 def itemLoader(parent: 'Panel', unsortedItems: list[dict], existing: list = None, **kwargs):
+	"""Reconcile `unsortedItems` (raw dicts from a `.levity`) against `existing`
+	(live scene items already on `parent`).
+
+	`existing` is the single shared pool: every per-type loader below claims out
+	of it via `_claim`, which removes a matched panel from both its own local
+	candidate list and this shared one. Whatever is left in `existing` once every
+	type has been dispatched was not claimed by anything in the incoming file -
+	including a whole type that vanished entirely - and is torn down here, once,
+	in one place. Previously each loader deleted its own leftovers from a
+	private copy of `existing`, so a type absent from the file was never visited
+	and its panels were never torn down at all.
+	"""
 	if not unsortedItems:
 		return
 	if existing is None:
 		existing = []
+	else:
+		existing = list(existing)
 
 	sortedItems = defaultdict(list)
 
@@ -374,8 +435,15 @@ def itemLoader(parent: 'Panel', unsortedItems: list[dict], existing: list = None
 				panelType = Panel
 				items = loadPanels(parent, group, existing, panelType, **kwargs)
 			case _:
+				log.warning(f"itemLoader: unrecognized item type {_type!r} - its dashboard items were not loaded")
 				items = []
 		newItems.extend(items)
+
+	# Whatever no loader claimed: a type that vanished from the file entirely,
+	# or an item within a type that no incoming entry matched. A real delete,
+	# not a hide - matches every loader's previous per-type teardown.
+	for leftover in existing:
+		leftover.scene().removeItem(leftover)
 
 	return newItems
 

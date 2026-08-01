@@ -810,12 +810,30 @@ class Panel(_Panel, Stateful, tag='group'):
         The cached named group if found, otherwise the first
         ancestor in the hierarchy with matching stateName, or
         self.localGroup if no match is found.
+
+		__groups__ is a class-level cache shared by every Panel, and is never
+		cleared on reload - so a name can point at a panel that reload already
+		tore down. Checked here rather than at teardown time because nothing
+		at delete-time knows every name a panel might be cached under; a stale
+		hit is cheap to detect on the read side (membership in `self.hierarchy`,
+		a real ancestor of *this* panel) and correct itself.
 		"""
-		if (named_ancestor := Panel.__groups__.get(name, None)) is None:
-			named_ancestor = next((group for group in self.hierarchy if group.stateName == name), None)
-			if named_ancestor is None:
-				return self.localGroup
-			Panel.__groups__[name] = named_ancestor
+		cached = Panel.__groups__.get(name, None)
+		if cached is not None:
+			try:
+				stillLive = cached in self.hierarchy
+			except RuntimeError:
+				# the underlying Qt object was deleted outright, not just
+				# removed from the scene
+				stillLive = False
+			if stillLive:
+				return cached
+			Panel.__groups__.pop(name, None)
+
+		named_ancestor = next((group for group in self.hierarchy if group.stateName == name), None)
+		if named_ancestor is None:
+			return self.localGroup
+		Panel.__groups__[name] = named_ancestor
 		return named_ancestor
 
 	def getAttrGroup(self, group: str | _Panel, matchAll: bool = False) -> SizeGroup:
