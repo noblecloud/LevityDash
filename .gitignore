@@ -163,3 +163,6 @@ docs/source/.build/
 
 # Benchmark answer key - must never sync to candidate-accessible clones
 docs/benchmark/ANSWER-KEY.md
+
+# openlore analysis artifacts
+.openlore/

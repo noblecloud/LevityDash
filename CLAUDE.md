@@ -101,3 +101,21 @@ box and pass on ARM — see [docs/tasks/lambda-sizegroup-test-failures.md](docs/
 - Commit messages: `type(Scope): summary`, e.g. `fix(UI.Graph): …`, `feat(Stateful): …`.
 - `.levity` dashboard files are YAML; example config/templates under `src/LevityDash/resources/example-config/`.
 - **Task handoffs live in `docs/tasks/`** — self-contained briefs (context, expected change, verification, suggested branch/worktree) for work meant to be picked up in a fresh session or by another agent. If working from one of these, sync your branch with `dev` first (`git merge dev`) since new briefs and unrelated fixes land there continuously.
+
+<!-- BEGIN OPENLORE (managed — edits inside this block will be overwritten) -->
+<!-- openlore-fingerprint: 25cdd746ebf39b56 -->
+This project uses OpenLore for persistent architectural memory.
+
+ALWAYS call `orient()` (via the openlore MCP server, or `npx openlore orient --json`)
+before reading source files when starting a new task. This returns the relevant
+functions, callers, spec sections, and insertion points for the task at hand —
+one structural lookup instead of file-by-file rediscovery.
+
+OpenLore prefixes tool responses with a brief, factual freshness note (the
+Epistemic Lease) once your cached context has aged or the repo has moved since
+your last `orient()`. It is informational — re-`orient()` if you are relying on
+cached cross-module structure; otherwise carry on.
+
+For the MCP setup, ensure `openlore mcp` is configured as an MCP server.
+See https://github.com/clay-good/OpenLore for details.
+<!-- END OPENLORE -->

@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "_openlore": true,
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx --yes openlore orient --json"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "_openlore": true,
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx --yes openlore orient --inject"
+          }
+        ]
+      }
+    ]
+  }
+}
