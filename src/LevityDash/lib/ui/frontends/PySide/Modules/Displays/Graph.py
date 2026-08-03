@@ -3208,6 +3208,13 @@ class GraphPanel(Panel, tag='graph'):
 		self.graphZoom.setEnabled(not self.frozen)
 		self.updateSyncTimer()
 		self.scene().view.resizeFinished.connect(self.updateSyncTimer)
+		# syncDisplay only ever ran off syncTimer, whose interval is one whole
+		# pixel of time (~3.4 minutes on a 66h window). Nothing synced the
+		# *initial* position, so a freshly loaded graph sat wherever layout put
+		# it - measured at ~174px, about ten hours, out of date - until the
+		# first tick or a manual refresh. Realtime already uses this signal for
+		# the same reason.
+		self.scene().view.loadingFinished.connect(self.syncDisplay)
 		self.setAcceptHoverEvents(True)
 		# self.extra = CurrentTimeIndicator(self, signal=self.signals.resized)
 		#
