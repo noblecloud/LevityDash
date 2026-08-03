@@ -24,7 +24,7 @@
           key: environment.temperature.temperature
           title: false
           display:
-            radius: 88%
+            radius: 44%
             arc: {gradient: TemperatureGradient, weight: 22%, cap: FlatCap}
             needle: {width: 9%, length: 78%}
             major: {enabled: false, labels: {enabled: false}}
@@ -56,7 +56,7 @@
           key: environment.temperature.feelsLike
           title: false
           display:
-            radius: 88%
+            radius: 44%
             arc: {gradient: TemperatureGradient, weight: 22%, cap: FlatCap}
             needle: {width: 9%, length: 78%}
             major: {enabled: false, labels: {enabled: false}}
@@ -88,7 +88,7 @@
           key: environment.temperature.dewpoint
           title: false
           display:
-            radius: 88%
+            radius: 44%
             arc: {gradient: TemperatureGradient, weight: 22%, cap: FlatCap}
             needle: {width: 9%, length: 78%}
             major: {enabled: false, labels: {enabled: false}}
@@ -120,7 +120,7 @@
           key: indoor.temperature.temperature#bedroom
           title: false
           display:
-            radius: 88%
+            radius: 44%
             arc: {gradient: TemperatureGradient, weight: 22%, cap: FlatCap}
             needle: {width: 9%, length: 78%}
             major: {enabled: false, labels: {enabled: false}}
@@ -152,7 +152,7 @@
           key: indoor.temperature.temperature#terrarium
           title: false
           display:
-            radius: 88%
+            radius: 44%
             arc: {gradient: TemperatureGradient, weight: 22%, cap: FlatCap}
             needle: {width: 9%, length: 78%}
             major: {enabled: false, labels: {enabled: false}}
