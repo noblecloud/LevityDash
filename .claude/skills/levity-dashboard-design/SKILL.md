@@ -187,11 +187,17 @@ needs `-g` for the bracket form; `render/at/0/1` needs no flag and is identical.
 
 **What `--seed` does:** the devtools boot a *real* dashboard, so by default they
 read the real config directory — real dashboards, real plugin settings, real
-cached data. `--seed <dir>` points them at a copy instead, by setting
-`LEVITYDASH_CONFIG_DEBUG=1` (use temp dirs) and `LEVITYDASH_CONFIG_SEED` (copy
-that dir into them). Omit it to render the real config — real data, but on macOS
-the Govee plugin needs a Bluetooth-capable host, see CLAUDE.md. Add `--plugins`
-for live values, `--size WxH` to match the actual window.
+cached data. `--seed <dir>` copies **from** `<dir>` into a disposable temp
+config instead, by setting `LEVITYDASH_CONFIG_DEBUG=1` (use temp dirs) and
+`LEVITYDASH_CONFIG_SEED` (the source to copy). Since it's a one-way copy,
+`<dir>` **can be the real config directory itself** — `~/Library/Application
+Support/LevityDash` on macOS — with no risk to it: you get real plugins and
+dashboards with no onboarding, and nothing writes back. Point it at a *copy* you
+made yourself only when you specifically want to edit-and-render a candidate
+file without that edit ever reaching a real dashboard. Omit `--seed` entirely to
+skip the copy step and run directly against the real config — real data, but on
+macOS the Govee plugin needs a Bluetooth-capable host, see CLAUDE.md. Add
+`--plugins` for live values, `--size WxH` to match the actual window.
 
 ⚠️ **`--seed` silently did nothing before 2026-08-03.** Those variables are read
 in a class body at *import* time, and `from LevityDash.devtools…` imports the
