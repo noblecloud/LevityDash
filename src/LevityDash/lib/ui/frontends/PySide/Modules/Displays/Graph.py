@@ -394,7 +394,10 @@ class GraphItemData(Stateful, tag=...):
 			existingFigure.removeItem(self)
 
 		self._figure = figure
-		if graphic := getattr(self, '_graphic', None) is not None:
+		# Parenthesised: without them the walrus captures the *comparison*, so
+		# `graphic` was a bool and the reparent silently never happened (and
+		# would have raised on True.setParentItem if it ever were reached).
+		if (graphic := getattr(self, '_graphic', None)) is not None:
 			graphic.setParentItem(figure)
 
 		# Connect slot that informs the figure to update the transform
@@ -4198,6 +4201,19 @@ class Figure(NonInteractivePanel, tag=...):
 			self.plotData.remove(item)
 		except ValueError:
 			pass
+		# plotData is bookkeeping; the graphic is what actually paints. Dropping
+		# only the former left the old path parented to the figure and still
+		# drawing - the phantom second precipitation line that appears after a
+		# backend restart swaps containers out from under the figure.
+		#
+		# setParentItem(None) alone is not enough: an unparented item stays in
+		# the scene as a root item and keeps painting. It has to leave the scene
+		# too. Re-adding is safe - the figure setter reparents immediately after
+		# calling this, which puts it back.
+		if (graphic := getattr(item, '_graphic', None)) is not None:
+			graphic.setParentItem(None)
+			if (scene := graphic.scene()) is not None:
+				scene.removeItem(graphic)
 
 	def ensureFramed(self):
 		self.setPos(self.clampPoint(self.pos()))

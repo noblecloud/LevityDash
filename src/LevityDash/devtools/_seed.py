@@ -22,15 +22,21 @@ from pathlib import Path
 from typing import List, Optional
 
 
+def parseFlag(argv: List[str], flag: str) -> Optional[str]:
+	"""The value of `--flag X` or `--flag=X` from a raw argv, or None."""
+	value = None
+	prefix = f'{flag}='
+	for i, arg in enumerate(argv):
+		if arg == flag and i + 1 < len(argv):
+			value = argv[i + 1]
+		elif arg.startswith(prefix):
+			value = arg.split('=', 1)[1]
+	return value
+
+
 def parseSeed(argv: List[str]) -> Optional[str]:
 	"""The value of `--seed`/`--seed=` from a raw argv, or None."""
-	seed = None
-	for i, arg in enumerate(argv):
-		if arg == '--seed' and i + 1 < len(argv):
-			seed = argv[i + 1]
-		elif arg.startswith('--seed='):
-			seed = arg.split('=', 1)[1]
-	return seed
+	return parseFlag(argv, '--seed')
 
 
 def seedEnvironment(argv: List[str] = None) -> Optional[str]:
@@ -38,11 +44,26 @@ def seedEnvironment(argv: List[str] = None) -> Optional[str]:
 
 	Must be called before the first `LevityDash` import. Safe to call when no
 	`--seed` is present - it does nothing.
+
+	Also stages `--levity`, for the same ordering reason: the seed directory is
+	copied into the throwaway config while `LevityDash` is being imported, so a
+	candidate dashboard written into that directory *after* the import - which
+	is what `_boot.boot()` used to do - never reaches the config actually
+	loaded, and the run silently renders the seed's own default dashboard.
 	"""
-	seed = parseSeed(sys.argv if argv is None else argv)
+	argv = sys.argv if argv is None else argv
+	seed = parseSeed(argv)
 	if not seed:
 		return None
-	resolved = str(Path(seed).expanduser().resolve())
+	resolved = Path(seed).expanduser().resolve()
 	os.environ['LEVITYDASH_CONFIG_DEBUG'] = '1'
-	os.environ['LEVITYDASH_CONFIG_SEED'] = resolved
-	return resolved
+	os.environ['LEVITYDASH_CONFIG_SEED'] = str(resolved)
+
+	if (levity := parseFlag(argv, '--levity')) is not None:
+		import shutil
+
+		target = resolved / 'saves' / 'dashboards' / 'default.levity'
+		target.parent.mkdir(parents=True, exist_ok=True)
+		shutil.copy(Path(levity).expanduser(), target)
+
+	return str(resolved)
