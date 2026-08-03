@@ -64,16 +64,24 @@ def main() -> int:
 		parser.error(f'no such file: {source}')
 
 	app, dashboard = boot(
-		seed=args.seed, size=_parseSize(args.size),
+		seed=args.seed, levity=str(source), size=_parseSize(args.size),
 		settle=args.settle, plugins=args.plugins, windowed=True,
 	)
 
-	# NOT boot(levity=source): that copies the fragment into the seed's
-	# default.levity once at startup, and every later reload() would just
-	# re-read that one stale copy - edits to `source` would never show up.
-	# Loading `source` directly here makes it CentralPanel.filePath from this
-	# point on, so reload() (which re-reads self.filePath fresh every call)
-	# always sees the file's current, live content.
+	# boot(levity=source) makes the fragment the FIRST thing ever loaded,
+	# rather than the seed's own real default.levity - which, if --seed points
+	# at a real config, is a full dashboard (Graph panel, Govee/indoor panels,
+	# all of it) that would otherwise render for a moment with zero data
+	# (nothing has connected/published yet - see the --plugins note below) and
+	# then get torn down when the fragment swap happened.
+	#
+	# But boot(levity=...) copies the fragment into the SEED's internal
+	# default.levity, so CentralPanel.filePath afterward points at that copy,
+	# not at `source`. Loading `source` directly here overrides that - this
+	# call is now a cheap same-content reconcile, since the copy boot() just
+	# loaded and `source` are identical - but it makes filePath the real path
+	# going forward, so every later reload() (fired on every save) re-reads
+	# the file's current, live content instead of that one-time copy.
 	dashboard.CENTRAL_PANEL._load(source)
 
 	from PySide6.QtCore import QTimer
