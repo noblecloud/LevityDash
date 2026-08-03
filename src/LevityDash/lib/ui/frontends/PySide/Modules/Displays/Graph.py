@@ -3237,7 +3237,14 @@ class GraphPanel(Panel, tag='graph'):
 		self.setFlag(self.GraphicsItemFlag.ItemClipsToShape, True)
 		self.setAcceptDrops(True)
 		self.setAcceptHoverEvents(True)
-		self.syncTimer = QTimer(timeout=self.syncDisplay, interval=300000)
+		# refresh(), not syncDisplay(). syncDisplay only repositions the proxy;
+		# the plot paths are built in scene coordinates against timeframe.start,
+		# so as the clock advances they need rebuilding, not just moving. That is
+		# the whole difference between this timer (which appeared to do nothing
+		# over a full day) and hovering the graph and pressing 'r' - which routes
+		# through view.refresh -> GraphPanel.refresh -> figure.refresh() first,
+		# and visibly reshapes the curves.
+		self.syncTimer = QTimer(timeout=self.refresh, interval=300000)
 		self.axisTransformed = AxisSignal(self)
 		self.signals.resized.connect(self.updateSyncTimer)
 		self.axisTransformed.connectSlot(self.onAxisChange)
