@@ -237,6 +237,13 @@ Discovered the hard way; each one cost a full build/render cycle.
   gap — the value lands beside the ring, not inside it. Don't fight it with radius
   tweaks; compose explicitly instead (gauge with `value-label: {visible: false}`
   plus a sibling `realtime.text`), which also gives you full control of placement.
+- **`major: {enabled: false}` doesn't hide the tick labels.** Tick marks and
+  their text are two separate stateful objects — `major.enabled` controls the
+  marks, `major.labels.enabled` controls the text, and the label group defaults
+  to enabled independently. Turning off graduations still leaves a stray number
+  (the range min) floating in the arc. Disable both explicitly:
+  `major: {enabled: false, labels: {enabled: false}}`. Same applies to `minor`/
+  `micro` if they're ever turned on with real content.
 - **Units are strings, not booleans.** `unit_symbol: True` renders the literal
   word `True` (`61True`). Omit the key or give it a real string.
 - **`title: {position: bottom}` is inert.** `DisplayPosition` has no `Top` or
