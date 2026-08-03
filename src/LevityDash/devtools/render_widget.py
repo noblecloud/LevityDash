@@ -37,6 +37,14 @@ from pathlib import Path
 # window and rendered at the wrong size.
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
+# --seed must reach the environment before the first LevityDash import, for the
+# same reason QT_QPA_PLATFORM must - see _seed.py. Imported from this directory
+# so it does not pull in the package it is configuring.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _seed import seedEnvironment
+
+seedEnvironment()
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from LevityDash.devtools._boot import DEFAULT_SIZE, boot, named_items, render_rect

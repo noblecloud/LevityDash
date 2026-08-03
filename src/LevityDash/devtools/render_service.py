@@ -77,29 +77,14 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 
-def _seedEnvironment(argv: List[str]) -> None:
-	"""Honour --seed *before* LevityDash is imported.
+# Same ordering rule as QT_QPA_PLATFORM above: --seed must reach the
+# environment before the first LevityDash import. Imported from this directory
+# rather than as LevityDash.devtools._seed precisely so it does not pull in the
+# package it is trying to configure - see _seed.py.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _seed import seedEnvironment
 
-	Same class of trap as QT_QPA_PLATFORM above, and it bit harder because it
-	failed silently: LevityDash/__init__.py reads LEVITYDASH_CONFIG_DEBUG in a
-	class body at import time, and `from LevityDash.devtools...` imports the
-	parent package. Setting it inside boot() - which is what _boot did - is
-	therefore always too late, so --seed had no effect at all and every
-	"rendered against a copy" run was really reading the live config. Caught
-	when /preview wrote a stray file into the author's real saves directory.
-	"""
-	seed = None
-	for i, arg in enumerate(argv):
-		if arg == '--seed' and i + 1 < len(argv):
-			seed = argv[i + 1]
-		elif arg.startswith('--seed='):
-			seed = arg.split('=', 1)[1]
-	if seed:
-		os.environ['LEVITYDASH_CONFIG_DEBUG'] = '1'
-		os.environ['LEVITYDASH_CONFIG_SEED'] = str(Path(seed).expanduser().resolve())
-
-
-_seedEnvironment(sys.argv)
+seedEnvironment()
 
 from aiohttp import web
 

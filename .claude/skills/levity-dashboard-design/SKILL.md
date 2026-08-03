@@ -178,9 +178,28 @@ Then `curl -s localhost:8670/render -o board.png` (~85ms),
 `curl -s localhost:8670/items` for the names, and `curl -sX POST
 localhost:8670/reload` after editing the `.levity`.
 
-Omit `--seed` to render the real config (real data, but on macOS the Govee
-plugin needs a Bluetooth-capable host — see CLAUDE.md). Add `--plugins` for
-live values, `--size WxH` to match the actual window.
+`GET /tree?depth=3` shows the whole structure with indices, and
+`curl -sg 'localhost:8670/render/at/[0][1]?pad=4'` renders a panel by position —
+useful because `/items` only lists items that carry a `name:`. Note `curl`
+needs `-g` for the bracket form; `render/at/0/1` needs no flag and is identical.
+`?w=`/`?h=` take the same vocabulary as a `.levity` — `1800`, `50%`, `12in`
+(physical needs `?dpi=`, default 96, since a headless process has no screen).
+
+**What `--seed` does:** the devtools boot a *real* dashboard, so by default they
+read the real config directory — real dashboards, real plugin settings, real
+cached data. `--seed <dir>` points them at a copy instead, by setting
+`LEVITYDASH_CONFIG_DEBUG=1` (use temp dirs) and `LEVITYDASH_CONFIG_SEED` (copy
+that dir into them). Omit it to render the real config — real data, but on macOS
+the Govee plugin needs a Bluetooth-capable host, see CLAUDE.md. Add `--plugins`
+for live values, `--size WxH` to match the actual window.
+
+⚠️ **`--seed` silently did nothing before 2026-08-03.** Those variables are read
+in a class body at *import* time, and `from LevityDash.devtools…` imports the
+package first, so setting them inside `boot()` was always too late — every
+"rendered against a copy" run actually read *and wrote* the live config. Fixed
+by applying them before the import (`devtools/_seed.py`). If you are on an older
+revision, assume `--seed` is a no-op. `tests/conftest.py` was never affected; it
+sets both at module import.
 
 It renders the scene straight into a `QImage` via `QGraphicsScene.render()`, so
 there is no window and no GL context. Prefer it over `view.grab()`, which
