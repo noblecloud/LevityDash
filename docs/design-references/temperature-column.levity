@@ -3,175 +3,93 @@
 # Intent: make the *list* scannable. Every ring shares one 50-110F range, so
 # needle position is comparable down the column - you can see at a glance that
 # the terrarium sits high and the dew point sits low, without reading a digit.
-# A per-row range would make the rings pretty and meaningless.
 #
-# Rings, not dials: graduations off, value/unit labels off. The number lives in
-# its own cell (also dodges the value-label centring gap), so the ring is doing
-# exactly one job - position within a range.
+# Column-major, not row-major: `shared:` applies flatly to every direct child
+# of a stack, with no per-type dispatch - so a row mixing [gauge, text,
+# realtime.text] can't give `shared` to "just the gauge". Three parallel
+# column-stacks (gauges | titles | values) each hold same-typed children, so
+# one `shared:` per column covers all five rows and each line item is just its
+# `key:` or `text:`. Outer `spacing: 0` keeps the columns adjoining, so each
+# column's own divider lines land at the same y as its neighbours' and read as
+# one continuous rule rather than three broken segments.
 - type: stack
   name: temperatures
-  direction: Vertical
-  spacing: 6px
+  direction: Horizontal
+  spacing: 0px
   geometry: {fillParent: true}
-  dividers: {enabled: true, opacity: 0.15, size: 0.9}
   items:
 
     - type: stack
-      name: row-outdoor
-      direction: Horizontal
+      name: gauges
+      direction: Vertical
+      spacing: 6px
+      dividers: {enabled: true, opacity: 0.15, size: 0.9}
+      shared:
+        title: false
+        display:
+          radius: 88%
+          arc: {gradient: TemperatureGradient, weight: 22%, cap: FlatCap}
+          needle: {width: 9%, length: 78%}
+          major: {enabled: false, labels: {enabled: false}}
+          minor: {enabled: false}
+          micro: {enabled: false}
+          value-label: {visible: false}
+          unit-label: {visible: false}
+          range: {min: 50, max: 110}
+      geometry: {x: 0%, y: 0%, width: 10%, height: 100%}
       items:
         - type: realtime.gauge
           key: environment.temperature.temperature
-          title: false
-          display:
-            radius: 44%
-            arc: {gradient: TemperatureGradient, weight: 22%, cap: FlatCap}
-            needle: {width: 9%, length: 78%}
-            major: {enabled: false, labels: {enabled: false}}
-            minor: {enabled: false}
-            micro: {enabled: false}
-            value-label: {visible: false}
-            unit-label: {visible: false}
-            range: {min: 50, max: 110}
-          geometry: {x: 0%, y: 0%, width: 18%, height: 100%}
+        - type: realtime.gauge
+          key: environment.temperature.feelsLike
+        - type: realtime.gauge
+          key: environment.temperature.dewpoint
+        - type: realtime.gauge
+          key: indoor.temperature.temperature#bedroom
+        - type: realtime.gauge
+          key: indoor.temperature.temperature#terrarium
+
+    - type: stack
+      name: titles
+      direction: Vertical
+      spacing: 6px
+      dividers: {enabled: true, opacity: 0.15, size: 0.9}
+      shared:
+        alignment: CenterLeft
+        display: {font: Nunito, text-height: 46%}
+      geometry: {x: 10%, y: 0%, width: 54%, height: 100%}
+      items:
         - type: text
           text: Outdoor
-          alignment: CenterLeft
-          display: {font: Nunito, text-height: 46%}
-          geometry: {x: 20%, y: 0%, width: 44%, height: 100%}
-        - type: realtime.text
-          key: environment.temperature.temperature
-          title: false
-          display:
-            font: Roboto Mono
-            unitPosition: Hidden
-            valueLabel: {matchingGroup: value@temps}
-          geometry: {x: 64%, y: 0%, width: 36%, height: 100%}
-
-    - type: stack
-      name: row-feels
-      direction: Horizontal
-      items:
-        - type: realtime.gauge
-          key: environment.temperature.feelsLike
-          title: false
-          display:
-            radius: 44%
-            arc: {gradient: TemperatureGradient, weight: 22%, cap: FlatCap}
-            needle: {width: 9%, length: 78%}
-            major: {enabled: false, labels: {enabled: false}}
-            minor: {enabled: false}
-            micro: {enabled: false}
-            value-label: {visible: false}
-            unit-label: {visible: false}
-            range: {min: 50, max: 110}
-          geometry: {x: 0%, y: 0%, width: 18%, height: 100%}
         - type: text
           text: Feels Like
-          alignment: CenterLeft
-          display: {font: Nunito, text-height: 46%}
-          geometry: {x: 20%, y: 0%, width: 44%, height: 100%}
-        - type: realtime.text
-          key: environment.temperature.feelsLike
-          title: false
-          display:
-            font: Roboto Mono
-            unitPosition: Hidden
-            valueLabel: {matchingGroup: value@temps}
-          geometry: {x: 64%, y: 0%, width: 36%, height: 100%}
-
-    - type: stack
-      name: row-dewpoint
-      direction: Horizontal
-      items:
-        - type: realtime.gauge
-          key: environment.temperature.dewpoint
-          title: false
-          display:
-            radius: 44%
-            arc: {gradient: TemperatureGradient, weight: 22%, cap: FlatCap}
-            needle: {width: 9%, length: 78%}
-            major: {enabled: false, labels: {enabled: false}}
-            minor: {enabled: false}
-            micro: {enabled: false}
-            value-label: {visible: false}
-            unit-label: {visible: false}
-            range: {min: 50, max: 110}
-          geometry: {x: 0%, y: 0%, width: 18%, height: 100%}
         - type: text
           text: Dew Point
-          alignment: CenterLeft
-          display: {font: Nunito, text-height: 46%}
-          geometry: {x: 20%, y: 0%, width: 44%, height: 100%}
-        - type: realtime.text
-          key: environment.temperature.dewpoint
-          title: false
-          display:
-            font: Roboto Mono
-            unitPosition: Hidden
-            valueLabel: {matchingGroup: value@temps}
-          geometry: {x: 64%, y: 0%, width: 36%, height: 100%}
-
-    - type: stack
-      name: row-bedroom
-      direction: Horizontal
-      items:
-        - type: realtime.gauge
-          key: indoor.temperature.temperature#bedroom
-          title: false
-          display:
-            radius: 44%
-            arc: {gradient: TemperatureGradient, weight: 22%, cap: FlatCap}
-            needle: {width: 9%, length: 78%}
-            major: {enabled: false, labels: {enabled: false}}
-            minor: {enabled: false}
-            micro: {enabled: false}
-            value-label: {visible: false}
-            unit-label: {visible: false}
-            range: {min: 50, max: 110}
-          geometry: {x: 0%, y: 0%, width: 18%, height: 100%}
         - type: text
           text: Bedroom
-          alignment: CenterLeft
-          display: {font: Nunito, text-height: 46%}
-          geometry: {x: 20%, y: 0%, width: 44%, height: 100%}
-        - type: realtime.text
-          key: indoor.temperature.temperature#bedroom
-          title: false
-          display:
-            font: Roboto Mono
-            unitPosition: Hidden
-            valueLabel: {matchingGroup: value@temps}
-          geometry: {x: 64%, y: 0%, width: 36%, height: 100%}
-
-    - type: stack
-      name: row-terrarium
-      direction: Horizontal
-      items:
-        - type: realtime.gauge
-          key: indoor.temperature.temperature#terrarium
-          title: false
-          display:
-            radius: 44%
-            arc: {gradient: TemperatureGradient, weight: 22%, cap: FlatCap}
-            needle: {width: 9%, length: 78%}
-            major: {enabled: false, labels: {enabled: false}}
-            minor: {enabled: false}
-            micro: {enabled: false}
-            value-label: {visible: false}
-            unit-label: {visible: false}
-            range: {min: 50, max: 110}
-          geometry: {x: 0%, y: 0%, width: 18%, height: 100%}
         - type: text
           text: Terrarium
-          alignment: CenterLeft
-          display: {font: Nunito, text-height: 46%}
-          geometry: {x: 20%, y: 0%, width: 44%, height: 100%}
+
+    - type: stack
+      name: values
+      direction: Vertical
+      spacing: 6px
+      dividers: {enabled: true, opacity: 0.15, size: 0.9}
+      shared:
+        title: false
+        display:
+          font: Roboto Mono
+          unitPosition: Hidden
+          valueLabel: {matchingGroup: value@temps}
+      geometry: {x: 64%, y: 0%, width: 36%, height: 100%}
+      items:
+        - type: realtime.text
+          key: environment.temperature.temperature
+        - type: realtime.text
+          key: environment.temperature.feelsLike
+        - type: realtime.text
+          key: environment.temperature.dewpoint
+        - type: realtime.text
+          key: indoor.temperature.temperature#bedroom
         - type: realtime.text
           key: indoor.temperature.temperature#terrarium
-          title: false
-          display:
-            font: Roboto Mono
-            unitPosition: Hidden
-            valueLabel: {matchingGroup: value@temps}
-          geometry: {x: 64%, y: 0%, width: 36%, height: 100%}
