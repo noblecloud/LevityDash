@@ -45,11 +45,20 @@ def seedEnvironment(argv: List[str] = None) -> Optional[str]:
 	Must be called before the first `LevityDash` import. Safe to call when no
 	`--seed` is present - it does nothing.
 
-	Also stages `--levity`, for the same ordering reason: the seed directory is
-	copied into the throwaway config while `LevityDash` is being imported, so a
-	candidate dashboard written into that directory *after* the import - which
-	is what `_boot.boot()` used to do - never reaches the config actually
-	loaded, and the run silently renders the seed's own default dashboard.
+	Deliberately does NOT also stage `--levity` here, despite that looking like
+	the same ordering problem this function exists to solve. This function runs
+	*before* LevityDash is imported, so the only directory available to write a
+	candidate dashboard into is `seed` itself - and `seed` is meant to be read
+	from, never written to; it is explicitly supported, documented usage to
+	point it at a real, live config directory (CLAUDE.md, the design skill). An
+	earlier version of this function copied the candidate straight into `seed`
+	here, before any temp directory existed to redirect the write into, and it
+	corrupted a real dashboard the one time `seed` was pointed at one - this
+	function's own module docstring even names a near-identical incident with
+	`--seed` itself, from before this file existed, without noticing this was
+	the same class of bug reintroduced. `_boot.boot()` is the only place that
+	can stage a candidate `.levity` safely: it runs its copy *after* import,
+	once `LevityDash` has resolved a real, disposable temp directory to target.
 	"""
 	argv = sys.argv if argv is None else argv
 	seed = parseSeed(argv)
@@ -58,12 +67,4 @@ def seedEnvironment(argv: List[str] = None) -> Optional[str]:
 	resolved = Path(seed).expanduser().resolve()
 	os.environ['LEVITYDASH_CONFIG_DEBUG'] = '1'
 	os.environ['LEVITYDASH_CONFIG_SEED'] = str(resolved)
-
-	if (levity := parseFlag(argv, '--levity')) is not None:
-		import shutil
-
-		target = resolved / 'saves' / 'dashboards' / 'default.levity'
-		target.parent.mkdir(parents=True, exist_ok=True)
-		shutil.copy(Path(levity).expanduser(), target)
-
 	return str(resolved)

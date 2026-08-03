@@ -50,17 +50,33 @@ def boot(
 	if not windowed:
 		os.environ['QT_QPA_PLATFORM'] = 'offscreen'
 	if seed:
-		seed_path = Path(seed)
 		os.environ['LEVITYDASH_CONFIG_DEBUG'] = '1'
-		os.environ['LEVITYDASH_CONFIG_SEED'] = str(seed_path)
-		if levity:
-			shutil.copy(levity, seed_path / 'saves' / 'dashboards' / 'default.levity')
+		os.environ['LEVITYDASH_CONFIG_SEED'] = str(Path(seed))
 	elif levity:
 		raise ValueError('rendering a candidate .levity needs a seed; refusing to overwrite the real dashboard')
 
 	from LevityDash import LevityDashboard
 
 	LevityDashboard.init()
+
+	if levity:
+		# NOT `seed_path / 'saves' / 'dashboards' / 'default.levity'` - that
+		# copies into `seed` itself, which is exactly the directory `seed` is
+		# supposed to be read from, never written to. Whatever LevityDashboard
+		# just resolved config to (a disposable temp dir, populated a moment
+		# ago by copying FROM seed) is the only destination that is ever safe.
+		# Writing into `seed` directly overwrote a real dashboard the one time
+		# `seed` pointed at a real, live config directory rather than a
+		# scratch copy - `seed` being a live directory is an explicitly
+		# supported, documented use (CLAUDE.md, the design skill), not an edge
+		# case, so this cannot be "usually fine."
+		from LevityDash.lib.config import userConfig
+
+		base = getattr(userConfig.userPath, 'path', userConfig.userPath)
+		dashboards = Path(base) / 'saves' / 'dashboards'
+		dashboards.mkdir(parents=True, exist_ok=True)
+		shutil.copy(levity, dashboards / 'default.levity')
+
 	LevityDashboard.plugins.load_all()
 	app = LevityDashboard.app
 
