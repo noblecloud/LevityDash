@@ -32,15 +32,23 @@ def boot(
 	size: Tuple[int, int] = DEFAULT_SIZE,
 	settle: float = 6.0,
 	plugins: bool = False,
+	windowed: bool = False,
 ):
-	"""Bring up an offscreen dashboard and return ``(app, LevityDashboard)``.
+	"""Bring up a dashboard and return ``(app, LevityDashboard)``.
 
 	``seed`` renders against a *copy* of a config dir (safe anywhere, but values
 	with no source in that copy show as placeholders). Omit it to render the
 	real config, which means real data — and on macOS a Bluetooth-capable host
 	if the Govee plugin is enabled (see CLAUDE.md's Bluetooth gotcha).
+
+	``windowed=True`` shows a real window instead of forcing
+	``QT_QPA_PLATFORM=offscreen`` — for `design_mode.py`, which needs an actual
+	interactive Qt event loop (`app.exec()`) rather than a scene to hand to
+	`render_image`. Every other caller renders offscreen and never shows a
+	window, so this defaults to `False` and changes nothing for them.
 	"""
-	os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+	if not windowed:
+		os.environ['QT_QPA_PLATFORM'] = 'offscreen'
 	if seed:
 		seed_path = Path(seed)
 		os.environ['LEVITYDASH_CONFIG_DEBUG'] = '1'
@@ -70,6 +78,8 @@ def boot(
 	# work.
 	pump(app, min(1.5, settle))
 	app.main_window.resize(*size)
+	if windowed:
+		app.main_window.show()
 	pump(app, max(settle - 1.5, 1.5))
 	return app, LevityDashboard
 
