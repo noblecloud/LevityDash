@@ -35,6 +35,7 @@ seedEnvironment()
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from LevityDash.devtools._boot import DEFAULT_SIZE, boot
+from LevityDash.lib.EasyPath import EasyPathFile
 
 
 def _parseSize(text: str):
@@ -72,17 +73,22 @@ def main() -> int:
 	# rather than the seed's own real default.levity - which, if --seed points
 	# at a real config, is a full dashboard (Graph panel, Govee/indoor panels,
 	# all of it) that would otherwise render for a moment with zero data
-	# (nothing has connected/published yet - see the --plugins note below) and
-	# then get torn down when the fragment swap happened.
+	# (nothing has connected/published yet) and then get torn down when the
+	# fragment swap happened.
 	#
 	# But boot(levity=...) copies the fragment into the SEED's internal
-	# default.levity, so CentralPanel.filePath afterward points at that copy,
-	# not at `source`. Loading `source` directly here overrides that - this
-	# call is now a cheap same-content reconcile, since the copy boot() just
-	# loaded and `source` are identical - but it makes filePath the real path
-	# going forward, so every later reload() (fired on every save) re-reads
-	# the file's current, live content instead of that one-time copy.
-	dashboard.CENTRAL_PANEL._load(source)
+	# default.levity, so CentralPanel.filePath points at that temp copy, not
+	# at `source`. Calling _load(source) again here would fix that, but it
+	# is a second full reload of content that is already on screen and
+	# already correct (boot() just loaded this exact file) - visible as a
+	# pointless "loads, waits, loads again" on every launch. filePath and
+	# loadedFile are plain attributes with no side effects of their own (see
+	# CentralPanel.py - _load only acts on them, they do not act on
+	# anything), so repointing them directly gets the same result - every
+	# later reload()/save re-reads `source` - without redoing the load that
+	# already happened correctly.
+	panel = dashboard.CENTRAL_PANEL
+	panel.filePath = panel.loadedFile = EasyPathFile(source)
 
 	from PySide6.QtCore import QTimer
 
