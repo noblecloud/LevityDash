@@ -189,3 +189,34 @@ def test_stop_all_sends_stop_for_every_plugin_over_wire(dashboard):
 		menu.stopAll()
 
 	assert conn.calls == [('OpenMeteo', 'stop'), ('Govee', 'stop')]
+
+
+def test_bulk_actions_disabled_when_remote_backend_not_alive(dashboard):
+	plugins = [_FakePlugin('OpenMeteo'), _FakePlugin('Govee')]
+	conn = _FakeConnection(alive=False)
+	with _make_menu(plugins, conn, 'remote') as (menu, _):
+		menu.refresh_toggles()
+		start_all, stop_all = menu._bulk_actions
+		assert start_all.isEnabled() is False
+		assert stop_all.isEnabled() is False
+
+
+def test_bulk_actions_enabled_when_remote_backend_alive(dashboard):
+	plugins = [_FakePlugin('OpenMeteo'), _FakePlugin('Govee')]
+	conn = _FakeConnection(alive=True)
+	with _make_menu(plugins, conn, 'remote') as (menu, _):
+		menu.refresh_toggles()
+		start_all, stop_all = menu._bulk_actions
+		assert start_all.isEnabled() is True
+		assert stop_all.isEnabled() is True
+
+
+def test_bulk_actions_enabled_in_live_mode(dashboard):
+	# In live mode there is no remote connection; bulk actions drive the
+	# local plugins directly and must stay enabled regardless.
+	plugins = [_FakePlugin('OpenMeteo'), _FakePlugin('Govee')]
+	with _make_menu(plugins, None, 'live') as (menu, _):
+		menu.refresh_toggles()
+		start_all, stop_all = menu._bulk_actions
+		assert start_all.isEnabled() is True
+		assert stop_all.isEnabled() is True

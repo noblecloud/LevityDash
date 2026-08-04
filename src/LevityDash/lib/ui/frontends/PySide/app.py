@@ -516,6 +516,11 @@ class PluginsMenu(QMenu):
 			stop_all = QAction('Stop all', self)
 			stop_all.triggered.connect(self.stopAll)
 			self.addAction(stop_all)
+			# Tracked so refresh_toggles can disable them when the remote
+			# backend is unreachable (no point issuing bulk commands into
+			# a dead connection). In live mode connection is None, so they
+			# stay enabled and drive the local plugins directly.
+			self._bulk_actions = (start_all, stop_all)
 
 	@Slot()
 	def refresh_toggles(self):
@@ -529,6 +534,12 @@ class PluginsMenu(QMenu):
 			if connection is not None:
 				toggle.setEnabled(alive)
 				restart.setEnabled(alive)
+		# Bulk controls follow the same reachability rule, but only in remote
+		# mode - in live mode connection is None and they drive local plugins.
+		if connection is not None:
+			start_all, stop_all = self._bulk_actions
+			start_all.setEnabled(alive)
+			stop_all.setEnabled(alive)
 
 	@staticmethod
 	def _command_callback(name, command, response):
