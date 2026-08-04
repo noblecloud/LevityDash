@@ -152,5 +152,40 @@ def test_remote_actions_disabled_when_backend_not_alive(dashboard):
 	with _make_menu([plugin], conn, 'remote') as (menu, _):
 		menu.refresh_toggles()
 
-	toggle = next(a for a in menu.actions() if getattr(a, 'plugin', None) is plugin and a.isCheckable())
+	sub, status, toggle, restart = menu._plugin_actions['OpenMeteo']
 	assert toggle.isEnabled() is False
+	assert restart.isEnabled() is False
+	# The status header is a read-only (always-disabled) info line.
+	assert status.isEnabled() is False
+
+
+def test_menu_builds_one_submenu_per_plugin_with_status_header(dashboard):
+	plugins = [_FakePlugin('OpenMeteo'), _FakePlugin('Govee', running=True)]
+	with _make_menu(plugins, None, 'live') as (menu, _):
+		assert set(menu._plugin_actions) == {'OpenMeteo', 'Govee'}
+		sub, status, toggle, restart = menu._plugin_actions['OpenMeteo']
+		# The submenu's first action is the non-action status header.
+		assert sub.actions()[0] is status
+		assert 'OpenMeteo:' in status.text()
+		assert 'Stopped' in status.text()
+		# The submenu exposes Running (toggle) + Restart.
+		assert toggle.isCheckable() is True
+		assert restart.text() == 'Restart'
+
+
+def test_start_all_sends_start_for_every_plugin_over_wire(dashboard):
+	plugins = [_FakePlugin('OpenMeteo'), _FakePlugin('Govee')]
+	conn = _FakeConnection()
+	with _make_menu(plugins, conn, 'remote') as (menu, _):
+		menu.startAll()
+
+	assert conn.calls == [('OpenMeteo', 'start'), ('Govee', 'start')]
+
+
+def test_stop_all_sends_stop_for_every_plugin_over_wire(dashboard):
+	plugins = [_FakePlugin('OpenMeteo', running=True), _FakePlugin('Govee', running=True)]
+	conn = _FakeConnection()
+	with _make_menu(plugins, conn, 'remote') as (menu, _):
+		menu.stopAll()
+
+	assert conn.calls == [('OpenMeteo', 'stop'), ('Govee', 'stop')]

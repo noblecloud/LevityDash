@@ -425,8 +425,18 @@ class PluginsMenu(QMenu):
 	def __init__(self, parent):
 		super(PluginsMenu, self).__init__(parent)
 		self.setTitle('Plugins')
+		# name -> (submenu, status_action, toggle_action, restart_action)
+		self._plugin_actions: dict = {}
 		self.buildItems()
 		self.aboutToShow.connect(self.refresh_toggles)
+		# The running flag can change after the menu opens (e.g. Govee's BLE
+		# scanner connects asynchronously, or a start/stop command completes),
+		# so refresh on a timer while the menu is visible - not just on show.
+		self._refresh_timer = QTimer(self)
+		self._refresh_timer.setInterval(500)
+		self._refresh_timer.timeout.connect(self.refresh_toggles)
+		self.aboutToShow.connect(self._refresh_timer.start)
+		self.aboutToHide.connect(self._refresh_timer.stop)
 
 	def _remote_connection(self):
 		"""The mode=remote backend connection, or None. In live mode plugins
@@ -435,43 +445,90 @@ class PluginsMenu(QMenu):
 			return None
 		return getattr(LevityDashboard.dispatcher, 'remote', None)
 
+	def _snapshot(self, plugin):
+		"""The backend's reported state for this plugin in remote mode, else None."""
+		connection = self._remote_connection()
+		if connection is not None:
+			return connection.plugins.get(plugin.name)
+		return None
+
 	def _is_running(self, plugin) -> bool:
 		"""Effective running state. In remote mode the local plugin object is
 		loaded but never started - the real state lives in the backend's
 		plugin_status snapshot (connection.plugins[name].running)."""
-		connection = self._remote_connection()
-		if connection is not None:
-			state = connection.plugins.get(plugin.name)
-			return bool(state.running) if state is not None else False
+		snap = self._snapshot(plugin)
+		if snap is not None:
+			return bool(snap.running)
 		return bool(plugin.running)
+
+	def _status_text(self, plugin) -> str:
+		"""A non-action summary of the plugin's live/remote status shown at the
+		top of its submenu - running/enabled, key count, last publish time."""
+		snap = self._snapshot(plugin)
+		if snap is not None:
+			running = 'Running' if snap.running else 'Stopped'
+			enabled = 'Enabled' if snap.enabled else 'Disabled'
+			keys = f'{snap.keyCount} keys'
+			parts = [running, enabled, keys]
+			if snap.lastPublish is not None:
+				parts.append(f'updated {snap.lastPublish.strftime("%H:%M")}')
+			return f'{plugin.name}: ' + ' · '.join(parts)
+		# Live mode: read the local plugin directly.
+		running = 'Running' if plugin.running else 'Stopped'
+		enabled = 'Enabled' if getattr(plugin, 'enabled', True) else 'Disabled'
+		try:
+			keys = f'{len(plugin)} keys'
+		except Exception:
+			keys = '0 keys'
+		return f'{plugin.name}: ' + ' · '.join([running, enabled, keys])
 
 	def buildItems(self):
 		for plugin in LevityDashboard.plugins:
-			action = QAction(plugin.name, self)
-			action.setCheckable(True)
-			action.setChecked(self._is_running(plugin))
-			action.plugin = plugin
-			action.togglePlugin = partial(self.togglePlugin, plugin)
-			action.toggled.connect(action.togglePlugin)
-			self.addAction(action)
+			sub = QMenu(plugin.name, self)
 
-			restart = QAction(f'Restart {plugin.name}', self)
+			# Non-action status header - the read-only "more info" line.
+			status = QAction(self._status_text(plugin), sub)
+			status.setEnabled(False)
+			sub.addAction(status)
+
+			toggle = QAction('Running', sub)
+			toggle.setCheckable(True)
+			toggle.setChecked(self._is_running(plugin))
+			toggle.plugin = plugin
+			toggle.togglePlugin = partial(self.togglePlugin, plugin)
+			toggle.toggled.connect(toggle.togglePlugin)
+			sub.addAction(toggle)
+
+			restart = QAction('Restart', sub)
 			restart.plugin = plugin
 			restart.triggered.connect(partial(self.restartPlugin, plugin))
-			self.addAction(restart)
+			sub.addAction(restart)
+
+			self.addMenu(sub)
+			self._plugin_actions[plugin.name] = (sub, status, toggle, restart)
+
+		# Top-level bulk controls, separated from the per-plugin submenus.
+		if LevityDashboard.plugins:
+			self.addSeparator()
+			start_all = QAction('Start all', self)
+			start_all.triggered.connect(self.startAll)
+			self.addAction(start_all)
+			stop_all = QAction('Stop all', self)
+			stop_all.triggered.connect(self.stopAll)
+			self.addAction(stop_all)
 
 	@Slot()
 	def refresh_toggles(self):
 		connection = self._remote_connection()
 		alive = connection is not None and connection.backendAlive
-		for action in self.actions():
-			plugin = getattr(action, 'plugin', None)
-			if plugin is None:
-				continue
-			action.setChecked(self._is_running(plugin))
+		for name, (sub, status, toggle, restart) in self._plugin_actions.items():
+			plugin = toggle.plugin
+			status.setText(self._status_text(plugin))
+			toggle.setChecked(self._is_running(plugin))
 			# No point issuing commands to a backend we can't reach.
 			if connection is not None:
-				action.setEnabled(alive)
+				toggle.setEnabled(alive)
+				restart.setEnabled(alive)
 
 	@staticmethod
 	def _command_callback(name, command, response):
@@ -479,6 +536,23 @@ class PluginsMenu(QMenu):
 			guiLog.warning(f'plugin command {command} for {name} got no response (backend unreachable?)')
 		elif not response.get('ok', False):
 			guiLog.warning(f'plugin command {command} for {name} failed: {response.get("error")}')
+		# Re-sync the checkbox/header to the backend's reported state now that
+		# the command has resolved - no need to wait for the next status beat
+		# or for the menu to be reopened.
+
+	def _each(self, enabled):
+		"""Start (enabled=True) or stop (enabled=False) every plugin, routing
+		through the wire in remote mode, local calls in live mode."""
+		for name, (sub, status, toggle, restart) in self._plugin_actions.items():
+			self.togglePlugin(toggle.plugin, enabled)
+
+	@Slot()
+	def startAll(self):
+		self._each(True)
+
+	@Slot()
+	def stopAll(self):
+		self._each(False)
 
 	@Slot(bool)
 	def togglePlugin(self, plugin, enabled):
