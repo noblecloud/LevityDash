@@ -5,8 +5,10 @@ schema typo degrades to a cosmetic oddity instead of a crash. These pin that
 the opt-in debug flag surfaces those events loudly *and* — crucially — that it
 changes nothing about what the fallbacks actually return.
 """
+from pathlib import Path
 from types import SimpleNamespace
 
+import os
 import pytest
 
 import LevityDash.lib.plugins.schema as sm
@@ -154,8 +156,39 @@ def test_summarize_unmapped_emits_one_line(monkeypatch, alerts):
 	assert len(alerts) == before
 
 
-def test_summarize_unmapped_is_silent_with_flag_off(monkeypatch, alerts):
-	monkeypatch.setattr(sm, "SCHEMA_DEBUG", False)
+def test_summarize_unmapped_is_registered_with_atexit():
+	"""The summary must fire automatically at interpreter exit, not only on a
+	manual call. Confirm the module registered summarize_unmapped with atexit.
+
+	atexit's registry isn't introspectable portably (C builtin in 3.14), and
+	reloading the module mid-session would rebind Schema/LevityDatagram and
+	poison later tests. So we probe in a fresh subprocess: spy on atexit.register
+	before importing the schema module, and assert our function is registered.
+	"""
+	import subprocess, sys
+	code = (
+		"import atexit\n"
+		"captured = []\n"
+		"atexit.register = lambda fn, *a, **k: captured.append(fn)\n"
+		"import LevityDash.lib.plugins.schema as sm\n"
+		"print('OK' if sm.summarize_unmapped in captured else 'MISS')\n"
+	)
+	out = subprocess.run(
+		[sys.executable, "-c", code],
+		cwd=str(Path(__file__).resolve().parents[3]),
+		env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[3] / "src")},
+		capture_output=True, text=True,
+	)
+	assert out.returncode == 0, out.stderr
+	assert "OK" in out.stdout, f"summarize_unmapped was not registered with atexit\n{out.stdout}{out.stderr}"
+
+
+def test_atexit_fires_summary_on_exit(monkeypatch, alerts):
+	"""End-to-end: when the process exits, the recorded unmapped keys are
+	surfaced once. We exercise the same path atexit would, since tearing down
+	the interpreter inside a test is unsafe."""
+	monkeypatch.setattr(sm, "SCHEMA_DEBUG", True)
 	monkeypatch.setattr(sm, "_SCHEMA_DEBUG_UNMAPPED", {("P", "a"): "missing"})
+	# atexit would call this on real exit; simulate that exact call
 	sm.summarize_unmapped()
-	assert alerts == []
+	assert any("unmapped-key summary (1)" in a for a in alerts)

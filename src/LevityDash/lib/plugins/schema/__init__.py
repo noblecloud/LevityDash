@@ -1,4 +1,5 @@
 import os
+import atexit
 from collections import ChainMap
 from copy import deepcopy
 from difflib import get_close_matches
@@ -78,6 +79,14 @@ def summarize_unmapped() -> None:
 	)
 	log.error(f"SCHEMA-DEBUG: unmapped-key summary ({len(_SCHEMA_DEBUG_UNMAPPED)}): {flat}")
 	_SCHEMA_DEBUG_UNMAPPED.clear()
+
+
+# Fire the summary once at interpreter exit (normal shutdown). The function is a
+# no-op unless SCHEMA_DEBUG is on and something was recorded, so registering it
+# unconditionally is free in production. atexit runs regardless of how the
+# process winds down (Qt exec_ return, SIGTERM handler, sys.exit), which is
+# exactly what we want for a "what did I get wrong this run?" report.
+atexit.register(summarize_unmapped)
 
 
 class SchemaSpecialKeys(str, Enum):
