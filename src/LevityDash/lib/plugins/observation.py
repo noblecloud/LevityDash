@@ -244,7 +244,14 @@ class ObservationValue(TimeAwareValue):
 			try:
 				value = self.convertFunc(self.rawValue)
 			except Exception as e:
-				log.warning(f'{self.__metadata.get("key")}: failed to convert raw value {self.rawValue!r} ({e}); using raw value as-is')
+				key = self.__metadata.get("key")
+				# Production stays lenient: degrade to the raw value so one bad
+				# reading doesn't kill a whole plugin update. In SCHEMA_DEBUG the
+				# same event is surfaced loudly (key + raw + exception) so a silent
+				# wrong-number bug is catchable during development.
+				log.warning(f'{key}: failed to convert raw value {self.rawValue!r} ({e}); using raw value as-is')
+				if environ.get("LEVITYDASH_SCHEMA_DEBUG", "").strip().lower() in ("1", "true", "yes", "on"):
+					log.error(f"SCHEMA-DEBUG: convert failed for {key!r}: raw={self.rawValue!r} convertFunc={getattr(self.convertFunc, '__qualname__', self.convertFunc)} exc={e!r}")
 				value = self.rawValue
 			if localized := getattr(value, 'localize', None):
 				value = localized
