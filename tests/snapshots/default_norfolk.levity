@@ -1,0 +1,145 @@
+- type: stack
+  defaultType: group
+  name: main
+  padding: 1mm
+  spacing: 2 mm
+  dividers:
+    enabled: true
+    opacity: 70%
+    size: 99%
+  items:
+  - type: stack
+    name: bottom
+    direction: Horizontal
+    spacing: 20px
+    dividers:
+      enabled: true
+      opacity: 70%
+      size: 98%
+    items:
+    - type: titled-group
+      title:
+        height: 0.75cm
+        text: Condition
+      items:
+      - type: realtime.text
+        key: environment.light.sunrise
+        title:
+          size: 0.33
+          alignment: right
+          position: left
+          icon: wi:sunrise
+        display:
+          format: '%-I:%M%p'
+          valueLabel:
+            alignment: left
+      - type: realtime.text
+        key: environment.light.sunset
+        title:
+          size: 0.33
+          alignment: right
+          position: left
+          icon: wi:sunset
+        display:
+          format: '%-I:%M%p'
+          valueLabel:
+            alignment: left
+      - type: realtime.text
+        key: environment.condition.icon
+        title: false
+        display:
+          valueLabel:
+            margins: 6mm, 2mm
+      - type: realtime.text
+        key: environment.condition.condition
+        title: false
+        display:
+          valueLabel:
+            margins: 2mm, .5mm
+      - type: realtime.text
+        key: environment.temperature.high
+        title:
+          size: 0.33
+          text: High
+        source: WeatherFlow
+        display: {}
+      - type: realtime.text
+        key: environment.temperature.low
+        title:
+          size: 0.33
+          text: Low
+        source: WeatherFlow
+        display: {}
+      size: 34%
+    - type: titled-group
+      title:
+        height: 0.75cm
+        text: Wind
+      items:
+      - type: realtime.text
+        key: environment.wind.speed.speed
+        title: false
+        display:
+          unitLabel:
+            alignment: CenterLeft
+            matchingGroup: global.direction
+        geometry:
+          height: 62%
+          width: 100%
+          x: 0%
+          y: 0%
+      - type: realtime.text
+        key: environment.wind.direction.direction
+        title: false
+        display:
+          unitLabel:
+            filters:
+            - Lower
+        geometry:
+          height: 13%
+          width: 42.1%
+          x: 57.9%
+          y: 49.1%
+      - type: realtime.text
+        key: environment.wind.speed.gust
+        title:
+          text: Gust
+        display:
+          unitPosition: hidden
+      - type: realtime.text
+        key: environment.wind.speed.gustMax
+        title:
+          text: Gusts Max
+        display:
+          unitPosition: hidden
+      size: 33%
+    - type: titled-group
+      title:
+        height: 0.75cm
+        text: Precipitation
+      items:
+      - type: realtime.text
+        key: environment.precipitation.precipitation
+        title: false
+        display:
+          format-hint: '0.0'
+          unitPosition: float-under
+        geometry:
+          height: 50%
+          width: 40%
+          x: 0%
+          y: 50%
+      - type: realtime.text
+        key: environment.precipitation.daily
+        title:
+          text: Today
+        display:
+          format: format={value}{self.numerator.unit}, precision=2
+      - type: realtime.text
+        key: environment.precipitation.daily
+        title:
+          text: Expected
+        forecast: true
+        display:
+          format: format={value}in, precision=2
+      size: 30%

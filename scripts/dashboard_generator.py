@@ -11,14 +11,17 @@ moves that job into the repo: a dashboard is described by a small, declarative
 ``spec`` (a list of panels + sizes + per-display options) and rendered to a
 YAML ``.levity`` file the app loads.
 
-It is *not* a replacement for hand-tuned dashboards. It produces a faithful,
-clean baseline; you can still open the emitted file and tweak it by hand. Every
-default below encodes a trap that previously cost a full render cycle — see
-``docs/tasks/dashboard-traps.md`` for the war stories behind each one.
+It is *not* a replacement for hand-tuned dashboards. It produces a minimal,
+honest baseline (Condition / Wind / Precipitation panels using only
+``realtime.text`` displays) — it cannot emit the clock, moon, gauge, or
+value-stack item types the live default.levity uses. You can still open the
+emitted file and add those by hand. Every default below encodes a trap that
+previously cost a full render cycle — see ``docs/tasks/dashboard-traps.md`` for
+the war stories behind each one.
 
 Usage
 -----
-    # Emit the Norfolk default layout to stdout
+    # Emit the Norfolk baseline layout to stdout
     poetry run python scripts/dashboard_generator.py --preset default_norfolk
 
     # Write it to a file
@@ -79,15 +82,16 @@ import yaml
 TARGET_PANEL_SUM = 97.0
 PANEL_SUM_TOLERANCE = 2.0
 
-# Keys with no source in the default OpenMeteo/WeatherFlow plugin set. They
-# render as "•••" and pad density without adding information — avoid them.
+# Keys with no source in the default OpenMeteo / WeatherFlow / Govee plugin set.
+# Verified directly against every schema dict in src/LevityDash/lib/plugins/builtin/*
+# (grep -rn "feelsLike\|heatIndex" ...): environment.temperature.feelsLike is defined
+# in OpenMeteo.py, WeatherFlow/__init__.py, PirateWeather.py, and OpenWeatherMap.py;
+# indoor.temperature.heatIndex is defined in Govee.py. Neither is dead. The Govee
+# indoor.temperature.* block (Govee.py:211-214) has temperature/dewpoint/heatIndex
+# but no feelsLike, and no other plugin uses the `indoor` namespace — that is the
+# one genuinely undefined key. (Two earlier drafts had this list wrong in different
+# ways; see docs/tasks/dashboard-traps.md.)
 DEAD_KEYS = frozenset({
-	"light.irradiance",
-	"light.illuminance",
-	"precipitation.precipitation",
-	"precipitation.daily",
-	"precipitation.type",
-	"pressure.trend",
 	"indoor.temperature.feelsLike",
 })
 
@@ -216,18 +220,21 @@ def build_document(spec: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
-# Presets — faithful recreations of known-good layouts
+# Presets — minimal, honest baselines (NOT recreations of the live layout)
 # ---------------------------------------------------------------------------
 
 def preset_default_norfolk() -> Dict[str, Any]:
-	"""Recreate the live Norfolk default layout structure (15-inch display).
+	"""A clean 3-panel baseline dashboard for a typical weather setup.
 
-	Bottom band: Condition / Wind / Precipitation. Top band carries the clock
-	and temperature stack plus the temperature graph. Sizes use the verified
-	~97% split rather than the old 100% that overflowed.
+	This is *not* a recreation of the live default.levity — the generator only
+	has builders for ``realtime.text`` (via realtime_item) and titled-group, so
+	it cannot emit the clock/moon/gauge/value-stack top band or the mini-gauge
+	rings that the installed dashboard uses. Treat this as a starting point to
+	hand-edit from, not a byte-faithful clone. Sizes use the verified ~97% split
+	rather than 100% (which silently overflows).
 	"""
 	return {
-		"name": "Norfolk Default (generated)",
+		"name": "Norfolk Baseline (generated)",
 		"base_size": 1920,
 		"panels": [
 			{
@@ -282,15 +289,6 @@ def preset_default_norfolk() -> Dict[str, Any]:
 				],
 			},
 		],
-		"graph": {
-			"timeframe": {"days": 2, "hours": 18},
-			"series": [
-				{"key": "environment.temperature.temperature", "gradient": "TemperatureGradient"},
-				{"key": "environment.temperature.feelsLike", "gradient": "TemperatureGradient", "weight": 0.6},
-				{"key": "environment.temperature.dewpoint", "gradient": None, "name": "dewpoint",
-				 "max": None},
-			],
-		},
 	}
 
 
@@ -328,7 +326,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 	doc = build_document(spec)
 	body = yaml.safe_dump(doc, sort_keys=False, default_flow_style=False, allow_unicode=True)
 
-	if args.out:
+	if args.out and str(args.out) != "-":
 		args.out.parent.mkdir(parents=True, exist_ok=True)
 		args.out.write_text(body)
 		print(f"wrote {args.out} ({len(body)} bytes)", file=sys.stderr)
