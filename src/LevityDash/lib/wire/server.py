@@ -138,13 +138,13 @@ class WireServer:
 		except Exception as e:
 			log.warning(f'failed to parse client message: {e!r}')
 			return
-		if incoming.get('type') != 'ts_request':
-			# subscribe/other frontend->backend message types are a later step;
-			# unrecognized messages are ignored rather than erroring, so an
-			# older/newer client can't crash this connection.
+		# Frontend->backend request types that expect a unicast reply keyed by
+		# id (ts_request, plugin_command). Anything else is ignored rather
+		# than erroring, so an older/newer client can't crash this connection.
+		if incoming.get('type') not in ('ts_request', 'plugin_command'):
 			return
 		if self.on_request is None:
-			log.warning(f'ts_request {incoming.get("id")} received but no handler is wired up')
+			log.warning(f'{incoming.get("type")} {incoming.get("id")} received but no handler is wired up')
 			return
 		try:
 			response = await self.on_request(incoming)

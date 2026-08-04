@@ -33,7 +33,7 @@ from PySide6.QtCore import QObject, Qt, Signal, Slot
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.wire.client import WireClient
 from LevityDash.lib.wire.frontend import RemoteFrontend
-from LevityDash.lib.wire.messages import PluginState
+from LevityDash.lib.wire.messages import PluginState, build_plugin_command
 
 if TYPE_CHECKING:
 	from LevityDash.lib.plugins.dispatcher import PluginValueDirectory
@@ -230,6 +230,37 @@ class RemoteConnection:
 					response = await client.request(message)
 				except Exception as e:
 					log.warning(f'timeseries request {message.get("id")} failed: {e!r}')
+					response = None
+				self._marshal.invoke(lambda: on_response(response))
+
+			asyncio.ensure_future(_do())
+
+		self._loop.call_soon_threadsafe(submit)
+
+	def send_plugin_command(self, name: str, command: str, on_response: Callable[[Optional[dict]], None]) -> None:
+		"""Issue a 'plugin_command' (start/stop/restart) on the wire thread;
+		``on_response`` fires on the GUI thread exactly once with the
+		'plugin_command_response' dict, or ``None`` on failure/no connection -
+		the single GUI-thread hop this seam requires (same ``_marshal`` used for
+		'update' and ts_request). Mirrors ``request_timeseries`` so both
+		control-plane directions share one marshaling idiom."""
+		if self._loop is None:
+			on_response(None)
+			return
+
+		message = build_plugin_command(name=name, command=command)
+
+		def submit() -> None:
+			client = self._client
+			if client is None:
+				self._marshal.invoke(lambda: on_response(None))
+				return
+
+			async def _do() -> None:
+				try:
+					response = await client.request(message)
+				except Exception as e:
+					log.warning(f'plugin_command {message.get("id")} ({name}/{command}) failed: {e!r}')
 					response = None
 				self._marshal.invoke(lambda: on_response(response))
 

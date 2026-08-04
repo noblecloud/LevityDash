@@ -74,6 +74,13 @@ class WireClient:
 						# else: unmatched (already timed out and popped, or a
 						# stray) - nobody's awaiting it anymore, drop silently.
 						continue
+					if message.get('type') == 'plugin_command_response':
+						# Same id-correlation as ts_response above; a command
+						# reply is also a one-shot unicast, not broadcast state.
+						future = self._pending.get(message.get('id'))
+						if future is not None and not future.done():
+							future.set_result(message)
+						continue
 					try:
 						self._on_message(message)
 					except Exception as e:

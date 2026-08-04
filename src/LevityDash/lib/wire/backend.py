@@ -41,7 +41,7 @@ from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.utils.data import KeyData
 from LevityDash.lib.utils.shared import now
-from LevityDash.lib.wire.messages import encode_container, encode_heartbeat, encode_plugin_status, encode_ts_response, encode_update_message
+from LevityDash.lib.wire.messages import encode_container, encode_heartbeat, encode_plugin_command_response, encode_plugin_status, encode_ts_response, encode_update_message
 
 if TYPE_CHECKING:
 	from LevityDash.lib.plugins.plugin import Plugin
@@ -236,3 +236,51 @@ class RemoteBackend:
 			plugin.thread_pool.run_threaded_process(timeseries.update, on_finish=on_finish, direct=True)
 		except Exception as e:
 			finish(encode_ts_response(request_id=request_id, source=source, key=key_str, ok=False, error=repr(e)))
+
+	async def handle_plugin_command(self, message: dict) -> dict:
+		"""The coroutine WireServer awaits per 'plugin_command' (server.py's
+		on_request hook) - runs on the server's asyncio thread, same as
+		handle_ts_request. Marshals the actual start/stop/restart onto the Qt
+		main thread (where plugins live) and awaits the result without blocking
+		this loop."""
+		loop = asyncio.get_running_loop()
+		fut = loop.create_future()
+		self._qt_invoker.invoke(lambda: self._resolve_plugin_command(message, loop, fut))
+		return await fut
+
+	def _resolve_plugin_command(self, message: dict, loop: asyncio.AbstractEventLoop, fut: asyncio.Future) -> None:
+		"""Runs on the Qt main thread (via _qt_invoker). Calls the target
+		plugin's start()/stop()/restart() (restart composes stop()+start(),
+		since Plugin defines no restart of its own) and replies ok/error."""
+		request_id = message['id']
+		name = message['name']
+		command = message['command']
+
+		def _set_result(response: dict) -> None:
+			if not fut.done():
+				fut.set_result(response)
+
+		def finish(response: dict) -> None:
+			loop.call_soon_threadsafe(_set_result, response)
+
+		if command not in ('start', 'stop', 'restart'):
+			finish(encode_plugin_command_response(request_id=request_id, name=name, ok=False, error=f'unknown command: {command!r}'))
+			return
+
+		plugin = self._plugins.get(name)
+		if plugin is None:
+			finish(encode_plugin_command_response(request_id=request_id, name=name, ok=False, error=f'unknown plugin: {name!r}'))
+			return
+
+		try:
+			if command == 'start':
+				plugin.start()
+			elif command == 'stop':
+				plugin.stop()
+			else:  # restart
+				plugin.stop()
+				plugin.start()
+		except Exception as e:
+			finish(encode_plugin_command_response(request_id=request_id, name=name, ok=False, error=repr(e)))
+			return
+		finish(encode_plugin_command_response(request_id=request_id, name=name, ok=True))

@@ -102,8 +102,16 @@ def main() -> int:
 	# set post-construction rather than passed to WireServer(...) above: the
 	# server starts (and its thread begins reading connections) before a
 	# RemoteBackend exists to answer requests. No race - a frontend can't
-	# connect and send a ts_request until well after this line runs.
-	server.on_request = bridge.handle_ts_request
+	# connect and send a request until well after this line runs.
+	async def _on_request(message: dict) -> dict:
+		# One handler for every frontend->backend request type. WireServer
+		# already whitelists which types reach here (ts_request, plugin_command).
+		msg_type = message.get('type')
+		if msg_type == 'plugin_command':
+			return await bridge.handle_plugin_command(message)
+		# default / ts_request
+		return await bridge.handle_ts_request(message)
+	server.on_request = _on_request
 
 	app = LevityDashboard.app
 

@@ -36,6 +36,7 @@ __all__ = [
 	'build_ts_request', 'encode_ts_response', 'decode_ts_response',
 	'PluginState', 'encode_plugin_status', 'parse_plugin_status',
 	'encode_heartbeat', 'parse_heartbeat',
+	'PLUGIN_COMMANDS', 'build_plugin_command', 'encode_plugin_command_response', 'decode_plugin_command_response',
 ]
 
 # The flag fields a container advertises across the wire (isRealtime,
@@ -278,6 +279,68 @@ def encode_heartbeat(*, seq: int, uptime: float) -> dict:
 	}
 
 
-def parse_heartbeat(message: dict) -> Tuple[int, float]:
+def decode_heartbeat(message: dict) -> Tuple[int, float]:
 	"""Decode a 'heartbeat' into ``(seq, uptime)``."""
 	return int(message.get('seq') or 0), float(message.get('uptime') or 0.0)
+
+
+# Legacy alias kept because existing callers (frontend.py) import parse_heartbeat.
+def parse_heartbeat(message: dict) -> Tuple[int, float]:
+	return decode_heartbeat(message)
+
+
+# --- control plane: plugin start/stop/restart commands ------------------
+#
+# The frontend->backend half of the control plane (the read-only health half -
+# heartbeat + plugin_status - is above). A 'plugin_command' is a unicast request
+# like 'ts_request' (same id-correlation shape, see client.py): the frontend asks
+# the backend to start/stop/restart one plugin, and the backend replies with a
+# 'plugin_command_response' carrying ok/error. It is NOT broadcast and NOT
+# replayed - a command is a one-shot imperative, not state to be observed.
+#
+# The command set is intentionally small and composes with Plugin's existing
+# abstract surface (start/stop; no restart exists on Plugin, so the backend
+# resolver composes stop()+start()). 'enable'/'disable' would touch persisted
+# config and are deliberately out of scope for this slice.
+
+#: The commands a 'plugin_command' may carry. Kept as a tuple of str so the
+#: server can whitelist request types without importing this module's internals.
+PLUGIN_COMMANDS = ('start', 'stop', 'restart')
+
+
+def build_plugin_command(*, name: str, command: str) -> dict:
+	"""Build a 'plugin_command' asking the backend to run ``command`` on the
+	plugin named ``name``.
+
+	``command`` must be one of ``PLUGIN_COMMANDS``; the backend also validates
+	this and replies with ``ok=False`` for an unknown command rather than
+	raising, so an older/newer client can't crash the connection.
+	"""
+	return {
+		'v': WIRE_VERSION,
+		'type': 'plugin_command',
+		'id': str(uuid4()),
+		'name': name,
+		'command': command,
+	}
+
+
+def encode_plugin_command_response(*, request_id: str, name: str, ok: bool, error: Optional[str] = None) -> dict:
+	"""Build the matching 'plugin_command_response' - same `id` as the command
+	it answers, so the client can correlate it (see client.py's pending-futures
+	map, identical to ts_response)."""
+	return {
+		'v': WIRE_VERSION,
+		'type': 'plugin_command_response',
+		'id': request_id,
+		'name': name,
+		'ok': bool(ok),
+		'error': error,
+	}
+
+
+def decode_plugin_command_response(message: dict) -> Tuple[bool, Optional[str]]:
+	"""Decode a 'plugin_command_response' into ``(ok, error)``. Always returns a
+	(bool, str|None) pair - never raises - so callers don't need a separate
+	error branch beyond checking ``ok``."""
+	return bool(message.get('ok', False)), message.get('error')
