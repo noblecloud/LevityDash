@@ -428,27 +428,80 @@ class PluginsMenu(QMenu):
 		self.buildItems()
 		self.aboutToShow.connect(self.refresh_toggles)
 
+	def _remote_connection(self):
+		"""The mode=remote backend connection, or None. In live mode plugins
+		run in this process and are toggled directly (the original behavior)."""
+		if backend_mode() != 'remote':
+			return None
+		return getattr(LevityDashboard.dispatcher, 'remote', None)
+
+	def _is_running(self, plugin) -> bool:
+		"""Effective running state. In remote mode the local plugin object is
+		loaded but never started - the real state lives in the backend's
+		plugin_status snapshot (connection.plugins[name].running)."""
+		connection = self._remote_connection()
+		if connection is not None:
+			state = connection.plugins.get(plugin.name)
+			return bool(state.running) if state is not None else False
+		return bool(plugin.running)
+
 	def buildItems(self):
 		for plugin in LevityDashboard.plugins:
 			action = QAction(plugin.name, self)
 			action.setCheckable(True)
-			action.setChecked(plugin.running)
+			action.setChecked(self._is_running(plugin))
 			action.plugin = plugin
 			action.togglePlugin = partial(self.togglePlugin, plugin)
 			action.toggled.connect(action.togglePlugin)
 			self.addAction(action)
 
+			restart = QAction(f'Restart {plugin.name}', self)
+			restart.plugin = plugin
+			restart.triggered.connect(partial(self.restartPlugin, plugin))
+			self.addAction(restart)
+
 	@Slot()
 	def refresh_toggles(self):
+		connection = self._remote_connection()
+		alive = connection is not None and connection.backendAlive
 		for action in self.actions():
-			action.setChecked(action.plugin.running)
+			plugin = getattr(action, 'plugin', None)
+			if plugin is None:
+				continue
+			action.setChecked(self._is_running(plugin))
+			# No point issuing commands to a backend we can't reach.
+			if connection is not None:
+				action.setEnabled(alive)
 
 	@staticmethod
-	def togglePlugin(plugin, enabled):
+	def _command_callback(name, command, response):
+		if response is None:
+			guiLog.warning(f'plugin command {command} for {name} got no response (backend unreachable?)')
+		elif not response.get('ok', False):
+			guiLog.warning(f'plugin command {command} for {name} failed: {response.get("error")}')
+
+	@Slot(bool)
+	def togglePlugin(self, plugin, enabled):
+		connection = self._remote_connection()
+		if connection is not None:
+			connection.send_plugin_command(
+				plugin.name, 'start' if enabled else 'stop',
+				partial(self._command_callback, plugin.name, 'start' if enabled else 'stop'),
+			)
+			return
 		if enabled and not plugin.running:
 			plugin.start()
 		elif not enabled and plugin.running:
 			plugin.stop()
+
+	@Slot()
+	def restartPlugin(self, plugin):
+		connection = self._remote_connection()
+		if connection is not None:
+			connection.send_plugin_command(plugin.name, 'restart', partial(self._command_callback, plugin.name, 'restart'))
+			return
+		plugin.stop()
+		plugin.start()
 
 
 class InsertMenu(QMenu):
