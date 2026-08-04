@@ -236,6 +236,26 @@ class TestPerDeviceInstances:
 		assert bedroom.device.alias == 'bedroom'
 		assert bedroom.device.name == ROOM['name']
 
+	def test_name_is_answerable_before_init_runs(self):
+		# __instances__ builds a bare probe (object.__new__, no __init__) to
+		# read the config, and PluginConfig.__getitem__ asks for plugin.name
+		# on every section miss. An instance-only __name made that raise
+		# AttributeError, so the plugin failed to load entirely:
+		#   'Govee' object has no attribute '_Govee__name'
+		# Caught only in a real GUI run - the unit tests all constructed
+		# instances normally, and the config dry-run passed a raw ConfigParser
+		# rather than a PluginConfig, so neither reached this path.
+		probe = object.__new__(Govee)
+		assert probe.name == 'Govee'
+
+	def test_instances_are_built_from_a_real_plugin_config(self):
+		# Drives the actual loader path end to end (getConfig -> PluginConfig
+		# -> parse_devices), not a hand-made config stand-in.
+		instances = Govee.__instances__()
+		for instance in instances:
+			assert instance.name.startswith('Govee-')
+			assert instance.device is not None
+
 
 # --- lifecycle --------------------------------------------------------------
 

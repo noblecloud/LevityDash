@@ -283,11 +283,19 @@ class Govee(BLEPlugin, realtime=True, logged=True):
 
 	#: This instance's device. Set before ``Plugin.__init__`` runs, because
 	#: ``name`` is read during base initialisation.
-	device: DeviceConfig
+	device: Optional[DeviceConfig] = None
+
+	#: Class-level fallback so ``name`` is answerable on an instance that has
+	#: not run ``__init__`` - ``__instances__`` builds one such probe to read
+	#: the config, and ``PluginConfig.__getitem__`` asks for ``plugin.name``
+	#: on every section miss. Without this, reading config raised
+	#: AttributeError before any device could be discovered.
+	__name = 'Govee'
 
 	def __init__(self, device: Optional[DeviceConfig] = None):
 		self.device = device
-		self.__name = device.sourceName if device is not None else 'Govee'
+		if device is not None:
+			self.__name = device.sourceName
 		super().__init__()
 		self.lastDatagram: Optional[LevityDatagram] = None
 		self.historicalTimer: ScheduledEvent | None = None
@@ -305,6 +313,10 @@ class Govee(BLEPlugin, realtime=True, logged=True):
 		here rather than per instance: every device shares one ``Govee.ini``,
 		because ``Plugin.getConfig`` keys off the class.
 		"""
+		# A bare probe, only to read the config: getConfig wants a plugin, but
+		# no device is known yet. It answers `name` from the class-level
+		# fallback above, which PluginConfig.__getitem__ needs on every
+		# section miss.
 		probe = object.__new__(cls)
 		try:
 			config = cls.getConfig(probe)
