@@ -2,7 +2,7 @@ import pkgutil
 from dataclasses import dataclass, field
 from importlib import import_module
 from types import ModuleType
-from typing import Any, ClassVar, Dict, Hashable, Iterator, Optional, Type
+from typing import Any, ClassVar, Dict, Hashable, Iterator, List, Optional, Type
 
 from LevityDash import LevityDashboard
 from LevityDash.lib.config import pluginConfig
@@ -83,12 +83,12 @@ class PluginsLoader(metaclass=GlobalSingleton, name='plugins'):
 			if plugin_ is None:
 				continue
 			try:
-				pluginInstance = plugin_()
-				pluginInstance.manager = self
-				self.dispatcher.connect_plugin(pluginInstance)
-				self.__plugin_instances[name] = pluginInstance
-				statusColor = 'green' if pluginInstance.enabled else 'red'
-				pluginLog.info(f'Loaded plugin [{statusColor}]{name}[/{statusColor}]')
+				for pluginInstance in self._instantiate(name, plugin_):
+					pluginInstance.manager = self
+					self.dispatcher.connect_plugin(pluginInstance)
+					self.__plugin_instances[pluginInstance.name] = pluginInstance
+					statusColor = 'green' if pluginInstance.enabled else 'red'
+					pluginLog.info(f'Loaded plugin [{statusColor}]{pluginInstance.name}[/{statusColor}]')
 			except ImportError as e:
 				pluginLog.debug(f'Unable to load {name} due to exception --> {e}')
 				continue
@@ -98,6 +98,42 @@ class PluginsLoader(metaclass=GlobalSingleton, name='plugins'):
 					pluginLog.exception(e)
 				continue
 		pluginLog.info(f'Loaded {len(self.__plugin_instances)} plugins')
+
+	@staticmethod
+	def _instantiate(name: str, plugin_: Type[Plugin]) -> List[Plugin]:
+		"""Build the instances a plugin module contributes.
+
+		Normally one, keyed by its own ``name``. A plugin class may instead
+		declare ``__instances__``, a classmethod returning an iterable of
+		already-constructed instances - the hook that lets one module cover
+		several physical devices (Govee's per-thermometer instances) without
+		every consumer learning about devices.
+
+		The mechanism is general; the policy - what a device is, how it is
+		configured, what the instances are called - stays with the plugin.
+		Instances must have distinct ``name`` values, since ``name`` is the
+		key for the dispatcher, the wire protocol, and ``source:`` in saved
+		dashboards.
+		"""
+		factory = getattr(plugin_, '__instances__', None)
+		if factory is None:
+			return [plugin_()]
+
+		instances = list(factory())
+		if not instances:
+			pluginLog.info(f'{name}: no instances configured')
+			return []
+
+		seen = {}
+		for instance in instances:
+			if (existing := seen.get(instance.name)) is not None:
+				pluginLog.error(
+					f'{name}: two instances both named {instance.name!r}; keeping the first. '
+					f'Names must be unique - they key the dispatcher and saved dashboards.'
+				)
+				continue
+			seen[instance.name] = instance
+		return list(seen.values())
 
 	def start(self):
 		pluginLog.info(' Starting Plugins '.center(80, '-'))
