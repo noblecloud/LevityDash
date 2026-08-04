@@ -34,7 +34,7 @@ log = LevityPluginLog.getChild('Wire').getChild('Messages')
 __all__ = [
 	'encode_container', 'apply_container_update', 'encode_update_message', 'parse_update_message',
 	'build_ts_request', 'encode_ts_response', 'decode_ts_response',
-	'PluginState', 'encode_plugin_status', 'parse_plugin_status',
+	'PluginState', 'plugin_key_count', 'encode_plugin_status', 'parse_plugin_status',
 	'encode_heartbeat', 'parse_heartbeat',
 	'PLUGIN_COMMANDS', 'build_plugin_command', 'encode_plugin_command_response', 'decode_plugin_command_response',
 ]
@@ -193,7 +193,7 @@ class PluginState(NamedTuple):
 	lastPublish: Optional[datetime] = None
 
 
-def _plugin_key_count(plugin: Any) -> int:
+def plugin_key_count(plugin: Any) -> int:
 	"""How many keys a plugin currently exposes.
 
 	``Plugin`` defines no ``__len__`` (the ``__len__`` nearby in plugin.py
@@ -228,7 +228,7 @@ def encode_plugin_status(*, plugins: Sequence[Any], lastPublish: Optional[dict] 
 		name = getattr(plugin, 'name', None)
 		if name is None:
 			continue
-		keyCount = _plugin_key_count(plugin)
+		keyCount = plugin_key_count(plugin)
 		published = lastPublish.get(name)
 		entries.append({
 			'name': name,

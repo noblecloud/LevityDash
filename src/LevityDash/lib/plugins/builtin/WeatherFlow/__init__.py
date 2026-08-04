@@ -437,6 +437,7 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 			self._task = async_bootstrap()
 			self.loop.run_until_complete(self._task)
 			del self.loop
+			del self.future
 			self.pluginLog.info('WeatherFlow: shutdown complete')
 
 		self.loop.run_in_executor(None, bootstrap)

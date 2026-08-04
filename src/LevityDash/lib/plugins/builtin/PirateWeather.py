@@ -207,6 +207,7 @@ class PirateWeather(REST, realtime=True, daily=True, hourly=True, minutely=True,
 			self.loop.run_until_complete(self._task)
 			self.stop()
 			del self.loop
+			del self.future
 			self.pluginLog.info('Pirate Weather: shutdown complete')
 
 		self.loop.run_in_executor(None, bootstrap)

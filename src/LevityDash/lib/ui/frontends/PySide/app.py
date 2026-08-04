@@ -37,6 +37,7 @@ from LevityDash.lib.plugins import AnySource, Container
 from LevityDash.lib.plugins.categories import CategoryAtom, CategoryItem
 from LevityDash.lib.plugins.dispatcher import backend_mode, MultiSourceContainer
 from LevityDash.lib.plugins.observation import TimeAwareValue
+from LevityDash.lib.wire.messages import plugin_key_count
 from LevityDash.lib.ui.fonts import monospaceFont, system_default_font
 from LevityDash.lib.ui.frontends.PySide import qtLogger as guiLog
 from LevityDash.lib.ui.frontends.PySide.Modules import SizeGroup
@@ -473,13 +474,14 @@ class PluginsMenu(QMenu):
 			if snap.lastPublish is not None:
 				parts.append(f'updated {snap.lastPublish.strftime("%H:%M")}')
 			return f'{plugin.name}: ' + ' · '.join(parts)
-		# Live mode: read the local plugin directly.
+		# Live mode: read the local plugin directly. Use the same
+		# keys()/containers/len() fallback chain plugin_status uses on the
+		# wire side - a bare len(plugin) raises for any plugin with no
+		# __len__ (e.g. Govee), which an over-broad except previously
+		# reported as a flat '0 keys' for every such plugin, running or not.
 		running = 'Running' if plugin.running else 'Stopped'
 		enabled = 'Enabled' if getattr(plugin, 'enabled', True) else 'Disabled'
-		try:
-			keys = f'{len(plugin)} keys'
-		except Exception:
-			keys = '0 keys'
+		keys = f'{plugin_key_count(plugin)} keys'
 		return f'{plugin.name}: ' + ' · '.join([running, enabled, keys])
 
 	def buildItems(self):

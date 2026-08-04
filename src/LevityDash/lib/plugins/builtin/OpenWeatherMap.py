@@ -207,6 +207,7 @@ class OpenWeatherMap(REST, realtime=True, daily=False, hourly=False, logged=Fals
 			self.loop.run_until_complete(self._task)
 			self.stop()
 			del self.loop
+			del self.future
 			self.pluginLog.info('OpenWeatherMap: shutdown complete')
 
 		self.loop.run_in_executor(None, bootstrap)

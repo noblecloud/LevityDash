@@ -675,6 +675,7 @@ class OpenMeteo(REST, realtime=False, hourly=True, daily=True, recorded=True):
 			self.loop.run_until_complete(self._task)
 			self.stop()
 			del self.loop
+			del self.future
 			self.pluginLog.info('OpenMeteo: shutdown complete')
 
 		self.loop.run_in_executor(None, bootstrap)

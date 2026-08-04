@@ -372,6 +372,15 @@ class Plugin(metaclass=PluginMeta):
 	def future(self) -> Future:
 		return self.loop.create_future()
 
+	# `stop()`/`asyncStop()` implementations resolve `future` to end the
+	# `await self.future` in their bootstrap loop, then `del self.loop` so the
+	# next `start()` gets a fresh loop. `future` must be torn down the same
+	# way (`del self.future`) - it is a `cached_property` too, and a resolved
+	# Future stays resolved forever. Without the matching `del`, every start
+	# after the first stop hits `await self.future` on an already-completed
+	# future and returns instantly, so the plugin appears to shut itself down
+	# the moment it starts.
+
 	@abstractmethod
 	def start(self):
 		raise NotImplementedError

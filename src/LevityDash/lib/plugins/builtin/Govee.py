@@ -299,7 +299,19 @@ class Govee(Plugin, realtime=True, logged=True):
 				self.config.defaults().pop('device.mac', None)
 				self.config.defaults().pop('device.model', None)
 				self.config.save()
-		self.name = self.config['device.name']
+		# Do NOT also do `self.name = self.config['device.name']` here for the
+		# configured-device branches above - `device.name` is per-device
+		# legacy config, and overwriting the plugin's own stable `name` with
+		# it broke identity everywhere `plugin.name` is used as a stable key:
+		# RemoteBackend.attach()/self._plugins is keyed by the pre-rename
+		# name, so a renamed Govee could never be found by
+		# handle_plugin_command; encode_plugin_status reports the *post*
+		# rename name, so the frontend's never-renamed local Govee object
+		# (mode=remote never starts local plugins) could never match its own
+		# backend snapshot and always fell back to "Stopped - 0 keys". Same
+		# root cause as the log/tooltip mislabeling in task #19. With two
+		# devices behind one plugin instance, there is no single correct
+		# device to name it after anyway - `name` stays 'Govee'.
 		pluginLog.info(f'{self.name} initialized for device {device}')
 
 	@classmethod
@@ -373,6 +385,7 @@ class Govee(Plugin, realtime=True, logged=True):
 			pluginLog.info(f'{self.name} stopped!')
 			self.loop.stop()
 			del self.loop
+			del self.future
 			self.pluginLog.info('Govee: shutdown complete')
 
 		loop.run_in_executor(None, bootstrap)
