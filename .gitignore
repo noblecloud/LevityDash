@@ -166,3 +166,12 @@ docs/benchmark/ANSWER-KEY.md
 
 # openlore analysis artifacts
 .openlore/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+graft/
+
+# agent/tooling caches — regenerable, machine-local
+.codegraph/
+.memmy/
+openspec/
+opencode.jsonc
