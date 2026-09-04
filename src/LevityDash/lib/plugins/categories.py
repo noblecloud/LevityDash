@@ -519,6 +519,51 @@ class CategoryAtom(str):
 #: and is used by schemas for variable placeholders like '@deviceName'.
 IDENTITY_SEPARATOR = '#'
 
+#: Separates a key from its *source* - who provided it. This is the character
+#: `__str__` has always emitted ('Govee:indoor.temperature.temperature'); it is
+#: not '@' for the same reason identity is not: '@' is a registered wildcard.
+SOURCE_SEPARATOR = ':'
+
+
+def normaliseSource(value: Any) -> Optional[tuple]:
+	"""A source as the canonical tuple, whatever shape it arrived in.
+
+	`__new__` builds the interning key from the source and the setter stores
+	it, so the two must agree: they did not, and `source=['X']` interned to a
+	different instance than `source=('X',)` despite comparing equal.
+
+	A bare string is wrapped rather than iterated - str is Iterable, so
+	source='Govee' used to explode into ('G','o','v','e','e') and render as
+	'G:o:v:e:e:a.b'.
+	"""
+	if value is None:
+		return None
+	if isinstance(value, (str, bytes)):
+		return (value,)
+	if isinstance(value, Iterable):
+		return tuple(value)
+	return (value,)
+
+
+def splitKeyString(value: str) -> tuple:
+	"""Split the string form into ``(path, source, identity)``.
+
+	The inverse of `__str__`, which emits ``source:path#identity``. Both
+	affixes are stripped before the path is tokenized because neither ':' nor
+	'#' is in the atom character class - left in place they are not delimiters
+	but simply dropped, folding the source and identity into the path as
+	ordinary atoms ('Govee:a.b' -> ('Govee', 'a', 'b')).
+
+	The source is everything before the *last* ':' so a multi-part source
+	round-trips; path atoms can never contain ':' themselves.
+	"""
+	value, _, identity = value.partition(IDENTITY_SEPARATOR)
+	source = None
+	if SOURCE_SEPARATOR in value:
+		head, _, value = value.rpartition(SOURCE_SEPARATOR)
+		source = tuple(part for part in head.split(SOURCE_SEPARATOR) if part) or None
+	return value, source, identity or None
+
 
 # Section CategoryItem
 class CategoryItem(tuple):
@@ -535,23 +580,22 @@ class CategoryItem(tuple):
 			if value is None:
 				continue
 			elif isinstance(value, str):
-				# '#identity' must be split off before the findall below: '#'
-				# is not in the atom character class, so it would otherwise be
-				# dropped and the identity absorbed as an ordinary path atom
-				# ('a.b#bedroom' -> ('a', 'b', 'bedroom')).
-				value, _, parsedIdentity = value.partition(IDENTITY_SEPARATOR)
+				value, parsedSource, parsedIdentity = splitKeyString(value)
 				if parsedIdentity and identity is None:
 					identity = parsedIdentity
+				if parsedSource and source is None:
+					source = parsedSource
 				valueArray.extend(re.findall(rf"[\w|{CategoryWildcard.regexMatchPattern()}|\-]+", value))
 			else:
 				valueArray.extend(value)
 				if identity is None:
 					identity = getattr(value, 'identity', None)
-		source = tuple(source) if isinstance(source, list) else (source,)
-		# identity is part of the interning key: two keys differing only by
-		# identity are *different* keys (a bedroom reading is never a garage
-		# reading), so they must not share an interned instance.
-		id = hash((*tuple(valueArray), *source, identity))
+		# Normalised here so the interning key matches what the setter stores;
+		# source and identity both participate, since two keys differing only
+		# by either are *different* keys (a bedroom reading is never a garage
+		# reading) and must not share an interned instance.
+		source = normaliseSource(source)
+		id = hash((*tuple(valueArray), source, identity))
 		if id in cls.__existing__:
 			return cls.__existing__[id]
 		kwargs['id'] = id
@@ -573,15 +617,23 @@ class CategoryItem(tuple):
 		# re-init can only ever write back what is already there. Do nothing.
 		if getattr(self, '_CategoryItem__initialised', False):
 			return
-		self.source = source
-		if identity is None:
-			for value in values:
-				if isinstance(value, str) and IDENTITY_SEPARATOR in value:
-					identity = value.partition(IDENTITY_SEPARATOR)[2] or None
-					break
-				if isinstance(value, CategoryItem) and value.identity is not None:
+		# Derived with the same helper `__new__` used, not a second
+		# hand-rolled parse: the two used to disagree about identity in edge
+		# cases, and `__new__` interns on its answer while this one is what
+		# actually gets stored.
+		for value in values:
+			if identity is not None and source is not None:
+				break
+			if isinstance(value, str):
+				_, parsedSource, parsedIdentity = splitKeyString(value)
+				if identity is None:
+					identity = parsedIdentity
+				if source is None:
+					source = parsedSource
+			elif isinstance(value, CategoryItem):
+				if identity is None:
 					identity = value.identity
-					break
+		self.source = source
 		self.__identity = identity
 		self.__id = kwargs.pop('id', None)
 		self.__hash = None
@@ -593,22 +645,11 @@ class CategoryItem(tuple):
 
 	@source.setter
 	def source(self, value: Hashable):
-		if value is None:
-			self.__source = value
-			return
-		# str is Iterable, so a bare source name used to be exploded into its
-		# characters - source='Govee' became ('G','o','v','e','e') and str()
-		# rendered 'G:o:v:e:e:a.b'. Callers passing a list (the common path,
-		# e.g. observation.py's source=[source.name]) were unaffected, which is
-		# why it survived.
-		if isinstance(value, (str, bytes)):
-			value = (value,)
-		elif isinstance(value, Iterable):
-			value = tuple(value)
-		if not isinstance(value, Hashable):
+		# Same normaliser `__new__` builds the interning key from, so what is
+		# stored and what was interned on can never disagree.
+		value = normaliseSource(value)
+		if value is not None and not isinstance(value, Hashable):
 			raise TypeError('source must be hashable')
-		if not isinstance(value, tuple):
-			value = (value,)
 		self.__source = value
 
 	@cached_property

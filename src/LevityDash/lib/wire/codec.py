@@ -5,18 +5,12 @@ Versioned (schema `v`) so the wire format can evolve without breaking an
 older frontend talking to a newer backend or vice versa - see WIRE_VERSION.
 
 Four things get encoded today:
-  - CategoryItem <-> its string form. Round-trips correctly for anonymous
-    keys (no `.source` set) - the only kind MultiSourceContainer/dispatcher
-    keys are today. NOT yet correct for a CategoryItem with `.source` set:
-    CategoryItem.__str__ emits a `source:path` prefix, but the single-string
-    constructor's tokenizing regex (categories.py `__new__`, word-chars only)
-    doesn't treat `:` as a delimiter - it's simply outside the matched
-    character class, so `findall` splits on it exactly like `.`, silently
-    folding the source into the path atoms instead of restoring `.source`.
-    Fixing this is Phase 3.5's job (the `@source`/`#identity` addressing
-    model, which has to design canonical ordering + escaping anyway) - not
-    patched here to avoid a narrow, easily-desynced fix landing ahead of
-    that design.
+  - CategoryItem <-> its string form, `source:path#identity`. Round-trips
+    fully, source included: the constructor splits both affixes off before
+    tokenizing the path (categories.py `splitKeyString`). It did not always -
+    the tokenizing regex is word-chars only, so ':' was neither delimiter nor
+    atom content and the source was silently folded into the path atoms
+    ('Govee:a.b' -> ('Govee', 'a', 'b')).
   - WeatherUnits Measurement <-> {"value", "unit", "cls", "ts"} - value is
     the plain float (a Measurement is a float subclass), unit/cls are used
     together to resolve the exact class on decode (unit alone can be

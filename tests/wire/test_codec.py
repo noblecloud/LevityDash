@@ -37,20 +37,37 @@ def test_category_item_str_roundtrip():
 	assert decode_category_item(encode_category_item(item)) == item
 
 
-def test_category_item_with_source_does_not_roundtrip_yet():
-	# Documents a real, currently-open gap (see codec.py's module docstring):
-	# CategoryItem.__str__ emits 'source:path', but the single-string
-	# constructor's tokenizer doesn't treat ':' as a delimiter and silently
-	# folds the source into the path atoms instead. Not a codec bug to fix
-	# here - MultiSourceContainer/dispatcher keys are anonymous today, and
-	# proper source-in-key round-tripping is Phase 3.5's job. This test
-	# exists so a future CategoryItem fix flips it, rather than the gap
-	# going unnoticed.
+def test_category_item_with_source_roundtrips():
+	# Was an open gap: __str__ emitted 'source:path' but the constructor's
+	# tokenizer did not treat ':' as a delimiter, so it silently folded the
+	# source into the path atoms. The constructor now splits both affixes off
+	# before tokenizing.
 	item = CategoryItem('environment.temperature.temperature', source=['OpenMeteo'])
 	result = roundtrip(item)
 	assert isinstance(result, CategoryItem)
-	assert result != item
-	assert result.source != item.source
+	assert result == item
+	assert result.source == item.source == ('OpenMeteo',)
+	assert tuple(result) == ('environment', 'temperature', 'temperature')
+
+
+def test_category_item_with_source_and_identity_roundtrips():
+	# Both affixes at once, which is the shape a per-device plugin produces.
+	item = CategoryItem('indoor.temperature.temperature', source='Govee-bedroom', identity='bedroom')
+	assert str(item) == 'Govee-bedroom:indoor.temperature.temperature#bedroom'
+	result = roundtrip(item)
+	assert result == item
+	assert result.source == ('Govee-bedroom',)
+	assert result.identity == 'bedroom'
+	assert tuple(result) == ('indoor', 'temperature', 'temperature')
+
+
+def test_a_multi_part_source_roundtrips():
+	# The source is everything before the *last* ':', so more than one part
+	# survives rather than being partly absorbed into the path.
+	item = CategoryItem('a.b', source=['one', 'two'])
+	result = roundtrip(item)
+	assert result.source == ('one', 'two')
+	assert tuple(result) == ('a', 'b')
 
 
 def test_category_item_wire_envelope_shape():

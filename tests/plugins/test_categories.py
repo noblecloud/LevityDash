@@ -155,6 +155,63 @@ class TestSourceIsNotExploded:
 		assert str(CategoryItem('a.b', source='Govee')) == 'Govee:a.b'
 
 
+class TestStringFormRoundTrips:
+	"""`str()` is the round-trip form, source included.
+
+	It always emitted `source:path#identity`, but the constructor tokenized
+	with a word-character class that treats ':' as neither delimiter nor atom
+	content - so it was simply dropped and the source folded into the path
+	('Govee:a.b' -> ('Govee', 'a', 'b')). CLAUDE.md claimed sourced keys were
+	round-trip safe; they were not. Both affixes are now split off before the
+	path is tokenized.
+	"""
+
+	def test_source_survives(self):
+		key = CategoryItem('a.b', source='Govee')
+		assert CategoryItem(str(key)) == key
+		assert CategoryItem(str(key)).source == ('Govee',)
+
+	def test_the_path_is_not_polluted_by_the_source(self):
+		assert tuple(CategoryItem('Govee:a.b')) == ('a', 'b')
+
+	def test_identity_survives_alongside_a_source(self):
+		key = CategoryItem('indoor.temperature.temperature', source='Govee-bedroom', identity='bedroom')
+		assert str(key) == 'Govee-bedroom:indoor.temperature.temperature#bedroom'
+		back = CategoryItem(str(key))
+		assert back == key
+		assert back.source == ('Govee-bedroom',)
+		assert back.identity == 'bedroom'
+		assert tuple(back) == ('indoor', 'temperature', 'temperature')
+
+	def test_a_multi_part_source_survives(self):
+		# Everything before the *last* ':' is the source, so more than one
+		# part round-trips instead of leaking into the path.
+		key = CategoryItem('a.b', source=['one', 'two'])
+		back = CategoryItem(str(key))
+		assert back.source == ('one', 'two')
+		assert tuple(back) == ('a', 'b')
+
+	def test_an_anonymous_key_is_unaffected(self):
+		key = CategoryItem('a.b.c')
+		assert CategoryItem(str(key)) == key
+		assert CategoryItem(str(key)).source is None
+
+
+class TestSourceShapesInternTogether:
+	"""`__new__` and the setter must normalise a source the same way.
+
+	They did not: `__new__` only converted a list, while the setter converted
+	any Iterable. So `source=['X']` and `source=('X',)` compared equal but
+	interned to two different instances.
+	"""
+
+	def test_list_and_tuple_intern_to_one_instance(self):
+		assert CategoryItem('a.b', source=['X']) is CategoryItem('a.b', source=('X',))
+
+	def test_string_and_list_intern_to_one_instance(self):
+		assert CategoryItem('a.b', source='X') is CategoryItem('a.b', source=['X'])
+
+
 class TestKeysToDictTerminatesWithIdentity:
 	"""keysToDict recursed forever once identity-scoped keys existed.
 
