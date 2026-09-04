@@ -759,6 +759,14 @@ class Schema(CategoryDict):
 		return result
 
 	def __init__(self, plugin: 'Plugin', source: dict, category: str = None, ignored: Iterable[str] = None, **kwargs):
+		# Work on our own copy: everything below treats `source` as scratch,
+		# popping seven keys out of it and replacing the rest with
+		# UnitMetaData. Callers pass the plugin class's `schema` attribute,
+		# which is shared by every instance of that class - consuming it here
+		# left the *second* instance of a multi-instance plugin (Govee's
+		# per-device instances) with no dataMaps, no identityKey and no
+		# aliases, so its datagrams had no 'realtime' group at all.
+		source = dict(source)
 		self._ignored = set(source.pop('ignored', []))
 		category = ''
 		self._plugin = plugin

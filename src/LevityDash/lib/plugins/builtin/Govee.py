@@ -442,7 +442,14 @@ class Govee(BLEPlugin, realtime=True, logged=True):
 			results, schema=self.schema, dataMaps=self.schema.dataMaps,
 			identity=identity,
 		)
-		pluginLog.verbose(f'{self.name} received: {datagram["realtime"]}', verbosity=5)
+		# Never let the diagnostic break delivery: this line used to index
+		# datagram['realtime'] directly, so a datagram without that group
+		# raised KeyError *before* the update below ever ran - a log statement
+		# silently costing the device all of its data.
+		if 'realtime' in datagram:
+			pluginLog.verbose(f'{self.name} received: {datagram["realtime"]}', verbosity=5)
+		else:
+			pluginLog.warning(f'{self.name}: datagram carries no realtime group; keys: {sorted(map(str, datagram))}')
 		self.realtime.update(datagram)
 		self.lastDatagram = datagram
 
