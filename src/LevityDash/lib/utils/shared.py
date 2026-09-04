@@ -77,11 +77,23 @@ inverse_golden = INVERSE_GOLDEN_RATIO = 1/golden
 from LevityDash.lib._descriptors import classproperty
 
 
-def simpleRequest(url: str) -> dict:
+#: Every caller of `simpleRequest` is on a startup path, so a stalled socket
+#: stalls the whole app rather than one request.
+REQUEST_TIMEOUT_S = 10
+
+
+def simpleRequest(url: str, timeout: float = REQUEST_TIMEOUT_S) -> dict:
+	"""Fetch and decode JSON, refusing to wait forever.
+
+	`urlopen` without a timeout waits on the socket indefinitely. That is not
+	an error, so the `except Exception` fallbacks around callers never fire:
+	`guessLocation` (config.py) simply hung at startup whenever ipapi.co
+	answered slowly or rate-limited, and the app never finished booting.
+	"""
 	from urllib.request import urlopen, Request
 	from json import loads
 	r = Request(url)
-	with urlopen(r) as response:
+	with urlopen(r, timeout=timeout) as response:
 		return loads(response.read())
 
 
