@@ -41,8 +41,13 @@ packages = [
 ]
 
 [tool.poetry.scripts]
-LevityDash = 'LevityDash:__main__.main'
-LevityDash-reset-config = 'LevityDash:__main__.reset_config'
+# `pkg:submodule.func` is not valid entry-point syntax - the part after the
+# colon is a dotted path of *attributes*, and `__main__` is a submodule, so it
+# only resolves once something has already imported it. Poetry's runner does
+# exactly `import_module('LevityDash').__main__.main` and raises AttributeError,
+# which broke `poetry run LevityDash`. Name the module before the colon.
+LevityDash = 'LevityDash.__main__:main'
+LevityDash-reset-config = 'LevityDash.__main__:reset_config'
 LevityDash-backend = 'LevityDash.backend:main'
 LevityDash-backend-watch = 'LevityDash.devtools.backend_watch:cli'
 
