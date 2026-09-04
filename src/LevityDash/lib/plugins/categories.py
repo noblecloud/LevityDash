@@ -561,6 +561,18 @@ class CategoryItem(tuple):
 		return value
 
 	def __init__(self, *values: Union[tuple, list, str], separator: Optional[str] = None, source: Any = None, identity: Optional[str] = None, **kwargs):
+		# `__new__` interns, so it hands back instances that are already in use
+		# as dict keys all over the app - and Python still calls `__init__` on
+		# them. Re-running the body below rewrote `source` and `__identity`,
+		# wiped `__id` (only `__new__` puts it in kwargs, and only for a *new*
+		# instance) and set `__hash = None` on a live key. A key whose hash
+		# changes while it sits in a dict duplicates its own entry: the
+		# dispatcher's `_values` was reaching 95 entries for 91 distinct keys,
+		# with the wire thread re-constructing keys continuously as it decoded
+		# messages. Identity and source are part of the interning key, so a
+		# re-init can only ever write back what is already there. Do nothing.
+		if getattr(self, '_CategoryItem__initialised', False):
+			return
 		self.source = source
 		if identity is None:
 			for value in values:
@@ -573,6 +585,7 @@ class CategoryItem(tuple):
 		self.__identity = identity
 		self.__id = kwargs.pop('id', None)
 		self.__hash = None
+		self.__initialised = True
 
 	@property
 	def source(self) -> Hashable:
