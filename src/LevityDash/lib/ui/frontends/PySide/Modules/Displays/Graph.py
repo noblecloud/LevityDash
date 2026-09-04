@@ -1218,7 +1218,18 @@ class Plot(QGraphicsPixmapItem, Stateful):
 	def weight_px(self) -> float:
 		return self.figure.parent.plotLineWeight() * self.weight
 
-	@StateProperty(default=DefaultGroup(colorPalette.windowText().color(), '#ffffff', 'ffffff'), allowNone=False, after=updateAppearance)
+	# `color` and `gradient` are two properties describing one thing: how this
+	# line is painted. Each setter clears the other, so they must not be
+	# reverted independently. `color` used to default to an opaque white, and
+	# once `_revertOmittedKeys` landed (statekit 01c41d5, "a key removed from
+	# state reverts to its default") a plot configured with only `gradient:`
+	# had its absent `color:` reverted to that white - which ran the setter
+	# below and wiped the gradient. Every gradient in every dashboard rendered
+	# as a flat white line. Default to None like `gradient` does: the getter
+	# already falls back to the window-text colour, so an unset colour looks
+	# identical, but reverting to None leaves `if value:` false and the
+	# gradient intact.
+	@StateProperty(default=None, allowNone=True, after=updateAppearance)
 	def color(self) -> QColor:
 		if (color := getattr(self, '_color', None)) is None:
 			return colorPalette.windowText().color()
