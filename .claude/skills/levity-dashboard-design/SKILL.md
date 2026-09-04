@@ -59,6 +59,36 @@ Rules for this mode:
 **Design mode — the loop below — is for a blank slate or an explicit
 "redesign this."** Everything after this section assumes design mode.
 
+## Mock it in HTML before writing YAML
+
+`docs/design-references/mockup-kit.html` — open it in a browser. It exists
+because designing straight into `.levity` means every judgement costs a full
+render cycle, and because the scrapped generator proved the real risk: building
+something that cannot be reproduced.
+
+What keeps it honest:
+
+- **Every primitive is a real `type:`.** `realtime.text`, `realtime.gauge`,
+  `graph`, `stack`, `titled-group`, `clock`, `moon`. If you cannot build a
+  layout out of these pieces, the app cannot render it either.
+- **The board is authored `.levity`-shaped** — `type` / `size` / `items` /
+  `display` — so reproducing it is transcription, not reinterpretation. The
+  page prints a `.levity` sketch of whatever you drew.
+- **The gradients are the real stops** read out of `lib/ui/colors/presets.py`,
+  so a gradient looks in the mockup the way it will on the screen.
+- **A linter enforces the traps in this file**: sizes summing over ~97%,
+  `value-label: {position: center}`, `major.enabled: false` leaving its labels
+  on, boolean units, `shared:` overriding a child's `title: false`.
+
+It is a design surface, not a generator: the sketch it prints is a starting
+point to hand-tune. Geometry, fonts and sizing groups still want a human, and
+the mockup cannot tell you how `Groups.py` will actually fit your text.
+
+Sequence: mock → look → agree the design → write the `.levity` → render →
+compare against the mock. The comparison is the point; a difference is either a
+layout bug worth knowing about or a constraint the mockup was lying about, and
+both are worth the extra step.
+
 ## The loop
 
 1. **Look at the current dashboard.** Screenshot or render it. You cannot

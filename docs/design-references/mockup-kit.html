@@ -1,0 +1,524 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>LevityDash mockup kit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&family=Roboto+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+:root { --bg:#000; --fg:#fff; --dim:#8a8a8a; --line:#2a2a2a; --warn:#f7b731; --bad:#f18271; }
+* { box-sizing:border-box; }
+body { margin:0; background:#111; color:#ddd;
+       font:14px/1.5 Roboto, system-ui, sans-serif; }
+.wrap { max-width:1900px; margin:0 auto; padding:24px; }
+h1 { font-weight:400; font-size:22px; margin:0 0 4px; color:#fff; }
+h2 { font-weight:400; font-size:16px; margin:32px 0 10px; color:#fff;
+     border-bottom:1px solid #333; padding-bottom:6px; }
+p.note { color:#9a9a9a; margin:4px 0 16px; max-width:80ch; }
+code { font-family:'Roboto Mono', monospace; font-size:.9em; color:#cfd8ff; }
+
+/* ---- the board: this is what a real dashboard looks like ---- */
+.board { background:var(--bg); color:var(--fg); aspect-ratio:16/9; width:100%;
+         position:relative; overflow:hidden; font-family:Roboto, sans-serif;
+         border:1px solid #333; }
+
+/* ---- stack: children share space by `size`, spacing costs real room ---- */
+.stack { display:flex; width:100%; height:100%; }
+.stack[data-direction="Vertical"] { flex-direction:column; }
+.stack > .cell { position:relative; min-width:0; min-height:0; display:flex; }
+.stack[data-dividers="true"] > .cell + .cell::before {
+  content:""; position:absolute; background:var(--fg); opacity:.2;
+}
+.stack:not([data-direction="Vertical"])[data-dividers="true"] > .cell + .cell::before {
+  left:0; top:8%; width:1px; height:84%;
+}
+.stack[data-direction="Vertical"][data-dividers="true"] > .cell + .cell::before {
+  top:0; left:8%; height:1px; width:84%;
+}
+
+/* ---- panel / group / titled-group ---- */
+.panel { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column;
+         align-items:center; justify-content:center; position:relative; }
+.titled-group > .heading { font-size:1.05em; color:var(--fg); opacity:.95;
+                           padding-top:2px; }
+.titled-group > .body { flex:1; width:100%; display:flex; align-items:center;
+                        justify-content:center; min-height:0; }
+
+/* ---- realtime.text ---- */
+.rt { display:flex; flex-direction:column; align-items:center; justify-content:center;
+      line-height:1; width:100%; height:100%; }
+.rt .title { color:var(--fg); opacity:.85; font-size:.62em; letter-spacing:.01em;
+             margin-bottom:.25em; }
+.rt .value { font-weight:300; white-space:nowrap; }
+.rt .value.mono { font-family:'Roboto Mono', monospace; }
+.rt .unit { opacity:.8; }
+.rt[data-unit-position="FloatUnder"] .unit { display:block; font-size:.34em;
+                                             margin-top:.15em; text-align:center; }
+.rt[data-unit-position="Inline"] .unit { font-size:.5em; margin-left:.08em; }
+.rt[data-unit-position="Hidden"] .unit { display:none; }
+.rt[data-title-below] { flex-direction:column-reverse; }
+.rt .placeholder { letter-spacing:.12em; }
+
+/* ---- gauge ---- */
+.gauge { position:relative; width:100%; height:100%; display:flex;
+         align-items:center; justify-content:center; }
+.gauge svg { width:100%; height:100%; overflow:visible; }
+.gauge .glabel { position:absolute; bottom:2%; text-align:center; width:100%;
+                 font-size:.5em; opacity:.85; }
+
+/* ---- graph ---- */
+.graph { width:100%; height:100%; position:relative; }
+.graph svg { width:100%; height:100%; }
+.graph .daylabel { fill:var(--fg); opacity:.28; font-size:26px; }
+.graph .hourlabel { fill:var(--fg); opacity:.75; font-size:11px; }
+.graph .vline { stroke:var(--fg); opacity:.16; stroke-width:1; }
+.graph .vline.dashed { stroke-dasharray:2 4; opacity:.10; }
+
+/* ---- clock / moon ---- */
+.clock { text-align:center; line-height:1; }
+.clock .date { font-size:.34em; opacity:.95; }
+.clock .time { font-weight:300; }
+.clock .ampm { font-size:.42em; }
+.moon { border-radius:50%; background:#1c1c1c; aspect-ratio:1; width:38%;
+        box-shadow:inset -6px 0 10px rgba(255,255,255,.06); }
+
+/* ---- inspector ---- */
+.grid2 { display:grid; grid-template-columns: 1fr 380px; gap:20px; align-items:start; }
+.pane { background:#161616; border:1px solid #2c2c2c; border-radius:6px; padding:14px; }
+.pane h3 { margin:0 0 8px; font-size:13px; font-weight:500; color:#fff;
+           text-transform:uppercase; letter-spacing:.06em; }
+pre { margin:0; font-family:'Roboto Mono', monospace; font-size:11.5px;
+      line-height:1.5; color:#cfd8ff; white-space:pre-wrap; word-break:break-word;
+      max-height:520px; overflow:auto; }
+.lint { list-style:none; margin:0; padding:0; font-size:12.5px; }
+.lint li { padding:6px 0; border-bottom:1px solid #262626; }
+.lint li:last-child { border-bottom:0; }
+.lint .ok { color:#7bd88f; } .lint .warn { color:var(--warn); } .lint .bad { color:var(--bad); }
+.swatches { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:10px; }
+.sw { border:1px solid #2c2c2c; border-radius:5px; overflow:hidden; }
+.sw .bar { height:26px; }
+.sw .nm { font-family:'Roboto Mono', monospace; font-size:10.5px; padding:5px 7px;
+          color:#bbb; background:#141414; }
+.legend { display:flex; gap:16px; flex-wrap:wrap; font-size:12.5px; color:#9a9a9a; }
+</style>
+<div class="wrap">
+<h1>LevityDash mockup kit</h1>
+<p class="note">
+Draw a dashboard here <em>before</em> writing <code>.levity</code>. Every primitive below maps
+to a real <code>type:</code>, the gradients are the actual stops from
+<code>lib/ui/colors/presets.py</code>, and the linter enforces the traps that cost a render cycle
+to discover. <strong>If you cannot build it out of these pieces, the app cannot render it</strong> &mdash;
+which is the whole point: this is a design surface, not a picture.
+</p>
+
+<div class="grid2">
+  <div>
+    <h2>Board</h2>
+    <div class="board" id="board"></div>
+    <p class="note" style="margin-top:10px">
+      Edit <code>BOARD</code> at the bottom of this file and reload. The structure is
+      <code>.levity</code>-shaped on purpose &mdash; <code>type</code>, <code>size</code>,
+      <code>items</code>, <code>display</code> &mdash; so reproducing it is transcription
+      rather than reinterpretation.
+    </p>
+  </div>
+  <div>
+    <div class="pane">
+      <h3>Linter</h3>
+      <ul class="lint" id="lint"></ul>
+    </div>
+    <div class="pane" style="margin-top:16px">
+      <h3>.levity sketch</h3>
+      <pre id="yaml"></pre>
+      <p class="note" style="font-size:11.5px;margin:10px 0 0">
+        A starting point to hand-tune, not a generator. It carries the structure and the keys;
+        geometry, fonts and sizing groups still want a human.
+      </p>
+    </div>
+  </div>
+</div>
+
+<h2>Gradients (real stops from presets.py)</h2>
+<p class="note">Gradients map to <strong>absolute values</strong>, not to a gauge's own range &mdash;
+one built for a 0&ndash;11 UV scale looks wrong on a 0&ndash;100 dial.</p>
+<div class="swatches" id="swatches"></div>
+
+<h2>Primitives</h2>
+<p class="note">Each of these is a real <code>type:</code>. Anything absent here is not expressible today.</p>
+<div class="board" id="palette" style="aspect-ratio:auto;height:300px"></div>
+
+<script>
+const GRADIENTS = {"CloudCoverGradient": [[0.0, "#5ba3d0"], [0.3, "#a8c4d8"], [0.6, "#c9cdd2"], [1.0, "#7e858c"]], "FabledSunsetGradientLux": [[0.0, "#231557"], [3600.0, "#44107a"], [6000.0, "#8f6aae"], [7200.0, "#cc6b8e"], [10800.0, "#f3a469"], [18000.0, "#f7b731"], [36000.0, "#fffefa"]], "FabledSunsetGradientWattsPerSquareMeter": [[0.0, "#231557"], [30.0, "#44107a"], [50.0, "#8f6aae"], [60.0, "#cc6b8e"], [90.0, "#f3a469"], [150.0, "#f7b731"], [300.0, "#fffefa"]], "HappyFisher": [[0.0, "#89f7fe"], [1.0, "#66a6ff"]], "HumidityGradient": [[0.0, "#e8b87d"], [0.25, "#f0dfc0"], [0.45, "#dceae4"], [0.6, "#8fc7be"], [0.8, "#4e9c93"], [1.0, "#2e6e73"]], "PlumPlate": [[0.0, "#667eea"], [1.0, "#764ba2"]], "PrecipitationProbabilityGradient": [[0.0, "#00c6fb"], [1.0, "#e7f0fd"], [1.0, "#accbee"]], "PrecipitationRateGradient": [[0.1, "#3f51b1"], [0.2, "#3f51b1"], [1.0, "#5a55ae"], [1.5, "#7b5fac"], [3.0, "#8f6aae"], [5.0, "#a86aa4"], [12.0, "#cc6b8e"], [24.0, "#f18271"], [30.0, "#f3a469"], [35.0, "#f7c978"]], "PressureGradient": [[28.0, "#6c7a9c"], [29.2, "#8fa5bf"], [29.92, "#e8e6df"], [30.4, "#f0c987"], [31.0, "#e8a552"]], "PurpleSunset": [[0.0, "#8f6aae"], [0.5, "#f3a469"], [1.0, "#f7b731"]], "RainbowDefault": [[0.0, "#c000ff"], [0.33, "#00c0ff"], [0.66, "#ffff00"], [1.0, "#ff0000"]], "RainbowPercentage": [[0.0, "#c000ff"], [0.33, "#00c0ff"], [0.66, "#ffff00"], [1.0, "#ff0000"]], "RainbowTemperature": [[-40.0, "#c000ff"], [20.0, "#00c0ff"], [90.0, "#ffff00"], [160.0, "#ff0000"]], "RipeMalinkaGradient": [[0.0, "#f093fb"], [10.0, "#f5576c"], [20.0, "#f7b731"], [30.0, "#f9f64f"], [40.0, "#a9f7a9"], [50.0, "#5ff781"], [60.0, "#00e756"], [70.0, "#00b7eb"], [80.0, "#0052f3"], [90.0, "#0f00f9"], [100.0, "#7b00d4"]], "TemperatureGradient": [[-10.0, "#94b7ff"], [7.0, "#b2cbff"], [12.0, "#f2f2ff"], [17.0, "#f2f2ff"], [22.0, "#fffefa"], [28.0, "#ffb75d"], [30.0, "#f3a469"], [32.0, "#f18271"], [38.0, "#cc6b8e"], [40.0, "#a86aa4"], [50.0, "#8f6aae"]], "UVIndexGradient": [[2.0, "#3ea72d"], [5.0, "#fff300"], [7.0, "#f18b00"], [10.0, "#e53210"], [11.0, "#b567a4"], [14.0, "#8b5fa8"]], "WindSpeedGradient": [[0.0, "#5b7c99"], [5.0, "#7fb2c4"], [12.0, "#94d2a5"], [20.0, "#f2d06b"], [30.0, "#e8963c"], [45.0, "#d1495b"]]};
+
+// ---------- helpers ----------
+const el = (t, cls, txt) => { const n = document.createElement(t);
+  if (cls) n.className = cls; if (txt != null) n.textContent = txt; return n; };
+const PLACEHOLDER = '•••';
+
+function gradientCss(name, dir='90deg') {
+  const stops = GRADIENTS[name]; if (!stops) return '#fff';
+  const lo = stops[0][0], hi = stops[stops.length-1][0], span = (hi-lo) || 1;
+  return `linear-gradient(${dir},` + stops.map(([v,c]) =>
+    `${c} ${(((v-lo)/span)*100).toFixed(1)}%`).join(',') + ')';
+}
+function gradientStops(name) {
+  const stops = GRADIENTS[name] || [[0,'#fff'],[1,'#fff']];
+  const lo = stops[0][0], hi = stops[stops.length-1][0], span = (hi-lo) || 1;
+  return stops.map(([v,c]) => ({ off: ((v-lo)/span), col: c }));
+}
+
+// ---------- gauge (arc + needle), honouring start/end-angle ----------
+function gauge(item) {
+  const d = item.display || {};
+  const arc = d.arc || {};
+  const start = arc['start-angle'] ?? -120, end = arc['end-angle'] ?? 120;
+  const weight = parseFloat(arc.weight ?? '13') / 100;
+  const frac = d._fraction ?? 0.42;              // where the needle sits, mockup-only
+  const R = 42, cx = 50, cy = 50;
+  const uid = 'g' + Math.random().toString(36).slice(2, 8);
+  const pt = a => { const r = (a - 90) * Math.PI / 180;
+    return [cx + R * Math.cos(r), cy + R * Math.sin(r)]; };
+  const [x1,y1] = pt(start), [x2,y2] = pt(end);
+  const large = (end - start) > 180 ? 1 : 0;
+  const stops = gradientStops(arc.gradient || 'RainbowDefault')
+    .map(s => `<stop offset="${(s.off*100).toFixed(1)}%" stop-color="${s.col}"/>`).join('');
+  const nAng = start + (end - start) * frac;
+  const nLen = R * (parseFloat((d.needle||{}).length ?? '80') / 100);
+  const nr = (nAng - 90) * Math.PI / 180;
+  const nx = cx + nLen * Math.cos(nr), ny = cy + nLen * Math.sin(nr);
+
+  const wrap = el('div', 'gauge');
+  wrap.innerHTML = `<svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+      <defs><linearGradient id="${uid}" x1="0" y1="1" x2="1" y2="0">${stops}</linearGradient></defs>
+      <path d="M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${R} ${R} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}"
+            fill="none" stroke="url(#${uid})" stroke-width="${(R*2*weight).toFixed(2)}"
+            stroke-linecap="${arc.cap === 'FlatCap' ? 'butt' : 'round'}"/>
+      <line x1="${cx}" y1="${cy}" x2="${nx.toFixed(2)}" y2="${ny.toFixed(2)}"
+            stroke="#fff" stroke-width="${(d.needle||{}).width ? parseFloat(d.needle.width)/100*R : 2.4}"
+            stroke-linecap="round"/>
+    </svg>`;
+  const vl = d['value-label'] || {};
+  if (vl.visible !== false && item.label) {
+    const l = el('div', 'glabel', item.label);
+    wrap.appendChild(l);
+  }
+  return wrap;
+}
+
+// ---------- graph ----------
+function graph(item) {
+  const g = el('div', 'graph');
+  const figures = item.figures || [];
+  const W = 1000, H = 420;
+  const wave = (seed, amp, off) => {
+    let d = '';
+    for (let i = 0; i <= 40; i++) {
+      const x = (i/40)*W;
+      const y = H*off + Math.sin(i/5 + seed)*amp + Math.sin(i/11 + seed*2)*amp*0.6;
+      d += (i ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1) + ' ';
+    }
+    return d;
+  };
+  let defs = '', paths = '';
+  figures.forEach((f, i) => {
+    const uid = 'gr' + i + Math.random().toString(36).slice(2,6);
+    const stops = gradientStops(f.gradient || 'RainbowDefault')
+      .map(s => `<stop offset="${(s.off*100).toFixed(1)}%" stop-color="${s.col}"/>`).join('');
+    defs += `<linearGradient id="${uid}" x1="0" y1="1" x2="0" y2="0">${stops}</linearGradient>`;
+    paths += `<path d="${wave(i*2.1, f.amp ?? 26, f.off ?? 0.35)}" fill="none"
+      stroke="${f.color || `url(#${uid})`}" stroke-width="${f.weight ?? 5}"
+      ${f.dash ? `stroke-dasharray="${f.dash}"` : ''} stroke-linecap="round"/>`;
+  });
+  const days = ['Fri','Sat','Sun'];
+  let marks = '';
+  for (let i = 1; i < 12; i++) marks +=
+    `<line class="vline ${i%4 ? 'dashed':''}" x1="${i*W/12}" y1="0" x2="${i*W/12}" y2="${H}"/>`;
+  let dayLabels = days.map((d,i) =>
+    `<text class="daylabel" x="${(i+0.5)*W/3}" y="34" text-anchor="middle">${d}</text>`).join('');
+  let hours = '';
+  for (let i = 0; i < 12; i++) hours +=
+    `<text class="hourlabel" x="${(i+0.5)*W/12}" y="${H-6}" text-anchor="middle">${
+      [ '9a','12p','3p','6p','9p','12a' ][i%6]}</text>`;
+  g.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <defs>${defs}</defs>${marks}${dayLabels}${paths}</svg>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
+         style="position:absolute;inset:0">${hours}</svg>`;
+  return g;
+}
+
+// ---------- realtime.text ----------
+function realtimeText(item) {
+  const d = item.display || {};
+  const n = el('div', 'rt');
+  n.dataset.unitPosition = d.unitPosition || 'Inline';
+  if (item.title) n.appendChild(el('div', 'title', item.title));
+  const v = el('div', 'value' + (d.font === 'Roboto Mono' ? ' mono' : ''));
+  v.style.fontSize = (item.scale ?? 1) + 'em';
+  if (item.value == null) {
+    v.appendChild(el('span', 'placeholder', PLACEHOLDER));
+  } else {
+    v.appendChild(document.createTextNode(item.value));
+    if (item.unit) v.appendChild(el('span', 'unit', item.unit));
+  }
+  n.appendChild(v);
+  return n;
+}
+
+function clock(item) {
+  const n = el('div', 'clock');
+  n.style.fontSize = (item.scale ?? 1) + 'em';
+  if (item.date) n.appendChild(el('div', 'date', item.date));
+  const t = el('div', 'time');
+  t.appendChild(document.createTextNode(item.time || '3:10'));
+  t.appendChild(el('span', 'ampm', item.ampm || 'pm'));
+  n.appendChild(t);
+  return n;
+}
+
+// ---------- dispatch ----------
+function build(item) {
+  let inner;
+  switch (item.type) {
+    case 'stack':          inner = stack(item); break;
+    case 'graph':          inner = graph(item); break;
+    case 'realtime.gauge': inner = gauge(item); break;
+    case 'realtime.text':  inner = realtimeText(item); break;
+    case 'clock':          inner = clock(item); break;
+    case 'moon':           inner = el('div', 'moon'); break;
+    case 'titled-group': {
+      inner = el('div', 'panel titled-group');
+      inner.appendChild(el('div', 'heading', item.title || ''));
+      const b = el('div', 'body');
+      (item.items || []).forEach(c => b.appendChild(wrapCell(c)));
+      inner.appendChild(b);
+      break;
+    }
+    case 'group':
+    default: {
+      inner = el('div', 'panel');
+      (item.items || []).forEach(c => inner.appendChild(wrapCell(c)));
+    }
+  }
+  return inner;
+}
+function wrapCell(item) {
+  const cell = el('div', 'cell');
+  cell.style.flex = item.size ? `0 0 ${item.size}` : '1 1 0';
+  if (item.type === 'stack') cell.style.display = 'block';
+  cell.appendChild(build(item));
+  return cell;
+}
+function stack(item) {
+  const s = el('div', 'stack');
+  s.dataset.direction = item.direction || 'Horizontal';
+  if (item.dividers && item.dividers.enabled) s.dataset.dividers = 'true';
+  if (item.spacing) s.style.gap = item.spacing;
+  (item.items || []).forEach(c => s.appendChild(wrapCell(c)));
+  return s;
+}
+
+// ---------- linter ----------
+function lint(root) {
+  const out = [];
+  (function walk(item, path) {
+    if (item.type === 'stack') {
+      const sized = (item.items || []).filter(i => typeof i.size === 'string' && i.size.endsWith('%'));
+      if (sized.length) {
+        const sum = sized.reduce((a, i) => a + parseFloat(i.size), 0);
+        const spacing = item.spacing ? ` with spacing ${item.spacing}` : '';
+        if (sum > 99)
+          out.push(['bad', `${path}: sizes sum to ${sum.toFixed(0)}%${spacing}. Spacing costs real room on top — the last panel runs off the edge, silently. Aim for ~97%.`]);
+        else if (sum < 93)
+          out.push(['warn', `${path}: sizes sum to only ${sum.toFixed(0)}% — there will be a visible gap.`]);
+        else out.push(['ok', `${path}: sizes sum to ${sum.toFixed(0)}% ✓`]);
+      }
+    }
+    if (item.type === 'realtime.gauge') {
+      const vl = (item.display || {})['value-label'] || {};
+      if (vl.position === 'center')
+        out.push(['bad', `${path}: value-label position:center does not centre (known _center_transform gap). Compose a hidden label plus a sibling realtime.text instead.`]);
+      const major = (item.display || {}).major;
+      if (major && major.enabled === false && !(major.labels && major.labels.enabled === false))
+        out.push(['warn', `${path}: major.enabled:false hides the ticks but NOT their labels — a stray number stays in the arc. Set major.labels.enabled:false too.`]);
+    }
+    if (item.type === 'realtime.text' || item.type === 'realtime.gauge') {
+      const mocked = item.value != null || item.label != null;
+      if (item.key && !mocked && item.placeholderOk !== true)
+        out.push(['warn', `${path}: ${item.key} has no mocked value — it will render ${PLACEHOLDER} unless a plugin publishes it.`]);
+      const d = item.display || {};
+      if (typeof d.unit_symbol === 'boolean' || typeof d.unitLabel === 'boolean')
+        out.push(['bad', `${path}: units are strings, not booleans — True renders the literal word "True".`]);
+    }
+    if (item.type === 'stack' && item.shared && item.items)
+      out.push(['warn', `${path}: shared: overrides a child's title:false — a child told not to have a title gets one anyway.`]);
+    (item.items || []).forEach((c, i) => walk(c, `${path}/${c.type || 'item'}[${i}]`));
+  })(root, root.type || 'root');
+  if (!out.length) out.push(['ok', 'Nothing flagged.']);
+  return out;
+}
+
+// ---------- .levity sketch ----------
+function toYaml(item, indent = 0) {
+  const pad = '  '.repeat(indent);
+  let s = `${pad}- type: ${item.type}\n`;
+  const p = pad + '  ';
+  if (item.name)   s += `${p}name: ${item.name}\n`;
+  if (item.size)   s += `${p}size: ${item.size}\n`;
+  if (item.key)    s += `${p}key: ${item.key}\n`;
+  if (item.title && item.type !== 'titled-group') s += `${p}title: {text: ${item.title}}\n`;
+  if (item.type === 'titled-group' && item.title) s += `${p}title: ${item.title}\n`;
+  if (item.direction) s += `${p}direction: ${item.direction}\n`;
+  if (item.spacing)   s += `${p}spacing: ${item.spacing}\n`;
+  if (item.dividers)  s += `${p}dividers: {enabled: ${!!item.dividers.enabled}}\n`;
+  const d = item.display;
+  if (d) {
+    const keep = Object.entries(d).filter(([k]) => !k.startsWith('_'));
+    if (keep.length) {
+      s += `${p}display:\n`;
+      for (const [k, v] of keep) {
+        if (v && typeof v === 'object')
+          s += `${p}  ${k}: {${Object.entries(v).filter(([kk])=>!kk.startsWith('_'))
+                .map(([kk,vv]) => `${kk}: ${vv}`).join(', ')}}\n`;
+        else s += `${p}  ${k}: ${v}\n`;
+      }
+    }
+  }
+  if (item.figures) {
+    s += `${p}figures:\n`;
+    item.figures.forEach(f => {
+      s += `${p}  - figure: ${f.name || 'figure'}\n`;
+      if (f.key) s += `${p}    ${f.key}:\n${p}      plot: {type: plot${
+        f.gradient ? `, gradient: ${f.gradient}` : ''}${
+        f.color ? `, color: '${f.color}'` : ''}}\n`;
+    });
+  }
+  if (item.items && item.items.length) {
+    s += `${p}items:\n`;
+    item.items.forEach(c => { s += toYaml(c, indent + 2); });
+  }
+  return s;
+}
+
+// ---------- render ----------
+function render() {
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+  board.appendChild(build(BOARD));
+
+  const ul = document.getElementById('lint');
+  ul.innerHTML = '';
+  lint(BOARD).forEach(([lvl, msg]) => {
+    const li = el('li');
+    li.appendChild(el('span', lvl, lvl === 'ok' ? '✓ ' : lvl === 'warn' ? '! ' : '✗ '));
+    li.appendChild(document.createTextNode(msg));
+    ul.appendChild(li);
+  });
+
+  document.getElementById('yaml').textContent = toYaml(BOARD);
+
+  const sw = document.getElementById('swatches');
+  Object.keys(GRADIENTS).sort().forEach(n => {
+    const d = el('div', 'sw');
+    const bar = el('div', 'bar');
+    bar.style.background = gradientCss(n);
+    d.appendChild(bar); d.appendChild(el('div', 'nm', n));
+    sw.appendChild(d);
+  });
+
+  document.getElementById('palette').appendChild(build(PALETTE));
+}
+</script>
+
+<script>
+// ============================================================================
+// The board. `.levity`-shaped on purpose: type / size / items / display.
+// Mockup-only keys are prefixed with _ and are stripped from the YAML sketch.
+// ============================================================================
+const BOARD = {
+  type: 'stack', direction: 'Vertical', spacing: '8px',
+  items: [
+    { type: 'stack', size: '54%', direction: 'Horizontal', spacing: '10px',
+      items: [
+        { type: 'stack', size: '32%', direction: 'Vertical',
+          items: [
+            { type: 'clock', size: '46%', date: 'Friday, September 4th',
+              time: '3:10', ampm: 'pm', scale: 4.4 },
+            { type: 'stack', size: '51%', direction: 'Horizontal',
+              dividers: { enabled: true },
+              items: [
+                { type: 'titled-group', title: 'Indoor', size: '48%', items: [
+                  { type: 'realtime.text', key: 'indoor.temperature.temperature#bedroom',
+                    value: '77', unit: '°', scale: 3.2,
+                    display: { font: 'Roboto Mono', unitPosition: 'Inline' } }]},
+                { type: 'titled-group', title: 'Outdoor', size: '48%', items: [
+                  { type: 'realtime.text', key: 'environment.temperature.temperature',
+                    value: '82', unit: '°', scale: 3.2,
+                    display: { font: 'Roboto Mono', unitPosition: 'Inline' } }]},
+              ]},
+          ]},
+        { type: 'graph', size: '65%', figures: [
+            { name: 'temperature', key: 'environment.temperature.temperature',
+              gradient: 'TemperatureGradient', weight: 6, amp: 30, off: 0.30 },
+            { name: 'feelsLike', key: 'environment.temperature.feelsLike',
+              gradient: 'TemperatureGradient', weight: 4, amp: 26, off: 0.38 },
+            { name: 'dewpoint', key: 'environment.temperature.dewpoint',
+              color: '#5882ff', weight: 3, dash: '5 5', amp: 10, off: 0.60 },
+          ]},
+      ]},
+    { type: 'stack', size: '43%', direction: 'Horizontal', spacing: '10px',
+      dividers: { enabled: true },
+      items: [
+        { type: 'titled-group', title: 'Wind', size: '24%', items: [
+          { type: 'realtime.gauge', key: 'environment.wind.speed.speed', label: '9.9 mph',
+            display: { arc: { gradient: 'WindSpeedGradient', weight: '13%' },
+                       needle: { length: '80%', width: '7%' },
+                       'value-label': { visible: true, position: 'below' } },
+            _fraction: 0.38 }]},
+        { type: 'titled-group', title: 'Humidity', size: '24%', items: [
+          { type: 'realtime.gauge', key: 'environment.humidity.humidity', label: '74%',
+            display: { arc: { gradient: 'HumidityGradient', weight: '13%' },
+                       needle: { length: '80%', width: '7%' } },
+            _fraction: 0.74 }]},
+        { type: 'titled-group', title: 'Cloud', size: '24%', items: [
+          { type: 'realtime.gauge', key: 'environment.clouds.cover.cover', label: '100%',
+            display: { arc: { gradient: 'CloudCoverGradient', weight: '13%' },
+                       needle: { length: '80%', width: '7%' } },
+            _fraction: 1.0 }]},
+        { type: 'titled-group', title: 'UV', size: '24%', items: [
+          { type: 'realtime.gauge', key: 'environment.light.uvi', label: '3',
+            display: { arc: { gradient: 'UVIndexGradient', weight: '13%' },
+                       needle: { length: '80%', width: '7%' } },
+            _fraction: 0.27 }]},
+      ]},
+  ],
+};
+
+// A strip showing each primitive on its own.
+const PALETTE = {
+  type: 'stack', direction: 'Horizontal', spacing: '10px', dividers: { enabled: true },
+  items: [
+    { type: 'titled-group', title: 'realtime.text', items: [
+      { type: 'realtime.text', title: 'Dew Point', value: '74', unit: '°', scale: 2.4,
+        display: { font: 'Roboto Mono', unitPosition: 'Inline' } }]},
+    { type: 'titled-group', title: 'FloatUnder', items: [
+      { type: 'realtime.text', value: '9.9', unit: 'mph', scale: 2.4,
+        display: { font: 'Roboto Mono', unitPosition: 'FloatUnder' } }]},
+    { type: 'titled-group', title: 'no publisher', items: [
+      { type: 'realtime.text', title: 'Lightning', value: null, scale: 2.0 }]},
+    { type: 'titled-group', title: 'realtime.gauge', items: [
+      { type: 'realtime.gauge', label: '12 mph',
+        display: { arc: { gradient: 'WindSpeedGradient', weight: '13%' },
+                   needle: { length: '80%', width: '7%' } }, _fraction: 0.5 }]},
+    { type: 'titled-group', title: 'quarter arc', items: [
+      { type: 'realtime.gauge', label: 'UV 3',
+        display: { arc: { gradient: 'UVIndexGradient', weight: '18%',
+                          'start-angle': -90, 'end-angle': 0 },
+                   needle: { length: '70%', width: '6%' } }, _fraction: 0.4 }]},
+    { type: 'titled-group', title: 'clock', items: [
+      { type: 'clock', time: '3:10', ampm: 'pm', scale: 1.9 }]},
+    { type: 'titled-group', title: 'moon', items: [{ type: 'moon' }]},
+  ],
+};
+
+render();
+</script>
+</div>
