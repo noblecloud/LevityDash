@@ -1,30 +1,54 @@
-import asyncio
+"""Govee BLE thermometers.
+
+One ``Plugin`` instance per configured device, all sharing one BLE scanner.
+
+**Why per-device instances.** This plugin used to be a single-device plugin
+with multi-device support bolted on: individual *values* were scoped with an
+identity suffix (``…temperature#bedroom``) while ``name``, ``running``, the
+scanner, and the payload parser stayed singular and were fought over by
+whichever device reported most recently. That shape produced a steady supply
+of bugs - a plugin renamed after one device so the control plane could not
+find it, log lines attributing every reading to the same sensor, one device's
+config silently deciding how the other's bytes were parsed.
+
+Home Assistant's ``govee_ble`` integration has the shape that works: the
+Bluetooth platform owns one scanner, and each device gets its own coordinator
+filtered to its own address. Here that is one ``Plugin`` per device
+(``Govee-bedroom``, ``Govee-terrarium``), each a distinct *source*, all
+subscribed to :mod:`LevityDash.lib.plugins.ble`'s shared scanner. Per-device
+state lives on the instance that owns it, so there is nothing left to fight
+over.
+
+**Identity is kept, and is not redundant.** Each device is now its own source,
+so ``#bedroom`` and ``Govee-bedroom`` name the same thing today. They are still
+different axes: ``source`` answers "who reported this" and is *reconciled* by
+``MultiSourceContainer``, while ``identity`` answers "which physical thing is
+this" and is never merged. If a Zigbee sensor ever reports the same room,
+``…temperature#bedroom`` stays meaningful across both plugins where a source
+name cannot. Saved dashboards already rely on this - they address these
+thermometers by identity alone, with no ``source:`` pin.
+
+Configuration is documented in :mod:`LevityDash.lib.plugins.govee.config`.
+"""
 import platform
 import re
 from datetime import timedelta
 from types import FunctionType
-from typing import Callable, Dict, Optional, Type, Union
-from uuid import UUID
-
-from bleak import BleakError, BleakScanner
-from bleak.backends.device import BLEDevice
+from typing import Callable, Dict, List, Optional, Type, Union
 
 from LevityDash.lib.log import LevityPluginLog
+from LevityDash.lib.plugins.ble import BLEPlugin
 from LevityDash.lib.plugins.categories import CategoryItem
+from LevityDash.lib.plugins.govee.config import DeviceConfig, parse_devices
+from LevityDash.lib.plugins.govee.models import trim_payload
 from LevityDash.lib.plugins.observation import ObservationRealtime
-from LevityDash.lib.plugins.plugin import Plugin
 from LevityDash.lib.plugins.schema import LevityDatagram, Schema, SchemaSpecialKeys as tsk
 from LevityDash.lib.plugins.utils import ScheduledEvent
-from LevityDash.lib.utils.shared import getOr, now
-
+from LevityDash.lib.utils.shared import now
 
 pluginLog = LevityPluginLog.getChild('Govee')
 
 __all__ = ["Govee"]
-
-#: Config sections declaring a device: ``[device:bedroom]``. The text after the
-#: prefix is the human-readable identity used in keys.
-_DEVICE_SECTION_PREFIX = 'device:'
 
 
 def getBadActors(string: str) -> list[str]:
@@ -64,13 +88,31 @@ def parseMathString(mathString: str, functionName: str = 'mathExpression', **kwa
 
 
 class BLEPayloadParser:
+	"""Reads one value out of an advertisement payload.
 
-	def __init__(self, field: str, startingByte: int, endingByte: int, expression: Optional[Union[str, Callable]] = None, base: int = 16):
+	A hex-character slice plus an arithmetic expression. ``signBit`` handles
+	two's-complement-style negatives, which cannot live in the expression:
+	``parseMathString`` turns every bare identifier into a variable, so a hex
+	literal (``0x800000``) becomes a variable named ``x800000`` and a
+	conditional turns ``if``/``else`` into function parameters. Sign handling
+	has to be a parser feature rather than user arithmetic.
+	"""
+
+	def __init__(
+		self,
+		field: str,
+		startingByte: int,
+		endingByte: int,
+		expression: Optional[Union[str, Callable]] = None,
+		base: int = 16,
+		signBit: Optional[int] = None,
+	):
 		self.__field = field
 		self.__startingByte = startingByte
 		self.__endingByte = endingByte
-		self.__expression = expression
+		self.__expression: Optional[Callable] = None
 		self.__base = base
+		self.__signBit = signBit
 		match expression:
 			case FunctionType():
 				self.__expression = expression
@@ -78,65 +120,61 @@ class BLEPayloadParser:
 				self.__expression = parseMathString(expression)
 
 	def __call__(self, payload: bytes) -> dict[str, float | int]:
-		payload = int(payload.hex().upper()[self.__startingByte: self.__endingByte], self.__base)
+		raw: int = int(payload.hex().upper()[self.__startingByte: self.__endingByte], self.__base)
+		negative = False
+		if self.__signBit is not None:
+			mask = 1 << self.__signBit
+			if raw & mask:
+				negative = True
+				raw &= mask - 1
 		if self.__expression is not None:
-			value = self.__expression(payload)
+			value = self.__expression(raw)
 		else:
-			value = payload
+			value = raw
+		if negative:
+			value = -value
 		return {self.__field: value}
 
 
 def parse_device_sections(config) -> Dict[str, dict]:
-	"""Read ``[device:<alias>]`` sections into ``{alias: {settings}}``.
+	"""Configured devices as ``{alias: {settings}}``.
 
-	The section header *is* the human-readable identity, so a device is
-	declared as::
-
-	    [device:bedroom]
-	    name = GVH5102_6736
-
-	Sections rather than a flat alias->name mapping because a device can then
-	override the payload parser it inherits from ``[plugin]`` - a different
-	model needs different byte slices, which is exactly what the plugin
-	description promises is configurable.
-
-	A legacy flat ``device.name`` under ``[plugin]`` is surfaced as a single
-	device aliased to its own advertised name, so existing single-device
-	configs keep working untouched.
+	The pre-rewrite shape, kept because it is the useful *read-only* view of
+	the config for anything that just wants to know what is configured
+	without building plugin instances (and it is what the existing tests
+	assert against). :func:`parse_devices` is the richer form the plugin
+	itself uses - same parsing underneath, so the two cannot disagree.
 	"""
 	devices: Dict[str, dict] = {}
-	for section in getattr(config, 'sections', lambda: ())():
-		if not str(section).startswith(_DEVICE_SECTION_PREFIX):
-			continue
-		alias = str(section)[len(_DEVICE_SECTION_PREFIX):].strip()
-		if alias:
-			devices[alias] = dict(config[section])
-
-	if not devices:
-		try:
-			legacyName = config['plugin']['device.name']
-		except (KeyError, TypeError):
-			legacyName = None
-		if legacyName:
-			devices[str(legacyName)] = {'name': str(legacyName)}
+	for device in parse_devices(config):
+		settings: Dict[str, object] = {'name': device.name}
+		if device.address is not None:
+			settings['address'] = device.address
+		if device.modelPinned:
+			settings['model'] = device.preset.model
+		devices[device.alias] = settings
 	return devices
 
 
-def resolve_device_identity(advertisedName: str, devices: Dict[str, dict]) -> str:
+def resolve_device_identity(advertisedName: str, devices) -> str:
 	"""Map an advertised BLE name onto the identity used in keys.
 
 	Falls back to the advertised name when no alias is configured, so two
 	thermometers work out of the box and aliasing is a readability upgrade
 	rather than a requirement.
 
-	Matching is on ``name`` rather than address: on macOS the address is a
-	per-machine generated UUID, not a hardware MAC, so an address-keyed config
-	would not survive moving to another machine. ``address``, when given, is
-	only a same-machine tiebreaker for two devices advertising the same name.
+	Accepts either the ``{alias: {settings}}`` mapping this plugin used to
+	build or a list of :class:`DeviceConfig`, so callers (and tests) written
+	against either shape keep working.
 	"""
-	for alias, settings in (devices or {}).items():
-		if settings.get('name') == advertisedName:
-			return alias
+	for entry in (devices or {}).values() if isinstance(devices, dict) else (devices or ()):
+		if isinstance(entry, DeviceConfig):
+			if entry.name == advertisedName:
+				return entry.alias
+			continue
+		# dict form: {alias: {'name': ...}}
+		if entry.get('name') == advertisedName:
+			return next(a for a, s in devices.items() if s is entry)
 	return advertisedName
 
 
@@ -157,10 +195,11 @@ def device_scoped_key(key, identity: Optional[str]) -> CategoryItem:
 
 _on_board_banner = '[bold]Govee BLE Plugin On-Boarding[/bold]'
 _plugin_description = (
-	"This plugin allows you to connect to Govee BLE thermometers.  "
-	"Currently GVH5102 is the only device model tested, but theoretically, "
-	"it should be compatible with any Govee BLE thermometer by adjusting "
-	"the payload parser in the config."
+	"This plugin connects to Govee BLE thermometers.  Devices are listed in "
+	"the plugin's config under [devices] as 'alias = advertised name'; the "
+	"model is detected from that name, so no byte-level configuration is "
+	"needed for known models (the H5100 and H5072 families, including the "
+	"GVH5102 and GVH5075)."
 )
 
 if platform.system() == "Darwin":
@@ -186,23 +225,30 @@ _defaultConfig = f"""
 [plugin] ; All independent configs must have a Config section
 enabled = @ask(bool:False).message({_on_board_message})
 
-; At least one of these must be set for a device to be recognized
-device.id = @askChoose(str:closest,first,custom).message(Select method for finding a device or provide the MAC address of the device to connect to)
-device.model = @ask(str:GVH5102).message(Enter device model)
-;device.uuid =
-;device.mac =
+; One line per thermometer: alias = the name it advertises.
+; The alias names the device everywhere it appears - in keys
+; (indoor.temperature.temperature#bedroom) and as a source (Govee-bedroom).
+; The model is detected from the advertised name; no byte slices needed.
+[devices]
+;bedroom = GVH5102_6736
+;terrarium = GVH5102_527D
 
-; These are the defaults for a GVH5102
-temperature.slice = [4:10]
-temperature.expression = val / 10000
-humidity.slice = [4:10]
-humidity.expression = payload % 1000 / 1000
-battery.slice = [10:12]
+; Only needed for an unrecognised model or a hand-tuned field:
+;[device:garage]
+;name = GVH5075_A1B2
+;model = H5075
+;temperature.slice = [4:10]
+;temperature.expression = val / 10000
 """
 
 
-class Govee(Plugin, realtime=True, logged=True):
-	name = 'Govee'
+class Govee(BLEPlugin, realtime=True, logged=True):
+	"""One Govee thermometer.
+
+	Instantiated once per configured device by :meth:`__instances__`; there is
+	no "the Govee plugin" object at runtime, only ``Govee-bedroom`` and its
+	siblings.
+	"""
 
 	requirements = {'bluetooth'}
 
@@ -212,21 +258,18 @@ class Govee(Plugin, realtime=True, logged=True):
 		'indoor.temperature.dewpoint': {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Dew Point', 'sourceKey': 'dewpoint'},
 		'indoor.temperature.heatIndex': {'type': 'temperature', 'sourceUnit': 'c', 'title': 'Heat Index', 'sourceKey': 'heatIndex'},
 		'indoor.humidity.humidity': {'type': 'humidity', 'sourceUnit': '%h', 'title': 'Humidity', 'sourceKey': 'humidity'},
-		# Plain keys, not 'indoor.@deviceName.battery': identity now scopes
-		# these per device (…battery#terrarium), so the @deviceName segment is
-		# redundant. It was also *wrong* once two devices reported - the var
-		# resolved to the same configured name for both, so a terrarium reading
-		# came back as indoor.GVH5102_6736.battery#terrarium.
 		'indoor.battery.battery': {'type': 'battery', 'sourceUnit': '%bat', 'title': 'Battery', 'sourceKey': 'battery'},
 		'indoor.rssi.rssi': {'type': 'rssi', 'sourceUnit': 'rssi', 'title': 'Signal', 'sourceKey': 'rssi'},
 		'@type': {'sourceKey': 'type', tsk.metaData: True, tsk.sourceData: True},
 		'@deviceName': {'sourceKey': 'deviceName', tsk.metaData: True, tsk.sourceData: True},
 		'@deviceIdentity': {'sourceKey': 'deviceIdentity', tsk.metaData: True, tsk.sourceData: True},
 		'@deviceAddress': {'sourceKey': 'deviceAddress', tsk.metaData: True, tsk.sourceData: True},
-		# '@timezone':                      {'default': {'value': config.tz}, tsk.metaData: True},
 
-		# Scopes every value key to the device that produced it, so two
-		# thermometers behind this one plugin don't overwrite each other.
+		# Scopes value keys to the device that produced them. Each device is
+		# now its own source too, so this is belt *and* braces for Govee - but
+		# identity survives cross-source reconciliation where a source name
+		# does not, and saved dashboards address these sensors by identity
+		# alone. See the module docstring.
 		'identityKey': '@deviceIdentity',
 
 		'dataMaps': {
@@ -238,307 +281,170 @@ class Govee(Plugin, realtime=True, logged=True):
 
 	__defaultConfig__ = _defaultConfig
 
-	def __init__(self):
+	#: This instance's device. Set before ``Plugin.__init__`` runs, because
+	#: ``name`` is read during base initialisation.
+	device: Optional[DeviceConfig] = None
+
+	#: Class-level fallback so ``name`` is answerable on an instance that has
+	#: not run ``__init__`` - ``__instances__`` builds one such probe to read
+	#: the config, and ``PluginConfig.__getitem__`` asks for ``plugin.name``
+	#: on every section miss. Without this, reading config raised
+	#: AttributeError before any device could be discovered.
+	__name = 'Govee'
+
+	def __init__(self, device: Optional[DeviceConfig] = None):
+		self.device = device
+		if device is not None:
+			self.__name = device.sourceName
 		super().__init__()
-		self.__running = False
 		self.lastDatagram: Optional[LevityDatagram] = None
 		self.historicalTimer: ScheduledEvent | None = None
-		self.scannerTask = None
-		self.devices_observations = {}
-		#: {alias: {settings}} from [device:<alias>] config sections. Populated
-		#: by __readConfig below; empty until then.
-		self.devices: Dict[str, dict] = {}
+		self.__parsers: Dict[str, BLEPayloadParser] = {}
+		if device is not None:
+			self.__buildParsers()
+
+	# -- construction --------------------------------------------------------
+
+	@classmethod
+	def __instances__(cls) -> List['Govee']:
+		"""One instance per configured device.
+
+		The loader hook (``PluginsLoader._instantiate``). Config is read once
+		here rather than per instance: every device shares one ``Govee.ini``,
+		because ``Plugin.getConfig`` keys off the class.
+		"""
+		# A bare probe, only to read the config: getConfig wants a plugin, but
+		# no device is known yet. It answers `name` from the class-level
+		# fallback above, which PluginConfig.__getitem__ needs on every
+		# section miss.
+		probe = object.__new__(cls)
 		try:
-			self.__readConfig()
+			config = cls.getConfig(probe)
 		except Exception as e:
-			raise e
+			pluginLog.error(f'Govee: unable to read config: {e}')
+			return []
 
-	async def __init_device__(self):
-		config = self.config
-		deviceConfig = self.__readDeviceConfig(config)
-		device = deviceConfig['id']
-		match device:
-			case str() if self._varifyDeviceID(device):
-				self.scanner = BleakScanner(service_uuids=[device], detection_callback=self.__dataParse)
-			case str() if ',' in device and (devices := tuple([i for i in device.split(',') if self._varifyDeviceID(i)])):
-				self.scanner = BleakScanner(service_uuids=devices, detection_callback=self.__dataParse)
-			case _:
-				device = None
-				__scanAttempts = 0
-				self.scanner = BleakScanner()
+		devices = parse_devices(getattr(config, 'parser', config))
+		if not devices:
+			pluginLog.info(
+				'Govee: no devices configured - add entries under [devices] in Govee.ini '
+				'(alias = advertised name)'
+			)
+			return []
 
-				while device is None:
-					scanTime = min(5 * max(__scanAttempts, 1), 60)
-					try:
-						pluginLog.info(f"Scanning for Govee devices for {scanTime} seconds")
-						device = await self.__discoverDevice(deviceConfig, timeout=scanTime)
-					except NoDevice:
-						__scanAttempts += 1
-						if __scanAttempts > 10:
-							raise NoDevice(f'No device found after scanning for {scanTime} and {__scanAttempts} attempts')
-						pluginLog.warning(f"Unable to find device matching config {deviceConfig} after scanning for {scanTime}...")
-					except RuntimeError:
-						__scanAttempts += 1
-						if __scanAttempts > 10:
-							raise NoDevice(f'No device found after scanning for {scanTime} and {__scanAttempts} attempts')
-						pluginLog.warning(f"Unable to find device matching config {deviceConfig} after scanning for {scanTime}...")
+		instances = []
+		for device in devices:
+			try:
+				instances.append(cls(device))
+			except Exception as e:
+				pluginLog.error(f'Govee: failed to set up device {device.alias!r}: {e}')
+				pluginLog.exception(e)
+		if instances:
+			pluginLog.info(
+				f'Govee: {len(instances)} device(s): '
+				+ ', '.join(f'{i.device.alias} ({i.device.preset.model})' for i in instances)
+			)
+		return instances
 
-				try:
-					self.scanner.register_detection_callback(None)
-					await self.scanner.stop()
-					delattr(self, 'scanner')
-				except Exception as e:
-					pass
-				self.scanner = BleakScanner(service_uuids=tuple(device.metadata['uuids']), detection_callback=self.__dataParse)
-				name = f'GoveeBLE [{device.name}]'
-				self.name = name
-				self.config[name]['device.name'] = str(device.name)
-				self.config[name]['device.uuid'] = f"{', '.join(device.metadata['uuids'])}"
-				self.config[name]['device.address'] = str(device.address)
-				self.config.defaults().pop('device.id', None)
-				self.config.defaults().pop('device.mac', None)
-				self.config.defaults().pop('device.model', None)
-				self.config.save()
-		# Do NOT also do `self.name = self.config['device.name']` here for the
-		# configured-device branches above - `device.name` is per-device
-		# legacy config, and overwriting the plugin's own stable `name` with
-		# it broke identity everywhere `plugin.name` is used as a stable key:
-		# RemoteBackend.attach()/self._plugins is keyed by the pre-rename
-		# name, so a renamed Govee could never be found by
-		# handle_plugin_command; encode_plugin_status reports the *post*
-		# rename name, so the frontend's never-renamed local Govee object
-		# (mode=remote never starts local plugins) could never match its own
-		# backend snapshot and always fell back to "Stopped - 0 keys". Same
-		# root cause as the log/tooltip mislabeling in task #19. With two
-		# devices behind one plugin instance, there is no single correct
-		# device to name it after anyway - `name` stays 'Govee'.
-		pluginLog.info(f'{self.name} initialized for device {device}')
+	def __buildParsers(self) -> None:
+		for field, params in self.device.fields.items():
+			try:
+				self.__parsers[field] = BLEPayloadParser(field=field, **params)
+			except Exception as e:
+				pluginLog.error(f'{self.name}: could not build the {field} parser: {e}')
+
+	@property
+	def name(self) -> str:
+		return self.__name
 
 	@classmethod
 	def _validateConfig(cls, cfg) -> bool:
-		results = dict()
-		results['enabled'] = 'enabled' in cfg and cfg['enabled']
-		expectedIDStrings = ('uuid', 'id', 'mac', 'address', 'name')
-		expectedIDStrings = {*expectedIDStrings, *[f'device.{i}' for i in expectedIDStrings]}
-		availableIDKeys = expectedIDStrings & cfg.keys()
-		results['device'] = any(cfg[i] for i in availableIDKeys)
-		return all(results.values())
+		return bool('enabled' in cfg and cfg['enabled'])
 
-	def __readConfig(self):
-		pluginConfig = self.config
+	# -- BLE routing ---------------------------------------------------------
 
-		def getValues(key) -> Dict[str, Union[str, int, float, Callable]]:
-			params = {'field': key}
-			if f'{key}.slice' in pluginConfig:
-				params['startingByte'], params['endingByte'] = [int(i) for i in re.findall(r'\d+', pluginConfig[f'{key}.slice'])]
-			if f'{key}.expression' in pluginConfig:
-				params['expression'] = pluginConfig[f'{key}.expression']
-			if f'{key}.base' in pluginConfig:
-				params['base'] = int(pluginConfig[f'{key}.base'])
-			return params
+	def wants(self, device, data) -> bool:
+		"""Claim only this instance's device.
 
-		self.__temperatureParse = BLEPayloadParser(**getValues('temperature'))
-		self.__humidityParse = BLEPayloadParser(**getValues('humidity'))
-		self.__batteryParse = BLEPayloadParser(**getValues('battery'))
-
-		# Read off the whole config object, not `self.config` (which is already
-		# scoped to [plugin]), since the device declarations are sibling
-		# sections. Falls back to the legacy flat device.name, so an existing
-		# single-device config keeps working.
-		self.devices = parse_device_sections(getattr(pluginConfig, 'parser', pluginConfig))
-		if self.devices:
-			pluginLog.info(f'Govee: {len(self.devices)} device(s) configured: {", ".join(sorted(self.devices))}')
-
-		return pluginConfig
-
-	def accepts_device(self, advertisedName: str) -> bool:
-		"""Whether an advertisement should be parsed.
-
-		With no devices configured, accept anything the scanner surfaced - the
-		scanner is already filtered to the Govee service UUID, and rejecting
-		everything would make an unconfigured plugin silently dead.
+		Address is checked first when configured - it is exact - then the
+		advertised name, which is what config keys on (macOS randomises
+		addresses per machine, so a name is the portable identifier).
 		"""
-		if not self.devices:
-			return True
-		return any(settings.get('name') == advertisedName for settings in self.devices.values())
+		if self.device is None:
+			return False
+		if (address := self.device.address) is not None:
+			if str(getattr(device, 'address', '')).lower() == str(address).lower():
+				return True
+		return getattr(device, 'name', None) == self.device.name
 
-	@staticmethod
-	def _varifyDeviceID(deviceID: str) -> bool:
-		reMac = r'((?:(\d{1,2}|[a-fA-F]{1,2}){2})(?::|-*)){6}'
-		reUUID = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}'
-		return bool(re.match(reMac, deviceID) or re.match(reUUID, deviceID))
+	def handleAdvertisement(self, device, data) -> None:
+		self.__dataParse(device, data)
 
-	@staticmethod
-	def __readDeviceConfig(config):
-		deviceConfig = {
-			"id": getOr(config, "device.id", "device.uuid", "device.address", "id", "device", expectedType=str, default=None),
-			"model": getOr(config, "model", "device.model", "type", "device.type", expectedType=str, default=None),
-		}
-		return {k: v for k, v in deviceConfig.items() if v is not None}
+	# -- lifecycle -----------------------------------------------------------
 
-	def start(self):
-		loop = self.loop
-
-		def bootstrap():
-			self._task = self.asyncStart()
-			self.loop.run_until_complete(self._task)
-			pluginLog.info(f'{self.name} stopped!')
-			self.loop.stop()
-			del self.loop
-			del self.future
-			self.pluginLog.info('Govee: shutdown complete')
-
-		loop.run_in_executor(None, bootstrap)
-
-		return self
-
-	async def asyncStart(self):
-		pluginLog.info(f'{self.name} starting...')
-
+	async def onStart(self) -> None:
+		await super().onStart()
 		if self.historicalTimer is None:
 			self.historicalTimer = ScheduledEvent(timedelta(seconds=15), self.logValues, loop=self.loop).schedule()
 		else:
 			self.historicalTimer.schedule()
 
-		await self.run()
-
-		await self.future
-		self.pluginLog.info(f'{self.name}: shutdown started')
-
-
-
-	@property
-	def running(self) -> bool:
-		return self.__running
-
-	async def run(self):
-		try:
-			await self.__init_device__()
-		except Exception as e:
-			self.pluginLog.error(f'Error initializing device: {e.args[0]}')
-			return
-		try:
-			await self.scanner.start()
-			self.pluginLog.info(f'{self.name} started!')
-			self.__running = True
-		except BleakError as e:
-			self.pluginLog.error(f'Error starting scanner: {e}')
-			self.__running = False
-
-	def stop(self):
-		asyncio.run_coroutine_threadsafe(self.asyncStop(), self.loop)
-
-	async def asyncStop(self):
-		self.pluginLog.info(f'{self.name} stopping...')
-		self.future.set_result(True)
-		self.future.cancel()
-		self.__running = False
-		try:
-			self.scanner.register_detection_callback(None)
-			await self.scanner.stop()
-		except AttributeError:
-			pass
-		except Exception as e:
-			pluginLog.error(f'Error stopping scanner: {e}')
+	async def onStop(self) -> None:
+		await super().onStop()
 		if self.historicalTimer is not None and self.historicalTimer.running:
 			self.historicalTimer.stop()
-		self.pluginLog.info(f'{self.name} stopped')
 
 	async def close(self):
 		await self.asyncStop()
 
-	async def __discoverDevice(self, deviceConfig, timeout=15) -> Optional[BLEDevice]:
-		async def discover(timeout):
-			devices = await self.scanner.discover(timeout=timeout) or []
-			return devices
-
-		def genFilter(by: str, value: str, contains: bool = False):
-			def filter(device, *_):
-				return str(getattr(device, by, f'{hash(value)}')).lower() == f'{str(value).lower()}'
-
-			def containsFilter(device, *_):
-				return str(getattr(device, by, f'{hash(value)}')).lower().find(f'{str(value).lower()}') != -1
-
-			return containsFilter if contains else filter
-
-		match deviceConfig:
-			case {'id': 'closest', 'model': model}:
-				devices = await discover(timeout)
-				filterFunc = genFilter('name', model, contains=True)
-				device = found[0] if (found := sorted([device for device in devices if filterFunc(device)], key=lambda x: -x.rssi)) else None
-
-			case {'id': 'first', 'model': str(model)} | {'model': str(model)}:
-				device = await self.scanner.find_device_by_filter(genFilter('name', model, contains=True), timeout=timeout) or None
-
-			case {'id': UUID(_id)}:
-				device = await self.scanner.find_device_by_filter(genFilter('address', _id), timeout=timeout) or None
-
-			case {'id': str(address)} if re.match("[0-9a-f]{2}([-:]?)[0-9a-f]{2}(\\1[0-9a-f]{2}){4}$", address.lower()):
-				device = await self.scanner.find_device_by_filter(genFilter('address', address), timeout=timeout) or None
-
-			case {'id': str(_id)}:
-				device = await self.scanner.find_device_by_filter(lambda d, _: _id.lower() in str(d.name).lower(), timeout=timeout) or None
-
-			case _:
-				device = await self.scanner.find_device_by_filter(lambda d, _: 'gvh' in str(d.name).lower(), timeout=timeout) or None
-
-		if device:
-			pluginLog.info(f'Found device {device.name}')
-			return device
-		else:
-			raise NoDevice(f'No device found for {deviceConfig}')
+	# -- data ----------------------------------------------------------------
 
 	def get_device_observation(self, device: str):
-		if (obs := self.devices_observations.get(device, None)) is None:
-			RealtimeClass: Type[ObservationRealtime] = self.classes['Realtime']
-			obs = RealtimeClass(self, device)
-			(self, device)
-		return obs
+		RealtimeClass: Type[ObservationRealtime] = self.classes['Realtime']
+		return RealtimeClass(self, device)
 
 	def __dataParse(self, device, data):
-		try:
-			advertisedName = device.name
-		except AttributeError:
-			return
+		advertisedName = getattr(device, 'name', None)
 		if advertisedName is None:
-			return
-
-		# This used to be `if device.name != self.name: return`, and self.name
-		# was set to the configured device's name - so with two thermometers
-		# advertising, whichever one won the config was the only one that got
-		# past this line. Now every *known* device is accepted; identity keeps
-		# their readings apart downstream.
-		if not self.accepts_device(advertisedName):
 			return
 
 		try:
 			dataBytes: bytes = data.manufacturer_data[1]
-		except KeyError:
-			pluginLog.error(f'Invalid data: {data!r}')
+		except (KeyError, AttributeError, TypeError):
+			pluginLog.error(f'{self.name}: invalid data: {data!r}')
 			return
+
+		# Some firmware glues an INTELLI_ROCKS beacon onto the payload; both of
+		# the repo's real captures carry it. Upstream strips it before parsing.
+		dataBytes = trim_payload(dataBytes)
+
+		identity = self.device.alias if self.device is not None else advertisedName
+
 		results = {
 			'timestamp': now().timestamp(),
 			'type': f'BLE{str(type(data).__name__)}',
-			'rssi': int(data.rssi),
-			'deviceName': str(device.name),
-			'deviceAddress': str(device.address),
-			# Consumed by the schema's identityKey - scopes every value key in
-			# this batch to the device that sent it (…temperature#terrarium).
-			'deviceIdentity': resolve_device_identity(advertisedName, self.devices),
-			**self.__temperatureParse(dataBytes),
-			**self.__humidityParse(dataBytes),
-			**self.__batteryParse(dataBytes),
+			'rssi': int(getattr(data, 'rssi', 0)),
+			'deviceName': str(advertisedName),
+			'deviceAddress': str(getattr(device, 'address', '')),
+			# Consumed by the schema's identityKey.
+			'deviceIdentity': identity,
 		}
-		# Pass the identity explicitly rather than letting the datagram discover
-		# it: we know exactly which device this advertisement came from, and
+		for field, parser in self.__parsers.items():
+			try:
+				results.update(parser(dataBytes))
+			except Exception as e:
+				pluginLog.error(f'{self.name}: could not read {field} from {dataBytes.hex()}: {e}')
+
+		# Pass the identity explicitly rather than letting the datagram
+		# discover it: we know exactly which device this came from, and
 		# discovery was picking up the *previous* device's value.
-		data = LevityDatagram(
+		datagram = LevityDatagram(
 			results, schema=self.schema, dataMaps=self.schema.dataMaps,
-			identity=results['deviceIdentity'],
+			identity=identity,
 		)
-		pluginLog.verbose(f'{self.__class__.__name__} received: {data["realtime"]}', verbosity=5)
-		self.realtime.update(data)
-		self.lastDatagram = data
+		pluginLog.verbose(f'{self.name} received: {datagram["realtime"]}', verbosity=5)
+		self.realtime.update(datagram)
+		self.lastDatagram = datagram
 
 
 __plugin__ = Govee
