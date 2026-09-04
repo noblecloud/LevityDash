@@ -127,6 +127,30 @@ the `__setattr__` watchdog, and is the first thing to rule out.
 Note also that `len(set(_values))` varied run to run (91 on some runs, 95 on
 others) from identical scripts, so whatever it is, it is timing-dependent.
 
+## Third round (2026-09-04): two more theories dead
+
+- **Not the source round-trip gap.** That gap was real and is now fixed
+  (`splitKeyString`, commit `19b9985`) - it was the first suggestion in the
+  list below, since the wire decodes keys from their string form. The
+  duplicates are unchanged after it: still 95 entries for 91 distinct keys.
+- **Not concurrent insertion.** A plain dict corrupted by two threads racing
+  would explain every symptom, including the run-to-run variance. It is not
+  that: instrumenting `__setitem__` with `threading.current_thread().name`
+  recorded **all 95 inserts on `MainThread`**.
+
+So the shape of it is now quite tightly bounded, and quite strange: 95
+single-threaded inserts produce 95 entries (so every key was distinct from
+every other *at the moment it was inserted*), no key object is ever mutated
+afterwards, and yet four pairs later compare equal with equal hashes. Whatever
+changes is not an attribute write reaching `CategoryItem.__setattr__`.
+
+Two things that would bypass that watchdog and are worth ruling out next:
+`object.__setattr__`/`instance.__dict__[...]` writes (a `cached_property`
+populates `__dict__` directly, for instance), and the class-level
+`cls.__separator` that `__new__` assigns whenever `separator` is passed -
+`__hash__` reads `self.__separator`, so a class-level change moves every
+instance's hash at once.
+
 ## Where to look next
 
 1. Instrument `dict.__setitem__` on `_values` — subclass it temporarily and log
