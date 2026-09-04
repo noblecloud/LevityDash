@@ -76,6 +76,57 @@ wrong on its own terms — identity and source are part of the interning key, so
 a re-init can only write back what is already there — and it was clearing the
 cached hash of live dict keys. This is hardening; it did not close the symptom.
 
+## Second round of measurements (same night)
+
+Instrumenting `PluginValueDirectory._values` with a `dict` subclass and
+`CategoryItem.__setattr__` with a watchdog produced these, all reproducible:
+
+- **Every insert is a new key.** `__setitem__` was called exactly 95 times and
+  the dict ended with 95 entries; `update()` and `setdefault()` were never used
+  (both would bypass a subclass's `__setitem__`). So no insert ever replaced an
+  existing key, and no fourth insert created the duplicate.
+- **Only three inserts touch an affected key**, and they are genuinely
+  different at insert time: `#bedroom` (from the wire, `frontend.py:76
+  handle_message`), the bare key with `identity=None` (from the dashboard's own
+  key parsing, `app.py:712 __init__` via `buildLevel`), and `#terrarium` (wire).
+- **The key objects never mutate.** A watchdog on every `CategoryItem`
+  attribute write, filtered to genuine overwrites (ignoring the expected lazy
+  `__hash: None -> value`), caught **zero** writes across a full 18s run. The
+  earlier "the objects are mutating" reading was wrong.
+
+### The unresolved contradiction
+
+In a run with the watchdog installed and zero mutations recorded:
+
+```
+len(_values)      = 95
+len(set(_values)) = 95      # no collapsing
+```
+
+yet for each of the four duplicated strings, the two objects satisfy *every*
+part of the equality contract:
+
+```
+a is b          False
+a == b          True     b == a  True     a != b  False
+hash(a) == hash(b)       True
+tuple(a) == tuple(b)     True
+identity / source        'bedroom' / 'bedroom',  None / None
+type / len               CategoryItem / CategoryItem,  3 / 3
+a in {b}        True
+len({a, b})     1        len({a: 1, b: 2})  1
+```
+
+Two objects that collapse to one in a fresh `set` do not collapse inside
+`set(_values)`. That should not be possible for a plain dict whose keys never
+mutate. Something is inconsistent between the state at insertion and the state
+at inspection that none of the above instrumentation caught - a write reaching
+the instance through `object.__setattr__` or `__dict__` directly would bypass
+the `__setattr__` watchdog, and is the first thing to rule out.
+
+Note also that `len(set(_values))` varied run to run (91 on some runs, 95 on
+others) from identical scripts, so whatever it is, it is timing-dependent.
+
 ## Where to look next
 
 1. Instrument `dict.__setitem__` on `_values` — subclass it temporarily and log
