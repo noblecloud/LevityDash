@@ -65,10 +65,16 @@ Other panel-level keys: `margins`, `padding`, `opacity`, `border`, `name`.
   items: [...]
 ```
 
-- `size:` on each child is its share.
-- `spacing` costs real space **on top of** the declared sizes. Five panels with
-  `spacing: 10px` on 1920px eats ~2%, so sizes should sum to ~97%, not 100%.
-  Overflow is silent — the last panel runs off the edge.
+- `size:` **pins** an item to that share. Children with no `size:` split whatever
+  is left, and the engine already subtracts `spacing` from that remainder
+  (`Stacks.py`: `remainingSpace = span - spacingTotal - totalFixedSizes`). So a
+  stack whose sizes total 45% or 70% is perfectly normal — that is one or two
+  pinned children and the rest sharing the remainder, which is how nearly every
+  stack in the real dashboards is written.
+  
+  The total only matters when **every** child carries a `size:`. Then there is no
+  unsized remainder for spacing to come out of, and sizes totalling 100% overflow
+  by exactly the spacing. Leave one child unsized, or keep the total under 100%.
 - `dividers` draw a line between children. Useful for binding by *common
   region* when proximity alone can't group things.
 - `preset:` / `shared:` push defaults into children.

@@ -321,15 +321,27 @@ function lint(root) {
   const out = [];
   (function walk(item, path) {
     if (item.type === 'stack') {
-      const sized = (item.items || []).filter(i => typeof i.size === 'string' && i.size.endsWith('%'));
+      // `size:` PINS an item. Unsized siblings split what is left, and the
+      // engine already deducts spacing from that remainder
+      // (Stacks.py: remainingSpace = span - spacingTotal - totalFixedSizes).
+      // So a total well under 100% is normal and correct — most real stacks
+      // size one child of two. The total only matters when EVERY child is
+      // sized, because then there is no remainder for spacing to come from.
+      const kids = item.items || [];
+      const sized = kids.filter(i => typeof i.size === 'string' && i.size.endsWith('%'));
       if (sized.length) {
         const sum = sized.reduce((a, i) => a + parseFloat(i.size), 0);
-        const spacing = item.spacing ? ` with spacing ${item.spacing}` : '';
-        if (sum > 99)
-          out.push(['bad', `${path}: sizes sum to ${sum.toFixed(0)}%${spacing}. Spacing costs real room on top — the last panel runs off the edge, silently. Aim for ~97%.`]);
-        else if (sum < 93)
-          out.push(['warn', `${path}: sizes sum to only ${sum.toFixed(0)}% — there will be a visible gap.`]);
-        else out.push(['ok', `${path}: sizes sum to ${sum.toFixed(0)}% ✓`]);
+        if (sized.length === kids.length) {
+          if (sum >= 100)
+            out.push(['bad', `${path}: every child is sized and they total ${sum.toFixed(0)}%. With no unsized sibling to absorb it, spacing has nowhere to come from and the last one overflows. Leave a child unsized, or drop the total below 100%.`]);
+          else
+            out.push(['ok', `${path}: all ${kids.length} children sized, ${sum.toFixed(0)}% — room left for spacing ✓`]);
+        } else {
+          if (sum >= 100)
+            out.push(['bad', `${path}: sized children already claim ${sum.toFixed(0)}%, leaving nothing for the ${kids.length - sized.length} unsized one(s).`]);
+          else
+            out.push(['ok', `${path}: ${sized.length}/${kids.length} sized (${sum.toFixed(0)}%); the rest split the remainder ✓`]);
+        }
       }
     }
     if (item.type === 'realtime.gauge') {

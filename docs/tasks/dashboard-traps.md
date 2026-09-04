@@ -12,11 +12,21 @@ These are about the *layout YAML*, not the schema/source-key layer (that's
 
 ## Layout sizing
 
-- **Panel sizes must sum to ~97%, not 100%.** The stack inserts `~2–3%` of
-  spacing between bands (at 1920px, `spacing: 20px` between five panels). A
-  declared `100%` silently overflows off the right edge — the failure looks like
-  "the stack is broken", not "a size sum is wrong". The generator warns when the
-  sum is outside `97% ± 2%`.
+- **~~Panel sizes must sum to ~97%~~ — wrong, corrected 2026-09-04.**
+  `size:` **pins** an item to that share. Children with no `size:` split whatever
+  is left, and the engine already subtracts `spacing` from that remainder
+  (`Stacks.py`: `remainingSpace = span - spacingTotal - totalFixedSizes`). So a
+  stack whose sizes total 45% or 70% is perfectly normal — that is one or two
+  pinned children and the rest sharing the remainder, which is how nearly every
+  stack in the real dashboards is written.
+  
+  The total only matters when **every** child carries a `size:`. Then there is no
+  unsized remainder for spacing to come out of, and sizes totalling 100% overflow
+  by exactly the spacing. Leave one child unsized, or keep the total under 100%.
+
+  The original note generalised from the single all-sized stack in
+  `default.levity`. Every other stack in that same file totals 10–80% and
+  renders correctly.
 - **A `size: 25%` panel that is actually `28%` will not be fixed by a string
   replace.** Several attempts did `str.replace('size: 25%', 'size: 20%')` which
   matched nothing because the real value was `28%`. Read the actual value before

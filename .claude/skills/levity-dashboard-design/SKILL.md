@@ -262,9 +262,13 @@ Discovered the hard way; each one cost a full build/render cycle.
   applies to every child, so a gauge you told not to have a title gets one anyway
   — and if a sibling also has a title, the cell renders two. Set titles per item
   when any child needs to opt out.
-- **Panel sizes sum to ~97%, not 100%.** A stack's `spacing` costs real width on
-  top of the declared sizes. Five panels with `spacing: 10px` on 1920px eats ~2%.
-  Overflow is silent — the last panel just runs off the edge.
+- **A stack's sizes do not have to total anything in particular.** `size:` pins
+  one child; unsized siblings split the remainder, and the engine already
+  subtracts `spacing` from it. Totals of 45% or 70% are normal and correct.
+  Only when *every* child is sized does the total matter — then nothing absorbs
+  the spacing and 100% overflows. (An earlier note here claimed sizes must sum
+  to ~97%; that was generalised from the one all-sized stack in the dashboard
+  and is wrong for every other case.)
 - **A lone glyph in a tall cell balloons.** A single character (`0`, `8`) fits far
   larger than `71°` in the same box, and size groups don't always equalise across
   distance (`Groups.py` clusters by proximity). Give short values neighbours, or
