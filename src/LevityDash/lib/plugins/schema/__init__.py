@@ -1,4 +1,5 @@
 import os
+import atexit
 from collections import ChainMap
 from copy import deepcopy
 from difflib import get_close_matches
@@ -44,6 +45,48 @@ def _schema_debug_alert(message: str):
 	"""
 	if SCHEMA_DEBUG:
 		log.error(f"SCHEMA-DEBUG: {message}")
+
+
+# Aggregate every unmapped / fuzzy-matched key seen during a run so they can be
+# dumped once at shutdown instead of interleaved with every log line. Only used
+# when SCHEMA_DEBUG is on. Keyed by (schema-name, key) so the same stray key
+# emitted by several datagrams collapses to one entry.
+_SCHEMA_DEBUG_UNMAPPED: "dict[tuple, str]" = {}
+
+
+def record_unmapped(name: str, key, resolution: str) -> None:
+	"""Remember an unmapped/fuzzy key for the end-of-run summary (debug only).
+
+	``resolution`` is one of: ``'missing'`` (no metadata at all),
+	``'fuzzy'`` (matched a near-key), or ``'fallback'`` (used a default).
+	"""
+	if not SCHEMA_DEBUG:
+		return
+	_SCHEMA_DEBUG_UNMAPPED[(str(name), str(key))] = resolution
+
+
+def summarize_unmapped() -> None:
+	"""Emit one greppable summary line per unmapped key collected this run.
+
+	Safe to call at interpreter exit; a no-op when not in debug mode or when
+	nothing was recorded. Idempotent — clears the buffer so a second call is
+	quiet (handy under pytest where teardown may run more than once).
+	"""
+	if not SCHEMA_DEBUG or not _SCHEMA_DEBUG_UNMAPPED:
+		return
+	flat = ", ".join(
+		f"{key!r}->{resolution}" for key, resolution in sorted(_SCHEMA_DEBUG_UNMAPPED.items())
+	)
+	log.error(f"SCHEMA-DEBUG: unmapped-key summary ({len(_SCHEMA_DEBUG_UNMAPPED)}): {flat}")
+	_SCHEMA_DEBUG_UNMAPPED.clear()
+
+
+# Fire the summary once at interpreter exit (normal shutdown). The function is a
+# no-op unless SCHEMA_DEBUG is on and something was recorded, so registering it
+# unconditionally is free in production. atexit runs regardless of how the
+# process winds down (Qt exec_ return, SIGTERM handler, sys.exit), which is
+# exactly what we want for a "what did I get wrong this run?" report.
+atexit.register(summarize_unmapped)
 
 
 class SchemaSpecialKeys(str, Enum):
@@ -870,24 +913,52 @@ class Schema(CategoryDict):
 			key = key.withoutIdentity
 
 		if key not in self:
-			key = self.sourceKeyMap.get(key, None)
-			if key is None:
+			# Resolve a source-key alias without clobbering the originally
+			# requested key — we still need the original for logging/recording
+			# if the alias lookup fails.
+			resolved = self.sourceKeyMap.get(key, None)
+			if resolved is None:
 				#TODO: Add better error handling
 				log.warning(f'{key} was not found in {self}')
+				record_unmapped(getattr(source, 'name', '?'), key, 'missing')
 				return None
+			key = resolved
 		metaData = self.getExact(key)
 		if metaData is None:
 			keys = [str(k) for k in self._source.keys()]
 			closestMatch = get_close_matches(str(key), keys, n=1, cutoff=0.5)
 			if closestMatch:
-				log.warning(f'{key} was not found in {self} but {closestMatch[0]} was found as it\'s closest match')
+				fuzzy = closestMatch[0]
+				if fuzzy == key:
+					# The nearest match is the key itself (e.g. a mistyped key
+					# that's also a literal schema entry) — there's no better
+					# binding to fall back to, so don't recurse on ourselves.
+					log.warning(f'{key} was not found in {self}')
+					record_unmapped(getattr(source, 'name', '?'), key, 'missing')
+					return None
+				log.warning(f'{key} was not found in {self} but {fuzzy} was found as it\'s closest match')
+				record_unmapped(getattr(source, 'name', '?'), key, 'fuzzy')
+				if SCHEMA_DEBUG:
+					# In debug mode, *suggest* the near-key but do NOT silently
+					# bind to it — a mistyped sourceKey degrades to a cosmetic
+					# oddity in production, but here we want the developer to see
+					# the mismatch without the value quietly landing on the wrong
+					# unit metadata. Signal loudly, but keep production behaviour
+					# (return the fuzzy match) when the flag is off.
+					_schema_debug_alert(
+						f"{key!r} not found in {self}; nearest is {fuzzy!r} (cutoff=0.5). "
+						f"NOT auto-binding — if this is correct, fix the sourceKey; "
+						f"otherwise this value will be missing until corrected."
+					)
+					return None
 				_schema_debug_alert(
-					f"{key!r} not found in {self}; fuzzy-matched to {closestMatch[0]!r} (cutoff=0.5). "
+					f"{key!r} not found in {self}; fuzzy-matched to {fuzzy!r} (cutoff=0.5). "
 					f"A mistyped sourceKey will silently bind to the wrong unit metadata."
 				)
-				return self.getUnitMetaData(closestMatch[0], source)
+				return self.getUnitMetaData(fuzzy, source)
 			else:
 				log.warning(f'{key} was not found in {self}')
+				record_unmapped(getattr(source, 'name', '?'), key, 'missing')
 				return None
 		return metaData
 
