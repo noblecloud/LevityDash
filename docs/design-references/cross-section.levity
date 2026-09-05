@@ -1,0 +1,397 @@
+# Cross-section: sky, surface, ground.
+#
+# Designed in docs/design-references/mockup-kit.html against a snapshot of
+# real values, then transcribed here. Every key was checked against a running
+# backend - nothing in this file renders ••• .
+#
+# Hex colours are quoted. Unquoted, YAML reads '#' as a comment and the value
+# becomes null, which silently drops a plot's colour.
+- type: stack
+  defaultType: group
+  name: main
+  padding: 1mm
+  spacing: 2 mm
+  dividers: {enabled: true, opacity: 70%, size: 99%}
+  items:
+
+  # ================= SKY ==================================================
+  - type: stack
+    name: sky
+    direction: Horizontal
+    size: 22%
+    spacing: 2 mm
+    dividers: {enabled: true, opacity: 55%, size: 88%}
+    shared:
+      display:
+        font: Roboto Mono
+    items:
+
+    - type: clock
+      name: clock
+      size: 20%
+      items:
+      - type: stack
+        items:
+        - format: '%A, %B %-d'
+          size: 30%
+          alignment: CenterLeft
+          filters: [AddOrdinal]
+          margins: {left: 2mm, right: 1mm, top: 1mm, bottom: 0.25mm}
+          weight: Light
+        - type: stack
+          direction: Horizontal
+          items:
+          - format: '%-I:%M'
+            size: 66%
+            alignment: CenterRight
+            format-hint: '10:00'
+            margins: {left: 1mm, right: 1mm, top: 0.5mm, bottom: 0.5mm}
+          - type: stack
+            size: 16%
+            items:
+            - format: '%p'
+              alignment: BottomLeft
+              margins: {bottom: 12%, left: 0%}
+          - type: moon
+            size: 18%
+
+    - type: titled-group
+      name: cloud
+      size: 15%
+      title: {text: Cloud, height: 0.55cm}
+      items:
+      - type: value-stack
+        padding: {left: 1mm, right: 1mm, top: 0.5mm, bottom: 2%}
+        spacing: 0.6 mm
+        items:
+        - environment.clouds.cover.cover: {title: {text: Total}}
+        - environment.clouds.cover.high:  {title: {text: High}}
+        - environment.clouds.cover.mid:   {title: {text: Mid}}
+        - environment.clouds.cover.low:   {title: {text: Low}}
+
+    - type: titled-group
+      name: windAloft
+      size: 16%
+      title: {text: Wind Aloft, height: 0.55cm}
+      items:
+      - type: value-stack
+        padding: {left: 1mm, right: 1mm, top: 0.5mm, bottom: 2%}
+        spacing: 0.6 mm
+        items:
+        - environment.wind.speed.180m:    {title: {text: 180 m}}
+        - environment.wind.speed.120m:    {title: {text: 120 m}}
+        - environment.wind.speed.80m:     {title: {text: 80 m}}
+        - environment.wind.direction.80m: {title: {text: Dir}}
+
+    - type: titled-group
+      name: sun
+      title: {text: Sun, height: 0.55cm}
+      items:
+      - type: value-stack
+        padding: {left: 1mm, right: 1mm, top: 0.5mm, bottom: 2%}
+        spacing: 0.6 mm
+        items:
+        - environment.light.sunrise: {title: {text: Rise}, display: {format: '%-I:%M%p'}}
+        - environment.light.sunset:  {title: {text: Set},  display: {format: '%-I:%M%p'}}
+        - astronomy.moon.phase:      {title: {text: Moon}}
+        - environment.light.uvi:     {title: {text: UV}}
+
+    # Pressure with its own trend: the number alone says nothing, the slope
+    # is the whole story.
+    - type: titled-group
+      name: pressure
+      size: 21%
+      title: {text: Pressure, height: 0.55cm}
+      items:
+      - type: realtime.text
+        key: environment.pressure.pressure
+        title: false
+        display:
+          unitPosition: FloatUnder
+          valueLabel: {matchingGroup: value@sky}
+        geometry: {x: 0%, y: 0%, width: 52%, height: 60%}
+      - type: mini-graph
+        timeframe: {hours: 12}
+        annotations:
+          dayLabels: {enabled: false}
+          hourLabels: {enabled: false}
+        indicator: {color: white, opacity: 0.3}
+        margins: {top: 18%, bottom: 12%}
+        figures:
+        - figure: pressure
+          environment.pressure.pressure:
+            plot: {type: plot, gradient: PressureGradient, weight: 0.4}
+        geometry: {x: 52%, y: 2%, width: 48%, height: 56%}
+      - type: value-stack
+        padding: {left: 1mm, right: 1mm, top: 0.5mm, bottom: 2%}
+        spacing: 0.6 mm
+        geometry: {x: 0%, y: 60%, width: 100%, height: 40%}
+        items:
+        - environment.visibility:                {title: {text: Visibility}}
+        - environment.soil.freezingLevelHeight:  {title: {text: Freezing}}
+
+  # ================= SURFACE ==============================================
+  # Unsized on purpose: it absorbs the spacing the sized bands leave behind.
+  - type: stack
+    name: surface
+    direction: Horizontal
+    spacing: 2 mm
+    items:
+
+    - type: stack
+      name: now
+      size: 20%
+      spacing: 1 mm
+      items:
+      - type: group
+        size: 58%
+        items:
+        - type: realtime.text
+          key: environment.temperature.temperature
+          title: false
+          display:
+            font: Roboto Mono
+            unitPosition: Inline
+            valueLabel: {margins: 3%}
+          geometry: {x: 0%, y: 0%, width: 100%, height: 74%}
+        - type: realtime.text
+          key: environment.condition.condition
+          title: false
+          display: {valueLabel: {matchingGroup: condition@now}}
+          geometry: {x: 0%, y: 74%, width: 100%, height: 24%}
+      - type: value-stack
+        padding: {left: 1.5mm, right: 1.5mm, top: 0.5mm, bottom: 3%}
+        spacing: 0.7 mm
+        items:
+        - environment.temperature.feelsLike:        {title: {text: Feels}}
+        - environment.temperature.dewpoint:         {title: {text: Dew Point}}
+        - environment.humidity.humidity:            {title: {text: Humidity}}
+        - environment.pressure.vaporPressureDeficit: {title: {text: VPD}}
+
+    - type: graph
+      name: forecast
+      timeframe: {days: 2, hours: 12}
+      annotations:
+        dayLabels: {alignment: TopCenter}
+        hourLabels: {alignment: BottomCenter, spacingIntervals: '1, 3, 6'}
+        lines: {spacing: 8 mm, weight: 0.8}
+      figures:
+      - figure: temperature
+        margins: {bottom: 22%, top: 12%}
+        environment.temperature.temperature:
+          labels: {enabled: true}
+          plot: {type: plot, gradient: TemperatureGradient}
+          resolution: 2
+        environment.temperature.feelsLike:
+          plot: {type: plot, gradient: TemperatureGradient, weight: 0.6}
+          resolution: 2
+        environment.temperature.dewpoint:
+          plot:
+            type: plot
+            cap: square
+            color: '#5882ff'
+            dashPattern: 5, 5
+            weight: 0.35
+      - figure: precipitation
+        margins: {bottom: 0%, top: 62%}
+        environment.precipitation.precipitation:
+          plot: {type: plot, gradient: PrecipitationRateGradient, weight: 0.35}
+        max: 1
+
+    # Today's envelope with the times the extremes land - the part a curve
+    # cannot tell you at a glance.
+    - type: titled-group
+      name: today
+      size: 17%
+      title: {text: Today, height: 0.55cm}
+      items:
+      - type: value-stack
+        padding: {left: 1.5mm, right: 1.5mm, top: 0.5mm, bottom: 3%}
+        spacing: 0.5 mm
+        items:
+        - environment.temperature.high:     {title: {text: High}}
+        - environment.temperature.highTime: {title: {text: at}, display: {format: '%-I:%M%p'}}
+        - environment.temperature.low:      {title: {text: Low}}
+        - environment.temperature.lowTime:  {title: {text: at}, display: {format: '%-I:%M%p'}}
+        - spacer: {size: 1.5 mm}
+        - environment.temperature.feelsLikeHigh: {title: {text: Feels Hi}}
+        - environment.temperature.feelsLikeLow:  {title: {text: Feels Lo}}
+        - spacer: {size: 1.5 mm}
+        - environment.precipitation.probability: {title: {text: Precip}}
+        - environment.precipitation.max:         {title: {text: Max Rate}}
+
+  # ================= GROUND ===============================================
+  - type: stack
+    name: ground
+    direction: Horizontal
+    size: 38%
+    spacing: 2 mm
+    dividers: {enabled: true, opacity: 55%, size: 88%}
+    shared:
+      display:
+        font: Roboto Mono
+    items:
+
+    - type: titled-group
+      name: bedroom
+      size: 16%
+      title: {text: Bedroom, height: 0.6cm}
+      items:
+      - type: realtime.text
+        key: indoor.temperature.temperature#bedroom
+        title: false
+        display:
+          unitPosition: Inline
+          valueLabel: {matchingGroup: value@indoor}
+        geometry: {x: 0%, y: 0%, width: 54%, height: 40%}
+      - type: mini-graph
+        timeframe: {hours: 12}
+        annotations:
+          dayLabels: {enabled: false}
+          hourLabels: {enabled: false}
+        indicator: {color: white, opacity: 0.3}
+        margins: {top: 16%, bottom: 14%}
+        figures:
+        - figure: indoor
+          indoor.temperature.temperature#bedroom:
+            plot: {type: plot, gradient: TemperatureGradient, weight: 0.4}
+        geometry: {x: 54%, y: 2%, width: 46%, height: 36%}
+      - type: value-stack
+        padding: {left: 1mm, right: 1mm, top: 0.5mm, bottom: 3%}
+        spacing: 0.6 mm
+        geometry: {x: 0%, y: 42%, width: 100%, height: 58%}
+        items:
+        - indoor.humidity.humidity#bedroom:       {title: {text: Humidity}}
+        - indoor.temperature.heatIndex#bedroom:   {title: {text: Heat Index}}
+        - indoor.temperature.dewpoint#bedroom:    {title: {text: Dew Point}}
+        - indoor.battery.battery#bedroom:         {title: {text: Battery}}
+
+    - type: titled-group
+      name: terrarium
+      size: 16%
+      title: {text: Terrarium, height: 0.6cm}
+      items:
+      - type: realtime.text
+        key: indoor.temperature.temperature#terrarium
+        title: false
+        display:
+          unitPosition: Inline
+          valueLabel: {matchingGroup: value@indoor}
+        geometry: {x: 0%, y: 0%, width: 54%, height: 40%}
+      - type: mini-graph
+        timeframe: {hours: 12}
+        annotations:
+          dayLabels: {enabled: false}
+          hourLabels: {enabled: false}
+        indicator: {color: white, opacity: 0.3}
+        margins: {top: 16%, bottom: 14%}
+        figures:
+        - figure: indoor
+          indoor.temperature.temperature#terrarium:
+            plot: {type: plot, gradient: TemperatureGradient, weight: 0.4}
+        geometry: {x: 54%, y: 2%, width: 46%, height: 36%}
+      - type: value-stack
+        padding: {left: 1mm, right: 1mm, top: 0.5mm, bottom: 3%}
+        spacing: 0.6 mm
+        geometry: {x: 0%, y: 42%, width: 100%, height: 58%}
+        items:
+        - indoor.humidity.humidity#terrarium:     {title: {text: Humidity}}
+        - indoor.temperature.heatIndex#terrarium: {title: {text: Heat Index}}
+        - indoor.temperature.dewpoint#terrarium:  {title: {text: Dew Point}}
+        - indoor.battery.battery#terrarium:       {title: {text: Battery}}
+
+    # The ring carries its own readout: a hidden value-label plus a
+    # positioned sibling, since value-label position:center does not centre.
+    - type: titled-group
+      name: wind
+      size: 15%
+      title: {text: Wind, height: 0.6cm}
+      items:
+      - type: realtime.gauge
+        key: environment.wind.speed.speed
+        title: false
+        display:
+          radius: 92%
+          arc: {gradient: WindSpeedGradient, weight: 10%}
+          needle: {type: marker, width: 9%, length: 13%}
+          value-label: {visible: false}
+          unit-label: {visible: false}
+          major: {enabled: false, labels: {enabled: false}}
+          minor: {enabled: false}
+        geometry: {x: 0%, y: 0%, width: 100%, height: 66%}
+      - type: realtime.text
+        key: environment.wind.speed.speed
+        title: false
+        display:
+          unitPosition: Hidden
+          valueLabel: {matchingGroup: value@gauge}
+        geometry: {x: 26%, y: 26%, width: 48%, height: 22%}
+      - type: value-stack
+        padding: {left: 1mm, right: 1mm, top: 0.5mm, bottom: 3%}
+        spacing: 0.6 mm
+        geometry: {x: 0%, y: 66%, width: 100%, height: 34%}
+        items:
+        - environment.wind.speed.gust:           {title: {text: Gust}}
+        - environment.wind.direction.direction:  {title: {text: Dir}}
+
+    - type: titled-group
+      name: light
+      size: 15%
+      title: {text: Light, height: 0.6cm}
+      items:
+      - type: realtime.gauge
+        key: environment.light.uvi
+        title: false
+        display:
+          radius: 92%
+          arc: {gradient: UVIndexGradient, weight: 11%}
+          needle: {type: marker, width: 9%, length: 14%}
+          value-label: {visible: false}
+          unit-label: {visible: false}
+          major: {enabled: false, labels: {enabled: false}}
+          minor: {enabled: false}
+          range: {min: 0, max: 11}
+        geometry: {x: 0%, y: 0%, width: 100%, height: 54%}
+      - type: realtime.text
+        key: environment.light.uvi
+        title: false
+        display:
+          unitPosition: Hidden
+          valueLabel: {matchingGroup: value@gauge}
+        geometry: {x: 30%, y: 20%, width: 40%, height: 22%}
+      - type: value-stack
+        padding: {left: 1mm, right: 1mm, top: 0.5mm, bottom: 3%}
+        spacing: 0.6 mm
+        geometry: {x: 0%, y: 54%, width: 100%, height: 46%}
+        items:
+        - environment.light.irradiance.irradiance: {title: {text: Total}}
+        - environment.light.irradiance.direct:     {title: {text: Direct}}
+        - environment.light.irradiance.diffuse:    {title: {text: Diffuse}}
+
+    - type: titled-group
+      name: soilTemp
+      size: 17%
+      title: {text: Soil Temp, height: 0.6cm}
+      items:
+      - type: value-stack
+        padding: {left: 1mm, right: 1mm, top: 0.5mm, bottom: 3%}
+        spacing: 0.6 mm
+        items:
+        - environment.soil.temperature.temperature: {title: {text: Surface}}
+        - environment.soil.temperature.6cm:         {title: {text: 6 cm}}
+        - environment.soil.temperature.18cm:        {title: {text: 18 cm}}
+        - environment.soil.temperature.54cm:        {title: {text: 54 cm}}
+
+    - type: titled-group
+      name: soilMoisture
+      title: {text: Soil Moisture, height: 0.6cm}
+      items:
+      - type: value-stack
+        padding: {left: 1mm, right: 1mm, top: 0.5mm, bottom: 3%}
+        spacing: 0.5 mm
+        items:
+        - environment.soil.moisture.1-3cm:            {title: {text: 1-3 cm}}
+        - environment.soil.moisture.3-9cm:            {title: {text: 3-9 cm}}
+        - environment.soil.moisture.9-27cm:           {title: {text: 9-27 cm}}
+        - environment.soil.moisture.27-81cm:          {title: {text: 27-81 cm}}
+        - environment.soil.moisture.evapotranspiration: {title: {text: Evapo}}
