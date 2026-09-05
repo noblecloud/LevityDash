@@ -419,7 +419,18 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, ColorGradientMixin, ta
 			else:
 				textHeight = float(textHeight.toAbsolute(self.text_size_relative_to))
 		elif isinstance(textHeight, Length):
-			dpi = getDPI(self.surface.scene().view.screen())
+			# A physical length needs a screen to resolve against, but during a
+			# dashboard reload the outgoing items are detached from the scene
+			# before their timers stop, so `scene()` is None and this raised
+			# "'NoneType' object has no attribute 'view'". It fired ~180 times
+			# per switch, and since it aborts text scaling every *text* item -
+			# titles, value-stack labels, the hero - came back unsized and
+			# invisible while gauges and graphs survived. `getDPI(None)`
+			# already resolves a sensible screen, so ask for that instead.
+			# `limitRect` above guards the same shape.
+			scene = self.surface.scene() if self.surface is not None else None
+			view = getattr(scene, 'view', None)
+			dpi = getDPI(view.screen() if view is not None else None)
 			# dpi = 1080 / Centimeter(13.5).inch
 			textHeight = float(textHeight.inch) * dpi
 		return textHeight
