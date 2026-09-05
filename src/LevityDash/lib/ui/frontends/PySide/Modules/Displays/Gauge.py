@@ -837,19 +837,32 @@ class Graduations(ColorGradientMixin, StatefulGaugeItem):
 
 		gauge = self.gauge
 
+		# A minor tick subdivides a major one, and a micro subdivides a minor -
+		# so each asks its parent for a count. `count` is 0 for a *disabled*
+		# graduation, and dividing by it raised ZeroDivisionError out of
+		# WeatherUnits' __truediv__, taking the whole gauge down. Disabling
+		# major while leaving minor on is the documented way to get a plain
+		# ring (docs: "major/minor/micro: {enabled: false}"), so this crashed
+		# on exactly the configuration the design notes recommend.
 		match self.tick_type:
 			case Graduations.Type.Major:
 				return self._determine_interval()
 			case Graduations.Type.Minor:
+				parent = gauge.majorDivisions
+				if not parent.count:
+					return gauge.range.rounded_range
 				return self._determine_interval(
-					range_value=gauge.range.rounded_range / gauge.majorDivisions.count,
-					gauge_max_angle_deg=gauge.majorDivisions.angle_range / gauge.majorDivisions.count,
+					range_value=gauge.range.rounded_range / parent.count,
+					gauge_max_angle_deg=parent.angle_range / parent.count,
 				)
 
 			case Graduations.Type.Micro:
+				parent = gauge.minorDivisions
+				if not parent.count:
+					return gauge.range.rounded_range
 				return self._determine_interval(
-					range_value=gauge.range.rounded_range / gauge.minorDivisions.count,
-					gauge_max_angle_deg=gauge.minorDivisions.angle_range / gauge.minorDivisions.count,
+					range_value=gauge.range.rounded_range / parent.count,
+					gauge_max_angle_deg=parent.angle_range / parent.count,
 				)
 			case _:
 				raise ValueError(f'Invalid tick type: {self.tick_type}')
@@ -1509,6 +1522,10 @@ class Needle(StatefulGaugePathItem):
 		Circle = 'circle'
 		Triangle = 'triangle'
 		Diamond = 'diamond'
+		#: An arrowhead riding the arc itself rather than sweeping from the
+		#: centre. The other edge shapes sit *at* the radius; this one is
+		#: centred *on* the stroke, so it reads as a marker on the line.
+		Marker = 'marker'
 
 	def __init__(self, *args, **kwargs):
 		super(Needle, self).__init__(*args, **kwargs)
@@ -1531,6 +1548,8 @@ class Needle(StatefulGaugePathItem):
 				path = self._edge_triangle()
 			case Needle.Type.Diamond | 'diamond':
 				path = self._edge_diamond()
+			case Needle.Type.Marker | 'marker':
+				path = self._edge_marker()
 			case _:
 				path = self._default()
 		self.setPath(path)
@@ -1715,6 +1734,41 @@ class Needle(StatefulGaugePathItem):
 		shape.lineTo(tri_base_left)
 		shape.lineTo(tri_base_right)
 		shape.lineTo(tri_point)
+		shape.closeSubpath()
+		self._shape = QPainterPath(shape)
+		self._bounding_rect = shape.boundingRect()
+		return shape
+
+	def _edge_marker(self) -> QPainterPath:
+		"""
+		Returns an arrowhead that sits *on* the arc rather than pointing at it
+		from the centre.
+
+		Unlike the other edge shapes, which are placed at the radius, this one
+		is centred on the arc's stroke, so with a matching weight it reads as a
+		marker travelling along the line. The notched back keeps it an arrow
+		rather than a triangle at a glance.
+
+		Length: depth across the arc. Positive points inward.
+		Width: width along the arc
+		Offset: nudges it off the arc line
+		"""
+		cx = 0
+		cy = self.offset_px
+		l = self.length_px
+		w = self.width_px
+		# Centre on the stroke, not on the radius, so half sits either side.
+		pos = QPointF(cx, cy - self.gauge.radius)
+		shape = QPainterPath()
+		tip = QPointF(pos.x(), pos.y() + l / 2)
+		back_left = QPointF(pos.x() - w / 2, pos.y() - l / 2)
+		back_right = QPointF(pos.x() + w / 2, pos.y() - l / 2)
+		notch = QPointF(pos.x(), pos.y() - l / 6)
+		shape.moveTo(tip)
+		shape.lineTo(back_left)
+		shape.lineTo(notch)
+		shape.lineTo(back_right)
+		shape.lineTo(tip)
 		shape.closeSubpath()
 		self._shape = QPainterPath(shape)
 		self._bounding_rect = shape.boundingRect()

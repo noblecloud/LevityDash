@@ -823,7 +823,13 @@ class Stack(Panel, tag='stack'):
 								state['type'] = first_key
 								state.update(first_value)
 
-						elif CategoryItem(first_key) in LevityDashboard.dispatcher.all_valid_keys:
+						# Identity is runtime scoping, not schema: `all_valid_keys`
+						# holds base keys only, so a per-device key like
+						# `indoor.humidity.humidity#bedroom` failed this test and
+						# the row was silently dropped - it rendered as a bare
+						# dash with a ••• value. Strip it, as every other schema
+						# lookup does.
+						elif CategoryItem(first_key).withoutIdentity in LevityDashboard.dispatcher.all_valid_keys:
 							item_type = default_type
 
 							# If the first value is None, then the first key is the key and the state is the rest of the item.
