@@ -17,14 +17,19 @@ p.note { color:#9a9a9a; margin:4px 0 16px; max-width:80ch; }
 code { font-family:'Roboto Mono', monospace; font-size:.9em; color:#cfd8ff; }
 
 /* ---- the board: this is what a real dashboard looks like ---- */
-.board { background:var(--bg); color:var(--fg); aspect-ratio:16/9; width:100%;
+/* 16:10 to match the real display (2880x1800). `container-type` + `cqw`
+   makes every em scale with the board, so the mock reads the same at any
+   size on screen — a fixed px base silently lies about how much room a
+   value has. */
+.board { background:var(--bg); color:var(--fg); aspect-ratio:16/10; width:100%;
          position:relative; overflow:hidden; font-family:Roboto, sans-serif;
-         border:1px solid #333; }
+         border:1px solid #333; container-type:size; font-size:1.35cqw; }
 
 /* ---- stack: children share space by `size`, spacing costs real room ---- */
 .stack { display:flex; width:100%; height:100%; }
 .stack[data-direction="Vertical"] { flex-direction:column; }
 .stack > .cell { position:relative; min-width:0; min-height:0; display:flex; }
+.titled-group > .body, .panel { position:relative; }
 .stack[data-dividers="true"] > .cell + .cell::before {
   content:""; position:absolute; background:var(--fg); opacity:.2;
 }
@@ -34,6 +39,13 @@ code { font-family:'Roboto Mono', monospace; font-size:.9em; color:#cfd8ff; }
 .stack[data-direction="Vertical"][data-dividers="true"] > .cell + .cell::before {
   top:0; left:8%; height:1px; width:84%;
 }
+
+/* ---- free geometry: a group positions any child by x/y/width/height, so
+       panels can overlay — a value inside a gauge ring, readings composed
+       over a graph. This is what stops a board being a grid of boxes. ---- */
+.free { position:absolute; inset:0; }
+.free > .abs { position:absolute; display:flex; align-items:center;
+               justify-content:center; }
 
 /* ---- panel / group / titled-group ---- */
 .panel { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column;
@@ -54,9 +66,22 @@ code { font-family:'Roboto Mono', monospace; font-size:.9em; color:#cfd8ff; }
 .rt[data-unit-position="FloatUnder"] .unit { display:block; font-size:.34em;
                                              margin-top:.15em; text-align:center; }
 .rt[data-unit-position="Inline"] .unit { font-size:.5em; margin-left:.08em; }
+.rt[data-unit-position="Inline"] .unit.degree { font-size:.62em; margin-left:0; }
 .rt[data-unit-position="Hidden"] .unit { display:none; }
 .rt[data-title-below] { flex-direction:column-reverse; }
 .rt .placeholder { letter-spacing:.12em; }
+
+/* ---- value-stack: the dense primitive, label left / value right ---- */
+.vstack { display:flex; flex-direction:column; width:100%; height:100%;
+          justify-content:center; padding:0 .35em; }
+.vrow { display:flex; align-items:baseline; gap:.6em; line-height:1.25; }
+.vrow .k { flex:1; min-width:0; font-size:.66em; opacity:.72;
+           white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vrow .v { font-family:'Roboto Mono', monospace; font-size:.82em;
+           white-space:nowrap; text-align:right; }
+.vrow .v .u { font-size:.72em; opacity:.7; margin-left:.15em; }
+.vrow.missing .v { opacity:.55; letter-spacing:.1em; }
+.vspacer { height:.7em; }
 
 /* ---- gauge ---- */
 .gauge { position:relative; width:100%; height:100%; display:flex;
@@ -147,12 +172,43 @@ one built for a 0&ndash;11 UV scale looks wrong on a 0&ndash;100 dial.</p>
 <div class="board" id="palette" style="aspect-ratio:auto;height:300px"></div>
 
 <script>
+const SNAPSHOT = {"astronomy.moon.phase": {"value": "79.0%", "source": "PirateWeather"}, "astronomy.sun.rise": {"value": "2026-09-05 10:39:36+00:00", "source": "PirateWeather"}, "astronomy.sun.set": {"value": "2026-09-05 23:27:19+00:00", "source": "PirateWeather"}, "environment.clouds.cover": {"value": "1%", "source": "PirateWeather"}, "environment.clouds.cover.cover": {"value": "8%", "source": "OpenMeteo"}, "environment.clouds.cover.high": {"value": "0%", "source": "OpenMeteo"}, "environment.clouds.cover.low": {"value": "8%", "source": "OpenMeteo"}, "environment.clouds.cover.mid": {"value": "0%", "source": "OpenMeteo"}, "environment.condition.condition": {"value": "Clear", "source": "OpenMeteo"}, "environment.condition.icon": {"value": "\uf00d", "source": "OpenMeteo"}, "environment.condition.weatherCode": {"value": "0.0", "source": "OpenMeteo"}, "environment.humidity.humidity": {"value": "74%", "source": "OpenMeteo"}, "environment.light.irradiance.diffuse": {"value": "70 W/m\u00b2", "source": "OpenMeteo"}, "environment.light.irradiance.direct": {"value": "26 W/m\u00b2", "source": "OpenMeteo"}, "environment.light.irradiance.directNormal": {"value": "137.2 W/m\u00b2", "source": "OpenMeteo"}, "environment.light.irradiance.irradiance": {"value": "96 W/m\u00b2", "source": "OpenMeteo"}, "environment.light.sunrise": {"value": "2026-09-04 10:38:38+00:00", "source": "OpenWeatherMap"}, "environment.light.sunset": {"value": "2026-09-04 23:30:06+00:00", "source": "OpenWeatherMap"}, "environment.light.uvi": {"value": "1", "source": "PirateWeather"}, "environment.precipitation.accumulation": {"value": "0 in/hr", "source": "PirateWeather"}, "environment.precipitation.max": {"value": ".02 in/hr", "source": "PirateWeather"}, "environment.precipitation.maxTime": {"value": "2026-09-06 03:00:00+00:00", "source": "PirateWeather"}, "environment.precipitation.precipitation": {"value": "0 in/hr", "source": "OpenMeteo"}, "environment.precipitation.probability": {"value": "0%", "source": "PirateWeather"}, "environment.precipitation.rainDaily": {"value": "0 in/d", "source": "OpenMeteo"}, "environment.precipitation.showDaily": {"value": "0 in/d", "source": "OpenMeteo"}, "environment.precipitation.showersDaily": {"value": "0 in/d", "source": "OpenMeteo"}, "environment.precipitation.snowDepth": {"value": "0 m", "source": "OpenMeteo"}, "environment.pressure.pressure": {"value": "29.88 inHg", "source": "OpenMeteo"}, "environment.pressure.surface": {"value": "29.85 inHg", "source": "OpenMeteo"}, "environment.pressure.vaporPressureDeficit": {"value": "1.03", "source": "OpenMeteo"}, "environment.soil.freezingLevelHeight": {"value": "4.930 km", "source": "OpenMeteo"}, "environment.soil.moisture.1-3cm": {"value": "30%", "source": "OpenMeteo"}, "environment.soil.moisture.27-81cm": {"value": "33%", "source": "OpenMeteo"}, "environment.soil.moisture.3-9cm": {"value": "30%", "source": "OpenMeteo"}, "environment.soil.moisture.9-27cm": {"value": "31%", "source": "OpenMeteo"}, "environment.soil.moisture.evapotranspiration": {"value": "0 mm/hr", "source": "OpenMeteo"}, "environment.soil.moisture.moisture": {"value": "30%", "source": "OpenMeteo"}, "environment.soil.temperature.18cm": {"value": "86\u00b0", "source": "OpenMeteo"}, "environment.soil.temperature.54cm": {"value": "79\u00b0", "source": "OpenMeteo"}, "environment.soil.temperature.6cm": {"value": "90\u00b0", "source": "OpenMeteo"}, "environment.soil.temperature.temperature": {"value": "86\u00b0", "source": "OpenMeteo"}, "environment.temperature.dewpoint": {"value": "75\u00b0", "source": "OpenMeteo"}, "environment.temperature.feelsLike": {"value": "89\u00b0", "source": "OpenMeteo"}, "environment.temperature.feelsLikeHigh": {"value": "100\u00b0", "source": "PirateWeather"}, "environment.temperature.feelsLikeHighTime": {"value": "2026-09-05 17:00:00+00:00", "source": "PirateWeather"}, "environment.temperature.feelsLikeLow": {"value": "80\u00b0", "source": "PirateWeather"}, "environment.temperature.feelsLikeLowTime": {"value": "2026-09-06 10:00:00+00:00", "source": "PirateWeather"}, "environment.temperature.feelsLikeMax": {"value": "100\u00b0", "source": "PirateWeather"}, "environment.temperature.feelsLikeMaxTime": {"value": "2026-09-05 17:00:00+00:00", "source": "PirateWeather"}, "environment.temperature.feelsLikeMin": {"value": "83\u00b0", "source": "PirateWeather"}, "environment.temperature.feelsLikeMinTime": {"value": "2026-09-06 03:00:00+00:00", "source": "PirateWeather"}, "environment.temperature.high": {"value": "90\u00b0", "source": "OpenWeatherMap"}, "environment.temperature.highTime": {"value": "2026-09-05 18:00:00+00:00", "source": "PirateWeather"}, "environment.temperature.low": {"value": "82\u00b0", "source": "OpenWeatherMap"}, "environment.temperature.lowTime": {"value": "2026-09-06 06:00:00+00:00", "source": "PirateWeather"}, "environment.temperature.max": {"value": "88\u00b0", "source": "PirateWeather"}, "environment.temperature.maxTime": {"value": "2026-09-05 18:00:00+00:00", "source": "PirateWeather"}, "environment.temperature.min": {"value": "76\u00b0", "source": "PirateWeather"}, "environment.temperature.minTime": {"value": "2026-09-06 03:00:00+00:00", "source": "PirateWeather"}, "environment.temperature.temperature": {"value": "84\u00b0", "source": "OpenMeteo"}, "environment.visibility": {"value": "10.000 km", "source": "OpenWeatherMap"}, "environment.wind.direction": {"value": "180", "source": "OpenWeatherMap"}, "environment.wind.direction.120m": {"value": "ESE", "source": "OpenMeteo"}, "environment.wind.direction.180m": {"value": "S", "source": "OpenMeteo"}, "environment.wind.direction.80m": {"value": "SE", "source": "OpenMeteo"}, "environment.wind.direction.direction": {"value": "SE", "source": "OpenMeteo"}, "environment.wind.speed.120m": {"value": "14.8 mph", "source": "OpenMeteo"}, "environment.wind.speed.180m": {"value": "11.2 mph", "source": "OpenMeteo"}, "environment.wind.speed.80m": {"value": "18.7 mph", "source": "OpenMeteo"}, "environment.wind.speed.gust": {"value": "19.9 mph", "source": "OpenMeteo"}, "environment.wind.speed.speed": {"value": "12.2 mph", "source": "OpenMeteo"}, "indoor.battery.battery#bedroom": {"value": "0.7", "source": "Govee-bedroom"}, "indoor.battery.battery#terrarium": {"value": "0.7", "source": "Govee-terrarium"}, "indoor.humidity.humidity#bedroom": {"value": "48%", "source": "Govee-bedroom"}, "indoor.humidity.humidity#terrarium": {"value": "48%", "source": "Govee-terrarium"}, "indoor.rssi.rssi#bedroom": {"value": "-55 dBm", "source": "Govee-bedroom"}, "indoor.rssi.rssi#terrarium": {"value": "-55 dBm", "source": "Govee-terrarium"}, "indoor.temperature.dewpoint#bedroom": {"value": "55\u00b0", "source": "Govee-bedroom"}, "indoor.temperature.dewpoint#terrarium": {"value": "55\u00b0", "source": "Govee-terrarium"}, "indoor.temperature.heatIndex#bedroom": {"value": "77\u00b0", "source": "Govee-bedroom"}, "indoor.temperature.heatIndex#terrarium": {"value": "77\u00b0", "source": "Govee-terrarium"}, "indoor.temperature.temperature#bedroom": {"value": "77\u00b0", "source": "Govee-bedroom"}, "indoor.temperature.temperature#terrarium": {"value": "77\u00b0", "source": "Govee-terrarium"}};
 const GRADIENTS = {"CloudCoverGradient": [[0.0, "#5ba3d0"], [0.3, "#a8c4d8"], [0.6, "#c9cdd2"], [1.0, "#7e858c"]], "FabledSunsetGradientLux": [[0.0, "#231557"], [3600.0, "#44107a"], [6000.0, "#8f6aae"], [7200.0, "#cc6b8e"], [10800.0, "#f3a469"], [18000.0, "#f7b731"], [36000.0, "#fffefa"]], "FabledSunsetGradientWattsPerSquareMeter": [[0.0, "#231557"], [30.0, "#44107a"], [50.0, "#8f6aae"], [60.0, "#cc6b8e"], [90.0, "#f3a469"], [150.0, "#f7b731"], [300.0, "#fffefa"]], "HappyFisher": [[0.0, "#89f7fe"], [1.0, "#66a6ff"]], "HumidityGradient": [[0.0, "#e8b87d"], [0.25, "#f0dfc0"], [0.45, "#dceae4"], [0.6, "#8fc7be"], [0.8, "#4e9c93"], [1.0, "#2e6e73"]], "PlumPlate": [[0.0, "#667eea"], [1.0, "#764ba2"]], "PrecipitationProbabilityGradient": [[0.0, "#00c6fb"], [1.0, "#e7f0fd"], [1.0, "#accbee"]], "PrecipitationRateGradient": [[0.1, "#3f51b1"], [0.2, "#3f51b1"], [1.0, "#5a55ae"], [1.5, "#7b5fac"], [3.0, "#8f6aae"], [5.0, "#a86aa4"], [12.0, "#cc6b8e"], [24.0, "#f18271"], [30.0, "#f3a469"], [35.0, "#f7c978"]], "PressureGradient": [[28.0, "#6c7a9c"], [29.2, "#8fa5bf"], [29.92, "#e8e6df"], [30.4, "#f0c987"], [31.0, "#e8a552"]], "PurpleSunset": [[0.0, "#8f6aae"], [0.5, "#f3a469"], [1.0, "#f7b731"]], "RainbowDefault": [[0.0, "#c000ff"], [0.33, "#00c0ff"], [0.66, "#ffff00"], [1.0, "#ff0000"]], "RainbowPercentage": [[0.0, "#c000ff"], [0.33, "#00c0ff"], [0.66, "#ffff00"], [1.0, "#ff0000"]], "RainbowTemperature": [[-40.0, "#c000ff"], [20.0, "#00c0ff"], [90.0, "#ffff00"], [160.0, "#ff0000"]], "RipeMalinkaGradient": [[0.0, "#f093fb"], [10.0, "#f5576c"], [20.0, "#f7b731"], [30.0, "#f9f64f"], [40.0, "#a9f7a9"], [50.0, "#5ff781"], [60.0, "#00e756"], [70.0, "#00b7eb"], [80.0, "#0052f3"], [90.0, "#0f00f9"], [100.0, "#7b00d4"]], "TemperatureGradient": [[-10.0, "#94b7ff"], [7.0, "#b2cbff"], [12.0, "#f2f2ff"], [17.0, "#f2f2ff"], [22.0, "#fffefa"], [28.0, "#ffb75d"], [30.0, "#f3a469"], [32.0, "#f18271"], [38.0, "#cc6b8e"], [40.0, "#a86aa4"], [50.0, "#8f6aae"]], "UVIndexGradient": [[2.0, "#3ea72d"], [5.0, "#fff300"], [7.0, "#f18b00"], [10.0, "#e53210"], [11.0, "#b567a4"], [14.0, "#8b5fa8"]], "WindSpeedGradient": [[0.0, "#5b7c99"], [5.0, "#7fb2c4"], [12.0, "#94d2a5"], [20.0, "#f2d06b"], [30.0, "#e8963c"], [45.0, "#d1495b"]]};
 
 // ---------- helpers ----------
 const el = (t, cls, txt) => { const n = document.createElement(t);
   if (cls) n.className = cls; if (txt != null) n.textContent = txt; return n; };
 const PLACEHOLDER = '•••';
+
+// Real values, captured from a running backend. A mock built on placeholders
+// lies about width: '100°' and '•••' occupy different space, and a layout
+// judged on the second breaks on the first.
+function splitValue(raw) {
+  if (raw == null) return null;
+  const iso = /^\d{4}-\d{2}-\d{2}[ T]/.test(raw);
+  if (iso) {
+    const d = new Date(raw.replace(' ', 'T'));
+    return { value: d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})
+                     .replace(' ', '').toLowerCase(), unit: '' };
+  }
+  const m = String(raw).match(/^(-?[\d.,]+)\s*(.*)$/);
+  return m ? { value: m[1], unit: m[2] || '' } : { value: String(raw), unit: '' };
+}
+function resolve(item) {
+  if (item.value !== undefined) return { value: item.value, unit: item.unit || '' };
+  const hit = item.key && SNAPSHOT[item.key];
+  if (!hit) return null;                    // no publisher -> ••• , honestly
+  const sv = splitValue(hit.value);
+  return { value: sv.value, unit: item.unit !== undefined ? item.unit : sv.unit };
+}
+function numeric(item) {                    // 0..1 position for a gauge needle
+  const r = resolve(item);
+  if (!r) return 0;
+  const n = parseFloat(String(r.value).replace(/,/g, ''));
+  if (isNaN(n)) return 0;
+  const min = item.min ?? 0, max = item.max ?? 100;
+  return Math.max(0, Math.min(1, (n - min) / ((max - min) || 1)));
+}
 
 function gradientCss(name, dir='90deg') {
   const stops = GRADIENTS[name]; if (!stops) return '#fff';
@@ -172,7 +228,7 @@ function gauge(item) {
   const arc = d.arc || {};
   const start = arc['start-angle'] ?? -120, end = arc['end-angle'] ?? 120;
   const weight = parseFloat(arc.weight ?? '13') / 100;
-  const frac = d._fraction ?? 0.42;              // where the needle sits, mockup-only
+  const frac = item._fraction ?? (item.key ? numeric(item) : 0.42);
   const R = 42, cx = 50, cy = 50;
   const uid = 'g' + Math.random().toString(36).slice(2, 8);
   const pt = a => { const r = (a - 90) * Math.PI / 180;
@@ -197,9 +253,9 @@ function gauge(item) {
             stroke-linecap="round"/>
     </svg>`;
   const vl = d['value-label'] || {};
-  if (vl.visible !== false && item.label) {
-    const l = el('div', 'glabel', item.label);
-    wrap.appendChild(l);
+  const r = item.label ? { value: item.label, unit: '' } : resolve(item);
+  if (vl.visible !== false && r) {
+    wrap.appendChild(el('div', 'glabel', `${r.value}${r.unit ? ' ' + r.unit : ''}`));
   }
   return wrap;
 }
@@ -253,14 +309,49 @@ function realtimeText(item) {
   if (item.title) n.appendChild(el('div', 'title', item.title));
   const v = el('div', 'value' + (d.font === 'Roboto Mono' ? ' mono' : ''));
   v.style.fontSize = (item.scale ?? 1) + 'em';
-  if (item.value == null) {
+  const r = resolve(item);
+  if (r == null) {
     v.appendChild(el('span', 'placeholder', PLACEHOLDER));
   } else {
-    v.appendChild(document.createTextNode(item.value));
-    if (item.unit) v.appendChild(el('span', 'unit', item.unit));
+    v.appendChild(document.createTextNode(r.value));
+    if (r.unit) v.appendChild(el('span', 'unit' + (r.unit === '°' ? ' degree' : ''), r.unit));
   }
   n.appendChild(v);
   return n;
+}
+
+// value-stack: items are keys, optionally {key: {title: {text}}}, plus `spacer`.
+// This is the densest thing the config can express and the reason a board can
+// carry forty readings without looking like a spreadsheet.
+function valueStack(item) {
+  const n = el('div', 'vstack');
+  (item.items || []).forEach(entry => {
+    let key = entry, opts = {};
+    if (entry && typeof entry === 'object') {
+      key = Object.keys(entry)[0];
+      opts = entry[key] || {};
+    }
+    if (key === 'spacer') { n.appendChild(el('div', 'vspacer')); return; }
+    const hit = SNAPSHOT[key];
+    const row = el('div', 'vrow' + (hit ? '' : ' missing'));
+    const label = (opts.title && opts.title.text) || prettyKey(key);
+    row.appendChild(el('div', 'k', label));
+    const v = el('div', 'v');
+    if (!hit) { v.textContent = PLACEHOLDER; }
+    else {
+      const sv = splitValue(hit.value);
+      v.appendChild(document.createTextNode(sv.value));
+      if (sv.unit) v.appendChild(el('span', 'u', sv.unit));
+    }
+    row.appendChild(v);
+    n.appendChild(row);
+  });
+  return n;
+}
+function prettyKey(key) {
+  const base = String(key).split('#')[0].split('.').pop();
+  return base.replace(/([a-z])([A-Z])/g, '$1 $2')
+             .replace(/^./, c => c.toUpperCase());
 }
 
 function clock(item) {
@@ -282,6 +373,7 @@ function build(item) {
     case 'graph':          inner = graph(item); break;
     case 'realtime.gauge': inner = gauge(item); break;
     case 'realtime.text':  inner = realtimeText(item); break;
+    case 'value-stack':    inner = valueStack(item); break;
     case 'clock':          inner = clock(item); break;
     case 'moon':           inner = el('div', 'moon'); break;
     case 'titled-group': {
@@ -294,8 +386,23 @@ function build(item) {
     }
     case 'group':
     default: {
-      inner = el('div', 'panel');
-      (item.items || []).forEach(c => inner.appendChild(wrapCell(c)));
+      const positioned = (item.items || []).some(c => c.geometry);
+      if (positioned) {
+        inner = el('div', 'free');
+        (item.items || []).forEach(c => {
+          const g = c.geometry || {};
+          const box = el('div', 'abs');
+          box.style.left = g.x ?? '0%';
+          box.style.top = g.y ?? '0%';
+          box.style.width = g.width ?? '100%';
+          box.style.height = g.height ?? '100%';
+          box.appendChild(build(c));
+          inner.appendChild(box);
+        });
+      } else {
+        inner = el('div', 'panel');
+        (item.items || []).forEach(c => inner.appendChild(wrapCell(c)));
+      }
     }
   }
   return inner;
@@ -332,10 +439,17 @@ function lint(root) {
       if (sized.length) {
         const sum = sized.reduce((a, i) => a + parseFloat(i.size), 0);
         if (sized.length === kids.length) {
-          if (sum >= 100)
-            out.push(['bad', `${path}: every child is sized and they total ${sum.toFixed(0)}%. With no unsized sibling to absorb it, spacing has nowhere to come from and the last one overflows. Leave a child unsized, or drop the total below 100%.`]);
+          // Spacing is only ever deducted from an unsized remainder. With
+          // every child sized there is none, so the spacing lands on top of
+          // the total and the last child runs off the edge - silently. How
+          // much depends on the rendered size, so flag the shape, not a
+          // number: leaving one child unsized removes the whole class of bug.
+          if (item.spacing)
+            out.push(['warn', `${path}: all ${kids.length} children are sized (${sum.toFixed(0)}%) and the stack has spacing:${item.spacing}. Nothing absorbs that spacing, so the last child is pushed off the edge. Leave one child unsized.`]);
+          else if (sum > 100)
+            out.push(['bad', `${path}: sizes total ${sum.toFixed(0)}%.`]);
           else
-            out.push(['ok', `${path}: all ${kids.length} children sized, ${sum.toFixed(0)}% — room left for spacing ✓`]);
+            out.push(['ok', `${path}: all ${kids.length} sized, ${sum.toFixed(0)}%, no spacing ✓`]);
         } else {
           if (sum >= 100)
             out.push(['bad', `${path}: sized children already claim ${sum.toFixed(0)}%, leaving nothing for the ${kids.length - sized.length} unsized one(s).`]);
@@ -353,12 +467,18 @@ function lint(root) {
         out.push(['warn', `${path}: major.enabled:false hides the ticks but NOT their labels — a stray number stays in the arc. Set major.labels.enabled:false too.`]);
     }
     if (item.type === 'realtime.text' || item.type === 'realtime.gauge') {
-      const mocked = item.value != null || item.label != null;
-      if (item.key && !mocked && item.placeholderOk !== true)
-        out.push(['warn', `${path}: ${item.key} has no mocked value — it will render ${PLACEHOLDER} unless a plugin publishes it.`]);
+      if (item.key && !SNAPSHOT[item.key] && item.value == null && item.label == null)
+        out.push(['bad', `${path}: ${item.key} is not in the snapshot — nothing publishes it, so it renders ${PLACEHOLDER} forever. Density built from placeholders is fake density.`]);
       const d = item.display || {};
       if (typeof d.unit_symbol === 'boolean' || typeof d.unitLabel === 'boolean')
         out.push(['bad', `${path}: units are strings, not booleans — True renders the literal word "True".`]);
+    }
+    if (item.type === 'value-stack') {
+      (item.items || []).forEach(entry => {
+        const key = (entry && typeof entry === 'object') ? Object.keys(entry)[0] : entry;
+        if (key !== 'spacer' && !SNAPSHOT[key])
+          out.push(['bad', `${path}: ${key} is not in the snapshot — it renders ${PLACEHOLDER} forever.`]);
+      });
     }
     if (item.type === 'stack' && item.shared && item.items)
       out.push(['warn', `${path}: shared: overrides a child's title:false — a child told not to have a title gets one anyway.`]);
@@ -378,6 +498,8 @@ function toYaml(item, indent = 0) {
   if (item.key)    s += `${p}key: ${item.key}\n`;
   if (item.title && item.type !== 'titled-group') s += `${p}title: {text: ${item.title}}\n`;
   if (item.type === 'titled-group' && item.title) s += `${p}title: ${item.title}\n`;
+  if (item.geometry) s += `${p}geometry: {${Object.entries(item.geometry)
+        .map(([k, v]) => `${k}: ${v}`).join(', ')}}\n`;
   if (item.direction) s += `${p}direction: ${item.direction}\n`;
   if (item.spacing)   s += `${p}spacing: ${item.spacing}\n`;
   if (item.dividers)  s += `${p}dividers: {enabled: ${!!item.dividers.enabled}}\n`;
@@ -402,6 +524,18 @@ function toYaml(item, indent = 0) {
         f.gradient ? `, gradient: ${f.gradient}` : ''}${
         f.color ? `, color: '${f.color}'` : ''}}\n`;
     });
+  }
+  if (item.type === 'value-stack') {
+    s += `${p}items:\n`;
+    (item.items || []).forEach(entry => {
+      if (entry && typeof entry === 'object') {
+        const k = Object.keys(entry)[0], o = entry[k] || {};
+        s += (o.title && o.title.text)
+          ? `${p}  - ${k}: {title: {text: ${o.title.text}}}\n`
+          : `${p}  - ${k}\n`;
+      } else s += `${p}  - ${entry}\n`;
+    });
+    return s;
   }
   if (item.items && item.items.length) {
     s += `${p}items:\n`;
@@ -446,60 +580,182 @@ function render() {
 // Mockup-only keys are prefixed with _ and are stripped from the YAML sketch.
 // ============================================================================
 const BOARD = {
-  type: 'stack', direction: 'Vertical', spacing: '8px',
+  // A cross-section, read top to bottom: sky, surface, ground. The unusual
+  // data the plugins already publish and nothing displays — cloud by layer,
+  // wind at three altitudes, soil at four depths — is the spine of it.
+  type: 'stack', direction: 'Vertical', spacing: '10px',
   items: [
-    { type: 'stack', size: '54%', direction: 'Horizontal', spacing: '10px',
-      items: [
-        { type: 'stack', size: '32%', direction: 'Vertical',
-          items: [
-            { type: 'clock', size: '46%', date: 'Friday, September 4th',
-              time: '3:10', ampm: 'pm', scale: 4.4 },
-            { type: 'stack', size: '51%', direction: 'Horizontal',
-              dividers: { enabled: true },
-              items: [
-                { type: 'titled-group', title: 'Indoor', size: '48%', items: [
-                  { type: 'realtime.text', key: 'indoor.temperature.temperature#bedroom',
-                    value: '77', unit: '°', scale: 3.2,
-                    display: { font: 'Roboto Mono', unitPosition: 'Inline' } }]},
-                { type: 'titled-group', title: 'Outdoor', size: '48%', items: [
-                  { type: 'realtime.text', key: 'environment.temperature.temperature',
-                    value: '82', unit: '°', scale: 3.2,
-                    display: { font: 'Roboto Mono', unitPosition: 'Inline' } }]},
-              ]},
-          ]},
-        { type: 'graph', size: '65%', figures: [
-            { name: 'temperature', key: 'environment.temperature.temperature',
-              gradient: 'TemperatureGradient', weight: 6, amp: 30, off: 0.30 },
-            { name: 'feelsLike', key: 'environment.temperature.feelsLike',
-              gradient: 'TemperatureGradient', weight: 4, amp: 26, off: 0.38 },
-            { name: 'dewpoint', key: 'environment.temperature.dewpoint',
-              color: '#5882ff', weight: 3, dash: '5 5', amp: 10, off: 0.60 },
-          ]},
-      ]},
-    { type: 'stack', size: '43%', direction: 'Horizontal', spacing: '10px',
+
+    // ================= SKY =================================================
+    { type: 'stack', size: '19%', direction: 'Horizontal', spacing: '12px',
       dividers: { enabled: true },
       items: [
-        { type: 'titled-group', title: 'Wind', size: '24%', items: [
-          { type: 'realtime.gauge', key: 'environment.wind.speed.speed', label: '9.9 mph',
-            display: { arc: { gradient: 'WindSpeedGradient', weight: '13%' },
-                       needle: { length: '80%', width: '7%' },
-                       'value-label': { visible: true, position: 'below' } },
-            _fraction: 0.38 }]},
-        { type: 'titled-group', title: 'Humidity', size: '24%', items: [
-          { type: 'realtime.gauge', key: 'environment.humidity.humidity', label: '74%',
-            display: { arc: { gradient: 'HumidityGradient', weight: '13%' },
-                       needle: { length: '80%', width: '7%' } },
-            _fraction: 0.74 }]},
-        { type: 'titled-group', title: 'Cloud', size: '24%', items: [
-          { type: 'realtime.gauge', key: 'environment.clouds.cover.cover', label: '100%',
-            display: { arc: { gradient: 'CloudCoverGradient', weight: '13%' },
-                       needle: { length: '80%', width: '7%' } },
-            _fraction: 1.0 }]},
-        { type: 'titled-group', title: 'UV', size: '24%', items: [
-          { type: 'realtime.gauge', key: 'environment.light.uvi', label: '3',
-            display: { arc: { gradient: 'UVIndexGradient', weight: '13%' },
-                       needle: { length: '80%', width: '7%' } },
-            _fraction: 0.27 }]},
+        { type: 'group', size: '26%', items: [
+          { type: 'clock', date: 'Friday, September 4th', time: '3:10',
+            ampm: 'pm', scale: 3.4 }]},
+
+        { type: 'titled-group', size: '17%', title: 'Cloud', items: [
+          { type: 'value-stack', items: [
+            { 'environment.clouds.cover.high': { title: { text: 'High' } } },
+            { 'environment.clouds.cover.mid':  { title: { text: 'Mid'  } } },
+            { 'environment.clouds.cover.low':  { title: { text: 'Low'  } } },
+          ]}]},
+
+        { type: 'titled-group', size: '19%', title: 'Wind Aloft', items: [
+          { type: 'value-stack', items: [
+            { 'environment.wind.speed.180m': { title: { text: '180 m' } } },
+            { 'environment.wind.speed.120m': { title: { text: '120 m' } } },
+            { 'environment.wind.speed.80m':  { title: { text: '80 m'  } } },
+          ]}]},
+
+        { type: 'titled-group', size: '17%', title: 'Sun', items: [
+          { type: 'value-stack', items: [
+            { 'environment.light.sunrise': { title: { text: 'Rise' } } },
+            { 'environment.light.sunset':  { title: { text: 'Set'  } } },
+            { 'astronomy.moon.phase':      { title: { text: 'Moon' } } },
+          ]}]},
+
+        { type: 'titled-group', title: 'Air', items: [
+          { type: 'value-stack', items: [
+            'environment.pressure.pressure',
+            { 'environment.visibility': { title: { text: 'Visibility' } } },
+            { 'environment.soil.freezingLevelHeight': { title: { text: 'Freezing' } } },
+          ]}]},
+      ]},
+
+    // ================= SURFACE =============================================
+    // The hero gets its own column. Overlaying it on the graph was tried and
+    // read badly - the curves run straight through a 7em number. Overlay is
+    // for small things inside their own shape, like a gauge readout.
+    { type: 'stack', direction: 'Horizontal', spacing: '12px',
+      items: [
+        { type: 'stack', size: '23%', direction: 'Vertical', spacing: '6px',
+          items: [
+            { type: 'group', size: '58%', items: [
+              { type: 'stack', direction: 'Vertical', items: [
+                { type: 'realtime.text', size: '72%',
+                  key: 'environment.temperature.temperature', scale: 7.0,
+                  display: { font: 'Roboto Mono', unitPosition: 'Inline' } },
+                { type: 'realtime.text', key: 'environment.condition.condition',
+                  scale: 1.5 },
+              ]}]},
+            { type: 'group', items: [
+              { type: 'value-stack', items: [
+                { 'environment.temperature.feelsLike': { title: { text: 'Feels' } } },
+                { 'environment.temperature.dewpoint':  { title: { text: 'Dew Point' } } },
+                { 'environment.humidity.humidity':     { title: { text: 'Humidity' } } },
+                'spacer',
+                { 'environment.temperature.high': { title: { text: 'High' } } },
+                { 'environment.temperature.low':  { title: { text: 'Low'  } } },
+              ]}]},
+          ]},
+
+        { type: 'graph', figures: [
+            { name: 'temperature', key: 'environment.temperature.temperature',
+              gradient: 'TemperatureGradient', weight: 6, amp: 30, off: 0.34 },
+            { name: 'feelsLike', key: 'environment.temperature.feelsLike',
+              gradient: 'TemperatureGradient', weight: 3.5, amp: 26, off: 0.41 },
+            { name: 'dewpoint', key: 'environment.temperature.dewpoint',
+              color: '#5882ff', weight: 2.5, dash: '5 5', amp: 8, off: 0.66 },
+            { name: 'precipitation', key: 'environment.precipitation.precipitation',
+              gradient: 'PrecipitationRateGradient', weight: 3, amp: 14, off: 0.90 },
+          ]},
+      ]},
+
+    // ================= GROUND ==============================================
+    { type: 'stack', size: '34%', direction: 'Horizontal', spacing: '12px',
+      dividers: { enabled: true },
+      items: [
+
+        // Indoor, one region per sensor: a big reading with its own detail
+        // stack, so a bedroom number can never be read as the terrarium's.
+        { type: 'titled-group', size: '17%', title: 'Bedroom', items: [
+          { type: 'stack', direction: 'Vertical', items: [
+            { type: 'realtime.text', size: '46%',
+              key: 'indoor.temperature.temperature#bedroom', scale: 3.6,
+              display: { font: 'Roboto Mono', unitPosition: 'Inline' } },
+            { type: 'value-stack', items: [
+                { 'indoor.humidity.humidity#bedroom': { title: { text: 'Humidity' } } },
+                { 'indoor.temperature.dewpoint#bedroom': { title: { text: 'Dew Point' } } },
+                { 'indoor.battery.battery#bedroom': { title: { text: 'Battery' } } },
+              ]},
+          ]}]},
+
+        { type: 'titled-group', size: '17%', title: 'Terrarium', items: [
+          { type: 'stack', direction: 'Vertical', items: [
+            { type: 'realtime.text', size: '46%',
+              key: 'indoor.temperature.temperature#terrarium', scale: 3.6,
+              display: { font: 'Roboto Mono', unitPosition: 'Inline' } },
+            { type: 'value-stack', items: [
+                { 'indoor.humidity.humidity#terrarium': { title: { text: 'Humidity' } } },
+                { 'indoor.temperature.dewpoint#terrarium': { title: { text: 'Dew Point' } } },
+                { 'indoor.battery.battery#terrarium': { title: { text: 'Battery' } } },
+              ]},
+          ]}]},
+
+        // Wind: the gauge carries the reading inside its own ring, which is
+        // what `value-label: {visible: false}` plus a positioned sibling is
+        // for — the built-in centre position is broken.
+        { type: 'titled-group', size: '15%', title: 'Wind', items: [
+          { type: 'group', items: [
+            { type: 'realtime.gauge',
+              geometry: { x: '0%', y: '0%', width: '100%', height: '100%' },
+              key: 'environment.wind.speed.speed', min: 0, max: 25,
+              display: { arc: { gradient: 'WindSpeedGradient', weight: '12%' },
+                         needle: { length: '76%', width: '6%' },
+                         major: { enabled: false, labels: { enabled: false } },
+                         'value-label': { visible: false } } },
+            { type: 'realtime.text',
+              geometry: { x: '22%', y: '38%', width: '56%', height: '30%' },
+              key: 'environment.wind.speed.speed', scale: 1.9,
+              display: { font: 'Roboto Mono', unitPosition: 'Hidden' } },
+            { type: 'value-stack',
+              geometry: { x: '4%', y: '74%', width: '92%', height: '26%' },
+              items: [
+                { 'environment.wind.speed.gust': { title: { text: 'Gust' } } },
+                { 'environment.wind.direction.direction': { title: { text: 'Dir' } } },
+              ]},
+          ]}]},
+
+        { type: 'titled-group', size: '15%', title: 'UV & Light', items: [
+          { type: 'group', items: [
+            { type: 'realtime.gauge',
+              geometry: { x: '0%', y: '0%', width: '100%', height: '100%' },
+              key: 'environment.light.uvi', min: 0, max: 11,
+              display: { arc: { gradient: 'UVIndexGradient', weight: '12%' },
+                         needle: { length: '76%', width: '6%' },
+                         major: { enabled: false, labels: { enabled: false } },
+                         'value-label': { visible: false } } },
+            { type: 'realtime.text',
+              geometry: { x: '22%', y: '38%', width: '56%', height: '30%' },
+              key: 'environment.light.uvi', scale: 1.9,
+              display: { font: 'Roboto Mono', unitPosition: 'Hidden' } },
+            { type: 'value-stack',
+              geometry: { x: '4%', y: '74%', width: '92%', height: '26%' },
+              items: [
+                { 'environment.light.irradiance.direct':  { title: { text: 'Direct' } } },
+                { 'environment.light.irradiance.diffuse': { title: { text: 'Diffuse' } } },
+              ]},
+          ]}]},
+
+        // Soil: four depths of temperature and moisture. Nothing else on any
+        // weather display shows this, and the plugin already publishes it.
+        { type: 'titled-group', size: '17%', title: 'Soil Temp', items: [
+          { type: 'value-stack', items: [
+            { 'environment.soil.temperature.6cm':  { title: { text: '6 cm'  } } },
+            { 'environment.soil.temperature.18cm': { title: { text: '18 cm' } } },
+            { 'environment.soil.temperature.54cm': { title: { text: '54 cm' } } },
+            'spacer',
+            { 'environment.precipitation.probability': { title: { text: 'Precip' } } },
+          ]}]},
+
+        { type: 'titled-group', title: 'Soil Moisture', items: [
+          { type: 'value-stack', items: [
+            { 'environment.soil.moisture.1-3cm':   { title: { text: '1–3 cm'   } } },
+            { 'environment.soil.moisture.3-9cm':   { title: { text: '3–9 cm'   } } },
+            { 'environment.soil.moisture.9-27cm':  { title: { text: '9–27 cm'  } } },
+            { 'environment.soil.moisture.27-81cm': { title: { text: '27–81 cm' } } },
+          ]}]},
       ]},
   ],
 };
