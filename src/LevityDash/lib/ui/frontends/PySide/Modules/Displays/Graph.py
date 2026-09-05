@@ -377,7 +377,13 @@ class GraphItemData(Stateful, tag=...):
 		self.__clearAxis(Axis.Both)
 		self.graphic.onDataChange()
 		if self.labels.enabled:
-			self.labels.refresh()
+			# onDataChange, not refresh: only the former calls resetAxis, which
+			# invalidates the labels' cached normalised x/y. refresh() alone
+			# recomputes each label's *text* and then places it with
+			# first-generation coordinates, so the plot moved and its labels
+			# stayed put - and pressing the refresh key made no difference,
+			# because this is the path the refresh key takes.
+			self.labels.onDataChange(Axis.Both)
 		self.log.info(f'GraphItemData[{self.key.name}] refreshed')
 
 	@property
