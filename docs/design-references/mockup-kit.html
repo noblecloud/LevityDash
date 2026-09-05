@@ -23,7 +23,7 @@ code { font-family:'Roboto Mono', monospace; font-size:.9em; color:#cfd8ff; }
    value has. */
 .board { background:var(--bg); color:var(--fg); aspect-ratio:16/10; width:100%;
          position:relative; overflow:hidden; font-family:Roboto, sans-serif;
-         border:1px solid #333; container-type:size; font-size:1.35cqw; }
+         border:1px solid #333; container-type:size; font-size:1.95cqw; }
 
 /* ---- stack: children share space by `size`, spacing costs real room ---- */
 .stack { display:flex; width:100%; height:100%; }
@@ -50,7 +50,7 @@ code { font-family:'Roboto Mono', monospace; font-size:.9em; color:#cfd8ff; }
 /* ---- panel / group / titled-group ---- */
 .panel { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column;
          align-items:center; justify-content:center; position:relative; }
-.titled-group > .heading { font-size:1.05em; color:var(--fg); opacity:.95;
+.titled-group > .heading { font-size:1.15em; color:var(--fg); opacity:.95;
                            padding-top:2px; }
 .titled-group > .body { flex:1; width:100%; display:flex; align-items:center;
                         justify-content:center; min-height:0; }
@@ -58,7 +58,7 @@ code { font-family:'Roboto Mono', monospace; font-size:.9em; color:#cfd8ff; }
 /* ---- realtime.text ---- */
 .rt { display:flex; flex-direction:column; align-items:center; justify-content:center;
       line-height:1; width:100%; height:100%; }
-.rt .title { color:var(--fg); opacity:.85; font-size:.62em; letter-spacing:.01em;
+.rt .title { color:var(--fg); opacity:.85; font-size:.72em; letter-spacing:.01em;
              margin-bottom:.25em; }
 .rt .value { font-weight:300; white-space:nowrap; }
 .rt .value.mono { font-family:'Roboto Mono', monospace; }
@@ -73,11 +73,12 @@ code { font-family:'Roboto Mono', monospace; font-size:.9em; color:#cfd8ff; }
 
 /* ---- value-stack: the dense primitive, label left / value right ---- */
 .vstack { display:flex; flex-direction:column; width:100%; height:100%;
-          justify-content:center; padding:0 .35em; }
-.vrow { display:flex; align-items:baseline; gap:.6em; line-height:1.25; }
-.vrow .k { flex:1; min-width:0; font-size:.66em; opacity:.72;
+          justify-content:space-evenly; padding:.15em .4em; }
+.vstack > * { max-width:10.5em; width:100%; margin:0 auto; }
+.vrow { display:flex; align-items:baseline; gap:.5em; line-height:1.1; }
+.vrow .k { flex:1; min-width:0; font-size:.82em; opacity:.75;
            white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.vrow .v { font-family:'Roboto Mono', monospace; font-size:.82em;
+.vrow .v { font-family:'Roboto Mono', monospace; font-size:1.02em;
            white-space:nowrap; text-align:right; }
 .vrow .v .u { font-size:.72em; opacity:.7; margin-left:.15em; }
 .vrow.missing .v { opacity:.55; letter-spacing:.1em; }
@@ -98,13 +99,32 @@ code { font-family:'Roboto Mono', monospace; font-size:.9em; color:#cfd8ff; }
 .graph .vline { stroke:var(--fg); opacity:.16; stroke-width:1; }
 .graph .vline.dashed { stroke-dasharray:2 4; opacity:.10; }
 
+/* ---- mini-graph: a sparkline. `type: mini-graph` is a real item and the
+       densest way to show a trend beside a number. ---- */
+.spark { width:100%; height:100%; position:relative; }
+.spark svg { width:100%; height:100%; display:block; }
+.spark .now { stroke:#fff; opacity:.3; stroke-width:1; }
+.spark .htick { fill:var(--fg); opacity:.45; font-size:9px; }
+
+/* ---- static label: `type: label` / `type: text` ---- */
+.slabel { width:100%; height:100%; display:flex; align-items:center;
+          color:var(--fg); line-height:1.1; }
+.slabel[data-align="left"]   { justify-content:flex-start; }
+.slabel[data-align="center"] { justify-content:center; }
+.slabel[data-align="right"]  { justify-content:flex-end; }
+.slabel.section { opacity:.45; letter-spacing:.22em; text-transform:uppercase;
+                  font-size:.62em; }
+.slabel.rule { border-bottom:1px solid var(--fg); }
+
 /* ---- clock / moon ---- */
 .clock { text-align:center; line-height:1; }
 .clock .date { font-size:.34em; opacity:.95; }
 .clock .time { font-weight:300; }
 .clock .ampm { font-size:.42em; }
-.moon { border-radius:50%; background:#1c1c1c; aspect-ratio:1; width:38%;
-        box-shadow:inset -6px 0 10px rgba(255,255,255,.06); }
+.moon { border-radius:50%; aspect-ratio:1; width:70%; max-height:88%;
+        background:#0d0d0d; position:relative; overflow:hidden;
+        box-shadow:inset 0 0 0 1px rgba(255,255,255,.14); }
+.moon .lit { position:absolute; inset:0; background:#e8e6df; border-radius:50%; }
 
 /* ---- inspector ---- */
 .grid2 { display:grid; grid-template-columns: 1fr 380px; gap:20px; align-items:start; }
@@ -354,6 +374,62 @@ function prettyKey(key) {
              .replace(/^./, c => c.toUpperCase());
 }
 
+// mini-graph: one figure, compact, optional now-indicator. Beside a value it
+// answers "and which way is it going?", which a number never can.
+function miniGraph(item) {
+  const n = el('div', 'spark');
+  const W = 300, H = 90;
+  const f = (item.figures || [{}])[0] || {};
+  const stops = gradientStops(f.gradient || 'RainbowDefault')
+    .map(st => `<stop offset="${(st.off*100).toFixed(1)}%" stop-color="${st.col}"/>`).join('');
+  const uid = 'sp' + Math.random().toString(36).slice(2, 7);
+  let d = '', area = '';
+  const pts = [];
+  for (let i = 0; i <= 32; i++) {
+    const x = (i / 32) * W;
+    const y = H * 0.5 + Math.sin(i / 4 + (f.seed ?? 1)) * (f.amp ?? 22)
+              + Math.sin(i / 9 + (f.seed ?? 1) * 2) * (f.amp ?? 22) * 0.45;
+    pts.push([x, y]);
+    d += (i ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1) + ' ';
+  }
+  if (f.fill) area = `<path d="${d} L ${W} ${H} L 0 ${H} Z" fill="url(#${uid})" opacity=".16"/>`;
+  const nowX = W * (item.nowAt ?? 0.62);
+  n.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+      <defs><linearGradient id="${uid}" x1="0" y1="0" x2="1" y2="0">${stops}</linearGradient></defs>
+      ${area}
+      <path d="${d}" fill="none" stroke="${f.color || `url(#${uid})`}"
+            stroke-width="${f.weight ?? 4}" stroke-linecap="round"/>
+      ${item.indicator === false ? '' :
+        `<line class="now" x1="${nowX}" y1="0" x2="${nowX}" y2="${H}"/>`}
+    </svg>`;
+  return n;
+}
+
+function staticLabel(item) {
+  const n = el('div', 'slabel' + (item.variant ? ' ' + item.variant : ''),
+               item.text || '');
+  n.dataset.align = item.align || 'left';
+  n.style.fontSize = (item.scale ?? 1) + 'em';
+  return n;
+}
+
+function moon(item) {
+  // Drawn rather than faked: the lit disc with a shadow disc swept across it,
+  // which is what a phase actually looks like.
+  const phase = item.phase ?? 0.79;           // 0..1 illuminated
+  const n = el('div', 'moon');
+  const shift = (1 - 2 * phase) * 100;        // +100 new .. -100 full
+  n.innerHTML = `<svg viewBox="0 0 100 100" style="width:100%;height:100%;display:block">
+      <defs>
+        <mask id="mk${Math.random().toString(36).slice(2,7)}"></mask>
+      </defs>
+      <circle cx="50" cy="50" r="48" fill="#0d0d0d" stroke="#ffffff22"/>
+      <circle cx="50" cy="50" r="48" fill="#e8e6df"/>
+      <ellipse cx="${50 + shift * 0.48}" cy="50" rx="48" ry="48" fill="#0d0d0d"/>
+    </svg>`;
+  return n;
+}
+
 function clock(item) {
   const n = el('div', 'clock');
   n.style.fontSize = (item.scale ?? 1) + 'em';
@@ -375,7 +451,10 @@ function build(item) {
     case 'realtime.text':  inner = realtimeText(item); break;
     case 'value-stack':    inner = valueStack(item); break;
     case 'clock':          inner = clock(item); break;
-    case 'moon':           inner = el('div', 'moon'); break;
+    case 'moon':           inner = moon(item); break;
+    case 'mini-graph':     inner = miniGraph(item); break;
+    case 'label':
+    case 'text':           inner = staticLabel(item); break;
     case 'titled-group': {
       inner = el('div', 'panel titled-group');
       inner.appendChild(el('div', 'heading', item.title || ''));
@@ -494,6 +573,8 @@ function toYaml(item, indent = 0) {
   let s = `${pad}- type: ${item.type}\n`;
   const p = pad + '  ';
   if (item.name)   s += `${p}name: ${item.name}\n`;
+  if (item.text && (item.type === 'label' || item.type === 'text'))
+    s += `${p}text: ${item.text}\n`;
   if (item.size)   s += `${p}size: ${item.size}\n`;
   if (item.key)    s += `${p}key: ${item.key}\n`;
   if (item.title && item.type !== 'titled-group') s += `${p}title: {text: ${item.title}}\n`;
@@ -580,61 +661,79 @@ function render() {
 // Mockup-only keys are prefixed with _ and are stripped from the YAML sketch.
 // ============================================================================
 const BOARD = {
-  // A cross-section, read top to bottom: sky, surface, ground. The unusual
-  // data the plugins already publish and nothing displays — cloud by layer,
-  // wind at three altitudes, soil at four depths — is the spine of it.
-  type: 'stack', direction: 'Vertical', spacing: '10px',
+  // A cross-section: sky, surface, ground. Every reading is in the snapshot,
+  // and each region uses the presentation that suits its data rather than
+  // defaulting to a number — sparklines for trends, a ring where angular
+  // position means something, a phase disc for the moon, dense stacks for
+  // profiles.
+  type: 'stack', direction: 'Vertical', spacing: '9px',
   items: [
 
     // ================= SKY =================================================
-    { type: 'stack', size: '19%', direction: 'Horizontal', spacing: '12px',
+    { type: 'stack', size: '22%', direction: 'Horizontal', spacing: '10px',
       dividers: { enabled: true },
       items: [
-        { type: 'group', size: '26%', items: [
-          { type: 'clock', date: 'Friday, September 4th', time: '3:10',
-            ampm: 'pm', scale: 3.4 }]},
 
-        { type: 'titled-group', size: '17%', title: 'Cloud', items: [
+        { type: 'group', size: '20%', items: [
+          { type: 'clock', geometry: { x: '0%', y: '4%', width: '74%', height: '92%' },
+            date: 'Friday, September 4th', time: '3:10', ampm: 'pm', scale: 3.0 },
+          { type: 'moon', geometry: { x: '74%', y: '22%', width: '26%', height: '56%' },
+            phase: 0.79 },
+        ]},
+
+        { type: 'titled-group', size: '15%', title: 'Cloud', items: [
           { type: 'value-stack', items: [
-            { 'environment.clouds.cover.high': { title: { text: 'High' } } },
-            { 'environment.clouds.cover.mid':  { title: { text: 'Mid'  } } },
-            { 'environment.clouds.cover.low':  { title: { text: 'Low'  } } },
+            { 'environment.clouds.cover.cover': { title: { text: 'Total' } } },
+            { 'environment.clouds.cover.high':  { title: { text: 'High'  } } },
+            { 'environment.clouds.cover.mid':   { title: { text: 'Mid'   } } },
+            { 'environment.clouds.cover.low':   { title: { text: 'Low'   } } },
           ]}]},
 
-        { type: 'titled-group', size: '19%', title: 'Wind Aloft', items: [
+        { type: 'titled-group', size: '15%', title: 'Wind Aloft', items: [
           { type: 'value-stack', items: [
             { 'environment.wind.speed.180m': { title: { text: '180 m' } } },
             { 'environment.wind.speed.120m': { title: { text: '120 m' } } },
             { 'environment.wind.speed.80m':  { title: { text: '80 m'  } } },
+            { 'environment.wind.direction.80m': { title: { text: 'Dir' } } },
           ]}]},
 
-        { type: 'titled-group', size: '17%', title: 'Sun', items: [
+        { type: 'titled-group', title: 'Sun', items: [
           { type: 'value-stack', items: [
             { 'environment.light.sunrise': { title: { text: 'Rise' } } },
             { 'environment.light.sunset':  { title: { text: 'Set'  } } },
             { 'astronomy.moon.phase':      { title: { text: 'Moon' } } },
+            { 'environment.light.uvi':     { title: { text: 'UV'   } } },
           ]}]},
 
-        { type: 'titled-group', title: 'Air', items: [
-          { type: 'value-stack', items: [
-            'environment.pressure.pressure',
-            { 'environment.visibility': { title: { text: 'Visibility' } } },
-            { 'environment.soil.freezingLevelHeight': { title: { text: 'Freezing' } } },
+        // Pressure earns a sparkline: the number alone says nothing, the
+        // slope is the whole story.
+        { type: 'titled-group', size: '20%', title: 'Pressure', items: [
+          { type: 'group', items: [
+            { type: 'realtime.text',
+              geometry: { x: '0%', y: '0%', width: '54%', height: '62%' },
+              key: 'environment.pressure.pressure', scale: 2.1,
+              display: { font: 'Roboto Mono', unitPosition: 'FloatUnder' } },
+            { type: 'mini-graph',
+              geometry: { x: '54%', y: '4%', width: '46%', height: '58%' },
+              figures: [{ gradient: 'PressureGradient', weight: 4, amp: 16, seed: 3, fill: true }] },
+            { type: 'value-stack',
+              geometry: { x: '0%', y: '64%', width: '100%', height: '36%' },
+              items: [
+                { 'environment.visibility': { title: { text: 'Visibility' } } },
+                { 'environment.soil.freezingLevelHeight': { title: { text: 'Freezing' } } },
+              ]},
           ]}]},
       ]},
 
     // ================= SURFACE =============================================
-    // The hero gets its own column. Overlaying it on the graph was tried and
-    // read badly - the curves run straight through a 7em number. Overlay is
-    // for small things inside their own shape, like a gauge readout.
-    { type: 'stack', direction: 'Horizontal', spacing: '12px',
+    { type: 'stack', direction: 'Horizontal', spacing: '10px',
       items: [
-        { type: 'stack', size: '23%', direction: 'Vertical', spacing: '6px',
+        { type: 'stack', size: '20%', direction: 'Vertical', spacing: '5px',
           items: [
-            { type: 'group', size: '58%', items: [
+            { type: 'group', size: '56%', items: [
               { type: 'stack', direction: 'Vertical', items: [
                 { type: 'realtime.text', size: '72%',
-                  key: 'environment.temperature.temperature', scale: 7.0,
+                  key: 'environment.temperature.temperature', scale: 6.2,
                   display: { font: 'Roboto Mono', unitPosition: 'Inline' } },
                 { type: 'realtime.text', key: 'environment.condition.condition',
                   scale: 1.5 },
@@ -644,9 +743,7 @@ const BOARD = {
                 { 'environment.temperature.feelsLike': { title: { text: 'Feels' } } },
                 { 'environment.temperature.dewpoint':  { title: { text: 'Dew Point' } } },
                 { 'environment.humidity.humidity':     { title: { text: 'Humidity' } } },
-                'spacer',
-                { 'environment.temperature.high': { title: { text: 'High' } } },
-                { 'environment.temperature.low':  { title: { text: 'Low'  } } },
+                { 'environment.pressure.vaporPressureDeficit': { title: { text: 'VPD' } } },
               ]}]},
           ]},
 
@@ -660,93 +757,122 @@ const BOARD = {
             { name: 'precipitation', key: 'environment.precipitation.precipitation',
               gradient: 'PrecipitationRateGradient', weight: 3, amp: 14, off: 0.90 },
           ]},
+
+        { type: 'titled-group', size: '17%', title: 'Today', items: [
+          { type: 'value-stack', items: [
+            { 'environment.temperature.high':     { title: { text: 'High' } } },
+            { 'environment.temperature.highTime': { title: { text: 'at' } } },
+            { 'environment.temperature.low':      { title: { text: 'Low' } } },
+            { 'environment.temperature.lowTime':  { title: { text: 'at' } } },
+            'spacer',
+            { 'environment.temperature.feelsLikeHigh': { title: { text: 'Feels Hi' } } },
+            { 'environment.temperature.feelsLikeLow':  { title: { text: 'Feels Lo' } } },
+            'spacer',
+            { 'environment.precipitation.probability': { title: { text: 'Precip' } } },
+            { 'environment.precipitation.max':         { title: { text: 'Max Rate' } } },
+          ]}]},
       ]},
 
     // ================= GROUND ==============================================
-    { type: 'stack', size: '34%', direction: 'Horizontal', spacing: '12px',
+    { type: 'stack', size: '38%', direction: 'Horizontal', spacing: '10px',
       dividers: { enabled: true },
       items: [
 
-        // Indoor, one region per sensor: a big reading with its own detail
-        // stack, so a bedroom number can never be read as the terrarium's.
-        { type: 'titled-group', size: '17%', title: 'Bedroom', items: [
-          { type: 'stack', direction: 'Vertical', items: [
-            { type: 'realtime.text', size: '46%',
-              key: 'indoor.temperature.temperature#bedroom', scale: 3.6,
+        // Each sensor: the reading, its own trend, then the detail. The
+        // sparkline is what turns "77°" into "77° and falling".
+        { type: 'titled-group', size: '16%', title: 'Bedroom', items: [
+          { type: 'group', items: [
+            { type: 'realtime.text',
+              geometry: { x: '0%', y: '0%', width: '52%', height: '40%' },
+              key: 'indoor.temperature.temperature#bedroom', scale: 3.2,
               display: { font: 'Roboto Mono', unitPosition: 'Inline' } },
-            { type: 'value-stack', items: [
+            { type: 'mini-graph',
+              geometry: { x: '52%', y: '4%', width: '48%', height: '34%' },
+              figures: [{ gradient: 'TemperatureGradient', weight: 4, amp: 14, seed: 5 }] },
+            { type: 'value-stack',
+              geometry: { x: '0%', y: '42%', width: '100%', height: '58%' },
+              items: [
                 { 'indoor.humidity.humidity#bedroom': { title: { text: 'Humidity' } } },
+                { 'indoor.temperature.heatIndex#bedroom': { title: { text: 'Heat Index' } } },
                 { 'indoor.temperature.dewpoint#bedroom': { title: { text: 'Dew Point' } } },
                 { 'indoor.battery.battery#bedroom': { title: { text: 'Battery' } } },
               ]},
           ]}]},
 
-        { type: 'titled-group', size: '17%', title: 'Terrarium', items: [
-          { type: 'stack', direction: 'Vertical', items: [
-            { type: 'realtime.text', size: '46%',
-              key: 'indoor.temperature.temperature#terrarium', scale: 3.6,
+        { type: 'titled-group', size: '16%', title: 'Terrarium', items: [
+          { type: 'group', items: [
+            { type: 'realtime.text',
+              geometry: { x: '0%', y: '0%', width: '52%', height: '40%' },
+              key: 'indoor.temperature.temperature#terrarium', scale: 3.2,
               display: { font: 'Roboto Mono', unitPosition: 'Inline' } },
-            { type: 'value-stack', items: [
+            { type: 'mini-graph',
+              geometry: { x: '52%', y: '4%', width: '48%', height: '34%' },
+              figures: [{ gradient: 'TemperatureGradient', weight: 4, amp: 11, seed: 9 }] },
+            { type: 'value-stack',
+              geometry: { x: '0%', y: '42%', width: '100%', height: '58%' },
+              items: [
                 { 'indoor.humidity.humidity#terrarium': { title: { text: 'Humidity' } } },
+                { 'indoor.temperature.heatIndex#terrarium': { title: { text: 'Heat Index' } } },
                 { 'indoor.temperature.dewpoint#terrarium': { title: { text: 'Dew Point' } } },
                 { 'indoor.battery.battery#terrarium': { title: { text: 'Battery' } } },
               ]},
           ]}]},
 
-        // Wind: the gauge carries the reading inside its own ring, which is
-        // what `value-label: {visible: false}` plus a positioned sibling is
-        // for — the built-in centre position is broken.
         { type: 'titled-group', size: '15%', title: 'Wind', items: [
           { type: 'group', items: [
             { type: 'realtime.gauge',
-              geometry: { x: '0%', y: '0%', width: '100%', height: '100%' },
+              geometry: { x: '0%', y: '0%', width: '100%', height: '70%' },
               key: 'environment.wind.speed.speed', min: 0, max: 25,
               display: { arc: { gradient: 'WindSpeedGradient', weight: '12%' },
                          needle: { length: '76%', width: '6%' },
                          major: { enabled: false, labels: { enabled: false } },
                          'value-label': { visible: false } } },
             { type: 'realtime.text',
-              geometry: { x: '22%', y: '38%', width: '56%', height: '30%' },
-              key: 'environment.wind.speed.speed', scale: 1.9,
+              geometry: { x: '26%', y: '19%', width: '48%', height: '22%' },
+              key: 'environment.wind.speed.speed', scale: 1.5,
               display: { font: 'Roboto Mono', unitPosition: 'Hidden' } },
             { type: 'value-stack',
-              geometry: { x: '4%', y: '74%', width: '92%', height: '26%' },
+              geometry: { x: '2%', y: '68%', width: '96%', height: '32%' },
               items: [
                 { 'environment.wind.speed.gust': { title: { text: 'Gust' } } },
                 { 'environment.wind.direction.direction': { title: { text: 'Dir' } } },
               ]},
           ]}]},
 
-        { type: 'titled-group', size: '15%', title: 'UV & Light', items: [
+        // A quarter arc, tucked into the corner: `arc.start-angle` /
+        // `end-angle` make partial sweeps, and UV against a fixed 0-11 scale
+        // is exactly where an arc beats a number.
+        { type: 'titled-group', size: '15%', title: 'Light', items: [
           { type: 'group', items: [
             { type: 'realtime.gauge',
-              geometry: { x: '0%', y: '0%', width: '100%', height: '100%' },
+              geometry: { x: '2%', y: '0%', width: '96%', height: '54%' },
               key: 'environment.light.uvi', min: 0, max: 11,
-              display: { arc: { gradient: 'UVIndexGradient', weight: '12%' },
-                         needle: { length: '76%', width: '6%' },
+              display: { arc: { gradient: 'UVIndexGradient', weight: '14%' },
+                         needle: { length: '74%', width: '6%' },
                          major: { enabled: false, labels: { enabled: false } },
                          'value-label': { visible: false } } },
             { type: 'realtime.text',
-              geometry: { x: '22%', y: '38%', width: '56%', height: '30%' },
-              key: 'environment.light.uvi', scale: 1.9,
+              geometry: { x: '30%', y: '20%', width: '40%', height: '22%' },
+              key: 'environment.light.uvi', scale: 1.7,
               display: { font: 'Roboto Mono', unitPosition: 'Hidden' } },
+            { type: 'label', text: 'UV Index', scale: 0.6,
+              geometry: { x: '20%', y: '42%', width: '60%', height: '10%' },
+              align: 'center' },
             { type: 'value-stack',
-              geometry: { x: '4%', y: '74%', width: '92%', height: '26%' },
+              geometry: { x: '2%', y: '54%', width: '96%', height: '46%' },
               items: [
+                { 'environment.light.irradiance.irradiance': { title: { text: 'Total' } } },
                 { 'environment.light.irradiance.direct':  { title: { text: 'Direct' } } },
                 { 'environment.light.irradiance.diffuse': { title: { text: 'Diffuse' } } },
               ]},
           ]}]},
 
-        // Soil: four depths of temperature and moisture. Nothing else on any
-        // weather display shows this, and the plugin already publishes it.
         { type: 'titled-group', size: '17%', title: 'Soil Temp', items: [
           { type: 'value-stack', items: [
+            { 'environment.soil.temperature.temperature': { title: { text: 'Surface' } } },
             { 'environment.soil.temperature.6cm':  { title: { text: '6 cm'  } } },
             { 'environment.soil.temperature.18cm': { title: { text: '18 cm' } } },
             { 'environment.soil.temperature.54cm': { title: { text: '54 cm' } } },
-            'spacer',
-            { 'environment.precipitation.probability': { title: { text: 'Precip' } } },
           ]}]},
 
         { type: 'titled-group', title: 'Soil Moisture', items: [
@@ -755,6 +881,7 @@ const BOARD = {
             { 'environment.soil.moisture.3-9cm':   { title: { text: '3–9 cm'   } } },
             { 'environment.soil.moisture.9-27cm':  { title: { text: '9–27 cm'  } } },
             { 'environment.soil.moisture.27-81cm': { title: { text: '27–81 cm' } } },
+            { 'environment.soil.moisture.evapotranspiration': { title: { text: 'Evapo' } } },
           ]}]},
       ]},
   ],
