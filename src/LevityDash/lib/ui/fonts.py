@@ -132,6 +132,14 @@ class FontWeight(int, Enum, metaclass=ClosestMatchEnumMeta):
 	# @lru_cache()
 	def closestWeightStyle(cls, family: str, weight: int) -> QFont:
 		weights = cls.styleWeights(family)
+		if not weights:
+			# A family with no resolvable styles - unavailable, or substituted
+			# by the font system - left min() with an empty sequence, and the
+			# ValueError went off inside the dashboard load, where anything
+			# raising costs the *whole* board rather than one label. Qt's own
+			# default for the family is the honest answer here.
+			log.warning(f"No usable weights for font family {family!r}; using its default face")
+			return QFont(family)
 		closest = min(weights.items(), key=lambda x: abs(x[0] - weight))[1]
 		return database.font(family, closest, -1)
 
@@ -145,8 +153,14 @@ class FontWeight(int, Enum, metaclass=ClosestMatchEnumMeta):
 			weight = (weight.variantsInclusive & weights).pop()
 		except KeyError:
 			wIntValue = weight.value
-			weight = min(weights, key=lambda x: abs(x.value - wIntValue))
-			log.warning(f"Font weight '{weight}' not available for '{family}', using closest match '{weight}' instead")
+			if not weights:
+				# Same hazard as closestWeightStyle: no weights at all for this
+				# family. Keep the requested weight rather than raising.
+				log.warning(f"No weights available for '{family}'; keeping requested weight '{weight}'")
+				return weight
+			closest = min(weights, key=lambda x: abs(x.value - wIntValue))
+			log.warning(f"Font weight '{weight}' not available for '{family}', using closest match '{closest}' instead")
+			weight = closest
 
 		return weight
 
