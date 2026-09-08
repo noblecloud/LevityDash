@@ -16,6 +16,7 @@ from functools import cached_property
 from math import isfinite, isinf, floor, log10
 from numbers import Number
 from numpy import ceil, cos, pi, radians, sin, sqrt, number as np_number
+from collections.abc import Mapping
 from typing import Optional, Type, Union, Iterator, Iterable, TypeVar, Sequence, Dict
 
 from LevityDash.lib.plugins.categories import CategoryItem
@@ -3295,6 +3296,15 @@ class Gauge(Display):
 	def valueLabel(self, value: GaugeValueLabel):
 		self._valueLabel = value
 
+	@valueLabel.decode
+	def valueLabel(self, value) -> GaugeValueLabel:
+		# `value-label: {visible: false}` arrives as a plain mapping. Without a
+		# decoder the setter stored it verbatim, and `_afterSetState` -> refresh()
+		# then reached `self.valueLabel.textBox` on a dict. That AttributeError
+		# aborted the whole dashboard load, which is what left a board showing
+		# nothing but the moon. See docs/tasks/dashboard-wont-load.md.
+		return self._buildLabel('_valueLabel', GaugeValueLabel, value)
+
 	@StateProperty(key='unit-label', repr=True)
 	def unitLabel(self) -> GaugeUnit:
 		return self._unitLabel
@@ -3310,6 +3320,30 @@ class Gauge(Display):
 	@unitLabel.setter
 	def unitLabel(self, value: GaugeUnit):
 		self._unitLabel = value
+
+	@unitLabel.decode
+	def unitLabel(self, value) -> GaugeUnit:
+		return self._buildLabel('_unitLabel', GaugeUnit, value)
+
+	def _buildLabel(self, attr: str, labelType: type, value):
+		"""Turn a `value-label`/`unit-label` mapping into a real label.
+
+		Reuses the label already on the gauge when there is one, so a reload
+		applies onto the existing item rather than orphaning it and building a
+		second.
+		"""
+		if not isinstance(value, Mapping):
+			return value
+		label = getattr(self, attr, None)
+		if not isinstance(label, labelType):
+			label = labelType(self)
+			label.textBox.setParentItem(self)
+			label.hide()
+		try:
+			label.state = dict(value)
+		except Exception as e:  # noqa: BLE001 - a bad key must not abort the load
+			log.warning(f'{self}: could not apply {labelType.__name__} state {value!r}: {e}')
+		return label
 
 	@property
 	def type(self):
@@ -3482,8 +3516,16 @@ class Gauge(Display):
 		self.micro_ticks_surface.refresh()
 
 		self._update_shape()
-		self.valueLabel.textBox.refresh()
-		self.unitLabel.textBox.refresh()
+		# Defensive: refresh() runs from _afterSetState, which is inside the
+		# dashboard load. Anything raising here aborts the *whole* load, so a
+		# single malformed gauge used to leave a board with nothing on it. A
+		# label that is not a label is worth a warning, not an empty screen.
+		for label in (self.valueLabel, self.unitLabel):
+			textBox = getattr(label, 'textBox', None)
+			if textBox is None:
+				log.warning(f'{self}: {type(label).__name__} has no textBox; skipping its refresh')
+				continue
+			textBox.refresh()
 		self.recenter()
 
 	def _update_shape(self):
