@@ -104,7 +104,8 @@ class SupervisorState:
 class Child:
 	"""One supervised subprocess, restarted whenever it is not running."""
 
-	def __init__(self, name: str, argv: List[str], cwd: Path, env: Optional[dict] = None):
+	def __init__(self, name: str, argv: List[str], cwd: Path, env: Optional[dict] = None,
+	             logDir: Optional[Path] = None):
 		self.name = name
 		self.argv = argv
 		self.cwd = cwd
@@ -114,6 +115,15 @@ class Child:
 		self.restarts: int = 0
 		#: Consecutive restarts where the child died before HEALTHY_RUN_S.
 		self.failures: int = 0
+		#: Where this child's own stdout/stderr is kept. Without it a child's
+		#: output only ever reaches the terminal the supervisor was started
+		#: from, which is how a dashboard that fails to build has stayed
+		#: unexplained: the app's log file records a clean startup while the
+		#: traceback goes to a terminal nobody is reading. See
+		#: docs/tasks/dashboard-wont-load.md - "the traceback never reached a
+		#: log file ... it was terminal-only".
+		self.logPath: Optional[Path] = (logDir / f'{name}.out') if logDir else None
+		self._pump: Optional[asyncio.Task] = None
 
 	@property
 	def is_alive(self) -> bool:
@@ -124,9 +134,41 @@ class Child:
 		return self.proc.pid if self.is_alive else None
 
 	async def start(self) -> None:
-		self.proc = await asyncio.create_subprocess_exec(*self.argv, cwd=str(self.cwd), env=self.env)
+		if self.logPath is None:
+			self.proc = await asyncio.create_subprocess_exec(*self.argv, cwd=str(self.cwd), env=self.env)
+		else:
+			self.proc = await asyncio.create_subprocess_exec(
+				*self.argv, cwd=str(self.cwd), env=self.env,
+				stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+			)
+			self._pump = asyncio.create_task(self._pumpOutput(self.proc))
 		self.started_at = time.monotonic()
-		print(f'[run] {self.name} started (pid={self.proc.pid})')
+		print(f'[run] {self.name} started (pid={self.proc.pid})'
+		      + (f' -> {self.logPath}' if self.logPath else ''))
+
+	async def _pumpOutput(self, proc: asyncio.subprocess.Process) -> None:
+		"""Copy the child's output to its log file *and* to our own stdout.
+
+		Both, deliberately: watching the terminal is how you use this tool
+		interactively, and the file is what is still there tomorrow when the
+		display did something odd overnight.
+		"""
+		try:
+			self.logPath.parent.mkdir(parents=True, exist_ok=True)
+			with self.logPath.open('a', buffering=1, errors='replace') as fh:
+				fh.write(f'\n===== {self.name} started {datetime.now(timezone.utc).isoformat()} =====\n')
+				while True:
+					line = await proc.stdout.readline()
+					if not line:
+						break
+					text = line.decode(errors='replace')
+					fh.write(text)
+					sys.stdout.write(f'[{self.name}] {text}')
+					sys.stdout.flush()
+		except asyncio.CancelledError:
+			raise
+		except Exception as e:  # noqa: BLE001 - losing the log must not kill the child
+			print(f'[run] {self.name}: output capture stopped ({e})')
 
 	async def stop(self, timeout: float = 10.0) -> None:
 		if not self.is_alive:
@@ -191,7 +233,10 @@ def _make_status_app(state: SupervisorState, children: List[Child]) -> web.Appli
 	async def status(_request: web.Request) -> web.Response:
 		payload = state.to_dict()
 		payload['children'] = {
-			c.name: {'pid': c.pid, 'alive': c.is_alive, 'restarts': c.restarts, 'failures': c.failures}
+			c.name: {
+				'pid': c.pid, 'alive': c.is_alive, 'restarts': c.restarts,
+				'failures': c.failures, 'log': str(c.logPath) if c.logPath else None,
+			}
 			for c in children
 		}
 		return web.json_response(payload)
@@ -227,11 +272,14 @@ class Runner:
 		wantBackend = self.mode == 'remote' and not args.no_backend
 		if self.mode != 'remote' and not args.no_backend:
 			print(f'[run] mode={self.mode}: the frontend runs plugins itself, so no separate backend')
+		logDir = None if args.no_capture else Path(args.log_dir).expanduser()
 		if wantBackend:
-			self.backendChild = Child('backend', [sys.executable, '-m', 'LevityDash.backend'], REPO_ROOT)
+			self.backendChild = Child('backend', [sys.executable, '-m', 'LevityDash.backend'],
+			                          REPO_ROOT, logDir=logDir)
 			self.children.append(self.backendChild)
 		if not args.no_frontend:
-			self.frontendChild = Child('frontend', [sys.executable, '-m', 'LevityDash'], REPO_ROOT)
+			self.frontendChild = Child('frontend', [sys.executable, '-m', 'LevityDash'],
+			                           REPO_ROOT, logDir=logDir)
 			self.children.append(self.frontendChild)
 
 	async def startAll(self) -> None:
@@ -399,6 +447,15 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 	parser.add_argument(
 		'--watch', action='append', default=None,
 		help='Path to watch (repeatable); defaults to src/LevityDash',
+	)
+	parser.add_argument(
+		'--log-dir', default=os.environ.get('LEVITYDASH_SUPERVISOR_LOG_DIR',
+		                                    '~/Library/Logs/LevityDash'),
+		help="Where to keep each child's stdout/stderr (default: ~/Library/Logs/LevityDash)",
+	)
+	parser.add_argument(
+		'--no-capture', action='store_true',
+		help="Let children write straight to this terminal without capturing to a file",
 	)
 	parser.add_argument('--no-backend', action='store_true', help='Supervise only the frontend')
 	parser.add_argument('--no-frontend', action='store_true', help='Supervise only the backend')

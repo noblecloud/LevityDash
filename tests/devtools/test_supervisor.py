@@ -13,6 +13,14 @@ from LevityDash.devtools.supervisor import (
 	BACKOFF_S, Child, SupervisorState, _make_status_app, readBackendConfig, waitForPort,
 )
 
+_TALKER = (
+	"import sys, time, signal\n"
+	"signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))\n"
+	"print('hello from the child'); sys.stdout.flush()\n"
+	"print('Traceback (most recent call last):'); sys.stdout.flush()\n"
+	"time.sleep(600)\n"
+)
+
 _SLEEPER = (
 	"import time, signal, sys\n"
 	"signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))\n"
@@ -115,3 +123,39 @@ def test_health_is_down_until_every_child_is_up(tmp_path):
 def test_backend_mode_env_overrides_the_config_file(monkeypatch):
 	monkeypatch.setenv('LEVITYDASH_BACKEND_MODE', 'live')
 	assert readBackendConfig()['mode'] == 'live'
+
+
+def test_child_output_is_captured_to_a_file(tmp_path):
+	"""A child's stdout must survive somewhere other than the terminal.
+
+	Without this a dashboard that fails to build is invisible: the app's own
+	log records a clean startup while the traceback goes only to whatever
+	terminal the supervisor was launched from. That is the reason
+	docs/tasks/dashboard-wont-load.md sat open - "the traceback never reached
+	a log file".
+	"""
+	script = tmp_path / 'talker.py'
+	script.write_text(_TALKER)
+	logs = tmp_path / 'logs'
+	child = Child('frontend', [sys.executable, str(script)], tmp_path, logDir=logs)
+
+	async def scenario():
+		await child.start()
+		for _ in range(100):                      # let the pump drain
+			await asyncio.sleep(0.05)
+			if child.logPath.exists() and 'hello from the child' in child.logPath.read_text():
+				break
+		await child.stop()
+
+	asyncio.run(scenario())
+	assert child.logPath == logs / 'frontend.out'
+	text = child.logPath.read_text()
+	assert 'hello from the child' in text
+	assert 'Traceback (most recent call last):' in text, (
+		'a traceback on the child\'s stdout must reach the file'
+	)
+
+
+def test_capture_can_be_turned_off(tmp_path):
+	child = Child('frontend', [sys.executable, '-c', 'pass'], tmp_path)
+	assert child.logPath is None
