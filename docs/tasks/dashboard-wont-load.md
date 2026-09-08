@@ -1,7 +1,56 @@
 # Dashboard fails to load — gauge value-label is a dict
 
-**Status:** open, no longer blocking. Found 2026-07-27; the room display is
-running on the gauge-free OpenMeteo template in the meantime.
+**Status: FIXED 2026-09-08** (`808363c`). Root cause confirmed and fixed;
+everything below is kept as the trail, including two wrong turns.
+
+## What it was
+
+`value-label: {visible: false}` arrives from YAML as a plain mapping.
+`Gauge.valueLabel` had a `.factory` and a `.setter` but **no `.decode`**, so the
+setter stored the mapping verbatim. `_afterSetState` then ran `refresh()`, which
+reached `self.valueLabel.textBox` on a dict:
+
+```
+AttributeError: 'dict' object has no attribute 'textBox'
+```
+
+That raised *inside the dashboard load*, so it did not break one gauge — it
+aborted the whole board, leaving a screen with nothing but the moon. That
+moon-only screen had been showing up for months and was never explained.
+
+The fix decodes a mapping into a real label for both `value-label` and
+`unit-label`, reusing the label already on the gauge so a reload applies onto it
+instead of orphaning it. `refresh()` also no longer trusts what it is handed: it
+runs during the load, so anything raising there costs the entire dashboard, and
+a label that is not a label is now a warning rather than an empty screen.
+
+## Why it took two months
+
+**The traceback never reached a log file.** On the room display the frontend
+runs as a child of `LevityDash-run`, so its stdout went to a terminal nobody was
+reading, while `LevityDash.log` recorded a clean startup — fonts, Qt, plugins,
+timers, no errors. Every investigation looked at the log and found nothing.
+
+`514fc16` makes the supervisor capture each child's stdout/stderr to
+`~/Library/Logs/LevityDash/<name>.out`. The traceback appeared within minutes of
+turning that on. **If a display misbehaves and the log looks clean, read that
+file first.**
+
+## Two wrong turns worth remembering
+
+- **The prime suspect was right and was cleared anyway.** July's note named
+  `value-label: {visible: false}` and then cleared it because an *offscreen
+  render* built the gauges fine. It only reproduces in the real windowed app.
+  An offscreen render is not proof that a dashboard loads.
+- **"It's the dashboard file" was wrong.** The working template
+  (`OpenMeteo.levity`) simply has no gauges. Any dashboard with a gauge using
+  that key hit this.
+
+## Verifying a fix for this class
+
+Render offscreen *and* run the real windowed app with a live backend. The three
+conditions that matter are a window, real data, and `STATEFUL_DEBUG=1` —
+statekit swallows factory exceptions otherwise.
 
 ## ⚠️ The prime suspect below is WRONG — cleared 2026-07-27
 
