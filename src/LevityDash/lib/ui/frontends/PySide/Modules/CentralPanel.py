@@ -232,7 +232,28 @@ class CentralPanel(Panel, tag="dashboard"):
 			self.loadedFile = EasyPathFile(path)
 		start = perf_counter()
 		self.scene().view.status = 'Loading'
-		self.state = state
+		try:
+			self.state = state
+		except Exception as error:
+			# A single item raising anywhere below here unwinds the whole load,
+			# so the board stops at whatever was built first. Left unreported
+			# that looks like a layout bug rather than a crash - the reason the
+			# 'just a big moon' symptom went undiagnosed for two months. The
+			# notice has to match the size of the consequence.
+			built = len(self.childPanels)
+			expected = len(state.get('items', ()))
+			log.critical(
+				f"DASHBOARD LOAD FAILED: {path.name} is only partly built - "
+				f"{built} of {expected} top-level item(s) made it onto the scene, and "
+				f"the rest of the file was never read. The dashboard on screen is incomplete. "
+				f"Cause below.",
+				exc_info=error,
+			)
+			self.scene().view.status = 'Load Failed'
+			self.scene().view.loadingFinished.emit()
+			if debug:
+				raise
+			return
 		self.scene().clearSelection()
 		self.scene().view.status = 'Ready'
 		self.scene().view.loadingFinished.emit()

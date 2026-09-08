@@ -409,35 +409,35 @@ def itemLoader(parent: 'Panel', unsortedItems: list[dict], existing: list = None
 
 	newItems = []
 
-	for _type, group in sortedItems.items():
+	pending = list(sortedItems.items())
 
-		match _type:
-			case 'mini-graph':
-				items = loadGraphs(parent, group, existing, type='mini', **kwargs)
-			case 'realtime':
-				items = loadRealtime(parent, group, existing, **kwargs)
-			case 'clock':
-				items = loadClock(parent, group, existing, **kwargs)
-			case 'text' | 'label':
-				items = loadLabels(parent, group, existing, **kwargs)
-			case 'moon':
-				items = loadMoon(parent, group, existing, **kwargs)
-			case 'graph':
-				items = loadGraphs(parent, group, existing, **kwargs)
-			case 'value-stack' | 'stack':
-				items = loadStacks(parent, group, existing, valueStack=_type == 'value-stack', **kwargs)
-			case str(panel):
-				match panel:
-					case 'titled-group':
-						from LevityDash.lib.ui.frontends.PySide.Modules.Containers.TitleContainer import TitledPanel as Panel
-					case _:
-						from LevityDash.lib.ui.frontends.PySide.Modules import Panel
-				panelType = Panel
-				items = loadPanels(parent, group, existing, panelType, **kwargs)
-			case _:
-				log.warning(f"itemLoader: unrecognized item type {_type!r} - its dashboard items were not loaded")
-				items = []
-		newItems.extend(items)
+	for index, (_type, group) in enumerate(pending):
+		try:
+			newItems.extend(_loadItemGroup(parent, _type, group, existing, **kwargs))
+		except Exception as error:
+			# One item raising here costs the *whole* board, not just that item -
+			# the exception unwinds out through Panel.state and everything after
+			# it in the file is never built. That used to surface as a dashboard
+			# showing only whatever loaded first (famously, just the moon), with
+			# nothing in the log to say why. Say exactly what failed and what it
+			# cost, then re-raise for the caller to report.
+			if not getattr(error, '_levityLoadReported', False):
+				# The innermost itemLoader is the one that knows which item
+				# actually raised, so it owns the traceback. Panels nest, so
+				# every frame above this one sees the same exception on its way
+				# out; those add a breadcrumb instead of repeating the trace.
+				error._levityLoadReported = True
+				skipped = sum(len(g) for _, g in pending[index + 1:])
+				log.critical(
+					f"Dashboard load aborted while building {len(group)} {_type!r} item(s) "
+					f"on {_describeParent(parent)}. First item in the group: {_describeItem(group[0])}. "
+					f"{skipped} later item(s) in this group were not built, and nothing after this "
+					f"point in the file was loaded.",
+					exc_info=error,
+				)
+			error.add_note(f"while loading {_type!r} items onto {_describeParent(parent)}")
+			error.add_note(f"first item in the group: {_describeItem(group[0])}")
+			raise
 
 	# Whatever no loader claimed: a type that vanished from the file entirely,
 	# or an item within a type that no incoming entry matched. A real delete,
@@ -446,6 +446,59 @@ def itemLoader(parent: 'Panel', unsortedItems: list[dict], existing: list = None
 		leftover.scene().removeItem(leftover)
 
 	return newItems
+
+
+def _describeItem(item: dict) -> str:
+	"""Name a raw `.levity` item the way its author would recognise it."""
+	if not isinstance(item, dict):
+		return repr(item)
+	for field in ('key', 'name', 'title', 'text'):
+		value = item.get(field, None)
+		if isinstance(value, dict):
+			value = value.get('text', None)
+		if value:
+			return f"{item.get('type', 'group')} {field}={value!r}"
+	return f"{item.get('type', 'group')} (no key, name or title)"
+
+
+def _describeParent(parent: 'Panel') -> str:
+	for field in ('name', 'title'):
+		value = getattr(parent, field, None)
+		if isinstance(value, str) and value:
+			return f"{type(parent).__name__}({value})"
+	return type(parent).__name__
+
+
+def _loadItemGroup(parent: 'Panel', _type: str, group: list[dict], existing: list, **kwargs) -> list:
+	"""Dispatch one item type to its loader. Split out of `itemLoader` so a
+	failure can be reported with the type and item that caused it."""
+	match _type:
+		case 'mini-graph':
+			items = loadGraphs(parent, group, existing, type='mini', **kwargs)
+		case 'realtime':
+			items = loadRealtime(parent, group, existing, **kwargs)
+		case 'clock':
+			items = loadClock(parent, group, existing, **kwargs)
+		case 'text' | 'label':
+			items = loadLabels(parent, group, existing, **kwargs)
+		case 'moon':
+			items = loadMoon(parent, group, existing, **kwargs)
+		case 'graph':
+			items = loadGraphs(parent, group, existing, **kwargs)
+		case 'value-stack' | 'stack':
+			items = loadStacks(parent, group, existing, valueStack=_type == 'value-stack', **kwargs)
+		case str(panel):
+			match panel:
+				case 'titled-group':
+					from LevityDash.lib.ui.frontends.PySide.Modules.Containers.TitleContainer import TitledPanel as Panel
+				case _:
+					from LevityDash.lib.ui.frontends.PySide.Modules import Panel
+			panelType = Panel
+			items = loadPanels(parent, group, existing, panelType, **kwargs)
+		case _:
+			log.warning(f"itemLoader: unrecognized item type {_type!r} - its dashboard items were not loaded")
+			items = []
+	return items
 
 
 def hasState(obj):
