@@ -18,7 +18,9 @@ support yet). `.timeseries`/`.timeseriesAll` are now backed by
 `RemoteTimeSeries` (the timeseries-over-wire milestone) - populated once
 `RemoteContainer.prepare_for_ts_connection` gets a response back from the
 backend; `None` until then, exactly like a real `Container` before its
-first `.timeseries.update()`.
+first `.timeseries.update()`. Once populated, the series is fetched again
+whenever the backend pushes an update for the same (source, key) - see
+`RemoteContainer._update`.
 """
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Hashable, List, NamedTuple, Optional, Set, Type
@@ -306,9 +308,11 @@ class RemoteSource:
 
 class RemoteTimeSeries:
 	"""Frontend stand-in for `observation.MeasurementTimeSeries` (the
-	timeseries-over-wire milestone). Built once from a decoded ts_response's
-	columnar arrays - a fully materialized snapshot, not a live/incrementally
-	updating series (there's no re-fetch on pan/zoom yet - a follow-up).
+	timeseries-over-wire milestone). Holds a materialized snapshot built from a
+	decoded ts_response's columnar arrays. The owning `RemoteContainer` swaps
+	in a fresh snapshot (`_replace`) whenever the backend publishes that key
+	again, and `.signals` fires so a connected graph redraws. There is still no
+	re-fetch on pan/zoom - a follow-up.
 
 	Reuses `TimeSeriesItem` (a plain value holder, no Qt/plugin coupling) and
 	`ChannelSignal` (the same generic pub/sub primitive `RemoteContainer.channel`
@@ -320,16 +324,25 @@ class RemoteTimeSeries:
 	`.signals` (context manager + connect/disconnectSlot), datetime slicing
 	(`__getitem__`), `.first`, `len()` (also covers the truthiness checks at
 	`Graph.py`'s `if self.data.timeseries` sites - no separate `__bool__`
-	needed), and a no-op-but-safe `.refresh()`.
+	needed), and `.refresh()`, which asks the owning container to fetch the
+	series again.
 	"""
 
-	__slots__ = ('source', 'key', '_items', 'signals')
+	__slots__ = ('source', 'key', '_items', 'signals', '_container')
 
-	def __init__(self, source: 'RemoteSource', key: CategoryItem, items: List[TimeSeriesItem]):
+	def __init__(self, source: 'RemoteSource', key: CategoryItem, items: List[TimeSeriesItem], container: Optional['RemoteContainer'] = None):
 		self.source = source
 		self.key = key
 		self._items = sorted(items, key=lambda i: i.timestamp)
 		self.signals = ChannelSignal(source, key)
+		self._container = container
+
+	def _replace(self, items: List[TimeSeriesItem]) -> None:
+		# In place, never a new object: Graph.py keeps a reference to this
+		# series and its slot is connected to *these* signals. A new object
+		# would leave the graph drawing the old snapshot forever.
+		self._items = sorted(items, key=lambda i: i.timestamp)
+		self.signals.publish({self})
 
 	def __getitem__(self, item):
 		if isinstance(item, slice):
@@ -349,12 +362,13 @@ class RemoteTimeSeries:
 		return self._items[0] if self._items else None
 
 	def refresh(self, callback: Optional[Callable] = None) -> None:
-		# A materialized snapshot, not a live series - no periodic re-fetch
-		# this milestone (a follow-up). No-op beyond firing callback, so
-		# GraphItemData.refresh (Graph.py, self.timeseries.refresh()) doesn't
-		# crash if ever reached in remote mode.
-		if callback is not None:
-			callback()
+		# GraphItemData.refresh (Graph.py) calls this. Fetch again rather than
+		# redraw the same snapshot; the new points arrive through .signals.
+		if self._container is None:
+			if callback is not None:
+				callback()
+			return
+		self._container._refetchTimeseries(callback)
 
 	def __repr__(self):
 		return f'RemoteTimeSeries({self.source.name}:{self.key.name}, {len(self._items)} points)'
@@ -372,6 +386,15 @@ class RemoteContainer:
 		self._title: Optional[str] = None
 		self._awaitingRequirements: Dict[Hashable, GuardedRequest] = {}
 		self._timeseries: Optional[RemoteTimeSeries] = None
+		# The window the last prepare_for_ts_connection asked for, reused by
+		# every refetch so a refresh never shrinks what the graph can show.
+		self._tsPeriod: tuple = (_DEFAULT_MIN_PERIOD, _DEFAULT_MAX_PERIOD)
+		# At most one refetch in flight. A push that lands mid-flight marks
+		# the series stale and one more fetch follows, rather than stacking
+		# requests on a slow backend.
+		self._tsRefetching = False
+		self._tsStale = False
+		self._tsCallbacks: List[Callable] = []
 		self.__hash_key = CategoryItem(key, source=[source.name])
 
 	def _update(
@@ -393,6 +416,12 @@ class RemoteContainer:
 			self._title = title
 		self.channel.publish({self})
 		self._checkAwaiting()
+		# The backend publishes a key when its data changes - for a forecast,
+		# that is every successful fetch. Without this the series fetched when
+		# the graph first connected was the only one it ever saw, and a
+		# long-running display ran off the end of its forecast.
+		if self._timeseries is not None:
+			self._refetchTimeseries()
 
 	@property
 	def channel(self) -> ChannelSignal:
@@ -466,22 +495,57 @@ class RemoteContainer:
 		# back immediately. request.callback() only fires once a response
 		# (or a definitive "no connection") comes back, exactly like the live
 		# path only calls back once MeasurementTimeSeries.update() finishes.
-		from LevityDash.lib.wire.messages import decode_ts_response  # deferred - see module note
-
 		def on_response(response: Optional[dict]) -> None:
-			if response is None:
-				log.debug(f'{self.log_repr}: no ts_response (no connection or request failed)')
-			else:
-				ok, points, error = decode_ts_response(response)
-				if not ok:
-					log.warning(f'{self.log_repr}: ts_request failed: {error}')
-				elif points:
-					items = [TimeSeriesItem.load_raw(value, timestamp) for timestamp, value in points]
-					self._timeseries = RemoteTimeSeries(self.source, self.key, items)
+			self._applyTsResponse(response)
 			request.callback()
 
-		minPeriod, maxPeriod = self._resolve_ts_period(request)
-		self.source.request_timeseries(self.key, minPeriod, maxPeriod, on_response)
+		self._tsPeriod = self._resolve_ts_period(request)
+		self.source.request_timeseries(self.key, *self._tsPeriod, on_response)
+
+	def _applyTsResponse(self, response: Optional[dict]) -> None:
+		from LevityDash.lib.wire.messages import decode_ts_response  # deferred - see module note
+
+		if response is None:
+			log.debug(f'{self.log_repr}: no ts_response (no connection or request failed)')
+			return
+		ok, points, error = decode_ts_response(response)
+		if not ok:
+			log.warning(f'{self.log_repr}: ts_request failed: {error}')
+			return
+		if not points:
+			return
+		items = [TimeSeriesItem.load_raw(value, timestamp) for timestamp, value in points]
+		if self._timeseries is None:
+			self._timeseries = RemoteTimeSeries(self.source, self.key, items, container=self)
+		else:
+			self._timeseries._replace(items)
+			log.info(f'{self.log_repr}: timeseries refetched, {len(items)} points, last at {self._timeseries._items[-1].timestamp:%m/%d %H:%M}')
+
+	def _refetchTimeseries(self, callback: Optional[Callable] = None) -> None:
+		if callback is not None:
+			self._tsCallbacks.append(callback)
+		if self._tsRefetching:
+			self._tsStale = True
+			return
+		self._tsRefetching = True
+		self._tsStale = False
+
+		def on_response(response: Optional[dict]) -> None:
+			try:
+				self._applyTsResponse(response)
+			finally:
+				self._tsRefetching = False
+			if self._tsStale:
+				self._refetchTimeseries()
+				return
+			callbacks, self._tsCallbacks = self._tsCallbacks, []
+			for cb in callbacks:
+				try:
+					cb()
+				except Exception as e:
+					log.error(f'{self.log_repr}: timeseries refresh callback failed: {e!r}')
+
+		self.source.request_timeseries(self.key, *self._tsPeriod, on_response)
 
 	@staticmethod
 	def _resolve_ts_period(request: Request) -> tuple:
