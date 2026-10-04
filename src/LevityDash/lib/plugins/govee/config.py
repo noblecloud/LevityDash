@@ -127,8 +127,22 @@ def _sections(config) -> List[str]:
 
 
 def _section(config, name: str) -> Dict[str, Any]:
+	"""A section's own keys.
+
+	``PluginConfig`` uses ``plugin`` as its ``default_section``, so configparser
+	copies every ``[plugin]`` key into every other section. A legacy
+	``device.address`` under ``[plugin]`` then became the address of *every*
+	device, and each instance claimed the legacy device's advertisements as its
+	own: a second sensor's panel flipped between two devices' readings. Only
+	keys written in the section itself count; ``[plugin]`` is read as itself.
+	"""
 	try:
-		return {str(k): v for k, v in dict(config[name]).items()}
+		values = {str(k): v for k, v in dict(config[name]).items()}
+		if name != 'plugin':
+			own = getattr(config, '_sections', {}).get(name)
+			if own is not None:
+				values = {k: v for k, v in values.items() if k in own}
+		return values
 	except (KeyError, TypeError, ValueError):
 		return {}
 
