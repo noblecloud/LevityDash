@@ -2152,8 +2152,13 @@ class GaugeFill(GaugePathItem):
 		if angles is None:
 			self.hide()
 			return
-		a, b = angles
-		weight = size_px(self._weight, gauge.radius, dimension=DimensionType.width) if self._weight is not None else gauge.arc.weight_px
+		# Either order: draw from the smaller angle to the larger. Both ends were
+		# already clamped to the arc by value_to_angle. Equal angles draw nothing.
+		a, b = sorted(angles)
+		if a == b:
+			self.hide()
+			return
+		weight =size_px(self._weight, gauge.radius, dimension=DimensionType.width) if self._weight is not None else gauge.arc.weight_px
 		path = QPainterPath()
 		if weight and a != b:
 			rect = gauge.arc.centered_gauge_rect
