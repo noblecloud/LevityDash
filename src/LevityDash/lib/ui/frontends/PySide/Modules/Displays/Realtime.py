@@ -1205,6 +1205,8 @@ class MeasurementDisplayProperties(Stateful):
 			return
 		if (timer := self._unitRefreshTimer) is None:
 			timer = self._unitRefreshTimer = QTimer(singleShot=True, interval=0)
+			# Owned by the GUI thread even when first scheduled from a data callback.
+			timer.moveToThread(QApplication.instance().thread())
 			timer.timeout.connect(self.unitTextBox.textBox.refresh)
 		startTimerSafe(timer)
 
