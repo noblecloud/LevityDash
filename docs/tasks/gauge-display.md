@@ -118,7 +118,7 @@ Note `GaugeRange.default_range` already reaches *upward* for
 range layer too, not only at the panel.
 
 This overlaps with
-[computed-values-in-dashboard-config.md](computed-values-in-dashboard-config.md)
+[value-sources.md](value-sources.md)
 — both want a display fed by something other than exactly one plugin key.
 
 ## Wanted: data-driven min/max
@@ -126,7 +126,7 @@ This overlaps with
 The range presets are static. They should be able to track the data — the
 day's high/low, a rolling window — with options for how the bound is
 calculated. Recorded under
-[computed-values-in-dashboard-config.md](computed-values-in-dashboard-config.md),
+[value-sources.md](value-sources.md),
 since it is the same expression machinery consumed by the range rather than
 by a displayed value.
 
@@ -137,7 +137,8 @@ by a displayed value.
    `CategoryItem` branch in `default_range` is the prime suspect.
 3. Get one gauge *visible* with a live value. Until that works, multi-key is
    premature.
-4. Only then design multi-key, alongside the computed-values work.
+4. Only then build multi-key, as gauge `markers:` in
+   [value-sources.md](value-sources.md).
 
 ## Reproduction
 

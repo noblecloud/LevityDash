@@ -66,12 +66,13 @@ Kept briefly so the same ground isn't re-covered.
 - [dead-code-sweep](dead-code-sweep.md), [dependabot-triage](dependabot-triage.md),
   [schema-golden-fixture-tests](schema-golden-fixture-tests.md) — done.
 
-- **[computed-values-in-dashboard-config.md](computed-values-in-dashboard-config.md)**
-  — define a value by expression in a `.levity` file
-  (`average(environment.temperature.temperature, 24hr)`, arithmetic between
-  keys). Closer to a small expression language than a display option; the
-  design questions are where it evaluates, when it recomputes, and what unit
-  the result carries.
+- **[value-sources.md](value-sources.md)**
+  — every value slot in a `.levity` file (panel key, gauge markers, range
+  bounds, colour) takes a key, a number or an expression
+  (`max(environment.temperature.temperature, today)`, maths between keys,
+  `x if cond else y`). Evaluated on the backend as computed keys. First
+  slice: a gauge with today's high/low markers. Merges the former
+  computed-values and value-driven-display-properties briefs.
 
 - **[experimental-maybe-never.md](experimental-maybe-never.md)** - ideas recorded but not scheduled; currently distance-tolerant size matching.
 - **[curved-gauge-labels.md](curved-gauge-labels.md)** - bend gauge graduation labels along the arc - warping the glyph OUTLINES, not placing characters along a curve (that has been tried and looks faceted). A non-affine warp, so the path must be flattened and every point remapped into polar space.
