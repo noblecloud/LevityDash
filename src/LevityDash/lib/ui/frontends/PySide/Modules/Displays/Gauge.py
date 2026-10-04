@@ -3084,10 +3084,20 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 	def offset_relative_to(self) -> Length | Dimension:
 		return self.source.length_px or self.textSize_px
 
+	# The class-level ask every tick label starts from. Named rather than
+	# inlined so `format_value` can merge the user's `format:` over it.
+	#
 	# Tick labels drop the WORD unit ('inHg', 'mph'): said once, by the unit
 	# label, rather than on every tick. Symbols ('°', '%') stay glued to the
 	# number, for the reason given on GaugeValueLabel's defaults.
-	_tick_format = {'show_unit': False}
+	#
+	# `compact=True` asks WeatherUnits for the unit's own *label* convention
+	# rather than its reading convention. A dial face is not a readout: inHg
+	# reads 29.92 but its ticks are 28, 29, 30, and hPa reads 1013.2 but its
+	# ticks are 1000, 1010, 1020. That difference belongs to the unit, so it
+	# is asked for here rather than spelled out per gauge - which is also why
+	# it follows a unit change instead of having to be re-stated.
+	_tickFormatDefaults: Mapping[str, Any] = {'compact': True, 'show_unit': False}
 
 	@StateProperty(key='format', default=None, allowNone=False)
 	def format_spec(self) -> str | dict:
@@ -3097,12 +3107,52 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 	def format_spec(self, value: str | dict):
 		self._format_spec = value
 
+	def _spacingPrecision(self) -> int | None:
+		"""How many decimals the tick *spacing* needs, or None if it needs none.
+
+		Adjacent labels have to stay distinct. A barograph zoomed to
+		29.90-30.10 with 0.05 ticks cannot use the compact convention: 30,
+		30, 30. So the spacing sets a floor under the compact format -
+
+		    precision = max(compact, the smallest d for which every tick
+		                    value rounds exactly to d places)
+
+		which is the smallest d such that no two tick values agree at d
+		places. Read off the graduations themselves rather than the nominal
+		interval, so a range that is not an exact multiple of its interval
+		still labels correctly.
+
+		Rarely fires. When it does, the trailing zeros come back only where
+		the scale forces them - a whole-number dial keeps whole numbers.
+		"""
+		try:
+			values = [float(v) for v in self._ticks.tick_values]
+		except Exception:  # noqa: BLE001 - a label floor must never blank the dial
+			return None
+		if len(values) < 2:
+			return None
+		for places in range(0, 8):
+			if len({round(v, places) for v in values}) == len(set(values)):
+				return places or None
+		return None
+
 	def format_value(self, value: Measurement) -> str:
 		# Merged rather than replaced, so `format: {precision: 0}` does not
-		# bring the unit back on every tick.
+		# bring the unit back on every tick. A user's format is an addition to
+		# the default, never a replacement for it: dropping `compact` here
+		# would put a padded reading back on every tick, and dropping
+		# `show_unit` would say 'inHg' twenty times around one dial.
 		spec = self.format_spec
 		if spec is None or isinstance(spec, Mapping):
-			spec = {**self._tick_format, **(spec or {})}
+			# The item_default is the base; the user's `format:` merges over
+			# it. Both sides are Mappings, so a dict ask composes with the
+			# class's compact ask instead of replacing it.
+			spec = {**self._tickFormatDefaults, **(spec or {})}
+			# The spacing floor only applies where the caller has not already
+			# said what precision they want; an explicit `precision:` in the
+			# user's format: is their decision, not ours to raise.
+			if 'precision' not in spec and (floor := self._spacingPrecision()) is not None:
+				spec = {**spec, 'precision': floor}
 		if isinstance(value, Measurement):
 			try:
 				match spec:
