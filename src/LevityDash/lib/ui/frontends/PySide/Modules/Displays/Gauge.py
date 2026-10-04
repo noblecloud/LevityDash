@@ -2455,10 +2455,21 @@ class GaugeValueLabel(GaugeLabel):
 
 			reserve = self._unit_reserve()
 
+			# A bottom value hangs under the needle's pivot. The needle is not
+			# part of gauge_path here (only an Inline value dodges it), so
+			# without this the label grew upward until it touched the arc and
+			# covered the hub. Its top must stay below the hub's lowest point.
+			hub_bottom = None
+			if self._position is DisplayPosition.Below and gauge.needle.type is Needle.Type.Needle:
+				needle = gauge.needle
+				hub_bottom = gauge.center.y() + needle.offset_px + needle.width_px * 0.6 + gauge.radius * 0.03
+
 			def collides_at(trial: float) -> bool:
 				t = QTransform.fromTranslate(origin.x(), origin.y())
 				t.scale(trial, trial)
 				candidate = t.map(base_path)
+				if hub_bottom is not None and candidate.boundingRect().top() < hub_bottom:
+					return True
 				if reserve:
 					# The unit hangs beneath the value, so the value has to
 					# leave it a strip as wide as itself.
