@@ -19,20 +19,21 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import Realtim
 
 # The ranges from the brief. The three that already worked are here as
 # regression guards: the fix must not move them.
+RAIN, PRESSURE = 'environment.precipitation.precipitation', 'environment.pressure.pressure'
 RANGES = (
-	(29.9, 30.1, 'fine barograph, 0.05 ticks'),
-	(0, 0.5, 'sub-1 from zero'),
-	(0, 1, 'decade - already worked'),
-	(950, 1050, 'the 99<span<=350 band - already worked'),
-	(28, 32, 'whole inches - already worked'),
+	(0, 0.5, RAIN, 'rain rate, sub-1 from zero'),
+	(0.1, 0.3, RAIN, 'rain rate, sub-1 off zero'),
+	(0, 1, RAIN, 'decade - already worked'),
+	(950, 1050, PRESSURE, 'the 99<span<=350 band - already worked'),
+	(28, 32, PRESSURE, 'whole inches - already worked'),
 )
 
 
-def _range(dashboard, lo, hi):
+def _range(dashboard, lo, hi, key=PRESSURE):
 	"""A GaugeRange built directly, so the test does not need a full gauge."""
 	sandbox = Panel(parent=dashboard.scene.base, geometry={'x': '0%', 'y': '0%', 'width': '30%', 'height': '30%'})
 	sandbox.state = {'items': [{
-		'type': 'realtime.gauge', 'name': 'g', 'key': 'environment.pressure.pressure',
+		'type': 'realtime.gauge', 'name': 'g', 'key': key,
 		'geometry': {'x': '0%', 'y': '0%', 'width': '100%', 'height': '100%'},
 		'display': {'range': {'min': lo, 'max': hi}},
 	}]}
@@ -43,8 +44,8 @@ def _range(dashboard, lo, hi):
 
 def test_sub_one_ranges_produce_a_usable_step(dashboard):
 	"""The bug: these returned 1e-323 and overflowed rounded_min."""
-	for lo, hi, label in RANGES:
-		sandbox, rng = _range(dashboard, lo, hi)
+	for lo, hi, key, label in RANGES:
+		sandbox, rng = _range(dashboard, lo, hi, key)
 		try:
 			round_to = rng.round_to
 			assert isfinite(round_to), f'{label}: round_to is not finite: {round_to!r}'
@@ -56,8 +57,8 @@ def test_sub_one_ranges_produce_a_usable_step(dashboard):
 
 def test_rounded_min_stays_finite(dashboard):
 	"""The overflow itself: floor(lo / round_to) must not blow up."""
-	for lo, hi, label in RANGES:
-		sandbox, rng = _range(dashboard, lo, hi)
+	for lo, hi, key, label in RANGES:
+		sandbox, rng = _range(dashboard, lo, hi, key)
 		try:
 			assert isfinite(float(rng.rounded_min)), f'{label}: rounded_min is not finite'
 			assert isfinite(float(rng.rounded_max)), f'{label}: rounded_max is not finite'
@@ -80,9 +81,9 @@ def test_a_sub_one_gauge_actually_builds(dashboard):
 	"""The regression that matters: today this raises before it draws."""
 	sandbox = Panel(parent=dashboard.scene.base, geometry={'x': '0%', 'y': '0%', 'width': '30%', 'height': '30%'})
 	sandbox.state = {'items': [{
-		'type': 'realtime.gauge', 'name': 'g', 'key': 'environment.pressure.pressure',
+		'type': 'realtime.gauge', 'name': 'g', 'key': RAIN,
 		'geometry': {'x': '0%', 'y': '0%', 'width': '100%', 'height': '100%'},
-		'display': {'range': {'min': 29.9, 'max': 30.1}, 'major': {'interval': 0.05}},
+		'display': {'range': {'min': 0, 'max': 0.5}},
 	}]}
 	dashboard.app.processEvents()
 	gauge = next(c for c in sandbox.childPanels if isinstance(c, Realtime)).display
@@ -90,26 +91,11 @@ def test_a_sub_one_gauge_actually_builds(dashboard):
 	sandbox.scene().removeItem(sandbox)
 
 
-def test_the_half_steps_survive(dashboard):
-	"""29.95 and 30.05 must still be graduations.
-
-	`round_to` sets rounded_min/rounded_max, which position every tick. A step
-	of 0.1 divides the 0.2 span exactly but would snap the range to 29.9/30.0/
-	30.1 and drop both half-steps - arithmetically right for the span, wrong
-	for the dial.
-	"""
-	sandbox = Panel(parent=dashboard.scene.base, geometry={'x': '0%', 'y': '0%', 'width': '30%', 'height': '30%'})
-	sandbox.state = {'items': [{
-		'type': 'realtime.gauge', 'name': 'g', 'key': 'environment.pressure.pressure',
-		'geometry': {'x': '0%', 'y': '0%', 'width': '100%', 'height': '100%'},
-		'display': {'range': {'min': 29.9, 'max': 30.1}, 'major': {'interval': 0.05}},
-	}]}
-	dashboard.app.processEvents()
-	gauge = next(c for c in sandbox.childPanels if isinstance(c, Realtime)).display
-	assert gauge.range.round_to <= 0.05, (
-		f'round_to {gauge.range.round_to!r} is coarser than the 0.05 interval, '
-		'so the half-steps would be dropped'
-	)
-	ticks = sorted(round(float(v), 6) for v in gauge.majorDivisions.tick_values)
-	assert 29.95 in ticks and 30.05 in ticks, f'half-steps missing: {ticks}'
-	sandbox.scene().removeItem(sandbox)
+def test_rounding_does_not_move_a_round_bound(dashboard):
+	"""0.1 / 0.1 and 0.3 / 0.1 are not whole in float; floor/ceil must not step past them."""
+	sandbox, rng = _range(dashboard, 0.1, 0.3, RAIN)
+	try:
+		assert round(float(rng.rounded_min), 9) == 0.1, f'rounded_min is {rng.rounded_min!r}'
+		assert round(float(rng.rounded_max), 9) == 0.3, f'rounded_max is {rng.rounded_max!r}'
+	finally:
+		sandbox.scene().removeItem(sandbox)

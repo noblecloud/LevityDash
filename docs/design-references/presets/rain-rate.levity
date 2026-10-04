@@ -1,0 +1,12 @@
+# A rain-rate dial: a range below one unit. Ranges like this used to die in
+# __init__ with a bogus "'Gauge' object has no attribute '_needle'" - see
+# docs/tasks/gauge-round-to-float.md.
+- type: realtime.gauge
+  name: gauge
+  key: environment.precipitation.precipitation
+  title: false
+  display:
+    arc: {weight: 5%}
+    range: {min: 0, max: 0.5}
+    value-label: {position: below}
+    unit-label: {visible: true, position: float-under, height: 14%}

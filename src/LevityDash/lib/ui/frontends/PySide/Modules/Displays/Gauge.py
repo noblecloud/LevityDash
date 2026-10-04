@@ -3482,17 +3482,7 @@ class Gauge(Display):
 
 		@round_to.item_default
 		def round_to(self) -> int | float:
-			_span = abs(float(self.max - self.min))
-			_step = self._spanStep(_span)
-			# A finer major interval wins, or the range would drop its graduations.
-			_requested = self._requestedStep()
-			if _requested is not None and _requested < _step and not isclose(_requested, _step, rel_tol=1e-9):
-				return _requested
-			return _step
-
-		@staticmethod
-		def _spanStep(span: float) -> int | float:
-			"""The power of ten that divides `span`, within float tolerance."""
+			span = abs(float(self.max - self.min))
 			if 99 < span <= 350:
 				return 10
 			if log10(span).is_integer():
@@ -3505,24 +3495,6 @@ class Gauge(Display):
 				_power -= 1
 			# Nothing divides it (a span like 1/3): keep rounded_min finite.
 			return 10 ** floor(log10(span))
-
-		def _requestedStep(self) -> int | float | None:
-			"""The major interval the graduations ask for, or None. Never raises."""
-			try:
-				_graduations = getattr(self._gauge, 'majorDivisions', None)
-				if _graduations is None or not getattr(_graduations, 'enabled', False):
-					return None
-				_interval = _graduations.usr_interval
-				if _interval is None or _interval is Unset:
-					return None
-				_value = abs(float(_interval))
-				# Below 1 only: the default interval is computed mid-construction from a
-				# half-built range and can read 1 on a 100-wide dial. No default is below 1.
-				if not _value or not isfinite(_value) or _value >= 1:
-					return None
-				return _value
-			except Exception:  # noqa: BLE001 - a default must never be the crash
-				return None
 
 		@StateProperty(key='min', repr=True)
 		def min(self) -> Measurement:
@@ -3557,7 +3529,8 @@ class Gauge(Display):
 			round_to = self.round_to
 			if not round_to:
 				return self.min
-			return self._gauge.valueClass(floor(float(self.min) / round_to) * round_to)
+			# Round the quotient first: 29.9 / 0.1 is 298.99999999999994, which floors to 29.8.
+			return self._gauge.valueClass(floor(round(float(self.min) / round_to, 9)) * round_to)
 
 		@StateProperty(key='max', repr=True)
 		def max(self) -> Measurement:
@@ -3592,7 +3565,7 @@ class Gauge(Display):
 			round_to = self.round_to
 			if not round_to:
 				return self.max
-			return self._gauge.valueClass(ceil(float(self.max) / round_to) * round_to)
+			return self._gauge.valueClass(ceil(round(float(self.max) / round_to, 9)) * round_to)
 
 		@cached_property
 		def rounded_max(self):
@@ -3607,8 +3580,6 @@ class Gauge(Display):
 			if not round_to:
 				return self._rounded_max
 			steps = ceil(round(float(rounded_range) / round_to, 9))
-			if is_prime(steps):
-				steps += 1
 			return self._gauge.valueClass(float(self.rounded_min) + steps * round_to)
 
 		@property

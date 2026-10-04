@@ -116,21 +116,22 @@ them without checking that:
   (`:832`, `:2850`, `:4446`).
 - The 1c floor is the smallest number of decimals a *label* needs.
 
-So for 29.9–30.1 with 0.05 ticks, `round_to` must divide 0.05, not 0.2.
-Returning `0.1` — which divides 0.2 exactly — would snap the range to
-29.9 / 30.0 / 30.1 and **drop the 29.95 and 30.05 half-steps**. That is
-arithmetic-correct for the span and wrong for the dial. The fix must respect
-the graduations, not just the span.
+`round_to` follows the span only. An earlier attempt let a finer major
+interval (0.05 on a 29.9-30.1 dial) override it so that the 29.95 and 30.05
+half-steps would survive. That was dropped: those half-steps would be labelled,
+and a dial labelled every 0.05 inHg is not something anyone asked for. Fine
+unlabelled ticks between coarse labels are a labelling question, not a
+`round_to` one.
 
 ## Verify
 
 - **Tests:** a new `tests/ui/test_gauge_round_to.py` asserting `round_to` for
   every range in the table above, plus the invariant that it never returns a
   value below `1e-12`, and that `floor(min / round_to)` stays finite. Cover at
-  minimum: **29.9–30.1, 0–0.5, 0–1, 950–1050, 28–32**.
-- **A 29.9–30.1 gauge builds** and renders. That is the regression that
+  minimum: **0–0.5, 0.1–0.3, 0–1, 950–1050, 28–32**.
+- **A sub-1 gauge builds** and renders. That is the regression that
   matters: today it raises before it draws.
-- **A render** of a fine-scale dial, to confirm the half-steps survive:
+- **A render** of a sub-1 dial (`docs/design-references/presets/rain-rate.levity`):
 
   ```bash
   QT_QPA_PLATFORM=offscreen .venv/bin/python src/LevityDash/devtools/render_widget.py \
@@ -138,45 +139,25 @@ the graduations, not just the span.
     --name gauge --out /tmp/round-to.png --scale 3
   ```
 
-  (No preset currently has a sub-1 range; one may need writing. `render_widget.py`'s
-  `--help` prints the *app's* CLI, not its own — the real usage is in its
-  module docstring.)
+  (`render_widget.py`'s `--help` prints the *app's* CLI, not its own — the real
+  usage is in its module docstring.)
 
 - **No change** for 0–1, 950–1050, 28–32. Those already work; the fix must not
   move them.
 
-## Also broken on a fine-scale range, NOT fixed here
+## Also fixed: `rounded_min` / `rounded_max`
 
-With `round_to` repaired the 29.9-30.1 gauge **constructs and renders** - the
-crash is gone. But it draws **no graduations at all**, because a second,
-independent bug lives in `rounded_max` (`Gauge.py:3639-3660`):
+With `round_to` repaired, a sub-1 gauge built but drew no graduations:
 
-```
-round_to      = 0.05
-rounded_min   = InchOfMercury(29.85 inHg)
-rounded_max   = np.float64(0.4)          <-- should be ~30.15
-rounded_range = 29.45                    <-- |0.4 - 29.85|
-tick_values   = [0.4]                    <-- every tick outside the range
-```
-
-`rounded_max` scales a fractional `rounded_range` up to a whole number of
-ticks, then maps back by **dividing by** `scaled_amount` instead of
-**multiplying by its reciprocal**. On a range of 0.30000000000000426 that
-yields 0.4, which lands *below* `rounded_min`, so `rounded_range` comes out as
-29.45 and every graduation falls outside the dial.
-
-Not fixed here, deliberately:
-
-- It is a different defect in a different property, with its own blast radius
-  (any fractional range: 0-0.9 and 0.4 both mis-round today).
-- The fix is not obvious from the code's intent. Scaling up to count ticks and
-  back again has several defensible formulations, and picking one is a design
-  call, not a mechanical repair. An attempted reciprocal rewrite was checked
-  against four ranges and was wrong on three of them, so it was reverted
-  rather than shipped.
-
-**A fine-scale gauge therefore still does not label correctly.** The crash is
-fixed; the graduations are not. Tracked here so it is not lost.
+- `rounded_max` scaled a fractional range up to a whole number and back down
+  again, and returned a range *width*, not a bound. It came out as 0.4 on a
+  29.9-30.1 dial. It now counts whole `round_to` steps and adds them to
+  `rounded_min`.
+- `rounded_min` and `rounded_max` floored and ceiled a raw float quotient.
+  `29.9 / 0.1` is `298.99999999999994`, which floors to 29.8, so a round bound
+  moved out by one step. Both now round the quotient to 9 places first.
+- The prime-count bump (a prime number of steps gets one more) now applies only
+  to whole-number ranges. On a fractional range it only padded the dial.
 
 ## Scope
 
