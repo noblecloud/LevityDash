@@ -2797,9 +2797,9 @@ class GaugeTickText(GaugeItem, AnnotationText):
 	@property
 	def display_position(self) -> DisplayPosition:
 		if self.tick is self.surface.ticks[0]:
-			return self.group.position_trailing
-		elif self.tick is self.surface.ticks[-1]:
 			return self.group.position_leading
+		elif self.tick is self.surface.ticks[-1]:
+			return self.group.position_trailing
 		return self.group.position
 
 	def setPath(self, path: QPainterPath):
@@ -2898,9 +2898,9 @@ class GaugeTickText(GaugeItem, AnnotationText):
 	@property
 	def rotated(self):
 		if self.tick is self.surface.ticks[0]:
-			return self.group.rotation_trailing
-		if self.tick is self.surface.ticks[-1]:
 			return self.group.rotation_leading
+		if self.tick is self.surface.ticks[-1]:
+			return self.group.rotation_trailing
 		return self.group.rotation
 
 	@property
@@ -2908,7 +2908,7 @@ class GaugeTickText(GaugeItem, AnnotationText):
 		if self.tick is self.surface.ticks[0]:
 			return Alignment(self.group.align_leading)
 		if self.tick is self.surface.ticks[-1]:
-			return Alignment(self.group.align_leading)
+			return Alignment(self.group.align_trailing)
 		return self.group.alignment
 
 	@alignment.setter
