@@ -620,12 +620,44 @@ class Text(QGraphicsPathItem):
 
 		return neighbors
 
+	_builtSignature = None
+
+	def _layoutSignature(self) -> tuple:
+		# Everything _update_path reads. Two equal signatures build the same path.
+		text = self.text if self.icon is None else str(self.icon)
+		# _update_path reads limitRect at identity transform, and some subclasses
+		# (the gauge value label) derive it from the item's own transform, so
+		# read it at identity here too or the two never compare equal.
+		transform = self.transform()
+		if transform.isIdentity():
+			r = self.limitRect
+		else:
+			self.resetTransform()
+			r = self.limitRect
+			self.setTransform(transform)
+		align = self.alignment
+		return (
+			text,
+			self.font().key(),
+			(r.x(), r.y(), r.width(), r.height()),
+			(align.horizontal, align.vertical),
+			self._scaleType,
+			getattr(self, '_formatHint', None),
+			self.height_px,
+		)
+
 	def refresh(self):
 		# refresh() is the value-arrival path (a container update calls it), so
 		# the displayed text may have changed: rebuild this item's path with
 		# updatePath=True - otherwise a late-arriving value never replaces the
 		# '...' placeholder. If grouped, re-fit the whole group afterwards so
 		# the shared size/baseline pick up the new text.
+		#
+		# Skip the rebuild and refit when nothing that shapes the path moved
+		# since the last build (same text, font, box, alignment, scale type).
+		# Colour is a brush, not part of the path, so it never needs a rebuild.
+		if self._layoutSignature() == self._builtSignature:
+			return
 		self.updateTransform(reason='refresh', updatePath=True, updateShared=False)
 		if (group := getattr(self, '_sized', None)) is not None:
 			group.apply()
@@ -1042,6 +1074,7 @@ class Text(QGraphicsPathItem):
 		newTextRect = size_hint_rect #if not abs(rotation) else QTransform().rotate(rotation).map(pathSizeHint).boundingRect()
 
 		self._textRect = newTextRect
+		self._builtSignature = self._layoutSignature()
 		self._sizeHintRect = newTextRect
 		self._fmt_rect = fmt_hint_rect
 		self.setPath(path)
