@@ -3224,7 +3224,10 @@ class GraphPanel(Panel, tag='graph'):
 		super(GraphPanel, self).__init__(parent=parent, **kwargs)
 		self.graphZoom = GraphZoom(self, self.timeframe)
 		self.graphZoom.setZValue(1000)
-		self.graphZoom.setVisible(not self.frozen)
+		# Hidden until hoverEnterEvent, which shows it and moves it into place.
+		# Shown here, the buttons sit at the panel origin offset by -60 and draw
+		# over whatever lies above and left of the graph (the clock's "pm").
+		self.graphZoom.setVisible(False)
 		self.graphZoom.setEnabled(not self.frozen)
 		self.updateSyncTimer()
 		self.scene().view.resizeFinished.connect(self.updateSyncTimer)
@@ -3280,7 +3283,9 @@ class GraphPanel(Panel, tag='graph'):
 	def freeze(self, value: bool = None):
 		super().freeze(value)
 		if graphZoom := getattr(self, 'graphZoom', None):
-			graphZoom.setVisible(not value)
+			# hoverEnterEvent shows the buttons and places them. Showing them
+			# here would leave them at the panel origin.
+			graphZoom.setVisible(False)
 
 	@StateProperty(default=Stateful, allowNone=False, dependencies={'items', 'timeframe'}, accepts=dict, link=DayAnnotations)
 	def annotations(self) -> DayAnnotations:
