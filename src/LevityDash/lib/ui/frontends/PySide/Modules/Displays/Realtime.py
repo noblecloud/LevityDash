@@ -239,6 +239,10 @@ class Realtime(Panel, tag='realtime'):
 			releaseValueSource(source)
 
 	def delete(self):
+		try:
+			self.disconnectRealtime()
+		except ValueError:
+			pass
 		self._releaseKeySource()
 		super().delete()
 

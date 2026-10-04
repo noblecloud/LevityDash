@@ -171,9 +171,16 @@ def loadRealtime(parent, items, parentItems, **kwargs):
 			log.error('Invalid state for existingItem:', item)
 		# An expression stays text: Realtime.key registers it as a computed key.
 		from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import _isExpression
+		matchKey = None
 		if not (isinstance(item['key'], str) and _isExpression(item['key'])):
 			item['key'] = CategoryItem(item['key'])
+		else:
+			# A panel's `key` is the computed key, so match on that, not the text.
+			from LevityDash.lib.plugins.expressions import Expression
+			matchKey = Expression.parse(item['key']).key
 		ns = SimpleNamespace(**item)
+		if matchKey is not None:
+			ns.key = matchKey
 		geometry = _geometry(ns)
 		match existing:
 			case []:
