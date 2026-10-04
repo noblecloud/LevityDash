@@ -26,6 +26,11 @@ not by topic:
   worktrees (`isolation: "worktree"`) with the overlap called out so the merge
   is planned rather than discovered.
 - Phases with disjoint files run **in parallel**, in worktrees.
+- **A worktree does not start on your branch.** It starts on an old base
+  (it has been `origin/main`), with none of the branch's work. Every brief
+  must name the base and make re-basing step one:
+  `git checkout -B <branch> <working branch>`. Commit the working branch
+  first, since uncommitted files never reach a worktree.
 - Read-only phases (investigate, find, measure) need no worktree.
 
 **Pick the model per phase; never let it default to the orchestrator's.**
@@ -36,6 +41,9 @@ Pass `model` on every Agent call:
 | new primitive, design calls, unclear spec | `opus` |
 | bounded fix, investigate-and-verify, render checks | `sonnet` |
 | run a script, grep, report numbers | `haiku` |
+
+Bounded phases go to the `levity-worker` agent (`.claude/agents/`): Sonnet at
+normal effort, with the base-branch and render rules built in.
 
 The orchestrator's review catches a weaker model's mistakes; that is what
 the review step is for.
