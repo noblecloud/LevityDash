@@ -244,6 +244,9 @@ class Realtime(Panel, tag='realtime'):
 		except ValueError:
 			pass
 		self._releaseKeySource()
+		# A gauge's markers and fill hold value sources of their own.
+		if (release := getattr(getattr(self, 'display', None), 'releaseSources', None)) is not None:
+			release()
 		super().delete()
 
 	@StateProperty(default=AnySource, dependencies={'key', 'display', 'title', 'forecast'})

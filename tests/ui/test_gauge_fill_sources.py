@@ -59,7 +59,6 @@ def test_fill_follows_source_and_releases(dashboard):
 	before = engine.refcount(key)
 	gauge.fill = None
 	assert engine.refcount(key) == before - 1
-	gauge.fill = None  # panel deletion does not release fill sources yet
 	sandbox.scene().removeItem(sandbox)
 
 
@@ -69,12 +68,26 @@ def test_fill_round_trip(dashboard):
 	saved = gauge.state['fill']
 	assert saved == fill
 	assert type(saved) is dict and isinstance(saved['to'], str)
-	gauge.fill = None  # panel deletion does not release fill sources yet
+	gauge.fill = None
 	sandbox.scene().removeItem(sandbox)
 
 
 def test_bad_fill_source_never_raises(dashboard):
 	sandbox, gauge = _gauge(dashboard, {'to': 'max((('})
 	assert gauge._fillItem is None or not gauge._fillItem.isVisible()
-	gauge.fill = None  # panel deletion does not release fill sources yet
+	gauge.fill = None
+	sandbox.scene().removeItem(sandbox)
+
+
+def test_deleting_the_panel_releases_fill_and_marker_sources(dashboard):
+	engine = computedEngine()
+	sandbox, gauge = _gauge(dashboard, {'from': 0, 'to': EXPR})
+	gauge.markers = [{'value': EXPR}]
+	key = gauge._fillItem._feeds[0]._key
+	before = engine.refcount(key)
+	assert before >= 2, 'the fill and the marker each hold the expression'
+	panel = next(c for c in sandbox.childPanels if isinstance(c, Realtime))
+	panel.delete()
+	_settle(dashboard)
+	assert engine.refcount(key) == before - 2
 	sandbox.scene().removeItem(sandbox)

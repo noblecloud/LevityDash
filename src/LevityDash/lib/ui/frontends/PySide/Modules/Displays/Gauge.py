@@ -3785,6 +3785,15 @@ class Gauge(Display):
 		self._markerItems = []
 		self._markerSpecs = []
 
+	def releaseSources(self):
+		"""Stop and release every value source the markers and fill hold.
+		Called when the owning panel is deleted; never raises."""
+		for clear in (self._clearMarkers, self._clearFill):
+			try:
+				clear()
+			except Exception as e:
+				log.warning(f'Gauge {_gaugeKeyName(self)} could not release its value sources: {e!r}')
+
 	@StateProperty(key='major', repr=True, dependencies={'range'})
 	def majorDivisions(self) -> Graduations:
 		return self._majorDivisions
