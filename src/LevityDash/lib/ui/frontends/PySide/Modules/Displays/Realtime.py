@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QApplication, QGraphicsItem, QGraphicsSceneMouseEv
 from LevityDash import LevityDashboard
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.DisplayBase import Display
 from LevityDash.lib.ui.icons import fa as FontAwesome, getIcon, Icon
-from LevityDash.lib.utils.shared import singleShotSafe
+from LevityDash.lib.utils.shared import singleShotSafe, startTimerSafe, stopTimerSafe
 from WeatherUnits.time_.time import Second
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.computed import acquireValueSource, releaseValueSource
@@ -1195,6 +1195,24 @@ class MeasurementDisplayProperties(Stateful):
 			return "⋯"
 		return str(value)
 
+	_unitRefreshTimer: QTimer | None = None
+	_unitRefreshCancelled: bool = False
+
+	def _scheduleUnitRefresh(self):
+		# One owned single-shot timer rather than a free-floating singleShot, so
+		# delete() can cancel a refresh that has not fired yet.
+		if self._unitRefreshCancelled:
+			return
+		if (timer := self._unitRefreshTimer) is None:
+			timer = self._unitRefreshTimer = QTimer(singleShot=True, interval=0)
+			timer.timeout.connect(self.unitTextBox.textBox.refresh)
+		startTimerSafe(timer)
+
+	def _cancelUnitRefresh(self):
+		self._unitRefreshCancelled = True
+		if (timer := self._unitRefreshTimer) is not None:
+			stopTimerSafe(timer)
+
 	@property
 	def measurement(self) -> Measurement | datetime | None:
 		value = self.localGroup.value
@@ -1208,7 +1226,7 @@ class MeasurementDisplayProperties(Stateful):
 				log.warning(f'Could not convert {value} to {convertTo}', exc_info=e)
 		if hash((value, type(value))) != self.__measurementHash:
 			self.__measurementHash = hash((value, type(value)))
-			singleShotSafe(0, self.unitTextBox.textBox.refresh)
+			self._scheduleUnitRefresh()
 		if isinstance(value, Measurement):
 			value.__dict__.update(self.unit_dict)
 		return value
@@ -1329,6 +1347,10 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 	__exclude__ = {'items', 'geometry', 'locked', 'frozen', 'movable', 'resizable', 'text'}
 
 	deletable = False
+
+	def delete(self):
+		self._cancelUnitRefresh()
+		super().delete()
 
 	class UnitLabel(Label, tag=...):
 		deletable = False

@@ -59,4 +59,12 @@ def test_shared_expression_refcount_and_delete(dashboard):
 	dashboard.app.processEvents()
 	assert '43' in b.display.text
 
+	# A new value schedules a deferred unit-label refresh; deleting the panel
+	# before it fires must cancel it rather than refresh a detached label.
+	engine._publish(engine._entries[key], 44.0)
+	b.display.refresh()
+	b.delete()
+	dashboard.app.processEvents()
+	assert engine.refcount(key) == 0
+
 	sandbox.scene().removeItem(sandbox)
