@@ -324,18 +324,16 @@ class RemoteTimeSeries:
 	`.signals` (context manager + connect/disconnectSlot), datetime slicing
 	(`__getitem__`), `.first`, `len()` (also covers the truthiness checks at
 	`Graph.py`'s `if self.data.timeseries` sites - no separate `__bool__`
-	needed), and `.refresh()`, which asks the owning container to fetch the
-	series again.
+	needed), and a redraw-only `.refresh()`.
 	"""
 
-	__slots__ = ('source', 'key', '_items', 'signals', '_container')
+	__slots__ = ('source', 'key', '_items', 'signals')
 
-	def __init__(self, source: 'RemoteSource', key: CategoryItem, items: List[TimeSeriesItem], container: Optional['RemoteContainer'] = None):
+	def __init__(self, source: 'RemoteSource', key: CategoryItem, items: List[TimeSeriesItem]):
 		self.source = source
 		self.key = key
 		self._items = sorted(items, key=lambda i: i.timestamp)
 		self.signals = ChannelSignal(source, key)
-		self._container = container
 
 	def _replace(self, items: List[TimeSeriesItem]) -> None:
 		# In place, never a new object: Graph.py keeps a reference to this
@@ -362,13 +360,14 @@ class RemoteTimeSeries:
 		return self._items[0] if self._items else None
 
 	def refresh(self, callback: Optional[Callable] = None) -> None:
-		# GraphItemData.refresh (Graph.py) calls this. Fetch again rather than
-		# redraw the same snapshot; the new points arrive through .signals.
-		if self._container is None:
-			if callback is not None:
-				callback()
-			return
-		self._container._refetchTimeseries(callback)
+		# Never fetches. GraphItemData.refresh (Graph.py) calls this from the
+		# graph's sync timer, once per pixel of elapsed time - about once a
+		# minute on a mini-graph - to redraw as the clock advances. Fetching
+		# here turned every redraw tick into a network round trip and a full
+		# series rebuild on the backend. New data arrives by push instead; see
+		# RemoteContainer._update.
+		if callback is not None:
+			callback()
 
 	def __repr__(self):
 		return f'RemoteTimeSeries({self.source.name}:{self.key.name}, {len(self._items)} points)'
@@ -394,7 +393,6 @@ class RemoteContainer:
 		# requests on a slow backend.
 		self._tsRefetching = False
 		self._tsStale = False
-		self._tsCallbacks: List[Callable] = []
 		self.__hash_key = CategoryItem(key, source=[source.name])
 
 	def _update(
@@ -416,10 +414,12 @@ class RemoteContainer:
 			self._title = title
 		self.channel.publish({self})
 		self._checkAwaiting()
-		# The backend publishes a key when its data changes - for a forecast,
-		# that is every successful fetch. Without this the series fetched when
-		# the graph first connected was the only one it ever saw, and a
-		# long-running display ran off the end of its forecast.
+		# The backend publishes a key only when an observation update carries
+		# it (observation.py, ObservationTimeSeries.__post_update) - for a
+		# forecast, once per successful fetch. So a push is the signal that the
+		# series changed, and the only trigger for a refetch. Without it the
+		# series fetched when the graph first connected was the only one it
+		# ever saw, and a long-running display ran off the end of its forecast.
 		if self._timeseries is not None:
 			self._refetchTimeseries()
 
@@ -516,14 +516,12 @@ class RemoteContainer:
 			return
 		items = [TimeSeriesItem.load_raw(value, timestamp) for timestamp, value in points]
 		if self._timeseries is None:
-			self._timeseries = RemoteTimeSeries(self.source, self.key, items, container=self)
+			self._timeseries = RemoteTimeSeries(self.source, self.key, items)
 		else:
 			self._timeseries._replace(items)
 			log.info(f'{self.log_repr}: timeseries refetched, {len(items)} points, last at {self._timeseries._items[-1].timestamp:%m/%d %H:%M}')
 
-	def _refetchTimeseries(self, callback: Optional[Callable] = None) -> None:
-		if callback is not None:
-			self._tsCallbacks.append(callback)
+	def _refetchTimeseries(self) -> None:
 		if self._tsRefetching:
 			self._tsStale = True
 			return
@@ -537,13 +535,6 @@ class RemoteContainer:
 				self._tsRefetching = False
 			if self._tsStale:
 				self._refetchTimeseries()
-				return
-			callbacks, self._tsCallbacks = self._tsCallbacks, []
-			for cb in callbacks:
-				try:
-					cb()
-				except Exception as e:
-					log.error(f'{self.log_repr}: timeseries refresh callback failed: {e!r}')
 
 		self.source.request_timeseries(self.key, *self._tsPeriod, on_response)
 

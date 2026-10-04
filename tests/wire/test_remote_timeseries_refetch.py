@@ -1,8 +1,7 @@
 """A remote timeseries must follow the backend, not freeze at first fetch.
 
 In mode=remote a graph fetched its series once, when it connected, and never
-again: `RemoteTimeSeries.refresh()` was a no-op and a backend push only
-replaced the container's scalar value. A display left running kept drawing
+again: a backend push only replaced the container's scalar value. A display left running kept drawing
 the forecast from the day it started until the forecast ran out - lambda ran
 from Sept 8 to Sept 23 on one 16-day OpenMeteo fetch.
 """
@@ -109,16 +108,18 @@ def test_the_refetch_keeps_the_graphs_window():
 	assert again['maxPeriod'] == first['maxPeriod'] == timedelta(days=16).total_seconds()
 
 
-def test_refresh_fetches_again_and_calls_back_after_the_data_lands():
+def test_refresh_redraws_without_fetching():
+	"""Graph.py calls refresh() from its sync timer, once per pixel of elapsed
+	time. On lambda that fetched the pressure mini-graph's series every ~60 s."""
 	backend = FakeBackend()
 	container, series, graph = connected(backend)
-	before = last(series)
 	seen = []
 
-	series.refresh(lambda: seen.append(last(series)))
+	series.refresh(lambda: seen.append(True))
+	series.refresh()
 
-	assert len(backend.requests) == 2
-	assert seen and seen[0] > before
+	assert len(backend.requests) == 1, 'only the initial fetch'
+	assert seen == [True]
 
 
 def test_pushes_during_a_fetch_coalesce_into_one_more_fetch():
