@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 from enum import Enum
 from functools import cached_property
+from itertools import combinations
 from math import isfinite, isinf, floor, log10, atan2, hypot
 from numbers import Number
 from numpy import ceil, cos, pi, radians, sin, sqrt, number as np_number
@@ -2875,7 +2876,7 @@ class GaugeTickText(GaugeItem, AnnotationText):
 		# self._shape = outline_path(self.path(), 5)
 
 	def refresh(self):
-		if (interval := self.group.label_step) > 1 and self.tick.index % interval and not (self.is_last_tick and self.group._auto_step > 1):
+		if (interval := self.group.label_step) > 1 and self.tick.index % interval and not (self.is_last_tick and self.group._auto_step > 1 and self.group._keep_last):
 			self.hide()
 			return
 		else:
@@ -3006,6 +3007,7 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 		print('onDataChange', axis)
 
 	_auto_step: int = 1
+	_keep_last: bool = True
 	_measuring: bool = False
 
 	@property
@@ -3023,22 +3025,23 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 				label.refresh()
 		finally:
 			self._measuring = False
-		self._auto_step = self._measure_step()
+		self._auto_step, self._keep_last = self._measure_step()
 		for label in self:
 			label.refresh()
 
-	def _measure_step(self) -> int:
+	def _measure_step(self) -> tuple[int, bool]:
 		"""
-		The smallest step at which neighbouring labels no longer overlap.
+		The smallest step at which neighbouring labels no longer overlap, and
+		whether the last label can still be kept at that step.
 
 		Only chosen for default tick intervals: an `interval` or `every` written in
 		the config is taken as is.
 		"""
 		if 'interval' in self._ticks._user_set_state_items_ or 'every' in self._user_set_state_items_:
-			return 1
+			return 1, True
 		labels = sorted((l for l in self if l.isVisible()), key=lambda l: l.tick.index)
 		if len(labels) < 3:
-			return 1
+			return 1, True
 		geometry = {}
 		for label in labels:
 			rect = label.path().boundingRect()
@@ -3060,15 +3063,20 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 			distance = hypot(delta.x(), delta.y())
 			if not distance:
 				return True
-			return distance < (extent(a, delta) + extent(b, delta)) * 1.05
+			# Touching is not enough: keep half a label height between neighbours.
+			gap = min(geometry[a][2], geometry[b][2]) / 2
+			return distance < extent(a, delta) + extent(b, delta) + gap
 
 		indices = [label.tick.index for label in labels]
 		last = indices[-1]
-		for step in range(1, last + 1):
-			kept = [i for i in indices if not i % step or i == last]
-			if not any(overlaps(a, b) for a, b in zip(kept, kept[1:])):
-				return step
-		return last
+		for keepLast in (True, False):
+			for step in range(1, last + 1):
+				kept = [i for i in indices if not i % step or (keepLast and i == last)]
+				# Every pair, not just neighbours by value: labels pushed inward can
+				# meet across the dial (both ends of a 240° arc land on the bottom row).
+				if not any(overlaps(a, b) for a, b in combinations(kept, 2)):
+					return step, keepLast
+		return last, False
 
 	def __init__(self, graduations: Graduations, surface: 'TickSurface'):
 		self._gauge = graduations.gauge
