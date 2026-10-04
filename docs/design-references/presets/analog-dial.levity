@@ -1,0 +1,11 @@
+- type: realtime.gauge
+  name: gauge
+  key: environment.pressure.pressure
+  title: false
+  display:
+    arc: {weight: 5%}
+    range: {min: 28, max: 32}
+    major:
+      labels:
+        format-spec: {show_unit: false, unit_symbol: false, precision: 0}
+    value-label: {position: bottom}
