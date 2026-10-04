@@ -26,6 +26,7 @@ continuously.
 | [eventfilter-pending-exception](eventfilter-pending-exception.md) | parked: a `SystemError` seen once, non-fatal, not reproducible. Wants an always-on diagnostic to catch it live |
 | [phase-4.2-follow-ups](phase-4.2-follow-ups.md) | remaining odds from the backend/frontend split |
 | [gauge-tick-label-format](gauge-tick-label-format.md) | tick labels read `28.00` on a 1-inHg scale — units carry a compact (dial-face) format in WeatherUnits, tick spacing as the floor; then dashboard-level format `defaults:` (matcher design open) |
+| [gauge-round-to-float](gauge-round-to-float.md) | a gauge narrower than 1 unit dies in `__init__` — `round_to` returns `1e-323`, `rounded_min` overflows, surfaces as a bogus `_needle` AttributeError |
 | [gauge-text-treatments](gauge-text-treatments.md) | optical centering — `98°` looks off-centre because `°` is light |
 | [gauge-presets](gauge-presets.md) | named `preset:` for gauges, one per gauge-ui template (29 rows); which of seven missing gauge primitives unlocks which; blocked first on [gauge-display](gauge-display.md) |
 

@@ -1,0 +1,13 @@
+# A barograph zoom: a 0.2-wide inHg window with 0.05 major ticks. The case
+# that used to die in __init__ with a bogus "'Gauge' object has no attribute
+# '_needle'" - see docs/tasks/gauge-round-to-float.md.
+- type: realtime.gauge
+  name: gauge
+  key: environment.pressure.pressure
+  title: false
+  display:
+    arc: {weight: 5%}
+    range: {min: 29.9, max: 30.1}
+    major: {interval: 0.05}
+    value-label: {position: below}
+    unit-label: {visible: true, position: float-under, height: 14%}
