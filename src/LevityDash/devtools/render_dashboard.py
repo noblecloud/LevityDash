@@ -8,6 +8,11 @@ Usage:
     poetry run python src/LevityDash/devtools/render_dashboard.py OUT.png
     poetry run python src/LevityDash/devtools/render_dashboard.py OUT.png --levity CAND.levity --seed DIR
     poetry run python src/LevityDash/devtools/render_dashboard.py OUT.png --size 1800x1090 --plugins
+    poetry run python src/LevityDash/devtools/render_dashboard.py OUT.png --levity CAND.levity --scenario stormy-day
+
+`--scenario` feeds fixed values from `docs/design-references/scenarios/` through
+the Fixture plugin instead of a live backend, so the render is repeatable. It
+starts no other plugin. See `lib/plugins/builtin/Fixture.py`.
 
 Rendering notes (why this doesn't use `view.grab()`), and the caveat about
 `QGraphicsEffect`s, are in `_boot.render_rect`.
@@ -47,6 +52,7 @@ def main() -> int:
 	parser.add_argument('out', help='PNG path to write')
 	parser.add_argument('--levity', help='candidate .levity to render (requires --seed)')
 	parser.add_argument('--seed', help='config dir copy to render against; omit for the real config')
+	parser.add_argument('--scenario', help='fixed values for every key: a docs/design-references/scenarios name or a YAML path (turns on the Fixture plugin; seeds from devtools/design-seed unless --seed)')
 	parser.add_argument('--size', default='x'.join(map(str, DEFAULT_SIZE)), help='window size driving layout')
 	parser.add_argument('--settle', type=float, default=6.0)
 	parser.add_argument('--scale', type=float, default=1.0)

@@ -39,11 +39,29 @@ def parseSeed(argv: List[str]) -> Optional[str]:
 	return parseFlag(argv, '--seed')
 
 
+def parseScenario(argv: List[str]) -> Optional[str]:
+	"""The value of `--scenario`/`--scenario=` from a raw argv, or None."""
+	return parseFlag(argv, '--scenario')
+
+
+#: `design-seed/` next to this file: the test suite's established-user config
+#: (onboarding answered, plugin files present), plus a `config.ini` with a fixed
+#: location so a design render never guesses one over the network, and OpenGL
+#: off so nothing needs a GL context.
+DEFAULT_SEED = Path(__file__).resolve().parent / 'design-seed'
+
+
 def seedEnvironment(argv: List[str] = None) -> Optional[str]:
 	"""Set the config-debug/seed environment from argv. Returns the seed path.
 
-	Must be called before the first `LevityDash` import. Safe to call when no
-	`--seed` is present - it does nothing.
+	Must be called before the first `LevityDash` import. Safe to call when
+	neither `--seed` nor `--scenario` is present - it does nothing.
+
+	`--scenario NAME` turns on the Fixture plugin (`lib/plugins/builtin/Fixture.py`)
+	by setting `LEVITYDASH_FIXTURE`, which that module reads at import. It also
+	forces a disposable config: with no `--seed` it seeds from `DEFAULT_SEED`,
+	because a scenario run must never write `Fixture.ini` into a real config
+	directory. An explicit `--seed` wins.
 
 	Deliberately does NOT also stage `--levity` here, despite that looking like
 	the same ordering problem this function exists to solve. This function runs
@@ -62,6 +80,9 @@ def seedEnvironment(argv: List[str] = None) -> Optional[str]:
 	"""
 	argv = sys.argv if argv is None else argv
 	seed = parseSeed(argv)
+	if scenario := parseScenario(argv):
+		os.environ['LEVITYDASH_FIXTURE'] = scenario
+		seed = seed or str(DEFAULT_SEED)
 	if not seed:
 		return None
 	resolved = Path(seed).expanduser().resolve()

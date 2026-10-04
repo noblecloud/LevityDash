@@ -1,0 +1,62 @@
+# A thunderstorm front passing through: heavy rain, falling pressure, a strong
+# east-north-easterly gust, dark and humid. Mid-evening, about 7 pm.
+#
+# Load it for a render with:
+#   poetry run python src/LevityDash/devtools/render_widget.py \
+#       --levity frag.levity --scenario stormy-day --name gauge --out out.png
+#
+# How a scenario reads is in src/LevityDash/lib/plugins/builtin/Fixture.py.
+name: stormy-day
+description: Heavy rain, pressure 986 hPa and falling, wind 31 mph gusting 52 from the east-north-east.
+keys:
+  environment.temperature.temperature:
+    value: 61
+    unit: f
+    series: [68, 67, 67, 66, 66, 65, 66, 68, 70, 72, 73, 74, 73, 71, 68, 65, 63, 62, 61, 61, 60, 60, 59, 59]
+  environment.temperature.feelsLike:
+    value: 54
+    unit: f
+  environment.temperature.dewpoint:
+    value: 59
+    unit: f
+  environment.temperature.high:
+    value: 74
+    unit: f
+  environment.temperature.low:
+    value: 58
+    unit: f
+  environment.humidity.humidity:
+    value: 94
+    unit: '%'
+    series: [70, 72, 74, 75, 76, 78, 76, 72, 68, 65, 64, 63, 66, 72, 80, 86, 90, 92, 94, 95, 95, 96, 96, 96]
+  environment.pressure.pressure:
+    value: 986
+    unit: hPa
+    series: [1004, 1004, 1003, 1003, 1002, 1001, 1001, 1000, 999, 998, 997, 996, 995, 994, 993, 991, 990, 988, 986, 985, 984, 984, 983, 983]
+  environment.wind.speed.speed:
+    value: 31
+    unit: [mi, hr]
+    type: wind
+    series: [8, 8, 9, 10, 10, 11, 12, 12, 13, 14, 15, 16, 18, 20, 23, 26, 29, 31, 31, 30, 28, 26, 24, 22]
+  environment.wind.speed.gust:
+    value: 52
+    unit: [mi, hr]
+    type: wind
+  environment.wind.direction.direction:
+    value: 68
+    unit: º
+    type: direction
+  environment.clouds.cover.cover:
+    value: 100
+    unit: '%c'
+    type: cloudcover
+  environment.precipitation.precipitation:
+    value: 14
+    unit: [mm, hr]
+    type: precipitationHourly
+    series: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.2, 1, 3, 6, 9, 12, 14, 12, 9, 6, 3, 1]
+  environment.light.uvi:
+    value: 1
+    unit: uvi
+    type: index
+    title: UV Index

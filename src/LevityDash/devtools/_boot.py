@@ -41,6 +41,11 @@ def boot(
 	real config, which means real data — and on macOS a Bluetooth-capable host
 	if the Govee plugin is enabled (see CLAUDE.md's Bluetooth gotcha).
 
+	With ``LEVITYDASH_FIXTURE`` set (the devtools' ``--scenario``, see
+	``_seed.py``), the Fixture plugin supplies every value. It is the only
+	plugin started, with or without ``plugins=True``: a design render must not
+	reach the network or Bluetooth. The seed is whatever ``_seed`` staged.
+
 	``windowed=True`` shows a real window instead of forcing
 	``QT_QPA_PLATFORM=offscreen`` — for `design_mode.py`, which needs an actual
 	interactive Qt event loop (`app.exec()`) rather than a scene to hand to
@@ -49,6 +54,11 @@ def boot(
 	"""
 	if not windowed:
 		os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+	fixture = bool(os.environ.get('LEVITYDASH_FIXTURE', '').strip())
+	if fixture and not seed:
+		# `_seed.seedEnvironment` already pointed the environment at a seed and a
+		# disposable config; take its word rather than demanding `--seed` twice.
+		seed = os.environ.get('LEVITYDASH_CONFIG_SEED')
 	if seed:
 		os.environ['LEVITYDASH_CONFIG_DEBUG'] = '1'
 		os.environ['LEVITYDASH_CONFIG_SEED'] = str(Path(seed))
@@ -84,7 +94,9 @@ def boot(
 
 	app.init_app()
 	QTimer.singleShot(10, LevityDashboard.load_dashboard)
-	if plugins:
+	if fixture:
+		QTimer.singleShot(50, lambda: startFixture(LevityDashboard))
+	elif plugins:
 		QTimer.singleShot(50, LevityDashboard.plugins.start)
 
 	# Resize AFTER the dashboard has loaded. load_dashboard restores a saved
@@ -98,6 +110,14 @@ def boot(
 		app.main_window.show()
 	pump(app, max(settle - 1.5, 1.5))
 	return app, LevityDashboard
+
+
+def startFixture(dashboard) -> None:
+	"""Start the Fixture plugin alone. Raises if it did not load."""
+	plugin = dashboard.plugins.get('Fixture', None)
+	if plugin is None:
+		raise RuntimeError('LEVITYDASH_FIXTURE is set but the Fixture plugin did not load; see LevityDash.log')
+	plugin.thread.start()
 
 
 def pump(app, seconds: float) -> None:
