@@ -1,7 +1,8 @@
+import copy
 import PySide6.QtGui
 import numpy as np
 from PySide6 import QtCore
-from PySide6.QtCore import QPointF, QRectF, QPoint, QPropertyAnimation, Signal, QEasingCurve, QSizeF, Slot, QLineF
+from PySide6.QtCore import QPointF, QRectF, QPoint, QPropertyAnimation, Signal, QEasingCurve, QSizeF, Slot, QLineF, QObject
 from PySide6.QtGui import (
 	QBrush, QFont, QPainter, QPainterPath,
 	QPen, QPolygonF, QTransform, QRadialGradient, QGradient, QColor, Qt, QConicalGradient
@@ -19,7 +20,10 @@ from numpy import ceil, cos, pi, radians, sin, sqrt, number as np_number
 from collections.abc import Mapping
 from typing import Optional, Type, Union, Iterator, Iterable, TypeVar, Sequence, Dict
 
+from LevityDash import LevityDashboard
 from LevityDash.lib.plugins.categories import CategoryItem
+from LevityDash.lib.plugins.expressions import Expression, ExpressionError
+from LevityDash.lib.plugins.plugin import AnySource
 from LevityDash.lib.stateful import Stateful, StateProperty, SourceType
 from LevityDash.lib.stateful_mixins import ColorGradientMixin
 from LevityDash.lib.ui import UILogger, Color, Gradient
@@ -1876,6 +1880,182 @@ class Arrow(Needle):
 		self.setPath(path)
 
 
+def _gaugeKeyName(gauge: 'Gauge') -> str:
+	"""The key of the panel that owns ``gauge``, for log messages. Never raises."""
+	try:
+		return str(gauge.parent.key)
+	except Exception:
+		return '<unkeyed>'
+
+
+def _markerText(spec) -> str:
+	"""The ``value:`` text of a marker spec, for log messages. Never raises."""
+	try:
+		return str(spec.get('value'))
+	except Exception:
+		return str(spec)
+
+
+def _markerKeyFor(text: str) -> Optional[CategoryItem]:
+	"""Turn a marker's ``value:`` text into the key to subscribe to.
+
+	Every string value goes through here. Computed keys plug in here: when
+	``Expression.plainKey`` is None the expression's own ``.key`` is what to
+	subscribe to, once the backend registers it.
+
+	Returns None, and logs, when the text is not a plain key or does not parse.
+	"""
+	try:
+		expression = Expression.parse(text)
+	except ExpressionError as e:
+		log.warning(f'Gauge marker value {text!r} is not a valid value source ({e}); the marker stays hidden')
+		return None
+	if expression.plainKey is None:
+		log.warning(f'Gauge marker value {text!r} is not a plain key and computed keys are not supported yet; the marker stays hidden')
+		return None
+	return expression.plainKey
+
+
+class _MarkerFeed(QObject):
+	"""Subscribes one marker to the container of its key.
+
+	This is the part of ``Realtime.container`` a marker needs: wait for the
+	``MultiSourceContainer`` to have a realtime (or approximate) source, then
+	connect to that source's channel. The feed is a ``QObject`` so the channel
+	signal reaches ``updateSlot`` on the GUI thread, never on the plugin
+	thread that published the data.
+	"""
+
+	def __init__(self, marker: 'GaugeMarker', key: CategoryItem):
+		super().__init__()
+		self._marker = marker
+		self._key = key
+		self._connected = None
+		self._closed = False
+		self._multi = LevityDashboard.get_container(key)
+		self._multi.getPreferredSourceContainer(self, AnySource, self._attach)
+
+	def _attach(self):
+		if self._closed or self._connected is not None:
+			return
+		source = self._multi.getRealtimeContainer(AnySource) or self._multi.getRealtimeContainer(AnySource, False)
+		if source is None:
+			return
+		if not source.channel.connectSlot(self.updateSlot):
+			log.warning(f'Gauge marker for {self._key} failed to connect to {source.log_repr}')
+			return
+		self._connected = source
+		self.updateSlot()
+
+	@Slot(object)
+	def updateSlot(self, *args):
+		if self._closed:
+			return
+		try:
+			value = self._multi.value.now.value
+		except AttributeError:
+			return
+		try:
+			self._marker.setMarkerValue(value)
+		except RuntimeError:
+			# The gauge was deleted (dashboard reload) and this feed outlived it.
+			self.close()
+
+	def close(self):
+		self._closed = True
+		if self._connected is not None:
+			try:
+				self._connected.channel.disconnectSlot(self.updateSlot)
+			except Exception:
+				pass
+			self._connected = None
+
+
+class GaugeMarker(Needle):
+	"""An extra indicator on a gauge, with its own value.
+
+	Shares every visual option with the needle (``type``, ``width``,
+	``length``, ``offset``). The value comes from ``value:``, a number or a
+	key, not from the panel's key. With no value yet the marker is hidden.
+	"""
+
+	_markerValue = None
+	_markerColor: Optional[QColor] = None
+	_feed: Optional[_MarkerFeed] = None
+	_warned = False
+
+	#: Used when the marker names no ``length``: the needle default for the
+	#: ``marker`` type is the full radius, which is far too long for a tick.
+	DEFAULT_LENGTH = '20%'
+
+	def configure(self, spec: Mapping) -> None:
+		"""Apply the visual options and start the value source from ``spec``."""
+		visual = {k: v for k, v in spec.items() if k not in ('value', 'color')}
+		visual.setdefault('type', 'marker')
+		if Needle.Type[visual['type']] is Needle.Type.Marker:
+			visual.setdefault('length', self.DEFAULT_LENGTH)
+		with self.action_pool:
+			self.setItemState(visual)
+
+		if (color := spec.get('color')) is not None:
+			self._markerColor = Color.decode(color).QColor
+
+		raw = spec.get('value')
+		if isinstance(raw, bool):
+			raise TypeError(f'a marker value must be a number or a key, not {raw!r}')
+		if isinstance(raw, (int, float)):
+			self._markerValue = raw
+		elif isinstance(raw, str):
+			if (key := _markerKeyFor(raw)) is not None:
+				self._feed = _MarkerFeed(self, key)
+		else:
+			raise TypeError(f'a marker value must be a number or a key, not {raw!r}')
+		self.refresh()
+
+	def close(self):
+		if self._feed is not None:
+			self._feed.close()
+			self._feed = None
+
+	def setMarkerValue(self, value) -> None:
+		"""Set the value to show. GUI thread only (the feed's slot runs there)."""
+		self._markerValue = value
+		self.refresh()
+
+	def _markerAngle(self) -> Optional[float]:
+		value = self._markerValue
+		if value is None:
+			return None
+		gauge = self.gauge
+		valueClass = gauge.valueClass
+		try:
+			if not isinstance(value, valueClass):
+				value = valueClass(value)
+		except Exception:
+			value = float(value)
+		try:
+			return gauge.value_to_angle(value)
+		except Exception as e:
+			if not self._warned:
+				self._warned = True
+				log.warning(f'Gauge {_gaugeKeyName(gauge)} cannot place marker value {value!r}: {e}')
+			return None
+
+	def refresh(self):
+		gauge = self.gauge
+		self.resetTransform()
+		self.setBrush(QBrush(gauge.defaultColor if self._markerColor is None else self._markerColor))
+		self.draw()
+		angle = self._markerAngle()
+		if angle is None:
+			self.hide()
+			return
+		self.setRotation(angle)
+		self.setPos(gauge.center)
+		self.setZValue(-500)
+		self.show()
+
+
 class GaugeText(AnnotationText, GaugeItem):
 	def __init__(self, *args, **kwargs):
 		super(GaugeText, self).__init__(*args, **kwargs)
@@ -3173,6 +3353,8 @@ class Gauge(Display):
 
 	def _init_defaults_(self):
 		self._valueClass = self.parent.container.value_type
+		self._markerItems = []
+		self._markerSpecs = []
 		super()._init_defaults_()
 		self.__value = value = self._valueClass(0)
 
@@ -3240,6 +3422,63 @@ class Gauge(Display):
 	@needle.setter
 	def needle(self, value: Needle):
 		self._needle = value
+
+	@StateProperty(key='markers', default=None, allowNone=True, dependencies={'range', 'needle'})
+	def markers(self) -> Optional[list]:
+		"""Extra indicators: a list of ``{value, type, color, ...}`` mappings.
+
+		Kept as the plain mappings the user wrote, so saving writes them back
+		unchanged. The scene items built from them are ``self._markerItems``.
+		"""
+		return self._markerSpecs or None
+
+	@markers.setter
+	def markers(self, value: Optional[list]):
+		self._clearMarkers()
+		specs = []
+		for spec in value or []:
+			# One bad marker is skipped; it must never abort the dashboard load.
+			try:
+				marker = GaugeMarker(self)
+				marker.configure(spec)
+			except Exception as e:
+				log.warning(f'Gauge {_gaugeKeyName(self)} skipped marker {_markerText(spec)!r}: {e}')
+				try:
+					marker.close()
+					self.scene().removeItem(marker)
+				except Exception:
+					pass
+				continue
+			self._markerItems.append(marker)
+			specs.append(copy.deepcopy(dict(spec)))
+		self._markerSpecs = specs
+
+	@markers.decode
+	def markers(self, value) -> list:
+		if isinstance(value, Mapping):
+			value = [value]
+		if not isinstance(value, (list, tuple)):
+			log.warning(f'Gauge {_gaugeKeyName(self)} ignored markers {value!r}: expected a list')
+			return []
+		valid = []
+		for spec in value:
+			if isinstance(spec, Mapping):
+				valid.append(dict(spec))
+			else:
+				log.warning(f'Gauge {_gaugeKeyName(self)} skipped marker {spec!r}: expected a mapping with a value')
+		return valid
+
+	@markers.encode
+	def markers(self, value: Optional[list]) -> Optional[list]:
+		return copy.deepcopy(value) if value else None
+
+	def _clearMarkers(self):
+		for marker in self._markerItems:
+			marker.close()
+			if (scene := marker.scene()) is not None:
+				scene.removeItem(marker)
+		self._markerItems = []
+		self._markerSpecs = []
 
 	@StateProperty(key='major', repr=True, dependencies={'range'})
 	def majorDivisions(self) -> Graduations:
@@ -3433,7 +3672,7 @@ class Gauge(Display):
 		# second, then jump" behaviour: the first pass centres correctly and
 		# the second undoes it.
 		centred_items = (
-			self.needle, self.arc,
+			self.needle, self.arc, *self._markerItems,
 			self.major_ticks_surface, self.minor_ticks_surface, self.micro_ticks_surface,
 		)
 		for item in centred_items:
@@ -3474,6 +3713,8 @@ class Gauge(Display):
 		self._center_transform = QTransform()
 
 		self.needle.setTransform(t, combine=False)
+		for marker in self._markerItems:
+			marker.setTransform(t, combine=False)
 		self.arc.setTransform(t, combine=False)
 
 		# TODO: After transformation is set, the labels are not moved
@@ -3510,6 +3751,8 @@ class Gauge(Display):
 	def refresh(self):
 		self.arc.refresh()
 		self.needle.refresh()
+		for marker in self._markerItems:
+			marker.refresh()
 
 		self.major_ticks_surface.refresh()
 		self.minor_ticks_surface.refresh()
