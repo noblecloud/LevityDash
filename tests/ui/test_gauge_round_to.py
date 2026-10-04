@@ -14,8 +14,6 @@ The loop was always bounded - it terminates at -323 - so the cost was a garbage
 """
 from math import isfinite
 
-import pytest
-
 from LevityDash.lib.ui.frontends.PySide.Modules import Panel
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import Realtime
 
@@ -112,12 +110,6 @@ def test_the_half_steps_survive(dashboard):
 		f'round_to {gauge.range.round_to!r} is coarser than the 0.05 interval, '
 		'so the half-steps would be dropped'
 	)
-	# The graduations themselves are a SEPARATE bug - see the "Also broken on a
-	# fine-scale range" section of docs/tasks/gauge-round-to-float.md. rounded_max
-	# returns 0.4 for this range, so every tick lands outside the dial and the
-	# gauge draws no graduations at all. Pinned here as a known failure: if this
-	# starts passing, rounded_max got fixed and the brief should be updated.
-	ticks = sorted(float(v) for v in gauge.majorDivisions.tick_values)
-	if len(ticks) < 2:
-		pytest.xfail('rounded_max still returns 0.4 - graduations missing, tracked in the brief')
+	ticks = sorted(round(float(v), 6) for v in gauge.majorDivisions.tick_values)
+	assert 29.95 in ticks and 30.05 in ticks, f'half-steps missing: {ticks}'
 	sandbox.scene().removeItem(sandbox)

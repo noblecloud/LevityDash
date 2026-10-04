@@ -3482,65 +3482,32 @@ class Gauge(Display):
 
 		@round_to.item_default
 		def round_to(self) -> int | float:
-			_value_range = abs(float(self.max - self.min))
+			_span = abs(float(self.max - self.min))
+			_step = self._spanStep(_span)
+			# A finer major interval wins, or the range would drop its graduations.
+			_requested = self._requestedStep()
+			if _requested is not None and _requested < _step and not isclose(_requested, _step, rel_tol=1e-9):
+				return _requested
+			return _step
 
-			if 99 < _value_range <= 350:
+		@staticmethod
+		def _spanStep(span: float) -> int | float:
+			"""The power of ten that divides `span`, within float tolerance."""
+			if 99 < span <= 350:
 				return 10
-
-			if log10(_value_range).is_integer():
-				return _value_range / 10
-
-			# Walk DOWN from the span's own decade and take the first power of
-			# ten that divides it *within tolerance*.
-			#
-			# This used to test `span % 10 ** power > 0` and keep decrementing
-			# until it was exactly 0. Float `%` never is: for a span below 1,
-			# int(log10(span)) is 0 or negative, so the walk went into NEGATIVE
-			# powers and only stopped at _power = -323, where the remainder
-			# underflowed to 0.0. round_to came back as 1e-323 and rounded_min
-			# (below) overflowed computing floor(min / round_to), killing the
-			# gauge in __init__ - which surfaced as a bogus
-			# "'Gauge' object has no attribute '_needle'".
-			#
-			# Dividing and comparing to the quotient's own rounding asks the
-			# question float arithmetic can actually answer: is the remainder
-			# just representation error?
-			# The span alone is not the whole question. round_to sets
-			# rounded_min/rounded_max, which position every tick, so a step
-			# that divides the span exactly can still be too coarse for the
-			# graduations: 0.1 divides 0.2 perfectly, but on a 29.9-30.1 dial
-			# with 0.05 major ticks it would snap the range to 29.9 / 30.0 /
-			# 30.1 and drop the 29.95 and 30.05 half-steps. So prefer the
-			# requested interval when the graduations have one, and only fall
-			# back to the span otherwise.
-			if (requested := self._requestedStep()) is not None:
-				return requested
-
-			_power = floor(log10(_value_range))
-
+			if log10(span).is_integer():
+				return span / 10
+			_power = floor(log10(span))
 			while _power > -12:
 				_divisor = 10 ** _power
-				_quotient = _value_range / _divisor
-				if isclose(_quotient, round(_quotient), rel_tol=1e-9):
+				if isclose(span / _divisor, round(span / _divisor), rel_tol=1e-9):
 					return _divisor
 				_power -= 1
-
-			# Nothing divides it at any usable scale (a span like 1/3). Fall
-			# back to the span's own decade rather than to something absurd:
-			# rounded_min must stay finite.
-			return 10 ** floor(log10(_value_range))
+			# Nothing divides it (a span like 1/3): keep rounded_min finite.
+			return 10 ** floor(log10(span))
 
 		def _requestedStep(self) -> int | float | None:
-			"""The finest interval the graduations asked for, or None.
-
-			`usr_interval` is the interval the user (or `usr_interval`'s own
-			default ladder) wants. When a gauge sets `major: {interval: 0.05}`,
-			that is the finest step its ticks actually use, so it is the step
-			the range must not round *below*. Read defensively: this is a
-			defaulting calculation, and a gauge mid-construction may not have
-			usable graduations yet - a wrong answer here must not be worse than
-			the span-derived one.
-			"""
+			"""The major interval the graduations ask for, or None. Never raises."""
 			try:
 				_graduations = getattr(self._gauge, 'majorDivisions', None)
 				if _graduations is None or not getattr(_graduations, 'enabled', False):
@@ -3549,18 +3516,9 @@ class Gauge(Display):
 				if _interval is None or _interval is Unset:
 					return None
 				_value = abs(float(_interval))
-				# Only trust it if it is no coarser than the span-derived answer
-				# would be. On a 28-32 dial the major interval is 1 and the span
-				# answer is also 1, so nothing changes; the micro ticks step by
-				# 0.1 but minor and micro SUBDIVIDE the major interval without
-				# needing the range to move, so they must not drive this.
-				#
-				# Where it differs: a 0.2-wide span on 0.05 major ticks. The
-				# span answer would be 0.1, which would drop the 29.95 and
-				# 30.05 half-steps, so the requested 0.05 wins. A range that
-				# cannot be a whole number of major intervals is fine - that is
-				# the whole point of a zoomed barograph.
-				if not _value or not isfinite(_value) or _value > abs(float(self.max - self.min)):
+				# Below 1 only: the default interval is computed mid-construction from a
+				# half-built range and can read 1 on a 100-wide dial. No default is below 1.
+				if not _value or not isfinite(_value) or _value >= 1:
 					return None
 				return _value
 			except Exception:  # noqa: BLE001 - a default must never be the crash
@@ -3644,20 +3602,14 @@ class Gauge(Display):
 					return self._rounded_max + 1
 				return self._rounded_max
 
-			scaled_range = rounded_range
-			while scaled_range < 1:
-				scaled_range *= 10
-
-			scaled_amount = scaled_range / rounded_range
-
-			scaled_range = ceil(scaled_range)
-
-			if is_prime(scaled_range):
-				scaled_range += 1
-
-			scaled_range /= scaled_amount
-
-			return scaled_range
+			# Count whole round_to steps, as rounded_min does, and add them to rounded_min.
+			round_to = self.round_to
+			if not round_to:
+				return self._rounded_max
+			steps = ceil(round(float(rounded_range) / round_to, 9))
+			if is_prime(steps):
+				steps += 1
+			return self._gauge.valueClass(float(self.rounded_min) + steps * round_to)
 
 		@property
 		def range(self) -> Measurement:
