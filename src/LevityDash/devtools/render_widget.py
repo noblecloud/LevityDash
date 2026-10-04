@@ -20,6 +20,10 @@ Usage:
     poetry run python src/LevityDash/devtools/render_widget.py \\
         --all --out-dir widgets/ --seed DIR
 
+    # the same, but with fixed values instead of a live backend (see Fixture.py)
+    poetry run python src/LevityDash/devtools/render_widget.py \\
+        --levity frag.levity --scenario hot-clear-day --name gauge --out gauge.png
+
 `--pad` adds context around the item, which matters for judging *placement* —
 a label's binding depends on its distance to neighbours, so a pixel-tight crop
 can make bad spacing look fine. Render with padding when reviewing proximity,
@@ -66,6 +70,7 @@ def main() -> int:
 	parser.add_argument('--pad', type=float, default=0.0, help='pixels of surrounding context to include')
 	parser.add_argument('--levity', help='candidate .levity to render (requires --seed)')
 	parser.add_argument('--seed', help='config dir copy to render against; omit for the real config')
+	parser.add_argument('--scenario', help='fixed values for every key: a docs/design-references/scenarios name or a YAML path (turns on the Fixture plugin; seeds from devtools/design-seed unless --seed)')
 	parser.add_argument('--size', default='x'.join(map(str, DEFAULT_SIZE)), help='window size driving layout')
 	parser.add_argument('--settle', type=float, default=6.0)
 	parser.add_argument('--plugins', action='store_true', help='start plugins for real values')

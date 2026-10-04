@@ -13,6 +13,7 @@ docs/tasks/render-service-and-surface-frontend.md. Step 1 of that brief.
 
 Usage:
     poetry run python src/LevityDash/devtools/render_service.py --seed DIR
+    poetry run python src/LevityDash/devtools/render_service.py --scenario hot-clear-day   # fixed values
     curl -s localhost:8670/items
     curl -s 'localhost:8670/render?w=1800&h=1015' -o board.png
     curl -s 'localhost:8670/render/terrarium?scale=3&pad=8' -o cell.png
@@ -565,6 +566,7 @@ def _parseSize(text: str) -> Tuple[int, int]:
 def main() -> int:
 	parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 	parser.add_argument('--seed', help='config dir copy to render against; omit for the real config')
+	parser.add_argument('--scenario', help='fixed values for every key: a docs/design-references/scenarios name or a YAML path (turns on the Fixture plugin; seeds from devtools/design-seed unless --seed)')
 	parser.add_argument('--levity', help='candidate .levity to render (requires --seed)')
 	parser.add_argument('--size', default='x'.join(map(str, DEFAULT_SIZE)), help='window size driving layout')
 	parser.add_argument('--settle', type=float, default=6.0, help='seconds to let layout settle after boot/resize')
