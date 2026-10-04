@@ -179,7 +179,23 @@ physical display is read from further away but resolves *more* items — the win
 Size text in `mm`/`cm` where it matters, since those are physical units and survive
 a resolution change.
 
-### 6. Never pad with data that doesn't exist
+### 6. Stacks for uniform data and sections; geometry for composition
+
+Use a stack only for two jobs: a run of uniform data displays (a column of
+readings, a row of same-shaped cells) and dividing the board into sections.
+Anything composed — a clock with its date, AM/PM and moon, a hero value with a
+sub-label tucked against it — is laid out with relative `geometry:`
+(`x`/`y`/`width`/`height` as percentages of the parent), the way the author's
+original dashboards do it (see the clock in
+`src/LevityDash/resources/example-config/templates/dashboards/Empty.levity`).
+
+A stack shares space along one axis, so it cannot put one item *under* another
+inside a neighbour's column. The cross-section clock built from stacks put the
+moon and the AM side by side and they collided; rebuilt with geometry (moon at
+`x: 81.2%, y: 27%`, `%p` directly under it at `y: 70.4%`) it matched the
+original.
+
+### 7. Never pad with data that doesn't exist
 
 A cell whose key has no source renders `•••` forever. That's worse than an empty
 space — it looks broken. Before adding a value, confirm something actually
