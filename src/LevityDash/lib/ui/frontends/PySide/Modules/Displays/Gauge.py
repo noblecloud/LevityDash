@@ -2775,6 +2775,13 @@ class GaugeTickText(GaugeItem, AnnotationText):
 
 		position = display_position or self.display_position
 
+		# Labels placed relative to the arc: inside is toward the center (like Below),
+		# outside is away from it (like Above).
+		if position == DisplayPosition.Outside:
+			position = DisplayPosition.Above
+		elif position == DisplayPosition.Inside:
+			position = DisplayPosition.Below
+
 		if self.group.source.position in {DisplayPosition.Above, DisplayPosition.Outside}:
 			position = position.opposite
 
