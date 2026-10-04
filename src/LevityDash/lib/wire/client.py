@@ -74,7 +74,7 @@ class WireClient:
 						# else: unmatched (already timed out and popped, or a
 						# stray) - nobody's awaiting it anymore, drop silently.
 						continue
-					if message.get('type') == 'plugin_command_response':
+					if message.get('type') in ('plugin_command_response', 'computed_sync_response'):
 						# Same id-correlation as ts_response above; a command
 						# reply is also a one-shot unicast, not broadcast state.
 						future = self._pending.get(message.get('id'))

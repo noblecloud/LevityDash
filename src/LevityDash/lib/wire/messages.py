@@ -37,6 +37,7 @@ __all__ = [
 	'PluginState', 'plugin_key_count', 'encode_plugin_status', 'parse_plugin_status',
 	'encode_heartbeat', 'parse_heartbeat',
 	'PLUGIN_COMMANDS', 'build_plugin_command', 'encode_plugin_command_response', 'decode_plugin_command_response',
+	'build_computed_sync', 'encode_computed_sync_response', 'decode_computed_sync_response',
 ]
 
 # The flag fields a container advertises across the wire (isRealtime,
@@ -344,3 +345,50 @@ def decode_plugin_command_response(message: dict) -> Tuple[bool, Optional[str]]:
 	(bool, str|None) pair - never raises - so callers don't need a separate
 	error branch beyond checking ``ok``."""
 	return bool(message.get('ok', False)), message.get('error')
+
+
+# --- computed keys: which expressions a frontend needs -----------------------
+#
+# A frontend loads the .levity file, so only it knows which expressions the
+# dashboard uses (docs/tasks/value-sources.md). 'computed_sync' tells the
+# backend, and the backend publishes each result under its computed key through
+# the ordinary 'update' path, with the source 'Computed'.
+#
+# The message carries the frontend's *whole* set, not a change. That makes it
+# idempotent: the frontend sends it again after every reconnect (the backend
+# may have restarted and forgotten everything), and a repeated or reordered
+# message cannot leave a count wrong. The backend keeps one set per connection
+# and drops it when the connection closes, so a frontend that goes away stops
+# costing computations. The same id-correlated reply as 'plugin_command'
+# reports the expressions the backend could not parse.
+
+
+def build_computed_sync(*, expressions: Sequence[str]) -> dict:
+	"""Build a 'computed_sync' carrying every expression text this frontend
+	currently needs. An empty list releases everything."""
+	return {
+		'v': WIRE_VERSION,
+		'type': 'computed_sync',
+		'id': str(uuid4()),
+		'expressions': sorted(set(expressions)),
+	}
+
+
+def encode_computed_sync_response(*, request_id: str, ok: bool, rejected: Optional[Dict[str, str]] = None, error: Optional[str] = None) -> dict:
+	"""Build the matching 'computed_sync_response'. ``rejected`` maps each
+	expression text the backend refused to the reason; the rest are live."""
+	return {
+		'v': WIRE_VERSION,
+		'type': 'computed_sync_response',
+		'id': request_id,
+		'ok': bool(ok),
+		'error': error,
+		'rejected': dict(rejected or {}),
+	}
+
+
+def decode_computed_sync_response(message: dict) -> Tuple[bool, Dict[str, str], Optional[str]]:
+	"""Decode a 'computed_sync_response' into ``(ok, rejected, error)``. Never
+	raises."""
+	rejected = message.get('rejected')
+	return bool(message.get('ok', False)), dict(rejected) if isinstance(rejected, dict) else {}, message.get('error')

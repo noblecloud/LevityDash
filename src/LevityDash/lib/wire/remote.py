@@ -26,17 +26,19 @@ marshal QObject's thread affinity correctly.
 import asyncio
 import threading
 from time import monotonic
-from typing import Callable, Dict, Optional, TYPE_CHECKING
+from typing import Callable, Dict, Optional, Tuple, TYPE_CHECKING
 
 from PySide6.QtCore import QObject, Qt, Signal, Slot
 
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.wire.client import WireClient
 from LevityDash.lib.wire.frontend import RemoteFrontend
-from LevityDash.lib.wire.messages import PluginState, build_plugin_command
+from LevityDash.lib.wire.messages import PluginState, build_computed_sync, build_plugin_command, decode_computed_sync_response
 
 if TYPE_CHECKING:
+	from LevityDash.lib.plugins.categories import CategoryItem
 	from LevityDash.lib.plugins.dispatcher import PluginValueDirectory
+	from LevityDash.lib.plugins.expressions import Expression
 
 log = LevityPluginLog.getChild('Wire').getChild('Remote')
 
@@ -115,6 +117,13 @@ class RemoteConnection:
 		# and must not be skewed by an NTP step or a DST change.
 		self._lastHeartbeat: Optional[float] = None
 		self._heartbeatSeq: Optional[int] = None
+		# Computed keys this frontend needs (lib/plugins/computed.py). The
+		# refcounts are GUI-thread state; _computedTexts is the snapshot the
+		# wire thread sends, replaced whole (one attribute swap) on each
+		# change, so the wire thread never reads a dict mid-mutation.
+		self._computed: Dict['CategoryItem', list] = {}
+		self._computedTexts: Tuple[str, ...] = ()
+		self._computedSyncQueued = False
 		self._thread.start()
 		log.info(f'mode=remote: connecting to backend at {url}')
 
@@ -147,6 +156,10 @@ class RemoteConnection:
 				await client.connect()
 				log.info(f'connected to backend at {self.url}')
 				self._set_state('connected')
+				# A new connection may be a new backend process that knows
+				# nothing of this frontend's expressions: send them again.
+				if self._computedTexts:
+					self._queue_computed_sync()
 				backoff = 1
 				await client.wait_closed()
 				log.warning('backend connection closed')
@@ -267,6 +280,66 @@ class RemoteConnection:
 			asyncio.ensure_future(_do())
 
 		self._loop.call_soon_threadsafe(submit)
+
+	# -- computed keys (GUI thread) -----------------------------------------
+
+	def acquire_expression(self, expression: 'Expression') -> None:
+		"""Count one more user of ``expression``; the first one asks the
+		backend to compute it. Results arrive as ordinary updates from the
+		'Computed' source."""
+		entry = self._computed.get(expression.key)
+		if entry is not None:
+			entry[1] += 1
+			return
+		self._computed[expression.key] = [expression, 1]
+		self._computed_changed()
+
+	def release_expression(self, expression: 'Expression') -> None:
+		"""Count one fewer user; the last one tells the backend to stop."""
+		entry = self._computed.get(expression.key)
+		if entry is None:
+			return
+		entry[1] -= 1
+		if entry[1] <= 0:
+			del self._computed[expression.key]
+			self._computed_changed()
+
+	def _computed_changed(self) -> None:
+		self._computedTexts = tuple(sorted(expression.text for expression, _ in self._computed.values()))
+		# With no loop yet, the sync on connect sends the snapshot.
+		if self._loop is not None:
+			try:
+				self._loop.call_soon_threadsafe(self._queue_computed_sync)
+			except RuntimeError:
+				pass  # the loop has closed: this connection is shutting down
+
+	# -- computed keys (wire thread) ----------------------------------------
+
+	def _queue_computed_sync(self) -> None:
+		# Coalesces: a dashboard load acquires many expressions in one burst,
+		# and every change before the send goes out rides in the same message,
+		# because the send reads the newest snapshot.
+		if self._computedSyncQueued:
+			return
+		self._computedSyncQueued = True
+		asyncio.ensure_future(self._send_computed_sync())
+
+	async def _send_computed_sync(self) -> None:
+		self._computedSyncQueued = False
+		client = self._client
+		if client is None or self.state != 'connected':
+			return  # the sync on connect covers it
+		message = build_computed_sync(expressions=self._computedTexts)
+		try:
+			response = await client.request(message)
+		except Exception as e:
+			log.warning(f'computed_sync {message["id"]} failed: {e!r}')
+			return
+		ok, rejected, error = decode_computed_sync_response(response)
+		if not ok:
+			log.error(f'backend refused computed_sync: {error}')
+		for text, reason in rejected.items():
+			log.error(f'backend rejected computed value {text!r}: {reason}')
 
 	def stop(self) -> None:
 		self._stop.set()

@@ -99,16 +99,24 @@ def main() -> int:
 	)
 	for plugin in LevityDashboard.plugins:
 		bridge.attach(plugin)
+	# Computed keys (value-source expressions) are evaluated here, where the
+	# timeseries live; frontends register the ones they need over the wire.
+	from LevityDash.lib.plugins.computed import computedEngine
+	bridge.attach_computed(computedEngine())
+	server.on_disconnect = bridge.handle_disconnect
 	# set post-construction rather than passed to WireServer(...) above: the
 	# server starts (and its thread begins reading connections) before a
 	# RemoteBackend exists to answer requests. No race - a frontend can't
 	# connect and send a request until well after this line runs.
 	async def _on_request(message: dict) -> dict:
 		# One handler for every frontend->backend request type. WireServer
-		# already whitelists which types reach here (ts_request, plugin_command).
+		# already whitelists which types reach here (ts_request, plugin_command,
+		# computed_sync).
 		msg_type = message.get('type')
 		if msg_type == 'plugin_command':
 			return await bridge.handle_plugin_command(message)
+		if msg_type == 'computed_sync':
+			return await bridge.handle_computed_sync(message)
 		# default / ts_request
 		return await bridge.handle_ts_request(message)
 	server.on_request = _on_request
