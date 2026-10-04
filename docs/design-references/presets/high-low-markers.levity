@@ -1,0 +1,19 @@
+# Today's temperature now, with today's high and low as marker expressions.
+# Needs a timeseries for the key (the hot-clear-day scenario supplies one).
+- type: realtime.gauge
+  name: gauge
+  key: environment.temperature.temperature
+  title: false
+  display:
+    arc: {weight: 5%}
+    range: {min: 60, max: 110}
+    value-label: {position: below}
+    markers:
+      - value: min(environment.temperature.temperature, today)
+        type: marker
+        length: 12%
+        color: '#4aa3ff'
+      - value: max(environment.temperature.temperature, today)
+        type: marker
+        length: 12%
+        color: '#ff5a4a'
