@@ -2062,6 +2062,115 @@ class GaugeMarker(Needle):
 		self.show()
 
 
+class GaugeFill(GaugePathItem):
+	"""A value-driven arc stroked over the track and under the needle.
+
+	Spec keys: ``from`` (a number; default the range minimum), ``to`` (a
+	number; omitted means the gauge value), ``weight`` (default the arc's) and
+	``color`` (default the gauge colour). With no value to draw to, it is hidden.
+	Number-only ends for now; a bad spec logs the gauge key and hides the fill.
+	"""
+
+	#: Between the arc (-800) and the needle (-500).
+	Z_VALUE = -700
+
+	_from: Optional[float] = None
+	_to: Optional[float] = None
+	_weight = None
+	_color: Optional[QColor] = None
+	_valid = False
+	_warned = False
+
+	def configure(self, spec: Mapping) -> None:
+		"""Read ``spec``. Never raises: a bad spec warns and leaves the fill hidden."""
+		self._valid = False
+		self._from = self._to = self._weight = self._color = None
+		name = _gaugeKeyName(self.gauge)
+		unknown = set(spec) - {'from', 'to', 'weight', 'color'}
+		if unknown:
+			log.warning(f'Gauge {name} fill ignored unknown keys {sorted(map(str, unknown))}')
+		try:
+			for end in ('from', 'to'):
+				raw = spec.get(end)
+				if raw is None:
+					continue
+				if isinstance(raw, bool) or not isinstance(raw, (int, float)) or not isfinite(raw):
+					raise TypeError(f'{end} must be a number (value sources are not supported in fill yet), not {raw!r}')
+				setattr(self, f'_{end}', float(raw))
+			if (weight := spec.get('weight')) is not None:
+				self._weight = parseWidth(weight, None)
+				if self._weight is None:
+					raise ValueError(f'weight {weight!r} is not a size')
+			if (color := spec.get('color')) is not None:
+				self._color = Color.decode(color).QColor
+		except Exception as e:
+			log.warning(f'Gauge {name} fill ignored, hidden: {e}')
+			self._safeRefresh()
+			return
+		self._valid = True
+		self._safeRefresh()
+
+	def _safeRefresh(self):
+		# The gauge may not be laid out yet while its state loads; Gauge.refresh redraws later.
+		try:
+			self.refresh()
+		except Exception as e:
+			log.debug(f'Gauge {_gaugeKeyName(self.gauge)} fill not drawn yet: {e}')
+
+	def _toValueClass(self, value):
+		valueClass = self.gauge.valueClass
+		try:
+			if not isinstance(value, valueClass):
+				value = valueClass(value)
+		except Exception:
+			value = float(value)
+		return value
+
+	def _angles(self) -> Optional[tuple[float, float]]:
+		gauge = self.gauge
+		start = self._from if self._from is not None else gauge._range.rounded_min
+		end = self._to if self._to is not None else gauge.value
+		if start is None or end is None:
+			return None
+		try:
+			a = gauge.value_to_angle(self._toValueClass(start))
+			b = gauge.value_to_angle(self._toValueClass(end))
+			a, b = float(a), float(b)
+		except Exception as e:
+			if not self._warned:
+				self._warned = True
+				log.warning(f'Gauge {_gaugeKeyName(gauge)} cannot place fill {start!r} to {end!r}: {e}')
+			return None
+		if not (isfinite(a) and isfinite(b)):
+			return None
+		return a, b
+
+	def refresh(self):
+		"""Redraw. Geometry and colour only; never asks the gauge to relayout."""
+		gauge = self.gauge
+		angles = self._angles() if self._valid else None
+		if angles is None:
+			self.hide()
+			return
+		a, b = angles
+		weight = size_px(self._weight, gauge.radius, dimension=DimensionType.width) if self._weight is not None else gauge.arc.weight_px
+		path = QPainterPath()
+		if weight and a != b:
+			rect = gauge.arc.centered_gauge_rect
+			path.arcMoveTo(rect, -a + 90)
+			path.arcTo(rect, -a + 90, -(b - a))
+		pen = QPen(gauge.pen)
+		pen.setWidthF(weight or 0)
+		pen.setCapStyle(Qt.PenCapStyle.FlatCap)
+		pen.setBrush(QBrush(gauge.defaultColor if self._color is None else self._color))
+		self.setPen(pen)
+		self.setBrush(Qt.BrushStyle.NoBrush)
+		self.setPath(path)
+		self.setPos(gauge.center)
+		self.setZValue(self.Z_VALUE)
+		self.show()
+
+
 class GaugeText(AnnotationText, GaugeItem):
 	def __init__(self, *args, **kwargs):
 		super(GaugeText, self).__init__(*args, **kwargs)
@@ -3362,6 +3471,8 @@ class Gauge(Display):
 		self._valueClass = self.parent.container.value_type
 		self._markerItems = []
 		self._markerSpecs = []
+		self._fillItem = None
+		self._fillSpec = None
 		super()._init_defaults_()
 		self.__value = value = self._valueClass(0)
 
@@ -3429,6 +3540,49 @@ class Gauge(Display):
 	@needle.setter
 	def needle(self, value: Needle):
 		self._needle = value
+
+	@StateProperty(key='fill', default=None, allowNone=True, dependencies={'range', 'arc'})
+	def fill(self) -> Optional[dict]:
+		"""A value-driven arc over the track: ``{from, to, weight, color}``.
+
+		Kept as the plain mapping the user wrote; the scene item is ``self._fillItem``.
+		"""
+		return self._fillSpec
+
+	@fill.setter
+	def fill(self, value: Optional[dict]):
+		self._clearFill()
+		if not value:
+			return
+		# A bad fill is a warning, never a failed dashboard load.
+		try:
+			item = GaugeFill(self)
+			item.configure(value)
+		except Exception as e:
+			log.warning(f'Gauge {_gaugeKeyName(self)} fill skipped: {e}')
+			return
+		self._fillItem = item
+		self._fillSpec = copy.deepcopy(dict(value))
+
+	@fill.decode
+	def fill(self, value) -> Optional[dict]:
+		if value is None:
+			return None
+		if not isinstance(value, Mapping):
+			log.warning(f'Gauge {_gaugeKeyName(self)} ignored fill {value!r}: expected a mapping')
+			return None
+		return dict(value)
+
+	@fill.encode
+	def fill(self, value: Optional[dict]) -> Optional[dict]:
+		return copy.deepcopy(value) if value else None
+
+	def _clearFill(self):
+		item = self._fillItem
+		self._fillItem = None
+		self._fillSpec = None
+		if item is not None and (scene := item.scene()) is not None:
+			scene.removeItem(item)
 
 	@StateProperty(key='markers', default=None, allowNone=True, dependencies={'range', 'needle'})
 	def markers(self) -> Optional[list]:
@@ -3679,7 +3833,7 @@ class Gauge(Display):
 		# second, then jump" behaviour: the first pass centres correctly and
 		# the second undoes it.
 		centred_items = (
-			self.needle, self.arc, *self._markerItems,
+			self.needle, self.arc, *self._markerItems, *self._fillItems(),
 			self.major_ticks_surface, self.minor_ticks_surface, self.micro_ticks_surface,
 		)
 		for item in centred_items:
@@ -3723,6 +3877,8 @@ class Gauge(Display):
 		for marker in self._markerItems:
 			marker.setTransform(t, combine=False)
 		self.arc.setTransform(t, combine=False)
+		for item in self._fillItems():
+			item.setTransform(t, combine=False)
 
 		# TODO: After transformation is set, the labels are not moved
 		# correctly thus the 'refresh' method must be called after.
@@ -3757,6 +3913,8 @@ class Gauge(Display):
 
 	def refresh(self):
 		self.arc.refresh()
+		for item in self._fillItems():
+			item.refresh()
 		self.needle.refresh()
 		for marker in self._markerItems:
 			marker.refresh()
@@ -3801,7 +3959,13 @@ class Gauge(Display):
 			self.valueLabel.textBox.refresh()
 			self.unitLabel.textBox.refresh()
 			self.needle.refresh()
+			for item in self._fillItems():
+				item.refresh()
 			self._update_shape()
+
+	def _fillItems(self) -> list:
+		item = getattr(self, '_fillItem', None)
+		return [] if item is None else [item]
 
 	def value_to_angle(self, value: Numeric) -> Angle:
 		angle = float(value - self._range.rounded_min) / self._range.rounded_range * self.fullAngle + self.startAngle

@@ -1,0 +1,15 @@
+# Humidity with a fixed 30-60 % comfort band under the needle.
+# `fill:` with numeric `from` and `to` is a fixed band; the needle still shows the value.
+- type: realtime.gauge
+  name: gauge
+  key: environment.humidity.humidity
+  title: false
+  display:
+    arc: {weight: 5%}
+    range: {min: 0, max: 100}
+    fill: {from: 30, to: 60, weight: 5%, color: '#4cc38a'}
+    major:
+      interval: 25
+      labels:
+        format-spec: {show_unit: false, unit_symbol: false, precision: 0}
+    value-label: {position: bottom}
