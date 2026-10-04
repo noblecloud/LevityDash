@@ -41,9 +41,11 @@ from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.utils.data import KeyData
 from LevityDash.lib.utils.shared import now
-from LevityDash.lib.wire.messages import encode_container, encode_heartbeat, encode_plugin_command_response, encode_plugin_status, encode_ts_response, encode_update_message
+from LevityDash.lib.wire.messages import encode_computed_sync_response, encode_container, encode_heartbeat, encode_plugin_command_response, encode_plugin_status, encode_ts_response, encode_update_message
 
 if TYPE_CHECKING:
+	from LevityDash.lib.plugins.computed import ComputedEngine
+	from LevityDash.lib.plugins.expressions import Expression
 	from LevityDash.lib.plugins.plugin import Plugin
 
 log = LevityPluginLog.getChild('Wire').getChild('Backend')
@@ -97,10 +99,24 @@ class RemoteBackend:
 		# this QObject's thread affinity correctly, same as remote.py's
 		# _GuiMarshal.
 		self._qt_invoker = _QtInvoker()
+		# The computed-key engine (lib/plugins/computed.py), and the computed
+		# keys each frontend connection asked for in its last computed_sync.
+		# The engine refcounts expressions; this holds the counts that belong
+		# to each connection, so a closed connection releases exactly its own.
+		self._computed: Optional['ComputedEngine'] = None
+		self._computedDemand: Dict[int, Dict[CategoryItem, 'Expression']] = {}
 
 	def attach(self, plugin: 'Plugin') -> None:
 		self._plugins[plugin.name] = plugin
 		plugin.publisher.connectSlot(self._on_published)
+
+	def attach_computed(self, engine: 'ComputedEngine') -> None:
+		"""Serve computed keys. Their results go out through ``_on_published``
+		like a plugin's keys; the engine is not added to ``_plugins``, so it
+		never shows in plugin_status or takes plugin_commands - there is
+		nothing to start or stop."""
+		self._computed = engine
+		engine.source.publisher.connectSlot(self._on_published)
 
 	@Slot(KeyData)
 	def _on_published(self, data: KeyData) -> None:
@@ -236,6 +252,77 @@ class RemoteBackend:
 			plugin.thread_pool.run_threaded_process(timeseries.update, on_finish=on_finish, direct=True)
 		except Exception as e:
 			finish(encode_ts_response(request_id=request_id, source=source, key=key_str, ok=False, error=repr(e)))
+
+	async def handle_computed_sync(self, message: dict) -> dict:
+		"""The coroutine WireServer awaits per 'computed_sync' - runs on the
+		server's asyncio thread. The engine lives on the Qt main thread, so the
+		work hops there, same as handle_plugin_command."""
+		loop = asyncio.get_running_loop()
+		fut = loop.create_future()
+		self._qt_invoker.invoke(lambda: self._resolve_computed_sync(message, loop, fut))
+		return await fut
+
+	def _resolve_computed_sync(self, message: dict, loop: asyncio.AbstractEventLoop, fut: asyncio.Future) -> None:
+		"""Runs on the Qt main thread. Replaces the sending connection's set
+		of expressions with the one in the message, then republishes every
+		result already computed, so a frontend that just (re)connected gets its
+		values without waiting for an input to change."""
+		from LevityDash.lib.plugins.expressions import Expression, ExpressionError
+
+		request_id = message.get('id')
+
+		def finish(response: dict) -> None:
+			loop.call_soon_threadsafe(lambda: fut.done() or fut.set_result(response))
+
+		if self._computed is None:
+			finish(encode_computed_sync_response(request_id=request_id, ok=False, error='this backend does not serve computed keys'))
+			return
+
+		connection = message.get('connection', 0)
+		rejected: Dict[str, str] = {}
+		wanted: Dict[CategoryItem, 'Expression'] = {}
+		for text in message.get('expressions') or ():
+			try:
+				expression = Expression.parse(text)
+			except ExpressionError as e:
+				rejected[str(text)] = str(e)
+				continue
+			except Exception as e:
+				rejected[str(text)] = repr(e)
+				continue
+			if expression.plainKey is not None or expression.usesValue:
+				rejected[str(text)] = 'not a computed expression'
+				continue
+			wanted[expression.key] = expression
+		if rejected:
+			log.warning(f'computed_sync from connection {connection} rejected {rejected}')
+
+		held = self._computedDemand.get(connection, {})
+		for key, expression in wanted.items():
+			if key not in held:
+				self._computed.register(expression)
+		for key in held.keys() - wanted.keys():
+			self._computed.release(key)
+		if wanted:
+			self._computedDemand[connection] = wanted
+		else:
+			self._computedDemand.pop(connection, None)
+		log.info(f'connection {connection} needs {len(wanted)} computed keys')
+		self._computed.republish(wanted.keys())
+		finish(encode_computed_sync_response(request_id=request_id, ok=True, rejected=rejected))
+
+	def handle_disconnect(self, connection: int) -> None:
+		"""WireServer.on_disconnect - runs on the server's asyncio thread.
+		Releases what the closed connection held."""
+		self._qt_invoker.invoke(lambda: self._release_connection(connection))
+
+	def _release_connection(self, connection: int) -> None:
+		held = self._computedDemand.pop(connection, None)
+		if not held or self._computed is None:
+			return
+		for key in held:
+			self._computed.release(key)
+		log.info(f'connection {connection} closed, released {len(held)} computed keys')
 
 	async def handle_plugin_command(self, message: dict) -> dict:
 		"""The coroutine WireServer awaits per 'plugin_command' (server.py's

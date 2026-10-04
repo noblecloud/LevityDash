@@ -16,6 +16,7 @@ here directly — this class stays ignorant of message-shape specifics beyond
 (lib/wire/backend.py) and messages.py.
 """
 import json
+from itertools import count
 from typing import Awaitable, Callable, Dict, Optional, Set
 
 from aiohttp import WSMsgType, web
@@ -42,7 +43,11 @@ class WireServer:
 		# lib/backend.py, where the handler needs a RemoteBackend that isn't
 		# built yet at server-construction time).
 		self.on_request = on_request
+		# Called with a connection id when that client's socket closes, so a
+		# handler holding per-connection state (computed_sync) can drop it.
+		self.on_disconnect: Optional[Callable[[int], None]] = None
 		self._clients: Set[web.WebSocketResponse] = set()
+		self._connectionIds = count(1)
 		# Last update message seen per source, replayed to new clients. NOTE:
 		# updates are incremental (changed keys only); merging them into a true
 		# cumulative snapshot is a mode=remote-step refinement (TODO), this
@@ -116,6 +121,7 @@ class WireServer:
 		ws = web.WebSocketResponse(heartbeat=30)
 		await ws.prepare(request)
 		self._clients.add(ws)
+		connection = next(self._connectionIds)
 		# replay current snapshot so a late-joining frontend starts populated
 		for message in self._latest.values():
 			await self._safe_send(ws, json.dumps(message))
@@ -124,25 +130,34 @@ class WireServer:
 		try:
 			async for msg in ws:
 				if msg.type == WSMsgType.TEXT:
-					await self._handle_incoming(ws, msg.data)
+					await self._handle_incoming(ws, msg.data, connection)
 				elif msg.type == WSMsgType.ERROR:
 					log.warning(f'client socket error: {ws.exception()!r}')
 					break
 		finally:
 			self._clients.discard(ws)
+			if self.on_disconnect is not None:
+				try:
+					self.on_disconnect(connection)
+				except Exception as e:
+					log.error(f'on_disconnect handler raised for connection {connection}: {e!r}')
 		return ws
 
-	async def _handle_incoming(self, ws: web.WebSocketResponse, raw: str) -> None:
+	async def _handle_incoming(self, ws: web.WebSocketResponse, raw: str, connection: int = 0) -> None:
 		try:
 			incoming = json.loads(raw)
 		except Exception as e:
 			log.warning(f'failed to parse client message: {e!r}')
 			return
 		# Frontend->backend request types that expect a unicast reply keyed by
-		# id (ts_request, plugin_command). Anything else is ignored rather
-		# than erroring, so an older/newer client can't crash this connection.
-		if incoming.get('type') not in ('ts_request', 'plugin_command'):
+		# id (ts_request, plugin_command, computed_sync). Anything else is
+		# ignored rather than erroring, so an older/newer client can't crash
+		# this connection.
+		if incoming.get('type') not in ('ts_request', 'plugin_command', 'computed_sync'):
 			return
+		# Which socket sent it, for handlers that keep per-connection state.
+		# Set here rather than trusted from the client.
+		incoming['connection'] = connection
 		if self.on_request is None:
 			log.warning(f'{incoming.get("type")} {incoming.get("id")} received but no handler is wired up')
 			return
