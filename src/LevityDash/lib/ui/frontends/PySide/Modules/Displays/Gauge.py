@@ -2876,7 +2876,12 @@ class GaugeTickText(GaugeItem, AnnotationText):
 
 		# Always set it: a label refreshed after `rotate: false` must drop the
 		# angle an earlier refresh gave it.
-		self.setRotation(self.tick.angle + 90 if self.rotated else 0)
+		rotation = self.tick.angle + 90 if self.rotated else 0
+		# Text that would read upside down is flipped half a turn so it stays legible.
+		# A margin keeps near-vertical radial labels (a few degrees past 90/270) as they are.
+		if 105 < rotation % 360 < 255:
+			rotation += 180
+		self.setRotation(rotation)
 
 		super(GaugeTickText, self).refresh()
 		self.setPos(self.position())
