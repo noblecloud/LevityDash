@@ -88,6 +88,7 @@ _METADATA = {'type': 'computed'}
 #: one computation. Current-value expressions recompute at once.
 _SERIES_DELAY_MS = 5000
 _CURRENT_DELAY_MS = 0
+_MAX_TIMER_MS = 2 ** 31 - 1
 
 
 # -- the source --------------------------------------------------------------
@@ -183,8 +184,37 @@ def _msUntilNextMidnight(at: Optional[float] = None) -> int:
 
 # -- the engine ----------------------------------------------------------------
 
+def _msUntilExpiry(expression: Expression, resolver, now: datetime) -> Optional[int]:
+	"""Milliseconds from ``now`` until a duration window of ``expression`` next
+	changes by itself: its oldest reading leaves a rolling window
+	(``max(x, 24h)``), or the point an ``at(x, -3h)`` reads moves past the next
+	reading. None when no duration window has a reading to wait for. ``today``
+	windows are the midnight timer's job."""
+	soonest: Optional[timedelta] = None
+	for item in expression.series:
+		span = item.window.span
+		if span is None:
+			continue
+		points = resolver.series(item.key, now - abs(span), now)
+		if not points:
+			continue
+		leaves = min(t for t, _ in points) + abs(span) - now
+		soonest = leaves if soonest is None else min(soonest, leaves)
+	for item in expression.points:
+		points = resolver.series(item.key, now + item.offset, now)
+		later = [t for t, _ in points or () if t > now + item.offset]
+		if not later:
+			continue
+		reaches = min(later) - item.offset - now
+		soonest = reaches if soonest is None else min(soonest, reaches)
+	if soonest is None:
+		return None
+	# A second past the edge, so the reading is out when the recompute looks.
+	return min(max(int(soonest.total_seconds() * 1000) + 1000, 1000), _MAX_TIMER_MS)
+
+
 class _Entry:
-	__slots__ = ('expression', 'count', 'state', 'stale', 'lastError')
+	__slots__ = ('expression', 'count', 'state', 'stale', 'lastError', 'expiry')
 
 	def __init__(self, expression: Expression):
 		self.expression = expression
@@ -196,6 +226,9 @@ class _Entry:
 		#: The last evaluation error logged, so a broken expression logs once
 		#: rather than on every recompute.
 		self.lastError: Optional[str] = None
+		#: Single-shot that recomputes when a reading leaves a rolling window.
+		#: Created on the main thread on first use.
+		self.expiry: Optional[QTimer] = None
 
 	@property
 	def delay(self) -> int:
@@ -262,6 +295,10 @@ class ComputedEngine(QObject):
 		if entry.count > 0:
 			return False
 		del self._entries[key]
+		if entry.expiry is not None:
+			entry.expiry.stop()
+			entry.expiry.deleteLater()
+			entry.expiry = None
 		for inputKey in entry.expression.inputKeys:
 			dependents = self._dependents.get(inputKey)
 			if dependents is not None:
@@ -306,6 +343,22 @@ class ComputedEngine(QObject):
 		entry.state = 'scheduled'
 		singleShotSafe(delay, partial(self._start, entry))
 
+	def _armExpiry(self, entry: _Entry, delay: Optional[int]) -> None:
+		"""Replace the entry's expiry timer: one single-shot at most."""
+		if delay is None:
+			if entry.expiry is not None:
+				entry.expiry.stop()
+			return
+		if entry.expiry is None:
+			timer = entry.expiry = QTimer(self)
+			timer.setSingleShot(True)
+			timer.timeout.connect(partial(self._onExpiry, entry))
+		startTimerSafe(entry.expiry, delay)
+
+	def _onExpiry(self, entry: _Entry) -> None:
+		if self._entries.get(entry.expression.key) is entry:
+			self._schedule(entry, 0)
+
 	def _scheduleMidnight(self) -> None:
 		if not self._midnight.isActive():
 			startTimerSafe(self._midnight, _msUntilNextMidnight())
@@ -331,24 +384,26 @@ class ComputedEngine(QObject):
 			series = {key: self._timeseriesFor(key) for key in windowed}
 			self._executor.submit(self._compute, entry, current, series, self.clock())
 		except Exception as e:
-			self._finished.emit((entry, Missing, f'could not read its inputs: {e!r}'))
+			self._finished.emit((entry, Missing, f'could not read its inputs: {e!r}', None))
 
 	def _compute(self, entry: _Entry, current: dict, series: dict, now: datetime) -> None:
 		"""Worker thread."""
 		try:
 			for timeseries in {id(s): s for s in series.values() if s is not None}.values():
 				timeseries.update()
-			result = entry.expression.evaluate(_SnapshotResolver(current, series), now)
+			resolver = _SnapshotResolver(current, series)
+			result = entry.expression.evaluate(resolver, now)
 			error = None
+			expiry = _msUntilExpiry(entry.expression, resolver, now)
 		except ExpressionError as e:
-			result, error = Missing, str(e)
+			result, error, expiry = Missing, str(e), None
 		except Exception as e:
-			result, error = Missing, f'{entry.expression.text!r}: {type(e).__name__}: {e}'
-		self._finished.emit((entry, result, error))
+			result, error, expiry = Missing, f'{entry.expression.text!r}: {type(e).__name__}: {e}', None
+		self._finished.emit((entry, result, error, expiry))
 
 	@Slot(object)
 	def _onFinished(self, outcome) -> None:
-		entry, result, error = outcome
+		entry, result, error, expiry = outcome
 		entry.state = 'idle'
 		if self._entries.get(entry.expression.key) is not entry:
 			return  # released while running
@@ -356,6 +411,7 @@ class ComputedEngine(QObject):
 			entry.lastError = error
 			log.error(f'computed value {entry.expression.text!r} has no value: {error}')
 		self._publish(entry, result)
+		self._armExpiry(entry, expiry)
 		if entry.stale:
 			self._schedule(entry, entry.delay)
 
@@ -368,6 +424,14 @@ class ComputedEngine(QObject):
 			if container.value is None or container.value.rawValue is None:
 				return
 			result = None
+		if result is not None and (current := container.value) is not None:
+			# Same raw value, same unit: nothing for a subscriber to learn.
+			# Exact equality on purpose; only labels round, never markers.
+			try:
+				if current.rawValue is not None and current.rawValue == result and type(current.rawValue) is type(result):
+					return
+			except Exception:
+				pass
 		container._update(
 			result,
 			timestamp=localNow(),
