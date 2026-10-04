@@ -14,6 +14,8 @@ from LevityDash.lib.ui.icons import fa as FontAwesome, getIcon, Icon
 from LevityDash.lib.utils.shared import singleShotSafe
 from WeatherUnits.time_.time import Second
 from LevityDash.lib.plugins.categories import CategoryItem
+from LevityDash.lib.plugins.computed import acquireValueSource, releaseValueSource
+from LevityDash.lib.plugins.expressions import Expression
 from LevityDash.lib.plugins import Plugin, Container
 from LevityDash.lib.plugins.plugin import AnySource, SomePlugin
 from LevityDash.lib.plugins.dispatcher import MultiSourceContainer
@@ -192,10 +194,22 @@ class Realtime(Panel, tag='realtime'):
 	@key.setter
 	def key(self, value):
 		#! self.display can not be accessed here
+		source = None
 		if isinstance(value, str):
-			value = CategoryItem(value)
+			# A value source: a plain key, or an expression published as a computed key.
+			key = acquireValueSource(value)
+			if key is None:
+				log.warning(f'Realtime panel key {value!r} is not a valid value source; it shows no value')
+				key = CategoryItem(value)
+			elif _isExpression(value):
+				source = value
+			value = key
 		if value == getattr(self, '_key', None):
+			if source is not None:
+				releaseValueSource(source)
 			return
+		self._releaseKeySource()
+		self._keySource = source
 		self._key = value
 		container = LevityDashboard.get_container(value)
 
@@ -208,6 +222,20 @@ class Realtime(Panel, tag='realtime'):
 			self.title_label.textBox.updateText()
 		# self.title_label.textBox.refresh()
 		self.container = container
+
+	@key.encode
+	def key(self, value) -> str:
+		# Save what the file said: the expression text, not its computed key.
+		return getattr(self, '_keySource', None) or str(value)
+
+	def _releaseKeySource(self):
+		if (source := getattr(self, '_keySource', None)) is not None:
+			self._keySource = None
+			releaseValueSource(source)
+
+	def delete(self):
+		self._releaseKeySource()
+		super().delete()
 
 	@StateProperty(default=AnySource, dependencies={'key', 'display', 'title', 'forecast'})
 	def source(self) -> Plugin | SomePlugin:
@@ -678,6 +706,13 @@ class Realtime(Panel, tag='realtime'):
 		self._container.source.publisher.disconnectChannel(self.key, self.updateSlot)
 		log.debug(f'{self.name} deleted')
 		super(Realtime, self).__del__()
+
+
+def _isExpression(text: str) -> bool:
+	try:
+		return Expression.parse(text).plainKey is None
+	except Exception:
+		return False
 
 
 class RealtimeText(Realtime, tag='realtime.text'):

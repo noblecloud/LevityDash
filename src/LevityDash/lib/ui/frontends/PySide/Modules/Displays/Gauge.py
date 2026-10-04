@@ -23,6 +23,7 @@ from typing import Optional, Type, Union, Iterator, Iterable, TypeVar, Sequence,
 from LevityDash import LevityDashboard
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.expressions import Expression, ExpressionError
+from LevityDash.lib.plugins.computed import acquireValueSource, releaseValueSource
 from LevityDash.lib.plugins.plugin import AnySource
 from LevityDash.lib.stateful import Stateful, StateProperty, SourceType
 from LevityDash.lib.stateful_mixins import ColorGradientMixin
@@ -1896,24 +1897,24 @@ def _markerText(spec) -> str:
 		return str(spec)
 
 
-def _markerKeyFor(text: str) -> Optional[CategoryItem]:
+def _markerKeyFor(text: str, gauge: 'Gauge') -> Optional[CategoryItem]:
 	"""Turn a marker's ``value:`` text into the key to subscribe to.
 
-	Every string value goes through here. Computed keys plug in here: when
-	``Expression.plainKey`` is None the expression's own ``.key`` is what to
-	subscribe to, once the backend registers it.
+	A plain key comes back as itself. An expression is registered with the
+	computed engine (or the backend in mode=remote) and its computed key comes
+	back; the caller must ``releaseValueSource(text)`` when the marker goes away.
 
-	Returns None, and logs, when the text is not a plain key or does not parse.
+	Returns None, and logs naming the gauge, when the text does not parse or
+	cannot be registered.
 	"""
 	try:
-		expression = Expression.parse(text)
+		Expression.parse(text)
 	except ExpressionError as e:
-		log.warning(f'Gauge marker value {text!r} is not a valid value source ({e}); the marker stays hidden')
+		log.warning(f'Gauge {_gaugeKeyName(gauge)} marker value {text!r} is not a valid value source ({e}); the marker stays hidden')
 		return None
-	if expression.plainKey is None:
-		log.warning(f'Gauge marker value {text!r} is not a plain key and computed keys are not supported yet; the marker stays hidden')
-		return None
-	return expression.plainKey
+	if (key := acquireValueSource(text)) is None:
+		log.warning(f'Gauge {_gaugeKeyName(gauge)} marker value {text!r} could not be registered; the marker stays hidden')
+	return key
 
 
 class _MarkerFeed(QObject):
@@ -1982,6 +1983,7 @@ class GaugeMarker(Needle):
 	_markerValue = None
 	_markerColor: Optional[QColor] = None
 	_feed: Optional[_MarkerFeed] = None
+	_source: Optional[str] = None
 	_warned = False
 
 	#: Used when the marker names no ``length``: the needle default for the
@@ -2006,7 +2008,8 @@ class GaugeMarker(Needle):
 		if isinstance(raw, (int, float)):
 			self._markerValue = raw
 		elif isinstance(raw, str):
-			if (key := _markerKeyFor(raw)) is not None:
+			if (key := _markerKeyFor(raw, self.gauge)) is not None:
+				self._source = raw
 				self._feed = _MarkerFeed(self, key)
 		else:
 			raise TypeError(f'a marker value must be a number or a key, not {raw!r}')
@@ -2016,6 +2019,9 @@ class GaugeMarker(Needle):
 		if self._feed is not None:
 			self._feed.close()
 			self._feed = None
+		if self._source is not None:
+			releaseValueSource(self._source)
+			self._source = None
 
 	def setMarkerValue(self, value) -> None:
 		"""Set the value to show. GUI thread only (the feed's slot runs there)."""

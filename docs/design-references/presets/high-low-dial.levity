@@ -1,0 +1,21 @@
+# Today's temperature now, with today's high and low as markers.
+- type: realtime.gauge
+  name: gauge
+  key: environment.temperature.temperature
+  title: false
+  display:
+    arc: {weight: 5%}
+    range: {min: 60, max: 110}
+    major:
+      labels:
+        format-spec: {show_unit: false, unit_symbol: false, precision: 0}
+    value-label: {position: bottom}
+    markers:
+      - value: min(environment.temperature.temperature, today)
+        type: marker
+        length: 12%
+        color: '#4aa3ff'
+      - value: max(environment.temperature.temperature, today)
+        type: marker
+        length: 12%
+        color: '#ff5a4a'
