@@ -2058,107 +2058,110 @@ class Stateful(metaclass=StatefulMetaclass):
 
 		self._unset_keys_ = set(items.values())
 
-		if isinstance(state, dict) and getOnlyItems:
-			for i in getOnlyItems & set(state.keys()):
-				state.pop(i, None)
+		try:
+			if isinstance(state, dict) and getOnlyItems:
+				for i in getOnlyItems & set(state.keys()):
+					state.pop(i, None)
 
-		if isinstance(state, DeepChainMap):
-			state = state.to_dict()
+			if isinstance(state, DeepChainMap):
+				state = state.to_dict()
 
-		# Captured before the loop below, which pops keys off `state` as it
-		# consumes them - by the end there is no record of what was provided.
-		providedKeys = set(state.keys()) if isinstance(state, Mapping) else set()
+			# Captured before the loop below, which pops keys off `state` as it
+			# consumes them - by the end there is no record of what was provided.
+			providedKeys = set(state.keys()) if isinstance(state, Mapping) else set()
 
-		shared = getattr(self, 'shared', Unset) or DeepChainMap()
-		# self.action_pool (not self._action_pool) - the property lazily
-		# initializes the pool on first access; a freshly constructed object
-		# that hasn't touched it yet has no _action_pool set at all, and
-		# state is very often assigned right at construction time (e.g.
-		# Panel._init_args_'s `self.state = kwargs`), so the raw attribute
-		# access was a real, reachable AttributeError, not just a
-		# theoretical one.
-		afterPool: ActionPool = self.action_pool
-		unwraps = []
-		for prop in items.values():
+			shared = getattr(self, 'shared', Unset) or DeepChainMap()
+			# self.action_pool (not self._action_pool) - the property lazily
+			# initializes the pool on first access; a freshly constructed object
+			# that hasn't touched it yet has no _action_pool set at all, and
+			# state is very often assigned right at construction time (e.g.
+			# Panel._init_args_'s `self.state = kwargs`), so the raw attribute
+			# access was a real, reachable AttributeError, not just a
+			# theoretical one.
+			afterPool: ActionPool = self.action_pool
+			unwraps = []
+			for prop in items.values():
 
-			# Set state item source
-			if prop not in self._state_item_sources:
-				# TODO: Add better conditions for this.  I believe Currently items added in
-				#  the prep_kwargs stage are flagged as user config here?
-				if prop.key in state:
-					self._state_item_sources[prop] = SourceType.UserConfig
-				else:
-					self._state_item_sources[prop] = SourceType.Default
+				# Set state item source
+				if prop not in self._state_item_sources:
+					# TODO: Add better conditions for this.  I believe Currently items added in
+					#  the prep_kwargs stage are flagged as user config here?
+					if prop.key in state:
+						self._state_item_sources[prop] = SourceType.UserConfig
+					else:
+						self._state_item_sources[prop] = SourceType.Default
 
-			if prop.unwrappedKeys:
-				if prop.key not in prop.unwrappedKeys:
-					pass
-				elif prop.unwraps and prop.isStatefulReference and (sub_prop_keys := prop.unwrappedKeys) & set(state.keys()) - {prop.key}:
-					return_type = prop.returnsFilter(Stateful)
+				if prop.unwrappedKeys:
+					if prop.key not in prop.unwrappedKeys:
+						pass
+					elif prop.unwraps and prop.isStatefulReference and (sub_prop_keys := prop.unwrappedKeys) & set(state.keys()) - {prop.key}:
+						return_type = prop.returnsFilter(Stateful)
+						unwraps.append(prop)
+						if len(state) == 1:
+							self._unset_keys_.clear()
+							break
+						continue
+				elif prop.unwraps:
 					unwraps.append(prop)
 					if len(state) == 1:
-						self._unset_keys_.clear()
 						break
 					continue
-			elif prop.unwraps:
-				unwraps.append(prop)
-				if len(state) == 1:
-					break
-				continue
 
-			propKey = prop.key
-			if propKey not in state:
-				self._unset_keys_.discard(prop)
-				continue
-			else:
-				value = state.pop(propKey)
-				if (sharedValue := shared.get(propKey, Unset)) is not Unset:
-					# Update the item with the shared value if it is the same type
-					sharedType = type(sharedValue)
-					sharedType = sharedType if not issubclass(sharedType, DeepChainMap) else dict
-					if isinstance(value, sharedType):
-						self._state_item_sources[prop] = SourceType.Shared
-						match sharedValue:
-							case dict():
-								value = DeepChainMap(value, sharedValue).to_dict()
-							case DeepChainMap():
-								value = sharedValue.to_dict(value)
-							case _:
-								value = sharedValue
-
-					else:
-						statefulType = prop.returnsFilter(Stateful)
-						if (
-							prop.isStatefulReference
-							and isinstance(value, statefulType.singleStatefulItemTypes)
-							and statefulType is not UnsetReturn
-						):
-							subProp = statefulType.findPropForType(type(value))
-							if isinstance(sharedValue, DeepChainMap) and subProp is not None:
-								self._state_item_sources[subProp] = SourceType.Shared
-								value = sharedValue.to_dict({subProp.key: value})
-
-				prop.setState(self, value, afterPool=afterPool)
-				value: Stateful
-				self._unset_keys_.discard(prop)
-		match len(unwraps):
-			case 0:
-				pass
-			case 1:
-				prop = unwraps[0]
-				if isinstance(prop_value := prop.fget(self), Stateful):
-					prop_value.setItemState(state, afterPool=afterPool)
-				elif isinstance(state, Mapping):
-					prop.setState(self, state, afterPool=afterPool)
+				propKey = prop.key
+				if propKey not in state:
+					self._unset_keys_.discard(prop)
+					continue
 				else:
+					value = state.pop(propKey)
+					if (sharedValue := shared.get(propKey, Unset)) is not Unset:
+						# Update the item with the shared value if it is the same type
+						sharedType = type(sharedValue)
+						sharedType = sharedType if not issubclass(sharedType, DeepChainMap) else dict
+						if isinstance(value, sharedType):
+							self._state_item_sources[prop] = SourceType.Shared
+							match sharedValue:
+								case dict():
+									value = DeepChainMap(value, sharedValue).to_dict()
+								case DeepChainMap():
+									value = sharedValue.to_dict(value)
+								case _:
+									value = sharedValue
 
-					raise NotImplementedError(f"Unable to set state for type '{type(self).__name__}' with state: {state}")
-				self._unset_keys_.discard(prop)
-			case _:
-				raise ValueError("Multiple unwrapped properties found", unwraps, state)
+						else:
+							statefulType = prop.returnsFilter(Stateful)
+							if (
+								prop.isStatefulReference
+								and isinstance(value, statefulType.singleStatefulItemTypes)
+								and statefulType is not UnsetReturn
+							):
+								subProp = statefulType.findPropForType(type(value))
+								if isinstance(sharedValue, DeepChainMap) and subProp is not None:
+									self._state_item_sources[subProp] = SourceType.Shared
+									value = sharedValue.to_dict({subProp.key: value})
 
-		assert len(self._unset_keys_) == 0, f"Unable to set state for {self} with {state}"
-		self._unset_keys_.clear()
+					prop.setState(self, value, afterPool=afterPool)
+					value: Stateful
+					self._unset_keys_.discard(prop)
+			match len(unwraps):
+				case 0:
+					pass
+				case 1:
+					prop = unwraps[0]
+					if isinstance(prop_value := prop.fget(self), Stateful):
+						prop_value.setItemState(state, afterPool=afterPool)
+					elif isinstance(state, Mapping):
+						prop.setState(self, state, afterPool=afterPool)
+					else:
+
+						raise NotImplementedError(f"Unable to set state for type '{type(self).__name__}' with state: {state}")
+					self._unset_keys_.discard(prop)
+				case _:
+					raise ValueError("Multiple unwrapped properties found", unwraps, state)
+
+			assert len(self._unset_keys_) == 0, f"Unable to set state for {self} with {state}"
+		finally:
+			# Always clear: a raise above would leave is_loading True forever.
+			self._unset_keys_.clear()
 
 		self._revertOmittedKeys(providedKeys, afterPool=afterPool)
 
