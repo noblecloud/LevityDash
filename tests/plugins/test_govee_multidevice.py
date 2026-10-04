@@ -389,3 +389,21 @@ class TestSharedScannerLifecycle:
 		scanner.subscribe('b', lambda d, _: True, lambda d, _: None)
 		scanner.dispatch(FakeDevice(ROOM), FakeAdvertisement(ROOM))
 		assert scanner.subscribers == {'a'}
+
+
+class TestPluginDefaultsDoNotLeak:
+	"""[plugin] is PluginConfig default section; configparser copies its keys
+	into every section. A legacy device.address there made every device claim
+	the same advertisements."""
+
+	def test_device_sections_do_not_inherit_plugin_address(self):
+		import configparser
+		parser = configparser.ConfigParser(default_section='plugin')
+		parser.read_string(
+			'[plugin]\nenabled = True\ndevice.address = AAAA\n'
+			'[device:bedroom]\nname = GVH5102_527D\n'
+			'[device:terrarium]\nname = GVH5102_6736\naddress = BBBB\n'
+		)
+		devices = {d.alias: d for d in parse_devices(parser)}
+		assert devices['bedroom'].address is None
+		assert devices['terrarium'].address == 'BBBB'
