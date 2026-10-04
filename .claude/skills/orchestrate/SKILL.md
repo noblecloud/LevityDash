@@ -28,6 +28,18 @@ not by topic:
 - Phases with disjoint files run **in parallel**, in worktrees.
 - Read-only phases (investigate, find, measure) need no worktree.
 
+**Pick the model per phase; never let it default to the orchestrator's.**
+Pass `model` on every Agent call:
+
+| Phase | Model |
+|---|---|
+| new primitive, design calls, unclear spec | `opus` |
+| bounded fix, investigate-and-verify, render checks | `sonnet` |
+| run a script, grep, report numbers | `haiku` |
+
+The orchestrator's review catches a weaker model's mistakes; that is what
+the review step is for.
+
 Keep a phase small enough that its result can be reviewed in one sitting. A
 phase that needs its own phases is a brief for `docs/tasks/`, not a subagent.
 
