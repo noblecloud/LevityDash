@@ -2,7 +2,7 @@
 
 **Status:** open, actionable. Recorded 2026-10-04.
 **Base:** `feat/value-sources`. Step one: `git checkout -B feat/tick-label-format feat/value-sources`.
-**Model:** 1a needs a little design (the WeatherUnits API shape) — Opus or bring options back; 1b/1c and 3 suit `levity-worker` (Sonnet). Phase 2 involves design calls: use Opus, or bring the questions back to the maintainer.
+**Model:** 1a's ranking is decided (below); its API spelling is the implementer's. 1a-1c and 3 suit `levity-worker` (Sonnet). Phase 2 involves design calls: use Opus, or bring the questions back to the maintainer.
 
 ## The problem
 
@@ -29,22 +29,63 @@ The maintainer's rules for the fix:
 
 ### 1a. WeatherUnits: a compact format per unit (sibling repo `../WeatherUnits`)
 
-A unit's conventions already live on its class: `_precision` and `_digit_budget` on `InchOfMercury`, `Hectopascal`, … (`src/WeatherUnits/pressure/pressure.py` ~108-160, base defaults in `base/_Measurement.py` ~428).
+Where a unit's formatting comes from today, lowest to highest (`ChainMap(extras, specParams, params)` in `SmartFloat.__format__`, `base/_SmartFloat.py` ~828):
 
-- Add a second, **compact** convention beside them: the format to use where the number is a label, not a reading (a dial face, an axis).
-- The shape is the implementer's call. One candidate is a `_compact_format` class attribute holding a spec dict (`{'precision': 0, 'trailing_zeros': False}` on `InchOfMercury`), inherited and overridable like `_precision`. Another is a named profile passed to `__format__` (`format(v, 'compact')`).
-- Prefer whichever fits how `_SmartFloat.__format__` already resolves `specParams` and `extras`. Do not invent a parallel mechanism.
+1. class attributes: `_precision`, `_digit_budget`. Base defaults are in `base/_Measurement.py` ~428. Most unit classes set none: `InchOfMercury` (`pressure/pressure.py` ~135) is bare, and `Millibar` sets only `_digit_budget`.
+2. `[UnitProperties]` in the loaded config, which writes onto the class. `inHg = precision=2, digit_budget=4, trailing_zeros=precision` is in `config/us.ini:39` and in LevityDash's `resources/example-config/config.ini:87`.
+3. the caller's format spec, as a string (`'precision=0'`) or keywords. **This outranks config.**
 
-**Pressure on the defaults:** most units' compact format *is* their normal one minus padding zeros. Only units whose convention keeps the zeros (rain in inches, currency-like values) should need an explicit setting. Default to as little information as possible.
+Add a **compact** profile: the format for a number that is a label, not a reading (a dial face, an axis).
+
+**The ranking is decided:** compact is something the caller *asks for*, so it sits at level 3, beside any other explicit spec. It does not compete with `[UnitProperties]`, which keeps governing readings.
+
+**Its default is derived, not declared:** the unit's reading format with padding zeros dropped (`trailing_zeros: off`), still capped by the configured precision.
+- inHg compact gives `28` and `29.5`, never `28.00`.
+- A unit whose convention *keeps* its zeros (rain in inches) declares that, as a class attribute.
+- So most units need nothing, and nothing goes in `config.ini`.
+
+The implementer chooses the spelling:
+- a named profile `format(v, 'compact')`;
+- or a `compact=True` spec flag that expands to the unit's `_compact_format` (class attribute, default `{'trailing_zeros': 'off'}`).
+
+Prefer whichever fits how `__format__` already resolves `specParams`. Do not build a parallel mechanism.
 
 Also in that repo:
-- **The precision fix.** Passing `precision` as a keyword (`v.__format__('', precision=0)`) was silently ignored. The fix is in `base/_SmartFloat.py`, `params.explicitPrecision`.
-- **It needs a regression test and a commit.** It is currently uncommitted there.
-- **The maintainer pushes WeatherUnits**, not you. Hand back a commit, never a push.
+- **The keyword-precision fix.** `v.__format__('', precision=0)` is ignored when the unit's config says `trailing_zeros=precision`.
+  - The string form `format(v, 'precision=0')` works, which is why the bug hides.
+  - The fix (`params.explicitPrecision` in `base/_SmartFloat.py`) is uncommitted in the maintainer's checkout. Re-apply it from [the diff below](#the-keyword-precision-fix) and add the regression test.
+  - Hand back a commit; the maintainer pushes WeatherUnits.
+
+⚠️ **To reproduce it, load the US config.** WeatherUnits picks `us.ini` or `si.ini` from the **locale**, and a container without `en_US` silently gets `si.ini`. That config has no `inHg` line, so precision is 1 and the bug cannot show.
+- The tell: plain `format(InchOfMercury(29.92), '')` gives `'29.9 inHg'`. With `us.ini` loaded it gives `'29.92 inHg'`.
+- Set `WU_CONFIG_PATH=<abs path>/src/WeatherUnits/config/us.ini`. That is the variable; `WU_CONFIG` does nothing.
+
+Verified 2026-10-04 with `us.ini` loaded:
+
+| call | without the fix | with it |
+|---|---|---|
+| `format(H(28.0), 'precision=0')` | `28 inHg` | `28 inHg` |
+| `H(28.0).__format__('', precision=0)` | **`28.00 inHg`** | `28 inHg` |
+| `H(29.92).__format__('', precision=0)` | **`30.00 inHg`** | `30 inHg` |
+
+#### The keyword-precision fix
+
+In `SmartFloat.__format__`, right after `params.specParams = specParams`:
+
+```python
+		# The caller's own precision, from either spelling - `format(v,
+		# 'precision=0')` or `v.__format__('', precision=0)`. Captured now:
+		# `extras` is the first map, so every `params['precision'] = ...`
+		# below writes into it and the asked-for value is gone by the time
+		# trailing_zeros needs it.
+		params.explicitPrecision = extras.get('precision', specParams.get('precision'))
+```
+
+and in the `trailing_zeros` branch, `configured = params.specParams.get('precision')` becomes `configured = params.explicitPrecision`.
 
 ### 1b. LevityDash: tick labels ask for the compact format
 
-In `GaugeTickTextGroup` (`Displays/Gauge.py` ~3051):
+In `GaugeTickTextGroup` (`src/LevityDash/lib/ui/frontends/PySide/Modules/Displays/Gauge.py` ~3051):
 
 - Replace the `_tick_format` class attribute with an `@format_spec.item_default`, the same pattern as `enabled.item_default` (~3247).
 - It asks for the unit's compact format plus `show_unit: False`. The word unit is said once, by the unit label. Symbols like `°` and `%` follow the unit's convention.
@@ -71,7 +112,7 @@ Real instrument faces label whole units and leave the half-ticks bare. That avoi
 
 - **Tests:**
   - WeatherUnits:
-    - `format(InchOfMercury(28.0), <compact>)` gives `28`;
+    - `format(InchOfMercury(28.0), <compact>)` gives `28` and `29.5` stays `29.5`, **with `us.ini` loaded** (see the ⚠️ above);
     - `Hectopascal(1013.2)` compact gives `1013`;
     - the keyword `precision=0` gives `28`.
   - LevityDash: a new `tests/ui/test_gauge_tick_format.py` builds gauges (see the `_gauge` helper in `tests/ui/test_gauge_fill_sources.py`) and asserts the label strings for each of these:
