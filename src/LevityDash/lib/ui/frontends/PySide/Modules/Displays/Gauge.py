@@ -2760,8 +2760,9 @@ class GaugeTickText(GaugeItem, AnnotationText):
 		else:
 			self.show()
 
-		if self.rotated:
-			self.setRotation(self.tick.angle + 90)
+		# Always set it: a label refreshed after `rotate: false` must drop the
+		# angle an earlier refresh gave it.
+		self.setRotation(self.tick.angle + 90 if self.rotated else 0)
 
 		super(GaugeTickText, self).refresh()
 		self.setPos(self.position())
