@@ -782,7 +782,7 @@ class Text(QGraphicsPathItem):
 			try:
 				return self._valueAccessor()
 			except Exception as e:
-				self.log.error(f'Error getting value from accessor: {e}')
+				log.error(f'Error getting value from accessor: {e}')
 
 		if self._value is None:
 			return self.default
