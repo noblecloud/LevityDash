@@ -8,7 +8,4 @@
     arc: {weight: 5%}
     range: {min: 60, max: 110}
     fill: {weight: 5%, color: '#ff8a3d'}
-    major:
-      labels:
-        format-spec: {show_unit: false, unit_symbol: false, precision: 0}
-    value-label: {position: bottom}
+    value-label: {position: below}

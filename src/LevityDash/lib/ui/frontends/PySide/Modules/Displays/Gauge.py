@@ -1882,6 +1882,11 @@ class Arrow(Needle):
 		self.setPath(path)
 
 
+# Unit positions that hang the unit under the value. `float-under` is the
+# Realtime text display's name for it; `below` is the gauge's older one.
+_UNIT_UNDER_VALUE = frozenset({UnitDisplayPosition.Below, UnitDisplayPosition.FloatUnder})
+
+
 def _gaugeKeyName(gauge: 'Gauge') -> str:
 	"""The key of the panel that owns ``gauge``, for log messages. Never raises."""
 	try:
@@ -2387,8 +2392,12 @@ class GaugeValueLabel(GaugeLabel):
 					return gauge.center + QPointF(0, max(-gauge.safe_radius, self.mapRectFromItem(gauge, gauge.gaugeRect).top()))
 					# return gauge.center + QPointF(0, -gauge.safe_radius)
 				case ValueDisplayPosition.Bottom:
-					return gauge.center + QPointF(0, min(gauge.safe_radius, gauge.arc.boundingRect().bottom()))
-					# return gauge.center + QPointF(0, gauge.safe_radius)
+					# Stands on the panel's bottom edge, above the strip a unit
+					# label below it needs; bottom-aligned, so it grows upward
+					# until getTextScale finds it touching the dial. It used to
+					# be centred on the arc's lowest point, which left no room
+					# under it and none to shrink into.
+					return QPointF(gauge.center.x(), gauge.rect().bottom() - self._unit_reserve() - 1)
 				case _:
 					raise NotImplementedError
 
@@ -2420,11 +2429,17 @@ class GaugeValueLabel(GaugeLabel):
 			# each other.
 			#
 			# The test is the same, done arithmetically: this item's parent IS
-			# the gauge (the factory reparents textBox to it), so its own
-			# transform already maps into gauge coordinates. Mapping the glyph
-			# path through a trial transform gives the candidate outline
-			# without touching anything.
+			# the gauge (the factory reparents textBox to it), so a transform
+			# built from the label's position and a trial scale maps the glyph
+			# path into gauge coordinates without touching anything.
+			#
+			# Built from getTextPosition, NOT self.transform(): updateTransform
+			# resets the transform to identity before asking for a scale, so
+			# the old copy of it tested every trial at the gauge's top-left
+			# corner. That always failed `bounds.contains`, and every gauge
+			# value sat on the 0.2 floor whatever room it had.
 			base_path = self.path()
+			origin = self.getTextPosition(limitRect)
 			# Which box the label has to stay inside depends on where it sits.
 			# A Center/Inline label lives among the dial's own parts, so the
 			# dial's square is the right constraint. A Below/Above one is
@@ -2438,18 +2453,43 @@ class GaugeValueLabel(GaugeLabel):
 			else:
 				bounds = gauge.rect()
 
+			reserve = self._unit_reserve()
+
 			def collides_at(trial: float) -> bool:
-				t = QTransform(self.transform())
-				modifyTransformValues(t, xScale=trial, yScale=trial)
+				t = QTransform.fromTranslate(origin.x(), origin.y())
+				t.scale(trial, trial)
 				candidate = t.map(base_path)
+				if reserve:
+					# The unit hangs beneath the value, so the value has to
+					# leave it a strip as wide as itself.
+					rect = candidate.boundingRect()
+					candidate.addRect(QRectF(rect.left(), rect.bottom(), rect.width(), reserve))
 				if not bounds.contains(candidate.boundingRect()):
 					return True
 				return candidate.intersects(gauge_path)
 
-			while scale > 0.2 and collides_at(scale):
+			# The floor is relative: a bare 0.2 is in glyph-path units, so it
+			# meant something different for every font size and stopped the
+			# value long before it cleared the dial.
+			floor = scale * 0.2
+			while scale > floor and collides_at(scale):
 				scale *= 0.95
 
 			return round(scale, 4)
+
+		def _unit_reserve(self) -> float:
+			"""Height, in gauge pixels, a visible unit label below the value needs."""
+			gauge = self.parent.parent
+			unit = getattr(gauge, '_unitLabel', None)
+			if not isinstance(unit, GaugeUnit) or not unit.textBox.isVisibleTo(gauge):
+				return 0
+			try:
+				if unit.textBox._position not in _UNIT_UNDER_VALUE:
+					return 0
+				return unit.height_px + self.parent.value_padding_px
+			except Exception as e:  # noqa: BLE001 - sizing must never abort a load
+				log.warning(f'Gauge {_gaugeKeyName(gauge)} could not size its unit label: {e!r}')
+				return 0
 
 		_shapePath: QPainterPath = QPainterPath()
 
@@ -2561,6 +2601,11 @@ class GaugeValueLabel(GaugeLabel):
 		if (position := self.position) is ValueDisplayPosition.Auto:
 			position = self.position_auto()
 
+		# A bottom value stands on the panel's bottom edge and grows upward
+		# into the dial's mouth (see TextBox.getTextPosition).
+		if position is ValueDisplayPosition.Bottom:
+			return Alignment(self.parent.alignment.horizontal | AlignmentFlag.Bottom)
+
 		min_angle, max_angle = sorted((self.parent.startAngle, self.parent.endAngle))
 
 		angle_spread = max_angle - min_angle
@@ -2625,7 +2670,7 @@ class GaugeUnit(GaugeLabel):
 
 		def getTextPosition(self, limitRect: QRectF = None) -> QPointF:
 			match self._position:
-				case UnitDisplayPosition.Below:
+				case UnitDisplayPosition.Below | UnitDisplayPosition.FloatUnder:
 					return self._position_below()
 				case UnitDisplayPosition.TrailingValue:
 					return self._position_trailing_value()
@@ -3039,13 +3084,37 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 	def offset_relative_to(self) -> Length | Dimension:
 		return self.source.length_px or self.textSize_px
 
-	@StateProperty
-	def format_spec(self) -> str | dict:
-		pass
+	# Tick labels drop the WORD unit ('inHg', 'mph'): said once, by the unit
+	# label, rather than on every tick. Symbols ('°', '%') stay glued to the
+	# number, for the reason given on GaugeValueLabel's defaults.
+	_tick_format = {'show_unit': False}
 
-	@format_spec.item_default
-	def format_spec(self) -> dict | str:
-		return {'show_unit': False, 'unit_symbol': False}
+	@StateProperty(key='format', default=None, allowNone=False)
+	def format_spec(self) -> str | dict:
+		return getattr(self, '_format_spec', None)
+
+	@format_spec.setter
+	def format_spec(self, value: str | dict):
+		self._format_spec = value
+
+	def format_value(self, value: Measurement) -> str:
+		# Merged rather than replaced, so `format: {precision: 0}` does not
+		# bring the unit back on every tick.
+		spec = self.format_spec
+		if spec is None or isinstance(spec, Mapping):
+			spec = {**self._tick_format, **(spec or {})}
+		if isinstance(value, Measurement):
+			try:
+				match spec:
+					case str():
+						return value.__format__(spec)
+					case dict():
+						return value.__format__('', **spec)
+			except Exception as e:  # noqa: BLE001 - a bad spec must not blank the dial
+				log.warning(f'Gauge {_gaugeKeyName(self.gauge)} tick label format {spec!r} failed: {e!r}')
+		elif value is None:
+			return '⋯'
+		return str(value)
 
 	@cached_property
 	def size_group(self) -> SizeGroup:
@@ -4049,12 +4118,37 @@ class Gauge(Display):
 		self.unitLabel.textBox.updateTransform(updatePath=False, reason='recenter')
 		self.unitLabel.textBox.setTransform(t, combine=True)
 
-		# Only update the unit label location if it's not relative to the value label
-		# if False and self.unitLabel:
-		# 	self.unitLabel.textBox.setTransform(t, combine=True)
-		# else:
-		# 	# existing_t = self.unitLabel.textBox.transform()
-		# 	self.unitLabel.textBox.setTransform(t, combine=True)
+		self._syncUnitUnderValue()
+
+	def _syncUnitUnderValue(self):
+		"""Hang a `float-under`/`below` unit under the value's final glyphs.
+
+		The unit places itself from the value's box while both are still being
+		laid out, and recenter() then shifts each again, so where it landed
+		depended on update order - over the value as often as under it. Run
+		last, against the glyphs as drawn: the gauge's version of Realtime's
+		_syncFloatUnderPair.
+		"""
+		unit, value = getattr(self, '_unitLabel', None), getattr(self, '_valueLabel', None)
+		if not isinstance(unit, GaugeUnit) or not isinstance(value, GaugeValueLabel):
+			return
+		ubox, vbox = unit.textBox, value.textBox
+		try:
+			if not ubox.isVisibleTo(self) or ubox._position not in _UNIT_UNDER_VALUE:
+				return
+			v = self.mapRectFromScene(vbox.scenePath().boundingRect())
+			u = self.mapRectFromScene(ubox.scenePath().boundingRect())
+		except Exception as e:  # noqa: BLE001 - layout must never abort a load
+			log.warning(f'Gauge {_gaugeKeyName(self)} could not place its unit label: {e!r}')
+			return
+		if v.isEmpty() or u.isEmpty():
+			return
+		# A third of the unit's own height: reads as one block, never touches.
+		dx = v.center().x() - u.center().x()
+		dy = v.bottom() + u.height() / 3 - u.top()
+		t = ubox.transform()
+		# Shift the translation part only, in gauge coordinates.
+		ubox.setTransform(QTransform(t.m11(), t.m12(), t.m21(), t.m22(), t.dx() + dx, t.dy() + dy))
 
 	@defer
 	def rebuild(self):

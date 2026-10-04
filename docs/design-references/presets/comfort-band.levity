@@ -10,6 +10,4 @@
     fill: {from: 30, to: 60, weight: 5%, color: '#4cc38a'}
     major:
       interval: 25
-      labels:
-        format-spec: {show_unit: false, unit_symbol: false, precision: 0}
-    value-label: {position: bottom}
+    value-label: {position: below}

@@ -6,10 +6,7 @@
   display:
     arc: {weight: 5%}
     range: {min: 60, max: 110}
-    major:
-      labels:
-        format-spec: {show_unit: false, unit_symbol: false, precision: 0}
-    value-label: {position: bottom}
+    value-label: {position: below}
     markers:
       - value: min(environment.temperature.temperature, today)
         type: marker
