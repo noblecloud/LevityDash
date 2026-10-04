@@ -169,7 +169,10 @@ def loadRealtime(parent, items, parentItems, **kwargs):
 		item = pop(items)
 		if not Realtime.validate(item, context={'parent': parent}):
 			log.error('Invalid state for existingItem:', item)
-		item['key'] = CategoryItem(item['key'])
+		# An expression stays text: Realtime.key registers it as a computed key.
+		from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import _isExpression
+		if not (isinstance(item['key'], str) and _isExpression(item['key'])):
+			item['key'] = CategoryItem(item['key'])
 		ns = SimpleNamespace(**item)
 		geometry = _geometry(ns)
 		match existing:

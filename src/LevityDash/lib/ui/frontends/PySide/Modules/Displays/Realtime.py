@@ -223,6 +223,11 @@ class Realtime(Panel, tag='realtime'):
 		# self.title_label.textBox.refresh()
 		self.container = container
 
+	@key.decode
+	def key(self, value):
+		# Keep the text: the setter decides whether it is a key or an expression.
+		return value
+
 	@key.encode
 	def key(self, value) -> str:
 		# Save what the file said: the expression text, not its computed key.

@@ -1,0 +1,4 @@
+- type: realtime.text
+  name: high
+  key: max(environment.temperature.temperature, today)
+  title: Today's high
