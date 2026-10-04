@@ -38,7 +38,11 @@ quality loss, and the result stays a path.
 looks bad.** Each glyph stays internally straight, so the string reads as a
 faceted polygon approximating the arc — visible gaps opening at the outer
 edge between characters, pinching at the inner edge, and the taller the text
-or tighter the radius, the worse it gets. Do not re-attempt it.
+or tighter the radius, the worse it gets. Do not make it the default.
+
+The maintainer does want it as a *second, opt-in* mode (2026-10-04) — it suits
+loose, letter-spaced labels where the faceting doesn't show. Build the warp
+first; per-glyph placement is a small option on top.
 
 ## Suggested approach: warp the outlines
 
