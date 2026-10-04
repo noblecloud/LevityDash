@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 )
 from enum import Enum
 from functools import cached_property
-from math import isfinite, isinf, floor, log10
+from math import isfinite, isinf, floor, log10, atan2, hypot
 from numbers import Number
 from numpy import ceil, cos, pi, radians, sin, sqrt, number as np_number
 from collections.abc import Mapping
@@ -2875,7 +2875,7 @@ class GaugeTickText(GaugeItem, AnnotationText):
 		# self._shape = outline_path(self.path(), 5)
 
 	def refresh(self):
-		if (interval := self.group.interval) > 1 and self.tick.index % interval:
+		if (interval := self.group.label_step) > 1 and self.tick.index % interval and not (self.is_last_tick and self.group._auto_step > 1):
 			self.hide()
 			return
 		else:
@@ -2942,6 +2942,10 @@ class GaugeTickText(GaugeItem, AnnotationText):
 		return y
 
 	@property
+	def is_last_tick(self) -> bool:
+		return self.tick is self.surface.ticks[-1]
+
+	@property
 	def is_endcap(self) -> bool:
 		return self.tick is self.surface.ticks[0] or self.tick is self.surface.ticks[-1]
 
@@ -3001,9 +3005,70 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 	def onDataChange(self, axis: Axis):
 		print('onDataChange', axis)
 
+	_auto_step: int = 1
+	_measuring: bool = False
+
+	@property
+	def label_step(self) -> int:
+		"""Show every n-th label: the configured `every`, or a step chosen to keep labels apart."""
+		if self._measuring:
+			return 1
+		return max(self.interval, self._auto_step)
+
 	def refresh(self):
+		# Place every label first, then pick the thinning step from where they landed.
+		self._measuring = True
+		try:
+			for label in self:
+				label.refresh()
+		finally:
+			self._measuring = False
+		self._auto_step = self._measure_step()
 		for label in self:
 			label.refresh()
+
+	def _measure_step(self) -> int:
+		"""
+		The smallest step at which neighbouring labels no longer overlap.
+
+		Only chosen for default tick intervals: an `interval` or `every` written in
+		the config is taken as is.
+		"""
+		if 'interval' in self._ticks._user_set_state_items_ or 'every' in self._user_set_state_items_:
+			return 1
+		labels = sorted((l for l in self if l.isVisible()), key=lambda l: l.tick.index)
+		if len(labels) < 3:
+			return 1
+		geometry = {}
+		for label in labels:
+			rect = label.path().boundingRect()
+			geometry[label.tick.index] = (
+				label.mapToParent(rect.center()),
+				rect.width() * label.scale(),
+				rect.height() * label.scale(),
+				label.rotation(),
+			)
+
+		def extent(index: int, direction: QPointF) -> float:
+			# Half-extent of the label's box measured along `direction`.
+			_, w, h, rotation = geometry[index]
+			beta = atan2(direction.y(), direction.x()) - radians(rotation)
+			return (abs(w * cos(beta)) + abs(h * sin(beta))) / 2
+
+		def overlaps(a: int, b: int) -> bool:
+			delta = geometry[b][0] - geometry[a][0]
+			distance = hypot(delta.x(), delta.y())
+			if not distance:
+				return True
+			return distance < (extent(a, delta) + extent(b, delta)) * 1.05
+
+		indices = [label.tick.index for label in labels]
+		last = indices[-1]
+		for step in range(1, last + 1):
+			kept = [i for i in indices if not i % step or i == last]
+			if not any(overlaps(a, b) for a, b in zip(kept, kept[1:])):
+				return step
+		return last
 
 	def __init__(self, graduations: Graduations, surface: 'TickSurface'):
 		self._gauge = graduations.gauge
