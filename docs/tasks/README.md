@@ -25,6 +25,7 @@ continuously.
 | [text-baseline-alignment](text-baseline-alignment.md) | graph hour labels — descenders (`12p`) shift them relative to `6a`; align by font metric, not ink extents |
 | [eventfilter-pending-exception](eventfilter-pending-exception.md) | parked: a `SystemError` seen once, non-fatal, not reproducible. Wants an always-on diagnostic to catch it live |
 | [phase-4.2-follow-ups](phase-4.2-follow-ups.md) | remaining odds from the backend/frontend split |
+| [gauge-presets](gauge-presets.md) | named `preset:` for gauges, one per gauge-ui template (29 rows); which of seven missing gauge primitives unlocks which; blocked first on [gauge-display](gauge-display.md) |
 
 ## Loose ends not yet written up
 
