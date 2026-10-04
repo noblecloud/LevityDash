@@ -1898,7 +1898,7 @@ def _markerText(spec) -> str:
 		return str(spec)
 
 
-def _markerKeyFor(text: str, gauge: 'Gauge') -> Optional[CategoryItem]:
+def _markerKeyFor(text: str, gauge: 'Gauge', what: str = 'marker value', effect: str = 'the marker stays hidden') -> Optional[CategoryItem]:
 	"""Turn a marker's ``value:`` text into the key to subscribe to.
 
 	A plain key comes back as itself. An expression is registered with the
@@ -1911,10 +1911,10 @@ def _markerKeyFor(text: str, gauge: 'Gauge') -> Optional[CategoryItem]:
 	try:
 		Expression.parse(text)
 	except ExpressionError as e:
-		log.warning(f'Gauge {_gaugeKeyName(gauge)} marker value {text!r} is not a valid value source ({e}); the marker stays hidden')
+		log.warning(f'Gauge {_gaugeKeyName(gauge)} {what} {text!r} is not a valid value source ({e}); {effect}')
 		return None
 	if (key := acquireValueSource(text)) is None:
-		log.warning(f'Gauge {_gaugeKeyName(gauge)} marker value {text!r} could not be registered; the marker stays hidden')
+		log.warning(f'Gauge {_gaugeKeyName(gauge)} {what} {text!r} could not be registered; {effect}')
 	return key
 
 
@@ -2063,13 +2063,24 @@ class GaugeMarker(Needle):
 		self.show()
 
 
+class _FillEnd:
+	"""Adapts one end of a fill to what ``_MarkerFeed`` drives."""
+
+	def __init__(self, fill: 'GaugeFill', end: str):
+		self._fill = fill
+		self._end = end
+
+	def setMarkerValue(self, value) -> None:
+		self._fill.setEnd(self._end, value)
+
+
 class GaugeFill(GaugePathItem):
 	"""A value-driven arc stroked over the track and under the needle.
 
-	Spec keys: ``from`` (a number; default the range minimum), ``to`` (a
-	number; omitted means the gauge value), ``weight`` (default the arc's) and
+	Spec keys: ``from`` (a number, key or expression; default the range
+	minimum), ``to`` (a number, key or expression; omitted means the gauge value), ``weight`` (default the arc's) and
 	``color`` (default the gauge colour). With no value to draw to, it is hidden.
-	Number-only ends for now; a bad spec logs the gauge key and hides the fill.
+	A source-fed end with no value yet hides the fill; a bad spec logs the gauge key and hides it.
 	"""
 
 	#: Between the arc (-800) and the needle (-500).
@@ -2082,8 +2093,37 @@ class GaugeFill(GaugePathItem):
 	_valid = False
 	_warned = False
 
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		# Ends fed by a value source that has not delivered yet: the fill is hidden.
+		self._pending: set = set()
+		self._sources: list = []
+		self._feeds: list = []
+
+	def close(self):
+		"""Stop the feeds and release the value sources."""
+		feeds, sources = self._feeds, self._sources
+		self._feeds, self._sources, self._pending = [], [], set()
+		for feed in feeds:
+			feed.close()
+		for source in sources:
+			releaseValueSource(source)
+
+	def setEnd(self, end: str, value) -> None:
+		"""Set a source-fed end. GUI thread only (the feed's slot runs there)."""
+		try:
+			value = float(value)
+		except (TypeError, ValueError):
+			return
+		if not isfinite(value):
+			return
+		setattr(self, f'_{end}', value)
+		self._pending.discard(end)
+		self._safeRefresh()
+
 	def configure(self, spec: Mapping) -> None:
 		"""Read ``spec``. Never raises: a bad spec warns and leaves the fill hidden."""
+		self.close()
 		self._valid = False
 		self._from = self._to = self._weight = self._color = None
 		name = _gaugeKeyName(self.gauge)
@@ -2095,9 +2135,20 @@ class GaugeFill(GaugePathItem):
 				raw = spec.get(end)
 				if raw is None:
 					continue
-				if isinstance(raw, bool) or not isinstance(raw, (int, float)) or not isfinite(raw):
-					raise TypeError(f'{end} must be a number (value sources are not supported in fill yet), not {raw!r}')
-				setattr(self, f'_{end}', float(raw))
+				if isinstance(raw, bool):
+					raise TypeError(f'{end} must be a number, a key or an expression, not {raw!r}')
+				if isinstance(raw, (int, float)):
+					if not isfinite(raw):
+						raise TypeError(f'{end} must be finite, not {raw!r}')
+					setattr(self, f'_{end}', float(raw))
+				elif isinstance(raw, str):
+					self._pending.add(end)
+					if (key := _markerKeyFor(raw, self.gauge, what=f'fill {end}', effect='the fill stays hidden')) is None:
+						raise ValueError(f'{end} {raw!r} is not usable')
+					self._sources.append(raw)
+					self._feeds.append(_MarkerFeed(_FillEnd(self, end), key))
+				else:
+					raise TypeError(f'{end} must be a number, a key or an expression, not {raw!r}')
 			if (weight := spec.get('weight')) is not None:
 				self._weight = parseWidth(weight, None)
 				if self._weight is None:
@@ -2106,6 +2157,7 @@ class GaugeFill(GaugePathItem):
 				self._color = Color.decode(color).QColor
 		except Exception as e:
 			log.warning(f'Gauge {name} fill ignored, hidden: {e}')
+			self.close()
 			self._safeRefresh()
 			return
 		self._valid = True
@@ -2149,7 +2201,7 @@ class GaugeFill(GaugePathItem):
 	def refresh(self):
 		"""Redraw. Geometry and colour only; never asks the gauge to relayout."""
 		gauge = self.gauge
-		angles = self._angles() if self._valid else None
+		angles = self._angles() if self._valid and not self._pending else None
 		if angles is None:
 			self.hide()
 			return
@@ -3670,6 +3722,8 @@ class Gauge(Display):
 	def _clearFill(self):
 		item = self._fillItem
 		self._fillItem = None
+		if item is not None:
+			item.close()
 		self._fillSpec = None
 		if item is not None and (scene := item.scene()) is not None:
 			scene.removeItem(item)
