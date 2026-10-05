@@ -51,7 +51,7 @@
             minor: {interval: 4, length: 50%, width: 1px, color: '#5d5d66'}
             micro: {enabled: false}
             needle: {type: circle, length: 8%, width: 5%, color: '#ffffff'}
-            value-label: {position: center, size: 22%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: center, size: 14%, color: '#ffffff', value-padding: 7%}
             unit-label: {visible: true, position: float-under, height: 9%, color: '#8d8d96', value-padding: 14%}
     - type: group
       name: wind
@@ -90,7 +90,7 @@
             minor: {interval: 10, length: 50%, width: 1px, color: '#5d5d66'}
             micro: {enabled: false}
             needle: {type: triangle, length: 11%, width: 7%, color: '#ffffff'}
-            value-label: {position: center, size: 22%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: center, size: 14%, color: '#ffffff', value-padding: 7%}
     - type: group
       name: pressure
       geometry: {x: 50.6%, y: 0%, width: 24.1%, height: 32%}
@@ -130,7 +130,7 @@
             needle: {type: needle, length: 72%, width: 4%, color: '#ffffff'}
             markers:
             - {value: 'at(environment.pressure.pressure, -3h)', type: marker, length: 9%, color: '#ffffff'}
-            value-label: {position: below, size: 17%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: below, size: 11%, color: '#ffffff', value-padding: 7%}
             unit-label: {visible: true, position: float-under, height: 8%, color: '#8d8d96', value-padding: 14%}
     - type: group
       name: windSpeed
@@ -172,7 +172,7 @@
             markers:
             - {value: 'environment.wind.speed.gust', type: marker, length: 12%, color: '#ff5a4a'}
             needle: {type: circle, length: 8%, width: 5%, color: '#ffffff'}
-            value-label: {position: center, size: 22%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: center, size: 14%, color: '#ffffff', value-padding: 7%}
             unit-label: {visible: true, position: float-under, height: 9%, color: '#8d8d96', value-padding: 14%}
     - type: group
       name: humidity
@@ -209,7 +209,7 @@
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {type: circle, length: 10%, width: 8%, color: '#ffffff'}
-            value-label: {position: below, size: 24%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: below, size: 15%, color: '#ffffff', value-padding: 7%}
       - type: text
         name: humidityCap
         text: "relative humidity"
@@ -252,7 +252,7 @@
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {type: circle, width: 0%, color: "#ffffff"}
-            value-label: {position: center, size: 20%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: center, size: 13%, color: '#ffffff', value-padding: 7%}
       - type: text
         name: cloudsCap
         text: "of the sky"
@@ -294,7 +294,7 @@
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {type: circle, length: 10%, width: 8%, color: '#ffffff'}
-            value-label: {position: below, size: 24%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: below, size: 15%, color: '#ffffff', value-padding: 7%}
       - type: text
         name: uvCap
         text: "index 0 to 12"
@@ -337,7 +337,7 @@
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {type: circle, length: 8%, width: 5%, color: '#ffffff'}
-            value-label: {position: center, size: 24%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: center, size: 15%, color: '#ffffff', value-padding: 7%}
             unit-label: {visible: true, position: float-under, height: 9%, color: '#8d8d96', value-padding: 14%}
       - type: text
         name: rainCap
@@ -384,7 +384,7 @@
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {type: needle, length: 72%, width: 4%, color: '#ffffff'}
-            value-label: {position: below, size: 20%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: below, size: 13%, color: '#ffffff', value-padding: 7%}
       - type: realtime.gauge
         name: powerGauge
         key: environment.temperature.feelsLike
@@ -403,7 +403,7 @@
               labels: {position: inside, height: 13%, color: '#8d8d96', offset: 3%}
             minor: {enabled: false}
             micro: {enabled: false}
-            value-label: {position: below, size: 20%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: below, size: 13%, color: '#ffffff', value-padding: 7%}
       - type: realtime.gauge
         name: fuelGauge
         key: environment.clouds.cover.cover
@@ -423,7 +423,7 @@
             minor: {interval: 10, length: 50%, width: 1px, color: '#5d5d66'}
             micro: {enabled: false}
             needle: {type: needle, length: 72%, width: 4%, color: '#ffffff'}
-            value-label: {position: below, size: 20%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: below, size: 13%, color: '#ffffff', value-padding: 7%}
       - type: realtime.gauge
         name: dewGauge
         key: environment.temperature.dewpoint
@@ -442,7 +442,7 @@
             minor: {interval: 4, length: 50%, width: 1px, color: '#5d5d66'}
             micro: {enabled: false}
             needle: {type: needle, length: 72%, width: 4%, color: '#ffffff'}
-            value-label: {position: below, size: 20%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: below, size: 13%, color: '#ffffff', value-padding: 7%}
       - type: text
         name: tachCap
         text: "Gust"
@@ -503,7 +503,7 @@
               interval: 25
               labels: {curve: warp, height: 7%, position: inside, format: {precision: 0}}
             needle: {type: circle, length: 8%, width: 5%, color: '#ffffff'}
-            value-label: {position: center, size: 20%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: center, size: 13%, color: '#ffffff', value-padding: 7%}
       - type: realtime.gauge
         name: markersGauge
         key: environment.temperature.temperature
@@ -524,7 +524,7 @@
             markers:
             - {value: 'min(environment.temperature.temperature, today)', type: marker, length: 12%, color: '#4aa3ff'}
             - {value: 'max(environment.temperature.temperature, today)', type: marker, length: 12%, color: '#ff5a4a'}
-            value-label: {position: below, size: 20%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: below, size: 13%, color: '#ffffff', value-padding: 7%}
       - type: realtime.gauge
         name: rangeGauge
         key: environment.temperature.temperature
@@ -544,7 +544,7 @@
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {type: circle, length: 8%, width: 5%, color: '#ffffff'}
-            value-label: {position: center, size: 20%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: center, size: 13%, color: '#ffffff', value-padding: 7%}
       - type: realtime.gauge
         name: capGauge
         key: environment.wind.speed.speed
@@ -560,7 +560,7 @@
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {type: triangle, length: 12%, width: 8%, color: '#ffffff'}
-            value-label: {position: center, size: 20%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: center, size: 13%, color: '#ffffff', value-padding: 7%}
       - type: text
         name: warpCap
         text: "Curved labels"
@@ -624,7 +624,7 @@
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {type: circle, width: 0%, color: "#ffffff"}
-            value-label: {position: center, size: 20%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: center, size: 13%, color: '#ffffff', value-padding: 7%}
       - type: text
         name: ringHumidityCap
         text: "Humidity"
@@ -648,7 +648,7 @@
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {type: circle, width: 0%, color: "#ffffff"}
-            value-label: {position: center, size: 20%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: center, size: 13%, color: '#ffffff', value-padding: 7%}
       - type: text
         name: ringCloudCap
         text: "Cloud"
@@ -672,7 +672,7 @@
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {type: circle, width: 0%, color: "#ffffff"}
-            value-label: {position: center, size: 20%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: center, size: 13%, color: '#ffffff', value-padding: 7%}
       - type: text
         name: ringUVCap
         text: "UV"
@@ -696,7 +696,7 @@
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {type: circle, width: 0%, color: "#ffffff"}
-            value-label: {position: center, size: 20%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: center, size: 13%, color: '#ffffff', value-padding: 7%}
       - type: text
         name: ringRainCap
         text: "Rain"
@@ -720,7 +720,7 @@
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {type: circle, width: 0%, color: "#ffffff"}
-            value-label: {position: center, size: 20%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: center, size: 13%, color: '#ffffff', value-padding: 7%}
       - type: text
         name: ringWindCap
         text: "Wind"
@@ -744,7 +744,7 @@
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {type: circle, width: 0%, color: "#ffffff"}
-            value-label: {position: center, size: 20%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: center, size: 13%, color: '#ffffff', value-padding: 7%}
       - type: text
         name: ringGustCap
         text: "Gust"
@@ -768,7 +768,7 @@
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {type: circle, width: 0%, color: "#ffffff"}
-            value-label: {position: center, size: 20%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: center, size: 13%, color: '#ffffff', value-padding: 7%}
       - type: text
         name: ringFeelsCap
         text: "Feels"
@@ -792,7 +792,7 @@
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {type: circle, width: 0%, color: "#ffffff"}
-            value-label: {position: center, size: 20%, color: '#ffffff', value-padding: 7%}
+            value-label: {position: center, size: 13%, color: '#ffffff', value-padding: 7%}
       - type: text
         name: ringDewCap
         text: "Dew"

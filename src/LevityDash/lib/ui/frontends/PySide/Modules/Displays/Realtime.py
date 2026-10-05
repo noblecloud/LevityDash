@@ -612,7 +612,7 @@ class Realtime(Panel, tag='realtime'):
 
 	def __updateTimeOffsetLabel(self):
 		value = self.value
-		if self.__connectedContainer.isDailyOnly:
+		if not SHOW_TIME_OFFSET or self.__connectedContainer.isDailyOnly:
 			self.timeOffsetLabel.setEnabled(False)
 		elif value.isValid and abs(Now() - value.timestamp) > (timedelta(minutes=15) if isinstance(value.source, RealtimeSource) else value.source.period):
 			self.timeOffsetLabel.setEnabled(True)
@@ -620,7 +620,7 @@ class Realtime(Panel, tag='realtime'):
 			self.timeOffsetLabel.setEnabled(False)
 
 	def contentStaled(self):
-		self.timeOffsetLabel.setEnabled(True)
+		self.timeOffsetLabel.setEnabled(SHOW_TIME_OFFSET)
 		self.setOpacity(sorted((self.opacity() - 0.1, 0.6, 1))[0])
 		self.update()
 
@@ -765,6 +765,11 @@ class RealtimeGauge(Realtime, tag='realtime.gauge'):
 				value.pop('displayType', DisplayType.Gauge)
 				from LevityDash.lib.ui.frontends.PySide.Modules import Gauge
 				return Gauge(parent=self, **value)
+
+
+# Parked (2026-10-04): the "21 minutes ago" label cluttered every stale panel.
+# The label and its logic stay; flip this to bring it back.
+SHOW_TIME_OFFSET = False
 
 
 class TimeOffsetLabel(Label):
