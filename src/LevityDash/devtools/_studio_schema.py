@@ -45,6 +45,7 @@ from statekit.yaml import StatefulDumper
 from statekit.validate import StateError
 from qolkit import Unset
 from LevityDash.lib.ui.colors import Gradient
+from LevityDash.lib.ui.colors.stopunits import formatStop, parseStop, unitText
 
 #: Properties that are not about how a gauge looks: plumbing, layout of the
 #: panel itself, or text the gauge computes.
@@ -161,12 +162,20 @@ def saved(prop: StateProperty, raw: Any, owner: Stateful) -> Any:
 
 
 def gradientText(gradient: Gradient) -> dict:
-	"""A gradient as the `{value: '#rrggbb'}` mapping a `.levity` file holds and the loader reads back."""
-	out = {}
-	for stop in gradient.as_list:
-		number = float(stop.value)
-		out[int(number) if number.is_integer() else number] = stop.color.QColor.name()
-	return out
+	"""A gradient as the `{stop: '#rrggbb'}` mapping a `.levity` file holds and the loader reads back.
+
+	A stop written with a unit keeps its own text (`99°F`); a bare number stays a number. The stops
+	keep the order they were written in. A bare-number stop that holds a measurement, as the stops of
+	a preset such as `TemperatureGradient` (°C) do, gets that unit, so it does not read as the data's unit.
+	"""
+	def key(stop):
+		parsed = parseStop(stop.key)
+		if parsed is not None and parsed[1] is None and isinstance(stop.value, wu.Measurement):
+			if (unit := unitText(type(stop.value))) is not None:
+				return formatStop(parsed[0], unit)
+		return stop.key
+
+	return {key(stop): stop.color.QColor.name() for stop in dict.values(gradient)}
 
 
 class StudioDumper(StatefulDumper):
@@ -215,11 +224,23 @@ def write(root: Stateful, path: tuple, value: Any) -> Optional[str]:
 	# Some decoders keep the old value and say nothing. Notice that: the gauge now
 	# holds what it held before, and that is not what was typed.
 	after = read(root, path)
-	if value is not None and not _same(value, after):
+	if value is not None and not _same(value, after) and not _same(_canonical(prop, value, owner), after):
 		if _same(after, before):
 			return f'the gauge did not take {value!r}; it still holds {after!r}'
 		return f'the gauge holds {after!r} instead of {value!r}'
 	return None
+
+
+def _canonical(prop: StateProperty, value: Any, owner: Stateful) -> Any:
+	"""What `value` becomes after the property decodes it and saves it again.
+
+	An encoder may drop keys that equal the default (`warp: {radius: 40%}` saves as `true`), so the
+	typed form and the held form differ in text while they mean the same.
+	"""
+	try:
+		return saved(prop, prop.decodeValue(value, owner), owner)
+	except Exception:  # noqa: BLE001
+		return value
 
 
 def _norm(a: Any) -> str:
@@ -305,7 +326,9 @@ def _classify(prop: StateProperty, raw: Any, owner: Stateful) -> Optional[Field]
 		return Field((), 'bool')
 	if enumType is not None:
 		choices = []
-		for member in enumType:
+		# A property that declares `choices` offers only those members, in that order.
+		declared = prop.options.get('choices', None)
+		for member in (enumType if declared is None else [m for m in declared if isinstance(m, enumType)]):
 			text = saved(prop, member, owner)
 			choices.append((text if isinstance(text, str) else str(member.name), text if isinstance(text, (str, int, float)) else member.name))
 		return Field((), 'enum', choices=choices)
@@ -384,6 +407,10 @@ def _refine(found: Field, prop: StateProperty, raw: Any, owner: Stateful) -> Fie
 		found.kind = 'fill'
 	elif key in ('caption', 'sub-label'):
 		found.kind = 'caption'
+	elif key == 'warp':
+		found.kind = 'warp'
+	elif key == 'glow':
+		found.kind = 'glow'
 	elif key == 'zones':
 		found.kind = 'zones'
 	elif key == 'markers':

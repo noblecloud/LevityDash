@@ -10,6 +10,8 @@
 #                              diameter (center: dial) or of the card's short side; px and in also work
 #     angle: 0                 where the middle of the text sits, degrees clockwise from the top
 #     mode: warp               warp bends the outlines | glyphs keeps each letter straight
+#     bend: 100%               0% keeps each letter rigid and turns it to the circle; 100% is the full warp;
+#                              between, each point sits that share of the way. `mode: glyphs` is 0%.
 #     flip: auto               auto turns text in the lower half so it reads left to right; true | false force it
 #
 # Alignment is ignored for warped text (the circle decides where it sits), and so are a caption's
@@ -18,7 +20,9 @@
 #
 # Cells, left to right and top to bottom: card title over a dial; caption along the bottom;
 # value label on a small circle; dashboard text round the card centre; text round a corner dial's pivot;
-# `warp` against `glyphs` on a point at the bottom edge.
+# one word on one circle at `bend` 100% (the full warp), 60% and 0% (rigid letters turned to the circle).
+#   bend: 0-100%  how far the letters bend. 0% is `mode: glyphs`, 100% is `mode: warp`. About 60% keeps
+#                 the flow of the circle without stretching the letters.
 # Needs the Fixture plugin: render_dashboard.py OUT.png --levity THIS --scenario stormy-day --size 1600x900 --settle 14
 - type: group
   name: main
@@ -133,15 +137,33 @@
       geometry: {x: 66.67%, y: 50%, width: 33.33%, height: 50%}
       border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
       items:
-        - type: text
-          name: warpedWord
-          text: "WARPED OUTLINES"
-          geometry: {x: 20%, y: 20%, width: 60%, height: 12%}
-          warp: {center: {x: 50%, y: 100%}, radius: 80%, angle: -18}
-          display: {color: '#ff8a3d'}
-        - type: text
-          name: glyphWord
-          text: "RIGID GLYPHS"
-          geometry: {x: 20%, y: 20%, width: 60%, height: 12%}
-          warp: {center: {x: 50%, y: 100%}, radius: 58%, angle: 18, mode: glyphs}
-          display: {color: '#8d8d96'}
+        - type: group
+          name: bendFull
+          geometry: {x: 0%, y: 0%, width: 33.34%, height: 100%}
+          items:
+            - type: text
+              name: bendFullWord
+              text: "BENDING"
+              geometry: {x: 0%, y: 20%, width: 100%, height: 30%}
+              warp: {center: {x: 50%, y: 64%}, radius: 24%, angle: 0, bend: 100%}
+              display: {color: '#ff8a3d'}
+        - type: group
+          name: bendMix
+          geometry: {x: 33.33%, y: 0%, width: 33.34%, height: 100%}
+          items:
+            - type: text
+              name: bendMixWord
+              text: "BENDING"
+              geometry: {x: 0%, y: 20%, width: 100%, height: 30%}
+              warp: {center: {x: 50%, y: 64%}, radius: 24%, angle: 0, bend: 60%}
+              display: {color: '#ffffff'}
+        - type: group
+          name: bendRigid
+          geometry: {x: 66.67%, y: 0%, width: 33.34%, height: 100%}
+          items:
+            - type: text
+              name: bendRigidWord
+              text: "BENDING"
+              geometry: {x: 0%, y: 20%, width: 100%, height: 30%}
+              warp: {center: {x: 50%, y: 64%}, radius: 24%, angle: 0, bend: 0%}
+              display: {color: '#8d8d96'}

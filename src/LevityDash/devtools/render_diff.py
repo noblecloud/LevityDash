@@ -70,6 +70,16 @@ MOCK_SOURCE = REPO / 'src' / 'LevityDash' / 'lib' / 'plugins' / 'builtin' / 'Moc
 #: series, which the `at(key, -3h)` markers on several presets want).
 BASE_SCENARIOS = ('stormy-day', 'gauge-cards')
 
+#: Scenarios to borrow a missing *series* from. A base scenario may name a key as
+#: a bare value; a preset that draws that key as a figure then has a zero range
+#: (`ValueError: Range cannot be zero`, raised on a worker thread, which makes the
+#: render warn or crash). `emissive` - whose own header names `hot-clear-day` -
+#: plots `environment.temperature.feelsLike`, which `stormy-day` names without a
+#: series, so the series is taken from the scenario the preset asks for. Only a
+#: key a base scenario already names but leaves series-less is filled, so no other
+#: preset's values move.
+SERIES_SOURCES = ('hot-clear-day',)
+
 SHOWCASE_SIZE = (2560, 1440)
 PRESET_SIZE = (1600, 900)
 DEFAULT_SETTLE = 14.0
@@ -197,6 +207,12 @@ def build_scenario() -> dict:
 	for name in BASE_SCENARIOS:
 		with open(SCENARIO_DIR / f'{name}.yaml') as file:
 			keys.update(yaml.safe_load(file)['keys'])
+	for name in SERIES_SOURCES:
+		with open(SCENARIO_DIR / f'{name}.yaml') as file:
+			for key, spec in yaml.safe_load(file)['keys'].items():
+				entry = keys.get(key)
+				if isinstance(entry, dict) and 'series' not in entry and isinstance(spec, dict) and 'series' in spec:
+					entry['series'] = spec['series']
 	added = []
 	for key, spec in mock_keys().items():
 		if key in keys:

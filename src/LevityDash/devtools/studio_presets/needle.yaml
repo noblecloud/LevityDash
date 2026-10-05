@@ -1,0 +1,16 @@
+# Needle presets. Values follow docs/design-references/presets/needle-designs.levity,
+# corner-gauges.levity and clock.levity.
+None:
+  needle: {visible: false}
+Line:
+  needle: {visible: true, type: line, length: 82%, width: 1.4%, tail: 20%, tail-dot: 7%, hub: 5%, color: '#ff8a3d'}
+Tapered:
+  needle: {visible: true, type: tapered, length: 78%, width: 7%, tail: 18%, hub: 9%, hub-hole: 40%, hub-color: '#0b0b0d', color: '#f2f2f2'}
+Arrow:
+  needle: {visible: true, type: arrow, length: 36%, width: 2.4%, head: 13%, tail: 30%, tail-dot: 5.5%, color: '#ffffff'}
+Dot on the arc:
+  needle: {visible: true, type: dot, width: 7%, halo: 1.6%, halo-color: '#0b0b0d', color: '#ff7a59'}
+Notch:
+  needle: {visible: true, type: notch, width: 1.6%, length: 8%, color: '#ffffff'}
+Clock hand:
+  needle: {visible: true, type: tapered, length: 72%, width: 4.4%, tail: 9%, hub: 7%, hub-hole: 40%, hub-color: '#0b0b0d', color: '#f2f2f2'}

@@ -35,6 +35,7 @@ from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem, QStyleOptionGrap
 from LevityDash.lib.stateful import Binding, SourceType, StateProperty, Stateful
 from LevityDash.lib.stateful_mixins import ColorGradientMixin
 from LevityDash.lib.ui import Color, Gradient, UILogger
+from LevityDash.lib.ui.glow import Glow, GlowMixin, paintGlow, resolveGlow
 from LevityDash.lib.ui.Geometry import (
 	Alignment, AlignmentFlag, Dimension, DimensionType, DisplayPosition, RelativeFloat, Size, UnitDisplayPosition,
 	ValueDisplayPosition, parseHeight, parseSize, parseWidth, size_px,
@@ -1379,6 +1380,21 @@ class TickSurface(GaugeItem, SurfaceCentered):
 			tick.update_color()
 
 
+#: The positions an end label (`position-leading`, `position-trailing`) can take.
+END_LABEL_POSITIONS = (DisplayPosition.Outside, DisplayPosition.Inside, DisplayPosition.Center, DisplayPosition.FloatUnder)
+
+# `above` and `below` placed an end label exactly as `outside` and `inside` do.
+_END_LABEL_ALIASES = {DisplayPosition.Above: DisplayPosition.Outside, DisplayPosition.Below: DisplayPosition.Inside}
+
+
+def _endLabelPosition(value):
+	"""`value` with the old names `above` and `below` read as `outside` and `inside`."""
+	name = getattr(value, 'value', value)
+	if isinstance(name, str):
+		return _END_LABEL_ALIASES.get(name.lower(), value)
+	return value
+
+
 class GaugeTickText(GaugeItem, AnnotationText):
 
 	"""
@@ -1503,7 +1519,12 @@ class GaugeTickText(GaugeItem, AnnotationText):
 				value = self.tick.endPoint
 			case DisplayPosition.Above:
 				value = self.tick.startPoint
-			case DisplayPosition.Center:
+			case DisplayPosition.Center if self.end_position_set:
+				# On the arc's centre line, whichever side of the arc the tick is on.
+				value = self.tick.startPoint
+				if (distance := hypot(*value.toTuple())) > 1e-6:
+					value = value * (self.gauge.radius / distance)
+			case DisplayPosition.Center | DisplayPosition.FloatUnder:
 				value = self.tick.endPoint / 2 + self.tick.startPoint / 2
 			case DisplayPosition.Left:
 				value = min(self.tick.startPoint, self.tick.endPoint, key=lambda p: p.x())
@@ -1517,10 +1538,19 @@ class GaugeTickText(GaugeItem, AnnotationText):
 	@property
 	def display_position(self) -> DisplayPosition:
 		if self.tick is self.surface.ticks[0]:
-			return self.group.position_leading
+			return getattr(self.group, '_position_leading', Unset) or self.group.position
 		elif self.tick is self.surface.ticks[-1]:
-			return self.group.position_trailing
+			return getattr(self.group, '_position_trailing', Unset) or self.group.position
 		return self.group.position
+
+	@property
+	def end_position_set(self) -> bool:
+		"""True for an end label whose position came from position-leading / position-trailing."""
+		if self.tick is self.surface.ticks[0]:
+			return bool(getattr(self.group, '_position_leading', Unset))
+		if self.tick is self.surface.ticks[-1]:
+			return bool(getattr(self.group, '_position_trailing', Unset))
+		return False
 
 	def setPath(self, path: QPainterPath):
 		if not self._bending:
@@ -1549,11 +1579,16 @@ class GaugeTickText(GaugeItem, AnnotationText):
 
 		disp_pos = self.display_position
 		match disp_pos:
+			# A group-wide `inside` has always placed labels outside the arc, and the
+			# shipped dashboards are drawn that way. Only an end label set with
+			# position-leading / position-trailing goes inward.
 			case DisplayPosition.Below:
 				move_direction = radialPoint(QPointF(0, 0), -1 * direction, angle)
-			case DisplayPosition.Above:
+			case DisplayPosition.Inside if self.end_position_set:
+				move_direction = radialPoint(QPointF(0, 0), -1 * direction, angle)
+			case DisplayPosition.Above | DisplayPosition.Outside:
 				move_direction = radialPoint(QPointF(0, 0), 1 * direction, angle)
-			case DisplayPosition.Center:
+			case DisplayPosition.Center | DisplayPosition.FloatUnder:
 				move_direction = QPointF(0, 1 * direction)
 			case DisplayPosition.Left:
 				move_direction = QPointF(1 * direction, 0)
@@ -1567,6 +1602,11 @@ class GaugeTickText(GaugeItem, AnnotationText):
 		max_travel_distance = int(ceil(sqrt(sum(i**2 for i in self.limitRect.size().toTuple()))))
 		self.prepareGeometryChange()
 		# self._shape = outline_path(self.path(), self.group.offset_px)
+
+		if disp_pos is DisplayPosition.Center and self.end_position_set:
+			# Centered on the arc, so it stays where position() put it.
+			self._bend()
+			return
 
 		arc = self.gauge.arc
 		arc_weight = arc.pen().width() / 2
@@ -1727,7 +1767,7 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 	@property
 	def fill_brush(self) -> Dict[Number, QBrush]:
 		values = self._ticks.tick_values
-		if (gradient := self.gradient) is not None:
+		if (gradient := self.gradient) is not None and (gradient := self.gauge.resolve_gradient(gradient)) is not None:
 			return {value: QBrush(gradient.get_color_for_value(value).QColor) for value in values}
 		return {value: QBrush(self.color.QColor) for value in values}
 
@@ -2086,37 +2126,60 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 	def _get_max_label(self) -> GaugeTickText:
 		return max(self, key=lambda label: label.value)
 
-	@StateProperty(key='position-leading', dependencies={'position'}, after=refresh)
+	@StateProperty(key='position-leading', dependencies={'position'}, after=refresh, choices=END_LABEL_POSITIONS)
 	def position_leading(self) -> DisplayPosition:
-		return getattr(self, '_position_leading', Unset) or self.position
+		"""
+		Where the first label sits against the arc's start. The labels in between keep `position`.
+
+		outside      radially out from the arc, clear of the arc and its tick
+		inside       radially in, clear of the tick's inner end
+		center       on the arc's centre line, over the arc, with no clearing
+		float-under  straight down on screen from the end of the tick, clear of the arc and tick
+
+		`above` and `below` are read as `outside` and `inside`. `left` and `right` are not accepted.
+		"""
+		return getattr(self, '_position_leading', Unset) or _END_LABEL_ALIASES.get(self.position, self.position)
 
 	@position_leading.setter
 	def position_leading(self, value: DisplayPosition):
 		self._position_leading = value
 
+	@position_leading.validator
+	def position_leading(self, value):
+		return _endLabelPosition(value)
+
 	@position_leading.decode
 	def position_leading(self, value: str) -> DisplayPosition:
-		return DisplayPosition[value]
+		return value if isinstance(value, DisplayPosition) else DisplayPosition[value]
 
 	@position_leading.condition(method='get')
 	def position_leading(self, value: DisplayPosition) -> bool:
-		return value is not self.position
+		# Saved whenever set: a group-wide `inside` and an end label set to `inside` differ.
+		return bool(getattr(self, '_position_leading', Unset))
 
-	@StateProperty(key='position-trailing', dependencies={'position'}, after=refresh)
+	@StateProperty(key='position-trailing', dependencies={'position'}, after=refresh, choices=END_LABEL_POSITIONS)
 	def position_trailing(self) -> DisplayPosition:
-		return getattr(self, '_position_trailing', Unset) or self.position
+		"""
+		Where the last label sits against the arc's end. The labels in between keep `position`.
+		The four values mean the same as for `position-leading`.
+		"""
+		return getattr(self, '_position_trailing', Unset) or _END_LABEL_ALIASES.get(self.position, self.position)
 
 	@position_trailing.setter
 	def position_trailing(self, value: DisplayPosition):
 		self._position_trailing = value
 
+	@position_trailing.validator
+	def position_trailing(self, value):
+		return _endLabelPosition(value)
+
 	@position_trailing.decode
 	def position_trailing(self, value: str) -> DisplayPosition:
-		return DisplayPosition[value]
+		return value if isinstance(value, DisplayPosition) else DisplayPosition[value]
 
 	@position_trailing.condition(method='get')
 	def position_trailing(self, value: DisplayPosition) -> bool:
-		return value is not self.position
+		return bool(getattr(self, '_position_trailing', Unset))
 
 	@StateProperty(key='rotate-leading', allowNone=False, default=False)
 	def rotation_leading(self) -> bool:
@@ -2227,7 +2290,7 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 				return Alignment(AlignmentFlag.Center)
 
 
-class Needle(StatefulGaugePathItem):
+class Needle(GlowMixin, StatefulGaugePathItem):
 	_animation: QPropertyAnimation
 	_animationSignal = Signal(float)
 
@@ -2676,9 +2739,22 @@ class Needle(StatefulGaugePathItem):
 		rect = super().boundingRect()
 		for path, _ in (*self._under, *self._over):
 			rect = rect.united(path.boundingRect())
-		return rect
+		try:
+			glow = self._glowToDraw()
+			return rect if glow is None else glow.pad(rect, self.width_px, filled=True)
+		except Exception:
+			# Asked before the width or the gauge exists, while the item loads.
+			return rect
+
+	def _glowToDraw(self) -> Optional[Glow]:
+		return resolveGlow(self.glow, getattr(self.gauge, 'glow', None))
+
+	def glowChanged(self):
+		self.prepareGeometryChange()
+		self.update()
 
 	def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget = None):
+		paintGlow(painter, self.path(), self.brush(), self.width_px, self._glowToDraw())
 		painter.setPen(Qt.NoPen)
 		for path, color in self._under:
 			painter.setBrush(QBrush(color))
@@ -3252,7 +3328,7 @@ class GaugeZones(GaugeItem, QGraphicsItem):
 			try:
 				if not isinstance(spec, Mapping):
 					raise TypeError('expected a mapping with from, to and color')
-				unknown = set(spec) - {'from', 'to', 'color', 'weight', 'mark'}
+				unknown = set(spec) - {'from', 'to', 'color', 'weight', 'mark', 'glow'}
 				if unknown:
 					log.warning(f'Gauge {name} zone ignored unknown keys {sorted(map(str, unknown))}')
 				ends = []
@@ -3272,7 +3348,7 @@ class GaugeZones(GaugeItem, QGraphicsItem):
 					weight = parseWidth(raw, None)
 					if weight is None:
 						raise ValueError(f'weight {raw!r} is not a size')
-				zones.append({'from': ends[0], 'to': ends[1], 'color': color, 'weight': weight, 'mark': bool(spec.get('mark', False))})
+				zones.append({'from': ends[0], 'to': ends[1], 'color': color, 'weight': weight, 'mark': bool(spec.get('mark', False)), 'glow': Glow.decode(spec.get('glow'))})
 				kept.append(copy.deepcopy(dict(spec)))
 			except Exception as e:
 				log.warning(f'Gauge {name} skipped zone {spec!r}: {e}')
@@ -3339,8 +3415,11 @@ class GaugeZones(GaugeItem, QGraphicsItem):
 				path.arcTo(rect, -a + 90, -(b - a))
 				pen = QPen(zone['color'], weight)
 				pen.setCapStyle(Qt.PenCapStyle.FlatCap)
-				self._strokes.append((path, pen))
+				glow = resolveGlow(zone['glow'], gauge.glow)
+				self._strokes.append((path, pen, glow))
 				bounds = bounds.united(path.boundingRect().adjusted(-weight, -weight, weight, weight))
+				if glow is not None:
+					bounds = bounds.united(glow.pad(path.boundingRect(), weight))
 			for angle in sorted(marks):
 				radius = rect.width() / 2
 				reach = (arcWeight or 0) * 0.75
@@ -3349,7 +3428,7 @@ class GaugeZones(GaugeItem, QGraphicsItem):
 				path.lineTo(radialPoint(QPointF(0, 0), radius + reach, angle))
 				pen = QPen(gauge.defaultColor, max(1.5, (arcWeight or 0) * 0.12))
 				pen.setCapStyle(Qt.PenCapStyle.FlatCap)
-				self._strokes.append((path, pen))
+				self._strokes.append((path, pen, None))
 				bounds = bounds.united(path.boundingRect().adjusted(-2, -2, 2, 2))
 		except Exception as e:
 			log.warning(f'Gauge {gaugeKeyName(gauge)} zones not drawn: {e}')
@@ -3363,9 +3442,15 @@ class GaugeZones(GaugeItem, QGraphicsItem):
 	def boundingRect(self) -> QRectF:
 		return self._rect
 
+	def glowChanged(self):
+		self.refresh()
+
 	def paint(self, painter: QPainter, option, widget=None):
 		painter.setBrush(Qt.BrushStyle.NoBrush)
-		for path, pen in self._strokes:
+		# Every halo first, so a neighbour's glow never lies over a core.
+		for path, pen, glow in self._strokes:
+			paintGlow(painter, path, pen.brush(), pen.widthF(), glow)
+		for path, pen, _ in self._strokes:
 			painter.setPen(pen)
 			painter.drawPath(path)
 
@@ -3391,6 +3476,7 @@ class GaugeFill(GaugePathItem):
 	_colorFromZones = False
 	_segments: int = 0
 	_gap = None
+	_glow: Optional[Glow] = None
 	_strokes: list = ()
 
 	def __init__(self, *args, **kwargs):
@@ -3422,10 +3508,10 @@ class GaugeFill(GaugePathItem):
 		"""Read ``spec``. Never raises: a bad spec warns and leaves the fill hidden."""
 		self.close()
 		self._valid = False
-		self._from = self._to = self._weight = self._color = self._gap = None
+		self._from = self._to = self._weight = self._color = self._gap = self._glow = None
 		self._colorFromZones, self._segments, self._strokes = False, 0, ()
 		name = gaugeKeyName(self.gauge)
-		unknown = set(spec) - {'from', 'to', 'weight', 'color', 'segments', 'gap'}
+		unknown = set(spec) - {'from', 'to', 'weight', 'color', 'segments', 'gap', 'glow'}
 		if unknown:
 			log.warning(f'Gauge {name} fill ignored unknown keys {sorted(map(str, unknown))}')
 		try:
@@ -3450,6 +3536,7 @@ class GaugeFill(GaugePathItem):
 				self._weight = parseWidth(weight, None)
 				if self._weight is None:
 					raise ValueError(f'weight {weight!r} is not a size')
+			self._glow = Glow.decode(spec.get('glow'))
 			if isinstance(spec.get('color'), str) and spec['color'].strip().lower() == 'zone':
 				self._colorFromZones = True
 			elif (color := spec.get('color')) is not None:
@@ -3575,8 +3662,23 @@ class GaugeFill(GaugePathItem):
 		lo, span = float(gauge._range.rounded_min), float(gauge._range.rounded_range)
 		return lo + (angle - float(gauge.startAngle)) / float(gauge.fullAngle) * span
 
+	def glowChanged(self):
+		self.prepareGeometryChange()
+		self.update()
+
+	def _glowToDraw(self) -> Optional[Glow]:
+		return resolveGlow(self._glow, getattr(self.gauge, 'glow', None))
+
+	def boundingRect(self) -> QRectF:
+		rect = super().boundingRect()
+		glow = self._glowToDraw()
+		return rect if glow is None else glow.pad(rect, self.pen().widthF())
+
 	def paint(self, painter: QPainter, option, widget=None):
 		painter.setBrush(Qt.BrushStyle.NoBrush)
+		glow = self._glowToDraw()
+		for path, color in self._strokes:
+			paintGlow(painter, path, QBrush(color), self.pen().widthF(), glow)
 		for path, color in self._strokes:
 			pen = QPen(self.pen())
 			pen.setBrush(QBrush(color))
@@ -3700,7 +3802,7 @@ class GaugeCaption(GaugePathItem):
 		scale = arcFit(fm.horizontalAdvance(self._text), fm.ascent() + fm.descent(), 1.0, place.radius)
 		view = getattr(self.scene(), 'viewScale', None)
 		epsilon = 0.25 / ((getattr(view, 'x', 1) or 1) if view is not None else 1)
-		path = warp_path(self._text, font, scale, place.radius, place.side, self._warp.mode, epsilon)
+		path = warp_path(self._text, font, scale, place.radius, place.side, self._warp.mode, epsilon, self._warp.amount)
 		self.prepareGeometryChange()
 		self.setPath(path)
 		self.setTransform(QTransform().scale(scale, scale))

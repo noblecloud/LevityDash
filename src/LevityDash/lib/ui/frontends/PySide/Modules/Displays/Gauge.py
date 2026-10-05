@@ -30,6 +30,7 @@ from LevityDash.lib.plugins.plugin import AnySource
 from LevityDash.lib.stateful import Binding, Stateful, StateProperty, SourceType
 from LevityDash.lib.stateful_mixins import ColorGradientMixin
 from LevityDash.lib.ui import UILogger, Color, Gradient
+from LevityDash.lib.ui.glow import Glow, GlowMixin, paintGlow, resolveGlow
 from LevityDash.lib.ui.Geometry import RelativeFloat, parseSize, DimensionType, size_px, Dimension, Size, Alignment, \
 	AlignmentFlag, DisplayPosition, parseWidth, parseX, parseY, parseHeight, UnitDisplayPosition, ValueDisplayPosition
 from LevityDash.lib.ui.frontends.PySide.Modules import Panel
@@ -64,7 +65,7 @@ log = UILogger.getChild('Gauge')
 
 
 @DebugPaint
-class GaugeArc(StatefulGaugePathItem):
+class GaugeArc(GlowMixin, StatefulGaugePathItem):
 
 	_weight_scale = 0.75
 
@@ -78,6 +79,19 @@ class GaugeArc(StatefulGaugePathItem):
 		if self._track is None:
 			self._track = ArcTrack(self.centered_gauge_rect, self.startAngle, self.endAngle)
 		return self._track
+
+	def glowChanged(self):
+		self.prepareGeometryChange()
+		self.update()
+
+	def boundingRect(self) -> QRectF:
+		rect = super().boundingRect()
+		return rect if self.glow is None else self.glow.pad(rect, self.pen().widthF())
+
+	def paint(self, painter: QPainter, option, widget=None):
+		pen = self.pen()
+		paintGlow(painter, self.path(), pen.brush(), pen.widthF(), self.glow)
+		super().paint(painter, option, widget)
 
 	@property
 	def safe_area(self) -> QPainterPath:
@@ -288,7 +302,7 @@ class GaugeArc(StatefulGaugePathItem):
 
 
 @DebugPaint
-class Gauge(Meter):
+class Gauge(GlowMixin, Meter):
 
 	__value: float = 0.0
 	_needleAnimation: QPropertyAnimation
@@ -374,11 +388,26 @@ class Gauge(Meter):
 		angle = sorted([self.startAngle, self.endAngle])[0]
 		return angle % 360
 
-	def convert_gradient(self, gradient: 'Gradient') -> QConicalGradient:
+	def resolve_gradient(self, gradient: 'Gradient') -> 'Gradient | None':
+		"""`gradient` with each stop that carries a unit (`99°F`) converted into the unit of this gauge's data.
+
+		A gradient of bare numbers comes back as it is. None when every stop was left out because its unit does not fit the data;
+		the log names each such stop once.
+		"""
+		if not gradient.hasUnits:
+			return gradient
+		resolved = gradient.resolve(self.valueClass)
+		return resolved if len(resolved) else None
+
+	def convert_gradient(self, gradient: 'Gradient') -> QConicalGradient | None:
 		_type = self.valueClass
 		rounded_min = self._range.rounded_min
 		rounded_max = self._range.rounded_max
-		if not issubclass(gradient.itemCls.__item__, _type):
+		if gradient.hasUnits:
+			# Stops pinned to a reading stay at it: no stretching over the range, as a bare-number gradient gets below.
+			if (gradient := self.resolve_gradient(gradient)) is None:
+				return None
+		elif not issubclass(gradient.itemCls.__item__, _type):
 			gradient = gradient.as_type(_type, rounded_min, rounded_max)
 		return gradient.toQConicalGradient(
 			start_angle=self.startAngle,
@@ -388,9 +417,14 @@ class Gauge(Meter):
 		)
 
 	def map_gradient_to(self, gradient: 'Gradient', item: QGraphicsPathItem | Surface = None) -> QConicalGradient:
-		gradient = self.convert_gradient(gradient)
-		gradient.setCenter(self._center_transform.map(self.mapToItem(item or self, self.center)))
-		return gradient
+		converted = self.convert_gradient(gradient)
+		if converted is None:
+			# No stop fits the data. Paint the gauge's own colour rather than abort the dashboard.
+			converted = QConicalGradient()
+			converted.setColorAt(0, self.pen.color())
+			converted.setColorAt(1, self.pen.color())
+		converted.setCenter(self._center_transform.map(self.mapToItem(item or self, self.center)))
+		return converted
 
 	def _afterSetState(self):
 		super()._afterSetState()

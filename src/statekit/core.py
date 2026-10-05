@@ -592,7 +592,7 @@ class StateProperty(property):
 	KNOWN_OPTIONS: ClassVar[frozenset] = frozenset({
 		# Every option name this module actually reads, gathered from its
 		# __options.get / kwargs.get / options[...] sites.
-		'accepts', 'after', 'afterPool', 'allowNone', 'altKey', 'conditions',
+		'accepts', 'after', 'afterPool', 'allowNone', 'altKey', 'choices', 'conditions',
 		'decode', 'decoder', 'default', 'dependencies', 'encode', 'encoder',
 		'exclude', 'expand', 'factory.func', 'inheritFrom', 'item_default',
 		'link', 'match', 'owner', 'repr', 'required', 'score.func',
@@ -943,7 +943,27 @@ class StateProperty(property):
 				raise
 			except (ValueError, TypeError, KeyError) as e:
 				raise StateError(str(e), prop=self, value=proposal) from e
+		self.checkChoices(proposal)
 		return proposal
+
+	@staticmethod
+	def _choiceKey(value: Any) -> Any:
+		value = getattr(value, 'value', value)
+		return value.lower() if isinstance(value, str) else value
+
+	def checkChoices(self, proposal: Any) -> None:
+		"""Raise StateError unless `proposal` is one of the property's `choices`.
+
+		`choices` is the declarative list of values the property accepts. Enum members
+		match by value, and strings match without regard to case. Tools that offer the
+		property for editing read the same list, so they show only values that work.
+		"""
+		choices = self.__options.get('choices', None)
+		if choices is None or proposal is None or proposal is Unset:
+			return
+		if self._choiceKey(proposal) not in {self._choiceKey(c) for c in choices}:
+			allowed = ', '.join(str(getattr(c, 'value', c)) for c in choices)
+			raise StateError(f"{self.key} must be one of: {allowed} (got {getattr(proposal, 'value', proposal)!r})", prop=self, value=proposal)
 
 	def validator(self, func: Callable[['Stateful', Any], Any]) -> 'StateProperty':
 		"""Register `func(owner, proposal) -> value`. Raise StateError to reject."""

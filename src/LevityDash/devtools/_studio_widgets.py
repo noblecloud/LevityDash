@@ -44,8 +44,12 @@ def labelFor(key: str) -> str:
 class Section(QWidget):
 	"""A header you click to fold, over a body that holds rows and child sections."""
 
+	userToggled = Signal(bool)  # a click on the header, not a change the filter made
+
 	def __init__(self, title: str, expanded: bool = False, parent: Optional[QWidget] = None):
 		super().__init__(parent)
+		self.key = ''  # names the section in the saved fold state
+		self._preFilter: Optional[bool] = None
 		outer = QVBoxLayout(self)
 		outer.setContentsMargins(0, 0, 0, 0)
 		outer.setSpacing(0)
@@ -55,10 +59,17 @@ class Section(QWidget):
 		self.header.setChecked(expanded)
 		self.header.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
 		self.header.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
-		self.header.setStyleSheet('QToolButton { border: none; font-weight: 600; padding: 6px 4px; text-align: left; color: palette(window-text); }')
-		self.header.setSizePolicy(self.header.sizePolicy().horizontalPolicy(), self.header.sizePolicy().verticalPolicy())
+		# Larger than the field labels, so a header reads as a heading. QToolButton centres its
+		# text, so the button keeps its own width and a stretch after it pins it to the left.
+		self.header.setStyleSheet('QToolButton { border: none; font-size: 17px; font-weight: 700; padding: 8px 2px 4px 0px; color: palette(window-text); }')
 		self.header.toggled.connect(self._toggled)
-		outer.addWidget(self.header)
+		self.header.clicked.connect(self.userToggled)
+		self.headerBar = QHBoxLayout()
+		self.headerBar.setContentsMargins(0, 0, 0, 0)
+		self.headerBar.setSpacing(4)
+		self.headerBar.addWidget(self.header)
+		self.headerBar.addStretch(1)
+		outer.addLayout(self.headerBar)
 		self.body = QFrame()
 		self.body.setVisible(expanded)
 		self.grid = QGridLayout(self.body)
@@ -81,6 +92,17 @@ class Section(QWidget):
 		self.grid.addWidget(widget, self._row, 0, 1, 3)
 		self._row += 1
 
+	def addHeaderWidget(self, widget: QWidget):
+		self.headerBar.addWidget(widget)
+
+	def clear(self):
+		while self.grid.count():
+			w = self.grid.takeAt(0).widget()
+			if w is not None:
+				w.setParent(None)
+				w.deleteLater()
+		self._row = 0
+
 	def setFiltered(self, text: str) -> bool:
 		"""Show only rows whose label contains `text`. True when anything matches."""
 		anything = False
@@ -95,7 +117,12 @@ class Section(QWidget):
 				w.setVisible(hit)
 				anything |= hit
 		if text:
+			if self._preFilter is None:
+				self._preFilter = self.header.isChecked()
 			self.setExpanded(anything)
+		elif self._preFilter is not None:
+			self.setExpanded(self._preFilter)
+			self._preFilter = None
 		return anything or not text
 
 
@@ -103,6 +130,7 @@ class FieldRow(QWidget):
 	"""One property: label, control, reset, and the reason a value was rejected."""
 
 	edited = Signal(tuple, object)  # path, value in `.levity` form
+	pinToggled = Signal(tuple, bool)
 
 	def __init__(self, field: Field, saved: Any, parent: Optional[QWidget] = None):
 		super().__init__(parent)
@@ -131,8 +159,10 @@ class FieldRow(QWidget):
 			box.addWidget(self.editor, 1)
 		else:
 			self._build(box)
+		if self.editor is not None and self.editor.minimumSizeHint().width() > 300:
+			self.editor.wide = True  # too wide to sit beside the label: it would force the panel to scroll sideways
 		if self.editor is not None and self.editor.wide:
-			grid.addWidget(self.control, 2, 0, 1, 3)
+			grid.addWidget(self.control, 2, 0, 1, 4)
 		else:
 			grid.addWidget(self.control, 0, 1)
 		self.reset = QToolButton()
@@ -143,13 +173,45 @@ class FieldRow(QWidget):
 		self.reset.setEnabled(False)
 		grid.addWidget(self.reset, 0, 2)
 		self.reset.setVisible(saved is not None or self.editor is not None)
+		self.pin = QToolButton()
+		self.pin.setCheckable(True)
+		self.pin.setAutoRaise(True)
+		self.pin.setText('☆')
+		self.pin.setToolTip('Pin this property to the top of the panel')
+		keep = self.pin.sizePolicy()
+		keep.setRetainSizeWhenHidden(True)
+		self.pin.setSizePolicy(keep)
+		self.pin.setVisible(False)
+		self.pin.toggled.connect(self._pinned)
+		grid.addWidget(self.pin, 0, 3)
 		self.error = QLabel()
 		self.error.setWordWrap(True)
 		self.error.setStyleSheet(f'color: {ERROR_COLOR}; font-size: 11px;')
 		self.error.setVisible(False)
-		grid.addWidget(self.error, 1, 0, 1, 3)
+		grid.addWidget(self.error, 1, 0, 1, 4)
 		grid.setColumnStretch(1, 1)
 		self.setSaved(saved)
+
+	# pinning
+
+	def _pinned(self, on: bool):
+		self.pin.setText('★' if on else '☆')
+		self.pinToggled.emit(self.field.path, on)
+
+	def setPinned(self, on: bool):
+		"""Show the pin state without reporting a toggle."""
+		with QSignalBlocker(self.pin):
+			self.pin.setChecked(on)
+		self.pin.setText('★' if on else '☆')
+		self.pin.setVisible(on)
+
+	def enterEvent(self, event):
+		self.pin.setVisible(True)
+		super().enterEvent(event)
+
+	def leaveEvent(self, event):
+		self.pin.setVisible(self.pin.isChecked())
+		super().leaveEvent(event)
 
 	# building
 
@@ -374,3 +436,13 @@ def build(group: Group, read: Callable[[tuple], Any], rows: Dict[tuple, FieldRow
 	for sub in group.groups:
 		section.addRow(build(sub, read, rows, expanded=False, top=False))
 	return section
+
+
+def fieldsOf(group: Group, found: Optional[Dict[tuple, Field]] = None) -> Dict[tuple, Field]:
+	"""Every field under `group`, keyed by path."""
+	found = {} if found is None else found
+	for field in group.fields:
+		found[field.path] = field
+	for sub in group.groups:
+		fieldsOf(sub, found)
+	return found

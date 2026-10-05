@@ -1,0 +1,23 @@
+# Shape presets: the arc's sweep and weight. Values follow docs/design-references/presets/partial-dials.levity
+# and corner-gauges.levity. A null removes the key, so the property goes back to its default.
+Full ring:
+  arc: {start-angle: 0, end-angle: 360, weight: 6%, cap: flat}
+  anchor: null
+  inset: null
+270 dial:
+  arc: {start-angle: -135, end-angle: 135, weight: 5%, cap: flat}
+  anchor: null
+  inset: null
+Half dial:
+  arc: {start-angle: -90, end-angle: 90, weight: 9%, cap: flat}
+  anchor: null
+  inset: null
+Corner dial:
+  anchor: bottom-left
+  inset: 10%
+  radius: 88%
+  arc: {start-angle: 0, end-angle: 90, weight: 3.5%, cap: flat}
+Thin arc:
+  arc: {weight: 2%, cap: round}
+Thick arc:
+  arc: {weight: 11%, cap: round}

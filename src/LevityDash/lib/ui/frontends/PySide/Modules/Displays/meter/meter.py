@@ -1029,3 +1029,9 @@ class Meter(Display):
 	def _fillItems(self) -> list:
 		item = getattr(self, '_fillItem', None)
 		return [] if item is None else [item]
+
+	def glowChanged(self):
+		"""The gauge's ``glow`` is the default for the fill, zones, needle and markers; the track has its own."""
+		for item in (getattr(self, '_needle', None), *self._markerItems, *self._zoneItems(), *self._fillItems()):
+			if item is not None:
+				item.glowChanged()

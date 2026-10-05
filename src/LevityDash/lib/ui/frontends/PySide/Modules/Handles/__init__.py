@@ -203,6 +203,12 @@ class Handle(QGraphicsPathItem):
 
 	def updateShape(self):
 		self.prepareGeometryChange()
+		return self._buildShape()
+
+	def _buildShape(self) -> QPainterPath:
+		# No prepareGeometryChange here: Qt asks for shape() while preparing a
+		# geometry change, so building lazily from shape() through updateShape
+		# recursed until the stack ran out.
 		qp = QPainterPathStroker()
 		qp.setWidth(self.width*HITBOX_SIZE)
 		qp.setCapStyle(Qt.RoundCap)
@@ -213,7 +219,7 @@ class Handle(QGraphicsPathItem):
 	@property
 	def _shape(self) -> QPainterPath:
 		if (path := self._shape_) is None:
-			path = self.updateShape()
+			path = self._buildShape()
 		return path
 
 	@property

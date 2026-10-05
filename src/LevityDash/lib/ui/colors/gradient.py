@@ -1,15 +1,18 @@
 import numpy as np
 from PySide6.QtCore import QPoint, QPointF
-from PySide6.QtGui import QLinearGradient, QConicalGradient, QPainter, Qt
+from PySide6.QtGui import QColor, QLinearGradient, QConicalGradient, QPainter, Qt
 from difflib import get_close_matches
 from functools import cached_property, lru_cache
 from numbers import Number
 from rich.repr import auto as auto_repr
-from typing import TypeVar, ClassVar, Dict, Type, Tuple, Callable, Union, List, runtime_checkable, Protocol
+from typing import Optional, TypeVar, ClassVar, Dict, Type, Tuple, Callable, Union, List, runtime_checkable, Protocol
 from yaml import SafeDumper, SafeLoader, SequenceNode, MappingNode, ScalarNode
 
 from LevityDash.lib.stateful import StatefulLoader
+from LevityDash.lib.ui import UILogger as log
 from LevityDash.lib.ui.colors.color import Color
+from LevityDash.lib.ui.colors.oklch import oklab_stops
+from LevityDash.lib.ui.colors.stopunits import StopUnitError, formatStop, parseStop, toDataUnit
 from LevityDash.lib.utils import getOrSet, classproperty
 from LevityDash.shims.Qt import QImage
 from WeatherUnits import Measurement, Percentage
@@ -27,7 +30,7 @@ class SupportsMath(Protocol):
 
 @auto_repr
 class MappedGradientValue:
-	__slots__ = ('__color', '__value')
+	__slots__ = ('__color', '__value', 'unit', 'text')
 	__types__: ClassVar[Dict[Type, Type]] = {}
 	__item__: ClassVar[Type] = GradientValueType
 
@@ -36,6 +39,11 @@ class MappedGradientValue:
 
 	__color: Color
 	color: Color
+
+	#: The unit a stop was written in (`°F`, `mph`), or None for a bare number. `value` is then the number in that unit.
+	unit: Optional[str]
+	#: The key a stop was written under (`99°F`). A save writes it back unchanged.
+	text: Optional[str]
 
 	def __class_getitem__(cls, item):
 		if isinstance(item, TypeVar):
@@ -47,12 +55,22 @@ class MappedGradientValue:
 			cls.__types__[item] = t
 		return cls.__types__[item]
 
-	def __init__(self, value: Number, color: Color | str | Tuple[int | float]):
+	def __init__(self, value: Number, color: Color | str | Tuple[int | float], unit: Optional[str] = None, text: Optional[str] = None):
 		self.value = value
 		self.color = color if isinstance(color, Color) else Color(color)
+		self.unit = unit or None
+		self.text = text
+
+	@property
+	def key(self) -> str | int | float:
+		"""What a file calls this stop: its own text for a measured stop, else the number."""
+		if self.unit:
+			return self.text or formatStop(float(self.value), self.unit)
+		number = float(self.value)
+		return int(number) if number.is_integer() else number
 
 	def __rich_repr__(self):
-		yield 'value', str(self.value)
+		yield 'value', self.text if self.unit else str(self.value)
 		yield 'color', self.color
 
 	def __hash__(self) -> int:
@@ -95,7 +113,20 @@ class MappedGradientValue:
 		return dumper.represent_mapping(cls.__name__, {'value': value, 'colors': data.color})
 
 
+def setStops(gradient, stops, space: str = 'srgb') -> None:
+	"""Add ``(position, QColor)`` stops to a Qt gradient. ``space='oklab'`` adds stops between them that mix in Oklab."""
+	if space == 'oklab' and len(stops) > 1:
+		pairs = [(p, (c.redF(), c.greenF(), c.blueF(), c.alphaF())) for p, c in stops]
+		for position, (r, g, b, a) in oklab_stops(pairs):
+			gradient.setColorAt(min(1.0, max(0.0, position)), QColor.fromRgbF(r, g, b, a))
+		return
+	for position, colour in stops:
+		gradient.setColorAt(position, colour)
+
+
 class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
+	#: How Qt gradients built from this one mix between stops: ``srgb`` (Qt's own) or ``oklab``.
+	space: str = 'srgb'
 	__types__: ClassVar[Dict[Type, Type]] = {}
 	__presets__: ClassVar[Dict[str, 'Gradient']] = {}
 	__item__: ClassVar[Type] = MappedGradientValue[float]
@@ -110,16 +141,26 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 		def __genGradient(self):
 			T = self.localized
 			locations = (T - T.min())/np.ptp(T)
-			for position, value in zip(locations, self.values):
-				self.setColorAt(position, value.color.QColor)
+			setStops(self, [(float(p), v.color.QColor) for p, v in zip(locations, self.activeStops)], getattr(self.values, 'space', 'srgb'))
+
+		@cached_property
+		def activeStops(self) -> list:
+			"""The stops that apply to this plot's data, in order. A stop with a unit the data cannot take is left out."""
+			try:
+				unitType = self.plot.data.dataType
+			except Exception:
+				return self.values.as_list
+			if self.values.hasUnits:
+				return self.values.resolve(unitType).as_list
+			return self.values.as_list
 
 		@cached_property
 		def localized(self):
 			try:
 				unitType = self.plot.data.dataType
-				values = [unitType(t.value) for t in self.values.as_list]
+				values = [unitType(t.value) for t in self.activeStops]
 			except Exception:
-				values = [t.value for t in self.values.as_list]
+				values = [t.value for t in self.activeStops]
 			return np.array(values)
 
 		@property
@@ -188,7 +229,10 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 				self[str(key)] = itemType(key, item)
 			elif isinstance(key, str) and isinstance(item, (tuple, list)) and len(item) == 2:
 				value, color = item
-				self[key] = itemType(value, color)
+				self[key] = self._stop(value, color, value if isinstance(value, str) else None)
+			elif isinstance(key, str) and parseStop(key) is not None and not isinstance(item, (tuple, list, dict)):
+				# `99°F: '#ff4a4a'`: the stop is the key, and a unit on it is kept.
+				self[key] = self._stop(key, item, key)
 
 		for color in color:
 			match color:
@@ -197,12 +241,58 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 				case (Number() as p,  str() | tuple() as c):
 					c = Color(c)
 					self[str(c)] = itemType(p, c)
+				case {'at': at, 'color': c} | {'value': at, 'color': c}:
+					# `- {at: 37°C, color: '#ff4a4a'}`
+					self._add(at, c)
+				case (str() as at, Color() | str() | tuple() as c) if parseStop(at) is not None:
+					self._add(at, c)
+
+	def _stop(self, at, color, key: str = None) -> MappedGradientValue:
+		"""A stop at `at`: a number, or text such as `99°F`. A unit is kept on the stop and applied against the data."""
+		number, unit = parseStop(at) or (at, None)
+		return type(self).itemCls(number, color, unit=unit, text=key if unit else None)
+
+	def _add(self, at, color):
+		stop = self._stop(at, color, at if isinstance(at, str) else None)
+		self[stop.text or str(stop.key)] = stop
+
+	@property
+	def hasUnits(self) -> bool:
+		"""True when any stop carries a unit. Such a gradient is placed by reading, not by position along the range."""
+		return any(stop.unit for stop in dict.values(self))
+
+	def resolve(self, valueClass: type) -> 'Gradient':
+		"""The same stops as plain numbers in the unit of `valueClass`, ready to place on a display of that data.
+
+		Each stop converts on its own, so units may mix. A bare number is taken as already in the data's unit.
+		A stop whose unit is unknown or measures something else is left out, and the log names it once.
+		"""
+		cache = self.__dict__.setdefault('_resolved', {})
+		if valueClass in cache:
+			return cache[valueClass]
+		out = Gradient[valueClass]() if isinstance(valueClass, type) else Gradient()
+		reported = self.__dict__.setdefault('_reported', set())
+		for key, stop in dict.items(self):
+			try:
+				number = toDataUnit(float(stop.value), stop.unit, valueClass)
+			except StopUnitError as e:
+				if key not in reported:
+					reported.add(key)
+					log.error(f'Gradient stop {stop.key!r} skipped: {e}')
+				continue
+			out[key] = type(out).itemCls(number, stop.color)
+		out.space = self.space
+		cache[valueClass] = out
+		return out
 
 	def as_type(self, type_: Type[Measurement], _min: Measurement, _max: Measurement) -> 'Gradient':
 		cls = Gradient[type_]
 		own_min = float(self.min.value)
 		own_max = float(self.max.value)
 		own_range = own_max - own_min
+		if own_range == 0:
+			# One stop has no span to stretch over the range: it stays one flat colour.
+			return cls(colors={type_(float(_min)): self.as_list[0].color})
 
 		own_normalized_values = {(float(item.value) - own_min) / own_range: item.color for item in self.values()}
 
@@ -212,7 +302,9 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 
 		new_values_from_normals = dict((type_(other_min + (other_range * k)), v) for k, v in own_normalized_values.items())
 
-		return cls(colors=new_values_from_normals)
+		out = cls(colors=new_values_from_normals)
+		out.space = self.space
+		return out
 
 	@classproperty
 	def itemCls(cls) -> Type[MappedGradientValue]:
@@ -266,17 +358,15 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 		image.fill(Qt.transparent)
 		painter = QPainter(image)
 		gradient = QLinearGradient(QPoint(0, 0), QPoint(width, 0))
-		for point in self.as_list:
-			color = point.color.QColor
-			value = float(point.value)
-			normalized_value = float(value - min_value) / float(value_range)
-			gradient.setColorAt(normalized_value, color)
+		setStops(gradient, [(float(float(p.value) - min_value) / float(value_range), p.color.QColor) for p in self.as_list], self.space)
 		painter.fillRect(image.rect(), gradient)
 		painter.end()
 		return image
 
 	@lru_cache(maxsize=512)
 	def get_color_for_value(self, value: GradientValueType) -> Color:
+		if float(self.valueRange) == 0:
+			return self.as_list[0].color
 		map = self.map
 		pixel_pos = round((float(value) - float(self.min.value)) / float(self.valueRange) * float(map.width()))
 		pixel_pos = max(0, min(pixel_pos, map.width()-1))
@@ -305,6 +395,13 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 			QConicalGradient: The converted QConicalGradient object.
 		"""
 		gradient = QConicalGradient()
+
+		if float(self.valueRange) == 0:
+			# One stop, or every stop at one value: a flat colour. The blend below divides by the span.
+			colour = self.as_list[0].color.QColor
+			gradient.setColorAt(0, colour)
+			gradient.setColorAt(1, colour)
+			return gradient
 
 		inverted = float(start_angle) > float(stop_angle)
 		modifier = (lambda x: x) if inverted else (lambda x: 1-x)
@@ -362,9 +459,8 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 		normalized_values = normalized_values + ((360 - abs(full_angle)) / 2 / 360)
 
 		# Add all the stops that are between 0.0 and 1.0 to the gradient
-		for point, item in zip(normalized_values, stops):
-			if 0 <= round(point, 6) <= 1:
-				gradient.setColorAt(modifier(point), item.color.QColor)
+		inside = [(modifier(point), item.color.QColor) for point, item in zip(normalized_values, stops) if 0 <= round(point, 6) <= 1]
+		setStops(gradient, sorted(inside, key=lambda s: s[0]), self.space)
 
 		# if there are stops outside the range of the gradient, add stops at the edge of the gradient
 		value_per_degree = float(value_range / abs(full_angle))
@@ -392,7 +488,10 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 	def representer(cls, dumper: SafeDumper, data):
 		if name := getattr(data, 'presetName', None):
 			return dumper.represent_scalar(u'tag:yaml.org,2002:str', name)
-		return dumper.represent_mapping(cls.__name__, {k: v.value for k, v in data.items()})
+		# Plain strings only, never a measurement: a leaked object is written as its repr().
+		# A list of pairs keeps the order the stops were written in; a dict would be sorted.
+		stops = [(stop.key, str(stop.color)) for stop in dict.values(data)]
+		return dumper.represent_mapping(u'tag:yaml.org,2002:map', stops)
 
 	@classmethod
 	def constructor(cls, loader: SafeLoader, node):
@@ -411,16 +510,33 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 				raise NotImplementedError
 
 	@classmethod
+	def _withOptions(cls, data: dict, name: str = None) -> 'Gradient':
+		"""A gradient from a stop mapping that may carry ``space: oklab|srgb`` and ``emission:`` beside the stops.
+
+		``emission`` runs every stop colour through the emissive display chain (see ``Color.decode``).
+		"""
+		data = dict(data)
+		space = str(data.pop('space', 'srgb')).lower()
+		if space not in ('srgb', 'oklab'):
+			raise ValueError(f'gradient space must be srgb or oklab, not {space!r}')
+		if (emission := data.pop('emission', None)) not in (None, False):
+			data = {k: v if isinstance(v, (tuple, list)) else Color.decode({'color': v.hex if isinstance(v, Color) else v, 'emission': emission}) for k, v in data.items()}
+		gradient = cls(name=name, colors=data) if name else cls(colors=data)
+		gradient.space = space
+		return gradient
+
+	@classmethod
 	def decode(cls, data: str | dict | list | tuple) -> 'Gradient':
 		match data:
 			case {'name': name, **rest}:
-				return cls(name=name, colors=rest)
+				return cls._withOptions(rest, name=name)
 			case dict():
-				return cls(colors=data)
-			case [str(name), *rest]:
-				return cls(name=name, *rest)
+				return cls._withOptions(data)
+			case [str(name), *rest] if name in cls.__presets__:
+				return cls(name, *rest)
 			case [*colors]:
-				return cls(*colors)
+				# The first positional argument of `cls` is a preset name, so a list of stops needs `None` there.
+				return cls(None, *colors)
 			case str(name):
 				if (preset := cls.__presets__.get(name, None)) is not None:
 					return preset
