@@ -9,6 +9,8 @@ continuously.
 
 ---
 
+**Start here:** [session-handoff-2026-10-05](session-handoff-2026-10-05.md) is the state of play for a fresh session: branch, rules, work in flight, open decisions and known bugs.
+
 ## Open — needs a decision from the maintainer
 
 | brief | what's blocked on you |
