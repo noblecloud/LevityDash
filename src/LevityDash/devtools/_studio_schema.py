@@ -161,12 +161,12 @@ def saved(prop: StateProperty, raw: Any, owner: Stateful) -> Any:
 
 
 def gradientText(gradient: Gradient) -> dict:
-	"""A gradient as the `{value: '#rrggbb'}` mapping a `.levity` file holds and the loader reads back."""
-	out = {}
-	for stop in gradient.as_list:
-		number = float(stop.value)
-		out[int(number) if number.is_integer() else number] = stop.color.QColor.name()
-	return out
+	"""A gradient as the `{stop: '#rrggbb'}` mapping a `.levity` file holds and the loader reads back.
+
+	A stop written with a unit keeps its own text (`99°F`); a bare number stays a number. The stops
+	keep the order they were written in.
+	"""
+	return {stop.key: stop.color.QColor.name() for stop in dict.values(gradient)}
 
 
 class StudioDumper(StatefulDumper):
