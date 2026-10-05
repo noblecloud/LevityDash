@@ -43,6 +43,10 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Handles import Handle
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import SizeGroup
 from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, addCrosshair, DebugPaint, SoftShadow, outline_path, \
 	modifyTransformValues, rect_to_shape, addPath
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.scale import (
+	CLOCK_HANDS, _isWholeSteps, clockTurn, decode_measurement, filter_factors, formatDuration,
+	parseClockTime, shortestDelta,
+)
 from LevityDash.lib.utils import Axis
 from LevityDash.lib.utils.data import MinMax
 from LevityDash.lib.utils.shared import radialPoint, defer, factors, is_prime, Unset, clearCacheAttr, \
@@ -50,53 +54,6 @@ from LevityDash.lib.utils.shared import radialPoint, defer, factors, is_prime, U
 from WeatherUnits import Measurement, Angle, Wind, Humidity, auto as auto_wu, Length, Percentage
 
 log = UILogger.getChild('Gauge')
-
-
-def filter_factors(
-	numbers: Iterable[int],
-	required_factors: set[int] = None,
-	included_factors: set[int] = None,
-	excluded_factors: set[int] = None,
-) -> set[int]:
-	if required_factors is None:
-		required_factors = set()
-
-	return {
-		n for n in numbers
-		if required_factors <= (f := factors(int(n)))
-		and (not included_factors or included_factors & f)
-		and (not excluded_factors or not excluded_factors & f)
-	}
-
-
-def _isWholeSteps(span, interval) -> bool:
-	"""Whether `interval` divides `span` into a whole number of steps, within float error."""
-	try:
-		span, interval = float(span), float(interval)
-		steps = round(span / interval, 9)
-	except (TypeError, ValueError, ZeroDivisionError, OverflowError):
-		return False
-	return steps == int(steps)
-
-
-def formatDuration(minutes) -> str:
-	"""A number of minutes as ``4h 49m``, or ``49m`` under an hour. Pure."""
-	try:
-		total = int(round(float(minutes)))
-	except (TypeError, ValueError):
-		return '\u22ef'
-	sign, total = ('-' if total < 0 else ''), abs(total)
-	hours, mins = divmod(total, 60)
-	return f'{sign}{hours}h {mins:02d}m' if hours else f'{sign}{mins}m'
-
-
-def shortestDelta(current: float, target: float, span: float = 360.0) -> float:
-	"""The signed turn from ``current`` to ``target`` that crosses the join the short way.
-
-	``span`` is one full turn of the scale. The result lies in ``[-span/2, span/2]``.
-	"""
-	delta = (target - current) % span
-	return delta - span if delta > span / 2 else delta
 
 
 class GaugeItem:
@@ -2476,40 +2433,6 @@ def _markerText(spec) -> str:
 		return str(spec)
 
 
-#: What a marker's ``time:`` can follow. Each is one turn of the dial, whatever
-#: the range: ``hour`` a 12 hour turn, ``minute`` and ``second`` 60 s, ``day`` 24 hours.
-CLOCK_HANDS = ('hour', 'minute', 'second', 'day')
-
-
-def clockTurn(hand: str, hours: int, minutes: int, seconds: float) -> float:
-	"""How far round the dial a clock ``hand`` is at a time of day, from 0 up to (not including) 1. Pure.
-
-	The hour and minute hands carry the smaller units, so they sweep rather than step.
-	"""
-	match hand:
-		case 'hour':
-			return ((hours % 12) + minutes / 60 + seconds / 3600) / 12
-		case 'minute':
-			return (minutes + seconds / 60) / 60
-		case 'second':
-			return seconds / 60
-		case 'day':
-			return (hours + minutes / 60 + seconds / 3600) / 24
-	raise ValueError(f'a clock hand is one of {", ".join(CLOCK_HANDS)}, not {hand!r}')
-
-
-def parseClockTime(text: str) -> tuple[int, int, float]:
-	"""``'10:08'`` or ``'10:08:36'`` as ``(hours, minutes, seconds)``."""
-	parts = str(text).strip().split(':')
-	if not 2 <= len(parts) <= 3:
-		raise ValueError(f'a clock time is HH:MM or HH:MM:SS, not {text!r}')
-	hours, minutes = int(parts[0]), int(parts[1])
-	seconds = float(parts[2]) if len(parts) == 3 else 0.0
-	if not (0 <= hours < 24 and 0 <= minutes < 60 and 0 <= seconds < 60):
-		raise ValueError(f'{text!r} is not a time of day')
-	return hours, minutes, seconds
-
-
 class GaugeMarker(Needle):
 	"""An extra indicator on a gauge, with its own value.
 
@@ -4814,17 +4737,6 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 				return Alignment(AlignmentFlag.Center)
 			case _:
 				return Alignment(AlignmentFlag.Center)
-
-
-def decode_measurement(value: str | int | float, default_type: Type[Measurement] = Unset) -> Measurement:
-	match value:
-		case str(v):
-			value = auto_wu(v)
-		case int(v) | float(v):
-			value = default_type(v)
-		case _:
-			raise TypeError(f'Invalid type for min: {type(value)}')
-	return value
 
 
 @DebugPaint
