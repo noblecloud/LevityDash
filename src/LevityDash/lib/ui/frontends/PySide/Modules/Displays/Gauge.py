@@ -1,4 +1,5 @@
 import copy
+import re
 import PySide6.QtGui
 import numpy as np
 from PySide6 import QtCore
@@ -5027,10 +5028,20 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 				return Alignment(AlignmentFlag.Center)
 
 
+_LEADING_NUMBER = re.compile(r'\s*[-+]?\d+(?:\.\d+)?')
+
+
 def decode_measurement(value: str | int | float, default_type: Type[Measurement] = Unset) -> Measurement:
 	match value:
 		case str(v):
-			value = auto_wu(v)
+			try:
+				value = auto_wu(v)
+			except (TypeError, ValueError, NotImplementedError):
+				# A bare number, or a unit `auto_wu` cannot place (`6`, `10 in/hr`): keep the number, in the gauge's own unit.
+				found = _LEADING_NUMBER.match(v)
+				if found is None or default_type is Unset:
+					raise
+				value = default_type(float(found.group()))
 		case int(v) | float(v):
 			value = default_type(v)
 		case _:
