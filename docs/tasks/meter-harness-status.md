@@ -142,6 +142,9 @@ by `Gauge.py` (which keeps re-exporting every name the rest of the app imports):
   move is validated on copies in scratch before the worktree sees it.
 - **M3** `GaugeArc` and the arc-specific label overrides into `meter/gauge.py`;
   `Gauge.py` becomes the shim.
+- The remaining batches, and two read-only jobs beside them (an audit of
+  every move so far, and the M3 recon), are briefed in
+  `docs/tasks/meter-m2b-remaining.md`.
 
 Every step ends with the suite and a capture against the baseline. Renames the
 survey proposes (`GaugeItem` → `MeterItem` and friends) come after the package is
