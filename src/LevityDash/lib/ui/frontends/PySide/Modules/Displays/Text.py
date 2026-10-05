@@ -1,5 +1,5 @@
 
-from PySide6.QtCore import QObject, QPoint, QPointF, QRectF, Signal, Slot
+from PySide6.QtCore import QLineF, QObject, QPoint, QPointF, QRectF, Signal, Slot
 from PySide6.QtGui import QBrush, QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPen, Qt, QTransform, QGradient
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem
 from datetime import datetime, timedelta
@@ -20,6 +20,7 @@ from LevityDash.lib.ui.frontends.PySide.utils import addCrosshair, addRect, colo
 from LevityDash.lib.ui.icons import fa as FontAwesome, Icon
 from LevityDash.lib.utils.shared import _Panel, ActionPool, ClosestMatchEnumMeta, defer, now, TextFilter, block_pools
 from LevityDash.lib.log import debug as DEBUG
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.curvetext import WarpSpec, arcFit, warp_path
 
 from LevityDash.lib.ui import UILogger as log
 log = log.getChild(__name__)
@@ -463,6 +464,78 @@ class Text(QGraphicsPathItem):
 			self.setToolTip('\n'.join(tool_tip_text))
 
 		self.setTransform(transform)
+		self._applyWarp()
+
+	_warp: Optional[WarpSpec] = None
+	_warpActive: bool = False
+
+	@property
+	def warp(self) -> Optional[WarpSpec]:
+		return self._warp
+
+	def setWarp(self, spec: Optional[WarpSpec]):
+		"""Pin this text's middle to a circle and bend it along it, or (None) lay it flat again."""
+		if spec == self._warp:
+			return
+		self._warp = spec
+		self.updateTransform(updatePath=True, updateShared=True, reason='warp')
+
+	def _warpFrame(self) -> tuple[QRectF, Optional[tuple]]:
+		"""
+		The card's box and, inside a gauge, the dial's `(centre, radius)`, both in this
+		item's own frame at identity transform (the parent's coordinates less `pos()`).
+		"""
+		parentItem = self.parentItem()
+		owner = self.parent
+		gauge = getattr(owner, 'gauge', None)
+		if gauge is not None and hasattr(gauge, 'radius') and hasattr(gauge, 'center'):
+			card = gauge.parentItem() or gauge
+			cardRect = card.mapRectToScene(card.rect() if hasattr(card, 'rect') else card.boundingRect())
+			centre = gauge.mapToScene(gauge.center)
+			edge = gauge.mapToScene(gauge.center + QPointF(gauge.radius, 0))
+			dial = (parentItem.mapFromScene(centre) - self.pos(), QLineF(parentItem.mapFromScene(centre), parentItem.mapFromScene(edge)).length())
+		else:
+			card = owner.parentItem() or owner
+			cardRect = card.mapRectToScene(card.rect() if hasattr(card, 'rect') else card.boundingRect())
+			dial = None
+		box = parentItem.mapRectFromScene(cardRect).translated(-self.pos())
+		return box, dial
+
+	def _applyWarp(self):
+		"""
+		Swap the flat outline for one bent along the warp circle. Fitting already
+		happened on the flat box (width = the arc length at that radius), so sizes do not
+		move when warp turns on. Builds from text and font, never from the current path.
+		"""
+		spec = self._warp
+		self._warpActive = False
+		if spec is None or self.icon is not None:
+			return
+		text = self.text
+		if not text:
+			return
+		try:
+			card, dial = self._warpFrame()
+			place = spec.resolve(card, dial)
+		except Exception as e:  # noqa: BLE001 - one bad spec must not abort a dashboard load
+			log.warning(f'warp skipped for {text!r}: {e!r}')
+			return
+		font = self.font()
+		scale = self.transform().m11() or 1.0
+		fm = QFontMetricsF(font)
+		scale *= arcFit(fm.horizontalAdvance(text), fm.ascent() + fm.descent(), scale, place.radius)
+		view = getattr(self.scene(), 'viewScale', None)
+		epsilon = 0.25 / ((getattr(view, 'x', 1) or 1) if view is not None else 1)
+		path = warp_path(text, font, scale, place.radius, place.side, spec.mode, epsilon)
+		transform = QTransform()
+		transform.translate(place.point.x(), place.point.y())
+		transform.rotate(place.rotation)
+		transform.scale(scale, scale)
+		self.setTransform(transform)
+		self.prepareGeometryChange()
+		self.setPath(path)
+		self._shapePath = path
+		self._warpActive = True
 
 	def find_character_bounding_rect(
 		self,
@@ -644,6 +717,7 @@ class Text(QGraphicsPathItem):
 			self._scaleType,
 			getattr(self, '_formatHint', None),
 			self.height_px,
+			self._warp,
 		)
 
 	def refresh(self):

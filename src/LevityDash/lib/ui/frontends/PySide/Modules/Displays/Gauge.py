@@ -4,6 +4,7 @@ import numpy as np
 from PySide6 import QtCore
 from PySide6.QtCore import QPointF, QRectF, QPoint, QPropertyAnimation, QVariantAnimation, QTimer, Signal, QEasingCurve, QSizeF, Slot, QLineF, QObject
 from PySide6.QtGui import (
+	QFontMetricsF,
 	QBrush, QFont, QPainter, QPainterPath,
 	QPen, QPolygonF, QTransform, QRadialGradient, QGradient, QColor, Qt, QConicalGradient, QPainterPathStroker
 )
@@ -35,7 +36,7 @@ from LevityDash.lib.ui.frontends.PySide.Modules import Panel
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays import SurfaceCentered, Surface
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Annotations import AnnotationText, AnnotationLabels
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.DisplayBase import Display
-from LevityDash.lib.ui.frontends.PySide.Modules.Displays.curvetext import CurveMode, bend_text, glyph_ring_text
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.curvetext import CurveMode, WarpSpec, arcFit, normalizeCorner, warp_path
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Label import NonInteractiveLabel
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import Text
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles import Handle
@@ -3038,7 +3039,8 @@ class GaugeCaption(GaugePathItem):
 	where the value goes), ``value`` (a key or expression to show; with no
 	``format`` it prints as the value does, unit and all), ``format``
 	(``duration`` turns minutes into ``4h 49m``; any other string is a Python
-	format spec, and a mapping is the value label's ``format``, e.g. ``{precision: 0, show_unit: false}``), ``size`` (text height as a share of the dial's diameter,
+	format spec, and a mapping is the value label's ``format``, e.g. ``{precision: 0, show_unit: false}``), ``warp`` (bend the text along a
+	circle, see `WarpSpec`; then ``gap`` and ``offset`` do not apply), ``size`` (text height as a share of the dial's diameter,
 	default 7%), ``color``, ``weight`` (``bold``), ``gap`` (distance from the
 	value, a share of the diameter, default 2%) and ``offset`` (``{x, y}``, shares of the
 	diameter, added to where the gap puts it). A value source with no value
@@ -3058,6 +3060,7 @@ class GaugeCaption(GaugePathItem):
 	_bold = False
 	_offset: Optional[tuple] = None
 	_binding: Optional[Binding] = None
+	_warp: Optional[WarpSpec] = None
 
 	def __init__(self, gauge: 'Gauge', side: str):
 		super().__init__(gauge)
@@ -3075,10 +3078,11 @@ class GaugeCaption(GaugePathItem):
 		if isinstance(spec, str):
 			spec = {'text': spec}
 		name = _gaugeKeyName(self.gauge)
-		unknown = set(spec) - {'text', 'value', 'format', 'size', 'color', 'weight', 'gap', 'offset'}
+		unknown = set(spec) - {'text', 'value', 'format', 'size', 'color', 'weight', 'gap', 'offset', 'warp'}
 		if unknown:
 			log.warning(f'Gauge {name} {self._side} ignored unknown keys {sorted(map(str, unknown))}')
 		self._offset = _decodeOffset(spec.get('offset'))
+		self._warp = WarpSpec.decode(spec.get('warp'))
 		self._template = spec.get('text')
 		self._hasValue = False
 		self._format = spec.get('format')
@@ -3122,6 +3126,31 @@ class GaugeCaption(GaugePathItem):
 		self._text = text
 		self._layoutDirty = True
 
+	def _placeWarped(self, font) -> None:
+		"""Bend the text along the warp circle instead of setting it beside the value.
+		`gap` and `offset` do not apply: the circle decides where the text sits."""
+		gauge = self.gauge
+		card = gauge.parentItem() or gauge
+		cardRect = gauge.mapRectFromItem(card, card.rect() if hasattr(card, 'rect') else card.boundingRect())
+		place = self._warp.resolve(cardRect, (gauge.center, gauge.radius))
+		fm = QFontMetricsF(font)
+		scale = arcFit(fm.horizontalAdvance(self._text), fm.ascent() + fm.descent(), 1.0, place.radius)
+		view = getattr(self.scene(), 'viewScale', None)
+		epsilon = 0.25 / ((getattr(view, 'x', 1) or 1) if view is not None else 1)
+		path = warp_path(self._text, font, scale, place.radius, place.side, self._warp.mode, epsilon)
+		self.prepareGeometryChange()
+		self.setPath(path)
+		self.setTransform(QTransform().scale(scale, scale))
+		self.setRotation(place.rotation)
+		self.setPos(place.point)
+		color = self._color
+		if color is None:
+			color = QColor(gauge.defaultColor)
+			color.setAlphaF(0.65)
+		self.setBrush(QBrush(color))
+		self.setZValue(self.Z_VALUE)
+		self.show()
+
 	def refresh(self):
 		"""Place the text against the centre value. Never raises."""
 		gauge = self.gauge
@@ -3139,6 +3168,11 @@ class GaugeCaption(GaugePathItem):
 			if rect.isEmpty():
 				self.hide()
 				return
+			if self._warp is not None:
+				self._placeWarped(font)
+				return
+			self.setTransform(QTransform())
+			self.setRotation(0)
 			anchor = gauge._valueAnchor()
 			gap = size_px(self._gap, gauge.radius * 2, dimension=DimensionType.height) or 0.0
 			x = anchor.center().x() - rect.center().x()
@@ -3185,6 +3219,8 @@ def _decodeOffset(value) -> Optional[tuple]:
 def _shiftByOffset(box) -> None:
 	"""Move a label's text box by its label's `offset`, in the gauge's own coordinates.
 	Run after a refit has put the box where the layout wants it, so the shift never builds up."""
+	if getattr(box, '_warpActive', False):
+		return  # a warped label is pinned to its circle; `offset` would drag it off
 	try:
 		shift = box.parent.offsetPx()
 	except Exception as e:  # noqa: BLE001 - layout must never abort a load
@@ -4023,10 +4059,7 @@ class GaugeTickText(GaugeItem, AnnotationText):
 			viewScale = self.scene().viewScale.x
 		except AttributeError:
 			viewScale = 1
-		if mode is CurveMode.warp:
-			path = bend_text(self.text, font, scale, radius, side, 0.25 / (viewScale or 1))
-		else:
-			path = glyph_ring_text(self.text, font, scale, radius, side)
+		path = warp_path(self.text, font, scale, radius, side, mode, 0.25 / (viewScale or 1))
 		self._bendKey = key
 		self._bending = True
 		try:
@@ -5682,7 +5715,7 @@ class Gauge(Display):
 			return
 		ubox, vbox = unit.textBox, value.textBox
 		try:
-			if not ubox.isVisibleTo(self) or ubox._position not in _UNIT_UNDER_VALUE:
+			if not ubox.isVisibleTo(self) or ubox._position not in _UNIT_UNDER_VALUE or ubox._warpActive:
 				return
 			v = self.mapRectFromScene(vbox.scenePath().boundingRect())
 			u = self.mapRectFromScene(ubox.scenePath().boundingRect())
@@ -5852,10 +5885,7 @@ class Gauge(Display):
 	def anchor(self, value) -> Optional[str]:
 		if value is None:
 			return None
-		name = str(value).strip().lower().replace('_', '-').replace(' ', '-')
-		parts = name.split('-')
-		if len(parts) == 2 and parts[0] in ('left', 'right') and parts[1] in ('top', 'bottom'):
-			name = f'{parts[1]}-{parts[0]}'
+		name = normalizeCorner(value)
 		if name not in Gauge._ANCHORS:
 			raise ValueError(f'anchor must be one of {sorted(Gauge._ANCHORS)}, got {value!r}')
 		return name

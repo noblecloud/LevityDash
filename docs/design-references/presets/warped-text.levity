@@ -1,0 +1,147 @@
+# Warped text. `warp:` pins the middle of a text to a point on a circle and bends the glyph
+# outlines along it. It works on any text: a card `title`, a gauge `caption` / `sub-label`,
+# the gauge `value-label` and `unit-label`, and dashboard `text` / `realtime.text` items.
+#
+#   warp: true                 every default below
+#   warp:
+#     center: dial             dial (a gauge's pivot; the card when not in a gauge) | card |
+#                              a corner or edge (top-left, bottom, center...) | {x: 50%, y: 100%} of the card
+#     radius: 40%              distance from the centre to the middle of the text. % is a share of the dial's
+#                              diameter (center: dial) or of the card's short side; px and in also work
+#     angle: 0                 where the middle of the text sits, degrees clockwise from the top
+#     mode: warp               warp bends the outlines | glyphs keeps each letter straight
+#     flip: auto               auto turns text in the lower half so it reads left to right; true | false force it
+#
+# Alignment is ignored for warped text (the circle decides where it sits), and so are a caption's
+# `gap` and `offset`. Size fitting works on the flat text, so turning warp on does not change a size.
+# Text longer than one turn of the circle shrinks to fit.
+#
+# Cells, left to right and top to bottom: card title over a dial; caption along the bottom;
+# value label on a small circle; dashboard text round the card centre; text round a corner dial's pivot;
+# `warp` against `glyphs` on a point at the bottom edge.
+# Needs the Fixture plugin: render_dashboard.py OUT.png --levity THIS --scenario stormy-day --size 1600x900 --settle 14
+- type: group
+  name: main
+  items:
+    - type: group
+      name: titleCell
+      geometry: {x: 0%, y: 0%, width: 33.34%, height: 50%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: realtime.gauge
+          name: titleGauge
+          key: environment.humidity.humidity
+          title: {text: {text: HUMIDITY, color: '#ff8a3d', font: Roboto, warp: {center: card, radius: 41%, angle: 0}}, size: 0.1}
+          geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+          display:
+            radius: 84%
+            arc: {start-angle: 0, end-angle: 360, weight: 4%, color: '#26262c'}
+            range: {min: 0, max: 100}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            fill: {weight: 4%, color: '#ff8a3d'}
+            needle: {visible: false}
+            value-label: {position: center, size: 22%, format: {precision: 0}}
+            unit-label: {visible: false}
+    - type: group
+      name: captionCell
+      geometry: {x: 33.33%, y: 0%, width: 33.34%, height: 50%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: realtime.gauge
+          name: captionGauge
+          key: environment.temperature.temperature
+          title: false
+          geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+          display:
+            radius: 80%
+            arc: {start-angle: -135, end-angle: 135, weight: 4%, color: '#26262c'}
+            range: {min: 0, max: 100}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            fill: {weight: 4%, color: '#6ad1ff'}
+            needle: {visible: false}
+            value-label: {position: center, size: 24%, format: {precision: 0}}
+            unit-label: {visible: false}
+            caption: {text: FEELS LIKE, size: 7%, warp: {center: dial, radius: 38%, angle: 180}}
+    - type: group
+      name: valueCell
+      geometry: {x: 66.67%, y: 0%, width: 33.33%, height: 50%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: realtime.gauge
+          name: valueGauge
+          key: environment.humidity.humidity
+          title: false
+          geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+          display:
+            radius: 80%
+            arc: {start-angle: -120, end-angle: 120, weight: 4%, color: '#26262c'}
+            range: {min: 0, max: 100}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            fill: {weight: 4%, color: '#9be07a'}
+            needle: {visible: false}
+            value-label: {position: center, size: 30%, format: {precision: 0}, warp: {center: dial, radius: 23%, angle: 0}}
+            unit-label: {visible: false}
+    - type: group
+      name: textCell
+      geometry: {x: 0%, y: 50%, width: 33.34%, height: 50%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: roundText
+          text: "AROUND THE CARD CENTRE"
+          geometry: {x: 20%, y: 20%, width: 60%, height: 12%}
+          warp: {center: card, radius: 32%, angle: 0}
+          display: {color: '#ffffff'}
+        - type: text
+          name: roundTextLow
+          text: "READS LEFT TO RIGHT"
+          geometry: {x: 20%, y: 68%, width: 60%, height: 12%}
+          warp: {center: card, radius: 32%, angle: 180}
+          display: {color: '#8d8d96'}
+    - type: group
+      name: cornerCell
+      geometry: {x: 33.33%, y: 50%, width: 33.34%, height: 50%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: realtime.gauge
+          name: cornerGauge
+          key: environment.wind.speed.speed
+          title: false
+          geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+          display:
+            anchor: bottom-left
+            inset: 10%
+            radius: 88%
+            arc: {start-angle: 0, end-angle: 90, weight: 3.5%, color: '#26262c', cap: flat}
+            range: {min: 0, max: 40}
+            fill: {weight: 3.5%, color: '#ff8a3d'}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {visible: false}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+            caption: {text: WIND SPEED, size: 6.5%, color: '#ffffff', warp: {center: dial, radius: 36%, angle: 45}}
+    - type: group
+      name: pointCell
+      geometry: {x: 66.67%, y: 50%, width: 33.33%, height: 50%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: warpedWord
+          text: "WARPED OUTLINES"
+          geometry: {x: 20%, y: 20%, width: 60%, height: 12%}
+          warp: {center: {x: 50%, y: 100%}, radius: 80%, angle: -18}
+          display: {color: '#ff8a3d'}
+        - type: text
+          name: glyphWord
+          text: "RIGID GLYPHS"
+          geometry: {x: 20%, y: 20%, width: 60%, height: 12%}
+          warp: {center: {x: 50%, y: 100%}, radius: 58%, angle: 18, mode: glyphs}
+          display: {color: '#8d8d96'}
