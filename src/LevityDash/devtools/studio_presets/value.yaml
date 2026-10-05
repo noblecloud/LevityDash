@@ -1,0 +1,13 @@
+# Value label presets. Values follow label-sides.levity, analog-dial.levity and center-captions.levity.
+Big centre:
+  value-label: {visible: true, position: center, size: 24%, format: {precision: 0}}
+  unit-label: {visible: false}
+Small with unit below:
+  value-label: {visible: true, position: center, size: 14%}
+  unit-label: {visible: true, position: float-under, height: 14%}
+Beside the dial:
+  value-label: {visible: true, position: right, size: 22%}
+  unit-label: {visible: false}
+Hidden:
+  value-label: {visible: false}
+  unit-label: {visible: false}

@@ -1,0 +1,25 @@
+# Extras presets: fill, zones and markers. Values follow fill-dial.levity, zones.levity and
+# high-low-markers.levity. The zone bounds assume a 0-100 range.
+Plain:
+  fill: null
+  zones: null
+  markers: null
+  caption: null
+  sub-label: null
+Value fill:
+  fill: {weight: 5%, color: '#ff8a3d'}
+  zones: null
+  markers: null
+Three zones:
+  fill: null
+  markers: null
+  zones:
+    - {from: 0, to: 40, color: '#4caf50'}
+    - {from: 40, to: 70, color: '#e5a135'}
+    - {from: 70, to: 100, color: '#e53935'}
+Today's low and high:
+  fill: null
+  zones: null
+  markers:
+    - {value: 'min(environment.temperature.temperature, today)', type: marker, length: 12%, color: '#4aa3ff'}
+    - {value: 'max(environment.temperature.temperature, today)', type: marker, length: 12%, color: '#ff5a4a'}
