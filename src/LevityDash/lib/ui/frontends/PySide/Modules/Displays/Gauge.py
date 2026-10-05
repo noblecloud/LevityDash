@@ -8,7 +8,7 @@ from PySide6.QtGui import (
 	QPen, QPolygonF, QTransform, QRadialGradient, QGradient, QColor, Qt, QConicalGradient
 )
 from PySide6.QtWidgets import (
-	QGraphicsPathItem,
+	QGraphicsItem, QGraphicsPathItem,
 	QGraphicsScene, QStyleOptionGraphicsItem,
 	QWidget, QGraphicsItemGroup
 )
@@ -2060,6 +2060,155 @@ class GaugeMarker(Needle):
 		self.show()
 
 
+class GaugeZones(GaugeItem, QGraphicsItem):
+	"""Coloured bands over the arc track, from a list of plain mappings.
+
+	Each entry: ``from`` and ``to`` (numbers; default the range ends),
+	``color`` (required), ``weight`` (default the arc's) and ``mark`` (draw a
+	tick across the arc at each cutoff that is not a range end). A bad entry
+	logs the gauge key and is skipped; nothing here raises during load.
+	"""
+
+	#: Over the arc (-800), under the fill (-700) and the needle (-500).
+	Z_VALUE = -750
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		self._zones: list = []
+		self._strokes: list = []
+		self._rect = QRectF()
+		self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemHasNoContents, False)
+
+	def close(self):
+		self._zones = []
+		self._strokes = []
+
+	def configure(self, specs: Sequence) -> list:
+		"""Validate ``specs``; keep the good ones. Returns the plain mappings kept."""
+		name = _gaugeKeyName(self.gauge)
+		zones, kept = [], []
+		for spec in specs:
+			try:
+				if not isinstance(spec, Mapping):
+					raise TypeError('expected a mapping with from, to and color')
+				unknown = set(spec) - {'from', 'to', 'color', 'weight', 'mark'}
+				if unknown:
+					log.warning(f'Gauge {name} zone ignored unknown keys {sorted(map(str, unknown))}')
+				ends = []
+				for end in ('from', 'to'):
+					raw = spec.get(end)
+					if raw is None:
+						ends.append(None)
+						continue
+					if isinstance(raw, bool) or not isinstance(raw, (int, float)) or not isfinite(raw):
+						raise TypeError(f'{end} must be a finite number, not {raw!r}')
+					ends.append(float(raw))
+				if spec.get('color') is None:
+					raise ValueError('a zone needs a color')
+				color = Color.decode(spec['color']).QColor
+				weight = None
+				if (raw := spec.get('weight')) is not None:
+					weight = parseWidth(raw, None)
+					if weight is None:
+						raise ValueError(f'weight {raw!r} is not a size')
+				zones.append({'from': ends[0], 'to': ends[1], 'color': color, 'weight': weight, 'mark': bool(spec.get('mark', False))})
+				kept.append(copy.deepcopy(dict(spec)))
+			except Exception as e:
+				log.warning(f'Gauge {name} skipped zone {spec!r}: {e}')
+		self._zones = zones
+		return kept
+
+	def _span(self, zone) -> tuple[float, float]:
+		"""The zone's start and end as dial angles; a missing end is the dial's end."""
+		gauge = self.gauge
+		lo = float(gauge.startAngle) if zone['from'] is None else self._angle(zone['from'])
+		hi = float(gauge.endAngle) if zone['to'] is None else self._angle(zone['to'])
+		return tuple(sorted((lo, hi)))
+
+	def colorAtAngle(self, angle: float) -> Optional[QColor]:
+		"""The colour of the zone holding ``angle``; the later zone wins on a shared cutoff."""
+		found = None
+		for zone in self._zones:
+			try:
+				lo, hi = self._span(zone)
+			except Exception:
+				continue
+			if lo - 1e-9 <= angle <= hi + 1e-9:
+				found = zone['color']
+		return found
+
+	def colorAt(self, value) -> Optional[QColor]:
+		"""The colour of the zone holding ``value`` (a number or a measurement)."""
+		try:
+			return self.colorAtAngle(self._angle(value))
+		except Exception:
+			return None
+
+	def _angle(self, value: float) -> float:
+		gauge = self.gauge
+		valueClass = gauge.valueClass
+		try:
+			converted = valueClass(value)
+		except Exception:
+			converted = float(value)
+		return float(gauge.value_to_angle(converted))
+
+	def refresh(self):
+		self.prepareGeometryChange()
+		self._strokes = []
+		gauge = self.gauge
+		bounds = QRectF()
+		if not self._zones:
+			self._rect = bounds
+			self.hide()
+			return
+		try:
+			rect = gauge.arc.centered_gauge_rect
+			arcWeight = gauge.arc.weight_px
+			marks = set()
+			for zone in self._zones:
+				a, b = self._span(zone)
+				weight = size_px(zone['weight'], gauge.radius, dimension=DimensionType.width) if zone['weight'] is not None else arcWeight
+				if zone['mark']:
+					marks.update(x for x in (a, b) if float(gauge.startAngle) + 1e-6 < x < float(gauge.endAngle) - 1e-6)
+				if not weight or a == b:
+					continue
+				path = QPainterPath()
+				path.arcMoveTo(rect, -a + 90)
+				path.arcTo(rect, -a + 90, -(b - a))
+				pen = QPen(zone['color'], weight)
+				pen.setCapStyle(Qt.PenCapStyle.FlatCap)
+				self._strokes.append((path, pen))
+				bounds = bounds.united(path.boundingRect().adjusted(-weight, -weight, weight, weight))
+			for angle in sorted(marks):
+				radius = rect.width() / 2
+				reach = (arcWeight or 0) * 0.75
+				path = QPainterPath()
+				path.moveTo(radialPoint(QPointF(0, 0), radius - reach, angle))
+				path.lineTo(radialPoint(QPointF(0, 0), radius + reach, angle))
+				pen = QPen(gauge.defaultColor, max(1.5, (arcWeight or 0) * 0.12))
+				pen.setCapStyle(Qt.PenCapStyle.FlatCap)
+				self._strokes.append((path, pen))
+				bounds = bounds.united(path.boundingRect().adjusted(-2, -2, 2, 2))
+		except Exception as e:
+			log.warning(f'Gauge {_gaugeKeyName(gauge)} zones not drawn: {e}')
+			self._strokes = []
+		self._rect = bounds
+		self.setPos(gauge.center)
+		self.setZValue(self.Z_VALUE)
+		self.setVisible(bool(self._strokes))
+		self.update()
+
+	def boundingRect(self) -> QRectF:
+		return self._rect
+
+	def paint(self, painter: QPainter, option, widget=None):
+		painter.setBrush(Qt.BrushStyle.NoBrush)
+		for path, pen in self._strokes:
+			painter.setPen(pen)
+			painter.drawPath(path)
+
+
 class _FillEnd:
 	"""Adapts one end of a fill to the setter a ``Binding`` drives."""
 
@@ -2089,6 +2238,10 @@ class GaugeFill(GaugePathItem):
 	_color: Optional[QColor] = None
 	_valid = False
 	_warned = False
+	_colorFromZones = False
+	_segments: int = 0
+	_gap = None
+	_strokes: list = ()
 
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
@@ -2119,9 +2272,10 @@ class GaugeFill(GaugePathItem):
 		"""Read ``spec``. Never raises: a bad spec warns and leaves the fill hidden."""
 		self.close()
 		self._valid = False
-		self._from = self._to = self._weight = self._color = None
+		self._from = self._to = self._weight = self._color = self._gap = None
+		self._colorFromZones, self._segments, self._strokes = False, 0, ()
 		name = _gaugeKeyName(self.gauge)
-		unknown = set(spec) - {'from', 'to', 'weight', 'color'}
+		unknown = set(spec) - {'from', 'to', 'weight', 'color', 'segments', 'gap'}
 		if unknown:
 			log.warning(f'Gauge {name} fill ignored unknown keys {sorted(map(str, unknown))}')
 		try:
@@ -2146,8 +2300,18 @@ class GaugeFill(GaugePathItem):
 				self._weight = parseWidth(weight, None)
 				if self._weight is None:
 					raise ValueError(f'weight {weight!r} is not a size')
-			if (color := spec.get('color')) is not None:
+			if isinstance(spec.get('color'), str) and spec['color'].strip().lower() == 'zone':
+				self._colorFromZones = True
+			elif (color := spec.get('color')) is not None:
 				self._color = Color.decode(color).QColor
+			if (segments := spec.get('segments')) is not None:
+				if isinstance(segments, bool) or not isinstance(segments, int) or segments < 1:
+					raise TypeError(f'segments must be a whole number of 1 or more, not {segments!r}')
+				self._segments = segments
+				if (gap := spec.get('gap')) is not None:
+					self._gap = parseWidth(gap, None)
+					if self._gap is None:
+						raise ValueError(f'gap {gap!r} is not a size')
 		except Exception as e:
 			log.warning(f'Gauge {name} fill ignored, hidden: {e}')
 			self.close()
@@ -2204,22 +2368,70 @@ class GaugeFill(GaugePathItem):
 		if a == b:
 			self.hide()
 			return
-		weight =size_px(self._weight, gauge.radius, dimension=DimensionType.width) if self._weight is not None else gauge.arc.weight_px
-		path = QPainterPath()
-		if weight and a != b:
-			rect = gauge.arc.centered_gauge_rect
+		weight = size_px(self._weight, gauge.radius, dimension=DimensionType.width) if self._weight is not None else gauge.arc.weight_px
+		rect = gauge.arc.centered_gauge_rect
+		zones = gauge._zonesItem
+		base = gauge.defaultColor if self._color is None else self._color
+		strokes = []
+		if weight and self._segments:
+			start, full = float(gauge.startAngle), float(gauge.fullAngle)
+			step = full / self._segments
+			radius = rect.width() / 2 or 1
+			gapDeg = 0.0
+			if self._gap is not None:
+				gapPx = size_px(self._gap, gauge.radius, dimension=DimensionType.width) or 0
+				gapDeg = gapPx / radius * 180 / pi
+			# Never let the gap swallow the segment.
+			gapDeg = min(max(gapDeg, 0.0), step * 0.8)
+			for i in range(self._segments):
+				sa, sb = start + i * step + gapDeg / 2, start + (i + 1) * step - gapDeg / 2
+				mid = start + (i + 0.5) * step
+				if not (a <= mid <= b):
+					continue
+				path = QPainterPath()
+				path.arcMoveTo(rect, -sa + 90)
+				path.arcTo(rect, -sa + 90, -(sb - sa))
+				color = base
+				if self._colorFromZones and zones is not None:
+					color = zones.colorAtAngle(mid) or base
+				strokes.append((path, color))
+		elif weight:
+			path = QPainterPath()
 			path.arcMoveTo(rect, -a + 90)
 			path.arcTo(rect, -a + 90, -(b - a))
+			color = base
+			if self._colorFromZones and zones is not None:
+				endValue = self._to if self._to is not None else gauge.value
+				color = zones.colorAt(endValue) or base
+			strokes.append((path, color))
+		full = QPainterPath()
+		for path, _ in strokes:
+			full.addPath(path)
 		pen = QPen(gauge.pen)
 		pen.setWidthF(weight or 0)
 		pen.setCapStyle(Qt.PenCapStyle.FlatCap)
-		pen.setBrush(QBrush(gauge.defaultColor if self._color is None else self._color))
+		pen.setBrush(QBrush(strokes[0][1] if strokes else base))
 		self.setPen(pen)
 		self.setBrush(Qt.BrushStyle.NoBrush)
-		self.setPath(path)
+		self.prepareGeometryChange()
+		self._strokes = strokes
+		self.setPath(full)
 		self.setPos(gauge.center)
 		self.setZValue(self.Z_VALUE)
 		self.show()
+
+	def _valueAtAngle(self, angle: float) -> float:
+		gauge = self.gauge
+		lo, span = float(gauge._range.rounded_min), float(gauge._range.rounded_range)
+		return lo + (angle - float(gauge.startAngle)) / float(gauge.fullAngle) * span
+
+	def paint(self, painter: QPainter, option, widget=None):
+		painter.setBrush(Qt.BrushStyle.NoBrush)
+		for path, color in self._strokes:
+			pen = QPen(self.pen())
+			pen.setBrush(QBrush(color))
+			painter.setPen(pen)
+			painter.drawPath(path)
 
 
 class GaugeText(AnnotationText, GaugeItem):
@@ -3268,7 +3480,93 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 				return places
 		return None
 
+	_COMPASS = {
+		'compass': ('N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'),
+		'compass-16': ('N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'),
+	}
+
+	@StateProperty(key='text', default=None, allowNone=True)
+	def text_map(self) -> Optional[str | dict]:
+		"""Words in place of numbers: ``{0: E, 100: F}``, ``compass`` or ``compass-16``."""
+		return getattr(self, '_text_map', None)
+
+	@text_map.setter
+	def text_map(self, value):
+		self._text_map = value
+
+	@text_map.decode
+	def text_map(self, value):
+		if value is None:
+			return None
+		if isinstance(value, str):
+			if value.strip().lower() in self._COMPASS:
+				return value.strip().lower()
+			log.warning(f'Gauge {_gaugeKeyName(self.gauge)} ignored label text {value!r}: use a mapping, compass or compass-16')
+			return None
+		if not isinstance(value, Mapping):
+			log.warning(f'Gauge {_gaugeKeyName(self.gauge)} ignored label text {value!r}: expected a mapping or compass')
+			return None
+		clean = {}
+		for key, word in value.items():
+			try:
+				float(key)
+			except (TypeError, ValueError):
+				log.warning(f'Gauge {_gaugeKeyName(self.gauge)} label text skipped key {key!r}: not a number')
+				continue
+			clean[key] = str(word)
+		return clean
+
+	@text_map.encode
+	def text_map(self, value):
+		return dict(value) if isinstance(value, Mapping) else value
+
+	@StateProperty(key='sign', default=False, allowNone=False)
+	def sign(self) -> bool:
+		"""Put a plus in front of positive labels (``+5``)."""
+		return getattr(self, '_sign', False)
+
+	@sign.setter
+	def sign(self, value: bool):
+		self._sign = bool(value)
+
+	@staticmethod
+	def _labelNumber(value) -> float:
+		"""The number a tick shows. A Percentage floats as a fraction (50 % is 0.5), the label says 50."""
+		number = float(value)
+		return number * 100 if isinstance(value, Percentage) else number
+
+	def _mappedText(self, value) -> Optional[str]:
+		spec = self.text_map
+		if spec is None:
+			return None
+		try:
+			number = self._labelNumber(value)
+		except (TypeError, ValueError):
+			return None
+		if isinstance(spec, str):
+			names = self._COMPASS[spec]
+			width = 360 / len(names)
+			return names[int(((number % 360) + width / 2) // width) % len(names)]
+		for key, word in spec.items():
+			k = float(key)
+			if abs(number - k) <= 1e-6 * max(1.0, abs(k)):
+				return word
+		return None
+
 	def format_value(self, value: Measurement) -> str:
+		mapped = self._mappedText(value)
+		if mapped is not None:
+			return mapped
+		text = self._format_number(value)
+		if self.sign:
+			try:
+				if self._labelNumber(value) > 0 and not text.startswith('+'):
+					return '+' + text
+			except (TypeError, ValueError):
+				pass
+		return text
+
+	def _format_number(self, value: Measurement) -> str:
 		# Merged rather than replaced, so `format: {precision: 0}` does not
 		# bring the unit back on every tick. A user's format is an addition to
 		# the default, never a replacement for it: dropping `compact` here
@@ -3886,6 +4184,8 @@ class Gauge(Display):
 		self._markerSpecs = []
 		self._fillItem = None
 		self._fillSpec = None
+		self._zonesItem = None
+		self._zoneSpecs = []
 		super()._init_defaults_()
 		self.__value = value = self._valueClass(0)
 
@@ -3999,6 +4299,62 @@ class Gauge(Display):
 		if item is not None and (scene := item.scene()) is not None:
 			scene.removeItem(item)
 
+	@StateProperty(key='zones', default=None, allowNone=True, dependencies={'range', 'arc'})
+	def zones(self) -> Optional[list]:
+		"""Coloured bands on the track: a list of ``{from, to, color, mark}`` mappings.
+
+		Kept as the plain mappings the user wrote; the scene item is ``self._zonesItem``.
+		"""
+		return self._zoneSpecs or None
+
+	@zones.setter
+	def zones(self, value: Optional[list]):
+		self._clearZones()
+		if not value:
+			return
+		try:
+			item = GaugeZones(self)
+			kept = item.configure(value)
+		except Exception as e:
+			log.warning(f'Gauge {_gaugeKeyName(self)} zones skipped: {e}')
+			return
+		if not kept:
+			scene = item.scene()
+			if scene is not None:
+				scene.removeItem(item)
+			return
+		self._zonesItem = item
+		self._zoneSpecs = kept
+		try:
+			item.refresh()
+		except Exception as e:
+			log.debug(f'Gauge {_gaugeKeyName(self)} zones not drawn yet: {e}')
+
+	@zones.decode
+	def zones(self, value) -> list:
+		if isinstance(value, Mapping):
+			value = [value]
+		if not isinstance(value, (list, tuple)):
+			log.warning(f'Gauge {_gaugeKeyName(self)} ignored zones {value!r}: expected a list')
+			return []
+		for spec in value:
+			if not isinstance(spec, Mapping):
+				log.warning(f'Gauge {_gaugeKeyName(self)} skipped zone {spec!r}: expected a mapping')
+		return [dict(spec) for spec in value if isinstance(spec, Mapping)]
+
+	@zones.encode
+	def zones(self, value: Optional[list]) -> Optional[list]:
+		return copy.deepcopy(value) if value else None
+
+	def _clearZones(self):
+		item = self._zonesItem
+		self._zonesItem = None
+		self._zoneSpecs = []
+		if item is not None:
+			item.close()
+			if (scene := item.scene()) is not None:
+				scene.removeItem(item)
+
 	@StateProperty(key='markers', default=None, allowNone=True, dependencies={'range', 'needle'})
 	def markers(self) -> Optional[list]:
 		"""Extra indicators: a list of ``{value, type, color, ...}`` mappings.
@@ -4059,7 +4415,7 @@ class Gauge(Display):
 	def releaseSources(self):
 		"""Stop and release every value source the markers and fill hold.
 		Called when the owning panel is deleted; never raises."""
-		for clear in (self._clearMarkers, self._clearFill):
+		for clear in (self._clearMarkers, self._clearFill, self._clearZones):
 			try:
 				clear()
 			except Exception as e:
@@ -4259,7 +4615,7 @@ class Gauge(Display):
 		# second, then jump" behaviour: the first pass centres correctly and
 		# the second undoes it.
 		centred_items = (
-			self.needle, self.arc, *self._markerItems, *self._fillItems(),
+			self.needle, self.arc, *self._zoneItems(), *self._markerItems, *self._fillItems(),
 			self.major_ticks_surface, self.minor_ticks_surface, self.micro_ticks_surface,
 		)
 		for item in centred_items:
@@ -4304,6 +4660,8 @@ class Gauge(Display):
 		for marker in self._markerItems:
 			marker.setTransform(t, combine=False)
 		self.arc.setTransform(t, combine=False)
+		for item in self._zoneItems():
+			item.setTransform(t, combine=False)
 		for item in self._fillItems():
 			item.setTransform(t, combine=False)
 
@@ -4365,6 +4723,8 @@ class Gauge(Display):
 
 	def refresh(self):
 		self.arc.refresh()
+		for item in self._zoneItems():
+			item.refresh()
 		for item in self._fillItems():
 			item.refresh()
 		self.needle.refresh()
@@ -4414,6 +4774,10 @@ class Gauge(Display):
 			for item in self._fillItems():
 				item.refresh()
 			self._update_shape()
+
+	def _zoneItems(self) -> list:
+		item = getattr(self, '_zonesItem', None)
+		return [] if item is None else [item]
 
 	def _fillItems(self) -> list:
 		item = getattr(self, '_fillItem', None)

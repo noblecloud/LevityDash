@@ -1,0 +1,53 @@
+# Coloured bands on the dial track. `zones:` is a list of {from, to, color};
+# `from`/`to` default to the range ends; `mark: true` draws a tick across the arc at
+# each cutoff. `fill: {color: zone}` colours the fill by the zone holding its value.
+# Three dials: temperature (bands + marks), humidity (zone-coloured fill), UV index.
+# Render with --scenario stormy-day. Hex colours are quoted ('#' starts a comment).
+- type: group
+  name: main
+  items:
+    - type: realtime.gauge
+      name: bands
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 0%, y: 0%, width: 33%, height: 100%}
+      display:
+        arc: {start-angle: -135, end-angle: 135, weight: 6%, color: '#3c3c44'}
+        range: {min: 0, max: 100}
+        zones:
+          - {from: 0, to: 40, color: '#4aa3ff', mark: true}
+          - {from: 40, to: 80, color: '#4caf50', mark: true}
+          - {from: 80, to: 100, color: '#e53935'}
+        major: {interval: 20, labels: {position: inside, height: 8%}}
+        needle: {type: circle, length: 8%, width: 5%, color: '#ffffff'}
+        value-label: {position: center, size: 14%}
+    - type: realtime.gauge
+      name: zonefill
+      key: environment.humidity.humidity
+      title: false
+      geometry: {x: 33%, y: 0%, width: 33%, height: 100%}
+      display:
+        arc: {start-angle: -135, end-angle: 135, weight: 6%, color: '#3c3c44'}
+        range: {min: 0, max: 100}
+        zones:
+          - {to: 30, color: '#e5a135'}
+          - {from: 30, to: 60, color: '#4caf50'}
+          - {from: 60, color: '#4aa3ff'}
+        fill: {weight: 6%, color: zone}
+        major: {interval: 25, labels: {position: inside, height: 8%}}
+        value-label: {position: center, size: 14%}
+    - type: realtime.gauge
+      name: uv
+      key: environment.light.uvi
+      title: false
+      geometry: {x: 66%, y: 0%, width: 34%, height: 100%}
+      display:
+        arc: {start-angle: -135, end-angle: 135, weight: 6%}
+        range: {min: 0, max: 12}
+        zones:
+          - {from: 0, to: 3, color: '#4caf50'}
+          - {from: 3, to: 6, color: '#fdd835'}
+          - {from: 6, to: 8, color: '#fb8c00'}
+          - {from: 8, to: 12, color: '#e53935'}
+        major: {interval: 2, labels: {position: inside, height: 8%}}
+        value-label: {position: center, size: 14%}

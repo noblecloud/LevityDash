@@ -1,0 +1,37 @@
+# Words and signs on tick labels. `labels: {text: {0: E, 100: F}}` replaces a tick's
+# number (numeric keys, matched with tolerance); `text: compass` (or `compass-16`)
+# names the nearest compass sector; `sign: true` puts a plus on positive numbers.
+# Render with --scenario stormy-day.
+- type: group
+  name: main
+  items:
+    - type: realtime.gauge
+      name: fuel
+      key: environment.humidity.humidity
+      title: false
+      geometry: {x: 0%, y: 0%, width: 33%, height: 100%}
+      display:
+        arc: {start-angle: -80, end-angle: 80, weight: 5%}
+        range: {min: 0, max: 100}
+        major: {interval: 50, labels: {position: inside, height: 12%, text: {0: E, 50: '1/2', 100: F}}}
+        value-label: {position: below}
+    - type: realtime.gauge
+      name: heading
+      key: environment.wind.direction.direction
+      title: false
+      geometry: {x: 33%, y: 0%, width: 33%, height: 100%}
+      display:
+        arc: {start-angle: 0, end-angle: 360, weight: 4%}
+        range: {min: 0, max: 360}
+        major: {interval: 45, labels: {position: inside, height: 11%, text: compass}}
+        value-label: {position: center, size: 14%}
+    - type: realtime.gauge
+      name: trend
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 66%, y: 0%, width: 34%, height: 100%}
+      display:
+        arc: {start-angle: -135, end-angle: 135, weight: 5%}
+        range: {min: -50, max: 50}
+        major: {interval: 25, labels: {position: inside, height: 9%, sign: true}}
+        value-label: {position: center, size: 14%}

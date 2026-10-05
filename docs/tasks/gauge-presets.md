@@ -170,7 +170,7 @@ A full ring (360 sweep) is untested in `Gauge`. Test it first.
 | speed-fuel | two dials in one ring | speed and tank | wind and gust | N2, N6 | no: the pair is the point |
 | nested-rings | three concentric fills | three goals | temperature, humidity, cloud as % of range | N1, N6 | no |
 | system | three half dials in one frame | CPU, memory, disk | humidity, cloud, rain chance | N1, N6 | no |
-| orrery | N cyclical positions on rings | phase of any cycle | tide, moon, season | N1, N4, N6 | no. Decorative. Skip unless the rest is cheap. |
+| orrery | N cyclical positions on rings | phase of any cycle | tide, moon, season | N1, N4, N6 | no. Decorative, so it comes after the rest, but it is in scope. |
 | barometer *(weather-dashboard)* | range with words, set hand, fall arc | any value with a "was" mark | pressure with 3 h set hand | N1 (`from: set`), N3 (`at(key, -3h)`), N7 (words) | partly: needle and numeric labels, no set hand |
 | humidity comfort band *(weather-dashboard)* | bounded % with a highlighted band and dot | CPU temperature in the safe band | humidity, comfortable 30-60 % | N1 (`from`/`to` band) or N2 | partly: gradient with band stops and a circle needle |
 
@@ -268,3 +268,5 @@ since step 1 and the `markers:` rows depend on it. Steps 0 and 2 do not.
 - [curved-gauge-labels.md](curved-gauge-labels.md): glyphs bent along the arc; touches N7
 - `docs/roadmap.md`: "Migrate `shared:` to named `preset:`"
 - `docs/design-references/`: example fragments for `design_mode.py`
+
+Cockpit instruments (attitude indicator, altimeter, heading indicator, airspeed, vertical speed) are in scope for later, for a future overhead-flights tracker. They need a rotating dial card, an artificial horizon and a multi-hand scale, none of which exist yet.
