@@ -860,7 +860,12 @@ class GraphItemData(Stateful, tag=...):
 		if x is not None:
 			start = self.graph.timeframe.start
 			seconds = self.figure.figureTimeRangeMaxMin.total_seconds()
-			x = (x - start.timestamp()) / seconds
+			if seconds > 0:
+				x = (x - start.timestamp()) / seconds
+			else:
+				# One sample, a stalled source or a frozen clock: no time span to scale by.
+				# Pin every point to the left edge, as a flat series is pinned to the bottom.
+				x = np.zeros_like(x, dtype=float)
 		return x, y
 
 	def normalizeToFrame(self, **data):
