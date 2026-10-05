@@ -38,9 +38,11 @@ def test_shared_expression_refcount_and_delete(dashboard):
 	# Nothing computes without a running plugin, so publish a value by hand;
 	# that creates the container both panels subscribe to.
 	engine._publish(engine._entries[key], 42.0)
-	dashboard.app.processEvents()
-	assert a._Realtime__connectedContainer is not None
-	assert b._Realtime__connectedContainer is not None
+	# Each panel connects on a short timer once the container exists.
+	dashboard.wait_until(
+		lambda: a._Realtime__connectedContainer is not None and b._Realtime__connectedContainer is not None,
+		message='both panels connect to the published container',
+	)
 
 	# Reloading the same file over the live panels must not move or double-count them.
 	sandbox.state = {'items': _items()}
@@ -56,7 +58,7 @@ def test_shared_expression_refcount_and_delete(dashboard):
 
 	# The survivor still follows the shared key.
 	engine._publish(engine._entries[key], 43.0)
-	dashboard.app.processEvents()
+	dashboard.wait_until(lambda: '43' in b.display.text, message='the survivor shows 43')
 	assert '43' in b.display.text
 
 	# A new value schedules a deferred unit-label refresh; deleting the panel

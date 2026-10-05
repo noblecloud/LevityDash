@@ -31,6 +31,22 @@ def pump(app, seconds: float) -> None:
 		time.sleep(0.005)
 
 
+def wait_until(app, condition, timeout: float = 5.0, message: str = '') -> None:
+	"""Pump Qt events until ``condition()`` is true, or fail after ``timeout`` seconds.
+
+	Use this instead of one ``processEvents()`` or a fixed sleep when the
+	thing under test arrives through a timer or a queued signal.
+	"""
+	end = time.monotonic() + timeout
+	while True:
+		app.processEvents()
+		if condition():
+			return
+		if time.monotonic() >= end:
+			raise AssertionError(message or f'timed out after {timeout}s waiting for {condition!r}')
+		time.sleep(0.005)
+
+
 # A fixed, unremarkable instant used to make time-dependent widgets (clock,
 # date) deterministic across runs. 2025-06-18 is a Wednesday at 14:30.
 import datetime as _dt
@@ -120,6 +136,10 @@ def dashboard():
 			sz = win.size()
 			win.resize(max(200, sz.width() + dw), max(150, sz.height() + dh))
 			pump(self.app, 1.2)  # past the 300ms resizeDone debounce
+
+		def wait_until(self, condition, timeout: float = 5.0, message: str = ''):
+			"""Pump Qt events until ``condition()`` holds; fail after ``timeout`` seconds."""
+			return wait_until(self.app, condition, timeout, message)
 
 		def refresh_all(self):
 			self.view.refresh()
