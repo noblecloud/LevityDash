@@ -3348,6 +3348,19 @@ class GaugeTickText(GaugeItem, AnnotationText):
 		# self.prepareGeometryChange()
 		# self._shape = outline_path(self.path(), 5)
 
+	_placedKey: Optional[tuple] = None
+	_placedPos: Optional[QPointF] = None
+
+	def _placementKey(self, target: QPointF) -> tuple:
+		"""Everything `setPos` reads: this label, the arc and the tick it must clear, and where it aims."""
+		tick = self.tick
+		arc = self.gauge.arc
+		return (
+			target, self.path(), self.sceneTransform(), self.rotation(), self.scale(), self.group.offset_px, self.display_position,
+			self.limitRect.size(), self.group.source.length_px, tick.angle, tick.startPoint, tick.endPoint,
+			arc.path(), arc.pen().width(), arc.sceneTransform(), tick.path(), tick.pen().width(), tick.sceneTransform(),
+		)
+
 	@property
 	def repeats_first_label(self) -> bool:
 		"""True for the last label of a full-circle dial, which sits on top of the first.
@@ -3373,7 +3386,16 @@ class GaugeTickText(GaugeItem, AnnotationText):
 		self.setRotation(self._labelRotation()[0])
 
 		super(GaugeTickText, self).refresh()
-		self.setPos(self.position())
+		target = self.position()
+		key = self._placementKey(target)
+		# setPos() nudges the label off the arc and tick one pixel at a time, which
+		# costs most of a gauge refresh. It is a function of the things in the key;
+		# if none moved since the last placement and the label is still where that
+		# placement left it, the answer is the position it already has.
+		if key != self._placedKey or self.pos() != self._placedPos:
+			self.setPos(target)
+			self._placedKey = self._placementKey(target)
+			self._placedPos = self.pos()
 		if self.is_endcap:
 			self.setToolTip("Endcap")
 
