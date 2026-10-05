@@ -359,7 +359,7 @@ def test_active_follows_a_condition(dashboard, sandbox, clock):
 
 def test_sweep_runs_once_per_arriving_value(dashboard, sandbox, clock):
 	sandbox.setRect(QRectF(0, 0, W, H))
-	sandbox.state = {'beam': {'size': 'md', 'duration': 0.3, 'sweep': 'max(environment.temperature.temperature, today)'}}
+	sandbox.state = {'beam': {'size': 'md', 'duration': 0.3, 'sweep': 'max(environment.humidity.humidity, today)'}}
 	beam = sandbox.beamProp
 	engine = computedEngine()
 	key = beam._sweepBinding.source.key
