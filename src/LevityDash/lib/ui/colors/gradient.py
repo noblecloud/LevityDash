@@ -493,10 +493,11 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 				return cls(name=name, colors=rest)
 			case dict():
 				return cls(colors=data)
-			case [str(name), *rest]:
-				return cls(name=name, *rest)
+			case [str(name), *rest] if name in cls.__presets__:
+				return cls(name, *rest)
 			case [*colors]:
-				return cls(*colors)
+				# The first positional argument of `cls` is a preset name, so a list of stops needs `None` there.
+				return cls(None, *colors)
 			case str(name):
 				if (preset := cls.__presets__.get(name, None)) is not None:
 					return preset
