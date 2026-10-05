@@ -132,6 +132,12 @@ class ActionPool(OrderedSet[Callable, SubActionPool]):
 		self.__contextLevel -= 1
 		if self.__contextLevel <= 0:
 			self.__contextLevel = 0
+			if self.status is ActionPool.Status.Running:
+				# Exit of a `with pool:` opened inside one of this pool's own
+				# running actions. The running loop already picks up anything
+				# queued meanwhile; starting another run here re-enters the
+				# action that is still queued and never returns.
+				return
 			if self.can_execute:
 				self._unsafe_execute()
 			match self.status:
