@@ -241,7 +241,8 @@ class CentralPanel(Panel, tag="dashboard"):
 			# 'just a big moon' symptom went undiagnosed for two months. The
 			# notice has to match the size of the consequence.
 			built = len(self.childPanels)
-			expected = len(state.get('items', ()))
+			# The root is a list in many dashboards and a mapping in others.
+			expected = len(state.get('items', ()) if isinstance(state, dict) else state or ())
 			log.critical(
 				f"DASHBOARD LOAD FAILED: {path.name} is only partly built - "
 				f"{built} of {expected} top-level item(s) made it onto the scene, and "
