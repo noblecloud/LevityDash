@@ -379,6 +379,10 @@ def capture(args) -> int:
 		if entry['tracebacks']:
 			lines = [line.strip() for line in output.splitlines() if line.strip()]
 			entry['last_error'] = lines[-1][:200] if lines else ''
+			# Keep the block itself, not just the last line: a render that raises
+			# and carries on is only diagnosable if the traceback survives the run.
+			marker = 'Traceback (most recent call last)'
+			entry['traceback_text'] = output[output.rfind(marker):][-1500:]
 		if completed.returncode != 0 or not out.is_file():
 			entry['error'] = output.strip()[-400:]
 			return target.stem, entry
