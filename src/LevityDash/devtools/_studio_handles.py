@@ -178,10 +178,14 @@ class _Handle(QGraphicsItem):
 		event.accept()
 
 	def mouseMoveEvent(self, event):
+		# After a double click the item still holds the mouse (a colour dialog eats the release), but no press began a drag.
+		if self.layer.active is not self:
+			return
 		self.layer.move(self, event.scenePos(), bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier))
 
 	def mouseReleaseEvent(self, event):
-		self.layer.end(self)
+		if self.layer.active is self:
+			self.layer.end(self)
 		event.accept()
 
 	def mouseDoubleClickEvent(self, event):
@@ -455,6 +459,7 @@ class HandleLayer:
 	def begin(self, item: _Handle, pos: QPointF):
 		self.active = item
 		self._moved = False
+		self._state = None
 		self._state = item.spec.press(pos) if item.spec.press is not None else item.spec.begin()
 		self._start = pos
 		if item.spec.kind == 'gradient':
@@ -471,6 +476,8 @@ class HandleLayer:
 		self._moved = True
 		fine = shift or not self.snap
 		spec.drag(self._state, pos, fine)
+		if spec.kind in ('gradient', 'track'):
+			self.reposition()
 
 	def end(self, item: _Handle):
 		spec = item.spec
@@ -509,6 +516,10 @@ class HandleLayer:
 		"""The stops of the arc's gradient, in the order the file holds them."""
 		if self.gauge is None:
 			return []
+		state = self._state
+		if self.active is not None and self.active.spec.kind in ('gradient', 'track') and isinstance(state, dict) and 'stops' in state:
+			# Mid-drag the gauge still holds the old gradient: a write waits for the flush. The held stops are what the node follows.
+			return [s.copy() for s in state['stops']]
 		try:
 			return stops.decode(schema.read(self.gauge, GRADIENT))
 		except Exception:  # noqa: BLE001 - a gauge mid-rebuild has nothing to read
@@ -635,9 +646,12 @@ class HandleLayer:
 			if ordered:
 				unit = ordered[-1].unit
 			new = stops.place(stops.Stop(0.0, unit, colour), value, vc(), lo, hi)
-			items.append(new)
+			# In value order from the start, so the file never holds the new stop out of place.
+			key = lambda s: v if (v := stops.native(s, vc())) is not None else float('inf')
+			items = sorted(items + [new], key=key)
+			at = next(k for k, s in enumerate(items) if s is new)
 			write(items)
-			return {'index': len(items) - 1, 'stops': items}
+			return {'index': at, 'stops': items}
 
 		def tdrag(state, p, fine):
 			dl = dial()
