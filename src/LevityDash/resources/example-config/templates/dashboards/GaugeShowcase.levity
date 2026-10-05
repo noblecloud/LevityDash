@@ -1,287 +1,705 @@
-# Gauge showcase: one cell per gauge feature, each with a caption.
-# Cells sit on relative geometry. Render with --scenario stormy-day.
-# Hex colours are quoted; unquoted, '#' starts a YAML comment.
+# Gauge showcase: 32 cells, one gauge feature or gauge-ui template each, every one captioned.
+# Eight columns by four rows, relative geometry (each cell 12.5% by 25%).
+# Render with --scenario stormy-day. Hex colours are quoted; unquoted, '#' starts a YAML comment.
+# Cells that recreate a template from github.com/thordursk/gauge-ui (MIT, commit cfe5341)
+# start the caption with "gauge-ui:". The ones LevityDash cannot draw yet are listed in
+# docs/tasks/gauge-presets.md.
+
 - type: group
   name: main
   items:
   - type: group
-    name: plain
-    geometry: {x: 0.0%, y: 0.0%, width: 25.0%, height: 25.0%}
+    name: speedometer
+    geometry: {x: 0%, y: 0%, width: 12.5%, height: 25.0%}
     items:
     - type: realtime.gauge
-      name: plainGauge
-      key: environment.temperature.temperature
+      name: speedometerGauge
+      key: environment.wind.speed.speed
       title: false
-      geometry: {x: 0%, y: 0%, width: 100%, height: 82%}
-      display: {}
-    - type: text
-      text: "Plain realtime gauge"
-      geometry: {x: 3%, y: 86%, width: 94%, height: 9%}
-      display: {text-height: 42%}
-  - type: group
-    name: fill
-    geometry: {x: 25.0%, y: 0.0%, width: 25.0%, height: 25.0%}
-    items:
-    - type: realtime.gauge
-      name: fillGauge
-      key: environment.temperature.temperature
-      title: false
-      geometry: {x: 0%, y: 0%, width: 100%, height: 82%}
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
       display:
-        range: {min: 40, max: 90}
-        fill: {weight: 5%, color: '#ff8a3d'}
+        radius: 84%
+        arc: {start-angle: -140, end-angle: 140, weight: 1.5%}
+        range: {min: 0, max: 60}
+        fill: {from: 45, to: 60, weight: 5%, color: '#ff4a3d'}
+        major:
+          interval: 10
+          labels: {position: outside}
         value-label: {position: below}
     - type: text
-      text: "Fill: range min up to value"
-      geometry: {x: 3%, y: 86%, width: 94%, height: 9%}
-      display: {text-height: 42%}
+      text: "gauge-ui: Speedometer"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
   - type: group
-    name: dayRange
-    geometry: {x: 50.0%, y: 0.0%, width: 25.0%, height: 25.0%}
+    name: internetSpeed
+    geometry: {x: 12.5%, y: 0%, width: 12.5%, height: 25.0%}
     items:
     - type: realtime.gauge
-      name: dayRangeGauge
+      name: internetSpeedGauge
+      key: environment.wind.speed.gust
+      title: false
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
+      display:
+        arc: {start-angle: -120, end-angle: 120, weight: 9%}
+        range: {min: 0, max: 80}
+        fill: {weight: 9%, color: '#3da5ff'}
+        major:
+          labels: {enabled: false}
+        needle: {type: circle}
+        value-label: {position: below}
+    - type: text
+      text: "gauge-ui: Internet speed"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
+  - type: group
+    name: saasMetric
+    geometry: {x: 25%, y: 0%, width: 12.5%, height: 25.0%}
+    items:
+    - type: realtime.gauge
+      name: saasMetricGauge
+      key: environment.humidity.humidity
+      title: false
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
+      display:
+        arc: {start-angle: -90, end-angle: 90, weight: 9%}
+        range: {min: 0, max: 100}
+        fill: {weight: 9%, color: '#7b6cff'}
+        major:
+          enabled: false
+          labels: {enabled: false}
+        minor: {enabled: false}
+        needle: {type: circle}
+        value-label: {position: below}
+    - type: text
+      text: "gauge-ui: SaaS metric"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
+  - type: group
+    name: temperature
+    geometry: {x: 37.5%, y: 0%, width: 12.5%, height: 25.0%}
+    items:
+    - type: realtime.gauge
+      name: temperatureGauge
       key: environment.temperature.temperature
       title: false
-      geometry: {x: 0%, y: 0%, width: 100%, height: 82%}
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
       display:
-        range: {min: 40, max: 90}
-        fill:
-          from: min(environment.temperature.temperature, today)
-          to: max(environment.temperature.temperature, today)
-          weight: 5%
-          color: '#ff8a3d'
+        radius: 84%
+        arc: {start-angle: -140, end-angle: 140, gradient: TemperatureGradient, weight: 6%}
+        range: {min: 0, max: 100}
+        major:
+          interval: 20
+          labels: {position: outside}
+        needle: {type: circle}
         value-label: {position: below}
     - type: text
-      text: "Fill: today's low to high"
-      geometry: {x: 3%, y: 86%, width: 94%, height: 9%}
-      display: {text-height: 42%}
+      text: "gauge-ui: Temperature"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
   - type: group
-    name: highLow
-    geometry: {x: 75.0%, y: 0.0%, width: 25.0%, height: 25.0%}
+    name: thermostat
+    geometry: {x: 50%, y: 0%, width: 12.5%, height: 25.0%}
     items:
     - type: realtime.gauge
-      name: highLowGauge
-      key: environment.temperature.temperature
+      name: thermostatGauge
+      key: environment.temperature.feelsLike
       title: false
-      geometry: {x: 0%, y: 0%, width: 100%, height: 82%}
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
       display:
-        range: {min: 40, max: 90}
+        arc: {start-angle: -140, end-angle: 140, weight: 11%}
+        range: {min: 40, max: 80}
+        fill: {weight: 11%, color: '#ff8a3d'}
+        major:
+          enabled: false
+          labels: {enabled: false}
+        minor: {enabled: false}
+        needle: {type: circle}
         value-label: {position: below}
-        markers:
-        - value: min(environment.temperature.temperature, today)
-          type: marker
-          length: 12%
-          color: '#4aa3ff'
-        - value: max(environment.temperature.temperature, today)
-          type: marker
-          length: 12%
-          color: '#ff5a4a'
     - type: text
-      text: "Markers: today's low, high"
-      geometry: {x: 3%, y: 86%, width: 94%, height: 9%}
-      display: {text-height: 42%}
+      text: "gauge-ui: Thermostat"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
   - type: group
-    name: rain
-    geometry: {x: 0.0%, y: 25.0%, width: 25.0%, height: 25.0%}
+    name: progressRing
+    geometry: {x: 62.5%, y: 0%, width: 12.5%, height: 25.0%}
     items:
     - type: realtime.gauge
-      name: rainGauge
-      key: environment.precipitation.precipitation
+      name: progressRingGauge
+      key: environment.clouds.cover.cover
       title: false
-      geometry: {x: 0%, y: 0%, width: 100%, height: 82%}
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
       display:
-        range: {min: 0, max: 0.7}
-        major: {interval: 0.1}
-        value-label: {position: below}
-        unit-label: {visible: true, position: float-under, height: 10%}
+        arc: {start-angle: 0, end-angle: 360, weight: 8%}
+        range: {min: 0, max: 100}
+        fill: {weight: 8%, color: '#59d0c2'}
+        major:
+          enabled: false
+          labels: {enabled: false}
+        minor: {enabled: false}
+        needle: {type: circle, width: 0%}
     - type: text
-      text: "Range under 1, floating unit"
-      geometry: {x: 3%, y: 86%, width: 94%, height: 9%}
-      display: {text-height: 42%}
+      text: "gauge-ui: Progress ring"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
   - type: group
-    name: pressure
-    geometry: {x: 25.0%, y: 25.0%, width: 25.0%, height: 25.0%}
+    name: dimmer
+    geometry: {x: 75%, y: 0%, width: 12.5%, height: 25.0%}
     items:
     - type: realtime.gauge
-      name: pressureGauge
+      name: dimmerGauge
+      key: environment.humidity.humidity
+      title: false
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
+      display:
+        arc: {start-angle: -140, end-angle: 140, weight: 14%}
+        range: {min: 0, max: 100}
+        fill: {weight: 14%, color: '#ffd24a'}
+        major:
+          enabled: false
+          labels: {enabled: false}
+        minor: {enabled: false}
+        needle: {type: circle}
+        value-label: {position: below}
+    - type: text
+      text: "gauge-ui: Dimmer"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
+  - type: group
+    name: volume
+    geometry: {x: 87.5%, y: 0%, width: 12.5%, height: 25.0%}
+    items:
+    - type: realtime.gauge
+      name: volumeGauge
       key: environment.pressure.pressure
       title: false
-      geometry: {x: 0%, y: 0%, width: 100%, height: 82%}
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
       display:
+        radius: 84%
+        arc: {start-angle: -140, end-angle: 140, weight: 1.5%}
+        range: {min: 28, max: 32}
+        fill: {weight: 1.5%, color: '#ffffff'}
+        major:
+          interval: 1
+          labels: {position: outside}
+        minor: {interval: 0.05}
+        needle: {type: circle}
+        value-label: {position: below}
+    - type: text
+      text: "gauge-ui: Volume"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
+  - type: group
+    name: analogDial
+    geometry: {x: 0%, y: 25%, width: 12.5%, height: 25.0%}
+    items:
+    - type: realtime.gauge
+      name: analogDialGauge
+      key: environment.pressure.pressure
+      title: false
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
+      display:
+        arc: {start-angle: -135, end-angle: 135, weight: 1.5%}
         range: {min: 28, max: 32}
         value-label: {position: below}
-        unit-label: {visible: true, position: float-under, height: 10%}
     - type: text
-      text: "Pressure in inHg, 28 to 32"
-      geometry: {x: 3%, y: 86%, width: 94%, height: 9%}
-      display: {text-height: 42%}
+      text: "gauge-ui: Analog dial"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
+  - type: group
+    name: compass
+    geometry: {x: 12.5%, y: 25%, width: 12.5%, height: 25.0%}
+    items:
+    - type: realtime.gauge
+      name: compassGauge
+      key: environment.wind.direction.direction
+      title: false
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
+      display:
+        radius: 84%
+        arc: {start-angle: 0, end-angle: 360, weight: 1%}
+        range: {min: 0, max: 360}
+        major:
+          interval: 90
+          labels: {position: outside}
+        needle: {type: needle}
+        value-label: {position: below}
+    - type: text
+      text: "gauge-ui: Compass"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
+  - type: group
+    name: windDirection
+    geometry: {x: 25%, y: 25%, width: 12.5%, height: 25.0%}
+    items:
+    - type: realtime.gauge
+      name: windDirectionGauge
+      key: environment.wind.direction.direction
+      title: false
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
+      display:
+        radius: 84%
+        arc: {start-angle: 0, end-angle: 360, weight: 1%}
+        range: {min: 0, max: 360}
+        major:
+          interval: 90
+          labels: {position: inside}
+        minor: {interval: 10}
+        needle: {type: triangle, width: 16%, length: 16%}
+        value-label: {position: below}
+    - type: text
+      text: "gauge-ui: Wind direction"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
+  - type: group
+    name: activityRing
+    geometry: {x: 37.5%, y: 25%, width: 12.5%, height: 25.0%}
+    items:
+    - type: realtime.gauge
+      name: activityRingGauge
+      key: environment.precipitation.precipitation
+      title: false
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
+      display:
+        arc: {start-angle: 0, end-angle: 360, weight: 10%}
+        range: {min: 0, max: 0.7}
+        major:
+          interval: 0.1
+          enabled: false
+          labels: {enabled: false}
+        minor: {enabled: false}
+        fill: {weight: 10%, color: '#ff4a7a'}
+        needle: {type: circle, width: 0%}
+    - type: text
+      text: "gauge-ui: Activity ring"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
+  - type: group
+    name: fuel
+    geometry: {x: 50%, y: 25%, width: 12.5%, height: 25.0%}
+    items:
+    - type: realtime.gauge
+      name: fuelGauge
+      key: environment.clouds.cover.cover
+      title: false
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
+      display:
+        arc: {start-angle: -90, end-angle: 90, weight: 1.5%}
+        range: {min: 0, max: 100}
+        fill: {from: 0, to: 20, weight: 5%, color: '#ff4a3d'}
+        major:
+          interval: 25
+          labels:
+            position: outside
+            format: {precision: 0}
+        value-label: {position: below}
+    - type: text
+      text: "gauge-ui: Fuel"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
+  - type: group
+    name: battery
+    geometry: {x: 62.5%, y: 25%, width: 12.5%, height: 25.0%}
+    items:
+    - type: realtime.gauge
+      name: batteryGauge
+      key: environment.humidity.humidity
+      title: false
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
+      display:
+        arc: {start-angle: 0, end-angle: 360, weight: 10%}
+        range: {min: 0, max: 100}
+        fill: {weight: 10%, color: '#4cc38a'}
+        major:
+          enabled: false
+          labels: {enabled: false}
+        minor: {enabled: false}
+        markers:
+        - {value: 80, type: marker, length: 14%, color: '#ffffff'}
+        needle: {type: circle, width: 0%}
+    - type: text
+      text: "gauge-ui: Battery"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
+  - type: group
+    name: tachometer
+    geometry: {x: 75%, y: 25%, width: 12.5%, height: 25.0%}
+    items:
+    - type: realtime.gauge
+      name: tachometerGauge
+      key: environment.wind.speed.gust
+      title: false
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
+      display:
+        radius: 84%
+        arc: {start-angle: -140, end-angle: 140, weight: 1.5%}
+        range: {min: 0, max: 80}
+        fill: {from: 65, to: 80, weight: 5%, color: '#ff4a3d'}
+        major:
+          interval: 10
+          labels: {position: outside}
+        needle: {type: needle}
+        value-label: {position: below}
+    - type: text
+      text: "gauge-ui: Tachometer"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
+  - type: group
+    name: powerMeter
+    geometry: {x: 87.5%, y: 25%, width: 12.5%, height: 25.0%}
+    items:
+    - type: realtime.gauge
+      name: powerMeterGauge
+      key: environment.temperature.feelsLike
+      title: false
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
+      display:
+        arc: {start-angle: -90, end-angle: 90, weight: 3%}
+        range: {min: 40, max: 80}
+        fill: {from: 60, weight: 3%, color: '#3da5ff'}
+        major:
+          interval: 10
+          labels: {position: outside}
+        value-label: {position: below}
+    - type: text
+      text: "gauge-ui: Power meter"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
+  - type: group
+    name: airQuality
+    geometry: {x: 0%, y: 50%, width: 12.5%, height: 25.0%}
+    items:
+    - type: realtime.gauge
+      name: airQualityGauge
+      key: environment.light.uvi
+      title: false
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
+      display:
+        radius: 84%
+        arc: {start-angle: -90, end-angle: 90, gradient: UVIndexGradient, weight: 5%}
+        range: {min: 0, max: 12}
+        major:
+          interval: 3
+          labels: {position: outside}
+        needle: {type: circle}
+        value-label: {position: below}
+    - type: text
+      text: "gauge-ui: Air quality"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
+  - type: group
+    name: heartRate
+    geometry: {x: 12.5%, y: 50%, width: 12.5%, height: 25.0%}
+    items:
+    - type: realtime.gauge
+      name: heartRateGauge
+      key: environment.temperature.feelsLike
+      title: false
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
+      display:
+        arc: {start-angle: -120, end-angle: 120, gradient: TemperatureGradient, weight: 5%}
+        range: {min: 20, max: 100}
+        major:
+          enabled: false
+          labels: {enabled: false}
+        minor: {enabled: false}
+        needle: {type: circle}
+        value-label: {position: below}
+    - type: text
+      text: "gauge-ui: Heart rate"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
+  - type: group
+    name: timer
+    geometry: {x: 25%, y: 50%, width: 12.5%, height: 25.0%}
+    items:
+    - type: realtime.gauge
+      name: timerGauge
+      key: environment.wind.speed.speed
+      title: false
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
+      display:
+        radius: 84%
+        arc: {start-angle: -165, end-angle: 165, weight: 1%}
+        range: {min: 0, max: 60}
+        major:
+          interval: 10
+          labels: {position: outside}
+        minor: {interval: 5}
+        needle: {type: circle}
+    - type: text
+      text: "gauge-ui: Timer"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
+  - type: group
+    name: comfortBand
+    geometry: {x: 37.5%, y: 50%, width: 12.5%, height: 25.0%}
+    items:
+    - type: realtime.gauge
+      name: comfortBandGauge
+      key: environment.humidity.humidity
+      title: false
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
+      display:
+        radius: 84%
+        range: {min: 0, max: 100}
+        fill: {from: 30, to: 60, weight: 5%, color: '#4cc38a'}
+        major:
+          interval: 25
+          labels:
+            position: outside
+            format: {precision: 0}
+        value-label: {position: below}
+    - type: text
+      text: "gauge-ui: Humidity band"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
+  - type: group
+    name: uvSteps
+    geometry: {x: 50%, y: 50%, width: 12.5%, height: 25.0%}
+    items:
+    - type: realtime.gauge
+      name: uvStepsGauge
+      key: environment.light.uvi
+      title: false
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
+      display:
+        radius: 84%
+        arc: {start-angle: -120, end-angle: 120, weight: 1.5%}
+        range: {min: 0, max: 11}
+        fill: {weight: 6%, color: '#ffd24a'}
+        major:
+          interval: 1
+          labels: {position: outside}
+        minor: {enabled: false}
+        needle: {type: circle}
+        value-label: {position: below}
+    - type: text
+      text: "gauge-ui: UV steps"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
   - type: group
     name: warp
-    geometry: {x: 50.0%, y: 25.0%, width: 25.0%, height: 25.0%}
+    geometry: {x: 62.5%, y: 50%, width: 12.5%, height: 25.0%}
     items:
     - type: realtime.gauge
       name: warpGauge
       key: environment.humidity.humidity
       title: false
-      geometry: {x: 0%, y: 0%, width: 100%, height: 82%}
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
       display:
         arc: {start-angle: -170, end-angle: 170, weight: 4%}
         range: {min: 0, max: 100}
-        major: {labels: {curve: warp, height: 10%, position: outside}}
+        major:
+          labels:
+            curve: warp
+            height: 10%
+            position: outside
+            format: {precision: 0}
     - type: text
-      text: "Tick labels: curve warp"
-      geometry: {x: 3%, y: 86%, width: 94%, height: 9%}
-      display: {text-height: 42%}
+      text: "Labels: curve warp"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
   - type: group
     name: glyphs
-    geometry: {x: 75.0%, y: 25.0%, width: 25.0%, height: 25.0%}
+    geometry: {x: 75%, y: 50%, width: 12.5%, height: 25.0%}
     items:
     - type: realtime.gauge
       name: glyphsGauge
       key: environment.humidity.humidity
       title: false
-      geometry: {x: 0%, y: 0%, width: 100%, height: 82%}
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
       display:
         arc: {start-angle: -170, end-angle: 170, weight: 4%}
         range: {min: 0, max: 100}
-        major: {labels: {curve: glyphs, height: 10%, position: outside}}
+        major:
+          labels:
+            curve: glyphs
+            height: 10%
+            position: outside
+            format: {precision: 0}
     - type: text
-      text: "Tick labels: curve glyphs"
-      geometry: {x: 3%, y: 86%, width: 94%, height: 9%}
-      display: {text-height: 42%}
+      text: "Labels: curve glyphs"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
   - type: group
-    name: wide
-    geometry: {x: 0.0%, y: 50.0%, width: 25.0%, height: 25.0%}
+    name: highLow
+    geometry: {x: 87.5%, y: 50%, width: 12.5%, height: 25.0%}
     items:
     - type: realtime.gauge
-      name: wideGauge
-      key: environment.humidity.humidity
+      name: highLowGauge
+      key: environment.temperature.temperature
       title: false
-      geometry: {x: 0%, y: 0%, width: 100%, height: 82%}
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
       display:
-        arc: {start-angle: -150, end-angle: 150}
-        range: {min: 0, max: 100}
+        radius: 84%
+        range: {min: 40, max: 90}
+        major:
+          labels: {position: outside}
+        value-label: {position: below}
+        markers:
+        - {value: 'min(environment.temperature.temperature, today)', type: marker, length: 12%, color: '#4aa3ff'}
+        - {value: 'max(environment.temperature.temperature, today)', type: marker, length: 12%, color: '#ff5a4a'}
     - type: text
-      text: "Wide sweep, 300 degrees"
-      geometry: {x: 3%, y: 86%, width: 94%, height: 9%}
-      display: {text-height: 42%}
+      text: "Markers: low and high"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
   - type: group
-    name: narrow
-    geometry: {x: 25.0%, y: 50.0%, width: 25.0%, height: 25.0%}
+    name: dayRange
+    geometry: {x: 0%, y: 75%, width: 12.5%, height: 25.0%}
     items:
     - type: realtime.gauge
-      name: narrowGauge
-      key: environment.humidity.humidity
+      name: dayRangeGauge
+      key: environment.temperature.temperature
       title: false
-      geometry: {x: 0%, y: 0%, width: 100%, height: 82%}
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
       display:
-        arc: {start-angle: -90, end-angle: 90}
-        range: {min: 0, max: 100}
+        radius: 84%
+        range: {min: 40, max: 90}
+        fill: {from: 'min(environment.temperature.temperature, today)', to: 'max(environment.temperature.temperature,
+            today)', weight: 5%, color: '#ff8a3d'}
+        major:
+          labels: {position: outside}
         value-label: {position: below}
     - type: text
-      text: "Narrow sweep, 180 degrees"
-      geometry: {x: 3%, y: 86%, width: 94%, height: 9%}
-      display: {text-height: 42%}
+      text: "Fill: day low to high"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
   - type: group
-    name: band
-    geometry: {x: 50.0%, y: 50.0%, width: 25.0%, height: 25.0%}
+    name: rain
+    geometry: {x: 12.5%, y: 75%, width: 12.5%, height: 25.0%}
     items:
     - type: realtime.gauge
-      name: bandGauge
-      key: environment.humidity.humidity
+      name: rainGauge
+      key: environment.precipitation.precipitation
       title: false
-      geometry: {x: 0%, y: 0%, width: 100%, height: 82%}
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
       display:
-        range: {min: 0, max: 100}
-        fill: {from: 30, to: 60, weight: 5%, color: '#4cc38a'}
-        major: {interval: 25}
+        radius: 84%
+        range: {min: 0, max: 0.7}
+        major:
+          interval: 0.1
+          labels: {position: outside}
         value-label: {position: below}
+        unit-label: {visible: true, position: float-under, height: 9%}
     - type: text
-      text: "Fixed fill band, 30 to 60"
-      geometry: {x: 3%, y: 86%, width: 94%, height: 9%}
-      display: {text-height: 42%}
+      text: "Range under 1, unit label"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
+  - type: group
+    name: pressure
+    geometry: {x: 25%, y: 75%, width: 12.5%, height: 25.0%}
+    items:
+    - type: realtime.gauge
+      name: pressureGauge
+      key: environment.pressure.pressure
+      title: false
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
+      display:
+        radius: 84%
+        range: {min: 28, max: 32}
+        major:
+          labels: {position: outside}
+        value-label: {position: below}
+        unit-label: {visible: true, position: float-under, height: 9%}
+    - type: text
+      text: "Pressure in inHg"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
   - type: group
     name: gradient
-    geometry: {x: 75.0%, y: 50.0%, width: 25.0%, height: 25.0%}
+    geometry: {x: 37.5%, y: 75%, width: 12.5%, height: 25.0%}
     items:
     - type: realtime.gauge
       name: gradientGauge
       key: environment.wind.speed.speed
       title: false
-      geometry: {x: 0%, y: 0%, width: 100%, height: 82%}
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
       display:
         radius: 92%
         arc: {gradient: WindSpeedGradient, weight: 10%}
         needle: {type: marker, width: 9%, length: 13%}
-        major: {enabled: false, labels: {enabled: false}}
+        major:
+          enabled: false
+          labels: {enabled: false}
         minor: {enabled: false}
     - type: text
       text: "Gradient arc, no ticks"
-      geometry: {x: 3%, y: 86%, width: 94%, height: 9%}
-      display: {text-height: 42%}
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
   - type: group
     name: circle
-    geometry: {x: 0.0%, y: 75.0%, width: 25.0%, height: 25.0%}
+    geometry: {x: 50%, y: 75%, width: 12.5%, height: 25.0%}
     items:
     - type: realtime.gauge
       name: circleGauge
       key: environment.temperature.temperature
       title: false
-      geometry: {x: 0%, y: 0%, width: 100%, height: 82%}
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
       display:
+        radius: 84%
         range: {min: 40, max: 90}
+        major:
+          labels: {position: outside}
         needle: {type: circle}
     - type: text
-      text: "Needle type: circle"
-      geometry: {x: 3%, y: 86%, width: 94%, height: 9%}
-      display: {text-height: 42%}
+      text: "Needle: circle"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
   - type: group
     name: triangle
-    geometry: {x: 25.0%, y: 75.0%, width: 25.0%, height: 25.0%}
+    geometry: {x: 62.5%, y: 75%, width: 12.5%, height: 25.0%}
     items:
     - type: realtime.gauge
       name: triangleGauge
       key: environment.temperature.temperature
       title: false
-      geometry: {x: 0%, y: 0%, width: 100%, height: 82%}
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
       display:
+        radius: 84%
         range: {min: 40, max: 90}
+        major:
+          labels: {position: outside}
         needle: {type: triangle}
     - type: text
-      text: "Needle type: triangle"
-      geometry: {x: 3%, y: 86%, width: 94%, height: 9%}
-      display: {text-height: 42%}
+      text: "Needle: triangle"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
   - type: group
     name: diamond
-    geometry: {x: 50.0%, y: 75.0%, width: 25.0%, height: 25.0%}
+    geometry: {x: 75%, y: 75%, width: 12.5%, height: 25.0%}
     items:
     - type: realtime.gauge
       name: diamondGauge
       key: environment.temperature.temperature
       title: false
-      geometry: {x: 0%, y: 0%, width: 100%, height: 82%}
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
       display:
+        radius: 84%
         range: {min: 40, max: 90}
+        major:
+          labels: {position: outside}
         needle: {type: diamond}
     - type: text
-      text: "Needle type: diamond"
-      geometry: {x: 3%, y: 86%, width: 94%, height: 9%}
-      display: {text-height: 42%}
+      text: "Needle: diamond"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
   - type: group
     name: cap
-    geometry: {x: 75.0%, y: 75.0%, width: 25.0%, height: 25.0%}
+    geometry: {x: 87.5%, y: 75%, width: 12.5%, height: 25.0%}
     items:
     - type: realtime.gauge
       name: capGauge
       key: environment.temperature.temperature
       title: false
-      geometry: {x: 0%, y: 0%, width: 100%, height: 82%}
+      geometry: {x: 0%, y: 0%, width: 100%, height: 80%}
       display:
+        radius: 84%
         range: {min: 40, max: 90}
         arc: {cap: round, weight: 9%}
+        major:
+          labels: {position: outside}
         value-label: {position: below}
     - type: text
-      text: "Round arc cap, heavy arc"
-      geometry: {x: 3%, y: 86%, width: 94%, height: 9%}
-      display: {text-height: 42%}
+      text: "Round cap, heavy arc"
+      geometry: {x: 2%, y: 84%, width: 96%, height: 9%}
+      display: {text-height: 55%}
