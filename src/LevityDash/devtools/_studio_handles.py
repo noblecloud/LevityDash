@@ -17,7 +17,13 @@ fill end dot               `from` or `to` of the fill, when it is a number
 value, unit, caption,      `value-label.offset`, `unit-label.offset`, and `offset` inside
 sub-label (drag the text)  `caption` and `sub-label`
 corner squares (click)     `anchor`
+gradient node (*Edit       the stop's value in its own unit (drag along the track); drag off
+gradient* on)              the track, or Delete, removes it; double click picks its colour;
+                           click on the track adds a stop with the colour there
 ========================== ===============================================================
+
+*Edit gradient* shows one node per stop of `arc.gradient` and dims every other handle, so the two
+kinds do not fight for the mouse. A node shows its value and unit while it is dragged.
 
 Handles show while the pointer is over the preview and brighten under the
 cursor. Shift while dragging snaps finely; without it a value snaps to a round
@@ -30,30 +36,20 @@ from dataclasses import dataclass
 from typing import Any, Callable, List, Optional
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
-from PySide6.QtGui import QBrush, QColor, QPainter, QPen
+from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QGraphicsItem
+
+from LevityDash.devtools import _studio_stops as stops
+from LevityDash.devtools._studio_stops import niceStep, snapTo
 
 Z = 10000
 
 COLORS = {
 	'angle': '#2f81f7', 'radius': '#3fb950', 'weight': '#a371f7', 'needle': '#ffd33d', 'marker': '#f5a524',
-	'zone': '#ff7b72', 'fill': '#39c5cf', 'label': '#f0f6fc', 'corner': '#8b949e',
+	'zone': '#ff7b72', 'fill': '#39c5cf', 'label': '#f0f6fc', 'corner': '#8b949e', 'gradient': '#ffffff', 'track': '#ffffff',
 }
 
-
-def niceStep(x: float) -> float:
-	"""The round number (1, 2 or 5 times a power of ten) at or below `x`."""
-	if x <= 0 or not math.isfinite(x):
-		return 1.0
-	power = 10 ** math.floor(math.log10(x))
-	for m in (5, 2, 1):
-		if x >= m * power:
-			return m * power
-	return power
-
-
-def snapTo(value: float, step: float) -> float:
-	return round(value / step) * step
+GRADIENT = ('arc', 'gradient')
 
 
 class Dial:
@@ -129,6 +125,17 @@ class Spec:
 	rect: Optional[Callable[[], Optional[QRectF]]] = None
 	shape: str = 'dot'
 	active: Callable[[], bool] = lambda: False
+	#: A gradient node: its colour, the text it shows while dragged, whether a drop now would remove it.
+	fill: Optional[Callable[[], str]] = None
+	label: Optional[Callable[[], str]] = None
+	removing: Callable[[], bool] = lambda: False
+	#: Runs when the drag ends (the mouse comes up), before the edit is recorded.
+	finish: Optional[Callable[[Any], None]] = None
+	double: Optional[Callable[[], None]] = None
+	remove: Optional[Callable[[], None]] = None
+	tag: Any = None
+	#: A track hit area, in scene coordinates.
+	path: Optional[Callable[[], Optional[Any]]] = None
 
 
 class _Handle(QGraphicsItem):
@@ -146,6 +153,13 @@ class _Handle(QGraphicsItem):
 		self.setToolTip(spec.tip)
 		self.setCursor(Qt.CursorShape.OpenHandCursor if spec.drag else Qt.CursorShape.PointingHandCursor)
 		self.color = QColor(COLORS.get(spec.kind, '#ffffff'))
+		node = spec.kind in ('gradient', 'track')
+		dim = self.layer.gradientMode and not node
+		# While gradients are edited the other handles stay visible but hold no mouse, so a drag on a node never grabs one.
+		self.setOpacity(0.25 if dim else 1.0)
+		self.setAcceptedMouseButtons(Qt.MouseButton.NoButton if dim else Qt.MouseButton.LeftButton)
+		self.setAcceptHoverEvents(not dim)
+		self.setZValue(2 if spec.kind == 'gradient' else (1 if spec.kind == 'track' else 0))
 		self.update()
 
 	def hoverEnterEvent(self, event):
@@ -167,13 +181,17 @@ class _Handle(QGraphicsItem):
 		self.layer.end(self)
 		event.accept()
 
+	def mouseDoubleClickEvent(self, event):
+		self.layer.doubleClick(self)
+		event.accept()
+
 	def reposition(self):
 		spec = self.spec
 		p = spec.position()
 		if p is None:
 			self.setVisible(False)
 			return
-		self.setVisible(self.layer.shown)
+		self.setVisible(self.layer.visibleFor(spec))
 		self.setPos(p)
 
 
@@ -187,11 +205,45 @@ class Dot(_Handle):
 		self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations)
 
 	def boundingRect(self) -> QRectF:
-		return QRectF(-12, -12, 24, 24)
+		# Room above the dot for the value a gradient node shows while it is dragged.
+		return QRectF(-110, -48, 220, 72) if self.spec.kind == 'gradient' else QRectF(-12, -12, 24, 24)
+
+	def shape(self):
+		path = QPainterPath()
+		path.addEllipse(QPointF(0, 0), 12, 12)
+		return path
+
+	def _paintNode(self, painter: QPainter, hot: bool):
+		spec = self.spec
+		r = 7 + (3 if hot else 0)
+		fade = spec.removing() and self.layer.active is self
+		painter.setOpacity(self.opacity() * (0.4 if fade else 1.0))
+		painter.setPen(QPen(QColor(0, 0, 0, 220), 4))
+		painter.setBrush(Qt.BrushStyle.NoBrush)
+		painter.drawEllipse(QPointF(0, 0), r, r)
+		painter.setPen(QPen(QColor(255, 255, 255), 2))
+		painter.setBrush(QBrush(QColor(spec.fill() if spec.fill else '#ffffff')))
+		painter.drawEllipse(QPointF(0, 0), r, r)
+		painter.setOpacity(self.opacity())
+		if self.layer.active is self and spec.label is not None:
+			text = 'release to remove' if spec.removing() else spec.label()
+			font = painter.font()
+			font.setPointSizeF(10)
+			painter.setFont(font)
+			w = painter.fontMetrics().horizontalAdvance(text) + 16
+			box = QRectF(-w / 2, -40, w, 22)
+			painter.setPen(QPen(QColor(255, 255, 255), 1))
+			painter.setBrush(QBrush(QColor('#0d1117')))
+			painter.drawRoundedRect(box, 5, 5)
+			painter.setPen(QColor('#f0f6fc'))
+			painter.drawText(box, Qt.AlignmentFlag.AlignCenter, text)
 
 	def paint(self, painter: QPainter, option, widget=None):
 		painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 		hot = self.hover or self.layer.active is self
+		if self.spec.kind == 'gradient':
+			self._paintNode(painter, hot)
+			return
 		r = self.R + (2 if hot else 0)
 		color = QColor(self.color)
 		color.setAlpha(255 if hot else 190)
@@ -226,7 +278,7 @@ class Box(_Handle):
 		if rect != self._rect:
 			self.prepareGeometryChange()
 			self._rect = rect
-		self.setVisible(self.layer.shown)
+		self.setVisible(self.layer.visibleFor(self.spec))
 		self.update()
 
 	def shape(self):
@@ -248,6 +300,41 @@ class Box(_Handle):
 		painter.drawRoundedRect(self._rect, 4, 4)
 
 
+class TrackHit(_Handle):
+	"""The arc's track, while gradients are edited. A press on it adds a stop there; drag to place it."""
+
+	_path = None
+
+	def boundingRect(self) -> QRectF:
+		return self._path.boundingRect() if self._path is not None else QRectF()
+
+	def shape(self):
+		return self._path if self._path is not None else QPainterPath()
+
+	def reposition(self):
+		path = self.spec.path()
+		if path is None:
+			self.setVisible(False)
+			return
+		if self._path is None or path != self._path:
+			self.prepareGeometryChange()
+			self._path = path
+		self.setPos(0, 0)
+		self.setVisible(self.layer.visibleFor(self.spec))
+		self.update()
+
+	def paint(self, painter: QPainter, option, widget=None):
+		if self._path is None:
+			return
+		hot = self.hover or self.layer.active is self
+		color = QColor(255, 255, 255, 120 if hot else 50)
+		pen = QPen(color, 1.5, Qt.PenStyle.DashLine)
+		pen.setCosmetic(True)
+		painter.setPen(pen)
+		painter.setBrush(Qt.BrushStyle.NoBrush)
+		painter.drawPath(self._path)
+
+
 # Section: the layer
 
 class HandleLayer:
@@ -265,6 +352,9 @@ class HandleLayer:
 		self.inside = False
 		self.force = False
 		self.snap = True
+		#: *Edit gradient*: one node per stop of the arc's gradient, and the other handles dimmed.
+		self.gradientMode = False
+		self.selectedStop: Optional[int] = None
 		self.active: Optional[_Handle] = None
 		self._state: Any = None
 		self._moved = False
@@ -280,6 +370,17 @@ class HandleLayer:
 	@property
 	def gauge(self):
 		return self.studio.studio.gauge
+
+	def visibleFor(self, spec: Spec) -> bool:
+		"""Gradient nodes stay up for as long as *Edit gradient* is on; the rest show while the pointer is over the preview."""
+		if spec.kind in ('gradient', 'track'):
+			return self.gradientMode
+		return self.shown
+
+	def setGradientMode(self, on: bool):
+		self.gradientMode = on
+		self.selectedStop = None
+		self.rebuildNow()
 
 	def setInside(self, inside: bool):
 		self.inside = inside
@@ -314,7 +415,7 @@ class HandleLayer:
 			traceback.print_exc()
 			specs = []
 		for spec in specs:
-			kind = Box if spec.rect is not None else Dot
+			kind = TrackHit if spec.path is not None else (Box if spec.rect is not None else Dot)
 			item = next((i for i in self.pool if type(i) is kind and i not in self.items), None)
 			if item is None:
 				item = kind(self, spec)
@@ -328,7 +429,7 @@ class HandleLayer:
 	def _sig(self) -> tuple:
 		g = self.gauge
 		return (id(g), len(g._markerSpecs), len(g._zoneSpecs), bool(g._fillSpec), bool(g._captionItem), bool(g._subItem),
-		        g._anchor, bool(g.unitLabel.textBox.isVisibleTo(g)))
+		        g._anchor, bool(g.unitLabel.textBox.isVisibleTo(g)), self.gradientMode, len(self._stops()) if self.gradientMode else 0)
 
 	def refresh(self):
 		"""Move the handles to where the gauge has them now; make them again if the gauge changed shape."""
@@ -353,6 +454,8 @@ class HandleLayer:
 		self._moved = False
 		self._state = item.spec.begin()
 		self._start = pos
+		if item.spec.kind == 'gradient':
+			self.selectedStop = item.spec.tag
 		self.studio.beginDrag()
 		item.setCursor(Qt.CursorShape.ClosedHandCursor)
 
@@ -373,8 +476,29 @@ class HandleLayer:
 		if spec.click is not None and not self._moved:
 			spec.click()
 		moved = self._moved
+		if spec.finish is not None and (moved or spec.kind == 'track'):
+			spec.finish(self._state)
+			moved = True
 		self.studio.endDrag(moved or spec.click is not None)
 		self.rebuild()
+
+	def doubleClick(self, item: _Handle):
+		"""A double click on a node picks its colour. The dialog waits for the event to finish: it runs its own loop."""
+		spec = item.spec
+		if spec.double is not None:
+			QTimer.singleShot(0, spec.double)
+
+	def deleteSelected(self) -> bool:
+		"""Delete the chosen gradient node. True when there was one."""
+		if not self.gradientMode or self.selectedStop is None:
+			return False
+		for item in self.items:
+			spec = item.spec
+			if spec.kind == 'gradient' and spec.tag == self.selectedStop and spec.remove is not None:
+				self.selectedStop = None
+				spec.remove()
+				return True
+		return False
 
 	# the specs
 

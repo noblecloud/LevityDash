@@ -14,7 +14,7 @@ font     `FontEdit`: a dropdown of the installed families that also takes a name
 offset   `OffsetEdit`: x and y as a share of the dial's diameter
 intset   `IntSetEdit`: numbers with commas, checked as you type
 format   `FormatEdit`: decimals, unit shown, compact
-gradient `GradientEdit`: a list of stops, each a value and a colour swatch
+gradient `GradientEdit`: a colour band (folded) or a band of draggable nodes and a row per stop (open); each stop has its own unit
 textmap  `TextMapEdit`: value to word table, with compass and E/F presets
 zones    `ZonesEdit`: a list of bands
 markers  `MarkersEdit`: a list of markers with the real needle types
@@ -26,17 +26,23 @@ A value that needs a key (a marker, a fill end, a caption) uses `KeyEdit`, a
 dropdown that completes as you type from every key the studio knows.
 """
 import re
+import weakref
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
-from PySide6.QtCore import QRegularExpression, QSignalBlocker, Qt, QTime, Signal
-from PySide6.QtGui import QColor, QFontDatabase, QRegularExpressionValidator
+from PySide6.QtCore import QPointF, QRectF, QRegularExpression, QSignalBlocker, Qt, QTime, Signal
+from PySide6.QtGui import (
+	QBrush, QColor, QFontDatabase, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QRegularExpressionValidator,
+)
 from PySide6.QtWidgets import (
 	QCheckBox, QColorDialog, QComboBox, QCompleter, QDoubleSpinBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
 	QSlider, QSpinBox, QTimeEdit, QToolButton, QVBoxLayout, QWidget,
 )
 
 from LevityDash.devtools import _studio_schema as schema
+from LevityDash.devtools import _studio_stops as stops
+from LevityDash.devtools._studio_stops import niceStep, snapTo
+from LevityDash.lib.ui.colors.stopunits import formatStop
 
 __all__ = ['Editor', 'make', 'CONTEXT', 'knownKeys']
 
@@ -55,6 +61,16 @@ class Context:
 	#: Pixels a '%' size is a share of: 'radius' is the dial's radius now, 'full' the radius at 100%.
 	ref: Callable[[str], float] = lambda kind='radius': 100.0
 	dpi: float = 100.0
+	#: The class of the gauge's data (a WeatherUnits unit class), which a stop in another unit converts to.
+	valueClass: Callable[[], Optional[type]] = lambda: None
+	#: The range the dial spans, in the gauge's own unit.
+	span: Callable[[], tuple] = lambda: (0.0, 100.0)
+	#: A drag that spans several edits (a node on the band) is one undo step: it starts here and ends here.
+	beginDrag: Callable[[], None] = lambda: None
+	endDrag: Callable[[bool], None] = lambda changed=True: None
+	#: Whether the meter shows the gradient's nodes, and the switch for it.
+	gradientMode: Callable[[], bool] = lambda: False
+	setGradientMode: Callable[[bool], None] = lambda on: None
 
 	def toShown(self, value: float) -> float:
 		fn = self.units.get(self.shown)
@@ -1046,40 +1062,494 @@ class ZonesEdit(ListEditor):
 		return {'from': round(start, 3), 'to': round(min(hi, start + (hi - lo) / 4), 3), 'color': '#f5a524'}
 
 
-class StopItem(_Form):
+def pickColor(parent: QWidget, initial: Optional[str]) -> Optional[str]:
+	"""The colour the user picks, as `#rrggbb`, or None for cancel. `PICKER` stands in for the dialog in a scripted run."""
+	if PICKER is not None:
+		return PICKER(initial)
+	chosen = QColorDialog.getColor(QColor(initial or 'white'), parent, 'Colour')
+	return chosen.name() if chosen.isValid() else None
+
+
+PICKER: Optional[Callable[[Optional[str]], Optional[str]]] = None
+
+
+def _spanOf(unit: Optional[str]) -> float:
+	"""The width of the gauge's range in `unit` (the shown unit when there is none)."""
+	lo, hi = sorted(CONTEXT.span())
+	vc = CONTEXT.valueClass()
+	if unit:
+		return abs(stops.fromNative(hi, unit, vc) - stops.fromNative(lo, unit, vc))
+	return abs(CONTEXT.toShown(hi) - CONTEXT.toShown(lo))
+
+
+class StopRow(Editor):
+	"""One gradient stop: its colour, and its value with a unit of its own.
+
+	A stop written with a unit (`99°F`) holds the number in that unit. Another unit in the box
+	converts the number and keeps the reading, so nothing moves on the meter. A bare number (no
+	unit) is in the gauge's own unit and shows in the unit the context names, as a zone does.
+	"""
+
 	def __init__(self):
 		super().__init__()
-		self.part('value', 'value', NumberEdit(measured=True))
-		self.part('color', 'colour', ColorEdit())
+		grid = QGridLayout(self)
+		grid.setContentsMargins(0, 0, 0, 0)
+		grid.setHorizontalSpacing(4)
+		grid.setVerticalSpacing(3)
+		self.color = ColorEdit()
+		self.color.changed.connect(self._emit)
+		grid.addWidget(self.color, 0, 0, 1, 3)
+		self.slide = Slide(digits=3)
+		self.slide.moved.connect(self._slid)
+		self.spin = QDoubleSpinBox()
+		self.spin.setRange(-1e9, 1e9)
+		self.spin.setDecimals(3)
+		self.spin.setKeyboardTracking(False)
+		self.spin.setMinimumWidth(80)
+		self.spin.valueChanged.connect(self._spun)
+		self.unitCombo = QComboBox()
+		self.unitCombo.setToolTip('The unit this stop is written in. A different unit converts the number; the colour stays at the same reading.')
+		self.unitCombo.activated.connect(self._unitPicked)
+		grid.addWidget(self.slide, 1, 0)
+		grid.addWidget(self.spin, 1, 1)
+		grid.addWidget(self.unitCombo, 1, 2)
+		grid.setColumnStretch(0, 1)
+		self.number = 0.0
+		self.unit: Optional[str] = None
+
+	# the value
+
+	def stop(self) -> 'stops.Stop':
+		return stops.Stop(self.number, self.unit, self.color.value() or '#ffffff')
+
+	def native(self) -> Optional[float]:
+		return stops.native(self.stop(), CONTEXT.valueClass())
+
+	def _shown(self) -> float:
+		return self.number if self.unit else CONTEXT.toShown(self.number)
+
+	def _take(self, shown: float):
+		self.number = round(shown if self.unit else CONTEXT.toNative(shown), 4)
+
+	def _fit(self):
+		lo, hi = sorted(CONTEXT.span())
+		vc = CONTEXT.valueClass()
+		a, b = (stops.fromNative(v, self.unit, vc) for v in (lo, hi)) if self.unit else (CONTEXT.toShown(lo), CONTEXT.toShown(hi))
+		self.slide.setBase(min(a, b), max(a, b))
+
+	def _names(self) -> List[str]:
+		names = list(CONTEXT.units)
+		if self.unit and self.unit not in names:
+			names.append(self.unit)
+		return names
+
+	def _show(self):
+		names = self._names()
+		with QSignalBlocker(self.unitCombo):
+			if [self.unitCombo.itemText(i) for i in range(self.unitCombo.count())] != names:
+				self.unitCombo.clear()
+				self.unitCombo.addItems(names)
+			self.unitCombo.setCurrentText(self.unit or CONTEXT.symbol())
+		self.unitCombo.setVisible(bool(names))
+		self.spin.setSuffix('' if names else (f' {CONTEXT.symbol()}' if CONTEXT.symbol() else ''))
+		self._fit()
+		with QSignalBlocker(self.spin):
+			self.spin.setValue(self._shown())
+		self.slide.showValue(self._shown())
+
+	def onContext(self):
+		self._show()
+
+	def _spun(self, value):
+		self._take(float(value))
+		self.slide.showValue(float(value))
+		self._emit()
+
+	def _slid(self, value: float):
+		with QSignalBlocker(self.spin):
+			self.spin.setValue(value)
+		self._take(float(self.spin.value()))
+		self._emit()
+
+	def _unitPicked(self, i: int):
+		new = self.unitCombo.itemText(i)
+		if new == (self.unit or CONTEXT.symbol()):
+			return
+		native = self.native()
+		if native is not None:
+			self.number = round(stops.fromNative(native, new, CONTEXT.valueClass()), 4)
+		self.unit = new
+		self._show()
+		self._emit()
+
+	def setNative(self, native: float, fine: bool = False):
+		"""Put the stop at `native` (in the gauge's own unit), snapped to a round step in the stop's own unit unless `fine`."""
+		lo, hi = sorted(CONTEXT.span())
+		self.number = stops.place(self.stop(), native, CONTEXT.valueClass(), lo, hi, fine).number
+		self._show()
+		self._emit()
+
+	# the editor protocol
 
 	def setValue(self, value):
 		value = value or {}
-		for key, p in self.parts.items():
-			with QSignalBlocker(p):
-				p.setValue(value.get(key))
+		self.number = float(value.get('value') or 0.0)
+		self.unit = value.get('unit') or None
+		with QSignalBlocker(self.color):
+			self.color.setValue(value.get('color') or '#ffffff')
+		self._show()
 
 	def value(self):
-		return {'value': self.parts['value'].value() or 0, 'color': self.parts['color'].value() or '#ffffff'}
+		return {'value': self.number, 'unit': self.unit, 'color': self.color.value() or '#ffffff'}
+
+	def isEditing(self) -> bool:
+		return self.spin.hasFocus() or self.slide.isSliderDown() or self.color.isEditing()
 
 
-class GradientEdit(ListEditor):
-	"""A colour at each value; the arc blends between them."""
+class GradientBar(QWidget):
+	"""The gradient across the gauge's range, with a mark for each stop.
 
-	def __init__(self):
-		super().__init__(StopItem, self._fresh, '+ Add stop', 'No gradient. The arc keeps its colour.', measured=True)
-		from LevityDash.lib.ui.colors import Gradient
+	Folded, it is one thin band with a tick at each stop; a click opens the stops. Open, each stop
+	is a node you can drag (the value snaps to a round step; shift snaps finely), a click on the
+	band adds a stop with the colour that is there, a double click on a node picks its colour, and a node dragged off
+	the band, or Delete with a node chosen, removes it.
+	"""
+
+	PAD = 10
+	NODE = 7
+
+	def __init__(self, owner: 'GradientEdit'):
+		super().__init__()
+		self.owner = owner
+		self.open = False
+		self.drag: Optional[int] = None
+		self.selected: Optional[int] = None
+		self.removing = False
+		self._moved = False
+		self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+		self.setMouseTracking(True)
+		self.setFixedHeight(24)
+
+	def setOpen(self, on: bool):
+		self.open = on
+		self.setFixedHeight(64 if on else 24)
+		self.setCursor(Qt.CursorShape.ArrowCursor if on else Qt.CursorShape.PointingHandCursor)
+		self.setToolTip('' if on else 'Click to show the stops')
+		self.update()
+
+	# geometry
+
+	def _span(self):
+		lo, hi = sorted(CONTEXT.span())
+		return lo, (hi if hi > lo else lo + 1)
+
+	def _band(self) -> QRectF:
+		top = 22 if self.open else 5
+		return QRectF(self.PAD, top, max(self.width() - 2 * self.PAD, 1), 14)
+
+	def xOf(self, value: float) -> float:
+		lo, hi = self._span()
+		band = self._band()
+		return band.left() + (value - lo) / (hi - lo) * band.width()
+
+	def valueAt(self, x: float) -> float:
+		lo, hi = self._span()
+		band = self._band()
+		return lo + (x - band.left()) / band.width() * (hi - lo)
+
+	def _nodeAt(self, pos) -> Optional[int]:
+		best, found = 11.0, None
+		cy = self._band().center().y()
+		for index, value, _ in self.owner.points():
+			if abs(pos.y() - cy) > 13:
+				continue
+			d = abs(pos.x() - self.xOf(value))
+			if d < best:
+				best, found = d, index
+		return found
+
+	# painting
+
+	def paintEvent(self, event):
+		p = QPainter(self)
+		p.setRenderHint(QPainter.RenderHint.Antialiasing)
+		pal = self.palette()
+		band = self._band()
+		points = self.owner.points()
+		colors = [(v, c) for _, v, c in points]
+		lo, hi = self._span()
+		path = QPainterPath()
+		path.addRoundedRect(band, 4, 4)
+		if colors:
+			grad = QLinearGradient(band.left(), 0, band.right(), 0)
+			grad.setColorAt(0, QColor(stops.sample(colors, lo)))
+			grad.setColorAt(1, QColor(stops.sample(colors, hi)))
+			for _, v, c in sorted(points, key=lambda t: t[1]):
+				if lo < v < hi:
+					grad.setColorAt((v - lo) / (hi - lo), QColor(c))
+			p.fillPath(path, QBrush(grad))
+		else:
+			p.fillPath(path, pal.alternateBase())
+			p.setPen(pal.color(QPalette.ColorRole.PlaceholderText))
+			p.drawText(band, Qt.AlignmentFlag.AlignCenter, 'No gradient')
+		edge = QColor(pal.color(QPalette.ColorRole.Mid))
+		p.setPen(QPen(edge, 1))
+		p.drawPath(path)
+		cy = band.center().y()
+		for index, value, color in points:
+			x = self.xOf(value)
+			if not self.open:
+				# a tick that reads on any colour and either theme: a dark line under a light one
+				p.setPen(QPen(QColor(0, 0, 0, 210), 3))
+				p.drawLine(QPointF(x, band.top() - 3), QPointF(x, band.bottom() + 3))
+				p.setPen(QPen(QColor(255, 255, 255, 240), 1.2))
+				p.drawLine(QPointF(x, band.top() - 3), QPointF(x, band.bottom() + 3))
+			else:
+				hot = index in (self.drag, self.selected)
+				r = self.NODE + (2 if hot else 0)
+				fade = self.removing and index == self.drag
+				p.setOpacity(0.4 if fade else 1.0)
+				p.setPen(QPen(QColor(0, 0, 0, 220), 4))
+				p.setBrush(Qt.BrushStyle.NoBrush)
+				p.drawEllipse(QPointF(x, cy), r, r)
+				p.setPen(QPen(QColor(255, 255, 255), 2))
+				p.setBrush(QBrush(QColor(color)))
+				p.drawEllipse(QPointF(x, cy), r, r)
+				p.setOpacity(1.0)
+		if self.open:
+			# the range ends, in the unit the panel shows
+			p.setPen(pal.color(QPalette.ColorRole.WindowText))
+			small = p.font()
+			small.setPointSizeF(max(small.pointSizeF() - 1, 7))
+			p.setFont(small)
+			lo_, hi_ = self._span()
+			sym = CONTEXT.symbol()
+			p.drawText(QRectF(self.PAD, band.bottom() + 6, 140, 16), Qt.AlignmentFlag.AlignLeft, f'{CONTEXT.toShown(lo_):g} {sym}'.strip())
+			p.drawText(QRectF(self.width() - self.PAD - 140, band.bottom() + 6, 140, 16), Qt.AlignmentFlag.AlignRight,
+			           f'{CONTEXT.toShown(hi_):g} {sym}'.strip())
+			if self.drag is not None:
+				self._label(p, self.drag)
+
+	def _label(self, p: QPainter, index: int):
+		"""The value and unit of the dragged node, over it."""
+		match = [(v, c) for i, v, c in self.owner.points() if i == index]
+		if not match:
+			return
+		text = 'release to remove' if self.removing else self.owner.labelFor(index)
+		pal = self.palette()
+		fm = p.fontMetrics()
+		w = fm.horizontalAdvance(text) + 14
+		x = min(max(self.xOf(match[0][0]) - w / 2, 1), self.width() - w - 1)
+		box = QRectF(x, 2, w, 18)
+		p.setPen(QPen(pal.color(QPalette.ColorRole.WindowText), 1))
+		p.setBrush(pal.base())
+		p.drawRoundedRect(box, 4, 4)
+		p.setPen(pal.color(QPalette.ColorRole.Text))
+		p.drawText(box, Qt.AlignmentFlag.AlignCenter, text)
+
+	# the mouse
+
+	def mousePressEvent(self, event):
+		if event.button() != Qt.MouseButton.LeftButton:
+			return
+		if not self.open:
+			self.owner.setOpen(True)
+			return
+		self.setFocus()
+		hit = self._nodeAt(event.position())
+		self._moved = False
+		if hit is None and self._band().adjusted(0, -4, 0, 4).contains(event.position()):
+			CONTEXT.beginDrag()
+			hit = self.owner.addAt(self.valueAt(event.position().x()))
+			self._moved = True
+		elif hit is not None:
+			CONTEXT.beginDrag()
+		if hit is None:
+			self.selected = None
+			self.update()
+			return
+		self.drag = self.selected = hit
+		self.removing = False
+		self.update()
+
+	def mouseMoveEvent(self, event):
+		if self.drag is None:
+			if self.open:
+				self.setCursor(Qt.CursorShape.OpenHandCursor if self._nodeAt(event.position()) is not None else Qt.CursorShape.ArrowCursor)
+			return
+		self._moved = True
+		off = abs(event.position().y() - self._band().center().y()) > 34
+		self.removing = off
+		if not off:
+			fine = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+			self.owner.moveStop(self.drag, self.valueAt(event.position().x()), fine)
+		self.update()
+
+	def mouseReleaseEvent(self, event):
+		if self.drag is None:
+			return
+		index, removing, moved = self.drag, self.removing, self._moved
+		self.drag, self.removing = None, False
+		if removing:
+			self.selected = None
+			self.owner.removeStop(index)
+		self.update()
+		CONTEXT.endDrag(moved or removing)
+
+	def mouseDoubleClickEvent(self, event):
+		if self.open and (hit := self._nodeAt(event.position())) is not None:
+			self.owner.recolor(hit)
+
+	def keyPressEvent(self, event):
+		if self.open and self.selected is not None and event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+			index, self.selected = self.selected, None
+			CONTEXT.beginDrag()
+			self.owner.removeStop(index)
+			CONTEXT.endDrag(True)
+			return
+		super().keyPressEvent(event)
+
+
+METER_GRADIENT = ('arc', 'gradient')
+
+
+class GradientEdit(Editor):
+	"""A colour pinned to each reading. Folded it is one band; open it is the band with a node per stop, and a row per stop."""
+
+	wide = True
+	#: Whether the stops are open. One answer for every gradient editor in the session.
+	opened = False
+	_all: 'weakref.WeakSet' = weakref.WeakSet()
+
+	def __init__(self, path: tuple = ()):
+		super().__init__()
+		self.path = tuple(path)
+		outer = QVBoxLayout(self)
+		outer.setContentsMargins(0, 0, 0, 0)
+		outer.setSpacing(3)
+		top = QHBoxLayout()
+		top.setSpacing(4)
+		self.arrow = QToolButton()
+		self.arrow.setAutoRaise(True)
+		self.arrow.clicked.connect(lambda: self.setOpen(not GradientEdit.opened))
+		top.addWidget(self.arrow)
+		self.bar = GradientBar(self)
+		top.addWidget(self.bar, 1)
+		self.meterToggle: Optional[QCheckBox] = None
+		if self.path == METER_GRADIENT:
+			self.meterToggle = QCheckBox('Edit gradient')
+			self.meterToggle.setToolTip('Drag the stops as nodes on the meter itself')
+			self.meterToggle.toggled.connect(lambda on: CONTEXT.setGradientMode(on))
+			top.addWidget(self.meterToggle)
+		outer.addLayout(top)
+		self.detail = QWidget()
+		inner = QVBoxLayout(self.detail)
+		inner.setContentsMargins(0, 0, 0, 0)
+		inner.setSpacing(3)
 		self.presets = QComboBox()
 		self.presets.addItem('Preset…', None)
+		from LevityDash.lib.ui.colors import Gradient
 		for name in Gradient.presets():
 			self.presets.addItem(name, name)
 		self.presets.activated.connect(self._preset)
-		self.layout().insertWidget(1, self.presets)
+		inner.addWidget(self.presets)
+		self.list = ListEditor(StopRow, self._fresh, '+ Add stop', 'No gradient. The arc keeps its colour.')
+		self.list.changed.connect(self._listChanged)
+		inner.addWidget(self.list)
+		outer.addWidget(self.detail)
+		GradientEdit._all.add(self)
+		self._apply()
 
-	@staticmethod
-	def _fresh(items):
-		lo, hi = CONTEXT.range()
-		top = max((i['value'] for i in items), default=lo - (hi - lo) / 4)
-		return {'value': min(hi, top + (hi - lo) / 4), 'color': '#2f81f7'}
+	# fold
+
+	def setOpen(self, on: bool):
+		GradientEdit.opened = on
+		for editor in list(GradientEdit._all):
+			try:
+				editor._apply()
+			except RuntimeError:  # the widget is gone; Python still holds its wrapper
+				GradientEdit._all.discard(editor)
+
+	def _apply(self):
+		on = GradientEdit.opened
+		self.arrow.setArrowType(Qt.ArrowType.DownArrow if on else Qt.ArrowType.RightArrow)
+		self.arrow.setToolTip('Hide the stops' if on else 'Show the stops')
+		self.detail.setVisible(on)
+		self.bar.setOpen(on)
+
+	# the stops
+
+	def stopList(self) -> List['stops.Stop']:
+		return [row.item.stop() for row in self.list.rows]
+
+	def points(self) -> List[tuple]:
+		"""(row, native value, colour) for each stop that sits on this data."""
+		out = []
+		for i, row in enumerate(self.list.rows):
+			value = row.item.native()
+			if value is not None:
+				out.append((i, value, row.item.color.value() or '#ffffff'))
+		return out
+
+	def labelFor(self, index: int) -> str:
+		"""The number and unit of stop `index`, as the stop shows them."""
+		item = self.list.rows[index].item
+		if item.unit:
+			return formatStop(item.number, item.unit)
+		return f'{CONTEXT.toShown(item.number):.4g} {CONTEXT.symbol()}'.strip()
+
+	def _unitForNew(self) -> Optional[str]:
+		"""A new stop is written in the unit of the highest stop, so a gradient in one unit stays in one."""
+		ordered = sorted(self.points(), key=lambda t: t[1])
+		return self.list.rows[ordered[-1][0]].item.unit if ordered else None
+
+	def _fresh(self, items):
+		lo, hi = sorted(CONTEXT.span())
+		natives = sorted(v for _, v, _ in self.points())
+		if not natives:
+			where = lo + (hi - lo) * 0.25
+		elif natives[-1] + (hi - lo) / 4 <= hi:
+			where = natives[-1] + (hi - lo) / 4
+		else:
+			edges = [lo, *natives, hi]
+			gap = max(zip(edges, edges[1:]), key=lambda g: g[1] - g[0])
+			where = (gap[0] + gap[1]) / 2
+		unit = self._unitForNew()
+		vc = CONTEXT.valueClass()
+		number = stops.fromNative(where, unit, vc) if unit else where
+		span = _spanOf(unit) if unit else hi - lo
+		number = round(snapTo(number, niceStep(span / 50)), 4)
+		color = stops.freshColor([i['color'] for i in items])
+		return {'value': number, 'unit': unit, 'color': color}
+
+	def addAt(self, native: float) -> int:
+		"""Add a stop at `native` with the colour the gradient has there. Returns its row."""
+		color = stops.sample([(v, c) for _, v, c in self.points()], native) if self.points() else stops.freshColor([])
+		unit = self._unitForNew()
+		row = self.list._make({'value': 0.0, 'unit': unit, 'color': color})
+		self.list._refreshHint()
+		row.item.setNative(native)
+		return len(self.list.rows) - 1
+
+	def moveStop(self, index: int, native: float, fine: bool = False):
+		if 0 <= index < len(self.list.rows):
+			self.list.rows[index].item.setNative(native, fine)
+
+	def removeStop(self, index: int):
+		if 0 <= index < len(self.list.rows):
+			self.list._remove(self.list.rows[index])
+
+	def recolor(self, index: int):
+		if not 0 <= index < len(self.list.rows):
+			return
+		item = self.list.rows[index].item
+		CONTEXT.beginDrag()
+		chosen = pickColor(self, item.color.value())
+		if chosen is not None:
+			with QSignalBlocker(item.color):
+				item.color.setValue(chosen)
+			item._emit()
+		CONTEXT.endDrag(chosen is not None)
 
 	def _preset(self, _):
 		name = self.presets.currentData()
@@ -1091,19 +1561,36 @@ class GradientEdit(ListEditor):
 			self.presets.setCurrentIndex(0)
 		self._emit()
 
+	def _listChanged(self, _=None):
+		self.bar.update()
+		self.changed.emit(self.value())
+
+	# the editor protocol
+
 	def setValue(self, value):
-		stops = [{'value': k, 'color': v} for k, v in sorted((value or {}).items(), key=lambda kv: float(kv[0]))]
-		self.setItems(stops)
+		wanted = [{'value': s.number, 'unit': s.unit, 'color': s.color} for s in stops.decode(value)]
+		have = self.list.items()
+		same = len(wanted) == len(have) and all(
+			abs(a['value'] - b['value']) < 1e-9 and a['unit'] == b['unit'] and a['color'].lower() == b['color'].lower()
+			for a, b in zip(wanted, have))
+		if not same:
+			self.list.setItems(wanted)
+		self.bar.update()
 
 	def value(self):
-		stops = self.items()
-		return {s['value']: s['color'] for s in sorted(stops, key=lambda s: s['value'])} or None
+		vc = CONTEXT.valueClass()
+		ordered = sorted(self.stopList(), key=lambda s: (v if (v := stops.native(s, vc)) is not None else float('inf')))
+		return stops.encode(ordered)
 
-	def setItems(self, values):
-		current = self.items()
-		if [(float(a['value']), a['color'].lower()) for a in values] == [(float(a['value']), a['color'].lower()) for a in current]:
-			return
-		super().setItems(values)
+	def onContext(self):
+		self.list.onContext()
+		if self.meterToggle is not None:
+			with QSignalBlocker(self.meterToggle):
+				self.meterToggle.setChecked(CONTEXT.gradientMode())
+		self.bar.update()
+
+	def isEditing(self) -> bool:
+		return self.bar.drag is not None or self.list.isEditing()
 
 
 class WordItem(_Form):
@@ -1668,7 +2155,7 @@ def make(field: 'schema.Field') -> Optional[Editor]:
 	if kind == 'format':
 		return FormatEdit()
 	if kind == 'gradient':
-		return GradientEdit()
+		return GradientEdit(field.path)
 	if kind == 'textmap':
 		return TextMapEdit()
 	if kind == 'zones':
