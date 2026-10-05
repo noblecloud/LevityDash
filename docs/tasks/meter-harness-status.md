@@ -9,6 +9,31 @@ Captures are local and gitignored: `.render-diff/`.
 
 ## Done
 
+### The refactor, step by step
+
+Each step is its own commit on `refactor/meter`, and each one is diffed against
+the baseline before it lands. "Clean" below means `render_diff compare` against
+`.render-diff/baseline/` reports no pixel over the anti-aliasing level, except
+where noted.
+
+- `f21b6a2` **helpers** — `filter_factors`, `_isWholeSteps`, `formatDuration`,
+  `shortestDelta`, `CLOCK_HANDS`, `clockTurn`, `parseClockTime`,
+  `decode_measurement` move to `meter/scale.py`; `Gauge.py` imports them back, so
+  every existing import site is unchanged. Bodies verified byte-identical to
+  HEAD's. 23/23 clean.
+- `5413d67` **tracks** — `meter/track.py`: `Track`, `ArcTrack`, `LineTrack`.
+  `GaugeArc.draw` builds its path with `ArcTrack.subPath(0, 1)`;
+  `tests/ui/test_meter_track.py` pins the new path against the old hand-built one
+  element for element over six angle ranges. 22/23 clean, the one difference
+  being the EV caption region named below.
+- Next: `Scale` (value ↔ fraction) and the conversions that used degrees —
+  `Gauge.value_to_angle`, `value_to_angle_degrees`, `angle_degrees_to_value`,
+  `GaugeMarker._markerAngle`, `GaugeZones._angle`, `GaugeFill._angles`,
+  `Needle.refresh`. Then ticks, then zones and fills, then `Meter` itself, then
+  `Gauge(Meter)`, then `Bar`.
+
+### The harness itself
+
 - `src/LevityDash/devtools/render_diff.py` — `capture | compare | selfcheck`
   over the 22 presets + the showcase, one PNG per target per capture plus a
   manifest of inputs, hashes and per-file ink; `compare` writes a diff image per
