@@ -21,28 +21,43 @@ Captures are local and gitignored: `.render-diff/`.
   own seed with Mock off.
 - The showcase pins its clock hands with `at: '10:08:36'` (both copies), as
   `clock.levity` already did.
-- `selfcheck` — two captures of unchanged code — has reached **23/23 files,
-  0 differing pixels**. The 22 presets are bit-stable across every capture taken
-  so far.
+- `compare` prints each differing cluster's bounding box and writes a diff image
+  per mismatch, so reviewing a diff is a glance rather than a hunt.
+- Three consecutive captures of unchanged code (`--jobs 6`) are **bit-identical:
+  23/23 files, 0 differing pixels**. The pre-refactor baseline is
+  `.render-diff/baseline/`; `baseline2` and `baseline3` are the same render
+  again, kept so the claim can be re-checked. Captures are local (gitignored).
 
 ## Open
 
-- **The caption flicker is accepted, not chased** (Neal, 2026-10-05: "sounds like an
-  extreme gate, I wouldn't sweat that too much"). The showcase's EV caption
-  (`sub-label: {value: ev.charge.range}`) renders `313` or `313 km`, roughly
-  50/50: a bound value that arrives as a bare float prints without its unit, and
-  the caption never re-formats. Everything else is bit-stable.
-  Ruled out, each by measurement: settle (14 s, 30 s, 60 s), publish delay
-  (50 ms … 6 s), injecting the values after the dashboard has settled,
-  publishing twice, `PYTHONHASHSEED`. Minimal repros are *stable* — one gauge
-  with the same bound caption (5/5), and a two-consumer fragment (gauge caption
-  + `realtime.text` on one key, 6/6) — so the flip needs the full showcase.
-- So phase 2's rule is a *guide*, not a gate: `compare` still reports per-file
-  pixel counts and writes diff images, and a diff gets looked at rather than
-  treated as an automatic failure. Only one region is known-flaky, and it is
-  named above.
-- Then: re-run `selfcheck`, capture `.render-diff/baseline/`, and start the
-  refactor proper, diffing after each commit.
+- **The caption flicker does not reproduce under the harness's own conditions.**
+  Measured 2026-10-05: three consecutive captures of unchanged code
+  (`baseline`, `baseline2`, `baseline3`, `--jobs 6`) are bit-identical — 0
+  differing pixels in all 23 files — and the showcase's EV caption lands in the
+  same state every time. The `313` / `313 km` flicker appeared only in scratch
+  loops that staged **one** seed and reused it across renders; the harness stages
+  a fresh seed per capture, which is the shape it is actually used in. Keep it
+  that way.
+- Ruled out along the way, each by measurement: settle (14 s, 30 s, 60 s),
+  publish delay (50 ms … 6 s), injecting the values after the dashboard has
+  settled, `PYTHONHASHSEED`, and publishing twice. Minimal repros were stable
+  too: a one-gauge fragment with the same bound caption (5/5), and a
+  two-consumer fragment — gauge caption + `realtime.text` on one key (6/6) —
+  so the flip needs the full showcase as well as a reused seed.
+- **Where a diff is expected, if one appears**: the EV caption
+  (`sub-label: {value: ev.charge.range}`, showcase, x172-238 y767-782) and thin
+  needle marks in `needle-designs` (x11-24 y436-438). Both are ~450 px clumps.
+  `compare` prints each cluster's bounding box, so they are recognisable at a
+  glance, and every diff it writes gets looked at.
+- Publishing twice does change those two marks versus a single publish — a
+  second update re-settles an element that animates on change. It is kept: three
+  captures are identical with it, and a live dashboard sees values arrive again.
+- Neal's ruling on the rule itself (2026-10-05: "sounds like an extreme gate, I
+  wouldn't sweat that too much", plus "a lot of automatic positioning … hard to
+  pin down deterministically"): pixel-exactness is a *guide*. `compare` reports
+  per-file counts and regions and writes diff images; a diff is reviewed, not
+  treated as an automatic failure.
+- Then: start the refactor proper, diffing after each commit.
 
 ## Reproduce
 
