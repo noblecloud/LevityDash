@@ -2681,6 +2681,8 @@ class GaugeValueLabel(GaugeLabel):
 				needle = gauge.needle
 				hub_bottom = gauge.center.y() + needle.offset_px + needle.width_px * 0.6 + gauge.radius * 0.03
 
+			gauge_bounds = gauge_path.boundingRect()
+
 			def collides_at(trial: float) -> bool:
 				t = QTransform.fromTranslate(origin.x(), origin.y())
 				t.scale(trial, trial)
@@ -2697,15 +2699,46 @@ class GaugeValueLabel(GaugeLabel):
 				# Clear of the dial's parts by a gap, not merely not touching:
 				# without one, a bottom value grew until its edge stood against
 				# the end tick labels beside it.
-				if gap:
-					candidate = candidate.united(outline_path(candidate, gap * 2))
-				return candidate.intersects(gauge_path)
+				# The padded shape is the glyphs plus a stroke around them.
+				# Testing the two against the dial one after the other answers
+				# the same as testing their union, which is slow to build. The
+				# dial path has thousands of segments, and a boolean test
+				# against all of them costs milliseconds per step. Cut it to
+				# the box the label can touch first (a rectangle clip is
+				# cheap); only the few segments inside are left to test.
+				reach = candidate.boundingRect().adjusted(-gap, -gap, gap, gap) if gap else candidate.boundingRect()
+				if not reach.intersects(gauge_bounds):
+					return False
+				clip = QPainterPath()
+				clip.addRect(reach.adjusted(-1, -1, 1, 1))
+				near = gauge_path.intersected(clip)
+				if near.isEmpty():
+					return False
+				if gap and outline_path(candidate, gap * 2).intersects(near):
+					return True
+				return candidate.intersects(near)
 
 			# The floor is relative: a bare 0.2 is in glyph-path units, so it
 			# meant something different for every font size and stopped the
 			# value long before it cleared the dial.
+			# Steps of 5% down from the start scale. The answer is the first
+			# step that is clear, or the step that reaches the floor. Collision
+			# only gets rarer as the label shrinks, so bisect over the step
+			# count instead of testing every step in turn.
 			floor = scale * 0.2
-			while scale > floor and collides_at(scale):
+			start = scale
+			steps = 0
+			while start * 0.95 ** steps > floor:
+				steps += 1
+			lo, hi = 0, steps  # the answer is in lo..hi; `hi` is accepted untested
+			while lo < hi:
+				mid = (lo + hi) // 2
+				if collides_at(start * 0.95 ** mid):
+					lo = mid + 1
+				else:
+					hi = mid
+			scale = start
+			for _ in range(lo):
 				scale *= 0.95
 
 			# `size` caps the glyph height at a share of the dial's diameter,
