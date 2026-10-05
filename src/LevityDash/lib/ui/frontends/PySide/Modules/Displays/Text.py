@@ -526,7 +526,7 @@ class Text(QGraphicsPathItem):
 		scale *= arcFit(fm.horizontalAdvance(text), fm.ascent() + fm.descent(), scale, place.radius)
 		view = getattr(self.scene(), 'viewScale', None)
 		epsilon = 0.25 / ((getattr(view, 'x', 1) or 1) if view is not None else 1)
-		path = warp_path(text, font, scale, place.radius, place.side, spec.mode, epsilon)
+		path = warp_path(text, font, scale, place.radius, place.side, spec.mode, epsilon, spec.amount)
 		transform = QTransform()
 		transform.translate(place.point.x(), place.point.y())
 		transform.rotate(place.rotation)

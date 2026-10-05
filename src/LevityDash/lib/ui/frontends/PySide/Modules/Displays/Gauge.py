@@ -3137,7 +3137,7 @@ class GaugeCaption(GaugePathItem):
 		scale = arcFit(fm.horizontalAdvance(self._text), fm.ascent() + fm.descent(), 1.0, place.radius)
 		view = getattr(self.scene(), 'viewScale', None)
 		epsilon = 0.25 / ((getattr(view, 'x', 1) or 1) if view is not None else 1)
-		path = warp_path(self._text, font, scale, place.radius, place.side, self._warp.mode, epsilon)
+		path = warp_path(self._text, font, scale, place.radius, place.side, self._warp.mode, epsilon, self._warp.amount)
 		self.prepareGeometryChange()
 		self.setPath(path)
 		self.setTransform(QTransform().scale(scale, scale))
