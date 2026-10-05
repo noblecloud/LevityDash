@@ -13,9 +13,8 @@
 # Hex colours are quoted; unquoted, '#' starts a YAML comment.
 # Render: render_dashboard.py OUT.png --levity THIS --scenario stormy-day --size 2560x1440 --settle 14
 #
-# The two clock cards pin every hand with `at: '10:08:36'`, as clock.levity does.
-# A `time:` hand with no `at:` follows the wall clock, so two renders of this file
-# would never agree - and a render is what the showcase is for.
+# The two clock cards follow the app clock (`shared.now()`), so `--freeze-time`
+# pins every hand for a render, and a live board still tells the real time.
 - type: group
   name: main
   items:
@@ -1471,9 +1470,9 @@
             micro: {enabled: false}
             needle: {visible: false}
             markers:
-            - {time: hour, at: '10:08:36', type: line, length: 46%, width: 3.4%, tail: 8%, color: '#f2f2f2'}
-            - {time: minute, at: '10:08:36', type: line, length: 74%, width: 2.2%, tail: 8%, color: '#f2f2f2'}
-            - {time: second, at: '10:08:36', type: line, length: 78%, width: 0.8%, tail: 14%, tail-dot: 3%, hub: 4%, color: '#ff6b4a'}
+            - {time: hour, type: line, length: 46%, width: 3.4%, tail: 8%, color: '#f2f2f2'}
+            - {time: minute, type: line, length: 74%, width: 2.2%, tail: 8%, color: '#f2f2f2'}
+            - {time: second, type: line, length: 78%, width: 0.8%, tail: 14%, tail-dot: 3%, hub: 4%, color: '#ff6b4a'}
             value-label: {visible: false}
             unit-label: {visible: false}
     - type: group
@@ -1513,9 +1512,9 @@
             micro: {interval: 0.2, length: 40%, width: 1px, color: '#6b6b73'}
             needle: {visible: false}
             markers:
-            - {time: hour, at: '10:08:36', type: tapered, length: 46%, width: 6%, tail: 9%, color: '#f2f2f2'}
-            - {time: minute, at: '10:08:36', type: tapered, length: 72%, width: 4.4%, tail: 9%, hub: 7%, hub-hole: 40%, hub-color: '#000000', color: '#f2f2f2'}
-            - {time: second, at: '10:08:36', type: line, length: 76%, width: 0.9%, tail: 16%, tail-dot: 3.4%, color: '#ff6b4a'}
+            - {time: hour, type: tapered, length: 46%, width: 6%, tail: 9%, color: '#f2f2f2'}
+            - {time: minute, type: tapered, length: 72%, width: 4.4%, tail: 9%, hub: 7%, hub-hole: 40%, hub-color: '#000000', color: '#f2f2f2'}
+            - {time: second, type: line, length: 76%, width: 0.9%, tail: 16%, tail-dot: 3.4%, color: '#ff6b4a'}
             value-label: {visible: false}
             unit-label: {visible: false}
     - type: group

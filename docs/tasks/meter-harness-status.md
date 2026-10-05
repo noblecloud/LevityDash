@@ -68,8 +68,14 @@ where noted.
 - The scenario is generated: `stormy-day` + `gauge-cards` + every key of Mock's
   own table at its base value, read out of `Mock.py`. Each capture stages its
   own seed with Mock off.
-- The showcase pins its clock hands with `at: '10:08:36'` (both copies), as
-  `clock.levity` already did.
+- The showcase's two clock cards follow the app clock (`shared.now()`), so
+  `--freeze-time` pins their hands for a capture, and a live board still tells
+  the time. `49c1623` fixed the cause - `Gauge._tickClock` read `datetime.now()`
+  directly, so a frozen render drew a *live* hand, and the `at:` pins stood in
+  for the freeze instead. The pins are gone (`clock.levity`'s own are its
+  design, untouched). The pre-refactor baseline was **re-taken** after this,
+  because the hands legitimately moved from the pinned `10:08:36` to the frozen
+  time; the old one is kept as `.render-diff/baseline-pinned`.
 - `compare` prints each differing cluster's bounding box and writes a diff image
   per mismatch, so reviewing a diff is a glance rather than a hunt.
 - **One mask, named and reported** (Opus, 2026-10-05: phase 2's bar is "clean
