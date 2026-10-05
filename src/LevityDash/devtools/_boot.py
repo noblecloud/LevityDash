@@ -19,11 +19,114 @@ place:
 """
 import os
 import shutil
+import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Tuple
 
 DEFAULT_SIZE = (1800, 1090)
+
+#: The instant `freeze_time()` pins the app clock to when given no argument: the
+#: same local instant as the test suite's `FROZEN_TIME` fixture (tests/conftest.py),
+#: so a design render and a test agree about "now".
+FROZEN_TIME = datetime(2025, 6, 18, 14, 30, 0, tzinfo=timezone.utc).astimezone()
+
+
+def freeze_time(when: Optional[datetime] = None) -> dict:
+	"""Pin the clock so a one-shot render is repeatable. Returns what was pinned.
+
+	Ports `tests/conftest.py`'s `frozen_time` fixture to the renderers, plus the
+	readers a test never starts: the Fixture and Mock plugins (both stamp a
+	`time` key from `datetime.now()`), and the Graph display's own `_time`
+	partial. `now` on the `shared` module is the app-wide clock the widgets use.
+
+	Call *after* the LevityDash import and *before* `boot()` builds any widget.
+
+	⚠ Deliberately does NOT replace `sys.modules['datetime']`. A function-local
+	`from datetime import datetime` (Gauge.py's `GaugeMarker._tickClock`) can
+	therefore not be pinned - and replacing the module globally would make every
+	`isinstance(x, datetime)` in the app answer False for real datetimes. A
+	clock marker with no `at:` is the one construct that still moves with the
+	wall clock; `render_diff.py` refuses to baseline such a file (see
+	`unpinned_clock_markers`).
+	"""
+	import datetime as _dt
+	from importlib import import_module
+
+	when = when or FROZEN_TIME
+	if when.tzinfo is None:
+		when = when.astimezone()
+
+	class _FrozenDatetime(_dt.datetime):
+		@classmethod
+		def now(cls, tz=None):
+			return when.astimezone(tz) if tz else when
+
+		@classmethod
+		def today(cls):
+			return when
+
+	pinned = {}
+
+	def pin(module_name: str, attr: str, value) -> None:
+		try:
+			module = import_module(module_name)
+		except ImportError:  # a module this checkout lacks is not a failure
+			return
+		if not hasattr(module, attr):
+			return
+		setattr(module, attr, value)
+		pinned[f'{module_name.split(".")[-1]}.{attr}'] = True
+
+	# The app-wide clock.
+	shared = import_module('LevityDash.lib.utils.shared')
+	original_now = shared.now
+	pin('LevityDash.lib.utils.shared', 'now', lambda: when)
+
+	# `from ...shared import now` COPIES the function into a module's namespace at
+	# import time, so patching `shared.now` alone leaves every one of those
+	# reading the real clock. Derive the list by identity rather than naming
+	# modules: whatever holds the original function gets the frozen one.
+	for name, module in list(sys.modules.items()):
+		if name.startswith('LevityDash') and getattr(module, 'now', None) is original_now:
+			module.now = lambda: when
+			pinned[f'{name.split(".")[-1]}.now'] = True
+
+	try:
+		shared.Now.now = classmethod(lambda cls, **kw: when)
+		pinned['Now.now'] = True
+	except Exception:  # noqa: BLE001
+		pass
+
+	# Modules that bound `datetime` (or a `strftime`) at import time, before this ran.
+	for module_name in (
+		'LevityDash.lib.ui.frontends.PySide.Modules.Displays.DateTime',
+		'LevityDash.lib.ui.frontends.PySide.Modules.Displays.Moon',
+		'LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph',
+		'LevityDash.lib.plugins.builtin.Fixture',
+		'LevityDash.lib.plugins.builtin.Mock',
+	):
+		pin(module_name, 'datetime', _FrozenDatetime)
+
+	# DateTime renders via a module-level `strftime(fmt)` that reads the system clock.
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays import DateTime as _DateTime
+
+	if hasattr(_DateTime, 'strftime'):
+		_DateTime.strftime = lambda fmt: when.strftime(fmt)
+		pinned['DateTime.strftime'] = True
+
+	# Graph binds `partial(datetime.now, tz=LOCAL_TIMEZONE)` on the class that
+	# draws the current-time line; it is a plain class attribute (a staticmethod
+	# since 3.14), so replacing it is the same shape.
+	_Graph = import_module('LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph')
+	indicator = getattr(_Graph, 'CurrentTimeIndicator', None)
+	if indicator is not None and hasattr(indicator, '_time'):
+		indicator._time = staticmethod(lambda: when)
+		pinned['CurrentTimeIndicator._time'] = True
+
+	pinned['when'] = when.isoformat()
+	return pinned
 
 
 def boot(
@@ -33,6 +136,7 @@ def boot(
 	settle: float = 6.0,
 	plugins: bool = False,
 	windowed: bool = False,
+	freeze: Optional[datetime] = None,
 ):
 	"""Bring up a dashboard and return ``(app, LevityDashboard)``.
 
@@ -50,7 +154,12 @@ def boot(
 	``QT_QPA_PLATFORM=offscreen`` — for `design_mode.py`, which needs an actual
 	interactive Qt event loop (`app.exec()`) rather than a scene to hand to
 	`render_image`. Every other caller renders offscreen and never shows a
-	window, so this defaults to `False` and changes nothing for them.
+	window, so this defaults to ``False`` and changes nothing for them.
+
+	``freeze`` (a datetime, or ``FROZEN_TIME``) pins the app clock before the
+	dashboard is built, so two renders of the same file agree; see
+	`freeze_time`. Left ``None`` the clock is live, which is what an
+	interactive design session wants.
 	"""
 	if not windowed:
 		os.environ['QT_QPA_PLATFORM'] = 'offscreen'
@@ -67,7 +176,15 @@ def boot(
 
 	from LevityDash import LevityDashboard
 
+	# NOT before init(): `LevityDashboard.init()` is what imports
+	# `LevityDash.lib`, whose own `__init__` sets `config` on the singleton. Any
+	# earlier `LevityDash.lib.*` import runs that module against an already
+	# immutable dashboard and dies with "LevityDashboard is immutable".
 	LevityDashboard.init()
+
+	if freeze is not None:
+		pinned = freeze_time(freeze)
+		print(f"frozen clock at {pinned['when']} ({len(pinned) - 1} sources)")
 
 	if levity:
 		# NOT `seed_path / 'saves' / 'dashboards' / 'default.levity'` - that
@@ -95,9 +212,24 @@ def boot(
 	app.init_app()
 	QTimer.singleShot(10, LevityDashboard.load_dashboard)
 	if fixture:
-		QTimer.singleShot(50, lambda: startFixture(LevityDashboard))
+		# When the scenario's values arrive. Displays format a value once, on
+		# arrival, and never re-format it - so a value that lands before a display
+		# has resolved its configured unit (or its unit metadata) keeps whatever
+		# it printed first. Deterministic renders therefore want the values to
+		# arrive *last*: `LEVITYDASH_FIXTURE_DELAY_MS=end` injects them after the
+		# dashboard has settled, which is what render_diff.py uses. A number is
+		# milliseconds from here, and is what an interactive look wants.
+		setting = (os.environ.get('LEVITYDASH_FIXTURE_DELAY_MS') or '50').strip().lower()
+		if setting == 'end':
+			fixture_pending = True
+		else:
+			fixture_pending = False
+			QTimer.singleShot(int(setting or 50), lambda: startFixture(LevityDashboard))
 	elif plugins:
+		fixture_pending = False
 		QTimer.singleShot(50, LevityDashboard.plugins.start)
+	else:
+		fixture_pending = False
 
 	# Resize AFTER the dashboard has loaded. load_dashboard restores a saved
 	# window geometry, so an earlier resize gets clobbered and the render comes
@@ -109,6 +241,18 @@ def boot(
 	if windowed:
 		app.main_window.show()
 	pump(app, max(settle - 1.5, 1.5))
+	if fixture_pending:
+		# Every display now exists and has been laid out; publishing here means
+		# no display can format a value before it knows its own units. The second
+		# publish is what a display sees in the wild - the same value arriving
+		# again - and gives any consumer that formatted the first callback a
+		# settled second one.
+		startFixture(LevityDashboard)
+		pump(app, 1.0)
+		plugin = LevityDashboard.plugins.get('Fixture', None)
+		if plugin is not None:
+			plugin.publish()
+			pump(app, 0.5)
 	return app, LevityDashboard
 
 

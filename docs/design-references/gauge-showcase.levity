@@ -12,6 +12,9 @@
 # and cards are shares of the board, so the board scales; the shares were worked out in pixels at 2560x1440.
 # Hex colours are quoted; unquoted, '#' starts a YAML comment.
 # Render: render_dashboard.py OUT.png --levity THIS --scenario stormy-day --size 2560x1440 --settle 14
+#
+# The two clock cards follow the app clock (`shared.now()`), so `--freeze-time`
+# pins every hand for a render, and a live board still tells the real time.
 - type: group
   name: main
   items:
