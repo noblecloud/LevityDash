@@ -365,3 +365,25 @@ neither joins this branch (docs/tasks/studio-slider-smoke.md has the numbers):
 - 17 of the 30 showcase cells never load: 16 decode a range or interval against a
   `valueClass` that is still `None`, and Rain rate raises `NotImplementedError:
   Multi-Unit values are not supported yet`.
+
+## M3 step 1, and the one region that is not the gauge (2026-10-05)
+
+`meter/gauge.py` now holds `GaugeArc` and `Gauge`, with the hand-over at its foot;
+`Gauge.py` is a 16-line shim that re-exports the namespace it had, so the star
+import in `Displays/__init__.py` and every `from ...Displays.Gauge import ...`
+keep working; `gauge_class()` returns this module's own global once the hand-over
+has run, with the import as a fallback — one mechanism instead of two. 614 tests
+pass.
+
+Verified as a move rather than by eye: between the pre-step tree and this one, the
+gauge's rect, dial rect, side rect, every label's bounding rect and scene position,
+the full 34-panel list with its keys and `valueClass`es, the freeze's pinned names,
+and the staged scenario and seed are all identical. The render differs in exactly
+one region: the two `time.timer.seconds` readouts, which show 3088 against 5314 —
+the wall-clock gap between the two captures. Every other target in the set is
+untouched, and each tree is internally deterministic (two captures in one tree,
+minutes apart, are bit-identical). The panels are time-fed values, not the gauge,
+and the residual question — why the two runs sampled different instants when the
+freeze's pins are identical in both — is open. A target that contains them will
+need a named mask, the way `ev-caption` has one, or the render set needs a
+timer-free dashboard.
