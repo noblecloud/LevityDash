@@ -2,8 +2,18 @@
 
 **Status: phase 1 of [`meter-and-bar.md`](meter-and-bar.md) — read-only. No source file was changed.**
 
-- Branch: `refactor/meter`, cut from `feat/value-sources` at `099ce84`.
+- Branch: `refactor/meter`, cut from `feat/value-sources` at `099ce84`, then merged up to
+  `fd873b5` (the studio-sliders merge) before this document was committed; the revision this
+  survey describes is therefore `fd873b5`.
 - Worktree: `.claude/worktrees/blackfish-meter` (the main checkout was not touched).
+- Phase-2 gate status at the time of writing: `feat/warped-text` merged (`f706e33`) and
+  `fix/studio-sliders-contrast` merged (`fd873b5`), so phase 2 is unblocked.
+  `feat/studio-snapping` does not exist yet, so phase 4 is still gated.
+- Test baseline at `fd873b5`: `env -u PYTHONPATH .venv/bin/python -m pytest tests -q
+  -p no:cacheprovider` → **498 passed, 1 skipped** in 39s. The brief's 492 predates the
+  `feat/warped-text` merge; that merge added `tests/ui/test_warp_spec.py`, which collects
+  exactly 6 tests, so 492 + 6 = 498 is fully accounted for. Phase 2 should treat 498 + 1 as
+  its gate, not 492 + 1.
 - Scope of this document: `src/LevityDash/lib/ui/frontends/PySide/Modules/Displays/Gauge.py`,
   6,299 lines.
 
@@ -421,10 +431,12 @@ Nothing else in the file needs an angle or a radius.
 10. **Studio handles assume an arc.**
     `devtools/_studio_handles.py:60-100` hard-codes "the pivot is (0, 0), 0 degrees is up and
     angles run clockwise", and `toScene`/`polar`/`angleValue` convert a scene point to
-    `(angle, radius)`. Phase 4 is correctly gated on `feat/studio-snapping`; until then,
-    bars will be editable through the state-editor controls only (`gauge_studio.py` builds
-    controls from `StateProperty` introspection, so a new display class gets controls with no
-    Studio change, as the brief says).
+    `(angle, radius)`. Phase 4 is correctly gated on `feat/studio-snapping`; until then, bars
+    will be editable through the generated controls only — `devtools/_studio_schema.describe`
+    (docstring at `_studio_schema.py:1-30`) walks `type(owner).statefulItems` on the gauge and
+    on every part it holds, and makes one control per settable property, so a new display
+    class needs no Studio edit to get controls. (`gauge_studio.py` itself only assembles the
+    window; the introspection lives in `_studio_schema.py`.)
 
 ## Dead and shadowed code found while surveying
 
