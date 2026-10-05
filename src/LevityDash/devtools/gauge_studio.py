@@ -43,16 +43,17 @@ import yaml
 from PySide6.QtCore import QEvent, QObject, QRectF, QSignalBlocker, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QKeySequence, QPainter, QPalette, QPen, QPixmap, QShortcut, QTransform
 from PySide6.QtWidgets import (
-	QApplication, QCheckBox, QPinchGesture, QComboBox, QDoubleSpinBox, QFileDialog, QFrame, QGraphicsView, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMenu,
+	QApplication, QCheckBox, QInputDialog, QPinchGesture, QComboBox, QDoubleSpinBox, QFileDialog, QFrame, QGraphicsView, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMenu,
 	QPushButton, QScrollArea, QSlider, QSpinBox, QSplitter, QToolButton, QVBoxLayout, QWidget,
 )
 
 from LevityDash.devtools import _studio_schema as schema
+from LevityDash.devtools import _studio_state as state
 from LevityDash.devtools import _studio_stage as _stage
 from LevityDash.devtools._studio_stage import DATA_PRESETS, DataPreset, StudioGauge, StudioScene, presetForKey
 from LevityDash.devtools import _studio_editors as editors
 from LevityDash.devtools._studio_handles import HandleLayer
-from LevityDash.devtools._studio_widgets import FieldRow, Section, build
+from LevityDash.devtools._studio_widgets import FieldRow, Section, build, fieldsOf
 
 StatefulDumper = schema.StudioDumper
 
@@ -397,6 +398,15 @@ class Studio(QWidget):
 		self.key: Optional[str] = None
 		self.title = 'Gauge'
 		self.rows: Dict[tuple, FieldRow] = {}
+		self.dupes: Dict[tuple, List[FieldRow]] = {}  # more views of a property: the top sections and the pinned ones
+		self.fields: Dict[tuple, schema.Field] = {}
+		self.quickBox: Optional[QWidget] = None
+		self.quickSections: List[Section] = []
+		self.allSection: Optional[Section] = None
+		self._pinRows: List[FieldRow] = []
+		self.settings = state.settings()
+		raw = str(self.settings.value('pins', '') or '')
+		self.pins: List[tuple] = [tuple(part.split('.')) for part in raw.split(',') if part]
 		self._group: Optional[schema.Group] = None
 		self.pending: Dict[tuple, Any] = {}
 		self.dragActive = False
@@ -457,7 +467,7 @@ class Studio(QWidget):
 		split.addWidget(self.preview)
 
 		side = QWidget()
-		side.setMinimumWidth(460)
+		side.setMinimumWidth(520)
 		side.setMaximumWidth(720)
 		box = QVBoxLayout(side)
 		box.setContentsMargins(8, 8, 8, 8)
@@ -537,6 +547,11 @@ class Studio(QWidget):
 
 		self.valueSection = self._buildValueSection()
 		self.stageSection = self._buildStageSection()
+		self.pinSection = Section('Pinned', expanded=True)
+		self.pinSection.setVisible(False)
+		self.holderLayout.insertWidget(0, self.pinSection)
+		for section, key in ((self.pinSection, 'Pinned'), (self.valueSection, 'Value'), (self.stageSection, 'Stage')):
+			self._track(section, f'top.{key}')
 		self.tree: Optional[Section] = None
 
 	def _templateMenu(self) -> QMenu:
@@ -739,7 +754,7 @@ class Studio(QWidget):
 		self.valueUnit.sync()
 		self.valueSpin.setSuffix('' if ctx.units else (f' {ctx.symbol()}' if ctx.symbol() else ''))
 		self._syncValueControls(keepValue=True)
-		for row in self.rows.values():
+		for _, row in self._pairs():
 			row.onContext()
 
 	def _unitChanged(self):
@@ -765,7 +780,7 @@ class Studio(QWidget):
 	def _applyRules(self):
 		"""Hide the needle options the current needle type does not use."""
 		kind = schema.read(self.studio.gauge, ('needle', 'type'))
-		for row in self.rows.values():
+		for _, row in self._pairs():
 			if row.field.types is not None:
 				row.ruledOut = kind not in row.field.types
 				row.setVisible(not row.ruledOut)
@@ -777,7 +792,7 @@ class Studio(QWidget):
 			# The same controls as before (a data or stage change keeps them): show the new
 			# values in the widgets that exist. Building the tree again costs about 100 ms.
 			self._applyContext()
-			for path, row in self.rows.items():
+			for path, row in self._pairs():
 				value = self._read(path)
 				row.baseline = schema.read(gauge, path)
 				row.setSaved(value)
@@ -787,23 +802,146 @@ class Studio(QWidget):
 			self._filter(self.search.text())
 			return
 		self._group = group
+		self.fields = fieldsOf(group)
 		open_paths = set()
 		if self.tree is not None:
 			open_paths = {s.path for s in self.tree.findChildren(Section) if s.header.isChecked()} | (
 				{self.tree.path} if self.tree.header.isChecked() else set())
-			self.tree.setParent(None)
-			self.tree.deleteLater()
+		if self.quickBox is not None:
+			self.quickBox.setParent(None)
+			self.quickBox.deleteLater()
 		self.rows = {}
+		self.dupes = {}
+		self._pinRows = []
 		self.tree = build(group, self._read, self.rows, expanded=not open_paths or () in open_paths)
 		for s in self.tree.findChildren(Section):
 			if s.path in open_paths:
 				s.setExpanded(True)
-		for row in self.rows.values():
+		for s in [self.tree, *self.tree.findChildren(Section)]:
+			self._track(s, 'tree.' + '.'.join(s.path))
+		for path, row in self.rows.items():
 			row.edited.connect(self._edited)
-		self.holderLayout.insertWidget(self.holderLayout.count() - 1, self.tree)
+			row.pinToggled.connect(self._pinToggled)
+			row.setPinned(path in self.pins)
+		self.quickBox = QWidget()
+		lay = QVBoxLayout(self.quickBox)
+		lay.setContentsMargins(0, 0, 0, 0)
+		lay.setSpacing(2)
+		self.quickSections = [self._quickSection(title) for title in state.QUICK]
+		for section in self.quickSections:
+			lay.addWidget(section)
+		self.allSection = Section('All properties', expanded=False)
+		self.allSection.addRow(self.tree)
+		self._track(self.allSection, 'all')
+		lay.addWidget(self.allSection)
+		self.holderLayout.insertWidget(self.holderLayout.count() - 1, self.quickBox)
+		self._rebuildPins()
 		self._applyContext()
 		self._applyRules()
 		self._filter(self.search.text())
+
+	def _pairs(self):
+		"""Every row on screen with its path: the full tree's and the extra views of a property."""
+		for path, row in self.rows.items():
+			yield path, row
+			for view in self.dupes.get(path, ()):
+				yield path, view
+
+	def _track(self, section: Section, key: str):
+		"""Keep the section's fold state between launches."""
+		section.key = key
+		name = f'sections/{key}'
+		if self.settings.contains(name):
+			section.setExpanded(self.settings.value(name, type=bool))
+		section.userToggled.connect(lambda on, n=name: self.settings.setValue(n, on))
+
+	def _view(self, path: tuple) -> Optional[FieldRow]:
+		"""A second row for the property at `path`. It edits the same property and syncs with the first."""
+		field = self.fields.get(path)
+		if field is None:
+			return None
+		row = FieldRow(field, self._read(path))
+		row.edited.connect(self._edited)
+		row.pinToggled.connect(self._pinToggled)
+		row.setPinned(path in self.pins)
+		row.onContext()
+		self.dupes.setdefault(path, []).append(row)
+		return row
+
+	def _quickSection(self, title: str) -> Section:
+		section = Section(title, expanded=True)
+		for dotted in state.QUICK[title]['paths']:
+			if (row := self._view(tuple(dotted.split('.')))) is not None:
+				section.addRow(row)
+		button = QToolButton()
+		button.setText('Presets')
+		button.setAutoRaise(True)
+		button.setToolTip(f'Set the {title.lower()} properties to a preset. Nothing else changes.')
+		button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+		menu = QMenu(button)
+		menu.aboutToShow.connect(lambda m=menu, t=title: self._fillPresets(m, t))
+		button.setMenu(menu)
+		section.addHeaderWidget(button)
+		self._track(section, f'quick.{title}')
+		return section
+
+	def _fillPresets(self, menu: QMenu, title: str):
+		menu.clear()
+		found = state.presets(title)
+		for preset in found:
+			if not preset.user:
+				menu.addAction(preset.name, lambda p=preset: self.applyPreset(title, p))
+		mine = [p for p in found if p.user]
+		if mine:
+			menu.addSeparator()
+			for preset in mine:
+				menu.addAction(f'{preset.name} (mine)', lambda p=preset: self.applyPreset(title, p))
+		menu.addSeparator()
+		menu.addAction('Save current as preset…', lambda: self._savePresetPrompt(title))
+
+	def applyPreset(self, title: str, preset: 'state.Preset'):
+		"""Set the section's properties to the preset, as one undo step. Every other property stays."""
+		self.commitPending()
+		display = state.apply(self.exportDisplay(), preset)
+		self.studio.build(display)
+		self._afterBuild()
+		self._commit(self.exportDisplay())
+		self.status.setText(f'{title}: {preset.name}. Undo goes back.')
+
+	def _savePresetPrompt(self, title: str):
+		name, ok = QInputDialog.getText(self, f'Save {title.lower()} preset', 'Name')
+		if ok and name.strip():
+			self.saveUserPreset(title, name.strip())
+
+	def saveUserPreset(self, title: str, name: str):
+		self.commitPending()
+		state.saveUser(title, name, self.exportDisplay())
+		self.status.setText(f'Saved {title.lower()} preset "{name}" to {state.stateDir() / "presets"}')
+
+	def _pinToggled(self, path: tuple, on: bool):
+		if on and path not in self.pins:
+			self.pins.append(path)
+		elif not on and path in self.pins:
+			self.pins.remove(path)
+		self.settings.setValue('pins', ','.join('.'.join(p) for p in self.pins))
+		self.settings.sync()
+		for row in list(self.dupes.get(path, ())) + [self.rows[path]] if path in self.rows else []:
+			row.setPinned(on)
+		self._rebuildPins()
+		self._filter(self.search.text())
+
+	def _rebuildPins(self):
+		for row in self._pinRows:
+			views = self.dupes.get(row.field.path, [])
+			if row in views:
+				views.remove(row)
+		self._pinRows = []
+		self.pinSection.clear()
+		for path in self.pins:
+			if (row := self._view(path)) is not None:
+				self._pinRows.append(row)
+				self.pinSection.addRow(row)
+		self.pinSection.setVisible(bool(self._pinRows))
 
 	def _edited(self, path: tuple, value: Any):
 		row = self.rows.get(path)
@@ -840,8 +978,7 @@ class Studio(QWidget):
 		gauge = self.studio.gauge
 		for path, value in pending.items():
 			reason = schema.write(gauge, path, value)
-			row = self.rows.get(path)
-			if row is not None:
+			for row in ([self.rows[path]] if path in self.rows else []) + self.dupes.get(path, []):
 				row.setError(reason)
 				if reason is None and not row.isEditing():
 					row.setSaved(self._read(path))
@@ -928,7 +1065,7 @@ class Studio(QWidget):
 		self.preview.viewport().update()
 		group = schema.describe(self.studio.gauge)
 		if group == self._group:
-			for row in self.rows.values():
+			for _, row in self._pairs():
 				row.setError(None)
 			self.syncRows(force=True)
 			self._applyRules()
@@ -945,7 +1082,7 @@ class Studio(QWidget):
 		`force` (undo, redo) also replaces the row that has focus: its text would otherwise keep the edit that was undone.
 		"""
 		gauge = self.studio.gauge
-		for path, row in self.rows.items():
+		for path, row in self._pairs():
 			if not force and (row.isEditing() or row.hasError()):
 				continue
 			row.setSaved(self._read(path))
@@ -955,8 +1092,12 @@ class Studio(QWidget):
 		self._syncValueControls(keepValue=True)
 
 	def _filter(self, text: str):
-		if self.tree is not None:
-			self.tree.setFiltered(text.strip().lower())
+		if self.tree is None or self.allSection is None:
+			return
+		text = text.strip().lower()
+		for section in (self.pinSection, *self.quickSections, self.allSection):
+			shown = section.setFiltered(text)
+			section.setVisible(shown and (section is not self.pinSection or bool(self._pinRows)))
 
 	# value
 

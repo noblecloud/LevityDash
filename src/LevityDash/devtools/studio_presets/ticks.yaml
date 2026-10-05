@@ -1,0 +1,23 @@
+# Tick presets. Values follow needle-designs.levity, wrap-compass.levity and curved-labels.levity.
+None:
+  major: {enabled: false}
+  minor: {enabled: false}
+  micro: {enabled: false}
+Majors only:
+  major: {enabled: true, labels: {enabled: true, position: inside, height: 8%, curve: null, text: null}}
+  minor: {enabled: false}
+  micro: {enabled: false}
+Majors and minors:
+  major: {enabled: true, labels: {enabled: true, position: inside, height: 8%, curve: null, text: null}}
+  minor: {enabled: true, length: 50%, width: 1px}
+  micro: {enabled: false}
+Dense:
+  major: {enabled: true, labels: {enabled: true, position: inside, height: 8%, curve: null, text: null}}
+  minor: {enabled: true, length: 50%, width: 1px}
+  micro: {enabled: true}
+Compass labels:
+  major: {enabled: true, interval: 90, length: 7%, width: 2px, color: '#8d8d96', labels: {enabled: true, position: inside, offset: 4%, height: 10%, rotate: false, text: compass}}
+  minor: {enabled: true, interval: 22.5, length: 40%, width: 1px, color: '#55555c'}
+  micro: {enabled: false}
+Warped labels:
+  major: {enabled: true, labels: {enabled: true, curve: warp, height: 7%, position: outside}}
