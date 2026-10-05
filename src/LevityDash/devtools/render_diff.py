@@ -145,17 +145,14 @@ MASKS: Dict[str, Tuple[Mask, ...]] = {
 	),
 	'emissive': (
 		Mask(
-			'graph-plot', (0, 450, 1480, 712), (1600, 830),
-			'the figure plots a window relative to the live clock, and this target has to keep '
-			'the clock live: freezing it collapses the series time range and Graph.py:862 divides '
-			'by zero - the plot drifts between runs and the render exits SIGSEGV at shutdown, in '
-			'upstream a31af10 exactly as here (docs/tasks/emissive-upstream-check.md). The gauge '
-			'glow paths this target is in the set for sit outside this box. Remove when the clock '
-			'can be frozen without tripping that divide.',
-		),
-		Mask(
-			'graph-time-axis', (0, 798, 1480, 828), (1600, 830),
-			'the figure\'s time-axis labels, which read the same live clock as graph-plot.',
+			'graph-figure', (0, 450, 1480, 830), (1600, 830),
+			'the figure is drawn against the live clock, and this target has to keep its clock live: '
+			'freezing it collapses the series time range and Graph.py:862 divides by zero - the plot then '
+			'drifts between runs and about half of them exit SIGSEGV at shutdown, in upstream a31af10 exactly '
+			'as here (docs/tasks/emissive-upstream-check.md). Measured across three captures, what the live '
+			'clock moves is the plot band, the time-axis labels, and the strip between them - this box is '
+			'the figure and nothing else. The gauge glow paths this target is in the set for sit outside it. '
+			'Remove when the clock can be frozen without tripping that divide.',
 		),
 	),
 }
