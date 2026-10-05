@@ -25,6 +25,7 @@ import time (`LevityDash/__init__.py`, class body). The studio points both at a
 throwaway directory first (`_studio_env.prepare`). That is the only way to keep
 the import from creating files in the real config directory.
 """
+import copy
 from dataclasses import dataclass, field
 from functools import cached_property
 from math import pi, sin
@@ -74,11 +75,11 @@ class DataPreset:
 
 DATA_PRESETS: Dict[str, DataPreset] = {p.name: p for p in (
 	DataPreset('Temperature F', 'environment.temperature.temperature', wu.Temperature.Fahrenheit, 52, 78, 68, 0, 120),
-	DataPreset('Humidity %', 'environment.humidity.humidity', lambda v: wu.Humidity(v), 38, 82, 61, 0, 100),
+	DataPreset('Humidity %', 'environment.humidity.humidity', lambda v: wu.Humidity(v), 0.38, 0.82, 0.61, 0, 1),
 	DataPreset('Pressure inHg', 'environment.pressure.pressure', wu.Pressure.InchOfMercury, 29.7, 30.1, 29.9, 28.5, 31.5),
 	DataPreset('Wind mph', 'environment.wind.speed.speed', wu.Wind.MilesPerHour, 3, 18, 11, 0, 40),
 	DataPreset('Rain in/hr', 'environment.precipitation.precipitation', _rain, 0.0, 0.8, 0.3, 0, 2),
-	DataPreset('Generic 0-100', 'studio.generic', lambda v: float(v), 15, 85, 55, 0, 100),
+	DataPreset('Generic 0-100', 'studio.generic', wu.Index, 15, 85, 55, 0, 100),
 )}
 
 #: Which preset suits a key in a showcase cell.
@@ -293,9 +294,12 @@ class StudioGauge:
 		_active = self
 		if preset is not None:
 			self.preset = preset
+		view = self.scene.view
+		saved = view.transform()
+		view.resetTransform()  # a gauge built under a scaled view draws doubled text
 		self.dispose()
 		self.stage = StudioStage(self.scene, self.preset)
-		display = dict(display or {})
+		display = copy.deepcopy(dict(display or {}))  # the loader edits the mappings it is given
 		display.setdefault('geometry', {'x': 0, 'y': 0, 'width': 1, 'height': 1})
 		# Inside the stage's action pool: the dashboard builds a gauge while its panel
 		# loads state, so every deferred refresh waits until the gauge is complete.
@@ -306,6 +310,10 @@ class StudioGauge:
 		self.gauge.valueClass = type(self.preset.measurement(self.value))
 		self.gauge.value = self.preset.measurement(self.value)
 		self.gauge.refresh()
+		# The value label sizes from its text, and the dial centres on the label. The first
+		# refresh sees the label before it has the value, so refresh once more.
+		self.gauge.refresh()
+		view.setTransform(saved)
 		return self.gauge
 
 	def dispose(self) -> None:
