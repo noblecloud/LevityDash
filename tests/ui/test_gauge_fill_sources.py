@@ -39,7 +39,7 @@ def test_fill_follows_source_and_releases(dashboard):
 	sandbox, gauge = _gauge(dashboard, {'from': 0, 'to': EXPR})
 	item = gauge._fillItem
 	assert item is not None
-	key = item._feeds[0]._key
+	key = item._bindings[0].source.key
 	assert engine.refcount(key) >= 1
 	assert item._pending == {'to'}, 'no value yet: the fill is hidden'
 	_engine_idle(dashboard, engine, key)
@@ -83,7 +83,7 @@ def test_deleting_the_panel_releases_fill_and_marker_sources(dashboard):
 	engine = computedEngine()
 	sandbox, gauge = _gauge(dashboard, {'from': 0, 'to': EXPR})
 	gauge.markers = [{'value': EXPR}]
-	key = gauge._fillItem._feeds[0]._key
+	key = gauge._fillItem._bindings[0].source.key
 	before = engine.refcount(key)
 	assert before >= 2, 'the fill and the marker each hold the expression'
 	panel = next(c for c in sandbox.childPanels if isinstance(c, Realtime))

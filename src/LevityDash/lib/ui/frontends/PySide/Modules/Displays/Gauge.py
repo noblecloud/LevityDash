@@ -24,9 +24,9 @@ from typing import Optional, Type, Union, Iterator, Iterable, TypeVar, Sequence,
 from LevityDash import LevityDashboard
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.expressions import Expression, ExpressionError
-from LevityDash.lib.plugins.computed import acquireValueSource, releaseValueSource
+from LevityDash.lib.valuesource import openValueSource
 from LevityDash.lib.plugins.plugin import AnySource
-from LevityDash.lib.stateful import Stateful, StateProperty, SourceType
+from LevityDash.lib.stateful import Binding, Stateful, StateProperty, SourceType
 from LevityDash.lib.stateful_mixins import ColorGradientMixin
 from LevityDash.lib.ui import UILogger, Color, Gradient
 from LevityDash.lib.ui.Geometry import RelativeFloat, parseSize, DimensionType, size_px, Dimension, Size, Alignment, \
@@ -1904,81 +1904,6 @@ def _markerText(spec) -> str:
 		return str(spec)
 
 
-def _markerKeyFor(text: str, gauge: 'Gauge', what: str = 'marker value', effect: str = 'the marker stays hidden') -> Optional[CategoryItem]:
-	"""Turn a marker's ``value:`` text into the key to subscribe to.
-
-	A plain key comes back as itself. An expression is registered with the
-	computed engine (or the backend in mode=remote) and its computed key comes
-	back; the caller must ``releaseValueSource(text)`` when the marker goes away.
-
-	Returns None, and logs naming the gauge, when the text does not parse or
-	cannot be registered.
-	"""
-	try:
-		Expression.parse(text)
-	except ExpressionError as e:
-		log.warning(f'Gauge {_gaugeKeyName(gauge)} {what} {text!r} is not a valid value source ({e}); {effect}')
-		return None
-	if (key := acquireValueSource(text)) is None:
-		log.warning(f'Gauge {_gaugeKeyName(gauge)} {what} {text!r} could not be registered; {effect}')
-	return key
-
-
-class _MarkerFeed(QObject):
-	"""Subscribes one marker to the container of its key.
-
-	This is the part of ``Realtime.container`` a marker needs: wait for the
-	``MultiSourceContainer`` to have a realtime (or approximate) source, then
-	connect to that source's channel. The feed is a ``QObject`` so the channel
-	signal reaches ``updateSlot`` on the GUI thread, never on the plugin
-	thread that published the data.
-	"""
-
-	def __init__(self, marker: 'GaugeMarker', key: CategoryItem):
-		super().__init__()
-		self._marker = marker
-		self._key = key
-		self._connected = None
-		self._closed = False
-		self._multi = LevityDashboard.get_container(key)
-		self._multi.getPreferredSourceContainer(self, AnySource, self._attach)
-
-	def _attach(self):
-		if self._closed or self._connected is not None:
-			return
-		source = self._multi.getRealtimeContainer(AnySource) or self._multi.getRealtimeContainer(AnySource, False)
-		if source is None:
-			return
-		if not source.channel.connectSlot(self.updateSlot):
-			log.warning(f'Gauge marker for {self._key} failed to connect to {source.log_repr}')
-			return
-		self._connected = source
-		self.updateSlot()
-
-	@Slot(object)
-	def updateSlot(self, *args):
-		if self._closed:
-			return
-		try:
-			value = self._multi.value.now.value
-		except AttributeError:
-			return
-		try:
-			self._marker.setMarkerValue(value)
-		except RuntimeError:
-			# The gauge was deleted (dashboard reload) and this feed outlived it.
-			self.close()
-
-	def close(self):
-		self._closed = True
-		if self._connected is not None:
-			try:
-				self._connected.channel.disconnectSlot(self.updateSlot)
-			except Exception:
-				pass
-			self._connected = None
-
-
 class GaugeMarker(Needle):
 	"""An extra indicator on a gauge, with its own value.
 
@@ -1989,8 +1914,7 @@ class GaugeMarker(Needle):
 
 	_markerValue = None
 	_markerColor: Optional[QColor] = None
-	_feed: Optional[_MarkerFeed] = None
-	_source: Optional[str] = None
+	_binding: Optional[Binding] = None
 	_warned = False
 
 	#: Used when the marker names no ``length``: the needle default for the
@@ -2015,20 +1939,16 @@ class GaugeMarker(Needle):
 		if isinstance(raw, (int, float)):
 			self._markerValue = raw
 		elif isinstance(raw, str):
-			if (key := _markerKeyFor(raw, self.gauge)) is not None:
-				self._source = raw
-				self._feed = _MarkerFeed(self, key)
+			if (source := openValueSource(raw, f'Gauge {_gaugeKeyName(self.gauge)} marker value', 'the marker stays hidden')) is not None:
+				self._binding = Binding(source, self.setMarkerValue)
 		else:
 			raise TypeError(f'a marker value must be a number or a key, not {raw!r}')
 		self.refresh()
 
 	def close(self):
-		if self._feed is not None:
-			self._feed.close()
-			self._feed = None
-		if self._source is not None:
-			releaseValueSource(self._source)
-			self._source = None
+		if self._binding is not None:
+			self._binding.unlink()
+			self._binding = None
 
 	def setMarkerValue(self, value) -> None:
 		"""Set the value to show. GUI thread only (the feed's slot runs there)."""
@@ -2070,7 +1990,7 @@ class GaugeMarker(Needle):
 
 
 class _FillEnd:
-	"""Adapts one end of a fill to what ``_MarkerFeed`` drives."""
+	"""Adapts one end of a fill to the setter a ``Binding`` drives."""
 
 	def __init__(self, fill: 'GaugeFill', end: str):
 		self._fill = fill
@@ -2103,17 +2023,14 @@ class GaugeFill(GaugePathItem):
 		super().__init__(*args, **kwargs)
 		# Ends fed by a value source that has not delivered yet: the fill is hidden.
 		self._pending: set = set()
-		self._sources: list = []
-		self._feeds: list = []
+		self._bindings: list = []
 
 	def close(self):
-		"""Stop the feeds and release the value sources."""
-		feeds, sources = self._feeds, self._sources
-		self._feeds, self._sources, self._pending = [], [], set()
-		for feed in feeds:
-			feed.close()
-		for source in sources:
-			releaseValueSource(source)
+		"""Unlink the bindings, which releases the value sources."""
+		bindings = self._bindings
+		self._bindings, self._pending = [], set()
+		for binding in bindings:
+			binding.unlink()
 
 	def setEnd(self, end: str, value) -> None:
 		"""Set a source-fed end. GUI thread only (the feed's slot runs there)."""
@@ -2149,10 +2066,9 @@ class GaugeFill(GaugePathItem):
 					setattr(self, f'_{end}', float(raw))
 				elif isinstance(raw, str):
 					self._pending.add(end)
-					if (key := _markerKeyFor(raw, self.gauge, what=f'fill {end}', effect='the fill stays hidden')) is None:
+					if (source := openValueSource(raw, f'Gauge {name} fill {end}', 'the fill stays hidden')) is None:
 						raise ValueError(f'{end} {raw!r} is not usable')
-					self._sources.append(raw)
-					self._feeds.append(_MarkerFeed(_FillEnd(self, end), key))
+					self._bindings.append(Binding(source, _FillEnd(self, end).setMarkerValue))
 				else:
 					raise TypeError(f'{end} must be a number, a key or an expression, not {raw!r}')
 			if (weight := spec.get('weight')) is not None:
