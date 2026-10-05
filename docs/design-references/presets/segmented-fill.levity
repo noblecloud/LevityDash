@@ -1,0 +1,41 @@
+# A fill drawn as separate segments, like an LED bar. `segments: N` splits the whole
+# arc into N equal parts; a segment lights when its midpoint is inside the fill.
+# `gap` is the space between segments (capped under a segment width). With
+# `color: zone` each lit segment takes the colour of its zone.
+- type: group
+  name: main
+  items:
+    - type: realtime.gauge
+      name: plain
+      key: environment.humidity.humidity
+      title: false
+      geometry: {x: 0%, y: 0%, width: 33%, height: 100%}
+      display:
+        arc: {start-angle: -135, end-angle: 135, weight: 6%, color: '#2c2c34'}
+        range: {min: 0, max: 100}
+        fill: {segments: 11, gap: 1.5%, weight: 6%, color: '#ffffff'}
+        value-label: {position: center, size: 14%}
+    - type: realtime.gauge
+      name: zoned
+      key: environment.humidity.humidity
+      title: false
+      geometry: {x: 33%, y: 0%, width: 33%, height: 100%}
+      display:
+        arc: {start-angle: -135, end-angle: 135, weight: 6%, color: '#2c2c34'}
+        range: {min: 0, max: 100}
+        zones:
+          - {to: 60, color: '#4caf50'}
+          - {from: 60, to: 85, color: '#fdd835'}
+          - {from: 85, color: '#e53935'}
+        fill: {segments: 20, gap: 1%, weight: 6%, color: zone}
+        value-label: {position: center, size: 14%}
+    - type: realtime.gauge
+      name: hugegap
+      key: environment.humidity.humidity
+      title: false
+      geometry: {x: 66%, y: 0%, width: 34%, height: 100%}
+      display:
+        arc: {start-angle: -135, end-angle: 135, weight: 6%, color: '#2c2c34'}
+        range: {min: 0, max: 100}
+        fill: {segments: 8, gap: 50%, weight: 6%, color: '#4aa3ff'}
+        value-label: {position: center, size: 14%}

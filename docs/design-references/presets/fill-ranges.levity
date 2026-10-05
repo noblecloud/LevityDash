@@ -1,0 +1,26 @@
+# Edge cases for `fill:`. Left: a range through zero filled from 0, so it grows each
+# way from the middle. Right: a full 360 degree ring filled up to the value.
+- type: group
+  name: main
+  items:
+    - type: realtime.gauge
+      name: centred
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 0%, y: 0%, width: 50%, height: 100%}
+      display:
+        arc: {start-angle: -135, end-angle: 135, weight: 6%, color: '#2c2c34'}
+        range: {min: -50, max: 50}
+        fill: {from: 0, weight: 6%, color: '#ff8a3d'}
+        major: {interval: 25, labels: {position: inside, height: 8%}}
+        value-label: {position: center, size: 14%}
+    - type: realtime.gauge
+      name: ring
+      key: environment.humidity.humidity
+      title: false
+      geometry: {x: 50%, y: 0%, width: 50%, height: 100%}
+      display:
+        arc: {start-angle: 0, end-angle: 360, weight: 6%, color: '#2c2c34'}
+        range: {min: 0, max: 100}
+        fill: {weight: 6%, color: '#4aa3ff'}
+        value-label: {position: center, size: 14%}
