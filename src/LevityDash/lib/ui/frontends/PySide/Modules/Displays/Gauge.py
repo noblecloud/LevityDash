@@ -300,8 +300,6 @@ def _markerText(spec) -> str:
 @DebugPaint
 class Gauge(Meter):
 
-	_center_offset: QPointF | QPointF = QPointF(0, 0)
-
 	__value: float = 0.0
 	_needleAnimation: QPropertyAnimation
 	arc: GaugeArc
@@ -419,9 +417,6 @@ class Gauge(Meter):
 		if item is not None and (scene := item.scene()) is not None:
 			scene.removeItem(item)
 
-	_captionSpec = None
-	_subSpec = None
-
 	@StateProperty(key='zones', default=None, allowNone=True, dependencies={'range', 'arc'})
 	def zones(self) -> Optional[list]:
 		"""Coloured bands on the track: a list of ``{from, to, color, mark}`` mappings.
@@ -535,17 +530,6 @@ class Gauge(Meter):
 		self._markerItems = []
 		self._markerSpecs = []
 
-	def releaseSources(self):
-		"""Stop and release every value source the markers and fill hold.
-		Called when the owning panel is deleted; never raises."""
-		for clear in (self._clearMarkers, self._clearFill, self._clearZones,
-					lambda: self._clearCaption('_captionItem', '_captionSpec'),
-					lambda: self._clearCaption('_subItem', '_subSpec')):
-			try:
-				clear()
-			except Exception as e:
-				log.warning(f'Gauge {_gaugeKeyName(self)} could not release its value sources: {e!r}')
-
 	@StateProperty(key='major', repr=True, dependencies={'range'})
 	def majorDivisions(self) -> Graduations:
 		return self._majorDivisions
@@ -581,14 +565,6 @@ class Gauge(Meter):
 	@microDivisions.setter
 	def microDivisions(self, value: Graduations):
 		self._microDivisions = value
-
-	@property
-	def type(self):
-		return DisplayType.Gauge
-
-	@property
-	def displayType(self):
-		return DisplayType.Gauge
 
 	def __init__(self, parent, *args, **kwargs):
 		self.previousParent = None
@@ -746,14 +722,6 @@ class Gauge(Meter):
 		self._syncUnitUnderValue()
 		self._syncCaptions()
 
-	@defer
-	def rebuild(self):
-		self.major_ticks_surface.rebuild()
-		self.minor_ticks_surface.rebuild()
-		self.micro_ticks_surface.rebuild()
-
-		self.refresh()
-
 	def refresh(self):
 		self.arc.refresh()
 		for item in self._zoneItems():
@@ -781,13 +749,6 @@ class Gauge(Meter):
 			textBox.refresh()
 		self.recenter()
 
-	def _update_shape(self):
-		clearCacheAttr(self, 'value_text_box_area_rect', 'full_gauge_path')
-
-	def parentResized(self, arg: Union[QPointF, QSizeF, QRectF]):
-		super().parentResized(arg)
-		self.refresh()
-
 	def _zoneItems(self) -> list:
 		item = getattr(self, '_zonesItem', None)
 		return [] if item is None else [item]
@@ -806,193 +767,6 @@ class Gauge(Meter):
 		self._needleAnimation.setStartValue(float(start))
 		self._needleAnimation.setEndValue(float(end))
 		self._needleAnimation.start()
-
-	@property
-	def pen(self):
-		return self._pen
-
-	@StateProperty(key='alignment', allowNone=False, after=rebuild, repr=True)
-	def alignment(self) -> Alignment:
-		return self._alignment
-
-	@alignment.setter
-	def alignment(self, value: Alignment):
-		self._alignment = value
-
-	@alignment.item_default
-	def alignment(self) -> Alignment:
-		return Alignment(AlignmentFlag.Center)
-
-	@alignment.decode
-	def alignment(self, value: str | int | tuple[AlignmentFlag, AlignmentFlag] | AlignmentFlag) -> Alignment:
-		if isinstance(value, (str, int)):
-			alignment = AlignmentFlag[value]
-		elif value is None:
-			alignment = AlignmentFlag.Center
-		elif isinstance(value, tuple):
-			return Alignment(*value)
-		else:
-			alignment = AlignmentFlag.Center
-		return Alignment(alignment)
-
-	#: Corner names `anchor` accepts, as the (x, y) share of the box the pivot sits at.
-	_ANCHORS = {
-		'top-left': (0, 0), 'top-right': (1, 0),
-		'bottom-left': (0, 1), 'bottom-right': (1, 1),
-	}
-	_anchor: Optional[str] = None
-	_s_inset = Size.Height(0.0, relative=True)
-
-	@StateProperty(key='anchor', default=None, allowNone=True, after=rebuild, repr=True)
-	def anchor(self) -> Optional[str]:
-		"""Pin the pivot (the arc centre) to a corner of the box: ``top-left``, ``top-right``,
-		``bottom-left`` or ``bottom-right``. ``radius`` then counts from the box's short side, so
-		100% is the whole short side minus ``inset``. Use it for a quarter-circle dial that fills
-		a card. Without it the dial is centred as before."""
-		return self._anchor
-
-	@anchor.setter
-	def anchor(self, value: Optional[str]):
-		self._anchor = value
-
-	@anchor.decode
-	def anchor(self, value) -> Optional[str]:
-		if value is None:
-			return None
-		name = normalizeCorner(value)
-		if name not in Gauge._ANCHORS:
-			raise ValueError(f'anchor must be one of {sorted(Gauge._ANCHORS)}, got {value!r}')
-		return name
-
-	@StateProperty(key='inset', default=Size.Height(0.0, relative=True), allowNone=False, after=rebuild)
-	def inset(self) -> Length | Size.Height:
-		"""Gap between an `anchor`ed pivot and the box's two edges at that corner."""
-		return self._s_inset
-
-	@inset.setter
-	def inset(self, value):
-		self._s_inset = value
-
-	@inset.decode
-	def inset(self, value) -> Length | Size.Height:
-		return parseSize(value, allowFloat=False, dimension=DimensionType.height)
-
-	@inset.encode
-	def inset(self, value) -> str:
-		return str(value)
-
-	@property
-	def insetPx(self) -> float:
-		if self._anchor is None:
-			return 0.0
-		return max(size_px(self._s_inset, min(self.height(), self.width())), 0.0)
-
-	def update_center_offset(self, offset: QPointF):
-		self._center_offset = offset
-
-	@StateProperty(key='center_offset', allowNone=True, after=rebuild, repr=True)
-	def center_offset(self) -> QPointF:
-		return getattr(self, '_center_offset', QPointF())
-
-	@center_offset.setter
-	def center_offset(self, value: QPointF):
-		self._center_offset = value
-
-	@center_offset.decode
-	def center_offset(self, value: str | Sequence | dict) -> QPointF:
-		if isinstance(value, str):
-			value = value.split(',')
-
-		if len(value) != 2:
-			raise ValueError(f'center_offset must be a sequence or mapping of length 2, got {len(value)}')
-
-		if isinstance(value, dict):
-			x = parseX(value.get('x', 0), 0)
-			y = parseY(value.get('y', 0), 0)
-		else:
-			x = parseX(value[0], 0)
-			y = parseY(value[1], 0)
-		return QPointF(x, y)
-
-	@center_offset.encode
-	def center_offset(self, value: QPointF) -> dict[str, float]:
-		return {'x': round(value.x(), 3), 'y': round(value.y(), 3)}
-
-	def _valueSide(self) -> Optional[ValueDisplayPosition]:
-		"""`left` or `right` when the value label is set to sit beside the dial, else None."""
-		label = getattr(self, '_valueLabel', None)
-		position = getattr(label, '_position', None)
-		if position in (ValueDisplayPosition.Left, ValueDisplayPosition.Right):
-			return position
-		return None
-
-	def _sideStripWidth(self) -> float:
-		"""Width the box gives a value beside the dial, from the far edge to the dial's."""
-		if self._valueSide() is None:
-			return 0.0
-		width, height = self.width(), self.height()
-		# A wide box keeps the dial at full height and gives the value what is left;
-		# a narrow one shares the width, the dial taking the larger part.
-		return min(width * 0.5, max(width * 0.34, width - height))
-
-	def _dialRect(self) -> QRectF:
-		"""The part of the box the dial lives in: all of it, less the strip a side value takes."""
-		rect = QRectF(self.rect())
-		side = self._valueSide()
-		if side is None:
-			return rect
-		strip = self._sideStripWidth()
-		if side is ValueDisplayPosition.Left:
-			rect.setLeft(rect.left() + strip)
-		else:
-			rect.setRight(rect.right() - strip)
-		return rect
-
-	def _sideValueRect(self) -> QRectF:
-		"""The strip beside the dial a `left`/`right` value is fitted to, in gauge coordinates.
-		Centred on the pivot, so a value stays level with it however the sweep is cut."""
-		rect = self.rect()
-		strip = self._sideStripWidth()
-		# A pinned pivot sits in a corner, so level with the box's middle instead.
-		pivot_y = self.rect().center().y() if self._anchor is not None else self.center.y() + self._recenterTransform.dy()
-		half = max(min(pivot_y - rect.top(), rect.bottom() - pivot_y), 1.0)
-		left = rect.left() if self._valueSide() is ValueDisplayPosition.Left else rect.right() - strip
-		return QRectF(left, pivot_y - half, strip, half * 2)
-
-	@property
-	def center(self) -> QPointF:
-
-		if self._anchor is not None:
-			fx, fy = self._ANCHORS[self._anchor]
-			rect, inset = self._dialRect(), self.insetPx
-			return QPointF(
-				rect.left() + inset if fx == 0 else rect.right() - inset,
-				rect.top() + inset if fy == 0 else rect.bottom() - inset,
-			)
-
-		p = self.alignment.multipliersAlt
-		rect = self.boundingRect()
-		x = rect.width() * p[0]
-		y = rect.height() * p[1]
-		p = QPointF(x, y)
-
-		p -= self._center_offset
-		if self._valueSide() is not None:
-			p.setX(p.x() + self._dialRect().center().x() - self.rect().center().x())
-		margin_rect = self.marginRect
-		# keep p within the bounding rect
-		p.setX(sorted((margin_rect.left(), p.x(), margin_rect.right()))[1])
-		p.setY(sorted((margin_rect.top(), p.y(), margin_rect.bottom()))[1])
-
-		return p
-
-	@property
-	def scene_center(self) -> QPointF:
-		return self.mapToScene(self.center)
-
-	@property
-	def baseWidth(self):
-		return sqrt(self.height() ** 2 + self.width() ** 2) * INVERSE_GOLDEN_RATIO * 0.01
 
 	@property
 	def radius_max(self):
@@ -1021,17 +795,10 @@ class Gauge(Meter):
 		return abs(self.endAngle + -self.startAngle)
 
 	@property
-	def defaultColor(self):
-		return Color.text.QColor
-
-	@property
 	def tickFont(self):
 		font = QFont()
 		font.setPointSizeF(max(self.radius * .1, 18))
 		return font
-
-	def setRect(self, *args, **kwargs):
-		super().setRect(*args, **kwargs)
 
 	@property
 	def duration(self):
