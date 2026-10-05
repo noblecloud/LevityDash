@@ -176,12 +176,44 @@ class GaugeArc(GlowMixin, StatefulGaugePathItem):
 
 	def draw(self):
 		self.resetTransform()
-		self._track = ArcTrack(self.centered_gauge_rect, self.startAngle, self.endAngle)
+		rect = self.centered_gauge_rect
+		self._track = ArcTrack(rect, self.startAngle, self.endAngle)
 		path = self._track.subPath(0, 1)
+		# The centre comes from the arc as specified, so extending its ends
+		# never moves the dial.
 		self._center_offset = path.boundingRect().center()
 		self.gauge.update_center_offset(self._center_offset)
 		self.setPath(path)
 		self.makeShape()
+
+	def extend_degrees(self, radius: float) -> float:
+		"""How far, in degrees, each end of the track runs past its angle.
+
+		`auto` covers the outer half of the widest end tick, so a flat end lines
+		up with the tick's far edge instead of stopping on its centre line. Round
+		and square caps already reach past the end, so `auto` leaves them alone.
+		"""
+		value = self.extend
+		# A closed ring has no ends to extend; it would only overlap itself.
+		if radius <= 0 or not value or abs(self.fullAngle) >= 360:
+			return 0.0
+		if value == 'auto':
+			if self.capStyle != Qt.PenCapStyle.FlatCap:
+				return 0.0
+			try:
+				widths = [
+					graduation.width_px
+					for graduation in (self.gauge.majorDivisions, self.gauge.minorDivisions, self.gauge.microDivisions)
+					if graduation.enabled
+				]
+			except AttributeError:
+				return 0.0
+			pixels = max(widths, default=0.0) / 2
+		elif isinstance(value, str) and value.endswith('px'):
+			pixels = float(value[:-2])
+		else:
+			return float(value)
+		return float(np.degrees(pixels / radius))
 
 	def refresh(self):
 		self.draw()
@@ -290,6 +322,34 @@ class GaugeArc(GlowMixin, StatefulGaugePathItem):
 			return camelCase(value.name.decode().strip('Cap'), titleCase=False)
 		except AttributeError:
 			return camelCase(value.name.strip('Cap'), titleCase=False)
+
+	@StateProperty(key='extend', default='auto', after=refresh, allowNone=True)
+	def extend(self) -> str | float | None:
+		"""How far each end of the track runs past its angle: `auto` (reach the
+		outer edge of the end tick when the cap is flat), a number of degrees, a
+		length such as `2px`, or `0` for none."""
+		return getattr(self, '_extend', 'auto')
+
+	@extend.setter
+	def extend(self, value: str | float | None):
+		self._extend = value
+
+	@extend.decode
+	def extend(value) -> str | float | None:
+		if value is None or value is False:
+			return 0
+		if isinstance(value, str):
+			text = value.strip().lower()
+			if text in ('auto', 'true'):
+				return 'auto'
+			if text in ('none', 'off', 'false', ''):
+				return 0
+			if text.endswith('px'):
+				return f'{float(text[:-2]):g}px'
+			return float(text.rstrip('°'))
+		if value is True:
+			return 'auto'
+		return float(value)
 
 	@property
 	def fullAngle(self) -> float | int:
@@ -582,8 +642,8 @@ class Gauge(GlowMixin, Meter):
 	def radius_max(self):
 		if self._anchor is not None:
 			# The pivot is in a corner, so the dial may reach the whole short side.
-			return max(min(self.height(), self._dialRect().width()) - self.insetPx - self.baseWidth, 1)
-		return max(min(self.height(), self._dialRect().width()) / 2 - self.baseWidth, 1)
+			return max(min(self._dialRect().height(), self._dialRect().width()) - self.insetPx - self.baseWidth, 1)
+		return max(min(self._dialRect().height(), self._dialRect().width()) / 2 - self.baseWidth, 1)
 
 	@property
 	def radius(self):
