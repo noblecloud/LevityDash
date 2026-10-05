@@ -39,6 +39,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
 from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QGraphicsItem
 
+from LevityDash.devtools import _studio_schema as schema
 from LevityDash.devtools import _studio_stops as stops
 from LevityDash.devtools._studio_stops import niceStep, snapTo
 
@@ -136,6 +137,8 @@ class Spec:
 	tag: Any = None
 	#: A track hit area, in scene coordinates.
 	path: Optional[Callable[[], Optional[Any]]] = None
+	#: Takes the scene point of the press and returns the drag state, in place of `begin`.
+	press: Optional[Callable[[QPointF], Any]] = None
 
 
 class _Handle(QGraphicsItem):
@@ -452,7 +455,7 @@ class HandleLayer:
 	def begin(self, item: _Handle, pos: QPointF):
 		self.active = item
 		self._moved = False
-		self._state = item.spec.begin()
+		self._state = item.spec.press(pos) if item.spec.press is not None else item.spec.begin()
 		self._start = pos
 		if item.spec.kind == 'gradient':
 			self.selectedStop = item.spec.tag
@@ -501,6 +504,152 @@ class HandleLayer:
 		return False
 
 	# the specs
+
+	def _stops(self) -> List['stops.Stop']:
+		"""The stops of the arc's gradient, in the order the file holds them."""
+		if self.gauge is None:
+			return []
+		try:
+			return stops.decode(schema.read(self.gauge, GRADIENT))
+		except Exception:  # noqa: BLE001 - a gauge mid-rebuild has nothing to read
+			return []
+
+	def _gradientSpecs(self, dial: Callable[[], Dial]) -> List[Spec]:
+		"""One node per stop on the track, and the track itself to click for a new stop.
+
+		An edit writes the whole gradient (`arc.gradient`) through the studio, so a drag is one edit like any other
+		handle's. While a node is held the stops keep the order they had, so the node under the mouse stays the same
+		stop; the drag's end writes them in order of value.
+		"""
+		studio = self.studio
+		out: List[Spec] = []
+
+		def vc():
+			return self.gauge.valueClass
+
+		def span():
+			dl = dial()
+			return dl.lo, dl.lo + dl.span
+
+		def write(items: List['stops.Stop'], ordered: bool = False):
+			if ordered:
+				items = sorted(items, key=lambda s: v if (v := stops.native(s, vc())) is not None else float('inf'))
+			studio.handleEdit(GRADIENT, stops.encode(items))
+
+		def once(items: List['stops.Stop']):
+			"""A change that is a whole gesture of its own (a colour, a delete): one undo step."""
+			studio.beginDrag()
+			write(items, ordered=True)
+			studio.endDrag(True)
+
+		def centre() -> float:
+			dl = dial()
+			return max(dl.R - dl.weight / 2, 0)
+
+		def threshold() -> float:
+			return dial().weight / 2 + 30
+
+		def colourAt(value: float, items: List['stops.Stop']) -> str:
+			pts = [(n, s.color) for s in items if (n := stops.native(s, vc())) is not None]
+			return stops.sample(pts, value) if pts else stops.freshColor([])
+
+		for i in range(len(self._stops())):
+			held = {'off': False, 'stop': None}
+
+			def pos(i=i):
+				items = self._stops()
+				if i >= len(items):
+					return None
+				value = stops.native(items[i], vc())
+				if value is None:
+					return None
+				dl = dial()
+				# Placed through the dial's value-to-angle mapping. Once refactor/meter lands, place nodes through
+				# Scale and Track instead (docs/tasks/meter-and-bar.md), so a bar gets gradient nodes for free.
+				return dl.toScene(dl.valueAngle(value), centre())
+
+			def begin(i=i, held=held):
+				held['off'], held['stop'] = False, None
+				return {'index': i, 'stops': self._stops()}
+
+			def drag(state, p, fine, held=held):
+				dl = dial()
+				angle, radius = dl.polar(p)
+				held['off'] = abs(radius - centre()) > threshold()
+				if held['off']:
+					return
+				items = [s.copy() for s in state['stops']]
+				lo, hi = span()
+				items[state['index']] = stops.place(items[state['index']], dl.angleValue(angle), vc(), lo, hi, fine)
+				held['stop'] = items[state['index']]
+				state['stops'] = items
+				write(items)
+
+			def finish(state, held=held):
+				items = state['stops']
+				if held['off']:
+					items = [s for k, s in enumerate(items) if k != state['index']]
+				held['off'] = False
+				write(items, ordered=True)
+
+			def fill(i=i):
+				items = self._stops()
+				return items[i].color if i < len(items) else '#ffffff'
+
+			def label(i=i, held=held):
+				items = self._stops()
+				stop = held['stop'] or (items[i] if i < len(items) else None)
+				return studio.stopLabel(stop) if stop is not None else ''
+
+			def recolor(i=i):
+				items = self._stops()
+				if i >= len(items):
+					return
+				chosen = studio.pickColor(items[i].color)
+				if chosen is not None:
+					items[i].color = chosen
+					once(items)
+
+			def remove(i=i):
+				items = self._stops()
+				if i < len(items):
+					del items[i]
+					once(items)
+
+			out.append(Spec('gradient', 'Drag along the track to move this stop (shift: fine). Drag off the track or press Delete to remove it. Double click for its colour.',
+			                pos, begin=begin, drag=drag, finish=finish, fill=fill, label=label, removing=lambda held=held: held['off'],
+			                double=recolor, remove=remove, tag=i))
+
+		def trackPath():
+			arc = self.gauge.arc
+			return arc.mapToScene(arc.shape())
+
+		def press(p):
+			items = self._stops()
+			dl = dial()
+			value = dl.angleValue(dl.polar(p)[0])
+			lo, hi = span()
+			colour = colourAt(value, items)
+			unit = None
+			ordered = sorted(items, key=lambda s: v if (v := stops.native(s, vc())) is not None else float('inf'))
+			if ordered:
+				unit = ordered[-1].unit
+			new = stops.place(stops.Stop(0.0, unit, colour), value, vc(), lo, hi)
+			items.append(new)
+			write(items)
+			return {'index': len(items) - 1, 'stops': items}
+
+		def tdrag(state, p, fine):
+			dl = dial()
+			items = [s.copy() for s in state['stops']]
+			lo, hi = span()
+			items[state['index']] = stops.place(items[state['index']], dl.angleValue(dl.polar(p)[0]), vc(), lo, hi, fine)
+			state['stops'] = items
+			write(items)
+
+		out.append(Spec('track', 'Click the track to add a stop with the colour there; drag to place it', lambda: None, drag=tdrag,
+		                finish=lambda state: write(state['stops'], ordered=True), path=trackPath, press=press))
+		return out
 
 	def _specs(self) -> List[Spec]:
 		g = self.gauge
@@ -710,4 +859,6 @@ class HandleLayer:
 
 			out.append(Spec('corner', f'Click to pin the dial\'s centre to the {name} corner (again to unpin)', cpos, click=cclick, shape='square',
 			                active=lambda name=name: self.gauge._anchor == name))
+		if self.gradientMode:
+			out += self._gradientSpecs(dial)
 		return out
