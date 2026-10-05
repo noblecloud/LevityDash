@@ -19,6 +19,7 @@ from PySide6.QtCore import QObject
 import statekit
 from statekit import DefaultFalse, DefaultGroup, DefaultTrue, SourceType, StatefulDumper, StatefulLoader, StatefulMixin
 from statekit import StateProperty
+from statekit import ConditionFailed, StateError, firstOf
 from qolkit import Unset
 
 QObjectType = type(QObject)

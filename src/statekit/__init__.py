@@ -25,6 +25,7 @@ from .introspect import (
 	tryAndLog,
 )
 from .actions import ActionPool, ActionPoolItemInstance, block_pools, defer, SubActionPool
+from .validate import ConditionFailed, StateError, firstOf
 from .core import (
 	InvalidArguments, SingletonConstant, Stateful, StateProperty, StatefulMetaclass, StatefulMixin,
 	StatefulReferenceProperty, gendoc,
@@ -41,4 +42,5 @@ __all__ = [
 	"ActionPool", "ActionPoolItemInstance", "block_pools", "defer", "SubActionPool",
 	"InvalidArguments", "SingletonConstant", "Stateful", "StateProperty", "StatefulMetaclass", "StatefulMixin",
 	"StatefulReferenceProperty", "gendoc",
+	"ConditionFailed", "StateError", "firstOf",
 ]

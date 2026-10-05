@@ -57,6 +57,7 @@ from qolkit import (
 	recursiveRemove, remove_empty_dicts, sortDict, Unset,
 )
 from .actions import ActionPool
+from .validate import ConditionFailed, StateError, firstOf
 from .defaults import (
 	Default, DefaultGroup, DefaultState, DefaultValue, SourceType, UnsetDefault, UnsetExisting,
 )
@@ -280,6 +281,7 @@ class StateProperty(property):
 		if (decode := kwargs.pop("decoder", None)) is not None:
 			if isinstance(decode, Callable):
 				kwargs["decode.func"] = decode
+		self._validators = list(kwargs.pop("validators", None) or ())
 		self.optionsFromInit = DotDict(kwargs)
 		self.__state = kwargs.pop("state", None)
 
@@ -472,7 +474,12 @@ class StateProperty(property):
 			_source = SourceType.Default
 			value = value.value
 
-		if self.conditions and not self.testConditions(value, owner, "set"):
+		try:
+			value = self.validate(owner, value)
+		except ConditionFailed as e:
+			# Conditions have always dropped the value silently. Keep that for
+			# direct assignment, but say why at debug level.
+			log.debug(f"{type(owner).__name__}.{self.key}: {e.reason}")
 			return
 
 		value = self.__decode__(owner, value)
@@ -552,7 +559,7 @@ class StateProperty(property):
 		'exclude', 'expand', 'factory.func', 'inheritFrom', 'item_default',
 		'link', 'match', 'owner', 'repr', 'required', 'score.func',
 		'singleVal', 'sort', 'sortKey', 'sortOrder', 'tag', 'type', 'unwrap',
-		'update.func',
+		'update.func', 'validators',
 		# forwarded from __init__ rather than supplied by a caller
 		'fset', 'fdel', 'key', 'name', 'sortOrder.func',
 		# declared-but-unimplemented, kept deliberately - statekit carries a
@@ -879,6 +886,31 @@ class StateProperty(property):
 				console.print(p)
 			return result
 		return all(self.__testCondition(value, owner, condition) for condition in conditions)
+
+	def validate(self, owner: 'Stateful', proposal: Any) -> Any:
+		"""Return the value to store for `proposal`, possibly coerced.
+
+		Raises StateError, carrying the reason, when the value is not acceptable.
+		Runs the bool conditions for "set" first (a failure raises ConditionFailed
+		with a generic reason), then each validator in registration order.
+		"""
+		if self.conditions and not self.testConditions(proposal, owner, "set"):
+			raise ConditionFailed(f"{self!r} condition failed for {proposal!r}", prop=self, value=proposal)
+		for validator in self._validators:
+			try:
+				proposal = validator(owner, proposal)
+			except StateError as e:
+				if e.prop is None:
+					e.prop = self
+				raise
+			except (ValueError, TypeError, KeyError) as e:
+				raise StateError(str(e), prop=self, value=proposal) from e
+		return proposal
+
+	def validator(self, func: Callable[['Stateful', Any], Any]) -> 'StateProperty':
+		"""Register `func(owner, proposal) -> value`. Raise StateError to reject."""
+		self._validators.append(func)
+		return self
 
 	def setOption(self, **kwargs):
 		self.__options.update(kwargs)
@@ -2139,7 +2171,10 @@ class Stateful(metaclass=StatefulMetaclass):
 									self._state_item_sources[subProp] = SourceType.Shared
 									value = sharedValue.to_dict({subProp.key: value})
 
-					prop.setState(self, value, afterPool=afterPool)
+					try:
+						prop.setState(self, value, afterPool=afterPool)
+					except StateError as e:
+						log.error(f"{type(self).__name__}: skipping '{prop.key}': {e.reason}")
 					value: Stateful
 					self._unset_keys_.discard(prop)
 			match len(unwraps):
