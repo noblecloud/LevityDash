@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 from enum import Enum
 from functools import cached_property
 from itertools import combinations
-from math import isclose, isfinite, isinf, floor, log10, atan2, hypot
+from math import inf, isclose,isfinite, isinf, floor, log10, atan2, hypot
 from numbers import Number
 from numpy import ceil, cos, pi, radians, sin, sqrt, number as np_number
 from collections.abc import Mapping
@@ -66,6 +66,16 @@ def filter_factors(
 		and (not included_factors or included_factors & f)
 		and (not excluded_factors or not excluded_factors & f)
 	}
+
+
+def _isWholeSteps(span, interval) -> bool:
+	"""Whether `interval` divides `span` into a whole number of steps, within float error."""
+	try:
+		span, interval = float(span), float(interval)
+		steps = round(span / interval, 9)
+	except (TypeError, ValueError, ZeroDivisionError, OverflowError):
+		return False
+	return steps == int(steps)
 
 
 class GaugeItem:
@@ -757,7 +767,7 @@ class Graduations(ColorGradientMixin, StatefulGaugeItem):
 	def count(self):
 		if self.enabled:
 			interval = self.interval
-			count = int(self.gauge.range.rounded_range / interval) + 1
+			count = self.step_count(interval) + 1
 			if count <= 1 and self.tick_type is Graduations.Type.Major:
 				return 2
 			return count
@@ -817,6 +827,17 @@ class Graduations(ColorGradientMixin, StatefulGaugeItem):
 
 		return compatible_intervals
 
+	def step_count(self, interval=None) -> int:
+		"""Whole intervals in the rounded range. Counted with a tolerance: 0.6 / 0.2 is 2.9999999999999996."""
+		interval = float(self.interval if interval is None else interval)
+		if not interval:
+			return 0
+		return floor(round(float(self.gauge.range.rounded_range) / interval, 9))
+
+	def value_at(self, index: int) -> GaugeValue:
+		"""The tick value at `index`, rounded so every caller gets the same float for the same tick."""
+		return self.gauge.valueClass(round(float(self.gauge.range.rounded_min) + index * float(self.interval), 9))
+
 	@property
 	def tick_values(self) -> set[GaugeValue]:
 
@@ -829,13 +850,14 @@ class Graduations(ColorGradientMixin, StatefulGaugeItem):
 			super_tick_values = super_grad.tick_values
 		else:
 			super_tick_values = set()
-		values = set(value_class(i) for i in np.arange(
-			float(gauge_range.rounded_min),
-			float(gauge_range.rounded_max),
-			float(interval)
-		)) - super_tick_values
-		if self.tick_type is Graduations.Type.Major:
-			values.add(gauge_range.rounded_max)
+		count = self.step_count(interval)
+		# Index-based, through value_at, so a tick built from its index always
+		# finds itself here. arange's float stepping and the index arithmetic
+		# disagreed in the last digit (0.6000000000000001 against 0.6) and the
+		# label for that tick raised KeyError.
+		values = set(self.value_at(i) for i in range(count + 1)) - super_tick_values
+		if self.tick_type is not Graduations.Type.Major:
+			values.discard(self.value_at(count))
 		return values
 
 	def interval_to_deg(self, interval: GaugeValue) -> Angle:
@@ -932,8 +954,13 @@ class Graduations(ColorGradientMixin, StatefulGaugeItem):
 
 		compatible_intervals = self.compatible_intervals
 
-		if self._state_item_sources.get(Graduations.usr_interval, SourceType.ItemDefault) is SourceType.UserConfig:
-			if usr_interval not in compatible_intervals and float(range_value / usr_interval).is_integer():
+		# Warn only when the interval cannot tile the range. It used to warn when
+		# it could (and the interval merely missed the filtered factor set), which
+		# rejected a valid `interval: 1` on 28-32. Major only: minor and micro
+		# intervals tile their parent's span and are often not the user's.
+		if self.tick_type is Graduations.Type.Major and self._state_item_sources.get(Graduations.usr_interval, SourceType.ItemDefault) is SourceType.UserConfig:
+			# An interval wider than the range is replaced below, so it is not worth a warning.
+			if usr_interval not in compatible_intervals and float(usr_interval) <= float(range_value) and not _isWholeSteps(range_value, usr_interval):
 				gauge_repr = f'Gauge.{gauge.valueClass.name.replace(" ", "")}(min={gauge.range.min}, max={gauge.range.max})'
 				log.warning(f'User specified interval: {usr_interval} for {gauge_repr} is not compatible with the gauge range {gauge.range}')
 
@@ -950,6 +977,21 @@ class Graduations(ColorGradientMixin, StatefulGaugeItem):
 		# all, fall back to the unfiltered set.
 		if not compatible_intervals:
 			compatible_intervals = [self.gauge.valueClass(i) for i in unfiltered_intervals]
+
+		# An interval wider than the range cannot place a second tick. The built-in
+		# default asks for 1 on any range up to 10, so a 0 to 0.6 gauge got a single
+		# tick and no labels. Drop such asks and take the interval that gives about
+		# five steps instead, as 0 to 0.5 already did.
+		if not issubclass(gauge.valueClass, Percentage) and float(range_value) > 0:
+			span = float(range_value)
+			if any(float(i) > span * (1 + 1e-9) for i in preferred_intervals):
+				preferred_intervals = [i for i in preferred_intervals if float(i) <= span * (1 + 1e-9)]
+				if not preferred_intervals:
+					usr_interval = min(
+						compatible_intervals,
+						key=lambda i: abs(span / float(i) - 5) if float(i) > 0 else inf,
+					)
+					preferred_intervals = [usr_interval]
 
 		if issubclass(gauge.valueClass, Percentage):
 			preferred_intervals = [abs(i) if isinstance(i, gauge.valueClass) else gauge.valueClass(abs(i) / 100) for i in preferred_intervals]
@@ -1304,7 +1346,7 @@ class Tick(GaugePathItem):
 
 	@cached_property
 	def value(self) -> GaugeValue:
-		return self._index * self.properties.interval + self.gauge.range.rounded_min
+		return self.properties.value_at(self._index)
 
 	@property
 	def index(self):
@@ -1461,7 +1503,7 @@ class TickSurface(GaugeItem, SurfaceCentered):
 
 		interval = self._properties.interval
 		for i in range(self.count + 1):
-			if i * interval + self.gauge.range.rounded_min not in tick_values:
+			if self._properties.value_at(i) not in tick_values:
 				continue
 			if existing:
 				tick = existing.pop(0)
@@ -2781,7 +2823,7 @@ class GaugeTickText(GaugeItem, AnnotationText):
 		self.tick = tick
 		tick.label = self
 		kwargs['gauge'] = gauge
-		kwargs['value'] = gauge.valueClass(tick.index * group.source.interval + gauge.range.rounded_min)
+		kwargs['value'] = group.source.value_at(tick.index)
 		# group.size_group.addItem(self)
 		self.set_formatting_func(group.format_value)
 		kwargs['labelGroup'] = group
