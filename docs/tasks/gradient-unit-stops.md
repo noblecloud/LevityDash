@@ -1,0 +1,75 @@
+# Gradient stops at real unit values
+
+Suggested branch: `feat/gradient-unit-stops` off `feat/value-sources`. Start it after
+`fix/warp-smooth` merges, because both edit `devtools/_studio_editors.py`.
+
+## What the user asked for
+
+> for the gradients, you should be able to set an actual unit value. like "red at 99ºf"
+> kind of deal. tho not like that in english, but you get what I mean, right?
+
+A gradient stop should be pinned to a measured value, such as 99 °F, 30 mph or 1.2 in/hr.
+It should not be a bare float or a position along the scale. The colour then sits at the
+same reading whatever the gauge's range, and whatever unit the data arrives in.
+
+## Where things are
+
+- `src/LevityDash/lib/ui/colors/gradient.py`: `Gradient` (a dict of
+  `MappedGradientValue`) and `Gradient.decode`, which takes a dict, a list or a preset
+  name.
+  - Presets in `colors/presets.py` (for example `TemperatureGradient`) already carry
+    unit-typed values through `MappedGradientValue[<unit class>]`.
+  - Stops written in YAML are plain numbers, whose meaning depends on the receiving
+    display.
+  - `Gradient.QtGradient` converts values to the plot's data type
+    (`self.plot.data.dataType`). Read it first: some of the conversion machinery exists.
+- Gauge and graph use gradients through `ColorGradientMixin` (Gauge.py) and Plot
+  (Graph.py).
+- In Gauge Studio, the gradient stop list editor is in `devtools/_studio_editors.py`.
+  The zone and marker editors already have a "values in" WeatherUnits unit selector.
+  Reuse that.
+
+## Expected change
+
+1. **YAML.** A stop key or value may carry a unit:
+
+   ```yaml
+   gradient:
+     32°F: '#4aa3ff'
+     70°F: '#7bd88f'
+     99°F: '#ff4a4a'
+   ```
+
+   A list form also works: `- {at: 37°C, color: '#ff4a4a'}`. Parse the unit with
+   WeatherUnits, using the same parser that range, zone and marker values use. Convert
+   each stop into the display's data unit when the stops are applied. A bare number keeps
+   its current meaning, so existing files do not change.
+2. **Mixed units** in one gradient are allowed, and each stop converts on its own. A
+   unit whose type does not match the data, such as mph on a temperature, logs one
+   clear error naming the stop. That stop is then skipped, and the display is not
+   aborted.
+3. **Encoding.** Write a stop back in the unit it was written in, so the YAML
+   round-trips unchanged. Encode as plain strings only, never measurement objects
+   (see the StateProperty encoder gotcha in CLAUDE.md).
+4. **Studio.**
+   - Each gradient stop row gets a value slider with a number box and a unit dropdown,
+     using the same selector as zones.
+   - Give each stop a colour swatch.
+   - Clicking or dragging a stop on the preview's arc is optional. Add it only if the
+     handles layer makes it cheap.
+   - Use a distinct default colour for a new stop. Today a new stop repeats the last
+     colour.
+
+## Verification
+
+Use real renders. Small tests are allowed only for the parse and convert maths.
+
+- Render a temperature gauge whose gradient is pinned at 32 °F, 70 °F and 99 °F. Do it
+  twice: once with the data in °F, once in °C. The colour at the needle must match
+  between the two.
+- Render the same gradient on a range of 0-120 °F and on a range of 40-100 °F. Each stop
+  must stay at its reading, not at its fraction of the range.
+- Open the stop editor in Studio offscreen. Switch a stop's unit and check that the
+  render does not change. Export, reload, and confirm the YAML is unchanged.
+- Run `pytest tests -q -p no:cacheprovider`.
+- Use offscreen only, and end each script with `app.quit()`.
