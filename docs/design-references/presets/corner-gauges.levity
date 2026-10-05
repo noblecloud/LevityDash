@@ -1,0 +1,410 @@
+# Corner gauges: a quarter-circle dial whose pivot (the arc centre) sits in a corner of its box,
+# so the 90 degree arc sweeps across the card. Cockpit and gauge-ui cards use them with the number
+# in the open space opposite the corner.
+#
+#   display:
+#     anchor: bottom-left     top-left | top-right | bottom-left | bottom-right
+#     inset: 6%               gap between the pivot and the two edges of that corner (share of the box's short side)
+#     radius: 90%             100% is the whole short side minus the inset. Leave 10% when tick labels are on,
+#                             so the labels at the two arc ends stay inside the box.
+#     arc: {start-angle: 0, end-angle: 90}   angles run clockwise from straight up:
+#       bottom-left  0..90      bottom-right  -90..0      top-left  90..180      top-right  180..270
+#
+# Labels at the two ends of the arc turn with it (`rotate-leading`, `rotate-trailing`) so they lie
+# along the arc end. The value is a `realtime.text` in the open space, picked per card by corner.
+# Render with --scenario stormy-day (or the Mock plugin) at 1600x900.
+- type: group
+  name: main
+  items:
+    - type: group
+      name: speed
+      geometry: {x: 0%, y: 0%, width: 33.34%, height: 33.34%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: speedTitle
+          text: "Speed"
+          alignment: CenterLeft
+          geometry: {x: 62%, y: 7%, width: 34%, height: 11%}
+          display: {color: '#ff8a3d'}
+        - type: realtime.gauge
+          name: speedGauge
+          key: vehicle.speed.speed
+          title: false
+          geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+          display:
+            anchor: bottom-left
+            inset: 10%
+            radius: 88%
+            arc: {start-angle: 0, end-angle: 90, weight: 3.5%, color: '#26262c', cap: flat}
+            range: {min: 0, max: 140}
+            fill: {weight: 3.5%, from: 110, to: 140, color: '#ff4b3e'}
+            major:
+              interval: 20
+              length: 5%
+              width: 2px
+              color: '#c9c9d0'
+              labels: {position: inside, height: 7.5%, color: '#8d8d96', offset: 2%, format: {precision: 0}, font: Roboto Mono, rotate-leading: true, rotate-trailing: true}
+            minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 5}
+            micro: {enabled: false}
+            needle: {type: tapered, length: 84%, width: 4.5%, hub: 6%, hub-hole: 35%, hub-color: '#0b0b0d', color: '#ff8a3d'}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+        - type: realtime.text
+          name: speedValue
+          key: vehicle.speed.speed
+          title: false
+          alignment: CenterLeft
+          geometry: {x: 62%, y: 26%, width: 34%, height: 28%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: ''}
+        - type: text
+          name: speedUnit
+          text: "km/h"
+          alignment: CenterLeft
+          geometry: {x: 62%, y: 52%, width: 34%, height: 9%}
+          opacity: 0.6
+          display: {color: '#ffffff'}
+    - type: group
+      name: load
+      geometry: {x: 33.33%, y: 0%, width: 33.34%, height: 33.34%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: loadTitle
+          text: "CPU load"
+          alignment: CenterLeft
+          geometry: {x: 4%, y: 7%, width: 34%, height: 11%}
+          display: {color: '#4aa3ff'}
+        - type: realtime.gauge
+          name: loadGauge
+          key: system.cpu.usage
+          title: false
+          geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+          display:
+            anchor: bottom-right
+            inset: 6%
+            radius: 90%
+            arc: {start-angle: -90, end-angle: 0, weight: 13%, color: '#26262c', cap: round}
+            range: {min: 0, max: 100}
+            fill: {weight: 13%, color: '#4aa3ff'}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {visible: false}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+        - type: realtime.text
+          name: loadValue
+          key: system.cpu.usage
+          title: false
+          alignment: CenterLeft
+          geometry: {x: 4%, y: 26%, width: 34%, height: 28%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '%'}
+    - type: group
+      name: air
+      geometry: {x: 66.66%, y: 0%, width: 33.34%, height: 33.34%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: airTitle
+          text: "Air quality"
+          alignment: CenterLeft
+          geometry: {x: 62%, y: 80%, width: 34%, height: 11%}
+          display: {color: '#3ddc97'}
+        - type: realtime.gauge
+          name: airGauge
+          key: environment.airQuality.index
+          title: false
+          geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+          display:
+            anchor: top-left
+            inset: 6%
+            radius: 92%
+            arc: {start-angle: 90, end-angle: 180, weight: 12%, color: '#26262c', cap: flat}
+            range: {min: 0, max: 300}
+            zones:
+            - {from: 0, to: 50, color: '#3ddc97'}
+            - {from: 50, to: 100, color: '#ffd23f'}
+            - {from: 100, to: 150, color: '#ff8a3d'}
+            - {from: 150, to: 200, color: '#ff4b3e'}
+            - {from: 200, to: 300, color: '#b48cff'}
+            fill: {weight: 12%, segments: 12, gap: 5%, color: zone}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {visible: false}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+        - type: realtime.text
+          name: airValue
+          key: environment.airQuality.index
+          title: false
+          alignment: CenterLeft
+          geometry: {x: 62%, y: 36%, width: 34%, height: 28%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: ''}
+        - type: text
+          name: airUnit
+          text: "AQI"
+          alignment: CenterLeft
+          geometry: {x: 62%, y: 66%, width: 34%, height: 9%}
+          opacity: 0.6
+          display: {color: '#ffffff'}
+    - type: group
+      name: coolant
+      geometry: {x: 0%, y: 33.33%, width: 33.34%, height: 33.34%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: coolantTitle
+          text: "Coolant"
+          alignment: CenterLeft
+          geometry: {x: 4%, y: 80%, width: 34%, height: 11%}
+          display: {color: '#ffb454'}
+        - type: realtime.gauge
+          name: coolantGauge
+          key: vehicle.engine.coolant
+          title: false
+          geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+          display:
+            anchor: top-right
+            inset: 10%
+            radius: 88%
+            arc: {start-angle: 180, end-angle: 270, weight: 3%, color: '#26262c', cap: flat}
+            range: {min: 140, max: 250}
+            zones:
+            - {from: 140, to: 215, color: '#3ddc97'}
+            - {from: 215, to: 230, color: '#ffb454'}
+            - {from: 230, to: 250, color: '#ff4b3e'}
+            fill: {weight: 3%, color: zone}
+            major:
+              interval: 20
+              length: 5%
+              width: 2px
+              color: '#c9c9d0'
+              labels: {position: inside, height: 7.5%, color: '#8d8d96', offset: 2%, format: {precision: 0}, font: Roboto Mono, rotate-leading: true, rotate-trailing: true}
+            minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 10}
+            micro: {enabled: false}
+            needle: {type: line, length: 82%, width: 1.4%, hub: 4%, color: '#ffffff'}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+        - type: realtime.text
+          name: coolantValue
+          key: vehicle.engine.coolant
+          title: false
+          alignment: CenterLeft
+          geometry: {x: 4%, y: 36%, width: 34%, height: 28%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: ''}
+    - type: group
+      name: thermo
+      geometry: {x: 33.33%, y: 33.33%, width: 33.34%, height: 33.34%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: thermoTitle
+          text: "Thermostat"
+          alignment: CenterLeft
+          geometry: {x: 4%, y: 7%, width: 34%, height: 11%}
+          display: {color: '#ff7a59'}
+        - type: realtime.gauge
+          name: thermoGauge
+          key: home.thermostat.temperature
+          title: false
+          geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+          display:
+            anchor: bottom-right
+            inset: 6%
+            radius: 92%
+            arc: {start-angle: -90, end-angle: 0, weight: 0.7%, color: '#5d5d66', cap: flat}
+            range: {min: 60, max: 80}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {type: dot, width: 7%, halo: 1.6%, halo-color: '#0b0b0d', color: '#ff7a59'}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+        - type: realtime.text
+          name: thermoValue
+          key: home.thermostat.temperature
+          title: false
+          alignment: CenterLeft
+          geometry: {x: 4%, y: 26%, width: 34%, height: 28%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 1, unit-string: ''}
+        - type: text
+          name: thermoUnit
+          text: "room"
+          alignment: CenterLeft
+          geometry: {x: 4%, y: 52%, width: 34%, height: 9%}
+          opacity: 0.6
+          display: {color: '#ffffff'}
+    - type: group
+      name: memory
+      geometry: {x: 66.66%, y: 33.33%, width: 33.34%, height: 33.34%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: memoryTitle
+          text: "Memory"
+          alignment: CenterLeft
+          geometry: {x: 4%, y: 80%, width: 34%, height: 11%}
+          display: {color: '#b48cff'}
+        - type: realtime.gauge
+          name: memoryGauge
+          key: system.memory.usage
+          title: false
+          geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+          display:
+            anchor: top-right
+            inset: 6%
+            radius: 92%
+            arc: {start-angle: 180, end-angle: 270, weight: 6%, color: '#26262c', cap: round}
+            range: {min: 0, max: 100}
+            fill: {weight: 6%, color: '#b48cff'}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {visible: false}
+            markers:
+            - {value: 80, type: notch, width: 1.6%, length: 8%, color: '#ffffff'}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+        - type: realtime.text
+          name: memoryValue
+          key: system.memory.usage
+          title: false
+          alignment: CenterLeft
+          geometry: {x: 4%, y: 36%, width: 34%, height: 28%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '%'}
+        - type: text
+          name: memoryUnit
+          text: "notch at 80"
+          alignment: CenterLeft
+          geometry: {x: 4%, y: 66%, width: 34%, height: 9%}
+          opacity: 0.6
+          display: {color: '#ffffff'}
+    # Two corner gauges facing each other on one card: speed from the bottom-left, engine speed from the bottom-right.
+    - type: group
+      name: pair
+      geometry: {x: 0%, y: 66.66%, width: 66.67%, height: 33.34%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: pairTitle
+          text: "Speed and engine"
+          alignment: Center
+          geometry: {x: 36%, y: 7%, width: 28%, height: 11%}
+          display: {color: '#ffffff'}
+        - type: realtime.gauge
+          name: pairSpeed
+          key: vehicle.speed.speed
+          title: false
+          geometry: {x: 0%, y: 0%, width: 50%, height: 100%}
+          display:
+            anchor: bottom-left
+            inset: 10%
+            radius: 88%
+            arc: {start-angle: 0, end-angle: 90, weight: 3.5%, color: '#26262c', cap: flat}
+            range: {min: 0, max: 140}
+            fill: {weight: 3.5%, from: 110, to: 140, color: '#ff4b3e'}
+            major:
+              interval: 20
+              length: 5%
+              width: 2px
+              color: '#c9c9d0'
+              labels: {position: inside, height: 7.5%, color: '#8d8d96', offset: 2%, format: {precision: 0}, font: Roboto Mono, rotate-leading: true, rotate-trailing: true}
+            minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 5}
+            micro: {enabled: false}
+            needle: {type: tapered, length: 84%, width: 4%, hub: 5%, hub-hole: 35%, hub-color: '#0b0b0d', color: '#ff8a3d'}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+        - type: realtime.gauge
+          name: pairRpm
+          key: vehicle.engine.rpm
+          title: false
+          geometry: {x: 50%, y: 0%, width: 50%, height: 100%}
+          display:
+            anchor: bottom-right
+            inset: 10%
+            radius: 88%
+            arc: {start-angle: -90, end-angle: 0, weight: 3.5%, color: '#26262c', cap: flat}
+            range: {min: 0, max: 8000}
+            fill: {weight: 3.5%, from: 6500, to: 8000, color: '#ff4b3e'}
+            major:
+              interval: 1000
+              length: 5%
+              width: 2px
+              color: '#c9c9d0'
+              labels: {position: inside, height: 7.5%, color: '#8d8d96', offset: 2%, format: {precision: 0}, font: Roboto Mono, rotate-leading: true, rotate-trailing: true, text: {0: '0', 1000: '1', 2000: '2', 3000: '3', 4000: '4', 5000: '5', 6000: '6', 7000: '7', 8000: '8'}}
+            minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 250}
+            micro: {enabled: false}
+            needle: {type: tapered, length: 84%, width: 4%, hub: 5%, hub-hole: 35%, hub-color: '#0b0b0d', color: '#4aa3ff'}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+        - type: realtime.text
+          name: pairSpeedValue
+          key: vehicle.speed.speed
+          title: false
+          alignment: Center
+          geometry: {x: 24%, y: 38%, width: 20%, height: 28%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: ''}
+        - type: text
+          name: pairSpeedUnit
+          text: "km/h"
+          alignment: Center
+          geometry: {x: 24%, y: 68%, width: 20%, height: 9%}
+          opacity: 0.6
+          display: {color: '#ffffff'}
+        - type: realtime.text
+          name: pairRpmValue
+          key: vehicle.engine.rpm
+          title: false
+          alignment: Center
+          geometry: {x: 56%, y: 38%, width: 20%, height: 28%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: ''}
+        - type: text
+          name: pairRpmUnit
+          text: "rpm"
+          alignment: Center
+          geometry: {x: 56%, y: 68%, width: 20%, height: 9%}
+          opacity: 0.6
+          display: {color: '#ffffff'}
+    - type: group
+      name: fuel
+      geometry: {x: 66.66%, y: 66.66%, width: 33.34%, height: 33.34%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: fuelTitle
+          text: "Fuel"
+          alignment: CenterLeft
+          geometry: {x: 62%, y: 7%, width: 34%, height: 11%}
+          display: {color: '#8d8d96'}
+        - type: realtime.gauge
+          name: fuelGauge
+          key: vehicle.fuel.level
+          title: false
+          geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+          display:
+            anchor: bottom-left
+            inset: 10%
+            radius: 88%
+            arc: {start-angle: 0, end-angle: 90, weight: 2%, color: '#3a3a42', cap: flat}
+            range: {min: 0, max: 100}
+            fill: {weight: 2%, from: 0, to: 20, color: '#ff4b3e'}
+            major:
+              interval: 50
+              length: 5%
+              width: 2px
+              color: '#c9c9d0'
+              labels: {position: inside, height: 12%, color: '#8d8d96', offset: 2%, format: {precision: 0}, font: Roboto Mono, rotate-leading: true, rotate-trailing: true, text: {0: E, 50: '1/2', 100: F}}
+            minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 10}
+            micro: {enabled: false}
+            needle: {type: line, length: 82%, width: 1.6%, hub: 5%, color: '#ffffff'}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+        - type: realtime.text
+          name: fuelValue
+          key: vehicle.fuel.level
+          title: false
+          alignment: CenterLeft
+          geometry: {x: 62%, y: 26%, width: 34%, height: 28%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '%'}

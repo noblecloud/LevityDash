@@ -1,7 +1,7 @@
 # Gauge showcase v5: a board of gauge-ui style cards (github.com/thordursk/gauge-ui, MIT).
 # Cards vary on purpose: hairline (1%) to chunky (14-18%) arcs, sweeps of 90, 180, 240, 270, 300
-# and 360 degrees, dials in a card corner with a big number beside them, dials left with a stats
-# list right, a hero dial with corner arcs, signed dials, word labels, segmented fills, notches.
+# and 360 degrees, corner dials (the pivot sits in a card corner, `anchor:`) with a big number in the
+# open space, dials left with a stats list right, a hero dial with corner arcs, signed dials, word labels, segmented fills, notches.
 # Weather cards read the real sources (or a --scenario). Everything else reads made-up values
 # from the Mock plugin (src/LevityDash/lib/plugins/builtin/Mock.py), which is off until
 # Mock.ini says `enabled = True`.
@@ -524,17 +524,20 @@
           name: waterGauge
           key: home.water.today
           title: false
-          geometry: {x: 52%, y: 4%, width: 46%, height: 62%}
+          geometry: {x: 50%, y: 6%, width: 48%, height: 64%}
           display:
-            radius: 150%
-            arc: {start-angle: -60, end-angle: 60, weight: 11%, color: '#2e2e35', cap: round}
+            anchor: bottom-right
+            inset: 8%
+            radius: 92%
+            arc: {start-angle: -90, end-angle: 0, weight: 13%, color: '#2e2e35', cap: round}
             range: {min: 0, max: 250}
-            fill: {weight: 11%, color: '#4aa3ff'}
+            fill: {weight: 13%, color: '#4aa3ff'}
             major: {enabled: false}
             minor: {enabled: false}
             micro: {enabled: false}
-            needle: {type: circle, width: 0%, color: '#4aa3ff'}
+            needle: {visible: false}
             value-label: {visible: false}
+            unit-label: {visible: false}
     - type: group
       name: washer
       geometry: {x: 83.48%, y: 33.58%, width: 16.37%, height: 16.17%}
@@ -564,17 +567,19 @@
           name: washerGauge
           key: home.washer.minutes
           title: false
-          geometry: {x: 52%, y: 4%, width: 46%, height: 62%}
+          geometry: {x: 50%, y: 4%, width: 48%, height: 64%}
           display:
-            radius: 125%
-            arc: {start-angle: -75, end-angle: 75, weight: 11%, color: '#26262c', cap: round}
+            anchor: top-right
+            inset: 8%
+            radius: 92%
+            arc: {start-angle: 180, end-angle: 270, weight: 1%, color: '#8d8d96', cap: flat}
             range: {min: 0, max: 60}
-            fill: {weight: 11%, color: '#b48cff'}
             major: {enabled: false}
             minor: {enabled: false}
             micro: {enabled: false}
-            needle: {type: circle, width: 0%, color: '#b48cff'}
+            needle: {type: dot, width: 9%, halo: 2%, halo-color: '#0b0b0d', color: '#b48cff'}
             value-label: {visible: false}
+            unit-label: {visible: false}
     - type: group
       name: temp
       geometry: {x: 66.82%, y: 50.25%, width: 16.37%, height: 16.17%}
@@ -595,7 +600,7 @@
           display: {color: '#ffffff', precision: 0, unit-string: ''}
         - type: text
           name: tempFoot
-          text: "Quarter dial, zone fill"
+          text: "Corner dial, zone fill"
           alignment: CenterLeft
           geometry: {x: 5%, y: 72%, width: 90%, height: 12%}
           opacity: 0.6
@@ -604,10 +609,12 @@
           name: tempGauge
           key: environment.temperature.temperature
           title: false
-          geometry: {x: 52%, y: 4%, width: 46%, height: 62%}
+          geometry: {x: 50%, y: 6%, width: 48%, height: 64%}
           display:
-            radius: 190%
-            arc: {start-angle: -45, end-angle: 45, weight: 17%, color: '#26262c', cap: flat}
+            anchor: bottom-left
+            inset: 6%
+            radius: 94%
+            arc: {start-angle: 0, end-angle: 90, weight: 17%, color: '#26262c', cap: flat}
             range: {min: 40, max: 100}
             zones:
             - {from: 40, to: 60, color: '#4aa3ff'}
@@ -617,8 +624,9 @@
             major: {enabled: false}
             minor: {enabled: false}
             micro: {enabled: false}
-            needle: {type: circle, width: 0%, color: '#ffffff'}
+            needle: {visible: false}
             value-label: {visible: false}
+            unit-label: {visible: false}
     - type: group
       name: aqi
       geometry: {x: 83.48%, y: 50.25%, width: 16.37%, height: 16.17%}
@@ -639,7 +647,7 @@
           display: {color: '#ffffff', precision: 0, unit-string: ''}
         - type: text
           name: aqiFoot
-          text: "Segmented, AQI bands"
+          text: "Corner dial, AQI bands"
           alignment: CenterLeft
           geometry: {x: 5%, y: 72%, width: 90%, height: 12%}
           opacity: 0.6
@@ -648,10 +656,12 @@
           name: aqiGauge
           key: environment.airQuality.index
           title: false
-          geometry: {x: 52%, y: 4%, width: 46%, height: 62%}
+          geometry: {x: 50%, y: 4%, width: 48%, height: 64%}
           display:
-            radius: 120%
-            arc: {start-angle: -80, end-angle: 80, weight: 13%, color: '#26262c', cap: flat}
+            anchor: top-left
+            inset: 6%
+            radius: 94%
+            arc: {start-angle: 90, end-angle: 180, weight: 14%, color: '#26262c', cap: flat}
             range: {min: 0, max: 300}
             zones:
             - {from: 0, to: 50, color: '#3ddc97'}
@@ -659,12 +669,13 @@
             - {from: 100, to: 150, color: '#ff8a3d'}
             - {from: 150, to: 200, color: '#ff4b3e'}
             - {from: 200, to: 300, color: '#b48cff'}
-            fill: {weight: 13%, segments: 12, gap: 5%, color: zone}
+            fill: {weight: 14%, segments: 12, gap: 5%, color: zone}
             major: {enabled: false}
             minor: {enabled: false}
             micro: {enabled: false}
-            needle: {type: circle, width: 0%, color: '#ffffff'}
+            needle: {visible: false}
             value-label: {visible: false}
+            unit-label: {visible: false}
     - type: group
       name: drive
       geometry: {x: 0.15%, y: 66.92%, width: 33.03%, height: 32.83%}
@@ -703,65 +714,85 @@
             needle: {type: needle, length: 74%, width: 4%, color: '#ff8a3d'}
             value-label: {position: below, size: 14%, color: '#ffffff', value-padding: 2%, font: Roboto Mono, format: {precision: 0}}
             unit-label: {visible: true, position: float-under, height: 7%, color: '#8d8d96', value-padding: 8%}
-        - type: text
-          name: fuelCap
-          text: "Fuel"
-          alignment: Center
-          geometry: {x: 62%, y: 7%, width: 34%, height: 6%}
-          display: {matchingGroup: {group: global.capS, matchAll: true}, color: '#8d8d96'}
         - type: realtime.gauge
           name: fuelGauge
           key: vehicle.fuel.level
           title: false
-          geometry: {x: 62%, y: 14%, width: 34%, height: 32%}
+          geometry: {x: 59%, y: 12%, width: 40%, height: 41%}
           display:
-            radius: 120%
-            arc: {start-angle: -70, end-angle: 70, weight: 2%, color: '#3a3a42', cap: flat}
+            anchor: bottom-left
+            inset: 9%
+            radius: 88%
+            arc: {start-angle: 0, end-angle: 90, weight: 2%, color: '#3a3a42', cap: flat}
             range: {min: 0, max: 100}
             fill: {weight: 2%, from: 0, to: 20, color: '#ff4b3e'}
             major:
-              length: 10%
+              length: 6%
               width: 2px
               color: '#c9c9d0'
               interval: 50
               labels:
                 position: inside
-                height: 18%
+                height: 13%
                 color: '#8d8d96'
-                offset: 4%
+                offset: 3%
                 format: {precision: 0}
                 text: {0: E, 50: '1/2', 100: F}
+                rotate-leading: true
+                rotate-trailing: true
             minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 10}
             micro: {enabled: false}
-            needle: {type: line, length: 70%, width: 2%, tail: 12%, tail-dot: 6%, hub: 5%, color: '#ffffff'}
+            needle: {type: line, length: 80%, width: 1.6%, hub: 5%, color: '#ffffff'}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+        - type: text
+          name: fuelCap
+          text: "Fuel"
+          alignment: CenterRight
+          geometry: {x: 80%, y: 13%, width: 17%, height: 5.5%}
+          display: {matchingGroup: {group: global.capS, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: fuelValue
+          key: vehicle.fuel.level
+          title: false
+          alignment: CenterRight
+          geometry: {x: 76%, y: 20%, width: 21%, height: 9%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '%'}
+        - type: realtime.gauge
+          name: coolGauge
+          key: vehicle.engine.coolant
+          title: false
+          geometry: {x: 59%, y: 56%, width: 40%, height: 41%}
+          display:
+            anchor: bottom-right
+            inset: 6%
+            radius: 94%
+            arc: {start-angle: -90, end-angle: 0, weight: 11%, color: '#26262c', cap: round}
+            range: {min: 140, max: 250}
+            zones:
+            - {from: 140, to: 215, color: '#3ddc97'}
+            - {from: 215, to: 230, color: '#ffb454'}
+            - {from: 230, to: 250, color: '#ff4b3e'}
+            fill: {weight: 11%, color: zone}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {visible: false}
             value-label: {visible: false}
             unit-label: {visible: false}
         - type: text
           name: coolCap
           text: "Coolant"
-          alignment: Center
-          geometry: {x: 62%, y: 52%, width: 34%, height: 6%}
+          alignment: CenterLeft
+          geometry: {x: 61%, y: 57%, width: 20%, height: 5.5%}
           display: {matchingGroup: {group: global.capS, matchAll: true}, color: '#8d8d96'}
-        - type: realtime.gauge
-          name: coolGauge
+        - type: realtime.text
+          name: coolValue
           key: vehicle.engine.coolant
           title: false
-          geometry: {x: 62%, y: 60%, width: 34%, height: 30%}
-          display:
-            radius: 115%
-            arc: {start-angle: -60, end-angle: 60, weight: 11%, color: '#26262c', cap: round}
-            range: {min: 60, max: 120}
-            zones:
-            - {from: 60, to: 100, color: '#3ddc97'}
-            - {from: 100, to: 110, color: '#ffb454'}
-            - {from: 110, to: 120, color: '#ff4b3e'}
-            fill: {weight: 11%, color: zone}
-            major: {enabled: false}
-            minor: {enabled: false}
-            micro: {enabled: false}
-            needle: {type: circle, width: 0%, color: '#ffffff'}
-            value-label: {visible: false}
-            unit-label: {visible: false}
+          alignment: CenterLeft
+          geometry: {x: 61%, y: 64%, width: 21%, height: 9%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: ''}
     - type: group
       name: thermo
       geometry: {x: 33.48%, y: 66.92%, width: 16.37%, height: 32.83%}
