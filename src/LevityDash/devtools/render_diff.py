@@ -382,6 +382,56 @@ def manifests_differ(a_dir: Path, b_dir: Path) -> List[str]:
 	return [f'{k}: {a["inputs"].get(k)} != {b["inputs"].get(k)}' for k in sorted(set(a['inputs']) | set(b['inputs'])) if a['inputs'].get(k) != b['inputs'].get(k)]
 
 
+def regions(mask, block: int = 24, gap: int = 1) -> list:
+	"""Bounding boxes of the differing clusters in `mask`, as (x0, y0, x1, y1).
+
+	Coarse blocks first, so the cost does not scale with the pixel count, then
+	each cluster is tightened to exact pixel bounds. Ordered largest first.
+	"""
+	ys, xs = np.nonzero(mask)
+	if not len(ys):
+		return []
+	cells = {(int(y) // block, int(x) // block) for y, x in zip(ys, xs)}
+	grid = set()
+	for by, bx in cells:
+		for dy in range(-gap, gap + 1):
+			for dx in range(-gap, gap + 1):
+				grid.add((by + dy, bx + dx))
+	seen, clusters = set(), []
+	for cell in grid:
+		if cell in seen:
+			continue
+		stack, cluster = [cell], []
+		seen.add(cell)
+		while stack:
+			cy, cx = stack.pop()
+			cluster.append((cy, cx))
+			for dy in (-1, 0, 1):
+				for dx in (-1, 0, 1):
+					neighbour = (cy + dy, cx + dx)
+					if neighbour in grid and neighbour not in seen:
+						seen.add(neighbour)
+						stack.append(neighbour)
+		clusters.append(set(cluster))
+	boxes = []
+	for cluster in clusters:
+		ys_here, xs_here = [], []
+		for y, x in zip(ys, xs):
+			if (int(y) // block, int(x) // block) in cluster:
+				ys_here.append(int(y))
+				xs_here.append(int(x))
+		boxes.append((min(xs_here), min(ys_here), max(xs_here), max(ys_here)))
+	return sorted(boxes, key=lambda b: -((b[2] - b[0] + 1) * (b[3] - b[1] + 1)))
+
+
+def explain_regions(boxes) -> str:
+	"""`x172-238 y767-782, …` for a diff row — where to look, in one line."""
+	if not boxes:
+		return ''
+	shown = ', '.join(f'x{x0}-{x1} y{y0}-{y1}' for x0, y0, x1, y1 in boxes[:3])
+	return f'  regions: {shown}' + (f' (+{len(boxes) - 3} more)' if len(boxes) > 3 else '')
+
+
 def compare(args) -> int:
 	a_dir, b_dir = Path(args.a).expanduser().resolve(), Path(args.b).expanduser().resolve()
 	for directory in (a_dir, b_dir):
@@ -418,12 +468,14 @@ def compare(args) -> int:
 			delta = np.abs(a.astype(np.int16) - b.astype(np.int16))
 			mask = delta.max(axis=2) > level
 			count = int(mask.sum())
+			boxes = regions(mask) if count else []
 			if count:
 				diff_dir.mkdir(parents=True, exist_ok=True)
 				save_rgb(np.clip(delta * 8, 0, 255).astype(np.uint8), diff_dir / f'{name}.diff.png')
 			return name, {
 				'max_level': int(delta.max()), 'count': count, 'pixels': int(mask.size),
 				'share': count / mask.size, 'ink_a': ink_of(a), 'ink_b': ink_of(b),
+				'regions': boxes,
 			}
 
 		for name, row in pool.map(diff, common):
@@ -435,7 +487,7 @@ def compare(args) -> int:
 			worst = max(worst, row['share'])
 			flag = '' if row['count'] <= tolerance else '  ← differs'
 			if row['count'] or args.verbose:
-				print(f'  {name:<24} {row["count"]:>8} px >{level}  ({row["share"] * 100:5.2f}% of {row["pixels"]})  max Δ{row["max_level"]:<4}{flag}')
+				print(f'  {name:<24} {row["count"]:>8} px >{level}  ({row["share"] * 100:5.2f}% of {row["pixels"]})  max Δ{row["max_level"]:<4}{flag}{explain_regions(row["regions"])}')
 
 	shape_errors = [name for name, row in rows if row.get('shape')]
 	over = [name for name, row in rows if not row.get('shape') and row['count'] > tolerance]
