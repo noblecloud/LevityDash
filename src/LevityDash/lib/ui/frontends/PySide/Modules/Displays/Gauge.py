@@ -2363,6 +2363,13 @@ class GaugeValueLabel(GaugeLabel):
 		def _valueAccessor(self):
 			return self.parent.parent.value
 
+		@defer(pool_attr='action_pool')
+		def updateTransform(self, rect: QRectF = None, updateShared: bool = True, updatePath: bool = True, reason: str = None, *args):
+			super().updateTransform(rect, updateShared, updatePath, reason=reason, *args)
+			# A refit resets this label to where the fit puts it, and Gauge.recenter
+			# is not called again. Re-hang the unit from the value as it now is.
+			self.parent.parent._syncUnitUnderValue()
+
 		def getTextScale(self, textRect: QRectF = None, limitRect: QRectF = None) -> float:
 
 			"""
@@ -2643,6 +2650,13 @@ class GaugeUnit(GaugeLabel):
 			if (position := self.parent.position) is UnitDisplayPosition.Auto:
 				position = self.parent.position_auto()
 			return position
+
+		@defer(pool_attr='action_pool')
+		def updateTransform(self, rect: QRectF = None, updateShared: bool = True, updatePath: bool = True, reason: str = None, *args):
+			super().updateTransform(rect, updateShared, updatePath, reason=reason, *args)
+			# Same as the value label's: a refit puts the unit back at the
+			# value's raw box, which is not where it should hang.
+			self.parent.parent._syncUnitUnderValue()
 
 		def getTextPosition(self, limitRect: QRectF = None) -> QPointF:
 			match self._position:
