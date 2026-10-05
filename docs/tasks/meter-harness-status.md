@@ -319,3 +319,49 @@ sometimes no PNG at all, and 3239 px of difference between two captures of the
 same code. A separate job is measuring whether that is pre-existing at upstream's
 tip; until it is settled, the capture set carries emissive but the baseline cannot
 be called stable.
+
+## The clock lives for one target (2026-10-05)
+
+`emissive` cannot be photographed with the freeze on, and the reason is not this
+branch's. Its figure plots a window relative to the clock; the freeze collapses the
+series time range, `Graph.py:862` divides by it, the plot's pixels drift between runs
+and about half the runs exit SIGSEGV at shutdown with the same
+`libshiboken: Internal C++ object (LevitySceneView) already deleted` traceback. Every
+crashing module is byte-identical between this tree and `a31af10`, and upstream
+reproduces it run for run (docs/tasks/emissive-upstream-check.md) — the freeze is the
+trigger, and with the clock live both trees render cleanly, exit 0.
+
+So the harness carries `NO_FREEZE`: a target named there renders with the live clock
+however the run was invoked. `emissive` is the only entry, and it costs nothing —
+the target has no clock of its own, and the point of having it in the set is the glow
+on its gauges, which does not read the time.
+
+What the live clock does move is the figure itself: its plot band and its row of
+time-axis labels. Those are masked by name (`graph-plot`, `graph-time-axis`), with
+the measurement and the removal condition in the mask itself, the way `ev-caption`
+is. Masked, a two-capture comparison of `emissive` is 0 px over tolerance with 1344
+masked, and the gauge pixels — the glow cover — are what the gate judges.
+
+`baseline-merged` is superseded: it was taken before the freeze exemption existed, so
+its `emissive` member is the drifting one. The baseline the gate should use is
+`.render-diff/merged-a`, with `merged-b` as the pair that proves it reproduces.
+
+## The Studio's slider does follow (2026-10-05)
+
+The review asked for an offscreen check of the Studio's value slider; the first pass
+said the preview did not follow it, and that was wrong — the pass held a stale
+`studio.studio.gauge` reference across `settle()`, and `settle()` rebuilds the gauge.
+Re-read from the stage, the value, the value label and the rendered pixels all move
+together, identically here and in `a31af10`.
+
+Two real defects turned up instead, both pre-existing and identical upstream, so
+neither joins this branch (docs/tasks/studio-slider-smoke.md has the numbers):
+
+- `installSources()` patches `Displays.Gauge`, which `Displays/__init__.py`'s star
+  import binds to the class, so the studio's stand-in reaches no consumer and a
+  marker, fill or caption that names a key stays hidden. Patching where the consumer
+  looks fixes it; after the split that is two modules, so a fix should route both
+  through one lookup.
+- 17 of the 30 showcase cells never load: 16 decode a range or interval against a
+  `valueClass` that is still `None`, and Rain rate raises `NotImplementedError:
+  Multi-Unit values are not supported yet`.

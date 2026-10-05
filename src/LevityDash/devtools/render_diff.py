@@ -103,6 +103,16 @@ DEFAULT_TOLERANCE = 0
 #: guessing a margin.
 FIXTURE_DELAY_MS = 'end'
 
+#: Targets that render with a live clock even when the run freezes it.
+#: The freeze collapses a graph figure's time range to zero seconds, and
+#: `Graph.py:862` divides by it: the plot's pixels drift between runs and about
+#: half of the runs die at shutdown with SIGSEGV. That is measured in this tree
+#: and in upstream `a31af10` alike, so it is not the meter split's, and the
+#: trigger is this harness rather than the app — with the clock live, both trees
+#: render cleanly. Emissive is the graph preset and carries no clock, so leaving
+#: its clock live costs nothing and buys the glow paths their pixel cover.
+NO_FREEZE = frozenset({'emissive'})
+
 
 # --------------------------------------------------------------------------- #
 # masks: regions a comparison is allowed to ignore
@@ -131,6 +141,21 @@ MASKS: Dict[str, Tuple[Mask, ...]] = {
 			'the EV caption prints its unit per capture - a Measurement gets "313 km", '
 			'a float gets "313", and it never re-formats. App-side; see '
 			'docs/tasks/meter-harness-status.md. Remove when fix/caption-unit-race merges.',
+		),
+	),
+	'emissive': (
+		Mask(
+			'graph-plot', (0, 450, 1480, 712), (1600, 830),
+			'the figure plots a window relative to the live clock, and this target has to keep '
+			'the clock live: freezing it collapses the series time range and Graph.py:862 divides '
+			'by zero - the plot drifts between runs and the render exits SIGSEGV at shutdown, in '
+			'upstream a31af10 exactly as here (docs/tasks/emissive-upstream-check.md). The gauge '
+			'glow paths this target is in the set for sit outside this box. Remove when the clock '
+			'can be frozen without tripping that divide.',
+		),
+		Mask(
+			'graph-time-axis', (0, 798, 1480, 828), (1600, 830),
+			'the figure\'s time-axis labels, which read the same live clock as graph-plot.',
 		),
 	),
 }
@@ -382,11 +407,12 @@ def capture(args) -> int:
 	def run(target: Path) -> Tuple[str, dict]:
 		size = size_for(target, size_override)
 		out = out_dir / f'{target.stem}.png'
-		command = render_command(target, out, seed_dir, scenario_path, size, args.settle, args.scale, freeze, args.python)
+		target_freeze = None if target.stem in NO_FREEZE else freeze
+		command = render_command(target, out, seed_dir, scenario_path, size, args.settle, args.scale, target_freeze, args.python)
 		started = time.monotonic()
 		completed = subprocess.run(command, capture_output=True, text=True, env={**os.environ, 'LEVITYDASH_FIXTURE_DELAY_MS': FIXTURE_DELAY_MS})
 		seconds = time.monotonic() - started
-		entry = {'seconds': round(seconds, 1), 'size': list(size), 'exit': completed.returncode}
+		entry = {'seconds': round(seconds, 1), 'size': list(size), 'exit': completed.returncode, 'freeze': target_freeze or 'live'}
 		output = (completed.stdout or '') + (completed.stderr or '')
 		# A render can log a traceback and still write a PNG (a plugin thread that
 		# dies mid-publish, a layout that warns and carries on). Those must not
@@ -505,8 +531,8 @@ def explain_regions(boxes) -> str:
 	"""`x172-238 y767-782, …` for a diff row — where to look, in one line."""
 	if not boxes:
 		return ''
-	shown = ', '.join(f'x{x0}-{x1} y{y0}-{y1}' for x0, y0, x1, y1 in boxes[:3])
-	return f'  regions: {shown}' + (f' (+{len(boxes) - 3} more)' if len(boxes) > 3 else '')
+	shown = ', '.join(f'x{x0}-{x1} y{y0}-{y1}' for x0, y0, x1, y1 in boxes[:8])
+	return f'  regions: {shown}' + (f' (+{len(boxes) - 8} more)' if len(boxes) > 8 else '')
 
 
 def compare(args) -> int:
