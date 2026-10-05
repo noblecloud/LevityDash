@@ -175,3 +175,6 @@ graft/
 .memmy/
 openspec/
 opencode.jsonc
+
+# render_diff.py captures and their diff images — regenerable, machine-local
+.render-diff/
