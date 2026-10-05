@@ -16,10 +16,10 @@ import copy
 from collections.abc import Mapping
 from functools import cached_property
 from math import floor, isclose, isinf, log10
-from typing import TYPE_CHECKING, Optional, Type
+from typing import TYPE_CHECKING, Optional, Type, Union
 
 from numpy import ceil
-from PySide6.QtCore import QRectF, QSizeF
+from PySide6.QtCore import QRectF, QSizeF, Signal, Slot
 from PySide6.QtGui import QTransform
 from WeatherUnits import Humidity, Measurement, Wind
 
@@ -30,7 +30,7 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Displays.DisplayBase import Disp
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.elements import (
 	GaugeCaption, GaugeUnit, GaugeValueLabel, StatefulGaugeItem, _UNIT_UNDER_VALUE, gaugeKeyName,
 )
-from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.scale import decode_measurement
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.scale import GaugeValue, Numeric, Scale, decode_measurement
 from LevityDash.lib.utils.data import MinMax
 from LevityDash.lib.utils.shared import clearCacheAttr, is_prime
 
@@ -497,3 +497,73 @@ class Meter(Display):
 	_subItem: Optional[GaugeCaption] = None
 
 	_unit: Optional[str] = None
+
+	_value: GaugeValue = 0
+
+	_valueClass: Type[GaugeValue] = float
+
+	@property
+	def value(self) -> GaugeValue:
+		return self._value
+
+	@value.setter
+	def value(self, value):
+		if isinstance(value, (int, float)):
+			self.valueClass = value
+			if float(value) == float(self._value):
+				return
+			self._value = value
+			self.valueLabel.textBox.refresh()
+			self.unitLabel.textBox.refresh()
+			self.needle.refresh()
+			for item in self._fillItems():
+				item.refresh()
+			self._update_shape()
+
+	@property
+	def valueClass(self) -> Type[GaugeValue]:
+		return self._valueClass
+
+	@valueClass.setter
+	def valueClass(self, value):
+		if not isinstance(value, type):
+			value = type(value)
+		if value is self._valueClass:
+			return
+
+		self._valueClass = value
+
+		self.rebuild()
+
+	@Slot(float)
+	def updateSlot(self, value: Union[Measurement, Numeric]):
+		if isinstance(value, (int, float)):
+			self.valueClass = value
+
+	@property
+	def value_scale(self) -> Scale:
+		"""This gauge's range as fractions - the value→``t`` half of the track's work.
+
+		Not `scale`: `QGraphicsItem` already owns that name for the item's
+		transform, and shadowing it would break `item.scale()` calls.
+		"""
+		_range = self._range
+		return Scale.from_span(_range.rounded_min, _range.rounded_range, _range.wrap)
+
+	@StateProperty(key='range', link=GaugeRange, allowNone=False, repr=True, sortOrder=-2)
+	def range(self) -> GaugeRange:
+		return self._range
+
+	@range.setter
+	def range(self, value: GaugeRange):
+		self._range = value
+
+	@range.factory
+	def range(self) -> GaugeRange:
+		return GaugeRange(self)
+
+	@range.after
+	def range(self):
+		self.rebuild()
+
+	valueChanged = Signal(float)

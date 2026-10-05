@@ -125,6 +125,15 @@ by `Gauge.py` (which keeps re-exporting every name the rest of the app imports):
   Without the base change `refresh()` died on `AttributeError: 'Gauge' object has
   no attribute 'valueLabel'` - a member that is defined, has a factory, and is
   simply invisible to the machine that builds it.
+- **M2b, batch 2 (done)** — the value side: `value`/`_value`/`valueChanged`,
+  `valueClass`/`_valueClass`, `updateSlot`, `value_scale`, `range` (all four
+  definitions). One check earned its place first: Python mangles
+  double-underscore class attributes, so a moved member reading `self.__value`
+  would silently look for `_Meter__value`. The only such attribute is `__value`,
+  written but never read, by `_init_defaults_` - which stays in Gauge. Scripted
+  it rather than reading 1,300 lines for `__` names.
+  `animateValue`/`duration`/`easing`/`_needleAnimation` stay with the needle;
+  they move when a pointer abstraction does (phase 3).
 - Tooling: `move_members.py` moves a *member group* - every definition sharing a
   name, decorators included, since `@prop.factory`/`@prop.setter` are evaluated in
   the class body and only work beside their base property. Its first version

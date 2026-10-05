@@ -304,13 +304,11 @@ class Gauge(Meter):
 
 	__value: float = 0.0
 	_needleAnimation: QPropertyAnimation
-	valueChanged = Signal(float)
 	arc: GaugeArc
 
 	grads: Graduations
 	needleLength = 1.0
 	needleWidth = 0.1
-	_valueClass: Type[GaugeValue] = float
 	_scene: QGraphicsScene
 	_pen: QPen
 	_cache: list
@@ -335,22 +333,6 @@ class Gauge(Meter):
 		self.hide()
 	# a = self.arc
 	# self.unitLabel = unit_label = GaugeUnit(self)
-
-	@StateProperty(key='range', link=GaugeRange, allowNone=False, repr=True, sortOrder=-2)
-	def range(self) -> GaugeRange:
-		return self._range
-
-	@range.setter
-	def range(self, value: GaugeRange):
-		self._range = value
-
-	@range.factory
-	def range(self) -> GaugeRange:
-		return GaugeRange(self)
-
-	@range.after
-	def range(self):
-		self.rebuild()
 
 	@StateProperty(key='radius', default=Size.Height(1.0, relative=True), allowNone=False, repr=True, sortOrder=-1)
 	def _radius(self) -> Length | Size.Height:
@@ -806,26 +788,6 @@ class Gauge(Meter):
 		super().parentResized(arg)
 		self.refresh()
 
-	_value: GaugeValue = 0
-
-	@property
-	def value(self) -> GaugeValue:
-		return self._value
-
-	@value.setter
-	def value(self, value):
-		if isinstance(value, (int, float)):
-			self.valueClass = value
-			if float(value) == float(self._value):
-				return
-			self._value = value
-			self.valueLabel.textBox.refresh()
-			self.unitLabel.textBox.refresh()
-			self.needle.refresh()
-			for item in self._fillItems():
-				item.refresh()
-			self._update_shape()
-
 	def _zoneItems(self) -> list:
 		item = getattr(self, '_zonesItem', None)
 		return [] if item is None else [item]
@@ -837,26 +799,6 @@ class Gauge(Meter):
 	def value_to_angle(self, value: Numeric) -> Angle:
 		angle = float(value - self._range.rounded_min) / self._range.rounded_range * self.fullAngle + self.startAngle
 		return Angle(sorted((self.startAngle, angle, self.endAngle))[1])
-
-	@property
-	def valueClass(self) -> Type[GaugeValue]:
-		return self._valueClass
-
-	@valueClass.setter
-	def valueClass(self, value):
-		if not isinstance(value, type):
-			value = type(value)
-		if value is self._valueClass:
-			return
-
-		self._valueClass = value
-
-		self.rebuild()
-
-	@Slot(float)
-	def updateSlot(self, value: Union[Measurement, Numeric]):
-		if isinstance(value, (int, float)):
-			self.valueClass = value
 
 	def animateValue(self, start: Numeric, end: Numeric):
 		if self._needleAnimation.state() == QtCore.QAbstractAnimation.Running:
@@ -1128,16 +1070,6 @@ class Gauge(Meter):
 	def sizeAlong(self, value, dimension: Optional[DimensionType] = None):
 		"""A relative size resolved along the track - against the arc's length."""
 		return size_px(value, self.arc_length, dimension=dimension)
-
-	@property
-	def value_scale(self) -> Scale:
-		"""This gauge's range as fractions - the value→``t`` half of the track's work.
-
-		Not `scale`: `QGraphicsItem` already owns that name for the item's
-		transform, and shadowing it would break `item.scale()` calls.
-		"""
-		_range = self._range
-		return Scale.from_span(_range.rounded_min, _range.rounded_range, _range.wrap)
 
 	def value_to_angle(self, value: Numeric) -> float:
 		return self.startAngle + self.value_scale.toT(value) * self.fullAngle
