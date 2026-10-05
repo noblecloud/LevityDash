@@ -56,6 +56,33 @@ where noted.
     one capture. Caught, fixed, re-measured clean.
 - Next: `Meter` and `Gauge(Meter)` as one slice, handed over when it lands.
 
+### The Meter slice, in steps
+
+`Meter` cannot move before the items do: its state properties reference the item
+classes, and `GaugeRange` is nested inside the `Gauge` class body today. So the
+slice is a sequence, one family per commit, each moved verbatim and imported back
+by `Gauge.py` (which keeps re-exporting every name the rest of the app imports):
+
+- **M1a** (done) — `meter/elements.py`: `GaugeItem`, `StatefulGaugeItem`,
+  `GaugePathItem`, `StatefulGaugePathItem`, plus `Numeric`/`GaugeValue` into
+  `meter/scale.py`. `Gauge` is named through a lazy `gauge_class()` inside
+  elements - a real import there would be a cycle, since a gauge imports this.
+  Bodies verified verbatim except those two call sites, which a script checks.
+- **M1b** `Graduations`, `Tick`, `SubTick`, `TickSurface`.
+- **M1c** `GaugeTickText`, `GaugeTickTextGroup`.
+- **M1d** `Needle`, `Arrow`, `GaugeMarker`.
+- **M1e** `GaugeZones`, `GaugeFill`.
+- **M1f** `GaugeText`, `GaugeLabel`, `GaugeValueLabel`, `GaugeUnit`,
+  `GaugeCaption`.
+- **M2** `GaugeRange` + `Meter(Display)` into `meter/meter.py`; `Gauge(Meter)`
+  keeps the arc-only members. Handed over as one slice.
+- **M3** `GaugeArc` and the arc-specific label overrides into `meter/gauge.py`;
+  `Gauge.py` becomes the shim.
+
+Every step ends with the suite and a capture against the baseline. Renames the
+survey proposes (`GaugeItem` → `MeterItem` and friends) come after the package is
+assembled, as one names-only commit, so the moves stay reviewable.
+
 ### The harness itself
 
 - `src/LevityDash/devtools/render_diff.py` — `capture | compare | selfcheck`

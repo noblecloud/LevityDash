@@ -14,14 +14,23 @@ and the tracks are built on, and because a bar needs the same ones.
 None of this imports Qt, `Gauge.py`, or anything that does.
 """
 from collections.abc import Iterable
-from typing import Type
+from typing import Type, TypeVar, Union
+
+from numpy import number as np_number
 
 from LevityDash.lib.utils.shared import factors, Unset
 from WeatherUnits import Measurement, auto as auto_wu
 
+#: The value types a gauge deals with, and the type variable the classes that
+#: hold one are generic over. (`shared.Numeric` is the same union; this file's
+#: copy is the one the meter package reads, and consolidating the two is a
+#: separate, deliberate change.)
+Numeric = Union[int, float, complex, np_number, Measurement]
+GaugeValue = TypeVar('GaugeValue', bound=Numeric, covariant=True)
+
 __all__ = [
-	'CLOCK_HANDS', 'Scale', '_isWholeSteps', 'clockTurn', 'decode_measurement', 'filter_factors',
-	'formatDuration', 'parseClockTime', 'shortestDelta',
+	'CLOCK_HANDS', 'GaugeValue', 'Numeric', 'Scale', '_isWholeSteps', 'clockTurn', 'decode_measurement',
+	'filter_factors', 'formatDuration', 'parseClockTime', 'shortestDelta',
 ]
 
 

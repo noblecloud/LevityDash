@@ -43,9 +43,12 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Handles import Handle
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import SizeGroup
 from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, addCrosshair, DebugPaint, SoftShadow, outline_path, \
 	modifyTransformValues, rect_to_shape, addPath
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.elements import (
+	GaugeItem, GaugePathItem, StatefulGaugeItem, StatefulGaugePathItem,
+)
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.scale import (
-	CLOCK_HANDS, Scale, _isWholeSteps, clockTurn, decode_measurement, filter_factors, formatDuration,
-	parseClockTime, shortestDelta,
+	CLOCK_HANDS, GaugeValue, Numeric, Scale, _isWholeSteps, clockTurn, decode_measurement,
+	filter_factors, formatDuration, parseClockTime, shortestDelta,
 )
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.track import ArcTrack
 from LevityDash.lib.utils import Axis
@@ -55,52 +58,6 @@ from LevityDash.lib.utils.shared import radialPoint, defer, factors, is_prime, U
 from WeatherUnits import Measurement, Angle, Wind, Humidity, auto as auto_wu, Length, Percentage
 
 log = UILogger.getChild('Gauge')
-
-
-class GaugeItem:
-	"""
-	Base class for all gauge items.  This class provides a reference to the gauge that the item belongs to
-	and will raise a ValueError if no gauge is provided.
-	"""
-
-	_gauge: 'Gauge'
-
-	def __extract_gauge(self, args, kwargs):
-		gauge = get(kwargs, 'gauge' 'parent', default=None, expectedType=Gauge)
-		if gauge is None:
-			gauge = next((arg for arg in args if isinstance(arg, Gauge)), None)
-		if gauge is None:
-			gauge = next((kwarg for kwarg in kwargs.values() if isinstance(kwarg, Gauge)), None)
-		if gauge is None:
-			raise ValueError(f'No gauge provided for {self.__class__.__name__}')
-		return gauge
-
-	def __init__(self, *args, **kwargs):
-
-		self._gauge = self.__extract_gauge(args, kwargs)
-
-		try:
-			super().__init__(*args, **kwargs)
-		except TypeError:
-			super().__init__()
-
-	@property
-	def gauge(self) -> 'Gauge':
-		return self._gauge
-
-	def remove(self):
-		self.gauge.scene().removeItem(self)
-
-
-Numeric = Union[int, float, complex, np_number, Measurement]
-GaugeValue = TypeVar('GaugeValue', bound=Numeric, covariant=True)
-
-
-class StatefulGaugeItem(GaugeItem, Stateful):
-
-	def __init__(self, *args, **kwargs):
-		super(StatefulGaugeItem, self).__init__(*args, **kwargs)
-		self.prep_init(args=args, kwargs=kwargs, stateful_parent=self.gauge)
 
 
 class Graduations(ColorGradientMixin, StatefulGaugeItem):
@@ -1016,41 +973,6 @@ class Graduations(ColorGradientMixin, StatefulGaugeItem):
 
 	def _map_gradient(self, gradient: Gradient) -> QGradient:
 		return self.gauge.map_gradient_to(gradient, self.surface)
-
-
-class GaugePathItem(GaugeItem, QGraphicsPathItem):
-
-	_weight_scale: float = 1.0
-	_shape: QPainterPath = QPainterPath()
-
-	def __init__(self, *args, **kwargs):
-		super(GaugePathItem, self).__init__(*args, **kwargs)
-		self.setPen(self.gauge.pen)
-
-	def _set_color(self, color: Color):
-		self.setBrush(color.QColor)
-
-	@guarded_cached_property(guardFunc=lambda x: x is not None, default=None)
-	def gauge(self) -> 'Gauge':
-		try:
-			return self._gauge
-		except AttributeError:
-			pass
-
-		parent = self.parentItem()
-		while not isinstance(parent, Gauge):
-			try:
-				parent = parent.parentItem()
-			except AttributeError:
-				return None
-		return parent
-
-
-class StatefulGaugePathItem(Stateful, GaugePathItem):
-
-	def __init__(self, *args, **kwargs):
-		super(StatefulGaugePathItem, self).__init__(*args, **kwargs)
-		self.prep_init(args=args, kwargs=kwargs, stateful_parent=self.gauge)
 
 
 @DebugPaint
