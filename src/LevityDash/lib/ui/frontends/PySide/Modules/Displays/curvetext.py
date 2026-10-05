@@ -53,34 +53,148 @@ def _subdivide(points: np.ndarray, max_len: float) -> np.ndarray:
 	return np.vstack([out, points[-1:]])
 
 
-def bend_text(text: str, font, scale: float, radius: float, side: int, epsilon: float) -> QPainterPath:
+def _outline_pieces(path: QPainterPath, scale: float):
+	"""
+	Split a path into subpaths of cubic pieces.
+
+	Returns a list of (n, 4, 2) arrays, one per subpath. Every piece holds the
+	four control points of a cubic. A line becomes a cubic with its control
+	points a third of the way along. Coordinates are multiplied by `scale`.
+	"""
+	subpaths = []
+	pieces = []
+	current = None
+	start = None
+	count = path.elementCount()
+	i = 0
+
+	def close():
+		if pieces:
+			if (current[0] - start[0]) ** 2 + (current[1] - start[1]) ** 2 > 1e-12:
+				pieces.append(_line_piece(current, start))
+			subpaths.append(np.array(pieces) * scale)
+
+	while i < count:
+		element = path.elementAt(i)
+		kind = element.type
+		point = (element.x, element.y)
+		if kind == QPainterPath.ElementType.MoveToElement:
+			close()
+			pieces = []
+			start = current = point
+			i += 1
+		elif kind == QPainterPath.ElementType.LineToElement:
+			pieces.append(_line_piece(current, point))
+			current = point
+			i += 1
+		elif kind == QPainterPath.ElementType.CurveToElement:
+			c2 = path.elementAt(i + 1)
+			end = path.elementAt(i + 2)
+			pieces.append((current, point, (c2.x, c2.y), (end.x, end.y)))
+			current = (end.x, end.y)
+			i += 3
+		else:
+			i += 1
+	close()
+	return subpaths
+
+
+def _line_piece(a, b):
+	return (a, (a[0] + (b[0] - a[0]) / 3, a[1] + (b[1] - a[1]) / 3), (a[0] + (b[0] - a[0]) * 2 / 3, a[1] + (b[1] - a[1]) * 2 / 3), b)
+
+
+def _cubic_at(pieces: np.ndarray, t: np.ndarray) -> np.ndarray:
+	"""Points of `pieces` (n, 4, 2) at parameters `t` (n,)."""
+	u = 1 - t
+	return (
+		(u ** 3)[:, None] * pieces[:, 0] + (3 * u * u * t)[:, None] * pieces[:, 1]
+		+ (3 * u * t * t)[:, None] * pieces[:, 2] + (t ** 3)[:, None] * pieces[:, 3]
+	)
+
+
+#: Widest arc, in radians, one cubic may cover after the warp.
+_MAX_ARC = 0.5
+
+
+def bend_text(text: str, font, scale: float, radius: float, side: int, epsilon: float, bend: Optional[float] = None) -> QPainterPath:
 	"""
 	Outline of `text` bent along a circle, in the label's local units.
 
 	`scale` is the item's scale: the outline is warped at final size, then divided
 	by it. `radius` is the label-centre radius in scene units. `epsilon` is the
 	flatness tolerance in scene units.
+
+	`bend` runs from 0 to 1. At 1 every point follows the warp, so the letters
+	stretch. At 0 each letter keeps its shape and turns to the circle's tangent at
+	its own centre. Between, every point sits that share of the way from its rigid
+	place to its warped place.
+
+	The glyph curves are never flattened. Each cubic is cut into pieces that span
+	a small angle of the circle, and the result of every piece is fitted by one
+	cubic through its end points and its two third points. The result is a curve
+	path: smooth at any zoom.
 	"""
+	bend = min(1.0, max(0.0, bend))
 	fm = QFontMetricsF(font)
 	width = fm.horizontalAdvance(text)
 	ascent, descent = fm.ascent(), fm.descent()
-	flat = QPainterPath()
-	flat.addText(QPointF(0, 0), font, text)
 	scale = scale or 1.0
 	y_mid = (descent - ascent) / 2 * scale
-	# Smallest radius the text spans, floored so the chord length stays positive.
-	inner = max(radius - (ascent + descent) * scale, radius * 0.1, 1e-3)
-	max_len = max((8 * inner * epsilon) ** 0.5, 1e-3)
+	# The fit error grows with the sixth power of the arc. Tighten the arc for a big radius or a small epsilon.
+	arc = min(_MAX_ARC, max(0.05, (max(epsilon, 1e-6) / (0.02 * max(radius, 1e-3) + 1e-9)) ** (1 / 6)))
+	step = abs(radius) * arc
+	half = width * scale / 2
 	result = QPainterPath()
 	result.setFillRule(Qt.WindingFill)
-	for polygon in flat.toSubpathPolygons(QTransform().scale(scale, scale)):
-		points = np.array([(p.x(), p.y()) for p in polygon])
-		if len(points) < 2:
+	third = np.array([1 / 3, 2 / 3])
+	for i, char in enumerate(text):
+		if char.isspace():
 			continue
-		points = _subdivide(points, max_len)
-		x, y = warp_point(points[:, 0] - width * scale / 2, points[:, 1], y_mid, radius, side)
-		result.addPolygon(QPolygonF([QPointF(a / scale, b / scale) for a, b in zip(x, y)]))
-		result.closeSubpath()
+		advance = fm.horizontalAdvance(text[:i])
+		glyph = QPainterPath()
+		glyph.addText(QPointF(advance, 0), font, char)
+		# Frame of the glyph: its middle on the circle, turned to the tangent there.
+		centre_x = (advance + fm.horizontalAdvance(char) / 2) * scale
+		alpha = (centre_x - half) / radius
+		cx, cy = warp_point(centre_x - half, y_mid, y_mid, radius, side)
+		turn = side * alpha
+		cos_t, sin_t = cos(turn), sin(turn)
+		for pieces in _outline_pieces(glyph, scale):
+			# Only the warped share bends, so a low bend needs fewer pieces.
+			span = (pieces[:, :, 0].max(axis=1) - pieces[:, :, 0].min(axis=1)) * bend
+			counts = np.maximum(1, np.ceil(span / step)).astype(int)
+			index = np.repeat(np.arange(len(pieces)), counts)
+			first = np.cumsum(counts) - counts
+			k = np.arange(len(index)) - first[index]
+			n = counts[index]
+			whole = pieces[index]
+			t0 = k / n
+			dt = 1 / n
+			samples = np.stack([
+				_cubic_at(whole, t0),
+				_cubic_at(whole, t0 + dt * third[0]),
+				_cubic_at(whole, t0 + dt * third[1]),
+				_cubic_at(whole, t0 + dt),
+			], axis=1)
+			dx = samples[:, :, 0] - centre_x
+			dy = samples[:, :, 1] - y_mid
+			rigid_x = cx + dx * cos_t - dy * sin_t
+			rigid_y = cy + dx * sin_t + dy * cos_t
+			if bend >= 1.0:
+				x, y = warp_point(samples[:, :, 0] - half, samples[:, :, 1], y_mid, radius, side)
+			elif bend <= 0.0:
+				x, y = rigid_x, rigid_y
+			else:
+				wx, wy = warp_point(samples[:, :, 0] - half, samples[:, :, 1], y_mid, radius, side)
+				x, y = rigid_x + (wx - rigid_x) * bend, rigid_y + (wy - rigid_y) * bend
+			q = np.stack([x, y], axis=2) / scale
+			p0, q1, q2, p3 = q[:, 0], q[:, 1], q[:, 2], q[:, 3]
+			c1 = (-5 * p0 + 18 * q1 - 9 * q2 + 2 * p3) / 6
+			c2 = (2 * p0 - 9 * q1 + 18 * q2 - 5 * p3) / 6
+			result.moveTo(float(p0[0, 0]), float(p0[0, 1]))
+			for a, b, c in zip(c1.tolist(), c2.tolist(), p3.tolist()):
+				result.cubicTo(a[0], a[1], b[0], b[1], c[0], c[1])
+			result.closeSubpath()
 	return result
 
 
@@ -133,24 +247,24 @@ _cache: 'OrderedDict[tuple, QPainterPath]' = OrderedDict()
 _CACHE_SIZE = 512
 
 
-def warp_path(text: str, font, scale: float, radius: float, side: int, mode: CurveMode, epsilon: float) -> QPainterPath:
+def warp_path(text: str, font, scale: float, radius: float, side: int, mode: CurveMode, epsilon: float, bend: Optional[float] = None) -> QPainterPath:
 	"""
 	The one place any text is bent onto a circle: tick labels, value and unit
 	labels, captions, titles and dashboard text all come here.
 
-	Cached per (text, font, scale, radius, side, mode). `epsilon` is the flatness
+	Cached per (text, font, scale, radius, side, bend). `bend` is 0 to 1; left out,
+	it comes from `mode` (`glyphs` is 0, `warp` is 1). `epsilon` is the flatness
 	tolerance in scene units; it only changes the result at the 0.05 level, so it
 	is rounded in the key.
 	"""
-	key = (mode, text, font.key(), round(scale, 4), round(radius, 2), side, round(epsilon, 2))
+	if bend is None:
+		bend = 0.0 if mode is CurveMode.glyphs else 1.0
+	key = (text, font.key(), round(scale, 4), round(radius, 2), side, round(epsilon, 2), round(bend, 3))
 	hit = _cache.get(key)
 	if hit is not None:
 		_cache.move_to_end(key)
 		return hit
-	if mode is CurveMode.glyphs:
-		path = glyph_ring_text(text, font, scale, radius, side)
-	else:
-		path = bend_text(text, font, scale, radius, side, epsilon)
+	path = bend_text(text, font, scale, radius, side, epsilon, bend)
 	_cache[key] = path
 	if len(_cache) > _CACHE_SIZE:
 		_cache.popitem(last=False)
@@ -196,6 +310,9 @@ class WarpSpec:
 	            the dial's diameter (``dial``) or the card's short side, or ``px``/``in``.
 	``angle``   where on the circle the middle sits, degrees clockwise from the top.
 	``mode``    ``warp`` bends the outlines; ``glyphs`` keeps each letter straight.
+	``bend``    how far the letters bend, ``0%`` to ``100%`` (a bare number is a percent).
+	            ``0%`` turns each rigid letter to the circle, ``100%`` is the full warp.
+	            ``mode: glyphs`` is ``0%`` and ``mode: warp`` is ``100%``.
 	``flip``    ``auto`` turns text in the lower half so it reads left to right;
 	            ``true``/``false`` force it.
 
@@ -207,6 +324,12 @@ class WarpSpec:
 	angle: float = 0.0
 	mode: CurveMode = CurveMode.warp
 	flip: Any = 'auto'
+	bend: float = 1.0  # 0..1; the share of the warp each point takes
+
+	@property
+	def amount(self) -> float:
+		"""The bend to draw with: `mode: glyphs` built in code, without a bend, is 0."""
+		return 0.0 if self.mode is CurveMode.glyphs and self.bend == 1.0 else self.bend
 
 	@classmethod
 	def decode(cls, value) -> Optional['WarpSpec']:
@@ -218,7 +341,7 @@ class WarpSpec:
 			return cls()
 		if not isinstance(value, dict):
 			raise ValueError(f'warp must be true, false or a mapping, got {value!r}')
-		unknown = set(value) - {'center', 'radius', 'angle', 'mode', 'flip'}
+		unknown = set(value) - {'center', 'radius', 'angle', 'mode', 'flip', 'bend'}
 		if unknown:
 			raise ValueError(f'warp has unknown keys {sorted(map(str, unknown))}')
 		center = value.get('center', 'dial')
@@ -244,7 +367,16 @@ class WarpSpec:
 			raise ValueError(f'warp flip must be auto, true or false, got {flip!r}')
 		if isinstance(flip, str):
 			flip = 'auto'
-		return cls(center, value.get('radius', '40%'), float(value.get('angle', 0)), mode, flip)
+		bend = 0.0 if mode is CurveMode.glyphs and 'bend' not in value else 1.0
+		if 'bend' in value:
+			raw = value['bend']
+			try:
+				bend = float(str(raw).strip().rstrip('%')) / 100
+			except ValueError:
+				raise ValueError(f'warp bend must be a percent from 0% to 100%, got {raw!r}') from None
+			if not 0 <= bend <= 1:
+				raise ValueError(f'warp bend must be between 0% and 100%, got {raw!r}')
+		return cls(center, value.get('radius', '40%'), float(value.get('angle', 0)), mode, flip, bend)
 
 	def encode(self):
 		"""Plain types only: `true` when everything is default, else a mapping of what differs."""
@@ -260,6 +392,10 @@ class WarpSpec:
 			out['mode'] = self.mode.value
 		if self.flip != default.flip:
 			out['flip'] = self.flip
+		if self.mode is CurveMode.glyphs and self.bend == 0.0:
+			pass  # mode: glyphs already says 0%
+		elif self.bend != default.bend:
+			out['bend'] = f'{round(self.bend * 100, 1):g}%'
 		return out or True
 
 	def resolve(self, card: QRectF, dial: Optional[tuple]) -> 'WarpPlacement':

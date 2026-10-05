@@ -1555,9 +1555,11 @@ class WarpForm(_Form):
 		                        'Distance from the centre to the middle of the text; % is a share of the dial\'s diameter')
 		self.angle = self.part('angle', 'angle', NumberEdit(lo=-180, hi=180, step=1, decimals=1, suffix='\u00b0'),
 		                       'Where on the circle the text sits, degrees clockwise from the top')
+		self.bend = self.part('bend', 'bend', NumberEdit(lo=0, hi=100, step=1, decimals=0, suffix=' %'),
+		                      '0 % turns each rigid letter to the circle; 100 % bends the letters with it. Around 60 % keeps letters readable')
 		self.mode = QComboBox()
 		self.mode.addItems(['warp', 'glyphs'])
-		self.mode.setToolTip('warp bends the letters; glyphs keeps each letter straight')
+		self.mode.setToolTip('warp is bend 100 %; glyphs is bend 0 %. Use bend for anything between')
 		self.mode.activated.connect(self._emit)
 		self.grid.addWidget(QLabel('mode'), self._r, 0)
 		self.grid.addWidget(self.mode, self._r, 1)
@@ -1569,7 +1571,7 @@ class WarpForm(_Form):
 		self.grid.addWidget(QLabel('flip'), self._r, 0)
 		self.grid.addWidget(self.flip, self._r, 1)
 		self._r += 1
-		self._known |= {'center', 'mode', 'flip'}
+		self._known |= {'center', 'mode', 'flip', 'bend'}
 		self.setValue(True)
 
 	def _showCustom(self, on: bool):
@@ -1599,6 +1601,10 @@ class WarpForm(_Form):
 		self._showCustom(self.centre.currentText() == 'custom')
 		self.radius.setValue(spec.get('radius', '40%'))
 		self.angle.setValue(spec.get('angle', 0))
+		bend = spec.get('bend')
+		if bend is None:
+			bend = 0 if str(spec.get('mode', 'warp')) == 'glyphs' else 100
+		self.bend.setValue(_number(bend))
 
 	def value(self):
 		out = dict(self._extra)
@@ -1612,6 +1618,9 @@ class WarpForm(_Form):
 			out['angle'] = a
 		if self.mode.currentText() != 'warp':
 			out['mode'] = self.mode.currentText()
+		bend = self.bend.value()
+		if bend is not None and not (bend == 0 and out.get('mode') == 'glyphs') and bend != 100:
+			out['bend'] = f'{bend:g}%'
 		if self.flip.currentText() != 'auto':
 			out['flip'] = self.flip.currentText() == 'true'
 		return out or True
