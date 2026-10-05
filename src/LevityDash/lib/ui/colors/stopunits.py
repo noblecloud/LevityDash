@@ -15,7 +15,7 @@ from typing import Optional, Tuple, Type
 
 from WeatherUnits import Length, Measurement, Time, Wind, auto
 
-__all__ = ('StopUnitError', 'parseStop', 'measure', 'toDataUnit', 'formatStop', 'family')
+__all__ = ('StopUnitError', 'parseStop', 'measure', 'toDataUnit', 'formatStop', 'family', 'unitText')
 
 _STOP = re.compile(r'^\s*(?P<number>[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*(?P<unit>.*?)\s*$')
 
@@ -132,3 +132,27 @@ def formatStop(number: float, unit: Optional[str]) -> str:
 	if unit[0] in '°%º':
 		return f'{text}{unit}'
 	return f'{text} {unit}'
+
+
+def unitText(cls: type) -> Optional[str]:
+	"""How a stop key spells the unit of `cls`, such as `°C` for `Temperature.Celsius`; None when no spelling reads back as `cls`.
+
+	A preset gradient holds measurements (`Gradient[Temperature.Celsius]`), and its stop keys are bare
+	numbers. Written out without the unit, a stop would read as the data's own unit.
+	"""
+	unit = getattr(cls, 'unit', None)
+	if not isinstance(unit, str) or not unit:
+		return None
+	candidates = [unit, unit.upper()]
+	if family(cls) == 'temperature':
+		candidates = [f'°{unit.upper()}', *candidates]
+	for text in candidates:
+		try:
+			found = measure(1.0, text)
+			# WeatherUnits may answer with a sibling class (Wind.MilesPerHour for rate.MilesPerHour),
+			# so the test is the same kind of thing and one of it converting to exactly one.
+			if family(type(found)) == family(cls) and abs(float(cls(found)) - 1.0) < 1e-9:
+				return text
+		except Exception:  # noqa: BLE001 - WeatherUnits raises several kinds for a unit it cannot convert
+			continue
+	return None

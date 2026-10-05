@@ -45,6 +45,7 @@ from statekit.yaml import StatefulDumper
 from statekit.validate import StateError
 from qolkit import Unset
 from LevityDash.lib.ui.colors import Gradient
+from LevityDash.lib.ui.colors.stopunits import formatStop, parseStop, unitText
 
 #: Properties that are not about how a gauge looks: plumbing, layout of the
 #: panel itself, or text the gauge computes.
@@ -164,9 +165,17 @@ def gradientText(gradient: Gradient) -> dict:
 	"""A gradient as the `{stop: '#rrggbb'}` mapping a `.levity` file holds and the loader reads back.
 
 	A stop written with a unit keeps its own text (`99°F`); a bare number stays a number. The stops
-	keep the order they were written in.
+	keep the order they were written in. A bare-number stop that holds a measurement, as the stops of
+	a preset such as `TemperatureGradient` (°C) do, gets that unit, so it does not read as the data's unit.
 	"""
-	return {stop.key: stop.color.QColor.name() for stop in dict.values(gradient)}
+	def key(stop):
+		parsed = parseStop(stop.key)
+		if parsed is not None and parsed[1] is None and isinstance(stop.value, wu.Measurement):
+			if (unit := unitText(type(stop.value))) is not None:
+				return formatStop(parsed[0], unit)
+		return stop.key
+
+	return {key(stop): stop.color.QColor.name() for stop in dict.values(gradient)}
 
 
 class StudioDumper(StatefulDumper):
