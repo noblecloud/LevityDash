@@ -86,7 +86,10 @@ the track differs: an arc for a gauge, a straight line for a bar.
      the showcase with frozen time and fixed scenario data into a directory, then
      compares two directories pixel by pixel. It writes a diff image for each mismatch
      and exits non-zero on any difference beyond anti-aliasing noise. Run it twice on
-     unchanged code and confirm that two runs match. If they do not, fix the cause:
+     unchanged code and confirm that two runs match. Known starting point: on
+     2026-10-05 two showcase renders of unchanged code differed by about 48k pixels
+     (by more than 30 levels), because the Mock plugin drives live values. Use the
+     Fixture scenario data, not Mock. If they do not, fix the cause:
      needle animation, clocks or a settle time that is too short.
    - Capture the baseline on the pre-refactor commit.
    - Move `Gauge` onto `Meter` plus `ArcTrack` in small commits. Run the diff after
