@@ -1200,10 +1200,46 @@ class GaugeArc(GlowMixin, StatefulGaugePathItem):
 		rect = self.centered_gauge_rect
 		path.arcMoveTo(rect, -self.startAngle + 90)
 		path.arcTo(rect, -self.startAngle + 90, -self.fullAngle)
+		# The centre comes from the arc as specified, so extending its ends
+		# never moves the dial.
 		self._center_offset = path.boundingRect().center()
 		self.gauge.update_center_offset(self._center_offset)
+		if extra := self.extend_degrees(rect.width() / 2):
+			extra = extra if self.fullAngle >= 0 else -extra
+			path = QPainterPath()
+			path.arcMoveTo(rect, -(self.startAngle - extra) + 90)
+			path.arcTo(rect, -(self.startAngle - extra) + 90, -(self.fullAngle + 2 * extra))
 		self.setPath(path)
 		self.makeShape()
+
+	def extend_degrees(self, radius: float) -> float:
+		"""How far, in degrees, each end of the track runs past its angle.
+
+		`auto` covers the outer half of the widest end tick, so a flat end lines
+		up with the tick's far edge instead of stopping on its centre line. Round
+		and square caps already reach past the end, so `auto` leaves them alone.
+		"""
+		value = self.extend
+		# A closed ring has no ends to extend; it would only overlap itself.
+		if radius <= 0 or not value or abs(self.fullAngle) >= 360:
+			return 0.0
+		if value == 'auto':
+			if self.capStyle != Qt.PenCapStyle.FlatCap:
+				return 0.0
+			try:
+				widths = [
+					graduation.width_px
+					for graduation in (self.gauge.majorDivisions, self.gauge.minorDivisions, self.gauge.microDivisions)
+					if graduation.enabled
+				]
+			except AttributeError:
+				return 0.0
+			pixels = max(widths, default=0.0) / 2
+		elif isinstance(value, str) and value.endswith('px'):
+			pixels = float(value[:-2])
+		else:
+			return float(value)
+		return float(np.degrees(pixels / radius))
 
 	def refresh(self):
 		self.draw()
@@ -1312,6 +1348,34 @@ class GaugeArc(GlowMixin, StatefulGaugePathItem):
 			return camelCase(value.name.decode().strip('Cap'), titleCase=False)
 		except AttributeError:
 			return camelCase(value.name.strip('Cap'), titleCase=False)
+
+	@StateProperty(key='extend', default='auto', after=refresh, allowNone=True)
+	def extend(self) -> str | float | None:
+		"""How far each end of the track runs past its angle: `auto` (reach the
+		outer edge of the end tick when the cap is flat), a number of degrees, a
+		length such as `2px`, or `0` for none."""
+		return getattr(self, '_extend', 'auto')
+
+	@extend.setter
+	def extend(self, value: str | float | None):
+		self._extend = value
+
+	@extend.decode
+	def extend(value) -> str | float | None:
+		if value is None or value is False:
+			return 0
+		if isinstance(value, str):
+			text = value.strip().lower()
+			if text in ('auto', 'true'):
+				return 'auto'
+			if text in ('none', 'off', 'false', ''):
+				return 0
+			if text.endswith('px'):
+				return f'{float(text[:-2]):g}px'
+			return float(text.rstrip('°'))
+		if value is True:
+			return 'auto'
+		return float(value)
 
 	@property
 	def fullAngle(self) -> float | int:
@@ -2861,7 +2925,9 @@ class GaugeFill(GaugePathItem):
 
 	Spec keys: ``from`` (a number, key or expression; default the range
 	minimum), ``to`` (a number, key or expression; omitted means the gauge value), ``weight`` (default the arc's) and
-	``color`` (default the gauge colour). With no value to draw to, it is hidden.
+	``color`` (default the gauge colour) and ``cap`` (``round``, the default,
+	``square`` or ``flat``; a round or square cap ends on the value rather than
+	past it). With no value to draw to, it is hidden.
 	A source-fed end with no value yet hides the fill; a bad spec logs the gauge key and hides it.
 	"""
 
@@ -2879,6 +2945,9 @@ class GaugeFill(GaugePathItem):
 	_gap = None
 	_glow: Optional[Glow] = None
 	_strokes: list = ()
+	_cap = Qt.PenCapStyle.RoundCap
+
+	_CAPS = {'round': Qt.PenCapStyle.RoundCap, 'square': Qt.PenCapStyle.SquareCap, 'flat': Qt.PenCapStyle.FlatCap}
 
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
@@ -2911,8 +2980,9 @@ class GaugeFill(GaugePathItem):
 		self._valid = False
 		self._from = self._to = self._weight = self._color = self._gap = self._glow = None
 		self._colorFromZones, self._segments, self._strokes = False, 0, ()
+		self._cap = Qt.PenCapStyle.RoundCap
 		name = _gaugeKeyName(self.gauge)
-		unknown = set(spec) - {'from', 'to', 'weight', 'color', 'segments', 'gap', 'glow'}
+		unknown = set(spec) - {'from', 'to', 'weight', 'color', 'segments', 'gap', 'glow', 'cap'}
 		if unknown:
 			log.warning(f'Gauge {name} fill ignored unknown keys {sorted(map(str, unknown))}')
 		try:
@@ -2938,6 +3008,10 @@ class GaugeFill(GaugePathItem):
 				if self._weight is None:
 					raise ValueError(f'weight {weight!r} is not a size')
 			self._glow = Glow.decode(spec.get('glow'))
+			if (cap := spec.get('cap')) is not None:
+				if not isinstance(cap, str) or (cap := cap.strip().lower()) not in self._CAPS:
+					raise ValueError(f'cap must be one of {", ".join(self._CAPS)}, not {cap!r}')
+				self._cap = self._CAPS[cap]
 			if isinstance(spec.get('color'), str) and spec['color'].strip().lower() == 'zone':
 				self._colorFromZones = True
 			elif (color := spec.get('color')) is not None:
@@ -3011,10 +3085,31 @@ class GaugeFill(GaugePathItem):
 		zones = gauge._zonesItem
 		base = gauge.defaultColor if self._color is None else self._color
 		strokes = []
+		radius = rect.width() / 2 or 1
+		# A round or square cap reaches half the weight past the end of its
+		# stroke. Pull each end in by that much, so the cap's edge lands on the
+		# value (and segment gaps keep their size) instead of overshooting it.
+		capDeg = 0.0 if self._cap == Qt.PenCapStyle.FlatCap else (weight or 0) / 2 / radius * 180 / pi
+		# Where the track itself has a cap that reaches past its end, a fill end
+		# on that end keeps its length, so the two caps cover each other.
+		ends = sorted((float(gauge.startAngle), float(gauge.endAngle)))
+		trackCapped = gauge.arc.capStyle != Qt.PenCapStyle.FlatCap and abs(ends[1] - ends[0]) < 360
+
+		def arc(sa: float, sb: float) -> QPainterPath:
+			sa += 0.0 if trackCapped and isclose(sa, ends[0], abs_tol=1e-6) else capDeg
+			sb -= 0.0 if trackCapped and isclose(sb, ends[1], abs_tol=1e-6) else capDeg
+			if sb <= sa:
+				# Shorter than its own caps: one dot at the middle.
+				sa = sb = (sa + sb) / 2
+				sb += 1e-3
+			path = QPainterPath()
+			path.arcMoveTo(rect, -sa + 90)
+			path.arcTo(rect, -sa + 90, -(sb - sa))
+			return path
+
 		if weight and self._segments:
 			start, full = float(gauge.startAngle), float(gauge.fullAngle)
 			step = full / self._segments
-			radius = rect.width() / 2 or 1
 			gapDeg = 0.0
 			if self._gap is not None:
 				gapPx = size_px(self._gap, gauge.radius, dimension=DimensionType.width) or 0
@@ -3026,17 +3121,13 @@ class GaugeFill(GaugePathItem):
 				mid = start + (i + 0.5) * step
 				if not (a <= mid <= b):
 					continue
-				path = QPainterPath()
-				path.arcMoveTo(rect, -sa + 90)
-				path.arcTo(rect, -sa + 90, -(sb - sa))
+				path = arc(*sorted((sa, sb)))
 				color = base
 				if self._colorFromZones and zones is not None:
 					color = zones.colorAtAngle(mid) or base
 				strokes.append((path, color))
 		elif weight:
-			path = QPainterPath()
-			path.arcMoveTo(rect, -a + 90)
-			path.arcTo(rect, -a + 90, -(b - a))
+			path = arc(a, b)
 			color = base
 			if self._colorFromZones and zones is not None:
 				endValue = self._to if self._to is not None else gauge.value
@@ -3047,7 +3138,7 @@ class GaugeFill(GaugePathItem):
 			full.addPath(path)
 		pen = QPen(gauge.pen)
 		pen.setWidthF(weight or 0)
-		pen.setCapStyle(Qt.PenCapStyle.FlatCap)
+		pen.setCapStyle(self._cap)
 		pen.setBrush(QBrush(strokes[0][1] if strokes else base))
 		self.setPen(pen)
 		self.setBrush(Qt.BrushStyle.NoBrush)
