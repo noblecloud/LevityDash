@@ -55,6 +55,16 @@ where noted.
   `clock.levity` already did.
 - `compare` prints each differing cluster's bounding box and writes a diff image
   per mismatch, so reviewing a diff is a glance rather than a hunt.
+- **One mask, named and reported** (Opus, 2026-10-05: phase 2's bar is "clean
+  everywhere except that one named region"): `MASKS` in `render_diff.py` holds
+  `ev-caption` for `gauge-showcase`, the EV caption's unit word, with the render
+  size it was measured at and the condition for removing it (when
+  `fix/caption-unit-race` merges). Every comparison reports the pixels it
+  masked -
+  `gauge-showcase  0 px >30  (0.00%)  max Δ166  masked 409 px (ev-caption)` -
+  and `--no-mask` turns the mask off to show the raw difference and the diff
+  image. A mask whose recorded size no longer matches the capture is skipped
+  with a warning rather than silently blocking a region.
 - Three consecutive captures of unchanged code (`--jobs 6`) came back
   **bit-identical: 23/23 files, 0 differing pixels** — usually true, but the EV
   caption's unit word is a per-capture coin flip, so a comparison can also come

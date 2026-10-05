@@ -46,7 +46,7 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple
 
 import numpy as np
 import yaml
@@ -92,6 +92,63 @@ DEFAULT_TOLERANCE = 0
 #: Injecting the values last removes the race by construction rather than by
 #: guessing a margin.
 FIXTURE_DELAY_MS = 'end'
+
+
+# --------------------------------------------------------------------------- #
+# masks: regions a comparison is allowed to ignore
+
+class Mask(NamedTuple):
+	"""A rectangle of a capture that differs without meaning anything.
+
+	Deliberately explicit - a named box, the render size it was measured at, and
+	why it is here - so it can never quietly grow into a place a real change
+	hides. `compare` reports the pixels it masked, every run.
+	"""
+
+	name: str
+	box: Tuple[int, int, int, int]  # x0, y0, x1, y1 inclusive, in image pixels
+	size: Tuple[int, int]  # the rendered image size the box was measured at (w, h); the
+	# capture is scene-sized, which is not the same as the window size a render asks for
+	why: str
+
+
+#: Nothing may be added here without a region that was measured, not guessed, and
+#: a stated condition for its removal.
+MASKS: Dict[str, Tuple[Mask, ...]] = {
+	'gauge-showcase': (
+		Mask(
+			'ev-caption', (172, 767, 237, 781), (2560, 1370),
+			'the EV caption prints its unit per capture - a Measurement gets "313 km", '
+			'a float gets "313", and it never re-formats. App-side; see '
+			'docs/tasks/meter-harness-status.md. Remove when fix/caption-unit-race merges.',
+		),
+	),
+}
+
+
+def masks_for(name: str, shape) -> Tuple[Mask, ...]:
+	"""The masks that apply to a file of this pixel shape, warning if one is stale."""
+	height, width = shape[0], shape[1]
+	found = []
+	for mask in MASKS.get(name, ()):
+		if (width, height) != mask.size:
+			print(f'  ⚠ {name}: mask {mask.name!r} was measured at {mask.size[0]}x{mask.size[1]}, '
+			      f'this capture is {width}x{height} - not applied')
+			continue
+		found.append(mask)
+	return tuple(found)
+
+
+def apply_masks(name: str, mask: np.ndarray, shape) -> Tuple[int, Tuple[str, ...]]:
+	"""Clear every masked region from `mask`; return the pixels cleared and their names."""
+	cleared, names = 0, []
+	for item in masks_for(name, shape):
+		x0, y0, x1, y1 = item.box
+		region = mask[y0:y1 + 1, x0:x1 + 1]
+		cleared += int(region.sum())
+		region[:] = False
+		names.append(item.name)
+	return cleared, tuple(names)
 
 
 # --------------------------------------------------------------------------- #
@@ -467,6 +524,9 @@ def compare(args) -> int:
 				return name, {'shape': True, 'a': a.shape, 'b': b.shape}
 			delta = np.abs(a.astype(np.int16) - b.astype(np.int16))
 			mask = delta.max(axis=2) > level
+			masked, masked_names = (0, ())
+			if not getattr(args, 'no_mask', False):
+				masked, masked_names = apply_masks(name, mask, a.shape)
 			count = int(mask.sum())
 			boxes = regions(mask) if count else []
 			if count:
@@ -475,7 +535,7 @@ def compare(args) -> int:
 			return name, {
 				'max_level': int(delta.max()), 'count': count, 'pixels': int(mask.size),
 				'share': count / mask.size, 'ink_a': ink_of(a), 'ink_b': ink_of(b),
-				'regions': boxes,
+				'regions': boxes, 'masked': masked, 'masked_names': masked_names,
 			}
 
 		for name, row in pool.map(diff, common):
@@ -486,8 +546,11 @@ def compare(args) -> int:
 			total_diff += row['count']
 			worst = max(worst, row['share'])
 			flag = '' if row['count'] <= tolerance else '  ← differs'
-			if row['count'] or args.verbose:
-				print(f'  {name:<24} {row["count"]:>8} px >{level}  ({row["share"] * 100:5.2f}% of {row["pixels"]})  max Δ{row["max_level"]:<4}{flag}{explain_regions(row["regions"])}')
+			masked = ''
+			if row.get('masked'):
+				masked = f'  masked {row["masked"]} px ({", ".join(row["masked_names"])})'
+			if row['count'] or masked or args.verbose:
+				print(f'  {name:<24} {row["count"]:>8} px >{level}  ({row["share"] * 100:5.2f}% of {row["pixels"]})  max Δ{row["max_level"]:<4}{flag}{explain_regions(row["regions"])}{masked}')
 
 	shape_errors = [name for name, row in rows if row.get('shape')]
 	over = [name for name, row in rows if not row.get('shape') and row['count'] > tolerance]
@@ -496,6 +559,10 @@ def compare(args) -> int:
 		f'{len(over)} over tolerance, {len(shape_errors)} with a size change'
 	)
 	print(f'total differing pixels (>{level} levels): {total_diff}   worst file: {worst * 100:.2f}%')
+	masked_total = sum(row.get('masked', 0) for _, row in rows)
+	if masked_total:
+		names = ', '.join(sorted({name for _, row in rows for name in row.get('masked_names', ())}))
+		print(f'{masked_total} px ignored in masks: {names} (see MASKS in this file for the why)')
 	if over or shape_errors:
 		if not shape_errors:
 			print(f'diff images: {diff_dir}/')
@@ -512,7 +579,7 @@ def selfcheck(args) -> int:
 		if rc:
 			print(f'capture {half} failed', file=sys.stderr)
 			return rc
-	rc = compare(argparse.Namespace(a=str(work / 'a'), b=str(work / 'b'), diff_dir=None, level=args.level, tolerance=args.tolerance, jobs=args.jobs, verbose=False))
+	rc = compare(argparse.Namespace(a=str(work / 'a'), b=str(work / 'b'), diff_dir=None, level=args.level, tolerance=args.tolerance, jobs=args.jobs, verbose=False, no_mask=False))
 	if rc:
 		print('\n✗ two captures of the SAME code differ - the harness is not stable yet.')
 		print('  The files named above are the unstable ones. Fix the cause (a clock marker')
@@ -553,6 +620,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 	compare_parser.add_argument('--diff-dir', help='where to write <name>.diff.png (default: <B>/_diff)')
 	compare_parser.add_argument('--jobs', type=int, default=min(4, (os.cpu_count() or 2)))
 	compare_parser.add_argument('--verbose', action='store_true', help='list clean files too')
+	compare_parser.add_argument('--no-mask', action='store_true', help='report every differing pixel, masks included')
 
 	selfcheck_parser = subparsers.add_parser('selfcheck', help='capture twice and compare - the stability test')
 	add_capture_arguments(selfcheck_parser)
