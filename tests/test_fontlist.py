@@ -9,3 +9,9 @@ def test_parse_extra():
 def test_curated_only_installed_and_ordered():
 	installed = ['Arial', 'Roboto Mono [GOOG]', 'Zapfino', 'Fira Code']
 	assert curatedFamilies(installed, ['Roboto Mono'], ['fira code', 'Missing']) == ['Roboto Mono', 'Fira Code', 'Arial']
+
+
+def test_generic_family():
+	from LevityDash.lib.ui.fontlist import genericFamily
+	assert genericFamily('Monospace') == 'Roboto Mono'
+	assert genericFamily('Nunito') is None

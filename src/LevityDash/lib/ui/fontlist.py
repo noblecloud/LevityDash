@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 from typing import Iterable
 
-__all__ = ['COMMON_FAMILIES', 'curatedFamilies', 'folderFamilies', 'parseExtra']
+__all__ = ['COMMON_FAMILIES', 'GENERIC_FAMILIES', 'genericFamily', 'curatedFamilies', 'folderFamilies', 'parseExtra']
 
 _FOUNDRY = re.compile(r'\s*\[[^\]]*\]$')  # Qt names some families 'Roboto Mono [GOOG]'
 
@@ -29,6 +29,20 @@ COMMON_FAMILIES: tuple[str, ...] = (
 	# linux
 	'Ubuntu', 'Cantarell',
 )
+
+# Generic CSS-style names and the bundled family each one stands for.
+GENERIC_FAMILIES: dict[str, str] = {
+	'monospace':  'Roboto Mono',
+	'mono':       'Roboto Mono',
+	'sans-serif': 'Roboto',
+	'sans':       'Roboto',
+	'serif':      'Noto Serif',
+}
+
+
+def genericFamily(name: str) -> str | None:
+	"""The bundled family for a generic name such as 'Monospace', or None when `name` is not generic."""
+	return GENERIC_FAMILIES.get(name.strip().lower())
 
 
 def parseExtra(value: str | None) -> list[str]:
