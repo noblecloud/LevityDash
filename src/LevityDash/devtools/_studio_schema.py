@@ -317,7 +317,9 @@ def _classify(prop: StateProperty, raw: Any, owner: Stateful) -> Optional[Field]
 		return Field((), 'bool')
 	if enumType is not None:
 		choices = []
-		for member in enumType:
+		# A property that declares `choices` offers only those members, in that order.
+		declared = prop.options.get('choices', None)
+		for member in (enumType if declared is None else [m for m in declared if isinstance(m, enumType)]):
 			text = saved(prop, member, owner)
 			choices.append((text if isinstance(text, str) else str(member.name), text if isinstance(text, (str, int, float)) else member.name))
 		return Field((), 'enum', choices=choices)
