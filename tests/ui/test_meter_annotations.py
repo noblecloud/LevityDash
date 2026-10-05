@@ -21,6 +21,7 @@ MODULES = (
 	'LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.scale',
 	'LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.track',
 	'LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.elements',
+	'LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.meter',
 )
 
 PROPERTY_TYPES = (StateProperty,)
