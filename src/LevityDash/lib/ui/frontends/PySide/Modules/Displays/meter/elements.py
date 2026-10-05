@@ -4531,4 +4531,6 @@ def _shiftByOffset(box) -> None:
 	box.setTransform(QTransform(t.m11(), t.m12(), t.m21(), t.m22(), t.dx() + shift.x(), t.dy() + shift.y()))
 
 
+# Unit positions that hang the unit under the value. `float-under` is the
+# Realtime text display's name for it; `below` is the gauge's older one.
 _UNIT_UNDER_VALUE = frozenset({UnitDisplayPosition.Below, UnitDisplayPosition.FloatUnder})

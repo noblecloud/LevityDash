@@ -30,7 +30,8 @@ from LevityDash.lib.ui.Geometry import Alignment, AlignmentFlag, DimensionType, 
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.DisplayBase import Display
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.curvetext import normalizeCorner
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.elements import (
-	GaugeCaption, GaugeUnit, GaugeValueLabel, StatefulGaugeItem, _UNIT_UNDER_VALUE, gaugeKeyName,
+	GaugeCaption, GaugeFill, GaugeMarker, GaugeUnit, GaugeValueLabel, GaugeZones, Graduations, Needle,
+	StatefulGaugeItem, _UNIT_UNDER_VALUE, gaugeKeyName,
 )
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.scale import GaugeValue, Numeric, Scale, decode_measurement
 from LevityDash.lib.ui.frontends.PySide.utils import DisplayType
@@ -47,6 +48,14 @@ Gauge = None
 log = UILogger.getChild('meter')
 
 __all__ = ['GaugeRange', 'Meter']
+
+
+def _markerText(spec) -> str:
+	"""The ``value:`` text of a marker spec, for log messages. Never raises."""
+	try:
+		return str(spec.get('value'))
+	except Exception:
+		return str(spec)
 
 
 class GaugeRange(StatefulGaugeItem):
@@ -806,3 +815,217 @@ class Meter(Display):
 
 	def setRect(self, *args, **kwargs):
 		super().setRect(*args, **kwargs)
+
+	@StateProperty(key='needle', repr=True)
+	def needle(self) -> Needle:
+		return self._needle
+
+	@needle.factory
+	def needle(self) -> Needle:
+		return Needle(self)
+
+	@needle.setter
+	def needle(self, value: Needle):
+		self._needle = value
+
+	@StateProperty(key='fill', default=None, allowNone=True, dependencies={'range', 'arc'})
+	def fill(self) -> Optional[dict]:
+		"""A value-driven arc over the track: ``{from, to, weight, color}``.
+
+		Kept as the plain mapping the user wrote; the scene item is ``self._fillItem``.
+		"""
+		return self._fillSpec
+
+	@fill.setter
+	def fill(self, value: Optional[dict]):
+		self._clearFill()
+		if not value:
+			return
+		# A bad fill is a warning, never a failed dashboard load.
+		try:
+			item = GaugeFill(self)
+			item.configure(value)
+		except Exception as e:
+			log.warning(f'Gauge {gaugeKeyName(self)} fill skipped: {e}')
+			return
+		self._fillItem = item
+		self._fillSpec = copy.deepcopy(dict(value))
+
+	@fill.decode
+	def fill(self, value) -> Optional[dict]:
+		if value is None:
+			return None
+		if not isinstance(value, Mapping):
+			log.warning(f'Gauge {gaugeKeyName(self)} ignored fill {value!r}: expected a mapping')
+			return None
+		return dict(value)
+
+	@fill.encode
+	def fill(self, value: Optional[dict]) -> Optional[dict]:
+		return copy.deepcopy(value) if value else None
+
+	def _clearFill(self):
+		item = self._fillItem
+		self._fillItem = None
+		if item is not None:
+			item.close()
+		self._fillSpec = None
+		if item is not None and (scene := item.scene()) is not None:
+			scene.removeItem(item)
+
+	@StateProperty(key='zones', default=None, allowNone=True, dependencies={'range', 'arc'})
+	def zones(self) -> Optional[list]:
+		"""Coloured bands on the track: a list of ``{from, to, color, mark}`` mappings.
+
+		Kept as the plain mappings the user wrote; the scene item is ``self._zonesItem``.
+		"""
+		return self._zoneSpecs or None
+
+	@zones.setter
+	def zones(self, value: Optional[list]):
+		self._clearZones()
+		if not value:
+			return
+		try:
+			item = GaugeZones(self)
+			kept = item.configure(value)
+		except Exception as e:
+			log.warning(f'Gauge {gaugeKeyName(self)} zones skipped: {e}')
+			return
+		if not kept:
+			scene = item.scene()
+			if scene is not None:
+				scene.removeItem(item)
+			return
+		self._zonesItem = item
+		self._zoneSpecs = kept
+		try:
+			item.refresh()
+		except Exception as e:
+			log.debug(f'Gauge {gaugeKeyName(self)} zones not drawn yet: {e}')
+
+	@zones.decode
+	def zones(self, value) -> list:
+		if isinstance(value, Mapping):
+			value = [value]
+		if not isinstance(value, (list, tuple)):
+			log.warning(f'Gauge {gaugeKeyName(self)} ignored zones {value!r}: expected a list')
+			return []
+		for spec in value:
+			if not isinstance(spec, Mapping):
+				log.warning(f'Gauge {gaugeKeyName(self)} skipped zone {spec!r}: expected a mapping')
+		return [dict(spec) for spec in value if isinstance(spec, Mapping)]
+
+	@zones.encode
+	def zones(self, value: Optional[list]) -> Optional[list]:
+		return copy.deepcopy(value) if value else None
+
+	def _clearZones(self):
+		item = self._zonesItem
+		self._zonesItem = None
+		self._zoneSpecs = []
+		if item is not None:
+			item.close()
+			if (scene := item.scene()) is not None:
+				scene.removeItem(item)
+
+	@StateProperty(key='markers', default=None, allowNone=True, dependencies={'range', 'needle'})
+	def markers(self) -> Optional[list]:
+		"""Extra indicators: a list of ``{value, type, color, ...}`` mappings.
+
+		Kept as the plain mappings the user wrote, so saving writes them back
+		unchanged. The scene items built from them are ``self._markerItems``.
+		"""
+		return self._markerSpecs or None
+
+	@markers.setter
+	def markers(self, value: Optional[list]):
+		self._clearMarkers()
+		specs = []
+		for spec in value or []:
+			# One bad marker is skipped; it must never abort the dashboard load.
+			try:
+				marker = GaugeMarker(self)
+				marker.configure(spec)
+			except Exception as e:
+				log.warning(f'Gauge {gaugeKeyName(self)} skipped marker {_markerText(spec)!r}: {e}')
+				try:
+					marker.close()
+					self.scene().removeItem(marker)
+				except Exception:
+					pass
+				continue
+			self._markerItems.append(marker)
+			specs.append(copy.deepcopy(dict(spec)))
+		self._markerSpecs = specs
+
+	@markers.decode
+	def markers(self, value) -> list:
+		if isinstance(value, Mapping):
+			value = [value]
+		if not isinstance(value, (list, tuple)):
+			log.warning(f'Gauge {gaugeKeyName(self)} ignored markers {value!r}: expected a list')
+			return []
+		valid = []
+		for spec in value:
+			if isinstance(spec, Mapping):
+				valid.append(dict(spec))
+			else:
+				log.warning(f'Gauge {gaugeKeyName(self)} skipped marker {spec!r}: expected a mapping with a value')
+		return valid
+
+	@markers.encode
+	def markers(self, value: Optional[list]) -> Optional[list]:
+		return copy.deepcopy(value) if value else None
+
+	def _clearMarkers(self):
+		for marker in self._markerItems:
+			marker.close()
+			if (scene := marker.scene()) is not None:
+				scene.removeItem(marker)
+		self._markerItems = []
+		self._markerSpecs = []
+
+	@StateProperty(key='major', repr=True, dependencies={'range'})
+	def majorDivisions(self) -> Graduations:
+		return self._majorDivisions
+
+	@majorDivisions.factory
+	def majorDivisions(self):
+		return Graduations(gauge=self, type=Graduations.Type.Major)
+
+	@majorDivisions.setter
+	def majorDivisions(self, value: Graduations):
+		self._majorDivisions = value
+
+	@StateProperty(key='minor', repr=True, dependencies={'majorDivisions'})
+	def minorDivisions(self) -> Graduations:
+		return self._minorDivisions
+
+	@minorDivisions.factory
+	def minorDivisions(self):
+		return Graduations(gauge=self, type=Graduations.Type.Minor)
+
+	@minorDivisions.setter
+	def minorDivisions(self, value: Graduations):
+		self._minorDivisions = value
+
+	@StateProperty(key='micro', repr=True, dependencies={'minorDivisions'})
+	def microDivisions(self) -> Graduations:
+		return self._microDivisions
+
+	@microDivisions.factory
+	def microDivisions(self):
+		return Graduations(gauge=self, type=Graduations.Type.Micro)
+
+	@microDivisions.setter
+	def microDivisions(self, value: Graduations):
+		self._microDivisions = value
+
+	def _zoneItems(self) -> list:
+		item = getattr(self, '_zonesItem', None)
+		return [] if item is None else [item]
+
+	def _fillItems(self) -> list:
+		item = getattr(self, '_fillItem', None)
+		return [] if item is None else [item]
