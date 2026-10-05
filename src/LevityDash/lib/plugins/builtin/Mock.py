@@ -63,6 +63,24 @@ MOCK_KEYS: Dict[str, dict] = {
 	'home.thermostat.setpoint':     dict(unit='f', base=71, swing=0, period=1, noise=0, min=60, max=80, title='Setpoint'),
 	'home.thermostat.temperature':  dict(unit='f', base=69.5, swing=2.5, period=420, noise=0.1, min=55, max=85, title='Room temperature'),
 	'time.timer.seconds':           dict(unit='int', base=0, swing=0, period=60, noise=0, min=0, max=60, title='Timer'),
+	# Smart home cards (EV charger, energy, water, washer) and the sun card.
+	# kW, kWh and litres have no unit type yet, so they are plain numbers: a card
+	# adds the unit text with `unit-string` or a static label.
+	'ev.charge.level':              dict(unit='%', base=65, swing=14, period=1800, noise=0.1, min=5, max=100, title='EV charge'),
+	'ev.charge.rate':               dict(unit='int', base=7.4, swing=0.9, period=240, noise=0.1, min=0, max=11, title='Charge rate'),
+	'ev.charge.added':              dict(unit='int', base=14, swing=9, period=1800, noise=0.05, min=0, max=40, title='Energy added'),
+	'ev.charge.range':              dict(unit='km', base=313, swing=40, period=1800, noise=0.5, min=20, max=480, title='Range'),
+	'home.water.today':             dict(unit='int', base=184, swing=55, period=1500, noise=0.5, min=0, max=400, title='Water today'),
+	'home.washer.minutes':          dict(unit='min', base=23, swing=18, period=900, noise=0, min=1, max=60, title='Washer remaining'),
+	'power.energy.net':             dict(unit='int', base=3.8, swing=5.6, period=420, noise=0.15, min=-10, max=10, title='Grid exchange'),
+	'power.energy.solar':           dict(unit='int', base=3.3, swing=1.6, period=360, noise=0.1, min=0, max=8, title='Solar power'),
+	'power.energy.house':           dict(unit='int', base=1.2, swing=0.6, period=150, noise=0.1, min=0.2, max=4, title='House power'),
+	'power.energy.car':             dict(unit='int', base=7.4, swing=0.8, period=240, noise=0.1, min=0, max=11, title='Car power'),
+	'power.energy.today':           dict(unit='int', base=18.6, swing=5, period=2400, noise=0.05, min=0, max=40, title='Energy made today'),
+	'sun.day.progress':             dict(unit='int', base=58, swing=34, period=1800, noise=0, min=2, max=98, title='Daylight elapsed'),
+	'sun.day.left':                 dict(unit='min', base=289, swing=190, period=1800, noise=0, min=5, max=690, title='Daylight left'),
+	# Text made from another key's value, so the card shows `4h 49m` instead of `4.8 hr`.
+	'sun.day.remaining':            dict(unit='str', derive='sun.day.left', title='Daylight left, as text'),
 }
 
 
@@ -103,8 +121,14 @@ class Mock(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 	def publish(self) -> None:
 		now = time.time()
 		realtime = {'time': datetime.now().replace(microsecond=0).strftime(_TIME_FORMAT)}
+		values = {}
 		for key, spec in MOCK_KEYS.items():
-			realtime[self._sourceKeys[key]] = mockValue(key, spec, now, self._phases[key])
+			if 'derive' in spec:
+				continue
+			values[key] = mockValue(key, spec, now, self._phases[key])
+			realtime[self._sourceKeys[key]] = values[key]
+		minutes = int(values['sun.day.left'])
+		realtime[self._sourceKeys['sun.day.remaining']] = f'{minutes // 60}h {minutes % 60:02d}m'
 		datagram = LevityDatagram(realtime, schema=self.schema, dataMap=self.schema.dataMaps['realtime'], static=False)
 		self.realtime.update(datagram)
 
