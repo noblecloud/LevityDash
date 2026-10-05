@@ -46,12 +46,13 @@ def test_fill_follows_source_and_releases(dashboard):
 	assert not item.isVisibleTo(None)
 
 	engine._publish(engine._entries[key], 10.0)
-	_settle(dashboard)
+	# The fill attaches to the new container on a short timer.
+	dashboard.wait_until(lambda: not item._pending, message='the fill receives the first value')
 	a, b = item._angles()
 	assert not item._pending and not item.path().isEmpty() and item.isVisibleTo(None) and b > a, 'a positive value grows the fill clockwise from 0'
 
 	engine._publish(engine._entries[key], -10.0)
-	_settle(dashboard)
+	dashboard.wait_until(lambda: item._angles()[1] < item._angles()[0], message='the fill follows the negative value')
 	a2, b2 = item._angles()
 	assert b2 < a2 and b2 < b, 'a negative value grows the fill the other way from 0'
 	assert abs(a2 - a) < 1e-6, 'the from end stays at 0'
