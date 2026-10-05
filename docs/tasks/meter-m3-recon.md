@@ -491,3 +491,27 @@ Two changes the review requires *inside* M3, and one to leave alone:
    is a string-literal join, so the lookup key is `'gaugeparent'` and never
    matches. It came over unchanged and is filed as its own job — do not fix it
    inside M3.
+
+## M3 step 2: the decisions (2026-10-05)
+
+- **The dial geometry is Gauge-side again.** `center`, `scene_center`, `center_offset`
+  (with its setter, decode and encode), `update_center_offset`, `_valueSide`,
+  `_sideStripWidth`, `_underStripHeight`, `_dialRect` and `_sideValueRect` moved from
+  `Meter` into `Gauge`. One seam is left and recorded rather than papered over:
+  `Meter._valueAnchor` still calls `self._dialRect()` for the line that offsets the value
+  box by the dial's centre. It is label layout and belongs on Meter; a `Bar` will have to
+  answer that call, and that is the point at which a hook is worth writing.
+- **The `arc` and `needle` dependencies stay where they are.** `fill`, `zones`, `caption`
+  and `sub-label` declare `dependencies={'range', 'arc'}` on `Meter`; `markers` declares
+  `{'range', 'needle'}` — a fourth case the review's list did not name. `dependencies`
+  only feeds a property's set order (statekit `core.py:999`), and a key the class does not
+  have is simply never satisfied: no error, no hidden write. `arc` and `needle` are Gauge
+  keys, the only Meter that exists is a Gauge, so the ordering is correct today; when
+  `Bar` arrives it declares the ordering its own items need.
+- **One hand-over mechanism**, as the review asked: `gauge_class()` answers with
+  `meter/gauge.py`'s own global once the hand-over has run, and the import is the
+  fallback for a caller that runs first.
+- `rebuild` is a `Meter` method, so the moved `center_offset` schedules
+  `after=Meter.rebuild` — a decorator evaluates in the class body, where an inherited
+  name is not visible. Same family as the `_FillEnd` swallow: a move takes the code but
+  not the names it was reading.

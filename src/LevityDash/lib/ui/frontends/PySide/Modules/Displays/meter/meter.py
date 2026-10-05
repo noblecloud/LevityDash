@@ -702,118 +702,17 @@ class Meter(Display):
 			return 0.0
 		return max(size_px(self._s_inset, min(self.height(), self.width())), 0.0)
 
-	def update_center_offset(self, offset: QPointF):
-		self._center_offset = offset
 
-	@StateProperty(key='center_offset', allowNone=True, after=rebuild, repr=True)
-	def center_offset(self) -> QPointF:
-		return getattr(self, '_center_offset', QPointF())
 
-	@center_offset.setter
-	def center_offset(self, value: QPointF):
-		self._center_offset = value
 
-	@center_offset.decode
-	def center_offset(self, value: str | Sequence | dict) -> QPointF:
-		if isinstance(value, str):
-			value = value.split(',')
 
-		if len(value) != 2:
-			raise ValueError(f'center_offset must be a sequence or mapping of length 2, got {len(value)}')
 
-		if isinstance(value, dict):
-			x = parseX(value.get('x', 0), 0)
-			y = parseY(value.get('y', 0), 0)
-		else:
-			x = parseX(value[0], 0)
-			y = parseY(value[1], 0)
-		return QPointF(x, y)
 
-	@center_offset.encode
-	def center_offset(self, value: QPointF) -> dict[str, float]:
-		return {'x': round(value.x(), 3), 'y': round(value.y(), 3)}
 
-	def _valueSide(self) -> Optional[ValueDisplayPosition]:
-		"""`left`, `right` or `float-under` when the value label is set to sit outside the dial, else None."""
-		label = getattr(self, '_valueLabel', None)
-		position = getattr(label, '_position', None)
-		if position in (ValueDisplayPosition.Left, ValueDisplayPosition.Right, ValueDisplayPosition.FloatUnder):
-			return position
-		return None
 
-	def _sideStripWidth(self) -> float:
-		"""Width the box gives a value beside the dial, from the far edge to the dial's."""
-		if self._valueSide() in (None, ValueDisplayPosition.FloatUnder):
-			return 0.0
-		width, height = self.width(), self.height()
-		# A wide box keeps the dial at full height and gives the value what is left;
-		# a narrow one shares the width, the dial taking the larger part.
-		return min(width * 0.5, max(width * 0.34, width - height))
 
-	def _underStripHeight(self) -> float:
-		"""Height the box gives a `float-under` value, from the bottom edge to the dial's."""
-		return self.height() * 0.22 if self._valueSide() is ValueDisplayPosition.FloatUnder else 0.0
 
-	def _dialRect(self) -> QRectF:
-		"""The part of the box the dial lives in: all of it, less the strip a side or under value takes."""
-		rect = QRectF(self.rect())
-		side = self._valueSide()
-		if side is None:
-			return rect
-		if side is ValueDisplayPosition.FloatUnder:
-			rect.setBottom(rect.bottom() - self._underStripHeight())
-			return rect
-		strip = self._sideStripWidth()
-		if side is ValueDisplayPosition.Left:
-			rect.setLeft(rect.left() + strip)
-		else:
-			rect.setRight(rect.right() - strip)
-		return rect
 
-	def _sideValueRect(self) -> QRectF:
-		"""The strip beside (or, for `float-under`, under) the dial a value is fitted to, in gauge coordinates.
-		A side strip is centred on the pivot, so a value stays level with it however the sweep is cut."""
-		rect = self.rect()
-		if self._valueSide() is ValueDisplayPosition.FloatUnder:
-			strip = self._underStripHeight()
-			return QRectF(rect.left(), rect.bottom() - strip, rect.width(), strip)
-		strip = self._sideStripWidth()
-		# A pinned pivot sits in a corner, so level with the box's middle instead.
-		pivot_y = self.rect().center().y() if self._anchor is not None else self.center.y() + self._recenterTransform.dy()
-		half = max(min(pivot_y - rect.top(), rect.bottom() - pivot_y), 1.0)
-		left = rect.left() if self._valueSide() is ValueDisplayPosition.Left else rect.right() - strip
-		return QRectF(left, pivot_y - half, strip, half * 2)
-
-	@property
-	def center(self) -> QPointF:
-
-		if self._anchor is not None:
-			fx, fy = self._ANCHORS[self._anchor]
-			rect, inset = self._dialRect(), self.insetPx
-			return QPointF(
-				rect.left() + inset if fx == 0 else rect.right() - inset,
-				rect.top() + inset if fy == 0 else rect.bottom() - inset,
-			)
-
-		p = self.alignment.multipliersAlt
-		rect = self.boundingRect()
-		x = rect.width() * p[0]
-		y = rect.height() * p[1]
-		p = QPointF(x, y)
-
-		p -= self._center_offset
-		if self._valueSide() is not None:
-			p += self._dialRect().center() - self.rect().center()
-		margin_rect = self.marginRect
-		# keep p within the bounding rect
-		p.setX(sorted((margin_rect.left(), p.x(), margin_rect.right()))[1])
-		p.setY(sorted((margin_rect.top(), p.y(), margin_rect.bottom()))[1])
-
-		return p
-
-	@property
-	def scene_center(self) -> QPointF:
-		return self.mapToScene(self.center)
 
 	@property
 	def baseWidth(self):
