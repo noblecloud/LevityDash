@@ -2,8 +2,8 @@
 
 Suggested branch: `feat/emissive-color` off `feat/value-sources`. Phases 1 and 2 can
 start now. The Oklab gradient step in phase 1 edits `colors/gradient.py`, so start that
-step only after `feat/gradient-unit-stops` has merged. Phase 3 waits for the user's answer
-on how to bring in `border-beam-qt` (see the end).
+step only after `feat/gradient-unit-stops` has merged. Phases 1 and 2 merged on 2026-10-05.
+Phase 3 is decided: the border-beam painting engine moves into LevityDash (see Phase 3).
 
 ## What the user asked for
 
@@ -112,9 +112,30 @@ Qt quirks found in PySide6 6.11 (LevityDash's venv runs 6.11.1).
 5. Gauge Studio gets a Glow section through the usual `StateProperty` introspection.
    Every numeric control keeps a slider.
 
-## Phase 3: border beams (after the user answers)
+## Phase 3: border beams
 
-1. Draw the `border_beam` painters on a LevityDash panel through a small decoration item,
+**Decision (2026-10-05): move the code into LevityDash; do not depend on the package.**
+`border-beam-qt` is the user's own project, so either was acceptable. Moving it in won
+because LevityDash needs only the painters, the palettes and the pulse clock, not the
+`BorderBeam` widget, and because `lambda` then needs no second checkout.
+
+- Copy `styles.py`, `palettes.py`, `pulse_driver.py` and `types.py` into a `beam/` package
+  under `lib/ui/frontends/PySide/Modules/` (or beside the panel code, if that fits better).
+  Leave out `border_beam.py`, `effect.py` and `demo.py`, which belong to the widget wrapper.
+- Do not copy `oklch.py`. Point the beam code at LevityDash's `lib/ui/colors/oklch.py`,
+  which phase 1 ported from the same file.
+- Convert to LevityDash style: tabs, and LevityDash's logging.
+- Keep the MIT notice for the upstream React component
+  ([Jakubantalik/border-beam](https://github.com/Jakubantalik/border-beam)) at the top of the
+  package, since the painters port its CSS values.
+- Keep the Qt quirks from `~/Code/border-beam-qt/AGENTS.md` as comments where they apply,
+  for example the counter-clockwise `QConicalGradient`, and `set_time()` tolerating a dead
+  timer at shutdown.
+- Move its pixel tests that still apply into `tests/ui/`.
+
+Then:
+
+1. Draw the painters on a LevityDash panel through a small decoration item,
    with a `PaintCtx` built from the panel's rect and corner radius.
 2. Settings: `beam: {size: md|sm|line|pulse-inner|pulse-outside, variant, duration,
    strength, active}`, with names taken from border-beam's public API.
