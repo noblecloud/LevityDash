@@ -68,8 +68,23 @@ by `Gauge.py` (which keeps re-exporting every name the rest of the app imports):
   `meter/scale.py`. `Gauge` is named through a lazy `gauge_class()` inside
   elements - a real import there would be a cycle, since a gauge imports this.
   Bodies verified verbatim except those two call sites, which a script checks.
-- **M1b** `Graduations`, `Tick`, `SubTick`, `TickSurface`.
-- **M1c** `GaugeTickText`, `GaugeTickTextGroup`.
+- **M1b + M1c (done, folded into one step)** — `meter/elements.py`: `Graduations`,
+  `Tick`, `SubTick`, `TickSurface`, then `GaugeTickText` and `GaugeTickTextGroup`.
+  Folded because the state layer forced it: `StateProperty.returns` calls
+  `typing.get_type_hints` on the getter at run time, and `Graduations.labels` is
+  annotated `-> 'GaugeTickTextGroup'` - resolved against the module the method
+  was *defined* in. With the group still in `Gauge.py`, that turned into a
+  `NameError` the moment a gauge was built (the gauge would not build at all:
+  9 test failures, 22 of 23 renders wrong). A lazy fetch at the call site, which
+  is what the first attempt did, does not help: the name has to exist in the
+  module. `tests/ui/test_meter_annotations.py` now walks every `StateProperty` in
+  the package and touches `returns`, so the next step finds this in a second
+  instead of an afternoon.
+- `_gaugeKeyName` moved with the label code that logs with it, as
+  `elements.gaugeKeyName`; `Gauge.py` imports it back under its old name so its
+  own call sites are untouched.
+- Moved classes log as `meter.elements` now, not `Gauge` (a moved module's
+  `log = UILogger.getChild(...)` is its own).
 - **M1d** `Needle`, `Arrow`, `GaugeMarker`.
 - **M1e** `GaugeZones`, `GaugeFill`.
 - **M1f** `GaugeText`, `GaugeLabel`, `GaugeValueLabel`, `GaugeUnit`,
