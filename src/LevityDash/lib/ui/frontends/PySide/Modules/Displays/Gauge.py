@@ -3108,32 +3108,32 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 		self._format_spec = value
 
 	def _spacingPrecision(self) -> int | None:
-		"""How many decimals the tick *spacing* needs, or None if it needs none.
+		"""How many decimals the tick values need, or None if they cannot be read.
 
-		Adjacent labels have to stay distinct. A barograph zoomed to
-		29.90-30.10 with 0.05 ticks cannot use the compact convention: 30,
-		30, 30. So the spacing sets a floor under the compact format -
+		The decimals on a tick label follow the tick spacing: spacing 1 shows
+		`28`, spacing 0.1 shows `0.1`, spacing 0.05 shows `29.95`. The answer
+		is the smallest d for which every tick value is exact at d places, so
+		it is never more than the scale needs and never less than the labels
+		need to stay exact. Read off the graduations themselves rather than
+		the nominal interval, so a range that is not an exact multiple of its
+		interval still labels correctly.
 
-		    precision = max(compact, the smallest d for which every tick
-		                    value rounds exactly to d places)
+		The test is "exact", not "still distinct": 0.25 steps on 29-30 stay
+		distinct at one decimal (29.2 29.5 29.8) while two of them are wrong.
 
-		which is the smallest d such that no two tick values agree at d
-		places. Read off the graduations themselves rather than the nominal
-		interval, so a range that is not an exact multiple of its interval
-		still labels correctly.
-
-		Rarely fires. When it does, the trailing zeros come back only where
-		the scale forces them - a whole-number dial keeps whole numbers.
+		The comparison has a tolerance because tick values are built by
+		repeated float addition. 29.95 arrives as 29.950000000000003, and an
+		exact test would push the answer to 3.
 		"""
 		try:
 			values = [float(v) for v in self._ticks.tick_values]
-		except Exception:  # noqa: BLE001 - a label floor must never blank the dial
+		except Exception:  # noqa: BLE001 - a label rule must never blank the dial
 			return None
-		if len(values) < 2:
+		if not values:
 			return None
 		for places in range(0, 8):
-			if len({round(v, places) for v in values}) == len(set(values)):
-				return places or None
+			if all(isclose(v, round(v, places), rel_tol=0, abs_tol=1e-9 * max(1.0, abs(v))) for v in values):
+				return places
 		return None
 
 	def format_value(self, value: Measurement) -> str:
@@ -3148,11 +3148,19 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 			# it. Both sides are Mappings, so a dict ask composes with the
 			# class's compact ask instead of replacing it.
 			spec = {**self._tickFormatDefaults, **(spec or {})}
-			# The spacing floor only applies where the caller has not already
-			# said what precision they want; an explicit `precision:` in the
-			# user's format: is their decision, not ours to raise.
-			if 'precision' not in spec and (floor := self._spacingPrecision()) is not None:
-				spec = {**spec, 'precision': floor}
+			# The tick spacing sets the decimals, unless the caller has already
+			# said what precision they want: an explicit `precision:` in the
+			# user's format: is their decision, not ours.
+			#
+			# The spacing replaces the unit's compact precision rather than
+			# flooring it. Compact only drops padding, so rain in inches
+			# (compact precision 2) with 0.1 ticks would otherwise read 0.10.
+			# Where the spacing needs decimals the zeros stay, so a scale
+			# reads 29.90 29.95 30.00, not 29.9 29.95 30.
+			if 'precision' not in spec and (places := self._spacingPrecision()) is not None:
+				spec = {**spec, 'precision': places}
+				if places:
+					spec['trailing_zeros'] = 'precision'
 		if isinstance(value, Measurement):
 			try:
 				match spec:
