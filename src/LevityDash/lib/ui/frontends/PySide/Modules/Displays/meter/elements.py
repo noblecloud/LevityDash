@@ -26,19 +26,24 @@ from numpy import ceil, cos, pi, radians, sin, sqrt
 from PySide6.QtCore import (
 	QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRectF, QSizeF, QTimer, QVariantAnimation, Signal,
 )
-from PySide6.QtGui import QBrush, QColor, QGradient, QPainter, QPainterPath, QPainterPathStroker, QPen, QPolygonF, QTransform, Qt
+from PySide6.QtGui import (
+	QBrush, QColor, QFont, QFontMetricsF, QGradient, QPainter, QPainterPath, QPainterPathStroker, QPen, QPolygonF,
+	QTransform, Qt,
+)
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem, QStyleOptionGraphicsItem, QWidget
 
 from LevityDash.lib.stateful import Binding, SourceType, StateProperty, Stateful
 from LevityDash.lib.stateful_mixins import ColorGradientMixin
 from LevityDash.lib.ui import Color, Gradient, UILogger
 from LevityDash.lib.ui.Geometry import (
-	Alignment, AlignmentFlag, Dimension, DimensionType, DisplayPosition, RelativeFloat, Size, parseHeight, parseSize,
-	parseWidth, size_px,
+	Alignment, AlignmentFlag, Dimension, DimensionType, DisplayPosition, RelativeFloat, Size, UnitDisplayPosition,
+	ValueDisplayPosition, parseHeight, parseSize, parseWidth, size_px,
 )
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays import SurfaceCentered
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Annotations import AnnotationLabels, AnnotationText
-from LevityDash.lib.ui.frontends.PySide.Modules.Displays.curvetext import CurveMode, warp_path
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Label import NonInteractiveLabel
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import Text
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.curvetext import CurveMode, WarpSpec, arcFit, warp_path
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import SizeGroup
 from LevityDash.lib.ui.frontends.PySide.utils import DebugPaint, addCrosshair, outline_path
 from LevityDash.lib.ui.frontends.PySide.utils import SoftShadow
@@ -51,8 +56,8 @@ from LevityDash.lib.valuesource import openValueSource
 from WeatherUnits import Angle, Length, Measurement, Percentage
 
 from .scale import (
-	CLOCK_HANDS, GaugeValue, Numeric, _isWholeSteps, clockTurn, decode_measurement, filter_factors, parseClockTime,
-	shortestDelta,
+	CLOCK_HANDS, GaugeValue, Numeric, _isWholeSteps, clockTurn, decode_measurement, filter_factors, formatDuration,
+	parseClockTime, shortestDelta,
 )
 
 if TYPE_CHECKING:  # the real import would be a cycle; see `gauge_class`
@@ -61,6 +66,15 @@ if TYPE_CHECKING:  # the real import would be a cycle; see `gauge_class`
 #: The items' log channel. `Gauge.py` logs as 'Gauge'; these moved out of it, so
 #: they log under the package name.
 log = UILogger.getChild('meter.elements')
+
+#: The display classes these items belong to, handed over by `Gauge.py` once it has
+#: defined them (see the assignment at the foot of that file). They have to exist
+#: *here* as names even though they are defined there: the item classes annotate
+#: themselves with `Gauge`, and `typing.get_type_hints` resolves annotations against
+#: the module a class was defined in - `Text.surface` does exactly that, so a
+#: missing name here is a NameError in the middle of a layout.
+Gauge = None
+GaugeArc = None
 
 __all__ = ['GaugeItem', 'GaugePathItem', 'GaugeValue', 'Numeric', 'StatefulGaugeItem', 'StatefulGaugePathItem']
 
@@ -3579,3 +3593,942 @@ class _FillEnd:
 
 	def setMarkerValue(self, value) -> None:
 		self._fill.setEnd(self._end, value)
+
+
+class GaugeCaption(GaugePathItem):
+	"""A small line of text above (``caption``) or below (``sub-label``) the centre value.
+
+	The spec is a string (static text) or a mapping: ``text`` (may hold ``{}``
+	where the value goes), ``value`` (a key or expression to show; with no
+	``format`` it prints as the value does, unit and all), ``format``
+	(``duration`` turns minutes into ``4h 49m``; any other string is a Python
+	format spec, and a mapping is the value label's ``format``, e.g. ``{precision: 0, show_unit: false}``), ``warp`` (bend the text along a
+	circle, see `WarpSpec`; then ``gap`` and ``offset`` do not apply), ``size`` (text height as a share of the dial's diameter,
+	default 7%), ``color``, ``weight`` (``bold``), ``gap`` (distance from the
+	value, a share of the diameter, default 2%) and ``offset`` (``{x, y}``, shares of the
+	diameter, added to where the gap puts it). A value source with no value
+	yet shows nothing. A bad spec logs the gauge key and shows nothing.
+	"""
+
+	Z_VALUE = -400
+
+	_text = ''
+	_template = None
+	_value = None
+	_hasValue = False
+	_format = None
+	_size = None
+	_gap = None
+	_color: Optional[QColor] = None
+	_bold = False
+	_offset: Optional[tuple] = None
+	_binding: Optional[Binding] = None
+	_warp: Optional[WarpSpec] = None
+
+	def __init__(self, gauge: 'Gauge', side: str):
+		super().__init__(gauge)
+		self._side = side
+		self.setPen(Qt.PenStyle.NoPen)
+		self.hide()
+
+	def close(self):
+		if self._binding is not None:
+			self._binding.unlink()
+			self._binding = None
+
+	def configure(self, spec) -> None:
+		self.close()
+		if isinstance(spec, str):
+			spec = {'text': spec}
+		name = gaugeKeyName(self.gauge)
+		unknown = set(spec) - {'text', 'value', 'format', 'size', 'color', 'weight', 'gap', 'offset', 'warp'}
+		if unknown:
+			log.warning(f'Gauge {name} {self._side} ignored unknown keys {sorted(map(str, unknown))}')
+		self._offset = _decodeOffset(spec.get('offset'))
+		self._warp = WarpSpec.decode(spec.get('warp'))
+		self._template = spec.get('text')
+		self._hasValue = False
+		self._format = spec.get('format')
+		self._size = parseHeight(spec.get('size', '7%'), None)
+		self._gap = parseHeight(spec.get('gap', '2%'), None)
+		self._color = Color.decode(spec['color']).QColor if spec.get('color') is not None else None
+		self._bold = str(spec.get('weight', '')).lower() == 'bold'
+		raw = spec.get('value')
+		if raw is not None:
+			if (source := openValueSource(raw, f'Gauge {name} {self._side} value', 'the text stays hidden')) is not None:
+				self._binding = Binding(source, self.setCaptionValue)
+		self._rebuildText()
+
+	def setCaptionValue(self, value) -> None:
+		"""Set the shown value. GUI thread only."""
+		self._value, self._hasValue = value, True
+		self._rebuildText()
+		self.gauge._syncCaptions()
+
+	def _valueText(self) -> str:
+		value, spec = self._value, self._format
+		if spec == 'duration':
+			return formatDuration(value)
+		if spec is not None:
+			try:
+				if isinstance(value, Measurement):
+					return value.__format__('', **spec) if isinstance(spec, Mapping) else value.__format__(spec)
+				return format(float(value), spec)
+			except Exception:
+				return str(value)
+		return str(value)
+
+	def _rebuildText(self) -> None:
+		if self._binding is not None and not self._hasValue:
+			text = ''
+		elif self._hasValue:
+			shown = self._valueText()
+			text = shown if self._template is None else str(self._template).replace('{}', shown)
+		else:
+			text = '' if self._template is None else str(self._template)
+		self._text = text
+		self._layoutDirty = True
+
+	def _placeWarped(self, font) -> None:
+		"""Bend the text along the warp circle instead of setting it beside the value.
+		`gap` and `offset` do not apply: the circle decides where the text sits."""
+		gauge = self.gauge
+		card = gauge.parentItem() or gauge
+		cardRect = gauge.mapRectFromItem(card, card.rect() if hasattr(card, 'rect') else card.boundingRect())
+		place = self._warp.resolve(cardRect, (gauge.center, gauge.radius))
+		fm = QFontMetricsF(font)
+		scale = arcFit(fm.horizontalAdvance(self._text), fm.ascent() + fm.descent(), 1.0, place.radius)
+		view = getattr(self.scene(), 'viewScale', None)
+		epsilon = 0.25 / ((getattr(view, 'x', 1) or 1) if view is not None else 1)
+		path = warp_path(self._text, font, scale, place.radius, place.side, self._warp.mode, epsilon)
+		self.prepareGeometryChange()
+		self.setPath(path)
+		self.setTransform(QTransform().scale(scale, scale))
+		self.setRotation(place.rotation)
+		self.setPos(place.point)
+		color = self._color
+		if color is None:
+			color = QColor(gauge.defaultColor)
+			color.setAlphaF(0.65)
+		self.setBrush(QBrush(color))
+		self.setZValue(self.Z_VALUE)
+		self.show()
+
+	def refresh(self):
+		"""Place the text against the centre value. Never raises."""
+		gauge = self.gauge
+		try:
+			if not self._text:
+				self.hide()
+				return
+			font = gauge.tickFont
+			font.setPixelSize(max(1, int(size_px(self._size, gauge.radius * 2, dimension=DimensionType.height) or 1)))
+			if self._bold:
+				font.setWeight(QFont.Weight.Bold)
+			path = QPainterPath()
+			path.addText(0, 0, font, self._text)
+			rect = path.boundingRect()
+			if rect.isEmpty():
+				self.hide()
+				return
+			if self._warp is not None:
+				self._placeWarped(font)
+				return
+			self.setTransform(QTransform())
+			self.setRotation(0)
+			anchor = gauge._valueAnchor()
+			gap = size_px(self._gap, gauge.radius * 2, dimension=DimensionType.height) or 0.0
+			x = anchor.center().x() - rect.center().x()
+			if self._side == 'caption':
+				y = anchor.top() - gap - rect.bottom()
+			else:
+				y = anchor.bottom() + gap - rect.top()
+			if self._offset:
+				x += self._offset[0] * gauge.radius * 2
+				y += self._offset[1] * gauge.radius * 2
+			self.prepareGeometryChange()
+			self.setPath(path)
+			self.setPos(x, y)
+			color = self._color
+			if color is None:
+				color = QColor(gauge.defaultColor)
+				color.setAlphaF(0.65)
+			self.setBrush(QBrush(color))
+			self.setZValue(self.Z_VALUE)
+			self.show()
+		except Exception as e:  # noqa: BLE001 - layout must never abort a load
+			log.warning(f'Gauge {gaugeKeyName(gauge)} could not place its {self._side}: {e!r}')
+
+
+class GaugeText(AnnotationText, GaugeItem):
+	def __init__(self, *args, **kwargs):
+		super(GaugeText, self).__init__(*args, **kwargs)
+
+
+class GaugeLabel(NonInteractiveLabel, ColorGradientMixin, GaugeItem):
+
+	def __init__(self, *args, **kwargs):
+		GaugeItem.__init__(self, *args, **kwargs)
+		assert isinstance(self.gauge, gauge_class())
+		NonInteractiveLabel.__init__(self, *args, **kwargs)
+
+	def _get_color_value(self) -> Number:
+		return self.gauge.value
+
+	def _set_fill_brush(self, color: Color):
+		self.textBox.setBrush(QBrush(color))
+
+	@StateProperty(key='visible', default=True, allowNone=False, singleVal=True)
+	def visible(self) -> bool:
+		# The textBox is reparented to the gauge (see the `valueLabel` factory),
+		# so the label wrapper's own visibility says nothing about what is drawn
+		# - the textBox is the thing the viewer sees.
+		return self.textBox.isVisible()
+
+	@visible.setter
+	def visible(self, value: bool):
+		self.textBox.setVisible(value)
+		if (gauge := self.gauge) is not None:
+			# full_gauge_path counts only visible labels, so the cached centre
+			# is stale the moment this changes.
+			gauge.__dict__.pop('full_gauge_path', None)
+
+	@StateProperty(key='offset', default=None, allowNone=True)
+	def offset(self) -> Optional[tuple]:
+		"""Shift the label from where it would sit: ``{x, y}`` as shares of the dial's diameter
+		(``{x: 0, y: -0.1}`` is a tenth of the diameter up). Gauge Studio writes it when you drag the label."""
+		return getattr(self, '_offset', None)
+
+	@offset.setter
+	def offset(self, value: Optional[tuple]):
+		self._offset = value
+
+	@offset.decode
+	def offset(self, value) -> Optional[tuple]:
+		return _decodeOffset(value)
+
+	@offset.encode
+	def offset(self, value: Optional[tuple]) -> Optional[dict]:
+		return None if not value else {'x': round(value[0], 4), 'y': round(value[1], 4)}
+
+	def offsetPx(self) -> QPointF:
+		"""`offset` in gauge pixels."""
+		value = getattr(self, '_offset', None)
+		if not value:
+			return QPointF()
+		d = self.gauge.radius * 2
+		return QPointF(value[0] * d, value[1] * d)
+
+
+class GaugeValueLabel(GaugeLabel):
+
+	parent: 'Gauge'
+
+	_debug_paint_color = Color.randomColor.QColor
+
+	__defaults__ = {
+		'format': {
+			# `show_unit` hides the WORD unit - 'mph', 'inHg' - which reads
+			# fine as its own label beneath the dial.
+			#
+			# `unit_symbol` is deliberately NOT set here. It used to be False,
+			# which also stripped '%' and '°' - symbols that belong glued to
+			# the number, so a humidity gauge read a bare '56'. And it cannot
+			# simply be flipped to True: unit_symbol is a *string*, not a
+			# flag, so True renders the literal word ('61True'). Omitting it
+			# lets each unit class supply its own symbol, which is the point.
+			'show_unit': False,
+		},
+		# Relative, not the absolute 100px this used to be: a gauge is sized
+		# by its panel, so a fixed-pixel label is correct at exactly one gauge
+		# size and wildly wrong everywhere else - in a small panel it drew the
+		# value several times larger than the dial it belonged to.
+		'geometry': {
+			'x': '0px',
+			'y': '0px',
+			'width': '45%',
+			'height': '28%',
+		},
+		'margins': ('0', '0', '0', '0'),
+	}
+
+	class TextBox(Text):
+		parent: 'GaugeValueLabel'
+		surface: 'Gauge'
+
+		@Text.alignment.getter
+		def alignment(self):
+			return self.parent.alignment
+
+		@property
+		def _position(self) -> ValueDisplayPosition:
+			if (position := self.parent.position) is ValueDisplayPosition.Auto:
+				position = self.parent.position_auto()
+			return position
+
+		def __rich_repr__(self):
+			yield from super().__rich_repr__()
+			yield 'alignment', self.alignment
+
+		def _format_value_func(self, value):
+			try:
+				return self.parent.format_value(value.value)
+			except AttributeError:
+				return self.parent.format_value(value)
+
+		# def paint(self, painter: QPainter, option, widget):
+		# 	f = QRadialGradient(rainbow)
+		# 	f.setRadius(max(self.boundingRect().width(), self.boundingRect().height()))
+		# 	# f.setCenter(-self.boundingRect().topLeft())
+		# 	# f.setFocalPoint(-self.boundingRect().topLeft())
+		# 	f.setCoordinateMode(QGradient.CoordinateMode.LogicalMode)
+		# 	painter.save()
+		# 	# painter.setOpacity(0.5)
+		# 	# painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Screen)
+		#
+		# 	shape = self.shape()
+		# 	addPath(painter, shape, fill=f, color=Qt.GlobalColor.transparent)
+		#
+		# 	# shape = self.mapFromParent(self.parentItem()._gauge_path())
+		# 	# addPath(painter, shape, fill=QBrush(Qt.GlobalColor.red), color=Qt.GlobalColor.transparent)
+		#
+		# 	painter.restore()
+		# 	super().paint(painter, option, widget)
+		#
+		# 	painter.setBrush(QBrush(Qt.white))
+		# painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Difference)
+
+		# gauge = self.parent.parent
+		# for collision_item in self.collidingItems():
+		# 	if not gauge.isAncestorOf(collision_item):
+		# 		continue
+		# 	item_path = self.mapFromItem(collision_item, collision_item.shape())
+		# 	painter.drawPath(item_path)
+
+		@property
+		def limitRect(self) -> QRectF:
+			if self._position in (DisplayPosition.Left, DisplayPosition.Right):
+				return self.parent.parent._sideValueRect().translated(-self.pos())
+			arc = self.parent.parent.arc.sceneBoundingRect()
+			# r = max(arc.width(), arc.height()) / sqrt(2)
+			# g = self.parent.parent
+			# r = g.radius
+			# r /= self.transform().m11()
+			# r = QRectF(0, 0, r, r)
+			# r.moveCenter(self.mapFromItem(g, g.center))
+			r = self.mapRectFromScene(arc)
+
+			# self._debug_paint_shape = rect_to_shape(r)
+			return r
+
+		def getTextPosition(self, limitRect: QRectF = None) -> QPointF:
+
+			gauge: Gauge = self.parent.parent
+			arc: GaugeArc = gauge.arc
+
+			min_angle, max_angle = sorted((arc.startAngle, arc.endAngle))
+
+			angle_spread = max_angle - min_angle
+
+			# if angle_spread <= 200:
+			# 	return gauge.center
+
+			arc_center = arc.mapToParent(arc.path().boundingRect().center())
+			gauge_center = gauge.center
+
+			match self._position:
+				case ValueDisplayPosition.Left | ValueDisplayPosition.Right:
+					# Beside the dial: the middle of the strip the dial left free.
+					return gauge._sideValueRect().center()
+				case ValueDisplayPosition.Inline:
+					diff = arc_center - gauge_center
+					return arc_center - (diff * (angle_spread / 360))
+				case ValueDisplayPosition.Center:
+					return gauge.center
+				case ValueDisplayPosition.Top:
+					return gauge.center + QPointF(0, max(-gauge.safe_radius, self.mapRectFromItem(gauge, gauge.gaugeRect).top()))
+					# return gauge.center + QPointF(0, -gauge.safe_radius)
+				case ValueDisplayPosition.Bottom:
+					# Stands on the panel's bottom edge, above the strip a unit
+					# label below it needs; bottom-aligned, so it grows upward
+					# until getTextScale finds it touching the dial. It used to
+					# be centred on the arc's lowest point, which left no room
+					# under it and none to shrink into.
+					return QPointF(gauge.center.x(), gauge.rect().bottom() - self._unit_reserve() - 1)
+				case _:
+					raise NotImplementedError
+
+		def _valueAccessor(self):
+			return self.parent.parent.value
+
+		@defer(pool_attr='action_pool')
+		def updateTransform(self, rect: QRectF = None, updateShared: bool = True, updatePath: bool = True, reason: str = None, *args):
+			super().updateTransform(rect, updateShared, updatePath, reason=reason, *args)
+			_shiftByOffset(self)
+			# A refit resets this label to where the fit puts it, and Gauge.recenter
+			# is not called again. Re-hang the unit from the value as it now is.
+			self.parent.parent._syncUnitUnderValue()
+			self.parent.parent._syncCaptions()
+
+		def getTextScale(self, textRect: QRectF = None, limitRect: QRectF = None) -> float:
+
+			"""
+			Modifies the local transform until no there are no collisions, restores the original transform and returns the scale.
+			"""
+
+			gauge = self.parent.parent
+			if self._position in (DisplayPosition.Left, DisplayPosition.Right):
+				# The strip beside the dial is empty by construction, so there is
+				# nothing to collide with: fit the glyphs to the strip.
+				strip = gauge._sideValueRect()
+				strip = strip.adjusted(*([self.parent.value_padding_px] * 2), *([-self.parent.value_padding_px] * 2))
+				scale = Text.getTextScale(self, textRect, strip.translated(-self.pos()))
+				base_path = self.path()
+				if (size := self.parent.size) is not None and (glyph_height := base_path.boundingRect().height()) > 0:
+					scale = min(scale, size_px(size, gauge.radius * 2) / glyph_height)
+				return round(scale, 4)
+
+			scale = super(GaugeValueLabel.TextBox, self).getTextScale()
+
+			gauge_path = gauge._gauge_path()
+
+			if self._position is DisplayPosition.Inline:
+				# Without the recenter shift: that shift is computed from this
+				# label's size, so fitting against the shifted needle would feed
+				# back into the layout it depends on.
+				needle = gauge.needle
+				unshifted, _ = needle.transform().inverted()
+				gauge_path.addPath(gauge.mapFromItem(needle, unshifted.map(needle.shape())))
+
+			# PURE. The base class documents that getTextScale must not mutate
+			# the transform, because a SizeGroup calls it on every member to
+			# pick a shared scale - and this override used to violate that,
+			# applying each trial scale to the live item and asking the scene
+			# "am I colliding now?". Probing one member moved it in the scene,
+			# which changed the answers for the others, and the group then
+			# applied a shared scale that invalidated whatever the probe had
+			# concluded. That is why collision fitting and size groups fought
+			# each other.
+			#
+			# The test is the same, done arithmetically: this item's parent IS
+			# the gauge (the factory reparents textBox to it), so a transform
+			# built from the label's position and a trial scale maps the glyph
+			# path into gauge coordinates without touching anything.
+			#
+			# Built from getTextPosition, NOT self.transform(): updateTransform
+			# resets the transform to identity before asking for a scale, so
+			# the old copy of it tested every trial at the gauge's top-left
+			# corner. That always failed `bounds.contains`, and every gauge
+			# value sat on the 0.2 floor whatever room it had.
+			base_path = self.path()
+			origin = self.getTextPosition(limitRect)
+			# Which box the label has to stay inside depends on where it sits.
+			# A Center/Inline label lives among the dial's own parts, so the
+			# dial's square is the right constraint. A Below/Above one is
+			# deliberately OUTSIDE the dial, and judging it against gaugeRect
+			# rejected every size that cleared the graduations - the wind value
+			# measured 'outside the dial but colliding with nothing' and was
+			# shrunk anyway, all the way to the floor. Those positions belong
+			# to the panel, not the dial.
+			if self._position in (DisplayPosition.Center, DisplayPosition.Inline):
+				bounds = gauge.gaugeRect
+			else:
+				bounds = gauge.rect()
+
+			reserve = self._unit_reserve()
+			gap = self.parent.value_padding_px
+
+			# A bottom value hangs under the needle's pivot. The needle is not
+			# part of gauge_path here (only an Inline value dodges it), so
+			# without this the label grew upward until it touched the arc and
+			# covered the hub. Its top must stay below the hub's lowest point.
+			hub_bottom = None
+			if self._position is DisplayPosition.Below and gauge.needle.type is Needle.Type.Needle:
+				needle = gauge.needle
+				hub_bottom = gauge.center.y() + needle.offset_px + needle.width_px * 0.6 + gauge.radius * 0.03
+
+			gauge_bounds = gauge_path.boundingRect()
+
+			def collides_at(trial: float) -> bool:
+				t = QTransform.fromTranslate(origin.x(), origin.y())
+				t.scale(trial, trial)
+				candidate = t.map(base_path)
+				if hub_bottom is not None and candidate.boundingRect().top() < hub_bottom:
+					return True
+				if reserve:
+					# The unit hangs beneath the value, so the value has to
+					# leave it a strip as wide as itself.
+					rect = candidate.boundingRect()
+					candidate.addRect(QRectF(rect.left(), rect.bottom(), rect.width(), reserve))
+				if not bounds.contains(candidate.boundingRect()):
+					return True
+				# Clear of the dial's parts by a gap, not merely not touching:
+				# without one, a bottom value grew until its edge stood against
+				# the end tick labels beside it.
+				# The padded shape is the glyphs plus a stroke around them.
+				# Testing the two against the dial one after the other answers
+				# the same as testing their union, which is slow to build. The
+				# dial path has thousands of segments, and a boolean test
+				# against all of them costs milliseconds per step. Cut it to
+				# the box the label can touch first (a rectangle clip is
+				# cheap); only the few segments inside are left to test.
+				reach = candidate.boundingRect().adjusted(-gap, -gap, gap, gap) if gap else candidate.boundingRect()
+				if not reach.intersects(gauge_bounds):
+					return False
+				clip = QPainterPath()
+				clip.addRect(reach.adjusted(-1, -1, 1, 1))
+				near = gauge_path.intersected(clip)
+				if near.isEmpty():
+					return False
+				if gap and outline_path(candidate, gap * 2).intersects(near):
+					return True
+				return candidate.intersects(near)
+
+			# The floor is relative: a bare 0.2 is in glyph-path units, so it
+			# meant something different for every font size and stopped the
+			# value long before it cleared the dial.
+			# Steps of 5% down from the start scale. The answer is the first
+			# step that is clear, or the step that reaches the floor. Collision
+			# only gets rarer as the label shrinks, so bisect over the step
+			# count instead of testing every step in turn.
+			floor = scale * 0.2
+			start = scale
+			steps = 0
+			while start * 0.95 ** steps > floor:
+				steps += 1
+			lo, hi = 0, steps  # the answer is in lo..hi; `hi` is accepted untested
+			while lo < hi:
+				mid = (lo + hi) // 2
+				if collides_at(start * 0.95 ** mid):
+					lo = mid + 1
+				else:
+					hi = mid
+			scale = start
+			for _ in range(lo):
+				scale *= 0.95
+
+			# `size` caps the glyph height at a share of the dial's diameter,
+			# so a short value ('N', '0') stays as small as a long one.
+			if (size := self.parent.size) is not None and (glyph_height := base_path.boundingRect().height()) > 0:
+				scale = min(scale, size_px(size, gauge.radius * 2) / glyph_height)
+
+			return round(scale, 4)
+
+		def _unit_reserve(self) -> float:
+			"""Height, in gauge pixels, a visible unit label below the value needs."""
+			gauge = self.parent.parent
+			unit = getattr(gauge, '_unitLabel', None)
+			if not isinstance(unit, GaugeUnit) or not unit.textBox.isVisibleTo(gauge):
+				return 0
+			try:
+				if unit.textBox._position not in _UNIT_UNDER_VALUE:
+					return 0
+				return unit.height_px + self.parent.value_padding_px
+			except Exception as e:  # noqa: BLE001 - sizing must never abort a load
+				log.warning(f'Gauge {gaugeKeyName(gauge)} could not size its unit label: {e!r}')
+				return 0
+
+		_shapePath: QPainterPath = QPainterPath()
+
+		def setPath(self, path: QPainterPath):
+			matrix = self.transform()
+			scale_x = matrix.m11() * self.scale()
+			scale_y = matrix.m22() * self.scale()
+			scale_value = (self.scaleSelection(scale_x, scale_y) or 1)
+			self._debug_paint_shape = self._shape = outline_path(self._shapePath or path, self.parent.value_padding_px / scale_value)
+			super().setPath(path)
+
+		_shape: QPainterPath = QPainterPath()
+
+		def setTransform(self, matrix: QTransform, **kwargs) -> None:
+			super().setTransform(matrix, **kwargs)
+			scale_x = matrix.m11() * self.scale()
+			scale_y = matrix.m22() * self.scale()
+			scale_value = (self.scaleSelection(scale_x, scale_y) or 1)
+			self.prepareGeometryChange()
+			self._shape = outline_path(self._shapePath or self.path(), self.parent.value_padding_px / scale_value)
+
+		def shape(self) -> QPainterPath:
+			return QPainterPath(self._shape)
+
+		def boundingRect(self) -> QRectF:
+			return self._shape.boundingRect()
+
+		def sceneBoundingRect(self) -> QRectF:
+			return self.mapToScene(self._shape).boundingRect()
+
+	@StateProperty(key='alignment', allowNone=True, dependencies={'geometry', 'text', 'margins'})
+	def alignment(self) -> Alignment:
+		return getattr(self, '_alignment', None) or self.alignment_auto()
+
+	@alignment.condition(method='get')
+	def alignment(self) -> bool:
+		return getattr(self, '_alignment', None) is not None
+
+	@alignment.setter
+	def alignment(self, value: Alignment):
+		self._alignment = value
+
+	@alignment.decode
+	def alignment(self, value: str) -> Alignment:
+		return Alignment(AlignmentFlag[value])
+
+	@StateProperty(key='format', default=None, allowNone=False)
+	def format_spec(self) -> str | dict:
+		return getattr(self, '_format_spec', None)
+
+	@format_spec.setter
+	def format_spec(self, value: str | dict):
+		self._format_spec = value
+
+	def format_value(self, value: Measurement) -> str:
+		format_spec = self.format_spec
+		if format_spec == 'duration':
+			return formatDuration(value)
+		if format_spec is not None:
+			if isinstance(value, Measurement):
+				match format_spec:
+					case str():
+						return value.__format__(format_spec)
+					case dict():
+						return value.__format__('', **format_spec)
+		elif value is None:
+			return "⋯"
+		return str(value)
+
+	@StateProperty(key='size', default=None, allowNone=True)
+	def size(self) -> Length | Dimension | None:
+		"""
+		Largest height of the value text, as a share of the dial's diameter.
+
+		Without it the value grows until it touches the dial, so a short value
+		such as 'N' or '0' comes out far larger than '7.4'.
+
+		```yaml
+		value-label: {size: 26%}
+		```
+		"""
+		return getattr(self, '_size', None)
+
+	@size.setter
+	def size(self, value: Length | Dimension | None):
+		self._size = value
+
+	@size.decode
+	def size(self, value: str | int | float) -> Length | Dimension | None:
+		return parseSize(value, default=None)
+
+	@StateProperty(key='value-padding', default=Size.Height(0.05, relative=True), allowNone=False)
+	def value_padding(self) -> Length | Dimension | None:
+		return self._value_padding
+
+	@value_padding.setter
+	def value_padding(self, value: Length | Dimension | None):
+		self._value_padding = value
+
+	@value_padding.decode
+	def value_padding(self, value: str | int | float) -> Length | Dimension | None:
+		return parseSize(value, default=None)
+
+	@property
+	def value_padding_px(self) -> float | int:
+		value_padding = self.value_padding
+		if value_padding is None:
+			return 5
+		return size_px(value_padding, (self.textBox._textRect or self.textBox.limitRect).height())
+
+	@StateProperty(key='position', allowNone=False, default=ValueDisplayPosition.Auto, repr=True)
+	def position(self) -> ValueDisplayPosition:
+		return self._position
+
+	@position.setter
+	def position(self, value: ValueDisplayPosition):
+		self._position = value
+
+	@position.decode
+	def position(self, value: str) -> ValueDisplayPosition:
+		return ValueDisplayPosition[value]
+
+	def alignment_auto(self) -> Alignment:
+		# TODO: This a quick and slopy implementation and needs improvement
+
+		# match self.position:
+		# 	case ValueDisplayPosition.Inline:
+		# 		return Alignment(AlignmentFlag.Bottom)
+		# 	case _:
+		# 		pass
+		align = self.parent.alignment.combined
+
+		if (position := self.position) is ValueDisplayPosition.Auto:
+			position = self.position_auto()
+
+		# A side value is centred on the middle of its strip.
+		if position in (ValueDisplayPosition.Left, ValueDisplayPosition.Right):
+			return Alignment(AlignmentFlag.Center)
+
+		# A bottom value stands on the panel's bottom edge and grows upward
+		# into the dial's mouth (see TextBox.getTextPosition).
+		if position is ValueDisplayPosition.Bottom:
+			return Alignment(self.parent.alignment.horizontal | AlignmentFlag.Bottom)
+
+		min_angle, max_angle = sorted((self.parent.startAngle, self.parent.endAngle))
+
+		angle_spread = max_angle - min_angle
+		if angle_spread > 180 and position is not ValueDisplayPosition.Inline:
+			return Alignment(align)
+
+		angle_mid = ((min_angle + max_angle) / 2 + 90) % 360
+
+		if 60 >= angle_mid or angle_mid >= 300:
+			align |= AlignmentFlag.Right
+		elif 240 >= angle_mid >= 120:
+			align |= AlignmentFlag.Left
+
+		if 135 >= angle_mid >= 45:
+			align |= AlignmentFlag.Bottom
+		elif 315 >= angle_mid >= 225:
+			align |= AlignmentFlag.Top
+
+		return Alignment(align)
+
+	def position_auto(self) -> ValueDisplayPosition:
+		if self.gauge.needle.type is Needle.Type.Needle and self.gauge.arc.fullAngle > 180:
+			return ValueDisplayPosition.Inline
+		return ValueDisplayPosition.Center
+
+
+class GaugeUnit(GaugeLabel):
+
+	surface: 'Gauge'
+	__exclude__ = {'alignment'}
+
+	_debug_paint_color = Color.randomColor.QColor
+
+	__defaults__ = {
+		# Relative for the same reason as GaugeValueLabel above.
+		'geometry': {
+			'x': '0px',
+			'y': '0px',
+			'width': '30%',
+			'height': '14%',
+		},
+		'margins': ('0', '0', '0', '0'),
+	}
+
+	class TextBox(Text):
+
+		surface: 'Gauge'
+
+		@property
+		def alignment(self) -> Alignment:
+			return Alignment(AlignmentFlag.Center | AlignmentFlag.Top)
+
+		@alignment.setter
+		def alignment(self, value):
+			pass
+
+		@property
+		def _position(self) -> UnitDisplayPosition:
+			if (position := self.parent.position) is UnitDisplayPosition.Auto:
+				position = self.parent.position_auto()
+			return position
+
+		@defer(pool_attr='action_pool')
+		def updateTransform(self, rect: QRectF = None, updateShared: bool = True, updatePath: bool = True, reason: str = None, *args):
+			super().updateTransform(rect, updateShared, updatePath, reason=reason, *args)
+			_shiftByOffset(self)
+			# Same as the value label's: a refit puts the unit back at the
+			# value's raw box, which is not where it should hang.
+			self.parent.parent._syncUnitUnderValue()
+			self.parent.parent._syncCaptions()
+
+		def getTextPosition(self, limitRect: QRectF = None) -> QPointF:
+			match self._position:
+				case UnitDisplayPosition.Below | UnitDisplayPosition.FloatUnder:
+					return self._position_below()
+				case UnitDisplayPosition.TrailingValue:
+					return self._position_trailing_value()
+				case _:
+					raise NotImplementedError
+
+		def _position_below(self) -> QPointF:
+			try:
+				value_label = self.surface.valueLabel.textBox.sceneBoundingRect()
+				p = value_label.center()
+				p.setY(value_label.bottom())
+				p = self.mapFromScene(p)
+				return p
+			except AttributeError:
+				pass
+
+			return self.parent.parent.center
+
+		def _position_trailing_value(self) -> QPointF:
+			try:
+				value_label = self.surface.valueLabel.textBox.sceneBoundingRect()
+				p = value_label.bottomLeft()
+				return self.mapFromScene(p)
+			except AttributeError:
+				pass
+
+			return self.parent.parent.center
+
+		def _position_leading_value(self) -> QPointF:
+			raise NotImplementedError
+
+		def setPath(self, path):
+			self._shape = outline_path(path, self.parent.value_padding_px)
+			super().setPath(path)
+
+		_shape: QPainterPath = QPainterPath()
+
+		def shape(self) -> QPainterPath:
+			return self._shape
+
+		def boundingRect(self) -> QRectF:
+			return self.shape().boundingRect()
+
+		def setTransform(self, *args, **kwargs):
+			super().setTransform(*args, **kwargs)
+
+			move_direction = QPointF(0, 1)
+
+			moved_count = 0
+
+			if not self.parentItem().alignment == AlignmentFlag.Center:
+				return
+
+			max_travel_distance = int(ceil(sqrt(sum(i ** 2 for i in self.limitRect.size().toTuple()))))
+
+			# Move the unit label away from the value label if it collides with the needle
+			# TODO: Make this use transformations rather than moveBy
+			while self.collidesWithItem(self.surface.needle) and abs(moved_count) < max_travel_distance:
+				self.moveBy(move_direction.x(), move_direction.y())
+				moved_count += 1
+
+		def _textAccessor(self) -> str:
+			value_class = self.parent.parent.valueClass
+			# A key with no unit class (a bare float, e.g. a plugin value whose
+			# unit WeatherUnits does not know) has no unit to show. Raising here
+			# aborted the whole dashboard load.
+			return getattr(value_class, 'unit', None) or getattr(value_class, 'unit_symbol', None) or ''
+
+		@property
+		def limitRect(self) -> QRectF:
+			arc = self.surface.arc.boundingRect()
+			r = max(arc.width(), arc.height()) / sqrt(2)
+			r = QRectF(0, 0, r, r)
+			r.setHeight(self.parent.height_px)
+			return r
+
+	@cached_property
+	def value_label(self) -> GaugeValueLabel:
+		return self.gauge.valueLabel
+
+	@StateProperty(key='height', default=Length.Millimeter(5), allowNone=False)
+	def height(self) -> Measurement | Dimension | None:
+		return self._height
+
+	@height.setter
+	def height(self, value: Measurement | Dimension | None):
+		self._height = value
+
+	@height.decode
+	def height(self, value: str | int | float) -> Measurement | Dimension | None:
+		return parseSize(value, default=None, allowFloat=False)
+
+	@property
+	def height_px(self) -> float | int:
+		height = self.height
+		if height is None:
+			return 0
+		return size_px(height, self.height_relative_to)
+
+	@property
+	def height_relative_to(self) -> float | int:
+		return self.parent.radius
+
+	@StateProperty(key='value-padding', default=Size.Height(0.05, relative=True), allowNone=False)
+	def value_padding(self) -> Length | Dimension | None:
+		return self._value_padding
+
+	@value_padding.setter
+	def value_padding(self, value: Length | Dimension | None):
+		self._value_padding = value
+
+	@value_padding.decode
+	def value_padding(self, value: str | int | float) -> Length | Dimension | None:
+		return parseSize(value, default=None)
+
+	@property
+	def value_padding_px(self) -> float | int:
+		value_padding = self.value_padding
+		if value_padding is None:
+			return 5
+		return size_px(value_padding, (self.textBox._textRect or self.textBox.limitRect).height())
+
+	@StateProperty(key='position', default=UnitDisplayPosition.Auto, allowNone=False, repr=True)
+	def position(self) -> UnitDisplayPosition:
+		return self._position
+
+	@position.setter
+	def position(self, value: UnitDisplayPosition):
+		self._position = value
+
+	# @position.item_default
+	# def position(self) -> UnitDisplayPosition:
+	# 	label_position = self.value_label.position
+	# 	match label_position:
+	# 		case ValueDisplayPosition.Auto:
+	# 			return self.position_auto()
+	# 		case ValueDisplayPosition.Inline | ValueDisplayPosition.Center:
+	# 			return UnitDisplayPosition.Below
+	#
+	# 	return UnitDisplayPosition.Below
+
+	@position.decode
+	def position(self, value: str) -> UnitDisplayPosition:
+		return UnitDisplayPosition[value]
+
+	def position_auto(self) -> UnitDisplayPosition:
+		value_label_position = self.value_label.position
+		if value_label_position is ValueDisplayPosition.Auto:
+			value_label_position = self.value_label.position_auto()
+		match value_label_position:
+			case ValueDisplayPosition.Inline | ValueDisplayPosition.Center:
+				return UnitDisplayPosition.Below
+			case _:
+				return UnitDisplayPosition.TrailingValue
+
+
+def _decodeOffset(value) -> Optional[tuple]:
+	"""`{x, y}` (or `[x, y]`) as a pair of floats; None for nothing or all zero."""
+	if value is None:
+		return None
+	if isinstance(value, Mapping):
+		pair = (value.get('x', 0), value.get('y', 0))
+	elif isinstance(value, (list, tuple)) and len(value) == 2:
+		pair = tuple(value)
+	else:
+		raise ValueError(f'offset must be a mapping {{x, y}} or a pair, got {value!r}')
+	x, y = float(pair[0]), float(pair[1])
+	return None if x == 0 and y == 0 else (x, y)
+
+
+def _shiftByOffset(box) -> None:
+	"""Move a label's text box by its label's `offset`, in the gauge's own coordinates.
+	Run after a refit has put the box where the layout wants it, so the shift never builds up."""
+	if getattr(box, '_warpActive', False):
+		return  # a warped label is pinned to its circle; `offset` would drag it off
+	try:
+		shift = box.parent.offsetPx()
+	except Exception as e:  # noqa: BLE001 - layout must never abort a load
+		log.warning(f'could not read a label offset: {e!r}')
+		return
+	if shift.isNull():
+		return
+	t = box.transform()
+	box.setTransform(QTransform(t.m11(), t.m12(), t.m21(), t.m22(), t.dx() + shift.x(), t.dy() + shift.y()))
+
+
+_UNIT_UNDER_VALUE = frozenset({UnitDisplayPosition.Below, UnitDisplayPosition.FloatUnder})

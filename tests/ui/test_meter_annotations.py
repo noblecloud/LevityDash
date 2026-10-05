@@ -13,6 +13,7 @@ annotation still named `GaugeTickTextGroup`, which was still in Gauge.py, so the
 gauge would not build at all. This test is the guard for the rest of the split.
 """
 import importlib
+import typing
 
 from LevityDash.lib.stateful import StateProperty
 
@@ -53,6 +54,25 @@ def test_every_state_property_resolves_its_returns():
 		'a StateProperty cannot resolve the annotations the state layer reads at runtime '
 		'(a moved class whose annotation still names something left behind?):\n  ' + '\n  '.join(problems)
 	)
+
+
+def test_every_class_annotation_resolves():
+	"""`Text.surface` calls `get_type_hints(type(self))` at layout time.
+
+	So a *class-level* annotation that names something its module cannot see is a
+	NameError in the middle of laying a label out - which is exactly how
+	`GaugeUnit.surface: Gauge` failed when GaugeUnit moved. The display classes are
+	handed to meter/elements.py at the foot of Gauge.py for this reason.
+	"""
+	problems = []
+	for module_name in MODULES:
+		module = importlib.import_module(module_name)
+		for cls_name, cls in _classes(module):
+			try:
+				typing.get_type_hints(cls)
+			except NameError as e:
+				problems.append(f'{cls_name}: {e}')
+	assert not problems, 'a class annotation cannot be resolved by its own module:\n  ' + '\n  '.join(problems)
 
 
 def test_the_walk_finds_the_properties_it_is_supposed_to():

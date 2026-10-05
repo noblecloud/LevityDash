@@ -83,12 +83,37 @@ by `Gauge.py` (which keeps re-exporting every name the rest of the app imports):
 - `_gaugeKeyName` moved with the label code that logs with it, as
   `elements.gaugeKeyName`; `Gauge.py` imports it back under its old name so its
   own call sites are untouched.
-- Moved classes log as `meter.elements` now, not `Gauge` (a moved module's
-  `log = UILogger.getChild(...)` is its own).
-- **M1d** `Needle`, `Arrow`, `GaugeMarker`.
-- **M1e** `GaugeZones`, `GaugeFill`.
-- **M1f** `GaugeText`, `GaugeLabel`, `GaugeValueLabel`, `GaugeUnit`,
-  `GaugeCaption`.
+- **M1f (done)** — `meter/elements.py`: `GaugeCaption`, `GaugeText`, `GaugeLabel`,
+  `GaugeValueLabel`, `GaugeUnit`, plus the two offset helpers only they used
+  (`_decodeOffset`, `_shiftByOffset`) and the `_UNIT_UNDER_VALUE` constant, which
+  both modules read. Two traps this step surfaced, both about *names*, which is
+  where this split keeps biting:
+  - the moved code had a runtime `isinstance(self.gauge, Gauge)`; a moved class
+    names the display class through `gauge_class()` now, like the item bases;
+  - `Text.surface` calls `typing.get_type_hints(type(self))` at layout time, so
+    every *class-level* annotation on a moved class must resolve in
+    `meter/elements.py`'s globals. `GaugeUnit.surface: Gauge` failed there (a
+    NameError mid-layout, which surfaced as a segfault in pytest's own failure
+    reporting - see below). `meter.elements` now declares `Gauge = None` and
+    `GaugeArc = None`, and `Gauge.py` hands the real classes over at its foot.
+    `tests/ui/test_meter_annotations.py` grew a test that runs `get_type_hints`
+    on every class in the package, mirroring the app's own call.
+  - **Ruff is worth having.** No linter ships with the repo, so I installed one
+    into this worktree's venv (`pip install ruff`, machine-local, not in
+    pyproject): `ruff check --select F821,F811 <files>` catches an undefined name
+    in one second. It found the `GaugeArc` annotation, and it would have found the
+    two missing import-backs. What it cannot catch is a right name holding the
+    wrong object - `from copy import copy` where the code wanted the module - and
+    that was a 4-file pixel difference. The harness is still the real gate.
+  - **A failing test can look like a crash.** The first attempt did not report a
+    failure: it segfaulted, because pytest's failure repr called
+    `Label.__rich_repr__` → `textBox` → `Text.__init__` → recursion until the C
+    stack ran out. `--tb=native` printed the actual `NameError`. Worth knowing
+    before chasing a phantom Qt bug: if a test run dies with a stack dump, re-run
+    that file with `--tb=native --tb=no`.
+- **M1d (done)** `Needle`, `Arrow`, `GaugeMarker`; **M1e (done)** `GaugeZones`,
+  `GaugeFill` + `_FillEnd`. Each moved verbatim, each gated on the suite and a
+  capture.
 - **M2** `GaugeRange` + `Meter(Display)` into `meter/meter.py`; `Gauge(Meter)`
   keeps the arc-only members. Handed over as one slice.
 - **M3** `GaugeArc` and the arc-specific label overrides into `meter/gauge.py`;
