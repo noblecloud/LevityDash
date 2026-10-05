@@ -55,7 +55,7 @@ class Section(QWidget):
 		self.header.setChecked(expanded)
 		self.header.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
 		self.header.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
-		self.header.setStyleSheet('QToolButton { border: none; font-weight: 600; padding: 6px 4px; text-align: left; }')
+		self.header.setStyleSheet('QToolButton { border: none; font-weight: 600; padding: 6px 4px; text-align: left; color: palette(window-text); }')
 		self.header.setSizePolicy(self.header.sizePolicy().horizontalPolicy(), self.header.sizePolicy().verticalPolicy())
 		self.header.toggled.connect(self._toggled)
 		outer.addWidget(self.header)
