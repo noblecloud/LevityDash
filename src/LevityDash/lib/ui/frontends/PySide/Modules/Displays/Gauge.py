@@ -1615,6 +1615,10 @@ class Needle(StatefulGaugePathItem):
 			gauge.value_to_angle(gauge.value)
 		)
 		self.setPos(gauge.center)
+		# resetTransform() above dropped the shift recenter() gave this item.
+		# A value change refreshes the needle without a recenter, so put the
+		# shift back or the pivot drifts off the arc's centre.
+		self.setTransform(gauge._recenterTransform, combine=False)
 		self.setZValue(-500)
 
 	@StateProperty(key='type', default=Type.Needle, allowNone=False, repr=True, after=refresh)
@@ -2375,7 +2379,12 @@ class GaugeValueLabel(GaugeLabel):
 			gauge_path = gauge._gauge_path()
 
 			if self._position is DisplayPosition.Inline:
-				gauge_path.addPath(gauge.mapFromItem(gauge.needle, gauge.needle.shape()))
+				# Without the recenter shift: that shift is computed from this
+				# label's size, so fitting against the shifted needle would feed
+				# back into the layout it depends on.
+				needle = gauge.needle
+				unshifted, _ = needle.transform().inverted()
+				gauge_path.addPath(gauge.mapFromItem(needle, unshifted.map(needle.shape())))
 
 			# PURE. The base class documents that getTextScale must not mutate
 			# the transform, because a SizeGroup calls it on every member to
@@ -4135,6 +4144,8 @@ class Gauge(Display):
 		self.refresh()
 
 	_center_transform: QTransform = QTransform()
+	#: The shift recenter() last applied to the needle, markers, arc, fills and ticks.
+	_recenterTransform: QTransform = QTransform()
 
 	# def paint(self, painter, option, widget):
 	# 	super().paint(painter, option, widget)
@@ -4206,6 +4217,7 @@ class Gauge(Display):
 				t.translate(bounds_rect.right() - own_shape_rect.right(), 0)
 
 		self._center_transform = QTransform()
+		self._recenterTransform = QTransform(t)
 
 		self.needle.setTransform(t, combine=False)
 		for marker in self._markerItems:
