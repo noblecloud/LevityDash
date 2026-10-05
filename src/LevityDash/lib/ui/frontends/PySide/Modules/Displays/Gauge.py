@@ -51,7 +51,7 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.track import ArcT
 from LevityDash.lib.utils import Axis
 from LevityDash.lib.utils.data import MinMax
 from LevityDash.lib.utils.shared import radialPoint, defer, factors, is_prime, Unset, clearCacheAttr, \
-	INVERSE_GOLDEN_RATIO, closestStringInList, camelCase, guarded_cached_property, get, ClosestMatchEnumMeta
+	INVERSE_GOLDEN_RATIO, closestStringInList, camelCase, guarded_cached_property, get, ClosestMatchEnumMeta, now
 from WeatherUnits import Measurement, Angle, Wind, Humidity, auto as auto_wu, Length, Percentage
 
 log = UILogger.getChild('Gauge')
@@ -2518,9 +2518,11 @@ class GaugeMarker(Needle):
 			if self._fixedTime is not None:
 				hours, minutes, seconds = self._fixedTime
 			else:
-				from datetime import datetime
-				now = datetime.now()
-				hours, minutes, seconds = now.hour, now.minute, now.second + now.microsecond / 1e6
+				# The app's own clock, not the wall clock: `shared.now()` is what
+				# `--freeze-time` patches (see _boot.freeze_time), so reading
+				# datetime.now() here meant a frozen render still drew a live hand.
+				current = now()
+				hours, minutes, seconds = current.hour, current.minute, current.second + current.microsecond / 1e6
 			self._clockFraction = clockTurn(self._clockHand, hours, minutes, seconds)
 		except Exception as e:
 			log.warning(f'Gauge {_gaugeKeyName(self.gauge)} clock hand stopped: {e}')
