@@ -5550,6 +5550,10 @@ class Gauge(Display):
 			elif own_shape_rect.right() >= bounds_rect.right():
 				t.translate(bounds_rect.right() - own_shape_rect.right(), 0)
 
+		if self._anchor is not None:
+			# The pivot is already where `anchor` put it; nothing to centre.
+			t = QTransform()
+
 		self._center_transform = QTransform()
 		self._recenterTransform = QTransform(t)
 
@@ -5740,6 +5744,61 @@ class Gauge(Display):
 			alignment = AlignmentFlag.Center
 		return Alignment(alignment)
 
+	#: Corner names `anchor` accepts, as the (x, y) share of the box the pivot sits at.
+	_ANCHORS = {
+		'top-left': (0, 0), 'top-right': (1, 0),
+		'bottom-left': (0, 1), 'bottom-right': (1, 1),
+	}
+	_anchor: Optional[str] = None
+	_s_inset = Size.Height(0.0, relative=True)
+
+	@StateProperty(key='anchor', default=None, allowNone=True, after=rebuild, repr=True)
+	def anchor(self) -> Optional[str]:
+		"""Pin the pivot (the arc centre) to a corner of the box: ``top-left``, ``top-right``,
+		``bottom-left`` or ``bottom-right``. ``radius`` then counts from the box's short side, so
+		100% is the whole short side minus ``inset``. Use it for a quarter-circle dial that fills
+		a card. Without it the dial is centred as before."""
+		return self._anchor
+
+	@anchor.setter
+	def anchor(self, value: Optional[str]):
+		self._anchor = value
+
+	@anchor.decode
+	def anchor(self, value) -> Optional[str]:
+		if value is None:
+			return None
+		name = str(value).strip().lower().replace('_', '-').replace(' ', '-')
+		parts = name.split('-')
+		if len(parts) == 2 and parts[0] in ('left', 'right') and parts[1] in ('top', 'bottom'):
+			name = f'{parts[1]}-{parts[0]}'
+		if name not in Gauge._ANCHORS:
+			raise ValueError(f'anchor must be one of {sorted(Gauge._ANCHORS)}, got {value!r}')
+		return name
+
+	@StateProperty(key='inset', default=Size.Height(0.0, relative=True), allowNone=False, after=rebuild)
+	def inset(self) -> Length | Size.Height:
+		"""Gap between an `anchor`ed pivot and the box's two edges at that corner."""
+		return self._s_inset
+
+	@inset.setter
+	def inset(self, value):
+		self._s_inset = value
+
+	@inset.decode
+	def inset(self, value) -> Length | Size.Height:
+		return parseSize(value, allowFloat=False, dimension=DimensionType.height)
+
+	@inset.encode
+	def inset(self, value) -> str:
+		return str(value)
+
+	@property
+	def insetPx(self) -> float:
+		if self._anchor is None:
+			return 0.0
+		return max(size_px(self._s_inset, min(self.height(), self.width())), 0.0)
+
 	def update_center_offset(self, offset: QPointF):
 		self._center_offset = offset
 
@@ -5774,6 +5833,14 @@ class Gauge(Display):
 	@property
 	def center(self) -> QPointF:
 
+		if self._anchor is not None:
+			fx, fy = self._ANCHORS[self._anchor]
+			rect, inset = self.rect(), self.insetPx
+			return QPointF(
+				rect.left() + inset if fx == 0 else rect.right() - inset,
+				rect.top() + inset if fy == 0 else rect.bottom() - inset,
+			)
+
 		p = self.alignment.multipliersAlt
 		rect = self.boundingRect()
 		x = rect.width() * p[0]
@@ -5798,6 +5865,9 @@ class Gauge(Display):
 
 	@property
 	def radius_max(self):
+		if self._anchor is not None:
+			# The pivot is in a corner, so the dial may reach the whole short side.
+			return max(min(self.height(), self.width()) - self.insetPx - self.baseWidth, 1)
 		return max(min(self.height(), self.width()) / 2 - self.baseWidth, 1)
 
 	@property
