@@ -29,11 +29,11 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
-from PySide6.QtCore import QRegularExpression, QSignalBlocker, Qt, Signal
+from PySide6.QtCore import QRegularExpression, QSignalBlocker, Qt, QTime, Signal
 from PySide6.QtGui import QColor, QFontDatabase, QRegularExpressionValidator
 from PySide6.QtWidgets import (
 	QCheckBox, QColorDialog, QComboBox, QCompleter, QDoubleSpinBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-	QSpinBox, QToolButton, QVBoxLayout, QWidget,
+	QSlider, QSpinBox, QTimeEdit, QToolButton, QVBoxLayout, QWidget,
 )
 
 from LevityDash.devtools import _studio_schema as schema
@@ -47,9 +47,31 @@ class Context:
 	unit: str = ''
 	range: Callable[[], tuple] = lambda: (0.0, 100.0)
 	keys: List[str] = field(default_factory=list)
+	#: The unit a number is shown in, and the units the data can be shown in: name to (native -> shown, shown -> native).
+	shown: str = ''
+	units: Dict[str, tuple] = field(default_factory=dict)
+	#: Called after the shown unit changes, so every control redraws.
+	refresh: Callable[[], None] = lambda: None
+	#: Pixels a '%' size is a share of: 'radius' is the dial's radius now, 'full' the radius at 100%.
+	ref: Callable[[str], float] = lambda kind='radius': 100.0
+	dpi: float = 100.0
+
+	def toShown(self, value: float) -> float:
+		fn = self.units.get(self.shown)
+		return value if fn is None else fn[0](value)
+
+	def toNative(self, value: float) -> float:
+		fn = self.units.get(self.shown)
+		return value if fn is None else fn[1](value)
+
+	def symbol(self) -> str:
+		return self.shown or self.unit
 
 
 CONTEXT = Context()
+
+#: The colour of quiet text (hints). The window sets it with the theme.
+MUTED = '#8b949e'
 
 _WEATHER_KEYS = [
 	'environment.temperature.temperature', 'environment.temperature.high', 'environment.temperature.low',
@@ -82,6 +104,48 @@ def knownKeys() -> List[str]:
 		pass
 	_keyCache.extend(sorted(set(keys)))
 	return _keyCache
+
+
+SLIDER_STEPS = 1000
+
+
+class Slide(QSlider):
+	"""A slider over real numbers, kept beside a spinbox for the precise value.
+
+	The span is the base span, stretched to hold the value it shows. It stays fixed while the
+	handle is down, so a drag does not move the scale under the mouse. `moved(value)` reports
+	only a move the user made; `showValue` never reports.
+	"""
+
+	moved = Signal(float)
+
+	def __init__(self, lo: float = 0.0, hi: float = 100.0, digits: int = 3):
+		super().__init__(Qt.Orientation.Horizontal)
+		self.setRange(0, SLIDER_STEPS)
+		self.setMinimumWidth(56)
+		self.base = (lo, hi)
+		self.span = (lo, hi)
+		self.digits = digits
+		self.valueChanged.connect(self._moved)
+
+	def setBase(self, lo: float, hi: float):
+		self.base = (lo, hi) if hi > lo else (lo, lo + 1)
+		if not self.isSliderDown():
+			self.span = self.base
+
+	def _moved(self, pos: int):
+		lo, hi = self.span
+		self.moved.emit(round(lo + pos / SLIDER_STEPS * (hi - lo), self.digits))
+
+	def showValue(self, value: Optional[float]):
+		if self.isSliderDown():
+			return
+		lo, hi = self.base
+		if value is not None:
+			lo, hi = min(lo, value), max(hi, value)
+		self.span = (lo, hi)
+		with QSignalBlocker(self):
+			self.setValue(round((value - lo) / (hi - lo) * SLIDER_STEPS) if value is not None and hi > lo else 0)
 
 
 _SIZE = re.compile(r'^\s*(-?\d*\.?\d+)\s*(%|px|mm|cm|in)?\s*$')
@@ -118,17 +182,69 @@ class Editor(QWidget):
 
 # Section: single values
 
+_LEADING_NUMBER = re.compile(r'^\s*(-?\d+(?:\.\d+)?)')
+
+
+def _number(value: Any) -> Optional[float]:
+	"""A number from a saved value: `10`, `'10'` or `'10°'`; None for anything else."""
+	if isinstance(value, bool) or value is None:
+		return None
+	if isinstance(value, (int, float)):
+		return float(value)
+	if isinstance(value, str) and (m := _LEADING_NUMBER.match(value)):
+		return float(m.group(1))
+	return None
+
+
+def _liveDpi() -> float:
+	"""Ask for the dpi each time: it depends on which window is active, and the gauge asks the same way."""
+	try:
+		from LevityDash.lib.ui.Geometry import getDPI
+		return float(getDPI())
+	except Exception:  # noqa: BLE001
+		return CONTEXT.dpi
+
+
+class UnitBox(QComboBox):
+	"""The unit a measured number is shown in. Choosing one redraws every control; no value changes."""
+
+	def __init__(self):
+		super().__init__()
+		self.setToolTip('The unit this number is shown in. The gauge keeps its own unit, so nothing moves when you switch.')
+		self.activated.connect(self._picked)
+
+	def _picked(self, _):
+		CONTEXT.shown = self.currentText()
+		CONTEXT.refresh()
+
+	def sync(self):
+		with QSignalBlocker(self):
+			names = list(CONTEXT.units)
+			if [self.itemText(i) for i in range(self.count())] != names:
+				self.clear()
+				self.addItems(names)
+			self.setCurrentText(CONTEXT.symbol())
+		self.setVisible(bool(CONTEXT.units))
+
+
 class NumberEdit(Editor):
-	"""A number, with an optional 'off' state (`autoText` names what off means)."""
+	"""A number, with an optional 'off' state (`autoText` names what off means).
+
+	A `measured` number is in the gauge's own unit (degrees F, inHg, mph). It is held in that
+	unit and shown in the unit the context names, so a switch from F to C moves no value.
+	`unitBox` adds the dropdown; without it the unit shows as a suffix.
+	"""
 
 	def __init__(self, autoText: Optional[str] = None, suffix: str = '', lo: float = -1e9, hi: float = 1e9,
-	             step: float = 1.0, decimals: int = 3, measured: bool = False, integer: bool = False):
+	             step: float = 1.0, decimals: int = 3, measured: bool = False, integer: bool = False, slider: bool = True,
+	             unitBox: bool = False):
 		super().__init__()
 		box = QHBoxLayout(self)
 		box.setContentsMargins(0, 0, 0, 0)
 		box.setSpacing(4)
 		self.measured = measured
 		self.baseSuffix = suffix
+		self.native: float = 0.0
 		self.auto: Optional[QCheckBox] = None
 		if autoText is not None:
 			self.auto = QCheckBox(autoText)
@@ -142,50 +258,111 @@ class NumberEdit(Editor):
 		self.spin.setSingleStep(step)
 		self.spin.setKeyboardTracking(False)
 		self.spin.setMinimumWidth(48)
-		self.spin.valueChanged.connect(self._emit)
-		box.addWidget(self.spin, 1)
+		self.spin.valueChanged.connect(self._spun)
+		self.slide: Optional[Slide] = None
+		self.lo, self.hi = lo, hi
+		if slider:
+			self.slide = Slide(digits=0 if integer else min(decimals, 3))
+			self.slide.moved.connect(self._slid)
+			self._fitSlider()
+			box.addWidget(self.slide, 1)
+		box.addWidget(self.spin, 0 if slider else 1)
+		self.unitBox: Optional[UnitBox] = None
+		if measured and unitBox:
+			self.unitBox = UnitBox()
+			box.addWidget(self.unitBox)
 		self._applySuffix()
 		if self.auto is not None:
 			self.spin.setEnabled(False)
+			if self.slide is not None:
+				self.slide.setEnabled(False)
+
+	def _fitSlider(self):
+		# The scale: the data range (in the shown unit) for a measured number, else the limits given (0 to 100 when none).
+		if self.slide is None:
+			return
+		if self.measured:
+			lo, hi = sorted((CONTEXT.toShown(v) for v in CONTEXT.range()))
+		elif abs(self.lo) < 1e6 and abs(self.hi) < 1e6:
+			lo, hi = self.lo, self.hi
+		else:
+			lo, hi = 0.0, 100.0
+		self.slide.setBase(lo, hi)
 
 	def _applySuffix(self):
 		suffix = self.baseSuffix
-		if self.measured and CONTEXT.unit:
-			suffix = f' {CONTEXT.unit}'
+		if self.measured and self.unitBox is None and CONTEXT.symbol():
+			suffix = f' {CONTEXT.symbol()}'
 		self.spin.setSuffix(suffix)
+		if self.unitBox is not None:
+			self.unitBox.sync()
+
+	def _show(self):
+		"""Put the held number on the spinbox and the slider, in the shown unit."""
+		shown = CONTEXT.toShown(self.native) if self.measured else self.native
+		with QSignalBlocker(self.spin):
+			self.spin.setValue(int(round(shown)) if isinstance(self.spin, QSpinBox) else shown)
+		if self.slide is not None:
+			self._fitSlider()
+			self.slide.showValue(float(self.spin.value()) if self.spin.isEnabled() else None)
 
 	def onContext(self):
 		self._applySuffix()
+		self._show()
+
+	def _spun(self, value):
+		self._take(float(value))
+		if self.slide is not None:
+			self.slide.showValue(float(value))
+		self._emit()
+
+	def _slid(self, value: float):
+		with QSignalBlocker(self.spin):
+			self.spin.setValue(int(round(value)) if isinstance(self.spin, QSpinBox) else value)
+		self._take(float(self.spin.value()))
+		self._emit()
+
+	def _take(self, shown: float):
+		self.native = round(CONTEXT.toNative(shown), 4) if self.measured else shown
 
 	def _autoToggled(self, on: bool):
 		self.spin.setEnabled(not on)
+		if self.slide is not None:
+			self.slide.setEnabled(not on)
 		self._emit()
 
 	def setValue(self, value):
-		with QSignalBlocker(self.spin):
-			if self.auto is not None:
-				with QSignalBlocker(self.auto):
-					self.auto.setChecked(value is None)
-				self.spin.setEnabled(value is not None)
-			if value is not None:
-				n = float(value)
-				self.spin.setValue(int(n) if isinstance(self.spin, QSpinBox) else n)
+		if self.auto is not None:
+			with QSignalBlocker(self.auto):
+				self.auto.setChecked(value is None)
+			self.spin.setEnabled(value is not None)
+			if self.slide is not None:
+				self.slide.setEnabled(value is not None)
+		number = _number(value)
+		if number is not None:
+			self.native = number
+		elif value is not None:
+			value = None
+		self._show()
+		if value is None and self.slide is not None:
+			self.slide.showValue(None)
 
 	def value(self):
 		if self.auto is not None and self.auto.isChecked():
 			return None
-		v = self.spin.value()
+		v = self.native
 		return int(v) if isinstance(self.spin, QSpinBox) or float(v).is_integer() else round(float(v), 4)
 
 	def isEditing(self) -> bool:
-		return self.spin.hasFocus()
+		return self.spin.hasFocus() or (self.slide is not None and self.slide.isSliderDown())
 
 
 class SizeEdit(Editor):
 	"""A size: a number and its unit. `nullable` adds an 'auto' box that unsets it."""
 
-	def __init__(self, nullable: bool = False, autoText: str = 'auto', units: Optional[List[str]] = None):
+	def __init__(self, nullable: bool = False, autoText: str = 'auto', units: Optional[List[str]] = None, ref: str = 'radius'):
 		super().__init__()
+		self.ref = ref
 		box = QHBoxLayout(self)
 		box.setContentsMargins(0, 0, 0, 0)
 		box.setSpacing(4)
@@ -200,25 +377,71 @@ class SizeEdit(Editor):
 		self.spin.setDecimals(2)
 		self.spin.setKeyboardTracking(False)
 		self.spin.setMinimumWidth(48)
-		self.spin.valueChanged.connect(self._emit)
+		self.spin.valueChanged.connect(self._spun)
+		self.slide = Slide(digits=2)
+		self.slide.moved.connect(self._slid)
 		self.unit = QComboBox()
-		self.unit.addItems(units or UNITS)
+		# Inches are left out of the small sizes (weights, gaps): WeatherUnits calls any inch value
+		# within about 0.05 of a default equal to it, so the export drops 0.09 in and the gauge falls back.
+		self.unit.addItems(units or (UNITS if ref == 'full' else [u for u in UNITS if u != 'in']))
 		self.unit.setToolTip('% is a share of the dial; px is scene pixels; mm, cm and in are physical')
 		self.unit.activated.connect(self._unitPicked)
-		box.addWidget(self.spin, 1)
+		box.addWidget(self.slide, 1)
+		box.addWidget(self.spin)
 		box.addWidget(self.unit)
+		self._fitSlider()
 		if nullable:
 			self.spin.setEnabled(False)
 			self.unit.setEnabled(False)
+			self.slide.setEnabled(False)
+
+	#: The scale of the slider for each unit: a share of the dial, scene pixels, then physical sizes.
+	SPANS = {'%': (0.0, 100.0), 'px': (0.0, 500.0), 'mm': (0.0, 50.0), 'cm': (0.0, 5.0), 'in': (0.0, 2.0)}
+
+	def _fitSlider(self):
+		self.slide.setBase(*self.SPANS.get(self.unit.currentText(), (0.0, 100.0)))
+		self.slide.showValue(float(self.spin.value()))
+
+	def _spun(self, value):
+		self.slide.showValue(float(value))
+		self._emit()
+
+	def _slid(self, value: float):
+		with QSignalBlocker(self.spin):
+			self.spin.setValue(value)
+		self._emit()
 
 	def _autoToggled(self, on: bool):
 		self.spin.setEnabled(not on)
 		self.unit.setEnabled(not on)
+		self.slide.setEnabled(not on)
 		self._emit()
 
+	def pixels(self, value: float, unit: str) -> float:
+		"""A size in scene pixels. A '%' is a share of `ref`; physical units go through the dpi the dashboard uses."""
+		dpi = _liveDpi()
+		return {'%': value / 100 * CONTEXT.ref(self.ref), 'px': value, 'mm': value / 25.4 * dpi, 'cm': value / 2.54 * dpi,
+		        'in': value * dpi}.get(unit, value)
+
+	def fromPixels(self, px: float, unit: str) -> float:
+		dpi = _liveDpi()
+		ref = CONTEXT.ref(self.ref) or 1.0
+		return {'%': px / ref * 100, 'px': px, 'mm': px / dpi * 25.4, 'cm': px / dpi * 2.54, 'in': px / dpi}.get(unit, px)
+
 	def _unitPicked(self, _):
-		self.spin.setSingleStep(1.0 if self.unit.currentText() in ('%', 'px') else 0.5)
+		"""Show the same size in the new unit, so the gauge does not jump."""
+		new = self.unit.currentText()
+		old = self._unit
+		if old != new and self.spin.isEnabled():
+			value = round(self.fromPixels(self.pixels(self.spin.value(), old), new), 2)
+			with QSignalBlocker(self.spin):
+				self.spin.setValue(value)
+		self._unit = new
+		self.spin.setSingleStep(1.0 if new in ('%', 'px') else 0.5)
+		self._fitSlider()
 		self._emit()
+
+	_unit = '%'
 
 	def setValue(self, value):
 		with QSignalBlocker(self.spin), QSignalBlocker(self.unit):
@@ -227,6 +450,7 @@ class SizeEdit(Editor):
 					self.auto.setChecked(value is None)
 				self.spin.setEnabled(value is not None)
 				self.unit.setEnabled(value is not None)
+				self.slide.setEnabled(value is not None)
 			if value is None:
 				return
 			m = _SIZE.match(str(value))
@@ -234,7 +458,12 @@ class SizeEdit(Editor):
 				return
 			self.spin.setValue(float(m.group(1)))
 			i = self.unit.findText(m.group(2) or '%')
-			self.unit.setCurrentIndex(max(i, 0))
+			if i < 0:
+				self.unit.addItem(m.group(2))
+				i = self.unit.count() - 1
+			self.unit.setCurrentIndex(i)
+			self._unit = self.unit.currentText()
+			self._fitSlider()
 
 	def value(self):
 		if self.auto is not None and self.auto.isChecked():
@@ -242,7 +471,7 @@ class SizeEdit(Editor):
 		return f'{self.spin.value():g}{self.unit.currentText()}'
 
 	def isEditing(self) -> bool:
-		return self.spin.hasFocus()
+		return self.spin.hasFocus() or self.slide.isSliderDown()
 
 
 class ColorEdit(Editor):
@@ -468,6 +697,7 @@ class OffsetEdit(Editor):
 		box.setSpacing(4)
 		self.x = QDoubleSpinBox()
 		self.y = QDoubleSpinBox()
+		self.slides = {}
 		for label, spin in (('x', self.x), ('y', self.y)):
 			spin.setRange(-100, 100)
 			spin.setDecimals(1)
@@ -475,15 +705,29 @@ class OffsetEdit(Editor):
 			spin.setSuffix(' %')
 			spin.setKeyboardTracking(False)
 			spin.setToolTip(f'{label}: share of the dial\'s diameter; positive is right (x) or down (y)')
-			spin.valueChanged.connect(self._emit)
+			slide = Slide(-50.0, 50.0, digits=1)
+			slide.setToolTip(spin.toolTip())
+			slide.moved.connect(lambda v, s=spin: self._slid(s, v))
+			spin.valueChanged.connect(lambda v, k=label: self._spun(k, v))
+			self.slides[label] = slide
 			box.addWidget(QLabel(label))
-			box.addWidget(spin, 1)
+			box.addWidget(slide, 1)
+			box.addWidget(spin)
 		self.clear = _tool('×', 'Back to the default place')
 		self.clear.clicked.connect(self._cleared)
 		box.addWidget(self.clear)
 
 	def _cleared(self):
 		self.setValue(None)
+		self._emit()
+
+	def _spun(self, key: str, value: float):
+		self.slides[key].showValue(value)
+		self._emit()
+
+	def _slid(self, spin: QDoubleSpinBox, value: float):
+		with QSignalBlocker(spin):
+			spin.setValue(value)
 		self._emit()
 
 	def setValue(self, value):
@@ -493,47 +737,52 @@ class OffsetEdit(Editor):
 		with QSignalBlocker(self.x), QSignalBlocker(self.y):
 			self.x.setValue(x * 100)
 			self.y.setValue(y * 100)
+		self.slides['x'].showValue(self.x.value())
+		self.slides['y'].showValue(self.y.value())
 
 	def value(self):
 		x, y = round(self.x.value() / 100, 4), round(self.y.value() / 100, 4)
 		return None if x == 0 and y == 0 else {'x': x, 'y': y}
 
 	def isEditing(self) -> bool:
-		return self.x.hasFocus() or self.y.hasFocus()
+		return self.x.hasFocus() or self.y.hasFocus() or any(s.isSliderDown() for s in self.slides.values())
 
 
 class IntSetEdit(Editor):
-	"""Whole numbers separated by commas. Anything else is refused as you type."""
+	"""A set of whole numbers, picked from boxes. A number the file holds that is not a candidate gets a box too."""
+
+	CANDIDATES = [1, 2, 2.5, 3, 4, 5, 6, 8, 10]
 
 	def __init__(self):
 		super().__init__()
-		box = QHBoxLayout(self)
-		box.setContentsMargins(0, 0, 0, 0)
-		self.text = QLineEdit()
-		self.text.setValidator(QRegularExpressionValidator(QRegularExpression(r'^[\d\s,\.]*$')))
-		self.text.setPlaceholderText('1, 2, 5')
-		self.text.editingFinished.connect(self._emit)
-		box.addWidget(self.text, 1)
+		self.grid = QGridLayout(self)
+		self.grid.setContentsMargins(0, 0, 0, 0)
+		self.grid.setSpacing(4)
+		self.boxes: Dict[float, QCheckBox] = {}
+		for n in self.CANDIDATES:
+			self._box(n)
+
+	def _box(self, n: float) -> QCheckBox:
+		box = QCheckBox(f'{n:g}')
+		box.toggled.connect(self._emit)
+		i = len(self.boxes)
+		self.grid.addWidget(box, i // 5, i % 5)
+		self.boxes[n] = box
+		return box
 
 	def setValue(self, value):
-		items = sorted(value or [])
-		with QSignalBlocker(self.text):
-			self.text.setText(', '.join(f'{v:g}' for v in items))
+		items = {float(v) for v in (value or [])}
+		for n in sorted(items - set(self.boxes)):
+			self._box(n)
+		for n, box in self.boxes.items():
+			with QSignalBlocker(box):
+				box.setChecked(n in items)
 
 	def value(self):
-		out = []
-		for part in self.text.text().split(','):
-			part = part.strip()
-			if part:
-				try:
-					n = float(part)
-				except ValueError:
-					continue
-				out.append(int(n) if n.is_integer() else n)
-		return sorted(set(out))
+		return sorted(int(n) if float(n).is_integer() else n for n, box in self.boxes.items() if box.isChecked())
 
 	def isEditing(self) -> bool:
-		return self.text.hasFocus()
+		return any(b.hasFocus() for b in self.boxes.values())
 
 
 FORMAT_PRESETS = [
@@ -550,7 +799,7 @@ class FormatEdit(Editor):
 		box = QHBoxLayout(self)
 		box.setContentsMargins(0, 0, 0, 0)
 		box.setSpacing(4)
-		self.decimals = NumberEdit(autoText='auto', integer=True, lo=0, hi=8, step=1)
+		self.decimals = NumberEdit(autoText='auto', integer=True, lo=0, hi=8, step=1, slider=False)
 		self.decimals.setToolTip('Digits after the point')
 		self.decimals.changed.connect(self._emit)
 		self.unit = QComboBox()
@@ -627,16 +876,25 @@ class ListEditor(Editor):
 
 	wide = True
 
-	def __init__(self, factory: Callable[[], Editor], fresh: Callable[[List[Any]], Any], addText: str = '+ Add', empty: str = ''):
+	def __init__(self, factory: Callable[[], Editor], fresh: Callable[[List[Any]], Any], addText: str = '+ Add', empty: str = '', measured: bool = False):
 		super().__init__()
 		self.factory, self.fresh = factory, fresh
 		box = QVBoxLayout(self)
 		box.setContentsMargins(0, 0, 0, 0)
 		box.setSpacing(3)
 		self.hint = QLabel(empty)
-		self.hint.setStyleSheet('color: #7d8590; font-size: 11px;')
+		self.hint.setStyleSheet('color: palette(placeholder-text); font-size: 11px;')
 		self.hint.setVisible(bool(empty))
 		box.addWidget(self.hint)
+		self.unitBox: Optional[UnitBox] = None
+		if measured:
+			header = QHBoxLayout()
+			header.addWidget(QLabel('values in'))
+			self.unitBox = UnitBox()
+			header.addWidget(self.unitBox)
+			header.addStretch(1)
+			box.addLayout(header)
+			self.unitBox.sync()
 		self.body = QVBoxLayout()
 		self.body.setSpacing(3)
 		box.addLayout(self.body)
@@ -691,6 +949,8 @@ class ListEditor(Editor):
 		return self.items() or None
 
 	def onContext(self):
+		if self.unitBox is not None:
+			self.unitBox.sync()
 		for row in self.rows:
 			row.item.onContext()
 
@@ -776,7 +1036,7 @@ class ZoneItem(_Form):
 
 class ZonesEdit(ListEditor):
 	def __init__(self):
-		super().__init__(ZoneItem, self._fresh, '+ Add zone', 'No zones. The track is one colour.')
+		super().__init__(ZoneItem, self._fresh, '+ Add zone', 'No zones. The track is one colour.', measured=True)
 
 	@staticmethod
 	def _fresh(items):
@@ -806,7 +1066,7 @@ class GradientEdit(ListEditor):
 	"""A colour at each value; the arc blends between them."""
 
 	def __init__(self):
-		super().__init__(StopItem, self._fresh, '+ Add stop', 'No gradient. The arc keeps its colour.')
+		super().__init__(StopItem, self._fresh, '+ Add stop', 'No gradient. The arc keeps its colour.', measured=True)
 		from LevityDash.lib.ui.colors import Gradient
 		self.presets = QComboBox()
 		self.presets.addItem('Preset…', None)
@@ -873,7 +1133,7 @@ class TextMapEdit(ListEditor):
 	PRESETS = ['custom', 'compass', 'compass-16', 'E ½ F']
 
 	def __init__(self):
-		super().__init__(WordItem, self._fresh, '+ Add word', '')
+		super().__init__(WordItem, self._fresh, '+ Add word', '', measured=True)
 		self.preset = QComboBox()
 		self.preset.addItems(self.PRESETS)
 		self.preset.activated.connect(self._preset)
@@ -959,11 +1219,15 @@ class MarkerValue(Editor):
 		self.hand = QComboBox()
 		self.hand.addItems(CLOCK_HANDS)
 		self.hand.activated.connect(self._emit)
-		self.at = QLineEdit()
-		self.at.setPlaceholderText('now (or HH:MM)')
-		self.at.setToolTip('A fixed time such as 10:09. Empty follows the clock.')
-		self.at.editingFinished.connect(self._emit)
-		for w in (self.mode, self.number, self.key, self.hand, self.at):
+		self.at = QTimeEdit()
+		self.at.setDisplayFormat('HH:mm')
+		self.at.setToolTip('A fixed time such as 10:09. Untick "fixed" to follow the clock.')
+		self.at.timeChanged.connect(self._emit)
+		self.fixed = QCheckBox('fixed')
+		self.fixed.setToolTip('Hold the hand at this time instead of following the clock')
+		self.fixed.toggled.connect(self._fixedToggled)
+		self.at.setEnabled(False)
+		for w in (self.mode, self.number, self.key, self.hand, self.fixed, self.at):
 			box.addWidget(w, 0 if w is self.mode else 1)
 		self._show()
 
@@ -972,7 +1236,12 @@ class MarkerValue(Editor):
 		self.number.setVisible(mode == 'number')
 		self.key.setVisible(mode == 'key')
 		self.hand.setVisible(mode == 'clock')
+		self.fixed.setVisible(mode == 'clock')
 		self.at.setVisible(mode == 'clock')
+
+	def _fixedToggled(self, on: bool):
+		self.at.setEnabled(on)
+		self._emit()
 
 	def _modeChanged(self, _):
 		self._show()
@@ -991,7 +1260,7 @@ class MarkerValue(Editor):
 			mode = 'number'
 		with QSignalBlocker(self.mode):
 			self.mode.setCurrentText(mode)
-		with QSignalBlocker(self.number), QSignalBlocker(self.key), QSignalBlocker(self.hand), QSignalBlocker(self.at):
+		with QSignalBlocker(self.number), QSignalBlocker(self.key), QSignalBlocker(self.hand), QSignalBlocker(self.at), QSignalBlocker(self.fixed):
 			if mode == 'number':
 				v = spec.get('value')
 				self.number.setValue(v if isinstance(v, (int, float)) else sum(CONTEXT.range()) / 2)
@@ -999,7 +1268,12 @@ class MarkerValue(Editor):
 				self.key.setValue(spec.get('value'))
 			else:
 				self.hand.setCurrentText(str(spec.get('time')))
-				self.at.setText('' if spec.get('at') is None else str(spec.get('at')))
+				held = spec.get('at') is not None
+				with QSignalBlocker(self.fixed):
+					self.fixed.setChecked(held)
+				self.at.setEnabled(held)
+				if held:
+					self.at.setTime(QTime.fromString(str(spec.get('at')), 'H:mm'))
 		self._show()
 
 	def value(self):
@@ -1009,12 +1283,12 @@ class MarkerValue(Editor):
 		if mode == 'key':
 			return {'value': self.key.value() or ''}
 		out = {'time': self.hand.currentText()}
-		if self.at.text().strip():
-			out['at'] = self.at.text().strip()
+		if self.fixed.isChecked():
+			out['at'] = self.at.time().toString('H:mm')
 		return out
 
 	def isEditing(self) -> bool:
-		return self.number.isEditing() or self.key.isEditing() or self.at.hasFocus()
+		return self.number.isEditing() or self.key.isEditing() or self.at.hasFocus() or self.fixed.hasFocus()
 
 
 _MARKER_SIZES = [('width', 'width'), ('length', 'length'), ('offset', 'offset'), ('tail', 'tail'), ('tail-dot', 'tail dot'),
@@ -1082,7 +1356,7 @@ class MarkerItem(_Form):
 
 class MarkersEdit(ListEditor):
 	def __init__(self):
-		super().__init__(MarkerItem, self._fresh, '+ Add marker', 'No markers.')
+		super().__init__(MarkerItem, self._fresh, '+ Add marker', 'No markers.', measured=True)
 
 	@staticmethod
 	def _fresh(items):
@@ -1266,7 +1540,10 @@ def make(field: 'schema.Field') -> Optional[Editor]:
 	"""The editor for a field's kind, or None when the plain control will do."""
 	kind = field.kind
 	if kind == 'size':
-		return SizeEdit(nullable=field.nullable)
+		return SizeEdit(nullable=field.nullable, ref='full' if field.key in ('radius', 'inset') else 'radius')
+	if kind == 'number' and field.measured:
+		return NumberEdit(autoText='auto' if field.nullable else None, measured=True, step=field.step, unitBox=True,
+		                  integer=field.integer)
 	if kind == 'choice':
 		return ChoiceEdit(field.choices)
 	if kind == 'font':

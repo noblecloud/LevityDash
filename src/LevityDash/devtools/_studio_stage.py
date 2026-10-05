@@ -46,7 +46,7 @@ import WeatherUnits as wu
 
 __all__ = ['DataPreset', 'DATA_PRESETS', 'presetForKey', 'StudioScene', 'StudioStage', 'StudioGauge', 'installSources']
 
-STAGE_SIZE = (800, 800)
+STAGE_SIZE = (320, 240)
 
 
 # Section: made-up data
@@ -74,6 +74,11 @@ class DataPreset:
 	def measurement(self, value: float):
 		return self.make(value)
 
+	@cached_property
+	def units(self) -> Dict[str, tuple]:
+		"""Units a number can be shown in: name to (native -> shown, shown -> native). Empty when none convert."""
+		return _unitTable(self)
+
 
 DATA_PRESETS: Dict[str, DataPreset] = {p.name: p for p in (
 	DataPreset('Temperature F', 'environment.temperature.temperature', wu.Temperature.Fahrenheit, 52, 78, 68, 0, 120, symbol='\u00b0F'),
@@ -83,6 +88,47 @@ DATA_PRESETS: Dict[str, DataPreset] = {p.name: p for p in (
 	DataPreset('Rain in/hr', 'environment.precipitation.precipitation', _rain, 0.0, 0.8, 0.3, 0, 2, symbol='in/hr'),
 	DataPreset('Generic 0-100', 'studio.generic', wu.Index, 15, 85, 55, 0, 100, symbol=''),
 )}
+
+def _linear(convert: Callable[[float], float]):
+	"""(to, back) for a conversion that is a straight line, found from two samples. Every unit pair here is one."""
+	a = float(convert(0.0))
+	b = float(convert(1.0))
+	scale = b - a
+	return (lambda v: a + scale * v), (lambda d: (d - a) / scale)
+
+
+def _wu(cls: Callable, make: Callable[[float], Any]):
+	"""A conversion from the preset's own unit to `cls`, done by WeatherUnits."""
+	return _linear(lambda v: float(cls(make(v))))
+
+
+def _scaled(factor: float):
+	return _linear(lambda v: v * factor)
+
+
+def _unitTable(preset: DataPreset) -> Dict[str, tuple]:
+	"""The units a number in this preset can be shown in, each as (native -> shown, shown -> native).
+
+	The gauge keeps the preset's own unit and the saved file holds it; the studio only changes what a control shows.
+	"""
+	m = preset.make
+	try:
+		if preset.name == 'Temperature F':
+			return {'°F': _scaled(1), '°C': _wu(wu.Temperature.Celsius, m), 'K': _wu(wu.Temperature.Kelvin, m)}
+		if preset.name == 'Pressure inHg':
+			P = wu.Pressure
+			return {'inHg': _scaled(1), 'hPa': _wu(P.Hectopascal, m), 'kPa': _wu(P.Kilopascal, m), 'mmHg': _wu(P.MillimeterOfMercury, m)}
+		if preset.name == 'Wind mph':
+			ms = _wu(wu.Wind.MetersPerSecond, m)
+			return {'mph': _scaled(1), 'km/h': _linear(lambda v: ms[0](v) * 3.6), 'm/s': ms, 'kn': _scaled(0.868976)}
+		if preset.name == 'Rain in/hr':
+			return {'in/hr': _scaled(1), 'mm/hr': _scaled(25.4)}
+		if preset.name == 'Humidity %':
+			return {'(0-1)': _scaled(1), '%': _scaled(100)}
+	except Exception:  # noqa: BLE001 - a missing unit class must not stop the studio
+		pass
+	return {}
+
 
 #: Which preset suits a key in a showcase cell.
 _KEY_HINTS = (
@@ -310,6 +356,7 @@ class StudioGauge:
 		with self.stage.action_pool:
 			self.gauge = Gauge(parent=self.stage, **display)
 		self.gauge.show()
+		self._lock(self.gauge)
 		self.stage.setRect(self.scene.sceneRect())
 		self.gauge.valueClass = type(self.preset.measurement(self.value))
 		self.gauge.value = self.preset.measurement(self.value)
@@ -319,6 +366,21 @@ class StudioGauge:
 		self.gauge.refresh()
 		view.setTransform(saved)
 		return self.gauge
+
+	@staticmethod
+	def _lock(gauge: Gauge) -> None:
+		"""Turn off the dashboard's own resize grips and drag-to-move on the gauge.
+
+		They change the item's geometry behind the studio's undo history. The studio edits size
+		through the stage size and the drag handles instead.
+		"""
+		flags = gauge.GraphicsItemFlag
+		gauge.setFlag(flags.ItemIsMovable, False)
+		gauge.setFlag(flags.ItemIsSelectable, False)
+		gauge.setFlag(flags.ItemIsFocusable, False)
+		gauge.resizeHandles.setEnabled(False)
+		gauge.resizeHandles.setVisible(False)
+		gauge.setAcceptHoverEvents(False)
 
 	def dispose(self) -> None:
 		if self.gauge is not None:
