@@ -276,6 +276,9 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 		own_min = float(self.min.value)
 		own_max = float(self.max.value)
 		own_range = own_max - own_min
+		if own_range == 0:
+			# One stop has no span to stretch over the range: it stays one flat colour.
+			return cls(colors={type_(float(_min)): self.as_list[0].color})
 
 		own_normalized_values = {(float(item.value) - own_min) / own_range: item.color for item in self.values()}
 
@@ -350,6 +353,8 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 
 	@lru_cache(maxsize=512)
 	def get_color_for_value(self, value: GradientValueType) -> Color:
+		if float(self.valueRange) == 0:
+			return self.as_list[0].color
 		map = self.map
 		pixel_pos = round((float(value) - float(self.min.value)) / float(self.valueRange) * float(map.width()))
 		pixel_pos = max(0, min(pixel_pos, map.width()-1))
@@ -378,6 +383,13 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 			QConicalGradient: The converted QConicalGradient object.
 		"""
 		gradient = QConicalGradient()
+
+		if float(self.valueRange) == 0:
+			# One stop, or every stop at one value: a flat colour. The blend below divides by the span.
+			colour = self.as_list[0].color.QColor
+			gradient.setColorAt(0, colour)
+			gradient.setColorAt(1, colour)
+			return gradient
 
 		inverted = float(start_angle) > float(stop_angle)
 		modifier = (lambda x: x) if inverted else (lambda x: 1-x)
