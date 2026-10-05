@@ -114,8 +114,23 @@ by `Gauge.py` (which keeps re-exporting every name the rest of the app imports):
 - **M1d (done)** `Needle`, `Arrow`, `GaugeMarker`; **M1e (done)** `GaugeZones`,
   `GaugeFill` + `_FillEnd`. Each moved verbatim, each gated on the suite and a
   capture.
-- **M2** `GaugeRange` + `Meter(Display)` into `meter/meter.py`; `Gauge(Meter)`
-  keeps the arc-only members. Handed over as one slice.
+- **M2b, batch 1 (done)** — `Meter(Display)` exists in `meter/meter.py`, and the
+  label/caption machinery moved into it: `_buildLabel`, `valueLabel`, `unitLabel`,
+  `subLabel`, `caption` and their helpers and fields (15 member groups), moved
+  verbatim apart from three `_gaugeKeyName` → `gaugeKeyName` renames in warning
+  paths. **`Gauge` now derives from `Meter`** rather than `Display`, which is not
+  cosmetic: a class's state items are a `ChainMap` seeded from its *parent's*
+  `__state_items__` (statekit's metaclass, `core.py:1829`), so a member moved to a
+  class the child does not inherit from stops being a state item of the child.
+  Without the base change `refresh()` died on `AttributeError: 'Gauge' object has
+  no attribute 'valueLabel'` - a member that is defined, has a factory, and is
+  simply invisible to the machine that builds it.
+- Tooling: `move_members.py` moves a *member group* - every definition sharing a
+  name, decorators included, since `@prop.factory`/`@prop.setter` are evaluated in
+  the class body and only work beside their base property. Its first version
+  inserted member by member and renumbered the lines under itself, mangling the
+  target class *after* writing both files; it inserts one block now, and every
+  move is validated on copies in scratch before the worktree sees it.
 - **M3** `GaugeArc` and the arc-specific label overrides into `meter/gauge.py`;
   `Gauge.py` becomes the shim.
 

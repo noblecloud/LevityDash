@@ -43,7 +43,7 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Handles import Handle
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import SizeGroup
 from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, addCrosshair, DebugPaint, SoftShadow, outline_path, \
 	modifyTransformValues, rect_to_shape, addPath
-from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.meter import GaugeRange
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.meter import GaugeRange, Meter
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.elements import (
 	Arrow, GaugeCaption, GaugeFill, GaugeItem, GaugeLabel, GaugeMarker, GaugePathItem, GaugeText, GaugeTickText,
 	GaugeTickTextGroup, GaugeUnit, GaugeValueLabel, GaugeZones, Graduations, Needle, StatefulGaugeItem,
@@ -298,7 +298,7 @@ def _markerText(spec) -> str:
 
 
 @DebugPaint
-class Gauge(Display):
+class Gauge(Meter):
 
 	_center_offset: QPointF | QPointF = QPointF(0, 0)
 
@@ -311,7 +311,6 @@ class Gauge(Display):
 	needleLength = 1.0
 	needleWidth = 0.1
 	_valueClass: Type[GaugeValue] = float
-	_unit: Optional[str] = None
 	_scene: QGraphicsScene
 	_pen: QPen
 	_cache: list
@@ -438,105 +437,8 @@ class Gauge(Display):
 		if item is not None and (scene := item.scene()) is not None:
 			scene.removeItem(item)
 
-	_captionItem: Optional[GaugeCaption] = None
 	_captionSpec = None
-	_subItem: Optional[GaugeCaption] = None
 	_subSpec = None
-
-	def _setCaption(self, attr: str, specAttr: str, side: str, value) -> None:
-		self._clearCaption(attr, specAttr)
-		if not value:
-			return
-		# A bad caption is a warning, never a failed dashboard load.
-		try:
-			item = GaugeCaption(self, side)
-			item.configure(value)
-		except Exception as e:
-			log.warning(f'Gauge {_gaugeKeyName(self)} {side} skipped: {e}')
-			return
-		setattr(self, attr, item)
-		setattr(self, specAttr, copy.deepcopy(value))
-
-	def _clearCaption(self, attr: str, specAttr: str) -> None:
-		item = getattr(self, attr)
-		setattr(self, attr, None)
-		setattr(self, specAttr, None)
-		if item is not None:
-			item.close()
-			if (scene := item.scene()) is not None:
-				scene.removeItem(item)
-
-	@staticmethod
-	def _decodeCaption(value):
-		if value is None or isinstance(value, (str, Mapping)):
-			return value if not isinstance(value, Mapping) else dict(value)
-		log.warning(f'ignored caption {value!r}: expected text or a mapping')
-		return None
-
-	@StateProperty(key='caption', default=None, allowNone=True, dependencies={'range', 'arc'})
-	def caption(self) -> Optional[dict | str]:
-		"""Small text above the centre value: a string, or ``{text, value, format, size, color}``."""
-		return self._captionSpec
-
-	@caption.setter
-	def caption(self, value):
-		self._setCaption('_captionItem', '_captionSpec', 'caption', value)
-
-	@caption.decode
-	def caption(self, value):
-		return Gauge._decodeCaption(value)
-
-	@caption.encode
-	def caption(self, value):
-		return copy.deepcopy(value) if value else None
-
-	@StateProperty(key='sub-label', default=None, allowNone=True, dependencies={'range', 'arc'})
-	def subLabel(self) -> Optional[dict | str]:
-		"""Small text below the centre value (and its unit): same forms as ``caption``."""
-		return self._subSpec
-
-	@subLabel.setter
-	def subLabel(self, value):
-		self._setCaption('_subItem', '_subSpec', 'sub-label', value)
-
-	@subLabel.decode
-	def subLabel(self, value):
-		return Gauge._decodeCaption(value)
-
-	@subLabel.encode
-	def subLabel(self, value):
-		return copy.deepcopy(value) if value else None
-
-	def _captionItems(self) -> list:
-		return [i for i in (self._captionItem, self._subItem) if i is not None]
-
-	def _valueAnchor(self) -> QRectF:
-		"""The box the centre value (and a unit hung under it) occupies, in gauge coordinates.
-		With no visible value, a point at the dial's centre."""
-		rects = []
-		vbox = self.valueLabel.textBox
-		try:
-			if vbox.isVisibleTo(self):
-				r = self.mapRectFromScene(vbox.scenePath().boundingRect())
-				if not r.isEmpty():
-					rects.append(r)
-			ubox = self.unitLabel.textBox
-			if rects and ubox.isVisibleTo(self) and ubox._position in _UNIT_UNDER_VALUE:
-				r = self.mapRectFromScene(ubox.scenePath().boundingRect())
-				if not r.isEmpty():
-					rects.append(r)
-		except Exception as e:  # noqa: BLE001
-			log.warning(f'Gauge {_gaugeKeyName(self)} could not measure its value: {e!r}')
-		if not rects:
-			return QRectF(self.center, QSizeF(0, 0))
-		box = rects[0]
-		for r in rects[1:]:
-			box = box.united(r)
-		return box
-
-	def _syncCaptions(self):
-		for item in self._captionItems():
-			item.refresh()
 
 	@StateProperty(key='zones', default=None, allowNone=True, dependencies={'range', 'arc'})
 	def zones(self) -> Optional[list]:
@@ -697,74 +599,6 @@ class Gauge(Display):
 	@microDivisions.setter
 	def microDivisions(self, value: Graduations):
 		self._microDivisions = value
-
-	@StateProperty(key='value-label', repr=True)
-	def valueLabel(self) -> GaugeValueLabel:
-		return self._valueLabel
-
-	@valueLabel.factory
-	def valueLabel(self) -> GaugeValueLabel:
-		label = GaugeValueLabel(self)
-		label.textBox.setParentItem(self)
-		label.hide()
-		# NB: the textBox was reparented to the gauge above, so it is no longer
-		# a child of the label and `label.hide()` does not reach it. The value
-		# text is what the viewer actually sees, so it stays visible - the
-		# label wrapper being hidden is incidental.
-		return label
-
-	@valueLabel.setter
-	def valueLabel(self, value: GaugeValueLabel):
-		self._valueLabel = value
-
-	@valueLabel.decode
-	def valueLabel(self, value) -> GaugeValueLabel:
-		# `value-label: {visible: false}` arrives as a plain mapping. Without a
-		# decoder the setter stored it verbatim, and `_afterSetState` -> refresh()
-		# then reached `self.valueLabel.textBox` on a dict. That AttributeError
-		# aborted the whole dashboard load, which is what left a board showing
-		# nothing but the moon. See docs/tasks/dashboard-wont-load.md.
-		return self._buildLabel('_valueLabel', GaugeValueLabel, value)
-
-	@StateProperty(key='unit-label', repr=True)
-	def unitLabel(self) -> GaugeUnit:
-		return self._unitLabel
-
-	@unitLabel.factory
-	def unitLabel(self) -> GaugeUnit:
-		label = GaugeUnit(self)
-		label.textBox.setParentItem(self)
-		label.hide()
-		label.textBox.hide()
-		return label
-
-	@unitLabel.setter
-	def unitLabel(self, value: GaugeUnit):
-		self._unitLabel = value
-
-	@unitLabel.decode
-	def unitLabel(self, value) -> GaugeUnit:
-		return self._buildLabel('_unitLabel', GaugeUnit, value)
-
-	def _buildLabel(self, attr: str, labelType: type, value):
-		"""Turn a `value-label`/`unit-label` mapping into a real label.
-
-		Reuses the label already on the gauge when there is one, so a reload
-		applies onto the existing item rather than orphaning it and building a
-		second.
-		"""
-		if not isinstance(value, Mapping):
-			return value
-		label = getattr(self, attr, None)
-		if not isinstance(label, labelType):
-			label = labelType(self)
-			label.textBox.setParentItem(self)
-			label.hide()
-		try:
-			label.state = dict(value)
-		except Exception as e:  # noqa: BLE001 - a bad key must not abort the load
-			log.warning(f'{self}: could not apply {labelType.__name__} state {value!r}: {e}')
-		return label
 
 	@property
 	def type(self):
@@ -929,37 +763,6 @@ class Gauge(Display):
 
 		self._syncUnitUnderValue()
 		self._syncCaptions()
-
-	def _syncUnitUnderValue(self):
-		"""Hang a `float-under`/`below` unit under the value's final glyphs.
-
-		The unit places itself from the value's box while both are still being
-		laid out, and recenter() then shifts each again, so where it landed
-		depended on update order - over the value as often as under it. Run
-		last, against the glyphs as drawn: the gauge's version of Realtime's
-		_syncFloatUnderPair.
-		"""
-		unit, value = getattr(self, '_unitLabel', None), getattr(self, '_valueLabel', None)
-		if not isinstance(unit, GaugeUnit) or not isinstance(value, GaugeValueLabel):
-			return
-		ubox, vbox = unit.textBox, value.textBox
-		try:
-			if not ubox.isVisibleTo(self) or ubox._position not in _UNIT_UNDER_VALUE or ubox._warpActive:
-				return
-			v = self.mapRectFromScene(vbox.scenePath().boundingRect())
-			u = self.mapRectFromScene(ubox.scenePath().boundingRect())
-		except Exception as e:  # noqa: BLE001 - layout must never abort a load
-			log.warning(f'Gauge {_gaugeKeyName(self)} could not place its unit label: {e!r}')
-			return
-		if v.isEmpty() or u.isEmpty():
-			return
-		# A third of the unit's own height: reads as one block, never touches.
-		shift = unit.offsetPx()
-		dx = v.center().x() - u.center().x() + shift.x()
-		dy = v.bottom() + u.height() / 3 - u.top() + shift.y()
-		t = ubox.transform()
-		# Shift the translation part only, in gauge coordinates.
-		ubox.setTransform(QTransform(t.m11(), t.m12(), t.m21(), t.m22(), t.dx() + dx, t.dy() + dy))
 
 	@defer
 	def rebuild(self):
