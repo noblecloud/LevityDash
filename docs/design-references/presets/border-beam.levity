@@ -1,0 +1,74 @@
+# Border beams: a glow that travels or breathes around a panel. The painting is a port of
+# border-beam (github.com/Jakubantalik/border-beam, MIT); see Modules/beam/__init__.py.
+#
+# `beam:` goes on any panel. It is off unless `active` is true or `sweep` names a key.
+#   size:        sm | md | line | pulse-inner | pulse-outside
+#   variant:     colorful | mono | ocean | sunset
+#   theme:       dark | light
+#   color-space: hsv (the upstream colours) | oklch (LevityDash's palette ring)
+#   duration:    seconds per cycle (1.96 sm and md, 3.1 line, 2.3 the pulses)
+#   strength:    0 to 1
+#   radius:      corner radius in px (32 sm, 16 the rest)
+#   fill:        a card colour under the content; pulse-outside needs one
+#   active:      true | false | a key or expression. The beam runs while it is true.
+#                  active: environment.wind.speed.speed > 25
+#   sweep:       a key or expression. The beam runs once each time a new value arrives.
+#                  sweep: environment.temperature.temperature
+#   phase:       hold the beam at this time in seconds, with no animation. Used here so every
+#                render is the same frame. Leave it out on a real dashboard.
+#
+# Five cards, one per size, held at a visible moment of the cycle.
+# Render: render_dashboard.py OUT.png --levity THIS --size 1800x320 --scenario hot-clear-day --settle 4
+- type: group
+  name: main
+  items:
+    - type: group
+      name: sm
+      geometry: {x: 2.5%, y: 25%, width: 15%, height: 50%}
+      beam: {size: sm, fill: '#1b1b1f', active: true, phase: 0.5}
+      items:
+        - type: text
+          name: smTitle
+          text: sm
+          geometry: {x: 8%, y: 32%, width: 84%, height: 36%}
+          display: {color: '#ffffff'}
+    - type: group
+      name: md
+      geometry: {x: 22.5%, y: 25%, width: 15%, height: 50%}
+      beam: {size: md, fill: '#1b1b1f', active: true, phase: 0.5}
+      items:
+        - type: text
+          name: mdTitle
+          text: md
+          geometry: {x: 8%, y: 32%, width: 84%, height: 36%}
+          display: {color: '#ffffff'}
+    - type: group
+      name: line
+      geometry: {x: 42.5%, y: 25%, width: 15%, height: 50%}
+      beam: {size: line, fill: '#1b1b1f', active: true, phase: 0.9}
+      items:
+        - type: text
+          name: lineTitle
+          text: line
+          geometry: {x: 8%, y: 32%, width: 84%, height: 36%}
+          display: {color: '#ffffff'}
+    - type: group
+      name: pulseInner
+      geometry: {x: 62.5%, y: 25%, width: 15%, height: 50%}
+      beam: {size: pulse-inner, fill: '#1b1b1f', active: true, phase: 0.95}
+      items:
+        - type: text
+          name: pulseInnerTitle
+          text: pulse-inner
+          geometry: {x: 8%, y: 32%, width: 84%, height: 36%}
+          display: {color: '#ffffff'}
+    - type: group
+      name: pulseOutside
+      geometry: {x: 82.5%, y: 25%, width: 15%, height: 50%}
+      beam: {size: pulse-outside, fill: '#1b1b1f', active: true, phase: 0.95}
+      items:
+        - type: text
+          name: pulseOutsideTitle
+          text: pulse-outside
+          geometry: {x: 8%, y: 32%, width: 84%, height: 36%}
+          display: {color: '#ffffff'}

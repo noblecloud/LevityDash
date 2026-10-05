@@ -46,6 +46,7 @@ from WeatherUnits import Length
 from .Handles import Handle, HandleGroup
 from .Handles.Resize import ResizeHandles
 from .Menus import BaseContextMenu
+from .beam.item import PanelBeam
 from ..utils import colorPalette, GeometryManaged, GeometryManager, GraphicsItemSignals, itemLoader, selectionPen
 
 if TYPE_CHECKING:
@@ -722,6 +723,19 @@ class Panel(_Panel, Stateful, tag='group'):
 	@borderProp.condition(method='get')
 	def borderProp(self) -> bool:
 		return (border := self.borderProp) is not None and border.enabled
+
+	@StateProperty(key='beam', default=Stateful, allowNone=True, sortOrder=50)
+	def beamProp(self) -> Optional[PanelBeam]:
+		"""A travelling or breathing glow around the panel. Off unless the file has a `beam:` section that turns it on."""
+		return getattr(self, '_beam', None)
+
+	@beamProp.setter
+	def beamProp(self, value: PanelBeam):
+		self._beam = value
+
+	@beamProp.factory
+	def beamProp(self) -> PanelBeam:
+		return PanelBeam(self)
 
 	@cached_property
 	def localGroup(self) -> 'Panel':
