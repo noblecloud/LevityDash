@@ -145,6 +145,33 @@ by `Gauge.py` (which keeps re-exporting every name the rest of the app imports):
 - The remaining batches, and two read-only jobs beside them (an audit of
   every move so far, and the M3 recon), are briefed in
   `docs/tasks/meter-m2b-remaining.md`.
+- **M2b, batches 3 and 4 (done)** — `80fcfe2` the layout (alignment, anchor,
+  inset, center_offset, the side rects, `_dialRect`, `center`, `scene_center`,
+  `baseWidth`, `setRect`, `pen`, `defaultColor`, `displayType`, `type`,
+  `parentResized`, `_update_shape`, `rebuild`, `releaseSources`: 28 member
+  groups), `210b3d9` the item holders (`needle`, `fill`, `zones`, `markers`, the
+  three divisions and their clear/item helpers, plus `_markerText` moved by hand
+  since it is a module-level function, not a member). `Gauge.py` 1,292 -> 835
+  lines. Byte-identity spot-checked against `fd873b5`: only the documented
+  `gaugeKeyName` renames differ.
+- **The audit** (`meter-split-audit.md`) re-derived every move independently. Two
+  corrections to this note and the brief, both mine: `label_group_class()` does
+  not exist anywhere (it was removed in M1c, not kept - the brief listed a swap
+  that is gone), and the `GaugeArc` annotation is unquoted with a `None` sentinel
+  rather than quoted. It also caught something the note should say plainly: **the
+  working tree is genuinely broken between a member move and its import fix** - a
+  capture run in that window failed 20 of 23 renders with `NameError: QPointF`.
+  That is why every batch is committed only green, and why read-only work in a
+  shared tree must read committed revisions (`git show <rev>:<path>`), not the
+  working copy.
+- **The M3 plan** is `meter-m3-recon.md`: the shim's export list by file:line
+  (`Gauge` 4 sites, `Needle` 1, `GaugeTickTextGroup` 1, `_isWholeSteps` 1,
+  `clockTurn`/`formatDuration`/`parseClockTime`/`shortestDelta` 1), 33 meter-package
+  names the shim must keep or `Displays.<name>` disappears, and the traps - the
+  elements `__all__` is too small for a star import to carry the classes, the
+  hand-over belongs at the foot of `meter/gauge.py`, `meter/__init__.py` must stay
+  docstring-only, and the two shadowed `radius`/`value_to_angle` definitions must
+  move in order.
 
 Every step ends with the suite and a capture against the baseline. Renames the
 survey proposes (`GaugeItem` → `MeterItem` and friends) come after the package is
