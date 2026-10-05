@@ -22,7 +22,7 @@ from LevityDash.lib.plugins.plugin import AnySource
 from LevityDash.lib.stateful import Constant, ValueSource
 from qolkit import Unset
 
-__all__ = ["KeySource", "openValueSource"]
+__all__ = ["KeySource", "openValueSource", "installStandIn"]
 
 log = LevityPluginLog.getChild("ValueSource")
 
@@ -146,6 +146,21 @@ class KeySource:
 		return f'KeySource({self.text!r})'
 
 
+_standIn: Optional[Callable[..., Optional[ValueSource]]] = None
+
+
+def installStandIn(standIn: Optional[Callable[..., Optional[ValueSource]]]) -> None:
+	"""Answer every `openValueSource` call with `standIn` instead of the dispatcher.
+
+	For tools that draw items without booting the dashboard (Gauge Studio). The
+	stand-in takes the same arguments as `openValueSource`. Pass None to restore
+	the real lookup. Consumers call `openValueSource`, so no module that imports
+	it by name needs patching.
+	"""
+	global _standIn
+	_standIn = standIn
+
+
 def openValueSource(value: Any, label: str = 'value source', effect: str = 'it shows no value') -> Optional[ValueSource]:
 	"""The ValueSource for a `.levity` slot, or None after a logged warning.
 
@@ -153,6 +168,8 @@ def openValueSource(value: Any, label: str = 'value source', effect: str = 'it s
 	holding one acquire. `label` names the slot in the log and `effect` says
 	what the user sees instead. Never raises.
 	"""
+	if _standIn is not None:
+		return _standIn(value, label, effect)
 	if isinstance(value, bool):
 		log.warning(f'{label} {value!r} must be a number, a key or an expression; {effect}')
 		return None
