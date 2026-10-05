@@ -23,6 +23,24 @@ ColorDict = Dict[_BASE_COLOR, int | float]
 
 COLOR_REG = re.compile(r"([A-Fa-f0-9]{8}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{4}|[A-Fa-f0-9]{3})")
 
+#: A whole string that is a hex colour: ``#ff8800``, ``0xff8800``, ``ff8800``, ``#f80``, and the forms with alpha.
+_HEX_REG = re.compile(r"(?:#|0[xX])?([A-Fa-f0-9]{8}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{4}|[A-Fa-f0-9]{3})")
+#: A whole string of three or four channel numbers: ``255 0 0``, ``255, 0, 0, 128``, ``1.0 0.5 0``.
+_NUMBERS_REG = re.compile(r"\s*\d+(?:\.\d+)?(?:\s*[,\s]\s*\d+(?:\.\d+)?){2,3}\s*")
+
+#: Keys of a mapping colour that mean red, green, blue and alpha.
+_RGBA_KEYS = frozenset({'r', 'g', 'b', 'a', 'red', 'green', 'blue', 'alpha'})
+
+
+def _decodeHex(hexVal: str) -> Tuple[int, int, int, int]:
+	"""Read 3, 4, 6 or 8 hex digits. Short forms double each digit, as CSS does: ``f80`` is ``ff8800``."""
+	if len(hexVal) in (3, 4):
+		hexVal = ''.join(c * 2 for c in hexVal)
+	channels = tuple(int(hexVal[i:i + 2], 16) for i in range(0, len(hexVal), 2))
+	if len(channels) == 3:
+		channels = *channels, 255
+	return channels
+
 
 #: Keys of a mapping colour that mean a colour made from Oklch values, not red/green/blue.
 _OKLCH_KEYS = frozenset({'hue', 'oklch', 'palette', 'emission'})
@@ -179,24 +197,24 @@ class Color:
 			return spec
 		match color:
 			case str(color):
-				if hexVal := next(iter(re.findall(r"[A-Fa-f0-9]+", color)), None):
-					length = len(hexVal)
-					if length > 8:
-						hexVal = hexVal[:8]
-					n = 3 if length % 3 == 0 else 4
-					hexVal = [i.rjust(2, '0') for i in split(hexVal, n)]
-					if len(hexVal) == 3:
-						hexVal = *hexVal, 'ff'
-					return tuple(int(i, 16) for i in hexVal)
-				else:
-					raise ValueError(f'Invalid colors string: {color}')
-			case [int(red), int(green), int(blue)] as rgb:
+				text = color.strip()
+				if match := _HEX_REG.fullmatch(text):
+					return _decodeHex(match.group(1))
+				if _NUMBERS_REG.fullmatch(text):
+					return Color.__decode([float(i) if '.' in i else int(i) for i in re.split(r'[,\s]+', text)])
+				if QColor.isValidColorName(text):
+					return QColor.fromString(text).getRgb()
+				# A hex colour inside other text, such as 'Color(#ff8800)'
+				if match := COLOR_REG.search(text):
+					return _decodeHex(match.group(1))
+				raise ValueError(f'Invalid colors string: {color}')
+			case [Number(), Number(), Number()] as rgb:
 				return *rgb, 255
-			case [int(red), int(green), int(blue), int(alpha)] as rgba:
-				return rgba
+			case [Number(), Number(), Number(), Number()] as rgba:
+				return tuple(rgba)
 			case QColor() as qc:
 				return qc.getRgb()
-			case dict() if set(color) & set(ColorDict.__args__):
+			case dict() if set(color) & _RGBA_KEYS:
 				rgb = tuple(
 					get(color, *i, expectedType=float | int, default=0)
 					for i in (
@@ -486,10 +504,9 @@ class Color:
 		>>> Color.decode('red')
 		Color('#FF0000')
 		"""
-		try:
+		if isinstance(color, dict) and 'name' in color:
+			color = dict(color)
 			name = color.pop('name')
-		except Exception:
-			pass
 		return cls(**{k: v for k, v in zip(('red', 'green', 'blue', 'alpha'), cls.__decode(color))}, name=name)
 
 	@classmethod

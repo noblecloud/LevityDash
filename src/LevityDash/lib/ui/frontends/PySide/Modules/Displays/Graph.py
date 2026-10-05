@@ -3,7 +3,6 @@ from asyncio import Task
 import numpy as np
 import operator
 import platform
-import re
 from PySide6.QtCore import (
 	QLineF, QMetaObject, QObject, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt, QThread, QTimer,
 	Signal, Slot
@@ -50,7 +49,6 @@ from LevityDash.lib.ui.Geometry import (
 	Size, size_px
 )
 from LevityDash.lib.ui.colors import Color, Gradient
-from LevityDash.lib.ui.colors.oklch import is_oklch
 from LevityDash.lib.ui.glow import GlowMixin, paintGlow
 from LevityDash.lib.ui.frontends.PySide import UILogger
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Surface, GraphItem
@@ -1255,22 +1253,17 @@ class Plot(GlowMixin, QGraphicsPixmapItem, Stateful):
 	@color.decode
 	def color(self, value):
 		match value:
-			case dict() | str() if isinstance(value, dict) or is_oklch(value):
-				# oklch(...) and the hue, palette and emission mappings, which the hex search below would misread
-				value = Color.decode(value).QColor
-			case str():
-				if hexVal := re.findall(r"([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})", value):
-					value = QColor(f'#{hexVal[0]}')
-				else:
-					try:
-						value = QColor(value)
-					except ValueError:
-						UILogger.warning(f'Invalid colors: {value} for plot {self.data.name}')
-						value = colorPalette.windowText().color()
+			case dict() | str():
+				# Color reads hex, colour names, channel numbers, oklch(...) and the hue, palette and emission mappings
+				try:
+					value = Color.decode(value).QColor
+				except ValueError:
+					UILogger.warning(f'Invalid colors: {value} for plot {self.data.name}')
+					value = colorPalette.windowText().color()
 			case QColor() | None:
 				pass
 			case Color():
-				value = value.toQColor()
+				value = value.QColor
 			case _:
 				raise ValueError(f'Invalid colors: {value} for plot {self.data.name}')
 		return value
@@ -3170,20 +3163,12 @@ class CurrentTimeIndicator(QGraphicsLineItem, Stateful, tag=...):
 				return Color.presets[value]
 			except KeyError:
 				pass
-			if hexVal := re.findall(r"([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})", value):
-				value = Color(f'#{hexVal[0]}')
-			elif (floatVals := re.findall(r"(\d+\.?\d*)", value)) and len(floatVals) == 3:
-				value = Color(floatVals)
-			else:
-				try:
-					value = Color(value)
-				except ValueError:
-					log.warning(f'Invalid color \'{value}\' for time indicator')
-					value = Color('#ff9aa3')
-		elif isinstance(value, dict):
-			value = Color(**value)
-		elif isinstance(value, (tuple, list)):
-			value = Color(value)
+		if isinstance(value, (str, dict, tuple, list)):
+			try:
+				value = Color.decode(value)
+			except ValueError:
+				log.warning(f'Invalid color \'{value}\' for time indicator')
+				value = Color('#ff9aa3')
 		return value
 
 	@StateProperty(key='opacity', default=1.0)
