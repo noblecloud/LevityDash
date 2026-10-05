@@ -5,11 +5,13 @@ from difflib import get_close_matches
 from functools import cached_property, lru_cache
 from numbers import Number
 from rich.repr import auto as auto_repr
-from typing import TypeVar, ClassVar, Dict, Type, Tuple, Callable, Union, List, runtime_checkable, Protocol
+from typing import Optional, TypeVar, ClassVar, Dict, Type, Tuple, Callable, Union, List, runtime_checkable, Protocol
 from yaml import SafeDumper, SafeLoader, SequenceNode, MappingNode, ScalarNode
 
 from LevityDash.lib.stateful import StatefulLoader
+from LevityDash.lib.ui import UILogger as log
 from LevityDash.lib.ui.colors.color import Color
+from LevityDash.lib.ui.colors.stopunits import StopUnitError, formatStop, parseStop, toDataUnit
 from LevityDash.lib.utils import getOrSet, classproperty
 from LevityDash.shims.Qt import QImage
 from WeatherUnits import Measurement, Percentage
@@ -27,7 +29,7 @@ class SupportsMath(Protocol):
 
 @auto_repr
 class MappedGradientValue:
-	__slots__ = ('__color', '__value')
+	__slots__ = ('__color', '__value', 'unit', 'text')
 	__types__: ClassVar[Dict[Type, Type]] = {}
 	__item__: ClassVar[Type] = GradientValueType
 
@@ -36,6 +38,11 @@ class MappedGradientValue:
 
 	__color: Color
 	color: Color
+
+	#: The unit a stop was written in (`°F`, `mph`), or None for a bare number. `value` is then the number in that unit.
+	unit: Optional[str]
+	#: The key a stop was written under (`99°F`). A save writes it back unchanged.
+	text: Optional[str]
 
 	def __class_getitem__(cls, item):
 		if isinstance(item, TypeVar):
@@ -47,12 +54,22 @@ class MappedGradientValue:
 			cls.__types__[item] = t
 		return cls.__types__[item]
 
-	def __init__(self, value: Number, color: Color | str | Tuple[int | float]):
+	def __init__(self, value: Number, color: Color | str | Tuple[int | float], unit: Optional[str] = None, text: Optional[str] = None):
 		self.value = value
 		self.color = color if isinstance(color, Color) else Color(color)
+		self.unit = unit or None
+		self.text = text
+
+	@property
+	def key(self) -> str | int | float:
+		"""What a file calls this stop: its own text for a measured stop, else the number."""
+		if self.unit:
+			return self.text or formatStop(float(self.value), self.unit)
+		number = float(self.value)
+		return int(number) if number.is_integer() else number
 
 	def __rich_repr__(self):
-		yield 'value', str(self.value)
+		yield 'value', self.text if self.unit else str(self.value)
 		yield 'color', self.color
 
 	def __hash__(self) -> int:
@@ -110,16 +127,27 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 		def __genGradient(self):
 			T = self.localized
 			locations = (T - T.min())/np.ptp(T)
-			for position, value in zip(locations, self.values):
+			for position, value in zip(locations, self.activeStops):
 				self.setColorAt(position, value.color.QColor)
+
+		@cached_property
+		def activeStops(self) -> list:
+			"""The stops that apply to this plot's data, in order. A stop with a unit the data cannot take is left out."""
+			try:
+				unitType = self.plot.data.dataType
+			except Exception:
+				return self.values.as_list
+			if self.values.hasUnits:
+				return self.values.resolve(unitType).as_list
+			return self.values.as_list
 
 		@cached_property
 		def localized(self):
 			try:
 				unitType = self.plot.data.dataType
-				values = [unitType(t.value) for t in self.values.as_list]
+				values = [unitType(t.value) for t in self.activeStops]
 			except Exception:
-				values = [t.value for t in self.values.as_list]
+				values = [t.value for t in self.activeStops]
 			return np.array(values)
 
 		@property
@@ -188,7 +216,10 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 				self[str(key)] = itemType(key, item)
 			elif isinstance(key, str) and isinstance(item, (tuple, list)) and len(item) == 2:
 				value, color = item
-				self[key] = itemType(value, color)
+				self[key] = self._stop(value, color, value if isinstance(value, str) else None)
+			elif isinstance(key, str) and parseStop(key) is not None and not isinstance(item, (tuple, list, dict)):
+				# `99°F: '#ff4a4a'`: the stop is the key, and a unit on it is kept.
+				self[key] = self._stop(key, item, key)
 
 		for color in color:
 			match color:
@@ -197,6 +228,48 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 				case (Number() as p,  str() | tuple() as c):
 					c = Color(c)
 					self[str(c)] = itemType(p, c)
+				case {'at': at, 'color': c} | {'value': at, 'color': c}:
+					# `- {at: 37°C, color: '#ff4a4a'}`
+					self._add(at, c)
+				case (str() as at, Color() | str() | tuple() as c) if parseStop(at) is not None:
+					self._add(at, c)
+
+	def _stop(self, at, color, key: str = None) -> MappedGradientValue:
+		"""A stop at `at`: a number, or text such as `99°F`. A unit is kept on the stop and applied against the data."""
+		number, unit = parseStop(at) or (at, None)
+		return type(self).itemCls(number, color, unit=unit, text=key if unit else None)
+
+	def _add(self, at, color):
+		stop = self._stop(at, color, at if isinstance(at, str) else None)
+		self[stop.text or str(stop.key)] = stop
+
+	@property
+	def hasUnits(self) -> bool:
+		"""True when any stop carries a unit. Such a gradient is placed by reading, not by position along the range."""
+		return any(stop.unit for stop in dict.values(self))
+
+	def resolve(self, valueClass: type) -> 'Gradient':
+		"""The same stops as plain numbers in the unit of `valueClass`, ready to place on a display of that data.
+
+		Each stop converts on its own, so units may mix. A bare number is taken as already in the data's unit.
+		A stop whose unit is unknown or measures something else is left out, and the log names it once.
+		"""
+		cache = self.__dict__.setdefault('_resolved', {})
+		if valueClass in cache:
+			return cache[valueClass]
+		out = Gradient[valueClass]() if isinstance(valueClass, type) else Gradient()
+		reported = self.__dict__.setdefault('_reported', set())
+		for key, stop in dict.items(self):
+			try:
+				number = toDataUnit(float(stop.value), stop.unit, valueClass)
+			except StopUnitError as e:
+				if key not in reported:
+					reported.add(key)
+					log.error(f'Gradient stop {stop.key!r} skipped: {e}')
+				continue
+			out[key] = type(out).itemCls(number, stop.color)
+		cache[valueClass] = out
+		return out
 
 	def as_type(self, type_: Type[Measurement], _min: Measurement, _max: Measurement) -> 'Gradient':
 		cls = Gradient[type_]
@@ -392,7 +465,10 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 	def representer(cls, dumper: SafeDumper, data):
 		if name := getattr(data, 'presetName', None):
 			return dumper.represent_scalar(u'tag:yaml.org,2002:str', name)
-		return dumper.represent_mapping(cls.__name__, {k: v.value for k, v in data.items()})
+		# Plain strings only, never a measurement: a leaked object is written as its repr().
+		# A list of pairs keeps the order the stops were written in; a dict would be sorted.
+		stops = [(stop.key, str(stop.color)) for stop in dict.values(data)]
+		return dumper.represent_mapping(u'tag:yaml.org,2002:map', stops)
 
 	@classmethod
 	def constructor(cls, loader: SafeLoader, node):
