@@ -20,7 +20,7 @@ from math import inf, isclose,isfinite, isinf, floor, log10, atan2, hypot
 from numbers import Number
 from numpy import ceil, cos, pi, radians, sin, sqrt, number as np_number
 from collections.abc import Mapping
-from typing import Optional, Type, Union, Iterator, Iterable, TypeVar, Sequence, Dict
+from typing import Any, Optional, Type, Union, Iterator, Iterable, TypeVar, Sequence, Dict
 
 from LevityDash import LevityDashboard
 from LevityDash.lib.plugins.categories import CategoryItem
