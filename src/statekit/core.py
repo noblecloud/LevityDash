@@ -39,7 +39,7 @@ from types import GenericAlias, UnionType, FunctionType
 from typing import (
 	Any, Callable, ClassVar, Dict, Final, Generic, get_args, get_origin,
 	get_type_hints, Hashable, Iterable, List, Literal, Mapping, Sequence, Set, Sized, Text, Tuple, Type, TypeAlias,
-	TypeVar, Union, Iterator,
+	TypeVar, Union, Iterator, Optional,
 )
 try:
 	from typing import _GenericAlias, _UnionGenericAlias
@@ -59,6 +59,7 @@ from qolkit import (
 from .actions import ActionPool
 from .validate import ConditionFailed, StateError, firstOf
 from .observe import Change, differs
+from .binding import Binding, Constant, ValueSource
 from .defaults import (
 	Default, DefaultGroup, DefaultState, DefaultValue, SourceType, UnsetDefault, UnsetExisting,
 )
@@ -1959,6 +1960,33 @@ class Stateful(metaclass=StatefulMetaclass):
 	def _afterSetState(self):
 		pass
 
+	_bindings_: Dict[str, Binding] = None
+
+	def bind(self, slot: str, source: Optional[ValueSource], setter: Callable[[Any], None], transform: Callable[[Any], Any] = None) -> Optional[Binding]:
+		"""Bind `source` to `setter` under the name `slot`.
+
+		A binding already under `slot` is unlinked first, which releases its
+		source. Pass `source=None` to clear the slot. Returns the new Binding.
+		"""
+		bindings = self._bindings_
+		if bindings is None:
+			bindings = self._bindings_ = {}
+		if (old := bindings.pop(slot, None)) is not None:
+			old.unlink()
+		if source is None:
+			return None
+		binding = bindings[slot] = Binding(source, setter, transform)
+		return binding
+
+	def unbind(self, slot: str = None) -> None:
+		"""Unlink the binding under `slot`, or every binding when `slot` is None."""
+		bindings = self._bindings_
+		if not bindings:
+			return
+		for name in ([slot] if slot is not None else list(bindings)):
+			if (binding := bindings.pop(name, None)) is not None:
+				binding.unlink()
+
 	def is_default(self, state_data: Mapping = None) -> bool:
 		# TODO: Implement this
 		return False
@@ -2698,6 +2726,8 @@ class Stateful(metaclass=StatefulMetaclass):
 		# a real error - silently masking the same underlying gap.
 		if (pool := getattr(self, '_action_pool', None)) is not None and pool.up is not pool:
 			pool.up.remove(pool)
+		if getattr(self, '_bindings_', None):
+			self.unbind()
 
 	def __rich_repr__(self, exclude: set = None):
 
