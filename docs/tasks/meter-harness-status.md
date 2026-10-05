@@ -33,11 +33,28 @@ where noted.
   `min + span - min` is not always `span` in floats. Pinned against the old
   inline arithmetic bit for bit inside the range, 1e-12 past the ends, over nine
   range/angle/wrap combinations. 22/23 clean, same caption region.
-- Next: the rest of the degrees arithmetic — `value_to_angle_degrees`,
-  `angle_degrees_to_value`, `GaugeMarker._markerAngle`, `GaugeZones._angle`,
-  `GaugeFill._angles`. Then ticks through `track.pointAt(t)`/`normalAt(t)`, then
-  zones and fills through `track.subPath(t0, t1)`, then `Meter` itself, then
-  `Gauge(Meter)`, then `Bar`.
+- `204be55` **the size reference** — `Gauge.sizeAcross` / `sizeAlong` (Opus's
+  wording: a call site names the meaning it wants). Thirteen sites resolve
+  through `sizeAcross` now: tick length, the arc's weight, the needle's width,
+  length, offset, hub, halo, tail dot, the zones' weights, the fill's weight and
+  gap. Same function, same arguments, so the diff is empty. Left alone for their
+  own steps: the caption/value-label sizes that use the dial's *diameter*
+  (`radius * 2`) and the tick-*width* sizes that use the panel share
+  (`baseWidth` - the same meaning on a bar).
+- `d2580b5` **ticks through the track** — `Tick.draw` asks the track for a point
+  and an outward direction (`pointAtAngle` / `normalAtAngle`) instead of doing
+  its own cos/sin, in the angle convention `Tick.angle` already carries. 23/23
+  clean.
+  - Two findings: `QPainterPath` quantises arc angles to a 16th of a degree, so
+    `arcMoveTo` is up to **0.199 px** off the marks' own arithmetic on a 400 px
+    radius - placing marks through the Qt arc would have moved every tick, so
+    `pointAtAngle` is the marks' arithmetic and `subPath` stays Qt's arc. They
+    disagree by that 0.2 px; a test pins the gap, and making them agree is a
+    **visible change for its own task**, not a refactor.
+  - The harness earned its keep: the first version of this subtracted the 90°
+    a tick's angle already carries, and **20 of 23 files / 2.0 M px** moved in
+    one capture. Caught, fixed, re-measured clean.
+- Next: `Meter` and `Gauge(Meter)` as one slice, handed over when it lands.
 
 ### The harness itself
 
