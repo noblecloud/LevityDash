@@ -173,6 +173,11 @@ def _resolve_measurement_class(cls_name: Optional[str], unit: Optional[str], typ
 			return by_symbol
 	if by_name is not None:
 		return by_name
+	# A unit-less `'int'` schema key is the base `Measurement` itself, which
+	# carries no unit symbol and is not in the registry by name - without this
+	# it fell through to None and arrived as a bare float, printing raw digits.
+	if cls_name == Measurement.__name__:
+		return Measurement
 	return registry.get(unit) if unit else None
 
 
