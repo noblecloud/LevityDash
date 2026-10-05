@@ -50,6 +50,8 @@ from LevityDash.lib.ui.Geometry import (
 	Size, size_px
 )
 from LevityDash.lib.ui.colors import Color, Gradient
+from LevityDash.lib.ui.colors.oklch import is_oklch
+from LevityDash.lib.ui.glow import GlowMixin, paintGlow
 from LevityDash.lib.ui.frontends.PySide import UILogger
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Surface, GraphItem
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Text
@@ -1101,7 +1103,7 @@ def _get_shadow_renderer_scene() -> 'RendererScene':
 # Section Plot
 @auto
 @DebugPaint
-class Plot(QGraphicsPixmapItem, Stateful):
+class Plot(GlowMixin, QGraphicsPixmapItem, Stateful):
 	""" The graphical plot of GraphItemData.
 	All updates are handled by the GraphItemData.
 	"""
@@ -1253,6 +1255,9 @@ class Plot(QGraphicsPixmapItem, Stateful):
 	@color.decode
 	def color(self, value):
 		match value:
+			case dict() | str() if isinstance(value, dict) or is_oklch(value):
+				# oklch(...) and the hue, palette and emission mappings, which the hex search below would misread
+				value = Color.decode(value).QColor
 			case str():
 				if hexVal := re.findall(r"([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})", value):
 					value = QColor(f'#{hexVal[0]}')
@@ -1648,13 +1653,20 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		contentsWidth = min(contentsWidth, self.mapped_path.boundingRect().width())
 		return QSizeF(contentsWidth, self.figure.height()).toSize()
 
+	def glowChanged(self):
+		self.updateAppearance()
+
 	@property
 	def img_padding(self) -> QSize:
-		weight = int(self.weight_px) + 1
+		weight = self.weight_px
+		if (glow := self.glow) is not None:
+			# room for the halo on both sides of the line
+			weight += 2 * glow.reach(weight)
+		weight = int(weight) + 1
 		weight *= self.scene().view.devicePixelRatio()
 		return QSize(weight, weight)
 
-	def _render_paint(self, size: QSize, dpr: float, pen: QPen, path: QPainterPath) -> QImage:
+	def _render_paint(self, size: QSize, dpr: float, pen: QPen, path: QPainterPath, glow=None) -> QImage:
 		# Runs on the painter worker thread. Everything the caller passes in
 		# is a plain value (no live scene-graph references), so this is pure
 		# computation + painting into a QImage - Qt supports QImage painting
@@ -1665,6 +1677,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		img.setDevicePixelRatio(dpr)
 		img.fill(Qt.transparent)
 		painter = EffectPainter(img)
+		paintGlow(painter, path, pen.brush(), pen.widthF(), glow)
 		painter.setPen(pen)
 		painter.drawPath(path)
 		painter.end()
@@ -1738,7 +1751,7 @@ class Plot(QGraphicsPixmapItem, Stateful):
 		path.translate(-path.elementAt(0).x, 0)
 		path.translate(padding.width() / 2, padding.height() / 2)
 
-		self.painter.args = (size, dpr, pen, path)
+		self.painter.args = (size, dpr, pen, path, self.glow)
 		self.painter.start()
 		self.shaper.start(priority=0)
 
