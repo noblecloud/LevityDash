@@ -1425,6 +1425,7 @@ class FillForm(_Form):
 		self.part('weight', 'weight', SizeEdit(nullable=True, autoText='arc'))
 		self.part('segments', 'segments', NumberEdit(autoText='solid', integer=True, lo=1, hi=200, step=1), 'Break the fill into this many pieces.')
 		self.part('gap', 'gap', SizeEdit(nullable=True, autoText='auto'), 'Space between segments.')
+		self.part('glow', 'glow', GlowEdit(), 'A halo around the fill. Left off, the fill takes the gauge glow.')
 
 	def _zone(self, on: bool):
 		self.color.setEnabled(not on)
@@ -1639,6 +1640,49 @@ class WarpEdit(_Toggled):
 		return True
 
 
+class GlowForm(_Form):
+	"""The pieces of `glow:`. Only what differs from the defaults is written; all default is `true`."""
+
+	DEFAULTS = {'strength': 1.0, 'size': 0.6, 'passes': 4, 'bloom': 0.04}
+
+	def __init__(self):
+		super().__init__()
+		self.part('strength', 'strength', NumberEdit(lo=0, hi=3, step=0.05, decimals=2),
+		          'How bright the halo is. 0 draws no glow, which also turns off a glow the item inherits')
+		self.part('size', 'size', NumberEdit(lo=0, hi=2, step=0.05, decimals=2),
+		          'How wide the halo is, as a share of the line width')
+		self.part('passes', 'passes', NumberEdit(lo=1, hi=4, step=1, integer=True),
+		          'How many layers the halo has. More is smoother and costs a little more to draw')
+		self.part('bloom', 'bloom', NumberEdit(lo=0, hi=0.2, step=0.005, decimals=3),
+		          'Cap on the extra light added to the core. 0 turns it off. Too much washes colours out to white')
+		self.setValue(True)
+
+	def setValue(self, value):
+		spec = dict(value) if isinstance(value, dict) else {}
+		self._extra = {k: v for k, v in spec.items() if k not in self._known}
+		for key, p in self.parts.items():
+			with QSignalBlocker(p):
+				p.setValue(spec.get(key, self.DEFAULTS[key]))
+
+	def value(self):
+		out = dict(self._extra)
+		for key, p in self.parts.items():
+			v = p.value()
+			if v is not None and v != self.DEFAULTS[key]:
+				out[key] = int(v) if key == 'passes' else v
+		return out or True
+
+
+class GlowEdit(_Toggled):
+	"""`glow:` as a structured editor: off, or the halo settings. Every number keeps its slider."""
+
+	def __init__(self):
+		super().__init__('Glow', GlowForm())
+
+	def fresh(self):
+		return True
+
+
 class CaptionEdit(_Toggled):
 	def __init__(self):
 		super().__init__('Show small text', CaptionForm())
@@ -1681,4 +1725,6 @@ def make(field: 'schema.Field') -> Optional[Editor]:
 		return CaptionEdit()
 	if kind == 'warp':
 		return WarpEdit()
+	if kind == 'glow':
+		return GlowEdit()
 	return None
