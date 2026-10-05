@@ -55,6 +55,11 @@ same reading whatever the gauge's range, and whatever unit the data arrives in.
    - Each gradient stop row gets a value slider with a number box and a unit dropdown,
      using the same selector as zones.
    - Give each stop a colour swatch.
+   - **Collapsed by default.** The user asked: "have the gradient colors collapsed by
+     default and only showing a color band". A collapsed gradient shows one row: a
+     colour band drawn across the gauge's range, with small ticks at each stop.
+     Clicking the band or a disclosure arrow expands the stop list. The collapsed or
+     expanded state persists per Studio session.
    - Clicking or dragging a stop on the preview's arc is optional. Add it only if the
      handles layer makes it cheap.
    - Use a distinct default colour for a new stop. Today a new stop repeats the last
