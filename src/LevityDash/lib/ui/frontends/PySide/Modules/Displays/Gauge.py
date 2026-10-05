@@ -315,7 +315,8 @@ class Graduations(ColorGradientMixin, StatefulGaugeItem):
 	def length_px(self) -> float:
 		match self.tick_type:
 			case self.Type.Major:
-				value = size_px(self.length, relative_to := self.gauge.radius)
+				relative_to = self.gauge.radius
+				value = self.gauge.sizeAcross(self.length)
 			case self.Type.Minor:
 				value = size_px(self.length, relative_to := self.gauge.majorDivisions.length_px)
 			case self.Type.Micro:
@@ -1216,7 +1217,7 @@ class GaugeArc(StatefulGaugePathItem):
 
 	@property
 	def weight_px(self) -> float:
-		return size_px(self.weight, self.gauge.radius, dimension=DimensionType.width)
+		return self.gauge.sizeAcross(self.weight, dimension=DimensionType.width)
 
 	@StateProperty(key='start-angle', default=-120, after=refresh, allowNone=False, repr=True)
 	def startAngle(self) -> float | int:
@@ -1718,7 +1719,7 @@ class Needle(StatefulGaugePathItem):
 
 	@property
 	def width_px(self) -> float:
-		return size_px(self.width, self.gauge.radius, dimension=DimensionType.width)
+		return self.gauge.sizeAcross(self.width, dimension=DimensionType.width)
 
 	@StateProperty(key='length', allowNone=False, repr=True, dependencies={'type'}, after=refresh)
 	def length(self) -> Size.Height | Length:
@@ -1758,7 +1759,7 @@ class Needle(StatefulGaugePathItem):
 
 	@property
 	def length_px(self) -> float:
-		return size_px(self.length, self.gauge.radius, dimension=DimensionType.height)
+		return self.gauge.sizeAcross(self.length, dimension=DimensionType.height)
 
 	@property
 	def needleSize(self) -> QSizeF:
@@ -1778,7 +1779,7 @@ class Needle(StatefulGaugePathItem):
 
 	@property
 	def offset_px(self) -> float:
-		return size_px(self.offset, self.gauge.radius, dimension=DimensionType.height)
+		return self.gauge.sizeAcross(self.offset, dimension=DimensionType.height)
 
 	@StateProperty(key='color', default=None, allowNone=True, repr=True, after=refresh)
 	def color(self) -> Color | None:
@@ -1977,10 +1978,9 @@ class Needle(StatefulGaugePathItem):
 
 	def _radial(self, size: Size.Height | Size.Width | None, default: float = 0.0, *, dimension=DimensionType.height) -> float:
 		"""A relative size in pixels, or ``default`` (a share of the radius) when unset."""
-		radius = self.gauge.radius
 		if size is None:
-			return default * radius
-		return size_px(size, radius, dimension=dimension) or 0.0
+			return default * self.gauge.radius
+		return self.gauge.sizeAcross(size, dimension=dimension) or 0.0
 
 	def _pivotY(self) -> float:
 		return self.offset_px
@@ -1989,7 +1989,7 @@ class Needle(StatefulGaugePathItem):
 		hub = self.hub
 		if hub is None or self.type.value not in self._PIVOT_STYLES:
 			return None
-		diameter = size_px(hub, self.gauge.radius, dimension=DimensionType.width) or 0.0
+		diameter = self.gauge.sizeAcross(hub, dimension=DimensionType.width) or 0.0
 		if diameter <= 0:
 			return None
 		path = QPainterPath()
@@ -2006,7 +2006,7 @@ class Needle(StatefulGaugePathItem):
 		if (hub := self._hubPath()) is not None:
 			over.append((hub, self._hubColor.QColor if getattr(self, '_hubColor', None) is not None else self.brush().color()))
 		if self.type is Needle.Type.Dot and self.halo is not None:
-			halo = size_px(self.halo, self.gauge.radius, dimension=DimensionType.width) or 0.0
+			halo = self.gauge.sizeAcross(self.halo, dimension=DimensionType.width) or 0.0
 			if halo > 0 and (color := getattr(self, '_haloColor', None)) is not None:
 				r = self.width_px / 2 + halo
 				path = QPainterPath()
@@ -2070,7 +2070,7 @@ class Needle(StatefulGaugePathItem):
 		line.lineTo(0, y - self.length_px)
 		path = self._stroke(line, w, Qt.PenCapStyle.RoundCap)
 		if self.tailDot is not None:
-			r = size_px(self.tailDot, self.gauge.radius, dimension=DimensionType.width) / 2
+			r = self.gauge.sizeAcross(self.tailDot, dimension=DimensionType.width) / 2
 			disc = QPainterPath()
 			disc.addEllipse(QPointF(0, y + tail), r, r)
 			path = path.united(disc)
@@ -2109,7 +2109,7 @@ class Needle(StatefulGaugePathItem):
 			path.lineTo(-half, rim + length - head)
 			path.closeSubpath()
 		tail = self._radial(self.tail)
-		dot = (size_px(self.tailDot, radius, dimension=DimensionType.width) or 0.0) if self.tailDot is not None else 0.0
+		dot = (self.gauge.sizeAcross(self.tailDot, dimension=DimensionType.width) or 0.0) if self.tailDot is not None else 0.0
 		far = radius - off
 		if tail > 0:
 			shaft = QPainterPath(QPointF(0, far - dot * 0.5))
@@ -2691,7 +2691,7 @@ class GaugeZones(GaugeItem, QGraphicsItem):
 			marks = set()
 			for zone in self._zones:
 				a, b = self._span(zone)
-				weight = size_px(zone['weight'], gauge.radius, dimension=DimensionType.width) if zone['weight'] is not None else arcWeight
+				weight = gauge.sizeAcross(zone['weight'], dimension=DimensionType.width) if zone['weight'] is not None else arcWeight
 				if zone['mark']:
 					marks.update(x for x in (a, b) if float(gauge.startAngle) + 1e-6 < x < float(gauge.endAngle) - 1e-6)
 				if not weight or a == b:
@@ -2891,7 +2891,7 @@ class GaugeFill(GaugePathItem):
 		if a == b:
 			self.hide()
 			return
-		weight = size_px(self._weight, gauge.radius, dimension=DimensionType.width) if self._weight is not None else gauge.arc.weight_px
+		weight = gauge.sizeAcross(self._weight, dimension=DimensionType.width) if self._weight is not None else gauge.arc.weight_px
 		rect = gauge.arc.centered_gauge_rect
 		zones = gauge._zonesItem
 		base = gauge.defaultColor if self._color is None else self._color
@@ -2902,7 +2902,7 @@ class GaugeFill(GaugePathItem):
 			radius = rect.width() / 2 or 1
 			gapDeg = 0.0
 			if self._gap is not None:
-				gapPx = size_px(self._gap, gauge.radius, dimension=DimensionType.width) or 0
+				gapPx = gauge.sizeAcross(self._gap, dimension=DimensionType.width) or 0
 				gapDeg = gapPx / radius * 180 / pi
 			# Never let the gap swallow the segment.
 			gapDeg = min(max(gapDeg, 0.0), step * 0.8)
@@ -5996,6 +5996,20 @@ class Gauge(Display):
 	def arc_length(self) -> float:
 		radius_px = self.radius
 		return float(radius_px * self.fullAngle / 180 * pi)
+
+	def sizeAcross(self, value, dimension: Optional[DimensionType] = None):
+		"""A relative size resolved across the track - against the dial's radius.
+
+		The reference, not the quantity: `sizeAcross(self.width)` asks how wide
+		something is in dial terms. A bar answers the same question with its own
+		cross extent, so an element drawn on either asks the meter for this rather
+		than reaching for a radius it may not have.
+		"""
+		return size_px(value, self.radius, dimension=dimension)
+
+	def sizeAlong(self, value, dimension: Optional[DimensionType] = None):
+		"""A relative size resolved along the track - against the arc's length."""
+		return size_px(value, self.arc_length, dimension=dimension)
 
 	@property
 	def value_scale(self) -> Scale:
