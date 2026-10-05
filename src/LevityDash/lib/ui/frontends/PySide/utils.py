@@ -422,6 +422,10 @@ def itemLoader(parent: 'Panel', unsortedItems: list[dict], existing: list = None
 	pending = list(sortedItems.items())
 
 	for index, (_type, group) in enumerate(pending):
+		# The loaders pop items off `group` as they build them, so by the time
+		# one raises the list can be empty. Keep the first item for the report.
+		first = _describeItem(group[0]) if group else 'none'
+		count = len(group)
 		try:
 			newItems.extend(_loadItemGroup(parent, _type, group, existing, **kwargs))
 		except Exception as error:
@@ -439,14 +443,14 @@ def itemLoader(parent: 'Panel', unsortedItems: list[dict], existing: list = None
 				error._levityLoadReported = True
 				skipped = sum(len(g) for _, g in pending[index + 1:])
 				log.critical(
-					f"Dashboard load aborted while building {len(group)} {_type!r} item(s) "
-					f"on {_describeParent(parent)}. First item in the group: {_describeItem(group[0])}. "
+					f"Dashboard load aborted while building {count} {_type!r} item(s) "
+					f"on {_describeParent(parent)}. First item in the group: {first}. "
 					f"{skipped} later item(s) in this group were not built, and nothing after this "
 					f"point in the file was loaded.",
 					exc_info=error,
 				)
 			error.add_note(f"while loading {_type!r} items onto {_describeParent(parent)}")
-			error.add_note(f"first item in the group: {_describeItem(group[0])}")
+			error.add_note(f"first item in the group: {first}")
 			raise
 
 	# Whatever no loader claimed: a type that vanished from the file entirely,

@@ -473,8 +473,12 @@ class Graduations(ColorGradientMixin, StatefulGaugeItem):
 			return set(float(v) for v in value.split(','))
 		return {value}
 
+	# A `.levity` file gives a plain number here, and the setter stores it as
+	# given, so the getter returns int or float as often as a Measurement.
+	# Without them in the return type the check in StateProperty.existing()
+	# raised the second time a gauge's state was set, which aborted the load.
 	@StateProperty(key='interval', allowNone=False)
-	def usr_interval(self) -> Measurement | Unset:
+	def usr_interval(self) -> Measurement | int | float | Unset:
 		"""
 		The interval between graduations.
 
@@ -2997,7 +3001,10 @@ class GaugeUnit(GaugeLabel):
 
 		def _textAccessor(self) -> str:
 			value_class = self.parent.parent.valueClass
-			return value_class.unit or value_class.unit_symbol
+			# A key with no unit class (a bare float, e.g. a plugin value whose
+			# unit WeatherUnits does not know) has no unit to show. Raising here
+			# aborted the whole dashboard load.
+			return getattr(value_class, 'unit', None) or getattr(value_class, 'unit_symbol', None) or ''
 
 		@property
 		def limitRect(self) -> QRectF:
