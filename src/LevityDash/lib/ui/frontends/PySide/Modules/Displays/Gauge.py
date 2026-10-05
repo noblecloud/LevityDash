@@ -3520,7 +3520,7 @@ class GaugeValueLabel(GaugeLabel):
 
 		@property
 		def limitRect(self) -> QRectF:
-			if self._position in (DisplayPosition.Left, DisplayPosition.Right):
+			if self._position in (DisplayPosition.Left, DisplayPosition.Right, DisplayPosition.FloatUnder):
 				return self.parent.parent._sideValueRect().translated(-self.pos())
 			arc = self.parent.parent.arc.sceneBoundingRect()
 			# r = max(arc.width(), arc.height()) / sqrt(2)
@@ -3550,8 +3550,8 @@ class GaugeValueLabel(GaugeLabel):
 			gauge_center = gauge.center
 
 			match self._position:
-				case ValueDisplayPosition.Left | ValueDisplayPosition.Right:
-					# Beside the dial: the middle of the strip the dial left free.
+				case ValueDisplayPosition.Left | ValueDisplayPosition.Right | ValueDisplayPosition.FloatUnder:
+					# Beside or under the dial: the middle of the strip the dial left free.
 					return gauge._sideValueRect().center()
 				case ValueDisplayPosition.Inline:
 					diff = arc_center - gauge_center
@@ -3590,8 +3590,8 @@ class GaugeValueLabel(GaugeLabel):
 			"""
 
 			gauge = self.parent.parent
-			if self._position in (DisplayPosition.Left, DisplayPosition.Right):
-				# The strip beside the dial is empty by construction, so there is
+			if self._position in (DisplayPosition.Left, DisplayPosition.Right, DisplayPosition.FloatUnder):
+				# The strip beside or under the dial is empty by construction, so there is
 				# nothing to collide with: fit the glyphs to the strip.
 				strip = gauge._sideValueRect()
 				strip = strip.adjusted(*([self.parent.value_padding_px] * 2), *([-self.parent.value_padding_px] * 2))
@@ -3875,8 +3875,8 @@ class GaugeValueLabel(GaugeLabel):
 		if (position := self.position) is ValueDisplayPosition.Auto:
 			position = self.position_auto()
 
-		# A side value is centred on the middle of its strip.
-		if position in (ValueDisplayPosition.Left, ValueDisplayPosition.Right):
+		# A side or under value is centred on the middle of its strip.
+		if position in (ValueDisplayPosition.Left, ValueDisplayPosition.Right, ValueDisplayPosition.FloatUnder):
 			return Alignment(AlignmentFlag.Center)
 
 		# A bottom value stands on the panel's bottom edge and grows upward
@@ -6179,27 +6179,34 @@ class Gauge(GlowMixin, Display):
 		return {'x': round(value.x(), 3), 'y': round(value.y(), 3)}
 
 	def _valueSide(self) -> Optional[ValueDisplayPosition]:
-		"""`left` or `right` when the value label is set to sit beside the dial, else None."""
+		"""`left`, `right` or `float-under` when the value label is set to sit outside the dial, else None."""
 		label = getattr(self, '_valueLabel', None)
 		position = getattr(label, '_position', None)
-		if position in (ValueDisplayPosition.Left, ValueDisplayPosition.Right):
+		if position in (ValueDisplayPosition.Left, ValueDisplayPosition.Right, ValueDisplayPosition.FloatUnder):
 			return position
 		return None
 
 	def _sideStripWidth(self) -> float:
 		"""Width the box gives a value beside the dial, from the far edge to the dial's."""
-		if self._valueSide() is None:
+		if self._valueSide() in (None, ValueDisplayPosition.FloatUnder):
 			return 0.0
 		width, height = self.width(), self.height()
 		# A wide box keeps the dial at full height and gives the value what is left;
 		# a narrow one shares the width, the dial taking the larger part.
 		return min(width * 0.5, max(width * 0.34, width - height))
 
+	def _underStripHeight(self) -> float:
+		"""Height the box gives a `float-under` value, from the bottom edge to the dial's."""
+		return self.height() * 0.22 if self._valueSide() is ValueDisplayPosition.FloatUnder else 0.0
+
 	def _dialRect(self) -> QRectF:
-		"""The part of the box the dial lives in: all of it, less the strip a side value takes."""
+		"""The part of the box the dial lives in: all of it, less the strip a side or under value takes."""
 		rect = QRectF(self.rect())
 		side = self._valueSide()
 		if side is None:
+			return rect
+		if side is ValueDisplayPosition.FloatUnder:
+			rect.setBottom(rect.bottom() - self._underStripHeight())
 			return rect
 		strip = self._sideStripWidth()
 		if side is ValueDisplayPosition.Left:
@@ -6209,9 +6216,12 @@ class Gauge(GlowMixin, Display):
 		return rect
 
 	def _sideValueRect(self) -> QRectF:
-		"""The strip beside the dial a `left`/`right` value is fitted to, in gauge coordinates.
-		Centred on the pivot, so a value stays level with it however the sweep is cut."""
+		"""The strip beside (or, for `float-under`, under) the dial a value is fitted to, in gauge coordinates.
+		A side strip is centred on the pivot, so a value stays level with it however the sweep is cut."""
 		rect = self.rect()
+		if self._valueSide() is ValueDisplayPosition.FloatUnder:
+			strip = self._underStripHeight()
+			return QRectF(rect.left(), rect.bottom() - strip, rect.width(), strip)
 		strip = self._sideStripWidth()
 		# A pinned pivot sits in a corner, so level with the box's middle instead.
 		pivot_y = self.rect().center().y() if self._anchor is not None else self.center.y() + self._recenterTransform.dy()
@@ -6238,7 +6248,7 @@ class Gauge(GlowMixin, Display):
 
 		p -= self._center_offset
 		if self._valueSide() is not None:
-			p.setX(p.x() + self._dialRect().center().x() - self.rect().center().x())
+			p += self._dialRect().center() - self.rect().center()
 		margin_rect = self.marginRect
 		# keep p within the bounding rect
 		p.setX(sorted((margin_rect.left(), p.x(), margin_rect.right()))[1])
@@ -6258,8 +6268,8 @@ class Gauge(GlowMixin, Display):
 	def radius_max(self):
 		if self._anchor is not None:
 			# The pivot is in a corner, so the dial may reach the whole short side.
-			return max(min(self.height(), self._dialRect().width()) - self.insetPx - self.baseWidth, 1)
-		return max(min(self.height(), self._dialRect().width()) / 2 - self.baseWidth, 1)
+			return max(min(self._dialRect().height(), self._dialRect().width()) - self.insetPx - self.baseWidth, 1)
+		return max(min(self._dialRect().height(), self._dialRect().width()) / 2 - self.baseWidth, 1)
 
 	@property
 	def radius(self):
