@@ -2031,6 +2031,10 @@ class GaugeMarker(Needle):
 			return
 		self.setRotation(angle)
 		self.setPos(gauge.center)
+		# resetTransform() above dropped the shift recenter() gave this item.
+		# A value change refreshes the needle without a recenter, so put the
+		# shift back or the pivot drifts off the arc's centre.
+		self.setTransform(gauge._recenterTransform, combine=False)
 		self.setZValue(-500)
 		self.show()
 
