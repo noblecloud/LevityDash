@@ -118,6 +118,11 @@ def startFixture(dashboard) -> None:
 	if plugin is None:
 		raise RuntimeError('LEVITYDASH_FIXTURE is set but the Fixture plugin did not load; see LevityDash.log')
 	plugin.thread.start()
+	# The Mock plugin (made-up non-weather values) runs beside the scenario when
+	# its config turns it on; the design seed does. It never touches the network.
+	mock = dashboard.plugins.get('Mock', None)
+	if mock is not None and mock.enabled:
+		mock.thread.start()
 
 
 def pump(app, seconds: float) -> None:
