@@ -2371,6 +2371,7 @@ class GaugeValueLabel(GaugeLabel):
 				bounds = gauge.rect()
 
 			reserve = self._unit_reserve()
+			gap = self.parent.value_padding_px
 
 			# A bottom value hangs under the needle's pivot. The needle is not
 			# part of gauge_path here (only an Inline value dodges it), so
@@ -2394,6 +2395,11 @@ class GaugeValueLabel(GaugeLabel):
 					candidate.addRect(QRectF(rect.left(), rect.bottom(), rect.width(), reserve))
 				if not bounds.contains(candidate.boundingRect()):
 					return True
+				# Clear of the dial's parts by a gap, not merely not touching:
+				# without one, a bottom value grew until its edge stood against
+				# the end tick labels beside it.
+				if gap:
+					candidate = candidate.united(outline_path(candidate, gap * 2))
 				return candidate.intersects(gauge_path)
 
 			# The floor is relative: a bare 0.2 is in glyph-path units, so it
