@@ -2,10 +2,10 @@ import copy
 import PySide6.QtGui
 import numpy as np
 from PySide6 import QtCore
-from PySide6.QtCore import QPointF, QRectF, QPoint, QPropertyAnimation, Signal, QEasingCurve, QSizeF, Slot, QLineF, QObject
+from PySide6.QtCore import QPointF, QRectF, QPoint, QPropertyAnimation, QVariantAnimation, QTimer, Signal, QEasingCurve, QSizeF, Slot, QLineF, QObject
 from PySide6.QtGui import (
 	QBrush, QFont, QPainter, QPainterPath,
-	QPen, QPolygonF, QTransform, QRadialGradient, QGradient, QColor, Qt, QConicalGradient
+	QPen, QPolygonF, QTransform, QRadialGradient, QGradient, QColor, Qt, QConicalGradient, QPainterPathStroker
 )
 from PySide6.QtWidgets import (
 	QGraphicsItem, QGraphicsPathItem,
@@ -76,6 +76,26 @@ def _isWholeSteps(span, interval) -> bool:
 	except (TypeError, ValueError, ZeroDivisionError, OverflowError):
 		return False
 	return steps == int(steps)
+
+
+def formatDuration(minutes) -> str:
+	"""A number of minutes as ``4h 49m``, or ``49m`` under an hour. Pure."""
+	try:
+		total = int(round(float(minutes)))
+	except (TypeError, ValueError):
+		return '\u22ef'
+	sign, total = ('-' if total < 0 else ''), abs(total)
+	hours, mins = divmod(total, 60)
+	return f'{sign}{hours}h {mins:02d}m' if hours else f'{sign}{mins}m'
+
+
+def shortestDelta(current: float, target: float, span: float = 360.0) -> float:
+	"""The signed turn from ``current`` to ``target`` that crosses the join the short way.
+
+	``span`` is one full turn of the scale. The result lies in ``[-span/2, span/2]``.
+	"""
+	delta = (target - current) % span
+	return delta - span if delta > span / 2 else delta
 
 
 class GaugeItem:
@@ -1601,6 +1621,31 @@ class Needle(StatefulGaugePathItem):
 		#: centre. The other edge shapes sit *at* the radius; this one is
 		#: centred *on* the stroke, so it reads as a marker on the line.
 		Marker = 'marker'
+		#: A kite from the pivot to the tip, with an optional tail behind the
+		#: pivot (``tail``) and a hub disc (``hub``): a barometer hand.
+		Tapered = 'tapered'
+		#: A shaft with an arrowhead at the rim (``point: out``, the default) or
+		#: at the inner end (``point: in``). ``tail`` adds a second shaft on the
+		#: opposite side and ``tail-dot`` caps it with a dot at the opposite rim:
+		#: a wind-direction arrow.
+		Arrow = 'arrow'
+		#: A thin line from the pivot, with an optional counterweight disc
+		#: (``tail-dot``) at the end of its tail (``tail``).
+		Line = 'line'
+		#: A knob riding the track, with an optional ``halo`` ring around it:
+		#: a sun-path position.
+		Dot = 'dot'
+		#: A short bar across the track: a limit mark.
+		Notch = 'notch'
+
+	#: Styles drawn from the pivot, which can carry a ``hub``.
+	_PIVOT_STYLES = frozenset({'needle', 'tapered', 'line'})
+
+	_shown: Optional[float] = None
+	_lastTarget: Optional[float] = None
+	_anim: Optional[QVariantAnimation] = None
+	_under: tuple = ()
+	_over: tuple = ()
 
 	def __init__(self, *args, **kwargs):
 		super(Needle, self).__init__(*args, **kwargs)
@@ -1625,26 +1670,50 @@ class Needle(StatefulGaugePathItem):
 				path = self._edge_diamond()
 			case Needle.Type.Marker | 'marker':
 				path = self._edge_marker()
+			case Needle.Type.Tapered:
+				path = self._style_tapered()
+			case Needle.Type.Arrow:
+				path = self._style_arrow()
+			case Needle.Type.Line:
+				path = self._style_line()
+			case Needle.Type.Dot:
+				path = self._style_dot()
+			case Needle.Type.Notch:
+				path = self._style_notch()
 			case _:
 				path = self._default()
+		self.prepareGeometryChange()
+		self._under, self._over = self._extras()
 		self.setPath(path)
+
+	def _brushColor(self) -> QColor:
+		color = getattr(self, '_color', None)
+		return self.gauge.defaultColor if color is None else color.QColor
 
 	def refresh(self):
 		gauge = self.gauge
 
 		self.resetTransform()
-		self.setBrush(QBrush(gauge.defaultColor))
+		self.setBrush(QBrush(self._brushColor()))
 		self.draw()
 
-		self.setRotation(
-			gauge.value_to_angle(gauge.value)
-		)
+		self._applyAngle(gauge.value_to_angle(gauge.value))
 		self.setPos(gauge.center)
 		# resetTransform() above dropped the shift recenter() gave this item.
 		# A value change refreshes the needle without a recenter, so put the
 		# shift back or the pivot drifts off the arc's centre.
 		self.setTransform(gauge._recenterTransform, combine=False)
 		self.setZValue(-500)
+		self.setVisible(getattr(self, '_visible', True))
+
+	@StateProperty(key='visible', default=True, allowNone=False, after=refresh)
+	def visible(self) -> bool:
+		"""``false`` hides the needle itself, for a dial drawn with a ``fill`` and markers."""
+		return getattr(self, '_visible', True)
+
+	@visible.setter
+	def visible(self, value: bool):
+		self._visible = bool(value)
 
 	@StateProperty(key='type', default=Type.Needle, allowNone=False, repr=True, after=refresh)
 	def type(self) -> Type:
@@ -1658,13 +1727,30 @@ class Needle(StatefulGaugePathItem):
 	def type(self, value: str) -> Type:
 		return Needle.Type[value]
 
-	@StateProperty(key='width', default=Size.Width(0.1, relative=True), allowNone=False, repr=True, after=refresh)
+	@StateProperty(key='width', allowNone=False, repr=True, dependencies={'type'}, after=refresh)
 	def width(self) -> Size.Width | Length:
 		return self._width
 
 	@width.setter
 	def width(self, value: Size.Width | Length):
 		self._width = value
+
+	@width.item_default
+	def width(self) -> Size.Width | Length:
+		# The styles added with the hands are thin; every older one keeps 10%.
+		match self.type:
+			case Needle.Type.Tapered:
+				return Size.Width(0.09, relative=True)
+			case Needle.Type.Arrow:
+				return Size.Width(0.025, relative=True)
+			case Needle.Type.Line:
+				return Size.Width(0.012, relative=True)
+			case Needle.Type.Dot:
+				return Size.Width(0.09, relative=True)
+			case Needle.Type.Notch:
+				return Size.Width(0.02, relative=True)
+			case _:
+				return Size.Width(0.1, relative=True)
 
 	@width.decode
 	def width(self, value: str | float | int) -> Size.Width | Length:
@@ -1693,6 +1779,16 @@ class Needle(StatefulGaugePathItem):
 				return Size.Height(0.2, relative=True)
 			case Needle.Type.Diamond | 'diamond':
 				return Size.Height(0.2, relative=True)
+			case Needle.Type.Tapered:
+				return Size.Height(0.85, relative=True)
+			case Needle.Type.Arrow:
+				return Size.Height(0.4, relative=True)
+			case Needle.Type.Line:
+				return Size.Height(0.9, relative=True)
+			case Needle.Type.Dot:
+				return Size.Height(0.2, relative=True)
+			case Needle.Type.Notch:
+				return Size.Height(0.12, relative=True)
 			case _:
 				return Size.Height(1.0, relative=True)
 
@@ -1723,6 +1819,410 @@ class Needle(StatefulGaugePathItem):
 	@property
 	def offset_px(self) -> float:
 		return size_px(self.offset, self.gauge.radius, dimension=DimensionType.height)
+
+	@StateProperty(key='color', default=None, allowNone=True, repr=True, after=refresh)
+	def color(self) -> Color | None:
+		"""Colour of the needle. Default: the gauge's text colour."""
+		return getattr(self, '_color', None)
+
+	@color.setter
+	def color(self, value: Color | None):
+		self._color = value
+
+	@color.decode
+	def color(self, value) -> Color | None:
+		return None if value is None else Color.decode(value)
+
+	@color.encode
+	def color(self, value: Color | None) -> str | None:
+		return None if value is None else str(value)
+
+	@staticmethod
+	def _optionalSize(parse, value):
+		return None if value is None else parse(value, None)
+
+	@staticmethod
+	def _encodeSize(value) -> str | None:
+		return None if value is None else str(value)
+
+	@StateProperty(key='tail', default=None, allowNone=True, after=refresh)
+	def tail(self) -> Size.Height | Length | None:
+		"""Length behind the pivot, as a share of the radius (``tapered``, ``arrow``, ``line``)."""
+		return getattr(self, '_tail', None)
+
+	@tail.setter
+	def tail(self, value):
+		self._tail = value
+
+	@tail.decode
+	def tail(self, value):
+		return Needle._optionalSize(parseHeight, value)
+
+	@tail.encode
+	def tail(self, value):
+		return Needle._encodeSize(value)
+
+	@StateProperty(key='tail-dot', default=None, allowNone=True, after=refresh)
+	def tailDot(self) -> Size.Width | Length | None:
+		"""Diameter of the dot at the end of the tail (``arrow``, ``line``)."""
+		return getattr(self, '_tailDot', None)
+
+	@tailDot.setter
+	def tailDot(self, value):
+		self._tailDot = value
+
+	@tailDot.decode
+	def tailDot(self, value):
+		return Needle._optionalSize(parseWidth, value)
+
+	@tailDot.encode
+	def tailDot(self, value):
+		return Needle._encodeSize(value)
+
+	@StateProperty(key='head', default=None, allowNone=True, after=refresh)
+	def head(self) -> Size.Height | Length | None:
+		"""Length of the arrowhead (``arrow``). Default 12% of the radius."""
+		return getattr(self, '_head', None)
+
+	@head.setter
+	def head(self, value):
+		self._head = value
+
+	@head.decode
+	def head(self, value):
+		return Needle._optionalSize(parseHeight, value)
+
+	@head.encode
+	def head(self, value):
+		return Needle._encodeSize(value)
+
+	@StateProperty(key='point', default=None, allowNone=True, after=refresh)
+	def point(self) -> str | None:
+		"""Where the ``arrow`` head sits: ``out`` (at the rim, default) or ``in`` (at the inner end)."""
+		return getattr(self, '_point', None)
+
+	@point.setter
+	def point(self, value):
+		self._point = value
+
+	@point.decode
+	def point(self, value):
+		if value is None:
+			return None
+		value = str(value).strip().lower()
+		if value not in ('in', 'out'):
+			raise ValueError(f'needle point must be in or out, not {value!r}')
+		return value
+
+	@StateProperty(key='hub', default=None, allowNone=True, after=refresh)
+	def hub(self) -> Size.Width | Length | None:
+		"""Diameter of a disc at the pivot (``needle``, ``tapered``, ``line``), as a share of the radius."""
+		return getattr(self, '_hub', None)
+
+	@hub.setter
+	def hub(self, value):
+		self._hub = value
+
+	@hub.decode
+	def hub(self, value):
+		return Needle._optionalSize(parseWidth, value)
+
+	@hub.encode
+	def hub(self, value):
+		return Needle._encodeSize(value)
+
+	@StateProperty(key='hub-color', default=None, allowNone=True, after=refresh)
+	def hubColor(self) -> Color | None:
+		"""Colour of the hub. Default: the needle colour."""
+		return getattr(self, '_hubColor', None)
+
+	@hubColor.setter
+	def hubColor(self, value):
+		self._hubColor = value
+
+	@hubColor.decode
+	def hubColor(self, value):
+		return None if value is None else Color.decode(value)
+
+	@hubColor.encode
+	def hubColor(self, value):
+		return None if value is None else str(value)
+
+	@StateProperty(key='hub-hole', default=None, allowNone=True, after=refresh)
+	def hubHole(self) -> float | None:
+		"""Share of the hub's diameter cut out of its middle: a ring instead of a disc."""
+		return getattr(self, '_hubHole', None)
+
+	@hubHole.setter
+	def hubHole(self, value):
+		self._hubHole = value
+
+	@hubHole.decode
+	def hubHole(self, value):
+		if value is None:
+			return None
+		if isinstance(value, str):
+			value = float(value.strip().rstrip('%')) / 100 if value.strip().endswith('%') else float(value)
+		return min(max(float(value), 0.0), 0.95)
+
+	@StateProperty(key='halo', default=None, allowNone=True, after=refresh)
+	def halo(self) -> Size.Width | Length | None:
+		"""Width of a ring around a ``dot``, in the ``halo-color``."""
+		return getattr(self, '_halo', None)
+
+	@halo.setter
+	def halo(self, value):
+		self._halo = value
+
+	@halo.decode
+	def halo(self, value):
+		return Needle._optionalSize(parseWidth, value)
+
+	@halo.encode
+	def halo(self, value):
+		return Needle._encodeSize(value)
+
+	@StateProperty(key='halo-color', default=None, allowNone=True, after=refresh)
+	def haloColor(self) -> Color | None:
+		return getattr(self, '_haloColor', None)
+
+	@haloColor.setter
+	def haloColor(self, value):
+		self._haloColor = value
+
+	@haloColor.decode
+	def haloColor(self, value):
+		return None if value is None else Color.decode(value)
+
+	@haloColor.encode
+	def haloColor(self, value):
+		return None if value is None else str(value)
+
+	@StateProperty(key='animate', default=0, allowNone=False, after=refresh)
+	def animate(self) -> float:
+		"""Milliseconds the hand takes to move to a new value; 0 (default) jumps.
+		With a wrapping range (``range: {wrap: true}``) it takes the shorter way round."""
+		return self._animate
+
+	@animate.setter
+	def animate(self, value: float):
+		self._animate = value
+
+	@animate.decode
+	def animate(self, value) -> float:
+		if isinstance(value, str):
+			text = value.strip().lower()
+			value = float(text[:-2]) if text.endswith('ms') else float(text[:-1]) * 1000 if text.endswith('s') else float(text)
+		return max(0.0, float(value))
+
+	def _radial(self, size: Size.Height | Size.Width | None, default: float = 0.0, *, dimension=DimensionType.height) -> float:
+		"""A relative size in pixels, or ``default`` (a share of the radius) when unset."""
+		radius = self.gauge.radius
+		if size is None:
+			return default * radius
+		return size_px(size, radius, dimension=dimension) or 0.0
+
+	def _pivotY(self) -> float:
+		return self.offset_px
+
+	def _hubPath(self) -> Optional[QPainterPath]:
+		hub = self.hub
+		if hub is None or self.type.value not in self._PIVOT_STYLES:
+			return None
+		diameter = size_px(hub, self.gauge.radius, dimension=DimensionType.width) or 0.0
+		if diameter <= 0:
+			return None
+		path = QPainterPath()
+		path.setFillRule(Qt.FillRule.OddEvenFill)
+		path.addEllipse(QPointF(0, self._pivotY()), diameter / 2, diameter / 2)
+		if self.hubHole:
+			hole = diameter / 2 * self.hubHole
+			path.addEllipse(QPointF(0, self._pivotY()), hole, hole)
+		return path
+
+	def _extras(self) -> tuple[tuple, tuple]:
+		"""Disc paths drawn beside the main path: ``(under, over)``, each a tuple of ``(path, colour)``."""
+		under, over = [], []
+		if (hub := self._hubPath()) is not None:
+			over.append((hub, self._hubColor.QColor if getattr(self, '_hubColor', None) is not None else self.brush().color()))
+		if self.type is Needle.Type.Dot and self.halo is not None:
+			halo = size_px(self.halo, self.gauge.radius, dimension=DimensionType.width) or 0.0
+			if halo > 0 and (color := getattr(self, '_haloColor', None)) is not None:
+				r = self.width_px / 2 + halo
+				path = QPainterPath()
+				path.addEllipse(QPointF(0, self.offset_px - self.gauge.radius), r, r)
+				under.append((path, color.QColor))
+		return tuple(under), tuple(over)
+
+	def boundingRect(self) -> QRectF:
+		rect = super().boundingRect()
+		for path, _ in (*self._under, *self._over):
+			rect = rect.united(path.boundingRect())
+		return rect
+
+	def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget = None):
+		painter.setPen(Qt.NoPen)
+		for path, color in self._under:
+			painter.setBrush(QBrush(color))
+			painter.drawPath(path)
+		super().paint(painter, option, widget)
+		painter.setPen(Qt.NoPen)
+		for path, color in self._over:
+			painter.setBrush(QBrush(color))
+			painter.drawPath(path)
+
+	def _setShape(self, path: QPainterPath) -> QPainterPath:
+		self._shape = QPainterPath(path)
+		self._bounding_rect = path.boundingRect()
+		return path
+
+	@staticmethod
+	def _stroke(line: QPainterPath, width: float, cap=Qt.PenCapStyle.FlatCap) -> QPainterPath:
+		stroker = QPainterPathStroker()
+		stroker.setWidth(max(width, 0.5))
+		stroker.setCapStyle(cap)
+		return stroker.createStroke(line)
+
+	def _style_tapered(self) -> QPainterPath:
+		"""A kite: wide at the pivot, narrowing to the tip, with a short tail behind.
+
+		Length: pivot to tip. Width: across the pivot. Tail: behind the pivot.
+		Offset: moves the pivot. Add ``hub`` for the disc over the pivot.
+		"""
+		y, w = self._pivotY(), self.width_px
+		tip = QPointF(0, y - self.length_px)
+		tail = self._radial(self.tail)
+		path = QPainterPath()
+		path.moveTo(tip)
+		path.lineTo(w / 2, y)
+		path.lineTo(w * 0.3, y + tail)
+		path.lineTo(-w * 0.3, y + tail)
+		path.lineTo(-w / 2, y)
+		path.closeSubpath()
+		return self._setShape(path)
+
+	def _style_line(self) -> QPainterPath:
+		"""A thin line with a counterweight: ``tail`` is the line behind the pivot,
+		``tail-dot`` the disc at its end. Length: pivot to tip."""
+		y, w = self._pivotY(), self.width_px
+		tail = self._radial(self.tail)
+		line = QPainterPath(QPointF(0, y + tail))
+		line.lineTo(0, y - self.length_px)
+		path = self._stroke(line, w, Qt.PenCapStyle.RoundCap)
+		if self.tailDot is not None:
+			r = size_px(self.tailDot, self.gauge.radius, dimension=DimensionType.width) / 2
+			disc = QPainterPath()
+			disc.addEllipse(QPointF(0, y + tail), r, r)
+			path = path.united(disc)
+		return self._setShape(path)
+
+	def _style_arrow(self) -> QPainterPath:
+		"""A wind-direction arrow: a shaft and head at the rim, and optionally a
+		tail shaft ending in a dot at the opposite rim.
+
+		Length: the shaft, from the rim inward. Width: shaft width.
+		Head: head length (default 12%). Point: ``out`` (head at the rim) or ``in``.
+		Tail: the opposite shaft's length, from the opposite rim inward.
+		Tail-dot: diameter of the dot at the opposite rim. Offset: moves it all inward.
+		"""
+		radius, w = self.gauge.radius, self.width_px
+		off = self.offset_px
+		head = self._radial(self.head, 0.12)
+		half = head * 0.42
+		length = max(self.length_px, head)
+		rim = off - radius
+		path = QPainterPath()
+		if (self.point or 'out') == 'out':
+			shaft = QPainterPath(QPointF(0, rim + head * 0.6))
+			shaft.lineTo(0, rim + length)
+			path.addPath(self._stroke(shaft, w))
+			path.moveTo(0, rim)
+			path.lineTo(half, rim + head)
+			path.lineTo(-half, rim + head)
+			path.closeSubpath()
+		else:
+			shaft = QPainterPath(QPointF(0, rim))
+			shaft.lineTo(0, rim + length - head * 0.6)
+			path.addPath(self._stroke(shaft, w))
+			path.moveTo(0, rim + length)
+			path.lineTo(half, rim + length - head)
+			path.lineTo(-half, rim + length - head)
+			path.closeSubpath()
+		tail = self._radial(self.tail)
+		dot = (size_px(self.tailDot, radius, dimension=DimensionType.width) or 0.0) if self.tailDot is not None else 0.0
+		far = radius - off
+		if tail > 0:
+			shaft = QPainterPath(QPointF(0, far - dot * 0.5))
+			shaft.lineTo(0, far - tail)
+			path.addPath(self._stroke(shaft, w))
+		if dot > 0:
+			path.addEllipse(QPointF(0, far - dot / 2), dot / 2, dot / 2)
+		return self._setShape(path)
+
+	def _style_dot(self) -> QPainterPath:
+		"""A knob centred on the track. Width: diameter. Halo/halo-color: a ring around it."""
+		r = self.width_px / 2
+		path = QPainterPath()
+		path.addEllipse(QPointF(0, self.offset_px - self.gauge.radius), r, r)
+		return self._setShape(path)
+
+	def _style_notch(self) -> QPainterPath:
+		"""A bar across the track. Width: along the track. Length: across it."""
+		w, length = self.width_px, self.length_px
+		rect = QRectF(-w / 2, self.offset_px - self.gauge.radius - length / 2, w, length)
+		path = QPainterPath()
+		path.addRoundedRect(rect, w * 0.25, w * 0.25)
+		return self._setShape(path)
+
+	def _animateMs(self) -> float:
+		try:
+			return float(self.animate or 0)
+		except (AttributeError, TypeError, ValueError):
+			return 0.0
+
+	def _applyAngle(self, target: float) -> None:
+		"""Rotate to ``target`` degrees, easing there when ``animate`` is set.
+
+		With a wrapping range the hand turns the shorter way across the join.
+		Without ``animate`` this is a plain ``setRotation``, as it always was.
+		"""
+		target = float(target)
+		ms = self._animateMs()
+		if not ms or self._shown is None:
+			self._stopAnimation()
+			self._shown = self._lastTarget = target
+			self.setRotation(target)
+			return
+		if target == self._lastTarget:
+			self.setRotation(self._shown)
+			return
+		self._lastTarget = target
+		shown = self._shown
+		if getattr(self.gauge._range, 'wrap', False):
+			destination = shown + shortestDelta(shown, target, float(self.gauge.fullAngle))
+		else:
+			destination = target
+		self._stopAnimation()
+		animation = QVariantAnimation()
+		animation.setDuration(int(ms))
+		animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
+		animation.setStartValue(float(shown))
+		animation.setEndValue(float(destination))
+		animation.valueChanged.connect(self._onAnimated)
+		self._anim = animation
+		animation.start()
+
+	def _onAnimated(self, value) -> None:
+		self._shown = float(value)
+		try:
+			self.setRotation(self._shown)
+		except RuntimeError:
+			self._stopAnimation()
+
+	def _stopAnimation(self) -> None:
+		animation, self._anim = self._anim, None
+		if animation is not None:
+			animation.stop()
 
 	_shape: QPainterPath = QPainterPath()
 
@@ -1975,6 +2475,40 @@ def _markerText(spec) -> str:
 		return str(spec)
 
 
+#: What a marker's ``time:`` can follow. Each is one turn of the dial, whatever
+#: the range: ``hour`` a 12 hour turn, ``minute`` and ``second`` 60 s, ``day`` 24 hours.
+CLOCK_HANDS = ('hour', 'minute', 'second', 'day')
+
+
+def clockTurn(hand: str, hours: int, minutes: int, seconds: float) -> float:
+	"""How far round the dial a clock ``hand`` is at a time of day, from 0 up to (not including) 1. Pure.
+
+	The hour and minute hands carry the smaller units, so they sweep rather than step.
+	"""
+	match hand:
+		case 'hour':
+			return ((hours % 12) + minutes / 60 + seconds / 3600) / 12
+		case 'minute':
+			return (minutes + seconds / 60) / 60
+		case 'second':
+			return seconds / 60
+		case 'day':
+			return (hours + minutes / 60 + seconds / 3600) / 24
+	raise ValueError(f'a clock hand is one of {", ".join(CLOCK_HANDS)}, not {hand!r}')
+
+
+def parseClockTime(text: str) -> tuple[int, int, float]:
+	"""``'10:08'`` or ``'10:08:36'`` as ``(hours, minutes, seconds)``."""
+	parts = str(text).strip().split(':')
+	if not 2 <= len(parts) <= 3:
+		raise ValueError(f'a clock time is HH:MM or HH:MM:SS, not {text!r}')
+	hours, minutes = int(parts[0]), int(parts[1])
+	seconds = float(parts[2]) if len(parts) == 3 else 0.0
+	if not (0 <= hours < 24 and 0 <= minutes < 60 and 0 <= seconds < 60):
+		raise ValueError(f'{text!r} is not a time of day')
+	return hours, minutes, seconds
+
+
 class GaugeMarker(Needle):
 	"""An extra indicator on a gauge, with its own value.
 
@@ -1987,6 +2521,8 @@ class GaugeMarker(Needle):
 	_markerColor: Optional[QColor] = None
 	_binding: Optional[Binding] = None
 	_warned = False
+	_clockTimer: Optional[QTimer] = None
+	_clockHand: Optional[str] = None
 
 	#: Used when the marker names no ``length``: the needle default for the
 	#: ``marker`` type is the full radius, which is far too long for a tick.
@@ -1994,7 +2530,7 @@ class GaugeMarker(Needle):
 
 	def configure(self, spec: Mapping) -> None:
 		"""Apply the visual options and start the value source from ``spec``."""
-		visual = {k: v for k, v in spec.items() if k not in ('value', 'color')}
+		visual = {k: v for k, v in spec.items() if k not in ('value', 'color', 'time', 'at')}
 		visual.setdefault('type', 'marker')
 		if Needle.Type[visual['type']] is Needle.Type.Marker:
 			visual.setdefault('length', self.DEFAULT_LENGTH)
@@ -2003,6 +2539,11 @@ class GaugeMarker(Needle):
 
 		if (color := spec.get('color')) is not None:
 			self._markerColor = Color.decode(color).QColor
+
+		if spec.get('time') is not None:
+			self._followClock(spec['time'], spec.get('at'))
+			self.refresh()
+			return
 
 		raw = spec.get('value')
 		if isinstance(raw, bool):
@@ -2017,16 +2558,68 @@ class GaugeMarker(Needle):
 		self.refresh()
 
 	def close(self):
+		self._stopAnimation()
+		if self._clockTimer is not None:
+			self._clockTimer.stop()
+			self._clockTimer = None
 		if self._binding is not None:
 			self._binding.unlink()
 			self._binding = None
+
+	def _followClock(self, hand, at) -> None:
+		"""Drive the marker from the time of day: ``time: hour|minute|second|day``.
+		The hand turns once round the gauge's range (``range: {min: 0, max: 12, wrap: true}``
+		for a 12 hour dial) however many units that holds.
+
+		``at: 'HH:MM[:SS]'`` shows that fixed time instead and starts no timer.
+		The timer runs on the GUI thread, once a second.
+		"""
+		hand = str(hand).strip().lower()
+		if hand not in CLOCK_HANDS:
+			raise ValueError(f'time must be one of {", ".join(CLOCK_HANDS)}, not {hand!r}')
+		self._clockHand = hand
+		if at is not None:
+			self._fixedTime = parseClockTime(at)
+			self._tickClock()
+			return
+		self._fixedTime = None
+		self._clockTimer = QTimer()
+		self._clockTimer.setInterval(1000)
+		self._clockTimer.timeout.connect(self._tickClock)
+		self._clockTimer.start()
+		self._tickClock()
+
+	def _tickClock(self) -> None:
+		try:
+			if self._fixedTime is not None:
+				hours, minutes, seconds = self._fixedTime
+			else:
+				from datetime import datetime
+				now = datetime.now()
+				hours, minutes, seconds = now.hour, now.minute, now.second + now.microsecond / 1e6
+			self._clockFraction = clockTurn(self._clockHand, hours, minutes, seconds)
+		except Exception as e:
+			log.warning(f'Gauge {_gaugeKeyName(self.gauge)} clock hand stopped: {e}')
+			if self._clockTimer is not None:
+				self._clockTimer.stop()
+			return
+		self.refresh()
 
 	def setMarkerValue(self, value) -> None:
 		"""Set the value to show. GUI thread only (the feed's slot runs there)."""
 		self._markerValue = value
 		self.refresh()
 
+	_clockFraction: Optional[float] = None
+	_fixedTime = None
+
 	def _markerAngle(self) -> Optional[float]:
+		if self._clockHand is not None:
+			# Placed against the range as it is now: the range may load after the marker.
+			if self._clockFraction is None:
+				return None
+			_range = self.gauge._range
+			self._markerValue = float(_range.rounded_min) + self._clockFraction * float(_range.rounded_range)
 		value = self._markerValue
 		if value is None:
 			return None
@@ -2054,7 +2647,7 @@ class GaugeMarker(Needle):
 		if angle is None:
 			self.hide()
 			return
-		self.setRotation(angle)
+		self._applyAngle(angle)
 		self.setPos(gauge.center)
 		# resetTransform() above dropped the shift recenter() gave this item.
 		# A value change refreshes the needle without a recenter, so put the
@@ -2438,6 +3031,132 @@ class GaugeFill(GaugePathItem):
 			painter.drawPath(path)
 
 
+class GaugeCaption(GaugePathItem):
+	"""A small line of text above (``caption``) or below (``sub-label``) the centre value.
+
+	The spec is a string (static text) or a mapping: ``text`` (may hold ``{}``
+	where the value goes), ``value`` (a key or expression to show; with no
+	``format`` it prints as the value does, unit and all), ``format``
+	(``duration`` turns minutes into ``4h 49m``; any other string is a Python
+	format spec, and a mapping is the value label's ``format``, e.g. ``{precision: 0, show_unit: false}``), ``size`` (text height as a share of the dial's diameter,
+	default 7%), ``color``, ``weight`` (``bold``) and ``gap`` (distance from the
+	value, a share of the diameter, default 2%). A value source with no value
+	yet shows nothing. A bad spec logs the gauge key and shows nothing.
+	"""
+
+	Z_VALUE = -400
+
+	_text = ''
+	_template = None
+	_value = None
+	_hasValue = False
+	_format = None
+	_size = None
+	_gap = None
+	_color: Optional[QColor] = None
+	_bold = False
+	_binding: Optional[Binding] = None
+
+	def __init__(self, gauge: 'Gauge', side: str):
+		super().__init__(gauge)
+		self._side = side
+		self.setPen(Qt.PenStyle.NoPen)
+		self.hide()
+
+	def close(self):
+		if self._binding is not None:
+			self._binding.unlink()
+			self._binding = None
+
+	def configure(self, spec) -> None:
+		self.close()
+		if isinstance(spec, str):
+			spec = {'text': spec}
+		name = _gaugeKeyName(self.gauge)
+		unknown = set(spec) - {'text', 'value', 'format', 'size', 'color', 'weight', 'gap'}
+		if unknown:
+			log.warning(f'Gauge {name} {self._side} ignored unknown keys {sorted(map(str, unknown))}')
+		self._template = spec.get('text')
+		self._hasValue = False
+		self._format = spec.get('format')
+		self._size = parseHeight(spec.get('size', '7%'), None)
+		self._gap = parseHeight(spec.get('gap', '2%'), None)
+		self._color = Color.decode(spec['color']).QColor if spec.get('color') is not None else None
+		self._bold = str(spec.get('weight', '')).lower() == 'bold'
+		raw = spec.get('value')
+		if raw is not None:
+			if (source := openValueSource(raw, f'Gauge {name} {self._side} value', 'the text stays hidden')) is not None:
+				self._binding = Binding(source, self.setCaptionValue)
+		self._rebuildText()
+
+	def setCaptionValue(self, value) -> None:
+		"""Set the shown value. GUI thread only."""
+		self._value, self._hasValue = value, True
+		self._rebuildText()
+		self.gauge._syncCaptions()
+
+	def _valueText(self) -> str:
+		value, spec = self._value, self._format
+		if spec == 'duration':
+			return formatDuration(value)
+		if spec is not None:
+			try:
+				if isinstance(value, Measurement):
+					return value.__format__('', **spec) if isinstance(spec, Mapping) else value.__format__(spec)
+				return format(float(value), spec)
+			except Exception:
+				return str(value)
+		return str(value)
+
+	def _rebuildText(self) -> None:
+		if self._binding is not None and not self._hasValue:
+			text = ''
+		elif self._hasValue:
+			shown = self._valueText()
+			text = shown if self._template is None else str(self._template).replace('{}', shown)
+		else:
+			text = '' if self._template is None else str(self._template)
+		self._text = text
+		self._layoutDirty = True
+
+	def refresh(self):
+		"""Place the text against the centre value. Never raises."""
+		gauge = self.gauge
+		try:
+			if not self._text:
+				self.hide()
+				return
+			font = gauge.tickFont
+			font.setPixelSize(max(1, int(size_px(self._size, gauge.radius * 2, dimension=DimensionType.height) or 1)))
+			if self._bold:
+				font.setWeight(QFont.Weight.Bold)
+			path = QPainterPath()
+			path.addText(0, 0, font, self._text)
+			rect = path.boundingRect()
+			if rect.isEmpty():
+				self.hide()
+				return
+			anchor = gauge._valueAnchor()
+			gap = size_px(self._gap, gauge.radius * 2, dimension=DimensionType.height) or 0.0
+			x = anchor.center().x() - rect.center().x()
+			if self._side == 'caption':
+				y = anchor.top() - gap - rect.bottom()
+			else:
+				y = anchor.bottom() + gap - rect.top()
+			self.prepareGeometryChange()
+			self.setPath(path)
+			self.setPos(x, y)
+			color = self._color
+			if color is None:
+				color = QColor(gauge.defaultColor)
+				color.setAlphaF(0.65)
+			self.setBrush(QBrush(color))
+			self.setZValue(self.Z_VALUE)
+			self.show()
+		except Exception as e:  # noqa: BLE001 - layout must never abort a load
+			log.warning(f'Gauge {_gaugeKeyName(gauge)} could not place its {self._side}: {e!r}')
+
+
 class GaugeText(AnnotationText, GaugeItem):
 	def __init__(self, *args, **kwargs):
 		super(GaugeText, self).__init__(*args, **kwargs)
@@ -2614,6 +3333,7 @@ class GaugeValueLabel(GaugeLabel):
 			# A refit resets this label to where the fit puts it, and Gauge.recenter
 			# is not called again. Re-hang the unit from the value as it now is.
 			self.parent.parent._syncUnitUnderValue()
+			self.parent.parent._syncCaptions()
 
 		def getTextScale(self, textRect: QRectF = None, limitRect: QRectF = None) -> float:
 
@@ -2817,6 +3537,8 @@ class GaugeValueLabel(GaugeLabel):
 
 	def format_value(self, value: Measurement) -> str:
 		format_spec = self.format_spec
+		if format_spec == 'duration':
+			return formatDuration(value)
 		if format_spec is not None:
 			if isinstance(value, Measurement):
 				match format_spec:
@@ -2967,6 +3689,7 @@ class GaugeUnit(GaugeLabel):
 			# Same as the value label's: a refit puts the unit back at the
 			# value's raw box, which is not where it should hang.
 			self.parent.parent._syncUnitUnderValue()
+			self.parent.parent._syncCaptions()
 
 		def getTextPosition(self, limitRect: QRectF = None) -> QPointF:
 			match self._position:
@@ -4044,6 +4767,16 @@ class Gauge(Display):
 			self.add_defaults_to_state(state)
 			self.state = state
 
+		@StateProperty(key='wrap', default=False, allowNone=False, repr=True)
+		def wrap(self) -> bool:
+			"""A cyclic scale: a value past the maximum comes round again from the minimum.
+			A clock face (0-12 hours) or a bearing (0-360) turns instead of stopping at the end."""
+			return self._wrap
+
+		@wrap.setter
+		def wrap(self, value: bool):
+			self._wrap = bool(value)
+
 		@StateProperty(key='round-to', repr=True)
 		def round_to(self) -> int | float:
 			return self._round_to
@@ -4361,6 +5094,106 @@ class Gauge(Display):
 		if item is not None and (scene := item.scene()) is not None:
 			scene.removeItem(item)
 
+	_captionItem: Optional[GaugeCaption] = None
+	_captionSpec = None
+	_subItem: Optional[GaugeCaption] = None
+	_subSpec = None
+
+	def _setCaption(self, attr: str, specAttr: str, side: str, value) -> None:
+		self._clearCaption(attr, specAttr)
+		if not value:
+			return
+		# A bad caption is a warning, never a failed dashboard load.
+		try:
+			item = GaugeCaption(self, side)
+			item.configure(value)
+		except Exception as e:
+			log.warning(f'Gauge {_gaugeKeyName(self)} {side} skipped: {e}')
+			return
+		setattr(self, attr, item)
+		setattr(self, specAttr, copy.deepcopy(value))
+
+	def _clearCaption(self, attr: str, specAttr: str) -> None:
+		item = getattr(self, attr)
+		setattr(self, attr, None)
+		setattr(self, specAttr, None)
+		if item is not None:
+			item.close()
+			if (scene := item.scene()) is not None:
+				scene.removeItem(item)
+
+	@staticmethod
+	def _decodeCaption(value):
+		if value is None or isinstance(value, (str, Mapping)):
+			return value if not isinstance(value, Mapping) else dict(value)
+		log.warning(f'ignored caption {value!r}: expected text or a mapping')
+		return None
+
+	@StateProperty(key='caption', default=None, allowNone=True, dependencies={'range', 'arc'})
+	def caption(self) -> Optional[dict | str]:
+		"""Small text above the centre value: a string, or ``{text, value, format, size, color}``."""
+		return self._captionSpec
+
+	@caption.setter
+	def caption(self, value):
+		self._setCaption('_captionItem', '_captionSpec', 'caption', value)
+
+	@caption.decode
+	def caption(self, value):
+		return Gauge._decodeCaption(value)
+
+	@caption.encode
+	def caption(self, value):
+		return copy.deepcopy(value) if value else None
+
+	@StateProperty(key='sub-label', default=None, allowNone=True, dependencies={'range', 'arc'})
+	def subLabel(self) -> Optional[dict | str]:
+		"""Small text below the centre value (and its unit): same forms as ``caption``."""
+		return self._subSpec
+
+	@subLabel.setter
+	def subLabel(self, value):
+		self._setCaption('_subItem', '_subSpec', 'sub-label', value)
+
+	@subLabel.decode
+	def subLabel(self, value):
+		return Gauge._decodeCaption(value)
+
+	@subLabel.encode
+	def subLabel(self, value):
+		return copy.deepcopy(value) if value else None
+
+	def _captionItems(self) -> list:
+		return [i for i in (self._captionItem, self._subItem) if i is not None]
+
+	def _valueAnchor(self) -> QRectF:
+		"""The box the centre value (and a unit hung under it) occupies, in gauge coordinates.
+		With no visible value, a point at the dial's centre."""
+		rects = []
+		vbox = self.valueLabel.textBox
+		try:
+			if vbox.isVisibleTo(self):
+				r = self.mapRectFromScene(vbox.scenePath().boundingRect())
+				if not r.isEmpty():
+					rects.append(r)
+			ubox = self.unitLabel.textBox
+			if rects and ubox.isVisibleTo(self) and ubox._position in _UNIT_UNDER_VALUE:
+				r = self.mapRectFromScene(ubox.scenePath().boundingRect())
+				if not r.isEmpty():
+					rects.append(r)
+		except Exception as e:  # noqa: BLE001
+			log.warning(f'Gauge {_gaugeKeyName(self)} could not measure its value: {e!r}')
+		if not rects:
+			return QRectF(self.center, QSizeF(0, 0))
+		box = rects[0]
+		for r in rects[1:]:
+			box = box.united(r)
+		return box
+
+	def _syncCaptions(self):
+		for item in self._captionItems():
+			item.refresh()
+
 	@StateProperty(key='zones', default=None, allowNone=True, dependencies={'range', 'arc'})
 	def zones(self) -> Optional[list]:
 		"""Coloured bands on the track: a list of ``{from, to, color, mark}`` mappings.
@@ -4477,7 +5310,9 @@ class Gauge(Display):
 	def releaseSources(self):
 		"""Stop and release every value source the markers and fill hold.
 		Called when the owning panel is deleted; never raises."""
-		for clear in (self._clearMarkers, self._clearFill, self._clearZones):
+		for clear in (self._clearMarkers, self._clearFill, self._clearZones,
+					lambda: self._clearCaption('_captionItem', '_captionSpec'),
+					lambda: self._clearCaption('_subItem', '_subSpec')):
 			try:
 				clear()
 			except Exception as e:
@@ -4744,6 +5579,7 @@ class Gauge(Display):
 		self.unitLabel.textBox.setTransform(t, combine=True)
 
 		self._syncUnitUnderValue()
+		self._syncCaptions()
 
 	def _syncUnitUnderValue(self):
 		"""Hang a `float-under`/`below` unit under the value's final glyphs.
@@ -5024,6 +5860,9 @@ class Gauge(Display):
 		_range = self._range
 		s = self.startAngle
 		e = self.endAngle
+		if _range.wrap:
+			span = float(_range.rounded_range)
+			return s + (float(value - _range.rounded_min) % span) / span * self.fullAngle
 		angle = float(value - _range.rounded_min) / _range.rounded_range * self.fullAngle + s
 		return sorted((s, angle, e))[1]
 

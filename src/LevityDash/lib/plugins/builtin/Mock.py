@@ -63,13 +63,26 @@ MOCK_KEYS: Dict[str, dict] = {
 	'home.thermostat.setpoint':     dict(unit='f', base=71, swing=0, period=1, noise=0, min=60, max=80, title='Setpoint'),
 	'home.thermostat.temperature':  dict(unit='f', base=69.5, swing=2.5, period=420, noise=0.1, min=55, max=85, title='Room temperature'),
 	'time.timer.seconds':           dict(unit='int', base=0, swing=0, period=60, noise=0, min=0, max=60, title='Timer'),
+	# Follow the real clock against a made-up day (sunrise 07:31, sunset 19:09).
+	'astronomy.sun.hour':           dict(unit='int', clock='hour', min=0, max=24, title='Hour of day'),
+	'astronomy.sun.remaining':      dict(unit='int', clock='daylight-left', min=0, max=698, title='Daylight left (minutes)'),
 }
+
+#: The made-up day the ``clock`` keys use, in minutes after midnight.
+MOCK_SUNRISE = 7 * 60 + 31
+MOCK_SUNSET = 19 * 60 + 9
 
 
 def mockValue(key: str, spec: dict, now: float, phase: float = 0.0) -> float:
 	"""One key's value at ``now`` seconds. Pure, so a test can call it."""
 	if key == 'time.timer.seconds':
 		return round(now % spec['period'], 1)
+	if 'clock' in spec:
+		local = datetime.fromtimestamp(now)
+		minutes = local.hour * 60 + local.minute + local.second / 60
+		if spec['clock'] == 'hour':
+			return round(minutes / 60, 4)
+		return round(min(max(MOCK_SUNSET - minutes, 0), MOCK_SUNSET - MOCK_SUNRISE), 1)
 	wave = spec['swing'] * math.sin(2 * math.pi * now / spec['period'] + phase)
 	value = spec['base'] + wave + random.uniform(-spec['noise'], spec['noise'])
 	return round(min(spec['max'], max(spec['min'], value)), 3)

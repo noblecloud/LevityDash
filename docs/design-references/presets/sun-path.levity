@@ -1,0 +1,30 @@
+# Sun path: a dot riding a half dial from sunrise to sunset, and the daylight left in the middle.
+#
+#   range: {min: 7.52, max: 19.15}    sunrise and sunset as hours of the day (07:31, 19:09)
+#   markers: {value: astronomy.sun.hour, type: dot, halo: ...}
+#                                     the dot follows the hour of the day
+#   fill: {to: astronomy.sun.hour}    the part of the day already gone
+#   value-label: {format: duration}   the gauge key is minutes; 289 reads 4h 49m
+#   sub-label: 'of daylight left'     small text under the value (`caption` is the one above)
+#
+# The keys come from the Mock plugin (astronomy.sun.hour, astronomy.sun.remaining), or
+# from --scenario gauge-cards, which pins them to 14:20. Real feeds publish sunrise and
+# sunset as times, not as an hour of the day, so a real dashboard needs a feed that does.
+- type: realtime.gauge
+  name: gauge
+  key: astronomy.sun.remaining
+  title: false
+  display:
+    radius: 96%
+    arc: {start-angle: -90, end-angle: 90, weight: 5%, color: '#2a2a2e', cap: round}
+    range: {min: 7.52, max: 19.15}
+    major: {enabled: false}
+    minor: {interval: 0.5, length: 40%, width: 1px, color: '#55555c', labels: {enabled: false}}
+    micro: {enabled: false}
+    fill: {to: astronomy.sun.hour, weight: 5%, color: '#4a4a52'}
+    needle: {visible: false}
+    markers:
+      - {value: astronomy.sun.hour, type: dot, width: 10%, halo: 2.4%, halo-color: '#0b0b0d', color: '#ffffff'}
+    value-label: {position: center, size: 19%, format: duration}
+    unit-label: {visible: false}
+    sub-label: {text: of daylight left, size: 7%}

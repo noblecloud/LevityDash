@@ -1,0 +1,53 @@
+# Two 12-hour clocks. A marker with `time:` follows the clock; `at:` pins it to one
+# time so the render does not change. Delete `at:` to run live.
+#
+#   range: {min: 0, max: 12, wrap: true}   one turn of the dial is the whole range,
+#                                          so 12 is at the top and the hands never stop
+#   markers: {time: hour|minute|second|day, at: 'HH:MM[:SS]'}
+#                                          a hand turns once round the range
+#
+# The gauge key only gives the value type; the clock ignores it, and the needle is hidden.
+# Render with --scenario gauge-cards.
+- type: group
+  name: main
+  items:
+    # Minimal: ticks and three hands, no numbers.
+    - type: realtime.gauge
+      name: minimal
+      key: time.timer.seconds
+      title: false
+      geometry: {x: 0%, y: 0%, width: 50%, height: 100%}
+      display:
+        radius: 92%
+        arc: {start-angle: 0, end-angle: 360, weight: 1%, color: '#2a2a2e'}
+        range: {min: 0, max: 12, wrap: true}
+        major: {interval: 3, length: 7%, width: 2px, color: '#f2f2f2', labels: {enabled: false}}
+        minor: {interval: 1, length: 50%, width: 1.5px, color: '#8d8d96', labels: {enabled: false}}
+        micro: {enabled: false}
+        value-label: {visible: false}
+        unit-label: {visible: false}
+        needle: {visible: false}
+        markers:
+          - {time: hour, at: '10:08:36', type: line, length: 46%, width: 3.4%, tail: 8%, color: '#f2f2f2'}
+          - {time: minute, at: '10:08:36', type: line, length: 74%, width: 2.2%, tail: 8%, color: '#f2f2f2'}
+          - {time: second, at: '10:08:36', type: line, length: 78%, width: 0.8%, tail: 14%, tail-dot: 3%, hub: 4%, color: '#ff6b4a'}
+    # Classic: minute ticks, numerals at 12, 3, 6 and 9, tapered hands.
+    - type: realtime.gauge
+      name: classic
+      key: time.timer.seconds
+      title: false
+      geometry: {x: 50%, y: 0%, width: 50%, height: 100%}
+      display:
+        radius: 92%
+        arc: {start-angle: 0, end-angle: 360, weight: 1.2%, color: '#2a2a2e'}
+        range: {min: 0, max: 12, wrap: true}
+        major: {interval: 3, length: 6%, width: 2px, color: '#f2f2f2', labels: {position: inside, offset: 4%, height: 11%, rotate: false, text: {0: '12', 3: '3', 6: '6', 9: '9', 12: '12'}}}
+        minor: {interval: 1, length: 50%, width: 1.5px, color: '#b8b8c0'}
+        micro: {interval: 0.2, length: 40%, width: 1px, color: '#6b6b73'}
+        value-label: {visible: false}
+        unit-label: {visible: false}
+        needle: {visible: false}
+        markers:
+          - {time: hour, at: '10:08:36', type: tapered, length: 46%, width: 6%, tail: 9%, color: '#f2f2f2'}
+          - {time: minute, at: '10:08:36', type: tapered, length: 72%, width: 4.4%, tail: 9%, hub: 7%, hub-hole: 40%, hub-color: '#0b0b0d', color: '#f2f2f2'}
+          - {time: second, at: '10:08:36', type: line, length: 76%, width: 0.9%, tail: 16%, tail-dot: 3.4%, color: '#ff6b4a'}
