@@ -6062,14 +6062,10 @@ class Gauge(Display):
 	def full_gauge_path(self) -> QPainterPath:
 		path = self._gauge_path()
 		path.setFillRule(Qt.WindingFill)
-		# Only labels that are actually drawn: a hidden textBox still has a
-		# shape, and counting it drags the computed centre toward something
-		# the viewer cannot see.
-		for label in (self.valueLabel, self.unitLabel):
-			box = label.textBox
-			if box.isVisible():
-				path.addPath(self.mapFromItem(box, box.shape()))
-		# path.addPath(self.mapFromItem(self.needle, self.needle.shape()))
+		# Value-independent geometry only: arc, ticks, tick labels. The value
+		# and unit labels (and the needle, fills, markers) change shape with
+		# the value, and recenter() measures this path - counting them made a
+		# partial dial land somewhere different for every value at load.
 		return path.simplified()
 
 	def full_gauge_rect(self) -> QRectF:

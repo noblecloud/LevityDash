@@ -1,0 +1,63 @@
+# Partial dials, to check they sit in the same place whatever the value: half,
+# quarter, a 120 degree corner arc, 270 degrees and a full ring. The recentre step
+# measures only value-independent geometry (arc, ticks, tick labels), so rendering
+# this with different values must move no arc pixel. Render with --scenario stormy-day
+# or a scenario that sets environment.temperature.temperature to another value.
+- type: group
+  name: main
+  items:
+    - type: realtime.gauge
+      name: half
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 0%, y: 0%, width: 33%, height: 50%}
+      display:
+        arc: {start-angle: -90, end-angle: 90, weight: 9%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 9%, color: '#ff8a3d'}
+        needle: {visible: false}
+        value-label: {position: center, size: 22%}
+    - type: realtime.gauge
+      name: quarter
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 33%, y: 0%, width: 33%, height: 50%}
+      display:
+        arc: {start-angle: 0, end-angle: 90, weight: 9%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 9%, color: '#4aa3ff'}
+        needle: {visible: false}
+        value-label: {position: center, size: 22%}
+    - type: realtime.gauge
+      name: corner
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 66%, y: 0%, width: 34%, height: 50%}
+      display:
+        arc: {start-angle: -60, end-angle: 60, weight: 11%, color: '#3a3a42', cap: round}
+        range: {min: 0, max: 100}
+        fill: {weight: 11%, color: '#4caf50'}
+        needle: {visible: false}
+        value-label: {position: below, size: 18%}
+    - type: realtime.gauge
+      name: threeQuarter
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 0%, y: 50%, width: 50%, height: 50%}
+      display:
+        arc: {start-angle: -135, end-angle: 135, weight: 3%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        major: {interval: 20, labels: {position: inside, height: 8%}}
+        needle: {type: circle, length: 8%, width: 5%, color: '#ffffff'}
+        value-label: {position: center, size: 14%}
+    - type: realtime.gauge
+      name: ring
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 50%, y: 50%, width: 50%, height: 50%}
+      display:
+        arc: {start-angle: 0, end-angle: 360, weight: 6%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 6%, color: '#ffffff'}
+        needle: {visible: false}
+        value-label: {position: center, size: 22%}

@@ -335,7 +335,7 @@
             value-label: {position: center, size: 22%, color: '#ffffff', format: {precision: 0}}
             unit-label: {visible: false}
             caption: {text: CHARGING, size: 6%, gap: 3%}
-            sub-label: {value: ev.charge.range, size: 6.5%, gap: 3%}
+            sub-label: {value: ev.charge.range, format: {precision: 0}, size: 6.5%, gap: 3%}
         - type: text
           name: evSL0
           text: "Rate (kW)"
