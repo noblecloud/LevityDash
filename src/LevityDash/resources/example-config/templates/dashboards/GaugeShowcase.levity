@@ -1,53 +1,52 @@
-# Gauge showcase v5: a board of gauge-ui style cards (github.com/thordursk/gauge-ui, MIT).
-# Cards vary on purpose: hairline (1%) to chunky (14-18%) arcs, sweeps of 90, 180, 240, 270, 300
-# and 360 degrees, corner dials (the pivot sits in a card corner, `anchor:`) with a big number in the
-# open space, dials left with a stats list right, a hero dial with corner arcs, signed dials, word labels, segmented fills, notches.
+# Gauge showcase v6: a board of gauge-ui style cards (github.com/thordursk/gauge-ui, MIT), laid out for a 2560x1440 screen.
+# 30 cards on an 8 by 6 grid: 1x1 dials, 2x1 dials with a stats list, 1x2 columns and 2x2 hero cards.
+# Cards vary on purpose: hairline (1%) to chunky (14-18%) arcs, sweeps of 90, 180, 240, 270, 300 and 360 degrees,
+# corner dials (the pivot sits in a card corner, `anchor:`; the dial box sits inside the card padding, the number
+# nests in the quarter, a caption fills the open side), needle designs, clocks, word and tick labels, segmented fills.
 # Weather cards read the real sources (or a --scenario). Everything else reads made-up values
 # from the Mock plugin (src/LevityDash/lib/plugins/builtin/Mock.py), which is off until
 # Mock.ini says `enabled = True`.
 #
-# Look: dark grey track, one accent per card, some cards monochrome white on grey, Roboto Mono
-# for numbers, values capped near 15% of a plain dial (`value-label: {size}`). Big numbers that sit
-# in a card rather than on a dial are `realtime.text` items placed by geometry. Words inside a dial
-# ("CHARGING", "of daylight left") are text items over the dial until the caption primitive lands.
-# Board is 12 columns by 3 rows; every size is a share of its card, so the board scales.
+# Look: dark grey track, one accent per card, Roboto Mono for numbers. Big numbers that sit in a card
+# rather than on a dial are `realtime.text` items placed by geometry. Every size is a share of its card
+# and cards are shares of the board, so the board scales; the shares were worked out in pixels at 2560x1440.
 # Hex colours are quoted; unquoted, '#' starts a YAML comment.
-# Render: render_dashboard.py OUT.png --levity THIS --scenario stormy-day --size 1934x1170 --settle 14
+# Render: render_dashboard.py OUT.png --levity THIS --scenario stormy-day --size 2560x1440 --settle 14
 - type: group
   name: main
   items:
     - type: group
       name: wind
-      geometry: {x: 0.15%, y: 0.25%, width: 33.03%, height: 32.83%}
+      geometry: {x: 0.16%, y: 0.29%, width: 24.69%, height: 32.75%}
       border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
       items:
         - type: text
-          name: windTitle
-          text: "Wind"
+          name: windTitle1
+          text: Wind
           alignment: CenterLeft
-          geometry: {x: 4%, y: 3.5%, width: 60%, height: 8%}
+          geometry: {x: 2.22%, y: 2.45%, width: 64%, height: 5.79%}
           display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ffffff'}
         - type: text
-          name: windCap
-          text: "compass ring, needle, speed inside"
+          name: windCap2
+          text: 'compass ring, needle, speed inside'
           alignment: CenterLeft
-          geometry: {x: 4%, y: 12%, width: 70%, height: 5.5%}
+          geometry: {x: 2.22%, y: 8.92%, width: 66.46%, height: 4.01%}
           opacity: 0.6
           display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
         - type: realtime.gauge
-          name: compassGauge
+          name: windGauge3
           key: environment.wind.direction.direction
           title: false
-          geometry: {x: 2%, y: 22%, width: 46%, height: 74%}
+          geometry: {x: 4.59%, y: 20.28%, width: 54.11%, height: 76.23%}
           display:
-            radius: 94%
-            arc: {start-angle: 0, end-angle: 360, weight: 3.5%, color: '#26262c', cap: flat}
+            radius: 95.23%
+            arc: {start-angle: 0, end-angle: 360, weight: 3.75%, color: '#26262c', cap: flat}
             range: {min: 0, max: 360, wrap: true}
             major:
+              interval: 90
               length: 5%
               width: 3px
               color: '#c9c9d0'
-              interval: 90
               labels:
                 position: inside
                 height: 15%
@@ -61,474 +60,291 @@
             needle: {type: arrow, length: 34%, width: 2.4%, head: 12%, tail: 28%, tail-dot: 5%, color: '#ffffff'}
             value-label: {visible: false}
             unit-label: {visible: false}
-            caption: {value: environment.wind.speed.speed, format: {precision: 0, show_unit: false}, size: 16%, gap: 0%, color: '#ffffff'}
+            caption:
+              value: environment.wind.speed.speed
+              format: {precision: 0, show_unit: false}
+              size: 16%
+              gap: 0%
+              color: '#ffffff'
             sub-label: {text: mph, size: 6.5%, gap: 1%}
         - type: text
-          name: windSL0
-          text: "Speed (mph)"
+          name: windLab4
+          text: Speed
           alignment: CenterLeft
-          geometry: {x: 50%, y: 33.26%, width: 31%, height: 6.48%}
+          geometry: {x: 63.29%, y: 24.96%, width: 23.73%, height: 5.35%}
           display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
         - type: realtime.text
-          name: windSV0
+          name: windValue5
           key: environment.wind.speed.speed
           title: false
-          alignment: Center
-          geometry: {x: 81%, y: 31.55%, width: 17%, height: 9.9%}
-          display: {font: Roboto Mono, precision: 0, unit-string: '', unitPosition: inline}
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 24.07%, width: 15.82%, height: 7.13%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
         - type: text
-          name: windSL1
-          text: "Gusts (mph)"
+          name: windLab6
+          text: Gusts
           alignment: CenterLeft
-          geometry: {x: 50%, y: 49.26%, width: 31%, height: 6.48%}
+          geometry: {x: 63.29%, y: 38.78%, width: 23.73%, height: 5.35%}
           display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
         - type: realtime.text
-          name: windSV1
+          name: windValue7
           key: environment.wind.speed.gust
           title: false
-          alignment: Center
-          geometry: {x: 81%, y: 47.55%, width: 17%, height: 9.9%}
-          display: {font: Roboto Mono, precision: 0, unit-string: '', unitPosition: inline}
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 37.89%, width: 15.82%, height: 7.13%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
         - type: text
-          name: windSL2
-          text: "Bearing"
+          name: windLab8
+          text: Bearing
           alignment: CenterLeft
-          geometry: {x: 50%, y: 65.26%, width: 31%, height: 6.48%}
+          geometry: {x: 63.29%, y: 52.6%, width: 23.73%, height: 5.35%}
           display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
         - type: realtime.text
-          name: windSV2
+          name: windValue9
           key: environment.wind.direction.direction
           title: false
-          alignment: Center
-          geometry: {x: 81%, y: 63.55%, width: 17%, height: 9.9%}
-          display: {font: Roboto Mono, precision: 0, unitPosition: inline}
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 51.71%, width: 15.82%, height: 7.13%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
         - type: text
-          name: windSL3
-          text: "Clouds"
+          name: windLab10
+          text: Clouds
           alignment: CenterLeft
-          geometry: {x: 50%, y: 81.26%, width: 31%, height: 6.48%}
+          geometry: {x: 63.29%, y: 66.42%, width: 23.73%, height: 5.35%}
           display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
         - type: realtime.text
-          name: windSV3
+          name: windValue11
           key: environment.clouds.cover.cover
           title: false
-          alignment: Center
-          geometry: {x: 81%, y: 79.55%, width: 17%, height: 9.9%}
-          display: {font: Roboto Mono, precision: 0, unitPosition: inline}
-    - type: group
-      name: sun
-      geometry: {x: 33.48%, y: 0.25%, width: 33.03%, height: 32.83%}
-      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
-      items:
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 65.53%, width: 15.82%, height: 7.13%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
         - type: text
-          name: sunTitle
-          text: "Sun"
+          name: windLab12
+          text: Humidity
           alignment: CenterLeft
-          geometry: {x: 4%, y: 3.5%, width: 60%, height: 8%}
-          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ffb454'}
-        - type: text
-          name: sunCap
-          text: "half dial, dot rides the day, duration caption"
-          alignment: CenterLeft
-          geometry: {x: 4%, y: 12%, width: 70%, height: 5.5%}
-          opacity: 0.6
-          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
-        - type: realtime.gauge
-          name: sunGauge
-          key: astronomy.sun.remaining
-          title: false
-          geometry: {x: 2%, y: 20%, width: 46%, height: 52%}
-          display:
-            radius: 146%
-            arc: {start-angle: -90, end-angle: 90, weight: 2.2%, color: '#3a3a42', cap: round}
-            range: {min: 7.52, max: 19.15}
-            major: {enabled: false}
-            minor: {interval: 0.5, length: 55%, width: 3px, color: '#8a8a94', labels: {enabled: false}}
-            micro: {enabled: false}
-            fill: {to: astronomy.sun.hour, weight: 2.2%, color: '#ffb454'}
-            needle: {visible: false}
-            markers:
-            - {value: astronomy.sun.hour, type: dot, width: 8%, halo: 2.4%, halo-color: '#000000', color: '#ffffff'}
-            value-label: {position: center, size: 10%, color: '#ffffff', format: duration}
-            unit-label: {visible: false}
-            sub-label: {text: of daylight left, size: 6.5%, gap: 3%}
-        - type: text
-          name: sunSL0
-          text: "Sunrise"
-          alignment: CenterLeft
-          geometry: {x: 50%, y: 33.26%, width: 31%, height: 6.48%}
-          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
-        - type: text
-          name: sunSV0
-          text: "07:31"
-          alignment: Center
-          geometry: {x: 81%, y: 33.26%, width: 17%, height: 6.48%}
-          display: {matchingGroup: {group: global.stat, matchAll: true}, font: Roboto Mono}
-        - type: text
-          name: sunSL1
-          text: "Sunset"
-          alignment: CenterLeft
-          geometry: {x: 50%, y: 49.26%, width: 31%, height: 6.48%}
-          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
-        - type: text
-          name: sunSV1
-          text: "19:09"
-          alignment: Center
-          geometry: {x: 81%, y: 49.26%, width: 17%, height: 6.48%}
-          display: {matchingGroup: {group: global.stat, matchAll: true}, font: Roboto Mono}
-        - type: text
-          name: sunSL2
-          text: "Daylight"
-          alignment: CenterLeft
-          geometry: {x: 50%, y: 65.26%, width: 31%, height: 6.48%}
-          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
-        - type: text
-          name: sunSV2
-          text: "11h 38m"
-          alignment: Center
-          geometry: {x: 81%, y: 65.26%, width: 17%, height: 6.48%}
-          display: {matchingGroup: {group: global.stat, matchAll: true}, font: Roboto Mono}
-        - type: text
-          name: sunSL3
-          text: "UV index"
-          alignment: CenterLeft
-          geometry: {x: 50%, y: 81.26%, width: 31%, height: 6.48%}
+          geometry: {x: 63.29%, y: 80.24%, width: 23.73%, height: 5.35%}
           display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
         - type: realtime.text
-          name: sunSV3
-          key: environment.light.uvi
-          title: false
-          alignment: Center
-          geometry: {x: 81%, y: 79.55%, width: 17%, height: 9.9%}
-          display: {font: Roboto Mono, precision: 0, unitPosition: inline}
-    - type: group
-      name: pressure
-      geometry: {x: 66.82%, y: 0.25%, width: 33.03%, height: 32.83%}
-      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
-      items:
-        - type: text
-          name: pressureTitle
-          text: "Pressure"
-          alignment: CenterLeft
-          geometry: {x: 4%, y: 3.5%, width: 60%, height: 8%}
-          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#4dd0c4'}
-        - type: text
-          name: pressureCap
-          text: "barometer, word labels, set hand"
-          alignment: CenterLeft
-          geometry: {x: 4%, y: 12%, width: 70%, height: 5.5%}
-          opacity: 0.6
-          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
-        - type: realtime.gauge
-          name: pressureGauge
-          key: environment.pressure.pressure
-          title: false
-          geometry: {x: 2%, y: 22%, width: 46%, height: 76%}
-          display:
-            radius: 94%
-            arc: {start-angle: -135, end-angle: 135, weight: 3%, color: '#26262c', cap: flat}
-            range: {min: 28, max: 32}
-            major:
-              length: 6%
-              width: 3px
-              color: '#c9c9d0'
-              interval: 1
-              labels:
-                position: inside
-                height: 14%
-                color: '#c9c9d0'
-                offset: 3%
-                format: {precision: 0}
-                text: {28: Stormy, 29: Rain, 30: Change, 31: Fair, 32: Dry}
-            minor: {length: 45%, width: 1px, color: '#5d5d66', interval: 0.1}
-            micro: {enabled: false}
-            needle: {type: tapered, length: 72%, width: 7%, tail: 16%, hub: 9%, hub-hole: 40%, hub-color: '#000000', color: '#4dd0c4'}
-            markers:
-            - {value: 'at(environment.pressure.pressure, -3h)', type: notch, width: 1.8%, length: 9%, color: '#ffffff'}
-            value-label: {position: below, size: 10%, color: '#ffffff', value-padding: 4%, font: Roboto Mono}
-        - type: text
-          name: pressSL0
-          text: "Now (inHg)"
-          alignment: CenterLeft
-          geometry: {x: 50%, y: 33.26%, width: 31%, height: 6.48%}
-          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
-        - type: realtime.text
-          name: pressSV0
-          key: environment.pressure.pressure
-          title: false
-          alignment: Center
-          geometry: {x: 81%, y: 31.55%, width: 17%, height: 9.9%}
-          display: {font: Roboto Mono, precision: 2, unit-string: '', unitPosition: inline}
-        - type: text
-          name: pressSL1
-          text: "Humidity"
-          alignment: CenterLeft
-          geometry: {x: 50%, y: 49.26%, width: 31%, height: 6.48%}
-          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
-        - type: realtime.text
-          name: pressSV1
+          name: windValue13
           key: environment.humidity.humidity
           title: false
-          alignment: Center
-          geometry: {x: 81%, y: 47.55%, width: 17%, height: 9.9%}
-          display: {font: Roboto Mono, precision: 0, unitPosition: inline}
-        - type: text
-          name: pressSL2
-          text: "Dew point"
-          alignment: CenterLeft
-          geometry: {x: 50%, y: 65.26%, width: 31%, height: 6.48%}
-          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
-        - type: realtime.text
-          name: pressSV2
-          key: environment.temperature.dewpoint
-          title: false
-          alignment: Center
-          geometry: {x: 81%, y: 63.55%, width: 17%, height: 9.9%}
-          display: {font: Roboto Mono, precision: 0, unitPosition: inline}
-        - type: text
-          name: pressSL3
-          text: "Rain rate (in/hr)"
-          alignment: CenterLeft
-          geometry: {x: 50%, y: 81.26%, width: 31%, height: 6.48%}
-          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
-        - type: realtime.text
-          name: pressSV3
-          key: environment.precipitation.precipitation
-          title: false
-          alignment: Center
-          geometry: {x: 81%, y: 79.55%, width: 17%, height: 9.9%}
-          display: {font: Roboto Mono, precision: 1, unit-string: '', unitPosition: inline}
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 79.35%, width: 15.82%, height: 7.13%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
     - type: group
-      name: ev
-      geometry: {x: 0.15%, y: 33.58%, width: 33.03%, height: 32.83%}
+      name: temp
+      geometry: {x: 25.16%, y: 0.29%, width: 12.19%, height: 16.08%}
       border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
       items:
         - type: text
-          name: evTitle
-          text: "EV charging"
+          name: tempTitle1
+          text: Temperature
           alignment: CenterLeft
-          geometry: {x: 4%, y: 3.5%, width: 60%, height: 8%}
-          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ffffff'}
-        - type: text
-          name: evSub
-          text: "Wall box, 32 A"
-          alignment: CenterRight
-          geometry: {x: 52%, y: 3.5%, width: 44%, height: 6%}
-          opacity: 0.6
-          display: {matchingGroup: {group: global.cap, matchAll: true}}
+          geometry: {x: 4.49%, y: 4.99%, width: 64%, height: 11.8%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ff8a3d'}
         - type: realtime.gauge
-          name: evGauge
-          key: ev.charge.level
+          name: tempGauge2
+          key: environment.temperature.temperature
           title: false
-          geometry: {x: 2%, y: 15%, width: 46%, height: 82%}
+          geometry: {x: 4.49%, y: 19.97%, width: 52.03%, height: 73.68%}
           display:
-            radius: 94%
-            arc: {start-angle: 0, end-angle: 360, weight: 8%, color: '#26262c', cap: flat}
-            range: {min: 0, max: 100}
-            fill: {weight: 8%, color: '#ffffff'}
+            anchor: bottom-left
+            inset: 8.62%
+            radius: 91.2%
+            arc: {start-angle: 0, end-angle: 90, weight: 16%, color: '#26262c', cap: flat}
+            range: {min: 40, max: 100}
+            zones:
+            - {from: 40, to: 60, color: '#4aa3ff'}
+            - {from: 60, to: 80, color: '#ffb454'}
+            - {from: 80, to: 100, color: '#ff4b3e'}
+            fill: {weight: 16%, color: zone}
             major: {enabled: false}
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {visible: false}
-            markers:
-            - {value: 80, type: notch, width: 1.8%, length: 12%, color: '#ffffff'}
-            value-label: {position: center, size: 22%, color: '#ffffff', format: {precision: 0}}
+            value-label: {visible: false}
             unit-label: {visible: false}
-            caption: {text: CHARGING, size: 6%, gap: 3%}
-            sub-label: {value: ev.charge.range, format: {precision: 0}, size: 6.5%, gap: 3%}
-        - type: text
-          name: evSL0
-          text: "Rate (kW)"
-          alignment: CenterLeft
-          geometry: {x: 50%, y: 25.26%, width: 31%, height: 6.48%}
-          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
         - type: realtime.text
-          name: evSV0
-          key: ev.charge.rate
+          name: tempValue3
+          key: environment.temperature.temperature
           title: false
-          alignment: Center
-          geometry: {x: 81%, y: 23.55%, width: 17%, height: 9.9%}
-          display: {font: Roboto Mono, precision: 1, unit-string: '', unitPosition: inline}
-        - type: text
-          name: evSL1
-          text: "Added (kWh)"
           alignment: CenterLeft
-          geometry: {x: 50%, y: 42.26%, width: 31%, height: 6.48%}
-          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
-        - type: realtime.text
-          name: evSV1
-          key: ev.charge.added
-          title: false
-          alignment: Center
-          geometry: {x: 81%, y: 40.55%, width: 17%, height: 9.9%}
-          display: {font: Roboto Mono, precision: 1, unit-string: '', unitPosition: inline}
+          geometry: {x: 11.54%, y: 59.15%, width: 33.33%, height: 24.51%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
         - type: text
-          name: evSL2
-          text: "Limit"
-          alignment: CenterLeft
-          geometry: {x: 50%, y: 59.26%, width: 31%, height: 6.48%}
-          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+          name: tempCap4
+          text: Outdoor
+          alignment: CenterRight
+          geometry: {x: 59.08%, y: 74.58%, width: 36.43%, height: 9.08%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
         - type: text
-          name: evSV2
-          text: "80%"
-          alignment: Center
-          geometry: {x: 81%, y: 59.26%, width: 17%, height: 6.48%}
-          display: {matchingGroup: {group: global.stat, matchAll: true}, font: Roboto Mono}
-        - type: text
-          name: evSL3
-          text: "Ready"
-          alignment: CenterLeft
-          geometry: {x: 50%, y: 76.26%, width: 31%, height: 6.48%}
-          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
-        - type: text
-          name: evSV3
-          text: "15:42"
-          alignment: Center
-          geometry: {x: 81%, y: 76.26%, width: 17%, height: 6.48%}
-          display: {matchingGroup: {group: global.stat, matchAll: true}, font: Roboto Mono}
+          name: tempCap5
+          text: zone fill
+          alignment: CenterRight
+          geometry: {x: 59.08%, y: 84.57%, width: 36.43%, height: 9.08%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
     - type: group
-      name: energy
-      geometry: {x: 33.48%, y: 33.58%, width: 33.03%, height: 32.83%}
+      name: humidity
+      geometry: {x: 37.66%, y: 0.29%, width: 12.19%, height: 16.08%}
       border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
       items:
         - type: text
-          name: energyTitle
-          text: "Energy"
+          name: humidityTitle1
+          text: Humidity
           alignment: CenterLeft
-          geometry: {x: 4%, y: 3.5%, width: 60%, height: 8%}
-          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ffd23f'}
-        - type: text
-          name: energySub
-          text: "Grid, kW"
-          alignment: CenterRight
-          geometry: {x: 52%, y: 3.5%, width: 44%, height: 6%}
-          opacity: 0.6
-          display: {matchingGroup: {group: global.cap, matchAll: true}}
+          geometry: {x: 4.49%, y: 4.99%, width: 64%, height: 11.8%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#4dd0c4'}
         - type: realtime.gauge
-          name: energyGauge
-          key: power.energy.net
+          name: humidityGauge2
+          key: environment.humidity.humidity
           title: false
-          geometry: {x: 0%, y: 14%, width: 46%, height: 52%}
+          geometry: {x: 13.78%, y: -6.13%, width: 72.44%, height: 102.57%}
           display:
-            radius: 136%
-            arc: {start-angle: -90, end-angle: 90, weight: 9%, color: '#26262c', cap: flat}
-            range: {min: -10, max: 10}
-            fill: {weight: 9%, from: 0, color: '#ffd23f', opacity: 0.55}
+            radius: 88.27%
+            arc: {start-angle: -90, end-angle: 90, weight: 14.29%, color: '#26262c', cap: flat}
+            range: {min: 0, max: 100}
+            zones:
+            - {to: 30, color: '#e5a135'}
+            - {from: 30, to: 60, color: '#4caf50'}
+            - {from: 60, color: '#4aa3ff'}
+            fill: {weight: 14.29%, color: zone}
             major:
-              length: 9%
-              width: 3px
+              interval: 50
+              length: 10%
+              width: 2px
               color: '#c9c9d0'
-              interval: 5
               labels:
                 position: inside
-                height: 11%
+                height: 15.9%
                 color: '#8d8d96'
                 offset: 4%
-                format: {precision: 0}
+                format: {precision: 0, show_unit: false}
                 font: Roboto Mono
-                sign: true
-            minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 1}
+            minor: {enabled: false}
             micro: {enabled: false}
-            needle: {type: tapered, length: 80%, width: 9%, tail: 8%, hub: 7%, hub-hole: 40%, hub-color: '#000000', color: '#ffffff'}
-            value-label: {visible: false}
-        - type: text
-          name: energyExp
-          text: "Export"
-          alignment: CenterLeft
-          geometry: {x: 3%, y: 84%, width: 16%, height: 7%}
-          display: {matchingGroup: {group: global.capC, matchAll: true}, color: '#8d8d96'}
-        - type: text
-          name: energyImp
-          text: "Import"
-          alignment: CenterRight
-          geometry: {x: 28%, y: 84%, width: 16%, height: 7%}
-          display: {matchingGroup: {group: global.capC, matchAll: true}, color: '#8d8d96'}
-        - type: text
-          name: energySL0
-          text: "Solar (kW)"
-          alignment: CenterLeft
-          geometry: {x: 50%, y: 25.26%, width: 31%, height: 6.48%}
-          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
-        - type: realtime.text
-          name: energySV0
-          key: power.energy.solar
-          title: false
-          alignment: Center
-          geometry: {x: 81%, y: 23.55%, width: 17%, height: 9.9%}
-          display: {font: Roboto Mono, precision: 1, unit-string: '', unitPosition: inline}
-        - type: text
-          name: energySL1
-          text: "House (kW)"
-          alignment: CenterLeft
-          geometry: {x: 50%, y: 42.26%, width: 31%, height: 6.48%}
-          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
-        - type: realtime.text
-          name: energySV1
-          key: power.energy.house
-          title: false
-          alignment: Center
-          geometry: {x: 81%, y: 40.55%, width: 17%, height: 9.9%}
-          display: {font: Roboto Mono, precision: 1, unit-string: '', unitPosition: inline}
-        - type: text
-          name: energySL2
-          text: "Car (kW)"
-          alignment: CenterLeft
-          geometry: {x: 50%, y: 59.26%, width: 31%, height: 6.48%}
-          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
-        - type: realtime.text
-          name: energySV2
-          key: power.energy.car
-          title: false
-          alignment: Center
-          geometry: {x: 81%, y: 57.55%, width: 17%, height: 9.9%}
-          display: {font: Roboto Mono, precision: 1, unit-string: '', unitPosition: inline}
-        - type: text
-          name: energySL3
-          text: "Today (kWh)"
-          alignment: CenterLeft
-          geometry: {x: 50%, y: 76.26%, width: 31%, height: 6.48%}
-          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
-        - type: realtime.text
-          name: energySV3
-          key: power.energy.today
-          title: false
-          alignment: Center
-          geometry: {x: 81%, y: 74.55%, width: 17%, height: 9.9%}
-          display: {font: Roboto Mono, precision: 1, unit-string: '', unitPosition: inline}
+            needle: {type: circle, length: 8%, width: 5%, color: '#ffffff'}
+            value-label: {position: center, size: 22%, color: '#ffffff', value-padding: 2%, font: Roboto Mono, format: {precision: 0}}
+            unit-label: {visible: false}
     - type: group
-      name: water
-      geometry: {x: 66.82%, y: 33.58%, width: 16.37%, height: 16.17%}
+      name: drive
+      geometry: {x: 50.16%, y: 0.29%, width: 24.69%, height: 32.75%}
       border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
       items:
         - type: text
-          name: waterTitle
-          text: "Water"
+          name: driveTitle1
+          text: Drive
           alignment: CenterLeft
-          geometry: {x: 4%, y: 5%, width: 60%, height: 13%}
-          display: {matchingGroup: {group: global.titleS, matchAll: true}, color: '#4aa3ff'}
-        - type: realtime.text
-          name: waterHero
-          key: home.water.today
-          title: false
-          alignment: CenterLeft
-          geometry: {x: 5%, y: 33%, width: 46%, height: 30%}
-          display: {color: '#ffffff', precision: 0, unit-string: ' L'}
+          geometry: {x: 2.22%, y: 2.45%, width: 64%, height: 5.79%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ff8a3d'}
         - type: text
-          name: waterFoot
-          text: "Today, of 250 L average"
+          name: driveCap2
+          text: '270 degrees, red zone, needle'
           alignment: CenterLeft
-          geometry: {x: 5%, y: 72%, width: 90%, height: 12%}
+          geometry: {x: 2.22%, y: 8.92%, width: 66.46%, height: 4.01%}
           opacity: 0.6
-          display: {matchingGroup: {group: global.capS, matchAll: true}}
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
         - type: realtime.gauge
-          name: waterGauge
+          name: driveGauge3
+          key: vehicle.speed.speed
+          title: false
+          geometry: {x: 4.83%, y: 8.84%, width: 58.39%, height: 82.24%}
+          display:
+            radius: 94.88%
+            arc: {start-angle: -135, end-angle: 135, weight: 5.23%, color: '#26262c', cap: flat}
+            range: {min: 0, max: 140}
+            fill: {weight: 5.23%, from: 110, to: 140, color: '#ff4b3e'}
+            major:
+              interval: 20
+              length: 7%
+              width: 3px
+              color: '#c9c9d0'
+              labels:
+                position: inside
+                height: 14.5%
+                color: '#8d8d96'
+                offset: 3%
+                format: {precision: 0, show_unit: false}
+                font: Roboto Mono
+            minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 5}
+            micro: {enabled: false}
+            needle: {type: needle, length: 74%, width: 4%, color: '#ff8a3d'}
+            value-label: {position: below, size: 15%, color: '#ffffff', value-padding: 2%, font: Roboto Mono, format: {precision: 0}}
+            unit-label: {visible: true, position: float-under, height: 7%, color: '#8d8d96', value-padding: 8%}
+        - type: text
+          name: driveLab4
+          text: RPM
+          alignment: CenterLeft
+          geometry: {x: 70.25%, y: 28.97%, width: 18.99%, height: 5.35%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: driveValue5
+          key: vehicle.engine.rpm
+          title: false
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 28.08%, width: 15.82%, height: 7.13%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
+        - type: text
+          name: driveLab6
+          text: Fuel
+          alignment: CenterLeft
+          geometry: {x: 70.25%, y: 45.91%, width: 18.99%, height: 5.35%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: driveValue7
+          key: vehicle.fuel.level
+          title: false
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 45.02%, width: 15.82%, height: 7.13%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
+        - type: text
+          name: driveLab8
+          text: Coolant
+          alignment: CenterLeft
+          geometry: {x: 70.25%, y: 62.85%, width: 18.99%, height: 5.35%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: driveValue9
+          key: vehicle.engine.coolant
+          title: false
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 61.96%, width: 15.82%, height: 7.13%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
+        - type: text
+          name: driveLab10
+          text: Battery
+          alignment: CenterLeft
+          geometry: {x: 70.25%, y: 79.79%, width: 18.99%, height: 5.35%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: driveValue11
+          key: power.battery.level
+          title: false
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 78.9%, width: 15.82%, height: 7.13%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
+    - type: group
+      name: water
+      geometry: {x: 75.16%, y: 0.29%, width: 12.19%, height: 16.08%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: waterTitle1
+          text: Water
+          alignment: CenterLeft
+          geometry: {x: 4.49%, y: 4.99%, width: 64%, height: 11.8%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#4aa3ff'}
+        - type: realtime.gauge
+          name: waterGauge2
           key: home.water.today
           title: false
-          geometry: {x: 50%, y: 6%, width: 48%, height: 64%}
+          geometry: {x: 43.48%, y: 19.97%, width: 52.03%, height: 73.68%}
           display:
             anchor: bottom-right
-            inset: 8%
-            radius: 92%
+            inset: 7.39%
+            radius: 92.5%
             arc: {start-angle: -90, end-angle: 0, weight: 13%, color: '#2e2e35', cap: round}
             range: {min: 0, max: 250}
             fill: {weight: 13%, color: '#4aa3ff'}
@@ -538,130 +354,111 @@
             needle: {visible: false}
             value-label: {visible: false}
             unit-label: {visible: false}
+        - type: realtime.text
+          name: waterValue3
+          key: home.water.today
+          title: false
+          alignment: CenterRight
+          geometry: {x: 55.77%, y: 60.06%, width: 33.33%, height: 24.51%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: ' L'}
+        - type: text
+          name: waterCap4
+          text: Today
+          alignment: CenterLeft
+          geometry: {x: 4.49%, y: 74.58%, width: 36.43%, height: 9.08%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
+        - type: text
+          name: waterCap5
+          text: avg 250 L
+          alignment: CenterLeft
+          geometry: {x: 4.49%, y: 84.57%, width: 36.43%, height: 9.08%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
     - type: group
       name: washer
-      geometry: {x: 83.48%, y: 33.58%, width: 16.37%, height: 16.17%}
+      geometry: {x: 87.66%, y: 0.29%, width: 12.19%, height: 16.08%}
       border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
       items:
         - type: text
-          name: washerTitle
-          text: "Washer"
+          name: washerTitle1
+          text: Washer
           alignment: CenterLeft
-          geometry: {x: 4%, y: 5%, width: 60%, height: 13%}
-          display: {matchingGroup: {group: global.titleS, matchAll: true}, color: '#b48cff'}
-        - type: realtime.text
-          name: washerHero
-          key: home.washer.minutes
-          title: false
-          alignment: CenterLeft
-          geometry: {x: 5%, y: 33%, width: 46%, height: 30%}
-          display: {color: '#ffffff', precision: 0, unit-string: ''}
-        - type: text
-          name: washerFoot
-          text: "Rinsing, minutes left"
-          alignment: CenterLeft
-          geometry: {x: 5%, y: 72%, width: 90%, height: 12%}
-          opacity: 0.6
-          display: {matchingGroup: {group: global.capS, matchAll: true}}
+          geometry: {x: 4.49%, y: 4.99%, width: 64%, height: 11.8%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#b48cff'}
         - type: realtime.gauge
-          name: washerGauge
+          name: washerGauge2
           key: home.washer.minutes
           title: false
-          geometry: {x: 50%, y: 4%, width: 48%, height: 64%}
+          geometry: {x: 48.61%, y: 27.23%, width: 46.9%, height: 66.41%}
           display:
             anchor: top-right
-            inset: 8%
-            radius: 92%
-            arc: {start-angle: 180, end-angle: 270, weight: 1%, color: '#8d8d96', cap: flat}
+            inset: 5.47%
+            radius: 97.5%
+            arc: {start-angle: 180, end-angle: 270, weight: 2%, color: '#8d8d96', cap: flat}
             range: {min: 0, max: 60}
-            major: {enabled: false}
-            minor: {enabled: false}
+            major:
+              interval: 60
+              length: 5%
+              width: 2px
+              color: '#8d8d96'
+              labels:
+                position: inside
+                height: 13%
+                color: '#8d8d96'
+                offset: 2%
+                format: {precision: 0, show_unit: false}
+                font: Roboto Mono
+                rotate-leading: true
+                rotate-trailing: true
+                text: {0: 0, 60: 60}
+            minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 5}
             micro: {enabled: false}
-            needle: {type: dot, width: 9%, halo: 2%, halo-color: '#0b0b0d', color: '#b48cff'}
+            needle: {type: dot, width: 9, halo: 2, halo-color: '#0b0b0d', color: '#b48cff'}
             value-label: {visible: false}
             unit-label: {visible: false}
-    - type: group
-      name: temp
-      geometry: {x: 66.82%, y: 50.25%, width: 16.37%, height: 16.17%}
-      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
-      items:
-        - type: text
-          name: tempTitle
-          text: "Temperature"
-          alignment: CenterLeft
-          geometry: {x: 4%, y: 5%, width: 60%, height: 13%}
-          display: {matchingGroup: {group: global.titleS, matchAll: true}, color: '#ff8a3d'}
         - type: realtime.text
-          name: tempHero
-          key: environment.temperature.temperature
+          name: washerValue3
+          key: home.washer.minutes
           title: false
-          alignment: CenterLeft
-          geometry: {x: 5%, y: 33%, width: 46%, height: 30%}
-          display: {color: '#ffffff', precision: 0, unit-string: ''}
+          alignment: CenterRight
+          geometry: {x: 57.05%, y: 34.49%, width: 33.33%, height: 24.51%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
         - type: text
-          name: tempFoot
-          text: "Corner dial, zone fill"
+          name: washerCap4
+          text: Rinsing
           alignment: CenterLeft
-          geometry: {x: 5%, y: 72%, width: 90%, height: 12%}
+          geometry: {x: 4.49%, y: 74.58%, width: 41.56%, height: 9.08%}
           opacity: 0.6
-          display: {matchingGroup: {group: global.capS, matchAll: true}}
-        - type: realtime.gauge
-          name: tempGauge
-          key: environment.temperature.temperature
-          title: false
-          geometry: {x: 50%, y: 6%, width: 48%, height: 64%}
-          display:
-            anchor: bottom-left
-            inset: 6%
-            radius: 94%
-            arc: {start-angle: 0, end-angle: 90, weight: 17%, color: '#26262c', cap: flat}
-            range: {min: 40, max: 100}
-            zones:
-            - {from: 40, to: 60, color: '#4aa3ff'}
-            - {from: 60, to: 80, color: '#ffb454'}
-            - {from: 80, to: 100, color: '#ff4b3e'}
-            fill: {weight: 17%, color: zone}
-            major: {enabled: false}
-            minor: {enabled: false}
-            micro: {enabled: false}
-            needle: {visible: false}
-            value-label: {visible: false}
-            unit-label: {visible: false}
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
+        - type: text
+          name: washerCap5
+          text: minutes left
+          alignment: CenterLeft
+          geometry: {x: 4.49%, y: 84.57%, width: 41.56%, height: 9.08%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
     - type: group
       name: aqi
-      geometry: {x: 83.48%, y: 50.25%, width: 16.37%, height: 16.17%}
+      geometry: {x: 25.16%, y: 16.96%, width: 12.19%, height: 16.08%}
       border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
       items:
         - type: text
-          name: aqiTitle
-          text: "Air quality"
+          name: aqiTitle1
+          text: Air quality
           alignment: CenterLeft
-          geometry: {x: 4%, y: 5%, width: 60%, height: 13%}
-          display: {matchingGroup: {group: global.titleS, matchAll: true}, color: '#3ddc97'}
-        - type: realtime.text
-          name: aqiHero
-          key: environment.airQuality.index
-          title: false
-          alignment: CenterLeft
-          geometry: {x: 5%, y: 33%, width: 46%, height: 30%}
-          display: {color: '#ffffff', precision: 0, unit-string: ''}
-        - type: text
-          name: aqiFoot
-          text: "Corner dial, AQI bands"
-          alignment: CenterLeft
-          geometry: {x: 5%, y: 72%, width: 90%, height: 12%}
-          opacity: 0.6
-          display: {matchingGroup: {group: global.capS, matchAll: true}}
+          geometry: {x: 4.49%, y: 4.99%, width: 64%, height: 11.8%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#3ddc97'}
         - type: realtime.gauge
-          name: aqiGauge
+          name: aqiGauge2
           key: environment.airQuality.index
           title: false
-          geometry: {x: 50%, y: 4%, width: 48%, height: 64%}
+          geometry: {x: 4.49%, y: 19.97%, width: 52.03%, height: 73.68%}
           display:
             anchor: top-left
-            inset: 6%
-            radius: 94%
-            arc: {start-angle: 90, end-angle: 180, weight: 14%, color: '#26262c', cap: flat}
+            inset: 7.39%
+            radius: 92.5%
+            arc: {start-angle: 90, end-angle: 180, weight: 13%, color: '#26262c', cap: flat}
             range: {min: 0, max: 300}
             zones:
             - {from: 0, to: 50, color: '#3ddc97'}
@@ -669,363 +466,1383 @@
             - {from: 100, to: 150, color: '#ff8a3d'}
             - {from: 150, to: 200, color: '#ff4b3e'}
             - {from: 200, to: 300, color: '#b48cff'}
-            fill: {weight: 14%, segments: 12, gap: 5%, color: zone}
+            fill: {weight: 13%, segments: 12, gap: 5%, color: zone}
             major: {enabled: false}
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {visible: false}
             value-label: {visible: false}
             unit-label: {visible: false}
+        - type: realtime.text
+          name: aqiValue3
+          key: environment.airQuality.index
+          title: false
+          alignment: CenterLeft
+          geometry: {x: 10.9%, y: 29.05%, width: 33.33%, height: 24.51%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
+        - type: text
+          name: aqiCap4
+          text: AQI
+          alignment: CenterRight
+          geometry: {x: 59.08%, y: 74.58%, width: 36.43%, height: 9.08%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
+        - type: text
+          name: aqiCap5
+          text: moderate
+          alignment: CenterRight
+          geometry: {x: 59.08%, y: 84.57%, width: 36.43%, height: 9.08%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
     - type: group
-      name: drive
-      geometry: {x: 0.15%, y: 66.92%, width: 33.03%, height: 32.83%}
+      name: clouds
+      geometry: {x: 37.66%, y: 16.96%, width: 12.19%, height: 16.08%}
       border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
       items:
         - type: text
-          name: driveTitle
-          text: "Drive"
+          name: cloudsTitle1
+          text: Cloud cover
           alignment: CenterLeft
-          geometry: {x: 4%, y: 3.5%, width: 60%, height: 8%}
+          geometry: {x: 4.49%, y: 4.99%, width: 64%, height: 11.8%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#9fb2c4'}
+        - type: realtime.gauge
+          name: cloudsGauge2
+          key: environment.clouds.cover.cover
+          title: false
+          geometry: {x: 21.15%, y: 19.06%, width: 57.69%, height: 81.69%}
+          display:
+            radius: 85.95%
+            arc: {start-angle: 0, end-angle: 360, weight: 15.79%, color: '#23262b', cap: flat}
+            range: {min: 0, max: 100}
+            fill: {weight: 15.79%, color: '#9fb2c4', segments: 8, gap: 3%}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {type: circle, width: 0%, color: '#9fb2c4'}
+            value-label: {position: center, size: 22%, color: '#ffffff', value-padding: 7%, font: Roboto Mono, format: {precision: 0}}
+            unit-label: {visible: false}
+            caption: {text: one per okta, size: 9%, gap: 2%}
+    - type: group
+      name: uv
+      geometry: {x: 75.16%, y: 16.96%, width: 12.19%, height: 16.08%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: uvTitle1
+          text: UV index
+          alignment: CenterLeft
+          geometry: {x: 4.49%, y: 4.99%, width: 64%, height: 11.8%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#b48cff'}
+        - type: realtime.gauge
+          name: uvGauge2
+          key: environment.light.uvi
+          title: false
+          geometry: {x: 13.62%, y: -6.47%, width: 72.76%, height: 103.03%}
+          display:
+            radius: 87.88%
+            arc: {start-angle: -90, end-angle: 90, weight: 15.31%, color: '#26262c', cap: flat}
+            range: {min: 0, max: 11}
+            zones:
+            - {from: 0, to: 3, color: '#4caf50'}
+            - {from: 3, to: 6, color: '#fdd835'}
+            - {from: 6, to: 8, color: '#fb8c00'}
+            - {from: 8, to: 11, color: '#e53935'}
+            fill: {weight: 15.31%, segments: 11, gap: 2%, color: zone}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {visible: false}
+            value-label: {position: center, size: 22%, color: '#ffffff', value-padding: 2%, font: Roboto Mono, format: {precision: 0}}
+            unit-label: {visible: false}
+    - type: group
+      name: fuel
+      geometry: {x: 87.66%, y: 16.96%, width: 12.19%, height: 16.08%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: fuelTitle1
+          text: Fuel
+          alignment: CenterLeft
+          geometry: {x: 4.49%, y: 4.99%, width: 64%, height: 11.8%}
           display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ff8a3d'}
         - type: realtime.gauge
-          name: speedGauge
-          key: vehicle.speed.speed
-          title: false
-          geometry: {x: 1%, y: 12%, width: 56%, height: 86%}
-          display:
-            radius: 94%
-            arc: {start-angle: -135, end-angle: 135, weight: 5%, color: '#26262c', cap: flat}
-            range: {min: 0, max: 140}
-            fill: {weight: 5%, from: 110, to: 140, color: '#ff4b3e'}
-            major:
-              length: 7%
-              width: 3px
-              color: '#c9c9d0'
-              interval: 20
-              labels:
-                position: inside
-                height: 10%
-                color: '#8d8d96'
-                offset: 3%
-                format: {precision: 0}
-                font: Roboto Mono
-            minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 5}
-            micro: {enabled: false}
-            needle: {type: needle, length: 74%, width: 4%, color: '#ff8a3d'}
-            value-label: {position: below, size: 14%, color: '#ffffff', value-padding: 2%, font: Roboto Mono, format: {precision: 0}}
-            unit-label: {visible: true, position: float-under, height: 7%, color: '#8d8d96', value-padding: 8%}
-        - type: realtime.gauge
-          name: fuelGauge
+          name: fuelGauge2
           key: vehicle.fuel.level
           title: false
-          geometry: {x: 59%, y: 12%, width: 40%, height: 41%}
+          geometry: {x: 4.49%, y: 27.23%, width: 46.9%, height: 66.41%}
           display:
             anchor: bottom-left
-            inset: 9%
-            radius: 88%
-            arc: {start-angle: 0, end-angle: 90, weight: 2%, color: '#3a3a42', cap: flat}
+            inset: 5.47%
+            radius: 97.6%
+            arc: {start-angle: 0, end-angle: 90, weight: 1.8%, color: '#3a3a42', cap: flat}
             range: {min: 0, max: 100}
-            fill: {weight: 2%, from: 0, to: 20, color: '#ff4b3e'}
+            fill: {weight: 1.8%, from: 0, to: 20, color: '#ff4b3e'}
             major:
-              length: 6%
+              interval: 50
+              length: 5%
               width: 2px
               color: '#c9c9d0'
-              interval: 50
               labels:
                 position: inside
                 height: 13%
                 color: '#8d8d96'
-                offset: 3%
-                format: {precision: 0}
-                text: {0: E, 50: '1/2', 100: F}
+                offset: 2%
+                format: {precision: 0, show_unit: false}
+                font: Roboto Mono
                 rotate-leading: true
                 rotate-trailing: true
+                text: {0: E, 50: '1/2', 100: F}
             minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 10}
             micro: {enabled: false}
             needle: {type: line, length: 80%, width: 1.6%, hub: 5%, color: '#ffffff'}
             value-label: {visible: false}
             unit-label: {visible: false}
-        - type: text
-          name: fuelCap
-          text: "Fuel"
-          alignment: CenterRight
-          geometry: {x: 80%, y: 13%, width: 17%, height: 5.5%}
-          display: {matchingGroup: {group: global.capS, matchAll: true}, color: '#8d8d96'}
         - type: realtime.text
-          name: fuelValue
+          name: fuelValue3
           key: vehicle.fuel.level
           title: false
           alignment: CenterRight
-          geometry: {x: 76%, y: 20%, width: 21%, height: 9%}
+          geometry: {x: 53.95%, y: 62.78%, width: 41.56%, height: 19.97%}
           display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '%'}
+        - type: text
+          name: fuelCap4
+          text: Tank
+          alignment: CenterRight
+          geometry: {x: 53.95%, y: 84.57%, width: 41.56%, height: 9.08%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
+    - type: group
+      name: ev
+      geometry: {x: 0.16%, y: 33.63%, width: 24.69%, height: 32.75%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: evTitle1
+          text: EV charging
+          alignment: CenterLeft
+          geometry: {x: 2.22%, y: 2.45%, width: 64%, height: 5.79%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ffffff'}
+        - type: text
+          name: evCap2
+          text: 'Wall box, 32 A'
+          alignment: CenterRight
+          geometry: {x: 66.14%, y: 3.57%, width: 31.65%, height: 4.46%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
         - type: realtime.gauge
-          name: coolGauge
+          name: evGauge3
+          key: ev.charge.level
+          title: false
+          geometry: {x: 3.16%, y: 18.28%, width: 56.96%, height: 80.24%}
+          display:
+            radius: 90.47%
+            arc: {start-angle: 0, end-angle: 360, weight: 15%, color: '#26262c', cap: flat}
+            range: {min: 0, max: 100}
+            fill: {weight: 15%, color: '#ffffff'}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {visible: false}
+            markers:
+            - {value: 80, type: notch, width: 1.8%, length: 12%, color: '#ffffff'}
+            value-label: {position: center, size: 22%, color: '#ffffff', value-padding: 2%, font: Roboto Mono, format: {precision: 0}}
+            unit-label: {visible: false}
+            caption: {text: CHARGING, size: 6%, gap: 3%}
+            sub-label: {value: ev.charge.range, format: {precision: 0}, size: 6.5%, gap: 3%}
+        - type: text
+          name: evLab4
+          text: Rate
+          alignment: CenterLeft
+          geometry: {x: 63.29%, y: 24.96%, width: 23.73%, height: 5.35%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: evValue5
+          key: ev.charge.rate
+          title: false
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 24.07%, width: 15.82%, height: 7.13%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 1, unit-string: '', unitPosition: inline}
+        - type: text
+          name: evLab6
+          text: Added
+          alignment: CenterLeft
+          geometry: {x: 63.29%, y: 38.78%, width: 23.73%, height: 5.35%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: evValue7
+          key: ev.charge.added
+          title: false
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 37.89%, width: 15.82%, height: 7.13%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 1, unit-string: '', unitPosition: inline}
+        - type: text
+          name: evLab8
+          text: Limit
+          alignment: CenterLeft
+          geometry: {x: 63.29%, y: 52.6%, width: 23.73%, height: 5.35%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: text
+          name: evVal9
+          text: 80%
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 52.6%, width: 15.82%, height: 5.35%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, font: Roboto Mono}
+        - type: text
+          name: evLab10
+          text: Range
+          alignment: CenterLeft
+          geometry: {x: 63.29%, y: 66.42%, width: 23.73%, height: 5.35%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: evValue11
+          key: ev.charge.range
+          title: false
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 65.53%, width: 15.82%, height: 7.13%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
+        - type: text
+          name: evLab12
+          text: Ready
+          alignment: CenterLeft
+          geometry: {x: 63.29%, y: 80.24%, width: 23.73%, height: 5.35%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: text
+          name: evVal13
+          text: '15:42'
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 80.24%, width: 15.82%, height: 5.35%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, font: Roboto Mono}
+    - type: group
+      name: energy
+      geometry: {x: 25.16%, y: 33.63%, width: 24.69%, height: 16.08%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: energyTitle1
+          text: Energy
+          alignment: CenterLeft
+          geometry: {x: 2.22%, y: 4.99%, width: 64%, height: 11.8%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ffd23f'}
+        - type: realtime.gauge
+          name: energyGauge2
+          key: power.energy.net
+          title: false
+          geometry: {x: 6.8%, y: -4.77%, width: 40.19%, height: 115.28%}
+          display:
+            radius: 89.76%
+            arc: {start-angle: -90, end-angle: 90, weight: 12.5%, color: '#26262c', cap: flat}
+            range: {min: -10, max: 10}
+            fill: {weight: 12.5%, from: 0, color: '#ffd23f', opacity: 0.55}
+            major:
+              interval: 5
+              length: 9%
+              width: 3px
+              color: '#c9c9d0'
+              labels:
+                position: inside
+                height: 14.5%
+                color: '#8d8d96'
+                offset: 4%
+                format: {precision: 0, show_unit: false}
+                font: Roboto Mono
+                sign: true
+            minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 1}
+            micro: {enabled: false}
+            needle:
+              type: tapered
+              length: 80%
+              width: 9%
+              tail: 0%
+              hub: 7%
+              hub-hole: 40%
+              hub-color: '#000000'
+              color: '#ffffff'
+            value-label: {visible: false}
+            unit-label: {visible: false}
+        - type: text
+          name: energyExp3
+          text: Export
+          alignment: Center
+          geometry: {x: 6.33%, y: 83.66%, width: 15.82%, height: 9.98%}
+          display: {matchingGroup: {group: global.capC, matchAll: true}, color: '#8d8d96'}
+        - type: text
+          name: energyImp4
+          text: Import
+          alignment: Center
+          geometry: {x: 31.65%, y: 83.66%, width: 15.82%, height: 9.98%}
+          display: {matchingGroup: {group: global.capC, matchAll: true}, color: '#8d8d96'}
+        - type: text
+          name: energyLab5
+          text: Solar
+          alignment: CenterLeft
+          geometry: {x: 56.96%, y: 23.6%, width: 23.73%, height: 9.98%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: energyValue6
+          key: power.energy.solar
+          title: false
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 21.79%, width: 15.82%, height: 13.62%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 1, unit-string: '', unitPosition: inline}
+        - type: text
+          name: energyLab7
+          text: House
+          alignment: CenterLeft
+          geometry: {x: 56.96%, y: 42.66%, width: 23.73%, height: 9.98%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: energyValue8
+          key: power.energy.house
+          title: false
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 40.85%, width: 15.82%, height: 13.62%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 1, unit-string: '', unitPosition: inline}
+        - type: text
+          name: energyLab9
+          text: Car
+          alignment: CenterLeft
+          geometry: {x: 56.96%, y: 61.72%, width: 23.73%, height: 9.98%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: energyValue10
+          key: power.energy.car
+          title: false
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 59.91%, width: 15.82%, height: 13.62%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 1, unit-string: '', unitPosition: inline}
+        - type: text
+          name: energyLab11
+          text: Today kWh
+          alignment: CenterLeft
+          geometry: {x: 56.96%, y: 80.79%, width: 23.73%, height: 9.98%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: energyValue12
+          key: power.energy.today
+          title: false
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 78.97%, width: 15.82%, height: 13.62%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 1, unit-string: '', unitPosition: inline}
+    - type: group
+      name: battery
+      geometry: {x: 50.16%, y: 33.63%, width: 12.19%, height: 16.08%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: batteryTitle1
+          text: Battery
+          alignment: CenterLeft
+          geometry: {x: 4.49%, y: 4.99%, width: 64%, height: 11.8%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#a4ff00'}
+        - type: realtime.gauge
+          name: batteryGauge2
+          key: power.battery.level
+          title: false
+          geometry: {x: 20.83%, y: 18.61%, width: 58.33%, height: 82.6%}
+          display:
+            radius: 85%
+            arc: {start-angle: 0, end-angle: 360, weight: 18.42%, color: '#2a2a31', cap: round}
+            range: {min: 0, max: 100}
+            fill: {weight: 18.42%, color: '#a4ff00'}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {type: circle, width: 0%, color: '#a4ff00'}
+            markers:
+            - {value: 80, type: marker, length: 14%, color: '#ffffff'}
+            value-label: {position: center, size: 22%, color: '#ffffff', value-padding: 7%, font: Roboto Mono, format: {precision: 0}}
+            unit-label: {visible: false}
+            caption: {text: limit 80, size: 9%, gap: 2%}
+    - type: group
+      name: timer
+      geometry: {x: 62.66%, y: 33.63%, width: 12.19%, height: 16.08%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: timerTitle1
+          text: Timer
+          alignment: CenterLeft
+          geometry: {x: 4.49%, y: 4.99%, width: 64%, height: 11.8%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ffd23f'}
+        - type: realtime.gauge
+          name: timerGauge2
+          key: time.timer.seconds
+          title: false
+          geometry: {x: 18.27%, y: 9.03%, width: 63.46%, height: 89.86%}
+          display:
+            radius: 65.8%
+            arc: {start-angle: -165, end-angle: 165, weight: 3.12%, color: '#2a2a31', cap: flat}
+            range: {min: 0, max: 60}
+            major:
+              interval: 15
+              length: 8%
+              width: 2px
+              color: '#c9c9d0'
+              position: outside
+              labels:
+                position: outside
+                height: 20.3%
+                color: '#8d8d96'
+                offset: 5%
+                format: {precision: 0, show_unit: false}
+                font: Roboto Mono
+                text: {15: 15, 30: 30, 45: 45}
+            minor: {length: 45%, width: 1px, color: '#5d5d66', interval: 1, position: outside}
+            micro: {enabled: false}
+            needle: {type: needle, length: 70%, width: 3%, color: '#ffd23f'}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+        - type: realtime.text
+          name: timerValue3
+          key: time.timer.seconds
+          title: false
+          alignment: Center
+          geometry: {x: 30.77%, y: 83.51%, width: 38.46%, height: 12.71%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 1, unit-string: ' s'}
+    - type: group
+      name: heart
+      geometry: {x: 75.16%, y: 33.63%, width: 12.19%, height: 16.08%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: heartTitle1
+          text: Heart rate
+          alignment: CenterLeft
+          geometry: {x: 4.49%, y: 4.99%, width: 64%, height: 11.8%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ff2d55'}
+        - type: realtime.gauge
+          name: heartGauge2
+          key: health.heart.rate
+          title: false
+          geometry: {x: 21.15%, y: 9.76%, width: 57.69%, height: 81.69%}
+          display:
+            radius: 85.95%
+            arc: {start-angle: -120, end-angle: 120, weight: 15.79%, color: '#2a2a31', cap: flat}
+            range: {min: 40, max: 200}
+            fill: {weight: 15.79%, color: '#ff2d55'}
+            major:
+              interval: 80
+              length: 7%
+              width: 2px
+              color: '#c9c9d0'
+              labels:
+                position: inside
+                height: 17.4%
+                color: '#8d8d96'
+                offset: 4%
+                format: {precision: 0, show_unit: false}
+                font: Roboto Mono
+            minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 10}
+            micro: {enabled: false}
+            needle: {type: circle, length: 8%, width: 6%, color: '#ff2d55'}
+            value-label: {position: center, size: 24%, color: '#ffffff', value-padding: 2%, font: Roboto Mono, format: {precision: 0}}
+            unit-label: {visible: false}
+            caption: {text: bpm, size: 10%, gap: 2%}
+    - type: group
+      name: cool
+      geometry: {x: 87.66%, y: 33.63%, width: 12.19%, height: 16.08%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: coolTitle1
+          text: Coolant
+          alignment: CenterLeft
+          geometry: {x: 4.49%, y: 4.99%, width: 64%, height: 11.8%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#3ddc97'}
+        - type: realtime.gauge
+          name: coolGauge2
           key: vehicle.engine.coolant
           title: false
-          geometry: {x: 59%, y: 56%, width: 40%, height: 41%}
+          geometry: {x: 43.48%, y: 19.97%, width: 52.03%, height: 73.68%}
           display:
             anchor: bottom-right
-            inset: 6%
-            radius: 94%
-            arc: {start-angle: -90, end-angle: 0, weight: 11%, color: '#26262c', cap: round}
+            inset: 6.16%
+            radius: 94.3%
+            arc: {start-angle: -90, end-angle: 0, weight: 9%, color: '#26262c', cap: round}
             range: {min: 140, max: 250}
             zones:
             - {from: 140, to: 215, color: '#3ddc97'}
             - {from: 215, to: 230, color: '#ffb454'}
             - {from: 230, to: 250, color: '#ff4b3e'}
-            fill: {weight: 11%, color: zone}
+            fill: {weight: 9%, color: zone}
             major: {enabled: false}
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {visible: false}
             value-label: {visible: false}
             unit-label: {visible: false}
-        - type: text
-          name: coolCap
-          text: "Coolant"
-          alignment: CenterLeft
-          geometry: {x: 61%, y: 57%, width: 20%, height: 5.5%}
-          display: {matchingGroup: {group: global.capS, matchAll: true}, color: '#8d8d96'}
         - type: realtime.text
-          name: coolValue
+          name: coolValue3
           key: vehicle.engine.coolant
           title: false
+          alignment: CenterRight
+          geometry: {x: 56.41%, y: 60.97%, width: 33.33%, height: 24.51%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
+        - type: text
+          name: coolCap4
+          text: Engine
           alignment: CenterLeft
-          geometry: {x: 61%, y: 64%, width: 21%, height: 9%}
-          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: ''}
+          geometry: {x: 4.49%, y: 74.58%, width: 36.43%, height: 9.08%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
+        - type: text
+          name: coolCap5
+          text: degrees F
+          alignment: CenterLeft
+          geometry: {x: 4.49%, y: 84.57%, width: 36.43%, height: 9.08%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
     - type: group
-      name: thermo
-      geometry: {x: 33.48%, y: 66.92%, width: 16.37%, height: 32.83%}
+      name: sun
+      geometry: {x: 25.16%, y: 50.29%, width: 24.69%, height: 16.08%}
       border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
       items:
         - type: text
-          name: thermoTitle
-          text: "Thermostat"
+          name: sunTitle1
+          text: Sun
           alignment: CenterLeft
-          geometry: {x: 4%, y: 3.5%, width: 60%, height: 8%}
-          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ff7a59'}
+          geometry: {x: 2.22%, y: 4.99%, width: 64%, height: 11.8%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ffb454'}
         - type: text
-          name: thermoCap
-          text: "300 degrees, 14% round arc"
+          name: sunCap2
+          text: the dot rides the day
           alignment: CenterLeft
-          geometry: {x: 4%, y: 12%, width: 70%, height: 5.5%}
+          geometry: {x: 2.22%, y: 18.15%, width: 47.47%, height: 8.17%}
           opacity: 0.6
           display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
         - type: realtime.gauge
-          name: thermoGauge
+          name: sunGauge3
+          key: astronomy.sun.remaining
+          title: false
+          geometry: {x: 7.44%, y: -0.45%, width: 38.92%, height: 111.65%}
+          display:
+            radius: 92.68%
+            arc: {start-angle: -90, end-angle: 90, weight: 5.36%, color: '#3a3a42', cap: round}
+            range: {min: 7.52, max: 19.15}
+            fill: {weight: 5.36%, to: astronomy.sun.hour, color: '#ffb454'}
+            major: {enabled: false}
+            minor: {interval: 0.5, length: 55%, width: 2px, color: '#8a8a94', labels: {enabled: false}}
+            micro: {enabled: false}
+            needle: {visible: false}
+            markers:
+            - {value: astronomy.sun.hour, type: dot, width: 8%, halo: 2.4%, halo-color: '#000000', color: '#ffffff'}
+            value-label: {position: center, size: 16%, color: '#ffffff', format: duration}
+            unit-label: {visible: false}
+            sub-label: {text: of daylight left, size: 7%, gap: 3%}
+        - type: text
+          name: sunLab4
+          text: Sunrise
+          alignment: CenterLeft
+          geometry: {x: 56.96%, y: 23.6%, width: 23.73%, height: 9.98%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: text
+          name: sunVal5
+          text: '07:31'
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 23.6%, width: 15.82%, height: 9.98%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, font: Roboto Mono}
+        - type: text
+          name: sunLab6
+          text: Sunset
+          alignment: CenterLeft
+          geometry: {x: 56.96%, y: 42.66%, width: 23.73%, height: 9.98%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: text
+          name: sunVal7
+          text: '19:09'
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 42.66%, width: 15.82%, height: 9.98%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, font: Roboto Mono}
+        - type: text
+          name: sunLab8
+          text: Daylight
+          alignment: CenterLeft
+          geometry: {x: 56.96%, y: 61.72%, width: 23.73%, height: 9.98%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: text
+          name: sunVal9
+          text: '11h 38m'
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 61.72%, width: 15.82%, height: 9.98%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, font: Roboto Mono}
+        - type: text
+          name: sunLab10
+          text: UV index
+          alignment: CenterLeft
+          geometry: {x: 56.96%, y: 80.79%, width: 23.73%, height: 9.98%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: sunValue11
+          key: environment.light.uvi
+          title: false
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 78.97%, width: 15.82%, height: 13.62%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
+    - type: group
+      name: dimmer
+      geometry: {x: 50.16%, y: 50.29%, width: 12.19%, height: 16.08%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: dimmerTitle1
+          text: Dimmer
+          alignment: CenterLeft
+          geometry: {x: 4.49%, y: 4.99%, width: 64%, height: 11.8%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ffe28a'}
+        - type: realtime.gauge
+          name: dimmerGauge2
+          key: environment.clouds.cover.cover
+          title: false
+          geometry: {x: 19.87%, y: 12.68%, width: 60.26%, height: 85.33%}
+          display:
+            radius: 82.29%
+            arc: {start-angle: -140, end-angle: 140, weight: 26.32%, color: '#2e2b22', cap: flat}
+            range: {min: 0, max: 100}
+            fill: {weight: 26.32%, color: '#ffe28a'}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {type: circle, length: 14%, width: 8%, color: '#000000'}
+            value-label: {position: center, size: 22%, color: '#ffffff', value-padding: 7%, font: Roboto Mono, format: {precision: 0}}
+            unit-label: {visible: false}
+    - type: group
+      name: volume
+      geometry: {x: 62.66%, y: 50.29%, width: 12.19%, height: 16.08%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: volumeTitle1
+          text: Volume
+          alignment: CenterLeft
+          geometry: {x: 4.49%, y: 4.99%, width: 64%, height: 11.8%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#5ab4ff'}
+        - type: realtime.gauge
+          name: volumeGauge2
+          key: environment.humidity.humidity
+          title: false
+          geometry: {x: 20.67%, y: 13.63%, width: 58.65%, height: 83.06%}
+          display:
+            radius: 77.86%
+            arc: {start-angle: -135, end-angle: 135, weight: 4.29%, color: '#2a2a31', cap: flat}
+            range: {min: 0, max: 100}
+            fill: {weight: 4.29%, color: '#5ab4ff'}
+            major: {interval: 10, length: 6%, width: 4px, color: '#5ab4ff', position: outside, labels: {enabled: false}}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {type: circle, length: 10%, width: 6%, color: '#ffffff'}
+            value-label: {position: center, size: 22%, color: '#ffffff', value-padding: 7%, font: Roboto Mono, format: {precision: 0}}
+            unit-label: {visible: false}
+    - type: group
+      name: activity
+      geometry: {x: 75.16%, y: 50.29%, width: 24.69%, height: 16.08%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: activityTitle1
+          text: Activity rings
+          alignment: CenterLeft
+          geometry: {x: 2.22%, y: 4.99%, width: 64%, height: 11.8%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ff2d55'}
+        - type: realtime.gauge
+          name: activityGauge2
+          key: health.activity.move
+          title: false
+          geometry: {x: 4.27%, y: 16.79%, width: 30.7%, height: 88.05%}
+          display:
+            radius: 83.94%
+            arc: {start-angle: 0, end-angle: 360, weight: 22.5%, color: '#1d1d22', cap: round}
+            range: {min: 0, max: 100}
+            fill: {weight: 22.5%, color: '#ff2d55'}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {type: circle, width: 0%, color: '#ff2d55'}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+        - type: realtime.gauge
+          name: activityGauge3
+          key: health.activity.exercise
+          title: false
+          geometry: {x: 7.91%, y: 27.23%, width: 23.42%, height: 67.17%}
+          display:
+            radius: 78.4%
+            arc: {start-angle: 0, end-angle: 360, weight: 31.58%, color: '#1d1d22', cap: round}
+            range: {min: 0, max: 100}
+            fill: {weight: 31.58%, color: '#a4ff00'}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {type: circle, width: 0%, color: '#a4ff00'}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+        - type: realtime.gauge
+          name: activityGauge4
+          key: health.activity.stand
+          title: false
+          geometry: {x: 11.55%, y: 37.67%, width: 16.14%, height: 46.29%}
+          display:
+            radius: 67.85%
+            arc: {start-angle: 0, end-angle: 360, weight: 52.94%, color: '#1d1d22', cap: round}
+            range: {min: 0, max: 100}
+            fill: {weight: 52.94%, color: '#00d4ff'}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {type: circle, width: 0%, color: '#00d4ff'}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+        - type: text
+          name: activityLab5
+          text: Move
+          alignment: CenterLeft
+          geometry: {x: 42.72%, y: 28.14%, width: 30.06%, height: 11.8%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#ff2d55'}
+        - type: realtime.text
+          name: activityValue6
+          key: health.activity.move
+          title: false
+          alignment: CenterRight
+          geometry: {x: 78.48%, y: 26.78%, width: 18.99%, height: 14.52%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
+        - type: text
+          name: activityLab7
+          text: Exercise
+          alignment: CenterLeft
+          geometry: {x: 42.72%, y: 49.02%, width: 30.06%, height: 11.8%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#a4ff00'}
+        - type: realtime.text
+          name: activityValue8
+          key: health.activity.exercise
+          title: false
+          alignment: CenterRight
+          geometry: {x: 78.48%, y: 47.66%, width: 18.99%, height: 14.52%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
+        - type: text
+          name: activityLab9
+          text: Stand
+          alignment: CenterLeft
+          geometry: {x: 42.72%, y: 69.89%, width: 30.06%, height: 11.8%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#00d4ff'}
+        - type: realtime.text
+          name: activityValue10
+          key: health.activity.stand
+          title: false
+          alignment: CenterRight
+          geometry: {x: 78.48%, y: 68.53%, width: 18.99%, height: 14.52%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
+    - type: group
+      name: thermo
+      geometry: {x: 0.16%, y: 66.96%, width: 12.19%, height: 32.75%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: thermoTitle1
+          text: Thermostat
+          alignment: CenterLeft
+          geometry: {x: 4.49%, y: 2.45%, width: 64%, height: 5.79%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ff7a59'}
+        - type: text
+          name: thermoCap2
+          text: '300 degrees, round arc'
+          alignment: CenterLeft
+          geometry: {x: 4.49%, y: 8.92%, width: 91.03%, height: 4.01%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
+        - type: realtime.gauge
+          name: thermoGauge3
           key: home.thermostat.temperature
           title: false
-          geometry: {x: 4%, y: 20%, width: 92%, height: 58%}
+          geometry: {x: 9.29%, y: 12.26%, width: 81.41%, height: 56.61%}
           display:
-            radius: 94%
-            arc: {start-angle: -150, end-angle: 150, weight: 14%, color: '#26262c', cap: round}
+            radius: 86.55%
+            arc: {start-angle: -150, end-angle: 150, weight: 20.37%, color: '#26262c', cap: round}
             range: {min: 60, max: 80}
-            fill: {weight: 14%, color: '#ff7a59'}
+            fill: {weight: 20.37%, color: '#ff7a59'}
             major: {enabled: false}
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {type: circle, width: 0%, color: '#ff7a59'}
             markers:
             - {value: home.thermostat.setpoint, type: marker, length: 20%, width: 8%, color: '#ffffff'}
-            value-label: {position: center, size: 15%, color: '#ffffff', value-padding: 2%, font: Roboto Mono, format: {precision: 1}}
+            value-label: {position: center, size: 18%, color: '#ffffff', value-padding: 2%, font: Roboto Mono, format: {precision: 1}}
+            unit-label: {visible: false}
         - type: text
-          name: thermoSL0
-          text: "Set point"
+          name: thermoLab4
+          text: Set point
           alignment: CenterLeft
-          geometry: {x: 6%, y: 82.98%, width: 42%, height: 5.04%}
+          geometry: {x: 5.13%, y: 73.55%, width: 48.08%, height: 4.9%}
           display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
         - type: realtime.text
-          name: thermoSV0
+          name: thermoValue5
           key: home.thermostat.setpoint
           title: false
-          alignment: Center
-          geometry: {x: 74%, y: 81.65%, width: 20%, height: 7.7%}
-          display: {font: Roboto Mono, precision: 0, unitPosition: inline}
+          alignment: CenterRight
+          geometry: {x: 62.82%, y: 72.88%, width: 32.05%, height: 6.24%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
         - type: text
-          name: thermoSL1
-          text: "Mode"
+          name: thermoLab6
+          text: Mode
           alignment: CenterLeft
-          geometry: {x: 6%, y: 91.98%, width: 42%, height: 5.04%}
+          geometry: {x: 5.13%, y: 79.79%, width: 48.08%, height: 4.9%}
           display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
         - type: text
-          name: thermoSV1
-          text: "Heat"
-          alignment: Center
-          geometry: {x: 74%, y: 91.98%, width: 20%, height: 5.04%}
+          name: thermoVal7
+          text: Heat
+          alignment: CenterRight
+          geometry: {x: 62.82%, y: 79.79%, width: 32.05%, height: 4.9%}
           display: {matchingGroup: {group: global.stat, matchAll: true}, font: Roboto Mono}
+        - type: text
+          name: thermoLab8
+          text: Humidity
+          alignment: CenterLeft
+          geometry: {x: 5.13%, y: 86.03%, width: 48.08%, height: 4.9%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: thermoValue9
+          key: environment.humidity.humidity
+          title: false
+          alignment: CenterRight
+          geometry: {x: 62.82%, y: 85.36%, width: 32.05%, height: 6.24%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
+        - type: text
+          name: thermoLab10
+          text: Dew point
+          alignment: CenterLeft
+          geometry: {x: 5.13%, y: 92.27%, width: 48.08%, height: 4.9%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: thermoValue11
+          key: environment.temperature.dewpoint
+          title: false
+          alignment: CenterRight
+          geometry: {x: 62.82%, y: 91.6%, width: 32.05%, height: 6.24%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
     - type: group
       name: system
-      geometry: {x: 50.15%, y: 66.92%, width: 16.37%, height: 32.83%}
+      geometry: {x: 12.66%, y: 66.96%, width: 12.19%, height: 32.75%}
       border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
       items:
         - type: text
-          name: systemTitle
-          text: "System"
+          name: systemTitle1
+          text: System
           alignment: CenterLeft
-          geometry: {x: 4%, y: 3.5%, width: 60%, height: 8%}
+          geometry: {x: 4.49%, y: 2.45%, width: 64%, height: 5.79%}
           display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ffffff'}
         - type: text
-          name: systemCap
-          text: "three rings, one grey each"
+          name: systemCap2
+          text: 'three rings, one grey each'
           alignment: CenterLeft
-          geometry: {x: 4%, y: 12%, width: 70%, height: 5.5%}
+          geometry: {x: 4.49%, y: 8.92%, width: 91.03%, height: 4.01%}
           opacity: 0.6
           display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
         - type: realtime.gauge
-          name: ring0
+          name: systemGauge3
           key: system.cpu.usage
           title: false
-          geometry: {x: 6%, y: 17%, width: 88%, height: 50%}
+          geometry: {x: 9.13%, y: 13.93%, width: 81.73%, height: 56.84%}
           display:
-            radius: 94%
-            arc: {start-angle: 0, end-angle: 360, weight: 7%, color: '#202026', cap: round}
+            radius: 89.41%
+            arc: {start-angle: 0, end-angle: 360, weight: 13.39%, color: '#202026', cap: round}
             range: {min: 0, max: 100}
-            fill: {weight: 7%, color: '#ffffff'}
+            fill: {weight: 13.39%, color: '#ffffff'}
             major: {enabled: false}
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {type: circle, width: 0%, color: '#ffffff'}
             value-label: {visible: false}
+            unit-label: {visible: false}
         - type: realtime.gauge
-          name: ring1
+          name: systemGauge4
           key: system.memory.usage
           title: false
-          geometry: {x: 6%, y: 17%, width: 88%, height: 50%}
+          geometry: {x: 17.47%, y: 19.73%, width: 65.06%, height: 45.25%}
           display:
-            radius: 74%
-            arc: {start-angle: 0, end-angle: 360, weight: 7%, color: '#202026', cap: round}
+            radius: 86.24%
+            arc: {start-angle: 0, end-angle: 360, weight: 17.44%, color: '#202026', cap: round}
             range: {min: 0, max: 100}
-            fill: {weight: 7%, color: '#a9a9b2'}
+            fill: {weight: 17.44%, color: '#a9a9b2'}
             major: {enabled: false}
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {type: circle, width: 0%, color: '#a9a9b2'}
             value-label: {visible: false}
+            unit-label: {visible: false}
         - type: realtime.gauge
-          name: ring2
+          name: systemGauge5
           key: system.disk.usage
           title: false
-          geometry: {x: 6%, y: 17%, width: 88%, height: 50%}
+          geometry: {x: 25.8%, y: 25.52%, width: 48.4%, height: 33.66%}
           display:
-            radius: 54%
-            arc: {start-angle: 0, end-angle: 360, weight: 7%, color: '#202026', cap: round}
+            radius: 80.88%
+            arc: {start-angle: 0, end-angle: 360, weight: 25%, color: '#202026', cap: round}
             range: {min: 0, max: 100}
-            fill: {weight: 7%, color: '#62626b'}
+            fill: {weight: 25%, color: '#62626b'}
             major: {enabled: false}
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {type: circle, width: 0%, color: '#62626b'}
             value-label: {visible: false}
+            unit-label: {visible: false}
         - type: text
-          name: sysSL0
-          text: "CPU"
+          name: systemLab6
+          text: CPU
           alignment: CenterLeft
-          geometry: {x: 8%, y: 72.12%, width: 40%, height: 5.76%}
+          geometry: {x: 5.13%, y: 73.55%, width: 48.08%, height: 4.9%}
           display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
         - type: realtime.text
-          name: sysSV0
+          name: systemValue7
           key: system.cpu.usage
           title: false
-          alignment: Center
-          geometry: {x: 72%, y: 70.6%, width: 20%, height: 8.8%}
-          display: {font: Roboto Mono, precision: 0, unitPosition: inline}
+          alignment: CenterRight
+          geometry: {x: 62.82%, y: 72.88%, width: 32.05%, height: 6.24%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
         - type: text
-          name: sysSL1
-          text: "Memory"
+          name: systemLab8
+          text: Memory
           alignment: CenterLeft
-          geometry: {x: 8%, y: 81.12%, width: 40%, height: 5.76%}
+          geometry: {x: 5.13%, y: 79.79%, width: 48.08%, height: 4.9%}
           display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
         - type: realtime.text
-          name: sysSV1
+          name: systemValue9
           key: system.memory.usage
           title: false
-          alignment: Center
-          geometry: {x: 72%, y: 79.6%, width: 20%, height: 8.8%}
-          display: {font: Roboto Mono, precision: 0, unitPosition: inline}
+          alignment: CenterRight
+          geometry: {x: 62.82%, y: 79.12%, width: 32.05%, height: 6.24%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
         - type: text
-          name: sysSL2
-          text: "Disk"
+          name: systemLab10
+          text: Disk
           alignment: CenterLeft
-          geometry: {x: 8%, y: 90.12%, width: 40%, height: 5.76%}
+          geometry: {x: 5.13%, y: 86.03%, width: 48.08%, height: 4.9%}
           display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
         - type: realtime.text
-          name: sysSV2
+          name: systemValue11
           key: system.disk.usage
           title: false
-          alignment: Center
-          geometry: {x: 72%, y: 88.6%, width: 20%, height: 8.8%}
-          display: {font: Roboto Mono, precision: 0, unitPosition: inline}
+          alignment: CenterRight
+          geometry: {x: 62.82%, y: 85.36%, width: 32.05%, height: 6.24%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
+        - type: text
+          name: systemLab12
+          text: CPU temp
+          alignment: CenterLeft
+          geometry: {x: 5.13%, y: 92.27%, width: 48.08%, height: 4.9%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: systemValue13
+          key: system.cpu.temperature
+          title: false
+          alignment: CenterRight
+          geometry: {x: 62.82%, y: 91.6%, width: 32.05%, height: 6.24%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
     - type: group
       name: clockA
-      geometry: {x: 66.82%, y: 66.92%, width: 16.37%, height: 32.83%}
+      geometry: {x: 25.16%, y: 66.96%, width: 12.19%, height: 32.75%}
       border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
       items:
         - type: text
-          name: clockATitle
-          text: "Clock"
+          name: clockATitle1
+          text: Clock
           alignment: CenterLeft
-          geometry: {x: 4%, y: 3.5%, width: 60%, height: 8%}
+          geometry: {x: 4.49%, y: 2.45%, width: 64%, height: 5.79%}
           display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ff6b4a'}
         - type: text
-          name: clockACap
-          text: "ticks, line hands, red second hand"
+          name: clockACap2
+          text: 'ticks, line hands, red seconds'
           alignment: CenterLeft
-          geometry: {x: 4%, y: 12%, width: 70%, height: 5.5%}
+          geometry: {x: 4.49%, y: 8.92%, width: 91.03%, height: 4.01%}
           opacity: 0.6
           display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
         - type: realtime.gauge
-          name: clockMinimal
+          name: clockAGauge3
           key: time.timer.seconds
           title: false
-          geometry: {x: 4%, y: 24%, width: 92%, height: 70%}
+          geometry: {x: 4.17%, y: 24.96%, width: 91.67%, height: 63.74%}
           display:
-            radius: 100%
-            arc: {start-angle: 0, end-angle: 360, weight: 1%, color: '#2a2a2e'}
+            radius: 98.22%
+            arc: {start-angle: 0, end-angle: 360, weight: 1.45%, color: '#2a2a2e', cap: flat}
             range: {min: 0, max: 12, wrap: true}
             major: {interval: 3, length: 7%, width: 3px, color: '#f2f2f2', labels: {enabled: false}}
             minor: {interval: 1, length: 50%, width: 1.5px, color: '#8d8d96', labels: {enabled: false}}
             micro: {enabled: false}
-            value-label: {visible: false}
-            unit-label: {visible: false}
             needle: {visible: false}
             markers:
             - {time: hour, type: line, length: 46%, width: 3.4%, tail: 8%, color: '#f2f2f2'}
             - {time: minute, type: line, length: 74%, width: 2.2%, tail: 8%, color: '#f2f2f2'}
             - {time: second, type: line, length: 78%, width: 0.8%, tail: 14%, tail-dot: 3%, hub: 4%, color: '#ff6b4a'}
+            value-label: {visible: false}
+            unit-label: {visible: false}
     - type: group
       name: clockB
-      geometry: {x: 83.48%, y: 66.92%, width: 16.37%, height: 32.83%}
+      geometry: {x: 37.66%, y: 66.96%, width: 12.19%, height: 32.75%}
       border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
       items:
         - type: text
-          name: clockBTitle
-          text: "Clock"
+          name: clockBTitle1
+          text: Clock
           alignment: CenterLeft
-          geometry: {x: 4%, y: 3.5%, width: 60%, height: 8%}
+          geometry: {x: 4.49%, y: 2.45%, width: 64%, height: 5.79%}
           display: {matchingGroup: {group: global.title, matchAll: true}, color: '#f2f2f2'}
         - type: text
-          name: clockBCap
-          text: "numerals, tapered hands"
+          name: clockBCap2
+          text: 'numerals, tapered hands'
           alignment: CenterLeft
-          geometry: {x: 4%, y: 12%, width: 70%, height: 5.5%}
+          geometry: {x: 4.49%, y: 8.92%, width: 91.03%, height: 4.01%}
           opacity: 0.6
           display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
         - type: realtime.gauge
-          name: clockClassic
+          name: clockBGauge3
           key: time.timer.seconds
           title: false
-          geometry: {x: 4%, y: 24%, width: 92%, height: 70%}
+          geometry: {x: 4.17%, y: 24.96%, width: 91.67%, height: 63.74%}
           display:
-            radius: 100%
-            arc: {start-angle: 0, end-angle: 360, weight: 1.2%, color: '#2a2a2e'}
+            radius: 98.22%
+            arc: {start-angle: 0, end-angle: 360, weight: 1.45%, color: '#2a2a2e', cap: flat}
             range: {min: 0, max: 12, wrap: true}
-            major: {interval: 3, length: 6%, width: 2px, color: '#f2f2f2', labels: {position: inside, offset: 4%, height: 14%, rotate: false, text: {0: '12', 3: '3', 6: '6', 9: '9', 12: '12'}}}
+            major:
+              interval: 3
+              length: 6%
+              width: 2px
+              color: '#f2f2f2'
+              labels: {position: inside, offset: 4%, height: 14%, rotate: false, text: {0: 12, 3: 3, 6: 6, 9: 9, 12: 12}}
             minor: {interval: 1, length: 50%, width: 1.5px, color: '#b8b8c0'}
             micro: {interval: 0.2, length: 40%, width: 1px, color: '#6b6b73'}
-            value-label: {visible: false}
-            unit-label: {visible: false}
             needle: {visible: false}
             markers:
             - {time: hour, type: tapered, length: 46%, width: 6%, tail: 9%, color: '#f2f2f2'}
             - {time: minute, type: tapered, length: 72%, width: 4.4%, tail: 9%, hub: 7%, hub-hole: 40%, hub-color: '#000000', color: '#f2f2f2'}
             - {time: second, type: line, length: 76%, width: 0.9%, tail: 16%, tail-dot: 3.4%, color: '#ff6b4a'}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+    - type: group
+      name: pressure
+      geometry: {x: 50.16%, y: 66.96%, width: 24.69%, height: 16.08%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: pressureTitle1
+          text: Pressure
+          alignment: CenterLeft
+          geometry: {x: 2.22%, y: 4.99%, width: 64%, height: 11.8%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#4dd0c4'}
+        - type: realtime.gauge
+          name: pressureGauge2
+          key: environment.pressure.pressure
+          title: false
+          geometry: {x: 11.63%, y: 3.48%, width: 32.44%, height: 93.04%}
+          display:
+            radius: 91.35%
+            arc: {start-angle: -135, end-angle: 135, weight: 5.43%, color: '#26262c', cap: flat}
+            range: {min: 28, max: 32}
+            major:
+              interval: 1
+              length: 6%
+              width: 3px
+              color: '#c9c9d0'
+              labels:
+                position: inside
+                height: 14%
+                color: '#c9c9d0'
+                offset: 3%
+                format: {precision: 0}
+                text: {28: Stormy, 29: Rain, 30: Change, 31: Fair, 32: Dry}
+            minor: {length: 45%, width: 1px, color: '#5d5d66', interval: 0.1}
+            micro: {enabled: false}
+            needle:
+              type: tapered
+              length: 72%
+              width: 7%
+              tail: 16%
+              hub: 9%
+              hub-hole: 40%
+              hub-color: '#000000'
+              color: '#4dd0c4'
+            markers:
+            - {value: 'at(environment.pressure.pressure, -3h)', type: notch, width: 1.8%, length: 9%, color: '#ffffff'}
+            value-label: {position: below, size: 13%, color: '#ffffff', value-padding: 4%, font: Roboto Mono, format: {precision: 2}}
+            unit-label: {visible: false}
+        - type: text
+          name: pressureLab3
+          text: Humidity
+          alignment: CenterLeft
+          geometry: {x: 56.96%, y: 23.6%, width: 30.06%, height: 9.98%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: pressureValue4
+          key: environment.humidity.humidity
+          title: false
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 21.79%, width: 15.82%, height: 13.62%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
+        - type: text
+          name: pressureLab5
+          text: Dew point
+          alignment: CenterLeft
+          geometry: {x: 56.96%, y: 42.66%, width: 30.06%, height: 9.98%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: pressureValue6
+          key: environment.temperature.dewpoint
+          title: false
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 40.85%, width: 15.82%, height: 13.62%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
+        - type: text
+          name: pressureLab7
+          text: 'Rain in/hr'
+          alignment: CenterLeft
+          geometry: {x: 56.96%, y: 61.72%, width: 30.06%, height: 9.98%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: pressureValue8
+          key: environment.precipitation.precipitation
+          title: false
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 59.91%, width: 15.82%, height: 13.62%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 1, unit-string: '', unitPosition: inline}
+        - type: text
+          name: pressureLab9
+          text: Wind
+          alignment: CenterLeft
+          geometry: {x: 56.96%, y: 80.79%, width: 30.06%, height: 9.98%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: pressureValue10
+          key: environment.wind.speed.speed
+          title: false
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 78.97%, width: 15.82%, height: 13.62%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
+    - type: group
+      name: tach
+      geometry: {x: 50.16%, y: 83.63%, width: 24.69%, height: 16.08%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: tachTitle1
+          text: Engine
+          alignment: CenterLeft
+          geometry: {x: 2.22%, y: 4.99%, width: 64%, height: 11.8%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#4aa3ff'}
+        - type: realtime.gauge
+          name: tachGauge2
+          key: vehicle.engine.rpm
+          title: false
+          geometry: {x: 11.39%, y: -1.82%, width: 32.91%, height: 94.4%}
+          display:
+            radius: 90.04%
+            arc: {start-angle: -120, end-angle: 120, weight: 8.7%, color: '#26262c', cap: flat}
+            range: {min: 0, max: 8000}
+            fill: {weight: 8.7%, from: 6500, to: 8000, color: '#ff4b3e'}
+            major:
+              interval: 1000
+              length: 7%
+              width: 2px
+              color: '#c9c9d0'
+              labels:
+                position: inside
+                height: 12%
+                color: '#8d8d96'
+                offset: 3%
+                format: {precision: 0}
+                font: Roboto Mono
+                text: {0: 0, 1000: 1, 2000: 2, 3000: 3, 4000: 4, 5000: 5, 6000: 6, 7000: 7, 8000: 8}
+            minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 250}
+            micro: {enabled: false}
+            needle: {type: tapered, length: 84%, width: 5%, hub: 8%, hub-hole: 35%, hub-color: '#0b0b0d', color: '#4aa3ff'}
+            value-label: {position: below, size: 13%, color: '#ffffff', value-padding: 4%, font: Roboto Mono, format: {precision: 0}}
+            unit-label: {visible: false}
+        - type: text
+          name: tachLab3
+          text: Speed
+          alignment: CenterLeft
+          geometry: {x: 56.96%, y: 23.6%, width: 30.06%, height: 9.98%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: tachValue4
+          key: vehicle.speed.speed
+          title: false
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 21.79%, width: 15.82%, height: 13.62%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
+        - type: text
+          name: tachLab5
+          text: Coolant
+          alignment: CenterLeft
+          geometry: {x: 56.96%, y: 42.66%, width: 30.06%, height: 9.98%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: tachValue6
+          key: vehicle.engine.coolant
+          title: false
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 40.85%, width: 15.82%, height: 13.62%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
+        - type: text
+          name: tachLab7
+          text: Fuel
+          alignment: CenterLeft
+          geometry: {x: 56.96%, y: 61.72%, width: 30.06%, height: 9.98%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: realtime.text
+          name: tachValue8
+          key: vehicle.fuel.level
+          title: false
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 59.91%, width: 15.82%, height: 13.62%}
+          display: {font: Roboto Mono, color: '#ffffff', precision: 0, unit-string: '', unitPosition: inline}
+        - type: text
+          name: tachLab9
+          text: Gear
+          alignment: CenterLeft
+          geometry: {x: 56.96%, y: 80.79%, width: 30.06%, height: 9.98%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
+        - type: text
+          name: tachVal10
+          text: 4
+          alignment: CenterRight
+          geometry: {x: 81.65%, y: 80.79%, width: 15.82%, height: 9.98%}
+          display: {matchingGroup: {group: global.stat, matchAll: true}, font: Roboto Mono}
+    - type: group
+      name: solar
+      geometry: {x: 75.16%, y: 66.96%, width: 12.19%, height: 16.08%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: solarTitle1
+          text: Solar
+          alignment: CenterLeft
+          geometry: {x: 4.49%, y: 4.99%, width: 64%, height: 11.8%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ffd23f'}
+        - type: realtime.gauge
+          name: solarGauge2
+          key: power.solar.output
+          title: false
+          geometry: {x: 20.51%, y: 8.62%, width: 58.97%, height: 83.51%}
+          display:
+            radius: 84.08%
+            arc: {start-angle: -120, end-angle: 120, weight: 21.05%, color: '#2a2a31', cap: flat}
+            range: {min: 0, max: 5000}
+            fill: {weight: 21.05%, color: '#ffd23f', segments: 20, gap: 4%}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {visible: false}
+            value-label: {position: center, size: 19%, color: '#ffffff', value-padding: 2%, font: Roboto Mono, format: {precision: 0}}
+            unit-label: {visible: false}
+            caption: {text: watts, size: 10%, gap: 2%}
+    - type: group
+      name: cput
+      geometry: {x: 87.66%, y: 66.96%, width: 12.19%, height: 16.08%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: cputTitle1
+          text: CPU temp
+          alignment: CenterLeft
+          geometry: {x: 4.49%, y: 4.99%, width: 64%, height: 11.8%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ff7a59'}
+        - type: realtime.gauge
+          name: cputGauge2
+          key: system.cpu.temperature
+          title: false
+          geometry: {x: 23.24%, y: 27.03%, width: 53.53%, height: 75.79%}
+          display:
+            radius: 90.2%
+            arc: {start-angle: 45, end-angle: 315, weight: 4.05%, color: '#2a2a31', cap: flat}
+            range: {min: 30, max: 95}
+            fill: {weight: 4.05%, color: '#ff7a59'}
+            major:
+              interval: 10
+              length: 7%
+              width: 2px
+              color: '#c9c9d0'
+              labels:
+                position: inside
+                height: 15.9%
+                color: '#8d8d96'
+                offset: 4%
+                format: {precision: 0, show_unit: false}
+                font: Roboto Mono
+            minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 5}
+            micro: {enabled: false}
+            needle: {type: dot, width: 8%, halo: 2%, halo-color: '#0b0b0d', color: '#ff7a59'}
+            value-label: {position: center, size: 22%, color: '#ffffff', value-padding: 2%, font: Roboto Mono, format: {precision: 0}}
+            unit-label: {visible: false}
+    - type: group
+      name: net
+      geometry: {x: 75.16%, y: 83.63%, width: 12.19%, height: 16.08%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: netTitle1
+          text: Download
+          alignment: CenterLeft
+          geometry: {x: 4.49%, y: 4.99%, width: 64%, height: 11.8%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#4aa3ff'}
+        - type: realtime.gauge
+          name: netGauge2
+          key: system.network.down
+          title: false
+          geometry: {x: 15.38%, y: -2.27%, width: 69.23%, height: 98.03%}
+          display:
+            radius: 92.36%
+            arc: {start-angle: -90, end-angle: 90, weight: 4.08%, color: '#2a2a31', cap: round}
+            range: {min: 0, max: 1000}
+            fill: {weight: 4.08%, color: '#4aa3ff'}
+            major:
+              interval: 250
+              length: 9%
+              width: 2px
+              color: '#c9c9d0'
+              labels:
+                position: inside
+                height: 15.9%
+                color: '#8d8d96'
+                offset: 4%
+                format: {precision: 0, show_unit: false}
+                font: Roboto Mono
+            minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 50}
+            micro: {enabled: false}
+            needle: {type: line, length: 86%, width: 1.6%, hub: 5%, color: '#ffffff'}
+            value-label: {position: below, size: 17%, color: '#ffffff', value-padding: 4%, font: Roboto Mono, format: {precision: 0}}
+            unit-label: {visible: false}
+    - type: group
+      name: rain
+      geometry: {x: 87.66%, y: 83.63%, width: 12.19%, height: 16.08%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: rainTitle1
+          text: Rain rate
+          alignment: CenterLeft
+          geometry: {x: 4.49%, y: 4.99%, width: 64%, height: 11.8%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#4a9dff'}
+        - type: realtime.gauge
+          name: rainGauge2
+          key: environment.precipitation.precipitation
+          title: false
+          geometry: {x: 4.33%, y: -30.01%, width: 91.35%, height: 129.35%}
+          display:
+            radius: 92.85%
+            arc: {start-angle: -45, end-angle: 45, weight: 6.92%, color: '#2a2a31', cap: flat}
+            range: {min: 0, max: 2}
+            fill: {weight: 6.92%, color: '#4a9dff'}
+            major:
+              interval: 1
+              length: 8%
+              width: 2px
+              color: '#c9c9d0'
+              labels:
+                position: inside
+                height: 14.5%
+                color: '#8d8d96'
+                offset: 4%
+                format: {precision: 0, show_unit: false}
+                font: Roboto Mono
+                text: {0: 0, 1: 1, 2: 2}
+            minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 0.25}
+            micro: {enabled: false}
+            needle: {type: circle, length: 8%, width: 5%, color: '#ffffff'}
+            value-label: {position: below, size: 15%, color: '#ffffff', value-padding: -6%, font: Roboto Mono, format: {precision: 1}}
+            unit-label: {visible: false}
