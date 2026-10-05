@@ -465,3 +465,29 @@ repointed `elements.py`/`meter.py` catches a missed import in a second. It caugh
 7. `Gauge`'s class-level fields include `__value` (L305, L315). Python mangles it to
    `_Gauge__value`; moving the class body must keep the two `__value` rows together and the
    `_init_defaults_` write (L326) in the same class body.
+
+
+## Review notes to carry into M3 (owner's review, 2026-10-05)
+
+Two changes the review requires *inside* M3, and one to leave alone:
+
+1. **The dial geometry goes to the Gauge side before a second Meter exists.**
+   `center`, `scene_center`, `center_offset`, `_dialRect` and `_sideValueRect` are
+   on `Meter` today, which is acceptable only because `Gauge` is the sole subclass.
+   They are the dial's geometry, not the meter's, so they move back to the
+   arc-side module as part of M3 — before `Bar` gives `Meter` a second subclass
+   that would inherit a dial.
+2. **`dependencies={'range', 'arc'}` names a key only `Gauge` owns.** `fill`,
+   `zones`, `caption` and `sub-label` declare it on `Meter`. `range` is fine —
+   Meter holds the range — but `arc` is a Gauge key, so a `Bar` would carry a
+   dependency on a state item it does not have. Decide the shape in M3: either the
+   dependency is split (Meter keeps `range`, the Arc-side declares `arc`), or the
+   items that need `arc` move their declaration to the Gauge side.
+3. **One mechanism for the hand-over, not two.** Once the hand-over runs from
+   `meter/gauge.py`, `gauge_class()` can simply return that module's own `Gauge`
+   global and the lazy import becomes a fallback rather than the mechanism. Fold
+   them together there; do not add a third.
+4. **Not this branch:** `meter/elements.py`'s `get(kwargs, 'gauge' 'parent', ...)`
+   is a string-literal join, so the lookup key is `'gaugeparent'` and never
+   matches. It came over unchanged and is filed as its own job — do not fix it
+   inside M3.

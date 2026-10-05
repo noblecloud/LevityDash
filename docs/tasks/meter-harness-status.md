@@ -294,3 +294,28 @@ poetry run python src/LevityDash/devtools/render_diff.py compare A B --verbose
   is a float rather than a `Measurement`; the caption never re-formats, so the
   unit word appears or not. Observed as the showcase's EV caption flipping
   between `313` and `313 km`, and only in the full showcase.
+
+## The sync merge (2026-10-05)
+
+`feat/value-sources` moved 34 commits ahead while the refactor ran, six of them
+touching `Gauge.py` (+215/-59). The merge (`5dea824`, parents `3633c5f` +
+`a31af10`) was resolved by keeping this branch's structure and porting each
+upstream change to the module that owns the member now — the glow set, the
+`GlowMixin` bases, `resolve_gradient`, the end-label positions, `fill_brush`,
+`GaugeCaption._placeWarped`. `.render-diff/tools/port_list.py` generates the work
+list and judges the result (it reads git objects, so it works mid-merge, and it
+takes `--rev` — judging against a *moving* upstream ref reported 17 members from
+commits that were never part of the merge). Verified after: 578 tests pass (upstream
+brought two new test files), ruff shows only the two pre-existing F811s in
+`Gauge.py` plus three F821s in upstream's own `colors/` files (byte-identical to
+a31af10, so not ours), and the port's four remaining hunks are this branch's own
+documented edits: three `gaugeKeyName` renames and one `sizeAcross` call.
+
+**emissive cannot be the glow cover as the harness stands.** It is the only preset
+using `glow:`, and it does not render reliably: a shutdown segfault
+(`libshiboken: Internal C++ object (LevitySceneView) already deleted`, raised from
+`Annotations.limitRect` via `app.viewScale` — files this branch never touched),
+sometimes no PNG at all, and 3239 px of difference between two captures of the
+same code. A separate job is measuring whether that is pre-existing at upstream's
+tip; until it is settled, the capture set carries emissive but the baseline cannot
+be called stable.
