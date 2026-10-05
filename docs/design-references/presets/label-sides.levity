@@ -1,0 +1,242 @@
+# Where the value sits: center, left, right, above, below, on a full ring, a 270
+# degree dial and a half dial; the bottom row is a quarter dial pinned to a corner.
+# Left and right put the readout beside the dial, level with the pivot, and the dial
+# shrinks to leave it room. Render with --scenario stormy-day.
+- type: group
+  name: main
+  items:
+    - type: realtime.gauge
+      name: full-center
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 0%, y: 0.00%, width: 20%, height: 25.00%}
+      display:
+        arc: {start-angle: 0, end-angle: 360, weight: 7%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 7%, color: '#ff8a3d'}
+        needle: {visible: false}
+        value-label: {position: center, size: 22%}
+    - type: realtime.gauge
+      name: full-left
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 20%, y: 0.00%, width: 20%, height: 25.00%}
+      display:
+        arc: {start-angle: 0, end-angle: 360, weight: 7%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 7%, color: '#ff8a3d'}
+        needle: {visible: false}
+        value-label: {position: left, size: 22%}
+    - type: realtime.gauge
+      name: full-right
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 40%, y: 0.00%, width: 20%, height: 25.00%}
+      display:
+        arc: {start-angle: 0, end-angle: 360, weight: 7%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 7%, color: '#ff8a3d'}
+        needle: {visible: false}
+        value-label: {position: right, size: 22%}
+    - type: realtime.gauge
+      name: full-above
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 60%, y: 0.00%, width: 20%, height: 25.00%}
+      display:
+        arc: {start-angle: 0, end-angle: 360, weight: 7%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 7%, color: '#ff8a3d'}
+        needle: {visible: false}
+        value-label: {position: above, size: 22%}
+    - type: realtime.gauge
+      name: full-below
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 80%, y: 0.00%, width: 20%, height: 25.00%}
+      display:
+        arc: {start-angle: 0, end-angle: 360, weight: 7%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 7%, color: '#ff8a3d'}
+        needle: {visible: false}
+        value-label: {position: below, size: 22%}
+    - type: realtime.gauge
+      name: 270-center
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 0%, y: 25.00%, width: 20%, height: 25.00%}
+      display:
+        arc: {start-angle: -135, end-angle: 135, weight: 7%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 7%, color: '#ff8a3d'}
+        needle: {visible: false}
+        value-label: {position: center, size: 22%}
+    - type: realtime.gauge
+      name: 270-left
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 20%, y: 25.00%, width: 20%, height: 25.00%}
+      display:
+        arc: {start-angle: -135, end-angle: 135, weight: 7%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 7%, color: '#ff8a3d'}
+        needle: {visible: false}
+        value-label: {position: left, size: 22%}
+    - type: realtime.gauge
+      name: 270-right
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 40%, y: 25.00%, width: 20%, height: 25.00%}
+      display:
+        arc: {start-angle: -135, end-angle: 135, weight: 7%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 7%, color: '#ff8a3d'}
+        needle: {visible: false}
+        value-label: {position: right, size: 22%}
+    - type: realtime.gauge
+      name: 270-above
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 60%, y: 25.00%, width: 20%, height: 25.00%}
+      display:
+        arc: {start-angle: -135, end-angle: 135, weight: 7%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 7%, color: '#ff8a3d'}
+        needle: {visible: false}
+        value-label: {position: above, size: 22%}
+    - type: realtime.gauge
+      name: 270-below
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 80%, y: 25.00%, width: 20%, height: 25.00%}
+      display:
+        arc: {start-angle: -135, end-angle: 135, weight: 7%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 7%, color: '#ff8a3d'}
+        needle: {visible: false}
+        value-label: {position: below, size: 22%}
+    - type: realtime.gauge
+      name: half-center
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 0%, y: 50.00%, width: 20%, height: 25.00%}
+      display:
+        arc: {start-angle: -90, end-angle: 90, weight: 7%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 7%, color: '#ff8a3d'}
+        needle: {visible: false}
+        value-label: {position: center, size: 22%}
+    - type: realtime.gauge
+      name: half-left
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 20%, y: 50.00%, width: 20%, height: 25.00%}
+      display:
+        arc: {start-angle: -90, end-angle: 90, weight: 7%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 7%, color: '#ff8a3d'}
+        needle: {visible: false}
+        value-label: {position: left, size: 22%}
+    - type: realtime.gauge
+      name: half-right
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 40%, y: 50.00%, width: 20%, height: 25.00%}
+      display:
+        arc: {start-angle: -90, end-angle: 90, weight: 7%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 7%, color: '#ff8a3d'}
+        needle: {visible: false}
+        value-label: {position: right, size: 22%}
+    - type: realtime.gauge
+      name: half-above
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 60%, y: 50.00%, width: 20%, height: 25.00%}
+      display:
+        arc: {start-angle: -90, end-angle: 90, weight: 7%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 7%, color: '#ff8a3d'}
+        needle: {visible: false}
+        value-label: {position: above, size: 22%}
+    - type: realtime.gauge
+      name: half-below
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 80%, y: 50.00%, width: 20%, height: 25.00%}
+      display:
+        arc: {start-angle: -90, end-angle: 90, weight: 7%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 7%, color: '#ff8a3d'}
+        needle: {visible: false}
+        value-label: {position: below, size: 22%}
+    - type: realtime.gauge
+      name: corner-bottom-left-center
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 0%, y: 75.00%, width: 20%, height: 25.00%}
+      display:
+        anchor: bottom-left
+        inset: 8%
+        radius: 88%
+        arc: {start-angle: 0, end-angle: 90, weight: 7%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 7%, color: '#4aa3ff'}
+        needle: {visible: false}
+        value-label: {position: center, size: 22%}
+    - type: realtime.gauge
+      name: corner-bottom-left-right
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 20%, y: 75.00%, width: 20%, height: 25.00%}
+      display:
+        anchor: bottom-left
+        inset: 8%
+        radius: 88%
+        arc: {start-angle: 0, end-angle: 90, weight: 7%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 7%, color: '#4aa3ff'}
+        needle: {visible: false}
+        value-label: {position: right, size: 22%}
+    - type: realtime.gauge
+      name: corner-bottom-right-left
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 40%, y: 75.00%, width: 20%, height: 25.00%}
+      display:
+        anchor: bottom-right
+        inset: 8%
+        radius: 88%
+        arc: {start-angle: -90, end-angle: 0, weight: 7%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 7%, color: '#4aa3ff'}
+        needle: {visible: false}
+        value-label: {position: left, size: 22%}
+    - type: realtime.gauge
+      name: corner-top-left-right
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 60%, y: 75.00%, width: 20%, height: 25.00%}
+      display:
+        anchor: top-left
+        inset: 8%
+        radius: 88%
+        arc: {start-angle: 90, end-angle: 180, weight: 7%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 7%, color: '#4aa3ff'}
+        needle: {visible: false}
+        value-label: {position: right, size: 22%}
+    - type: realtime.gauge
+      name: corner-top-right-left
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 80%, y: 75.00%, width: 20%, height: 25.00%}
+      display:
+        anchor: top-right
+        inset: 8%
+        radius: 88%
+        arc: {start-angle: 180, end-angle: 270, weight: 7%, color: '#3a3a42', cap: flat}
+        range: {min: 0, max: 100}
+        fill: {weight: 7%, color: '#4aa3ff'}
+        needle: {visible: false}
+        value-label: {position: left, size: 22%}
