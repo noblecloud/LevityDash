@@ -119,7 +119,12 @@ def saved(prop: StateProperty, raw: Any, owner: Stateful) -> Any:
 	if raw is None or raw is Unset:
 		return None
 	try:
-		text = yaml.dump(prop.encodeValue(raw, owner), Dumper=StatefulDumper, default_flow_style=True, width=10 ** 6)
+		encoded = prop.encodeValue(raw, owner)
+		# A plain bool, int or float reads back from its own YAML text as itself. Skip the
+		# dump and parse, which is most of what `read` costs.
+		if type(encoded) in (bool, int) or (type(encoded) is float and encoded == encoded and abs(encoded) != float('inf')):
+			return encoded
+		text = yaml.dump(encoded, Dumper=StatefulDumper, default_flow_style=True, width=10 ** 6)
 		return yaml.safe_load(text)
 	except Exception:
 		return str(raw)

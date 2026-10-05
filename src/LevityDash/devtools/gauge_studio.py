@@ -59,6 +59,9 @@ SHOWCASE = REPO / 'docs' / 'design-references' / 'gauge-showcase.levity'
 #: Runtime-computed state the dumper reports but a file should not hold.
 EXPORT_DROP = {('center_offset',), ('unit-label', 'text'), ('value-label', 'text')}
 
+#: How long input must be quiet before the gauge is rebuilt from its saved form.
+SETTLE_MS = 400
+
 STAGES = {'Square 800x800': (800, 800), 'Wide 1200x700': (1200, 700), 'Tall 600x900': (600, 900)}
 MOTIONS = {
 	'sine': lambda p: math.sin(2 * math.pi * p),
@@ -223,6 +226,7 @@ class Studio(QWidget):
 		self.key: Optional[str] = None
 		self.title = 'Gauge'
 		self.rows: Dict[tuple, FieldRow] = {}
+		self._group: Optional[schema.Group] = None
 		self.pending: Dict[tuple, Any] = {}
 		self.fragment = fragment
 		self.fragmentMtime = fragment.stat().st_mtime if fragment else None
@@ -231,12 +235,14 @@ class Studio(QWidget):
 		self._buildChrome()
 
 		self.flushTimer = QTimer(self, singleShot=True, interval=8, timeout=self._flush)
-		self.syncTimer = QTimer(self, singleShot=True, interval=60, timeout=self.syncRows)
-		# An edit applies in place at once. A moment later the gauge is rebuilt from its own
-		# saved form, so the preview is what a reload of the exported file draws. In-place
-		# edits can leave a gauge laid out a little differently from a fresh one (the centre
-		# offset the value label asks for builds up).
-		self.settleTimer = QTimer(self, singleShot=True, interval=350, timeout=self.settle)
+		self.syncTimer = QTimer(self, singleShot=True, interval=60, timeout=self._syncIdle)
+		# An edit applies in place at once. A moment after the input goes quiet the gauge is
+		# rebuilt from its own saved form, so the preview is what a reload of the exported file
+		# draws. In-place edits can leave a gauge laid out a little differently from a fresh one
+		# (the centre offset the value label asks for builds up). The rebuild is the slow step,
+		# so it waits for the mouse button to come up: dragging a slider only pays for the
+		# in-place edit.
+		self.settleTimer = QTimer(self, singleShot=True, interval=SETTLE_MS, timeout=self.settle)
 		self.animTimer = QTimer(self, interval=16, timeout=self._tick)
 		self.watchTimer = QTimer(self, interval=500, timeout=self._checkFile)
 
@@ -449,6 +455,20 @@ class Studio(QWidget):
 	# the controls
 
 	def _rebuildPanel(self):
+		gauge = self.studio.gauge
+		group = schema.describe(gauge)
+		if self.tree is not None and group == self._group:
+			# The same controls as before (a data or stage change keeps them): show the new
+			# values in the widgets that exist. Building the tree again costs about 100 ms.
+			for path, row in self.rows.items():
+				value = schema.read(gauge, path)
+				row.baseline = value
+				row.setSaved(value)
+				row.setError(None)
+				row.reset.setEnabled(False)
+			self._filter(self.search.text())
+			return
+		self._group = group
 		open_paths = set()
 		if self.tree is not None:
 			open_paths = {s.path for s in self.tree.findChildren(Section) if s.header.isChecked()} | (
@@ -456,8 +476,6 @@ class Studio(QWidget):
 			self.tree.setParent(None)
 			self.tree.deleteLater()
 		self.rows = {}
-		gauge = self.studio.gauge
-		group = schema.describe(gauge)
 		self.tree = build(group, lambda path: schema.read(gauge, path), self.rows, expanded=not open_paths or () in open_paths)
 		for s in self.tree.findChildren(Section):
 			if s.path in open_paths:
@@ -487,9 +505,19 @@ class Studio(QWidget):
 		self.syncTimer.start()
 		self.settleTimer.start()
 
+	def _dragging(self) -> bool:
+		"""True while a mouse button is down (a slider is being dragged) or an edit waits to apply."""
+		return self.flushTimer.isActive() or QApplication.mouseButtons() != Qt.MouseButton.NoButton
+
+	def _syncIdle(self):
+		if self._dragging():
+			self.syncTimer.start()
+			return
+		self.syncRows()
+
 	def settle(self):
 		"""Rebuild the gauge from its saved form. The controls keep what they show."""
-		if self.flushTimer.isActive() or any(r.hasFocus() for r in self.rows.values()) and False:
+		if self._dragging():
 			self.settleTimer.start()
 			return
 		started = time.monotonic()

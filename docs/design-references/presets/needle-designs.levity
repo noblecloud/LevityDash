@@ -1,0 +1,94 @@
+# The needle designs, one per panel. Render with --scenario gauge-cards.
+#
+#   needle: {style...}   `type:` picks the design; every other key is optional
+#     tapered   kite from the pivot. length, width, tail, hub, hub-color, hub-hole
+#     arrow     shaft + head at the rim. length, width, head, point (out|in), tail, tail-dot
+#     line      thin line. length, width, tail, tail-dot (the counterweight), hub
+#     dot       knob on the track. width, halo, halo-color
+#     notch     bar across the track. width, length (also works in `markers:`)
+#   color: the hand's colour. visible: false hides the needle (for fill + markers).
+# gauge-ui's barometer, wind arrow, sun knob and EV limit notch, as one row.
+- type: group
+  name: main
+  items:
+    # Barometer: a tapered hand with a ring hub, and a notch for the pressure three hours ago.
+    - type: realtime.gauge
+      name: barometer
+      key: environment.pressure.pressure
+      title: false
+      geometry: {x: 0%, y: 0%, width: 20%, height: 100%}
+      display:
+        arc: {start-angle: -130, end-angle: 130, weight: 4%, color: '#2a2a2e'}
+        radius: 92%
+        range: {min: 28, max: 32}
+        major: {interval: 1, labels: {position: inside, height: 8%, text: {28: Stormy, 29: Rain, 30: Change, 31: Fair, 32: Dry}}}
+        minor: {interval: 0.2}
+        value-label: {visible: false}
+        unit-label: {visible: false}
+        needle: {type: tapered, length: 78%, width: 7%, tail: 18%, hub: 9%, hub-hole: 40%, hub-color: '#0b0b0d', color: '#f2f2f2'}
+        markers:
+          - {value: 'at(environment.pressure.pressure, -3h)', type: notch, width: 1.8%, length: 9%, color: '#f2f2f2'}
+    # Wind: an arrow from the rim, with the tail ending in a dot at the opposite rim.
+    - type: realtime.gauge
+      name: wind
+      key: environment.wind.direction.direction
+      title: false
+      geometry: {x: 20%, y: 0%, width: 20%, height: 100%}
+      display:
+        arc: {start-angle: 0, end-angle: 360, weight: 4%, color: '#2a2a2e'}
+        radius: 92%
+        range: {min: 0, max: 360, wrap: true}
+        major: {interval: 90, length: 7%, width: 2px, color: '#8d8d96', labels: {position: inside, offset: 4%, height: 11%, text: compass}}
+        minor: {interval: 22.5}
+        value-label: {visible: false}
+        unit-label: {visible: false}
+        needle: {type: arrow, length: 36%, width: 2.4%, head: 13%, tail: 30%, tail-dot: 5.5%, color: '#ffffff'}
+    # Line with counterweight.
+    - type: realtime.gauge
+      name: line
+      key: system.battery.charge
+      title: false
+      geometry: {x: 40%, y: 0%, width: 20%, height: 100%}
+      display:
+        arc: {start-angle: -135, end-angle: 135, weight: 4%, color: '#2a2a2e'}
+        radius: 92%
+        range: {min: 0, max: 100}
+        major: {interval: 25, labels: {position: inside, height: 8%}}
+        value-label: {visible: false}
+        unit-label: {visible: false}
+        needle: {type: line, length: 82%, width: 1.4%, tail: 20%, tail-dot: 7%, hub: 5%, color: '#ff8a3d'}
+    # Dot on the track.
+    - type: realtime.gauge
+      name: dot
+      key: system.battery.charge
+      title: false
+      geometry: {x: 60%, y: 0%, width: 20%, height: 100%}
+      display:
+        arc: {start-angle: -90, end-angle: 90, weight: 5%, color: '#2a2a2e'}
+        radius: 92%
+        range: {min: 0, max: 100}
+        major: {enabled: false}
+        minor: {enabled: false}
+        micro: {enabled: false}
+        value-label: {position: below, size: 20%}
+        unit-label: {visible: false}
+        needle: {type: dot, width: 10%, halo: 2.2%, halo-color: '#0b0b0d', color: '#ffffff'}
+    # Notch: a fill to the value, a limit mark at 80, no needle.
+    - type: realtime.gauge
+      name: notch
+      key: system.battery.charge
+      title: false
+      geometry: {x: 80%, y: 0%, width: 20%, height: 100%}
+      display:
+        arc: {start-angle: 0, end-angle: 360, weight: 5%, color: '#2a2a2e'}
+        radius: 92%
+        range: {min: 0, max: 100}
+        fill: {weight: 5%, color: '#ffffff'}
+        major: {enabled: false}
+        minor: {enabled: false}
+        micro: {enabled: false}
+        value-label: {position: center, size: 22%}
+        unit-label: {visible: false}
+        needle: {visible: false}
+        markers:
+          - {value: 80, type: notch, width: 1.6%, length: 8%, color: '#ffffff'}

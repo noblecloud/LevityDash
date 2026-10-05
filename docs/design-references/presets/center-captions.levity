@@ -1,0 +1,51 @@
+# Text around the centre value, as on gauge-ui's EV card.
+#
+#   caption:   small text above the value. A string, or {text, value, format, size, color, weight, gap}
+#   sub-label: small text below the value (and its unit). Same forms.
+#     text     static text; may hold {} where `value` goes
+#     value    a key or expression to show; with no `format` it prints as the value does
+#     format   duration (minutes as 4h 49m), or a Python format spec such as .0f
+#     size     text height, as a share of the dial's diameter (default 7%)
+#
+# Left: the EV card. Right: no value label, so the two lines pair up around the centre,
+# the speed above and its unit below, as in gauge-ui's wind card.
+- type: group
+  name: main
+  items:
+    - type: realtime.gauge
+      name: ev
+      key: system.battery.charge
+      title: false
+      geometry: {x: 0%, y: 0%, width: 50%, height: 100%}
+      display:
+        radius: 94%
+        arc: {start-angle: 0, end-angle: 360, weight: 6%, color: '#222226'}
+        range: {min: 0, max: 100}
+        major: {enabled: false}
+        minor: {enabled: false}
+        micro: {enabled: false}
+        fill: {weight: 6%, color: '#ffffff'}
+        needle: {visible: false}
+        markers:
+          - {value: 80, type: notch, width: 1.4%, length: 9%, color: '#ffffff'}
+        value-label: {position: center, size: 24%, format: {precision: 0}}
+        unit-label: {visible: false}
+        caption: {text: CHARGING, size: 6.5%, gap: 3%}
+        sub-label: {text: '313 km', size: 6.5%, gap: 3%}
+    - type: realtime.gauge
+      name: wind
+      key: environment.wind.direction.direction
+      title: false
+      geometry: {x: 50%, y: 0%, width: 50%, height: 100%}
+      display:
+        radius: 94%
+        arc: {start-angle: 0, end-angle: 360, weight: 3%, color: '#2a2a2e'}
+        range: {min: 0, max: 360, wrap: true}
+        major: {interval: 90, length: 7%, width: 2px, color: '#8d8d96', labels: {position: inside, offset: 4%, height: 10%, rotate: false, text: compass}}
+        minor: {interval: 22.5, length: 40%, width: 1px, color: '#55555c'}
+        micro: {enabled: false}
+        needle: {type: arrow, length: 34%, width: 2.2%, head: 12%, tail: 28%, tail-dot: 5%, color: '#ffffff'}
+        value-label: {visible: false}
+        unit-label: {visible: false}
+        caption: {value: environment.wind.speed.speed, format: {precision: 0, show_unit: false}, size: 16%, gap: 0%, color: '#ffffff'}
+        sub-label: {text: mph, size: 6.5%, gap: 1%}

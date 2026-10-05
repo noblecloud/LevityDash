@@ -1,0 +1,24 @@
+# A compass whose needle takes the shortest way round.
+#
+#   range: {min: 0, max: 360, wrap: true}   0 and 360 are the same point; a value past
+#                                           either end comes round again instead of stopping
+#   needle: {animate: 800ms}                the hand eases to each new value, and with
+#                                           `wrap` it crosses north the short way
+#                                           (350 to 10 turns 20 degrees, not 340)
+# Without `animate` the hand jumps, as every gauge did before. Render with --scenario gauge-cards.
+- type: realtime.gauge
+  name: gauge
+  key: environment.wind.direction.direction
+  title: false
+  display:
+    radius: 90%
+    arc: {start-angle: 0, end-angle: 360, weight: 3%, color: '#2a2a2e'}
+    range: {min: 0, max: 360, wrap: true}
+    major: {interval: 90, length: 7%, width: 2px, color: '#8d8d96', labels: {position: inside, offset: 4%, height: 10%, rotate: false, text: compass}}
+    minor: {interval: 22.5, length: 40%, width: 1px, color: '#55555c'}
+    micro: {enabled: false}
+    needle: {type: arrow, length: 34%, width: 2.2%, head: 12%, tail: 28%, tail-dot: 5%, color: '#ffffff', animate: 800ms}
+    value-label: {visible: false}
+    unit-label: {visible: false}
+    caption: {value: environment.wind.speed.speed, format: {precision: 0, show_unit: false}, size: 16%, gap: 0%, color: '#ffffff'}
+    sub-label: {text: mph, size: 6.5%, gap: 1%}
