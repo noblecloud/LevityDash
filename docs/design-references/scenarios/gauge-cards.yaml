@@ -1,0 +1,41 @@
+# Values for the gauge-ui card fragments in docs/design-references/presets/
+# (barometer, wind arrow, sun path, EV charge, clocks). Made-up, and not weather
+# only: the EV charge and the plain-number keys are not weather.
+#
+#   render_widget.py --levity frag.levity --scenario gauge-cards --name gauge --out out.png
+#
+# The pressure series falls 1.77 hPa an hour, so `at(key, -3h)` reads 5.3 hPa
+# above the current value whatever hour a render runs at. The sun keys match
+# the Mock plugin's day (sunrise 07:31, sunset 19:09) at 14:20, with 4h 49m of
+# daylight left. `time.timer.seconds` is a plain number a clock gauge can sit on.
+name: gauge-cards
+description: Pressure 1003.6 hPa falling, wind from 134 degrees at 19 mph, 65 % charge, 4h 49m of daylight left.
+keys:
+  environment.pressure.pressure:
+    value: 1003.6
+    unit: hPa
+    series: [1010.0, 1008.2, 1006.5, 1004.7, 1002.9, 1001.2, 999.4, 997.6, 995.9, 994.1, 992.3, 990.6, 988.8, 987.0, 985.3, 983.5, 981.8, 980.0, 978.2, 976.5, 974.7, 972.9, 971.2, 969.4]
+  environment.wind.direction.direction:
+    value: 134
+    unit: º
+    type: direction
+  environment.wind.speed.speed:
+    value: 19
+    unit: [mi, hr]
+    type: wind
+  system.battery.charge:
+    value: 65
+    unit: '%bat'
+    title: Battery
+  astronomy.sun.remaining:
+    value: 289
+    unit: int
+    title: Daylight left (minutes)
+  astronomy.sun.hour:
+    value: 14.33
+    unit: int
+    title: Hour of day
+  time.timer.seconds:
+    value: 0
+    unit: int
+    title: Clock
