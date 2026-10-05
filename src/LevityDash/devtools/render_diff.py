@@ -79,16 +79,19 @@ DEFAULT_SETTLE = 14.0
 DEFAULT_LEVEL = 30
 DEFAULT_TOLERANCE = 0
 
-#: How long a render waits before the scenario's values arrive, in milliseconds
-#: (`LEVITYDASH_FIXTURE_DELAY_MS`, see `_boot.boot`).
+#: When a render's scenario values arrive: `_boot.boot` injects them *after* the
+#: dashboard has settled (`LEVITYDASH_FIXTURE_DELAY_MS=end`).
 #:
-#: Not a settle tweak: a Realtime display formats a value when it arrives and
-#: never re-formats it, so a value that lands before the display has resolved
-#: its configured unit keeps the source unit for good - `ev.charge.range` read
-#: `313` (km) in some runs and `194` (mi, the unit `[Units] length = mi` asks
-#: for) in others, 50/50, whatever the settle. Measured: 50ms -> flips;
-#: 300ms -> flips; 1000ms -> stable over repeated runs.
-FIXTURE_DELAY_MS = '1000'
+#: Not a settle tweak. A display formats a value once, when it arrives, and never
+#: re-formats it, so a value that lands before the display has resolved its
+#: configured unit - or its unit metadata - keeps whatever it printed first:
+#: `ev.charge.range` read `313` (km) in some runs and `194` (mi, the unit
+#: `[Units] length = mi` asks for) in others, and its caption read `313` against
+#: `313 km`. Both flipped ~50/50 at the default 50ms publish, and were still
+#: flipping under a several-second delay once six renders shared the machine.
+#: Injecting the values last removes the race by construction rather than by
+#: guessing a margin.
+FIXTURE_DELAY_MS = 'end'
 
 
 # --------------------------------------------------------------------------- #
@@ -154,14 +157,38 @@ def build_scenario() -> dict:
 	}
 
 
-def stage_seed(directory: Path) -> Path:
-	"""A copy of `design-seed` with Mock switched off. Returns its path."""
+#: `[Units] length = mi` in the design seed is the only preferred unit a scenario
+#: value disagrees with (`ev.charge.range`, km, straight from Mock's own table),
+#: and a display that resolves its configured unit before the value arrives
+#: converts while one that does not keeps the source unit - the text is never
+#: recomputed either way. `stage_seed` therefore pins the staged seed's `length`
+#: to whatever unit the scenario itself supplies, so both outcomes print the same
+#: text. Same class of fix would be needed per dimension if another one turns up.
+LENGTH_UNITS = ('mi', 'km', 'm', 'mm', 'in', 'ft')
+
+
+def length_unit_in(scenario: dict) -> Optional[str]:
+	"""The single length unit a scenario supplies values in, or None if unclear."""
+	found = {
+		entry['unit'] for entry in scenario['keys'].values()
+		if isinstance(entry, dict) and entry.get('unit') in LENGTH_UNITS
+	}
+	return found.pop() if len(found) == 1 else None
+
+
+def stage_seed(directory: Path, scenario: Optional[dict] = None) -> Path:
+	"""A copy of `design-seed`, with Mock off and `[Units]` pinned. Returns its path."""
 	if directory.exists():
 		shutil.rmtree(directory)
 	shutil.copytree(DESIGN_SEED, directory)
 	mock_ini = directory / 'plugins' / 'Mock.ini'
 	mock_ini.parent.mkdir(parents=True, exist_ok=True)
 	mock_ini.write_text('[plugin]\nenabled = False\n')
+	if scenario is not None and (unit := length_unit_in(scenario)):
+		config_ini = directory / 'config.ini'
+		text = config_ini.read_text()
+		if re.search(r'^length\s*=', text, re.M):
+			config_ini.write_text(re.sub(r'^length\s*=.*$', f'length = {unit}', text, flags=re.M))
 	return directory
 
 
@@ -255,9 +282,10 @@ def capture(args) -> int:
 		width, _, height = args.size.lower().partition('x')
 		size_override = (int(width), int(height))
 
+	scenario = build_scenario()
 	scenario_path = out_dir / '_scenario.yaml'
-	scenario_path.write_text(yaml.safe_dump(build_scenario(), sort_keys=False, width=120))
-	seed_dir = stage_seed(out_dir / '_seed')
+	scenario_path.write_text(yaml.safe_dump(scenario, sort_keys=False, width=120))
+	seed_dir = stage_seed(out_dir / '_seed', scenario)
 
 	selected = targets(args.only)
 	freeze = None if args.no_freeze_time else (args.freeze_time or 'default')

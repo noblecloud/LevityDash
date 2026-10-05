@@ -212,15 +212,24 @@ def boot(
 	app.init_app()
 	QTimer.singleShot(10, LevityDashboard.load_dashboard)
 	if fixture:
-		# How long boot waits before the scenario's values arrive. A display that
-		# formats a value before it has resolved its own configured unit shows the
-		# source unit and is never re-formatted (the Fixture publishes once), so a
-		# render can be a coin flip between the two. Tunable for exactly that
-		# experiment: LEVITYDASH_FIXTURE_DELAY_MS.
-		delay = int(os.environ.get('LEVITYDASH_FIXTURE_DELAY_MS', '50') or 50)
-		QTimer.singleShot(delay, lambda: startFixture(LevityDashboard))
+		# When the scenario's values arrive. Displays format a value once, on
+		# arrival, and never re-format it - so a value that lands before a display
+		# has resolved its configured unit (or its unit metadata) keeps whatever
+		# it printed first. Deterministic renders therefore want the values to
+		# arrive *last*: `LEVITYDASH_FIXTURE_DELAY_MS=end` injects them after the
+		# dashboard has settled, which is what render_diff.py uses. A number is
+		# milliseconds from here, and is what an interactive look wants.
+		setting = (os.environ.get('LEVITYDASH_FIXTURE_DELAY_MS') or '50').strip().lower()
+		if setting == 'end':
+			fixture_pending = True
+		else:
+			fixture_pending = False
+			QTimer.singleShot(int(setting or 50), lambda: startFixture(LevityDashboard))
 	elif plugins:
+		fixture_pending = False
 		QTimer.singleShot(50, LevityDashboard.plugins.start)
+	else:
+		fixture_pending = False
 
 	# Resize AFTER the dashboard has loaded. load_dashboard restores a saved
 	# window geometry, so an earlier resize gets clobbered and the render comes
@@ -232,6 +241,11 @@ def boot(
 	if windowed:
 		app.main_window.show()
 	pump(app, max(settle - 1.5, 1.5))
+	if fixture_pending:
+		# Every display now exists and has been laid out; publishing here means
+		# no display can format a value before it knows its own units.
+		startFixture(LevityDashboard)
+		pump(app, 1.0)
 	return app, LevityDashboard
 
 
