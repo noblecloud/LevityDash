@@ -30,13 +30,12 @@ COMMON_FAMILIES: tuple[str, ...] = (
 	'Ubuntu', 'Cantarell',
 )
 
-# Generic CSS-style names and the bundled family each one stands for.
+# Generic names and the bundled family each one stands for. No serif is bundled, so 'serif' falls back to the default font.
 GENERIC_FAMILIES: dict[str, str] = {
 	'monospace':  'Roboto Mono',
 	'mono':       'Roboto Mono',
 	'sans-serif': 'Roboto',
 	'sans':       'Roboto',
-	'serif':      'Noto Serif',
 }
 
 
