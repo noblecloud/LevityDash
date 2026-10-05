@@ -58,6 +58,7 @@ from qolkit import (
 )
 from .actions import ActionPool
 from .validate import ConditionFailed, StateError, firstOf
+from .observe import Change, differs
 from .defaults import (
 	Default, DefaultGroup, DefaultState, DefaultValue, SourceType, UnsetDefault, UnsetExisting,
 )
@@ -282,6 +283,13 @@ class StateProperty(property):
 			if isinstance(decode, Callable):
 				kwargs["decode.func"] = decode
 		self._validators = list(kwargs.pop("validators", None) or ())
+		match kwargs.pop("observe", None):
+			case None:
+				self._observers = []
+			case [*funcs]:
+				self._observers = list(funcs)
+			case func:
+				self._observers = [func]
 		self.optionsFromInit = DotDict(kwargs)
 		self.__state = kwargs.pop("state", None)
 
@@ -493,6 +501,12 @@ class StateProperty(property):
 			value.__state_key__ = self
 			value.__statefulParent = owner
 
+		observers = self._observers
+		# An observer sees only real changes made after load. Reading the old
+		# value costs a getter call, so skip it when nothing observes.
+		watching = bool(observers) and not getattr(owner, "is_loading", False)
+		old = self._peek(owner) if watching else Unset
+
 		self.fset(owner, value)
 
 		try:
@@ -507,6 +521,29 @@ class StateProperty(property):
 
 		self.__existingValues__.pop(self.cacheKey(owner), None)
 		owner._set_state_items_.add(self.name)
+
+		if watching:
+			new = self._peek(owner)
+			if differs(old, new):
+				change = Change(self.name, old, new, owner)
+				for observer in tuple(observers):
+					observer(owner, change)
+
+	def _peek(self, owner: 'Stateful') -> Any:
+		"""Read the stored value through `fget`. Unset when the getter raises (nothing set yet)."""
+		try:
+			return self.fget(owner)
+		except Exception:
+			return Unset
+
+	def observe(self, func: Callable[['Stateful', Change], None]) -> 'StateProperty':
+		"""Register `func(owner, change)`. It runs only when a set changes the value.
+
+		`change` has `name`, `old`, `new` and `owner`. It does not run while
+		the owner loads state; use `after` for load-time work.
+		"""
+		self._observers.append(func)
+		return self
 
 	def schedule_after_func(self, owner: 'Stateful', afterPool: 'ActionPool' = None, **kwargs):
 		if after := self.__options.get("after", False):
@@ -559,7 +596,7 @@ class StateProperty(property):
 		'exclude', 'expand', 'factory.func', 'inheritFrom', 'item_default',
 		'link', 'match', 'owner', 'repr', 'required', 'score.func',
 		'singleVal', 'sort', 'sortKey', 'sortOrder', 'tag', 'type', 'unwrap',
-		'update.func', 'validators',
+		'update.func', 'validators', 'observe',
 		# forwarded from __init__ rather than supplied by a caller
 		'fset', 'fdel', 'key', 'name', 'sortOrder.func',
 		# declared-but-unimplemented, kept deliberately - statekit carries a
