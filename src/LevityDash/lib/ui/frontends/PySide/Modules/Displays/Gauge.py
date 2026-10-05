@@ -747,7 +747,9 @@ class Graduations(ColorGradientMixin, StatefulGaugeItem):
 
 	@property
 	def angle_range(self) -> float:
-		if self.super_grad is None:
+		# A disabled parent has count 0 and draws nothing, so its children
+		# span the whole range, as determine_interval already assumes.
+		if self.super_grad is None or not self.super_grad.count:
 			return self.gauge.fullAngle
 		else:
 			return self.super_grad.angle_range / self.super_grad.count
