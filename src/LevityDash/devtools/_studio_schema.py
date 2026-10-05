@@ -21,10 +21,17 @@ text    anything else with a short saved form: `4mm`, `Nunito`, `1.5`
 yaml    the saved form is a mapping, list or set
 ======= ==========================================================
 
+`_refine` then swaps a plain text or YAML control for a structured editor
+(`_studio_editors.py`) when the property is one the studio knows: sizes get a
+number and a unit, `fill`, `zones`, `markers` and the captions get forms,
+gradients and tick label text get lists, and so on. A property the studio does
+not know keeps the plain control.
+
 The saved form is what `StateProperty.encodeValue` returns: the same text a
 `.levity` file holds. Writing goes through `StateProperty.__set__`, the call a
 file load makes. That keeps validation, the decoder and the `after` hooks.
 """
+import inspect
 import logging
 import re
 from dataclasses import dataclass, field
@@ -37,6 +44,7 @@ from statekit.core import Stateful, StateProperty
 from statekit.yaml import StatefulDumper
 from statekit.validate import StateError
 from qolkit import Unset
+from LevityDash.lib.ui.colors import Gradient
 
 #: Properties that are not about how a gauge looks: plumbing, layout of the
 #: panel itself, or text the gauge computes.
@@ -46,7 +54,20 @@ SKIP_KEYS = frozenset({
 	'format-hint', 'text-scale-type', 'displayType', 'center_offset',
 })
 
+#: Text the studio edits although the gauge computes a default for it: the tick label words.
+UNSKIP = {('text_map',)}
+
 MAX_DEPTH = 4
+
+#: Needle types that use a needle property. A property not listed here applies to every type.
+NEEDLE_USES = {
+	'hub': {'needle', 'tapered', 'line'}, 'hub-color': {'needle', 'tapered', 'line'}, 'hub-hole': {'needle', 'tapered', 'line'},
+	'tail': {'tapered', 'arrow', 'line'}, 'tail-dot': {'line', 'arrow'}, 'head': {'arrow'}, 'point': {'arrow'},
+	'halo': {'dot'}, 'halo-color': {'dot'},
+}
+
+ALIGNMENTS = ['Center', 'Left', 'Right', 'Top', 'Bottom']
+ANCHORS = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 
 _PERCENT = re.compile(r'^\s*-?\d+(\.\d+)?\s*%\s*$')
 
@@ -61,6 +82,13 @@ class Field:
 	hi: float = 1.0
 	step: float = 0.01
 	integer: bool = False
+	doc: str = ''
+	nullable: bool = False
+	suffix: str = ''
+	#: A number in the gauge's own unit (degrees F, inHg, mph): the studio adds the unit symbol.
+	measured: bool = False
+	#: Needle types that use the property. None means every type.
+	types: Optional[frozenset] = None
 
 	@property
 	def key(self) -> str:
@@ -118,16 +146,34 @@ def saved(prop: StateProperty, raw: Any, owner: Stateful) -> Any:
 	"""
 	if raw is None or raw is Unset:
 		return None
+	if isinstance(raw, Gradient):
+		return gradientText(raw)
 	try:
 		encoded = prop.encodeValue(raw, owner)
 		# A plain bool, int or float reads back from its own YAML text as itself. Skip the
 		# dump and parse, which is most of what `read` costs.
 		if type(encoded) in (bool, int) or (type(encoded) is float and encoded == encoded and abs(encoded) != float('inf')):
 			return encoded
-		text = yaml.dump(encoded, Dumper=StatefulDumper, default_flow_style=True, width=10 ** 6)
+		text = yaml.dump(encoded, Dumper=StudioDumper, default_flow_style=True, width=10 ** 6)
 		return yaml.safe_load(text)
 	except Exception:
 		return str(raw)
+
+
+def gradientText(gradient: Gradient) -> dict:
+	"""A gradient as the `{value: '#rrggbb'}` mapping a `.levity` file holds and the loader reads back."""
+	out = {}
+	for stop in gradient.as_list:
+		number = float(stop.value)
+		out[int(number) if number.is_integer() else number] = stop.color.QColor.name()
+	return out
+
+
+class StudioDumper(StatefulDumper):
+	"""`StatefulDumper` that writes a gradient as a plain mapping (the stock dumper tags it, and a plain loader cannot read the tag)."""
+
+
+StudioDumper.add_multi_representer(Gradient, lambda dumper, data: dumper.represent_dict(gradientText(data)))
 
 
 def read(root: Stateful, path: tuple) -> Any:
@@ -293,7 +339,7 @@ def describe(owner: Stateful, path: tuple = (), title: str = 'Gauge', _seen: Opt
 	seen.add(id(owner))
 	group = Group(path, title)
 	for prop in type(owner).statefulItems.values():
-		if 'set' not in prop.actions or prop.key in SKIP_KEYS:
+		if 'set' not in prop.actions or (prop.key in SKIP_KEYS and (prop.fget.__name__,) not in UNSKIP):
 			continue
 		try:
 			raw = prop.fget(owner)
@@ -312,5 +358,69 @@ def describe(owner: Stateful, path: tuple = (), title: str = 'Gauge', _seen: Opt
 		if found is None:
 			continue
 		found.path = path + (prop.key,)
+		found = _refine(found, prop, raw, owner)
 		group.fields.append(found)
 	return group
+
+
+_SIZE_NAMES = ('Height', 'Width', 'Length', 'Dimension')
+_MEASURED_KEYS = {'min', 'max', 'interval', 'min-interval', 'round-to'}
+
+
+def _isSizeType(r: type) -> bool:
+	name = getattr(r, '__qualname__', r.__name__)
+	return name.endswith(_SIZE_NAMES)
+
+
+def _refine(found: Field, prop: StateProperty, raw: Any, owner: Stateful) -> Field:
+	"""Give the field its tooltip, its unit, and a structured editor when the studio has one."""
+	key = found.key
+	doc = prop.fget.__doc__ if prop.fget is not None else None
+	found.doc = inspect.cleandoc(doc) if doc else ''
+	found.nullable = bool(prop.allowNone)
+	returns = [r for r in prop.returns if isinstance(r, type)]
+	ownerName = type(owner).__name__
+	if key == 'fill':
+		found.kind = 'fill'
+	elif key in ('caption', 'sub-label'):
+		found.kind = 'caption'
+	elif key == 'zones':
+		found.kind = 'zones'
+	elif key == 'markers':
+		found.kind = 'markers'
+	elif key == 'gradient':
+		found.kind = 'gradient'
+	elif prop.fget.__name__ == 'text_map':
+		found.kind = 'textmap'
+	elif key == 'format' and not isinstance(raw, Stateful):
+		found.kind = 'format'
+	elif key == 'offset' and ownerName.startswith('Gauge') and 'Label' in ownerName + ''.join(c.__name__ for c in type(owner).__mro__):
+		found.kind = 'offset'
+	elif key == 'font':
+		found.kind = 'font'
+	elif key == 'alignment':
+		found.kind = 'choice'
+		found.choices = [('auto', None)] + [(a.lower(), a) for a in ALIGNMENTS]
+	elif key == 'anchor':
+		found.kind = 'choice'
+		found.choices = [('none', None)] + [(a, a) for a in ANCHORS]
+	elif key == 'point':
+		found.kind = 'choice'
+		found.choices = [('out', None), ('in', 'in')]
+	elif key.endswith('interval-factors'):
+		found.kind = 'intset'
+	elif found.kind in ('text', 'percent') and returns and any(_isSizeType(r) for r in returns) and not isinstance(raw, Stateful):
+		found.kind = 'size'
+	elif found.kind == 'number':
+		if 'angle' in key:
+			found.suffix = '\u00b0'
+		elif key == 'animate':
+			found.suffix = ' ms'
+			found.integer = True
+		elif isinstance(raw, wu.Measurement) or (key in _MEASURED_KEYS and ownerName in ('GaugeRange', 'Graduations')):
+			found.measured = True
+	if found.kind == 'number' and key in ('opacity',):
+		found.kind = 'percent'
+	if found.path[:1] == ('needle',) and key in NEEDLE_USES:
+		found.types = frozenset(NEEDLE_USES[key])
+	return found
