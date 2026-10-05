@@ -40,21 +40,51 @@ def test_same_as_hand_built_path(start, end):
 
 @pytest.mark.parametrize(('start', 'end'), ANGLE_RANGES)
 def test_subpath_ends_where_pointat_says(start, end):
+	"""The drawn arc and the placed point agree to well under a pixel.
+
+	They are not the same curve: `subPath` is Qt's arc, which quantises angles to
+	a 16th of a degree, and `pointAt` is the polar arithmetic the marks have
+	always used. The gap is bounded - this pins it, so growing it would be
+	noticed - and closing it is a visible change, not a refactor.
+	"""
 	track = ArcTrack(QRectF(-200, -200, 400, 400), start, end)
 	path = track.subPath(0, 1)
-	first, last = track.pointAt(0), track.pointAt(1)
-	assert path.pointAtPercent(0) == first
-	assert path.pointAtPercent(1) == last
+	for percent, point in ((0, track.pointAt(0)), (1, track.pointAt(1))):
+		on_path = path.pointAtPercent(percent)
+		gap = ((on_path.x() - point.x()) ** 2 + (on_path.y() - point.y()) ** 2) ** 0.5
+		assert gap < 0.25, f'{percent}: drawn arc and placed point differ by {gap:.3f} px'
+
+
+@pytest.mark.parametrize(('start', 'end'), ANGLE_RANGES)
+def test_point_at_angle_is_the_mark_arithmetic(start, end):
+	"""Bit for bit what `Tick.draw` computes: radius * cos/sin of the mark angle.
+
+	The mark angle is the dial's less 90 degrees - `Tick.angle` is
+	`gauge.startAngle - 90 + index * interval`, and that is what goes into
+	`cos`/`sin`. Getting this wrong rotates every tick by 90 degrees, which is
+	exactly what the first version of this did.
+	"""
+	from math import cos, radians, sin
+	track = ArcTrack(QRectF(-200, -200, 400, 400), start, end)
+	assert track.markAngle(0) == start - 90
+	assert track.markAngle(1) == end - 90
+	for angle in (start - 90, (start + end) / 2 - 90, end - 90):
+		r = radians(angle)
+		assert track.pointAtAngle(angle) == QPointF(200 * cos(r), 200 * sin(r))
+		assert track.normalAtAngle(angle) == QPointF(cos(r), sin(r))
 
 
 @pytest.mark.parametrize(('start', 'end'), ANGLE_RANGES)
 def test_subpath_piece_matches_the_whole_path(start, end):
-	"""A middle piece starts and ends on the full arc's points."""
+	"""A middle piece starts and ends where the track says those positions are."""
 	rect = QRectF(-200, -200, 400, 400)
 	track = ArcTrack(rect, start, end)
 	piece = track.subPath(0.25, 0.75)
-	assert piece.pointAtPercent(0) == track.pointAt(0.25)
-	assert piece.pointAtPercent(1) == track.pointAt(0.75)
+	for percent, t in ((0, 0.25), (1, 0.75)):
+		on_piece = piece.pointAtPercent(percent)
+		point = track.pointAt(t)
+		gap = ((on_piece.x() - point.x()) ** 2 + (on_piece.y() - point.y()) ** 2) ** 0.5
+		assert gap < 0.25, f't={t}: piece and track differ by {gap:.3f} px'
 
 
 def test_quarter_circle_length():

@@ -1058,8 +1058,16 @@ class GaugeArc(StatefulGaugePathItem):
 
 	_weight_scale = 0.75
 
-	#: The arc this item strokes, in the item's own coordinates. Rebuilt by `draw`.
-	track: Optional[ArcTrack] = None
+	#: The arc this item strokes, in the item's own coordinates. Rebuilt by `draw`,
+	#: and built on demand before that, since a tick can be drawn first.
+	_track: Optional[ArcTrack] = None
+
+	@property
+	def track(self) -> ArcTrack:
+		"""The dial's track: its rect and its angles, in this item's coordinates."""
+		if self._track is None:
+			self._track = ArcTrack(self.centered_gauge_rect, self.startAngle, self.endAngle)
+		return self._track
 
 	@property
 	def safe_area(self) -> QPainterPath:
@@ -1144,8 +1152,8 @@ class GaugeArc(StatefulGaugePathItem):
 
 	def draw(self):
 		self.resetTransform()
-		self.track = ArcTrack(self.centered_gauge_rect, self.startAngle, self.endAngle)
-		path = self.track.subPath(0, 1)
+		self._track = ArcTrack(self.centered_gauge_rect, self.startAngle, self.endAngle)
+		path = self._track.subPath(0, 1)
 		self._center_offset = path.boundingRect().center()
 		self.gauge.update_center_offset(self._center_offset)
 		self.setPath(path)
@@ -1391,40 +1399,30 @@ class Tick(GaugePathItem):
 
 	def draw(self):
 		path = QPainterPath()
-		angle = radians(self.angle)
-		cosI, sinI = cos(angle), sin(angle)
-		center = QPointF(0, 0)
-		cx = center.x()
-		cy = center.y()
-		radius = self.radius
+		# The dial's own track places the tick: a point on the rim and the outward
+		# direction there, in the same polar arithmetic this used to do inline. A
+		# bar's track answers the same two questions, so this is the whole of what
+		# a tick needs from the display it is on.
+		track = self.gauge.arc.track
+		point = track.pointAtAngle(self.angle)
+		outward = track.normalAtAngle(self.angle)
 		length = self.properties.length_px
 
-		x1 = x2 = radius * cosI
-		y1 = y2 = radius * sinI
-
+		start = end = point
 		match self.properties.position:
 			case DisplayPosition.Below | DisplayPosition.Inside:
-				x2 -= length * cosI
-				y2 -= length * sinI
+				end = point - outward * length
 			case DisplayPosition.Above | DisplayPosition.Outside:
-				x2 += length * cosI
-				y2 += length * sinI
+				end = point + outward * length
 			case DisplayPosition.Center | _:
-				half_x = length * cosI / 2
-				half_y = length * sinI / 2
+				half = outward * (length / 2)
+				start, end = point - half, point + half
+				if length > 0:  # keeps the outermost as the end point
+					start, end = end, start
 
-				x2 += half_x
-				x1 -= half_x
-
-				y2 += half_y
-				y1 -= half_y
-
-				if length > 0: # keeps the outermost as the end point
-					x1, y1, x2, y2 = x2, y2, x1, y1
-
-		p1 = QPointF(x1, y1)
+		p1 = start
 		self.startPoint = p1
-		p2 = QPointF(x2, y2)
+		p2 = end
 		self.endPoint = p2
 		path.moveTo(p1)
 		path.lineTo(p2)

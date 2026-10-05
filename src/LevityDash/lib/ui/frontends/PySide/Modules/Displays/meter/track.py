@@ -14,7 +14,7 @@ and nowhere else, exactly as it always has.
 `LineTrack` is the same interface for a straight run, which is what a bar
 needs. Both are written so a `PathTrack(QPainterPath)` can join them later.
 """
-from math import atan2, degrees, hypot
+from math import atan2, cos, degrees, hypot, radians, sin
 
 from PySide6.QtCore import QPointF, QRectF
 from PySide6.QtGui import QPainterPath
@@ -111,20 +111,45 @@ class ArcTrack(Track):
 		"""
 		return -self.start_angle + 90 - self.full_angle * t
 
+	def dialAngle(self, t: float) -> float:
+		"""The dial angle at ``t``: ``start`` at 0, ``end`` at 1, clockwise from up."""
+		return self.start_angle + self.full_angle * t
+
+	def markAngle(self, t: float) -> float:
+		"""The angle at ``t`` in the convention marks are placed in.
+
+		The dial's own angle less 90 degrees: what `Tick.angle` carries, and what
+		`cos`/`sin` want. ``-90`` is up, ``0`` is right, positive runs clockwise
+		(y grows downwards).
+		"""
+		return self.start_angle + self.full_angle * t - 90
+
+	def pointAtAngle(self, angle: float) -> QPointF:
+		"""The point at a mark angle (see `markAngle`), by the marks' own arithmetic.
+
+		Deliberately not Qt's arc parameterisation: `QPainterPath` quantises arc
+		angles to a 16th of a degree, so `arcMoveTo` lands up to 0.199 px off a
+		400 px radius (measured, 2026-10-05), and anything placed through it would
+		shift by that much against every render taken so far. `subPath` still
+		draws the Qt arc, so the two can disagree by that 0.2 px; making them
+		agree is a visible change and belongs in its own task, not this refactor.
+		"""
+		radians_ = radians(angle)
+		center = self.rect.center()
+		return QPointF(center.x() + self.radius * cos(radians_), center.y() + self.radius * sin(radians_))
+
+	def normalAtAngle(self, angle: float) -> QPointF:
+		"""The outward unit vector at a mark angle: the direction a tick grows in."""
+		return QPointF(cos(radians(angle)), sin(radians(angle)))
+
 	def pointAt(self, t: float) -> QPointF:
-		path = QPainterPath()
-		path.arcMoveTo(self.rect, self.qtAngle(t))
-		return path.currentPosition()
+		return self.pointAtAngle(self.markAngle(t))
 
 	def tangentAt(self, t: float) -> QPointF:
-		path = QPainterPath()
-		path.arcMoveTo(self.rect, self.qtAngle(t))
-		point = path.currentPosition()
-		# The tangent is perpendicular to the radius, the way the sweep runs.
-		dx, dy = point.x() - self.rect.center().x(), point.y() - self.rect.center().y()
-		sign = 1.0 if self.full_angle < 0 else -1.0
-		length = hypot(dx, dy) or 1.0
-		return QPointF(-dy / length * sign, dx / length * sign)
+		outward = self.normalAtAngle(self.markAngle(t))
+		# A clockwise sweep turns the outward normal a quarter turn backwards.
+		sign = -1.0 if self.full_angle < 0 else 1.0
+		return QPointF(outward.y() * sign, -outward.x() * sign)
 
 	def subPath(self, t0: float = 0.0, t1: float = 1.0) -> QPainterPath:
 		"""The arc between ``t0`` and ``t1``, drawn the way `GaugeArc` always drew it."""
