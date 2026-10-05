@@ -243,9 +243,16 @@ def boot(
 	pump(app, max(settle - 1.5, 1.5))
 	if fixture_pending:
 		# Every display now exists and has been laid out; publishing here means
-		# no display can format a value before it knows its own units.
+		# no display can format a value before it knows its own units. The second
+		# publish is what a display sees in the wild - the same value arriving
+		# again - and gives any consumer that formatted the first callback a
+		# settled second one.
 		startFixture(LevityDashboard)
 		pump(app, 1.0)
+		plugin = LevityDashboard.plugins.get('Fixture', None)
+		if plugin is not None:
+			plugin.publish()
+			pump(app, 0.5)
 	return app, LevityDashboard
 
 

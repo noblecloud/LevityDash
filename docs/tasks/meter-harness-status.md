@@ -27,15 +27,21 @@ Captures are local and gitignored: `.render-diff/`.
 
 ## Open
 
-- The showcase's EV-card caption (`sub-label: {value: ev.charge.range}`) renders
-  `313` or `313 km`, roughly 50/50, **in the full showcase only**.
-  Ruled out: settle (14 s, 30 s, 60 s), publish delay (50 ms … 6 s, and
-  injecting the values after the dashboard has settled), `PYTHONHASHSEED`.
-  A minimal one-gauge fragment with the same caption is stable (5/5), so it
-  needs two consumers of the same key — the showcase also shows
-  `ev.charge.range` in a `realtime.text`. Suspect: two displays sharing one
-  value source, where the first format converts the unit in place.
-- Then: re-run `selfcheck`, re-capture `.render-diff/baseline/`, and start the
+- **The caption flicker is accepted, not chased** (Neal, 2026-10-05: "sounds like an
+  extreme gate, I wouldn't sweat that too much"). The showcase's EV caption
+  (`sub-label: {value: ev.charge.range}`) renders `313` or `313 km`, roughly
+  50/50: a bound value that arrives as a bare float prints without its unit, and
+  the caption never re-formats. Everything else is bit-stable.
+  Ruled out, each by measurement: settle (14 s, 30 s, 60 s), publish delay
+  (50 ms … 6 s), injecting the values after the dashboard has settled,
+  publishing twice, `PYTHONHASHSEED`. Minimal repros are *stable* — one gauge
+  with the same bound caption (5/5), and a two-consumer fragment (gauge caption
+  + `realtime.text` on one key, 6/6) — so the flip needs the full showcase.
+- So phase 2's rule is a *guide*, not a gate: `compare` still reports per-file
+  pixel counts and writes diff images, and a diff gets looked at rather than
+  treated as an automatic failure. Only one region is known-flaky, and it is
+  named above.
+- Then: re-run `selfcheck`, capture `.render-diff/baseline/`, and start the
   refactor proper, diffing after each commit.
 
 ## Reproduce
@@ -71,3 +77,7 @@ poetry run python src/LevityDash/devtools/render_diff.py compare A B --verbose
   configured unit is formatted with the source unit and never re-formatted:
   `ev.charge.range` reads `313` (km) or `194` (mi, what `[Units] length = mi`
   asks for) in otherwise identical renders.
+- A caption bound with `value:` prints a bare number when the value it is handed
+  is a float rather than a `Measurement`; the caption never re-formats, so the
+  unit word appears or not. Observed as the showcase's EV caption flipping
+  between `313` and `313 km`, and only in the full showcase.
