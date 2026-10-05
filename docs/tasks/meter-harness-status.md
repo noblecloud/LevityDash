@@ -55,21 +55,29 @@ where noted.
   `clock.levity` already did.
 - `compare` prints each differing cluster's bounding box and writes a diff image
   per mismatch, so reviewing a diff is a glance rather than a hunt.
-- Three consecutive captures of unchanged code (`--jobs 6`) are **bit-identical:
-  23/23 files, 0 differing pixels**. The pre-refactor baseline is
-  `.render-diff/baseline/`; `baseline2` and `baseline3` are the same render
-  again, kept so the claim can be re-checked. Captures are local (gitignored).
+- Three consecutive captures of unchanged code (`--jobs 6`) came back
+  **bit-identical: 23/23 files, 0 differing pixels** — usually true, but the EV
+  caption's unit word is a per-capture coin flip, so a comparison can also come
+  back with one file and ~400 px, in that one named region. The pre-refactor
+  baseline is `.render-diff/baseline/`; `baseline2` and `baseline3` are the same
+  render again. Captures are local (gitignored).
 
 ## Open
 
-- **The caption flicker does not reproduce under the harness's own conditions.**
-  Measured 2026-10-05: three consecutive captures of unchanged code
-  (`baseline`, `baseline2`, `baseline3`, `--jobs 6`) are bit-identical — 0
-  differing pixels in all 23 files — and the showcase's EV caption lands in the
-  same state every time. The `313` / `313 km` flicker appeared only in scratch
-  loops that staged **one** seed and reused it across renders; the harness stages
-  a fresh seed per capture, which is the shape it is actually used in. Keep it
-  that way.
+- The EV caption's unit word is a **per-capture coin flip**, not a property of
+  the code. Measured 2026-10-05 with the refactor's own steps: `s3-scale` and
+  `s4-recheck` are the *same commit* and differ by 409 px in exactly this
+  region (`s3` renders `313`, `s4` renders `313 km`). Across seven captures the
+  region read `313 km` five times and `313` twice. An earlier three-in-a-row of
+  identical captures was luck; this is the flip, and it is *not* caused by the
+  refactor - which is why the rule is a guide. `s1-scale`, `baseline`,
+  `baseline2` and `baseline3` all read `313 km`; `s2-track` and `s3-scale` read
+  `313`.
+- The mechanism, as far as it was pinned down: the caption prints the unit only
+  when the value it is handed is a `Measurement`, and prints a bare number when
+  it is a float; it never re-formats. Whatever decides which of those two it
+  gets is not the settle time, the publish delay, the publish count, or the
+  hash seed (all ruled out by measurement).
 - Ruled out along the way, each by measurement: settle (14 s, 30 s, 60 s),
   publish delay (50 ms … 6 s), injecting the values after the dashboard has
   settled, `PYTHONHASHSEED`, and publishing twice. Minimal repros were stable
