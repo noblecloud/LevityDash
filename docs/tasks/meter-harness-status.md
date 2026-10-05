@@ -125,9 +125,13 @@ poetry run python src/LevityDash/devtools/render_diff.py compare A B --verbose
 - `Gauge.py:4344` uses `Any` without importing it, so `import LevityDash.lib`
   raises `NameError` on Python 3.13. Invisible on 3.14 (PEP 649 defers
   annotation evaluation). `pyproject.toml` declares 3.13–3.14.
-- `render_dashboard.py --scenario X` with no `--seed` hangs forever: the design
-  seed enables Mock, and Mock's ticker thread keeps the process alive after the
-  PNG is written.
+- `render_dashboard.py --scenario` **segfaults on a full dashboard** (rc=-11, no
+  PNG), while a single-preset dashboard renders fine under the same conditions.
+  This was first recorded as "hangs forever"; the current symptom is a crash, and
+  the trigger is the *dashboard*, not the scenario, the publish delay, the settle
+  or Mock — all measured. It does not affect this harness, which renders presets
+  and the showcase. Written up with the repro and the faulting stack in
+  [render-scenario-crash.md](render-scenario-crash.md).
 - A value that reaches its display before the display has resolved the
   configured unit is formatted with the source unit and never re-formatted:
   `ev.charge.range` reads `313` (km) or `194` (mi, what `[Units] length = mi`
