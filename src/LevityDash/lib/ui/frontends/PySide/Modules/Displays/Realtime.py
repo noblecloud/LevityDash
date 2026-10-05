@@ -14,7 +14,8 @@ from LevityDash.lib.ui.icons import fa as FontAwesome, getIcon, Icon
 from LevityDash.lib.utils.shared import singleShotSafe, startTimerSafe, stopTimerSafe
 from WeatherUnits.time_.time import Second
 from LevityDash.lib.plugins.categories import CategoryItem
-from LevityDash.lib.plugins.computed import acquireValueSource, releaseValueSource
+from LevityDash.lib.plugins.computed import acquireValueSource
+from LevityDash.lib.valuesource import KeySource
 from LevityDash.lib.plugins.expressions import Expression
 from LevityDash.lib.plugins import Plugin, Container
 from LevityDash.lib.plugins.plugin import AnySource, SomePlugin
@@ -202,11 +203,11 @@ class Realtime(Panel, tag='realtime'):
 				log.warning(f'Realtime panel key {value!r} is not a valid value source; it shows no value')
 				key = CategoryItem(value)
 			elif _isExpression(value):
-				source = value
+				source = KeySource(value, key)
 			value = key
 		if value == getattr(self, '_key', None):
 			if source is not None:
-				releaseValueSource(source)
+				source.release()
 			return
 		self._releaseKeySource()
 		self._keySource = source
@@ -231,12 +232,14 @@ class Realtime(Panel, tag='realtime'):
 	@key.encode
 	def key(self, value) -> str:
 		# Save what the file said: the expression text, not its computed key.
-		return getattr(self, '_keySource', None) or str(value)
+		if (source := getattr(self, '_keySource', None)) is not None:
+			return source.text
+		return str(value)
 
 	def _releaseKeySource(self):
 		if (source := getattr(self, '_keySource', None)) is not None:
 			self._keySource = None
-			releaseValueSource(source)
+			source.release()
 
 	def delete(self):
 		try:

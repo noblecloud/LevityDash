@@ -39,7 +39,7 @@ from types import GenericAlias, UnionType, FunctionType
 from typing import (
 	Any, Callable, ClassVar, Dict, Final, Generic, get_args, get_origin,
 	get_type_hints, Hashable, Iterable, List, Literal, Mapping, Sequence, Set, Sized, Text, Tuple, Type, TypeAlias,
-	TypeVar, Union, Iterator,
+	TypeVar, Union, Iterator, Optional,
 )
 try:
 	from typing import _GenericAlias, _UnionGenericAlias
@@ -57,6 +57,9 @@ from qolkit import (
 	recursiveRemove, remove_empty_dicts, sortDict, Unset,
 )
 from .actions import ActionPool
+from .validate import ConditionFailed, StateError, firstOf
+from .observe import Change, differs
+from .binding import Binding, Constant, ValueSource
 from .defaults import (
 	Default, DefaultGroup, DefaultState, DefaultValue, SourceType, UnsetDefault, UnsetExisting,
 )
@@ -280,6 +283,14 @@ class StateProperty(property):
 		if (decode := kwargs.pop("decoder", None)) is not None:
 			if isinstance(decode, Callable):
 				kwargs["decode.func"] = decode
+		self._validators = list(kwargs.pop("validators", None) or ())
+		match kwargs.pop("observe", None):
+			case None:
+				self._observers = []
+			case [*funcs]:
+				self._observers = list(funcs)
+			case func:
+				self._observers = [func]
 		self.optionsFromInit = DotDict(kwargs)
 		self.__state = kwargs.pop("state", None)
 
@@ -472,7 +483,12 @@ class StateProperty(property):
 			_source = SourceType.Default
 			value = value.value
 
-		if self.conditions and not self.testConditions(value, owner, "set"):
+		try:
+			value = self.validate(owner, value)
+		except ConditionFailed as e:
+			# Conditions have always dropped the value silently. Keep that for
+			# direct assignment, but say why at debug level.
+			log.debug(f"{type(owner).__name__}.{self.key}: {e.reason}")
 			return
 
 		value = self.__decode__(owner, value)
@@ -485,6 +501,12 @@ class StateProperty(property):
 		if isinstance(value, Stateful):
 			value.__state_key__ = self
 			value.__statefulParent = owner
+
+		observers = self._observers
+		# An observer sees only real changes made after load. Reading the old
+		# value costs a getter call, so skip it when nothing observes.
+		watching = bool(observers) and not getattr(owner, "is_loading", False)
+		old = self._peek(owner) if watching else Unset
 
 		self.fset(owner, value)
 
@@ -500,6 +522,29 @@ class StateProperty(property):
 
 		self.__existingValues__.pop(self.cacheKey(owner), None)
 		owner._set_state_items_.add(self.name)
+
+		if watching:
+			new = self._peek(owner)
+			if differs(old, new):
+				change = Change(self.name, old, new, owner)
+				for observer in tuple(observers):
+					observer(owner, change)
+
+	def _peek(self, owner: 'Stateful') -> Any:
+		"""Read the stored value through `fget`. Unset when the getter raises (nothing set yet)."""
+		try:
+			return self.fget(owner)
+		except Exception:
+			return Unset
+
+	def observe(self, func: Callable[['Stateful', Change], None]) -> 'StateProperty':
+		"""Register `func(owner, change)`. It runs only when a set changes the value.
+
+		`change` has `name`, `old`, `new` and `owner`. It does not run while
+		the owner loads state; use `after` for load-time work.
+		"""
+		self._observers.append(func)
+		return self
 
 	def schedule_after_func(self, owner: 'Stateful', afterPool: 'ActionPool' = None, **kwargs):
 		if after := self.__options.get("after", False):
@@ -552,7 +597,7 @@ class StateProperty(property):
 		'exclude', 'expand', 'factory.func', 'inheritFrom', 'item_default',
 		'link', 'match', 'owner', 'repr', 'required', 'score.func',
 		'singleVal', 'sort', 'sortKey', 'sortOrder', 'tag', 'type', 'unwrap',
-		'update.func',
+		'update.func', 'validators', 'observe',
 		# forwarded from __init__ rather than supplied by a caller
 		'fset', 'fdel', 'key', 'name', 'sortOrder.func',
 		# declared-but-unimplemented, kept deliberately - statekit carries a
@@ -879,6 +924,31 @@ class StateProperty(property):
 				console.print(p)
 			return result
 		return all(self.__testCondition(value, owner, condition) for condition in conditions)
+
+	def validate(self, owner: 'Stateful', proposal: Any) -> Any:
+		"""Return the value to store for `proposal`, possibly coerced.
+
+		Raises StateError, carrying the reason, when the value is not acceptable.
+		Runs the bool conditions for "set" first (a failure raises ConditionFailed
+		with a generic reason), then each validator in registration order.
+		"""
+		if self.conditions and not self.testConditions(proposal, owner, "set"):
+			raise ConditionFailed(f"{self!r} condition failed for {proposal!r}", prop=self, value=proposal)
+		for validator in self._validators:
+			try:
+				proposal = validator(owner, proposal)
+			except StateError as e:
+				if e.prop is None:
+					e.prop = self
+				raise
+			except (ValueError, TypeError, KeyError) as e:
+				raise StateError(str(e), prop=self, value=proposal) from e
+		return proposal
+
+	def validator(self, func: Callable[['Stateful', Any], Any]) -> 'StateProperty':
+		"""Register `func(owner, proposal) -> value`. Raise StateError to reject."""
+		self._validators.append(func)
+		return self
 
 	def setOption(self, **kwargs):
 		self.__options.update(kwargs)
@@ -1890,6 +1960,33 @@ class Stateful(metaclass=StatefulMetaclass):
 	def _afterSetState(self):
 		pass
 
+	_bindings_: Dict[str, Binding] = None
+
+	def bind(self, slot: str, source: Optional[ValueSource], setter: Callable[[Any], None], transform: Callable[[Any], Any] = None) -> Optional[Binding]:
+		"""Bind `source` to `setter` under the name `slot`.
+
+		A binding already under `slot` is unlinked first, which releases its
+		source. Pass `source=None` to clear the slot. Returns the new Binding.
+		"""
+		bindings = self._bindings_
+		if bindings is None:
+			bindings = self._bindings_ = {}
+		if (old := bindings.pop(slot, None)) is not None:
+			old.unlink()
+		if source is None:
+			return None
+		binding = bindings[slot] = Binding(source, setter, transform)
+		return binding
+
+	def unbind(self, slot: str = None) -> None:
+		"""Unlink the binding under `slot`, or every binding when `slot` is None."""
+		bindings = self._bindings_
+		if not bindings:
+			return
+		for name in ([slot] if slot is not None else list(bindings)):
+			if (binding := bindings.pop(name, None)) is not None:
+				binding.unlink()
+
 	def is_default(self, state_data: Mapping = None) -> bool:
 		# TODO: Implement this
 		return False
@@ -2139,7 +2236,10 @@ class Stateful(metaclass=StatefulMetaclass):
 									self._state_item_sources[subProp] = SourceType.Shared
 									value = sharedValue.to_dict({subProp.key: value})
 
-					prop.setState(self, value, afterPool=afterPool)
+					try:
+						prop.setState(self, value, afterPool=afterPool)
+					except StateError as e:
+						log.error(f"{type(self).__name__}: skipping '{prop.key}': {e.reason}")
 					value: Stateful
 					self._unset_keys_.discard(prop)
 			match len(unwraps):
@@ -2626,6 +2726,8 @@ class Stateful(metaclass=StatefulMetaclass):
 		# a real error - silently masking the same underlying gap.
 		if (pool := getattr(self, '_action_pool', None)) is not None and pool.up is not pool:
 			pool.up.remove(pool)
+		if getattr(self, '_bindings_', None):
+			self.unbind()
 
 	def __rich_repr__(self, exclude: set = None):
 
