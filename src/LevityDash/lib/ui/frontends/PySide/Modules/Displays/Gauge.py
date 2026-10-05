@@ -47,6 +47,7 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.scale import (
 	CLOCK_HANDS, _isWholeSteps, clockTurn, decode_measurement, filter_factors, formatDuration,
 	parseClockTime, shortestDelta,
 )
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.track import ArcTrack
 from LevityDash.lib.utils import Axis
 from LevityDash.lib.utils.data import MinMax
 from LevityDash.lib.utils.shared import radialPoint, defer, factors, is_prime, Unset, clearCacheAttr, \
@@ -1056,6 +1057,9 @@ class GaugeArc(StatefulGaugePathItem):
 
 	_weight_scale = 0.75
 
+	#: The arc this item strokes, in the item's own coordinates. Rebuilt by `draw`.
+	track: Optional[ArcTrack] = None
+
 	@property
 	def safe_area(self) -> QPainterPath:
 		return QPainterPath(self.shape())
@@ -1139,10 +1143,8 @@ class GaugeArc(StatefulGaugePathItem):
 
 	def draw(self):
 		self.resetTransform()
-		path = QPainterPath()
-		rect = self.centered_gauge_rect
-		path.arcMoveTo(rect, -self.startAngle + 90)
-		path.arcTo(rect, -self.startAngle + 90, -self.fullAngle)
+		self.track = ArcTrack(self.centered_gauge_rect, self.startAngle, self.endAngle)
+		path = self.track.subPath(0, 1)
 		self._center_offset = path.boundingRect().center()
 		self.gauge.update_center_offset(self._center_offset)
 		self.setPath(path)
