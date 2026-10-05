@@ -2925,9 +2925,9 @@ class GaugeFill(GaugePathItem):
 
 	Spec keys: ``from`` (a number, key or expression; default the range
 	minimum), ``to`` (a number, key or expression; omitted means the gauge value), ``weight`` (default the arc's) and
-	``color`` (default the gauge colour) and ``cap`` (``round``, the default,
-	``square`` or ``flat``; a round or square cap ends on the value rather than
-	past it). With no value to draw to, it is hidden.
+	``color`` (default the gauge colour) and ``cap`` (``round``, ``square`` or
+	``flat``; the default is ``round``, or ``flat`` with ``segments``; a round or
+	square cap ends on the value rather than past it). With no value to draw to, it is hidden.
 	A source-fed end with no value yet hides the fill; a bad spec logs the gauge key and hides it.
 	"""
 
@@ -2945,7 +2945,7 @@ class GaugeFill(GaugePathItem):
 	_gap = None
 	_glow: Optional[Glow] = None
 	_strokes: list = ()
-	_cap = Qt.PenCapStyle.RoundCap
+	_cap: Optional[Qt.PenCapStyle] = None
 
 	_CAPS = {'round': Qt.PenCapStyle.RoundCap, 'square': Qt.PenCapStyle.SquareCap, 'flat': Qt.PenCapStyle.FlatCap}
 
@@ -2980,7 +2980,7 @@ class GaugeFill(GaugePathItem):
 		self._valid = False
 		self._from = self._to = self._weight = self._color = self._gap = self._glow = None
 		self._colorFromZones, self._segments, self._strokes = False, 0, ()
-		self._cap = Qt.PenCapStyle.RoundCap
+		self._cap = None
 		name = _gaugeKeyName(self.gauge)
 		unknown = set(spec) - {'from', 'to', 'weight', 'color', 'segments', 'gap', 'glow', 'cap'}
 		if unknown:
@@ -3089,7 +3089,10 @@ class GaugeFill(GaugePathItem):
 		# A round or square cap reaches half the weight past the end of its
 		# stroke. Pull each end in by that much, so the cap's edge lands on the
 		# value (and segment gaps keep their size) instead of overshooting it.
-		capDeg = 0.0 if self._cap == Qt.PenCapStyle.FlatCap else (weight or 0) / 2 / radius * 180 / pi
+		# Segments read as cells, so they default to flat ends; a single fill
+		# defaults to round.
+		cap = self._cap if self._cap is not None else (Qt.PenCapStyle.FlatCap if self._segments else Qt.PenCapStyle.RoundCap)
+		capDeg = 0.0 if cap == Qt.PenCapStyle.FlatCap else (weight or 0) / 2 / radius * 180 / pi
 		# Where the track itself has a cap that reaches past its end, a fill end
 		# on that end keeps its length, so the two caps cover each other.
 		ends = sorted((float(gauge.startAngle), float(gauge.endAngle)))
@@ -3138,7 +3141,7 @@ class GaugeFill(GaugePathItem):
 			full.addPath(path)
 		pen = QPen(gauge.pen)
 		pen.setWidthF(weight or 0)
-		pen.setCapStyle(self._cap)
+		pen.setCapStyle(cap)
 		pen.setBrush(QBrush(strokes[0][1] if strokes else base))
 		self.setPen(pen)
 		self.setBrush(Qt.BrushStyle.NoBrush)
