@@ -54,6 +54,7 @@ from LevityDash.devtools._studio_stage import DATA_PRESETS, DataPreset, StudioGa
 from LevityDash.devtools import _studio_editors as editors
 from LevityDash.devtools._studio_handles import HandleLayer
 from LevityDash.devtools._studio_widgets import FieldRow, Section, build, fieldsOf
+from LevityDash.lib.ui.colors.stopunits import formatStop
 
 StatefulDumper = schema.StudioDumper
 
@@ -294,6 +295,7 @@ class Preview(QGraphicsView):
 		self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
 		self.setMinimumSize(320, 320)
 		self.setMouseTracking(True)
+		self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
 		self.viewport().setMouseTracking(True)
 		self.layer: Optional[HandleLayer] = None
 		self.fitting = True
@@ -353,6 +355,12 @@ class Preview(QGraphicsView):
 		super().leaveEvent(event)
 		if self.layer is not None:
 			self.layer.setInside(False)
+
+	def keyPressEvent(self, event):
+		if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace) and self.layer is not None and self.layer.deleteSelected():
+			event.accept()
+			return
+		super().keyPressEvent(event)
 
 	def resizeEvent(self, event):
 		super().resizeEvent(event)
@@ -431,7 +439,14 @@ class Studio(QWidget):
 		self.watchTimer = QTimer(self, interval=500, timeout=self._checkFile)
 
 		self.studio = StudioGauge(self.scene, DATA_PRESETS['Temperature F'])
-		editors.CONTEXT.range = lambda: self.studio.range if self.studio.gauge is not None else (0.0, 100.0)
+		ctx = editors.CONTEXT
+		ctx.range = lambda: self.studio.range if self.studio.gauge is not None else (0.0, 100.0)
+		ctx.span = self._span
+		ctx.valueClass = lambda: self.studio.gauge.valueClass if self.studio.gauge is not None else None
+		ctx.beginDrag = self.beginDrag
+		ctx.endDrag = self.endDrag
+		ctx.gradientMode = lambda: self.layer.gradientMode
+		ctx.setGradientMode = self.setGradientMode
 		self.layer = HandleLayer(self)
 		self.preview.layer = self.layer
 		# Each key sequence is bound once. On macOS the standard Undo key is Ctrl+Z in Qt's terms,
@@ -504,7 +519,11 @@ class Studio(QWidget):
 		self.snapBox.setChecked(True)
 		self.snapBox.setToolTip('Snap dragged values to round steps. Hold Shift while dragging for fine control.')
 		self.snapBox.toggled.connect(lambda on: setattr(self.layer, 'snap', on))
-		for w in (self.undoButton, self.redoButton, self.handlesBox, self.snapBox):
+		self.gradientBox = QCheckBox('Edit gradient')
+		self.gradientBox.setToolTip('Show one node per stop of the arc gradient on the preview. Drag a node to move the stop, '
+		                            'click the track to add one, double click a node for its colour, drag it off or press Delete to remove it.')
+		self.gradientBox.toggled.connect(self.setGradientMode)
+		for w in (self.undoButton, self.redoButton, self.handlesBox, self.snapBox, self.gradientBox):
 			bar3.addWidget(w)
 		bar3.addStretch(1)
 		box.addLayout(bar3)
@@ -953,6 +972,32 @@ class Studio(QWidget):
 	def handleEdit(self, path: tuple, value: Any):
 		"""A drag handle wrote `value` to the property at `path`."""
 		self._edited(path, value)
+
+	def _span(self) -> Tuple[float, float]:
+		"""The range the dial spans, in the gauge's own unit: what its angles map to."""
+		gauge = self.studio.gauge
+		if gauge is None:
+			return (0.0, 100.0)
+		r = gauge._range
+		return float(r.rounded_min), float(r.rounded_max)
+
+	def setGradientMode(self, on: bool):
+		"""*Edit gradient*: nodes on the track, one per stop. The panel's switch and the toolbar's stay together."""
+		with QSignalBlocker(self.gradientBox):
+			self.gradientBox.setChecked(on)
+		self.layer.setGradientMode(on)
+		for _, row in self._pairs():
+			row.onContext()
+		self.preview.setFocus()
+
+	def stopLabel(self, stop) -> str:
+		"""A stop's value and unit as a node shows them."""
+		if stop.unit:
+			return formatStop(stop.number, stop.unit)
+		return f'{editors.CONTEXT.toShown(stop.number):.4g} {editors.CONTEXT.symbol()}'.strip()
+
+	def pickColor(self, initial: Optional[str]) -> Optional[str]:
+		return editors.pickColor(self, initial)
 
 	def beginDrag(self):
 		self.dragActive = True

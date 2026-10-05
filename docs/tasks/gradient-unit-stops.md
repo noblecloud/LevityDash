@@ -3,6 +3,8 @@
 Suggested branch: `feat/gradient-unit-stops` off `feat/value-sources`. Start it after
 `fix/warp-smooth` merges, because both edit `devtools/_studio_editors.py`.
 
+Status: implemented on `feat/gradient-unit-stops`. The running-dashboard edit mode is still open.
+
 ## What the user asked for
 
 > for the gradients, you should be able to set an actual unit value. like "red at 99ºf"

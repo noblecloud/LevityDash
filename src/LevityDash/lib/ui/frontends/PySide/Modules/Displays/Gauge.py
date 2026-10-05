@@ -4355,7 +4355,7 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 	@property
 	def fill_brush(self) -> Dict[Number, QBrush]:
 		values = self._ticks.tick_values
-		if (gradient := self.gradient) is not None:
+		if (gradient := self.gradient) is not None and (gradient := self.gauge.resolve_gradient(gradient)) is not None:
 			return {value: QBrush(gradient.get_color_for_value(value).QColor) for value in values}
 		return {value: QBrush(self.color.QColor) for value in values}
 
@@ -5631,11 +5631,26 @@ class Gauge(Display):
 		angle = sorted([self.startAngle, self.endAngle])[0]
 		return angle % 360
 
-	def convert_gradient(self, gradient: 'Gradient') -> QConicalGradient:
+	def resolve_gradient(self, gradient: 'Gradient') -> 'Gradient | None':
+		"""`gradient` with each stop that carries a unit (`99°F`) converted into the unit of this gauge's data.
+
+		A gradient of bare numbers comes back as it is. None when every stop was left out because its unit does not fit the data;
+		the log names each such stop once.
+		"""
+		if not gradient.hasUnits:
+			return gradient
+		resolved = gradient.resolve(self.valueClass)
+		return resolved if len(resolved) else None
+
+	def convert_gradient(self, gradient: 'Gradient') -> QConicalGradient | None:
 		_type = self.valueClass
 		rounded_min = self._range.rounded_min
 		rounded_max = self._range.rounded_max
-		if not issubclass(gradient.itemCls.__item__, _type):
+		if gradient.hasUnits:
+			# Stops pinned to a reading stay at it: no stretching over the range, as a bare-number gradient gets below.
+			if (gradient := self.resolve_gradient(gradient)) is None:
+				return None
+		elif not issubclass(gradient.itemCls.__item__, _type):
 			gradient = gradient.as_type(_type, rounded_min, rounded_max)
 		return gradient.toQConicalGradient(
 			start_angle=self.startAngle,
@@ -5645,9 +5660,14 @@ class Gauge(Display):
 		)
 
 	def map_gradient_to(self, gradient: 'Gradient', item: QGraphicsPathItem | Surface = None) -> QConicalGradient:
-		gradient = self.convert_gradient(gradient)
-		gradient.setCenter(self._center_transform.map(self.mapToItem(item or self, self.center)))
-		return gradient
+		converted = self.convert_gradient(gradient)
+		if converted is None:
+			# No stop fits the data. Paint the gauge's own colour rather than abort the dashboard.
+			converted = QConicalGradient()
+			converted.setColorAt(0, self.pen.color())
+			converted.setColorAt(1, self.pen.color())
+		converted.setCenter(self._center_transform.map(self.mapToItem(item or self, self.center)))
+		return converted
 
 	def _afterSetState(self):
 		super()._afterSetState()
