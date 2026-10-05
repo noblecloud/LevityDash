@@ -3968,6 +3968,21 @@ class GaugeUnit(GaugeLabel):
 				return UnitDisplayPosition.TrailingValue
 
 
+#: The positions an end label (`position-leading`, `position-trailing`) can take.
+END_LABEL_POSITIONS = (DisplayPosition.Outside, DisplayPosition.Inside, DisplayPosition.Center, DisplayPosition.FloatUnder)
+
+# `above` and `below` placed an end label exactly as `outside` and `inside` do.
+_END_LABEL_ALIASES = {DisplayPosition.Above: DisplayPosition.Outside, DisplayPosition.Below: DisplayPosition.Inside}
+
+
+def _endLabelPosition(value):
+	"""`value` with the old names `above` and `below` read as `outside` and `inside`."""
+	name = getattr(value, 'value', value)
+	if isinstance(name, str):
+		return _END_LABEL_ALIASES.get(name.lower(), value)
+	return value
+
+
 class GaugeTickText(GaugeItem, AnnotationText):
 
 	"""
@@ -4092,7 +4107,12 @@ class GaugeTickText(GaugeItem, AnnotationText):
 				value = self.tick.endPoint
 			case DisplayPosition.Above:
 				value = self.tick.startPoint
-			case DisplayPosition.Center:
+			case DisplayPosition.Center if self.end_position_set:
+				# On the arc's centre line, whichever side of the arc the tick is on.
+				value = self.tick.startPoint
+				if (distance := hypot(*value.toTuple())) > 1e-6:
+					value = value * (self.gauge.radius / distance)
+			case DisplayPosition.Center | DisplayPosition.FloatUnder:
 				value = self.tick.endPoint / 2 + self.tick.startPoint / 2
 			case DisplayPosition.Left:
 				value = min(self.tick.startPoint, self.tick.endPoint, key=lambda p: p.x())
@@ -4106,10 +4126,19 @@ class GaugeTickText(GaugeItem, AnnotationText):
 	@property
 	def display_position(self) -> DisplayPosition:
 		if self.tick is self.surface.ticks[0]:
-			return self.group.position_leading
+			return getattr(self.group, '_position_leading', Unset) or self.group.position
 		elif self.tick is self.surface.ticks[-1]:
-			return self.group.position_trailing
+			return getattr(self.group, '_position_trailing', Unset) or self.group.position
 		return self.group.position
+
+	@property
+	def end_position_set(self) -> bool:
+		"""True for an end label whose position came from position-leading / position-trailing."""
+		if self.tick is self.surface.ticks[0]:
+			return bool(getattr(self.group, '_position_leading', Unset))
+		if self.tick is self.surface.ticks[-1]:
+			return bool(getattr(self.group, '_position_trailing', Unset))
+		return False
 
 	def setPath(self, path: QPainterPath):
 		if not self._bending:
@@ -4138,11 +4167,16 @@ class GaugeTickText(GaugeItem, AnnotationText):
 
 		disp_pos = self.display_position
 		match disp_pos:
+			# A group-wide `inside` has always placed labels outside the arc, and the
+			# shipped dashboards are drawn that way. Only an end label set with
+			# position-leading / position-trailing goes inward.
 			case DisplayPosition.Below:
 				move_direction = radialPoint(QPointF(0, 0), -1 * direction, angle)
-			case DisplayPosition.Above:
+			case DisplayPosition.Inside if self.end_position_set:
+				move_direction = radialPoint(QPointF(0, 0), -1 * direction, angle)
+			case DisplayPosition.Above | DisplayPosition.Outside:
 				move_direction = radialPoint(QPointF(0, 0), 1 * direction, angle)
-			case DisplayPosition.Center:
+			case DisplayPosition.Center | DisplayPosition.FloatUnder:
 				move_direction = QPointF(0, 1 * direction)
 			case DisplayPosition.Left:
 				move_direction = QPointF(1 * direction, 0)
@@ -4156,6 +4190,11 @@ class GaugeTickText(GaugeItem, AnnotationText):
 		max_travel_distance = int(ceil(sqrt(sum(i**2 for i in self.limitRect.size().toTuple()))))
 		self.prepareGeometryChange()
 		# self._shape = outline_path(self.path(), self.group.offset_px)
+
+		if disp_pos is DisplayPosition.Center and self.end_position_set:
+			# Centered on the arc, so it stays where position() put it.
+			self._bend()
+			return
 
 		arc = self.gauge.arc
 		arc_weight = arc.pen().width() / 2
@@ -4675,37 +4714,60 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 	def _get_max_label(self) -> GaugeTickText:
 		return max(self, key=lambda label: label.value)
 
-	@StateProperty(key='position-leading', dependencies={'position'}, after=refresh)
+	@StateProperty(key='position-leading', dependencies={'position'}, after=refresh, choices=END_LABEL_POSITIONS)
 	def position_leading(self) -> DisplayPosition:
-		return getattr(self, '_position_leading', Unset) or self.position
+		"""
+		Where the first label sits against the arc's start. The labels in between keep `position`.
+
+		outside      radially out from the arc, clear of the arc and its tick
+		inside       radially in, clear of the tick's inner end
+		center       on the arc's centre line, over the arc, with no clearing
+		float-under  straight down on screen from the end of the tick, clear of the arc and tick
+
+		`above` and `below` are read as `outside` and `inside`. `left` and `right` are not accepted.
+		"""
+		return getattr(self, '_position_leading', Unset) or _END_LABEL_ALIASES.get(self.position, self.position)
 
 	@position_leading.setter
 	def position_leading(self, value: DisplayPosition):
 		self._position_leading = value
 
+	@position_leading.validator
+	def position_leading(self, value):
+		return _endLabelPosition(value)
+
 	@position_leading.decode
 	def position_leading(self, value: str) -> DisplayPosition:
-		return DisplayPosition[value]
+		return value if isinstance(value, DisplayPosition) else DisplayPosition[value]
 
 	@position_leading.condition(method='get')
 	def position_leading(self, value: DisplayPosition) -> bool:
-		return value is not self.position
+		# Saved whenever set: a group-wide `inside` and an end label set to `inside` differ.
+		return bool(getattr(self, '_position_leading', Unset))
 
-	@StateProperty(key='position-trailing', dependencies={'position'}, after=refresh)
+	@StateProperty(key='position-trailing', dependencies={'position'}, after=refresh, choices=END_LABEL_POSITIONS)
 	def position_trailing(self) -> DisplayPosition:
-		return getattr(self, '_position_trailing', Unset) or self.position
+		"""
+		Where the last label sits against the arc's end. The labels in between keep `position`.
+		The four values mean the same as for `position-leading`.
+		"""
+		return getattr(self, '_position_trailing', Unset) or _END_LABEL_ALIASES.get(self.position, self.position)
 
 	@position_trailing.setter
 	def position_trailing(self, value: DisplayPosition):
 		self._position_trailing = value
 
+	@position_trailing.validator
+	def position_trailing(self, value):
+		return _endLabelPosition(value)
+
 	@position_trailing.decode
 	def position_trailing(self, value: str) -> DisplayPosition:
-		return DisplayPosition[value]
+		return value if isinstance(value, DisplayPosition) else DisplayPosition[value]
 
 	@position_trailing.condition(method='get')
 	def position_trailing(self, value: DisplayPosition) -> bool:
-		return value is not self.position
+		return bool(getattr(self, '_position_trailing', Unset))
 
 	@StateProperty(key='rotate-leading', allowNone=False, default=False)
 	def rotation_leading(self) -> bool:
