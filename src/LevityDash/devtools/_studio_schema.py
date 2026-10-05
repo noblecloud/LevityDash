@@ -215,11 +215,23 @@ def write(root: Stateful, path: tuple, value: Any) -> Optional[str]:
 	# Some decoders keep the old value and say nothing. Notice that: the gauge now
 	# holds what it held before, and that is not what was typed.
 	after = read(root, path)
-	if value is not None and not _same(value, after):
+	if value is not None and not _same(value, after) and not _same(_canonical(prop, value, owner), after):
 		if _same(after, before):
 			return f'the gauge did not take {value!r}; it still holds {after!r}'
 		return f'the gauge holds {after!r} instead of {value!r}'
 	return None
+
+
+def _canonical(prop: StateProperty, value: Any, owner: Stateful) -> Any:
+	"""What `value` becomes after the property decodes it and saves it again.
+
+	An encoder may drop keys that equal the default (`warp: {radius: 40%}` saves as `true`), so the
+	typed form and the held form differ in text while they mean the same.
+	"""
+	try:
+		return saved(prop, prop.decodeValue(value, owner), owner)
+	except Exception:  # noqa: BLE001
+		return value
 
 
 def _norm(a: Any) -> str:
@@ -384,6 +396,8 @@ def _refine(found: Field, prop: StateProperty, raw: Any, owner: Stateful) -> Fie
 		found.kind = 'fill'
 	elif key in ('caption', 'sub-label'):
 		found.kind = 'caption'
+	elif key == 'warp':
+		found.kind = 'warp'
 	elif key == 'zones':
 		found.kind = 'zones'
 	elif key == 'markers':

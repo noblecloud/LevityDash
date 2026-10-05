@@ -1474,6 +1474,7 @@ class CaptionForm(_Form):
 		self.grid.addWidget(self.bold, self._r, 1)
 		self._r += 1
 		self.part('offset', 'offset', OffsetEdit(), 'Move the text. Dragging it on the preview writes this.')
+		self.part('warp', 'warp', WarpEdit(), 'Bend the text along a circle.')
 		self._known |= {'weight'}
 
 	def setValue(self, value):
@@ -1526,6 +1527,109 @@ class LineText(Editor):
 		return self.edit.hasFocus()
 
 
+class WarpForm(_Form):
+	"""The pieces of `warp:`. Only what differs from the defaults is written; all default is `true`."""
+
+	CENTERS = ['dial', 'card', 'top-left', 'top', 'top-right', 'left', 'center', 'right', 'bottom-left', 'bottom',
+	           'bottom-right']
+
+	def __init__(self):
+		super().__init__()
+		self.centre = QComboBox()
+		self.centre.addItems(self.CENTERS + ['custom'])
+		self.centre.setToolTip('The middle of the circle: the dial\'s pivot, the card, a corner or edge, or a point you set')
+		self.centre.activated.connect(self._centreChanged)
+		self.grid.addWidget(QLabel('centre'), self._r, 0)
+		self.grid.addWidget(self.centre, self._r, 1)
+		self._r += 1
+		self.cx = NumberEdit(lo=-100, hi=200, step=1, decimals=1, suffix=' %')
+		self.cy = NumberEdit(lo=-100, hi=200, step=1, decimals=1, suffix=' %')
+		for k, e in (('x', self.cx), ('y', self.cy)):
+			e.setToolTip(f'{k} as a share of the card')
+			e.changed.connect(self._emit)
+			self.grid.addWidget(QLabel(f'  {k}'), self._r, 0)
+			self.grid.addWidget(e, self._r, 1)
+			self.labels[f'c{k}'] = self.grid.itemAtPosition(self._r, 0).widget()
+			self._r += 1
+		self.radius = self.part('radius', 'radius', SizeEdit(units=['%', 'px', 'in'], ref='full'),
+		                        'Distance from the centre to the middle of the text; % is a share of the dial\'s diameter')
+		self.angle = self.part('angle', 'angle', NumberEdit(lo=-180, hi=180, step=1, decimals=1, suffix='\u00b0'),
+		                       'Where on the circle the text sits, degrees clockwise from the top')
+		self.mode = QComboBox()
+		self.mode.addItems(['warp', 'glyphs'])
+		self.mode.setToolTip('warp bends the letters; glyphs keeps each letter straight')
+		self.mode.activated.connect(self._emit)
+		self.grid.addWidget(QLabel('mode'), self._r, 0)
+		self.grid.addWidget(self.mode, self._r, 1)
+		self._r += 1
+		self.flip = QComboBox()
+		self.flip.addItems(['auto', 'true', 'false'])
+		self.flip.setToolTip('auto turns text in the lower half so it reads left to right')
+		self.flip.activated.connect(self._emit)
+		self.grid.addWidget(QLabel('flip'), self._r, 0)
+		self.grid.addWidget(self.flip, self._r, 1)
+		self._r += 1
+		self._known |= {'center', 'mode', 'flip'}
+		self.setValue(True)
+
+	def _showCustom(self, on: bool):
+		for k in ('cx', 'cy'):
+			(self.cx if k == 'cx' else self.cy).setVisible(on)
+			self.labels[k].setVisible(on)
+
+	def _centreChanged(self, _=None):
+		self._showCustom(self.centre.currentText() == 'custom')
+		self._emit()
+
+	def setValue(self, value):
+		spec = dict(value) if isinstance(value, dict) else {}
+		self._extra = {k: v for k, v in spec.items() if k not in self._known}
+		centre = spec.get('center', 'dial')
+		with QSignalBlocker(self.centre), QSignalBlocker(self.mode), QSignalBlocker(self.flip):
+			if isinstance(centre, dict):
+				self.centre.setCurrentText('custom')
+				for e, k in ((self.cx, 'x'), (self.cy, 'y')):
+					with QSignalBlocker(e):
+						e.setValue(_number(centre.get(k, '50%')))
+			else:
+				self.centre.setCurrentText(str(centre) if str(centre) in self.CENTERS else 'dial')
+			self.mode.setCurrentText(str(spec.get('mode', 'warp')))
+			flip = spec.get('flip', 'auto')
+			self.flip.setCurrentText('auto' if flip == 'auto' else str(bool(flip)).lower())
+		self._showCustom(self.centre.currentText() == 'custom')
+		self.radius.setValue(spec.get('radius', '40%'))
+		self.angle.setValue(spec.get('angle', 0))
+
+	def value(self):
+		out = dict(self._extra)
+		if self.centre.currentText() == 'custom':
+			out['center'] = {'x': f'{self.cx.value():g}%', 'y': f'{self.cy.value():g}%'}
+		elif self.centre.currentText() != 'dial':
+			out['center'] = self.centre.currentText()
+		if (r := self.radius.value()) not in (None, '40%'):
+			out['radius'] = r
+		if (a := self.angle.value()):
+			out['angle'] = a
+		if self.mode.currentText() != 'warp':
+			out['mode'] = self.mode.currentText()
+		if self.flip.currentText() != 'auto':
+			out['flip'] = self.flip.currentText() == 'true'
+		return out or True
+
+	def isEditing(self) -> bool:
+		return super().isEditing() or self.centre.view().isVisible()
+
+
+class WarpEdit(_Toggled):
+	"""`warp:` as a structured editor: off, or the circle the text bends along."""
+
+	def __init__(self):
+		super().__init__('Bend along a circle', WarpForm())
+
+	def fresh(self):
+		return True
+
+
 class CaptionEdit(_Toggled):
 	def __init__(self):
 		super().__init__('Show small text', CaptionForm())
@@ -1566,4 +1670,6 @@ def make(field: 'schema.Field') -> Optional[Editor]:
 		return FillEdit()
 	if kind == 'caption':
 		return CaptionEdit()
+	if kind == 'warp':
+		return WarpEdit()
 	return None

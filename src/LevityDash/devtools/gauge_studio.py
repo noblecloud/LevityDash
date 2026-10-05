@@ -700,6 +700,7 @@ class Studio(QWidget):
 		self.studio.build(copy.deepcopy(self.template), preset)
 		self._afterBuild()
 		self._commit(self.exportDisplay())
+		self.status.setText('Reset to the template. Undo brings back what was there.')
 
 	def _afterBuild(self):
 		self.scene.invalidate()
