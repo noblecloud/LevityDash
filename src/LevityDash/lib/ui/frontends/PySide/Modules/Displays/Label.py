@@ -1,5 +1,5 @@
 from functools import cached_property
-from typing import List, Type, ClassVar, Callable
+from typing import List, Optional, Type, ClassVar, Callable
 
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QBrush
@@ -13,6 +13,7 @@ from LevityDash.lib.ui.frontends.PySide import qtLogger as guiLog
 from LevityDash.lib.ui.frontends.PySide.Modules import Panel
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Text
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import ScaleType, TextFilter
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.curvetext import WarpSpec
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.MarginHandles import MarginHandles
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import EditableLabelContextMenu, LabelContextMenu
 from LevityDash.lib.ui.frontends.PySide.utils import addRect, DebugPaint
@@ -92,6 +93,24 @@ class Label(Panel, ColorMixin, tag='label'):
 	@filters.encode
 	def filters(value: List[TextFilter]) -> List[str]:
 		return [f.name for f in value]
+
+	@StateProperty(key='warp', default=None, allowNone=True, dependencies={'geometry', 'text', 'margins'}, repr=True)
+	def warp(self) -> Optional[WarpSpec]:
+		"""Pin the text's middle to a circle and bend it along it: ``warp: true``, or
+		``{center, radius, angle, mode, flip}`` (see `WarpSpec`)."""
+		return self.textBox.warp
+
+	@warp.setter
+	def warp(self, value: Optional[WarpSpec]):
+		self.textBox.setWarp(value)
+
+	@warp.decode
+	def warp(self, value) -> Optional[WarpSpec]:
+		return WarpSpec.decode(value)
+
+	@warp.encode
+	def warp(value: Optional[WarpSpec]):
+		return None if value is None else value.encode()
 
 	def editMargins(self, toggle: bool = True):
 		if toggle:
