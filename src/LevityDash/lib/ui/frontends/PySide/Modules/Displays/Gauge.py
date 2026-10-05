@@ -35,6 +35,7 @@ from LevityDash.lib.ui.frontends.PySide.Modules import Panel
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays import SurfaceCentered, Surface
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Annotations import AnnotationText, AnnotationLabels
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.DisplayBase import Display
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.curvetext import CurveMode, bend_text, glyph_ring_text
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Label import NonInteractiveLabel
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import Text
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles import Handle
@@ -2870,11 +2871,74 @@ class GaugeTickText(GaugeItem, AnnotationText):
 
 	def setTransform(self, matrix: PySide6.QtGui.QTransform, *args) -> None:
 		super().setTransform(matrix, *args)
+		self._bend()
+		self._updateShape()
+
+	def _updateShape(self):
+		matrix = self.transform()
 		scale_x = matrix.m11() * self.scale()
 		scale_y = matrix.m22() * self.scale()
 		scale_value = (self.scaleSelection(scale_x, scale_y) or 1)
 		self.prepareGeometryChange()
 		self._shape = outline_path(self.path(), self.group.offset_px / scale_value)
+
+	_bendKey: Optional[tuple] = None
+	_bending: bool = False
+	_flatRect: Optional[QRectF] = None
+
+	def _labelRotation(self) -> tuple[float, bool]:
+		"""The item's final rotation, and whether it was flipped half a turn to stay legible."""
+		# Always computed: a label refreshed after `rotate: false` must drop the
+		# angle an earlier refresh gave it.
+		rotation = self.tick.angle + 90 if self.rotated else 0
+		# Text that would read upside down is flipped half a turn so it stays legible.
+		# A margin keeps near-vertical radial labels (a few degrees past 90/270) as they are.
+		flipped = 105 < rotation % 360 < 255
+		if flipped:
+			rotation += 180
+		return rotation, flipped
+
+	def _layoutSignature(self) -> tuple:
+		# The curve depends on where the tick sits, which the base signature never reads.
+		return super()._layoutSignature() + (self.group.curve, round(self.tick.angle, 3), round(hypot(*self.tick.startPoint.toTuple()), 2))
+
+	def _bend(self) -> bool:
+		"""
+		Replace the flat outline with one bent along the dial, when `curve` asks for it.
+		Returns True if the path changed. Builds from text and font, never from the
+		current path, so an already bent path is never bent twice. Fitting reads the
+		flat rect the base class built, so label size does not depend on the angle.
+		"""
+		mode = self.group.curve
+		if mode is CurveMode.none or not self.rotated or not self.text:
+			self._bendKey = None
+			return False
+		scale = self.transform().m11() or 1.0
+		radius = hypot(self.pos().x(), self.pos().y())
+		if radius < 1e-6:
+			return False
+		_, flipped = self._labelRotation()
+		font = self.font()
+		key = (mode, self.text, font.key(), round(scale, 4), flipped, round(self.tick.angle, 4), round(radius, 2))
+		if key == self._bendKey:
+			return False
+		side = -1 if flipped else 1
+		try:
+			viewScale = self.scene().viewScale.x
+		except AttributeError:
+			viewScale = 1
+		if mode is CurveMode.warp:
+			path = bend_text(self.text, font, scale, radius, side, 0.25 / (viewScale or 1))
+		else:
+			path = glyph_ring_text(self.text, font, scale, radius, side)
+		self._bendKey = key
+		self._bending = True
+		try:
+			self.setPath(path)
+		finally:
+			self._bending = False
+		self._updateShape()
+		return True
 
 	@property
 	def offset_relative_to(self) -> float:
@@ -2919,6 +2983,10 @@ class GaugeTickText(GaugeItem, AnnotationText):
 		return self.group.position
 
 	def setPath(self, path: QPainterPath):
+		if not self._bending:
+			# A fresh flat path: the next bend must rebuild.
+			self._bendKey = None
+			self._flatRect = path.boundingRect()
 		self._shape = outline_path(path, self.group.offset_px)
 		self._debug_paint_shape = QPainterPath(self._shape)
 		super(GaugeTickText, self).setPath(path)
@@ -2976,9 +3044,15 @@ class GaugeTickText(GaugeItem, AnnotationText):
 			own_scene_path = self.mapToScene(self.shape())
 			return own_scene_path.intersects(other_scene_path)
 
-		while (self.collidesWithItem(arc) or self.collidesWithItem(self.tick)) and moved_count < max_travel_distance:
-			self.moveBy(move_direction.x(), move_direction.y())
-			moved_count += 1
+		def clearCollisions(moved_count: int = 0):
+			while (self.collidesWithItem(arc) or self.collidesWithItem(self.tick)) and moved_count < max_travel_distance:
+				self.moveBy(move_direction.x(), move_direction.y())
+				moved_count += 1
+
+		clearCollisions()
+		# The nudge above ran against the flat shape; run it again against the bent one.
+		if self._bend():
+			clearCollisions()
 
 		# self.prepareGeometryChange()
 		# self._shape = outline_path(self.path(), 5)
@@ -2990,14 +3064,7 @@ class GaugeTickText(GaugeItem, AnnotationText):
 		else:
 			self.show()
 
-		# Always set it: a label refreshed after `rotate: false` must drop the
-		# angle an earlier refresh gave it.
-		rotation = self.tick.angle + 90 if self.rotated else 0
-		# Text that would read upside down is flipped half a turn so it stays legible.
-		# A margin keeps near-vertical radial labels (a few degrees past 90/270) as they are.
-		if 105 < rotation % 360 < 255:
-			rotation += 180
-		self.setRotation(rotation)
+		self.setRotation(self._labelRotation()[0])
 
 		super(GaugeTickText, self).refresh()
 		self.setPos(self.position())
@@ -3176,7 +3243,9 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 			return 1, True
 		geometry = {}
 		for label in labels:
-			rect = label.path().boundingRect()
+			# The flat rect: a bent outline's box is bigger on the curved axis, and
+			# the rotation term below would count that twice.
+			rect = label._flatRect or label.path().boundingRect()
 			geometry[label.tick.index] = (
 				label.mapToParent(rect.center()),
 				rect.width() * label.scale(),
@@ -3272,6 +3341,26 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 	@rotation.setter
 	def rotation(self, value: bool):
 		self._rotation = value
+
+	@StateProperty(key='curve', default=CurveMode.none, allowNone=False, repr=True, after=refresh)
+	def curve(self) -> CurveMode:
+		return getattr(self, '_curve', CurveMode.none)
+
+	@curve.setter
+	def curve(self, value: CurveMode):
+		self._curve = value
+
+	@curve.decode
+	def curve(self, value) -> CurveMode:
+		if isinstance(value, CurveMode):
+			return value
+		if value in (False, None):
+			return CurveMode.none
+		return CurveMode[str(value).lower()]
+
+	@curve.encode
+	def curve(self, value: CurveMode) -> str:
+		return value.value
 
 	def _get_max_label(self) -> GaugeTickText:
 		return max(self, key=lambda label: label.value)

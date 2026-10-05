@@ -1,0 +1,13 @@
+# Gauge tick labels bent along the arc. `curve: warp` bends the glyph outlines;
+# `curve: glyphs` keeps each character straight and places it on the arc;
+# `curve: none` (the default) rotates the whole label as one block.
+# A wide sweep, so the lower half of the dial shows the flip. Needs the Fixture
+# plugin (--scenario stormy-day).
+- type: realtime.gauge
+  name: gauge
+  key: environment.humidity.humidity
+  title: false
+  display:
+    arc: {start-angle: -170, end-angle: 170, weight: 4%}
+    range: {min: 0, max: 100}
+    major: {labels: {curve: warp, height: 7%, position: outside}}
