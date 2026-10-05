@@ -1254,7 +1254,7 @@ class MeasurementDisplayProperties(Stateful):
 		if self.__precision is not Unset:
 			unit_props['_precision'] = int(self.__precision)
 		if self.__maxLength is not Unset:
-			unit_props['_max'] = int(self.__maxLength)
+			unit_props['_digit_budget'] = int(self.__maxLength)
 		return unit_props
 
 	@property
