@@ -6,6 +6,7 @@ import numpy as np
 from PySide6.QtGui import QColor
 from rich.repr import rich_repr
 
+from LevityDash.lib.ui.colors import oklch as _oklch
 from LevityDash.lib.ui.colors.utils import randomColor, kelvinToRGB
 from LevityDash.lib.utils import get, split, classproperty
 from LevityDash.lib.ui import UILogger as log
@@ -21,6 +22,88 @@ _BASE_COLOR = Literal['r', 'g', 'b', 'a', 'red', 'green', 'blue', 'alpha']
 ColorDict = Dict[_BASE_COLOR, int | float]
 
 COLOR_REG = re.compile(r"([A-Fa-f0-9]{8}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{4}|[A-Fa-f0-9]{3})")
+
+
+#: Keys of a mapping colour that mean a colour made from Oklch values, not red/green/blue.
+_OKLCH_KEYS = frozenset({'hue', 'oklch', 'palette', 'emission'})
+
+
+def _emission(value) -> Optional[float]:
+	"""``emission:`` as a number. ``true`` means the demo's default; ``false`` and ``None`` mean none."""
+	if value is None or value is False:
+		return None
+	if value is True:
+		return _oklch.EMISSION
+	emission = float(value)
+	if emission <= 0:
+		raise ValueError(f'emission must be above 0, not {value!r}')
+	return emission
+
+
+def _toBytes(triple, alpha: float = 1.0) -> Tuple[int, int, int, int]:
+	return (*(int(round(min(1.0, max(0.0, c)) * 255)) for c in triple), int(round(min(1.0, max(0.0, alpha)) * 255)))
+
+
+def _decodeOklchSpec(color, decodePlain) -> Optional[Tuple[int, int, int, int]]:
+	"""Read the Oklch and emissive colour forms. Gives ``None`` for any other value.
+
+	- ``oklch(0.70 0.20 145)``: a string. The chroma is lowered into sRGB when it does not fit.
+	- ``{hue: 145}``: a hue on the palette ring, at the default lightness and chroma
+	  (``lightness:`` and ``chroma:`` change them).
+	- ``{oklch: 'oklch(0.70 0.20 145)'}``, ``{oklch: [0.70, 0.20, 145]}``.
+	- ``{palette: {hue: 145, scheme: triadic}, index: 1}`` picks one colour of a palette;
+	  ``at: 0.5`` mixes along it instead (0 first colour, 1 last).
+	- ``{color: '#ff8800', emission: 2}`` on any colour: add ``emission`` to run it through
+	  the emissive display chain. ``saturation:`` goes with it.
+
+	Without ``emission`` the colour is shown as it is. A colour with ``emission`` is final: it
+	has already been tone mapped.
+	"""
+	if isinstance(color, str):
+		if not _oklch.is_oklch(color):
+			return None
+		L, C, h, alpha = _oklch.parse_oklch(color)
+		return _toBytes(_oklch.oklch_srgb(L, C, h), alpha)
+	if not isinstance(color, dict) or not (set(color) & _OKLCH_KEYS or ('color' in color and 'emission' in color)):
+		return None
+	if set(color) & {'r', 'g', 'b', 'red', 'green', 'blue'}:
+		return None
+	data = dict(color)
+	data.pop('name', None)
+	emission = _emission(data.pop('emission', None))
+	saturation = float(data.pop('saturation', 1.0))
+	alpha = 1.0
+	if 'palette' in data:
+		from LevityDash.lib.ui.colors.palette import Palette
+		palette = Palette.decode(data.pop('palette'))
+		linear = palette.sample(index=data.pop('index', None), at=data.pop('at', None))
+	elif 'color' in data:
+		r, g, b, a = decodePlain(data.pop('color'))
+		linear = _oklch.srgb_to_linear((r / 255, g / 255, b / 255))
+		alpha = a / 255
+	else:
+		L = float(data.pop('lightness', _oklch.OKLCH_L))
+		C = float(data.pop('chroma', _oklch.OKLCH_C))
+		if 'oklch' in data:
+			raw = data.pop('oklch')
+			if isinstance(raw, str):
+				L, C, h, alpha = _oklch.parse_oklch(raw)
+			else:
+				L, C, h = (float(v) for v in raw)
+		elif 'hue' in data:
+			h = float(data.pop('hue'))
+		else:
+			raise ValueError(f'a colour with emission needs a hue, oklch or color: {color!r}')
+		linear = _oklch.oklch_color(h, L, C)
+	if 'alpha' in data:
+		alpha = float(data.pop('alpha'))
+	if data:
+		raise ValueError(f'unknown colour keys {sorted(map(str, data))}')
+	if emission is None:
+		triple = _oklch.linear_to_srgb(linear)
+	else:
+		triple = _oklch.display_color(linear, saturation, emission)
+	return _toBytes(triple, alpha)
 
 
 @rich_repr
@@ -92,6 +175,8 @@ class Color:
 
 	@staticmethod
 	def __decode(color) -> Tuple[int, int, int, int]:
+		if (spec := _decodeOklchSpec(color, Color.__decode)) is not None:
+			return spec
 		match color:
 			case str(color):
 				if hexVal := next(iter(re.findall(r"[A-Fa-f0-9]+", color)), None):
