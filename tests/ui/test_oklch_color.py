@@ -55,6 +55,20 @@ def test_palette_schemes():
 	assert a == Color.decode({'hue': 265})
 
 
+def test_oklab_mix_is_not_grey():
+	mid = oklch.mix_oklab((0, 0, 1), (1, 1, 0), 0.5)
+	assert max(mid) - min(mid) > 0.25  # sRGB mixing gives a grey here
+	assert oklch.mix_oklab((0, 0, 1), (1, 1, 0), 0.0) == pytest.approx((0, 0, 1), abs=1e-3)
+
+
+def test_gradient_space_option():
+	from LevityDash.lib.ui.colors import Gradient
+	assert Gradient.decode({0: '#0000ff', 100: '#ffff00'}).space == 'srgb'
+	assert Gradient.decode({'space': 'oklab', 0: '#0000ff', 100: '#ffff00'}).space == 'oklab'
+	with pytest.raises(ValueError):
+		Gradient.decode({'space': 'lab', 0: '#0000ff'})
+
+
 def test_bad_forms_raise():
 	for bad in ('oklch(banana)', {'hue': 10, 'bogus': 1}, {'hue': 10, 'emission': -1}):
 		with pytest.raises(ValueError):

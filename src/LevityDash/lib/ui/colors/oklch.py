@@ -157,6 +157,56 @@ def blend_linear(colors: list[Triple], t: float) -> Triple:
 	return tuple(a + (b - a) * f for a, b in zip(colors[i], colors[i + 1]))
 
 
+def srgb_to_oklab(srgb: Triple) -> Triple:
+	"""An encoded sRGB triple as Oklab (L, a, b), with Bjorn Ottosson's matrices."""
+	r, g, b = srgb_to_linear(srgb)
+	l = abs(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b) ** (1 / 3)
+	m = abs(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b) ** (1 / 3)
+	s = abs(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b) ** (1 / 3)
+	return (
+		0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+		1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+		0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s,
+	)
+
+
+def oklab_to_srgb(lab: Triple) -> Triple:
+	"""Oklab (L, a, b) as an encoded sRGB triple, clamped into gamut."""
+	L, a, b = lab
+	l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3
+	m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3
+	s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3
+	return linear_to_srgb((
+		4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+		-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+		-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
+	))
+
+
+def mix_oklab(a: Triple, b: Triple, t: float) -> Triple:
+	"""Mix two encoded sRGB colours in Oklab. Blue to yellow stays light through the middle, not grey."""
+	la, lb = srgb_to_oklab(a), srgb_to_oklab(b)
+	return oklab_to_srgb(tuple(x + (y - x) * t for x, y in zip(la, lb)))
+
+
+def oklab_stops(stops: list, steps: int = 16) -> list:
+	"""Add ``steps - 1`` Oklab-mixed stops between each pair of ``(position, (r, g, b, a))`` stops (colours 0..1, encoded).
+
+	Qt mixes gradient stops in sRGB, so the way to get Oklab is more stops. Alpha mixes straight.
+	"""
+	out = []
+	stops = sorted(stops, key=lambda s: s[0])
+	for (p0, c0), (p1, c1) in zip(stops, stops[1:]):
+		out.append((p0, c0))
+		for i in range(1, steps):
+			t = i / steps
+			rgb = mix_oklab(c0[:3], c1[:3], t)
+			out.append((p0 + (p1 - p0) * t, (*rgb, c0[3] + (c1[3] - c0[3]) * t)))
+	if stops:
+		out.append(stops[-1])
+	return out
+
+
 _NUMBER = r'[-+]?(?:\d+\.?\d*|\.\d+)'
 _OKLCH = re.compile(
 	rf'^\s*oklch\(\s*({_NUMBER})(%?)[\s,]+({_NUMBER})(%?)[\s,]+({_NUMBER})(?:deg)?\s*(?:/\s*({_NUMBER})(%?)\s*)?\)\s*$',
@@ -192,5 +242,5 @@ def parse_oklch(text: str) -> tuple[float, float, float, float]:
 __all__ = (
 	'OKLCH_L', 'OKLCH_C', 'EMISSION', 'EMISSION_MATERIAL', 'EXPOSURE', 'GAMMA', 'SCHEMES',
 	'oklch_to_linear', 'oklch_color', 'display_color', 'linear_to_srgb', 'srgb_to_linear',
-	'oklch_srgb', 'scheme_hues', 'palette_linear', 'blend_linear', 'is_oklch', 'parse_oklch',
+	'oklch_srgb', 'srgb_to_oklab', 'oklab_to_srgb', 'mix_oklab', 'oklab_stops', 'scheme_hues', 'palette_linear', 'blend_linear', 'is_oklch', 'parse_oklch',
 )
