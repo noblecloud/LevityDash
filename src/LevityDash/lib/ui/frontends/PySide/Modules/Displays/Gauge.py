@@ -1177,6 +1177,8 @@ class GaugeArc(StatefulGaugePathItem):
 		if weight := self.weight_px:
 			pen.setWidthF(weight)
 			pen.setCapStyle(self.capStyle)
+			if (color := self.color) is not None:
+				pen.setBrush(QBrush(color.QColor))
 			if (gradient := self.gradient) is not None:
 				brush = self.gauge.map_gradient_to(gradient, self)
 				pen.setBrush(brush)
@@ -1190,6 +1192,23 @@ class GaugeArc(StatefulGaugePathItem):
 
 	def shape(self):
 		return self._shape
+
+	@StateProperty(key='color', default=None, after=refresh, allowNone=True)
+	def color(self) -> Color | None:
+		"""Colour of the track. Defaults to the gauge colour; a dark grey gives the unfilled-track look."""
+		return getattr(self, '_color', None)
+
+	@color.setter
+	def color(self, value: Color | None):
+		self._color = value
+
+	@color.decode
+	def color(self, value) -> Color | None:
+		return None if value is None else Color.decode(value)
+
+	@color.encode
+	def color(self, value: Color | None) -> str | None:
+		return None if value is None else str(value)
 
 	@StateProperty(key='gradient', default=None, after=refresh, decoder=Gradient.decode)
 	def gradient(self) -> Gradient | None:
@@ -2460,6 +2479,11 @@ class GaugeValueLabel(GaugeLabel):
 			while scale > floor and collides_at(scale):
 				scale *= 0.95
 
+			# `size` caps the glyph height at a share of the dial's diameter,
+			# so a short value ('N', '0') stays as small as a long one.
+			if (size := self.parent.size) is not None and (glyph_height := base_path.boundingRect().height()) > 0:
+				scale = min(scale, size_px(size, gauge.radius * 2) / glyph_height)
+
 			return round(scale, 4)
 
 		def _unit_reserve(self) -> float:
@@ -2541,6 +2565,28 @@ class GaugeValueLabel(GaugeLabel):
 		elif value is None:
 			return "⋯"
 		return str(value)
+
+	@StateProperty(key='size', default=None, allowNone=True)
+	def size(self) -> Length | Dimension | None:
+		"""
+		Largest height of the value text, as a share of the dial's diameter.
+
+		Without it the value grows until it touches the dial, so a short value
+		such as 'N' or '0' comes out far larger than '7.4'.
+
+		```yaml
+		value-label: {size: 26%}
+		```
+		"""
+		return getattr(self, '_size', None)
+
+	@size.setter
+	def size(self, value: Length | Dimension | None):
+		self._size = value
+
+	@size.decode
+	def size(self, value: str | int | float) -> Length | Dimension | None:
+		return parseSize(value, default=None)
 
 	@StateProperty(key='value-padding', default=Size.Height(0.05, relative=True), allowNone=False)
 	def value_padding(self) -> Length | Dimension | None:
