@@ -12,7 +12,7 @@ name to the `display:` keys it sets. Adding a preset is a data edit.
 import copy
 import os
 from pathlib import Path
-from typing import Dict, List, NamedTuple
+from typing import Any, Dict, List, NamedTuple
 
 import yaml
 from PySide6.QtCore import QCoreApplication, QSettings, QStandardPaths
@@ -21,27 +21,36 @@ BUILTIN_DIR = Path(__file__).resolve().parent / 'studio_presets'
 
 #: The top sections. `paths` are the rows (dotted property paths); `owns` are the top-level
 #: `display:` keys a preset of the section may set and "Save current as preset" records.
-QUICK: Dict[str, Dict[str, tuple]] = {
+#: `labels` names a row whose last key alone would be ambiguous here, such as three rows that
+#: would all read "enabled".
+QUICK: Dict[str, Dict[str, Any]] = {
 	'Shape': {
 		'paths': ('arc.start-angle', 'arc.end-angle', 'radius', 'arc.weight', 'arc.color', 'arc.cap', 'anchor'),
 		'owns': ('arc', 'radius', 'anchor', 'inset'),
+		'labels': {'arc.color': 'arc color', 'arc.cap': 'arc cap'},
 	},
 	'Needle': {
 		'paths': ('needle.visible', 'needle.color', 'needle.length', 'needle.width', 'needle.point'),
 		'owns': ('needle',),
+		'labels': {'needle.visible': 'show needle'},
 	},
 	'Value': {
 		'paths': ('value-label.visible', 'value-label.position', 'value-label.size', 'value-label.format', 'unit-label.visible'),
 		'owns': ('value-label', 'unit-label'),
+		'labels': {'value-label.visible': 'show value', 'unit-label.visible': 'show unit'},
 	},
 	'Ticks': {
 		'paths': ('major.enabled', 'minor.enabled', 'micro.enabled', 'major.labels.height', 'major.labels.position',
 		          'major.labels.curve', 'major.color'),
 		'owns': ('major', 'minor', 'micro'),
+		'labels': {'major.enabled': 'major ticks', 'minor.enabled': 'minor ticks', 'micro.enabled': 'micro ticks',
+		           'major.labels.height': 'label size', 'major.labels.position': 'label position',
+		           'major.labels.curve': 'label curve', 'major.color': 'major color'},
 	},
 	'Extras': {
 		'paths': ('fill', 'zones', 'markers', 'caption', 'sub-label', 'value-label.warp'),
 		'owns': ('fill', 'zones', 'markers', 'caption', 'sub-label'),
+		'labels': {'value-label.warp': 'value warp'},
 	},
 }
 

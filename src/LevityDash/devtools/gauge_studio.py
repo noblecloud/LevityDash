@@ -41,10 +41,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import yaml
 from PySide6.QtCore import QEvent, QObject, QRectF, QSignalBlocker, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QIcon, QKeySequence, QPainter, QPalette, QPen, QPixmap, QShortcut, QTransform
+from PySide6.QtGui import QColor, QCursor, QIcon, QKeySequence, QPainter, QPalette, QPen, QPixmap, QShortcut, QTransform
 from PySide6.QtWidgets import (
-	QApplication, QCheckBox, QInputDialog, QPinchGesture, QComboBox, QDoubleSpinBox, QFileDialog, QFrame, QGraphicsView, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMenu,
-	QPushButton, QScrollArea, QSlider, QSpinBox, QSplitter, QToolButton, QVBoxLayout, QWidget,
+	QAbstractSlider, QAbstractSpinBox, QApplication, QCheckBox, QInputDialog, QPinchGesture, QComboBox, QDoubleSpinBox, QFileDialog, QFrame, QGraphicsView, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMenu,
+	QPushButton, QScrollArea, QScrollBar, QSlider, QSpinBox, QSplitter, QToolButton, QVBoxLayout, QWidget,
 )
 
 from LevityDash.devtools import _studio_schema as schema
@@ -392,6 +392,65 @@ class _UndoKeys(QObject):
 		return False
 
 
+class _WheelGuard(QObject):
+	"""Keeps the scroll wheel on the control list while the list is being scrolled.
+
+	A combo box, spin box or slider in the list takes the wheel only when it has keyboard focus,
+	or when the pointer has rested on it for DWELL seconds with no list scroll in that time.
+	Otherwise the wheel scrolls the list, so a control that slides under the pointer mid-scroll
+	is not turned by accident. A control that slid under a pointer that has not moved since the
+	last list scroll never takes the wheel, however long the pause: the pointer has to move.
+	"""
+
+	DWELL = 0.6
+
+	def __init__(self, studio):
+		super().__init__(studio)
+		self.studio = studio
+		self.hover = None
+		self.hoverSince = 0.0
+		self.lastScroll = 0.0
+		self.scrollPos = None  # the pointer's global position at the last list scroll
+
+	def guarded(self, obj) -> Optional[QWidget]:
+		holder = self.studio.holder
+		w = obj if isinstance(obj, QWidget) else None
+		while w is not None and w is not holder:
+			if isinstance(w, (QComboBox, QAbstractSpinBox)) or (isinstance(w, QAbstractSlider) and not isinstance(w, QScrollBar)):
+				return w if holder.isAncestorOf(w) else None
+			w = w.parentWidget()
+		return None
+
+	def eventFilter(self, obj, event):
+		kind = event.type()
+		if kind == QEvent.Type.Enter:
+			if (g := self.guarded(obj)) is not None and g is not self.hover:
+				self.hover, self.hoverSince = g, time.monotonic()
+			return False
+		if kind == QEvent.Type.Leave:
+			if obj is self.hover:
+				self.hover = None
+			return False
+		if kind != QEvent.Type.Wheel:
+			return False
+		if (g := self.guarded(obj)) is None:
+			if isinstance(obj, QWidget) and obj.window() is self.studio and self.studio.scroll.isAncestorOf(obj):
+				self.lastScroll, self.scrollPos = time.monotonic(), QCursor.pos()
+			return False
+		focus = QApplication.focusWidget()
+		if focus is not None and (focus is g or g.isAncestorOf(focus)):
+			return False
+		now = time.monotonic()
+		if g is not self.hover:
+			self.hover, self.hoverSince = g, now
+		still = self.scrollPos is not None and (QCursor.pos() - self.scrollPos).manhattanLength() <= 3
+		if not still and now - max(self.hoverSince, self.lastScroll) >= self.DWELL:
+			return False
+		self.lastScroll, self.scrollPos = now, QCursor.pos()
+		QApplication.sendEvent(self.studio.scroll.viewport(), event)
+		return True
+
+
 class Studio(QWidget):
 	"""Preview on the left, controls on the right."""
 
@@ -465,6 +524,8 @@ class Studio(QWidget):
 		# filter lets the shortcut through.
 		self._keys = _UndoKeys(self)
 		QApplication.instance().installEventFilter(self._keys)
+		self._wheel = _WheelGuard(self)
+		QApplication.instance().installEventFilter(self._wheel)
 		if fragment is not None:
 			self.loadFile(fragment)
 			self.watchTimer.start()
@@ -589,7 +650,7 @@ class Studio(QWidget):
 		return menu
 
 	def _buildValueSection(self) -> Section:
-		section = Section('Value', expanded=True)
+		section = Section('Data', expanded=True)
 		w = QWidget()
 		g = QVBoxLayout(w)
 		g.setContentsMargins(0, 0, 0, 0)
@@ -889,8 +950,11 @@ class Studio(QWidget):
 
 	def _quickSection(self, title: str) -> Section:
 		section = Section(title, expanded=True)
+		labels = state.QUICK[title].get('labels', {})
 		for dotted in state.QUICK[title]['paths']:
 			if (row := self._view(tuple(dotted.split('.')))) is not None:
+				if dotted in labels:
+					row.label.setText(labels[dotted])
 				section.addRow(row)
 		button = QToolButton()
 		button.setText('Presets')
