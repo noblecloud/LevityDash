@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 	QPushButton, QSlider, QSpinBox, QToolButton, QVBoxLayout, QWidget,
 )
 
+from LevityDash.devtools import _studio_editors as editors
 from LevityDash.devtools._studio_schema import Field, Group, fromText, toYaml
 
 _NUMBER = re.compile(r'^\s*(-?\d+(?:\.\d+)?)')
@@ -86,7 +87,7 @@ class Section(QWidget):
 		for i in range(self.grid.count()):
 			w = self.grid.itemAt(i).widget()
 			if isinstance(w, FieldRow):
-				hit = w.matches(text)
+				hit = w.matches(text) and not w.ruledOut
 				w.setVisible(hit)
 				anything |= hit
 			elif isinstance(w, Section):
@@ -108,20 +109,32 @@ class FieldRow(QWidget):
 		self.field = field
 		self.baseline = saved
 		self._stepping = False
+		self.ruledOut = False  # hidden because the needle type does not use it
+		self.editor: Optional[editors.Editor] = editors.make(field)
+		if self.editor is None and field.kind == 'color':
+			self.editor = editors.ColorEdit(nullable=field.nullable)
 		grid = QGridLayout(self)
 		grid.setContentsMargins(0, 0, 0, 0)
 		grid.setHorizontalSpacing(6)
 		grid.setVerticalSpacing(0)
 		self.label = QLabel(labelFor(field.key))
 		self.label.setMinimumWidth(96)
-		self.label.setToolTip('.'.join(field.path))
+		self.label.setToolTip((field.doc + '\n\n' if field.doc else '') + '.'.join(field.path))
 		grid.addWidget(self.label, 0, 0)
 		self.control = QWidget()
 		box = QHBoxLayout(self.control)
 		box.setContentsMargins(0, 0, 0, 0)
 		box.setSpacing(4)
-		self._build(box)
-		grid.addWidget(self.control, 0, 1)
+		if self.editor is not None:
+			self.editor.setToolTip(field.doc)
+			self.editor.changed.connect(self._emit)
+			box.addWidget(self.editor, 1)
+		else:
+			self._build(box)
+		if self.editor is not None and self.editor.wide:
+			grid.addWidget(self.control, 2, 0, 1, 3)
+		else:
+			grid.addWidget(self.control, 0, 1)
 		self.reset = QToolButton()
 		self.reset.setText('↺')
 		self.reset.setToolTip('Back to the value it had when this template loaded')
@@ -129,7 +142,7 @@ class FieldRow(QWidget):
 		self.reset.clicked.connect(self.resetToBaseline)
 		self.reset.setEnabled(False)
 		grid.addWidget(self.reset, 0, 2)
-		self.reset.setVisible(saved is not None)
+		self.reset.setVisible(saved is not None or self.editor is not None)
 		self.error = QLabel()
 		self.error.setWordWrap(True)
 		self.error.setStyleSheet(f'color: {ERROR_COLOR}; font-size: 11px;')
@@ -171,6 +184,7 @@ class FieldRow(QWidget):
 				self.spin.setDecimals(3 if f.step < 0.1 else 2)
 			self.spin.setSingleStep(f.step)
 			self.spin.setMinimumWidth(72)
+			self._suffix()
 			self.spin.setKeyboardTracking(False)
 			self.slider.valueChanged.connect(self._sliderMoved)
 			self.spin.valueChanged.connect(self._spinChanged)
@@ -190,6 +204,19 @@ class FieldRow(QWidget):
 			self.text.setPlaceholderText('flow YAML: {a: 1}' if kind == 'yaml' else 'unset')
 			self.text.editingFinished.connect(self._textEdited)
 			box.addWidget(self.text, 1)
+
+	def _suffix(self):
+		f = self.field
+		text = f.suffix
+		if f.measured and editors.CONTEXT.unit:
+			text = f' {editors.CONTEXT.unit}'
+		self.spin.setSuffix(text)
+
+	def onContext(self):
+		if self.editor is not None:
+			self.editor.onContext()
+		elif self.field.kind == 'number':
+			self._suffix()
 
 	# slider mapping: the slider spans lo..hi, stretched when the value is outside it
 
@@ -272,6 +299,10 @@ class FieldRow(QWidget):
 	def setSaved(self, saved: Any):
 		"""Show a value without reporting it as an edit."""
 		kind = self.field.kind
+		if self.editor is not None:
+			with QSignalBlocker(self.editor):
+				self.editor.setValue(saved)
+			return
 		if kind == 'bool':
 			with QSignalBlocker(self.check):
 				self.check.setChecked(bool(saved))
@@ -306,7 +337,7 @@ class FieldRow(QWidget):
 				self.text.setText(toYaml(saved) if self.field.kind == 'yaml' else ('' if saved is None else str(saved)))
 
 	def isEditing(self) -> bool:
-		return any(w.hasFocus() for w in self.control.findChildren(QWidget)) or self.slider_down()
+		return any(w.hasFocus() or (isinstance(w, QComboBox) and w.view().isVisible()) for w in self.control.findChildren(QWidget)) or self.slider_down()
 
 	def slider_down(self) -> bool:
 		slider = getattr(self, 'slider', None)

@@ -68,18 +68,20 @@ class DataPreset:
 	max: float
 	#: Extra keys a marker or fill may name, each as a fraction of min..max or an absolute number.
 	keys: Dict[str, float] = field(default_factory=dict)
+	#: The unit as the gauge's number fields show it.
+	symbol: str = ''
 
 	def measurement(self, value: float):
 		return self.make(value)
 
 
 DATA_PRESETS: Dict[str, DataPreset] = {p.name: p for p in (
-	DataPreset('Temperature F', 'environment.temperature.temperature', wu.Temperature.Fahrenheit, 52, 78, 68, 0, 120),
-	DataPreset('Humidity %', 'environment.humidity.humidity', lambda v: wu.Humidity(v), 0.38, 0.82, 0.61, 0, 1),
-	DataPreset('Pressure inHg', 'environment.pressure.pressure', wu.Pressure.InchOfMercury, 29.7, 30.1, 29.9, 28.5, 31.5),
-	DataPreset('Wind mph', 'environment.wind.speed.speed', wu.Wind.MilesPerHour, 3, 18, 11, 0, 40),
-	DataPreset('Rain in/hr', 'environment.precipitation.precipitation', _rain, 0.0, 0.8, 0.3, 0, 2),
-	DataPreset('Generic 0-100', 'studio.generic', wu.Index, 15, 85, 55, 0, 100),
+	DataPreset('Temperature F', 'environment.temperature.temperature', wu.Temperature.Fahrenheit, 52, 78, 68, 0, 120, symbol='\u00b0F'),
+	DataPreset('Humidity %', 'environment.humidity.humidity', lambda v: wu.Humidity(v), 0.38, 0.82, 0.61, 0, 1, symbol='(0-1)'),
+	DataPreset('Pressure inHg', 'environment.pressure.pressure', wu.Pressure.InchOfMercury, 29.7, 30.1, 29.9, 28.5, 31.5, symbol='inHg'),
+	DataPreset('Wind mph', 'environment.wind.speed.speed', wu.Wind.MilesPerHour, 3, 18, 11, 0, 40, symbol='mph'),
+	DataPreset('Rain in/hr', 'environment.precipitation.precipitation', _rain, 0.0, 0.8, 0.3, 0, 2, symbol='in/hr'),
+	DataPreset('Generic 0-100', 'studio.generic', wu.Index, 15, 85, 55, 0, 100, symbol=''),
 )}
 
 #: Which preset suits a key in a showcase cell.
@@ -129,6 +131,8 @@ class StudioScene(QGraphicsScene):
 		super().__init__(view)
 		self._view = view
 		self.base = None
+		#: The handle layer's root item; a render hides it so a picture has no handles.
+		self.overlay = None
 		self.setSceneRect(QRectF(0, 0, *STAGE_SIZE))
 		self.setBackgroundBrush(Qt.transparent)
 
@@ -334,6 +338,12 @@ class StudioGauge:
 		image.fill(Qt.black)
 		painter = QPainter(image)
 		painter.setRenderHint(QPainter.Antialiasing)
+		overlay = self.scene.overlay
+		shown = overlay is not None and overlay.isVisible()
+		if overlay is not None:
+			overlay.hide()
 		self.scene.render(painter, QRectF(image.rect()), rect)
+		if shown:
+			overlay.show()
 		painter.end()
 		return image

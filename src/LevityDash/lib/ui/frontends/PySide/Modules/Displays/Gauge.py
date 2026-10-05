@@ -3039,8 +3039,9 @@ class GaugeCaption(GaugePathItem):
 	``format`` it prints as the value does, unit and all), ``format``
 	(``duration`` turns minutes into ``4h 49m``; any other string is a Python
 	format spec, and a mapping is the value label's ``format``, e.g. ``{precision: 0, show_unit: false}``), ``size`` (text height as a share of the dial's diameter,
-	default 7%), ``color``, ``weight`` (``bold``) and ``gap`` (distance from the
-	value, a share of the diameter, default 2%). A value source with no value
+	default 7%), ``color``, ``weight`` (``bold``), ``gap`` (distance from the
+	value, a share of the diameter, default 2%) and ``offset`` (``{x, y}``, shares of the
+	diameter, added to where the gap puts it). A value source with no value
 	yet shows nothing. A bad spec logs the gauge key and shows nothing.
 	"""
 
@@ -3055,6 +3056,7 @@ class GaugeCaption(GaugePathItem):
 	_gap = None
 	_color: Optional[QColor] = None
 	_bold = False
+	_offset: Optional[tuple] = None
 	_binding: Optional[Binding] = None
 
 	def __init__(self, gauge: 'Gauge', side: str):
@@ -3073,9 +3075,10 @@ class GaugeCaption(GaugePathItem):
 		if isinstance(spec, str):
 			spec = {'text': spec}
 		name = _gaugeKeyName(self.gauge)
-		unknown = set(spec) - {'text', 'value', 'format', 'size', 'color', 'weight', 'gap'}
+		unknown = set(spec) - {'text', 'value', 'format', 'size', 'color', 'weight', 'gap', 'offset'}
 		if unknown:
 			log.warning(f'Gauge {name} {self._side} ignored unknown keys {sorted(map(str, unknown))}')
+		self._offset = _decodeOffset(spec.get('offset'))
 		self._template = spec.get('text')
 		self._hasValue = False
 		self._format = spec.get('format')
@@ -3143,6 +3146,9 @@ class GaugeCaption(GaugePathItem):
 				y = anchor.top() - gap - rect.bottom()
 			else:
 				y = anchor.bottom() + gap - rect.top()
+			if self._offset:
+				x += self._offset[0] * gauge.radius * 2
+				y += self._offset[1] * gauge.radius * 2
 			self.prepareGeometryChange()
 			self.setPath(path)
 			self.setPos(x, y)
@@ -3160,6 +3166,34 @@ class GaugeCaption(GaugePathItem):
 class GaugeText(AnnotationText, GaugeItem):
 	def __init__(self, *args, **kwargs):
 		super(GaugeText, self).__init__(*args, **kwargs)
+
+
+def _decodeOffset(value) -> Optional[tuple]:
+	"""`{x, y}` (or `[x, y]`) as a pair of floats; None for nothing or all zero."""
+	if value is None:
+		return None
+	if isinstance(value, Mapping):
+		pair = (value.get('x', 0), value.get('y', 0))
+	elif isinstance(value, (list, tuple)) and len(value) == 2:
+		pair = tuple(value)
+	else:
+		raise ValueError(f'offset must be a mapping {{x, y}} or a pair, got {value!r}')
+	x, y = float(pair[0]), float(pair[1])
+	return None if x == 0 and y == 0 else (x, y)
+
+
+def _shiftByOffset(box) -> None:
+	"""Move a label's text box by its label's `offset`, in the gauge's own coordinates.
+	Run after a refit has put the box where the layout wants it, so the shift never builds up."""
+	try:
+		shift = box.parent.offsetPx()
+	except Exception as e:  # noqa: BLE001 - layout must never abort a load
+		log.warning(f'could not read a label offset: {e!r}')
+		return
+	if shift.isNull():
+		return
+	t = box.transform()
+	box.setTransform(QTransform(t.m11(), t.m12(), t.m21(), t.m22(), t.dx() + shift.x(), t.dy() + shift.y()))
 
 
 class GaugeLabel(NonInteractiveLabel, ColorGradientMixin, GaugeItem):
@@ -3189,6 +3223,32 @@ class GaugeLabel(NonInteractiveLabel, ColorGradientMixin, GaugeItem):
 			# full_gauge_path counts only visible labels, so the cached centre
 			# is stale the moment this changes.
 			gauge.__dict__.pop('full_gauge_path', None)
+
+	@StateProperty(key='offset', default=None, allowNone=True)
+	def offset(self) -> Optional[tuple]:
+		"""Shift the label from where it would sit: ``{x, y}`` as shares of the dial's diameter
+		(``{x: 0, y: -0.1}`` is a tenth of the diameter up). Gauge Studio writes it when you drag the label."""
+		return getattr(self, '_offset', None)
+
+	@offset.setter
+	def offset(self, value: Optional[tuple]):
+		self._offset = value
+
+	@offset.decode
+	def offset(self, value) -> Optional[tuple]:
+		return _decodeOffset(value)
+
+	@offset.encode
+	def offset(self, value: Optional[tuple]) -> Optional[dict]:
+		return None if not value else {'x': round(value[0], 4), 'y': round(value[1], 4)}
+
+	def offsetPx(self) -> QPointF:
+		"""`offset` in gauge pixels."""
+		value = getattr(self, '_offset', None)
+		if not value:
+			return QPointF()
+		d = self.gauge.radius * 2
+		return QPointF(value[0] * d, value[1] * d)
 
 
 class GaugeValueLabel(GaugeLabel):
@@ -3330,6 +3390,7 @@ class GaugeValueLabel(GaugeLabel):
 		@defer(pool_attr='action_pool')
 		def updateTransform(self, rect: QRectF = None, updateShared: bool = True, updatePath: bool = True, reason: str = None, *args):
 			super().updateTransform(rect, updateShared, updatePath, reason=reason, *args)
+			_shiftByOffset(self)
 			# A refit resets this label to where the fit puts it, and Gauge.recenter
 			# is not called again. Re-hang the unit from the value as it now is.
 			self.parent.parent._syncUnitUnderValue()
@@ -3686,6 +3747,7 @@ class GaugeUnit(GaugeLabel):
 		@defer(pool_attr='action_pool')
 		def updateTransform(self, rect: QRectF = None, updateShared: bool = True, updatePath: bool = True, reason: str = None, *args):
 			super().updateTransform(rect, updateShared, updatePath, reason=reason, *args)
+			_shiftByOffset(self)
 			# Same as the value label's: a refit puts the unit back at the
 			# value's raw box, which is not where it should hang.
 			self.parent.parent._syncUnitUnderValue()
@@ -5609,8 +5671,9 @@ class Gauge(Display):
 		if v.isEmpty() or u.isEmpty():
 			return
 		# A third of the unit's own height: reads as one block, never touches.
-		dx = v.center().x() - u.center().x()
-		dy = v.bottom() + u.height() / 3 - u.top()
+		shift = unit.offsetPx()
+		dx = v.center().x() - u.center().x() + shift.x()
+		dy = v.bottom() + u.height() / 3 - u.top() + shift.y()
 		t = ubox.transform()
 		# Shift the translation part only, in gauge coordinates.
 		ubox.setTransform(QTransform(t.m11(), t.m12(), t.m21(), t.m22(), t.dx() + dx, t.dy() + dy))

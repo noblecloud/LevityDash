@@ -40,17 +40,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import yaml
 from PySide6.QtCore import QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtGui import QColor, QKeySequence, QPalette, QShortcut
 from PySide6.QtWidgets import (
-	QApplication, QComboBox, QDoubleSpinBox, QFileDialog, QFrame, QGraphicsView, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMenu,
+	QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFrame, QGraphicsView, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMenu,
 	QPushButton, QScrollArea, QSlider, QSplitter, QToolButton, QVBoxLayout, QWidget,
 )
 
 from LevityDash.devtools import _studio_schema as schema
 from LevityDash.devtools import _studio_stage as _stage
 from LevityDash.devtools._studio_stage import DATA_PRESETS, DataPreset, StudioGauge, StudioScene, presetForKey
+from LevityDash.devtools import _studio_editors as editors
+from LevityDash.devtools._studio_handles import HandleLayer
 from LevityDash.devtools._studio_widgets import FieldRow, Section, build
-from statekit.yaml import StatefulDumper
+
+StatefulDumper = schema.StudioDumper
 
 REPO = Path(__file__).resolve().parents[3]
 PRESET_DIR = REPO / 'docs' / 'design-references' / 'presets'
@@ -193,6 +196,19 @@ class Preview(QGraphicsView):
 		self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 		self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.FullViewportUpdate)
 		self.setMinimumSize(320, 320)
+		self.setMouseTracking(True)
+		self.viewport().setMouseTracking(True)
+		self.layer: Optional[HandleLayer] = None
+
+	def enterEvent(self, event):
+		super().enterEvent(event)
+		if self.layer is not None:
+			self.layer.setInside(True)
+
+	def leaveEvent(self, event):
+		super().leaveEvent(event)
+		if self.layer is not None:
+			self.layer.setInside(False)
 
 	def refit(self):
 		self.fitInView(self.scene().sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
@@ -228,6 +244,9 @@ class Studio(QWidget):
 		self.rows: Dict[tuple, FieldRow] = {}
 		self._group: Optional[schema.Group] = None
 		self.pending: Dict[tuple, Any] = {}
+		self.dragActive = False
+		self.history: List[dict] = []
+		self.hpos = -1
 		self.fragment = fragment
 		self.fragmentMtime = fragment.stat().st_mtime if fragment else None
 		self.animStart = time.monotonic()
@@ -247,6 +266,13 @@ class Studio(QWidget):
 		self.watchTimer = QTimer(self, interval=500, timeout=self._checkFile)
 
 		self.studio = StudioGauge(self.scene, DATA_PRESETS['Temperature F'])
+		editors.CONTEXT.range = lambda: self.studio.range if self.studio.gauge is not None else (0.0, 100.0)
+		self.layer = HandleLayer(self)
+		self.preview.layer = self.layer
+		for keys in (QKeySequence.StandardKey.Undo, 'Ctrl+Z'):
+			QShortcut(QKeySequence(keys), self, activated=self.undo)
+		for keys in (QKeySequence.StandardKey.Redo, 'Ctrl+Shift+Z', 'Ctrl+Y'):
+			QShortcut(QKeySequence(keys), self, activated=self.redo)
 		if fragment is not None:
 			self.loadFile(fragment)
 			self.watchTimer.start()
@@ -264,7 +290,7 @@ class Studio(QWidget):
 		split.addWidget(self.preview)
 
 		side = QWidget()
-		side.setMinimumWidth(360)
+		side.setMinimumWidth(400)
 		side.setMaximumWidth(520)
 		box = QVBoxLayout(side)
 		box.setContentsMargins(8, 8, 8, 8)
@@ -285,6 +311,26 @@ class Studio(QWidget):
 		bar.addWidget(reset)
 		bar.addStretch(1)
 		box.addLayout(bar)
+
+		bar3 = QHBoxLayout()
+		self.undoButton = QPushButton('Undo')
+		self.undoButton.setToolTip('Undo the last edit (Cmd+Z)')
+		self.undoButton.clicked.connect(self.undo)
+		self.redoButton = QPushButton('Redo')
+		self.redoButton.setToolTip('Redo (Shift+Cmd+Z)')
+		self.redoButton.clicked.connect(self.redo)
+		self.handlesBox = QCheckBox('Handles')
+		self.handlesBox.setChecked(True)
+		self.handlesBox.setToolTip('Drag handles on the preview: angles, radius, weight, markers, zones, labels, anchor corner')
+		self.handlesBox.toggled.connect(lambda on: self.layer.setEnabled(on))
+		self.snapBox = QCheckBox('Snap')
+		self.snapBox.setChecked(True)
+		self.snapBox.setToolTip('Snap dragged values to round steps. Hold Shift while dragging for fine control.')
+		self.snapBox.toggled.connect(lambda on: setattr(self.layer, 'snap', on))
+		for w in (self.undoButton, self.redoButton, self.handlesBox, self.snapBox):
+			bar3.addWidget(w)
+		bar3.addStretch(1)
+		box.addLayout(bar3)
 
 		bar2 = QHBoxLayout()
 		copy_ = QPushButton('Copy code')
@@ -320,7 +366,7 @@ class Studio(QWidget):
 		split.addWidget(side)
 		split.setStretchFactor(0, 1)
 		split.setStretchFactor(1, 0)
-		split.setSizes([900, 400])
+		split.setSizes([860, 460])
 
 		self.valueSection = self._buildValueSection()
 		self.stageSection = self._buildStageSection()
@@ -432,6 +478,8 @@ class Studio(QWidget):
 		self.studio.value = preset.value
 		self.studio.build(copy.deepcopy(display), preset)
 		self._afterBuild()
+		self.history, self.hpos = [], -1
+		self._commit(self.exportDisplay())
 		self.status.setText(f'{label} on {preset.name}')
 
 	def resetAll(self):
@@ -439,6 +487,7 @@ class Studio(QWidget):
 		self.studio.value = preset.value
 		self.studio.build(copy.deepcopy(self.template), preset)
 		self._afterBuild()
+		self._commit(self.exportDisplay())
 
 	def _afterBuild(self):
 		self.scene.invalidate()
@@ -446,6 +495,7 @@ class Studio(QWidget):
 		self.preview.refit()
 		self._rebuildPanel()
 		self._syncValueControls()
+		self.layer.rebuild()
 
 	def _openFile(self):
 		name, _ = QFileDialog.getOpenFileName(self, 'Open a .levity fragment', str(PRESET_DIR), 'Levity (*.levity *.yaml)')
@@ -454,18 +504,42 @@ class Studio(QWidget):
 
 	# the controls
 
+	def _read(self, path: tuple) -> Any:
+		"""What a row shows for `path`. An unset range end shows the range the gauge is using."""
+		value = schema.read(self.studio.gauge, path)
+		if value is None and path in (('range', 'min'), ('range', 'max')):
+			lo, hi = self.studio.range
+			return lo if path[-1] == 'min' else hi
+		return value
+
+	def _applyContext(self):
+		"""Tell the editors which unit and range the open gauge has."""
+		editors.CONTEXT.unit = self.studio.preset.symbol
+		for row in self.rows.values():
+			row.onContext()
+
+	def _applyRules(self):
+		"""Hide the needle options the current needle type does not use."""
+		kind = schema.read(self.studio.gauge, ('needle', 'type'))
+		for row in self.rows.values():
+			if row.field.types is not None:
+				row.ruledOut = kind not in row.field.types
+				row.setVisible(not row.ruledOut)
+
 	def _rebuildPanel(self):
 		gauge = self.studio.gauge
 		group = schema.describe(gauge)
 		if self.tree is not None and group == self._group:
 			# The same controls as before (a data or stage change keeps them): show the new
 			# values in the widgets that exist. Building the tree again costs about 100 ms.
+			self._applyContext()
 			for path, row in self.rows.items():
-				value = schema.read(gauge, path)
-				row.baseline = value
+				value = self._read(path)
+				row.baseline = schema.read(gauge, path)
 				row.setSaved(value)
 				row.setError(None)
 				row.reset.setEnabled(False)
+			self._applyRules()
 			self._filter(self.search.text())
 			return
 		self._group = group
@@ -476,20 +550,46 @@ class Studio(QWidget):
 			self.tree.setParent(None)
 			self.tree.deleteLater()
 		self.rows = {}
-		self.tree = build(group, lambda path: schema.read(gauge, path), self.rows, expanded=not open_paths or () in open_paths)
+		self.tree = build(group, self._read, self.rows, expanded=not open_paths or () in open_paths)
 		for s in self.tree.findChildren(Section):
 			if s.path in open_paths:
 				s.setExpanded(True)
 		for row in self.rows.values():
 			row.edited.connect(self._edited)
 		self.holderLayout.insertWidget(self.holderLayout.count() - 1, self.tree)
+		self._applyContext()
+		self._applyRules()
 		self._filter(self.search.text())
 
 	def _edited(self, path: tuple, value: Any):
-		if value is None and self.rows[path].field.kind not in ('text', 'yaml'):
+		row = self.rows.get(path)
+		if value is None and row is not None and row.field.kind not in ('text', 'yaml') and row.editor is None:
 			return
 		self.pending[path] = value
 		self.flushTimer.start()
+
+	def handleEdit(self, path: tuple, value: Any):
+		"""A drag handle wrote `value` to the property at `path`."""
+		self._edited(path, value)
+
+	def beginDrag(self):
+		self.dragActive = True
+		self.settleTimer.stop()
+
+	def endDrag(self, changed: bool):
+		"""The mouse came up on a handle: apply what is waiting, rebuild the gauge from its saved form, record one undo step."""
+		self.dragActive = False
+		if self.pending or self.flushTimer.isActive():
+			self.flushTimer.stop()
+			self._flush()
+		if changed:
+			self.settleTimer.stop()
+			self.settle()
+
+	def setValueFromDrag(self, value: float):
+		if self.mode.currentText() != 'Manual':
+			self.mode.setCurrentText('Manual')
+		self.setValue(value)
 
 	def _flush(self):
 		pending, self.pending = self.pending, {}
@@ -499,15 +599,21 @@ class Studio(QWidget):
 			row = self.rows.get(path)
 			if row is not None:
 				row.setError(reason)
+				if reason is None and not row.isEditing():
+					row.setSaved(self._read(path))
+					row.reset.setEnabled(True)
 		gauge.refresh()
+		if ('needle', 'type') in pending:
+			self._applyRules()
 		self.scene.invalidate()
 		self.preview.viewport().update()
+		self.layer.refresh()
 		self.syncTimer.start()
 		self.settleTimer.start()
 
 	def _dragging(self) -> bool:
-		"""True while a mouse button is down (a slider is being dragged) or an edit waits to apply."""
-		return self.flushTimer.isActive() or QApplication.mouseButtons() != Qt.MouseButton.NoButton
+		"""True while a mouse button is down (a slider is being dragged), a handle is held, or an edit waits to apply."""
+		return self.dragActive or self.flushTimer.isActive() or QApplication.mouseButtons() != Qt.MouseButton.NoButton
 
 	def _syncIdle(self):
 		if self._dragging():
@@ -521,11 +627,60 @@ class Studio(QWidget):
 			self.settleTimer.start()
 			return
 		started = time.monotonic()
-		self.studio.build(self.exportDisplay())
+		display = self.exportDisplay()
+		self.studio.build(display)
 		self.scene.invalidate()
 		self.preview.viewport().update()
 		self.syncRows()
+		self.layer.rebuild()
+		self._commit(display)
 		self.lastSettle = time.monotonic() - started
+
+	# history
+
+	def _commit(self, display: dict):
+		"""Record the gauge's saved form as an undo step, unless nothing changed."""
+		if 0 <= self.hpos < len(self.history) and self.history[self.hpos] == display:
+			self._historyButtons()
+			return
+		del self.history[self.hpos + 1:]
+		self.history.append(copy.deepcopy(display))
+		del self.history[:-200]
+		self.hpos = len(self.history) - 1
+		self._historyButtons()
+
+	def _historyButtons(self):
+		self.undoButton.setEnabled(self.hpos > 0)
+		self.redoButton.setEnabled(self.hpos < len(self.history) - 1)
+
+	def undo(self):
+		self._step(-1)
+
+	def redo(self):
+		self._step(1)
+
+	def _step(self, by: int):
+		target = self.hpos + by
+		if self._dragging() or not 0 <= target < len(self.history):
+			return
+		self.settleTimer.stop()
+		self.syncTimer.stop()
+		self.hpos = target
+		self.studio.build(copy.deepcopy(self.history[self.hpos]))
+		self.scene.invalidate()
+		self.preview.viewport().update()
+		group = schema.describe(self.studio.gauge)
+		if group == self._group:
+			for row in self.rows.values():
+				row.setError(None)
+			self.syncRows()
+			self._applyRules()
+		else:
+			self._rebuildPanel()
+		self._syncValueControls(keepValue=True)
+		self.layer.rebuild()
+		self._historyButtons()
+		self.status.setText(f'{"Undid" if by < 0 else "Redid"} to step {self.hpos + 1} of {len(self.history)}')
 
 	def syncRows(self):
 		"""Show what the gauge holds now. One edit can move others (a range change moves the ticks)."""
@@ -533,7 +688,8 @@ class Studio(QWidget):
 		for path, row in self.rows.items():
 			if row.isEditing() or row.hasError():
 				continue
-			row.setSaved(schema.read(gauge, path))
+			row.setSaved(self._read(path))
+		self._applyRules()
 		self._syncValueControls(keepValue=True)
 
 	def _filter(self, text: str):
@@ -564,6 +720,8 @@ class Studio(QWidget):
 
 	def setValue(self, value: float):
 		self.studio.setValue(value)
+		if self.layer.shown:
+			self.layer.reposition()
 		self.valueSpin.blockSignals(True)
 		self.valueSpin.setValue(value)
 		self.valueSpin.blockSignals(False)
@@ -598,6 +756,7 @@ class Studio(QWidget):
 		self.studio.value = preset.value
 		self.studio.build(display, preset)
 		self._afterBuild()
+		self._commit(self.exportDisplay())
 		self.status.setText(f'{self.label} on {preset.name}')
 
 	def _stageChanged(self):
@@ -606,6 +765,7 @@ class Studio(QWidget):
 		self.scene.setSceneRect(QRectF(0, 0, width, height))
 		self.studio.build(display)
 		self._afterBuild()
+		self._commit(self.exportDisplay())
 
 	# export
 
