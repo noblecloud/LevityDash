@@ -514,7 +514,7 @@
             minor: {length: 45%, width: 1px, color: '#5d5d66', interval: 50}
             micro: {enabled: false}
             needle: {type: needle, length: 72%, width: 3%, color: '#ffffff'}
-            value-label: {position: below, size: 12%, color: '#ffffff', value-padding: 7%, font: Roboto Mono}
+            value-label: {position: below, size: 12%, color: '#ffffff', value-padding: 7%, font: Roboto Mono, format: {precision: 0}}
     - type: group
       name: nested
       geometry: {x: 50.0%, y: 25.0%, width: 24.65%, height: 24.45%}
@@ -665,7 +665,7 @@
           display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ffd23f'}
         - type: text
           name: timerCap
-          text: "60 ticks outside, 330 degrees"
+          text: "60 ticks outside, 300 degrees"
           alignment: Center
           geometry: {x: 5%, y: 91.5%, width: 90%, height: 5.0%}
           opacity: 0.6
@@ -677,7 +677,7 @@
           geometry: {x: 6%, y: 12%, width: 88%, height: 78%}
           display:
             radius: 84%
-            arc: {start-angle: -165, end-angle: 165, weight: 1.2%, color: '#2a2a31', cap: flat}
+            arc: {start-angle: -150, end-angle: 150, weight: 1.2%, color: '#2a2a31', cap: flat}
             range: {min: 0, max: 60}
             major:
               length: 7%
@@ -696,7 +696,7 @@
             micro: {enabled: false}
             needle: {type: needle, length: 70%, width: 3%, color: '#ffd23f'}
             value-label:
-              position: center
+              position: below
               size: 13%
               color: '#ffffff'
               value-padding: 7%
@@ -745,7 +745,7 @@
             minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 10}
             micro: {enabled: false}
             needle: {type: needle, length: 74%, width: 4%, color: '#ffffff'}
-            value-label: {position: below, size: 14%, color: '#ffffff', value-padding: 7%, font: Roboto Mono}
+            value-label: {position: below, size: 14%, color: '#ffffff', value-padding: 7%, font: Roboto Mono, format: {precision: 0}}
     - type: group
       name: tach
       geometry: {x: 12.5%, y: 50.0%, width: 12.15%, height: 24.45%}
@@ -789,7 +789,7 @@
             minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 500}
             micro: {enabled: false}
             needle: {type: needle, length: 74%, width: 4%, color: '#ff8a3d'}
-            value-label: {position: below, size: 13%, color: '#ffffff', value-padding: 7%, font: Roboto Mono}
+            value-label: {position: below, size: 13%, color: '#ffffff', value-padding: 7%, font: Roboto Mono, format: {precision: 0}}
     - type: group
       name: fuel
       geometry: {x: 25.0%, y: 50.0%, width: 12.15%, height: 24.45%}
@@ -879,7 +879,7 @@
             minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 500}
             micro: {enabled: false}
             needle: {type: circle, length: 8%, width: 5%, color: '#ffd23f'}
-            value-label: {position: below, size: 13%, color: '#ffffff', value-padding: 7%, font: Roboto Mono}
+            value-label: {position: below, size: 13%, color: '#ffffff', value-padding: 7%, font: Roboto Mono, format: {precision: 0}}
     - type: group
       name: solar
       geometry: {x: 50.0%, y: 50.0%, width: 12.15%, height: 24.45%}
@@ -912,7 +912,7 @@
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {type: marker, length: 12%, width: 9%, color: '#ffffff'}
-            value-label: {position: below, size: 13%, color: '#ffffff', value-padding: 7%, font: Roboto Mono}
+            value-label: {position: below, size: 13%, color: '#ffffff', value-padding: 7%, font: Roboto Mono, format: {precision: 0}}
     - type: group
       name: thermostat
       geometry: {x: 62.5%, y: 50.0%, width: 12.15%, height: 24.45%}
@@ -997,7 +997,7 @@
             minor: {enabled: false}
             micro: {enabled: false}
             needle: {type: circle, length: 8%, width: 5%, color: '#ffffff'}
-            value-label: {position: below, size: 14%, color: '#ffffff', value-padding: 7%, font: Roboto Mono}
+            value-label: {position: below, size: 14%, color: '#ffffff', value-padding: 7%, font: Roboto Mono, format: {precision: 0}}
     - type: group
       name: coolant
       geometry: {x: 87.5%, y: 50.0%, width: 12.15%, height: 24.45%}
@@ -1078,7 +1078,7 @@
             minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 10}
             micro: {enabled: false}
             needle: {type: circle, length: 8%, width: 5%, color: '#ff2d55'}
-            value-label: {position: center, size: 14%, color: '#ffffff', value-padding: 7%, font: Roboto Mono}
+            value-label: {position: center, size: 14%, color: '#ffffff', value-padding: 7%, font: Roboto Mono, format: {precision: 0}}
     - type: group
       name: activity
       geometry: {x: 12.5%, y: 75.0%, width: 24.65%, height: 24.45%}
@@ -1320,8 +1320,8 @@
           title: false
           geometry: {x: 1.0%, y: 16%, width: 23.5%, height: 62%}
           display:
-            radius: 92%
-            arc: {start-angle: -135, end-angle: 135, weight: 2%, color: '#2a2a31', cap: flat}
+            radius: 80%
+            arc: {start-angle: -135, end-angle: 135, weight: 7%, color: '#2a2a31', cap: flat}
             range: {min: 0, max: 100}
             major:
               length: 8%
@@ -1329,10 +1329,11 @@
               color: '#c9c9d0'
               interval: 50
               labels: {enabled: false}
-            minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 10}
+            minor: {enabled: false}
             micro: {enabled: false}
-            needle: {type: circle, length: 16%, width: 12%, color: '#5ab4ff'}
-            value-label: {visible: false}
+            needle: {type: circle, length: 84%, width: 11%, color: '#5ab4ff'}
+            fill: {weight: 7%, color: '#5ab4ff', opacity: 0.45}
+            value-label: {position: below, size: 17%, color: '#ffffff', value-padding: 7%, font: Roboto Mono, format: {precision: 0}}
         - type: text
           name: needleName0
           text: "circle"
@@ -1345,8 +1346,8 @@
           title: false
           geometry: {x: 25.5%, y: 16%, width: 23.5%, height: 62%}
           display:
-            radius: 92%
-            arc: {start-angle: -135, end-angle: 135, weight: 2%, color: '#2a2a31', cap: flat}
+            radius: 80%
+            arc: {start-angle: -135, end-angle: 135, weight: 7%, color: '#2a2a31', cap: flat}
             range: {min: 0, max: 100}
             major:
               length: 8%
@@ -1354,10 +1355,11 @@
               color: '#c9c9d0'
               interval: 50
               labels: {enabled: false}
-            minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 10}
+            minor: {enabled: false}
             micro: {enabled: false}
-            needle: {type: triangle, length: 16%, width: 12%, color: '#ffb454'}
-            value-label: {visible: false}
+            needle: {type: triangle, length: 84%, width: 11%, color: '#ffb454'}
+            fill: {weight: 7%, color: '#ffb454', opacity: 0.45}
+            value-label: {position: below, size: 17%, color: '#ffffff', value-padding: 7%, font: Roboto Mono, format: {precision: 0}}
         - type: text
           name: needleName1
           text: "triangle"
@@ -1370,8 +1372,8 @@
           title: false
           geometry: {x: 50.0%, y: 16%, width: 23.5%, height: 62%}
           display:
-            radius: 92%
-            arc: {start-angle: -135, end-angle: 135, weight: 2%, color: '#2a2a31', cap: flat}
+            radius: 80%
+            arc: {start-angle: -135, end-angle: 135, weight: 7%, color: '#2a2a31', cap: flat}
             range: {min: 0, max: 100}
             major:
               length: 8%
@@ -1379,10 +1381,11 @@
               color: '#c9c9d0'
               interval: 50
               labels: {enabled: false}
-            minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 10}
+            minor: {enabled: false}
             micro: {enabled: false}
-            needle: {type: diamond, length: 16%, width: 12%, color: '#3ddc97'}
-            value-label: {visible: false}
+            needle: {type: diamond, length: 84%, width: 11%, color: '#3ddc97'}
+            fill: {weight: 7%, color: '#3ddc97', opacity: 0.45}
+            value-label: {position: below, size: 17%, color: '#ffffff', value-padding: 7%, font: Roboto Mono, format: {precision: 0}}
         - type: text
           name: needleName2
           text: "diamond"
@@ -1395,8 +1398,8 @@
           title: false
           geometry: {x: 74.5%, y: 16%, width: 23.5%, height: 62%}
           display:
-            radius: 92%
-            arc: {start-angle: -135, end-angle: 135, weight: 2%, color: '#2a2a31', cap: flat}
+            radius: 80%
+            arc: {start-angle: -135, end-angle: 135, weight: 7%, color: '#2a2a31', cap: flat}
             range: {min: 0, max: 100}
             major:
               length: 8%
@@ -1404,10 +1407,11 @@
               color: '#c9c9d0'
               interval: 50
               labels: {enabled: false}
-            minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 10}
+            minor: {enabled: false}
             micro: {enabled: false}
-            needle: {type: marker, length: 16%, width: 12%, color: '#ff2d55'}
-            value-label: {visible: false}
+            needle: {type: marker, length: 84%, width: 11%, color: '#ff2d55'}
+            fill: {weight: 7%, color: '#ff2d55', opacity: 0.45}
+            value-label: {position: below, size: 17%, color: '#ffffff', value-padding: 7%, font: Roboto Mono, format: {precision: 0}}
         - type: text
           name: needleName3
           text: "marker"
