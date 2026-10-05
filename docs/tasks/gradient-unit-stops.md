@@ -60,8 +60,27 @@ same reading whatever the gauge's range, and whatever unit the data arrives in.
      colour band drawn across the gauge's range, with small ticks at each stop.
      Clicking the band or a disclosure arrow expands the stop list. The collapsed or
      expanded state persists per Studio session.
-   - Clicking or dragging a stop on the preview's arc is optional. Add it only if the
-     handles layer makes it cheap.
+   - **Gradient edit mode with draggable nodes.** This is required, not optional. The
+     user asked: "we need a gradient edit mode with dragible nodes. Both in the little
+     config editor but also on the actual meters".
+     - **In the editor:** the colour band becomes a gradient bar with one node per
+       stop. Drag a node to move its stop; the value snaps to the property's unit
+       step. Click empty band to add a stop with the colour sampled there.
+       Double-click a node to pick its colour. Drag a node off the bar, or press
+       Delete, to remove it. The value and unit fields stay in step with the nodes.
+     - **On the meter:** a toggle, "Edit gradient", in the gradient row and in the
+       preview toolbar. While it is on, the drag handles layer (`_studio_handles.py`)
+       draws one node per stop on the track, at the stop's value. The same drag, add,
+       remove and recolour actions work there, and each node shows its value and unit
+       while dragged. The other handles dim, so the two kinds don't fight for the
+       mouse.
+     - One drag is one undo step, in both places.
+     - Nodes are placed through the gauge's value-to-angle mapping. After the meter
+       refactor (`docs/tasks/meter-and-bar.md`) they should go through
+       `Scale`/`Track` instead, so bars get gradient nodes for free. Leave a note at
+       that spot if the refactor has not landed yet.
+     - The same mode in the running dashboard's own edit mode is a follow-up. Don't
+       build it here.
    - Use a distinct default colour for a new stop. Today a new stop repeats the last
      colour.
 
