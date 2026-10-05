@@ -387,3 +387,7 @@ and the residual question — why the two runs sampled different instants when t
 freeze's pins are identical in both — is open. A target that contains them will
 need a named mask, the way `ev-caption` has one, or the render set needs a
 timer-free dashboard.
+
+The baseline at the M3 tip is `.render-diff/m3tip-a` with `m3tip-b` as its reproducing
+pair: 25 files, 25 clean, 0 px over tolerance. The gate command is
+`.venv/bin/python src/LevityDash/devtools/render_diff.py selfcheck .render-diff/m3tip-a`.
