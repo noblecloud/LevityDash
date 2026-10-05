@@ -44,7 +44,7 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Panel import SizeGroup
 from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, addCrosshair, DebugPaint, SoftShadow, outline_path, \
 	modifyTransformValues, rect_to_shape, addPath
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.scale import (
-	CLOCK_HANDS, _isWholeSteps, clockTurn, decode_measurement, filter_factors, formatDuration,
+	CLOCK_HANDS, Scale, _isWholeSteps, clockTurn, decode_measurement, filter_factors, formatDuration,
 	parseClockTime, shortestDelta,
 )
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.track import ArcTrack
@@ -5997,15 +5997,18 @@ class Gauge(Display):
 		radius_px = self.radius
 		return float(radius_px * self.fullAngle / 180 * pi)
 
-	def value_to_angle(self, value: Numeric) -> float:
+	@property
+	def value_scale(self) -> Scale:
+		"""This gauge's range as fractions - the value→``t`` half of the track's work.
+
+		Not `scale`: `QGraphicsItem` already owns that name for the item's
+		transform, and shadowing it would break `item.scale()` calls.
+		"""
 		_range = self._range
-		s = self.startAngle
-		e = self.endAngle
-		if _range.wrap:
-			span = float(_range.rounded_range)
-			return s + (float(value - _range.rounded_min) % span) / span * self.fullAngle
-		angle = float(value - _range.rounded_min) / _range.rounded_range * self.fullAngle + s
-		return sorted((s, angle, e))[1]
+		return Scale.from_span(_range.rounded_min, _range.rounded_range, _range.wrap)
+
+	def value_to_angle(self, value: Numeric) -> float:
+		return self.startAngle + self.value_scale.toT(value) * self.fullAngle
 
 	def value_to_angle_degrees(
 		self,

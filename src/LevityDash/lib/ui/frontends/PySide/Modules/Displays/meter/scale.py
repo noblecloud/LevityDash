@@ -20,7 +20,7 @@ from LevityDash.lib.utils.shared import factors, Unset
 from WeatherUnits import Measurement, auto as auto_wu
 
 __all__ = [
-	'CLOCK_HANDS', '_isWholeSteps', 'clockTurn', 'decode_measurement', 'filter_factors',
+	'CLOCK_HANDS', 'Scale', '_isWholeSteps', 'clockTurn', 'decode_measurement', 'filter_factors',
 	'formatDuration', 'parseClockTime', 'shortestDelta',
 ]
 
@@ -115,3 +115,70 @@ def decode_measurement(value: str | int | float, default_type: Type[Measurement]
 		case _:
 			raise TypeError(f'Invalid type for min: {type(value)}')
 	return value
+
+
+class Scale:
+	"""A value range as fractions: where on the track a value sits.
+
+	``t`` is the only currency a scale deals in - 0 is the minimum, 1 the
+	maximum - so a caller never needs to know whether the track it lands on
+	happens to be an arc, a line, or anything else. That mapping is the track's
+	business, and the two used to be the same number only because the track was
+	always a dial.
+
+	The two constructors are the two shapes the app has: ``Scale(min, max)`` for
+	a range as a user writes it, and `from_span(min, span)`, because what the
+	gauge stores is ``rounded_min`` and ``rounded_range`` - a minimum and a span,
+	which are not the same pair of floats. Each keeps the numbers it was given
+	exactly, so neither path introduces a rounding the old code did not have.
+	"""
+
+	__slots__ = ('_min', '_span', 'wrap')
+
+	def __init__(self, min: float, max: float, wrap: bool = False):
+		self._min = float(min)
+		self._span = float(max) - float(min)
+		self.wrap = bool(wrap)
+
+	@classmethod
+	def from_span(cls, min: float, span: float, wrap: bool = False) -> 'Scale':
+		scale = cls.__new__(cls)
+		scale._min, scale._span, scale.wrap = float(min), float(span), bool(wrap)
+		return scale
+
+	def __repr__(self) -> str:
+		return f'Scale({self.min:g}..{self.max:g}{", wrap" if self.wrap else ""})'
+
+	@property
+	def min(self) -> float:
+		return self._min
+
+	@property
+	def max(self) -> float:
+		return self._min + self._span
+
+	@property
+	def span(self) -> float:
+		return self._span
+
+	def toT(self, value) -> float:
+		"""Where ``value`` sits, as a fraction of the span.
+
+		Clamped to 0..1; on a wrapping scale it is taken modulo the span instead,
+		which is what a dial that goes round does. Out of range is not an error
+		on either - a needle at the end of its scale simply stays there.
+		"""
+		if not self._span:
+			return 0.0
+		offset = float(value) - self._min
+		if self.wrap:
+			return (offset % self._span) / self._span
+		return min(1.0, max(0.0, offset / self._span))
+
+	def fromT(self, t: float) -> float:
+		"""The value at ``t``. The inverse of `toT` between the stops."""
+		return self._min + self._span * float(t)
+
+	def spanOf(self, t0: float, t1: float) -> float:
+		"""The span between two positions, in the scale's own units."""
+		return self._span * (float(t1) - float(t0))
