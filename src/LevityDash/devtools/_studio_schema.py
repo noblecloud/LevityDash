@@ -400,6 +400,8 @@ def _refine(found: Field, prop: StateProperty, raw: Any, owner: Stateful) -> Fie
 		found.kind = 'caption'
 	elif key == 'warp':
 		found.kind = 'warp'
+	elif key == 'glow':
+		found.kind = 'glow'
 	elif key == 'zones':
 		found.kind = 'zones'
 	elif key == 'markers':

@@ -1,0 +1,81 @@
+# Emissive colour and stroke glow, after ~/Code/color_sphere/demo.html.
+#
+# Colours here come from Oklch, not hex:
+#   'oklch(0.70 0.20 145)'                      one colour, chroma lowered into sRGB when needed
+#   {hue: 145}                                  a hue on the palette ring (lightness .70, chroma .20)
+#   {palette: {hue: 145, scheme: triadic}, index: 1}   one colour of a palette (schemes: triadic,
+#                                               split-complement, analogous, complementary, golden)
+#   {hue: 145, emission: 3.18}                  the same colour through the emissive display chain:
+#                                               boosted, tone mapped, so bright colours roll off to white
+# `glow:` draws a halo of wider, fainter strokes. `glow: true` is {strength: 1, size: 0.6, passes: 4, bloom: 0.04}.
+# Set on `display:` it covers the fill, zones, needle and markers; the track takes its own `arc: {glow: ...}`.
+# `glow: {strength: 0}` on one part turns off a glow it would inherit.
+#
+# Three gauges and a graph. Render with --scenario hot-clear-day. Hex colours are quoted ('#' starts a comment).
+- type: group
+  name: main
+  items:
+    # A fill and a needle: triadic palette from hue 145, the first colour emissive.
+    - type: realtime.gauge
+      name: fill
+      key: environment.temperature.temperature
+      title: false
+      geometry: {x: 0%, y: 0%, width: 33%, height: 55%}
+      display:
+        arc: {start-angle: -135, end-angle: 135, weight: 5%, color: '#1d1d24'}
+        range: {min: 60, max: 110}
+        fill: {weight: 5%, color: {palette: {hue: 145, scheme: triadic}, index: 0, emission: 3.18}}
+        glow: {strength: 1.0, size: 0.7}
+        needle: {type: dot, length: 6%, width: 7%, color: '#ffffff', glow: {strength: 0.8, size: 0.5}}
+        major: {interval: 10, labels: {position: inside, height: 7%}}
+        value-label: {position: center, size: 15%}
+    # Zones in three colours of one palette; the fill follows the zone the value is in.
+    - type: realtime.gauge
+      name: zones
+      key: environment.humidity.humidity
+      title: false
+      geometry: {x: 33%, y: 0%, width: 33%, height: 55%}
+      display:
+        arc: {start-angle: -135, end-angle: 135, weight: 5%, color: '#1d1d24'}
+        range: {min: 0, max: 100}
+        zones:
+          - {to: 30, color: {palette: {hue: 60, scheme: triadic}, index: 0, emission: 3.18}}
+          - {from: 30, to: 60, color: {palette: {hue: 60, scheme: triadic}, index: 1, emission: 3.18}}
+          - {from: 60, color: {palette: {hue: 60, scheme: triadic}, index: 2, emission: 3.18}}
+        glow: {strength: 0.9, size: 0.6}
+        needle: {type: tapered, length: 78%, width: 4%, color: '#ffffff', glow: {strength: 0.5, size: 0.25}}
+        major: {interval: 25, labels: {position: inside, height: 7%}}
+        value-label: {position: center, size: 15%}
+    # A glowing track with a pointer, analogous palette, plain Oklch strings (no emission).
+    - type: realtime.gauge
+      name: track
+      key: environment.temperature.feelsLike
+      title: false
+      geometry: {x: 66%, y: 0%, width: 34%, height: 55%}
+      display:
+        arc:
+          start-angle: -135
+          end-angle: 135
+          weight: 3%
+          color: 'oklch(0.70 0.20 320)'
+          glow: {strength: 1.2, size: 0.9}
+        range: {min: 60, max: 110}
+        needle: {type: marker, length: 14%, width: 6%, color: '#ffffff', glow: {strength: 0.6, size: 0.3}}
+        value-label: {position: center, size: 15%}
+    # Two lines of a palette on a graph, emissive and glowing.
+    - type: graph
+      name: forecast
+      geometry: {x: 0%, y: 55%, width: 100%, height: 45%}
+      timeframe: {hours: 24}
+      annotations:
+        hourLabels: {alignment: BottomCenter, spacingIntervals: '3, 6'}
+        lines: {spacing: 8 mm, weight: 0.8}
+      figures:
+      - figure: temperature
+        margins: {bottom: 24%, top: 12%}
+        environment.temperature.temperature:
+          plot: {type: plot, color: {palette: {hue: 145, scheme: triadic}, index: 0, emission: 3.18}, weight: 0.8, glow: true}
+          resolution: 2
+        environment.temperature.feelsLike:
+          plot: {type: plot, color: {palette: {hue: 145, scheme: triadic}, index: 2, emission: 3.18}, weight: 0.5, glow: true}
+          resolution: 2

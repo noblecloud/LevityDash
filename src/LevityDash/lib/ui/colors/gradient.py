@@ -1,6 +1,6 @@
 import numpy as np
 from PySide6.QtCore import QPoint, QPointF
-from PySide6.QtGui import QLinearGradient, QConicalGradient, QPainter, Qt
+from PySide6.QtGui import QColor, QLinearGradient, QConicalGradient, QPainter, Qt
 from difflib import get_close_matches
 from functools import cached_property, lru_cache
 from numbers import Number
@@ -11,6 +11,7 @@ from yaml import SafeDumper, SafeLoader, SequenceNode, MappingNode, ScalarNode
 from LevityDash.lib.stateful import StatefulLoader
 from LevityDash.lib.ui import UILogger as log
 from LevityDash.lib.ui.colors.color import Color
+from LevityDash.lib.ui.colors.oklch import oklab_stops
 from LevityDash.lib.ui.colors.stopunits import StopUnitError, formatStop, parseStop, toDataUnit
 from LevityDash.lib.utils import getOrSet, classproperty
 from LevityDash.shims.Qt import QImage
@@ -112,7 +113,20 @@ class MappedGradientValue:
 		return dumper.represent_mapping(cls.__name__, {'value': value, 'colors': data.color})
 
 
+def setStops(gradient, stops, space: str = 'srgb') -> None:
+	"""Add ``(position, QColor)`` stops to a Qt gradient. ``space='oklab'`` adds stops between them that mix in Oklab."""
+	if space == 'oklab' and len(stops) > 1:
+		pairs = [(p, (c.redF(), c.greenF(), c.blueF(), c.alphaF())) for p, c in stops]
+		for position, (r, g, b, a) in oklab_stops(pairs):
+			gradient.setColorAt(min(1.0, max(0.0, position)), QColor.fromRgbF(r, g, b, a))
+		return
+	for position, colour in stops:
+		gradient.setColorAt(position, colour)
+
+
 class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
+	#: How Qt gradients built from this one mix between stops: ``srgb`` (Qt's own) or ``oklab``.
+	space: str = 'srgb'
 	__types__: ClassVar[Dict[Type, Type]] = {}
 	__presets__: ClassVar[Dict[str, 'Gradient']] = {}
 	__item__: ClassVar[Type] = MappedGradientValue[float]
@@ -127,8 +141,7 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 		def __genGradient(self):
 			T = self.localized
 			locations = (T - T.min())/np.ptp(T)
-			for position, value in zip(locations, self.activeStops):
-				self.setColorAt(position, value.color.QColor)
+			setStops(self, [(float(p), v.color.QColor) for p, v in zip(locations, self.activeStops)], getattr(self.values, 'space', 'srgb'))
 
 		@cached_property
 		def activeStops(self) -> list:
@@ -268,6 +281,7 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 					log.error(f'Gradient stop {stop.key!r} skipped: {e}')
 				continue
 			out[key] = type(out).itemCls(number, stop.color)
+		out.space = self.space
 		cache[valueClass] = out
 		return out
 
@@ -288,7 +302,9 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 
 		new_values_from_normals = dict((type_(other_min + (other_range * k)), v) for k, v in own_normalized_values.items())
 
-		return cls(colors=new_values_from_normals)
+		out = cls(colors=new_values_from_normals)
+		out.space = self.space
+		return out
 
 	@classproperty
 	def itemCls(cls) -> Type[MappedGradientValue]:
@@ -342,11 +358,7 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 		image.fill(Qt.transparent)
 		painter = QPainter(image)
 		gradient = QLinearGradient(QPoint(0, 0), QPoint(width, 0))
-		for point in self.as_list:
-			color = point.color.QColor
-			value = float(point.value)
-			normalized_value = float(value - min_value) / float(value_range)
-			gradient.setColorAt(normalized_value, color)
+		setStops(gradient, [(float(float(p.value) - min_value) / float(value_range), p.color.QColor) for p in self.as_list], self.space)
 		painter.fillRect(image.rect(), gradient)
 		painter.end()
 		return image
@@ -447,9 +459,8 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 		normalized_values = normalized_values + ((360 - abs(full_angle)) / 2 / 360)
 
 		# Add all the stops that are between 0.0 and 1.0 to the gradient
-		for point, item in zip(normalized_values, stops):
-			if 0 <= round(point, 6) <= 1:
-				gradient.setColorAt(modifier(point), item.color.QColor)
+		inside = [(modifier(point), item.color.QColor) for point, item in zip(normalized_values, stops) if 0 <= round(point, 6) <= 1]
+		setStops(gradient, sorted(inside, key=lambda s: s[0]), self.space)
 
 		# if there are stops outside the range of the gradient, add stops at the edge of the gradient
 		value_per_degree = float(value_range / abs(full_angle))
@@ -499,12 +510,28 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 				raise NotImplementedError
 
 	@classmethod
+	def _withOptions(cls, data: dict, name: str = None) -> 'Gradient':
+		"""A gradient from a stop mapping that may carry ``space: oklab|srgb`` and ``emission:`` beside the stops.
+
+		``emission`` runs every stop colour through the emissive display chain (see ``Color.decode``).
+		"""
+		data = dict(data)
+		space = str(data.pop('space', 'srgb')).lower()
+		if space not in ('srgb', 'oklab'):
+			raise ValueError(f'gradient space must be srgb or oklab, not {space!r}')
+		if (emission := data.pop('emission', None)) not in (None, False):
+			data = {k: v if isinstance(v, (tuple, list)) else Color.decode({'color': v.hex if isinstance(v, Color) else v, 'emission': emission}) for k, v in data.items()}
+		gradient = cls(name=name, colors=data) if name else cls(colors=data)
+		gradient.space = space
+		return gradient
+
+	@classmethod
 	def decode(cls, data: str | dict | list | tuple) -> 'Gradient':
 		match data:
 			case {'name': name, **rest}:
-				return cls(name=name, colors=rest)
+				return cls._withOptions(rest, name=name)
 			case dict():
-				return cls(colors=data)
+				return cls._withOptions(data)
 			case [str(name), *rest] if name in cls.__presets__:
 				return cls(name, *rest)
 			case [*colors]:

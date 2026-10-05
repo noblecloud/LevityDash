@@ -30,6 +30,7 @@ from LevityDash.lib.plugins.plugin import AnySource
 from LevityDash.lib.stateful import Binding, Stateful, StateProperty, SourceType
 from LevityDash.lib.stateful_mixins import ColorGradientMixin
 from LevityDash.lib.ui import UILogger, Color, Gradient
+from LevityDash.lib.ui.glow import Glow, GlowMixin, paintGlow, resolveGlow
 from LevityDash.lib.ui.Geometry import RelativeFloat, parseSize, DimensionType, size_px, Dimension, Size, Alignment, \
 	AlignmentFlag, DisplayPosition, parseWidth, parseX, parseY, parseHeight, UnitDisplayPosition, ValueDisplayPosition
 from LevityDash.lib.ui.frontends.PySide.Modules import Panel
@@ -1095,9 +1096,22 @@ class StatefulGaugePathItem(Stateful, GaugePathItem):
 
 
 @DebugPaint
-class GaugeArc(StatefulGaugePathItem):
+class GaugeArc(GlowMixin, StatefulGaugePathItem):
 
 	_weight_scale = 0.75
+
+	def glowChanged(self):
+		self.prepareGeometryChange()
+		self.update()
+
+	def boundingRect(self) -> QRectF:
+		rect = super().boundingRect()
+		return rect if self.glow is None else self.glow.pad(rect, self.pen().widthF())
+
+	def paint(self, painter: QPainter, option, widget=None):
+		pen = self.pen()
+		paintGlow(painter, self.path(), pen.brush(), pen.widthF(), self.glow)
+		super().paint(painter, option, widget)
 
 	@property
 	def safe_area(self) -> QPainterPath:
@@ -1609,7 +1623,7 @@ class TickSurface(GaugeItem, SurfaceCentered):
 			tick.update_color()
 
 
-class Needle(StatefulGaugePathItem):
+class Needle(GlowMixin, StatefulGaugePathItem):
 	_animation: QPropertyAnimation
 	_animationSignal = Signal(float)
 
@@ -2059,9 +2073,22 @@ class Needle(StatefulGaugePathItem):
 		rect = super().boundingRect()
 		for path, _ in (*self._under, *self._over):
 			rect = rect.united(path.boundingRect())
-		return rect
+		try:
+			glow = self._glowToDraw()
+			return rect if glow is None else glow.pad(rect, self.width_px, filled=True)
+		except Exception:
+			# Asked before the width or the gauge exists, while the item loads.
+			return rect
+
+	def _glowToDraw(self) -> Optional[Glow]:
+		return resolveGlow(self.glow, getattr(self.gauge, 'glow', None))
+
+	def glowChanged(self):
+		self.prepareGeometryChange()
+		self.update()
 
 	def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget = None):
+		paintGlow(painter, self.path(), self.brush(), self.width_px, self._glowToDraw())
 		painter.setPen(Qt.NoPen)
 		for path, color in self._under:
 			painter.setBrush(QBrush(color))
@@ -2689,7 +2716,7 @@ class GaugeZones(GaugeItem, QGraphicsItem):
 			try:
 				if not isinstance(spec, Mapping):
 					raise TypeError('expected a mapping with from, to and color')
-				unknown = set(spec) - {'from', 'to', 'color', 'weight', 'mark'}
+				unknown = set(spec) - {'from', 'to', 'color', 'weight', 'mark', 'glow'}
 				if unknown:
 					log.warning(f'Gauge {name} zone ignored unknown keys {sorted(map(str, unknown))}')
 				ends = []
@@ -2709,7 +2736,7 @@ class GaugeZones(GaugeItem, QGraphicsItem):
 					weight = parseWidth(raw, None)
 					if weight is None:
 						raise ValueError(f'weight {raw!r} is not a size')
-				zones.append({'from': ends[0], 'to': ends[1], 'color': color, 'weight': weight, 'mark': bool(spec.get('mark', False))})
+				zones.append({'from': ends[0], 'to': ends[1], 'color': color, 'weight': weight, 'mark': bool(spec.get('mark', False)), 'glow': Glow.decode(spec.get('glow'))})
 				kept.append(copy.deepcopy(dict(spec)))
 			except Exception as e:
 				log.warning(f'Gauge {name} skipped zone {spec!r}: {e}')
@@ -2776,8 +2803,11 @@ class GaugeZones(GaugeItem, QGraphicsItem):
 				path.arcTo(rect, -a + 90, -(b - a))
 				pen = QPen(zone['color'], weight)
 				pen.setCapStyle(Qt.PenCapStyle.FlatCap)
-				self._strokes.append((path, pen))
+				glow = resolveGlow(zone['glow'], gauge.glow)
+				self._strokes.append((path, pen, glow))
 				bounds = bounds.united(path.boundingRect().adjusted(-weight, -weight, weight, weight))
+				if glow is not None:
+					bounds = bounds.united(glow.pad(path.boundingRect(), weight))
 			for angle in sorted(marks):
 				radius = rect.width() / 2
 				reach = (arcWeight or 0) * 0.75
@@ -2786,7 +2816,7 @@ class GaugeZones(GaugeItem, QGraphicsItem):
 				path.lineTo(radialPoint(QPointF(0, 0), radius + reach, angle))
 				pen = QPen(gauge.defaultColor, max(1.5, (arcWeight or 0) * 0.12))
 				pen.setCapStyle(Qt.PenCapStyle.FlatCap)
-				self._strokes.append((path, pen))
+				self._strokes.append((path, pen, None))
 				bounds = bounds.united(path.boundingRect().adjusted(-2, -2, 2, 2))
 		except Exception as e:
 			log.warning(f'Gauge {_gaugeKeyName(gauge)} zones not drawn: {e}')
@@ -2800,9 +2830,15 @@ class GaugeZones(GaugeItem, QGraphicsItem):
 	def boundingRect(self) -> QRectF:
 		return self._rect
 
+	def glowChanged(self):
+		self.refresh()
+
 	def paint(self, painter: QPainter, option, widget=None):
 		painter.setBrush(Qt.BrushStyle.NoBrush)
-		for path, pen in self._strokes:
+		# Every halo first, so a neighbour's glow never lies over a core.
+		for path, pen, glow in self._strokes:
+			paintGlow(painter, path, pen.brush(), pen.widthF(), glow)
+		for path, pen, _ in self._strokes:
 			painter.setPen(pen)
 			painter.drawPath(path)
 
@@ -2839,6 +2875,7 @@ class GaugeFill(GaugePathItem):
 	_colorFromZones = False
 	_segments: int = 0
 	_gap = None
+	_glow: Optional[Glow] = None
 	_strokes: list = ()
 
 	def __init__(self, *args, **kwargs):
@@ -2870,10 +2907,10 @@ class GaugeFill(GaugePathItem):
 		"""Read ``spec``. Never raises: a bad spec warns and leaves the fill hidden."""
 		self.close()
 		self._valid = False
-		self._from = self._to = self._weight = self._color = self._gap = None
+		self._from = self._to = self._weight = self._color = self._gap = self._glow = None
 		self._colorFromZones, self._segments, self._strokes = False, 0, ()
 		name = _gaugeKeyName(self.gauge)
-		unknown = set(spec) - {'from', 'to', 'weight', 'color', 'segments', 'gap'}
+		unknown = set(spec) - {'from', 'to', 'weight', 'color', 'segments', 'gap', 'glow'}
 		if unknown:
 			log.warning(f'Gauge {name} fill ignored unknown keys {sorted(map(str, unknown))}')
 		try:
@@ -2898,6 +2935,7 @@ class GaugeFill(GaugePathItem):
 				self._weight = parseWidth(weight, None)
 				if self._weight is None:
 					raise ValueError(f'weight {weight!r} is not a size')
+			self._glow = Glow.decode(spec.get('glow'))
 			if isinstance(spec.get('color'), str) and spec['color'].strip().lower() == 'zone':
 				self._colorFromZones = True
 			elif (color := spec.get('color')) is not None:
@@ -3023,8 +3061,23 @@ class GaugeFill(GaugePathItem):
 		lo, span = float(gauge._range.rounded_min), float(gauge._range.rounded_range)
 		return lo + (angle - float(gauge.startAngle)) / float(gauge.fullAngle) * span
 
+	def glowChanged(self):
+		self.prepareGeometryChange()
+		self.update()
+
+	def _glowToDraw(self) -> Optional[Glow]:
+		return resolveGlow(self._glow, getattr(self.gauge, 'glow', None))
+
+	def boundingRect(self) -> QRectF:
+		rect = super().boundingRect()
+		glow = self._glowToDraw()
+		return rect if glow is None else glow.pad(rect, self.pen().widthF())
+
 	def paint(self, painter: QPainter, option, widget=None):
 		painter.setBrush(Qt.BrushStyle.NoBrush)
+		glow = self._glowToDraw()
+		for path, color in self._strokes:
+			paintGlow(painter, path, QBrush(color), self.pen().widthF(), glow)
 		for path, color in self._strokes:
 			pen = QPen(self.pen())
 			pen.setBrush(QBrush(color))
@@ -4890,7 +4943,7 @@ def decode_measurement(value: str | int | float, default_type: Type[Measurement]
 
 
 @DebugPaint
-class Gauge(Display):
+class Gauge(GlowMixin, Display):
 
 	_center_offset: QPointF | QPointF = QPointF(0, 0)
 
@@ -5883,6 +5936,12 @@ class Gauge(Display):
 	def _fillItems(self) -> list:
 		item = getattr(self, '_fillItem', None)
 		return [] if item is None else [item]
+
+	def glowChanged(self):
+		"""The gauge's ``glow`` is the default for the fill, zones, needle and markers; the track has its own."""
+		for item in (getattr(self, '_needle', None), *self._markerItems, *self._zoneItems(), *self._fillItems()):
+			if item is not None:
+				item.glowChanged()
 
 	def value_to_angle(self, value: Numeric) -> Angle:
 		angle = float(value - self._range.rounded_min) / self._range.rounded_range * self.fullAngle + self.startAngle
