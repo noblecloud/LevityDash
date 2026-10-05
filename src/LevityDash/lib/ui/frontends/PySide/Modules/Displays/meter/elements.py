@@ -3460,7 +3460,9 @@ class GaugeFill(GaugePathItem):
 
 	Spec keys: ``from`` (a number, key or expression; default the range
 	minimum), ``to`` (a number, key or expression; omitted means the gauge value), ``weight`` (default the arc's) and
-	``color`` (default the gauge colour). With no value to draw to, it is hidden.
+	``color`` (default the gauge colour) and ``cap`` (``round``, ``square`` or
+	``flat``; the default is ``round``, or ``flat`` with ``segments``; a round or
+	square cap ends on the value rather than past it). With no value to draw to, it is hidden.
 	A source-fed end with no value yet hides the fill; a bad spec logs the gauge key and hides it.
 	"""
 
@@ -3478,6 +3480,9 @@ class GaugeFill(GaugePathItem):
 	_gap = None
 	_glow: Optional[Glow] = None
 	_strokes: list = ()
+	_cap: Optional[Qt.PenCapStyle] = None
+
+	_CAPS = {'round': Qt.PenCapStyle.RoundCap, 'square': Qt.PenCapStyle.SquareCap, 'flat': Qt.PenCapStyle.FlatCap}
 
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
@@ -3510,8 +3515,9 @@ class GaugeFill(GaugePathItem):
 		self._valid = False
 		self._from = self._to = self._weight = self._color = self._gap = self._glow = None
 		self._colorFromZones, self._segments, self._strokes = False, 0, ()
+		self._cap = None
 		name = gaugeKeyName(self.gauge)
-		unknown = set(spec) - {'from', 'to', 'weight', 'color', 'segments', 'gap', 'glow'}
+		unknown = set(spec) - {'from', 'to', 'weight', 'color', 'segments', 'gap', 'glow', 'cap'}
 		if unknown:
 			log.warning(f'Gauge {name} fill ignored unknown keys {sorted(map(str, unknown))}')
 		try:
@@ -3537,6 +3543,10 @@ class GaugeFill(GaugePathItem):
 				if self._weight is None:
 					raise ValueError(f'weight {weight!r} is not a size')
 			self._glow = Glow.decode(spec.get('glow'))
+			if (cap := spec.get('cap')) is not None:
+				if not isinstance(cap, str) or (cap := cap.strip().lower()) not in self._CAPS:
+					raise ValueError(f'cap must be one of {", ".join(self._CAPS)}, not {cap!r}')
+				self._cap = self._CAPS[cap]
 			if isinstance(spec.get('color'), str) and spec['color'].strip().lower() == 'zone':
 				self._colorFromZones = True
 			elif (color := spec.get('color')) is not None:
@@ -3610,10 +3620,34 @@ class GaugeFill(GaugePathItem):
 		zones = gauge._zonesItem
 		base = gauge.defaultColor if self._color is None else self._color
 		strokes = []
+		radius = rect.width() / 2 or 1
+		# A round or square cap reaches half the weight past the end of its
+		# stroke. Pull each end in by that much, so the cap's edge lands on the
+		# value (and segment gaps keep their size) instead of overshooting it.
+		# Segments read as cells, so they default to flat ends; a single fill
+		# defaults to round.
+		cap = self._cap if self._cap is not None else (Qt.PenCapStyle.FlatCap if self._segments else Qt.PenCapStyle.RoundCap)
+		capDeg = 0.0 if cap == Qt.PenCapStyle.FlatCap else (weight or 0) / 2 / radius * 180 / pi
+		# Where the track itself has a cap that reaches past its end, a fill end
+		# on that end keeps its length, so the two caps cover each other.
+		ends = sorted((float(gauge.startAngle), float(gauge.endAngle)))
+		trackCapped = gauge.arc.capStyle != Qt.PenCapStyle.FlatCap and abs(ends[1] - ends[0]) < 360
+
+		def arc(sa: float, sb: float) -> QPainterPath:
+			sa += 0.0 if trackCapped and isclose(sa, ends[0], abs_tol=1e-6) else capDeg
+			sb -= 0.0 if trackCapped and isclose(sb, ends[1], abs_tol=1e-6) else capDeg
+			if sb <= sa:
+				# Shorter than its own caps: one dot at the middle.
+				sa = sb = (sa + sb) / 2
+				sb += 1e-3
+			path = QPainterPath()
+			path.arcMoveTo(rect, -sa + 90)
+			path.arcTo(rect, -sa + 90, -(sb - sa))
+			return path
+
 		if weight and self._segments:
 			start, full = float(gauge.startAngle), float(gauge.fullAngle)
 			step = full / self._segments
-			radius = rect.width() / 2 or 1
 			gapDeg = 0.0
 			if self._gap is not None:
 				gapPx = gauge.sizeAcross(self._gap, dimension=DimensionType.width) or 0
@@ -3625,17 +3659,13 @@ class GaugeFill(GaugePathItem):
 				mid = start + (i + 0.5) * step
 				if not (a <= mid <= b):
 					continue
-				path = QPainterPath()
-				path.arcMoveTo(rect, -sa + 90)
-				path.arcTo(rect, -sa + 90, -(sb - sa))
+				path = arc(*sorted((sa, sb)))
 				color = base
 				if self._colorFromZones and zones is not None:
 					color = zones.colorAtAngle(mid) or base
 				strokes.append((path, color))
 		elif weight:
-			path = QPainterPath()
-			path.arcMoveTo(rect, -a + 90)
-			path.arcTo(rect, -a + 90, -(b - a))
+			path = arc(a, b)
 			color = base
 			if self._colorFromZones and zones is not None:
 				endValue = self._to if self._to is not None else gauge.value
@@ -3646,7 +3676,7 @@ class GaugeFill(GaugePathItem):
 			full.addPath(path)
 		pen = QPen(gauge.pen)
 		pen.setWidthF(weight or 0)
-		pen.setCapStyle(Qt.PenCapStyle.FlatCap)
+		pen.setCapStyle(cap)
 		pen.setBrush(QBrush(strokes[0][1] if strokes else base))
 		self.setPen(pen)
 		self.setBrush(Qt.BrushStyle.NoBrush)
@@ -4009,7 +4039,7 @@ class GaugeValueLabel(GaugeLabel):
 
 		@property
 		def limitRect(self) -> QRectF:
-			if self._position in (DisplayPosition.Left, DisplayPosition.Right):
+			if self._position in (DisplayPosition.Left, DisplayPosition.Right, DisplayPosition.FloatUnder):
 				return self.parent.parent._sideValueRect().translated(-self.pos())
 			arc = self.parent.parent.arc.sceneBoundingRect()
 			# r = max(arc.width(), arc.height()) / sqrt(2)
@@ -4039,8 +4069,8 @@ class GaugeValueLabel(GaugeLabel):
 			gauge_center = gauge.center
 
 			match self._position:
-				case ValueDisplayPosition.Left | ValueDisplayPosition.Right:
-					# Beside the dial: the middle of the strip the dial left free.
+				case ValueDisplayPosition.Left | ValueDisplayPosition.Right | ValueDisplayPosition.FloatUnder:
+					# Beside or under the dial: the middle of the strip the dial left free.
 					return gauge._sideValueRect().center()
 				case ValueDisplayPosition.Inline:
 					diff = arc_center - gauge_center
@@ -4079,8 +4109,8 @@ class GaugeValueLabel(GaugeLabel):
 			"""
 
 			gauge = self.parent.parent
-			if self._position in (DisplayPosition.Left, DisplayPosition.Right):
-				# The strip beside the dial is empty by construction, so there is
+			if self._position in (DisplayPosition.Left, DisplayPosition.Right, DisplayPosition.FloatUnder):
+				# The strip beside or under the dial is empty by construction, so there is
 				# nothing to collide with: fit the glyphs to the strip.
 				strip = gauge._sideValueRect()
 				strip = strip.adjusted(*([self.parent.value_padding_px] * 2), *([-self.parent.value_padding_px] * 2))
@@ -4364,8 +4394,8 @@ class GaugeValueLabel(GaugeLabel):
 		if (position := self.position) is ValueDisplayPosition.Auto:
 			position = self.position_auto()
 
-		# A side value is centred on the middle of its strip.
-		if position in (ValueDisplayPosition.Left, ValueDisplayPosition.Right):
+		# A side or under value is centred on the middle of its strip.
+		if position in (ValueDisplayPosition.Left, ValueDisplayPosition.Right, ValueDisplayPosition.FloatUnder):
 			return Alignment(AlignmentFlag.Center)
 
 		# A bottom value stands on the panel's bottom edge and grows upward
