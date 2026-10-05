@@ -50,6 +50,33 @@ snap logic if it grows). Gauge.py does not change.
    axis or angle constraint, or leave it unbound. Update the Studio help text and the
    `gauge_studio.py` paragraph in `CLAUDE.md`.
 
+## Wireframe mode and guideline layers
+
+The user also asked for "a wireframe mode with optional guidelines". It shares
+geometry with the snap targets, so build both from one source: a function that
+collects every element's geometry from the live gauge (dial rect, centre, track
+radii, tick extents, each label's layout box and ink box, needle path, value strip,
+card rect, padding, inset). Snapping reads that function, and both overlays draw it.
+
+8. **Wireframe toggle (W).** Hide the painted gauge, or dim it to about 15%, and draw
+   every element as a 1 px outline in its own colour:
+   - the arc track as its centre line and its inner and outer edges;
+   - each tick as its line;
+   - each label's layout box solid and its ink box dashed;
+   - the needle path, the pivot, the dial rect and the card rect with its padding.
+   Elements that overlap are drawn red, so collisions show up without hunting.
+9. **Guideline layers (G opens a menu).** Each layer switches on or off on its own,
+   and the choice persists as a Studio setting:
+   - centre crosshair;
+   - radius circles at the track, the ticks and the labels;
+   - angle rays at start, end and every 15° or 45°;
+   - thirds and golden-ratio lines over the card;
+   - baseline, cap height and x-height of the value text;
+   - a safe-area inset.
+   Guidelines draw in both normal and wireframe mode. During a drag, the guideline
+   that the drag snaps to is highlighted.
+10. Neither overlay changes the export or the undo stack.
+
 ## Verification
 
 Use real runs, not new unit tests. A short test for the pure snap-target maths is fine.
@@ -61,5 +88,8 @@ Use real runs, not new unit tests. A short test for the pure snap-target maths i
 - Hold Option, scroll, and screenshot the gear-ratio overlay. Then drag 100 px and
   show that the value moved a quarter as far as an ungeared 100 px drag.
 - Confirm that one drag is still one undo step, at any modifier state.
+- Take screenshots of one gauge in wireframe mode and with all guideline layers on.
+  Then set a `below` value label on a full ring, which overlaps today. Show that the
+  overlap is drawn red in wireframe mode.
 - Run `pytest tests -q -p no:cacheprovider` and check the result against the baseline
   of 492 passed, 1 skipped.
