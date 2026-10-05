@@ -40,7 +40,7 @@ _studio_env.prepare()
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import yaml
-from PySide6.QtCore import QEvent, QObject, QRectF, QSignalBlocker, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QObject, QPoint, QRectF, QSignalBlocker, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QCursor, QIcon, QKeySequence, QPainter, QPalette, QPen, QPixmap, QShortcut, QTransform
 from PySide6.QtWidgets import (
 	QAbstractSlider, QAbstractSpinBox, QApplication, QCheckBox, QInputDialog, QPinchGesture, QComboBox, QDoubleSpinBox, QFileDialog, QFrame, QGraphicsView, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMenu,
@@ -619,7 +619,17 @@ class Studio(QWidget):
 		self.holderLayout.setSpacing(2)
 		self.holderLayout.addStretch(1)
 		self.scroll.setWidget(self.holder)
+		# The section path at the top of the list, as links that scroll back to each section.
+		self.crumbs = QLabel('')
+		self.crumbs.setTextFormat(Qt.TextFormat.RichText)
+		self.crumbs.setStyleSheet('font-size: 14px; padding: 2px 2px;')
+		self.crumbs.linkActivated.connect(self._crumbClicked)
+		self._crumbTrail: List[Section] = []
+		box.addWidget(self.crumbs)
 		box.addWidget(self.scroll, 1)
+		bar = self.scroll.verticalScrollBar()
+		bar.valueChanged.connect(self._updateCrumbs)
+		bar.rangeChanged.connect(self._updateCrumbs)
 		split.addWidget(side)
 		split.setStretchFactor(0, 1)
 		split.setStretchFactor(1, 0)
@@ -948,6 +958,60 @@ class Studio(QWidget):
 		self.dupes.setdefault(path, []).append(row)
 		return row
 
+	def _updateCrumbs(self, *_):
+		"""Show the chain of sections that holds the top line of the list."""
+		trail = []
+		at = self.holder.mapFrom(self.scroll.viewport(), QPoint(24, 4))
+		w = self.holder.childAt(at)
+		while w is not None and w is not self.holder:
+			if isinstance(w, Section):
+				trail.append(w)
+			w = w.parentWidget()
+		trail.reverse()
+		self._crumbTrail = trail
+		if not trail:
+			self.crumbs.setText('')
+			return
+		link = self.palette().color(QPalette.ColorRole.Highlight).name()
+		self.crumbs.setText(' › '.join(f'<a href="{i}" style="color: {link}; text-decoration: none;">{t.header.text()}</a>'
+		                               for i, t in enumerate(trail)))
+
+	def _crumbClicked(self, href: str):
+		trail = self._crumbTrail
+		if href.isdigit() and int(href) < len(trail):
+			section = trail[int(href)]
+			self.scroll.verticalScrollBar().setValue(section.mapTo(self.holder, QPoint(0, 0)).y())
+
+	def _viewPart(self, title: str, path: tuple) -> Optional[Section]:
+		"""A folded section of extra rows for the part at `path`, or for the one property there."""
+		def find(group):
+			if group.path == path:
+				return group
+			for sub in group.groups:
+				if (hit := find(sub)) is not None:
+					return hit
+			return None
+
+		def fill(section, group):
+			for f in group.fields:
+				if (row := self._view(f.path)) is not None:
+					section.addRow(row)
+			for sub in group.groups:
+				child = Section(sub.title)
+				child.path = sub.path
+				fill(child, sub)
+				section.addRow(child)
+
+		section = Section(title)
+		section.path = path
+		if (group := find(self._group)) is not None:
+			fill(section, group)
+		elif (row := self._view(path)) is not None:
+			section.addRow(row)
+		else:
+			return None
+		return section
+
 	def _quickSection(self, title: str) -> Section:
 		section = Section(title, expanded=True)
 		labels = state.QUICK[title].get('labels', {})
@@ -956,6 +1020,10 @@ class Studio(QWidget):
 				if dotted in labels:
 					row.label.setText(labels[dotted])
 				section.addRow(row)
+		for name, dotted in state.QUICK[title].get('subsections', {}).items():
+			if (sub := self._viewPart(name, tuple(dotted.split('.')))) is not None:
+				self._track(sub, f'quick.{title}.{name}')
+				section.addRow(sub)
 		button = QToolButton()
 		button.setText('Presets')
 		button.setAutoRaise(True)

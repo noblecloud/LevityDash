@@ -22,7 +22,8 @@ BUILTIN_DIR = Path(__file__).resolve().parent / 'studio_presets'
 #: The top sections. `paths` are the rows (dotted property paths); `owns` are the top-level
 #: `display:` keys a preset of the section may set and "Save current as preset" records.
 #: `labels` names a row whose last key alone would be ambiguous here, such as three rows that
-#: would all read "enabled".
+#: would all read "enabled". `subsections` adds folded child sections, each holding a part of the
+#: gauge (every property under that path) or a single property.
 QUICK: Dict[str, Dict[str, Any]] = {
 	'Shape': {
 		'paths': ('arc.start-angle', 'arc.end-angle', 'radius', 'arc.weight', 'arc.color', 'arc.cap', 'anchor'),
@@ -38,6 +39,14 @@ QUICK: Dict[str, Dict[str, Any]] = {
 		'paths': ('value-label.visible', 'value-label.position', 'value-label.size', 'value-label.format', 'unit-label.visible'),
 		'owns': ('value-label', 'unit-label'),
 		'labels': {'value-label.visible': 'show value', 'unit-label.visible': 'show unit'},
+	},
+	'Text': {
+		'paths': (),
+		# Each entry is one folded subsection: a part (every property under it) or one property.
+		'subsections': {'Value label': 'value-label', 'Unit label': 'unit-label', 'Caption': 'caption',
+		                'Sub-label': 'sub-label', 'Major tick labels': 'major.labels',
+		                'Minor tick labels': 'minor.labels', 'Micro tick labels': 'micro.labels'},
+		'owns': ('value-label', 'unit-label', 'caption', 'sub-label'),
 	},
 	'Ticks': {
 		'paths': ('major.enabled', 'minor.enabled', 'micro.enabled', 'major.labels.height', 'major.labels.position',
