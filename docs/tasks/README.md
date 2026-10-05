@@ -32,6 +32,7 @@ continuously.
 | [gauge-presets](gauge-presets.md) | named `preset:` for gauges, one per gauge-ui template (29 rows); which of seven missing gauge primitives unlocks which; blocked first on [gauge-display](gauge-display.md) |
 | [meter-and-bar](meter-and-bar.md) | `Scale` + `Track` split out of `Gauge.py` (~6,299 lines) into a `meter/` package, `Meter(Display)` base, then `Bar(realtime.bar)` with progress/battery/segmented/thermometer/range presets. Phase 1 (survey) is done: [meter-survey](meter-survey.md). Phase 2 (pixel-diff harness, then the refactor) is blocked until `fix/studio-sliders-contrast` and `feat/warped-text` have merged into `feat/value-sources` — both edit `Gauge.py`. Phase 4 waits on `feat/studio-snapping`. |
 | [meter-survey](meter-survey.md) | phase 1 output of [meter-and-bar](meter-and-bar.md): every angle/radius site in `Gauge.py` grouped by class, what each becomes under `Scale`/`Track`, the arc-only remainder, the risks, and the proposed `meter/` file split. Read-only; awaiting review before phase 2. |
+| [meter-harness-status](meter-harness-status.md) | phase 2 working note: the pixel-diff harness is built and reaches 23/23 clean, one caption in the showcase still flips (app-side, under investigation), plus the two queued gauge-track asks and the findings to report. |
 
 ## Loose ends not yet written up
 
