@@ -33,6 +33,37 @@ warp:
 `curve: warp|glyphs` and `warp: {mode: ...}` keep parsing and looking the same.
 Accept `px` as well as `%` in path coordinates if the existing size parser makes that cheap.
 
+## Step 1: ellipse, before the free path
+
+The user asked for this order: "if adding elipise support is simple, add that before
+path". An ellipse needs the same arc-length core as a free path, but it is smooth and
+closed, needs no SVG parser and has no sharp corners. So build the core below, prove it
+on the ellipse, and ship that first. Then add the free path on the same core.
+
+```yaml
+warp:
+  center: dial
+  radius: {x: 45%, y: 30%}   # a single value still means a circle
+  rotation: 0                # turns the ellipse, in degrees
+  angle: 0                   # where the middle of the text sits; degrees clockwise from the top, measured from the centre
+```
+
+- Sample the ellipse into the same numpy arc-length table as a path. Map `angle` to
+  arc length by finding the point on the ellipse in that direction from the centre.
+- The inner side of a bend folds where the ellipse is tightest: at the ends of the
+  long axis, where the radius of curvature is `b²/a`. Apply the same fold rule as the
+  path edge cases: shrink the text or log a warning.
+- Keep the circle's closed-form path when `x == y` and `rotation` is 0. Check that its
+  output is unchanged, using the same pixel-identical check that `feat/warped-text` used
+  on `curved-labels.levity`.
+- Verification: render one preset that shows text on a wide ellipse, on a tall
+  ellipse, on a rotated ellipse, and flipped along the bottom of an ellipse. Include a
+  close-up crop where the bend is tightest.
+- The `bend` blend can wait for step 2, or come in step 1 if it costs little. Report
+  which you did.
+- Later, the meter refactor (`docs/tasks/meter-and-bar.md`) can reuse this ellipse
+  sampling for an elliptical gauge track.
+
 ## Core: a curve sampled by arc length
 
 Give the helper one curve abstraction that returns a position `P(s)` and a unit normal
