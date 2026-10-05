@@ -26,10 +26,17 @@ where noted.
   `tests/ui/test_meter_track.py` pins the new path against the old hand-built one
   element for element over six angle ranges. 22/23 clean, the one difference
   being the EV caption region named below.
-- Next: `Scale` (value ↔ fraction) and the conversions that used degrees —
-  `Gauge.value_to_angle`, `value_to_angle_degrees`, `angle_degrees_to_value`,
-  `GaugeMarker._markerAngle`, `GaugeZones._angle`, `GaugeFill._angles`,
-  `Needle.refresh`. Then ticks, then zones and fills, then `Meter` itself, then
+- `fdfd15e` **scale** — `meter/scale.py`'s `Scale` (min + span, `toT`, `fromT`,
+  `spanOf`, `wrap`), and `Gauge.value_to_angle` is now
+  `startAngle + t * fullAngle`. `Gauge.value_scale` carries the range;
+  `from_span` exists because the gauge holds `rounded_min`/`rounded_range`, and
+  `min + span - min` is not always `span` in floats. Pinned against the old
+  inline arithmetic bit for bit inside the range, 1e-12 past the ends, over nine
+  range/angle/wrap combinations. 22/23 clean, same caption region.
+- Next: the rest of the degrees arithmetic — `value_to_angle_degrees`,
+  `angle_degrees_to_value`, `GaugeMarker._markerAngle`, `GaugeZones._angle`,
+  `GaugeFill._angles`. Then ticks through `track.pointAt(t)`/`normalAt(t)`, then
+  zones and fills through `track.subPath(t0, t1)`, then `Meter` itself, then
   `Gauge(Meter)`, then `Bar`.
 
 ### The harness itself
