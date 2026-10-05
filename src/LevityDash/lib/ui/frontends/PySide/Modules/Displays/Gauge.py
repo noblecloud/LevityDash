@@ -3084,10 +3084,20 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 	def offset_relative_to(self) -> Length | Dimension:
 		return self.source.length_px or self.textSize_px
 
+	# The class-level ask every tick label starts from. Named rather than
+	# inlined so `format_value` can merge the user's `format:` over it.
+	#
 	# Tick labels drop the WORD unit ('inHg', 'mph'): said once, by the unit
 	# label, rather than on every tick. Symbols ('°', '%') stay glued to the
 	# number, for the reason given on GaugeValueLabel's defaults.
-	_tick_format = {'show_unit': False}
+	#
+	# `compact=True` asks WeatherUnits for the unit's own *label* convention
+	# rather than its reading convention. A dial face is not a readout: inHg
+	# reads 29.92 but its ticks are 28, 29, 30, and hPa reads 1013.2 but its
+	# ticks are 1000, 1010, 1020. That difference belongs to the unit, so it
+	# is asked for here rather than spelled out per gauge - which is also why
+	# it follows a unit change instead of having to be re-stated.
+	_tickFormatDefaults: Mapping[str, Any] = {'compact': True, 'show_unit': False}
 
 	@StateProperty(key='format', default=None, allowNone=False)
 	def format_spec(self) -> str | dict:
@@ -3097,12 +3107,60 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 	def format_spec(self, value: str | dict):
 		self._format_spec = value
 
+	def _spacingPrecision(self) -> int | None:
+		"""How many decimals the tick values need, or None if they cannot be read.
+
+		The decimals on a tick label follow the tick spacing: spacing 1 shows
+		`28`, spacing 0.1 shows `0.1`, spacing 0.05 shows `29.95`. The answer
+		is the smallest d for which every tick value is exact at d places, so
+		it is never more than the scale needs and never less than the labels
+		need to stay exact. Read off the graduations themselves rather than
+		the nominal interval, so a range that is not an exact multiple of its
+		interval still labels correctly.
+
+		The test is "exact", not "still distinct": 0.25 steps on 29-30 stay
+		distinct at one decimal (29.2 29.5 29.8) while two of them are wrong.
+
+		The comparison has a tolerance because tick values are built by
+		repeated float addition. 29.95 arrives as 29.950000000000003, and an
+		exact test would push the answer to 3.
+		"""
+		try:
+			values = [float(v) for v in self._ticks.tick_values]
+		except Exception:  # noqa: BLE001 - a label rule must never blank the dial
+			return None
+		if not values:
+			return None
+		for places in range(0, 8):
+			if all(isclose(v, round(v, places), rel_tol=0, abs_tol=1e-9 * max(1.0, abs(v))) for v in values):
+				return places
+		return None
+
 	def format_value(self, value: Measurement) -> str:
 		# Merged rather than replaced, so `format: {precision: 0}` does not
-		# bring the unit back on every tick.
+		# bring the unit back on every tick. A user's format is an addition to
+		# the default, never a replacement for it: dropping `compact` here
+		# would put a padded reading back on every tick, and dropping
+		# `show_unit` would say 'inHg' twenty times around one dial.
 		spec = self.format_spec
 		if spec is None or isinstance(spec, Mapping):
-			spec = {**self._tick_format, **(spec or {})}
+			# The item_default is the base; the user's `format:` merges over
+			# it. Both sides are Mappings, so a dict ask composes with the
+			# class's compact ask instead of replacing it.
+			spec = {**self._tickFormatDefaults, **(spec or {})}
+			# The tick spacing sets the decimals, unless the caller has already
+			# said what precision they want: an explicit `precision:` in the
+			# user's format: is their decision, not ours.
+			#
+			# The spacing replaces the unit's compact precision rather than
+			# flooring it. Compact only drops padding, so rain in inches
+			# (compact precision 2) with 0.1 ticks would otherwise read 0.10.
+			# Where the spacing needs decimals the zeros stay, so a scale
+			# reads 29.90 29.95 30.00, not 29.9 29.95 30.
+			if 'precision' not in spec and (places := self._spacingPrecision()) is not None:
+				spec = {**spec, 'precision': places}
+				if places:
+					spec['trailing_zeros'] = 'precision'
 		if isinstance(value, Measurement):
 			try:
 				match spec:
