@@ -1,0 +1,43 @@
+# Not weather: the busiest processes on a host, ranked by CPU.
+#
+# A ranked list publishes one key per slot rather than one key per process:
+# `system.process.top.N.*` is whichever process ranks Nth right now, so a panel
+# binds to slots and never to process names. A real source (psutil, or a
+# remote agent) would re-rank on every poll and publish the same keys.
+#
+# Load it for a render with:
+#   .venv/bin/python src/LevityDash/devtools/render_dashboard.py out.png \
+#       --levity docs/design-references/presets/process-table.levity --scenario top-processes
+#
+# `str` values are text with no unit. Percentages are fractions (0.458 is 45.8 %):
+# WeatherUnits reads a value above 1 as a whole percent and one at or below 1 as
+# a fraction, so 0.1 % written as 0.1 would show as 10 %. How a scenario reads is in
+# src/LevityDash/lib/plugins/builtin/Fixture.py.
+name: top-processes
+description: 312 processes, six ranked by CPU, from postgres at 45.8 % down to redis at 0.1 %.
+keys:
+  system.process.count: {value: 312, unit: int, title: Processes}
+  system.process.top.1.name: {value: postgres, unit: str, title: Name}
+  system.process.top.1.pid: {value: 1182, unit: int, title: PID}
+  system.process.top.1.cpu: {value: 0.458, unit: '%', title: CPU}
+  system.process.top.1.memory: {value: 0.18, unit: '%', title: Mem}
+  system.process.top.2.name: {value: node, unit: str, title: Name}
+  system.process.top.2.pid: {value: 2417, unit: int, title: PID}
+  system.process.top.2.cpu: {value: 0.31, unit: '%', title: CPU}
+  system.process.top.2.memory: {value: 0.093, unit: '%', title: Mem}
+  system.process.top.3.name: {value: nginx, unit: str, title: Name}
+  system.process.top.3.pid: {value: 904, unit: int, title: PID}
+  system.process.top.3.cpu: {value: 0.228, unit: '%', title: CPU}
+  system.process.top.3.memory: {value: 0.007, unit: '%', title: Mem}
+  system.process.top.4.name: {value: prometheus, unit: str, title: Name}
+  system.process.top.4.pid: {value: 1755, unit: int, title: PID}
+  system.process.top.4.cpu: {value: 0.09, unit: '%', title: CPU}
+  system.process.top.4.memory: {value: 0.035, unit: '%', title: Mem}
+  system.process.top.5.name: {value: dockerd, unit: str, title: Name}
+  system.process.top.5.pid: {value: 611, unit: int, title: PID}
+  system.process.top.5.cpu: {value: 0.001, unit: '%', title: CPU}
+  system.process.top.5.memory: {value: 0.027, unit: '%', title: Mem}
+  system.process.top.6.name: {value: redis-server, unit: str, title: Name}
+  system.process.top.6.pid: {value: 1320, unit: int, title: PID}
+  system.process.top.6.cpu: {value: 0.001, unit: '%', title: CPU}
+  system.process.top.6.memory: {value: 0.041, unit: '%', title: Mem}

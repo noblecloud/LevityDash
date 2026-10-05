@@ -1,0 +1,126 @@
+# A ranked table: the busiest processes on a host, one row per rank.
+# Data: `--scenario top-processes` (slot keys `system.process.top.N.*`).
+#
+# The table is a horizontal stack of columns. Each column is a vertical stack
+# of bare keys, so a row is the Nth item of every column, and each column's
+# style is written once, in its `shared:`. The table's own `shared:` holds what
+# every column has in common: item spacing, no titles, one text size.
+# Precedence, highest first: the item, the column's `shared`, the table's
+# `shared`, the stack preset.
+- type: group
+  name: processes
+  border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+  items:
+    - type: text
+      name: processesTitle
+      text: Processes
+      alignment: CenterLeft
+      geometry: {x: 4%, y: 5%, width: 50%, height: 7%}
+    - type: text
+      name: processesSubtitle
+      text: Top by CPU
+      alignment: CenterLeft
+      geometry: {x: 4%, y: 14%, width: 50%, height: 5.5%}
+      color: '#8a8a8a'
+    - type: realtime.text
+      name: processCount
+      key: system.process.count
+      title: false
+      geometry: {x: 60%, y: 5%, width: 36%, height: 6%}
+      display:
+        unit-string: ' running'
+        unitPosition: inline
+        valueLabel: {alignment: CenterRight, color: '#8a8a8a'}
+    - type: stack
+      name: table
+      direction: Horizontal
+      spacing: 1.5%
+      geometry: {x: 4%, y: 25%, width: 92%, height: 70%}
+      shared:
+        spacing: 0
+        defaultType: realtime.text
+        title: false
+        display:
+          font: Roboto Mono
+          valueLabel:
+            margins: {left: 0, right: 0, top: 18%, bottom: 18%}
+            matchingGroup: {group: cell@table, matchAll: true}
+      items:
+        - type: stack
+          name: name
+          size: 38%
+          shared:
+            display: {valueLabel: {alignment: CenterLeft}}
+          items:
+            - {type: text, text: Name, alignment: CenterLeft, color: '#8a8a8a', margins: {left: 0, right: 0, top: 26%, bottom: 26%}, matchingGroup: header@table}
+            - system.process.top.1.name
+            - system.process.top.2.name
+            - system.process.top.3.name
+            - system.process.top.4.name
+            - system.process.top.5.name
+            - system.process.top.6.name
+        - type: stack
+          name: pid
+          size: 14%
+          shared:
+            display: {valueLabel: {alignment: CenterRight, color: '#8a8a8a'}}
+          items:
+            - {type: text, text: PID, alignment: CenterRight, color: '#8a8a8a', margins: {left: 0, right: 0, top: 26%, bottom: 26%}, matchingGroup: header@table}
+            - system.process.top.1.pid
+            - system.process.top.2.pid
+            - system.process.top.3.pid
+            - system.process.top.4.pid
+            - system.process.top.5.pid
+            - system.process.top.6.pid
+        - type: stack
+          name: cpu
+          size: 20%
+          shared:
+            display: {precision: 1, max-length: 4, valueLabel: {alignment: CenterRight}}
+          items:
+            - {type: text, text: CPU, alignment: CenterRight, color: '#8a8a8a', margins: {left: 0, right: 0, top: 26%, bottom: 26%}, matchingGroup: header@table}
+            - system.process.top.1.cpu
+            - system.process.top.2.cpu
+            - system.process.top.3.cpu
+            - system.process.top.4.cpu
+            - system.process.top.5.cpu
+            - system.process.top.6.cpu
+        - type: stack
+          name: cpuRing
+          size: 8%
+          defaultType: realtime.gauge
+          shared:
+            '~clear': true
+            title: false
+            display:
+              radius: 72%
+              arc: {start-angle: 0, end-angle: 360, weight: 14%, color: '#2e2e33', cap: flat}
+              range: {min: 0, max: 100}
+              fill: {weight: 14%, color: '#ffffff', cap: flat}
+              major: {enabled: false}
+              minor: {enabled: false}
+              micro: {enabled: false}
+              needle: {type: circle, width: 0%}
+              value-label: {visible: false}
+              unit-label: {visible: false}
+          items:
+            - spacer
+            - system.process.top.1.cpu
+            - system.process.top.2.cpu
+            - system.process.top.3.cpu
+            - system.process.top.4.cpu
+            - system.process.top.5.cpu
+            - system.process.top.6.cpu
+        - type: stack
+          name: memory
+          size: 14%
+          shared:
+            display: {precision: 1, max-length: 4, valueLabel: {alignment: CenterRight}}
+          items:
+            - {type: text, text: Mem, alignment: CenterRight, color: '#8a8a8a', margins: {left: 0, right: 0, top: 26%, bottom: 26%}, matchingGroup: header@table}
+            - system.process.top.1.memory
+            - system.process.top.2.memory
+            - system.process.top.3.memory
+            - system.process.top.4.memory
+            - system.process.top.5.memory
+            - system.process.top.6.memory
