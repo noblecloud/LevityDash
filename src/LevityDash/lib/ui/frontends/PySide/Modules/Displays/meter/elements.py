@@ -19,31 +19,40 @@ from functools import cached_property
 from itertools import combinations
 from math import atan2, floor, hypot, inf, isclose, isfinite, isinf
 from numbers import Number
-from typing import TYPE_CHECKING, Any, Dict, Iterator, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterator, Optional, Type, Union
 
 from numpy import ceil, cos, pi, radians, sin, sqrt
-from PySide6.QtCore import QPoint, QPointF, QRectF
-from PySide6.QtGui import QBrush, QGradient, QPainter, QPainterPath, QPen, QTransform, Qt
+from PySide6.QtCore import (
+	QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRectF, QSizeF, QTimer, QVariantAnimation, Signal,
+)
+from PySide6.QtGui import QBrush, QColor, QGradient, QPainter, QPainterPath, QPainterPathStroker, QPen, QPolygonF, QTransform, Qt
 from PySide6.QtWidgets import QGraphicsPathItem, QStyleOptionGraphicsItem, QWidget
 
-from LevityDash.lib.stateful import SourceType, StateProperty, Stateful
+from LevityDash.lib.stateful import Binding, SourceType, StateProperty, Stateful
 from LevityDash.lib.stateful_mixins import ColorGradientMixin
 from LevityDash.lib.ui import Color, Gradient, UILogger
 from LevityDash.lib.ui.Geometry import (
-	Alignment, AlignmentFlag, Dimension, DimensionType, DisplayPosition, RelativeFloat, Size, parseSize, size_px,
+	Alignment, AlignmentFlag, Dimension, DimensionType, DisplayPosition, RelativeFloat, Size, parseHeight, parseSize,
+	parseWidth, size_px,
 )
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays import SurfaceCentered
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Annotations import AnnotationLabels, AnnotationText
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.curvetext import CurveMode, warp_path
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import SizeGroup
 from LevityDash.lib.ui.frontends.PySide.utils import DebugPaint, addCrosshair, outline_path
+from LevityDash.lib.ui.frontends.PySide.utils import SoftShadow
 from LevityDash.lib.utils import Axis
 from LevityDash.lib.utils.shared import (
-	INVERSE_GOLDEN_RATIO, Unset, clearCacheAttr, defer, factors, get, guarded_cached_property, radialPoint,
+	INVERSE_GOLDEN_RATIO, ClosestMatchEnumMeta, Unset, clearCacheAttr, defer, factors, get,
+	guarded_cached_property, now, radialPoint,
 )
+from LevityDash.lib.valuesource import openValueSource
 from WeatherUnits import Angle, Length, Measurement, Percentage
 
-from .scale import GaugeValue, Numeric, _isWholeSteps, decode_measurement, filter_factors
+from .scale import (
+	CLOCK_HANDS, GaugeValue, Numeric, _isWholeSteps, clockTurn, decode_measurement, filter_factors, parseClockTime,
+	shortestDelta,
+)
 
 if TYPE_CHECKING:  # the real import would be a cycle; see `gauge_class`
 	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Gauge import Gauge
@@ -1788,17 +1797,17 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 		if isinstance(value, str):
 			if value.strip().lower() in self._COMPASS:
 				return value.strip().lower()
-			log.warning(f'Gauge {_gaugeKeyName(self.gauge)} ignored label text {value!r}: use a mapping, compass or compass-16')
+			log.warning(f'Gauge {gaugeKeyName(self.gauge)} ignored label text {value!r}: use a mapping, compass or compass-16')
 			return None
 		if not isinstance(value, Mapping):
-			log.warning(f'Gauge {_gaugeKeyName(self.gauge)} ignored label text {value!r}: expected a mapping or compass')
+			log.warning(f'Gauge {gaugeKeyName(self.gauge)} ignored label text {value!r}: expected a mapping or compass')
 			return None
 		clean = {}
 		for key, word in value.items():
 			try:
 				float(key)
 			except (TypeError, ValueError):
-				log.warning(f'Gauge {_gaugeKeyName(self.gauge)} label text skipped key {key!r}: not a number')
+				log.warning(f'Gauge {gaugeKeyName(self.gauge)} label text skipped key {key!r}: not a number')
 				continue
 			clean[key] = str(word)
 		return clean
@@ -1886,7 +1895,7 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 					case dict():
 						return value.__format__('', **spec)
 			except Exception as e:  # noqa: BLE001 - a bad spec must not blank the dial
-				log.warning(f'Gauge {_gaugeKeyName(self.gauge)} tick label format {spec!r} failed: {e!r}')
+				log.warning(f'Gauge {gaugeKeyName(self.gauge)} tick label format {spec!r} failed: {e!r}')
 		elif value is None:
 			return '⋯'
 		return str(value)
@@ -2201,3 +2210,997 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 				return Alignment(AlignmentFlag.Center)
 			case _:
 				return Alignment(AlignmentFlag.Center)
+
+
+class Needle(StatefulGaugePathItem):
+	_animation: QPropertyAnimation
+	_animationSignal = Signal(float)
+
+	class Type(str, Enum, metaclass=ClosestMatchEnumMeta):
+		Needle = 'needle'
+		Circle = 'circle'
+		Triangle = 'triangle'
+		Diamond = 'diamond'
+		#: An arrowhead riding the arc itself rather than sweeping from the
+		#: centre. The other edge shapes sit *at* the radius; this one is
+		#: centred *on* the stroke, so it reads as a marker on the line.
+		Marker = 'marker'
+		#: A kite from the pivot to the tip, with an optional tail behind the
+		#: pivot (``tail``) and a hub disc (``hub``): a barometer hand.
+		Tapered = 'tapered'
+		#: A shaft with an arrowhead at the rim (``point: out``, the default) or
+		#: at the inner end (``point: in``). ``tail`` adds a second shaft on the
+		#: opposite side and ``tail-dot`` caps it with a dot at the opposite rim:
+		#: a wind-direction arrow.
+		Arrow = 'arrow'
+		#: A thin line from the pivot, with an optional counterweight disc
+		#: (``tail-dot``) at the end of its tail (``tail``).
+		Line = 'line'
+		#: A knob riding the track, with an optional ``halo`` ring around it:
+		#: a sun-path position.
+		Dot = 'dot'
+		#: A short bar across the track: a limit mark.
+		Notch = 'notch'
+
+	#: Styles drawn from the pivot, which can carry a ``hub``.
+	_PIVOT_STYLES = frozenset({'needle', 'tapered', 'line'})
+
+	_shown: Optional[float] = None
+	_lastTarget: Optional[float] = None
+	_anim: Optional[QVariantAnimation] = None
+	_under: tuple = ()
+	_over: tuple = ()
+
+	def __init__(self, *args, **kwargs):
+		super(Needle, self).__init__(*args, **kwargs)
+		# self._animation = NeedleAnimation(self)
+		pen = QPen()
+		pen.setJoinStyle(Qt.RoundJoin)
+		self.setPen(Qt.NoPen)
+		self.add_defaults_to_state(kwargs)
+		self.refresh()
+		shadow = SoftShadow(owner=self)
+		self.setGraphicsEffect(shadow)
+
+	def draw(self):
+		match self.type:
+			case Needle.Type.Needle | 'needle':
+				path = self._default()
+			case Needle.Type.Circle | 'circle':
+				path = self._edge_circle()
+			case Needle.Type.Triangle | 'triangle':
+				path = self._edge_triangle()
+			case Needle.Type.Diamond | 'diamond':
+				path = self._edge_diamond()
+			case Needle.Type.Marker | 'marker':
+				path = self._edge_marker()
+			case Needle.Type.Tapered:
+				path = self._style_tapered()
+			case Needle.Type.Arrow:
+				path = self._style_arrow()
+			case Needle.Type.Line:
+				path = self._style_line()
+			case Needle.Type.Dot:
+				path = self._style_dot()
+			case Needle.Type.Notch:
+				path = self._style_notch()
+			case _:
+				path = self._default()
+		self.prepareGeometryChange()
+		self._under, self._over = self._extras()
+		self.setPath(path)
+
+	def _brushColor(self) -> QColor:
+		color = getattr(self, '_color', None)
+		return self.gauge.defaultColor if color is None else color.QColor
+
+	def refresh(self):
+		gauge = self.gauge
+
+		self.resetTransform()
+		self.setBrush(QBrush(self._brushColor()))
+		self.draw()
+
+		self._applyAngle(gauge.value_to_angle(gauge.value))
+		self.setPos(gauge.center)
+		# resetTransform() above dropped the shift recenter() gave this item.
+		# A value change refreshes the needle without a recenter, so put the
+		# shift back or the pivot drifts off the arc's centre.
+		self.setTransform(gauge._recenterTransform, combine=False)
+		self.setZValue(-500)
+		self.setVisible(getattr(self, '_visible', True))
+
+	@StateProperty(key='visible', default=True, allowNone=False, after=refresh)
+	def visible(self) -> bool:
+		"""``false`` hides the needle itself, for a dial drawn with a ``fill`` and markers."""
+		return getattr(self, '_visible', True)
+
+	@visible.setter
+	def visible(self, value: bool):
+		self._visible = bool(value)
+
+	@StateProperty(key='type', default=Type.Needle, allowNone=False, repr=True, after=refresh)
+	def type(self) -> Type:
+		return self._type
+
+	@type.setter
+	def type(self, value: Type):
+		self._type = value
+
+	@type.decode
+	def type(self, value: str) -> Type:
+		return Needle.Type[value]
+
+	@StateProperty(key='width', allowNone=False, repr=True, dependencies={'type'}, after=refresh)
+	def width(self) -> Size.Width | Length:
+		return self._width
+
+	@width.setter
+	def width(self, value: Size.Width | Length):
+		self._width = value
+
+	@width.item_default
+	def width(self) -> Size.Width | Length:
+		# The styles added with the hands are thin; every older one keeps 10%.
+		match self.type:
+			case Needle.Type.Tapered:
+				return Size.Width(0.09, relative=True)
+			case Needle.Type.Arrow:
+				return Size.Width(0.025, relative=True)
+			case Needle.Type.Line:
+				return Size.Width(0.012, relative=True)
+			case Needle.Type.Dot:
+				return Size.Width(0.09, relative=True)
+			case Needle.Type.Notch:
+				return Size.Width(0.02, relative=True)
+			case _:
+				return Size.Width(0.1, relative=True)
+
+	@width.decode
+	def width(self, value: str | float | int) -> Size.Width | Length:
+		return parseWidth(value, type(self).width.default(type(self), self, update_source=False))
+
+	@property
+	def width_px(self) -> float:
+		return self.gauge.sizeAcross(self.width, dimension=DimensionType.width)
+
+	@StateProperty(key='length', allowNone=False, repr=True, dependencies={'type'}, after=refresh)
+	def length(self) -> Size.Height | Length:
+		return self._length
+
+	@length.setter
+	def length(self, value: Size.Height | Length):
+		self._length = value
+
+	@length.item_default
+	def length(self) -> Size.Height | Length:
+		match self.type:
+			case Needle.Type.Needle | 'needle':
+				return Size.Height(1.0, relative=True)
+			case Needle.Type.Circle | 'circle':
+				return Size.Height(0.2, relative=True)
+			case Needle.Type.Triangle | 'triangle':
+				return Size.Height(0.2, relative=True)
+			case Needle.Type.Diamond | 'diamond':
+				return Size.Height(0.2, relative=True)
+			case Needle.Type.Tapered:
+				return Size.Height(0.85, relative=True)
+			case Needle.Type.Arrow:
+				return Size.Height(0.4, relative=True)
+			case Needle.Type.Line:
+				return Size.Height(0.9, relative=True)
+			case Needle.Type.Dot:
+				return Size.Height(0.2, relative=True)
+			case Needle.Type.Notch:
+				return Size.Height(0.12, relative=True)
+			case _:
+				return Size.Height(1.0, relative=True)
+
+	@length.decode
+	def length(self, value: str | float | int) -> Size.Height | Length:
+		return parseHeight(value, type(self).length.default(type(self), self, update_source=False))
+
+	@property
+	def length_px(self) -> float:
+		return self.gauge.sizeAcross(self.length, dimension=DimensionType.height)
+
+	@property
+	def needleSize(self) -> QSizeF:
+		return QSizeF(self.width_px, self.length_px)
+
+	@StateProperty(key='offset', default=Size.Height(0, relative=True), allowNone=False, repr=True, after=refresh)
+	def offset(self) -> Size.Height | Length:
+		return self._offset
+
+	@offset.setter
+	def offset(self, value: Size.Height | Length):
+		self._offset = value
+
+	@offset.decode
+	def offset(self, value: str | float | int) -> Size.Height | Length:
+		return parseHeight(value, type(self).offset.default(type(self), self, update_source=False))
+
+	@property
+	def offset_px(self) -> float:
+		return self.gauge.sizeAcross(self.offset, dimension=DimensionType.height)
+
+	@StateProperty(key='color', default=None, allowNone=True, repr=True, after=refresh)
+	def color(self) -> Color | None:
+		"""Colour of the needle. Default: the gauge's text colour."""
+		return getattr(self, '_color', None)
+
+	@color.setter
+	def color(self, value: Color | None):
+		self._color = value
+
+	@color.decode
+	def color(self, value) -> Color | None:
+		return None if value is None else Color.decode(value)
+
+	@color.encode
+	def color(self, value: Color | None) -> str | None:
+		return None if value is None else str(value)
+
+	@staticmethod
+	def _optionalSize(parse, value):
+		return None if value is None else parse(value, None)
+
+	@staticmethod
+	def _encodeSize(value) -> str | None:
+		return None if value is None else str(value)
+
+	@StateProperty(key='tail', default=None, allowNone=True, after=refresh)
+	def tail(self) -> Size.Height | Length | None:
+		"""Length behind the pivot, as a share of the radius (``tapered``, ``arrow``, ``line``)."""
+		return getattr(self, '_tail', None)
+
+	@tail.setter
+	def tail(self, value):
+		self._tail = value
+
+	@tail.decode
+	def tail(self, value):
+		return Needle._optionalSize(parseHeight, value)
+
+	@tail.encode
+	def tail(self, value):
+		return Needle._encodeSize(value)
+
+	@StateProperty(key='tail-dot', default=None, allowNone=True, after=refresh)
+	def tailDot(self) -> Size.Width | Length | None:
+		"""Diameter of the dot at the end of the tail (``arrow``, ``line``)."""
+		return getattr(self, '_tailDot', None)
+
+	@tailDot.setter
+	def tailDot(self, value):
+		self._tailDot = value
+
+	@tailDot.decode
+	def tailDot(self, value):
+		return Needle._optionalSize(parseWidth, value)
+
+	@tailDot.encode
+	def tailDot(self, value):
+		return Needle._encodeSize(value)
+
+	@StateProperty(key='head', default=None, allowNone=True, after=refresh)
+	def head(self) -> Size.Height | Length | None:
+		"""Length of the arrowhead (``arrow``). Default 12% of the radius."""
+		return getattr(self, '_head', None)
+
+	@head.setter
+	def head(self, value):
+		self._head = value
+
+	@head.decode
+	def head(self, value):
+		return Needle._optionalSize(parseHeight, value)
+
+	@head.encode
+	def head(self, value):
+		return Needle._encodeSize(value)
+
+	@StateProperty(key='point', default=None, allowNone=True, after=refresh)
+	def point(self) -> str | None:
+		"""Where the ``arrow`` head sits: ``out`` (at the rim, default) or ``in`` (at the inner end)."""
+		return getattr(self, '_point', None)
+
+	@point.setter
+	def point(self, value):
+		self._point = value
+
+	@point.decode
+	def point(self, value):
+		if value is None:
+			return None
+		value = str(value).strip().lower()
+		if value not in ('in', 'out'):
+			raise ValueError(f'needle point must be in or out, not {value!r}')
+		return value
+
+	@StateProperty(key='hub', default=None, allowNone=True, after=refresh)
+	def hub(self) -> Size.Width | Length | None:
+		"""Diameter of a disc at the pivot (``needle``, ``tapered``, ``line``), as a share of the radius."""
+		return getattr(self, '_hub', None)
+
+	@hub.setter
+	def hub(self, value):
+		self._hub = value
+
+	@hub.decode
+	def hub(self, value):
+		return Needle._optionalSize(parseWidth, value)
+
+	@hub.encode
+	def hub(self, value):
+		return Needle._encodeSize(value)
+
+	@StateProperty(key='hub-color', default=None, allowNone=True, after=refresh)
+	def hubColor(self) -> Color | None:
+		"""Colour of the hub. Default: the needle colour."""
+		return getattr(self, '_hubColor', None)
+
+	@hubColor.setter
+	def hubColor(self, value):
+		self._hubColor = value
+
+	@hubColor.decode
+	def hubColor(self, value):
+		return None if value is None else Color.decode(value)
+
+	@hubColor.encode
+	def hubColor(self, value):
+		return None if value is None else str(value)
+
+	@StateProperty(key='hub-hole', default=None, allowNone=True, after=refresh)
+	def hubHole(self) -> float | None:
+		"""Share of the hub's diameter cut out of its middle: a ring instead of a disc."""
+		return getattr(self, '_hubHole', None)
+
+	@hubHole.setter
+	def hubHole(self, value):
+		self._hubHole = value
+
+	@hubHole.decode
+	def hubHole(self, value):
+		if value is None:
+			return None
+		if isinstance(value, str):
+			value = float(value.strip().rstrip('%')) / 100 if value.strip().endswith('%') else float(value)
+		return min(max(float(value), 0.0), 0.95)
+
+	@StateProperty(key='halo', default=None, allowNone=True, after=refresh)
+	def halo(self) -> Size.Width | Length | None:
+		"""Width of a ring around a ``dot``, in the ``halo-color``."""
+		return getattr(self, '_halo', None)
+
+	@halo.setter
+	def halo(self, value):
+		self._halo = value
+
+	@halo.decode
+	def halo(self, value):
+		return Needle._optionalSize(parseWidth, value)
+
+	@halo.encode
+	def halo(self, value):
+		return Needle._encodeSize(value)
+
+	@StateProperty(key='halo-color', default=None, allowNone=True, after=refresh)
+	def haloColor(self) -> Color | None:
+		return getattr(self, '_haloColor', None)
+
+	@haloColor.setter
+	def haloColor(self, value):
+		self._haloColor = value
+
+	@haloColor.decode
+	def haloColor(self, value):
+		return None if value is None else Color.decode(value)
+
+	@haloColor.encode
+	def haloColor(self, value):
+		return None if value is None else str(value)
+
+	@StateProperty(key='animate', default=0, allowNone=False, after=refresh)
+	def animate(self) -> float:
+		"""Milliseconds the hand takes to move to a new value; 0 (default) jumps.
+		With a wrapping range (``range: {wrap: true}``) it takes the shorter way round."""
+		return self._animate
+
+	@animate.setter
+	def animate(self, value: float):
+		self._animate = value
+
+	@animate.decode
+	def animate(self, value) -> float:
+		if isinstance(value, str):
+			text = value.strip().lower()
+			value = float(text[:-2]) if text.endswith('ms') else float(text[:-1]) * 1000 if text.endswith('s') else float(text)
+		return max(0.0, float(value))
+
+	def _radial(self, size: Size.Height | Size.Width | None, default: float = 0.0, *, dimension=DimensionType.height) -> float:
+		"""A relative size in pixels, or ``default`` (a share of the radius) when unset."""
+		if size is None:
+			return default * self.gauge.radius
+		return self.gauge.sizeAcross(size, dimension=dimension) or 0.0
+
+	def _pivotY(self) -> float:
+		return self.offset_px
+
+	def _hubPath(self) -> Optional[QPainterPath]:
+		hub = self.hub
+		if hub is None or self.type.value not in self._PIVOT_STYLES:
+			return None
+		diameter = self.gauge.sizeAcross(hub, dimension=DimensionType.width) or 0.0
+		if diameter <= 0:
+			return None
+		path = QPainterPath()
+		path.setFillRule(Qt.FillRule.OddEvenFill)
+		path.addEllipse(QPointF(0, self._pivotY()), diameter / 2, diameter / 2)
+		if self.hubHole:
+			hole = diameter / 2 * self.hubHole
+			path.addEllipse(QPointF(0, self._pivotY()), hole, hole)
+		return path
+
+	def _extras(self) -> tuple[tuple, tuple]:
+		"""Disc paths drawn beside the main path: ``(under, over)``, each a tuple of ``(path, colour)``."""
+		under, over = [], []
+		if (hub := self._hubPath()) is not None:
+			over.append((hub, self._hubColor.QColor if getattr(self, '_hubColor', None) is not None else self.brush().color()))
+		if self.type is Needle.Type.Dot and self.halo is not None:
+			halo = self.gauge.sizeAcross(self.halo, dimension=DimensionType.width) or 0.0
+			if halo > 0 and (color := getattr(self, '_haloColor', None)) is not None:
+				r = self.width_px / 2 + halo
+				path = QPainterPath()
+				path.addEllipse(QPointF(0, self.offset_px - self.gauge.radius), r, r)
+				under.append((path, color.QColor))
+		return tuple(under), tuple(over)
+
+	def boundingRect(self) -> QRectF:
+		rect = super().boundingRect()
+		for path, _ in (*self._under, *self._over):
+			rect = rect.united(path.boundingRect())
+		return rect
+
+	def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget = None):
+		painter.setPen(Qt.NoPen)
+		for path, color in self._under:
+			painter.setBrush(QBrush(color))
+			painter.drawPath(path)
+		super().paint(painter, option, widget)
+		painter.setPen(Qt.NoPen)
+		for path, color in self._over:
+			painter.setBrush(QBrush(color))
+			painter.drawPath(path)
+
+	def _setShape(self, path: QPainterPath) -> QPainterPath:
+		self._shape = QPainterPath(path)
+		self._bounding_rect = path.boundingRect()
+		return path
+
+	@staticmethod
+	def _stroke(line: QPainterPath, width: float, cap=Qt.PenCapStyle.FlatCap) -> QPainterPath:
+		stroker = QPainterPathStroker()
+		stroker.setWidth(max(width, 0.5))
+		stroker.setCapStyle(cap)
+		return stroker.createStroke(line)
+
+	def _style_tapered(self) -> QPainterPath:
+		"""A kite: wide at the pivot, narrowing to the tip, with a short tail behind.
+
+		Length: pivot to tip. Width: across the pivot. Tail: behind the pivot.
+		Offset: moves the pivot. Add ``hub`` for the disc over the pivot.
+		"""
+		y, w = self._pivotY(), self.width_px
+		tip = QPointF(0, y - self.length_px)
+		tail = self._radial(self.tail)
+		path = QPainterPath()
+		path.moveTo(tip)
+		path.lineTo(w / 2, y)
+		path.lineTo(w * 0.3, y + tail)
+		path.lineTo(-w * 0.3, y + tail)
+		path.lineTo(-w / 2, y)
+		path.closeSubpath()
+		return self._setShape(path)
+
+	def _style_line(self) -> QPainterPath:
+		"""A thin line with a counterweight: ``tail`` is the line behind the pivot,
+		``tail-dot`` the disc at its end. Length: pivot to tip."""
+		y, w = self._pivotY(), self.width_px
+		tail = self._radial(self.tail)
+		line = QPainterPath(QPointF(0, y + tail))
+		line.lineTo(0, y - self.length_px)
+		path = self._stroke(line, w, Qt.PenCapStyle.RoundCap)
+		if self.tailDot is not None:
+			r = self.gauge.sizeAcross(self.tailDot, dimension=DimensionType.width) / 2
+			disc = QPainterPath()
+			disc.addEllipse(QPointF(0, y + tail), r, r)
+			path = path.united(disc)
+		return self._setShape(path)
+
+	def _style_arrow(self) -> QPainterPath:
+		"""A wind-direction arrow: a shaft and head at the rim, and optionally a
+		tail shaft ending in a dot at the opposite rim.
+
+		Length: the shaft, from the rim inward. Width: shaft width.
+		Head: head length (default 12%). Point: ``out`` (head at the rim) or ``in``.
+		Tail: the opposite shaft's length, from the opposite rim inward.
+		Tail-dot: diameter of the dot at the opposite rim. Offset: moves it all inward.
+		"""
+		radius, w = self.gauge.radius, self.width_px
+		off = self.offset_px
+		head = self._radial(self.head, 0.12)
+		half = head * 0.42
+		length = max(self.length_px, head)
+		rim = off - radius
+		path = QPainterPath()
+		if (self.point or 'out') == 'out':
+			shaft = QPainterPath(QPointF(0, rim + head * 0.6))
+			shaft.lineTo(0, rim + length)
+			path.addPath(self._stroke(shaft, w))
+			path.moveTo(0, rim)
+			path.lineTo(half, rim + head)
+			path.lineTo(-half, rim + head)
+			path.closeSubpath()
+		else:
+			shaft = QPainterPath(QPointF(0, rim))
+			shaft.lineTo(0, rim + length - head * 0.6)
+			path.addPath(self._stroke(shaft, w))
+			path.moveTo(0, rim + length)
+			path.lineTo(half, rim + length - head)
+			path.lineTo(-half, rim + length - head)
+			path.closeSubpath()
+		tail = self._radial(self.tail)
+		dot = (self.gauge.sizeAcross(self.tailDot, dimension=DimensionType.width) or 0.0) if self.tailDot is not None else 0.0
+		far = radius - off
+		if tail > 0:
+			shaft = QPainterPath(QPointF(0, far - dot * 0.5))
+			shaft.lineTo(0, far - tail)
+			path.addPath(self._stroke(shaft, w))
+		if dot > 0:
+			path.addEllipse(QPointF(0, far - dot / 2), dot / 2, dot / 2)
+		return self._setShape(path)
+
+	def _style_dot(self) -> QPainterPath:
+		"""A knob centred on the track. Width: diameter. Halo/halo-color: a ring around it."""
+		r = self.width_px / 2
+		path = QPainterPath()
+		path.addEllipse(QPointF(0, self.offset_px - self.gauge.radius), r, r)
+		return self._setShape(path)
+
+	def _style_notch(self) -> QPainterPath:
+		"""A bar across the track. Width: along the track. Length: across it."""
+		w, length = self.width_px, self.length_px
+		rect = QRectF(-w / 2, self.offset_px - self.gauge.radius - length / 2, w, length)
+		path = QPainterPath()
+		path.addRoundedRect(rect, w * 0.25, w * 0.25)
+		return self._setShape(path)
+
+	def _animateMs(self) -> float:
+		try:
+			return float(self.animate or 0)
+		except (AttributeError, TypeError, ValueError):
+			return 0.0
+
+	def _applyAngle(self, target: float) -> None:
+		"""Rotate to ``target`` degrees, easing there when ``animate`` is set.
+
+		With a wrapping range the hand turns the shorter way across the join.
+		Without ``animate`` this is a plain ``setRotation``, as it always was.
+		"""
+		target = float(target)
+		ms = self._animateMs()
+		if not ms or self._shown is None:
+			self._stopAnimation()
+			self._shown = self._lastTarget = target
+			self.setRotation(target)
+			return
+		if target == self._lastTarget:
+			self.setRotation(self._shown)
+			return
+		self._lastTarget = target
+		shown = self._shown
+		if getattr(self.gauge._range, 'wrap', False):
+			destination = shown + shortestDelta(shown, target, float(self.gauge.fullAngle))
+		else:
+			destination = target
+		self._stopAnimation()
+		animation = QVariantAnimation()
+		animation.setDuration(int(ms))
+		animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
+		animation.setStartValue(float(shown))
+		animation.setEndValue(float(destination))
+		animation.valueChanged.connect(self._onAnimated)
+		self._anim = animation
+		animation.start()
+
+	def _onAnimated(self, value) -> None:
+		self._shown = float(value)
+		try:
+			self.setRotation(self._shown)
+		except RuntimeError:
+			self._stopAnimation()
+
+	def _stopAnimation(self) -> None:
+		animation, self._anim = self._anim, None
+		if animation is not None:
+			animation.stop()
+
+	_shape: QPainterPath = QPainterPath()
+
+	def shape(self) -> QPainterPath:
+		return self._shape or self.path()
+
+	def _default(self) -> QPainterPath:
+		"""
+		Returns a standard tapering needle with a rounded bottom.
+
+		Length: Controls the length of the needle
+		Width: Controls the width of the needle
+		Offset: Controls the offset of the needle from the center of the gauge
+		"""
+
+		cx = 0
+		cy = self.offset_px
+		middle = QPointF(cx, cy - self.length_px)
+		needleWidth = self.width_px
+		left = QPointF(cx - needleWidth / 2, cy)
+		right = QPointF(cx + needleWidth / 2, cy)
+		arcStart = QPointF(left)
+		arcStart.setY(left.y() + needleWidth * 0.6)
+		arcEnd = QPointF(right)
+		arcEnd.setY(right.y() + needleWidth * 0.6)
+		arcRect = QRectF(arcStart, QSizeF(needleWidth, -needleWidth))
+
+		needlePath = QPainterPath()
+		needlePath.arcMoveTo(arcRect, 0)
+		needlePath.lineTo(middle)
+		needlePath.arcTo(arcRect, 180, -180)
+		needlePath.addEllipse(QPointF(cx, cy), needleWidth / 3, needleWidth / 3)
+
+		# Set the needle's bounding rect and shape
+		self._shape = shape = QPainterPath()
+		bounding_rect = QRectF(0, 0, needleWidth, needleWidth)
+		bounding_rect.moveCenter(QPointF(cx, cy))
+		shape.addEllipse(bounding_rect)
+		self._bounding_rect = shape.boundingRect()
+
+		return needlePath
+
+	def _edge_circle(self) -> QPainterPath:
+		"""
+		Returns a circle that is used as the indicator instead of a needle.
+
+		Length: Not used
+		Width: Controls the diameter of the circle
+		Offset: Controls the offset of the circle from the arch path of the gauge
+		"""
+
+		cx = 0
+		cy = self.offset_px
+		pos = QPointF(cx, cy - self.gauge.radius)
+
+		path = QPainterPath()
+		path.addEllipse(pos, self.width_px / 2, self.width_px / 2)
+
+		# Set the needle's bounding rect and shape
+		self._shape = shape = QPainterPath(path)
+		# bounding_rect = QRectF(0, 0, self.width_px, self.width_px)
+		# bounding_rect.moveCenter(QPointF(pos))
+		# shape.addEllipse(bounding_rect)
+		self._bounding_rect = shape.boundingRect()
+
+		return path
+
+	def _edge_triangle(self) -> QPainterPath:
+		"""
+		Returns a triangle that is used as the indicator instead of a needle.
+
+		Length: Controls the length of the triangle.  Positive values will point in, negative values will point out.
+		Width: Controls the base width of the triangle
+		Offset: Controls the offset of the triangle from the arch path of the gauge
+
+		"""
+		cx = 0
+		cy = self.offset_px
+		l = self.length_px
+		w = self.width_px
+		pos = QPointF(cx, cy - self.gauge.radius)
+		shape = QPainterPath()
+		tri_point = QPointF(pos + QPointF(0, l))
+		tri_base_y = pos.y()
+		tri_base_left = QPointF(pos.x() - w / 2, tri_base_y)
+		tri_base_right = QPointF(pos.x() + w / 2, tri_base_y)
+		shape.moveTo(tri_point)
+		shape.lineTo(tri_base_left)
+		shape.lineTo(tri_base_right)
+		shape.lineTo(tri_point)
+		shape.closeSubpath()
+		self._shape = QPainterPath(shape)
+		self._bounding_rect = shape.boundingRect()
+		return shape
+
+	def _edge_marker(self) -> QPainterPath:
+		"""
+		Returns an arrowhead that sits *on* the arc rather than pointing at it
+		from the centre.
+
+		Unlike the other edge shapes, which are placed at the radius, this one
+		is centred on the arc's stroke, so with a matching weight it reads as a
+		marker travelling along the line. The notched back keeps it an arrow
+		rather than a triangle at a glance.
+
+		Length: depth across the arc. Positive points inward.
+		Width: width along the arc
+		Offset: nudges it off the arc line
+		"""
+		cx = 0
+		cy = self.offset_px
+		l = self.length_px
+		w = self.width_px
+		# Centre on the stroke, not on the radius, so half sits either side.
+		pos = QPointF(cx, cy - self.gauge.radius)
+		shape = QPainterPath()
+		tip = QPointF(pos.x(), pos.y() + l / 2)
+		back_left = QPointF(pos.x() - w / 2, pos.y() - l / 2)
+		back_right = QPointF(pos.x() + w / 2, pos.y() - l / 2)
+		notch = QPointF(pos.x(), pos.y() - l / 6)
+		shape.moveTo(tip)
+		shape.lineTo(back_left)
+		shape.lineTo(notch)
+		shape.lineTo(back_right)
+		shape.lineTo(tip)
+		shape.closeSubpath()
+		self._shape = QPainterPath(shape)
+		self._bounding_rect = shape.boundingRect()
+		return shape
+
+	def _edge_diamond(self) -> QPainterPath:
+		"""
+		Returns a diamond that is used as the indicator instead of a needle.
+
+		Length: Controls the height of the diamond
+		Width: Controls the width of the diamond
+		Offset: Controls the offset of the diamond from the arch path of the gauge
+
+		"""
+		cx = 0
+		cy = self.offset_px
+		l = self.length_px
+		w = self.width_px
+		pos = QPointF(cx, cy - self.gauge.radius)
+		shape = QPainterPath()
+		diamond_top = QPointF(pos.x(), pos.y() - l / 2)
+		diamond_left = QPointF(pos.x() - w / 2, pos.y())
+		diamond_bottom = QPointF(pos.x(), pos.y() + l / 2)
+		diamond_right = QPointF(pos.x() + w / 2, pos.y())
+		shape.moveTo(diamond_top)
+		shape.lineTo(diamond_left)
+		shape.lineTo(diamond_bottom)
+		shape.lineTo(diamond_right)
+		shape.lineTo(diamond_top)
+		shape.closeSubpath()
+		self._shape = QPainterPath(shape)
+		self._bounding_rect = shape.boundingRect()
+		return shape
+
+
+class Arrow(Needle):
+
+	def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget):
+		# draw lines through the center
+		painter.setPen(QPen(Qt.red))
+		painter.drawRect(self.boundingRect())
+		# c = self.boundingRect().center()
+		# cTop = QPointF(c.x(), 0)
+		# cBottom = QPointF(c.x(), self.boundingRect().height())
+		# painter.drawLine(cTop, cBottom)
+		# c = self.gauge.arc.center
+		# cLeft = QPointF(0, c.y())
+		# cRight = QPointF(self.boundingRect().width(), c.y())
+		# horizontal = QLineF(cLeft, cRight)
+		# painter.drawLine(horizontal)
+		# horizontal.translate(0, self.gauge.radius/2/4)
+		# painter.drawLine(horizontal)
+		# horizontal.translate(0, -self.gauge.radius/2/4*2)
+		# painter.drawLine(horizontal)
+		# painter.drawLine(self.gauge.arc.center, self.gauge.arc.center + QPointF(0, self.needleLength))
+		super(Arrow, self).paint(painter, option, widget)
+
+	@property
+	def safeZone(self):
+		path = QPainterPath()
+		radius = self.gauge.radius
+		path.addEllipse(QPoint(0, 0), radius * 0.6, radius * 0.6)
+		return path
+
+	# super(Arrow, self).paint(painter, option, widget)
+
+	def draw(self):
+		# center = self._gauge.arc.center
+		cx = 0
+		cy = 0
+
+		# Draw Circle
+		radius = self.gauge.radius
+		pointerHeight = radius * 0.178
+		radius = radius - pointerHeight
+		base = pointerHeight
+		path = QPainterPath()
+
+		# Draw Outer Circle
+		path.setFillRule(Qt.FillRule.WindingFill)
+		path.addEllipse(QPoint(cx, cy), radius, radius)
+
+		# Draw Arrow
+		middle = QPointF(cx, cy - pointerHeight - radius)
+		left = QPointF(cx - base, cy - radius + 10)
+		right = QPointF(cx + base, cy - radius + 10)
+		arrow = QPolygonF()
+		path.moveTo(left)
+		path.lineTo(middle)
+		path.lineTo(right)
+		# arrow.append(middle)
+		# arrow.append(left)
+		# arrow.append(right)
+		# path.addPolygon(arrow)
+
+
+		# path.setFillRule(Qt.FillRule.WindingFill)
+
+		# Draw Center Circle
+		path.addEllipse(QPoint(0, 0), radius * 0.8, radius * 0.8)
+		path.setFillRule(Qt.FillRule.OddEvenFill)
+
+		self.setPath(path)
+
+
+class GaugeMarker(Needle):
+	"""An extra indicator on a gauge, with its own value.
+
+	Shares every visual option with the needle (``type``, ``width``,
+	``length``, ``offset``). The value comes from ``value:``, a number or a
+	key, not from the panel's key. With no value yet the marker is hidden.
+	"""
+
+	_markerValue = None
+	_markerColor: Optional[QColor] = None
+	_binding: Optional[Binding] = None
+	_warned = False
+	_clockTimer: Optional[QTimer] = None
+	_clockHand: Optional[str] = None
+
+	#: Used when the marker names no ``length``: the needle default for the
+	#: ``marker`` type is the full radius, which is far too long for a tick.
+	DEFAULT_LENGTH = '20%'
+
+	def configure(self, spec: Mapping) -> None:
+		"""Apply the visual options and start the value source from ``spec``."""
+		visual = {k: v for k, v in spec.items() if k not in ('value', 'color', 'time', 'at')}
+		visual.setdefault('type', 'marker')
+		if Needle.Type[visual['type']] is Needle.Type.Marker:
+			visual.setdefault('length', self.DEFAULT_LENGTH)
+		with self.action_pool:
+			self.setItemState(visual)
+
+		if (color := spec.get('color')) is not None:
+			self._markerColor = Color.decode(color).QColor
+
+		if spec.get('time') is not None:
+			self._followClock(spec['time'], spec.get('at'))
+			self.refresh()
+			return
+
+		raw = spec.get('value')
+		if isinstance(raw, bool):
+			raise TypeError(f'a marker value must be a number or a key, not {raw!r}')
+		if isinstance(raw, (int, float)):
+			self._markerValue = raw
+		elif isinstance(raw, str):
+			if (source := openValueSource(raw, f'Gauge {gaugeKeyName(self.gauge)} marker value', 'the marker stays hidden')) is not None:
+				self._binding = Binding(source, self.setMarkerValue)
+		else:
+			raise TypeError(f'a marker value must be a number or a key, not {raw!r}')
+		self.refresh()
+
+	def close(self):
+		self._stopAnimation()
+		if self._clockTimer is not None:
+			self._clockTimer.stop()
+			self._clockTimer = None
+		if self._binding is not None:
+			self._binding.unlink()
+			self._binding = None
+
+	def _followClock(self, hand, at) -> None:
+		"""Drive the marker from the time of day: ``time: hour|minute|second|day``.
+		The hand turns once round the gauge's range (``range: {min: 0, max: 12, wrap: true}``
+		for a 12 hour dial) however many units that holds.
+
+		``at: 'HH:MM[:SS]'`` shows that fixed time instead and starts no timer.
+		The timer runs on the GUI thread, once a second.
+		"""
+		hand = str(hand).strip().lower()
+		if hand not in CLOCK_HANDS:
+			raise ValueError(f'time must be one of {", ".join(CLOCK_HANDS)}, not {hand!r}')
+		self._clockHand = hand
+		if at is not None:
+			self._fixedTime = parseClockTime(at)
+			self._tickClock()
+			return
+		self._fixedTime = None
+		self._clockTimer = QTimer()
+		self._clockTimer.setInterval(1000)
+		self._clockTimer.timeout.connect(self._tickClock)
+		self._clockTimer.start()
+		self._tickClock()
+
+	def _tickClock(self) -> None:
+		try:
+			if self._fixedTime is not None:
+				hours, minutes, seconds = self._fixedTime
+			else:
+				# The app's own clock, not the wall clock: `shared.now()` is what
+				# `--freeze-time` patches (see _boot.freeze_time), so reading
+				# datetime.now() here meant a frozen render still drew a live hand.
+				current = now()
+				hours, minutes, seconds = current.hour, current.minute, current.second + current.microsecond / 1e6
+			self._clockFraction = clockTurn(self._clockHand, hours, minutes, seconds)
+		except Exception as e:
+			log.warning(f'Gauge {gaugeKeyName(self.gauge)} clock hand stopped: {e}')
+			if self._clockTimer is not None:
+				self._clockTimer.stop()
+			return
+		self.refresh()
+
+	def setMarkerValue(self, value) -> None:
+		"""Set the value to show. GUI thread only (the feed's slot runs there)."""
+		self._markerValue = value
+		self.refresh()
+
+	_clockFraction: Optional[float] = None
+	_fixedTime = None
+
+	def _markerAngle(self) -> Optional[float]:
+		if self._clockHand is not None:
+			# Placed against the range as it is now: the range may load after the marker.
+			if self._clockFraction is None:
+				return None
+			_range = self.gauge._range
+			self._markerValue = float(_range.rounded_min) + self._clockFraction * float(_range.rounded_range)
+		value = self._markerValue
+		if value is None:
+			return None
+		gauge = self.gauge
+		valueClass = gauge.valueClass
+		try:
+			if not isinstance(value, valueClass):
+				value = valueClass(value)
+		except Exception:
+			value = float(value)
+		try:
+			return gauge.value_to_angle(value)
+		except Exception as e:
+			if not self._warned:
+				self._warned = True
+				log.warning(f'Gauge {gaugeKeyName(gauge)} cannot place marker value {value!r}: {e}')
+			return None
+
+	def refresh(self):
+		gauge = self.gauge
+		self.resetTransform()
+		self.setBrush(QBrush(gauge.defaultColor if self._markerColor is None else self._markerColor))
+		self.draw()
+		angle = self._markerAngle()
+		if angle is None:
+			self.hide()
+			return
+		self._applyAngle(angle)
+		self.setPos(gauge.center)
+		# resetTransform() above dropped the shift recenter() gave this item.
+		# A value change refreshes the needle without a recenter, so put the
+		# shift back or the pivot drifts off the arc's centre.
+		self.setTransform(gauge._recenterTransform, combine=False)
+		self.setZValue(-500)
+		self.show()
