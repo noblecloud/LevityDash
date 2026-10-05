@@ -1504,7 +1504,7 @@ class TickSurface(GaugeItem, SurfaceCentered):
 		tick_values = self._properties.tick_values
 
 		interval = self._properties.interval
-		for i in range(self.count + 1):
+		for i in range(self.count):
 			if self._properties.value_at(i) not in tick_values:
 				continue
 			if existing:
@@ -3037,7 +3037,22 @@ class GaugeTickText(GaugeItem, AnnotationText):
 		# self.prepareGeometryChange()
 		# self._shape = outline_path(self.path(), 5)
 
+	@property
+	def repeats_first_label(self) -> bool:
+		"""True for the last label of a full-circle dial, which sits on top of the first.
+
+		0 and 360 are the same point on a compass, so both would draw "N" in
+		one place. Hiding the last one also keeps it out of the overlap
+		measurement, which would otherwise find two labels at distance zero
+		and thin the whole dial to fit them.
+		"""
+		ticks = self.surface.ticks
+		return len(ticks) > 2 and self.tick is ticks[-1] and isclose(float(self.gauge.fullAngle) % 360, 0, abs_tol=1e-6) and float(self.gauge.fullAngle) > 0
+
 	def refresh(self):
+		if self.repeats_first_label:
+			self.hide()
+			return
 		if (interval := self.group.label_step) > 1 and self.tick.index % interval and not (self.is_last_tick and self.group._auto_step > 1 and self.group._keep_last):
 			self.hide()
 			return
