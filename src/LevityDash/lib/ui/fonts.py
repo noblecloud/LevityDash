@@ -11,7 +11,7 @@ from LevityDash import LevityDashboard
 from LevityDash.lib.config import userConfig
 from LevityDash.lib.EasyPath import EasyPath
 from LevityDash.lib.log import LevityLogger
-from LevityDash.lib.ui.fontlist import genericFamily
+from LevityDash.lib.ui.fontlist import NON_FONT_KEYS, genericFamily
 from LevityDash.lib.utils.shared import ClosestMatchEnumMeta
 
 log = LevityLogger.getChild('fonts')
@@ -282,7 +282,7 @@ def __getFontFromConfig(name: str) -> QFont:
 
 fontDict: Dict[str, QFont] = {f: database.font(f, '', -1) for f in loadFonts(*builtInFonts, *userFonts)}
 
-for namedFont in {i for i in fontConfig.keys() if '.' not in i}:
+for namedFont in {i for i in fontConfig.keys() if '.' not in i and i not in NON_FONT_KEYS}:
 	if namedFont in locals():
 		log.warning(f'Font name {namedFont} is already in use by {locals()[namedFont]}, not adding to namespace')
 		continue

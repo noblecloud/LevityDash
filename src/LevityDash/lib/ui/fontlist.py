@@ -12,7 +12,10 @@ import re
 from pathlib import Path
 from typing import Iterable
 
-__all__ = ['COMMON_FAMILIES', 'GENERIC_FAMILIES', 'genericFamily', 'curatedFamilies', 'folderFamilies', 'parseExtra']
+__all__ = ['NON_FONT_KEYS', 'COMMON_FAMILIES', 'GENERIC_FAMILIES', 'genericFamily', 'curatedFamilies', 'folderFamilies', 'parseExtra']
+
+#: Keys of the `[Fonts]` section that are settings, not named fonts.
+NON_FONT_KEYS = frozenset({'extra'})
 
 _FOUNDRY = re.compile(r'\s*\[[^\]]*\]$')  # Qt names some families 'Roboto Mono [GOOG]'
 
