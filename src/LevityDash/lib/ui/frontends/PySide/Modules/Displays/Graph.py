@@ -1834,6 +1834,7 @@ class LinePlot(Plot):
 		super(LinePlot, self).__init__(*args, **kwargs)
 
 	_thickness: Optional[dict] = None
+	_pins: Optional[dict] = None
 
 	@StateProperty(default=None, allowNone=True, after=Plot.updateAppearance)
 	def thickness(self) -> Optional[dict]:
@@ -1860,9 +1861,38 @@ class LinePlot(Plot):
 			raise ValueError('thickness weight and range each take two numbers')
 		return {'key': str(value['key']), 'weight': weight, 'range': None if span is None else [float(v) for v in span]}
 
+	@StateProperty(default=None, allowNone=True, after=Plot.updateAppearance)
+	def pins(self) -> Optional[dict]:
+		"""Marks from another key riding the line, each at its own time and height: condition glyphs, say.
+
+		`{key: environment.condition.icon, size: 14, offset: -1.2, spacing: 1.6, color: '#ffd400'}`.
+		`size` is pixels (or `5mm`); `offset` is in sizes, negative above the line; `spacing` is the least
+		gap between marks in sizes. An icon value draws as its glyph. Other values need `steps`
+		(`[[0, wi:day-sunny], [0.05, wi:showers], [0.3, wi:rain]]`: a number takes the last row it reaches)
+		or `map` (`{0: 'wi:day-sunny'}`: exact values); with neither, the value prints as text.
+		"""
+		return self._pins
+
+	@pins.setter
+	def pins(self, value: Optional[dict]):
+		self._pins = value
+
+	@pins.decode
+	def pins(value) -> Optional[dict]:
+		if not value:
+			return None
+		if not isinstance(value, Mapping) or 'key' not in value:
+			raise ValueError(f'pins needs a mapping with a key, not {value!r}')
+		steps = sorted(([float(t), str(g)] for t, g in value.get('steps', ())), key=lambda row: row[0])
+		return {
+			'key':     str(value['key']), 'steps': steps, 'map': {str(k): str(v) for k, v in dict(value.get('map', {})).items()},
+			'size':    value.get('size', 14), 'offset': float(value.get('offset', -1.2)), 'spacing': float(value.get('spacing', 1.6)),
+			'color':   value.get('color'),
+		}
+
 	def _renderExtras(self, path: QPainterPath) -> dict:
 		extras = {}
-		if not self.data.hasData or not self._thickness:
+		if not self.data.hasData or not (self._thickness or self._pins):
 			return extras
 		# The sample times come back out of the normalised x the path was built from: the data itself can be
 		# re-cut at another resolution between a path build and this render, and would no longer line up with it.
@@ -1883,6 +1913,11 @@ class LinePlot(Plot):
 				scale = self.figure.parent.plotLineWeight()
 				widths = widths * scale
 				extras['ribbon'] = ribbonPath(xs, ys, np.concatenate(([widths[0]], widths, [widths[-1]] * tail)))
+		if self._pins and (side := self.data.sideSeries(self._pins['key'])) is not None:
+			screen = self.scene().view.screen()
+			extras['pins'] = pinPath(times, xs[1:count - tail], ys[1:count - tail], *side, {**PIN_DEFAULTS, **self._pins}, getDPI(screen))
+			color = self._pins.get('color')
+			extras['pinColor'] = Color.decode(color).QColor if color else None
 		return extras
 
 	def _render_paint(self, size: QSize, dpr: float, pen: QPen, path: QPainterPath, glow=None, extras=None) -> QImage:
@@ -1900,6 +1935,11 @@ class LinePlot(Plot):
 		else:
 			painter.setPen(pen)
 			painter.drawPath(path)
+		if (pins := extras.get('pins')) is not None:
+			painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+			painter.setPen(Qt.NoPen)
+			painter.setBrush(extras.get('pinColor') or pen.brush())
+			painter.drawPath(pins)
 		painter.end()
 		return img
 
@@ -1987,6 +2027,10 @@ class LinePlot(Plot):
 		return path
 
 
+# What a pins mapping falls back to for a key it leaves out (state may hand it back with defaults dropped).
+PIN_DEFAULTS = {'steps': [], 'map': {}, 'size': 14, 'offset': -1.2, 'spacing': 1.6, 'color': None}
+
+
 def variableWidths(times: np.ndarray, sideTimes: np.ndarray, sideValues: list, weight: Sequence[float], span: Optional[Sequence[float]]) -> Optional[np.ndarray]:
 	"""A line weight for each of `times`, taken from another series laid over them.
 
@@ -2019,6 +2063,57 @@ def ribbonPath(xs: np.ndarray, ys: np.ndarray, widths: np.ndarray) -> QPainterPa
 	for point in left[1:] + right[::-1]:
 		path.lineTo(*point)
 	path.closeSubpath()
+	return path
+
+
+def pinText(value: Any, config: Mapping) -> tuple[str, Optional[QFont]]:
+	"""What to draw for one pinned value: text, and the icon font it needs (None for plain text)."""
+	from LevityDash.lib.ui.icons import getIcon, Icon
+
+	def resolve(name: str):
+		if re.fullmatch(r'[a-z]+:[\w-]+', name):
+			try:
+				icon = getIcon(name)
+				return icon.unicode, QFont(icon.font)
+			except Exception:
+				pass
+		return name, None
+
+	if isinstance(value, Icon):
+		return value.unicode, QFont(value.font)
+	if str(value) in config['map']:
+		return resolve(config['map'][str(value)])
+	if config['steps']:
+		try:
+			number = float(value)
+		except (TypeError, ValueError):
+			return str(value), None
+		reached = [row for row in config['steps'] if row[0] <= number]
+		return resolve(reached[-1][1]) if reached else ('', None)
+	return resolve(str(value))
+
+
+def pinPath(times: np.ndarray, xs: np.ndarray, ys: np.ndarray, pinTimes: np.ndarray, pinValues: list, config: Mapping, dpi: float) -> QPainterPath:
+	"""The glyphs for a pinned series, set on the line through (xs, ys) at each pin's own time."""
+	size = config['size']
+	size = float(size) if isinstance(size, (int, float)) else float(re.sub(r'[a-z]+$', '', str(size))) * dpi / (25.4 if str(size).endswith('mm') else 2.54 if str(size).endswith('cm') else 1)
+	path = QPainterPath()
+	lastX = -np.inf
+	for t, value in zip(pinTimes, pinValues):
+		if not times[0] <= t <= times[-1]:
+			continue
+		x = float(np.interp(t, times, xs))
+		if x - lastX < config['spacing'] * size:
+			continue
+		text, font = pinText(value, config)
+		if not text:
+			continue
+		font = font or QFont(QApplication.font())
+		font.setPixelSize(max(int(round(size)), 1))
+		box = QFontMetricsF(font).boundingRect(text)
+		y = float(np.interp(t, times, ys)) + config['offset'] * size
+		path.addText(QPointF(x - box.center().x(), y - box.center().y()), font, text)
+		lastX = x
 	return path
 
 
