@@ -4,25 +4,24 @@
 # A root mapping with `items:` is how a dashboard picks a theme; without `theme:` it uses `default`.
 theme: dusk
 items:
-  - type: stack
+  - type: group
     name: board
-    padding: 3mm
-    spacing: 3mm
     items:
       - type: text
         name: heading
         text: Weather at the window
         font: $display
         color: $muted
-        geometry: {height: 12%}
+        geometry: {x: 3%, y: 3%, width: 60%, height: 12%}
       - type: group
         name: main
+        geometry: {x: 0%, y: 18%, width: 100%, height: 82%}
         items:
           - type: realtime.gauge
             name: bands
             key: environment.temperature.temperature
             title: false
-            geometry: {x: 0%, y: 0%, width: 33%, height: 100%}
+            geometry: {x: 2%, y: 0%, width: 30%, height: 100%}
             display:
               arc: {start-angle: -135, end-angle: 135, weight: 6%, color: $rule}
               range: {min: 0, max: 100}
@@ -37,7 +36,7 @@ items:
             name: zonefill
             key: environment.humidity.humidity
             title: false
-            geometry: {x: 33%, y: 0%, width: 33%, height: 100%}
+            geometry: {x: 35%, y: 0%, width: 30%, height: 100%}
             display:
               arc: {start-angle: -135, end-angle: 135, weight: 6%, color: $rule}
               range: {min: 0, max: 100}
@@ -52,7 +51,7 @@ items:
             name: uv
             key: environment.light.uvi
             title: false
-            geometry: {x: 66%, y: 0%, width: 34%, height: 100%}
+            geometry: {x: 68%, y: 0%, width: 30%, height: 100%}
             display:
               arc: {start-angle: -135, end-angle: 135, weight: 6%}
               range: {min: 0, max: 12}
