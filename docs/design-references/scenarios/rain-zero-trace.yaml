@@ -1,0 +1,33 @@
+# Zero, trace and sub-one-percent readings. Render with presets/rain-zero-trace.levity.
+# Rows: rain exactly zero, rain a trace (0.1 mm/hr is 0.004 in/hr), rain 0.5 mm/hr, and
+# two percentages. `cover` reports percent, so 0.1 is 0.1 %. `fraction` reports a 0-1
+# fraction (PirateWeather style, `isPercentage: false`), so 0.1 is 10 %.
+name: rain-zero-trace
+description: 'Rain at zero, trace and light; percentages below one and fraction-scale.'
+keys:
+  environment.precipitation.precipitation:
+    value: 0
+    unit: [mm, hr]
+    type: precipitationHourly
+    title: Rain zero
+  environment.precipitation.max:
+    value: 0.1
+    unit: [mm, hr]
+    type: precipitationRate
+    title: Rain trace
+  environment.precipitation.rate:
+    value: 0.5
+    unit: [mm, hr]
+    type: precipitationRate
+    title: Rain light
+  environment.clouds.cover:
+    value: 0.1
+    unit: '%c'
+    type: cloudCover
+    title: Cover 0.1 percent
+  environment.precipitation.probability:
+    value: 0.1
+    unit: '%p'
+    type: probability
+    kwargs: {isPercentage: false}
+    title: Chance fraction 0.1

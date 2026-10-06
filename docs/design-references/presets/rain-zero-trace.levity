@@ -1,0 +1,10 @@
+# Five readings that exercise the zero, trace and percent rules.
+#   render_dashboard.py out.png --levity THIS --scenario rain-zero-trace --size 1200x400
+- type: group
+  name: main
+  items:
+    - {type: realtime.text, name: rain-zero, key: environment.precipitation.precipitation, title: true, alignment: Center, geometry: {x: 0%, y: 0%, width: 20%, height: 100%}, display: {color: '#ffffff'}}
+    - {type: realtime.text, name: rain-trace, key: environment.precipitation.max, title: true, alignment: Center, geometry: {x: 20%, y: 0%, width: 20%, height: 100%}, display: {color: '#ffffff'}}
+    - {type: realtime.text, name: rain-light, key: environment.precipitation.rate, title: true, alignment: Center, geometry: {x: 40%, y: 0%, width: 20%, height: 100%}, display: {color: '#ffffff'}}
+    - {type: realtime.text, name: cover, key: environment.clouds.cover, title: true, alignment: Center, geometry: {x: 60%, y: 0%, width: 20%, height: 100%}, display: {color: '#ffffff'}}
+    - {type: realtime.text, name: chance, key: environment.precipitation.probability, title: true, alignment: Center, geometry: {x: 80%, y: 0%, width: 20%, height: 100%}, display: {color: '#ffffff'}}
