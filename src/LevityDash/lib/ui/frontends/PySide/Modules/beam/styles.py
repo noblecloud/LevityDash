@@ -11,6 +11,7 @@ per-frame animation state comes from the caller (BorderBeamEffect).
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from PySide6.QtCore import QPointF, QRectF, Qt
@@ -80,7 +81,7 @@ _MONO_MULTIPLIER = 0.5
 FRAME_BAND = 28
 
 # Pulse-outside halo: bloom is inset -30px with a blur of 15-22.5px.
-PULSE_HALO = 70
+PULSE_HALO = 75
 
 # Cached masks
 _ring_cache: dict[tuple[int, int, float, float], QImage] = {}
@@ -809,31 +810,44 @@ def paint_pulse_outside_behind(painter: QPainter, ctx: PaintCtx) -> None:
 
 	# bloom — wide blurred halo, scaled 0.95 x 0.9 about its center.
 	bloom_rect = rect.adjusted(-30.0, -30.0, 30.0, 30.0)
-	bloom = make_layer(int(bloom_rect.width()), int(bloom_rect.height()))
-	bp = QPainter(bloom)
-	bp.setRenderHint(QPainter.RenderHint.Antialiasing)
-	paint_pulse_blobs(
-		bp, bloom_rect, PULSE_OUTER_BLOOM, palette, values, hue, b, s,
-		sx=ctx.sx, sy=ctx.sy, frozen_alpha=_frozen_alpha(pm), scale=(0.95, 0.9),
-		color_space=ctx.color_space,
+	bloom_blur = 22.5 if dark else 15.0
+	bloom = _paint_padded_blur(
+		bloom_rect, bloom_blur,
+		lambda bp, r: paint_pulse_blobs(
+			bp, r, PULSE_OUTER_BLOOM, palette, values, hue, b, s,
+			sx=ctx.sx, sy=ctx.sy, frozen_alpha=_frozen_alpha(pm), scale=(0.95, 0.9),
+			color_space=ctx.color_space,
+		),
 	)
-	bp.end()
-	bloom = blur_image(bloom, 22.5 if dark else 15.0)
 	painter.setOpacity(ctx.fade * preset["bloom_opacity"] * mono)
-	painter.drawImage(bloom_rect, bloom)
+	painter.drawImage(bloom[0], bloom[1])
 	painter.setOpacity(1.0)
 
 	# core — bright blurred edge blobs, same transform.
 	core_rect = rect.adjusted(-10.0, -10.0, 10.0, 10.0)
-	core = make_layer(int(core_rect.width()), int(core_rect.height()))
-	cp = QPainter(core)
-	cp.setRenderHint(QPainter.RenderHint.Antialiasing)
-	paint_pulse_blobs(cp, core_rect, PULSE_OUTER_CORE, palette, values, hue, b, s, sx=ctx.sx, sy=ctx.sy, scale=(0.95, 0.9), color_space=ctx.color_space)
-	cp.end()
-	core = blur_image(core, 3.0 if dark else 6.0)
+	core = _paint_padded_blur(
+		core_rect, 3.0 if dark else 6.0,
+		lambda cp, r: paint_pulse_blobs(cp, r, PULSE_OUTER_CORE, palette, values, hue, b, s, sx=ctx.sx, sy=ctx.sy, scale=(0.95, 0.9), color_space=ctx.color_space),
+	)
 	painter.setOpacity(ctx.fade * preset["inner_opacity"] * mono)
-	painter.drawImage(core_rect, core)
+	painter.drawImage(core[0], core[1])
 	painter.setOpacity(1.0)
+
+
+def _paint_padded_blur(rect: QRectF, blur: float, paint) -> tuple[QRectF, QImage]:
+	"""Paint into a layer larger than `rect` and blur it; returns where to draw the result and the image.
+
+	Blobs reach past `rect` and a blur spreads further, so a layer cut at `rect` shows hard edges
+	where the glow runs out of image. Padding by twice the blur lets both fade to nothing.
+	"""
+	pad = math.ceil(blur * 2.0)
+	outer = rect.adjusted(-pad, -pad, pad, pad)
+	layer = make_layer(int(outer.width()), int(outer.height()))
+	qp = QPainter(layer)
+	qp.setRenderHint(QPainter.RenderHint.Antialiasing)
+	paint(qp, QRectF(pad, pad, rect.width(), rect.height()))
+	qp.end()
+	return outer, blur_image(layer, blur)
 
 
 def paint_pulse_outside_front(painter: QPainter, ctx: PaintCtx) -> None:
