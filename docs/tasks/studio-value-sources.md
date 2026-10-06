@@ -1,5 +1,17 @@
 # Gauge Studio: the value sources never reach their consumers, and 17 cells do not load
 
+**Status: FIXED 2026-10-06.** The stand-in now registers in `lib/valuesource` and
+`openValueSource` consults it, so every consumer that calls that name is answered
+wherever it lives (`794dcd8`, merged via `fix/studio-value-sources`). The
+cell-loading order is settled by letting a numeric field decode against the class
+the build assigns — `decode_measurement` keeps a bare number a plain float while
+the class is unknown, and `Meter.valueClass` reports `float` until one is set — so
+the range/interval decode during `Gauge(...)` no longer calls a `None` class.
+Measured: **13/30 -> 30/30** showcase cells load, and a keyed fill/marker/caption
+now draws. The `Multi-Unit` (Rain rate) cell loads too; nothing was papered over.
+`tests/devtools/test_studio_value_sources.py` pins both, and
+`render_diff_tools/studio_smoke2.py` now sweeps all 30 cells and checks the fill.
+
 Two defects in one job — they share a smell: the Studio stands in for the app's data
 in ways that depend on *where* a name happens to live rather than on a mechanism.
 

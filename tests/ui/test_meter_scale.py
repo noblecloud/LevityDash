@@ -8,7 +8,7 @@ when its value runs off the end of the scale.
 """
 import pytest
 
-from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.scale import Scale
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.scale import Scale, decode_measurement
 
 
 def old_value_to_angle(value, start, end, min_, range_, wrap):
@@ -97,3 +97,17 @@ def test_zero_span_does_not_divide_by_zero():
 def test_span_of_between_positions():
 	scale = Scale(0, 100)
 	assert scale.spanOf(0.25, 0.75) == pytest.approx(50)
+
+
+def test_a_bare_number_stays_a_float_until_the_value_class_is_known():
+	"""A gauge's `min`/`max`/`interval` decode before its value class is set.
+
+	With no class yet (`None`, or the default `Unset`) the number is kept as a
+	plain float, so the field never calls a `None` class; the gauge converts it
+	once the build assigns the class. This is the fix for the Studio's
+	`TypeError: 'NoneType' object is not callable` (docs/tasks/studio-value-sources.md).
+	"""
+	assert decode_measurement(5, None) == 5.0
+	assert decode_measurement(2.5, None) == 2.5
+	assert decode_measurement('5', None) == 5.0
+	assert decode_measurement(5) == 5.0

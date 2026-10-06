@@ -37,7 +37,6 @@ continuously.
 | [meter-harness-status](meter-harness-status.md) | phase 2 working note: the harness renders 24 targets (23 presets plus the showcase) and the merged tree is 24/24 clean across captures; `emissive` keeps a live clock (the freeze trips `Graph.py:862`) behind two named masks, and the baseline is `.render-diff/merged-a`. Also the clock-pin fix, the two queued gauge-track asks, and the findings to report. |
 | [render-scenario-crash](render-scenario-crash.md) | `render_dashboard.py --scenario` SIGSEGVs on a full dashboard (a preset renders fine): the repro, what was ruled out, the faulting stack, and where to look. Needs a fix or a finer bisect — suggested branch `fix/scenario-render-segv`. |
 | [graph-zero-time-range](graph-zero-time-range.md) | `Graph.py:862` divides by a zero-second time range (the y axis guards its own range, the x axis does not): NaN x-coordinates, a plot that drifts between captures, and in about half the harness runs a shutdown SIGSEGV. A live-board risk, not just harness noise; fixing it also lets the harness drop `emissive`'s workarounds. |
-| [studio-value-sources](studio-value-sources.md) | Gauge Studio: `installSources()` patches the `Gauge` class rather than the modules its consumers read, so keyed markers, fills and captions never resolve, and 17 of the 30 showcase cells never load. Suggested branch `fix/studio-value-sources`, after the meter merge. |
 
 ## Loose ends not yet written up
 
@@ -61,6 +60,12 @@ continuously.
 
 Kept briefly so the same ground isn't re-covered.
 
+- **[studio-value-sources](studio-value-sources.md)** — the Studio's value-source
+  stand-in now registers in `lib/valuesource` and `openValueSource` consults it,
+  so keyed markers/fills/captions resolve wherever their consumer lives; and a
+  numeric field decodes against the class the build assigns, so the settle/rebuild
+  path no longer calls a `None` class. 13/30 -> 30/30 showcase cells load. Pinned
+  by `tests/devtools/test_studio_value_sources.py`.
 - **Digit budget** — `max` now applies to values ≤ 1; `leadingZero`
   implemented as three-state with an `auto` default. The `auto` rule is
   documented in `WeatherUnits/docs/formatting.md` along with two rejected
