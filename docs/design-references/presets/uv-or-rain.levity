@@ -46,7 +46,7 @@
             - type: realtime.gauge
               name: rain-rate
               key: environment.precipitation.precipitation
-              title: false
+              title: Rain
               geometry: {x: 0%, y: 0%, width: 100%, height: 72%}
               display:
                 radius: 90%
@@ -68,7 +68,7 @@
         - type: realtime.gauge
           name: uv
           key: environment.light.uvi
-          title: false
+          title: UV Index
           display:
             radius: 88%
             arc: {weight: 8%}
