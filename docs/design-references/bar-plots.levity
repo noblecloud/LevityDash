@@ -1,4 +1,6 @@
-# Bars in a graph: `plot: {type: bar}`.
+# Bars in a graph: `plot: {type: bar}`. Violins: `plot: {type: violin, bucket: 6h}`
+# (see the second graph; it needs several samples per bucket, so a sensor that
+# logs every few minutes shows it best - hourly forecast data gives blocky ones).
 #
 # Precipitation amount as bars with the chance of rain as a line over them, and
 # the temperature line above both. Bars are drawn per source sample (an hour
@@ -7,28 +9,46 @@
 # same margins; figures keep their own axis.
 #
 # Hex colours are quoted. Unquoted, YAML reads '#' as a comment.
-- type: graph
-  name: forecast
-  timeframe: {days: 1, hours: 12}
-  annotations:
-    dayLabels: {alignment: TopCenter}
-    hourLabels: {alignment: BottomCenter, spacingIntervals: '1, 3, 6'}
-    lines: {spacing: 8 mm, weight: 0.8}
-  figures:
-  - figure: temperature
-    margins: {bottom: 42%, top: 8%}
-    environment.temperature.temperature:
-      labels: {enabled: true}
-      plot: {type: plot, gradient: TemperatureGradient}
-      resolution: 2
-  - figure: precipitation
-    margins: {bottom: 0%, top: 62%}
-    max: 0.5
-    environment.precipitation.precipitation:
-      plot: {type: bar, gradient: PrecipitationRateGradient, width: 0.8, radius: 0.25}
-  - figure: humidity
-    margins: {bottom: 0%, top: 62%}
-    min: 0
-    max: 1
-    environment.humidity.humidity:
-      plot: {type: plot, color: '#5882ff', weight: 0.3, dashPattern: '5, 5'}
+- type: stack
+  direction: Vertical
+  spacing: 3 mm
+  items:
+    - type: graph
+      name: forecast
+      timeframe: {days: 1, hours: 12}
+      annotations:
+        dayLabels: {alignment: TopCenter}
+        hourLabels: {alignment: BottomCenter, spacingIntervals: '1, 3, 6'}
+        lines: {spacing: 8 mm, weight: 0.8}
+      figures:
+      - figure: temperature
+        margins: {bottom: 42%, top: 8%}
+        environment.temperature.temperature:
+          labels: {enabled: true}
+          plot: {type: plot, gradient: TemperatureGradient}
+          resolution: 2
+      - figure: precipitation
+        margins: {bottom: 0%, top: 62%}
+        max: 0.5
+        environment.precipitation.precipitation:
+          plot: {type: bar, gradient: PrecipitationRateGradient, width: 0.8, radius: 0.25}
+      - figure: humidity
+        margins: {bottom: 0%, top: 62%}
+        min: 0
+        max: 1
+        environment.humidity.humidity:
+          plot: {type: plot, color: '#5882ff', weight: 0.3, dashPattern: '5, 5'}
+
+    # One violin per 6 hours: how the temperature spread inside each stretch of the
+    # day. `bucket` takes 30min, 1h, 1d; `bandwidth` below 1 shows more detail.
+    - type: graph
+      name: spread
+      timeframe: {days: 1, hours: 12}
+      annotations:
+        dayLabels: {enabled: false}
+        hourLabels: {alignment: BottomCenter}
+      figures:
+      - figure: spread
+        margins: {bottom: 12%, top: 12%}
+        environment.temperature.temperature:
+          plot: {type: violin, bucket: 6h, gradient: TemperatureGradient, width: 0.85}
