@@ -27,6 +27,13 @@ These are about the *layout YAML*, not the schema/source-key layer (that's
   The original note generalised from the single all-sized stack in
   `default.levity`. Every other stack in that same file totals 10–80% and
   renders correctly.
+- **A stack child's `geometry:` is not a layout input.** The stack sizes every
+  child itself, along its direction, from `size:`. Until 2026-10-06 a child
+  written `geometry: {height: 30%}` in a vertical stack silently got an equal
+  share instead (`temperature-column.levity` drew three equal columns, not 10 /
+  54 / 36%). The value along the stack's direction now acts as `size:` (an
+  explicit `size:` wins); `x`, `y` and the other dimension are dropped with a
+  warning in the log. Write `size:`.
 - **A `size: 25%` panel that is actually `28%` will not be fixed by a string
   replace.** Several attempts did `str.replace('size: 25%', 'size: 20%')` which
   matched nothing because the real value was `28%`. Read the actual value before

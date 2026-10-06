@@ -71,7 +71,7 @@ def main() -> int:
 	parser.add_argument('--levity', help='candidate .levity to render (requires --seed)')
 	parser.add_argument('--seed', help='config dir copy to render against; omit for the real config')
 	parser.add_argument('--scenario', help='fixed values for every key: a docs/design-references/scenarios name or a YAML path (turns on the Fixture plugin; seeds from devtools/design-seed unless --seed)')
-	parser.add_argument('--size', default='x'.join(map(str, DEFAULT_SIZE)), help='window size driving layout')
+	parser.add_argument('--size', default='x'.join(map(str, DEFAULT_SIZE)), help='scene size driving layout (the window is sized to match)')
 	parser.add_argument('--settle', type=float, default=6.0)
 	parser.add_argument('--plugins', action='store_true', help='start plugins for real values')
 	args = parser.parse_args()

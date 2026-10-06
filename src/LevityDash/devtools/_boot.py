@@ -237,9 +237,11 @@ def boot(
 	# renderer bug and isn't. Racing it by chance is how this first appeared to
 	# work.
 	pump(app, min(1.5, settle))
-	app.main_window.resize(*size)
 	if windowed:
+		app.main_window.resize(*size)
 		app.main_window.show()
+	else:
+		resizeScene(app, size)
 	pump(app, max(settle - 1.5, 1.5))
 	if fixture_pending:
 		# Every display now exists and has been laid out; publishing here means
@@ -254,6 +256,24 @@ def boot(
 			plugin.publish()
 			pump(app, 0.5)
 	return app, LevityDashboard
+
+
+def resizeScene(app, size: Tuple[int, int]) -> None:
+	"""Size the window so the *scene* is ``size``, not the window around it.
+
+	The window carries chrome the scene does not: the menu bar (on platforms with
+	an in-window one) and the status bar. ``main_window.resize(w, h)`` alone made
+	every headless render ``h`` minus that chrome tall - 70px short in the
+	design seed (48px menu bar, 22px status bar), which looked like a layout bug
+	in the scene and is not one. The view's size follows the window by a fixed
+	amount, so one correction is enough.
+	"""
+	window = app.main_window
+	window.resize(*size)
+	pump(app, 0.2)
+	view = window.view
+	window.resize(size[0] + size[0] - view.width(), size[1] + size[1] - view.height())
+	pump(app, 0.2)
 
 
 def startFixture(dashboard) -> None:
