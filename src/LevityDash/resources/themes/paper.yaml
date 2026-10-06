@@ -25,3 +25,4 @@ colors:
 scales:
   load: {0: $good, 60: $warn, 85: $bad}
   temperature: {0°F: '#1d5fa8', 45°F: '#4a8f8a', 70°F: '#b7a03a', 85°F: $accent, 100°F: $bad}
+  sky: {0: '#f6f2ea', 1: '#e7dec9'}
