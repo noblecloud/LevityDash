@@ -648,6 +648,9 @@ class DisplayType(str, Enum, metaclass=ClosestMatchEnumMeta):
 	Graph = 'graph'
 	LinePlot = 'plot'
 	BarPlot = 'bar'
+	#: A `realtime.bar` display. Reached by name from `Realtime._init_args_` (`bar` alone is the plot above);
+	#: the bar itself reports `Gauge`, so the value feed that drives a dial drives it too.
+	Bar = 'meter-bar'
 	ViolinPlot = 'violin'
 	BarGraph = 'bargraph'
 	WindVein = 'windVein'

@@ -93,7 +93,8 @@ class Realtime(Panel, tag='realtime'):
 
 	@property
 	def subtag(self) -> str:
-		return self.display.displayType.value
+		# A display that is not the plain kind of its `displayType` (a bar reports `gauge`) names itself.
+		return getattr(self.display, 'subtag', None) or self.display.displayType.value
 
 	# Section Realtime
 	def __init__(self, parent: Panel, **kwargs):
@@ -139,7 +140,9 @@ class Realtime(Panel, tag='realtime'):
 			# mangled the string down to nothing and crashed downstream in
 			# DisplayType.__getitem__. removeprefix() is a no-op when the
 			# prefix isn't present, so both "realtime.text" and "text" work.
-			display['displayType'] = DisplayType[displayType.removeprefix('realtime.')]
+			name = displayType.removeprefix('realtime.')
+			# `bar` fuzzy-matches the bar *plot*; a meter bar is named outright.
+			display['displayType'] = DisplayType.Bar if name == 'bar' else DisplayType[name]
 			kwargs['display'] = display
 		super(Realtime, self)._init_args_(*args, **kwargs)
 
@@ -315,6 +318,9 @@ class Realtime(Panel, tag='realtime'):
 				case DisplayType.Gauge:
 					from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Gauge import Gauge
 					return Gauge(parent=self, **value)
+				case DisplayType.Bar:
+					from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.bar import Bar
+					return Bar(parent=self, **value)
 				case _:
 					raise ValueError(f'Unknown Display Type: {display_type}')
 
@@ -774,6 +780,26 @@ class RealtimeGauge(Realtime, tag='realtime.gauge'):
 				value.pop('displayType', DisplayType.Gauge)
 				from LevityDash.lib.ui.frontends.PySide.Modules import Gauge
 				return Gauge(parent=self, **value)
+
+
+class RealtimeBar(Realtime, tag='realtime.bar'):
+
+	@property
+	def subtag(self) -> str:
+		return 'bar'
+
+	@StateProperty(key='display')
+	def display(self) -> Display:
+		pass
+
+	@display.decode
+	def display(self, value) -> Display:
+		if isinstance(value, dict):
+			# A bar reports `DisplayType.Gauge` (it is a `Meter`), which is what this class's
+			# value feed keys on, so the same updateSlot path drives both.
+			value.pop('displayType', DisplayType.Gauge)
+			from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.bar import Bar
+			return Bar(parent=self, **value)
 
 
 # Parked (2026-10-04): the "21 minutes ago" label cluttered every stale panel.
