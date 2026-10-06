@@ -1,0 +1,19 @@
+# A line whose width follows another reading: the temperature line gets thicker
+# where the wind blows harder. `thickness: {key, weight: [thin, thick]}`; the
+# weights are in the units `weight` uses, and `range: [lo, hi]` pins the values
+# they stand for (default: the lowest and highest in view).
+- type: graph
+  name: temperature
+  timeframe: {days: 1, hours: 12}
+  annotations:
+    dayLabels: {enabled: false}
+    hourLabels: {alignment: BottomCenter}
+  figures:
+  - figure: temperature
+    margins: {bottom: 20%, top: 20%}
+    environment.temperature.temperature:
+      plot:
+        type: plot
+        gradient: TemperatureGradient
+        thickness: {key: environment.wind.speed.speed, weight: [0.15, 1.4]}
+      resolution: 2
