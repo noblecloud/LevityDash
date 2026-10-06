@@ -1501,20 +1501,26 @@ class ObservationDict(PublishedDict):
 			if key('environment.humidity.humidity') in keys:
 				humidity = self[key('environment.humidity.humidity')]
 
-				if key('environment.temperature.dewpoint') not in keys and self.schema.get('environment.temperature.dewpoint', None):
-					self._calculatedKeys.add(key('environment.temperature.dewpoint'))
-					dewpoint = temperature.dewpoint(humidity.value)
-					dewpoint.key = CategoryItem('environment.temperature.dewpoint').withIdentity(identity)
-					dewpoint = TimeSeriesItem(dewpoint, timestamp=timestamp)
-					self[key('environment.temperature.dewpoint')] = dewpoint
+				# A packet that cannot carry humidity decodes as 0 (the byte is absent, not a
+				# reading). Everything derived from it is undefined there: dewpoint's log(0)
+				# raises, and a heat index at 0% is fiction. Derive nothing, and say so once.
+				if humidity.value > 0:
+					if key('environment.temperature.dewpoint') not in keys and self.schema.get('environment.temperature.dewpoint', None):
+						self._calculatedKeys.add(key('environment.temperature.dewpoint'))
+						dewpoint = temperature.dewpoint(humidity.value)
+						dewpoint.key = CategoryItem('environment.temperature.dewpoint').withIdentity(identity)
+						dewpoint = TimeSeriesItem(dewpoint, timestamp=timestamp)
+						self[key('environment.temperature.dewpoint')] = dewpoint
 
-				if key('environment.temperature.heatIndex') not in keys and self.schema.get('environment.temperature.heatIndex', None):
-					self._calculatedKeys.add(key('environment.temperature.heatIndex'))
-					heatIndex = temperature.heatIndex(humidity.value)
-					heatIndex.key = CategoryItem('environment.temperature.heatIndex').withIdentity(identity)
-					heatIndex = TimeSeriesItem(heatIndex, timestamp=timestamp)
-					self[key('environment.temperature.heatIndex')] = heatIndex
-					keys.add(key('environment.temperature.heatIndex'))
+					if key('environment.temperature.heatIndex') not in keys and self.schema.get('environment.temperature.heatIndex', None):
+						self._calculatedKeys.add(key('environment.temperature.heatIndex'))
+						heatIndex = temperature.heatIndex(humidity.value)
+						heatIndex.key = CategoryItem('environment.temperature.heatIndex').withIdentity(identity)
+						heatIndex = TimeSeriesItem(heatIndex, timestamp=timestamp)
+						self[key('environment.temperature.heatIndex')] = heatIndex
+						keys.add(key('environment.temperature.heatIndex'))
+				else:
+					log.verbose(f'{self}: humidity reads {humidity.value}, so no dewpoint or heat index is derived from it', verbosity=4)
 
 			if key('environment.wind.speed.speed') in keys:
 				windSpeed = self[key('environment.wind.speed.speed')]
@@ -1550,19 +1556,21 @@ class ObservationDict(PublishedDict):
 			if key('indoor.humidity.humidity') in keys:
 				humidity = self[key('indoor.humidity.humidity')]
 
-				if key('indoor.temperature.dewpoint') not in keys:
-					self._calculatedKeys.add(key('indoor.temperature.dewpoint'))
-					dewpoint = temperature.dewpoint(humidity.value)
-					dewpoint.key = CategoryItem('indoor.temperature.dewpoint').withIdentity(identity)
-					dewpoint = TimeSeriesItem(dewpoint, timestamp=timestamp)
-					self[key('indoor.temperature.dewpoint')] = dewpoint
+				# Same guard as the environment block: a 0 here is an absent byte, not air.
+				if humidity.value > 0:
+					if key('indoor.temperature.dewpoint') not in keys:
+						self._calculatedKeys.add(key('indoor.temperature.dewpoint'))
+						dewpoint = temperature.dewpoint(humidity.value)
+						dewpoint.key = CategoryItem('indoor.temperature.dewpoint').withIdentity(identity)
+						dewpoint = TimeSeriesItem(dewpoint, timestamp=timestamp)
+						self[key('indoor.temperature.dewpoint')] = dewpoint
 
-				if key('indoor.temperature.heatIndex') not in keys:
-					self._calculatedKeys.add(key('indoor.temperature.heatIndex'))
-					heatIndex = temperature.heatIndex(humidity.value)
-					heatIndex.key = CategoryItem('indoor.temperature.heatIndex').withIdentity(identity)
-					heatIndex = TimeSeriesItem(heatIndex, timestamp=timestamp)
-					self[key('indoor.temperature.heatIndex')] = heatIndex
+					if key('indoor.temperature.heatIndex') not in keys:
+						self._calculatedKeys.add(key('indoor.temperature.heatIndex'))
+						heatIndex = temperature.heatIndex(humidity.value)
+						heatIndex.key = CategoryItem('indoor.temperature.heatIndex').withIdentity(identity)
+						heatIndex = TimeSeriesItem(heatIndex, timestamp=timestamp)
+						self[key('indoor.temperature.heatIndex')] = heatIndex
 
 	def timeKey(self, data) -> str:
 		if 'timestamp' in data:
