@@ -69,7 +69,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Callable, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 # Before ANY LevityDash import: the QApplication is constructed during the
 # package import chain and the platform cannot change afterwards. See _boot.
