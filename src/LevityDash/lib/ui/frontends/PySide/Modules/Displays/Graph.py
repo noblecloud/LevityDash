@@ -3,6 +3,7 @@ from asyncio import Task
 import numpy as np
 import operator
 import platform
+import re
 from PySide6.QtCore import (
 	QLineF, QMetaObject, QObject, QPoint, QPointF, QRect, QRectF, QSize, QSizeF, Qt, QThread, QTimer,
 	Signal, Slot
@@ -19,6 +20,8 @@ from PySide6.QtWidgets import (
 )
 from abc import abstractmethod
 from builtins import isinstance
+from collections.abc import Mapping
+from contextlib import suppress
 from datetime import datetime, timedelta
 from difflib import get_close_matches
 from enum import Enum
@@ -446,12 +449,31 @@ class GraphItemData(Stateful, tag=...):
 
 	@graphic.factory
 	def graphic(self) -> 'Plot':
-		self._graphic = graphic = LinePlot(self)
+		# The dashboard's whole state is stashed on the owner before its children are built, so the plot
+		# class can follow `plot: {type: bar}` from the start rather than swapping afterwards.
+		raw = getattr(self, '_rawItemState', None)
+		plotState = raw.get('plot') if isinstance(raw, dict) else None
+		self._graphic = graphic = plotClassFor(plotState)(self)
 		return graphic
 
 	@graphic.update
 	def graphic(self, value: dict):
+		cls = plotClassFor(value)
+		if type(self._graphic) is not cls:
+			self.__swapGraphic(cls)
 		self._graphic.state = value
+
+	def __swapGraphic(self, cls: Type['Plot']):
+		"""Replace the plot with one of another class: a reload that changed `type`."""
+		old = self._graphic
+		with suppress(RuntimeError, TypeError):
+			self._figure.signals.clicked.disconnect(old.showToolTip)
+		old.setParentItem(None)
+		if (scene := old.scene()) is not None:
+			scene.removeItem(old)
+		self._graphic = cls(self)
+		self._graphic.setParentItem(self._figure)
+		clearCacheAttr(self, 'data', 'dataTransform')
 
 	@StateProperty(sortOrder=2, default=Stateful, dependencies={'key'}, allowNone=False)
 	def labels(self) -> 'PlotLabels':
@@ -980,7 +1002,10 @@ class GraphItemData(Stateful, tag=...):
 
 		# Interpolate
 
-		if self.interpolate and len(x) > 5:
+		# Bars sit on the source's own samples: resampling would turn one hour into dozens of slivers.
+		raw = getattr(getattr(self, '_graphic', None), 'wantsRawData', False)
+
+		if self.interpolate and len(x) > 5 and not raw:
 
 			# create new period for the given resolution
 
@@ -1002,7 +1027,7 @@ class GraphItemData(Stateful, tag=...):
 			y = interpField(x_interp)
 
 		# Smooth
-		if self.smooth and len(x) > 5:
+		if self.smooth and len(x) > 5 and not raw:
 			smooth_type = self.smoothingType
 			strength = self.smoothingStrength
 			dpi = getDPI(self.graph.scene().view.screen())
@@ -1308,13 +1333,23 @@ class Plot(GlowMixin, QGraphicsPixmapItem, Stateful):
 	def figure(self, value: 'Figure'):
 		self._figure = value
 
+	displayType: ClassVar[DisplayType] = DisplayType.LinePlot
+	# Bars are drawn per source sample; lines resample and smooth first.
+	wantsRawData: ClassVar[bool] = False
+
 	@StateProperty(key='type', sortOrder=0)
 	def plotType(self) -> DisplayType:
-		return DisplayType.LinePlot
+		return self.displayType
 
 	@plotType.setter
 	def plotType(self, value: DisplayType):
-		log.warning('Setting plot type currently not implemented.')
+		# The class was chosen from `type` when the plot was built (plotClassFor); nothing left to apply.
+		# (A body of only `pass` reads to statekit as "inherit the parent's setter".)
+		log.debug(f'{self.log_repr}: plot type {value} was applied when the plot was built')
+
+	def valueAnchor(self) -> Optional[float]:
+		"""A value the figure's axis must include, or None. Bars are rooted at one."""
+		return None
 
 	@plotType.encode
 	def plotType(value: DisplayType) -> str:
@@ -1860,6 +1895,345 @@ class LinePlot(Plot):
 			i += 2
 			path.quadTo(c, endPt)
 		return path
+
+
+# Section FilledPlot
+class FilledPlot(Plot):
+	"""Base of the plots drawn as filled shapes cut from the samples (bars, violins).
+
+	A subclass says how by overriding `_shapes`, which turns the samples, already mapped to figure pixels,
+	into one path whose first element sits on the left edge (the item is placed from it, see updateScale).
+	Colour, gradient (value against height), `opacity` and `glow` work as on a line; `weight`, `dash` and
+	`cap` are line settings and do nothing here.
+	"""
+	wantsRawData = True
+
+	_barWidth: float = 0.8
+	_barPixels: float = 1.0
+
+	def __init__(self, *args, **kwargs):
+		self._dashPattern = None
+		super().__init__(*args, **kwargs)
+
+	@StateProperty(key='width', default=0.8, after=Plot.updateAppearance)
+	def barWidth(self) -> float:
+		return self._barWidth
+
+	@barWidth.setter
+	def barWidth(self, value: float):
+		self._barWidth = value
+		self._pathDirty = True
+
+	@barWidth.decode
+	def barWidth(value) -> float:
+		"""The share of each slot the shape fills: `0.8` or `80%`."""
+		if isinstance(value, str):
+			value = float(value.strip().removesuffix('%')) / (100 if value.strip().endswith('%') else 1)
+		return clamp(float(value), 0.05, 1.0)
+
+	@barWidth.encode
+	def barWidth(value: float) -> float:
+		return round(value, 3)
+
+	@property
+	def weight_px(self) -> float:
+		# The glow and the pen width the base class hands the painter stand for the shape's thickness.
+		return self._barPixels
+
+	@property
+	def img_padding(self) -> QSize:
+		pad = 2.0
+		if (glow := self.glow) is not None:
+			pad += 2 * glow.reach(self._barPixels, filled=True)
+		return QSize(int(pad) + 1, int(pad) + 1) * self.scene().view.devicePixelRatio()
+
+	@property
+	def expected_size(self) -> QSize:
+		return QSizeF(self.mapped_path.boundingRect().width(), self.figure.height()).toSize()
+
+	def _updatePath(self):
+		# Points only: where each sample sits in the figure. The shapes are cut from them once mapped to pixels.
+		path = self._normalPath
+		path.clear()
+		for i, value in enumerate(self.data.plotValues):
+			path.moveTo(value) if not i else path.lineTo(value)
+
+	@property
+	def mapped_path(self):
+		if self._normalPath.elementCount() == 0 and self.data.timeseries:
+			self._updatePath()
+		points = self.data.combinedTransform.map(self._normalPath)
+		count = points.elementCount()
+		xs = np.array([points.elementAt(i).x for i in range(count)])
+		ys = np.array([points.elementAt(i).y for i in range(count)])
+		path = self._shapes(xs, ys)
+		path.setFillRule(Qt.WindingFill)
+		return path
+
+	def _slotPixels(self, xs: np.ndarray) -> float:
+		"""The width of one sample's slot: the usual gap between samples, or an hour for a lone one."""
+		slot = float(np.median(np.diff(xs))) if len(xs) > 1 else 3600 * self.figure.graph.pixelsPerSecond
+		return max(slot, 1.0)
+
+	def _shapes(self, xs: np.ndarray, ys: np.ndarray) -> QPainterPath:
+		raise NotImplementedError
+
+	def _onePerSlot(self, xs: np.ndarray, ys: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+		"""Samples folded to one per slot of the series' own grid.
+
+		A current observation lands between the hourly forecast samples; drawn as it is, it would
+		be a stray bar crowding its neighbour. The slots follow the usual gap between samples and the
+		phase most of them share, and a slot keeps the sample closest to its centre.
+		"""
+		times = self.data.data[0]
+		if len(times) != len(xs) or len(times) < 3:
+			return xs, ys
+		step = float(np.median(np.diff(times)))
+		if step <= 0:
+			return xs, ys
+		phase = float(np.median(times % step))
+		slots = np.round((times - phase) / step).astype(np.int64)
+		distance = np.abs(times - (slots * step + phase))
+		keep = np.zeros(len(times), dtype=bool)
+		for slot in np.unique(slots):
+			inSlot = np.flatnonzero(slots == slot)
+			keep[inSlot[np.argmin(distance[inSlot])]] = True
+		return xs[keep], ys[keep]
+
+	def _fix_shape(self) -> QPainterPath:
+		# Filled shapes are their own hit area.
+		return QPainterPath(self.translated_mapped_path)
+
+	def _render_paint(self, size: QSize, dpr: float, pen: QPen, path: QPainterPath, glow=None) -> QImage:
+		# Painter worker: plain values in, QImage out (see Plot._render_paint).
+		img = QImage(size, QImage.Format.Format_ARGB32_Premultiplied)
+		img.setDevicePixelRatio(dpr)
+		img.fill(Qt.transparent)
+		painter = EffectPainter(img)
+		painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+		brush = pen.brush()
+		paintGlow(painter, path, brush, pen.widthF(), glow)
+		painter.setPen(Qt.NoPen)
+		painter.setBrush(brush)
+		painter.drawPath(path)
+		painter.end()
+		return img
+
+
+# Section BarPlot
+class BarPlot(FilledPlot):
+	"""Filled bars, one per source sample, rising from a baseline: `plot: {type: bar}`."""
+	displayType = DisplayType.BarPlot
+
+	_radius: float = 0.2
+	_base: float = 0.0
+	_align: str = 'center'
+
+	@StateProperty(default=0.2, after=Plot.updateAppearance)
+	def radius(self) -> float:
+		return self._radius
+
+	@radius.setter
+	def radius(self, value: float):
+		self._radius = value
+
+	@radius.decode
+	def radius(value) -> float:
+		"""How round the tip is, as a share of the bar's width: 0 square, 0.5 a full half-circle."""
+		return clamp(float(value), 0.0, 0.5)
+
+	@radius.encode
+	def radius(value: float) -> float:
+		return round(value, 3)
+
+	@StateProperty(default=0.0, after=Plot.updateAppearance)
+	def base(self) -> float:
+		return self._base
+
+	@base.setter
+	def base(self, value: float):
+		self._base = value
+		self.data.figure.dataValueRange.emitChanged()
+
+	@base.decode
+	def base(value) -> float:
+		"""The value the bars rise from (in the data's own unit). Held inside the axis range."""
+		return float(value)
+
+	@StateProperty(default='center', after=Plot.updateAppearance)
+	def align(self) -> str:
+		return self._align
+
+	@align.setter
+	def align(self, value: str):
+		self._align = value
+
+	@align.decode
+	def align(value: str) -> str:
+		"""Where a sample's slot sits against its timestamp: `center`, `start` (the hour that begins at it) or `end` (the hour that ended)."""
+		value = str(value).strip().lower()
+		if value not in ('center', 'start', 'end'):
+			raise ValueError(f'bar align must be center, start or end, not {value!r}')
+		return value
+
+	def valueAnchor(self) -> float:
+		return self._base
+
+	def _baselineY(self) -> float:
+		axis = self.figure.dataValueRange
+		low, high = axis.min, axis.max
+		share = (clamp(self._base, low, high) - low) / (high - low)
+		return self.figure.figureTransform.map(QPointF(0, share)).y()
+
+	def _shapes(self, xs: np.ndarray, ys: np.ndarray) -> QPainterPath:
+		path = QPainterPath()
+		if not len(xs):
+			return path
+		xs, ys = self._onePerSlot(xs, ys)
+		base = self._baselineY()
+		slot = self._slotPixels(xs)
+		width = max(slot * self._barWidth, 1.0)
+		self._barPixels = width
+		slotLeft = {'center': -slot / 2, 'start': 0.0, 'end': -slot}[self._align]
+		inset = slotLeft + (slot - width) / 2
+
+		path.moveTo(xs[0] + inset, base)
+		for x, y in zip(xs, ys):
+			left = x + inset
+			rise = y - base
+			if abs(rise) < 1e-6:
+				continue
+			if abs(rise) < 1:
+				y = base + (1 if rise > 0 else -1)
+			tip = -1 if y < base else 1
+			r = min(self._radius * width, abs(y - base) / 2)
+			path.moveTo(left, base)
+			path.lineTo(left, y - tip * r)
+			path.quadTo(left, y, left + r, y)
+			path.lineTo(left + width - r, y)
+			path.quadTo(left + width, y, left + width, y - tip * r)
+			path.lineTo(left + width, base)
+			path.closeSubpath()
+		return path
+
+
+# Section ViolinPlot
+_DURATION_UNITS = {'s': 1, 'sec': 1, 'm': 60, 'min': 60, 'h': 3600, 'hr': 3600, 'd': 86400, 'w': 604800}
+
+
+class ViolinPlot(FilledPlot):
+	"""One violin per time bucket: the spread of the readings inside it, `plot: {type: violin, bucket: 1h}`.
+
+	Each bucket's samples become a mirrored density outline, widest where readings cluster. It needs
+	several samples per bucket (a sensor logging every few minutes, not an hourly forecast); a bucket
+	with fewer than two draws nothing. Every violin is scaled to fill its own width.
+	"""
+	displayType = DisplayType.ViolinPlot
+
+	_bucket: float = 3600.0
+	_bandwidth: float = 1.0
+
+	@StateProperty(default=3600.0, after=Plot.updateAppearance)
+	def bucket(self) -> float:
+		return self._bucket
+
+	@bucket.setter
+	def bucket(self, value: float):
+		self._bucket = value
+		self._pathDirty = True
+
+	@bucket.decode
+	def bucket(value) -> float:
+		"""The time one violin covers: `1h`, `30min`, `1d`. A bare number is hours. Stored as seconds."""
+		if isinstance(value, (int, float)):
+			seconds = float(value) * 3600
+		else:
+			match = re.fullmatch(r'\s*([\d.]+)\s*([a-z]*)\s*', str(value).lower())
+			if match is None or (match[2] and match[2] not in _DURATION_UNITS):
+				raise ValueError(f'violin bucket must look like 1h, 30min or 1d, not {value!r}')
+			seconds = float(match[1]) * (_DURATION_UNITS[match[2]] if match[2] else 3600)
+		if seconds <= 0:
+			raise ValueError('violin bucket must be longer than zero')
+		return seconds
+
+	@bucket.encode
+	def bucket(value: float) -> str:
+		return f'{value / 3600:g}h'
+
+	@StateProperty(default=1.0, after=Plot.updateAppearance)
+	def bandwidth(self) -> float:
+		return self._bandwidth
+
+	@bandwidth.setter
+	def bandwidth(self, value: float):
+		self._bandwidth = value
+
+	@bandwidth.decode
+	def bandwidth(value) -> float:
+		"""How smooth the outline is, as a multiple of the automatic choice: below 1 shows more detail."""
+		return clamp(float(value), 0.1, 10.0)
+
+	@bandwidth.encode
+	def bandwidth(value: float) -> float:
+		return round(value, 3)
+
+	def _shapes(self, xs: np.ndarray, ys: np.ndarray) -> QPainterPath:
+		path = QPainterPath()
+		if len(xs) < 2:
+			return path
+		times = self.data.data[0]
+		if len(times) != len(xs):
+			return path
+		pps = (xs[-1] - xs[0]) / (times[-1] - times[0]) if times[-1] > times[0] else self.figure.graph.pixelsPerSecond
+		offset = LOCAL_TIMEZONE.utcoffset(datetime.fromtimestamp(times[0])).total_seconds() if self._bucket >= 86400 else 0
+		bucketIds = np.floor((times + offset) / self._bucket).astype(np.int64)
+		slot = self._bucket * pps
+		width = max(slot * self._barWidth, 1.0)
+		self._barPixels = width
+
+		shapes = []
+		for bucketId in np.unique(bucketIds):
+			chosen = bucketIds == bucketId
+			if chosen.sum() < 2:
+				continue
+			centre = xs[0] + ((bucketId * self._bucket - offset) + self._bucket / 2 - times[0]) * pps
+			values = ys[chosen]
+			spread = float(values.std())
+			h = max(1.06 * spread * len(values) ** -0.2 * self._bandwidth, 1.0)
+			grid = np.linspace(values.min(), values.max(), 40)
+			density = np.exp(-0.5 * ((grid[:, None] - values[None, :]) / h) ** 2).sum(axis=1)
+			shapes.append((centre, grid, density / density.max()))
+		if not shapes:
+			return path
+		# The first element marks the left edge. A bare moveTo would be replaced by the next one, and Qt drops a zero-length line, so it gets a hair-long one.
+		edge = QPointF(shapes[0][0] - width / 2, float(ys.mean()))
+		path.moveTo(edge)
+		path.lineTo(edge + QPointF(0.001, 0))
+		for centre, grid, density in shapes:
+			half = density * width / 2
+			path.moveTo(centre + half[0], grid[0])
+			for g, d in zip(grid[1:], half[1:]):
+				path.lineTo(centre + d, g)
+			for g, d in zip(grid[::-1], half[::-1]):
+				path.lineTo(centre - d, g)
+			path.closeSubpath()
+		return path
+
+
+_PLOT_KINDS = {
+	'bar': BarPlot, 'bars': BarPlot, 'barplot': BarPlot, 'bargraph': BarPlot,
+	'violin': ViolinPlot, 'violins': ViolinPlot, 'violinplot': ViolinPlot,
+}
+
+
+def plotClassFor(state) -> Type[Plot]:
+	"""The plot class a `plot:` mapping asks for through `type`: bars or violins when it says so, a line otherwise."""
+	kind = state.get('type') if isinstance(state, Mapping) else None
+	if isinstance(kind, Enum):
+		kind = kind.value
+	if isinstance(kind, str):
+		return _PLOT_KINDS.get(kind.strip().lower().replace('-', '').replace('_', ''), LinePlot)
+	return LinePlot
 
 
 # class BackgroundImage(QGraphicsPixmapItem):
