@@ -100,6 +100,20 @@ def gaugeKeyName(gauge: 'Gauge') -> str:
 		return '<unkeyed>'
 
 
+def glyphOutlineWidth(font: QFont) -> float:
+	"""A glyph's own stroke thickness: the base width a text glow grows from.
+
+	A glyph is a filled shape, so `paintGlow` strokes its halo along the glyph outline
+	(`filled=True`) and reaches `reach` of this width outward. The font's own stroke
+	thickness is `QFontMetricsF.lineWidth()` (its underline width - the usual stem
+	proxy); doubling it reads as a glow rather than a hairline, and the floor of a
+	twentieth of the pixel size keeps a light weight from vanishing.
+	"""
+	metrics = QFontMetricsF(font)
+	size = font.pixelSize() if font.pixelSize() > 0 else metrics.ascent()
+	return max(1.0, metrics.lineWidth() * 2.0, size * 0.05)
+
+
 class GaugeItem:
 	"""
 	Base class for all gauge items.  This class provides a reference to the gauge that the item belongs to
@@ -1397,7 +1411,7 @@ def _endLabelPosition(value):
 	return value
 
 
-class GaugeTickText(GaugeItem, AnnotationText):
+class GaugeTickText(GlowMixin, GaugeItem, AnnotationText, Stateful):
 
 	"""
 	TODO
@@ -1569,7 +1583,38 @@ class GaugeTickText(GaugeItem, AnnotationText):
 		return QPainterPath(self._shape)
 
 	def boundingRect(self) -> QRectF:
-		return self._shape.boundingRect()
+		rect = self._shape.boundingRect()
+		try:
+			glow = self._glowToDraw()
+			return rect if glow is None else glow.pad(rect, self.glowWidth(), filled=True)
+		except Exception:
+			# Asked before the font or the group exists, while the item loads.
+			return rect
+
+	def _glowToDraw(self) -> Optional[Glow]:
+		"""The label's own glow, else the group's: a tick label has no state of its own."""
+		return resolveGlow(self.glow, getattr(self.group, 'glow', None))
+
+	_glyphWidthCache: Optional[tuple] = None
+
+	def glowWidth(self) -> float:
+		"""The glyph stroke thickness at the current font: the halo's base width."""
+		font = self.font()
+		key = font.key()
+		cache = self._glyphWidthCache
+		if cache is None or cache[0] != key:
+			self._glyphWidthCache = cache = (key, glyphOutlineWidth(font))
+		return cache[1]
+
+	def glowChanged(self):
+		self.prepareGeometryChange()
+		self.update()
+
+	def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget = None):
+		glow = self._glowToDraw()
+		if glow is not None:
+			paintGlow(painter, self.path(), self.brush(), self.glowWidth(), glow, filled=True)
+		super().paint(painter, option, widget)
 
 	def setPos(self, pos: QPointF):
 		"""This method is overridden to ensure that the text is not placed overlapping arc or tick."""
@@ -1745,7 +1790,13 @@ class GaugeTickText(GaugeItem, AnnotationText):
 		return self.tick is self.surface.ticks[0] or self.tick is self.surface.ticks[-1]
 
 
-class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
+class GaugeTickTextGroup(AnnotationLabels[GaugeTickText], GlowMixin):
+	# The Stateful base is written first on purpose: statekit infers a property's
+	# parent class from the first name in this line (`introspect.ownerParentClass`),
+	# so a mixin written first would make every `...`-bodied getter here (position,
+	# enabled, rotation, ...) inherit from the mixin instead of the labels class and
+	# come back with no getter at all. The metaclass hoists GlowMixin to the front of
+	# the MRO regardless, so the glow property is still available.
 
 	__defaults__ = {
 		'height': Size.Height(0.15, relative=True),
@@ -1758,6 +1809,11 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText]):
 
 	surface: 'TickSurface'
 	source: 'Graduations'
+
+	def glowChanged(self):
+		"""The group draws nothing: each label's halo grows when the group's glow changes."""
+		for label in self:
+			label.glowChanged()
 
 	def shape(self) -> QPainterPath:
 		path = QPainterPath()
@@ -3751,7 +3807,7 @@ class _FillEnd:
 		self._fill.setEnd(self._end, value)
 
 
-class GaugeCaption(GaugePathItem):
+class GaugeCaption(GlowMixin, GaugePathItem, Stateful):
 	"""A small line of text above (``caption``) or below (``sub-label``) the centre value.
 
 	The spec is a string (static text) or a mapping: ``text`` (may hold ``{}``
@@ -3760,7 +3816,8 @@ class GaugeCaption(GaugePathItem):
 	(``duration`` turns minutes into ``4h 49m``; any other string is a Python
 	format spec, and a mapping is the value label's ``format``, e.g. ``{precision: 0, show_unit: false}``), ``warp`` (bend the text along a
 	circle, see `WarpSpec`; then ``gap`` and ``offset`` do not apply), ``size`` (text height as a share of the dial's diameter,
-	default 7%), ``color``, ``weight`` (``bold``), ``gap`` (distance from the
+	default 7%), ``color``, ``weight`` (``bold``), ``glow`` (a halo around the
+	glyphs, same forms as elsewhere), ``gap`` (distance from the
 	value, a share of the diameter, default 2%) and ``offset`` (``{x, y}``, shares of the
 	diameter, added to where the gap puts it). A value source with no value
 	yet shows nothing. A bad spec logs the gauge key and shows nothing.
@@ -3780,6 +3837,8 @@ class GaugeCaption(GaugePathItem):
 	_offset: Optional[tuple] = None
 	_binding: Optional[Binding] = None
 	_warp: Optional[WarpSpec] = None
+	#: The font the current path was built from: the glyph thickness the glow grows from.
+	_glyphFont: Optional[QFont] = None
 
 	def __init__(self, gauge: 'Gauge', side: str):
 		super().__init__(gauge)
@@ -3792,16 +3851,38 @@ class GaugeCaption(GaugePathItem):
 			self._binding.unlink()
 			self._binding = None
 
+	def glowChanged(self):
+		self.prepareGeometryChange()
+		self.update()
+
+	def glowWidth(self) -> float:
+		"""The glyph stroke thickness at the font the path was built from."""
+		return glyphOutlineWidth(self._glyphFont) if self._glyphFont is not None else 0.0
+
+	def boundingRect(self) -> QRectF:
+		rect = super().boundingRect()
+		glow = self.glow
+		if glow is None or self._glyphFont is None:
+			return rect
+		return glow.pad(rect, self.glowWidth(), filled=True)
+
+	def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget = None):
+		glow = self.glow
+		if glow is not None and self._glyphFont is not None:
+			paintGlow(painter, self.path(), self.brush(), self.glowWidth(), glow, filled=True)
+		super().paint(painter, option, widget)
+
 	def configure(self, spec) -> None:
 		self.close()
 		if isinstance(spec, str):
 			spec = {'text': spec}
 		name = gaugeKeyName(self.gauge)
-		unknown = set(spec) - {'text', 'value', 'format', 'size', 'color', 'weight', 'gap', 'offset', 'warp'}
+		unknown = set(spec) - {'text', 'value', 'format', 'size', 'color', 'weight', 'glow', 'gap', 'offset', 'warp'}
 		if unknown:
 			log.warning(f'Gauge {name} {self._side} ignored unknown keys {sorted(map(str, unknown))}')
 		self._offset = _decodeOffset(spec.get('offset'))
 		self._warp = WarpSpec.decode(spec.get('warp'))
+		self.glow = spec.get('glow')
 		self._template = spec.get('text')
 		self._hasValue = False
 		self._format = spec.get('format')
@@ -3881,6 +3962,7 @@ class GaugeCaption(GaugePathItem):
 			font.setPixelSize(max(1, int(size_px(self._size, gauge.radius * 2, dimension=DimensionType.height) or 1)))
 			if self._bold:
 				font.setWeight(QFont.Weight.Bold)
+			self._glyphFont = font
 			path = QPainterPath()
 			path.addText(0, 0, font, self._text)
 			rect = path.boundingRect()
@@ -3916,9 +3998,40 @@ class GaugeCaption(GaugePathItem):
 			log.warning(f'Gauge {gaugeKeyName(gauge)} could not place its {self._side}: {e!r}')
 
 
-class GaugeText(AnnotationText, GaugeItem):
+class GaugeText(GlowMixin, AnnotationText, GaugeItem, Stateful):
 	def __init__(self, *args, **kwargs):
 		super(GaugeText, self).__init__(*args, **kwargs)
+
+	def boundingRect(self) -> QRectF:
+		rect = super().boundingRect()
+		glow = self.glow
+		if glow is None:
+			return rect
+		try:
+			return glow.pad(rect, self.glowWidth(), filled=True)
+		except Exception:
+			# Asked before the font exists, while the item loads.
+			return rect
+
+	_glyphWidthCache: Optional[tuple] = None
+
+	def glowWidth(self) -> float:
+		"""The glyph stroke thickness at the current font: the halo's base width."""
+		font = self.font()
+		key = font.key()
+		cache = self._glyphWidthCache
+		if cache is None or cache[0] != key:
+			self._glyphWidthCache = cache = (key, glyphOutlineWidth(font))
+		return cache[1]
+
+	def glowChanged(self):
+		self.prepareGeometryChange()
+		self.update()
+
+	def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget = None):
+		if self.glow is not None:
+			paintGlow(painter, self.path(), self.brush(), self.glowWidth(), self.glow, filled=True)
+		super().paint(painter, option, widget)
 
 
 class GaugeLabel(NonInteractiveLabel, ColorGradientMixin, GaugeItem):
