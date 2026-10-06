@@ -4057,6 +4057,14 @@ class GaugeValueLabel(GaugeLabel):
 			# self._debug_paint_shape = rect_to_shape(r)
 			return r
 
+		def _stripRect(self) -> QRectF:
+			"""The strip beside or under the dial, less the room a unit hung under an under-dial value needs."""
+			rect = self.parent.parent._sideValueRect()
+			if self._position is ValueDisplayPosition.FloatUnder and (reserve := self._unit_reserve()):
+				# The reserve may not take more than 40% of the strip, so a short box still shows the value.
+				rect.setBottom(rect.bottom() - min(reserve, rect.height() * 0.4))
+			return rect
+
 		def getTextPosition(self, limitRect: QRectF = None) -> QPointF:
 
 			gauge: Gauge = self.parent.parent
@@ -4075,7 +4083,7 @@ class GaugeValueLabel(GaugeLabel):
 			match self._position:
 				case ValueDisplayPosition.Left | ValueDisplayPosition.Right | ValueDisplayPosition.FloatUnder:
 					# Beside or under the dial: the middle of the strip the dial left free.
-					return gauge._sideValueRect().center()
+					return self._stripRect().center()
 				case ValueDisplayPosition.Inline:
 					diff = arc_center - gauge_center
 					return arc_center - (diff * (angle_spread / 360))
@@ -4116,8 +4124,11 @@ class GaugeValueLabel(GaugeLabel):
 			if self._position in (DisplayPosition.Left, DisplayPosition.Right, DisplayPosition.FloatUnder):
 				# The strip beside or under the dial is empty by construction, so there is
 				# nothing to collide with: fit the glyphs to the strip.
-				strip = gauge._sideValueRect()
-				strip = strip.adjusted(*([self.parent.value_padding_px] * 2), *([-self.parent.value_padding_px] * 2))
+				strip = self._stripRect()
+				pad = self.parent.value_padding_px
+				# With a unit hung beneath, the strip is already short; a full pad above and below would leave no glyph.
+				padY = min(pad, strip.height() * 0.15) if strip.height() < self.parent.parent._sideValueRect().height() else pad
+				strip = strip.adjusted(pad, padY, -pad, -padY)
 				scale = Text.getTextScale(self, textRect, strip.translated(-self.pos()))
 				base_path = self.path()
 				if (size := self.parent.size) is not None and (glyph_height := base_path.boundingRect().height()) > 0:
