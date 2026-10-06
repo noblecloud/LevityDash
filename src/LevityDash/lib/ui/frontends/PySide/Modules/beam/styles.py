@@ -22,6 +22,7 @@ from PySide6.QtGui import (
 	QLinearGradient,
 	QPainter,
 	QPainterPath,
+	QPainterPathStroker,
 	QPen,
 	QRadialGradient,
 )
@@ -85,6 +86,7 @@ PULSE_HALO = 75
 
 # Cached masks
 _ring_cache: dict[tuple[int, int, float, float], QImage] = {}
+_path_cache: dict[tuple, QImage] = {}
 _conic_cache: dict[tuple[int, int, int, str], QImage] = {}
 _frame_fade_cache: dict[tuple[int, int], QImage] = {}
 _conic_frame_cache: dict[tuple[int, int, int, str], QImage] = {}
@@ -114,6 +116,8 @@ class PaintCtx:
 	sx: float = 1.0  # pulse-outside glow scale x (measured vs 350px ref)
 	sy: float = 1.0  # pulse-outside glow scale y (measured vs 140px ref)
 	color_space: ColorSpace = ColorSpace.HSV  # Oklch re-derives blobs from the sphere palette
+	path: QPainterPath | None = None  # a custom outline in `rect` coordinates; None follows the rounded rect
+	path_key: tuple | None = None  # identifies `path` for the mask cache
 
 
 # ------------------------------------------------------------------ paths
@@ -441,6 +445,158 @@ def blur_image(img: QImage, radius: float) -> QImage:
 	return out
 
 
+# ------------------------------------------------------- custom outlines
+
+def outline(ctx: PaintCtx) -> QPainterPath:
+	"""What the beam follows: the custom path, or the panel's rounded rect."""
+	return ctx.path if ctx.path is not None else rounded_rect_path(ctx.rect, ctx.radius)
+
+
+def _stroke_mask(ctx: PaintCtx, w: int, h: int, width: float, blur: float = 0.0) -> QImage:
+	"""A band of `width` px centred on the custom path, as an alpha mask."""
+	key = ('stroke', ctx.path_key, w, h, width, blur)
+	img = _path_cache.get(key)
+	if img is None:
+		img = QImage(w, h, QImage.Format.Format_ARGB32_Premultiplied)
+		img.fill(Qt.GlobalColor.transparent)
+		stroker = QPainterPathStroker()
+		stroker.setWidth(width)
+		stroker.setCapStyle(Qt.PenCapStyle.RoundCap)
+		stroker.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+		painter = QPainter(img)
+		painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+		painter.fillPath(stroker.createStroke(ctx.path), QColor(255, 255, 255))
+		painter.end()
+		img = blur_image(img, blur) if blur > 0 else img
+		if len(_path_cache) > 64:
+			_path_cache.clear()
+		_path_cache[key] = img
+	return img
+
+
+def band_mask(ctx: PaintCtx, w: int, h: int, band: float = 1.0) -> QImage:
+	"""The thin band along the edge that the stroke and bloom layers show through."""
+	if ctx.path is None:
+		return ring_mask(w, h, ctx.radius, band)
+	return _stroke_mask(ctx, w, h, max(1.0, band) * 2.0)
+
+
+def _stop_alpha(stops: tuple, pos: float) -> float:
+	for (p0, a0), (p1, a1) in zip(stops, stops[1:]):
+		if p0 <= pos <= p1:
+			return a0 if p1 == p0 else a0 + (a1 - a0) * (pos - p0) / (p1 - p0)
+	return 0.0
+
+
+def path_travel_mask(ctx: PaintCtx, w: int, h: int, progress: float, stops: tuple, reach: float) -> QImage:
+	"""A window that runs along the custom path by arc length.
+
+	`stops` is the conic profile of the rectangle version: its alpha at position p
+	becomes the alpha at that share of the way round the path. The window carries
+	`reach` px either side of the path, so it lights the band and the glow inside it.
+	"""
+	path = ctx.path
+	img = QImage(w, h, QImage.Format.Format_ARGB32_Premultiplied)
+	img.fill(Qt.GlobalColor.transparent)
+	length = path.length()
+	if length < 1.0:
+		return img
+	count = max(48, min(600, int(length / 3.0)))
+	painter = QPainter(img)
+	painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+	painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Lighten)
+	painter.setPen(Qt.PenStyle.NoPen)
+	for i in range(count):
+		t = i / count
+		alpha = _stop_alpha(stops, (t - progress) % 1.0)
+		if alpha < 0.01:
+			continue
+		p = path.pointAtPercent(t)
+		gradient = QRadialGradient(p, reach)
+		gradient.setColorAt(0.0, QColor(255, 255, 255, int(alpha * 255)))
+		gradient.setColorAt(1.0, QColor(255, 255, 255, 0))
+		painter.setBrush(gradient)
+		painter.drawEllipse(p, reach, reach)
+	painter.end()
+	return img
+
+
+def window_mask(ctx: PaintCtx, w: int, h: int, progress: float, stops: tuple, reach: float = 40.0, *, frame: bool = False) -> QImage:
+	"""The travelling window: the conic wedge on a rectangle, an arc-length window on a custom path.
+
+	With `frame` the window gates the inner glow, which on a path is the band of
+	`FRAME_BAND` px inside the edge instead of the rectangle's top and bottom strips.
+	"""
+	if ctx.path is None:
+		if frame:
+			return conic_frame_fade_mask(w, h, progress * 360.0, stops=stops)
+		return conic_wedge_mask(w, h, progress * 360.0, stops=stops)
+	window = path_travel_mask(ctx, w, h, progress, stops, reach)
+	if frame:
+		window = apply_mask(window, _stroke_mask(ctx, w, h, FRAME_BAND * 1.6, 6.0))
+	return window
+
+
+def fill_window(painter: QPainter, ctx: PaintCtx, color: QColor, progress: float, stops: tuple, ring: bool = False) -> None:
+	"""Fill the layer with `color` through the travelling window (the conic gradient fill on a rectangle)."""
+	rect = ctx.rect
+	if ctx.path is None:
+		painter.fillRect(rect, _conic_fill_gradient(rect, progress * 360.0, stops, ctx.dark))
+		return
+	w, h = int(rect.width()), int(rect.height())
+	layer = make_layer(w, h)
+	lp = QPainter(layer)
+	lp.fillRect(0, 0, w, h, color)
+	lp.end()
+	painter.drawImage(0, 0, apply_mask(layer, path_travel_mask(ctx, w, h, progress, stops, 6.0 if ring else 14.0)))
+
+
+def line_window(ctx: PaintCtx, w: int, h: int, x: float, w_scale: float, h_scale: float, mask_w: float, mask_h: float) -> QImage:
+	"""The `line` style's window: a soft spot at `x` along the bottom edge, or at that share of a custom path."""
+	if ctx.path is None:
+		return travel_mask(w, h, x, w_scale, h_scale, mask_w, mask_h)
+	half = 0.08 * w_scale * (mask_w / 78.0)
+	stops = ((0.0, 0.0), (0.5 - half, 0.0), (0.5, 1.0), (0.5 + half, 0.0), (1.0, 0.0))
+	return path_travel_mask(ctx, w, h, x - 0.5 + 1.0, stops, max(14.0, mask_h * h_scale * 0.5))
+
+
+def _path_point(ctx: PaintCtx, t: float) -> tuple[float, float]:
+	p = ctx.path.pointAtPercent(t % 1.0)
+	return p.x(), p.y()
+
+
+def frame_band(ctx: PaintCtx, w: int, h: int) -> QImage:
+	"""The soft band inside the edge that the inner glow shows through."""
+	if ctx.path is None:
+		return frame_fade_mask(w, h)
+	return _stroke_mask(ctx, w, h, FRAME_BAND * 1.6, 6.0)
+
+
+def line_frame_window(ctx: PaintCtx, w: int, h: int, x: float, w_scale: float, h_scale: float) -> QImage:
+	if ctx.path is None:
+		return travel_frame_fade_mask(w, h, x, w_scale, h_scale)
+	return apply_mask(line_window(ctx, w, h, x, w_scale, h_scale, 78, 60), frame_band(ctx, w, h))
+
+
+def _halo_mask(ctx: PaintCtx, qp: QPainter, origin: QPointF, width: float) -> None:
+	"""Keep a halo layer only near the custom path (the rectangle's halo needs no cut)."""
+	if ctx.path is None:
+		return
+	device = qp.device()
+	mask = QImage(device.width(), device.height(), QImage.Format.Format_ARGB32_Premultiplied)
+	mask.fill(Qt.GlobalColor.transparent)
+	stroker = QPainterPathStroker()
+	stroker.setWidth(width)
+	mp = QPainter(mask)
+	mp.setRenderHint(QPainter.RenderHint.Antialiasing)
+	mp.translate(origin)
+	mp.fillPath(stroker.createStroke(ctx.path), QColor(255, 255, 255))
+	mp.end()
+	qp.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
+	qp.drawImage(0, 0, mask)
+	qp.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+
+
 # ------------------------------------------------------------ rotate (md/sm)
 
 # White traveling hotspot on the stroke ring (dark = white, light = black).
@@ -470,7 +626,7 @@ def _conic_fill_gradient(rect: QRectF, css_angle_deg: float, stops: tuple, dark:
 	return gradient
 
 
-def _inner_shadow_layer(w: int, h: int, rect: QRectF, radius: float, color: QColor, blur_px: float, spread: float = 1.0) -> QImage:
+def _inner_shadow_layer(w: int, h: int, rect: QRectF, radius: float, color: QColor, blur_px: float, spread: float = 1.0, path: QPainterPath | None = None) -> QImage:
 	"""Blurred inset ring glow (CSS `box-shadow: inset 0 0 Npx 1px`)."""
 	img = make_layer(w, h)
 	painter = QPainter(img)
@@ -478,7 +634,7 @@ def _inner_shadow_layer(w: int, h: int, rect: QRectF, radius: float, color: QCol
 	pen = QPen(color, max(1.0, spread))
 	painter.setPen(pen)
 	painter.setBrush(Qt.BrushStyle.NoBrush)
-	painter.drawPath(rounded_rect_path(rect, radius - spread))
+	painter.drawPath(path if path is not None else rounded_rect_path(rect, radius - spread))
 	painter.end()
 	return blur_image(img, blur_px)
 
@@ -497,16 +653,16 @@ def paint_ring_front(painter: QPainter, ctx: PaintCtx) -> None:
 	inner = make_layer(w, h)
 	ip = QPainter(inner)
 	ip.setRenderHint(QPainter.RenderHint.Antialiasing)
-	ip.setClipPath(rounded_rect_path(rect, radius))
+	ip.setClipPath(outline(ctx))
 	paint_blobs(ip, rect, SMALL_INNER[ctx.variant] if small else inner_blobs(ctx.variant), hue, b, s, ctx.color_space)
 	shadow = preset["inner_shadow"]
 	if shadow.alpha() > 0:
-		ip.drawImage(0, 0, _inner_shadow_layer(w, h, rect, radius, shadow, 5 if small else 9))
+		ip.drawImage(0, 0, _inner_shadow_layer(w, h, rect, radius, shadow, 5 if small else 9, path=ctx.path))
 	ip.end()
 	if small:
-		m = conic_wedge_mask(w, h, angle, stops=_SM_INNER_CONIC_STOPS)
+		m = window_mask(ctx, w, h, ctx.progress, _SM_INNER_CONIC_STOPS)
 	else:
-		m = conic_frame_fade_mask(w, h, angle)
+		m = window_mask(ctx, w, h, ctx.progress, _RING_CONIC_STOPS, frame=True)
 	inner = apply_mask(inner, m)
 	painter.setOpacity(ctx.fade * preset["inner_opacity"] * mono)
 	painter.drawImage(0, 0, inner)
@@ -516,12 +672,12 @@ def paint_ring_front(painter: QPainter, ctx: PaintCtx) -> None:
 	stroke = make_layer(w, h)
 	sp = QPainter(stroke)
 	sp.setRenderHint(QPainter.RenderHint.Antialiasing)
-	sp.setClipPath(rounded_rect_path(rect, radius))
-	sp.fillRect(rect, _conic_fill_gradient(rect, angle, _WHITE_CONIC_STOPS, dark))
+	sp.setClipPath(outline(ctx))
+	fill_window(sp, ctx, QColor(255, 255, 255) if dark else QColor(0, 0, 0), ctx.progress, _WHITE_CONIC_STOPS, ring=True)
 	paint_blobs(sp, rect, SMALL_BORDER[ctx.variant] if small else BORDER_PALETTES[ctx.variant], hue, b, s, ctx.color_space)
 	sp.end()
-	band = ring_mask(w, h, radius, 1.0)
-	stroke = apply_mask(stroke, apply_mask(conic_wedge_mask(w, h, angle), band))
+	band = band_mask(ctx, w, h)
+	stroke = apply_mask(stroke, apply_mask(window_mask(ctx, w, h, ctx.progress, _RING_CONIC_STOPS, 10.0), band))
 	painter.setOpacity(ctx.fade * preset["stroke_opacity"] * mono)
 	painter.drawImage(0, 0, stroke)
 	painter.setOpacity(1.0)
@@ -530,10 +686,10 @@ def paint_ring_front(painter: QPainter, ctx: PaintCtx) -> None:
 	bloom = make_layer(w, h)
 	bp = QPainter(bloom)
 	bp.setRenderHint(QPainter.RenderHint.Antialiasing)
-	bp.setClipPath(rounded_rect_path(rect, radius))
-	bp.fillRect(rect, _conic_fill_gradient(rect, angle, _BLOOM_CONIC_STOPS_DARK if dark else _BLOOM_CONIC_STOPS_LIGHT, dark))
+	bp.setClipPath(outline(ctx))
+	fill_window(bp, ctx, QColor(255, 255, 255) if dark else QColor(0, 0, 0), ctx.progress, _BLOOM_CONIC_STOPS_DARK if dark else _BLOOM_CONIC_STOPS_LIGHT, ring=True)
 	bp.end()
-	bloom = apply_mask(bloom, ring_mask(w, h, radius, 1.0))
+	bloom = apply_mask(bloom, band_mask(ctx, w, h))
 	bloom = blur_image(bloom, 8.0)
 	painter.setOpacity(ctx.fade * preset["bloom_opacity"] * mono)
 	painter.drawImage(0, 0, bloom)
@@ -554,8 +710,7 @@ def _line_bloom_layer(w: int, h: int, rect: QRectF, ctx: PaintCtx) -> QImage:
 	okl = ctx.color_space is ColorSpace.OKLCH
 	primary, secondary, spikes = _line_spike_colors(ctx.variant, dark)
 	vals = ctx.values
-	x = vals["x"] * rect.width()
-	bottom = rect.height()
+	x, bottom = (vals["x"] * rect.width(), rect.height()) if ctx.path is None else _path_point(ctx, vals["x"])
 	spike, spike2, hv, wv = vals["spike"], vals["spike2"], vals["h"], vals["w"]
 	hue, b, s = ctx.hue_bloom if not okl else ctx.hue_deg, ctx.brightness, ctx.saturation
 	thin_w, thin_h = _LINE_THIN_MONO if mono else _LINE_THIN_DARK
@@ -574,7 +729,7 @@ def _line_bloom_layer(w: int, h: int, rect: QRectF, ctx: PaintCtx) -> QImage:
 	img = make_layer(w, h)
 	painter = QPainter(img)
 	painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-	painter.setClipPath(rounded_rect_path(rect, ctx.radius))
+	painter.setClipPath(outline(ctx))
 
 	if okl:
 		primary = ring_color(0, hue, s, b)
@@ -672,13 +827,14 @@ def paint_line_front(painter: QPainter, ctx: PaintCtx) -> None:
 	vals = ctx.values
 	x, wv, hv, edge = vals["x"], vals["w"], vals["h"], vals["edge"]
 	cx = x * rect.width()
+	px, py = (cx, rect.height()) if ctx.path is None else _path_point(ctx, x)
 	hue, b, s = ctx.hue_deg, ctx.brightness, ctx.saturation
 
 	# ::after — white highlight + line blobs in the ring band, travel-masked.
 	stroke = make_layer(w, h)
 	sp = QPainter(stroke)
 	sp.setRenderHint(QPainter.RenderHint.Antialiasing)
-	sp.setClipPath(rounded_rect_path(rect, radius))
+	sp.setClipPath(outline(ctx))
 	if dark:
 		hl = QColor(255, 255, 255, 97)
 		hl30 = QColor(255, 255, 255, 31)
@@ -689,15 +845,15 @@ def paint_line_front(painter: QPainter, ctx: PaintCtx) -> None:
 		hl30 = QColor(0, 0, 0, 64)
 		hl_w = 35.0
 		hl_stops = [(0.0, hl), (0.35, hl30), (0.70, QColor(0, 0, 0, 0))]
-	paint_blob(sp, cx, rect.y() + rect.height() + 2, hl_w * wv, 28.0 * hv, hl, stops=hl_stops)
+	paint_blob(sp, px, py + 2, hl_w * wv, 28.0 * hv, hl, stops=hl_stops)
 	for i, lb in enumerate(LINE_PALETTES[ctx.variant]["dark" if dark else "light"]):
 		if ctx.color_space is ColorSpace.OKLCH:
 			color = ring_color(i, hue, s, b)
 		else:
 			color = apply_filters(hue_shift_color(lb.color, hue), b, s)
-		paint_blob(sp, cx + lb.ox, rect.y() + rect.height() + lb.oy, lb.w * wv, lb.h * hv, color)
+		paint_blob(sp, px + lb.ox, py + lb.oy, lb.w * wv, lb.h * hv, color)
 	sp.end()
-	m = apply_mask(travel_mask(w, h, x, wv, hv), ring_mask(w, h, radius, 1.0))
+	m = apply_mask(line_window(ctx, w, h, x, wv, hv, 78, 60), band_mask(ctx, w, h))
 	stroke = apply_mask(stroke, m)
 	painter.setOpacity(ctx.fade * edge * preset["stroke_opacity"])
 	painter.drawImage(0, 0, stroke)
@@ -707,19 +863,19 @@ def paint_line_front(painter: QPainter, ctx: PaintCtx) -> None:
 	inner = make_layer(w, h)
 	ip = QPainter(inner)
 	ip.setRenderHint(QPainter.RenderHint.Antialiasing)
-	ip.setClipPath(rounded_rect_path(rect, radius))
+	ip.setClipPath(outline(ctx))
 	for i, lb in enumerate(LINE_INNER[ctx.variant]):
 		color = (
 			ring_color(i, hue, s, b)
 			if ctx.color_space is ColorSpace.OKLCH
 			else apply_filters(hue_shift_color(lb.color, hue), b, s)
 		)
-		paint_blob(ip, cx + lb.ox, rect.y() + rect.height() - abs(lb.oy), lb.w * wv, lb.h * hv, color)
+		paint_blob(ip, px + lb.ox, py - abs(lb.oy), lb.w * wv, lb.h * hv, color)
 	shadow = preset["inner_shadow"]
 	if shadow.alpha() > 0:
-		ip.drawImage(0, 0, _inner_shadow_layer(w, h, rect, radius, shadow, 9))
+		ip.drawImage(0, 0, _inner_shadow_layer(w, h, rect, radius, shadow, 9, path=ctx.path))
 	ip.end()
-	m = travel_frame_fade_mask(w, h, x, wv, hv)
+	m = line_frame_window(ctx, w, h, x, wv, hv)
 	inner = apply_mask(inner, m)
 	painter.setOpacity(ctx.fade * edge * preset["inner_opacity"])
 	painter.drawImage(0, 0, inner)
@@ -727,7 +883,7 @@ def paint_line_front(painter: QPainter, ctx: PaintCtx) -> None:
 
 	# bloom — spike burst + glow dot, travel-masked, blurred.
 	bloom = _line_bloom_layer(w, h, rect, ctx)
-	m = travel_mask(w, h, x, wv, hv, mask_w=84.0, mask_h=110.0)
+	m = line_window(ctx, w, h, x, wv, hv, 84.0, 110.0)
 	bloom = apply_mask(bloom, m)
 	bloom = blur_image(bloom, 6.0 if ctx.variant.is_mono else 8.0)
 	painter.setOpacity(ctx.fade * edge * preset["bloom_opacity"])
@@ -757,10 +913,10 @@ def paint_pulse_inner_front(painter: QPainter, ctx: PaintCtx) -> None:
 	stroke = make_layer(w, h)
 	sp = QPainter(stroke)
 	sp.setRenderHint(QPainter.RenderHint.Antialiasing)
-	sp.setClipPath(rounded_rect_path(rect, radius))
+	sp.setClipPath(outline(ctx))
 	paint_pulse_blobs(sp, rect, pulse_ring_defs(ctx.variant), palette, values, hue, b, s, color_space=ctx.color_space)
 	sp.end()
-	stroke = apply_mask(stroke, ring_mask(w, h, radius, 1.0))
+	stroke = apply_mask(stroke, band_mask(ctx, w, h))
 	painter.setOpacity(ctx.fade * preset["stroke_opacity"] * mono)
 	painter.drawImage(0, 0, stroke)
 	painter.setOpacity(1.0)
@@ -769,7 +925,7 @@ def paint_pulse_inner_front(painter: QPainter, ctx: PaintCtx) -> None:
 	inner = make_layer(w, h)
 	ip = QPainter(inner)
 	ip.setRenderHint(QPainter.RenderHint.Antialiasing)
-	ip.setClipPath(rounded_rect_path(rect, radius))
+	ip.setClipPath(outline(ctx))
 	paint_pulse_blobs(ip, rect, pulse_inner_defs(ctx.variant), palette, values, hue, b, s, color_space=ctx.color_space)
 	base = 0.18 if dark else 0.08
 	corner = 255 if dark else 0
@@ -779,7 +935,7 @@ def paint_pulse_inner_front(painter: QPainter, ctx: PaintCtx) -> None:
 			c = QColor(corner, corner, corner, int(alpha * 255))
 			paint_blob(ip, rect.x() + fx * rect.width(), rect.y() + fy * rect.height(), 60.0, 60.0, c)
 	ip.end()
-	inner = apply_mask(inner, frame_fade_mask(w, h))
+	inner = apply_mask(inner, frame_band(ctx, w, h))
 	painter.setOpacity(ctx.fade * preset["inner_opacity"] * mono)
 	painter.drawImage(0, 0, inner)
 	painter.setOpacity(1.0)
@@ -788,10 +944,10 @@ def paint_pulse_inner_front(painter: QPainter, ctx: PaintCtx) -> None:
 	bloom = make_layer(w, h)
 	bp = QPainter(bloom)
 	bp.setRenderHint(QPainter.RenderHint.Antialiasing)
-	bp.setClipPath(rounded_rect_path(rect, radius))
+	bp.setClipPath(outline(ctx))
 	paint_pulse_blobs(bp, rect, PULSE_INNER_BLOOM, palette, values, hue, b, s, frozen_alpha=_frozen_alpha(pm), color_space=ctx.color_space)
 	bp.end()
-	bloom = apply_mask(bloom, ring_mask(w, h, radius, 1.0))
+	bloom = apply_mask(bloom, band_mask(ctx, w, h))
 	bloom = blur_image(bloom, 8.0)
 	painter.setOpacity(ctx.fade * preset["bloom_opacity"] * mono)
 	painter.drawImage(0, 0, bloom)
@@ -813,11 +969,11 @@ def paint_pulse_outside_behind(painter: QPainter, ctx: PaintCtx) -> None:
 	bloom_blur = 22.5 if dark else 15.0
 	bloom = _paint_padded_blur(
 		bloom_rect, bloom_blur,
-		lambda bp, r: paint_pulse_blobs(
+		lambda bp, r: (paint_pulse_blobs(
 			bp, r, PULSE_OUTER_BLOOM, palette, values, hue, b, s,
 			sx=ctx.sx, sy=ctx.sy, frozen_alpha=_frozen_alpha(pm), scale=(0.95, 0.9),
 			color_space=ctx.color_space,
-		),
+		), _halo_mask(ctx, bp, QPointF(r.x() + 30.0, r.y() + 30.0), 90.0)),
 	)
 	painter.setOpacity(ctx.fade * preset["bloom_opacity"] * mono)
 	painter.drawImage(bloom[0], bloom[1])
@@ -827,7 +983,7 @@ def paint_pulse_outside_behind(painter: QPainter, ctx: PaintCtx) -> None:
 	core_rect = rect.adjusted(-10.0, -10.0, 10.0, 10.0)
 	core = _paint_padded_blur(
 		core_rect, 3.0 if dark else 6.0,
-		lambda cp, r: paint_pulse_blobs(cp, r, PULSE_OUTER_CORE, palette, values, hue, b, s, sx=ctx.sx, sy=ctx.sy, scale=(0.95, 0.9), color_space=ctx.color_space),
+		lambda cp, r: (paint_pulse_blobs(cp, r, PULSE_OUTER_CORE, palette, values, hue, b, s, sx=ctx.sx, sy=ctx.sy, scale=(0.95, 0.9), color_space=ctx.color_space), _halo_mask(ctx, cp, QPointF(r.x() + 10.0, r.y() + 10.0), 30.0)),
 	)
 	painter.setOpacity(ctx.fade * preset["inner_opacity"] * mono)
 	painter.drawImage(core[0], core[1])
@@ -863,10 +1019,10 @@ def paint_pulse_outside_front(painter: QPainter, ctx: PaintCtx) -> None:
 	stroke = make_layer(w, h)
 	sp = QPainter(stroke)
 	sp.setRenderHint(QPainter.RenderHint.Antialiasing)
-	sp.setClipPath(rounded_rect_path(rect, radius))
+	sp.setClipPath(outline(ctx))
 	paint_pulse_blobs(sp, rect, PULSE_OUTER_CORE, palette, values, hue, b, s, sx=ctx.sx, sy=ctx.sy, color_space=ctx.color_space)
 	sp.end()
-	stroke = apply_mask(stroke, ring_mask(w, h, radius, 1.0))
+	stroke = apply_mask(stroke, band_mask(ctx, w, h))
 	painter.setOpacity(ctx.fade * preset["stroke_opacity"] * mono)
 	painter.drawImage(0, 0, stroke)
 	painter.setOpacity(1.0)

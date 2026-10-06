@@ -2250,6 +2250,8 @@ class BeamForm(_Form):
 		self.part('active', 'active', ConditionEdit(unsetText='off'), 'Runs while true: a bool, a key or an expression.')
 		self.part('sweep', 'sweep', ConditionEdit(unsetText='off', placeholder='environment.temperature.temperature'),
 		          'Runs once each time a new value arrives. A key or an expression.')
+		self.part('path', 'outline', ChoiceEdit([('panel rectangle', None)] + [(n, n) for n in ('circle', 'diamond', 'triangle', 'arc', 'wave', 'heart')], editable=True),
+		          'What the beam follows. A shape name, or SVG path data such as M 0 0 L 100 0 L 50 100 Z, scaled to fill the panel.')
 		self.part('size', 'size', ChoiceEdit([(n, n) for n in ('sm', 'md', 'line', 'pulse-inner', 'pulse-outside')]), 'The shape and motion.')
 		self.part('variant', 'variant', ChoiceEdit([(n, n) for n in ('colorful', 'mono', 'ocean', 'sunset')]))
 		self.part('theme', 'theme', ChoiceEdit([('auto', None), ('dark', 'dark'), ('light', 'light')]))
