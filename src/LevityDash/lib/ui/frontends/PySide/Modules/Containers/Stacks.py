@@ -622,7 +622,7 @@ class Stack(Panel, tag='stack'):
 			breaks = length - 1
 			spacingTotal = breaks * absoluteSpacing
 			remainingSpace = padding.primarySpan - (float(spacingTotal) / own_size_px) - float(totalFixeSizes)
-			cellSize = PrimarySize(remainingSpace / ((length - len(fixedSizes)) or remainingSpace), absolute=False)
+			cellSize = PrimarySize(remainingSpace / max(length - len(fixedSizes), 1), absolute=False)
 
 		if self.minCellSize is not None:
 			cellSize = max(cellSize, self.minCellSize)
