@@ -9,7 +9,7 @@ from . import presets
 def _userThemes():
 	# Looked up on each search, not at import: the config folder is decided after this package loads.
 	from LevityDash.lib.config import userConfig
-	return [Path(str(userConfig.userPath)) / 'themes']
+	return [Path(userConfig.userPath.path) / 'themes']
 
 
 theme.add_search_path(_userThemes)

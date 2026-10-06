@@ -19,6 +19,28 @@ The current anatomy of a dashboard file is strictly a list of module attributes 
     ...
 ```
 
+A dashboard can also be a mapping. A mapping has room for a [theme](/config/dashboard/themes.md) and [variables](/config/dashboard/variables.md). Put the list of modules under `items:`.
+
+```yaml
+theme: dusk
+vars:
+  gap: 3mm
+items:
+  - type: stack
+    padding: $gap
+    items:
+      - type: realtime.text
+        key: environment.temperature.temperature
+        color: $accent
+```
+
+These pages cover the options that work on a whole dashboard:
+
+- [Themes](/config/dashboard/themes.md): named colors, fonts, and gradients.
+- [Variables](/config/dashboard/variables.md): a name for a value that you use more than once.
+- [Value Sources](/config/dashboard/expressions.md): a key, a number, or an expression, and units in an expression.
+- [Switch](/config/dashboard/switch.md): a slot that shows one of several modules.
+
 ## Shared Parameters
 
 There are a few config parameters that are shared across all modules
@@ -69,6 +91,8 @@ Additionally, a `spacer` can be used inside a stack's `items` list, and prefixin
 
 The key is the key used to access the data. This is the key used to access the data in the source. All sources use the same key, so it will be the same regardless of the source. Keys use a hierarchical format. For example, the key
 for the temperature in the 'environment.temperature.temperature'. Note the double 'temperature' in the key since category 'temperature' contains many measurements.
+
+On a `realtime` module, `key:` can also be an [expression](/config/dashboard/expressions.md), such as `max(environment.temperature.temperature, today)`.
 
 <!-- div:right-panel -->
 
@@ -448,6 +472,21 @@ The Text submodule used to display the unit string. All Text submodule options a
 [//]: #
 [//]: #
 [//]: #
+### Zero, trace, and percent values
+
+> [!NOTE]
+> **Pending** ([#35](https://github.com/noblecloud/LevityDash/pull/35) and [WeatherUnits #4](https://github.com/noblecloud/WeatherUnits/pull/4)).
+
+A small value can mean "none" or "a little". The display keeps the two apart.
+
+- `0` is exactly zero.
+- `0.0` is a trace. The value is more than zero but less than `0.05` in the unit you see.
+- A `precision:` or `format:` that you set always wins over these rules.
+
+A percentage can arrive in two scales. Some sources report `0` to `100`. For these, `0.1` is a tenth of one percent. Other sources report a fraction from `0` to `1`. For these, `0.1` is ten percent. Each source states its own scale, so `0.1` shows as `0.10%` for one source and `10.0%` for another. PirateWeather reports fractions. You do not set the scale in a dashboard.
+
+A plugin author sets the scale in the schema entry of a key. Add `kwargs: {isPercentage: false}` for a source that reports a fraction.
+
 ## Graph
 
 ```yaml
@@ -603,13 +642,229 @@ weight: 0.3
 ##### <div class='mono-header'>type:</div>
 
 <description>
-The type of plot. Currently only supports line-plots
+The type of plot. The default is a line.
+
+- `plot`: a line. This is the default.
+- `bar`: one bar for each sample. See [Bar plots](#bar-plots).
+- `violin`: one violin for each stretch of time. See [Violin plots](#violin-plots).
 
 ```yaml
 type: plot
 ```
 
 </description>
+
+##### <div class='mono-header'>thickness:</div>
+
+<description>
+Makes a line thicker or thinner with the value of another key. See [Line thickness](#line-thickness).
+</description>
+
+##### <div class='mono-header'>pins:</div>
+
+<description>
+Puts a mark on the line for each value of another key. See [Pins on a line](#pins-on-a-line).
+</description>
+
+### Bar plots
+
+> [!NOTE]
+> **Pending** ([#33](https://github.com/noblecloud/LevityDash/pull/33)).
+
+A bar plot draws one bar for each sample. Use it for amounts, such as rain in each hour.
+
+```yaml
+- type: graph
+  name: rain
+  timeframe: {days: 1, hours: 12}
+  annotations:
+    dayLabels: {enabled: false}
+    hourLabels: {alignment: BottomCenter}
+  figures:
+  - figure: precipitation
+    margins: {bottom: 12%, top: 8%}
+    min: 0
+    max: 0.6
+    environment.precipitation.precipitation:
+      plot: {type: bar, gradient: PrecipitationRateGradient, width: 0.8, radius: 0.25}
+```
+
+<div class="indent">
+
+#### <div class=mono>width: float | str</div>
+
+How much of the space for each sample the bar fills. Write `0.8` or `80%`. The range is `0.05` to `1`. The default is `0.8`.
+
+#### <div class=mono>radius: float</div>
+
+How round the end of a bar is, as a share of the width of the bar. `0` is square. `0.5` is a half circle. The default is `0.2`.
+
+#### <div class=mono>base: float</div>
+
+The value that the bars rise from, in the unit of the data. The default is `0`. A value below `base` gives a bar that hangs down.
+
+#### <div class=mono>align: center | start | end</div>
+
+Where the bar sits against the time of its sample. `center` puts the time in the middle of the bar. `start` is for a sample that is for the hour that begins at its time. `end` is for a sample that is for the hour that ended at its time. The default is `center`.
+
+</div>
+
+`color`, `gradient`, `opacity`, and `glow` work as they do for a line. A gradient maps the value to the height of the bar. `weight`, `dashPattern`, and the line cap do nothing on a bar plot.
+
+A bar plot draws one bar for each slot of the data. If a current value falls between two hourly samples, LevityDash draws only the sample that is closest to the middle of the slot.
+
+To draw a line over bars, put each in its own figure. Give the two figures the same margins. A figure keeps its own range.
+
+### Violin plots
+
+> [!NOTE]
+> **Pending** ([#33](https://github.com/noblecloud/LevityDash/pull/33)).
+
+A violin plot draws the spread of the values in a stretch of time. It is wide where many values are near each other. It is narrow where there are few.
+
+```yaml
+- type: graph
+  name: spread
+  timeframe: {days: 1, hours: 12}
+  annotations:
+    dayLabels: {enabled: false}
+    hourLabels: {alignment: BottomCenter}
+  figures:
+  - figure: spread
+    margins: {bottom: 12%, top: 12%}
+    environment.temperature.temperature:
+      plot: {type: violin, bucket: 6h, gradient: TemperatureGradient, width: 0.85}
+```
+
+<div class="indent">
+
+#### <div class=mono>bucket: str</div>
+
+The length of time for one violin: `30min`, `1h`, `6h`, `1d`. A number with no unit is hours. The default is `1h`.
+
+#### <div class=mono>bandwidth: float</div>
+
+How much the outline is smoothed. A number below `1` shows more detail. A number above `1` shows less. The default is `1`.
+
+#### <div class=mono>width: float | str</div>
+
+How much of its stretch of time each violin fills. It works as it does for a bar plot. Each violin is scaled to fill its own width.
+
+</div>
+
+> [!NOTE]
+> A violin needs many values in each bucket. Use it with a sensor that logs every few minutes. A bucket with fewer than two values draws nothing. Hourly forecast data gives blocky violins, as in the picture of the example.
+
+### Line thickness
+
+> [!NOTE]
+> **Pending** ([#36](https://github.com/noblecloud/LevityDash/pull/36)).
+
+A line can get thicker where another key has a higher value. In the example, the temperature line is thicker when the wind is stronger.
+
+```yaml
+- type: graph
+  name: temperature
+  timeframe: {days: 1, hours: 12}
+  annotations:
+    dayLabels: {enabled: false}
+    hourLabels: {alignment: BottomCenter}
+  figures:
+  - figure: temperature
+    margins: {bottom: 20%, top: 20%}
+    environment.temperature.temperature:
+      plot:
+        type: plot
+        gradient: TemperatureGradient
+        thickness: {key: environment.wind.speed.speed, weight: [0.15, 1.4]}
+      resolution: 2
+```
+
+<div class="indent">
+
+#### <div class=mono>key: str</div>
+
+The key that sets the thickness. This option is required.
+
+#### <div class=mono>weight: [thin, thick]</div>
+
+The two weights, in the units that `weight` uses on the plot. The line has the thin weight where the key is lowest. It has the thick weight where the key is highest. The default is `[0.2, 1.0]`.
+
+#### <div class=mono>range: [low, high]</div>
+
+The values of the key that the two weights are for. A value outside the range uses the nearest weight. If you do not set `range`, the lowest and highest values in view are used.
+
+</div>
+
+### Pins on a line
+
+> [!NOTE]
+> **Pending** ([#37](https://github.com/noblecloud/LevityDash/pull/37)).
+
+A pin is a mark on a line. Each pin has its own time and sits on the line at that time. A pin shows the value of another key. Use pins to put a weather symbol on a temperature line.
+
+In the example, the amount of rain picks the symbol.
+
+```yaml
+- type: graph
+  name: temperature
+  timeframe: {days: 1, hours: 12}
+  annotations:
+    dayLabels: {enabled: false}
+    hourLabels: {alignment: BottomCenter}
+  figures:
+  - figure: temperature
+    margins: {bottom: 20%, top: 25%}
+    environment.temperature.temperature:
+      plot:
+        type: plot
+        gradient: TemperatureGradient
+        pins:
+          key: environment.precipitation.precipitation
+          size: 22
+          steps:
+          - [0,    'wi:day-sunny']
+          - [0.02, 'wi:sprinkle']
+          - [0.1,  'wi:showers']
+          - [0.3,  'wi:rain']
+      resolution: 2
+```
+
+<div class="indent">
+
+#### <div class=mono>key: str</div>
+
+The key that gives the value for each pin. This option is required.
+
+#### <div class=mono>steps: list</div>
+
+A list of `[number, symbol]` rows. A value uses the last row whose number it reaches. In the example, `0.05` uses the `0.02` row. The numbers are in the unit of the data. A symbol is an icon name with the icon pack in front: `wi:` (Weather Icons), `fa:` (Font Awesome), or `mdi:` (Material Design Icons).
+
+#### <div class=mono>map: dict</div>
+
+A list of exact values and their symbols, such as `{0: 'wi:day-sunny'}`. Use `map` for a key with fixed values.
+
+#### <div class=mono>size: int | str</div>
+
+The size of a pin in pixels, or a length such as `5mm`. The default is `14`.
+
+#### <div class=mono>offset: float</div>
+
+The distance between the pin and the line, in pin sizes. A negative number puts the pin above the line. The default is `-1.2`.
+
+#### <div class=mono>spacing: float</div>
+
+The smallest gap between two pins, in pin sizes. A pin that would be closer than this to the last one is not drawn. The default is `1.6`.
+
+#### <div class=mono>color: str</div>
+
+The color of the pins. If you leave it out, the pins are painted like the line, with the same color or gradient.
+
+</div>
+
+If a key gives an icon, the pin shows that icon, and you do not need `steps` or `map`. If you give neither `steps`, `map`, nor an icon, the value is printed as text.
+
+Pins update when the plot updates, not on their own.
 
 ## Clock
 
@@ -656,7 +911,7 @@ The characters used for strftime can be fairly difficult to remember so it is re
 
 ## Moon Phase
 
-Essentially, the Moon Phase you can only adjust the `glowStrength` and the update interval.
+The Moon Phase shows the phase of the moon and tilts it as it looks in the sky. You can adjust `glowStrength`, `rotate`, and the update interval.
 
 ```yaml
 - type: moon
@@ -664,6 +919,14 @@ Essentially, the Moon Phase you can only adjust the `glowStrength` and the updat
   geometry:
     ...
   glowStrength: 2
+  rotate: true
   interval:
     minutes: 20
 ```
+
+### <div class=mono>rotate: bool</div>
+
+When `true`, the lit part of the moon turns to match how the moon looks to someone at your location. The default is `true`. When `false`, the moon always draws with its lit side to the right (waxing) or to the left (waning).
+
+> [!NOTE]
+> **Pending** ([#32](https://github.com/noblecloud/LevityDash/pull/32)). The tilt uses the latitude and longitude from the `[Location]` section of your [config](/config.md). Before this change, the tilt was wrong for most times and places.

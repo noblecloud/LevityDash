@@ -5,5 +5,10 @@
 - Editable Margins for text modules
 - Resizable graph figures
 - Custom, value mapped, gradients for figure items
+- [Themes](/config/dashboard/themes.md): named colors, fonts, and gradients that restyle a whole board
+- [Variables](/config/dashboard/variables.md): name a value once and use it in many places
+- [Expressions](/config/dashboard/expressions.md): a value from a calculation on keys, with units such as `> 90°F`
+- A module that is shown only while a condition is true (`when:`)
+- A dashboard that loads when one item fails. The item shows an error tile.
 - Icon packs: Font Awesome (`fa:`), Material Design Icons (`mdi:`), Weather Icons (`wi:`)
 - Text filters (lower, upper, title, capitalize, ordinal, add-ordinal)
