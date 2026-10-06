@@ -12,6 +12,7 @@ from LevityDash.lib.config import userConfig
 from LevityDash.lib.EasyPath import EasyPath
 from LevityDash.lib.log import LevityLogger
 from LevityDash.lib.ui.colors import theme as _theme
+from LevityDash.lib.ui.fontlist import NON_FONT_KEYS, genericFamily
 from LevityDash.lib.utils.shared import ClosestMatchEnumMeta
 
 log = LevityLogger.getChild('fonts')
@@ -76,7 +77,7 @@ _defaults = {
 	'default.weight': 'Normal',
 	'title':          'Roboto',
 	'title.weight':   'Light',
-	'monospace':      'Monospace',
+	'monospace':      'Roboto Mono',
 }
 
 _missing_defaults = {k: v for k, v in _defaults.items() if k not in fontConfig}
@@ -231,6 +232,8 @@ def __getFontFromConfig(name: str) -> QFont:
 	global fontConfig
 
 	f = userConfig['Fonts'][name]
+	if not database.hasFamily(f) and (generic := genericFamily(f)) and database.hasFamily(generic):
+		f = generic
 	if not database.hasFamily(f):
 		closestMatch = get_close_matches(f, database.families(), n=1, cutoff=0.85)
 		try:
@@ -280,7 +283,7 @@ def __getFontFromConfig(name: str) -> QFont:
 
 fontDict: Dict[str, QFont] = {f: database.font(f, '', -1) for f in loadFonts(*builtInFonts, *userFonts)}
 
-for namedFont in {i for i in fontConfig.keys() if '.' not in i}:
+for namedFont in {i for i in fontConfig.keys() if '.' not in i and i not in NON_FONT_KEYS}:
 	if namedFont in locals():
 		log.warning(f'Font name {namedFont} is already in use by {locals()[namedFont]}, not adding to namespace')
 		continue
@@ -303,9 +306,10 @@ QApplication.setFont(defaultFont)
 def getFontFamily(family: str) -> str:
 	if _theme.is_token(family):
 		family = _theme.font(_theme.token_name(family))
+	if not database.hasFamily(family) and (generic := genericFamily(family)) and database.hasFamily(generic):
+		return generic
 	if not database.hasFamily(family):
 		closestMatch = get_close_matches(family, database.families(), n=1, cutoff=0.85)
-		family = None
 		try:
 			fallback = closestMatch[0]
 		except IndexError:

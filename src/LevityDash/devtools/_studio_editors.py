@@ -28,6 +28,7 @@ dropdown that completes as you type from every key the studio knows.
 import re
 import weakref
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from PySide6.QtCore import QPointF, QRectF, QRegularExpression, QSignalBlocker, Qt, QTime, Signal
@@ -589,11 +590,21 @@ class ChoiceEdit(Editor):
 		return self.combo.hasFocus() or self.combo.view().isVisible()
 
 
+def pickerFamilies() -> list[str]:
+	"""Bundled and user-folder families, common families, and `[Fonts] extra`, each only if installed."""
+	from LevityDash import LevityDashboard
+	from LevityDash.lib.config import userConfig
+	from LevityDash.lib.ui.fontlist import curatedFamilies, folderFamilies, parseExtra
+	extra = parseExtra(userConfig.get('Fonts', 'extra', fallback=None))
+	bundled = folderFamilies(Path(LevityDashboard.resources) / 'fonts', userConfig.userPath.path / 'fonts')
+	return curatedFamilies(QFontDatabase.families(), bundled, extra)
+
+
 class FontEdit(ChoiceEdit):
-	"""The installed font families, and any other name you type."""
+	"""A short list of fonts, and any other name you type. See `lib/ui/fontlist.py`."""
 
 	def __init__(self):
-		super().__init__([(name, name) for name in QFontDatabase.families()], editable=True)
+		super().__init__([(name, name) for name in pickerFamilies()], editable=True)
 		self.combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
 		self.combo.lineEdit().editingFinished.connect(self._emit)
 		completer = self.combo.completer()
