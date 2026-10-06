@@ -32,6 +32,7 @@ from typing import Any, Callable, Dict, FrozenSet, Mapping, Optional, Protocol, 
 import WeatherUnits as wu
 
 from LevityDash.lib.plugins.categories import CategoryItem
+from LevityDash.lib.ui.colors.stopunits import StopUnitError, measure, toDataUnit
 
 __all__ = [
 	'Expression', 'ExpressionError', 'Missing', 'Window', 'SeriesInput', 'PointInput', 'Resolver',
@@ -140,7 +141,16 @@ _DURATION_UNITS = {
 	'w':  timedelta(weeks=1),
 }
 
+#: A number with a unit: `90°F`, `30 mph`, `0.1 in/hr`, `55%`, `1013 hPa`. A unit that is only
+#: letters needs two of them (`5 m` is not metres), and the duration units are left to durations.
+_UNIT_PATTERN = re.compile(
+	r'(?<![\w.])(\d+(?:\.\d+)?)\s*'
+	r'([°º˚]\s?[A-Za-z]+|%|[A-Za-z]{2,}(?:\s?/\s?[A-Za-z]+)?)(?![\w.])'
+)
+_NOT_UNITS = frozenset({'ms', 'if', 'else', 'and', 'or', 'not', 'is'})
+
 _KEY_PREFIX = '__key'
+_UNIT_PREFIX = '__unit'
 _DURATION_PREFIX = '__duration'
 
 #: Names an expression may use besides keys.
@@ -273,6 +283,13 @@ class Expression:
 		return _Evaluator(resolver, now, value, self._placeholders, self.text).eval(self._tree.body)
 
 
+@dataclass(frozen=True)
+class UnitLiteral:
+	"""A number written with a unit. It takes the unit of whatever it is compared with."""
+	number: float
+	unit: str
+
+
 def _substitute(text: str) -> Tuple[str, Dict[str, Any]]:
 	placeholders: Dict[str, Any] = {}
 
@@ -290,7 +307,20 @@ def _substitute(text: str) -> Tuple[str, Dict[str, Any]]:
 		placeholders[name] = float(match.group(1)) * _DURATION_UNITS[match.group(2)]
 		return name
 
+	def unitLiteral(match: re.Match) -> str:
+		unit = re.sub(r'\s+', '', match.group(2))
+		if unit.lower() in _NOT_UNITS:
+			return match.group(0)
+		try:
+			measure(float(match.group(1)), unit)
+		except Exception:  # noqa: BLE001 - not a unit WeatherUnits knows: leave the text for the parser to refuse
+			return match.group(0)
+		name = f'{_UNIT_PREFIX}{len(placeholders)}'
+		placeholders[name] = UnitLiteral(float(match.group(1)), unit)
+		return name
+
 	text = _KEY_PATTERN.sub(key, text)
+	text = _UNIT_PATTERN.sub(unitLiteral, text)
 	text = _DURATION_PATTERN.sub(duration, text)
 	return text, placeholders
 
@@ -415,6 +445,8 @@ def _canonical(tree: ast.AST, placeholders: Mapping[str, Any]) -> str:
 					return ast.copy_location(ast.Constant(f'key:{key!s}'), node)
 				case timedelta() as span:
 					return ast.copy_location(ast.Constant(f'duration:{span.total_seconds()}'), node)
+				case UnitLiteral() as literal:
+					return ast.copy_location(ast.Constant(f'unit:{literal.number:g}{literal.unit}'), node)
 			return node
 
 	restored = Restore().visit(ast.parse(ast.unparse(tree), mode='eval'))
@@ -468,6 +500,8 @@ class _Evaluator:
 		if name == _VALUE:
 			return self.value
 		key = self.placeholders[name]
+		if isinstance(key, UnitLiteral):
+			return key
 		return self._present(self.resolver.current(key))
 
 	@staticmethod
@@ -486,6 +520,20 @@ class _Evaluator:
 				# WeatherUnits' __neg__ returns a bare float, dropping the unit.
 				return operand * -1
 		raise ExpressionError(f'{self.text!r}: unknown operator {type(op).__name__}')
+
+	def _withUnits(self, left: Any, right: Any) -> Tuple[Any, Any]:
+		"""A unit literal beside a measurement, as a measurement of the same class."""
+		for literal, other, swap in ((right, left, False), (left, right, True)):
+			if isinstance(literal, UnitLiteral):
+				if not _isMeasurement(other):
+					raise ExpressionError(f'{self.text!r}: {literal.number:g}{literal.unit} needs a measurement to compare with')
+				try:
+					number = toDataUnit(literal.number, literal.unit, type(other))
+				except StopUnitError as e:
+					raise ExpressionError(f'{self.text!r}: {e}') from e
+				converted = type(other)(number)
+				return (converted, other) if swap else (other, converted)
+		return left, right
 
 	def _checkUnits(self, op: ast.AST, left: Any, right: Any) -> None:
 		if type(op) not in _UNIT_SENSITIVE:
@@ -506,6 +554,7 @@ class _Evaluator:
 	def _binary(self, op: ast.operator, left: Any, right: Any) -> Any:
 		if left is Missing or right is Missing:
 			return Missing
+		left, right = self._withUnits(left, right)
 		self._checkUnits(op, left, right)
 		try:
 			return _BINARY_OPERATORS[type(op)](left, right)
@@ -520,6 +569,7 @@ class _Evaluator:
 			following = self.eval(comparator)
 			if following is Missing:
 				return Missing
+			current, following = self._withUnits(current, following)
 			self._checkUnits(op, current, following)
 			if not _COMPARISONS[type(op)](current, following):
 				return False

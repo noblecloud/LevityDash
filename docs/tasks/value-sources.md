@@ -264,8 +264,12 @@ child whose `when:` holds (a child with no `when:` is the default); `hold`,
 `fade` and `cycle` are in `Modules/Containers/Switch.py`. The demo is
 `docs/design-references/presets/uv-or-rain.levity`.
 
-A bare `0` may be compared with a measurement (`rain > 0`), since zero is the
-same in every unit of a measure that starts at zero. Any other bare number, and
-zero next to a temperature, is still refused as ambiguous: comparing a
-temperature to a threshold needs a way to write a unit literal, which does not
-exist yet.
+A number may carry a unit in an expression: `90°F`, `30 mph`, `0.1 in/hr`,
+`55%`. The unit text is read by WeatherUnits (`ui/colors/stopunits.py`) and
+the number is converted to the unit of the measurement it is compared with, so
+`temperature > 90°F` holds whatever unit the data arrives in. A unit that
+measures something else (`temperature > 30 mph`) is an error at evaluation: it
+is logged and the result has no value. A bare `0` may also be compared with a
+measurement (`rain > 0`), since zero is the same in every unit of a measure that
+starts at zero. Any other bare number, and zero next to a temperature, is still
+refused as ambiguous.

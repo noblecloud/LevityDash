@@ -192,6 +192,40 @@ def test_zero_is_not_ambiguous_for_a_measure_that_starts_at_zero():
 		Expression.parse(f'{TEMP} > 0').evaluate(resolver, NOW)
 
 
+def test_unit_literals_compare_in_the_measurements_own_unit():
+	rain = 'environment.precipitation.precipitation'
+	wind = 'environment.wind.speed.speed'
+	resolver = FakeResolver(current={
+		TEMP: Fahrenheit(95), rain: wu.Precipitation.Hourly(Millimeter(5.0)), wind: wu.Wind.MilesPerHour(30),
+	})
+	ev = lambda text: Expression.parse(text).evaluate(resolver, NOW)
+	assert ev(f'{TEMP} > 90°F') is True
+	assert ev(f'{TEMP} > 34°C') is True       # 93.2°F
+	assert ev(f'{TEMP} > 36°C') is False      # 96.8°F
+	assert ev(f'{TEMP} > 40 °C') is False
+	assert ev(f'{rain} > 0.1 in/hr') is True  # 5 mm/hr is 0.2 in/hr
+	assert ev(f'{rain} > 0.3 in/hr') is False
+	assert ev(f'{wind} >= 30 mph') is True
+	assert ev(f'{wind} < 20 kn') is False     # 20 kn is 23 mph
+	assert ev(f'1 if {TEMP} > 90°F else 2') == 1
+	assert ev(f'{TEMP} - 5°F') == Fahrenheit(90)
+
+
+def test_a_unit_literal_must_match_what_it_is_compared_with():
+	resolver = FakeResolver(current={TEMP: Fahrenheit(70)})
+	with pytest.raises(ExpressionError, match='measures'):
+		Expression.parse(f'{TEMP} > 30 mph').evaluate(resolver, NOW)
+	with pytest.raises(ExpressionError):
+		Expression.parse('5 mph > 3 mph').evaluate(resolver, NOW)
+
+
+def test_unit_literals_do_not_swallow_durations_or_keywords():
+	assert Expression.parse(f'max({TEMP}, 24h)').text
+	assert Expression.parse(f'1 if {TEMP} > 3 else 2') is not None
+	with pytest.raises(ExpressionError):
+		Expression.parse(f'{TEMP} > 3 flurbs')
+
+
 def test_negation_keeps_the_unit():
 	resolver = FakeResolver(current={TEMP: Fahrenheit(70)})
 	assert isinstance(Expression.parse(f'-{TEMP}').evaluate(resolver, NOW), Fahrenheit)
