@@ -46,6 +46,7 @@ keys:
     value: 68
     unit: º
     type: direction
+    series: [190, 195, 200, 205, 205, 210, 215, 225, 240, 255, 270, 285, 300, 290, 250, 190, 120, 85, 68, 66, 64, 60, 58, 56]
   environment.clouds.cover.cover:
     value: 100
     unit: '%c'

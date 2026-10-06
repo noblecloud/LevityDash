@@ -1,0 +1,26 @@
+# Polar graphs: a clock-face temperature day, a wind trail and a wind rose.
+# Render: render_dashboard.py OUT.png --levity THIS --scenario stormy-day --size 1800x640 --settle 8
+- type: group
+  name: main
+  items:
+    - type: polar-graph
+      name: dayClock
+      key: environment.temperature.temperature
+      angle: time
+      geometry: {x: 0%, y: 0%, width: 33%, height: 100%}
+      gradient: $temperature
+    - type: polar-graph
+      name: windTrail
+      key: environment.wind.speed.speed
+      angle: environment.wind.direction.direction
+      window: 18h
+      geometry: {x: 33%, y: 0%, width: 33%, height: 100%}
+      range: {min: 0, max: 40}
+    - type: polar-graph
+      name: windRose
+      key: environment.wind.speed.speed
+      angle: environment.wind.direction.direction
+      style: rose
+      window: 24h
+      bins: 16
+      geometry: {x: 66%, y: 0%, width: 34%, height: 100%}
