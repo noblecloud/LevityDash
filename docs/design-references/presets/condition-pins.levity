@@ -1,0 +1,18 @@
+# Condition glyphs riding a temperature line, and a line whose width follows a key.
+# `pins:` marks the line at each sample of another key (here the condition icon, which
+# the schema derives from the weather code); `thickness:` follows one with the line's
+# width. Both take a plain key or an expression, published as a computed key like a
+# panel's. Render with --scenario condition-day.
+- type: graph
+  name: conditions
+  geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+  timeframe: {hours: 24}
+  figures:
+  - figure: temperature
+    environment.temperature.temperature:
+      plot:
+        type: plot
+        weight: 0.8
+        thickness: {key: max(environment.temperature.temperature, today), weight: [0.2, 1.2]}
+        pins: {key: environment.condition.icon, size: 14, offset: -1.2, spacing: 1.6}
+      resolution: 2
