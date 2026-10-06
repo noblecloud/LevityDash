@@ -39,12 +39,22 @@ seedEnvironment()
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from LevityDash.devtools._boot import DEFAULT_SIZE, boot, render_rect
+from LevityDash.devtools._boot import DEFAULT_SIZE, FROZEN_TIME, boot, render_rect
 
 
 def _parse_size(text: str):
 	width, _, height = text.lower().partition('x')
 	return int(width), int(height)
+
+
+def _parse_when(text: str):
+	"""An ISO instant for --freeze-time, or _boot.FROZEN_TIME for 'default'."""
+	from datetime import datetime
+
+	if text in ('', 'default', None):
+		return FROZEN_TIME
+	when = datetime.fromisoformat(text)
+	return when if when.tzinfo else when.astimezone()
 
 
 def main() -> int:
@@ -57,12 +67,18 @@ def main() -> int:
 	parser.add_argument('--settle', type=float, default=6.0)
 	parser.add_argument('--scale', type=float, default=1.0)
 	parser.add_argument('--plugins', action='store_true', help='start plugins for real values')
+	parser.add_argument(
+		'--freeze-time', nargs='?', const='default', metavar='ISO',
+		help='pin the app clock (default: _boot.FROZEN_TIME) so two renders of the same file agree; '
+			'the same patches as tests/conftest.py\'s frozen_time. Omit for a live clock',
+	)
 	args = parser.parse_args()
 
 	try:
 		app, dashboard = boot(
 			seed=args.seed, levity=args.levity, size=_parse_size(args.size),
 			settle=args.settle, plugins=args.plugins,
+			freeze=_parse_when(args.freeze_time) if args.freeze_time else None,
 		)
 	except ValueError as e:
 		parser.error(str(e))
