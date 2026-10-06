@@ -4382,6 +4382,11 @@ class GaugeValueLabel(GaugeLabel):
 			return "⋯"
 		return str(value)
 
+	@NonInteractiveLabel.formatHint.getter
+	def formatHint(self) -> Optional[str]:
+		"""`format-hint` as configured. The range's own hint is not reported here, so a save does not write it back as if set."""
+		return getattr(self.textBox, '_explicitHint', None)
+
 	def rangeHint(self, font: QFont) -> Optional[str]:
 		"""The widest text the gauge's range can show, with every digit set to the widest glyph the font has.
 
