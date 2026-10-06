@@ -195,7 +195,7 @@ def read(root: Stateful, path: tuple) -> Any:
 	if prop is None:
 		return None
 	try:
-		raw = prop.fget(owner)
+		raw = prop.__get__(owner, type(owner))
 	except Exception:
 		return None
 	return saved(prop, raw, owner)
@@ -369,7 +369,7 @@ def describe(owner: Stateful, path: tuple = (), title: str = 'Gauge', _seen: Opt
 		if 'set' not in prop.actions or skipped:
 			continue
 		try:
-			raw = prop.fget(owner)
+			raw = prop.__get__(owner, type(owner))
 		except Exception:
 			raw = None
 		if isinstance(raw, Stateful):
