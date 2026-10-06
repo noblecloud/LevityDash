@@ -2875,6 +2875,24 @@ class Needle(GlowMixin, StatefulGaugePathItem):
 			path = path.united(disc)
 		return self._setShape(path)
 
+	@staticmethod
+	def _silhouette(parts: list[QPainterPath]) -> QPainterPath:
+		"""One non-overlapping outline from parts that overlap.
+
+		The head sits over the end of the shaft and the tail-dot over the end of
+		the tail, so filled as separate subpaths the overlaps are covered twice.
+		Under the default odd-even rule they cancel - a slot through the head and
+		a bite out of the dot - and the shared edges read as seams. A boolean
+		union flattens the parts into a single boundary whatever each one's
+		winding. ``simplified()`` alone is not enough here: it keeps the fill
+		rule's holes, and the ``point: in`` branch winds its triangle the opposite
+		way to ``out``, so the overlaps would survive it.
+		"""
+		path = QPainterPath(parts[0])
+		for part in parts[1:]:
+			path = path.united(part)
+		return path
+
 	def _style_arrow(self) -> QPainterPath:
 		"""A wind-direction arrow: a shaft and head at the rim, and optionally a
 		tail shaft ending in a dot at the opposite rim.
@@ -2890,33 +2908,39 @@ class Needle(GlowMixin, StatefulGaugePathItem):
 		half = head * 0.42
 		length = max(self.length_px, head)
 		rim = off - radius
-		path = QPainterPath()
+		parts: list[QPainterPath] = []
 		if (self.point or 'out') == 'out':
 			shaft = QPainterPath(QPointF(0, rim + head * 0.6))
 			shaft.lineTo(0, rim + length)
-			path.addPath(self._stroke(shaft, w))
-			path.moveTo(0, rim)
-			path.lineTo(half, rim + head)
-			path.lineTo(-half, rim + head)
-			path.closeSubpath()
+			parts.append(self._stroke(shaft, w))
+			headPath = QPainterPath()
+			headPath.moveTo(0, rim)
+			headPath.lineTo(half, rim + head)
+			headPath.lineTo(-half, rim + head)
+			headPath.closeSubpath()
+			parts.append(headPath)
 		else:
 			shaft = QPainterPath(QPointF(0, rim))
 			shaft.lineTo(0, rim + length - head * 0.6)
-			path.addPath(self._stroke(shaft, w))
-			path.moveTo(0, rim + length)
-			path.lineTo(half, rim + length - head)
-			path.lineTo(-half, rim + length - head)
-			path.closeSubpath()
+			parts.append(self._stroke(shaft, w))
+			headPath = QPainterPath()
+			headPath.moveTo(0, rim + length)
+			headPath.lineTo(half, rim + length - head)
+			headPath.lineTo(-half, rim + length - head)
+			headPath.closeSubpath()
+			parts.append(headPath)
 		tail = self._radial(self.tail)
 		dot = (self.gauge.sizeAcross(self.tailDot, dimension=DimensionType.width) or 0.0) if self.tailDot is not None else 0.0
 		far = radius - off
 		if tail > 0:
 			shaft = QPainterPath(QPointF(0, far - dot * 0.5))
 			shaft.lineTo(0, far - tail)
-			path.addPath(self._stroke(shaft, w))
+			parts.append(self._stroke(shaft, w))
 		if dot > 0:
-			path.addEllipse(QPointF(0, far - dot / 2), dot / 2, dot / 2)
-		return self._setShape(path)
+			disc = QPainterPath()
+			disc.addEllipse(QPointF(0, far - dot / 2), dot / 2, dot / 2)
+			parts.append(disc)
+		return self._setShape(self._silhouette(parts))
 
 	def _style_dot(self) -> QPainterPath:
 		"""A knob centred on the track. Width: diameter. Halo/halo-color: a ring around it."""
