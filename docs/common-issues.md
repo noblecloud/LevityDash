@@ -20,3 +20,26 @@ you have to set it with an environment flag. Note, xcb is the default which expe
 ```bash
 export QT_QPA_PLATFORM=your_selection_here
 ```
+
+### When an item fails to load
+
+> [!NOTE]
+> **Pending** ([#30](https://github.com/noblecloud/LevityDash/pull/30)). Before this change, one item that failed stopped the whole dashboard from loading.
+
+If one item in a dashboard cannot load, LevityDash shows a red tile in its place. The tile has the size and position of the item. The rest of the dashboard loads as usual.
+
+The tile shows the type of the item, or its key, and the first line of the error. Point at the tile to see the full text.
+
+For example, a color that names a token that does not exist, such as `$acent`, gives this tile:
+
+```yaml
+- type: text
+  text: Typo in a color
+  color: $acent
+  geometry: {x: 33%, y: 0%, width: 33%, height: 100%}
+```
+
+The tile says that the theme has no token `$acent` and lists the tokens that it has.
+
+- The log has the full error with the traceback. Search it for `Item failed to load`.
+- LevityDash does not save a dashboard while an error tile is on it. A save would write the tile out as nothing and remove the item from the file. Fix the item, then reload with `Ctrl+R`.

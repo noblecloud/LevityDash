@@ -8,7 +8,7 @@ Single line text with support for showing units and titles and mapping glyphs/em
 
 ## Gauge  <!-- {docsify-ignore} -->
 
-A radial gauge display for realtime values with customizable arcs, tick marks, needles, and value-mapped gradient coloring.
+A radial gauge display for realtime values with customizable arcs, tick marks, needles, and value-mapped gradient coloring. Markers and fills can follow an [expression](/config/dashboard/expressions.md), such as the high of today.
 
 ## Graph  <!-- {docsify-ignore} -->
 
@@ -24,7 +24,13 @@ Any scalar value can be plotted as a line. The line can be colored by a scalar v
 
 #### Bar  <!-- {docsify-ignore} -->
 
-Not fully implemented
+One bar for each sample, for amounts such as rain in each hour. A bar plot takes a gradient that follows the value.
+
+#### Violin  <!-- {docsify-ignore} -->
+
+One violin for each stretch of time. It shows how the values in the stretch are spread.
+
+A line can also change its thickness with the value of another key, and carry pins: marks, such as weather symbols, each at its own time. See the [dashboard options](/config/dashboard.md#graph).
 
 ## Mini Graph  <!-- {docsify-ignore} -->
 
@@ -36,7 +42,7 @@ A customizable clock that can have whatever formatting you want and values can b
 
 ## Moon Phase  <!-- {docsify-ignore} -->
 
-Displays the current moon phase and its rotation.
+Displays the current moon phase. The moon tilts as it looks in the sky at your location.
 
 ## Groups & Stacks  <!-- {docsify-ignore} -->
 
@@ -46,6 +52,7 @@ Containers for organizing display modules:
 - **titled-group** — a group with a built-in title bar
 - **stack** — lays children out automatically in a vertical or horizontal stack, with optional dividers and spacers
 - **value-stack** — a stack purpose-built for lists of labeled realtime values
+- **switch** — a slot that shows one of several modules, chosen by a condition or in turn. See [Switch](/config/dashboard/switch.md)
 
 ## Planned Modules  <!-- {docsify-ignore} -->
 
@@ -66,5 +73,10 @@ See the [roadmap](/roadmap.md) for the full picture.
 - Editable Margins for text modules
 - Resizable graph figures
 - Custom, value mapped, gradients for figure items
+- [Themes](/config/dashboard/themes.md): named colors, fonts, and gradients that restyle a whole board
+- [Variables](/config/dashboard/variables.md): name a value once and use it in many places
+- [Expressions](/config/dashboard/expressions.md): a value from a calculation on keys, with units such as `> 90°F`
+- A module that is shown only while a condition is true (`when:`)
+- A dashboard that loads when one item fails. The item shows an error tile.
 - Icon packs: Font Awesome (`fa:`), Material Design Icons (`mdi:`), Weather Icons (`wi:`)
 - Text filters (lower, upper, title, capitalize, ordinal, add-ordinal)
