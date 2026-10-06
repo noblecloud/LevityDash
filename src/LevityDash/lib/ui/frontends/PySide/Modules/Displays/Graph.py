@@ -1106,7 +1106,10 @@ class GraphItemData(Stateful, tag=...):
 
 
 		l = self.smoothed
-		index = round(time_from_now / self.timeframe.range * len(l))
+		span = self.timeframe.range
+		# One sample, a stalled source or a frozen clock: no span to index by.
+		# There is a single sample to land on, so take it rather than divide by zero.
+		index = round(time_from_now / span * len(l)) if span else 0
 		i = sorted((0, index, len(l) - 1))[1]
 		return l[i]
 
