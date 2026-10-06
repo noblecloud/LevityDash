@@ -1,0 +1,92 @@
+# Report, not a gate: neither job fails the PR. Read the job summary.
+name: Report
+
+on:
+  pull_request:
+    branches: [ feat/value-sources ]
+  workflow_dispatch:
+
+concurrency:
+  group: report-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  LANG: en_US.UTF-8
+  LC_ALL: en_US.UTF-8
+  QT_QPA_PLATFORM: offscreen
+  LEVITYDASH_CONFIG_DEBUG: "1"
+
+jobs:
+  suite:
+    name: Test suite (3.14, offscreen)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: LevityDash
+      - uses: ./LevityDash/.github/actions/setup
+      - name: Run suite
+        working-directory: LevityDash
+        run: |
+          set +e
+          .venv/bin/python -m pytest tests -q -p no:cacheprovider -rfE 2>&1 | tee ../suite.log
+          status=${PIPESTATUS[0]}
+          {
+            echo '### Test suite (Python 3.14)'
+            echo
+            echo "Exit code: $status. \`test_remote_connection_signal\` is known flaky."
+            echo '```'
+            grep -E '^(FAILED|ERROR)|passed|failed' ../suite.log | tail -40
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+  render-diff:
+    name: Render diff against base
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: LevityDash
+          fetch-depth: 0
+      - uses: ./LevityDash/.github/actions/setup
+      - name: Check out the base commit
+        working-directory: LevityDash
+        run: git worktree add ../base "${{ github.event.pull_request.base.sha }}"
+      - name: Capture base
+        run: |
+          cd base
+          PYTHONPATH=src ../LevityDash/.venv/bin/python src/LevityDash/devtools/render_diff.py \
+            capture "$RUNNER_TEMP/before" --python ../LevityDash/.venv/bin/python || echo "base capture failed"
+      - name: Capture head
+        working-directory: LevityDash
+        run: |
+          PYTHONPATH=src .venv/bin/python src/LevityDash/devtools/render_diff.py \
+            capture "$RUNNER_TEMP/after" || echo "head capture failed"
+      - name: Compare
+        working-directory: LevityDash
+        run: |
+          set +e
+          PYTHONPATH=src .venv/bin/python src/LevityDash/devtools/render_diff.py \
+            compare "$RUNNER_TEMP/before" "$RUNNER_TEMP/after" | tee ../compare.log
+          status=${PIPESTATUS[0]}
+          {
+            echo '### Render diff (base vs this PR)'
+            echo
+            echo "Exit code: $status (1 = some render changed; that is a report, not a failure)."
+            echo '```'
+            tail -60 ../compare.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: render-diff
+          path: |
+            ${{ runner.temp }}/after/_diff
+            ${{ runner.temp }}/after/*.png
+          if-no-files-found: ignore
