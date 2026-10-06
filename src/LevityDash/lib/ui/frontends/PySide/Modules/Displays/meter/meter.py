@@ -608,9 +608,10 @@ class Meter(Display):
 
 	@defer
 	def rebuild(self):
-		self.major_ticks_surface.rebuild()
-		self.minor_ticks_surface.rebuild()
-		self.micro_ticks_surface.rebuild()
+		# A meter without tick surfaces (a bar draws its own) just refreshes.
+		for name in ('major_ticks_surface', 'minor_ticks_surface', 'micro_ticks_surface'):
+			if (surface := getattr(self, name, None)) is not None:
+				surface.rebuild()
 
 		self.refresh()
 
