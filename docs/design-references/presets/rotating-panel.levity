@@ -1,0 +1,29 @@
+# A panel that flips through sub-panels at a set rate. `cycle:` is the seconds each child stays up.
+# Children with no `when:` always match, so all of them take turns, in file order.
+# Add `when:` to a child to keep it out of the rotation while its condition is false, or on the
+# switch's children generally to rotate only the ones that apply right now.
+# `fade:` is the cross-fade in seconds (0 swaps at once). Each switch has its own `cycle:`.
+- type: group
+  name: main
+  items:
+    - type: switch
+      name: rotator
+      cycle: 6s
+      fade: 0.4s
+      geometry: {x: 25%, y: 4%, width: 50%, height: 92%}
+      items:
+        - type: realtime.gauge
+          name: temperature
+          key: environment.temperature.temperature
+          title: false
+          display: {radius: 90%, arc: {gradient: TemperatureGradient, weight: 10%}, range: {min: 30, max: 110}, value-label: {position: below}}
+        - type: realtime.gauge
+          name: humidity
+          key: environment.humidity.humidity
+          title: false
+          display: {radius: 90%, arc: {weight: 10%}, range: {min: 0, max: 100}, value-label: {position: below}}
+        - type: realtime.gauge
+          name: uv
+          key: environment.light.uvi
+          title: false
+          display: {radius: 90%, arc: {weight: 8%}, range: {min: 0, max: 12}, value-label: {position: below}}
