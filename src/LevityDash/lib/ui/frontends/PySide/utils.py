@@ -1003,6 +1003,24 @@ colorPalette.setColor(QPalette.ColorRole.WindowText, QColor(255, 255, 255))
 colorPalette.setColor(QPalette.ColorRole.ButtonText, QColor(255, 255, 255))
 colorPalette.setColor(QPalette.ColorRole.Text, QColor(255, 255, 255))
 
+
+
+def applyThemeToPalette(palette: QPalette, active) -> QPalette:
+	"""Fill the dashboard's palette from a theme. It is set on the dashboard view only, never on the QApplication."""
+	R = QPalette.ColorRole
+	for roles, token in (
+		((R.Window, R.Base), 'background'),
+		((R.WindowText, R.Text, R.ButtonText), 'text'),
+		((R.Button, R.AlternateBase), 'surface'),
+		((R.PlaceholderText,), 'faint'),
+		((R.Mid, R.Dark), 'rule'),
+		((R.Highlight,), 'accent'),
+	):
+		for role in roles:
+			palette.setColor(role, active.color(token).QColor)
+	return palette
+
+
 selectionPen = QPen(QColor(colorPalette.windowText().color()), 1)
 selectionPen.setDashPattern([5, 5])
 debugPen = QPen(colorPalette.windowText().color(), 1)

@@ -43,7 +43,7 @@ from LevityDash.lib.ui.fonts import monospaceFont, system_default_font
 from LevityDash.lib.ui.frontends.PySide import qtLogger as guiLog
 from LevityDash.lib.ui.frontends.PySide.Modules import SizeGroup
 from LevityDash.lib.ui.frontends.PySide.utils import (
-	colorPalette, RendererScene, ViewScale
+	applyThemeToPalette, colorPalette, RendererScene, ViewScale
 )
 from LevityDash.lib.ui.Geometry import (
 	AbsoluteFloat, DimensionType, findScreen, getDPI, LocationFlag, parseSize,
@@ -410,6 +410,8 @@ class LevitySceneView(QGraphicsView):
 
 	def _themeChanged(self, active):
 		self.setBackgroundBrush(active.color('background').QColor)
+		# The viewport only: the window frame and the rest of the app keep the system palette.
+		self.viewport().setPalette(applyThemeToPalette(colorPalette, active))
 
 	def resizeEvent(self, event):
 		super(LevitySceneView, self).resizeEvent(event)
