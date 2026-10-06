@@ -575,6 +575,9 @@ class HandleLayer:
 				if value is None:
 					return None
 				dl = dial()
+				# A stop outside the range (50°C on a 0-120°F dial) rests on the arc's end, not past it.
+				lo, hi = span()
+				value = min(max(value, lo), hi)
 				# Placed through the dial's value-to-angle mapping. Once refactor/meter lands, place nodes through
 				# Scale and Track instead (docs/tasks/meter-and-bar.md), so a bar gets gradient nodes for free.
 				return dl.toScene(dl.valueAngle(value), centre())
