@@ -74,8 +74,8 @@ class Glow:
 				out = replace(out, **{key: number})
 		if 'passes' in value:
 			passes = _number('passes', value['passes'])
-			if passes != int(passes) or not 1 <= passes <= 4:
-				raise ValueError(f'glow passes must be a whole number from 1 to 4, not {value["passes"]!r}')
+			if passes != int(passes) or not 1 <= passes <= 16:
+				raise ValueError(f'glow passes must be a whole number from 1 to 16, not {value["passes"]!r}')
 			out = replace(out, passes=int(passes))
 		return out
 

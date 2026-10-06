@@ -1,0 +1,15 @@
+# Glow with more passes than the old 4-pass cap allowed: each pass strokes the path
+# again, wider and fainter, so more passes buy a smoother halo. This pair is the
+# 4-pass reference; glow-passes-12.levity is the same gauge at twelve.
+# Render with --scenario hot-clear-day.
+- type: realtime.gauge
+  name: glow
+  key: environment.temperature.temperature
+  title: false
+  display:
+    arc: {start-angle: -135, end-angle: 135, weight: 5%, color: '#1d1d24'}
+    range: {min: 60, max: 110}
+    fill: {weight: 5%, color: '#ff8a3d'}
+    glow: {strength: 1.0, size: 0.7, passes: 4}
+    needle: {type: dot, length: 6%, width: 7%, color: '#ffffff'}
+    value-label: {position: center, size: 15%}

@@ -109,9 +109,10 @@ FIXTURE_DELAY_MS = 'end'
 #: half of the runs die at shutdown with SIGSEGV. That is measured in this tree
 #: and in upstream `a31af10` alike, so it is not the meter split's, and the
 #: trigger is this harness rather than the app — with the clock live, both trees
-#: render cleanly. Emissive is the graph preset and carries no clock, so leaving
-#: its clock live costs nothing and buys the glow paths their pixel cover.
-NO_FREEZE = frozenset({'emissive'})
+#: render cleanly. Emissive and condition-pins are the graph presets and carry no
+#: clock, so leaving their clocks live costs nothing and buys the glow paths and
+#: the pins/thickness fixture their pixel cover.
+NO_FREEZE = frozenset({'emissive', 'condition-pins'})
 
 
 # --------------------------------------------------------------------------- #
