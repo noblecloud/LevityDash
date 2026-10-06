@@ -101,3 +101,19 @@ def test_a_theme_can_recolour_a_named_preset():
 	theme.reset()
 	assert Gradient.decode('UVIndexGradient') is before
 	assert Gradient.decode('$temperature') is Gradient.decode('TemperatureGradient')
+
+
+def test_a_theme_file_in_the_config_folder_is_found():
+	from LevityDash.lib.config import userConfig
+
+	folder = userConfig.userPath.path / 'themes'
+	folder.mkdir(exist_ok=True)
+	file = folder / 'harbor-test.yaml'
+	file.write_text("name: harbor-test\nextends: dusk\ncolors:\n  accent: '#4fd1c5'\n", encoding='utf-8')
+	try:
+		theme.reset()
+		assert 'harbor-test' in theme.available()
+		assert theme.load('harbor-test').color('accent').hex == '#4fd1c5'
+	finally:
+		file.unlink()
+		theme.reset()
