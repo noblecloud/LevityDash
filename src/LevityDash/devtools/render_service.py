@@ -95,6 +95,7 @@ from LevityDash.devtools._boot import (
 	named_items,
 	pump,
 	render_png_bytes,
+	resizeScene,
 )
 
 DEFAULT_PORT = 8670  # one above backend_watch's 8669
@@ -185,7 +186,7 @@ class QtRenderer:
 		"""
 		if size == self._size:
 			return
-		self._app.main_window.resize(*size)
+		resizeScene(self._app, size)
 		pump(self._app, self._settle)
 		self._size = size
 
