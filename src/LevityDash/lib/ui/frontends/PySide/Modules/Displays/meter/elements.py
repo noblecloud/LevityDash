@@ -81,13 +81,17 @@ __all__ = ['GaugeItem', 'GaugePathItem', 'GaugeValue', 'Numeric', 'StatefulGauge
 
 
 def gauge_class():
-	"""The `Gauge` class, imported when it is needed rather than at import time.
+	"""The `Gauge` class an item recognises its owner by.
 
-	`Gauge.py` imports this module, so importing it back at module level would be
-	a cycle. The class here is the one an item recognises its owner by.
+	`meter/gauge.py` hands its class over at that module's foot, so this module's
+	own global is the answer as soon as anything has imported it - one mechanism,
+	not two. The import is the fallback for a caller that runs before the
+	hand-over, or for this module loaded on its own, as the tests load it.
 	"""
-	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Gauge import Gauge
-	return Gauge
+	if Gauge is not None:
+		return Gauge
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.gauge import Gauge as gauge_cls
+	return gauge_cls
 
 
 def gaugeKeyName(gauge: 'Gauge') -> str:
