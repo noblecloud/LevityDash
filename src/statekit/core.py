@@ -860,9 +860,8 @@ class StateProperty(property):
 						fromOwner = factory(owner)
 						owner._state_item_sources[self] = SourceType.Factory
 					except Exception as eF:
+						log.error(f"{self} factory failed: {type(eF).__name__}: {eF}", exc_info=eF if STATEFUL_DEBUG else None)
 						if STATEFUL_DEBUG:
-							log.exception(e)
-							log.exception(eF)
 							raise eF
 					else:
 						self.fset(owner, fromOwner)
