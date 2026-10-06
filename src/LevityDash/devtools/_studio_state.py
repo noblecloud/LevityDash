@@ -31,7 +31,7 @@ QUICK: Dict[str, Dict[str, Any]] = {
 		'labels': {'arc.color': 'arc color', 'arc.cap': 'arc cap'},
 	},
 	'Needle': {
-		'paths': ('needle.visible', 'needle.color', 'needle.length', 'needle.width', 'needle.point'),
+		'paths': ('needle.visible', 'needle.type', 'needle.color', 'needle.length', 'needle.width', 'needle.point'),
 		'owns': ('needle',),
 		'labels': {'needle.visible': 'show needle'},
 	},
