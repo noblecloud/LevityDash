@@ -13,8 +13,9 @@ what the dashboard draws.
 - `GaugeRange.default_range` and `_gaugeKeyName` read `self.parent.key`.
   `StudioStage.key` answers both.
 - A marker or fill that names a key (`value: environment.temperature.high`) asks
-  `openValueSource`, imported into the Gauge module by name. `installSources()`
-  swaps that name for a lookup into the made-up data.
+  `openValueSource` (`lib/valuesource.py`). `installSources()` registers a
+  stand-in there that looks into the made-up data, so it reaches every consumer
+  wherever it lives.
 - `Panel` wants a stateful root with an action pool, a scene with `.view` and
   `.base`, and a parent that is a `Panel`. `StudioScene` and `StudioStage` are
   that, minus everything `CentralPanel` does with files, config and the
@@ -36,8 +37,8 @@ from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import QGraphicsScene, QGraphicsView
 
 from LevityDash.lib.plugins.categories import CategoryItem
+from LevityDash.lib.valuesource import installStandIn
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
-from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Gauge as _gaugeModule
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Gauge import Gauge
 from statekit.actions import ActionPool
 from statekit.binding import Constant
@@ -277,7 +278,7 @@ _active: Optional['StudioGauge'] = None
 
 
 def _openValueSource(value, label: str = '', effect: str = ''):
-	"""Replaces `Gauge.openValueSource`. A number is a constant, a key reads the made-up data."""
+	"""Stands in for `openValueSource`. A number is a constant, a key reads the made-up data."""
 	if isinstance(value, bool):
 		return None
 	if isinstance(value, (int, float)):
@@ -288,8 +289,8 @@ def _openValueSource(value, label: str = '', effect: str = ''):
 
 
 def installSources() -> None:
-	"""Point the Gauge module's `openValueSource` at the made-up data. Idempotent."""
-	_gaugeModule.openValueSource = _openValueSource
+	"""Answer every value-source lookup from the made-up data. Idempotent."""
+	installStandIn(_openValueSource)
 
 
 # Section: the gauge and its driver
