@@ -1,0 +1,78 @@
+# The three polar plots on one board: a wind rose, a wind trail and a 24 hour temperature clock.
+#   render_dashboard.py OUT.png --levity docs/design-references/polar-board.levity --scenario polar-day --size 1920x1080
+# See Modules/Displays/polar/item.py for every setting.
+items:
+  - type: group
+    name: board
+    items:
+      - type: text
+        name: heading
+        text: Wind and temperature, today
+        font: $display
+        color: $muted
+        geometry: {x: 3%, y: 2%, width: 60%, height: 8%}
+      - type: group
+        name: rose-card
+        geometry: {x: 1%, y: 12%, width: 32%, height: 86%}
+        items:
+          - type: text
+            text: Where the wind comes from
+            font: $display
+            color: $faint
+            geometry: {x: 3%, y: 0%, width: 94%, height: 6%}
+          - type: polar
+            name: rose
+            plot: rose
+            direction: environment.wind.direction.direction
+            speed: environment.wind.speed.speed
+            window: today
+            legend: false
+            geometry: {x: 0%, y: 8%, width: 100%, height: 92%}
+            gradient:
+              - {at: 0, color: '#1a8cff'}
+              - {at: 8, color: '#14e3c0'}
+              - {at: 14, color: '#ffd400'}
+              - {at: 20, color: '#ff9124'}
+              - {at: 28, color: '#ff3048'}
+      - type: group
+        name: trail-card
+        geometry: {x: 34%, y: 12%, width: 32%, height: 86%}
+        items:
+          - type: text
+            text: Where it has pointed, hour by hour
+            font: $display
+            color: $faint
+            geometry: {x: 3%, y: 0%, width: 94%, height: 6%}
+          - type: polar
+            name: trail
+            plot: trail
+            direction: environment.wind.direction.direction
+            speed: environment.wind.speed.speed
+            window: today
+            geometry: {x: 0%, y: 8%, width: 100%, height: 92%}
+            gradient:
+              - {at: 0, color: '#1a8cff'}
+              - {at: 8, color: '#14e3c0'}
+              - {at: 14, color: '#ffd400'}
+              - {at: 20, color: '#ff9124'}
+              - {at: 28, color: '#ff3048'}
+      - type: group
+        name: clock-card
+        geometry: {x: 67%, y: 12%, width: 32%, height: 86%}
+        items:
+          - type: text
+            text: Temperature round the clock
+            font: $display
+            color: $faint
+            geometry: {x: 3%, y: 0%, width: 94%, height: 6%}
+          - type: polar
+            name: clock
+            plot: clock
+            key: environment.temperature.temperature
+            window: today
+            geometry: {x: 0%, y: 8%, width: 100%, height: 92%}
+            gradient:
+              - {at: 45°F, color: '#1a8cff'}
+              - {at: 58°F, color: '#14e3c0'}
+              - {at: 66°F, color: '#ffd400'}
+              - {at: 75°F, color: '#ff9124'}

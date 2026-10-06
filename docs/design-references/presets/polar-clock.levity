@@ -1,0 +1,10 @@
+- type: polar
+  name: polar
+  plot: clock
+  key: environment.temperature.temperature
+  window: today
+  gradient:
+    - {at: 45°F, color: '#1a8cff'}
+    - {at: 58°F, color: '#14e3c0'}
+    - {at: 66°F, color: '#ffd400'}
+    - {at: 75°F, color: '#ff9124'}

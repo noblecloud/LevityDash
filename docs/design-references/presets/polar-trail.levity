@@ -1,0 +1,12 @@
+- type: polar
+  name: polar
+  plot: trail
+  direction: environment.wind.direction.direction
+  speed: environment.wind.speed.speed
+  window: today
+  gradient:
+    - {at: 0, color: '#1a8cff'}
+    - {at: 8, color: '#14e3c0'}
+    - {at: 14, color: '#ffd400'}
+    - {at: 20, color: '#ff9124'}
+    - {at: 28, color: '#ff3048'}
