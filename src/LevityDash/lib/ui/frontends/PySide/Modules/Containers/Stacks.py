@@ -857,6 +857,8 @@ class Stack(Panel, tag='stack'):
 
 					state = shared_state.new_child(origin=self, child_map=state).to_dict()
 
+				state = self._sizeFromGeometry(state)
+
 				if (existingItem := self.extractExisting(state, existing)) is not None and isinstance(existingItem, item_type):
 					existingItem.state = state
 					item = existingItem
@@ -872,6 +874,35 @@ class Stack(Panel, tag='stack'):
 				item.index = index
 			else:
 				log.debug(f'{item} has no geometry')
+
+	def _sizeFromGeometry(self, state: dict) -> dict:
+		"""Turn a child's `geometry:` into a `size:`, the one thing a stack honours.
+
+		The stack lays every child out itself, so a child's own `geometry` was
+		decoded and then overwritten by `setGeometries`: `geometry: {height: 30%}`
+		in a vertical stack gave the child an equal share instead, with nothing in
+		the log. Along the stack's direction that value now acts as `size:` (an
+		explicit `size:` wins). The rest of it (`x`, `y`, the other dimension) has
+		no meaning in a stack and is dropped with a warning.
+		"""
+		geometry = state.get('geometry')
+		if geometry is None:
+			return state
+		state = {k: v for k, v in state.items() if k != 'geometry'}
+		if isinstance(geometry, (tuple, list)) and len(geometry) == 4:
+			geometry = dict(zip(('x', 'y', 'width', 'height'), geometry))
+		if not isinstance(geometry, Mapping):
+			return state
+		primary = 'height' if self.direction is Direction.Vertical else 'width'
+		if (size := geometry.get(primary)) is not None and state.get('size') is None:
+			state['size'] = size
+		ignored = [k for k in geometry if k not in (primary, 'fillParent')]
+		if ignored:
+			log.warning(
+				f'{state.get("key") or state.get("type") or "item"} in {self.direction.name} stack {self.name!r}: '
+				f'geometry {ignored} ignored; a stack sizes its children along {primary} with `size:`'
+			)
+		return state
 
 	def extractExisting(self, state_: dict, existing_: List[Panel], itemType: Type[Panel] = None) -> Panel | None:
 		if itemType is None:
