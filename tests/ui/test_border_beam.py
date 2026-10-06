@@ -393,3 +393,91 @@ def test_the_clock_is_shared_by_every_beam(dashboard, clock):
 			box.scene().removeItem(box)
 	assert clock.subscriberCount == 0, 'a beam that leaves the scene gives up its subscription'
 	assert not clock.running
+
+
+# section glow
+
+PAD = 12
+GLOW = {'strength': 1.0, 'reach': 4.0, 'passes': 6, 'bloom': 0.0}
+
+
+def render_glow(beam: PanelBeam, pad: int) -> QImage:
+	"""The scene's paint, on an image padded so the halo outside the panel is visible."""
+	image = QImage(W + 2 * pad, H + 2 * pad, QImage.Format.Format_ARGB32_Premultiplied)
+	image.fill(0)
+	painter = QPainter(image)
+	painter.translate(pad, pad)
+	painter.setBrush(QColor('#1d1d1d'))
+	painter.setPen(QColor('#3a3a3a'))
+	beam.paintBehind(painter)
+	painter.drawRoundedRect(QRectF(0.5, 0.5, W - 1, H - 1), 16, 16)
+	beam.paint(painter, None)
+	painter.end()
+	return image
+
+
+def ring_ink(image: QImage, pad: int) -> int:
+	"""Pixels outside the panel's rect that are not transparent: the halo's footprint."""
+	count = 0
+	for y in range(image.height()):
+		for x in range(image.width()):
+			if pad <= x < pad + W and pad <= y < pad + H:
+				continue
+			if image.pixelColor(x, y).alpha() > 0:
+				count += 1
+	return count
+
+
+def test_glow_true_puts_a_halo_outside_the_beam(sandbox):
+	beam = make_beam(sandbox, 'md', glow=dict(GLOW))
+	assert ring_ink(render_glow(beam, PAD), PAD) > 0, 'no halo pixels outside the panel'
+
+
+def test_no_glow_leaves_nothing_outside_the_beam(sandbox):
+	absent = make_beam(sandbox, 'md')
+	assert ring_ink(render_glow(absent, PAD), PAD) == 0
+	off = make_beam(sandbox, 'md', glow=False)
+	assert ring_ink(render_glow(off, PAD), PAD) == 0
+
+
+def test_glow_grows_the_bounding_rect(sandbox):
+	plain = make_beam(sandbox, 'md').boundingRect()
+	beam = make_beam(sandbox, 'md', glow=dict(GLOW))
+	box = beam.boundingRect()
+	assert box.left() < plain.left() and box.top() < plain.top()
+	assert box.right() > plain.right() and box.bottom() > plain.bottom()
+
+
+def test_glow_round_trips_through_state(sandbox):
+	sandbox.state = {'beam': {'size': 'md', 'active': True, 'glow': {'reach': 1.5, 'passes': 6}}}
+	beam = sandbox.beamProp
+	assert beam.glow is not None
+	assert beam.glow.reach == pytest.approx(1.5)
+	assert beam.glow.passes == 6
+	assert beam.state['glow'] == {'reach': 1.5, 'passes': 6}
+
+
+def test_glow_changed_refreshes_geometry(sandbox):
+	beam = make_beam(sandbox, 'md')
+	plain = beam.boundingRect()
+	beam.glow = {'reach': 4.0}
+	box = beam.boundingRect()
+	assert box.left() < plain.left(), 'a later glow change did not grow the bounds'
+
+
+def test_card_fill_glow_paints_a_halo(sandbox):
+	beam = make_beam(sandbox, 'md', fill='#ff3366', glow=dict(GLOW))
+	image = QImage(W + 2 * PAD, H + 2 * PAD, QImage.Format.Format_ARGB32_Premultiplied)
+	image.fill(0)
+	painter = QPainter(image)
+	painter.translate(PAD, PAD)
+	beam.paintBehind(painter)
+	painter.end()
+	assert ring_ink(image, PAD) > 0, 'the filled card drew no halo'
+
+
+def test_card_glow_grows_the_behind_layer(sandbox):
+	beam = make_beam(sandbox, 'md', fill='#ff3366', glow=dict(GLOW))
+	behind = beam._behind
+	assert behind is not None
+	assert behind.boundingRect().left() < beam.panelRect().left()

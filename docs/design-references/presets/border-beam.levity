@@ -18,6 +18,8 @@
 #                (M L H V C S Q T A Z). It is scaled to fill the panel. Left out, the panel's rounded rectangle.
 #   phase:       hold the beam at this time in seconds, with no animation. Used here so every
 #                render is the same frame. Leave it out on a real dashboard.
+#   glow:        a halo along the beam's outline (and around the card when a fill is set).
+#                true, or {strength, reach, passes, bloom}. reach is a share of the beam's band.
 #
 # Five cards, one per size, held at a visible moment of the cycle.
 # Render: render_dashboard.py OUT.png --levity THIS --size 1800x320 --scenario hot-clear-day --settle 4
@@ -27,7 +29,7 @@
     - type: group
       name: sm
       geometry: {x: 2.5%, y: 25%, width: 15%, height: 50%}
-      beam: {size: sm, fill: '#1b1b1f', active: true, phase: 0.5}
+      beam: {size: sm, fill: '#1b1b1f', active: true, phase: 0.5, glow: {strength: 1.0, reach: 4.0, passes: 6}}
       items:
         - type: text
           name: smTitle
@@ -37,7 +39,7 @@
     - type: group
       name: md
       geometry: {x: 22.5%, y: 25%, width: 15%, height: 50%}
-      beam: {size: md, fill: '#1b1b1f', active: true, phase: 0.5}
+      beam: {size: md, fill: '#1b1b1f', active: true, phase: 0.5, glow: {strength: 1.0, reach: 4.0, passes: 6}}
       items:
         - type: text
           name: mdTitle
@@ -47,7 +49,7 @@
     - type: group
       name: line
       geometry: {x: 42.5%, y: 25%, width: 15%, height: 50%}
-      beam: {size: line, fill: '#1b1b1f', active: true, phase: 0.9}
+      beam: {size: line, fill: '#1b1b1f', active: true, phase: 0.9, glow: {strength: 1.0, reach: 4.0, passes: 6}}
       items:
         - type: text
           name: lineTitle
@@ -57,7 +59,7 @@
     - type: group
       name: pulseInner
       geometry: {x: 62.5%, y: 25%, width: 15%, height: 50%}
-      beam: {size: pulse-inner, fill: '#1b1b1f', active: true, phase: 0.95}
+      beam: {size: pulse-inner, fill: '#1b1b1f', active: true, phase: 0.95, glow: {strength: 1.0, reach: 4.0, passes: 6}}
       items:
         - type: text
           name: pulseInnerTitle
@@ -67,7 +69,7 @@
     - type: group
       name: pulseOutside
       geometry: {x: 82.5%, y: 25%, width: 15%, height: 50%}
-      beam: {size: pulse-outside, fill: '#1b1b1f', active: true, phase: 0.95}
+      beam: {size: pulse-outside, fill: '#1b1b1f', active: true, phase: 0.95, glow: {strength: 1.0, reach: 4.0, passes: 6}}
       items:
         - type: text
           name: pulseOutsideTitle

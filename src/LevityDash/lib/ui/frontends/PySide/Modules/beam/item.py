@@ -14,10 +14,15 @@
     active: false            # true | false | a key or expression: the beam runs while it is true
     sweep: some.key          # a key or expression: one sweep each time the value arrives
     phase: 0.6               # optional: hold the beam at this time in seconds (renders)
+    glow: true               # optional halo along the beam's outline and around its card
 ```
 
 A panel with no `beam:` has none of this. `active` and `sweep` default to off, so a beam that is
 only declared draws nothing. See docs/tasks/emissive-color-and-glow.md, phase 3.
+
+`glow:` is the shared halo helper (`lib/ui/glow.py`). The beam draws it twice: a stroked halo
+along the outline it follows (`filled=False`), and a filled one around the card when a `fill:` is
+set (`filled=True`). Both scale from the band the beam paints (`glowWidth`).
 
 Painting: two items. `PanelBeam` is the front layer, a child of the panel above its content. For
 `pulse-outside`, and for a `fill`, a second item sits behind the panel (`ItemStacksBehindParent`),
@@ -34,16 +39,18 @@ import math
 from typing import Any, Optional
 
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QPainter, QPainterPath
+from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath
 from PySide6.QtWidgets import QGraphicsItem
 
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.stateful import Binding, Stateful, StateProperty
 from LevityDash.lib.ui.colors import Color, theme as colour_theme
+from LevityDash.lib.ui.glow import GlowMixin, paintGlow
 from LevityDash.lib.valuesource import openValueSource
 from . import shapes, styles
-from .palettes import line_hue_shift
+from .palettes import BORDER_PALETTES, apply_filters, hue_shift as hue_shift_color, line_hue_shift
 from .pulse_driver import PulseDriver
+from .ring import ring_color
 from .types import ColorSpace, ColorVariant, Size, Theme
 
 __all__ = ('PanelBeam',)
@@ -108,14 +115,18 @@ class _BehindLayer(QGraphicsItem):
 		rect = self._beam.panelRect()
 		if self._beam.size is Size.PULSE_OUTSIDE:
 			halo = styles.PULSE_HALO
-			return rect.adjusted(-halo, -halo, halo, halo)
+			rect = rect.adjusted(-halo, -halo, halo, halo)
+		glow = self._beam.glow
+		if glow is not None and self._beam.fill is not None:
+			# The card is a filled shape: its halo reaches `reach` outside the outline.
+			rect = rect.united(glow.pad(self._beam.panelRect(), self._beam.glowWidth(), filled=True))
 		return rect
 
 	def paint(self, painter: QPainter, option, widget=None) -> None:
 		self._beam.paintBehind(painter)
 
 
-class PanelBeam(QGraphicsItem, Stateful, tag=...):
+class PanelBeam(GlowMixin, QGraphicsItem, Stateful, tag=...):
 	"""The front layer of a beam, and the owner of its settings and its clock."""
 
 	_size: Size = Size.MEDIUM
@@ -166,7 +177,12 @@ class PanelBeam(QGraphicsItem, Stateful, tag=...):
 		return QPainterPath()
 
 	def boundingRect(self) -> QRectF:
-		return self.panelRect()
+		rect = self.panelRect()
+		glow = self.glow
+		if glow is None:
+			return rect
+		# The beam is stroked along the outline, so half the spread lies on each side of it.
+		return glow.pad(rect, self.glowWidth())
 
 	def parentResized(self, *args) -> None:
 		"""Connected by the panel when this item is added to it."""
@@ -182,6 +198,39 @@ class PanelBeam(QGraphicsItem, Stateful, tag=...):
 		self.update()
 		if self._behind is not None:
 			self._behind.update()
+
+	# section glow
+
+	def glowWidth(self) -> float:
+		"""The width the halo scales from: the band the beam paints along its outline.
+
+		1px on the panel's rounded rectangle, 2px on a custom path - the same band
+		`styles.band_mask` uses, so the halo grows from what the beam actually draws.
+		"""
+		return 2.0 if self._pathUnits is not None else 1.0
+
+	def glowPath(self) -> QPainterPath:
+		"""The outline the halo follows, in the item's own coordinates: the custom path, or the rounded rect."""
+		path, _ = self.outlinePath()
+		if path is not None:
+			return path
+		rect = self.panelRect()
+		return styles.rounded_rect_path(QRectF(0.0, 0.0, rect.width(), rect.height()), self.cornerRadius)
+
+	def _glowBrush(self, ctx: styles.PaintCtx) -> QBrush:
+		"""The halo colour: the beam's leading blob colour for this frame, so it keeps the beam's hue."""
+		if ctx.color_space is ColorSpace.OKLCH:
+			color = ring_color(0, ctx.hue_deg, ctx.saturation, ctx.brightness)
+		else:
+			color = apply_filters(
+				hue_shift_color(BORDER_PALETTES[ctx.variant][0].color, ctx.hue_deg),
+				ctx.brightness, ctx.saturation,
+			)
+		return QBrush(color)
+
+	def glowChanged(self) -> None:
+		"""After a `glow` change: the halo grows the bounds, so re-measure and repaint."""
+		self._geometryChanged()
 
 	def outlinePath(self) -> tuple[Optional[QPainterPath], Optional[tuple]]:
 		"""The custom outline fitted to the panel, with a key for the mask cache. (None, None) without one."""
@@ -256,6 +305,10 @@ class PanelBeam(QGraphicsItem, Stateful, tag=...):
 		try:
 			painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 			painter.translate(self.panelRect().topLeft())
+			glow = self.glow
+			if glow is not None:
+				# The beam is stroked along its outline: the halo grows half its spread on each side.
+				paintGlow(painter, self.glowPath(), self._glowBrush(ctx), self.glowWidth(), glow)
 			size = ctx.size
 			if size is Size.PULSE_OUTSIDE:
 				styles.paint_pulse_outside_front(painter, ctx)
@@ -281,6 +334,10 @@ class PanelBeam(QGraphicsItem, Stateful, tag=...):
 			if self._fill is not None:
 				rect = self.panelRect()
 				radius = self.cornerRadius
+				glow = self.glow
+				if glow is not None:
+					# The card is a filled shape: its halo is stroked along the outline, outside it.
+					paintGlow(painter, self.glowPath(), QBrush(self._fill.QColor), self.glowWidth(), glow, filled=True)
 				painter.setPen(Qt.PenStyle.NoPen)
 				painter.setBrush(self._fill.QColor)
 				if (path := self.outlinePath()[0]) is not None:
