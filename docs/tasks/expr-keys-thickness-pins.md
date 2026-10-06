@@ -43,3 +43,13 @@ Branch: `feat/expr-props`, based on `dev` (`5661eb4`).
 - Save round-trip keeps the expression text as `key`.
 - Condition-icon fixture: a graph with `pins: {key: environment.condition.icon, ...}`
   renders glyphs — the docstring's own example at `Graph.py:1866-1868`.
+
+## Harness notes (2026-10-06, from the merge check)
+
+- `polar-clock` renders almost blank in `render_diff.py capture` on both `dev` and this
+  branch — a scenario key it reads is missing from `_scenario.yaml`. Pre-existing;
+  fix the scenario before baselining that target.
+- The named masks (`graph-figure`, `ev-caption`) were measured against a 70px-shorter
+  capture than the current one (830/1370 vs 900/1440), so they no longer apply and
+  `emissive`'s live-clock regions count as differences. Re-measure them at the current
+  capture size. The size guard doing its job is the only reason this was visible.
