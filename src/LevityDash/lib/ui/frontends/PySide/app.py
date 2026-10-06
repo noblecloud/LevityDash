@@ -42,6 +42,7 @@ from LevityDash.lib.ui.colors import backdrop, theme
 from LevityDash.lib.ui.fonts import monospaceFont, system_default_font
 from LevityDash.lib.ui.frontends.PySide import qtLogger as guiLog
 from LevityDash.lib.ui.frontends.PySide.Modules import SizeGroup
+from LevityDash.lib.ui.frontends.PySide.Modules.ThemeMenu import ThemeMenu
 from LevityDash.lib.ui.frontends.PySide.utils import (
 	applyThemeToPalette, colorPalette, RendererScene, ViewScale
 )
@@ -1290,6 +1291,7 @@ class LevityMainWindow(QMainWindow):
 		dashboardMenu.addAction(clear)
 		dashboardMenu.addAction(printState)
 		dashboardMenu.addAction(showStatusBar)
+		dashboardMenu.addMenu(ThemeMenu(self, self.view.graphicsScene.base.reload))
 
 		clearCacheAction = QAction('Clear Pixmap Cache', self)
 		clearCacheAction.setStatusTip('Clear the cache')
