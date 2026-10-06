@@ -10,9 +10,8 @@ Ported from color_sphere's knot (`demo.html`, the per-segment stroke loop). For 
 - normal (source-over) blending, so the halo keeps the hue of the core.
 
 A **line** (an arc, a plot) grows half its spread on each side of the stroke. A **filled
-shape** (a needle, a fill, a glyph) is stroked along its outline, so its halo stroke has to
-span the object before any of it shows outside - pass ``filled=True`` and the outline's own
-thickness, and the halo reaches ``reach`` *outside* the outline.
+shape** (a needle, a fill, a glyph) is stroked along its outline: pass ``filled=True`` and the shape's own thickness, and the halo reaches ``reach`` widths
+*outside* the outline, starting flush with it (nothing shows at ``reach: 0``).
 
 One more stroke, at the widest width, adds light (``Plus`` blending) with alpha
 ``min(bloom, widest pass alpha / 2)``. The cap matters: hue colours added together go to
@@ -103,10 +102,11 @@ class Glow:
 		"""The widest halo stroke as a multiple of the object's width.
 
 		A line grows half the spread on each side, so its widest stroke is ``1 + reach``.
-		A filled shape's halo is stroked along its outline: to reach ``reach`` *outside*
-		the outline, the stroke has to span the object as well, hence ``1 + 2 * reach``.
+		A filled shape's halo is stroked along its outline, and half of that stroke lies
+		outside it: to reach ``reach`` widths outside, the stroke is ``2 * reach`` wide.
+		It does not add the object's own width, or a band shows even at ``reach: 0``.
 		"""
-		return 1 + self.reach * (2 if filled else 1)
+		return 2 * self.reach if filled else 1 + self.reach
 
 	def reach_px(self, width: float, filled: bool = False) -> float:
 		"""How far the halo reaches past the core, in pixels, on each side.
@@ -170,12 +170,16 @@ def paintGlow(painter: QPainter, path: QPainterPath, brush: QBrush, width: float
 			# the passes between divide that evenly. More passes, finer steps - the halo
 			# is always `reach` wide whatever the count.
 			spread = glow.reach * (k - 1) / steps
-			pen.setWidthF(width * (1 + spread * (2 if filled else 1)))
+			stroke = width * (2 * spread if filled else 1 + spread)
+			if stroke <= 0:
+				# A filled shape's first pass is the shape itself, which the core hides.
+				continue
+			pen.setWidthF(stroke)
 			painter.setOpacity(opacity * min(1.0, alpha))
 			painter.setPen(pen)
 			painter.drawPath(path)
 		bloom = min(glow.bloom, alpha * 0.5)
-		if bloom > 0:
+		if bloom > 0 and glow.widest(filled) > 0:
 			pen.setWidthF(width * glow.widest(filled))
 			painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
 			painter.setOpacity(opacity * bloom)
