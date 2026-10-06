@@ -35,7 +35,7 @@ two batches, each with its own commit and a full gate run.
 what each member actually touches:
 
 ```
-.render-diff/tools/arc_cut.py src/.../Displays/Gauge.py Gauge
+src/LevityDash/devtools/render_diff_tools/arc_cut.py src/.../Displays/Gauge.py Gauge
 ```
 
 A member belongs on `Meter` if it does not reference the arc, the angles, or
@@ -58,7 +58,7 @@ Batch 3 is the layout: alignment, anchor, inset, `center_offset`, the side rects
 Batch 4 is the item holders: `needle`, `fill`, `zones`, `markers`,
 `majorDivisions`, `minorDivisions`, `microDivisions` and their clear/item helpers.
 
-**How to move them.** `.render-diff/tools/move_members.py SOURCE.py Class
+**How to move them.** `src/LevityDash/devtools/render_diff_tools/move_members.py SOURCE.py Class
 TARGET.py Class Name...` moves a member *group* - every definition sharing a name,
 decorators included - because `@prop.factory` and `@prop.setter` are evaluated in
 the class body and only work beside their base property. Always run it against

@@ -17,8 +17,8 @@ its original text, except where the branch documents a change.*
   line for line. Indentation is normalised, because one member (`GaugeRange`) moved out of the
   `Gauge` class body (nested, one tab) to module level. A member "group" means every definition
   sharing a name — the `@StateProperty` getter/setter/decode/encode idiom — compared in order.
-- **Reproduce:** `python .render-diff/tools/split_audit.py` (all steps) or
-  `python .render-diff/tools/split_audit.py <commit>` (one step). Read-only (`git show` only).
+- **Reproduce:** `python src/LevityDash/devtools/render_diff_tools/split_audit.py` (all steps) or
+  `python src/LevityDash/devtools/render_diff_tools/split_audit.py <commit>` (one step). Read-only (`git show` only).
   The tool is new, lives in the gitignored `.render-diff/` beside `check_move.py`/`diff_member.py`,
   and is the "command that shows it" for every row below.
 - **The tree was being written while this ran.** Job A committed batches 3 and 4 *during* the

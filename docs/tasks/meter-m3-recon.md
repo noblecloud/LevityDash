@@ -8,8 +8,8 @@
   being written), so the working file will not agree with the numbers here until that batch
   lands.
 - Method: an AST scan of every `*.py` under `src/` and `tests/` for imports that resolve to
-  `...Displays.Gauge`, plus `.render-diff/tools/move_inventory.py` and
-  `.render-diff/tools/arc_cut.py` run against the commit's `Gauge.py`.
+  `...Displays.Gauge`, plus `src/LevityDash/devtools/render_diff_tools/move_inventory.py` and
+  `src/LevityDash/devtools/render_diff_tools/arc_cut.py` run against the commit's `Gauge.py`.
 - Job C of [`meter-m2b-remaining.md`](meter-m2b-remaining.md). Working note:
   [`meter-harness-status.md`](meter-harness-status.md). Survey: [`meter-survey.md`](meter-survey.md).
 
@@ -160,7 +160,7 @@ add anything that fell out.
 
 ## 2. What `GaugeArc` needs in order to live in `meter/gauge.py`
 
-`.render-diff/tools/move_inventory.py <Gauge.py> GaugeArc` against `1922538`:
+`src/LevityDash/devtools/render_diff_tools/move_inventory.py <Gauge.py> GaugeArc` against `1922538`:
 
 ```
 classes: GaugeArc
@@ -214,7 +214,7 @@ decorated with `@DebugPaint`; both come from outside `Gauge.py`.
 
 ## 3. The arc-only members of `Gauge`
 
-`.render-diff/tools/arc_cut.py <Gauge.py> Gauge` against `1922538` (125 members, 33 rows
+`src/LevityDash/devtools/render_diff_tools/arc_cut.py <Gauge.py> Gauge` against `1922538` (125 members, 33 rows
 with an arc reference). Grouped by member, the arc-specific set is:
 
 | member | lines (`1922538`) | why it is arc-only |
