@@ -2766,7 +2766,7 @@ class Needle(GlowMixin, StatefulGaugePathItem):
 		self.update()
 
 	def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget: QWidget = None):
-		paintGlow(painter, self.path(), self.brush(), self.width_px, self._glowToDraw())
+		paintGlow(painter, self.path(), self.brush(), self.width_px, self._glowToDraw(), filled=True)
 		painter.setPen(Qt.NoPen)
 		for path, color in self._under:
 			painter.setBrush(QBrush(color))
@@ -3729,13 +3729,13 @@ class GaugeFill(GaugePathItem):
 	def boundingRect(self) -> QRectF:
 		rect = super().boundingRect()
 		glow = self._glowToDraw()
-		return rect if glow is None else glow.pad(rect, self.pen().widthF())
+		return rect if glow is None else glow.pad(rect, self.pen().widthF(), filled=True)
 
 	def paint(self, painter: QPainter, option, widget=None):
 		painter.setBrush(Qt.BrushStyle.NoBrush)
 		glow = self._glowToDraw()
 		for path, color in self._strokes:
-			paintGlow(painter, path, QBrush(color), self.pen().widthF(), glow)
+			paintGlow(painter, path, QBrush(color), self.pen().widthF(), glow, filled=True)
 		for path, color in self._strokes:
 			pen = QPen(self.pen())
 			pen.setBrush(QBrush(color))

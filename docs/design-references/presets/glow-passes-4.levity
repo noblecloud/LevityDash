@@ -10,6 +10,6 @@
     arc: {start-angle: -135, end-angle: 135, weight: 5%, color: '#1d1d24'}
     range: {min: 60, max: 110}
     fill: {weight: 5%, color: '#ff8a3d'}
-    glow: {strength: 1.0, size: 0.7, passes: 4}
+    glow: {strength: 1.0, reach: 0.7, passes: 4}
     needle: {type: dot, length: 6%, width: 7%, color: '#ffffff'}
     value-label: {position: center, size: 15%}

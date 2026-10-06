@@ -1714,7 +1714,7 @@ class Plot(GlowMixin, QGraphicsPixmapItem, Stateful):
 		weight = self.weight_px
 		if (glow := self.glow) is not None:
 			# room for the halo on both sides of the line
-			weight += 2 * glow.reach(weight)
+			weight += 2 * glow.reach_px(weight)
 		weight = int(weight) + 1
 		weight *= self.scene().view.devicePixelRatio()
 		return QSize(weight, weight)
@@ -2216,7 +2216,7 @@ class FilledPlot(Plot):
 	def img_padding(self) -> QSize:
 		pad = 2.0
 		if (glow := self.glow) is not None:
-			pad += 2 * glow.reach(self._barPixels, filled=True)
+			pad += 2 * glow.reach_px(self._barPixels, filled=True)
 		return QSize(int(pad) + 1, int(pad) + 1) * self.scene().view.devicePixelRatio()
 
 	@property

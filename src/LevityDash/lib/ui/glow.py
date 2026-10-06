@@ -3,9 +3,16 @@
 Ported from color_sphere's knot (`demo.html`, the per-segment stroke loop). For pass ``k``
 (1 to ``passes``) the path is stroked again, wider and fainter, in the colour of the core:
 
-- width: ``1 + size * (1.6 + (k - 1) * 1.2)`` times the core width;
+- width: pass 1 is the object's own width; the last pass is ``reach`` further out, and the
+  passes between divide that evenly, so the step is ``reach / (passes - 1)``. More passes
+  is finer steps over the same reach, not a wider halo;
 - alpha: ``strength * 0.30`` for ``k = 1``, then ``strength * 0.12 * 2 ** (2 - k)``;
 - normal (source-over) blending, so the halo keeps the hue of the core.
+
+A **line** (an arc, a plot) grows half its spread on each side of the stroke. A **filled
+shape** (a needle, a fill, a glyph) is stroked along its outline, so its halo stroke has to
+span the object before any of it shows outside - pass ``filled=True`` and the outline's own
+thickness, and the halo reaches ``reach`` *outside* the outline.
 
 One more stroke, at the widest width, adds light (``Plus`` blending) with alpha
 ``min(bloom, widest pass alpha / 2)``. The cap matters: hue colours added together go to
@@ -20,7 +27,7 @@ without glow, so turning glow off leaves the old paint code untouched.
 YAML (the same shape for every element that takes it)::
 
 	glow: true          # the defaults below
-	glow: {strength: 1.0, size: 0.6, passes: 4, bloom: 0.04}
+	glow: {strength: 1.0, reach: 0.6, passes: 4, bloom: 0.04}
 	glow: false         # or leave it out: no glow
 """
 from dataclasses import dataclass, replace
@@ -39,20 +46,22 @@ class Glow:
 
 	#: The demo's `glow`: scales every pass alpha. 0 draws nothing.
 	strength: float = 1.0
-	#: The demo's `glowSize`: how fast the passes widen, as a share of the core width.
-	size: float = 0.6
-	#: The demo's `glowPass`: how many halo strokes, 1 to 8.
+	#: How far the halo reaches past the object, as a share of its width. Pass 1 is
+	#: flush with the object; the last pass is this far out, evenly stepped between.
+	reach: float = 0.6
+	#: The demo's `glowPass`: how many halo strokes, 1 to 8. More is finer, not wider.
 	passes: int = 4
 	#: Cap on the additive pass alpha. 0 turns the pass off.
 	bloom: float = 0.04
 
-	KEYS = ('strength', 'size', 'passes', 'bloom')
+	KEYS = ('strength', 'reach', 'passes', 'bloom')
 
 	@classmethod
 	def decode(cls, value: Any) -> Optional['Glow']:
 		"""``None``, ``False`` and ``{}``-less off forms give ``None``. ``True`` gives the defaults.
 
-		A mapping sets any of strength, size, passes and bloom. Anything else raises ``ValueError``.
+		A mapping sets any of strength, reach, passes and bloom. ``size`` is the old name
+		for ``reach`` and still reads. Anything else raises ``ValueError``.
 		"""
 		if value is None or value is False:
 			return None
@@ -61,12 +70,14 @@ class Glow:
 		if value is True:
 			return cls()
 		if not isinstance(value, Mapping):
-			raise ValueError(f'glow is true, false or a mapping of strength, size, passes and bloom, not {value!r}')
+			raise ValueError(f'glow is true, false or a mapping of strength, reach, passes and bloom, not {value!r}')
+		if 'size' in value:
+			value = {**{k: v for k, v in value.items() if k != 'size'}, 'reach': value['size']}
 		unknown = set(value) - set(cls.KEYS)
 		if unknown:
 			raise ValueError(f'glow has no {sorted(map(str, unknown))}; use {", ".join(cls.KEYS)}')
 		out = cls()
-		for key, limits in (('strength', (0.0, 4.0)), ('size', (0.0, 4.0)), ('bloom', (0.0, 1.0))):
+		for key, limits in (('strength', (0.0, 4.0)), ('reach', (0.0, 4.0)), ('bloom', (0.0, 1.0))):
 			if key in value:
 				number = _number(key, value[key])
 				if not limits[0] <= number <= limits[1]:
@@ -88,12 +99,16 @@ class Glow:
 		changed = {k: getattr(value, k) for k in Glow.KEYS if getattr(value, k) != getattr(default, k)}
 		return changed or True
 
-	@property
-	def widest(self) -> float:
-		"""The widest halo stroke as a multiple of the core width."""
-		return 1 + self.size * (1.6 + (self.passes - 1) * 1.2)
+	def widest(self, filled: bool = False) -> float:
+		"""The widest halo stroke as a multiple of the object's width.
 
-	def reach(self, width: float, filled: bool = False) -> float:
+		A line grows half the spread on each side, so its widest stroke is ``1 + reach``.
+		A filled shape's halo is stroked along its outline: to reach ``reach`` *outside*
+		the outline, the stroke has to span the object as well, hence ``1 + 2 * reach``.
+		"""
+		return 1 + self.reach * (2 if filled else 1)
+
+	def reach_px(self, width: float, filled: bool = False) -> float:
 		"""How far the halo reaches past the core, in pixels, on each side.
 
 		``width`` is the core stroke width. For a filled shape pass ``filled=True`` and the
@@ -101,11 +116,11 @@ class Glow:
 		"""
 		if self.strength <= 0:
 			return 0.0
-		return (self.widest * width if filled else (self.widest - 1) * width) / 2 + 1
+		return (self.widest(filled) * width if filled else (self.widest() - 1) * width) / 2 + 1
 
 	def pad(self, rect: QRectF, width: float, filled: bool = False) -> QRectF:
-		"""``rect`` grown by :meth:`reach`: add this to a bounding rect so the halo is not clipped."""
-		reach = self.reach(width, filled)
+		"""``rect`` grown by :meth:`reach_px`: add this to a bounding rect so the halo is not clipped."""
+		reach = self.reach_px(width, filled)
 		return rect.adjusted(-reach, -reach, reach, reach)
 
 
@@ -125,13 +140,16 @@ def passAlpha(glow: Glow, k: int) -> float:
 	return glow.strength * (0.30 if k == 1 else 0.12 * 2 ** (2 - k))
 
 
-def paintGlow(painter: QPainter, path: QPainterPath, brush: QBrush, width: float, glow: Optional[Glow], dashes=None) -> None:
+def paintGlow(painter: QPainter, path: QPainterPath, brush: QBrush, width: float, glow: Optional[Glow],
+              filled: bool = False, dashes=None) -> None:
 	"""Draw the halo of ``path``: ``glow.passes`` fainter strokes, then the capped additive pass.
 
-	``brush`` is the core colour or gradient. ``width`` is the core stroke width; for a filled
-	shape, a width that stands for its thickness (the halo is stroked along its outline and the
-	core, drawn after, hides what lies inside). Does nothing when ``glow`` is ``None``, the
-	strength is 0 or the width is 0. Leaves the painter as it found it.
+	``brush`` is the core colour or gradient. ``width`` is the object's own width: the core
+	stroke width for a line, the shape's thickness for a filled one. Pass ``filled=True``
+	for a filled shape - the halo is then stroked along its outline and the core, drawn
+	after, hides what lies inside, so the halo reaches ``reach`` *outside* the outline.
+	Does nothing when ``glow`` is ``None``, the strength is 0 or the width is 0. Leaves the
+	painter as it found it.
 	"""
 	if glow is None or glow.strength <= 0 or width <= 0 or path.isEmpty():
 		return
@@ -145,15 +163,20 @@ def paintGlow(painter: QPainter, path: QPainterPath, brush: QBrush, width: float
 		if dashes:
 			pen.setDashPattern(list(dashes))
 		alpha = 0.0
+		steps = max(glow.passes - 1, 1)
 		for k in range(1, glow.passes + 1):
 			alpha = passAlpha(glow, k)
-			pen.setWidthF(width * (1 + glow.size * (1.6 + (k - 1) * 1.2)))
+			# Pass 1 is the object's own width; the last pass is `reach` further out, and
+			# the passes between divide that evenly. More passes, finer steps - the halo
+			# is always `reach` wide whatever the count.
+			spread = glow.reach * (k - 1) / steps
+			pen.setWidthF(width * (1 + spread * (2 if filled else 1)))
 			painter.setOpacity(opacity * min(1.0, alpha))
 			painter.setPen(pen)
 			painter.drawPath(path)
 		bloom = min(glow.bloom, alpha * 0.5)
 		if bloom > 0:
-			pen.setWidthF(width * glow.widest)
+			pen.setWidthF(width * glow.widest(filled))
 			painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
 			painter.setOpacity(opacity * bloom)
 			painter.setPen(pen)
@@ -177,7 +200,7 @@ class GlowMixin(StatefulMixin):
 
 	@StateProperty(key='glow', default=None, allowNone=True, after=_glowChanged)
 	def glow(self) -> Optional[Glow]:
-		"""A halo of fainter, wider strokes around the item: ``true``, or ``{strength, size, passes, bloom}``.
+		"""A halo of fainter, wider strokes around the item: ``true``, or ``{strength, reach, passes, bloom}``.
 
 		Left out, or ``false``, there is no glow. ``strength: 0`` also draws nothing, which turns off
 		a glow the item would otherwise inherit.
