@@ -1157,16 +1157,20 @@ class Plot(GlowMixin, QGraphicsPixmapItem, Stateful):
 		self.setShapeMode(QGraphicsPixmapItem.BoundingRectShape)
 
 	def __repr__(self):
-		return f'{self.__class__.__name}({self.data.key})'
+		return f'{self.__class__.__name__}({self.data.key})'
 
 	def __rich_repr__(self, **kwargs):
-		pathLen = self.path().elementCount()
+		path = self.path()
+		pathLen = path.elementCount()
 		# yield the size of the pixmap in megabytes
 		yield 'pixmap_size', f'{prod(self.pixmap().size().toTuple()) * 4 / 1024 / 1024:g} MB'
-		yield 'minX', f'{self.path().elementAt(0).x:g}'
-		yield 'maxX', f'{self.path().elementAt(pathLen - 1).x:g}'
-		yield 'minY', f'{self.path().elementAt(0).y:g}'
-		yield 'maxY', f'{self.path().elementAt(pathLen - 1).y:g}'
+		# elementAt() on an empty path reads out of bounds and segfaults, and a
+		# plot with no data yet (precipitation at zero) has an empty path
+		if pathLen:
+			yield 'minX', f'{path.elementAt(0).x:g}'
+			yield 'maxX', f'{path.elementAt(pathLen - 1).x:g}'
+			yield 'minY', f'{path.elementAt(0).y:g}'
+			yield 'maxY', f'{path.elementAt(pathLen - 1).y:g}'
 		yield from super(Plot, self).__rich_repr__()
 
 	@property
