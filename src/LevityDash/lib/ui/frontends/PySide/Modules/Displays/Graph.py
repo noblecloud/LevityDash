@@ -47,6 +47,7 @@ from LevityDash.lib.plugins.dispatcher import MultiSourceContainer
 from LevityDash.lib.plugins.observation import MeasurementTimeSeries, TimeAwareValue, TimeSeriesItem
 from LevityDash.lib.plugins.plugin import AnySource, SomePlugin
 from LevityDash.lib.stateful import DefaultGroup, Stateful, StateProperty
+from LevityDash.lib.valuesource import KeySource, openValueSource
 from LevityDash.lib.ui.Geometry import (
 	Alignment, AlignmentFlag, Axis, Dimension, DimensionType, DisplayPosition, getDPI, length_px, Margins, parseSize,
 	Size, size_px
@@ -1835,19 +1836,54 @@ class LinePlot(Plot):
 
 	_thickness: Optional[dict] = None
 	_pins: Optional[dict] = None
+	#: The acquire behind `_thickness['key']` / `_pins['key']` when the key came from a
+	#: `.levity` slot. Holds the text the file said, so encode writes the expression back.
+	_thicknessSource: Optional[KeySource] = None
+	_pinsSource: Optional[KeySource] = None
+
+	def _swapValueSource(self, attr: str, text: Optional[str], label: str) -> Optional[KeySource]:
+		"""Open the source for ``text`` and release the one ``attr`` holds, keeping it when
+		the text has not changed — a reload sets the same value again, and re-acquiring
+		would drop the computed key to zero in between."""
+		current = getattr(self, attr, None)
+		if text is None:
+			if current is not None:
+				current.release()
+				setattr(self, attr, None)
+			return None
+		if current is not None and current.text == text:
+			return current
+		fresh = openValueSource(text, label=f'{label} key', effect='the line draws without it')
+		if not isinstance(fresh, KeySource):
+			fresh = None
+		if current is not None:
+			current.release()
+		setattr(self, attr, fresh)
+		return fresh
 
 	@StateProperty(default=None, allowNone=True, after=Plot.updateAppearance)
 	def thickness(self) -> Optional[dict]:
 		"""Line width that follows another key: `{key: environment.wind.speed.speed, weight: [0.2, 1.2]}`.
 
-		`weight` is the thin and thick end in the units `weight` uses; `range: [lo, hi]` pins the values they
-		stand for (default: the lowest and highest in view). Clamped outside it.
+		`key` may be an expression (`max(environment.wind.speed.speed, today)`), published as a
+		computed key. `weight` is the thin and thick end in the units `weight` uses; `range: [lo, hi]`
+		pins the values they stand for (default: the lowest and highest in view). Clamped outside it.
 		"""
 		return self._thickness
 
 	@thickness.setter
 	def thickness(self, value: Optional[dict]):
+		text = value.get('key') if value else None
+		source = self._swapValueSource('_thicknessSource', text, 'thickness')
+		if value is not None and source is not None:
+			value = {**value, 'key': source.key}
 		self._thickness = value
+
+	@thickness.encode
+	def thickness(self, value: Optional[dict]) -> Optional[dict]:
+		if value is not None and self._thicknessSource is not None:
+			return {**value, 'key': self._thicknessSource.text}
+		return value
 
 	@thickness.decode
 	def thickness(value) -> Optional[dict]:
@@ -1866,6 +1902,7 @@ class LinePlot(Plot):
 		"""Marks from another key riding the line, each at its own time and height: condition glyphs, say.
 
 		`{key: environment.condition.icon, size: 14, offset: -1.2, spacing: 1.6, color: '#ffd400'}`.
+		`key` may be an expression, published as a computed key.
 		`size` is pixels (or `5mm`); `offset` is in sizes, negative above the line; `spacing` is the least
 		gap between marks in sizes. An icon value draws as its glyph. Other values need `steps`
 		(`[[0, wi:day-sunny], [0.05, wi:showers], [0.3, wi:rain]]`: a number takes the last row it reaches)
@@ -1875,7 +1912,17 @@ class LinePlot(Plot):
 
 	@pins.setter
 	def pins(self, value: Optional[dict]):
+		text = value.get('key') if value else None
+		source = self._swapValueSource('_pinsSource', text, 'pins')
+		if value is not None and source is not None:
+			value = {**value, 'key': source.key}
 		self._pins = value
+
+	@pins.encode
+	def pins(self, value: Optional[dict]) -> Optional[dict]:
+		if value is not None and self._pinsSource is not None:
+			return {**value, 'key': self._pinsSource.text}
+		return value
 
 	@pins.decode
 	def pins(value) -> Optional[dict]:
@@ -1889,6 +1936,11 @@ class LinePlot(Plot):
 			'size':    value.get('size', 14), 'offset': float(value.get('offset', -1.2)), 'spacing': float(value.get('spacing', 1.6)),
 			'color':   value.get('color'),
 		}
+
+	def delete(self):
+		"""Give both acquires back; a plot torn down must not hold an expression up."""
+		self._swapValueSource('_thicknessSource', None, 'thickness')
+		self._swapValueSource('_pinsSource', None, 'pins')
 
 	def _renderExtras(self, path: QPainterPath) -> dict:
 		extras = {}
