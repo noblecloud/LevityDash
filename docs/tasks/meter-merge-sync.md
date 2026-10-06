@@ -11,8 +11,8 @@ port each upstream change to where its code now lives, and commit.
 
 ```
 cd /Users/noblecloud/Code/LevityDash/.claude/worktrees/blackfish-meter
-.venv/bin/python .render-diff/tools/port_list.py          # summary
-.venv/bin/python .render-diff/tools/port_list.py --full   # the diffs to apply
+.venv/bin/python src/LevityDash/devtools/render_diff_tools/port_list.py          # summary
+.venv/bin/python src/LevityDash/devtools/render_diff_tools/port_list.py --full   # the diffs to apply
 ```
 
 It reads git objects only, so it works with the tree mid-merge. It reports, for
@@ -64,7 +64,7 @@ members are in that second list.
 - `.venv/bin/ruff check --no-cache --select F821,F811` on `Gauge.py`, `meter/`,
   `curvetext.py`, `lib/ui/glow.py` and `lib/ui/colors/`. Expect the two
   pre-existing F811s in `Gauge.py` and nothing else.
-- `.venv/bin/python .render-diff/tools/port_list.py` — the remaining hunks must all
+- `.venv/bin/python src/LevityDash/devtools/render_diff_tools/port_list.py` — the remaining hunks must all
   be ones this branch deliberately made. Read them; anything else is a missed port.
 - **Pixels.** The old `.render-diff/baseline` predates the glow and the unit stops,
   so it cannot judge this merge - do not chase differences against it. Instead:

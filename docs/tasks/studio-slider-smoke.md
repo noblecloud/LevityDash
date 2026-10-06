@@ -4,7 +4,7 @@ Question under review: *run the Studio offscreen and confirm that the preview st
 its value slider. If it does not, the defect is no longer latent and it becomes part of this
 branch.* A first pass in this worktree suggested it did not; the attribution was missing.
 
-Harness: `.render-diff/tools/studio_smoke2.py`, copied to scratch and fixed (see "Harness"
+Harness: `src/LevityDash/devtools/render_diff_tools/studio_smoke2.py`, copied to scratch and fixed (see "Harness"
 below for the two bugs it had and one trap that made the first pass look negative).
 This note is the only file written in this worktree. No commit.
 
@@ -125,7 +125,7 @@ this branch.
 
 ## Harness
 
-`.render-diff/tools/studio_smoke2.py` (the starting point) had two bugs and one trap:
+`src/LevityDash/devtools/render_diff_tools/studio_smoke2.py` (the starting point) had two bugs and one trap:
 
 1. preset path was `DEVTOOLS.parent.parent / 'docs/...'` (that is `src/`) — fixed to
    `DEVTOOLS.parents[2] / 'docs/design-references/presets/sun-path.levity'`;

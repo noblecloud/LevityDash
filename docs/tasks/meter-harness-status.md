@@ -302,7 +302,7 @@ touching `Gauge.py` (+215/-59). The merge (`5dea824`, parents `3633c5f` +
 `a31af10`) was resolved by keeping this branch's structure and porting each
 upstream change to the module that owns the member now — the glow set, the
 `GlowMixin` bases, `resolve_gradient`, the end-label positions, `fill_brush`,
-`GaugeCaption._placeWarped`. `.render-diff/tools/port_list.py` generates the work
+`GaugeCaption._placeWarped`. `src/LevityDash/devtools/render_diff_tools/port_list.py` generates the work
 list and judges the result (it reads git objects, so it works mid-merge, and it
 takes `--rev` — judging against a *moving* upstream ref reported 17 members from
 commits that were never part of the merge). Verified after: 578 tests pass (upstream

@@ -56,8 +56,8 @@ that have to be satisfied.
 
 ## Verification
 
-`.render-diff/tools/studio_smoke2.py` in the meter worktree — offscreen, no app boot:
-`QT_QPA_PLATFORM=offscreen .venv/bin/python .render-diff/tools/studio_smoke2.py`.
+`src/LevityDash/devtools/render_diff_tools/studio_smoke2.py` in the meter worktree — offscreen, no app boot:
+`QT_QPA_PLATFORM=offscreen .venv/bin/python src/LevityDash/devtools/render_diff_tools/studio_smoke2.py`.
 
 - Before: the keyed fill builds but stays hidden; 13 of 30 cells load.
 - After: the keyed fill is visible; all 30 cells load.
