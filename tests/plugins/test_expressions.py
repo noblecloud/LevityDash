@@ -6,6 +6,8 @@ dict-backed one and never start a plugin, Qt or the wire.
 from datetime import datetime, timedelta, timezone
 
 import pytest
+import WeatherUnits as wu
+from WeatherUnits.length import Millimeter
 from WeatherUnits.temperature import Celsius, Fahrenheit
 
 from LevityDash.lib.plugins.categories import CategoryItem
@@ -176,6 +178,60 @@ def test_bare_number_next_to_a_measurement_is_refused():
 		Expression.parse(f'{TEMP} > 90').evaluate(resolver, NOW)
 	# Scaling by a bare number is fine.
 	assert Expression.parse(f'{TEMP} * 2').evaluate(resolver, NOW) == Fahrenheit(140)
+
+
+def test_zero_is_not_ambiguous_for_a_measure_that_starts_at_zero():
+	rain = 'environment.precipitation.precipitation'
+	resolver = FakeResolver(current={rain: wu.Precipitation.Hourly(Millimeter(2.0)), TEMP: Fahrenheit(70)})
+	assert Expression.parse(f'{rain} > 0').evaluate(resolver, NOW) is True
+	assert Expression.parse(f'{rain} == 0').evaluate(resolver, NOW) is False
+	# A bare number other than zero, or a temperature, still names no unit.
+	with pytest.raises(ExpressionError, match='ambiguous'):
+		Expression.parse(f'{rain} > 1').evaluate(resolver, NOW)
+	with pytest.raises(ExpressionError, match='ambiguous'):
+		Expression.parse(f'{TEMP} > 0').evaluate(resolver, NOW)
+
+
+def test_unit_literals_compare_in_the_measurements_own_unit():
+	rain = 'environment.precipitation.precipitation'
+	wind = 'environment.wind.speed.speed'
+	resolver = FakeResolver(current={
+		TEMP: Fahrenheit(95), rain: wu.Precipitation.Hourly(Millimeter(5.0)), wind: wu.Wind.MilesPerHour(30),
+	})
+	ev = lambda text: Expression.parse(text).evaluate(resolver, NOW)
+	assert ev(f'{TEMP} > 90°F') is True
+	assert ev(f'{TEMP} > 34°C') is True       # 93.2°F
+	assert ev(f'{TEMP} > 36°C') is False      # 96.8°F
+	assert ev(f'{TEMP} > 40 °C') is False
+	assert ev(f'{rain} > 0.1 in/hr') is True  # 5 mm/hr is 0.2 in/hr
+	assert ev(f'{rain} > 0.3 in/hr') is False
+	assert ev(f'{wind} >= 30 mph') is True
+	assert ev(f'{wind} < 20 kn') is False     # 20 kn is 23 mph
+	assert ev(f'1 if {TEMP} > 90°F else 2') == 1
+	assert ev(f'{TEMP} - 5°F') == Fahrenheit(90)
+
+
+def test_a_unit_literal_must_match_what_it_is_compared_with():
+	resolver = FakeResolver(current={TEMP: Fahrenheit(70)})
+	with pytest.raises(ExpressionError, match='measures'):
+		Expression.parse(f'{TEMP} > 30 mph').evaluate(resolver, NOW)
+	with pytest.raises(ExpressionError):
+		Expression.parse('5 mph > 3 mph').evaluate(resolver, NOW)
+
+
+def test_unit_literals_do_not_swallow_durations_or_keywords():
+	assert Expression.parse(f'max({TEMP}, 24h)').text
+	assert Expression.parse(f'1 if {TEMP} > 3 else 2') is not None
+	with pytest.raises(ExpressionError):
+		Expression.parse(f'{TEMP} > 3 flurbs')
+
+
+def test_a_spaced_time_unit_is_not_a_unit_literal():
+	# `3 min` and `10 hr` were syntax errors before unit literals and still are: spans are durations.
+	for text in (f'{TEMP} * 3 min', f'max({TEMP}, 10 hr)', f'{TEMP} > 3 min'):
+		with pytest.raises(ExpressionError):
+			Expression.parse(text)
+	assert Expression.parse(f'max({TEMP}, 3h)').text
 
 
 def test_negation_keeps_the_unit():

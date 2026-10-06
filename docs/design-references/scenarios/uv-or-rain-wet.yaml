@@ -1,0 +1,24 @@
+# Scenario for presets/uv-or-rain.levity: Raining: 14 mm/hr, UV 1.
+# Render both and compare: the slot shows UV when dry and rain detail while it rains.
+name: uv-or-rain-wet
+description: 'Raining: 14 mm/hr, UV 1.'
+keys:
+  environment.temperature.temperature:
+    value: 61
+    unit: f
+    series: [68, 67, 67, 66, 66, 65, 66, 68, 70, 72, 73, 74, 73, 71, 68, 65, 63, 62, 61, 61, 60, 60, 59, 59]
+  environment.humidity.humidity:
+    value: 94
+    unit: '%'
+    series: [70, 72, 74, 75, 76, 78, 76, 72, 68, 65, 64, 63, 66, 72, 80, 86, 90, 92, 94, 95, 95, 96, 96, 96]
+  environment.precipitation.precipitation:
+    value: 14
+    unit: [mm, hr]
+    type: precipitationHourly
+    series: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.2, 1, 3, 6, 9, 12, 14, 12, 9, 6, 3, 1]
+  environment.light.uvi: {value: 1, unit: uvi, type: index, title: UV Index}
+  environment.precipitation.daily:
+    value: 41
+    unit: [mm, day]
+    type: precipitationDaily
+    title: Precipitation Daily
