@@ -3464,7 +3464,7 @@ class GaugeFill(GaugePathItem):
 
 	Spec keys: ``from`` (a number, key or expression; default the range
 	minimum), ``to`` (a number, key or expression; omitted means the gauge value), ``weight`` (default the arc's) and
-	``color`` (default the gauge colour) and ``cap`` (``round``, ``square`` or
+	``color`` (default the gauge colour), ``opacity`` (0 to 1, scales the colour's own alpha; default 1) and ``cap`` (``round``, ``square`` or
 	``flat``; the default is ``round``, or ``flat`` with ``segments``; a round or
 	square cap ends on the value rather than past it). With no value to draw to, it is hidden.
 	A source-fed end with no value yet hides the fill; a bad spec logs the gauge key and hides it.
@@ -3485,6 +3485,7 @@ class GaugeFill(GaugePathItem):
 	_glow: Optional[Glow] = None
 	_strokes: list = ()
 	_cap: Optional[Qt.PenCapStyle] = None
+	_opacity: float = 1.0
 
 	_CAPS = {'round': Qt.PenCapStyle.RoundCap, 'square': Qt.PenCapStyle.SquareCap, 'flat': Qt.PenCapStyle.FlatCap}
 
@@ -3520,8 +3521,9 @@ class GaugeFill(GaugePathItem):
 		self._from = self._to = self._weight = self._color = self._gap = self._glow = None
 		self._colorFromZones, self._segments, self._strokes = False, 0, ()
 		self._cap = None
+		self._opacity = 1.0
 		name = gaugeKeyName(self.gauge)
-		unknown = set(spec) - {'from', 'to', 'weight', 'color', 'segments', 'gap', 'glow', 'cap'}
+		unknown = set(spec) - {'from', 'to', 'weight', 'color', 'segments', 'gap', 'glow', 'cap', 'opacity'}
 		if unknown:
 			log.warning(f'Gauge {name} fill ignored unknown keys {sorted(map(str, unknown))}')
 		try:
@@ -3547,6 +3549,10 @@ class GaugeFill(GaugePathItem):
 				if self._weight is None:
 					raise ValueError(f'weight {weight!r} is not a size')
 			self._glow = Glow.decode(spec.get('glow'))
+			if (opacity := spec.get('opacity')) is not None:
+				if isinstance(opacity, bool) or not isinstance(opacity, (int, float)) or not 0 <= opacity <= 1:
+					raise ValueError(f'opacity must be a number from 0 to 1, not {opacity!r}')
+				self._opacity = float(opacity)
 			if (cap := spec.get('cap')) is not None:
 				if not isinstance(cap, str) or (cap := cap.strip().lower()) not in self._CAPS:
 					raise ValueError(f'cap must be one of {", ".join(self._CAPS)}, not {cap!r}')
@@ -3675,6 +3681,15 @@ class GaugeFill(GaugePathItem):
 				endValue = self._to if self._to is not None else gauge.value
 				color = zones.colorAt(endValue) or base
 			strokes.append((path, color))
+		if self._opacity < 1:
+			faded = []
+			for path, color in strokes:
+				color = QColor(color)
+				color.setAlphaF(color.alphaF() * self._opacity)
+				faded.append((path, color))
+			strokes = faded
+			base = QColor(base)
+			base.setAlphaF(base.alphaF() * self._opacity)
 		full = QPainterPath()
 		for path, _ in strokes:
 			full.addPath(path)
