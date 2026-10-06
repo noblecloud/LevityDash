@@ -3472,7 +3472,7 @@ class GaugeFill(GaugePathItem):
 
 	Spec keys: ``from`` (a number, key or expression; default the range
 	minimum), ``to`` (a number, key or expression; omitted means the gauge value), ``weight`` (default the arc's) and
-	``color`` (default the gauge colour) and ``cap`` (``round``, ``square`` or
+	``color`` (default the gauge colour), ``opacity`` (0 to 1, scales the colour's own alpha; default 1) and ``cap`` (``round``, ``square`` or
 	``flat``; the default is ``round``, or ``flat`` with ``segments``; a round or
 	square cap ends on the value rather than past it). With no value to draw to, it is hidden.
 	A source-fed end with no value yet hides the fill; a bad spec logs the gauge key and hides it.
@@ -3493,6 +3493,7 @@ class GaugeFill(GaugePathItem):
 	_glow: Optional[Glow] = None
 	_strokes: list = ()
 	_cap: Optional[Qt.PenCapStyle] = None
+	_opacity: float = 1.0
 
 	_CAPS = {'round': Qt.PenCapStyle.RoundCap, 'square': Qt.PenCapStyle.SquareCap, 'flat': Qt.PenCapStyle.FlatCap}
 
@@ -3528,8 +3529,9 @@ class GaugeFill(GaugePathItem):
 		self._from = self._to = self._weight = self._color = self._gap = self._glow = None
 		self._colorFromZones, self._segments, self._strokes = False, 0, ()
 		self._cap = None
+		self._opacity = 1.0
 		name = gaugeKeyName(self.gauge)
-		unknown = set(spec) - {'from', 'to', 'weight', 'color', 'segments', 'gap', 'glow', 'cap'}
+		unknown = set(spec) - {'from', 'to', 'weight', 'color', 'segments', 'gap', 'glow', 'cap', 'opacity'}
 		if unknown:
 			log.warning(f'Gauge {name} fill ignored unknown keys {sorted(map(str, unknown))}')
 		try:
@@ -3555,6 +3557,10 @@ class GaugeFill(GaugePathItem):
 				if self._weight is None:
 					raise ValueError(f'weight {weight!r} is not a size')
 			self._glow = Glow.decode(spec.get('glow'))
+			if (opacity := spec.get('opacity')) is not None:
+				if isinstance(opacity, bool) or not isinstance(opacity, (int, float)) or not 0 <= opacity <= 1:
+					raise ValueError(f'opacity must be a number from 0 to 1, not {opacity!r}')
+				self._opacity = float(opacity)
 			if (cap := spec.get('cap')) is not None:
 				if not isinstance(cap, str) or (cap := cap.strip().lower()) not in self._CAPS:
 					raise ValueError(f'cap must be one of {", ".join(self._CAPS)}, not {cap!r}')
@@ -3683,6 +3689,15 @@ class GaugeFill(GaugePathItem):
 				endValue = self._to if self._to is not None else gauge.value
 				color = zones.colorAt(endValue) or base
 			strokes.append((path, color))
+		if self._opacity < 1:
+			faded = []
+			for path, color in strokes:
+				color = QColor(color)
+				color.setAlphaF(color.alphaF() * self._opacity)
+				faded.append((path, color))
+			strokes = faded
+			base = QColor(base)
+			base.setAlphaF(base.alphaF() * self._opacity)
 		full = QPainterPath()
 		for path, _ in strokes:
 			full.addPath(path)
@@ -4065,6 +4080,14 @@ class GaugeValueLabel(GaugeLabel):
 			# self._debug_paint_shape = rect_to_shape(r)
 			return r
 
+		def _stripRect(self) -> QRectF:
+			"""The strip beside or under the dial, less the room a unit hung under an under-dial value needs."""
+			rect = self.parent.parent._sideValueRect()
+			if self._position is ValueDisplayPosition.FloatUnder and (reserve := self._unit_reserve()):
+				# The reserve may not take more than 40% of the strip, so a short box still shows the value.
+				rect.setBottom(rect.bottom() - min(reserve, rect.height() * 0.4))
+			return rect
+
 		def getTextPosition(self, limitRect: QRectF = None) -> QPointF:
 
 			gauge: Gauge = self.parent.parent
@@ -4083,7 +4106,7 @@ class GaugeValueLabel(GaugeLabel):
 			match self._position:
 				case ValueDisplayPosition.Left | ValueDisplayPosition.Right | ValueDisplayPosition.FloatUnder:
 					# Beside or under the dial: the middle of the strip the dial left free.
-					return gauge._sideValueRect().center()
+					return self._stripRect().center()
 				case ValueDisplayPosition.Inline:
 					diff = arc_center - gauge_center
 					return arc_center - (diff * (angle_spread / 360))
@@ -4124,8 +4147,11 @@ class GaugeValueLabel(GaugeLabel):
 			if self._position in (DisplayPosition.Left, DisplayPosition.Right, DisplayPosition.FloatUnder):
 				# The strip beside or under the dial is empty by construction, so there is
 				# nothing to collide with: fit the glyphs to the strip.
-				strip = gauge._sideValueRect()
-				strip = strip.adjusted(*([self.parent.value_padding_px] * 2), *([-self.parent.value_padding_px] * 2))
+				strip = self._stripRect()
+				pad = self.parent.value_padding_px
+				# With a unit hung beneath, the strip is already short; a full pad above and below would leave no glyph.
+				padY = min(pad, strip.height() * 0.15) if strip.height() < self.parent.parent._sideValueRect().height() else pad
+				strip = strip.adjusted(pad, padY, -pad, -padY)
 				scale = Text.getTextScale(self, textRect, strip.translated(-self.pos()))
 				base_path = self.path()
 				if (size := self.parent.size) is not None and (glyph_height := base_path.boundingRect().height()) > 0:

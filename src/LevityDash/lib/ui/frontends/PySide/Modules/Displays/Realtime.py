@@ -1,7 +1,8 @@
+import copy
 from datetime import timedelta, datetime
 from functools import cached_property, partial
 from numbers import Number
-from time import process_time
+from time import monotonic, process_time
 from typing import Any, Iterable, Type, Dict
 
 from PySide6.QtCore import QByteArray, QMimeData, Qt, QTimer, QRectF, Slot, QPointF
@@ -9,6 +10,7 @@ from PySide6.QtGui import QDrag, QFocusEvent, QPainter, QPixmap, QTransform
 from PySide6.QtWidgets import QApplication, QGraphicsItem, QGraphicsSceneMouseEvent, QStyleOptionGraphicsItem
 
 from LevityDash import LevityDashboard
+from LevityDash.lib.plugins.freshness import RefreshEstimator
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.DisplayBase import Display
 from LevityDash.lib.ui.icons import fa as FontAwesome, getIcon, Icon
 from LevityDash.lib.utils.shared import singleShotSafe, startTimerSafe, stopTimerSafe
@@ -120,6 +122,7 @@ class Realtime(Panel, tag='realtime'):
 	def _init_defaults_(self):
 		super()._init_defaults_()
 		self.contentStaleTimer = QTimer(singleShot=True)
+		self._refreshEstimator = RefreshEstimator()
 		self.setFlag(self.GraphicsItemFlag.ItemIsSelectable, True)
 		self.setAcceptHoverEvents(not True)
 		self.setAcceptDrops(True)
@@ -546,6 +549,7 @@ class Realtime(Panel, tag='realtime'):
 			self.display.value = value
 
 		self.lastUpdate = process_time()
+		self._refreshEstimator.observe(monotonic())
 		self.__updateTimeOffsetLabel()
 		self.updateToolTip()
 
@@ -587,6 +591,8 @@ class Realtime(Panel, tag='realtime'):
 	@Slot(object)
 	def updateSlot(self, *args):
 		self.setOpacity(1)
+		self._refreshEstimator.observe(monotonic())
+		self.__updateTimeOffsetLabel()
 		if self.display.displayType is DisplayType.Text:
 			self.display.refresh()
 		elif self.display.displayType is DisplayType.Gauge:
@@ -614,7 +620,10 @@ class Realtime(Panel, tag='realtime'):
 		value = self.value
 		if not SHOW_TIME_OFFSET or self.__connectedContainer.isDailyOnly:
 			self.timeOffsetLabel.setEnabled(False)
-		elif value.isValid and abs(Now() - value.timestamp) > (timedelta(minutes=15) if isinstance(value.source, RealtimeSource) else value.source.period):
+		elif value is not None and value.isValid and abs(Now() - value.timestamp) > self._refreshEstimator.staleAfter(
+			# A realtime source states no period; the estimator learns it from the updates it delivers.
+			None if isinstance(value.source, RealtimeSource) else value.source.period
+		):
 			self.timeOffsetLabel.setEnabled(True)
 		else:
 			self.timeOffsetLabel.setEnabled(False)
@@ -1240,8 +1249,12 @@ class MeasurementDisplayProperties(Stateful):
 		if hash((value, type(value))) != self.__measurementHash:
 			self.__measurementHash = hash((value, type(value)))
 			self._scheduleUnitRefresh()
-		if isinstance(value, Measurement):
-			value.__dict__.update(self.unit_dict)
+		if isinstance(value, Measurement) and (unit_dict := self.unit_dict):
+			# The observation hands every consumer of a key the same Measurement. Writing this
+			# display's unit and precision into it changed what a gauge caption on the same key
+			# printed, depending on which of the two reached the value first.
+			value = copy.copy(value)
+			value.__dict__.update(unit_dict)
 		return value
 
 	@property

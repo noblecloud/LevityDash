@@ -280,7 +280,7 @@
           name: driveLab4
           text: RPM
           alignment: CenterLeft
-          geometry: {x: 70.25%, y: 28.97%, width: 18.99%, height: 5.35%}
+          geometry: {x: 66.5%, y: 28.97%, width: 18.99%, height: 5.35%}
           display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
         - type: realtime.text
           name: driveValue5
@@ -293,7 +293,7 @@
           name: driveLab6
           text: Fuel
           alignment: CenterLeft
-          geometry: {x: 70.25%, y: 45.91%, width: 18.99%, height: 5.35%}
+          geometry: {x: 66.5%, y: 45.91%, width: 18.99%, height: 5.35%}
           display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
         - type: realtime.text
           name: driveValue7
@@ -306,7 +306,7 @@
           name: driveLab8
           text: Coolant
           alignment: CenterLeft
-          geometry: {x: 70.25%, y: 62.85%, width: 18.99%, height: 5.35%}
+          geometry: {x: 66.5%, y: 62.85%, width: 18.99%, height: 5.35%}
           display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
         - type: realtime.text
           name: driveValue9
@@ -319,7 +319,7 @@
           name: driveLab10
           text: Battery
           alignment: CenterLeft
-          geometry: {x: 70.25%, y: 79.79%, width: 18.99%, height: 5.35%}
+          geometry: {x: 66.5%, y: 79.79%, width: 18.99%, height: 5.35%}
           display: {matchingGroup: {group: global.stat, matchAll: true}, color: '#8d8d96'}
         - type: realtime.text
           name: driveValue11
