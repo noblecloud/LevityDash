@@ -7,12 +7,12 @@ from pylunar import MoonInfo as _MoonInfo
 from PySide6.QtCore import QPointF, Qt, QTimer, Signal
 from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPen, QTransform
 from PySide6.QtWidgets import QGraphicsPathItem, QGraphicsItem, QGraphicsDropShadowEffect
-from pysolar import solar
 from ephem import previous_new_moon, next_new_moon
 
 from LevityDash.lib.ui.frontends.PySide.utils import colorPalette
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.ui.Geometry import Alignment, AlignmentFlag
+from LevityDash.lib.moonorientation import brightLimbFromZenith
 from LevityDash.lib.utils.shared import now
 from LevityDash.lib.stateful import StateProperty
 from LevityDash.lib.config import userConfig
@@ -361,22 +361,18 @@ class Moon(Panel, tag="moon"):
 		self.__rotate = value
 
 	def getAngle(self) -> float:
-		"""https://stackoverflow.com/a/45029216/2975046"""
+		"""
+		Clockwise rotation, in degrees, for the lit shape so the Moon looks as it does in the sky
+		to an observer at the configured location (zenith up, facing the Moon).
+		The shape is drawn lit on the right when waxing and on the left when waning.
+		"""
 
 		if not self.__rotate:
 			return 0.0
 
-		sunalt = solar.get_altitude_fast(self.lat, self.lon, self._date)
-		sunaz = solar.get_azimuth_fast(self.lat, self.lon, self._date)
-		moonaz = self._moonInfo.azimuth()
-		moonalt = self._moonInfo.altitude()
-
-		dLon = (sunaz - moonaz)
-		y = np.sin(np.deg2rad(dLon))*np.cos(np.deg2rad(sunalt))
-		x = np.cos(np.deg2rad(moonalt))*np.sin(np.deg2rad(sunalt)) - np.sin(np.deg2rad(moonalt))*np.cos(np.deg2rad(sunalt))*np.cos(np.deg2rad(dLon))
-		brng = np.arctan2(y, x)
-		brng = np.rad2deg(brng)
-		return (brng + 90)%360
+		litSide = -brightLimbFromZenith(self.lat, self.lon, self._date)
+		drawnSide = 90 if self._phase < 180 else 270
+		return (litSide - drawnSide)%360
 
 	@staticmethod
 	def deg2dms(dd: float) -> Tuple[float, float, float]:
