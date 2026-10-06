@@ -41,7 +41,7 @@ class Glow:
 	strength: float = 1.0
 	#: The demo's `glowSize`: how fast the passes widen, as a share of the core width.
 	size: float = 0.6
-	#: The demo's `glowPass`: how many halo strokes, 1 to 4.
+	#: The demo's `glowPass`: how many halo strokes, 1 to 8.
 	passes: int = 4
 	#: Cap on the additive pass alpha. 0 turns the pass off.
 	bloom: float = 0.04
@@ -74,8 +74,8 @@ class Glow:
 				out = replace(out, **{key: number})
 		if 'passes' in value:
 			passes = _number('passes', value['passes'])
-			if passes != int(passes) or not 1 <= passes <= 4:
-				raise ValueError(f'glow passes must be a whole number from 1 to 4, not {value["passes"]!r}')
+			if passes != int(passes) or not 1 <= passes <= 8:
+				raise ValueError(f'glow passes must be a whole number from 1 to 8, not {value["passes"]!r}')
 			out = replace(out, passes=int(passes))
 		return out
 

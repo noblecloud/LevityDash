@@ -2149,7 +2149,7 @@ class GlowForm(_Form):
 		          'How bright the halo is. 0 draws no glow, which also turns off a glow the item inherits')
 		self.part('size', 'size', NumberEdit(lo=0, hi=2, step=0.05, decimals=2),
 		          'How wide the halo is, as a share of the line width')
-		self.part('passes', 'passes', NumberEdit(lo=1, hi=4, step=1, integer=True),
+		self.part('passes', 'passes', NumberEdit(lo=1, hi=8, step=1, integer=True),
 		          'How many layers the halo has. More is smoother and costs a little more to draw')
 		self.part('bloom', 'bloom', NumberEdit(lo=0, hi=0.2, step=0.005, decimals=3),
 		          'Cap on the extra light added to the core. 0 turns it off. Too much washes colours out to white')
