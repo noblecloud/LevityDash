@@ -9,3 +9,6 @@ keys:
   environment.condition.weatherCode:
     value: 3
     series: [0, 0, 1, 1, 2, 2, 3, 3, 3, 2, 61, 63, 65, 80, 81, 82, 61, 3, 2, 1, 1, 0, 0, 45]
+  # Declared so the glyph key exists; its values come from the codes above.
+  environment.condition.icon:
+    value: 3
