@@ -1,0 +1,16 @@
+# A progress bar: charge as a fill that takes the colour of the zone it ends in.
+# The zones are `opacity: 0`, so they colour the fill without painting the track.
+- type: realtime.bar
+  name: bar
+  key: system.battery.charge
+  title: false
+  display:
+    range: {min: 0, max: 100}
+    caption: Battery
+    track: {weight: 28%}
+    fill: {color: zone}
+    zones:
+      - {to: 20, color: $bad, opacity: 0}
+      - {from: 20, to: 50, color: $warn, opacity: 0}
+      - {from: 50, color: $good, opacity: 0}
+    value-label: {position: end, format: {precision: 0}}

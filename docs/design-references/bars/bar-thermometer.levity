@@ -1,0 +1,11 @@
+# A thermometer: a tube standing on a bulb, filled from the bulb up by a temperature gradient.
+- type: realtime.bar
+  name: bar
+  key: environment.temperature.temperature
+  title: false
+  display:
+    style: thermometer
+    range: {min: 60, max: 110}
+    fill: {gradient: $temperature}
+    major: {interval: 10, side: after, labels: true}
+    value-label: {position: inside, format: {precision: 0}, size: 18%}

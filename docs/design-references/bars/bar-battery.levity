@@ -1,0 +1,14 @@
+# A battery: an outlined cell with a terminal, filled from the left in the colour of the zone it ends in.
+- type: realtime.bar
+  name: bar
+  key: system.battery.low
+  title: false
+  display:
+    style: battery
+    range: {min: 0, max: 100}
+    fill: {color: zone}
+    zones:
+      - {to: 20, color: $bad, opacity: 0}
+      - {from: 20, to: 50, color: $warn, opacity: 0}
+      - {from: 50, color: $good, opacity: 0}
+    value-label: {position: end, format: {precision: 0}}

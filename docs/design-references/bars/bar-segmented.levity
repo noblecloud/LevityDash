@@ -1,0 +1,15 @@
+# A segmented bar: ten cells, each lit in its zone's colour while the value is past its middle.
+- type: realtime.bar
+  name: bar
+  key: system.disk.used
+  title: false
+  display:
+    range: {min: 0, max: 100}
+    caption: Disk
+    track: {weight: 40%, cap: flat}
+    fill: {color: zone, segments: 10, gap: 5%}
+    zones:
+      - {to: 60, color: $good, opacity: 0}
+      - {from: 60, to: 85, color: $warn, opacity: 0}
+      - {from: 85, color: $bad, opacity: 0}
+    value-label: {position: end, format: {precision: 0}}

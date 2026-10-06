@@ -94,7 +94,7 @@ the track differs: an arc for a gauge, a straight line for a bar.
    - Capture the baseline on the pre-refactor commit.
    - Move `Gauge` onto `Meter` plus `ArcTrack` in small commits. Run the diff after
      each commit. **Phase 2 is done only when the diff is clean.**
-3. **Add `Bar`.** Write presets: progress, battery, segmented, thermometer
+3. **Add `Bar`.** *(Done 2026-10-06: `meter/bar.py`, YAML `realtime.bar`; fragments and a showcase board in `docs/design-references/bars/`, values in `scenarios/bar-cards.yaml`, options in `docs/config/dashboard/bar.md`. `Bar` draws its parts in one canvas item through a `LineTrack` and shares `Meter` with `Gauge`; it does not reuse the arc-based tick, fill and needle items. Gauge renders are unchanged.)* Write presets: progress, battery, segmented, thermometer
    (vertical, with a bulb), and a range bar with markers for today's low and high. Add
    one showcase row of bars. Render it, and check readability at 2560x1440: labels
    at least about 14 px tall.

@@ -1,0 +1,43 @@
+# Values for the bar fragments in docs/design-references/presets/ (progress, battery, segmented,
+# thermometer, day range) and docs/design-references/bar-showcase.levity. Made-up, and not weather
+# only: the charge and the load are not.
+#
+#   render_dashboard.py out.png --levity docs/design-references/bar-showcase.levity --scenario bar-cards
+#
+# The temperature series is today's 24 hourly readings, so `min(key, today)` reads 71 F and
+# `max(key, today)` reads 99 F whatever hour a render runs at.
+name: bar-cards
+description: 98 F afternoon (low 71, high 99), 31 % humidity, 7 mph wind, 65 % charge, 82 % disk.
+keys:
+  environment.temperature.temperature:
+    value: 98
+    unit: f
+    series: [74, 73, 72, 72, 71, 71, 73, 77, 82, 87, 91, 94, 96, 98, 99, 99, 97, 94, 90, 86, 83, 80, 77, 75]
+  environment.humidity.humidity:
+    value: 31
+    unit: '%'
+    series: [62, 65, 67, 68, 70, 70, 66, 58, 50, 43, 38, 34, 32, 31, 30, 30, 32, 36, 42, 48, 52, 56, 59, 61]
+  environment.wind.speed.speed:
+    value: 7
+    unit: [mi, hr]
+    type: wind
+  environment.wind.speed.gust:
+    value: 13
+    unit: [mi, hr]
+    type: wind
+  environment.light.uvi:
+    value: 10
+    unit: uvi
+    type: index
+  system.battery.charge:
+    value: 65
+    unit: '%bat'
+    title: Battery
+  system.battery.low:
+    value: 18
+    unit: '%bat'
+    title: Phone
+  system.disk.used:
+    value: 82
+    unit: '%bat'
+    title: Disk
