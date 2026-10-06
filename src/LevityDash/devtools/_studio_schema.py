@@ -372,6 +372,11 @@ def describe(owner: Stateful, path: tuple = (), title: str = 'Gauge', _seen: Opt
 			raw = prop.__get__(owner, type(owner))
 		except Exception:
 			raw = None
+		if isinstance(raw, Stateful) and prop.key == 'beam':
+			# One popover edits the whole beam, so it is a field, not a group of its own.
+			found = _refine(Field(path + (prop.key,), 'yaml'), prop, raw, owner)
+			group.fields.append(found)
+			continue
 		if isinstance(raw, Stateful):
 			if id(raw) in seen or _depth >= MAX_DEPTH:
 				continue
@@ -415,6 +420,10 @@ def _refine(found: Field, prop: StateProperty, raw: Any, owner: Stateful) -> Fie
 		found.kind = 'warp'
 	elif key == 'glow':
 		found.kind = 'glow'
+	elif key == 'beam':
+		found.kind = 'beam'
+	elif key == 'when':
+		found.kind = 'when'
 	elif key == 'zones':
 		found.kind = 'zones'
 	elif key == 'markers':
