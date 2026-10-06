@@ -104,6 +104,7 @@ A dashboard picks one colour theme and writes `$tokens` instead of raw values. `
 - **Modifiers**: `{color: $accent, alpha: 0.4 | lighten: 0.1 | darken | chroma: 0.8 | hue-shift: 30 | mix: {with: $background, by: 0.3}}`; lightness, chroma and hue work in Oklch, mixing in Oklab. A token can be built from another one inside a theme file.
 - **A `Color` from a token keeps the name** (`str()` gives `$accent`), so saving writes the token back. `Color.role('text')` is a shared live colour retargeted in place when the theme changes; `Color.text`/`Color.default`, Text, dividers, the Graph line and the view background use it. Use it for class-level defaults; never hard-code `#ffffff` for "the text colour".
 - **Qt palette**: the theme also fills the dashboard's `QPalette` (`applyThemeToPalette`: background, text, surface, faint, rule, accent), set on the dashboard viewport only. The QApplication and window chrome keep the system palette.
+- **Picker**: the `Dashboard > Theme` menu (`Modules/ThemeMenu.py`) forces a theme for this run with `theme.set_override` and reloads the board (items read `$tokens` once); "Dashboard's own" lifts it. It never writes the dashboard file. Gauge Studio has a theme combo (`devtools/_studio_themes.py`) that does the same and rebuilds the gauge from its saved form; the Studio's Light/Dark button only styles the controls.
 - Beam `theme: auto` (the default) follows the theme's `mode`. Not themed yet: the needle's dark glow, the moon, any colour still literal in code.
 
 ## Gotchas

@@ -54,6 +54,7 @@ from LevityDash.devtools import _studio_stage as _stage
 from LevityDash.devtools._studio_stage import DATA_PRESETS, DataPreset, StudioGauge, StudioScene, presetForKey
 from LevityDash.devtools import _studio_editors as editors
 from LevityDash.devtools._studio_handles import HandleLayer
+from LevityDash.devtools._studio_themes import ThemePicker
 from LevityDash.devtools._studio_widgets import FieldRow, Section, build, fieldsOf
 from LevityDash.lib.ui.colors.stopunits import formatStop
 
@@ -559,6 +560,9 @@ class Studio(QWidget):
 		self.themeButton.setCheckable(True)
 		self.themeButton.toggled.connect(self._setTheme)
 		bar.addWidget(self.themeButton)
+		self.themePicker = ThemePicker()
+		self.themePicker.picked.connect(self._themePicked)
+		bar.addWidget(self.themePicker)
 		reset = QPushButton('Reset')
 		reset.setToolTip('Reload the current template and drop every change')
 		reset.clicked.connect(self.resetAll)
@@ -1458,6 +1462,14 @@ class Studio(QWidget):
 			self.status.setText(f'{self.fragment.name} changed on disk; reloaded')
 
 	# theme
+
+	def _themePicked(self, name: str):
+		"""Draw the gauge in another colour theme: the stage takes its ground and the gauge is built again from the saved form."""
+		self.preview.setBackgroundBrush(ThemePicker.stageColor())
+		self.commitPending()
+		self.studio.build(self.exportDisplay())
+		self._afterBuild()
+		self.status.setText(f'Drawn in the {name} theme')
 
 	def _setTheme(self, light: bool):
 		self.themeButton.setText('Dark' if light else 'Light')

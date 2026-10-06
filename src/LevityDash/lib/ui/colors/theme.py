@@ -325,6 +325,11 @@ def set_override(spec: Any = None) -> Optional[Theme]:
 	return activate(None) if _override is None else activate(_override)
 
 
+def override() -> Optional[Theme]:
+	"""The theme forced by ``set_override``, if any."""
+	return _override
+
+
 def color(token: str):
 	"""A ``Color`` for a token of the active theme."""
 	return active().color(token)
@@ -345,5 +350,5 @@ def reset():
 
 __all__ = (
 	'DEFAULT_NAME', 'GROUPS', 'MODIFIERS', 'STANDARD_TOKENS', 'Theme', 'ThemeError', 'activate', 'active', 'add_search_path',
-	'available', 'color', 'decode', 'font', 'is_modifier_spec', 'is_token', 'load', 'on_change', 'reset', 'set_override', 'token_name',
+	'available', 'color', 'decode', 'font', 'is_modifier_spec', 'is_token', 'load', 'on_change', 'override', 'reset', 'set_override', 'token_name',
 )
