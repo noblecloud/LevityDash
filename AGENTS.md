@@ -24,6 +24,7 @@ poetry run pytest                       # run all tests
 poetry run pytest -xvs tests/ui/test_smoke.py
 poetry run pytest -m unwired            # xfail-marked (unimplemented) tests
 poetry run pytest tests/wire/           # wire-protocol tests (codec, transport, containers)
+LEVITY_LOG_PLAIN=1 poetry run LevityDash  # plain logging: no rich console, markup or rich tracebacks ([Logging] plain = 1 in config does the same)
 ```
 
 No linter, no formatter, no pre-commit hooks — `pytest` is the only gating command. Poetry uses an in-project `.venv` per directory, not a shared one: a fresh clone or worktree needs its own `poetry install` before anything runs (`poetry run pytest` failing with "command not found" means this step was skipped, not a real error).
