@@ -1,4 +1,5 @@
 import re
+from copy import deepcopy
 from datetime import datetime
 from functools import cached_property
 from pathlib import Path
@@ -16,6 +17,7 @@ from LevityDash.lib.config import userConfig
 from LevityDash.lib.EasyPath import EasyPathFile
 from LevityDash.lib.log import debug
 from LevityDash.lib.stateful import StatefulDumper, StateProperty
+from LevityDash.lib.variables import resolveVariables, retemplate
 from LevityDash.lib.ui.colors import theme
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import CentralPanelContextMenu
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
@@ -141,6 +143,19 @@ class CentralPanel(Panel, tag="dashboard"):
 			raise ValueError(f'theme is a theme name or a mapping, not {value!r}')
 		return value
 
+	_vars: Any = None
+	_written: Any = None
+	_resolved: Any = None
+
+	@StateProperty(key='vars', default=None, allowNone=True, sortOrder=-2)
+	def variables(self) -> dict | None:
+		"""Named values for the file: `vars: {hot: 90°F}`, used as `$hot`. Applied when the file loads (`lib/variables.py`); a save writes the `$name` uses back where the value is unchanged."""
+		return self._vars
+
+	@variables.setter
+	def variables(self, value: dict | None):
+		self._vars = value
+
 	@cached_property
 	def contextMenu(self):
 		return CentralPanelContextMenu(self)
@@ -184,6 +199,8 @@ class CentralPanel(Panel, tag="dashboard"):
 			try:
 				state = self.state
 				yaml.dump(state, f, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True)
+				if self._vars:
+					self._restoreVariables(f)
 
 				YAMLPreprocessor(f)
 				copyfile(f.name, str(path.joinpath(fileName)))
@@ -191,6 +208,23 @@ class CentralPanel(Panel, tag="dashboard"):
 			except Exception if not debug else DebugException as e:
 				log.info('Failed')
 				log.exception(e)
+
+	def _restoreVariables(self, f) -> None:
+		"""Rewrite the dumped file so `$name` stays where the value is as the file resolved it.
+
+		The dump is read back with the loader that read the file, so the live tree and the
+		resolved one have the same shape. Never raises: on any failure the values stay.
+		"""
+		try:
+			f.seek(0)
+			live = type(self).__loader__(YAMLPreprocessor(f.read())).get_data()
+			merged = retemplate(live, self._resolved, self._written)
+			text = yaml.dump(merged, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True)
+			f.seek(0)
+			f.truncate()
+			f.write(text)
+		except Exception:
+			log.exception('a save could not restore the variable names; it wrote the values')
 
 	def save(self):
 		self._save()
@@ -240,6 +274,12 @@ class CentralPanel(Panel, tag="dashboard"):
 				state = loader.get_data()
 				if state is None:
 					raise yaml.YAMLError("Failed to load dashboard")
+				# Kept so a save can write the `$name` text back (see `_save`).
+				self._vars = None
+				self._written = deepcopy(state)
+				state = resolveVariables(state)
+				# Loading consumes the dicts it is given, so the save keeps its own copies.
+				self._resolved = deepcopy(state)
 		except yaml.YAMLError as error:
 			log.exception(f"Error loading dashboard: {path}\n{error}")
 			QMessageBox.critical(self.scene().window, "Error", f"Error loading dashboard: {path}\n{error}")

@@ -1,0 +1,41 @@
+# Variables: `vars:` at the root names a value once, `$name` uses it.
+#
+# A value that is exactly `$name` keeps its type, so `$lo` is the number 30. `$name` inside longer
+# text is spliced in (`${name}` when a letter or digit follows). A name that is not a variable is
+# left for the theme (`$accent`). Variables may use earlier ones. The root is a mapping with `items:`,
+# the same shape `theme:` needs.
+#
+# A save keeps the `$name` text wherever the value is unchanged; a field edited in the app is saved
+# as its new value.
+vars:
+  temp: environment.temperature.temperature
+  lo: 30
+  hi: 110
+  weight: 10%
+  hot: 90
+items:
+  - type: group
+    name: main
+    items:
+      - type: realtime.gauge
+        name: outside
+        key: $temp
+        title: false
+        geometry: {x: 0%, y: 0%, width: 50%, height: 100%}
+        display:
+          radius: 90%
+          arc: {gradient: TemperatureGradient, weight: $weight}
+          range: {min: $lo, max: $hi}
+          zones:
+            - {from: $hot, to: $hi, color: '#ff6a4a'}
+          value-label: {position: below}
+      - type: realtime.gauge
+        name: dewpoint
+        key: environment.temperature.dewpoint
+        title: false
+        geometry: {x: 50%, y: 0%, width: 50%, height: 100%}
+        display:
+          radius: 90%
+          arc: {gradient: TemperatureGradient, weight: $weight}
+          range: {min: $lo, max: $hi}
+          value-label: {position: below}
