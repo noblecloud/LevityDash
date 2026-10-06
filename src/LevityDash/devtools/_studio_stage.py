@@ -306,6 +306,7 @@ class StudioGauge:
 		self.preset = preset
 		self.stage: Optional[StudioStage] = None
 		self.gauge: Optional[Gauge] = None
+		self._good: Optional[tuple] = None  # the last display that built, with its preset
 		self.value = preset.value
 		self._valueSource = _Source(lambda: self.preset.measurement(self.value))
 		installSources()
@@ -353,8 +354,18 @@ class StudioGauge:
 		display.setdefault('geometry', {'x': 0, 'y': 0, 'width': 1, 'height': 1})
 		# Inside the stage's action pool: the dashboard builds a gauge while its panel
 		# loads state, so every deferred refresh waits until the gauge is complete.
-		with self.stage.action_pool:
-			self.gauge = Gauge(parent=self.stage, **display)
+		try:
+			with self.stage.action_pool:
+				self.gauge = Gauge(parent=self.stage, **display)
+		except Exception:
+			# Keep the last gauge that built, so one bad edit does not blank the preview.
+			view.setTransform(saved)
+			self.dispose()
+			good, self._good = self._good, None
+			if good is not None:
+				self.build(*good)
+			raise
+		self._good = (copy.deepcopy(display), self.preset)
 		self.gauge.show()
 		self._lock(self.gauge)
 		self.stage.setRect(self.scene.sceneRect())

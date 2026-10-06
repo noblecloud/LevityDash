@@ -13,6 +13,7 @@ and the tracks are built on, and because a bar needs the same ones.
 
 None of this imports Qt, `Gauge.py`, or anything that does.
 """
+import re
 from collections.abc import Iterable
 from typing import Type, TypeVar, Union
 
@@ -115,12 +116,30 @@ def parseClockTime(text: str) -> tuple[int, int, float]:
 	return hours, minutes, seconds
 
 
-def decode_measurement(value: str | int | float, default_type: Type[Measurement] = Unset) -> Measurement:
+_LEADING_NUMBER = re.compile(r'\s*[-+]?\d+(?:\.\d+)?')
+
+
+def decode_measurement(value: str | int | float, default_type: Type[Measurement] | None = Unset) -> Measurement | float:
+	"""A user's number as a measurement.
+
+	With no usable `default_type` (`Unset`, or `None` while a gauge's states apply
+	before its value class is known) a bare number stays a plain float, so the
+	field keeps what the user wrote and the gauge converts it once the class is
+	known.
+	"""
+	unknown = default_type is Unset or default_type is None
 	match value:
 		case str(v):
-			value = auto_wu(v)
+			try:
+				value = auto_wu(v)
+			except (TypeError, ValueError, NotImplementedError):
+				# A bare number, or a unit `auto_wu` cannot place (`6`, `10 in/hr`): keep the number, in the gauge's own unit.
+				found = _LEADING_NUMBER.match(v)
+				if found is None:
+					raise
+				value = float(found.group()) if unknown else default_type(float(found.group()))
 		case int(v) | float(v):
-			value = default_type(v)
+			value = float(v) if unknown else default_type(v)
 		case _:
 			raise TypeError(f'Invalid type for min: {type(value)}')
 	return value

@@ -534,7 +534,8 @@ class Meter(Display):
 
 	@property
 	def valueClass(self) -> Type[GaugeValue]:
-		return self._valueClass
+		# A container that has no class yet reports None; fields that decode while the states apply need something callable.
+		return self._valueClass or float
 
 	@valueClass.setter
 	def valueClass(self, value):

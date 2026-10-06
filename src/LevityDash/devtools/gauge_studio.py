@@ -29,6 +29,7 @@ import re
 import signal
 import sys
 import time
+import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -1198,7 +1199,14 @@ class Studio(QWidget):
 			return
 		started = time.monotonic()
 		display = self.exportDisplay()
-		self.studio.build(display)
+		try:
+			self.studio.build(display)
+		except Exception as e:
+			traceback.print_exc()
+			self.status.setText(f'Could not apply that edit: {e}. The preview keeps the last gauge that built.')
+			self.scene.invalidate()
+			self.preview.viewport().update()
+			return
 		self.scene.invalidate()
 		self.preview.viewport().update()
 		self.syncRows()

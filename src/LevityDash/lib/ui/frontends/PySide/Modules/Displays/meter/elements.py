@@ -1023,7 +1023,7 @@ class Graduations(ColorGradientMixin, StatefulGaugeItem):
 		if self.tick_type is Graduations.Type.Major and self._state_item_sources.get(Graduations.usr_interval, SourceType.ItemDefault) is SourceType.UserConfig:
 			# An interval wider than the range is replaced below, so it is not worth a warning.
 			if usr_interval not in compatible_intervals and float(usr_interval) <= float(range_value) and not _isWholeSteps(range_value, usr_interval):
-				gauge_repr = f'Gauge.{gauge.valueClass.name.replace(" ", "")}(min={gauge.range.min}, max={gauge.range.max})'
+				gauge_repr = f'Gauge.{getattr(gauge.valueClass, "name", gauge.valueClass.__name__).replace(" ", "")}(min={gauge.range.min}, max={gauge.range.max})'
 				log.warning(f'User specified interval: {usr_interval} for {gauge_repr} is not compatible with the gauge range {gauge.range}')
 
 		unfiltered_intervals = sorted(compatible_intervals)
