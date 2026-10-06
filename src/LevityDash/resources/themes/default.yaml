@@ -23,6 +23,12 @@ colors:
   series-5: '#ffb454'
   series-6: '#ff6b4a'
 
+  # Needle shadow, and the moon: lit face, dark side, glow. Defaults reproduce the original look.
+  needle-glow: '#000000'
+  moon: '#ffffff'
+  moon-shade: '#1c1d1f'
+  moon-glow: '#ffffff'
+
 fonts:
   display: Roboto         # titles and labels
   mono: Roboto Mono       # numbers that line up

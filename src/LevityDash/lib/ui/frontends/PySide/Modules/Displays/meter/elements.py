@@ -35,6 +35,7 @@ from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem, QStyleOptionGrap
 from LevityDash.lib.stateful import Binding, SourceType, StateProperty, Stateful
 from LevityDash.lib.stateful_mixins import ColorGradientMixin
 from LevityDash.lib.ui import Color, Gradient, UILogger
+from LevityDash.lib.ui.colors import theme
 from LevityDash.lib.ui.glow import Glow, GlowMixin, paintGlow, resolveGlow
 from LevityDash.lib.ui.Geometry import (
 	Alignment, AlignmentFlag, Dimension, DimensionType, DisplayPosition, RelativeFloat, Size, UnitDisplayPosition,
@@ -2342,7 +2343,14 @@ class Needle(GlowMixin, StatefulGaugePathItem):
 		self.add_defaults_to_state(kwargs)
 		self.refresh()
 		shadow = SoftShadow(owner=self)
+		shadow.setColor(Color.role('needle-glow').QColor)
 		self.setGraphicsEffect(shadow)
+		theme.on_change(self._followTheme, call_now=False)
+
+	def _followTheme(self, active=None):
+		"""The dark glow under the needle is the theme's `needle-glow`."""
+		if isinstance(effect := self.graphicsEffect(), SoftShadow):
+			effect.setColor(Color.role('needle-glow').QColor)
 
 	def draw(self):
 		match self.type:
