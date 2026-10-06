@@ -1,3 +1,4 @@
+import copy
 from datetime import timedelta, datetime
 from functools import cached_property, partial
 from numbers import Number
@@ -1240,8 +1241,12 @@ class MeasurementDisplayProperties(Stateful):
 		if hash((value, type(value))) != self.__measurementHash:
 			self.__measurementHash = hash((value, type(value)))
 			self._scheduleUnitRefresh()
-		if isinstance(value, Measurement):
-			value.__dict__.update(self.unit_dict)
+		if isinstance(value, Measurement) and (unit_dict := self.unit_dict):
+			# The observation hands every consumer of a key the same Measurement. Writing this
+			# display's unit and precision into it changed what a gauge caption on the same key
+			# printed, depending on which of the two reached the value first.
+			value = copy.copy(value)
+			value.__dict__.update(unit_dict)
 		return value
 
 	@property
