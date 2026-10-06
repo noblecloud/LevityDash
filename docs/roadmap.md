@@ -1,6 +1,6 @@
 # Roadmap
 
-*Last updated: 2026-08-08 (agent status panels added to backlog).*
+*Last updated: 2026-10-06 (plan for first stable cut and lanes merged in).*
 
 This organizes and supersedes the raw idea list in [`_planned-features.md`](_planned-features.md) — every item from that list is either placed in a section below, marked as already done, or parked with a reason. Status notes reference the code so claims stay checkable.
 
@@ -15,6 +15,59 @@ The 2026 revival brought the project from a long-dormant WIP tree to a healthy, 
 - **Size-group text fitting rewritten** — stateless refit engine (`lib/ui/Groups.py`), with proximity clustering and baseline alignment actually wired for the first time.
 - **`statekit` + `qolkit` extracted** — the declarative state/YAML-persistence layer (`src/statekit/`) and generic Python utilities (`src/qolkit/`) are now standalone, Qt-free, in-repo packages with pure-Python test suites. `lib/stateful.py` remains as a thin Qt facade, so no consumer code changed.
 - **First real test harness** — `tests/` covers statekit, qolkit, and headless (offscreen) UI/dashboard behavior.
+
+## Plan: first stable cut, then lanes
+
+Draft, 2026-10-06. Two questions are open (last part of this section).
+
+**Diagnosis.** Code is no longer the bottleneck. On 2026-10-05 and 06, threads opened and merged 11 PRs (#18 to #28). The limits now are attention, the token budget, and verification. Verification still needs the Mac too often. So: fewer things, finished, and checks that run without a person.
+
+**The spine: the render pipeline.** `render_dashboard.py`, `render_service.py`, the scenarios and the render_diff harness do four jobs:
+
+- CI: render every reference board and compare it with a baseline.
+- Agent checks: a thread sees its change without a real window.
+- Design: a mockup becomes a real board that is rendered and compared.
+- HUDs: the same renderer makes frames for e-paper devices.
+
+Invest here first. Every lane uses it.
+
+**Phase 0: now.** Smoke-test the merge at `e899cb0`. The live display log is clean. Still to run, after a go: the full suite on Python 3.14, and offscreen renders of the 32 `.levity` files under `docs/design-references/`.
+
+**Phase 1: foundation.** Small tasks. Each makes later tasks cheaper.
+
+1. CI on GitHub Actions. Run the suite and render_diff on every PR. Report the result. Do not block a merge on it.
+2. Cloud threads on Python 3.14 with the en_US locale, so a thread's test result matches the Mac.
+3. Fail-soft load. When one item fails to load, show an error tile in its place. Never blank the whole board.
+4. Fix the known segfaults: the mini-graph debug repr in a worker thread, and the crash after the QBasicTimer cross-thread warning.
+
+**Phase 2: first stable cut.**
+
+1. Fix the rain `0.0` bug (a true zero shows as trace) and the WeatherUnits percent bug (0.1% shows as 10%).
+2. Build one or two real weather boards from the paused design (Station, Core + rotation). Use themes, `switch` and `vars`. The handoff is `docs/tasks/dashboard-design-handoff.md` on branch `claude/dashboard-design-uy2w74`.
+3. Document themes, variables, the switch slot and unit literals. Threads write draft notes. The docs owner edits the `docs` branch.
+4. Close out value-sources.
+5. Merge `feat/value-sources` into `main` and tag a version. After that, work on short branches off `main`.
+
+**Phase 3: lanes, one at a time.**
+
+- HUD: serve frames from `render_service` at device size and palette. Add an e-paper theme. Write the ESP32-S3 client that fetches a frame and keeps the last one. Builds on the surface frontend in [render-service-and-surface-frontend.md](tasks/render-service-and-surface-frontend.md).
+- Data: a psutil plugin for host vitals, which also feeds the processes table. Rooms from Govee BLE with value-sources `where`. Rates and compound units (in/hr, kWh, W/m²), which need the parked WeatherUnits `dimensional-analysis` branch.
+- Look: rename `needle` to `pointer`, linear meters and bars, and theme polish (gradient background, themed glow and moon, a theme picker).
+- Editor: Studio snapping and guides. Decide whether Studio ships as the board editor.
+
+**How we work.**
+
+- One or two threads at a time, with one line per thread in the project chat.
+- Decisions come in batches. The current batch: beam colour space, beam keys, sweep length, glow defaults, gradient-edit details, tick-label `position: inside`, and `needle` to `pointer`.
+- Sonnet writes code. The coordinator plans and reviews. Opus works only on request.
+- Mac-only steps go to a Remote Control session on the Mac.
+
+**Open questions.**
+
+1. Who is the first stable cut for? Options: the author only; weather-station owners such as Tempest and PiConsole users (recommended, since a concrete audience gives the cut a finish line); everyone.
+2. Which lane comes first after the cut? Options: HUD (recommended: it is the north star, and `render_service` already renders frames); data; look; editor.
+
+---
 
 ## Now: plugin control plane
 
@@ -143,6 +196,7 @@ Triaged from `_planned-features.md`, grouped by area. ~~Struck~~ items are alrea
 | OpenWeatherMap plugin | Done — was a disabled skeleton (schema shadowed by an empty class attr); rebuilt against the free Current Weather Data endpoint (One Call requires a paid plan), with a `normalizeData` flatten step for its nested response shape. Verified live against the real API. |
 | Phase 4.2 backend/frontend process split | Done — wire codec (`lib/wire/codec.py`), typed messages (`messages.py`), aiohttp WebSocket server (`server.py`) + client (`client.py`), `RemoteBackend`/`RemoteFrontend` adapters, `RemoteContainer`/`RemoteObservationValue` stand-ins, `GuiMarshal` single-hop bridge, standalone backend entry point (`LevityDash-backend` / `python -m LevityDash.backend`). Merge `fce2568`. Full dashboard renders on first paint in remote mode; 125-pass test suite. Follow-ups tracked in `docs/tasks/phase-4.2-follow-ups.md`. |
 | Timeseries over the wire | Done — columnar codec (`encode_timeseries_values`/`decode_timeseries_values`), `ts_request`/`ts_response` messages, unicast dispatch in `WireServer`, request correlation in `WireClient`, `RemoteBackend.handle_ts_request`'s Qt-thread/thread-pool/asyncio-thread hop (mirrors `Container.prepare_for_ts_connection`'s own thread-pool pattern), `RemoteTimeSeries` stand-in. Verified against a real two-process run, not just unit tests — which is also how a `dispatcher.getTimeseries` fast-path bug (returned a flag-ready-but-not-yet-fetched `RemoteContainer` without ever triggering the fetch) got caught; fixed with a `timeseries is not None` guard, no-op for live mode. 150-pass test suite. Known gaps in `docs/tasks/timeseries-viewport-and-control-plane.md`. |
+| Value-sources, themes, variables, switch slot, unit literals, gauge vocabulary | Done 2026-10 — merged in PRs #18 to #28 into `feat/value-sources` (tip `e899cb0`). Still to do before release: see the plan above. |
 
 ## Parked (kept for reference, no current plan)
 
