@@ -197,3 +197,42 @@ def test_calculate_missing_still_handles_unscoped_keys_alongside_identities():
 
 	assert 'indoor.temperature.dewpoint' in obs
 	assert _indoor('indoor.temperature.dewpoint', 'bedroom') in obs
+
+
+def test_calculate_missing_derives_nothing_at_zero_humidity():
+	# Regression: a Govee advertisement that cannot carry humidity decodes that
+	# byte as 0. dewpoint() takes log(rh/100), so 0 raised
+	# `ValueError: expected a positive input, got 0.0` inside update() on every
+	# advertisement - and the lines after it (un-muting the accumulator among
+	# them) never ran. A non-positive humidity must derive nothing.
+	class Temp:
+		def dewpoint(self, humidity):
+			raise AssertionError('dewpoint() must not be called with zero humidity')
+
+		def heatIndex(self, humidity):
+			raise AssertionError('heatIndex() must not be called with zero humidity')
+
+	temperature = FakeTemperature(Temp(), timestamp=None)
+	humidity = FakeHumidity(0)
+	schema = FakeSchemaWithDewpoint(declares_dewpoint=True)
+	obs = FakeObservation(temperature, humidity, schema)
+
+	ObservationDict.calculateMissing(obs, keys=set(obs.keys()))
+
+	assert 'environment.temperature.dewpoint' not in obs
+	assert 'environment.temperature.dewpoint' not in obs._calculatedKeys
+
+
+def test_calculate_missing_indoor_derives_nothing_at_zero_humidity():
+	"""The exact shape from the live log: an indoor Govee reading humidity 0."""
+	import WeatherUnits as wu
+
+	obs = FakeIndoorObservation({
+		_indoor('indoor.temperature.temperature', 'terrarium'): FakeTemperature(wu.Temperature.Fahrenheit(85), timestamp=None),
+		_indoor('indoor.humidity.humidity', 'terrarium'): FakeHumidity(0),
+	})
+
+	ObservationDict.calculateMissing(obs, keys=set(obs.keys()))
+
+	assert _indoor('indoor.temperature.dewpoint', 'terrarium') not in obs
+	assert _indoor('indoor.temperature.heatIndex', 'terrarium') not in obs
