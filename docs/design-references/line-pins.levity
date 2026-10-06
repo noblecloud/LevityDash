@@ -1,0 +1,28 @@
+# Marks from another reading riding a line, each at its own time and height.
+# Here the precipitation rate picks a weather glyph that sits on the temperature
+# line. `steps` maps a number to the glyph of the last row it reaches; an icon
+# value (a condition icon key) needs no steps. `size` is pixels (or 5mm),
+# `offset` is in sizes (negative = above the line), `spacing` the least gap
+# between marks in sizes. Marks refresh with the plot, not on their own.
+- type: graph
+  name: temperature
+  timeframe: {days: 1, hours: 12}
+  annotations:
+    dayLabels: {enabled: false}
+    hourLabels: {alignment: BottomCenter}
+  figures:
+  - figure: temperature
+    margins: {bottom: 20%, top: 25%}
+    environment.temperature.temperature:
+      plot:
+        type: plot
+        gradient: TemperatureGradient
+        pins:
+          key: environment.precipitation.precipitation
+          size: 22
+          steps:
+          - [0,    'wi:day-sunny']
+          - [0.02, 'wi:sprinkle']
+          - [0.1,  'wi:showers']
+          - [0.3,  'wi:rain']
+      resolution: 2
