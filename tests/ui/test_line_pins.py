@@ -17,3 +17,11 @@ def test_pin_icon_names_become_glyphs():
 
 	text, font = pinText('wi:rain', PIN_DEFAULTS)
 	assert font is not None and text != 'wi:rain'
+
+
+def test_pin_map_takes_comparisons_and_drops_unnamed_values():
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph import PIN_DEFAULTS, pinText
+
+	config = {**PIN_DEFAULTS, 'map': {'true': 'storm'}}
+	assert pinText(True, config)[0] == 'storm'
+	assert pinText(False, config)[0] == ''

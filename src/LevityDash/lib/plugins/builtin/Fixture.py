@@ -86,12 +86,17 @@ def loadScenario(name: str) -> dict:
 def _openMeteoDefaults() -> Dict[str, dict]:
 	"""``type``/``sourceUnit``/``title`` for every key OpenMeteo publishes."""
 	from LevityDash.lib.plugins.builtin.OpenMeteo import schema as openMeteoSchema
-	wanted = ('type', 'sourceUnit', 'title', 'description')
+	wanted = ('type', 'sourceUnit', 'title', 'description', 'dataKey', 'iconType', 'aliases')
 	return {
 		key: {field: value[field] for field in wanted if field in value}
 		for key, value in openMeteoSchema.items()
 		if isinstance(value, dict) and 'sourceUnit' in value and 'type' in value
 	}
+
+
+def _openMeteoAliases() -> dict:
+	from LevityDash.lib.plugins.builtin.OpenMeteo import schema as openMeteoSchema
+	return openMeteoSchema.get('aliases', {})
 
 
 def buildSchema(scenario: dict) -> tuple[dict, Dict[str, str]]:
@@ -107,12 +112,14 @@ def buildSchema(scenario: dict) -> tuple[dict, Dict[str, str]]:
 			'title': 'Time', 'sourceKey': 'time', tsk.metaData: '@timestamp',
 		},
 		'dataMaps': {'forecast': {'hourly': 'hourly'}, 'realtime': {'realtime': ()}},
+		# The condition icon and name read these, as OpenMeteo's do.
+		'aliases': deepcopy(_openMeteoAliases()),
 	}
 	sourceKeys = {}
 	for key, entry in scenario['keys'].items():
 		entry = entry if isinstance(entry, dict) else {'value': entry}
 		spec = deepcopy(defaults.get(key, {}))
-		spec.update({k: v for k, v in entry.items() if k in ('type', 'sourceUnit', 'title', 'description', 'kwargs')})
+		spec.update({k: v for k, v in entry.items() if k in ('type', 'sourceUnit', 'title', 'description', 'kwargs', 'dataKey', 'iconType', 'aliases')})
 		if 'unit' in entry:
 			spec['sourceUnit'] = entry['unit']
 		if 'sourceUnit' not in spec:

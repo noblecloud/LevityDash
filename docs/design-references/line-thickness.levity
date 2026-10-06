@@ -1,7 +1,8 @@
 # A line whose width follows another reading: the temperature line gets thicker
 # where the wind blows harder. `thickness: {key, weight: [thin, thick]}`; the
 # weights are in the units `weight` uses, and `range: [lo, hi]` pins the values
-# they stand for (default: the lowest and highest in view).
+# they stand for (default: the lowest and highest in view). `key` may be an
+# expression over keys, such as `environment.wind.speed.speed - environment.wind.speed.gust`.
 - type: graph
   name: temperature
   timeframe: {days: 1, hours: 12}

@@ -1,9 +1,11 @@
 # Marks from another reading riding a line, each at its own time and height.
-# Here the precipitation rate picks a weather glyph that sits on the temperature
-# line. `steps` maps a number to the glyph of the last row it reaches; an icon
-# value (a condition icon key) needs no steps. `size` is pixels (or 5mm),
+# Here the condition icon key puts its weather glyph on the temperature line.
+# For a plain number, `steps` maps it to the glyph of the last row it reaches;
+# an icon value (a condition icon key) needs no steps. `size` is pixels (or 5mm),
 # `offset` is in sizes (negative = above the line), `spacing` the least gap
-# between marks in sizes. Marks refresh with the plot, not on their own.
+# between marks in sizes. Marks follow their key: a new reading redraws the plot.
+# `key` takes an expression too, worked out at each sample time, so a pin can
+# show the glyph only while it is raining (see the second figure's `key`).
 - type: graph
   name: temperature
   timeframe: {days: 1, hours: 12}
@@ -18,11 +20,6 @@
         type: plot
         gradient: TemperatureGradient
         pins:
-          key: environment.precipitation.precipitation
+          key: environment.condition.icon
           size: 22
-          steps:
-          - [0,    'wi:day-sunny']
-          - [0.02, 'wi:sprinkle']
-          - [0.1,  'wi:showers']
-          - [0.3,  'wi:rain']
       resolution: 2

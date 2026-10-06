@@ -44,6 +44,7 @@ from LevityDash import LevityDashboard
 from LevityDash.lib.plugins import Container, Plugin
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.dispatcher import MultiSourceContainer
+from LevityDash.lib.plugins.expressions import Expression, ExpressionError, Missing
 from LevityDash.lib.plugins.observation import MeasurementTimeSeries, TimeAwareValue, TimeSeriesItem
 from LevityDash.lib.plugins.plugin import AnySource, SomePlugin
 from LevityDash.lib.stateful import DefaultGroup, Stateful, StateProperty
@@ -978,20 +979,33 @@ class GraphItemData(Stateful, tag=...):
 		frame = self.graph.timeframe
 		return min(frame.lookback, _WIRE_FETCH_LOOKBACK), max(frame.range, _WIRE_FETCH_HORIZON)
 
-	def sideSeries(self, key) -> tuple[np.ndarray, list] | None:
-		"""Another key's samples over this plot's window: epoch seconds and the values as the source holds them.
-
-		None when the key is unknown, has no timeseries yet, or has nothing in the window.
-		"""
-		container = LevityDashboard.get_container(CategoryItem(str(key)), None)
+	def sideTimeseries(self, key: CategoryItem) -> 'MeasurementTimeSeries | None':
+		"""The timeseries another key holds, or None while it has none."""
+		container = LevityDashboard.get_container(key, None)
 		series = container.getTimeseries(AnySource) if container is not None else None
 		if series is None or series.timeseries is None:
 			return None
-		end = self.graph.timeframe.end + timedelta(hours=1) if not self.graph.scrollable else None
-		items = series.timeseries[self.graph.timeframe.historicalStart:end]
-		if not len(items):
+		return series.timeseries
+
+	def sideSeries(self, text) -> tuple[np.ndarray, list] | None:
+		"""Another key's samples over this plot's window: epoch seconds and the values as the source holds them.
+
+		`text` is a key or an expression over keys (`wind.speed * 2`, `temperature > 80f`). An expression is
+		worked out at every sample time of the keys it reads, each held at its last sample.
+
+		None when the text is not usable, a key is unknown, has no timeseries yet, or nothing is in the window.
+		"""
+		expression = sideExpression(text)
+		if expression is None:
 			return None
-		return np.array([i.timestamp.timestamp() for i in items]), [i.value for i in items]
+		end = self.graph.timeframe.end + timedelta(hours=1) if not self.graph.scrollable else None
+		inputs = {}
+		for key in expression.inputKeys:
+			timeseries = self.sideTimeseries(key)
+			items = timeseries[self.graph.timeframe.historicalStart:end] if timeseries is not None else ()
+			if len(items):
+				inputs[key] = (np.array([i.timestamp.timestamp() for i in items]), [i.value for i in items])
+		return evaluateSide(expression, inputs)
 
 	@cached_property
 	def list(self):
@@ -1831,6 +1845,7 @@ class LinePlot(Plot):
 		self.penOffset = None
 		self._shape = None
 		self._dashPattern = None
+		self._sideFeed = None
 		super(LinePlot, self).__init__(*args, **kwargs)
 
 	_thickness: Optional[dict] = None
@@ -1842,6 +1857,9 @@ class LinePlot(Plot):
 
 		`weight` is the thin and thick end in the units `weight` uses; `range: [lo, hi]` pins the values they
 		stand for (default: the lowest and highest in view). Clamped outside it.
+
+		`key` may be an expression over keys (`wind.speed * 2`), worked out at each sample time. Windows, `at()`
+		and `value` are not available. The line redraws when any key it reads changes.
 		"""
 		return self._thickness
 
@@ -1869,7 +1887,8 @@ class LinePlot(Plot):
 		`size` is pixels (or `5mm`); `offset` is in sizes, negative above the line; `spacing` is the least
 		gap between marks in sizes. An icon value draws as its glyph. Other values need `steps`
 		(`[[0, wi:day-sunny], [0.05, wi:showers], [0.3, wi:rain]]`: a number takes the last row it reaches)
-		or `map` (`{0: 'wi:day-sunny'}`: exact values); with neither, the value prints as text.
+		or `map` (`{0: 'wi:day-sunny'}`: exact values; a value it leaves out gets no mark); with neither, the value prints as text.
+		`key` may be an expression over keys, worked out at each sample time: `precipitation > 5mm/h` with `map: {true: wi:thunderstorm}`.
 		"""
 		return self._pins
 
@@ -1890,8 +1909,21 @@ class LinePlot(Plot):
 			'color':   value.get('color'),
 		}
 
+	def _followSides(self) -> None:
+		"""Keep a render coming whenever a key the thickness or pins read changes, not only when this plot's own data does."""
+		texts = [spec['key'] for spec in (self._thickness, self._pins) if spec]
+		if not texts:
+			if self._sideFeed is not None:
+				self._sideFeed.close()
+				self._sideFeed = None
+			return
+		if self._sideFeed is None:
+			self._sideFeed = SideFeed(self.data, self.onDataChange)
+		self._sideFeed.connect(texts)
+
 	def _renderExtras(self, path: QPainterPath) -> dict:
 		extras = {}
+		self._followSides()
 		if not self.data.hasData or not (self._thickness or self._pins):
 			return extras
 		# The sample times come back out of the normalised x the path was built from: the data itself can be
@@ -2027,6 +2059,120 @@ class LinePlot(Plot):
 		return path
 
 
+_warnedSideKeys: set = set()
+
+
+def sideExpression(text) -> Optional[Expression]:
+	"""The parsed `key:` of a thickness or pins mapping, or None (logged once) when it cannot be used.
+
+	A side key reads other keys as they were at each sample time. Window functions (`avg(x, 3h)`), `at(...)`
+	and `value` need a clock or a displayed item, which a sample does not have.
+	"""
+	try:
+		expression = Expression.parse(str(text))
+		if expression.series or expression.points or expression.usesValue:
+			raise ExpressionError('only plain keys and arithmetic work here, not windows, `at()` or `value`')
+	except ExpressionError as e:
+		if text not in _warnedSideKeys:
+			_warnedSideKeys.add(text)
+			log.warning(f'graph key {text!r} is not usable ({e}); the line draws without it')
+		return None
+	return expression
+
+
+class _SampleResolver:
+	"""Reads each key as it was at one moment: its last sample at or before then."""
+	__slots__ = ('inputs', 'moment')
+
+	def __init__(self, inputs: Mapping):
+		self.inputs = inputs
+		self.moment = 0.0
+
+	def current(self, key):
+		if (series := self.inputs.get(key)) is None:
+			return None
+		at = int(np.searchsorted(series[0], self.moment, side='right')) - 1
+		return series[1][at] if at >= 0 else None
+
+	def series(self, key, start, end):
+		return None
+
+	def at(self, key, when):
+		return None
+
+
+def evaluateSide(expression: Expression, inputs: Mapping) -> Optional[tuple[np.ndarray, list]]:
+	"""An expression over series as one series: epoch seconds and a value for each moment any input has a sample.
+
+	`inputs` maps each key to `(times, values)`. A plain key comes back as it is. A moment where an input has not
+	started yet, or the expression gives nothing, is left out. None when no moment is left.
+	"""
+	if expression.plainKey is not None:
+		return inputs.get(expression.plainKey)
+	if not inputs:
+		return None
+	moments = np.unique(np.concatenate([series[0] for series in inputs.values()]))
+	resolver = _SampleResolver(inputs)
+	times, values = [], []
+	for moment in moments:
+		resolver.moment = float(moment)
+		try:
+			result = expression.evaluate(resolver, None)
+		except ExpressionError as e:
+			if expression.text not in _warnedSideKeys:
+				_warnedSideKeys.add(expression.text)
+				log.warning(f'graph key {expression.text!r}: {e}')
+			return None
+		if result is Missing or result is None:
+			continue
+		times.append(float(moment))
+		values.append(result)
+	return (np.array(times), values) if times else None
+
+
+class SideFeed(QObject):
+	"""Calls `callback` whenever one of the timeseries a plot's thickness or pins read changes.
+
+	A key joins as its timeseries appears, so `connect()` is safe to call again on every render.
+	"""
+
+	def __init__(self, data: 'GraphItemData', callback: Callable[[], None]):
+		super().__init__()
+		self._data = data
+		self._callback = callback
+		self._connected: dict[CategoryItem, MeasurementTimeSeries] = {}
+
+	def connect(self, texts: Iterable) -> None:
+		"""Follow exactly the keys `texts` read (keys or expressions); let go of the rest."""
+		wanted = set()
+		for text in texts:
+			if (expression := sideExpression(text)) is not None:
+				wanted |= set(expression.inputKeys)
+		for key in set(self._connected) - wanted:
+			self._release(key)
+		for key in wanted - set(self._connected):
+			if (timeseries := self._data.sideTimeseries(key)) is None:
+				continue
+			with timeseries.signals as signal:
+				if signal.connectSlot(self.changed):
+					self._connected[key] = timeseries
+
+	def _release(self, key: CategoryItem) -> None:
+		timeseries = self._connected.pop(key)
+		try:
+			timeseries.signals.disconnectSlot(self.changed)
+		except Exception:
+			pass
+
+	def close(self) -> None:
+		for key in list(self._connected):
+			self._release(key)
+
+	@Slot()
+	def changed(self):
+		self._callback()
+
+
 # What a pins mapping falls back to for a key it leaves out (state may hand it back with defaults dropped).
 PIN_DEFAULTS = {'steps': [], 'map': {}, 'size': 14, 'offset': -1.2, 'spacing': 1.6, 'color': None}
 
@@ -2081,8 +2227,12 @@ def pinText(value: Any, config: Mapping) -> tuple[str, Optional[QFont]]:
 
 	if isinstance(value, Icon):
 		return value.unicode, QFont(value.font)
-	if str(value) in config['map']:
-		return resolve(config['map'][str(value)])
+	# A comparison gives True or False; `true` is how YAML 1.2 keys it.
+	names = (str(value), str(value).lower()) if isinstance(value, (bool, np.bool_)) else (str(value),)
+	if (name := next((n for n in names if n in config['map']), None)) is not None:
+		return resolve(config['map'][name])
+	if config['map'] and not config['steps']:
+		return '', None  # a value the map does not name has no mark
 	if config['steps']:
 		try:
 			number = float(value)
