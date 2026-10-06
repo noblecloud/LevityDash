@@ -62,7 +62,7 @@ STANDARD_TOKENS: dict[str, tuple[str, ...]] = {
 		'needle-glow', 'moon', 'moon-shade', 'moon-glow',
 	),
 	'fonts':  ('display', 'mono', 'body'),
-	'scales': ('load', 'temperature'),
+	'scales': ('load', 'temperature', 'sky'),
 }
 
 DEFAULT_NAME = 'default'

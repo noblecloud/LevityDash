@@ -3,6 +3,7 @@
 #   render_dashboard.py OUT.png --levity docs/design-references/themed-board.levity --scenario stormy-day --theme dusk
 # A root mapping with `items:` is how a dashboard picks a theme; without `theme:` it uses `default`.
 theme: dusk
+background: $sky
 items:
   - type: group
     name: board

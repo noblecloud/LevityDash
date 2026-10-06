@@ -104,8 +104,8 @@ A dashboard picks one colour theme and writes `$tokens` instead of raw values. `
 - **Modifiers**: `{color: $accent, alpha: 0.4 | lighten: 0.1 | darken | chroma: 0.8 | hue-shift: 30 | mix: {with: $background, by: 0.3}}`; lightness, chroma and hue work in Oklch, mixing in Oklab. A token can be built from another one inside a theme file.
 - **A `Color` from a token keeps the name** (`str()` gives `$accent`), so saving writes the token back. `Color.role('text')` is a shared live colour retargeted in place when the theme changes; `Color.text`/`Color.default`, Text, dividers, the Graph line and the view background use it. Use it for class-level defaults; never hard-code `#ffffff` for "the text colour".
 - **Qt palette**: the theme also fills the dashboard's `QPalette` (`applyThemeToPalette`: background, text, surface, faint, rule, accent), set on the dashboard viewport only. The QApplication and window chrome keep the system palette.
+- Beam `theme: auto` (the default) follows the theme's `mode`. Not themed yet: the needle's dark glow, the moon, any colour still literal in code.
 - Beam `theme: auto` (the default) follows the theme's `mode`. The needle's shadow is `needle-glow`; the moon takes `moon` (lit face), `moon-shade` (dark side) and `moon-glow` (default theme keeps the original black, white, `#1c1d1f` and white). Both follow a runtime theme change. Not themed yet: any colour still literal in code.
-
 ## Gotchas
 
 - **A misbehaving display with a clean log — read the captured child output.** Under `LevityDash-run` each child's stdout/stderr goes to `~/Library/Logs/LevityDash/<name>.out`. The app's own `LevityDash.log` can record a perfectly clean startup while a traceback that aborted the dashboard load went only to the supervisor's terminal. That is how [dashboard-wont-load.md](docs/tasks/dashboard-wont-load.md) stayed open for two months.
