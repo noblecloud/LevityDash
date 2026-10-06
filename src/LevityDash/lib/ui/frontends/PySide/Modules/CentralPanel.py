@@ -16,6 +16,7 @@ from LevityDash.lib.config import userConfig
 from LevityDash.lib.EasyPath import EasyPathFile
 from LevityDash.lib.log import debug
 from LevityDash.lib.stateful import StatefulDumper, StateProperty
+from LevityDash.lib.ui.colors import theme
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import CentralPanelContextMenu
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.utils import BusyContext, ActionPool
@@ -121,6 +122,24 @@ class CentralPanel(Panel, tag="dashboard"):
 	@StateProperty(singleVal=True, inheritFrom=Panel.items)
 	def items(self) -> list[Panel]:
 		...
+
+	_theme: Any = None
+
+	@StateProperty(default=None, allowNone=True, sortOrder=-1)
+	def theme(self) -> str | dict | None:
+		"""The colour theme: a name, or ``{extends: name, colors: {...}}``. Tokens such as ``$accent`` read from it."""
+		return self._theme
+
+	@theme.setter
+	def theme(self, value: str | dict | None):
+		self._theme = value
+		theme.activate(value)
+
+	@theme.decode
+	def theme(self, value):
+		if value is not None and not isinstance(value, (str, dict)):
+			raise ValueError(f'theme is a theme name or a mapping, not {value!r}')
+		return value
 
 	@cached_property
 	def contextMenu(self):
@@ -232,6 +251,13 @@ class CentralPanel(Panel, tag="dashboard"):
 			self.loadedFile = EasyPathFile(path)
 		start = perf_counter()
 		self.scene().view.status = 'Loading'
+		# The theme has to be live before the first item decodes a `$token`.
+		self._theme = None
+		try:
+			theme.activate(state.get('theme') if isinstance(state, dict) else None)
+		except theme.ThemeError as error:
+			log.error(f'{error}. Using the default theme.')
+			theme.activate(None)
 		try:
 			self.state = state
 		except Exception as error:

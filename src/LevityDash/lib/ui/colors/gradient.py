@@ -10,6 +10,7 @@ from yaml import SafeDumper, SafeLoader, SequenceNode, MappingNode, ScalarNode
 
 from LevityDash.lib.stateful import StatefulLoader
 from LevityDash.lib.ui import UILogger as log
+from LevityDash.lib.ui.colors import theme as _theme
 from LevityDash.lib.ui.colors.color import Color
 from LevityDash.lib.ui.colors.oklch import oklab_stops
 from LevityDash.lib.ui.colors.stopunits import StopUnitError, formatStop, parseStop, toDataUnit
@@ -528,6 +529,9 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 	@classmethod
 	def decode(cls, data: str | dict | list | tuple) -> 'Gradient':
 		match data:
+			case str(token) if _theme.is_token(token):
+				# A scale of the active theme. The scale is a gradient spec of its own, so every form works in it.
+				return cls.decode(_theme.active().scale(_theme.token_name(token)))
 			case {'name': name, **rest}:
 				return cls._withOptions(rest, name=name)
 			case dict():
@@ -537,6 +541,9 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 			case [*colors]:
 				# The first positional argument of `cls` is a preset name, so a list of stops needs `None` there.
 				return cls(None, *colors)
+			case str(name) if name in _theme.active().names('scales') and _theme.active().scale(name) != name:
+				# A theme may recolour a named preset (`TemperatureGradient`) for every dashboard that already uses it.
+				return cls.decode(_theme.active().scale(name))
 			case str(name):
 				if (preset := cls.__presets__.get(name, None)) is not None:
 					return preset

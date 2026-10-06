@@ -3148,7 +3148,7 @@ class CurrentTimeIndicator(QGraphicsLineItem, Stateful, tag=...):
 		self.setVisible(value)
 		self.setEnabled(value)
 
-	@StateProperty(key='color', default=Color('#ff9aa3'), allowNone=False, singleVal=True, after=updateAppearance)
+	@StateProperty(key='color', default=Color.role('series-1'), allowNone=False, singleVal=True, after=updateAppearance)
 	def color(self) -> Color:
 		return self._color
 
@@ -3168,7 +3168,7 @@ class CurrentTimeIndicator(QGraphicsLineItem, Stateful, tag=...):
 				value = Color.decode(value)
 			except ValueError:
 				log.warning(f'Invalid color \'{value}\' for time indicator')
-				value = Color('#ff9aa3')
+				value = Color.role('series-1')
 		return value
 
 	@StateProperty(key='opacity', default=1.0)

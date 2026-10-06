@@ -57,7 +57,7 @@ class Divider(QGraphicsPathItem, Stateful, tag='divider'):
 
 	_size: Size.Height | Size.Width | Length = Size.Height(1, relative=True)
 	_weight: Size.Height | Size.Width | Length = Size.Height(1, relative=True)
-	_color: Color = Color("#FFFFFF")
+	_color: Color = Color.text
 	_opacity: float = 1.0
 
 	def __init__(self, stack: 'Stack', **kwargs):
@@ -142,7 +142,7 @@ class Divider(QGraphicsPathItem, Stateful, tag='divider'):
 		self._weight = value
 
 	@StateProperty(
-		default=Color("#FFFFFF"),
+		default=Color.text,
 		after=update,
 	)
 	def color(self) -> Color:
@@ -192,7 +192,7 @@ class DividerProperties(Stateful, tag=...):
 
 	_size: Size.Height | Size.Width | Length = Size.Height(1, relative=True)
 	_weight: Size.Height | Size.Width | Length = Size.Width(1, absolute=True)
-	_color: Color = Color("#FFFFFF")
+	_color: Color = Color.text
 	_opacity: float = 1.0
 	_enabled: bool = False
 
@@ -257,7 +257,7 @@ class DividerProperties(Stateful, tag=...):
 		self._weight = value
 
 	@StateProperty(
-		default=Color("#FFFFFF"),
+		default=Color.text,
 		after=updateAppearance,
 	)
 	def color(self) -> Color:
@@ -1276,3 +1276,4 @@ class ValueStack(Stack, tag='value-stack'):
 			}
 
 		}
+

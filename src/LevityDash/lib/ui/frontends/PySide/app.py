@@ -38,11 +38,12 @@ from LevityDash.lib.plugins.categories import CategoryAtom, CategoryItem
 from LevityDash.lib.plugins.dispatcher import backend_mode, MultiSourceContainer
 from LevityDash.lib.plugins.observation import TimeAwareValue
 from LevityDash.lib.wire.messages import plugin_key_count
+from LevityDash.lib.ui.colors import theme
 from LevityDash.lib.ui.fonts import monospaceFont, system_default_font
 from LevityDash.lib.ui.frontends.PySide import qtLogger as guiLog
 from LevityDash.lib.ui.frontends.PySide.Modules import SizeGroup
 from LevityDash.lib.ui.frontends.PySide.utils import (
-	colorPalette, RendererScene, ViewScale
+	applyThemeToPalette, colorPalette, RendererScene, ViewScale
 )
 from LevityDash.lib.ui.Geometry import (
 	AbsoluteFloat, DimensionType, findScreen, getDPI, LocationFlag, parseSize,
@@ -282,7 +283,7 @@ class LevitySceneView(QGraphicsView):
 		self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 		self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 		self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
-		self.setBackgroundBrush(Qt.black)
+		theme.on_change(self._themeChanged)
 		self.setStyleSheet('QGraphicsView { border: 0px; }')
 
 		self.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.SmoothPixmapTransform | QPainter.TextAntialiasing)
@@ -406,6 +407,11 @@ class LevitySceneView(QGraphicsView):
 
 	def __screenChange(self):
 		self.resizeDone.start()
+
+	def _themeChanged(self, active):
+		self.setBackgroundBrush(active.color('background').QColor)
+		# The viewport only: the window frame and the rest of the app keep the system palette.
+		self.viewport().setPalette(applyThemeToPalette(colorPalette, active))
 
 	def resizeEvent(self, event):
 		super(LevitySceneView, self).resizeEvent(event)

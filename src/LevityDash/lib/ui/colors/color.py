@@ -7,6 +7,7 @@ from PySide6.QtGui import QColor
 from rich.repr import rich_repr
 
 from LevityDash.lib.ui.colors import oklch as _oklch
+from LevityDash.lib.ui.colors import theme as _theme
 from LevityDash.lib.ui.colors.utils import randomColor, kelvinToRGB
 from LevityDash.lib.utils import get, split, classproperty
 from LevityDash.lib.ui import UILogger as log
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
 log = log.getChild('Color')
 
 _knownColors: Dict[str, 'Color'] = {}
+_roleColors: Dict[str, 'Color'] = {}
 
 _BASE_COLOR = Literal['r', 'g', 'b', 'a', 'red', 'green', 'blue', 'alpha']
 ColorDict = Dict[_BASE_COLOR, int | float]
@@ -124,6 +126,17 @@ def _decodeOklchSpec(color, decodePlain) -> Optional[Tuple[int, int, int, int]]:
 	return _toBytes(triple, alpha)
 
 
+def _decodeThemed(color, decodePlain) -> Optional[Tuple[int, int, int, int]]:
+	"""Read a theme token (``$accent``) or a modifier mapping (``{color: $accent, alpha: 0.4}``).
+
+	Gives ``None`` for any other value. The token is looked up in the active theme when the colour is
+	decoded, so a theme is chosen before the dashboard builds its items.
+	"""
+	if not (_theme.is_token(color) or _theme.is_modifier_spec(color)):
+		return None
+	return decodePlain(_theme.active().resolve(color, 'colors'))
+
+
 @rich_repr
 class Color:
 
@@ -152,11 +165,27 @@ class Color:
 
 	@classproperty
 	def text(cls) -> 'Color':
-		return cls.presets.white
+		"""The ``$text`` colour of the active theme, as a live colour: see ``role``."""
+		return cls.role('text')
 
 	@classproperty
 	def default(cls) -> 'Color':
-		return cls.presets.white
+		return cls.role('text')
+
+	@classmethod
+	def role(cls, token: str) -> 'Color':
+		"""The colour of a theme token, the same object every time.
+
+		It is retargeted in place when the active theme changes, so a class that keeps one as its default
+		follows the theme without anyone reassigning it. A colour a dashboard writes (``$accent`` on an item)
+		is a plain value instead and is read once, when the item is built.
+		"""
+		if (color := _roleColors.get(token)) is None:
+			color = _roleColors[token] = cls.decode(_theme.active().resolve(f'${token}', 'colors'), name=f'${token}')
+		return color
+
+	def _retarget(self, other: 'Color'):
+		self.__red, self.__green, self.__blue, self.__alpha = other.rbga
 
 	def __init__(
 		self,
@@ -178,7 +207,9 @@ class Color:
 			alpha = 255
 		self.__alpha = self.__ensureCorrectValue(255 if alpha is None else alpha)
 
-		if name:
+		if name is None and _theme.is_token(color):
+			name = color
+		if name and not _theme.is_token(name):
 			_knownColors[name] = self
 		self.__name = name or self.hex
 
@@ -193,6 +224,8 @@ class Color:
 
 	@staticmethod
 	def __decode(color) -> Tuple[int, int, int, int]:
+		if (spec := _decodeThemed(color, Color.__decode)) is not None:
+			return spec
 		if (spec := _decodeOklchSpec(color, Color.__decode)) is not None:
 			return spec
 		match color:
@@ -507,6 +540,8 @@ class Color:
 		if isinstance(color, dict) and 'name' in color:
 			color = dict(color)
 			name = color.pop('name')
+		if name is None and _theme.is_token(color):
+			name = color
 		return cls(**{k: v for k, v in zip(('red', 'green', 'blue', 'alpha'), cls.__decode(color))}, name=name)
 
 	@classmethod
@@ -532,3 +567,11 @@ SupportsColor = Union[
 
 
 __all__ = ('Color', 'SupportsColor')
+
+
+def _followTheme(active: '_theme.Theme'):
+	for token, color in _roleColors.items():
+		color._retarget(Color.decode(active.resolve(f'${token}', 'colors')))
+
+
+_theme.on_change(_followTheme, call_now=False)
