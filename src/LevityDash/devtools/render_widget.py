@@ -51,7 +51,7 @@ seedEnvironment()
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from LevityDash.devtools._boot import DEFAULT_SIZE, boot, named_items, render_rect
+from LevityDash.devtools._boot import DEFAULT_SIZE, boot, named_items, render_rect, shutdown
 
 
 def _parse_size(text: str):
@@ -91,6 +91,13 @@ def main() -> int:
 	except ValueError as e:
 		parser.error(str(e))
 
+	try:
+		return render(args, dashboard)
+	finally:
+		shutdown(dashboard)
+
+
+def render(args, dashboard) -> int:
 	scene = dashboard.scene
 	items = named_items(scene)
 

@@ -40,7 +40,7 @@ seedEnvironment()
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from LevityDash.devtools._boot import DEFAULT_SIZE, FROZEN_TIME, boot, render_rect
+from LevityDash.devtools._boot import DEFAULT_SIZE, FROZEN_TIME, boot, render_rect, shutdown
 
 
 def _parse_size(text: str):
@@ -93,13 +93,16 @@ def main() -> int:
 	except ValueError as e:
 		parser.error(str(e))
 
-	scene = dashboard.scene
-	rect = scene.sceneRect()
-	if not render_rect(scene, rect, args.out, scale=args.scale):
-		print(f'failed to write {args.out}', file=sys.stderr)
-		return 1
-	print(f'rendered {args.out}  ({rect.width():.0f}x{rect.height():.0f} @{args.scale:g}x)')
-	return 0
+	try:
+		scene = dashboard.scene
+		rect = scene.sceneRect()
+		if not render_rect(scene, rect, args.out, scale=args.scale):
+			print(f'failed to write {args.out}', file=sys.stderr)
+			return 1
+		print(f'rendered {args.out}  ({rect.width():.0f}x{rect.height():.0f} @{args.scale:g}x)')
+		return 0
+	finally:
+		shutdown(dashboard)
 
 
 if __name__ == '__main__':
