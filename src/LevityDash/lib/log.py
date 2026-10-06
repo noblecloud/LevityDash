@@ -168,7 +168,7 @@ class RichRotatingLogHandlerProxy(RotatingFileHandler, LevityHandler):
 class _LevityLogger(logging.Logger):
 	__initiated__: ClassVar[bool] = False
 	__config__: ClassVar[SectionProxy] = lvdash.config["Logging"]
-	logDir: ClassVar[Path] = Path(lvdash.paths.user_log_dir)
+	logDir: ClassVar[Path] = Path(lvdash.paths.log)
 	errorLogDir: ClassVar[Path]
 	logPath: ClassVar[Path]
 

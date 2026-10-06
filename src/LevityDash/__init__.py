@@ -105,7 +105,8 @@ class _LevityAppDirs(AppDirs):
 		cache_temp_dir = TemporaryDirectory(prefix="levitydash-cache-")
 		cache: Path = Path(cache_temp_dir.name)
 
-		log: Path = AppDirs.user_log_dir
+		log_temp_dir = TemporaryDirectory(prefix="levitydash-log-")
+		log: Path = Path(log_temp_dir.name)
 
 		site_data_temp_dir = TemporaryDirectory(prefix="levitydash-site-data-")
 		site_data: Path = Path(site_data_temp_dir.name)
