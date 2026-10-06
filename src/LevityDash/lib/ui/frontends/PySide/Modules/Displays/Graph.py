@@ -1974,6 +1974,28 @@ class FilledPlot(Plot):
 	def _shapes(self, xs: np.ndarray, ys: np.ndarray) -> QPainterPath:
 		raise NotImplementedError
 
+	def _onePerSlot(self, xs: np.ndarray, ys: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+		"""Samples folded to one per slot of the series' own grid.
+
+		A current observation lands between the hourly forecast samples; drawn as it is, it would
+		be a stray bar crowding its neighbour. The slots follow the usual gap between samples and the
+		phase most of them share, and a slot keeps the sample closest to its centre.
+		"""
+		times = self.data.data[0]
+		if len(times) != len(xs) or len(times) < 3:
+			return xs, ys
+		step = float(np.median(np.diff(times)))
+		if step <= 0:
+			return xs, ys
+		phase = float(np.median(times % step))
+		slots = np.round((times - phase) / step).astype(np.int64)
+		distance = np.abs(times - (slots * step + phase))
+		keep = np.zeros(len(times), dtype=bool)
+		for slot in np.unique(slots):
+			inSlot = np.flatnonzero(slots == slot)
+			keep[inSlot[np.argmin(distance[inSlot])]] = True
+		return xs[keep], ys[keep]
+
 	def _fix_shape(self) -> QPainterPath:
 		# Filled shapes are their own hit area.
 		return QPainterPath(self.translated_mapped_path)
@@ -2063,6 +2085,7 @@ class BarPlot(FilledPlot):
 		path = QPainterPath()
 		if not len(xs):
 			return path
+		xs, ys = self._onePerSlot(xs, ys)
 		base = self._baselineY()
 		slot = self._slotPixels(xs)
 		width = max(slot * self._barWidth, 1.0)
