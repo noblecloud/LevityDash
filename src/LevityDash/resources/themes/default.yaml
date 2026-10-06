@@ -29,7 +29,9 @@ fonts:
   body: Nunito            # everything else
 
 # Named gradients. Stops are in the units of the data a gauge or graph shows, so `load` is for a 0 to 100
-# percentage and `temperature` pins its stops to °F and follows the reading into any other unit.
+# percentage. `temperature` is the existing TemperatureGradient preset. The other presets dashboards already
+# name (UVIndexGradient, WindSpeedGradient, PressureGradient, HumidityGradient, CloudCoverGradient,
+# PrecipitationRateGradient) are left as they are here; a theme recolours one by listing it under `scales`.
 scales:
   load: {0: $good, 60: $warn, 85: $bad}
-  temperature: {0°F: '#4aa3ff', 45°F: '#8fd3c8', 70°F: '#f2e9a0', 85°F: $accent, 100°F: $bad}
+  temperature: TemperatureGradient

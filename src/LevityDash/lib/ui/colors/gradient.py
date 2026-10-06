@@ -541,6 +541,9 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 			case [*colors]:
 				# The first positional argument of `cls` is a preset name, so a list of stops needs `None` there.
 				return cls(None, *colors)
+			case str(name) if name in _theme.active().names('scales') and _theme.active().scale(name) != name:
+				# A theme may recolour a named preset (`TemperatureGradient`) for every dashboard that already uses it.
+				return cls.decode(_theme.active().scale(name))
 			case str(name):
 				if (preset := cls.__presets__.get(name, None)) is not None:
 					return preset

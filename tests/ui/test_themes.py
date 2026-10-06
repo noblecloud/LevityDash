@@ -92,3 +92,12 @@ def test_override_wins_over_the_dashboard():
 	assert theme.active().name == 'dusk'
 	theme.set_override(None)
 	assert theme.active().name == 'default'
+
+
+def test_a_theme_can_recolour_a_named_preset():
+	before = Gradient.decode('UVIndexGradient')
+	theme.activate({'scales': {'UVIndexGradient': {0: '#000000', 10: '#ffffff'}}})
+	assert Gradient.decode('UVIndexGradient') is not before
+	theme.reset()
+	assert Gradient.decode('UVIndexGradient') is before
+	assert Gradient.decode('$temperature') is Gradient.decode('TemperatureGradient')
