@@ -19,6 +19,8 @@ from PySide6.QtWidgets import (
 )
 from abc import abstractmethod
 from builtins import isinstance
+from collections.abc import Mapping
+from contextlib import suppress
 from datetime import datetime, timedelta
 from difflib import get_close_matches
 from enum import Enum
@@ -446,12 +448,31 @@ class GraphItemData(Stateful, tag=...):
 
 	@graphic.factory
 	def graphic(self) -> 'Plot':
-		self._graphic = graphic = LinePlot(self)
+		# The dashboard's whole state is stashed on the owner before its children are built, so the plot
+		# class can follow `plot: {type: bar}` from the start rather than swapping afterwards.
+		raw = getattr(self, '_rawItemState', None)
+		plotState = raw.get('plot') if isinstance(raw, dict) else None
+		self._graphic = graphic = plotClassFor(plotState)(self)
 		return graphic
 
 	@graphic.update
 	def graphic(self, value: dict):
+		cls = plotClassFor(value)
+		if type(self._graphic) is not cls:
+			self.__swapGraphic(cls)
 		self._graphic.state = value
+
+	def __swapGraphic(self, cls: Type['Plot']):
+		"""Replace the plot with one of another class: a reload that changed `type`."""
+		old = self._graphic
+		with suppress(RuntimeError, TypeError):
+			self._figure.signals.clicked.disconnect(old.showToolTip)
+		old.setParentItem(None)
+		if (scene := old.scene()) is not None:
+			scene.removeItem(old)
+		self._graphic = cls(self)
+		self._graphic.setParentItem(self._figure)
+		clearCacheAttr(self, 'data', 'dataTransform')
 
 	@StateProperty(sortOrder=2, default=Stateful, dependencies={'key'}, allowNone=False)
 	def labels(self) -> 'PlotLabels':
@@ -980,7 +1001,10 @@ class GraphItemData(Stateful, tag=...):
 
 		# Interpolate
 
-		if self.interpolate and len(x) > 5:
+		# Bars sit on the source's own samples: resampling would turn one hour into dozens of slivers.
+		raw = getattr(getattr(self, '_graphic', None), 'wantsRawData', False)
+
+		if self.interpolate and len(x) > 5 and not raw:
 
 			# create new period for the given resolution
 
@@ -1002,7 +1026,7 @@ class GraphItemData(Stateful, tag=...):
 			y = interpField(x_interp)
 
 		# Smooth
-		if self.smooth and len(x) > 5:
+		if self.smooth and len(x) > 5 and not raw:
 			smooth_type = self.smoothingType
 			strength = self.smoothingStrength
 			dpi = getDPI(self.graph.scene().view.screen())
@@ -1304,13 +1328,23 @@ class Plot(GlowMixin, QGraphicsPixmapItem, Stateful):
 	def figure(self, value: 'Figure'):
 		self._figure = value
 
+	displayType: ClassVar[DisplayType] = DisplayType.LinePlot
+	# Bars are drawn per source sample; lines resample and smooth first.
+	wantsRawData: ClassVar[bool] = False
+
 	@StateProperty(key='type', sortOrder=0)
 	def plotType(self) -> DisplayType:
-		return DisplayType.LinePlot
+		return self.displayType
 
 	@plotType.setter
 	def plotType(self, value: DisplayType):
-		log.warning('Setting plot type currently not implemented.')
+		# The class was chosen from `type` when the plot was built (plotClassFor); nothing left to apply.
+		# (A body of only `pass` reads to statekit as "inherit the parent's setter".)
+		log.debug(f'{self.log_repr}: plot type {value} was applied when the plot was built')
+
+	def valueAnchor(self) -> Optional[float]:
+		"""A value the figure's axis must include, or None. Bars are rooted at one."""
+		return None
 
 	@plotType.encode
 	def plotType(value: DisplayType) -> str:
@@ -1856,6 +1890,201 @@ class LinePlot(Plot):
 			i += 2
 			path.quadTo(c, endPt)
 		return path
+
+
+# Section BarPlot
+class BarPlot(Plot):
+	"""Filled bars, one per source sample, rising from a baseline: `plot: {type: bar}`.
+
+	Colour, gradient (read as value against height, so a tall bar takes the hotter colour), `opacity` and
+	`glow` work as they do on a line. `weight`, `dash` and `cap` are line settings and do nothing here.
+	"""
+	displayType = DisplayType.BarPlot
+	wantsRawData = True
+
+	_barWidth: float = 0.8
+	_radius: float = 0.2
+	_base: float = 0.0
+	_align: str = 'center'
+	_barPixels: float = 1.0
+
+	def __init__(self, *args, **kwargs):
+		self._dashPattern = None
+		super().__init__(*args, **kwargs)
+
+	@StateProperty(key='width', default=0.8, after=Plot.updateAppearance)
+	def barWidth(self) -> float:
+		return self._barWidth
+
+	@barWidth.setter
+	def barWidth(self, value: float):
+		self._barWidth = value
+		self._pathDirty = True
+
+	@barWidth.decode
+	def barWidth(value) -> float:
+		"""The share of each sample's slot the bar fills: `0.8` or `80%`."""
+		if isinstance(value, str):
+			value = float(value.strip().removesuffix('%')) / (100 if value.strip().endswith('%') else 1)
+		return clamp(float(value), 0.05, 1.0)
+
+	@barWidth.encode
+	def barWidth(value: float) -> float:
+		return round(value, 3)
+
+	@StateProperty(default=0.2, after=Plot.updateAppearance)
+	def radius(self) -> float:
+		return self._radius
+
+	@radius.setter
+	def radius(self, value: float):
+		self._radius = value
+
+	@radius.decode
+	def radius(value) -> float:
+		"""How round the tip is, as a share of the bar's width: 0 square, 0.5 a full half-circle."""
+		return clamp(float(value), 0.0, 0.5)
+
+	@radius.encode
+	def radius(value: float) -> float:
+		return round(value, 3)
+
+	@StateProperty(default=0.0, after=Plot.updateAppearance)
+	def base(self) -> float:
+		return self._base
+
+	@base.setter
+	def base(self, value: float):
+		self._base = value
+		self.data.figure.dataValueRange.emitChanged()
+
+	@base.decode
+	def base(value) -> float:
+		"""The value the bars rise from (in the data's own unit). Held inside the axis range."""
+		return float(value)
+
+	@StateProperty(default='center', after=Plot.updateAppearance)
+	def align(self) -> str:
+		return self._align
+
+	@align.setter
+	def align(self, value: str):
+		self._align = value
+
+	@align.decode
+	def align(value: str) -> str:
+		"""Where a sample's slot sits against its timestamp: `center`, `start` (the hour that begins at it) or `end` (the hour that ended)."""
+		value = str(value).strip().lower()
+		if value not in ('center', 'start', 'end'):
+			raise ValueError(f'bar align must be center, start or end, not {value!r}')
+		return value
+
+	def valueAnchor(self) -> float:
+		return self._base
+
+	@property
+	def weight_px(self) -> float:
+		# The glow and the pen width the base class hands the painter stand for the bar's thickness.
+		return self._barPixels
+
+	@property
+	def img_padding(self) -> QSize:
+		pad = 2.0
+		if (glow := self.glow) is not None:
+			pad += 2 * glow.reach(self._barPixels, filled=True)
+		return QSize(int(pad) + 1, int(pad) + 1) * self.scene().view.devicePixelRatio()
+
+	@property
+	def expected_size(self) -> QSize:
+		return QSizeF(self.mapped_path.boundingRect().width(), self.figure.height()).toSize()
+
+	def _updatePath(self):
+		# Points only: where each sample sits in the figure. The bars are cut from them once mapped to pixels.
+		path = self._normalPath
+		path.clear()
+		for i, value in enumerate(self.data.plotValues):
+			path.moveTo(value) if not i else path.lineTo(value)
+
+	@property
+	def mapped_path(self):
+		if self._normalPath.elementCount() == 0 and self.data.timeseries:
+			self._updatePath()
+		return self._bars(self.data.combinedTransform.map(self._normalPath))
+
+	def _baselineY(self) -> float:
+		axis = self.figure.dataValueRange
+		low, high = axis.min, axis.max
+		share = (clamp(self._base, low, high) - low) / (high - low)
+		return self.figure.figureTransform.map(QPointF(0, share)).y()
+
+	def _bars(self, points: QPainterPath) -> QPainterPath:
+		count = points.elementCount()
+		path = QPainterPath()
+		path.setFillRule(Qt.WindingFill)
+		if not count:
+			return path
+		xs = [points.elementAt(i).x for i in range(count)]
+		ys = [points.elementAt(i).y for i in range(count)]
+		base = self._baselineY()
+
+		if count > 1:
+			slot = float(np.median(np.diff(xs)))
+		else:
+			slot = 3600 * self.figure.graph.pixelsPerSecond
+		slot = max(slot, 1.0)
+		width = max(slot * self._barWidth, 1.0)
+		self._barPixels = width
+		slotLeft = {'center': -slot / 2, 'start': 0.0, 'end': -slot}[self._align]
+		inset = slotLeft + (slot - width) / 2
+
+		# The path's first element is its left edge: the item is placed from it (see updateScale).
+		path.moveTo(xs[0] + inset, base)
+		for x, y in zip(xs, ys):
+			left = x + inset
+			rise = y - base
+			if abs(rise) < 1e-6:
+				continue
+			if abs(rise) < 1:
+				y = base + (1 if rise > 0 else -1)
+			tip = -1 if y < base else 1
+			r = min(self._radius * width, abs(y - base) / 2)
+			path.moveTo(left, base)
+			path.lineTo(left, y - tip * r)
+			path.quadTo(left, y, left + r, y)
+			path.lineTo(left + width - r, y)
+			path.quadTo(left + width, y, left + width, y - tip * r)
+			path.lineTo(left + width, base)
+			path.closeSubpath()
+		return path
+
+	def _fix_shape(self) -> QPainterPath:
+		# Filled shapes: the bars are their own hit area.
+		return QPainterPath(self.translated_mapped_path)
+
+	def _render_paint(self, size: QSize, dpr: float, pen: QPen, path: QPainterPath, glow=None) -> QImage:
+		# Painter worker: plain values in, QImage out (see Plot._render_paint).
+		img = QImage(size, QImage.Format.Format_ARGB32_Premultiplied)
+		img.setDevicePixelRatio(dpr)
+		img.fill(Qt.transparent)
+		painter = EffectPainter(img)
+		painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+		brush = pen.brush()
+		paintGlow(painter, path, brush, pen.widthF(), glow)
+		painter.setPen(Qt.NoPen)
+		painter.setBrush(brush)
+		painter.drawPath(path)
+		painter.end()
+		return img
+
+
+def plotClassFor(state) -> Type[Plot]:
+	"""The plot class a `plot:` mapping asks for through `type`: bars when it says so, a line otherwise."""
+	kind = state.get('type') if isinstance(state, Mapping) else None
+	if isinstance(kind, Enum):
+		kind = kind.value
+	if isinstance(kind, str) and kind.strip().lower().replace('-', '').replace('_', '') in ('bar', 'bars', 'barplot', 'bargraph'):
+		return BarPlot
+	return LinePlot
 
 
 # class BackgroundImage(QGraphicsPixmapItem):

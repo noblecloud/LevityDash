@@ -293,6 +293,12 @@ class MinMax:
 		return self._max - self._min
 
 
+def _anchor(item) -> float | None:
+	"""The value a graph item's plot needs the axis to include (a bar plot's base), or None."""
+	graphic = getattr(item, '_graphic', None)
+	return graphic.valueAnchor() if graphic is not None else None
+
+
 class AxisMetaData(QObject):
 	changed = Signal(Axis)
 	min: Numeric
@@ -311,6 +317,8 @@ class AxisMetaData(QObject):
 	def __actualMin(self) -> Numeric:
 		if plots := self._link.plots:
 			value = min(min(i.data[1]) for i in plots)
+			# a bar plot is rooted at its base, so the axis has to reach it
+			value = min([value, *(a for i in plots if (a := _anchor(i)) is not None)])
 		else:
 			value = self.__limits[0]
 		value = max(value, self._link.lowerLimit)
@@ -337,6 +345,7 @@ class AxisMetaData(QObject):
 	def __actualMax(self) -> Numeric:
 		if plots := self._link.plots:
 			value = max(max(i.data[1]) for i in plots)
+			value = max([value, *(a for i in plots if (a := _anchor(i)) is not None)])
 		else:
 			value = self.__limits[1]
 		value = min(self._link.upperLimit, value)

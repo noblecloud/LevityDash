@@ -640,6 +640,7 @@ class DisplayType(str, Enum, metaclass=ClosestMatchEnumMeta):
 	Gauge = 'gauge'
 	Graph = 'graph'
 	LinePlot = 'plot'
+	BarPlot = 'bar'
 	BarGraph = 'bargraph'
 	WindVein = 'windVein'
 	Custom = 'custom'
