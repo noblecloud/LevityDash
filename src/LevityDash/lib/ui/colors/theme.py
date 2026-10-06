@@ -61,7 +61,7 @@ STANDARD_TOKENS: dict[str, tuple[str, ...]] = {
 		'series-1', 'series-2', 'series-3', 'series-4', 'series-5', 'series-6',
 	),
 	'fonts':  ('display', 'mono', 'body'),
-	'scales': ('load', 'temperature'),
+	'scales': ('load', 'temperature', 'sky'),
 }
 
 DEFAULT_NAME = 'default'

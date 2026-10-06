@@ -38,7 +38,7 @@ from LevityDash.lib.plugins.categories import CategoryAtom, CategoryItem
 from LevityDash.lib.plugins.dispatcher import backend_mode, MultiSourceContainer
 from LevityDash.lib.plugins.observation import TimeAwareValue
 from LevityDash.lib.wire.messages import plugin_key_count
-from LevityDash.lib.ui.colors import theme
+from LevityDash.lib.ui.colors import backdrop, theme
 from LevityDash.lib.ui.fonts import monospaceFont, system_default_font
 from LevityDash.lib.ui.frontends.PySide import qtLogger as guiLog
 from LevityDash.lib.ui.frontends.PySide.Modules import SizeGroup
@@ -132,9 +132,46 @@ class LevityScene(RendererScene):
 		self.staticGrid = False
 		clearCacheAttr(self, 'geometry')
 		self.setBackgroundBrush(Qt.transparent)
+		self._backdropSpec = None
+		self._backdropCache = None
+		theme.on_change(self._themeChanged, call_now=False)
 		self.busyBlocker = QGraphicsRectItem(self.sceneRect())
 		self.busyBlocker.setVisible(False)
 		self.addItem(self.busyBlocker)
+
+	@property
+	def backdropSpec(self):
+		"""The dashboard's ``background:`` as written (``None``: the theme's own ground)."""
+		return self._backdropSpec
+
+	@backdropSpec.setter
+	def backdropSpec(self, value):
+		self._backdropSpec = value
+		self.refreshBackdrop()
+
+	def refreshBackdrop(self):
+		self._backdropCache = None
+		self.invalidate(self.sceneRect(), QGraphicsScene.SceneLayer.BackgroundLayer)
+		for view in self.views():
+			view.viewport().update()
+
+	def _themeChanged(self, active):
+		self.refreshBackdrop()
+
+	def backdrop(self):
+		"""The resolved ground, kept until the spec, the theme or the scene size changes."""
+		key = (id(theme.active()), self._backdropSpec is None or repr(self._backdropSpec), self.sceneRect().getRect())
+		if self._backdropCache is None or self._backdropCache[0] != key:
+			try:
+				ground = backdrop.decode(self._backdropSpec)
+			except Exception as error:
+				guiLog.error(f'background {self._backdropSpec!r}: {error}. Using the theme ground.')
+				ground = backdrop.decode(None)
+			self._backdropCache = (key, ground, ground.brush(self.sceneRect()))
+		return self._backdropCache[2]
+
+	def drawBackground(self, painter, rect):
+		painter.fillRect(rect, self.backdrop())
 
 	def addBusyBlocker(self):
 		self.busyBlocker.setZValue(100)
@@ -409,7 +446,7 @@ class LevitySceneView(QGraphicsView):
 		self.resizeDone.start()
 
 	def _themeChanged(self, active):
-		self.setBackgroundBrush(active.color('background').QColor)
+		# The scene paints the ground (`LevityScene.drawBackground`), flat or gradient.
 		# The viewport only: the window frame and the rest of the app keep the system palette.
 		self.viewport().setPalette(applyThemeToPalette(colorPalette, active))
 

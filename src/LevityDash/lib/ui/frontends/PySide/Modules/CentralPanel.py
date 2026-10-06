@@ -143,6 +143,18 @@ class CentralPanel(Panel, tag="dashboard"):
 			raise ValueError(f'theme is a theme name or a mapping, not {value!r}')
 		return value
 
+	_background: Any = None
+
+	@StateProperty(key='background', default=None, allowNone=True, sortOrder=-1)
+	def background(self) -> str | dict | list | None:
+		"""The ground of the board: a colour, a theme token (`$background`, or a scale such as `$sky` for a gradient), or a gradient written in place. `{gradient: $sky, angle: 160}` sets the direction. `lib/ui/colors/backdrop.py`"""
+		return self._background
+
+	@background.setter
+	def background(self, value):
+		self._background = value
+		self.scene().backdropSpec = value
+
 	_vars: Any = None
 	_written: Any = None
 	_resolved: Any = None
@@ -298,6 +310,8 @@ class CentralPanel(Panel, tag="dashboard"):
 		self.scene().view.status = 'Loading'
 		# The theme has to be live before the first item decodes a `$token`.
 		self._theme = None
+		self._background = None
+		self.scene().backdropSpec = None
 		try:
 			theme.activate(state.get('theme') if isinstance(state, dict) else None)
 		except theme.ThemeError as error:

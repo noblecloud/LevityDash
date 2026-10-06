@@ -35,3 +35,5 @@ fonts:
 scales:
   load: {0: $good, 60: $warn, 85: $bad}
   temperature: TemperatureGradient
+  # The board's ground as a gradient. Flat here, so a dashboard that writes `background: $sky` looks the same as without it.
+  sky: {0: $background, 1: $background}
