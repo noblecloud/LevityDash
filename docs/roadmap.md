@@ -1,6 +1,6 @@
 # Roadmap
 
-*Last updated: 2026-10-06 (plan for first release and lanes merged in).*
+*Last updated: 2026-10-06 (plan for first stable cut and lanes merged in).*
 
 This organizes and supersedes the raw idea list in [`_planned-features.md`](_planned-features.md) — every item from that list is either placed in a section below, marked as already done, or parked with a reason. Status notes reference the code so claims stay checkable.
 
@@ -16,7 +16,7 @@ The 2026 revival brought the project from a long-dormant WIP tree to a healthy, 
 - **`statekit` + `qolkit` extracted** — the declarative state/YAML-persistence layer (`src/statekit/`) and generic Python utilities (`src/qolkit/`) are now standalone, Qt-free, in-repo packages with pure-Python test suites. `lib/stateful.py` remains as a thin Qt facade, so no consumer code changed.
 - **First real test harness** — `tests/` covers statekit, qolkit, and headless (offscreen) UI/dashboard behavior.
 
-## Plan: first release, then lanes
+## Plan: first stable cut, then lanes
 
 Draft, 2026-10-06. Two questions are open (last part of this section).
 
@@ -40,13 +40,13 @@ Invest here first. Every lane uses it.
 3. Fail-soft load. When one item fails to load, show an error tile in its place. Never blank the whole board.
 4. Fix the known segfaults: the mini-graph debug repr in a worker thread, and the crash after the QBasicTimer cross-thread warning.
 
-**Phase 2: first release.**
+**Phase 2: first stable cut.**
 
 1. Fix the rain `0.0` bug (a true zero shows as trace) and the WeatherUnits percent bug (0.1% shows as 10%).
 2. Build one or two real weather boards from the paused design (Station, Core + rotation). Use themes, `switch` and `vars`. The handoff is `docs/tasks/dashboard-design-handoff.md` on branch `claude/dashboard-design-uy2w74`.
 3. Document themes, variables, the switch slot and unit literals. Threads write draft notes. The docs owner edits the `docs` branch.
 4. Close out value-sources.
-5. Merge `feat/value-sources` into `main` and tag a release. After that, work on short branches off `main`.
+5. Merge `feat/value-sources` into `main` and tag a version. After that, work on short branches off `main`.
 
 **Phase 3: lanes, one at a time.**
 
@@ -64,8 +64,8 @@ Invest here first. Every lane uses it.
 
 **Open questions.**
 
-1. Who is the launch for? Options: the author only; weather-station owners such as Tempest and PiConsole users (recommended, since a concrete audience gives the release a finish line); everyone.
-2. Which lane comes first after the release? Options: HUD (recommended: it is the north star, and `render_service` already renders frames); data; look; editor.
+1. Who is the first stable cut for? Options: the author only; weather-station owners such as Tempest and PiConsole users (recommended, since a concrete audience gives the cut a finish line); everyone.
+2. Which lane comes first after the cut? Options: HUD (recommended: it is the north star, and `render_service` already renders frames); data; look; editor.
 
 ---
 
