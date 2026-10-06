@@ -41,7 +41,7 @@ from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.stateful import Binding, Stateful, StateProperty
 from LevityDash.lib.ui.colors import Color, theme as colour_theme
 from LevityDash.lib.valuesource import openValueSource
-from . import styles
+from . import shapes, styles
 from .palettes import line_hue_shift
 from .pulse_driver import PulseDriver
 from .types import ColorSpace, ColorVariant, Size, Theme
@@ -136,6 +136,9 @@ class PanelBeam(QGraphicsItem, Stateful, tag=...):
 		self._duration: Optional[float] = None
 		self._strength = 1.0
 		self._radius: Optional[float] = None
+		self._pathSpec: Optional[str] = None
+		self._pathUnits: Optional[QPainterPath] = None
+		self._pathFit: Optional[tuple] = None
 		self._fill: Optional[Color] = None
 		self._phase: Optional[float] = None
 		self._fade = 0.0
@@ -179,6 +182,16 @@ class PanelBeam(QGraphicsItem, Stateful, tag=...):
 		self.update()
 		if self._behind is not None:
 			self._behind.update()
+
+	def outlinePath(self) -> tuple[Optional[QPainterPath], Optional[tuple]]:
+		"""The custom outline fitted to the panel, with a key for the mask cache. (None, None) without one."""
+		if self._pathUnits is None:
+			return None, None
+		rect = self.panelRect()
+		key = (self._pathSpec, int(rect.width()), int(rect.height()))
+		if self._pathFit is None or self._pathFit[0] != key:
+			self._pathFit = (key, shapes.fitPath(self._pathUnits, rect.width(), rect.height()))
+		return self._pathFit[1], key
 
 	@property
 	def cornerRadius(self) -> float:
@@ -227,11 +240,12 @@ class PanelBeam(QGraphicsItem, Stateful, tag=...):
 				values = styles.line_values(progress)
 				if not static:
 					hue_bloom = line_hue_shift(progress * duration, hue_range + 10.0)
+		path, pathKey = self.outlinePath()
 		return styles.PaintCtx(
 			size=size, rect=local, radius=self.cornerRadius, dark=dark, variant=self._variant,
 			fade=self._fade * self._strength, brightness=brightness, saturation=saturation, hue_deg=hue,
 			progress=progress, duration=duration, values=values, hue_bloom=hue_bloom, sx=sx, sy=sy,
-			color_space=self._colorSpace,
+			color_space=self._colorSpace, path=path, path_key=pathKey,
 		)
 
 	def paint(self, painter: QPainter, option, widget=None) -> None:
@@ -269,7 +283,10 @@ class PanelBeam(QGraphicsItem, Stateful, tag=...):
 				radius = self.cornerRadius
 				painter.setPen(Qt.PenStyle.NoPen)
 				painter.setBrush(self._fill.QColor)
-				painter.drawRoundedRect(QRectF(0.0, 0.0, rect.width(), rect.height()), radius, radius)
+				if (path := self.outlinePath()[0]) is not None:
+					painter.drawPath(path)
+				else:
+					painter.drawRoundedRect(QRectF(0.0, 0.0, rect.width(), rect.height()), radius, radius)
 		finally:
 			painter.restore()
 
@@ -511,6 +528,25 @@ class PanelBeam(QGraphicsItem, Stateful, tag=...):
 	@radius.decode
 	def radius(self, value) -> Optional[float]:
 		return None if value is None else max(0.0, float(value))
+
+	@StateProperty(default=None, allowNone=True, after=_changed)
+	def path(self) -> Optional[str]:
+		"""The outline the beam follows: SVG path data (M, L, H, V, C, S, Q, T, A, Z), or one of `circle`, `diamond`, `triangle`, `arc`, `wave`, `heart`. It is scaled to fill the panel. Left out, the beam follows the panel's rounded rectangle."""
+		return self._pathSpec
+
+	@path.setter
+	def path(self, value: Optional[str]):
+		self._pathSpec = value
+		self._pathFit = None
+		try:
+			self._pathUnits = shapes.resolve(value)
+		except ValueError as e:
+			log.warning(f'beam path {value!r} is not usable ({e}); following the panel outline')
+			self._pathUnits = None
+
+	@path.decode
+	def path(self, value) -> Optional[str]:
+		return None if value in (None, False, '') else str(value)
 
 	@StateProperty(default=None, allowNone=True, after=_changed)
 	def fill(self) -> Optional[Color]:

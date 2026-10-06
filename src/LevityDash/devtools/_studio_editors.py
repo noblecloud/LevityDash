@@ -2189,6 +2189,216 @@ class CaptionEdit(_Toggled):
 		return 'Label'
 
 
+class ConditionEdit(Editor):
+	"""`when:` and a beam's `active:` and `sweep:`: nothing, a bool, or a key or an expression."""
+
+	MODES = [('not set', None), ('always (true)', True), ('never (false)', False), ('key or expression', '')]
+
+	def __init__(self, unsetText: str = 'not set', placeholder: str = 'environment.wind.speed.speed > 25 mph'):
+		super().__init__()
+		box = QHBoxLayout(self)
+		box.setContentsMargins(0, 0, 0, 0)
+		box.setSpacing(4)
+		self.mode = QComboBox()
+		for i, (label, _) in enumerate(self.MODES):
+			self.mode.addItem(unsetText if i == 0 else label)
+		self.mode.activated.connect(self._modeChanged)
+		self.text = KeyEdit(placeholder)
+		self.text.changed.connect(self._emit)
+		box.addWidget(self.mode)
+		box.addWidget(self.text, 1)
+		self._showMode()
+
+	def _showMode(self):
+		self.text.setVisible(self.mode.currentIndex() == 3)
+
+	def _modeChanged(self, _):
+		self._showMode()
+		if self.mode.currentIndex() == 3:
+			self.text.setFocus()
+		self._emit()
+
+	def setValue(self, value):
+		if value is None or value == '':
+			index = 0
+		elif isinstance(value, bool):
+			index = 1 if value else 2
+		else:
+			index = 3
+		with QSignalBlocker(self.mode):
+			self.mode.setCurrentIndex(index)
+		self.text.setValue(str(value) if index == 3 else None)
+		self._showMode()
+
+	def value(self):
+		index = self.mode.currentIndex()
+		if index == 3:
+			return self.text.value()
+		return self.MODES[index][1]
+
+	def isEditing(self) -> bool:
+		return self.text.isEditing() or self.mode.view().isVisible()
+
+
+class BeamForm(_Form):
+	"""The keys of `beam:`. Only what differs from the defaults is written."""
+
+	DEFAULTS = {'size': 'md', 'variant': 'colorful', 'theme': None, 'color-space': 'hsv', 'strength': 1.0}
+
+	def __init__(self):
+		super().__init__()
+		self.part('active', 'active', ConditionEdit(unsetText='off'), 'Runs while true: a bool, a key or an expression.')
+		self.part('sweep', 'sweep', ConditionEdit(unsetText='off', placeholder='environment.temperature.temperature'),
+		          'Runs once each time a new value arrives. A key or an expression.')
+		self.part('path', 'outline', ChoiceEdit([('panel rectangle', None)] + [(n, n) for n in ('circle', 'diamond', 'triangle', 'arc', 'wave', 'heart')], editable=True),
+		          'What the beam follows. A shape name, or SVG path data such as M 0 0 L 100 0 L 50 100 Z, scaled to fill the panel.')
+		self.part('size', 'size', ChoiceEdit([(n, n) for n in ('sm', 'md', 'line', 'pulse-inner', 'pulse-outside')]), 'The shape and motion.')
+		self.part('variant', 'variant', ChoiceEdit([(n, n) for n in ('colorful', 'mono', 'ocean', 'sunset')]))
+		self.part('theme', 'theme', ChoiceEdit([('auto', None), ('dark', 'dark'), ('light', 'light')]))
+		self.part('color-space', 'colour space', ChoiceEdit([('hsv (upstream)', 'hsv'), ('oklch (palette ring)', 'oklch')]))
+		self.part('duration', 'duration', NumberEdit(autoText='default', suffix=' s', lo=0.2, hi=20, step=0.1, decimals=2),
+		          'Seconds for one cycle. 1.96 for sm and md, 3.1 for line, 2.3 for the pulses.')
+		self.part('strength', 'strength', NumberEdit(lo=0, hi=1, step=0.05, decimals=2), 'How strong the beam is, 0 to 1.')
+		self.part('radius', 'radius', NumberEdit(autoText='default', suffix=' px', lo=0, hi=200, step=1, decimals=0),
+		          'Corner radius in pixels. 32 for sm, 16 for the others.')
+		self.part('fill', 'fill', ColorEdit(nullable=True), 'A card colour under the content. pulse-outside needs one.')
+		self.part('phase', 'hold at', NumberEdit(autoText='run', suffix=' s', lo=0, hi=20, step=0.05, decimals=2),
+		          'Freeze the beam at this time in seconds. For renders; leave it on run for a real dashboard.')
+
+	def setValue(self, value):
+		spec = dict(value) if isinstance(value, dict) else {}
+		self._extra = {k: v for k, v in spec.items() if k not in self._known}
+		for key, p in self.parts.items():
+			with QSignalBlocker(p):
+				p.setValue(spec.get(key, self.DEFAULTS.get(key)))
+
+	def value(self):
+		out = dict(self._extra)
+		for key, p in self.parts.items():
+			v = p.value()
+			if v is not None and v != self.DEFAULTS.get(key):
+				out[key] = v
+		return out
+
+
+class _Popover(Editor):
+	"""A button that shows a summary and opens its form in a small floating panel.
+
+	The panel is a tool window, not a popup: a popup closes when the colour dialog opens.
+	"""
+
+	title = ''
+
+	def __init__(self, form: Editor):
+		super().__init__()
+		self.form = form
+		box = QHBoxLayout(self)
+		box.setContentsMargins(0, 0, 0, 0)
+		self.button = QPushButton()
+		self.button.setCheckable(True)
+		self.button.setStyleSheet('text-align: left; padding: 3px 8px;')
+		self.button.toggled.connect(self._toggle)
+		box.addWidget(self.button, 1)
+		self.panel = QFrame(self, Qt.WindowType.Tool)
+		self.panel.setWindowTitle(self.title)
+		inner = QVBoxLayout(self.panel)
+		inner.setContentsMargins(10, 10, 10, 10)
+		inner.addWidget(form)
+		self.panel.setMinimumWidth(420)
+		form.changed.connect(self._formChanged)
+		self._value: Any = None
+		self._summarize()
+
+	def _toggle(self, on: bool):
+		if on:
+			self.form.setValue(self._value)
+			corner = self.button.mapToGlobal(self.button.rect().bottomLeft())
+			self.panel.move(corner)
+			self.panel.show()
+			self.panel.raise_()
+		else:
+			self.panel.hide()
+
+	def _formChanged(self, value):
+		self._value = self._tidy(value)
+		self._summarize()
+		self.changed.emit(self._value)
+
+	def _tidy(self, value):
+		return value or None
+
+	def summary(self) -> str:
+		return 'set' if self._value is not None else 'not set'
+
+	def _summarize(self):
+		self.button.setText(self.summary() + '  \u25be')
+
+	def setValue(self, value):
+		self._value = value
+		self._summarize()
+		if self.panel.isVisible():
+			self.form.setValue(value)
+
+	def value(self):
+		return self._value
+
+	def onContext(self):
+		self.form.onContext()
+
+	def isEditing(self) -> bool:
+		return self.panel.isVisible() and self.form.isEditing()
+
+
+class BeamEdit(_Popover):
+	"""`beam:` as a popover. Off when it has no `active` or `sweep`."""
+
+	title = 'Beam'
+
+	def __init__(self):
+		super().__init__(BeamForm())
+
+	def _tidy(self, value):
+		return value or None
+
+	def summary(self) -> str:
+		spec = self._value if isinstance(self._value, dict) else {}
+		if not spec:
+			return 'Beam: off'
+		running = spec.get('active') not in (None, False) or spec.get('sweep') not in (None, False)
+		bits = [spec.get('size', 'md'), spec.get('variant', 'colorful')]
+		return 'Beam: ' + ' \u00b7 '.join(bits) + ('' if running else ' (not triggered)')
+
+
+class WhenEdit(_Popover):
+	"""`when:` as a popover: the form is a mode and a key or expression, with hints."""
+
+	title = 'When'
+
+	def __init__(self):
+		form = _Form()
+		self.condition = form.part('when', 'when', ConditionEdit(unsetText='always shown'),
+		                           'Show this panel only while the condition holds. In a switch the slot picks among its children by it.')
+		hint = QLabel('A key is true when its value is not zero. An expression can use units: '
+		              'environment.temperature.temperature < 32\u00b0F. A missing value counts as false.')
+		hint.setWordWrap(True)
+		hint.setStyleSheet('color: palette(placeholder-text); font-size: 11px;')
+		form.grid.addWidget(hint, 1, 0, 1, 2)
+		form.setValue = lambda value: self.condition.setValue(value)
+		form.value = lambda: self.condition.value()
+		super().__init__(form)
+
+	def _tidy(self, value):
+		return None if value is None or value == '' else value
+
+	def summary(self) -> str:
+		v = self._value
+		if v is None:
+			return 'When: always shown'
+		if isinstance(v, bool):
+			return 'When: ' + ('true' if v else 'false')
+		return f'When: {v}'
+
+
 # Section: the factory
 
 def make(field: 'schema.Field') -> Optional[Editor]:
@@ -2225,4 +2435,8 @@ def make(field: 'schema.Field') -> Optional[Editor]:
 		return WarpEdit()
 	if kind == 'glow':
 		return GlowEdit()
+	if kind == 'beam':
+		return BeamEdit()
+	if kind == 'when':
+		return WhenEdit()
 	return None

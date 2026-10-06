@@ -14,6 +14,8 @@
 #                  active: environment.wind.speed.speed > 25
 #   sweep:       a key or expression. The beam runs once each time a new value arrives.
 #                  sweep: environment.temperature.temperature
+#   path:        what the beam follows: circle | diamond | triangle | arc | wave | heart, or SVG path data
+#                (M L H V C S Q T A Z). It is scaled to fill the panel. Left out, the panel's rounded rectangle.
 #   phase:       hold the beam at this time in seconds, with no animation. Used here so every
 #                render is the same frame. Leave it out on a real dashboard.
 #
