@@ -226,6 +226,14 @@ def test_unit_literals_do_not_swallow_durations_or_keywords():
 		Expression.parse(f'{TEMP} > 3 flurbs')
 
 
+def test_a_spaced_time_unit_is_not_a_unit_literal():
+	# `3 min` and `10 hr` were syntax errors before unit literals and still are: spans are durations.
+	for text in (f'{TEMP} * 3 min', f'max({TEMP}, 10 hr)', f'{TEMP} > 3 min'):
+		with pytest.raises(ExpressionError):
+			Expression.parse(text)
+	assert Expression.parse(f'max({TEMP}, 3h)').text
+
+
 def test_negation_keeps_the_unit():
 	resolver = FakeResolver(current={TEMP: Fahrenheit(70)})
 	assert isinstance(Expression.parse(f'-{TEMP}').evaluate(resolver, NOW), Fahrenheit)

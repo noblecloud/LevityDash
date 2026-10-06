@@ -32,7 +32,7 @@ from typing import Any, Callable, Dict, FrozenSet, Mapping, Optional, Protocol, 
 import WeatherUnits as wu
 
 from LevityDash.lib.plugins.categories import CategoryItem
-from LevityDash.lib.ui.colors.stopunits import StopUnitError, measure, toDataUnit
+from LevityDash.lib.stopunits import StopUnitError, family, measure, toDataUnit
 
 __all__ = [
 	'Expression', 'ExpressionError', 'Missing', 'Window', 'SeriesInput', 'PointInput', 'Resolver',
@@ -312,9 +312,11 @@ def _substitute(text: str) -> Tuple[str, Dict[str, Any]]:
 		if unit.lower() in _NOT_UNITS:
 			return match.group(0)
 		try:
-			measure(float(match.group(1)), unit)
+			found = measure(float(match.group(1)), unit)
 		except Exception:  # noqa: BLE001 - not a unit WeatherUnits knows: leave the text for the parser to refuse
 			return match.group(0)
+		if family(type(found)) == 'time':
+			return match.group(0)  # spans are durations (`3h`), which only a window or an offset takes
 		name = f'{_UNIT_PREFIX}{len(placeholders)}'
 		placeholders[name] = UnitLiteral(float(match.group(1)), unit)
 		return name
