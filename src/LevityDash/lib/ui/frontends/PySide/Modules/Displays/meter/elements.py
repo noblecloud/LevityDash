@@ -4029,6 +4029,22 @@ class GaugeValueLabel(GaugeLabel):
 			yield from super().__rich_repr__()
 			yield 'alignment', self.alignment
 
+		@property
+		def _formatHint(self) -> Optional[str]:
+			"""The string the value is sized against: an explicit hint if one was set, else the widest the range can show."""
+			explicit = getattr(self, '_explicitHint', None)
+			return explicit if explicit else self.parent.rangeHint(self.font())
+
+		@_formatHint.setter
+		def _formatHint(self, value: Optional[str]):
+			self._explicitHint = value
+
+		def _fitPath(self) -> QPainterPath:
+			"""The glyphs the fit measures: the hint string laid out like the value, so the size does not follow the digits shown."""
+			if self._formatHint and not self._shapePath.isEmpty():
+				return self._shapePath
+			return self.path()
+
 		def _format_value_func(self, value):
 			try:
 				return self.parent.format_value(value.value)
@@ -4153,7 +4169,7 @@ class GaugeValueLabel(GaugeLabel):
 				padY = min(pad, strip.height() * 0.15) if strip.height() < self.parent.parent._sideValueRect().height() else pad
 				strip = strip.adjusted(pad, padY, -pad, -padY)
 				scale = Text.getTextScale(self, textRect, strip.translated(-self.pos()))
-				base_path = self.path()
+				base_path = self._fitPath()
 				if (size := self.parent.size) is not None and (glyph_height := base_path.boundingRect().height()) > 0:
 					scale = min(scale, size_px(size, gauge.radius * 2) / glyph_height)
 				return round(scale, 4)
@@ -4190,7 +4206,7 @@ class GaugeValueLabel(GaugeLabel):
 			# the old copy of it tested every trial at the gauge's top-left
 			# corner. That always failed `bounds.contains`, and every gauge
 			# value sat on the 0.2 floor whatever room it had.
-			base_path = self.path()
+			base_path = self._fitPath()
 			origin = self.getTextPosition(limitRect)
 			# Which box the label has to stay inside depends on where it sits.
 			# A Center/Inline label lives among the dial's own parts, so the
@@ -4365,6 +4381,36 @@ class GaugeValueLabel(GaugeLabel):
 		elif value is None:
 			return "⋯"
 		return str(value)
+
+	def rangeHint(self, font: QFont) -> Optional[str]:
+		"""The widest text the gauge's range can show, with every digit set to the widest glyph the font has.
+
+		The value is sized against this, not against the number on show, so 7, 13 and 101 on a 0-120
+		gauge all come out at one size. None when the range cannot be formatted; the value is then
+		sized against itself.
+		"""
+		gauge = self.gauge
+		try:
+			low, high = gauge.range.min, gauge.range.max
+			key = (float(low), float(high), repr(self.format_spec), gauge.valueClass, font.key())
+		except Exception as e:  # noqa: BLE001 - sizing must never abort a load
+			log.warning(f'Gauge {gaugeKeyName(gauge)} could not size its value to its range: {e!r}')
+			return None
+		if (cached := getattr(self, '_rangeHint', None)) is not None and cached[0] == key:
+			return cached[1]
+		try:
+			ends = [self.format_value(low), self.format_value(high)]
+			widest = max(ends, key=lambda text: (sum(c.isdigit() for c in text), len(text)))
+			if float(low) < 0 and '-' not in widest and '\u2212' not in widest:
+				widest = '-' + widest
+			metrics = QFontMetricsF(font)
+			digit = max('0123456789', key=metrics.horizontalAdvance)
+			hint = ''.join(digit if c.isdigit() else c for c in widest)
+		except Exception as e:  # noqa: BLE001
+			log.warning(f'Gauge {gaugeKeyName(gauge)} could not size its value to its range: {e!r}')
+			hint = None
+		self._rangeHint = (key, hint)
+		return hint
 
 	@StateProperty(key='size', default=None, allowNone=True)
 	def size(self) -> Length | Dimension | None:
