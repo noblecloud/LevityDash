@@ -1,0 +1,11 @@
+name: condition-day
+keys:
+  environment.temperature.temperature:
+    value: 75
+    unit: f
+    series: [66, 64, 63, 62, 61, 62, 65, 69, 73, 77, 80, 83, 85, 86, 87, 86, 84, 81, 78, 75, 72, 70, 68, 67]
+  # The icon derives from the code (OpenMeteo schema: dataKey), so the scenario
+  # carries codes only. 0 clear, 1-2 partly, 3 overcast, 61-65 rain, 80-82 showers.
+  environment.condition.weatherCode:
+    value: 3
+    series: [0, 0, 1, 1, 2, 2, 3, 3, 3, 2, 61, 63, 65, 80, 81, 82, 61, 3, 2, 1, 1, 0, 0, 45]
