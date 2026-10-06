@@ -112,7 +112,7 @@ def buildSchema(scenario: dict) -> tuple[dict, Dict[str, str]]:
 	for key, entry in scenario['keys'].items():
 		entry = entry if isinstance(entry, dict) else {'value': entry}
 		spec = deepcopy(defaults.get(key, {}))
-		spec.update({k: v for k, v in entry.items() if k in ('type', 'sourceUnit', 'title', 'description')})
+		spec.update({k: v for k, v in entry.items() if k in ('type', 'sourceUnit', 'title', 'description', 'kwargs')})
 		if 'unit' in entry:
 			spec['sourceUnit'] = entry['unit']
 		if 'sourceUnit' not in spec:

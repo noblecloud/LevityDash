@@ -39,7 +39,7 @@ schema = {
 	'environment.precipitation.precipitation': {'type': 'precipitationRate', 'title': 'Precipitation', 'sourceKey': 'precipIntensity'},
 	'environment.precipitation.error': {'type': 'precipitationRate', 'title': 'Precipitation Error', 'sourceKey': 'precipIntensityError'},
 	'environment.precipitation.accumulation': {'type': 'precipitationRate', 'title': 'Precipitation Accumulation', 'sourceKey': 'precipAccumulation', 'timeSeriesOnly': True},
-	'environment.precipitation.probability': {'type': 'probability', 'sourceUnit': '%p', 'title': 'Precipitation Probability', 'sourceKey': 'precipProbability'},
+	'environment.precipitation.probability': {'type': 'probability', 'sourceUnit': '%p', 'kwargs': {'isPercentage': False}, 'title': 'Precipitation Probability', 'sourceKey': 'precipProbability'},
 
 	# Temperature
 	'environment.temperature': {'type': 'temperature', 'sourceUnit': 'c'},
@@ -47,7 +47,7 @@ schema = {
 	'environment.temperature.feelsLike': {'title': 'Feels like', 'sourceKey': 'apparentTemperature'},
 	'environment.temperature.dewpoint': {'title': 'Dew Point', 'sourceKey': 'dewPoint'},
 
-	'environment.humidity.humidity': {'type': 'humidity', 'sourceUnit': '%', 'title': 'Humidity', 'sourceKey': 'humidity'},
+	'environment.humidity.humidity': {'type': 'humidity', 'sourceUnit': '%', 'kwargs': {'isPercentage': False}, 'title': 'Humidity', 'sourceKey': 'humidity'},
 
 	# Pressure
 	'environment.pressure': {'type': 'pressure', 'sourceUnit': 'hPa'},
@@ -60,7 +60,7 @@ schema = {
 	'environment.wind.direction': {'type': 'direction', 'sourceUnit': 'deg', 'title': 'Wind direction', 'sourceKey': 'windBearing'},
 
 	# Clouds
-	'environment.clouds.cover': {'type': 'cloudCover', 'sourceUnit': '%', 'title': 'Cloud coverage', 'sourceKey': 'cloudCover'},
+	'environment.clouds.cover': {'type': 'cloudCover', 'sourceUnit': '%', 'kwargs': {'isPercentage': False}, 'title': 'Cloud coverage', 'sourceKey': 'cloudCover'},
 	'environment.light.uvi': {'type': 'index', 'sourceUnit': 'uvi', 'title': 'UV Index', 'sourceKey': 'uvIndex'},
 	'environment.visibility': {'type': 'distance', 'sourceUnit': 'km', 'title': 'Visibility', 'sourceKey': 'visibility'},
 
@@ -70,7 +70,7 @@ schema = {
 
 	'astronomy.sun.rise': {'type': 'datetime', 'sourceUnit': 'epoch', 'title': 'Sunrise', 'sourceKey': 'sunriseTime', 'timeseriesOnly': True},
 	'astronomy.sun.set': {'type': 'datetime', 'sourceUnit': 'epoch', 'title': 'Sunset', 'sourceKey': 'sunsetTime', 'timeseriesOnly': True},
-	'astronomy.moon.phase': {'type': 'percentage', 'sourceUnit': '%%', 'title': 'Moon Phase', 'sourceKey': 'moonPhase', 'timeseriesOnly': True},
+	'astronomy.moon.phase': {'type': 'percentage', 'sourceUnit': '%%', 'kwargs': {'isPercentage': False}, 'title': 'Moon Phase', 'sourceKey': 'moonPhase', 'timeseriesOnly': True},
 
 	'environment.precipitation.max': {'type': 'precipitationRate', 'sourceUnit': ('mm', 'hr'), 'title': 'Max Precipitation', 'sourceKey': 'precipIntensityMax', 'timeseriesOnly': True},
 	'environment.precipitation.maxTime': {'type': 'datetime', 'sourceUnit': 'epoch', 'title': 'Max Precipitation Time', 'sourceKey': 'precipIntensityMaxTime', 'timeseriesOnly': True},

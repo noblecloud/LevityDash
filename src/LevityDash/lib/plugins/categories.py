@@ -201,6 +201,11 @@ class UnitMetaData(dict):
 					format = format[source.dataName]
 				return lambda value: datetime.strptime(value, format).astimezone(LOCAL_TIMEZONE)
 		if isinstance(unitDef, str) and unitDef in unitDict:
+			if unitDef in PERCENT_UNITS:
+				# A percent class can't tell 0.1 % from 10 % by looking at the
+				# number, so the scale comes from the schema: percent unless
+				# the source says it reports a 0-1 fraction (`isPercentage: False`).
+				kwargs = {'isPercentage': True, **kwargs}
 			return lambda value: unitDict[unitDef](value, **kwargs)
 		if isinstance(unitDef, str) and '[' in unitDef:
 			unitType = unitDef.split('[')[0]
@@ -566,6 +571,10 @@ def splitKeyString(value: str) -> tuple:
 
 
 # Section CategoryItem
+#: Unit ids that build a WeatherUnits percentage class
+PERCENT_UNITS = frozenset({'%', '%h', '%c', '%p', '%%', '%bat'})
+
+
 class CategoryItem(tuple):
 	root: ClassVar['CategoryItem']
 	__separator: str = '.'

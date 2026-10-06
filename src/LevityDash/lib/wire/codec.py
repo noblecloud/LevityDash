@@ -36,6 +36,7 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional, Sequence, Tuple
 
 from WeatherUnits import Measurement
+from WeatherUnits.others import Percentage
 from WeatherUnits.base.Registry import UnitRegistry
 
 from LevityDash.lib.plugins.categories import CategoryItem
@@ -191,7 +192,9 @@ def decode_measurement(payload: dict) -> Measurement | float:
 		# take down an entire snapshot/update message.
 		return value
 	try:
-		measurement = cls(value)
+		# `value` is the stored form, a 0-1 fraction for percentages, so say
+		# so rather than let the class guess from its size
+		measurement = cls(value, isPercentage=False) if issubclass(cls, Percentage) else cls(value)
 	except Exception:
 		# The class resolved but can't be built from a bare number: derived/
 		# rate units (e.g. Wind = Distance/Time) resolve to their GENERIC
