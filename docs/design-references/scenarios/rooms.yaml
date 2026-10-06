@@ -1,0 +1,18 @@
+# Indoor rooms for the compact Rooms widget: one Govee sensor per room, keyed by identity.
+# Load: --scenario rooms. Series are today's 24 hourly readings.
+name: rooms
+description: Four rooms from 68 to 82 F, outdoors 58 F.
+keys:
+  environment.temperature.temperature: {value: 58, unit: f, title: Outdoor, series: [50.8, 49.8, 49.2, 49.0, 49.2, 49.8, 50.8, 52.0, 53.4, 55.0, 56.6, 58.0, 59.2, 60.2, 60.8, 61.0, 60.8, 60.2, 59.2, 58.0, 56.6, 55.0, 53.4, 52.0]}
+  indoor.temperature.temperature#livingroom: {value: 72.4, unit: f, title: Living room, series: [71.2, 72.0, 72.0, 72.2, 72.9, 73.2, 72.8, 72.8, 73.0, 72.6, 71.8, 71.6, 71.5, 70.7, 70.0, 70.0, 69.9, 69.3, 69.2, 69.7, 69.8, 69.7, 70.2, 71.0]}
+  indoor.humidity.humidity#livingroom: {value: 0.44, unit: '%', title: Humidity}
+  indoor.battery#livingroom: {value: 0.91, unit: '%', title: Battery}
+  indoor.temperature.temperature#bedroom: {value: 68.1, unit: f, title: Bedroom, series: [68.4, 68.9, 68.6, 68.4, 68.6, 68.5, 67.7, 67.3, 67.2, 66.6, 65.8, 65.6, 65.7, 65.2, 64.8, 65.2, 65.6, 65.4, 65.7, 66.6, 67.0, 67.0, 67.6, 68.4]}
+  indoor.humidity.humidity#bedroom: {value: 0.51, unit: '%', title: Humidity}
+  indoor.battery#bedroom: {value: 0.64, unit: '%', title: Battery}
+  indoor.temperature.temperature#office: {value: 75.9, unit: f, title: Office, series: [76.3, 76.4, 75.7, 75.0, 75.0, 74.6, 73.7, 73.4, 73.5, 73.1, 72.6, 72.9, 73.4, 73.3, 73.4, 74.2, 74.8, 74.8, 75.2, 76.1, 76.3, 76.1, 76.4, 76.8]}
+  indoor.humidity.humidity#office: {value: 0.38, unit: '%', title: Humidity}
+  indoor.battery#office: {value: 0.88, unit: '%', title: Battery}
+  indoor.temperature.temperature#terrarium: {value: 81.6, unit: f, title: Terrarium, series: [80.7, 80.5, 79.7, 79.0, 79.1, 79.0, 78.4, 78.4, 79.0, 79.1, 79.0, 79.6, 80.4, 80.6, 80.8, 81.6, 82.1, 81.9, 82.0, 82.4, 82.2, 81.6, 81.4, 81.4]}
+  indoor.humidity.humidity#terrarium: {value: 0.86, unit: '%', title: Humidity}
+  indoor.battery#terrarium: {value: 0.47, unit: '%', title: Battery}
