@@ -1314,13 +1314,13 @@ class LevityMainWindow(QMainWindow):
 
 	def openLogFolder(self):
 		from LevityDash import __dirs__
-		QDesktopServices.openUrl(QUrl.fromLocalFile(Path(__dirs__.user_log_dir).as_posix()))
+		QDesktopServices.openUrl(QUrl.fromLocalFile(Path(__dirs__.log).as_posix()))
 
 	def submitLogs(self, sendType=None):
 		if sendType is None:
 			sendType = 'openFolder'
 		from LevityDash import __dirs__
-		logDir = Path(__dirs__.user_log_dir)
+		logDir = Path(__dirs__.log)
 
 		def writeFiles(zipFile, path, relativeTo: Path = None):
 			if relativeTo is None:

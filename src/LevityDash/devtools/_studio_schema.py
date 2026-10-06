@@ -58,6 +58,9 @@ SKIP_KEYS = frozenset({
 #: Text the studio edits although the gauge computes a default for it: the tick label words.
 UNSKIP = {('text_map',)}
 
+#: A skipped key a part of this class does edit: the needle's `type` is its shape, not the panel's dispatch key.
+UNSKIP_OWNED = {('Needle', 'type')}
+
 MAX_DEPTH = 4
 
 #: Needle types that use a needle property. A property not listed here applies to every type.
@@ -192,7 +195,7 @@ def read(root: Stateful, path: tuple) -> Any:
 	if prop is None:
 		return None
 	try:
-		raw = prop.fget(owner)
+		raw = prop.__get__(owner, type(owner))
 	except Exception:
 		return None
 	return saved(prop, raw, owner)
@@ -362,10 +365,11 @@ def describe(owner: Stateful, path: tuple = (), title: str = 'Gauge', _seen: Opt
 	seen.add(id(owner))
 	group = Group(path, title)
 	for prop in type(owner).statefulItems.values():
-		if 'set' not in prop.actions or (prop.key in SKIP_KEYS and (prop.fget.__name__,) not in UNSKIP):
+		skipped = prop.key in SKIP_KEYS and (prop.fget.__name__,) not in UNSKIP and (type(owner).__name__, prop.key) not in UNSKIP_OWNED
+		if 'set' not in prop.actions or skipped:
 			continue
 		try:
-			raw = prop.fget(owner)
+			raw = prop.__get__(owner, type(owner))
 		except Exception:
 			raw = None
 		if isinstance(raw, Stateful):
