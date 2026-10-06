@@ -9,7 +9,7 @@ from PySide6.QtCore import (
 	Signal, Slot
 )
 from PySide6.QtGui import (
-	QBrush, QColor, QCursor, QFontMetricsF, QImage, QPainter, QPainterPath, QPainterPathStroker, QPen,
+	QBrush, QColor, QCursor, QFont, QFontMetricsF, QImage, QPainter, QPainterPath, QPainterPathStroker, QPen,
 	QPixmap, QPolygonF, QTransform, QAction
 )
 from PySide6.QtWidgets import (
@@ -978,6 +978,21 @@ class GraphItemData(Stateful, tag=...):
 		frame = self.graph.timeframe
 		return min(frame.lookback, _WIRE_FETCH_LOOKBACK), max(frame.range, _WIRE_FETCH_HORIZON)
 
+	def sideSeries(self, key) -> tuple[np.ndarray, list] | None:
+		"""Another key's samples over this plot's window: epoch seconds and the values as the source holds them.
+
+		None when the key is unknown, has no timeseries yet, or has nothing in the window.
+		"""
+		container = LevityDashboard.get_container(CategoryItem(str(key)), None)
+		series = container.getTimeseries(AnySource) if container is not None else None
+		if series is None or series.timeseries is None:
+			return None
+		end = self.graph.timeframe.end + timedelta(hours=1) if not self.graph.scrollable else None
+		items = series.timeseries[self.graph.timeframe.historicalStart:end]
+		if not len(items):
+			return None
+		return np.array([i.timestamp.timestamp() for i in items]), [i.value for i in items]
+
 	@cached_property
 	def list(self):
 		if self.useTestData:
@@ -1703,7 +1718,12 @@ class Plot(GlowMixin, QGraphicsPixmapItem, Stateful):
 		weight *= self.scene().view.devicePixelRatio()
 		return QSize(weight, weight)
 
-	def _render_paint(self, size: QSize, dpr: float, pen: QPen, path: QPainterPath, glow=None) -> QImage:
+	def _renderExtras(self, path: QPainterPath) -> dict:
+		"""Plain values a subclass wants painted besides the path: resolved here, on the GUI thread, since
+		the painter worker may read no scene graph. `path` is already in the pixmap's coordinates."""
+		return {}
+
+	def _render_paint(self, size: QSize, dpr: float, pen: QPen, path: QPainterPath, glow=None, extras=None) -> QImage:
 		# Runs on the painter worker thread. Everything the caller passes in
 		# is a plain value (no live scene-graph references), so this is pure
 		# computation + painting into a QImage - Qt supports QImage painting
@@ -1788,7 +1808,7 @@ class Plot(GlowMixin, QGraphicsPixmapItem, Stateful):
 		path.translate(-path.elementAt(0).x, 0)
 		path.translate(padding.width() / 2, padding.height() / 2)
 
-		self.painter.args = (size, dpr, pen, path, self.glow)
+		self.painter.args = (size, dpr, pen, path, self.glow, self._renderExtras(path))
 		self.painter.start()
 		self.shaper.start(priority=0)
 
@@ -1812,6 +1832,76 @@ class LinePlot(Plot):
 		self._shape = None
 		self._dashPattern = None
 		super(LinePlot, self).__init__(*args, **kwargs)
+
+	_thickness: Optional[dict] = None
+
+	@StateProperty(default=None, allowNone=True, after=Plot.updateAppearance)
+	def thickness(self) -> Optional[dict]:
+		"""Line width that follows another key: `{key: environment.wind.speed.speed, weight: [0.2, 1.2]}`.
+
+		`weight` is the thin and thick end in the units `weight` uses; `range: [lo, hi]` pins the values they
+		stand for (default: the lowest and highest in view). Clamped outside it.
+		"""
+		return self._thickness
+
+	@thickness.setter
+	def thickness(self, value: Optional[dict]):
+		self._thickness = value
+
+	@thickness.decode
+	def thickness(value) -> Optional[dict]:
+		if not value:
+			return None
+		if not isinstance(value, Mapping) or 'key' not in value:
+			raise ValueError(f'thickness needs a mapping with a key, not {value!r}')
+		weight = [float(w) for w in value.get('weight', (0.2, 1.0))]
+		span = value.get('range')
+		if len(weight) != 2 or (span is not None and len(span) != 2):
+			raise ValueError('thickness weight and range each take two numbers')
+		return {'key': str(value['key']), 'weight': weight, 'range': None if span is None else [float(v) for v in span]}
+
+	def _renderExtras(self, path: QPainterPath) -> dict:
+		extras = {}
+		if not self.data.hasData or not self._thickness:
+			return extras
+		# The sample times come back out of the normalised x the path was built from: the data itself can be
+		# re-cut at another resolution between a path build and this render, and would no longer line up with it.
+		seconds = self.figure.figureTimeRangeMaxMin.total_seconds()
+		if seconds <= 0:
+			return extras
+		times = self.data.graph.timeframe.start.timestamp() + np.asarray(self.data.normalizedX) * seconds
+		count = path.elementCount()
+		# The path is a lead-in point, one point per sample and a closing point that Qt drops when it repeats the last.
+		if count not in (len(times) + 1, len(times) + 2):
+			return extras
+		tail = count - len(times) - 1
+		xs = np.array([path.elementAt(i).x for i in range(count)])
+		ys = np.array([path.elementAt(i).y for i in range(count)])
+		if self._thickness and (side := self.data.sideSeries(self._thickness['key'])) is not None:
+			widths = variableWidths(times, *side, self._thickness['weight'], self._thickness.get('range'))
+			if widths is not None:
+				scale = self.figure.parent.plotLineWeight()
+				widths = widths * scale
+				extras['ribbon'] = ribbonPath(xs, ys, np.concatenate(([widths[0]], widths, [widths[-1]] * tail)))
+		return extras
+
+	def _render_paint(self, size: QSize, dpr: float, pen: QPen, path: QPainterPath, glow=None, extras=None) -> QImage:
+		extras = extras or {}
+		img = QImage(size, QImage.Format.Format_ARGB32_Premultiplied)
+		img.setDevicePixelRatio(dpr)
+		img.fill(Qt.transparent)
+		painter = EffectPainter(img)
+		paintGlow(painter, path, pen.brush(), pen.widthF(), glow)
+		if (ribbon := extras.get('ribbon')) is not None:
+			painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+			painter.setPen(Qt.NoPen)
+			painter.setBrush(pen.brush())
+			painter.drawPath(ribbon)
+		else:
+			painter.setPen(pen)
+			painter.drawPath(path)
+		painter.end()
+		return img
 
 	def __getValues(self) -> list[QPointF]:
 		return self.data.plotValues
@@ -1895,6 +1985,41 @@ class LinePlot(Plot):
 			i += 2
 			path.quadTo(c, endPt)
 		return path
+
+
+def variableWidths(times: np.ndarray, sideTimes: np.ndarray, sideValues: list, weight: Sequence[float], span: Optional[Sequence[float]]) -> Optional[np.ndarray]:
+	"""A line weight for each of `times`, taken from another series laid over them.
+
+	The series is read at each time (held at its ends), then spread across `span` (default its own
+	extremes in view) and mapped onto `weight`. None when its values are not numbers.
+	"""
+	try:
+		values = np.array([float(v) for v in sideValues])
+	except (TypeError, ValueError):
+		return None
+	at = np.interp(times, sideTimes, values)
+	low, high = (float(at.min()), float(at.max())) if span is None else span
+	share = np.clip((at - low) / ((high - low) or 1.0), 0.0, 1.0)
+	return weight[0] + share * (weight[1] - weight[0])
+
+
+def ribbonPath(xs: np.ndarray, ys: np.ndarray, widths: np.ndarray) -> QPainterPath:
+	"""A closed outline of the line through (xs, ys), `widths` thick at each point."""
+	path = QPainterPath()
+	path.setFillRule(Qt.WindingFill)
+	if len(xs) < 2:
+		return path
+	dx, dy = np.gradient(xs), np.gradient(ys)
+	length = np.hypot(dx, dy)
+	length[length == 0] = 1.0
+	nx, ny = -dy / length * widths / 2, dx / length * widths / 2
+	left = list(zip(xs + nx, ys + ny))
+	right = list(zip(xs - nx, ys - ny))
+	path.moveTo(*left[0])
+	for point in left[1:] + right[::-1]:
+		path.lineTo(*point)
+	path.closeSubpath()
+	return path
 
 
 # Section FilledPlot
@@ -2004,7 +2129,7 @@ class FilledPlot(Plot):
 		# Filled shapes are their own hit area.
 		return QPainterPath(self.translated_mapped_path)
 
-	def _render_paint(self, size: QSize, dpr: float, pen: QPen, path: QPainterPath, glow=None) -> QImage:
+	def _render_paint(self, size: QSize, dpr: float, pen: QPen, path: QPainterPath, glow=None, extras=None) -> QImage:
 		# Painter worker: plain values in, QImage out (see Plot._render_paint).
 		img = QImage(size, QImage.Format.Format_ARGB32_Premultiplied)
 		img.setDevicePixelRatio(dpr)
