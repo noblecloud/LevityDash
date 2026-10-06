@@ -47,6 +47,7 @@ from .Handles import Handle, HandleGroup
 from .Handles.Resize import ResizeHandles
 from .Menus import BaseContextMenu
 from .beam.item import PanelBeam
+from .condition import PanelCondition
 from ..utils import colorPalette, GeometryManaged, GeometryManager, GraphicsItemSignals, itemLoader, selectionPen
 
 if TYPE_CHECKING:
@@ -723,6 +724,29 @@ class Panel(_Panel, Stateful, tag='group'):
 	@borderProp.condition(method='get')
 	def borderProp(self) -> bool:
 		return (border := self.borderProp) is not None and border.enabled
+
+	@property
+	def condition(self) -> PanelCondition:
+		"""The `when:` condition. It holds when the panel has none."""
+		if (condition := self.__dict__.get('_whenCondition')) is None:
+			condition = self.__dict__['_whenCondition'] = PanelCondition(self, self._conditionChanged)
+		return condition
+
+	def _conditionChanged(self) -> None:
+		# A switch picks among its children; a panel on its own just shows or hides.
+		if (hook := getattr(self.parentItem(), 'childConditionChanged', None)) is not None:
+			hook(self)
+		elif self.__dict__.get('_whenCondition') is not None:
+			self.setVisible(self.condition.holds)
+
+	@StateProperty(key='when', default=None, allowNone=True, sortOrder=51)
+	def when(self) -> Optional[str | bool]:
+		"""Show this panel only while the condition holds. A key, an expression, or a bool; a missing value counts as false. In a `switch` the slot picks among its children by this."""
+		return self.condition.spec if '_whenCondition' in self.__dict__ else None
+
+	@when.setter
+	def when(self, value: Optional[str | bool]):
+		self.condition.spec = value
 
 	@StateProperty(key='beam', default=Stateful, allowNone=True, sortOrder=50)
 	def beamProp(self) -> Optional[PanelBeam]:
@@ -1540,8 +1564,13 @@ class Panel(_Panel, Stateful, tag='group'):
 		return value
 
 	def itemChange(self, change: QGraphicsItem.GraphicsItemChange, value: Any) -> Any:
-		if change == QGraphicsItem.ItemSceneHasChanged:
+		if change == QGraphicsItem.ItemSceneChange:
+			if value is None and (condition := self.__dict__.get('_whenCondition')) is not None:
+				condition.detach()
+		elif change == QGraphicsItem.ItemSceneHasChanged:
 			clearCacheAttr(value, 'panels')
+			if value is not None and (condition := self.__dict__.get('_whenCondition')) is not None:
+				condition.attach()
 
 		elif change == QGraphicsItem.ItemPositionChange:
 			if QApplication.mouseButtons() & Qt.LeftButton and self.isSelected() and not self.focusProxy():

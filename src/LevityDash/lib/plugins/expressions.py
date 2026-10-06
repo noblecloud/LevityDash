@@ -492,6 +492,12 @@ class _Evaluator:
 			return
 		if (_isMeasurement(left) and _isBareNumber(right)) or (_isBareNumber(left) and _isMeasurement(right)):
 			measurement = left if _isMeasurement(left) else right
+			bare = right if _isMeasurement(left) else left
+			if type(op) in _COMPARISONS and bare == 0 and not isinstance(measurement, wu.Temperature):
+				# Zero is the same in every unit of a measure that starts at zero, so
+				# `rain > 0` is not ambiguous. Celsius and Fahrenheit zeros differ, so a
+				# temperature still has to name a second key.
+				return
 			raise ExpressionError(
 				f'{self.text!r}: a bare number next to a {type(measurement).__name__} is ambiguous, '
 				f'because its unit is not known; only multiply or divide a measurement by a bare number'

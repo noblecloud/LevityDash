@@ -255,3 +255,17 @@ then display properties (colour from a value, on `realtime.text` first).
   plane, where expression registration may belong
 - `docs/tasks/value-annotations-and-digit-budget.md`: also about what a
   displayed value *is* beyond its number
+
+## Conditional panels (built 2026-10-06)
+
+`when:` on any panel takes a value source and shows the panel only while it
+holds. `type: switch` is a slot that holds alternatives and shows the first
+child whose `when:` holds (a child with no `when:` is the default); `hold`,
+`fade` and `cycle` are in `Modules/Containers/Switch.py`. The demo is
+`docs/design-references/presets/uv-or-rain.levity`.
+
+A bare `0` may be compared with a measurement (`rain > 0`), since zero is the
+same in every unit of a measure that starts at zero. Any other bare number, and
+zero next to a temperature, is still refused as ambiguous: comparing a
+temperature to a threshold needs a way to write a unit literal, which does not
+exist yet.

@@ -6,6 +6,8 @@ dict-backed one and never start a plugin, Qt or the wire.
 from datetime import datetime, timedelta, timezone
 
 import pytest
+import WeatherUnits as wu
+from WeatherUnits.length import Millimeter
 from WeatherUnits.temperature import Celsius, Fahrenheit
 
 from LevityDash.lib.plugins.categories import CategoryItem
@@ -176,6 +178,18 @@ def test_bare_number_next_to_a_measurement_is_refused():
 		Expression.parse(f'{TEMP} > 90').evaluate(resolver, NOW)
 	# Scaling by a bare number is fine.
 	assert Expression.parse(f'{TEMP} * 2').evaluate(resolver, NOW) == Fahrenheit(140)
+
+
+def test_zero_is_not_ambiguous_for_a_measure_that_starts_at_zero():
+	rain = 'environment.precipitation.precipitation'
+	resolver = FakeResolver(current={rain: wu.Precipitation.Hourly(Millimeter(2.0)), TEMP: Fahrenheit(70)})
+	assert Expression.parse(f'{rain} > 0').evaluate(resolver, NOW) is True
+	assert Expression.parse(f'{rain} == 0').evaluate(resolver, NOW) is False
+	# A bare number other than zero, or a temperature, still names no unit.
+	with pytest.raises(ExpressionError, match='ambiguous'):
+		Expression.parse(f'{rain} > 1').evaluate(resolver, NOW)
+	with pytest.raises(ExpressionError, match='ambiguous'):
+		Expression.parse(f'{TEMP} > 0').evaluate(resolver, NOW)
 
 
 def test_negation_keeps_the_unit():
