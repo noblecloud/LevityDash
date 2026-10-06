@@ -23,6 +23,12 @@ colors:
   series-5: '#ffb454'
   series-6: '#ff6b4a'
 
+  # Needle shadow, and the moon: lit face, dark side, glow. Defaults reproduce the original look.
+  needle-glow: '#000000'
+  moon: '#ffffff'
+  moon-shade: '#1c1d1f'
+  moon-glow: '#ffffff'
+
 fonts:
   display: Roboto         # titles and labels
   mono: Roboto Mono       # numbers that line up
@@ -35,3 +41,5 @@ fonts:
 scales:
   load: {0: $good, 60: $warn, 85: $bad}
   temperature: TemperatureGradient
+  # The board's ground as a gradient. Flat here, so a dashboard that writes `background: $sky` looks the same as without it.
+  sky: {0: $background, 1: $background}

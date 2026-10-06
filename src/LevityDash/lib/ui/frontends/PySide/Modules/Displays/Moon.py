@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QGraphicsPathItem, QGraphicsItem, QGraphicsDropSha
 from pysolar import solar
 from ephem import previous_new_moon, next_new_moon
 
+from LevityDash.lib.ui.colors import Color, theme
 from LevityDash.lib.ui.frontends.PySide.utils import colorPalette
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.ui.Geometry import Alignment, AlignmentFlag
@@ -19,7 +20,6 @@ from LevityDash.lib.config import userConfig
 from LevityDash.lib.ui import UILogger
 from WeatherUnits import Angle, Time, Percentage
 
-dark = QColor(28, 29, 31, 255)
 
 __all__ = ["Moon"]
 
@@ -76,7 +76,7 @@ class MoonBack(QGraphicsPathItem):
 		self.setAcceptHoverEvents(False)
 		self.setAcceptedMouseButtons(Qt.NoButton)
 		self.setPen(QPen(Qt.NoPen))
-		self.setBrush(QBrush(dark))
+		self.setBrush(QBrush(Color.role('moon-shade').QColor))
 		self.setZValue(-1)
 		self.draw()
 
@@ -108,7 +108,7 @@ class MoonFront(QGraphicsPathItem):
 		self.setAcceptHoverEvents(False)
 		self.setAcceptedMouseButtons(Qt.NoButton)
 		self.setPen(QPen(Qt.NoPen))
-		self.setBrush(colorPalette.windowText().color())
+		self.setBrush(Color.role('moon').QColor)
 		self.setZValue(1)
 		self.draw()
 
@@ -172,7 +172,7 @@ class MoonGlowEffect(QGraphicsDropShadowEffect):
 		super().__init__(None)
 		self.surface = parent
 		self.setBlurRadius(strength)
-		self.setColor(QColor(255, 255, 255, 255))
+		self.setColor(Color.role('moon-glow').QColor)
 		self.setOffset(QPointF(0, 0))
 
 
@@ -211,6 +211,15 @@ class Moon(Panel, tag="moon"):
 		self.timer.start()
 		self._acceptsChildren = False
 		self.updateMoon()
+		theme.on_change(self._followTheme, call_now=False)
+
+	def _followTheme(self, active=None):
+		"""Retint the lit face, the dark side and the glow from the theme's `moon`, `moon-shade` and `moon-glow`."""
+		self.moonFull.setBrush(QBrush(Color.role('moon-shade').QColor))
+		self.moonPath.setBrush(Color.role('moon').QColor)
+		if effect := self.moonPath.graphicsEffect():
+			effect.setColor(Color.role('moon-glow').QColor)
+		self.update()
 
 	def refresh(self):
 		self.setRect(self.rect())
