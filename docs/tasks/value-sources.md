@@ -273,14 +273,3 @@ is logged and the result has no value. A bare `0` may also be compared with a
 measurement (`rain > 0`), since zero is the same in every unit of a measure that
 starts at zero. Any other bare number, and zero next to a temperature, is still
 refused as ambiguous.
-
-## Variables (built 2026-10-06)
-
-A root `vars:` mapping names values; `$name` uses them (`lib/variables.py`).
-A value that is exactly `$name` keeps the variable's type; inside text it is
-spliced, so `when: $temp > $hot` works. Names that are not variables are left
-alone, so the theme engine's `$tokens` (PR #24) go on to it. The root is a
-mapping with `items:`, as with `theme:`. Resolved after parsing, before items
-load. `vars:` is written back on save; uses of `$name` are saved as the values
-they became.
-

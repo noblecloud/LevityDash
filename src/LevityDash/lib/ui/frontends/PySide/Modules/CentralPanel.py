@@ -16,7 +16,6 @@ from LevityDash.lib.config import userConfig
 from LevityDash.lib.EasyPath import EasyPathFile
 from LevityDash.lib.log import debug
 from LevityDash.lib.stateful import StatefulDumper, StateProperty
-from LevityDash.lib.variables import resolveVariables
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import CentralPanelContextMenu
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.utils import BusyContext, ActionPool
@@ -123,17 +122,6 @@ class CentralPanel(Panel, tag="dashboard"):
 	def items(self) -> list[Panel]:
 		...
 
-	_vars: Any = None
-
-	@StateProperty(key='vars', default=None, allowNone=True, sortOrder=-2)
-	def variables(self) -> dict | None:
-		"""Named values for the file: `vars: {hot: 90°F}`, used as `$hot`. Applied when the file loads (`lib/variables.py`); kept here so a save writes the definitions back."""
-		return self._vars
-
-	@variables.setter
-	def variables(self, value: dict | None):
-		self._vars = value
-
 	@cached_property
 	def contextMenu(self):
 		return CentralPanelContextMenu(self)
@@ -233,7 +221,6 @@ class CentralPanel(Panel, tag="dashboard"):
 				state = loader.get_data()
 				if state is None:
 					raise yaml.YAMLError("Failed to load dashboard")
-				state = resolveVariables(state)
 		except yaml.YAMLError as error:
 			log.exception(f"Error loading dashboard: {path}\n{error}")
 			QMessageBox.critical(self.scene().window, "Error", f"Error loading dashboard: {path}\n{error}")
