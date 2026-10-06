@@ -20,3 +20,13 @@ def test_beam_form_writes_only_changes():
 	assert form.value() == {'active': True, 'variant': 'ocean', 'fill': '#1b1b1f'}
 	form.setValue({})
 	assert form.value() == {}
+
+
+def test_beam_form_round_trips_glow():
+	form = BeamForm()
+	form.setValue({'active': True, 'glow': {'reach': 1.5, 'passes': 6}})
+	assert form.value() == {'active': True, 'glow': {'reach': 1.5, 'passes': 6}}
+	form.setValue({'active': True, 'glow': True})
+	assert form.value() == {'active': True, 'glow': True}
+	form.setValue({'active': True})
+	assert form.value() == {'active': True}, 'no glow stays out of the file'

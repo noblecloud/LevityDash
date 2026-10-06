@@ -2263,6 +2263,7 @@ class BeamForm(_Form):
 		self.part('radius', 'radius', NumberEdit(autoText='default', suffix=' px', lo=0, hi=200, step=1, decimals=0),
 		          'Corner radius in pixels. 32 for sm, 16 for the others.')
 		self.part('fill', 'fill', ColorEdit(nullable=True), 'A card colour under the content. pulse-outside needs one.')
+		self.part('glow', 'glow', GlowEdit(), 'A halo hugging the beam\'s outline, and around the card when a fill is set.')
 		self.part('phase', 'hold at', NumberEdit(autoText='run', suffix=' s', lo=0, hi=20, step=0.05, decimals=2),
 		          'Freeze the beam at this time in seconds. For renders; leave it on run for a real dashboard.')
 

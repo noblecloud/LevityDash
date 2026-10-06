@@ -78,6 +78,8 @@ Kept briefly so the same ground isn't re-covered.
   rate rendered as raw float64 digits.
 - [dead-code-sweep](dead-code-sweep.md), [dependabot-triage](dependabot-triage.md),
   [schema-golden-fixture-tests](schema-golden-fixture-tests.md) — done.
+- [beam-glow](beam-glow.md) — the border-beam pieces take a `glow:` (stroked on the beam's
+  outline, filled on its card), with a Studio control and an opt-in preset.
 
 - **[value-sources.md](value-sources.md)**
   — every value slot in a `.levity` file (panel key, gauge markers, range
