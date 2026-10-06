@@ -507,6 +507,8 @@ def _loadItemGroup(parent: 'Panel', _type: str, group: list[dict], existing: lis
 					from LevityDash.lib.ui.frontends.PySide.Modules.Containers.TitleContainer import TitledPanel as Panel
 				case 'switch':
 					from LevityDash.lib.ui.frontends.PySide.Modules.Containers.Switch import Switch as Panel
+				case 'polar':
+					from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.item import Polar as Panel
 				case _:
 					from LevityDash.lib.ui.frontends.PySide.Modules import Panel
 			panelType = Panel

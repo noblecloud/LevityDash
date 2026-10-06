@@ -1,0 +1,25 @@
+# A breezy spring day for the polar plots: wind backs from north-west round
+# to south over the day, gusting up in the afternoon, and the temperature
+# makes one clean swing from 48 F before dawn to 71 F at about 3 pm.
+#
+#   render_widget.py --levity docs/design-references/presets/polar-rose.levity \
+#       --scenario polar-day --name polar --out out.png
+#
+# `series` is today's 24 hourly values, 00:00 to 23:00 local.
+name: polar-day
+description: Wind swings NW to S and peaks near 22 mph at 4 pm; temperature 48 to 71 F.
+keys:
+  environment.temperature.temperature:
+    value: 69
+    unit: f
+    series: [52, 51, 50, 49, 48, 48, 49, 52, 56, 60, 64, 67, 69, 70, 71, 71, 70, 68, 64, 60, 57, 55, 54, 53]
+  environment.wind.direction.direction:
+    value: 188
+    unit: º
+    type: direction
+    series: [318, 322, 330, 338, 345, 352, 4, 12, 20, 34, 52, 78, 102, 126, 148, 164, 176, 184, 190, 196, 204, 214, 226, 236]
+  environment.wind.speed.speed:
+    value: 17
+    unit: [mi, hr]
+    type: wind
+    series: [4, 3, 3, 5, 6, 8, 9, 10, 9, 8, 7, 9, 12, 15, 18, 21, 22, 19, 16, 14, 11, 9, 7, 6]
