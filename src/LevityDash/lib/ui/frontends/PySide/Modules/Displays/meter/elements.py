@@ -82,17 +82,14 @@ __all__ = ['GaugeItem', 'GaugePathItem', 'GaugeValue', 'Numeric', 'StatefulGauge
 
 
 def gauge_class():
-	"""The `Gauge` class an item recognises its owner by.
+	"""The class an item recognises its owner by: `Meter`, the base a `Gauge` and a `Bar` share.
 
-	`meter/gauge.py` hands its class over at that module's foot, so this module's
-	own global is the answer as soon as anything has imported it - one mechanism,
-	not two. The import is the fallback for a caller that runs before the
-	hand-over, or for this module loaded on its own, as the tests load it.
+	Items name their owner a "gauge" for historical reasons; any meter qualifies, so
+	`GaugeRange`, the labels and the tick items can sit on a bar as they sit on a dial.
+	The import is lazy because `meter.py` imports this module.
 	"""
-	if Gauge is not None:
-		return Gauge
-	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.gauge import Gauge as gauge_cls
-	return gauge_cls
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.meter import Meter
+	return Meter
 
 
 def gaugeKeyName(gauge: 'Gauge') -> str:

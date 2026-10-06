@@ -1,0 +1,25 @@
+# Today's range on a bar: the fill spans today's low to today's high and a pointer rides the current value.
+# `from`, `to` and a marker's `value` take a key or an expression, as on a dial.
+- type: realtime.bar
+  name: bar
+  key: environment.temperature.temperature
+  title: false
+  display:
+    range: {min: 60, max: 110}
+    caption: Today
+    track: {weight: 20%}
+    fill:
+      from: min(environment.temperature.temperature, today)
+      to: max(environment.temperature.temperature, today)
+      color: $accent
+      opacity: 0.55
+    pointer: {type: triangle, color: $text}
+    major: {interval: 10, side: after, labels: true}
+    markers:
+      - value: min(environment.temperature.temperature, today)
+        type: line
+        color: $info
+      - value: max(environment.temperature.temperature, today)
+        type: line
+        color: $bad
+    value-label: {position: end, format: {precision: 0}}

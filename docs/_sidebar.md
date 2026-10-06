@@ -15,6 +15,7 @@
 		- [Variables](config/dashboard/variables.md)
 		- [Value Sources](config/dashboard/expressions.md)
 		- [Switch](config/dashboard/switch.md)
+		- [Bars](config/dashboard/bar.md)
 	- [Plugins](config/plugins.md ':id=plugin-config')
 - [Development](development.md)
   - [Bug Reports](development/issues.md)

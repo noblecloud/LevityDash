@@ -58,7 +58,7 @@ The current options are:
 
 <div class="multi-column">
 
-- realtime[.text|.gauge]
+- realtime[.text|.gauge|.bar]
 - text / label
 - group
 - titled-group
@@ -307,7 +307,7 @@ Like Font, the anchor point is the "strikeout" postition, but the height is eith
 
 ## Realtime
 
-Realtime can display its value as text (`realtime.text`) or as a radial gauge (`realtime.gauge`, or set `displayType: gauge` under `display:`). It defaults to text.
+Realtime can display its value as text (`realtime.text`) or as a radial gauge (`realtime.gauge`, or set `displayType: gauge` under `display:`). A bar on a straight track is `realtime.bar` (see [Bars](dashboard/bar.md)). It defaults to text.
 
 The Realtime module essentially a grouping that contains a title and a display submodule.
 
