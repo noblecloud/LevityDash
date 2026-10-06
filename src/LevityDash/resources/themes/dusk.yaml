@@ -21,6 +21,10 @@ colors:
   series-4: '#b48cff'
   series-5: '#ff7a59'
   series-6: '#89f7fe'
+  needle-glow: '#000000'
+  moon: $text
+  moon-shade: '#1b2130'
+  moon-glow: {color: $info, alpha: 0.8}
 
 scales:
   load: {0: $good, 60: $warn, 85: $bad}
