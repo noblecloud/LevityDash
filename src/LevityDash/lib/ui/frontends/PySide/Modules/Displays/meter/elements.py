@@ -111,7 +111,7 @@ class GaugeItem:
 	_gauge: 'Gauge'
 
 	def __extract_gauge(self, args, kwargs):
-		gauge = get(kwargs, 'gauge' 'parent', default=None, expectedType=gauge_class())
+		gauge = get(kwargs, 'gauge', 'parent', default=None, expectedType=gauge_class())
 		if gauge is None:
 			gauge = next((arg for arg in args if isinstance(arg, gauge_class())), None)
 		if gauge is None:
