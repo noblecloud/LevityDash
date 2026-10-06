@@ -255,3 +255,16 @@ then display properties (colour from a value, on `realtime.text` first).
   plane, where expression registration may belong
 - `docs/tasks/value-annotations-and-digit-budget.md`: also about what a
   displayed value *is* beyond its number
+
+## Variables (built 2026-10-06)
+
+A root `vars:` mapping names values; `$name` uses them (`lib/variables.py`,
+demo `docs/design-references/presets/variables.levity`). A value that is exactly
+`$name` keeps the variable's type; inside text it is spliced. Names that are
+not variables are left alone, so the theme engine's `$tokens` still reach it.
+The root is a mapping with `items:`, as with `theme:`. Resolved after parsing,
+before items load, so it works in every field, `when:` and expressions
+included. A save keeps the `$name` text wherever the live value still equals
+what it resolved to (`retemplate`); a field edited in the app is saved as its
+new value. Root `vars:` only; not yet in dict keys or on inner panels.
+
