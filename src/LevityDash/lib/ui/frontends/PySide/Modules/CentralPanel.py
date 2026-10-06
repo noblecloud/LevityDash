@@ -195,6 +195,11 @@ class CentralPanel(Panel, tag="dashboard"):
 		if not path.exists():
 			path.mkdir(parents=True)
 
+		from .ErrorTile import ErrorTile
+		if any(isinstance(i, ErrorTile) for i in self.scene().items()):
+			log.error('Not saved: an item failed to load and a save would delete it from the file. Fix the file and reload.')
+			return
+
 		with NamedTemporaryFile(delete=True, mode="w+", encoding='utf-8') as f:
 			try:
 				state = self.state

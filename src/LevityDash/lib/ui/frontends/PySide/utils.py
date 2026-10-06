@@ -421,37 +421,22 @@ def itemLoader(parent: 'Panel', unsortedItems: list[dict], existing: list = None
 
 	pending = list(sortedItems.items())
 
-	for index, (_type, group) in enumerate(pending):
-		# The loaders pop items off `group` as they build them, so by the time
-		# one raises the list can be empty. Keep the first item for the report.
-		first = _describeItem(group[0]) if group else 'none'
-		count = len(group)
-		try:
-			newItems.extend(_loadItemGroup(parent, _type, group, existing, **kwargs))
-		except Exception as error:
-			# One item raising here costs the *whole* board, not just that item -
-			# the exception unwinds out through Panel.state and everything after
-			# it in the file is never built. That used to surface as a dashboard
-			# showing only whatever loaded first (famously, just the moon), with
-			# nothing in the log to say why. Say exactly what failed and what it
-			# cost, then re-raise for the caller to report.
-			if not getattr(error, '_levityLoadReported', False):
-				# The innermost itemLoader is the one that knows which item
-				# actually raised, so it owns the traceback. Panels nest, so
-				# every frame above this one sees the same exception on its way
-				# out; those add a breadcrumb instead of repeating the trace.
-				error._levityLoadReported = True
-				skipped = sum(len(g) for _, g in pending[index + 1:])
-				log.critical(
-					f"Dashboard load aborted while building {count} {_type!r} item(s) "
-					f"on {_describeParent(parent)}. First item in the group: {first}. "
-					f"{skipped} later item(s) in this group were not built, and nothing after this "
-					f"point in the file was loaded.",
+	for _type, group in pending:
+		# One item per call, so the one that raised is known and whatever it
+		# half-built can be removed without touching its siblings. One bad item
+		# must not cost the board: log it, put a tile where it was, go on.
+		while group:
+			item = group[0]
+			children = set(parent.childItems())
+			try:
+				newItems.extend(_loadItemGroup(parent, _type, [group.pop(0)], existing, **kwargs))
+			except Exception as error:
+				log.error(
+					f"Item failed to load and was replaced by an error tile: {_describeItem(item)} "
+					f"on {_describeParent(parent)}",
 					exc_info=error,
 				)
-			error.add_note(f"while loading {_type!r} items onto {_describeParent(parent)}")
-			error.add_note(f"first item in the group: {first}")
-			raise
+				_errorTile(parent, children, item, error)
 
 	# Whatever no loader claimed: a type that vanished from the file entirely,
 	# or an item within a type that no incoming entry matched. A real delete,
@@ -460,6 +445,26 @@ def itemLoader(parent: 'Panel', unsortedItems: list[dict], existing: list = None
 		leftover.scene().removeItem(leftover)
 
 	return newItems
+
+
+def _errorTile(parent, childrenBefore: set, item: dict, error: Exception):
+	"""Drop what the failed item half-built, then stand an ErrorTile in its place."""
+	from LevityDash.lib.ui.frontends.PySide.Modules.ErrorTile import ErrorTile
+	for child in parent.childItems():
+		if child not in childrenBefore and child.scene() is not None:
+			child.scene().removeItem(child)
+	message = (str(error).strip().splitlines() or [type(error).__name__])[0]
+	label = f"{item.get('type', 'group')}" + (f" {item['key']}" if isinstance(item, dict) and isinstance(item.get('key'), str) else '')
+	geometry = item.get('geometry') if isinstance(item, dict) else None
+	for geometry in (geometry, None):
+		try:
+			ErrorTile(parent, label, f"{type(error).__name__}: {message}", geometry)
+			return
+		except Exception:
+			for child in parent.childItems():
+				if child not in childrenBefore and child.scene() is not None:
+					child.scene().removeItem(child)
+	log.exception("Could not build an error tile; the item is left out")
 
 
 def _describeItem(item: dict) -> str:
