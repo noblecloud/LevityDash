@@ -1974,6 +1974,7 @@ class CaptionForm(_Form):
 		self._r += 1
 		self.part('offset', 'offset', OffsetEdit(), 'Move the text. Dragging it on the preview writes this.')
 		self.part('warp', 'warp', WarpEdit(), 'Bend the text along a circle.')
+		self.part('glow', 'glow', GlowEdit(), 'A halo around the text.')
 		self._known |= {'weight'}
 
 	def setValue(self, value):
