@@ -1,0 +1,35 @@
+# The look LevityDash has always had: white on black. A dashboard with no `theme:` uses this.
+# Every theme takes the tokens it leaves out from the theme it `extends` (this one, unless it says otherwise).
+# Hex colours are quoted because '#' starts a YAML comment.
+name: default
+mode: dark
+
+colors:
+  background: '#000000'   # behind the whole board
+  surface: '#141418'      # a card or panel face
+  text: '#ffffff'         # values and anything that has no role of its own
+  muted: '#eeeeee'        # titles and captions
+  faint: '#8d8d96'        # units, ticks, secondary labels
+  rule: '#3a3a42'         # dividers, gauge tracks, axes
+  accent: '#ff8a3d'       # the one colour that draws the eye
+  good: '#4caf50'
+  warn: '#fdd835'
+  bad: '#e53935'
+  info: '#4aa3ff'
+  series-1: '#ff9aa3'     # data lines and bars, in the order a board uses them
+  series-2: '#4aa3ff'
+  series-3: '#3ddc97'
+  series-4: '#b48cff'
+  series-5: '#ffb454'
+  series-6: '#ff6b4a'
+
+fonts:
+  display: Roboto         # titles and labels
+  mono: Roboto Mono       # numbers that line up
+  body: Nunito            # everything else
+
+# Named gradients. Stops are in the units of the data a gauge or graph shows, so `load` is for a 0 to 100
+# percentage and `temperature` pins its stops to °F and follows the reading into any other unit.
+scales:
+  load: {0: $good, 60: $warn, 85: $bad}
+  temperature: {0°F: '#4aa3ff', 45°F: '#8fd3c8', 70°F: '#f2e9a0', 85°F: $accent, 100°F: $bad}

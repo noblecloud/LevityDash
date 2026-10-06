@@ -11,6 +11,7 @@ from LevityDash import LevityDashboard
 from LevityDash.lib.config import userConfig
 from LevityDash.lib.EasyPath import EasyPath
 from LevityDash.lib.log import LevityLogger
+from LevityDash.lib.ui.colors import theme as _theme
 from LevityDash.lib.utils.shared import ClosestMatchEnumMeta
 
 log = LevityLogger.getChild('fonts')
@@ -300,6 +301,8 @@ QApplication.setFont(defaultFont)
 
 
 def getFontFamily(family: str) -> str:
+	if _theme.is_token(family):
+		family = _theme.font(_theme.token_name(family))
 	if not database.hasFamily(family):
 		closestMatch = get_close_matches(family, database.families(), n=1, cutoff=0.85)
 		family = None

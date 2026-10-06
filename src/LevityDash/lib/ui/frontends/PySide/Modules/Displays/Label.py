@@ -543,8 +543,8 @@ class TitleLabel(NonInteractiveLabel, defaultText='-'):
 
 	__defaults__ = {
 		'weight': FontWeight.Light,
-		'color': '#eeeeee',
-		'font': 'Roboto',
+		'color': '$muted',
+		'font': '$display',
 	}
 
 	def __init__(self, *args, **kwargs):

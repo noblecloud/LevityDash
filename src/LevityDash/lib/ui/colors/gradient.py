@@ -10,6 +10,7 @@ from yaml import SafeDumper, SafeLoader, SequenceNode, MappingNode, ScalarNode
 
 from LevityDash.lib.stateful import StatefulLoader
 from LevityDash.lib.ui import UILogger as log
+from LevityDash.lib.ui.colors import theme as _theme
 from LevityDash.lib.ui.colors.color import Color
 from LevityDash.lib.ui.colors.oklch import oklab_stops
 from LevityDash.lib.ui.colors.stopunits import StopUnitError, formatStop, parseStop, toDataUnit
@@ -528,6 +529,9 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 	@classmethod
 	def decode(cls, data: str | dict | list | tuple) -> 'Gradient':
 		match data:
+			case str(token) if _theme.is_token(token):
+				# A scale of the active theme. The scale is a gradient spec of its own, so every form works in it.
+				return cls.decode(_theme.active().scale(_theme.token_name(token)))
 			case {'name': name, **rest}:
 				return cls._withOptions(rest, name=name)
 			case dict():

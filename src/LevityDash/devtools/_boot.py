@@ -296,7 +296,9 @@ def render_image(scene, source_rect, scale: float = 1.0):
 
 	size = (source_rect.size() * scale).toSize()
 	image = QImage(size, QImage.Format.Format_ARGB32)
-	image.fill(Qt.black)  # the dashboard assumes a dark ground
+	from LevityDash.lib.ui.colors import theme
+
+	image.fill(theme.color('background').QColor)  # the theme's ground; the default theme is black
 	painter = QPainter(image)
 	painter.setRenderHint(QPainter.Antialiasing)
 	scene.render(painter, QRectF(image.rect()), source_rect)

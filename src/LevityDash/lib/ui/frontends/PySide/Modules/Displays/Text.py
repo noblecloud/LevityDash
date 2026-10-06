@@ -13,9 +13,10 @@ import WeatherUnits as wu
 from LevityDash.lib.plugins import Container
 from LevityDash.lib.plugins.observation import TimeHash
 from LevityDash.lib.ui import Color
+from LevityDash.lib.ui.colors import theme
 from LevityDash.lib.ui.Geometry import Alignment, AlignmentFlag, Geometry, getDPI, Size
 from LevityDash.lib.ui.Groups import SizeGroupItem
-from LevityDash.lib.ui.fonts import defaultFont, FontWeight
+from LevityDash.lib.ui.fonts import defaultFont, FontWeight, getFontFamily
 from LevityDash.lib.ui.frontends.PySide.utils import addCrosshair, addRect, colorPalette, DebugPaint, addPath, move_shape_into_rect, rect_to_shape, add_corner_at_point
 from LevityDash.lib.ui.icons import fa as FontAwesome, Icon
 from LevityDash.lib.utils.shared import _Panel, ActionPool, ClosestMatchEnumMeta, defer, now, TextFilter, block_pools
@@ -69,7 +70,7 @@ class Text(QGraphicsPathItem):
 	_height: Size.Height | None = None
 	_relativeTo: Geometry | None = None
 	_height_px_cache: Optional[int] = None
-	_color: Color = Color(colorPalette.windowText().color())
+	_color: Color = Color.text
 	_value: Container | str | int | float | datetime | timedelta | Icon | None = None
 
 	_valueAccessor: Callable[[], Any] | None = None
@@ -324,6 +325,8 @@ class Text(QGraphicsPathItem):
 		return font
 
 	def setFontFamily(self, family: str, update: bool=True):
+		if theme.is_token(family):
+			family = getFontFamily(family)
 		self._font.setFamily(family)
 		if update: self.updateTransform(reason='setFontFamily')
 
@@ -1195,3 +1198,4 @@ class TextHelper(Text):
 
 	def __dir__(self):
 		return set(super().__dir__()) - set(dir(QGraphicsItem))
+

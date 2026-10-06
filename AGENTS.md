@@ -234,3 +234,15 @@ re-read whole files.
 After big code changes, refresh the graph with `graft build` (deterministic,
 no API key, $0).
 <!-- graft:end -->
+
+
+## Themes
+
+A dashboard picks one colour theme and writes `$tokens` instead of raw values. `lib/ui/colors/theme.py` (Qt-free) holds the engine; themes are YAML in `resources/themes/` (user ones in `<config>/themes/`, found first). `default.yaml` is the original white-on-black look, so a dashboard without `theme:` renders pixel-identical to before.
+
+- **Select**: a root mapping, `theme: dusk` or inline `theme: {extends: dusk, colors: {solar: '#ffd400'}}`, with the board under `items:` (a root list has no room for it). `render_dashboard.py --theme NAME` forces one over the file. Applied in `CentralPanel._load` before any item decodes; switching needs a reload (`Ctrl+R`).
+- **Write**: `color: $accent`, `font: $mono`, `gradient: $temperature`. One token namespace across three groups in the theme file: `colors`, `fonts`, `scales` (named gradients; unit-pinned stops work inside them). A raw value on an item always wins; a missing token comes from `extends` (default: `default`); an unknown token is a `ThemeError` that names the known ones.
+- **Standard tokens** every theme defines: colours `background surface text muted faint rule accent good warn bad info series-1..6`; fonts `display mono body`; scales `load temperature`. A theme may add more (per-source colours like `$solar`).
+- **Modifiers**: `{color: $accent, alpha: 0.4 | lighten: 0.1 | darken | chroma: 0.8 | hue-shift: 30 | mix: {with: $background, by: 0.3}}`; lightness, chroma and hue work in Oklch, mixing in Oklab. A token can be built from another one inside a theme file.
+- **A `Color` from a token keeps the name** (`str()` gives `$accent`), so saving writes the token back. `Color.role('text')` is a shared live colour retargeted in place when the theme changes; `Color.text`/`Color.default`, Text, dividers, the Graph line and the view background use it. Use it for class-level defaults; never hard-code `#ffffff` for "the text colour".
+- Beam `theme: auto` (the default) follows the theme's `mode`. Not themed yet: the needle's dark glow, the moon, any colour still literal in code.

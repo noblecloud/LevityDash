@@ -39,7 +39,7 @@ from PySide6.QtWidgets import QGraphicsItem
 
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.stateful import Binding, Stateful, StateProperty
-from LevityDash.lib.ui.colors import Color
+from LevityDash.lib.ui.colors import Color, theme as colour_theme
 from LevityDash.lib.valuesource import openValueSource
 from . import styles
 from .palettes import line_hue_shift
@@ -120,7 +120,7 @@ class PanelBeam(QGraphicsItem, Stateful, tag=...):
 
 	_size: Size = Size.MEDIUM
 	_variant: ColorVariant = ColorVariant.COLORFUL
-	_theme: Theme = Theme.DARK
+	_theme: Theme = Theme.AUTO
 	_colorSpace: ColorSpace = ColorSpace.HSV
 
 	def __init__(self, parent, *args, **kwargs):
@@ -200,7 +200,7 @@ class PanelBeam(QGraphicsItem, Stateful, tag=...):
 		if rect.width() <= 1 or rect.height() <= 1:
 			return None
 		size = self._size
-		dark = self._theme is not Theme.LIGHT
+		dark = self._theme is Theme.DARK or (self._theme is Theme.AUTO and colour_theme.active().mode == 'dark')
 		preset = styles.THEME_PRESETS[size]['dark' if dark else 'light']
 		brightness = preset.get('brightness', 1.3)
 		saturation = preset['saturation']
@@ -439,9 +439,9 @@ class PanelBeam(QGraphicsItem, Stateful, tag=...):
 	def variant(self, value: ColorVariant) -> str:
 		return value.value
 
-	@StateProperty(default=Theme.DARK, allowNone=False, after=_changed, choices=[Theme.DARK, Theme.LIGHT])
+	@StateProperty(default=Theme.AUTO, allowNone=False, after=_changed, choices=[Theme.AUTO, Theme.DARK, Theme.LIGHT])
 	def theme(self) -> Theme:
-		"""`dark` for a dark card, `light` for a light one. The strengths and saturation differ."""
+		"""`dark` for a dark card, `light` for a light one. The strengths and saturation differ. `auto` follows the dashboard theme's mode."""
 		return self._theme
 
 	@theme.setter
@@ -450,7 +450,7 @@ class PanelBeam(QGraphicsItem, Stateful, tag=...):
 
 	@theme.decode
 	def theme(self, value) -> Theme:
-		return _enum(Theme, value, Theme.DARK)
+		return _enum(Theme, value, Theme.AUTO)
 
 	@theme.encode
 	def theme(self, value: Theme) -> str:

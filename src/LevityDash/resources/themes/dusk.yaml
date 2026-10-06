@@ -1,0 +1,27 @@
+# A dark theme with a cool ground and one warm accent.
+name: dusk
+mode: dark
+extends: default
+
+colors:
+  background: '#0d1017'
+  surface: '#161b26'
+  text: '#e8ecf4'
+  muted: '#aab3c5'
+  faint: '#6b7489'
+  rule: '#2a3142'
+  accent: '#ffb454'
+  good: '#3ddc97'
+  warn: '#ffb454'
+  bad: '#ff5a4a'
+  info: '#6cb6ff'
+  series-1: '#6cb6ff'
+  series-2: '#ffb454'
+  series-3: '#3ddc97'
+  series-4: '#b48cff'
+  series-5: '#ff7a59'
+  series-6: '#89f7fe'
+
+scales:
+  load: {0: $good, 60: $warn, 85: $bad}
+  temperature: {0°F: '#6cb6ff', 45°F: '#89f7fe', 70°F: '#e8ecf4', 85°F: $accent, 100°F: $bad}

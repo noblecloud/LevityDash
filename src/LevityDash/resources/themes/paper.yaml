@@ -1,0 +1,27 @@
+# A light theme: dark ink on warm paper. Written to check that a board restyles from the theme alone.
+name: paper
+mode: light
+extends: default
+
+colors:
+  background: '#f4efe6'
+  surface: '#ebe4d6'
+  text: '#1d1b18'
+  muted: '#4b463d'
+  faint: '#8a8374'
+  rule: '#cfc6b3'
+  accent: '#c2410c'
+  good: '#2f7d3a'
+  warn: '#b7791f'
+  bad: '#b42318'
+  info: '#1d5fa8'
+  series-1: '#c2410c'
+  series-2: '#1d5fa8'
+  series-3: '#2f7d3a'
+  series-4: '#7a4ea3'
+  series-5: '#b7791f'
+  series-6: '#b42318'
+
+scales:
+  load: {0: $good, 60: $warn, 85: $bad}
+  temperature: {0°F: '#1d5fa8', 45°F: '#4a8f8a', 70°F: '#b7a03a', 85°F: $accent, 100°F: $bad}
