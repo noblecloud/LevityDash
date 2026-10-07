@@ -35,3 +35,4 @@ def test_a_graph_with_a_theme_coloured_indicator_saves(dashboard):
 		'figures': [{'figure': 'temperature', 'environment.temperature.temperature': {'plot': {'type': 'plot', 'color': '#ff0000'}}}],
 	}])
 	assert 'indicator' in text and '$text' in text
+
