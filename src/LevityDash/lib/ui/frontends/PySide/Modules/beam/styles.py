@@ -214,9 +214,14 @@ def paint_pulse_blobs(
 	frozen_alpha: float | None = None,
 	scale: tuple[float, float] | None = None,
 	color_space: ColorSpace = ColorSpace.HSV,
+	snap: "PathSnap | None" = None,
 ) -> None:
 	"""Live pulse blobs: per-quadrant alpha, per-region size/drift oscillators,
 	optional glow scale (pulse-outside) and element scale transform.
+
+	With `snap`, each blob moves from where it sits on the rectangle's edge to the point of the
+	custom path in the same direction from the centre, so a halo on a circle or a heart lies on
+	the outline and not at the corners of its bounding box.
 
 	In OKLCH mode colors are re-derived from the sphere ring palette via
 	``def.ci`` (palette index); base palette supplies geometry + alpha.
@@ -248,7 +253,54 @@ def paint_pulse_blobs(
 		py = (d.y if d.y is not None else palette[d.ci].y) * rect.height() + oy
 		px = cx + (px - cx) * sxs
 		py = cy + (py - cy) * sys
-		paint_blob(painter, rect.x() + px, rect.y() + py, d.w * wf * sx * sxs, d.h * hf * sy * sys, c)
+		x, y = rect.x() + px, rect.y() + py
+		if snap is not None:
+			x, y = snap.move(x, y)
+		paint_blob(painter, x, y, d.w * wf * sx * sxs, d.h * hf * sy * sys, c)
+
+
+_SNAP_SAMPLES = 360
+_snap_cache: dict[tuple, list[tuple[float, float, float, float]]] = {}
+
+
+class PathSnap:
+	"""Moves a point near the panel's edge onto the custom path, along the same direction from the centre.
+
+	Directions are measured in the panel's own proportions (a corner of the rectangle is the
+	diagonal of the path's box whatever the aspect), and where a direction meets the path twice
+	the outer point wins. `origin` is where the panel's top-left lies in the layer being painted.
+	"""
+
+	def __init__(self, path: QPainterPath, key: tuple | None, width: float, height: float, origin: QPointF):
+		self.width, self.height, self.origin = max(width, 1.0), max(height, 1.0), origin
+		cache_key = (key, int(self.width), int(self.height))
+		samples = _snap_cache.get(cache_key) if key is not None else None
+		if samples is None:
+			samples = []
+			for i in range(_SNAP_SAMPLES):
+				point = path.pointAtPercent(i / _SNAP_SAMPLES)
+				nx, ny = (point.x() - self.width / 2) / self.width, (point.y() - self.height / 2) / self.height
+				samples.append((point.x(), point.y(), math.atan2(ny, nx), math.hypot(nx, ny)))
+			if key is not None:
+				if len(_snap_cache) > 64:
+					_snap_cache.clear()
+				_snap_cache[cache_key] = samples
+		self.samples = samples
+
+	def move(self, x: float, y: float) -> tuple[float, float]:
+		ix, iy = x - self.origin.x(), y - self.origin.y()
+		target = math.atan2((iy - self.height / 2) / self.height, (ix - self.width / 2) / self.width)
+		best = min(
+			self.samples,
+			key=lambda s: (round(abs((s[2] - target + math.pi) % math.tau - math.pi), 3), -s[3]),
+		)
+		return best[0] + self.origin.x(), best[1] + self.origin.y()
+
+
+def _snap(ctx: PaintCtx, origin: QPointF) -> PathSnap | None:
+	if ctx.path is None:
+		return None
+	return PathSnap(ctx.path, ctx.path_key, ctx.rect.width(), ctx.rect.height(), origin)
 
 
 def pulse_ring_defs(variant: ColorVariant) -> list[PulseDef]:
@@ -972,7 +1024,7 @@ def paint_pulse_outside_behind(painter: QPainter, ctx: PaintCtx) -> None:
 		lambda bp, r: (paint_pulse_blobs(
 			bp, r, PULSE_OUTER_BLOOM, palette, values, hue, b, s,
 			sx=ctx.sx, sy=ctx.sy, frozen_alpha=_frozen_alpha(pm), scale=(0.95, 0.9),
-			color_space=ctx.color_space,
+			color_space=ctx.color_space, snap=_snap(ctx, QPointF(r.x() + 30.0, r.y() + 30.0)),
 		), _halo_mask(ctx, bp, QPointF(r.x() + 30.0, r.y() + 30.0), 90.0)),
 	)
 	painter.setOpacity(ctx.fade * preset["bloom_opacity"] * mono)
@@ -983,7 +1035,7 @@ def paint_pulse_outside_behind(painter: QPainter, ctx: PaintCtx) -> None:
 	core_rect = rect.adjusted(-10.0, -10.0, 10.0, 10.0)
 	core = _paint_padded_blur(
 		core_rect, 3.0 if dark else 6.0,
-		lambda cp, r: (paint_pulse_blobs(cp, r, PULSE_OUTER_CORE, palette, values, hue, b, s, sx=ctx.sx, sy=ctx.sy, scale=(0.95, 0.9), color_space=ctx.color_space), _halo_mask(ctx, cp, QPointF(r.x() + 10.0, r.y() + 10.0), 30.0)),
+		lambda cp, r: (paint_pulse_blobs(cp, r, PULSE_OUTER_CORE, palette, values, hue, b, s, sx=ctx.sx, sy=ctx.sy, scale=(0.95, 0.9), color_space=ctx.color_space, snap=_snap(ctx, QPointF(r.x() + 10.0, r.y() + 10.0))), _halo_mask(ctx, cp, QPointF(r.x() + 10.0, r.y() + 10.0), 30.0)),
 	)
 	painter.setOpacity(ctx.fade * preset["inner_opacity"] * mono)
 	painter.drawImage(core[0], core[1])
@@ -1020,7 +1072,7 @@ def paint_pulse_outside_front(painter: QPainter, ctx: PaintCtx) -> None:
 	sp = QPainter(stroke)
 	sp.setRenderHint(QPainter.RenderHint.Antialiasing)
 	sp.setClipPath(outline(ctx))
-	paint_pulse_blobs(sp, rect, PULSE_OUTER_CORE, palette, values, hue, b, s, sx=ctx.sx, sy=ctx.sy, color_space=ctx.color_space)
+	paint_pulse_blobs(sp, rect, PULSE_OUTER_CORE, palette, values, hue, b, s, sx=ctx.sx, sy=ctx.sy, color_space=ctx.color_space, snap=_snap(ctx, rect.topLeft()))
 	sp.end()
 	stroke = apply_mask(stroke, band_mask(ctx, w, h))
 	painter.setOpacity(ctx.fade * preset["stroke_opacity"] * mono)
