@@ -3025,7 +3025,10 @@ class TimestampGenerator:
 		return self
 
 	def __len__(self) -> int:
-		return max(abs(int((self.end - self.start) / self.__interval)), 0)
+		# A window that ends before it starts holds no labels. `abs()` here once counted
+		# it as a full one, and a clock split between the frozen and the wall time asked
+		# for eleven thousand hour labels, one graphics item each.
+		return max(int((self.end - self.start) / self.__interval), 0)
 
 	def __next__(self) -> datetime:
 		if self.__current > self.end:
