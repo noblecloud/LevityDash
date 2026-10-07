@@ -98,6 +98,10 @@ box — push both when they move together.
 pytest` (or `.venv/bin/LevityDash`). Two size-group tests currently fail on that
 box and pass on ARM — see [docs/tasks/lambda-sizegroup-test-failures.md](docs/tasks/lambda-sizegroup-test-failures.md).
 
+## Presets
+
+A preset is a whole item written once: `resources/presets/<name>.yaml` (user ones in `<config>/presets/`, found first) holds `props:` (names with defaults, optional `type`/`min`/`max`/`doc`) and a `template:` that uses them as `$prop`. A board item says `preset: name`, `props: {...}` and any fields it changes, which merge over the template (mappings merge, lists replace). `lib/presets.py` is Qt-free, like `lib/variables.py`: `expand` runs in `CentralPanel._load` before `resolveVariables`, so `$name` resolves item props, preset defaults, `vars:`, theme. A bad use becomes an error tile (`type: preset-error`, raised in `utils._loadItemGroup`). On save, `collapse` writes `preset`, the file's `props` and only the fields that differ from `CentralPanel._loaded`, the app's own dump taken right after loading (the raw expansion is not a usable baseline, because a dump adds keys). `preset:` on a stack whose value is not a preset file is still `Stack.preset`. Docs: `docs/config/dashboard/presets.md`. Known: a gauge saves a derived `center_offset`, so a saved gauge board reloads shifted with or without presets.
+
 ## Themes
 
 A dashboard picks one colour theme and writes `$tokens` instead of raw values. `lib/ui/colors/theme.py` (Qt-free) holds the engine; themes are YAML in `resources/themes/` (user ones in `<config>/themes/`, found first). `default.yaml` is the original white-on-black look, so a dashboard without `theme:` renders pixel-identical to before.

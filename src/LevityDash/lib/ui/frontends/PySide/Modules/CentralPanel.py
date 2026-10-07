@@ -17,7 +17,8 @@ from LevityDash.lib.config import userConfig
 from LevityDash.lib.EasyPath import EasyPathFile
 from LevityDash.lib.log import debug
 from LevityDash.lib.stateful import StatefulDumper, StateProperty
-from LevityDash.lib.variables import resolveVariables, retemplate
+from LevityDash.lib import presets
+from LevityDash.lib.variables import _definitions, resolveVariables, retemplate
 from LevityDash.lib.ui.colors import theme
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import CentralPanelContextMenu
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
@@ -158,6 +159,8 @@ class CentralPanel(Panel, tag="dashboard"):
 	_vars: Any = None
 	_written: Any = None
 	_resolved: Any = None
+	_usesPresets: bool = False
+	_loaded: Any = None
 
 	@StateProperty(key='vars', default=None, allowNone=True, sortOrder=-2)
 	def variables(self) -> dict | None:
@@ -216,7 +219,7 @@ class CentralPanel(Panel, tag="dashboard"):
 			try:
 				state = self.state
 				yaml.dump(state, f, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True)
-				if self._vars:
+				if self._vars or self._usesPresets:
 					self._restoreVariables(f)
 
 				YAMLPreprocessor(f)
@@ -226,8 +229,17 @@ class CentralPanel(Panel, tag="dashboard"):
 				log.info('Failed')
 				log.exception(e)
 
+	def _dumpedLive(self) -> Any:
+		"""What a save would write now, read back as data: the same shape as the live tree. None if it cannot be made."""
+		try:
+			text = yaml.dump(self.state, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True)
+			return type(self).__loader__(YAMLPreprocessor(text)).get_data()
+		except Exception:
+			log.exception('the loaded board could not be dumped; a save compares presets with the file instead')
+			return None
+
 	def _restoreVariables(self, f) -> None:
-		"""Rewrite the dumped file so `$name` stays where the value is as the file resolved it.
+		"""Rewrite the dumped file so `$name` stays where the value is as the file resolved it, and a preset use stays short (`lib/presets.py`).
 
 		The dump is read back with the loader that read the file, so the live tree and the
 		resolved one have the same shape. Never raises: on any failure the values stay.
@@ -235,7 +247,11 @@ class CentralPanel(Panel, tag="dashboard"):
 		try:
 			f.seek(0)
 			live = type(self).__loader__(YAMLPreprocessor(f.read())).get_data()
-			merged = retemplate(live, self._resolved, self._written)
+			variables = _definitions(self._vars) if self._vars else {}
+			# With presets the baseline is what the app wrote right after loading, not the raw file: the two differ by
+			# everything the app adds on a dump, and a preset's fields are compared against that.
+			baseline = self._loaded if self._usesPresets and self._loaded is not None else self._resolved
+			merged = retemplate(live, baseline, self._written, lambda item, written, base: presets.collapse(item, written, base, variables))
 			text = yaml.dump(merged, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True)
 			f.seek(0)
 			f.truncate()
@@ -294,6 +310,8 @@ class CentralPanel(Panel, tag="dashboard"):
 				# Kept so a save can write the `$name` text back (see `_save`).
 				self._vars = None
 				self._written = deepcopy(state)
+				state = presets.expand(state)
+				self._usesPresets = state != self._written
 				state = resolveVariables(state)
 				# Loading consumes the dicts it is given, so the save keeps its own copies.
 				self._resolved = deepcopy(state)
@@ -340,6 +358,7 @@ class CentralPanel(Panel, tag="dashboard"):
 			if debug:
 				raise
 			return
+		self._loaded = self._dumpedLive() if self._usesPresets else None
 		self.scene().clearSelection()
 		self.scene().view.status = 'Ready'
 		self.scene().view.loadingFinished.emit()

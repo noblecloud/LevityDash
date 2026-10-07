@@ -1,6 +1,6 @@
 # Roadmap
 
-*Last updated: 2026-10-06 (plan for first stable cut and lanes merged in).*
+*Last updated: 2026-10-07 (presets added to dashboard authoring).*
 
 This organizes and supersedes the raw idea list in [`_planned-features.md`](_planned-features.md) — every item from that list is either placed in a section below, marked as already done, or parked with a reason. Status notes reference the code so claims stay checkable.
 
@@ -121,13 +121,13 @@ Triaged from `_planned-features.md`, grouped by area. ~~Struck~~ items are alrea
 
 - **Conditional dashboards / panels** — show/hide panels (or switch whole dashboards) based on conditions, including plugin status. Today there's only a static `disabled-` type prefix and template auto-selection by enabled plugin.
 - **Position relative to sibling items** — "center this item with the center of that item." All current positioning is relative to the parent only.
-- **Migrate `shared:` → named `preset:`** — both exist today (`preset` at `Stacks.py:892`, `Stateful.shared` at `statekit/core.py:1925`); the direction is named, reusable presets over anonymous inheritance.
+- **Migrate `shared:` → named `preset:`** — both exist today (`preset` at `Stacks.py:892`, `Stateful.shared` at `statekit/core.py:1925`); the direction is named, reusable presets over anonymous inheritance. **Started 2026-10-07:** whole-module presets (`preset: name` + `props:`, saved as only what differs) are in `lib/presets.py`; see [config/dashboard/presets.md](config/dashboard/presets.md). `Stack.preset` (item defaults) and `shared:` are unchanged; moving them onto the same mechanism is still open.
 - **Screen-size conditions for size options** — different sizing rules per display size.
 - **Scrolling in overfilled stacks.**
 - **Condensed-title option** — possibly automatic by available size.
 - **Corner radius** on panels.
 - **Fill object** — one abstraction accepting colors, gradients, images, and patterns; today `FillBrushMixin` handles color + gradient only. Include dynamic color functions and plot-line section dividers.
-- **Value templates** — file-loadable templates combining multiple values into one composite display.
+- ~~**Value templates** — file-loadable templates combining multiple values into one composite display.~~ **Done 2026-10-07** as presets: a preset's `template:` can be a composite (`hero-readings` is a titled panel of four readings) with props that land on its sub-items. Still open: a Studio editor for presets, and a way to save a selection as a preset.
 - **Layout in a separate file** — split panel layout from the rest of the dashboard spec.
 - **Groups default to grid/stack** unless specified; explicit item geometry overrides.
 - **`type: split` in YAML** — `SplitPanel` exists but is only insertable from the context menu; it isn't wired into `itemLoader`.

@@ -18,49 +18,37 @@ items:
         name: main
         geometry: {x: 0%, y: 18%, width: 100%, height: 82%}
         items:
-          - type: realtime.gauge
+          - preset: zone-dial
             name: bands
-            key: environment.temperature.temperature
-            title: false
             geometry: {x: 2%, y: 0%, width: 30%, height: 100%}
-            display:
-              arc: {start-angle: -135, end-angle: 135, weight: 6%, color: $rule}
-              range: {min: 0, max: 100}
+            props:
               zones:
                 - {from: 0, to: 40, color: $info, mark: true}
                 - {from: 40, to: 80, color: $good, mark: true}
                 - {from: 80, to: 100, color: $bad}
-              major: {interval: 20, labels: {position: inside, height: 8%}}
-              needle: {type: circle, length: 8%, width: 5%, color: $text}
-              value-label: {position: center, size: 14%}
-          - type: realtime.gauge
-            name: zonefill
-            key: environment.humidity.humidity
-            title: false
-            geometry: {x: 35%, y: 0%, width: 30%, height: 100%}
             display:
-              arc: {start-angle: -135, end-angle: 135, weight: 6%, color: $rule}
-              range: {min: 0, max: 100}
+              needle: {type: circle, length: 8%, width: 5%, color: $text}
+          - preset: zone-dial
+            name: zonefill
+            geometry: {x: 35%, y: 0%, width: 30%, height: 100%}
+            props:
+              key: environment.humidity.humidity
+              interval: 25
               zones:
                 - {to: 30, color: $warn}
                 - {from: 30, to: 60, color: $good}
                 - {from: 60, color: $info}
-              fill: {weight: 6%, color: zone}
-              major: {interval: 25, labels: {position: inside, height: 8%}}
-              value-label: {position: center, size: 14%}
-          - type: realtime.gauge
-            name: uv
-            key: environment.light.uvi
-            title: false
-            geometry: {x: 68%, y: 0%, width: 30%, height: 100%}
             display:
-              arc: {start-angle: -135, end-angle: 135, weight: 6%}
-              range: {min: 0, max: 12}
+              fill: {weight: 6%, color: zone}
+          - preset: zone-dial
+            name: uv
+            geometry: {x: 68%, y: 0%, width: 30%, height: 100%}
+            props:
+              key: environment.light.uvi
+              max: 12
+              interval: 2
               zones:
                 - {from: 0, to: 3, color: $good}
                 - {from: 3, to: 6, color: $warn}
                 - {from: 6, to: 8, color: $accent}
                 - {from: 8, to: 12, color: $bad}
-              major: {interval: 2, labels: {position: inside, height: 8%}}
-              value-label: {position: center, size: 14%}
-
