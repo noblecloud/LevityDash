@@ -253,6 +253,7 @@ class WFWebsocket:
 
 	def __init__(self, plugin: 'WeatherFlow', *args, **kwargs):
 		self.socket = None
+		self.task: asyncio.Task | None = None
 		self.plugin = plugin
 		self.loop = plugin.loop
 		from secrets import token_urlsafe as genUUID
@@ -268,13 +269,17 @@ class WFWebsocket:
 		)
 
 	def start(self):
-		self.loop.create_task(self.run())
+		self.task = self.loop.create_task(self.run())
 
 	def stop(self):
 		self.loop.create_task(self.astop())
 
 	async def astop(self):
-		if self.socket is None:
+		if self.task is not None:
+			self.task.cancel()
+			self.task = None
+		if self.socket is None or self.socket.closed:
+			self.socket = None
 			return
 		self.plugin.pluginLog.info('WeatherFlow: disconnecting Websocket')
 		await self.socket.send_str(self._genMessage('listen_stop'))
@@ -283,10 +288,15 @@ class WFWebsocket:
 		self.plugin.pluginLog.info('WeatherFlow: socket disconnected')
 
 	async def run(self):
+		backoff = Backoff()
+		await keepConnected(lambda: self._connect(backoff), self.plugin.pluginLog, 'WeatherFlow websocket', backoff)
+
+	async def _connect(self, backoff: Backoff):
 		self.plugin.pluginLog.info('WeatherFlow: connecting Websocket')
 		async with ClientSession() as session:
 			async with session.ws_connect(self.url, params=self.endpoint.params) as ws:
 				self.socket = ws
+				backoff.reset()
 				await self._open(ws)
 				async for msg in ws:
 					if msg.type == WSMsgType.TEXT:
@@ -296,8 +306,7 @@ class WFWebsocket:
 							self.plugin.pluginLog.exception(f'WeatherFlow: error handling message: {e}')
 					elif msg.type == WSMsgType.ERROR:
 						break
-				else:
-					self.plugin.pluginLog.info('WeatherFlow: socket closed')
+				self.socket = None
 
 	async def _handleMessage(self, data: str):
 		datagram = loads(data)
