@@ -3,11 +3,12 @@
 # Built from the options reference and cross-section.levity, without a mockup.
 # Every hero carries its context: today's range, the last hour's change, the
 # peak still to come. One layered graph at the bottom holds the day. The right
-# slot is a switch: lightning takes it when a strike is near, otherwise UV and
-# sky take turns.
+# slot is a switch: lightning takes it when a strike is near, rain while it
+# rains, and UV and sky always take turns. The middle band holds the bedroom
+# and the terrarium, and a second slot that turns through what needs a look.
 #
 # Render: render_dashboard.py OUT.png --levity docs/design-references/boards/station.levity
-#           --scenario station-day --freeze-time default --size 1440x900
+#           --scenario station-day --size 1440x900
 #
 # Hex colours are quoted. Unquoted, YAML reads '#' as a comment.
 theme:
@@ -42,7 +43,7 @@ items:
   - type: stack
     name: now
     direction: Horizontal
-    size: 46%
+    size: 40%
     spacing: 2.5mm
     dividers: {enabled: true, opacity: 60%, size: 90%}
     shared:
@@ -210,7 +211,7 @@ items:
       items:
       - type: group
         name: lightning
-        when: environment.lightning.distance < 10
+        when: environment.lightning.distance < 10mi
         items:
         - type: realtime.text
           key: environment.lightning.distance
@@ -225,6 +226,23 @@ items:
           - environment.lightning.count: {title: {text: Strikes}}
           - environment.precipitation.precipitation: {title: {text: Rain rate}}
           - environment.wind.speed.gust: {title: {text: Gust}}
+      - type: group
+        name: rain-now
+        when: '$rain > 0'
+        items:
+        - type: realtime.text
+          key: $rain
+          title: {text: Raining, height: 14%, color: $info}
+          display: {font: Nunito, unitPosition: Inline, valueLabel: {color: $info}}
+          geometry: {x: 0%, y: 0%, width: 100%, height: 50%}
+        - type: value-stack
+          shared:
+            title: {color: $muted}
+          geometry: {x: 0%, y: 54%, width: 100%, height: 46%}
+          items:
+          - environment.precipitation.daily: {title: {text: Today}}
+          - {type: realtime.text, key: 'max($rain, 1h)', title: {text: Peak 1h}}
+          - {type: realtime.text, key: 'at($rain, 1h)', title: {text: Rate +1h}}
       - type: group
         name: uv
         items:
@@ -279,6 +297,231 @@ items:
           - environment.clouds.cover.mid:  {title: {text: Mid}, display: {precision: 0}}
           - environment.clouds.cover.high: {title: {text: High}, display: {precision: 0}}
           - environment.visibility:        {title: {text: Visibility}}
+
+  # ================= ROOMS =================================================
+  # Inside: the bedroom and the terrarium, each against its own day. The right
+  # slot turns through whatever needs a look now: heat, storms on the way,
+  # a terrarium out of range, a flat sensor battery. With nothing to flag it
+  # shows inside against outside.
+  - type: stack
+    name: rooms
+    direction: Horizontal
+    size: 23%
+    spacing: 2.5mm
+    dividers: {enabled: true, opacity: 60%, size: 90%}
+    shared:
+      display:
+        font: Roboto Mono
+    items:
+
+    # Bedroom: the hero, its day against the outdoor line, then the readings.
+    - type: titled-group
+      name: indoor
+      size: 31%
+      title: {text: Indoor, height: 0.5cm, color: $muted}
+      items:
+      - type: realtime.text
+        key: indoor.temperature.temperature#bedroom
+        title: false
+        display: {font: Nunito, unitPosition: Inline}
+        geometry: {x: 0%, y: 0%, width: 40%, height: 58%}
+      - type: mini-graph
+        timeframe: {hours: 24}
+        annotations:
+          dayLabels: {enabled: false}
+          hourLabels: {enabled: false}
+        indicator: {color: white, opacity: 0.3}
+        margins: {top: 8%, bottom: 8%}
+        figures:
+        - figure: temperature
+          min: 60
+          max: 90
+          environment.temperature.temperature:
+            plot: {type: plot, color: '#8b8f98', weight: 0.25, dashPattern: '2, 3'}
+          indoor.temperature.temperature#bedroom:
+            plot: {type: plot, gradient: TemperatureGradient, weight: 0.5}
+        geometry: {x: 42%, y: 0%, width: 58%, height: 58%}
+      - type: value-stack
+        shared:
+          title: {color: $muted, matchingGroup: {group: rowTitle@indoor, matchAll: true}}
+          display:
+            unitPosition: Hidden
+            valueLabel: {matchingGroup: {group: rowValue@indoor, matchAll: true}}
+        direction: Horizontal
+        spacing: 1mm
+        geometry: {x: 0%, y: 62%, width: 100%, height: 38%}
+        items:
+        - {type: realtime.text, key: indoor.humidity.humidity#bedroom, title: {text: Humid}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: indoor.temperature.dewpoint#bedroom, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
+        - {type: realtime.text, key: 'indoor.temperature.temperature#bedroom - $t', title: {text: vs out}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: 'max(indoor.temperature.temperature#bedroom, today)', title: {text: High}, display: {precision: 0}}
+        - {type: realtime.text, key: indoor.battery.battery#bedroom, title: {text: Batt}, display: {precision: 0}}
+
+    # Terrarium: temperature and humidity side by side, since humidity is the
+    # one the plants care about. The graph puts both on one day.
+    - type: titled-group
+      name: terrarium
+      size: 37%
+      title: {text: Terrarium, height: 0.5cm, color: $good}
+      items:
+      - type: realtime.text
+        key: indoor.temperature.temperature#terrarium
+        title: false
+        display: {font: Nunito, unitPosition: Inline}
+        geometry: {x: 0%, y: 0%, width: 31%, height: 58%}
+      - type: realtime.text
+        key: indoor.humidity.humidity#terrarium
+        title: false
+        display: {font: Nunito, unitPosition: Inline, precision: 0, valueLabel: {color: $info}}
+        geometry: {x: 32%, y: 0%, width: 30%, height: 58%}
+      - type: mini-graph
+        timeframe: {hours: 24}
+        annotations:
+          dayLabels: {enabled: false}
+          hourLabels: {enabled: false}
+        indicator: {color: white, opacity: 0.3}
+        margins: {top: 8%, bottom: 8%}
+        figures:
+        - figure: humidity
+          indoor.humidity.humidity#terrarium:
+            plot: {type: plot, color: '#1a8cff', weight: 0.4}
+        - figure: temperature
+          min: 70
+          max: 90
+          indoor.temperature.temperature#terrarium:
+            plot: {type: plot, gradient: TemperatureGradient, weight: 0.5}
+        geometry: {x: 64%, y: 0%, width: 36%, height: 58%}
+      - type: value-stack
+        shared:
+          title: {color: $muted, matchingGroup: {group: rowTitle@terrarium, matchAll: true}}
+          display:
+            unitPosition: Hidden
+            valueLabel: {matchingGroup: {group: rowValue@terrarium, matchAll: true}}
+        direction: Horizontal
+        spacing: 1mm
+        geometry: {x: 0%, y: 62%, width: 100%, height: 38%}
+        items:
+        - {type: realtime.text, key: indoor.temperature.dewpoint#terrarium, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
+        - {type: realtime.text, key: indoor.temperature.heatIndex#terrarium, title: {text: Heat idx}, display: {precision: 0}}
+        - {type: realtime.text, key: 'min(indoor.temperature.temperature#terrarium, today)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: 'max(indoor.temperature.temperature#terrarium, today)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
+        - {type: realtime.text, key: 'min(indoor.humidity.humidity#terrarium, today)', title: {text: RH low}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: indoor.battery.battery#terrarium, title: {text: Batt}, display: {precision: 0, valueLabel: {color: $bad}}}
+
+    # Watch: a rotating slot of conditional panels. Each one takes part in the
+    # turn only while its condition holds; the last has none and always does.
+    - type: switch
+      name: watch
+      cycle: 10s
+      fade: 0.4s
+      hold: 10s
+      items:
+      - type: group
+        name: heat
+        when: 'environment.temperature.heatIndex > 90°F'
+        items:
+        - type: realtime.text
+          key: 'environment.temperature.heatIndex'
+          title: {text: Heat, height: 18%, color: $bad}
+          display: {font: Nunito, unitPosition: Inline, valueLabel: {color: $bad}}
+          geometry: {x: 0%, y: 0%, width: 38%, height: 100%}
+        - type: value-stack
+          shared:
+            title: {color: $muted}
+          spacing: 0.4mm
+          geometry: {x: 40%, y: 0%, width: 60%, height: 100%}
+          items:
+          - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels}, display: {valueLabel: {color: $accent}}}
+          - environment.temperature.wetBulb: {title: {text: Wet bulb}}
+          - {type: realtime.text, key: $uv, title: {text: UV}}
+          - {type: realtime.text, key: 'max(environment.temperature.heatIndex, today)', title: {text: Peak}}
+      - type: group
+        name: storms
+        when: 'at($prob, 2h) > 60%'
+        items:
+        - type: realtime.text
+          key: 'at($prob, 2h)'
+          title: {text: Storms ahead, height: 18%, color: $info}
+          display: {font: Nunito, unitPosition: Inline, precision: 0, valueLabel: {color: $info}}
+          geometry: {x: 0%, y: 0%, width: 38%, height: 100%}
+        - type: value-stack
+          shared:
+            title: {color: $muted}
+          spacing: 0.4mm
+          geometry: {x: 40%, y: 0%, width: 60%, height: 100%}
+          items:
+          - {type: realtime.text, key: 'at($rain, 2h)', title: {text: Rate +2h}}
+          - {type: realtime.text, key: 'at($wg, 2h)', title: {text: Gust +2h}, display: {valueLabel: {color: $accent}}}
+          - {type: realtime.text, key: '$pres - at($pres, -3h)', title: {text: Press 3h}}
+          - {type: realtime.text, key: environment.lightning.distance, title: {text: Strike}}
+      - type: group
+        name: terrarium-dry
+        when: 'indoor.humidity.humidity#terrarium < 70%'
+        items:
+        - type: realtime.text
+          key: 'indoor.humidity.humidity#terrarium'
+          title: {text: Terrarium dry, height: 18%, color: $warn}
+          display: {font: Nunito, unitPosition: Inline, precision: 0, valueLabel: {color: $warn}}
+          geometry: {x: 0%, y: 0%, width: 38%, height: 100%}
+        - type: value-stack
+          shared:
+            title: {color: $muted}
+          spacing: 0.4mm
+          geometry: {x: 40%, y: 0%, width: 60%, height: 100%}
+          items:
+          - {type: realtime.text, key: 'min(indoor.humidity.humidity#terrarium, today)', title: {text: Low}, display: {precision: 0}}
+          - {type: realtime.text, key: indoor.temperature.temperature#terrarium, title: {text: Temp}}
+      - type: group
+        name: terrarium-hot
+        when: 'indoor.temperature.temperature#terrarium > 86°F'
+        items:
+        - type: realtime.text
+          key: 'indoor.temperature.temperature#terrarium'
+          title: {text: Terrarium hot, height: 18%, color: $bad}
+          display: {font: Nunito, unitPosition: Inline, valueLabel: {color: $bad}}
+          geometry: {x: 0%, y: 0%, width: 38%, height: 100%}
+        - type: value-stack
+          shared:
+            title: {color: $muted}
+          spacing: 0.4mm
+          geometry: {x: 40%, y: 0%, width: 60%, height: 100%}
+          items:
+          - {type: realtime.text, key: indoor.humidity.humidity#terrarium, title: {text: Humid}, display: {precision: 0}}
+          - {type: realtime.text, key: 'max(indoor.temperature.temperature#terrarium, today)', title: {text: High}}
+      - type: group
+        name: battery
+        when: 'indoor.battery.battery#terrarium < 20%'
+        items:
+        - type: realtime.text
+          key: 'indoor.battery.battery#terrarium'
+          title: {text: Sensor battery, height: 18%, color: $warn}
+          display: {font: Nunito, unitPosition: Inline, precision: 0, valueLabel: {color: $warn}}
+          geometry: {x: 0%, y: 0%, width: 38%, height: 100%}
+        - type: value-stack
+          shared:
+            title: {color: $muted}
+          spacing: 0.4mm
+          geometry: {x: 40%, y: 0%, width: 60%, height: 100%}
+          items:
+          - {type: realtime.text, key: indoor.battery.battery#bedroom, title: {text: Bedroom}, display: {precision: 0}}
+          - {type: realtime.text, key: indoor.battery.battery#terrarium, title: {text: Terrarium}, display: {precision: 0, valueLabel: {color: $warn}}}
+      - type: group
+        name: inside-out
+        items:
+        - type: realtime.text
+          key: 'indoor.temperature.temperature#bedroom - $t'
+          title: {text: Inside vs out, height: 18%, color: $muted}
+          display: {font: Nunito, unitPosition: Inline, precision: 0, valueLabel: {color: $info}}
+          geometry: {x: 0%, y: 0%, width: 38%, height: 100%}
+        - type: value-stack
+          shared:
+            title: {color: $muted}
+          spacing: 0.4mm
+          geometry: {x: 40%, y: 0%, width: 60%, height: 100%}
+          items:
+          - {type: realtime.text, key: 'indoor.temperature.dewpoint#bedroom - environment.temperature.dewpoint', title: {text: Dew pt}, display: {precision: 0}}
+          - {type: realtime.text, key: 'indoor.temperature.heatIndex#bedroom - environment.temperature.heatIndex', title: {text: Heat idx}, display: {precision: 0}}
+          - {type: realtime.text, key: 'indoor.temperature.temperature#terrarium - indoor.temperature.temperature#bedroom', title: {text: Terr vs rm}, display: {precision: 0}}
 
   # ================= DAY ===================================================
   # One graph for the day: temperature, feels and dew point on top; rain as
