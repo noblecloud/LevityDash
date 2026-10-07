@@ -1,5 +1,12 @@
 # Emissive render instability — is it pre-existing upstream?
 
+**Status: CLOSED 2026-10-06 (answered).** The verdict below stands, and the
+follow-up is settled: `Graph.py`'s zero-range divide is guarded now, yet a frozen
+clock still destabilises a graph preset, so `emissive` keeps its `NO_FREEZE`
+exemption. Re-measured on `dev` `b2499da` — frozen 4/4 dirty (2 SIGSEGV, 2 with
+7 and 12 tracebacks), live 4/4 clean; numbers in
+[meter-harness-status](meter-harness-status.md).
+
 **Question.** `docs/design-references/presets/emissive.levity` (the only preset that
 uses `glow:`) renders unreliably in the meter worktree: exit `-11` (SIGSEGV) at
 shutdown with `RuntimeError: libshiboken: Internal C++ object (LevitySceneView)

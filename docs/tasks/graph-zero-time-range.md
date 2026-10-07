@@ -1,5 +1,15 @@
 # The graph divides by a zero-second time range
 
+**Status: FIXED 2026-10-06.** `normalize()` guards the divide (`Graph.py:884`,
+`if seconds > 0:`) and pins a zero-span series to the left edge, and
+`pos_px_to_value` takes its single sample rather than indexing by a zero span.
+Both are on `dev` (`d917135`, merged via `fix/graph-zero-time-range-test`),
+pinned by `tests/ui/test_graph_zero_time_range.py`. A frozen clock no longer logs
+a divide-by-zero — but it still destabilises a graph preset for a separate
+reason, so the harness's `NO_FREEZE` exemption did **not** become droppable; see
+the correction under Verification and
+[emissive-upstream-check](emissive-upstream-check.md).
+
 ## What is wrong
 
 `src/LevityDash/lib/ui/frontends/PySide/Modules/Displays/Graph.py:862` normalises every
@@ -67,11 +77,15 @@ the path never carries NaN coordinates.
   lines that were run, with the staged scenario and seed paths, are in
   `docs/tasks/emissive-upstream-check.md`.
 - After: exit 0 and a PNG, twice, byte-identical.
-- Then the harness follow-up this unblocks: `emissive` renders with the freeze on, so
-  its `NO_FREEZE` entry and both masks can be deleted from
-  `src/LevityDash/devtools/render_diff.py`, and
-  `.venv/bin/python src/LevityDash/devtools/render_diff.py selfcheck .render-diff/merged-a`
-  must still report 24 of 24 clean.
+- ⚠️ **Correction (2026-10-06): the follow-up this was expected to unblock did not
+  unblock.** Guarding the divide stops the `divide by zero` warning but not the
+  crash: with the freeze on, `emissive` still exits `-11` (SIGSEGV) about half the
+  time, and the runs that survive log `RuntimeError: libshiboken: Internal C++
+  object (LevitySceneView) already deleted` from the graph's time-axis labels
+  (`Annotations.resize -> TimestampLabel`). Measured on `dev` `b2499da`: frozen
+  4/4 dirty (2 SIGSEGV, 2 with 7 and 12 tracebacks), live 4/4 clean. So
+  `NO_FREEZE` stays and the masks stay; see
+  [meter-harness-status](meter-harness-status.md).
 - Regression: a live-clock capture of a graph preset still renders, and a normal
   (non-degenerate) range is unmoved by the guard.
 
