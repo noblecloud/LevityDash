@@ -96,6 +96,17 @@ class Realtime(Panel, tag='realtime'):
 		# A display that is not the plain kind of its `displayType` (a bar reports `gauge`) names itself.
 		return getattr(self.display, 'subtag', None) or self.display.displayType.value
 
+	@StateProperty(key='type')
+	def type(self) -> str:
+		"""`realtime.gauge`, `realtime.bar` and so on, so a save loads back as the same display. A text display stays `realtime`."""
+		tag = type(self).__tag__
+		subtag = self.subtag if tag == 'realtime' and getattr(self, 'display', None) is not None else None
+		return f'{tag}.{subtag}' if subtag and subtag != 'text' else tag
+
+	@type.condition(method='get')
+	def type(self, value: str) -> bool:
+		return value not in {..., None, Stateful, 'Stateful'}
+
 	# Section Realtime
 	def __init__(self, parent: Panel, **kwargs):
 		self.__connectedContainer: Container | None = None
