@@ -3,6 +3,7 @@ from json import JSONDecodeError, loads
 
 import asyncio
 import logging
+from time import monotonic
 from abc import ABC, abstractmethod
 
 from aiohttp import ClientSession
@@ -140,9 +141,11 @@ class BaseSocketProtocol(asyncio.DatagramProtocol):
 		self._plugin = api
 		self.handler = LevityQtSocketMessageHandler()
 		self.lost: Optional[asyncio.Future] = None
+		self.lastReceived = monotonic()
 		self.log = api.pluginLog.getChild(self.__class__.__name__)
 
 	def datagram_received(self, data, addr):
+		self.lastReceived = monotonic()
 		try:
 			message = loads(data.decode('utf-8'))
 			self.handler.publish(message)
@@ -224,8 +227,11 @@ class UDPSocket(Socket):
 	last: dict
 	port: int
 
-	def __init__(self, api: 'REST', address: Optional[str] = None, port: Optional[int] = None, *args, **kwargs):
+	def __init__(self, api: 'REST', address: Optional[str] = None, port: Optional[int] = None, silenceTimeout: Optional[float] = None, *args, **kwargs):
 		super(UDPSocket, self).__init__(api=api, *args, **kwargs)
+		# Seconds without a datagram before the socket is judged dead and rebound.
+		# None never rebinds on silence (a quiet source is not a dead one).
+		self.silenceTimeout = silenceTimeout
 		self._address = address
 		if port is not None:
 			self.port = port
@@ -248,9 +254,21 @@ class UDPSocket(Socket):
 			self.transport, _ = await loop.create_datagram_endpoint(lambda: self.protocol, local_addr=(self.address, self.port))
 			self.log.debug(f'Connected UDP Socket: {self.api.name}')
 			backoff.reset()
+			self.protocol.lastReceived = monotonic()
 			try:
-				await self.protocol.lost
+				await self._untilLostOrSilent()
 			finally:
 				self.transport.close()
 
 		await keepConnected(connect, self.log, f'UDP {self.api.name}', backoff)
+
+	async def _untilLostOrSilent(self):
+		if self.silenceTimeout is None:
+			await self.protocol.lost
+			return
+		while not self.protocol.lost.done():
+			quiet = monotonic() - self.protocol.lastReceived
+			if quiet >= self.silenceTimeout:
+				self.log.warning(f'No data for {quiet:.0f}s, rebinding')
+				return
+			await asyncio.wait({self.protocol.lost}, timeout=self.silenceTimeout - quiet)
