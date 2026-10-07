@@ -213,7 +213,7 @@ class UnitMetaData(dict):
 			cls = unitDict['special'][unitType][unitDict[unitDef]]
 			return lambda value: cls(value, **kwargs)
 
-		if isinstance(unitDef, Iterable):
+		if isinstance(unitDef, Iterable) and not isinstance(unitDef, str):
 			if len(unitDef) == 2:
 				n, d = unitDef
 				if isinstance(n, str) and n in unitDict:

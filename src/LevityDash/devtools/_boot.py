@@ -122,6 +122,7 @@ def freeze_time(when: Optional[datetime] = None) -> dict:
 		'LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph',
 		'LevityDash.lib.plugins.builtin.Fixture',
 		'LevityDash.lib.plugins.builtin.Mock',
+		'LevityDash.lib.plugins.builtin.Astronomy',
 		# Which values count as history, and what `at()` and the windows read from.
 		# Left on the wall clock, a frozen render drew its data for the wrong hours.
 		'LevityDash.lib.plugins.observation',
@@ -310,6 +311,10 @@ def startFixture(dashboard) -> None:
 	mock = dashboard.plugins.get('Mock', None)
 	if mock is not None and mock.enabled:
 		mock.thread.start()
+	# Astronomy is on by default; a scenario that defines the sun keys wins.
+	astronomy = dashboard.plugins.get('Astronomy', None)
+	if astronomy is not None and astronomy.enabled:
+		astronomy.thread.start()
 
 
 def shutdown(dashboard) -> None:

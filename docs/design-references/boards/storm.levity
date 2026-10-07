@@ -405,7 +405,7 @@ items:
           - {type: realtime.text, key: 'at($d, 1h)', title: {text: Dist +1h}}
       - type: group
         name: flood
-        when: environment.precipitation.precipitation > 1 in/hr
+        when: environment.precipitation.precipitation > 0.95 in/hr
         items:
         - type: text
           text: Flooding rain

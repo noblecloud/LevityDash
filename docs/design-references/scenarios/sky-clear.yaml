@@ -125,8 +125,8 @@ keys:
     unit: f
     series: [57, 57, 56, 56, 56, 55, 55, 55, 56, 57, 58, 60, 61, 62, 63, 63, 63, 62, 61, 60, 59, 59, 58, 58]
   environment.soil.freezingLevelHeight:
-    value: 11800
-    unit: ft
+    value: 3597
+    unit: m
   astronomy.sun.hour:
     value: 15.667
     unit: int
