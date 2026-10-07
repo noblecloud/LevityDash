@@ -36,3 +36,17 @@ def test_a_graph_with_a_theme_coloured_indicator_saves(dashboard):
 	}])
 	assert 'indicator' in text and '$text' in text
 
+
+
+def test_an_expression_key_and_a_precision_survive_the_save(dashboard):
+	"""`max(a, b): {...}` shorthand reloads as a literal key, and `precision` was never written."""
+	text = _dump(dashboard, [{
+		'type': 'value-stack', 'name': 'row', 'geometry': BOX,
+		'items': [{
+			'type': 'realtime.text', 'key': 'max(environment.temperature.temperature, today)',
+			'title': {'text': 'Peak'}, 'display': {'precision': 0},
+		}],
+	}])
+	item = yaml.safe_load(text)['items'][0]['items'][0]
+	assert item['key'] == 'max(environment.temperature.temperature, today)'
+	assert item['display']['precision'] == 0
