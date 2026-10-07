@@ -92,6 +92,12 @@ def main() -> int:
 		)
 	except ValueError as e:
 		parser.error(str(e))
+	except BaseException:
+		# A boot that raised after the plugins started left their threads running,
+		# and the interpreter then hung joining them instead of showing the error.
+		from LevityDash import LevityDashboard
+		shutdown(LevityDashboard)
+		raise
 
 	try:
 		scene = dashboard.scene

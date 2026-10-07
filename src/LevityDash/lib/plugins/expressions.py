@@ -533,7 +533,12 @@ class _Evaluator:
 					number = toDataUnit(literal.number, literal.unit, type(other))
 				except StopUnitError as e:
 					raise ExpressionError(f'{self.text!r}: {e}') from e
-				converted = type(other)(number)
+				try:
+					converted = type(other)(number)
+				except TypeError:
+					# A rate (`in/hr`) cannot be built from a bare number; build it from the
+					# literal as a measurement instead, which converts to the data's unit.
+					converted = type(other)(measure(literal.number, literal.unit))
 				return (converted, other) if swap else (other, converted)
 		return left, right
 

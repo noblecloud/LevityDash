@@ -213,7 +213,7 @@ class UnitMetaData(dict):
 			cls = unitDict['special'][unitType][unitDict[unitDef]]
 			return lambda value: cls(value, **kwargs)
 
-		if isinstance(unitDef, Iterable):
+		if isinstance(unitDef, Iterable) and not isinstance(unitDef, str):
 			if len(unitDef) == 2:
 				n, d = unitDef
 				if isinstance(n, str) and n in unitDict:
@@ -570,6 +570,10 @@ def splitKeyString(value: str) -> tuple:
 	return value, source, identity or None
 
 
+def _rebuildCategoryItem(atoms: tuple, source, identity):
+	return CategoryItem(atoms, source=source, identity=identity)
+
+
 # Section CategoryItem
 #: Unit ids that build a WeatherUnits percentage class
 PERCENT_UNITS = frozenset({'%', '%h', '%c', '%p', '%%', '%bat'})
@@ -647,6 +651,22 @@ class CategoryItem(tuple):
 		self.__id = kwargs.pop('id', None)
 		self.__hash = None
 		self.__initialised = True
+
+	# Interned keys are shared and must never be rebuilt in place. The default
+	# copy and pickle protocols rebuild through `__new__` with the bare atoms,
+	# which hands back the interned *unscoped* key, and then write the copied
+	# state onto it: copying '…temperature#bedroom' set the identity of the
+	# plain '…temperature' everyone else holds, after which schema lookups for
+	# it failed. A key is immutable, so a copy is the key itself, and a pickle
+	# rebuilds from source, atoms and identity.
+	def __copy__(self):
+		return self
+
+	def __deepcopy__(self, memo):
+		return self
+
+	def __reduce__(self):
+		return _rebuildCategoryItem, (tuple(str(atom) for atom in self), self.__source, self.__identity)
 
 	@property
 	def source(self) -> Hashable:
