@@ -8,9 +8,9 @@ props:
   display: {default: null, doc: "Display settings every reading shares, such as {font: Roboto Mono, precision: 0}"}
 template:
   type: value-stack
-  direction: $direction
-  spacing: $spacing
   shared:
     title: {color: $muted}
     display: $display
+  direction: $direction
+  spacing: $spacing
   items: $items

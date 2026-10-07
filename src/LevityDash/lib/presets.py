@@ -143,6 +143,8 @@ class Preset:
 			item = {}
 		if fields:
 			item = merge(item, fields)
+		if isinstance(item, dict) and 'items' in item:
+			item['items'] = item.pop('items')  # an item takes its own geometry and settings before its children are built
 		return _walk(item, (*_stack, self.name))
 
 

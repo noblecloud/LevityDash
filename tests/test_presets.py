@@ -164,3 +164,8 @@ def test_a_property_left_null_leaves_its_entry_out_and_a_set_one_puts_it_back():
 def test_a_property_used_as_a_key_must_be_text(library):
 	use = {'preset': 'spark', 'props': {'key': 5}}
 	assert presets.expand([use])[0]['type'] == presets.FAILED
+
+
+def test_an_item_keeps_its_children_for_last(library):
+	use = {'preset': 'dial', 'name': 'a', 'geometry': {'x': 0}}
+	assert list(presets.expand([use])[0])[-1] == 'items', 'an item takes its own geometry and settings before its children are built'

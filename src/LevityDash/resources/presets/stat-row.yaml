@@ -9,12 +9,12 @@ props:
   font: {default: null, type: text, doc: "Font of the values; unset keeps the font of the panel around it"}
 template:
   type: value-stack
-  direction: Horizontal
-  spacing: $spacing
   shared:
     title: {color: $muted, matchingGroup: {group: 'rowTitle@$group', matchAll: true}}
     display:
-      font: $font
       unitPosition: Hidden
+      font: $font
       valueLabel: {matchingGroup: {group: 'rowValue@$group', matchAll: true}}
+  direction: Horizontal
+  spacing: $spacing
   items: $items

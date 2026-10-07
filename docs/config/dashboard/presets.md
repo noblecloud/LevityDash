@@ -85,6 +85,8 @@ These are in the app's `presets` folder. Copy one into your own `presets` folder
 
 Every property has a `doc:` line in its file. The boards in `docs/design-references/boards` use them: `station`, `storm`, `sky` and `week`.
 
+The module's own fields (`name`, `geometry`, `size`, `when`) are applied before its `items`, wherever you write them, so the children lay out against the final size.
+
 ## Leave a property out
 
 A property whose default is `null` is not written at all when you do not set it. Where a preset has `font: $font` and you do not give `font`, the module has no `font` key, so it takes the font of the panel around it. The same holds for a mapping key (`$key2: {...}` is left out when `key2` is `null`), for a list item that is only `$prop`, and for a mapping that this leaves empty. You can also write `null` in `props:` to remove something that the default sets.
