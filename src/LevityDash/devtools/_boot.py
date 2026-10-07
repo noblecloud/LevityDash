@@ -58,10 +58,20 @@ def freeze_time(when: Optional[datetime] = None) -> dict:
 	if when.tzinfo is None:
 		when = when.astimezone()
 
-	class _FrozenDatetime(_dt.datetime):
+	class _FrozenMeta(type):
+		# A module that checks `isinstance(x, datetime)` still has to accept the real
+		# datetimes the rest of the app passes around.
+		def __instancecheck__(cls, obj):
+			return isinstance(obj, _dt.datetime)
+
+	class _FrozenDatetime(_dt.datetime, metaclass=_FrozenMeta):
 		@classmethod
 		def now(cls, tz=None):
 			return when.astimezone(tz) if tz else when
+
+		@classmethod
+		def utcnow(cls):
+			return when.astimezone(_dt.timezone.utc).replace(tzinfo=None)
 
 		@classmethod
 		def today(cls):
@@ -112,6 +122,13 @@ def freeze_time(when: Optional[datetime] = None) -> dict:
 		'LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph',
 		'LevityDash.lib.plugins.builtin.Fixture',
 		'LevityDash.lib.plugins.builtin.Mock',
+		# Which values count as history, and what `at()` and the windows read from.
+		# Left on the wall clock, a frozen render drew its data for the wrong hours.
+		'LevityDash.lib.plugins.observation',
+		'LevityDash.lib.plugins.expressions',
+		'LevityDash.lib.plugins.computed',
+		# The graph's window (TimeFrameWindow.start) reads the clock here.
+		'LevityDash.lib.utils.data',
 	):
 		pin(module_name, 'datetime', _FrozenDatetime)
 
