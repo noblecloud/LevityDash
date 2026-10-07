@@ -4,7 +4,7 @@
 - type: polar
   plot: rose                  # rose | trail | clock
   direction: environment.wind.direction.direction   # rose and trail
-  speed: environment.wind.speed.speed               # rose and trail
+  speed: environment.wind.speed.speed               # rose and trail; a key or an expression
   window: today               # today | 24h | +24h | 3d
   sectors: 16                 # rose: petals round the compass
   rings: 4                    # about this many value rings
@@ -22,7 +22,10 @@
 ```
 
 The three plots read whole series from the dispatcher (`feed.SeriesFeed`), so they draw the same
-values a graph of that key would. Maths lives in `geometry.py` and the painting in `draw.py`; this
+values a graph of that key would. `key`, `direction` and `speed` also take an expression over keys
+(`key: environment.temperature.temperature - environment.temperature.dewpoint`, `speed: max(a, b)`).
+It is evaluated at every sample time (`series.derive`), because a computed key holds one value and no
+history. A time where an input has no sample yet is left out. Maths lives in `geometry.py` and the painting in `draw.py`; this
 file reads the settings, owns the feeds and chooses what to hand to the painter.
 """
 from datetime import datetime, timedelta
@@ -33,11 +36,12 @@ from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import QGraphicsItem
 
 from LevityDash.lib.log import LevityPluginLog
+from LevityDash.lib.plugins.expressions import Expression, ExpressionError
 from LevityDash.lib.stateful import StateProperty
 from LevityDash.lib.ui.colors import Color, Gradient, theme
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar import draw
-from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.feed import Series, SeriesFeed
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.feed import Series, openFeed
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.geometry import (
 	parseWindow, roseBins, windowBounds,
 )
@@ -54,6 +58,18 @@ def _oneOf(name: str, value, allowed: tuple):
 	if value not in allowed:
 		raise ValueError(f'{name} is one of {", ".join(map(str, allowed))}, not {value!r}')
 	return value
+
+
+def _expression(name: str, value) -> Optional[str]:
+	"""The text of a key or an expression over keys, or None. Text that is neither says why."""
+	if value is None or str(value).strip() == '':
+		return None
+	text = str(value).strip()
+	try:
+		Expression.parse(text)
+	except ExpressionError as error:
+		raise ValueError(f'{name}: {error}') from None
+	return text
 
 
 class Polar(Panel, tag='polar'):
@@ -81,8 +97,8 @@ class Polar(Panel, tag='polar'):
 		self._stamps = 6
 		self._legend = True
 		self._marks = True
-		self._feeds: dict[str, SeriesFeed] = {}
-		self._wanted: dict[str, Optional[str]] = {}
+		self._feeds: dict[str, object] = {}
+		self._feedText: dict[str, str] = {}
 		super().__init__(*args, **kwargs)
 		self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemHasNoContents, False)
 		# A clock face's hand moves; a minute is coarse enough and the timer is made on the GUI thread.
@@ -104,7 +120,10 @@ class Polar(Panel, tag='polar'):
 	# -- data ---------------------------------------------------------------------------------
 
 	def _connect(self):
-		"""Open a feed for each key the current plot reads, and close the ones it no longer reads."""
+		"""Open a feed for each key the current plot reads, and close the ones it no longer reads.
+
+		A key is a key or an expression over keys (`temperature - dewpoint`); an expression is
+		evaluated at every sample, so the plot gets a whole series, not one value."""
 		wanted = {
 			'rose': {'direction': self._direction, 'speed': self._speed},
 			'trail': {'direction': self._direction, 'speed': self._speed},
@@ -112,15 +131,29 @@ class Polar(Panel, tag='polar'):
 		}[self._plot]
 		wanted = {name: key for name, key in wanted.items() if key}
 		for name in list(self._feeds):
-			if wanted.get(name) != str(self._feeds[name].key):
+			if wanted.get(name) != self._feedText.get(name):
 				self._feeds.pop(name).close()
+				self._feedText.pop(name, None)
 		for name, key in wanted.items():
 			if name not in self._feeds:
 				try:
-					self._feeds[name] = SeriesFeed(key, self._changed)
+					self._feeds[name] = openFeed(str(key), self._changed)
+					self._feedText[name] = str(key)
 				except Exception as error:  # noqa: BLE001 - a bad key must not abort the dashboard load
 					log.warning(f'polar {name} {key!r}: {error!r}; it shows no data')
 		self.update()
+
+	def release(self):
+		"""Stop the clock and let go of every feed. A dashboard reload and `delete` both end here."""
+		self._clock.stop()
+		for feed in self._feeds.values():
+			feed.close()
+		self._feeds.clear()
+		self._feedText.clear()
+
+	def delete(self):
+		self.release()
+		super().delete()
 
 	def _series(self, name: str) -> Series:
 		feed = self._feeds.get(name)
@@ -152,6 +185,10 @@ class Polar(Panel, tag='polar'):
 	def key(self, value: Optional[str]):
 		self._key = value
 
+	@key.decode
+	def key(self, value) -> Optional[str]:
+		return _expression('key', value)
+
 	@StateProperty(key='direction', default=None, after=_connect, repr=True)
 	def direction(self) -> Optional[str]:
 		return self._direction
@@ -160,6 +197,10 @@ class Polar(Panel, tag='polar'):
 	def direction(self, value: Optional[str]):
 		self._direction = value
 
+	@direction.decode
+	def direction(self, value) -> Optional[str]:
+		return _expression('direction', value)
+
 	@StateProperty(key='speed', default=None, after=_connect, repr=True)
 	def speed(self) -> Optional[str]:
 		return self._speed
@@ -167,6 +208,10 @@ class Polar(Panel, tag='polar'):
 	@speed.setter
 	def speed(self, value: Optional[str]):
 		self._speed = value
+
+	@speed.decode
+	def speed(self, value) -> Optional[str]:
+		return _expression('speed', value)
 
 	@StateProperty(key='window', default='today', allowNone=False, after=refresh)
 	def window(self) -> str:

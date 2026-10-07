@@ -1,6 +1,7 @@
 # A breezy spring day for the polar plots: wind backs from north-west round
 # to south over the day, gusting up in the afternoon, and the temperature
-# makes one clean swing from 48 F before dawn to 71 F at about 3 pm.
+# makes one clean swing from 48 F before dawn to 71 F at about 3 pm. The
+# dewpoint sits between 45 and 52 F, so the spread (an expression key) is widest in the afternoon.
 #
 #   render_widget.py --levity docs/design-references/presets/polar-rose.levity \
 #       --scenario polar-day --name polar --out out.png
@@ -9,6 +10,10 @@
 name: polar-day
 description: Wind swings NW to S and peaks near 22 mph at 4 pm; temperature 48 to 71 F.
 keys:
+  environment.temperature.dewpoint:
+    value: 52
+    unit: f
+    series: [47, 47, 46, 46, 46, 45, 45, 46, 47, 48, 49, 49, 50, 50, 51, 52, 52, 52, 52, 51, 50, 50, 49, 48]
   environment.temperature.temperature:
     value: 69
     unit: f
