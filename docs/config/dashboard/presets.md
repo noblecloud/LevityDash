@@ -94,4 +94,4 @@ When you edit a dashboard in the app and save it, a use of a preset stays short.
 
 The preset-board example in `docs/design-references/preset-board.levity` saves as 846 bytes. The same board without presets saves as 12,703 bytes.
 
-Known limit: a gauge saves a `center_offset` that the app works out by itself. This was true before presets. A saved board with gauges is not drawn the same when it is loaded again, with or without presets.
+Known limit: a saved board with a gauge does not load back as the same board until [the gauge save fix](https://github.com/noblecloud/LevityDash/pull/66) is merged. This was true before presets.
