@@ -44,12 +44,19 @@ Branch: `feat/expr-props`, based on `dev` (`5661eb4`).
 - Condition-icon fixture: a graph with `pins: {key: environment.condition.icon, ...}`
   renders glyphs — the docstring's own example at `Graph.py:1866-1868`.
 
-## Harness notes (2026-10-06, from the merge check)
+## Harness notes (2026-10-06, from the merge check) - all fixed
 
-- `polar-clock` renders almost blank in `render_diff.py capture` on both `dev` and this
-  branch — a scenario key it reads is missing from `_scenario.yaml`. Pre-existing;
-  fix the scenario before baselining that target.
-- The named masks (`graph-figure`, `ev-caption`) were measured against a 70px-shorter
-  capture than the current one (830/1370 vs 900/1440), so they no longer apply and
-  `emissive`'s live-clock regions count as differences. Re-measure them at the current
-  capture size. The size guard doing its job is the only reason this was visible.
+- `polar-clock` rendered black in `render_diff.py capture`. The cause was not a missing
+  key: `_boot.freeze_time` only re-pinned modules whose attribute was named `now`, and
+  `polar/item.py` imports the clock `as localNow`, so the plot asked the wall clock for
+  "today" while the Fixture had stamped its series in the frozen day. It now pins by
+  identity under any name. `polar-rose` and `polar-trail` also drew empty: `stormy-day`
+  gives the wind direction no series, so `polar-day` is now a `SERIES_SOURCES` entry.
+- Masks re-measured at 1600x900 / 2560x1440. `graph-figure` is now `(0, 494, 1269, 893)`
+  on `emissive`. `ev-caption` is gone: eight showcase captures are byte-identical
+  (`FIXTURE_DELAY_MS=end` removed the unit race by construction), so there is nothing
+  to mask.
+- A second `render_widget.py` run hung after writing its PNG. Not the second run, the
+  Mock plugin: the design seed enables it, it never finishes, and the interpreter
+  joins its worker thread at exit. `render_widget.py` and `render_dashboard.py` now
+  call `_boot.shutdown(dashboard)` once the image is saved.
