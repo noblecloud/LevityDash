@@ -74,12 +74,12 @@ keys:
     series: [0, 0, 0, 0, 0, 0, 0, 0, 5, 5, 10, 15, 25, 40, 60, 75, 85, 70, 45, 25, 15, 10, 5, 5]
   environment.precipitation.daily:
     value: 0.68
-    unit: in
+    unit: [in, day]
     type: precipitationDaily
     title: Expected today
   environment.yesterday.precipitation.precipitation:
     value: 0.31
-    unit: in
+    unit: [in, day]
     type: precipitationDaily
     title: Yesterday
   environment.condition.weatherCode:
