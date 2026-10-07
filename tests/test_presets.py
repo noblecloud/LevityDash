@@ -25,11 +25,26 @@ template:
     - {preset: dial, props: {key: $key, hi: 50}}
 '''
 LOOP = 'template: {type: group, items: [{preset: loop}]}'
+SPARK = '''
+props:
+  key: environment.pressure.pressure
+  key2: {default: null, type: key}
+  color: {default: null, type: color}
+  min: {default: null, type: number}
+template:
+  type: mini-graph
+  min: $min
+  style: {color: $color, weight: 1}
+  figures:
+    - figure: p
+      $key: {plot: one}
+      $key2: {plot: two}
+'''
 
 
 @pytest.fixture(autouse=True)
 def library(tmp_path):
-	for name, text in {'dial': DIAL, 'outer': OUTER, 'loop': LOOP}.items():
+	for name, text in {'dial': DIAL, 'outer': OUTER, 'loop': LOOP, 'spark': SPARK}.items():
 		(tmp_path / f'{name}.yaml').write_text(text)
 	presets.add_search_path(lambda: [tmp_path])
 	yield tmp_path
@@ -135,3 +150,17 @@ def test_a_field_the_file_wrote_keeps_its_text_while_it_holds():
 	written = {'preset': 'dial', 'name': 'a', 'display': {'color': '$mine'}, 'geometry': {'x': '$gap'}}
 	out = _roundtrip(written, lambda item: item.update(name='b'), variables={'gap': 3})
 	assert out == {'preset': 'dial', 'name': 'b', 'display': {'color': '$mine'}, 'geometry': {'x': '$gap'}}
+
+
+def test_a_property_left_null_leaves_its_entry_out_and_a_set_one_puts_it_back():
+	bare = presets.expand([{'preset': 'spark'}])[0]
+	assert bare == {'type': 'mini-graph', 'style': {'weight': 1}, 'figures': [{'figure': 'p', 'environment.pressure.pressure': {'plot': 'one'}}]}, \
+		'a null property drops its key, and a mapping it empties'
+	set_ = presets.expand([{'preset': 'spark', 'props': {'min': 29.5, 'color': '$red', 'key2': 'a.b'}}])[0]
+	assert set_['min'] == 29.5 and set_['style'] == {'color': '$red', 'weight': 1}
+	assert set_['figures'][0]['a.b'] == {'plot': 'two'}, 'a property used as a key names the series'
+
+
+def test_a_property_used_as_a_key_must_be_text(library):
+	use = {'preset': 'spark', 'props': {'key': 5}}
+	assert presets.expand([use])[0]['type'] == presets.FAILED

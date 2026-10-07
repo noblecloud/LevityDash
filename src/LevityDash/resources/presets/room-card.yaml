@@ -1,0 +1,28 @@
+# One room as a card: its name, the temperature as the hero, a day graph beside it and a row of small
+# readings under both. A second hero (a terrarium's humidity) goes in `extra`; the graph is any item, a
+# `sparkline` use for one or two series on one scale, or a mini-graph with its own figures. For a room whose
+# sensor is named by an identity, write the key with it: `indoor.temperature.temperature#bedroom`.
+doc: "A room: temperature hero, a day graph and a row of readings"
+props:
+  title: {default: Room, type: text, doc: The room's name}
+  title_color: {default: $muted, type: color, doc: Colour of the name}
+  key: {default: indoor.temperature.temperature, type: key, doc: The hero reading}
+  hero_box: {default: {x: 0%, y: 0%, width: 40%, height: 58%}, doc: Where the hero sits}
+  extra: {default: null, doc: "A second hero, as a realtime.text item"}
+  graph: {default: null, doc: "The day graph, as an item; give it a geometry"}
+  group: {default: room, type: text, doc: Name of the size group the row of readings shares text sizes in}
+  items: {default: [], doc: "The row of readings, written as the items of a value-stack"}
+template:
+  type: titled-group
+  title: {text: $title, height: 0.5cm, color: $title_color}
+  items:
+    - type: realtime.text
+      key: $key
+      title: false
+      display: {font: Nunito, unitPosition: Inline}
+      geometry: $hero_box
+    - $extra
+    - $graph
+    - preset: stat-row
+      geometry: {x: 0%, y: 62%, width: 100%, height: 38%}
+      props: {group: $group, items: $items}

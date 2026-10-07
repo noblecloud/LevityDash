@@ -96,22 +96,16 @@ items:
         unit-label: {visible: false}
         sub-label: {text: miles to the last strike, size: 5%, gap: 1%, color: $muted}
     # Strikes in the last hour, inside the dial. 0 to 300.
-    - type: realtime.gauge
+    - preset: ring
       name: strike-ring
-      key: $n1
-      title: false
-      geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
-      display:
+      props:
+        key: $n1
         radius: 70%
-        arc: {start-angle: 0, end-angle: 360, weight: 1.6%, color: $rule}
-        range: {min: 0, max: 300}
-        fill: {weight: 1.6%, color: $volt}
-        major: {enabled: false}
-        minor: {enabled: false}
-        micro: {enabled: false}
-        needle: {visible: false}
-        value-label: {visible: false}
-        unit-label: {visible: false}
+        weight: 1.6%
+        color: $volt
+        start_angle: 0
+        end_angle: 360
+        max: 300
     - type: text
       text: strikes this hour
       font: $display
@@ -128,23 +122,18 @@ items:
         valueLabel: {color: $volt}
 
   # Under the dial: the readings that say whether it is coming or going.
-  - type: value-stack
+  - preset: stat-row
     name: strikes
-    direction: Horizontal
     geometry: {x: 1%, y: 56%, width: 42%, height: 10%}
-    spacing: 1mm
-    shared:
-      title: {color: $muted, matchingGroup: {group: rowTitle@strikes, matchAll: true}}
-      display:
-        unitPosition: Hidden
-        font: Roboto Mono
-        valueLabel: {matchingGroup: {group: rowValue@strikes, matchAll: true}}
-    items:
-    - {type: realtime.text, key: 'min($d, 3h)', title: {text: Nearest 3h}, display: {valueLabel: {color: $bad}}}
-    - {type: realtime.text, key: 'avg($d, 3h)', title: {text: Average 3h}}
-    - {type: realtime.text, key: '$d - at($d, -1h)', title: {text: Closing 1h}, display: {valueLabel: {color: $warn}}}
-    - {type: realtime.text, key: environment.lightning.count3hr, title: {text: Strikes 3h}, display: {valueLabel: {color: $volt}}}
-    - {type: realtime.text, key: 'max($n1, 3h)', title: {text: Peak hour}, display: {valueLabel: {color: $volt}}}
+    props:
+      group: strikes
+      font: Roboto Mono
+      items:
+      - {type: realtime.text, key: 'min($d, 3h)', title: {text: Nearest 3h}, display: {valueLabel: {color: $bad}}}
+      - {type: realtime.text, key: 'avg($d, 3h)', title: {text: Average 3h}}
+      - {type: realtime.text, key: '$d - at($d, -1h)', title: {text: Closing 1h}, display: {valueLabel: {color: $warn}}}
+      - {type: realtime.text, key: environment.lightning.count3hr, title: {text: Strikes 3h}, display: {valueLabel: {color: $volt}}}
+      - {type: realtime.text, key: 'max($n1, 3h)', title: {text: Peak hour}, display: {valueLabel: {color: $volt}}}
 
   # ================= RAIN, GUST, PRESSURE ==================================
   - type: stack
@@ -155,82 +144,46 @@ items:
     dividers: {enabled: true, opacity: 50%, size: 90%}
     items:
 
-    - type: group
+    - preset: meter-card
       name: rain
-      items:
-      - type: realtime.text
+      props:
         key: $rain
-        title: {text: Rain rate, height: 11%, color: $info}
-        display:
-          font: Barlow Condensed
-          weight: Bold
-          unitPosition: FloatUnder
-          valueLabel: {color: $info, margins: 2%}
-        geometry: {x: 0%, y: 0%, width: 100%, height: 50%}
-      - type: realtime.bar
-        key: $rain
-        title: false
-        geometry: {x: 2%, y: 51%, width: 96%, height: 9%}
-        display:
-          range: {min: 0, max: 2}
-          track: {weight: 28%}
-          zones:
-          - {to: 0.1, color: $good, opacity: 0}
-          - {from: 0.1, to: 0.3, color: $info, opacity: 0}
-          - {from: 0.3, to: 1, color: $warn, opacity: 0}
-          - {from: 1, color: $bad, opacity: 0}
-          fill: {weight: 28%, color: zone}
-          markers:
-          - {value: 'max($rain, 3h)', type: line, color: $text}
-          major: {interval: 0.5, side: after, labels: true}
-          value-label: {visible: false}
-      - type: value-stack
-        shared:
-          title: {color: $muted}
-        geometry: {x: 0%, y: 66%, width: 100%, height: 34%}
-        direction: Horizontal
-        spacing: 1mm
+        title: Rain rate
+        color: $info
+        font: Barlow Condensed
+        weight: Bold
+        max: 2
+        interval: 0.5
+        zones:
+        - {to: 0.1, color: $good, opacity: 0}
+        - {from: 0.1, to: 0.3, color: $info, opacity: 0}
+        - {from: 0.3, to: 1, color: $warn, opacity: 0}
+        - {from: 1, color: $bad, opacity: 0}
+        markers:
+        - {value: 'max($rain, 3h)', type: line, color: $text}
         items:
         - {type: realtime.text, key: environment.precipitation.daily, title: {text: Due today}, display: {unitPosition: Hidden}}
         - {type: realtime.text, key: $prob, title: {text: Chance}, display: {precision: 0, unitPosition: Hidden, valueLabel: {color: $info}}}
         - {type: realtime.text, key: 'at($rain, 2h)', title: {text: Rate +2h}, display: {unitPosition: Hidden}}
         - {type: realtime.text, key: 'at($prob, 4h)', title: {text: Chance +4h}, display: {precision: 0, unitPosition: Hidden, valueLabel: {color: $info}}}
 
-    - type: group
+    - preset: meter-card
       name: gust
-      items:
-      - type: realtime.text
+      props:
         key: $wg
-        title: {text: Gust, height: 11%, color: $accent}
-        display:
-          font: Barlow Condensed
-          weight: Bold
-          unitPosition: FloatUnder
-          valueLabel: {color: $accent, margins: 2%}
-        geometry: {x: 0%, y: 0%, width: 100%, height: 50%}
-      - type: realtime.bar
-        key: $wg
-        title: false
-        geometry: {x: 2%, y: 51%, width: 96%, height: 9%}
-        display:
-          range: {min: 0, max: 80}
-          track: {weight: 28%}
-          zones:
-          - {to: 20, color: $good, opacity: 0}
-          - {from: 20, to: 40, color: $warn, opacity: 0}
-          - {from: 40, to: 60, color: $accent, opacity: 0}
-          - {from: 60, color: $bad, opacity: 0}
-          fill: {weight: 28%, color: zone}
-          markers:
-          - {value: $ws, type: line, color: $text}
-          major: {interval: 20, side: after, labels: true}
-          value-label: {visible: false}
-      - type: value-stack
-        shared:
-          title: {color: $muted}
-        geometry: {x: 0%, y: 66%, width: 100%, height: 34%}
-        direction: Horizontal
-        spacing: 1mm
+        title: Gust
+        color: $accent
+        font: Barlow Condensed
+        weight: Bold
+        max: 80
+        interval: 20
+        zones:
+        - {to: 20, color: $good, opacity: 0}
+        - {from: 20, to: 40, color: $warn, opacity: 0}
+        - {from: 40, to: 60, color: $accent, opacity: 0}
+        - {from: 60, color: $bad, opacity: 0}
+        markers:
+        - {value: $ws, type: line, color: $text}
         items:
         - {type: realtime.text, key: $ws, title: {text: Sustained}, display: {unitPosition: Hidden}}
         - {type: realtime.text, key: 'max($wg, today)', title: {text: Peak today}, display: {unitPosition: Hidden, valueLabel: {color: $bad}}}
@@ -249,20 +202,17 @@ items:
           unitPosition: FloatUnder
           valueLabel: {color: $text, margins: 2%}
         geometry: {x: 0%, y: 0%, width: 62%, height: 50%}
-      - type: mini-graph
-        timeframe: {hours: 12}
-        annotations:
-          dayLabels: {enabled: false}
-          hourLabels: {enabled: false}
-        indicator: {color: white, opacity: 0.3}
-        margins: {top: 12%, bottom: 12%}
-        figures:
-        - figure: pressure
+      - preset: sparkline
+        geometry: {x: 62%, y: 4%, width: 38%, height: 52%}
+        props:
+          hours: 12
+          figure: pressure
           min: 29.5
           max: 30.05
-          environment.pressure.pressure:
-            plot: {type: plot, color: '#ff3048', weight: 0.6}
-        geometry: {x: 62%, y: 4%, width: 38%, height: 52%}
+          key: environment.pressure.pressure
+          plot: {type: plot, color: '#ff3048', weight: 0.6}
+          top: 12%
+          bottom: 12%
       - type: realtime.bar
         key: $pres
         title: false
@@ -278,17 +228,16 @@ items:
           fill: {weight: 28%, color: zone}
           major: {interval: 0.2, side: after, labels: true}
           value-label: {visible: false}
-      - type: value-stack
-        shared:
-          title: {color: $muted}
+      - preset: reading-list
         geometry: {x: 0%, y: 72%, width: 100%, height: 28%}
-        direction: Horizontal
-        spacing: 1mm
-        items:
-        - {type: realtime.text, key: '$pres - at($pres, -3h)', title: {text: 3 hr}, display: {unitPosition: Hidden, valueLabel: {color: $bad}}}
-        - {type: realtime.text, key: '$pres - at($pres, -1h)', title: {text: 1 hr}, display: {unitPosition: Hidden, valueLabel: {color: $bad}}}
-        - {type: realtime.text, key: 'min($pres, today)', title: {text: Low}, display: {unitPosition: Hidden}}
-        - {type: realtime.text, key: 'at($pres, 3h) - $pres', title: {text: Next 3h}, display: {unitPosition: Hidden, valueLabel: {color: $good}}}
+        props:
+          direction: Horizontal
+          spacing: 1mm
+          items:
+          - {type: realtime.text, key: '$pres - at($pres, -3h)', title: {text: 3 hr}, display: {unitPosition: Hidden, valueLabel: {color: $bad}}}
+          - {type: realtime.text, key: '$pres - at($pres, -1h)', title: {text: 1 hr}, display: {unitPosition: Hidden, valueLabel: {color: $bad}}}
+          - {type: realtime.text, key: 'min($pres, today)', title: {text: Low}, display: {unitPosition: Hidden}}
+          - {type: realtime.text, key: 'at($pres, 3h) - $pres', title: {text: Next 3h}, display: {unitPosition: Hidden, valueLabel: {color: $good}}}
 
   # ================= WIND, TEMPERATURE, SLOT, INSIDE =======================
   - type: stack
@@ -307,31 +256,22 @@ items:
       name: wind
       size: 26%
       items:
-      - type: realtime.gauge
-        key: environment.wind.direction.direction
-        title: false
+      - preset: compass
         geometry: {x: 0%, y: 0%, width: 100%, height: 82%}
-        display:
-          radius: 92%
-          arc: {start-angle: 0, end-angle: 360, weight: 2.5%, color: $rule}
-          range: {min: 0, max: 360, wrap: true}
-          major: {interval: 90, length: 8%, width: 2px, color: $faint, labels: {position: inside, offset: 4%, height: 9%, rotate: false, text: compass}}
-          minor: {interval: 22.5, length: 40%, width: 1px, color: $rule}
-          micro: {enabled: false}
-          needle: {type: arrow, length: 36%, width: 2.4%, head: 12%, tail: 28%, tail-dot: 5%, color: $accent}
-          value-label: {visible: false}
-          unit-label: {visible: false}
-          caption: {value: $ws, format: {precision: 0, show_unit: false}, size: 22%, gap: 0%, color: $text}
-          sub-label: {text: mph sustained, size: 7%, gap: 1%}
-      - type: value-stack
-        shared:
-          title: {color: $muted}
-        direction: Horizontal
+        props:
+          arc_weight: 2.5%
+          needle_length: 36%
+          caption_size: 22%
+          label: mph sustained
+          label_size: 7%
+      - preset: reading-list
         geometry: {x: 0%, y: 84%, width: 100%, height: 16%}
-        spacing: 1mm
-        items:
-        - {type: realtime.text, key: 'max($wg, 1h)', title: {text: Gust 1h}, display: {unitPosition: Hidden, valueLabel: {color: $accent}}}
-        - {type: realtime.text, key: 'at($ws, 2h)', title: {text: +2h}, display: {unitPosition: Hidden}}
+        props:
+          direction: Horizontal
+          spacing: 1mm
+          items:
+          - {type: realtime.text, key: 'max($wg, 1h)', title: {text: Gust 1h}, display: {unitPosition: Hidden, valueLabel: {color: $accent}}}
+          - {type: realtime.text, key: 'at($ws, 2h)', title: {text: +2h}, display: {unitPosition: Hidden}}
 
     # Temperature: it fell off a cliff when the front came through.
     - type: group
@@ -347,29 +287,22 @@ items:
           unitPosition: Inline
           valueLabel: {margins: 2%}
         geometry: {x: 0%, y: 0%, width: 100%, height: 42%}
-      - type: mini-graph
-        timeframe: {hours: 24}
-        annotations:
-          dayLabels: {enabled: false}
-          hourLabels: {enabled: false}
-        indicator: {color: white, opacity: 0.3}
-        margins: {top: 8%, bottom: 8%}
-        figures:
-        - figure: temperature
+      - preset: sparkline
+        geometry: {x: 0%, y: 43%, width: 100%, height: 22%}
+        props:
+          figure: temperature
           min: 55
           max: 95
-          environment.temperature.temperature:
-            plot: {type: plot, gradient: TemperatureGradient, weight: 0.6}
-        geometry: {x: 0%, y: 43%, width: 100%, height: 22%}
-      - type: value-stack
-        shared:
-          title: {color: $muted}
+          key: environment.temperature.temperature
+          plot: {type: plot, gradient: TemperatureGradient, weight: 0.6}
+      - preset: reading-list
         geometry: {x: 0%, y: 68%, width: 100%, height: 32%}
-        spacing: 0.4mm
-        items:
-        - {type: realtime.text, key: '$t - max($t, 6h)', title: {text: Since the peak}, display: {valueLabel: {color: $info}}}
-        - {type: realtime.text, key: 'environment.humidity.humidity', title: {text: Humidity}, display: {precision: 0}}
-        - {type: realtime.text, key: 'environment.temperature.dewpoint', title: {text: Dew pt}, display: {valueLabel: {color: $good}}}
+        props:
+          spacing: 0.4mm
+          items:
+          - {type: realtime.text, key: '$t - max($t, 6h)', title: {text: Since the peak}, display: {valueLabel: {color: $info}}}
+          - {type: realtime.text, key: 'environment.humidity.humidity', title: {text: Humidity}, display: {precision: 0}}
+          - {type: realtime.text, key: 'environment.temperature.dewpoint', title: {text: Dew pt}, display: {valueLabel: {color: $good}}}
 
     # The slot: what matters most while it holds. Each panel takes part in the
     # turn only while its condition is true; the last one always does.
@@ -380,100 +313,83 @@ items:
       fade: 0.4s
       hold: 1s
       items:
-      - type: group
+      - preset: headline-panel
         name: take-cover
         when: environment.lightning.distance < 3mi
-        items:
-        - type: text
-          text: Take cover
-          font: Barlow Condensed
-          weight: Bold
-          color: $bad
-          geometry: {x: 0%, y: 0%, width: 100%, height: 30%}
-        - type: realtime.text
+        props:
+          headline: Take cover
+          headline_color: $bad
+          headline_font: Barlow Condensed
+          headline_weight: Bold
+          headline_box: {x: 0%, y: 0%, width: 100%, height: 30%}
           key: $d
-          title: {text: Strike, height: 14%, color: $muted}
-          display: {font: Barlow Condensed, weight: SemiBold, unitPosition: Inline, valueLabel: {color: $warn}}
-          geometry: {x: 0%, y: 32%, width: 100%, height: 40%}
-        - type: value-stack
-          shared:
-            title: {color: $muted}
-          direction: Horizontal
-          geometry: {x: 0%, y: 76%, width: 100%, height: 24%}
+          title: Strike
+          color: $warn
+          font: Barlow Condensed
+          weight: SemiBold
+          hero_box: {x: 0%, y: 32%, width: 100%, height: 40%}
+          list_box: {x: 0%, y: 76%, width: 100%, height: 24%}
           items:
           - {type: realtime.text, key: $n1, title: {text: Strikes 1h}}
           - {type: realtime.text, key: 'at($d, 1h)', title: {text: Dist +1h}}
-      - type: group
+      - preset: headline-panel
         name: flood
         when: environment.precipitation.precipitation >= 1 in/hr
-        items:
-        - type: text
-          text: Flooding rain
-          font: Barlow Condensed
-          weight: Bold
-          color: $info
-          geometry: {x: 0%, y: 0%, width: 100%, height: 30%}
-        - type: realtime.text
+        props:
+          headline: Flooding rain
+          headline_color: $info
+          headline_font: Barlow Condensed
+          headline_weight: Bold
+          headline_box: {x: 0%, y: 0%, width: 100%, height: 30%}
           key: environment.precipitation.daily
-          title: {text: Expected today, height: 14%, color: $muted}
-          display: {font: Barlow Condensed, weight: SemiBold, unitPosition: Inline, valueLabel: {color: $info}}
-          geometry: {x: 0%, y: 32%, width: 100%, height: 40%}
-        - type: value-stack
-          shared:
-            title: {color: $muted}
-          direction: Horizontal
-          geometry: {x: 0%, y: 76%, width: 100%, height: 24%}
+          title: Expected today
+          color: $info
+          font: Barlow Condensed
+          weight: SemiBold
+          hero_box: {x: 0%, y: 32%, width: 100%, height: 40%}
+          list_box: {x: 0%, y: 76%, width: 100%, height: 24%}
           items:
           - {type: realtime.text, key: 'max($rain, 3h)', title: {text: Peak 3h}}
           - {type: realtime.text, key: 'at($rain, 1h)', title: {text: Rate +1h}}
-      - type: group
+      - preset: headline-panel
         name: damaging-wind
         when: environment.wind.speed.gust > 45 mph
-        items:
-        - type: text
-          text: Damaging gusts
-          font: Barlow Condensed
-          weight: Bold
+        props:
+          headline: Damaging gusts
+          headline_color: $accent
+          headline_font: Barlow Condensed
+          headline_weight: Bold
+          headline_box: {x: 0%, y: 0%, width: 100%, height: 30%}
+          key: max($wg, today)
+          title: Peak today
           color: $accent
-          geometry: {x: 0%, y: 0%, width: 100%, height: 30%}
-        - type: realtime.text
-          key: 'max($wg, today)'
-          title: {text: Peak today, height: 14%, color: $muted}
-          display: {font: Barlow Condensed, weight: SemiBold, unitPosition: Inline, valueLabel: {color: $accent}}
-          geometry: {x: 0%, y: 32%, width: 100%, height: 40%}
-        - type: value-stack
-          shared:
-            title: {color: $muted}
-          direction: Horizontal
-          geometry: {x: 0%, y: 76%, width: 100%, height: 24%}
+          font: Barlow Condensed
+          weight: SemiBold
+          hero_box: {x: 0%, y: 32%, width: 100%, height: 40%}
+          list_box: {x: 0%, y: 76%, width: 100%, height: 24%}
           items:
           - {type: realtime.text, key: $ws, title: {text: Sustained}}
           - {type: realtime.text, key: 'at($wg, 2h)', title: {text: Gust +2h}}
-      - type: group
+      - preset: callout
         name: air
-        items:
-        - type: realtime.text
+        props:
           key: environment.visibility
-          title: {text: Visibility, height: 14%, color: $muted}
-          display: {font: Barlow Condensed, weight: SemiBold, unitPosition: Inline}
-          geometry: {x: 0%, y: 0%, width: 100%, height: 40%}
-        - type: value-stack
-          shared:
-            title: {color: $muted}
-          geometry: {x: 0%, y: 44%, width: 100%, height: 56%}
+          title: Visibility
+          title_height: 14%
+          font: Barlow Condensed
+          weight: SemiBold
+          hero_box: {x: 0%, y: 0%, width: 100%, height: 40%}
+          list_box: {x: 0%, y: 44%, width: 100%, height: 56%}
           items:
           - {type: realtime.text, key: environment.clouds.cover.cover, title: {text: Cloud}, display: {precision: 0}}
           - {type: realtime.text, key: environment.clouds.cover.low, title: {text: Low}, display: {precision: 0}}
           - {type: realtime.text, key: environment.light.uvi, title: {text: UV}}
 
     # Inside: the house in a storm.
-    - type: titled-group
+    - preset: list-panel
       name: inside
-      title: {text: Inside, height: 0.5cm, color: $muted}
-      items:
-      - type: value-stack
-        shared:
-          title: {color: $muted}
+      props:
+        title: Inside
         spacing: 0.4mm
         items:
         - {type: realtime.text, key: 'indoor.temperature.temperature#bedroom', title: {text: Bedroom}, display: {precision: 0}}
@@ -535,16 +451,13 @@ items:
           plot: {type: plot, color: '#1a8cff', weight: 0.35, dashPattern: '2, 3'}
 
     # Read straight off the forecast: what the next hours bring.
-    - type: titled-group
+    - preset: list-panel
       name: ahead
       size: 15%
-      title: {text: Ahead, height: 0.5cm, color: $muted}
-      items:
-      - type: value-stack
-        shared:
-          title: {color: $muted}
-          display: {font: Roboto Mono}
+      props:
+        title: Ahead
         spacing: 0.4mm
+        display: {font: Roboto Mono}
         items:
         - {type: realtime.text, key: 'at($t, 3h)', title: {text: Temp +3h}}
         - {type: realtime.text, key: 'at($t, 6h)', title: {text: Temp +6h}}

@@ -111,39 +111,29 @@ items:
         precision: 0
         unitPosition: Inline
         valueLabel: {color: $accent, margins: 2%}
-    - type: value-stack
-      shared:
-        title: {color: $muted, matchingGroup: {group: rowTitle@now, matchAll: true}}
-        display:
-          font: Roboto Mono
-          unitPosition: Hidden
-          valueLabel: {matchingGroup: {group: rowValue@now, matchAll: true}}
-      direction: Horizontal
+    - preset: stat-row
       geometry: {x: 0%, y: 50%, width: 100%, height: 24%}
-      spacing: 1mm
-      items:
-      - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels}, display: {precision: 0, valueLabel: {color: $accent}}}
-      - {type: realtime.text, key: environment.temperature.dewpoint, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
-      - {type: realtime.text, key: environment.humidity.humidity, title: {text: Humid}, display: {precision: 0}}
-      - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Wind}, display: {precision: 0}}
-      - {type: realtime.text, key: environment.precipitation.probability, title: {text: Rain}, display: {precision: 0, valueLabel: {color: $info}}}
-      - {type: realtime.text, key: environment.light.uvi, title: {text: UV}, display: {precision: 1}}
-    - type: value-stack
-      shared:
-        title: {color: $muted, matchingGroup: {group: rowTitle@inside, matchAll: true}}
-        display:
-          font: Roboto Mono
-          unitPosition: Hidden
-          valueLabel: {matchingGroup: {group: rowValue@inside, matchAll: true}}
-      direction: Horizontal
+      props:
+        group: now
+        font: Roboto Mono
+        items:
+        - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels}, display: {precision: 0, valueLabel: {color: $accent}}}
+        - {type: realtime.text, key: environment.temperature.dewpoint, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
+        - {type: realtime.text, key: environment.humidity.humidity, title: {text: Humid}, display: {precision: 0}}
+        - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Wind}, display: {precision: 0}}
+        - {type: realtime.text, key: environment.precipitation.probability, title: {text: Rain}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: environment.light.uvi, title: {text: UV}, display: {precision: 1}}
+    - preset: stat-row
       geometry: {x: 0%, y: 76%, width: 100%, height: 24%}
-      spacing: 1mm
-      items:
-      - {type: realtime.text, key: 'indoor.temperature.temperature#bedroom', title: {text: Bedroom}, display: {precision: 0}}
-      - {type: realtime.text, key: 'indoor.humidity.humidity#bedroom', title: {text: Bed RH}, display: {precision: 0, valueLabel: {color: $info}}}
-      - {type: realtime.text, key: 'indoor.temperature.temperature#terrarium', title: {text: Terrarium}, display: {precision: 0, valueLabel: {color: $good}}}
-      - {type: realtime.text, key: 'indoor.humidity.humidity#terrarium', title: {text: Terr RH}, display: {precision: 0, valueLabel: {color: $info}}}
-      - {type: realtime.text, key: 'min(indoor.temperature.temperature#terrarium, today)', title: {text: Terr low}, display: {precision: 0, valueLabel: {color: $info}}}
+      props:
+        group: inside
+        font: Roboto Mono
+        items:
+        - {type: realtime.text, key: 'indoor.temperature.temperature#bedroom', title: {text: Bedroom}, display: {precision: 0}}
+        - {type: realtime.text, key: 'indoor.humidity.humidity#bedroom', title: {text: Bed RH}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: 'indoor.temperature.temperature#terrarium', title: {text: Terrarium}, display: {precision: 0, valueLabel: {color: $good}}}
+        - {type: realtime.text, key: 'indoor.humidity.humidity#terrarium', title: {text: Terr RH}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: 'min(indoor.temperature.temperature#terrarium, today)', title: {text: Terr low}, display: {precision: 0, valueLabel: {color: $info}}}
 
   # ================= THE WEEK'S HEADLINE, ROTATING =========================
   - type: switch
@@ -153,27 +143,22 @@ items:
     hold: 1s
     geometry: {x: 68%, y: 1.5%, width: 31%, height: 21%}
     items:
-    - type: group
+    - preset: headline-panel
       name: frost
       when: 'min(at($lo, 1d), at($lo, 2d), at($lo, 3d), at($lo, 4d), at($lo, 5d), at($lo, 6d)) < 36°F'
-      items:
-      - type: text
-        text: Frost in the week
-        font: Nunito
-        weight: Light
+      props:
+        headline: Frost in the week
+        headline_color: $info
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 22%}
+        key: min(at($lo, 1d), at($lo, 2d), at($lo, 3d), at($lo, 4d), at($lo, 5d), at($lo, 6d))
+        title: Coldest night
         color: $info
-        geometry: {x: 0%, y: 0%, width: 100%, height: 22%}
-      - type: realtime.text
-        key: 'min(at($lo, 1d), at($lo, 2d), at($lo, 3d), at($lo, 4d), at($lo, 5d), at($lo, 6d))'
-        title: {text: Coldest night, height: 14%, color: $muted}
-        display: {font: Nunito, weight: ExtraLight, precision: 0, unitPosition: Inline, valueLabel: {color: $info}}
-        geometry: {x: 0%, y: 24%, width: 46%, height: 76%}
-      - type: value-stack
-        shared:
-          title: {color: $muted}
-          display: {font: Roboto Mono, precision: 0}
-        geometry: {x: 48%, y: 26%, width: 52%, height: 74%}
+        precision: 0
+        hero_box: {x: 0%, y: 24%, width: 46%, height: 76%}
+        direction: null
         spacing: 0.4mm
+        list_display: {font: Roboto Mono, precision: 0}
+        list_box: {x: 48%, y: 26%, width: 52%, height: 74%}
         items:
         - {type: realtime.text, key: 'at($lo, 4d)', title: {text: In 4 days}, display: {valueLabel: {color: $info}}}
         - {type: realtime.text, key: 'at($lo, 5d)', title: {text: In 5 days}, display: {valueLabel: {color: $info}}}
@@ -209,17 +194,16 @@ items:
         title: {text: Rain, 2 days out, height: 14%, color: $muted}
         display: {font: Nunito, weight: ExtraLight, unitPosition: Inline, valueLabel: {color: $info}}
         geometry: {x: 0%, y: 24%, width: 46%, height: 76%}
-      - type: value-stack
-        shared:
-          title: {color: $muted}
-          display: {font: Roboto Mono}
+      - preset: reading-list
         geometry: {x: 48%, y: 26%, width: 52%, height: 74%}
-        spacing: 0.4mm
-        items:
-        - {type: realtime.text, key: 'at($rd, 2d)', title: {text: In 2 days}}
-        - {type: realtime.text, key: 'at($rd, 3d)', title: {text: In 3 days}}
-        - {type: realtime.text, key: 'max(at($gm, 2d), at($gm, 3d))', title: {text: Gusts to}, display: {valueLabel: {color: $warn}}}
-        - {type: realtime.text, key: 'at(environment.precipitation.probability, 3d)', title: {text: Chance}, display: {precision: 0, valueLabel: {color: $info}}}
+        props:
+          spacing: 0.4mm
+          display: {font: Roboto Mono}
+          items:
+          - {type: realtime.text, key: 'at($rd, 2d)', title: {text: In 2 days}}
+          - {type: realtime.text, key: 'at($rd, 3d)', title: {text: In 3 days}}
+          - {type: realtime.text, key: 'max(at($gm, 2d), at($gm, 3d))', title: {text: Gusts to}, display: {valueLabel: {color: $warn}}}
+          - {type: realtime.text, key: 'at(environment.precipitation.probability, 3d)', title: {text: Chance}, display: {precision: 0, valueLabel: {color: $info}}}
     - type: group
       name: windy
       when: 'max(at($gm, 1d), at($gm, 2d), at($gm, 3d)) > 30 mph'
@@ -244,17 +228,16 @@ items:
         weight: Light
         color: $muted
         geometry: {x: 0%, y: 0%, width: 100%, height: 22%}
-      - type: value-stack
-        shared:
-          title: {color: $muted}
-          display: {font: Roboto Mono}
+      - preset: reading-list
         geometry: {x: 0%, y: 26%, width: 100%, height: 74%}
-        spacing: 0.4mm
-        items:
-        - {type: realtime.text, key: 'max($hi, at($hi, 1d), at($hi, 2d), at($hi, 3d), at($hi, 4d), at($hi, 5d), at($hi, 6d))', title: {text: Warmest day}, display: {precision: 0, valueLabel: {color: $bad}}}
-        - {type: realtime.text, key: 'min($lo, at($lo, 1d), at($lo, 2d), at($lo, 3d), at($lo, 4d), at($lo, 5d), at($lo, 6d))', title: {text: Coldest night}, display: {precision: 0, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: 'at($rd, 3d)', title: {text: Rain in 3 d}, display: {precision: 2, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: 'max($gm, at($gm, 1d), at($gm, 2d), at($gm, 3d), at($gm, 4d), at($gm, 5d), at($gm, 6d))', title: {text: Gustiest day}, display: {precision: 0, valueLabel: {color: $warn}}}
+        props:
+          spacing: 0.4mm
+          display: {font: Roboto Mono}
+          items:
+          - {type: realtime.text, key: 'max($hi, at($hi, 1d), at($hi, 2d), at($hi, 3d), at($hi, 4d), at($hi, 5d), at($hi, 6d))', title: {text: Warmest day}, display: {precision: 0, valueLabel: {color: $bad}}}
+          - {type: realtime.text, key: 'min($lo, at($lo, 1d), at($lo, 2d), at($lo, 3d), at($lo, 4d), at($lo, 5d), at($lo, 6d))', title: {text: Coldest night}, display: {precision: 0, valueLabel: {color: $info}}}
+          - {type: realtime.text, key: 'at($rd, 3d)', title: {text: Rain in 3 d}, display: {precision: 2, valueLabel: {color: $info}}}
+          - {type: realtime.text, key: 'max($gm, at($gm, 1d), at($gm, 2d), at($gm, 3d), at($gm, 4d), at($gm, 5d), at($gm, 6d))', title: {text: Gustiest day}, display: {precision: 0, valueLabel: {color: $warn}}}
 
   # ================= A DAY AT A TIME =======================================
   # Seven columns, one per coming day, each read off the daily keys with at().
@@ -271,52 +254,24 @@ items:
       display:
         font: Roboto Mono
     items:
-    - items:
-      - {type: text, text: Today, font: $display, color: $text, alignment: Center}
-      - {type: realtime.text, key: $hi, title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
-      - {type: realtime.text, key: $lo, title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
-      - {type: realtime.text, key: $rd, title: {text: Rain}, display: {precision: 2, valueLabel: {color: $info}}}
-      - {type: realtime.text, key: $gm, title: {text: Gust}, display: {precision: 0, valueLabel: {color: $warn}}}
-      - {type: realtime.text, key: environment.wind.direction.dominant, title: {text: From}, display: {precision: 0}}
-    - items:
-      - {type: text, text: Tomorrow, font: $display, color: $text, alignment: Center}
-      - {type: realtime.text, key: 'at($hi, 1d)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
-      - {type: realtime.text, key: 'at($lo, 1d)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
-      - {type: realtime.text, key: 'at($rd, 1d)', title: {text: Rain}, display: {precision: 2, valueLabel: {color: $info}}}
-      - {type: realtime.text, key: 'at($gm, 1d)', title: {text: Gust}, display: {precision: 0, valueLabel: {color: $warn}}}
-      - {type: realtime.text, key: 'at(environment.wind.direction.dominant, 1d)', title: {text: From}, display: {precision: 0}}
-    - items:
-      - {type: text, text: In 2 days, font: $display, color: $text, alignment: Center}
-      - {type: realtime.text, key: 'at($hi, 2d)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
-      - {type: realtime.text, key: 'at($lo, 2d)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
-      - {type: realtime.text, key: 'at($rd, 2d)', title: {text: Rain}, display: {precision: 2, valueLabel: {color: $info}}}
-      - {type: realtime.text, key: 'at($gm, 2d)', title: {text: Gust}, display: {precision: 0, valueLabel: {color: $warn}}}
-      - {type: realtime.text, key: 'at(environment.wind.direction.dominant, 2d)', title: {text: From}, display: {precision: 0}}
-    - items:
-      - {type: text, text: In 3 days, font: $display, color: $text, alignment: Center}
-      - {type: realtime.text, key: 'at($hi, 3d)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
-      - {type: realtime.text, key: 'at($lo, 3d)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
-      - {type: realtime.text, key: 'at($rd, 3d)', title: {text: Rain}, display: {precision: 2, valueLabel: {color: $info}}}
-      - {type: realtime.text, key: 'at($gm, 3d)', title: {text: Gust}, display: {precision: 0, valueLabel: {color: $warn}}}
-      - {type: realtime.text, key: 'at(environment.wind.direction.dominant, 3d)', title: {text: From}, display: {precision: 0}}
-    - items:
-      - {type: text, text: In 4 days, font: $display, color: $text, alignment: Center}
-      - {type: realtime.text, key: 'at($hi, 4d)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
-      - {type: realtime.text, key: 'at($lo, 4d)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
-      - {type: realtime.text, key: 'at($rd, 4d)', title: {text: Rain}, display: {precision: 2, valueLabel: {color: $info}}}
-      - {type: realtime.text, key: 'at($gm, 4d)', title: {text: Gust}, display: {precision: 0, valueLabel: {color: $warn}}}
-      - {type: realtime.text, key: 'at(environment.wind.direction.dominant, 4d)', title: {text: From}, display: {precision: 0}}
-    - items:
-      - {type: text, text: In 5 days, font: $display, color: $text, alignment: Center}
-      - {type: realtime.text, key: 'at($hi, 5d)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
-      - {type: realtime.text, key: 'at($lo, 5d)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
-      - {type: realtime.text, key: 'at($rd, 5d)', title: {text: Rain}, display: {precision: 2, valueLabel: {color: $info}}}
-      - {type: realtime.text, key: 'at($gm, 5d)', title: {text: Gust}, display: {precision: 0, valueLabel: {color: $warn}}}
-      - {type: realtime.text, key: 'at(environment.wind.direction.dominant, 5d)', title: {text: From}, display: {precision: 0}}
-    - items:
-      - {type: text, text: In 6 days, font: $display, color: $text, alignment: Center}
-      - {type: realtime.text, key: 'at($hi, 6d)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
-      - {type: realtime.text, key: 'at($lo, 6d)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
-      - {type: realtime.text, key: 'at($rd, 6d)', title: {text: Rain}, display: {precision: 2, valueLabel: {color: $info}}}
-      - {type: realtime.text, key: 'at($gm, 6d)', title: {text: Gust}, display: {precision: 0, valueLabel: {color: $warn}}}
-      - {type: realtime.text, key: 'at(environment.wind.direction.dominant, 6d)', title: {text: From}, display: {precision: 0}}
+    - preset: day-column
+      props:
+        label: Today
+        high: environment.temperature.high
+        low: environment.temperature.low
+        rain: environment.precipitation.daily
+        gust: environment.wind.speed.gustMax
+        heading: environment.wind.direction.dominant
+    - preset: day-column
+      props: {label: Tomorrow, offset: 1d}
+    - preset: day-column
+      props: {label: In 2 days, offset: 2d}
+    - preset: day-column
+      props: {label: In 3 days, offset: 3d}
+    - preset: day-column
+      props: {label: In 4 days, offset: 4d}
+    - preset: day-column
+      props: {label: In 5 days, offset: 5d}
+    - preset: day-column
+      props: {label: In 6 days, offset: 6d}
+

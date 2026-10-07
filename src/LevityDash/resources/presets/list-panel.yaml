@@ -1,0 +1,16 @@
+# A panel with a small title and a list of readings under it: Inside, Aloft, Ahead. Spacers and
+# titles in the list work as in any value-stack. Give the use a `size:` or a `geometry:` as for any item.
+doc: Titled panel holding a list of small readings
+props:
+  title: {default: Readings, type: text, doc: The panel's title}
+  title_color: {default: $muted, type: color, doc: Colour of the title}
+  title_height: {default: 0.5cm, type: size, doc: Height of the title}
+  items: {default: [], doc: "The readings, written as the items of a value-stack"}
+  spacing: {default: 0.4mm, type: size, doc: Gap between readings}
+  display: {default: null, doc: "Display settings every reading shares, such as {font: Roboto Mono}"}
+template:
+  type: titled-group
+  title: {text: $title, height: $title_height, color: $title_color}
+  items:
+    - preset: reading-list
+      props: {items: $items, spacing: $spacing, display: $display}

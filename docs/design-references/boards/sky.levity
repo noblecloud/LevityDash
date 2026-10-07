@@ -144,23 +144,18 @@ items:
     title: {text: Sunset, height: 20%, color: $muted}
     geometry: {x: 48.5%, y: 43%, width: 9%, height: 10%}
     display: {font: Nunito, weight: Light, format: '%-I:%M', valueLabel: {color: $accent}}
-  - type: value-stack
+  - preset: stat-row
     name: sun-times
-    direction: Horizontal
     geometry: {x: 1.5%, y: 17.5%, width: 55%, height: 8%}
-    spacing: 1mm
-    shared:
-      title: {color: $muted, matchingGroup: {group: rowTitle@sun, matchAll: true}}
-      display:
-        font: Roboto Mono
-        unitPosition: Hidden
-        valueLabel: {matchingGroup: {group: rowValue@sun, matchAll: true}}
-    items:
-    - {type: realtime.text, key: $irr, title: {text: Sun now W/m2}, display: {precision: 0, valueLabel: {color: $accent}}}
-    - {type: realtime.text, key: 'max($irr, today)', title: {text: Peak W/m2}, display: {precision: 0}}
-    - {type: realtime.text, key: environment.light.irradiance.direct, title: {text: Direct}, display: {precision: 0, valueLabel: {color: $sun}}}
-    - {type: realtime.text, key: environment.light.irradiance.diffuse, title: {text: Diffuse}, display: {precision: 0, valueLabel: {color: $info}}}
-    - {type: realtime.text, key: environment.light.illuminance, title: {text: Light}, display: {shorten: true}}
+    props:
+      group: sun
+      font: Roboto Mono
+      items:
+      - {type: realtime.text, key: $irr, title: {text: Sun now W/m2}, display: {precision: 0, valueLabel: {color: $accent}}}
+      - {type: realtime.text, key: 'max($irr, today)', title: {text: Peak W/m2}, display: {precision: 0}}
+      - {type: realtime.text, key: environment.light.irradiance.direct, title: {text: Direct}, display: {precision: 0, valueLabel: {color: $sun}}}
+      - {type: realtime.text, key: environment.light.irradiance.diffuse, title: {text: Diffuse}, display: {precision: 0, valueLabel: {color: $info}}}
+      - {type: realtime.text, key: environment.light.illuminance, title: {text: Light}, display: {shorten: true}}
 
   # ================= UV, ROTATING ==========================================
   - type: switch
@@ -170,50 +165,37 @@ items:
     hold: 1s
     geometry: {x: 59.5%, y: 1.5%, width: 40%, height: 30%}
     items:
-    - type: group
+    - preset: headline-panel
       name: golden-hour
       when: astronomy.sun.remaining < 90
-      items:
-      - type: text
-        text: Golden hour
-        font: Nunito
-        weight: Light
-        color: $sun
-        geometry: {x: 0%, y: 0%, width: 100%, height: 26%}
-      - type: realtime.text
+      props:
+        headline: Golden hour
+        headline_color: $sun
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 26%}
         key: astronomy.sun.remaining
-        title: {text: Until sunset, height: 14%, color: $muted}
-        display: {font: Nunito, weight: ExtraLight, format: duration, valueLabel: {color: $sun}}
-        geometry: {x: 0%, y: 28%, width: 100%, height: 48%}
-      - type: value-stack
-        shared:
-          title: {color: $muted}
-        direction: Horizontal
-        geometry: {x: 0%, y: 78%, width: 100%, height: 22%}
+        title: Until sunset
+        color: $sun
+        format: duration
+        unit_position: null
+        hero_box: {x: 0%, y: 28%, width: 100%, height: 48%}
+        list_box: {x: 0%, y: 78%, width: 100%, height: 22%}
         items:
         - {type: realtime.text, key: environment.light.sunset, title: {text: Sunset}, display: {format: '%-I:%M'}}
         - {type: realtime.text, key: $cc, title: {text: Cloud}, display: {precision: 0}}
         - {type: realtime.text, key: environment.visibility, title: {text: Visibility}}
-    - type: group
+    - preset: headline-panel
       name: uv-high
       when: environment.light.uvi >= 6
-      items:
-      - type: text
-        text: High UV
-        font: Nunito
-        weight: Light
-        color: $bad
-        geometry: {x: 0%, y: 0%, width: 100%, height: 26%}
-      - type: realtime.text
+      props:
+        headline: High UV
+        headline_color: $bad
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 26%}
         key: $uvi
-        title: {text: UV index, height: 14%, color: $muted}
-        display: {font: Nunito, weight: ExtraLight, valueLabel: {color: $bad}}
-        geometry: {x: 0%, y: 28%, width: 100%, height: 48%}
-      - type: value-stack
-        shared:
-          title: {color: $muted}
-        direction: Horizontal
-        geometry: {x: 0%, y: 78%, width: 100%, height: 22%}
+        title: UV index
+        color: $bad
+        unit_position: null
+        hero_box: {x: 0%, y: 28%, width: 100%, height: 48%}
+        list_box: {x: 0%, y: 78%, width: 100%, height: 22%}
         items:
         - {type: realtime.text, key: 'max($uvi, today)', title: {text: Peak}}
         - {type: realtime.text, key: 'at($uvi, 1h)', title: {text: +1h}}
@@ -247,30 +229,24 @@ items:
           - {value: 'max($uvi, today)', type: triangle, color: $text, side: after}
           major: {interval: 3, side: before, labels: true}
           value-label: {visible: false}
-      - type: value-stack
-        shared:
-          title: {color: $muted}
+      - preset: reading-list
         geometry: {x: 36%, y: 22%, width: 64%, height: 38%}
-        spacing: 0.4mm
-        items:
-        - {type: realtime.text, key: 'max($uvi, today)', title: {text: Peak today}, display: {precision: 1, valueLabel: {color: $uv}}}
-        - {type: realtime.text, key: 'at($uvi, 1h)', title: {text: UV in 1 h}, display: {precision: 1}}
-        - {type: realtime.text, key: 'at($uvi, 3h)', title: {text: UV in 3 h}, display: {precision: 1}}
-      - type: value-stack
-        shared:
-          title: {color: $muted, matchingGroup: {group: rowTitle@uv, matchAll: true}}
-          display:
-            unitPosition: Hidden
-            font: Roboto Mono
-            valueLabel: {matchingGroup: {group: rowValue@uv, matchAll: true}}
-        direction: Horizontal
+        props:
+          spacing: 0.4mm
+          items:
+          - {type: realtime.text, key: 'max($uvi, today)', title: {text: Peak today}, display: {precision: 1, valueLabel: {color: $uv}}}
+          - {type: realtime.text, key: 'at($uvi, 1h)', title: {text: UV in 1 h}, display: {precision: 1}}
+          - {type: realtime.text, key: 'at($uvi, 3h)', title: {text: UV in 3 h}, display: {precision: 1}}
+      - preset: stat-row
         geometry: {x: 0%, y: 64%, width: 100%, height: 36%}
-        spacing: 1mm
-        items:
-        - {type: realtime.text, key: 'at($irr, 2h)', title: {text: Sun +2h}, display: {precision: 0, valueLabel: {color: $sun}}}
-        - {type: realtime.text, key: 'at($irr, 4h)', title: {text: Sun +4h}, display: {precision: 0, valueLabel: {color: $accent}}}
-        - {type: realtime.text, key: 'avg($irr, today)', title: {text: Avg today}, display: {precision: 0}}
-        - {type: realtime.text, key: 'max($uvi, 24h)', title: {text: Peak 24h}, display: {precision: 1, valueLabel: {color: $uv}}}
+        props:
+          group: uv
+          font: Roboto Mono
+          items:
+          - {type: realtime.text, key: 'at($irr, 2h)', title: {text: Sun +2h}, display: {precision: 0, valueLabel: {color: $sun}}}
+          - {type: realtime.text, key: 'at($irr, 4h)', title: {text: Sun +4h}, display: {precision: 0, valueLabel: {color: $accent}}}
+          - {type: realtime.text, key: 'avg($irr, today)', title: {text: Avg today}, display: {precision: 0}}
+          - {type: realtime.text, key: 'max($uvi, 24h)', title: {text: Peak 24h}, display: {precision: 1, valueLabel: {color: $uv}}}
     - type: group
       name: ground
       items:
@@ -279,30 +255,24 @@ items:
         title: {text: Soil, height: 8%, color: $good}
         display: {font: Nunito, weight: ExtraLight, valueLabel: {color: $good, margins: 2%}}
         geometry: {x: 0%, y: 0%, width: 40%, height: 60%}
-      - type: value-stack
-        shared:
-          title: {color: $muted}
+      - preset: reading-list
         geometry: {x: 42%, y: 4%, width: 58%, height: 56%}
-        spacing: 0.4mm
-        items:
-        - {type: realtime.text, key: environment.pressure.vaporPressureDeficit, title: {text: Vapour deficit}}
-        - {type: realtime.text, key: 'max(environment.soil.temperature.temperature, today)', title: {text: Soil high}}
-        - {type: realtime.text, key: 'min(environment.soil.temperature.temperature, today)', title: {text: Soil low}, display: {valueLabel: {color: $info}}}
-      - type: value-stack
-        shared:
-          title: {color: $muted, matchingGroup: {group: rowTitle@ground, matchAll: true}}
-          display:
-            unitPosition: Hidden
-            font: Roboto Mono
-            valueLabel: {matchingGroup: {group: rowValue@ground, matchAll: true}}
-        direction: Horizontal
+        props:
+          spacing: 0.4mm
+          items:
+          - {type: realtime.text, key: environment.pressure.vaporPressureDeficit, title: {text: Vapour deficit}}
+          - {type: realtime.text, key: 'max(environment.soil.temperature.temperature, today)', title: {text: Soil high}}
+          - {type: realtime.text, key: 'min(environment.soil.temperature.temperature, today)', title: {text: Soil low}, display: {valueLabel: {color: $info}}}
+      - preset: stat-row
         geometry: {x: 0%, y: 64%, width: 100%, height: 36%}
-        spacing: 1mm
-        items:
-        - {type: realtime.text, key: environment.temperature.dewpoint, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
-        - {type: realtime.text, key: environment.humidity.humidity, title: {text: Humidity}, display: {precision: 0}}
-        - {type: realtime.text, key: 'min($t, 24h)', title: {text: Low 24h}, display: {precision: 0, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: environment.soil.freezingLevelHeight, title: {text: Freezing}, display: {unitPosition: Hidden, shorten: true}}
+        props:
+          group: ground
+          font: Roboto Mono
+          items:
+          - {type: realtime.text, key: environment.temperature.dewpoint, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
+          - {type: realtime.text, key: environment.humidity.humidity, title: {text: Humidity}, display: {precision: 0}}
+          - {type: realtime.text, key: 'min($t, 24h)', title: {text: Low 24h}, display: {precision: 0, valueLabel: {color: $info}}}
+          - {type: realtime.text, key: environment.soil.freezingLevelHeight, title: {text: Freezing}, display: {unitPosition: Hidden, shorten: true}}
 
   # ================= CLOUD =================================================
   # Three rings, low inside and high outside, and the total in the middle.
@@ -314,81 +284,45 @@ items:
       name: rings
       geometry: {x: 0%, y: 0%, width: 44%, height: 100%}
       items:
-      - type: realtime.gauge
-        key: environment.clouds.cover.high
-        title: false
-        geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
-        display:
+      - preset: ring
+        props:
+          key: environment.clouds.cover.high
           radius: 96%
-          arc: {start-angle: -135, end-angle: 135, weight: 5%, color: $rule}
-          range: {min: 0, max: 100}
-          fill: {weight: 5%, color: '#7fb4d9'}
-          major: {enabled: false}
-          minor: {enabled: false}
-          micro: {enabled: false}
-          needle: {visible: false}
-          value-label: {visible: false}
-          unit-label: {visible: false}
-      - type: realtime.gauge
-        key: environment.clouds.cover.mid
-        title: false
-        geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
-        display:
+          color: '#7fb4d9'
+      - preset: ring
+        props:
+          key: environment.clouds.cover.mid
           radius: 78%
-          arc: {start-angle: -135, end-angle: 135, weight: 5%, color: $rule}
-          range: {min: 0, max: 100}
-          fill: {weight: 5%, color: '#aacde6'}
-          major: {enabled: false}
-          minor: {enabled: false}
-          micro: {enabled: false}
-          needle: {visible: false}
-          value-label: {visible: false}
-          unit-label: {visible: false}
-      - type: realtime.gauge
-        key: environment.clouds.cover.low
-        title: false
-        geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
-        display:
+          color: '#aacde6'
+      - preset: ring
+        props:
+          key: environment.clouds.cover.low
           radius: 60%
-          arc: {start-angle: -135, end-angle: 135, weight: 5%, color: $rule}
-          range: {min: 0, max: 100}
-          fill: {weight: 5%, color: '#e8f3fa'}
-          major: {enabled: false}
-          minor: {enabled: false}
-          micro: {enabled: false}
-          needle: {visible: false}
-          value-label: {visible: false}
-          unit-label: {visible: false}
+          color: '#e8f3fa'
       - type: realtime.text
         key: $cc
         title: {text: Cloud, height: 14%, color: $muted}
         display: {font: Nunito, weight: Light, precision: 0, valueLabel: {color: $cloud}}
         geometry: {x: 22%, y: 28%, width: 56%, height: 44%}
-    - type: value-stack
-      shared:
-        title: {color: $muted}
+    - preset: reading-list
       geometry: {x: 46%, y: 2%, width: 54%, height: 56%}
-      spacing: 0.5mm
-      items:
-      - {type: realtime.text, key: environment.clouds.cover.high, title: {text: High}, display: {precision: 0, valueLabel: {color: '#7fb4d9'}}}
-      - {type: realtime.text, key: environment.clouds.cover.mid, title: {text: Middle}, display: {precision: 0, valueLabel: {color: '#aacde6'}}}
-      - {type: realtime.text, key: environment.clouds.cover.low, title: {text: Low}, display: {precision: 0, valueLabel: {color: '#e8f3fa'}}}
-      - {type: realtime.text, key: 'at($cc, 3h)', title: {text: Cloud in 3 h}, display: {precision: 0}}
-    - type: value-stack
-      shared:
-        title: {color: $muted, matchingGroup: {group: rowTitle@cloud, matchAll: true}}
-        display:
-          unitPosition: Hidden
-          font: Roboto Mono
-          valueLabel: {matchingGroup: {group: rowValue@cloud, matchAll: true}}
-      direction: Horizontal
+      props:
+        spacing: 0.5mm
+        items:
+        - {type: realtime.text, key: environment.clouds.cover.high, title: {text: High}, display: {precision: 0, valueLabel: {color: '#7fb4d9'}}}
+        - {type: realtime.text, key: environment.clouds.cover.mid, title: {text: Middle}, display: {precision: 0, valueLabel: {color: '#aacde6'}}}
+        - {type: realtime.text, key: environment.clouds.cover.low, title: {text: Low}, display: {precision: 0, valueLabel: {color: '#e8f3fa'}}}
+        - {type: realtime.text, key: 'at($cc, 3h)', title: {text: Cloud in 3 h}, display: {precision: 0}}
+    - preset: stat-row
       geometry: {x: 46%, y: 64%, width: 54%, height: 36%}
-      spacing: 1mm
-      items:
-      - {type: realtime.text, key: environment.visibility, title: {text: Visible mi}, display: {precision: 0}}
-      - {type: realtime.text, key: 'avg($cc, today)', title: {text: Avg today}, display: {precision: 0}}
-      - {type: realtime.text, key: 'max($cc, today)', title: {text: Peak}, display: {precision: 0}}
-      - {type: realtime.text, key: environment.precipitation.probability, title: {text: Rain}, display: {precision: 0, valueLabel: {color: $info}}}
+      props:
+        group: cloud
+        font: Roboto Mono
+        items:
+        - {type: realtime.text, key: environment.visibility, title: {text: Visible mi}, display: {precision: 0}}
+        - {type: realtime.text, key: 'avg($cc, today)', title: {text: Avg today}, display: {precision: 0}}
+        - {type: realtime.text, key: 'max($cc, today)', title: {text: Peak}, display: {precision: 0}}
+        - {type: realtime.text, key: environment.precipitation.probability, title: {text: Rain}, display: {precision: 0, valueLabel: {color: $info}}}
 
   # ================= THE DAY, LAYERED ======================================
   - type: graph
@@ -449,14 +383,11 @@ items:
         font: $display
         color: $muted
         geometry: {x: 0%, y: 86%, width: 100%, height: 10%}
-    - type: titled-group
+    - preset: list-panel
       name: aloft
       size: 26%
-      title: {text: Aloft, height: 0.5cm, color: $muted}
-      items:
-      - type: value-stack
-        shared:
-          title: {color: $muted}
+      props:
+        title: Aloft
         spacing: 0.4mm
         items:
         - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Surface}, display: {precision: 0}}
@@ -496,15 +427,14 @@ items:
           indoor.temperature.temperature#terrarium:
             plot: {type: plot, gradient: TemperatureGradient, weight: 0.5}
         geometry: {x: 0%, y: 38%, width: 100%, height: 22%}
-      - type: value-stack
-        shared:
-          title: {color: $muted}
+      - preset: reading-list
         geometry: {x: 0%, y: 62%, width: 100%, height: 38%}
-        spacing: 0.4mm
-        items:
-        - {type: realtime.text, key: 'indoor.temperature.dewpoint#terrarium', title: {text: Terr. dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
-        - {type: realtime.text, key: 'indoor.temperature.temperature#bedroom', title: {text: Bedroom}, display: {precision: 0}}
-        - {type: realtime.text, key: 'indoor.humidity.humidity#bedroom', title: {text: Bedroom RH}, display: {precision: 0, valueLabel: {color: $info}}}
+        props:
+          spacing: 0.4mm
+          items:
+          - {type: realtime.text, key: 'indoor.temperature.dewpoint#terrarium', title: {text: Terr. dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
+          - {type: realtime.text, key: 'indoor.temperature.temperature#bedroom', title: {text: Bedroom}, display: {precision: 0}}
+          - {type: realtime.text, key: 'indoor.humidity.humidity#bedroom', title: {text: Bedroom RH}, display: {precision: 0, valueLabel: {color: $info}}}
 
   # What the lines in the day graph are.
   - type: group

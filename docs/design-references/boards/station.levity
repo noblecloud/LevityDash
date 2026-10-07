@@ -65,17 +65,16 @@ items:
           unitPosition: Inline
           valueLabel: {margins: 2%}
         geometry: {x: 0%, y: 0%, width: 58%, height: 52%}
-      - type: value-stack
-        shared:
-          title: {color: $muted}
+      - preset: reading-list
         geometry: {x: 60%, y: 3%, width: 40%, height: 49%}
-        spacing: 0.6mm
-        items:
-        - environment.temperature.feelsLike: {title: {text: Feels}, display: {valueLabel: {color: $accent}}}
-        - environment.temperature.dewpoint:  {title: {text: Dew pt}, display: {valueLabel: {color: $good}}}
-        - environment.temperature.heatIndex: {title: {text: Heat idx}}
-        - environment.humidity.humidity:     {title: {text: Humidity}}
-        - environment.temperature.wetBulb:   {title: {text: Wet bulb}}
+        props:
+          spacing: 0.6mm
+          items:
+          - environment.temperature.feelsLike: {title: {text: Feels}, display: {valueLabel: {color: $accent}}}
+          - environment.temperature.dewpoint:  {title: {text: Dew pt}, display: {valueLabel: {color: $good}}}
+          - environment.temperature.heatIndex: {title: {text: Heat idx}}
+          - environment.humidity.humidity:     {title: {text: Humidity}}
+          - environment.temperature.wetBulb:   {title: {text: Wet bulb}}
       - type: realtime.bar
         key: $t
         title: false
@@ -93,55 +92,31 @@ items:
           - {value: max($t, today), type: line, color: $bad}
           major: {interval: 10, side: after, labels: true}
           value-label: {visible: false}
-      - type: value-stack
-        shared:
-          title: {color: $muted, matchingGroup: {group: rowTitle@temperature, matchAll: true}}
-          display:
-            unitPosition: Hidden
-            valueLabel: {matchingGroup: {group: rowValue@temperature, matchAll: true}}
-        direction: Horizontal
+      - preset: stat-row
         geometry: {x: 0%, y: 78%, width: 100%, height: 22%}
-        spacing: 1mm
-        items:
-        - {type: realtime.text, key: 'min($t, today)', title: {text: Low}, display: {valueLabel: {color: $info}}}
-        - {type: realtime.text, key: 'max($t, today)', title: {text: High}, display: {valueLabel: {color: $bad}}}
-        - {type: realtime.text, key: '$t - at($t, -1h)', title: {text: 1 hr}, display: {valueLabel: {color: $warn}}}
-        - {type: realtime.text, key: 'avg($t, today)', title: {text: Avg}}
+        props:
+          group: temperature
+          items:
+          - {type: realtime.text, key: 'min($t, today)', title: {text: Low}, display: {valueLabel: {color: $info}}}
+          - {type: realtime.text, key: 'max($t, today)', title: {text: High}, display: {valueLabel: {color: $bad}}}
+          - {type: realtime.text, key: '$t - at($t, -1h)', title: {text: 1 hr}, display: {valueLabel: {color: $warn}}}
+          - {type: realtime.text, key: 'avg($t, today)', title: {text: Avg}}
 
     # Wind: a compass whose middle is the speed, gust and peak beside it.
     - type: group
       name: wind
       size: 21%
       items:
-      - type: realtime.gauge
-        key: environment.wind.direction.direction
-        title: false
+      - preset: compass
         geometry: {x: 0%, y: 0%, width: 100%, height: 72%}
-        display:
-          radius: 92%
-          arc: {start-angle: 0, end-angle: 360, weight: 3%, color: $rule}
-          range: {min: 0, max: 360, wrap: true}
-          major: {interval: 90, length: 8%, width: 2px, color: $faint, labels: {position: inside, offset: 4%, height: 9%, rotate: false, text: compass}}
-          minor: {interval: 22.5, length: 40%, width: 1px, color: $rule}
-          micro: {enabled: false}
-          needle: {type: arrow, length: 34%, width: 2.4%, head: 12%, tail: 28%, tail-dot: 5%, color: $accent}
-          value-label: {visible: false}
-          unit-label: {visible: false}
-          caption: {value: $ws, format: {precision: 0, show_unit: false}, size: 17%, gap: 0%, color: $text}
-          sub-label: {text: mph, size: 6.5%, gap: 1%}
-      - type: value-stack
-        shared:
-          title: {color: $muted, matchingGroup: {group: rowTitle@wind, matchAll: true}}
-          display:
-            unitPosition: Hidden
-            valueLabel: {matchingGroup: {group: rowValue@wind, matchAll: true}}
-        direction: Horizontal
+      - preset: stat-row
         geometry: {x: 0%, y: 76%, width: 100%, height: 24%}
-        spacing: 1mm
-        items:
-        - {type: realtime.text, key: $wg, title: {text: Gust}, display: {valueLabel: {color: $accent}}}
-        - {type: realtime.text, key: 'max($wg, today)', title: {text: Peak}, display: {valueLabel: {color: $bad}}}
-        - {type: realtime.text, key: 'avg($ws, 3h)', title: {text: Avg 3h}}
+        props:
+          group: wind
+          items:
+          - {type: realtime.text, key: $wg, title: {text: Gust}, display: {valueLabel: {color: $accent}}}
+          - {type: realtime.text, key: 'max($wg, today)', title: {text: Peak}, display: {valueLabel: {color: $bad}}}
+          - {type: realtime.text, key: 'avg($ws, 3h)', title: {text: Avg 3h}}
 
     # Rain and pressure: the chance now, what is due, and the slope that says
     # whether it is coming.
@@ -158,49 +133,40 @@ items:
           unitPosition: Inline
           valueLabel: {color: $info}
         geometry: {x: 0%, y: 0%, width: 48%, height: 38%}
-      - type: value-stack
-        shared:
-          title: {color: $muted}
+      - preset: reading-list
         geometry: {x: 50%, y: 2%, width: 50%, height: 38%}
-        spacing: 0.5mm
-        items:
-        - {type: realtime.text, key: 'max($prob, today)', title: {text: Peak}, display: {precision: 0, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: $rain, title: {text: Rate}}
-        - environment.precipitation.daily: {title: {text: Due today}}
-        - environment.yesterday.precipitation.precipitation: {title: {text: Yesterday}}
+        props:
+          spacing: 0.5mm
+          items:
+          - {type: realtime.text, key: 'max($prob, today)', title: {text: Peak}, display: {precision: 0, valueLabel: {color: $info}}}
+          - {type: realtime.text, key: $rain, title: {text: Rate}}
+          - environment.precipitation.daily: {title: {text: Due today}}
+          - environment.yesterday.precipitation.precipitation: {title: {text: Yesterday}}
       - type: realtime.text
         key: $pres
         title: {text: Pressure, height: 18%, color: $muted}
         display:
           unitPosition: FloatUnder
         geometry: {x: 0%, y: 44%, width: 48%, height: 34%}
-      - type: mini-graph
-        timeframe: {hours: 12}
-        annotations:
-          dayLabels: {enabled: false}
-          hourLabels: {enabled: false}
-        indicator: {color: white, opacity: 0.3}
-        margins: {top: 14%, bottom: 10%}
-        figures:
-        - figure: pressure
+      - preset: sparkline
+        geometry: {x: 50%, y: 46%, width: 50%, height: 32%}
+        props:
+          hours: 12
+          figure: pressure
           min: 29.9
           max: 30.1
-          environment.pressure.pressure:
-            plot: {type: plot, color: '#ff9124', weight: 0.5}
-        geometry: {x: 50%, y: 46%, width: 50%, height: 32%}
-      - type: value-stack
-        shared:
-          title: {color: $muted, matchingGroup: {group: rowTitle@rain, matchAll: true}}
-          display:
-            unitPosition: Hidden
-            valueLabel: {matchingGroup: {group: rowValue@rain, matchAll: true}}
-        direction: Horizontal
+          key: environment.pressure.pressure
+          plot: {type: plot, color: '#ff9124', weight: 0.5}
+          top: 14%
+          bottom: 10%
+      - preset: stat-row
         geometry: {x: 0%, y: 80%, width: 100%, height: 20%}
-        spacing: 1mm
-        items:
-        - {type: realtime.text, key: '$pres - at($pres, -3h)', title: {text: 3 hr}, display: {valueLabel: {color: $accent}}}
-        - {type: realtime.text, key: 'min($pres, today)', title: {text: Low}}
-        - {type: realtime.text, key: 'max($pres, today)', title: {text: High}}
+        props:
+          group: rain
+          items:
+          - {type: realtime.text, key: '$pres - at($pres, -3h)', title: {text: 3 hr}, display: {valueLabel: {color: $accent}}}
+          - {type: realtime.text, key: 'min($pres, today)', title: {text: Low}}
+          - {type: realtime.text, key: 'max($pres, today)', title: {text: High}}
 
     # The slot: lightning when a strike is within 10 mi, otherwise UV and sky
     # take turns.
@@ -209,36 +175,32 @@ items:
       cycle: 20s
       fade: 0.4s
       items:
-      - type: group
+      - preset: callout
         name: lightning
         when: environment.lightning.distance < 10mi
-        items:
-        - type: realtime.text
+        props:
           key: environment.lightning.distance
-          title: {text: Lightning, height: 14%, color: $bad}
-          display: {font: Nunito, unitPosition: Inline, valueLabel: {color: $warn}}
-          geometry: {x: 0%, y: 0%, width: 100%, height: 50%}
-        - type: value-stack
-          shared:
-            title: {color: $muted}
-          geometry: {x: 0%, y: 54%, width: 100%, height: 46%}
+          title: Lightning
+          title_color: $bad
+          title_height: 14%
+          color: $warn
+          hero_box: {x: 0%, y: 0%, width: 100%, height: 50%}
+          list_box: {x: 0%, y: 54%, width: 100%, height: 46%}
           items:
           - environment.lightning.count: {title: {text: Strikes}}
           - environment.precipitation.precipitation: {title: {text: Rain rate}}
           - environment.wind.speed.gust: {title: {text: Gust}}
-      - type: group
+      - preset: callout
         name: rain-now
         when: '$rain > 0'
-        items:
-        - type: realtime.text
+        props:
           key: $rain
-          title: {text: Raining, height: 14%, color: $info}
-          display: {font: Nunito, unitPosition: Inline, valueLabel: {color: $info}}
-          geometry: {x: 0%, y: 0%, width: 100%, height: 50%}
-        - type: value-stack
-          shared:
-            title: {color: $muted}
-          geometry: {x: 0%, y: 54%, width: 100%, height: 46%}
+          title: Raining
+          title_color: $info
+          title_height: 14%
+          color: $info
+          hero_box: {x: 0%, y: 0%, width: 100%, height: 50%}
+          list_box: {x: 0%, y: 54%, width: 100%, height: 46%}
           items:
           - environment.precipitation.daily: {title: {text: Today}}
           - {type: realtime.text, key: 'max($rain, 1h)', title: {text: Peak 1h}}
@@ -269,29 +231,25 @@ items:
             value-label: {position: center, size: 22%}
             unit-label: {visible: false}
             sub-label: {text: UV index, size: 7%}
-        - type: value-stack
-          shared:
-            title: {color: $muted}
+        - preset: reading-list
           geometry: {x: 0%, y: 64%, width: 100%, height: 36%}
-          spacing: 0.5mm
-          items:
-          - {type: realtime.text, key: 'max($uv, today)', title: {text: Peak}}
-          - {type: realtime.text, key: 'at($uv, 1h)', title: {text: UV +1h}}
-          - {type: realtime.text, key: 'at($uv, 3h)', title: {text: UV +3h}}
-          - environment.light.irradiance.irradiance: {title: {text: Sun}}
-          - environment.light.illuminance: {title: {text: Light}}
-      - type: group
+          props:
+            spacing: 0.5mm
+            items:
+            - {type: realtime.text, key: 'max($uv, today)', title: {text: Peak}}
+            - {type: realtime.text, key: 'at($uv, 1h)', title: {text: UV +1h}}
+            - {type: realtime.text, key: 'at($uv, 3h)', title: {text: UV +3h}}
+            - environment.light.irradiance.irradiance: {title: {text: Sun}}
+            - environment.light.illuminance: {title: {text: Light}}
+      - preset: callout
         name: sky
-        items:
-        - type: realtime.text
+        props:
           key: environment.clouds.cover.cover
-          title: {text: Cloud, height: 14%, color: $muted}
-          display: {font: Nunito, unitPosition: Inline, precision: 0}
-          geometry: {x: 0%, y: 0%, width: 100%, height: 34%}
-        - type: value-stack
-          shared:
-            title: {color: $muted}
-          geometry: {x: 0%, y: 40%, width: 100%, height: 60%}
+          title: Cloud
+          title_height: 14%
+          precision: 0
+          hero_box: {x: 0%, y: 0%, width: 100%, height: 34%}
+          list_box: {x: 0%, y: 40%, width: 100%, height: 60%}
           items:
           - environment.clouds.cover.low:  {title: {text: Low}, display: {precision: 0}}
           - environment.clouds.cover.mid:  {title: {text: Mid}, display: {precision: 0}}
@@ -315,41 +273,23 @@ items:
     items:
 
     # Bedroom: the hero, its day against the outdoor line, then the readings.
-    - type: titled-group
+    - preset: room-card
       name: indoor
       size: 31%
-      title: {text: Indoor, height: 0.5cm, color: $muted}
-      items:
-      - type: realtime.text
+      props:
+        title: Indoor
         key: indoor.temperature.temperature#bedroom
-        title: false
-        display: {font: Nunito, unitPosition: Inline}
-        geometry: {x: 0%, y: 0%, width: 40%, height: 58%}
-      - type: mini-graph
-        timeframe: {hours: 24}
-        annotations:
-          dayLabels: {enabled: false}
-          hourLabels: {enabled: false}
-        indicator: {color: white, opacity: 0.3}
-        margins: {top: 8%, bottom: 8%}
-        figures:
-        - figure: temperature
-          min: 60
-          max: 90
-          environment.temperature.temperature:
+        graph:
+          preset: sparkline
+          geometry: {x: 42%, y: 0%, width: 58%, height: 58%}
+          props:
+            min: 60
+            max: 90
+            key: environment.temperature.temperature
             plot: {type: plot, color: '#8b8f98', weight: 0.25, dashPattern: '2, 3'}
-          indoor.temperature.temperature#bedroom:
-            plot: {type: plot, gradient: TemperatureGradient, weight: 0.5}
-        geometry: {x: 42%, y: 0%, width: 58%, height: 58%}
-      - type: value-stack
-        shared:
-          title: {color: $muted, matchingGroup: {group: rowTitle@indoor, matchAll: true}}
-          display:
-            unitPosition: Hidden
-            valueLabel: {matchingGroup: {group: rowValue@indoor, matchAll: true}}
-        direction: Horizontal
-        spacing: 1mm
-        geometry: {x: 0%, y: 62%, width: 100%, height: 38%}
+            key2: indoor.temperature.temperature#bedroom
+            plot2: {type: plot, gradient: TemperatureGradient, weight: 0.5}
+        group: indoor
         items:
         - {type: realtime.text, key: indoor.humidity.humidity#bedroom, title: {text: Humid}, display: {precision: 0, valueLabel: {color: $info}}}
         - {type: realtime.text, key: indoor.temperature.dewpoint#bedroom, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
@@ -359,47 +299,39 @@ items:
 
     # Terrarium: temperature and humidity side by side, since humidity is the
     # one the plants care about. The graph puts both on one day.
-    - type: titled-group
+    - preset: room-card
       name: terrarium
       size: 37%
-      title: {text: Terrarium, height: 0.5cm, color: $good}
-      items:
-      - type: realtime.text
+      props:
+        title: Terrarium
+        title_color: $good
         key: indoor.temperature.temperature#terrarium
-        title: false
-        display: {font: Nunito, unitPosition: Inline}
-        geometry: {x: 0%, y: 0%, width: 31%, height: 58%}
-      - type: realtime.text
-        key: indoor.humidity.humidity#terrarium
-        title: false
-        display: {font: Nunito, unitPosition: Inline, precision: 0, valueLabel: {color: $info}}
-        geometry: {x: 32%, y: 0%, width: 30%, height: 58%}
-      - type: mini-graph
-        timeframe: {hours: 24}
-        annotations:
-          dayLabels: {enabled: false}
-          hourLabels: {enabled: false}
-        indicator: {color: white, opacity: 0.3}
-        margins: {top: 8%, bottom: 8%}
-        figures:
-        - figure: humidity
-          indoor.humidity.humidity#terrarium:
-            plot: {type: plot, color: '#1a8cff', weight: 0.4}
-        - figure: temperature
-          min: 70
-          max: 90
-          indoor.temperature.temperature#terrarium:
-            plot: {type: plot, gradient: TemperatureGradient, weight: 0.5}
-        geometry: {x: 64%, y: 0%, width: 36%, height: 58%}
-      - type: value-stack
-        shared:
-          title: {color: $muted, matchingGroup: {group: rowTitle@terrarium, matchAll: true}}
-          display:
-            unitPosition: Hidden
-            valueLabel: {matchingGroup: {group: rowValue@terrarium, matchAll: true}}
-        direction: Horizontal
-        spacing: 1mm
-        geometry: {x: 0%, y: 62%, width: 100%, height: 38%}
+        hero_box: {x: 0%, y: 0%, width: 31%, height: 58%}
+        extra:
+          type: realtime.text
+          key: indoor.humidity.humidity#terrarium
+          title: false
+          display: {font: Nunito, unitPosition: Inline, precision: 0, valueLabel: {color: $info}}
+          geometry: {x: 32%, y: 0%, width: 30%, height: 58%}
+        graph:
+          type: mini-graph
+          timeframe: {hours: 24}
+          annotations:
+            dayLabels: {enabled: false}
+            hourLabels: {enabled: false}
+          indicator: {color: white, opacity: 0.3}
+          margins: {top: 8%, bottom: 8%}
+          figures:
+          - figure: humidity
+            indoor.humidity.humidity#terrarium:
+              plot: {type: plot, color: '#1a8cff', weight: 0.4}
+          - figure: temperature
+            min: 70
+            max: 90
+            indoor.temperature.temperature#terrarium:
+              plot: {type: plot, gradient: TemperatureGradient, weight: 0.5}
+          geometry: {x: 64%, y: 0%, width: 36%, height: 58%}
+        group: terrarium
         items:
         - {type: realtime.text, key: indoor.temperature.dewpoint#terrarium, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
         - {type: realtime.text, key: indoor.temperature.heatIndex#terrarium, title: {text: Heat idx}, display: {precision: 0}}
@@ -416,108 +348,81 @@ items:
       fade: 0.4s
       hold: 10s
       items:
-      - type: group
+      - preset: callout
         name: heat
         when: 'environment.temperature.heatIndex > 90°F'
-        items:
-        - type: realtime.text
-          key: 'environment.temperature.heatIndex'
-          title: {text: Heat, height: 18%, color: $bad}
-          display: {font: Nunito, unitPosition: Inline, valueLabel: {color: $bad}}
-          geometry: {x: 0%, y: 0%, width: 38%, height: 100%}
-        - type: value-stack
-          shared:
-            title: {color: $muted}
+        props:
+          key: environment.temperature.heatIndex
+          title: Heat
+          title_color: $bad
+          color: $bad
           spacing: 0.4mm
-          geometry: {x: 40%, y: 0%, width: 60%, height: 100%}
           items:
           - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels}, display: {valueLabel: {color: $accent}}}
           - environment.temperature.wetBulb: {title: {text: Wet bulb}}
           - {type: realtime.text, key: $uv, title: {text: UV}}
           - {type: realtime.text, key: 'max(environment.temperature.heatIndex, today)', title: {text: Peak}}
-      - type: group
+      - preset: callout
         name: storms
         when: 'at($prob, 2h) > 60%'
-        items:
-        - type: realtime.text
-          key: 'at($prob, 2h)'
-          title: {text: Storms ahead, height: 18%, color: $info}
-          display: {font: Nunito, unitPosition: Inline, precision: 0, valueLabel: {color: $info}}
-          geometry: {x: 0%, y: 0%, width: 38%, height: 100%}
-        - type: value-stack
-          shared:
-            title: {color: $muted}
+        props:
+          key: at($prob, 2h)
+          title: Storms ahead
+          title_color: $info
+          color: $info
+          precision: 0
           spacing: 0.4mm
-          geometry: {x: 40%, y: 0%, width: 60%, height: 100%}
           items:
           - {type: realtime.text, key: 'at($rain, 2h)', title: {text: Rate +2h}}
           - {type: realtime.text, key: 'at($wg, 2h)', title: {text: Gust +2h}, display: {valueLabel: {color: $accent}}}
           - {type: realtime.text, key: '$pres - at($pres, -3h)', title: {text: Press 3h}}
           - {type: realtime.text, key: environment.lightning.distance, title: {text: Strike}}
-      - type: group
+      - preset: callout
         name: terrarium-dry
         when: 'indoor.humidity.humidity#terrarium < 70%'
-        items:
-        - type: realtime.text
-          key: 'indoor.humidity.humidity#terrarium'
-          title: {text: Terrarium dry, height: 18%, color: $warn}
-          display: {font: Nunito, unitPosition: Inline, precision: 0, valueLabel: {color: $warn}}
-          geometry: {x: 0%, y: 0%, width: 38%, height: 100%}
-        - type: value-stack
-          shared:
-            title: {color: $muted}
+        props:
+          key: indoor.humidity.humidity#terrarium
+          title: Terrarium dry
+          title_color: $warn
+          color: $warn
+          precision: 0
           spacing: 0.4mm
-          geometry: {x: 40%, y: 0%, width: 60%, height: 100%}
           items:
           - {type: realtime.text, key: 'min(indoor.humidity.humidity#terrarium, today)', title: {text: Low}, display: {precision: 0}}
           - {type: realtime.text, key: indoor.temperature.temperature#terrarium, title: {text: Temp}}
-      - type: group
+      - preset: callout
         name: terrarium-hot
         when: 'indoor.temperature.temperature#terrarium > 86°F'
-        items:
-        - type: realtime.text
-          key: 'indoor.temperature.temperature#terrarium'
-          title: {text: Terrarium hot, height: 18%, color: $bad}
-          display: {font: Nunito, unitPosition: Inline, valueLabel: {color: $bad}}
-          geometry: {x: 0%, y: 0%, width: 38%, height: 100%}
-        - type: value-stack
-          shared:
-            title: {color: $muted}
+        props:
+          key: indoor.temperature.temperature#terrarium
+          title: Terrarium hot
+          title_color: $bad
+          color: $bad
           spacing: 0.4mm
-          geometry: {x: 40%, y: 0%, width: 60%, height: 100%}
           items:
           - {type: realtime.text, key: indoor.humidity.humidity#terrarium, title: {text: Humid}, display: {precision: 0}}
           - {type: realtime.text, key: 'max(indoor.temperature.temperature#terrarium, today)', title: {text: High}}
-      - type: group
+      - preset: callout
         name: battery
         when: 'indoor.battery.battery#terrarium < 20%'
-        items:
-        - type: realtime.text
-          key: 'indoor.battery.battery#terrarium'
-          title: {text: Sensor battery, height: 18%, color: $warn}
-          display: {font: Nunito, unitPosition: Inline, precision: 0, valueLabel: {color: $warn}}
-          geometry: {x: 0%, y: 0%, width: 38%, height: 100%}
-        - type: value-stack
-          shared:
-            title: {color: $muted}
+        props:
+          key: indoor.battery.battery#terrarium
+          title: Sensor battery
+          title_color: $warn
+          color: $warn
+          precision: 0
           spacing: 0.4mm
-          geometry: {x: 40%, y: 0%, width: 60%, height: 100%}
           items:
           - {type: realtime.text, key: indoor.battery.battery#bedroom, title: {text: Bedroom}, display: {precision: 0}}
           - {type: realtime.text, key: indoor.battery.battery#terrarium, title: {text: Terrarium}, display: {precision: 0, valueLabel: {color: $warn}}}
-      - type: group
+      - preset: callout
         name: inside-out
-        items:
-        - type: realtime.text
-          key: 'indoor.temperature.temperature#bedroom - $t'
-          title: {text: Inside vs out, height: 18%, color: $muted}
-          display: {font: Nunito, unitPosition: Inline, precision: 0, valueLabel: {color: $info}}
-          geometry: {x: 0%, y: 0%, width: 38%, height: 100%}
-        - type: value-stack
-          shared:
-            title: {color: $muted}
+        props:
+          key: indoor.temperature.temperature#bedroom - $t
+          title: Inside vs out
+          color: $info
+          precision: 0
           spacing: 0.4mm
-          geometry: {x: 40%, y: 0%, width: 60%, height: 100%}
           items:
           - {type: realtime.text, key: 'indoor.temperature.dewpoint#bedroom - environment.temperature.dewpoint', title: {text: Dew pt}, display: {precision: 0}}
           - {type: realtime.text, key: 'indoor.temperature.heatIndex#bedroom - environment.temperature.heatIndex', title: {text: Heat idx}, display: {precision: 0}}
@@ -571,14 +476,12 @@ items:
           plot: {type: plot, color: '#1a8cff', weight: 0.4}
 
     # What the next hours bring, read straight off the forecast.
-    - type: titled-group
+    - preset: list-panel
       name: ahead
       size: 18%
-      title: {text: Ahead, height: 0.5cm}
-      items:
-      - type: value-stack
-        shared:
-          title: {color: $muted}
+      props:
+        title: Ahead
+        title_color: null
         spacing: 0.5mm
         items:
         - {type: realtime.text, key: 'at($t, 1h)', title: {text: Temp +1h}}
