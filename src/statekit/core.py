@@ -2400,8 +2400,9 @@ class Stateful(metaclass=StatefulMetaclass):
 						encodedValue = prop.encodeValue(value, self)
 						if sharedValue == encodedValue:
 							continue
-					else:
-						raise TypeError(f'Failed parsing Shared Value')
+					elif isinstance(value, Enum) and isinstance(sharedValue, str) and sharedValue.lower() in {str(value.name).lower(), str(value.value).lower()}:
+						continue  # shared holds the text as written ('Hidden'); the live value is its enum
+					# Anything else cannot be compared with the shared value: write the value, never abort the save.
 				elif isinstance(value, Stateful) and value.state == sharedValue:
 					continue
 				elif sharedValue is not None and prop.encodeValue(sharedValue, self) == value:
@@ -2538,7 +2539,8 @@ class Stateful(metaclass=StatefulMetaclass):
 			case set(d):
 				return dumper.represent_set(d)
 			case _:
-				raise NotImplementedError
+				# A `singleVal` state can be a value with a representer of its own (a Color): let the dumper find it.
+				return dumper.represent_data(state)
 
 	@classmethod
 	def loader(cls, loader: StatefulLoader, data):
