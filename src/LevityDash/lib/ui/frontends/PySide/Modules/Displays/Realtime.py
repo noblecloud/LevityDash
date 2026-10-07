@@ -96,6 +96,17 @@ class Realtime(Panel, tag='realtime'):
 		# A display that is not the plain kind of its `displayType` (a bar reports `gauge`) names itself.
 		return getattr(self.display, 'subtag', None) or self.display.displayType.value
 
+	@StateProperty(key='type')
+	def type(self) -> str:
+		"""`realtime.text`, `realtime.gauge`, `realtime.bar`, so a save loads back as the same display. Plain `realtime` picks the display from the key's data, which is wrong for a text over a time or a duration."""
+		tag = type(self).__tag__
+		subtag = self.subtag if tag == 'realtime' and getattr(self, 'display', None) is not None else None
+		return f'{tag}.{subtag}' if subtag else tag
+
+	@type.condition(method='get')
+	def type(self, value: str) -> bool:
+		return value not in {..., None, Stateful, 'Stateful'}
+
 	# Section Realtime
 	def __init__(self, parent: Panel, **kwargs):
 		self.__connectedContainer: Container | None = None
@@ -1021,7 +1032,7 @@ class MeasurementDisplayProperties(Stateful):
 
 	@maxLength.condition
 	def maxLength(self) -> bool:
-		return getattr(self, '__maxLength', Unset) is not Unset
+		return self.__maxLength is not Unset
 
 	@maxLength.setter
 	def maxLength(self, value: int):
@@ -1039,7 +1050,7 @@ class MeasurementDisplayProperties(Stateful):
 
 	@precision.condition(method={'get'})
 	def precision(self) -> bool:
-		return getattr(self, '__precision', Unset) is not Unset
+		return self.__precision is not Unset
 
 	@StateProperty(default=LocationFlag.Horizontal, allowNone=False)
 	def splitDirection(self) -> LocationFlag:
@@ -1336,7 +1347,10 @@ class MeasurementDisplayProperties(Stateful):
 
 	@StateProperty(key='null', default=None, after=updateLabels)
 	def nullValue(self) -> str | None:
-		return getattr(self, '__null', None)
+		try:
+			return self.__null
+		except AttributeError:
+			return None
 
 	@nullValue.setter
 	def nullValue(self, value: str | None):
