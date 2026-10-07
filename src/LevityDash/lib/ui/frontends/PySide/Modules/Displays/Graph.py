@@ -838,6 +838,10 @@ class GraphItemData(Stateful, tag=...):
 		axis = axis or Axis.Both
 
 		if values is not None:
+			values = list(values)
+			if not values:
+				empty = np.empty(0, dtype='f4')
+				return (empty if axis.X & Axis.X else None), (empty if axis.Y & Axis.Y else None)
 			if any(isinstance(i, TimeAwareValue) for i in values):
 				x = {'iter': (int(i.timestamp.timestamp()) for i in values), 'dtype': 'i4'}
 				y = {'iter': (float(i.value) for i in values), 'dtype': 'f4'}
@@ -2798,7 +2802,8 @@ class PlotLabels(GraphAnnotationLabels[PlotLabel]):
 	def _intercept_peaks_troughs(self, peaks_troughs: List[TimeAwareValue], callback: Callable = None):
 		log.verbose(f'{self.log_repr}: Received peaks and troughs ({(p_len := len([i for i in peaks_troughs if i.isPeak]))} peaks, {len(peaks_troughs) - p_len} troughs)')
 		# merged: List = sorted([x for x in chain.from_iterable(zip_longest(peaks, troughs)) if x is not None], key=lambda x: x.timestamp)[1:-1]
-		peaks_troughs.pop(-1)
+		if peaks_troughs:
+			peaks_troughs.pop(-1)
 		self.data = peaks_troughs
 		self.waiting_for_data = False
 		if callback is not None:
