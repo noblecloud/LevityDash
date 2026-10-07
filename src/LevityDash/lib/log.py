@@ -623,6 +623,30 @@ class _LevityLogger(logging.Logger):
 		if 'all' in handler:
 			self.setLevel(level, 'console', 'file', 'status-bar')
 
+	#: What the Logs menu offers, loudest last.
+	RUNTIME_LEVELS = (('Error', 40), ('Warning', 30), ('Info', 20), ('Debug', 10), ('Verbose', 5))
+
+	@classmethod
+	def _handlerFor(cls, target: str) -> logging.Handler:
+		return {'log': cls.fileHandler, 'status-bar': cls.statusBarHandler}[target]
+
+	@classmethod
+	def runtimeLevel(cls, target: str) -> int:
+		"""The level `target` ('log' or 'status-bar') filters at now."""
+		return cls._handlerFor(target).level
+
+	@classmethod
+	def setRuntimeLevel(cls, target: str, level: int) -> None:
+		"""Change a level while the app runs. Lasts until restart; nothing is saved.
+
+		'log' sets the log file and the console together. The root logger drops to
+		the lowest level any handler wants, or those records would never reach it.
+		"""
+		handlers = [cls.fileHandler, cls.consoleHandler] if target == 'log' else [cls._handlerFor(target)]
+		for handler in handlers:
+			handler.setLevel(level)
+		logging.getLogger().setLevel(min(cls.fileHandler.level, cls.consoleHandler.level, cls.statusBarHandler.level))
+
 	def setVerbosity(self, level: int):
 		self.fileHandler.setLevel(5 - level)
 		self.__config__['verbosity'] = str(level)
