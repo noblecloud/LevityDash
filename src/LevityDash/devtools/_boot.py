@@ -87,11 +87,17 @@ def freeze_time(when: Optional[datetime] = None) -> dict:
 	# `from ...shared import now` COPIES the function into a module's namespace at
 	# import time, so patching `shared.now` alone leaves every one of those
 	# reading the real clock. Derive the list by identity rather than naming
-	# modules: whatever holds the original function gets the frozen one.
+	# modules or attributes: whatever holds the original function, under any name
+	# (`polar/item.py` imports it `as localNow`), gets the frozen one. Matching
+	# only the name `now` left the polar plots on the wall clock against data
+	# stamped in the frozen day, so `polar-clock` rendered black.
 	for name, module in list(sys.modules.items()):
-		if name.startswith('LevityDash') and getattr(module, 'now', None) is original_now:
-			module.now = lambda: when
-			pinned[f'{name.split(".")[-1]}.now'] = True
+		if not name.startswith('LevityDash'):
+			continue
+		for attr, value in list(vars(module).items()):
+			if value is original_now:
+				setattr(module, attr, lambda: when)
+				pinned[f'{name.split(".")[-1]}.{attr}'] = True
 
 	try:
 		shared.Now.now = classmethod(lambda cls, **kw: when)
@@ -287,6 +293,22 @@ def startFixture(dashboard) -> None:
 	mock = dashboard.plugins.get('Mock', None)
 	if mock is not None and mock.enabled:
 		mock.thread.start()
+
+
+def shutdown(dashboard) -> None:
+	"""Stop every running plugin so a one-shot tool's process can exit.
+
+	A plugin that keeps running holds a worker thread in `run_until_complete`, and
+	the interpreter joins that thread when the script ends - the process then
+	hangs after it has written its PNG. The design seed switches `Mock` on and
+	`Mock` never finishes, so `render_widget.py` and `render_dashboard.py` sat
+	there for ever; `render_diff.py capture` only escaped because it stages a seed
+	with Mock off. Call this once the image is saved.
+	"""
+	try:
+		dashboard.plugins.stop()
+	except Exception as e:  # noqa: BLE001 - the render is done; do not fail it over teardown
+		print(f'plugin shutdown: {type(e).__name__}: {e}', file=sys.stderr)
 
 
 def pump(app, seconds: float) -> None:

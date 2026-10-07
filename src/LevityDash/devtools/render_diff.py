@@ -77,8 +77,10 @@ BASE_SCENARIOS = ('stormy-day', 'gauge-cards')
 #: plots `environment.temperature.feelsLike`, which `stormy-day` names without a
 #: series, so the series is taken from the scenario the preset asks for. Only a
 #: key a base scenario already names but leaves series-less is filled, so no other
-#: preset's values move.
-SERIES_SOURCES = ('hot-clear-day',)
+#: preset's values move. `polar-day` does the same for `polar-rose` and
+#: `polar-trail`: `stormy-day` names the wind direction as a bare value, so both
+#: drew an empty rose until its 24-point series was borrowed.
+SERIES_SOURCES = ('hot-clear-day', 'polar-day')
 
 SHOWCASE_SIZE = (2560, 1440)
 PRESET_SIZE = (1600, 900)
@@ -136,23 +138,16 @@ class Mask(NamedTuple):
 #: Nothing may be added here without a region that was measured, not guessed, and
 #: a stated condition for its removal.
 MASKS: Dict[str, Tuple[Mask, ...]] = {
-	'gauge-showcase': (
-		Mask(
-			'ev-caption', (172, 767, 237, 781), (2560, 1370),
-			'the EV caption prints its unit per capture - a Measurement gets "313 km", '
-			'a float gets "313", and it never re-formats. App-side; see '
-			'docs/tasks/meter-harness-status.md. Remove when fix/caption-unit-race merges.',
-		),
-	),
 	'emissive': (
 		Mask(
-			'graph-figure', (0, 450, 1480, 830), (1600, 830),
+			'graph-figure', (0, 494, 1269, 893), (1600, 900),
 			'the figure is drawn against the live clock, and this target has to keep its clock live: '
 			'freezing it collapses the series time range and Graph.py:862 divides by zero - the plot then '
 			'drifts between runs and about half of them exit SIGSEGV at shutdown, in upstream a31af10 exactly '
-			'as here (docs/tasks/emissive-upstream-check.md). Measured across three captures, what the live '
-			'clock moves is the plot band, the time-axis labels, and the strip between them - this box is '
-			'the figure and nothing else. The gauge glow paths this target is in the set for sit outside it. '
+			'as here (docs/tasks/emissive-upstream-check.md). Re-measured 2026-10-06 at the 1600x900 scene size '
+			'(union of every pair among three captures): the plot band x0-1269 y494-767 and the time-axis labels '
+			'x121-1144 y874-893. This box is those two and the empty strip between them, and nothing else. The '
+			'gauge glow paths this target is in the set for sit above y494, outside it. '
 			'Remove when the clock can be frozen without tripping that divide.',
 		),
 	),
