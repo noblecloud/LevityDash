@@ -121,7 +121,14 @@ def buildSchema(scenario: dict) -> tuple[dict, Dict[str, str]]:
 		spec = deepcopy(defaults.get(key, {}))
 		spec.update({k: v for k, v in entry.items() if k in ('type', 'sourceUnit', 'title', 'description', 'kwargs', 'dataKey', 'iconType', 'aliases')})
 		if 'unit' in entry:
-			spec['sourceUnit'] = entry['unit']
+			default = spec.get('sourceUnit')
+			if isinstance(entry['unit'], str) and isinstance(default, (list, tuple)) and len(default) == 2:
+				# A rate or a daily total (`['mm', 'day']`) keeps its time unit when the
+				# scenario names only the amount. A bare `in` made a plain inch, which
+				# the length localisation then turned into miles on some runs.
+				spec['sourceUnit'] = [entry['unit'], default[1]]
+			else:
+				spec['sourceUnit'] = entry['unit']
 		if 'sourceUnit' not in spec:
 			raise ValueError(f'{key}: no `unit`, and OpenMeteo does not publish this key')
 		spec.setdefault('type', 'measurement')
