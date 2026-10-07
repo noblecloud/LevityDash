@@ -605,4 +605,21 @@ userConfig = Config()
 pluginConfig = userConfig.plugins
 os.environ['WU_CONFIG_PATH'] = str(userConfig.path.absolute())
 
+
+def _applyUnitsConfig() -> None:
+	"""Make WeatherUnits use this config, whatever was imported first.
+
+	WeatherUnits reads `WU_CONFIG_PATH` once, when it is first imported. If anything
+	imported it before the line above, it kept its own default file, and whether a
+	value came out in the units this config asks for depended on import order and
+	thread timing. Reading the file explicitly removes the order from it.
+	"""
+	from WeatherUnits.config import config as unitsConfig
+	path = str(userConfig.path.absolute())
+	if str(unitsConfig.path) != path:
+		unitsConfig.read(path)
+
+
+_applyUnitsConfig()
+
 __all__ = ['userConfig', 'pluginConfig']
