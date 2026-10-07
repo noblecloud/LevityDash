@@ -172,3 +172,27 @@ def test_a_use_the_library_refuses_shows_its_reason(builder):
 	builder.given['max'] = 'lots'
 	builder.redraw()
 	assert 'max' in builder.status.text()
+
+
+def test_instance_fields_beyond_properties_are_stored_and_drawn(builder):
+	builder.openNamed('readout-bar')
+	builder.instanceTab.useEditors['geometry.x'].auto.setChecked(False)
+	builder.instanceTab.useEditors['geometry.x'].spin.setValue(20)
+	assert builder.fields == {'geometry': {'x': '20%'}}
+	assert 'geometry:\n    x: 20%' in builder.instanceTab.out.toPlainText()
+	builder.redraw()
+	assert builder.engine.drawn[-1][0]['items'][0]['geometry']['x'] == '20%'
+
+
+def test_a_range_property_gets_the_unit_selector_of_its_key(builder, monkeypatch):
+	builder.addItem('realtime.gauge')
+	monkeypatch.setattr(sb.QInputDialog, 'getText', staticmethod(lambda *a, **k: ('lo', True)))
+	builder.newPropFrom('display.range.min', 'any')
+	assert builder.piece.measuredKey('lo') == 'environment.temperature.temperature'
+	builder.instanceTab.load()
+	edit = builder.instanceTab.editors['lo']
+	assert isinstance(edit, sb.MeasuredEdit) and edit.unit.findData('\u00b0C') >= 0
+	edit.unit.setCurrentIndex(edit.unit.findData('\u00b0F'))
+	edit.unit.activated.emit(edit.unit.currentIndex())
+	assert builder.given['lo'] == '0\u00b0F'
+	assert 'lo: "0\u00b0F"' in builder.instanceTab.out.toPlainText() or "lo: 0\u00b0F" in builder.instanceTab.out.toPlainText()

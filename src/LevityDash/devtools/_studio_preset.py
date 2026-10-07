@@ -181,6 +181,17 @@ class Piece:
 			out.update(_without(fields, self.expanded(given)))
 		return out
 
+	def measuredKey(self, name: str, given: Optional[Dict[str, Any]] = None) -> Optional[str]:
+		"""The data key whose scale property `name` sets (`display.range.min` or `.max` on an item with a `key`), else None."""
+		values = {n: s.default for n, s in self.props.items()}
+		values.update(given or {})
+		for _, node in self.walk():
+			if any(wholeRef(getField(node, f)) == name for f in ('display.range.min', 'display.range.max')):
+				key = node.get('key')
+				ref = wholeRef(key)
+				return str(values.get(ref)) if ref in values else (key if isinstance(key, str) and not ref else None)
+		return None
+
 	# the tree
 
 	def node(self, path: Path) -> Optional[dict]:

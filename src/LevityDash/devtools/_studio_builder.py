@@ -41,6 +41,7 @@ from LevityDash.devtools import _studio_editors as editors
 from LevityDash.lib import presets as lib
 from LevityDash.devtools import _studio_preset as model
 from LevityDash.devtools import _studio_state as state
+from LevityDash.devtools._studio_stage import presetForKey
 from LevityDash.devtools._studio_chrome import THEMES, themePalette, themeSheet
 from LevityDash.devtools._studio_themes import ThemePicker
 from LevityDash.devtools._studio_widgets import Section
@@ -57,7 +58,7 @@ SETTLE_MS = 350
 #: The fields the Item tab edits, in order: (field, label, kind). `kind` picks the editor and the property type a `$` binds to.
 GEOMETRY = [('geometry.x', 'x', 'w'), ('geometry.y', 'y', 'h'), ('geometry.width', 'width', 'w'), ('geometry.height', 'height', 'h')]
 BINDABLE = {
-	'display.range.min': ('number', ('number',)), 'display.range.max': ('number', ('number',)),
+	'display.range.min': ('any', ('number', 'any')), 'display.range.max': ('any', ('number', 'any')),
 	'display.arc.gradient': ('text', ('text', 'color')),
 	'key': ('key', ('key', 'text')), 'text': ('text', ('text', 'key')), 'color': ('color', ('color', 'text')),
 	'direction': ('text', ('text',)), 'spacing': ('size', ('size',)),
@@ -151,6 +152,65 @@ class BoolEdit(Editor):
 
 	def value(self):
 		return self.check.isChecked()
+
+
+_MEASURED = re.compile(r'^\s*(-?\d+(?:\.\d+)?)\s*(.*?)\s*$')
+
+
+class MeasuredEdit(Editor):
+	"""A number on a data key's scale, with the unit selector the key allows.
+
+	With no unit chosen it writes a bare number, which the gauge reads in the unit it shows. With one chosen it writes
+	`32\u00b0F`, which it converts, so the file says what it means.
+	"""
+
+	def __init__(self, key: Optional[str] = None):
+		super().__init__()
+		box = QHBoxLayout(self)
+		box.setContentsMargins(0, 0, 0, 0)
+		self.number = numberEdit(0)
+		self.number.changed.connect(self._emit)
+		self.unit = QComboBox()
+		self.unit.setToolTip('The unit this number is in. "as shown" is a bare number, read in the unit the display shows.')
+		self.unit.activated.connect(self._emit)
+		box.addWidget(self.number, 1)
+		box.addWidget(self.unit)
+		self.setKey(key)
+
+	def setKey(self, key: Optional[str]):
+		current = self.unit.currentData()
+		names = list(presetForKey(key if isinstance(key, str) and '$' not in key else None).units)
+		with QSignalBlocker(self.unit):
+			self.unit.clear()
+			self.unit.addItem('as shown', '')
+			for name in names:
+				self.unit.addItem(name, name)
+			i = self.unit.findData(current or '')
+			self.unit.setCurrentIndex(max(i, 0))
+		self.unit.setVisible(bool(names))
+
+	def setValue(self, value):
+		text = '' if value is None else str(value)
+		m = _MEASURED.match(text)
+		if not m:
+			return
+		self.number.setValue(float(m.group(1)))
+		unit = m.group(2)
+		with QSignalBlocker(self.unit):
+			i = self.unit.findData(unit)
+			if i < 0 and unit:
+				self.unit.addItem(unit, unit)
+				i = self.unit.findData(unit)
+			self.unit.setCurrentIndex(max(i, 0))
+			self.unit.setVisible(self.unit.count() > 1)
+
+	def value(self):
+		n = self.number.value()
+		unit = self.unit.currentData()
+		return f'{n:g}{unit}' if unit else n
+
+	def isEditing(self) -> bool:
+		return self.number.isEditing()
 
 
 class AnyEdit(Editor):
@@ -264,8 +324,10 @@ def numberEdit(value: Any = 0, lo: Optional[float] = None, hi: Optional[float] =
 	return edit
 
 
-def editorFor(kind: str, spec: Optional[model.PropSpec] = None, ref: str = 'w') -> Editor:
+def editorFor(kind: str, spec: Optional[model.PropSpec] = None, ref: str = 'w', measured: Optional[str] = None) -> Editor:
 	"""The editor for a value of `kind`. A number and a size carry a slider; a size also carries its unit."""
+	if measured is not None and kind in ('number', 'any'):
+		return MeasuredEdit(measured)
 	if kind == 'number':
 		default = spec.default if spec else 0
 		return numberEdit(default, spec.lo if spec else None, spec.hi if spec else None)
@@ -354,9 +416,9 @@ class PreviewEngine:
 		self._boot.shutdown(self.dashboard)
 
 
-def previewDocument(piece: model.Piece, given: Dict[str, Any]) -> Tuple[List[dict], Dict[str, tuple]]:
+def previewDocument(piece: model.Piece, given: Dict[str, Any], fields: Optional[dict] = None) -> Tuple[List[dict], Dict[str, tuple]]:
 	"""The dashboard item list for the stage, and the temporary names that find each item again."""
-	root = piece.expanded(given)
+	root = lib.merge(piece.expanded(given), fields) if fields else piece.expanded(given)
 	names: Dict[str, tuple] = {}
 
 	def tag(node: dict, path: tuple):
@@ -599,7 +661,7 @@ class ItemTab(QWidget):
 			scale = Section('Scale', expanded=True)
 			self.layout_.addWidget(scale)
 			for field, label in (('display.range.min', 'min'), ('display.range.max', 'max')):
-				self._row(scale, field, label, numberEdit(model.getField(node, field)), value=model.getField(node, field))
+				self._row(scale, field, label, MeasuredEdit(self._keyOf(node)), value=model.getField(node, field))
 			if kind == 'realtime.gauge':
 				self._row(scale, 'display.arc.gradient', 'gradient', editors.ChoiceEdit([('$temperature', '$temperature'), ('$load', '$load')], editable=True),
 				          value=model.getField(node, 'display.arc.gradient'))
@@ -621,6 +683,15 @@ class ItemTab(QWidget):
 		rest = restOf(node)
 		self._row(more, '*', 'more', MoreEdit(), bindable=False, value=rest)
 		self.layout_.addStretch(1)
+
+	def _keyOf(self, node: dict) -> Optional[str]:
+		key = node.get('key')
+		ref = model.wholeRef(key)
+		if ref is None:
+			return key if isinstance(key, str) else None
+		given = self.builder.given.get(ref)
+		spec = self.builder.piece.props.get(ref)
+		return str(given if given is not None else spec.default if spec else '')
 
 	def _row(self, section: Section, field: str, label: str, editor: Editor, bindable: bool = True, value: Any = None):
 		row = FieldRow(field, label, editor, bindable)
@@ -645,7 +716,7 @@ class PropRow(QFrame):
 	renamed = Signal(str, str)
 	typed = Signal(str)
 
-	def __init__(self, spec: model.PropSpec):
+	def __init__(self, spec: model.PropSpec, measured: Optional[str] = None):
 		super().__init__()
 		self.spec = spec
 		self.setFrameShape(QFrame.Shape.StyledPanel)
@@ -666,7 +737,7 @@ class PropRow(QFrame):
 		top.addWidget(self.type)
 		top.addWidget(gone)
 		box.addLayout(top)
-		self.default = editorFor(spec.kind(), spec, 'full')
+		self.default = editorFor(spec.kind(), spec, 'full', measured)
 		self.default.setValue(spec.default)
 		self.default.changed.connect(self._default)
 		line = QHBoxLayout()
@@ -761,7 +832,7 @@ class PropsTab(QWidget):
 				w.setParent(None)
 				w.deleteLater()
 		for spec in self.builder.piece.props.values():
-			row = PropRow(spec)
+			row = PropRow(spec, self.builder.piece.measuredKey(spec.name, self.builder.given))
 			row.changed.connect(self.builder.propChanged)
 			row.removed.connect(self.builder.removeProp)
 			row.renamed.connect(self.builder.renameProp)
@@ -810,7 +881,7 @@ class InstanceTab(QWidget):
 			box = QHBoxLayout(row)
 			box.setContentsMargins(0, 0, 0, 0)
 			label = _label(name, spec.doc or name)
-			editor = editorFor(spec.kind(), spec, 'full')
+			editor = editorFor(spec.kind(), spec, 'full', piece.measuredKey(name, self.builder.given))
 			editor.setToolTip(spec.doc)
 			editor.setValue(self.builder.given.get(name, spec.default))
 			editor.changed.connect(lambda v, n=name: self.builder.setGiven(n, v))
@@ -825,19 +896,35 @@ class InstanceTab(QWidget):
 			self.editors[name] = editor
 		if not piece.props:
 			self.list.addWidget(QLabel('The preset has no properties, so an instance is just its name.'))
+		use = Section('This use: fields beyond the properties', expanded=True)
+		self.list.addWidget(use)
+		self.useEditors: Dict[str, Editor] = {}
+		for field, label, ref in GEOMETRY:
+			editor = editors.SizeEdit(nullable=True, ref=ref)
+			editor.setValue(model.getField(self.builder.fields, field))
+			editor.changed.connect(lambda v, f=field: self.builder.setUseField(f, v))
+			row = QWidget()
+			box = QHBoxLayout(row)
+			box.setContentsMargins(0, 0, 0, 0)
+			box.addWidget(_label(label, f'{field} on the instance, merged over the preset'))
+			box.addWidget(editor, 1)
+			use.addRow(row)
+			self.useEditors[field] = editor
 		self.list.addStretch(1)
 		self.refresh()
 
 	def sync(self):
 		piece = self.builder.piece
 		for name, editor in self.editors.items():
+			if isinstance(editor, MeasuredEdit):
+				editor.setKey(piece.measuredKey(name, self.builder.given))
 			if name in piece.props and not editor.isEditing():
 				editor.setValue(self.builder.given.get(name, piece.props[name].default))
 		self.refresh()
 
 	def refresh(self):
 		piece = self.builder.piece
-		text = yaml.safe_dump([piece.instance(self.builder.given)], sort_keys=False, allow_unicode=True)
+		text = yaml.safe_dump([piece.instance(self.builder.given, self.builder.fields)], sort_keys=False, allow_unicode=True)
 		bad = piece.problems(self.builder.given)
 		self.out.setPlainText(text + ''.join(f'# {b}\n' for b in bad))
 
@@ -853,6 +940,7 @@ class Builder(QWidget):
 		self.engine = engine or PreviewEngine(size)
 		self.piece = model.Piece()
 		self.given: Dict[str, Any] = {}
+		self.fields: Dict[str, Any] = {}  # the fields the instance sets beyond its properties (geometry, name)
 		self.path: Optional[Path] = None
 		self.selection: Optional[tuple] = ()
 		self.history: List[Tuple[model.Piece, Dict[str, Any]]] = []
@@ -997,6 +1085,7 @@ class Builder(QWidget):
 
 	def loadPiece(self, piece: model.Piece, given: Dict[str, Any], path: Optional[Path] = None):
 		self.piece, self.given, self.path = piece, dict(given), path
+		self.fields = {}
 		self._searchPath()
 		self.history.clear()
 		self.future.clear()
@@ -1101,7 +1190,7 @@ class Builder(QWidget):
 		self.status.setText('Copied the preset file')
 
 	def copyInstance(self):
-		QApplication.clipboard().setText(yaml.safe_dump([self.piece.instance(self.given)], sort_keys=False, allow_unicode=True))
+		QApplication.clipboard().setText(yaml.safe_dump([self.piece.instance(self.given, self.fields)], sort_keys=False, allow_unicode=True))
 		self.status.setText('Copied the instance')
 
 	def _named(self):
@@ -1419,6 +1508,11 @@ class Builder(QWidget):
 		self.instanceTab.refresh()
 		self.schedule()
 
+	def setUseField(self, field: str, value: Any):
+		model.setField(self.fields, field, value)
+		self.instanceTab.refresh()
+		self.schedule()
+
 	def resetGiven(self, name: str):
 		self.given.pop(name, None)
 		self.instanceTab.sync()
@@ -1436,7 +1530,7 @@ class Builder(QWidget):
 		self.timer.stop()
 		problems = self.piece.problems(self.given)
 		self.engine.resize(self.stageSize())
-		items, names = previewDocument(self.piece, self.given)
+		items, names = previewDocument(self.piece, self.given, self.fields)
 		try:
 			image, rects = self.engine.render(items, names)
 		except Exception as e:  # noqa: BLE001 - a bad preset must not close the builder
