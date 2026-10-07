@@ -16,8 +16,7 @@ from LevityDash.lib.ui.icons import fa as FontAwesome, getIcon, Icon
 from LevityDash.lib.utils.shared import singleShotSafe, startTimerSafe, stopTimerSafe
 from WeatherUnits.time_.time import Second
 from LevityDash.lib.plugins.categories import CategoryItem
-from LevityDash.lib.plugins.computed import acquireValueSource
-from LevityDash.lib.valuesource import KeySource
+from LevityDash.lib.valuesource import openValueSource
 from LevityDash.lib.plugins.expressions import Expression
 from LevityDash.lib.plugins import Plugin, Container
 from LevityDash.lib.plugins.plugin import AnySource, SomePlugin
@@ -204,16 +203,17 @@ class Realtime(Panel, tag='realtime'):
 		source = None
 		if isinstance(value, str):
 			# A value source: a plain key, or an expression published as a computed key.
-			key = acquireValueSource(value)
-			if key is None:
-				log.warning(f'Realtime panel key {value!r} is not a valid value source; it shows no value')
-				key = CategoryItem(value)
-			elif _isExpression(value):
-				source = KeySource(value, key)
-			value = key
+			# Open it through `openValueSource` - the one lookup the Studio's stand-in
+			# replaces (`lib/valuesource.py`) - rather than reaching for
+			# `acquireValueSource`/`KeySource` directly, which would leave a Realtime
+			# panel outside that path. The source carries the acquire an expression
+			# needs (a plain key registers nothing) and the text `encode` writes back.
+			source = openValueSource(value, label='Realtime panel key', effect='it shows no value')
+			key = getattr(source, 'key', None)
+			value = key if key is not None else CategoryItem(value)
 		if value == getattr(self, '_key', None):
-			if source is not None:
-				source.release()
+			if (release := getattr(source, 'release', None)) is not None:
+				release()
 			return
 		self._releaseKeySource()
 		self._keySource = source
@@ -239,13 +239,15 @@ class Realtime(Panel, tag='realtime'):
 	def key(self, value) -> str:
 		# Save what the file said: the expression text, not its computed key.
 		if (source := getattr(self, '_keySource', None)) is not None:
-			return source.text
+			if (text := getattr(source, 'text', None)) is not None:
+				return text
 		return str(value)
 
 	def _releaseKeySource(self):
 		if (source := getattr(self, '_keySource', None)) is not None:
 			self._keySource = None
-			source.release()
+			if (release := getattr(source, 'release', None)) is not None:
+				release()
 
 	def delete(self):
 		try:
