@@ -1,0 +1,518 @@
+# Meter showcase: the whole meter family on one board, laid out for a 2560x1440 screen.
+# 12 cards on a 4 by 3 grid, one variant per card, so a change to any meter part is visible at a glance.
+#
+# Row 1: the gauge needles - tapered, arrow, line, dot.
+# Row 2: the gauge pieces - a notch/dot marker, zones with a segmented zone-coloured fill,
+#        a fill over a fixed range with markers, and glow on a piece (left) against glow
+#        on a tick label and a caption (right).
+# Row 3: the bar lying down, standing up, and in its battery and thermometer styles, and a border beam.
+#
+# Keys come from the render harness's merged scenario (`stormy-day` + `gauge-cards` + every
+# Mock key at its base), so the pressure, temperature, humidity and wind cards read the weather
+# values and the battery, disk and bar cards read the Mock plugin's made-up ones. Mock is off
+# until Mock.ini says `enabled = True`.
+# Render: render_dashboard.py OUT.png --levity THIS --size 2560x1440 --settle 14
+- type: group
+  name: main
+  items:
+    # -- row 1: the needles --------------------------------------------------------------------
+    - type: group
+      name: tapered
+      geometry: {x: 0.5%, y: 0.5%, width: 24.3%, height: 32.6%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: taperedTitle
+          text: Needle · tapered
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 3.5%, width: 91%, height: 6%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ff8a3d'}
+        - type: text
+          name: taperedCap
+          text: kite from the pivot, ring hub
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 11%, width: 91%, height: 4.5%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
+        - type: realtime.gauge
+          name: taperedGauge
+          key: environment.pressure.pressure
+          title: false
+          geometry: {x: 19%, y: 18%, width: 62%, height: 78%}
+          display:
+            radius: 92%
+            arc: {start-angle: -130, end-angle: 130, weight: 4%, color: '#2a2a2e', cap: flat}
+            range: {min: 28, max: 32}
+            major:
+              interval: 1
+              length: 7%
+              width: 3px
+              color: '#c9c9d0'
+              labels:
+                position: inside
+                height: 13%
+                color: '#8d8d96'
+                offset: 3%
+                format: {precision: 0}
+                font: Roboto Mono
+            minor: {length: 45%, width: 1px, color: '#5d5d66', interval: 0.2}
+            micro: {enabled: false}
+            needle: {type: tapered, length: 76%, width: 7%, tail: 16%, hub: 9%, hub-hole: 40%, hub-color: '#0b0b0d', color: '#ff8a3d'}
+            value-label: {position: below, size: 15%, color: '#ffffff', value-padding: 3%, font: Roboto Mono, format: {precision: 2}}
+            unit-label: {visible: false}
+            caption: {text: TAPERED, size: 7%, gap: 3%, color: '#8d8d96'}
+    - type: group
+      name: arrow
+      geometry: {x: 25.4%, y: 0.5%, width: 24.3%, height: 32.6%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: arrowTitle
+          text: Needle · arrow
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 3.5%, width: 91%, height: 6%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ffffff'}
+        - type: text
+          name: arrowCap
+          text: shaft and head, dot at the tail
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 11%, width: 91%, height: 4.5%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
+        - type: realtime.gauge
+          name: arrowGauge
+          key: environment.wind.direction.direction
+          title: false
+          geometry: {x: 19%, y: 18%, width: 62%, height: 78%}
+          display:
+            radius: 92%
+            arc: {start-angle: 0, end-angle: 360, weight: 3.5%, color: '#2a2a2e', cap: flat}
+            range: {min: 0, max: 360, wrap: true}
+            major:
+              interval: 90
+              length: 6%
+              width: 2px
+              color: '#c9c9d0'
+              labels:
+                position: inside
+                height: 13%
+                color: '#c9c9d0'
+                offset: 4%
+                text: compass
+                rotate: false
+            minor: {length: 40%, width: 1px, color: '#5d5d66', interval: 22.5}
+            micro: {enabled: false}
+            needle: {type: arrow, length: 36%, width: 2.4%, head: 13%, tail: 30%, tail-dot: 5.5%, color: '#ffffff'}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+            caption: {text: ARROW, size: 7%, gap: 3%, color: '#8d8d96'}
+    - type: group
+      name: line
+      geometry: {x: 50.3%, y: 0.5%, width: 24.3%, height: 32.6%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: lineTitle
+          text: Needle · line
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 3.5%, width: 91%, height: 6%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#4caf50'}
+        - type: text
+          name: lineCap
+          text: thin hand, weighted tail
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 11%, width: 91%, height: 4.5%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
+        - type: realtime.gauge
+          name: lineGauge
+          key: system.battery.charge
+          title: false
+          geometry: {x: 19%, y: 18%, width: 62%, height: 78%}
+          display:
+            radius: 92%
+            arc: {start-angle: -135, end-angle: 135, weight: 4.5%, color: '#2a2a2e', cap: flat}
+            range: {min: 0, max: 100}
+            fill: {weight: 4.5%, color: '#4caf50'}
+            major:
+              interval: 25
+              length: 7%
+              width: 2px
+              color: '#c9c9d0'
+              labels:
+                position: inside
+                height: 13%
+                color: '#8d8d96'
+                offset: 3%
+                format: {precision: 0}
+                font: Roboto Mono
+            minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 5}
+            micro: {enabled: false}
+            needle: {type: line, length: 82%, width: 1.6%, tail: 20%, tail-dot: 7%, hub: 5%, color: '#ff8a3d'}
+            value-label: {position: below, size: 15%, color: '#ffffff', value-padding: 3%, font: Roboto Mono, format: {precision: 0}}
+            unit-label: {visible: false}
+            caption: {text: LINE, size: 7%, gap: 3%, color: '#8d8d96'}
+    - type: group
+      name: dot
+      geometry: {x: 75.2%, y: 0.5%, width: 24.3%, height: 32.6%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: dotTitle
+          text: Needle · dot
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 3.5%, width: 91%, height: 6%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#4aa3ff'}
+        - type: text
+          name: dotCap
+          text: knob riding the track
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 11%, width: 91%, height: 4.5%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
+        - type: realtime.gauge
+          name: dotGauge
+          key: system.battery.charge
+          title: false
+          geometry: {x: 19%, y: 18%, width: 62%, height: 78%}
+          display:
+            radius: 90%
+            arc: {start-angle: -120, end-angle: 120, weight: 4%, color: '#2a2a2e', cap: flat}
+            range: {min: 0, max: 100}
+            fill: {weight: 4%, color: '#4aa3ff'}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {type: dot, width: 9%, halo: 2%, halo-color: '#0b0b0d', color: '#ffffff'}
+            value-label: {position: center, size: 22%, color: '#ffffff', value-padding: 2%, font: Roboto Mono, format: {precision: 0}}
+            unit-label: {visible: false}
+            caption: {text: DOT, size: 7%, gap: 3%, color: '#8d8d96'}
+    # -- row 2: the gauge pieces -----------------------------------------------------------------
+    - type: group
+      name: markers
+      geometry: {x: 0.5%, y: 33.7%, width: 24.3%, height: 32.6%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: markersTitle
+          text: Markers · notch + dot
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 3.5%, width: 91%, height: 6%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ffffff'}
+        - type: text
+          name: markersCap
+          text: at 80 and 20, needle off
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 11%, width: 91%, height: 4.5%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
+        - type: realtime.gauge
+          name: markersGauge
+          key: system.battery.charge
+          title: false
+          geometry: {x: 19%, y: 18%, width: 62%, height: 78%}
+          display:
+            radius: 90%
+            arc: {start-angle: 0, end-angle: 360, weight: 5%, color: '#2a2a2e', cap: flat}
+            range: {min: 0, max: 100}
+            fill: {weight: 5%, color: '#ffffff'}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {visible: false}
+            markers:
+              - {value: 80, type: notch, width: 1.8%, length: 10%, color: '#ffffff'}
+              - {value: 20, type: dot, width: 8%, halo: 2.4%, halo-color: '#000000', color: '#ff8a3d'}
+            value-label: {position: center, size: 22%, color: '#ffffff', value-padding: 2%, font: Roboto Mono, format: {precision: 0}}
+            unit-label: {visible: false}
+            caption: {text: MARKERS, size: 7%, gap: 3%, color: '#8d8d96'}
+    - type: group
+      name: zones
+      geometry: {x: 25.4%, y: 33.7%, width: 24.3%, height: 32.6%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: zonesTitle
+          text: Zones · zone-coloured fill
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 3.5%, width: 91%, height: 6%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#4aa3ff'}
+        - type: text
+          name: zonesCap
+          text: 'colour: zone, cut in ten'
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 11%, width: 91%, height: 4.5%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
+        - type: realtime.gauge
+          name: zonesGauge
+          key: environment.humidity.humidity
+          title: false
+          geometry: {x: 19%, y: 18%, width: 62%, height: 78%}
+          display:
+            radius: 88%
+            arc: {start-angle: -90, end-angle: 90, weight: 15%, color: '#26262c', cap: flat}
+            range: {min: 0, max: 100}
+            zones:
+              - {to: 30, color: '#e5a135'}
+              - {from: 30, to: 60, color: '#4caf50'}
+              - {from: 60, color: '#4aa3ff'}
+            fill: {weight: 15%, segments: 10, gap: 4%, color: zone}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {visible: false}
+            value-label: {position: center, size: 22%, color: '#ffffff', value-padding: 2%, font: Roboto Mono, format: {precision: 0}}
+            unit-label: {visible: false}
+            caption: {text: ZONE FILL, size: 7%, gap: 3%, color: '#8d8d96'}
+    - type: group
+      name: fillrange
+      geometry: {x: 50.3%, y: 33.7%, width: 24.3%, height: 32.6%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: fillrangeTitle
+          text: Fill range · from 40 to 80
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 3.5%, width: 91%, height: 6%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ffd23f'}
+        - type: text
+          name: fillrangeCap
+          text: a band, not from the minimum
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 11%, width: 91%, height: 4.5%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
+        - type: realtime.gauge
+          name: fillrangeGauge
+          key: environment.temperature.temperature
+          title: false
+          geometry: {x: 19%, y: 18%, width: 62%, height: 78%}
+          display:
+            radius: 90%
+            arc: {start-angle: -135, end-angle: 135, weight: 5%, color: '#2a2a2e', cap: flat}
+            range: {min: 40, max: 100}
+            fill: {weight: 5%, from: 40, to: 80, color: '#4aa3ff', opacity: 0.7}
+            major:
+              interval: 20
+              length: 7%
+              width: 2px
+              color: '#c9c9d0'
+              labels:
+                position: inside
+                height: 13%
+                color: '#8d8d96'
+                offset: 3%
+                format: {precision: 0}
+                font: Roboto Mono
+            minor: {length: 50%, width: 1px, color: '#5d5d66', interval: 5}
+            micro: {enabled: false}
+            needle: {visible: false}
+            markers:
+              - {value: 60, type: notch, width: 1.6%, length: 8%, color: '#ffffff'}
+              - {value: 80, type: marker, length: 14%, color: '#ffd23f'}
+            value-label: {position: center, size: 20%, color: '#ffffff', value-padding: 2%, font: Roboto Mono, format: {precision: 0}}
+            unit-label: {visible: true, position: float-under, height: 7%, color: '#8d8d96', value-padding: 6%}
+            caption: {text: FILL RANGE, size: 7%, gap: 3%, color: '#8d8d96'}
+    - type: group
+      name: glow
+      geometry: {x: 75.2%, y: 33.7%, width: 24.3%, height: 32.6%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: glowTitle
+          text: Glow · piece and text
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 3.5%, width: 91%, height: 6%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#7fd4ff'}
+        - type: realtime.gauge
+          name: glowPiece
+          key: environment.temperature.temperature
+          title: false
+          geometry: {x: 2%, y: 16%, width: 47%, height: 78%}
+          display:
+            radius: 90%
+            arc: {start-angle: -120, end-angle: 120, weight: 5%, color: '#1d1d24', cap: flat}
+            range: {min: 40, max: 100}
+            zones:
+              - {from: 40, to: 70, color: '#4aa3ff', glow: {strength: 1.2, reach: 1.0}}
+              - {from: 70, to: 100, color: '#ff4b3e', glow: {strength: 1.2, reach: 1.0}}
+            fill: {weight: 5%, color: zone, glow: {strength: 1.6, reach: 1.4, passes: 6}}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {type: dot, width: 8%, halo: 2%, halo-color: '#0b0b0d', color: '#ffffff', glow: {strength: 1.4, reach: 1.2}}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+            caption: {text: PIECE GLOW, size: 6.5%, gap: 2%, color: '#7fd4ff'}
+        - type: realtime.gauge
+          name: glowText
+          key: environment.wind.direction.direction
+          title: false
+          geometry: {x: 51%, y: 16%, width: 47%, height: 78%}
+          display:
+            radius: 90%
+            arc: {start-angle: 0, end-angle: 360, weight: 3%, color: '#1d1d24', cap: flat}
+            range: {min: 0, max: 360, wrap: true}
+            major:
+              interval: 90
+              length: 6%
+              width: 2px
+              color: '#8d8d96'
+              labels:
+                position: outside
+                offset: 4%
+                height: 12%
+                color: '#c9c9d0'
+                text: compass
+                glow: {strength: 1.4, reach: 1.2}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {type: arrow, length: 32%, width: 2%, head: 11%, tail: 26%, tail-dot: 5%, color: '#ffffff'}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+            caption: {text: TEXT GLOW, size: 6.5%, gap: 2%, color: '#ffd400', glow: {strength: 1.5, reach: 1.2}}
+    # -- row 3: the bar family and a beam --------------------------------------------------------
+    - type: group
+      name: barh
+      geometry: {x: 0.5%, y: 66.9%, width: 24.3%, height: 32.6%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: barhTitle
+          text: Bar · horizontal
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 3.5%, width: 91%, height: 6%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#4caf50'}
+        - type: text
+          name: barhCap
+          text: zones, zone fill, ticks
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 11%, width: 91%, height: 4.5%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
+        - type: realtime.bar
+          name: barHorizontal
+          key: system.battery.charge
+          title: false
+          geometry: {x: 6%, y: 26%, width: 88%, height: 58%}
+          display:
+            orientation: horizontal
+            range: {min: 0, max: 100}
+            caption: Charge
+            track: {weight: 26%, cap: round}
+            zones:
+              - {to: 20, color: '#e53935', opacity: 0}
+              - {from: 20, to: 50, color: '#fdd835', opacity: 0}
+              - {from: 50, color: '#4caf50', opacity: 0}
+            fill: {color: zone}
+            major: {interval: 25, side: after, labels: true}
+            minor: {count: 5, side: after}
+            value-label: {position: end, format: {precision: 0}, font: Roboto Mono}
+    - type: group
+      name: barv
+      geometry: {x: 25.4%, y: 66.9%, width: 24.3%, height: 32.6%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: barvTitle
+          text: Bar · vertical
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 3.5%, width: 91%, height: 6%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#4aa3ff'}
+        - type: text
+          name: barvCap
+          text: standing, segmented, pointer
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 11%, width: 91%, height: 4.5%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
+        - type: realtime.bar
+          name: barVertical
+          key: system.battery.charge
+          title: false
+          geometry: {x: 24%, y: 20%, width: 40%, height: 74%}
+          display:
+            orientation: vertical
+            range: {min: 0, max: 100}
+            track: {weight: 40%, cap: flat}
+            zones:
+              - {to: 20, color: '#e53935', opacity: 0}
+              - {from: 20, to: 50, color: '#fdd835', opacity: 0}
+              - {from: 50, color: '#4caf50', opacity: 0}
+            fill: {color: zone, segments: 10, gap: 3%}
+            pointer: {type: triangle, color: '#ffffff', side: after}
+            major: {interval: 25, side: after, labels: true}
+            value-label: {position: end, format: {precision: 0}, font: Roboto Mono}
+    - type: group
+      name: barstyles
+      geometry: {x: 50.3%, y: 66.9%, width: 24.3%, height: 32.6%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: barstylesTitle
+          text: Bar · battery + thermometer
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 3.5%, width: 91%, height: 6%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ffd23f'}
+        - type: text
+          name: barstylesCap
+          text: the other two styles
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 11%, width: 91%, height: 4.5%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
+        - type: realtime.bar
+          name: barBattery
+          key: system.battery.charge
+          title: false
+          geometry: {x: 6%, y: 30%, width: 40%, height: 52%}
+          display:
+            style: battery
+            range: {min: 0, max: 100}
+            fill: {color: zone}
+            zones:
+              - {to: 20, color: '#e53935', opacity: 0}
+              - {from: 20, to: 50, color: '#fdd835', opacity: 0}
+              - {from: 50, color: '#4caf50', opacity: 0}
+            value-label: {position: end, format: {precision: 0}, font: Roboto Mono}
+        - type: realtime.bar
+          name: barThermometer
+          key: environment.temperature.temperature
+          title: false
+          geometry: {x: 54%, y: 26%, width: 40%, height: 64%}
+          display:
+            style: thermometer
+            range: {min: 40, max: 100}
+            fill: {gradient: $temperature}
+            major: {interval: 20, side: after, labels: true}
+            value-label: {position: inside, format: {precision: 0}, size: 14%, font: Roboto Mono}
+    - type: group
+      name: beam
+      geometry: {x: 75.2%, y: 66.9%, width: 24.3%, height: 32.6%}
+      border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+      items:
+        - type: text
+          name: beamTitle
+          text: Border beam
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 3.5%, width: 91%, height: 6%}
+          display: {matchingGroup: {group: global.title, matchAll: true}, color: '#b48cff'}
+        - type: text
+          name: beamCap
+          text: a glow around a panel
+          alignment: CenterLeft
+          geometry: {x: 4.5%, y: 11%, width: 91%, height: 4.5%}
+          opacity: 0.6
+          display: {matchingGroup: {group: global.cap, matchAll: true}, font: Roboto Mono}
+        - type: group
+          name: beamCard
+          geometry: {x: 14%, y: 26%, width: 72%, height: 60%}
+          beam: {size: sm, fill: '#1b1b1f', active: true, phase: 0.5, glow: {strength: 1.0, reach: 4.0, passes: 6}}
+          items:
+            - type: text
+              name: beamLabel
+              text: beam
+              alignment: Center
+              geometry: {x: 10%, y: 28%, width: 80%, height: 44%}
+              display: {matchingGroup: {group: global.title, matchAll: true}, color: '#ffffff'}
