@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QGraphicsItem, QLineEdit
 from LevityDash.lib.stateful import DefaultFalse, DefaultTrue, StateProperty
 from LevityDash.lib.stateful_mixins import ColorMixin
 from LevityDash.lib.ui.Groups import SizeGroup, MatchAllSizeGroup
+from LevityDash.lib.ui.colors import theme
 from LevityDash.lib.ui.fonts import fontDict as fonts, FontWeight, getFontFamily
 from LevityDash.lib.ui.frontends.PySide import qtLogger as guiLog
 from LevityDash.lib.ui.frontends.PySide.Modules import Panel
@@ -216,19 +217,27 @@ class Label(Panel, ColorMixin, tag='label'):
 
 	@fontFamily.setter
 	def fontFamily(self, value: str):
+		# A theme token (`$display`) is resolved by the text box; the name is kept so a save writes the token back.
+		self._fontToken = value if isinstance(value, str) and theme.is_token(value) else None
 		self.textBox.setFontFamily(value)
 
 	@fontFamily.decode
 	def fontFamily(self, value: str) -> str:
 		return getFontFamily(value)
 
-	@fontFamily.condition
-	def fontFamily(self) -> bool:
-		return not self.textBox.isIcon and not self.textBox.hasDynamicFontFamily
+	@fontFamily.encode
+	def fontFamily(self, value: str) -> str:
+		token = getattr(self, '_fontToken', None)
+		return token if token is not None and getFontFamily(token) == value else value
 
 	@fontFamily.condition
 	def fontFamily(self) -> bool:
-		return self.textBox.icon is not None and self.textBox.font().family() != self.textBox.icon.font.family()
+		# Either a plain text font, or an icon label whose family is not the icon's own. These were two separate
+		# conditions, and a property needs all of its conditions to pass, so no text font was ever saved.
+		box = self.textBox
+		if box.isIcon:
+			return box.icon is not None and box.font().family() != box.icon.font.family()
+		return not box.hasDynamicFontFamily
 
 	@StateProperty(key='weight', default=FontWeight.Normal, repr=True, allowNone=False)
 	def fontWeight(self) -> FontWeight:

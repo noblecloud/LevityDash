@@ -10,6 +10,7 @@ from PySide6.QtCore import QObject, Signal
 from typing import Optional
 
 from LevityDash.lib.plugins.web import Endpoint
+from LevityDash.lib.plugins.web.reconnect import Backoff, keepConnected
 
 
 class SocketMessageHandler(ABC):
@@ -138,6 +139,7 @@ class BaseSocketProtocol(asyncio.DatagramProtocol):
 	def __init__(self, api: 'REST'):
 		self._plugin = api
 		self.handler = LevityQtSocketMessageHandler()
+		self.lost: Optional[asyncio.Future] = None
 		self.log = api.pluginLog.getChild(self.__class__.__name__)
 
 	def datagram_received(self, data, addr):
@@ -150,9 +152,12 @@ class BaseSocketProtocol(asyncio.DatagramProtocol):
 
 	def connection_made(self, transport):
 		self.log.debug('Connection made')
+		self.lost = asyncio.get_running_loop().create_future()
 
 	def connection_lost(self, exc):
 		self.log.warning('Connection lost: %s', exc)
+		if self.lost is not None and not self.lost.done():
+			self.lost.set_result(exc)
 
 	def error_received(self, exc):
 		self.log.warning('Error received: %s', exc)
@@ -198,7 +203,9 @@ class Socket:
 		if self.runTask:
 			self.runTask.cancel()
 			self.runTask = None
-		self.transport.close()
+		transport = getattr(self, 'transport', None)
+		if transport is not None:
+			transport.close()
 		self.protocol.close()
 
 	@abstractmethod
@@ -233,10 +240,17 @@ class UDPSocket(Socket):
 		return self._address or '0.0.0.0'
 
 	async def run(self):
-		self.log.debug(f'Connecting UDP Socket: {self.api.name}')
-		loop = asyncio.get_event_loop()
-		try:
-			self.transport, self.protocol = await loop.create_datagram_endpoint(lambda: self.protocol, local_addr=(self.address, self.port))
-		except Exception as e:
-			self.log.error(f'Error connecting UDP Socket: {e}')
-		self.log.debug(f'Connected UDP Socket: {self.api.name}')
+		backoff = Backoff(maximum=60)
+
+		async def connect():
+			self.log.debug(f'Connecting UDP Socket: {self.api.name}')
+			loop = asyncio.get_running_loop()
+			self.transport, _ = await loop.create_datagram_endpoint(lambda: self.protocol, local_addr=(self.address, self.port))
+			self.log.debug(f'Connected UDP Socket: {self.api.name}')
+			backoff.reset()
+			try:
+				await self.protocol.lost
+			finally:
+				self.transport.close()
+
+		await keepConnected(connect, self.log, f'UDP {self.api.name}', backoff)

@@ -1,6 +1,11 @@
 # M3 recon: `GaugeArc`, `Gauge(Meter)`, the shim, and the hand-over
 
-**Status: read-only recon. No source file was changed. Not committed (the writer owns the index).**
+**Status: FIXED 2026-10-06.** M3 landed: `meter/gauge.py` holds `GaugeArc` and
+`Gauge` with the hand-over at its foot, and `Gauge.py` is a 16-line shim
+(`38579f4`, `f519eed`, on `dev`). This brief is the read-only recon that planned
+that move — it changed no source itself, and its writer did not commit it (the
+index is the maintainer's). The line numbers below are from `1922538`, the commit
+it was written against; the working tree has moved on since.
 
 - Commit read: `1922538` (`git rev-parse HEAD` when this was written). Every line number
   below is from `git show 1922538:<path>`, *not* from the working file: another agent was

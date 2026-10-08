@@ -17,6 +17,8 @@ it a value the studio owns (see `_studio_stage.py`).
 - Copy code / Save as: the gauge's `.levity` YAML, only the properties that
   differ from the defaults.
 - With a fragment path, the studio reloads it whenever the file changes on disk.
+- `--build [preset.yaml]` opens the builder (`_studio_builder.py`) instead: compose containers and displays into a
+  preset, give it properties, preview it on a Fixture scenario, save it. See that module.
 
 Importing `LevityDash` builds the config object, so the studio points every
 LevityDash directory at a throwaway temp directory first. It never reads or
@@ -54,6 +56,7 @@ from LevityDash.devtools import _studio_stage as _stage
 from LevityDash.devtools._studio_stage import DATA_PRESETS, DataPreset, StudioGauge, StudioScene, presetForKey
 from LevityDash.devtools import _studio_editors as editors
 from LevityDash.devtools._studio_handles import HandleLayer
+from LevityDash.devtools._studio_chrome import THEMES, themePalette, themeSheet
 from LevityDash.devtools._studio_themes import ThemePicker
 from LevityDash.devtools._studio_widgets import FieldRow, Section, build, fieldsOf
 from LevityDash.lib.ui.colors.stopunits import formatStop
@@ -216,58 +219,7 @@ def _dpi() -> float:
 		return 100.0
 
 
-# Section: themes
-#
-# Both themes set every colour role the widgets read, so no role falls back to the platform's
-# own palette (a dark system gave the light theme a mixed palette). The sheet covers what a
-# palette cannot reach: combo popups, tooltips, menus and disabled text.
-
-THEMES = {
-	'dark': {
-		'window': '#161b22', 'text': '#e6edf3', 'base': '#0d1117', 'alt': '#161b22', 'button': '#21262d', 'highlight': '#2f81f7',
-		'highlightText': '#ffffff', 'muted': '#8b949e', 'placeholder': '#7d8590', 'disabled': '#6e7681', 'border': '#30363d',
-		'tipBase': '#21262d',
-	},
-	'light': {
-		'window': '#f6f8fa', 'text': '#1f2328', 'base': '#ffffff', 'alt': '#eef0f3', 'button': '#e6e9ed', 'highlight': '#0969da',
-		'highlightText': '#ffffff', 'muted': '#59636e', 'placeholder': '#6e7781', 'disabled': '#8c959f', 'border': '#d0d7de',
-		'tipBase': '#ffffff',
-	},
-}
-
-
-def themePalette(t: Dict[str, str]) -> QPalette:
-	p = QPalette()
-	Role, Group = QPalette.ColorRole, QPalette.ColorGroup
-	for role, key in ((Role.Window, 'window'), (Role.WindowText, 'text'), (Role.Base, 'base'), (Role.AlternateBase, 'alt'),
-	                  (Role.Text, 'text'), (Role.Button, 'button'), (Role.ButtonText, 'text'), (Role.Highlight, 'highlight'),
-	                  (Role.HighlightedText, 'highlightText'), (Role.PlaceholderText, 'placeholder'), (Role.ToolTipBase, 'tipBase'),
-	                  (Role.ToolTipText, 'text'), (Role.BrightText, 'text'), (Role.Link, 'highlight')):
-		p.setColor(role, QColor(t[key]))
-	for role in (Role.WindowText, Role.Text, Role.ButtonText):
-		p.setColor(Group.Disabled, role, QColor(t['disabled']))
-	p.setColor(Group.Disabled, Role.Base, QColor(t['alt']))
-	p.setColor(Group.Disabled, Role.Button, QColor(t['window']))
-	for role in (Role.Light, Role.Midlight, Role.Mid, Role.Dark, Role.Shadow):
-		p.setColor(role, QColor(t['border']))
-	return p
-
-
-def themeSheet(t: Dict[str, str]) -> str:
-	return f"""
-QToolTip {{ color: {t['text']}; background-color: {t['tipBase']}; border: 1px solid {t['border']}; padding: 3px; }}
-QComboBox QAbstractItemView, QCompleter QAbstractItemView {{ color: {t['text']}; background-color: {t['base']};
-	selection-color: {t['highlightText']}; selection-background-color: {t['highlight']}; outline: 0; }}
-QMenu {{ color: {t['text']}; background-color: {t['base']}; border: 1px solid {t['border']}; }}
-QMenu::item:selected {{ color: {t['highlightText']}; background-color: {t['highlight']}; }}
-QMenu::item:disabled {{ color: {t['disabled']}; }}
-QToolButton {{ color: {t['text']}; }}
-QToolButton:disabled, QLabel:disabled, QCheckBox:disabled {{ color: {t['disabled']}; }}
-QLineEdit, QAbstractSpinBox {{ color: {t['text']}; background-color: {t['base']}; selection-color: {t['highlightText']};
-	selection-background-color: {t['highlight']}; }}
-QLineEdit:disabled, QAbstractSpinBox:disabled {{ color: {t['disabled']}; background-color: {t['alt']}; }}
-"""
-
+# Section: themes: the light and dark chrome live in `_studio_chrome.py`
 
 # Section: the preview
 
@@ -1506,8 +1458,11 @@ class Studio(QWidget):
 
 def main(argv: Optional[List[str]] = None) -> int:
 	parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-	parser.add_argument('fragment', nargs='?', help='a .levity fragment to open; reloaded when it changes on disk')
+	parser.add_argument('fragment', nargs='?', help='a .levity fragment to open; reloaded when it changes on disk. With --build, a preset file')
 	parser.add_argument('--polar', action='store_true', help='open the polar plot panel instead of the gauge')
+	parser.add_argument('--build', action='store_true', help='open the builder: compose items, give them properties, preview on fixture data')
+	parser.add_argument('--scenario', help='with --build: the fixture scenario the preview draws on (default hot-clear-day)')
+	parser.add_argument('--seed', help='with --build: a config dir to seed the preview dashboard from')
 	args = parser.parse_args(argv)
 	fragment = Path(args.fragment).expanduser().resolve() if args.fragment else None
 	if fragment is not None and not fragment.exists():
@@ -1515,6 +1470,18 @@ def main(argv: Optional[List[str]] = None) -> int:
 	app = QApplication.instance() or QApplication(sys.argv)
 	app.setStyle('Fusion')
 	identify(app)
+	if args.build:
+		from LevityDash.devtools._studio_builder import Builder
+		window = Builder(fragment)
+		window.setLight(False)
+		window.show()
+		app.lastWindowClosed.connect(app.quit)
+		signal.signal(signal.SIGTERM, lambda *_: app.quit())
+		signal.signal(signal.SIGINT, lambda *_: app.quit())
+		wake = QTimer()
+		wake.start(200)
+		wake.timeout.connect(lambda: None)
+		return app.exec()
 	if args.polar:
 		from LevityDash.devtools._studio_polar import PolarStudio
 		window = PolarStudio(fragment)

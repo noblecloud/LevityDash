@@ -8,16 +8,23 @@ odd-even rule the overlaps cancel instead - a slot through the arrowhead and a
 bite out of the tail dot, the winding seam `wrap-compass.levity` shows.
 
 The invariant this pins: a path with no overlapping subpaths describes the same
-region under odd-even and winding fill, so the two fill areas agree. Stacked,
-overlapping parts make them disagree - the odd-even area drops what the winding
-area keeps - which is exactly the bug.
+region under odd-even and winding fill, so the two fill rules agree. Stacked,
+overlapping parts make them disagree - the odd-even region drops what the winding
+region keeps - which is exactly the bug.
+
+The two regions are compared as geometry (`QPainterPath.subtracted`), not as
+rasterised pixel counts. A rasterised area is read off an image buffer whose row
+padding is uninitialised - `bytesPerLine()` rounds the stride up past the pixels -
+so summing `bytes(image.constBits())` picked up random padding bytes and made the
+comparison flaky: it failed in some full-suite runs and passed in others on the
+same tree, depending on what the heap happened to hold. Geometry has no such state.
 
 Building the arrow through a real sandbox gauge (as `test_gauge_fill_sources`
 does) means the test exercises the same `Needle.draw` path the app uses.
 """
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QImage, QPainter, QPainterPath
+from PySide6.QtGui import QPainterPath
 
 from LevityDash.lib.ui.frontends.PySide.Modules import Panel
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import Realtime
@@ -30,8 +37,6 @@ ARROW = {
 #: The same arrow with its head at the inner end. Its triangle winds the opposite
 #: way to `out`'s, so it is the case a fill-rule-only fix leaves overlapping.
 ARROW_IN = {**ARROW, 'point': 'in'}
-
-RASTER_SCALE = 4.0
 
 
 def _arrow_needle(dashboard, needle):
@@ -46,24 +51,11 @@ def _arrow_needle(dashboard, needle):
 	return sandbox, gauge
 
 
-def _fill_area(path: QPainterPath, rule) -> float:
-	"""The path's filled area in px^2, rasterised offscreen under ``rule``."""
-	rect = path.boundingRect().adjusted(-2, -2, 2, 2)
-	image = QImage(max(1, int(rect.width() * RASTER_SCALE)), max(1, int(rect.height() * RASTER_SCALE)),
-	               QImage.Format.Format_Grayscale8)
-	image.fill(0)
-	painter = QPainter(image)
-	painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-	painter.scale(RASTER_SCALE, RASTER_SCALE)
-	painter.translate(-rect.left(), -rect.top())
-	painter.setPen(Qt.PenStyle.NoPen)
-	painter.setBrush(QColor(255, 255, 255))
+def _region(path: QPainterPath, rule) -> QPainterPath:
+	"""The path's filled region under ``rule``, as a path to subtract."""
 	shaped = QPainterPath(path)
 	shaped.setFillRule(rule)
-	painter.drawPath(shaped)
-	painter.end()
-	filled = sum(1 for byte in bytes(image.constBits()) if byte > 127)
-	return filled / (RASTER_SCALE * RASTER_SCALE)
+	return shaped
 
 
 def _subpath_count(path: QPainterPath) -> int:
@@ -77,12 +69,16 @@ def test_arrow_fill_has_no_overlapping_subpaths(dashboard, needle):
 	try:
 		path = gauge.needle.path()
 		assert not path.isEmpty(), 'the arrow drew nothing'
-		odd = _fill_area(path, Qt.FillRule.OddEvenFill)
-		wind = _fill_area(path, Qt.FillRule.WindingFill)
-		assert odd > 0
-		assert odd == wind, (
-			'the arrow is stacked overlapping subpaths: the odd-even fill '
-			f'({odd:.1f}px^2) drops the overlaps the winding fill ({wind:.1f}px^2) keeps'
+		odd = _region(path, Qt.FillRule.OddEvenFill)
+		wind = _region(path, Qt.FillRule.WindingFill)
+		assert not odd.isEmpty(), 'the arrow has no filled area'
+		# Each region minus the other must be empty: they cover the same ground.
+		wind_only = wind.subtracted(odd)
+		odd_only = odd.subtracted(wind)
+		assert wind_only.isEmpty() and odd_only.isEmpty(), (
+			'the arrow is stacked overlapping subpaths: the odd-even and winding '
+			'fills describe different regions (winding-only '
+			f'{wind_only.boundingRect()}, odd-even-only {odd_only.boundingRect()})'
 		)
 	finally:
 		sandbox.scene().removeItem(sandbox)

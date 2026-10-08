@@ -492,6 +492,10 @@ def _loadItemGroup(parent: 'Panel', _type: str, group: list[dict], existing: lis
 	"""Dispatch one item type to its loader. Split out of `itemLoader` so a
 	failure can be reported with the type and item that caused it."""
 	match _type:
+		case 'preset-error':
+			# A preset use that could not be expanded (`lib/presets.py`); the caller turns the raise into an error tile.
+			from LevityDash.lib.presets import PresetError
+			raise PresetError(group[0].get('message', 'the preset could not be used'))
 		case 'mini-graph':
 			items = loadGraphs(parent, group, existing, type='mini', **kwargs)
 		case 'realtime':

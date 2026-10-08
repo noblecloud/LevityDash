@@ -421,7 +421,11 @@ class TitleValueSplitter(Splitter, Stateful):
 	def showTitle(self):
 		if (previousRatio := getattr(self, '_previousHeight', None)) is not None:
 			self.ratio = previousRatio
-		self.setVisible(True)
+		# Enabled is what "the title is shown" means to the handle; it is drawn
+		# only while its panel has focus (Panel.refreshHandles). Showing it here
+		# left a bar between title and value on every panel that never took and
+		# lost focus, which is any panel a switch brings in after the load.
+		self.setVisible(self.surface.hasFocus())
 		self.setEnabled(True)
 
 	# self.setGeometries()

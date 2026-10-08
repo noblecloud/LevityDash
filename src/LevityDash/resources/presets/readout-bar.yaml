@@ -1,0 +1,20 @@
+# A horizontal bar with a caption on the left and the reading at its end, the shape every card on the bar
+# showcase repeats. Zones, markers, a pointer, segments and the like go in as fields of the use
+# (`display: {fill: ..., zones: ...}`); the properties are the few things that change in almost every use.
+doc: Captioned bar with the reading at the end
+props:
+  key: {default: environment.humidity.humidity, type: key, doc: The value the bar shows}
+  caption: {default: null, type: text, doc: Label at the start of the bar}
+  min: {default: 0, type: number, doc: Start of the scale}
+  max: {default: 100, type: number, doc: End of the scale}
+  weight: {default: null, type: size, doc: Thickness of the track; unset uses the style's own}
+  precision: {default: 0, type: number, min: 0, doc: Decimals in the reading}
+template:
+  type: realtime.bar
+  key: $key
+  title: false
+  display:
+    range: {min: $min, max: $max}
+    caption: $caption
+    track: {weight: $weight}
+    value-label: {position: end, format: {precision: $precision}}
