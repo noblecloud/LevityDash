@@ -2,6 +2,8 @@
 
 **Status:** open, not scheduled. Recorded 2026-10-04.
 
+**Update 2026-10-07:** the `preset:` mechanism now exists, and it is wider than the one described in section 1: a preset is a whole item template with its own properties (`lib/presets.py`, [docs/config/dashboard/presets.md](../config/dashboard/presets.md)). A gauge-ui template becomes `resources/presets/<name>.yaml` with a `realtime.gauge` template and the few properties worth changing. Section 1's `display:`-only form is superseded; the rest of this brief (the template list and the gaps it exposes) still stands.
+
 ## What
 
 Give LevityDash a named preset for each gauge template on gauge-ui.dev, so a
