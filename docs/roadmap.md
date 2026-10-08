@@ -1,6 +1,6 @@
 # Roadmap
 
-*Last updated: 2026-10-07 (presets added to dashboard authoring).*
+*Last updated: 2026-10-08 (boards, presets, saved gauges and bars, log-level menus, reconnects, and units on `dev`).*
 
 This organizes and supersedes the raw idea list in [`_planned-features.md`](_planned-features.md) — every item from that list is either placed in a section below, marked as already done, or parked with a reason. Status notes reference the code so claims stay checkable.
 
@@ -42,8 +42,8 @@ Invest here first. Every lane uses it.
 
 **Phase 2: first stable cut.**
 
-1. Fix the rain `0.0` bug (a true zero shows as trace) and the WeatherUnits percent bug (0.1% shows as 10%).
-2. Build one or two real weather boards from the paused design (Station, Core + rotation). Use themes, `switch` and `vars`. The handoff is `docs/tasks/dashboard-design-handoff.md` on branch `claude/dashboard-design-uy2w74`.
+1. Done: rain zero and trace, and the percent scale (#35, WeatherUnits #4).
+2. Done: Station (#54), and Storm, Sky and Week (#60), are on `dev` under `docs/design-references/boards/`. The handoff is `docs/tasks/dashboard-design-handoff.md` on branch `claude/dashboard-design-uy2w74`.
 3. Document themes, variables, the switch slot and unit literals. Threads write draft notes. The docs owner edits the `docs` branch.
 4. Close out value-sources.
 5. Merge `feat/value-sources` into `main` and tag a version. After that, work on short branches off `main`.
