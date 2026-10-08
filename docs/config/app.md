@@ -114,6 +114,10 @@ are stored in a QPixmapCache, this option limits the size of that cache.
 
 When `True`, shows a status bar along the bottom of the window with plugin/log activity. Default is `False`.
 
+### <div class=mono>keepAwake</div>
+
+When `True`, asks the operating system not to dim, sleep or lock the display while Levity runs, for an always-on kiosk. Default is `False`. It uses `caffeinate` on macOS, `systemd-inhibit` on Linux (needs a desktop session) and `SetThreadExecutionState` on Windows. If the system cannot, the log says so and the dashboard runs as before. This is separate from App Nap, which Levity always opts out of on macOS.
+
 ### <div class=mono>handleTouchSize</div>
 
 The size of the invisible grab area around resize/drag handles, making them easier to hit on touch screens. Accepts a length unit like the other size options.
