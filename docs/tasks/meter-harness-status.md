@@ -180,9 +180,11 @@ assembled, as one names-only commit, so the moves stay reviewable.
 ### The harness itself
 
 - `src/LevityDash/devtools/render_diff.py` — `capture | compare | selfcheck`
-  over the 22 presets + the showcase, one PNG per target per capture plus a
-  manifest of inputs, hashes and per-file ink; `compare` writes a diff image per
-  mismatch and exits non-zero past anti-aliasing noise.
+  over every preset + the showcase (37 targets on `dev`: 36 presets plus
+  `gauge-showcase`; 38 once `feat/meter-showcase` lands its second board), one PNG
+  per target per capture plus a manifest of inputs, hashes and per-file ink;
+  `compare` writes a diff image per mismatch and exits non-zero past anti-aliasing
+  noise.
 - `_boot.freeze_time()` (the `conftest` patches, plus every module that did
   `from shared import now`, found by identity) and `render_dashboard.py
   --freeze-time`.
@@ -209,6 +211,9 @@ assembled, as one names-only commit, so the moves stay reviewable.
   and `--no-mask` turns the mask off to show the raw difference and the diff
   image. A mask whose recorded size no longer matches the capture is skipped
   with a warning rather than silently blocking a region.
+  - **2026-10-06:** `ev-caption` is gone — eight showcase captures came back
+    byte-identical, so the region no longer flips and the mask was dropped
+    (`c292b1f`). The only mask now is `graph-figure` for `emissive`.
 - Three consecutive captures of unchanged code (`--jobs 6`) came back
   **bit-identical: 23/23 files, 0 differing pixels** — usually true, but the EV
   caption's unit word is a per-capture coin flip, so a comparison can also come
@@ -218,6 +223,9 @@ assembled, as one names-only commit, so the moves stay reviewable.
 
 ## Open
 
+- **CLOSED 2026-10-06** — the region no longer flips in the harness: eight
+  showcase captures came back byte-identical and its mask was dropped
+  (`c292b1f`). Kept below for the record.
 - The EV caption's unit word is a **per-capture coin flip**, not a property of
   the code. Measured 2026-10-05 with the refactor's own steps: `s3-scale` and
   `s4-recheck` are the *same commit* and differ by 409 px in exactly this
@@ -324,23 +332,34 @@ be called stable.
 
 `emissive` cannot be photographed with the freeze on, and the reason is not this
 branch's. Its figure plots a window relative to the clock; the freeze collapses the
-series time range, `Graph.py:862` divides by it, the plot's pixels drift between runs
+series time range, `Graph.py:862` divided by it, the plot's pixels drift between runs
 and about half the runs exit SIGSEGV at shutdown with the same
 `libshiboken: Internal C++ object (LevitySceneView) already deleted` traceback. Every
 crashing module is byte-identical between this tree and `a31af10`, and upstream
 reproduces it run for run (docs/tasks/emissive-upstream-check.md) — the freeze is the
 trigger, and with the clock live both trees render cleanly, exit 0.
 
-So the harness carries `NO_FREEZE`: a target named there renders with the live clock
-however the run was invoked. `emissive` is the only entry, and it costs nothing —
-the target has no clock of its own, and the point of having it in the set is the glow
-on its gauges, which does not read the time.
+**Re-measured 2026-10-06, after the divide was guarded** (`Graph.py:884`, `d917135`):
+the divide is gone — no `divide by zero` warning in any run — but the freeze still
+breaks a graph preset. On `dev` `b2499da`, `emissive` frozen: 4/4 runs dirty (2 exit
+`-11` SIGSEGV with no PNG, 2 exit 0 but log 7 and 12 tracebacks, the same
+`LevitySceneView already deleted` raised from `Annotations.resize -> TimestampLabel`),
+and live: 4/4 exit 0, 0 tracebacks. The same split holds for the other graph preset,
+`condition-pins`: frozen 3/3 crashed, live 3/3 clean. Guarding the divide was
+necessary but not sufficient, so `NO_FREEZE` stays and the mask stays with it.
 
-What the live clock does move is the figure itself: its plot band and its row of
-time-axis labels. Those are masked by name (`graph-plot`, `graph-time-axis`), with
-the measurement and the removal condition in the mask itself, the way `ev-caption`
-is. Masked, a two-capture comparison of `emissive` is 0 px over tolerance with 1344
-masked, and the gauge pixels — the glow cover — are what the gate judges.
+So the harness carries `NO_FREEZE`: a target named there renders with the live clock
+however the run was invoked. It holds two entries, `emissive` and `condition-pins` —
+the two graph presets — and it costs nothing: neither target has a clock of its own,
+and the point of having them in the set is their glow/pins cover, which does not read
+the time.
+
+What the live clock does move is `emissive`'s figure itself: its plot band and its row
+of time-axis labels. Those are masked by one named box, `graph-figure` (re-measured
+2026-10-06 at the 1600x900 scene size: x0-1269 y494-893), with the measurement and the
+removal condition in the mask itself. Masked, a two-capture comparison of `emissive`
+is 0 px over tolerance, and the gauge pixels — the glow cover — are what the gate
+judges.
 
 `baseline-merged` is superseded: it was taken before the freeze exemption existed, so
 its `emissive` member is the drifting one. The baseline the gate should use is

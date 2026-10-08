@@ -1,0 +1,150 @@
+# The Storm board with only the rain takeover true: heavy rain (1.4 in/hr), gusts down to 22 mph
+# and lightning 3.2 mi out, so the Flooding rain panel is the one the slot shows.
+# Use it with --freeze-time 2026-10-07T19:10:00 (the series count from today midnight).
+name: storm-flood
+description: Heavy rain, no damaging wind, lightning still beyond 3 mi; shows the flood takeover.
+keys:
+  environment.temperature.temperature:
+    value: 64
+    unit: f
+    series: [72, 71, 70, 69, 69, 68, 70, 74, 78, 82, 85, 87, 88, 89, 88, 84, 76, 70, 66, 64, 63, 62, 62, 61]
+  environment.temperature.feelsLike:
+    value: 59
+    unit: f
+    series: [74, 72, 71, 70, 69, 69, 71, 76, 81, 86, 90, 93, 95, 96, 94, 87, 76, 67, 62, 59, 58, 58, 58, 57]
+  environment.temperature.dewpoint:
+    value: 64
+    unit: f
+    series: [66, 66, 65, 65, 65, 65, 66, 67, 68, 69, 70, 71, 71, 72, 72, 71, 70, 68, 66, 64, 63, 62, 62, 61]
+  environment.temperature.heatIndex:
+    value: 64
+    unit: f
+  environment.temperature.wetBulb:
+    value: 63
+    unit: f
+  environment.humidity.humidity:
+    value: 92
+    unit: '%'
+    series: [82, 84, 86, 87, 87, 88, 84, 78, 72, 66, 62, 59, 57, 56, 58, 64, 76, 86, 90, 92, 93, 94, 94, 95]
+  environment.pressure.pressure:
+    value: 29.57
+    unit: inHg
+    series: [29.98, 29.97, 29.97, 29.96, 29.96, 29.95, 29.95, 29.94, 29.93, 29.91, 29.89, 29.86, 29.83, 29.8, 29.76, 29.72, 29.68, 29.63, 29.59, 29.57, 29.56, 29.58, 29.62, 29.66]
+  environment.wind.speed.speed:
+    value: 30
+    unit: [mi, hr]
+    type: wind
+    series: [6, 6, 5, 5, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 18, 22, 26, 29, 31, 30, 27, 24, 20, 16]
+  environment.wind.speed.gust:
+    value: 22
+    unit: [mi, hr]
+    type: wind
+    series: [10, 10, 9, 9, 9, 10, 12, 14, 15, 17, 19, 21, 23, 26, 31, 38, 45, 52, 58, 54, 47, 40, 34, 28]
+  environment.wind.direction.direction:
+    value: 260
+    unit: º
+    type: direction
+    series: [140, 140, 140, 145, 145, 150, 150, 150, 155, 160, 165, 170, 175, 180, 185, 190, 200, 230, 250, 260, 270, 275, 280, 285]
+  environment.clouds.cover.cover:
+    value: 100
+    unit: '%c'
+    type: cloudcover
+    series: [60, 60, 70, 70, 70, 75, 70, 60, 50, 40, 40, 45, 55, 65, 80, 92, 98, 100, 100, 100, 100, 95, 90, 85]
+  environment.clouds.cover.low:
+    value: 100
+    unit: '%c'
+    type: cloudcover
+  environment.clouds.cover.mid:
+    value: 96
+    unit: '%c'
+    type: cloudcover
+  environment.clouds.cover.high:
+    value: 82
+    unit: '%c'
+    type: cloudcover
+  environment.precipitation.precipitation:
+    value: 1.4
+    unit: [in, hr]
+    type: precipitationHourly
+    series: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.02, 0.1, 0.5, 1.1, 1.4, 1.0, 0.5, 0.15, 0.03]
+  environment.precipitation.probability:
+    value: 98
+    unit: '%p'
+    series: [0, 0, 0, 0, 0, 0, 0, 5, 5, 10, 10, 15, 20, 30, 50, 70, 85, 95, 98, 98, 90, 70, 40, 20]
+  environment.precipitation.daily:
+    value: 3.9
+    unit: in
+    type: precipitationDaily
+    title: Expected today
+  environment.yesterday.precipitation.precipitation:
+    value: 0.0
+    unit: in
+    type: precipitationDaily
+    title: Yesterday
+  environment.condition.condition:
+    value: 95
+    type: WeatherCode
+  environment.condition.icon:
+    value: 95
+  environment.condition.weatherCode:
+    value: 95
+    series: [0, 0, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 80, 81, 95, 96, 95, 95, 81, 61, 3]
+  environment.light.uvi:
+    value: 0.0
+    unit: uvi
+    type: index
+    title: UV Index
+    series: [0, 0, 0, 0, 0, 0, 0.2, 0.8, 2, 3.5, 5, 6, 6.5, 5, 3, 1.5, 0.6, 0.2, 0, 0, 0, 0, 0, 0]
+  environment.light.irradiance.irradiance:
+    value: 0
+    unit: W/m^2
+    series: [0, 0, 0, 0, 0, 0, 20, 110, 280, 450, 620, 740, 800, 660, 420, 220, 120, 40, 10, 0, 0, 0, 0, 0]
+  environment.visibility:
+    value: 1.8
+    unit: mi
+  environment.lightning.distance:
+    value: 3.2
+    unit: mi
+    title: Distance
+    series: [40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 34, 26, 18, 11, 6, 3.2, 4.5, 7, 12, 20]
+  environment.lightning.distanceAverage:
+    value: 6.8
+    unit: mi
+    title: Average distance
+  environment.lightning.lightning:
+    value: 41
+    unit: strike
+    title: Strikes
+  environment.lightning.count1hr:
+    value: 213
+    unit: strike
+    title: Strikes 1h
+    series: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 12, 60, 150, 213, 180, 95, 30, 8]
+  environment.lightning.count3hr:
+    value: 340
+    unit: strike
+    title: Strikes 3h
+
+  # Indoors: the bedroom (shut up, a little muggy) and the terrarium.
+  indoor.temperature.temperature#bedroom:
+    value: 72.6
+    unit: f
+    series: [71.2, 71.0, 70.8, 70.6, 70.5, 70.4, 70.6, 71.0, 71.6, 72.2, 72.8, 73.2, 73.5, 73.8, 74.0, 74.1, 73.9, 73.6, 73.2, 72.9, 72.6, 72.3, 72.0, 71.7]
+  indoor.humidity.humidity#bedroom:
+    value: 56
+    unit: '%'
+    series: [52, 52, 53, 53, 53, 53, 52, 51, 50, 49, 48, 48, 48, 48, 49, 50, 52, 54, 55, 56, 57, 57, 58, 58]
+  indoor.temperature.dewpoint#bedroom: {value: 56.9, unit: f}
+  indoor.temperature.heatIndex#bedroom: {value: 73.2, unit: f}
+  indoor.battery.battery#bedroom: {value: 64, unit: '%'}
+  indoor.temperature.temperature#terrarium:
+    value: 78.4
+    unit: f
+    series: [77.8, 77.6, 77.4, 77.2, 77.1, 77.0, 77.4, 78.2, 79.0, 79.8, 80.4, 80.9, 81.2, 81.4, 81.6, 81.5, 81.2, 80.6, 79.6, 78.8, 78.4, 78.2, 78.0, 77.8]
+  indoor.humidity.humidity#terrarium:
+    value: 88
+    unit: '%'
+    series: [93, 93, 94, 94, 94, 95, 95, 92, 90, 89, 88, 87, 86, 86, 85, 84, 84, 85, 86, 88, 88, 89, 90, 91]
+  indoor.temperature.dewpoint#terrarium: {value: 74.2, unit: f}
+  indoor.temperature.heatIndex#terrarium: {value: 83.1, unit: f}
+  indoor.battery.battery#terrarium: {value: 14, unit: '%'}

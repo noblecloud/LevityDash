@@ -121,6 +121,7 @@ build = ["pyinstaller", "certifi"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+norecursedirs = [".venv", "venv", "build", "dist", ".git", "node_modules"]
 # QT_QPA_PLATFORM=offscreen and LEVITYDASH_CONFIG_DEBUG=1 are set in
 # tests/conftest.py before any Qt import (no pytest-env dependency needed).
 markers = [

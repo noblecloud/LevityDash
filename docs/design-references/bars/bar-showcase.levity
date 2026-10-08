@@ -16,89 +16,67 @@ items:
         geometry: {x: 3%, y: 3%, width: 20%, height: 6%}
 
       # -- lying down --------------------------------------------------------------------------------
+      # Each bar is a `readout-bar` preset use: the properties are the key, caption, scale and track
+      # weight; the rest of what a bar does is a field of the use, merged over the template.
       - type: group
         name: lying
         geometry: {x: 3%, y: 11%, width: 60%, height: 86%}
         items:
-          - type: realtime.bar
+          - preset: readout-bar
             name: charge
-            key: system.battery.charge
-            title: false
             geometry: {x: 0%, y: 0%, width: 100%, height: 10%}
+            props: {key: system.battery.charge, caption: Charge}
             display:
-              range: {min: 0, max: 100}
-              caption: Charge
               fill: {color: zone}
               zones:
                 - {to: 20, color: $bad, opacity: 0}
                 - {from: 20, to: 50, color: $warn, opacity: 0}
                 - {from: 50, color: $good, opacity: 0}
-              value-label: {position: end, format: {precision: 0}}
-          - type: realtime.bar
+          - preset: readout-bar
             name: cell
-            key: system.battery.low
-            title: false
             geometry: {x: 0%, y: 13%, width: 100%, height: 11%}
+            props: {key: system.battery.low}
             display:
               style: battery
-              range: {min: 0, max: 100}
               fill: {color: zone}
               zones:
                 - {to: 20, color: $bad, opacity: 0}
                 - {from: 20, to: 50, color: $warn, opacity: 0}
                 - {from: 50, color: $good, opacity: 0}
-              value-label: {position: end, format: {precision: 0}}
-          - type: realtime.bar
+          - preset: readout-bar
             name: disk
-            key: system.disk.used
-            title: false
             geometry: {x: 0%, y: 27%, width: 100%, height: 10%}
+            props: {key: system.disk.used, caption: Disk, weight: 40%}
             display:
-              range: {min: 0, max: 100}
-              caption: Disk
-              track: {weight: 40%, cap: flat}
+              track: {cap: flat}
               fill: {color: zone, segments: 20, gap: 4%}
               zones:
                 - {to: 60, color: $good, opacity: 0}
                 - {from: 60, to: 85, color: $warn, opacity: 0}
                 - {from: 85, color: $bad, opacity: 0}
-              value-label: {position: end, format: {precision: 0}}
-          - type: realtime.bar
+          - preset: readout-bar
             name: humidity
-            key: environment.humidity.humidity
-            title: false
             geometry: {x: 0%, y: 40%, width: 100%, height: 12%}
+            props: {caption: Humidity, weight: 22%}
             display:
-              range: {min: 0, max: 100}
-              caption: Humidity
-              track: {weight: 22%}
               fill: {gradient: $load}
               major: {interval: 25, side: after, labels: true}
-              value-label: {position: end, format: {precision: 0}}
-          - type: realtime.bar
+          - preset: readout-bar
             name: wind
-            key: environment.wind.speed.speed
-            title: false
             geometry: {x: 0%, y: 55%, width: 100%, height: 12%}
+            props: {key: environment.wind.speed.speed, max: 20, caption: Wind and gusts, weight: 22%}
             display:
-              range: {min: 0, max: 20}
-              caption: Wind and gusts
-              track: {weight: 22%}
               fill: {color: $series-2}
               markers:
                 - {value: environment.wind.speed.gust, type: triangle, color: $warn, side: before}
               major: {interval: 5, side: after, labels: true}
-              value-label: {position: end, format: {precision: 0}}
               unit-label: {visible: true}
-          - type: realtime.bar
+          - preset: readout-bar
             name: uv
-            key: environment.light.uvi
-            title: false
             geometry: {x: 0%, y: 70%, width: 100%, height: 12%}
+            props: {key: environment.light.uvi, max: 12, caption: UV index, weight: 30%}
             display:
-              range: {min: 0, max: 12}
-              caption: UV index
-              track: {weight: 30%, cap: flat}
+              track: {cap: flat}
               zones:
                 - {from: 0, to: 3, color: $good}
                 - {from: 3, to: 6, color: $warn}
@@ -106,16 +84,11 @@ items:
                 - {from: 8, to: 12, color: $bad}
               pointer: {type: dot, color: $text, size: 40%}
               major: {interval: 2, side: after, labels: true}
-              value-label: {position: end, format: {precision: 0}}
-          - type: realtime.bar
+          - preset: readout-bar
             name: day
-            key: environment.temperature.temperature
-            title: false
             geometry: {x: 0%, y: 85%, width: 100%, height: 14%}
+            props: {key: environment.temperature.temperature, min: 60, max: 110, caption: Today, weight: 20%}
             display:
-              range: {min: 60, max: 110}
-              caption: Today
-              track: {weight: 20%}
               fill:
                 from: min(environment.temperature.temperature, today)
                 to: max(environment.temperature.temperature, today)
@@ -131,7 +104,6 @@ items:
                 - value: max(environment.temperature.temperature, today)
                   type: line
                   color: $bad
-              value-label: {position: end, format: {precision: 0}}
 
       # -- standing up -------------------------------------------------------------------------------
       - type: group
@@ -149,48 +121,35 @@ items:
               fill: {gradient: $temperature}
               major: {interval: 10, side: after, labels: true}
               value-label: {position: inside, format: {precision: 0}, size: 14%}
-          - type: realtime.bar
+          - preset: readout-bar
             name: humidity-tall
-            key: environment.humidity.humidity
-            title: false
             geometry: {x: 40%, y: 0%, width: 18%, height: 100%}
+            props: {caption: RH, weight: 40%}
             display:
               orientation: vertical
-              range: {min: 0, max: 100}
-              caption: RH
-              track: {weight: 40%}
               fill: {gradient: $load}
-              value-label: {position: end, format: {precision: 0}}
-          - type: realtime.bar
+          - preset: readout-bar
             name: charge-tall
-            key: system.battery.charge
-            title: false
             geometry: {x: 61%, y: 0%, width: 18%, height: 100%}
+            props: {key: system.battery.charge, caption: Charge, weight: 40%}
             display:
               orientation: vertical
-              range: {min: 0, max: 100}
-              caption: Charge
-              track: {weight: 40%, cap: flat}
+              track: {cap: flat}
               fill: {color: zone, segments: 10, gap: 3%}
               zones:
                 - {to: 20, color: $bad, opacity: 0}
                 - {from: 20, to: 50, color: $warn, opacity: 0}
                 - {from: 50, color: $good, opacity: 0}
-              value-label: {position: end, format: {precision: 0}}
-          - type: realtime.bar
+          - preset: readout-bar
             name: uv-tall
-            key: environment.light.uvi
-            title: false
             geometry: {x: 82%, y: 0%, width: 18%, height: 100%}
+            props: {key: environment.light.uvi, max: 12, caption: UV, weight: 40%}
             display:
               orientation: vertical
-              range: {min: 0, max: 12}
-              caption: UV
-              track: {weight: 40%, cap: flat}
+              track: {cap: flat}
               zones:
                 - {from: 0, to: 3, color: $good}
                 - {from: 3, to: 6, color: $warn}
                 - {from: 6, to: 8, color: $accent}
                 - {from: 8, to: 12, color: $bad}
               pointer: {type: triangle, color: $text, side: after}
-              value-label: {position: end, format: {precision: 0}}

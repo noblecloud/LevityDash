@@ -38,6 +38,7 @@ These pages cover the options that work on a whole dashboard:
 
 - [Themes](/config/dashboard/themes.md): named colors, fonts, and gradients.
 - [Variables](/config/dashboard/variables.md): a name for a value that you use more than once.
+- [Presets](/config/dashboard/presets.md): a module that you write once and use many times, with its own properties.
 - [Value Sources](/config/dashboard/expressions.md): a key, a number, or an expression, and units in an expression.
 - [Switch](/config/dashboard/switch.md): a slot that shows one of several modules.
 

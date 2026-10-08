@@ -107,30 +107,38 @@ def _same(live: Any, resolved: Any) -> bool:
 	return False
 
 
-def retemplate(live: Any, resolved: Any, template: Any) -> Any:
+def retemplate(live: Any, resolved: Any, template: Any, collapse: Any = None) -> Any:
 	"""`live` with the `$name` text of `template` restored wherever `live` still equals `resolved`.
 
 	`resolved` is `template` after `resolveVariables`, so the two have the same shape. A list lines up by
 	`name` when every item has a distinct one, else by position, and only when the lengths agree.
+	`collapse(live, template, resolved)` is offered each mapping `live` meets that `template` wrote as a preset use
+	(`lib/presets.py`); it returns the short form to save, or None to go on as usual.
 	"""
 	try:
 		if _same(live, resolved):
 			return template
+		if collapse is not None and isinstance(template, dict) and 'preset' in template and (short := collapse(live, template, resolved)) is not None:
+			return short
 		if isinstance(live, dict) and isinstance(resolved, dict) and isinstance(template, dict):
 			return {
-				key: retemplate(value, resolved[key], template[key]) if key in resolved and key in template else value
+				key: retemplate(value, resolved[key], template[key], collapse) if key in resolved and key in template else value
 				for key, value in live.items()
 			}
 		if isinstance(live, list) and isinstance(resolved, list) and isinstance(template, list) and len(resolved) == len(template):
 			liveNames, resolvedNames = _names(live), _names(resolved)
 			if liveNames is not None and resolvedNames is not None:
 				where = {name: index for index, name in enumerate(resolvedNames)}
+				# An item whose name changed has no match. When as many names went as are new, they pair up in order.
+				gone = [index for index, name in enumerate(resolvedNames) if name not in liveNames]
+				new = [index for index, name in enumerate(liveNames) if name not in where]
+				pair = dict(zip(new, gone)) if len(gone) == len(new) else {}
 				return [
-					retemplate(item, resolved[where[name]], template[where[name]]) if name in where else item
-					for name, item in zip(liveNames, live)
+					retemplate(item, resolved[index], template[index], collapse) if (index := where.get(name, pair.get(position))) is not None else item
+					for position, (name, item) in enumerate(zip(liveNames, live))
 				]
 			if len(live) == len(resolved):
-				return [retemplate(*triple) for triple in zip(live, resolved, template)]
+				return [retemplate(*triple, collapse) for triple in zip(live, resolved, template)]
 	except Exception:
 		log.exception('a save could not restore the variable names; it writes the values')
 	return live

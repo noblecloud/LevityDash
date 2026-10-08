@@ -1,6 +1,6 @@
 # Roadmap
 
-*Last updated: 2026-10-06 (plan for first stable cut and lanes merged in).*
+*Last updated: 2026-10-07 (presets added to dashboard authoring).*
 
 This organizes and supersedes the raw idea list in [`_planned-features.md`](_planned-features.md) — every item from that list is either placed in a section below, marked as already done, or parked with a reason. Status notes reference the code so claims stay checkable.
 
@@ -121,20 +121,20 @@ Triaged from `_planned-features.md`, grouped by area. ~~Struck~~ items are alrea
 
 - **Conditional dashboards / panels** — show/hide panels (or switch whole dashboards) based on conditions, including plugin status. Today there's only a static `disabled-` type prefix and template auto-selection by enabled plugin.
 - **Position relative to sibling items** — "center this item with the center of that item." All current positioning is relative to the parent only.
-- **Migrate `shared:` → named `preset:`** — both exist today (`preset` at `Stacks.py:892`, `Stateful.shared` at `statekit/core.py:1925`); the direction is named, reusable presets over anonymous inheritance.
+- **Migrate `shared:` → named `preset:`** — both exist today (`preset` at `Stacks.py:892`, `Stateful.shared` at `statekit/core.py:1925`); the direction is named, reusable presets over anonymous inheritance. **Started 2026-10-07:** whole-module presets (`preset: name` + `props:`, saved as only what differs) are in `lib/presets.py`; see [config/dashboard/presets.md](config/dashboard/presets.md). `Stack.preset` (item defaults) and `shared:` are unchanged; moving them onto the same mechanism is still open.
 - **Screen-size conditions for size options** — different sizing rules per display size.
 - **Scrolling in overfilled stacks.**
 - **Condensed-title option** — possibly automatic by available size.
 - **Corner radius** on panels.
 - **Fill object** — one abstraction accepting colors, gradients, images, and patterns; today `FillBrushMixin` handles color + gradient only. Include dynamic color functions and plot-line section dividers.
-- **Value templates** — file-loadable templates combining multiple values into one composite display.
+- ~~**Value templates** — file-loadable templates combining multiple values into one composite display.~~ **Done 2026-10-07** as presets: a preset's `template:` can be a composite (`hero-readings` is a titled panel of four readings) with props that land on its sub-items. Still open: a Studio editor for presets, and a way to save a selection as a preset.
 - **Layout in a separate file** — split panel layout from the rest of the dashboard spec.
 - **Groups default to grid/stack** unless specified; explicit item geometry overrides.
 - **`type: split` in YAML** — `SplitPanel` exists but is only insertable from the context menu; it isn't wired into `itemLoader`.
 
 ### Display modules
 
-- **Stale-value indicator is too eager.** The "X mins ago" marker appears whenever a value is older than a fixed threshold, but "old" only means anything relative to *that source's* refresh period — a BLE thermometer advertising every ~20s and an hourly forecast poll are both perfectly fresh at 5 minutes. It should stay hidden while a value is within the plugin's expected interval and only surface once a refresh has actually been *missed*.
+- ~~**Stale-value indicator is too eager.**~~ **Done** (`c2e5b3b`, `lib/plugins/freshness.py`: `RefreshEstimator` learns each source's period; the marker itself is parked behind `SHOW_TIME_OFFSET`). Original note: The "X mins ago" marker appears whenever a value is older than a fixed threshold, but "old" only means anything relative to *that source's* refresh period — a BLE thermometer advertising every ~20s and an hourly forecast poll are both perfectly fresh at 5 minutes. It should stay hidden while a value is within the plugin's expected interval and only surface once a refresh has actually been *missed*.
   - Regular sources can declare their period. **Irregular ones (BLE, push) should infer it** from observed update intervals — a rolling median of recent gaps, so the threshold adapts instead of being guessed. That also makes the indicator meaningful: it then means "this source has gone quiet relative to its own habits", which is the thing worth knowing.
   - Related: the backend now tracks `lastPublish` per plugin for the control plane (`lib/wire/messages.py`), which is the same measurement one layer up — worth sharing the inference rather than computing staleness twice.
 - **Graph Y-axis labeling** — the graph only labels peaks/troughs and the time axis today.
@@ -164,14 +164,14 @@ Triaged from `_planned-features.md`, grouped by area. ~~Struck~~ items are alrea
 ### Plugins
 
 - **Watchdogs / health checks** — auto-restart and heartbeat for wedged plugins. The `health_check_worker` scaffold in `lib/backend.py` needs rebuilding now that backend.py is the live headless process.
-- **Network failure/recovery hardening** — REST plugins already retry (`ScheduledEvent.retry`); the UDP socket path only logs `connection_lost` and never reconnects.
+- ~~**Network failure/recovery hardening**~~ — **done 2026-10-07**: REST plugins already retried (`ScheduledEvent.retry`). The UDP socket and the WeatherFlow websocket now reconnect too: `lib/plugins/web/reconnect.py` (`keepConnected` with a growing `Backoff`, 2s up to 5 min) re-binds a lost or never-bound UDP port and re-opens a dropped websocket. Verified with real loopback drops in `tests/plugins/test_reconnect.py`. Still open: a socket that stays bound but goes silent (no datagram for several periods) is not detected.
 - **Govee: broader device support** — `closest`/`first`/MAC/UUID selection all work; only GVH5102 is tested. Extend model coverage and parsing presets.
 - **Bluetooth-unavailable handling** — test/degrade gracefully when the adapter is missing or permission-blocked (macOS TCC).
 
 ### App & platform
 
 - ~~**Keep-awake option**~~ — **done 2026-10-07**: `[QtOptions] keepAwake = True` holds an OS lock for the life of the frontend (`lib/utils/keepawake.py`): `caffeinate` on macOS, `systemd-inhibit` on Linux, `SetThreadExecutionState` on Windows. Off by default. Tested with stand-in commands and a real `systemd-inhibit` (which correctly reports failure in a container with no bus); a real macOS or Windows hold is not yet seen. App Nap is separate and unchanged: already opted out via `preventAppNap()` (`lib/utils/shared.py`).
-- **Runtime log-level menu** — change log level (and status-bar update level) from the menu bar; the Logs menu currently only opens/submits logs.
+- ~~**Runtime log-level menu**~~ — **done 2026-10-07**: Logs > Log Level (file and console) and Logs > Status Bar Level, each a radio list from Error to Verbose (`app.py` `_levelMenu`, `_LevityLogger.setRuntimeLevel`). A change applies at once and lasts until restart; nothing is written to the config.
 - **Dashboard-level config overrides** — per-dashboard settings that override global config.
 - **Event notifications** — user-facing alerts (lightning nearby, rain starting, etc.).
 - **Self-installer & packaging** — PyInstaller flow is unblocked (6.x) but unverified on the 3.14 stack; multi-OS builds via GitHub Actions.
