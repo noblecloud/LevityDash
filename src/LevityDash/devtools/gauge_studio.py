@@ -452,14 +452,8 @@ class Studio(QWidget):
 		self.watchTimer = QTimer(self, interval=500, timeout=self._checkFile)
 
 		self.studio = StudioGauge(self.scene, DATA_PRESETS['Temperature F'])
-		ctx = editors.CONTEXT
-		ctx.range = lambda: self.studio.range if self.studio.gauge is not None else (0.0, 100.0)
-		ctx.span = self._span
-		ctx.valueClass = lambda: self.studio.gauge.valueClass if self.studio.gauge is not None else None
-		ctx.beginDrag = self.beginDrag
-		ctx.endDrag = self.endDrag
-		ctx.gradientMode = lambda: self.layer.gradientMode
-		ctx.setGradientMode = self.setGradientMode
+		self.polarWindow = None
+		self._installContext()
 		self.layer = HandleLayer(self)
 		self.preview.layer = self.layer
 		# Each key sequence is bound once. On macOS the standard Undo key is Ctrl+Z in Qt's terms,
@@ -486,6 +480,31 @@ class Studio(QWidget):
 		else:
 			self.loadDisplay({'arc': {'weight': '5%'}, 'major': {'labels': {'position': 'outside'}}, 'value-label': {'position': 'below'}},
 			                 'environment.temperature.temperature', 'Default dial')
+
+	def _installContext(self):
+		"""Point the shared editor context at this gauge. The Polar window points it at its own plot, so each window takes it back when it is activated."""
+		ctx = editors.CONTEXT
+		ctx.range = lambda: self.studio.range if self.studio.gauge is not None else (0.0, 100.0)
+		ctx.span = self._span
+		ctx.valueClass = lambda: self.studio.gauge.valueClass if self.studio.gauge is not None else None
+		ctx.beginDrag = self.beginDrag
+		ctx.endDrag = self.endDrag
+		ctx.gradientMode = lambda: self.layer.gradientMode
+		ctx.setGradientMode = self.setGradientMode
+
+	def changeEvent(self, event):
+		if event.type() == QEvent.Type.ActivationChange and self.isActiveWindow() and getattr(self, 'layer', None) is not None:
+			self._installContext()
+		super().changeEvent(event)
+
+	def openPolar(self):
+		"""The polar plot panel, in a window of its own."""
+		from LevityDash.devtools._studio_polar import PolarStudio
+		if self.polarWindow is None or not self.polarWindow.isVisible():
+			self.polarWindow = PolarStudio()
+		self.polarWindow.show()
+		self.polarWindow.raise_()
+		self.polarWindow.activateWindow()
 
 	# chrome
 
@@ -519,6 +538,10 @@ class Studio(QWidget):
 		reset.setToolTip('Reload the current template and drop every change')
 		reset.clicked.connect(self.resetAll)
 		bar.addWidget(reset)
+		polar = QPushButton('Polar…')
+		polar.setToolTip('Design a polar plot (rose, trail, clock) in its own window')
+		polar.clicked.connect(self.openPolar)
+		bar.addWidget(polar)
 		bar.addStretch(1)
 		box.addLayout(bar)
 
@@ -1436,6 +1459,7 @@ class Studio(QWidget):
 def main(argv: Optional[List[str]] = None) -> int:
 	parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 	parser.add_argument('fragment', nargs='?', help='a .levity fragment to open; reloaded when it changes on disk. With --build, a preset file')
+	parser.add_argument('--polar', action='store_true', help='open the polar plot panel instead of the gauge')
 	parser.add_argument('--build', action='store_true', help='open the builder: compose items, give them properties, preview on fixture data')
 	parser.add_argument('--scenario', help='with --build: the fixture scenario the preview draws on (default hot-clear-day)')
 	parser.add_argument('--seed', help='with --build: a config dir to seed the preview dashboard from')
@@ -1458,8 +1482,14 @@ def main(argv: Optional[List[str]] = None) -> int:
 		wake.start(200)
 		wake.timeout.connect(lambda: None)
 		return app.exec()
-	window = Studio(fragment)
-	window._setTheme(False)
+	if args.polar:
+		from LevityDash.devtools._studio_polar import PolarStudio
+		window = PolarStudio(fragment)
+		app.setPalette(themePalette(THEMES['dark']))
+		app.setStyleSheet(themeSheet(THEMES['dark']))
+	else:
+		window = Studio(fragment)
+		window._setTheme(False)
 	window.show()
 	app.lastWindowClosed.connect(app.quit)
 	# Quit through Qt on SIGTERM/SIGINT, so macOS drops the Dock tile. The timer wakes Python

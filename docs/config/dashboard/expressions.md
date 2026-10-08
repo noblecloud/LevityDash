@@ -18,6 +18,7 @@ An expression is a small calculation. It can use keys, numbers, units, and the h
 | `when:` on any module | Show the module only while the expression is true. See [Switch](/config/dashboard/switch.md). |
 | `value:` of a gauge `markers:` entry | The place of the marker on the dial. |
 | `from:` and `to:` of a gauge `fill:` | The two ends of the filled part of the dial. |
+| `key:` of a `polar` clock, `direction:` and `speed:` of a `polar` rose or trail | The series that the plot draws. The expression is worked out at every sample time of its keys, so the plot gets a whole series, not one value. A time where a key has no value yet is left out. |
 
 ## Examples
 
