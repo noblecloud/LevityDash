@@ -150,6 +150,8 @@ rolloverCount = 5
 The logging level to use. This can be one of the following: `VERBOSE`, `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` with the default being `INFO`. This only changes the level of logging that is written to the console. The log file is
 always written at the `VERBOSE` level with a verbosity of `5`.
 
+The **Logs** menu changes the level while the app runs. **Log Level** sets the file and console levels together, and **Status Bar Level** sets the status bar. A change lasts until restart. It is not written to the config.
+
 <!-- panels:start -->
 
 <!-- div:left-panel -->
@@ -244,3 +246,5 @@ max = 3
 [UnitProperties]
 temperature = precision=0, max=3, unitSpacer=False, shorten=False, kSeparator=True, decorator=º, showUnit=False
 ```
+
+LevityDash reads `[Units]` when it starts. A length such as a rain caption is then shown in the same unit on every start, and the first paint already uses it.

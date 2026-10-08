@@ -59,6 +59,9 @@ continuously.
 
 Kept briefly so the same ground isn't re-covered.
 
+- **Station, Storm, Sky and Week boards** ([#54](https://github.com/noblecloud/LevityDash/pull/54), [#60](https://github.com/noblecloud/LevityDash/pull/60)) — the Station board is from [dashboard-design-handoff](dashboard-design-handoff.md). All four are in `docs/design-references/boards/`.
+- **Whole-module presets and saved gauges and bars** ([#64](https://github.com/noblecloud/LevityDash/pull/64), [#66](https://github.com/noblecloud/LevityDash/pull/66)), and a saved text keeps its theme font ([#69](https://github.com/noblecloud/LevityDash/pull/69)).
+- **Deterministic unit localisation** ([#68](https://github.com/noblecloud/LevityDash/pull/68), WeatherUnits [#7](https://github.com/noblecloud/WeatherUnits/pull/7)): the `[Units]` config is read explicitly, not by import order.
 - **[studio-value-sources](studio-value-sources.md)** — the Studio's value-source
   stand-in now registers in `lib/valuesource` and `openValueSource` consults it,
   so keyed markers/fills/captions resolve wherever their consumer lives; and a
