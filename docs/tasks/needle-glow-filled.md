@@ -1,5 +1,12 @@
 # Needle glow rides the pen width, not the shape
 
+**Status: FIXED 2026-10-06.** The needle's paint — on the shared
+`StatefulGaugePathItem` base, not the needle's own body — now passes
+`filled=True` and the shape's own thickness (`self.width_px`) instead of the pen's
+width, so at `reach: 0` nothing shows outside the outline and a halo starts flush
+at the blade's edge. On `dev` (`0d69fa5`, `14457d4`), pinned by
+`tests/ui/test_glow_filled.py`.
+
 At `reach: 0` the halo should be invisible (every pass flush), but the needle shows a
 uniform gray band around its blade — a hard-edged outline roughly 40-50% of the blade's
 width on each side. All passes stack at the same width, so it reads as one band rather

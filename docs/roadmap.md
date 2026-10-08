@@ -134,7 +134,7 @@ Triaged from `_planned-features.md`, grouped by area. ~~Struck~~ items are alrea
 
 ### Display modules
 
-- **Stale-value indicator is too eager.** The "X mins ago" marker appears whenever a value is older than a fixed threshold, but "old" only means anything relative to *that source's* refresh period — a BLE thermometer advertising every ~20s and an hourly forecast poll are both perfectly fresh at 5 minutes. It should stay hidden while a value is within the plugin's expected interval and only surface once a refresh has actually been *missed*.
+- ~~**Stale-value indicator is too eager.**~~ **Done** (`c2e5b3b`, `lib/plugins/freshness.py`: `RefreshEstimator` learns each source's period; the marker itself is parked behind `SHOW_TIME_OFFSET`). Original note: The "X mins ago" marker appears whenever a value is older than a fixed threshold, but "old" only means anything relative to *that source's* refresh period — a BLE thermometer advertising every ~20s and an hourly forecast poll are both perfectly fresh at 5 minutes. It should stay hidden while a value is within the plugin's expected interval and only surface once a refresh has actually been *missed*.
   - Regular sources can declare their period. **Irregular ones (BLE, push) should infer it** from observed update intervals — a rolling median of recent gaps, so the threshold adapts instead of being guessed. That also makes the indicator meaningful: it then means "this source has gone quiet relative to its own habits", which is the thing worth knowing.
   - Related: the backend now tracks `lastPublish` per plugin for the control plane (`lib/wire/messages.py`), which is the same measurement one layer up — worth sharing the inference rather than computing staleness twice.
 - **Graph Y-axis labeling** — the graph only labels peaks/troughs and the time axis today.
@@ -164,14 +164,14 @@ Triaged from `_planned-features.md`, grouped by area. ~~Struck~~ items are alrea
 ### Plugins
 
 - **Watchdogs / health checks** — auto-restart and heartbeat for wedged plugins. The `health_check_worker` scaffold in `lib/backend.py` needs rebuilding now that backend.py is the live headless process.
-- **Network failure/recovery hardening** — REST plugins already retry (`ScheduledEvent.retry`); the UDP socket path only logs `connection_lost` and never reconnects.
+- ~~**Network failure/recovery hardening**~~ — **done 2026-10-07**: REST plugins already retried (`ScheduledEvent.retry`). The UDP socket and the WeatherFlow websocket now reconnect too: `lib/plugins/web/reconnect.py` (`keepConnected` with a growing `Backoff`, 2s up to 5 min) re-binds a lost or never-bound UDP port and re-opens a dropped websocket. Verified with real loopback drops in `tests/plugins/test_reconnect.py`. Still open: a socket that stays bound but goes silent (no datagram for several periods) is not detected.
 - **Govee: broader device support** — `closest`/`first`/MAC/UUID selection all work; only GVH5102 is tested. Extend model coverage and parsing presets.
 - **Bluetooth-unavailable handling** — test/degrade gracefully when the adapter is missing or permission-blocked (macOS TCC).
 
 ### App & platform
 
 - **Keep-awake option** — prevent *system/display* sleep for an always-on kiosk display: `caffeinate` (macOS), `xdg-screensaver`/`systemd-inhibit` (Linux), `powercfg`/`SetThreadExecutionState` (Windows). Distinct from macOS App Nap (a per-process background-timer throttle, independent of system sleep settings) — App Nap is already opted out of unconditionally at startup via `preventAppNap()` (`lib/utils/shared.py`), both frontend and backend.
-- **Runtime log-level menu** — change log level (and status-bar update level) from the menu bar; the Logs menu currently only opens/submits logs.
+- ~~**Runtime log-level menu**~~ — **done 2026-10-07**: Logs > Log Level (file and console) and Logs > Status Bar Level, each a radio list from Error to Verbose (`app.py` `_levelMenu`, `_LevityLogger.setRuntimeLevel`). A change applies at once and lasts until restart; nothing is written to the config.
 - **Dashboard-level config overrides** — per-dashboard settings that override global config.
 - **Event notifications** — user-facing alerts (lightning nearby, rain starting, etc.).
 - **Self-installer & packaging** — PyInstaller flow is unblocked (6.x) but unverified on the 3.14 stack; multi-OS builds via GitHub Actions.

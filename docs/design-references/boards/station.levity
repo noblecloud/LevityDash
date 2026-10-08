@@ -83,13 +83,13 @@ items:
           range: {min: 50, max: 100}
           track: {weight: 18%}
           fill:
-            from: min($t, today)
-            to: max($t, today)
+            from: 'min($t, today)'
+            to: 'max($t, today)'
             gradient: TemperatureGradient
           pointer: {type: triangle, color: $text, side: before}
           markers:
-          - {value: min($t, today), type: line, color: $info}
-          - {value: max($t, today), type: line, color: $bad}
+          - {value: 'min($t, today)', type: line, color: $info}
+          - {value: 'max($t, today)', type: line, color: $bad}
           major: {interval: 10, side: after, labels: true}
           value-label: {visible: false}
       - preset: stat-row

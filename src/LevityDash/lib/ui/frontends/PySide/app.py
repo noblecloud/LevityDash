@@ -21,7 +21,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
 	QCursor, QDesktopServices, QDrag, QFont, QIcon, QPainter, QPainterPath, QPixmapCache, QScreen, QShowEvent,
-	QSurfaceFormat, QTransform, QPixmap, QAction
+	QSurfaceFormat, QTransform, QPixmap, QAction, QActionGroup
 )
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
@@ -1334,10 +1334,39 @@ class LevityMainWindow(QMainWindow):
 		submitLogsMenu.addAction(submitLogs)
 		logsMenu.addMenu(submitLogsMenu)
 
+		logsMenu.addSeparator()
+		logsMenu.addMenu(self._levelMenu('Log Level', 'log', 'Detail written to the log file and the console'))
+		logsMenu.addMenu(self._levelMenu('Status Bar Level', 'status-bar', 'Detail shown in the status bar'))
+
 		raiseException = QAction('Test Raise Exception', self)
 		raiseException.setStatusTip('Test raising an exception for log capture')
 		raiseException.triggered.connect(lambda: exec('raise Exception("Raised Test Exception")'))
 		logsMenu.addAction(raiseException)
+
+	def _levelMenu(self, title: str, target: str, tip: str) -> QMenu:
+		"""A radio list of log levels. Takes effect at once, lasts until restart."""
+		from LevityDash.lib.log import _LevityLogger
+		menu = QMenu(title, self)
+		menu.setStatusTip(tip)
+		group = QActionGroup(menu)
+		group.setExclusive(True)
+		for name, level in _LevityLogger.RUNTIME_LEVELS:
+			action = QAction(name, menu)
+			action.setCheckable(True)
+			action.setActionGroup(group)
+			action.triggered.connect(lambda _=False, level=level: _LevityLogger.setRuntimeLevel(target, level))
+			menu.addAction(action)
+
+		def showCurrent():
+			# The configured level may sit between two names; check the nearest one at or above it.
+			current = _LevityLogger.runtimeLevel(target)
+			nearest = min(_LevityLogger.RUNTIME_LEVELS, key=lambda item: (item[1] < current, abs(item[1] - current)))
+			for action in menu.actions():
+				action.setChecked(action.text() == nearest[0])
+
+		menu.aboutToShow.connect(showCurrent)
+		showCurrent()
+		return menu
 
 	def toggleFullScreen(self):
 		if self.isFullScreen():

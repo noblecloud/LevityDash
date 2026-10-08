@@ -43,6 +43,8 @@ from uuid import uuid4
 from LevityDash import LevityDashboard
 from LevityDash.lib.plugins import Container, Plugin
 from LevityDash.lib.plugins.categories import CategoryItem
+from LevityDash.lib.plugins.expressions import Expression, ExpressionError
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.series import derive, number, Series
 from LevityDash.lib.plugins.dispatcher import MultiSourceContainer
 from LevityDash.lib.plugins.observation import MeasurementTimeSeries, TimeAwareValue, TimeSeriesItem
 from LevityDash.lib.plugins.plugin import AnySource, SomePlugin
@@ -98,6 +100,15 @@ INTERP_TYPES = {'linear', 'cubic', 'spline'}
 # hundred points.
 _WIRE_FETCH_LOOKBACK = timedelta(days=-2)
 _WIRE_FETCH_HORIZON = timedelta(days=16)
+
+
+def _isPlainKey(text: str) -> bool:
+	"""True for a bare key, False for an expression over keys (or for text that parses as neither)."""
+	try:
+		return Expression.parse(text).plainKey is not None
+	except ExpressionError:
+		return True
+
 
 class TestData:
 
@@ -986,17 +997,44 @@ class GraphItemData(Stateful, tag=...):
 	def sideSeries(self, key) -> tuple[np.ndarray, list] | None:
 		"""Another key's samples over this plot's window: epoch seconds and the values as the source holds them.
 
+		`key` may be an expression: a computed key holds one value and no history, so the
+		expression is evaluated at each sample time of the keys it reads (`derive`) instead.
+
 		None when the key is unknown, has no timeseries yet, or has nothing in the window.
 		"""
+		text = str(key)
+		try:
+			expression = Expression.parse(text)
+		except ExpressionError:
+			expression = None
+		if expression is None or expression.plainKey is not None:
+			items = self._sideItems(key)
+			if items is None:
+				return None
+			return np.array([i.timestamp.timestamp() for i in items]), [i.value for i in items]
+		inputs = {}
+		for inputKey in expression.inputKeys:
+			if (items := self._sideItems(inputKey)) is None:
+				return None
+			inputs[inputKey] = Series([i.timestamp for i in items], [number(i.value) for i in items], raw=[i.value for i in items])
+		try:
+			derived = derive(expression, inputs, now())
+		except ExpressionError as e:
+			log.warning(f'{text!r}: {e}; it draws without it')
+			return None
+		if not len(derived):
+			return None
+		return np.array([t.timestamp() for t in derived.times]), derived.raw
+
+	def _sideItems(self, key) -> list | None:
+		"""The samples of one plain key inside this plot's window, or None."""
 		container = LevityDashboard.get_container(CategoryItem(str(key)), None)
 		series = container.getTimeseries(AnySource) if container is not None else None
 		if series is None or series.timeseries is None:
 			return None
 		end = self.graph.timeframe.end + timedelta(hours=1) if not self.graph.scrollable else None
 		items = series.timeseries[self.graph.timeframe.historicalStart:end]
-		if not len(items):
-			return None
-		return np.array([i.timestamp.timestamp() for i in items]), [i.value for i in items]
+		return list(items) if len(items) else None
 
 	@cached_property
 	def list(self):
@@ -1881,7 +1919,9 @@ class LinePlot(Plot):
 	@thickness.setter
 	def thickness(self, value: Optional[dict]):
 		text = value.get('key') if value else None
-		source = self._swapValueSource('_thicknessSource', text, 'thickness')
+		# No acquire for an expression: its computed key has no history to plot, so `sideSeries`
+		# keeps the text and evaluates it per sample.
+		source = self._swapValueSource('_thicknessSource', text if text and _isPlainKey(text) else None, 'thickness')
 		if value is not None and source is not None:
 			value = {**value, 'key': source.key}
 		self._thickness = value
@@ -1920,7 +1960,9 @@ class LinePlot(Plot):
 	@pins.setter
 	def pins(self, value: Optional[dict]):
 		text = value.get('key') if value else None
-		source = self._swapValueSource('_pinsSource', text, 'pins')
+		# No acquire for an expression: its computed key has no history to plot, so `sideSeries`
+		# keeps the text and evaluates it per sample.
+		source = self._swapValueSource('_pinsSource', text if text and _isPlainKey(text) else None, 'pins')
 		if value is not None and source is not None:
 			value = {**value, 'key': source.key}
 		self._pins = value
@@ -3030,7 +3072,10 @@ class TimestampGenerator:
 		return self
 
 	def __len__(self) -> int:
-		return max(abs(int((self.end - self.start) / self.__interval)), 0)
+		# A window that ends before it starts holds no labels. `abs()` here once counted
+		# it as a full one, and a clock split between the frozen and the wall time asked
+		# for eleven thousand hour labels, one graphics item each.
+		return max(int((self.end - self.start) / self.__interval), 0)
 
 	def __next__(self) -> datetime:
 		if self.__current > self.end:

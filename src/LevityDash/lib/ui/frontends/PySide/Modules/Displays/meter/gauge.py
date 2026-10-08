@@ -364,6 +364,10 @@ class GaugeArc(GlowMixin, StatefulGaugePathItem):
 @DebugPaint
 class Gauge(GlowMixin, Meter):
 
+	#: `center_offset` is worked out from the drawn arc on every rebuild. Saving it wrote a stale value that moved
+	#: the gauge on the next load. It still loads from an older file, where it is overwritten by the first draw.
+	__exclude__ = {..., 'center_offset'}
+
 	__value: float = 0.0
 	_needleAnimation: QPropertyAnimation
 	arc: GaugeArc
