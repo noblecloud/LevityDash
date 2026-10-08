@@ -1,4 +1,5 @@
 import copy
+from math import isfinite
 from datetime import timedelta, datetime
 from functools import cached_property, partial
 from numbers import Number
@@ -6,7 +7,7 @@ from time import monotonic, process_time
 from typing import Any, Iterable, Type, Dict
 
 from PySide6.QtCore import QByteArray, QMimeData, Qt, QTimer, QRectF, Slot, QPointF
-from PySide6.QtGui import QDrag, QFocusEvent, QPainter, QPixmap, QTransform
+from PySide6.QtGui import QDrag, QFocusEvent, QFont, QFontMetricsF, QPainter, QPixmap, QTransform
 from PySide6.QtWidgets import QApplication, QGraphicsItem, QGraphicsSceneMouseEvent, QStyleOptionGraphicsItem
 
 from LevityDash import LevityDashboard
@@ -1238,11 +1239,58 @@ class MeasurementDisplayProperties(Stateful):
 
 	@StateProperty(key='format-hint', default=None, allowNone=True, after=updateLabels)
 	def formatHint(self) -> str | None:
-		return getattr(self.valueTextBox.textBox, '_formatHint', None)
+		"""`format-hint` as configured. The derived hint is not reported here, so a save does not write it back as if set."""
+		return getattr(self.valueTextBox.textBox, '_explicitHint', None)
 
 	@formatHint.setter
 	def formatHint(self, value: str):
 		self.valueTextBox.textBox._formatHint = value
+
+	_hintCache: tuple | None = None
+
+	def valueHint(self, font: QFont) -> str | None:
+		"""The widest text this display can show, with every digit set to the widest glyph the font has.
+
+		The value is sized against this and not against the number on show, so 7, 13 and 101 come out
+		at one size. The widest text is the widest of: the formatted ends of the type's limits when
+		both are finite (a percentage: 0% to 100%), else the largest number the digit budget allows,
+		with a minus sign if the type goes below zero. None when the value is not a number or has no
+		digits (a compass point, a time of day); the value is then sized against itself.
+		"""
+		measurement = self.measurement
+		if not isinstance(measurement, Measurement) or isinstance(self.formatString, str) and self.formatString == 'duration':
+			return None
+		try:
+			live = self._textFor(measurement)
+			if not live or not any(c.isdigit() for c in live):
+				return None
+			key = (type(measurement), repr(self.formatString), repr(self.unit_dict), self.precision, self.unitPosition, font.key())
+			if (cached := self._hintCache) is not None and cached[0] == key:
+				return cached[1]
+			low, high = (float(x) for x in measurement._limits)
+			if isfinite(low) and isfinite(high):
+				values = [low, high]
+			else:
+				digits = max(1, int(self.maxLength if self.maxLength is not Unset else measurement.digit_budget))
+				values = [10 ** n - 1 for n in range(1, digits + 1)]
+				if low < 0:
+					values += [-(10 ** n - 1) for n in range(1, max(digits - 1, 1) + 1)]
+			texts = []
+			for value in values:
+				probe = type(measurement)(value)
+				probe.__dict__.update(measurement.__dict__)
+				text = self._textFor(probe)
+				if text and any(c.isdigit() for c in text):
+					texts.append(text)
+			metrics = QFontMetricsF(font)
+			digit = max('0123456789', key=metrics.horizontalAdvance)
+			texts = [''.join(digit if c.isdigit() else c for c in text) for text in texts]
+			hint = max(texts, key=metrics.horizontalAdvance) if texts else None
+		except Exception as e:  # noqa: BLE001 - sizing must never abort a load
+			guiLog.warning(f'{self.__class__.__name__} could not size its value to its range: {e!r}')
+			return None
+		self._hintCache = (key, hint)
+		return hint
 
 	def format(self, value: Measurement) -> str:
 		formatString = self.formatString
@@ -1321,7 +1369,10 @@ class MeasurementDisplayProperties(Stateful):
 
 	@property
 	def text(self) -> str | None:
-		measurement = self.measurement
+		return self._textFor(self.measurement)
+
+	def _textFor(self, measurement) -> str | None:
+		"""The value text for `measurement`; `text` is this applied to the live value, `valueHint` to probes."""
 		if isinstance(measurement, Measurement):
 			if (precision := self.precision) is not Unset and measurement.precision != precision:
 				measurement.precision = precision
@@ -1468,6 +1519,20 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 		__exclude__ = {..., 'format-hint'}
 
 		class TextBox(Label.TextBox):
+
+			@property
+			def _formatHint(self) -> str | None:
+				"""The string the value is sized against: an explicit hint if one was set, else the widest the display can show."""
+				if explicit := getattr(self, '_explicitHint', None):
+					return explicit
+				try:
+					return self.surface.parent.valueHint(QFont(self._font))
+				except AttributeError:
+					return None
+
+			@_formatHint.setter
+			def _formatHint(self, value: str | None):
+				self._explicitHint = value
 
 			@defer(pool_attr='action_pool')
 			def updateTransform(self, rect: QRectF = None, updateShared: bool = True, updatePath: bool = True, reason: str = None, *args):
