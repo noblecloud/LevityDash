@@ -1,0 +1,20 @@
+# A row of small readings that all share one title size and one value size, so the row reads as a table.
+# `group` names the size group: two rows with the same group share their text size, so give each row its own.
+# Where the row sits comes from the use (`geometry:`), and so does anything else that is not a property below.
+doc: Row of small readings with matched text sizes
+props:
+  items: {default: [], doc: "The readings, written as the items of a value-stack"}
+  group: {default: row, type: text, doc: "Name of the size group the row shares text sizes in"}
+  spacing: {default: 1mm, type: size, doc: "Gap between readings"}
+  font: {default: null, type: text, doc: "Font of the values; unset keeps the font of the panel around it"}
+template:
+  type: value-stack
+  shared:
+    title: {color: $muted, matchingGroup: {group: 'rowTitle@$group', matchAll: true}}
+    display:
+      unitPosition: Hidden
+      font: $font
+      valueLabel: {matchingGroup: {group: 'rowValue@$group', matchAll: true}}
+  direction: Horizontal
+  spacing: $spacing
+  items: $items

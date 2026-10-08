@@ -1,0 +1,49 @@
+# A panel with a word for a headline, one big reading under it and a few supporting readings: "Take cover",
+# the distance of the strike, and two small readings. The word, the reading and the list each have a box
+# (`headline_box`, `hero_box`, `list_box`); the defaults stack them down the panel, the list in a row.
+# For a conditional panel of a rotating slot add `when:` to the use.
+doc: Headline word, one big reading and a list of small ones
+props:
+  headline: {default: Headline, type: text, doc: "The word or phrase at the top"}
+  headline_color: {default: $text, type: color, doc: "Colour of the headline"}
+  headline_font: {default: Nunito, type: text, doc: "Font of the headline"}
+  headline_weight: {default: Light, type: text, doc: "Weight of the headline"}
+  headline_box: {default: {x: 0%, y: 0%, width: 100%, height: 30%}, doc: "Where the headline sits"}
+  key: {default: environment.temperature.temperature, type: key, doc: "The big reading"}
+  title: {default: null, type: text, doc: "Text over the big reading"}
+  title_height: {default: 14%, type: size, doc: "Height of that text, as a share of the panel"}
+  color: {default: null, type: color, doc: "Colour of the big reading"}
+  precision: {default: null, type: number, min: 0, doc: "Decimals of the big reading; unset keeps the key's own"}
+  font: {default: Nunito, type: text, doc: "Font of the big reading"}
+  weight: {default: ExtraLight, type: text, doc: "Weight of the big reading"}
+  format: {default: null, type: text, doc: "How the big reading is written, such as duration for minutes as hours and minutes"}
+  unit_position: {default: Inline, type: text, doc: "Where the unit goes: Inline, FloatUnder, Hidden; null keeps the default"}
+  hero_box: {default: {x: 0%, y: 32%, width: 100%, height: 40%}, doc: "Where the big reading sits"}
+  items: {default: [], doc: "The supporting readings, written as the items of a value-stack"}
+  direction: {default: Horizontal, doc: "Vertical or Horizontal"}
+  spacing: {default: null, type: size, doc: "Gap between the supporting readings"}
+  list_display: {default: null, doc: "Display settings the supporting readings share, such as {font: Roboto Mono}"}
+  list_box: {default: {x: 0%, y: 76%, width: 100%, height: 24%}, doc: "Where the supporting readings sit"}
+template:
+  type: group
+  items:
+    - type: text
+      text: $headline
+      font: $headline_font
+      weight: $headline_weight
+      color: $headline_color
+      geometry: $headline_box
+    - type: realtime.text
+      key: $key
+      title: {text: $title, height: $title_height, color: $muted}
+      display:
+        font: $font
+        weight: $weight
+        unitPosition: $unit_position
+        format: $format
+        precision: $precision
+        valueLabel: {color: $color}
+      geometry: $hero_box
+    - preset: reading-list
+      props: {items: $items, direction: $direction, spacing: $spacing, display: $list_display}
+      geometry: $list_box

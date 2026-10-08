@@ -1,0 +1,22 @@
+# One coming day, read off the daily keys with `at()`: its name, the high and low, the rain, the gust and
+# the wind's heading. Seven of these in a horizontal stack with `defaultType: value-stack` make a week
+# table. `offset` is how far on from now ("1d" is tomorrow). Each reading is a property whose default reads
+# the daily key at `offset`; for today give the plain key (`high: environment.temperature.high`), which
+# needs no `at()`.
+doc: "One day of the week table: high, low, rain, gust, wind heading"
+props:
+  label: {default: Tomorrow, type: text, doc: The name over the column}
+  offset: {default: 1d, type: text, doc: "How far on from now, such as 2d"}
+  high: {default: 'at(environment.temperature.high, $offset)', type: key, doc: The daily high}
+  low: {default: 'at(environment.temperature.low, $offset)', type: key, doc: The daily low}
+  rain: {default: 'at(environment.precipitation.daily, $offset)', type: key, doc: The rain for the day}
+  gust: {default: 'at(environment.wind.speed.gustMax, $offset)', type: key, doc: The day's strongest gust}
+  heading: {default: 'at(environment.wind.direction.dominant, $offset)', type: key, doc: Where the wind comes from}
+template:
+  items:
+    - {type: text, text: $label, font: $display, color: $text, alignment: Center}
+    - {type: realtime.text, key: $high, title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
+    - {type: realtime.text, key: $low, title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
+    - {type: realtime.text, key: $rain, title: {text: Rain}, display: {precision: 2, valueLabel: {color: $info}}}
+    - {type: realtime.text, key: $gust, title: {text: Gust}, display: {precision: 0, valueLabel: {color: $warn}}}
+    - {type: realtime.text, key: $heading, title: {text: From}, display: {precision: 0}}

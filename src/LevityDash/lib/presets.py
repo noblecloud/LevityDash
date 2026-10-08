@@ -138,10 +138,62 @@ class Preset:
 		"""The item this preset makes with `given` properties and `fields` merged over it. Nested presets are expanded."""
 		if self.name in _stack or len(_stack) >= _DEPTH:
 			raise PresetError(f'presets use each other in a loop: {" > ".join((*_stack, self.name))}')
-		item = substitute(deepcopy(self.template), self.values(given))
+		item = _apply(deepcopy(self.template), self.values(given))
+		if item is _GONE:
+			item = {}
 		if fields:
 			item = merge(item, fields)
+		if isinstance(item, dict) and 'items' in item:
+			item['items'] = item.pop('items')  # an item takes its own geometry and settings before its children are built
 		return _walk(item, (*_stack, self.name))
+
+
+_REFERENCE = re.compile(r'^\$(?:(\w[\w-]*)|\{(\w[\w-]*)\})$')
+
+
+def _name(text: Any, values: Dict[str, Any]) -> Optional[str]:
+	"""The property that `text` is exactly a reference to, else None."""
+	if isinstance(text, str) and (found := _REFERENCE.match(text)):
+		if (name := found.group(1) or found.group(2)) in values:
+			return name
+	return None
+
+
+_GONE = object()
+
+
+def _apply(node: Any, values: Dict[str, Any]) -> Any:
+	"""`node` with the properties filled in.
+
+	Beyond `substitute`: a mapping key that is exactly `$prop` takes the property's text, so a series can be named by a
+	property; and an entry whose key or value is exactly `$prop` for a property that is `null` is left out
+	(a list item that is exactly such a `$prop` too), so an optional setting costs nothing when it is not set. A mapping that
+	this empties is left out as well.
+	"""
+	if isinstance(node, dict):
+		out: dict = {}
+		dropped = False
+		for key, value in node.items():
+			if (name := _name(key, values)) is not None:
+				if values[name] is None:
+					dropped = True
+					continue
+				if not isinstance(values[name], str):
+					raise PresetError(f'property {name!r} is used as a key, so it must be text, not {values[name]!r}')
+				key = values[name]
+			if (name := _name(value, values)) is not None and values[name] is None:
+				dropped = True
+				continue
+			value = _apply(value, values)
+			if value is _GONE:
+				dropped = True
+				continue
+			out[key] = value
+		return _GONE if dropped and not out else out
+	if isinstance(node, list):
+		kept = [item for item in node if not ((name := _name(item, values)) is not None and values[name] is None)]
+		return [item for item in (_apply(item, values) for item in kept) if item is not _GONE]
+	return deepcopy(substitute(node, values))
 
 
 def merge(base: Any, over: Any) -> Any:

@@ -1,0 +1,26 @@
+# A compass dial for wind: the heading on the needle, the speed in the middle and a word under it.
+doc: Wind compass with the speed in the middle
+props:
+  key: {default: environment.wind.direction.direction, type: key, doc: "The heading the needle shows"}
+  speed: {default: environment.wind.speed.speed, type: key, doc: "The speed written in the middle"}
+  label: {default: mph, type: text, doc: "The word under the speed"}
+  label_size: {default: 6.5%, type: size, doc: "Height of that word, as a share of the dial"}
+  caption_size: {default: 17%, type: size, doc: "Height of the speed, as a share of the dial"}
+  arc_weight: {default: 3%, type: size, doc: "Thickness of the ring"}
+  needle_length: {default: 34%, type: size, doc: "Length of the needle, as a share of the dial"}
+template:
+  type: realtime.gauge
+  key: $key
+  title: false
+  display:
+    radius: 92%
+    arc: {start-angle: 0, end-angle: 360, weight: $arc_weight, color: $rule}
+    range: {min: 0, max: 360, wrap: true}
+    major: {interval: 90, length: 8%, width: 2px, color: $faint, labels: {position: inside, offset: 4%, height: 9%, rotate: false, text: compass}}
+    minor: {interval: 22.5, length: 40%, width: 1px, color: $rule}
+    micro: {enabled: false}
+    needle: {type: arrow, length: $needle_length, width: 2.4%, head: 12%, tail: 28%, tail-dot: 5%, color: $accent}
+    value-label: {visible: false}
+    unit-label: {visible: false}
+    caption: {value: $speed, format: {precision: 0, show_unit: false}, size: $caption_size, gap: 0%, color: $text}
+    sub-label: {text: $label, size: $label_size, gap: 1%}

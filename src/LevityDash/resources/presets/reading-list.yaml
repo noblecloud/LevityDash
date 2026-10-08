@@ -1,0 +1,16 @@
+# A stack of small readings, each a muted title over its value. Vertical by default; `direction: Horizontal`
+# lays them in a row (use `stat-row` when the row should also share one text size).
+doc: Stack of small readings with muted titles
+props:
+  items: {default: [], doc: "The readings, written as the items of a value-stack"}
+  direction: {default: null, doc: "Vertical or Horizontal; unset keeps the value-stack's own"}
+  spacing: {default: null, type: size, doc: "Gap between readings; unset keeps the value-stack's own"}
+  display: {default: null, doc: "Display settings every reading shares, such as {font: Roboto Mono, precision: 0}"}
+template:
+  type: value-stack
+  shared:
+    title: {color: $muted}
+    display: $display
+  direction: $direction
+  spacing: $spacing
+  items: $items
