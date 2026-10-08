@@ -1,9 +1,9 @@
 #!/usr/bin/env python
-"""Dev-only: render every gauge preset and the showcase, then compare two captures
+"""Dev-only: render every gauge preset and the showcases, then compare two captures
 pixel by pixel. The safety net for the meter refactor (`docs/tasks/meter-and-bar.md`):
 that work may move code, it may not move pixels.
 
-    render_diff.py capture BEFORE/           # 22 presets + the showcase -> PNGs
+    render_diff.py capture BEFORE/           # every preset + both showcases -> PNGs
     render_diff.py capture AFTER/
     render_diff.py compare BEFORE/ AFTER/    # exit 1 on any real difference
     render_diff.py selfcheck WORK/           # capture twice, compare: is the harness stable?
@@ -27,7 +27,7 @@ What makes two captures comparable
   function-local import), so `selfcheck` names any file that differs between two
   captures of the same code - fix the file, do not loosen the comparison.
 
-Sizes: the showcase at its documented 2560x1440, every preset at 1600x900 (the
+Sizes: each showcase at its documented 2560x1440, every preset at 1600x900 (the
 size the presets' own header comments document). `--size WxH` overrides both.
 
 A capture directory holds `<stem>.png` per target plus `_manifest.json` (inputs,
@@ -60,6 +60,7 @@ REPO = Path(__file__).resolve().parents[3]
 
 PRESET_DIR = REPO / 'docs' / 'design-references' / 'presets'
 SHOWCASE = REPO / 'docs' / 'design-references' / 'gauge-showcase.levity'
+METER_SHOWCASE = REPO / 'docs' / 'design-references' / 'meter-showcase.levity'
 SCENARIO_DIR = REPO / 'docs' / 'design-references' / 'scenarios'
 DESIGN_SEED = HERE / 'design-seed'
 RENDERER = HERE / 'render_dashboard.py'
@@ -331,7 +332,7 @@ def ink_of(array: np.ndarray) -> float:
 
 
 def targets(only: Optional[Sequence[str]] = None) -> List[Path]:
-	found = sorted(PRESET_DIR.glob('*.levity')) + [SHOWCASE]
+	found = sorted(PRESET_DIR.glob('*.levity')) + [SHOWCASE, METER_SHOWCASE]
 	if only:
 		wanted = {name.lower() for name in only}
 		found = [p for p in found if p.stem.lower() in wanted]
@@ -343,7 +344,7 @@ def targets(only: Optional[Sequence[str]] = None) -> List[Path]:
 def size_for(target: Path, override: Optional[Tuple[int, int]]) -> Tuple[int, int]:
 	if override:
 		return override
-	return SHOWCASE_SIZE if target.stem == 'gauge-showcase' else PRESET_SIZE
+	return SHOWCASE_SIZE if target.stem in ('gauge-showcase', 'meter-showcase') else PRESET_SIZE
 
 
 def render_command(
