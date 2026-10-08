@@ -32,11 +32,10 @@ continuously.
 | [gauge-round-to-float](gauge-round-to-float.md) | fixed on `fix/gauge-round-to-float`: a gauge narrower than 1 unit died in `__init__` (`round_to` returned `1e-323`); then drew no graduations (`rounded_max`, float floor/ceil) |
 | [gauge-text-treatments](gauge-text-treatments.md) | optical centering — `98°` looks off-centre because `°` is light |
 | [gauge-presets](gauge-presets.md) | named `preset:` for gauges, one per gauge-ui template (29 rows); which of seven missing gauge primitives unlocks which; blocked first on [gauge-display](gauge-display.md) |
-| [meter-and-bar](meter-and-bar.md) | `Scale` + `Track` split out of `Gauge.py` (~6,299 lines) into a `meter/` package, `Meter(Display)` base, then `Bar(realtime.bar)` with progress/battery/segmented/thermometer/range presets. Phase 1 (survey) is done: [meter-survey](meter-survey.md). Phase 2 runs on `refactor/meter`: the split is done and verified step by step against the pixel harness, and the sync merge with `feat/value-sources` has landed (`5dea824`). M3 (`GaugeArc` into `meter/gauge.py`, `Gauge.py` a ~30-line shim) waits on that merge's review and carries the dial-geometry and `dependencies={'range','arc'}` questions — see [meter-m3-recon](meter-m3-recon.md). Phase 4 waits on `feat/studio-snapping`. |
+| [meter-and-bar](meter-and-bar.md) | `Scale` + `Track` split out of `Gauge.py` (~6,299 lines) into a `meter/` package, `Meter(Display)` base, then `Bar(realtime.bar)` with progress/battery/segmented/thermometer/range presets. Phase 1 (survey) is done: [meter-survey](meter-survey.md). Phase 2 runs on `refactor/meter`: the split is done and verified step by step against the pixel harness, and the sync merge with `feat/value-sources` has landed (`5dea824`). M3 (`GaugeArc` into `meter/gauge.py`, `Gauge.py` a 16-line shim) has landed (`38579f4`, `f519eed`); the dial-geometry and `dependencies={'range','arc'}` questions it carried are settled in [meter-m3-recon](meter-m3-recon.md). Phase 4 waits on `feat/studio-snapping`. |
 | [meter-survey](meter-survey.md) | phase 1 output of [meter-and-bar](meter-and-bar.md): every angle/radius site in `Gauge.py` grouped by class, what each becomes under `Scale`/`Track`, the arc-only remainder, the risks, and the proposed `meter/` file split. Read-only; awaiting review before phase 2. |
-| [meter-harness-status](meter-harness-status.md) | phase 2 working note: the harness renders 24 targets (23 presets plus the showcase) and the merged tree is 24/24 clean across captures; `emissive` keeps a live clock (the freeze trips `Graph.py:862`) behind two named masks, and the baseline is `.render-diff/merged-a`. Also the clock-pin fix, the two queued gauge-track asks, and the findings to report. |
+| [meter-harness-status](meter-harness-status.md) | phase 2 working note: the harness renders 37 targets on `dev` (36 presets plus `gauge-showcase`; 38 once `feat/meter-showcase` lands its second board), and `emissive` keeps a live clock behind one named mask (`graph-figure`): the `Graph.py` zero-range divide is guarded now, but a frozen clock still SIGSEGVs a graph preset. Also the clock-pin fix, the two queued gauge-track asks, and the findings to report. |
 | [render-scenario-crash](render-scenario-crash.md) | `render_dashboard.py --scenario` SIGSEGVs on a full dashboard (a preset renders fine): the repro, what was ruled out, the faulting stack, and where to look. Needs a fix or a finer bisect — suggested branch `fix/scenario-render-segv`. |
-| [graph-zero-time-range](graph-zero-time-range.md) | `Graph.py:862` divides by a zero-second time range (the y axis guards its own range, the x axis does not): NaN x-coordinates, a plot that drifts between captures, and in about half the harness runs a shutdown SIGSEGV. A live-board risk, not just harness noise; fixing it also lets the harness drop `emissive`'s workarounds. |
 
 ## Loose ends not yet written up
 
@@ -85,6 +84,18 @@ Kept briefly so the same ground isn't re-covered.
   [schema-golden-fixture-tests](schema-golden-fixture-tests.md) — done.
 - [beam-glow](beam-glow.md) — the border-beam pieces take a `glow:` (stroked on the beam's
   outline, filled on its card), with a Studio control and an opt-in preset.
+- **[graph-zero-time-range](graph-zero-time-range.md)** — `Graph.normalize()` guards the
+  x divide (`Graph.py:884`) and pins a zero-span series to the left edge;
+  `pos_px_to_value` takes its single sample. On `dev` (`d917135`), pinned by
+  `tests/ui/test_graph_zero_time_range.py`. Guarding the divide did **not** let the
+  harness drop `emissive`'s `NO_FREEZE` — a frozen clock still SIGSEGVs a graph preset.
+- **[needle-glow-filled](needle-glow-filled.md)** — a filled shape's halo starts flush
+  with its outline: the needle's paint passes `filled=True` and the shape's own
+  thickness, not the pen width. On `dev` (`0d69fa5`, `14457d4`), pinned by
+  `tests/ui/test_glow_filled.py`.
+- **[emissive-upstream-check](emissive-upstream-check.md)** — the emissive render
+  instability is pre-existing, not the meter refactor's: a frozen clock plus a graph
+  preset is the trigger. Closed; `emissive` keeps its `NO_FREEZE` exemption.
 
 - **[value-sources.md](value-sources.md)**
   — every value slot in a `.levity` file (panel key, gauge markers, range
