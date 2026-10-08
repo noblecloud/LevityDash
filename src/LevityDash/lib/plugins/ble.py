@@ -29,13 +29,34 @@ from typing import Any, Callable, ClassVar, Dict, Optional, Set, TYPE_CHECKING
 
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.plugins.plugin import Plugin
+from LevityDash.lib.plugins.web.reconnect import Backoff
 
 if TYPE_CHECKING:
 	from bleak import BleakScanner
 
 log = LevityPluginLog.getChild('BLE')
 
-__all__ = ['LifecyclePlugin', 'BLEPlugin', 'SharedScanner', 'shared_scanner']
+__all__ = ['LifecyclePlugin', 'BLEPlugin', 'BluetoothUnavailable', 'SharedScanner', 'shared_scanner', 'explainScanFailure']
+
+
+class BluetoothUnavailable(Exception):
+	"""The radio cannot scan right now. The message says why, in plain words."""
+
+
+def explainScanFailure(error: BaseException) -> str:
+	"""Say in one line why a scan could not start.
+
+	bleak raises a different type on each platform (and a bare
+	`FileNotFoundError` on Linux with no BlueZ), so this reads the text too.
+	"""
+	text = str(error).lower()
+	if isinstance(error, PermissionError) or any(w in text for w in ('permission', 'not authorized', 'unauthorized', 'denied')):
+		return 'Bluetooth permission denied (on macOS: System Settings > Privacy & Security > Bluetooth)'
+	if any(w in text for w in ('powered off', 'turned off', 'not turned on', 'disabled', 'radio')):
+		return 'Bluetooth is turned off'
+	if isinstance(error, FileNotFoundError) or any(w in text for w in ('no bluetooth adapter', 'no adapter', 'not available', 'bluez', 'dbus')):
+		return 'no Bluetooth adapter found'
+	return f'Bluetooth could not start ({type(error).__name__}: {error})'
 
 
 class LifecyclePlugin(Plugin):
@@ -219,8 +240,9 @@ class SharedScanner:
 				self._scanner = scanner
 			log.info('Shared BLE scanner started')
 		except Exception as e:
-			log.error(f'Unable to start shared BLE scanner: {e}')
-			raise
+			reason = explainScanFailure(e)
+			log.warning(f'Unable to start shared BLE scanner: {reason}')
+			raise BluetoothUnavailable(reason) from e
 		finally:
 			with self._lock:
 				self._starting = False
@@ -275,11 +297,38 @@ class BLEPlugin(LifecyclePlugin):
 	def scanner(self) -> SharedScanner:
 		return shared_scanner
 
+	#: None while the scanner is up; the reason while it is not.
+	bluetoothProblem: Optional[str] = None
+	_scanRetry: Optional[asyncio.Task] = None
+
 	async def onStart(self) -> None:
 		shared_scanner.subscribe(self, self.wants, self.handleAdvertisement)
-		await shared_scanner.start(**type(self).scannerKwargs)
+		try:
+			await shared_scanner.start(**type(self).scannerKwargs)
+		except BluetoothUnavailable as e:
+			# The plugin stays up, so the rest of the dashboard is untouched,
+			# and tries again: an adapter can be plugged in or permission granted later.
+			self.bluetoothProblem = str(e)
+			self.pluginLog.warning(f'{self.name}: {e}; will keep trying')
+			self._scanRetry = asyncio.ensure_future(self._retryScan())
+
+	async def _retryScan(self, backoff: Optional[Backoff] = None) -> None:
+		backoff = backoff or Backoff(initial=30, maximum=600)
+		while True:
+			await asyncio.sleep(backoff.next())
+			try:
+				await shared_scanner.start(**type(self).scannerKwargs)
+			except BluetoothUnavailable as e:
+				self.bluetoothProblem = str(e)
+				continue
+			self.bluetoothProblem = None
+			self.pluginLog.info(f'{self.name}: Bluetooth is available, scanning')
+			return
 
 	async def onStop(self) -> None:
+		if self._scanRetry is not None:
+			self._scanRetry.cancel()
+			self._scanRetry = None
 		shared_scanner.unsubscribe(self)
 		# Only actually stops if this was the last subscriber, so one device
 		# stopping does not blind the others.
