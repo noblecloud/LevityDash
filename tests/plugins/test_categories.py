@@ -256,3 +256,27 @@ class TestKeysToDictTerminatesWithIdentity:
 		keys = [CategoryItem('environment.temperature.temperature'), CategoryItem('environment.humidity.humidity')]
 		result = CategoryItem.keysToDict(sorted(keys, key=str), extendedKeys=True)
 		assert {str(k) for k in result} == {'environment'}
+
+
+class TestCopyKeepsInternedKeysIntact:
+	"""Copying a scoped key must not change the unscoped key it shares atoms with."""
+
+	def test_copy_and_deepcopy_return_the_key_itself(self):
+		scoped = CategoryItem('copytest.temperature.temperature#bedroom')
+		assert copy.copy(scoped) is scoped
+		assert copy.deepcopy({scoped: 1}) == {scoped: 1}
+
+	def test_copying_a_scoped_key_leaves_the_plain_key_unscoped(self):
+		plain = CategoryItem('copytest.humidity.humidity')
+		scoped = CategoryItem('copytest.humidity.humidity#terrarium')
+		copy.copy(scoped)
+		copy.deepcopy([scoped])
+		assert plain.identity is None
+		assert scoped.withoutIdentity is plain
+
+	def test_pickle_round_trips_source_and_identity(self):
+		import pickle
+
+		key = CategoryItem('Govee-bedroom:copytest.battery.battery#bedroom')
+		assert pickle.loads(pickle.dumps(key)) is key
+		assert CategoryItem('copytest.battery.battery').identity is None
