@@ -1,0 +1,517 @@
+# Sky: light and air, not temperature. A 15in 16:10 screen.
+#
+# The day is one big arc from sunrise to sunset with a dot riding it, and the
+# day's sunlight laid under it as a curve, so the arc stands on the light it
+# counts. UV and cloud take the right column: UV as a hero with its peak, cloud
+# as three rings, low, middle and high, round the total. The day graph under
+# the arc layers irradiance, UV, cloud and temperature. The bottom right holds the moon,
+# the air aloft, the ground, and the terrarium and bedroom, whose plants and
+# sleep care about the same sun. A rotating slot turns through UV, the ground and the
+# air, and takes over for golden hour, a high UV, a frost or a dry greenhouse.
+#
+# The sun arc reads astronomy.sun.hour and astronomy.sun.remaining. No plugin
+# publishes them yet (the Mock plugin and the sky-clear scenario do), so on a live
+# dashboard the arc waits for one. Everything else reads real keys.
+#
+# Render: render_dashboard.py OUT.png --levity docs/design-references/boards/sky.levity
+#           --scenario sky-clear --size 2880x1800 --freeze-time 2026-10-07T15:40:00
+#
+# Hex colours are quoted. Unquoted, YAML reads '#' as a comment.
+theme:
+  extends: default
+  colors:
+    background: '#07111d'
+    muted: '#a6c4d9'
+    faint: '#86a3b8'
+    rule: '#2a4256'
+    accent: '#ff9124'
+    good: '#14e3c0'
+    warn: '#ffd400'
+    bad: '#ff3048'
+    info: '#1a8cff'
+    sun: '#ffc61a'
+    uv: '#b07cff'
+    cloud: '#d6e8f5'
+  fonts:
+    display: Nunito
+    mono: Roboto Mono
+    body: Roboto
+  scales:
+    sky: {0: '#08182b', 0.5: '#103a5a', 1: '#2a5a68'}
+background: {gradient: $sky, angle: 175}
+vars:
+  t: environment.temperature.temperature
+  uvi: environment.light.uvi
+  irr: environment.light.irradiance.irradiance
+  cc: environment.clouds.cover.cover
+items:
+- type: group
+  name: board
+  items:
+
+  # ================= THE SUN'S DAY =========================================
+  # Layer one: the day's irradiance as a curve across the whole block.
+  - type: graph
+    name: daylight-curve
+    timeframe: {days: 1}
+    geometry: {x: 0%, y: 29%, width: 58%, height: 35%}
+    annotations:
+      dayLabels: {enabled: false}
+      hourLabels: {alignment: BottomCenter, spacingIntervals: '1, 3, 6'}
+      lines: {spacing: 8 mm, weight: 0.4}
+    figures:
+    - figure: irradiance
+      margins: {top: 34%, bottom: 16%}
+      min: 0
+      max: 850
+      environment.light.irradiance.irradiance:
+        plot: {type: plot, gradient: FabledSunsetGradientWattsPerSquareMeter, weight: 2.2}
+        resolution: 2
+      environment.light.irradiance.diffuse:
+        plot: {type: plot, color: '#6cb6ff', weight: 0.7, dashPattern: '4, 4'}
+
+  # Layer two: the arc. Its ends stand on the curve where the sun rises and sets.
+  - type: group
+    name: sun
+    geometry: {x: 9.1%, y: 10.2%, width: 44%, height: 70%}
+    items:
+    - type: realtime.gauge
+      name: sun-arc
+      key: astronomy.sun.remaining
+      title: false
+      geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+      display:
+        radius: 64%
+        arc: {start-angle: -90, end-angle: 90, weight: 1.4%, color: $rule, cap: round}
+        range: {min: 7.07, max: 18.68}
+        fill: {weight: 1.4%, to: astronomy.sun.hour, color: $sun, cap: round}
+        major: {interval: 1, length: 2%, width: 2px, color: $faint, labels: {enabled: false}}
+        minor: {interval: 0.5, length: 1.2%, width: 1px, color: $rule}
+        micro: {enabled: false}
+        needle: {visible: false}
+        markers:
+        - {value: astronomy.sun.hour, type: dot, width: 3.2%, halo: 1.2%, halo-color: '#0a1d33', color: $sun, glow: true}
+        value-label: {visible: false}
+        unit-label: {visible: false}
+
+  # The header: the time, the daylight that is left, and what the light is doing.
+  - type: clock
+    name: clock
+    geometry: {x: 1.5%, y: 1%, width: 22%, height: 15%}
+    items:
+    - format: '%A, %B %-d'
+      alignment: CenterLeft
+      weight: Light
+      geometry: {x: 0%, y: 0%, width: 100%, height: 27%}
+    - format: '%-I:%M'
+      alignment: CenterLeft
+      format-hint: '10:00'
+      geometry: {x: 0%, y: 27%, width: 78%, height: 73%}
+    - format: '%p'
+      filters: [Lower]
+      alignment: BottomLeft
+      geometry: {x: 79%, y: 60%, width: 21%, height: 30%}
+  # A gauge with no arc, for its value label: it formats minutes as hours and minutes.
+  - type: realtime.gauge
+    name: daylight-left
+    key: astronomy.sun.remaining
+    title: false
+    geometry: {x: 26%, y: 0%, width: 30%, height: 17%}
+    display:
+      radius: 90%
+      arc: {start-angle: -90, end-angle: 90, weight: 0.1%, color: '#00000000'}
+      range: {min: 7.07, max: 18.68}
+      major: {enabled: false}
+      minor: {enabled: false}
+      micro: {enabled: false}
+      needle: {visible: false}
+      value-label: {position: center, size: 85%, font: Nunito, weight: Light, color: $sun, format: duration}
+      unit-label: {visible: false}
+  - type: text
+    text: of daylight left
+    font: $display
+    color: $muted
+    geometry: {x: 26%, y: 14%, width: 30%, height: 3%}
+  - type: realtime.text
+    name: sunrise
+    key: environment.light.sunrise
+    title: {text: Sunrise, height: 20%, color: $muted}
+    geometry: {x: 1.5%, y: 43%, width: 9%, height: 10%}
+    display: {font: Nunito, weight: Light, format: '%-I:%M', valueLabel: {color: $sun}}
+  - type: realtime.text
+    name: sunset
+    key: environment.light.sunset
+    title: {text: Sunset, height: 20%, color: $muted}
+    geometry: {x: 48.5%, y: 43%, width: 9%, height: 10%}
+    display: {font: Nunito, weight: Light, format: '%-I:%M', valueLabel: {color: $accent}}
+  - type: value-stack
+    name: sun-times
+    direction: Horizontal
+    geometry: {x: 1.5%, y: 17.5%, width: 55%, height: 8%}
+    spacing: 1mm
+    shared:
+      title: {color: $muted, matchingGroup: {group: rowTitle@sun, matchAll: true}}
+      display:
+        font: Roboto Mono
+        unitPosition: Hidden
+        valueLabel: {matchingGroup: {group: rowValue@sun, matchAll: true}}
+    items:
+    - {type: realtime.text, key: $irr, title: {text: Sun now W/m2}, display: {precision: 0, valueLabel: {color: $accent}}}
+    - {type: realtime.text, key: 'max($irr, today)', title: {text: Peak W/m2}, display: {precision: 0}}
+    - {type: realtime.text, key: environment.light.irradiance.direct, title: {text: Direct}, display: {precision: 0, valueLabel: {color: $sun}}}
+    - {type: realtime.text, key: environment.light.irradiance.diffuse, title: {text: Diffuse}, display: {precision: 0, valueLabel: {color: $info}}}
+    - {type: realtime.text, key: environment.light.illuminance, title: {text: Light}, display: {shorten: true}}
+
+  # ================= UV, ROTATING ==========================================
+  - type: switch
+    name: slot
+    cycle: 6s
+    fade: 0.4s
+    hold: 1s
+    geometry: {x: 59.5%, y: 1.5%, width: 40%, height: 30%}
+    items:
+    - type: group
+      name: golden-hour
+      when: astronomy.sun.remaining < 90
+      items:
+      - type: text
+        text: Golden hour
+        font: Nunito
+        weight: Light
+        color: $sun
+        geometry: {x: 0%, y: 0%, width: 100%, height: 26%}
+      - type: realtime.text
+        key: astronomy.sun.remaining
+        title: {text: Until sunset, height: 14%, color: $muted}
+        display: {font: Nunito, weight: ExtraLight, format: duration, valueLabel: {color: $sun}}
+        geometry: {x: 0%, y: 28%, width: 100%, height: 48%}
+      - type: value-stack
+        shared:
+          title: {color: $muted}
+        direction: Horizontal
+        geometry: {x: 0%, y: 78%, width: 100%, height: 22%}
+        items:
+        - {type: realtime.text, key: environment.light.sunset, title: {text: Sunset}, display: {format: '%-I:%M'}}
+        - {type: realtime.text, key: $cc, title: {text: Cloud}, display: {precision: 0}}
+        - {type: realtime.text, key: environment.visibility, title: {text: Visibility}}
+    - type: group
+      name: uv-high
+      when: environment.light.uvi >= 6
+      items:
+      - type: text
+        text: High UV
+        font: Nunito
+        weight: Light
+        color: $bad
+        geometry: {x: 0%, y: 0%, width: 100%, height: 26%}
+      - type: realtime.text
+        key: $uvi
+        title: {text: UV index, height: 14%, color: $muted}
+        display: {font: Nunito, weight: ExtraLight, valueLabel: {color: $bad}}
+        geometry: {x: 0%, y: 28%, width: 100%, height: 48%}
+      - type: value-stack
+        shared:
+          title: {color: $muted}
+        direction: Horizontal
+        geometry: {x: 0%, y: 78%, width: 100%, height: 22%}
+        items:
+        - {type: realtime.text, key: 'max($uvi, today)', title: {text: Peak}}
+        - {type: realtime.text, key: 'at($uvi, 1h)', title: {text: +1h}}
+        - {type: realtime.text, key: 'at($uvi, 2h)', title: {text: +2h}}
+    - type: group
+      name: uv
+      items:
+      - type: realtime.text
+        key: $uvi
+        title: {text: UV index, height: 8%, color: $uv}
+        display:
+          font: Nunito
+          weight: ExtraLight
+          valueLabel: {color: $uv, margins: 2%}
+        geometry: {x: 0%, y: 0%, width: 34%, height: 60%}
+      - type: realtime.bar
+        key: $uvi
+        title: false
+        geometry: {x: 36%, y: 4%, width: 64%, height: 13%}
+        display:
+          range: {min: 0, max: 12}
+          track: {weight: 30%}
+          zones:
+          - {to: 3, color: $good, opacity: 0}
+          - {from: 3, to: 6, color: $warn, opacity: 0}
+          - {from: 6, to: 8, color: $accent, opacity: 0}
+          - {from: 8, to: 11, color: $bad, opacity: 0}
+          - {from: 11, color: $uv, opacity: 0}
+          fill: {weight: 30%, color: zone}
+          markers:
+          - {value: 'max($uvi, today)', type: triangle, color: $text, side: after}
+          major: {interval: 3, side: before, labels: true}
+          value-label: {visible: false}
+      - type: value-stack
+        shared:
+          title: {color: $muted}
+        geometry: {x: 36%, y: 22%, width: 64%, height: 38%}
+        spacing: 0.4mm
+        items:
+        - {type: realtime.text, key: 'max($uvi, today)', title: {text: Peak today}, display: {precision: 1, valueLabel: {color: $uv}}}
+        - {type: realtime.text, key: 'at($uvi, 1h)', title: {text: UV in 1 h}, display: {precision: 1}}
+        - {type: realtime.text, key: 'at($uvi, 3h)', title: {text: UV in 3 h}, display: {precision: 1}}
+      - type: value-stack
+        shared:
+          title: {color: $muted, matchingGroup: {group: rowTitle@uv, matchAll: true}}
+          display:
+            unitPosition: Hidden
+            font: Roboto Mono
+            valueLabel: {matchingGroup: {group: rowValue@uv, matchAll: true}}
+        direction: Horizontal
+        geometry: {x: 0%, y: 64%, width: 100%, height: 36%}
+        spacing: 1mm
+        items:
+        - {type: realtime.text, key: 'at($irr, 2h)', title: {text: Sun +2h}, display: {precision: 0, valueLabel: {color: $sun}}}
+        - {type: realtime.text, key: 'at($irr, 4h)', title: {text: Sun +4h}, display: {precision: 0, valueLabel: {color: $accent}}}
+        - {type: realtime.text, key: 'avg($irr, today)', title: {text: Avg today}, display: {precision: 0}}
+        - {type: realtime.text, key: 'max($uvi, 24h)', title: {text: Peak 24h}, display: {precision: 1, valueLabel: {color: $uv}}}
+    - type: group
+      name: ground
+      items:
+      - type: realtime.text
+        key: environment.soil.temperature.temperature
+        title: {text: Soil, height: 8%, color: $good}
+        display: {font: Nunito, weight: ExtraLight, valueLabel: {color: $good, margins: 2%}}
+        geometry: {x: 0%, y: 0%, width: 40%, height: 60%}
+      - type: value-stack
+        shared:
+          title: {color: $muted}
+        geometry: {x: 42%, y: 4%, width: 58%, height: 56%}
+        spacing: 0.4mm
+        items:
+        - {type: realtime.text, key: environment.pressure.vaporPressureDeficit, title: {text: Vapour deficit}}
+        - {type: realtime.text, key: 'max(environment.soil.temperature.temperature, today)', title: {text: Soil high}}
+        - {type: realtime.text, key: 'min(environment.soil.temperature.temperature, today)', title: {text: Soil low}, display: {valueLabel: {color: $info}}}
+      - type: value-stack
+        shared:
+          title: {color: $muted, matchingGroup: {group: rowTitle@ground, matchAll: true}}
+          display:
+            unitPosition: Hidden
+            font: Roboto Mono
+            valueLabel: {matchingGroup: {group: rowValue@ground, matchAll: true}}
+        direction: Horizontal
+        geometry: {x: 0%, y: 64%, width: 100%, height: 36%}
+        spacing: 1mm
+        items:
+        - {type: realtime.text, key: environment.temperature.dewpoint, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
+        - {type: realtime.text, key: environment.humidity.humidity, title: {text: Humidity}, display: {precision: 0}}
+        - {type: realtime.text, key: 'min($t, 24h)', title: {text: Low 24h}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: environment.soil.freezingLevelHeight, title: {text: Freezing}, display: {unitPosition: Hidden, shorten: true}}
+
+  # ================= CLOUD =================================================
+  # Three rings, low inside and high outside, and the total in the middle.
+  - type: group
+    name: cloud
+    geometry: {x: 59.5%, y: 33%, width: 40%, height: 31%}
+    items:
+    - type: group
+      name: rings
+      geometry: {x: 0%, y: 0%, width: 44%, height: 100%}
+      items:
+      - type: realtime.gauge
+        key: environment.clouds.cover.high
+        title: false
+        geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+        display:
+          radius: 96%
+          arc: {start-angle: -135, end-angle: 135, weight: 5%, color: $rule}
+          range: {min: 0, max: 100}
+          fill: {weight: 5%, color: '#7fb4d9'}
+          major: {enabled: false}
+          minor: {enabled: false}
+          micro: {enabled: false}
+          needle: {visible: false}
+          value-label: {visible: false}
+          unit-label: {visible: false}
+      - type: realtime.gauge
+        key: environment.clouds.cover.mid
+        title: false
+        geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+        display:
+          radius: 78%
+          arc: {start-angle: -135, end-angle: 135, weight: 5%, color: $rule}
+          range: {min: 0, max: 100}
+          fill: {weight: 5%, color: '#aacde6'}
+          major: {enabled: false}
+          minor: {enabled: false}
+          micro: {enabled: false}
+          needle: {visible: false}
+          value-label: {visible: false}
+          unit-label: {visible: false}
+      - type: realtime.gauge
+        key: environment.clouds.cover.low
+        title: false
+        geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+        display:
+          radius: 60%
+          arc: {start-angle: -135, end-angle: 135, weight: 5%, color: $rule}
+          range: {min: 0, max: 100}
+          fill: {weight: 5%, color: '#e8f3fa'}
+          major: {enabled: false}
+          minor: {enabled: false}
+          micro: {enabled: false}
+          needle: {visible: false}
+          value-label: {visible: false}
+          unit-label: {visible: false}
+      - type: realtime.text
+        key: $cc
+        title: {text: Cloud, height: 14%, color: $muted}
+        display: {font: Nunito, weight: Light, precision: 0, valueLabel: {color: $cloud}}
+        geometry: {x: 22%, y: 28%, width: 56%, height: 44%}
+    - type: value-stack
+      shared:
+        title: {color: $muted}
+      geometry: {x: 46%, y: 2%, width: 54%, height: 56%}
+      spacing: 0.5mm
+      items:
+      - {type: realtime.text, key: environment.clouds.cover.high, title: {text: High}, display: {precision: 0, valueLabel: {color: '#7fb4d9'}}}
+      - {type: realtime.text, key: environment.clouds.cover.mid, title: {text: Middle}, display: {precision: 0, valueLabel: {color: '#aacde6'}}}
+      - {type: realtime.text, key: environment.clouds.cover.low, title: {text: Low}, display: {precision: 0, valueLabel: {color: '#e8f3fa'}}}
+      - {type: realtime.text, key: 'at($cc, 3h)', title: {text: Cloud in 3 h}, display: {precision: 0}}
+    - type: value-stack
+      shared:
+        title: {color: $muted, matchingGroup: {group: rowTitle@cloud, matchAll: true}}
+        display:
+          unitPosition: Hidden
+          font: Roboto Mono
+          valueLabel: {matchingGroup: {group: rowValue@cloud, matchAll: true}}
+      direction: Horizontal
+      geometry: {x: 46%, y: 64%, width: 54%, height: 36%}
+      spacing: 1mm
+      items:
+      - {type: realtime.text, key: environment.visibility, title: {text: Visible mi}, display: {precision: 0}}
+      - {type: realtime.text, key: 'avg($cc, today)', title: {text: Avg today}, display: {precision: 0}}
+      - {type: realtime.text, key: 'max($cc, today)', title: {text: Peak}, display: {precision: 0}}
+      - {type: realtime.text, key: environment.precipitation.probability, title: {text: Rain}, display: {precision: 0, valueLabel: {color: $info}}}
+
+  # ================= THE DAY, LAYERED ======================================
+  - type: graph
+    name: day
+    timeframe: {days: 1}
+    geometry: {x: 0%, y: 66.5%, width: 58%, height: 33%}
+    annotations:
+      dayLabels: {enabled: false}
+      hourLabels: {alignment: BottomCenter, spacingIntervals: '1, 3, 6'}
+      lines: {spacing: 8 mm, weight: 0.4}
+    figures:
+    - figure: temperature
+      margins: {top: 8%, bottom: 40%}
+      environment.temperature.temperature:
+        labels: {enabled: true}
+        plot: {type: plot, gradient: TemperatureGradient, weight: 0.9}
+        resolution: 2
+    - figure: uv
+      margins: {top: 14%, bottom: 36%}
+      min: 0
+      max: 12
+      environment.light.uvi:
+        plot: {type: plot, color: '#b07cff', weight: 0.8}
+    - figure: cloud
+      margins: {top: 66%, bottom: 12%}
+      min: 0
+      max: 100
+      environment.clouds.cover.cover:
+        plot: {type: plot, color: '#d6e8f5', weight: 0.5, dashPattern: '2, 3'}
+    - figure: irradiance
+      margins: {top: 66%, bottom: 12%}
+      min: 0
+      max: 850
+      environment.light.irradiance.irradiance:
+        plot: {type: plot, color: '#ffc61a', weight: 0.5}
+
+  # ================= MOON, AIR, ROOMS ======================================
+  - type: stack
+    name: below
+    direction: Horizontal
+    geometry: {x: 59.5%, y: 66.5%, width: 40%, height: 33%}
+    spacing: 2mm
+    dividers: {enabled: true, opacity: 50%, size: 90%}
+    shared:
+      display:
+        font: Roboto Mono
+    items:
+    - type: group
+      name: moon
+      size: 22%
+      items:
+      - type: moon
+        glowStrength: 2
+        interval: {minutes: 20}
+        geometry: {x: 6%, y: 6%, width: 88%, height: 56%}
+      - type: text
+        text: Moon
+        font: $display
+        color: $muted
+        geometry: {x: 0%, y: 86%, width: 100%, height: 10%}
+    - type: titled-group
+      name: aloft
+      size: 26%
+      title: {text: Aloft, height: 0.5cm, color: $muted}
+      items:
+      - type: value-stack
+        shared:
+          title: {color: $muted}
+        spacing: 0.4mm
+        items:
+        - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Surface}, display: {precision: 0}}
+        - {type: realtime.text, key: environment.wind.speed.80m, title: {text: 80 m}, display: {precision: 0}}
+        - {type: realtime.text, key: environment.wind.speed.120m, title: {text: 120 m}, display: {precision: 0}}
+        - {type: realtime.text, key: environment.wind.speed.180m, title: {text: 180 m}, display: {precision: 0, valueLabel: {color: $accent}}}
+        - {type: realtime.text, key: environment.pressure.pressure, title: {text: Pressure}}
+        - {type: realtime.text, key: 'environment.pressure.pressure - at(environment.pressure.pressure, -3h)', title: {text: 3 hr}, display: {valueLabel: {color: $info}}}
+    - type: titled-group
+      name: inside
+      title: {text: Inside, height: 0.5cm, color: $good}
+      items:
+      - type: realtime.text
+        key: 'indoor.temperature.temperature#terrarium'
+        title: {text: Terrarium, height: 12%, color: $good}
+        display: {font: Nunito, weight: Light, precision: 0, unitPosition: Inline}
+        geometry: {x: 0%, y: 0%, width: 50%, height: 36%}
+      - type: realtime.text
+        key: 'indoor.humidity.humidity#terrarium'
+        title: {text: Humidity, height: 12%, color: $info}
+        display: {font: Nunito, weight: Light, precision: 0, unitPosition: Inline, valueLabel: {color: $info}}
+        geometry: {x: 50%, y: 0%, width: 50%, height: 36%}
+      - type: mini-graph
+        timeframe: {hours: 24}
+        annotations:
+          dayLabels: {enabled: false}
+          hourLabels: {enabled: false}
+        indicator: {color: white, opacity: 0.3}
+        margins: {top: 8%, bottom: 8%}
+        figures:
+        - figure: humidity
+          indoor.humidity.humidity#terrarium:
+            plot: {type: plot, color: '#1a8cff', weight: 0.4}
+        - figure: temperature
+          min: 70
+          max: 90
+          indoor.temperature.temperature#terrarium:
+            plot: {type: plot, gradient: TemperatureGradient, weight: 0.5}
+        geometry: {x: 0%, y: 38%, width: 100%, height: 22%}
+      - type: value-stack
+        shared:
+          title: {color: $muted}
+        geometry: {x: 0%, y: 62%, width: 100%, height: 38%}
+        spacing: 0.4mm
+        items:
+        - {type: realtime.text, key: 'indoor.temperature.dewpoint#terrarium', title: {text: Terr. dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
+        - {type: realtime.text, key: 'indoor.temperature.temperature#bedroom', title: {text: Bedroom}, display: {precision: 0}}
+        - {type: realtime.text, key: 'indoor.humidity.humidity#bedroom', title: {text: Bedroom RH}, display: {precision: 0, valueLabel: {color: $info}}}
+
+  # What the lines in the day graph are.
+  - type: group
+    name: day-legend
+    geometry: {x: 1%, y: 66.8%, width: 40%, height: 3%}
+    items:
+    - {type: text, text: Temperature, font: $display, color: $accent, geometry: {x: 0%, y: 0%, width: 28%, height: 100%}}
+    - {type: text, text: UV, font: $display, color: $uv, geometry: {x: 30%, y: 0%, width: 10%, height: 100%}}
+    - {type: text, text: Cloud, font: $display, color: $cloud, geometry: {x: 42%, y: 0%, width: 16%, height: 100%}}
+    - {type: text, text: Sunlight, font: $display, color: $sun, geometry: {x: 60%, y: 0%, width: 20%, height: 100%}}

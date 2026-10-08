@@ -17,7 +17,8 @@ devtools take ``--scenario NAME`` and set the variable for you (see
 ``devtools/_seed.py``).
 
 A scenario lists keys. Each key has a ``value`` (the current reading) and an
-optional ``series`` (24 hourly values for today, 00:00 to 23:00 local):
+optional ``series`` (hourly values from 00:00 today; 24 values for today, or a
+multiple of 24 for a forecast that runs on into the next days):
 
 	name: hot-clear-day
 	keys:
@@ -185,7 +186,9 @@ class Fixture(LifecyclePlugin, realtime=True, hourly=True, logged=False):
 		keys = self.scenario['keys']
 		now = datetime.now().replace(microsecond=0)
 		midnight = now.replace(hour=0, minute=0, second=0)
-		times = [(midnight + timedelta(hours=h)).strftime(_TIME_FORMAT) for h in range(24)]
+		# One time axis for every series: the longest one sets how many days it holds.
+		longest = max((len(e['series']) for e in keys.values() if isinstance(e, dict) and e.get('series') is not None), default=24)
+		times = [(midnight + timedelta(hours=h)).strftime(_TIME_FORMAT) for h in range(max(24, longest))]
 
 		groups: Dict[str | None, list] = {}
 		for key, entry in keys.items():
@@ -202,9 +205,10 @@ class Fixture(LifecyclePlugin, realtime=True, hourly=True, logged=False):
 					realtime[sourceKey] = value
 				hours = entry.get('series') if isinstance(entry, dict) else None
 				if hours is not None:
-					if len(hours) != 24:
-						raise ValueError(f'{key}: `series` needs 24 hourly values, got {len(hours)}')
-					hourly[sourceKey] = list(hours)
+					if len(hours) == 0 or len(hours) % 24:
+						raise ValueError(f'{key}: `series` needs a multiple of 24 hourly values, got {len(hours)}')
+					# A shorter series than the axis ends where its data ends.
+					hourly[sourceKey] = list(hours) + [None] * (len(times) - len(hours))
 			datagram = LevityDatagram(realtime, schema=self.schema, dataMap=self.schema.dataMaps['realtime'], static=False, identity=identity)
 			self.realtime.update(datagram)
 			values += len(realtime) - 1
