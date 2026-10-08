@@ -1,0 +1,30 @@
+# One big reading and three small ones under a title, the panel shape of Neal's Indoor and Outdoor boxes:
+# the hero takes the top half; below it the first small reading is tall on the left and the other two stack
+# on the right. Every property below lands on a sub-item: `hero` and `key1..3` on the readings,
+# `label1..3` on their titles, `title` on the panel's own title.
+doc: Titled panel, a hero reading over three small readings
+props:
+  title: {default: Outdoor, type: text, doc: Panel title}
+  hero: {default: environment.temperature.temperature, type: key, doc: The big reading}
+  key1: {default: environment.temperature.dewpoint, type: key}
+  label1: {default: Dew Point, type: text}
+  key2: {default: environment.temperature.feelsLike, type: key}
+  label2: {default: Apparent, type: text}
+  key3: {default: environment.humidity.humidity, type: key}
+  label3: {default: Humidity, type: text}
+template:
+  type: titled-group
+  title: {text: $title, height: 8mm}
+  items:
+    - type: realtime.text
+      key: $hero
+      title: false
+      display: {valueLabel: {margins: 5%}}
+      geometry: {x: 0%, y: 0%, width: 100%, height: 50%}
+    - type: group
+      geometry: {x: 0%, y: 50%, width: 100%, height: 50%}
+      shared: {title: {height: 5mm}}
+      items:
+        - {type: realtime.text, key: $key1, title: {text: $label1}, geometry: {x: 0%, y: 0%, width: 55%, height: 100%}}
+        - {type: realtime.text, key: $key2, title: {text: $label2}, geometry: {x: 55%, y: 0%, width: 45%, height: 50%}}
+        - {type: realtime.text, key: $key3, title: {text: $label3}, geometry: {x: 55%, y: 50%, width: 45%, height: 50%}}

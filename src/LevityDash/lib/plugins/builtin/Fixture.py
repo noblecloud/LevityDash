@@ -17,7 +17,8 @@ devtools take ``--scenario NAME`` and set the variable for you (see
 ``devtools/_seed.py``).
 
 A scenario lists keys. Each key has a ``value`` (the current reading) and an
-optional ``series`` (24 hourly values for today, 00:00 to 23:00 local):
+optional ``series`` (hourly values from 00:00 today; 24 values for today, or a
+multiple of 24 for a forecast that runs on into the next days):
 
 	name: hot-clear-day
 	keys:
@@ -99,6 +100,11 @@ def _openMeteoAliases() -> dict:
 	return openMeteoSchema.get('aliases', {})
 
 
+#: Named in the schema only so the datagram scopes keys; the identity itself
+#: is passed to each datagram by `Fixture.publish`.
+IDENTITY_KEY = '@fixtureIdentity'
+
+
 def buildSchema(scenario: dict) -> tuple[dict, Dict[str, str]]:
 	"""The schema dict for a scenario, and ``{key: sourceKey}``.
 
@@ -118,16 +124,33 @@ def buildSchema(scenario: dict) -> tuple[dict, Dict[str, str]]:
 	sourceKeys = {}
 	for key, entry in scenario['keys'].items():
 		entry = entry if isinstance(entry, dict) else {'value': entry}
+		# A scenario key may carry an identity ('…temperature#bedroom'). The
+		# schema is keyed by the base key, as getExact and getUnitMetaData
+		# strip identity before every lookup, and `publish` scopes each value
+		# to its identity per datagram, the way Govee does per device.
+		identity = None
+		if '#' in key:
+			key, identity = key.split('#', 1)
 		spec = deepcopy(defaults.get(key, {}))
 		spec.update({k: v for k, v in entry.items() if k in ('type', 'sourceUnit', 'title', 'description', 'kwargs', 'dataKey', 'iconType', 'aliases')})
 		if 'unit' in entry:
-			spec['sourceUnit'] = entry['unit']
+			default = spec.get('sourceUnit')
+			if isinstance(entry['unit'], str) and isinstance(default, (list, tuple)) and len(default) == 2:
+				# A rate or a daily total (`['mm', 'day']`) keeps its time unit when the
+				# scenario names only the amount. A bare `in` made a plain inch, which
+				# the length localisation then turned into miles on some runs.
+				spec['sourceUnit'] = [entry['unit'], default[1]]
+			else:
+				spec['sourceUnit'] = entry['unit']
 		if 'sourceUnit' not in spec:
 			raise ValueError(f'{key}: no `unit`, and OpenMeteo does not publish this key')
 		spec.setdefault('type', 'measurement')
 		spec.setdefault('title', key.rsplit('.', 1)[-1])
-		spec['sourceKey'] = sourceKeys[key] = key.replace('.', '_').replace('#', '__')
-		schema[key] = spec
+		spec['sourceKey'] = key.replace('.', '_')
+		sourceKeys[f'{key}#{identity}' if identity else key] = spec['sourceKey']
+		schema.setdefault(key, spec)
+		if identity:
+			schema['identityKey'] = IDENTITY_KEY
 	return schema, sourceKeys
 
 
@@ -162,33 +185,46 @@ class Fixture(LifecyclePlugin, realtime=True, hourly=True, logged=False):
 			callback()
 
 	def publish(self) -> None:
-		"""Push the realtime values and today's hourly series into the observations."""
+		"""Push the realtime values and today's hourly series into the observations.
+
+		One realtime and one hourly datagram per identity, so each scoped value
+		lands on its own key.
+		"""
 		keys = self.scenario['keys']
 		now = datetime.now().replace(microsecond=0)
-
-		realtime = {'time': now.strftime(_TIME_FORMAT)}
-		for key, entry in keys.items():
-			value = entry.get('value') if isinstance(entry, dict) else entry
-			if value is not None:
-				realtime[self._sourceKeys[key]] = value
-		datagram = LevityDatagram(realtime, schema=self.schema, dataMap=self.schema.dataMaps['realtime'], static=False)
-		self.realtime.update(datagram)
-
 		midnight = now.replace(hour=0, minute=0, second=0)
-		times = [(midnight + timedelta(hours=h)).strftime(_TIME_FORMAT) for h in range(24)]
-		series = {'time': times}
-		for key, entry in keys.items():
-			values = entry.get('series') if isinstance(entry, dict) else None
-			if values is None:
-				continue
-			if len(values) != 24:
-				raise ValueError(f'{key}: `series` needs 24 hourly values, got {len(values)}')
-			series[self._sourceKeys[key]] = list(values)
-		if len(series) > 1:
-			datagram = LevityDatagram({'hourly': series}, schema=self.schema, dataMap=self.schema.dataMaps['forecast'])
-			self.hourly.update(datagram)
+		# One time axis for every series: the longest one sets how many days it holds.
+		longest = max((len(e['series']) for e in keys.values() if isinstance(e, dict) and e.get('series') is not None), default=24)
+		times = [(midnight + timedelta(hours=h)).strftime(_TIME_FORMAT) for h in range(max(24, longest))]
 
-		log.info(f"Fixture: published {len(realtime) - 1} values, {len(series) - 1} series")
+		groups: Dict[str | None, list] = {}
+		for key, entry in keys.items():
+			sourceKey, identity = self._sourceKeys[key], key.partition('#')[2] or None
+			groups.setdefault(identity, []).append((key, sourceKey, entry))
+
+		values = series = 0
+		for identity, items in groups.items():
+			realtime = {'time': now.strftime(_TIME_FORMAT)}
+			hourly = {'time': times}
+			for key, sourceKey, entry in items:
+				value = entry.get('value') if isinstance(entry, dict) else entry
+				if value is not None:
+					realtime[sourceKey] = value
+				hours = entry.get('series') if isinstance(entry, dict) else None
+				if hours is not None:
+					if len(hours) == 0 or len(hours) % 24:
+						raise ValueError(f'{key}: `series` needs a multiple of 24 hourly values, got {len(hours)}')
+					# A shorter series than the axis ends where its data ends.
+					hourly[sourceKey] = list(hours) + [None] * (len(times) - len(hours))
+			datagram = LevityDatagram(realtime, schema=self.schema, dataMap=self.schema.dataMaps['realtime'], static=False, identity=identity)
+			self.realtime.update(datagram)
+			values += len(realtime) - 1
+			if len(hourly) > 1:
+				datagram = LevityDatagram({'hourly': hourly}, schema=self.schema, dataMap=self.schema.dataMaps['forecast'], identity=identity)
+				self.hourly.update(datagram)
+				series += len(hourly) - 1
+
+		log.info(f"Fixture: published {values} values, {series} series")
 
 
 __plugin__ = Fixture

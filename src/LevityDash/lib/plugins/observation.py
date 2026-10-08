@@ -32,10 +32,10 @@ from rich.progress import Progress
 
 import WeatherUnits as wu
 from LevityDash.lib.log import LevityPluginLog as log
-from LevityDash.lib.plugins.categories import CategoryDict, CategoryItem
+from LevityDash.lib.plugins.categories import CategoryDict, CategoryItem, UnitMetaData
 from LevityDash.lib.plugins.errors import InvalidData
 from LevityDash.lib.plugins.schema import LevityDatagram
-from LevityDash.lib.plugins.utils import ChannelSignal, Request, GuardedRequest, Accumulator, SchemaProperty, unitDict
+from LevityDash.lib.plugins.utils import ChannelSignal, Request, GuardedRequest, Accumulator, SchemaProperty, unitDict, localizeValue
 from LevityDash.lib.utils import (
 	clearCacheAttr, closest, connectSignal, DateKey, isa, LOCAL_TIMEZONE, mostCommonClass, mostFrequentValue,
 	NoValue, now,
@@ -44,7 +44,6 @@ from LevityDash.lib.utils import (
 
 if TYPE_CHECKING:
 	from LevityDash.lib.plugins.plugin import Plugin
-	from LevityDash.lib.plugins.categories import UnitMetaData
 
 REALTIME_THRESHOLD = timedelta(hours=1.5)
 TIMESERIES_CUTOFF = timedelta(seconds=59)
@@ -176,6 +175,15 @@ class ObservationValue(TimeAwareValue):
 			if metadata is None:
 				raise InvalidData(f'No schema metadata found for key {key!r} in {source!r}; unable to construct an ObservationValue for it.')
 			if metadata['key'] != key:
+				if getattr(key, 'hasIdentity', False):
+					# The schema hands back one shared metadata dict per base key,
+					# and `key` reads `metadata['key']`. Writing a scoped key into
+					# the shared dict relabelled every value of that key with the
+					# last identity seen: a plugin that publishes several devices
+					# from one schema (the Fixture) put the terrarium's hourly
+					# readings on the bedroom. Govee escaped it by running one
+					# schema per device. Scope a copy instead.
+					metadata = UnitMetaData(value=dict(metadata))
 				metadata['sourceKey'] = key
 				if isinstance(key, CategoryItem):
 					kSource = key.source
@@ -199,6 +207,12 @@ class ObservationValue(TimeAwareValue):
 					)
 				source.__sourceKeyMap__[metadata['sourceKey']] = metadata['key']
 			metadata['key'] = key
+		elif isinstance(key, CategoryItem) and key.hasIdentity and metadata.get('key', None) != key:
+			# Metadata handed in with the value (a time series row built from an
+			# earlier value) carries the base key; keep this value's identity,
+			# on a copy for the same reason as above.
+			metadata = UnitMetaData(value=dict(metadata))
+			metadata['key'] = metadata['key'].withIdentity(key.identity)
 		if isinstance(value, wu.Measurement):
 			sourceUnit = metadata['sourceUnit']
 			if value.unit != sourceUnit:
@@ -253,8 +267,7 @@ class ObservationValue(TimeAwareValue):
 				if environ.get("LEVITYDASH_SCHEMA_DEBUG", "").strip().lower() in ("1", "true", "yes", "on"):
 					log.error(f"SCHEMA-DEBUG: convert failed for {key!r}: raw={self.rawValue!r} convertFunc={getattr(self.convertFunc, '__qualname__', self.convertFunc)} exc={e!r}")
 				value = self.rawValue
-			if localized := getattr(value, 'localize', None):
-				value = localized
+			value = localizeValue(value)
 			if not isinstance(self, ObservationTimestamp):
 				if isinstance(value, timedelta):
 					value = wu.Time.Second(value.total_seconds()).auto
@@ -470,9 +483,7 @@ class ObservationValueResult(ObservationValue):
 			value = self.convertFunc(self.__rawValue)
 		except TypeError:
 			value = self.__rawValue
-		if hasattr(value, 'localize'):
-			value = value.localize
-		return value
+		return localizeValue(value)
 
 	@property
 	def value(self):
@@ -1078,8 +1089,7 @@ class RecordedObservationValue(ObservationValue):
 				value = self.convertFunc(self.rawValue)
 			except TypeError:
 				value = self.rawValue
-			if localized := getattr(value, 'localize', None):
-				value = localized
+			value = localizeValue(value)
 			self.__value = value
 		return self.__value
 
@@ -1123,8 +1133,7 @@ class RecordedObservationValue(ObservationValue):
 		except Exception as e:
 			log.error(f'Error converting value {rawValue.value} to {self.convertFunc} for {self.key}', exc_info=e)
 			return None
-		if hasattr(value, 'localize'):
-			value = value.localize
+		value = localizeValue(value)
 		if value:
 			return ArchivedObservationValue(origin=self, value=value, rawValue=rawValue, sourceUnitValue=sourceUnitValue)
 		return None
@@ -1418,7 +1427,11 @@ class ObservationDict(PublishedDict):
 
 	def __setitem__(self, key, value):
 		if key in self.__sourceKeyMap__:
-			key = self.__sourceKeyMap__[key]
+			mapped = self.__sourceKeyMap__[key]
+			# The map can send a scoped key to its base key; keep the identity.
+			if getattr(key, 'hasIdentity', False) and not getattr(mapped, 'hasIdentity', False):
+				mapped = convertToCategoryItem(mapped).withIdentity(key.identity)
+			key = mapped
 		key = convertToCategoryItem(key)
 		noChange = False
 		if (existing := self.get(key, None)) is not None:

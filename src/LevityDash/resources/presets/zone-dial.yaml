@@ -1,0 +1,21 @@
+# A 270° dial with colour zones, a tick every `interval` and the reading in the middle.
+# Use it as `- {preset: zone-dial, name: uv, props: {key: ..., min: 0, max: 12, zones: [...]}}`; anything
+# else a use writes (`display: {fill: ...}`) is merged over the template.
+doc: Zoned 270-degree dial with the reading in the centre
+props:
+  key: {default: environment.temperature.temperature, type: key, doc: The value the dial shows}
+  min: {default: 0, type: number, doc: Bottom of the scale}
+  max: {default: 100, type: number, doc: Top of the scale}
+  interval: {default: 20, type: number, min: 0, doc: Distance between numbered ticks}
+  zones: {default: [], doc: 'List of {from, to, color}; a zone may add `mark: true`'}
+  track: {default: $rule, type: color, doc: Colour of the bare arc}
+template:
+  type: realtime.gauge
+  key: $key
+  title: false
+  display:
+    arc: {start-angle: -135, end-angle: 135, weight: 6%, color: $track}
+    range: {min: $min, max: $max}
+    zones: $zones
+    major: {interval: $interval, labels: {position: inside, height: 8%}}
+    value-label: {position: center, size: 14%}

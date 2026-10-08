@@ -318,12 +318,15 @@ class LevityDatagram(dict):
 		# (Diagnosed 2026-07-27: the plugin resolved GVH5102_6736 -> 'bedroom'
 		# correctly, yet its readings published as '#terrarium'.)
 		identity = self._identity
-		if identity is None and (parent := getattr(self, 'parent', None)) is not None:
-			# Sub-items carry the parent's identity, the same way Subdatagram
-			# already chains sourceData/metaData to its parent. The realtime
-			# payload lives in a sub-item, so without this the keys that
-			# actually matter never get scoped.
+		parent = getattr(self, 'parent', None)
+		while identity is None and parent is not None:
+			# Sub-items carry the root datagram's identity, the same way
+			# Subdatagram already chains sourceData/metaData to its parent.
+			# The realtime payload lives in a sub-item, and an hourly row is a
+			# sub-item of a sub-item, so walk up to the root: one level was
+			# enough for realtime but left every hourly row unscoped.
 			identity = getattr(parent, '_identity', None)
+			parent = getattr(parent, 'parent', None)
 		if identity is None:
 			for candidate in (identityKey, str(identityKey).lstrip('@')):
 				if candidate in data:

@@ -1,0 +1,28 @@
+# Presets in use: three panels from one `hero-readings` preset (`resources/presets/hero-readings.yaml`).
+# Each use names the preset and only what it changes; the rest comes from the preset. Render:
+#   render_dashboard.py out.png --levity docs/design-references/preset-board.levity --scenario stormy-day
+theme: dusk
+background: $sky
+items:
+  - type: stack
+    name: board
+    direction: Horizontal
+    defaultType: group
+    dividers: {enabled: true, opacity: 70%, size: 99%}
+    shared:
+      display: {valueLabel: {matchingGroup: {group: display@board}}}
+      title: {matchingGroup: title@board}
+    items:
+      - preset: hero-readings
+      - preset: hero-readings
+        props:
+          title: Wind
+          hero: environment.wind.speed.speed
+          key1: environment.wind.speed.gust
+          label1: Gust
+          key2: environment.wind.direction.direction
+          label2: From
+          key3: environment.pressure.pressure
+          label3: Pressure
+      - preset: hero-readings
+        props: {title: Today, hero: environment.temperature.high, key1: environment.temperature.low, label1: Low, key2: environment.wind.speed.gust, label2: Gust}
