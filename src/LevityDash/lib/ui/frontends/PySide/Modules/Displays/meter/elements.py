@@ -4516,10 +4516,16 @@ class GaugeValueLabel(GaugeLabel):
 			return "⋯"
 		return str(value)
 
-	@NonInteractiveLabel.formatHint.getter
+	# A property of its own: `NonInteractiveLabel.formatHint.getter` changed the one
+	# shared by every Label, so no clock or text ever reported its hint for a save.
+	@StateProperty(key='format-hint', default=None)
 	def formatHint(self) -> Optional[str]:
 		"""`format-hint` as configured. The range's own hint is not reported here, so a save does not write it back as if set."""
 		return getattr(self.textBox, '_explicitHint', None)
+
+	@formatHint.setter
+	def formatHint(self, value: Optional[str]):
+		self.textBox._formatHint = value
 
 	def rangeHint(self, font: QFont) -> Optional[str]:
 		"""The widest text the gauge's range can show, with every digit set to the widest glyph the font has.

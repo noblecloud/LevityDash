@@ -50,3 +50,41 @@ def test_an_expression_key_and_a_precision_survive_the_save(dashboard):
 	item = yaml.safe_load(text)['items'][0]['items'][0]
 	assert item['key'] == 'max(environment.temperature.temperature, today)'
 	assert item['display']['precision'] == 0
+
+
+def test_a_clock_keeps_its_format_hint(dashboard):
+	"""The gauge's hint override once replaced the getter every Label shares, so no clock ever reported its hint."""
+	text = _dump(dashboard, [{
+		'type': 'clock', 'name': 'c', 'geometry': BOX,
+		'items': [{'format': '%-I:%M', 'format-hint': '10:00', 'geometry': BOX}],
+	}])
+	assert yaml.safe_load(text)['items'][0]['items'][0]['format-hint'] == '10:00'
+
+
+def test_a_type_first_shorthand_item_loads_as_its_type(dashboard):
+	"""A stack writes `{titled-group: {...}}`; the loader fell back to the stack's default item type and dropped the title."""
+	from LevityDash.lib.ui.frontends.PySide.Modules.Containers.TitleContainer import TitledPanel
+	sandbox = Panel(parent=dashboard.scene.base, geometry={'x': '0%', 'y': '0%', 'width': '40%', 'height': '40%'})
+	sandbox.state = {'items': [{
+		'type': 'value-stack', 'name': 'row', 'geometry': BOX,
+		'items': [{'titled-group': {'name': 'g', 'title': {'text': 'Aloft'}, 'items': []}}],
+	}]}
+	for _ in range(5):
+		QTest.qWait(20)
+		dashboard.app.processEvents()
+	def below(item):
+		for child in item.childItems():
+			yield child
+			yield from below(child)
+	found = [i for i in below(sandbox) if isinstance(i, TitledPanel)]
+	assert found, 'the shorthand item did not load as a titled-group'
+
+
+def test_a_gauge_range_is_saved_at_full_precision(dashboard):
+	"""7.07 was written as '7.1', which moved the sun arc's ends on reload."""
+	text = _dump(dashboard, [{
+		'type': 'realtime.gauge', 'key': 'astronomy.sun.remaining', 'geometry': BOX,
+		'display': {'range': {'min': 7.07, 'max': 18.68}},
+	}])
+	saved = yaml.safe_load(text)['items'][0]['display']['range']
+	assert (saved['min'], saved['max']) == (7.07, 18.68)

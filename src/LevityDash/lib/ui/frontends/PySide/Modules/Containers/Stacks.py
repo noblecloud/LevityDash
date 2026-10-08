@@ -848,7 +848,8 @@ class Stack(Panel, tag='stack'):
 							item_type = default_type
 							state = item
 
-						item_type = Stateful.findTag(item.get('type', default_type.__tag__)) or default_type
+						# `{type: {...}}` keeps its type in `state`, not in `item`.
+						item_type = Stateful.findTag(item.get('type', state.get('type', default_type.__tag__))) or default_type
 
 				if item_type is not Spacer:
 					# Update the state with the shared state and the preset for the direction.
