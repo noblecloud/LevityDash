@@ -35,7 +35,7 @@ from LevityDash.lib.log import LevityPluginLog as log
 from LevityDash.lib.plugins.categories import CategoryDict, CategoryItem
 from LevityDash.lib.plugins.errors import InvalidData
 from LevityDash.lib.plugins.schema import LevityDatagram
-from LevityDash.lib.plugins.utils import ChannelSignal, Request, GuardedRequest, Accumulator, SchemaProperty, unitDict
+from LevityDash.lib.plugins.utils import ChannelSignal, Request, GuardedRequest, Accumulator, SchemaProperty, unitDict, localizeValue
 from LevityDash.lib.utils import (
 	clearCacheAttr, closest, connectSignal, DateKey, isa, LOCAL_TIMEZONE, mostCommonClass, mostFrequentValue,
 	NoValue, now,
@@ -253,8 +253,7 @@ class ObservationValue(TimeAwareValue):
 				if environ.get("LEVITYDASH_SCHEMA_DEBUG", "").strip().lower() in ("1", "true", "yes", "on"):
 					log.error(f"SCHEMA-DEBUG: convert failed for {key!r}: raw={self.rawValue!r} convertFunc={getattr(self.convertFunc, '__qualname__', self.convertFunc)} exc={e!r}")
 				value = self.rawValue
-			if localized := getattr(value, 'localize', None):
-				value = localized
+			value = localizeValue(value)
 			if not isinstance(self, ObservationTimestamp):
 				if isinstance(value, timedelta):
 					value = wu.Time.Second(value.total_seconds()).auto
@@ -470,9 +469,7 @@ class ObservationValueResult(ObservationValue):
 			value = self.convertFunc(self.__rawValue)
 		except TypeError:
 			value = self.__rawValue
-		if hasattr(value, 'localize'):
-			value = value.localize
-		return value
+		return localizeValue(value)
 
 	@property
 	def value(self):
@@ -1078,8 +1075,7 @@ class RecordedObservationValue(ObservationValue):
 				value = self.convertFunc(self.rawValue)
 			except TypeError:
 				value = self.rawValue
-			if localized := getattr(value, 'localize', None):
-				value = localized
+			value = localizeValue(value)
 			self.__value = value
 		return self.__value
 
@@ -1123,8 +1119,7 @@ class RecordedObservationValue(ObservationValue):
 		except Exception as e:
 			log.error(f'Error converting value {rawValue.value} to {self.convertFunc} for {self.key}', exc_info=e)
 			return None
-		if hasattr(value, 'localize'):
-			value = value.localize
+		value = localizeValue(value)
 		if value:
 			return ArchivedObservationValue(origin=self, value=value, rawValue=rawValue, sourceUnitValue=sourceUnitValue)
 		return None

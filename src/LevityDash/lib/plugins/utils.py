@@ -104,6 +104,50 @@ unitDict: Dict[
 }
 
 
+def localizeValue(value: Any) -> Any:
+	"""``value`` in the unit the config prefers for its dimension, deterministically.
+
+	WeatherUnits' own ``Measurement.localize`` resolves the preferred unit
+	through ``type(value).Generic``, and ``_SmartFloat.Generic`` picks a base
+	*at random from a set* of generic bases - so the same reading localizes to
+	``mi`` in one process and stays ``km`` in the next. ``Length`` is the one
+	dimension whose ``type`` is a system class (``Metric Length``), so its
+	config lookup misses and lands on that fallback; that is the EV caption's
+	per-render km/mi flip (``docs/tasks/meter-harness-status.md``).
+
+	Resolve the dimension class from the MRO instead - a stable order - and ask
+	the config for its unit: ``Length`` matches the config's ``length`` by name,
+	and ``unitDict`` maps the symbol it names (``mi``) to the class, so nothing
+	reads the ambiguous ``Generic``. A value this cannot resolve (a
+	compound/derived unit, or no ``[Units]`` section) keeps WeatherUnits' own
+	result.
+	"""
+	if not isinstance(value, wu.Measurement):
+		return value
+	try:
+		units = wu.config.localUnits
+	except Exception:
+		# No `[Units]` section: WeatherUnits leaves the value in its own unit.
+		return value.localize
+	for base in type(value).__mro__:
+		name = getattr(base, 'name', None)
+		if not isinstance(name, str) or name.lower() not in units:
+			continue
+		symbol = units[name.lower()]
+		unit = unitDict.get(symbol) if isinstance(symbol, str) else None
+		if not (isinstance(unit, type) and issubclass(unit, wu.Measurement)):
+			# Not a symbol `unitDict` knows: fall back to WeatherUnits' own
+			# resolution for this dimension class.
+			unit = getattr(base, 'localizedUnit', None)
+		if isinstance(unit, type) and issubclass(unit, wu.Measurement):
+			try:
+				return unit(value)
+			except Exception:
+				break
+		break
+	return value.localize
+
+
 class SchemaProperty:
 
 	def __init__(self, source: 'ObservationDict', data: dict):
@@ -634,7 +678,7 @@ class ScheduledEvent(object):
 
 
 __all__ = ['unitDict', 'Accumulator', 'ChannelSignal', 'SchemaProperty', 'MutableSignal', 'ScheduledEvent',
-					 'Publisher']
+				 'Publisher', 'localizeValue']
 
 
 @dataclass(frozen=True, slots=True)

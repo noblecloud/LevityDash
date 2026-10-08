@@ -36,6 +36,22 @@ if _SEED is not None:
 _FORMERLY_BROKEN = ('Wind', 'Fuel', 'Clock', 'Sun', 'Download', 'Rain rate')
 
 
+@pytest.fixture(autouse=True)
+def _no_leaked_value_source_stand_in():
+	"""`StudioGauge` installs a process-global stand-in for `openValueSource`.
+
+	Left installed, every later test in any file reads made-up data through
+	`openValueSource` - so a Realtime panel's key never reaches the dispatcher.
+	Put back whatever was there before the test.
+	"""
+	from LevityDash.lib import valuesource
+	from LevityDash.lib.valuesource import installStandIn
+
+	saved = valuesource._standIn
+	yield
+	installStandIn(saved)
+
+
 def _pump(times: int = 5) -> None:
 	for _ in range(times):
 		QApplication.processEvents()
