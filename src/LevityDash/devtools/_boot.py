@@ -120,6 +120,7 @@ def freeze_time(when: Optional[datetime] = None) -> dict:
 		'LevityDash.lib.ui.frontends.PySide.Modules.Displays.DateTime',
 		'LevityDash.lib.ui.frontends.PySide.Modules.Displays.Moon',
 		'LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph',
+		'LevityDash.lib.utils.data',
 		'LevityDash.lib.plugins.builtin.Fixture',
 		'LevityDash.lib.plugins.builtin.Mock',
 		'LevityDash.lib.plugins.builtin.Astronomy',
