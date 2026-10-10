@@ -11,6 +11,7 @@ from LevityDash.lib.plugins.schema import LevityDatagram, SchemaSpecialKeys as t
 from LevityDash.lib.plugins.utils import ScheduledEvent
 from LevityDash.lib.plugins.web import Auth, AuthType, Endpoint, REST, URLs
 from LevityDash.lib.plugins.web.errors import APIError
+from LevityDash.lib.plugins.web.reconnect import Backoff, keepConnected
 from LevityDash.lib.plugins.web.socket_ import UDPSocket
 from LevityDash.lib.utils.shared import LOCAL_TIMEZONE, Now
 
