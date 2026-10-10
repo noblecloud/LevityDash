@@ -412,7 +412,7 @@ class Text(QGraphicsPathItem):
 			limitRect.setHeight(height)
 			limitRect.moveCenter(center)
 
-		rect = self._textRect or self._update_path()
+		rect = self.currentTextRect()
 		self.setTransformOriginPoint(0, 0)
 		# thread the one (height-adjusted) limitRect through both helpers so
 		# position and scale are computed against the same rect
@@ -599,7 +599,7 @@ class Text(QGraphicsPathItem):
 		# so no reset is needed; leaving the transform alone means computing one
 		# item's scale (e.g. during a group's shared-size pass) can't corrupt
 		# another item's transform.
-		textRect = textRect or self._textRect or self._update_path(update_others=False)
+		textRect = textRect or self.currentTextRect()
 		limitRect = limitRect if limitRect is not None else self.limitRect
 
 		width = (textRect.width()) or 1
@@ -697,6 +697,24 @@ class Text(QGraphicsPathItem):
 		return neighbors
 
 	_builtSignature = None
+
+	def currentTextRect(self) -> QRectF:
+		"""The text rect for the item as it is now, rebuilt if its inputs moved.
+
+		The cached rect is built from the font, which a size group sets from its
+		whole tier, so a sibling's change moves this item's font without anyone
+		telling it. Fitting against that stale rect made a group's scale depend on
+		which items had been rebuilt by the time it was read, i.e. on paint and
+		event order. Comparing the signature makes the fit a function of current
+		state only.
+		"""
+		if self._textRect is not None and self._layoutSignature() == self._builtSignature:
+			return self._textRect
+		transform = self.transform()
+		try:
+			return self._update_path(update_others=False)
+		finally:
+			self.setTransform(transform)
 
 	def _layoutSignature(self) -> tuple:
 		# Everything _update_path reads. Two equal signatures build the same path.
