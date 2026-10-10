@@ -9,8 +9,8 @@ wrapped text. Do not add them without asking.
 Simplifications, each also noted where it is made:
 - Item contributions are numbers on `GridItem` and are not re-run against the track sizes.
   §12 repeats steps 2 and 3 for wrapped content; that repetition is not done.
-- A container sized under a min-content or max-content constraint is not modelled. A
-  container with `width=None` has no free space to hand out.
+- A container with no definite size is sized under a max-content constraint: every track
+  grows to its growth limit. A min-content constraint is not modelled.
 - Indefinite free space in `expand_flexible_tracks` uses the tracks only, not the item
   terms of §12.7.1.
 - Content and self alignment other than `start`, `stretch` and `normal` go to `align.py`.
@@ -443,17 +443,11 @@ def _place_rows(placements: list[Placement], explicit_columns: int, dense: bool)
 	return [(pos[i][0], pos[i][1], spans[i][0], spans[i][1]) for i in range(n)]
 
 
-def _distribute(free: float, count: int, content: Alignment) -> tuple[float, float]:
-	if content.value in (ContentAlign.normal, ContentAlign.stretch, ContentAlign.start, ContentAlign.flex_start):
-		return 0.0, 0.0
-	return distribute_content(free, count, content)
-
-
 def _track_starts(sizes: list[float], gap: float, available: float | None, content: Alignment) -> list[float]:
 	if not sizes:
 		return []
 	free = 0.0 if available is None else available - sum(sizes) - gap * (len(sizes) - 1)
-	leading, between = _distribute(free, len(sizes), content)
+	leading, between = distribute_content(free, len(sizes), content)
 	starts, x = [], leading
 	for size in sizes:
 		starts.append(x)
@@ -492,6 +486,9 @@ def _size_axis(tracks: list[TrackSize], items: list[GridItem], spans: list[tuple
 	resolve_intrinsic_track_sizes(sized, items, spans, gap, axis=axis)
 	if available is not None:
 		maximize_tracks(sized, available, gap)
+	else:  # max-content constraint: the free space is infinite, so every track reaches its limit (§12.5 step 3)
+		for track in sized:
+			track.base = max(track.base, track.limit)
 	expand_flexible_tracks(sized, available, gap)
 	if available is not None:
 		stretch_auto_tracks(sized, available, gap, content)

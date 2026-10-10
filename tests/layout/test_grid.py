@@ -205,3 +205,9 @@ def test_auto_fill_keeps_its_empty_tracks():
 	assert len(rects) == 1
 	# the four columns exist; the item sits in the first one
 	assert rects[0].x == 0.0 and rects[0].width == 100.0
+
+
+def test_an_indefinite_container_sizes_auto_tracks_to_their_max_content():
+	container = GridContainer(columns=parse_track_list('1fr 2fr'), rows=parse_track_list('auto'), width=300, gap=Gap(0, 10))
+	rects = layout_grid([GridItem(max_content=(0, 20)), GridItem(max_content=(0, 20))], container)
+	assert [r.height for r in rects] == [20, 20]
