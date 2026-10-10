@@ -87,6 +87,7 @@ certifi = {version = "^2022.12.7", optional = true}
 sentinel = {extras = ["varname"], version = "^1.0.0"}
 pirateweatherlib = "^0.4.0"
 deepmerge = "^2.1.0"
+psutil = "^7.2.2"
 
 [tool.poetry.urls]
 "Bug Tracker" = "https://github.com/noblecloud/LevityDash/issues"
