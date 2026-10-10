@@ -1,5 +1,7 @@
 # N1 gauge fill arc: handoff
 
+**Audit 2026-10-10: done.** Merged into `feat/value-sources` on 2026-10-04 (`fill-value-sources`).
+
 ## Goal
 Add a value-driven fill arc to gauges: `display: fill:` (sibling of `arc:`) with keys
 `from` (number or value-source string; default range min), `to` (optional; default the

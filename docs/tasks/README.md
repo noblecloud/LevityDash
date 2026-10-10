@@ -7,35 +7,91 @@ suggested branch. See the root `CLAUDE.md` / `AGENTS.md` for conventions.
 **Sync with `dev` before branching** — briefs and unrelated fixes land here
 continuously.
 
+Audited against `dev` on 2026-10-10. Where a brief's own header disagreed
+with the merge history, the header now carries an **Audit** line. Status
+words below come from the briefs plus the merges, not from a re-run of each
+brief's verification steps.
+
 ---
 
-**Start here:** [session-handoff-2026-10-05](session-handoff-2026-10-05.md) is the state of play for a fresh session: branch, rules, work in flight, open decisions and known bugs.
+**Start here:** [docs/roadmap.md](../roadmap.md) is the only roadmap. The
+[session handoff of 2026-10-05](session-handoff-2026-10-05.md) is stale.
 
 ## Open — needs a decision from the maintainer
 
 | brief | what's blocked on you |
 |---|---|
 | [dual-license-migration](dual-license-migration.md) | the licensing model itself; repo is still plain MIT |
-| [value-annotations-and-digit-budget](value-annotations-and-digit-budget.md) § 3 | whether annotations v1 is derived-only, and the shape of the "micro leading zero" rendering |
+| [value-annotations-and-digit-budget](value-annotations-and-digit-budget.md) § 3 | whether annotations v1 is derived-only, and the shape of the "micro leading zero" rendering. The digit budget itself has merged. |
 | *(WeatherUnits)* [`parameter-audit.md`](../../../WeatherUnits/docs/parameter-audit.md) | param renames (`max` → ?, `unit_type` → `unitType`), which dead options to delete, and the library name |
+| [roadmap open questions](../roadmap.md#plan-first-stable-cut-then-lanes) | who the first stable cut is for, and the lane order after it |
 
-## Open — actionable without input
+## Open — actionable
 
 | brief | scope |
 |---|---|
-| [statekit-bindings](statekit-bindings.md) | statekit: validate with a reason, notify on real change with old value, one-way `bind` to a value source (ideas from traitlets) |
-| [timeseries-viewport-and-control-plane](timeseries-viewport-and-control-plane.md) | plugin control plane (start/stop/health); also no re-fetch when panning past the fetched window |
-| [text-baseline-alignment](text-baseline-alignment.md) | graph hour labels — descenders (`12p`) shift them relative to `6a`; align by font metric, not ink extents |
-| [eventfilter-pending-exception](eventfilter-pending-exception.md) | parked: a `SystemError` seen once, non-fatal, not reproducible. Wants an always-on diagnostic to catch it live |
-| [phase-4.2-follow-ups](phase-4.2-follow-ups.md) | remaining odds from the backend/frontend split |
-| [gauge-tick-label-format](gauge-tick-label-format.md) | tick labels read `28.00` on a 1-inHg scale — units carry a compact (dial-face) format in WeatherUnits, tick spacing as the floor; then dashboard-level format `defaults:` (matcher design open) |
-| [gauge-round-to-float](gauge-round-to-float.md) | fixed on `fix/gauge-round-to-float`: a gauge narrower than 1 unit died in `__init__` (`round_to` returned `1e-323`); then drew no graduations (`rounded_max`, float floor/ceil) |
+| [gauge-round-to-float](gauge-round-to-float.md) | a gauge narrower than 1 unit still goes through `round_to`'s float path (`meter/meter.py`). The fix is not on `dev` yet. |
 | [gauge-text-treatments](gauge-text-treatments.md) | optical centering — `98°` looks off-centre because `°` is light |
-| [gauge-presets](gauge-presets.md) | named `preset:` for gauges, one per gauge-ui template (29 rows); which of seven missing gauge primitives unlocks which; blocked first on [gauge-display](gauge-display.md) |
-| [meter-and-bar](meter-and-bar.md) | `Scale` + `Track` split out of `Gauge.py` (~6,299 lines) into a `meter/` package, `Meter(Display)` base, then `Bar(realtime.bar)` with progress/battery/segmented/thermometer/range presets. Phase 1 (survey) is done: [meter-survey](meter-survey.md). Phase 2 runs on `refactor/meter`: the split is done and verified step by step against the pixel harness, and the sync merge with `feat/value-sources` has landed (`5dea824`). M3 (`GaugeArc` into `meter/gauge.py`, `Gauge.py` a 16-line shim) has landed (`38579f4`, `f519eed`); the dial-geometry and `dependencies={'range','arc'}` questions it carried are settled in [meter-m3-recon](meter-m3-recon.md). Phase 4 waits on `feat/studio-snapping`. |
-| [meter-survey](meter-survey.md) | phase 1 output of [meter-and-bar](meter-and-bar.md): every angle/radius site in `Gauge.py` grouped by class, what each becomes under `Scale`/`Track`, the arc-only remainder, the risks, and the proposed `meter/` file split. Read-only; awaiting review before phase 2. |
-| [meter-harness-status](meter-harness-status.md) | phase 2 working note: the harness renders 37 targets on `dev` (36 presets plus `gauge-showcase`; 38 once `feat/meter-showcase` lands its second board), and `emissive` keeps a live clock behind one named mask (`graph-figure`): the `Graph.py` zero-range divide is guarded now, but a frozen clock still SIGSEGVs a graph preset. Also the clock-pin fix, the two queued gauge-track asks, and the findings to report. |
-| [render-scenario-crash](render-scenario-crash.md) | `render_dashboard.py --scenario` SIGSEGVs on a full dashboard (a preset renders fine): the repro, what was ruled out, the faulting stack, and where to look. Needs a fix or a finer bisect — suggested branch `fix/scenario-render-segv`. |
+| [studio-snapping-guides](studio-snapping-guides.md) | Studio distance guides, ratio snapping and drag gearing. Branch `feat/studio-snapping` is not on `dev`. Next lane: Editor. |
+| [warp-along-path](warp-along-path.md) | `warp:` takes a free path, plus a `bend` blend. Not started; `feat/warped-text` (circle warp) has merged. |
+| [render-scenario-crash](render-scenario-crash.md) | `render_dashboard.py --scenario` SIGSEGVs on a full dashboard (a preset renders fine). Needs a fix or a finer bisect — suggested branch `fix/scenario-render-segv`. |
+| [categoryitem-duplicate-keys](categoryitem-duplicate-keys.md) | duplicate `CategoryItem` keys in `dispatcher._values`; root cause not closed |
+| [lambda-sizegroup-test-failures](lambda-sizegroup-test-failures.md) | two size-group tests fail on `lambda`, pass on the Mac. Low priority. |
+| [gauge-display](gauge-display.md) | investigated 2026-07-26, not fixed: the gauge constructs but does not render |
+| [dashboard-redesign](dashboard-redesign.md) | in progress since 2026-07-26; the layout is installed, the font work is set up but not applied |
+| [dashboard-design-handoff](dashboard-design-handoff.md) | the weather boards: PR #54 and #60 merged; Station and Core + rotation still to finish. Paused 2026-10-06. |
+| [timeseries-viewport-and-control-plane](timeseries-viewport-and-control-plane.md) | the plugin control plane's start/stop/restart commands (not started); a socket that stays bound but goes silent is not detected; no re-fetch when panning past the fetched window |
+| [phase-4.2-follow-ups](phase-4.2-follow-ups.md) | loose ends from the backend/frontend split, which has merged |
+| [render-service-and-surface-frontend](render-service-and-surface-frontend.md) | step 1 shipped (`devtools/render_service.py`); step 2 is still a design note (HUD lane, parked) |
+| [dead-code-sweep](dead-code-sweep.md) | partly done. The commented-out-code portion needs a human pass. |
+| [meter-and-bar](meter-and-bar.md) | `Scale` + `Track` split and `Gauge(Meter)` have landed (M3, PR #27). Phase 4 (progress, battery, segmented, thermometer, range bars) is open. |
+| [meter-m2b-remaining](meter-m2b-remaining.md) | the rest of M2 and two side jobs. Follows [meter-and-bar](meter-and-bar.md). |
+| [meter-harness-status](meter-harness-status.md) | phase 2 working note, in progress 2026-10-05. The `emissive` `NO_FREEZE` exemption stays. |
+| [emissive-color-and-glow](emissive-color-and-glow.md) | phases 1 and 2 merged 2026-10-05. Phase 3 (border-beam painting engine moves into LevityDash) is open. |
+| [gauge-tick-label-format](gauge-tick-label-format.md) | 1a–1c and 3 merged (`feat/tick-label-format-2`). Phase 2 is open and has design calls. |
+| [gauge-presets](gauge-presets.md) | the `preset:` mechanism exists (`lib/presets.py`), and PR #64 merged. Preset library (PR #70) is open. The gauge-ui template list is still to do. |
+| [value-sources](value-sources.md) | merged into `feat/value-sources`, which is on `dev`. The roadmap's "close out value-sources" step is still open. |
+| [statekit-bindings](statekit-bindings.md) | partly merged; re-check items 1 to 3 before you start |
+| [gradient-unit-stops](gradient-unit-stops.md) | merged; the running-dashboard edit mode is still open |
+| [eventfilter-pending-exception](eventfilter-pending-exception.md) | root cause fixed 2026-07-28. A second `SystemError` was seen twice since, non-fatal, not reproducible. Parked until an always-on diagnostic catches it. |
+
+## Design only — not started
+
+| brief | what it is |
+|---|---|
+| [data-model-multi-domain](data-model-multi-domain.md) | research for a multi-domain data model (openHAB, Home Assistant, Grafana, Prometheus, OTel, InfluxDB, weather APIs). Not started. |
+| [data-model-spec](data-model-spec.md) | config spec that goes with the research above. Not started. |
+| [device-model-redesign](device-model-redesign.md) | the proposal for devices as first-class objects. Superseded in part by the data-model work. Not started. |
+| [ble-launcher-app](ble-launcher-app.md) | a wrapper `.app` so BLE work doesn't need iTerm. Idea, low priority. |
+| [experimental-maybe-never](experimental-maybe-never.md) | ideas recorded but not scheduled |
+
+## Done — kept briefly so the same ground isn't re-covered
+
+| brief | where it landed |
+|---|---|
+| [beam-glow](beam-glow.md) | `feat/beam-glow`, merged 2026-10-06 |
+| [text-baseline-alignment](text-baseline-alignment.md) | fixed 2026-07-26 |
+| [dashboard-wont-load](dashboard-wont-load.md) | `808363c`, fixed 2026-09-08 |
+| [graph-zero-time-range](graph-zero-time-range.md) | `d917135`, merged 2026-10-06 |
+| [needle-glow-filled](needle-glow-filled.md) | `0d69fa5`, `14457d4`, merged 2026-10-06 |
+| [emissive-upstream-check](emissive-upstream-check.md) | closed 2026-10-06 |
+| [studio-value-sources](studio-value-sources.md) | `794dcd8`, merged 2026-10-06 |
+| [meter-survey](meter-survey.md) | phase 1 of meter-and-bar, read-only, done |
+| [meter-m3-recon](meter-m3-recon.md) | M3 landed (`38579f4`, `f519eed`) |
+| [meter-merge-sync](meter-merge-sync.md) | the sync merge into the meter layout is merged |
+| [meter-split-audit](meter-split-audit.md) | read-only audit of the meter split; no status line of its own |
+| [dependabot-triage](dependabot-triage.md) | done; 43 alerts flagged for a follow-up decision in the triage doc |
+| [schema-golden-fixture-tests](schema-golden-fixture-tests.md) | done for OpenMeteo, PirateWeather, WeatherFlow. Govee not attempted. |
+| [govee-multi-device](govee-multi-device.md) | working since 2026-07-27 |
+| [govee-multi-device-rewrite](govee-multi-device-rewrite.md) | merged into `dev` 2026-09-03 |
+| [colour-decode-pr18-handoff](colour-decode-pr18-handoff.md) | PR #18 merged |
+| [condition-pins-bisect](condition-pins-bisect.md) | PR #50 merged |
+| [expr-keys-thickness-pins](expr-keys-thickness-pins.md) | `feat/expr-props`, merged |
+| [shared-expression-panels-handoff](shared-expression-panels-handoff.md) | `shared-expr`, merged 2026-10-04 |
+| [gauge-end-labels-handoff](gauge-end-labels-handoff.md) | `gauge-end-labels`, merged 2026-10-04 |
+| [n1-fill-arc-handoff](n1-fill-arc-handoff.md) | `fill-value-sources`, merged 2026-10-04 |
+| [curved-gauge-labels](curved-gauge-labels.md) | `feat/curved-gauge-labels`, merged 2026-10-04 |
+| [studio-slider-smoke](studio-slider-smoke.md) | `fix/studio-sliders-contrast` merged 2026-10-05; the smoke question is not re-checked |
 
 ## Loose ends not yet written up
 
@@ -54,56 +110,9 @@ continuously.
 - **Public docs for WeatherUnits** — the original ask, deliberately blocked
   on the naming cleanup so they aren't written against a surface that needs
   apologising for.
+- **Govee's schema golden tests** — the BLE payload parser has no golden
+  fixture yet (see schema-golden-fixture-tests).
 
-## Recently completed
+## Reference, not briefs
 
-Kept briefly so the same ground isn't re-covered.
-
-- **[studio-value-sources](studio-value-sources.md)** — the Studio's value-source
-  stand-in now registers in `lib/valuesource` and `openValueSource` consults it,
-  so keyed markers/fills/captions resolve wherever their consumer lives; and a
-  numeric field decodes against the class the build assigns, so the settle/rebuild
-  path no longer calls a `None` class. 13/30 -> 30/30 showcase cells load. Pinned
-  by `tests/devtools/test_studio_value_sources.py`.
-- **Digit budget** — `max` now applies to values ≤ 1; `leadingZero`
-  implemented as three-state with an `auto` default. The `auto` rule is
-  documented in `WeatherUnits/docs/formatting.md` along with two rejected
-  simplifications of it.
-- **Degree sign** — the whole codebase rendered `º` U+00BA (ordinal
-  indicator), not `°` U+00B0. Normalized, with a test pinning the codepoint.
-- **Formatting reference** — `WeatherUnits/docs/formatting.md`, every
-  example executed rather than predicted.
-- **`defaultFor` ignored for graphs** — `getPreferredSourceContainer` took
-  the first ready container instead of ranking, unlike the other three
-  accessors.
-- **Source menus empty in `mode=remote`** — they enumerated local plugins,
-  which are loaded but never started in that mode.
-- **Derived units degraded to bare floats over the wire** — precipitation
-  rate rendered as raw float64 digits.
-- [dead-code-sweep](dead-code-sweep.md), [dependabot-triage](dependabot-triage.md),
-  [schema-golden-fixture-tests](schema-golden-fixture-tests.md) — done.
-- [beam-glow](beam-glow.md) — the border-beam pieces take a `glow:` (stroked on the beam's
-  outline, filled on its card), with a Studio control and an opt-in preset.
-- **[graph-zero-time-range](graph-zero-time-range.md)** — `Graph.normalize()` guards the
-  x divide (`Graph.py:884`) and pins a zero-span series to the left edge;
-  `pos_px_to_value` takes its single sample. On `dev` (`d917135`), pinned by
-  `tests/ui/test_graph_zero_time_range.py`. Guarding the divide did **not** let the
-  harness drop `emissive`'s `NO_FREEZE` — a frozen clock still SIGSEGVs a graph preset.
-- **[needle-glow-filled](needle-glow-filled.md)** — a filled shape's halo starts flush
-  with its outline: the needle's paint passes `filled=True` and the shape's own
-  thickness, not the pen width. On `dev` (`0d69fa5`, `14457d4`), pinned by
-  `tests/ui/test_glow_filled.py`.
-- **[emissive-upstream-check](emissive-upstream-check.md)** — the emissive render
-  instability is pre-existing, not the meter refactor's: a frozen clock plus a graph
-  preset is the trigger. Closed; `emissive` keeps its `NO_FREEZE` exemption.
-
-- **[value-sources.md](value-sources.md)**
-  — every value slot in a `.levity` file (panel key, gauge markers, range
-  bounds, colour) takes a key, a number or an expression
-  (`max(environment.temperature.temperature, today)`, maths between keys,
-  `x if cond else y`). Evaluated on the backend as computed keys. First
-  slice: a gauge with today's high/low markers. Merges the former
-  computed-values and value-driven-display-properties briefs.
-
-- **[experimental-maybe-never.md](experimental-maybe-never.md)** - ideas recorded but not scheduled; currently distance-tolerant size matching.
-- **[curved-gauge-labels.md](curved-gauge-labels.md)** - bend gauge graduation labels along the arc - warping the glyph OUTLINES, not placing characters along a curve (that has been tried and looks faceted). A non-affine warp, so the path must be flattened and every point remapped into polar space.
+- [dashboard-traps](dashboard-traps.md) — `.levity` layout mistakes and the rule behind each one. Read it before hand-authoring a dashboard.

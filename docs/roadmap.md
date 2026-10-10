@@ -1,6 +1,6 @@
 # Roadmap
 
-*Last updated: 2026-10-07 (presets added to dashboard authoring).*
+*Last updated: 2026-10-10 (task-brief audit; merges of 2026-10-06 and 10-07 and the open PR list).*
 
 This organizes and supersedes the raw idea list in [`_planned-features.md`](_planned-features.md) — every item from that list is either placed in a section below, marked as already done, or parked with a reason. Status notes reference the code so claims stay checkable.
 
@@ -16,9 +16,19 @@ The 2026 revival brought the project from a long-dormant WIP tree to a healthy, 
 - **`statekit` + `qolkit` extracted** — the declarative state/YAML-persistence layer (`src/statekit/`) and generic Python utilities (`src/qolkit/`) are now standalone, Qt-free, in-repo packages with pure-Python test suites. `lib/stateful.py` remains as a thin Qt facade, so no consumer code changed.
 - **First real test harness** — `tests/` covers statekit, qolkit, and headless (offscreen) UI/dashboard behavior.
 
+## Status, 2026-10-10
+
+**Merged on `dev` on 2026-10-06 and 10-07.** Dashboard design (#54), more boards (#60), the presets mechanism (#64), the Studio builder (#67), the log-level menu (#62), units config (#68), fixture unit (#65), gauge centre offset (#66), font token save (#69), the bug sweep (#56), small follow-ups (#57), and roadmap-next (#58). Also merged: `feat/beam-glow`, `feat/text-glow`, `feat/meter-showcase` and its bars, `fix/wind-arrow-winding`, `fix/studio-value-sources-coverage`, `fix/graph-zero-time-range-test`, PR #53 (render tooling), and `fix/ev-caption-and-realtime-keys`.
+
+**Open PRs.** #55 polar. #59 and #61 (stacked; the next roadmap feature). #63 keep-awake. #70 preset library. #71 board saves (its body lists the reload gaps: title heights, captions, clock format hint). #72 docs.
+
+**Lane order, per the coordinator's notes.** Editor (Studio) first, then the first stable cut, then Data and Look. HUD is parked: there is no hardware for it yet. The stable cut is for Neal only until the boards run on Orca. The `Editor` lane is next. Its open item is `feat/studio-snapping`, which is not on `dev`.
+
+**Token budget.** Wrap-up is in force from 2026-10-08. Nothing new starts until Neal says go. Small asks, such as this audit, are fine.
+
 ## Plan: first stable cut, then lanes
 
-Draft, 2026-10-06. Two questions are open (last part of this section).
+Draft, 2026-10-06, with the status above. The questions at the end are partly answered: see the note there.
 
 **Diagnosis.** Code is no longer the bottleneck. On 2026-10-05 and 06, threads opened and merged 11 PRs (#18 to #28). The limits now are attention, the token budget, and verification. Verification still needs the Mac too often. So: fewer things, finished, and checks that run without a person.
 
@@ -48,7 +58,7 @@ Invest here first. Every lane uses it.
 4. Close out value-sources.
 5. Merge `feat/value-sources` into `main` and tag a version. After that, work on short branches off `main`.
 
-**Phase 3: lanes, one at a time.**
+**Phase 3: lanes, one at a time.** Order per the coordinator's notes: Editor, then the stable cut, then Data and Look. HUD is parked. The list below is the scope of each lane.
 
 - HUD: serve frames from `render_service` at device size and palette. Add an e-paper theme. Write the ESP32-S3 client that fetches a frame and keeps the last one. Builds on the surface frontend in [render-service-and-surface-frontend.md](tasks/render-service-and-surface-frontend.md).
 - Data: a psutil plugin for host vitals, which also feeds the processes table. Rooms from Govee BLE with value-sources `where`. Rates and compound units (in/hr, kWh, W/m²), which need the parked WeatherUnits `dimensional-analysis` branch.
@@ -64,8 +74,8 @@ Invest here first. Every lane uses it.
 
 **Open questions.**
 
-1. Who is the first stable cut for? Options: the author only; weather-station owners such as Tempest and PiConsole users (recommended, since a concrete audience gives the cut a finish line); everyone.
-2. Which lane comes first after the cut? Options: HUD (recommended: it is the north star, and `render_service` already renders frames); data; look; editor.
+1. Who is the first stable cut for? **Answered: Neal only** (Neal's direction in project memory), once the boards run on Orca. The wider audience (weather-station owners) waits for a later cut.
+2. Which lane comes first after the cut? **Answered: Editor, then the cut, then Data, then Look** (coordinator's notes), with HUD parked. The Editor lane comes before the cut, not after it. The HUD recommendation above is superseded.
 
 ---
 
