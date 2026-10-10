@@ -5,7 +5,7 @@ from functools import cached_property, partial
 from typing import Any, Dict, List, Optional, Tuple, Type, Mapping
 
 from PySide6.QtCore import QPoint, QPointF, Qt
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QFontMetricsF, QPainter, QPen
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem
 
 from LevityDash import LevityDashboard
@@ -797,19 +797,26 @@ class Stack(Panel, tag='stack'):
 		props = getattr(item, 'flexProps', None) or {}
 		size = getattr(item, '_fixedSize', None)
 		px = lambda v, along_main=True: self.cssPx(v, vertical == along_main)
-		if props.get('basis') is not None:
+		content_main = 0.0
+		basis_auto = str(props.get('basis', '')).casefold() in ('auto', 'content')
+		if basis_auto:
+			basis = None
+			if (aspect := self.cssAspect(item)) is not None:
+				content_main = inner_cross / aspect if vertical else inner_cross * aspect
+		elif props.get('basis') is not None:
 			basis = px(props['basis'])
 		elif size is not None:
 			basis = float(size_px(size, self.geometry, DimensionType.height if vertical else DimensionType.width))
 		else:
 			basis = None
-		sized = basis is not None
+		sized = basis is not None or basis_auto
 		cross = props.get('cross')
 		align = props.get('align-self')
 		return cssflex.FlexItem(
 			grow=float(props.get('grow', 0.0 if sized else 1.0)),
 			shrink=float(props.get('shrink', 1.0)),
-			basis=0.0 if basis is None else basis,
+			basis=None if basis_auto else (0.0 if basis is None else basis),
+			content_main=content_main,
 			min_main=px(props['min']) if props.get('min') is not None else 0.0,
 			max_main=px(props['max']) if props.get('max') is not None else cssflex.INF,
 			cross=None if cross is None else px(cross, False),
@@ -839,7 +846,70 @@ class Stack(Panel, tag='stack'):
 			container.align_items = cssparse.parse_item_align(align)
 		surfaces = [geometry.surface for geometry in self.geometries.values()]
 		items = [self.cssFlexItem(surface, vertical, container.cross) for surface in surfaces]
-		self.applyCssRects(cssflex.layout_flex(items, container), left, top, width, height)
+		rects = cssflex.layout_flex(items, container)
+		self.applyCssRects(rects, left, top, width, height)
+		self.cssDividers(rects, left, top, width, height, columns=not vertical, rows=vertical)
+
+	@staticmethod
+	def cssAspect(item: Panel) -> float | None:
+		"""Width over height of the widest text this item can show: the format hint at the item's own font.
+
+		Never the live value, so the size does not move as the number changes. None when the item
+		has no value text to measure (a container, a gauge, a value with no digits).
+		"""
+		try:
+			textBox = item.display.valueTextBox.textBox
+		except AttributeError:
+			textBox = getattr(getattr(item, 'textBox', None), 'textBox', None) or getattr(item, 'textBox', None)
+		if textBox is None:
+			return None
+		try:
+			hint = textBox._formatHint or textBox.text
+			metrics = QFontMetricsF(QFont(textBox._font))
+			if not hint or metrics.height() <= 0:
+				return None
+			return metrics.horizontalAdvance(hint) / metrics.height()
+		except Exception:  # noqa: BLE001 - sizing must never abort a layout
+			return None
+
+	def cssDividers(self, rects: list[CssRect], left: float, top: float, width: float, height: float, columns: bool = True, rows: bool = False):
+		"""Dividers where two items meet: a line in the middle of the gap, as a plain stack draws them.
+
+		`columns` draws between items side by side, `rows` between items one above the other. A line spans
+		the stack's inner extent, shortened by the dividers' `size` as in a plain stack.
+		"""
+		dividers = self.dividers
+		if not dividers or not dividers.enabled or len(rects) < 2:
+			return
+		size = dividers.size
+		if isinstance(size, Length) or size.absolute:
+			size = size_float(size, self.geometry, DimensionType.height)
+		trim = (1 - float(size)) / 2
+		inner_w, inner_h = width - left - self.cssBox()[4], height - top - self.cssBox()[5]
+		eps = 0.5
+
+		def edges(start, end):
+			spans = sorted({(round(start(r), 1), round(end(r), 1)) for r in rects})
+			found, reach = [], None
+			for a, b in spans:
+				if reach is not None and a >= reach - eps and a - reach < inner_w + inner_h:
+					found.append((reach + a) / 2)
+				reach = b if reach is None else max(reach, b)
+			return sorted(set(round(x, 1) for x in found))
+
+		if columns:
+			for x in edges(lambda r: r.x, lambda r: r.x + r.width):
+				ax, bx = (left + x) / width, (left + x) / width
+				ya, yb = (top + inner_h * trim) / height, (top + inner_h * (1 - trim)) / height
+				self._dividers.append((Position(Position.X(ax, absolute=False), Position.Y(ya, absolute=False), unsorted=True),
+					Position(Position.X(bx, absolute=False), Position.Y(yb, absolute=False), unsorted=True)))
+		if rows:
+			for y in edges(lambda r: r.y, lambda r: r.y + r.height):
+				ay = (top + y) / height
+				xa, xb = (left + inner_w * trim) / width, (left + inner_w * (1 - trim)) / width
+				self._dividers.append((Position(Position.X(xa, absolute=False), Position.Y(ay, absolute=False), unsorted=True),
+					Position(Position.X(xb, absolute=False), Position.Y(ay, absolute=False), unsorted=True)))
+		self.update()
 
 	def applyCssRects(self, rects: list[CssRect], left: float, top: float, width: float, height: float):
 		"""Give every item its rect (pixels inside the padding) as shares of this stack."""
@@ -1540,10 +1610,16 @@ class GridStack(Stack, tag='grid'):
 		for key, name in (('justify-items', 'justify_items'), ('align-items', 'align_items')):
 			if props.get(key) is not None:
 				setattr(container, name, cssparse.parse_item_align(props[key]))
+		# An item's natural height is a row of the explicit grid (or of an even split); its width follows the text's shape.
+		columns = len(container.columns) or 1
+		rows = len(container.rows) or -(-len(self.geometries) // columns)
+		natural_h = inner_h / max(rows, 1)
 		items = []
 		for geometry in self.geometries.values():
 			spec = getattr(geometry.surface, 'gridProps', None) or {}
+			aspect = self.cssAspect(geometry.surface)
 			items.append(cssgrid.GridItem(
+				max_content=(0.0, 0.0) if aspect is None else (aspect * natural_h, natural_h),
 				placement=cssgrid.Placement(
 					column_start=spec.get('column'), column_span=int(spec.get('column-span', 1)),
 					row_start=spec.get('row'), row_span=int(spec.get('row-span', 1)),
@@ -1551,4 +1627,6 @@ class GridStack(Stack, tag='grid'):
 				justify_self=CssItemAlign.auto if 'justify-self' not in spec else cssparse.parse_item_align(spec['justify-self']).value,
 				align_self=CssItemAlign.auto if 'align-self' not in spec else cssparse.parse_item_align(spec['align-self']).value,
 			))
-		self.applyCssRects(cssgrid.layout_grid(items, container), left, top, width, height)
+		rects = cssgrid.layout_grid(items, container)
+		self.applyCssRects(rects, left, top, width, height)
+		self.cssDividers(rects, left, top, width, height, columns=True, rows=True)

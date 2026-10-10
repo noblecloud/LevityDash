@@ -35,7 +35,7 @@ Put `flex:` on the stack for the container options. Put `flex:` on an item for t
 |---|---|---|
 | `grow` | The share of the free space this item takes. An item with no `size`, no `basis` and no `grow` has `grow: 1`. | `flex-grow` |
 | `shrink` | The share of the shortfall this item gives up, weighted by its size. Default 1. | `flex-shrink` |
-| `basis` | The size before growing and shrinking. `size:` does the same. | `flex-basis` |
+| `basis` | The size before growing and shrinking. `size:` does the same. `auto` sizes the item by its text (see *Content size* below). | `flex-basis` |
 | `min`, `max` | The least and most size along the stack. | `min-width`, `max-width` |
 | `cross` | The size across the stack. Default: the full width of the line. | `height` in a row |
 | `align-self` | Overrides `align-items` for one item. | `align-self` |
@@ -74,11 +74,22 @@ An item with a `size:` and no `flex:` keys does not grow, and it can shrink. Thi
 
 `grid: {column, row, column-span, row-span, justify-self, align-self}`. Lines count from 1. An item with no `column` or `row` goes in the next free cell.
 
+## Content size
+
+An item that shows a number reports its size from its **format hint**, the widest text it can show, set in its own font. It never uses the value on screen, so the layout does not move when the number changes. The hint gives a width-to-height shape; the size follows from the other axis, as it does for an image.
+
+- `flex: {basis: auto}` starts the item at that width (row) or height (column) and then applies `grow` and `shrink`. Default `grow` with `basis: auto` is 0.
+- In a grid, an `auto`, `min-content` or `max-content` track is as wide as its widest hinted item, taking the item's height as one even row of the grid.
+
+## Dividers
+
+`dividers: {enabled: true}` draws a line in the middle of the gap between neighbours, as in a plain stack: between columns in a row, between rows in a column, and both in a grid. `dividers.size` shortens the lines.
+
 ## Rules
 
 - A stack without any `flex:` key, and no item with one, is laid out exactly as before. A grid is always laid out by the grid engine.
 - A mistake in `flex:` or `grid:` (an unknown key, a wrong word) is an error on that item. The rest of the board loads.
 - Dividers are not drawn in a flex or grid stack.
-- Not yet supported: `subgrid`, named areas, `calc()`, `%` inside a track list, margins on items, and sizing by the text inside an item. Items do not report a content size, so `auto` tracks and `basis: auto` have no content to measure.
+- Not yet supported: `subgrid`, named areas, `calc()`, `%` inside a track list, margins on items, and sizing by anything but the text of a value (a gauge, a graph or a container has no content size, so for them `auto` is 0).
 
 Example board: `docs/design-references/css-layout.levity` (render: `docs/design-references/css-layout.png`).

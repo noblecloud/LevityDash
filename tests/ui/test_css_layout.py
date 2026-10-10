@@ -88,3 +88,35 @@ def test_unknown_keys_are_an_error_not_silence():
 	assert _checkedKeys({'Grow': 1}, {'grow'}, 'flex') == {'grow': 1}
 	with pytest.raises(ValueError, match='nope'):
 		_checkedKeys({'grow': 1, 'nope': 2}, {'grow'}, 'flex')
+
+
+def test_flex_stack_draws_dividers_between_items(dashboard, slot):
+	stack = build(dashboard, slot, 'stack', direction='Horizontal', flex={'justify': 'flex-start'}, dividers={'enabled': True}, items=[
+		{'type': 'group', 'size': '20%'}, {'type': 'group', 'size': '30%'}, {'type': 'group', 'size': '10%'},
+	])
+	xs = [first.x.value if hasattr(first.x, "value") else float(first.x) for first, _ in stack._dividers]
+	assert len(stack._dividers) == 2
+	assert [round(x, 2) for x in xs] == pytest.approx([0.2, 0.5], abs=0.01)
+
+
+def test_grid_stack_draws_dividers_between_tracks(dashboard, slot):
+	stack = build(dashboard, slot, 'grid', grid={'columns': ['1fr', '1fr'], 'rows': ['1fr', '1fr']}, dividers={'enabled': True}, items=[
+		{'type': 'group'}, {'type': 'group'}, {'type': 'group'}, {'type': 'group'},
+	])
+	assert len(stack._dividers) == 2  # one between columns, one between rows
+
+
+def test_basis_auto_sizes_a_value_by_its_format_hint_not_its_value(dashboard, slot):
+	items = [
+		{'type': 'realtime.text', 'key': 'environment.humidity.humidity', 'flex': {'basis': 'auto'}},
+		{'type': 'realtime.text', 'key': 'environment.humidity.humidity', 'flex': {'basis': 'auto'}},
+		{'type': 'group', 'flex': {'grow': 1}},
+	]
+	stack = build(dashboard, slot, 'stack', direction='Horizontal', flex={}, items=items)
+	for child in stack.childPanels:
+		if hasattr(child, 'display'):
+			child.display.valueTextBox.textBox._formatHint = '100%'  # no data in this test, so give it a hint to size against
+	stack.setGeometries()
+	widths = [r[2] for r in rects(stack)]
+	assert widths[0] == pytest.approx(widths[1], abs=0.001)
+	assert widths[0] > 0.1  # a hinted value has a width to start from; without one it would start at 0
