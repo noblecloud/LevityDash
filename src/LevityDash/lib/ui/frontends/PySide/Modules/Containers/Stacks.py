@@ -15,9 +15,11 @@ from LevityDash.lib.ui import Color, UILogger as log
 from LevityDash.lib.ui.frontends.PySide.Modules import NonInteractivePanel, Panel, Realtime
 from LevityDash.lib.ui.frontends.PySide.utils import DebugPaint, DisplayType
 from LevityDash.lib.ui.Geometry import (
-	Alignment, AlignmentFlag, Dimension, Direction, DisplayPosition, Geometry, parseHeight, parseSize, parseWidth,
+	Alignment, AlignmentFlag, Dimension, DimensionType, Direction, DisplayPosition, Geometry, parseHeight, parseSize, parseWidth,
 	Position, Size, size_float, size_px
 )
+from LevityDash.lib.layout import flex as cssflex, grid as cssgrid, parse as cssparse
+from LevityDash.lib.layout.types import Direction as CssDirection, Edge as CssEdge, Gap as CssGap, ItemAlign as CssItemAlign, Rect as CssRect
 from LevityDash.lib.utils import DeepChainMap, mostSimilarDict, sortDict
 from WeatherUnits import Length, Percentage
 
@@ -297,9 +299,31 @@ class DividerProperties(Stateful, tag=...):
 		self._opacity = value
 
 
+def _checkedKeys(value: Mapping | None, allowed: set[str], what: str) -> dict | None:
+	"""A `flex:` or `grid:` mapping with its keys checked, so a typo is an error and not silence."""
+	if value is None:
+		return None
+	if not isinstance(value, Mapping):
+		raise ValueError(f'{what}: expected a mapping, got {value!r}')
+	value = {str(k).casefold().replace('_', '-'): v for k, v in value.items()}
+	if unknown := sorted(set(value) - allowed):
+		raise ValueError(f'{what}: unknown key {unknown}; allowed: {sorted(allowed)}')
+	return value
+
+
+# One `flex:` mapping serves both roles, because a stack can be a flex item and a flex container
+# at once. The two sets do not overlap: `align-self` is the item's, `align-items` the container's.
+_FLEX_ITEM_KEYS = {'grow', 'shrink', 'basis', 'min', 'max', 'cross', 'align-self', 'order'}
+_FLEX_STACK_KEYS = {'justify', 'align-items', 'wrap'}
+_GRID_ITEM_KEYS = {'column', 'row', 'column-span', 'row-span', 'justify-self', 'align-self'}
+_GRID_KEYS = {'columns', 'rows', 'auto-columns', 'auto-rows', 'auto-flow', 'dense', 'gap', 'justify-content', 'align-content', 'justify-items', 'align-items'}
+
+
 class StackedItem(Stateful, tag=...):
 	__size = None
 	__sizeRatio = None
+	__flex = None
+	__grid = None
 	_keepInFrame = True
 	_index: Optional[int] = None
 
@@ -350,6 +374,28 @@ class StackedItem(Stateful, tag=...):
 				sizeRatio = self.parent.geometry.absoluteWidth * self.scene().viewScale.x / sizeRatio
 			sizeRatio = self.parent.primaryDimension.size(sizeRatio)
 		return sizeRatio
+
+	@StateProperty(key='flex', default=None, sortOrder=2, allowNone=True)
+	def flexProps(self) -> dict | None:
+		"""CSS flex item options: `grow`, `shrink`, `basis`, `min`, `max`, `cross`, `align-self`, `order`.
+
+		Any of them turns on the flex engine for the stack that holds this item.
+		"""
+		return self.__flex
+
+	@flexProps.setter
+	def flexProps(self, value: dict | None):
+		self.__flex = _checkedKeys(value, _FLEX_ITEM_KEYS, 'flex')
+
+	@StateProperty(key='grid', default=None, sortOrder=2, allowNone=True)
+	def gridProps(self) -> dict | None:
+		"""Where this item sits in a `grid` stack: `column`, `row`, `column-span`, `row-span`,
+		`justify-self`, `align-self`. Lines count from 1."""
+		return self.__grid
+
+	@gridProps.setter
+	def gridProps(self, value: dict | None):
+		self.__grid = _checkedKeys(value, _GRID_ITEM_KEYS, 'grid')
 
 	@StateProperty(key='size-ratio', default=None, sortOrder=2)
 	def _sizeRatio(self) -> float | None:
@@ -584,6 +630,14 @@ class Stack(Panel, tag='stack'):
 
 		self._dividers.clear()
 
+		if self.usesCssLayout:
+			try:
+				return self.setCssGeometries()
+			except Exception as error:
+				log.error(f'{self.name or type(self).__name__}: CSS layout failed ({error!r}); using the plain stack layout', exc_info=True)
+				if isinstance(self, GridStack):
+					return
+
 		dimension = self.direction.dimension
 
 		PrimarySize, PrimaryPosition = self.primaryDimension
@@ -699,6 +753,111 @@ class Stack(Panel, tag='stack'):
 						firstPoint = Position(PrimaryPosition(itemSize + (spacing / 2)), dividerLeading, unsorted=True)
 						secondPoint = Position(PrimaryPosition(itemSize + (spacing / 2)), dividerTrailing, unsorted=True)
 					self._dividers.append((firstPoint, secondPoint))
+
+	# Section: CSS layout engine (lib/layout). Off unless a `flex:` key is present.
+	@StateProperty(key='flex', default=None, after=setGeometries, allowNone=True, sortOrder=3)
+	def flexProps(self) -> dict | None:
+		"""Turns this stack into a CSS flex container: `justify`, `align-items`, `wrap`.
+		It may also carry the item options (`grow`, `shrink`, ...) for when this stack is an item of another.
+
+		A stack with no `flex:` on itself or on any item keeps the original sizing, so existing
+		boards do not move. See docs/config/dashboard/layout.md.
+		"""
+		return getattr(self, '_flexProps', None)
+
+	@flexProps.setter
+	def flexProps(self, value: dict | None):
+		self._flexProps = _checkedKeys(value, _FLEX_STACK_KEYS | _FLEX_ITEM_KEYS, 'flex')
+
+	@property
+	def usesCssLayout(self) -> bool:
+		return any(key in (self.flexProps or ()) for key in _FLEX_STACK_KEYS) or any(
+			getattr(geometry.surface, 'flexProps', None) is not None for geometry in self.geometries.values()
+		)
+
+	def cssPx(self, value, vertical: bool) -> float:
+		"""A `.levity` length (`40%`, `12px`, `3mm`, `0.5`) as pixels along one axis of this stack."""
+		dimension = DimensionType.height if vertical else DimensionType.width
+		parsed = parseSize(value, None, dimension=dimension)
+		if parsed is None:
+			raise ValueError(f'{value!r} is not a size')
+		return float(size_px(parsed, self.geometry, dimension))
+
+	def cssGapPx(self) -> float:
+		return float(self.spacing_px)
+
+	def cssBox(self) -> tuple[float, float, float, float, float, float]:
+		"""Own width and height, and the padding left, top, right, bottom, all in pixels."""
+		width, height = float(self.geometry.absoluteWidth), float(self.geometry.absoluteHeight)
+		padding = self.padding
+		return width, height, padding.relativeLeft * width, padding.relativeTop * height, padding.relativeRight * width, padding.relativeBottom * height
+
+	def cssFlexItem(self, item: Panel, vertical: bool, inner_cross: float) -> cssflex.FlexItem:
+		"""One stack item as a `FlexItem`. An item with no size and no basis shares the rest, as a plain stack does."""
+		props = getattr(item, 'flexProps', None) or {}
+		size = getattr(item, '_fixedSize', None)
+		px = lambda v, along_main=True: self.cssPx(v, vertical == along_main)
+		if props.get('basis') is not None:
+			basis = px(props['basis'])
+		elif size is not None:
+			basis = float(size_px(size, self.geometry, DimensionType.height if vertical else DimensionType.width))
+		else:
+			basis = None
+		sized = basis is not None
+		cross = props.get('cross')
+		align = props.get('align-self')
+		return cssflex.FlexItem(
+			grow=float(props.get('grow', 0.0 if sized else 1.0)),
+			shrink=float(props.get('shrink', 1.0)),
+			basis=0.0 if basis is None else basis,
+			min_main=px(props['min']) if props.get('min') is not None else 0.0,
+			max_main=px(props['max']) if props.get('max') is not None else cssflex.INF,
+			cross=None if cross is None else px(cross, False),
+			content_cross=inner_cross,
+			align_self=CssItemAlign.auto if align is None else cssparse.parse_item_align(align).value,
+			order=int(props.get('order', 0)),
+		)
+
+	def setCssGeometries(self):
+		vertical = self.direction is Direction.Vertical
+		width, height, left, top, right, bottom = self.cssBox()
+		inner_w, inner_h = width - left - right, height - top - bottom
+		if inner_w <= 0 or inner_h <= 0:
+			return
+		props = self.flexProps or {}
+		gap = self.cssGapPx()
+		container = cssflex.FlexContainer(
+			direction=CssDirection.column if vertical else CssDirection.row,
+			wrap=cssparse.parse_wrap(props.get('wrap', 'nowrap')),
+			gap=CssGap(gap, gap),
+			main=inner_h if vertical else inner_w,
+			cross=inner_w if vertical else inner_h,
+		)
+		if (justify := props.get('justify')) is not None:
+			container.justify_content = cssparse.parse_content_align(justify)
+		if (align := props.get('align-items')) is not None:
+			container.align_items = cssparse.parse_item_align(align)
+		surfaces = [geometry.surface for geometry in self.geometries.values()]
+		items = [self.cssFlexItem(surface, vertical, container.cross) for surface in surfaces]
+		self.applyCssRects(cssflex.layout_flex(items, container), left, top, width, height)
+
+	def applyCssRects(self, rects: list[CssRect], left: float, top: float, width: float, height: float):
+		"""Give every item its rect (pixels inside the padding) as shares of this stack."""
+		with self.action_pool:
+			for index, (geometry, rect) in enumerate(zip(list(self.geometries.values()), rects)):
+				geometry.index = index
+				geometry.position = Position(
+					Position.X((left + rect.x) / width, absolute=False),
+					Position.Y((top + rect.y) / height, absolute=False),
+					unsorted=True,
+				)
+				geometry.size = Size(
+					Size.Width(rect.width / width, absolute=False),
+					Size.Height(rect.height / height, absolute=False),
+					unsorted=True,
+				)
+				geometry.updateSurface()
+
 
 	def swap(self, first: int, second: int) -> None:
 		"""Swap the positions of two items in the stack."""
@@ -1308,3 +1467,88 @@ class ValueStack(Stack, tag='value-stack'):
 
 		}
 
+
+class GridStack(Stack, tag='grid'):
+	"""A CSS grid: tracks, areas and gaps. Items are placed with `grid:` (`column`, `row`, spans).
+
+	```yaml
+	- type: grid
+	  spacing: 8px
+	  grid: {columns: [1fr, 2fr, 1fr], rows: [1fr, 1fr]}
+	  items:
+	    - type: realtime.text
+	      key: environment.temperature.temperature
+	      grid: {column: 1, row: 1, column-span: 2}
+	```
+
+	Uses `lib/layout/grid.py`. Always laid out by the engine; `spacing:` is the gap on both axes.
+	"""
+
+	@StateProperty(key='grid', default=None, after=Stack.setGeometries, allowNone=True, sortOrder=3)
+	def gridProps(self) -> dict | None:
+		"""`columns`, `rows` (track lists such as `[1fr, 200px]` or `repeat(auto-fit, minmax(150px, 1fr))`),
+		`auto-columns`, `auto-rows`, `auto-flow` (row | column), `dense`, `gap`, `justify-content`,
+		`align-content`, `justify-items`, `align-items`."""
+		return getattr(self, '_gridProps', None)
+
+	@gridProps.setter
+	def gridProps(self, value: dict | None):
+		self._gridProps = _checkedKeys(value, _GRID_KEYS | _GRID_ITEM_KEYS, 'grid')
+
+	@property
+	def usesCssLayout(self) -> bool:
+		return True
+
+	def _tracks(self, value, vertical: bool):
+		if value is None:
+			return []
+		return cssgrid.parse_track_list(value, lambda number, unit: self.cssPx(f'{number}{unit}', vertical))
+
+	def _trackSize(self, value, vertical: bool) -> cssgrid.TrackSize:
+		if value is None:
+			return cssgrid.TrackSize(cssgrid.Keyword.auto, cssgrid.Fr(1))
+		(track,) = cssgrid.parse_track_list(value, lambda number, unit: self.cssPx(f'{number}{unit}', vertical))
+		return track
+
+	def setCssGeometries(self):
+		width, height, left, top, right, bottom = self.cssBox()
+		inner_w, inner_h = width - left - right, height - top - bottom
+		if inner_w <= 0 or inner_h <= 0:
+			return
+		props = self.gridProps or {}
+		gap = props.get('gap', None)
+		if gap is None:
+			gap_row = gap_column = self.cssGapPx()
+		elif isinstance(gap, (list, tuple)):
+			gap_row, gap_column = (self.cssPx(g, True) if i == 0 else self.cssPx(g, False) for i, g in enumerate(gap))
+		else:
+			gap_row, gap_column = self.cssPx(gap, True), self.cssPx(gap, False)
+		container = cssgrid.GridContainer(
+			columns=self._tracks(props.get('columns'), False),
+			rows=self._tracks(props.get('rows'), True),
+			auto_columns=self._trackSize(props.get('auto-columns'), False),
+			auto_rows=self._trackSize(props.get('auto-rows'), True),
+			auto_flow=str(props.get('auto-flow', 'row')),
+			dense=bool(props.get('dense', False)),
+			gap=CssGap(gap_row, gap_column),
+			width=inner_w,
+			height=inner_h,
+		)
+		for key, name in (('justify-content', 'justify_content'), ('align-content', 'align_content')):
+			if props.get(key) is not None:
+				setattr(container, name, cssparse.parse_content_align(props[key]))
+		for key, name in (('justify-items', 'justify_items'), ('align-items', 'align_items')):
+			if props.get(key) is not None:
+				setattr(container, name, cssparse.parse_item_align(props[key]))
+		items = []
+		for geometry in self.geometries.values():
+			spec = getattr(geometry.surface, 'gridProps', None) or {}
+			items.append(cssgrid.GridItem(
+				placement=cssgrid.Placement(
+					column_start=spec.get('column'), column_span=int(spec.get('column-span', 1)),
+					row_start=spec.get('row'), row_span=int(spec.get('row-span', 1)),
+				),
+				justify_self=CssItemAlign.auto if 'justify-self' not in spec else cssparse.parse_item_align(spec['justify-self']).value,
+				align_self=CssItemAlign.auto if 'align-self' not in spec else cssparse.parse_item_align(spec['align-self']).value,
+			))
+		self.applyCssRects(cssgrid.layout_grid(items, container), left, top, width, height)

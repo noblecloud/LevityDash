@@ -1,0 +1,56 @@
+# The CSS layout keys. A stack with `flex:` (on itself or on an item) is laid out by the flex engine,
+# a `grid` by the grid engine. Stacks without them keep the original sizing. See
+# docs/config/dashboard/layout.md. Render: render_dashboard.py OUT.png --levity THIS --scenario stormy-day
+- type: group
+  name: main
+  items:
+    # Row 1: grow. A fixed 20% item, then two that share the rest 1 : 2.
+    - type: stack
+      name: grow
+      direction: horizontal
+      spacing: 10px
+      geometry: {x: 2%, y: 2%, width: 96%, height: 9%}
+      flex: {justify: flex-start}
+      items:
+        - {type: text, text: 'size 20%', size: 20%, border: {enabled: true, edges: all}}
+        - {type: text, text: 'grow 1', flex: {grow: 1}, border: {enabled: true, edges: all}}
+        - {type: text, text: 'grow 2', flex: {grow: 2}, border: {enabled: true, edges: all}}
+
+    # Row 2: shrink. Three items ask for 50% each (150% in all). The one with shrink 0 keeps its
+    # size, the one with shrink 2 gives up twice as much as the one with shrink 1.
+    - type: stack
+      name: shrink
+      direction: horizontal
+      spacing: 10px
+      geometry: {x: 2%, y: 13%, width: 96%, height: 9%}
+      flex: {justify: flex-start}
+      items:
+        - {type: text, text: 'basis 50% shrink 0', flex: {basis: 50%, shrink: 0}, border: {enabled: true, edges: all}}
+        - {type: text, text: 'shrink 1', flex: {basis: 50%, shrink: 1}, border: {enabled: true, edges: all}}
+        - {type: text, text: 'shrink 2', flex: {basis: 50%, shrink: 2}, border: {enabled: true, edges: all}}
+
+    # Row 3: justify and order. Four 15% items spread with space-between; `order` moves one first.
+    - type: stack
+      name: justify
+      direction: horizontal
+      geometry: {x: 2%, y: 24%, width: 96%, height: 9%}
+      flex: {justify: space-between}
+      items:
+        - {type: text, text: 'a', size: 15%, border: {enabled: true, edges: all}}
+        - {type: text, text: 'b', size: 15%, border: {enabled: true, edges: all}}
+        - {type: text, text: 'c', size: 15%, border: {enabled: true, edges: all}}
+        - {type: text, text: 'order -1', size: 15%, flex: {order: -1}, border: {enabled: true, edges: all}}
+
+    # Grid: a hero over two columns and two rows, four satellites, rows and columns in fr.
+    - type: grid
+      name: grid
+      spacing: 10px
+      geometry: {x: 2%, y: 36%, width: 96%, height: 62%}
+      grid: {columns: [2fr, 1fr, 1fr], rows: [1fr, 1fr, 1fr]}
+      items:
+        - {type: realtime.text, key: environment.temperature.temperature, title: Temperature, grid: {column: 1, row: 1, column-span: 1, row-span: 3}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.humidity.humidity, title: Humidity, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.pressure.pressure, title: Pressure, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.wind.speed.speed, title: Wind, grid: {column: 2, column-span: 2}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.light.uvi, title: UV, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.precipitation.precipitation, title: Rain, border: {enabled: true, edges: all}}
