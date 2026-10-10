@@ -282,6 +282,12 @@ class Preview(QGraphicsView):
 		self.zoomChanged.emit(self.zoom)
 
 	def wheelEvent(self, event):
+		if event.modifiers() & Qt.KeyboardModifier.AltModifier and self.layer is not None:
+			# Option and the wheel set the gear ratio. Some platforms send the turn sideways while Alt is down.
+			delta = event.angleDelta().y() or event.angleDelta().x()
+			if self.layer.wheel(delta, self.mapToScene(event.position().toPoint())):
+				event.accept()
+				return
 		if event.modifiers() & Qt.KeyboardModifier.ControlModifier or event.modifiers() & Qt.KeyboardModifier.MetaModifier:
 			delta = event.angleDelta().y() or event.pixelDelta().y()
 			self.setZoom(self.zoom * 1.0015 ** delta)
@@ -535,7 +541,7 @@ class Studio(QWidget):
 		self.handlesBox.toggled.connect(lambda on: self.layer.setEnabled(on))
 		self.snapBox = QCheckBox('Snap')
 		self.snapBox.setChecked(True)
-		self.snapBox.setToolTip('Snap dragged values to round steps. Hold Shift while dragging for fine control.')
+		self.snapBox.setToolTip('Snap dragged values to round steps. Hold Cmd (Ctrl) while dragging to move freely, Option (Alt) to gear the drag down; Option and the wheel set the ratio.')
 		self.snapBox.toggled.connect(lambda on: setattr(self.layer, 'snap', on))
 		self.gradientBox = QCheckBox('Edit gradient')
 		self.gradientBox.setToolTip('Show one node per stop of the arc gradient on the preview. Drag a node to move the stop, '

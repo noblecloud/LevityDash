@@ -26,9 +26,12 @@ gradient* on)              the track, or Delete, removes it; double click picks 
 kinds do not fight for the mouse. A node shows its value and unit while it is dragged.
 
 Handles show while the pointer is over the preview and brighten under the
-cursor. Shift while dragging snaps finely; without it a value snaps to a round
-step when *Snap* is on. The overlay is one item (`Overlay`) so a screenshot can
-hide every handle at once.
+cursor. While *Snap* is on a value snaps to a round step; hold Cmd (Ctrl elsewhere) to
+move freely. Hold Option (Alt) to gear the drag down: the handle moves the mouse's
+distance divided by the gear ratio (4:1 to start), anchored where the key went down so
+nothing jumps. Scroll with Option held to change the ratio; a badge near the cursor
+shows it and fades. The overlay is one item (`Overlay`) so a screenshot can hide every
+handle at once.
 """
 import copy
 import math
@@ -36,7 +39,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, List, Optional
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
-from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QGraphicsItem
 
 from LevityDash.devtools import _studio_schema as schema
@@ -98,6 +101,108 @@ class Dial:
 
 
 # Section: the items
+
+#: Cmd on a Mac is Qt's Control and Ctrl is Meta; holding either turns snapping off.
+FREE = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier
+GEAR_STEPS = (1, 2, 3, 4, 6, 8, 10, 15, 20)
+GEAR_DEFAULT = 4
+#: What a handle's tip says about the modifiers.
+KEYS = 'Cmd: no snap, Option: fine control'
+
+
+class Gearing:
+	"""A drag's map from the mouse to the point the handle sees.
+
+	While gearing is off the handle follows the mouse one to one. While it is on the handle moves the mouse's distance
+	divided by `ratio`. Every change (the key going down or up, the ratio changing) anchors the map where the mouse
+	last was, so the handle never jumps.
+	"""
+
+	def __init__(self, ratio: int = GEAR_DEFAULT):
+		self.ratio = ratio
+		self.begin(QPointF())
+
+	def begin(self, pos: QPointF):
+		self.raw = self.eff = self.last = QPointF(pos)
+		self.geared = False
+
+	def _map(self, raw: QPointF) -> QPointF:
+		return self.eff + (raw - self.raw) / (self.ratio if self.geared else 1.0)
+
+	def _anchor(self):
+		self.eff, self.raw = self._map(self.last), QPointF(self.last)
+
+	def point(self, raw: QPointF, geared: bool) -> QPointF:
+		"""Where the handle goes for the mouse at `raw`, with the gear key held or not."""
+		if geared != self.geared:
+			self._anchor()
+			self.geared = geared
+		self.last = QPointF(raw)
+		return self._map(raw)
+
+	def step(self, direction: int) -> int:
+		"""Move the ratio one step up (`direction` > 0) or down along `GEAR_STEPS`; returns the new ratio."""
+		self._anchor()
+		i = GEAR_STEPS.index(self.ratio) if self.ratio in GEAR_STEPS else GEAR_STEPS.index(GEAR_DEFAULT)
+		self.ratio = GEAR_STEPS[max(0, min(len(GEAR_STEPS) - 1, i + (1 if direction > 0 else -1)))]
+		return self.ratio
+
+
+class Badge(QGraphicsItem):
+	"""A short line of text near the cursor that fades about a second after it was last set."""
+
+	LIFE = 1000
+
+	def __init__(self, parent: QGraphicsItem):
+		super().__init__(parent)
+		self.text = ''
+		self.setZValue(Z + 5)
+		self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+		self.setVisible(False)
+		self._timer = QTimer(singleShot=True, interval=self.LIFE, timeout=self._fade)
+		self._fading = QTimer(interval=40, timeout=self._step)
+
+	def boundingRect(self) -> QRectF:
+		return QRectF(0, 0, 150, 30)
+
+	def say(self, text: str, pos: QPointF, hold: bool = False):
+		"""Show `text` at `pos`. With `hold` it stays until the next `say` or `hide`; otherwise it fades after `LIFE` ms."""
+		self._fading.stop()
+		self.text = text
+		self.setPos(pos + QPointF(16, 16))
+		self.setOpacity(1.0)
+		self.setVisible(True)
+		self.update()
+		self._timer.stop()
+		if not hold:
+			self._timer.start()
+
+	def hide(self):
+		self._timer.stop()
+		self._fading.stop()
+		self.setVisible(False)
+
+	def _fade(self):
+		self._fading.start()
+
+	def _step(self):
+		self.setOpacity(self.opacity() - 0.1)
+		if self.opacity() <= 0.05:
+			self._fading.stop()
+			self.setVisible(False)
+
+	def paint(self, painter: QPainter, *args):
+		painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+		painter.setBrush(QColor(20, 24, 30, 230))
+		painter.setPen(QPen(QColor('#f5a524'), 1))
+		painter.drawRoundedRect(self.boundingRect().adjusted(0.5, 0.5, -0.5, -0.5), 6, 6)
+		painter.setPen(QColor('#f0f6fc'))
+		font = QFont()
+		font.setPixelSize(15)
+		font.setBold(True)
+		painter.setFont(font)
+		painter.drawText(self.boundingRect(), Qt.AlignmentFlag.AlignCenter, self.text)
+
 
 class Overlay(QGraphicsItem):
 	"""Holds every handle. Hide it and the scene renders without them."""
@@ -181,7 +286,7 @@ class _Handle(QGraphicsItem):
 		# After a double click the item still holds the mouse (a colour dialog eats the release), but no press began a drag.
 		if self.layer.active is not self:
 			return
-		self.layer.move(self, event.scenePos(), bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier))
+		self.layer.move(self, event.scenePos(), event.modifiers())
 
 	def mouseReleaseEvent(self, event):
 		if self.layer.active is self:
@@ -352,6 +457,9 @@ class HandleLayer:
 		self.scene = studio.scene
 		self.overlay = Overlay()
 		self.scene.addItem(self.overlay)
+		self.gear = Gearing()
+		self._wasGeared = False
+		self.badge = Badge(self.overlay)
 		self.scene.overlay = self.overlay
 		self.items: List[_Handle] = []
 		self.pool: List[_Handle] = []
@@ -462,26 +570,44 @@ class HandleLayer:
 		self._state = None
 		self._state = item.spec.press(pos) if item.spec.press is not None else item.spec.begin()
 		self._start = pos
+		self.gear.begin(pos)
+		self._wasGeared = False
 		if item.spec.kind == 'gradient':
 			self.selectedStop = item.spec.tag
 		self.studio.beginDrag()
 		item.setCursor(Qt.CursorShape.ClosedHandCursor)
 
-	def move(self, item: _Handle, pos: QPointF, shift: bool):
+	def move(self, item: _Handle, pos: QPointF, modifiers: Qt.KeyboardModifier = Qt.KeyboardModifier.NoModifier):
 		spec = item.spec
 		if spec.drag is None:
 			return
 		if not self._moved and (pos - self._start).manhattanLength() < 3:
 			return
 		self._moved = True
-		fine = shift or not self.snap
-		spec.drag(self._state, pos, fine)
+		geared = bool(modifiers & Qt.KeyboardModifier.AltModifier)
+		fine = bool(modifiers & FREE) or not self.snap
+		point = self.gear.point(pos, geared)
+		if geared:
+			self.badge.say(f'Gear {self.gear.ratio}:1', pos, hold=True)
+		elif self._wasGeared:
+			self.badge.say(f'Gear {self.gear.ratio}:1', pos)  # the key came up: let the badge fade
+		self._wasGeared = geared
+		spec.drag(self._state, point, fine)
 		if spec.kind in ('gradient', 'track'):
 			self.reposition()
+
+	def wheel(self, delta: int, at: QPointF) -> bool:
+		"""The wheel with Option held sets the gear ratio. True when it was used (a handle is being dragged, or the pointer is over the preview)."""
+		if not delta:
+			return False
+		ratio = self.gear.step(1 if delta > 0 else -1)
+		self.badge.say(f'Gear {ratio}:1', at, hold=self.active is not None and self.gear.geared)
+		return True
 
 	def end(self, item: _Handle):
 		spec = item.spec
 		self.active = None
+		self.badge.hide()
 		item.setCursor(Qt.CursorShape.OpenHandCursor if spec.drag else Qt.CursorShape.PointingHandCursor)
 		if spec.click is not None and not self._moved:
 			spec.click()
@@ -630,7 +756,7 @@ class HandleLayer:
 					del items[i]
 					once(items)
 
-			out.append(Spec('gradient', 'Drag along the track to move this stop (shift: fine). Drag off the track or press Delete to remove it. Double click for its colour.',
+			out.append(Spec('gradient', 'Drag along the track to move this stop (' + KEYS + '). Drag off the track or press Delete to remove it. Double click for its colour.',
 			                pos, begin=begin, drag=drag, finish=finish, fill=fill, label=label, removing=lambda held=held: held['off'],
 			                double=recolor, remove=remove, tag=i))
 
@@ -688,7 +814,7 @@ class HandleLayer:
 				angle = dl.angleNear(dl.polar(p)[0], dl.a1 if end else dl.a0)
 				angle = round(angle, 1) if fine else snapTo(angle, 5)
 				studio.handleEdit(('arc', key), int(angle) if float(angle).is_integer() else angle)
-			out.append(Spec('angle', 'Drag to set the arc\'s ' + ('end' if end else 'start') + ' angle (shift: fine)', pos, drag=drag))
+			out.append(Spec('angle', 'Drag to set the arc\'s ' + ('end' if end else 'start') + ' angle (' + KEYS + ')', pos, drag=drag))
 
 		# radius, on the track at the arc's middle
 		def radiusPos():
@@ -700,7 +826,7 @@ class HandleLayer:
 			ratio = dl.polar(p)[1] / max(dl.gauge.radius_max, 1) * 100
 			ratio = round(ratio, 1) if fine else snapTo(ratio, 5)
 			studio.handleEdit(('radius',), f'{max(ratio, 5):g}%')
-		out.append(Spec('radius', 'Drag to set the radius (shift: fine)', radiusPos, drag=radiusDrag))
+		out.append(Spec('radius', 'Drag to set the radius (' + KEYS + ')', radiusPos, drag=radiusDrag))
 
 		# arc weight, on the track's inner edge, a quarter of the way along
 		def weightPos():
@@ -713,7 +839,7 @@ class HandleLayer:
 			pct = w / max(dl.R, 1) * 100
 			pct = round(pct, 1) if fine else snapTo(pct, 0.5)
 			studio.handleEdit(('arc', 'weight'), f'{max(pct, 0.5):g}%')
-		out.append(Spec('weight', 'Drag to set the arc weight (shift: fine)', weightPos, drag=weightDrag))
+		out.append(Spec('weight', 'Drag to set the arc weight (' + KEYS + ')', weightPos, drag=weightDrag))
 
 		# the needle tip sets the preview value
 		def needlePos():
@@ -824,7 +950,7 @@ class HandleLayer:
 				x = snapTo(state['o']['x'] + delta.x() / diameter, step)
 				y = snapTo(state['o']['y'] + delta.y() / diameter, step)
 				write({'x': round(x, 4), 'y': round(y, 4)})
-			return Spec('label', f'Drag the {name} (shift: fine)', lambda: None, begin=begin, drag=drag, rect=rect)
+			return Spec('label', f'Drag the {name} ({KEYS})', lambda: None, begin=begin, drag=drag, rect=rect)
 
 		def offsetOf(label) -> dict:
 			v = getattr(label, '_offset', None) or (0.0, 0.0)
