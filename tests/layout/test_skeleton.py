@@ -27,12 +27,10 @@ def test_every_registered_function_is_documented_and_typed():
 			assert 'return' in function.__annotations__, function.__qualname__
 
 
-def test_a_pending_stub_raises_until_it_is_filled_in():
-	# A thread that fills a stub sets status='done' on its decorator and drops this expectation.
-	with pytest.raises(NotImplementedError):
-		layout.flex.resolve_flexible_lengths([], 0.0, 0.0)
-	assert layout.flex.resolve_flexible_lengths.__section__.status == 'stub'
-	assert 'LevityDash.lib.layout.flex.resolve_flexible_lengths' in pending()
+def test_a_finished_stub_is_marked_done_and_leaves_the_pending_list():
+	# A thread that fills a stub sets status='done' on its decorator.
+	assert layout.flex.resolve_flexible_lengths.__section__.status == 'done'
+	assert 'LevityDash.lib.layout.flex.resolve_flexible_lengths' not in pending()
 
 
 def test_the_package_needs_no_qt():
@@ -41,11 +39,22 @@ def test_the_package_needs_no_qt():
 		assert not [i for i in imports if re.search(r'PySide6|lib\.ui|frontends', i)], path.name
 
 
-@pytest.mark.skip(reason='fills in when layout_flex and legacy.stack_as_flex are done')
 def test_a_legacy_stack_and_its_flex_form_agree():
 	"""Unsized items split the rest equally, sized items keep their size, spacing is the gap."""
 	container, items = layout.legacy.stack_as_flex('horizontal', [100, None, None], 10, (0, 0), (0, 0), 400, 50)
 	rects = layout.flex.layout_flex(items, container)
-	assert [r.width for r in rects] == [100, 135, 135]
-	assert [r.x for r in rects] == [0, 110, 255]
+	assert [r.width for r in rects] == [100, 140, 140]
+	assert [r.x for r in rects] == [0, 110, 260]
 	assert all(r.height == 50 for r in rects)
+
+
+def test_a_vertical_legacy_stack_swaps_the_axes():
+	container, items = layout.legacy.stack_as_flex('vertical', [None, 50], 10, (0, 0), (0, 0), 200, 80)
+	rects = layout.flex.layout_flex(items, container)
+	assert [(r.y, r.height) for r in rects] == [(0, 140), (150, 50)]
+	assert all((r.x, r.width) == (0, 80) for r in rects)
+
+
+def test_a_legacy_item_size_keeps_every_cell_the_same_and_leaves_the_rest_empty():
+	container, items = layout.legacy.stack_as_flex('horizontal', [None, None], 10, (0, 0), (0, 0), 400, 50, item_size=100)
+	assert [(r.x, r.width) for r in layout.flex.layout_flex(items, container)] == [(0, 100), (110, 100)]
