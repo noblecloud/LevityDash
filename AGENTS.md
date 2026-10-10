@@ -45,7 +45,8 @@ src/
     lib/plugins/schema/        schema engine (Schema, LevityDatagram, Subdatagram) —
                                see "Schema engine" below, or docs/reviews/schema-pipeline.md
     lib/plugins/builtin/       OpenMeteo, PirateWeather, WeatherFlow, Govee (BLE),
-                               OpenWeatherMap
+                               OpenWeatherMap, Host (psutil vitals + top
+                               processes; off until Host.ini enables it)
     lib/wire/                  backend/frontend split wire protocol — see "Wire
                                protocol" below
     lib/ui/frontends/PySide/   the Qt frontend (app.py, Modules/Displays/…)
