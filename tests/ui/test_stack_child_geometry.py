@@ -58,3 +58,16 @@ def test_explicit_size_beats_geometry(dashboard, slot):
 	])
 	pump(dashboard.app, 0.3)
 	assert spans(stack, 'height')[0] == pytest.approx(stack.sceneBoundingRect().height() * 0.25, abs=1)
+
+
+def test_item_size_max_caps_each_child(dashboard, slot):
+	"""`item-size-max` used to crash the stack on a typo (`meaxCellSize`)."""
+	slot.state = {'items': [{
+		'type': 'stack', 'direction': 'Vertical', 'spacing': '0px',
+		'item-size-max': '20%',
+		'items': [{'type': 'group'}, {'type': 'group'}],
+	}]}
+	stack = next(c for c in slot.childItems() if isinstance(c, Stack))
+	pump(dashboard.app, 0.3)
+	whole = stack.sceneBoundingRect().height()
+	assert all(h <= whole * 0.2 + 1 for h in spans(stack, 'height'))
