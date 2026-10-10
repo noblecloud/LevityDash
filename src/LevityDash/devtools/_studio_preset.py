@@ -236,6 +236,35 @@ class Piece:
 		kids.insert(path[-1] + 1, copy.deepcopy(kids[path[-1]]))
 		return path[:-1] + (path[-1] + 1,)
 
+	#: What stays on the use when an item becomes a preset: where it sits and when it shows, not what it is.
+	USE_FIELDS = ('name', 'geometry', 'flex', 'grid', 'when')
+
+	def extract(self, path: Path, name: str) -> 'Piece':
+		"""Turn the item at `path` into a preset called `name`: the item takes its place as a use of it, and the new preset is returned.
+
+		Placement (`geometry`, `flex`, `grid`, `when`, `name`) stays on the use, so the preset can sit anywhere. A property of this
+		preset that the item reads becomes a property of the new one with the same default, and the use passes it through
+		(`props: {x: $x}`), so the item looks as it did.
+		"""
+		if not path:
+			raise ValueError('The whole template is already the preset; pick an item inside it')
+		node = self.node(path)
+		if node is None:
+			raise ValueError('No such item')
+		if PRESET_KEY in node:
+			raise ValueError('That item is already a use of a preset')
+		template = copy.deepcopy(node)
+		use: Dict[str, Any] = {PRESET_KEY: name}
+		for key in self.USE_FIELDS:
+			if key in template:
+				use[key] = template.pop(key)
+		used = [n for n in self.props if n in set(refs(template))]
+		if used:
+			use[PROPS_KEY] = {n: f'${n}' if n.isidentifier() else f'${{{n}}}' for n in used}
+		piece = Piece(name, {n: copy.deepcopy(self.props[n]) for n in used}, template)
+		self.node(path[:-1])[ITEMS_KEY][path[-1]] = use
+		return piece
+
 	# properties
 
 	def uniqueName(self, wish: str) -> str:
