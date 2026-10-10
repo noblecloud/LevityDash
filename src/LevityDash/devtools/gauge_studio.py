@@ -52,6 +52,7 @@ from PySide6.QtWidgets import (
 
 from LevityDash.devtools import _studio_schema as schema
 from LevityDash.devtools import _studio_state as state
+from LevityDash.devtools import _studio_geometry as geometry
 from LevityDash.devtools import _studio_targets as targets
 from LevityDash.devtools import _studio_stage as _stage
 from LevityDash.devtools._studio_stage import DATA_PRESETS, DataPreset, StudioGauge, StudioScene, presetForKey
@@ -253,6 +254,7 @@ class Preview(QGraphicsView):
 		self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
 		self.viewport().setMouseTracking(True)
 		self.layer: Optional[HandleLayer] = None
+		self.studioWindow = None
 		self.fitting = True
 		self.viewport().grabGesture(Qt.GestureType.PinchGesture)
 
@@ -318,6 +320,15 @@ class Preview(QGraphicsView):
 			self.layer.setInside(False)
 
 	def keyPressEvent(self, event):
+		if self.studioWindow is not None and not event.modifiers():
+			if event.key() == Qt.Key.Key_W:
+				self.studioWindow.toggleWireframe()
+				event.accept()
+				return
+			if event.key() == Qt.Key.Key_G:
+				self.studioWindow.openGuideMenu()
+				event.accept()
+				return
 		if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace) and self.layer is not None and self.layer.deleteSelected():
 			event.accept()
 			return
@@ -420,6 +431,7 @@ class Studio(QWidget):
 		self.setWindowTitle('Gauge Studio')
 		self.resize(1280, 860)
 		self.preview = Preview()
+		self.preview.studioWindow = self
 		self.scene = StudioScene(self.preview)
 		self.preview.setScene(self.scene)
 		self.studio: Optional[StudioGauge] = None
@@ -470,6 +482,9 @@ class Studio(QWidget):
 		self.layer = HandleLayer(self)
 		for key, act in self.targetActions.items():
 			self._targetToggled(key, act.isChecked(), save=False)
+		self.layer.wireframe = self.wireAction.isChecked()
+		for key, act in self.layerActions.items():
+			self.layer.layersOn[key] = act.isChecked()
 		self.preview.layer = self.layer
 		# Each key sequence is bound once. On macOS the standard Undo key is Ctrl+Z in Qt's terms,
 		# and two shortcuts on the same sequence make it ambiguous: neither fires.
@@ -558,6 +573,20 @@ class Studio(QWidget):
 			act.setChecked(self.settings.value(f'snap/{key}', True, type=bool))
 			act.toggled.connect(lambda on, k=key: self._targetToggled(k, on))
 			self.targetActions[key] = act
+		menu.addSeparator()
+		wire = menu.addAction('Wireframe (W)')
+		wire.setCheckable(True)
+		wire.setChecked(self.settings.value('wire/on', False, type=bool))
+		wire.toggled.connect(lambda on: self._wireToggled(on))
+		self.wireAction = wire
+		self.layerActions = {}
+		for key in geometry.LAYERS:
+			act = menu.addAction(geometry.LAYER_TITLES[key])
+			act.setCheckable(True)
+			act.setChecked(self.settings.value(f'guideline/{key}', False, type=bool))
+			act.toggled.connect(lambda on, k=key: self._layerToggled(k, on))
+			self.layerActions[key] = act
+		self.guideMenu = menu
 		self.targetsButton.setMenu(menu)
 		self.gradientBox = QCheckBox('Edit gradient')
 		self.gradientBox.setToolTip('Show one node per stop of the arc gradient on the preview. Drag a node to move the stop, '
@@ -1217,6 +1246,22 @@ class Studio(QWidget):
 		if save:
 			self.settings.setValue(f'snap/{key}', on)
 			self.settings.sync()
+
+	def _wireToggled(self, on: bool):
+		self.layer.setWireframe(on)
+		self.settings.setValue('wire/on', on)
+		self.settings.sync()
+
+	def _layerToggled(self, key: str, on: bool):
+		self.layer.setLayer(key, on)
+		self.settings.setValue(f'guideline/{key}', on)
+		self.settings.sync()
+
+	def toggleWireframe(self):
+		self.wireAction.setChecked(not self.wireAction.isChecked())
+
+	def openGuideMenu(self):
+		self.guideMenu.popup(QCursor.pos())
 
 	def undo(self):
 		self._step(-1)

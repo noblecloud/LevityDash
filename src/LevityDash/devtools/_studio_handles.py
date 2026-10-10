@@ -47,7 +47,8 @@ from PySide6.QtWidgets import QGraphicsItem
 from LevityDash.devtools import _studio_schema as schema
 from LevityDash.devtools import _studio_stops as stops
 from LevityDash.devtools import _studio_targets as targets
-from LevityDash.devtools._studio_guides import Guides, Line, Tag
+from LevityDash.devtools import _studio_geometry as geometry
+from LevityDash.devtools._studio_guides import Guides, Line, Tag, Wire
 from LevityDash.devtools._studio_stops import niceStep, snapTo
 
 Z = 10000
@@ -493,6 +494,12 @@ class HandleLayer:
 		self.hits: dict = {}
 		self.guides = Guides(self.overlay, -1)
 		self.guides.setVisible(False)
+		#: Wireframe mode and the guideline layers (`_studio_geometry.LAYERS`), drawn by `wire` under the handles.
+		self.wireframe = False
+		self.layersOn = {k: False for k in geometry.LAYERS}
+		self.wire = Wire(Z - 100)
+		self.wire.setVisible(False)
+		self.scene.addItem(self.wire)
 		#: *Edit gradient*: one node per stop of the arc's gradient, and the other handles dimmed.
 		self.gradientMode = False
 		self.selectedStop: Optional[int] = None
@@ -566,6 +573,7 @@ class HandleLayer:
 			self.items.append(item)
 		self._signature = self._sig()
 		self.reposition()
+		self.refreshWire()
 
 	def _sig(self) -> tuple:
 		g = self.gauge
@@ -580,6 +588,7 @@ class HandleLayer:
 			self.rebuild()
 			return
 		self.reposition()
+		self.refreshWire()
 
 	def reposition(self):
 		for item in self.items:
@@ -624,6 +633,42 @@ class HandleLayer:
 		spec.drag(self._state, point, fine)
 		if spec.kind in ('gradient', 'track'):
 			self.reposition()
+		if self.wire.isVisible():
+			self.refreshWire()
+
+	# the wireframe and the guideline layers
+
+	def setWireframe(self, on: bool):
+		self.wireframe = on
+		self.refreshWire()
+
+	def setLayer(self, key: str, on: bool):
+		self.layersOn[key] = on
+		self.refreshWire()
+
+	def refreshWire(self):
+		"""Redraw the wireframe and the guideline layers from the gauge as it is now. Reads only; writes nothing to the gauge."""
+		layers = [k for k, on in self.layersOn.items() if on]
+		g = self.gauge
+		if g is None or not (self.wireframe or layers):
+			self.wire.clear()
+			return
+		try:
+			dl, card = Dial(g), self.scene.sceneRect()
+			shapes = geometry.collect(g, dl, card) if self.wireframe else []
+			guides = geometry.guidelines(g, dl, card, layers)
+			hit = self.hits.get('v')
+			if hit is not None and hit[1] == 'angle':
+				for s in guides:
+					s.hot = s.name in ('ray', 'end ray') and abs((s.value or 0) - hit[0].value) < 1e-6
+			veil = None
+			if self.wireframe:
+				views = self.scene.views()
+				veil = QColor(views[0].backgroundBrush().color()) if views else QColor('#0b0d10')
+				veil.setAlpha(217)
+			self.wire.show(shapes, geometry.overlapping(shapes), guides, veil, card)
+		except Exception:  # noqa: BLE001 - the gauge may be mid-rebuild; the next refresh draws it
+			self.wire.clear()
 
 	# snapping to design targets, and the guides that show it
 
