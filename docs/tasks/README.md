@@ -36,8 +36,8 @@ brief's verification steps.
 | [render-scenario-crash](render-scenario-crash.md) | `render_dashboard.py --scenario` SIGSEGVs on a full dashboard (a preset renders fine). Needs a fix or a finer bisect — suggested branch `fix/scenario-render-segv`. |
 | [categoryitem-duplicate-keys](categoryitem-duplicate-keys.md) | duplicate `CategoryItem` keys in `dispatcher._values`; root cause not closed |
 | [lambda-sizegroup-test-failures](lambda-sizegroup-test-failures.md) | two size-group tests fail on `lambda`, pass on the Mac. Low priority. |
-| [gauge-display](gauge-display.md) | investigated 2026-07-26, not fixed: the gauge constructs but does not render |
-| [dashboard-redesign](dashboard-redesign.md) | in progress since 2026-07-26; the layout is installed, the font work is set up but not applied |
+| [gauge-display](gauge-display.md) | unclear (audit 2026-10-10): the `_majorDivisions` error may be fixed; value-label centring needs a render |
+| [dashboard-redesign](dashboard-redesign.md) | unclear (audit 2026-10-10): the layout is installed; the sun-time cells and mini-gauge centring need a render |
 | [dashboard-design-handoff](dashboard-design-handoff.md) | the weather boards: PR #54 and #60 merged; Station and Core + rotation still to finish. Paused 2026-10-06. |
 | [timeseries-viewport-and-control-plane](timeseries-viewport-and-control-plane.md) | the plugin control plane's start/stop/restart commands (not started); a socket that stays bound but goes silent is not detected; no re-fetch when panning past the fetched window |
 | [phase-4.2-follow-ups](phase-4.2-follow-ups.md) | loose ends from the backend/frontend split, which has merged |
@@ -79,7 +79,7 @@ brief's verification steps.
 | [meter-survey](meter-survey.md) | phase 1 of meter-and-bar, read-only, done |
 | [meter-m3-recon](meter-m3-recon.md) | M3 landed (`38579f4`, `f519eed`) |
 | [meter-merge-sync](meter-merge-sync.md) | the sync merge into the meter layout is merged |
-| [meter-split-audit](meter-split-audit.md) | read-only audit of the meter split; no status line of its own |
+| [meter-split-audit](meter-split-audit.md) | read-only audit of the meter split, complete; `refactor/meter` has merged |
 | [dependabot-triage](dependabot-triage.md) | done; 43 alerts flagged for a follow-up decision in the triage doc |
 | [schema-golden-fixture-tests](schema-golden-fixture-tests.md) | done for OpenMeteo, PirateWeather, WeatherFlow. Govee not attempted. |
 | [govee-multi-device](govee-multi-device.md) | working since 2026-07-27 |
@@ -91,7 +91,7 @@ brief's verification steps.
 | [gauge-end-labels-handoff](gauge-end-labels-handoff.md) | `gauge-end-labels`, merged 2026-10-04 |
 | [n1-fill-arc-handoff](n1-fill-arc-handoff.md) | `fill-value-sources`, merged 2026-10-04 |
 | [curved-gauge-labels](curved-gauge-labels.md) | `feat/curved-gauge-labels`, merged 2026-10-04 |
-| [studio-slider-smoke](studio-slider-smoke.md) | `fix/studio-sliders-contrast` merged 2026-10-05; the smoke question is not re-checked |
+| [studio-slider-smoke](studio-slider-smoke.md) | superseded by `studio-value-sources` (30/30 showcase cells load) |
 
 ## Loose ends not yet written up
 

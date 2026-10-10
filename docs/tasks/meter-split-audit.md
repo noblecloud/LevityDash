@@ -1,5 +1,7 @@
 # Meter split audit — is every moved member byte-identical?
 
+**Audit 2026-10-10: done.** A read-only audit record. The branch it audited, `refactor/meter`, has merged (M3, PR #27), so its verdict table stands as a record. Its own "could not verify" items are unchanged.
+
 **Job B of [meter-m2b-remaining.md](meter-m2b-remaining.md). Read-only audit: this document is
 the only file written; no source file was touched.**
 

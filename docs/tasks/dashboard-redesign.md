@@ -1,5 +1,7 @@
 # Dashboard redesign — state of play
 
+**Audit 2026-10-10: unclear.** The remaining items are visual: the sun-time cells, and whether mini-gauge value labels sit at the centre. Settling them needs a render of the installed layout, which this container cannot run. The layout itself lives in the user's config, not in this repo.
+
 **Status:** in progress, 2026-07-26. The layout below is **installed and
 running**; the font work is set up but not applied. Written as a handoff
 mid-task, so it records what was learned as much as what is left.

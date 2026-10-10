@@ -1,5 +1,7 @@
 # Gauge Studio offscreen smoke: the value slider, the sources, a fill that names a key
 
+**Audit 2026-10-10: done, superseded.** Its failing verdicts (13/30 cells, sources not reaching consumers) are what `studio-value-sources.md` fixed; that brief reports 30/30 showcase cells loading. The worktrees it used are not in this clone, so I did not re-run the harness.
+
 Question under review: *run the Studio offscreen and confirm that the preview still follows
 its value slider. If it does not, the defect is no longer latent and it becomes part of this
 branch.* A first pass in this worktree suggested it did not; the attribution was missing.
