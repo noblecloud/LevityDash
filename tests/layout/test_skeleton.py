@@ -39,11 +39,22 @@ def test_the_package_needs_no_qt():
 		assert not [i for i in imports if re.search(r'PySide6|lib\.ui|frontends', i)], path.name
 
 
-@pytest.mark.skip(reason='fills in when layout_flex and legacy.stack_as_flex are done')
 def test_a_legacy_stack_and_its_flex_form_agree():
 	"""Unsized items split the rest equally, sized items keep their size, spacing is the gap."""
 	container, items = layout.legacy.stack_as_flex('horizontal', [100, None, None], 10, (0, 0), (0, 0), 400, 50)
 	rects = layout.flex.layout_flex(items, container)
-	assert [r.width for r in rects] == [100, 135, 135]
-	assert [r.x for r in rects] == [0, 110, 255]
+	assert [r.width for r in rects] == [100, 140, 140]
+	assert [r.x for r in rects] == [0, 110, 260]
 	assert all(r.height == 50 for r in rects)
+
+
+def test_a_vertical_legacy_stack_swaps_the_axes():
+	container, items = layout.legacy.stack_as_flex('vertical', [None, 50], 10, (0, 0), (0, 0), 200, 80)
+	rects = layout.flex.layout_flex(items, container)
+	assert [(r.y, r.height) for r in rects] == [(0, 140), (150, 50)]
+	assert all((r.x, r.width) == (0, 80) for r in rects)
+
+
+def test_a_legacy_item_size_keeps_every_cell_the_same_and_leaves_the_rest_empty():
+	container, items = layout.legacy.stack_as_flex('horizontal', [None, None], 10, (0, 0), (0, 0), 400, 50, item_size=100)
+	assert [(r.x, r.width) for r in layout.flex.layout_flex(items, container)] == [(0, 100), (110, 100)]

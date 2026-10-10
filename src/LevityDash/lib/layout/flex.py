@@ -15,6 +15,7 @@ already resolved by the caller.
 
 from dataclasses import dataclass, field
 
+from .align import align_offset, distribute_content
 from .spec import implements
 from .types import Alignment, ContentAlign, Direction, Edge, Gap, INF, ItemAlign, Measure, Rect, Wrap
 
@@ -50,7 +51,11 @@ class FlexItem:
 
 @dataclass(slots=True)
 class FlexContainer:
-	"""A flex container. Defaults are the CSS initial values."""
+	"""A flex container. Defaults are the CSS initial values.
+
+	`main` and `cross` are the inner sizes (inside the padding). `layout_flex` does not apply
+	`padding_*`; the caller adds the padding start to the rects it gets back.
+	"""
 	direction: Direction = Direction.row
 	wrap: Wrap = Wrap.nowrap
 	justify_content: Alignment = field(default_factory=lambda: Alignment(ContentAlign.flex_start))
@@ -96,9 +101,10 @@ def _min_main(item: FlexItem) -> float:
 	content size and a definite specified size."""
 	if item.min_main is not None:
 		return item.min_main
+	suggestion = min(item.content_min_main, item.max_main)  # content size suggestion, clamped by the max
 	if item.main is not None:
-		return min(item.content_min_main, item.main)
-	return item.content_min_main
+		return min(suggestion, item.main)  # specified size suggestion
+	return suggestion
 
 
 def _hypothetical_main(item: FlexItem) -> float:
@@ -130,40 +136,6 @@ def _cross_size(item: FlexItem, main: float) -> float:
 	else:
 		size = item.content_cross
 	return max(item.min_cross, min(size, item.max_cross))
-
-
-def _distribute(free: float, count: int, alignment: Alignment) -> tuple[float, float]:
-	"""Split `free` space among `count` boxes. Returns `(leading, between)`.
-
-	This is the content distribution of `justify-content` and `align-content` (§9.5, §9.6).
-	It duplicates the rule that `align.distribute_content` will hold once Box Alignment is
-	ported; the two should be merged then.
-	"""
-	name = _alignment_name(alignment)
-	safe = alignment.safe
-	if name in ('end', 'flex-end'):
-		if safe and free < 0:
-			return 0.0, 0.0
-		return free, 0.0
-	if name == 'center':
-		if safe and free < 0:
-			return 0.0, 0.0
-		return free / 2, 0.0
-	if name == 'space-between':
-		if count <= 1 or free < 0:
-			return 0.0, 0.0
-		return 0.0, free / (count - 1)
-	if name == 'space-around':
-		if count <= 1 or free < 0:
-			return _distribute(free, count, Alignment(ContentAlign.center, safe))
-		each = free / count
-		return each / 2, each
-	if name == 'space-evenly':
-		if count <= 1 or free < 0:
-			return _distribute(free, count, Alignment(ContentAlign.center, safe))
-		each = free / (count + 1)
-		return each, each
-	return 0.0, 0.0  # start, flex-start, normal, stretch
 
 
 @implements('css-flexbox-1', 'Line Length Determination: flex base size and hypothetical main size', '9.2', status='done')
@@ -371,15 +343,14 @@ def _content_line_cross(line: FlexLine, items: list[FlexItem], container: FlexCo
 def align_main_axis(sizes: list[float], margins: list[Edge], available_main: float, gap: float, justify: Alignment) -> list[float]:
 	"""Main-axis offsets of the items in one line, from `justify-content` (§9.5).
 
-	Returns the offset of each item's border box, after its start margin. Uses the same
-	distribution as `align.distribute_content` for the leftover space after sizes, margins and
-	gaps.
+	Returns the offset of each item's border box, after its start margin. The leftover space
+	after sizes, margins and gaps goes through `align.distribute_content`.
 	"""
 	count = len(sizes)
 	if not count:
 		return []
 	used = sum(sizes) + sum(_fixed(m) for m in margins) + gap * (count - 1)
-	leading, between = _distribute(available_main - used, count, justify)
+	leading, between = distribute_content(available_main - used, count, justify)
 	offsets = []
 	position = leading
 	for size, margin in zip(sizes, margins):
@@ -411,7 +382,7 @@ def align_cross_axis(lines: list[FlexLine], items: list[FlexItem], container: Fl
 	count = len(lines)
 
 	free = container.cross - sum(line.cross for line in lines) - gap * (count - 1) if container.cross is not None else 0.0
-	leading, between = _distribute(free, count, container.align_content)
+	leading, between = distribute_content(free, count, container.align_content)
 	position = leading
 	for line in lines:
 		line.cross_offset = position
@@ -441,12 +412,7 @@ def align_cross_axis(lines: list[FlexLine], items: list[FlexItem], container: Fl
 				offset = line.cross_offset + baseline_max - (item.baseline or 0.0)
 			else:
 				free_self = line.cross - (size + start + end)
-				if name in ('end', 'flex-end'):
-					inner = free_self
-				elif name == 'center':
-					inner = 0.0 if safe and free_self < 0 else free_self / 2
-				else:
-					inner = 0.0
+				inner = align_offset(free_self, Alignment(ItemAlign(name), safe))
 				offset = line.cross_offset + start + inner
 			placed[index] = (offset, size)
 
