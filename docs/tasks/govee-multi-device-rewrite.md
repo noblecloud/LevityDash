@@ -1,5 +1,7 @@
 # Govee plugin: multi-device rewrite
 
+**Audit 2026-10-10: done.** Merged into `dev` on 2026-09-03 (`feat/govee-multi-device-rewrite`); the status below predates the merge.
+
 **Status:** not started, 2026-08-04. Written as a handoff for a fresh session
 (intended for Blackfish) — self-contained, no other context assumed.
 

@@ -1,5 +1,7 @@
 # Handoff: gauge end-label leading/trailing options
 
+**Audit 2026-10-10: done.** Merged into `feat/value-sources` on 2026-10-04 (`gauge-end-labels`, `fix/tick-end-label-position`).
+
 **Goal:** check whether `GaugeTickText` (Gauge.py, `src/LevityDash/lib/ui/frontends/PySide/Modules/Displays/`) applies `rotate-/align-/position-leading|trailing` to the wrong end tick, and fix it if so. Use a tabs-only, minimal fix. Commit format: `fix(UI.Gauge): …`.
 
 ## Code (on `dev`, approx. lines 2384-2520)

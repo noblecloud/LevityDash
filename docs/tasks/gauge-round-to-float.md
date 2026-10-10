@@ -1,6 +1,6 @@
 # `round_to` returns 1e-323 for any gauge narrower than 1 unit
 
-**Status:** open, actionable. Recorded 2026-10-04.
+**Status: FIXED on `dev` (`1789e18`, fix(Gauge): round_to picks a usable step for sub-1 ranges; moved to `meter/meter.py`).** Audit 2026-10-10: the loop is bounded at `_power > -12`, and a fallback returns `10 ** floor(log10(span))` when nothing divides the span. The text below is kept as the trail.
 **Base:** `feat/value-sources`. Step one: `git checkout -B fix/gauge-round-to-float feat/value-sources`.
 **Model:** suits `levity-worker`. The fix direction is decided below; no design call is outstanding.
 

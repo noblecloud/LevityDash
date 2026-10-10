@@ -1,5 +1,7 @@
 # Handoff: two Realtime panels sharing one expression key
 
+**Audit 2026-10-10: done.** Merged into `feat/value-sources` on 2026-10-04 (`shared-expr`).
+
 Goal: two `realtime.text` panels with the same expression key both show the value and share one computed key, and deleting one leaves the other working. Fix whatever breaks.
 
 Branch: `agent-realtime-expr2`, based on `feat/value-sources` (`dadd840`). The worktree's original base (`29991c6`) and local `dev` (`063bd15`) predate the computed-keys work, and `git merge dev` conflicts in `Panel.py`. Base this work on `feat/value-sources`, not `dev`.

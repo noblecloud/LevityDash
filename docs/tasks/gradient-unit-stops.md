@@ -1,5 +1,7 @@
 # Gradient stops at real unit values
 
+**Audit 2026-10-10: partly done.** Merged into `feat/value-sources` on 2026-10-05. The running-dashboard edit mode is still open.
+
 Suggested branch: `feat/gradient-unit-stops` off `feat/value-sources`. Start it after
 `fix/warp-smooth` merges, because both edit `devtools/_studio_editors.py`.
 

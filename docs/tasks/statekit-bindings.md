@@ -1,5 +1,7 @@
 # statekit: validate with a reason, notify on change, bind to a value source
 
+**Audit 2026-10-10: partly done.** The branch `feat/statekit-bindings` merged into `feat/value-sources` on 2026-10-04. Re-check items 1 to 3 against the code before you pick them up.
+
 **Status:** open, actionable. Recorded 2026-10-04. Items 1 to 3 are in order; item 4 is later.
 **Base:** `dev`. Step one: `git checkout -B feat/statekit-bindings dev`.
 **Model:** suits `levity-worker` for item 1 alone. Items 2 and 3 want a design read first.

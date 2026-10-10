@@ -1,5 +1,7 @@
 # Gauge display: what actually works, and what doesn't
 
+**Audit 2026-10-10: unclear.** `_majorDivisions` now has a getter and setter in `meter/meter.py`, so the AttributeError in section 3 may be gone, but I did not confirm it. The `_center_transform` code in `meter/gauge.py` is still there, so the centring question in section 1 is open. Settling it needs a render, which this container cannot run.
+
 **Status:** investigated 2026-07-26, not fixed. This replaces the guess that
 it was "mostly functional, just not wired to live values" — it *is* wired,
 and it does construct, but it does not render.
