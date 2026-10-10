@@ -1024,7 +1024,7 @@ class Builder(QWidget):
 		self.addButton = QToolButton()
 		self.addButton.setText('Add item')
 		self.addButton.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-		menu = QMenu(self.addButton)
+		menu = self.addMenu = QMenu(self.addButton)
 		menu.addSection('Containers')
 		for kind in CONTAINERS:
 			menu.addAction(kind, lambda k=kind: self.addItem(k))
@@ -1036,7 +1036,7 @@ class Builder(QWidget):
 			menu.addAction(name, lambda n=name: self.addItem(f'preset:{n}'))
 		self.addButton.setMenu(menu)
 		tools.addWidget(self.addButton)
-		for text, fn, tip in (('Duplicate', self.duplicateItem, ''), ('Delete', self.deleteItem, 'Remove the selected item and what is inside it'),
+		for text, fn, tip in (('Duplicate', self.duplicateItem, ''), ('To preset', self.extractPreset, 'Save the selected item as a preset of its own and use that preset here'), ('Delete', self.deleteItem, 'Remove the selected item and what is inside it'),
 		                      ('▲', lambda: self.moveItem(-1), 'Earlier'), ('▼', lambda: self.moveItem(1), 'Later')):
 			b = QToolButton()
 			b.setText(text)
@@ -1319,6 +1319,39 @@ class Builder(QWidget):
 			self.rebuildAll()
 			self._syncStage()
 			self.schedule()
+
+	def extractPreset(self, name: Optional[str] = None):
+		"""Save the selected item as a preset (written to the Studio's presets folder) and leave a use of it in its place."""
+		if not self.selection:
+			self.status.setText('Pick an item inside the template to save as a preset')
+			return
+		if name is None:
+			name, ok = QInputDialog.getText(self, 'Save as a preset', 'Name of the new preset')
+			if not ok:
+				return
+		name = re.sub(r'[^\w-]+', '-', name or '').strip('-')
+		if not name:
+			return
+		if name in lib.available():
+			self.status.setText(f'There is already a preset called {name}; pick another name')
+			return
+		self.push()
+		try:
+			piece = self.piece.extract(self.selection, name)
+		except ValueError as e:
+			self.history.pop()
+			self._updateHistory()
+			self.status.setText(str(e))
+			return
+		path = state.stateDir() / 'presets' / f'{name}.yaml'
+		path.parent.mkdir(parents=True, exist_ok=True)
+		path.write_text(yaml.safe_dump(piece.asData(), sort_keys=False, allow_unicode=True, width=120))
+		lib.clear_cache()
+		self.addMenu.addAction(name, lambda n=name: self.addItem(f'preset:{n}'))
+		self.rebuildAll()
+		self._syncStage()
+		self.schedule()
+		self.status.setText(f'Saved {path}; the item is now a use of {name}')
 
 	def deleteItem(self):
 		if self.selection:

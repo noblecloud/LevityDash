@@ -127,7 +127,7 @@ Triaged from `_planned-features.md`, grouped by area. ~~Struck~~ items are alrea
 - **Condensed-title option** — possibly automatic by available size.
 - **Corner radius** on panels.
 - **Fill object** — one abstraction accepting colors, gradients, images, and patterns; today `FillBrushMixin` handles color + gradient only. Include dynamic color functions and plot-line section dividers.
-- ~~**Value templates** — file-loadable templates combining multiple values into one composite display.~~ **Done 2026-10-07** as presets: a preset's `template:` can be a composite (`hero-readings` is a titled panel of four readings) with props that land on its sub-items. Still open: a Studio editor for presets, and a way to save a selection as a preset.
+- ~~**Value templates** — file-loadable templates combining multiple values into one composite display.~~ **Done 2026-10-07** as presets: a preset's `template:` can be a composite (`hero-readings` is a titled panel of four readings) with props that land on its sub-items. The Studio builder edits presets, and its *To preset* button saves a selected item as a preset (2026-10-10).
 - **Layout in a separate file** — split panel layout from the rest of the dashboard spec.
 - **Groups default to grid/stack** unless specified; explicit item geometry overrides.
 - **`type: split` in YAML** — `SplitPanel` exists but is only insertable from the context menu; it isn't wired into `itemLoader`.
