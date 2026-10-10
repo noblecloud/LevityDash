@@ -101,3 +101,35 @@ def test_a_group_saves_its_items_in_stacking_order(dashboard):
 	}])
 	names = [i['name'] for i in yaml.safe_load(text)['items'][0]['items']]
 	assert names == ['under', 'over']
+
+
+GRAPH = {
+	'type': 'graph', 'name': 'g', 'timeframe': {'days': 1}, 'geometry': BOX,
+	'annotations': {'hourLabels': {'alignment': 'BottomCenter'}, 'dayLabels': {'enabled': False}},
+	'figures': [{'figure': 'temperature', 'environment.temperature.temperature': {'plot': {'type': 'plot', 'color': '#ff0000'}}}],
+}
+
+
+def test_a_graph_does_not_save_what_its_own_layout_derived(dashboard):
+	"""The hour labels move the margins to fit and the graph hands the indicator a colour; neither was written."""
+	text = _dump(dashboard, [GRAPH])
+	saved = yaml.safe_load(text)['items'][0]
+	assert 'indicator' not in saved
+	assert 'margins' not in saved
+
+
+def test_a_graph_keeps_the_margins_the_config_wrote(dashboard):
+	text = _dump(dashboard, [{**GRAPH, 'margins': {'top': '8%', 'bottom': '20%'}}])
+	saved = yaml.safe_load(text)['items'][0]
+	assert saved['margins'] == {'top': '8%', 'bottom': '20%'}
+
+
+def test_a_gauge_saves_a_plain_interval_and_no_derived_unit_text(dashboard):
+	"""`interval: 1` came back as '1', and the unit label's text, which follows the data, was written too."""
+	text = _dump(dashboard, [{
+		'type': 'realtime.gauge', 'key': 'astronomy.sun.remaining', 'geometry': BOX,
+		'display': {'range': {'min': 7, 'max': 19}, 'major': {'interval': 1, 'length': '2%'}},
+	}])
+	saved = yaml.safe_load(text)['items'][0]
+	assert saved['display']['major']['interval'] == 1
+	assert 'text' not in saved.get('unit-label', {})

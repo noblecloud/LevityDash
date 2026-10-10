@@ -2123,15 +2123,22 @@ class Margins(MultiDimension, dimensions=('left', 'top', 'right', 'bottom'), sep
 
 	@property
 	def encoded_state(self) -> dict | str:
+		# A layout that moves the margins to fit its labels leaves what the config wrote here.
+		configured = getattr(self.surface, '_configuredMargins', None)
+		return self.encodeValues(tuple(self) if configured is None else configured)
+
+	def encodeValues(self, values: tuple) -> dict | str:
+		left, top, right, bottom = values
 		if (defaults := getattr(self.surface, '__defaults__', {})) and (default := defaults.get('margins', None)) or (default := tuple(self.default())):
-			nonDefaults = {k: v for i, (k, v) in enumerate(zip(self.__dimensions__, self)) if v != default[i]}
-			if self.left == self.right and self.top == self.bottom:
-				if self.left == self.top:
-					return str(self.left)
-				return f'{self.left}, {self.top}'
+			# A side left out of the text loads as zero, so only a zero that is also the default can be left out.
+			nonDefaults = {k: v for i, (k, v) in enumerate(zip(self.__dimensions__, values)) if v != default[i] or getattr(v, 'value', v) != 0}
+			if left == right and top == bottom:
+				if left == top:
+					return str(left)
+				return f'{left}, {top}'
 			if len(nonDefaults) == len(self.__dimensions__) or nonDefaults:
 				return nonDefaults
-		return ", ".join(tuple(str(i) for i in self.toTuple()))
+		return ", ".join(str(i) for i in values)
 
 	@property
 	def state(self) -> dict:

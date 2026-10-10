@@ -607,6 +607,16 @@ class Graduations(ColorGradientMixin, StatefulGaugeItem):
 				pass
 		return Unset
 
+	@usr_interval.encode
+	def usr_interval(self, value: Measurement | int | float | Unset) -> str | int | float:
+		# A bare number is how a dashboard writes it, and the data's own unit reads it
+		# back. Text would not do for a compass direction: 90 degrees prints as "E".
+		try:
+			number = float(value)
+		except (TypeError, ValueError):
+			return str(value)
+		return int(number) if number.is_integer() else number
+
 	@property
 	def usr_interval_deg(self) -> Angle | Unset:
 		gauge_angle_range = self.gauge.endAngle - self.gauge.startAngle
@@ -2274,7 +2284,8 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText], GlowMixin):
 
 	@align_trailing.condition(method='get')
 	def align_trailing(self, value: AlignmentFlag) -> bool:
-		return value != self.alignment.combined
+		# Only what the config set: the automatic alignment is derived from the tick's own.
+		return getattr(self, '_align_trailing', Unset) is not Unset
 
 	def _align_leading_auto(self) -> AlignmentFlag:
 		if self.rotation_leading:
@@ -2295,7 +2306,8 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText], GlowMixin):
 
 	@align_leading.condition(method='get')
 	def align_leading(self, value: AlignmentFlag) -> bool:
-		return value != self.alignment.combined
+		# Only what the config set: the automatic alignment is derived from the tick's own.
+		return getattr(self, '_align_leading', Unset) is not Unset
 
 	@property
 	def gauge(self) -> 'Gauge':
@@ -4675,6 +4687,26 @@ class GaugeUnit(GaugeLabel):
 		},
 		'margins': ('0', '0', '0', '0'),
 	}
+
+	# Its own property, not an override of Label.text: that would change the
+	# shared one for every label. The unit's text follows the data, so only a
+	# text the config wrote is saved.
+	@StateProperty(key='text', default=..., sortOrder=0, dependencies={'geometry', 'margins', 'format-hint'}, repr=True, singleVal=True)
+	def text(self) -> str:
+		return self.textBox.text if not self.hasIcon else ...
+
+	@text.setter
+	def text(self, value: str):
+		self._explicitText = value
+		self.textBox.value = value
+
+	@text.after
+	def text(self) -> Callable:
+		return self.textBox.updateText
+
+	@text.condition
+	def text(self, value) -> bool:
+		return bool(getattr(self, '_explicitText', None))
 
 	class TextBox(Text):
 

@@ -678,6 +678,13 @@ class Panel(_Panel, Stateful, tag='group'):
 	def margins(self, value: Margins):
 		value.surface = self
 		self._margins = value
+		self._configuredMargins = None
+
+	@margins.condition(method='get')
+	def margins(self, value: Margins) -> bool:
+		# A layout may have moved the margins since they loaded; judge the loaded ones.
+		configured = getattr(self, '_configuredMargins', None)
+		return configured is None or tuple(configured) != tuple(Margins.default())
 
 	@margins.factory
 	def margins(self) -> Margins:
