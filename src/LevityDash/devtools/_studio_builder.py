@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
 )
 
 from LevityDash.devtools import _studio_editors as editors
+from LevityDash.devtools import _studio_layout as layout
 from LevityDash.lib import presets as lib
 from LevityDash.devtools import _studio_preset as model
 from LevityDash.devtools import _studio_state as state
@@ -49,9 +50,9 @@ from LevityDash.devtools._studio_widgets import Section
 Editor = editors.Editor
 REPO = Path(__file__).resolve().parents[3]
 
-CONTAINERS = ['group', 'stack', 'value-stack', 'titled-group', 'switch']
+CONTAINERS = ['group', 'stack', 'grid', 'value-stack', 'titled-group', 'switch']
 DISPLAYS = ['realtime.text', 'realtime.gauge', 'realtime.bar', 'text', 'label', 'graph', 'mini-graph', 'polar', 'clock', 'moon', 'spacer']
-LAYOUT_PARENTS = ('stack', 'value-stack', 'switch')
+LAYOUT_PARENTS = ('stack', 'value-stack', 'grid', 'switch')
 STAGES = {'Card 640x400': (640, 400), 'Wide 960x400': (960, 400), 'Tall 400x640': (400, 640), 'Board 1280x800': (1280, 800)}
 SETTLE_MS = 350
 
@@ -67,7 +68,7 @@ BINDABLE = {
 
 
 #: Fields the Item tab has a control for. Everything else an item holds goes to the "more properties" popover.
-OWNED = {'type', model.PRESET_KEY, 'name', 'key', 'text', 'color', 'direction', 'spacing', 'when', model.ITEMS_KEY}
+OWNED = {'type', model.PRESET_KEY, 'name', 'key', 'text', 'color', 'direction', 'spacing', 'flex', 'grid', 'when', model.ITEMS_KEY}
 OWNED_PATHS = ['geometry.x', 'geometry.y', 'geometry.width', 'geometry.height', 'display.range.min', 'display.range.max', 'display.arc.gradient']
 
 
@@ -105,7 +106,7 @@ def newItem(kind: str, parentType: str, n: int) -> dict:
 	elif kind in ('stack', 'value-stack'):
 		item['direction'] = 'Vertical'
 		item['items'] = []
-	elif kind in ('group', 'titled-group', 'switch'):
+	elif kind in ('group', 'titled-group', 'switch', 'grid'):
 		item['items'] = []
 	if parentType not in LAYOUT_PARENTS and kind != 'spacer':
 		off = 8 * (n % 5)
@@ -671,6 +672,22 @@ class ItemTab(QWidget):
 		if kind in ('stack', 'value-stack'):
 			self._row(head, 'direction', 'direction', editors.ChoiceEdit([('Vertical', 'Vertical'), ('Horizontal', 'Horizontal')]), value=node.get('direction'))
 			self._row(head, 'spacing', 'spacing', editors.SizeEdit(nullable=True, ref='full'), value=node.get('spacing'))
+		if kind == layout.GRID_KIND:
+			self._row(head, 'spacing', 'spacing', editors.SizeEdit(nullable=True, ref='full'), value=node.get('spacing'))
+		parentKind = str(parent.get('type')) if parent is not None else ''
+		flexContainer, flexItem = kind in layout.STACK_KINDS, parentKind in layout.STACK_KINDS
+		gridContainer, gridItem = kind == layout.GRID_KIND, parentKind == layout.GRID_KIND
+		if flexContainer or flexItem or gridContainer or gridItem:
+			arrange = Section('Layout (CSS flex and grid)', expanded=True)
+			self.layout_.addWidget(arrange)
+			if flexContainer or flexItem:
+				edit = layout.FlexEdit()
+				edit.setRoles(flexContainer, flexItem)
+				self._row(arrange, 'flex', 'flex', edit, bindable=False, value=node.get('flex'))
+			if gridContainer or gridItem:
+				edit = layout.GridEdit()
+				edit.setRoles(gridContainer, gridItem)
+				self._row(arrange, 'grid', 'grid', edit, bindable=False, value=node.get('grid'))
 
 		where = Section('Geometry' + (' (a share of its parent; in a stack it sets the size)' if inLayout else ' (a share of its parent)'), expanded=True)
 		self.layout_.addWidget(where)
