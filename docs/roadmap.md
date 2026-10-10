@@ -22,7 +22,7 @@ The 2026 revival brought the project from a long-dormant WIP tree to a healthy, 
 
 **Open PRs.** #55 polar. #59 and #61 (stacked; the next roadmap feature). #63 keep-awake. #70 preset library. #71 board saves (its body lists the reload gaps: title heights, captions, clock format hint). #72 docs.
 
-**Lane order, per the coordinator's notes.** Editor (Studio) first, then the first stable cut, then Data and Look. HUD is parked: there is no hardware for it yet. The stable cut is for Neal only until the boards run on Orca. The `Editor` lane is next. Its open item is `feat/studio-snapping`, which is not on `dev`.
+**Lane order, per Neal's direction in project memory.** Editor (Studio) first, then the first stable cut, then Data and Look. HUD is parked: there is no hardware for it yet. The stable cut is for Neal only until the boards run on Orca. The `Editor` lane is next. Its open item is `feat/studio-snapping`, which is not on `dev`.
 
 **Token budget.** Wrap-up is in force from 2026-10-08. Nothing new starts until Neal says go. Small asks, such as this audit, are fine.
 
@@ -58,7 +58,7 @@ Invest here first. Every lane uses it.
 4. Close out value-sources.
 5. Merge `feat/value-sources` into `main` and tag a version. After that, work on short branches off `main`.
 
-**Phase 3: lanes, one at a time.** Order per the coordinator's notes: Editor, then the stable cut, then Data and Look. HUD is parked. The list below is the scope of each lane.
+**Phase 3: lanes, one at a time.** Order per Neal's direction in project memory: Editor, then the stable cut, then Data and Look. HUD is parked. The list below is the scope of each lane.
 
 - HUD: serve frames from `render_service` at device size and palette. Add an e-paper theme. Write the ESP32-S3 client that fetches a frame and keeps the last one. Builds on the surface frontend in [render-service-and-surface-frontend.md](tasks/render-service-and-surface-frontend.md).
 - Data: a psutil plugin for host vitals, which also feeds the processes table. Rooms from Govee BLE with value-sources `where`. Rates and compound units (in/hr, kWh, W/m²), which need the parked WeatherUnits `dimensional-analysis` branch.
@@ -74,8 +74,10 @@ Invest here first. Every lane uses it.
 
 **Open questions.**
 
-1. Who is the first stable cut for? **Answered: Neal only** (Neal's direction in project memory), once the boards run on Orca. The wider audience (weather-station owners) waits for a later cut.
-2. Which lane comes first after the cut? **Answered: Editor, then the cut, then Data, then Look** (coordinator's notes), with HUD parked. The Editor lane comes before the cut, not after it. The HUD recommendation above is superseded.
+1. Who is the first stable cut for? **Neal only**, per Neal's direction in project memory, until the boards run on Orca. A wider audience (weather-station owners) waits for a later cut.
+2. Which lane comes first? **Editor, then the cut, then Data, then Look**, per Neal's direction in project memory, with HUD parked. The HUD recommendation above is superseded.
+3. Does a true zero with `precision: 1` show `0.0`? Open. Project memory lists it as unresolved; it conflicts with the display rule that `0.0` means trace.
+4. Does the theme picker write back to the dashboard file? Open. Project memory lists it as unresolved. CLAUDE.md says the picker "never writes the dashboard file", so the open part is whether it should.
 
 ---
 

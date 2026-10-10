@@ -30,7 +30,6 @@ brief's verification steps.
 
 | brief | scope |
 |---|---|
-| [gauge-round-to-float](gauge-round-to-float.md) | a gauge narrower than 1 unit still goes through `round_to`'s float path (`meter/meter.py`). The fix is not on `dev` yet. |
 | [gauge-text-treatments](gauge-text-treatments.md) | optical centering — `98°` looks off-centre because `°` is light |
 | [studio-snapping-guides](studio-snapping-guides.md) | Studio distance guides, ratio snapping and drag gearing. Branch `feat/studio-snapping` is not on `dev`. Next lane: Editor. |
 | [warp-along-path](warp-along-path.md) | `warp:` takes a free path, plus a `bend` blend. Not started; `feat/warped-text` (circle warp) has merged. |
@@ -69,6 +68,7 @@ brief's verification steps.
 
 | brief | where it landed |
 |---|---|
+| [gauge-round-to-float](gauge-round-to-float.md) | `1789e18` on `dev`: sub-1 spans get a usable step |
 | [beam-glow](beam-glow.md) | `feat/beam-glow`, merged 2026-10-06 |
 | [text-baseline-alignment](text-baseline-alignment.md) | fixed 2026-07-26 |
 | [dashboard-wont-load](dashboard-wont-load.md) | `808363c`, fixed 2026-09-08 |
