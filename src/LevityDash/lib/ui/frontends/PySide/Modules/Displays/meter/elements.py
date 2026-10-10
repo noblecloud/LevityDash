@@ -1768,7 +1768,7 @@ class GaugeTickText(GlowMixin, GaugeItem, AnnotationText, Stateful):
 		pass
 
 	def getTextScale(self, textRect: QRectF = None, limitRect: QRectF = None) -> float:
-		textRect = textRect or self._textRect or self._update_path()
+		textRect = textRect or self.currentTextRect()
 		limitRect = limitRect or self.limitRect
 
 		width = (textRect.width()) or 1

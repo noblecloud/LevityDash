@@ -210,6 +210,10 @@ def boot(
 	if freeze is not None:
 		pinned = freeze_time(freeze)
 		print(f"frozen clock at {pinned['when']} ({len(pinned) - 1} sources)")
+		# Beams sweep on their own 30 fps clock, not the wall clock freeze_time
+		# patches; left running, the light sits wherever the render happened to be.
+		from LevityDash.lib.ui.frontends.PySide.Modules.beam.pulse_driver import PulseDriver
+		PulseDriver.shared().set_time(0.0)
 
 	if levity:
 		# NOT `seed_path / 'saves' / 'dashboards' / 'default.levity'` - that
@@ -268,6 +272,8 @@ def boot(
 	else:
 		resizeScene(app, size)
 	pump(app, max(settle - 1.5, 1.5))
+	if freeze is not None:
+		settleSwitches(LevityDashboard)
 	if fixture_pending:
 		# Every display now exists and has been laid out; publishing here means
 		# no display can format a value before it knows its own units. The second
@@ -280,7 +286,77 @@ def boot(
 		if plugin is not None:
 			plugin.publish()
 			pump(app, 0.5)
+	if freeze is not None:
+		settleSwitches(LevityDashboard)
+		settleAnimations(LevityDashboard)
+	# Text layout is built from caches that depend on update order; fit it to a
+	# fixed point so two renders of the same board agree.
+	app.main_window.view._refitAllText()
+	pump(app, 0.3)
+	settleGraphs(app, LevityDashboard)
 	return app, LevityDashboard
+
+
+def settleGraphs(app, dashboard, timeout: float = 10.0) -> None:
+	"""Re-render every graph plot at the settled layout and wait for the paint to land.
+
+	A plot paints on a worker thread behind a 333 ms debounce, sized from the
+	figure at the time it was scheduled. At capture time one could still be
+	queued, running, or showing an earlier size, which moved the line by pixels
+	from render to render.
+	"""
+	plots = [i for i in dashboard.scene.items() if hasattr(i, 'render_delay') and hasattr(i, 'scheduleRender')]
+	for plot in plots:
+		plot._pathDirty = True
+		plot.scheduleRender()
+	end = time.monotonic() + timeout
+	while time.monotonic() < end:
+		pump(app, 0.1)
+		if not any(p.render_delay.isActive() or p.painter.status.is_active for p in plots):
+			break
+	pump(app, 0.2)
+
+
+def settleAnimations(dashboard) -> None:
+	"""Run every running item animation (needle sweeps, meter fills) to its end value.
+
+	A capture taken mid-sweep shows the needle wherever the animation had got to,
+	which varies with how long the render took to reach it. Only for frozen
+	renders: a live display should keep animating.
+	"""
+	from PySide6.QtCore import QAbstractAnimation
+
+	for item in dashboard.scene.items():
+		for attr in ('_needleAnimation', '_anim', '_animation'):
+			animation = getattr(item, attr, None)
+			if isinstance(animation, QAbstractAnimation) and animation.state() == QAbstractAnimation.State.Running:
+				animation.setCurrentTime(animation.totalDuration())
+				animation.stop()
+
+
+def settleSwitches(dashboard) -> None:
+	"""Stop every `Switch` from changing on the wall clock, so a frozen render is repeatable.
+
+	A switch's `cycle`, `hold` and `fade` run on real QTimers, so which child
+	shows at capture depends on how far those timers have got - two renders of
+	the same board could show different panels in the same slot. With the clock
+	pinned, each switch shows its first matching child at once, every time.
+	"""
+	from LevityDash.lib.ui.frontends.PySide.Modules.Containers.Switch import Switch
+
+	for item in dashboard.scene.items():
+		if isinstance(item, Switch):
+			item._cycle = 0.0
+			item._hold = 0.0
+			item._fade = 0.0
+			item._cycleTimer.stop()
+			item._holdTimer.stop()
+			# Values that arrive after the first settle can start a fade, and a
+			# capture mid-fade shows two children at partial opacity. Land them,
+			# then pick the child the final values call for.
+			for animation in tuple(item._animations.values()):
+				animation.setCurrentTime(animation.totalDuration())
+			item._evaluate(settled=True)
 
 
 def resizeScene(app, size: Tuple[int, int]) -> None:

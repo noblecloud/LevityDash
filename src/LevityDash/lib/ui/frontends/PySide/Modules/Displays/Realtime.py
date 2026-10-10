@@ -1603,7 +1603,12 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 
 		self._syncingFloatUnder = True
 		try:
+			# Both boxes start from their natural transform, not only `other`: a
+			# value box that kept the shift of an earlier sync drifted a little
+			# further on every call, so the result depended on how many times the
+			# pair had been synced.
 			Text.updateTransform.__wrapped__(other, updatePath=False, updateShared=False, reason='float-under-sync')
+			Text.updateTransform.__wrapped__(source, updatePath=False, updateShared=False, reason='float-under-sync')
 
 			value_scene_rect = value_text_box.scenePath().boundingRect()
 			unit_scene_rect = unit_text_box.scenePath().boundingRect()
