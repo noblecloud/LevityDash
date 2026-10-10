@@ -627,7 +627,7 @@ class Stack(Panel, tag='stack'):
 		if self.minCellSize is not None:
 			cellSize = max(cellSize, self.minCellSize)
 		if self.maxCellSize is not None:
-			cellSize = min(cellSize, self.meaxCellSize)
+			cellSize = min(cellSize, self.maxCellSize)
 
 		if isinstance(cellSize, (Length, int, float)):
 			size = size_px(cellSize, self.geometry, dimension)

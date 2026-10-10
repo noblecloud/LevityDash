@@ -61,19 +61,16 @@ def test_inherited_key_reaches_serialized_state():
 	assert DirectStatefulSubclass().state.get('type') == 'direct'
 
 
-def test_a_declared_body_is_ignored_when_inheritFrom_is_given():
-	"""Characterization, NOT an endorsement - and pre-existing, not from the
-	fix above (verified by running this against both revisions).
+def test_a_declared_body_wins_over_inheritFrom():
+	"""A non-empty body is the getter; `inheritFrom=` only supplies one when the
+	body is empty (`StateProperty.fget` falls back to `parentCls` on a PASS body).
 
-	Writing a real body *and* passing `inheritFrom=` silently runs the
-	inherited getter and discards the body. Nothing in LevityDash does this
-	today - both live uses of `inheritFrom` have empty bodies - so this is
-	pinned rather than fixed, because changing getter-resolution priority is a
-	much broader change than the one this file exists to cover.
+	This used to be pinned as "the body is silently ignored". That was never the
+	code's behaviour at the commit that added this file, so the pin was wrong.
 	"""
 	class Overrides(Base, tag='overrides'):
 		@StateProperty(key='label', inheritFrom=Base.label)
 		def label(self) -> str:
 			return 'own'
 
-	assert Overrides().label == 'Overrides-label'  # the body is not called
+	assert Overrides().label == 'own'
