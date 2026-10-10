@@ -88,3 +88,16 @@ def test_a_gauge_range_is_saved_at_full_precision(dashboard):
 	}])
 	saved = yaml.safe_load(text)['items'][0]['display']['range']
 	assert (saved['min'], saved['max']) == (7.07, 18.68)
+
+
+def test_a_group_saves_its_items_in_stacking_order(dashboard):
+	"""Sorted by position, a later item that overlaps an earlier one changed layers on reload."""
+	text = _dump(dashboard, [{
+		'type': 'group', 'name': 'layers', 'geometry': BOX,
+		'items': [
+			{'type': 'group', 'name': 'under', 'geometry': {'x': '40%', 'y': '40%', 'width': '50%', 'height': '50%'}},
+			{'type': 'group', 'name': 'over', 'geometry': {'x': '0%', 'y': '0%', 'width': '60%', 'height': '60%'}},
+		],
+	}])
+	names = [i['name'] for i in yaml.safe_load(text)['items'][0]['items']]
+	assert names == ['under', 'over']

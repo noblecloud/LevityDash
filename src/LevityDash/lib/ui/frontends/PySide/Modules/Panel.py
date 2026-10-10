@@ -976,9 +976,9 @@ class Panel(_Panel, Stateful, tag='group'):
 	def scene(self) -> 'LevityScene':
 		return super(Panel, self).scene()
 
+	# Not sorted: the order of the children is their stacking order, so sorting them by
+	# position on a save made a later item that overlaps an earlier one change layers.
 	@StateProperty(
-		sort=True,
-		sortKey=lambda x: x.geometry.sortValue,
 		default=DefaultGroup(None, []),
 		dependencies={'geometry', 'margins'},
 		sortOrder=-1,
