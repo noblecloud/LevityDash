@@ -27,12 +27,10 @@ def test_every_registered_function_is_documented_and_typed():
 			assert 'return' in function.__annotations__, function.__qualname__
 
 
-def test_a_pending_stub_raises_until_it_is_filled_in():
-	# A thread that fills a stub sets status='done' on its decorator and drops this expectation.
-	with pytest.raises(NotImplementedError):
-		layout.flex.resolve_flexible_lengths([], 0.0, 0.0)
-	assert layout.flex.resolve_flexible_lengths.__section__.status == 'stub'
-	assert 'LevityDash.lib.layout.flex.resolve_flexible_lengths' in pending()
+def test_a_finished_stub_is_marked_done_and_leaves_the_pending_list():
+	# A thread that fills a stub sets status='done' on its decorator.
+	assert layout.flex.resolve_flexible_lengths.__section__.status == 'done'
+	assert 'LevityDash.lib.layout.flex.resolve_flexible_lengths' not in pending()
 
 
 def test_the_package_needs_no_qt():
