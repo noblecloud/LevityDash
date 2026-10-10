@@ -435,6 +435,54 @@ def previewDocument(piece: model.Piece, given: Dict[str, Any], fields: Optional[
 	return [stage], names
 
 
+def snapEdges(values: List[float], targets: List[float], reach: float) -> Tuple[float, Optional[float]]:
+	"""How far to shift so one of `values` lands on the nearest of `targets` within `reach`: (shift, the target it lands on).
+	(0.0, None) when nothing is close enough."""
+	best: Tuple[float, Optional[float]] = (0.0, None)
+	for v in values:
+		for t in targets:
+			d = t - v
+			if abs(d) <= reach and (best[1] is None or abs(d) < abs(best[0])):
+				best = (d, t)
+	return best
+
+
+def snapDrag(rect: QRectF, mode: str, corner: Optional[str], parent: QRectF, others: List[QRectF], reach: float) -> Tuple[QRectF, List[float], List[float]]:
+	"""Snap a dragged rect to the parent's and the siblings' edges and centres.
+
+	A move snaps its left, centre and right (and top, middle, bottom); a resize snaps only the edges it drags. Returns the rect and the
+	x and y positions of the guides to draw (the lines the rect now sits on).
+	"""
+	xs = [parent.left(), parent.center().x(), parent.right()]
+	ys = [parent.top(), parent.center().y(), parent.bottom()]
+	for o in others:
+		xs += [o.left(), o.center().x(), o.right()]
+		ys += [o.top(), o.center().y(), o.bottom()]
+	out = QRectF(rect)
+	if mode == 'move':
+		dx, gx = snapEdges([rect.left(), rect.center().x(), rect.right()], xs, reach)
+		dy, gy = snapEdges([rect.top(), rect.center().y(), rect.bottom()], ys, reach)
+		out.translate(dx, dy)
+	else:
+		corner = corner or ''
+		gx = gy = None
+		if 'l' in corner:
+			d, gx = snapEdges([rect.left()], xs, reach)
+			out.setLeft(rect.left() + d)
+		if 'r' in corner:
+			d, gx = snapEdges([rect.right()], xs, reach)
+			out.setRight(rect.right() + d)
+		if 't' in corner:
+			d, gy = snapEdges([rect.top()], ys, reach)
+			out.setTop(rect.top() + d)
+		if 'b' in corner:
+			d, gy = snapEdges([rect.bottom()], ys, reach)
+			out.setBottom(rect.bottom() + d)
+		out = out.normalized()
+	return out, [] if gx is None else [gx], [] if gy is None else [gy]
+
+
+# Section: the stage
 class Stage(QWidget):
 	"""The picture, with the selected item outlined. Click selects; a drag moves or resizes it."""
 
@@ -443,6 +491,7 @@ class Stage(QWidget):
 	dragDone = Signal()
 
 	HANDLE = 9
+	SNAP = 6  # view pixels
 
 	def __init__(self):
 		super().__init__()
@@ -451,6 +500,8 @@ class Stage(QWidget):
 		self.path: Optional[tuple] = None
 		self.movable = False
 		self._drag: Optional[tuple] = None
+		self.snap = True  # drags stick to the parent's and the siblings' edges and centres; Alt held turns it off
+		self.guides: Tuple[List[float], List[float]] = ([], [])
 		self.setMinimumSize(320, 220)
 		self.setMouseTracking(True)
 
@@ -489,6 +540,14 @@ class Stage(QWidget):
 			p.setPen(QPen(QColor('#2f81f7'), 2))
 			p.setBrush(Qt.BrushStyle.NoBrush)
 			p.drawRect(r)
+			p.setPen(QPen(QColor('#ff3d9a'), 1, Qt.PenStyle.DashLine))
+			for x in self.guides[0]:
+				v = self._toView(QRectF(x, 0, 0, 0)).x()
+				p.drawLine(QPointF(v, 0), QPointF(v, self.height()))
+			for y in self.guides[1]:
+				v = self._toView(QRectF(0, y, 0, 0)).y()
+				p.drawLine(QPointF(0, v), QPointF(self.width(), v))
+			p.setPen(QPen(QColor('#2f81f7'), 2))
 			if self.movable:
 				p.setBrush(QColor('#2f81f7'))
 				for c in (r.topLeft(), r.topRight(), r.bottomLeft(), r.bottomRight()):
@@ -551,6 +610,12 @@ class Stage(QWidget):
 			parent = QRectF(0, 0, self.image.width(), self.image.height()) if self.image else QRectF(0, 0, 1, 1)
 		if parent.width() <= 0 or parent.height() <= 0:
 			return
+		if self.snap and not event.modifiers() & Qt.KeyboardModifier.AltModifier:
+			others = [r for p, r in self.rects.items() if p and p != self.path and p[:-1] == self.path[:-1]]
+			new, gx, gy = snapDrag(new, mode, corner, parent, others, self.SNAP / scale)
+			self.guides = (gx, gy)
+		else:
+			self.guides = ([], [])
 		geometry = {
 			'x': f'{(new.x() - parent.x()) / parent.width() * 100:.1f}%', 'y': f'{(new.y() - parent.y()) / parent.height() * 100:.1f}%',
 			'width': f'{new.width() / parent.width() * 100:.1f}%', 'height': f'{new.height() / parent.height() * 100:.1f}%',
@@ -564,6 +629,8 @@ class Stage(QWidget):
 	def mouseReleaseEvent(self, _):
 		if self._drag is not None:
 			self._drag = None
+			self.guides = ([], [])
+			self.update()
 			self.dragDone.emit()
 
 
@@ -1011,6 +1078,10 @@ class Builder(QWidget):
 		self.themeButton = QPushButton('Light')
 		self.themeButton.setCheckable(True)
 		self.themeButton.toggled.connect(self.setLight)
+		self.snapBox = QCheckBox('Snap')
+		self.snapBox.setChecked(True)
+		self.snapBox.setToolTip('Drags stick to the edges and centres of the parent and the siblings. Hold Alt to drag free.')
+		bar.addWidget(self.snapBox)
 		bar.addWidget(self.themeButton)
 		outer.addLayout(bar)
 
@@ -1058,6 +1129,7 @@ class Builder(QWidget):
 		self.stage = Stage()
 		self.stage.selected.connect(self.select)
 		self.stage.dragged.connect(self._dragged)
+		self.snapBox.toggled.connect(lambda on: setattr(self.stage, 'snap', on))
 		self.stage.dragDone.connect(self._dragDone)
 		mbox.addWidget(self.stage, 1)
 		self.status = QLabel()
