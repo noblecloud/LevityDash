@@ -1,5 +1,7 @@
 # Gauge Studio: distance guides, ratio snapping and drag gearing
 
+**Status:** done. Gearing and the wheel in #87, ratio targets and distance guides in #89, wireframe and guideline layers in the PR after it. Kept for the reasoning.
+
 Suggested branch: `feat/studio-snapping` off `feat/value-sources`. Start this after
 `fix/studio-sliders-contrast` (sliders, unit selectors, stage size and zoom, the
 undo/reset fixes) has merged. Both touch `devtools/_studio_handles.py`.
