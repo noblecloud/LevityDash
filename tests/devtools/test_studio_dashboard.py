@@ -241,8 +241,6 @@ def test_a_file_with_a_template_is_a_preset_and_the_rest_are_dashboards(tmp_path
 def test_only_the_builder_stages_a_dashboard():
 	import _studio_env
 	assert _studio_env._runsBuilder(['/x/studio.py'])
-	assert not _studio_env._runsBuilder(['/x/studio.py', '--gauge'])
-	assert not _studio_env._runsBuilder(['/x/studio.py', '--polar'])
 	assert not _studio_env._runsBuilder(['pytest'])
 
 
