@@ -96,7 +96,6 @@ def test_the_gauge_editor_sends_polar_to_the_polar_mode(suite):
 	assert win.current() == 'polar'
 
 
-@pytest.mark.parametrize('entry', _entries(), ids=lambda e: f'{e.group}:{e.label}')
 def test_library_entries_open_in_their_mode(suite):
 	"""Every dashboard, preset and polar entry, and a few gauges (each gauge takes seconds to build), open in the mode
 	their kind names with no error in that mode's status."""
