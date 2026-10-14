@@ -2403,9 +2403,15 @@ class WhenEdit(_Popover):
 
 # Section: the factory
 
+#: Editors other tools add for kinds of their own (the polar panel): kind -> factory(field).
+EXTRA: Dict[str, Callable[['schema.Field'], Editor]] = {}
+
+
 def make(field: 'schema.Field') -> Optional[Editor]:
 	"""The editor for a field's kind, or None when the plain control will do."""
 	kind = field.kind
+	if kind in EXTRA:
+		return EXTRA[kind](field)
 	if kind == 'size':
 		return SizeEdit(nullable=field.nullable, ref='full' if field.key in ('radius', 'inset') else 'radius')
 	if kind == 'number' and field.measured:
