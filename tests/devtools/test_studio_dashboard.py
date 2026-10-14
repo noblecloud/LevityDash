@@ -204,3 +204,13 @@ def test_to_preset_warns_only_about_inherited_scopes(board):
 	win.select(inner)
 	win.extractPreset('zz-leaf')
 	assert ('inherits size groups' in win.status.text()) == parent_has
+
+
+def test_the_command_line_parser_builds(capsys):
+	"""`gauge_studio.py --help` runs: no flag is declared twice."""
+	from LevityDash.devtools import gauge_studio
+	with pytest.raises(SystemExit) as stop:
+		gauge_studio.main(['--help'])
+	assert stop.value.code == 0
+	out = capsys.readouterr().out
+	assert '--polar' in out and '--build' in out and '--dashboard' in out

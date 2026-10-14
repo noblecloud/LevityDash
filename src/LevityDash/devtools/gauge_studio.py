@@ -1535,7 +1535,7 @@ class Studio(QWidget):
 def main(argv: Optional[List[str]] = None) -> int:
 	parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 	parser.add_argument('fragment', nargs='?', help='a .levity preset to open; reloaded when it changes on disk. With --build, a preset file')
-	parser.add_argument('fragment', nargs='?', help='a .levity fragment to open; reloaded when it changes on disk. With --build, a preset file')
+	parser.add_argument('--polar', action='store_true', help='open the polar plot panel instead of the gauge')
 	parser.add_argument('--dashboard', action='store_true', help='with --build: open the file as a dashboard to edit and save back (only what changed is written)')
 	parser.add_argument('--build', action='store_true', help='open the builder: compose items, give them properties, preview on fixture data')
 	parser.add_argument('--scenario', help='with --build: the fixture scenario the preview draws on (default hot-clear-day)')
