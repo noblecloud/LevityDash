@@ -108,10 +108,8 @@ class SizeGroup:
 		SizeGroup.__groups__.append(instance)
 		return instance
 
-	def __init__(self, parent: ActionPoolItemInstance, key: str, items: Set[SizeGroupItem] = None, matchAll: bool = False, tiers: bool = True):
+	def __init__(self, parent: ActionPoolItemInstance, key: str, items: Set[SizeGroupItem] = None, matchAll: bool = False):
 		self.key = key
-		#: False puts every member in one tier, so boxes of different heights still share one size.
-		self.tiers = tiers
 		self.items = set(items) if items else set()
 		self._fit: Dict[SizeGroupItem, Fit] = {}
 		self._dirty = True
@@ -231,8 +229,6 @@ class SizeGroup:
 
 	# ----------------------------------------------- partition (overridable)
 	def _tiers(self, items: Set[SizeGroupItem]) -> Dict[int, Set[SizeGroupItem]]:
-		if not self.tiers:
-			return {0: set(items)} if items else {}
 		tiers: Dict[int, Set[SizeGroupItem]] = defaultdict(set)
 		for item in items:
 			tiers[self.make_size_key(item)].add(item)

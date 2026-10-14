@@ -874,7 +874,7 @@ class Panel(_Panel, Stateful, tag='group'):
 		Panel.__groups__[name] = named_ancestor
 		return named_ancestor
 
-	def getAttrGroup(self, group: str | _Panel, matchAll: bool = False, tiers: bool = True) -> SizeGroup:
+	def getAttrGroup(self, group: str | _Panel, matchAll: bool = False) -> SizeGroup:
 		"""
 		Retrieves an attribute group based on the provided group parameter.
 
@@ -891,8 +891,6 @@ class Panel(_Panel, Stateful, tag='group'):
 		    The group parameter.
 		matchAll : bool, optional
 		    Specifies whether all matches should be considered. Defaults to False.
-		tiers : bool, optional
-		    False puts every member in one size tier, whatever the height of its box. Defaults to True.
 
 		Returns
 		-------
@@ -934,7 +932,7 @@ class Panel(_Panel, Stateful, tag='group'):
 
 		attrGroups = group.attrGroups
 		if (attrGroup := attrGroups.get(key, None)) is None:
-			attrGroups[key] = attrGroup = SizeGroup(parent=group, key=key, matchAll=matchAll, tiers=tiers)
+			attrGroups[key] = attrGroup = SizeGroup(parent=group, key=key, matchAll=matchAll)
 		return attrGroup
 
 	@property
