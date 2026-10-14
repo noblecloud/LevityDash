@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
 
 from LevityDash.devtools import _studio_editors as editors
 from LevityDash.devtools import _yamlpatch as yamlpatch
+from LevityDash.lib.ui.colors import theme
 from LevityDash.devtools import _studio_layout as layout
 from LevityDash.lib import presets as lib
 from LevityDash.devtools import _studio_preset as model
@@ -322,6 +323,91 @@ class MoreEdit(editors._Popover):
 	def summary(self) -> str:
 		n = len(self._value or {})
 		return f'More properties: {n} set' if n else 'More properties: none'
+
+
+class VarsEdit(Editor):
+	"""A dashboard's `vars:` as name and value rows. A row left alone keeps the value the file had, whatever its type."""
+
+	wide = True
+
+	def __init__(self):
+		super().__init__()
+		self._box = QVBoxLayout(self)
+		self._box.setContentsMargins(0, 0, 0, 0)
+		self._rows: List[Tuple[QLineEdit, QLineEdit, Any, Any]] = []
+		self._holder = QVBoxLayout()
+		self._box.addLayout(self._holder)
+		add = QPushButton('Add variable')
+		add.clicked.connect(lambda: self._add('', None, True))
+		self._box.addWidget(add)
+		self._data: Dict[str, Any] = {}
+
+	@staticmethod
+	def show_(value: Any) -> str:
+		return '' if value is None else value if isinstance(value, str) else yaml.safe_dump(value, default_flow_style=True, width=10000).strip().removesuffix('...').strip()
+
+	@staticmethod
+	def read(text: str) -> Any:
+		if not text.strip() or text.lstrip().startswith('#'):
+			return text
+		try:
+			value = yaml.safe_load(text)
+		except yaml.YAMLError:
+			return text
+		return text if value is None or isinstance(value, str) else value
+
+	def _add(self, name: str, value: Any, new: bool = False):
+		row = QWidget()
+		line = QHBoxLayout(row)
+		line.setContentsMargins(0, 0, 0, 0)
+		key, val = QLineEdit(name), QLineEdit(self.show_(value))
+		key.setPlaceholderText('name')
+		val.setPlaceholderText('value')
+		gone = QToolButton()
+		gone.setText('\u00d7')
+		line.addWidget(key, 2)
+		line.addWidget(val, 3)
+		line.addWidget(gone)
+		entry = (key, val, name, value)
+		self._rows.append(entry)
+		self._holder.addWidget(row)
+		key.editingFinished.connect(self._done)
+		val.editingFinished.connect(self._done)
+		gone.clicked.connect(lambda: self._remove(entry, row))
+
+	def _remove(self, entry, row):
+		self._rows.remove(entry)
+		row.setParent(None)
+		row.deleteLater()
+		self._done()
+
+	def _done(self):
+		out: Dict[str, Any] = {}
+		for key, val, name, value in self._rows:
+			text = key.text().strip()
+			if not text:
+				continue
+			out[text] = value if name and val.text() == self.show_(value) else self.read(val.text())
+		if out != self._data:
+			self._data = out
+			self.changed.emit(copy.deepcopy(out))
+
+	def setValue(self, value):
+		self._data = dict(value or {})
+		while self._holder.count():
+			w = self._holder.takeAt(0).widget()
+			if w is not None:
+				w.setParent(None)
+				w.deleteLater()
+		self._rows.clear()
+		for k, v in self._data.items():
+			self._add(str(k), v)
+
+	def value(self):
+		return copy.deepcopy(self._data)
+
+	def isEditing(self) -> bool:
+		return any(k.hasFocus() or v.hasFocus() for k, v, _, _ in self._rows)
 
 
 def numberEdit(value: Any = 0, lo: Optional[float] = None, hi: Optional[float] = None, **kw) -> 'editors.NumberEdit':
@@ -723,6 +809,12 @@ class ItemTab(QWidget):
 		self.clear()
 		piece = self.builder.piece
 		node = piece.node(path) if path is not None else None
+		if node is None and path and isinstance(piece.raw(path), str):
+			head = Section('Item (a data key)', expanded=True)
+			self.layout_.addWidget(head)
+			self._row(head, '=', 'key', editors.KeyEdit(), bindable=False, value=piece.raw(path))
+			self.layout_.addStretch(1)
+			return
 		if node is None:
 			self.layout_.addWidget(QLabel('Select an item in the tree or on the preview.'))
 			self.layout_.addStretch(1)
@@ -732,8 +824,18 @@ class ItemTab(QWidget):
 			self.layout_.addWidget(head)
 			if piece.root:
 				extras = {k: v for k, v in piece.root.items() if k != model.ITEMS_KEY}
-				self._row(head, '#root', 'root keys', MoreEdit(), bindable=False, value=extras)
-				note = 'theme, vars and background; the items are the tree on the left.'
+				themes = [(n, n) for n in theme.available()]
+				if 'theme' not in extras or isinstance(extras['theme'], str):
+					self._row(head, '#theme', 'theme', editors.ChoiceEdit(themes, editable=True), bindable=False, value=extras.get('theme'))
+				else:
+					inline = extras['theme']
+					self._row(head, '#theme.extends', 'theme extends', editors.ChoiceEdit(themes, editable=True), bindable=False, value=inline.get('extends'))
+					self._row(head, '#theme.colors', 'theme colours', VarsEdit(), bindable=False, value=inline.get('colors') if isinstance(inline.get('colors'), dict) else {})
+					self._row(head, '#theme.fonts', 'theme fonts', VarsEdit(), bindable=False, value=inline.get('fonts') if isinstance(inline.get('fonts'), dict) else {})
+				self._row(head, '#vars', 'vars', VarsEdit(), bindable=False, value=extras.get('vars') if isinstance(extras.get('vars'), dict) else {})
+				rest = {k: v for k, v in extras.items() if k not in ('vars', 'theme')}
+				self._row(head, '#root', 'other root keys', MoreEdit(), bindable=False, value=rest)
+				note = 'Pick a theme and set the $names items read. Other root keys (background, an inline theme) are YAML; the items are the tree on the left.'
 			else:
 				note = 'A bare list of items has no root keys. The items are the tree on the left.'
 			hint = QLabel(note)
@@ -1500,7 +1602,7 @@ class Builder(QWidget):
 			self.select(row.data(0, Qt.ItemDataRole.UserRole), fromTree=True)
 
 	def select(self, path: tuple, fromTree: bool = False):
-		while path and self.piece.node(path) is None:
+		while path and self.piece.raw(path) is None:
 			path = path[:-1]  # the stage can show items a nested preset makes; the tree holds only this preset's own
 		self.selection = path
 		if not fromTree:
@@ -1603,12 +1705,36 @@ class Builder(QWidget):
 	def editField(self, field: str, value: Any):
 		"""A field of the selected item changed."""
 		node = self.piece.node(self.selection) if self.selection is not None else None
-		if node is None:
+		if node is None and not (field == '=' and self.selection and isinstance(self.piece.raw(self.selection), str)) and not field.startswith('#'):
 			return
 		self.push()
-		if field == '#root':
-			self.piece.setRoot(value or {})
+		if field in ('#theme', '#vars'):
+			extras = {k: v for k, v in (self.piece.root or {}).items() if k != model.ITEMS_KEY}
+			key = field[1:]
+			if value in (None, '', {}):
+				extras.pop(key, None)
+			else:
+				extras[key] = value
+			self.piece.setRoot(extras)
+		elif field.startswith('#theme.'):
+			extras = {k: v for k, v in (self.piece.root or {}).items() if k != model.ITEMS_KEY}
+			inline = dict(extras.get('theme') or {})
+			part = field.split('.', 1)[1]
+			if value in (None, '', {}):
+				inline.pop(part, None)
+			else:
+				inline[part] = value
+			extras['theme'] = inline
+			self.piece.setRoot(extras)
+		elif field == '#root':
+			extras = {k: v for k, v in (self.piece.root or {}).items() if k != model.ITEMS_KEY}
+			kept = {k: v for k, v in extras.items() if k in ('vars', 'theme')}
+			kept.update(value or {})
+			self.piece.setRoot(kept)
 		elif field == '=':
+			if value in (None, ''):
+				self.history.pop()
+				return
 			self.piece.node(self.selection[:-1])[model.ITEMS_KEY][self.selection[-1]] = copy.deepcopy(value)
 			self.rebuildTree()
 		elif field == '*':

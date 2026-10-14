@@ -135,3 +135,56 @@ def test_undo_restores_the_dashboard(board):
 	assert win.isDirty()
 	win.undo()
 	assert win.piece.dashboard() == saved and not win.isDirty()
+
+
+def test_a_bare_key_can_be_selected_and_changed(board):
+	win, path = board('station')
+	bare = [p for p in _paths(win.piece.template) if isinstance(win.piece.raw(p), str)]
+	if not bare:
+		win.select(())
+		win.addItem('spacer')
+		win.piece.template['items'].append('environment.wind.speed')
+		bare = [len(win.piece.template['items']) - 1]
+		bare = [tuple(bare)]
+	win.select(bare[0])
+	assert win.selection == bare[0]
+	win.editField('=', 'environment.wind.gust')
+	assert win.piece.raw(bare[0]) == 'environment.wind.gust'
+
+
+def test_theme_and_vars_have_controls(board):
+	win, path = board('storm')
+	win.select(())
+	assert {'#theme.extends', '#theme.colors', '#vars', '#root'} <= set(win.itemTab.rows)
+	before = dict(win.piece.root['vars'])
+	win.editField('#vars', dict(before, zz='#112233'))
+	win.editField('#theme.extends', 'dusk')
+	win.save()
+	data = yaml.safe_load(path.read_text())
+	assert data['vars']['zz'] == '#112233' and data['theme']['extends'] == 'dusk'
+	assert {k: v for k, v in data['vars'].items() if k != 'zz'} == before
+	assert list(data) == list(win.piece.root)
+
+
+def test_a_row_left_alone_keeps_its_type(board):
+	win, _ = board('storm')
+	win.select(())
+	edit = win.itemTab.rows['#vars'].editor
+	before = dict(win.piece.root['vars'])
+	seen = []
+	edit.changed.connect(seen.append)
+	key, val, *_ = edit._rows[0]
+	key.setText(key.text())
+	edit._done()
+	assert not seen, 'nothing changed'
+	assert edit.value() == before
+
+
+def test_group_memberships_survive_an_edit(board):
+	win, path = board('station')
+	count = path.read_text().count('matchingGroup')
+	target = next(p for p, n in win.piece.walk() if p and isinstance(n.get('geometry'), dict) and 'width' in n['geometry'])
+	win.select(target)
+	win.editField('geometry.width', '33%')
+	win.save()
+	assert path.read_text().count('matchingGroup') == count > 0
