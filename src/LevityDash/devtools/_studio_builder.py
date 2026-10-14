@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
 )
 
 from LevityDash.devtools import _studio_editors as editors
+from LevityDash.devtools import _yamlpatch as yamlpatch
 from LevityDash.devtools import _studio_layout as layout
 from LevityDash.lib import presets as lib
 from LevityDash.devtools import _studio_preset as model
@@ -53,7 +54,7 @@ REPO = Path(__file__).resolve().parents[3]
 CONTAINERS = ['group', 'stack', 'grid', 'value-stack', 'titled-group', 'switch']
 DISPLAYS = ['realtime.text', 'realtime.gauge', 'realtime.bar', 'text', 'label', 'graph', 'mini-graph', 'polar', 'clock', 'moon', 'spacer']
 LAYOUT_PARENTS = ('stack', 'value-stack', 'grid', 'switch')
-STAGES = {'Card 640x400': (640, 400), 'Wide 960x400': (960, 400), 'Tall 400x640': (400, 640), 'Board 1280x800': (1280, 800)}
+STAGES = {'Card 640x400': (640, 400), 'Wide 960x400': (960, 400), 'Tall 400x640': (400, 640), 'Board 1280x800': (1280, 800), 'Dashboard 1440x900': (1440, 900)}
 SETTLE_MS = 350
 
 #: The fields the Item tab edits, in order: (field, label, kind). `kind` picks the editor and the property type a `$` binds to.
@@ -85,6 +86,16 @@ def restOf(node: dict) -> dict:
 		if model.getField(rest, path) is not None:
 			model.setField(rest, path, None)
 	return rest
+
+
+def inRealConfig(path: Path) -> bool:
+	"""Whether `path` is inside the folder the real LevityDash keeps its config in. The Studio never writes there."""
+	from appdirs import AppDirs
+	dirs = AppDirs(appname='LevityDash', appauthor='LevityDash.app')
+	home = Path.home()
+	roots = {Path(dirs.user_config_dir), Path(dirs.user_data_dir), home / 'Library' / 'Application Support' / 'LevityDash', home / '.config' / 'LevityDash'}
+	target = path.expanduser().resolve()
+	return any(target == r.resolve() or r.resolve() in target.parents for r in roots)
 
 
 def newItem(kind: str, parentType: str, n: int) -> dict:
@@ -393,13 +404,20 @@ class PreviewEngine:
 			self.size = size
 			self._boot.resizeScene(self.app, size)
 
-	def render(self, items: List[dict], names: Dict[str, tuple]) -> Tuple[QImage, Dict[tuple, QRectF]]:
-		"""Draw `items` (a dashboard's item list, each carrying a `name` from `names`) and return the image and each item's rectangle."""
+	def render(self, items: List[dict], names: Dict[str, tuple], root: Optional[Dict[str, Any]] = None) -> Tuple[QImage, Dict[tuple, QRectF]]:
+		"""Draw `items` (a dashboard's item list, each carrying a `name` from `names`) and return the image and each item's rectangle.
+
+		`root` is a dashboard's other keys (`theme`, `vars`, `background`); the file is then a mapping with `items:` beside them.
+		"""
 		# A changed path makes the dashboard clear the old items first; the same path reconciles them in place, and an item
 		# whose key changed then fails to disconnect from its old value. So the two names take turns.
 		self._turn = not getattr(self, '_turn', False)
 		target = self.directory / ('_preview-a.levity' if self._turn else '_preview-b.levity')
-		target.write_text(yaml.safe_dump(items, sort_keys=False, allow_unicode=True), encoding='utf-8')
+		document: Any = items
+		if root:
+			document = {k: (items if k == model.ITEMS_KEY else v) for k, v in root.items()}
+			document.setdefault(model.ITEMS_KEY, items)
+		target.write_text(yaml.safe_dump(document, sort_keys=False, allow_unicode=True), encoding='utf-8')
 		self.panel._load(target)
 		self._boot.pump(self.app, 0.5)
 		self.app.processEvents()
@@ -427,7 +445,7 @@ def previewDocument(piece: model.Piece, given: Dict[str, Any], fields: Optional[
 		node['name'] = name
 		names[name] = path
 		for i, kid in enumerate(node.get(model.ITEMS_KEY) or []):
-			if isinstance(kid, dict):
+			if isinstance(kid, dict) and not model.opaque(kid):
 				tag(kid, path + (i,))
 
 	tag(root, ())
@@ -707,6 +725,31 @@ class ItemTab(QWidget):
 		node = piece.node(path) if path is not None else None
 		if node is None:
 			self.layout_.addWidget(QLabel('Select an item in the tree or on the preview.'))
+			self.layout_.addStretch(1)
+			return
+		if piece.root is not None and not path:
+			head = Section('Dashboard', expanded=True)
+			self.layout_.addWidget(head)
+			if piece.root:
+				extras = {k: v for k, v in piece.root.items() if k != model.ITEMS_KEY}
+				self._row(head, '#root', 'root keys', MoreEdit(), bindable=False, value=extras)
+				note = 'theme, vars and background; the items are the tree on the left.'
+			else:
+				note = 'A bare list of items has no root keys. The items are the tree on the left.'
+			hint = QLabel(note)
+			hint.setWordWrap(True)
+			hint.setStyleSheet('color: palette(placeholder-text);')
+			self.layout_.addWidget(hint)
+			self.layout_.addStretch(1)
+			return
+		if model.opaque(node):
+			head = Section('Item (shorthand)', expanded=True)
+			self.layout_.addWidget(head)
+			self._row(head, '=', 'as written', AnyEdit(), bindable=False, value=node)
+			hint = QLabel('A stack reads this one-key form with its own rules, so the Studio keeps it as written. Edit it here as YAML; it can be moved, duplicated and deleted.')
+			hint.setWordWrap(True)
+			hint.setStyleSheet('color: palette(placeholder-text);')
+			self.layout_.addWidget(hint)
 			self.layout_.addStretch(1)
 			return
 		kind = str(node.get('type') or '')
@@ -1018,7 +1061,7 @@ class InstanceTab(QWidget):
 class Builder(QWidget):
 	"""The builder window. `piece` is the preset being built; `given` is the instance the stage draws."""
 
-	def __init__(self, path: Optional[Path] = None, engine: Optional[PreviewEngine] = None, size: Tuple[int, int] = (640, 400)):
+	def __init__(self, path: Optional[Path] = None, engine: Optional[PreviewEngine] = None, size: Tuple[int, int] = (640, 400), dashboard: bool = False):
 		super().__init__()
 		self.setWindowTitle('Studio builder')
 		self.engine = engine or PreviewEngine(size)
@@ -1026,18 +1069,24 @@ class Builder(QWidget):
 		self.given: Dict[str, Any] = {}
 		self.fields: Dict[str, Any] = {}  # the fields the instance sets beyond its properties (geometry, name)
 		self.path: Optional[Path] = None
+		#: A dashboard open for editing: the file's text as read (the patcher keeps what did not change) and its data as last saved.
+		self.source: Optional[str] = None
+		self.saved: Any = None
 		self.selection: Optional[tuple] = ()
 		self.history: List[Tuple[model.Piece, Dict[str, Any]]] = []
 		self.future: List[Tuple[model.Piece, Dict[str, Any]]] = []
 		self.light = False
 		self._bindSource: Optional[str] = None
+		self.fileButtons: Dict[str, QPushButton] = {}
 		self.timer = QTimer(self)
 		self.timer.setSingleShot(True)
 		self.timer.setInterval(SETTLE_MS)
 		self.timer.timeout.connect(self.redraw)
 		self._build()
 		self.resize(1500, 860)
-		if path is not None:
+		if path is not None and dashboard:
+			self.openDashboard(path)
+		elif path is not None:
 			self.openFile(path)
 		else:
 			self.loadPiece(model.Piece(), {})
@@ -1056,11 +1105,12 @@ class Builder(QWidget):
 		self.name.setMaximumWidth(220)
 		self.name.setPlaceholderText('preset name')
 		self.name.editingFinished.connect(self._named)
-		bar.addWidget(QLabel('Preset'))
+		self.nameLabel = QLabel('Preset')
+		bar.addWidget(self.nameLabel)
 		bar.addWidget(self.name)
-		new = QPushButton('New')
-		new.clicked.connect(self.newPiece)
-		bar.addWidget(new)
+		self.newButton = QPushButton('New')
+		self.newButton.clicked.connect(self.newPiece)
+		bar.addWidget(self.newButton)
 		self.openButton = QToolButton()
 		self.openButton.setText('Open')
 		self.openButton.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
@@ -1076,6 +1126,7 @@ class Builder(QWidget):
 			button.setToolTip(tip)
 			button.clicked.connect(lambda _=False, f=fn: f())
 			bar.addWidget(button)
+			self.fileButtons[text] = button
 		self.undoButton = QPushButton('Undo')
 		self.undoButton.clicked.connect(self.undo)
 		self.redoButton = QPushButton('Redo')
@@ -1166,15 +1217,19 @@ class Builder(QWidget):
 		self.tabs.addTab(self.instanceTab, 'Instance')
 		self.tabs.addTab(self.yamlView, 'YAML')
 		self.tabs.setMinimumWidth(440)
+		self.tabs.currentChanged.connect(lambda _: self.refreshYaml())
 		split.addWidget(self.tabs)
 		split.setStretchFactor(1, 1)
 		split.setSizes([260, 700, 540])
 
 	# loading
 
-	def loadPiece(self, piece: model.Piece, given: Dict[str, Any], path: Optional[Path] = None):
+	def loadPiece(self, piece: model.Piece, given: Dict[str, Any], path: Optional[Path] = None, source: Optional[str] = None):
 		self.piece, self.given, self.path = piece, dict(given), path
+		self.source = source
+		self.saved = piece.dashboard() if piece.root is not None else None
 		self.fields = {}
+		self._applyMode()
 		self._searchPath()
 		self.history.clear()
 		self.future.clear()
@@ -1209,6 +1264,7 @@ class Builder(QWidget):
 			self.openMenu.addAction(name, lambda n=name: self.openNamed(n))
 		self.openMenu.addSeparator()
 		self.openMenu.addAction('File\u2026', self.openDialog)
+		self.openMenu.addAction('Dashboard\u2026', self.openDashboardDialog)
 
 	def openDialog(self):
 		start = str(state.stateDir() / 'presets')
@@ -1237,6 +1293,69 @@ class Builder(QWidget):
 		self.loadPiece(piece, {}, path if path.parent == state.stateDir() / 'presets' else None)
 		self.status.setText(f'Opened {path.name}')
 
+	# dashboards
+
+	def _applyMode(self):
+		"""A dashboard has no properties or instance: its tabs, name box and copy buttons give way to the file's."""
+		dashboard = self.piece.root is not None
+		self.nameLabel.setText('Dashboard' if dashboard else 'Preset')
+		self.name.setReadOnly(dashboard)
+		self.name.setPlaceholderText('file' if dashboard else 'preset name')
+		for text in ('Copy preset', 'Copy instance'):
+			self.fileButtons[text].setVisible(not dashboard)
+		self.fileButtons['Save'].setToolTip('Write the dashboard file: only what changed' if dashboard else 'Write the preset file')
+		for widget in (self.propsTab, self.instanceTab):
+			self.tabs.setTabVisible(self.tabs.indexOf(widget), not dashboard)
+		if dashboard and self.tabs.currentWidget() in (self.propsTab, self.instanceTab):
+			self.tabs.setCurrentWidget(self.itemTab)
+		self.tabs.setTabText(self.tabs.indexOf(self.yamlView), 'File' if dashboard else 'YAML')
+		self._title()
+
+	def _title(self):
+		if self.piece.root is None:
+			self.setWindowTitle('Studio builder')
+			return
+		mark = ' \u2022' if self.isDirty() else ''
+		self.setWindowTitle(f'Studio \u00b7 {self.path.name if self.path else self.piece.name}{mark}')
+
+	def isDirty(self) -> bool:
+		return self.piece.root is not None and self.piece.dashboard() != self.saved
+
+	def openDashboardDialog(self):
+		start = str(self.path.parent if self.path else Path.cwd())
+		name, _ = QFileDialog.getOpenFileName(self, 'Open a dashboard', start, 'Dashboard (*.levity *.yaml *.yml)')
+		if name:
+			self.openDashboard(Path(name))
+
+	def openDashboard(self, path: Path):
+		"""Open a dashboard file (a list of items, or a mapping with `items:`) to edit and save back."""
+		try:
+			text = path.read_text(encoding='utf-8')
+			data = yaml.safe_load(text)
+			piece = model.Piece.fromDashboard(path.stem, data)
+		except (OSError, yaml.YAMLError, ValueError) as e:
+			self.status.setText(f'Could not open {path.name}: {e}')
+			return
+		self.stageBox.setCurrentText('Dashboard 1440x900')
+		self.loadPiece(piece, {}, path, text)
+		self.status.setText(f'Opened {path.name}' + ('; it is in the real config folder, so Save asks for another place' if inRealConfig(path) else ''))
+
+	def dashboardPatch(self) -> 'yamlpatch.Patched':
+		data = self.piece.dashboard()
+		return yamlpatch.patch(self.source, data) if self.source else yamlpatch.Patched(yamlpatch.dump(data), False, 'a new file')
+
+	def saveDashboard(self, path: Optional[Path] = None):
+		path = path or self.path
+		if path is None or inRealConfig(path):
+			self.saveAs()
+			return
+		patched = self.dashboardPatch()
+		path.parent.mkdir(parents=True, exist_ok=True)
+		path.write_text(patched.text, encoding='utf-8')
+		self.path, self.source, self.saved = path, patched.text, self.piece.dashboard()
+		self._title()
+		self.status.setText(f'Saved {path}' + ('; the rest of the file is as it was' if patched.exact else f'; rewritten in full ({patched.why})'))
+
 	def openNamed(self, name: str):
 		"""Open a preset the library finds by name: the user's, then the ones that ship."""
 		lib.clear_cache()
@@ -1261,6 +1380,9 @@ class Builder(QWidget):
 		return state.stateDir() / 'presets' / f'{self.piece.name}.yaml'
 
 	def save(self):
+		if self.piece.root is not None:
+			self.saveDashboard()
+			return
 		path = self.path or self.defaultPath()
 		path.parent.mkdir(parents=True, exist_ok=True)
 		path.write_text(self.presetText())
@@ -1269,6 +1391,14 @@ class Builder(QWidget):
 		self.status.setText(f'Saved {path}')
 
 	def saveAs(self):
+		if self.piece.root is not None:
+			start = self.path if self.path and not inRealConfig(self.path) else state.stateDir() / 'dashboards' / f'{self.piece.name}.levity'
+			name, _ = QFileDialog.getSaveFileName(self, 'Save the dashboard', str(start), 'Dashboard (*.levity)')
+			if name and inRealConfig(Path(name)):
+				self.status.setText('The Studio does not write to the real config folder; pick another place')
+			elif name:
+				self.saveDashboard(Path(name))
+			return
 		name, _ = QFileDialog.getSaveFileName(self, 'Save the preset', str(self.path or self.defaultPath()), 'Preset (*.yaml)')
 		if name:
 			self.path = Path(name)
@@ -1283,6 +1413,8 @@ class Builder(QWidget):
 		self.status.setText('Copied the instance')
 
 	def _named(self):
+		if self.piece.root is not None:
+			return
 		name = re.sub(r'[^\w-]+', '-', self.name.text()).strip('-') or 'new-preset'
 		if name != self.piece.name:
 			self.push()
@@ -1303,6 +1435,7 @@ class Builder(QWidget):
 	def _updateHistory(self):
 		self.undoButton.setEnabled(bool(self.history))
 		self.redoButton.setEnabled(bool(self.future))
+		self._title()
 
 	def undo(self):
 		if self.history:
@@ -1331,13 +1464,21 @@ class Builder(QWidget):
 			self.tree.clear()
 
 			def add(parent, node, path):
-				label = str(node.get('type') or (f"preset: {node[model.PRESET_KEY]}" if model.PRESET_KEY in node else '?'))
-				detail = node.get('name') or node.get('key') or node.get('text')
+				if not isinstance(node, dict):
+					label, detail = 'key', str(node)
+				elif model.opaque(node):
+					label, detail = 'shorthand', str(next(iter(node)))
+				else:
+					label = str(node.get('type') or (f"preset: {node[model.PRESET_KEY]}" if model.PRESET_KEY in node else 'group' if model.ITEMS_KEY in node else '?'))
+					detail = node.get('name') or node.get('key') or node.get('text')
+					if not path and self.piece.root is not None:
+						label, detail = 'dashboard', self.path.name if self.path else self.piece.name
 				row = QTreeWidgetItem([f'{label}  ·  {detail}' if detail else label])
 				row.setData(0, Qt.ItemDataRole.UserRole, path)
 				(parent.addChild if parent is not None else self.tree.addTopLevelItem)(row)
-				for i, kid in enumerate(node.get(model.ITEMS_KEY) or []):
-					add(row, kid, path + (i,))
+				if isinstance(node, dict) and not model.opaque(node):
+					for i, kid in enumerate(node.get(model.ITEMS_KEY) or []):
+						add(row, kid, path + (i,))
 				row.setExpanded(True)
 
 			add(None, self.piece.template, ())
@@ -1391,7 +1532,7 @@ class Builder(QWidget):
 		self.push()
 		target = self.selection if self.selection is not None else ()
 		node = self.piece.node(target)
-		if node is None or str(node.get('type')) not in CONTAINERS:
+		if node is None or model.opaque(node) or (str(node.get('type')) not in CONTAINERS and model.ITEMS_KEY not in node):
 			target = target[:-1]
 			node = self.piece.node(target)
 		count = len(node.get(model.ITEMS_KEY) or [])
@@ -1465,7 +1606,12 @@ class Builder(QWidget):
 		if node is None:
 			return
 		self.push()
-		if field == '*':
+		if field == '#root':
+			self.piece.setRoot(value or {})
+		elif field == '=':
+			self.piece.node(self.selection[:-1])[model.ITEMS_KEY][self.selection[-1]] = copy.deepcopy(value)
+			self.rebuildTree()
+		elif field == '*':
 			self._replaceRest(node, value or {})
 		elif field == 'type':
 			node['type'] = value or node.get('type')
@@ -1654,7 +1800,7 @@ class Builder(QWidget):
 		self.engine.resize(self.stageSize())
 		items, names = previewDocument(self.piece, self.given, self.fields)
 		try:
-			image, rects = self.engine.render(items, names)
+			image, rects = self.engine.render(items, names, self.piece.root) if self.piece.root else self.engine.render(items, names)
 		except Exception as e:  # noqa: BLE001 - a bad preset must not close the builder
 			self.status.setText(f'The preview failed: {type(e).__name__}: {e}')
 			return
@@ -1665,6 +1811,13 @@ class Builder(QWidget):
 
 	def refreshYaml(self):
 		piece = self.piece
+		if piece.root is not None:
+			# The patch costs a moment on a big board, so it is made only while the tab is in view.
+			if self.tabs.currentWidget() is self.yamlView:
+				patched = self.dashboardPatch()
+				self.yamlView.setPlainText(patched.text if patched.exact else f'# Rewritten in full on Save: {patched.why}\n{patched.text}')
+			self._title()
+			return
 		self.yamlView.setPlainText(
 			f'# {piece.name}.yaml\n{self.presetText()}\n# What the dashboard sees for the instance on the Instance tab:\n'
 			+ yaml.safe_dump([piece.expanded(self.given)], sort_keys=False, allow_unicode=True, width=120))

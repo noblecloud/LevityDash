@@ -1,0 +1,137 @@
+"""The Studio builder editing a real dashboard file: open, change, save back only what changed."""
+import shutil
+from pathlib import Path
+
+import pytest
+
+pytest.importorskip('PySide6')
+
+import LevityDash  # noqa: F401  builds the QApplication
+import yaml  # noqa: E402
+from PySide6.QtCore import QRectF  # noqa: E402
+from PySide6.QtGui import QImage  # noqa: E402
+
+from LevityDash.devtools import _studio_builder as sb  # noqa: E402
+from LevityDash.devtools import _studio_preset as m  # noqa: E402
+
+BOARDS = Path(__file__).parents[2] / 'docs' / 'design-references' / 'boards'
+
+
+class StubEngine:
+	size = (1440, 900)
+
+	def __init__(self):
+		self.drawn = []
+
+	def resize(self, size):
+		self.size = size
+
+	def render(self, items, names, root=None):
+		self.drawn.append((items, root))
+		image = QImage(64, 40, QImage.Format.Format_ARGB32)
+		image.fill(0)
+		return image, {path: QRectF(10, 10, 100, 50) for path in names.values()}
+
+
+@pytest.fixture
+def board(tmp_path, monkeypatch):
+	monkeypatch.setenv('LEVITYDASH_STUDIO_DIR', str(tmp_path / 'studio'))
+
+	def make(name):
+		target = tmp_path / f'{name}.levity'
+		shutil.copy(BOARDS / f'{name}.levity', target)
+		win = sb.Builder(target, engine=StubEngine(), dashboard=True)
+		win.timer.stop()
+		boards.append(win)
+		return win, target
+
+	boards = []
+	yield make
+	for win in boards:
+		win.close()
+
+
+@pytest.mark.parametrize('name', ['station', 'storm', 'sky', 'week'])
+def test_save_without_a_change_leaves_the_file_as_it_was(board, name):
+	win, path = board(name)
+	before = path.read_text()
+	win.save()
+	assert path.read_text() == before
+
+
+def test_a_geometry_edit_changes_only_that_line(board):
+	win, path = board('station')
+	before = path.read_text().splitlines()
+	target = next(p for p, n in win.piece.walk() if p and 'geometry' in n and isinstance(n['geometry'], dict) and 'width' in n['geometry'])
+	win.select(target)
+	win.editField('geometry.width', '33%')
+	assert win.isDirty()
+	win.save()
+	after = path.read_text().splitlines()
+	changed = [i for i, (a, b) in enumerate(zip(before, after)) if a != b]
+	assert len(before) == len(after) and 1 <= len(changed) <= 2
+	assert not win.isDirty()
+	assert win.status.text().endswith('as it was')
+	assert yaml.safe_load(path.read_text()) == win.piece.dashboard()
+
+
+def test_the_root_keys_reach_the_preview(board):
+	win, _ = board('station')
+	win.redraw()
+	items, root = win.engine.drawn[-1]
+	assert root and root['vars'] and 'theme' in root
+
+
+def test_shorthand_items_stay_as_written(board):
+	win, path = board('station')
+	shorts = [p for p in _paths(win.piece.template) if m.opaque(win.piece.raw(p))]
+	assert shorts, 'station.levity has stack shorthand'
+	win.select(shorts[0])
+	assert win.selection == shorts[0]
+	text = path.read_text()
+	win.duplicateItem()
+	win.save()
+	assert path.read_text() != text
+	assert yaml.safe_load(path.read_text()) == win.piece.dashboard()
+
+
+def _paths(node, path=()):
+	out = []
+	for i, kid in enumerate(node.get('items') or []):
+		out.append(path + (i,))
+		if isinstance(kid, dict) and not m.opaque(kid):
+			out += _paths(kid, path + (i,))
+	return out
+
+
+def test_edit_root_keys_keeps_their_order(board):
+	win, path = board('storm')
+	win.select(())
+	extras = {k: v for k, v in win.piece.root.items() if k != 'items'}
+	extras['vars'] = dict(extras['vars'], zz_new='#123456')
+	win.editField('#root', extras)
+	win.save()
+	data = yaml.safe_load(path.read_text())
+	assert list(data) == list(win.piece.root)
+	assert data['vars']['zz_new'] == '#123456'
+
+
+def test_save_refuses_the_real_config_folder(board, tmp_path, monkeypatch):
+	win, path = board('storm')
+	monkeypatch.setattr(sb, 'inRealConfig', lambda p: True)
+	asked = []
+	monkeypatch.setattr(win, 'saveAs', lambda: asked.append(1))
+	win.editField('name', 'x') if False else None
+	before = path.read_text()
+	win.save()
+	assert asked and path.read_text() == before
+
+
+def test_undo_restores_the_dashboard(board):
+	win, _ = board('storm')
+	saved = win.piece.dashboard()
+	win.select((0,))
+	win.deleteItem()
+	assert win.isDirty()
+	win.undo()
+	assert win.piece.dashboard() == saved and not win.isDirty()
