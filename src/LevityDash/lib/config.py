@@ -554,12 +554,12 @@ class Config(LevityConfig):
 			except Exception as e:
 				log.warning(
 					f'Unable to determine location from IP ({e}).  '
-					f'Falling back to 0,0/UTC for this session; set [Location] in config.ini to silence this.'
+					f'Falling back to 0,0 and the machine timezone for this session; set [Location] in config.ini to silence this.'
 				)
 				# session-only fallback: deliberately not saved so a transient
 				# network failure never persists a bogus location
 				self['Location'] = {
-					'timezone': timezone or 'UTC',
+					'timezone': timezone or hostZoneName() or 'UTC',
 					'latitude': latitude or '0.0',
 					'longitude': longitude or '0.0',
 				}
@@ -600,6 +600,18 @@ class Config(LevityConfig):
 		self['Display']['dashboard'] = str(path)
 		with open(self.path.path, 'w') as f:
 			self.write(f)
+
+def hostZoneName() -> str | None:
+	"""The IANA name of the zone this machine's clock is set to (`America/New_York`), or None."""
+	if (name := os.environ.get('TZ', '').lstrip(':')) and 'zoneinfo/' not in name:
+		return name
+	try:
+		target = os.path.realpath('/etc/localtime')
+	except OSError:
+		return None
+	_, found, name = target.partition('zoneinfo/')
+	return name if found and name else None
+
 
 userConfig = Config()
 pluginConfig = userConfig.plugins
