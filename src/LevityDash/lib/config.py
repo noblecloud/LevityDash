@@ -539,6 +539,40 @@ class Config(LevityConfig):
 			log = log.getChild('config')
 			log.error('Unable load timezone from config\n', e)
 
+	_placeholders: frozenset = frozenset()
+
+	def write(self, fp, *args, **kwargs):
+		"""Writes the config without the placeholder location, so a stand-in never reaches the file."""
+		held = {k: self['Location'].pop(k) for k in self._placeholders if 'Location' in self.sections() and k in self['Location']}
+		try:
+			return super().write(fp, *args, **kwargs)
+		finally:
+			if held:
+				self['Location'].update(held)
+
+	#: False while the location is a placeholder because it is neither in the config nor guessable.
+	locationKnown: bool = True
+	_lastGuessFailure: float = 0.0
+
+	def _guessLocationWithRetries(self, log, attempts: int = 3):
+		"""The location from the IP address, retried, or None. Backs off for a minute after a failure."""
+		import time
+		if time.monotonic() - self._lastGuessFailure < 60 and self._lastGuessFailure:
+			return None
+		error = None
+		for attempt in range(attempts):
+			try:
+				return guessLocation()
+			except Exception as e:
+				error = e
+				time.sleep(1 + attempt)
+		self._lastGuessFailure = time.monotonic()
+		log.error(
+			f'LOCATION UNKNOWN: [Location] is not set in the config and the IP lookup failed {attempts} times ({error}). '
+			f'Weather will not be fetched until you set latitude, longitude and timezone under [Location] in the config.'
+		)
+		return None
+
 	@property
 	def loc(self):
 		noLocationSection = 'Location' not in self.sections()
@@ -549,21 +583,19 @@ class Config(LevityConfig):
 			from LevityDash.lib.log import LevityUtilsLog as log
 			log = log.getChild('config')
 			log.info('No location set in config.  Guessing location based on IP address.')
-			try:
-				lat, lon, tz = guessLocation()
-			except Exception as e:
-				log.warning(
-					f'Unable to determine location from IP ({e}).  '
-					f'Falling back to 0,0 and the machine timezone for this session; set [Location] in config.ini to silence this.'
-				)
-				# session-only fallback: deliberately not saved so a transient
-				# network failure never persists a bogus location
+			guessed = self._guessLocationWithRetries(log)
+			if guessed is None:
+				# Not saved, so a network blip never persists a place. But 0,0 is the Gulf of
+				# Guinea, and weather for it looks real, so say plainly that nothing is known.
+				self.locationKnown = False
+				self._placeholders = {k for k, v in (('latitude', latitude), ('longitude', longitude), ('timezone', timezone)) if not v}
 				self['Location'] = {
 					'timezone': timezone or hostZoneName() or 'UTC',
 					'latitude': latitude or '0.0',
 					'longitude': longitude or '0.0',
 				}
 				return float(self['Location']['latitude']), float(self['Location']['longitude'])
+			lat, lon, tz = guessed
 			self['Location'] = {'timezone': timezone or tz, 'latitude': latitude or lat, 'longitude': longitude or lon}
 			self.save()
 		return float(self['Location']['latitude']), float(self['Location']['longitude'])
