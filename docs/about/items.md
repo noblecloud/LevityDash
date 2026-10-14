@@ -1,6 +1,6 @@
-# Modules
+# Items
 
-There are several modules already available for use. However, you can also build your own.
+An item is one entry under `items:`. A display item shows data: Realtime, Gauge, Bar, Graph, Mini Graph, Polar, Clock and Moon Phase. A container item lays out other items: group, stack, switch and the others at the end of this page. There are several items already available for use. However, you can also build your own.
 
 ## Realtime  <!-- {docsify-ignore} -->
 
@@ -44,17 +44,17 @@ A customizable clock that can have whatever formatting you want and values can b
 
 Displays the current moon phase. The moon tilts as it looks in the sky at your location.
 
-## Groups & Stacks  <!-- {docsify-ignore} -->
+## Containers  <!-- {docsify-ignore} -->
 
-Containers for organizing display modules:
+Containers lay out other items:
 
 - **group** — free-form container; children use their own geometry
 - **titled-group** — a group with a built-in title bar
 - **stack** — lays children out automatically in a vertical or horizontal stack, with optional dividers and spacers
 - **value-stack** — a stack purpose-built for lists of labeled realtime values
-- **switch** — a slot that shows one of several modules, chosen by a condition or in turn. See [Switch](/config/dashboard/switch.md)
+- **switch** — shows one of several items, chosen by a condition or in turn. See [Switch](/config/dashboard/switch.md)
 
-## Planned Modules  <!-- {docsify-ignore} -->
+## Planned Items  <!-- {docsify-ignore} -->
 
 - Weather Radar
 - Multiline Text
@@ -68,15 +68,15 @@ See the [roadmap](/roadmap.md) for the full picture.
 
 - Drag and drop dashboard design (This can be a little funky at times)
 - YAML based dashboard specifications with support for both absolute and relative size/positioning
-- Module grouping with shared/preset styling
-- Size-matching groups that keep related text consistently sized across panels
-- Editable Margins for text modules
+- Item grouping with shared/preset styling
+- Size-matching groups that keep related text consistently sized across items
+- Editable Margins for text items
 - Resizable graph figures
 - Custom, value mapped, gradients for figure items
-- [Themes](/config/dashboard/themes.md): named colors, fonts, and gradients that restyle a whole board
+- [Themes](/config/dashboard/themes.md): named colors, fonts, and gradients that restyle a whole dashboard
 - [Variables](/config/dashboard/variables.md): name a value once and use it in many places
 - [Expressions](/config/dashboard/expressions.md): a value from a calculation on keys, with units such as `> 90°F`
-- A module that is shown only while a condition is true (`when:`)
+- An item that is shown only while a condition is true (`when:`)
 - A dashboard that loads when one item fails. The item shows an error tile.
 - Icon packs: Font Awesome (`fa:`), Material Design Icons (`mdi:`), Weather Icons (`wi:`)
 - Text filters (lower, upper, title, capitalize, ordinal, add-ordinal)

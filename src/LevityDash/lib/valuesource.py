@@ -152,7 +152,7 @@ _standIn: Optional[Callable[..., Optional[ValueSource]]] = None
 def installStandIn(standIn: Optional[Callable[..., Optional[ValueSource]]]) -> None:
 	"""Answer every `openValueSource` call with `standIn` instead of the dispatcher.
 
-	For tools that draw items without booting the dashboard (Gauge Studio). The
+	For tools that draw items without booting the dashboard (Studio). The
 	stand-in takes the same arguments as `openValueSource`. Pass None to restore
 	the real lookup. Consumers call `openValueSource`, so no module that imports
 	it by name needs patching.

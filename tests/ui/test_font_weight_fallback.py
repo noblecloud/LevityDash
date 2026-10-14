@@ -4,7 +4,7 @@
 is empty whenever the font system reports no styles for a family - an
 unavailable family, or one substituted at load time. The resulting ValueError
 was raised from a Label's `fontWeight` setter, deep inside `Panel.state`, where
-one item's exception costs the whole board: lambda showed nothing but the moon.
+one item's exception costs the whole dashboard: lambda showed nothing but the moon.
 """
 
 import pytest

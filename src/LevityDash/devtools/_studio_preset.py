@@ -115,6 +115,22 @@ def _without(node: Any, base: Any) -> Any:
 	return {} if node == base else copy.deepcopy(node)
 
 
+#: First keys that make a one-key item a shorthand a stack reads (`spacer: {…}`, `{type}: {…}`); a dotted data key does too.
+SHORT_TYPES = ('spacer', 'group', 'stack', 'grid', 'value-stack', 'titled-group', 'switch', 'text', 'label', 'graph', 'mini-graph', 'polar', 'clock', 'moon')
+
+
+def opaque(item: Any) -> bool:
+	"""An item the editor keeps as written: a bare key (`- environment.wind.speed`) or a stack's one-key shorthand
+	(`- environment.temperature.dewpoint: {…}`, `- spacer: {size: 2mm}`). A stack reads them with its own rules (default type,
+	direction preset), so writing them out in full would change what they draw."""
+	if not isinstance(item, dict):
+		return True
+	if not item or 'type' in item or PRESET_KEY in item:
+		return False
+	first = next(iter(item))
+	return isinstance(first, str) and (first in SHORT_TYPES or '.' in first) and (len(item) == 1 or item[first] is None)
+
+
 @dataclass
 class Piece:
 	"""A preset being built: its name, declared properties and template."""
@@ -122,6 +138,9 @@ class Piece:
 	props: Dict[str, PropSpec] = field(default_factory=dict)
 	template: Dict[str, Any] = field(default_factory=lambda: {'type': 'group', ITEMS_KEY: []})
 	doc: str = ''
+	#: A dashboard rather than a preset: the root's keys (`theme`, `vars`, `background`, with `items` as a placeholder in
+	#: its place), or `{}` for a bare list. `None` for a preset. The template's items are the dashboard's `items`.
+	root: Optional[Dict[str, Any]] = None
 
 	# files
 
@@ -133,6 +152,40 @@ class Piece:
 	def fromText(cls, name: str, text: str) -> 'Piece':
 		"""Read a preset file with the library's own parser; raises `lib.PresetError` for a file it would refuse."""
 		return cls.fromPreset(lib.parse(name, text))
+
+	@classmethod
+	def fromDashboard(cls, name: str, data: Any) -> 'Piece':
+		"""A dashboard file's data (a list of items, or a mapping with `items:` beside `theme`, `vars` and the like)."""
+		if isinstance(data, list):
+			return cls(name, {}, {'type': 'group', ITEMS_KEY: copy.deepcopy(data)}, root={})
+		if isinstance(data, dict):
+			items = data.get(ITEMS_KEY)
+			if not isinstance(items, list):
+				raise ValueError('A dashboard mapping needs an `items:` list')
+			return cls(name, {}, {'type': 'group', ITEMS_KEY: copy.deepcopy(items)}, root={k: (None if k == ITEMS_KEY else copy.deepcopy(v)) for k, v in data.items()})
+		raise ValueError('A dashboard is a list of items or a mapping with `items:`')
+
+	def dashboard(self) -> Any:
+		"""The file's data again: the items, under their root keys when the file had any. Only what the file said."""
+		items = copy.deepcopy(self.template.get(ITEMS_KEY) or [])
+		if not self.root:
+			return items
+		out = copy.deepcopy(self.root)
+		out[ITEMS_KEY] = items
+		return out
+
+	def setRoot(self, extras: Dict[str, Any]) -> None:
+		"""Replace a dashboard's root keys (everything but `items`), keeping the order the file had."""
+		old = self.root or {}
+		out: Dict[str, Any] = {}
+		for k in old:
+			if k == ITEMS_KEY or k in extras:
+				out[k] = None if k == ITEMS_KEY else copy.deepcopy(extras[k])
+		for k, v in extras.items():
+			if k not in out and k != ITEMS_KEY:
+				out[k] = copy.deepcopy(v)
+		out.setdefault(ITEMS_KEY, None)
+		self.root = out
 
 	def toPreset(self) -> 'lib.Preset':
 		props = {n: lib.Prop(n, copy.deepcopy(s.default), None if s.type == 'any' else s.type, s.lo, s.hi, s.doc) for n, s in self.props.items()}
@@ -194,20 +247,27 @@ class Piece:
 
 	# the tree
 
-	def node(self, path: Path) -> Optional[dict]:
-		node = self.template
+	def raw(self, path: Path) -> Any:
+		"""The item at `path` as written, whatever it is (a bare key is a string)."""
+		node: Any = self.template
 		for i in path:
-			kids = node.get(ITEMS_KEY)
+			kids = node.get(ITEMS_KEY) if isinstance(node, dict) else None
 			if not isinstance(kids, list) or not 0 <= i < len(kids):
 				return None
 			node = kids[i]
 		return node
 
+	def node(self, path: Path) -> Optional[dict]:
+		"""The item at `path` when it is a mapping the editor can change field by field; None for a bare key or no such item."""
+		node = self.raw(path)
+		return node if isinstance(node, dict) else None
+
 	def walk(self) -> Iterator[Tuple[Path, dict]]:
 		def go(node, path):
 			yield path, node
 			for i, kid in enumerate(node.get(ITEMS_KEY) or []):
-				yield from go(kid, path + (i,))
+				if isinstance(kid, dict) and not opaque(kid):
+					yield from go(kid, path + (i,))
 		yield from go(self.template, ())
 
 	def add(self, parent: Path, item: dict, index: Optional[int] = None) -> Path:
@@ -235,6 +295,39 @@ class Piece:
 		kids = self.node(path[:-1])[ITEMS_KEY]
 		kids.insert(path[-1] + 1, copy.deepcopy(kids[path[-1]]))
 		return path[:-1] + (path[-1] + 1,)
+
+	#: What stays on the use when an item becomes a preset: where it sits and when it shows, not what it is.
+	USE_FIELDS = ('name', 'geometry', 'flex', 'grid', 'when')
+
+	def extract(self, path: Path, name: str) -> 'Piece':
+		"""Turn the item at `path` into a preset called `name`: the item takes its place as a use of it, and the new preset is returned.
+
+		Placement (`geometry`, `flex`, `grid`, `when`, `name`) stays on the use, so the preset can sit anywhere. A property of this
+		preset that the item reads becomes a property of the new one with the same default, and the use passes it through
+		(`props: {x: $x}`), so the item looks as it did. A size-group scope the item names (`name@panel`) becomes a text property
+		(`group`) whose default is that panel, so the preset keeps its groups where it is reused and each use names its own panel.
+		"""
+		if not path:
+			raise ValueError('The whole template is already the preset; pick an item inside it')
+		node = self.node(path)
+		if node is None or opaque(node):
+			raise ValueError('No such item, or a shorthand the editor keeps as written')
+		if PRESET_KEY in node:
+			raise ValueError('That item is already a use of a preset')
+		template = copy.deepcopy(node)
+		use: Dict[str, Any] = {PRESET_KEY: name}
+		for key in self.USE_FIELDS:
+			if key in template:
+				use[key] = template.pop(key)
+		used = [n for n in self.props if n in set(refs(template))]
+		if used:
+			use[PROPS_KEY] = {n: f'${n}' if n.isidentifier() else f'${{{n}}}' for n in used}
+		props = {n: copy.deepcopy(self.props[n]) for n in used}
+		for prop, scope in _scopesToProps(template, set(props) | set(self.props)).items():
+			props[prop] = PropSpec(prop, 'text', scope, doc='The panel the size group is scoped to: the name of an ancestor panel (`name@panel`)')
+		piece = Piece(name, props, template)
+		self.node(path[:-1])[ITEMS_KEY][path[-1]] = use
+		return piece
 
 	# properties
 
@@ -269,6 +362,50 @@ def _rename(node: Any, old: str, new: str) -> Any:
 	if isinstance(node, str):
 		return _REF.sub(lambda m: ('${%s}' if m.group(1) else '$%s') % new if (m.group(1) or m.group(2)) == old else m.group(0), node)
 	return node
+
+
+def _scopesToProps(node: Any, taken: set) -> Dict[str, str]:
+	"""Rewrite each size-group scope a template joins (`matchingGroup: rowTitle@temperature`) to read a property
+	(`rowTitle@$group`), in place, and return the properties: name -> the scope it had. One property per distinct panel name,
+	so the preset keeps its groups wherever it is used and the use says which ancestor panel holds them (as `stat-row` does)."""
+	found: Dict[str, str] = {}
+
+	def prop_for(scope: str) -> str:
+		for k, v in found.items():
+			if v == scope:
+				return k
+		base, n = 'group', 2
+		name = base
+		while name in taken or name in found:
+			name, n = f'{base}-{n}', n + 1
+		found[name] = scope
+		return name
+
+	def rewrite(group: Any) -> Any:
+		if not isinstance(group, str) or '@' not in group or '$' in group:
+			return group
+		head, scope = group.rsplit('@', 1)
+		if not scope:
+			return group
+		name = prop_for(scope)
+		return f'{head}@${name}' if name.isidentifier() else f'{head}@${{{name}}}'
+
+	def walk(n: Any):
+		if isinstance(n, dict):
+			for k, v in n.items():
+				if k == 'matchingGroup':
+					if isinstance(v, dict) and 'group' in v:
+						v['group'] = rewrite(v['group'])
+					elif isinstance(v, str):
+						n[k] = rewrite(v)
+				else:
+					walk(v)
+		elif isinstance(n, list):
+			for v in n:
+				walk(v)
+
+	walk(node)
+	return found
 
 
 def setField(node: dict, field_: str, value: Any) -> None:

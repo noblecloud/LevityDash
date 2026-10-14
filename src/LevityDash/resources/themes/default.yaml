@@ -5,7 +5,7 @@ name: default
 mode: dark
 
 colors:
-  background: '#000000'   # behind the whole board
+  background: '#000000'   # behind the whole dashboard
   surface: '#141418'      # a card or panel face
   text: '#ffffff'         # values and anything that has no role of its own
   muted: '#eeeeee'        # titles and captions
@@ -16,7 +16,7 @@ colors:
   warn: '#fdd835'
   bad: '#e53935'
   info: '#4aa3ff'
-  series-1: '#ff9aa3'     # data lines and bars, in the order a board uses them
+  series-1: '#ff9aa3'     # data lines and bars, in the order a dashboard uses them
   series-2: '#4aa3ff'
   series-3: '#3ddc97'
   series-4: '#b48cff'
@@ -41,5 +41,5 @@ fonts:
 scales:
   load: {0: $good, 60: $warn, 85: $bad}
   temperature: TemperatureGradient
-  # The board's ground as a gradient. Flat here, so a dashboard that writes `background: $sky` looks the same as without it.
+  # The dashboard's ground as a gradient. Flat here, so a dashboard that writes `background: $sky` looks the same as without it.
   sky: {0: $background, 1: $background}

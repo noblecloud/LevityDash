@@ -1,4 +1,4 @@
-# Gauge Studio offscreen smoke: the value slider, the sources, a fill that names a key
+# Studio offscreen smoke: the value slider, the sources, a fill that names a key
 
 Question under review: *run the Studio offscreen and confirm that the preview still follows
 its value slider. If it does not, the defect is no longer latent and it becomes part of this
@@ -26,7 +26,7 @@ throwaway temp dir: the real config is not read or written. Offscreen; no window
 
 ## Q1. Which showcase cells load
 
-`gs.showcaseCells()` returns **30** cells. **13 load, 17 fail — identically in both trees**
+`gs.showcaseExamples()` returns **30** cells. **13 load, 17 fail — identically in both trees**
 (the cell-by-cell outcome lists compare equal as sets of `(index, label, ok, error)`).
 
 Load (13): Temperature, Humidity, Cloud cover, EV charging, Battery, Dimmer, Volume,

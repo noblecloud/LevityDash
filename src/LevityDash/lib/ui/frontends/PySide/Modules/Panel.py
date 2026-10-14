@@ -678,6 +678,13 @@ class Panel(_Panel, Stateful, tag='group'):
 	def margins(self, value: Margins):
 		value.surface = self
 		self._margins = value
+		self._configuredMargins = None
+
+	@margins.condition(method='get')
+	def margins(self, value: Margins) -> bool:
+		# A layout may have moved the margins since they loaded; judge the loaded ones.
+		configured = getattr(self, '_configuredMargins', None)
+		return configured is None or tuple(configured) != tuple(Margins.default())
 
 	@margins.factory
 	def margins(self) -> Margins:
@@ -741,7 +748,7 @@ class Panel(_Panel, Stateful, tag='group'):
 
 	@StateProperty(key='when', default=None, allowNone=True, sortOrder=51)
 	def when(self) -> Optional[str | bool]:
-		"""Show this panel only while the condition holds. A key, an expression, or a bool; a missing value counts as false. In a `switch` the slot picks among its children by this."""
+		"""Show this item only while the condition holds. A key, an expression, or a bool; a missing value counts as false. A `switch` picks among its children by this."""
 		return self.condition.spec if '_whenCondition' in self.__dict__ else None
 
 	@when.setter
@@ -976,9 +983,9 @@ class Panel(_Panel, Stateful, tag='group'):
 	def scene(self) -> 'LevityScene':
 		return super(Panel, self).scene()
 
+	# Not sorted: the order of the children is their stacking order, so sorting them by
+	# position on a save made a later item that overlaps an earlier one change layers.
 	@StateProperty(
-		sort=True,
-		sortKey=lambda x: x.geometry.sortValue,
 		default=DefaultGroup(None, []),
 		dependencies={'geometry', 'margins'},
 		sortOrder=-1,

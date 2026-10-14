@@ -50,7 +50,7 @@ Child output is in `~/Library/Logs/LevityDash/<name>.out`.
 
 ## What landed today
 
-- **Gauge Studio** (`devtools/gauge_studio.py` and `_studio_*.py`):
+- **Studio** (`devtools/gauge_studio.py` and `_studio_*.py`):
   - the wheel guard (a control takes the wheel only after the pointer rests on it);
   - larger, left-aligned section headings;
   - labelled "enabled" rows;

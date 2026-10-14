@@ -1,4 +1,4 @@
-"""Dev-only: the Qt widgets Gauge Studio builds its panel from.
+"""Dev-only: the Qt widgets Studio builds its panel from.
 
 One `FieldRow` per `_studio_schema.Field`. A row holds a label, the control
 that fits the field's kind, a reset button and a line for the reason a value

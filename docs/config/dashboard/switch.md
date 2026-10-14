@@ -1,12 +1,12 @@
 # Switch
 
-A switch is a slot that shows one of several modules. The switch keeps its place in the layout. The space that one module does not need goes to the module that replaces it. It does not go blank.
+A switch shows one of several items. The switch keeps its place in the layout. The space that one item does not need goes to the item that replaces it. It does not go blank.
 
 Use a switch to show UV while it is dry and rain detail while it rains. Use a switch to turn through a few gauges, one at a time, in the same place.
 
 ## Choose with a condition
 
-Each child of `items:` fills the slot. Give a child a `when:` to say when it is shown. The switch shows the first child whose `when:` is true.
+Each child of `items:` fills the switch. Give a child a `when:` to say when it is shown. The switch shows the first child whose `when:` is true.
 
 A child with no `when:` is always true. It is the default. Put it last.
 
@@ -14,7 +14,7 @@ A child with no `when:` is always true. It is the default. Put it last.
 
 <!-- div:left-panel -->
 
-In the example, the slot shows the rain panel while it rains. At other times, it shows the UV gauge. The gauge to the left of the slot always shows the temperature.
+In the example, the switch shows the rain item while it rains. At other times, it shows the UV gauge. The gauge to the left of the switch always shows the temperature.
 
 <!-- div:right-panel -->
 
@@ -34,7 +34,7 @@ In the example, the slot shows the rain panel while it rains. At other times, it
         value-label: {position: below}
 
     - type: switch
-      name: sky-slot
+      name: sky-switch
       hold: 0.2s
       fade: 0
       geometry: {x: 32%, y: 4%, width: 36%, height: 92%}
@@ -83,7 +83,7 @@ In the example, the slot shows the rain panel while it rains. At other times, it
 
 <!-- panels:end -->
 
-A child of a switch does not need a `geometry:`. It fills the slot.
+A child of a switch does not need a `geometry:`. It fills the switch.
 
 ### <div class=mono>when: key | expression | bool</div>
 
@@ -96,9 +96,9 @@ A child of a switch does not need a `geometry:`. It fills the slot.
 
 - If the value is missing, the condition is false.
 - If the expression is wrong, LevityDash logs the error once. The condition is then false.
-- If no child is true, the slot shows nothing.
+- If no child is true, the switch shows nothing.
 
-`when:` also works on a module that is not in a switch. The module is shown only while the condition is true.
+`when:` also works on an item that is not in a switch. The item is shown only while the condition is true.
 
 ```yaml
 - type: text
@@ -108,11 +108,11 @@ A child of a switch does not need a `geometry:`. It fills the slot.
 
 ## Stop a flicker
 
-A value near a limit can cross the limit again and again. A slot that follows it would flip all the time. `hold:` prevents this.
+A value near a limit can cross the limit again and again. A switch that follows it would flip all the time. `hold:` prevents this.
 
 ### <div class=mono>hold: duration</div>
 
-How long a change must last before the slot changes. The default is `30s`. The first choice, when the dashboard loads, is shown at once. `0` makes the slot change at once, always.
+How long a change must last before the switch changes. The default is `30s`. The first choice, when the dashboard loads, is shown at once. `0` makes the switch change at once, always.
 
 A duration is a number of seconds (`30`) or a number with a unit: `500ms`, `30s`, `2m`, `1h`.
 
@@ -150,7 +150,7 @@ Add a `when:` to each child to turn through only the children that apply now.
       display: {radius: 90%, arc: {weight: 8%}, range: {min: 0, max: 12}, value-label: {position: below}}
 ```
 
-Each switch has its own `cycle:`. Two switches on one board turn at their own rates.
+Each switch has its own `cycle:`. Two switches on one dashboard turn at their own rates.
 
 ## Fade
 

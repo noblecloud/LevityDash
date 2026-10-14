@@ -1,0 +1,71 @@
+# Three gauges of slightly different radius whose tick labels share one size group (`parent.ticks`) and whose value labels share another (`parent.values`), both match-all.
+- type: group
+  name: main
+  items:
+    - type: group
+      name: row
+      geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+      items:
+        - type: realtime.gauge
+          key: environment.temperature.temperature
+          title: false
+          geometry: {x: 3%, y: 25%, width: 28%, height: 50%}
+          display:
+            value-label: {matchingGroup: {group: parent.values, matchAll: true}}
+            radius: 88%
+            arc: {start-angle: 135, end-angle: 405, weight: 8%, color: '#26262c', cap: flat}
+            range: {min: 0, max: 100}
+            major:
+              interval: 25
+              length: 8%
+              width: 2px
+              color: '#c9c9d0'
+              labels:
+                position: inside
+                height: 15%
+                color: '#c9c9d0'
+                offset: 5%
+                format: {precision: 0}
+                matchingGroup: {group: parent.ticks, matchAll: true}
+        - type: realtime.gauge
+          key: environment.humidity.humidity
+          title: false
+          geometry: {x: 36%, y: 25%, width: 28%, height: 50%}
+          display:
+            value-label: {matchingGroup: {group: parent.values, matchAll: true}}
+            radius: 91%
+            arc: {start-angle: 135, end-angle: 405, weight: 8%, color: '#26262c', cap: flat}
+            range: {min: 0, max: 1000}
+            major:
+              interval: 250
+              length: 8%
+              width: 2px
+              color: '#c9c9d0'
+              labels:
+                position: inside
+                height: 15%
+                color: '#c9c9d0'
+                offset: 5%
+                format: {precision: 0}
+                matchingGroup: {group: parent.ticks, matchAll: true}
+        - type: realtime.gauge
+          key: environment.pressure.pressure
+          title: false
+          geometry: {x: 69%, y: 25%, width: 28%, height: 50%}
+          display:
+            value-label: {matchingGroup: {group: parent.values, matchAll: true}}
+            radius: 94%
+            arc: {start-angle: 135, end-angle: 405, weight: 8%, color: '#26262c', cap: flat}
+            range: {min: 0, max: 10}
+            major:
+              interval: 5
+              length: 8%
+              width: 2px
+              color: '#c9c9d0'
+              labels:
+                position: inside
+                height: 15%
+                color: '#c9c9d0'
+                offset: 5%
+                format: {precision: 0}
+                matchingGroup: {group: parent.ticks, matchAll: true}

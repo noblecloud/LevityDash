@@ -1,4 +1,4 @@
-# Gauge Studio: the value sources never reach their consumers, and 17 cells do not load
+# Studio: the value sources never reach their consumers, and 17 cells do not load
 
 **Status: FIXED 2026-10-06.** The stand-in now registers in `lib/valuesource` and
 `openValueSource` consults it, so every consumer that calls that name is answered
@@ -45,7 +45,7 @@ that have to be satisfied.
 
 ## Part 2 — 17 of the 30 showcase cells never load (same smell, fold in per the review)
 
-`gs.showcaseCells()` returns 30 cells. 13 load; 17 fail, identically in both trees:
+`gs.showcaseExamples()` returns 30 cells. 13 load; 17 fail, identically in both trees:
 
 - 16 raise `TypeError: 'NoneType' object is not callable` — a numeric field
   (`GaugeRange.min`/`max` at `meter/meter.py:61`, or `Graduations.usr_interval`) is

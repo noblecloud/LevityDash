@@ -4,6 +4,18 @@ A desktop-native, multi-source weather dashboard. Qt (PySide6) QGraphicsScene fr
 
 > [CLAUDE.md](CLAUDE.md) covers the same repo from Claude Code's side (package layout, dependency direction, environment gotchas) — the two should stay roughly in sync. Direction/roadmap lives in [docs/roadmap.md](docs/roadmap.md). Deep-dive investigations, including a full trace of the schema/data-ingestion engine, live in `docs/reviews/` (see `docs/reviews/schema-pipeline.md`).
 
+## Vocabulary
+
+One word per idea, in docs, UI strings and new code. The class `Panel`, `CentralPanel` and the `Modules/` directory keep their names.
+
+- **dashboard**: one `.levity` file. Not "dashboard".
+- **item**: any node under `items:`. Not "module", "panel" or "widget" (as a generic).
+- **container**: an item that lays out other items (`group`, `stack`, `value-stack`, `titled-group`, `switch`). **display**: an item that draws data (`realtime.*`, `graph`, `mini-graph`, `polar`, `clock`, `moon`, `label`). **part**: a styled piece inside a display with no `type:` (tick, needle, fill, beam).
+- **preset**: a reusable item definition (`presets/<name>.yaml`: `props:` plus `template:`). **instance**: one use of it, `preset: name` plus only what differs. **property**: a setting on an item or part; a preset's own are **preset properties**. Not "attribute", "parameter" or "option".
+- **template**: a starter dashboard in `resources/example-config/templates/`. **theme**, **variable** (`vars:`), **key**, **value source**, **switch** (not "slot"), **scenario** (fixture data for renders and Studio).
+- **Studio** is the design tool (file `gauge_studio.py`). Its section **styles** set a few properties at once; they are not presets.
+- **size group** (`Groups.py`): the text-fitting group. The word "fit group" is proposed but not adopted yet.
+
 ## Before you start a task
 
 - **Task briefs live in `docs/tasks/`.** Each file there is a self-contained brief for one piece of work (bug fix, cleanup, investigation) with context, the concrete change expected, verification steps, and a suggested branch name. If you were pointed at this repo for a specific task, check there first — the human maintainer uses this directory to hand off work.
@@ -240,13 +252,13 @@ no API key, $0).
 
 ## Presets
 
-A preset is a whole item written once: `resources/presets/<name>.yaml` (user ones in `<config>/presets/`, found first) holds `props:` (names with defaults, optional `type`/`min`/`max`/`doc`) and a `template:` that uses them as `$prop`. A board item says `preset: name`, `props: {...}` and any fields it changes, which merge over the template (mappings merge, lists replace). `lib/presets.py` is Qt-free, like `lib/variables.py`: `expand` runs in `CentralPanel._load` before `resolveVariables`, so `$name` resolves item props, preset defaults, `vars:`, theme. A bad use becomes an error tile (`type: preset-error`, raised in `utils._loadItemGroup`). On save, `collapse` writes `preset`, the file's `props` and only the fields that differ from `CentralPanel._loaded`, the app's own dump taken right after loading (the raw expansion is not a usable baseline, because a dump adds keys). `preset:` on a stack whose value is not a preset file is still `Stack.preset`. Docs: `docs/config/dashboard/presets.md`. Known: until PR #66, a gauge saved as `type: realtime` (an error tile on reload) and wrote a derived `center_offset`, with or without presets.
+A preset is a whole item written once: `resources/presets/<name>.yaml` (user ones in `<config>/presets/`, found first) holds `props:` (names with defaults, optional `type`/`min`/`max`/`doc`) and a `template:` that uses them as `$prop`. An instance says `preset: name`, `props: {...}` and any fields it changes, which merge over the template (mappings merge, lists replace). `lib/presets.py` is Qt-free, like `lib/variables.py`: `expand` runs in `CentralPanel._load` before `resolveVariables`, so `$name` resolves item props, preset defaults, `vars:`, theme. A bad instance becomes an error tile (`type: preset-error`, raised in `utils._loadItemGroup`). On save, `collapse` writes `preset`, the file's `props` and only the fields that differ from `CentralPanel._loaded`, the app's own dump taken right after loading (the raw expansion is not a usable baseline, because a dump adds keys). `preset:` on a stack whose value is not a preset file is still `Stack.preset`. Docs: `docs/config/dashboard/presets.md`. Known: until PR #66, a gauge saved as `type: realtime` (an error tile on reload) and wrote a derived `center_offset`, with or without presets.
 
 ## Themes
 
 A dashboard picks one colour theme and writes `$tokens` instead of raw values. `lib/ui/colors/theme.py` (Qt-free) holds the engine; themes are YAML in `resources/themes/` (user ones in `<config>/themes/`, found first). `default.yaml` is the original white-on-black look, so a dashboard without `theme:` renders pixel-identical to before.
 
-- **Select**: a root mapping, `theme: dusk` or inline `theme: {extends: dusk, colors: {solar: '#ffd400'}}`, with the board under `items:` (a root list has no room for it). `render_dashboard.py --theme NAME` forces one over the file. Applied in `CentralPanel._load` before any item decodes; switching needs a reload (`Ctrl+R`).
+- **Select**: a root mapping, `theme: dusk` or inline `theme: {extends: dusk, colors: {solar: '#ffd400'}}`, with the dashboard under `items:` (a root list has no room for it). `render_dashboard.py --theme NAME` forces one over the file. Applied in `CentralPanel._load` before any item decodes; switching needs a reload (`Ctrl+R`).
 - **Write**: `color: $accent`, `font: $mono`, `gradient: $temperature`. One token namespace across three groups in the theme file: `colors`, `fonts`, `scales` (named gradients; unit-pinned stops work inside them). A raw value on an item always wins; a missing token comes from `extends` (default: `default`); an unknown token is a `ThemeError` that names the known ones.
 - **Standard tokens** every theme defines: colours `background surface text muted faint rule accent good warn bad info series-1..6`; fonts `display mono body`; scales `load temperature`. A theme may add more (per-source colours like `$solar`).
 - **Existing presets**: the named gradients dashboards already use (`TemperatureGradient`, `UVIndexGradient`, `WindSpeedGradient`, …) and the web colour names are untouched. `$temperature` is `TemperatureGradient` in the default theme, and a theme recolours any preset by listing its name under `scales`.

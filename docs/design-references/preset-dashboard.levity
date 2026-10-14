@@ -1,6 +1,6 @@
 # Presets in use: three panels from one `hero-readings` preset (`resources/presets/hero-readings.yaml`).
 # Each use names the preset and only what it changes; the rest comes from the preset. Render:
-#   render_dashboard.py out.png --levity docs/design-references/preset-board.levity --scenario stormy-day
+#   render_dashboard.py out.png --levity docs/design-references/preset-dashboard.levity --scenario stormy-day
 theme: dusk
 background: $sky
 items:

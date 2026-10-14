@@ -1,5 +1,5 @@
-# The three polar plots on one board: a wind rose, a wind trail and a 24 hour temperature clock.
-#   render_dashboard.py OUT.png --levity docs/design-references/polar-board.levity --scenario polar-day --size 1920x1080
+# The three polar plots on one dashboard: a wind rose, a wind trail and a 24 hour temperature clock.
+#   render_dashboard.py OUT.png --levity docs/design-references/polar-dashboard.levity --scenario polar-day --size 1920x1080
 # See Modules/Displays/polar/item.py for every setting.
 items:
   - type: group

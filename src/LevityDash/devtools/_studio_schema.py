@@ -1,4 +1,4 @@
-"""Dev-only: turn a live `Stateful` tree into a description of controls. Gauge Studio.
+"""Dev-only: turn a live `Stateful` tree into a description of controls. Studio.
 
 The studio does not list the gauge's options by hand. It walks
 `type(owner).statefulItems` on the gauge, then on every part the gauge holds

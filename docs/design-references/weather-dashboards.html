@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Weather Boards</title>
+<title>Weather dashboards</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;600;800&family=Roboto:wght@300;400;500&family=Roboto+Mono:wght@300;400;500&family=Barlow+Condensed:wght@300;500;700&display=swap" rel="stylesheet">
 <style>
@@ -62,7 +62,7 @@ td:first-child,th:first-child{text-align:left;font-family:Roboto;color:#a3a7b0}
 .sim{display:flex;gap:8px;margin:0 0 10px;flex-wrap:wrap}.sim button{font:500 13px Roboto;padding:5px 12px;border-radius:5px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}.sim button[aria-pressed=true]{border-color:#1fb4ff;color:#1fb4ff}
 @media (max-width:700px){.board{border-radius:4px}}
 </style></head><body><div class="wrap">
-<h1>Weather boards</h1>
+<h1>Weather dashboards</h1>
 <p class="intro">Four different jobs, same data family. Each one picks a hero and packs context round it, PiConsole-dense. Fonts: Nunito for heroes, Roboto Mono for figures, Roboto for labels (all bundled); the Storm board also tries Barlow Condensed, which would need bundling. Every value maps to a real key or expression, listed under each board. Things the app can't do yet are flagged.</p>
 
 <section>
@@ -74,7 +74,7 @@ td:first-child,th:first-child{text-align:left;font-family:Roboto;color:#a3a7b0}
 <li>Fixed panels: the same value-stacks as Everything; heroes get 3 detail columns.</li>
 <li>The slot is one <code>switch</code> (in progress, not merged): first child whose <code>when:</code> holds shows; children without <code>when:</code> rotate under <code>cycle:</code>. Alerts first, so they beat rotation.
 <pre style="font:12px 'Roboto Mono';color:var(--ink);background:var(--card);padding:8px;border-radius:4px;overflow:auto">- type: switch
-  name: sky-slot
+  name: sky-switch
   cycle: 15s
   hold: 30s
   fade: 400ms

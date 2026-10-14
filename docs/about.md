@@ -19,23 +19,20 @@ More information can be found [here](/about/plugins.md) or by selecting the sect
 ### Dashboards <!-- {docsify-ignore} -->
 
 Dashboards are the main configuration file for LevityDash.
-Written in YAML, they are used to define the layout of the dashboard and what modules to use and how their panels are displayed.
+Written in YAML, they are used to define the layout of the dashboard and which items to use and how they are laid out.
 
 More information can be found [here](/about/dashboard.md) or by selecting the section in the sidebar.
 
-### Modules <!-- {docsify-ignore} -->
+### Items <!-- {docsify-ignore} -->
 
-Modules, are the building blocks of a dashboard.  They represent the various ways to display information.
+Items are the building blocks of a dashboard.  A container item lays out other items. A display item shows information.  Items can be resized and moved around the dashboard.  To remove an item, right click on it and select 'Delete' or press the delete or backspace key when the item is selected.
 
-More information about modules can be found [here](about/modules.md) or by selecting the section in the sidebar.
-
-### Panels <!-- {docsify-ignore} -->
-Panels are instances of modules on the dashboard.  Panels can be resized and moved around the dashboard.  To remove a panel, right click on it and select 'Delete' or press the delete or backspace key when the panel is selected. More information can be found [here](/config/panels.md).
+More information about items can be found [here](about/items.md) or by selecting the section in the sidebar.
 
 
 ## Minor Features <!-- {docsify-ignore} -->
 There are tons of other minor features already built in to LevityDash. Some of these features include:
 
-[modules](/about/other-features.md ':include')
+[features](/about/other-features.md ':include')
 
 If you have any suggestions for new features, please feel free to open an issue on the [GitHub]()

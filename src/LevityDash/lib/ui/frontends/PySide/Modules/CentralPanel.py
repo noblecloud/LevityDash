@@ -148,7 +148,7 @@ class CentralPanel(Panel, tag="dashboard"):
 
 	@StateProperty(key='background', default=None, allowNone=True, sortOrder=-1)
 	def background(self) -> str | dict | list | None:
-		"""The ground of the board: a colour, a theme token (`$background`, or a scale such as `$sky` for a gradient), or a gradient written in place. `{gradient: $sky, angle: 160}` sets the direction. `lib/ui/colors/backdrop.py`"""
+		"""The ground of the dashboard: a colour, a theme token (`$background`, or a scale such as `$sky` for a gradient), or a gradient written in place. `{gradient: $sky, angle: 160}` sets the direction. `lib/ui/colors/backdrop.py`"""
 		return self._background
 
 	@background.setter
@@ -195,9 +195,9 @@ class CentralPanel(Panel, tag="dashboard"):
 		else:
 			QMessageBox.warning(self, "No Dashboard", "There is currently no loaded dashboard to refresh").exec_()
 
-	def loadPanel(self):
+	def loadItem(self):
 		from LevityDash.lib.ui.frontends.PySide.Modules import PanelFromFile
-		paths = self._selectFile(fileType="Dashboard Files (*.levityPanel *.json)", startingDir='panels', multipleFiles=True)
+		paths = self._selectFile(fileType="Item Files (*.levity *.yaml *.json)", startingDir='panels', multipleFiles=True)
 		for p in paths:
 			PanelFromFile(self, p)
 
@@ -218,7 +218,7 @@ class CentralPanel(Panel, tag="dashboard"):
 		with NamedTemporaryFile(delete=True, mode="w+", encoding='utf-8') as f:
 			try:
 				state = self.state
-				yaml.dump(state, f, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True)
+				yaml.dump(state, f, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True, sort_keys=False)
 				if self._vars or self._usesPresets:
 					self._restoreVariables(f)
 
@@ -232,10 +232,10 @@ class CentralPanel(Panel, tag="dashboard"):
 	def _dumpedLive(self) -> Any:
 		"""What a save would write now, read back as data: the same shape as the live tree. None if it cannot be made."""
 		try:
-			text = yaml.dump(self.state, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True)
+			text = yaml.dump(self.state, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True, sort_keys=False)
 			return type(self).__loader__(YAMLPreprocessor(text)).get_data()
 		except Exception:
-			log.exception('the loaded board could not be dumped; a save compares presets with the file instead')
+			log.exception('the loaded dashboard could not be dumped; a save compares presets with the file instead')
 			return None
 
 	def _restoreVariables(self, f) -> None:
@@ -252,7 +252,7 @@ class CentralPanel(Panel, tag="dashboard"):
 			# everything the app adds on a dump, and a preset's fields are compared against that.
 			baseline = self._loaded if self._usesPresets and self._loaded is not None else self._resolved
 			merged = retemplate(live, baseline, self._written, lambda item, written, base: presets.collapse(item, written, base, variables))
-			text = yaml.dump(merged, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True)
+			text = yaml.dump(merged, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True, sort_keys=False)
 			f.seek(0)
 			f.truncate()
 			f.write(text)
@@ -339,7 +339,7 @@ class CentralPanel(Panel, tag="dashboard"):
 			self.state = state
 		except Exception as error:
 			# A single item raising anywhere below here unwinds the whole load,
-			# so the board stops at whatever was built first. Left unreported
+			# so the dashboard stops at whatever was built first. Left unreported
 			# that looks like a layout bug rather than a crash - the reason the
 			# 'just a big moon' symptom went undiagnosed for two months. The
 			# notice has to match the size of the consequence.
