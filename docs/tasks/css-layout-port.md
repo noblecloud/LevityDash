@@ -21,6 +21,8 @@ The package is a skeleton. Every function raises `NotImplementedError`. Nothing 
 5. Grid: `parse_track_list`, `expand_repeat`, the five track-sizing steps, `place_items`, `layout_grid`.
 6. `align.baseline_shifts` (also needed by [text-baseline-alignment](text-baseline-alignment.md)).
 
-## Wiring (a separate, reviewed change)
+## Wiring (done)
 
-A stack uses the flex engine only when it has a new key (`grow`, `shrink`, `basis`, `justify`, `align`, `wrap`, `min-size`, `max-size`, `order`). A stack without any keeps `Stack.setGeometries`. The parity test in `tests/layout/test_skeleton.py` must pass on the shipped boards first. Legacy and flex differ when `item-size-min` clamps; see `legacy.py`.
+`Stack.setGeometries` hands its layout to `lib/layout/flex.py` when the stack has a `flex:` container key (`justify`, `align-items`, `wrap`) or any item has `flex:`. `type: grid` (`GridStack`) always uses `lib/layout/grid.py`. A stack with none of those keeps the original sizing. User docs: `docs/config/dashboard/layout.md`. Example: `docs/design-references/css-layout.levity`.
+
+Check that a change to stacks moves nothing: `devtools/dump_layout.py` writes every panel's rect to a text file; diff a dump from before and after. Pixel diffs are noisy on boards with graphs and gauges.

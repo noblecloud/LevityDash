@@ -41,6 +41,7 @@ These pages cover the options that work on a whole dashboard:
 - [Presets](/config/dashboard/presets.md): a module that you write once and use many times, with its own properties.
 - [Value Sources](/config/dashboard/expressions.md): a key, a number, or an expression, and units in an expression.
 - [Switch](/config/dashboard/switch.md): a slot that shows one of several modules.
+- [Flex and grid](/config/dashboard/layout.md): CSS flexbox and grid layout for stacks.
 
 ## Shared Parameters
 
