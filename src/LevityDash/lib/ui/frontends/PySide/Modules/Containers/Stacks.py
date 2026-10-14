@@ -399,12 +399,15 @@ class StackedItem(Stateful, tag=...):
 	def representer(cls, dumper, data):
 		exclude_data = data.combined_shared
 		state = data.encodedState(exclude_value_map=exclude_data)
+		# Shorthand reads back as a plain category path; an expression such as
+		# `max(a, today)` would load as a literal key, so it is written in full.
+		plain = isinstance(state.get('key'), (str, CategoryItem)) and re.fullmatch(r'[\w.:#-]+', str(state['key'])) is not None
 		match state:
 
-			case {'key': key} if len(state) == 1:
+			case {'key': key} if plain and len(state) == 1:
 				return dumper.represent_str(str(key))
 
-			case {'key': key, **rest} if len(rest) >= 1:
+			case {'key': key, **rest} if plain and len(rest) >= 1:
 				return dumper.represent_dict({key: rest})
 
 			case {'type': _type} if len(state) == 1:
@@ -845,7 +848,8 @@ class Stack(Panel, tag='stack'):
 							item_type = default_type
 							state = item
 
-						item_type = Stateful.findTag(item.get('type', default_type.__tag__)) or default_type
+						# `{type: {...}}` keeps its type in `state`, not in `item`.
+						item_type = Stateful.findTag(item.get('type', state.get('type', default_type.__tag__))) or default_type
 
 				if item_type is not Spacer:
 					# Update the state with the shared state and the preset for the direction.
