@@ -78,9 +78,9 @@ def make_group():
 	"""Build throwaway SizeGroups and unregister them from the class list after."""
 	created = []
 
-	def _make(items=(), matchAll=False):
+	def _make(items=(), matchAll=False, tiers=True):
 		g = SizeGroup(parent=SimpleNamespace(is_loading=False, state_is_loading=False),
-		              key="test", matchAll=matchAll)
+		              key="test", matchAll=matchAll, tiers=tiers)
 		for it in items:
 			g.addItem(it)
 		created.append(g)
@@ -119,6 +119,13 @@ def test_tiers_partition(make_group):
 	tiers = g._tiers(g.items)
 	assert len(tiers) == 2
 	assert {len(t) for t in tiers.values()} == {2, 3}
+
+
+def test_untiered_group_is_one_tier(make_group):
+	items = [_Item(size=12), _Item(size=40), _Item(size=90)]
+	g = make_group(items, matchAll=True, tiers=False)
+	assert list(g._tiers(g.items).values()) == [set(items)]
+	assert g.font_size_for(items[2]) == 12   # one font size for every member
 
 
 # --------------------------------------------------------------------------- #

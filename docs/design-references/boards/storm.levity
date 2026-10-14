@@ -138,7 +138,7 @@ items:
       display:
         unitPosition: Hidden
         font: Roboto Mono
-        valueLabel: {matchingGroup: {group: rowValue@strikes, matchAll: true}}
+        valueLabel: {matchingGroup: {group: global.rowValue, matchAll: true, tiers: false}}
     items:
     - {type: realtime.text, key: 'min($d, 3h)', title: {text: Nearest 3h}, display: {valueLabel: {color: $bad}}}
     - {type: realtime.text, key: 'avg($d, 3h)', title: {text: Average 3h}}
@@ -187,6 +187,7 @@ items:
       - type: value-stack
         shared:
           title: {color: $muted}
+          display: {valueLabel: {matchingGroup: {group: global.rowValue, matchAll: true, tiers: false}}}
         geometry: {x: 0%, y: 66%, width: 100%, height: 34%}
         direction: Horizontal
         spacing: 1mm
@@ -228,6 +229,7 @@ items:
       - type: value-stack
         shared:
           title: {color: $muted}
+          display: {valueLabel: {matchingGroup: {group: global.rowValue, matchAll: true, tiers: false}}}
         geometry: {x: 0%, y: 66%, width: 100%, height: 34%}
         direction: Horizontal
         spacing: 1mm
@@ -281,6 +283,7 @@ items:
       - type: value-stack
         shared:
           title: {color: $muted}
+          display: {valueLabel: {matchingGroup: {group: global.rowValue, matchAll: true, tiers: false}}}
         geometry: {x: 0%, y: 72%, width: 100%, height: 28%}
         direction: Horizontal
         spacing: 1mm
@@ -326,6 +329,7 @@ items:
       - type: value-stack
         shared:
           title: {color: $muted}
+          display: {valueLabel: {matchingGroup: {group: global.rowValue, matchAll: true, tiers: false}}}
         direction: Horizontal
         geometry: {x: 0%, y: 84%, width: 100%, height: 16%}
         spacing: 1mm
@@ -398,6 +402,7 @@ items:
         - type: value-stack
           shared:
             title: {color: $muted}
+            display: {valueLabel: {matchingGroup: {group: global.rowValue, matchAll: true, tiers: false}}}
           direction: Horizontal
           geometry: {x: 0%, y: 76%, width: 100%, height: 24%}
           items:
@@ -421,6 +426,7 @@ items:
         - type: value-stack
           shared:
             title: {color: $muted}
+            display: {valueLabel: {matchingGroup: {group: global.rowValue, matchAll: true, tiers: false}}}
           direction: Horizontal
           geometry: {x: 0%, y: 76%, width: 100%, height: 24%}
           items:
@@ -444,6 +450,7 @@ items:
         - type: value-stack
           shared:
             title: {color: $muted}
+            display: {valueLabel: {matchingGroup: {group: global.rowValue, matchAll: true, tiers: false}}}
           direction: Horizontal
           geometry: {x: 0%, y: 76%, width: 100%, height: 24%}
           items:

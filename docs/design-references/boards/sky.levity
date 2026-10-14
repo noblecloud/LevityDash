@@ -154,7 +154,7 @@ items:
       display:
         font: Roboto Mono
         unitPosition: Hidden
-        valueLabel: {matchingGroup: {group: rowValue@sun, matchAll: true}}
+        valueLabel: {matchingGroup: {group: global.rowValue, matchAll: true, tiers: false}}
     items:
     - {type: realtime.text, key: $irr, title: {text: Sun now W/m2}, display: {precision: 0, valueLabel: {color: $accent}}}
     - {type: realtime.text, key: 'max($irr, today)', title: {text: Peak W/m2}, display: {precision: 0}}
@@ -188,6 +188,7 @@ items:
       - type: value-stack
         shared:
           title: {color: $muted}
+          display: {valueLabel: {matchingGroup: {group: global.rowValue, matchAll: true, tiers: false}}}
         direction: Horizontal
         geometry: {x: 0%, y: 78%, width: 100%, height: 22%}
         items:
@@ -212,6 +213,7 @@ items:
       - type: value-stack
         shared:
           title: {color: $muted}
+          display: {valueLabel: {matchingGroup: {group: global.rowValue, matchAll: true, tiers: false}}}
         direction: Horizontal
         geometry: {x: 0%, y: 78%, width: 100%, height: 22%}
         items:
@@ -262,7 +264,7 @@ items:
           display:
             unitPosition: Hidden
             font: Roboto Mono
-            valueLabel: {matchingGroup: {group: rowValue@uv, matchAll: true}}
+            valueLabel: {matchingGroup: {group: global.rowValue, matchAll: true, tiers: false}}
         direction: Horizontal
         geometry: {x: 0%, y: 64%, width: 100%, height: 36%}
         spacing: 1mm
@@ -294,7 +296,7 @@ items:
           display:
             unitPosition: Hidden
             font: Roboto Mono
-            valueLabel: {matchingGroup: {group: rowValue@ground, matchAll: true}}
+            valueLabel: {matchingGroup: {group: global.rowValue, matchAll: true, tiers: false}}
         direction: Horizontal
         geometry: {x: 0%, y: 64%, width: 100%, height: 36%}
         spacing: 1mm
@@ -380,7 +382,7 @@ items:
         display:
           unitPosition: Hidden
           font: Roboto Mono
-          valueLabel: {matchingGroup: {group: rowValue@cloud, matchAll: true}}
+          valueLabel: {matchingGroup: {group: global.rowValue, matchAll: true, tiers: false}}
       direction: Horizontal
       geometry: {x: 46%, y: 64%, width: 54%, height: 36%}
       spacing: 1mm

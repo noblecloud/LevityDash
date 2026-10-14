@@ -98,7 +98,7 @@ items:
           title: {color: $muted, matchingGroup: {group: rowTitle@temperature, matchAll: true}}
           display:
             unitPosition: Hidden
-            valueLabel: {matchingGroup: {group: rowValue@temperature, matchAll: true}}
+            valueLabel: {matchingGroup: {group: global.rowValue, matchAll: true, tiers: false}}
         direction: Horizontal
         geometry: {x: 0%, y: 78%, width: 100%, height: 22%}
         spacing: 1mm
@@ -134,7 +134,7 @@ items:
           title: {color: $muted, matchingGroup: {group: rowTitle@wind, matchAll: true}}
           display:
             unitPosition: Hidden
-            valueLabel: {matchingGroup: {group: rowValue@wind, matchAll: true}}
+            valueLabel: {matchingGroup: {group: global.rowValue, matchAll: true, tiers: false}}
         direction: Horizontal
         geometry: {x: 0%, y: 76%, width: 100%, height: 24%}
         spacing: 1mm
@@ -193,7 +193,7 @@ items:
           title: {color: $muted, matchingGroup: {group: rowTitle@rain, matchAll: true}}
           display:
             unitPosition: Hidden
-            valueLabel: {matchingGroup: {group: rowValue@rain, matchAll: true}}
+            valueLabel: {matchingGroup: {group: global.rowValue, matchAll: true, tiers: false}}
         direction: Horizontal
         geometry: {x: 0%, y: 80%, width: 100%, height: 20%}
         spacing: 1mm
@@ -346,7 +346,7 @@ items:
           title: {color: $muted, matchingGroup: {group: rowTitle@indoor, matchAll: true}}
           display:
             unitPosition: Hidden
-            valueLabel: {matchingGroup: {group: rowValue@indoor, matchAll: true}}
+            valueLabel: {matchingGroup: {group: global.rowValue, matchAll: true, tiers: false}}
         direction: Horizontal
         spacing: 1mm
         geometry: {x: 0%, y: 62%, width: 100%, height: 38%}
@@ -396,7 +396,7 @@ items:
           title: {color: $muted, matchingGroup: {group: rowTitle@terrarium, matchAll: true}}
           display:
             unitPosition: Hidden
-            valueLabel: {matchingGroup: {group: rowValue@terrarium, matchAll: true}}
+            valueLabel: {matchingGroup: {group: global.rowValue, matchAll: true, tiers: false}}
         direction: Horizontal
         spacing: 1mm
         geometry: {x: 0%, y: 62%, width: 100%, height: 38%}
