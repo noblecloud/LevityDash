@@ -1,4 +1,4 @@
-"""Dev-only: the stage Gauge Studio draws a gauge on, and the made-up data behind it.
+"""Dev-only: the stage Studio draws a gauge on, and the made-up data behind it.
 
 The studio is its own program. It does not boot the dashboard, the central
 panel, a plugin, the backend or the Fixture plugin. It builds the real `Gauge`

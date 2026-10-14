@@ -2,7 +2,7 @@
 > This is the raw idea list. The organized, triaged version lives in [roadmap.md](roadmap.md) — every item here is placed, marked done, or parked there.
 
 - conditional dashboards
-- conditional Panels
+- conditional items
 - scrolling in overfilled stacks
 - graph Y axis labeling
 - proper device filtering for Govee ble plugin
@@ -14,7 +14,7 @@
 - ability to use positions of other items for item positioning ie, center this item with the center of that item
 - add delay or block signals for parent resized when loading
 - carousel style direction display [w N e]
-- value templates that are loaded from a file that combine multiple values
+- presets that combine multiple values into one composite item
 - string plots can be assigned a second key for plotting placement
 - more than one plot can position match a key and with offsets can produce a little forcast infographic
 - filter functions that can be filtered values by key, functions are added to a list or a hash map
@@ -24,7 +24,7 @@
 
 - global colors that can be linked to a value gradient map
 
-- conditional panels based on plugin status
+- conditional items based on plugin status
 - plugins with included templates
 
 - size screen conditions for size options

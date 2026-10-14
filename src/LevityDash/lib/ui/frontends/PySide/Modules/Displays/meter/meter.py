@@ -378,7 +378,7 @@ class Meter(Display):
 		# `value-label: {visible: false}` arrives as a plain mapping. Without a
 		# decoder the setter stored it verbatim, and `_afterSetState` -> refresh()
 		# then reached `self.valueLabel.textBox` on a dict. That AttributeError
-		# aborted the whole dashboard load, which is what left a board showing
+		# aborted the whole dashboard load, which is what left a dashboard showing
 		# nothing but the moon. See docs/tasks/dashboard-wont-load.md.
 		return self._buildLabel('_valueLabel', GaugeValueLabel, value)
 

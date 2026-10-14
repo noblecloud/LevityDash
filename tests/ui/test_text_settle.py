@@ -1,4 +1,4 @@
-"""Fitting the board's text reaches a fixed point, so it does not depend on update order."""
+"""Fitting the dashboard's text reaches a fixed point, so it does not depend on update order."""
 from LevityDash.lib.ui.frontends.PySide.Modules import Panel
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import Text
 
@@ -14,7 +14,7 @@ def test_refit_all_text_is_idempotent(dashboard):
 	view = dashboard.view
 	view._refitAllText()
 	first = view._textSnapshot()
-	assert first, 'the board has text to fit'
+	assert first, 'the dashboard has text to fit'
 	view._refitAllText()
 	assert view._textSnapshot() == first
 

@@ -88,12 +88,12 @@ An item that shows a number reports its size from its **format hint**, the wides
 ## Rules
 
 - A stack without any `flex:` key, and no item with one, is laid out exactly as before. A grid is always laid out by the grid engine.
-- A mistake in `flex:` or `grid:` (an unknown key, a wrong word) is an error on that item. The rest of the board loads.
+- A mistake in `flex:` or `grid:` (an unknown key, a wrong word) is an error on that item. The rest of the dashboard loads.
 - Dividers are not drawn in a flex or grid stack.
-- A cell sizes its own text. To make the values in a grid or flex stack the same size, add a `shared:` size group (see the example board).
+- A cell sizes its own text. To make the values in a grid or flex stack the same size, add a `shared:` size group (see the example dashboard).
 - Not yet supported: `subgrid`, named areas, `calc()`, `%` inside a track list, margins on items, and sizing by anything but the text of a value (a gauge, a graph or a container has no content size, so for them `auto` is 0).
 
-Example board: `docs/design-references/css-layout.levity` (render: `docs/design-references/css-layout.png`).
+Example dashboard: `docs/design-references/css-layout.levity` (render: `docs/design-references/css-layout.png`).
 
 ## In the Studio
 

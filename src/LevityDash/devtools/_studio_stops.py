@@ -1,4 +1,4 @@
-"""Dev-only: gradient stops for Gauge Studio, shared by the stop editor and the drag handles on the meter.
+"""Dev-only: gradient stops for Studio, shared by the stop editor and the drag handles on the meter.
 
 A stop is a number, the unit it is written in (`°F`, `mph`; None for a bare number) and a colour. The
 file holds it as a key: `99°F`, or a plain number when there is no unit. The gauge keeps its data in

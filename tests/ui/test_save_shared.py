@@ -1,4 +1,4 @@
-"""A board with a `shared:` default or a graph's time indicator can be saved: neither aborts the dump."""
+"""A dashboard with a `shared:` default or a graph's time indicator can be saved: neither aborts the dump."""
 import yaml
 from PySide6.QtTest import QTest
 

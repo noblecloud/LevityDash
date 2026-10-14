@@ -138,7 +138,7 @@ class FontWeight(int, Enum, metaclass=ClosestMatchEnumMeta):
 			# A family with no resolvable styles - unavailable, or substituted
 			# by the font system - left min() with an empty sequence, and the
 			# ValueError went off inside the dashboard load, where anything
-			# raising costs the *whole* board rather than one label. Qt's own
+			# raising costs the *whole* dashboard rather than one label. Qt's own
 			# default for the family is the honest answer here.
 			log.warning(f"No usable weights for font family {family!r}; using its default face")
 			return QFont(family)

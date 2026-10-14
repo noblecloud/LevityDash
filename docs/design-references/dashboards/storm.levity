@@ -1,4 +1,4 @@
-# Storm: the board for when it is happening. A 15in 16:10 screen.
+# Storm: the dashboard for when it is happening. A 15in 16:10 screen.
 #
 # Lightning is the hero. A dial of distance, a ring of strikes inside it and a
 # ring of light round it that wakes when a strike is within 5 mi. Rain rate, gust
@@ -7,7 +7,7 @@
 # front over the last hours: pressure, rain, gusts and strikes on one time axis.
 # The slot beside the compass takes whatever matters most while it holds.
 #
-# Render: render_dashboard.py OUT.png --levity docs/design-references/boards/storm.levity
+# Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/storm.levity
 #           --scenario storm-night --size 2880x1800 --freeze-time 2026-10-07T19:10:00
 #
 # Hex colours are quoted. Unquoted, YAML reads '#' as a comment.

@@ -49,7 +49,7 @@ full isolation table and the raw runs are in `docs/tasks/emissive-upstream-check
 
 The harness works around it — a `NO_FREEZE` exemption for `emissive` plus two named
 masks over the plot band and the time axis (`meter-harness-status.md`) — but the
-division itself is a live-board risk. Any dashboard whose figure ends up with a
+division itself is a live-dashboard risk. Any dashboard whose figure ends up with a
 zero-length time range (an empty or single-point series, a window that collapses as
 data ages out) takes this path with the clock live. The NaN x-values are also the
 plausible source of the post-teardown crash family: a path carrying non-finite geometry

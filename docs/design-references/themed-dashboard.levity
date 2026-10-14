@@ -1,6 +1,6 @@
-# One board, any theme. Every colour and font is a `$token`, so `theme:` restyles the whole board.
+# One dashboard, any theme. Every colour and font is a `$token`, so `theme:` restyles the whole dashboard.
 # Render it under each theme to compare:
-#   render_dashboard.py OUT.png --levity docs/design-references/themed-board.levity --scenario stormy-day --theme dusk
+#   render_dashboard.py OUT.png --levity docs/design-references/themed-dashboard.levity --scenario stormy-day --theme dusk
 # A root mapping with `items:` is how a dashboard picks a theme; without `theme:` it uses `default`.
 theme: dusk
 background: $sky

@@ -16,7 +16,7 @@ class ThemeMenu(QMenu):
 	"""``Theme``: the dashboard's own theme, then every theme found in ``resources/themes`` and ``<config>/themes``.
 
 	A pick is an override for this run (``theme.set_override``), so it does not touch the dashboard file; "Dashboard's
-	own" lifts it. The board is reloaded after a pick, because an item reads its ``$tokens`` once, when it is built.
+	own" lifts it. The dashboard is reloaded after a pick, because an item reads its ``$tokens`` once, when it is built.
 	"""
 
 	def __init__(self, parent=None, reload: Optional[Callable[[], None]] = None):

@@ -97,7 +97,7 @@ Checked in the code on 2026-10-04.
    That method already pops `display` and rewrites it before `super()`. Pop
    `preset` there, look it up, and set `display = DeepChainMap(display, bundle).to_dict()`.
    Missing name: log an error naming the panel and use the empty bundle. A bad
-   name must never raise during load (one item's exception aborts the board).
+   name must never raise during load (one item's exception aborts the dashboard).
 2. Tag the merged values `SourceType.Shared` so hot reload behaves as it
    does for `shared:`.
 3. Put the lookup in a small registry module so `Stack.preset` can call it.

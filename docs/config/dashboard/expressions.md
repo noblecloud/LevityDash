@@ -1,6 +1,6 @@
 # Value Sources
 
-Some options take a value source. A value source is the thing that gives the option its value. It can be one of three kinds:
+Some properties take a value source. A value source is the thing that gives the property its value. It can be one of three kinds:
 
 | Kind | Example |
 |------|---------|
@@ -8,14 +8,14 @@ Some options take a value source. A value source is the thing that gives the opt
 | A number | `90` |
 | An expression | `max(environment.temperature.temperature, today)` |
 
-An expression is a small calculation. It can use keys, numbers, units, and the history of a key. The result updates when its keys update. A module that uses an expression looks the same as one that uses a key.
+An expression is a small calculation. It can use keys, numbers, units, and the history of a key. The result updates when its keys update. An item that uses an expression looks the same as one that uses a key.
 
 ## Where you can use an expression
 
-| Option | Used for |
+| Property | Used for |
 |--------|----------|
-| `key:` on a `realtime` module | The value that the module shows. |
-| `when:` on any module | Show the module only while the expression is true. See [Switch](/config/dashboard/switch.md). |
+| `key:` on a `realtime` item | The value that the item shows. |
+| `when:` on any item | Show the item only while the expression is true. See [Switch](/config/dashboard/switch.md). |
 | `value:` of a gauge `markers:` entry | The place of the marker on the dial. |
 | `from:` and `to:` of a gauge `fill:` | The two ends of the filled part of the dial. |
 
@@ -27,7 +27,7 @@ An expression is a small calculation. It can use keys, numbers, units, and the h
 
 The high and the low of today, on a dial.
 
-Each marker takes an expression. The fill takes two. The module has no other change.
+Each marker takes an expression. The fill takes two. The item has no other change.
 
 <!-- div:right-panel -->
 
@@ -61,7 +61,7 @@ Each marker takes an expression. The fill takes two. The module has no other cha
 
 <!-- div:left-panel -->
 
-A module that shows a calculation. `key:` takes an expression, so a module can show how much the pressure changed in the last three hours.
+An item that shows a calculation. `key:` takes an expression, so an item can show how much the pressure changed in the last three hours.
 
 <!-- div:right-panel -->
 
@@ -191,14 +191,14 @@ You can always multiply or divide a measurement by a bare number: `wind * 1.5`.
 ## When there is no data
 
 - An expression that reads a key with no value has no value. It does not become `0`.
-- A module with no value shows `•••`.
+- An item with no value shows `•••`.
 - In `when:`, no value counts as false.
 - A choice (`a if c else b`) reads only the branch it takes. The other branch can be missing.
 - A division by zero has no value.
 
 ## When an expression is wrong
 
-LevityDash reads the expression when the dashboard loads. A mistake in the syntax, an unknown function, or an unknown name is an error. The error says what is wrong. The module does not get a value. For `when:`, the module counts as false.
+LevityDash reads the expression when the dashboard loads. A mistake in the syntax, an unknown function, or an unknown name is an error. The error says what is wrong. The item does not get a value. For `when:`, the item counts as false.
 
 An error that depends on the values, such as a bare number next to a measurement, shows when the expression runs.
 

@@ -764,7 +764,7 @@ class Stack(Panel, tag='stack'):
 		It may also carry the item options (`grow`, `shrink`, ...) for when this stack is an item of another.
 
 		A stack with no `flex:` on itself or on any item keeps the original sizing, so existing
-		boards do not move. See docs/config/dashboard/layout.md.
+		dashboards do not move. See docs/config/dashboard/layout.md.
 		"""
 		return getattr(self, '_flexProps', None)
 

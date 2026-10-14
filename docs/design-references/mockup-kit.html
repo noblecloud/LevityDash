@@ -16,9 +16,9 @@ h2 { font-weight:400; font-size:16px; margin:32px 0 10px; color:#fff;
 p.note { color:#9a9a9a; margin:4px 0 16px; max-width:80ch; }
 code { font-family:'Roboto Mono', monospace; font-size:.9em; color:#cfd8ff; }
 
-/* ---- the board: this is what a real dashboard looks like ---- */
+/* ---- the dashboard: this is what a real dashboard looks like ---- */
 /* 16:10 to match the real display (2880x1800). `container-type` + `cqw`
-   makes every em scale with the board, so the mock reads the same at any
+   makes every em scale with the dashboard, so the mock reads the same at any
    size on screen — a fixed px base silently lies about how much room a
    value has. */
 .board { background:var(--bg); color:var(--fg); aspect-ratio:16/10; width:100%;
@@ -42,7 +42,7 @@ code { font-family:'Roboto Mono', monospace; font-size:.9em; color:#cfd8ff; }
 
 /* ---- free geometry: a group positions any child by x/y/width/height, so
        panels can overlay — a value inside a gauge ring, readings composed
-       over a graph. This is what stops a board being a grid of boxes. ---- */
+       over a graph. This is what stops a dashboard being a grid of boxes. ---- */
 .free { position:absolute; inset:0; }
 .free > .abs { position:absolute; display:flex; align-items:center;
                justify-content:center; }
@@ -157,7 +157,7 @@ which is the whole point: this is a design surface, not a picture.
 
 <div class="grid2">
   <div>
-    <h2>Board</h2>
+    <h2>Dashboard</h2>
     <div class="board" id="board"></div>
     <p class="note" style="margin-top:10px">
       Edit <code>BOARD</code> at the bottom of this file and reload. The structure is
@@ -341,7 +341,7 @@ function realtimeText(item) {
 }
 
 // value-stack: items are keys, optionally {key: {title: {text}}}, plus `spacer`.
-// This is the densest thing the config can express and the reason a board can
+// This is the densest thing the config can express and the reason a dashboard can
 // carry forty readings without looking like a spreadsheet.
 function valueStack(item) {
   const n = el('div', 'vstack');
@@ -657,7 +657,7 @@ function render() {
 
 <script>
 // ============================================================================
-// The board. `.levity`-shaped on purpose: type / size / items / display.
+// The dashboard. `.levity`-shaped on purpose: type / size / items / display.
 // Mockup-only keys are prefixed with _ and are stripped from the YAML sketch.
 // ============================================================================
 const BOARD = {

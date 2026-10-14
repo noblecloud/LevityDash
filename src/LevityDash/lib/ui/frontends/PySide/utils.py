@@ -426,7 +426,7 @@ def itemLoader(parent: 'Panel', unsortedItems: list[dict], existing: list = None
 	for _type, group in pending:
 		# One item per call, so the one that raised is known and whatever it
 		# half-built can be removed without touching its siblings. One bad item
-		# must not cost the board: log it, put a tile where it was, go on.
+		# must not cost the dashboard: log it, put a tile where it was, go on.
 		while group:
 			item = group[0]
 			children = set(parent.childItems())

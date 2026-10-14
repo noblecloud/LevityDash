@@ -1,4 +1,4 @@
-# Gauge Studio: distance guides, ratio snapping and drag gearing
+# Studio: distance guides, ratio snapping and drag gearing
 
 Suggested branch: `feat/studio-snapping` off `feat/value-sources`. Start this after
 `fix/studio-sliders-contrast` (sliders, unit selectors, stage size and zoom, the

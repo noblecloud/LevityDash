@@ -1,4 +1,4 @@
-"""Dev-only: drag handles drawn over the gauge on Gauge Studio's preview.
+"""Dev-only: drag handles drawn over the gauge on Studio's preview.
 
 Each handle edits one property of the gauge and writes it back live, the way a
 control in the panel does (`Studio.handleEdit`). On release the studio rebuilds

@@ -9,10 +9,10 @@ You can enable more sources/plugins by providing API keys and enabling them in t
 >
 >More information can be found [here](/config/dashboard.md).
 
-Once LevityDash is up and running, you can start rearranging and resizing the modules along with adding more by clicking on the **+** that appears when you hover over
+Once LevityDash is up and running, you can start rearranging and resizing the items along with adding more by clicking on the **+** that appears when you hover over
 the top left corner.
 The data menu is organized by source and categories.
-Once you find a module you want to use, you can click and hold until it pops out and place it anywhere on the dashboard.
+Once you find an item you want to use, you can click and hold until it pops out and place it anywhere on the dashboard.
 
 > [!TIP]
 > You can open up the config folder from the file menu.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Dev-only: drag a Gauge Studio slider offscreen and count what the studio does.
+"""Dev-only: drag a Studio slider offscreen and count what the studio does.
 
     QT_QPA_PLATFORM=offscreen PYTHONPATH=src python src/LevityDash/devtools/bench_studio_drag.py [--cell N] [--pause-ms 700]
 
@@ -33,7 +33,7 @@ def main() -> int:
 	p.add_argument('--pause-ms', type=int, default=700)
 	a = p.parse_args()
 	app = QApplication.instance() or QApplication(sys.argv)
-	cells = gs.showcaseCells()
+	cells = gs.showcaseExamples()
 	studio = gs.Studio()
 	studio.show()
 	label, entry = cells[a.cell]

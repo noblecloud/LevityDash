@@ -64,7 +64,7 @@ machinery is up while the interpreter is going down.
   gets a crash and no render, which is worse than the "hangs forever" it used to
   be recorded as (same fragility, different symptom — corrected in
   `meter-harness-status.md`).
-- A CI-style check that renders a full board would be flaky at best.
+- A CI-style check that renders a full dashboard would be flaky at best.
 
 ## Suggested directions
 
