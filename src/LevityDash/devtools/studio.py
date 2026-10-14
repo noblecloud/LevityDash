@@ -1,16 +1,20 @@
 #!/usr/bin/env python
-"""Dev-only: Studio, the dashboard editor.
+"""Dev-only: Studio, the dashboard editor: one window with the dashboard, gauge and polar editors as modes and a library
+of every preset, example and dashboard.
 
-    poetry run python src/LevityDash/devtools/studio.py                   # the builder: compose items and presets
-    poetry run python src/LevityDash/devtools/studio.py FILE.levity       # open a dashboard, or a preset file
-    poetry run python src/LevityDash/devtools/studio.py --gauge [FILE]    # design one gauge live, on made-up data
-    poetry run python src/LevityDash/devtools/studio.py --polar [FILE]    # design one polar plot
+    poetry run python src/LevityDash/devtools/studio.py                   # the Studio, in dashboard mode
+    poetry run python src/LevityDash/devtools/studio.py FILE.levity       # open a file in the mode that suits it
+    poetry run python src/LevityDash/devtools/studio.py --gauge [FILE]    # start in the gauge editor
+    poetry run python src/LevityDash/devtools/studio.py --polar [FILE]    # start in the polar editor
 
-With no flag Studio opens the builder (`_studio_builder.py`): a tree of items, a preview that is a real dashboard on
-Fixture data, and the fields of the selected item. A file that has a `template:` is a preset; any other `.levity`
-file is a dashboard, edited and saved back as only what changed. Open > Dashboard... does the same from the menu.
+The window itself is `_studio_suite.py` (mode switch, library, Open). This module is the gauge editor, the program's
+entry point and `makeSuite`, which wires the three editors into the suite.
 
-`--gauge` is the one-gauge editor. A standalone program. It does not start the dashboard, a plugin, the backend or
+Dashboard mode (`_studio_builder.py`): a tree of items, a preview that is a real dashboard on Fixture data, and the
+fields of the selected item. A file with a `template:` is a preset; any other `.levity` file is a dashboard, edited and
+saved back as only what changed.
+
+Gauge mode is the one-gauge editor. It does not start the dashboard, a plugin, the backend or
 the Fixture plugin. It draws the real `Gauge` class on its own scene and feeds
 it a value the studio owns (see `_studio_stage.py`).
 
@@ -20,10 +24,10 @@ it a value the studio owns (see `_studio_stage.py`).
   edit. A value the gauge rejects shows its reason under the control.
 - Value: a slider over the gauge's range, or an animated sweep.
 - Open menu: every preset in `docs/design-references/presets/`, every gauge example in
-  `docs/design-references/gauge-showcase.levity`, and any file you open.
+  `docs/design-references/gauge-showcase.levity`, and any file you open (the suite's library has them too).
 - Copy code / Save as: the gauge's `.levity` YAML, only the properties that
   differ from the defaults.
-- With a file, `--gauge` reloads it whenever the file changes on disk.
+- With a file, the gauge reloads it whenever the file changes on disk.
 
 Importing `LevityDash` builds the config object, so the studio points every
 LevityDash directory at a throwaway temp directory first. It never reads or
@@ -480,7 +484,6 @@ class Studio(QWidget):
 		self.watchTimer = QTimer(self, interval=500, timeout=self._checkFile)
 
 		self.studio = StudioGauge(self.scene, DATA_PRESETS['Temperature F'])
-		self.polarWindow = None
 		self._installContext()
 		self.layer = HandleLayer(self)
 		for key, act in self.targetActions.items():
@@ -531,13 +534,8 @@ class Studio(QWidget):
 		super().changeEvent(event)
 
 	def openPolar(self):
-		"""The polar plot panel, in a window of its own."""
-		from LevityDash.devtools._studio_polar import PolarStudio
-		if self.polarWindow is None or not self.polarWindow.isVisible():
-			self.polarWindow = PolarStudio()
-		self.polarWindow.show()
-		self.polarWindow.raise_()
-		self.polarWindow.activateWindow()
+		"""The polar editor: its own mode in the Studio window."""
+		self.suite.showMode('polar')
 
 	# chrome
 
@@ -1541,22 +1539,31 @@ class Studio(QWidget):
 
 
 
-def _isDashboard(path: Optional[Path]) -> bool:
-	"""A `.levity` file with no `template:` is a dashboard; a preset has one."""
-	if path is None:
-		return False
-	try:
-		data = yaml.safe_load(path.read_text())
-	except Exception:
-		return False
-	return not (isinstance(data, dict) and 'template' in data)
+def makeSuite(path: Optional[Path] = None, mode: Optional[str] = None, engine=None):
+	"""The Studio window: the three editors as modes and the library beside them. `engine` is the dashboard preview
+	engine (a test passes a stand-in); None boots a real dashboard offscreen the first time the dashboard mode shows."""
+	from LevityDash.devtools._studio_builder import Builder
+	from LevityDash.devtools._studio_polar import PolarStudio
+	from LevityDash.devtools._studio_suite import Suite
+
+	def dashboard():
+		window = Builder(engine=engine)
+		window.setLight(False)
+		return window
+
+	def gauge():
+		window = Studio(None)
+		window._setTheme(False)
+		return window
+
+	return Suite(path, mode, gauge=gauge, cells=showcaseExamples, dashboard=dashboard, polar=lambda: PolarStudio(None))
 
 
 def main(argv: Optional[List[str]] = None) -> int:
 	parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 	parser.add_argument('fragment', nargs='?', help='a .levity file to open: a dashboard or a preset (with --gauge or --polar, a gauge or plot, reloaded when it changes on disk)')
-	parser.add_argument('--gauge', action='store_true', help='the one-gauge editor instead of the builder')
-	parser.add_argument('--polar', action='store_true', help='the polar plot panel instead of the builder')
+	parser.add_argument('--gauge', action='store_true', help='start in the gauge editor')
+	parser.add_argument('--polar', action='store_true', help='start in the polar editor')
 	parser.add_argument('--scenario', help='the fixture scenario the builder previews on (default hot-clear-day)')
 	parser.add_argument('--seed', help="a config dir to seed the builder's preview dashboard from")
 	args = parser.parse_args(argv)
@@ -1566,26 +1573,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 	app = QApplication.instance() or QApplication(sys.argv)
 	app.setStyle('Fusion')
 	identify(app)
-	if not args.gauge and not args.polar:
-		from LevityDash.devtools._studio_builder import Builder
-		window = Builder(fragment, dashboard=_isDashboard(fragment))
-		window.setLight(False)
-		window.show()
-		app.lastWindowClosed.connect(app.quit)
-		signal.signal(signal.SIGTERM, lambda *_: app.quit())
-		signal.signal(signal.SIGINT, lambda *_: app.quit())
-		wake = QTimer()
-		wake.start(200)
-		wake.timeout.connect(lambda: None)
-		return app.exec()
-	if args.polar:
-		from LevityDash.devtools._studio_polar import PolarStudio
-		window = PolarStudio(fragment)
-		app.setPalette(themePalette(THEMES['dark']))
-		app.setStyleSheet(themeSheet(THEMES['dark']))
-	else:
-		window = Studio(fragment)
-		window._setTheme(False)
+	window = makeSuite(fragment, 'gauge' if args.gauge else 'polar' if args.polar else None)
 	window.show()
 	app.lastWindowClosed.connect(app.quit)
 	# Quit through Qt on SIGTERM/SIGINT, so macOS drops the Dock tile. The timer wakes Python

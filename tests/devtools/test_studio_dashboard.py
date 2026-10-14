@@ -230,19 +230,17 @@ def test_the_old_state_folder_moves_once(tmp_path):
 
 
 def test_a_file_with_a_template_is_a_preset_and_the_rest_are_dashboards(tmp_path):
-	from LevityDash.devtools import studio
+	from LevityDash.devtools import _studio_library as library
 	preset = tmp_path / 'p.levity'
 	preset.write_text('props: {}\ntemplate: {type: group}\n')
 	board = tmp_path / 'd.levity'
 	board.write_text('items: []\n')
-	assert not studio._isDashboard(preset) and studio._isDashboard(board) and not studio._isDashboard(None)
+	assert library.classify(preset) == library.PRESET and library.classify(board) == library.DASHBOARD
 
 
 def test_only_the_builder_stages_a_dashboard():
 	import _studio_env
 	assert _studio_env._runsBuilder(['/x/studio.py'])
-	assert not _studio_env._runsBuilder(['/x/studio.py', '--gauge'])
-	assert not _studio_env._runsBuilder(['/x/studio.py', '--polar'])
 	assert not _studio_env._runsBuilder(['pytest'])
 
 

@@ -582,6 +582,11 @@ class PolarStudio(QWidget):
 		ctx.unit, ctx.shown, ctx.units = '', '', {}
 		feed.installStandIn(self.studio.opener)
 
+	def _leave(self):
+		"""Another mode of the Studio took the window: stop answering plot keys with made-up data."""
+		if feed.standIn() is self.studio.opener:
+			feed.installStandIn(None)
+
 	def changeEvent(self, event):
 		if event.type() == QEvent.Type.ActivationChange and self.isActiveWindow():
 			self._installContext()

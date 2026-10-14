@@ -19,7 +19,7 @@ DEFAULT_SCENARIO = 'hot-clear-day'
 
 def _runsBuilder(argv) -> bool:
 	"""True when `studio.py` was started as a program and not for the one-gauge or polar editor."""
-	return os.path.basename(argv[0]) == 'studio.py' and '--gauge' not in argv and '--polar' not in argv
+	return os.path.basename(argv[0]) == 'studio.py'
 
 
 def prepare(argv=None) -> None:
