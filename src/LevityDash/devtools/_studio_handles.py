@@ -30,7 +30,9 @@ cursor. While *Snap* is on a value snaps to a round step; hold Cmd (Ctrl elsewhe
 move freely. Hold Option (Alt) to gear the drag down: the handle moves the mouse's
 distance divided by the gear ratio (4:1 to start), anchored where the key went down so
 nothing jumps. Scroll with Option held to change the ratio; a badge near the cursor
-shows it and fades. The overlay is one item (`Overlay`) so a screenshot can hide every
+shows it and fades. A drag within `SNAP_PX` of a design target (a fraction, a ratio such as 1/φ, an angle
+multiple or the golden angle; see `_studio_targets`) lands on it, and hairline guides (`_studio_guides`) measure
+the drag, pink and named for the target it hit. The overlay is one item (`Overlay`) so a screenshot can hide every
 handle at once.
 """
 import copy
@@ -44,6 +46,8 @@ from PySide6.QtWidgets import QGraphicsItem
 
 from LevityDash.devtools import _studio_schema as schema
 from LevityDash.devtools import _studio_stops as stops
+from LevityDash.devtools import _studio_targets as targets
+from LevityDash.devtools._studio_guides import Guides, Line, Tag
 from LevityDash.devtools._studio_stops import niceStep, snapTo
 
 Z = 10000
@@ -77,6 +81,11 @@ class Dial:
 	def pivot(self) -> QPointF:
 		return self.arc.mapToScene(QPointF(0, 0))
 
+	def sweep(self, a0: float, a1: float, radius: float) -> List[QPointF]:
+		"""Scene points along the circle of `radius` from angle `a0` to `a1`."""
+		n = max(2, int(abs(a1 - a0) / 3) + 1)
+		return [self.toScene(a0 + (a1 - a0) * i / (n - 1), radius) for i in range(n)]
+
 	def polar(self, scene: QPointF):
 		"""(angle in degrees, distance from the pivot) of a scene point."""
 		p = self.arc.mapFromScene(scene)
@@ -99,6 +108,14 @@ class Dial:
 	def step(self) -> float:
 		return niceStep(self.span / 50)
 
+	def degPx(self) -> float:
+		"""Screen pixels one degree of the track covers."""
+		return self.R * math.pi / 180
+
+	def spanPx(self) -> float:
+		"""Screen pixels the whole range covers along the track."""
+		return self.degPx() * abs(self.a1 - self.a0)
+
 
 # Section: the items
 
@@ -106,6 +123,8 @@ class Dial:
 FREE = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier
 GEAR_STEPS = (1, 2, 3, 4, 6, 8, 10, 15, 20)
 GEAR_DEFAULT = 4
+#: How close, in screen pixels, a drag has to be to a design target to land on it.
+SNAP_PX = 7
 #: What a handle's tip says about the modifiers.
 KEYS = 'Cmd: no snap, Option: fine control'
 
@@ -467,6 +486,13 @@ class HandleLayer:
 		self.inside = False
 		self.force = False
 		self.snap = True
+		#: Hairline distance guides while a handle is dragged, and which target families snapping reaches.
+		self.guideOn = True
+		self.familyOn = {f: True for f in targets.FAMILIES}
+		#: The target each value of the drag in progress landed on, by name of the value (`v`, `x`, `y`).
+		self.hits: dict = {}
+		self.guides = Guides(self.overlay, -1)
+		self.guides.setVisible(False)
 		#: *Edit gradient*: one node per stop of the arc's gradient, and the other handles dimmed.
 		self.gradientMode = False
 		self.selectedStop: Optional[int] = None
@@ -572,6 +598,8 @@ class HandleLayer:
 		self._start = pos
 		self.gear.begin(pos)
 		self._wasGeared = False
+		self.hits = {}
+		self.guides.clear()
 		if item.spec.kind == 'gradient':
 			self.selectedStop = item.spec.tag
 		self.studio.beginDrag()
@@ -592,9 +620,106 @@ class HandleLayer:
 		elif self._wasGeared:
 			self.badge.say(f'Gear {self.gear.ratio}:1', pos)  # the key came up: let the badge fade
 		self._wasGeared = geared
+		self.hits = {}
 		spec.drag(self._state, point, fine)
 		if spec.kind in ('gradient', 'track'):
 			self.reposition()
+
+	# snapping to design targets, and the guides that show it
+
+	def pick(self, value: float, step: float, fine: bool, kind: str, unitPx: float, origin: float = 0.0, scale: float = 1.0,
+	         name: str = 'v', digits: int = 3) -> float:
+		"""`value` snapped: to a design target within `SNAP_PX` of it, else to `step`; unsnapped (rounded to `digits`) when `fine`.
+
+		`kind` is `'fraction'`, `'offset'` or `'angle'` (see `_studio_targets`). A share is `(value - origin) / scale`;
+		`unitPx` is the screen pixels one unit of that share (one degree for an angle) covers. The target hit, if any, is
+		kept in `hits[name]` for the guides.
+		"""
+		self.hits.pop(name, None)
+		if fine:
+			return round(value, digits)
+		out = snapTo(value, step)
+		x = value if kind == 'angle' else (value - origin) / scale
+		target = targets.near(kind, x, SNAP_PX / max(unitPx, 1e-9), [f for f, on in self.familyOn.items() if on])
+		if target is not None:
+			self.hits[name] = (target, kind)
+			out = target.value if kind == 'angle' else origin + target.value * scale
+		return out
+
+	def _tag(self, default: str, at: QPointF, name: str = 'v') -> Tag:
+		hit = self.hits.get(name)
+		return Tag(targets.describe(*hit) if hit else default, at, hot=hit is not None)
+
+	def showGuides(self, lines: List[Line], tags: List[Tag]):
+		if self.guideOn:
+			self.guides.show(lines, tags, self.scene.sceneRect())
+
+	def angleGuides(self, dl: Dial, angle: float):
+		hot = 'v' in self.hits
+		r = dl.R * 0.45
+		lines = [Line([dl.pivot(), dl.toScene(0, dl.R * 1.15)], dashed=True),
+		         Line([dl.pivot(), dl.toScene(angle, dl.R * 1.15)], hot=hot),
+		         Line(dl.sweep(0, angle, r), hot=hot)]
+		tags = [self._tag(f'{angle:g}°', dl.toScene(angle / 2, r))]
+		if dl.a0 != dl.a1:
+			lines.append(Line(dl.sweep(dl.a0, dl.a1, dl.R * 0.3)))
+			tags.append(Tag(f'sweep {abs(dl.a1 - dl.a0):g}°', dl.toScene((dl.a0 + dl.a1) / 2, dl.R * 0.3)))
+		self.showGuides(lines, tags)
+
+	def shareGuides(self, dl: Dial, angle: float, radius: float, text: str, circle: bool = False):
+		"""A ray from the pivot to `radius` at `angle`; hot with a circle through its end when the drag snapped."""
+		hot = 'v' in self.hits
+		lines = [Line([dl.pivot(), dl.toScene(angle, radius)], hot=hot)]
+		if circle:
+			lines.append(Line(dl.sweep(0, 360, radius), hot=hot))
+		self.showGuides(lines, [self._tag(text, dl.toScene(angle, radius))])
+
+	def valueGuides(self, dl: Dial, value: float):
+		"""The arc from the dial's start to `value`, and a ray to its end."""
+		angle = dl.valueAngle(value)
+		hot = 'v' in self.hits
+		share = (value - dl.lo) / dl.span if dl.span else 0.0
+		r = dl.R * 0.55
+		lines = [Line([dl.pivot(), dl.toScene(angle, dl.R * 1.12)], hot=hot), Line(dl.sweep(dl.a0, angle, r), hot=hot)]
+		tag = self._tag(f'{share * 100:.0f}% · {value:.4g}', dl.toScene(angle, dl.R * 1.12))
+		self.showGuides(lines, [tag])
+
+	def labelGuides(self, rect: QRectF, spec_rect: Callable[[], Optional[QRectF]], dl: Dial):
+		"""Distances from a dragged label to the dial's centre, the card's edges and the other labels."""
+		c, mid, card = dl.pivot(), rect.center(), self.scene.sceneRect()
+		knee = QPointF(mid.x(), c.y())
+		lines = [Line([c, knee], hot='x' in self.hits), Line([knee, mid], hot='y' in self.hits)]
+		tags = []
+		if abs(mid.x() - c.x()) > 24 or 'x' in self.hits:
+			tags.append(self._tag(f'{abs(mid.x() - c.x()):.0f}px', QPointF((c.x() + mid.x()) / 2, c.y() - 9), 'x'))
+		if abs(mid.y() - c.y()) > 16 or 'y' in self.hits:
+			tags.append(self._tag(f'{abs(mid.y() - c.y()):.0f}px', QPointF(rect.right() + 34, (c.y() + mid.y()) / 2 + 12), 'y'))
+		edges = ((QPointF(rect.left(), mid.y()), QPointF(card.left(), mid.y()), rect.left() - card.left()),
+		         (QPointF(rect.right(), mid.y()), QPointF(card.right(), mid.y()), card.right() - rect.right()),
+		         (QPointF(mid.x(), rect.top()), QPointF(mid.x(), card.top()), rect.top() - card.top()),
+		         (QPointF(mid.x(), rect.bottom()), QPointF(mid.x(), card.bottom()), card.bottom() - rect.bottom()))
+		for a, b, gap in edges:
+			lines.append(Line([a, b], dashed=True))
+			tags.append(Tag(f'{gap:.0f}', (a + b) / 2))
+		for other in self.items:
+			if other.spec.kind != 'label' or other.spec.rect is spec_rect or other.spec.rect is None:
+				continue
+			o = other.spec.rect()
+			if o is None or not other.isVisible():
+				continue
+			if o.left() < rect.right() and rect.left() < o.right():
+				x = (max(o.left(), rect.left()) + min(o.right(), rect.right())) / 2
+				a, b = (rect.bottom(), o.top()) if o.top() >= rect.bottom() else (rect.top(), o.bottom())
+				seg = (QPointF(x, a), QPointF(x, b))
+			elif o.top() < rect.bottom() and rect.top() < o.bottom():
+				y = (max(o.top(), rect.top()) + min(o.bottom(), rect.bottom())) / 2
+				a, b = (rect.right(), o.left()) if o.left() >= rect.right() else (rect.left(), o.right())
+				seg = (QPointF(a, y), QPointF(b, y))
+			else:
+				continue
+			lines.append(Line(list(seg)))
+			tags.append(Tag(f'{(seg[1] - seg[0]).manhattanLength():.0f}', (seg[0] + seg[1]) / 2))
+		self.showGuides(lines, tags)
 
 	def wheel(self, delta: int, at: QPointF) -> bool:
 		"""The wheel with Option held sets the gear ratio. True when it was used (a handle is being dragged, or the pointer is over the preview)."""
@@ -608,6 +733,8 @@ class HandleLayer:
 		spec = item.spec
 		self.active = None
 		self.badge.hide()
+		self.hits = {}
+		self.guides.clear()
 		item.setCursor(Qt.CursorShape.OpenHandCursor if spec.drag else Qt.CursorShape.PointingHandCursor)
 		if spec.click is not None and not self._moved:
 			spec.click()
@@ -812,8 +939,9 @@ class HandleLayer:
 			def drag(state, p, fine, end=end, key=key):
 				dl = dial()
 				angle = dl.angleNear(dl.polar(p)[0], dl.a1 if end else dl.a0)
-				angle = round(angle, 1) if fine else snapTo(angle, 5)
+				angle = self.pick(angle, 5, fine, 'angle', dl.degPx(), digits=1)
 				studio.handleEdit(('arc', key), int(angle) if float(angle).is_integer() else angle)
+				self.angleGuides(dial(), angle)
 			out.append(Spec('angle', 'Drag to set the arc\'s ' + ('end' if end else 'start') + ' angle (' + KEYS + ')', pos, drag=drag))
 
 		# radius, on the track at the arc's middle
@@ -824,8 +952,10 @@ class HandleLayer:
 		def radiusDrag(state, p, fine):
 			dl = dial()
 			ratio = dl.polar(p)[1] / max(dl.gauge.radius_max, 1) * 100
-			ratio = round(ratio, 1) if fine else snapTo(ratio, 5)
+			ratio = self.pick(ratio, 5, fine, 'fraction', dl.gauge.radius_max, scale=100, digits=1)
 			studio.handleEdit(('radius',), f'{max(ratio, 5):g}%')
+			after = dial()
+			self.shareGuides(after, (after.a0 + after.a1) / 2, after.R, f'{after.R:.0f}px · {max(ratio, 5):g}%', circle=True)
 		out.append(Spec('radius', 'Drag to set the radius (' + KEYS + ')', radiusPos, drag=radiusDrag))
 
 		# arc weight, on the track's inner edge, a quarter of the way along
@@ -837,8 +967,12 @@ class HandleLayer:
 			dl = dial()
 			w = max(2 * (dl.R - dl.polar(p)[1]), 0)
 			pct = w / max(dl.R, 1) * 100
-			pct = round(pct, 1) if fine else snapTo(pct, 0.5)
+			pct = self.pick(pct, 0.5, fine, 'fraction', dl.R, scale=100, digits=1)
 			studio.handleEdit(('arc', 'weight'), f'{max(pct, 0.5):g}%')
+			after = dial()
+			mid = (after.a0 + after.a1) / 2
+			self.showGuides([Line([after.toScene(mid, after.R), after.toScene(mid, max(after.R - after.weight, 0))], hot='v' in self.hits)],
+			                [self._tag(f'{after.weight:.0f}px · {max(pct, 0.5):g}%', after.toScene(mid, after.R + 14))])
 		out.append(Spec('weight', 'Drag to set the arc weight (' + KEYS + ')', weightPos, drag=weightDrag))
 
 		# the needle tip sets the preview value
@@ -850,8 +984,9 @@ class HandleLayer:
 		def needleDrag(state, p, fine):
 			dl = dial()
 			v = dl.angleValue(dl.polar(p)[0])
-			v = round(v, 3) if fine else snapTo(v, dl.step() / 5)
+			v = self.pick(v, dl.step() / 5, fine, 'fraction', dl.spanPx(), dl.lo, dl.span)
 			studio.setValueFromDrag(v)
+			self.valueGuides(dl, v)
 		out.append(Spec('needle', 'Drag to set the preview value', needlePos, drag=needleDrag, shape='diamond'))
 
 		# markers
@@ -870,10 +1005,11 @@ class HandleLayer:
 			def mdrag(state, p, fine, i=i):
 				dl = dial()
 				v = dl.angleValue(dl.polar(p)[0])
-				v = round(v, 3) if fine else snapTo(v, dl.step())
+				v = self.pick(v, dl.step(), fine, 'fraction', dl.spanPx(), dl.lo, dl.span)
 				specs = copy.deepcopy(self.gauge._markerSpecs)
 				specs[i]['value'] = int(v) if float(v).is_integer() else v
 				studio.handleEdit(('markers',), specs)
+				self.valueGuides(dl, v)
 			out.append(Spec('marker', f'Drag marker {i + 1} along the arc', mpos, drag=mdrag))
 
 		# zone edges; a cutoff two zones share moves both
@@ -900,7 +1036,7 @@ class HandleLayer:
 				def zdrag(state, p, fine):
 					dl = dial()
 					v = dl.angleValue(dl.polar(p)[0])
-					v = round(v, 3) if fine else snapTo(v, dl.step())
+					v = self.pick(v, dl.step(), fine, 'fraction', dl.spanPx(), dl.lo, dl.span)
 					v = int(v) if float(v).is_integer() else v
 					specs = copy.deepcopy(self.gauge._zoneSpecs)
 					for spec in specs:
@@ -910,6 +1046,7 @@ class HandleLayer:
 					state_after = float(v)
 					self._state = state_after
 					studio.handleEdit(('zones',), specs)
+					self.valueGuides(dl, v)
 				out.append(Spec('zone', f'Drag zone {i + 1}\'s {end} edge (a shared cutoff moves both zones)', zpos, begin=zbegin, drag=zdrag, shape='square'))
 
 		# fill ends
@@ -928,16 +1065,17 @@ class HandleLayer:
 			def fdrag(state, p, fine, end=end):
 				dl = dial()
 				v = dl.angleValue(dl.polar(p)[0])
-				v = round(v, 3) if fine else snapTo(v, dl.step())
+				v = self.pick(v, dl.step(), fine, 'fraction', dl.spanPx(), dl.lo, dl.span)
 				spec = copy.deepcopy(self.gauge._fillSpec)
 				spec[end] = int(v) if float(v).is_integer() else v
 				studio.handleEdit(('fill',), spec)
+				self.valueGuides(dl, v)
 			out.append(Spec('fill', f'Drag the fill\'s {end} end', fpos, drag=fdrag))
 
 		# labels: drag the text
 		def labelSpec(name: str, path: tuple, rect: Callable[[], Optional[QRectF]], read: Callable[[], dict], write: Callable[[dict], None]):
 			def begin():
-				return {'o': read(), 'p0': None}
+				return {'o': read(), 'p0': None, 'r0': rect()}
 
 			def drag(state, p, fine):
 				gauge = self.gauge
@@ -946,10 +1084,13 @@ class HandleLayer:
 					state['g0'] = gauge.mapFromScene(p)
 				delta = gauge.mapFromScene(p) - state['g0']
 				diameter = max(gauge.radius * 2, 1)
-				step = 0.001 if fine else 0.005
-				x = snapTo(state['o']['x'] + delta.x() / diameter, step)
-				y = snapTo(state['o']['y'] + delta.y() / diameter, step)
+				x = self.pick(state['o']['x'] + delta.x() / diameter, 0.005, fine, 'offset', diameter, name='x', digits=4)
+				y = self.pick(state['o']['y'] + delta.y() / diameter, 0.005, fine, 'offset', diameter, name='y', digits=4)
 				write({'x': round(x, 4), 'y': round(y, 4)})
+				# The label settles a frame after the write, so place the guides from where it was and how far it moved.
+				if state['r0'] is not None:
+					shift = gauge.mapToScene(QPointF((x - state['o']['x']) * diameter, (y - state['o']['y']) * diameter)) - gauge.mapToScene(QPointF())
+					self.labelGuides(state['r0'].translated(shift), rect, dial())
 			return Spec('label', f'Drag the {name} ({KEYS})', lambda: None, begin=begin, drag=drag, rect=rect)
 
 		def offsetOf(label) -> dict:

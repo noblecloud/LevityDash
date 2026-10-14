@@ -52,6 +52,7 @@ from PySide6.QtWidgets import (
 
 from LevityDash.devtools import _studio_schema as schema
 from LevityDash.devtools import _studio_state as state
+from LevityDash.devtools import _studio_targets as targets
 from LevityDash.devtools import _studio_stage as _stage
 from LevityDash.devtools._studio_stage import DATA_PRESETS, DataPreset, StudioGauge, StudioScene, presetForKey
 from LevityDash.devtools import _studio_editors as editors
@@ -467,6 +468,8 @@ class Studio(QWidget):
 		ctx.gradientMode = lambda: self.layer.gradientMode
 		ctx.setGradientMode = self.setGradientMode
 		self.layer = HandleLayer(self)
+		for key, act in self.targetActions.items():
+			self._targetToggled(key, act.isChecked(), save=False)
 		self.preview.layer = self.layer
 		# Each key sequence is bound once. On macOS the standard Undo key is Ctrl+Z in Qt's terms,
 		# and two shortcuts on the same sequence make it ambiguous: neither fires.
@@ -543,11 +546,24 @@ class Studio(QWidget):
 		self.snapBox.setChecked(True)
 		self.snapBox.setToolTip('Snap dragged values to round steps. Hold Cmd (Ctrl) while dragging to move freely, Option (Alt) to gear the drag down; Option and the wheel set the ratio.')
 		self.snapBox.toggled.connect(lambda on: setattr(self.layer, 'snap', on))
+		self.targetsButton = QToolButton()
+		self.targetsButton.setText('Guides ▾')
+		self.targetsButton.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+		self.targetsButton.setToolTip('Hairline distance guides while dragging, and which design targets Snap lands on (shown pink with its name)')
+		menu = QMenu(self.targetsButton)
+		self.targetActions = {}
+		for key, title in (('guides', 'Distance guides'), *targets.FAMILY_TITLES.items()):
+			act = menu.addAction(title)
+			act.setCheckable(True)
+			act.setChecked(self.settings.value(f'snap/{key}', True, type=bool))
+			act.toggled.connect(lambda on, k=key: self._targetToggled(k, on))
+			self.targetActions[key] = act
+		self.targetsButton.setMenu(menu)
 		self.gradientBox = QCheckBox('Edit gradient')
 		self.gradientBox.setToolTip('Show one node per stop of the arc gradient on the preview. Drag a node to move the stop, '
 		                            'click the track to add one, double click a node for its colour, drag it off or press Delete to remove it.')
 		self.gradientBox.toggled.connect(self.setGradientMode)
-		for w in (self.undoButton, self.redoButton, self.handlesBox, self.snapBox, self.gradientBox):
+		for w in (self.undoButton, self.redoButton, self.handlesBox, self.snapBox, self.targetsButton, self.gradientBox):
 			bar3.addWidget(w)
 		bar3.addStretch(1)
 		box.addLayout(bar3)
@@ -1192,6 +1208,15 @@ class Studio(QWidget):
 	def _historyButtons(self):
 		self.undoButton.setEnabled(self.hpos > 0)
 		self.redoButton.setEnabled(self.hpos < len(self.history) - 1)
+
+	def _targetToggled(self, key: str, on: bool, save: bool = True):
+		if key == 'guides':
+			self.layer.guideOn = on
+		else:
+			self.layer.familyOn[key] = on
+		if save:
+			self.settings.setValue(f'snap/{key}', on)
+			self.settings.sync()
 
 	def undo(self):
 		self._step(-1)
