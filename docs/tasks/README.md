@@ -25,6 +25,7 @@ continuously.
 |---|---|
 | [statekit-bindings](statekit-bindings.md) | statekit: validate with a reason, notify on real change with old value, one-way `bind` to a value source (ideas from traitlets) |
 | [timeseries-viewport-and-control-plane](timeseries-viewport-and-control-plane.md) | plugin control plane (start/stop/health); also no re-fetch when panning past the fetched window |
+| [css-layout-port](css-layout-port.md) | fill in the stubs in `lib/layout/`: flex grow/shrink, alignment, wrap, grid tracks, one CSS spec section per task |
 | [text-baseline-alignment](text-baseline-alignment.md) | graph hour labels — descenders (`12p`) shift them relative to `6a`; align by font metric, not ink extents |
 | [eventfilter-pending-exception](eventfilter-pending-exception.md) | parked: a `SystemError` seen once, non-fatal, not reproducible. Wants an always-on diagnostic to catch it live |
 | [phase-4.2-follow-ups](phase-4.2-follow-ups.md) | remaining odds from the backend/frontend split |
