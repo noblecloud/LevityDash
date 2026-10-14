@@ -134,11 +134,11 @@ items:
     geometry: {x: 1%, y: 56%, width: 42%, height: 10%}
     spacing: 1mm
     shared:
-      title: {color: $muted, matchingGroup: {group: rowTitle@strikes, matchAll: true}}
+      title: {color: $muted, matchingGroup: {group: global.title, matchAll: true}}
       display:
         unitPosition: Hidden
         font: Roboto Mono
-        valueLabel: {matchingGroup: {group: rowValue@strikes, matchAll: true}}
+        valueLabel: {matchingGroup: {group: global.value, matchAll: true}}
     items:
     - {type: realtime.text, key: 'min($d, 3h)', title: {text: Nearest 3h}, display: {valueLabel: {color: $bad}}}
     - {type: realtime.text, key: 'avg($d, 3h)', title: {text: Average 3h}}
@@ -186,8 +186,8 @@ items:
           value-label: {visible: false}
       - type: value-stack
         shared:
-          title: {color: $muted, matchingGroup: {group: parent.title, matchAll: true}}
-          display: {valueLabel: {matchingGroup: {group: parent.value, matchAll: true}}}
+          title: {color: $muted, matchingGroup: {group: global.title, matchAll: true}}
+          display: {valueLabel: {matchingGroup: {group: global.value, matchAll: true}}}
         geometry: {x: 0%, y: 66%, width: 100%, height: 34%}
         direction: Horizontal
         spacing: 1mm
@@ -228,8 +228,8 @@ items:
           value-label: {visible: false}
       - type: value-stack
         shared:
-          title: {color: $muted, matchingGroup: {group: parent.title, matchAll: true}}
-          display: {valueLabel: {matchingGroup: {group: parent.value, matchAll: true}}}
+          title: {color: $muted, matchingGroup: {group: global.title, matchAll: true}}
+          display: {valueLabel: {matchingGroup: {group: global.value, matchAll: true}}}
         geometry: {x: 0%, y: 66%, width: 100%, height: 34%}
         direction: Horizontal
         spacing: 1mm
@@ -282,8 +282,8 @@ items:
           value-label: {visible: false}
       - type: value-stack
         shared:
-          title: {color: $muted, matchingGroup: {group: parent.title, matchAll: true}}
-          display: {valueLabel: {matchingGroup: {group: parent.value, matchAll: true}}}
+          title: {color: $muted, matchingGroup: {group: global.title, matchAll: true}}
+          display: {valueLabel: {matchingGroup: {group: global.value, matchAll: true}}}
         geometry: {x: 0%, y: 72%, width: 100%, height: 28%}
         direction: Horizontal
         spacing: 1mm
@@ -328,8 +328,8 @@ items:
           sub-label: {text: mph sustained, size: 7%, gap: 1%}
       - type: value-stack
         shared:
-          title: {color: $muted, matchingGroup: {group: parent.title, matchAll: true}}
-          display: {valueLabel: {matchingGroup: {group: parent.value, matchAll: true}}}
+          title: {color: $muted, matchingGroup: {group: global.title, matchAll: true}}
+          display: {valueLabel: {matchingGroup: {group: global.value, matchAll: true}}}
         direction: Horizontal
         geometry: {x: 0%, y: 84%, width: 100%, height: 16%}
         spacing: 1mm
@@ -367,8 +367,8 @@ items:
         geometry: {x: 0%, y: 43%, width: 100%, height: 22%}
       - type: value-stack
         shared:
-          title: {color: $muted, matchingGroup: {group: parent.title, matchAll: true}}
-          display: {valueLabel: {matchingGroup: {group: parent.value, matchAll: true}}}
+          title: {color: $muted, matchingGroup: {group: global.title, matchAll: true}}
+          display: {valueLabel: {matchingGroup: {group: global.value, matchAll: true}}}
         geometry: {x: 0%, y: 68%, width: 100%, height: 32%}
         spacing: 0.4mm
         items:
@@ -402,8 +402,8 @@ items:
           geometry: {x: 0%, y: 32%, width: 100%, height: 40%}
         - type: value-stack
           shared:
-            title: {color: $muted, matchingGroup: {group: parent.title, matchAll: true}}
-            display: {valueLabel: {matchingGroup: {group: parent.value, matchAll: true}}}
+            title: {color: $muted, matchingGroup: {group: global.title, matchAll: true}}
+            display: {valueLabel: {matchingGroup: {group: global.value, matchAll: true}}}
           direction: Horizontal
           geometry: {x: 0%, y: 76%, width: 100%, height: 24%}
           items:
@@ -426,8 +426,8 @@ items:
           geometry: {x: 0%, y: 32%, width: 100%, height: 40%}
         - type: value-stack
           shared:
-            title: {color: $muted, matchingGroup: {group: parent.title, matchAll: true}}
-            display: {valueLabel: {matchingGroup: {group: parent.value, matchAll: true}}}
+            title: {color: $muted, matchingGroup: {group: global.title, matchAll: true}}
+            display: {valueLabel: {matchingGroup: {group: global.value, matchAll: true}}}
           direction: Horizontal
           geometry: {x: 0%, y: 76%, width: 100%, height: 24%}
           items:
@@ -450,8 +450,8 @@ items:
           geometry: {x: 0%, y: 32%, width: 100%, height: 40%}
         - type: value-stack
           shared:
-            title: {color: $muted, matchingGroup: {group: parent.title, matchAll: true}}
-            display: {valueLabel: {matchingGroup: {group: parent.value, matchAll: true}}}
+            title: {color: $muted, matchingGroup: {group: global.title, matchAll: true}}
+            display: {valueLabel: {matchingGroup: {group: global.value, matchAll: true}}}
           direction: Horizontal
           geometry: {x: 0%, y: 76%, width: 100%, height: 24%}
           items:
@@ -467,8 +467,8 @@ items:
           geometry: {x: 0%, y: 0%, width: 100%, height: 40%}
         - type: value-stack
           shared:
-            title: {color: $muted, matchingGroup: {group: parent.title, matchAll: true}}
-            display: {valueLabel: {matchingGroup: {group: parent.value, matchAll: true}}}
+            title: {color: $muted, matchingGroup: {group: global.title, matchAll: true}}
+            display: {valueLabel: {matchingGroup: {group: global.value, matchAll: true}}}
           geometry: {x: 0%, y: 44%, width: 100%, height: 56%}
           items:
           - {type: realtime.text, key: environment.clouds.cover.cover, title: {text: Cloud}, display: {precision: 0}}
@@ -482,8 +482,8 @@ items:
       items:
       - type: value-stack
         shared:
-          title: {color: $muted, matchingGroup: {group: parent.title, matchAll: true}}
-          display: {valueLabel: {matchingGroup: {group: parent.value, matchAll: true}}}
+          title: {color: $muted, matchingGroup: {group: global.title, matchAll: true}}
+          display: {valueLabel: {matchingGroup: {group: global.value, matchAll: true}}}
         spacing: 0.4mm
         items:
         - {type: realtime.text, key: 'indoor.temperature.temperature#bedroom', title: {text: Bedroom}, display: {precision: 0}}
@@ -552,8 +552,8 @@ items:
       items:
       - type: value-stack
         shared:
-          title: {color: $muted, matchingGroup: {group: parent.title, matchAll: true}}
-          display: {font: Roboto Mono, valueLabel: {matchingGroup: {group: parent.value, matchAll: true}}}
+          title: {color: $muted, matchingGroup: {group: global.title, matchAll: true}}
+          display: {font: Roboto Mono, valueLabel: {matchingGroup: {group: global.value, matchAll: true}}}
         spacing: 0.4mm
         items:
         - {type: realtime.text, key: 'at($t, 3h)', title: {text: Temp +3h}}
