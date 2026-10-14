@@ -1,7 +1,8 @@
 """Dev-only: Studio's per-user state and the section styles.
 
-State lives in a folder of its own: `QStandardPaths.AppDataLocation` for "Gauge Studio"
-(`~/Library/Application Support/Gauge Studio` on macOS). It holds `studio.ini` (pins and
+State lives in a folder of its own: `QStandardPaths.AppDataLocation` for "LevityDash Studio"
+(`~/Library/Application Support/LevityDash Studio` on macOS). The folder was called "Gauge Studio" until the
+Studio became the dashboard editor; the first run moves it (`_moveOldFolder`), so saved pins and styles stay. It holds `studio.ini` (pins and
 section fold state) and `styles/<section>.yaml` (styles the user saved). Nothing here
 reads or writes the LevityDash config or the repository. `LEVITYDASH_STUDIO_DIR` moves the
 folder, which is how a test keeps off the real one.
@@ -11,6 +12,7 @@ name to the `display:` keys it sets. Adding a style is a data edit.
 """
 import copy
 import os
+import shutil
 from pathlib import Path
 from typing import Any, Dict, List, NamedTuple
 
@@ -71,13 +73,30 @@ class Style(NamedTuple):
 	user: bool
 
 
+NAME = 'LevityDash Studio'
+OLD_NAME = 'Gauge Studio'
+
+
+def _moveOldFolder(new: Path) -> Path:
+	"""Move the folder the Studio had before it was renamed, once: only if the new one does not exist yet."""
+	old = new.parent / OLD_NAME
+	if not new.exists() and old.is_dir():
+		try:
+			shutil.move(str(old), str(new))
+		except OSError:
+			return new
+	return new
+
+
 def stateDir() -> Path:
 	env = os.environ.get('LEVITYDASH_STUDIO_DIR')
 	if env:
 		return Path(env)
-	if QCoreApplication.applicationName() == 'Gauge Studio':
-		return Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation))
-	return Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.GenericDataLocation)) / 'Gauge Studio'
+	if QCoreApplication.applicationName() == NAME:
+		new = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation))
+	else:
+		new = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.GenericDataLocation)) / NAME
+	return _moveOldFolder(new)
 
 
 def settings() -> QSettings:

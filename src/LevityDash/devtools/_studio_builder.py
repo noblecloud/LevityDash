@@ -1,6 +1,6 @@
 """Dev-only: the Studio builder. Compose an item from sub-items, give it properties, preview it, save it.
 
-    poetry run python src/LevityDash/devtools/gauge_studio.py --build [preset.yaml] [--scenario NAME]
+    poetry run python src/LevityDash/devtools/studio.py [FILE] [--scenario NAME]
 
 The gauge editor edits one display. The builder edits a *preset*: a template of items (containers and
 displays) plus the properties the template exposes. It writes the format in `_studio_preset.py`

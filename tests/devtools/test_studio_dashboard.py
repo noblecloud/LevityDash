@@ -207,10 +207,55 @@ def test_to_preset_warns_only_about_inherited_scopes(board):
 
 
 def test_the_command_line_parser_builds(capsys):
-	"""`gauge_studio.py --help` runs: no flag is declared twice."""
-	from LevityDash.devtools import gauge_studio
+	"""`studio.py --help` runs: no flag is declared twice."""
+	from LevityDash.devtools import studio
 	with pytest.raises(SystemExit) as stop:
-		gauge_studio.main(['--help'])
+		studio.main(['--help'])
 	assert stop.value.code == 0
 	out = capsys.readouterr().out
-	assert '--polar' in out and '--build' in out and '--dashboard' in out
+	assert '--polar' in out and '--gauge' in out and '--scenario' in out
+
+
+def test_the_old_state_folder_moves_once(tmp_path):
+	from LevityDash.devtools import _studio_state as st
+	old = tmp_path / st.OLD_NAME
+	old.mkdir()
+	(old / 'studio.ini').write_text('[pins]\nkept=1\n')
+	new = tmp_path / st.NAME
+	assert st._moveOldFolder(new) == new
+	assert (new / 'studio.ini').read_text().endswith('kept=1\n') and not old.exists()
+	old.mkdir()
+	st._moveOldFolder(new)
+	assert old.exists(), 'a folder that is already there is left alone'
+
+
+def test_a_file_with_a_template_is_a_preset_and_the_rest_are_dashboards(tmp_path):
+	from LevityDash.devtools import studio
+	preset = tmp_path / 'p.levity'
+	preset.write_text('props: {}\ntemplate: {type: group}\n')
+	board = tmp_path / 'd.levity'
+	board.write_text('items: []\n')
+	assert not studio._isDashboard(preset) and studio._isDashboard(board) and not studio._isDashboard(None)
+
+
+def test_only_the_builder_stages_a_dashboard():
+	import _studio_env
+	assert _studio_env._runsBuilder(['/x/studio.py'])
+	assert not _studio_env._runsBuilder(['/x/studio.py', '--gauge'])
+	assert not _studio_env._runsBuilder(['/x/studio.py', '--polar'])
+	assert not _studio_env._runsBuilder(['pytest'])
+
+
+def test_the_studio_names_its_process_and_has_an_icon_of_its_own():
+	import sys
+	from LevityDash.devtools import _studio_identity as ident
+	art = Path(__file__).parents[2] / 'src' / 'LevityDash' / 'resources' / 'ui-elements'
+	assert (art / 'icon-studio.png').exists()
+	assert (art / 'icon-studio.png').read_bytes() != (art / 'icon512.png').read_bytes()
+	if sys.platform.startswith('linux'):
+		before = Path('/proc/self/comm').read_text()
+		try:
+			assert ident.apply(art / 'icon-studio.png')
+			assert Path('/proc/self/comm').read_text().strip() == 'LevityDashStudi'
+		finally:
+			Path('/proc/self/comm').write_text(before.strip())

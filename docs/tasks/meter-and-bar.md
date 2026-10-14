@@ -39,7 +39,7 @@ the track differs: an arc for a gauge, a straight line for a bar.
   --scenario stormy-day --size WxH --settle 14` feeds fixed values from
   `docs/design-references/scenarios/`. `tests/conftest.py` has a `frozen_time` fixture
   that shows how to freeze the app clock (`shared.now`, `shared.Now.now`).
-- Studio, `src/LevityDash/devtools/gauge_studio.py`, builds its controls from
+- Studio, `src/LevityDash/devtools/studio.py`, builds its controls from
   `StateProperty` introspection. A new display class gets controls with no Studio
   change. Its drag handles (`_studio_handles.py`) assume an arc today.
 

@@ -1,4 +1,4 @@
-"""The polar panel of Gauge Studio: the plot draws from made-up data, an expression key becomes a series,
+"""The polar panel of Studio: the plot draws from made-up data, an expression key becomes a series,
 every template loads, and an export reads back to the same plot.
 
 The Studio draws a polar plot without booting the dashboard; `feed.installStandIn` answers each key from
@@ -13,9 +13,9 @@ pytest.importorskip('PySide6')
 import LevityDash  # noqa: F401  builds the QApplication
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-# `gauge_studio` imports `_studio_env` and calls `prepare()`, which pops LEVITYDASH_CONFIG_SEED. Put it back.
+# `studio` imports `_studio_env` and calls `prepare()`, which pops LEVITYDASH_CONFIG_SEED. Put it back.
 _SEED = os.environ.get('LEVITYDASH_CONFIG_SEED')
-from LevityDash.devtools import gauge_studio  # noqa: E402,F401
+from LevityDash.devtools import studio  # noqa: E402,F401
 if _SEED is not None:
 	os.environ['LEVITYDASH_CONFIG_SEED'] = _SEED
 

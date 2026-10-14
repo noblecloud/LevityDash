@@ -142,7 +142,7 @@ _standIn: Optional[Callable[[str, Callable[[], None]], object]] = None
 
 
 def installStandIn(opener: Optional[Callable[[str, Callable[[], None]], object]]) -> None:
-	"""Answer every plain-key feed from `opener` (Gauge Studio's made-up data); None puts the dispatcher back."""
+	"""Answer every plain-key feed from `opener` (Studio's made-up data); None puts the dispatcher back."""
 	global _standIn
 	_standIn = opener
 

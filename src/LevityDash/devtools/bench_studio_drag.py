@@ -24,7 +24,7 @@ from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
-from LevityDash.devtools import gauge_studio as gs
+from LevityDash.devtools import studio as gs
 
 
 def main() -> int:

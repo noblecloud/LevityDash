@@ -1,9 +1,16 @@
 #!/usr/bin/env python
-"""Dev-only: Studio. Design one gauge live, with controls, on made-up data.
+"""Dev-only: Studio, the dashboard editor.
 
-    poetry run python src/LevityDash/devtools/gauge_studio.py [preset.levity]
+    poetry run python src/LevityDash/devtools/studio.py                   # the builder: compose items and presets
+    poetry run python src/LevityDash/devtools/studio.py FILE.levity       # open a dashboard, or a preset file
+    poetry run python src/LevityDash/devtools/studio.py --gauge [FILE]    # design one gauge live, on made-up data
+    poetry run python src/LevityDash/devtools/studio.py --polar [FILE]    # design one polar plot
 
-A standalone program. It does not start the dashboard, a plugin, the backend or
+With no flag Studio opens the builder (`_studio_builder.py`): a tree of items, a preview that is a real dashboard on
+Fixture data, and the fields of the selected item. A file that has a `template:` is a preset; any other `.levity`
+file is a dashboard, edited and saved back as only what changed. Open > Dashboard... does the same from the menu.
+
+`--gauge` is the one-gauge editor. A standalone program. It does not start the dashboard, a plugin, the backend or
 the Fixture plugin. It draws the real `Gauge` class on its own scene and feeds
 it a value the studio owns (see `_studio_stage.py`).
 
@@ -16,9 +23,7 @@ it a value the studio owns (see `_studio_stage.py`).
   `docs/design-references/gauge-showcase.levity`, and any file you open.
 - Copy code / Save as: the gauge's `.levity` YAML, only the properties that
   differ from the defaults.
-- With a preset path, Studio reloads it whenever the file changes on disk.
-- `--build [preset.yaml]` opens the builder (`_studio_builder.py`) instead: compose containers and displays into a
-  preset, give it properties, preview it on a Fixture scenario, save it. See that module.
+- With a file, `--gauge` reloads it whenever the file changes on disk.
 
 Importing `LevityDash` builds the config object, so the studio points every
 LevityDash directory at a throwaway temp directory first. It never reads or
@@ -50,6 +55,7 @@ from PySide6.QtWidgets import (
 	QPushButton, QScrollArea, QScrollBar, QSlider, QSpinBox, QSplitter, QToolButton, QVBoxLayout, QWidget,
 )
 
+from LevityDash.devtools import _studio_identity as _identity
 from LevityDash.devtools import _studio_schema as schema
 from LevityDash.devtools import _studio_state as state
 from LevityDash.devtools import _studio_geometry as geometry
@@ -194,10 +200,12 @@ def showcaseExamples() -> List[Tuple[str, dict]]:
 
 
 def identify(app: QApplication) -> None:
-	"""Name the program and give it an icon, so the Dock and the window show Studio and not the Python rocket."""
-	app.setApplicationName('Gauge Studio')  # also names the state folder, so it keeps the old name
-	app.setApplicationDisplayName('Studio')
-	icon = QIcon(str(REPO / 'src' / 'LevityDash' / 'resources' / 'ui-elements' / 'icon512.png'))
+	"""Name the program and give it an icon of its own, so the Dock, the menu bar and the process list show the Studio
+	and not the Python rocket, and not the LevityDash display either."""
+	app.setApplicationName(state.NAME)  # also names the state folder
+	app.setApplicationDisplayName('LevityDash Studio')
+	art = REPO / 'src' / 'LevityDash' / 'resources' / 'ui-elements' / 'icon-studio.png'
+	icon = QIcon(str(art))
 	if icon.isNull():
 		pixmap = QPixmap(256, 256)
 		pixmap.fill(Qt.GlobalColor.transparent)
@@ -210,6 +218,7 @@ def identify(app: QApplication) -> None:
 		painter.end()
 		icon = QIcon(pixmap)
 	app.setWindowIcon(icon)
+	_identity.apply(art)
 
 
 def _dpi() -> float:
@@ -1532,14 +1541,24 @@ class Studio(QWidget):
 
 
 
+def _isDashboard(path: Optional[Path]) -> bool:
+	"""A `.levity` file with no `template:` is a dashboard; a preset has one."""
+	if path is None:
+		return False
+	try:
+		data = yaml.safe_load(path.read_text())
+	except Exception:
+		return False
+	return not (isinstance(data, dict) and 'template' in data)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
 	parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-	parser.add_argument('fragment', nargs='?', help='a .levity preset to open; reloaded when it changes on disk. With --build, a preset file')
-	parser.add_argument('--polar', action='store_true', help='open the polar plot panel instead of the gauge')
-	parser.add_argument('--dashboard', action='store_true', help='with --build: open the file as a dashboard to edit and save back (only what changed is written)')
-	parser.add_argument('--build', action='store_true', help='open the builder: compose items, give them properties, preview on fixture data')
-	parser.add_argument('--scenario', help='with --build: the fixture scenario the preview draws on (default hot-clear-day)')
-	parser.add_argument('--seed', help='with --build: a config dir to seed the preview dashboard from')
+	parser.add_argument('fragment', nargs='?', help='a .levity file to open: a dashboard or a preset (with --gauge or --polar, a gauge or plot, reloaded when it changes on disk)')
+	parser.add_argument('--gauge', action='store_true', help='the one-gauge editor instead of the builder')
+	parser.add_argument('--polar', action='store_true', help='the polar plot panel instead of the builder')
+	parser.add_argument('--scenario', help='the fixture scenario the builder previews on (default hot-clear-day)')
+	parser.add_argument('--seed', help="a config dir to seed the builder's preview dashboard from")
 	args = parser.parse_args(argv)
 	fragment = Path(args.fragment).expanduser().resolve() if args.fragment else None
 	if fragment is not None and not fragment.exists():
@@ -1547,13 +1566,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 	app = QApplication.instance() or QApplication(sys.argv)
 	app.setStyle('Fusion')
 	identify(app)
-	if args.dashboard:
-		args.build = True
-		if fragment is None:
-			parser.error('--dashboard needs a file')
-	if args.build:
+	if not args.gauge and not args.polar:
 		from LevityDash.devtools._studio_builder import Builder
-		window = Builder(fragment, dashboard=args.dashboard)
+		window = Builder(fragment, dashboard=_isDashboard(fragment))
 		window.setLight(False)
 		window.show()
 		app.lastWindowClosed.connect(app.quit)

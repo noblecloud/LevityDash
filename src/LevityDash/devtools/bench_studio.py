@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Dev-only: time Studio's build, in-place edit and settle paths, offscreen.
 
-    QT_QPA_PLATFORM=offscreen PYTHONPATH=src python src/LevityDash/devtools/bench_gauge_studio.py [--cell N] [--runs 5] [--profile build|edit|settle] [--all]
+    QT_QPA_PLATFORM=offscreen PYTHONPATH=src python src/LevityDash/devtools/bench_studio.py [--cell N] [--runs 5] [--profile build|edit|settle] [--all]
 """
 import argparse
 import cProfile
@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from PySide6.QtWidgets import QApplication
 
-from LevityDash.devtools import gauge_studio as gs
+from LevityDash.devtools import studio as gs
 
 app = QApplication.instance() or QApplication(sys.argv)
 
