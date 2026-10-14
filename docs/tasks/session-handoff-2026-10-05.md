@@ -1,5 +1,7 @@
 # Session handoff, 2026-10-05
 
+**Audit 2026-10-10: stale.** Superseded by [docs/roadmap.md](../roadmap.md). Kept as history; do not use it as the start point.
+
 State of play for a fresh Claude Code project on LevityDash. Read `CLAUDE.md` first,
 then this file. Every commit named here is on `feat/value-sources` and `origin/dev`
 unless the text says otherwise.

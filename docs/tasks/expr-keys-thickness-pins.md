@@ -1,5 +1,7 @@
 # Expression keys for `thickness:` and `pins:`
 
+**Audit 2026-10-10: done.** Merged into `dev` (`feat/expr-props`).
+
 Goal: a Graph's `thickness:` and `pins:` accept an expression for their `key:`, not only a
 plain key. Example: `thickness: {key: max(environment.wind.speed.speed, today), weight: [0.2, 1.2]}`,
 `pins: {key: environment.condition.icon, size: 14, offset: -1.2}`.

@@ -1,5 +1,7 @@
 # Colour decode fix (PR #18), handoff
 
+**Audit 2026-10-10: done.** PR #18 is merged (colour names, r/g/b dicts, float lists).
+
 **Branch:** `claude/project-thread-ozs67u`. It is open as draft PR #18 into
 `feat/value-sources`.
 

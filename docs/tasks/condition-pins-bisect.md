@@ -1,5 +1,7 @@
 # condition-pins draws no curve — bisect results
 
+**Audit 2026-10-10: done.** The curve and glyphs were fixed in PR #50, now merged.
+
 A graph in `condition-pins.levity` renders its chrome (grid, labels, now-marker) but no
 data curve. All of the following were ruled out with single-target captures
 (`capture --only <stem> --no-freeze-time`; scenario `diff-stable` for every target):

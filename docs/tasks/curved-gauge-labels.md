@@ -1,5 +1,7 @@
 # Bend gauge tick labels along the arc
 
+**Audit 2026-10-10: done.** Merged into `feat/value-sources` on 2026-10-04 (`feat/curved-gauge-labels`); the header below predates the merge.
+
 **Status:** idea, not scheduled. Recorded 2026-07-26. Rewritten as a step-by-step
 brief 2026-10-04, with every file and line checked against `dev` at `689c067`.
 
