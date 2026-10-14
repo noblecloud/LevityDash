@@ -532,11 +532,19 @@ annotations:
 
 #### Matching label sizes
 
-`dayLabels` and `hourLabels` take `matchingGroup`, the same option a text item has, so the labels of several graphs can share one size. The gauge's tick labels (`major`, `minor` and `micro` `labels`) take it too. Every label of the set joins the group. The scopes are the ones a text item uses (`local.name`, `parent.name`, `name@panel`), resolved against the graph or the gauge.
+`dayLabels` and `hourLabels` take `matchingGroup`, the same option a text item has, so the labels of several graphs can share one size. The gauge's tick labels (`major`, `minor` and `micro` `labels`) take it too, and so does its `value-label`, so a row of gauges can keep their tick labels in one group and their value text in another. Every label of the set joins the group. The scopes are the ones a text item uses (`local.name`, `parent.name`, `name@panel`), resolved against the graph or the gauge.
 
 ```yaml
 annotations:
   dayLabels: {height: 14%, matchingGroup: {group: parent.days, matchAll: true}}
+```
+
+```yaml
+# on each gauge
+display:
+  value-label: {matchingGroup: {group: parent.values, matchAll: true}}
+  major:
+    labels: {matchingGroup: {group: parent.ticks, matchAll: true}}
 ```
 
 Labels only match inside one height tier (see the size-group rules), so graphs or dials of very different size keep their own sizes. Example boards, with renders: [day labels](design-references/size-groups/day-labels-group.levity) and [gauge tick labels](design-references/size-groups/tick-labels-group.levity).

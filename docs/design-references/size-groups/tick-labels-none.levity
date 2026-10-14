@@ -1,4 +1,4 @@
-# Three gauges of slightly different radius whose tick labels are not grouped: each dial fits its own text.
+# Three gauges of slightly different radius whose tick and value labels are not grouped: each dial fits its own text.
 - type: group
   name: main
   items:

@@ -1,4 +1,4 @@
-# Three gauges of slightly different radius whose tick labels are in one size group (`parent.ticks`, match-all): the widest label sets the size for all three.
+# Three gauges of slightly different radius whose tick labels share one size group (`parent.ticks`) and whose value labels share another (`parent.values`), both match-all.
 - type: group
   name: main
   items:
@@ -11,6 +11,7 @@
           title: false
           geometry: {x: 3%, y: 25%, width: 28%, height: 50%}
           display:
+            value-label: {matchingGroup: {group: parent.values, matchAll: true}}
             radius: 88%
             arc: {start-angle: 135, end-angle: 405, weight: 8%, color: '#26262c', cap: flat}
             range: {min: 0, max: 100}
@@ -31,6 +32,7 @@
           title: false
           geometry: {x: 36%, y: 25%, width: 28%, height: 50%}
           display:
+            value-label: {matchingGroup: {group: parent.values, matchAll: true}}
             radius: 91%
             arc: {start-angle: 135, end-angle: 405, weight: 8%, color: '#26262c', cap: flat}
             range: {min: 0, max: 1000}
@@ -51,6 +53,7 @@
           title: false
           geometry: {x: 69%, y: 25%, width: 28%, height: 50%}
           display:
+            value-label: {matchingGroup: {group: parent.values, matchAll: true}}
             radius: 94%
             arc: {start-angle: 135, end-angle: 405, weight: 8%, color: '#26262c', cap: flat}
             range: {min: 0, max: 10}
