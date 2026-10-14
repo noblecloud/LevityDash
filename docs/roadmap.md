@@ -53,7 +53,7 @@ Invest here first. Every lane uses it.
 - HUD: serve frames from `render_service` at device size and palette. Add an e-paper theme. Write the ESP32-S3 client that fetches a frame and keeps the last one. Builds on the surface frontend in [render-service-and-surface-frontend.md](tasks/render-service-and-surface-frontend.md).
 - Data: a psutil plugin for host vitals, which also feeds the processes table. Rooms from Govee BLE with value-sources `where`. Rates and compound units (in/hr, kWh, W/m²), which need the parked WeatherUnits `dimensional-analysis` branch.
 - Look: rename `needle` to `pointer`, linear meters and bars, and theme polish (gradient background, themed glow and moon, a theme picker).
-- Editor: Studio snapping and guides. Decide whether Studio ships as the board editor.
+- Editor: Studio snapping and guides (done in the builder preview, 2026-10-10; the gauge editor's handles already snap). Decide whether Studio ships as the board editor.
 
 **How we work.**
 
