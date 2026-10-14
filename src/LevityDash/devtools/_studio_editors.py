@@ -1221,7 +1221,7 @@ class GradientBar(QWidget):
 	"""The gradient across the gauge's range, with a mark for each stop.
 
 	Folded, it is one thin band with a tick at each stop; a click opens the stops. Open, each stop
-	is a node you can drag (the value snaps to a round step; shift snaps finely), a click on the
+	is a node you can drag (the value snaps to a round step; Cmd or Ctrl moves freely, Option gears the drag down), a click on the
 	band adds a stop with the colour that is there, a double click on a node picks its colour, and a node dragged off
 	the band, or Delete with a node chosen, removes it.
 	"""
@@ -1392,7 +1392,7 @@ class GradientBar(QWidget):
 		off = abs(event.position().y() - self._band().center().y()) > 34
 		self.removing = off
 		if not off:
-			fine = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+			fine = bool(event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier))
 			self.owner.moveStop(self.drag, self.valueAt(event.position().x()), fine)
 		self.update()
 
