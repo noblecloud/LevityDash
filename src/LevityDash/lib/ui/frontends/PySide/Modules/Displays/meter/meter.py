@@ -124,6 +124,10 @@ class GaugeRange(StatefulGaugeItem):
 	@round_to.item_default
 	def round_to(self) -> int | float:
 		span = abs(float(self.max - self.min))
+		# A zero span has no scale to divide, and log10(0) raises. Any step will
+		# do: the gauge draws its one tick and shows the value.
+		if span == 0:
+			return 1
 		if 99 < span <= 350:
 			return 10
 		if log10(span).is_integer():
@@ -165,6 +169,12 @@ class GaugeRange(StatefulGaugeItem):
 	def min(self, value: Measurement):
 		return value != type(value).typedLimits.min
 
+	@min.encode
+	def min(value: Measurement) -> int | float:
+		# Full precision, in the gauge's own unit (the way a bare number is read back).
+		number = float(value)
+		return int(number) if number.is_integer() else number
+
 	@cached_property
 	def rounded_min(self) -> Measurement:
 		round_to = self.round_to
@@ -201,6 +211,12 @@ class GaugeRange(StatefulGaugeItem):
 	def max(self, value: Measurement):
 		return value != type(value).typedLimits.max
 
+	@max.encode
+	def max(value: Measurement) -> int | float:
+		# Full precision, in the gauge's own unit (the way a bare number is read back).
+		number = float(value)
+		return int(number) if number.is_integer() else number
+
 	@cached_property
 	def _rounded_max(self) -> Measurement:
 		round_to = self.round_to
@@ -210,6 +226,14 @@ class GaugeRange(StatefulGaugeItem):
 
 	@cached_property
 	def rounded_max(self):
+		rounded_max = self._roundedMax()
+		# A zero span (min == max) rounds to rounded_min itself, and every scale
+		# divides by rounded_range. Show one step of range instead.
+		if rounded_max == self.rounded_min and self.round_to:
+			return self._gauge.valueClass(float(self.rounded_min) + self.round_to)
+		return rounded_max
+
+	def _roundedMax(self):
 		rounded_range = self._rounded_range
 		if isinstance(rounded_range, int) or (isinstance(rounded_range, float) and rounded_range.is_integer()):
 			if is_prime(rounded_range):

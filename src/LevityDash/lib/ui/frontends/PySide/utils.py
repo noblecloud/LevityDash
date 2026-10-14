@@ -271,10 +271,12 @@ def loadPanels(parent, items, parentItems, panelType, **kwargs) -> List[Stateful
 	return newItems
 
 
-def loadStacks(parent, items, parentItems, valueStack, **kwargs):
+def loadStacks(parent, items, parentItems, valueStack, grid=False, **kwargs):
 	global itemCount
 
-	if valueStack:
+	if grid:
+		from LevityDash.lib.ui.frontends.PySide.Modules.Containers.Stacks import GridStack as Stack
+	elif valueStack:
 		from LevityDash.lib.ui.frontends.PySide.Modules.Containers import ValueStack as Stack
 	else:
 		from LevityDash.lib.ui.frontends.PySide.Modules.Containers import Stack
@@ -508,8 +510,8 @@ def _loadItemGroup(parent: 'Panel', _type: str, group: list[dict], existing: lis
 			items = loadMoon(parent, group, existing, **kwargs)
 		case 'graph':
 			items = loadGraphs(parent, group, existing, **kwargs)
-		case 'value-stack' | 'stack':
-			items = loadStacks(parent, group, existing, valueStack=_type == 'value-stack', **kwargs)
+		case 'value-stack' | 'stack' | 'grid':
+			items = loadStacks(parent, group, existing, valueStack=_type == 'value-stack', grid=_type == 'grid', **kwargs)
 		case str(panel):
 			match panel:
 				case 'titled-group':

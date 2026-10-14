@@ -1,3 +1,4 @@
+from copy import copy
 from asyncio import Task
 
 import numpy as np
@@ -73,7 +74,7 @@ from LevityDash.lib.utils.data import AxisMetaData, DataTimeRange, findPeaksAndT
 from LevityDash.lib.utils.shared import (
 	_Panel, camelCase, clamp, clearCacheAttr, closestStringInList, connectSignal, defer, disconnectSignal,
 	joinCase,
-	LOCAL_TIMEZONE, now, run_in_thread, startTimerSafe, stopTimerSafe, thread_safe, timestampToTimezone,
+	LOCAL_TIMEZONE, callOnMainThread, isMainThread, now, run_in_thread, startTimerSafe, stopTimerSafe, thread_safe, timestampToTimezone,
 	Unset, Worker
 )
 from LevityDash.lib.utils.various import DateTimeRange
@@ -346,6 +347,11 @@ class GraphItemData(Stateful, tag=...):
 		return self.__onValueChange()
 
 	def __onValueChange(self):
+		# connectTimeseries runs on a worker thread (setContainer), and the axis,
+		# graphic and label updates below add and remove scene items.
+		if not isMainThread():
+			callOnMainThread(self.__onValueChange)
+			return
 		self.log.debug(f'Updating GraphItemData\[{self.key.name}]... Reason: value change')
 		self.graph.onAxisChange(Axis.Both)
 		self.__clearAxis(Axis.Both)
@@ -3469,9 +3475,11 @@ class HourLabels(AnnotationLabels[TimestampLabel]):
 			source = TimestampGenerator(graph)
 		elif graph is None and source is None:
 			raise ValueError('Either graph or source must be specified')
-		self.sizeGroup = graph.getAttrGroup('local.hourLabels')
-		self.sizeGroup.items = self
 		super(HourLabels, self).__init__(surface=surface, source=source, **kwargs)
+
+	@property
+	def groupOwner(self):
+		return self.graph
 
 	def post_init(self, **state):
 		super(HourLabels, self).post_init(**state)
@@ -3580,6 +3588,9 @@ class HourLabels(AnnotationLabels[TimestampLabel]):
 
 		r = self.graph.mapFromScene(r).boundingRect()
 		graphRect = self.graph.rect()
+		if getattr(self.graph, '_configuredMargins', None) is None:
+			# The margins as loaded; what the layout does to them below is not saved.
+			self.graph._configuredMargins = tuple(copy(i) for i in self.graph.margins)
 		if self.position is DisplayPosition.Bottom:
 			bottomMargin = graphRect.bottom() - r.top()
 			offset = graphRect.bottom() - r.bottom()
@@ -3824,6 +3835,7 @@ class CurrentTimeIndicator(QGraphicsLineItem, Stateful, tag=...):
 		self.updatePosition()
 		self.prep_init(stateful_parent=graph, stateful_key='indicator')
 		self.state = self.add_defaults_to_state(kwargs)
+		self._configured = False
 
 	def updatePath(self, rect = None):
 		self.setLine(0, 0, 0, (rect or self.parentItem().rect()).height())
@@ -3863,6 +3875,7 @@ class CurrentTimeIndicator(QGraphicsLineItem, Stateful, tag=...):
 	@color.setter
 	def color(self, value: Color):
 		self._color = value
+		self._configured = True
 
 	@color.decode
 	def color(self, value: str | dict | tuple | list) -> Color:
@@ -4030,6 +4043,11 @@ class GraphPanel(Panel, tag='graph'):
 	@indicator.factory
 	def indicator(self) -> 'CurrentTimeIndicator':
 		return CurrentTimeIndicator(self, signal=self.signals.resized)
+
+	@indicator.condition(method='get')
+	def indicator(self, value) -> bool:
+		# An indicator nobody configured is the graph's own; saving it writes a derived colour.
+		return getattr(value, '_configured', False)
 
 	@property
 	def indicatorEnabled(self) -> bool:

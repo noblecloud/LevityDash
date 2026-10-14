@@ -1,6 +1,6 @@
 # Roadmap
 
-*Last updated: 2026-10-07 (presets added to dashboard authoring).*
+*Last updated: 2026-10-08 (boards, presets, saved gauges and bars, log-level menus, reconnects, and units on `dev`).*
 
 This organizes and supersedes the raw idea list in [`_planned-features.md`](_planned-features.md) — every item from that list is either placed in a section below, marked as already done, or parked with a reason. Status notes reference the code so claims stay checkable.
 
@@ -42,8 +42,8 @@ Invest here first. Every lane uses it.
 
 **Phase 2: first stable cut.**
 
-1. Fix the rain `0.0` bug (a true zero shows as trace) and the WeatherUnits percent bug (0.1% shows as 10%).
-2. Build one or two real weather boards from the paused design (Station, Core + rotation). Use themes, `switch` and `vars`. The handoff is `docs/tasks/dashboard-design-handoff.md` on branch `claude/dashboard-design-uy2w74`.
+1. Done: rain zero and trace, and the percent scale (#35, WeatherUnits #4).
+2. Done: Station (#54), and Storm, Sky and Week (#60), are on `dev` under `docs/design-references/boards/`. The handoff is `docs/tasks/dashboard-design-handoff.md` on branch `claude/dashboard-design-uy2w74`.
 3. Document themes, variables, the switch slot and unit literals. Threads write draft notes. The docs owner edits the `docs` branch.
 4. Close out value-sources.
 5. Merge `feat/value-sources` into `main` and tag a version. After that, work on short branches off `main`.
@@ -53,7 +53,7 @@ Invest here first. Every lane uses it.
 - HUD: serve frames from `render_service` at device size and palette. Add an e-paper theme. Write the ESP32-S3 client that fetches a frame and keeps the last one. Builds on the surface frontend in [render-service-and-surface-frontend.md](tasks/render-service-and-surface-frontend.md).
 - Data: a psutil plugin for host vitals, which also feeds the processes table. Rooms from Govee BLE with value-sources `where`. Rates and compound units (in/hr, kWh, W/m²), which need the parked WeatherUnits `dimensional-analysis` branch.
 - Look: rename `needle` to `pointer`, linear meters and bars, and theme polish (gradient background, themed glow and moon, a theme picker).
-- Editor: Studio snapping and guides. Decide whether Studio ships as the board editor.
+- Editor: Studio snapping and guides (done in the builder preview, 2026-10-10; the gauge editor's handles already snap). Studio is the board editor (decided 2026-10-14): `--dashboard FILE` opens a real board, edits it with the builder tools and saves only what changed. Size-group membership (`matchingGroup`) survives a save, and the preview refits each group as a whole.
 
 **How we work.**
 
@@ -127,7 +127,7 @@ Triaged from `_planned-features.md`, grouped by area. ~~Struck~~ items are alrea
 - **Condensed-title option** — possibly automatic by available size.
 - **Corner radius** on panels.
 - **Fill object** — one abstraction accepting colors, gradients, images, and patterns; today `FillBrushMixin` handles color + gradient only. Include dynamic color functions and plot-line section dividers.
-- ~~**Value templates** — file-loadable templates combining multiple values into one composite display.~~ **Done 2026-10-07** as presets: a preset's `template:` can be a composite (`hero-readings` is a titled panel of four readings) with props that land on its sub-items. Still open: a Studio editor for presets, and a way to save a selection as a preset.
+- ~~**Value templates** — file-loadable templates combining multiple values into one composite display.~~ **Done 2026-10-07** as presets: a preset's `template:` can be a composite (`hero-readings` is a titled panel of four readings) with props that land on its sub-items. The Studio builder edits presets, and its *To preset* button saves a selected item as a preset (2026-10-10).
 - **Layout in a separate file** — split panel layout from the rest of the dashboard spec.
 - **Groups default to grid/stack** unless specified; explicit item geometry overrides.
 - **`type: split` in YAML** — `SplitPanel` exists but is only insertable from the context menu; it isn't wired into `itemLoader`.
@@ -164,13 +164,13 @@ Triaged from `_planned-features.md`, grouped by area. ~~Struck~~ items are alrea
 ### Plugins
 
 - **Watchdogs / health checks** — auto-restart and heartbeat for wedged plugins. The `health_check_worker` scaffold in `lib/backend.py` needs rebuilding now that backend.py is the live headless process.
-- ~~**Network failure/recovery hardening**~~ — **done 2026-10-07**: REST plugins already retried (`ScheduledEvent.retry`). The UDP socket and the WeatherFlow websocket now reconnect too: `lib/plugins/web/reconnect.py` (`keepConnected` with a growing `Backoff`, 2s up to 5 min) re-binds a lost or never-bound UDP port and re-opens a dropped websocket. Verified with real loopback drops in `tests/plugins/test_reconnect.py`. Still open: a socket that stays bound but goes silent (no datagram for several periods) is not detected.
+- ~~**Network failure/recovery hardening**~~ — **done 2026-10-07**: REST plugins already retried (`ScheduledEvent.retry`). The UDP socket and the WeatherFlow websocket now reconnect too: `lib/plugins/web/reconnect.py` (`keepConnected` with a growing `Backoff`, 2s up to 5 min) re-binds a lost or never-bound UDP port and re-opens a dropped websocket. Verified with real loopback drops in `tests/plugins/test_reconnect.py`. A socket that stays bound but goes silent is caught too: the Tempest UDP socket rebinds and the websocket reconnects after 60s without a datagram (a hub sends every few seconds); `UDPSocket(silenceTimeout=…)` is off by default.
 - **Govee: broader device support** — `closest`/`first`/MAC/UUID selection all work; only GVH5102 is tested. Extend model coverage and parsing presets.
-- **Bluetooth-unavailable handling** — test/degrade gracefully when the adapter is missing or permission-blocked (macOS TCC).
+- ~~**Bluetooth-unavailable handling**~~ — **done 2026-10-07**: a scan that cannot start (no adapter, Bluetooth off, permission denied) now logs one plain line instead of a traceback, keeps the plugin up (`bluetoothProblem` holds the reason), and retries every 30s up to 10 min until the radio works. Verified against the real container, which has no adapter, and with stand-in scanners in `tests/plugins/test_ble_unavailable.py`. macOS TCC wording is from bleak's error text, not yet seen on the Mac.
 
 ### App & platform
 
-- **Keep-awake option** — prevent *system/display* sleep for an always-on kiosk display: `caffeinate` (macOS), `xdg-screensaver`/`systemd-inhibit` (Linux), `powercfg`/`SetThreadExecutionState` (Windows). Distinct from macOS App Nap (a per-process background-timer throttle, independent of system sleep settings) — App Nap is already opted out of unconditionally at startup via `preventAppNap()` (`lib/utils/shared.py`), both frontend and backend.
+- ~~**Keep-awake option**~~ — **done 2026-10-07**: `[QtOptions] keepAwake = True` holds an OS lock for the life of the frontend (`lib/utils/keepawake.py`): `caffeinate` on macOS, `systemd-inhibit` on Linux, `SetThreadExecutionState` on Windows. Off by default. Tested with stand-in commands and a real `systemd-inhibit` (which correctly reports failure in a container with no bus); a real macOS or Windows hold is not yet seen. App Nap is separate and unchanged: already opted out via `preventAppNap()` (`lib/utils/shared.py`).
 - ~~**Runtime log-level menu**~~ — **done 2026-10-07**: Logs > Log Level (file and console) and Logs > Status Bar Level, each a radio list from Error to Verbose (`app.py` `_levelMenu`, `_LevityLogger.setRuntimeLevel`). A change applies at once and lasts until restart; nothing is written to the config.
 - **Dashboard-level config overrides** — per-dashboard settings that override global config.
 - **Event notifications** — user-facing alerts (lightning nearby, rain starting, etc.).
