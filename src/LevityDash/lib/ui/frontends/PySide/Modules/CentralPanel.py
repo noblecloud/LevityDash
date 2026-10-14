@@ -218,7 +218,7 @@ class CentralPanel(Panel, tag="dashboard"):
 		with NamedTemporaryFile(delete=True, mode="w+", encoding='utf-8') as f:
 			try:
 				state = self.state
-				yaml.dump(state, f, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True)
+				yaml.dump(state, f, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True, sort_keys=False)
 				if self._vars or self._usesPresets:
 					self._restoreVariables(f)
 
@@ -232,7 +232,7 @@ class CentralPanel(Panel, tag="dashboard"):
 	def _dumpedLive(self) -> Any:
 		"""What a save would write now, read back as data: the same shape as the live tree. None if it cannot be made."""
 		try:
-			text = yaml.dump(self.state, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True)
+			text = yaml.dump(self.state, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True, sort_keys=False)
 			return type(self).__loader__(YAMLPreprocessor(text)).get_data()
 		except Exception:
 			log.exception('the loaded board could not be dumped; a save compares presets with the file instead')
@@ -252,7 +252,7 @@ class CentralPanel(Panel, tag="dashboard"):
 			# everything the app adds on a dump, and a preset's fields are compared against that.
 			baseline = self._loaded if self._usesPresets and self._loaded is not None else self._resolved
 			merged = retemplate(live, baseline, self._written, lambda item, written, base: presets.collapse(item, written, base, variables))
-			text = yaml.dump(merged, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True)
+			text = yaml.dump(merged, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True, sort_keys=False)
 			f.seek(0)
 			f.truncate()
 			f.write(text)

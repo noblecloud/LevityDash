@@ -165,6 +165,12 @@ class GaugeRange(StatefulGaugeItem):
 	def min(self, value: Measurement):
 		return value != type(value).typedLimits.min
 
+	@min.encode
+	def min(value: Measurement) -> int | float:
+		# Full precision, in the gauge's own unit (the way a bare number is read back).
+		number = float(value)
+		return int(number) if number.is_integer() else number
+
 	@cached_property
 	def rounded_min(self) -> Measurement:
 		round_to = self.round_to
@@ -200,6 +206,12 @@ class GaugeRange(StatefulGaugeItem):
 	@max.condition(method='get')
 	def max(self, value: Measurement):
 		return value != type(value).typedLimits.max
+
+	@max.encode
+	def max(value: Measurement) -> int | float:
+		# Full precision, in the gauge's own unit (the way a bare number is read back).
+		number = float(value)
+		return int(number) if number.is_integer() else number
 
 	@cached_property
 	def _rounded_max(self) -> Measurement:

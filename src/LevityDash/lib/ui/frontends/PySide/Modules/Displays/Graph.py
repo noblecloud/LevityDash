@@ -1,3 +1,4 @@
+from copy import copy
 from asyncio import Task
 
 import numpy as np
@@ -3580,6 +3581,9 @@ class HourLabels(AnnotationLabels[TimestampLabel]):
 
 		r = self.graph.mapFromScene(r).boundingRect()
 		graphRect = self.graph.rect()
+		if getattr(self.graph, '_configuredMargins', None) is None:
+			# The margins as loaded; what the layout does to them below is not saved.
+			self.graph._configuredMargins = tuple(copy(i) for i in self.graph.margins)
 		if self.position is DisplayPosition.Bottom:
 			bottomMargin = graphRect.bottom() - r.top()
 			offset = graphRect.bottom() - r.bottom()
@@ -3824,6 +3828,7 @@ class CurrentTimeIndicator(QGraphicsLineItem, Stateful, tag=...):
 		self.updatePosition()
 		self.prep_init(stateful_parent=graph, stateful_key='indicator')
 		self.state = self.add_defaults_to_state(kwargs)
+		self._configured = False
 
 	def updatePath(self, rect = None):
 		self.setLine(0, 0, 0, (rect or self.parentItem().rect()).height())
@@ -3863,6 +3868,7 @@ class CurrentTimeIndicator(QGraphicsLineItem, Stateful, tag=...):
 	@color.setter
 	def color(self, value: Color):
 		self._color = value
+		self._configured = True
 
 	@color.decode
 	def color(self, value: str | dict | tuple | list) -> Color:
@@ -4030,6 +4036,11 @@ class GraphPanel(Panel, tag='graph'):
 	@indicator.factory
 	def indicator(self) -> 'CurrentTimeIndicator':
 		return CurrentTimeIndicator(self, signal=self.signals.resized)
+
+	@indicator.condition(method='get')
+	def indicator(self, value) -> bool:
+		# An indicator nobody configured is the graph's own; saving it writes a derived colour.
+		return getattr(value, '_configured', False)
 
 	@property
 	def indicatorEnabled(self) -> bool:
