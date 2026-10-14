@@ -26,7 +26,7 @@ import os
 import re
 import tempfile
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 import yaml
 from PySide6.QtCore import QPointF, QRectF, QSignalBlocker, Qt, QTimer, Signal
@@ -87,6 +87,21 @@ def restOf(node: dict) -> dict:
 		if model.getField(rest, path) is not None:
 			model.setField(rest, path, None)
 	return rest
+
+
+def _groupScopes(node: Any) -> Iterator[str]:
+	"""The `name@panel` scopes of the size groups a template joins (`matchingGroup`), which only mean something under that panel."""
+	if isinstance(node, dict):
+		for k, v in node.items():
+			if k == 'matchingGroup':
+				group = v.get('group') if isinstance(v, dict) else v
+				if isinstance(group, str) and '@' in group and not group.startswith('$'):
+					yield group
+			else:
+				yield from _groupScopes(v)
+	elif isinstance(node, list):
+		for v in node:
+			yield from _groupScopes(v)
 
 
 def inRealConfig(path: Path) -> bool:
@@ -1683,7 +1698,9 @@ class Builder(QWidget):
 		self.rebuildAll()
 		self._syncStage()
 		self.schedule()
-		self.status.setText(f'Saved {path}; the item is now a use of {name}')
+		scopes = sorted(set(_groupScopes(piece.template)))
+		note = f'; it names size-group scopes ({", ".join(scopes)}) that belong to the panel it came from, so elsewhere it gets private groups. Make the scope a property' if scopes else ''
+		self.status.setText(f'Saved {path}; the item is now a use of {name}{note}')
 
 	def deleteItem(self):
 		if self.selection:

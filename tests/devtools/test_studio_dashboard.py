@@ -188,3 +188,8 @@ def test_group_memberships_survive_an_edit(board):
 	win.editField('geometry.width', '33%')
 	win.save()
 	assert path.read_text().count('matchingGroup') == count > 0
+
+
+def test_group_scopes_are_found():
+	node = {'type': 'stack', 'shared': {'title': {'matchingGroup': {'group': 'rowTitle@temperature', 'matchAll': True}}}, 'items': [{'matchingGroup': 'plain'}, {'matchingGroup': {'group': '$g@x'}}]}
+	assert list(sb._groupScopes(node)) == ['rowTitle@temperature']
