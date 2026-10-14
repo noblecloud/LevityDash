@@ -53,7 +53,7 @@ Invest here first. Every lane uses it.
 - HUD: serve frames from `render_service` at device size and palette. Add an e-paper theme. Write the ESP32-S3 client that fetches a frame and keeps the last one. Builds on the surface frontend in [render-service-and-surface-frontend.md](tasks/render-service-and-surface-frontend.md).
 - Data: a psutil plugin for host vitals, which also feeds the processes table. Rooms from Govee BLE with value-sources `where`. Rates and compound units (in/hr, kWh, W/m²), which need the parked WeatherUnits `dimensional-analysis` branch.
 - Look: rename `needle` to `pointer`, linear meters and bars, and theme polish (gradient background, themed glow and moon, a theme picker).
-- Editor: Studio snapping and guides. Decide whether Studio ships as the board editor.
+- Editor: Studio snapping and guides (done in the builder preview, 2026-10-10; the gauge editor's handles already snap). Studio is the board editor (decided 2026-10-14): `--dashboard FILE` opens a real board, edits it with the builder tools and saves only what changed. Size-group membership (`matchingGroup`) survives a save, and the preview refits each group as a whole.
 
 **How we work.**
 
@@ -127,7 +127,7 @@ Triaged from `_planned-features.md`, grouped by area. ~~Struck~~ items are alrea
 - **Condensed-title option** — possibly automatic by available size.
 - **Corner radius** on panels.
 - **Fill object** — one abstraction accepting colors, gradients, images, and patterns; today `FillBrushMixin` handles color + gradient only. Include dynamic color functions and plot-line section dividers.
-- ~~**Value templates** — file-loadable templates combining multiple values into one composite display.~~ **Done 2026-10-07** as presets: a preset's `template:` can be a composite (`hero-readings` is a titled panel of four readings) with props that land on its sub-items. Still open: a Studio editor for presets, and a way to save a selection as a preset.
+- ~~**Value templates** — file-loadable templates combining multiple values into one composite display.~~ **Done 2026-10-07** as presets: a preset's `template:` can be a composite (`hero-readings` is a titled panel of four readings) with props that land on its sub-items. The Studio builder edits presets, and its *To preset* button saves a selected item as a preset (2026-10-10).
 - **Layout in a separate file** — split panel layout from the rest of the dashboard spec.
 - **Groups default to grid/stack** unless specified; explicit item geometry overrides.
 - **`type: split` in YAML** — `SplitPanel` exists but is only insertable from the context menu; it isn't wired into `itemLoader`.
