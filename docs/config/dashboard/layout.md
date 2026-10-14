@@ -97,4 +97,4 @@ Example dashboard: `docs/design-references/css-layout.levity` (render: `docs/des
 
 ## In the Studio
 
-`gauge_studio.py --build` edits these keys. A stack, a `grid`, and each of their items has a **Layout** section on the Item tab with a `flex` or `grid` popover. The popover shows the container options when the item is a stack or grid and the item options when its parent is one; an option left on its default is not written, and a stack with nothing set stays a plain stack.
+`studio.py` (the Studio builder) edits these keys. A stack, a `grid`, and each of their items has a **Layout** section on the Item tab with a `flex` or `grid` popover. The popover shows the container options when the item is a stack or grid and the item options when its parent is one; an option left on its default is not written, and a stack with nothing set stays a plain stack.

@@ -50,7 +50,7 @@ snap logic if it grows). Gauge.py does not change.
    shows the new ratio and fades out about 1 s after the last change.
 7. Shift was the "fine steps" key in Studio v2. Gearing replaces it, so free Shift for
    axis or angle constraint, or leave it unbound. Update the Studio help text and the
-   `gauge_studio.py` paragraph in `CLAUDE.md`.
+   `studio.py` paragraph in `CLAUDE.md`.
 
 ## Wireframe mode and guideline layers
 

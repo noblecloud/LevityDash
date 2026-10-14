@@ -435,7 +435,7 @@ Nothing else in the file needs an angle or a radius.
     will be editable through the generated controls only — `devtools/_studio_schema.describe`
     (docstring at `_studio_schema.py:1-30`) walks `type(owner).statefulItems` on the gauge and
     on every part it holds, and makes one control per settable property, so a new display
-    class needs no Studio edit to get controls. (`gauge_studio.py` itself only assembles the
+    class needs no Studio edit to get controls. (`studio.py` itself only assembles the
     window; the introspection lives in `_studio_schema.py`.)
 
 ## Dead and shadowed code found while surveying

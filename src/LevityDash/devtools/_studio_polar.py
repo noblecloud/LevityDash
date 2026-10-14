@@ -1,7 +1,7 @@
-"""Dev-only: the polar panel of Gauge Studio. Design one `type: polar` plot live, with controls.
+"""Dev-only: the polar panel of Studio. Design one `type: polar` plot live, with controls.
 
-    poetry run python src/LevityDash/devtools/gauge_studio.py --polar [fragment.levity]
-    (or "Polar…" in the Gauge Studio toolbar)
+    poetry run python src/LevityDash/devtools/studio.py --polar [fragment.levity]
+    (or "Polar…" in the Studio toolbar)
 
 The real `Polar` item on a `StudioScene`, drawn from made-up series: four days of hourly temperature,
 dewpoint and wind around now, so every window (`today`, `24h`, `+24h`, `3d`) has something in it.
@@ -452,7 +452,7 @@ class PolarStudio(QWidget):
 
 	def __init__(self, fragment: Optional[Path] = None, standalone: bool = False):
 		super().__init__()
-		self.setWindowTitle('Gauge Studio: Polar')
+		self.setWindowTitle('Studio: Polar')
 		self.resize(1280, 860)
 		self.view = _View()
 		self.scene = StudioScene(self.view)
@@ -850,7 +850,7 @@ class PolarStudio(QWidget):
 	def exportLevity(self) -> str:
 		entry = {'type': 'polar', 'name': 'polar', **self.exportDisplay()}
 		body = yaml.dump([entry], Dumper=schema.StudioDumper, default_flow_style=False, allow_unicode=True, sort_keys=False)
-		return f'# Made with Gauge Studio ({self.label}).\n{body}'
+		return f'# Made with Studio ({self.label}).\n{body}'
 
 	def copyCode(self):
 		text = self.exportLevity()

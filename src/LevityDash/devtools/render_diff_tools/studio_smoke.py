@@ -24,7 +24,7 @@ sys.path.insert(0, str(DEVTOOLS.parent.parent))
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from LevityDash.devtools import gauge_studio as gs  # noqa: E402
+from LevityDash.devtools import studio as gs  # noqa: E402
 
 app = QApplication.instance() or QApplication(sys.argv)
 

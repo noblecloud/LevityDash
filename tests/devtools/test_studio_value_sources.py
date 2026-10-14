@@ -24,10 +24,10 @@ from PySide6.QtWidgets import QApplication, QGraphicsView  # noqa: E402
 
 from LevityDash.devtools._studio_stage import StudioGauge, StudioScene, presetForKey  # noqa: E402
 
-# `gauge_studio` imports `_studio_env` and calls `prepare()`, which pops
+# `studio` imports `_studio_env` and calls `prepare()`, which pops
 # LEVITYDASH_CONFIG_SEED. Put the seed back so later tests still get it.
 _SEED = os.environ.get('LEVITYDASH_CONFIG_SEED')
-from LevityDash.devtools import gauge_studio as gs  # noqa: E402
+from LevityDash.devtools import studio as gs  # noqa: E402
 if _SEED is not None:
 	os.environ['LEVITYDASH_CONFIG_SEED'] = _SEED
 

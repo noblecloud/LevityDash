@@ -1,4 +1,4 @@
-"""Gauge Studio's wireframe and guideline layers read the gauge and write nothing."""
+"""Studio's wireframe and guideline layers read the gauge and write nothing."""
 import os
 
 import pytest
@@ -12,7 +12,7 @@ from PySide6.QtGui import QPainterPath  # noqa: E402
 from LevityDash.devtools import _studio_geometry as geometry  # noqa: E402
 
 _SEED = os.environ.get('LEVITYDASH_CONFIG_SEED')
-from LevityDash.devtools import gauge_studio as gs  # noqa: E402
+from LevityDash.devtools import studio as gs  # noqa: E402
 
 if _SEED is not None:
 	os.environ['LEVITYDASH_CONFIG_SEED'] = _SEED
