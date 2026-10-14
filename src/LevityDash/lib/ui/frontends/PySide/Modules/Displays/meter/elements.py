@@ -20,7 +20,7 @@ from functools import cached_property
 from itertools import combinations
 from math import atan2, floor, hypot, inf, isclose, isfinite, isinf
 from numbers import Number
-from typing import TYPE_CHECKING, Any, Dict, Iterator, Optional, Sequence, Type, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, Optional, Sequence, Type, Union
 
 from numpy import ceil, cos, pi, radians, sin, sqrt
 from PySide6.QtCore import (
