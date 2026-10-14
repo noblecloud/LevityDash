@@ -1,6 +1,8 @@
 import copy
 from math import isfinite
 from datetime import timedelta, datetime
+
+from LevityDash.lib.config import userConfig
 from functools import cached_property, partial
 from numbers import Number
 from time import monotonic, process_time
@@ -1386,6 +1388,10 @@ class MeasurementDisplayProperties(Stateful):
 				return measurement.withoutUnit
 			return str(measurement).strip()
 		elif isinstance(measurement, datetime):
+			# Shown in the zone the config names, not the one the datetime happens to carry or
+			# the host runs in: a host on UTC would otherwise print sunrise and sunset in UTC.
+			if measurement.tzinfo is not None and (zone := userConfig.tz) is not None:
+				measurement = measurement.astimezone(zone)
 			formatString = self.formatString or '%H:%M:%S'
 			try:
 				return f'{measurement:{formatString}}'.lower()

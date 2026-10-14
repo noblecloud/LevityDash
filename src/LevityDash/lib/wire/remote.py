@@ -240,7 +240,8 @@ class RemoteConnection:
 
 			async def _do() -> None:
 				try:
-					response = await client.request(message)
+					# A series is hundreds of points; an underclocked backend needs longer than 10s.
+					response = await client.request(message, timeout=60.0)
 				except Exception as e:
 					log.warning(f'timeseries request {message.get("id")} failed: {e!r}')
 					response = None

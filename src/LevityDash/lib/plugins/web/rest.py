@@ -4,6 +4,7 @@ import aiohttp
 from aiohttp import ClientOSError
 from rich.pretty import pretty_repr
 
+from LevityDash.lib.config import userConfig
 from LevityDash.lib.plugins.schema import LevityDatagram
 from LevityDash.lib.plugins.web import Endpoint, Web
 from LevityDash.lib.plugins.web.errors import APIError, InvalidCredentials, RateLimitExceeded, RequestTimeout
@@ -37,6 +38,10 @@ class REST(Web, prototype=True):
 					raise APIError(response)
 
 	async def getData(self, endpoint: Endpoint, **kwargs) -> LevityDatagram:
+		if not userConfig.locationKnown:
+			# Weather for 0,0 (the Gulf of Guinea) looks plausible and is wrong. Ask for nothing.
+			self.pluginLog.error(f'{self.name}: not fetching, the location is unknown. Set latitude, longitude and timezone under [Location] in the config.')
+			raise APIError(f'{self.name}: location unknown')
 		if isinstance(endpoint, str):
 			url = kwargs.get('url', endpoint)
 			params = kwargs.get('params', {})

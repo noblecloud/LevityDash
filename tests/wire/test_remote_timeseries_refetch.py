@@ -157,3 +157,22 @@ def test_a_failed_refetch_keeps_the_old_points():
 
 	assert list(series) == before
 	assert container._tsRefetching is False
+
+
+def test_a_refetch_that_gets_no_answer_is_tried_again(monkeypatch):
+	"""A slow backend can time a refetch out. The push that triggered it will not come again soon."""
+	from LevityDash.lib.utils import shared
+	monkeypatch.setattr(shared, 'singleShotSafe', lambda msec, callback: callback())
+
+	class DropsOnce(FakeBackend):
+		def __call__(self, message, on_response):
+			if len(self.requests) == 1:  # the first refetch, after the initial fetch
+				self.requests.append(message)
+				on_response(None)
+			else:
+				super().__call__(message, on_response)
+
+	backend = DropsOnce()
+	container, series, graph = connected(backend)
+	container._refetchTimeseries()
+	assert len(backend.requests) == 3, 'the failed refetch was not retried'

@@ -373,6 +373,11 @@ class RemoteTimeSeries:
 		return f'RemoteTimeSeries({self.source.name}:{self.key.name}, {len(self._items)} points)'
 
 
+#: Seconds before the first retry of a refetch that got no answer; doubles up to the maximum.
+_REFETCH_RETRY_START = 15
+_REFETCH_RETRY_MAX = 300
+
+
 class RemoteContainer:
 	"""Stand-in for `observation.Container` - see the module docstring for
 	the scope this covers and the rationale for what it doesn't (yet)."""
@@ -393,6 +398,7 @@ class RemoteContainer:
 		# requests on a slow backend.
 		self._tsRefetching = False
 		self._tsStale = False
+		self._tsRetries = 0
 		self.__hash_key = CategoryItem(key, source=[source.name])
 
 	def _update(
@@ -533,10 +539,24 @@ class RemoteContainer:
 				self._applyTsResponse(response)
 			finally:
 				self._tsRefetching = False
+			if response is None:
+				# A push is the only trigger, so a request that timed out (a slow
+				# backend) or met a dropped connection would leave the old forecast
+				# until the next push, which can be a quarter hour or more away.
+				self._retryRefetch()
+				return
+			self._tsRetries = 0
 			if self._tsStale:
 				self._refetchTimeseries()
 
 		self.source.request_timeseries(self.key, *self._tsPeriod, on_response)
+
+	def _retryRefetch(self) -> None:
+		from LevityDash.lib.utils.shared import singleShotSafe  # deferred - Qt-side helper
+		delay = min(_REFETCH_RETRY_START * 2 ** self._tsRetries, _REFETCH_RETRY_MAX)
+		self._tsRetries += 1
+		log.warning(f'{self.log_repr}: timeseries refetch got no answer, trying again in {delay}s (attempt {self._tsRetries})')
+		singleShotSafe(delay * 1000, self._refetchTimeseries)
 
 	@staticmethod
 	def _resolve_ts_period(request: Request) -> tuple:
