@@ -9,6 +9,7 @@ from LevityDash.lib.plugins.web.errors import APIError
 
 #: The zone the forecast request names. Open-Meteo writes its ISO times in that zone with no
 #: offset, so they have to be read in it and not in the machine's.
+userConfig.loc  # fills in [Location], timezone included, when the config lacks it
 _requestZone = userConfig.tz
 
 
