@@ -29,6 +29,7 @@ The other places a group can live are `local.key`, `parent.key`, `global.key`, `
 ## What a group does
 
 - **Tiers.** Labels with boxes of about the same height share a size. A box more than about 10 px taller or shorter is a different tier, so a large hero and a small caption in one group do not shrink to match.
+  To share one size whatever the box height, write `matchAll: true, tiers: false`. The tightest box in the whole group then sets the size, so use it for rows that should read as one type scale.
 - **Size.** The label with the tightest box sets the size for the tier.
 - **Baseline.** In a plain group, labels with the same vertical alignment also share a baseline. A `matchAll` group keeps each label where it is.
 - **Number shape.** A value is sized against the widest text it can show, so 7, 13 and 101 come out the same. A value with no digits, such as a compass point, has no such shape. Give it `format-hint`, for example `format-hint: WNW`.
