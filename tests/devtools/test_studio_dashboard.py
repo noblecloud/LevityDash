@@ -193,3 +193,12 @@ def test_group_memberships_survive_an_edit(board):
 def test_group_scopes_are_found():
 	node = {'type': 'stack', 'shared': {'title': {'matchingGroup': {'group': 'rowTitle@temperature', 'matchAll': True}}}, 'items': [{'matchingGroup': 'plain'}, {'matchingGroup': {'group': '$g@x'}}]}
 	assert list(sb._groupScopes(node)) == ['rowTitle@temperature']
+
+
+def test_to_preset_warns_only_about_inherited_scopes(board):
+	win, _ = board('station')
+	inner = next(p for p, n in win.piece.walk() if len(p) > 1 and n.get('type') == 'realtime.text')
+	parent_has = any('rowTitle@' in str(win.piece.node(inner[:i]).get('shared')) for i in range(len(inner)))
+	win.select(inner)
+	win.extractPreset('zz-leaf')
+	assert ('inherits size groups' in win.status.text()) == parent_has

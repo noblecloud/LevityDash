@@ -1698,8 +1698,10 @@ class Builder(QWidget):
 		self.rebuildAll()
 		self._syncStage()
 		self.schedule()
-		scopes = sorted(set(_groupScopes(piece.template)))
-		note = f'; it names size-group scopes ({", ".join(scopes)}) that belong to the panel it came from, so elsewhere it gets private groups. Make the scope a property' if scopes else ''
+		# Scopes written in the item became a property. What it inherits from an ancestor's `shared:` stays with that ancestor.
+		path_ = self.selection or ()
+		inherited = sorted({g for i in range(len(path_)) for g in _groupScopes((self.piece.node(path_[:i]) or {}).get('shared'))})
+		note = f'; it inherits size groups scoped to {", ".join(inherited)} from a panel around it, which a reused copy does not carry. Move that `shared:` into the item or give the preset its own' if inherited else ''
 		self.status.setText(f'Saved {path}; the item is now a use of {name}{note}')
 
 	def deleteItem(self):
