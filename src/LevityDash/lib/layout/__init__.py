@@ -1,7 +1,7 @@
 """Pure-Python ports of the CSS layout algorithms that `Stack` lacks.
 
 Status: skeleton. Every function raises `NotImplementedError`. Nothing in the app imports
-this package yet, so no board changes.
+this package yet, so no dashboard changes.
 
 Why: the dashboard layout system is modelled on CSS (docs in the project folder:
 `css-mapping.md`). `Stack` is a one-line flex container with fixed items and an equal split of
@@ -22,7 +22,7 @@ Layout of the package
 - `flex.py`   CSS Flexbox section 9
 - `grid.py`   CSS Grid sections 7, 8 and 12
 - `parse.py`  CSS keywords from `.levity` values
-- `legacy.py` how today's `Stack` maps to flex, so existing boards render the same
+- `legacy.py` how today's `Stack` maps to flex, so existing dashboards render the same
 """
 
 from . import align, flex, grid, legacy, parse, types

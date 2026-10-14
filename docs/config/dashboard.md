@@ -548,7 +548,7 @@ display:
     labels: {matchingGroup: {group: parent.ticks, matchAll: true}}
 ```
 
-Labels only match inside one height tier (see the size-group rules), so graphs or dials of very different size keep their own sizes. Example boards, with renders: [day labels](design-references/size-groups/day-labels-group.levity) and [gauge tick labels](design-references/size-groups/tick-labels-group.levity).
+Labels only match inside one height tier (see the size-group rules), so graphs or dials of very different size keep their own sizes. Example dashboards, with renders: [day labels](design-references/size-groups/day-labels-group.levity) and [gauge tick labels](design-references/size-groups/tick-labels-group.levity).
 
 ![Day labels without and with a size group](design-references/size-groups/day-labels-compare.png)
 

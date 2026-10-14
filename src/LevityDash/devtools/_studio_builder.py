@@ -1957,7 +1957,7 @@ class Builder(QWidget):
 	def refreshYaml(self):
 		piece = self.piece
 		if piece.root is not None:
-			# The patch costs a moment on a big board, so it is made only while the tab is in view.
+			# The patch costs a moment on a big dashboard, so it is made only while the tab is in view.
 			if self.tabs.currentWidget() is self.yamlView:
 				patched = self.dashboardPatch()
 				self.yamlView.setPlainText(patched.text if patched.exact else f'# Rewritten in full on Save: {patched.why}\n{patched.text}')

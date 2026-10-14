@@ -8,7 +8,7 @@ import yaml
 from LevityDash.devtools import _yamlpatch as yp
 
 REPO = Path(__file__).resolve().parents[2]
-BOARDS = sorted((REPO / 'docs' / 'design-references' / 'boards').glob('*.levity'))
+BOARDS = sorted((REPO / 'docs' / 'design-references' / 'dashboards').glob('*.levity'))
 
 SAMPLE = """\
 # A board.

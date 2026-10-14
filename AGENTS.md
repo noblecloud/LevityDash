@@ -8,7 +8,7 @@ A desktop-native, multi-source weather dashboard. Qt (PySide6) QGraphicsScene fr
 
 One word per idea, in docs, UI strings and new code. The class `Panel`, `CentralPanel` and the `Modules/` directory keep their names.
 
-- **dashboard**: one `.levity` file. Not "board".
+- **dashboard**: one `.levity` file. Not "dashboard".
 - **item**: any node under `items:`. Not "module", "panel" or "widget" (as a generic).
 - **container**: an item that lays out other items (`group`, `stack`, `value-stack`, `titled-group`, `switch`). **display**: an item that draws data (`realtime.*`, `graph`, `mini-graph`, `polar`, `clock`, `moon`, `label`). **part**: a styled piece inside a display with no `type:` (tick, needle, fill, beam).
 - **preset**: a reusable item definition (`presets/<name>.yaml`: `props:` plus `template:`). **instance**: one use of it, `preset: name` plus only what differs. **property**: a setting on an item or part; a preset's own are **preset properties**. Not "attribute", "parameter" or "option".

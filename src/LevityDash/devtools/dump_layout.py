@@ -4,7 +4,7 @@
 A pixel diff of two renders is noisy where graphs and glows animate. Layout is not, so this is
 the exact check that a layout change moved nothing:
 
-    dump_layout.py OUT.txt --levity BOARD.levity --scenario stormy-day --size 2560x1440
+    dump_layout.py OUT.txt --levity DASHBOARD.levity --scenario stormy-day --size 2560x1440
     diff BEFORE.txt AFTER.txt
 
 One line per panel: its path in the scene, its class, and its scene rectangle rounded to 0.01.
