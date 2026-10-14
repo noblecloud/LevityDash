@@ -1,0 +1,22 @@
+# A row of small readings that all share one title size and one value size, so the row reads as a table.
+# The groups default to dashboard-wide ones (`global.title`, `global.value`), so every row on the dashboard reads alike.
+# Name other groups only for a row that should deliberately differ.
+# Where the row sits comes from the use (`geometry:`), and so does anything else that is not a property below.
+doc: Row of small readings with matched text sizes
+props:
+  items: {default: [], doc: "The readings, written as the items of a value-stack"}
+  titleGroup: {default: global.title, type: text, doc: "Size group of the titles; the default spans the whole dashboard"}
+  valueGroup: {default: global.value, type: text, doc: "Size group of the values; the default spans the whole dashboard"}
+  spacing: {default: 1mm, type: size, doc: "Gap between readings"}
+  font: {default: null, type: text, doc: "Font of the values; unset keeps the font of the panel around it"}
+template:
+  type: value-stack
+  shared:
+    title: {color: $muted, matchingGroup: {group: $titleGroup, matchAll: true}}
+    display:
+      unitPosition: Hidden
+      font: $font
+      valueLabel: {matchingGroup: {group: $valueGroup, matchAll: true}}
+  direction: Horizontal
+  spacing: $spacing
+  items: $items

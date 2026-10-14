@@ -1,0 +1,28 @@
+# A small graph with no labels, for the shape of the last hours: pressure falling, a room's day. One or two
+# series on one scale; `plot` and `plot2` are the plot settings, as for a graph.
+doc: Small unlabelled graph of one or two series
+props:
+  key: {default: environment.temperature.temperature, type: key, doc: "The series"}
+  plot: {default: {type: plot, gradient: TemperatureGradient, weight: 0.5}, doc: "How the series is drawn"}
+  key2: {default: null, type: key, doc: "A second series on the same scale; drawn after the first"}
+  plot2: {default: {type: plot, color: '#8b8f98', weight: 0.25}, doc: "How the second series is drawn"}
+  hours: {default: 24, type: number, min: 1, doc: "How far back it looks"}
+  figure: {default: temperature, type: text, doc: "Name of the scale"}
+  min: {default: null, type: number, doc: "Bottom of the scale; unset fits the data"}
+  max: {default: null, type: number, doc: "Top of the scale; unset fits the data"}
+  top: {default: 8%, type: size, doc: "Space above the lines"}
+  bottom: {default: 8%, type: size, doc: "Space below the lines"}
+template:
+  type: mini-graph
+  timeframe: {hours: $hours}
+  annotations:
+    dayLabels: {enabled: false}
+    hourLabels: {enabled: false}
+  indicator: {color: white, opacity: 0.3}
+  margins: {top: $top, bottom: $bottom}
+  figures:
+    - figure: $figure
+      min: $min
+      max: $max
+      $key: {plot: $plot}
+      $key2: {plot: $plot2}

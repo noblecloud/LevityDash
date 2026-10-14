@@ -6,12 +6,12 @@ doc: Titled panel, a hero reading over three small readings
 props:
   title: {default: Outdoor, type: text, doc: Panel title}
   hero: {default: environment.temperature.temperature, type: key, doc: The big reading}
-  key1: {default: environment.temperature.dewpoint, type: key}
-  label1: {default: Dew Point, type: text}
-  key2: {default: environment.temperature.feelsLike, type: key}
-  label2: {default: Apparent, type: text}
-  key3: {default: environment.humidity.humidity, type: key}
-  label3: {default: Humidity, type: text}
+  key1: {default: environment.temperature.dewpoint, type: key, doc: The tall small reading}
+  label1: {default: Dew Point, type: text, doc: Its title}
+  key2: {default: environment.temperature.feelsLike, type: key, doc: The upper small reading on the right}
+  label2: {default: Apparent, type: text, doc: Its title}
+  key3: {default: environment.humidity.humidity, type: key, doc: The lower small reading on the right}
+  label3: {default: Humidity, type: text, doc: Its title}
 template:
   type: titled-group
   title: {text: $title, height: 8mm}

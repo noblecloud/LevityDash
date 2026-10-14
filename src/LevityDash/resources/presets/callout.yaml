@@ -1,0 +1,34 @@
+# One headline reading with a few supporting ones, as a panel: the reading takes the left 38% and the
+# list the right 60%. `hero_box` and `list_box` move them; the defaults are side by side, and
+# `hero_box: {x: 0%, y: 0%, width: 100%, height: 50%}` with `list_box` below it stacks them.
+# Used for the conditional panels of a rotating slot: add `when:` to the use.
+doc: Headline reading with a list of supporting readings
+props:
+  key: {default: environment.temperature.temperature, type: key, doc: "The headline reading"}
+  title: {default: null, type: text, doc: "Text over the headline reading"}
+  title_color: {default: $muted, type: color, doc: "Colour of that text"}
+  title_height: {default: 18%, type: size, doc: "Height of that text, as a share of the panel"}
+  color: {default: null, type: color, doc: "Colour of the headline value"}
+  precision: {default: null, type: number, min: 0, doc: "Decimals of the headline value; unset keeps the key's own"}
+  font: {default: Nunito, type: text, doc: "Font of the headline value"}
+  weight: {default: null, type: text, doc: "Weight of the headline value, such as Light"}
+  items: {default: [], doc: "The supporting readings, written as the items of a value-stack"}
+  spacing: {default: null, type: size, doc: "Gap between the supporting readings; unset keeps the value-stack's own"}
+  hero_box: {default: {x: 0%, y: 0%, width: 38%, height: 100%}, doc: "Where the headline sits"}
+  list_box: {default: {x: 40%, y: 0%, width: 60%, height: 100%}, doc: "Where the supporting readings sit"}
+template:
+  type: group
+  items:
+    - type: realtime.text
+      key: $key
+      title: {text: $title, height: $title_height, color: $title_color}
+      display:
+        font: $font
+        weight: $weight
+        unitPosition: Inline
+        precision: $precision
+        valueLabel: {color: $color}
+      geometry: $hero_box
+    - preset: reading-list
+      props: {items: $items, spacing: $spacing}
+      geometry: $list_box

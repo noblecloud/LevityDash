@@ -1,0 +1,46 @@
+# A reading with a zoned bar under it and a row of context under that: rain rate with its scale from
+# trace to flood, gust with the speeds that matter. The big reading and the bar's title take `color`;
+# zones, markers and the scale are the bar's own properties.
+doc: Big reading, a zoned bar, and a row of context readings
+props:
+  key: {default: environment.precipitation.precipitation, type: key, doc: "The reading and the value the bar shows"}
+  title: {default: null, type: text, doc: "Text over the reading"}
+  color: {default: $text, type: color, doc: "Colour of that text and the reading"}
+  font: {default: null, type: text, doc: "Font of the reading"}
+  weight: {default: null, type: text, doc: "Weight of the reading"}
+  min: {default: 0, type: number, doc: "Start of the bar's scale"}
+  max: {default: 100, type: number, doc: "End of the bar's scale"}
+  interval: {default: 20, type: number, min: 0, doc: "Distance between the labelled ticks"}
+  zones: {default: [], doc: "The bar's coloured ranges, as for a gauge"}
+  markers: {default: null, doc: "Marks on the bar, such as the day's peak"}
+  items: {default: [], doc: "The context readings, written as the items of a value-stack"}
+  hero_box: {default: {x: 0%, y: 0%, width: 100%, height: 50%}, doc: "Where the reading sits"}
+  bar_box: {default: {x: 2%, y: 51%, width: 96%, height: 9%}, doc: "Where the bar sits"}
+  list_box: {default: {x: 0%, y: 66%, width: 100%, height: 34%}, doc: "Where the context readings sit"}
+template:
+  type: group
+  items:
+    - type: realtime.text
+      key: $key
+      title: {text: $title, height: 11%, color: $color}
+      display:
+        font: $font
+        weight: $weight
+        unitPosition: FloatUnder
+        valueLabel: {color: $color, margins: 2%}
+      geometry: $hero_box
+    - type: realtime.bar
+      key: $key
+      title: false
+      geometry: $bar_box
+      display:
+        range: {min: $min, max: $max}
+        track: {weight: 28%}
+        zones: $zones
+        fill: {weight: 28%, color: zone}
+        markers: $markers
+        major: {interval: $interval, side: after, labels: true}
+        value-label: {visible: false}
+    - preset: reading-list
+      props: {items: $items, direction: Horizontal, spacing: 1mm}
+      geometry: $list_box

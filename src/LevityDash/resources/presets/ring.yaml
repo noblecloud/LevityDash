@@ -1,0 +1,29 @@
+# A thin ring that fills with one value and carries no text. Stack several in one group, each with its own
+# `radius`, for nested rings (cloud cover low, middle and high); the group must give them the same size.
+doc: Thin filled ring with no text
+props:
+  key: {default: environment.clouds.cover.cover, type: key, doc: "The value the ring shows"}
+  radius: {default: 96%, type: size, doc: "Radius, as a share of the space"}
+  color: {default: $accent, type: color, doc: "Colour of the filled part"}
+  track: {default: $rule, type: color, doc: "Colour of the unfilled part"}
+  weight: {default: 5%, type: size, doc: "Thickness"}
+  min: {default: 0, type: number, doc: "Value at the start"}
+  max: {default: 100, type: number, doc: "Value at the end"}
+  start_angle: {default: -135, type: number, min: -360, max: 360, doc: "Where it starts, in degrees from the top"}
+  end_angle: {default: 135, type: number, min: -360, max: 360, doc: "Where it ends"}
+template:
+  type: realtime.gauge
+  key: $key
+  title: false
+  geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+  display:
+    radius: $radius
+    arc: {start-angle: $start_angle, end-angle: $end_angle, weight: $weight, color: $track}
+    range: {min: $min, max: $max}
+    fill: {weight: $weight, color: $color}
+    major: {enabled: false}
+    minor: {enabled: false}
+    micro: {enabled: false}
+    needle: {visible: false}
+    value-label: {visible: false}
+    unit-label: {visible: false}

@@ -14,7 +14,9 @@ from PySide6.QtGui import QImage  # noqa: E402
 from LevityDash.devtools import _studio_builder as sb  # noqa: E402
 from LevityDash.devtools import _studio_preset as m  # noqa: E402
 
-BOARDS = Path(__file__).parents[2] / 'docs' / 'design-references' / 'dashboards'
+# Copies of the design dashboards as they were written without presets: stack shorthand and size groups in plain
+# sight, which the Studio must keep. The design dashboards themselves use presets and may change; this one does not.
+BOARDS = Path(__file__).parent / 'dashboards'
 
 
 class StubEngine:

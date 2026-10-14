@@ -1,4 +1,5 @@
 # The date, the time and the moon on one clock item. A preset with no properties.
+doc: The date, the time and the moon on one clock item
 template:
   type: clock
   frozen: true
