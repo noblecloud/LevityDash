@@ -158,3 +158,25 @@ def test_condition_icon_aliases_cover_all_wmo_codes():
 	for code, expected in WMOCodes.items():
 		assert iconAliases[code] == expected['icon']
 		assert conditionAliases[code] == expected['description']
+
+
+def test_forecast_times_are_read_in_the_zone_the_request_named(monkeypatch):
+	"""Open-Meteo answers in the requested zone with no offset. A host whose own clock is in
+	another zone must still put 14:00 New York at 14:00 New York, not at 14:00 host time."""
+	import time
+	from datetime import timezone
+
+	from LevityDash.lib.plugins.categories import CategoryItem
+
+	monkeypatch.setenv('TZ', 'Pacific/Honolulu')
+	time.tzset()
+	try:
+		raw = copy.deepcopy(raw_schema)
+		raw['timestamp']['kwargs'] = {'tz': 'America/New_York'}
+		schema = Schema(plugin=FakePlugin(), source=raw)
+		convert = schema.getExact(CategoryItem('timestamp')).getConvertFunc(type('Hourly', (), {'dataName': 'hourly'}))
+		parsed = convert('2026-10-14T14:00')
+		assert parsed.astimezone(timezone.utc).isoformat() == '2026-10-14T18:00:00+00:00'
+	finally:
+		monkeypatch.undo()
+		time.tzset()

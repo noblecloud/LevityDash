@@ -4518,6 +4518,7 @@ class GraphProxy(QGraphicsItemGroup):
 	def hoverMoveEvent(self, event: QGraphicsSceneHoverEvent) -> None:
 		values: List[Tuple[int, str]] = []
 		figure_trailing_values: Dict[Figure, str] = {}
+		sourceNames: List[str] = []
 		event.ignore()
 		t = timedelta(seconds=event.pos().x() * self.graph.secondsPerPixel)
 		for figure in self.graph.figures:
@@ -4531,6 +4532,9 @@ class GraphProxy(QGraphicsItemGroup):
 				if d.graphic.shape().contains(data_pos := d.graphic.mapFromItem(figure, pos)):
 					count += 1
 					d_name = d.key.name
+					sourceName = getattr(getattr(d.connectedContainer, 'source', None), 'name', None)
+					if sourceName and sourceName not in sourceNames:
+						sourceNames.append(sourceName)
 					matched_value = d.pos_px_to_value(t).value
 
 					if isinstance(matched_value, Measurement):
@@ -4557,6 +4561,8 @@ class GraphProxy(QGraphicsItemGroup):
 		if len(values):
 			values.sort(key=lambda x: x[0], reverse=True)
 			bottom_text = '\n'.join(i[1] for i in values)
+			if sourceNames:
+				bottom_text += f'\nSource: {", ".join(sourceNames)}'
 			t = Second(t).auto
 			timestamp = f'{t:+:simple}' if abs(t.second.int) > 900 else f'now'
 			QToolTip.showText(event.screenPos(), f'{timestamp}\n{bottom_text}')

@@ -185,6 +185,10 @@ class UnitMetaData(dict):
 		if typeString is None or unitDef is None:
 			return lambda value: value
 		if typeString in ('datetime', 'date'):
+			# A source that says which zone its clock-less ISO times are in (Open-Meteo
+			# answers in the zone the request named) must be read in that zone, not in
+			# the machine's: the two differ whenever the config and the host disagree.
+			sourceZone = 'tz' in kwargs
 			if 'tz' in kwargs:
 				if isinstance(kwargs['tz'], SchemaProperty):
 					value = kwargs['tz']
@@ -199,6 +203,15 @@ class UnitMetaData(dict):
 				format = self.get('format', None)
 				if isinstance(format, dict):
 					format = format[source.dataName]
+				if sourceZone:
+					zone = kwargs['tz']
+
+					def parseInZone(value):
+						naive = datetime.strptime(value, format)
+						aware = zone.localize(naive) if hasattr(zone, 'localize') else naive.replace(tzinfo=zone)
+						return aware.astimezone(LOCAL_TIMEZONE)
+
+					return parseInZone
 				return lambda value: datetime.strptime(value, format).astimezone(LOCAL_TIMEZONE)
 		if isinstance(unitDef, str) and unitDef in unitDict:
 			if unitDef in PERCENT_UNITS:
