@@ -268,6 +268,8 @@ def boot(
 	else:
 		resizeScene(app, size)
 	pump(app, max(settle - 1.5, 1.5))
+	if freeze is not None:
+		settleSwitches(LevityDashboard)
 	if fixture_pending:
 		# Every display now exists and has been laid out; publishing here means
 		# no display can format a value before it knows its own units. The second
@@ -281,6 +283,25 @@ def boot(
 			plugin.publish()
 			pump(app, 0.5)
 	return app, LevityDashboard
+
+
+def settleSwitches(dashboard) -> None:
+	"""Stop every `Switch` from changing on the wall clock, so a frozen render is repeatable.
+
+	A switch's `cycle`, `hold` and `fade` run on real QTimers, so which child
+	shows at capture depends on how far those timers have got - two renders of
+	the same board could show different panels in the same slot. With the clock
+	pinned, each switch shows its first matching child at once, every time.
+	"""
+	from LevityDash.lib.ui.frontends.PySide.Modules.Containers.Switch import Switch
+
+	for item in dashboard.scene.items():
+		if isinstance(item, Switch):
+			item._cycle = 0.0
+			item._hold = 0.0
+			item._fade = 0.0
+			item._cycleTimer.stop()
+			item._holdTimer.stop()
 
 
 def resizeScene(app, size: Tuple[int, int]) -> None:
