@@ -170,7 +170,7 @@ Triaged from `_planned-features.md`, grouped by area. ~~Struck~~ items are alrea
 
 ### App & platform
 
-- **Keep-awake option** — prevent *system/display* sleep for an always-on kiosk display: `caffeinate` (macOS), `xdg-screensaver`/`systemd-inhibit` (Linux), `powercfg`/`SetThreadExecutionState` (Windows). Distinct from macOS App Nap (a per-process background-timer throttle, independent of system sleep settings) — App Nap is already opted out of unconditionally at startup via `preventAppNap()` (`lib/utils/shared.py`), both frontend and backend.
+- ~~**Keep-awake option**~~ — **done 2026-10-07**: `[QtOptions] keepAwake = True` holds an OS lock for the life of the frontend (`lib/utils/keepawake.py`): `caffeinate` on macOS, `systemd-inhibit` on Linux, `SetThreadExecutionState` on Windows. Off by default. Tested with stand-in commands and a real `systemd-inhibit` (which correctly reports failure in a container with no bus); a real macOS or Windows hold is not yet seen. App Nap is separate and unchanged: already opted out via `preventAppNap()` (`lib/utils/shared.py`).
 - ~~**Runtime log-level menu**~~ — **done 2026-10-07**: Logs > Log Level (file and console) and Logs > Status Bar Level, each a radio list from Error to Verbose (`app.py` `_levelMenu`, `_LevityLogger.setRuntimeLevel`). A change applies at once and lasts until restart; nothing is written to the config.
 - **Dashboard-level config overrides** — per-dashboard settings that override global config.
 - **Event notifications** — user-facing alerts (lightning nearby, rain starting, etc.).
