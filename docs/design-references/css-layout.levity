@@ -47,6 +47,11 @@
       spacing: 10px
       geometry: {x: 2%, y: 36%, width: 96%, height: 62%}
       grid: {columns: [2fr, 1fr, 1fr], rows: [1fr, 1fr, 1fr]}
+      # A cell sizes its own text, so without a group the satellites come out at four sizes.
+      # One group for the titles and one for the values makes them agree. The hero is a taller box, so it stays larger.
+      shared:
+        title: {matchingGroup: {group: gridTitle@grid, matchAll: true}}
+        display: {valueLabel: {matchingGroup: {group: gridValue@grid, matchAll: true}}}
       items:
         - {type: realtime.text, key: environment.temperature.temperature, title: Temperature, grid: {column: 1, row: 1, column-span: 1, row-span: 3}, border: {enabled: true, edges: all}}
         - {type: realtime.text, key: environment.humidity.humidity, title: Humidity, border: {enabled: true, edges: all}}
