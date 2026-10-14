@@ -1445,7 +1445,6 @@ class GaugeTickText(GlowMixin, GaugeItem, AnnotationText, Stateful):
 		tick.label = self
 		kwargs['gauge'] = gauge
 		kwargs['value'] = group.source.value_at(tick.index)
-		# group.size_group.addItem(self)
 		self.set_formatting_func(group.format_value)
 		kwargs['labelGroup'] = group
 		super(GaugeTickText, self).__init__(*args, **kwargs)
@@ -2023,10 +2022,9 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText], GlowMixin):
 			return '⋯'
 		return str(value)
 
-	@cached_property
-	def size_group(self) -> SizeGroup:
-		tick_type = self._ticks.tick_type.name.lower()
-		return self.gauge.localGroup.getAttrGroup(f'local.{tick_type}-textSize', matchAll=True)
+	@property
+	def groupOwner(self):
+		return self.gauge
 
 	def onAxisTransform(self, axis: Axis):
 		print('onAxisTransform', axis)
