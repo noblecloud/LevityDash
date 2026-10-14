@@ -1,6 +1,6 @@
-"""One item that raises while loading must not cost the board.
+"""One item that raises while loading must not cost the dashboard.
 
-It used to unwind the whole load, so the board stopped at whatever was built
+It used to unwind the whole load, so the dashboard stopped at whatever was built
 first (the "just a big moon" symptom). Now the item is logged with its
 traceback and replaced by an error tile; everything else loads.
 """

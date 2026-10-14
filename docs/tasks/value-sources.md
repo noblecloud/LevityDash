@@ -115,7 +115,7 @@ use, service latency, or any key a plugin publishes.
    back to the static range resolution in `GaugeRange`. A condition
    short-circuits, so the branch not taken may be missing. **An expression
    must never raise during dashboard load**: one item's exception aborts
-   the whole board (see the gotcha in `CLAUDE.md`). Reject a malformed
+   the whole dashboard (see the gotcha in `CLAUDE.md`). Reject a malformed
    expression at load with a logged error naming the item, and treat it as
    missing.
 

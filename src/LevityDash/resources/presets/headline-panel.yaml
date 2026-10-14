@@ -22,7 +22,8 @@ props:
   items: {default: [], doc: "The supporting readings, written as the items of a value-stack"}
   direction: {default: Horizontal, doc: "Vertical or Horizontal"}
   spacing: {default: null, type: size, doc: "Gap between the supporting readings"}
-  list_display: {default: null, doc: "Display settings the supporting readings share, such as {font: Roboto Mono}"}
+  list_font: {default: null, type: text, doc: "Font of the supporting readings' values"}
+  list_precision: {default: null, type: number, min: 0, doc: "Decimals of the supporting readings; unset keeps each key's own"}
   list_box: {default: {x: 0%, y: 76%, width: 100%, height: 24%}, doc: "Where the supporting readings sit"}
 template:
   type: group
@@ -45,5 +46,5 @@ template:
         valueLabel: {color: $color}
       geometry: $hero_box
     - preset: reading-list
-      props: {items: $items, direction: $direction, spacing: $spacing, display: $list_display}
+      props: {items: $items, direction: $direction, spacing: $spacing, font: $list_font, precision: $list_precision}
       geometry: $list_box

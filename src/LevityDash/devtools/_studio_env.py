@@ -1,4 +1,4 @@
-"""Dev-only: set the environment before the first `LevityDash` import. Gauge Studio.
+"""Dev-only: set the environment before the first `LevityDash` import. Studio.
 
 `import LevityDash` builds the `QApplication` and the config object. With no
 override the config object reads, and creates files in, the real config
@@ -26,8 +26,8 @@ def prepare(argv=None) -> None:
 	argv = sys.argv if argv is None else argv
 	os.environ['LEVITYDASH_CONFIG_DEBUG'] = '1'
 	os.environ.pop('LEVITYDASH_CONFIG_SEED', None)
-	if '--build' in argv:
+	if '--build' in argv or '--dashboard' in argv:
 		os.environ['LEVITYDASH_FIXTURE'] = parseFlag(argv, '--scenario') or DEFAULT_SCENARIO
-		# Values arrive after the first (blank) board settles, so every preview's displays find them already published.
+		# Values arrive after the first (blank) dashboard settles, so every preview's displays find them already published.
 		os.environ.setdefault('LEVITYDASH_FIXTURE_DELAY_MS', 'end')
 		os.environ['LEVITYDASH_CONFIG_SEED'] = parseFlag(argv, '--seed') or str(DEFAULT_SEED)

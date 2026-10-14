@@ -429,7 +429,7 @@ shaping. Digits and `.`, `-`, `°`, `%` do not.
   `updateTransform`.** `updateTransform` calls `setTransform`, which calls
   `_bend()`. Call `setPath` only.
 - **One item's exception aborts the whole dashboard load.** A bug in `_bend()`
-  raised from `refresh` costs the whole board, not one label. Run with
+  raised from `refresh` costs the whole dashboard, not one label. Run with
   `STATEFUL_DEBUG=1` (see `CLAUDE.md` gotchas) and grep
   `~/Library/Logs/LevityDash/LevityDash.log` for `Dashboard load aborted`.
 - **Leave the `_center_transform` TODO alone.**

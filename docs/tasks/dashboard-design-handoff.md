@@ -1,17 +1,17 @@
-# Dashboard design handoff (weather boards)
+# Dashboard design handoff (weather dashboards)
 
 Paused 2026-10-06 when the project's token budget ran out. Branch
 `claude/dashboard-design-uy2w74` (draft PR #22: process table and the
 max-length fix).
 
 ## Where things are
-- Mockups: `docs/design-references/weather-boards.html` (open in a browser). The
+- Mockups: `docs/design-references/weather-dashboards.html` (open in a browser). The
   same page is published at https://claude.ai/artifact/Rit1u69z54f7vSg7rE5cKt.
 - Technique notes: `/mnt/project-files/levitydash/cascading-options.md` (cascading
-  options, the clock lesson, the 2022 board, density).
+  options, the clock lesson, the 2022 dashboard, density).
 - Theme roles: `/mnt/project-files/levitydash/themes.md`. The theme engine is PR #24 (`$token`).
 
-## State of the boards
+## State of the dashboards
 - **Core + rotation** (top of the page). Fixed heroes: temperature, wind and rain.
   Satellites: humidity and pressure. One `switch` slot rotates sun & UV, sky, moon
   and soil. A conditional Lightning panel takes the slot when a strike is within 10 mi
@@ -37,7 +37,7 @@ max-length fix).
 - Use more than one font: Nunito for heroes, Roboto Mono for figures, Roboto for labels.
 
 ## Keys and engine gaps
-- Keys are in the "Keys" notes under each board on the page. Most are standard
+- Keys are in the "Keys" notes under each dashboard on the page. Most are standard
   `environment.*` keys. Low, high and trend use `min/max(k, 24h)` and `k - at(k, -1h)`.
 - Missing:
   - arg-min/arg-max for "low at 05:12" and "rain after 3 pm".

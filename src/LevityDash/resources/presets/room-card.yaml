@@ -10,7 +10,6 @@ props:
   hero_box: {default: {x: 0%, y: 0%, width: 40%, height: 58%}, doc: Where the hero sits}
   extra: {default: null, doc: "A second hero, as a realtime.text item"}
   graph: {default: null, doc: "The day graph, as an item; give it a geometry"}
-  group: {default: room, type: text, doc: Name of the size group the row of readings shares text sizes in}
   items: {default: [], doc: "The row of readings, written as the items of a value-stack"}
 template:
   type: titled-group
@@ -25,4 +24,4 @@ template:
     - $graph
     - preset: stat-row
       geometry: {x: 0%, y: 62%, width: 100%, height: 38%}
-      props: {group: $group, items: $items}
+      props: {items: $items}

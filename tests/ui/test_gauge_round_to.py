@@ -99,3 +99,14 @@ def test_rounding_does_not_move_a_round_bound(dashboard):
 		assert round(float(rng.rounded_max), 9) == 0.3, f'rounded_max is {rng.rounded_max!r}'
 	finally:
 		sandbox.scene().removeItem(sandbox)
+
+
+def test_a_zero_span_gauge_builds_instead_of_raising(dashboard):
+	"""A min equal to max made `round_to` call log10(0) and raise, so the gauge
+	never finished building. It now gets a step of 1."""
+	sandbox, rng = _range(dashboard, 5, 5)
+	try:
+		assert rng.round_to == 1
+		assert isfinite(rng.rounded_min)
+	finally:
+		sandbox.scene().removeItem(sandbox)

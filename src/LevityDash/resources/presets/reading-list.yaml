@@ -5,12 +5,18 @@ props:
   items: {default: [], doc: "The readings, written as the items of a value-stack"}
   direction: {default: null, doc: "Vertical or Horizontal; unset keeps the value-stack's own"}
   spacing: {default: null, type: size, doc: "Gap between readings; unset keeps the value-stack's own"}
-  display: {default: null, doc: "Display settings every reading shares, such as {font: Roboto Mono, precision: 0}"}
+  font: {default: null, type: text, doc: "Font of the values; unset keeps the font of the panel around it"}
+  precision: {default: null, type: number, min: 0, doc: "Decimals of every value; unset keeps each key's own"}
+  titleGroup: {default: global.title, type: text, doc: "Size group of the titles. The default spans the whole dashboard, so every list reads alike"}
+  valueGroup: {default: global.value, type: text, doc: "Size group of the values; the default spans the whole dashboard"}
 template:
   type: value-stack
   shared:
-    title: {color: $muted}
-    display: $display
+    title: {color: $muted, matchingGroup: {group: $titleGroup, matchAll: true}}
+    display:
+      font: $font
+      precision: $precision
+      valueLabel: {matchingGroup: {group: $valueGroup, matchAll: true}}
   direction: $direction
   spacing: $spacing
   items: $items

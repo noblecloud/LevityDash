@@ -1,4 +1,4 @@
-"""Does Gauge Studio's preview follow its value slider, and do named sources resolve?
+"""Does Studio's preview follow its value slider, and do named sources resolve?
 
 Offscreen. Two checks, because they fail for different reasons:
 
@@ -42,7 +42,7 @@ def pixels() -> str:
 studio = gs.Studio()
 studio.show()
 pump()
-cells = gs.showcaseCells()
+cells = gs.showcaseExamples()
 label, entry = cells[0]
 studio.loadDisplay(copy.deepcopy(entry.get('display') or {}), entry.get('key'), label)
 pump()

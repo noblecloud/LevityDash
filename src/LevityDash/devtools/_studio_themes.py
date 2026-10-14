@@ -1,4 +1,4 @@
-"""Dev-only: the colour-theme picker in Gauge Studio.
+"""Dev-only: the colour-theme picker in Studio.
 
 Not the Studio's own light/dark button, which styles the controls. This one picks the theme the gauge is drawn in,
 so a `$token` in a template can be tried against `default`, `dusk`, `paper` and any file in `<config>/themes`.

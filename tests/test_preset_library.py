@@ -1,4 +1,4 @@
-"""The presets that ship with the app: each one loads, fills from its own defaults, and the example boards use them cleanly."""
+"""The presets that ship with the app: each one loads, fills from its own defaults, and the example dashboards use them cleanly."""
 from pathlib import Path
 
 import pytest
@@ -8,7 +8,7 @@ from LevityDash.lib import presets
 
 ROOT = Path(__file__).resolve().parents[1]
 SHIPPED = sorted(p.stem for p in (ROOT / 'src/LevityDash/resources/presets').glob('*.yaml'))
-BOARDS = sorted(p for p in (ROOT / 'docs/design-references').rglob('*.levity') if 'preset:' in p.read_text())
+DASHBOARDS = sorted(p for p in (ROOT / 'docs/design-references').rglob('*.levity') if 'preset:' in p.read_text())
 
 
 def _failed(node):
@@ -40,7 +40,7 @@ def test_every_property_of_a_shipped_preset_says_what_it_is(name):
 	assert not missing, f'{name}: properties without a doc: {missing}'
 
 
-@pytest.mark.parametrize('board', BOARDS, ids=lambda p: p.name)
-def test_a_design_board_uses_presets_without_an_error_tile(board):
-	data = presets.expand(yaml.safe_load(board.read_text()))
+@pytest.mark.parametrize('dashboard', DASHBOARDS, ids=lambda p: p.name)
+def test_a_design_dashboard_uses_presets_without_an_error_tile(dashboard):
+	data = presets.expand(yaml.safe_load(dashboard.read_text()))
 	assert not list(_failed(data)), [f['message'] for f in _failed(data)]

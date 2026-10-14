@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Dev-only: time Gauge Studio's build, in-place edit and settle paths, offscreen.
+"""Dev-only: time Studio's build, in-place edit and settle paths, offscreen.
 
     QT_QPA_PLATFORM=offscreen PYTHONPATH=src python src/LevityDash/devtools/bench_gauge_studio.py [--cell N] [--runs 5] [--profile build|edit|settle] [--all]
 """
@@ -51,7 +51,7 @@ def main():
 	p.add_argument('--only', type=int, help='with --roundtrip: one cell index; each cell in its own process avoids one failure spoiling the next')
 	p.add_argument('--all', action='store_true', help='benchmark every showcase cell (build only)')
 	a = p.parse_args()
-	cells = gs.showcaseCells()
+	cells = gs.showcaseExamples()
 	studio = gs.Studio()
 	studio.show()
 	pump()

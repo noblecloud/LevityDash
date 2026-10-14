@@ -1,8 +1,8 @@
-"""A slot that shows one of several panels.
+"""A switch shows one of several items.
 
 ```yaml
 - type: switch
-  hold: 30s        # a change must hold this long before the slot flips
+  hold: 30s        # a change must hold this long before the switch flips
   fade: 300ms
   cycle: 8s        # optional: take turns when more than one child matches
   items:
@@ -13,14 +13,14 @@
       key: environment.light.uvi
 ```
 
-Each child fills the slot. The first child whose `when` holds is shown; one with
-no `when` always matches. The slot keeps its place in the stack or group that
-holds it, so the space a hidden panel frees goes to its replacement, not to
+Each child fills the switch. The first child whose `when` holds is shown; one with
+no `when` always matches. The switch keeps its place in the stack or group that
+holds it, so the space a hidden item frees goes to its replacement, not to
 blank. With `cycle`, every matching child takes a turn. A choice never rebuilds
-anything: the slot only toggles visibility and opacity.
+anything: the switch only toggles visibility and opacity.
 
 Nothing here raises. A bad `when` counts as false (and is logged by the
-condition), and with no match the slot shows nothing.
+condition), and with no match the switch shows nothing.
 """
 from typing import Any, List, Optional
 
@@ -229,7 +229,7 @@ class Switch(Panel, tag='switch'):
 
 	@StateProperty(default=30.0, allowNone=False, sortOrder=60)
 	def hold(self) -> float:
-		"""Seconds a change must last before the slot flips, so a value hovering at a threshold does not flap. The first pick is instant."""
+		"""Seconds a change must last before the switch flips, so a value hovering at a threshold does not flap. The first pick is instant."""
 		return self._hold
 
 	@hold.setter

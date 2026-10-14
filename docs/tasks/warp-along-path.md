@@ -119,5 +119,5 @@ Extend `docs/design-references/presets/warped-text.levity` and its PNG:
   stretch on the outer side of a bend and squeeze on the inner side.
 
 Also: a before/after render of `gauge-showcase.levity` with no visible change; timing for
-the circle fast path against the general path on a live-updating value label; Gauge Studio
+the circle fast path against the general path on a live-updating value label; Studio
 export round trip; `pytest tests -q -p no:cacheprovider`.

@@ -1,14 +1,14 @@
 - Drag and drop dashboard design (This can be a little funky at times)
 - YAML based dashboard specifications with support for both absolute and relative size/positioning
-- Module grouping with shared/preset styling
-- Size-matching groups that keep related text consistently sized across panels
-- Editable Margins for text modules
+- Item grouping with shared/preset styling
+- Size-matching groups that keep related text consistently sized across items
+- Editable Margins for text items
 - Resizable graph figures
 - Custom, value mapped, gradients for figure items
-- [Themes](/config/dashboard/themes.md): named colors, fonts, and gradients that restyle a whole board
+- [Themes](/config/dashboard/themes.md): named colors, fonts, and gradients that restyle a whole dashboard
 - [Variables](/config/dashboard/variables.md): name a value once and use it in many places
 - [Expressions](/config/dashboard/expressions.md): a value from a calculation on keys, with units such as `> 90°F`
-- A module that is shown only while a condition is true (`when:`)
+- An item that is shown only while a condition is true (`when:`)
 - A dashboard that loads when one item fails. The item shows an error tile.
 - Icon packs: Font Awesome (`fa:`), Material Design Icons (`mdi:`), Weather Icons (`wi:`)
 - Text filters (lower, upper, title, capitalize, ordinal, add-ordinal)

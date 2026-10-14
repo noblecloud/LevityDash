@@ -1,0 +1,14 @@
+# `key:` may be an expression. It is evaluated at every sample, so this draws the gap between the
+# temperature and the dewpoint across the day: wide in the afternoon, closing towards dawn.
+- type: polar
+  name: polar
+  plot: clock
+  key: environment.temperature.temperature - environment.temperature.dewpoint
+  window: today
+  min: 0
+  max: 30
+  gradient:
+    - {at: 4°F, color: '#1a8cff'}
+    - {at: 12°F, color: '#14e3c0'}
+    - {at: 20°F, color: '#ffd400'}
+    - {at: 28°F, color: '#ff9124'}

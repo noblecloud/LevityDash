@@ -14,7 +14,7 @@ Selectively sync config/settings to lambda. Only syncs what you explicitly ask f
 Options:
   plugins       Sync plugin configs (plugins.ini + per-plugin configs)
   dashboards    Sync dashboard layout files (.levity)
-  panels        Sync panel config files (.levityPanel)
+  panels        Sync saved item files (saves/panels)
   config        Sync main config.ini only
   all           Sync everything (plugins + config, NOT dashboards/panels)
   --help        Show this help

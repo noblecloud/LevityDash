@@ -1,7 +1,7 @@
 """Themes: named tokens (``$accent``, ``$mono``, ``$temperature``) that a dashboard writes in place of raw values.
 
 A theme is a small YAML file. One dashboard picks one theme with a root ``theme:`` key, and every colour, font
-and gradient in it may name a token instead of a value. Swapping the theme restyles the board; a raw value
+and gradient in it may name a token instead of a value. Swapping the theme restyles the dashboard; a raw value
 written on an item still wins, because the token is only looked up when the item says ``$name``.
 
 Pure Python, no Qt: the colour work goes through ``Color`` and ``oklch`` lazily.

@@ -1,4 +1,4 @@
-"""Presets: a whole item, written once, used with only what differs.
+"""Presets: a whole item, written once, then used as an instance that holds only what differs.
 
 A preset is a file `<name>.yaml` in a `presets/` folder (the config folder first, then the ones that
 ship with the app). It names its own properties, with defaults, and a `template` that uses them:
@@ -14,7 +14,7 @@ template:
     - {type: realtime.gauge, key: $key, display: {arc: {gradient: $accent}, range: {max: $hi}}}
 ```
 
-A board uses it with `preset:`, `props:` for the properties it changes, and any other field it
+A dashboard makes an instance with `preset:`, `props:` for the properties it changes, and any other field it
 wants to change, which is merged over the template (mappings merge, lists and values replace):
 
 ```yaml
@@ -33,7 +33,7 @@ wants to change, which is merged over the template (mappings merge, lists and va
 - A save writes `preset`, the `props` as the file had them, and only the fields whose live value
   differs from what the preset gives (`collapse`). Lists are written whole when any item differs.
 - A bad preset (unknown name, unknown property, wrong type) becomes an error tile in place of that
-  item (`failed`); the rest of the board loads.
+  item (`failed`); the rest of the dashboard loads.
 
 Qt-free, like `lib/variables.py`. The names of the three keys are constants below.
 """
@@ -51,7 +51,7 @@ from LevityDash.lib.variables import _same, retemplate, substitute
 
 __all__ = [
 	'PresetError', 'Preset', 'Prop', 'PRESET', 'PROPS', 'TEMPLATE', 'FAILED', 'add_search_path', 'available', 'collapse',
-	'expand', 'expand_use', 'is_instance', 'load', 'merge', 'search_paths',
+	'expand', 'expand_instance', 'is_instance', 'load', 'merge', 'search_paths',
 ]
 
 log = logging.getLogger("LevityDash.presets")
@@ -76,7 +76,7 @@ _TYPES = {
 
 
 class PresetError(ValueError):
-	"""A preset file is wrong, or an item uses one wrongly."""
+	"""A preset file is wrong, or an instance is wrong."""
 
 
 @dataclass(frozen=True)
@@ -302,18 +302,18 @@ def is_instance(node: Any) -> bool:
 		return True  # a broken file is still the author's intent; expansion reports it
 
 
-def expand_use(use: dict, stack: tuple = ()) -> dict:
-	"""The item one `preset:` use makes. Raises `PresetError` instead of making a failed node."""
-	preset = load(use[PRESET])
-	given = use.get(PROPS)
+def expand_instance(instance: dict, stack: tuple = ()) -> dict:
+	"""The item one `preset:` instance makes. Raises `PresetError` instead of making a failed node."""
+	preset = load(instance[PRESET])
+	given = instance.get(PROPS)
 	if given is not None and not isinstance(given, dict):
 		raise PresetError(f'{PROPS!r} is a mapping of property names to values')
-	fields = {k: v for k, v in use.items() if k not in (PRESET, PROPS)}
+	fields = {k: v for k, v in instance.items() if k not in (PRESET, PROPS)}
 	return preset.instance(given, fields, stack)
 
 
 def _failed(node: dict, error: Exception) -> dict:
-	log.error(f'preset {node.get(PRESET)!r} could not be used: {error}')
+	log.error(f'preset {node.get(PRESET)!r} could not be expanded: {error}')
 	out = {'type': FAILED, 'message': str(error)}
 	for key in ('name', 'geometry'):
 		if key in node:
@@ -323,10 +323,10 @@ def _failed(node: dict, error: Exception) -> dict:
 
 def _expand_instance(node: dict, stack: tuple) -> dict:
 	try:
-		return expand_use(node, stack)
-	except Exception as error:  # one bad use must not cost the board
+		return expand_instance(node, stack)
+	except Exception as error:  # one bad instance must not cost the dashboard
 		if stack:
-			raise  # inside another preset: the outermost use fails, with this reason
+			raise  # inside another preset: the outermost instance fails, with this reason
 		return _failed(node, error)
 
 
@@ -341,7 +341,7 @@ def _walk(node: Any, stack: tuple = ()) -> Any:
 
 
 def expand(state: Any) -> Any:
-	"""The root of a dashboard with every preset use replaced by the item it makes. The input is not changed.
+	"""The root of a dashboard with every preset instance replaced by the item it makes. The input is not changed.
 
 	Run before `resolveVariables`, so a preset's text can use the file's `vars:`.
 	"""
@@ -391,9 +391,9 @@ def _fold(live: dict, base: dict, written: dict, collapse_: Callable) -> dict:
 
 
 def collapse(live: Any, written: dict, loaded: Any = None, variables: Optional[dict] = None, collapse_: Optional[Callable] = None) -> Any:
-	"""A preset use as it should be saved: `written`'s `preset` and `props`, and the fields of `live` that differ from the preset.
+	"""A preset instance as it should be saved: `written`'s `preset` and `props`, and the fields of `live` that differ from the preset.
 
-	`live` is the item as the app would save it now, `written` the use as the file had it, `loaded` the same item as
+	`live` is the item as the app would save it now, `written` the instance as the file had it, `loaded` the same item as
 	the app dumped it right after loading (the baseline; without it the preset's own expansion is used, which is
 	only exact when the app adds nothing on a dump) and `variables` the file's resolved `vars:`.
 	Returns None when this cannot be done, and the caller saves the full item.
@@ -405,7 +405,7 @@ def collapse(live: Any, written: dict, loaded: Any = None, variables: Optional[d
 		hook = collapse_ or (lambda item, wrote, base: collapse(item, wrote, base, variables))
 		given = written.get(PROPS)
 		if not isinstance(loaded, dict):
-			loaded = substitute(expand_use(written), variables)
+			loaded = substitute(expand_instance(written), variables)
 		fields = {k: v for k, v in written.items() if k not in (PRESET, PROPS)}
 		out: dict = {PRESET: written[PRESET]}
 		if given:

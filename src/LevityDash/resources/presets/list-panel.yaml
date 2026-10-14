@@ -7,10 +7,10 @@ props:
   title_height: {default: 0.5cm, type: size, doc: Height of the title}
   items: {default: [], doc: "The readings, written as the items of a value-stack"}
   spacing: {default: 0.4mm, type: size, doc: Gap between readings}
-  display: {default: null, doc: "Display settings every reading shares, such as {font: Roboto Mono}"}
+  font: {default: null, type: text, doc: "Font of the values; unset keeps the font of the panel around it"}
 template:
   type: titled-group
   title: {text: $title, height: $title_height, color: $title_color}
   items:
     - preset: reading-list
-      props: {items: $items, spacing: $spacing, display: $display}
+      props: {items: $items, spacing: $spacing, font: $font}

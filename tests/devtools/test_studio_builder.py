@@ -22,7 +22,7 @@ class StubEngine:
 	def resize(self, size):
 		self.size = size
 
-	def render(self, items, names):
+	def render(self, items, names, root=None):
 		self.drawn.append(items)
 		image = QImage(640, 400, QImage.Format.Format_ARGB32)
 		image.fill(0)

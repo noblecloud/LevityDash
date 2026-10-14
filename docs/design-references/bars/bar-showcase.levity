@@ -1,4 +1,4 @@
-# Every bar style on one board: progress, battery, segmented, gradient, zones, markers and a pointer, a
+# Every bar style on one dashboard: progress, battery, segmented, gradient, zones, markers and a pointer, a
 # thermometer, and the same bars standing up. Design size 2880x1800; every size is a share of its card.
 #
 #   render_dashboard.py out.png --levity docs/design-references/bars/bar-showcase.levity \

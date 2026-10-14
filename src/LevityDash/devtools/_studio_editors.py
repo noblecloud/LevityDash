@@ -1,4 +1,4 @@
-"""Dev-only: structured editors for Gauge Studio. Nothing here asks you to type YAML.
+"""Dev-only: structured editors for Studio. Nothing here asks you to type YAML.
 
 Each editor is a widget with one job: show a value in the form a `.levity` file
 holds, and report an edit in the same form (`changed(value)`). `FieldRow`
@@ -1221,7 +1221,7 @@ class GradientBar(QWidget):
 	"""The gradient across the gauge's range, with a mark for each stop.
 
 	Folded, it is one thin band with a tick at each stop; a click opens the stops. Open, each stop
-	is a node you can drag (the value snaps to a round step; shift snaps finely), a click on the
+	is a node you can drag (the value snaps to a round step; Cmd or Ctrl moves freely, Option gears the drag down), a click on the
 	band adds a stop with the colour that is there, a double click on a node picks its colour, and a node dragged off
 	the band, or Delete with a node chosen, removes it.
 	"""
@@ -1392,7 +1392,7 @@ class GradientBar(QWidget):
 		off = abs(event.position().y() - self._band().center().y()) > 34
 		self.removing = off
 		if not off:
-			fine = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+			fine = bool(event.modifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier))
 			self.owner.moveStop(self.drag, self.valueAt(event.position().x()), fine)
 		self.update()
 
@@ -2379,7 +2379,7 @@ class WhenEdit(_Popover):
 	def __init__(self):
 		form = _Form()
 		self.condition = form.part('when', 'when', ConditionEdit(unsetText='always shown'),
-		                           'Show this panel only while the condition holds. In a switch the slot picks among its children by it.')
+		                           'Show this item only while the condition holds. A switch picks among its children by it.')
 		hint = QLabel('A key is true when its value is not zero. An expression can use units: '
 		              'environment.temperature.temperature < 32\u00b0F. A missing value counts as false.')
 		hint.setWordWrap(True)
@@ -2403,9 +2403,15 @@ class WhenEdit(_Popover):
 
 # Section: the factory
 
+#: Editors other tools add for kinds of their own (the polar panel): kind -> factory(field).
+EXTRA: Dict[str, Callable[['schema.Field'], Editor]] = {}
+
+
 def make(field: 'schema.Field') -> Optional[Editor]:
 	"""The editor for a field's kind, or None when the plain control will do."""
 	kind = field.kind
+	if kind in EXTRA:
+		return EXTRA[kind](field)
 	if kind == 'size':
 		return SizeEdit(nullable=field.nullable, ref='full' if field.key in ('radius', 'inset') else 'radius')
 	if kind == 'number' and field.measured:
