@@ -1,12 +1,12 @@
 # Themes
 
-A theme is a set of named colors, fonts, and gradients. A dashboard uses the names instead of the values. When you change the theme, the whole board changes with it.
+A theme is a set of named colors, fonts, and gradients. A dashboard uses the names instead of the values. When you change the theme, the whole dashboard changes with it.
 
 A name that starts with `$` is called a token. `$accent` is a token for a color. `$mono` is a token for a font. `$temperature` is a token for a gradient.
 
 ## Choose a theme
 
-Set `theme:` at the top of the dashboard file. Put the modules under `items:`.
+Set `theme:` at the top of the dashboard file. Put the items under `items:`.
 
 <!-- panels:start -->
 
@@ -98,18 +98,18 @@ Every theme defines these tokens.
 | Fonts | `display` `mono` `body` |
 | Gradients | `load` `temperature` |
 
-- `background` is behind the whole board. `surface` is the face of a card.
+- `background` is behind the whole dashboard. `surface` is the face of a card.
 - `text` is for values. `muted` is for titles and captions. `faint` is for units and tick marks.
 - `rule` is for dividers, gauge tracks, and axes.
 - `accent` is the one color that draws the eye.
 - `good`, `warn`, and `bad` are for data that has a state.
-- `series-1` to `series-6` are for graph lines, in the order a board uses them.
+- `series-1` to `series-6` are for graph lines, in the order a dashboard uses them.
 - `display` is for titles and labels. `mono` is for numbers that line up. `body` is for everything else.
 - `load` is for a value from 0 to 100. `temperature` has stops pinned to °F. The stops follow the reading when the data is in °C.
 
-A theme can add more tokens. For example, a theme can define `solar` and `grid` for a board that shows energy.
+A theme can add more tokens. For example, a theme can define `solar` and `grid` for a dashboard that shows energy.
 
-## Change a few tokens for one board
+## Change a few tokens for one dashboard
 
 Write the theme inline. Use `extends:` to pick the theme to start from. List only the tokens you want to change.
 
@@ -158,7 +158,7 @@ The name of the theme. This is optional. The file name is used if you leave it o
 
 #### <div class=mono>mode: dark | light</div>
 
-Says if the theme is dark or light. Other parts of LevityDash read it. For example, the beam on a panel uses it to pick its colors. The default is the mode of the theme that you extend.
+Says if the theme is dark or light. Other parts of LevityDash read it. For example, the beam on an item uses it to pick its colors. The default is the mode of the theme that you extend.
 
 #### <div class=mono>extends: str</div>
 
@@ -205,11 +205,11 @@ Lightness, chroma, and hue use the Oklch color space. Mixing uses Oklab. You can
 - The Moon.
 - A color that is written as a value in the code.
 
-## Look at a board in each theme
+## Look at a dashboard in each theme
 
 The render tool can force a theme over the one in the file. Use it to compare themes.
 
 ```bash
 poetry run python src/LevityDash/devtools/render_dashboard.py out.png \
-    --levity my-board.levity --scenario stormy-day --theme paper
+    --levity my-dashboard.levity --scenario stormy-day --theme paper
 ```

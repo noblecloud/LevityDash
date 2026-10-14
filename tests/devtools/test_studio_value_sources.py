@@ -1,4 +1,4 @@
-"""The Gauge Studio's value-source stand-in reaches every consumer.
+"""The Studio's value-source stand-in reaches every consumer.
 
 The Studio draws a gauge without booting the dashboard. A marker, fill or
 caption that names a key asks `openValueSource`; the Studio registers a stand-in
@@ -94,7 +94,7 @@ def test_a_keyed_fill_survives_the_settle_rebuild():
 
 def test_the_formerly_broken_cells_rebuild_from_their_saved_form():
 	"""The rebuild path (`settle()` does this) is where a numeric field used to decode against a `None` class."""
-	by_label = {label: entry for label, entry in gs.showcaseCells()}
+	by_label = {label: entry for label, entry in gs.showcaseExamples()}
 	missing = [label for label in _FORMERLY_BROKEN if label not in by_label]
 	assert not missing, f'the showcase no longer holds {missing}'
 	studio = gs.Studio()

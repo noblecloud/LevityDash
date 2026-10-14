@@ -3,7 +3,7 @@
 All dashboard configurations in the YAML format. You can get a general understanding of how these work by looking at
 the [default dashboard](https://github.com/noblecloud/LevityDash/blob/main/src/LevityDash/example-config/saves/dashboards/default.levity).
 
-The current anatomy of a dashboard file is strictly a list of modules like so:
+The current anatomy of a dashboard file is strictly a list of items like so:
 
 ```yaml
 - type: graph
@@ -18,20 +18,20 @@ The current anatomy of a dashboard file is strictly a list of modules like so:
         ...
 ```
 
-## Shared Parameters
+## Shared Properties
 
-There are a few config parameters that are shared across all modules
+There are a few properties that are shared across all items
 
 ### <div class=mono>type:</div>
 
-The type of module. This is used to determine which module is used to display the data. Subtypes are specified with a dot. For example: `realtime.text`.
+The type of item. This is used to determine which item is used to display the data. Subtypes are specified with a dot. For example: `realtime.text`.
 
 ```yaml
 - type: realtime.text
   ...
 ```
 
-The current options are:
+The current properties are:
 
 - realtime[.text|.gauge]
 - text / label
@@ -57,7 +57,7 @@ for the temperature in the 'environment.temperature.temperature'. Note the doubl
 
 ### <div class=mono>geometry:</div>
 
-All modules have a geometry option, this defines the location and size. There are four sub-options: x, y, width and height. They can be proved with percentages or absolute pixel values. All relative values are to the immediate parent.
+All items have a geometry property, this defines the location and size. There are four sub-properties: x, y, width and height. They can be proved with percentages or absolute pixel values. All relative values are to the immediate parent.
 
 ```yaml
 geometry:
@@ -69,8 +69,8 @@ geometry:
 
 ### <div class=mono>margins:</div>
 
-The margins are used to define the space between the module and the edge of the screen. Like Geometry, it can be provided with percentages or absolute pixel values. For simplification, margins can be
-provided with a single comma separated value in the order lef, top, right, bottom. However, sub-options can also be provided individually.
+The margins are used to define the space between the item and the edge of the screen. Like Geometry, it can be provided with percentages or absolute pixel values. For simplification, margins can be
+provided with a single comma separated value in the order lef, top, right, bottom. However, sub-properties can also be provided individually.
 
 ```yaml
 margins: 0%, 0%, 0%, 0%
@@ -86,9 +86,9 @@ margins:
   left: 10px
 ```
 
-### Other less used options...
+### Other less used properties...
 
-Every module has the following options:
+Every item has the following properties:
 
 - resizable: boolean
 - movable: boolean
@@ -96,11 +96,11 @@ Every module has the following options:
 - locked: boolean
 
 > [!NOTE]
-> The difference between `frozen` and `locked` is that `frozen` only freezes the contents of the module, while `locked` locks the module and prevents it from being moved or resized.
+> The difference between `frozen` and `locked` is that `frozen` only freezes the contents of the item, while `locked` locks the item and prevents it from being moved or resized.
 
 <br/>
 
-# Modules
+# Items
 
 ## Text
 
@@ -115,14 +115,14 @@ Every module has the following options:
     	atTime: today 
 ```
 
-This module is for displaying static text. It has all the shared options along with `text` and `alignment`. The alignment option is fairly flexable since fuzzy matching is used.
+This item is for displaying static text. It has all the shared properties along with `text` and `alignment`. The alignment property is fairly flexable since fuzzy matching is used.
 
-Alignment has horizontal and vertical sub-options, but a single string of can be provided to set both.
+Alignment has horizontal and vertical sub-properties, but a single string of can be provided to set both.
 For example: `topLeft` or `bottom_center` will both work. However, on save, it will be changed to a proper value.
 
 #### Text Filters
 
-Text modules, and all modules that contain text for that matter, also have a `filter` option.  
+Text items, and all items that contain text for that matter, also have a `filter` property.  
 The current available filters are:
 
 - <span class=mono>Ordinal:</span> Converts any number to its ordinal suffix, '1' -> 'st'
@@ -139,7 +139,7 @@ The current available filters are:
 
 Realtime currently only supports displaying text but other display types will be added in the future. For now, the type must be set to `realtime` or `realtime.text`.
 
-The Realtime module essentially a grouping that contains a title and a display submodule.
+The Realtime item essentially a grouping that contains a title and a display sub-item.
 
 ```yaml
 - type: realtime.text
@@ -153,10 +153,10 @@ The Realtime module essentially a grouping that contains a title and a display s
 
 ### <div class=mono>title:</div>
 
-The title is just a text module and has the same options along with `visible` and `ratio`. Ratio is simply the size ratio between the display submodule and the title. To hide the title, you can either give the title a `ratio` of `0`,
-or set `visible` to `false` or set the entire title option to `false` like in the example above.
+The title is just a text item and has the same properties along with `visible` and `ratio`. Ratio is simply the size ratio between the display sub-item and the title. To hide the title, you can either give the title a `ratio` of `0`,
+or set `visible` to `false` or set the entire title property to `false` like in the example above.
 
-Title also has an optional position option, it can either be `Above`/`Top` or `Below`/`Bottom`. If not provided, it will default to `Above`.
+Title also has an optional position property, it can either be `Above`/`Top` or `Below`/`Bottom`. If not provided, it will default to `Above`.
 
 ```yaml
 - type: realtime.text
@@ -176,12 +176,12 @@ The display section is used to determine how the data is displayed. The display 
 
 #### <div class=mono>.text</div>
 
-Like its parent module, the `text` display type is a grouping containing a **value** and a **unit** text submodule. Both sections are optional if you just want to leave it to the defaults.
+Like its parent item, the `text` display type is a grouping containing a **value** and a **unit** text sub-item. Both sections are optional if you just want to leave it to the defaults.
 
-Since they are both text modules, the display options are similar to the parent module where there is a ratio, position, and visibility options.
-To avoid confusion, the position option is `unitPosition` and the ratio is `valueUnitRatio`.
+Since they are both text items, the display properties are similar to the parent item where there is a ratio, position, and visibility properties.
+To avoid confusion, the position property is `unitPosition` and the ratio is `valueUnitRatio`.
 
-In addition to `Above` and `Below`, the position option can also be `Inline`, `NewLine`, `Auto`, `Hidden`, `FloatUnder` or `FloatAbove`. The `auto` option will place the unit inline if there is enough space, otherwise it will place it below, this is also the
+In addition to `Above` and `Below`, the position property can also be `Inline`, `NewLine`, `Auto`, `Hidden`, `FloatUnder` or `FloatAbove`. The `auto` option will place the unit inline if there is enough space, otherwise it will place it below, this is also the
 default. The `float-under` option renders the unit as a small label floating beneath the value.
 
 ```yaml
@@ -208,7 +208,7 @@ A radial gauge display for the value. Set `displayType: gauge` (or use `type: re
 
 #### <div class=mono>.mini-graph</div>
 
-Available as its own top-level module — use `type: mini-graph`.
+Available as its own top-level item — use `type: mini-graph`.
 
 ## Graph
 
@@ -229,7 +229,7 @@ Available as its own top-level module — use `type: mini-graph`.
   - ...
 ```
 
-Like the previous Realtime, the Graph Module also a collection of submodules. It only has two of the shared options, `geometry` and `type` along with two additional options, `figures` and `timeframe`.
+Like the previous Realtime, the Graph item also a collection of sub-items. It only has two of the shared properties, `geometry` and `type` along with two additional options, `figures` and `timeframe`.
 
 ### Background Annotations
 
@@ -257,7 +257,7 @@ annotations:
 Going with the theme, a figure is a collection of graph items that share a unit of measure and range, although it is not strictly required. For readability, each figure has a `figure` option to provide a hint of the contents of the figure.
 It is completely optional, but will be added upon save.
 
-The `margin` option defines spread of the figure across the graph
+The `margin` property defines spread of the figure across the graph
 
 ```yaml
 - figure: temperature
@@ -268,7 +268,7 @@ The `margin` option defines spread of the figure across the graph
 ```
 
 Normally the min/max of a figure is provided by the range of the actual data displayed, however, sometimes having a data defined min/max can cause some plots to be unreadable. You can define the upper and lower limits of a figure with
-the `min:` and `max:` parameters.
+the `min:` and `max:` properties.
 
 ```yaml
 - figure: precipitationRate
@@ -307,7 +307,7 @@ Determines if the plot is labeled. Currently this only labels the peaks and trou
 
 #### <div class='mono-header'>plot:</div>
 
-Each Graph Item has its own graphical representation many options.
+Each Graph Item has its own graphical representation many properties.
 
 ##### <div class='mono-header'>color:</div>
 
@@ -374,7 +374,7 @@ type: plot
 
 ## Clock
 
-The clock module is a special grouping that can contain any other type of module along with its own `ClockComponent` item. Items defined without a type are assumed to be of this type.
+The clock item is a special grouping that can contain any other type of item along with its own `ClockComponent` item. Items defined without a type are assumed to be of this type.
 
 ```yaml
   ...
@@ -389,7 +389,7 @@ The clock module is a special grouping that can contain any other type of module
 
 ### ClockComponent
 
-ClockComponent is a modified Text module that updated automatically based on the items within the format string. The format string is the standard strftime format with the one cavite that '-' is used to denote hiding the leading zero,
+ClockComponent is a modified Text item that updated automatically based on the items within the format string. The format string is the standard strftime format with the one cavite that '-' is used to denote hiding the leading zero,
 i.e. `%-d`. Because of this, the format string can contain whatever text you want and only the %_ flags will be replaced.
 
 > [!TIP]

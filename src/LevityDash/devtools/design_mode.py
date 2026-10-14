@@ -1,9 +1,9 @@
 #!/usr/bin/env python
-"""Dev-only: a real, interactive window over one `.levity` fragment that
+"""Dev-only: a real, interactive window over one `.levity` item file that
 reloads itself whenever the file changes on disk.
 
-For prototyping a single panel/section rather than a whole dashboard - point
-this at a fragment (same shape as anything under `docs/design-references/`)
+For prototyping a single item rather than a whole dashboard - point
+this at an item file (same shape as anything under `docs/design-references/`)
 and get a live window: edit the file in your own editor, save, watch it
 update in place. No PNGs, no HTTP - just the real frontend, reloading itself.
 
@@ -45,7 +45,7 @@ def _parseSize(text: str):
 
 def main() -> int:
 	parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-	parser.add_argument('levity', help='the .levity fragment to watch and display')
+	parser.add_argument('levity', help='the .levity item file to watch and display')
 	parser.add_argument('--seed', required=True, help='config dir copy to run against (never the real config)')
 	parser.add_argument('--size', default='x'.join(map(str, DEFAULT_SIZE)), help='window size')
 	parser.add_argument('--settle', type=float, default=6.0, help='seconds to let the initial load settle')
@@ -55,7 +55,7 @@ def main() -> int:
 		'--full-reload', action='store_true',
 		help='wipe and rebuild from scratch on every change instead of reconciling. '
 		     'Slower and drops any in-place UI state, but skips panel-matching entirely - '
-		     'the right choice while restructuring a fragment (adding/removing/retyping '
+		     'the right choice while restructuring an item file (adding/removing/retyping '
 		     'items) rather than tweaking values on an unchanged structure.',
 	)
 	args = parser.parse_args()
@@ -69,14 +69,14 @@ def main() -> int:
 		settle=args.settle, plugins=args.plugins, windowed=True,
 	)
 
-	# boot(levity=source) makes the fragment the FIRST thing ever loaded,
+	# boot(levity=source) makes the item file the FIRST thing ever loaded,
 	# rather than the seed's own real default.levity - which, if --seed points
 	# at a real config, is a full dashboard (Graph panel, Govee/indoor panels,
 	# all of it) that would otherwise render for a moment with zero data
 	# (nothing has connected/published yet) and then get torn down when the
-	# fragment swap happened.
+	# item-file swap happened.
 	#
-	# But boot(levity=...) copies the fragment into the SEED's internal
+	# But boot(levity=...) copies the item file into the SEED's internal
 	# default.levity, so CentralPanel.filePath points at that temp copy, not
 	# at `source`. Calling _load(source) again here would fix that, but it
 	# is a second full reload of content that is already on screen and

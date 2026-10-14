@@ -27,7 +27,7 @@ same reading whatever the gauge's range, and whatever unit the data arrives in.
     (`self.plot.data.dataType`). Read it first: some of the conversion machinery exists.
 - Gauge and graph use gradients through `ColorGradientMixin` (Gauge.py) and Plot
   (Graph.py).
-- In Gauge Studio, the gradient stop list editor is in `devtools/_studio_editors.py`.
+- In Studio, the gradient stop list editor is in `devtools/_studio_editors.py`.
   The zone and marker editors already have a "values in" WeatherUnits unit selector.
   Reuse that.
 

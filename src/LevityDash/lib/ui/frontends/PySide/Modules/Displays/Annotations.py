@@ -4,11 +4,12 @@ from PySide6.QtGui import QBrush
 from abc import abstractmethod
 from datetime import datetime
 from numbers import Number
-from typing import Any, TypeVar, ClassVar, Type, Callable, Dict
+from typing import Any, TypeVar, ClassVar, Type, Callable, Dict, Optional
 
 from LevityDash.lib.stateful import Stateful, StateProperty, DefaultGroup
 from LevityDash.lib.stateful_mixins import ColorGradientMixin
 from LevityDash.lib.ui import UILogger, Color
+from LevityDash.lib.ui.Groups import SizeGroup
 from LevityDash.lib.ui.Geometry import Size, DisplayPosition, Alignment, AlignmentFlag, Dimension, getDPI, LineWeight
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Text, Surface
 from LevityDash.lib.ui.frontends.PySide.utils import SoftShadow, ViewScale
@@ -117,6 +118,8 @@ class AnnotationText(Text):
 	def delete(self):
 		if scene := self.scene():
 			scene.removeItem(self)
+		if (group := getattr(self, '_sized', None)) is not None:
+			group.removeItem(self)
 		if (pool := self.action_pool) is not None:
 			if pool.instance is self:
 				pool.delete()
@@ -192,6 +195,24 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, ColorGradientMixin, ta
 
 	""" Creates labels for the data."""
 
+	# ======= size group ======== #
+	@property
+	def groupOwner(self):
+		"""The panel whose scopes (`local.`, `parent.`, `name@panel`) `matchingGroup` resolves against."""
+		return self.surface
+
+	def append(self, label: AnnotationTextVar):
+		super().append(label)
+		if (group := self.matchingGroup) is not None:
+			group.addItem(label)
+
+	def extend(self, labels):
+		labels = list(labels)
+		super().extend(labels)
+		if (group := self.matchingGroup) is not None:
+			for label in labels:
+				group.addItem(label)
+
 	# ======= shared methods ======== #
 	def resize(self, newSize: int):
 		currentSize = len(self)
@@ -255,6 +276,36 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, ColorGradientMixin, ta
 	@enabled.setter
 	def enabled(self, value):
 		self._enabled = value
+
+	# ----------- matchingGroup ------------- #
+	@StateProperty(default=None, after=refresh)
+	def matchingGroup(self) -> Optional[SizeGroup]:
+		"""Size group every label here joins, so their text matches the group's other members."""
+		return getattr(self, '_matchingGroup', None)
+
+	@matchingGroup.setter
+	def matchingGroup(self, value: Optional[SizeGroup]):
+		current = getattr(self, '_matchingGroup', None)
+		if current is not None and current is not value:
+			for label in self:
+				current.removeItem(label)
+		self._matchingGroup = value
+		if value is not None:
+			for label in self:
+				value.addItem(label)
+
+	@matchingGroup.decode
+	def matchingGroup(self, value: str | dict | None) -> Optional[SizeGroup]:
+		if value is None:
+			return None
+		if isinstance(value, str):
+			value = {'group': value}
+		return self.groupOwner.getAttrGroup(**value)
+
+	@matchingGroup.encode
+	def matchingGroup(self, value: Optional[SizeGroup]) -> str | dict | None:
+		# A group is saved the way it was written; the scope is not recoverable from the group alone.
+		return (getattr(self, '_rawItemState', None) or {}).get('matchingGroup')
 
 	# ----------- format ------------- #
 	@StateProperty(key='format', default=None, allowNone=False)

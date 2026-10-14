@@ -99,7 +99,7 @@ Two modes, both worth supporting:
 
 **a) Single frame.** The service sends one composited image per update. Dead
 simple; the client is `while True: draw(recv())`. Right for an e-ink panel, a
-tiny SBC, or a "just show me the board" web page. Costs a full frame per update.
+tiny SBC, or a "just show me the dashboard" web page. Costs a full frame per update.
 
 **b) Per-surface deltas** — the author's *"updates the surfaces"*, and the
 interesting one. Each panel/item is a surface. When an item's value changes,

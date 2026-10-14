@@ -2,7 +2,7 @@
 #
 # `type: switch` holds alternatives. Each child fills the slot, and the first whose `when:` holds
 # is shown. A child with no `when:` always matches, so it is the default; put it last. The slot
-# keeps its place in the board, so the space UV does not need goes to the rain panel, not to blank.
+# keeps its place in the dashboard, so the space UV does not need goes to the rain panel, not to blank.
 #
 #   hold:   seconds a change must last before the slot flips (default 30s). A drizzle that starts
 #           and stops at the threshold does not flap. The first pick is instant.
@@ -32,7 +32,7 @@
         value-label: {position: below}
 
     - type: switch
-      name: sky-slot
+      name: sky-switch
       hold: 0.2s
       fade: 0
       geometry: {x: 32%, y: 4%, width: 36%, height: 92%}

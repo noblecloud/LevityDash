@@ -1,4 +1,4 @@
-"""The board's ground: a flat colour or a gradient, from `background:` or the theme."""
+"""The dashboard's ground: a flat colour or a gradient, from `background:` or the theme."""
 import pytest
 from PySide6.QtCore import QRectF, Qt
 

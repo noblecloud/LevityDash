@@ -15,7 +15,7 @@ Usage:
     poetry run python src/LevityDash/devtools/render_service.py --seed DIR
     poetry run python src/LevityDash/devtools/render_service.py --scenario hot-clear-day   # fixed values
     curl -s localhost:8670/items
-    curl -s 'localhost:8670/render?w=1800&h=1015' -o board.png
+    curl -s 'localhost:8670/render?w=1800&h=1015' -o dashboard.png
     curl -s 'localhost:8670/render/terrarium?scale=3&pad=8' -o cell.png
     curl -s -X POST localhost:8670/reload
 
@@ -25,7 +25,7 @@ Endpoints:
     GET  /items             the addressable `name:`s, as render_widget --list
     GET  /tree              the full child structure with indices (?depth=),
                             since /items only sees things carrying a `name:`
-    GET  /render/at/<path>  one panel by structural position (?scale= ?pad=).
+    GET  /render/at/<path>  one item by structural position (?scale= ?pad=).
                             Segments are an index, a `name:`, or a bound key,
                             and both `0/1/main` and `[0][1][main]` parse.
     GET  /render            full dashboard PNG  (?w= ?h= ?scale= ?dpi=)
@@ -234,8 +234,8 @@ class QtRenderer:
 		"""The addressable structure, with the indices `/render/at/...` expects.
 
 		`/items` only lists items carrying a `name:`, which leaves every unnamed
-		panel unaddressable. This walks the real child order instead, so any
-		panel can be pointed at positionally.
+		item unaddressable. This walks the real child order instead, so any
+		item can be pointed at positionally.
 		"""
 		def walk(item, level):
 			entry = self._describe(item)
@@ -248,7 +248,7 @@ class QtRenderer:
 		return walk(self._panel(), 0)
 
 	def itemAt(self, segments: List[str]):
-		"""Resolve a structural path to one panel.
+		"""Resolve a structural path to one item.
 
 		Each segment is an index into the child order, or a `name:`, or a bound
 		key - so `0/1/environment.temperature.temperature` and `[0][1]` both work.

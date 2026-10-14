@@ -1,4 +1,4 @@
-# The Storm board with only the rain takeover true: heavy rain (1.4 in/hr), gusts down to 22 mph
+# The Storm dashboard with only the rain takeover true: heavy rain (1.4 in/hr), gusts down to 22 mph
 # and lightning 3.2 mi out, so the Flooding rain panel is the one the slot shows.
 # Use it with --freeze-time 2026-10-07T19:10:00 (the series count from today midnight).
 name: storm-flood

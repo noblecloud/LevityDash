@@ -2,7 +2,7 @@
 
 A bar shows one value on a straight track. It is the same idea as a gauge: a value, a range, zones, a fill, markers, ticks and labels. The track is a line instead of an arc.
 
-Use `type: realtime.bar`. It takes the key, the title and the geometry that every `realtime` module takes. Everything below goes under `display:`.
+Use `type: realtime.bar`. It takes the key, the title and the geometry that every `realtime` item takes. Everything below goes under `display:`.
 
 ```yaml
 - type: realtime.bar
@@ -30,9 +30,9 @@ Sizes are in pixels (`12px`) or a share of the bar's cross size (`20%`). The cro
 | Segmented | `fill: {segments: 10}` | `bar-segmented.levity` |
 | Thermometer | `style: thermometer` | `bar-thermometer.levity` |
 
-`bar-day-range.levity` shows a range bar: the fill runs from today's low to today's high, with a pointer on the current value. `bar-showcase.levity` puts all of them on one board.
+`bar-day-range.levity` shows a range bar: the fill runs from today's low to today's high, with a pointer on the current value. `bar-showcase.levity` puts all of them on one dashboard.
 
-## Options
+## Properties
 
 ### `orientation: horizontal | vertical`
 

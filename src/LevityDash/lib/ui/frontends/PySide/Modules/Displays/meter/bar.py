@@ -130,7 +130,7 @@ class BarCanvas(QGraphicsItem):
 		painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 		try:
 			self._bar.paintBar(painter)
-		except Exception as e:  # noqa: BLE001 - a bar that cannot draw must not take the board with it
+		except Exception as e:  # noqa: BLE001 - a bar that cannot draw must not take the dashboard with it
 			log.warning(f'Bar {gaugeKeyName(self._bar)} not drawn: {e!r}')
 
 

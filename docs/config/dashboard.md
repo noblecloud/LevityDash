@@ -4,22 +4,22 @@ All dashboard configurations in the YAML format with the extension `.levity`.
 You can get a general understanding of how these work by looking at
 the [template dashboards](https://github.com/noblecloud/LevityDash/tree/main/src/LevityDash/resources/example-config/templates/dashboards).
 
-The current anatomy of a dashboard file is strictly a list of module attributes like so:
+The current anatomy of a dashboard file is strictly a list of item properties like so:
 
 ```yaml
 - type: type[.subtype]
-  attribute: value
-  dict-attribute:
-    sub-attr-a: 12px
-    sub-attr-b: test
-  items:  # <- child panels are defined here
+  property: value
+  dict-property:
+    sub-property-a: 12px
+    sub-property-b: test
+  items:  # <- child items are defined here
   - type: type[.subtype]
-    subitem_attr: 70%
+    subitem_property: 70%
 - type: realtime.text
     ...
 ```
 
-A dashboard can also be a mapping. A mapping has room for a [theme](/config/dashboard/themes.md) and [variables](/config/dashboard/variables.md). Put the list of modules under `items:`.
+A dashboard can also be a mapping. A mapping has room for a [theme](/config/dashboard/themes.md) and [variables](/config/dashboard/variables.md). Put the list of items under `items:`.
 
 ```yaml
 theme: dusk
@@ -34,17 +34,19 @@ items:
         color: $accent
 ```
 
-These pages cover the options that work on a whole dashboard:
+These pages cover the properties that work on a whole dashboard:
 
 - [Themes](/config/dashboard/themes.md): named colors, fonts, and gradients.
 - [Variables](/config/dashboard/variables.md): a name for a value that you use more than once.
-- [Presets](/config/dashboard/presets.md): a module that you write once and use many times, with its own properties.
+- [Presets](/config/dashboard/presets.md): an item that you write once and use many times, with its own properties.
+- [Size groups](/config/dashboard/size-groups.md): keep text sizes the same across items.
 - [Value Sources](/config/dashboard/expressions.md): a key, a number, or an expression, and units in an expression.
-- [Switch](/config/dashboard/switch.md): a slot that shows one of several modules.
+- [Switch](/config/dashboard/switch.md): shows one of several items.
+- [Flex and grid](/config/dashboard/layout.md): CSS flexbox and grid layout for stacks.
 
-## Shared Parameters
+## Shared Properties
 
-There are a few config parameters that are shared across all modules
+There are a few properties that are shared across all items
 
 
 <!-- panels:start -->
@@ -53,9 +55,9 @@ There are a few config parameters that are shared across all modules
 
 ### <div class=mono>type:</div>
 
-The type of module. This is used to determine which module is used to display the data. Subtypes are specified with a dot. For example: `realtime.text`.
+The type of item. This is used to determine which item is used to display the data. Subtypes are specified with a dot. For example: `realtime.text`.
 
-The current options are:
+The current properties are:
 
 <div class="multi-column">
 
@@ -93,7 +95,7 @@ Additionally, a `spacer` can be used inside a stack's `items` list, and prefixin
 The key is the key used to access the data. This is the key used to access the data in the source. All sources use the same key, so it will be the same regardless of the source. Keys use a hierarchical format. For example, the key
 for the temperature in the 'environment.temperature.temperature'. Note the double 'temperature' in the key since category 'temperature' contains many measurements.
 
-On a `realtime` module, `key:` can also be an [expression](/config/dashboard/expressions.md), such as `max(environment.temperature.temperature, today)`.
+On a `realtime` item, `key:` can also be an [expression](/config/dashboard/expressions.md), such as `max(environment.temperature.temperature, today)`.
 
 <!-- div:right-panel -->
 
@@ -112,14 +114,14 @@ On a `realtime` module, `key:` can also be an [expression](/config/dashboard/exp
 
 ### <div class=mono>geometry:</div>
 
-All modules have a geometry option, this defines the location and size.
+All items have a geometry property, this defines the location and size.
 
-There are four sub-options: `x`, `y`, `width` and `height`.
+There are four sub-properties: `x`, `y`, `width` and `height`.
 
-Any of these four attributes can be undefined, in which case the default value is used.
-Default values depend on the module, but are usually `0px` for `x` and `y` and `100px` for `width` and `height`.
+Any of these four properties can be undefined, in which case the default value is used.
+Default values depend on the item, but are usually `0px` for `x` and `y` and `100px` for `width` and `height`.
 
-All of these attributes can be provided as percentages `'%'`, absolute pixel values `'px'` or with physical units such as inch `'in'`, centimeter `'cm'`, or millimeters `'mm'`.
+All of these properties can be provided as percentages `'%'`, absolute pixel values `'px'` or with physical units such as inch `'in'`, centimeter `'cm'`, or millimeters `'mm'`.
 
 Relative values are to the immediate parent.
 
@@ -144,11 +146,11 @@ Relative values are to the immediate parent.
 
 ### <div class=mono>margins:</div>
 
-The margins are used to define the space between the module and the edge of the screen. Like Geometry, it can be provided with percentages or absolute pixel values.  Additionally, physical measurements (e.g. 1mm, 1cm, 1in) can be used.  For simplification, margins can be represented as a single value, which will be applied to all sides, two comma separated values, which will be applied to the top/bottom and left/right, or four comma separated values, which will be applied to the top, right, bottom, and left.  However, sub-options can also be provided individually.
+The margins are used to define the space between the item and the edge of the screen. Like Geometry, it can be provided with percentages or absolute pixel values.  Additionally, physical measurements (e.g. 1mm, 1cm, 1in) can be used.  For simplification, margins can be represented as a single value, which will be applied to all sides, two comma separated values, which will be applied to the top/bottom and left/right, or four comma separated values, which will be applied to the top, right, bottom, and left.  However, sub-properties can also be provided individually.
 
 ### <div class=mono>padding:</div>
 
-Similar to margins, padding is used to define the space between the edge of the module and it's contents.  It is represented in the same way as margins.
+Similar to margins, padding is used to define the space between the edge of the item and it's contents.  It is represented in the same way as margins.
 
 
 <!-- div:right-panel -->
@@ -175,9 +177,9 @@ padding:
 
 
 
-### Other less used options...
+### Other less used properties...
 
-Every module has the following options:
+Every item has the following properties:
 
 - resizable: boolean
 - movable: boolean
@@ -185,11 +187,11 @@ Every module has the following options:
 - locked: boolean
 
 > [!NOTE]
-> The difference between `frozen` and `locked` is that `frozen` only freezes the contents of the module, while `locked` locks the module and prevents it from being moved or resized.
+> The difference between `frozen` and `locked` is that `frozen` only freezes the contents of the item, while `locked` locks the item and prevents it from being moved or resized.
 
 <br/>
 
-# Modules
+# Items
 
 ## Text
 
@@ -209,15 +211,15 @@ Every module has the following options:
     	atTime: [today]
 ```
 
-This module is for displaying static text. It has all the shared options along with `text` and `alignment`.
+This item is for displaying static text. It has all the shared properties along with `text` and `alignment`.
 
 ### <div class=mono>text: str</div>
 
-The text to be displayed in the module.
+The text to be displayed in the item.
 
 ### <div class=mono>icon: Icon</div>
 
-The glyph icon to be displayed in the module specified in the format `icon-pack-abbrivation:icon-name`.  The included icon packs are:
+The glyph icon to be displayed in the item specified in the format `icon-pack-abbrivation:icon-name`.  The included icon packs are:
 
 - Weather Icons: `wi`
 - Font Awesome: `fa`
@@ -266,7 +268,7 @@ color:
 
 ### <div class=mono>alignment: str[fuzzy] | Alignment</div>
 
-Alignment has horizontal and vertical sub-options, but a single string of can be provided to set both.
+Alignment has horizontal and vertical sub-properties, but a single string of can be provided to set both.
 For example: `topLeft` or `bottom_center` will both work. However, on save, it will be changed to a proper value.
 
 The string value can be any combination of `top`, `bottom`, `center`, `left`, `right`.
@@ -282,8 +284,8 @@ alignment: bottom_center
 
 ### <div class=mono>filter: str[fuzzy]</div>
 
-Text modules, and all modules that contain text for that matter, also have a `filter` option.
-This option uses fuzzy text matching, so it is fairly flexable with what it is provided.
+Text items, and all items that contain text for that matter, also have a `filter` property.
+This property uses fuzzy text matching, so it is fairly flexable with what it is provided.
 
 The current available filters are:
 
@@ -310,7 +312,7 @@ Like Font, the anchor point is the "strikeout" postition, but the height is eith
 
 Realtime can display its value as text (`realtime.text`) or as a radial gauge (`realtime.gauge`, or set `displayType: gauge` under `display:`). A bar on a straight track is `realtime.bar` (see [Bars](dashboard/bar.md)). It defaults to text.
 
-The Realtime module essentially a grouping that contains a title and a display submodule.
+The Realtime item essentially a grouping that contains a title and a display sub-item.
 
 ```yaml
 - type: realtime.text
@@ -324,7 +326,7 @@ The Realtime module essentially a grouping that contains a title and a display s
 
 ### <div class=mono>title: Text</div>
 
-The title is just a text module and has the same options along with `visible`, `size` and `position`.
+The title is just a text item and has the same properties along with `visible`, `size` and `position`.
 
 ```yaml
 - type: realtime.text
@@ -344,7 +346,7 @@ Whether the title is visible.  If all other values are their defaults, `title:` 
 
 #### <div class=mono>size: RelativeValue | AbsolutePixelValue | AbsolutePhysicalValue </div>
 
-Size the attribute can a relative/percentage, an absolute pixel, or an absolute physical value.
+The size can be a relative/percentage, an absolute pixel, or an absolute physical value.
 Relative values are represented either as a float between 0 and 1 or any numerical value followed by a `%`.
 Absolute pixel values are represented as any numerical value followed by `px`.
 Absolute physical values are represented as any numerical value followed by a metric or imperial distance unit
@@ -377,7 +379,7 @@ display:
 
 #### <div class=mono>type: str[fuzzy]</div>
 
-The display type. `text` (the default) renders the value as text; `gauge` renders it as a radial gauge. `type: realtime.gauge` on the parent module is shorthand for setting this to `gauge`.
+The display type. `text` (the default) renders the value as text; `gauge` renders it as a radial gauge. `type: realtime.gauge` on the parent item is shorthand for setting this to `gauge`.
 
 #### <div class=mono>unit-string: str</div>
 
@@ -398,14 +400,14 @@ When `float-under` is set, `float-offset` is used to determine the offset of the
 
 #### <div class=mono>unitSize: RelativeValue | AbsolutePixelValue | AbsolutePhysicalValue </div>
 
-The size of the unit label.  Relative sizes are relative to the Realtime display submodule's size.
+The size of the unit label.  Relative sizes are relative to the Realtime display sub-item's size.
 
 #### <div class=mono>shorten: bool </div>
 
 Whether to shorten the very large numerical values.
 This is useful for when the value regularly changes in several orders of magnitude.
 The current implementation is not very smart and will just shorten the value to the nearest thousand, million, billion, etc and add the appropriate suffix.
-Eventually this option will be expanded to allow for stepping up and down the order of magnitude via unit conversion, (e.g. 5823 ft -> 1.10 mi).
+Eventually this property will be expanded to allow for stepping up and down the order of magnitude via unit conversion, (e.g. 5823 ft -> 1.10 mi).
 
 #### <div class=mono>floating-offset: RelativeValue | AbsolutePixelValue | AbsolutePhysicalValue </div>
 
@@ -417,22 +419,22 @@ The format string to use when formatting the value.
 
 #### <div class=mono>format-hint: str </div>
 
-This attribute is used to override the string used for sizing/alignment.
+This property is used to override the string used for sizing/alignment. If you leave it out, LevityDash sizes a value against the widest text its type can show, not against the value on screen. When both ends of the range are finite, the hint is their formatted ends. Otherwise it is the largest number the digit budget allows, with a minus sign when the value can go below zero. So a 7 and a 101 are sized alike. The derived hint is never saved to the file.
 For example, wind speed frequently changes between 0 and some non-zero float causing the text to constantly resize.
 To fix this, `format-hint` can be set to `'10.0'`.  Note, the quotes are required, without the quotes, the value will be interpreted as a float and the decimal will be dropped.  Since this string will be used to determine the size of the text, it is important that the string is the same length as the longest string that will be displayed.
 
 #### <div class=mono>convertTo: str </div>
 
 The unit to convert the value to.
-This option accepts any unit name or abbreviation that is compatible with the original value.
+This property accepts any unit name or abbreviation that is compatible with the original value.
 
 #### <div class=mono>valueLabel: Text </div>
 
-The Text submodule used to display the value.  All Text submodule options are available under this attribute except for `text` and `visible`.
+The Text sub-item used to display the value.  All Text sub-item properties are available under this property except for `text` and `visible`.
 
 #### <div class=mono>unitLabel: Text </div>
 
-The Text submodule used to display the unit string. All Text submodule options are available under this attribute except for `text` and `visible`.
+The Text sub-item used to display the unit string. All Text sub-item properties are available under this property except for `text` and `visible`.
 
 </div>
 
@@ -475,9 +477,6 @@ The Text submodule used to display the unit string. All Text submodule options a
 [//]: #
 ### Zero, trace, and percent values
 
-> [!NOTE]
-> **Pending** ([#35](https://github.com/noblecloud/LevityDash/pull/35) and [WeatherUnits #4](https://github.com/noblecloud/WeatherUnits/pull/4)).
-
 A small value can mean "none" or "a little". The display keeps the two apart.
 
 - `0` is exactly zero.
@@ -487,6 +486,19 @@ A small value can mean "none" or "a little". The display keeps the two apart.
 A percentage can arrive in two scales. Some sources report `0` to `100`. For these, `0.1` is a tenth of one percent. Other sources report a fraction from `0` to `1`. For these, `0.1` is ten percent. Each source states its own scale, so `0.1` shows as `0.10%` for one source and `10.0%` for another. PirateWeather reports fractions. You do not set the scale in a dashboard.
 
 A plugin author sets the scale in the schema entry of a key. Add `kwargs: {isPercentage: false}` for a source that reports a fraction.
+
+## Example dashboards
+
+Four full dashboards are in `docs/design-references/dashboards/`. Each one is for a 15 inch 16:10 screen, and each has its render command in its header. Render one with `render_dashboard.py`, for example:
+
+| Dashboard | What it is for | Scenario |
+|-------|----------------|----------|
+| `station.levity` | An everyday dashboard: dense readings, indoor and terrarium sensors, a rotating watch slot. | `station-day` |
+| `storm.levity` | Lightning as the hero, with a dial of strike distance. | `storm-night`, `storm-flood` |
+| `sky.levity` | Light and air: the day as one arc from sunrise to sunset. | `sky-clear` |
+| `week.levity` | The forecast as one graph across the screen. | `week-ahead` |
+
+Scenarios are in `docs/design-references/scenarios/`.
 
 ## Graph
 
@@ -507,7 +519,7 @@ A plugin author sets the scale in the schema entry of a key. Add `kwargs: {isPer
   - ...
 ```
 
-Like the previous Realtime, the Graph Module also a collection of submodules. It only has two of the shared options, `geometry` and `type` along with two additional options, `figures` and `timeframe`.
+Like the previous Realtime, the Graph item also a collection of sub-items. It only has two of the shared properties, `geometry` and `type` along with two additional options, `figures` and `timeframe`.
 
 ### Background Annotations
 
@@ -530,12 +542,35 @@ annotations:
     weight: 0.3
 ```
 
+#### Matching label sizes
+
+`dayLabels` and `hourLabels` take `matchingGroup`, the same option a text item has, so the labels of several graphs can share one size. The gauge's tick labels (`major`, `minor` and `micro` `labels`) take it too, and so does its `value-label`, so a row of gauges can keep their tick labels in one group and their value text in another. Every label of the set joins the group. The scopes are the ones a text item uses (`local.name`, `parent.name`, `name@panel`), resolved against the graph or the gauge.
+
+```yaml
+annotations:
+  dayLabels: {height: 14%, matchingGroup: {group: parent.days, matchAll: true}}
+```
+
+```yaml
+# on each gauge
+display:
+  value-label: {matchingGroup: {group: parent.values, matchAll: true}}
+  major:
+    labels: {matchingGroup: {group: parent.ticks, matchAll: true}}
+```
+
+Labels only match inside one height tier (see the size-group rules), so graphs or dials of very different size keep their own sizes. Example dashboards, with renders: [day labels](design-references/size-groups/day-labels-group.levity) and [gauge tick labels](design-references/size-groups/tick-labels-group.levity).
+
+![Day labels without and with a size group](design-references/size-groups/day-labels-compare.png)
+
+![Gauge tick labels without and with a size group](design-references/size-groups/tick-labels-compare.png)
+
 ### Figures
 
 Going with the theme, a figure is a collection of graph items that share a unit of measure and range, although it is not strictly required. For readability, each figure has a `figure` option to provide a hint of the contents of the figure.
 It is completely optional, but will be added upon save.
 
-The `margin` option defines spread of the figure across the graph
+The `margin` property defines spread of the figure across the graph
 
 ```yaml
 - figure: temperature
@@ -546,7 +581,7 @@ The `margin` option defines spread of the figure across the graph
 ```
 
 Normally the min/max of a figure is provided by the range of the actual data displayed, however, sometimes having a data defined min/max can cause some plots to be unreadable. You can define the upper and lower limits of a figure with
-the `min:` and `max:` parameters.
+the `min:` and `max:` properties.
 
 ```yaml
 - figure: precipitationRate
@@ -586,7 +621,7 @@ Determines if the plot is labeled. Currently this only labels the peaks and trou
 
 #### <div class='mono-header'>plot:</div>
 
-Each Graph Item has its own graphical representation many options.
+Each Graph Item has its own graphical representation many properties.
 
 ##### <div class='mono-header'>color:</div>
 
@@ -670,8 +705,6 @@ Puts a mark on the line for each value of another key. See [Pins on a line](#pin
 ### Bar plots
 
 > [!NOTE]
-> **Pending** ([#33](https://github.com/noblecloud/LevityDash/pull/33)).
-
 A bar plot draws one bar for each sample. Use it for amounts, such as rain in each hour.
 
 ```yaml
@@ -719,8 +752,6 @@ To draw a line over bars, put each in its own figure. Give the two figures the s
 ### Violin plots
 
 > [!NOTE]
-> **Pending** ([#33](https://github.com/noblecloud/LevityDash/pull/33)).
-
 A violin plot draws the spread of the values in a stretch of time. It is wide where many values are near each other. It is narrow where there are few.
 
 ```yaml
@@ -759,8 +790,6 @@ How much of its stretch of time each violin fills. It works as it does for a bar
 ### Line thickness
 
 > [!NOTE]
-> **Pending** ([#36](https://github.com/noblecloud/LevityDash/pull/36)).
-
 A line can get thicker where another key has a higher value. In the example, the temperature line is thicker when the wind is stronger.
 
 ```yaml
@@ -785,7 +814,7 @@ A line can get thicker where another key has a higher value. In the example, the
 
 #### <div class=mono>key: str</div>
 
-The key that sets the thickness. This option is required.
+The key that sets the thickness. This property is required.
 
 #### <div class=mono>weight: [thin, thick]</div>
 
@@ -800,8 +829,6 @@ The values of the key that the two weights are for. A value outside the range us
 ### Pins on a line
 
 > [!NOTE]
-> **Pending** ([#37](https://github.com/noblecloud/LevityDash/pull/37)).
-
 A pin is a mark on a line. Each pin has its own time and sits on the line at that time. A pin shows the value of another key. Use pins to put a weather symbol on a temperature line.
 
 In the example, the amount of rain picks the symbol.
@@ -835,7 +862,7 @@ In the example, the amount of rain picks the symbol.
 
 #### <div class=mono>key: str</div>
 
-The key that gives the value for each pin. This option is required.
+The key that gives the value for each pin. This property is required.
 
 #### <div class=mono>steps: list</div>
 
@@ -873,11 +900,11 @@ Pins update when the plot updates, not on their own.
 
 <!-- div:left-panel -->
 
-The clock module is a special grouping that can contain any other type of module along with its own `ClockComponent` item.  Items defined without a type are assumed to be of this type.  
+The clock item is a special grouping that can contain any other type of item along with its own `ClockComponent` item.  Items defined without a type are assumed to be of this type.  
 
 
-`ClockComponent` is a modified Text module that updated automatically based on the items within the format string.
-The format string, defined by the `format` attribute, uses the [standard strftime format](https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes) with the one caveat that '-' is used to denote hiding the leading zero,
+`ClockComponent` is a modified Text item that updated automatically based on the items within the format string.
+The format string, defined by the `format` property, uses the [standard strftime format](https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes) with the one caveat that '-' is used to denote hiding the leading zero,
 i.e. `%-d`.
 
 The characters used for strftime can be fairly difficult to remember so it is recommended to use this reference [strfti.me](https://www.strfti.me)
@@ -930,4 +957,4 @@ The Moon Phase shows the phase of the moon and tilts it as it looks in the sky. 
 When `true`, the lit part of the moon turns to match how the moon looks to someone at your location. The default is `true`. When `false`, the moon always draws with its lit side to the right (waxing) or to the left (waning).
 
 > [!NOTE]
-> **Pending** ([#32](https://github.com/noblecloud/LevityDash/pull/32)). The tilt uses the latitude and longitude from the `[Location]` section of your [config](/config.md). Before this change, the tilt was wrong for most times and places.
+The tilt uses the latitude and longitude from the `[Location]` section of your [config](/config.md). Before this change, the tilt was wrong for most times and places.

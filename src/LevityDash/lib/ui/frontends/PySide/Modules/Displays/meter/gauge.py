@@ -621,7 +621,7 @@ class Gauge(GlowMixin, Meter):
 		self._update_shape()
 		# Defensive: refresh() runs from _afterSetState, which is inside the
 		# dashboard load. Anything raising here aborts the *whole* load, so a
-		# single malformed gauge used to leave a board with nothing on it. A
+		# single malformed gauge used to leave a dashboard with nothing on it. A
 		# label that is not a label is worth a warning, not an empty screen.
 		for label in (self.valueLabel, self.unitLabel):
 			textBox = getattr(label, 'textBox', None)

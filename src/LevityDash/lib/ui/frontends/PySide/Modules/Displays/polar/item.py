@@ -405,7 +405,7 @@ class Polar(Panel, tag='polar'):
 					self._paintTrail(painter, look, rect)
 				case 'clock':
 					self._paintClock(painter, look, rect)
-		except Exception as error:  # noqa: BLE001 - a paint error must not take the board down
+		except Exception as error:  # noqa: BLE001 - a paint error must not take the dashboard down
 			if getattr(self, '_paintError', None) != repr(error):
 				self._paintError = repr(error)
 				log.exception(f'polar {self._plot} failed to paint: {error!r}')

@@ -1426,6 +1426,20 @@ class StateProperty(property):
 		return expected
 
 	@cached_property
+	def decodesFrom(self) -> Tuple[Type, ...]:
+		"""The types the decoder takes, read from the annotation of its `value`; empty when it does not say."""
+		try:
+			decoder_data = self.__options["decode"]
+			decoder = decoder_data["func"] if isinstance(decoder_data, Mapping) else decoder_data
+			hint = get_type_hints(decoder).get("value", None)
+		except Exception:
+			return ()
+		if hint is None:
+			return ()
+		options = get_args(hint) if get_origin(hint) in (Union, UnionType) else (hint,)
+		return tuple(i for i in options if isinstance(i, type))
+
+	@cached_property
 	def decodesTo(self) -> Tuple[Type, ...] | UnsetReturn:
 		try:
 			decoder_data = self.__options["decode"]
@@ -2147,15 +2161,16 @@ class Stateful(metaclass=StatefulMetaclass):
 			return
 
 		if not isinstance(state, Mapping):
+			# A single value is the property's own type, or any type its decoder takes (a Color is written as text).
 			acceptedSingleValueTypes = tuple(
-				i for j in (p.returns for p in self.statefulItems.values() if p.singleVal) for i in j
+				i for j in ((*p.returns, *p.decodesFrom) for p in self.statefulItems.values() if p.singleVal) for i in j
 			)
 			if isinstance(state, acceptedSingleValueTypes):
 				# try:
 				prop = [
 					v
 					for v in self.statefulItems.values()
-					if v.actions & {"set"} and v.singleVal and isinstance(state, v.returns)
+					if v.actions & {"set"} and v.singleVal and isinstance(state, (*v.returns, *v.decodesFrom))
 				].pop()
 				state = {prop.key: state}
 			else:
@@ -2400,8 +2415,9 @@ class Stateful(metaclass=StatefulMetaclass):
 						encodedValue = prop.encodeValue(value, self)
 						if sharedValue == encodedValue:
 							continue
-					else:
-						raise TypeError(f'Failed parsing Shared Value')
+					elif isinstance(value, Enum) and isinstance(sharedValue, str) and sharedValue.lower() in {str(value.name).lower(), str(value.value).lower()}:
+						continue  # shared holds the text as written ('Hidden'); the live value is its enum
+					# Anything else cannot be compared with the shared value: write the value, never abort the save.
 				elif isinstance(value, Stateful) and value.state == sharedValue:
 					continue
 				elif sharedValue is not None and prop.encodeValue(sharedValue, self) == value:
@@ -2538,7 +2554,8 @@ class Stateful(metaclass=StatefulMetaclass):
 			case set(d):
 				return dumper.represent_set(d)
 			case _:
-				raise NotImplementedError
+				# A `singleVal` state can be a value with a representer of its own (a Color): let the dumper find it.
+				return dumper.represent_data(state)
 
 	@classmethod
 	def loader(cls, loader: StatefulLoader, data):

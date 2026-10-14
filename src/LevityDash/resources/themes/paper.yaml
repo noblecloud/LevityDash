@@ -1,4 +1,4 @@
-# A light theme: dark ink on warm paper. Written to check that a board restyles from the theme alone.
+# A light theme: dark ink on warm paper. Written to check that a dashboard restyles from the theme alone.
 name: paper
 mode: light
 extends: default

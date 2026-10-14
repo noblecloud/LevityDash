@@ -1,8 +1,8 @@
 # Presets
 
-A preset is a module that you write once and use many times. A preset has its own properties. A property has a default. When you use the preset, you write only the properties and fields that are different.
+A preset is an item that you write once and use many times. A preset has its own properties. A property has a default. Each use of a preset in a dashboard is an instance. An instance holds only the properties and fields that are different.
 
-Use a preset for a panel that you repeat with different keys, such as an Indoor box and an Outdoor box. Use it for a gauge style that you want on many gauges.
+Use a preset for an item that you repeat with different keys, such as an Indoor box and an Outdoor box. Use it for a gauge style that you want on many gauges.
 
 ## Write a preset
 
@@ -15,7 +15,7 @@ The file has three parts.
 <!-- div:left-panel -->
 
 - `props:` The properties. A property is a name with a default. To add a type, a range, or a note, write the name with `default:`, `type:`, `min:`, `max:`, and `doc:`. The types are `number`, `size`, `text`, `key`, `color`, and `bool`. A default can use a property that is defined before it.
-- `template:` The module. Write `$name` where a property goes, in the module or in any module inside it.
+- `template:` The item. Write `$name` where a property goes, in the item or in any item inside it.
 - `doc:` One line about the preset. This part is optional.
 
 <!-- div:right-panel -->
@@ -44,7 +44,7 @@ template:
 
 <!-- panels:end -->
 
-## Use a preset
+## Make an instance
 
 In the dashboard, write `preset:` with the name of the file. Put the properties that you change under `props:`. Any other field is merged over the template: a mapping is merged key by key, and a list or a value replaces the one in the template.
 
@@ -68,7 +68,7 @@ In the dashboard, write `preset:` with the name of the file. Put the properties 
 
 `$name` is looked up in this order. The first match is used.
 
-1. The `props:` of the use.
+1. The `props:` of the instance.
 2. The defaults of the preset.
 3. The `vars:` of the [dashboard](/config/dashboard/variables.md).
 4. The [theme](/config/dashboard/themes.md).
@@ -77,21 +77,21 @@ A value that is exactly `$name` keeps its type. `max: $max` is the number `12`, 
 
 ## Rules
 
-- A preset can use another preset. A preset cannot use itself, directly or through another preset.
+- A preset can contain an instance of another preset. A preset cannot contain an instance of itself, directly or through another preset.
 - `preset:` on a stack that is not the name of a preset file keeps its old meaning: the defaults for the items of that stack.
-- If a use is wrong, that module becomes a red error tile and the rest of the board loads. A use is wrong when it names a property that the preset does not have, when a value has the wrong type or is out of range, or when the preset file is wrong. The tile tells you why.
+- If an instance is wrong, that item becomes a red error tile and the rest of the dashboard loads. An instance is wrong when it names a property that the preset does not have, when a value has the wrong type or is out of range, or when the preset file is wrong. The tile tells you why.
 - A value that starts with `$` is not type-checked. It is only known after the file is resolved.
 - A preset applies when the dashboard loads. Press `Ctrl+R` to see a change to a preset file.
 
 ## What a save writes
 
-When you edit a dashboard in the app and save it, a use of a preset stays short.
+When you edit a dashboard in the app and save it, an instance of a preset stays short.
 
 - `preset:` and `props:` are saved as you wrote them.
 - A field is saved only if it is different from what the preset gives. A field that you wrote and did not change is saved as you wrote it, with its `$name` text.
 - A list that has any change is saved whole.
-- If the app cannot work out a short form, it saves the full module. The result is the same board.
+- If the app cannot work out a short form, it saves the full item. The result is the same dashboard.
 
-The preset-board example in `docs/design-references/preset-board.levity` saves as 846 bytes. The same board without presets saves as 12,703 bytes.
+The preset-dashboard example in `docs/design-references/preset-dashboard.levity` saves as 846 bytes. The same dashboard without presets saves as 12,703 bytes.
 
-Known limit: a saved board with a gauge does not load back as the same board until [the gauge save fix](https://github.com/noblecloud/LevityDash/pull/66) is merged. This was true before presets.
+A saved gauge is written as `type: realtime.gauge`, and a saved bar as `type: realtime.bar`. Both load back as the same display. A gauge no longer saves its derived centre, so the file does not carry it.

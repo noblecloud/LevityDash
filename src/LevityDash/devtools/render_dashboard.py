@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Dev-only: render a whole `.levity` dashboard to a PNG, headless.
 
-For one panel rather than the whole board, use `render_widget.py` — a 200px
+For one item rather than the whole dashboard, use `render_widget.py` — a 200px
 cell buried in 1.8 megapixels is hard to judge.
 
 Usage:
