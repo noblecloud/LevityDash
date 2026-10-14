@@ -3469,9 +3469,11 @@ class HourLabels(AnnotationLabels[TimestampLabel]):
 			source = TimestampGenerator(graph)
 		elif graph is None and source is None:
 			raise ValueError('Either graph or source must be specified')
-		self.sizeGroup = graph.getAttrGroup('local.hourLabels')
-		self.sizeGroup.items = self
 		super(HourLabels, self).__init__(surface=surface, source=source, **kwargs)
+
+	@property
+	def groupOwner(self):
+		return self.graph
 
 	def post_init(self, **state):
 		super(HourLabels, self).post_init(**state)
