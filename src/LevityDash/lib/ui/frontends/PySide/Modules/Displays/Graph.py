@@ -73,7 +73,7 @@ from LevityDash.lib.utils.data import AxisMetaData, DataTimeRange, findPeaksAndT
 from LevityDash.lib.utils.shared import (
 	_Panel, camelCase, clamp, clearCacheAttr, closestStringInList, connectSignal, defer, disconnectSignal,
 	joinCase,
-	LOCAL_TIMEZONE, now, run_in_thread, startTimerSafe, stopTimerSafe, thread_safe, timestampToTimezone,
+	LOCAL_TIMEZONE, callOnMainThread, isMainThread, now, run_in_thread, startTimerSafe, stopTimerSafe, thread_safe, timestampToTimezone,
 	Unset, Worker
 )
 from LevityDash.lib.utils.various import DateTimeRange
@@ -346,6 +346,11 @@ class GraphItemData(Stateful, tag=...):
 		return self.__onValueChange()
 
 	def __onValueChange(self):
+		# connectTimeseries runs on a worker thread (setContainer), and the axis,
+		# graphic and label updates below add and remove scene items.
+		if not isMainThread():
+			callOnMainThread(self.__onValueChange)
+			return
 		self.log.debug(f'Updating GraphItemData\[{self.key.name}]... Reason: value change')
 		self.graph.onAxisChange(Axis.Both)
 		self.__clearAxis(Axis.Both)
