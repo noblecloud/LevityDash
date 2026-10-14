@@ -16,7 +16,7 @@ src/
     lib/plugins/               data layer: plugins, observations, schemas,
                                dispatcher ({key → MultiSourceContainer})
     lib/plugins/builtin/       OpenMeteo, PirateWeather, WeatherFlow, Govee (BLE),
-                               OpenWeatherMap (experimental)
+                               OpenWeatherMap (experimental), Astronomy (sun hour and remaining, no network)
     lib/wire/                  backend/frontend split wire protocol — codec, messages,
                                server/client transport, RemoteBackend/RemoteFrontend,
                                RemoteConnection, RemoteContainer stand-ins, LoopbackBridge
@@ -101,7 +101,7 @@ box and pass on ARM — see [docs/tasks/lambda-sizegroup-test-failures.md](docs/
 
 ## Presets
 
-A preset is a whole item written once: `resources/presets/<name>.yaml` (user ones in `<config>/presets/`, found first) holds `props:` (names with defaults, optional `type`/`min`/`max`/`doc`) and a `template:` that uses them as `$prop`. A board item says `preset: name`, `props: {...}` and any fields it changes, which merge over the template (mappings merge, lists replace). `lib/presets.py` is Qt-free, like `lib/variables.py`: `expand` runs in `CentralPanel._load` before `resolveVariables`, so `$name` resolves item props, preset defaults, `vars:`, theme. A bad use becomes an error tile (`type: preset-error`, raised in `utils._loadItemGroup`). On save, `collapse` writes `preset`, the file's `props` and only the fields that differ from `CentralPanel._loaded`, the app's own dump taken right after loading (the raw expansion is not a usable baseline, because a dump adds keys). `preset:` on a stack whose value is not a preset file is still `Stack.preset`. Docs: `docs/config/dashboard/presets.md`. Known: until PR #66, a gauge saved as `type: realtime` (an error tile on reload) and wrote a derived `center_offset`, with or without presets.
+A preset is a whole item written once: `resources/presets/<name>.yaml` (user ones in `<config>/presets/`, found first) holds `props:` (names with defaults, optional `type`/`min`/`max`/`doc`) and a `template:` that uses them as `$prop`. A board item says `preset: name`, `props: {...}` and any fields it changes, which merge over the template (mappings merge, lists replace). `lib/presets.py` is Qt-free, like `lib/variables.py`: `expand` runs in `CentralPanel._load` before `resolveVariables`, so `$name` resolves item props, preset defaults, `vars:`, theme. A bad use becomes an error tile (`type: preset-error`, raised in `utils._loadItemGroup`). On save, `collapse` writes `preset`, the file's `props` and only the fields that differ from `CentralPanel._loaded`, the app's own dump taken right after loading (the raw expansion is not a usable baseline, because a dump adds keys). `preset:` on a stack whose value is not a preset file is still `Stack.preset`. Docs: `docs/config/dashboard/presets.md`. A saved gauge is written as `realtime.gauge` and a saved bar as `realtime.bar`, and both load back as the same display (#66).
 
 ## Themes
 
