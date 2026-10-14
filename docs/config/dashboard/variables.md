@@ -2,11 +2,11 @@
 
 A variable gives a name to a value. You write the value once. You use the name in as many places as you like.
 
-Use a variable to keep a number the same on several gauges, to name a key you use often, or to change one setting for the whole board.
+Use a variable to keep a number the same on several gauges, to name a key you use often, or to change one setting for the whole dashboard.
 
 ## Define a variable
 
-Set `vars:` at the top of the dashboard file. Put the modules under `items:`. This is the same file shape that [themes](/config/dashboard/themes.md) use, and one file can have both.
+Set `vars:` at the top of the dashboard file. Put the items under `items:`. This is the same file shape that [themes](/config/dashboard/themes.md) use, and one file can have both.
 
 <!-- panels:start -->
 
@@ -99,7 +99,7 @@ items:
 - A variable can use a variable that is defined before it. It cannot use one that is defined after it.
 - A name that is not a variable stays as it is. The [theme](/config/dashboard/themes.md) then gets it. For example, `$accent` goes to the theme. An unknown token is an error that lists the tokens it knows.
 - Variables work everywhere in the dashboard file, including an inline `theme:`. They do not reach into a separate theme file.
-- If `vars:` is wrong, LevityDash logs the error and loads the file without variables. The board does not fail to load because of it.
+- If `vars:` is wrong, LevityDash logs the error and loads the file without variables. The dashboard does not fail to load because of it.
 
 ## What a save writes
 

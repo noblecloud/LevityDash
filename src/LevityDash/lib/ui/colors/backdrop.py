@@ -1,4 +1,4 @@
-"""The dashboard's ground: a flat colour, or a gradient across the whole board.
+"""The dashboard's ground: a flat colour, or a gradient across the whole dashboard.
 
 A dashboard writes it as a root key, ``background:``, beside ``theme:``::
 
@@ -9,10 +9,10 @@ A dashboard writes it as a root key, ``background:``, beside ``theme:``::
 	background: {0: '#0b1020', 1: '#2a1f3d'}     # a gradient written in place
 	background: {gradient: $sky, angle: 160}     # with a direction
 
-Without the key the board takes the theme's ``backdrop`` scale if it has one, and its ``background`` colour if
+Without the key the dashboard takes the theme's ``backdrop`` scale if it has one, and its ``background`` colour if
 not. A gradient runs top to bottom unless ``angle`` says otherwise. The angle is in CSS degrees: 0 is towards
 the top, 90 towards the right, 180 (the default) towards the bottom. Stops sit at their own values, stretched
-over the board, so ``{0: a, 1: b}`` and ``{0: a, 100: b}`` are the same ground.
+over the dashboard, so ``{0: a, 1: b}`` and ``{0: a, 100: b}`` are the same ground.
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from LevityDash.lib.ui.colors import theme as _theme
 from LevityDash.lib.ui.colors.color import Color
 from LevityDash.lib.ui.colors.gradient import Gradient, setStops
 
-#: The scale a theme may define to give every board that does not choose its own a gradient ground.
+#: The scale a theme may define to give every dashboard that does not choose its own a gradient ground.
 BACKDROP_SCALE = 'backdrop'
 DEFAULT_ANGLE = 180.0
 

@@ -13,7 +13,7 @@
 # publishes them yet (the Mock plugin and the sky-clear scenario do), so on a live
 # dashboard the arc waits for one. Everything else reads real keys.
 #
-# Render: render_dashboard.py OUT.png --levity docs/design-references/boards/sky.levity
+# Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/sky.levity
 #           --scenario sky-clear --size 2880x1800 --freeze-time 2026-10-07T15:40:00
 #
 # Hex colours are quoted. Unquoted, YAML reads '#' as a comment.

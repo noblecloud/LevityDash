@@ -55,7 +55,7 @@ REPO = Path(__file__).resolve().parents[3]
 CONTAINERS = ['group', 'stack', 'grid', 'value-stack', 'titled-group', 'switch']
 DISPLAYS = ['realtime.text', 'realtime.gauge', 'realtime.bar', 'text', 'label', 'graph', 'mini-graph', 'polar', 'clock', 'moon', 'spacer']
 LAYOUT_PARENTS = ('stack', 'value-stack', 'grid', 'switch')
-STAGES = {'Card 640x400': (640, 400), 'Wide 960x400': (960, 400), 'Tall 400x640': (400, 640), 'Board 1280x800': (1280, 800), 'Dashboard 1440x900': (1440, 900)}
+STAGES = {'Card 640x400': (640, 400), 'Wide 960x400': (960, 400), 'Tall 400x640': (400, 640), 'Dashboard 1280x800': (1280, 800), 'Dashboard 1440x900': (1440, 900)}
 SETTLE_MS = 350
 
 #: The fields the Item tab edits, in order: (field, label, kind). `kind` picks the editor and the property type a `$` binds to.
@@ -488,7 +488,7 @@ class PreviewEngine:
 		from LevityDash.devtools import _boot
 		self._boot = _boot
 		self.size = size
-		# Boot on an empty board: the seed's own dashboard draws graphs that are still working when the first preview replaces them.
+		# Boot on an empty dashboard: the seed's own dashboard draws graphs that are still working when the first preview replaces them.
 		blank = Path(tempfile.mkdtemp(prefix='levity-builder-')) / 'blank.levity'
 		blank.write_text('- type: group\n  name: blank\n')
 		self.app, self.dashboard = _boot.boot(levity=str(blank), size=size, settle=2.0, freeze=_boot.FROZEN_TIME)
@@ -1400,7 +1400,7 @@ class Builder(QWidget):
 			if isinstance(data, dict) and model.TEMPLATE_KEY in data:
 				piece = model.Piece.fromText(path.stem, text)
 			else:
-				# A plain item file (a gauge fragment, a levityPanel): a preset with no properties.
+				# A plain item file (a gauge preset from the design references): a preset with no properties.
 				items = data if isinstance(data, list) else data.get('items') if isinstance(data, dict) else None
 				template = items[0] if isinstance(items, list) and len(items) == 1 else {'type': 'group', 'items': items or []}
 				piece = model.Piece(path.stem, {}, template)

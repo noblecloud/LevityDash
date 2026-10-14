@@ -2,7 +2,7 @@
 
 A real plugin's values change, and a render of a dashboard changes with them.
 This plugin publishes the values in a scenario file and nothing else, so two
-renders of the same fragment show the same numbers.
+renders of the same item show the same numbers.
 
 **It is off unless you turn it on.** Set ``LEVITYDASH_FIXTURE`` to a scenario
 before the first LevityDash import:

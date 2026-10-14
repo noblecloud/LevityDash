@@ -71,7 +71,7 @@ What keeps it honest:
 - **Every primitive is a real `type:`.** `realtime.text`, `realtime.gauge`,
   `graph`, `stack`, `titled-group`, `clock`, `moon`. If you cannot build a
   layout out of these pieces, the app cannot render it either.
-- **The board is authored `.levity`-shaped** — `type` / `size` / `items` /
+- **The dashboard is authored `.levity`-shaped** — `type` / `size` / `items` /
   `display` — so reproducing it is transcription, not reinterpretation. The
   page prints a `.levity` sketch of whatever you drew.
 - **The gradients are the real stops** read out of `lib/ui/colors/presets.py`,
@@ -182,7 +182,7 @@ a resolution change.
 ### 6. Stacks for uniform data and sections; geometry for composition
 
 Use a stack only for two jobs: a run of uniform data displays (a column of
-readings, a row of same-shaped cells) and dividing the board into sections.
+readings, a row of same-shaped cells) and dividing the dashboard into sections.
 Anything composed — a clock with its date, AM/PM and moon, a hero value with a
 sub-label tucked against it — is laid out with relative `geometry:`
 (`x`/`y`/`width`/`height` as percentages of the parent), the way the author's
@@ -219,7 +219,7 @@ can't tell which change did what:
 poetry run python src/LevityDash/devtools/render_service.py --seed <config-copy>
 ```
 
-Then `curl -s localhost:8670/render -o board.png` (~85ms),
+Then `curl -s localhost:8670/render -o dashboard.png` (~85ms),
 `curl -s 'localhost:8670/render/NAME?scale=3&pad=8' -o cell.png`,
 `curl -s localhost:8670/items` for the names, and `curl -sX POST
 localhost:8670/reload` after editing the `.levity`.

@@ -1,4 +1,4 @@
-# Week: the forecast is the board. A 15in 16:10 screen.
+# Week: the forecast is the dashboard. A 15in 16:10 screen.
 #
 # One graph fills the screen to its edges. The day names sit behind the curve as a
 # watermark. The temperature runs along it in colour with its highs and lows parked
@@ -8,7 +8,7 @@
 # headlines, and a frost, a hot day, a windy day or a wet week takes it over while
 # it holds. Under the graph a table reads each coming day off the daily keys.
 #
-# Render: render_dashboard.py OUT.png --levity docs/design-references/boards/week.levity
+# Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/week.levity
 #           --scenario week-ahead --size 2880x1800 --freeze-time 2026-10-07T15:40:00
 #
 # Hex colours are quoted. Unquoted, YAML reads '#' as a comment.

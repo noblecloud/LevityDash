@@ -1,7 +1,7 @@
 #!/usr/bin/env python
-"""Dev-only: Gauge Studio. Design one gauge live, with controls, on made-up data.
+"""Dev-only: Studio. Design one gauge live, with controls, on made-up data.
 
-    poetry run python src/LevityDash/devtools/gauge_studio.py [fragment.levity]
+    poetry run python src/LevityDash/devtools/gauge_studio.py [preset.levity]
 
 A standalone program. It does not start the dashboard, a plugin, the backend or
 the Fixture plugin. It draws the real `Gauge` class on its own scene and feeds
@@ -12,11 +12,11 @@ it a value the studio owns (see `_studio_stage.py`).
   (see `_studio_schema.py`). A property added to `Gauge.py` shows up here with no
   edit. A value the gauge rejects shows its reason under the control.
 - Value: a slider over the gauge's range, or an animated sweep.
-- Templates: every file in `docs/design-references/presets/`, every gauge cell in
+- Open menu: every preset in `docs/design-references/presets/`, every gauge example in
   `docs/design-references/gauge-showcase.levity`, and any file you open.
 - Copy code / Save as: the gauge's `.levity` YAML, only the properties that
   differ from the defaults.
-- With a fragment path, the studio reloads it whenever the file changes on disk.
+- With a preset path, Studio reloads it whenever the file changes on disk.
 - `--build [preset.yaml]` opens the builder (`_studio_builder.py`) instead: compose containers and displays into a
   preset, give it properties, preview it on a Fixture scenario, save it. See that module.
 
@@ -144,10 +144,10 @@ def _without(node: Any, base: Any) -> Any:
 	return None if node == base else node
 
 
-# Section: reading templates
+# Section: reading presets
 
 def readEntries(path: Path) -> List[dict]:
-	"""The gauges in a `.levity` fragment, each as the `realtime.gauge` mapping."""
+	"""The gauges in a `.levity` preset, each as the `realtime.gauge` mapping."""
 	with open(path, 'r', encoding='utf-8') as file:
 		data = yaml.safe_load(file)
 	found: List[dict] = []
@@ -166,7 +166,7 @@ def _collect(node: Any, found: List[dict]):
 			_collect(node.get('items'), found)
 
 
-def showcaseCells() -> List[Tuple[str, dict]]:
+def showcaseExamples() -> List[Tuple[str, dict]]:
 	"""Every gauge cell of the showcase, labelled with the caption written beside it."""
 	with open(SHOWCASE, 'r', encoding='utf-8') as file:
 		data = yaml.safe_load(file)
@@ -192,9 +192,9 @@ def showcaseCells() -> List[Tuple[str, dict]]:
 
 
 def identify(app: QApplication) -> None:
-	"""Name the program and give it an icon, so the Dock and the window show Gauge Studio and not the Python rocket."""
-	app.setApplicationName('Gauge Studio')
-	app.setApplicationDisplayName('Gauge Studio')
+	"""Name the program and give it an icon, so the Dock and the window show Studio and not the Python rocket."""
+	app.setApplicationName('Gauge Studio')  # also names the state folder, so it keeps the old name
+	app.setApplicationDisplayName('Studio')
 	icon = QIcon(str(REPO / 'src' / 'LevityDash' / 'resources' / 'ui-elements' / 'icon512.png'))
 	if icon.isNull():
 		pixmap = QPixmap(256, 256)
@@ -410,7 +410,7 @@ class Studio(QWidget):
 
 	def __init__(self, fragment: Optional[Path] = None):
 		super().__init__()
-		self.setWindowTitle('Gauge Studio')
+		self.setWindowTitle('Studio')
 		self.resize(1280, 860)
 		self.preview = Preview()
 		self.scene = StudioScene(self.preview)
@@ -504,7 +504,7 @@ class Studio(QWidget):
 
 		bar = QHBoxLayout()
 		self.templates = QToolButton()
-		self.templates.setText('Templates')
+		self.templates.setText('Open')
 		self.templates.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
 		self.templates.setMenu(self._templateMenu())
 		bar.addWidget(self.templates)
@@ -516,7 +516,7 @@ class Studio(QWidget):
 		self.themePicker.picked.connect(self._themePicked)
 		bar.addWidget(self.themePicker)
 		reset = QPushButton('Reset')
-		reset.setToolTip('Reload the current template and drop every change')
+		reset.setToolTip('Reload the current preset and drop every change')
 		reset.clicked.connect(self.resetAll)
 		bar.addWidget(reset)
 		bar.addStretch(1)
@@ -606,9 +606,9 @@ class Studio(QWidget):
 		presets = menu.addMenu('Presets')
 		for path in sorted(PRESET_DIR.glob('*.levity')):
 			presets.addAction(path.stem.replace('-', ' '), lambda p=path: self.loadFile(p))
-		showcase = menu.addMenu('Showcase')
+		showcase = menu.addMenu('Examples')
 		try:
-			for label, entry in showcaseCells():
+			for label, entry in showcaseExamples():
 				showcase.addAction(label, lambda e=entry, l=label: self.loadEntry(e, l))
 		except Exception as e:  # noqa: BLE001 - a missing showcase must not stop the studio
 			showcase.addAction(f'unavailable: {e}').setEnabled(False)
@@ -755,14 +755,14 @@ class Studio(QWidget):
 		self.status.setText(f'{label} on {preset.name}')
 
 	def resetAll(self):
-		"""Back to the template, as one undoable step. What was on screen is recorded first."""
+		"""Back to the preset, as one undoable step. What was on screen is recorded first."""
 		self.commitPending()
 		preset = DATA_PRESETS[self.data.currentText()]
 		self.studio.value = preset.value
 		self.studio.build(copy.deepcopy(self.template), preset)
 		self._afterBuild()
 		self._commit(self.exportDisplay())
-		self.status.setText('Reset to the template. Undo brings back what was there.')
+		self.status.setText('Reset to the preset. Undo brings back what was there.')
 
 	def _afterBuild(self):
 		self.scene.invalidate()
@@ -773,7 +773,7 @@ class Studio(QWidget):
 		self.layer.rebuild()
 
 	def _openFile(self):
-		name, _ = QFileDialog.getOpenFileName(self, 'Open a .levity fragment', str(PRESET_DIR), 'Levity (*.levity *.yaml)')
+		name, _ = QFileDialog.getOpenFileName(self, 'Open a .levity preset', str(PRESET_DIR), 'Levity (*.levity *.yaml)')
 		if name:
 			self.loadFile(Path(name))
 
@@ -982,49 +982,49 @@ class Studio(QWidget):
 				self._track(sub, f'quick.{title}.{name}')
 				section.addRow(sub)
 		button = QToolButton()
-		button.setText('Presets')
+		button.setText('Styles')
 		button.setAutoRaise(True)
-		button.setToolTip(f'Set the {title.lower()} properties to a preset. Nothing else changes.')
+		button.setToolTip(f'Set the {title.lower()} properties to a style. Nothing else changes.')
 		button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
 		menu = QMenu(button)
-		menu.aboutToShow.connect(lambda m=menu, t=title: self._fillPresets(m, t))
+		menu.aboutToShow.connect(lambda m=menu, t=title: self._fillStyles(m, t))
 		button.setMenu(menu)
 		section.addHeaderWidget(button)
 		self._track(section, f'quick.{title}')
 		return section
 
-	def _fillPresets(self, menu: QMenu, title: str):
+	def _fillStyles(self, menu: QMenu, title: str):
 		menu.clear()
-		found = state.presets(title)
-		for preset in found:
-			if not preset.user:
-				menu.addAction(preset.name, lambda p=preset: self.applyPreset(title, p))
-		mine = [p for p in found if p.user]
+		found = state.styles(title)
+		for style in found:
+			if not style.user:
+				menu.addAction(style.name, lambda s=style: self.applyStyle(title, s))
+		mine = [s for s in found if s.user]
 		if mine:
 			menu.addSeparator()
-			for preset in mine:
-				menu.addAction(f'{preset.name} (mine)', lambda p=preset: self.applyPreset(title, p))
+			for style in mine:
+				menu.addAction(f'{style.name} (mine)', lambda s=style: self.applyStyle(title, s))
 		menu.addSeparator()
-		menu.addAction('Save current as preset…', lambda: self._savePresetPrompt(title))
+		menu.addAction('Save current as style…', lambda: self._saveStylePrompt(title))
 
-	def applyPreset(self, title: str, preset: 'state.Preset'):
-		"""Set the section's properties to the preset, as one undo step. Every other property stays."""
+	def applyStyle(self, title: str, style: 'state.Style'):
+		"""Set the section's properties to the style, as one undo step. Every other property stays."""
 		self.commitPending()
-		display = state.apply(self.exportDisplay(), preset)
+		display = state.apply(self.exportDisplay(), style)
 		self.studio.build(display)
 		self._afterBuild()
 		self._commit(self.exportDisplay())
-		self.status.setText(f'{title}: {preset.name}. Undo goes back.')
+		self.status.setText(f'{title}: {style.name}. Undo goes back.')
 
-	def _savePresetPrompt(self, title: str):
-		name, ok = QInputDialog.getText(self, f'Save {title.lower()} preset', 'Name')
+	def _saveStylePrompt(self, title: str):
+		name, ok = QInputDialog.getText(self, f'Save {title.lower()} style', 'Name')
 		if ok and name.strip():
-			self.saveUserPreset(title, name.strip())
+			self.saveUserStyle(title, name.strip())
 
-	def saveUserPreset(self, title: str, name: str):
+	def saveUserStyle(self, title: str, name: str):
 		self.commitPending()
 		state.saveUser(title, name, self.exportDisplay())
-		self.status.setText(f'Saved {title.lower()} preset "{name}" to {state.stateDir() / "presets"}')
+		self.status.setText(f'Saved {title.lower()} style "{name}" to {state.stateDir() / "styles"}')
 
 	def _pinToggled(self, path: tuple, on: bool):
 		if on and path not in self.pins:
@@ -1388,7 +1388,7 @@ class Studio(QWidget):
 		key = self.key or self.studio.preset.key
 		entry = {'type': 'realtime.gauge', 'name': 'gauge', 'key': key, 'title': False, 'display': self.exportDisplay()}
 		body = yaml.dump([entry], Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True, sort_keys=False)
-		return f'# Made with Gauge Studio ({self.label}).\n{body}'
+		return f'# Made with Studio ({self.label}).\n{body}'
 
 	def copyCode(self):
 		text = self.exportLevity()
@@ -1435,8 +1435,8 @@ class Studio(QWidget):
 
 def main(argv: Optional[List[str]] = None) -> int:
 	parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-	parser.add_argument('fragment', nargs='?', help='a .levity fragment to open; reloaded when it changes on disk. With --build, a preset file')
-	parser.add_argument('--dashboard', action='store_true', help='with --build: open FRAGMENT as a dashboard to edit and save back (only what changed is written)')
+	parser.add_argument('fragment', nargs='?', help='a .levity preset to open; reloaded when it changes on disk. With --build, a preset file')
+	parser.add_argument('--dashboard', action='store_true', help='with --build: open the file as a dashboard to edit and save back (only what changed is written)')
 	parser.add_argument('--build', action='store_true', help='open the builder: compose items, give them properties, preview on fixture data')
 	parser.add_argument('--scenario', help='with --build: the fixture scenario the preview draws on (default hot-clear-day)')
 	parser.add_argument('--seed', help='with --build: a config dir to seed the preview dashboard from')

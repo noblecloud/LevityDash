@@ -15,7 +15,7 @@ AttributeError: 'dict' object has no attribute 'textBox'
 ```
 
 That raised *inside the dashboard load*, so it did not break one gauge — it
-aborted the whole board, leaving a screen with nothing but the moon. That
+aborted the whole dashboard, leaving a screen with nothing but the moon. That
 moon-only screen had been showing up for months and was never explained.
 
 The fix decodes a mapping into a real label for both `value-label` and
@@ -113,7 +113,7 @@ Fixed going forward, so a save from now on writes the types correctly.
 
 ## Symptom
 
-`loadDefault` aborts partway through, leaving a broken board:
+`loadDefault` aborts partway through, leaving a broken dashboard:
 
 ```
 Gauge.py:3431 in refresh

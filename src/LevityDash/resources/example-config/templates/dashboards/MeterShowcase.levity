@@ -1,4 +1,4 @@
-# Meter showcase: the whole meter family on one board, laid out for a 2560x1440 screen.
+# Meter showcase: the whole meter family on one dashboard, laid out for a 2560x1440 screen.
 # 12 cards on a 4 by 3 grid, one variant per card, so a change to any meter part is visible at a glance.
 # The bar family leads - the radial dial has enough examples elsewhere - and the gauge cards stay as
 # the family's contrast, one per kind, so a gauge change is still caught here.

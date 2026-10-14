@@ -1,13 +1,13 @@
-"""Dev-only: Gauge Studio's per-user state and the section presets.
+"""Dev-only: Studio's per-user state and the section styles.
 
 State lives in a folder of its own: `QStandardPaths.AppDataLocation` for "Gauge Studio"
 (`~/Library/Application Support/Gauge Studio` on macOS). It holds `studio.ini` (pins and
-section fold state) and `presets/<section>.yaml` (presets the user saved). Nothing here
+section fold state) and `styles/<section>.yaml` (styles the user saved). Nothing here
 reads or writes the LevityDash config or the repository. `LEVITYDASH_STUDIO_DIR` moves the
 folder, which is how a test keeps off the real one.
 
-A built-in preset is a data file, `studio_presets/<section>.yaml`: a mapping from preset
-name to the `display:` keys it sets. Adding a preset is a data edit.
+A built-in style is a data file, `studio_styles/<section>.yaml`: a mapping from style
+name to the `display:` keys it sets. Adding a style is a data edit.
 """
 import copy
 import os
@@ -17,10 +17,10 @@ from typing import Any, Dict, List, NamedTuple
 import yaml
 from PySide6.QtCore import QCoreApplication, QSettings, QStandardPaths
 
-BUILTIN_DIR = Path(__file__).resolve().parent / 'studio_presets'
+BUILTIN_DIR = Path(__file__).resolve().parent / 'studio_styles'
 
 #: The top sections. `paths` are the rows (dotted property paths); `owns` are the top-level
-#: `display:` keys a preset of the section may set and "Save current as preset" records.
+#: `display:` keys a style of the section may set and "Save current as style" records.
 #: `labels` names a row whose last key alone would be ambiguous here, such as three rows that
 #: would all read "enabled". `subsections` adds folded child sections, each holding a part of the
 #: gauge (every property under that path) or a single property.
@@ -64,7 +64,7 @@ QUICK: Dict[str, Dict[str, Any]] = {
 }
 
 
-class Preset(NamedTuple):
+class Style(NamedTuple):
 	name: str
 	data: dict
 	replace: bool  # a saved snapshot replaces the section's keys; a built-in one merges into them
@@ -94,11 +94,11 @@ def _load(path: Path) -> dict:
 	return data if isinstance(data, dict) else {}
 
 
-def presets(title: str) -> List[Preset]:
-	found = [Preset(str(name), frag or {}, False, False) for name, frag in _load(BUILTIN_DIR / f'{title.lower()}.yaml').items()]
-	for name, entry in _load(stateDir() / 'presets' / f'{title.lower()}.yaml').items():
+def styles(title: str) -> List[Style]:
+	found = [Style(str(name), frag or {}, False, False) for name, frag in _load(BUILTIN_DIR / f'{title.lower()}.yaml').items()]
+	for name, entry in _load(stateDir() / 'styles' / f'{title.lower()}.yaml').items():
 		if isinstance(entry, dict) and isinstance(entry.get('display'), dict):
-			found.append(Preset(str(name), entry['display'], bool(entry.get('replace', True)), True))
+			found.append(Style(str(name), entry['display'], bool(entry.get('replace', True)), True))
 	return found
 
 
@@ -108,8 +108,8 @@ def snapshot(title: str, display: dict) -> dict:
 
 
 def saveUser(title: str, name: str, display: dict) -> None:
-	"""Record the section's current look under `name`, replacing a preset of that name."""
-	path = stateDir() / 'presets' / f'{title.lower()}.yaml'
+	"""Record the section's current look under `name`, replacing a style of that name."""
+	path = stateDir() / 'styles' / f'{title.lower()}.yaml'
 	path.parent.mkdir(parents=True, exist_ok=True)
 	data = _load(path)
 	data[name] = {'replace': True, 'display': snapshot(title, display)}
@@ -129,12 +129,12 @@ def merge(base: dict, fragment: dict) -> dict:
 	return out
 
 
-def apply(display: dict, preset: Preset) -> dict:
-	"""`display` with the preset's keys set. Every key the preset does not name stays as it is."""
-	if not preset.replace:
-		return merge(display, preset.data)
+def apply(display: dict, style: Style) -> dict:
+	"""`display` with the style's keys set. Every key the style does not name stays as it is."""
+	if not style.replace:
+		return merge(display, style.data)
 	out = copy.deepcopy(display)
-	for key, value in preset.data.items():
+	for key, value in style.data.items():
 		if value is None:
 			out.pop(key, None)
 		else:

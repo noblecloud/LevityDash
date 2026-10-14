@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-"""Dev-only: render a single panel/widget from a dashboard to a PNG.
+"""Dev-only: render a single item from a dashboard to a PNG.
 
-Iterating on one gauge or one panel is much easier when you're looking at just
-that panel — a full-dashboard render buries a 200px cell in 1.8 megapixels, and
+Iterating on one gauge or one item is much easier when you're looking at just
+that item — a full-dashboard render buries a 200px cell in 1.8 megapixels, and
 you end up cropping by hand every time.
 
 Items are addressed by the `name:` in the `.levity`. Use `--list` to see what's
@@ -12,7 +12,7 @@ Usage:
     # what can I render?
     poetry run python src/LevityDash/devtools/render_widget.py --list --seed DIR
 
-    # one panel, at 2x so small text is legible
+    # one item, at 2x so small text is legible
     poetry run python src/LevityDash/devtools/render_widget.py \\
         --name terrarium --out terrarium.png --scale 2 --seed DIR
 
