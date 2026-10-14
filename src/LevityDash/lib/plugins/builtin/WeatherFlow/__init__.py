@@ -11,6 +11,7 @@ from LevityDash.lib.plugins.schema import LevityDatagram, SchemaSpecialKeys as t
 from LevityDash.lib.plugins.utils import ScheduledEvent
 from LevityDash.lib.plugins.web import Auth, AuthType, Endpoint, REST, URLs
 from LevityDash.lib.plugins.web.errors import APIError
+from LevityDash.lib.plugins.web.reconnect import Backoff
 from LevityDash.lib.plugins.web.socket_ import UDPSocket
 from LevityDash.lib.utils.shared import LOCAL_TIMEZONE, Now
 
@@ -247,6 +248,10 @@ schema = {
 
 ignore = {'rapid_wind'}
 
+# A hub broadcasts every few seconds (rapid_wind every 3, hub_status every 10),
+# so a minute of nothing means the socket is dead, not the weather quiet.
+SILENCE_TIMEOUT = 60.0
+
 
 class WFWebsocket:
 	socket: ClientWebSocketResponse | None
@@ -254,6 +259,7 @@ class WFWebsocket:
 	def __init__(self, plugin: 'WeatherFlow', *args, **kwargs):
 		self.socket = None
 		self.task: asyncio.Task | None = None
+		self.silenceTimeout = SILENCE_TIMEOUT
 		self.plugin = plugin
 		self.loop = plugin.loop
 		from secrets import token_urlsafe as genUUID
@@ -298,7 +304,14 @@ class WFWebsocket:
 				self.socket = ws
 				backoff.reset()
 				await self._open(ws)
-				async for msg in ws:
+				while True:
+					try:
+						msg = await ws.receive(timeout=self.silenceTimeout)
+					except asyncio.TimeoutError:
+						self.plugin.pluginLog.warning(f'WeatherFlow: no data for {self.silenceTimeout:g}s, reconnecting')
+						break
+					if msg.type in (WSMsgType.CLOSE, WSMsgType.CLOSING, WSMsgType.CLOSED):
+						break
 					if msg.type == WSMsgType.TEXT:
 						try:
 							await self._handleMessage(msg.data)
@@ -386,7 +399,7 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 
 	def __init__(self, *args, **kwargs):
 		super(WeatherFlow, self).__init__(*args, **kwargs)
-		self.udp = UDPSocket(self, port=50222)
+		self.udp = UDPSocket(self, port=50222, silenceTimeout=SILENCE_TIMEOUT)
 		self.udp.handler.connectSlot(self.socketUpdate)
 		self.websocket = WFWebsocket(self)
 

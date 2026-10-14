@@ -18,7 +18,7 @@ def _item(dashboard, kind):
 
 
 def test_each_display_saves_its_own_type(dashboard):
-	for kind, saved in (('realtime.gauge', 'realtime.gauge'), ('realtime.bar', 'realtime.bar'), ('realtime.text', 'realtime')):
+	for kind, saved in (('realtime.gauge', 'realtime.gauge'), ('realtime.bar', 'realtime.bar'), ('realtime.text', 'realtime.text')):
 		assert _item(dashboard, kind).state['type'] == saved
 
 

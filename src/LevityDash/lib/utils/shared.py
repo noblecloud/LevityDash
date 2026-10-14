@@ -1874,6 +1874,28 @@ def singleShotSafe(msec: int, callback: Callable):
 	_mainThreadCall.invoke(_on_main)
 
 
+def isMainThread() -> bool:
+	"""True on the GUI thread (or before there is an application)."""
+	app = QtCore.QCoreApplication.instance()
+	return app is None or QThread.currentThread() is app.thread()
+
+
+def callOnMainThread(callback: Callable) -> bool:
+	"""Run ``callback`` on the GUI thread.
+
+	Called from the GUI thread it runs at once and returns True. From any other
+	thread it is queued onto the GUI thread and this returns False, so the
+	caller must not rely on the result. Scene items (and anything that adds or
+	removes them) may only be touched from the GUI thread; a worker that does so
+	corrupts Qt's heap and aborts the process, usually far from the cause.
+	"""
+	if isMainThread():
+		callback()
+		return True
+	_mainThreadCall.invoke(callback)
+	return False
+
+
 class WorkerSignals(QtCore.QObject):
 	finished = QtCore.Signal()
 	error = QtCore.Signal(tuple)

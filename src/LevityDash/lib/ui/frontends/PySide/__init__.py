@@ -23,6 +23,11 @@ class LevityDashApp(QApplication):
 		QApplication.setOrganizationName('LevityDash')
 		QApplication.setOrganizationDomain('LevityDash.app')
 		connectSignal(self.aboutToQuit, LevityDashboard.plugins.stop)
+		from LevityDash.lib.config import userConfig
+		if userConfig.getOrSet('QtOptions', 'keepAwake', False, userConfig.getboolean):
+			from LevityDash.lib.utils.keepawake import startKeepAwake, stopKeepAwake
+			if startKeepAwake():
+				connectSignal(self.aboutToQuit, stopKeepAwake)
 
 	def start(self):
 		self.init_app()

@@ -20,7 +20,7 @@ from functools import cached_property
 from itertools import combinations
 from math import atan2, floor, hypot, inf, isclose, isfinite, isinf
 from numbers import Number
-from typing import TYPE_CHECKING, Any, Dict, Iterator, Optional, Sequence, Type, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, Optional, Sequence, Type, Union
 
 from numpy import ceil, cos, pi, radians, sin, sqrt
 from PySide6.QtCore import (
@@ -606,6 +606,16 @@ class Graduations(ColorGradientMixin, StatefulGaugeItem):
 			except ValueError:
 				pass
 		return Unset
+
+	@usr_interval.encode
+	def usr_interval(self, value: Measurement | int | float | Unset) -> str | int | float:
+		# A bare number is how a dashboard writes it, and the data's own unit reads it
+		# back. Text would not do for a compass direction: 90 degrees prints as "E".
+		try:
+			number = float(value)
+		except (TypeError, ValueError):
+			return str(value)
+		return int(number) if number.is_integer() else number
 
 	@property
 	def usr_interval_deg(self) -> Angle | Unset:
@@ -1435,7 +1445,6 @@ class GaugeTickText(GlowMixin, GaugeItem, AnnotationText, Stateful):
 		tick.label = self
 		kwargs['gauge'] = gauge
 		kwargs['value'] = group.source.value_at(tick.index)
-		# group.size_group.addItem(self)
 		self.set_formatting_func(group.format_value)
 		kwargs['labelGroup'] = group
 		super(GaugeTickText, self).__init__(*args, **kwargs)
@@ -1768,7 +1777,7 @@ class GaugeTickText(GlowMixin, GaugeItem, AnnotationText, Stateful):
 		pass
 
 	def getTextScale(self, textRect: QRectF = None, limitRect: QRectF = None) -> float:
-		textRect = textRect or self._textRect or self._update_path()
+		textRect = textRect or self.currentTextRect()
 		limitRect = limitRect or self.limitRect
 
 		width = (textRect.width()) or 1
@@ -2013,10 +2022,9 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText], GlowMixin):
 			return '⋯'
 		return str(value)
 
-	@cached_property
-	def size_group(self) -> SizeGroup:
-		tick_type = self._ticks.tick_type.name.lower()
-		return self.gauge.localGroup.getAttrGroup(f'local.{tick_type}-textSize', matchAll=True)
+	@property
+	def groupOwner(self):
+		return self.gauge
 
 	def onAxisTransform(self, axis: Axis):
 		print('onAxisTransform', axis)
@@ -2274,7 +2282,8 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText], GlowMixin):
 
 	@align_trailing.condition(method='get')
 	def align_trailing(self, value: AlignmentFlag) -> bool:
-		return value != self.alignment.combined
+		# Only what the config set: the automatic alignment is derived from the tick's own.
+		return getattr(self, '_align_trailing', Unset) is not Unset
 
 	def _align_leading_auto(self) -> AlignmentFlag:
 		if self.rotation_leading:
@@ -2295,7 +2304,8 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText], GlowMixin):
 
 	@align_leading.condition(method='get')
 	def align_leading(self, value: AlignmentFlag) -> bool:
-		return value != self.alignment.combined
+		# Only what the config set: the automatic alignment is derived from the tick's own.
+		return getattr(self, '_align_leading', Unset) is not Unset
 
 	@property
 	def gauge(self) -> 'Gauge':
@@ -4516,10 +4526,16 @@ class GaugeValueLabel(GaugeLabel):
 			return "⋯"
 		return str(value)
 
-	@NonInteractiveLabel.formatHint.getter
+	# A property of its own: `NonInteractiveLabel.formatHint.getter` changed the one
+	# shared by every Label, so no clock or text ever reported its hint for a save.
+	@StateProperty(key='format-hint', default=None)
 	def formatHint(self) -> Optional[str]:
 		"""`format-hint` as configured. The range's own hint is not reported here, so a save does not write it back as if set."""
 		return getattr(self.textBox, '_explicitHint', None)
+
+	@formatHint.setter
+	def formatHint(self, value: Optional[str]):
+		self.textBox._formatHint = value
 
 	def rangeHint(self, font: QFont) -> Optional[str]:
 		"""The widest text the gauge's range can show, with every digit set to the widest glyph the font has.
@@ -4669,6 +4685,26 @@ class GaugeUnit(GaugeLabel):
 		},
 		'margins': ('0', '0', '0', '0'),
 	}
+
+	# Its own property, not an override of Label.text: that would change the
+	# shared one for every label. The unit's text follows the data, so only a
+	# text the config wrote is saved.
+	@StateProperty(key='text', default=..., sortOrder=0, dependencies={'geometry', 'margins', 'format-hint'}, repr=True, singleVal=True)
+	def text(self) -> str:
+		return self.textBox.text if not self.hasIcon else ...
+
+	@text.setter
+	def text(self, value: str):
+		self._explicitText = value
+		self.textBox.value = value
+
+	@text.after
+	def text(self) -> Callable:
+		return self.textBox.updateText
+
+	@text.condition
+	def text(self, value) -> bool:
+		return bool(getattr(self, '_explicitText', None))
 
 	class TextBox(Text):
 

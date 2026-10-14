@@ -1,0 +1,34 @@
+# Two graphs, seven days each, in one stack. Until the graph item updates ran on the GUI thread this aborted the process (Qt heap corruption in HourLines.updateLines).
+# Two graphs of different height in one stack. Their day labels are not grouped: each graph sizes its day names from its own height.
+- type: stack
+  name: board
+  direction: Vertical
+  geometry: {x: 1%, y: 1%, width: 98%, height: 98%}
+  spacing: 2.5mm
+  items:
+  - type: graph
+    name: graph0
+    size: 49%
+    timeframe: {days: 7}
+    annotations:
+      dayLabels: {position: Top, alignment: Center, opacity: 30%, height: 14%}
+      hourLabels: {alignment: BottomCenter, spacingIntervals: '6, 12, 24'}
+    figures:
+    - figure: temperature
+      margins: {top: 42%, bottom: 24%}
+      environment.temperature.temperature:
+        plot: {type: plot, gradient: TemperatureGradient, weight: 0.9}
+        resolution: 2
+  - type: graph
+    name: graph1
+    size: 51%
+    timeframe: {days: 7}
+    annotations:
+      dayLabels: {position: Top, alignment: Center, opacity: 30%, height: 14%}
+      hourLabels: {alignment: BottomCenter, spacingIntervals: '6, 12, 24'}
+    figures:
+    - figure: temperature
+      margins: {top: 42%, bottom: 24%}
+      environment.temperature.dewpoint:
+        plot: {type: plot, gradient: TemperatureGradient, weight: 0.9}
+        resolution: 2

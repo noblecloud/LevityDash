@@ -338,17 +338,61 @@ class LevitySceneView(QGraphicsView):
 		# in postInit, so reach it lazily.)
 		self.loadingFinished.connect(lambda: self.resizeDone.start())
 
+	_REFIT_MAX_PASSES = 8
+
 	def _refitAllText(self):
-		"""Re-fit grouped text, then rebuild any ungrouped text items.
+		"""Fit all text to a fixed point.
+
+		Text layout is not one-shot: a value label's box depends on its unit's,
+		a size group's font on its siblings', and each of those is cached at the
+		moment it was last built. A single pass leaves whichever items were
+		visited before their neighbours settled at an earlier answer, so the
+		result depended on update order, and two renders of one board differed.
+		Each pass is a pure recompute from current state, so repeating until
+		nothing moves lands on the same layout whatever the order. Idempotent -
+		safe to run on every settled resize.
+		"""
+		previous = self._textSnapshot()
+		for _ in range(self._REFIT_MAX_PASSES):
+			self._refitTextPass()
+			snapshot = self._textSnapshot()
+			if snapshot == previous:
+				return
+			previous = snapshot
+		guiLog.warning(f'Text layout did not settle after {self._REFIT_MAX_PASSES} passes')
+
+	def _textSnapshot(self) -> tuple:
+		"""Every text item's transform and outline, rounded: equal snapshots mean nothing moved."""
+		from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import Text
+		from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.gauge import Gauge
+		rows = []
+		for item in self.graphicsScene.items():
+			if isinstance(item, Gauge):
+				pivot = item.needle.pos()
+				rows.append((round(pivot.x(), 2), round(pivot.y(), 2)))
+			elif isinstance(item, Text):
+				t, r = item.transform(), item.path().boundingRect()
+				rows.append((round(t.m11(), 4), round(t.m22(), 4), round(t.dx(), 2), round(t.dy(), 2), round(r.width(), 2), round(r.height(), 2)))
+		return tuple(rows)
+
+	def _refitTextPass(self):
+		"""One pass: re-fit grouped text, then rebuild any ungrouped text items.
 
 		Grouped text is re-fit by rebucket_and_update_all. Ungrouped text
 		(titles, clock, standalone labels) builds its path lazily via
 		updateTransform and isn't a group member, so it must be rebuilt
-		explicitly. Idempotent - safe to run on every settled resize.
+		explicitly.
 		"""
 		from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import Text
 		from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import DisplayLabel
+		from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.gauge import Gauge
 		from LevityDash.lib.ui.Geometry import DisplayPosition
+		for item in self.graphicsScene.items():
+			if isinstance(item, Gauge):
+				# The needle, arc and fills take their pivot from `gauge.center`
+				# when they last refreshed; a centre that moved since leaves them
+				# where it used to be. Pull them to the current one first.
+				item.refresh()
 		SizeGroup.rebucket_and_update_all()
 		for item in self.graphicsScene.items():
 			if isinstance(item, Text) and getattr(item, '_sized', None) is None:

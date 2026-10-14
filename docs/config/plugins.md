@@ -32,6 +32,21 @@ Each plugin can have its own config file of the same name or a `config.ini` file
 
 ---
 
+## Astronomy
+
+The sun, from the clock and the `[Location]` section of your [config](/config/app.md). It needs no network and no key. It publishes two keys for a sun-arc dial:
+
+- `astronomy.sun.hour`: the local hour of day as a decimal, so 15.5 is 15:30.
+- `astronomy.sun.remaining`: minutes of daylight left today. It is `0` at night.
+
+The plugin is on by default. To turn it off, set `enabled = False` in `CONFIG_DIR/plugins/Astronomy.ini`. A scenario that defines either key wins over the plugin.
+
+## Lost connections
+
+REST plugins retry a failed request. The UDP listener and the WeatherFlow websocket also reconnect after a drop. They wait a little longer after each failed try, from 2 seconds up to 5 minutes, and then reconnect on their own. You do not need to restart the app.
+
+---
+
 
 [wf](plugins/WeatherFlow.md ':include')
 

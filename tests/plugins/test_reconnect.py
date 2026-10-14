@@ -150,3 +150,61 @@ def test_weatherflow_websocket_reconnects_after_the_server_hangs_up():
 		await runner.cleanup()
 
 	asyncio.run(main())
+
+
+def test_udp_socket_rebinds_when_the_port_goes_silent_but_not_while_data_flows():
+	port = freePort()
+
+	async def main():
+		udp = UDPSocket(stubPlugin(), port=port, silenceTimeout=0.4)
+		udp.start()
+		await until(lambda: hasattr(udp, 'transport'))
+		first = udp.transport
+		for _ in range(6):  # 0.9s of traffic, longer than the timeout
+			send(port, {'n': 1})
+			await asyncio.sleep(0.15)
+		assert udp.transport is first
+		await until(lambda: udp.transport is not first, timeout=6)
+		udp.stop()
+
+	asyncio.run(main())
+
+
+def test_weatherflow_websocket_reconnects_when_the_server_goes_silent():
+	from aiohttp import web
+	from LevityDash.lib.plugins.builtin.WeatherFlow import WFWebsocket
+
+	opened = []
+
+	async def handler(request):
+		ws = web.WebSocketResponse()
+		await ws.prepare(request)
+		opened.append(1)
+		await asyncio.sleep(5)  # connected, never says anything
+		return ws
+
+	async def main():
+		app = web.Application()
+		app.router.add_get('/data', handler)
+		runner = web.AppRunner(app)
+		await runner.setup()
+		port = freePort()
+		await web.TCPSite(runner, '127.0.0.1', port).start()
+		plugin = SimpleNamespace(
+			loop=asyncio.get_running_loop(), pluginLog=logging.getLogger('test.reconnect'),
+			config={'deviceID': 1},
+			urls=SimpleNamespace(websocket=SimpleNamespace(url=f'http://127.0.0.1:{port}/data', params={})),
+		)
+		ws = WFWebsocket(plugin)
+		ws.silenceTimeout = 0.3
+		backoff = Backoff(initial=0.05, maximum=0.05)
+		task = asyncio.create_task(keepConnected(lambda: ws._connect(backoff), plugin.pluginLog, 'ws', backoff))
+		await until(lambda: len(opened) == 2, timeout=5)
+		task.cancel()
+		try:
+			await task
+		except asyncio.CancelledError:
+			pass
+		await runner.cleanup()
+
+	asyncio.run(main())
