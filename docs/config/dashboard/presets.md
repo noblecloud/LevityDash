@@ -94,4 +94,4 @@ When you edit a dashboard in the app and save it, an instance of a preset stays 
 
 The preset-dashboard example in `docs/design-references/preset-dashboard.levity` saves as 846 bytes. The same dashboard without presets saves as 12,703 bytes.
 
-Known limit: a saved dashboard with a gauge does not load back as the same dashboard until [the gauge save fix](https://github.com/noblecloud/LevityDash/pull/66) is merged. This was true before presets.
+A saved gauge is written as `type: realtime.gauge`, and a saved bar as `type: realtime.bar`. Both load back as the same display. A gauge no longer saves its derived centre, so the file does not carry it.

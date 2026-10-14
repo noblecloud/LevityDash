@@ -113,11 +113,11 @@ items:
         valueLabel: {color: $accent, margins: 2%}
     - type: value-stack
       shared:
-        title: {color: $muted, matchingGroup: {group: rowTitle@now, matchAll: true}}
+        title: {color: $muted, matchingGroup: {group: global.title, matchAll: true}}
         display:
           font: Roboto Mono
           unitPosition: Hidden
-          valueLabel: {matchingGroup: {group: rowValue@now, matchAll: true}}
+          valueLabel: {matchingGroup: {group: global.value, matchAll: true}}
       direction: Horizontal
       geometry: {x: 0%, y: 50%, width: 100%, height: 24%}
       spacing: 1mm
@@ -130,11 +130,11 @@ items:
       - {type: realtime.text, key: environment.light.uvi, title: {text: UV}, display: {precision: 1}}
     - type: value-stack
       shared:
-        title: {color: $muted, matchingGroup: {group: rowTitle@inside, matchAll: true}}
+        title: {color: $muted, matchingGroup: {group: global.title, matchAll: true}}
         display:
           font: Roboto Mono
           unitPosition: Hidden
-          valueLabel: {matchingGroup: {group: rowValue@inside, matchAll: true}}
+          valueLabel: {matchingGroup: {group: global.value, matchAll: true}}
       direction: Horizontal
       geometry: {x: 0%, y: 76%, width: 100%, height: 24%}
       spacing: 1mm
@@ -170,8 +170,8 @@ items:
         geometry: {x: 0%, y: 24%, width: 46%, height: 76%}
       - type: value-stack
         shared:
-          title: {color: $muted}
-          display: {font: Roboto Mono, precision: 0}
+          title: {color: $muted, matchingGroup: {group: global.title, matchAll: true}}
+          display: {font: Roboto Mono, precision: 0, valueLabel: {matchingGroup: {group: global.value, matchAll: true}}}
         geometry: {x: 48%, y: 26%, width: 52%, height: 74%}
         spacing: 0.4mm
         items:
@@ -211,8 +211,8 @@ items:
         geometry: {x: 0%, y: 24%, width: 46%, height: 76%}
       - type: value-stack
         shared:
-          title: {color: $muted}
-          display: {font: Roboto Mono}
+          title: {color: $muted, matchingGroup: {group: global.title, matchAll: true}}
+          display: {font: Roboto Mono, valueLabel: {matchingGroup: {group: global.value, matchAll: true}}}
         geometry: {x: 48%, y: 26%, width: 52%, height: 74%}
         spacing: 0.4mm
         items:
@@ -246,8 +246,8 @@ items:
         geometry: {x: 0%, y: 0%, width: 100%, height: 22%}
       - type: value-stack
         shared:
-          title: {color: $muted}
-          display: {font: Roboto Mono}
+          title: {color: $muted, matchingGroup: {group: global.title, matchAll: true}}
+          display: {font: Roboto Mono, valueLabel: {matchingGroup: {group: global.value, matchAll: true}}}
         geometry: {x: 0%, y: 26%, width: 100%, height: 74%}
         spacing: 0.4mm
         items:
@@ -267,54 +267,55 @@ items:
     dividers: {enabled: true, opacity: 50%, size: 88%}
     defaultType: value-stack
     shared:
-      title: {color: $muted}
+      title: {color: $muted, matchingGroup: {group: global.title, matchAll: true}}
       display:
         font: Roboto Mono
+        valueLabel: {matchingGroup: {group: global.value, matchAll: true}}
     items:
     - items:
-      - {type: text, text: Today, font: $display, color: $text, alignment: Center}
+      - {type: text, text: Today, font: $display, color: $text, alignment: Center, matchingGroup: {group: global.head, matchAll: true}}
       - {type: realtime.text, key: $hi, title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
       - {type: realtime.text, key: $lo, title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
       - {type: realtime.text, key: $rd, title: {text: Rain}, display: {precision: 2, valueLabel: {color: $info}}}
       - {type: realtime.text, key: $gm, title: {text: Gust}, display: {precision: 0, valueLabel: {color: $warn}}}
       - {type: realtime.text, key: environment.wind.direction.dominant, title: {text: From}, display: {precision: 0}}
     - items:
-      - {type: text, text: Tomorrow, font: $display, color: $text, alignment: Center}
+      - {type: text, text: Tomorrow, font: $display, color: $text, alignment: Center, matchingGroup: {group: global.head, matchAll: true}}
       - {type: realtime.text, key: 'at($hi, 1d)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
       - {type: realtime.text, key: 'at($lo, 1d)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
       - {type: realtime.text, key: 'at($rd, 1d)', title: {text: Rain}, display: {precision: 2, valueLabel: {color: $info}}}
       - {type: realtime.text, key: 'at($gm, 1d)', title: {text: Gust}, display: {precision: 0, valueLabel: {color: $warn}}}
       - {type: realtime.text, key: 'at(environment.wind.direction.dominant, 1d)', title: {text: From}, display: {precision: 0}}
     - items:
-      - {type: text, text: In 2 days, font: $display, color: $text, alignment: Center}
+      - {type: text, text: In 2 days, font: $display, color: $text, alignment: Center, matchingGroup: {group: global.head, matchAll: true}}
       - {type: realtime.text, key: 'at($hi, 2d)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
       - {type: realtime.text, key: 'at($lo, 2d)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
       - {type: realtime.text, key: 'at($rd, 2d)', title: {text: Rain}, display: {precision: 2, valueLabel: {color: $info}}}
       - {type: realtime.text, key: 'at($gm, 2d)', title: {text: Gust}, display: {precision: 0, valueLabel: {color: $warn}}}
       - {type: realtime.text, key: 'at(environment.wind.direction.dominant, 2d)', title: {text: From}, display: {precision: 0}}
     - items:
-      - {type: text, text: In 3 days, font: $display, color: $text, alignment: Center}
+      - {type: text, text: In 3 days, font: $display, color: $text, alignment: Center, matchingGroup: {group: global.head, matchAll: true}}
       - {type: realtime.text, key: 'at($hi, 3d)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
       - {type: realtime.text, key: 'at($lo, 3d)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
       - {type: realtime.text, key: 'at($rd, 3d)', title: {text: Rain}, display: {precision: 2, valueLabel: {color: $info}}}
       - {type: realtime.text, key: 'at($gm, 3d)', title: {text: Gust}, display: {precision: 0, valueLabel: {color: $warn}}}
       - {type: realtime.text, key: 'at(environment.wind.direction.dominant, 3d)', title: {text: From}, display: {precision: 0}}
     - items:
-      - {type: text, text: In 4 days, font: $display, color: $text, alignment: Center}
+      - {type: text, text: In 4 days, font: $display, color: $text, alignment: Center, matchingGroup: {group: global.head, matchAll: true}}
       - {type: realtime.text, key: 'at($hi, 4d)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
       - {type: realtime.text, key: 'at($lo, 4d)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
       - {type: realtime.text, key: 'at($rd, 4d)', title: {text: Rain}, display: {precision: 2, valueLabel: {color: $info}}}
       - {type: realtime.text, key: 'at($gm, 4d)', title: {text: Gust}, display: {precision: 0, valueLabel: {color: $warn}}}
       - {type: realtime.text, key: 'at(environment.wind.direction.dominant, 4d)', title: {text: From}, display: {precision: 0}}
     - items:
-      - {type: text, text: In 5 days, font: $display, color: $text, alignment: Center}
+      - {type: text, text: In 5 days, font: $display, color: $text, alignment: Center, matchingGroup: {group: global.head, matchAll: true}}
       - {type: realtime.text, key: 'at($hi, 5d)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
       - {type: realtime.text, key: 'at($lo, 5d)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
       - {type: realtime.text, key: 'at($rd, 5d)', title: {text: Rain}, display: {precision: 2, valueLabel: {color: $info}}}
       - {type: realtime.text, key: 'at($gm, 5d)', title: {text: Gust}, display: {precision: 0, valueLabel: {color: $warn}}}
       - {type: realtime.text, key: 'at(environment.wind.direction.dominant, 5d)', title: {text: From}, display: {precision: 0}}
     - items:
-      - {type: text, text: In 6 days, font: $display, color: $text, alignment: Center}
+      - {type: text, text: In 6 days, font: $display, color: $text, alignment: Center, matchingGroup: {group: global.head, matchAll: true}}
       - {type: realtime.text, key: 'at($hi, 6d)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
       - {type: realtime.text, key: 'at($lo, 6d)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
       - {type: realtime.text, key: 'at($rd, 6d)', title: {text: Rain}, display: {precision: 2, valueLabel: {color: $info}}}

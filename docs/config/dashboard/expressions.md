@@ -176,6 +176,8 @@ A space between the number and the unit is optional.
 
 A unit must measure the same thing as the data. `90°F` and a wind speed do not match. The expression then has an error.
 
+A rate keeps its time. Write `0.1 in/hr`, not `0.1 in`. A plain `in` is a length, so it converts as a distance (to miles, for example), not as a rate.
+
 #### <div class=mono>A bare number next to a measurement</div>
 
 A bare number next to a measurement with `+`, `-`, or a comparison is an error. LevityDash does not know the unit of the number. Is the `5` in `temperature - 5` Celsius or Fahrenheit? Write the unit: `temperature - 5°F`.

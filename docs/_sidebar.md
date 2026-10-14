@@ -13,6 +13,7 @@
 		- [Themes](config/dashboard/themes.md)
 		- [Variables](config/dashboard/variables.md)
 		- [Presets](config/dashboard/presets.md)
+		- [Size groups](config/dashboard/size-groups.md)
 		- [Value Sources](config/dashboard/expressions.md)
 		- [Switch](config/dashboard/switch.md)
 		- [Bars](config/dashboard/bar.md)

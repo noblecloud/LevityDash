@@ -39,6 +39,7 @@ These pages cover the properties that work on a whole dashboard:
 - [Themes](/config/dashboard/themes.md): named colors, fonts, and gradients.
 - [Variables](/config/dashboard/variables.md): a name for a value that you use more than once.
 - [Presets](/config/dashboard/presets.md): an item that you write once and use many times, with its own properties.
+- [Size groups](/config/dashboard/size-groups.md): keep text sizes the same across items.
 - [Value Sources](/config/dashboard/expressions.md): a key, a number, or an expression, and units in an expression.
 - [Switch](/config/dashboard/switch.md): shows one of several items.
 - [Flex and grid](/config/dashboard/layout.md): CSS flexbox and grid layout for stacks.
@@ -418,7 +419,7 @@ The format string to use when formatting the value.
 
 #### <div class=mono>format-hint: str </div>
 
-This property is used to override the string used for sizing/alignment.
+This property is used to override the string used for sizing/alignment. If you leave it out, LevityDash sizes a value against the widest text its type can show, not against the value on screen. When both ends of the range are finite, the hint is their formatted ends. Otherwise it is the largest number the digit budget allows, with a minus sign when the value can go below zero. So a 7 and a 101 are sized alike. The derived hint is never saved to the file.
 For example, wind speed frequently changes between 0 and some non-zero float causing the text to constantly resize.
 To fix this, `format-hint` can be set to `'10.0'`.  Note, the quotes are required, without the quotes, the value will be interpreted as a float and the decimal will be dropped.  Since this string will be used to determine the size of the text, it is important that the string is the same length as the longest string that will be displayed.
 
@@ -476,9 +477,6 @@ The Text sub-item used to display the unit string. All Text sub-item properties 
 [//]: #
 ### Zero, trace, and percent values
 
-> [!NOTE]
-> **Pending** ([#35](https://github.com/noblecloud/LevityDash/pull/35) and [WeatherUnits #4](https://github.com/noblecloud/WeatherUnits/pull/4)).
-
 A small value can mean "none" or "a little". The display keeps the two apart.
 
 - `0` is exactly zero.
@@ -488,6 +486,19 @@ A small value can mean "none" or "a little". The display keeps the two apart.
 A percentage can arrive in two scales. Some sources report `0` to `100`. For these, `0.1` is a tenth of one percent. Other sources report a fraction from `0` to `1`. For these, `0.1` is ten percent. Each source states its own scale, so `0.1` shows as `0.10%` for one source and `10.0%` for another. PirateWeather reports fractions. You do not set the scale in a dashboard.
 
 A plugin author sets the scale in the schema entry of a key. Add `kwargs: {isPercentage: false}` for a source that reports a fraction.
+
+## Example dashboards
+
+Four full dashboards are in `docs/design-references/dashboards/`. Each one is for a 15 inch 16:10 screen, and each has its render command in its header. Render one with `render_dashboard.py`, for example:
+
+| Dashboard | What it is for | Scenario |
+|-------|----------------|----------|
+| `station.levity` | An everyday dashboard: dense readings, indoor and terrarium sensors, a rotating watch slot. | `station-day` |
+| `storm.levity` | Lightning as the hero, with a dial of strike distance. | `storm-night`, `storm-flood` |
+| `sky.levity` | Light and air: the day as one arc from sunrise to sunset. | `sky-clear` |
+| `week.levity` | The forecast as one graph across the screen. | `week-ahead` |
+
+Scenarios are in `docs/design-references/scenarios/`.
 
 ## Graph
 
@@ -694,8 +705,6 @@ Puts a mark on the line for each value of another key. See [Pins on a line](#pin
 ### Bar plots
 
 > [!NOTE]
-> **Pending** ([#33](https://github.com/noblecloud/LevityDash/pull/33)).
-
 A bar plot draws one bar for each sample. Use it for amounts, such as rain in each hour.
 
 ```yaml
@@ -743,8 +752,6 @@ To draw a line over bars, put each in its own figure. Give the two figures the s
 ### Violin plots
 
 > [!NOTE]
-> **Pending** ([#33](https://github.com/noblecloud/LevityDash/pull/33)).
-
 A violin plot draws the spread of the values in a stretch of time. It is wide where many values are near each other. It is narrow where there are few.
 
 ```yaml
@@ -783,8 +790,6 @@ How much of its stretch of time each violin fills. It works as it does for a bar
 ### Line thickness
 
 > [!NOTE]
-> **Pending** ([#36](https://github.com/noblecloud/LevityDash/pull/36)).
-
 A line can get thicker where another key has a higher value. In the example, the temperature line is thicker when the wind is stronger.
 
 ```yaml
@@ -824,8 +829,6 @@ The values of the key that the two weights are for. A value outside the range us
 ### Pins on a line
 
 > [!NOTE]
-> **Pending** ([#37](https://github.com/noblecloud/LevityDash/pull/37)).
-
 A pin is a mark on a line. Each pin has its own time and sits on the line at that time. A pin shows the value of another key. Use pins to put a weather symbol on a temperature line.
 
 In the example, the amount of rain picks the symbol.
@@ -954,4 +957,4 @@ The Moon Phase shows the phase of the moon and tilts it as it looks in the sky. 
 When `true`, the lit part of the moon turns to match how the moon looks to someone at your location. The default is `true`. When `false`, the moon always draws with its lit side to the right (waxing) or to the left (waning).
 
 > [!NOTE]
-> **Pending** ([#32](https://github.com/noblecloud/LevityDash/pull/32)). The tilt uses the latitude and longitude from the `[Location]` section of your [config](/config.md). Before this change, the tilt was wrong for most times and places.
+The tilt uses the latitude and longitude from the `[Location]` section of your [config](/config.md). Before this change, the tilt was wrong for most times and places.
