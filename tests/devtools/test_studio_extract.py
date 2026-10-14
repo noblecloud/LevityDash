@@ -68,3 +68,42 @@ def test_extract_is_undoable(builder):
 	builder.extractPreset('undo-me')
 	builder.undo()
 	assert builder.piece.node((0,)).get('type') == 'group'
+
+
+def stack_with_groups(builder):
+	builder.piece.template['items'] = [
+		{'type': 'value-stack', 'name': 'row', 'geometry': {'x': '0%', 'y': '0%', 'width': '100%', 'height': '30%'},
+		 'shared': {'title': {'matchingGroup': {'group': 'rowTitle@temperature', 'matchAll': True}},
+		            'display': {'valueLabel': {'matchingGroup': {'group': 'rowValue@temperature', 'matchAll': True}}}},
+		 'items': [{'type': 'realtime.text', 'key': 'environment.temperature.temperature'}]},
+	]
+	builder.rebuildAll()
+
+
+def test_a_size_group_scope_becomes_a_property(builder, tmp_path):
+	stack_with_groups(builder)
+	before = builder.piece.expanded()
+	builder.select((0,))
+	builder.extractPreset('row-preset')
+	piece = m.Piece.fromText('row-preset', (tmp_path / 'presets' / 'row-preset.yaml').read_text())
+	assert list(piece.props) == ['group'] and piece.props['group'].default == 'temperature'
+	shared = piece.template['shared']
+	assert shared['title']['matchingGroup']['group'] == 'rowTitle@$group'
+	assert shared['display']['valueLabel']['matchingGroup']['group'] == 'rowValue@$group'
+	assert builder.piece.node((0,)).get('props') is None, 'the default keeps the use as it was'
+	assert builder.piece.expanded() == before
+
+
+def test_a_second_scope_gets_its_own_property(builder):
+	stack_with_groups(builder)
+	builder.piece.template['items'][0]['shared']['display']['valueLabel']['matchingGroup']['group'] = 'rowValue@wind'
+	piece = builder.piece.extract((0,), 'row-preset')
+	assert {n: s.default for n, s in piece.props.items()} == {'group': 'temperature', 'group-2': 'wind'}
+	assert 'rowValue@${group-2}' in str(piece.template)
+
+
+def test_a_use_can_name_another_panel(builder):
+	stack_with_groups(builder)
+	piece = builder.piece.extract((0,), 'row-preset')
+	other = piece.toPreset().instance({'group': 'wind'})
+	assert other['shared']['title']['matchingGroup']['group'] == 'rowTitle@wind'

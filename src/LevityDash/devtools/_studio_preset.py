@@ -244,7 +244,8 @@ class Piece:
 
 		Placement (`geometry`, `flex`, `grid`, `when`, `name`) stays on the use, so the preset can sit anywhere. A property of this
 		preset that the item reads becomes a property of the new one with the same default, and the use passes it through
-		(`props: {x: $x}`), so the item looks as it did.
+		(`props: {x: $x}`), so the item looks as it did. A size-group scope the item names (`name@panel`) becomes a text property
+		(`group`) whose default is that panel, so the preset keeps its groups where it is reused and each use names its own panel.
 		"""
 		if not path:
 			raise ValueError('The whole template is already the preset; pick an item inside it')
@@ -261,7 +262,10 @@ class Piece:
 		used = [n for n in self.props if n in set(refs(template))]
 		if used:
 			use[PROPS_KEY] = {n: f'${n}' if n.isidentifier() else f'${{{n}}}' for n in used}
-		piece = Piece(name, {n: copy.deepcopy(self.props[n]) for n in used}, template)
+		props = {n: copy.deepcopy(self.props[n]) for n in used}
+		for prop, scope in _scopesToProps(template, set(props) | set(self.props)).items():
+			props[prop] = PropSpec(prop, 'text', scope, doc='The panel the size group is scoped to: the name of an ancestor panel (`name@panel`)')
+		piece = Piece(name, props, template)
 		self.node(path[:-1])[ITEMS_KEY][path[-1]] = use
 		return piece
 
@@ -298,6 +302,50 @@ def _rename(node: Any, old: str, new: str) -> Any:
 	if isinstance(node, str):
 		return _REF.sub(lambda m: ('${%s}' if m.group(1) else '$%s') % new if (m.group(1) or m.group(2)) == old else m.group(0), node)
 	return node
+
+
+def _scopesToProps(node: Any, taken: set) -> Dict[str, str]:
+	"""Rewrite each size-group scope a template joins (`matchingGroup: rowTitle@temperature`) to read a property
+	(`rowTitle@$group`), in place, and return the properties: name -> the scope it had. One property per distinct panel name,
+	so the preset keeps its groups wherever it is used and the use says which ancestor panel holds them (as `stat-row` does)."""
+	found: Dict[str, str] = {}
+
+	def prop_for(scope: str) -> str:
+		for k, v in found.items():
+			if v == scope:
+				return k
+		base, n = 'group', 2
+		name = base
+		while name in taken or name in found:
+			name, n = f'{base}-{n}', n + 1
+		found[name] = scope
+		return name
+
+	def rewrite(group: Any) -> Any:
+		if not isinstance(group, str) or '@' not in group or '$' in group:
+			return group
+		head, scope = group.rsplit('@', 1)
+		if not scope:
+			return group
+		name = prop_for(scope)
+		return f'{head}@${name}' if name.isidentifier() else f'{head}@${{{name}}}'
+
+	def walk(n: Any):
+		if isinstance(n, dict):
+			for k, v in n.items():
+				if k == 'matchingGroup':
+					if isinstance(v, dict) and 'group' in v:
+						v['group'] = rewrite(v['group'])
+					elif isinstance(v, str):
+						n[k] = rewrite(v)
+				else:
+					walk(v)
+		elif isinstance(n, list):
+			for v in n:
+				walk(v)
+
+	walk(node)
+	return found
 
 
 def setField(node: dict, field_: str, value: Any) -> None:
