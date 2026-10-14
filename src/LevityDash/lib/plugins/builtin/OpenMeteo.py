@@ -1,11 +1,21 @@
 import asyncio
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from LevityDash.lib.config import userConfig
 from LevityDash.lib.plugins.schema import SchemaSpecialKeys as tsk
 from LevityDash.lib.plugins.utils import ScheduledEvent
 from LevityDash.lib.plugins.web import Endpoint, REST, URLs
 from LevityDash.lib.plugins.web.errors import APIError
+
+#: The zone the forecast request names. Open-Meteo writes its ISO times in that zone with no
+#: offset, so they have to be read in it and not in the machine's.
+_requestZone = userConfig.tz
+
+
+def _zoneKwargs() -> dict:
+	# A fresh dict per entry: the schema resolves `tz` in place.
+	return {'kwargs': {'tz': str(_requestZone)}} if _requestZone is not None else {}
+
 
 WMOCodes = {
 	0:  {'description': 'Clear', 'icon': 'wi:day-sunny'},
@@ -164,6 +174,7 @@ schema = {
 		'title':          'Sunrise',
 		'description':    'Sunrise',
 		'sourceKey':      'sunrise',
+		**_zoneKwargs(),
 		'timeseriesOnly': True,
 	},
 	'environment.light.sunset':                     {
@@ -173,6 +184,7 @@ schema = {
 		'title':          'Sunset',
 		'description':    'Sunset',
 		'sourceKey':      'sunset',
+		**_zoneKwargs(),
 		'timeseriesOnly': True,
 	},
 	'environment.precipitation.daily':              {
@@ -537,6 +549,7 @@ schema = {
 		'title':       'Time',
 		'description': 'Time',
 		'sourceKey':   'time',
+		**_zoneKwargs(),
 		tsk.metaData:  '@timestamp',
 	},
 	'dataMaps':                                     {'forecast': {'daily': 'daily', 'hourly': 'hourly'}},
@@ -635,7 +648,7 @@ class OpenMeteoURLs(URLs, base='api.open-meteo.com/v1'):
 	# endpoint; verified live that every param below is still returned at that
 	# length (17 daily entries with past_days=1, 408 hourly points).
 	params = {
-		'latitude': userConfig.lat, 'longitude': userConfig.lon, 'timezone': str(userConfig.tz),
+		'latitude': userConfig.lat, 'longitude': userConfig.lon, 'timezone': str(_requestZone),
 		'past_days': 1, 'forecast_days': 16,
 	}
 	forecast = Endpoint(url='forecast', params={'hourly': allParams, 'daily': dailyParams})
@@ -699,12 +712,25 @@ class OpenMeteo(REST, realtime=False, hourly=True, daily=True, recorded=True):
 		self.future.cancel()
 		self.loop.stop()
 
+	_lastForecast: datetime | None = None
+
+	def _forecastAge(self) -> str:
+		if self._lastForecast is None:
+			return 'no forecast has arrived yet'
+		return f'last good forecast {(datetime.now() - self._lastForecast).total_seconds() / 3600:.1f}h ago'
+
 	async def getForecast(self):
 		try:
 			data = await self.getData(self.urls.forecast)
 		except APIError as e:
-			self.pluginLog.warning('OpenMeteo: No data received')
+			self.pluginLog.warning(f'OpenMeteo: no data received, {self._forecastAge()} ({e})')
 			return
+		except Exception as e:
+			# Anything else (a timeout, a dropped connection) used to end this task unseen
+			# and leave the old forecast on the graph with nothing in the log.
+			self.pluginLog.error(f'OpenMeteo: forecast request failed with {type(e).__name__}, {self._forecastAge()}: {e}')
+			return
+		self._lastForecast = datetime.now()
 		data['source'] = [self.name, self.urls.forecast]
 		self.loop.create_task(self.hourly.asyncUpdate(data))
 		self.loop.create_task(self.daily.asyncUpdate(data))
