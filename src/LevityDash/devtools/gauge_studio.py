@@ -1442,6 +1442,7 @@ class Studio(QWidget):
 def main(argv: Optional[List[str]] = None) -> int:
 	parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 	parser.add_argument('fragment', nargs='?', help='a .levity fragment to open; reloaded when it changes on disk. With --build, a preset file')
+	parser.add_argument('--dashboard', action='store_true', help='with --build: open FRAGMENT as a dashboard to edit and save back (only what changed is written)')
 	parser.add_argument('--build', action='store_true', help='open the builder: compose items, give them properties, preview on fixture data')
 	parser.add_argument('--scenario', help='with --build: the fixture scenario the preview draws on (default hot-clear-day)')
 	parser.add_argument('--seed', help='with --build: a config dir to seed the preview dashboard from')
@@ -1452,9 +1453,13 @@ def main(argv: Optional[List[str]] = None) -> int:
 	app = QApplication.instance() or QApplication(sys.argv)
 	app.setStyle('Fusion')
 	identify(app)
+	if args.dashboard:
+		args.build = True
+		if fragment is None:
+			parser.error('--dashboard needs a file')
 	if args.build:
 		from LevityDash.devtools._studio_builder import Builder
-		window = Builder(fragment)
+		window = Builder(fragment, dashboard=args.dashboard)
 		window.setLight(False)
 		window.show()
 		app.lastWindowClosed.connect(app.quit)
