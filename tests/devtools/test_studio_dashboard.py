@@ -14,7 +14,7 @@ from PySide6.QtGui import QImage  # noqa: E402
 from LevityDash.devtools import _studio_builder as sb  # noqa: E402
 from LevityDash.devtools import _studio_preset as m  # noqa: E402
 
-BOARDS = Path(__file__).parents[2] / 'docs' / 'design-references' / 'boards'
+BOARDS = Path(__file__).parents[2] / 'docs' / 'design-references' / 'dashboards'
 
 
 class StubEngine:

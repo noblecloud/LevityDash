@@ -109,7 +109,7 @@ Qt quirks found in PySide6 6.11 (LevityDash's venv runs 6.11.1).
 4. Add a preset, `docs/design-references/presets/emissive.levity`, that shows a few gauges
    and one graph with Oklch palettes, emission and glow. Tune it against the color_sphere
    demo side by side (see the memory note on defaults: do not ship untuned defaults).
-5. Gauge Studio gets a Glow section through the usual `StateProperty` introspection.
+5. Studio gets a Glow section through the usual `StateProperty` introspection.
    Every numeric control keeps a slider.
 
 ## Phase 3: border beams

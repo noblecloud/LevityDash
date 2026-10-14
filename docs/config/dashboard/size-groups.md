@@ -2,7 +2,7 @@
 
 A size group keeps text the same size across a dashboard. Each label fits its own box, so two labels in boxes of different shape come out at different sizes. When every title, value and caption of one kind belongs to one group, the whole dashboard reads as one design, however many panels it has.
 
-Pick a role for each kind of text (`title`, `value`, `cap`, ...) and give every label of that role the same group. The example boards in `docs/design-references/boards/` do this with `global.title` and `global.value`. Where a role needs its own size, such as the Week day headings, give it its own key (`global.head`).
+Pick a role for each kind of text (`title`, `value`, `cap`, ...) and give every label of that role the same group. The example dashboards in `docs/design-references/dashboards/` do this with `global.title` and `global.value`. Where a role needs its own size, such as the Week day headings, give it its own key (`global.head`).
 
 ## Join a group
 

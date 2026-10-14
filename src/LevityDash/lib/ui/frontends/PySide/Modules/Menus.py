@@ -89,11 +89,11 @@ class BaseContextMenu(QMenu):
 			self.addAction('Delete', self.delete)
 
 	def freezePanelMenuAction(self):
-		self.freeze = self.addAction('Freeze Panel', self.parent_item.freeze)
+		self.freeze = self.addAction('Freeze Item', self.parent_item.freeze)
 		self.freeze.setCheckable(True)
 		self.freeze.setChecked(self.parent_item.frozen)
 		self.freeze.setEnabled(self.parent_item.hasChildren)
-		self.locked = self.addAction('Lock Panel', self.parent_item.setLocked)
+		self.locked = self.addAction('Lock Item', self.parent_item.setLocked)
 		self.locked.setCheckable(True)
 		self.locked.setChecked(self.parent_item.locked)
 
@@ -141,8 +141,8 @@ class BaseContextMenu(QMenu):
 		console.print(panel)
 
 	def saveLoadMenu(self):
-		saveAct = self.addAction("Save Panel", self.parent_item.save)
-		loadAct = self.addAction("Load Panel")
+		saveAct = self.addAction("Save Item", self.parent_item.save)
+		loadAct = self.addAction("Load Item")
 
 	def addPanel(self):
 		from LevityDash.lib.ui.frontends.PySide.Modules import Panel
@@ -523,7 +523,7 @@ class CentralPanelContextMenu(BaseContextMenu):
 		pass
 
 	def saveLoadMenu(self):
-		self.addAction('Load Panal', self.parent_item.loadPanel)
+		self.addAction('Load Item', self.parent_item.loadItem)
 		self.addAction('Save Dashboard', self.parent_item.save)
 		self.addAction('Load Dashboard', self.parent_item.load)
 		self.addAction('Save Dashboard As...', self.parent_item.saveAs)
@@ -538,7 +538,7 @@ class InsertMenu(QMenu):
 		self.aboutToShow.connect(self.updateItems)
 		self.setMinimumWidth(150)
 		self.setTitle('Insert')
-		self.addAction('Group/Empty Panel', self.parent_item.addPanel)
+		self.addAction('Empty Group', self.parent_item.addPanel)
 		# self.templates = TemplateMenu(self, EasyPath(userConfig.userPath).templates.panels)
 		# self.addMenu(self.templates)
 		# if not self.templates.hasTemplates:

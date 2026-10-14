@@ -748,7 +748,7 @@ class Panel(_Panel, Stateful, tag='group'):
 
 	@StateProperty(key='when', default=None, allowNone=True, sortOrder=51)
 	def when(self) -> Optional[str | bool]:
-		"""Show this panel only while the condition holds. A key, an expression, or a bool; a missing value counts as false. In a `switch` the slot picks among its children by this."""
+		"""Show this item only while the condition holds. A key, an expression, or a bool; a missing value counts as false. A `switch` picks among its children by this."""
 		return self.condition.spec if '_whenCondition' in self.__dict__ else None
 
 	@when.setter

@@ -2,11 +2,11 @@
 
 The new engine is opt-in. A stack uses it only when one of the new keys is present
 (`grow`, `shrink`, `basis`, `justify`, `align`, `wrap`, `min-size`, `max-size`, `order`).
-A stack with none of them keeps `Stack.setGeometries`, so existing boards render the same.
+A stack with none of them keeps `Stack.setGeometries`, so existing dashboards render the same.
 
 This module states the equivalence that makes that safe, as functions. Once they are
 implemented, the parity test in `tests/test_layout_skeleton.py` compares the legacy and the
-flex result on the shipped boards before anything switches over.
+flex result on the shipped dashboards before anything switches over.
 
 | Stack today                       | flex                                       |
 |-----------------------------------|--------------------------------------------|
@@ -20,8 +20,8 @@ flex result on the shipped boards before anything switches over.
 | `item-size-min` / `-max`          | `min_main` / `max_main` on the unsized item|
 
 Known difference: legacy clamps `item-size-min` after the equal split and does not share the
-change with the other items. Flex redistributes. A board that has the clamp bite will move.
-The parity test lists such boards; none ship today.
+change with the other items. Flex redistributes. A dashboard that has the clamp bite will move.
+The parity test lists such dashboards; none ship today.
 """
 
 from .flex import FlexContainer, FlexItem

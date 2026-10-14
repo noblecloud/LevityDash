@@ -1,4 +1,4 @@
-"""Gauge Studio offscreen smoke: the showcase cells, keyed items, the slider.
+"""Studio offscreen smoke: the showcase cells, keyed items, the slider.
 
 Offscreen, no app boot. The checks fail for different reasons:
 
@@ -51,7 +51,7 @@ studio.show()
 pump()
 
 print('=== 0. which showcase cells load? ===')
-cells = gs.showcaseCells()
+cells = gs.showcaseExamples()
 loaded, failed = [], []
 for index, (label, entry) in enumerate(cells):
 	try:

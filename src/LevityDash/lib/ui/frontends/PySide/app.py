@@ -347,7 +347,7 @@ class LevitySceneView(QGraphicsView):
 		a size group's font on its siblings', and each of those is cached at the
 		moment it was last built. A single pass leaves whichever items were
 		visited before their neighbours settled at an earlier answer, so the
-		result depended on update order, and two renders of one board differed.
+		result depended on update order, and two renders of one dashboard differed.
 		Each pass is a pure recompute from current state, so repeating until
 		nothing moves lands on the same layout whatever the order. Idempotent -
 		safe to run on every settled resize.

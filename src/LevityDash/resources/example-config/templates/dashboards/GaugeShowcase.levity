@@ -1,4 +1,4 @@
-# Gauge showcase v6: a board of gauge-ui style cards (github.com/thordursk/gauge-ui, MIT), laid out for a 2560x1440 screen.
+# Gauge showcase v6: a dashboard of gauge-ui style cards (github.com/thordursk/gauge-ui, MIT), laid out for a 2560x1440 screen.
 # 30 cards on an 8 by 6 grid: 1x1 dials, 2x1 dials with a stats list, 1x2 columns and 2x2 hero cards.
 # Cards vary on purpose: hairline (1%) to chunky (14-18%) arcs, sweeps of 90, 180, 240, 270, 300 and 360 degrees,
 # corner dials (the pivot sits in a card corner, `anchor:`; the dial box sits inside the card padding, the number
@@ -9,12 +9,12 @@
 #
 # Look: dark grey track, one accent per card, Roboto Mono for numbers. Big numbers that sit in a card
 # rather than on a dial are `realtime.text` items placed by geometry. Every size is a share of its card
-# and cards are shares of the board, so the board scales; the shares were worked out in pixels at 2560x1440.
+# and cards are shares of the dashboard, so the dashboard scales; the shares were worked out in pixels at 2560x1440.
 # Hex colours are quoted; unquoted, '#' starts a YAML comment.
 # Render: render_dashboard.py OUT.png --levity THIS --scenario stormy-day --size 2560x1440 --settle 14
 #
 # The two clock cards follow the app clock (`shared.now()`), so `--freeze-time`
-# pins every hand for a render, and a live board still tells the real time.
+# pins every hand for a render, and a live dashboard still tells the real time.
 - type: group
   name: main
   items:

@@ -2,7 +2,7 @@
 
 Port the CSS layout algorithms that `Stack` lacks into `src/LevityDash/lib/layout/`. Read `css-mapping.md` in the project folder for the full mapping of LevityDash options to CSS.
 
-The package is a skeleton. Every function raises `NotImplementedError`. Nothing imports it yet, so no board changes. Run `python -m LevityDash.lib.layout` to list what is left.
+The package is a skeleton. Every function raises `NotImplementedError`. Nothing imports it yet, so no dashboard changes. Run `python -m LevityDash.lib.layout` to list what is left.
 
 ## Rules
 
@@ -25,4 +25,4 @@ The package is a skeleton. Every function raises `NotImplementedError`. Nothing 
 
 `Stack.setGeometries` hands its layout to `lib/layout/flex.py` when the stack has a `flex:` container key (`justify`, `align-items`, `wrap`) or any item has `flex:`. `type: grid` (`GridStack`) always uses `lib/layout/grid.py`. A stack with none of those keeps the original sizing. User docs: `docs/config/dashboard/layout.md`. Example: `docs/design-references/css-layout.levity`.
 
-Check that a change to stacks moves nothing: `devtools/dump_layout.py` writes every panel's rect to a text file; diff a dump from before and after. Pixel diffs are noisy on boards with graphs and gauges.
+Check that a change to stacks moves nothing: `devtools/dump_layout.py` writes every panel's rect to a text file; diff a dump from before and after. Pixel diffs are noisy on dashboards with graphs and gauges.

@@ -1,4 +1,4 @@
-# Gauge Studio: distance guides, ratio snapping and drag gearing
+# Studio: distance guides, ratio snapping and drag gearing
 
 **Status:** done. Gearing and the wheel in #87, ratio targets and distance guides in #89, wireframe and guideline layers in the PR after it. Kept for the reasoning.
 

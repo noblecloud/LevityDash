@@ -1,4 +1,4 @@
-# Station: a dense everyday weather board for a 15in 16:10 screen.
+# Station: a dense everyday weather dashboard for a 15in 16:10 screen.
 #
 # Built from the options reference and cross-section.levity, without a mockup.
 # Every hero carries its context: today's range, the last hour's change, the
@@ -7,7 +7,7 @@
 # rains, and UV and sky always take turns. The middle band holds the bedroom
 # and the terrarium, and a second slot that turns through what needs a look.
 #
-# Render: render_dashboard.py OUT.png --levity docs/design-references/boards/station.levity
+# Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/station.levity
 #           --scenario station-day --size 1440x900
 #
 # Hex colours are quoted. Unquoted, YAML reads '#' as a comment.

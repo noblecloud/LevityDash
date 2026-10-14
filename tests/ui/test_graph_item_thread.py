@@ -2,7 +2,7 @@
 
 `connectTimeseries` runs on a Worker (setContainer). Its first update used to add and remove
 hour lines from that thread, which corrupted Qt's heap: two graphs with a 7-day timeframe on
-one board aborted the process (`realloc(): invalid next size`) in `HourLines.updateLines`.
+one dashboard aborted the process (`realloc(): invalid next size`) in `HourLines.updateLines`.
 """
 import threading
 

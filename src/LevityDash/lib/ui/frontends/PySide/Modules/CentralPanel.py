@@ -148,7 +148,7 @@ class CentralPanel(Panel, tag="dashboard"):
 
 	@StateProperty(key='background', default=None, allowNone=True, sortOrder=-1)
 	def background(self) -> str | dict | list | None:
-		"""The ground of the board: a colour, a theme token (`$background`, or a scale such as `$sky` for a gradient), or a gradient written in place. `{gradient: $sky, angle: 160}` sets the direction. `lib/ui/colors/backdrop.py`"""
+		"""The ground of the dashboard: a colour, a theme token (`$background`, or a scale such as `$sky` for a gradient), or a gradient written in place. `{gradient: $sky, angle: 160}` sets the direction. `lib/ui/colors/backdrop.py`"""
 		return self._background
 
 	@background.setter
@@ -195,9 +195,9 @@ class CentralPanel(Panel, tag="dashboard"):
 		else:
 			QMessageBox.warning(self, "No Dashboard", "There is currently no loaded dashboard to refresh").exec_()
 
-	def loadPanel(self):
+	def loadItem(self):
 		from LevityDash.lib.ui.frontends.PySide.Modules import PanelFromFile
-		paths = self._selectFile(fileType="Dashboard Files (*.levityPanel *.json)", startingDir='panels', multipleFiles=True)
+		paths = self._selectFile(fileType="Item Files (*.levity *.yaml *.json)", startingDir='panels', multipleFiles=True)
 		for p in paths:
 			PanelFromFile(self, p)
 
@@ -235,7 +235,7 @@ class CentralPanel(Panel, tag="dashboard"):
 			text = yaml.dump(self.state, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True, sort_keys=False)
 			return type(self).__loader__(YAMLPreprocessor(text)).get_data()
 		except Exception:
-			log.exception('the loaded board could not be dumped; a save compares presets with the file instead')
+			log.exception('the loaded dashboard could not be dumped; a save compares presets with the file instead')
 			return None
 
 	def _restoreVariables(self, f) -> None:
@@ -339,7 +339,7 @@ class CentralPanel(Panel, tag="dashboard"):
 			self.state = state
 		except Exception as error:
 			# A single item raising anywhere below here unwinds the whole load,
-			# so the board stops at whatever was built first. Left unreported
+			# so the dashboard stops at whatever was built first. Left unreported
 			# that looks like a layout bug rather than a crash - the reason the
 			# 'just a big moon' symptom went undiagnosed for two months. The
 			# notice has to match the size of the consequence.

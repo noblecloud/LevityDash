@@ -32,7 +32,7 @@ class _Unsupported(Exception):
 
 
 def dump(data: Any) -> str:
-	"""Block-style YAML in the shape the boards use: sequences under a key start at the key's column."""
+	"""Block-style YAML in the shape the dashboards use: sequences under a key start at the key's column."""
 	return yaml.safe_dump(data, sort_keys=False, allow_unicode=True, default_flow_style=False, width=120)
 
 

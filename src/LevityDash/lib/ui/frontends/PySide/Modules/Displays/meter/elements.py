@@ -4099,7 +4099,7 @@ class GaugeLabel(NonInteractiveLabel, ColorGradientMixin, GaugeItem):
 	@StateProperty(key='offset', default=None, allowNone=True)
 	def offset(self) -> Optional[tuple]:
 		"""Shift the label from where it would sit: ``{x, y}`` as shares of the dial's diameter
-		(``{x: 0, y: -0.1}`` is a tenth of the diameter up). Gauge Studio writes it when you drag the label."""
+		(``{x: 0, y: -0.1}`` is a tenth of the diameter up). Studio writes it when you drag the label."""
 		return getattr(self, '_offset', None)
 
 	@offset.setter

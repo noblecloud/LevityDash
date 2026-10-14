@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """Dev-only: watch a `.levity` file and keep a PNG preview of it current.
 
-For prototyping one panel/section rather than a whole dashboard - point this
-at a small fragment file (a single top-level item, same shape as anything
+For prototyping one item rather than a whole dashboard - point this
+at a small item file (a single top-level item, same shape as anything
 under `docs/design-references/`) and it becomes a live-updating image: edit,
 save, look.
 
@@ -60,7 +60,7 @@ def renderOnce(base: str, path: Path, out: Path, settle: float, scale: float) ->
 
 def main() -> int:
 	parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-	parser.add_argument('file', help='the .levity fragment to watch')
+	parser.add_argument('file', help='the .levity item file to watch')
 	parser.add_argument('--out', help='PNG path (default: preview.png next to the source file)')
 	parser.add_argument('--host', default='127.0.0.1')
 	parser.add_argument('--port', type=int, default=8670)

@@ -290,7 +290,7 @@ def boot(
 		settleSwitches(LevityDashboard)
 		settleAnimations(LevityDashboard)
 	# Text layout is built from caches that depend on update order; fit it to a
-	# fixed point so two renders of the same board agree.
+	# fixed point so two renders of the same dashboard agree.
 	app.main_window.view._refitAllText()
 	pump(app, 0.3)
 	settleGraphs(app, LevityDashboard)
@@ -339,7 +339,7 @@ def settleSwitches(dashboard) -> None:
 
 	A switch's `cycle`, `hold` and `fade` run on real QTimers, so which child
 	shows at capture depends on how far those timers have got - two renders of
-	the same board could show different panels in the same slot. With the clock
+	the same dashboard could show different items in the same switch. With the clock
 	pinned, each switch shows its first matching child at once, every time.
 	"""
 	from LevityDash.lib.ui.frontends.PySide.Modules.Containers.Switch import Switch

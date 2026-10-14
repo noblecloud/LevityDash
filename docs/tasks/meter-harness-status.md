@@ -181,7 +181,7 @@ assembled, as one names-only commit, so the moves stay reviewable.
 
 - `src/LevityDash/devtools/render_diff.py` — `capture | compare | selfcheck`
   over every preset + the showcase (37 targets on `dev`: 36 presets plus
-  `gauge-showcase`; 38 once `feat/meter-showcase` lands its second board), one PNG
+  `gauge-showcase`; 38 once `feat/meter-showcase` lands its second dashboard), one PNG
   per target per capture plus a manifest of inputs, hashes and per-file ink;
   `compare` writes a diff image per mismatch and exits non-zero past anti-aliasing
   noise.
@@ -192,7 +192,7 @@ assembled, as one names-only commit, so the moves stay reviewable.
   own table at its base value, read out of `Mock.py`. Each capture stages its
   own seed with Mock off.
 - The showcase's two clock cards follow the app clock (`shared.now()`), so
-  `--freeze-time` pins their hands for a capture, and a live board still tells
+  `--freeze-time` pins their hands for a capture, and a live dashboard still tells
   the time. `49c1623` fixed the cause - `Gauge._tickClock` read `datetime.now()`
   directly, so a frozen render drew a *live* hand, and the `at:` pins stood in
   for the freeze instead. The pins are gone (`clock.levity`'s own are its
