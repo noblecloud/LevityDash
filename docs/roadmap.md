@@ -166,7 +166,7 @@ Triaged from `_planned-features.md`, grouped by area. ~~Struck~~ items are alrea
 - **Watchdogs / health checks** — auto-restart and heartbeat for wedged plugins. The `health_check_worker` scaffold in `lib/backend.py` needs rebuilding now that backend.py is the live headless process.
 - ~~**Network failure/recovery hardening**~~ — **done 2026-10-07**: REST plugins already retried (`ScheduledEvent.retry`). The UDP socket and the WeatherFlow websocket now reconnect too: `lib/plugins/web/reconnect.py` (`keepConnected` with a growing `Backoff`, 2s up to 5 min) re-binds a lost or never-bound UDP port and re-opens a dropped websocket. Verified with real loopback drops in `tests/plugins/test_reconnect.py`. A socket that stays bound but goes silent is caught too: the Tempest UDP socket rebinds and the websocket reconnects after 60s without a datagram (a hub sends every few seconds); `UDPSocket(silenceTimeout=…)` is off by default.
 - **Govee: broader device support** — `closest`/`first`/MAC/UUID selection all work; only GVH5102 is tested. Extend model coverage and parsing presets.
-- **Bluetooth-unavailable handling** — test/degrade gracefully when the adapter is missing or permission-blocked (macOS TCC).
+- ~~**Bluetooth-unavailable handling**~~ — **done 2026-10-07**: a scan that cannot start (no adapter, Bluetooth off, permission denied) now logs one plain line instead of a traceback, keeps the plugin up (`bluetoothProblem` holds the reason), and retries every 30s up to 10 min until the radio works. Verified against the real container, which has no adapter, and with stand-in scanners in `tests/plugins/test_ble_unavailable.py`. macOS TCC wording is from bleak's error text, not yet seen on the Mac.
 
 ### App & platform
 
