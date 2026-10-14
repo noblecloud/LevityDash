@@ -16,7 +16,8 @@ src/
     lib/plugins/               data layer: plugins, observations, schemas,
                                dispatcher ({key → MultiSourceContainer})
     lib/plugins/builtin/       OpenMeteo, PirateWeather, WeatherFlow, Govee (BLE),
-                               OpenWeatherMap (experimental), Astronomy (sun hour and remaining, no network)
+                               OpenWeatherMap (experimental), Astronomy (sun hour and remaining, no network),
+                               Host (psutil vitals + top processes; off until Host.ini enables it)
     lib/wire/                  backend/frontend split wire protocol — codec, messages,
                                server/client transport, RemoteBackend/RemoteFrontend,
                                RemoteConnection, RemoteContainer stand-ins, LoopbackBridge
