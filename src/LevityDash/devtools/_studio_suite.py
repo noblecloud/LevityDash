@@ -14,7 +14,7 @@ caller passes a `gauge` factory and the `cells` reader (see `studio.makeSuite`).
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, Qt, QTimer
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
 	QApplication, QDockWidget, QFileDialog, QLineEdit, QMainWindow, QStackedWidget, QToolBar, QTreeWidget,
@@ -232,4 +232,11 @@ class Suite(QMainWindow):
 	def closeEvent(self, event):
 		for widget in self.modes.values():
 			widget.close()
+			# A closed editor keeps its timers (the sweep, the file watch, the settle and render timers) and the
+			# application-wide key and wheel filters it installed, for as long as the window object lives. Left running they slow every window
+			# that opens after, which a test run or a long session feels as a hang.
+			for timer in widget.findChildren(QTimer):
+				timer.stop()
+			for child in widget.findChildren(QObject):
+				QApplication.instance().removeEventFilter(child)
 		super().closeEvent(event)
