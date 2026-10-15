@@ -31,6 +31,7 @@ from PySide6.QtGui import (
 	QTransform, Qt,
 )
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem, QStyleOptionGraphicsItem, QWidget
+from shiboken6 import isValid
 
 from LevityDash.lib.stateful import Binding, SourceType, StateProperty, Stateful
 from LevityDash.lib.stateful_mixins import ColorGradientMixin
@@ -2412,6 +2413,8 @@ class Needle(GlowMixin, StatefulGaugePathItem):
 
 	def _followTheme(self, active=None):
 		"""The dark glow under the needle is the theme's `needle-glow`."""
+		if not isValid(self):
+			return  # a closed window deleted the C++ item; the Python wrapper outlives it and asking it for its effect crashes
 		if isinstance(effect := self.graphicsEffect(), SoftShadow):
 			effect.setColor(Color.role('needle-glow').QColor)
 
