@@ -378,6 +378,7 @@ class Panel(_Panel, Stateful, tag='group'):
 	onlyAddChildrenOnRelease: ClassVar[bool] = False
 	_acceptsChildren: ClassVar[bool] = True
 	savable: ClassVar[bool] = True
+	placesChildren: ClassVar[bool] = False  # True where the parent sizes and places its children itself (SplitPanel): their lock, move and resize state is not saved
 	_keepInFrame: ClassVar[bool] = True
 	acceptsWheelEvents: ClassVar[bool] = False
 	__exclude__: ClassVar[Set[str]] = set()
@@ -1717,6 +1718,10 @@ class Panel(_Panel, Stateful, tag='group'):
 	def movable(self) -> bool:
 		return not self.frozen or not self.locked
 
+	@movable.condition(method='get')
+	def movable(self) -> bool:
+		return not getattr(self.parent, 'placesChildren', False)
+
 	def setResizable(self, value: bool = None):
 		if value is None:
 			value = not self.resizable
@@ -1737,6 +1742,10 @@ class Panel(_Panel, Stateful, tag='group'):
 	@resizable.condition
 	def resizable(self) -> bool:
 		return not self.frozen or not self.locked
+
+	@resizable.condition(method='get')
+	def resizable(self) -> bool:
+		return not getattr(self.parent, 'placesChildren', False)
 
 	def setClipping(self, value: bool = None):
 		if value is None:
@@ -1884,6 +1893,10 @@ class Panel(_Panel, Stateful, tag='group'):
 	@locked.condition
 	def locked(self) -> bool:
 		return not getattr(self.parent, 'frozen', False)
+
+	@locked.condition(method='get')
+	def locked(self) -> bool:
+		return not getattr(self.parent, 'placesChildren', False)
 
 	def setLocked(self, value: bool = None):
 		if value is None:

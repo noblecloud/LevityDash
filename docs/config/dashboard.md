@@ -42,6 +42,7 @@ These pages cover the properties that work on a whole dashboard:
 - [Size groups](/config/dashboard/size-groups.md): keep text sizes the same across items.
 - [Value Sources](/config/dashboard/expressions.md): a key, a number, or an expression, and units in an expression.
 - [Switch](/config/dashboard/switch.md): shows one of several items.
+- [Split](/config/dashboard/split.md): two items either side of a divider that you can drag.
 - [Flex and grid](/config/dashboard/layout.md): CSS flexbox and grid layout for stacks.
 
 ## Shared Properties
