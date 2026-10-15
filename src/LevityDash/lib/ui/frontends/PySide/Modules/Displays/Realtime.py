@@ -74,6 +74,69 @@ class RealtimeTitle(TitleLabel):
 	__defaults__ = {}
 
 
+class Connection(Stateful, tag=...):
+	"""What a display reads: a key (or an expression) and the source it prefers.
+
+	An item writes it as `connection: {key: ..., source: ...}`, as a bare
+	`connection: <key>`, or flat as `key:` / `source:` on the item itself
+	(`unwrap` on `Realtime.connection`). A connection holding only a key
+	saves back as the short `key: <key>`.
+
+	The state lives on the owning `Realtime`; this is the part of it a file
+	can name. Setting a value here is setting it there.
+	"""
+
+	def __init__(self, owner: 'Realtime'):
+		super().__init__()
+		self.prep_init(kwargs={}, stateful_parent=owner, stateful_key='connection')
+		self.owner = owner
+
+	@StateProperty(key='key', sortOrder=0, singleVal=True)
+	def key(self) -> CategoryItem:
+		return getattr(self.owner, '_key', None)
+
+	@key.setter
+	def key(self, value):
+		self.owner._openKey(value)
+
+	@key.decode
+	def key(self, value: str):
+		# Keep the text: the setter decides whether it is a key or an expression.
+		return value
+
+	@key.encode
+	def key(self, value) -> str:
+		# Save what the file said: the expression text, not its computed key.
+		if (source := getattr(self.owner, '_keySource', None)) is not None:
+			if (text := getattr(source, 'text', None)) is not None:
+				return text
+		return str(value)
+
+	@StateProperty(key='source', sortOrder=1, default=AnySource)
+	def source(self) -> Plugin | SomePlugin:
+		return getattr(self.owner, '_source', AnySource)
+
+	@source.setter
+	def source(self, value: Plugin):
+		self.owner._source = value or AnySource
+
+	@source.after
+	def source(self):
+		self.owner._reconnectToSource()
+
+	@source.encode
+	def source(value: Plugin) -> str:
+		return getattr(value, 'name', 'any')
+
+	@source.decode
+	def source(self, value: str) -> Plugin | SomePlugin:
+		source = LevityDashboard.plugins.get(value, AnySource)
+		self.owner._preferredSourceName = value
+		if source is None:
+			log.info(f'{value} is not a valid source or the plugin is not Loaded')
+		return source
+
+
 class Realtime(Panel, tag='realtime'):
 	_preferredSourceName: str
 	_acceptsChildren = False
@@ -207,12 +270,50 @@ class Realtime(Panel, tag='realtime'):
 	def timeOffsetLabel(self):
 		return TimeOffsetLabel(self)
 
-	@StateProperty(sortOrder=0, match=True, dependencies={'display', 'title', 'forecast'})
+	# A connection loads three ways: `key:` / `source:` on the item (this
+	# property: `unwrap`, so the item's own keys feed the Connection), a bare
+	# `connection: <key>`, or the nested `connection: {key, source}` (the next
+	# one, load only). Save writes the flat form; a connection holding only a key
+	# comes back as the short `key: <key>`.
+	@StateProperty(key='key', sortOrder=0, match=True, unwrap=True, allowNone=False, default=Stateful, dependencies={'display', 'title', 'forecast'})
+	def keyAndSource(self) -> Connection:
+		if (connection := getattr(self, '_connection', None)) is None:
+			connection = self._connection = Connection(self)
+		return connection
+
+	@keyAndSource.setter
+	def keyAndSource(self, value: Connection):
+		self._connection = value
+
+	@keyAndSource.factory
+	def keyAndSource(self) -> Connection:
+		return Connection(self)
+
+	@StateProperty(key='connection', sortOrder=0, allowNone=False, default=Stateful, dependencies={'display', 'title', 'forecast'})
+	def connection(self) -> Connection:
+		return self.keyAndSource
+
+	@connection.setter
+	def connection(self, value: Connection):
+		self._connection = value
+
+	@connection.condition(method='get')
+	def connection(self) -> bool:
+		return False
+
+	@connection.factory
+	def connection(self) -> Connection:
+		return Connection(self)
+
+	@property
 	def key(self) -> CategoryItem:
 		return getattr(self, '_key', None)
 
 	@key.setter
 	def key(self, value):
+		self.connection.key = value
+
+	def _openKey(self, value):
 		#! self.display can not be accessed here
 		source = None
 		if isinstance(value, str):
@@ -244,19 +345,6 @@ class Realtime(Panel, tag='realtime'):
 		# self.title_label.textBox.refresh()
 		self.container = container
 
-	@key.decode
-	def key(self, value):
-		# Keep the text: the setter decides whether it is a key or an expression.
-		return value
-
-	@key.encode
-	def key(self, value) -> str:
-		# Save what the file said: the expression text, not its computed key.
-		if (source := getattr(self, '_keySource', None)) is not None:
-			if (text := getattr(source, 'text', None)) is not None:
-				return text
-		return str(value)
-
 	def _releaseKeySource(self):
 		if (source := getattr(self, '_keySource', None)) is not None:
 			self._keySource = None
@@ -274,31 +362,18 @@ class Realtime(Panel, tag='realtime'):
 			release()
 		super().delete()
 
-	@StateProperty(default=AnySource, dependencies={'key', 'display', 'title', 'forecast'})
+	@property
 	def source(self) -> Plugin | SomePlugin:
 		return getattr(self, '_source', AnySource)
 
 	@source.setter
 	def source(self, value: Plugin):
-		self._source = value or AnySource
+		self.connection.source = value
 
-	@source.after
-	def source(self):
+	def _reconnectToSource(self):
 		new_container = self.container.get(self._source, None)
 		if new_container is not None and self.__connectedContainer is not new_container:
 			self.connectRealtime(new_container)
-
-	@source.encode
-	def source(value: Plugin) -> str:
-		return getattr(value, 'name', 'any')
-
-	@source.decode
-	def source(self, value: str) -> Plugin | SomePlugin:
-		source = LevityDashboard.plugins.get(value, AnySource)
-		self._preferredSourceName = value
-		if source is None:
-			log.info(f'{value} is not a valid source or the plugin is not Loaded')
-		return source
 
 	@StateProperty(default=False)
 	def forecast(self) -> bool:
@@ -315,7 +390,7 @@ class Realtime(Panel, tag='realtime'):
 		if self.__connectedContainer is not None:
 			return self.__connectedContainer.source
 
-	@StateProperty(allowNone=False, sortOrder=1, default=Stateful, link=Display, dependencies={'key', 'source', 'forecast'})
+	@StateProperty(allowNone=False, sortOrder=1, default=Stateful, link=Display, dependencies={'keyAndSource', 'connection', 'forecast'})
 	def display(self) -> Display:
 		return self._display
 
@@ -360,7 +435,7 @@ class Realtime(Panel, tag='realtime'):
 	def alignment(self, value) -> Alignment:
 		return None if value is None else Alignment(value)
 
-	@StateProperty(key='title', sortOrder=3, allowNone=False, default=Stateful, dependencies={'display', 'key', 'source', 'forecast'})
+	@StateProperty(key='title', sortOrder=3, allowNone=False, default=Stateful, dependencies={'display', 'keyAndSource', 'connection', 'forecast'})
 	def splitter(self) -> TitleValueSplitter:
 		return self._splitter
 
@@ -738,7 +813,7 @@ class Realtime(Panel, tag='realtime'):
 	@classmethod
 	def validate(cls, item: dict, context=None):
 		panelValidation = super(Realtime, cls).validate(item, context)
-		key = 'key' in item and item['key']
+		key = connectionKey(item)
 		return panelValidation and key
 
 	# def hoverEnterEvent(self, event: QGraphicsSceneHoverEvent):
@@ -779,6 +854,32 @@ def _isExpression(text: str) -> bool:
 		return Expression.parse(text).plainKey is None
 	except Exception:
 		return False
+
+
+def flattenConnection(item: dict) -> dict:
+	"""Move a `connection:` into the item's own `key:` / `source:`, in place.
+
+	`connection: X` is `connection: {key: X}`. A `key:` or `source:` written on
+	the item beats the one inside `connection:`. Code that reads a raw item
+	(the loader, a stack matching its children) calls this first, so it only
+	ever has to know the flat form.
+	"""
+	if 'connection' not in item:
+		return item
+	connection = item.pop('connection')
+	if not isinstance(connection, dict):
+		connection = {'key': connection}
+	for name, value in connection.items():
+		item.setdefault(name, value)
+	return item
+
+
+def connectionKey(item: dict):
+	"""The key text of a raw item, from `key:` or `connection:`; None without one."""
+	if 'key' in item:
+		return item['key']
+	connection = item.get('connection')
+	return connection.get('key') if isinstance(connection, dict) else connection
 
 
 class RealtimeText(Realtime, tag='realtime.text'):

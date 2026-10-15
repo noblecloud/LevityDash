@@ -167,10 +167,11 @@ def loadRealtime(parent, items, parentItems, **kwargs):
 	pop = getattr(type(items), 'popitem', None) or getattr(type(items), 'pop', Unset)
 	while items:
 		item = pop(items)
+		# An expression stays text: Realtime.key registers it as a computed key.
+		from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import _isExpression, flattenConnection
+		flattenConnection(item)
 		if not Realtime.validate(item, context={'parent': parent}):
 			log.error('Invalid state for existingItem:', item)
-		# An expression stays text: Realtime.key registers it as a computed key.
-		from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import _isExpression
 		matchKey = None
 		if not (isinstance(item['key'], str) and _isExpression(item['key'])):
 			item['key'] = CategoryItem(item['key'])
