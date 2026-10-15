@@ -5,7 +5,7 @@ one must release exactly one reference and stop that panel listening, and a
 reload over live panels must match them by computed key rather than by the
 expression text (the panel's `key` is the computed `CategoryItem`).
 """
-from LevityDash.lib.plugins.computed import computedEngine
+from LevityDash.lib.plugins.computed import acquireValueSource, computedEngine, releaseValueSource
 from LevityDash.lib.ui.frontends.PySide.Modules import Panel
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import Realtime
 
@@ -26,6 +26,9 @@ def _panels(sandbox):
 
 def test_shared_expression_refcount_and_delete(dashboard):
 	engine = computedEngine()
+	# The engine is process-wide and other tests acquire this same expression; count only this test's references.
+	held = engine.refcount(acquireValueSource(EXPR)) - 1
+	releaseValueSource(EXPR)
 	sandbox = Panel(parent=dashboard.scene.base, geometry={'x': '0%', 'y': '0%', 'width': '10%', 'height': '10%'})
 	sandbox.state = {'items': _items()}
 	dashboard.app.processEvents()
@@ -33,7 +36,7 @@ def test_shared_expression_refcount_and_delete(dashboard):
 	a, b = panels['high-a'], panels['high-b']
 	key = a.key
 	assert key == b.key
-	assert engine.refcount(key) == 2
+	assert engine.refcount(key) == held + 2
 
 	# Nothing computes without a running plugin, so publish a value by hand;
 	# that creates the container both panels subscribe to.
@@ -48,11 +51,11 @@ def test_shared_expression_refcount_and_delete(dashboard):
 	sandbox.state = {'items': _items()}
 	dashboard.app.processEvents()
 	assert _panels(sandbox) == panels
-	assert engine.refcount(key) == 2
+	assert engine.refcount(key) == held + 2
 
 	a.delete()
 	dashboard.app.processEvents()
-	assert engine.refcount(key) == 1
+	assert engine.refcount(key) == held + 1
 	assert a._Realtime__connectedContainer is None, 'a deleted panel is still subscribed to the shared key'
 	assert b.state['key'] == EXPR
 
@@ -67,6 +70,6 @@ def test_shared_expression_refcount_and_delete(dashboard):
 	b.display.refresh()
 	b.delete()
 	dashboard.app.processEvents()
-	assert engine.refcount(key) == 0
+	assert engine.refcount(key) == held
 
 	sandbox.scene().removeItem(sandbox)

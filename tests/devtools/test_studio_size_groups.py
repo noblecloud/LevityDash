@@ -36,10 +36,15 @@ def groups(dashboard, tmp_path):
 	panel = LevityDash.LevityDashboard.CENTRAL_PANEL
 	target = tmp_path / 'groups.levity'
 	target.write_text(BOARD)
+	was = panel.filePath
 	panel._load(target)
 	pump(dashboard.app, 1.5)
 	names = {'left': (0,), 'right': (1,), 'a': (0, 0), 'b': (0, 1), 'c': (1, 0), 'd': (1, 1), 'e': (1, 2)}
-	return sg.collect(dashboard.scene, names)
+	yield sg.collect(dashboard.scene, names)
+	# the dashboard fixture is shared by the whole session: put its own file back
+	if was is not None:
+		panel._load(was)
+		pump(dashboard.app, 1.5)
 
 
 def test_every_text_is_listed_under_the_group_it_joined(groups):

@@ -114,6 +114,9 @@ def test_a_real_board_round_trips_and_a_deep_edit_touches_one_line(board):
 				best = deepest(v) or best
 		return best
 	node = deepest(edited)
+	if node is None:
+		# split boards size their children by ratio and never write geometry; the round trip above is the whole check
+		return
 	node['geometry']['width'] = '37%'
 	r = yp.patch(text, edited)
 	assert r.exact, r.why
