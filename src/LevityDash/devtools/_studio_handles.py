@@ -46,6 +46,7 @@ from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QGraphicsItem
 
 from LevityDash.devtools import _studio_schema as schema
+from LevityDash.devtools._studio_bar_handles import barSpecs, signature as barSignature
 from LevityDash.devtools import _studio_stops as stops
 from LevityDash.devtools import _studio_targets as targets
 from LevityDash.devtools import _studio_geometry as geometry
@@ -520,11 +521,17 @@ class HandleLayer:
 	def gauge(self):
 		"""The gauge the handles sit on. None once its window is gone: deleting the window deletes the scene and the
 		gauge with it, while this layer's own timers and the Python wrappers live on, and a rebuild that fires then
-		reads a gauge that no longer exists. None for a bar too: it has no arc, needle or dial to grab, so the controls
-		edit it."""
+		reads a gauge that no longer exists. None for a bar too: it has no arc, needle or dial; `meter` is the one that
+		covers both."""
 		studio = self.studio.studio
 		gauge = studio.gauge
 		return gauge if studio.kind == 'gauge' and gauge is not None and isValid(gauge) else None
+
+	@property
+	def meter(self):
+		"""The open gauge or bar, whichever it is: what the handles sit on. None when there is none or its window is gone."""
+		meter = self.studio.studio.gauge
+		return meter if meter is not None and isValid(meter) else None
 
 	def visibleFor(self, spec: Spec) -> bool:
 		"""Gradient nodes stay up for as long as *Edit gradient* is on; the rest show while the pointer is over the preview."""
@@ -561,10 +568,10 @@ class HandleLayer:
 
 	def rebuildNow(self):
 		self.clear()
-		if self.gauge is None:
+		if self.meter is None:
 			return
 		try:
-			specs = self._specs()
+			specs = barSpecs(self) if self.studio.studio.kind == 'bar' else self._specs()
 		except Exception:  # noqa: BLE001 - a handle must never take the studio down
 			import traceback
 			traceback.print_exc()
@@ -583,13 +590,15 @@ class HandleLayer:
 		self.refreshWire()
 
 	def _sig(self) -> tuple:
+		if self.studio.studio.kind == 'bar':
+			return barSignature(self.meter)
 		g = self.gauge
 		return (id(g), len(g._markerSpecs), len(g._zoneSpecs), bool(g._fillSpec), bool(g._captionItem), bool(g._subItem),
 		        g._anchor, bool(g.unitLabel.textBox.isVisibleTo(g)), self.gradientMode, len(self._stops()) if self.gradientMode else 0)
 
 	def refresh(self):
 		"""Move the handles to where the gauge has them now; make them again if the gauge changed shape."""
-		if self.gauge is None:
+		if self.meter is None:
 			return
 		if self.active is None and self._sig() != self._signature:
 			self.rebuild()
