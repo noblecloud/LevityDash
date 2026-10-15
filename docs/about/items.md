@@ -53,6 +53,7 @@ Containers lay out other items:
 - **stack** — lays children out automatically in a vertical or horizontal stack, with optional dividers and spacers
 - **value-stack** — a stack purpose-built for lists of labeled realtime values
 - **switch** — shows one of several items, chosen by a condition or in turn. See [Switch](/config/dashboard/switch.md)
+- **split** — two items either side of a divider that you can drag. See [Split](/config/dashboard/split.md)
 
 ## Planned Items  <!-- {docsify-ignore} -->
 

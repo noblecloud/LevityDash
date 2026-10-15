@@ -10,7 +10,7 @@ One word per idea, in docs, UI strings and new code. The class `Panel`, `Central
 
 - **dashboard**: one `.levity` file. Not "dashboard".
 - **item**: any node under `items:`. Not "module", "panel" or "widget" (as a generic).
-- **container**: an item that lays out other items (`group`, `stack`, `value-stack`, `titled-group`, `switch`). **display**: an item that draws data (`realtime.*`, `graph`, `mini-graph`, `polar`, `clock`, `moon`, `label`). **part**: a styled piece inside a display with no `type:` (tick, needle, fill, beam).
+- **container**: an item that lays out other items (`group`, `stack`, `value-stack`, `titled-group`, `switch`, `split`). **display**: an item that draws data (`realtime.*`, `graph`, `mini-graph`, `polar`, `clock`, `moon`, `label`). **part**: a styled piece inside a display with no `type:` (tick, needle, fill, beam).
 - **preset**: a reusable item definition (`presets/<name>.yaml`: `props:` plus `template:`). **instance**: one use of it, `preset: name` plus only what differs. **property**: a setting on an item or part; a preset's own are **preset properties**. Not "attribute", "parameter" or "option".
 - **template**: a starter dashboard in `resources/example-config/templates/`. **theme**, **variable** (`vars:`), **key**, **value source**, **switch** (not "slot"), **scenario** (fixture data for renders and Studio).
 - **Studio** is the design tool (file `studio.py`). Its section **styles** set a few properties at once; they are not presets.

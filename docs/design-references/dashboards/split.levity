@@ -1,0 +1,48 @@
+# Split: two items either side of a divider, nested once.
+#
+# The outer split is vertical (first item left, 40%). Its right item is a horizontal
+# split (first item on top, half and half). Each of the three panes puts its titles and values
+# in `global.title` and `global.value` (matchAll), as every design dashboard does, so
+# the panes read as one design although their boxes differ. The split does not group
+# anything and does not cut a group in two. `geometry` is not written on the items of
+# a split: the divider places them.
+#
+# Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/split.levity
+#           --scenario station-day --size 1440x900
+items:
+- type: split
+  name: outer
+  orientation: vertical
+  ratio: 0.4
+  items:
+  - type: stack
+    name: now
+    direction: vertical
+    shared:
+      title: {matchingGroup: {group: global.title, matchAll: true}}
+      display:
+        valueLabel: {matchingGroup: {group: global.value, matchAll: true}}
+    items:
+    - {type: realtime.text, key: environment.temperature.temperature, title: {text: Temperature}}
+    - {type: realtime.text, key: environment.humidity.humidity, title: {text: Humidity}}
+  - type: split
+    name: right
+    items:
+    - type: stack
+      name: uv
+      direction: vertical
+      shared:
+        title: {matchingGroup: {group: global.title, matchAll: true}}
+        display:
+          valueLabel: {matchingGroup: {group: global.value, matchAll: true}}
+      items:
+      - {type: realtime.text, key: environment.light.uvi, title: {text: UV}}
+    - type: stack
+      name: rain
+      direction: vertical
+      shared:
+        title: {matchingGroup: {group: global.title, matchAll: true}}
+        display:
+          valueLabel: {matchingGroup: {group: global.value, matchAll: true}}
+      items:
+      - {type: realtime.text, key: environment.precipitation.probability, title: {text: Rain chance}}
