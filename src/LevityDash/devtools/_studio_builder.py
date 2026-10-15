@@ -1257,8 +1257,8 @@ class Builder(QWidget):
 		self.stageBox.activated.connect(lambda _: self.schedule())
 		bar.addWidget(self.stageBox)
 		self.themePicker = ThemePicker()
-		self.themePicker.setToolTip('The colour theme the preview is drawn in')
-		self.themePicker.picked.connect(lambda _: self.schedule())
+		self.themePicker.setToolTip('The colour theme: the preview is drawn in it, and for a dashboard it is written to the file as `theme:` on Save')
+		self.themePicker.picked.connect(self._themePicked)
 		bar.addWidget(self.themePicker)
 		self.themeButton = QPushButton('Light')
 		self.themeButton.setCheckable(True)
@@ -1361,6 +1361,23 @@ class Builder(QWidget):
 		self.rebuildAll()
 		self.redraw()
 
+	def _themePicked(self, name: str):
+		"""A dashboard keeps the pick as its root `theme:` (undoable, written by Save); a preset only draws in it."""
+		if self.piece.root is None:
+			self.schedule()
+			return
+		theme.set_override(None)
+		inline = isinstance((self.piece.root or {}).get('theme'), dict)
+		self.editField('#theme.extends' if inline else '#theme', None if name == theme.DEFAULT_NAME and not inline else name)
+
+	def _syncThemePicker(self):
+		"""A dashboard's picker shows the theme its file names, not a forced one."""
+		if self.piece.root is None:
+			return
+		spec = self.piece.root.get('theme')
+		name = spec.get('extends') if isinstance(spec, dict) else spec
+		self.themePicker.show(name if name in theme.available() else theme.DEFAULT_NAME)
+
 	def rebuildAll(self):
 		self.rebuildTree()
 		self.propsTab.load()
@@ -1459,6 +1476,7 @@ class Builder(QWidget):
 			self.status.setText(f'Could not open {path.name}: {e}')
 			return
 		self.stageBox.setCurrentText('Dashboard 1440x900')
+		theme.set_override(None)
 		self.loadPiece(piece, {}, path, text)
 		self.status.setText(f'Opened {path.name}' + ('; it is in the real config folder, so Save asks for another place' if inRealConfig(path) else ''))
 
@@ -1955,6 +1973,7 @@ class Builder(QWidget):
 			self.status.setText(f'The preview failed: {type(e).__name__}: {e}')
 			return
 		self.stage.show_(image, rects)
+		self._syncThemePicker()
 		self._syncStage()
 		self.status.setText(('; '.join(problems) + '. ') if problems else '')
 		self.refreshYaml()

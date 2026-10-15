@@ -131,9 +131,9 @@ class Splitter(Handle):
 		self.ratio = value if not invert else 1 - value
 
 	def swapSurfaces(self):
+		# A surface with `primary` and `secondary` (SplitPanel) reads them from this splitter,
+		# so swapping here swaps there; swapping the surface's too would undo it.
 		self.primary, self.secondary = self.secondary, self.primary
-		if hasattr(self.surface, 'primary'):
-			self.surface.primary, self.surface.secondary = self.surface.secondary, self.surface.primary
 		self.setGeometries()
 
 	def updatePosition(self, rect: QRectF):
@@ -172,6 +172,14 @@ class Splitter(Handle):
 	def setGeometries(self):
 		value = clamp(self.ratio, 0, 1)
 		primary, secondary = self.primary, self.secondary
+		if primary is None or secondary is None:
+			# One side only: it fills the surface
+			only = primary if primary is not None else secondary
+			if only is not None:
+				only.setVisible(True)
+				only.geometry.setRelativeGeometry(QRectF(0, 0, 1, 1))
+				only.updateFromGeometry()
+			return
 		primary.setVisible(value != 0)
 		secondary.setVisible(value != 1)
 

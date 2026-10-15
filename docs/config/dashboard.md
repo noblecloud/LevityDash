@@ -42,6 +42,7 @@ These pages cover the properties that work on a whole dashboard:
 - [Size groups](/config/dashboard/size-groups.md): keep text sizes the same across items.
 - [Value Sources](/config/dashboard/expressions.md): a key, a number, or an expression, and units in an expression.
 - [Switch](/config/dashboard/switch.md): shows one of several items.
+- [Split](/config/dashboard/split.md): two items either side of a divider that you can drag.
 - [Flex and grid](/config/dashboard/layout.md): CSS flexbox and grid layout for stacks.
 
 ## Shared Properties
@@ -104,6 +105,32 @@ On a `realtime` item, `key:` can also be an [expression](/config/dashboard/expre
   key: environment.temperature.temperature
 ```
 
+
+<!-- panels:end -->
+
+<!-- panels:start -->
+
+<!-- div:left-panel -->
+
+### <div class=mono>connection:</div>
+
+A `realtime` item reads its data through a connection. `key:` and `source:` on the item are the short way to write one. These three items are the same:
+
+A connection that holds only a key is saved back as `key:`. A connection with a `source` is saved with `key:` and `source:` side by side on the item.
+
+<!-- div:right-panel -->
+
+```yaml
+- type: realtime.text
+  key: environment.temperature.temperature
+
+- type: realtime.text
+  connection: environment.temperature.temperature
+
+- type: realtime.text
+  connection:
+    key: environment.temperature.temperature
+```
 
 <!-- panels:end -->
 

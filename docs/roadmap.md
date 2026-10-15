@@ -130,7 +130,7 @@ Triaged from `_planned-features.md`, grouped by area. ~~Struck~~ items are alrea
 - ~~**Composite presets** — file-loadable items combining multiple values into one composite display.~~ **Done 2026-10-07**: a preset's `template:` can be a composite (`hero-readings` is a titled group of four readings) with props that land on its sub-items. The Studio builder edits presets, and its *To preset* button saves a selected item as a preset (2026-10-10).
 - **Layout in a separate file** — split item layout from the rest of the dashboard spec.
 - **Groups default to grid/stack** unless specified; explicit item geometry overrides.
-- **`type: split` in YAML** — `SplitPanel` exists but is only insertable from the context menu; it isn't wired into `itemLoader`.
+- ~~**`type: split` in YAML**~~ **Done 2026-10-15**: `type: split` loads, renders and saves (`orientation`, `ratio`, two `items`); see [config/dashboard/split.md](config/dashboard/split.md). Still open: an Insert-menu entry (`insertSplitPanel` is commented out in `Menus.py`) and a visible divider line when the dashboard is not being edited.
 
 ### Displays
 

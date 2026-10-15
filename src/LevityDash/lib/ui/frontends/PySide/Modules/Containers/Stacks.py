@@ -13,6 +13,7 @@ from LevityDash.lib.plugins.categories import CategoryItem, SomeValidKey
 from LevityDash.lib.stateful import Stateful, StateProperty
 from LevityDash.lib.ui import Color, UILogger as log
 from LevityDash.lib.ui.frontends.PySide.Modules import NonInteractivePanel, Panel, Realtime
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import connectionKey
 from LevityDash.lib.ui.frontends.PySide.utils import DebugPaint, DisplayType
 from LevityDash.lib.ui.Geometry import (
 	Alignment, AlignmentFlag, Dimension, DimensionType, Direction, DisplayPosition, Geometry, parseHeight, parseSize, parseWidth,
@@ -778,6 +779,14 @@ class Stack(Panel, tag='stack'):
 			getattr(geometry.surface, 'flexProps', None) is not None for geometry in self.geometries.values()
 		)
 
+	@property
+	def cssContentSized(self) -> bool:
+		"""True when an item's size comes from its text (`basis: auto`), which no layout can know before the fonts are built."""
+		return self.usesCssLayout and any(
+			str((getattr(geometry.surface, 'flexProps', None) or {}).get('basis', '')).casefold() in ('auto', 'content')
+			for geometry in self.geometries.values()
+		)
+
 	def cssPx(self, value, vertical: bool) -> float:
 		"""A `.levity` length (`40%`, `12px`, `3mm`, `0.5`) as pixels along one axis of this stack."""
 		dimension = DimensionType.height if vertical else DimensionType.width
@@ -1409,7 +1418,7 @@ class ValueStack(Stack, tag='value-stack'):
 		itemType: Type[Panel] = Realtime
 	) -> Realtime | None:
 		for i, item in enumerate(existing_):
-			if item.key == state_['key']:
+			if item.key == connectionKey(state_):
 				return existing_.pop(i)
 		return None
 
@@ -1572,6 +1581,10 @@ class GridStack(Stack, tag='grid'):
 	@property
 	def usesCssLayout(self) -> bool:
 		return True
+
+	@property
+	def cssContentSized(self) -> bool:
+		return True  # an `auto` track measures its items' text
 
 	def _tracks(self, value, vertical: bool):
 		if value is None:

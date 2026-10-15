@@ -352,6 +352,7 @@ class LevitySceneView(QGraphicsView):
 		nothing moves lands on the same layout whatever the order. Idempotent -
 		safe to run on every settled resize.
 		"""
+		self._relayoutContentSized()
 		previous = self._textSnapshot()
 		for _ in range(self._REFIT_MAX_PASSES):
 			self._refitTextPass()
@@ -360,6 +361,17 @@ class LevitySceneView(QGraphicsView):
 				return
 			previous = snapshot
 		guiLog.warning(f'Text layout did not settle after {self._REFIT_MAX_PASSES} passes')
+
+	def _relayoutContentSized(self):
+		"""Lay out again every flex or grid stack that sizes an item by its text.
+
+		At load the text has no font yet, so a `basis: auto` item or an `auto` track measured zero and nothing
+		asked for a second layout. The format hint is known by the time the view settles.
+		"""
+		from LevityDash.lib.ui.frontends.PySide.Modules.Containers.Stacks import Stack
+		for item in self.graphicsScene.items():
+			if isinstance(item, Stack) and item.cssContentSized:
+				item.setGeometries()
 
 	def _textSnapshot(self) -> tuple:
 		"""Every text item's transform and outline, rounded: equal snapshots mean nothing moved."""
@@ -1335,7 +1347,7 @@ class LevityMainWindow(QMainWindow):
 		dashboardMenu.addAction(clear)
 		dashboardMenu.addAction(printState)
 		dashboardMenu.addAction(showStatusBar)
-		dashboardMenu.addMenu(ThemeMenu(self, self.view.graphicsScene.base.reload))
+		dashboardMenu.addMenu(ThemeMenu(self, self.view.graphicsScene.base))
 
 		clearCacheAction = QAction('Clear Pixmap Cache', self)
 		clearCacheAction.setStatusTip('Clear the cache')

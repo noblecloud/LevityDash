@@ -5,7 +5,7 @@ import platform
 import signal
 import sys
 import time
-from locale import LC_ALL, setlocale
+from locale import LC_ALL, Error as LocaleError, setlocale
 from pathlib import Path
 from sys import exit
 
@@ -13,7 +13,11 @@ from PySide6.QtWidgets import QApplication
 
 from qolkit.hotkeys import CTRL_R, HotkeyListener, restart_process
 
-setlocale(LC_ALL, 'en_US.UTF-8')
+try:
+	setlocale(LC_ALL, 'en_US.UTF-8')
+except LocaleError:
+	# Hosts without the en_US locale (minimal Linux images, CI) keep the C locale.
+	pass
 
 #: Whether the Ctrl+R hotkey is actually listening - False when stdin is not a
 #: TTY, in which case the Ctrl+C hint should not advertise it.

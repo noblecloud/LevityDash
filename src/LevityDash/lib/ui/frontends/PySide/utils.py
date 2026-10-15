@@ -167,10 +167,11 @@ def loadRealtime(parent, items, parentItems, **kwargs):
 	pop = getattr(type(items), 'popitem', None) or getattr(type(items), 'pop', Unset)
 	while items:
 		item = pop(items)
+		# An expression stays text: Realtime.key registers it as a computed key.
+		from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import _isExpression, flattenConnection
+		flattenConnection(item)
 		if not Realtime.validate(item, context={'parent': parent}):
 			log.error('Invalid state for existingItem:', item)
-		# An expression stays text: Realtime.key registers it as a computed key.
-		from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import _isExpression
 		matchKey = None
 		if not (isinstance(item['key'], str) and _isExpression(item['key'])):
 			item['key'] = CategoryItem(item['key'])
@@ -518,6 +519,8 @@ def _loadItemGroup(parent: 'Panel', _type: str, group: list[dict], existing: lis
 					from LevityDash.lib.ui.frontends.PySide.Modules.Containers.TitleContainer import TitledPanel as Panel
 				case 'switch':
 					from LevityDash.lib.ui.frontends.PySide.Modules.Containers.Switch import Switch as Panel
+				case 'split':
+					from LevityDash.lib.ui.frontends.PySide.Modules.Containers.SplitPanel import SplitPanel as Panel
 				case 'polar':
 					from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.item import Polar as Panel
 				case _:

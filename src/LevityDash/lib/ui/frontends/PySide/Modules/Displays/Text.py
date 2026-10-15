@@ -1082,7 +1082,8 @@ class Text(QGraphicsPathItem):
 		# Font metrics are the fix - ascent/descent are constant for a given
 		# font and size, so every string lands on the same baseline. Ink
 		# extents are still right for *fitting* text into a box (below), just
-		# not for aligning it.
+		# not for aligning it. These are the provisional baselines: the band
+		# step further down puts the fitted band on the box edge.
 		match align.vertical:
 			case AlignmentFlag.Top:
 				# rects were moved to top=0, so the baseline sits one ascent down
@@ -1118,6 +1119,13 @@ class Text(QGraphicsPathItem):
 					path_size_hint.addRect(QRectF(*fmt_hint_rect.bottomLeft().toTuple(), fmt_hint_rect.width(), -height))
 				else:
 					path_size_hint.addText(QPointF(fmt_hint_rect.center().x(), fmt_text_pos.y()), font, '|')
+					# A zero-width line over the vertical extent of the font's tallest and lowest letters. Where the
+					# '|' is shorter than them (Roboto's is), the band this fits and aligns by would be shorter than
+					# the text and the ink would leave the box. It adds no width, so the fit width is unchanged.
+					envelope = fm.tightBoundingRect('Hbdgjpy|')
+					x = fmt_hint_rect.center().x()
+					path_size_hint.moveTo(QPointF(x, fmt_text_pos.y() + envelope.top()))
+					path_size_hint.lineTo(QPointF(x, fmt_text_pos.y() + envelope.bottom()))
 
 			# Use the size of the font as the size of the text
 			case ScaleType.font:
@@ -1144,6 +1152,30 @@ class Text(QGraphicsPathItem):
 		# # Add decent line to the size hint path
 		# path_size_hint.moveTo(QPointF(fmt_hint_rect.left(), fmt_text_pos.y() + fm.descent()))
 		# path_size_hint.lineTo(QPointF(fmt_hint_rect.right(), fmt_text_pos.y() + fm.descent()))
+
+		# The baselines above are font metrics, so the lines they put on the box edge (the ascent line for Top, the
+		# descent line for Bottom, the strikeout line for Center) are not the edges of what the fit measured. The fit
+		# fills the limit rect with the size hint's band (the '|' from top to bottom, say), so on a box the text
+		# fills, an ascent-line `Top` lands that band a whole ascent-to-cap gap too low and the glyphs hang out of
+		# the bottom of the box, and `Bottom` and `Center` do the same the other way. Put the band itself on the
+		# edge instead. It is a property of the font and the hint, never of the string, so a descender still does
+		# not move a baseline.
+		band = path_size_hint.boundingRect()
+		if band.height() > 0:
+			match align.vertical:
+				case AlignmentFlag.Top:
+					shift = -band.top()
+				case AlignmentFlag.Bottom:
+					shift = -band.bottom()
+				case _:
+					shift = -band.center().y()
+			if shift:
+				for shifted in (path, fmt_hint_text_path, path_size_hint):
+					shifted.translate(0, shift)
+				fmt_hint_rect.translate(0, shift)
+				text_pos.setY(text_pos.y() + shift)
+				fmt_text_pos.setY(fmt_text_pos.y() + shift)
+				self._text_pos, self._fmt_text_pos = text_pos, fmt_text_pos
 
 		fmt_hint_text_path.addPath(path_size_hint)
 
