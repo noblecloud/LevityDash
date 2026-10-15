@@ -260,7 +260,10 @@ class SizeGroup:
 		if not isinstance(item, SizeGroupItem):
 			raise TypeError(f'item must be a SizeGroupItem, not {type(item)}')
 		reach = self.reach
-		return max(int(round(item.suggestedFontPixelSize / reach) * reach), reach)
+		# An item may name the height that picks its tier apart from the one that sizes its font
+		# (a value with a unit line is shorter than one without, but belongs with it).
+		height = getattr(item, 'tierHeight', item.suggestedFontPixelSize)
+		return max(int(round(height / reach) * reach), reach)
 
 	def apply(self):
 		"""Invalidate this group and re-apply its fit to every member now."""

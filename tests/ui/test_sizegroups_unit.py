@@ -186,3 +186,28 @@ def test_matchall_shares_one_scale_and_no_baseline(make_group):
 
 def _first(group):
 	return next(iter(group.items))
+
+
+class _ValueItem(_Item):
+	"""A value whose box is short because a unit line takes part of the display; `tierHeight` is the full box."""
+
+	def __init__(self, size, tier):
+		super().__init__(size=size)
+		self.tierHeight = tier
+
+
+def test_a_value_with_a_unit_line_stays_in_the_tier_of_one_without():
+	group = MatchAllSizeGroup(SimpleNamespace(is_loading=False, state_is_loading=False), "t", matchAll=True)
+	bare, with_unit = _ValueItem(90.0, 90.0), _ValueItem(72.0, 90.0)
+	group.addItem(bare)
+	group.addItem(with_unit)
+	assert group.make_size_key(bare) == group.make_size_key(with_unit)
+	assert group.font_size_for(bare) == group.font_size_for(with_unit) == 72.0  # the tightest box sets the size
+
+
+def test_items_without_a_tier_height_still_tier_by_their_own_size():
+	group = MatchAllSizeGroup(SimpleNamespace(is_loading=False, state_is_loading=False), "t2", matchAll=True)
+	big, small = _Item(size=90.0), _Item(size=20.0)
+	group.addItem(big)
+	group.addItem(small)
+	assert group.make_size_key(big) != group.make_size_key(small)
