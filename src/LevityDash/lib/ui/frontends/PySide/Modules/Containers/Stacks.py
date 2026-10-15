@@ -13,6 +13,7 @@ from LevityDash.lib.plugins.categories import CategoryItem, SomeValidKey
 from LevityDash.lib.stateful import Stateful, StateProperty
 from LevityDash.lib.ui import Color, UILogger as log
 from LevityDash.lib.ui.frontends.PySide.Modules import NonInteractivePanel, Panel, Realtime
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import connectionKey
 from LevityDash.lib.ui.frontends.PySide.utils import DebugPaint, DisplayType
 from LevityDash.lib.ui.Geometry import (
 	Alignment, AlignmentFlag, Dimension, DimensionType, Direction, DisplayPosition, Geometry, parseHeight, parseSize, parseWidth,
@@ -1409,7 +1410,7 @@ class ValueStack(Stack, tag='value-stack'):
 		itemType: Type[Panel] = Realtime
 	) -> Realtime | None:
 		for i, item in enumerate(existing_):
-			if item.key == state_['key']:
+			if item.key == connectionKey(state_):
 				return existing_.pop(i)
 		return None
 
