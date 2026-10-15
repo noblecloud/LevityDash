@@ -34,7 +34,7 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Splitters import TitleVa
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import RealtimeContextMenu
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.ui.Geometry import (
-	getDPI, Size, LocationFlag, AlignmentFlag, DisplayPosition, parseSize,
+	getDPI, Size, LocationFlag, Alignment, AlignmentFlag, DisplayPosition, parseSize,
 	RelativeFloat, size_px, Dimension
 )
 from LevityDash.lib.utils.shared import (
@@ -414,6 +414,26 @@ class Realtime(Panel, tag='realtime'):
 					return Bar(parent=self, **value)
 				case _:
 					raise ValueError(f'Unknown Display Type: {display_type}')
+
+	@StateProperty(key='alignment', sortOrder=5, default=None, allowNone=True, dependencies={'display'})
+	def alignment(self) -> Alignment:
+		# Write-only shorthand for `display: {valueLabel: {alignment: ...}}`, where the value label keeps and saves its
+		# alignment. Nothing read an item-level `alignment`, so `alignment: Left` on a text display did nothing. Gauges and bars ignore it.
+		display = getattr(self, 'display', None)
+		return display.valueTextBox.alignment if isinstance(display, DisplayLabel) else None
+
+	@alignment.condition(method='get')
+	def alignment(self, value) -> bool:
+		return False  # the value label saves its own alignment; writing it here as well would say it twice
+
+	@alignment.setter
+	def alignment(self, value: Alignment):
+		if value is not None and isinstance(self.display, DisplayLabel):
+			self.display.valueTextBox.setAlignment(value)
+
+	@alignment.decode
+	def alignment(self, value) -> Alignment:
+		return None if value is None else Alignment(value)
 
 	@StateProperty(key='title', sortOrder=3, allowNone=False, default=Stateful, dependencies={'display', 'keyAndSource', 'connection', 'forecast'})
 	def splitter(self) -> TitleValueSplitter:
@@ -1626,6 +1646,20 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 		__exclude__ = {..., 'format-hint'}
 
 		class TextBox(Label.TextBox):
+
+			@property
+			def tierHeight(self) -> float:
+				"""The box height this value would have with no unit beside it, which picks its size-group tier.
+
+				A split unit takes a share of the display, so a value with a unit line has a shorter box than one
+				without. The tier key must not follow that, or the two land in different tiers and different sizes.
+				"""
+				height = self.suggestedFontPixelSize
+				try:
+					share = float(self.surface.geometry.relativeHeight)
+				except (AttributeError, TypeError, ValueError):
+					return height
+				return height / share if 0.2 < share < 1 else height
 
 			@property
 			def _formatHint(self) -> str | None:

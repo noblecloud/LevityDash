@@ -120,3 +120,23 @@ def test_basis_auto_sizes_a_value_by_its_format_hint_not_its_value(dashboard, sl
 	widths = [r[2] for r in rects(stack)]
 	assert widths[0] == pytest.approx(widths[1], abs=0.001)
 	assert widths[0] > 0.1  # a hinted value has a width to start from; without one it would start at 0
+
+
+def test_basis_auto_is_measured_again_when_the_view_settles(dashboard, slot):
+	"""At load a value has no font, so `basis: auto` measured 0 and nothing laid the stack out again."""
+	items = [
+		{'type': 'realtime.text', 'key': 'environment.humidity.humidity', 'flex': {'basis': 'auto'}},
+		{'type': 'group', 'flex': {'grow': 1}},
+	]
+	stack = build(dashboard, slot, 'stack', direction='Horizontal', flex={}, items=items)
+	for child in stack.childPanels:
+		if hasattr(child, 'display'):
+			child.display.valueTextBox.textBox._formatHint = '100%'
+	assert stack.cssContentSized
+	dashboard.view._refitAllText()
+	assert rects(stack)[0][2] > 0.1
+
+
+def test_a_stack_with_no_content_sized_item_is_not_laid_out_again(dashboard, slot):
+	stack = build(dashboard, slot, 'stack', direction='Horizontal', flex={}, items=[{'type': 'group', 'size': '20%'}, {'type': 'group'}])
+	assert not stack.cssContentSized
