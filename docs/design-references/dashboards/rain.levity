@@ -1,0 +1,307 @@
+# Rain: the board for a wet day. A 15in 16:10 screen.
+#
+# The hero is the rain rate laid over the bars of its own day, with a zoned scale under it that says light, moderate
+# or heavy. Beside it five rings count what has fallen and what the air is doing: the day's total against two inches,
+# yesterday's, the chance now, the humidity and the cloud. Under the rings an hourly table reads the next eight hours
+# off the forecast (temperature, feels, chance, rate and gust each). The floor is two days of rain as bars with the
+# chance of it and the gap between temperature and dew point (rain comes as that gap closes), the sky's word written
+# huge behind them. The right slot turns to a flood warning, an easing, or tomorrow.
+#
+# Text sizes come from the three dashboard-wide size groups (global.title, global.value, global.head) set by the
+# presets. Layers: the rate over its own bars, a ring behind each total, the word behind the graph.
+#
+# Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/rain.levity
+#           --scenario rain-day --size 2880x1800 --freeze-time 2026-10-15T09:10:00
+#
+# Hex colours are quoted. Unquoted, YAML reads '#' as a comment.
+theme:
+  extends: default
+  colors:
+    background: '#030609'
+    muted: '#a4b6c4'
+    faint: '#7b91a3'
+    rule: '#223548'
+    accent: '#ff9124'
+    good: '#14e3c0'
+    warn: '#ffd400'
+    bad: '#ff3048'
+    info: '#1a8cff'
+    drop: '#2fa8ff'
+    mist: '#8fd6ff'
+  fonts:
+    display: Nunito
+    mono: Roboto Mono
+    body: Roboto
+  scales:
+    sky: {0: '#02050a', 0.6: '#06121e', 1: '#0a2030'}
+background: {gradient: $sky, angle: 172}
+vars:
+  rain: environment.precipitation.precipitation
+  prob: environment.precipitation.probability
+  t: environment.temperature.temperature
+  dew: environment.temperature.dewpoint
+  pres: environment.pressure.pressure
+  ws: environment.wind.speed.speed
+  wg: environment.wind.speed.gust
+items:
+- type: group
+  name: board
+  items:
+
+  # ================= THE RATE ==============================================
+  - type: group
+    name: rate
+    geometry: {x: 0.6%, y: 0.8%, width: 28%, height: 49.5%}
+    items:
+    - type: text
+      text: Rain rate
+      font: $display
+      color: $muted
+      alignment: CenterLeft
+      geometry: {x: 2%, y: 0%, width: 50%, height: 6%}
+    - preset: metric-tile
+      geometry: {x: 0%, y: 6%, width: 100%, height: 56%}
+      props:
+        key: environment.precipitation.precipitation
+        color: $drop
+        precision: 1
+        hint: '0.0'
+        unit_position: FloatUnder
+        hours: 24
+        figure: rain
+        min: 0
+        max: 0.8
+        line: {type: bar, gradient: PrecipitationRateGradient, width: 0.8, radius: 0.25}
+        hero_box: {x: 0%, y: 8%, width: 46%, height: 44%}
+        graph_box: {x: 40%, y: 12%, width: 60%, height: 70%}
+        list_box: {x: 0%, y: 84%, width: 100%, height: 16%}
+        items:
+        - {type: realtime.text, key: $rain, title: {text: Rate now}, display: {precision: 1, unitPosition: Hidden, valueLabel: {color: $drop}}}
+        - {type: realtime.text, key: 'at($rain, 1h)', title: {text: Rate +1h}, display: {precision: 1, unitPosition: Hidden}}
+        - {type: realtime.text, key: 'at($rain, 3h)', title: {text: Rate +3h}, display: {precision: 1, unitPosition: Hidden, valueLabel: {color: $warn}}}
+        - {type: realtime.text, key: 'avg($rain, 6h)', title: {text: Avg 6h}, display: {precision: 1, unitPosition: Hidden}}
+    - type: realtime.bar
+      key: environment.precipitation.precipitation
+      title: false
+      geometry: {x: 2%, y: 66%, width: 96%, height: 8%}
+      display:
+        range: {min: 0, max: 1}
+        track: {weight: 30%}
+        zones:
+        - {to: 0.1, color: $good, opacity: 0}
+        - {from: 0.1, to: 0.3, color: $drop, opacity: 0}
+        - {from: 0.3, to: 0.6, color: $warn, opacity: 0}
+        - {from: 0.6, color: $bad, opacity: 0}
+        fill: {weight: 30%, color: zone}
+        markers:
+        - {value: 'max(environment.precipitation.precipitation, 24h)', type: triangle, color: $text, side: before}
+        major: {interval: 0.25, side: after, labels: true}
+        value-label: {visible: false}
+    - preset: stat-row
+      geometry: {x: 0%, y: 80%, width: 100%, height: 20%}
+      props:
+        items:
+        - {type: realtime.text, key: environment.precipitation.daily, title: {text: Due today}, display: {precision: 2, format-hint: '0.00', unitPosition: Hidden, valueLabel: {color: $drop}}}
+        - {type: realtime.text, key: environment.yesterday.precipitation.precipitation, title: {text: Yesterday}, display: {precision: 2, format-hint: '0.00', unitPosition: Hidden}}
+        - {type: realtime.text, key: 'at(environment.precipitation.daily, 24h)', title: {text: Tomorrow}, display: {precision: 2, format-hint: '0.00', unitPosition: Hidden, valueLabel: {color: $mist}}}
+
+  # ================= THE RINGS =============================================
+  - type: group
+    name: rings
+    geometry: {x: 29.6%, y: 0.8%, width: 69.8%, height: 24%}
+    items:
+    - preset: ring-reading
+      geometry: {x: 0%, y: 0%, width: 20%, height: 100%}
+      props: {key: environment.precipitation.daily, title: Today, color: $drop, text_color: $drop, min: 0, max: 2, precision: 2, hint: '0.00', unit_position: Hidden, weight: 6%}
+    - preset: ring-reading
+      geometry: {x: 20%, y: 0%, width: 20%, height: 100%}
+      props: {key: environment.yesterday.precipitation.precipitation, title: Yesterday, color: $mist, text_color: $mist, min: 0, max: 2, precision: 2, hint: '0.00', unit_position: Hidden, weight: 6%}
+    - preset: ring-reading
+      geometry: {x: 40%, y: 0%, width: 20%, height: 100%}
+      props: {key: environment.precipitation.probability, title: Chance now, color: $info, text_color: $info, min: 0, max: 1, weight: 6%}
+    - preset: ring-reading
+      geometry: {x: 60%, y: 0%, width: 20%, height: 100%}
+      props: {key: environment.humidity.humidity, title: Humidity, color: $good, text_color: $good, min: 0, max: 1, weight: 6%}
+    - preset: ring-reading
+      geometry: {x: 80%, y: 0%, width: 20%, height: 100%}
+      props: {key: environment.clouds.cover.cover, title: Cloud, color: '#d6e8f5', text_color: '#d6e8f5', min: 0, max: 100, weight: 6%}
+
+  # ================= THE HOURS AHEAD =======================================
+  # Eight columns, each one hour on from now, read off the forecast.
+  - type: group
+    name: hours
+    geometry: {x: 29.6%, y: 25.5%, width: 69.8%, height: 24.8%}
+    items:
+    - type: text
+      text: The next eight hours
+      font: $display
+      color: $muted
+      alignment: CenterLeft
+      geometry: {x: 0%, y: 0%, width: 40%, height: 9%}
+    - type: stack
+      direction: Horizontal
+      defaultType: value-stack
+      geometry: {x: 0%, y: 10%, width: 100%, height: 90%}
+      spacing: 1.5mm
+      dividers: {enabled: true, opacity: 40%, size: 90%}
+      shared:
+        display:
+          font: Roboto Mono
+      items:
+      - {preset: hour-column, props: {label: +1h, offset: 1h}}
+      - {preset: hour-column, props: {label: +2h, offset: 2h}}
+      - {preset: hour-column, props: {label: +3h, offset: 3h}}
+      - {preset: hour-column, props: {label: +4h, offset: 4h}}
+      - {preset: hour-column, props: {label: +5h, offset: 5h}}
+      - {preset: hour-column, props: {label: +6h, offset: 6h}}
+      - {preset: hour-column, props: {label: +7h, offset: 7h}}
+      - {preset: hour-column, props: {label: +8h, offset: 8h}}
+
+  # ================= TWO DAYS OF RAIN ======================================
+  - type: realtime.text
+    name: sky-word
+    key: environment.condition.condition
+    title: false
+    geometry: {x: 0%, y: 50.5%, width: 66%, height: 49%}
+    display:
+      font: Nunito
+      weight: ExtraBold
+      alignment: Center
+      filters: [Upper]
+      valueLabel: {color: '#0b1c2c'}
+  - type: graph
+    name: rain-graph
+    timeframe: {days: 2}
+    geometry: {x: 0.6%, y: 52%, width: 65.4%, height: 46%}
+    annotations:
+      dayLabels: {position: Top, alignment: Center, opacity: 10%, height: 7%}
+      hourLabels: {alignment: BottomCenter, spacingIntervals: '3, 6, 12'}
+      lines: {spacing: 10 mm, weight: 0.4}
+    figures:
+    - figure: temperature
+      margins: {top: 8%, bottom: 52%}
+      min: 40
+      max: 70
+      environment.temperature.temperature:
+        plot: {type: plot, gradient: TemperatureGradient, weight: 0.9}
+        resolution: 2
+      environment.temperature.dewpoint:
+        plot: {type: plot, color: '#14e3c0', weight: 0.5}
+        resolution: 2
+    - figure: rain
+      margins: {top: 54%, bottom: 6%}
+      min: 0
+      max: 0.8
+      environment.precipitation.precipitation:
+        plot: {type: bar, gradient: PrecipitationRateGradient, width: 0.8, radius: 0.25}
+    - figure: chance
+      margins: {top: 54%, bottom: 6%}
+      min: 0
+      max: 1
+      environment.precipitation.probability:
+        plot: {type: plot, color: '#1a8cff', weight: 0.4, dashPattern: '3, 3'}
+    - figure: pressure
+      margins: {top: 8%, bottom: 52%}
+      min: 29.5
+      max: 30.1
+      environment.pressure.pressure:
+        plot: {type: plot, color: '#e0e3e8', weight: 0.4, dashPattern: '1, 3'}
+  - type: group
+    name: graph-legend
+    geometry: {x: 1.4%, y: 52.4%, width: 40%, height: 2.6%}
+    items:
+    - {type: text, text: Temperature, font: $display, color: '#ff9124', geometry: {x: 0%, y: 0%, width: 22%, height: 100%}}
+    - {type: text, text: Dew point, font: $display, color: '#14e3c0', geometry: {x: 24%, y: 0%, width: 20%, height: 100%}}
+    - {type: text, text: Pressure, font: $display, color: '#e0e3e8', geometry: {x: 46%, y: 0%, width: 18%, height: 100%}}
+    - {type: text, text: Rain, font: $display, color: '#2fa8ff', geometry: {x: 66%, y: 0%, width: 10%, height: 100%}}
+    - {type: text, text: Chance, font: $display, color: '#1a8cff', geometry: {x: 78%, y: 0%, width: 16%, height: 100%}}
+
+  # ================= THE AIR =================================================
+  - preset: list-panel
+    name: air
+    geometry: {x: 67%, y: 51.5%, width: 15.6%, height: 47.5%}
+    props:
+      title: The air
+      title_color: null
+      spacing: 0.4mm
+      items:
+      - {type: realtime.text, key: $t, title: {text: Temperature}, display: {precision: 0}}
+      - {type: realtime.text, key: $dew, title: {text: Dew point}, display: {precision: 0, valueLabel: {color: $good}}}
+      - {type: realtime.text, key: '$t - $dew', title: {text: Gap to dew}, display: {precision: 0, valueLabel: {color: $info}}}
+      - {type: realtime.text, key: environment.temperature.wetBulb, title: {text: Wet bulb}, display: {precision: 0}}
+      - spacer: {size: 1.5mm}
+      - {type: realtime.text, key: $pres, title: {text: Pressure}}
+      - {type: realtime.text, key: '$pres - at($pres, -3h)', title: {text: 3 hr}, display: {valueLabel: {color: $bad}}}
+      - {type: realtime.text, key: 'min($pres, 24h)', title: {text: Low 24h}}
+      - spacer: {size: 1.5mm}
+      - {type: realtime.text, key: environment.visibility, title: {text: Visibility}, display: {valueLabel: {color: $warn}}}
+      - {type: realtime.text, key: 'at(environment.visibility, 4h)', title: {text: Vis +4h}}
+      - {type: realtime.text, key: $ws, title: {text: Wind}, display: {precision: 0}}
+      - {type: realtime.text, key: $wg, title: {text: Gust}, display: {precision: 0, valueLabel: {color: $accent}}}
+
+  # ================= THE SLOT ==============================================
+  - type: switch
+    name: watch
+    geometry: {x: 83.4%, y: 51.5%, width: 16%, height: 47.5%}
+    cycle: 10s
+    fade: 0.4s
+    hold: 10s
+    items:
+    - preset: headline-panel
+      name: flood
+      when: 'at(environment.precipitation.precipitation, 3h) >= 0.5 in/hr'
+      props:
+        headline: Heavy rain due
+        headline_color: $bad
+        key: 'max(at(environment.precipitation.precipitation, 3h), environment.precipitation.precipitation)'
+        title: Peak rate soon
+        color: $bad
+        precision: 2
+        unit_position: FloatUnder
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 14%}
+        hero_box: {x: 0%, y: 16%, width: 100%, height: 42%}
+        list_box: {x: 0%, y: 62%, width: 100%, height: 38%}
+        direction: Vertical
+        items:
+        - {type: realtime.text, key: environment.precipitation.daily, title: {text: Due today}, display: {precision: 2, valueLabel: {color: $drop}}}
+        - {type: realtime.text, key: 'at($prob, 3h)', title: {text: Chance +3h}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: 'at($wg, 3h)', title: {text: Gust +3h}, display: {precision: 0, valueLabel: {color: $accent}}}
+        - {type: realtime.text, key: 'at(environment.visibility, 3h)', title: {text: Vis +3h}, display: {valueLabel: {color: $warn}}}
+    - preset: headline-panel
+      name: easing
+      when: 'environment.precipitation.precipitation > 0.02 in/hr and at(environment.precipitation.precipitation, 3h) < 0.05 in/hr'
+      props:
+        headline: Easing
+        headline_color: $good
+        key: environment.precipitation.precipitation
+        title: Rate now
+        color: $good
+        precision: 2
+        unit_position: FloatUnder
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 14%}
+        hero_box: {x: 0%, y: 16%, width: 100%, height: 42%}
+        list_box: {x: 0%, y: 62%, width: 100%, height: 38%}
+        direction: Vertical
+        items:
+        - {type: realtime.text, key: 'at($rain, 3h)', title: {text: Rate +3h}, display: {precision: 2}}
+        - {type: realtime.text, key: 'at($prob, 3h)', title: {text: Chance +3h}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: 'at(environment.clouds.cover.cover, 6h)', title: {text: Cloud +6h}, display: {precision: 0}}
+    - preset: headline-panel
+      name: tomorrow
+      props:
+        headline: Tomorrow
+        headline_color: $mist
+        key: at(environment.precipitation.daily, 24h)
+        title: Rain due
+        color: $mist
+        precision: 2
+        unit_position: FloatUnder
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 14%}
+        hero_box: {x: 0%, y: 16%, width: 100%, height: 42%}
+        list_box: {x: 0%, y: 62%, width: 100%, height: 38%}
+        direction: Vertical
+        items:
+        - {type: realtime.text, key: 'at($prob, 24h)', title: {text: Chance now+24h}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: 'at($t, 24h)', title: {text: Temp same time}, display: {precision: 0}}
+        - {type: realtime.text, key: 'at(environment.temperature.low, 24h)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: 'at(environment.temperature.high, 24h)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}

@@ -1,0 +1,38 @@
+# A thin panel for something that needs a look, shown with `when:` (alone, or as one panel of a switch): a word in a
+# colour on the left, the reading that caused it, and a row of context readings. Wide and short, so it can sit
+# where a long row of quiet readings usually is and take its place while the condition holds.
+doc: "Wide, short conditional panel: a word, the reading behind it and context readings"
+props:
+  headline: {default: Alert, type: text, doc: "The word or phrase on the left"}
+  color: {default: $bad, type: color, doc: "Colour of the word and the reading"}
+  key: {default: environment.temperature.temperature, type: key, doc: "The reading behind the alert"}
+  title: {default: null, type: text, doc: "Small text over that reading"}
+  precision: {default: null, type: number, min: 0, doc: "Decimals of that reading; unset keeps the key's own"}
+  format: {default: null, type: text, doc: "How that reading is written, such as duration"}
+  items: {default: [], doc: "The context readings, written as the items of a value-stack"}
+  headline_box: {default: {x: 0%, y: 0%, width: 24%, height: 100%}, doc: "Where the word sits"}
+  hero_box: {default: {x: 25%, y: 0%, width: 22%, height: 100%}, doc: "Where the reading sits"}
+  list_box: {default: {x: 49%, y: 4%, width: 51%, height: 92%}, doc: "Where the context readings sit"}
+template:
+  type: group
+  items:
+    - type: text
+      text: $headline
+      font: $display
+      weight: Bold
+      color: $color
+      geometry: $headline_box
+    - type: realtime.text
+      key: $key
+      title: {text: $title, height: 20%, color: $muted}
+      display:
+        font: Nunito
+        weight: Light
+        precision: $precision
+        format: $format
+        unitPosition: Inline
+        valueLabel: {color: $color, margins: 2%}
+      geometry: $hero_box
+    - preset: stat-row
+      geometry: $list_box
+      props: {items: $items}

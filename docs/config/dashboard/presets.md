@@ -81,15 +81,23 @@ These are in the app's `presets` folder. Copy one into your own `presets` folder
 | `ring` | A thin filled ring with no text, to nest | `key`, `radius`, `color`, `weight` |
 | `sparkline` | A small graph with no labels, one or two series | `key`, `plot`, `key2`, `plot2`, `hours`, `min`, `max` |
 | `day-column` | One day of a week table: high, low, rain, gust, heading | `label`, `offset`, `headGroup` |
+| `metric-tile` | A reading as the hero over its own day graph, with a row of context readings | `key`, `title`, `color`, `hint`, `hours`, `line`, `items`, three boxes |
+| `ring-reading` | A ring with the number inside and a caption under it | `key`, `title`, `color`, `min`, `max`, `hint`, `start_angle`, `end_angle` |
+| `range-bar` | A bar from today's low to its high with a marker for now, and a Low, Now, High row | `key`, `low`, `high`, `min`, `max`, `interval`, `gradient` |
+| `hour-column` | One hour of an hourly table: temperature, feels, rain chance, rate, gust | `label`, `offset`, `headGroup` |
+| `bar-stack` | A vertical stack of bars, for readout-bars that share a scale | `items`, `spacing` |
+| `polar-card` | A titled polar plot: rose, trail or clock | `title`, `plot`, `direction`, `speed`, `key`, `window` |
+| `alert-strip` | A wide, short panel: a word, the reading behind it and context readings | `headline`, `color`, `key`, `items` |
+| `climate-card` | One room or chamber: temperature over its day, a humidity ring, dew point, gap, range | `title`, `id`, `temp_min`, `temp_max`, `humid_min`, `humid_max` |
 | `zone-dial`, `readout-bar`, `hero-readings` | A zoned dial, a captioned bar, a titled panel of four readings | See the files |
 
-Every property has a `doc:` line in its file. The dashboards in `docs/design-references/dashboards` use them: `station`, `storm`, `sky` and `week`.
+Every property has a `doc:` line in its file. The dashboards in `docs/design-references/dashboards` use them: `station`, `storm`, `sky`, `week`, `garden`, `wind`, `rain`, `house`, `homelab`, `glance` and `gallery`.
 
 An item's own fields (`name`, `geometry`, `size`, `when`) are applied before its `items`, wherever you write them, so the children lay out against the final size.
 
 ## Size groups
 
-The presets that hold text (`stat-row`, `reading-list`, `day-column`) put it in dashboard-wide size groups: titles in `global.title`, values in `global.value` and the day names in `global.head`, all `matchAll`. Every such preset on the dashboard then reads at one size per role. A tier still keeps a hero and its satellites apart. The group names are properties (`titleGroup`, `valueGroup`, `headGroup`); change one only for a part of the dashboard that should differ on purpose. A `global.` group needs no scope name, so a preset carries it without a property for the panel's name.
+The presets that hold text (`stat-row`, `reading-list`, `day-column`, `hour-column`) put it in dashboard-wide size groups: titles in `global.title`, values in `global.value` and the day names in `global.head`, all `matchAll`. Every such preset on the dashboard then reads at one size per role. A tier still keeps a hero and its satellites apart. The group names are properties (`titleGroup`, `valueGroup`, `headGroup`); change one only for a part of the dashboard that should differ on purpose. A `global.` group needs no scope name, so a preset carries it without a property for the panel's name.
 
 ## Leave a property out
 

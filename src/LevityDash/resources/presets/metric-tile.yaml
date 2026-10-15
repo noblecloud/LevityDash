@@ -1,0 +1,43 @@
+# A reading laid over the graph of its own last hours, with a row of context readings along the bottom. The graph
+# fills the middle of the tile and the number floats on top of it (the number is drawn after the graph, so it stays
+# readable where the line passes behind it). Give `min` and `max` a fixed scale for a reading with a known range
+# (humidity, 0 to 100); leave them unset and the graph fits the day. `line` is how the graph draws.
+doc: Reading laid over a graph of its own day, with context readings under it
+props:
+  key: {default: environment.temperature.temperature, type: key, doc: "The reading and the series behind it"}
+  title: {default: false, doc: "Small text over the reading, written as a title: {text, height, color}; false for none"}
+  color: {default: null, type: color, doc: "Colour of the reading"}
+  precision: {default: 0, type: number, min: 0, doc: "Decimals of the reading"}
+  font: {default: Nunito, type: text, doc: "Font of the reading"}
+  weight: {default: Light, type: text, doc: "Weight of the reading"}
+  unit_position: {default: Inline, type: text, doc: "Where the unit goes: Inline, FloatUnder, Hidden"}
+  hint: {default: null, type: text, doc: "The widest the reading gets, such as 0.00, so the text fits its box"}
+  line: {default: {type: plot, gradient: TemperatureGradient, weight: 0.8}, doc: "How the series is drawn"}
+  hours: {default: 24, type: number, min: 1, doc: "How far back the graph looks"}
+  figure: {default: temperature, type: text, doc: "Name of the graph's scale"}
+  min: {default: null, type: number, doc: "Bottom of the graph's scale; unset fits the data"}
+  max: {default: null, type: number, doc: "Top of the graph's scale; unset fits the data"}
+  items: {default: [], doc: "The context readings, written as the items of a value-stack"}
+  hero_box: {default: {x: 0%, y: 0%, width: 56%, height: 62%}, doc: "Where the reading sits"}
+  graph_box: {default: {x: 0%, y: 8%, width: 100%, height: 66%}, doc: "Where the graph sits; it may run under the reading"}
+  list_box: {default: {x: 0%, y: 76%, width: 100%, height: 24%}, doc: "Where the context readings sit"}
+template:
+  type: group
+  items:
+    - preset: sparkline
+      geometry: $graph_box
+      props: {key: $key, plot: $line, hours: $hours, figure: $figure, min: $min, max: $max, top: 12%, bottom: 12%}
+    - type: realtime.text
+      key: $key
+      title: $title
+      display:
+        font: $font
+        weight: $weight
+        unitPosition: $unit_position
+        format-hint: $hint
+        precision: $precision
+        valueLabel: {color: $color, margins: 2%}
+      geometry: $hero_box
+    - preset: stat-row
+      geometry: $list_box
+      props: {items: $items}

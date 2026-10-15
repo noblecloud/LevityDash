@@ -1,0 +1,43 @@
+# Where the reading stands inside today's range. A bar runs from the day's low to the day's high, a pointer marks
+# now, and a row under it reads Low, Now and High. The bar's scale is the part of the range worth drawing (`min` and
+# `max`); the fill takes its colour from a gradient laid along that scale. `low` and `high` are keys or
+# expressions, so "today" can be "24h", or the range of a forecast: `high: 'max(at($key, 6h), today)'`.
+doc: "Bar from today's low to today's high with a pointer at now, and a Low, Now, High row"
+props:
+  key: {default: environment.temperature.temperature, type: key, doc: "The reading"}
+  low: {default: 'min($key, today)', type: key, doc: "The start of the filled part"}
+  high: {default: 'max($key, today)', type: key, doc: "The end of the filled part"}
+  min: {default: 40, type: number, doc: "Start of the bar's scale"}
+  max: {default: 100, type: number, doc: "End of the bar's scale"}
+  interval: {default: 10, type: number, min: 0, doc: "Distance between the labelled ticks"}
+  gradient: {default: TemperatureGradient, type: text, doc: "The colours along the scale: a gradient name or token"}
+  low_color: {default: $info, type: color, doc: "Colour of the low mark and its reading"}
+  high_color: {default: $bad, type: color, doc: "Colour of the high mark and its reading"}
+  now_color: {default: $text, type: color, doc: "Colour of the pointer and the middle reading"}
+  precision: {default: 0, type: number, min: 0, doc: "Decimals of the three readings"}
+  bar_box: {default: {x: 0%, y: 0%, width: 100%, height: 60%}, doc: "Where the bar sits"}
+  list_box: {default: {x: 0%, y: 68%, width: 100%, height: 32%}, doc: "Where the Low, Now, High row sits"}
+template:
+  type: group
+  items:
+    - type: realtime.bar
+      key: $key
+      title: false
+      geometry: $bar_box
+      display:
+        range: {min: $min, max: $max}
+        track: {weight: 18%}
+        fill: {from: $low, to: $high, gradient: $gradient}
+        pointer: {type: triangle, color: $now_color, side: before}
+        markers:
+          - {value: $low, type: line, color: $low_color}
+          - {value: $high, type: line, color: $high_color}
+        major: {interval: $interval, side: after, labels: true}
+        value-label: {visible: false}
+    - preset: stat-row
+      geometry: $list_box
+      props:
+        items:
+          - {type: realtime.text, key: $low, title: {text: Low}, display: {precision: $precision, valueLabel: {color: $low_color}}}
+          - {type: realtime.text, key: $key, title: {text: Now}, display: {precision: $precision, valueLabel: {color: $now_color}}}
+          - {type: realtime.text, key: $high, title: {text: High}, display: {precision: $precision, valueLabel: {color: $high_color}}}

@@ -1,0 +1,38 @@
+# A polar plot with a small title over it. `plot` is rose (where the wind comes from, and how hard), trail (where it
+# pointed hour by hour) or clock (a value round the 24 hours). The rose and the trail read `direction` and `speed`;
+# the clock reads `key`. `gradient` is a list of {at, color} stops in the unit of the value.
+doc: A polar plot (wind rose, trail or day clock) under a small title
+props:
+  title: {default: Wind, type: text, doc: "The small text over the plot"}
+  title_color: {default: $muted, type: color, doc: "Colour of that text"}
+  plot: {default: rose, type: text, doc: "rose, trail or clock"}
+  direction: {default: environment.wind.direction.direction, type: key, doc: "Where the wind comes from (rose and trail)"}
+  speed: {default: environment.wind.speed.speed, type: key, doc: "How hard it blows (rose and trail)"}
+  key: {default: environment.temperature.temperature, type: key, doc: "The value round the clock (clock)"}
+  window: {default: today, type: text, doc: "How much history it draws: today, 24h, 3d"}
+  legend: {default: false, type: bool, doc: "Draw the legend of colours"}
+  gradient:
+    default:
+      - {at: 0, color: '#1a8cff'}
+      - {at: 8, color: '#14e3c0'}
+      - {at: 14, color: '#ffd400'}
+      - {at: 20, color: '#ff9124'}
+      - {at: 28, color: '#ff3048'}
+    doc: "The colours by value, as {at, color} stops"
+template:
+  type: group
+  items:
+    - type: text
+      text: $title
+      font: $display
+      color: $title_color
+      geometry: {x: 2%, y: 0%, width: 96%, height: 7%}
+    - type: polar
+      plot: $plot
+      direction: $direction
+      speed: $speed
+      key: $key
+      window: $window
+      legend: $legend
+      gradient: $gradient
+      geometry: {x: 0%, y: 8%, width: 100%, height: 92%}

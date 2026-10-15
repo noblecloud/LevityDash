@@ -1,0 +1,46 @@
+# A ring that fills with the reading, and the reading written inside it with a word under it. Nothing in the middle
+# of the ring competes with the number, so it works for a share of anything: humidity, cloud, battery, a load.
+# Set `start_angle` and `end_angle` to -180 and 180 for a full circle. `value` writes a different key in the middle
+# (a ring of the humidity with the temperature inside it); left alone it writes the ring's own.
+doc: A filling ring with the reading inside it and a word under it
+props:
+  key: {default: environment.humidity.humidity, type: key, doc: "The value the ring fills with"}
+  value: {default: $key, type: key, doc: "The key written in the middle; it is the ring's own by default"}
+  title: {default: null, type: text, doc: "The word under the reading"}
+  title_color: {default: $muted, type: color, doc: "Colour of that word"}
+  color: {default: $accent, type: color, doc: "Colour of the filled part of the ring"}
+  text_color: {default: null, type: color, doc: "Colour of the reading; unset uses the text colour"}
+  track: {default: $rule, type: color, doc: "Colour of the unfilled part"}
+  weight: {default: 6%, type: size, doc: "Thickness of the ring"}
+  radius: {default: 94%, type: size, doc: "Radius, as a share of the space"}
+  min: {default: 0, type: number, doc: "Value at the start of the ring"}
+  max: {default: 100, type: number, doc: "Value at the end of the ring"}
+  start_angle: {default: -135, type: number, min: -360, max: 360, doc: "Where the ring starts, in degrees from the top"}
+  end_angle: {default: 135, type: number, min: -360, max: 360, doc: "Where the ring ends"}
+  precision: {default: 0, type: number, min: 0, doc: "Decimals of the reading"}
+  font: {default: Nunito, type: text, doc: "Font of the reading"}
+  weight_text: {default: Light, type: text, doc: "Weight of the reading"}
+  unit_position: {default: Inline, type: text, doc: "Where the unit goes: Inline, FloatUnder, Hidden"}
+  hint: {default: null, type: text, doc: "The widest the reading gets, such as 0.00, so the text fits its box"}
+template:
+  type: group
+  items:
+    - preset: ring
+      props: {key: $key, radius: $radius, color: $color, track: $track, weight: $weight, min: $min, max: $max, start_angle: $start_angle, end_angle: $end_angle}
+    - type: realtime.text
+      key: $value
+      title: false
+      display:
+        font: $font
+        weight: $weight_text
+        precision: $precision
+        unitPosition: $unit_position
+        format-hint: $hint
+        valueLabel: {color: $text_color, margins: 2%}
+      geometry: {x: 20%, y: 30%, width: 60%, height: 38%}
+    - type: text
+      text: $title
+      font: $display
+      color: $title_color
+      alignment: Center
+      geometry: {x: 20%, y: 68%, width: 60%, height: 10%}
