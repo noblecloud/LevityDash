@@ -47,7 +47,7 @@ from LevityDash.devtools import _studio_state as state
 from LevityDash.devtools._studio_stage import presetForKey
 from LevityDash.devtools._studio_chrome import THEMES, themePalette, themeSheet
 from LevityDash.devtools._studio_themes import ThemePicker
-from LevityDash.devtools._studio_widgets import Section
+from LevityDash.devtools._studio_widgets import Section, UndoKeys
 
 Editor = editors.Editor
 REPO = Path(__file__).resolve().parents[3]
@@ -1210,6 +1210,9 @@ class Builder(QWidget):
 		QShortcut(QKeySequence.StandardKey.Undo, self, self.undo)
 		QShortcut(QKeySequence.StandardKey.Redo, self, self.redo)
 		QShortcut(QKeySequence.StandardKey.Save, self, self.save)
+		# A focused field would keep Undo for its own text; the builder's history covers every control, so it takes the keys.
+		self._keys = UndoKeys(self)
+		QApplication.instance().installEventFilter(self._keys)
 
 	# layout
 
