@@ -131,3 +131,25 @@ def test_unique_name():
 	piece = m.Piece(props={'size': m.PropSpec('size')})
 	assert piece.uniqueName('size') == 'size-2'
 	assert piece.uniqueName('a b') == 'a-b'
+
+
+def test_relocate_moves_an_item_into_another_container_and_keeps_paths_right():
+	from LevityDash.devtools import _studio_preset as m
+	piece = m.Piece('t', {}, {'type': 'group', 'items': [
+		{'type': 'group', 'name': 'a', 'items': [{'type': 'text', 'name': 'a0'}, {'type': 'text', 'name': 'a1'}]},
+		{'type': 'group', 'name': 'b', 'items': []},
+		{'type': 'text', 'name': 'c'},
+	]})
+	assert piece.relocate((0, 0), (1,)) == (1, 0)  # into b, at the end
+	assert [k['name'] for k in piece.node((1,))['items']] == ['a0'] and [k['name'] for k in piece.node((0,))['items']] == ['a1']
+	assert piece.relocate((2,), (0,), 0) == (0, 0)  # c to the front of a
+	assert [k['name'] for k in piece.node((0,))['items']] == ['c', 'a1']
+	assert piece.relocate((0, 1), (0,), 0) == (0, 0)  # within a list: a1 before c
+	assert [k['name'] for k in piece.node((0,))['items']] == ['a1', 'c']
+	assert piece.relocate((0,), (0, 0)) is None, 'an item cannot go inside itself'
+	assert piece.relocate((), (0,)) is None, 'the root cannot move'
+	assert piece.relocate((0, 0), (1, 0)) is None, 'a text item holds nothing'
+	# A parent that sits after the leaving item in the same list shifts up by one.
+	piece2 = m.Piece('t', {}, {'type': 'group', 'items': [{'type': 'text', 'name': 'x'}, {'type': 'group', 'name': 'g', 'items': []}]})
+	assert piece2.relocate((0,), (1,)) == (0, 0)
+	assert piece2.node((0,))['name'] == 'g' and piece2.node((0, 0))['name'] == 'x'
