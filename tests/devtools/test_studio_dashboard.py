@@ -168,6 +168,32 @@ def test_theme_and_vars_have_controls(board):
 	assert list(data) == list(win.piece.root)
 
 
+def test_the_theme_picker_writes_the_pick_to_the_file(board):
+	from LevityDash.lib.ui.colors import theme
+	win, path = board('station')
+	win.select(())
+	win.themePicker.setCurrentText('paper')
+	win.themePicker._activated()
+	assert win.isDirty() and theme.override() is None
+	win.save()
+	saved = yaml.safe_load(path.read_text())['theme']
+	assert saved['extends'] == 'paper' and saved['colors']  # an inline theme keeps its colours
+	# a reopened dashboard shows the theme its file names, without forcing it
+	win.openDashboard(path)
+	assert win.themePicker.currentText() == 'paper' and theme.override() is None
+	# a named theme is replaced by the pick, and an undo takes the pick back
+	win.editField('#theme', 'paper')
+	win.themePicker.setCurrentText('dusk')
+	win.themePicker._activated()
+	assert win.piece.root['theme'] == 'dusk'
+	win.undo()
+	assert win.piece.root['theme'] == 'paper'
+	win.themePicker.setCurrentText('default')
+	win.themePicker._activated()
+	assert 'theme' not in win.piece.root
+	theme.reset()
+
+
 def test_a_row_left_alone_keeps_its_type(board):
 	win, _ = board('storm')
 	win.select(())

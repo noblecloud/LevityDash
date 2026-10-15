@@ -1,5 +1,5 @@
 """A menu that switches the colour theme of the running dashboard."""
-from typing import Callable, Optional
+from typing import Any, Optional
 
 from PySide6.QtGui import QAction, QActionGroup
 from PySide6.QtWidgets import QMenu
@@ -13,18 +13,19 @@ __all__ = ('ThemeMenu',)
 
 
 class ThemeMenu(QMenu):
-	"""``Theme``: the dashboard's own theme, then every theme found in ``resources/themes`` and ``<config>/themes``.
+	"""``Theme``: every theme found in ``resources/themes`` and ``<config>/themes``, the dashboard's own marked.
 
-	A pick is an override for this run (``theme.set_override``), so it does not touch the dashboard file; "Dashboard's
-	own" lifts it. The dashboard is reloaded after a pick, because an item reads its ``$tokens`` once, when it is built.
+	A pick is written into the dashboard file as its root ``theme:`` (``CentralPanel.setTheme``, the normal save) and the
+	dashboard is built again from the file, because an item reads its ``$tokens`` once, when it is built. If the file cannot be written the
+	pick still shows, as an override for this run (``theme.set_override``), and the log says so.
 	"""
 
-	def __init__(self, parent=None, reload: Optional[Callable[[], None]] = None):
+	def __init__(self, parent=None, dashboard: Any = None):
 		super().__init__('Theme', parent)
-		self._reload = reload
+		self._dashboard = dashboard
 		self._group = QActionGroup(self)
 		self._group.setExclusive(True)
-		self._actions: dict[Optional[str], QAction] = {}
+		self._actions: dict[str, QAction] = {}
 		self.aboutToShow.connect(self.rebuild)
 		self.rebuild()
 		theme.on_change(self._follow, call_now=False)
@@ -35,13 +36,11 @@ class ThemeMenu(QMenu):
 		self._actions.clear()
 		for action in list(self._group.actions()):
 			self._group.removeAction(action)
-		self._add(None, "Dashboard's own")
-		self.addSeparator()
 		for name in theme.available():
 			self._add(name, name)
 		self._follow()
 
-	def _add(self, name: Optional[str], text: str):
+	def _add(self, name: str, text: str):
 		action = self.addAction(text)
 		action.setCheckable(True)
 		action.triggered.connect(lambda _=False, name=name: self.pick(name))
@@ -49,25 +48,34 @@ class ThemeMenu(QMenu):
 		self._actions[name] = action
 
 	def _current(self) -> Optional[str]:
-		"""The name of the forced theme, or ``None`` when the dashboard chooses."""
-		override = theme.override()
-		if override is None:
-			return None
-		return next((n for n in theme.available() if _same(n, override)), None)
+		"""The name of the theme in force: a forced one, else the dashboard's, else the default."""
+		active = theme.override() or theme.active()
+		if active.name == 'inline':
+			active = theme.load(active.extends or theme.DEFAULT_NAME)
+		return next((n for n in theme.available() if _same(n, active)), None)
 
 	def _follow(self, active=None):
-		current = self._current()
-		if (action := self._actions.get(current)) is not None:
+		if (action := self._actions.get(self._current())) is not None:
 			action.setChecked(True)
 
-	def pick(self, name: Optional[str]):
+	def pick(self, name: str):
 		try:
-			theme.set_override(name)
+			theme.load(name)
 		except theme.ThemeError as error:
 			log.error(str(error))
 			return
-		if self._reload is not None:
-			self._reload()
+		dashboard = self._dashboard
+		if dashboard is None or not dashboard.setTheme(name):
+			log.error(f'The {name} theme was not saved to the dashboard file; it is in force for this run only.')
+			try:
+				theme.set_override(name)
+			except theme.ThemeError as error:
+				log.error(str(error))
+				return
+		if dashboard is not None:
+			# A reload of the same file reconciles the items in place, and a display keeps the colour it first resolved.
+			dashboard.clear()
+			dashboard.reload()
 
 
 def _same(name: str, other) -> bool:
