@@ -97,6 +97,8 @@ def _vertical_alignment(item: SizeGroupItem):
 class SizeGroup:
 	__groups__: ClassVar[List['SizeGroup']] = []
 	reach: float = 10
+	#: The `@name` this group was asked for when no ancestor has that name, so it is a group of its own. Set by `Panel.getAttrGroup`; tools read it.
+	unresolvedScope: Optional[str] = None
 
 	items: Set[SizeGroupItem]
 	key: str
