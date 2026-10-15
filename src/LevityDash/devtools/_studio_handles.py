@@ -41,6 +41,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, List, Optional
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer
+from shiboken6 import isValid
 from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QGraphicsItem
 
@@ -517,7 +518,11 @@ class HandleLayer:
 
 	@property
 	def gauge(self):
-		return self.studio.studio.gauge
+		"""The gauge the handles sit on, or None once its window is gone: deleting the window deletes the scene and the
+		gauge with it, while this layer's own timers and the Python wrappers live on, and a rebuild that fires then
+		reads a gauge that no longer exists."""
+		gauge = self.studio.studio.gauge
+		return gauge if gauge is not None and isValid(gauge) else None
 
 	def visibleFor(self, spec: Spec) -> bool:
 		"""Gradient nodes stay up for as long as *Edit gradient* is on; the rest show while the pointer is over the preview."""
