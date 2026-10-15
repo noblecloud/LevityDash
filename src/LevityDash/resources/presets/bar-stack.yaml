@@ -1,0 +1,11 @@
+# A column of captioned bars that share one scale of look: a load, a battery, a disk. Each item is a `readout-bar`
+# (or any bar), written in `items:` with its own key, caption, zones and markers. The bars split the height evenly.
+doc: A column of captioned bars
+props:
+  items: {default: [], doc: "The bars, written as items (preset: readout-bar, with its props and display)"}
+  spacing: {default: 1.5mm, type: size, doc: "Gap between the bars"}
+template:
+  type: stack
+  direction: Vertical
+  spacing: $spacing
+  items: $items

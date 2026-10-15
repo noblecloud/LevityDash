@@ -1,0 +1,56 @@
+# One room, tent or chamber as a climate card, for a sensor that reads temperature and humidity. A name on top; below
+# it the temperature laid over its own day, with the dew point, the gap to it (how close the air is to fog), and the
+# day's range; beside it a ring of the humidity with its own low and the battery. `id` is the identity the sensor
+# goes by (`tent` for `indoor.temperature.temperature#tent`). The two scales are the part of the range that matters
+# for what lives there: a terrarium 70 to 90 °F, a fruiting chamber 60 to 75.
+doc: "A room or chamber: temperature over its day, humidity ring, dew point, gap to it, range"
+props:
+  title: {default: Room, type: text, doc: "The name on top"}
+  title_color: {default: $muted, type: color, doc: "Colour of the name"}
+  id: {default: bedroom, type: text, doc: "The sensor's identity, the part after # in its keys"}
+  color: {default: null, type: color, doc: "Colour of the temperature"}
+  humid_color: {default: $info, type: color, doc: "Colour of the humidity ring and its reading"}
+  temp_min: {default: 60, type: number, doc: "Bottom of the temperature graph"}
+  temp_max: {default: 90, type: number, doc: "Top of the temperature graph"}
+  humid_min: {default: 0, type: number, doc: "Share at the start of the humidity ring, 0 to 1 (a gauge reads humidity as a share)"}
+  humid_max: {default: 1, type: number, doc: "Share at the end of the humidity ring, 0 to 1"}
+template:
+  type: group
+  items:
+    - type: text
+      text: $title
+      font: $display
+      color: $title_color
+      alignment: CenterLeft
+      geometry: {x: 2%, y: 0%, width: 96%, height: 8%}
+    - preset: metric-tile
+      geometry: {x: 0%, y: 6%, width: 62%, height: 94%}
+      props:
+        key: 'indoor.temperature.temperature#$id'
+        color: $color
+        min: $temp_min
+        max: $temp_max
+        hero_box: {x: 0%, y: 0%, width: 62%, height: 48%}
+        graph_box: {x: 0%, y: 16%, width: 100%, height: 56%}
+        list_box: {x: 0%, y: 78%, width: 100%, height: 22%}
+        items:
+          - {type: realtime.text, key: 'indoor.temperature.dewpoint#$id', title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
+          - {type: realtime.text, key: 'indoor.temperature.temperature#$id - indoor.temperature.dewpoint#$id', title: {text: Gap}, display: {precision: 0}}
+          - {type: realtime.text, key: 'min(indoor.temperature.temperature#$id, today)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
+          - {type: realtime.text, key: 'max(indoor.temperature.temperature#$id, today)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
+    - preset: ring-reading
+      geometry: {x: 64%, y: 8%, width: 36%, height: 52%}
+      props:
+        key: 'indoor.humidity.humidity#$id'
+        title: Humidity
+        color: $humid_color
+        text_color: $humid_color
+        min: $humid_min
+        max: $humid_max
+        weight: 7%
+    - preset: stat-row
+      geometry: {x: 64%, y: 74%, width: 36%, height: 26%}
+      props:
+        items:
+          - {type: realtime.text, key: 'min(indoor.humidity.humidity#$id, today)', title: {text: RH low}, display: {precision: 0, valueLabel: {color: $humid_color}}}
+          - {type: realtime.text, key: 'indoor.battery.battery#$id', title: {text: Batt}, display: {precision: 0}}

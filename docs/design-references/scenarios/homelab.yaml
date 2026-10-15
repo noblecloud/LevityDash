@@ -1,0 +1,173 @@
+# Not weather: a home server late on a busy evening. Every key is one the Host plugin publishes (system.cpu.usage, ...,
+# system.process.top.N.*), with a day of hourly readings behind the numbers. Percentages above 1 are whole percents.
+# Use it with --freeze-time 2026-10-15T20:00:00.
+name: homelab
+description: 'A home server at 8 pm: CPU 87 %, memory 72 %, disk 91 % full, 73 C core, 412 kB/s down, a UPS battery at 23 %, eight busiest processes.'
+keys:
+  system.cpu.usage:
+    value: 87
+    unit: '%'
+    title: CPU
+    series: [11.0, 15.0, 15.0, 13.0, 10.0, 14.0, 14.0, 21.0, 39.0, 46.0, 47.0, 56.0, 64.0, 63.0, 71.0, 73.0, 79.0, 80.0, 90.0, 91.0, 94.0, 91.0, 84.0, 86.0]
+  system.memory.usage:
+    value: 72
+    unit: '%'
+    title: Memory
+    series: [41.0, 42.0, 43.0, 45.0, 48.0, 51.0, 54.0, 56.0, 57.0, 58.0, 59.0, 60.0, 63.0, 66.0, 67.0, 68.0, 68.0, 69.0, 69.0, 70.0, 71.0, 71.0, 72.0, 72.0]
+  system.disk.usage:
+    value: 91
+    unit: '%'
+    title: Disk
+    series: [86.0, 86.0, 86.0, 86.0, 86.0, 87.0, 87.0, 87.0, 87.0, 88.0, 88.0, 88.0, 89.0, 89.0, 89.0, 90.0, 90.0, 90.0, 90.0, 91.0, 91.0, 91.0, 91.0, 91.0]
+  system.cpu.temperature:
+    value: 73
+    unit: c
+    title: CPU temperature
+    series: [42.0, 43.0, 45.0, 47.0, 49.0, 52.0, 53.0, 56.0, 59.0, 58.0, 60.0, 59.0, 63.0, 65.0, 69.0, 72.0, 72.0, 73.0, 73.0, 75.0, 74.0, 72.0, 74.0, 72.0]
+  system.battery.charge:
+    value: 23
+    unit: '%'
+    title: Battery
+    series: [100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 95.0, 82.0, 69.0, 64.0, 63.0, 59.0, 54.0, 47.0, 40.0, 33.0, 28.0, 24.0, 23.0]
+  system.network.down:
+    value: 412
+    unit: int
+    title: Download (kB/s)
+    series: [24.0, 70.0, 27.0, 72.0, 46.0, 65.0, 117.0, 73.0, 126.0, 188.0, 277.0, 352.0, 362.0, 423.0, 440.0, 534.0, 606.0, 683.0, 714.0, 667.0, 482.0, 389.0, 342.0, 329.0]
+  system.network.up:
+    value: 120
+    unit: int
+    title: Upload (kB/s)
+    series: [11.0, 10.0, 7.0, 29.0, 14.0, 31.0, 45.0, 29.0, 41.0, 50.0, 56.0, 92.0, 127.0, 141.0, 155.0, 152.0, 182.0, 213.0, 250.0, 270.0, 242.0, 197.0, 138.0, 126.0]
+  system.process.count:
+    value: 312
+    unit: int
+    title: Processes
+  system.process.top.1.name:
+    value: postgres
+    unit: str
+    title: Name
+  system.process.top.1.pid:
+    value: 1182
+    unit: int
+    title: PID
+  system.process.top.1.cpu:
+    value: 45.8
+    unit: '%'
+    title: CPU
+  system.process.top.1.memory:
+    value: 18
+    unit: '%'
+    title: Mem
+  system.process.top.2.name:
+    value: node
+    unit: str
+    title: Name
+  system.process.top.2.pid:
+    value: 2417
+    unit: int
+    title: PID
+  system.process.top.2.cpu:
+    value: 31.0
+    unit: '%'
+    title: CPU
+  system.process.top.2.memory:
+    value: 9.3
+    unit: '%'
+    title: Mem
+  system.process.top.3.name:
+    value: nginx
+    unit: str
+    title: Name
+  system.process.top.3.pid:
+    value: 904
+    unit: int
+    title: PID
+  system.process.top.3.cpu:
+    value: 22.8
+    unit: '%'
+    title: CPU
+  system.process.top.3.memory:
+    value: 0.7
+    unit: '%'
+    title: Mem
+  system.process.top.4.name:
+    value: prometheus
+    unit: str
+    title: Name
+  system.process.top.4.pid:
+    value: 1755
+    unit: int
+    title: PID
+  system.process.top.4.cpu:
+    value: 9.0
+    unit: '%'
+    title: CPU
+  system.process.top.4.memory:
+    value: 3.5
+    unit: '%'
+    title: Mem
+  system.process.top.5.name:
+    value: ffmpeg
+    unit: str
+    title: Name
+  system.process.top.5.pid:
+    value: 3320
+    unit: int
+    title: PID
+  system.process.top.5.cpu:
+    value: 6.4
+    unit: '%'
+    title: CPU
+  system.process.top.5.memory:
+    value: 2.2
+    unit: '%'
+    title: Mem
+  system.process.top.6.name:
+    value: dockerd
+    unit: str
+    title: Name
+  system.process.top.6.pid:
+    value: 611
+    unit: int
+    title: PID
+  system.process.top.6.cpu:
+    value: 4.1
+    unit: '%'
+    title: CPU
+  system.process.top.6.memory:
+    value: 2.7
+    unit: '%'
+    title: Mem
+  system.process.top.7.name:
+    value: redis-server
+    unit: str
+    title: Name
+  system.process.top.7.pid:
+    value: 733
+    unit: int
+    title: PID
+  system.process.top.7.cpu:
+    value: 2.4
+    unit: '%'
+    title: CPU
+  system.process.top.7.memory:
+    value: 1.1
+    unit: '%'
+    title: Mem
+  system.process.top.8.name:
+    value: sshd
+    unit: str
+    title: Name
+  system.process.top.8.pid:
+    value: 455
+    unit: int
+    title: PID
+  system.process.top.8.cpu:
+    value: 1.2
+    unit: '%'
+    title: CPU
+  system.process.top.8.memory:
+    value: 0.2
+    unit: '%'
+    title: Mem

@@ -1,0 +1,455 @@
+# Garden: a grower's board for a 15in 16:10 screen. Outside and inside, side by side.
+#
+# The top band is five chambers (grow tent, terrarium, bog, fruiting chamber, seedlings), each a climate card: the
+# temperature laid over its own day, a ring of the humidity, the dew point and the gap to it (how near the air is to
+# fog), and the day's range. The middle band is the weather the plants live in: today's range and what is coming,
+# the vapour deficit on a dial with the zones a grower cares about, the soil at four depths, the light, and a
+# rotating slot that turns to whatever needs a look (frost, a dry chamber, a heat spike, a flat battery). The floor is
+# two graphs: all five humidities on one day, and the outdoor air for two days with tomorrow's low written huge
+# behind it.
+#
+# Text sizes come from three dashboard-wide size groups (global.title, global.value, global.head), set by the
+# presets. Layers: a number over its graph (each chamber), a ring behind a number (humidity, soil), the frost word
+# behind the forecast graph.
+#
+# Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/garden.levity
+#           --scenario garden-day --size 2880x1800 --freeze-time 2026-10-15T14:20:00
+#
+# Hex colours are quoted. Unquoted, YAML reads '#' as a comment.
+theme:
+  extends: default
+  colors:
+    background: '#030906'
+    muted: '#a8bdb2'
+    faint: '#7d9487'
+    rule: '#25392e'
+    accent: '#ff9124'
+    good: '#14e3c0'
+    warn: '#ffd400'
+    bad: '#ff3048'
+    info: '#1a8cff'
+    leaf: '#9dff2e'
+    bloom: '#ff4fa3'
+    moss: '#3ddc97'
+  fonts:
+    display: Nunito
+    mono: Roboto Mono
+    body: Roboto
+  scales:
+    ground: {0: '#030906', 0.6: '#06120c', 1: '#0b1d13'}
+background: {gradient: $ground, angle: 170}
+vars:
+  t: environment.temperature.temperature
+  rh: environment.humidity.humidity
+  vpd: environment.pressure.vaporPressureDeficit
+  dew: environment.temperature.dewpoint
+  soil: environment.soil.temperature.temperature
+items:
+- type: group
+  name: board
+  items:
+
+  # ================= THE CHAMBERS ==========================================
+  - type: stack
+    name: chambers
+    direction: Horizontal
+    geometry: {x: 0.6%, y: 0.8%, width: 98.8%, height: 38%}
+    spacing: 2mm
+    dividers: {enabled: true, opacity: 60%, size: 92%}
+    shared:
+      display:
+        font: Roboto Mono
+    items:
+    - preset: climate-card
+      name: tent
+      props: {title: Grow tent, title_color: $leaf, id: tent, temp_min: 64, temp_max: 86, humid_color: $info}
+    - preset: climate-card
+      name: terrarium
+      props: {title: Terrarium, title_color: $moss, id: terrarium, temp_min: 68, temp_max: 86, humid_min: 0.5, humid_color: $good}
+    - preset: climate-card
+      name: bog
+      props: {title: Carnivorous bog, title_color: $bloom, id: bog, temp_min: 64, temp_max: 84, humid_min: 0.4, humid_color: $bloom}
+    - preset: climate-card
+      name: fruiting
+      props: {title: Fruiting chamber, title_color: $warn, id: fruiting, temp_min: 60, temp_max: 74, humid_min: 0.7, humid_color: $warn}
+    - preset: climate-card
+      name: seedlings
+      props: {title: Seedlings, title_color: $accent, id: seedlings, temp_min: 60, temp_max: 80, humid_color: $accent}
+
+  # ================= OUTSIDE ===============================================
+  # The hero over the next two days of itself, today's range under it, and what changes how it feels.
+  - type: group
+    name: outside
+    geometry: {x: 0.6%, y: 40.5%, width: 27%, height: 34%}
+    items:
+    - type: text
+      text: Outside
+      font: $display
+      color: $muted
+      alignment: CenterLeft
+      geometry: {x: 2%, y: 0%, width: 40%, height: 7%}
+    - preset: metric-tile
+      geometry: {x: 0%, y: 7%, width: 100%, height: 50%}
+      props:
+        key: environment.temperature.temperature
+        hours: 24
+        hero_box: {x: 0%, y: 0%, width: 44%, height: 70%}
+        graph_box: {x: 0%, y: 10%, width: 100%, height: 74%}
+        list_box: {x: 0%, y: 80%, width: 100%, height: 20%}
+        items:
+        - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels}, display: {precision: 0, valueLabel: {color: $accent}}}
+        - {type: realtime.text, key: $dew, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
+        - {type: realtime.text, key: $rh, title: {text: Humidity}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Wind}, display: {precision: 0}}
+        - {type: realtime.text, key: environment.wind.speed.gust, title: {text: Gust}, display: {precision: 0, valueLabel: {color: $warn}}}
+    - preset: range-bar
+      geometry: {x: 0%, y: 60%, width: 100%, height: 40%}
+      props:
+        key: $t
+        min: 30
+        max: 80
+        interval: 10
+        low: environment.temperature.low
+        high: environment.temperature.high
+
+  # ================= VAPOUR DEFICIT ========================================
+  # One dial with the bands a grower reads it by.
+  - type: group
+    name: vpd
+    geometry: {x: 28.4%, y: 40.5%, width: 15%, height: 34%}
+    items:
+    - type: text
+      text: Vapour deficit, kPa
+      font: $display
+      color: $muted
+      alignment: CenterLeft
+      geometry: {x: 2%, y: 0%, width: 90%, height: 7%}
+    - preset: zone-dial
+      geometry: {x: 0%, y: 8%, width: 100%, height: 62%}
+      props:
+        key: $vpd
+        min: 0
+        max: 2
+        interval: 0.5
+        zones:
+        - {to: 0.4, color: $info, opacity: 0}
+        - {from: 0.4, to: 0.8, color: $moss, opacity: 0}
+        - {from: 0.8, to: 1.2, color: $leaf, opacity: 0}
+        - {from: 1.2, to: 1.6, color: $warn, opacity: 0}
+        - {from: 1.6, color: $bad, opacity: 0}
+      display:
+        needle: {visible: false}
+        markers:
+        - {value: 'max($vpd, today)', type: marker, length: 12%, color: $text}
+        - {value: $vpd, type: dot, width: 4%, halo: 1.4%, halo-color: '#06120c', color: $text}
+        value-label: {visible: false}
+        unit-label: {visible: false}
+    - type: realtime.text
+      key: $vpd
+      title: false
+      geometry: {x: 31%, y: 30%, width: 38%, height: 24%}
+      display:
+        font: Nunito
+        weight: Light
+        precision: 2
+        unitPosition: Hidden
+    - preset: stat-row
+      geometry: {x: 0%, y: 72%, width: 100%, height: 28%}
+      props:
+        items:
+        - {type: realtime.text, key: 'at($vpd, 3h)', title: {text: +3h}, display: {precision: 2}}
+        - {type: realtime.text, key: 'max($vpd, today)', title: {text: Peak}, display: {precision: 2, valueLabel: {color: $warn}}}
+        - {type: realtime.text, key: 'min($vpd, today)', title: {text: Low}, display: {precision: 2, valueLabel: {color: $info}}}
+
+  # ================= THE SOIL ==============================================
+  # Four depths as bars, the colder the bluer (seeds wake near 50 F), and the surface soil in a ring.
+  - type: group
+    name: soil
+    geometry: {x: 44.4%, y: 40.5%, width: 20%, height: 34%}
+    items:
+    - type: text
+      text: Soil
+      font: $display
+      color: $muted
+      alignment: CenterLeft
+      geometry: {x: 2%, y: 0%, width: 40%, height: 7%}
+    - preset: bar-stack
+      geometry: {x: 0%, y: 8%, width: 62%, height: 56%}
+      props:
+        items:
+        - preset: readout-bar
+          props: {key: environment.soil.temperature.temperature, min: 30, max: 80, weight: 26%, precision: 0}
+          display:
+            caption: {text: Surface, size: 220%}
+            fill: {color: zone}
+            zones:
+            - {to: 40, color: $info, opacity: 0}
+            - {from: 40, to: 50, color: $moss, opacity: 0}
+            - {from: 50, to: 70, color: $leaf, opacity: 0}
+            - {from: 70, color: $warn, opacity: 0}
+        - preset: readout-bar
+          props: {key: environment.soil.temperature.6cm, min: 30, max: 80, weight: 26%, precision: 0}
+          display:
+            caption: {text: 6 cm, size: 220%}
+            fill: {color: zone}
+            zones:
+            - {to: 40, color: $info, opacity: 0}
+            - {from: 40, to: 50, color: $moss, opacity: 0}
+            - {from: 50, to: 70, color: $leaf, opacity: 0}
+            - {from: 70, color: $warn, opacity: 0}
+        - preset: readout-bar
+          props: {key: environment.soil.temperature.18cm, min: 30, max: 80, weight: 26%, precision: 0}
+          display:
+            caption: {text: 18 cm, size: 220%}
+            fill: {color: zone}
+            zones:
+            - {to: 40, color: $info, opacity: 0}
+            - {from: 40, to: 50, color: $moss, opacity: 0}
+            - {from: 50, to: 70, color: $leaf, opacity: 0}
+            - {from: 70, color: $warn, opacity: 0}
+        - preset: readout-bar
+          props: {key: environment.soil.temperature.54cm, min: 30, max: 80, weight: 26%, precision: 0}
+          display:
+            caption: {text: 54 cm, size: 220%}
+            fill: {color: zone}
+            zones:
+            - {to: 40, color: $info, opacity: 0}
+            - {from: 40, to: 50, color: $moss, opacity: 0}
+            - {from: 50, to: 70, color: $leaf, opacity: 0}
+            - {from: 70, color: $warn, opacity: 0}
+    - preset: ring-reading
+      geometry: {x: 64%, y: 8%, width: 36%, height: 52%}
+      props:
+        key: $soil
+        title: Soil now
+        color: $moss
+        text_color: $moss
+        min: 30
+        max: 80
+        weight: 7%
+    - preset: stat-row
+      geometry: {x: 0%, y: 70%, width: 100%, height: 30%}
+      props:
+        items:
+        - {type: realtime.text, key: environment.soil.temperature.18cm, title: {text: At 18 cm}, display: {precision: 0, valueLabel: {color: $moss}}}
+        - {type: realtime.text, key: 'max($soil, today)', title: {text: Soil high}, display: {precision: 0}}
+        - {type: realtime.text, key: 'min($soil, today)', title: {text: Soil low}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: environment.yesterday.precipitation.precipitation, title: {text: Rain yday}, display: {precision: 2, valueLabel: {color: $info}}}
+
+  # ================= LIGHT =================================================
+  - type: group
+    name: light
+    geometry: {x: 65.4%, y: 40.5%, width: 14.5%, height: 34%}
+    items:
+    - type: text
+      text: Light
+      font: $display
+      color: $muted
+      alignment: CenterLeft
+      geometry: {x: 2%, y: 0%, width: 40%, height: 7%}
+    - preset: ring-reading
+      geometry: {x: 0%, y: 8%, width: 100%, height: 56%}
+      props:
+        key: environment.light.irradiance.irradiance
+        title: W/m2 of sun
+        unit_position: Hidden
+        color: $warn
+        text_color: $warn
+        min: 0
+        max: 800
+        start_angle: -180
+        end_angle: 180
+        weight: 5%
+        radius: 96%
+    - preset: stat-row
+      geometry: {x: 0%, y: 68%, width: 100%, height: 32%}
+      props:
+        items:
+        - {type: realtime.text, key: environment.light.uvi, title: {text: UV}, display: {precision: 1, valueLabel: {color: $bloom}}}
+        - {type: realtime.text, key: 'max(environment.light.uvi, today)', title: {text: UV peak}, display: {precision: 1}}
+        - {type: realtime.text, key: environment.light.illuminance, title: {text: Lux}, display: {format-hint: 000k, shorten: true}}
+        - {type: realtime.text, key: environment.clouds.cover.cover, title: {text: Cloud}, display: {precision: 0}}
+
+  # ================= THE SLOT ==============================================
+  # Turns through what needs a look. A panel takes part only while its condition holds; the last always does.
+  - type: switch
+    name: watch
+    geometry: {x: 80.8%, y: 40.5%, width: 18.6%, height: 34%}
+    cycle: 10s
+    fade: 0.4s
+    hold: 10s
+    items:
+    - preset: headline-panel
+      name: frost
+      when: 'at(environment.temperature.temperature, 16h) < 36°F'
+      props:
+        headline: Frost tomorrow
+        headline_color: $info
+        key: at(environment.temperature.temperature, 16h)
+        title: Low at dawn
+        color: $info
+        precision: 0
+        unit_position: Inline
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
+        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
+        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+        items:
+        - {type: realtime.text, key: 'at($dew, 16h)', title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
+        - {type: realtime.text, key: 'at($rh, 16h)', title: {text: Humidity}, display: {precision: 0}}
+        - {type: realtime.text, key: 'at(environment.wind.speed.speed, 16h)', title: {text: Wind}, display: {precision: 0, unitPosition: Hidden}}
+        - {type: realtime.text, key: 'at(environment.clouds.cover.cover, 16h)', title: {text: Cloud}, display: {precision: 0}}
+    - preset: headline-panel
+      name: bog-dry
+      when: 'indoor.humidity.humidity#bog < 60%'
+      props:
+        headline: Bog drying
+        headline_color: $bloom
+        key: indoor.humidity.humidity#bog
+        title: Humidity
+        color: $bloom
+        precision: 0
+        unit_position: Inline
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
+        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
+        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+        items:
+        - {type: realtime.text, key: 'min(indoor.humidity.humidity#bog, today)', title: {text: Low}, display: {precision: 0}}
+        - {type: realtime.text, key: 'indoor.temperature.temperature#bog', title: {text: Temp}, display: {precision: 0}}
+        - {type: realtime.text, key: 'indoor.temperature.dewpoint#bog', title: {text: Dew pt}, display: {precision: 0}}
+    - preset: headline-panel
+      name: battery
+      when: 'indoor.battery.battery#seedlings < 25%'
+      props:
+        headline: Sensor battery
+        headline_color: $warn
+        key: indoor.battery.battery#seedlings
+        title: Seedlings
+        color: $warn
+        precision: 0
+        unit_position: Inline
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
+        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
+        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+        items:
+        - {type: realtime.text, key: 'indoor.battery.battery#fruiting', title: {text: Fruiting}, display: {precision: 0, valueLabel: {color: $warn}}}
+        - {type: realtime.text, key: 'indoor.battery.battery#bog', title: {text: Bog}, display: {precision: 0}}
+        - {type: realtime.text, key: 'indoor.battery.battery#terrarium', title: {text: Terrarium}, display: {precision: 0}}
+        - {type: realtime.text, key: 'indoor.battery.battery#tent', title: {text: Tent}, display: {precision: 0}}
+    - preset: headline-panel
+      name: daylight
+      props:
+        headline: Daylight left
+        headline_color: $warn
+        key: astronomy.sun.remaining
+        title: Until sunset
+        color: $warn
+        format: duration
+        unit_position: null
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
+        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
+        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+        items:
+        - {type: realtime.text, key: environment.light.sunrise, title: {text: Sunrise}, display: {format: '%-I:%M'}}
+        - {type: realtime.text, key: environment.light.sunset, title: {text: Sunset}, display: {format: '%-I:%M', valueLabel: {color: $accent}}}
+        - {type: realtime.text, key: 'max(environment.light.irradiance.irradiance, today)', title: {text: Peak sun}, display: {precision: 0}}
+
+  # ================= THE FLOOR =============================================
+  # Left: every chamber's humidity on one day. Middle: the outdoor air for two days, tomorrow's dawn low written
+  # huge and dark behind it. Right: what the next hours bring.
+  - type: graph
+    name: humidity-graph
+    timeframe: {days: 1}
+    geometry: {x: 0.6%, y: 76.5%, width: 33%, height: 22%}
+    annotations:
+      dayLabels: {enabled: false}
+      hourLabels: {alignment: BottomCenter, spacingIntervals: '3, 6, 12'}
+      lines: {spacing: 8 mm, weight: 0.4}
+    figures:
+    - figure: humidity
+      margins: {top: 22%, bottom: 18%}
+      min: 0.3
+      max: 1
+      indoor.humidity.humidity#tent:
+        plot: {type: plot, color: '#9dff2e', weight: 0.7}
+      indoor.humidity.humidity#terrarium:
+        plot: {type: plot, color: '#14e3c0', weight: 0.7}
+      indoor.humidity.humidity#bog:
+        plot: {type: plot, color: '#ff4fa3', weight: 0.7}
+      indoor.humidity.humidity#fruiting:
+        plot: {type: plot, color: '#ffd400', weight: 0.7}
+      indoor.humidity.humidity#seedlings:
+        plot: {type: plot, color: '#ff9124', weight: 0.7}
+  - type: group
+    name: humidity-legend
+    geometry: {x: 1.4%, y: 76.8%, width: 31%, height: 2.6%}
+    items:
+    - {type: text, text: Tent, font: $display, color: '#9dff2e', geometry: {x: 0%, y: 0%, width: 14%, height: 100%}}
+    - {type: text, text: Terrarium, font: $display, color: '#14e3c0', geometry: {x: 15%, y: 0%, width: 22%, height: 100%}}
+    - {type: text, text: Bog, font: $display, color: '#ff4fa3', geometry: {x: 38%, y: 0%, width: 12%, height: 100%}}
+    - {type: text, text: Fruiting, font: $display, color: '#ffd400', geometry: {x: 51%, y: 0%, width: 20%, height: 100%}}
+    - {type: text, text: Seedlings, font: $display, color: '#ff9124', geometry: {x: 72%, y: 0%, width: 24%, height: 100%}}
+
+  - type: realtime.text
+    name: frost-watermark
+    key: at(environment.temperature.temperature, 16h)
+    title: false
+    geometry: {x: 35%, y: 74.5%, width: 44%, height: 24%}
+    display:
+      font: Nunito
+      weight: ExtraBold
+      precision: 0
+      unitPosition: Hidden
+      alignment: CenterRight
+      valueLabel: {color: '#13261b'}
+  - type: graph
+    name: outside-graph
+    timeframe: {days: 2}
+    geometry: {x: 34.2%, y: 76.5%, width: 45.4%, height: 22%}
+    annotations:
+      dayLabels: {position: Top, alignment: Center, opacity: 12%, height: 8%}
+      hourLabels: {alignment: BottomCenter, spacingIntervals: '3, 6, 12'}
+      lines: {spacing: 8 mm, weight: 0.4}
+    figures:
+    - figure: temperature
+      margins: {top: 14%, bottom: 24%}
+      min: 25
+      max: 70
+      environment.temperature.temperature:
+        labels: {enabled: true}
+        plot: {type: plot, gradient: TemperatureGradient, weight: 1.1}
+        resolution: 2
+      environment.temperature.dewpoint:
+        plot: {type: plot, color: '#14e3c0', weight: 0.5}
+        resolution: 2
+      environment.temperature.feelsLike:
+        plot: {type: plot, color: '#ff9124', weight: 0.4, dashPattern: '4, 4'}
+        resolution: 2
+    - figure: sun
+      margins: {top: 66%, bottom: 6%}
+      min: 0
+      max: 900
+      environment.light.irradiance.irradiance:
+        plot: {type: plot, color: '#ffd400', weight: 0.4}
+    - figure: cloud
+      margins: {top: 66%, bottom: 6%}
+      min: 0
+      max: 100
+      environment.clouds.cover.cover:
+        plot: {type: plot, color: '#7d9487', weight: 0.4, dashPattern: '2, 3'}
+  - preset: list-panel
+    name: ahead
+    geometry: {x: 80.8%, y: 76.5%, width: 18.6%, height: 22.5%}
+    props:
+      title: Ahead
+      title_color: null
+      spacing: 0.4mm
+      items:
+      - {type: realtime.text, key: 'at($t, 3h)', title: {text: Temp +3h}, display: {precision: 0}}
+      - {type: realtime.text, key: 'at($t, 9h)', title: {text: Temp +9h}, display: {precision: 0, valueLabel: {color: $accent}}}
+      - {type: realtime.text, key: 'at($t, 16h)', title: {text: Dawn low}, display: {precision: 0, valueLabel: {color: $info}}}
+      - {type: realtime.text, key: 'at($t, 24h)', title: {text: Same time}, display: {precision: 0}}
+      - {type: realtime.text, key: 'at($dew, 16h)', title: {text: Dew pt dawn}, display: {precision: 0, valueLabel: {color: $good}}}
+      - {type: realtime.text, key: 'at($vpd, 3h)', title: {text: VPD +3h}, display: {precision: 2}}
+      - {type: realtime.text, key: 'at(environment.precipitation.probability, 12h)', title: {text: Rain +12h}, display: {precision: 0, valueLabel: {color: $info}}}
+      - {type: realtime.text, key: environment.pressure.pressure, title: {text: Pressure}}
+      - {type: realtime.text, key: 'environment.pressure.pressure - at(environment.pressure.pressure, -3h)', title: {text: 3 hr}, display: {valueLabel: {color: $info}}}

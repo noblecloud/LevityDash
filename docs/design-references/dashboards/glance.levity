@@ -1,0 +1,232 @@
+# Glance: a hallway board you read from across the room. Not a gauge board: one huge clock, the temperature, and the
+# next twelve hours and five days laid out as tables for a 15in 16:10 screen.
+#
+# The top band is the clock (day, time, moon), the temperature as a hero over the next two days of itself with
+# today's range under it, and a rotating slot that turns to what is worth a look (a frost, a hot spell, rain, wind).
+# The middle is the next twelve hours, one `hour-column` each. The floor is five `day-column`s, and a two-day graph
+# with the weekday written huge and dark behind it.
+#
+# Text sizes come from the dashboard-wide size groups global.title, global.value and global.head, set by the
+# presets. Layers: the temperature over its two days, the weekday behind the graph.
+#
+# Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/glance.levity
+#           --scenario week-ahead --size 2880x1800 --freeze-time 2026-10-07T15:40:00
+#
+# Hex colours are quoted. Unquoted, YAML reads '#' as a comment.
+theme:
+  extends: default
+  colors:
+    background: '#050505'
+    muted: '#b0b0b8'
+    faint: '#80808a'
+    rule: '#2c2c33'
+    accent: '#ff9124'
+    good: '#14e3c0'
+    warn: '#ffd400'
+    bad: '#ff3048'
+    info: '#1a8cff'
+  fonts:
+    display: Nunito
+    mono: Roboto Mono
+    body: Roboto
+vars:
+  t: environment.temperature.temperature
+items:
+- type: group
+  name: board
+  items:
+
+  # ================= THE CLOCK =============================================
+  - preset: clock
+    name: clock
+    geometry: {x: 0.6%, y: 0.8%, width: 38%, height: 24%}
+  - preset: stat-row
+    name: under-clock
+    geometry: {x: 2%, y: 26%, width: 36%, height: 10%}
+    props:
+      items:
+      - {type: realtime.text, key: environment.pressure.pressure, title: {text: Pressure}, display: {precision: 2, unitPosition: Hidden}}
+      - {type: realtime.text, key: environment.light.uvi, title: {text: UV now}, display: {precision: 1, valueLabel: {color: $warn}}}
+      - {type: realtime.text, key: environment.clouds.cover.cover, title: {text: Cloud}, display: {precision: 0}}
+      - {type: realtime.text, key: environment.precipitation.probability, title: {text: Rain chance}, display: {precision: 0, valueLabel: {color: $info}}}
+
+  # ================= THE TEMPERATURE =======================================
+  - type: group
+    name: now
+    geometry: {x: 40.5%, y: 0.8%, width: 33%, height: 36%}
+    items:
+    - type: text
+      text: Outside
+      font: $display
+      color: $muted
+      alignment: CenterLeft
+      geometry: {x: 2%, y: 0%, width: 40%, height: 8%}
+    - preset: metric-tile
+      geometry: {x: 0%, y: 7%, width: 100%, height: 56%}
+      props:
+        key: $t
+        hours: 24
+        hero_box: {x: 0%, y: 4%, width: 46%, height: 60%}
+        graph_box: {x: 0%, y: 12%, width: 100%, height: 76%}
+        list_box: {x: 0%, y: 74%, width: 100%, height: 26%}
+        items:
+        - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels}, display: {precision: 0, valueLabel: {color: $accent}}}
+        - {type: realtime.text, key: environment.temperature.dewpoint, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
+        - {type: realtime.text, key: environment.humidity.humidity, title: {text: Humidity}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Wind}, display: {precision: 0}}
+        - {type: realtime.text, key: environment.wind.speed.gust, title: {text: Gust}, display: {precision: 0, valueLabel: {color: $warn}}}
+    - preset: range-bar
+      geometry: {x: 0%, y: 64%, width: 100%, height: 36%}
+      props:
+        key: $t
+        min: 30
+        max: 90
+        interval: 10
+        low: environment.temperature.low
+        high: environment.temperature.high
+
+  # ================= THE SLOT ==============================================
+  - type: switch
+    name: watch
+    geometry: {x: 75.5%, y: 0.8%, width: 23.9%, height: 36%}
+    cycle: 10s
+    fade: 0.4s
+    hold: 10s
+    items:
+    - preset: headline-panel
+      name: frost
+      when: 'min(environment.temperature.temperature, 48h) < 36°F'
+      props:
+        headline: Frost ahead
+        headline_color: $info
+        key: min(environment.temperature.temperature, 48h)
+        title: Coldest, next 48 h
+        color: $info
+        precision: 0
+        unit_position: Inline
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
+        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
+        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+        items:
+        - {type: realtime.text, key: environment.temperature.low, title: {text: Low today}, display: {precision: 0}}
+        - {type: realtime.text, key: 'at(environment.temperature.low, 1d)', title: {text: Low tmrw}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: 'at(environment.wind.speed.speed, 12h)', title: {text: Wind}, display: {precision: 0, unitPosition: Hidden}}
+        - {type: realtime.text, key: 'at(environment.clouds.cover.cover, 12h)', title: {text: Cloud}, display: {precision: 0}}
+    - preset: headline-panel
+      name: rain
+      when: 'max(environment.precipitation.probability, 24h) > 60%'
+      props:
+        headline: Rain coming
+        headline_color: $info
+        key: max(environment.precipitation.probability, 24h)
+        title: Best chance, next 24 h
+        color: $info
+        precision: 0
+        unit_position: Inline
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
+        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
+        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+        items:
+        - {type: realtime.text, key: environment.precipitation.daily, title: {text: Today}, display: {precision: 2}}
+        - {type: realtime.text, key: 'at(environment.precipitation.daily, 1d)', title: {text: Tomorrow}, display: {precision: 2, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: 'at(environment.wind.speed.gust, 12h)', title: {text: Gust}, display: {precision: 0, unitPosition: Hidden}}
+    - preset: headline-panel
+      name: warm
+      props:
+        headline: Warmest hour today
+        headline_color: $accent
+        key: max(environment.temperature.temperature, today)
+        title: High
+        color: $accent
+        precision: 0
+        unit_position: Inline
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
+        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
+        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+        items:
+        - {type: realtime.text, key: environment.temperature.low, title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: environment.light.uvi, title: {text: UV}, display: {precision: 1, valueLabel: {color: $warn}}}
+        - {type: realtime.text, key: environment.pressure.pressure, title: {text: Pressure}, display: {precision: 2}}
+
+  # ================= THE NEXT TWELVE HOURS =================================
+  - type: stack
+    name: hours
+    direction: Horizontal
+    geometry: {x: 0.6%, y: 38.5%, width: 98.8%, height: 28%}
+    defaultType: value-stack
+    spacing: 1.5mm
+    dividers: {enabled: true, opacity: 40%, size: 90%}
+    shared:
+      display:
+        font: Roboto Mono
+    items:
+      - {preset: hour-column, props: {label: '+1h', offset: 1h}}
+      - {preset: hour-column, props: {label: '+2h', offset: 2h}}
+      - {preset: hour-column, props: {label: '+3h', offset: 3h}}
+      - {preset: hour-column, props: {label: '+4h', offset: 4h}}
+      - {preset: hour-column, props: {label: '+5h', offset: 5h}}
+      - {preset: hour-column, props: {label: '+6h', offset: 6h}}
+      - {preset: hour-column, props: {label: '+7h', offset: 7h}}
+      - {preset: hour-column, props: {label: '+8h', offset: 8h}}
+      - {preset: hour-column, props: {label: '+9h', offset: 9h}}
+      - {preset: hour-column, props: {label: '+10h', offset: 10h}}
+      - {preset: hour-column, props: {label: '+11h', offset: 11h}}
+      - {preset: hour-column, props: {label: '+12h', offset: 12h}}
+
+  # ================= THE NEXT FIVE DAYS ====================================
+  - type: stack
+    name: days
+    direction: Horizontal
+    geometry: {x: 0.6%, y: 68.5%, width: 52%, height: 28%}
+    defaultType: value-stack
+    spacing: 1.5mm
+    dividers: {enabled: true, opacity: 40%, size: 90%}
+    shared:
+      display:
+        font: Roboto Mono
+    items:
+      - preset: day-column
+        props:
+          label: Today
+          high: environment.temperature.high
+          low: environment.temperature.low
+          rain: environment.precipitation.daily
+          gust: environment.wind.speed.gustMax
+          heading: environment.wind.direction.dominant
+      - {preset: day-column, props: {label: Tomorrow, offset: 1d}}
+      - {preset: day-column, props: {label: In 2 days, offset: 2d}}
+      - {preset: day-column, props: {label: In 3 days, offset: 3d}}
+      - {preset: day-column, props: {label: In 4 days, offset: 4d}}
+
+  # ================= TWO DAYS ==============================================
+  - type: clock
+    name: weekday
+    geometry: {x: 55%, y: 70%, width: 43%, height: 28%}
+    items:
+    - format: '%a'
+      alignment: Center
+      weight: ExtraBold
+      font: Nunito
+      color: '#15151a'
+      geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+  - type: graph
+    name: two-days
+    timeframe: {days: 2}
+    geometry: {x: 53%, y: 68.5%, width: 46.4%, height: 30.5%}
+    annotations:
+      dayLabels: {enabled: false}
+      hourLabels: {alignment: BottomCenter, spacingIntervals: '3, 6, 12'}
+      lines: {spacing: 8 mm, weight: 0.4}
+    figures:
+    - figure: temperature
+      margins: {top: 14%, bottom: 40%}
+      environment.temperature.temperature:
+        plot: {type: plot, gradient: TemperatureGradient, weight: 1.2}
+      environment.temperature.feelsLike:
+        plot: {type: plot, color: '#ff9124', weight: 0.5, dash: true}
+    - figure: chance
+      margins: {top: 62%, bottom: 12%}
+      min: 0
+      max: 1
+      environment.precipitation.probability:
+        plot: {type: bar, color: '#1a8cff', width: 0.8}

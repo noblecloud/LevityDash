@@ -1,0 +1,302 @@
+# Wind: the board for a day when the air is the story. A 15in 16:10 screen.
+#
+# The compass is the hero: the speed in the middle, the heading on the needle, the gust, the day's peak and how gusty
+# it is in a row under it. Beside it the same wind drawn two other ways: a rose (where it came from across the day,
+# how hard) and a trail (where it pointed hour by hour). The right column is the wind aloft: four heights as bars and
+# the heading at each, so a front reads as the wind veering with height. The floor is one graph of the front, speed,
+# gust, heading and pressure on one time axis, with the heading written huge and dark behind it. A small polar clock
+# draws gustiness round the day, and a rotating slot turns to what needs a look: a damaging gust, a calm, or the wind
+# chill.
+#
+# Text sizes come from the three dashboard-wide size groups (global.title, global.value, global.head) set by the
+# presets. Layers: the heading behind the front graph, a number over the speed bar.
+#
+# Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/wind.levity
+#           --scenario windy-day --size 2880x1800 --freeze-time 2026-10-15T16:30:00
+#
+# Hex colours are quoted. Unquoted, YAML reads '#' as a comment.
+theme:
+  extends: default
+  colors:
+    background: '#04070d'
+    muted: '#a9b8cc'
+    faint: '#8196ae'
+    rule: '#2a3a52'
+    accent: '#ff9124'
+    good: '#14e3c0'
+    warn: '#ffd400'
+    bad: '#ff3048'
+    info: '#1a8cff'
+    gust: '#ffd400'
+    breeze: '#14e3c0'
+  fonts:
+    display: Barlow Condensed
+    mono: Roboto Mono
+    body: Nunito
+  scales:
+    sky: {0: '#03060b', 0.55: '#08111f', 1: '#0d1c33'}
+background: {gradient: $sky, angle: 165}
+vars:
+  ws: environment.wind.speed.speed
+  wg: environment.wind.speed.gust
+  wd: environment.wind.direction.direction
+  t: environment.temperature.temperature
+  pres: environment.pressure.pressure
+items:
+- type: group
+  name: board
+  items:
+
+  # ================= THE COMPASS ===========================================
+  - type: group
+    name: compass
+    geometry: {x: 0.6%, y: 0.8%, width: 24.4%, height: 51%}
+    items:
+    - type: text
+      text: Wind now
+      font: $display
+      color: $muted
+      alignment: CenterLeft
+      geometry: {x: 2%, y: 0%, width: 50%, height: 6%}
+    - preset: compass
+      geometry: {x: 0%, y: 6%, width: 100%, height: 62%}
+      props: {caption_size: 22%, label_size: 7%, arc_weight: 2.4%, needle_length: 36%}
+    - preset: stat-row
+      geometry: {x: 0%, y: 70%, width: 100%, height: 14%}
+      props:
+        items:
+        - {type: realtime.text, key: $wg, title: {text: Gust}, display: {precision: 0, valueLabel: {color: $gust}}}
+        - {type: realtime.text, key: 'max($wg, today)', title: {text: Peak}, display: {precision: 0, valueLabel: {color: $bad}}}
+        - {type: realtime.text, key: 'avg($ws, 3h)', title: {text: Avg 3h}, display: {precision: 0}}
+        - {type: realtime.text, key: '$wg - $ws', title: {text: Gusty by}, display: {precision: 0, valueLabel: {color: $accent}}}
+    - preset: stat-row
+      geometry: {x: 0%, y: 86%, width: 100%, height: 14%}
+      props:
+        items:
+        - {type: realtime.text, key: $wd, title: {text: From}, display: {precision: 0}}
+        - {type: realtime.text, key: 'environment.wind.direction.dominant', title: {text: Day mainly}, display: {precision: 0}}
+        - {type: realtime.text, key: 'at($ws, 3h)', title: {text: Speed +3h}, display: {precision: 0}}
+        - {type: realtime.text, key: 'at($wg, 3h)', title: {text: Gust +3h}, display: {precision: 0, valueLabel: {color: $gust}}}
+
+  # ================= ROSE AND TRAIL ========================================
+  - preset: polar-card
+    name: rose
+    geometry: {x: 25.4%, y: 0.8%, width: 25.4%, height: 51%}
+    props:
+      title: Where it came from today
+      plot: rose
+  - preset: polar-card
+    name: trail
+    geometry: {x: 51.2%, y: 0.8%, width: 25.4%, height: 51%}
+    props:
+      title: Where it pointed, hour by hour
+      plot: trail
+
+  # ================= THE WIND ALOFT ========================================
+  - type: group
+    name: aloft
+    geometry: {x: 77.4%, y: 0.8%, width: 22%, height: 51%}
+    items:
+    - type: text
+      text: Aloft
+      font: $display
+      color: $muted
+      alignment: CenterLeft
+      geometry: {x: 2%, y: 0%, width: 50%, height: 6%}
+    - preset: bar-stack
+      geometry: {x: 0%, y: 7%, width: 100%, height: 56%}
+      props:
+        items:
+        - preset: readout-bar
+          props: {key: $ws, min: 0, max: 60, weight: 28%, precision: 0}
+          display:
+            caption: {text: Surface, size: 220%}
+            fill: {color: zone}
+            zones:
+            - {to: 8, color: $info, opacity: 0}
+            - {from: 8, to: 18, color: $breeze, opacity: 0}
+            - {from: 18, to: 30, color: $gust, opacity: 0}
+            - {from: 30, to: 40, color: $accent, opacity: 0}
+            - {from: 40, color: $bad, opacity: 0}
+        - preset: readout-bar
+          props: {key: environment.wind.speed.80m, min: 0, max: 60, weight: 28%, precision: 0}
+          display:
+            caption: {text: 80 m, size: 220%}
+            fill: {color: zone}
+            zones:
+            - {to: 8, color: $info, opacity: 0}
+            - {from: 8, to: 18, color: $breeze, opacity: 0}
+            - {from: 18, to: 30, color: $gust, opacity: 0}
+            - {from: 30, to: 40, color: $accent, opacity: 0}
+            - {from: 40, color: $bad, opacity: 0}
+        - preset: readout-bar
+          props: {key: environment.wind.speed.120m, min: 0, max: 60, weight: 28%, precision: 0}
+          display:
+            caption: {text: 120 m, size: 220%}
+            fill: {color: zone}
+            zones:
+            - {to: 8, color: $info, opacity: 0}
+            - {from: 8, to: 18, color: $breeze, opacity: 0}
+            - {from: 18, to: 30, color: $gust, opacity: 0}
+            - {from: 30, to: 40, color: $accent, opacity: 0}
+            - {from: 40, color: $bad, opacity: 0}
+        - preset: readout-bar
+          props: {key: environment.wind.speed.180m, min: 0, max: 60, weight: 28%, precision: 0}
+          display:
+            caption: {text: 180 m, size: 220%}
+            fill: {color: zone}
+            zones:
+            - {to: 8, color: $info, opacity: 0}
+            - {from: 8, to: 18, color: $breeze, opacity: 0}
+            - {from: 18, to: 30, color: $gust, opacity: 0}
+            - {from: 30, to: 40, color: $accent, opacity: 0}
+            - {from: 40, color: $bad, opacity: 0}
+    - preset: stat-row
+      geometry: {x: 0%, y: 66%, width: 100%, height: 16%}
+      props:
+        items:
+        - {type: realtime.text, key: $wd, title: {text: Surface}, display: {precision: 0}}
+        - {type: realtime.text, key: environment.wind.direction.80m, title: {text: 80 m}, display: {precision: 0}}
+        - {type: realtime.text, key: environment.wind.direction.120m, title: {text: 120 m}, display: {precision: 0}}
+        - {type: realtime.text, key: environment.wind.direction.180m, title: {text: 180 m}, display: {precision: 0, valueLabel: {color: $accent}}}
+    - preset: stat-row
+      geometry: {x: 0%, y: 84%, width: 100%, height: 16%}
+      props:
+        items:
+        - {type: realtime.text, key: 'environment.wind.speed.180m - $ws', title: {text: Shear}, display: {precision: 0, valueLabel: {color: $accent}}}
+        - {type: realtime.text, key: 'max(environment.wind.speed.180m, today)', title: {text: 180 m peak}, display: {precision: 0}}
+        - {type: realtime.text, key: environment.wind.speed.gustMax, title: {text: Gust record}, display: {precision: 0, valueLabel: {color: $bad}}}
+
+  # ================= THE FRONT =============================================
+  # Heading as a word, huge and dark, behind two days of wind.
+  - type: realtime.text
+    name: heading-watermark
+    key: $wd
+    title: false
+    geometry: {x: 0%, y: 52.5%, width: 66%, height: 47%}
+    display:
+      font: Barlow Condensed
+      weight: Bold
+      precision: 0
+      unitPosition: Hidden
+      alignment: CenterRight
+      valueLabel: {color: '#12233b'}
+  - type: graph
+    name: front
+    timeframe: {days: 2}
+    geometry: {x: 0.6%, y: 53.5%, width: 65.4%, height: 44.5%}
+    annotations:
+      dayLabels: {position: Top, alignment: Center, opacity: 10%, height: 7%}
+      hourLabels: {alignment: BottomCenter, spacingIntervals: '3, 6, 12'}
+      lines: {spacing: 10 mm, weight: 0.4}
+    figures:
+    - figure: wind
+      margins: {top: 16%, bottom: 40%}
+      min: 0
+      max: 45
+      environment.wind.speed.gust:
+        labels: {enabled: true}
+        plot: {type: plot, color: '#ffd400', weight: 0.55, dashPattern: '4, 4'}
+        resolution: 2
+      environment.wind.speed.speed:
+        plot: {type: plot, gradient: WindSpeedGradient, weight: 1.2}
+        resolution: 2
+    - figure: heading
+      margins: {top: 66%, bottom: 18%}
+      min: 0
+      max: 360
+      environment.wind.direction.direction:
+        plot: {type: plot, color: '#1a8cff', weight: 0.45}
+    - figure: pressure
+      margins: {top: 66%, bottom: 12%}
+      min: 29.7
+      max: 30.2
+      environment.pressure.pressure:
+        plot: {type: plot, color: '#e0e3e8', weight: 0.4, dashPattern: '1, 3'}
+  - type: group
+    name: front-legend
+    geometry: {x: 1.4%, y: 54%, width: 40%, height: 2.6%}
+    items:
+    - {type: text, text: Gust, font: $display, color: '#ffd400', geometry: {x: 0%, y: 0%, width: 12%, height: 100%}}
+    - {type: text, text: Speed, font: $display, color: '#14e3c0', geometry: {x: 14%, y: 0%, width: 14%, height: 100%}}
+    - {type: text, text: Heading, font: $display, color: '#1a8cff', geometry: {x: 30%, y: 0%, width: 18%, height: 100%}}
+    - {type: text, text: Pressure, font: $display, color: '#e0e3e8', geometry: {x: 50%, y: 0%, width: 20%, height: 100%}}
+
+  # ================= GUSTINESS, ROUND THE CLOCK ============================
+  - preset: polar-card
+    name: gustiness
+    geometry: {x: 66.6%, y: 52.5%, width: 16%, height: 46.5%}
+    props:
+      title: Gust above the wind, round the day
+      plot: clock
+      key: 'environment.wind.speed.gust - environment.wind.speed.speed'
+      gradient:
+      - {at: 2, color: '#1a8cff'}
+      - {at: 6, color: '#14e3c0'}
+      - {at: 10, color: '#ffd400'}
+      - {at: 14, color: '#ff3048'}
+
+  # ================= THE SLOT ==============================================
+  - type: switch
+    name: watch
+    geometry: {x: 83.4%, y: 52.5%, width: 16%, height: 46.5%}
+    cycle: 10s
+    fade: 0.4s
+    hold: 10s
+    items:
+    - preset: headline-panel
+      name: damaging
+      when: 'environment.wind.speed.gust > 30mph'
+      props:
+        headline: Damaging gusts
+        headline_color: $bad
+        key: environment.wind.speed.gust
+        title: Gust now
+        color: $bad
+        precision: 0
+        unit_position: FloatUnder
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 14%}
+        hero_box: {x: 0%, y: 16%, width: 100%, height: 42%}
+        list_box: {x: 0%, y: 62%, width: 100%, height: 38%}
+        direction: Vertical
+        items:
+        - {type: realtime.text, key: 'max($wg, today)', title: {text: Peak today}, display: {precision: 0, valueLabel: {color: $bad}}}
+        - {type: realtime.text, key: 'max($wg, 3h)', title: {text: Peak 3h}, display: {precision: 0}}
+        - {type: realtime.text, key: 'at($wg, 3h)', title: {text: Gust +3h}, display: {precision: 0, valueLabel: {color: $gust}}}
+        - {type: realtime.text, key: 'at($wg, 6h)', title: {text: Gust +6h}, display: {precision: 0}}
+    - preset: headline-panel
+      name: calm
+      when: 'environment.wind.speed.speed < 3mph'
+      props:
+        headline: Calm
+        headline_color: $info
+        key: environment.wind.speed.speed
+        title: Speed
+        color: $info
+        precision: 0
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 14%}
+        hero_box: {x: 0%, y: 16%, width: 100%, height: 42%}
+        list_box: {x: 0%, y: 62%, width: 100%, height: 38%}
+        direction: Vertical
+        items:
+        - {type: realtime.text, key: 'min($ws, 24h)', title: {text: Lowest 24h}, display: {precision: 0}}
+        - {type: realtime.text, key: 'at($ws, 3h)', title: {text: Speed +3h}, display: {precision: 0}}
+    - preset: headline-panel
+      name: chill
+      props:
+        headline: Wind chill
+        headline_color: $info
+        key: environment.temperature.feelsLike
+        title: Feels like
+        color: $info
+        precision: 0
+        unit_position: Inline
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 14%}
+        hero_box: {x: 0%, y: 16%, width: 100%, height: 42%}
+        list_box: {x: 0%, y: 62%, width: 100%, height: 38%}
+        direction: Vertical
+        items:
+        - {type: realtime.text, key: $t, title: {text: Air}, display: {precision: 0}}
+        - {type: realtime.text, key: 'environment.temperature.feelsLike - $t', title: {text: Wind takes}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: 'at(environment.temperature.feelsLike, 6h)', title: {text: Feels +6h}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: environment.temperature.dewpoint, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
