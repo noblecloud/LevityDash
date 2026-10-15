@@ -1736,6 +1736,44 @@ class Builder(QWidget):
 			self._syncStage()
 			self.schedule()
 
+	def copyItem(self):
+		"""Put the selected item on the clipboard as the YAML a `.levity` would hold, so it pastes here, into another Studio, or into a file."""
+		raw = self.piece.raw(self.selection) if self.selection else None
+		if raw is not None:
+			QApplication.clipboard().setText(yaml.safe_dump([copy.deepcopy(raw)], sort_keys=False, allow_unicode=True, width=120))
+
+	def pasteItem(self):
+		"""Add the items on the clipboard: inside the selected container at its end, else after the selected item."""
+		try:
+			data = yaml.safe_load(QApplication.clipboard().text())
+		except yaml.YAMLError:
+			data = None
+		items = data if isinstance(data, list) else [data]
+		if not items or not all(isinstance(i, (dict, str)) for i in items):
+			self.status.setText('The clipboard does not hold an item.')
+			return
+		self.push()
+		target = self.selection if self.selection is not None else ()
+		index = None
+		node = self.piece.node(target)
+		if node is None or model.opaque(node) or (str(node.get('type')) not in CONTAINERS and model.ITEMS_KEY not in node):
+			target, index = target[:-1], (target[-1] + 1 if target else None)
+		path = ()
+		for n, item in enumerate(items):
+			path = self.piece.add(target, copy.deepcopy(item), None if index is None else index + n)
+		self.selection = path
+		self.rebuildAll()
+		self._syncStage()
+		self.schedule()
+
+	def _treeMenu(self, at):
+		menu = QMenu(self.tree)
+		menu.addAction('Copy', self.copyItem, QKeySequence.StandardKey.Copy)
+		menu.addAction('Paste', self.pasteItem, QKeySequence.StandardKey.Paste)
+		menu.addAction('Duplicate', self.duplicateItem)
+		menu.addAction('Delete', self.deleteItem)
+		menu.exec(self.tree.viewport().mapToGlobal(at))
+
 	def extractPreset(self, name: Optional[str] = None):
 		"""Save the selected item as a preset (written to the Studio's presets folder) and leave a use of it in its place."""
 		if not self.selection:

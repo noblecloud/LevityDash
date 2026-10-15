@@ -285,6 +285,24 @@ def test_the_studio_names_its_process_and_has_an_icon_of_its_own():
 			Path('/proc/self/comm').write_text(before.strip())
 
 
+def test_copy_and_paste_an_item_and_undo(board):
+	from PySide6.QtWidgets import QApplication
+	win, path = board('station')
+	before = yaml.safe_dump(win.piece.template, sort_keys=False)
+	source = next(p for p, n in win.piece.walk() if len(p) >= 2 and not n.get('items') and str(n.get('type')) not in sb.CONTAINERS)
+	win.select(source)
+	win.copyItem()
+	assert yaml.safe_load(QApplication.clipboard().text())[0] == win.piece.node(source)
+	count = len(win.piece.node(source[:-1])['items'])
+	win.pasteItem()  # a leaf is selected: the copy goes right after it
+	assert len(win.piece.node(source[:-1])['items']) == count + 1 and win.selection == source[:-1] + (source[-1] + 1,)
+	win.undo()
+	assert yaml.safe_dump(win.piece.template, sort_keys=False) == before
+	QApplication.clipboard().setText('not: [valid')
+	win.pasteItem()
+	assert yaml.safe_dump(win.piece.template, sort_keys=False) == before and 'clipboard' in win.status.text()
+
+
 def test_a_dropped_row_moves_the_item_and_undo_puts_it_back(board):
 	win, path = board('station')
 	before = yaml.safe_dump(win.piece.template, sort_keys=False)
