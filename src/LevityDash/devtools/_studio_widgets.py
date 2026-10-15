@@ -11,8 +11,8 @@ same form a `.levity` file holds, and the window decides what to do with it.
 import re
 from typing import Any, Callable, Dict, List, Optional
 
-from PySide6.QtCore import QSignalBlocker, Qt, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtCore import QEvent, QObject, QSignalBlocker, Qt, Signal
+from PySide6.QtGui import QColor, QKeySequence
 from PySide6.QtWidgets import (
 	QCheckBox, QColorDialog, QComboBox, QDoubleSpinBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
 	QPushButton, QSlider, QSpinBox, QToolButton, QVBoxLayout, QWidget,
@@ -24,6 +24,25 @@ from LevityDash.devtools._studio_schema import Field, Group, fromText, toYaml
 _NUMBER = re.compile(r'^\s*(-?\d+(?:\.\d+)?)')
 SLIDER_STEPS = 1000
 ERROR_COLOR = '#e5484d'
+
+
+class UndoKeys(QObject):
+	"""Keeps text fields of one editor from swallowing Undo and Redo.
+
+	It acts only while `editor` is shown and only for widgets inside it, so in the one-window Studio each mode's
+	fields hand the keys to their own mode and never to a mode that is hidden. Installed on the application.
+	"""
+
+	def __init__(self, editor: QWidget):
+		super().__init__(editor)
+		self.editor = editor
+
+	def eventFilter(self, obj, event):
+		if event.type() == QEvent.Type.ShortcutOverride and isinstance(obj, QWidget) and self.editor.isVisible() and self.editor.isAncestorOf(obj):
+			if event.matches(QKeySequence.StandardKey.Undo) or event.matches(QKeySequence.StandardKey.Redo):
+				event.ignore()
+				return True
+		return False
 
 
 def toNumber(value: Any) -> Optional[float]:

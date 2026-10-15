@@ -108,7 +108,7 @@ class Suite(QMainWindow):
 	             cells: Optional[Callable] = None, dashboard: Optional[Callable] = None, polar: Optional[Callable] = None):
 		super().__init__()
 		self.setWindowTitle('LevityDash Studio')
-		self.resize(1500, 920)
+		self.resize(1760, 980)
 		self._factories = {'gauge': gauge, 'dashboard': dashboard, 'polar': polar}
 		self._cells = cells
 		self.modes: Dict[str, QWidget] = {}
@@ -124,7 +124,7 @@ class Suite(QMainWindow):
 		dock = QDockWidget('Library', self)
 		dock.setWidget(self.library)
 		dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable)
-		dock.setMinimumWidth(240)
+		dock.setMinimumWidth(200)
 		self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock)
 		self.dock = dock
 		self._buildMenus()
