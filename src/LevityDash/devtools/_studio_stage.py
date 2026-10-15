@@ -331,7 +331,9 @@ class StudioGauge:
 	@property
 	def range(self):
 		"""The gauge's own min and max, as floats."""
-		r = self.gauge._range
+		r = getattr(self.gauge, '_range', None)
+		if r is None:  # a meter that is still being built has no range yet
+			return 0.0, 100.0
 		return float(r.min), float(r.max)
 
 	def setValue(self, value: float) -> None:

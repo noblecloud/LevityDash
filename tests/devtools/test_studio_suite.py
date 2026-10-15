@@ -166,14 +166,14 @@ def test_undo_and_save_keys_reach_only_the_visible_mode(suite, monkeypatch, mode
 	assert calls == [(mode, 'undo'), (mode, 'redo'), (mode, saved)]
 
 
-@pytest.mark.parametrize('mode', ['gauge', 'polar'])
+@pytest.mark.parametrize('mode', ['dashboard', 'gauge', 'polar'])
 def test_a_text_field_does_not_keep_undo_in_the_editors_that_own_it(suite, monkeypatch, mode):
-	"""The gauge and polar editors take Undo from a focused field (their history covers every control). Embedded in the
+	"""The dashboard, gauge and polar editors take Undo from a focused field (their history covers every control). Embedded in the
 	Studio window the field is no longer in a window of the editor's own, which the first filter checked."""
 	from PySide6.QtCore import Qt
-	from LevityDash.devtools import _studio_polar as polar
+	from LevityDash.devtools import _studio_builder as builder, _studio_polar as polar
 	calls = []
-	for name, cls in (('gauge', studio.Studio), ('polar', polar.PolarStudio)):
+	for name, cls in (('dashboard', builder.Builder), ('gauge', studio.Studio), ('polar', polar.PolarStudio)):
 		monkeypatch.setattr(cls, 'undo', lambda self, n=name: calls.append(n))
 	win = suite(mode=mode)
 	win.showMode('gauge')
