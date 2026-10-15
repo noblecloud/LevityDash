@@ -23,7 +23,7 @@ REFERENCES = REPO / 'docs' / 'design-references'
 TEMPLATES = REPO / 'src' / 'LevityDash' / 'resources' / 'example-config' / 'templates'
 
 DASHBOARD, GAUGE, POLAR, PRESET, CELL = 'dashboard', 'gauge', 'polar', 'preset', 'cell'
-GROUPS = ('Dashboards', 'Presets', 'Gauges', 'Polar plots', 'Panels and fragments', 'Your dashboards')
+GROUPS = ('Dashboards', 'Presets', 'Gauges', 'Bars', 'Polar plots', 'Panels and fragments', 'Your dashboards')
 
 _CONTAINERS = {'group', 'stack', 'value-stack', 'grid', 'titled-group', 'switch', 'graph', 'mini-graph', 'clock'}
 
@@ -65,7 +65,7 @@ def classify(path: Path) -> str:
 	types = set(_types(data))
 	if 'polar' in types:
 		return POLAR
-	if 'realtime.gauge' in types and not types & _CONTAINERS:
+	if types & {'realtime.gauge', 'realtime.bar'} and not types & _CONTAINERS:
 		return GAUGE
 	return DASHBOARD
 
@@ -126,7 +126,10 @@ def entries(
 	for label, entry in (cells() if cells else []):
 		found.append(Entry('Gauges', label, CELL, payload=entry, note='showcase'))
 	for path in _files(references, '*.levity') + _files(references / 'bars', '*.levity'):
-		found.append(Entry('Panels and fragments', _label(path), DASHBOARD, path, note=path.parent.name))
+		if path.parent.name == 'bars' and classify(path) == GAUGE:
+			found.append(Entry('Bars', _label(path), GAUGE, path, note='example'))  # one bar: the gauge editor edits it
+		else:
+			found.append(Entry('Panels and fragments', _label(path), DASHBOARD, path, note=path.parent.name))
 	for root in (realConfigRoots() if realRoots is None else realRoots):
 		for path in _files(root, '**/*.levity'):
 			found.append(Entry('Your dashboards', _label(path), DASHBOARD, path, note=str(path.parent.name)))

@@ -517,7 +517,8 @@ class HandleLayer:
 
 	@property
 	def gauge(self):
-		return self.studio.studio.gauge
+		"""The dial the handles sit on. A bar has no arc, needle or dial to grab, so it has none: the controls edit it."""
+		return self.studio.studio.gauge if self.studio.studio.kind == 'gauge' else None
 
 	def visibleFor(self, spec: Spec) -> bool:
 		"""Gradient nodes stay up for as long as *Edit gradient* is on; the rest show while the pointer is over the preview."""

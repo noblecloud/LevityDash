@@ -158,6 +158,9 @@ def _without(node: Any, base: Any) -> Any:
 
 # Section: reading presets
 
+ENTRY_TYPES = ('realtime.gauge', 'realtime.bar')
+
+
 def readEntries(path: Path) -> List[dict]:
 	"""The gauges in a `.levity` preset, each as the `realtime.gauge` mapping."""
 	with open(path, 'r', encoding='utf-8') as file:
@@ -172,7 +175,7 @@ def _collect(node: Any, found: List[dict]):
 		for item in node:
 			_collect(item, found)
 	elif isinstance(node, dict):
-		if node.get('type') == 'realtime.gauge':
+		if node.get('type') in ENTRY_TYPES:
 			found.append(node)
 		else:
 			_collect(node.get('items'), found)
@@ -800,15 +803,16 @@ class Studio(QWidget):
 	def loadFile(self, path: Path):
 		entries = readEntries(path)
 		if not entries:
-			self.status.setText(f'{path.name}: no realtime.gauge found')
+			self.status.setText(f'{path.name}: no realtime.gauge or realtime.bar found')
 			return
 		self.fragment = path if self.fragment is None or path == self.fragment else self.fragment
 		self.loadEntry(entries[0], path.stem.replace('-', ' '))
 
 	def loadEntry(self, entry: dict, label: str):
-		self.loadDisplay(copy.deepcopy(entry.get('display') or {}), entry.get('key'), label)
+		self.loadDisplay(copy.deepcopy(entry.get('display') or {}), entry.get('key'), label, 'bar' if entry.get('type') == 'realtime.bar' else 'gauge')
 
-	def loadDisplay(self, display: dict, key: Optional[str], label: str):
+	def loadDisplay(self, display: dict, key: Optional[str], label: str, kind: str = 'gauge'):
+		self.studio.kind = kind
 		self.key = key
 		self.label = label
 		self.template = copy.deepcopy(display)
@@ -941,7 +945,7 @@ class Studio(QWidget):
 		lay = QVBoxLayout(self.quickBox)
 		lay.setContentsMargins(0, 0, 0, 0)
 		lay.setSpacing(2)
-		self.quickSections = [self._quickSection(title) for title in state.QUICK]
+		self.quickSections = [self._quickSection(title) for title in state.quickTitles(self.studio.kind)]
 		for section in self.quickSections:
 			lay.addWidget(section)
 		self.allSection = Section('All properties', expanded=False)
@@ -1478,7 +1482,7 @@ class Studio(QWidget):
 
 	def exportLevity(self) -> str:
 		key = self.key or self.studio.preset.key
-		entry = {'type': 'realtime.gauge', 'name': 'gauge', 'key': key, 'title': False, 'display': self.exportDisplay()}
+		entry = {'type': f'realtime.{self.studio.kind}', 'name': self.studio.kind, 'key': key, 'title': False, 'display': self.exportDisplay()}
 		body = yaml.dump([entry], Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True, sort_keys=False)
 		return f'# Made with Studio ({self.label}).\n{body}'
 

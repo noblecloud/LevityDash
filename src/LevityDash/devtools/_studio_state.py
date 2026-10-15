@@ -32,6 +32,10 @@ QUICK: Dict[str, Dict[str, Any]] = {
 		'owns': ('arc', 'radius', 'anchor', 'inset'),
 		'labels': {'arc.color': 'arc color', 'arc.cap': 'arc cap'},
 	},
+	'Bar': {
+		'paths': ('orientation', 'style', 'track', 'pointer', 'font'),
+		'owns': ('orientation', 'style', 'track', 'pointer', 'font'),
+	},
 	'Needle': {
 		'paths': ('needle.visible', 'needle.type', 'needle.color', 'needle.length', 'needle.width', 'needle.point'),
 		'owns': ('needle',),
@@ -64,6 +68,13 @@ QUICK: Dict[str, Dict[str, Any]] = {
 		'labels': {'value-label.warp': 'value warp'},
 	},
 }
+
+
+def quickTitles(kind: str) -> tuple:
+	"""The top sections for a gauge or a bar. A bar has no arc or needle: its own `Bar` section stands in for them."""
+	if kind == 'bar':
+		return ('Bar', 'Value', 'Text', 'Ticks', 'Extras')
+	return tuple(t for t in QUICK if t != 'Bar')
 
 
 class Style(NamedTuple):
