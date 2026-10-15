@@ -11,12 +11,12 @@ correction varied by string, and bottom-aligning by them displaced any label
 containing a `p`.
 
 Ink extents are still the right measure for fitting text *into* a box; they
-are the wrong one for aligning text *within* a row. Vertical placement now
-uses ascent/descent, which are constant for a font and size.
-
-Note `VerticalCenter` never had the bug - centring makes the rect's bottom
-exactly half its height, which cancels the height correction - so only the
-Top and Bottom branches changed.
+are the wrong one for aligning text *within* a row. Vertical placement uses
+font metrics, which are constant for a font and size, and is then moved so the
+size hint's band (the font's `|` and tallest and lowest letters, or the format
+hint) sits on the edge the alignment names. The band belongs to the font and
+the hint, never to the string, so a descender still moves nothing. See
+`tests/devtools/test_text_alignment.py` for where the ink lands.
 """
 import pytest
 
