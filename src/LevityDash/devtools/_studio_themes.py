@@ -33,6 +33,11 @@ class ThemePicker(QComboBox):
 			self.setCurrentText(name)
 		theme.set_override(name)
 
+	def show(self, name: str):
+		"""Show ``name`` without forcing it, for a dashboard whose own file names the theme."""
+		with QSignalBlocker(self):
+			self.setCurrentText(name)
+
 	@staticmethod
 	def stageColor() -> QColor:
 		return theme.color('background').QColor

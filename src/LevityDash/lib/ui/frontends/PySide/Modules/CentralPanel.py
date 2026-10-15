@@ -144,6 +144,31 @@ class CentralPanel(Panel, tag="dashboard"):
 			raise ValueError(f'theme is a theme name or a mapping, not {value!r}')
 		return value
 
+	def setTheme(self, name: str | None) -> bool:
+		"""Make ``name`` the dashboard's theme and write it into the dashboard file as the root ``theme:``. ``None`` or the default theme removes the key.
+
+		Goes through the normal save, so the rest of the file is written as a save writes it. An inline theme keeps its colours and fonts and takes ``name`` as its ``extends``.
+		Returns False, with the theme as it was, if the file could not be written.
+		"""
+		if name == theme.DEFAULT_NAME:
+			name = None
+		previous = self._theme
+		if isinstance(previous, dict) and name is not None:
+			value = {**previous, 'extends': name}
+		elif isinstance(previous, dict):
+			value = {k: v for k, v in previous.items() if k != 'extends'} or None
+		else:
+			value = name
+		if self.filePath is None:
+			return False
+		theme.set_override(None)
+		self.theme = value
+		path = self.filePath.path if isinstance(self.filePath, EasyPathFile) else Path(self.filePath)
+		if self._save(path.parent, path.name):
+			return True
+		self.theme = previous
+		return False
+
 	_background: Any = None
 
 	@StateProperty(key='background', default=None, allowNone=True, sortOrder=-1)
@@ -201,7 +226,7 @@ class CentralPanel(Panel, tag="dashboard"):
 		for p in paths:
 			PanelFromFile(self, p)
 
-	def _save(self, path: Path = None, fileName: str = None):
+	def _save(self, path: Path = None, fileName: str = None) -> bool:
 		if path is None:
 			path = userConfig.userPath.joinpath('saves', 'dashboards')
 		if fileName is None:
@@ -213,7 +238,7 @@ class CentralPanel(Panel, tag="dashboard"):
 		from .ErrorTile import ErrorTile
 		if any(isinstance(i, ErrorTile) for i in self.scene().items()):
 			log.error('Not saved: an item failed to load and a save would delete it from the file. Fix the file and reload.')
-			return
+			return False
 
 		with NamedTemporaryFile(delete=True, mode="w+", encoding='utf-8') as f:
 			try:
@@ -225,9 +250,11 @@ class CentralPanel(Panel, tag="dashboard"):
 				YAMLPreprocessor(f)
 				copyfile(f.name, str(path.joinpath(fileName)))
 				log.info('Saved!')
+				return True
 			except Exception if not debug else DebugException as e:
 				log.info('Failed')
 				log.exception(e)
+		return False
 
 	def _dumpedLive(self) -> Any:
 		"""What a save would write now, read back as data: the same shape as the live tree. None if it cannot be made."""

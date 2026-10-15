@@ -1335,7 +1335,7 @@ class LevityMainWindow(QMainWindow):
 		dashboardMenu.addAction(clear)
 		dashboardMenu.addAction(printState)
 		dashboardMenu.addAction(showStatusBar)
-		dashboardMenu.addMenu(ThemeMenu(self, self.view.graphicsScene.base.reload))
+		dashboardMenu.addMenu(ThemeMenu(self, self.view.graphicsScene.base))
 
 		clearCacheAction = QAction('Clear Pixmap Cache', self)
 		clearCacheAction.setStatusTip('Clear the cache')
