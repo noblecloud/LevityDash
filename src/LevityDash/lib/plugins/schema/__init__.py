@@ -769,7 +769,10 @@ class Schema(CategoryDict):
 		# left the *second* instance of a multi-instance plugin (Govee's
 		# per-device instances) with no dataMaps, no identityKey and no
 		# aliases, so its datagrams had no 'realtime' group at all.
-		source = dict(source)
+		# Deep, not shallow: the nested dicts are rewritten in place too (`@name`
+		# references become SchemaProperty, `tz` kwargs get resolved), which left the
+		# plugin class's own schema holding live objects and broke the next copy of it.
+		source = deepcopy(source)
 		self._ignored = set(source.pop('ignored', []))
 		category = ''
 		self._plugin = plugin
