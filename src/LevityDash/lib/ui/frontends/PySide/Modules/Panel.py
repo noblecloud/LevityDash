@@ -838,7 +838,7 @@ class Panel(_Panel, Stateful, tag='group'):
 				break
 		return tagged_group
 
-	def get_named_ancestor(self, name: str) -> 'Panel':
+	def get_named_ancestor(self, name: str, strict: bool = False) -> Optional['Panel']:
 		"""
 		Gets a named Panel group.
 
@@ -878,7 +878,7 @@ class Panel(_Panel, Stateful, tag='group'):
 
 		named_ancestor = next((group for group in self.hierarchy if group.stateName == name), None)
 		if named_ancestor is None:
-			return self.localGroup
+			return None if strict else self.localGroup
 		Panel.__groups__[name] = named_ancestor
 		return named_ancestor
 
@@ -920,6 +920,7 @@ class Panel(_Panel, Stateful, tag='group'):
 		>>> getAttrGroup('key@namedGroup') # Get a named group. '@' is used to indicate a named group.
 		"""
 		kwargs = {}
+		missing = None
 		match group.split('.') if isinstance(group, str) else group:
 			case 'local', str(key):
 				group = self.localGroup
@@ -934,13 +935,20 @@ class Panel(_Panel, Stateful, tag='group'):
 			case [str(named)] if '@' in named:
 				key, group = named.split('@')
 				kwargs['tag'] = group
-				group = self.get_named_ancestor(group)
+				if (found := self.get_named_ancestor(group, strict=True)) is None:
+					# No ancestor has that name: the label gets a group nobody else joins. Say so, and mark the group so a tool can show it.
+					missing = group
+					log.warning(f'Size group {named!r} on {self!r} matches no panel named {missing!r}; it is a group of its own')
+					found = self.localGroup
+				group = found
 			case _:
 				raise ValueError(f'invalid group {group}')
 
 		attrGroups = group.attrGroups
 		if (attrGroup := attrGroups.get(key, None)) is None:
 			attrGroups[key] = attrGroup = SizeGroup(parent=group, key=key, matchAll=matchAll)
+		if missing is not None:
+			attrGroup.unresolvedScope = missing
 		return attrGroup
 
 	@property

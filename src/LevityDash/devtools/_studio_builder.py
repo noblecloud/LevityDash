@@ -38,6 +38,8 @@ from PySide6.QtWidgets import (
 )
 
 from LevityDash.devtools import _studio_editors as editors
+from LevityDash.devtools import _studio_groups as groups
+from LevityDash.devtools._studio_groups_tab import GroupsTab
 from LevityDash.devtools import _yamlpatch as yamlpatch
 from LevityDash.lib.ui.colors import theme
 from LevityDash.devtools import _studio_layout as layout
@@ -47,7 +49,7 @@ from LevityDash.devtools import _studio_state as state
 from LevityDash.devtools._studio_stage import presetForKey
 from LevityDash.devtools._studio_chrome import THEMES, themePalette, themeSheet
 from LevityDash.devtools._studio_themes import ThemePicker
-from LevityDash.devtools._studio_widgets import Section
+from LevityDash.devtools._studio_widgets import Section, UndoKeys
 
 Editor = editors.Editor
 REPO = Path(__file__).resolve().parents[3]
@@ -496,6 +498,7 @@ class PreviewEngine:
 		self.directory = Path(panel.filePath.path).parent
 		self.panel = panel
 		self.error = ''
+		self.groups: list = []
 		self.scenario = os.environ.get('LEVITYDASH_FIXTURE', '')
 		editors.knownKeys()
 		editors._keyCache[:] = sorted(set(editors._keyCache) | set(scenarioKeys(self.scenario)))
@@ -530,6 +533,7 @@ class PreviewEngine:
 		for name, item in self._boot.named_items(scene).items():
 			if name in names:
 				found[names[name]] = item.sceneBoundingRect().translated(-rect.topLeft())
+		self.groups = groups.collect(scene, names)
 		return image, found
 
 	def stop(self):
@@ -622,6 +626,7 @@ class Stage(QWidget):
 		self._drag: Optional[tuple] = None
 		self.snap = True  # drags stick to the parent's and the siblings' edges and centres; Alt held turns it off
 		self.guides: Tuple[List[float], List[float]] = ([], [])
+		self.marks: List[QRectF] = []  # boxes the Size groups tab points at, in scene pixels
 		self.setMinimumSize(320, 220)
 		self.setMouseTracking(True)
 
@@ -631,6 +636,10 @@ class Stage(QWidget):
 
 	def select(self, path: Optional[tuple], movable: bool):
 		self.path, self.movable = path, movable
+		self.update()
+
+	def setMarks(self, rects: List[QRectF]):
+		self.marks = list(rects)
 		self.update()
 
 	def _fit(self) -> Tuple[float, QPointF]:
@@ -655,6 +664,11 @@ class Stage(QWidget):
 		scale, off = self._fit()
 		p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
 		p.drawImage(QRectF(off.x(), off.y(), self.image.width() * scale, self.image.height() * scale), self.image)
+		if self.marks:
+			p.setPen(QPen(QColor('#ffb020'), 2))
+			p.setBrush(QColor(255, 176, 32, 50))
+			for m in self.marks:
+				p.drawRect(self._toView(m))
 		if self.path is not None and self.path in self.rects:
 			r = self._toView(self.rects[self.path])
 			p.setPen(QPen(QColor('#2f81f7'), 2))
@@ -1210,6 +1224,9 @@ class Builder(QWidget):
 		QShortcut(QKeySequence.StandardKey.Undo, self, self.undo)
 		QShortcut(QKeySequence.StandardKey.Redo, self, self.redo)
 		QShortcut(QKeySequence.StandardKey.Save, self, self.save)
+		# A focused field would keep Undo for its own text; the builder's history covers every control, so it takes the keys.
+		self._keys = UndoKeys(self)
+		QApplication.instance().installEventFilter(self._keys)
 
 	# layout
 
@@ -1334,9 +1351,11 @@ class Builder(QWidget):
 		self.instanceTab = InstanceTab(self)
 		self.yamlView = QPlainTextEdit()
 		self.yamlView.setReadOnly(True)
+		self.groupsTab = GroupsTab(self)
 		self.tabs.addTab(self.itemTab, 'Item')
 		self.tabs.addTab(self.propsTab, 'Properties')
 		self.tabs.addTab(self.instanceTab, 'Instance')
+		self.tabs.addTab(self.groupsTab, 'Size groups')
 		self.tabs.addTab(self.yamlView, 'YAML')
 		self.tabs.setMinimumWidth(440)
 		self.tabs.currentChanged.connect(lambda _: self.refreshYaml())
@@ -1646,6 +1665,7 @@ class Builder(QWidget):
 		if not fromTree:
 			self._selectRow()
 		self.itemTab.load(path)
+		self.groupsTab.selectionChanged()
 		self._syncStage()
 
 	def _movable(self) -> bool:
@@ -2011,6 +2031,8 @@ class Builder(QWidget):
 			self.status.setText(f'The preview failed: {type(e).__name__}: {e}')
 			return
 		self.stage.show_(image, rects)
+		self.stage.setMarks([])
+		self.groupsTab.load(getattr(self.engine, "groups", []))
 		self._syncThemePicker()
 		self._syncStage()
 		self.status.setText(('; '.join(problems) + '. ') if problems else '')

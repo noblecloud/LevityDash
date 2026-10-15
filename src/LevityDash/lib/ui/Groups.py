@@ -87,6 +87,13 @@ class Fit:
 	baseline_y: Optional[float] = None
 
 
+def _detached(item: SizeGroupItem) -> bool:
+	"""True for a member whose panel has been removed from its scene. Nothing takes a text out of its group when
+	its panel goes, and a removed one has no data to fit: a later refit would raise on it."""
+	scene = getattr(item, 'scene', None)
+	return callable(scene) and scene() is None
+
+
 def _vertical_alignment(item: SizeGroupItem):
 	try:
 		return item.alignment.vertical
@@ -97,6 +104,8 @@ def _vertical_alignment(item: SizeGroupItem):
 class SizeGroup:
 	__groups__: ClassVar[List['SizeGroup']] = []
 	reach: float = 10
+	#: The `@name` this group was asked for when no ancestor has that name, so it is a group of its own. Set by `Panel.getAttrGroup`; tools read it.
+	unresolvedScope: Optional[str] = None
 
 	items: Set[SizeGroupItem]
 	key: str
@@ -231,6 +240,8 @@ class SizeGroup:
 	def _tiers(self, items: Set[SizeGroupItem]) -> Dict[int, Set[SizeGroupItem]]:
 		tiers: Dict[int, Set[SizeGroupItem]] = defaultdict(set)
 		for item in items:
+			if _detached(item):
+				continue
 			tiers[self.make_size_key(item)].add(item)
 		return dict(tiers)
 
@@ -269,6 +280,8 @@ class SizeGroup:
 		"""Invalidate this group and re-apply its fit to every member now."""
 		self.mark_dirty()
 		for item in tuple(self.items):
+			if _detached(item):
+				continue
 			try:
 				item.updateTransform(updatePath=False, updateShared=False, reason='group-apply')
 			except Exception as e:

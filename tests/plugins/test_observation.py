@@ -236,3 +236,19 @@ def test_calculate_missing_indoor_derives_nothing_at_zero_humidity():
 
 	assert _indoor('indoor.temperature.dewpoint', 'terrarium') not in obs
 	assert _indoor('indoor.temperature.heatIndex', 'terrarium') not in obs
+
+
+def test_calculate_missing_indoor_survives_a_trace_humidity():
+	"""A humidity above 0 that rounds to 0 % used to raise inside dewpoint() and drop the whole advertisement."""
+	import WeatherUnits as wu
+
+	for reading in (0.0, 0.004):
+		obs = FakeIndoorObservation({
+			_indoor('indoor.temperature.temperature', 'bedroom'): FakeTemperature(wu.Temperature.Fahrenheit(74), timestamp=None),
+			_indoor('indoor.humidity.humidity', 'bedroom'): FakeHumidity(reading),
+		})
+
+		ObservationDict.calculateMissing(obs, keys=set(obs.keys()))
+
+		assert _indoor('indoor.temperature.dewpoint', 'bedroom') not in obs
+		assert _indoor('indoor.temperature.heatIndex', 'bedroom') not in obs
