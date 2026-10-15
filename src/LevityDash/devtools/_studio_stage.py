@@ -40,6 +40,7 @@ from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.valuesource import installStandIn
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Gauge import Gauge
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.bar import Bar
 from statekit.actions import ActionPool
 from statekit.binding import Constant
 from qolkit import Unset
@@ -305,6 +306,7 @@ class StudioGauge:
 	def __init__(self, scene: StudioScene, preset: DataPreset):
 		self.scene = scene
 		self.preset = preset
+		self.kind = 'gauge'  # 'gauge' draws a `Gauge`, 'bar' a `Bar`: the two share `Meter`, and so the controls
 		self.stage: Optional[StudioStage] = None
 		self.gauge: Optional[Gauge] = None
 		self._good: Optional[tuple] = None  # the last display that built, with its preset
@@ -357,7 +359,7 @@ class StudioGauge:
 		# loads state, so every deferred refresh waits until the gauge is complete.
 		try:
 			with self.stage.action_pool:
-				self.gauge = Gauge(parent=self.stage, **display)
+				self.gauge = (Bar if self.kind == 'bar' else Gauge)(parent=self.stage, **display)
 		except Exception:
 			# Keep the last gauge that built, so one bad edit does not blank the preview.
 			view.setTransform(saved)
@@ -366,8 +368,12 @@ class StudioGauge:
 			if good is not None:
 				self.build(*good)
 			raise
-		self._good = (copy.deepcopy(display), self.preset)
+		self._good = (copy.deepcopy(display), self.preset)  # a failed edit rebuilds this one, of the same kind
 		self.gauge.show()
+		if self.kind == 'bar':
+			for child in self.gauge.childItems():  # the canvas draws a bar whole; show() also woke the unused needle items
+				if type(child).__name__ == 'Needle':
+					child.hide()
 		self._lock(self.gauge)
 		self.stage.setRect(self.scene.sceneRect())
 		self.gauge.valueClass = type(self.preset.measurement(self.value))

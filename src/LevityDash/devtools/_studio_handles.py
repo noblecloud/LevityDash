@@ -518,11 +518,13 @@ class HandleLayer:
 
 	@property
 	def gauge(self):
-		"""The gauge the handles sit on, or None once its window is gone: deleting the window deletes the scene and the
+		"""The gauge the handles sit on. None once its window is gone: deleting the window deletes the scene and the
 		gauge with it, while this layer's own timers and the Python wrappers live on, and a rebuild that fires then
-		reads a gauge that no longer exists."""
-		gauge = self.studio.studio.gauge
-		return gauge if gauge is not None and isValid(gauge) else None
+		reads a gauge that no longer exists. None for a bar too: it has no arc, needle or dial to grab, so the controls
+		edit it."""
+		studio = self.studio.studio
+		gauge = studio.gauge
+		return gauge if studio.kind == 'gauge' and gauge is not None and isValid(gauge) else None
 
 	def visibleFor(self, spec: Spec) -> bool:
 		"""Gradient nodes stay up for as long as *Edit gradient* is on; the rest show while the pointer is over the preview."""

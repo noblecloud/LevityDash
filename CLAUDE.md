@@ -88,7 +88,7 @@ LEVITYDASH_CONFIG_DEBUG=1 poetry run python -m LevityDash   # pristine temp conf
 
 ## Bars
 
-`type: realtime.bar` is a `Meter` on a straight `LineTrack` (`Displays/meter/bar.py`): progress, battery (`style: battery`), segmented (`fill: {segments: N}`) and thermometer (`style: thermometer`). A bar paints track, zones, fill, ticks, markers, pointer and text in one canvas item; it shares `Meter` (value, range, `Scale`) with `Gauge` but not the arc items. It reports `DisplayType.Gauge`, so an item's value feed drives it unchanged; `Realtime` creates it from `DisplayType.Bar`, because `realtime.bar` alone would fuzzy-match the bar *plot*. Options: `docs/config/dashboard/bar.md`. Presets, a showcase dashboard and the `bar-cards` scenario: `docs/design-references/bars/`. Studio does not edit bars yet.
+`type: realtime.bar` is a `Meter` on a straight `LineTrack` (`Displays/meter/bar.py`): progress, battery (`style: battery`), segmented (`fill: {segments: N}`) and thermometer (`style: thermometer`). A bar paints track, zones, fill, ticks, markers, pointer and text in one canvas item; it shares `Meter` (value, range, `Scale`) with `Gauge` but not the arc items. It reports `DisplayType.Gauge`, so an item's value feed drives it unchanged; `Realtime` creates it from `DisplayType.Bar`, because `realtime.bar` alone would fuzzy-match the bar *plot*. Options: `docs/config/dashboard/bar.md`. Presets, a showcase dashboard and the `bar-cards` scenario: `docs/design-references/bars/`. The Studio's gauge mode edits one bar too (`studio.py --gauge docs/design-references/bars/bar-battery.levity`): the controls come from the same introspection, a bar has no dial handles, and Copy code and Save as write `realtime.bar`.
 
 ## The second machine (`lambda`)
 

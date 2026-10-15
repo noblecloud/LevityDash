@@ -359,6 +359,12 @@ def _classify(prop: StateProperty, raw: Any, owner: Stateful) -> Optional[Field]
 	return Field((), 'text')
 
 
+# A `Bar` inherits the needle from `Meter` and never draws it: its pointer is the `pointer` property.
+NOT_ON_BARS = {('Bar', 'needle')}
+# Its two words-from-a-list settings are strings, which the enum introspection does not see.
+BAR_CHOICES = {'orientation': ('horizontal', 'vertical'), 'style': ('bar', 'battery', 'thermometer')}
+
+
 def describe(owner: Stateful, path: tuple = (), title: str = 'Gauge', _seen: Optional[set] = None, _depth: int = 0) -> Group:
 	"""The controls for `owner` and every part under it."""
 	seen = _seen if _seen is not None else set()
@@ -366,7 +372,7 @@ def describe(owner: Stateful, path: tuple = (), title: str = 'Gauge', _seen: Opt
 	group = Group(path, title)
 	for prop in type(owner).statefulItems.values():
 		skipped = prop.key in SKIP_KEYS and (prop.fget.__name__,) not in UNSKIP and (type(owner).__name__, prop.key) not in UNSKIP_OWNED
-		if 'set' not in prop.actions or skipped:
+		if 'set' not in prop.actions or skipped or (type(owner).__name__, prop.key) in NOT_ON_BARS:
 			continue
 		try:
 			raw = prop.__get__(owner, type(owner))
@@ -412,7 +418,10 @@ def _refine(found: Field, prop: StateProperty, raw: Any, owner: Stateful) -> Fie
 	found.nullable = bool(prop.allowNone)
 	returns = [r for r in prop.returns if isinstance(r, type)]
 	ownerName = type(owner).__name__
-	if key == 'fill':
+	if ownerName == 'Bar' and key in BAR_CHOICES:
+		found.kind = 'enum'
+		found.choices = [(c, c) for c in BAR_CHOICES[key]]
+	elif key == 'fill':
 		found.kind = 'fill'
 	elif key in ('caption', 'sub-label'):
 		found.kind = 'caption'
