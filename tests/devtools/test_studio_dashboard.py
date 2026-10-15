@@ -283,3 +283,43 @@ def test_the_studio_names_its_process_and_has_an_icon_of_its_own():
 			assert Path('/proc/self/comm').read_text().strip() == 'LevityDashStudi'
 		finally:
 			Path('/proc/self/comm').write_text(before.strip())
+
+
+def test_a_dropped_row_moves_the_item_and_undo_puts_it_back(board):
+	win, path = board('station')
+	before = yaml.safe_dump(win.piece.template, sort_keys=False)
+	target = next(p for p, n in win.piece.walk() if p and n.get('type') == 'group' and p != (0,))
+	moving = next(p for p, n in win.piece.walk() if len(p) >= 2 and not n.get('items') and not m.holds(n) and p[:-1] != target)
+	count = len(win.piece.node(target).get('items') or [])
+	win.relocateItem(moving, target, -1)
+	assert yaml.safe_dump(win.piece.template, sort_keys=False) != before
+	win.undo()
+	assert yaml.safe_dump(win.piece.template, sort_keys=False) == before
+	win.relocateItem((0,), (0, 0), -1)  # into itself: refused, nothing changes or is recorded
+	assert yaml.safe_dump(win.piece.template, sort_keys=False) == before
+
+
+def test_dropping_a_tree_row_onto_a_container_moves_it_in(board):
+	"""A drag cannot be run offscreen, so the drop event is built by hand with the position Qt would report."""
+	from PySide6.QtCore import QMimeData, QPointF, Qt
+	from PySide6.QtGui import QDropEvent
+	from PySide6.QtWidgets import QAbstractItemView
+	win, path = board('storm')
+	win.resize(1200, 800)
+	win.show()
+	rows, stack = [], [win.tree.topLevelItem(0)]
+	while stack:
+		row = stack.pop(0)
+		rows.append(row)
+		stack += [row.child(i) for i in range(row.childCount())]
+	data = Qt.ItemDataRole.UserRole
+	source = next(r for r in rows if r.childCount() == 0 and len(r.data(0, data)) >= 2 and not m.holds(win.piece.node(r.data(0, data))))
+	target = next(r for r in rows if r.childCount() and r.data(0, data) and r.data(0, data) != source.data(0, data)[:-1] and r.data(0, data) != source.data(0, data)[:len(r.data(0, data))])
+	win.tree.setCurrentItem(source)
+	win.tree.dropIndicatorPosition = lambda: QAbstractItemView.DropIndicatorPosition.OnItem
+	before = yaml.safe_dump(win.piece.template, sort_keys=False)
+	at = QPointF(win.tree.visualItemRect(target).center())
+	win.tree.dropEvent(QDropEvent(at, Qt.DropAction.MoveAction, QMimeData(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
+	assert yaml.safe_dump(win.piece.template, sort_keys=False) != before
+	win.undo()
+	assert yaml.safe_dump(win.piece.template, sort_keys=False) == before

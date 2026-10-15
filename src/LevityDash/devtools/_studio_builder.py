@@ -32,7 +32,7 @@ import yaml
 from PySide6.QtCore import QPointF, QRectF, QSignalBlocker, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QImage, QKeySequence, QPainter, QPen, QShortcut
 from PySide6.QtWidgets import (
-	QApplication, QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMenu,
+	QAbstractItemView, QApplication, QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMenu,
 	QPlainTextEdit, QPushButton, QScrollArea, QSplitter, QTabWidget, QToolButton, QTreeWidget, QTreeWidgetItem,
 	QVBoxLayout, QWidget,
 )
@@ -52,7 +52,7 @@ from LevityDash.devtools._studio_widgets import Section
 Editor = editors.Editor
 REPO = Path(__file__).resolve().parents[3]
 
-CONTAINERS = ['group', 'stack', 'grid', 'value-stack', 'titled-group', 'switch']
+CONTAINERS = list(model.CONTAINER_TYPES)
 DISPLAYS = ['realtime.text', 'realtime.gauge', 'realtime.bar', 'text', 'label', 'graph', 'mini-graph', 'polar', 'clock', 'moon', 'spacer']
 LAYOUT_PARENTS = ('stack', 'value-stack', 'grid', 'switch')
 STAGES = {'Card 640x400': (640, 400), 'Wide 960x400': (960, 400), 'Tall 400x640': (400, 640), 'Dashboard 1280x800': (1280, 800), 'Dashboard 1440x900': (1440, 900)}
@@ -603,6 +603,31 @@ def snapDrag(rect: QRectF, mode: str, corner: Optional[str], parent: QRectF, oth
 
 
 # Section: the stage
+class ItemTree(QTreeWidget):
+	"""The item tree. A row dragged onto another row says where it wants to go; the builder moves it in the model and
+	draws the tree again, so Qt never moves a row itself."""
+
+	moved = Signal(tuple, tuple, int)  # path, new parent's path, index in it
+
+	def __init__(self):
+		super().__init__()
+		self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+		self.setDefaultDropAction(Qt.DropAction.MoveAction)
+
+	def dropEvent(self, event):
+		source, target = self.currentItem(), self.itemAt(event.position().toPoint())
+		event.ignore()
+		if source is None or target is None:
+			return
+		path, over = source.data(0, Qt.ItemDataRole.UserRole), target.data(0, Qt.ItemDataRole.UserRole)
+		where = self.dropIndicatorPosition()
+		Pos = QAbstractItemView.DropIndicatorPosition
+		if where == Pos.OnItem:
+			self.moved.emit(path, over, -1)  # into it, at the end
+		elif over:
+			self.moved.emit(path, over[:-1], over[-1] + (1 if where == Pos.BelowItem else 0))
+
+
 class Stage(QWidget):
 	"""The picture, with the selected item outlined. Click selects; a drag moves or resizes it."""
 
@@ -1306,9 +1331,10 @@ class Builder(QWidget):
 		# Two rows: one row of six buttons set the tree column's minimum width, which left the preview a sliver in a one-window Studio.
 		lbox.addLayout(tools)
 		lbox.addLayout(moves)
-		self.tree = QTreeWidget()
+		self.tree = ItemTree()
 		self.tree.setHeaderHidden(True)
 		self.tree.setMinimumWidth(200)
+		self.tree.moved.connect(self.relocateItem)
 		self.tree.currentItemChanged.connect(self._treePicked)
 		lbox.addWidget(self.tree, 1)
 		split.addWidget(left)
@@ -1743,6 +1769,22 @@ class Builder(QWidget):
 			self.rebuildAll()
 			self._syncStage()
 			self.schedule()
+
+	def relocateItem(self, path: tuple, parent: tuple, index: int):
+		"""A row was dropped: move the item there when the target can hold it."""
+		if not model.holds(self.piece.node(parent)):
+			self.status.setText('That item cannot hold others.')
+			return
+		self.push()
+		new = self.piece.relocate(path, parent, None if index < 0 else index)
+		if new is None:
+			self.history.pop()
+			self._updateHistory()
+			return
+		self.selection = new
+		self.rebuildAll()
+		self._syncStage()
+		self.schedule()
 
 	def editField(self, field: str, value: Any):
 		"""A field of the selected item changed."""
