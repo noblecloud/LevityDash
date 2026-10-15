@@ -70,7 +70,7 @@ from LevityDash.devtools import _studio_editors as editors
 from LevityDash.devtools._studio_handles import HandleLayer
 from LevityDash.devtools._studio_chrome import THEMES, themePalette, themeSheet
 from LevityDash.devtools._studio_themes import ThemePicker
-from LevityDash.devtools._studio_widgets import FieldRow, Section, build, fieldsOf
+from LevityDash.devtools._studio_widgets import FieldRow, Section, UndoKeys, build, fieldsOf
 from LevityDash.lib.ui.colors.stopunits import formatStop
 
 StatefulDumper = schema.StudioDumper
@@ -362,21 +362,6 @@ def _pruned(node):
 	return {k: v for k, v in pruned.items() if v not in ({}, None)}
 
 
-class _UndoKeys(QObject):
-	"""Keeps text fields from swallowing Undo and Redo."""
-
-	def __init__(self, studio):
-		super().__init__(studio)
-		self.studio = studio
-
-	def eventFilter(self, obj, event):
-		if event.type() == QEvent.Type.ShortcutOverride and isinstance(obj, QWidget) and obj.window() is self.studio:
-			if event.matches(QKeySequence.StandardKey.Undo) or event.matches(QKeySequence.StandardKey.Redo):
-				event.ignore()
-				return True
-		return False
-
-
 class _WheelGuard(QObject):
 	"""Keeps the scroll wheel on the control list while the list is being scrolled.
 
@@ -419,7 +404,7 @@ class _WheelGuard(QObject):
 		if kind != QEvent.Type.Wheel:
 			return False
 		if (g := self.guarded(obj)) is None:
-			if isinstance(obj, QWidget) and obj.window() is self.studio and self.studio.scroll.isAncestorOf(obj):
+			if isinstance(obj, QWidget) and self.studio.scroll.isAncestorOf(obj):
 				self.lastScroll, self.scrollPos = time.monotonic(), QCursor.pos()
 			return False
 		focus = QApplication.focusWidget()
@@ -503,10 +488,11 @@ class Studio(QWidget):
 						continue
 					taken.add(seq.toString())
 					QShortcut(seq, self, activated=action).setContext(Qt.ShortcutContext.ApplicationShortcut)
+		QShortcut(QKeySequence.StandardKey.Save, self, self.saveAs).setContext(Qt.ShortcutContext.WindowShortcut)
 		# A focused line edit or spinbox accepts the shortcut-override event for Undo and Redo and
 		# keeps the keys for its own text history. The studio's undo covers every control, so the
 		# filter lets the shortcut through.
-		self._keys = _UndoKeys(self)
+		self._keys = UndoKeys(self)
 		QApplication.instance().installEventFilter(self._keys)
 		self._wheel = _WheelGuard(self)
 		QApplication.instance().installEventFilter(self._wheel)

@@ -34,7 +34,7 @@ from LevityDash.devtools import _studio_editors as editors
 from LevityDash.devtools import _studio_schema as schema
 from LevityDash.devtools._studio_stage import DATA_PRESETS, StudioScene, StudioStage
 from LevityDash.devtools._studio_themes import ThemePicker
-from LevityDash.devtools._studio_widgets import FieldRow, Section, fieldsOf
+from LevityDash.devtools._studio_widgets import FieldRow, Section, UndoKeys, fieldsOf
 from LevityDash.lib.plugins.expressions import Expression, ExpressionError
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar import feed
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.item import Polar
@@ -481,6 +481,8 @@ class PolarStudio(QWidget):
 						continue
 					taken.add(seq.toString())
 					QShortcut(seq, self, activated=action).setContext(Qt.ShortcutContext.WindowShortcut)
+		QShortcut(QKeySequence.StandardKey.Save, self, self.saveAs).setContext(Qt.ShortcutContext.WindowShortcut)
+		QApplication.instance().installEventFilter(UndoKeys(self))
 		self._installContext()
 		if fragment is not None:
 			self.loadFile(fragment)

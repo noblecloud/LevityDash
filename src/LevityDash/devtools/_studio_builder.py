@@ -1292,18 +1292,23 @@ class Builder(QWidget):
 			menu.addAction(name, lambda n=name: self.addItem(f'preset:{n}'))
 		self.addButton.setMenu(menu)
 		tools.addWidget(self.addButton)
-		for text, fn, tip in (('Duplicate', self.duplicateItem, ''), ('To preset', self.extractPreset, 'Save the selected item as a preset of its own and use that preset here'), ('Delete', self.deleteItem, 'Remove the selected item and what is inside it'),
-		                      ('▲', lambda: self.moveItem(-1), 'Earlier'), ('▼', lambda: self.moveItem(1), 'Later')):
+		moves = QHBoxLayout()
+		for text, fn, tip, row in (('Duplicate', self.duplicateItem, '', tools), ('To preset', self.extractPreset, 'Save the selected item as a preset of its own and use that preset here', tools),
+		                           ('Delete', self.deleteItem, 'Remove the selected item and what is inside it', moves),
+		                           ('▲', lambda: self.moveItem(-1), 'Earlier', moves), ('▼', lambda: self.moveItem(1), 'Later', moves)):
 			b = QToolButton()
 			b.setText(text)
 			b.setToolTip(tip)
 			b.clicked.connect(lambda _=False, f=fn: f())
-			tools.addWidget(b)
+			row.addWidget(b)
 		tools.addStretch(1)
+		moves.addStretch(1)
+		# Two rows: one row of six buttons set the tree column's minimum width, which left the preview a sliver in a one-window Studio.
 		lbox.addLayout(tools)
+		lbox.addLayout(moves)
 		self.tree = QTreeWidget()
 		self.tree.setHeaderHidden(True)
-		self.tree.setMinimumWidth(240)
+		self.tree.setMinimumWidth(200)
 		self.tree.currentItemChanged.connect(self._treePicked)
 		lbox.addWidget(self.tree, 1)
 		split.addWidget(left)

@@ -114,3 +114,81 @@ def test_library_entries_open_in_their_mode(suite):
 		if win.current() != modes[entry.kind] or 'Could not' in text or 'no realtime.gauge' in text:
 			failed.append(f'{entry.group}: {entry.label}: {text or win.current()}')
 	assert not failed, '\n'.join(failed)
+
+
+def _press(win, key, mods=None):
+	"""A real key event to the focused widget of the active window, as a person's keystroke."""
+	from PySide6.QtCore import Qt
+	from PySide6.QtTest import QTest
+	from PySide6.QtWidgets import QApplication
+	QTest.keyClick(QApplication.focusWidget() or win, key, mods or Qt.KeyboardModifier.ControlModifier)
+
+
+def _focusField(win, mode):
+	"""Focus a text field inside `mode`, where the field itself would keep Undo."""
+	from PySide6.QtCore import Qt
+	from PySide6.QtTest import QTest
+	from PySide6.QtWidgets import QLineEdit
+	win.show()
+	win.activateWindow()
+	QTest.qWaitForWindowActive(win)
+	field = next(f for f in win.modes[mode].findChildren(QLineEdit) if f.isVisible() and f.isEnabled())
+	field.setFocus(Qt.FocusReason.OtherFocusReason)
+	assert field.hasFocus()
+
+
+@pytest.mark.parametrize('mode', ['dashboard', 'gauge', 'polar'])
+def test_undo_and_save_keys_reach_only_the_visible_mode(suite, monkeypatch, mode):
+	"""Each mode is built, then one is shown: the key lands in that mode alone, with a button or a text field focused."""
+	from PySide6.QtCore import Qt
+	from PySide6.QtWidgets import QPushButton
+	from LevityDash.devtools import _studio_builder as builder, _studio_polar as polar
+	calls = []
+	for name, cls in (('dashboard', builder.Builder), ('gauge', studio.Studio), ('polar', polar.PolarStudio)):
+		for method in ('undo', 'redo', 'save', 'saveAs'):
+			if hasattr(cls, method):
+				monkeypatch.setattr(cls, method, lambda self, n=name, m=method: calls.append((n, m)))
+	win = suite(mode='dashboard')
+	for other in ('gauge', 'polar'):
+		win.showMode(other)
+	win.showMode(mode)
+	win.show()
+	win.activateWindow()
+	from PySide6.QtTest import QTest
+	QTest.qWaitForWindowActive(win)
+	QTest.qWait(50)
+	button = next(b for b in win.modes[mode].findChildren(QPushButton) if b.isVisible())
+	button.setFocus(Qt.FocusReason.OtherFocusReason)
+	_press(win, Qt.Key.Key_Z)
+	_press(win, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)
+	_press(win, Qt.Key.Key_S)
+	saved = 'save' if mode == 'dashboard' else 'saveAs'
+	assert calls == [(mode, 'undo'), (mode, 'redo'), (mode, saved)]
+
+
+@pytest.mark.parametrize('mode', ['gauge', 'polar'])
+def test_a_text_field_does_not_keep_undo_in_the_editors_that_own_it(suite, monkeypatch, mode):
+	"""The gauge and polar editors take Undo from a focused field (their history covers every control). Embedded in the
+	Studio window the field is no longer in a window of the editor's own, which the first filter checked."""
+	from PySide6.QtCore import Qt
+	from LevityDash.devtools import _studio_polar as polar
+	calls = []
+	for name, cls in (('gauge', studio.Studio), ('polar', polar.PolarStudio)):
+		monkeypatch.setattr(cls, 'undo', lambda self, n=name: calls.append(n))
+	win = suite(mode=mode)
+	win.showMode('gauge')
+	win.showMode('polar')
+	win.showMode(mode)
+	_focusField(win, mode)
+	_press(win, Qt.Key.Key_Z)
+	assert calls == [mode]
+
+
+def test_the_dashboard_preview_is_not_a_sliver_at_the_default_size(suite):
+	from PySide6.QtWidgets import QSplitter
+	from PySide6.QtTest import QTest
+	win = suite()
+	win.show()
+	QTest.qWait(100)
+	split = win.modes['dashboard'].findChildren(QSplitter)[0]
+	assert split.sizes()[1] >= 500, split.sizes()
