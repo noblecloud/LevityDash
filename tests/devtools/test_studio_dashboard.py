@@ -283,3 +283,23 @@ def test_the_studio_names_its_process_and_has_an_icon_of_its_own():
 			assert Path('/proc/self/comm').read_text().strip() == 'LevityDashStudi'
 		finally:
 			Path('/proc/self/comm').write_text(before.strip())
+
+
+def test_arrow_keys_nudge_the_selected_item_and_undo(board):
+	from PySide6.QtCore import Qt
+	from PySide6.QtTest import QTest
+	win, path = board('station')
+	target = next(p for p, n in win.piece.walk() if len(p) >= 2 and n.get('geometry'))
+	win.select(target)
+	win.refresh() if hasattr(win, 'refresh') else None
+	win.timer.stop()
+	if target not in win.stage.rects:
+		pytest.skip('item not on the stage')
+	before = yaml.safe_dump(win.piece.template, sort_keys=False)
+	x0 = float(str(win.piece.node(target)['geometry']['x']).rstrip('%'))
+	QTest.keyClick(win.stage, Qt.Key.Key_Right)
+	assert float(win.piece.node(target)['geometry']['x'].rstrip('%')) == pytest.approx(x0 + 1, abs=0.15)
+	QTest.keyClick(win.stage, Qt.Key.Key_Left, Qt.KeyboardModifier.ShiftModifier)
+	assert float(win.piece.node(target)['geometry']['x'].rstrip('%')) == pytest.approx(x0 - 4, abs=0.3)
+	win.undo(); win.undo()
+	assert yaml.safe_dump(win.piece.template, sort_keys=False) == before
