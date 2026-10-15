@@ -14,7 +14,12 @@ def _dump(dashboard, items):
 	for _ in range(5):
 		QTest.qWait(20)
 		dashboard.app.processEvents()
-	return yaml.dump(sandbox.state, Dumper=StatefulDumper, default_flow_style=False)
+	text = yaml.dump(sandbox.state, Dumper=StatefulDumper, default_flow_style=False)
+	# The dashboard outlives the test and the computed engine counts every panel that
+	# acquired an expression key, so leave nothing behind for later tests to miscount.
+	sandbox.delete()
+	dashboard.app.processEvents()
+	return text
 
 
 def test_a_shared_enum_written_as_text_does_not_abort_the_save(dashboard):

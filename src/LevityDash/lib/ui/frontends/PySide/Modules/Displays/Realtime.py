@@ -1547,6 +1547,20 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 		class TextBox(Label.TextBox):
 
 			@property
+			def tierHeight(self) -> float:
+				"""The box height this value would have with no unit beside it, which picks its size-group tier.
+
+				A split unit takes a share of the display, so a value with a unit line has a shorter box than one
+				without. The tier key must not follow that, or the two land in different tiers and different sizes.
+				"""
+				height = self.suggestedFontPixelSize
+				try:
+					share = float(self.surface.geometry.relativeHeight)
+				except (AttributeError, TypeError, ValueError):
+					return height
+				return height / share if 0.2 < share < 1 else height
+
+			@property
 			def _formatHint(self) -> str | None:
 				"""The string the value is sized against: an explicit hint if one was set, else the widest the display can show."""
 				if explicit := getattr(self, '_explicitHint', None):

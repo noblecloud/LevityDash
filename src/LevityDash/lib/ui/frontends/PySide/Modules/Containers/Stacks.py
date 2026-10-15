@@ -778,6 +778,14 @@ class Stack(Panel, tag='stack'):
 			getattr(geometry.surface, 'flexProps', None) is not None for geometry in self.geometries.values()
 		)
 
+	@property
+	def cssContentSized(self) -> bool:
+		"""True when an item's size comes from its text (`basis: auto`), which no layout can know before the fonts are built."""
+		return self.usesCssLayout and any(
+			str((getattr(geometry.surface, 'flexProps', None) or {}).get('basis', '')).casefold() in ('auto', 'content')
+			for geometry in self.geometries.values()
+		)
+
 	def cssPx(self, value, vertical: bool) -> float:
 		"""A `.levity` length (`40%`, `12px`, `3mm`, `0.5`) as pixels along one axis of this stack."""
 		dimension = DimensionType.height if vertical else DimensionType.width
@@ -1572,6 +1580,10 @@ class GridStack(Stack, tag='grid'):
 	@property
 	def usesCssLayout(self) -> bool:
 		return True
+
+	@property
+	def cssContentSized(self) -> bool:
+		return True  # an `auto` track measures its items' text
 
 	def _tracks(self, value, vertical: bool):
 		if value is None:
