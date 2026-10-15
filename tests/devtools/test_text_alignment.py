@@ -227,16 +227,7 @@ def test_a_size_group_gives_labels_one_size_across_panels(sweep):
 	assert all(p.group for p in sweep['group/labels-matchall']['probes'])
 
 
-def test_values_of_one_box_height_share_a_size_in_a_group(sweep):
-	"""Temperature and humidity boxes are one height (one tier): grouped, one size."""
-	by = {p.text: p.fontPixels for p in sweep['group/values-matchall']['probes'] if p.role == 'value'}
-	assert by['98°'] == pytest.approx(by['31%'], rel=0.01), by
-
-
-@pytest.mark.xfail(strict=True, reason=(
-	'A value with a unit line has a shorter box (the unit takes about a fifth of it), so it lands in another '
-	'height tier (size-groups.md: tiers are ~10 px buckets) and keeps its own size beside the unitless values '
-	'around it, even in a global matchAll group. Wind next to Temperature shows it.'))
 def test_values_with_and_without_a_unit_line_share_a_size_in_a_group(sweep):
+	"""Temperature (no unit line), wind (mph) and humidity: one group, one size."""
 	sized = [p.fontPixels for p in sweep['group/values-matchall']['probes'] if p.role == 'value']
 	assert max(sized) / min(sized) < 1.02, sized
