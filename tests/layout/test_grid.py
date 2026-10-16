@@ -211,3 +211,34 @@ def test_an_indefinite_container_sizes_auto_tracks_to_their_max_content():
 	container = GridContainer(columns=parse_track_list('1fr 2fr'), rows=parse_track_list('auto'), width=300, gap=Gap(0, 10))
 	rects = layout_grid([GridItem(max_content=(0, 20)), GridItem(max_content=(0, 20))], container)
 	assert [r.height for r in rects] == [20, 20]
+
+
+# --- shrink (LevityDash extension, opt-in): a wide auto item squeezes into a gap --------------
+
+def test_shrink_item_takes_the_widest_span_that_fits_a_gap():
+	# A covers column 1 in both rows. W wants 3 columns and shrink lets it take the 2 that are free.
+	container = GridContainer()
+	items = [
+		at(column=1, row=1, row_span=2),
+		GridItem(placement=Placement(column_span=3, shrink=True)),
+	]
+	assert place_items(items, container, 3, 2) == [(0, 0, 1, 2), (1, 0, 2, 1)]
+
+
+def test_without_shrink_the_wide_item_goes_below_the_explicit_rows():
+	container = GridContainer()
+	items = [
+		at(column=1, row=1, row_span=2),
+		GridItem(placement=Placement(column_span=3)),
+	]
+	assert place_items(items, container, 3, 2) == [(0, 0, 1, 2), (0, 2, 3, 1)]
+
+
+def test_shrink_needs_explicit_rows_to_shrink_into():
+	container = GridContainer()
+	items = [
+		at(column=1, row=1, row_span=2),
+		GridItem(placement=Placement(column_span=3, shrink=True)),
+	]
+	# no explicit rows: the item keeps its span and opens a new row
+	assert place_items(items, container, 3, 0) == [(0, 0, 1, 2), (0, 2, 3, 1)]

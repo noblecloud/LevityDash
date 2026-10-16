@@ -316,7 +316,7 @@ def _checkedKeys(value: Mapping | None, allowed: set[str], what: str) -> dict | 
 # at once. The two sets do not overlap: `align-self` is the item's, `align-items` the container's.
 _FLEX_ITEM_KEYS = {'grow', 'shrink', 'basis', 'min', 'max', 'cross', 'align-self', 'order'}
 _FLEX_STACK_KEYS = {'justify', 'align-items', 'wrap'}
-_GRID_ITEM_KEYS = {'column', 'row', 'column-span', 'row-span', 'justify-self', 'align-self'}
+_GRID_ITEM_KEYS = {'column', 'row', 'column-span', 'row-span', 'justify-self', 'align-self', 'shrink'}
 _GRID_KEYS = {'columns', 'rows', 'auto-columns', 'auto-rows', 'auto-flow', 'dense', 'gap', 'justify-content', 'align-content', 'justify-items', 'align-items'}
 
 
@@ -1628,8 +1628,9 @@ class GridStack(Stack, tag='grid'):
 			if props.get(key) is not None:
 				setattr(container, name, cssparse.parse_item_align(props[key]))
 		# An item's natural height is a row of the explicit grid (or of an even split); its width follows the text's shape.
-		columns = len(container.columns) or 1
-		rows = len(container.rows) or -(-len(self.geometries) // columns)
+		# Count the tracks after repeats are expanded, so `repeat(auto-fill, ...)` counts as many columns as it fills.
+		columns = len(cssgrid.expand_repeat(container.columns, inner_w, gap_column)) or 1
+		rows = len(cssgrid.expand_repeat(container.rows, inner_h, gap_row)) or -(-len(self.geometries) // columns)
 		natural_h = inner_h / max(rows, 1)
 		items = []
 		for geometry in self.geometries.values():
@@ -1640,6 +1641,7 @@ class GridStack(Stack, tag='grid'):
 				placement=cssgrid.Placement(
 					column_start=spec.get('column'), column_span=int(spec.get('column-span', 1)),
 					row_start=spec.get('row'), row_span=int(spec.get('row-span', 1)),
+					shrink=bool(spec.get('shrink', False)),
 				),
 				justify_self=CssItemAlign.auto if 'justify-self' not in spec else cssparse.parse_item_align(spec['justify-self']).value,
 				align_self=CssItemAlign.auto if 'align-self' not in spec else cssparse.parse_item_align(spec['align-self']).value,
