@@ -320,6 +320,22 @@ _GRID_ITEM_KEYS = {'column', 'row', 'column-span', 'row-span', 'justify-self', '
 _GRID_KEYS = {'columns', 'rows', 'auto-columns', 'auto-rows', 'auto-flow', 'dense', 'gap', 'justify-content', 'align-content', 'justify-items', 'align-items'}
 
 
+def _scalarsOverShared(state: dict, shared: Mapping, itemType: Type) -> dict:
+	"""Decode a bare scalar that would replace a shared mapping, so the shared settings still merge in.
+
+	`shared: {title: {matchingGroup: ...}}` with an item `title: Dewpoint` would lose the group, because the
+	item's string replaces the whole mapping. Where the key's own decoder turns that string into a mapping
+	(a title's `title: X` is `{text: X}`), decode it first and the shared mapping merges with it.
+	"""
+	properties = {prop.key: prop for prop in getattr(itemType, 'statefulItems', {}).values()}
+	decoded = dict(state)
+	for key, value in state.items():
+		if isinstance(value, str) and isinstance(shared.get(key), Mapping) and (prop := properties.get(key)) is not None:
+			if isinstance(result := prop.decodeValue(value, None), Mapping):
+				decoded[key] = result
+	return decoded
+
+
 class StackedItem(Stateful, tag=...):
 	__size = None
 	__sizeRatio = None
@@ -1090,6 +1106,7 @@ class Stack(Panel, tag='stack'):
 						item_type = Stateful.findTag(item.get('type', state.get('type', default_type.__tag__))) or default_type
 
 				if item_type is not Spacer:
+					state = _scalarsOverShared(state, self.shared.to_dict(), item_type)
 					# Update the state with the shared state and the preset for the direction.
 					# User-specified shared values will override the preset values.
 					shared_state = self.shared.new_child(self, child_map=preset)
