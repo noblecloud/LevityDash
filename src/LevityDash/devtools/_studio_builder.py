@@ -654,6 +654,27 @@ class Stage(QWidget):
 		self.marks: List[QRectF] = []  # boxes the Size groups tab points at, in scene pixels
 		self.setMinimumSize(320, 220)
 		self.setMouseTracking(True)
+		self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+	def keyPressEvent(self, event):
+		"""Arrow keys move the selected item by 1% of its parent; Shift 5%, Alt 0.1%."""
+		step = {Qt.Key.Key_Left: (-1, 0), Qt.Key.Key_Right: (1, 0), Qt.Key.Key_Up: (0, -1), Qt.Key.Key_Down: (0, 1)}.get(event.key())
+		rect = self.rects.get(self.path) if self.path else None
+		if step is None or rect is None or not self.movable:
+			return super().keyPressEvent(event)
+		mods = event.modifiers()
+		size = 5 if mods & Qt.KeyboardModifier.ShiftModifier else 0.1 if mods & Qt.KeyboardModifier.AltModifier else 1
+		parent = self.rects.get(self.path[:-1])
+		if parent is None:
+			parent = QRectF(0, 0, self.image.width(), self.image.height()) if self.image else QRectF(0, 0, 1, 1)
+		if parent.width() <= 0 or parent.height() <= 0:
+			return
+		x = (rect.x() - parent.x()) / parent.width() * 100 + step[0] * size
+		y = (rect.y() - parent.y()) / parent.height() * 100 + step[1] * size
+		self.rects[self.path] = rect.translated(step[0] * size * parent.width() / 100, step[1] * size * parent.height() / 100)
+		self.update()
+		self.dragged.emit(self.path, {'x': f'{x:.1f}%', 'y': f'{y:.1f}%'})
+		self.dragDone.emit()
 
 	def show_(self, image: QImage, rects: Dict[tuple, QRectF]):
 		self.image, self.rects = image, rects
