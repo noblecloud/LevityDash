@@ -28,6 +28,7 @@ A device needing more than a name gets a section, and only says what differs:
 	model = H5075              ; pin the preset instead of detecting it
 	temperature.slice = [4:10] ; override one field
 	temperature.expression = val / 10000
+	where = home.upstairs.bedroom   ; a dotted place, see lib/plugins/places.py
 
 Matching is on advertised *name*, not address: on macOS an address is a
 per-machine generated UUID rather than a hardware MAC, so an address-keyed
@@ -39,6 +40,7 @@ from typing import Any, Dict, Iterable, List, NamedTuple, Optional
 
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.plugins.govee.models import ModelPreset, preset_for
+from LevityDash.lib.plugins.places import normalizePlace
 
 log = LevityPluginLog.getChild('Govee')
 
@@ -65,6 +67,18 @@ class DeviceConfig(NamedTuple):
 	fields: Dict[str, dict] = {}
 	#: True when the user pinned ``model =`` rather than it being detected.
 	modelPinned: bool = False
+	#: Where the device is, a dotted path such as ``home.upstairs.bedroom``.
+	#: ``None`` when the config does not say.
+	where: Optional[str] = None
+
+	@property
+	def place(self) -> str:
+		"""The device's place for matching: its ``where``, else its alias.
+
+		A device nobody placed still answers to its alias, so ``where: bedroom``
+		works on a config that only has ``[devices] bedroom = ...``.
+		"""
+		return self.where or normalizePlace(self.alias) or self.alias
 
 	@property
 	def sourceName(self) -> str:
@@ -172,6 +186,11 @@ def parse_devices(config) -> List[DeviceConfig]:
 			return
 		model = settings.get('model') or settings.get('device.model')
 		preset = preset_for(model=model, advertisedName=name)
+		try:
+			where = normalizePlace(settings.get('where'))
+		except ValueError as e:
+			log.warning(f'Govee: device {alias!r}: {e}; ignoring where')
+			where = None
 		devices[alias] = DeviceConfig(
 			alias=alias,
 			name=str(name),
@@ -179,6 +198,7 @@ def parse_devices(config) -> List[DeviceConfig]:
 			address=settings.get('address') or settings.get('device.address'),
 			fields=_field_settings(preset, settings),
 			modelPinned=bool(model),
+			where=where,
 		)
 
 	# 1. Explicit sections.
