@@ -118,6 +118,8 @@ A `realtime` item reads its data through a connection. `key:` and `source:` on t
 
 A connection that holds only a key is saved back as `key:`. A connection with a `source` is saved with `key:` and `source:` side by side on the item.
 
+`where:` names a place instead of a device. A place is a dotted path such as `home.upstairs.bedroom`. The item reads the device that the plugin config puts at that place. A parent place matches everything under it, but an item shows one device, so `where: home.upstairs` works only when one device is there. If `where` matches no device or several, the log says so and the item shows no value. `where:` does not work with an expression, or with a key that already has `#device` in it.
+
 <!-- div:right-panel -->
 
 ```yaml
@@ -130,6 +132,13 @@ A connection that holds only a key is saved back as `key:`. A connection with a 
 - type: realtime.text
   connection:
     key: environment.temperature.temperature
+```
+
+```yaml
+# The temperature of the device at this place
+- type: realtime.text
+  key: indoor.temperature.temperature
+  where: home.upstairs.bedroom
 ```
 
 <!-- panels:end -->

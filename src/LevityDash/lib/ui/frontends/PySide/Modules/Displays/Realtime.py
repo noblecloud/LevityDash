@@ -21,6 +21,7 @@ from WeatherUnits.time_.time import Second
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.valuesource import openValueSource
 from LevityDash.lib.plugins.expressions import Expression
+from LevityDash.lib.plugins.places import identitiesAt, normalizePlace
 from LevityDash.lib.plugins import Plugin, Container
 from LevityDash.lib.plugins.plugin import AnySource, SomePlugin
 from LevityDash.lib.plugins.dispatcher import MultiSourceContainer
@@ -93,6 +94,10 @@ class Connection(Stateful, tag=...):
 
 	@StateProperty(key='key', sortOrder=0, singleVal=True)
 	def key(self) -> CategoryItem:
+		# A key at a `where` is scoped to a device while it runs; the file keeps
+		# the key as written.
+		if getattr(self.owner, '_where', None) and isinstance(text := getattr(self.owner, '_keyText', None), str):
+			return CategoryItem(text)
 		return getattr(self.owner, '_key', None)
 
 	@key.setter
@@ -111,6 +116,18 @@ class Connection(Stateful, tag=...):
 			if (text := getattr(source, 'text', None)) is not None:
 				return text
 		return str(value)
+
+	@StateProperty(key='where', sortOrder=2, default=None)
+	def where(self) -> str | None:
+		return getattr(self.owner, '_where', None)
+
+	@where.setter
+	def where(self, value):
+		try:
+			self.owner._where = normalizePlace(value)
+		except ValueError as e:
+			log.warning(f'Realtime panel where: {e}; ignoring it')
+			self.owner._where = None
 
 	@StateProperty(key='source', sortOrder=1, default=AnySource)
 	def source(self) -> Plugin | SomePlugin:
@@ -220,6 +237,11 @@ class Realtime(Panel, tag='realtime'):
 			# `bar` fuzzy-matches the bar *plot*; a meter bar is named outright.
 			display['displayType'] = DisplayType.Bar if name == 'bar' else DisplayType[name]
 			kwargs['display'] = display
+		# A panel connects to its container once, when its key is first set, so a
+		# `where:` has to be turned into a device before then (see `placeConnection`).
+		flattenConnection(kwargs)
+		if (placed := placeConnection(kwargs, LevityDashboard.plugins)) is not None:
+			self.rememberPlace(*placed)
 		super(Realtime, self)._init_args_(*args, **kwargs)
 
 	def __repr__(self):
@@ -312,6 +334,16 @@ class Realtime(Panel, tag='realtime'):
 	@key.setter
 	def key(self, value):
 		self.connection.key = value
+
+	#: `where:` as written, and the key as written. The loader resolves `where` to
+	#: a device before the panel is built (`placeConnection`), so the panel's own
+	#: key is scoped to that device while the file keeps both as written.
+	_where = None
+	_keyText = None
+
+	def rememberPlace(self, where: str, written):
+		"""Keep `where:` and the key as the file wrote them (see `placeConnection`)."""
+		self._where, self._keyText = where, written
 
 	def _openKey(self, value):
 		#! self.display can not be accessed here
@@ -880,6 +912,46 @@ def connectionKey(item: dict):
 		return item['key']
 	connection = item.get('connection')
 	return connection.get('key') if isinstance(connection, dict) else connection
+
+
+def placeConnection(item: dict, plugins) -> tuple | None:
+	"""Resolve `where:` on a flat raw item to the one device there, in place.
+
+	The item's `key` becomes the key scoped to that device (`…#bedroom`) and
+	`where` leaves the item. Returns `(where, key as written)` for
+	`Realtime.rememberPlace` to put back on the panel, so a save writes what the
+	file said. Returns None when the item has no `where`. A `where` that cannot
+	name exactly one device, or sits on an expression or a key that already
+	names a device, is logged and the key stays as written.
+
+	It runs before the panel exists because a panel connects to its container
+	once, when its key is first set.
+	"""
+	if 'where' not in item:
+		return None
+	try:
+		where = normalizePlace(item.pop('where'))
+	except ValueError as e:
+		log.warning(f'Realtime panel where: {e}; ignoring it')
+		return None
+	if where is None:
+		return None
+	written = item.get('key')
+	if not isinstance(written, str) or _isExpression(written):
+		log.warning(f'Realtime panel {written!r}: where applies to a plain key, not an expression; ignoring where: {where}')
+		return where, written
+	key = CategoryItem(written)
+	if key.identity:
+		log.warning(f'Realtime panel {key}: the key already names a device with #{key.identity}; ignoring where: {where}')
+		return where, written
+	found = identitiesAt(where, plugins)
+	if len(found) == 1:
+		item['key'] = str(key.withIdentity(found[0]))
+	elif found:
+		log.warning(f'Realtime panel {key}: where: {where} matches {len(found)} devices ({", ".join(found)}); a panel needs one, so name a single place')
+	else:
+		log.warning(f'Realtime panel {key}: where: {where} matches no device; check the place in the plugin config')
+	return where, written
 
 
 class RealtimeText(Realtime, tag='realtime.text'):

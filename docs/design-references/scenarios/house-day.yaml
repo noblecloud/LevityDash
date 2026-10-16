@@ -3,6 +3,13 @@
 # Series are today's 24 hourly readings. Use it with --freeze-time 2026-10-15T15:10:00.
 name: house-day
 description: 'A house on a cool October afternoon: six rooms from 62 F (basement, 63 % humid) to 76 F (office, 38 % humid), outside 60 F, the nursery sensor low on battery.'
+places:
+  livingroom: home.downstairs.livingroom
+  kitchen: home.downstairs.kitchen
+  basement: home.basement
+  bedroom: home.upstairs.bedroom
+  office: home.upstairs.office
+  nursery: home.upstairs.nursery
 keys:
   environment.temperature.temperature:
     value: 60.5

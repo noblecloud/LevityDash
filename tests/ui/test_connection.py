@@ -92,3 +92,62 @@ def test_setting_key_on_the_item_goes_through_the_connection(dashboard):
 		assert panel.state['key'] == 'environment.humidity.humidity'
 	finally:
 		_drop(sandbox)
+
+
+# -- where ------------------------------------------------------------------------
+
+class _Placed:
+	def __init__(self, **places):
+		self.places = places
+
+
+@pytest.fixture
+def house(monkeypatch):
+	from LevityDash import LevityDashboard
+	placed = [_Placed(bedroom='home.upstairs.bedroom'), _Placed(office='home.upstairs.office', kitchen='home.downstairs.kitchen')]
+	# The loader is the one place a display finds its plugins; iterating it is all `where` needs.
+	monkeypatch.setattr(type(LevityDashboard.plugins), '__iter__', lambda self: iter(placed))
+
+
+@pytest.mark.parametrize('item', [
+	{'key': 'indoor.temperature.temperature', 'where': 'home.upstairs.bedroom'},
+	{'connection': {'key': 'indoor.temperature.temperature', 'where': 'Home.Upstairs.Bedroom'}},
+	{'where': 'home.upstairs.bedroom', 'key': 'indoor.temperature.temperature'},
+], ids=['flat', 'nested', 'where-first'])
+def test_where_scopes_the_key_to_the_one_device_there(dashboard, house, item):
+	sandbox, panel = _panel(dashboard, **item)
+	try:
+		assert str(panel.key) == 'indoor.temperature.temperature#bedroom'
+	finally:
+		_drop(sandbox)
+
+
+def test_where_saves_back_with_the_unscoped_key(dashboard, house):
+	sandbox, panel = _panel(dashboard, key='indoor.temperature.temperature', where='home.upstairs.bedroom')
+	try:
+		state = panel.state
+		assert state['key'] == 'indoor.temperature.temperature'
+		assert state['where'] == 'home.upstairs.bedroom'
+	finally:
+		_drop(sandbox)
+
+
+@pytest.mark.parametrize('where, why', [
+	('home.upstairs', 'several'),     # bedroom and office
+	('home.garage', 'none'),
+	('home..up', 'invalid'),
+], ids=['several', 'none', 'invalid'])
+def test_where_that_does_not_name_one_device_leaves_the_key_alone(dashboard, house, where, why):
+	sandbox, panel = _panel(dashboard, key='indoor.temperature.temperature', where=where)
+	try:
+		assert str(panel.key) == 'indoor.temperature.temperature'
+	finally:
+		_drop(sandbox)
+
+
+def test_where_does_not_override_a_key_that_names_a_device(dashboard, house):
+	sandbox, panel = _panel(dashboard, key='indoor.temperature.temperature#office', where='home.upstairs.bedroom')
+	try:
+		assert str(panel.key) == 'indoor.temperature.temperature#office'
+	finally:
+		_drop(sandbox)

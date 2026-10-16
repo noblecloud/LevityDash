@@ -56,3 +56,18 @@ battery.slice = [10:12]
 > [!NOTE]
 > Note that the payload variable name for temperature is different from the variable in humidify.
 > The plugin will assume the first available non numeric atom to be the payload value.
+
+### Places
+
+A device can say where it is with `where`, a dotted path. A dashboard item can then ask for that place with `where:` instead of the device's name.
+
+```ini
+; Govee.ini
+[device:bedroom]
+name = GVH5102_6736
+where = home.upstairs.bedroom
+```
+
+A device with no `where` uses its alias as its place, so `where: bedroom` finds `bedroom` with no change to an older config.
+
+A display in `remote` mode reads places from its own copy of this file, not from the backend. Keep the `where` lines the same on both machines.

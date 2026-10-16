@@ -25,3 +25,23 @@ def test_normalize_rejects_what_is_not_a_dotted_path(text):
 ])
 def test_place_contains(query, place, expected):
 	assert placeContains(query, place) is expected
+
+
+def test_identities_at_matches_by_place_across_plugins():
+	from LevityDash.lib.plugins.places import identitiesAt, placesOf
+
+	class Plugin:
+		def __init__(self, places=None):
+			self.places = places
+
+	plugins = [
+		Plugin({'bedroom': 'home.upstairs.bedroom'}),
+		Plugin({'office': 'home.upstairs.office', 'kitchen': 'home.downstairs.kitchen'}),
+		Plugin(),      # a plugin with no places is skipped
+		object(),
+	]
+	assert placesOf(plugins) == {'bedroom': 'home.upstairs.bedroom', 'office': 'home.upstairs.office', 'kitchen': 'home.downstairs.kitchen'}
+	assert identitiesAt('home.upstairs', plugins) == ['bedroom', 'office']
+	assert identitiesAt('home.upstairs.office', plugins) == ['office']
+	assert identitiesAt('home.garage', plugins) == []
+	assert identitiesAt('', plugins) == []

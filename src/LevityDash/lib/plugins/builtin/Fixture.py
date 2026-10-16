@@ -170,6 +170,12 @@ class Fixture(LifecyclePlugin, realtime=True, hourly=True, logged=False):
 		super().__init__()
 		log.info(f"Fixture: scenario {self.scenario['name']!r} from {self.scenario['path']}")
 
+	@property
+	def places(self) -> Dict[str, str]:
+		"""``{identity: place}`` from the scenario's optional ``places:`` mapping."""
+		from LevityDash.lib.plugins.places import normalizePlace
+		return {str(identity): normalizePlace(place) for identity, place in (self.scenario.get('places') or {}).items()}
+
 	# The values are fixed, so there is nothing to keep running. `start()` runs
 	# on the plugin's own thread (see `PluginThread`), publishes once and returns.
 	# `LifecyclePlugin.start` would park a loop in the default executor, whose
