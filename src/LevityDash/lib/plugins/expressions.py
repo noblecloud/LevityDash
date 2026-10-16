@@ -160,6 +160,8 @@ _RESERVED_NAMES = frozenset({_TODAY, _VALUE})
 
 _WINDOW_FUNCTIONS = frozenset({'min', 'max', 'avg'})
 _FUNCTIONS = frozenset({'min', 'max', 'avg', 'at', 'abs'})
+#: Other names for a function. ``mean`` is the plain word for ``avg``.
+_ALIASES = {'mean': 'avg'}
 
 _BINARY_OPERATORS: Dict[type, Callable] = {
 	ast.Add:  operator.add,
@@ -246,6 +248,7 @@ class Expression:
 			tree = ast.parse(source, mode='eval')
 		except SyntaxError as e:
 			raise ExpressionError(f'cannot parse {text!r}: {e.msg}') from None
+		_renameAliases(tree)
 		self._tree = tree
 		self._placeholders = placeholders
 		_check(tree, placeholders, text)
@@ -327,6 +330,14 @@ def _substitute(text: str) -> Tuple[str, Dict[str, Any]]:
 	return text, placeholders
 
 
+def _renameAliases(tree: ast.AST) -> None:
+	"""Rewrite an alias such as ``mean`` to its function in call position, so
+	``mean(a, b)`` and ``avg(a, b)`` are the same expression with the same key."""
+	for node in ast.walk(tree):
+		if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in _ALIASES:
+			node.func.id = _ALIASES[node.func.id]
+
+
 def _check(tree: ast.AST, placeholders: Mapping[str, Any], text: str) -> None:
 	for node in ast.walk(tree):
 		if not isinstance(node, _ALLOWED_NODES):
@@ -402,10 +413,11 @@ def _checkCall(name: str, args: Sequence[ast.AST], placeholders: Mapping[str, An
 			if len(args) != 1:
 				raise ExpressionError(f'{text!r}: abs() takes one argument')
 		case 'avg':
-			if len(args) != 2 or _windowOf(args[1], placeholders) is None:
-				raise ExpressionError(f'{text!r}: avg() takes a key and a window, like avg(a.b, 24h)')
-			if not _isKey(args[0], placeholders):
-				raise ExpressionError(f'{text!r}: the first argument of avg() must be a key')
+			if len(args) == 2 and _windowOf(args[1], placeholders) is not None:
+				if not _isKey(args[0], placeholders):
+					raise ExpressionError(f'{text!r}: the first argument of avg() must be a key')
+			elif len(args) < 2:
+				raise ExpressionError(f'{text!r}: avg() takes a key and a window, like avg(a.b, 24h), or two or more values')
 		case 'min' | 'max':
 			if not args:
 				raise ExpressionError(f'{text!r}: {name}() needs arguments')
@@ -625,4 +637,6 @@ class _Evaluator:
 				return min(values)
 			case 'max':
 				return max(values)
+			case 'avg':
+				return sum(values[1:], values[0]) / len(values)
 		raise ExpressionError(f'{self.text!r}: cannot call {name}()')

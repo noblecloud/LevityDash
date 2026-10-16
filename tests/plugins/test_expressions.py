@@ -147,6 +147,27 @@ def test_duration_window_covers_the_past():
 	assert Expression.parse(f'avg({TEMP}, 3h)').evaluate(resolver, NOW) == Fahrenheit(73.5)
 
 
+def test_avg_of_several_keys_is_their_mean():
+	other = 'indoor.temperature.temperature'
+	resolver = FakeResolver(current={TEMP: Fahrenheit(70), other: Fahrenheit(80)})
+	assert Expression.parse(f'avg({TEMP}, {other})').evaluate(resolver, NOW) == Fahrenheit(75)
+	assert Expression.parse(f'avg({TEMP}, {other}, {TEMP})').evaluate(resolver, NOW) == Fahrenheit(70 + 80 + 70) / 3
+
+
+def test_mean_is_avg():
+	other = 'indoor.temperature.temperature'
+	resolver = FakeResolver(current={TEMP: Fahrenheit(70), other: Fahrenheit(80)}, series={TEMP: hourly(*[Fahrenheit(60 + i) for i in range(24)])})
+	assert Expression.parse(f'mean({TEMP}, {other})') == Expression.parse(f'avg({TEMP}, {other})')
+	assert Expression.parse(f'mean({TEMP}, {other})').evaluate(resolver, NOW) == Fahrenheit(75)
+	assert Expression.parse(f'mean({TEMP}, 3h)').evaluate(resolver, NOW) == Fahrenheit(73.5)
+
+
+def test_avg_of_several_keys_is_missing_if_any_is():
+	other = 'indoor.temperature.temperature'
+	resolver = FakeResolver(current={TEMP: Fahrenheit(70)})
+	assert Expression.parse(f'avg({TEMP}, {other})').evaluate(resolver, NOW) is Missing
+
+
 def test_at_reads_an_offset_from_now():
 	resolver = FakeResolver(series={TEMP: hourly(*[Fahrenheit(60 + i) for i in range(24)])})
 	assert Expression.parse(f'at({TEMP}, -3h)').evaluate(resolver, NOW) == Fahrenheit(72)

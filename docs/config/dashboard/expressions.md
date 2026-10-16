@@ -116,6 +116,7 @@ A value that picks between two keys. This shows the gust when the gust is more t
 | `at(key, offset)` | The value of the key at a time, counted from now. `-3h` is three hours ago. `3h` is three hours ahead. |
 | `min(a, b, ...)` | The lowest of two or more values. |
 | `max(a, b, ...)` | The highest of two or more values. |
+| `avg(a, b, ...)` | The average of two or more values, such as the current values of several keys. `mean` is another name for `avg`. |
 | `abs(x)` | The size of a number, without its sign. |
 
 ### <div class=mono>Windows and offsets</div>
