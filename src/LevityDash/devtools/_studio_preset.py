@@ -22,6 +22,8 @@ PRESET_KEY = lib.PRESET
 PROPS_KEY = lib.PROPS
 TEMPLATE_KEY = lib.TEMPLATE
 ITEMS_KEY = 'items'
+#: The item types that lay out other items.
+CONTAINER_TYPES = ('group', 'stack', 'grid', 'value-stack', 'titled-group', 'switch')
 
 TYPES = ('number', 'size', 'text', 'key', 'color', 'bool', 'any')
 
@@ -117,6 +119,11 @@ def _without(node: Any, base: Any) -> Any:
 
 #: First keys that make a one-key item a shorthand a stack reads (`spacer: {…}`, `{type}: {…}`); a dotted data key does too.
 SHORT_TYPES = ('spacer', 'group', 'stack', 'grid', 'value-stack', 'titled-group', 'switch', 'text', 'label', 'graph', 'mini-graph', 'polar', 'clock', 'moon')
+
+
+def holds(item: Any) -> bool:
+	"""Whether `item` can have items inside it."""
+	return isinstance(item, dict) and not opaque(item) and (ITEMS_KEY in item or str(item.get('type')) in CONTAINER_TYPES)
 
 
 def opaque(item: Any) -> bool:
@@ -288,6 +295,31 @@ class Piece:
 		to = max(0, min(len(kids) - 1, path[-1] + by))
 		kids.insert(to, kids.pop(path[-1]))
 		return path[:-1] + (to,)
+
+	def relocate(self, path: Path, parent: Path, index: Optional[int] = None) -> Optional[Path]:
+		"""Move the item at `path` into the container at `parent`, at `index` (the end when None); the item's new path.
+
+		None when it cannot go there: the root, itself or something inside it, or a parent that is not a mapping the
+		editor changes. `index` counts the parent's children as they are now, so it is corrected when the item leaves
+		an earlier place in the same list.
+		"""
+		if not path or parent[:len(path)] == path or not holds(self.node(parent)):
+			return None
+		item = self.raw(path)
+		if item is None:
+			return None
+		source = self.node(path[:-1])[ITEMS_KEY]
+		kids = self.node(parent).setdefault(ITEMS_KEY, [])
+		at = len(kids) if index is None else max(0, min(index, len(kids)))
+		if kids is source and at > path[-1]:
+			at -= 1
+		# The parent's own path shifts when an earlier sibling of one of its ancestors leaves: read it again afterwards.
+		fixed = list(parent)
+		if len(path) <= len(parent) and parent[:len(path) - 1] == path[:-1] and parent[len(path) - 1] > path[-1]:
+			fixed[len(path) - 1] -= 1
+		del source[path[-1]]
+		self.node(tuple(fixed)).setdefault(ITEMS_KEY, []).insert(at, item)
+		return tuple(fixed) + (at,)
 
 	def duplicate(self, path: Path) -> Path:
 		if not path:

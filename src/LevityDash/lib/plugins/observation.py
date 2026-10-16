@@ -1298,6 +1298,18 @@ class PublishedDict(T, metaclass=ABCMeta):
 	accumulator: Optional[Accumulator]
 
 
+def _humidityDerivable(value) -> bool:
+	"""True when a humidity reading can feed a dewpoint or heat index.
+
+	WeatherUnits rounds the reading to a whole percent and takes its log, so
+	anything that rounds to 0 % (0.0, or a trace such as 0.004) raises.
+	"""
+	try:
+		return int(wu.Humidity(value)) >= 1
+	except Exception:
+		return False
+
+
 class ObservationDict(PublishedDict):
 	_source: 'Plugin'
 	_time: datetime
@@ -1496,7 +1508,12 @@ class ObservationDict(PublishedDict):
 		# temperature' matches none of the identity-scoped keys - running once
 		# over the whole set silently skipped every Govee thermometer.
 		for identity in {getattr(key, 'identity', None) for key in keys}:
-			self._calculateMissingFor(keys, identity)
+			try:
+				self._calculateMissingFor(keys, identity)
+			except Exception as e:
+				# A derived value is a bonus: one that cannot be computed must not
+				# drop the reading it came from (the rest of update() never ran).
+				log.warning(f'{self}: could not derive missing values for {identity or "the default device"}: {e!r}')
 
 	def _calculateMissingFor(self, keys: set, identity: str | None) -> None:
 		"""Fill in derived values for one identity (`None` = the unscoped keys)."""
@@ -1517,7 +1534,7 @@ class ObservationDict(PublishedDict):
 				# A packet that cannot carry humidity decodes as 0 (the byte is absent, not a
 				# reading). Everything derived from it is undefined there: dewpoint's log(0)
 				# raises, and a heat index at 0% is fiction. Derive nothing, and say so once.
-				if humidity.value > 0:
+				if _humidityDerivable(humidity.value):
 					if key('environment.temperature.dewpoint') not in keys and self.schema.get('environment.temperature.dewpoint', None):
 						self._calculatedKeys.add(key('environment.temperature.dewpoint'))
 						dewpoint = temperature.dewpoint(humidity.value)
@@ -1570,7 +1587,7 @@ class ObservationDict(PublishedDict):
 				humidity = self[key('indoor.humidity.humidity')]
 
 				# Same guard as the environment block: a 0 here is an absent byte, not air.
-				if humidity.value > 0:
+				if _humidityDerivable(humidity.value):
 					if key('indoor.temperature.dewpoint') not in keys:
 						self._calculatedKeys.add(key('indoor.temperature.dewpoint'))
 						dewpoint = temperature.dewpoint(humidity.value)

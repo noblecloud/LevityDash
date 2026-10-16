@@ -211,3 +211,14 @@ def test_items_without_a_tier_height_still_tier_by_their_own_size():
 	group.addItem(big)
 	group.addItem(small)
 	assert group.make_size_key(big) != group.make_size_key(small)
+
+
+def test_a_member_whose_panel_left_the_scene_is_skipped():
+	group = MatchAllSizeGroup(SimpleNamespace(is_loading=False, state_is_loading=False), "t3", matchAll=True)
+	live, gone = _Item(size=20.0), _Item(size=20.0, scale=0.1)
+	live.scene = lambda: object()
+	gone.scene = lambda: None
+	group.addItem(live)
+	group.addItem(gone)
+	group.refit()
+	assert gone not in group._fit and live in group._fit

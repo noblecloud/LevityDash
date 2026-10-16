@@ -198,7 +198,10 @@ def test_aligned_cluster_shares_baseline(dashboard):
 			continue
 		g.refit()
 		by_fit = defaultdict(list)
+		# a reload leaves the old dashboard's groups in the registry; only items still in the scene count
 		for item in g.items:
+			if item.scene() is None:
+				continue
 			by_fit[id(g.fit_for(item))].append(item)
 		for members in by_fit.values():
 			if len(members) < 2:

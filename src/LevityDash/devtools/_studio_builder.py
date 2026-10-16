@@ -32,12 +32,14 @@ import yaml
 from PySide6.QtCore import QPointF, QRectF, QSignalBlocker, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QImage, QKeySequence, QPainter, QPen, QShortcut
 from PySide6.QtWidgets import (
-	QApplication, QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMenu,
+	QAbstractItemView, QApplication, QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMenu,
 	QPlainTextEdit, QPushButton, QScrollArea, QSplitter, QTabWidget, QToolButton, QTreeWidget, QTreeWidgetItem,
 	QVBoxLayout, QWidget,
 )
 
 from LevityDash.devtools import _studio_editors as editors
+from LevityDash.devtools import _studio_groups as groups
+from LevityDash.devtools._studio_groups_tab import GroupsTab
 from LevityDash.devtools import _yamlpatch as yamlpatch
 from LevityDash.lib.ui.colors import theme
 from LevityDash.devtools import _studio_layout as layout
@@ -47,12 +49,12 @@ from LevityDash.devtools import _studio_state as state
 from LevityDash.devtools._studio_stage import presetForKey
 from LevityDash.devtools._studio_chrome import THEMES, themePalette, themeSheet
 from LevityDash.devtools._studio_themes import ThemePicker
-from LevityDash.devtools._studio_widgets import Section
+from LevityDash.devtools._studio_widgets import Section, UndoKeys
 
 Editor = editors.Editor
 REPO = Path(__file__).resolve().parents[3]
 
-CONTAINERS = ['group', 'stack', 'grid', 'value-stack', 'titled-group', 'switch']
+CONTAINERS = list(model.CONTAINER_TYPES)
 DISPLAYS = ['realtime.text', 'realtime.gauge', 'realtime.bar', 'text', 'label', 'graph', 'mini-graph', 'polar', 'clock', 'moon', 'spacer']
 LAYOUT_PARENTS = ('stack', 'value-stack', 'grid', 'switch')
 STAGES = {'Card 640x400': (640, 400), 'Wide 960x400': (960, 400), 'Tall 400x640': (400, 640), 'Dashboard 1280x800': (1280, 800), 'Dashboard 1440x900': (1440, 900)}
@@ -496,6 +498,7 @@ class PreviewEngine:
 		self.directory = Path(panel.filePath.path).parent
 		self.panel = panel
 		self.error = ''
+		self.groups: list = []
 		self.scenario = os.environ.get('LEVITYDASH_FIXTURE', '')
 		editors.knownKeys()
 		editors._keyCache[:] = sorted(set(editors._keyCache) | set(scenarioKeys(self.scenario)))
@@ -530,6 +533,7 @@ class PreviewEngine:
 		for name, item in self._boot.named_items(scene).items():
 			if name in names:
 				found[names[name]] = item.sceneBoundingRect().translated(-rect.topLeft())
+		self.groups = groups.collect(scene, names)
 		return image, found
 
 	def stop(self):
@@ -603,6 +607,31 @@ def snapDrag(rect: QRectF, mode: str, corner: Optional[str], parent: QRectF, oth
 
 
 # Section: the stage
+class ItemTree(QTreeWidget):
+	"""The item tree. A row dragged onto another row says where it wants to go; the builder moves it in the model and
+	draws the tree again, so Qt never moves a row itself."""
+
+	moved = Signal(tuple, tuple, int)  # path, new parent's path, index in it
+
+	def __init__(self):
+		super().__init__()
+		self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+		self.setDefaultDropAction(Qt.DropAction.MoveAction)
+
+	def dropEvent(self, event):
+		source, target = self.currentItem(), self.itemAt(event.position().toPoint())
+		event.ignore()
+		if source is None or target is None:
+			return
+		path, over = source.data(0, Qt.ItemDataRole.UserRole), target.data(0, Qt.ItemDataRole.UserRole)
+		where = self.dropIndicatorPosition()
+		Pos = QAbstractItemView.DropIndicatorPosition
+		if where == Pos.OnItem:
+			self.moved.emit(path, over, -1)  # into it, at the end
+		elif over:
+			self.moved.emit(path, over[:-1], over[-1] + (1 if where == Pos.BelowItem else 0))
+
+
 class Stage(QWidget):
 	"""The picture, with the selected item outlined. Click selects; a drag moves or resizes it."""
 
@@ -622,6 +651,7 @@ class Stage(QWidget):
 		self._drag: Optional[tuple] = None
 		self.snap = True  # drags stick to the parent's and the siblings' edges and centres; Alt held turns it off
 		self.guides: Tuple[List[float], List[float]] = ([], [])
+		self.marks: List[QRectF] = []  # boxes the Size groups tab points at, in scene pixels
 		self.setMinimumSize(320, 220)
 		self.setMouseTracking(True)
 		self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -654,6 +684,10 @@ class Stage(QWidget):
 		self.path, self.movable = path, movable
 		self.update()
 
+	def setMarks(self, rects: List[QRectF]):
+		self.marks = list(rects)
+		self.update()
+
 	def _fit(self) -> Tuple[float, QPointF]:
 		if self.image is None:
 			return 1.0, QPointF()
@@ -676,6 +710,11 @@ class Stage(QWidget):
 		scale, off = self._fit()
 		p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
 		p.drawImage(QRectF(off.x(), off.y(), self.image.width() * scale, self.image.height() * scale), self.image)
+		if self.marks:
+			p.setPen(QPen(QColor('#ffb020'), 2))
+			p.setBrush(QColor(255, 176, 32, 50))
+			for m in self.marks:
+				p.drawRect(self._toView(m))
 		if self.path is not None and self.path in self.rects:
 			r = self._toView(self.rects[self.path])
 			p.setPen(QPen(QColor('#2f81f7'), 2))
@@ -1231,6 +1270,9 @@ class Builder(QWidget):
 		QShortcut(QKeySequence.StandardKey.Undo, self, self.undo)
 		QShortcut(QKeySequence.StandardKey.Redo, self, self.redo)
 		QShortcut(QKeySequence.StandardKey.Save, self, self.save)
+		# A focused field would keep Undo for its own text; the builder's history covers every control, so it takes the keys.
+		self._keys = UndoKeys(self)
+		QApplication.instance().installEventFilter(self._keys)
 
 	# layout
 
@@ -1327,9 +1369,10 @@ class Builder(QWidget):
 		# Two rows: one row of six buttons set the tree column's minimum width, which left the preview a sliver in a one-window Studio.
 		lbox.addLayout(tools)
 		lbox.addLayout(moves)
-		self.tree = QTreeWidget()
+		self.tree = ItemTree()
 		self.tree.setHeaderHidden(True)
 		self.tree.setMinimumWidth(200)
+		self.tree.moved.connect(self.relocateItem)
 		self.tree.currentItemChanged.connect(self._treePicked)
 		lbox.addWidget(self.tree, 1)
 		split.addWidget(left)
@@ -1355,9 +1398,11 @@ class Builder(QWidget):
 		self.instanceTab = InstanceTab(self)
 		self.yamlView = QPlainTextEdit()
 		self.yamlView.setReadOnly(True)
+		self.groupsTab = GroupsTab(self)
 		self.tabs.addTab(self.itemTab, 'Item')
 		self.tabs.addTab(self.propsTab, 'Properties')
 		self.tabs.addTab(self.instanceTab, 'Instance')
+		self.tabs.addTab(self.groupsTab, 'Size groups')
 		self.tabs.addTab(self.yamlView, 'YAML')
 		self.tabs.setMinimumWidth(440)
 		self.tabs.currentChanged.connect(lambda _: self.refreshYaml())
@@ -1667,6 +1712,7 @@ class Builder(QWidget):
 		if not fromTree:
 			self._selectRow()
 		self.itemTab.load(path)
+		self.groupsTab.selectionChanged()
 		self._syncStage()
 
 	def _movable(self) -> bool:
@@ -1710,6 +1756,44 @@ class Builder(QWidget):
 			self.rebuildAll()
 			self._syncStage()
 			self.schedule()
+
+	def copyItem(self):
+		"""Put the selected item on the clipboard as the YAML a `.levity` would hold, so it pastes here, into another Studio, or into a file."""
+		raw = self.piece.raw(self.selection) if self.selection else None
+		if raw is not None:
+			QApplication.clipboard().setText(yaml.safe_dump([copy.deepcopy(raw)], sort_keys=False, allow_unicode=True, width=120))
+
+	def pasteItem(self):
+		"""Add the items on the clipboard: inside the selected container at its end, else after the selected item."""
+		try:
+			data = yaml.safe_load(QApplication.clipboard().text())
+		except yaml.YAMLError:
+			data = None
+		items = data if isinstance(data, list) else [data]
+		if not items or not all(isinstance(i, (dict, str)) for i in items):
+			self.status.setText('The clipboard does not hold an item.')
+			return
+		self.push()
+		target = self.selection if self.selection is not None else ()
+		index = None
+		node = self.piece.node(target)
+		if node is None or model.opaque(node) or (str(node.get('type')) not in CONTAINERS and model.ITEMS_KEY not in node):
+			target, index = target[:-1], (target[-1] + 1 if target else None)
+		path = ()
+		for n, item in enumerate(items):
+			path = self.piece.add(target, copy.deepcopy(item), None if index is None else index + n)
+		self.selection = path
+		self.rebuildAll()
+		self._syncStage()
+		self.schedule()
+
+	def _treeMenu(self, at):
+		menu = QMenu(self.tree)
+		menu.addAction('Copy', self.copyItem, QKeySequence.StandardKey.Copy)
+		menu.addAction('Paste', self.pasteItem, QKeySequence.StandardKey.Paste)
+		menu.addAction('Duplicate', self.duplicateItem)
+		menu.addAction('Delete', self.deleteItem)
+		menu.exec(self.tree.viewport().mapToGlobal(at))
 
 	def extractPreset(self, name: Optional[str] = None):
 		"""Save the selected item as a preset (written to the Studio's presets folder) and leave a use of it in its place."""
@@ -1764,6 +1848,22 @@ class Builder(QWidget):
 			self.rebuildAll()
 			self._syncStage()
 			self.schedule()
+
+	def relocateItem(self, path: tuple, parent: tuple, index: int):
+		"""A row was dropped: move the item there when the target can hold it."""
+		if not model.holds(self.piece.node(parent)):
+			self.status.setText('That item cannot hold others.')
+			return
+		self.push()
+		new = self.piece.relocate(path, parent, None if index < 0 else index)
+		if new is None:
+			self.history.pop()
+			self._updateHistory()
+			return
+		self.selection = new
+		self.rebuildAll()
+		self._syncStage()
+		self.schedule()
 
 	def editField(self, field: str, value: Any):
 		"""A field of the selected item changed."""
@@ -1994,6 +2094,8 @@ class Builder(QWidget):
 			self.status.setText(f'The preview failed: {type(e).__name__}: {e}')
 			return
 		self.stage.show_(image, rects)
+		self.stage.setMarks([])
+		self.groupsTab.load(getattr(self.engine, "groups", []))
 		self._syncThemePicker()
 		self._syncStage()
 		self.status.setText(('; '.join(problems) + '. ') if problems else '')

@@ -303,3 +303,61 @@ def test_arrow_keys_nudge_the_selected_item_and_undo(board):
 	assert float(win.piece.node(target)['geometry']['x'].rstrip('%')) == pytest.approx(x0 - 4, abs=0.3)
 	win.undo(); win.undo()
 	assert yaml.safe_dump(win.piece.template, sort_keys=False) == before
+
+
+def test_copy_and_paste_an_item_and_undo(board):
+	from PySide6.QtWidgets import QApplication
+	win, path = board('station')
+	before = yaml.safe_dump(win.piece.template, sort_keys=False)
+	source = next(p for p, n in win.piece.walk() if len(p) >= 2 and not n.get('items') and str(n.get('type')) not in sb.CONTAINERS)
+	win.select(source)
+	win.copyItem()
+	assert yaml.safe_load(QApplication.clipboard().text())[0] == win.piece.node(source)
+	count = len(win.piece.node(source[:-1])['items'])
+	win.pasteItem()  # a leaf is selected: the copy goes right after it
+	assert len(win.piece.node(source[:-1])['items']) == count + 1 and win.selection == source[:-1] + (source[-1] + 1,)
+	win.undo()
+	assert yaml.safe_dump(win.piece.template, sort_keys=False) == before
+	QApplication.clipboard().setText('not: [valid')
+	win.pasteItem()
+	assert yaml.safe_dump(win.piece.template, sort_keys=False) == before and 'clipboard' in win.status.text()
+
+
+def test_a_dropped_row_moves_the_item_and_undo_puts_it_back(board):
+	win, path = board('station')
+	before = yaml.safe_dump(win.piece.template, sort_keys=False)
+	target = next(p for p, n in win.piece.walk() if p and n.get('type') == 'group' and p != (0,))
+	moving = next(p for p, n in win.piece.walk() if len(p) >= 2 and not n.get('items') and not m.holds(n) and p[:-1] != target)
+	count = len(win.piece.node(target).get('items') or [])
+	win.relocateItem(moving, target, -1)
+	assert yaml.safe_dump(win.piece.template, sort_keys=False) != before
+	win.undo()
+	assert yaml.safe_dump(win.piece.template, sort_keys=False) == before
+	win.relocateItem((0,), (0, 0), -1)  # into itself: refused, nothing changes or is recorded
+	assert yaml.safe_dump(win.piece.template, sort_keys=False) == before
+
+
+def test_dropping_a_tree_row_onto_a_container_moves_it_in(board):
+	"""A drag cannot be run offscreen, so the drop event is built by hand with the position Qt would report."""
+	from PySide6.QtCore import QMimeData, QPointF, Qt
+	from PySide6.QtGui import QDropEvent
+	from PySide6.QtWidgets import QAbstractItemView
+	win, path = board('storm')
+	win.resize(1200, 800)
+	win.show()
+	rows, stack = [], [win.tree.topLevelItem(0)]
+	while stack:
+		row = stack.pop(0)
+		rows.append(row)
+		stack += [row.child(i) for i in range(row.childCount())]
+	data = Qt.ItemDataRole.UserRole
+	source = next(r for r in rows if r.childCount() == 0 and len(r.data(0, data)) >= 2 and not m.holds(win.piece.node(r.data(0, data))))
+	target = next(r for r in rows if r.childCount() and r.data(0, data) and r.data(0, data) != source.data(0, data)[:-1] and r.data(0, data) != source.data(0, data)[:len(r.data(0, data))])
+	win.tree.setCurrentItem(source)
+	win.tree.dropIndicatorPosition = lambda: QAbstractItemView.DropIndicatorPosition.OnItem
+	before = yaml.safe_dump(win.piece.template, sort_keys=False)
+	at = QPointF(win.tree.visualItemRect(target).center())
+	win.tree.dropEvent(QDropEvent(at, Qt.DropAction.MoveAction, QMimeData(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
+	assert yaml.safe_dump(win.piece.template, sort_keys=False) != before
+	win.undo()
+	assert yaml.safe_dump(win.piece.template, sort_keys=False) == before

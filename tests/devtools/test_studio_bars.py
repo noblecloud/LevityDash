@@ -5,6 +5,7 @@ import yaml
 pytest.importorskip('PySide6')
 
 import LevityDash  # noqa: F401  builds the QApplication
+from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 
 from LevityDash.devtools import _studio_library as library  # noqa: E402
@@ -58,3 +59,64 @@ def test_opening_a_gauge_after_a_bar_goes_back_to_the_dial(editor):
 	editor.loadFile(library.REFERENCES / 'presets' / 'fill-dial.levity')
 	assert editor.studio.kind == 'gauge' and not isinstance(editor.studio.gauge, Bar)
 	assert yaml.safe_load(editor.exportLevity())[0]['type'] == 'realtime.gauge'
+
+
+def _handles(editor):
+	editor.layer.rebuildNow()
+	return {(i.spec.kind, i.spec.tip.split(' to ')[0] if False else i.spec.tip): i for i in editor.layer.items}
+
+
+def _drag(editor, item, fraction, cross=0.0):
+	"""Drag `item` to the point `fraction` along the track, as the layer does on a mouse move."""
+	from LevityDash.devtools._studio_bar_handles import Run
+	run = Run(editor.studio.gauge)
+	point = run.at(fraction, cross)
+	editor.layer.begin(item, item.spec.position())
+	editor.layer.move(item, point, Qt.KeyboardModifier.ControlModifier)
+	editor.layer.end(item)
+	editor.commitPending()
+
+
+def test_a_bar_has_handles_and_they_sit_on_the_track(editor):
+	from LevityDash.devtools._studio_bar_handles import Run
+	editor.loadFile(BARS / 'bar-progress.levity')
+	editor.layer.setEnabled(True)
+	editor.layer.force = True
+	items = editor.layer.items or (editor.layer.rebuildNow() or editor.layer.items)
+	kinds = {i.spec.kind for i in items}
+	assert {'needle', 'weight'} <= kinds
+	run = Run(editor.studio.gauge)
+	needle = next(i for i in items if i.spec.kind == 'needle')
+	at = needle.spec.position()
+	assert abs(run.crossOf(at)) < 1.0, 'the value handle is on the track'
+	assert 0.0 <= run.tOf(at) <= 1.0
+
+
+def test_dragging_the_value_handle_sets_the_value_and_the_weight_handle_writes_the_track(editor):
+	editor.loadFile(BARS / 'bar-progress.levity')
+	editor.layer.rebuildNow()
+	needle = next(i for i in editor.layer.items if i.spec.kind == 'needle')
+	_drag(editor, needle, 0.25)
+	r = editor.studio.gauge.value_scale
+	assert abs(float(editor.studio.gauge.value) - (r.min + r.span * 0.25)) < r.span * 0.02
+	weight = next(i for i in editor.layer.items if i.spec.kind == 'weight')
+	from LevityDash.devtools._studio_bar_handles import Run
+	was = (yaml.safe_load(editor.exportLevity())[0]['display'].get('track') or {}).get('weight')
+	half = Run(editor.studio.gauge).u * 0.2
+	_drag(editor, weight, 0.3, cross=half)
+	now = yaml.safe_load(editor.exportLevity())[0]['display']['track']['weight']
+	assert now.endswith('%') and now != was
+	editor.undo()
+	assert (yaml.safe_load(editor.exportLevity())[0]['display'].get('track') or {}).get('weight') == was
+
+
+def test_dragging_a_zone_edge_moves_the_cutoff_both_zones_share(editor):
+	editor.loadFile(BARS / 'bar-progress.levity')
+	editor.layer.rebuildNow()
+	zones = [i for i in editor.layer.items if i.spec.kind == 'zone']
+	if not zones:
+		pytest.skip('this bar has no numeric zone edges')
+	before = [dict(z) for z in editor.studio.gauge._zoneSpecs]
+	_drag(editor, zones[0], 0.5)
+	after = editor.studio.gauge._zoneSpecs
+	assert after != before and any(abs(float(z[e]) - 50) < 3 for z in after for e in ('from', 'to') if isinstance(z.get(e), (int, float)))
