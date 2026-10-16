@@ -3,6 +3,8 @@
 # `shrink: true` lets a wide item give up columns when no full-width hole is left in the three rows.
 # The strip at the bottom uses `repeat(auto-fill, ...)`, so its column count follows the width.
 # Render: render_dashboard.py OUT.png --levity THIS --scenario hot-clear-day --size 2880x1800
+# Titles are written `title: {text: ...}`, not `title: text`: a bare string replaces the whole `shared: title:`
+# mapping and drops its matchingGroup, so the titles would size on their own boxes.
 - type: group
   name: main
   items:
@@ -15,13 +17,13 @@
         title: {matchingGroup: {group: bentoTitle@bento, matchAll: true}}
         display: {valueLabel: {matchingGroup: {group: bentoValue@bento, matchAll: true}}}
       items:
-        - {type: realtime.text, key: environment.temperature.temperature, title: Temperature, grid: {column-span: 2, row-span: 2}, border: {enabled: true, edges: all}}
-        - {type: realtime.text, key: environment.humidity.humidity, title: Humidity, border: {enabled: true, edges: all}}
-        - {type: realtime.text, key: environment.pressure.pressure, title: Pressure, border: {enabled: true, edges: all}}
-        - {type: realtime.text, key: environment.precipitation.precipitation, title: Rain, border: {enabled: true, edges: all}}
-        - {type: realtime.text, key: environment.light.uvi, title: UV, border: {enabled: true, edges: all}}
-        - {type: realtime.text, key: environment.wind.speed.speed, title: Wind, grid: {column-span: 3}, border: {enabled: true, edges: all}}
-        - {type: realtime.text, key: environment.wind.gust.gust, title: Gust, grid: {column-span: 3, shrink: true}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.temperature.temperature, title: {text: Temperature}, grid: {column-span: 2, row-span: 2}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.humidity.humidity, title: {text: Humidity}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.pressure.pressure, title: {text: Pressure}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.precipitation.precipitation, title: {text: Rain}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.light.uvi, title: {text: UV}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Wind}, grid: {column-span: 3}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.wind.gust.gust, title: {text: Gust}, grid: {column-span: 3, shrink: true}, border: {enabled: true, edges: all}}
 
     - type: grid
       name: strip
@@ -32,7 +34,7 @@
         title: {matchingGroup: {group: stripTitle@strip, matchAll: true}}
         display: {valueLabel: {matchingGroup: {group: stripValue@strip, matchAll: true}}}
       items:
-        - {type: realtime.text, key: environment.temperature.dewpoint, title: Dewpoint, border: {enabled: true, edges: all}}
-        - {type: realtime.text, key: environment.wind.direction.direction, title: Direction, border: {enabled: true, edges: all}}
-        - {type: realtime.text, key: environment.light.uvi, title: UV index, border: {enabled: true, edges: all}}
-        - {type: realtime.text, key: environment.precipitation.precipitation, title: Precip, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.temperature.dewpoint, title: {text: Dewpoint}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.wind.direction.direction, title: {text: Direction}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.light.uvi, title: {text: UV index}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.precipitation.precipitation, title: {text: Precip}, border: {enabled: true, edges: all}}
