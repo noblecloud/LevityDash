@@ -41,6 +41,20 @@ are written to match.
 9. **Missing readings:** an aggregate also publishes how many readings it
    used, so a panel can show "1 of 2".
 
+Decided on 2026-10-16:
+
+10. **`avg(a, b, ...)`** is added to the expression language: the mean of two
+    or more current values.
+11. **`mean` is accepted as another name for `avg`.** Docs use the plain word.
+12. **Named aggregates can be written in two places:** a global vars file that
+    every dashboard shares, and the `vars:` of a single dashboard. A dashboard
+    entry wins over the global one of the same name.
+13. **Labels as well as places.** A reading can carry free-form labels
+    (`battery`, `trusted`) beside its `where`.
+14. **`.high` and `.low` stay real keys.** Some sources provide them, so they
+    are not always calculated. A custom high or low, built from several
+    sources, is a computed aggregate (section 8).
+
 ---
 
 ## 1. Keys say *what*. Labels say *which*.
@@ -112,6 +126,8 @@ The dashboard already picks displays by shape (`realtime.text` vs `gauge` vs
 | `provider` | which **plugin** |
 | `period` | which **time window** |
 | `resolution` | how **fine-grained** |
+
+`period` is reserved and not part of the first cut (section 12, item 3).
 
 ⚠️ `where` and `provider` are **not** the same axis, and both are needed at
 once: *"backyard temperature, according to WeatherFlow."* Collapse them and
@@ -278,6 +294,11 @@ where = home.upstairs.bedroom
   where it is used. This is the trade for having no registry. Home Assistant's
   Area registry follows a rename everywhere. A dotted path does not, and that is
   accepted for the cut: one fewer thing to configure, and the hierarchy is free.
+- **Labels sit beside places.** A place answers "where". A label answers
+  everything else: `battery`, `trusted`, `outdoor-rated`. Labels are free-form
+  text on a device or an entity, and an aggregate can select by label the same
+  way it selects by place. Home Assistant needed both for the same reason:
+  a location cannot say "battery-powered".
 - **`#bedroom` is the short form of `where: bedroom`.** It is kept.
 - **`indoor.*` and `environment.*` die here.** They were places all along, and
   now they are places you write.
@@ -316,11 +337,16 @@ vars:
   indoor: avg(indoor.temperature.temperature#bedroom, indoor.temperature.temperature#terrarium)
 ```
 
+Write it in the global vars file to share it across dashboards, or in a
+dashboard's own `vars:` to keep it local. If both define the same name, the
+dashboard wins.
+
 What is missing from the expression language today:
 
-- `avg(a, b, ...)`: the mean of two or more current values. `min` and `max`
-  already take a list. `avg` takes only a window (`avg(key, 3h)`), so a second
-  argument that is a key, not a window, has to mean the list form.
+- `avg(a, b, ...)`, also spelled `mean(a, b, ...)`: the mean of two or more
+  current values. `min` and `max` already take a list. `avg` takes only a
+  window (`avg(key, 3h)`), so a second argument that is a key, not a window,
+  has to mean the list form.
 - Members chosen by label: `avg(sensor.temperature.air where indoor)` instead
   of listing every member by hand.
 - A name that is stable and readable in the dispatcher, so another panel can
@@ -376,23 +402,41 @@ that is currently invisible, at no extra computation.
 | **Tense** | observed vs forecast | `isRealtime`/`isForecast`/`isDaily` flags | ✅ already right |
 | **Resolution** | 1min · 1h · 1d | `request_timeseries(key, min_period, max_period)` | ✅ already right |
 | **Point time** | when this reading happened | on the value | ✅ already right |
-| **Window** | today · yesterday · 7d | 🔴 in the key | ❌ → `period` label |
-| **Aggregation** | max · min · sum | 🔴 in the key (`high`, `low`) | ❌ → `combine` |
+| **Window** | today · yesterday · 7d | in the key when a source provides it | ✅ keep reported keys; arbitrary windows are computed |
+| **Aggregation** | max · min · sum | in the key (`high`, `low`) when a source provides it | ✅ keep reported keys; custom ones are computed |
 
 **Three of five are already modeled correctly.** Notably `request_timeseries`
 takes a min/max period *range*, not a fixed interval — so multi-resolution
 negotiation (the hard part, equivalent to Grafana's `$__interval`) already
 works. Most projects get that wrong.
 
-The flexibility win: today `temperature.high` exists only because someone wrote
-that key, and "max over the last 3 hours" is **impossible**. As a label it's
-just `{period: 3h}`.
+**`.high` and `.low` are real keys.** Forecasts often provide them, so they are
+not always calculated, and they stay as keys. They are not replaced by a
+`period` label.
 
-⚠️ **Reported vs computed aggregates.** If a source only hands you a daily
-high, you cannot derive an arbitrary window from it. The model must distinguish
-"this aggregate was given to me" from "I calculated it," and a panel asking for
-an underivable window must fail honestly rather than show nothing. OTel treats
-this as first-class ("aggregation temporality").
+Two kinds of aggregate exist side by side:
+
+- **Reported:** the source gave it. `temperature.high` from a forecast is a
+  normal key with a normal source.
+- **Computed:** LevityDash calculated it, from readings or from other keys.
+  This is where a custom high or low lives. It can combine sources, for
+  example the highest of what two forecasts predict:
+
+```yaml
+vars:
+  high: max(openmeteo.temperature.high, pirateweather.temperature.high)
+```
+
+Such a computed high is published as a key under the source `Computed`, so a
+panel uses it like any other.
+
+"Max over the last 3 hours" is today impossible. The expression language
+already has `max(key, 3h)`, so it is a computed aggregate, not a new key.
+
+⚠️ If a source only hands you a daily high, you cannot derive an arbitrary
+window from it. A panel asking for a window that nothing can supply must fail
+honestly rather than show nothing. OTel treats this as first-class
+("aggregation temporality").
 
 ---
 
@@ -442,17 +486,13 @@ Step 3 is the scary one and also the most deferrable.
 ## 12. Still undecided
 
 1. Shape-discriminator vocabulary: a closed set? Does it map to display types?
-2. Labels as well as places? HA needed both. Location cannot say
-   "battery-powered" or "sensors I trust".
-3. Staging for events, lists and non-numeric values: can numeric and enum land
+2. Staging for events, lists and non-numeric values: can numeric and enum land
    first without forcing a second migration?
-4. `avg` or `mean`: expressions already say `avg`. Accept both and document the
-   plain word.
-5. The `period` label (replacing `.high`, `.low` and `.daily` keys): when, and
-   does it ride the same cut as `where`?
-6. Where aggregates are written: dashboard `vars:` as in the example above, or
-   a config file that every dashboard shares.
+3. A `period` label for windows that a source does not provide. The
+   expression language already covers `max(key, 3h)`, so this may not be
+   needed. Decide when a panel needs a window the expressions cannot write.
 
-Settled and removed from this list on 2026-10-15: flat versus nested
-semantics for several dimensions (section 5), and the shape of the connection
-(section 4).
+Settled and removed from this list: flat versus nested semantics for several
+dimensions (section 5) and the shape of the connection (section 4), on
+2026-10-15; labels beside places, `avg` versus `mean`, the fate of `.high` and
+`.low`, and where aggregates are written, on 2026-10-16.
