@@ -11,8 +11,8 @@ same form a `.levity` file holds, and the window decides what to do with it.
 import re
 from typing import Any, Callable, Dict, List, Optional
 
-from PySide6.QtCore import QEvent, QObject, QSignalBlocker, Qt, Signal
-from PySide6.QtGui import QColor, QKeySequence
+from PySide6.QtCore import QEvent, QObject, QRectF, QSignalBlocker, Qt, Signal
+from PySide6.QtGui import QColor, QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
 	QCheckBox, QColorDialog, QComboBox, QDoubleSpinBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
 	QPushButton, QSlider, QSpinBox, QToolButton, QVBoxLayout, QWidget,
@@ -61,7 +61,14 @@ def labelFor(key: str) -> str:
 
 
 class Section(QWidget):
-	"""A header you click to fold, over a body that holds rows and child sections."""
+	"""A header you click to fold, over a body that holds rows and child sections.
+
+	It paints itself as a pane of glass: a translucent body, a bright rim along the top edge and a soft one along the
+	bottom, so each section lifts off the panel in both themes. The colours come from the palette, so a theme change
+	needs nothing here. A section inside another is a lighter, tighter pane.
+	"""
+
+	RADIUS = 12
 
 	userToggled = Signal(bool)  # a click on the header, not a change the filter made
 
@@ -69,9 +76,11 @@ class Section(QWidget):
 		super().__init__(parent)
 		self.key = ''  # names the section in the saved fold state
 		self._preFilter: Optional[bool] = None
+		self.nested = False
 		outer = QVBoxLayout(self)
-		outer.setContentsMargins(0, 0, 0, 0)
+		outer.setContentsMargins(12, 2, 12, 4)
 		outer.setSpacing(0)
+		self._outer = outer
 		self.header = QToolButton()
 		self.header.setText(title[:1].upper() + title[1:])
 		self.header.setCheckable(True)
@@ -80,7 +89,7 @@ class Section(QWidget):
 		self.header.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
 		# Larger than the field labels, so a header reads as a heading. QToolButton centres its
 		# text, so the button keeps its own width and a stretch after it pins it to the left.
-		self.header.setStyleSheet('QToolButton { border: none; font-size: 17px; font-weight: 700; padding: 8px 2px 4px 0px; color: palette(window-text); }')
+		self.header.setStyleSheet('QToolButton { border: none; font-size: 17px; font-weight: 700; padding: 6px 2px 4px 0px; color: palette(window-text); }')
 		self.header.toggled.connect(self._toggled)
 		self.header.clicked.connect(self.userToggled)
 		self.headerBar = QHBoxLayout()
@@ -92,7 +101,7 @@ class Section(QWidget):
 		self.body = QFrame()
 		self.body.setVisible(expanded)
 		self.grid = QGridLayout(self.body)
-		self.grid.setContentsMargins(14, 0, 0, 6)
+		self.grid.setContentsMargins(4, 0, 0, 8)
 		self.grid.setHorizontalSpacing(6)
 		self.grid.setVerticalSpacing(3)
 		self.grid.setColumnStretch(1, 1)
@@ -108,8 +117,64 @@ class Section(QWidget):
 		self.header.setChecked(on)
 
 	def addRow(self, widget: QWidget):
+		if isinstance(widget, Section):
+			widget.setNested(True)
 		self.grid.addWidget(widget, self._row, 0, 1, 3)
 		self._row += 1
+
+	def setNested(self, on: bool):
+		self.nested = on
+		self._outer.setContentsMargins(*((8, 0, 8, 2) if on else (12, 2, 12, 4)))
+		self.update()
+
+	def paintEvent(self, event):
+		rect = QRectF(self.rect()).adjusted(0.5, 3.5, -0.5, -2.5) if not self.nested else QRectF(self.rect()).adjusted(0.5, 1.5, -0.5, -1.5)
+		if rect.height() < 8:
+			return
+		palette = self.palette()
+		dark = palette.color(palette.ColorRole.Window).lightness() < 128
+		ink = palette.color(palette.ColorRole.WindowText)
+		glow, shade = QColor(255, 255, 255), QColor(0, 0, 0)
+		depth = 0.6 if self.nested else 1.0
+		painter = QPainter(self)
+		painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+		shape = QPainterPath()
+		shape.addRoundedRect(rect, self.RADIUS, self.RADIUS)
+		# the pane: lighter towards the top, as light would fall through glass
+		fill = QLinearGradient(rect.topLeft(), rect.bottomLeft())
+		top, bottom = QColor(glow if dark else ink), QColor(glow if dark else ink)
+		top.setAlphaF((0.13 if dark else 0.04) * depth)
+		bottom.setAlphaF((0.04 if dark else 0.012) * depth)
+		if not dark:
+			# light ground: a soft contact shadow below the pane, which a white pane cannot cast on white
+			for grow, alpha in ((2.5, 0.015), (1.5, 0.022), (0.8, 0.035)):
+				cast = QPainterPath()
+				cast.addRoundedRect(rect.adjusted(-grow * 0.4, grow * 0.3, grow * 0.4, grow), self.RADIUS + grow * 0.4, self.RADIUS + grow * 0.4)
+				c = QColor(ink)
+				c.setAlphaF(alpha * depth)
+				painter.fillPath(cast, c)
+		fill.setColorAt(0, top)
+		fill.setColorAt(1, bottom)
+		painter.fillPath(shape, fill)
+		# the rim: bright on top, a darker line low, so the edge reads as thick glass
+		rim = QLinearGradient(rect.topLeft(), rect.bottomLeft())
+		bright, edge = QColor(glow), QColor(shade if not dark else glow)
+		bright.setAlphaF((0.42 if dark else 0.95) * depth)
+		edge.setAlphaF((0.07 if dark else 0.10) * depth)
+		rim.setColorAt(0, bright)
+		rim.setColorAt(0.45, edge)
+		rim.setColorAt(1, QColor(shade.red(), shade.green(), shade.blue(), int((70 if dark else 60) * depth)))
+		painter.setPen(QPen(rim, 1))
+		painter.drawPath(shape)
+		# a sheen across the top edge inside the pane
+		sheen = QLinearGradient(rect.topLeft(), rect.topRight())
+		for at, alpha in ((0, 0), (0.5, 0.55 if dark else 0.9), (1, 0)):
+			c = QColor(glow)
+			c.setAlphaF(alpha * 0.35 * depth)
+			sheen.setColorAt(at, c)
+		painter.setPen(QPen(sheen, 1))
+		painter.drawLine(rect.left() + self.RADIUS, rect.top() + 1.5, rect.right() - self.RADIUS, rect.top() + 1.5)
+		painter.end()
 
 	def addHeaderWidget(self, widget: QWidget):
 		self.headerBar.addWidget(widget)
