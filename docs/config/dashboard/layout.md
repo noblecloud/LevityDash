@@ -62,7 +62,7 @@ An item with a `size:` and no `flex:` keys does not grow, and it can shrink. Thi
 
 | Key | Meaning | CSS |
 |---|---|---|
-| `columns`, `rows` | A list of track sizes: lengths, `fr`, `auto`, `min-content`, `max-content`, `minmax(a, b)`, `fit-content(x)`, `repeat(n, ...)`, `repeat(auto-fill, ...)` and `repeat(auto-fit, ...)`. A string such as `'repeat(3, 1fr)'` works too. | `grid-template-columns`, `grid-template-rows` |
+| `columns`, `rows` | A list of track sizes: lengths, `fr`, `auto`, `min-content`, `max-content`, `minmax(a, b)`, `fit-content(x)`, `repeat(n, ...)`, `repeat(auto-fill, ...)` and `repeat(auto-fit, ...)`. A string such as `'repeat(3, 1fr)'` works too. `repeat(auto-fill, minmax(200px, 1fr))` makes as many 200px-or-wider columns as the grid's width holds, and the count changes when the window does. `auto-fit` does the same and then drops the empty columns. | `grid-template-columns`, `grid-template-rows` |
 | `auto-columns`, `auto-rows` | The size of a track that the items need and the list does not give. Default `1fr`. | `grid-auto-columns`, `grid-auto-rows` |
 | `auto-flow` | `row` (default) or `column`. | `grid-auto-flow` |
 | `dense` | `true` fills earlier holes. | `dense` |
@@ -72,7 +72,11 @@ An item with a `size:` and no `flex:` keys does not grow, and it can shrink. Thi
 
 ### Grid item options (on an item)
 
-`grid: {column, row, column-span, row-span, justify-self, align-self}`. Lines count from 1. An item with no `column` or `row` goes in the next free cell.
+`grid: {column, row, column-span, row-span, justify-self, align-self, shrink}`. Lines count from 1. An item with no `column` or `row` goes in the next free cell.
+
+Spans are how a layout gets a bento look: put `dense: true` on the grid, give the large items a `column-span` or `row-span`, and the small ones fill the holes in order.
+
+`shrink: true` (not CSS) lets an auto-placed item give up columns when it does not fit. It tries its full span in every hole of the explicit rows, from the top-left, and then the next narrower span, so a wide card lands in a gap rather than dropping below the rest. Rows must be declared (`rows: [...]`) for it to have anything to shrink into; with no explicit rows an item keeps its span and opens a new row. An item with a fixed `column` or `row` is never shrunk.
 
 ## Content size
 
@@ -93,7 +97,7 @@ An item that shows a number reports its size from its **format hint**, the wides
 - A cell sizes its own text. To make the values in a grid or flex stack the same size, add a `shared:` size group (see the example dashboard).
 - Not yet supported: `subgrid`, named areas, `calc()`, `%` inside a track list, margins on items, and sizing by anything but the text of a value (a gauge, a graph or a container has no content size, so for them `auto` is 0).
 
-Example dashboard: `docs/design-references/css-layout.levity` (render: `docs/design-references/css-layout.png`).
+Example dashboards: `docs/design-references/css-layout.levity` (render: `docs/design-references/css-layout.png`) and `docs/design-references/grid-bento.levity`, a dense bento board with spans, a `shrink` item and an `auto-fill` strip.
 
 ## In the Studio
 

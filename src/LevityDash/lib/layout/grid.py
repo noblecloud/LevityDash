@@ -86,6 +86,7 @@ class Placement:
 	column_span: int = 1
 	row_start: int | None = None
 	row_span: int = 1
+	shrink: bool = False  # not CSS: an auto-placed item may give up columns to fit a gap (see `_place_shrunk`)
 
 
 @dataclass(slots=True)
@@ -362,8 +363,12 @@ def _repeat_count(repeat: Repeat, available: float | None, gap: float) -> int:
 	return max(1, floor((available + gap) / pitch + _EPS))
 
 
-def _place_rows(placements: list[Placement], explicit_columns: int, dense: bool) -> list[tuple[int, int, int, int]]:
-	"""§8.5 with `grid-auto-flow: row`. Returns zero-based `(column, row, column_span, row_span)`."""
+def _place_rows(placements: list[Placement], explicit_columns: int, dense: bool, explicit_rows: int = 0) -> list[tuple[int, int, int, int]]:
+	"""§8.5 with `grid-auto-flow: row`. Returns zero-based `(column, row, column_span, row_span)`.
+
+	`explicit_rows` is only used by `shrink` items: their search stays inside the explicit rows, so
+	a board that declares no rows has nothing to shrink into.
+	"""
 	for p in placements:
 		if (p.column_start is not None and p.column_start < 1) or (p.row_start is not None and p.row_start < 1):
 			raise ValueError('grid lines are 1-based')
@@ -379,6 +384,25 @@ def _place_rows(placements: list[Placement], explicit_columns: int, dense: bool)
 		pos[i] = (col, row)
 		cs, rs = spans[i]
 		occupied.update((r, c) for r in range(row, row + rs) for c in range(col, col + cs))
+
+	def place_shrunk(i: int) -> bool:
+		"""Widest span first, then the first hole it fits in, scanning from the top-left (dense).
+
+		An item that fits at its full width anywhere in the explicit rows keeps that width. Otherwise it
+		takes the widest narrower span that fits, so a wide card squeezes into a gap rather than
+		dropping below the rest. Returns False when nothing fits in the explicit rows.
+		"""
+		if not explicit_rows:
+			return False
+		cs, rs = spans[i]
+		for width in range(cs, 0, -1):
+			for row in range(explicit_rows - rs + 1):
+				for col in range(count - width + 1):
+					if free(col, row, width, rs):
+						spans[i] = (width, rs)
+						put(i, col, row)
+						return True
+		return False
 
 	# Step 1: both lines given.
 	for i, p in enumerate(placements):
@@ -429,6 +453,8 @@ def _place_rows(placements: list[Placement], explicit_columns: int, dense: bool)
 			cur_row = row
 			put(i, col, row)
 		else:
+			if p.shrink and place_shrunk(i):
+				continue
 			if dense:
 				cur_row = cur_col = 0
 			while True:
@@ -542,9 +568,9 @@ def place_items(items: list[GridItem], container: GridContainer, columns: int, r
 	"""
 	placements = [item.placement for item in items]
 	if container.auto_flow != 'column':
-		return _place_rows(placements, columns, container.dense)
-	flipped = [Placement(p.row_start, p.row_span, p.column_start, p.column_span) for p in placements]
-	return [(row, col, rs, cs) for col, row, cs, rs in _place_rows(flipped, rows, container.dense)]
+		return _place_rows(placements, columns, container.dense, rows)
+	flipped = [Placement(p.row_start, p.row_span, p.column_start, p.column_span, p.shrink) for p in placements]
+	return [(row, col, rs, cs) for col, row, cs, rs in _place_rows(flipped, rows, container.dense, columns)]
 
 
 @implements('css-grid-1', 'Initialize Track Sizes', None, status='done')
