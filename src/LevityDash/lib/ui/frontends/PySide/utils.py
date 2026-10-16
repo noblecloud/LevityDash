@@ -161,6 +161,7 @@ def loadGraphs(parent, items, parentItems, **kwargs):
 def loadRealtime(parent, items, parentItems, **kwargs):
 	global itemCount
 
+	from LevityDash import LevityDashboard
 	from LevityDash.lib.ui.frontends.PySide.Modules import Realtime
 	existing: [Realtime] = [i for i in parentItems if isinstance(i, Realtime)]
 	newItems = []
@@ -168,8 +169,9 @@ def loadRealtime(parent, items, parentItems, **kwargs):
 	while items:
 		item = pop(items)
 		# An expression stays text: Realtime.key registers it as a computed key.
-		from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import _isExpression, flattenConnection
+		from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import _isExpression, flattenConnection, placeConnection
 		flattenConnection(item)
+		placed = placeConnection(item, LevityDashboard.plugins)
 		if not Realtime.validate(item, context={'parent': parent}):
 			log.error('Invalid state for existingItem:', item)
 		matchKey = None
@@ -186,19 +188,27 @@ def loadRealtime(parent, items, parentItems, **kwargs):
 		match existing:
 			case []:
 				item = Realtime(parent=parent, **item, cacheInitArgs=True)
+				if placed is not None:
+					item.rememberPlace(*placed)
 				newItems.append(item)
 			case [existingItem]:
 				_claim(existing, parentItems, existingItem)
 				existingItem.state = item
+				if placed is not None:
+					existingItem.rememberPlace(*placed)
 			case [Realtime(key=ns.key) as existingItem, *_] if geometry is not None and existingItem.geometry == geometry:
 				_claim(existing, parentItems, existingItem)
 				existingItem.state = item
+				if placed is not None:
+					existingItem.rememberPlace(*placed)
 			case [*_]:
 				existingItem = _bestMatch(
 					existing, geometry, tiebreak=lambda g: levenshtein(str(ns.key), str(g.key))
 				)
 				_claim(existing, parentItems, existingItem)
 				existingItem.state = item
+				if placed is not None:
+					existingItem.rememberPlace(*placed)
 		itemCount += 1
 		if INCREMENTAL_LOAD and itemCount % itemSkip == 0:
 			QThread.yieldCurrentThread()

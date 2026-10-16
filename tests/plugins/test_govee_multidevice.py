@@ -89,6 +89,24 @@ class TestReadableConfig:
 		assert devices['garage'].preset.model == 'H5075'
 		assert devices['garage'].modelPinned is True
 
+	def test_where_is_a_dotted_place_and_the_alias_is_the_fallback(self):
+		config = FakeConfig({
+			'plugin': {},
+			'devices': {'terrarium': TERRARIUM['name']},
+			'device:bedroom': {'name': ROOM['name'], 'where': ' Home.Upstairs.Bedroom '},
+		})
+		devices = {d.alias: d for d in parse_devices(config)}
+		assert devices['bedroom'].where == 'home.upstairs.bedroom'
+		assert devices['bedroom'].place == 'home.upstairs.bedroom'
+		assert devices['terrarium'].where is None
+		assert devices['terrarium'].place == 'terrarium'
+
+	def test_a_bad_where_is_ignored_with_a_warning(self):
+		config = FakeConfig({'plugin': {}, 'device:bedroom': {'name': ROOM['name'], 'where': 'home..bedroom'}})
+		device = parse_devices(config)[0]
+		assert device.where is None
+		assert device.place == 'bedroom'
+
 	def test_a_section_overrides_only_the_field_it_names(self):
 		config = FakeConfig({
 			'plugin': {},

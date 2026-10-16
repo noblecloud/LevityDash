@@ -357,6 +357,11 @@ class Govee(BLEPlugin, realtime=True, logged=True):
 	def name(self) -> str:
 		return self.__name
 
+	@property
+	def places(self) -> Dict[str, str]:
+		"""``{identity: place}`` for this device (see ``lib/plugins/places.py``)."""
+		return {self.device.alias: self.device.place} if self.device is not None else {}
+
 	@classmethod
 	def _validateConfig(cls, cfg) -> bool:
 		return bool('enabled' in cfg and cfg['enabled'])
