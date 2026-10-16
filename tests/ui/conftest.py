@@ -16,6 +16,11 @@ def _remove_leftover_sandboxes(request):
 	base = dashboard.scene.base
 	before = set(base.childItems())
 	yield
-	for item in base.childItems():
+	after = base.childItems()
+	if not before.issubset(after):
+		# The test loaded a dashboard: its top-level items are the new dashboard, not leftovers. Removing them
+		# left the next test an empty scene.
+		return
+	for item in after:
 		if item not in before and item.scene() is not None:
 			item.scene().removeItem(item)
