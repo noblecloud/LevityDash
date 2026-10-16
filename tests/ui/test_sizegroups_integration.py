@@ -198,10 +198,7 @@ def test_aligned_cluster_shares_baseline(dashboard):
 			continue
 		g.refit()
 		by_fit = defaultdict(list)
-		# a reload leaves the old dashboard's groups in the registry; only items still in the scene count
 		for item in g.items:
-			if item.scene() is None:
-				continue
 			by_fit[id(g.fit_for(item))].append(item)
 		for members in by_fit.values():
 			if len(members) < 2:
@@ -212,3 +209,33 @@ def test_aligned_cluster_shares_baseline(dashboard):
 			)
 			return
 	pytest.skip("no aligned multi-member cluster in this dashboard")
+
+
+class _Stub:
+	"""Stands in for a panel or a text: all the registry asks of one is whether it is still in a scene."""
+
+	def __init__(self, inScene: bool):
+		self._inScene = inScene
+
+	def scene(self):
+		return object() if self._inScene else None
+
+
+def test_prune_drops_the_groups_and_members_of_a_dashboard_that_is_gone():
+	"""A load builds new groups. The registry must forget the previous dashboard's, and the dead members a live panel still lists."""
+	from LevityDash.lib.ui.Groups import SizeGroup
+
+	before = list(SizeGroup.__groups__)
+	try:
+		SizeGroup.__groups__[:] = []
+		livePanel, deadPanel = _Stub(True), _Stub(False)
+		alive, dead = _Stub(True), _Stub(False)
+		whole = SizeGroup(parent=livePanel, key='a', items={alive, dead})
+		orphan = SizeGroup(parent=deadPanel, key='b', items={_Stub(False)})
+		rescued = SizeGroup(parent=deadPanel, key='c', items={alive})
+		assert SizeGroup.prune() == 1
+		assert SizeGroup.__groups__ == [whole, rescued]
+		assert whole.items == {alive}, 'the member that left the scene is still listed'
+		assert orphan not in SizeGroup.__groups__
+	finally:
+		SizeGroup.__groups__[:] = before
