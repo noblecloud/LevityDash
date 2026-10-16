@@ -78,7 +78,7 @@ class Section(QWidget):
 		self._preFilter: Optional[bool] = None
 		self.nested = False
 		outer = QVBoxLayout(self)
-		outer.setContentsMargins(12, 2, 12, 4)
+		outer.setContentsMargins(12, 8, 12, 10)
 		outer.setSpacing(0)
 		self._outer = outer
 		self.header = QToolButton()
@@ -89,7 +89,7 @@ class Section(QWidget):
 		self.header.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
 		# Larger than the field labels, so a header reads as a heading. QToolButton centres its
 		# text, so the button keeps its own width and a stretch after it pins it to the left.
-		self.header.setStyleSheet('QToolButton { border: none; font-size: 17px; font-weight: 700; padding: 6px 2px 4px 0px; color: palette(window-text); }')
+		self.header.setStyleSheet('QToolButton { border: none; font-size: 17px; font-weight: 700; padding: 8px 2px 6px 4px; color: palette(window-text); }')
 		self.header.toggled.connect(self._toggled)
 		self.header.clicked.connect(self.userToggled)
 		self.headerBar = QHBoxLayout()
@@ -101,7 +101,7 @@ class Section(QWidget):
 		self.body = QFrame()
 		self.body.setVisible(expanded)
 		self.grid = QGridLayout(self.body)
-		self.grid.setContentsMargins(4, 0, 0, 8)
+		self.grid.setContentsMargins(4, 2, 0, 10)
 		self.grid.setHorizontalSpacing(6)
 		self.grid.setVerticalSpacing(3)
 		self.grid.setColumnStretch(1, 1)
@@ -124,11 +124,11 @@ class Section(QWidget):
 
 	def setNested(self, on: bool):
 		self.nested = on
-		self._outer.setContentsMargins(*((8, 0, 8, 2) if on else (12, 2, 12, 4)))
+		self._outer.setContentsMargins(*((8, 4, 8, 6) if on else (12, 8, 12, 10)))
 		self.update()
 
 	def paintEvent(self, event):
-		rect = QRectF(self.rect()).adjusted(0.5, 3.5, -0.5, -2.5) if not self.nested else QRectF(self.rect()).adjusted(0.5, 1.5, -0.5, -1.5)
+		rect = QRectF(self.rect()).adjusted(3.5, 6.5, -3.5, -4.5) if not self.nested else QRectF(self.rect()).adjusted(0.5, 2.5, -0.5, -2.5)
 		if rect.height() < 8:
 			return
 		palette = self.palette()
