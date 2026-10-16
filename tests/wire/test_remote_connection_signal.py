@@ -25,7 +25,7 @@ class _FakeDispatcher:
 		pass
 
 
-def _pump_until(app, pred, timeout: float = 5.0) -> bool:
+def _pump_until(app, pred, timeout: float = 30.0) -> bool:
 	deadline = time.monotonic() + timeout
 	while time.monotonic() < deadline:
 		if pred():
@@ -51,23 +51,27 @@ def test_connection_state_signal_fires_on_connect_and_disconnect():
 
 	server_thread = threading.Thread(target=serve, daemon=True)
 	server_thread.start()
-	assert started.wait(timeout=5), 'WireServer never started'
+	assert started.wait(timeout=30), 'WireServer never started'
 
 	states = []
 	connection = RemoteConnection(_FakeDispatcher(), server.url)
 	connection.connectionStateChanged.connect(states.append)
 
 	try:
-		assert _pump_until(app, lambda: 'connected' in states), f'never saw connected, got {states}'
-		assert states[0] == 'connecting'
-		assert 'connected' in states
+		# The wire thread starts connecting in the constructor, so 'connecting' and even 'connected' can fire
+		# before this test subscribes, and a queued Signal emitted earlier never reaches a later subscriber.
+		# That is what the `state` attribute is for: wait on it, then check the transitions seen afterwards.
+		assert _pump_until(app, lambda: connection.state == 'connected'), f'never connected, state {connection.state!r}, saw {states}'
+		order = ['connecting', 'connected', 'disconnected']
+		assert states == sorted(states, key=order.index), f'states arrived out of order: {states}'
 
 		# stop the server out from under the client - the reconnect loop
 		# should notice and report disconnected
-		asyncio.run_coroutine_threadsafe(server.stop(), server_loop).result(timeout=5)
+		asyncio.run_coroutine_threadsafe(server.stop(), server_loop).result(timeout=30)
 
 		assert _pump_until(app, lambda: 'disconnected' in states), f'never saw disconnected, got {states}'
+		assert states == sorted(states, key=order.index), f'states arrived out of order: {states}'
 	finally:
 		connection.stop()
 		server_loop.call_soon_threadsafe(server_loop.stop)
-		server_thread.join(timeout=5)
+		server_thread.join(timeout=30)

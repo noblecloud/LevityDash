@@ -176,6 +176,9 @@ def test_clusters_get_independent_scales(dashboard):
 				continue
 			if len({round(i.getTextScale(), 3) for i in tier}) < 2:
 				continue  # clusters want the same size anyway; not discriminating
+			# Read the transforms the group applies, not whatever an earlier load left on the items: other tests
+			# reload the shared dashboard, and a refit that is still pending would show every member at one scale.
+			g.apply()
 			applied = {round(i.transform().m11(), 3) for i in tier}
 			assert len(applied) > 1, (
 				f"a multi-cluster tier with differing ideal scales collapsed to {applied}"
