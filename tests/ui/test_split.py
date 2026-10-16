@@ -131,6 +131,7 @@ def values(dashboard, split):
 	return [
 		t for t in dashboard.scene.items()
 		if isinstance(t, Text) and split.isAncestorOf(t) and t.isVisible() and t.size_group is not None
+		and t.size_group.key == 'value'
 	]
 
 
