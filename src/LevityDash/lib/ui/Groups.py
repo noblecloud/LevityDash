@@ -152,7 +152,7 @@ class SizeGroup:
 	def _disconnect_parent(self, parent: ActionPoolItemInstance):
 		try:
 			disconnectSignal(parent.signals.resized, self.parent_resized)
-		except AttributeError:
+		except (AttributeError, RuntimeError):
 			pass
 
 	@property
@@ -295,8 +295,37 @@ class SizeGroup:
 		Used for the post-load settle-fit and the manual 'Refresh All
 		SizeGroups' action. Idempotent.
 		"""
+		cls.prune()
 		for group in cls.__groups__:
 			group.apply()
+
+	@classmethod
+	def prune(cls) -> int:
+		"""Forget the groups of panels that are gone, and the members that left the scene, and return how many groups went.
+
+		A reload builds a new set of panels and with them new groups, but nothing told
+		the registry about the old ones, so every Ctrl+R added a full set of dead
+		groups that refits and the Studio then walked. A group is dead when its owning
+		panel and every member have left the scene. Run after a load has settled (a
+		panel still being built is not in the scene yet).
+		"""
+		def live(item) -> bool:
+			try:
+				return item.scene() is not None
+			except (RuntimeError, AttributeError):
+				return False
+		keep = []
+		for group in cls.__groups__:
+			if live(group.parent) or any(live(i) for i in group.items):
+				# a panel that outlives the load (the dashboard's own `global.` groups) still lists the old items
+				for item in [i for i in group.items if not live(i)]:
+					group.removeItem(item)
+				keep.append(group)
+			else:
+				group._disconnect_parent(group._parent)
+		gone = len(cls.__groups__) - len(keep)
+		cls.__groups__[:] = keep
+		return gone
 
 	# Back-compat aliases for existing callers/tests.
 	update_all = refit_all
