@@ -175,8 +175,8 @@ def test_summarize_unmapped_is_registered_with_atexit():
 	)
 	out = subprocess.run(
 		[sys.executable, "-c", code],
-		cwd=str(Path(__file__).resolve().parents[3]),
-		env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[3] / "src")},
+		cwd=str(Path(__file__).resolve().parents[2]),
+		env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[2] / "src")},
 		capture_output=True, text=True,
 	)
 	assert out.returncode == 0, out.stderr

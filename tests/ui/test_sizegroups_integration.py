@@ -242,3 +242,25 @@ def test_prune_drops_the_groups_and_members_of_a_dashboard_that_is_gone():
 		assert orphan not in SizeGroup.__groups__
 	finally:
 		SizeGroup.__groups__[:] = before
+
+
+def test_labels_whose_boxes_meet_at_an_edge_are_always_neighbours():
+	"""Two labels in a row meet at an edge, give or take float noise. That must read as touching on every start.
+	Before, a box that stopped a hundredth of a pixel short of its neighbour sometimes counted as apart, so one
+	dashboard clustered its titles two ways from one process to the next."""
+	from PySide6.QtCore import QRectF
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import Text
+
+	class Box:
+		TOUCH_TOLERANCE = Text.TOUCH_TOLERANCE
+
+		def __init__(self, rect):
+			self.containingRect = rect
+
+	left = Box(QRectF(4.0, 201.88, 70.45, 15.75))
+	for gap in (0.0, 0.01, 0.05, 0.3):
+		right = Box(QRectF(74.45 + gap, 201.88, 57.69, 15.75))
+		a, b = (Text.overlap_shape.__wrapped__(x, 10) for x in (left, right))
+		assert a.intersects(b), f'boxes {gap}px apart should still count as touching'
+	far = Box(QRectF(74.45 + 5, 201.88, 57.69, 15.75))
+	assert not Text.overlap_shape.__wrapped__(left, 10).intersects(Text.overlap_shape.__wrapped__(far, 10)), 'a 5 px gap is a gap'
