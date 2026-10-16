@@ -361,3 +361,22 @@ def test_dropping_a_tree_row_onto_a_container_moves_it_in(board):
 	assert yaml.safe_dump(win.piece.template, sort_keys=False) != before
 	win.undo()
 	assert yaml.safe_dump(win.piece.template, sort_keys=False) == before
+
+
+def test_tree_shortcuts_copy_paste_delete_duplicate_and_move(board):
+	from PySide6.QtCore import Qt
+	from PySide6.QtGui import QShortcut
+	from PySide6.QtWidgets import QApplication
+	win, path = board('station')
+	target = next(p for p, n in win.piece.walk() if len(p) >= 2 and not n.get('items') and str(n.get('type')) not in sb.CONTAINERS)
+	win.select(target)
+	win.tree.setFocus()
+	keys = {s.key().toString(): s for s in win.tree.findChildren(QShortcut)}
+	for name in ('Ctrl+C', 'Ctrl+V', 'Del', 'Ctrl+D', 'Alt+Up', 'Alt+Down'):
+		assert any(name.lower() in k.lower() for k in keys), name
+	count = len(win.piece.node(target[:-1])['items'])
+	[s for k, s in keys.items() if 'ctrl+d' in k.lower()][0].activated.emit()
+	assert len(win.piece.node(target[:-1])['items']) == count + 1
+	[s for k, s in keys.items() if 'del' in k.lower()][0].activated.emit()
+	assert len(win.piece.node(target[:-1])['items']) == count
+	assert win.tree.contextMenuPolicy() == Qt.ContextMenuPolicy.CustomContextMenu

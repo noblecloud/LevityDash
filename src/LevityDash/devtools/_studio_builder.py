@@ -1373,6 +1373,13 @@ class Builder(QWidget):
 		self.tree.setHeaderHidden(True)
 		self.tree.setMinimumWidth(200)
 		self.tree.moved.connect(self.relocateItem)
+		self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+		self.tree.customContextMenuRequested.connect(self._treeMenu)
+		# Only while the tree has the focus, so a text field keeps its own copy and paste.
+		for key, fn in ((QKeySequence.StandardKey.Copy, self.copyItem), (QKeySequence.StandardKey.Paste, self.pasteItem),
+		                (QKeySequence.StandardKey.Delete, self.deleteItem), (QKeySequence('Ctrl+D'), self.duplicateItem),
+		                (QKeySequence('Alt+Up'), lambda: self.moveItem(-1)), (QKeySequence('Alt+Down'), lambda: self.moveItem(1))):
+			QShortcut(key, self.tree, fn).setContext(Qt.ShortcutContext.WidgetShortcut)
 		self.tree.currentItemChanged.connect(self._treePicked)
 		lbox.addWidget(self.tree, 1)
 		split.addWidget(left)
@@ -1791,8 +1798,8 @@ class Builder(QWidget):
 		menu = QMenu(self.tree)
 		menu.addAction('Copy', self.copyItem, QKeySequence.StandardKey.Copy)
 		menu.addAction('Paste', self.pasteItem, QKeySequence.StandardKey.Paste)
-		menu.addAction('Duplicate', self.duplicateItem)
-		menu.addAction('Delete', self.deleteItem)
+		menu.addAction('Duplicate', self.duplicateItem, QKeySequence('Ctrl+D'))
+		menu.addAction('Delete', self.deleteItem, QKeySequence.StandardKey.Delete)
 		menu.exec(self.tree.viewport().mapToGlobal(at))
 
 	def extractPreset(self, name: Optional[str] = None):
