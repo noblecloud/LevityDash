@@ -1,7 +1,9 @@
 # Data model + config spec
 
-**Status:** design, 2026-08-05. Not started. Syntax settled in conversation;
-implementation not scoped.
+**Status:** design, 2026-08-05; decisions of 2026-10-15 folded in. The
+first step is shipped: a `realtime` item reads through a connection object
+([#106](https://github.com/noblecloud/LevityDash/pull/106)). The rest is not
+started.
 
 Companion to [data-model-multi-domain.md](data-model-multi-domain.md), which
 holds the *research* (openHAB / Home Assistant / Grafana / Prometheus / OTel /
@@ -13,6 +15,31 @@ Breaking changes are in scope, per the maintainer, repeatedly.
 
 Supersedes the naming in earlier drafts: `key:` → `connection:`, `room:` →
 `where:`, and `source:` disappears entirely.
+
+## Decided on 2026-10-15
+
+These settle questions that were open in the first draft. The sections below
+are written to match.
+
+1. **First cut:** `where` (a label on a reading, plus dotted places) and
+   named aggregates. No key renames in this cut.
+2. **`key:` stays an item property for now.** The rename to `connection:`
+   waits for the key-namespace step. The connection is an object that holds a
+   `key` (section 4), and `key:` on an item is its short form.
+3. **`#bedroom` is kept** as the short form of `where: bedroom`.
+4. **Aggregates are built on expressions**, the engine that already makes
+   computed keys. A `combine:` syntax comes later, and only for the
+   multi-provider ensemble (section 7).
+5. **Several dimensions can be combined at once.** Order and flat steps are
+   written in `over:` (section 5).
+6. **Old mapping form dropped.** `connection: {sensor.temperature.air: {where: bedroom}}`
+   is not valid. A connection is `{key: …, where: …}`.
+7. **Places are dotted paths** (`upstairs.bedroom`), not a separate registry
+   (section 6).
+8. **Stale readings:** an aggregate ignores a reading older than one hour. A
+   single aggregate can change that bound.
+9. **Missing readings:** an aggregate also publishes how many readings it
+   used, so a panel can show "1 of 2".
 
 ---
 
@@ -96,47 +123,59 @@ other things in this codebase).
 
 ---
 
-## 4. `key:` → `connection:`
+## 4. The connection
 
 ```yaml
 - type: realtime.text
   connection:
-    sensor.temperature.air: {where: bedroom}
+    key: sensor.temperature.air
+    where: bedroom
+    provider: WeatherFlow
   display:
     font: Roboto Mono
 ```
 
-**Why the rename.** The runtime already calls this a connection —
-`__connectedContainer`, `connectRealtime()`, `startConnecting()`. And it
-behaves like one: it connects to whatever is available, **re-negotiates** when
-a better source appears (`notPreferredSourceOnLastAttempt`), waits pending
-until requirements are met, and fails over. A key is a static address; this is
-a live binding. It also makes `•••` legible — *not connected yet* rather than
+A connection is an object. It always has a `key`. The other properties are
+labels (section 3). It is also what the item reads its data through.
+
+**Why the name.** The runtime already calls this a connection:
+`__connectedContainer`, `connectRealtime()`, `startConnecting()`. It behaves
+like one. It connects to whatever is available, re-negotiates when a better
+source appears (`notPreferredSourceOnLastAttempt`), waits pending until its
+requirements are met, and fails over. A key is a static address. A connection
+is a live binding. It also makes `•••` readable: *not connected yet*, not
 *broken*.
 
-`source:` as a panel property **disappears**, absorbed as the `provider`
-label. `key:` + `source:` were two halves of one question.
+`source:` on an item disappears into the `provider` label. `key:` and `source:`
+were two halves of one question.
 
-### YAML shape
+### Short forms
 
-`connection` is a **string** (bare) or a **single-key mapping** (with labels):
+An object with a `key` property can be written shorter. This is the same
+mechanism that Stateful already uses for `title`, `shadow` and the others:
+`unwrap` on the item's property, and `singleVal` on the connection's `key`.
 
 ```yaml
-connection: sensor.temperature.air                        # no labels
-
-connection:
-  sensor.temperature.air: {where: bedroom, provider: WeatherFlow}
+key: sensor.temperature.air                 # key: on the item is the short form
+connection: sensor.temperature.air          # a bare connection is a key
+connection: {key: sensor.temperature.air}   # the full form
 ```
 
-Same scalar-or-mapping pattern `title:` already uses, and `statekit` already
-has `unwraps`/`singleVal` for it.
+All three load as the same connection. A connection that holds only a key
+saves back as `key:` on the item. Today's dashboards keep working without an
+edit.
 
-⚠️ **Two keys under `connection:` must be a load-time error** — that's the one
-shape that can go wrong silently.
+**Shipped (#106).** This works now on `realtime` items, with `key` and `source`
+only. Save writes the flat form (`key:` and `source:` side by side on the item),
+which is what `unwrap` already does. `source` becomes `provider` and `where`
+and `device` arrive with the rename step. Graph, polar and clock items still
+take `key:` only.
 
-⚠️ **Indentation trap:** `- realtime.text:` followed by a same-indent `key:`
-parses as *two sibling keys* with `realtime.text: null`. Valid YAML, silently
-wrong. A linter should catch it.
+**Removed.** The earlier draft wrote a connection as a one-key mapping
+(`connection: {sensor.temperature.air: {where: bedroom}}`). That is not
+valid. It needed a "two keys is an error" rule and an indentation trap
+(`- realtime.text:` followed by a same-indent `key:` parses as two sibling
+keys). The object form has neither problem.
 
 ---
 
@@ -145,7 +184,9 @@ wrong. A linter should catch it.
 ```yaml
 combine: {over: provider, using: mean}              # the 95% case
 
-combine: {over: [where, device], using: mean}       # one function, many dims
+combine: {over: [where, device], using: mean}       # two steps, in order
+
+combine: {over: [[where, device]], using: mean}     # one flat step
 
 combine:                                            # full form
   over: [{device: max}, provider, where]
@@ -156,12 +197,11 @@ combine:                                            # full form
 
 ### Order lives in the list, never in a mapping
 
-- **`over:`** — *which* dimensions and **in what order** → a **list**
-- **`using:`** — *which function per dimension* → a **mapping** (pure lookup,
-  order irrelevant)
+- **`over:`** says which dimensions and in what order. It is a **list**.
+- **`using:`** says which function each dimension gets. It is a **mapping**: a
+  plain lookup where order does not matter.
 
-This matters because multi-dimension reduction is **not commutative**.
-Verified with real numbers:
+Reducing over more than one dimension is not commutative. Real numbers:
 
 ```
 data: (A,x)=0  (A,y)=10  (B,x)=8  (B,y)=0
@@ -171,22 +211,30 @@ spec: where→mean, device→max
   mean first, then max  →  5
 ```
 
-Same spec, same data, different answer. Addressing each function to its
-dimension does *not* determine the result — only order does.
+Same spec, same data, different answer. Naming a function for each dimension
+does not decide the result. Only the order does.
 
-Order therefore must live somewhere a serializer cannot scramble.
-⚠️ **`yaml.dump()` sorts keys by default**, and `CentralPanel._save` does not
-pass `sort_keys=False` — so `{where: mean, device: min}` comes back as
-`{device: min, where: mean}` after a save. Putting order in the list sidesteps
-this entirely.
+So the order must live where a serializer cannot scramble it. `yaml.dump()`
+sorts keys by default, and `CentralPanel._save` does not pass
+`sort_keys=False`, so `{where: mean, device: min}` comes back as
+`{device: min, where: mean}` after a save. A list keeps its order.
 
-**Exception worth documenting:** when every function is the same, order does
-*not* matter (for equal group sizes), so `over: [a, b], using: mean` is safe.
+**Steps and flat steps.** Each item of `over:` is one step. A step that is a
+single dimension reduces that dimension, on the result of the step before it.
+That is a mean of means when the function is `mean`. A step that is itself a
+list reduces all of its dimensions in one go, over every reading together. That
+is the flat mean. Both are written without extra words, and the simple case
+(`over: provider`) stays short.
 
-⚠️ Still to decide: `over: [where, device]` with **unequal group sizes** —
-flat mean of all readings, or mean-of-means? Those differ (33.3 vs 40 in a
-2-sensor/1-sensor case) and nothing in the syntax says which. Simplest safe
-answer: **one dimension per step**, use several steps for more.
+```
+2 sensors in the bedroom (20, 22) and 1 in the office (30)
+
+over: [device, where]     → mean per where first (21, 30), then mean of those → 25.5
+over: [[device, where]]   → one mean of all three readings                    → 24
+```
+
+When every function is the same and every group has the same size, order
+does not matter, so `over: [a, b], using: mean` is then safe.
 
 ### Precedence cascade
 
@@ -214,55 +262,83 @@ checksum:
 
 ## 6. Places, devices, aggregates
 
-```yaml
-places:
-  home:
-    upstairs:
-      bedroom:
-      office:
-    garage:
-  outside:
-    backyard:
-    roof:
+`where` is a dotted path. There is no separate list of places to declare.
 
+```ini
+[device:govee-bedroom]
+plugin = Govee
+id = GVH5102_527D
+where = home.upstairs.bedroom
+```
+
+- **Asking for a parent matches its children.** `where: home.upstairs` returns
+  the bedroom and the office. The depth is not limited, unlike Home Assistant's
+  fixed Floor→Area.
+- **A place exists when something uses it.** Rename a place by editing the path
+  where it is used. This is the trade for having no registry. Home Assistant's
+  Area registry follows a rename everywhere. A dotted path does not, and that is
+  accepted for the cut: one fewer thing to configure, and the hierarchy is free.
+- **`#bedroom` is the short form of `where: bedroom`.** It is kept.
+- **`indoor.*` and `environment.*` die here.** They were places all along, and
+  now they are places you write.
+
+```yaml
 devices:
   govee-bedroom:
     plugin: Govee
     id: GVH5102_527D
-    where: bedroom
-
-  indoor:                                     # an aggregate IS a device
-    temp: {mean: [govee-bedroom.temp, govee-terrarium.temp]}
+    where: home.upstairs.bedroom
 ```
 
-- **`where` is a reference to a place object**, not a string copied onto the
-  device. Rename the place, every reading follows. (HA's Area model.)
 - **Resolution order**: entity's own `where` if set, else its device's. The
   per-entity override earns its keep — a BLE hub in a closet whose sensors
   live in other rooms.
-- **Hierarchy**: asking a parent matches its children. `where: upstairs`
-  returns bedroom + office. Arbitrary depth, unlike HA's fixed Floor→Area.
-- **`indoor.*` / `environment.*` die here** — they were places all along, and
-  now they're places *you define*.
 
 ### Aggregates are model-time, not display-time
 
-openHAB's Group Item model, not HA's Area card. HA deliberately does **no**
-core aggregation — its Area card medians same-class sensors for glance display
-only, so nothing else can reference the result. Conditional panels driven by
+openHAB's Group Item model, not HA's Area card. HA deliberately does no core
+aggregation. Its Area card medians same-class sensors for glance display only,
+so nothing else can reference the result. Conditional panels driven by
 aggregate properties need a *referenceable* aggregate.
 
-Members stay separate entities; the aggregate is **additional**, never a merge
-that loses the underlying data.
+Members stay separate entities. The aggregate is additional. It never merges
+and loses the underlying data.
 
----
+**An aggregate is a named expression.** LevityDash already has the engine:
+`lib/plugins/computed.py` publishes an expression as a computed key
+(`computed.x3f9a0c21b7de`) with the source `Computed`. It recomputes when an
+input updates, runs in the backend in remote mode, and display code subscribes
+to the key like any other. An aggregate is that, with a readable name instead
+of a hash and with the members listed by `where`.
+
+```yaml
+vars:
+  indoor: avg(indoor.temperature.temperature#bedroom, indoor.temperature.temperature#terrarium)
+```
+
+What is missing from the expression language today:
+
+- `avg(a, b, ...)`: the mean of two or more current values. `min` and `max`
+  already take a list. `avg` takes only a window (`avg(key, 3h)`), so a second
+  argument that is a key, not a window, has to mean the list form.
+- Members chosen by label: `avg(sensor.temperature.air where indoor)` instead
+  of listing every member by hand.
+- A name that is stable and readable in the dispatcher, so another panel can
+  refer to `indoor.temperature`.
+
+Per-reading age and the member count (section 9) are published by the
+aggregate beside its value.
 
 ## 7. Two combining operations — do not conflate
 
 | | Collapses | Syntax |
 |---|---|---|
 | **Combine** | a *dimension* of matching series | `{over: provider, using: mean}` |
-| **Expression** | named *operands* | `{mean: [bedroom.temp, terrarium.temp]}` |
+| **Expression** | named *operands* | `avg(bedroom.temp, terrarium.temp)` |
+
+Aggregates over operands use expressions (decision 4). `combine:` is kept for
+the ensemble across providers, where the members are not listed because the
+dimension names them.
 
 Prometheus splits these the same way (`avg by (x)` vs arithmetic between
 series).
@@ -325,8 +401,8 @@ this as first-class ("aggregation temporality").
 | Problem | Notes |
 |---|---|
 | **Series alignment** | ensembles have different timestamps, resolutions and horizons — needs resampling onto a common grid before averaging. What happens past the shortest horizon needs a stated policy |
-| **Stale members** | nobody does this well — openHAB folds a dead sensor's last value in forever. We already track and display value age, so a max-age bound is natural here |
-| **Missing members** | HA silently drops them; a 2-sensor average quietly becomes 1 and still looks authoritative. Expose contributing-member count instead |
+| **Stale members** | nobody does this well: openHAB folds a dead sensor's last value in forever. **Decided:** an aggregate ignores a reading older than one hour, and one aggregate can set another bound. LevityDash already tracks value age (`plugins/freshness.py`), so the age is known |
+| **Missing members** | HA silently drops them, so a 2-sensor average quietly becomes 1 and still looks authoritative. **Decided:** an aggregate publishes the count of readings it used beside its value ("1 of 2") |
 | **Units** | HA's `min_max` refuses mismatched units; openHAB's `SUM` drops the UoM (open bug). WeatherUnits lets us just convert first — a genuine differentiator |
 | **Conditional panels** | **two** features: the condition (easy) and **layout reflow** (hard). Grafana needed a whole new grid engine. `.levity` uses absolute geometry, so a hidden panel leaves a hole — but **stacks already reflow**, so start there |
 | **Events / lists / non-numeric** | calendars, "top 10 processes", strings, geo — all break a `float + unit` container. The top three things that will break the current model |
@@ -348,21 +424,35 @@ this as first-class ("aggregation temporality").
 
 ## 11. Suggested order
 
-1. **Places + device registry** — no key changes, immediately useful
-2. **Aggregates** — the long-wanted feature, unblocked by 1
-3. **Key namespace** — the big one. Do it when health/service data actually
-   arrives, so the migration serves a real need rather than a predicted one
-4. **Conditionals in stacks** — cheap, any time
+0. **Connection object.** Shipped in #106 for `realtime` items: `key` and
+   `source`, with `connection:` and `key:` both read.
+1. **`where` and devices.** Dotted places, `#identity` kept as the short form,
+   a device registry. No key changes. This is what Govee `where` waits on.
+2. **Aggregates.** Named expressions, with `avg(a, b, ...)`, members chosen by
+   `where`, the one-hour bound and the member count. The long-wanted feature,
+   unblocked by 1.
+3. **Key namespace.** The big one. Do it when health or service data actually
+   arrives, so the migration serves a real need and not a predicted one. The
+   `key:` to `connection:` rename and `source` to `provider` go here.
+4. **Conditionals in stacks.** Cheap, any time.
 
-Steps 1–2 deliver most of the value without touching a single existing key.
+Steps 1-2 deliver most of the value without touching a single existing key.
 Step 3 is the scary one and also the most deferrable.
 
 ## 12. Still undecided
 
-1. Shape-discriminator vocabulary — closed set? maps to display types?
-2. Flat vs nested semantics for multi-dimension `combine` with unequal groups
-3. Labels *as well as* places? HA needed both; location can't express
-   "battery-powered" or "sensors I trust"
-4. Staging for events/lists/non-numeric — can numeric+enum land first without
-   forcing a second migration?
-5. `mean` vs `average` naming — accept both, document the plain word
+1. Shape-discriminator vocabulary: a closed set? Does it map to display types?
+2. Labels as well as places? HA needed both. Location cannot say
+   "battery-powered" or "sensors I trust".
+3. Staging for events, lists and non-numeric values: can numeric and enum land
+   first without forcing a second migration?
+4. `avg` or `mean`: expressions already say `avg`. Accept both and document the
+   plain word.
+5. The `period` label (replacing `.high`, `.low` and `.daily` keys): when, and
+   does it ride the same cut as `where`?
+6. Where aggregates are written: dashboard `vars:` as in the example above, or
+   a config file that every dashboard shares.
+
+Settled and removed from this list on 2026-10-15: flat versus nested
+semantics for several dimensions (section 5), and the shape of the connection
+(section 4).
