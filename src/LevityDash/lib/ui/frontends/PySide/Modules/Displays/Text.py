@@ -642,10 +642,15 @@ class Text(QGraphicsPathItem):
 		pos = self.getTextPosition()
 		return self.mapToItem(item, pos)
 
+	# Two labels in a row have boxes that meet at an edge, often to within a hundredth of a pixel.
+	# Whether such boxes "intersect" came down to float noise in the mapped coordinates, and flipped from one process to the next,
+	# so the same dashboard fitted its labels as one cluster on one start and two on the next. Growing each box by this much makes
+	# boxes that meet count as touching every time. `reach` is still not applied here: a gap of a few pixels is a gap.
+	TOUCH_TOLERANCE = 0.5
+
 	@lru_cache(maxsize=1)
 	def overlap_shape(self, reach: float) -> QPainterPath:
-		rect = self.containingRect
-		rect.adjusted(-reach, -reach, reach, reach)
+		rect = self.containingRect.adjusted(-self.TOUCH_TOLERANCE, -self.TOUCH_TOLERANCE, self.TOUCH_TOLERANCE, self.TOUCH_TOLERANCE)
 		return rect_to_shape(rect)
 
 	def scene_overlap_shape(self, reach: float) -> QPainterPath:
