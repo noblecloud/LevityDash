@@ -380,3 +380,18 @@ def test_tree_shortcuts_copy_paste_delete_duplicate_and_move(board):
 	[s for k, s in keys.items() if 'del' in k.lower()][0].activated.emit()
 	assert len(win.piece.node(target[:-1])['items']) == count
 	assert win.tree.contextMenuPolicy() == Qt.ContextMenuPolicy.CustomContextMenu
+
+
+def test_tree_rows_carry_a_square_for_what_the_item_is(board):
+	win, path = board('station')
+	seen = {}
+	stack = [win.tree.topLevelItem(0)]
+	while stack:
+		row = stack.pop()
+		node = win.piece.raw(row.data(0, 256))
+		seen.setdefault(sb._kind(node), []).append(row)
+		assert not row.icon(0).isNull()
+		stack += [row.child(i) for i in range(row.childCount())]
+	assert {'container', 'display'} <= set(seen)
+	assert sb._kind({'type': 'group'}) == 'container' and sb._kind({'type': 'realtime.text'}) == 'display'
+	assert sb._kind('environment.wind.speed') == 'shorthand' and sb._kind({'preset': 'stat-row'}) == 'preset'
