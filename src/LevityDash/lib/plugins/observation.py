@@ -743,12 +743,6 @@ class TimeSeriesItem(TimeAwareValue):
 		else:
 			value = float(sum(values)) / len(values)
 		timestamp = datetime.fromtimestamp(time / len(items), tz=_timezones.utc).astimezone(LOCAL_TIMEZONE)
-		if issubclass(valueCls, wu.Measurement) and {'denominator', 'numerator'}.intersection(valueCls.__init__.__annotations__.keys()):
-			ref = values[0]
-			n = type(ref.n)
-			d = type(ref.d)(1)
-			value = valueCls(numerator=n(value), denominator=d)
-			return TimeSeriesItem(value, timestamp)
 		return TimeSeriesItem(valueCls(value), timestamp)
 
 	@classmethod
@@ -770,12 +764,6 @@ class TimeSeriesItem(TimeAwareValue):
 			values = [value]
 			times = [item.timestamp.timestamp() for item in items if str(item) == value]
 		timestamp = datetime.fromtimestamp(max(times)).astimezone(_timezones.utc).astimezone(tz=LOCAL_TIMEZONE)
-		if issubclass(valueCls, wu.Measurement) and {'denominator', 'numerator'}.intersection(valueCls.__init__.__annotations__.keys()):
-			ref = values[0]
-			n = type(ref.n)
-			d = type(ref.d)(1)
-			value = valueCls(numerator=n(value), denominator=d)
-			return TimeSeriesItem(value, timestamp)
 		return TimeSeriesItem(valueCls(value), timestamp)
 
 

@@ -276,3 +276,44 @@ def test_elementwise_min_max():
 	resolver = FakeResolver(current={GUST: 20.0, SPEED: 10.0})
 	assert Expression.parse(f'max({GUST}, {SPEED})').evaluate(resolver, NOW) == 20.0
 	assert Expression.parse(f'min({GUST}, {SPEED}, 5)').evaluate(resolver, NOW) == 5
+
+
+# -- rates and durations -------------------------------------------------------------
+
+RAIN = 'environment.precipitation.rate'
+TOTAL = 'environment.precipitation.hourly'
+
+
+def test_a_rate_times_a_duration_is_an_amount():
+	rate = wu.Precipitation.Hourly(Millimeter(2), wu.Time.Hour(1))
+	result = Expression.parse(f'{RAIN} * 3h').evaluate(FakeResolver(current={RAIN: rate}), NOW)
+	assert isinstance(result, wu.Length) and result.unit == 'mm' and float(result) == pytest.approx(6)
+
+
+def test_a_duration_times_a_rate_is_the_same_amount():
+	rate = wu.Precipitation.Hourly(Millimeter(2), wu.Time.Hour(1))
+	result = Expression.parse(f'90m * {RAIN}').evaluate(FakeResolver(current={RAIN: rate}), NOW)
+	assert isinstance(result, wu.Length) and float(result) == pytest.approx(3)
+
+
+def test_an_amount_over_a_duration_is_a_rate_in_that_duration():
+	result = Expression.parse(f'{TOTAL} / 3h').evaluate(FakeResolver(current={TOTAL: Millimeter(6)}), NOW)
+	assert result.unit == 'mm/hr' and float(result) == pytest.approx(2)
+
+
+def test_two_lengths_make_an_area_not_a_length():
+	resolver = FakeResolver(current={'a.b.c': wu.Length.Meter(2), 'a.b.d': wu.Length.Meter(3)})
+	result = Expression.parse('a.b.c * a.b.d').evaluate(resolver, NOW)
+	assert result.unit == 'm²' and float(result) == pytest.approx(6)
+
+
+def test_same_dimension_division_is_a_plain_ratio():
+	resolver = FakeResolver(current={'a.b.c': wu.Length.Meter(6), 'a.b.d': wu.Length.Foot(3.28084)})
+	result = Expression.parse('a.b.c / a.b.d').evaluate(resolver, NOW)
+	assert type(result) is float and result == pytest.approx(6.0, rel=1e-3)
+
+
+@pytest.mark.parametrize('text', [f'{RAIN} + 3h', '3h * 3h', '3h / 3h', 'today * 2'])
+def test_a_duration_is_still_refused_where_it_means_nothing(text):
+	with pytest.raises(ExpressionError):
+		Expression.parse(text)

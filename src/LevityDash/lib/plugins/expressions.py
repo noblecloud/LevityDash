@@ -360,15 +360,39 @@ def _check(tree: ast.AST, placeholders: Mapping[str, Any], text: str) -> None:
 	for node in ast.walk(tree):
 		if isinstance(node, ast.Name) and node.id in _FUNCTIONS and id(node) not in called:
 			raise ExpressionError(f'{text!r}: {node.id} is a function; call it as {node.id}(...)')
-	# Durations and today only make sense as a window or an offset.
+	# Durations and today only make sense as a window or an offset, or, for a
+	# duration, as a factor or divisor: a rate times a duration is an amount.
 	allowed = set()
 	for node in ast.walk(tree):
 		if isinstance(node, ast.Call) and len(node.args) == 2 and _isWindowCall(node, placeholders):
 			allowed.update(id(n) for n in ast.walk(node.args[1]))
+		elif isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Mult, ast.Div)):
+			allowed.update(id(side) for side in (node.left, node.right) if _isDuration(side, placeholders))
 	for node in ast.walk(tree):
 		if isinstance(node, ast.Name) and id(node) not in allowed:
 			if node.id == _TODAY or isinstance(placeholders.get(node.id), timedelta):
-				raise ExpressionError(f'{text!r}: a duration or today can only be the second argument of min, max, avg or at')
+				raise ExpressionError(
+					f'{text!r}: a duration or today can only be the second argument of min, max, avg or at; '
+					f'a duration can also multiply or divide a measurement'
+				)
+	for node in ast.walk(tree):
+		if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Mult, ast.Div)):
+			if _isDuration(node.left, placeholders) and _isDuration(node.right, placeholders):
+				raise ExpressionError(f'{text!r}: two durations cannot be multiplied or divided')
+
+
+def _isDuration(node: ast.AST, placeholders: Mapping[str, Any]) -> bool:
+	return isinstance(node, ast.Name) and isinstance(placeholders.get(node.id), timedelta)
+
+
+def _asTime(span: timedelta) -> wu.Time:
+	"""A duration as a measurement of time, in the largest unit that holds it whole, so
+	``rain / 3h`` is per hour and not per second."""
+	seconds = span.total_seconds()
+	for unit, size in ((wu.Time.Day, 86400), (wu.Time.Hour, 3600), (wu.Time.Minute, 60)):
+		if seconds and seconds % size == 0:
+			return unit(seconds / size)
+	return wu.Time.Second(seconds)
 
 
 def _isKey(node: ast.AST, placeholders: Mapping[str, Any]) -> bool:
@@ -516,6 +540,8 @@ class _Evaluator:
 		key = self.placeholders[name]
 		if isinstance(key, UnitLiteral):
 			return key
+		if isinstance(key, timedelta):
+			return _asTime(key)
 		return self._present(self.resolver.current(key))
 
 	@staticmethod
@@ -531,8 +557,7 @@ class _Evaluator:
 			case ast.UAdd():
 				return operand
 			case ast.USub():
-				# WeatherUnits' __neg__ returns a bare float, dropping the unit.
-				return operand * -1
+				return -operand
 		raise ExpressionError(f'{self.text!r}: unknown operator {type(op).__name__}')
 
 	def _withUnits(self, left: Any, right: Any) -> Tuple[Any, Any]:

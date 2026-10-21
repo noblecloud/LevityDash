@@ -128,7 +128,7 @@ A window is the span of time that a function reads.
 
 A duration is a number and one of these units: `ms`, `s`, `m` (minutes), `h`, `d`, `w`. Examples: `90s`, `3h`, `7d`.
 
-A window or an offset can be the second argument of `min`, `max`, `avg`, or `at`. It cannot be used in other places.
+A window or an offset can be the second argument of `min`, `max`, `avg`, or `at`. A duration can also multiply or divide a measurement (see [Rates and amounts](#rates-and-amounts)). It cannot be used in other places.
 
 > [!NOTE]
 > A window needs data over time. A source that gives only the current value has no history to read. `min(key, today)` then has no value.
@@ -136,6 +136,22 @@ A window or an offset can be the second argument of `min`, `max`, `avg`, or `at`
 ### <div class=mono>Keys</div>
 
 Write a key as you write it in `key:`. A key has at least two parts that are joined with a dot. A key can have a source before it (`OpenMeteo:environment.temperature.temperature`) and an identity after it (`indoor.temperature.temperature#bedroom`).
+
+## Rates and amounts
+
+`*` and `/` between two measurements follow their units.
+
+| Expression | Result |
+|------------|--------|
+| `environment.precipitation.rate * 3h` | The rain that falls in 3 hours, as a length (`mm`). |
+| `3h * environment.precipitation.rate` | The same. |
+| `environment.precipitation.hourly / 3h` | A rate, in `mm/hr`. The rate is in the largest unit that holds the duration whole: `3h` gives per hour, `2d` gives per day, `90s` gives per second. |
+| `environment.wind.speed.gust / environment.wind.speed.speed` | A plain number. Two measurements of the same kind divide to a ratio, whatever their units. |
+| `a.b.length * a.b.width` | An area, in `m²`. |
+
+Units that have no name of their own are shown in SI units (`m²`, `kg·m⁻³`). A result can go on to further `*` and `/`. A power of a unit goes up to three (`m³`).
+
+A temperature reading does not multiply or divide. `20°C * 2` is not `40°C`, so the expression has an error. Use `+` and `-` with a unit literal to change a temperature (`temperature - 5°F`).
 
 ## Units in an expression
 
@@ -172,7 +188,7 @@ A space between the number and the unit is optional.
 #### <div class=mono>What you cannot write</div>
 
 - A unit of one letter. `5 m` is not read as metres. Use `5 mm`, `5 cm`, or another unit with at least two letters.
-- A span of time. `3h` is a duration. A duration is only for a window or an offset.
+- A span of time. `3h` is a duration. A duration is for a window or an offset, or it multiplies or divides a measurement.
 
 #### <div class=mono>Units must match</div>
 
