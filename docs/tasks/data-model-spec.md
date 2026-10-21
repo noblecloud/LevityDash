@@ -478,7 +478,8 @@ honestly rather than show nothing. OTel treats this as first-class
 3. **Key namespace.** The big one. Do it when health or service data actually
    arrives, so the migration serves a real need and not a predicted one. The
    `key:` to `connection:` rename and `source` to `provider` go here.
-4. **Conditionals in stacks.** Cheap, any time.
+4. **Conditionals in stacks.** Cheap, any time. Done: an item's `when:` hides it and a
+   stack closes up around it.
 
 Steps 1-2 deliver most of the value without touching a single existing key.
 Step 3 is the scary one and also the most deferrable.
