@@ -7,7 +7,7 @@ from typing import Any, ClassVar, Dict, Hashable, Iterator, List, Optional, Type
 from LevityDash import LevityDashboard
 from LevityDash.lib.config import pluginConfig
 from LevityDash.lib.log import LevityPluginLog as pluginLog
-from LevityDash.lib.plugins import categories, errors, observation, schema
+from LevityDash.lib.plugins import categories, errors, history, observation, schema
 from LevityDash.lib.plugins.utils import Request, GuardedRequest
 from LevityDash.lib.plugins.observation import Container
 from LevityDash.lib.plugins.plugin import AnySource, Plugin, SomePlugin
@@ -139,6 +139,9 @@ class PluginsLoader(metaclass=GlobalSingleton, name='plugins'):
 		pluginLog.info(' Starting Plugins '.center(80, '-'))
 		plugin_threads = [i for i in self if i.enabled]
 
+		# Before any plugin runs, so its first live reading lands after the saved history.
+		for plugin_ in plugin_threads:
+			history.restoreLog(plugin_)
 		for plugin_ in plugin_threads:
 			plugin_.thread.start()
 		pluginLog.info(' Thread Pool Started '.center(80, '-'))
