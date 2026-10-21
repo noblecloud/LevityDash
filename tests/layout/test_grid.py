@@ -277,3 +277,44 @@ def test_percent_track_goes_through_to_px_with_its_unit():
 	seen = []
 	result = parse_track_list('25% 1fr', to_px=lambda v, u: seen.append((v, u)) or v * 8)
 	assert seen == [(25.0, '%')] and result[0] == TrackSize(200.0, 200.0)
+
+
+# --- 7.3: grid-template-areas --------------------------------------------------------------
+
+from LevityDash.lib.layout.grid import area_placement, area_size, parse_template_areas
+
+_AREAS = ['head head head', 'nav main side', 'nav foot foot']
+
+
+def test_template_areas_give_each_name_its_rectangle():
+	areas = parse_template_areas(_AREAS)
+	assert areas['head'] == (1, 1, 3, 1)
+	assert areas['nav'] == (1, 2, 1, 2)
+	assert areas['foot'] == (2, 3, 2, 1)
+	assert area_size(_AREAS) == (3, 3)
+
+
+def test_template_areas_accept_one_multiline_string_and_dots():
+	areas = parse_template_areas('a . b\na . b')
+	assert areas == {'a': (1, 1, 1, 2), 'b': (3, 1, 1, 2)}
+
+
+def test_template_areas_refuse_a_ragged_row_and_a_non_rectangle():
+	with pytest.raises(ValueError, match='row 2 has 2 cells'):
+		parse_template_areas(['a b c', 'a b'])
+	with pytest.raises(ValueError, match="'a' is not a rectangle"):
+		parse_template_areas(['a a', 'a b'])
+
+
+def test_area_placement_places_an_item_over_its_area():
+	areas = parse_template_areas(_AREAS)
+	container = GridContainer(columns=parse_track_list('100px 100px 100px'), rows=parse_track_list('50px 50px 50px'), width=300, height=150)
+	items = [GridItem(placement=area_placement(areas, 'nav')), GridItem(placement=area_placement(areas, 'head'))]
+	nav, head = layout_grid(items, container)
+	assert (nav.x, nav.y, nav.width, nav.height) == (0, 50, 100, 100)
+	assert (head.x, head.y, head.width, head.height) == (0, 0, 300, 50)
+
+
+def test_area_placement_names_an_unknown_area():
+	with pytest.raises(ValueError, match="no area named 'x'"):
+		area_placement(parse_template_areas(_AREAS), 'x')

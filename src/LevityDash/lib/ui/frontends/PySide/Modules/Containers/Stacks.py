@@ -316,8 +316,8 @@ def _checkedKeys(value: Mapping | None, allowed: set[str], what: str) -> dict | 
 # at once. The two sets do not overlap: `align-self` is the item's, `align-items` the container's.
 _FLEX_ITEM_KEYS = {'grow', 'shrink', 'basis', 'min', 'max', 'cross', 'align-self', 'order', 'margin'}
 _FLEX_STACK_KEYS = {'justify', 'align-items', 'wrap'}
-_GRID_ITEM_KEYS = {'column', 'row', 'column-span', 'row-span', 'justify-self', 'align-self', 'shrink', 'margin'}
-_GRID_KEYS = {'columns', 'rows', 'auto-columns', 'auto-rows', 'auto-flow', 'dense', 'gap', 'justify-content', 'align-content', 'justify-items', 'align-items'}
+_GRID_ITEM_KEYS = {'column', 'row', 'column-span', 'row-span', 'justify-self', 'align-self', 'shrink', 'margin', 'area'}
+_GRID_KEYS = {'areas', 'columns', 'rows', 'auto-columns', 'auto-rows', 'auto-flow', 'dense', 'gap', 'justify-content', 'align-content', 'justify-items', 'align-items'}
 
 
 def _scalarsOverShared(state: dict, shared: Mapping, itemType: Type) -> dict:
@@ -1670,6 +1670,14 @@ class GridStack(Stack, tag='grid'):
 			width=inner_w,
 			height=inner_h,
 		)
+		areas = {}
+		if props.get('areas') is not None:
+			# `areas` makes the explicit grid at least as big as its picture; the extra tracks are sized by `auto-columns` / `auto-rows`
+			areas = cssgrid.parse_template_areas(props['areas'])
+			area_columns, area_rows = cssgrid.area_size(props['areas'])
+			for axis, wanted, vertical in (('columns', area_columns, False), ('rows', area_rows, True)):
+				have = len(cssgrid.expand_repeat(getattr(container, axis), inner_h if vertical else inner_w, gap_row if vertical else gap_column))
+				getattr(container, axis).extend([self._trackSize(props.get('auto-rows' if vertical else 'auto-columns'), vertical)] * max(0, wanted - have))
 		for key, name in (('justify-content', 'justify_content'), ('align-content', 'align_content')):
 			if props.get(key) is not None:
 				setattr(container, name, cssparse.parse_content_align(props[key]))
@@ -1686,14 +1694,21 @@ class GridStack(Stack, tag='grid'):
 			spec = getattr(geometry.surface, 'gridProps', None) or {}
 			aspect = self.cssAspect(geometry.surface)
 			top, right, bottom, left = self.cssMargin(spec.get('margin'))
-			items.append(cssgrid.GridItem(
-				margin_inline=CssEdge(left, right), margin_block=CssEdge(top, bottom),
-				max_content=(0.0, 0.0) if aspect is None else (aspect * natural_h, natural_h),
-				placement=cssgrid.Placement(
+			if (area := spec.get('area')) is not None:
+				if any(key in spec for key in ('column', 'row', 'column-span', 'row-span')):
+					raise ValueError('grid: `area` cannot be combined with column, row or a span')
+				placement = cssgrid.area_placement(areas, str(area))
+				placement = cssgrid.Placement(placement.column_start, placement.column_span, placement.row_start, placement.row_span, bool(spec.get('shrink', False)))
+			else:
+				placement = cssgrid.Placement(
 					column_start=spec.get('column'), column_span=int(spec.get('column-span', 1)),
 					row_start=spec.get('row'), row_span=int(spec.get('row-span', 1)),
 					shrink=bool(spec.get('shrink', False)),
-				),
+				)
+			items.append(cssgrid.GridItem(
+				margin_inline=CssEdge(left, right), margin_block=CssEdge(top, bottom),
+				max_content=(0.0, 0.0) if aspect is None else (aspect * natural_h, natural_h),
+				placement=placement,
 				justify_self=CssItemAlign.auto if 'justify-self' not in spec else cssparse.parse_item_align(spec['justify-self']).value,
 				align_self=CssItemAlign.auto if 'align-self' not in spec else cssparse.parse_item_align(spec['align-self']).value,
 			))

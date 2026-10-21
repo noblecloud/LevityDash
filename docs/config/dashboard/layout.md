@@ -64,6 +64,7 @@ An item with a `size:` and no `flex:` keys does not grow, and it can shrink. Thi
 | Key | Meaning | CSS |
 |---|---|---|
 | `columns`, `rows` | A list of track sizes: lengths, `fr`, `auto`, `min-content`, `max-content`, `minmax(a, b)`, `fit-content(x)`, `repeat(n, ...)`, `repeat(auto-fill, ...)` and `repeat(auto-fit, ...)`. A `%` is a share of the grid's inner size. A string such as `'repeat(3, 1fr)'` works too. `repeat(auto-fill, minmax(200px, 1fr))` makes as many 200px-or-wider columns as the grid's width holds, and the count changes when the window does. `auto-fit` does the same and then drops the empty columns. | `grid-template-columns`, `grid-template-rows` |
+| `areas` | A picture of the grid: a list with one string per row and one word per cell, `.` for an empty cell. Each name must cover one rectangle. It makes the explicit grid at least as big as the picture; tracks `columns` and `rows` do not list are sized by `auto-columns` and `auto-rows`. An item picks its place with `grid: {area: name}`. | `grid-template-areas` |
 | `auto-columns`, `auto-rows` | The size of a track that the items need and the list does not give. Default `1fr`. | `grid-auto-columns`, `grid-auto-rows` |
 | `auto-flow` | `row` (default) or `column`. | `grid-auto-flow` |
 | `dense` | `true` fills earlier holes. | `dense` |
@@ -73,7 +74,7 @@ An item with a `size:` and no `flex:` keys does not grow, and it can shrink. Thi
 
 ### Grid item options (on an item)
 
-`grid: {column, row, column-span, row-span, justify-self, align-self, shrink, margin}`. Lines count from 1. `margin` is the same shorthand as in flex. The margin box counts toward track sizes, and an `auto` side turns stretching off and takes the free space in the area, so two `auto` sides centre the item. An item with no `column` or `row` goes in the next free cell.
+`grid: {column, row, column-span, row-span, area, justify-self, align-self, shrink, margin}`. `area: name` places the item on a named area of `areas` and cannot be combined with `column`, `row` or a span. Lines count from 1. `margin` is the same shorthand as in flex. The margin box counts toward track sizes, and an `auto` side turns stretching off and takes the free space in the area, so two `auto` sides centre the item. An item with no `column` or `row` goes in the next free cell.
 
 Spans are how a layout gets a bento look: put `dense: true` on the grid, give the large items a `column-span` or `row-span`, and the small ones fill the holes in order.
 
@@ -96,9 +97,9 @@ An item that shows a number reports its size from its **format hint**, the wides
 - A mistake in `flex:` or `grid:` (an unknown key, a wrong word) is an error on that item. The rest of the dashboard loads.
 - Dividers are not drawn in a flex or grid stack.
 - A cell sizes its own text. To make the values in a grid or flex stack the same size, add a `shared:` size group (see the example dashboard).
-- Not yet supported: `subgrid`, named areas, `calc()`, and sizing by anything but the text of a value (a gauge, a graph or a container has no content size, so for them `auto` is 0).
+- Not yet supported: `subgrid`, named lines, `calc()`, and sizing by anything but the text of a value (a gauge, a graph or a container has no content size, so for them `auto` is 0).
 
-Example dashboards: `docs/design-references/layout-margins.levity` (margins), `docs/design-references/css-layout.levity` (render: `docs/design-references/css-layout.png`) and `docs/design-references/grid-bento.levity`, a dense bento board with spans, a `shrink` item and an `auto-fill` strip.
+Example dashboards: `docs/design-references/grid-areas.levity` (named areas), `docs/design-references/layout-margins.levity` (margins), `docs/design-references/css-layout.levity` (render: `docs/design-references/css-layout.png`) and `docs/design-references/grid-bento.levity`, a dense bento board with spans, a `shrink` item and an `auto-fill` strip.
 
 ## In the Studio
 

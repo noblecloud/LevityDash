@@ -3,7 +3,7 @@
 Spec: https://www.w3.org/TR/css-grid-1/ Sections 7, 8 and 12.
 
 Pure functions. No Qt. Sizes are pixels. See `types.py` for the conventions.
-Out of scope: `subgrid`, named areas by string art, masonry, intrinsic sizing from
+Out of scope: `subgrid`, named lines, masonry, intrinsic sizing from
 wrapped text. Do not add them without asking.
 
 Simplifications, each also noted where it is made:
@@ -32,7 +32,7 @@ __all__ = [
 	'Fr', 'Keyword', 'TrackSize', 'Repeat', 'GridContainer', 'GridItem', 'Placement', 'Track',
 	'parse_track_list', 'expand_repeat', 'place_items', 'initialize_track_sizes',
 	'resolve_intrinsic_track_sizes', 'maximize_tracks', 'expand_flexible_tracks',
-	'stretch_auto_tracks', 'layout_grid',
+	'stretch_auto_tracks', 'layout_grid', 'parse_template_areas', 'area_size', 'area_placement',
 ]
 
 _EPS = 1e-9
@@ -584,6 +584,54 @@ def expand_repeat(tracks: list[TrackSize | Repeat], available: float | None, gap
 	placement, so `layout_grid` does it.
 	"""
 	return _expand(tracks, available, gap)[0]
+
+
+@implements('css-grid-1', 'Named Areas: the grid-template-areas property', '7.3', status='done')
+def parse_template_areas(rows: str | list[str]) -> dict[str, tuple[int, int, int, int]]:
+	"""Read `grid-template-areas`: one string per row, one word per cell, `.` for an empty cell.
+
+	Returns `{name: (column, row, column_span, row_span)}` with lines counted from 1 as in CSS.
+	Every row must have the same number of cells, and each name must cover one rectangle
+	(§7.3). The grid has as many columns as a row has cells and as many rows as there are
+	strings; `area_size` gives that.
+	"""
+	lines = [line for line in (rows.splitlines() if isinstance(rows, str) else rows) if str(line).strip()]
+	if not lines:
+		raise ValueError('grid-template-areas: no rows')
+	table = [str(line).split() for line in lines]
+	width = len(table[0])
+	for number, row in enumerate(table, 1):
+		if len(row) != width:
+			raise ValueError(f'grid-template-areas: row {number} has {len(row)} cells, row 1 has {width}')
+	cells: dict[str, list[tuple[int, int]]] = {}
+	for r, row in enumerate(table):
+		for c, name in enumerate(row):
+			if name.strip('.') == '':  # any run of dots is a null cell
+				continue
+			cells.setdefault(name, []).append((r, c))
+	areas = {}
+	for name, found in cells.items():
+		rows_used = sorted({r for r, _ in found})
+		cols_used = sorted({c for _, c in found})
+		top, bottom, left, right = rows_used[0], rows_used[-1], cols_used[0], cols_used[-1]
+		if len(found) != (bottom - top + 1) * (right - left + 1):
+			raise ValueError(f'grid-template-areas: {name!r} is not a rectangle')
+		areas[name] = (left + 1, top + 1, right - left + 1, bottom - top + 1)
+	return areas
+
+
+def area_size(rows: str | list[str]) -> tuple[int, int]:
+	"""`(columns, rows)` of the explicit grid that `grid-template-areas` defines."""
+	lines = [line for line in (rows.splitlines() if isinstance(rows, str) else rows) if str(line).strip()]
+	return (len(str(lines[0]).split()) if lines else 0), len(lines)
+
+
+def area_placement(areas: dict[str, tuple[int, int, int, int]], name: str) -> Placement:
+	"""The `Placement` for `grid-area: name`. An unknown name is an error, not `auto`."""
+	if name not in areas:
+		raise ValueError(f'grid-area: no area named {name!r}; the template has {sorted(areas)}')
+	column, row, column_span, row_span = areas[name]
+	return Placement(column_start=column, column_span=column_span, row_start=row, row_span=row_span)
 
 
 @implements('css-grid-1', 'Grid Item Placement Algorithm', '8.5', status='done')
