@@ -40,7 +40,7 @@ Put `flex:` on the stack for the container options. Put `flex:` on an item for t
 | `cross` | The size across the stack. Default: the full width of the line. | `height` in a row |
 | `align-self` | Overrides `align-items` for one item. | `align-self` |
 | `order` | Items go in order of this number, then in file order. Default 0. | `order` |
-| `margin` | Space around the item: one, two or four values (top, right, bottom, left), as a list or a string. A side can be `auto`, which takes the free space on that side. `margin: [0, 0, 0, auto]` pushes the item and all after it to the end. | `margin` |
+| `margin` | Space around the item: one, two or four values (top, right, bottom, left), as a list or a string. A side can be `auto` or a `%` (of the stack's inner width, on every side). `auto` takes the free space on that side. `margin: [0, 0, 0, auto]` pushes the item and all after it to the end. | `margin` |
 
 Sizes take `%`, `px`, `mm`, `cm` and `in`, as everywhere else.
 
@@ -63,7 +63,7 @@ An item with a `size:` and no `flex:` keys does not grow, and it can shrink. Thi
 
 | Key | Meaning | CSS |
 |---|---|---|
-| `columns`, `rows` | A list of track sizes: lengths, `fr`, `auto`, `min-content`, `max-content`, `minmax(a, b)`, `fit-content(x)`, `repeat(n, ...)`, `repeat(auto-fill, ...)` and `repeat(auto-fit, ...)`. A string such as `'repeat(3, 1fr)'` works too. `repeat(auto-fill, minmax(200px, 1fr))` makes as many 200px-or-wider columns as the grid's width holds, and the count changes when the window does. `auto-fit` does the same and then drops the empty columns. | `grid-template-columns`, `grid-template-rows` |
+| `columns`, `rows` | A list of track sizes: lengths, `fr`, `auto`, `min-content`, `max-content`, `minmax(a, b)`, `fit-content(x)`, `repeat(n, ...)`, `repeat(auto-fill, ...)` and `repeat(auto-fit, ...)`. A `%` is a share of the grid's inner size. A string such as `'repeat(3, 1fr)'` works too. `repeat(auto-fill, minmax(200px, 1fr))` makes as many 200px-or-wider columns as the grid's width holds, and the count changes when the window does. `auto-fit` does the same and then drops the empty columns. | `grid-template-columns`, `grid-template-rows` |
 | `auto-columns`, `auto-rows` | The size of a track that the items need and the list does not give. Default `1fr`. | `grid-auto-columns`, `grid-auto-rows` |
 | `auto-flow` | `row` (default) or `column`. | `grid-auto-flow` |
 | `dense` | `true` fills earlier holes. | `dense` |
@@ -96,7 +96,7 @@ An item that shows a number reports its size from its **format hint**, the wides
 - A mistake in `flex:` or `grid:` (an unknown key, a wrong word) is an error on that item. The rest of the dashboard loads.
 - Dividers are not drawn in a flex or grid stack.
 - A cell sizes its own text. To make the values in a grid or flex stack the same size, add a `shared:` size group (see the example dashboard).
-- Not yet supported: `subgrid`, named areas, `calc()`, `%` inside a track list, `%` margins, and sizing by anything but the text of a value (a gauge, a graph or a container has no content size, so for them `auto` is 0).
+- Not yet supported: `subgrid`, named areas, `calc()`, and sizing by anything but the text of a value (a gauge, a graph or a container has no content size, so for them `auto` is 0).
 
 Example dashboards: `docs/design-references/layout-margins.levity` (margins), `docs/design-references/css-layout.levity` (render: `docs/design-references/css-layout.png`) and `docs/design-references/grid-bento.levity`, a dense bento board with spans, a `shrink` item and an `auto-fill` strip.
 

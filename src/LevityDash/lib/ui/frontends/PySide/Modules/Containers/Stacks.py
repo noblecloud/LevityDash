@@ -814,7 +814,7 @@ class Stack(Panel, tag='stack'):
 	def cssMargin(self, value) -> tuple[float | None, float | None, float | None, float | None]:
 		"""A CSS `margin` shorthand (one, two or four values, a string or a list) as pixels: top, right, bottom, left.
 
-		`auto` is None. Top and bottom are shares of the height, left and right of the width.
+		`auto` is None. A `%` is a share of the stack's inner width on every side, as in CSS.
 		"""
 		if value is None:
 			return 0.0, 0.0, 0.0, 0.0
@@ -822,8 +822,17 @@ class Stack(Panel, tag='stack'):
 		if len(parts) not in (1, 2, 4):
 			raise ValueError(f'margin: expected 1, 2 or 4 values, got {value!r}')
 		top, right, bottom, left = {1: parts * 4, 2: parts + parts, 4: parts}[len(parts)]
-		lengths = [None if str(v).casefold() == 'auto' else self.cssPx(v, vertical) for v, vertical in ((top, True), (right, False), (bottom, True), (left, False))]
-		return tuple(lengths)
+		width, _, padLeft, _, padRight, _ = self.cssBox()
+		inline = width - padLeft - padRight
+
+		def length(v, vertical):
+			if str(v).casefold() == 'auto':
+				return None
+			if str(v).strip().endswith('%'):  # a percent margin is a share of the inline size, on every side (CSS)
+				return float(str(v).strip()[:-1]) / 100 * inline
+			return self.cssPx(v, vertical)
+
+		return tuple(length(v, vertical) for v, vertical in ((top, True), (right, False), (bottom, True), (left, False)))
 
 	def cssGapPx(self) -> float:
 		return float(self.spacing_px)
@@ -1623,12 +1632,18 @@ class GridStack(Stack, tag='grid'):
 	def _tracks(self, value, vertical: bool):
 		if value is None:
 			return []
-		return cssgrid.parse_track_list(value, lambda number, unit: self.cssPx(f'{number}{unit}', vertical))
+		return cssgrid.parse_track_list(value, self._trackPx(vertical))
+
+	def _trackPx(self, vertical: bool):
+		"""Length resolver for a track list. `%` is a share of the grid's inner size, as in CSS."""
+		width, height, left, top, right, bottom = self.cssBox()
+		inner = (height - top - bottom) if vertical else (width - left - right)
+		return lambda number, unit: number / 100 * inner if unit == '%' else self.cssPx(f'{number}{unit}', vertical)
 
 	def _trackSize(self, value, vertical: bool) -> cssgrid.TrackSize:
 		if value is None:
 			return cssgrid.TrackSize(cssgrid.Keyword.auto, cssgrid.Fr(1))
-		(track,) = cssgrid.parse_track_list(value, lambda number, unit: self.cssPx(f'{number}{unit}', vertical))
+		(track,) = cssgrid.parse_track_list(value, self._trackPx(vertical))
 		return track
 
 	def setCssGeometries(self):

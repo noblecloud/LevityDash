@@ -296,8 +296,6 @@ def _breadth(token: str, to_px, *, maximum: bool) -> Breadth:
 		return Fr(value)
 	if unit in ('', 'px'):
 		return value
-	if unit == '%':
-		raise ValueError(f'{token!r}: % needs the container size, so resolve it to px first')
 	if to_px is None:
 		raise ValueError(f'{token!r}: unit {unit!r} needs a to_px function')
 	return float(to_px(value, unit))

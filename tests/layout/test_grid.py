@@ -49,7 +49,7 @@ def test_parse_track_list_keywords_and_fit_content():
 
 
 @pytest.mark.parametrize('text, bad', [
-	('10%', '10%'),  # % needs the container, the caller resolves it
+	('10%', '10%'),  # % needs a to_px that knows the container
 	('-5px', '-5px'),
 	('2xy 1fr', '2xy'),  # unit with no resolver
 	('minmax(1fr, 2px)', '1fr'),  # fr is only a max
@@ -271,3 +271,9 @@ def test_two_auto_margins_centre_the_item():
 	container = GridContainer(columns=[TrackSize(Keyword.auto, Fr(1))], rows=[TrackSize(Keyword.auto, Fr(1))], width=200, height=100)
 	(rect,) = layout_grid([item(max_content=(50, 20), min_content=(50, 20), margin_inline=Edge(None, None), margin_block=Edge(None, None))], container)
 	assert (rect.x, rect.y, rect.width, rect.height) == (75, 40, 50, 20)
+
+
+def test_percent_track_goes_through_to_px_with_its_unit():
+	seen = []
+	result = parse_track_list('25% 1fr', to_px=lambda v, u: seen.append((v, u)) or v * 8)
+	assert seen == [(25.0, '%')] and result[0] == TrackSize(200.0, 200.0)
