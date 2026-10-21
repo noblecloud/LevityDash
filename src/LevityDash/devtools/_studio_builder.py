@@ -652,12 +652,17 @@ class Stage(QWidget):
 		self.snap = True  # drags stick to the parent's and the siblings' edges and centres; Alt held turns it off
 		self.guides: Tuple[List[float], List[float]] = ([], [])
 		self.marks: List[QRectF] = []  # boxes the Size groups tab points at, in scene pixels
+		self.zoom = 1.0  # Ctrl + wheel zooms about the pointer, a middle-button drag pans, 0 shows the whole picture again
+		self.pan = QPointF()
+		self._panning: Optional[tuple] = None
 		self.setMinimumSize(320, 220)
 		self.setMouseTracking(True)
 		self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
 	def keyPressEvent(self, event):
 		"""Arrow keys move the selected item by 1% of its parent; Shift 5%, Alt 0.1%."""
+		if event.key() == Qt.Key.Key_0:
+			return self.resetView()
 		step = {Qt.Key.Key_Left: (-1, 0), Qt.Key.Key_Right: (1, 0), Qt.Key.Key_Up: (0, -1), Qt.Key.Key_Down: (0, 1)}.get(event.key())
 		rect = self.rects.get(self.path) if self.path else None
 		if step is None or rect is None or not self.movable:
@@ -691,8 +696,33 @@ class Stage(QWidget):
 	def _fit(self) -> Tuple[float, QPointF]:
 		if self.image is None:
 			return 1.0, QPointF()
-		scale = min(self.width() / self.image.width(), self.height() / self.image.height())
-		return scale, QPointF((self.width() - self.image.width() * scale) / 2, (self.height() - self.image.height() * scale) / 2)
+		fit = min(self.width() / self.image.width(), self.height() / self.image.height())
+		scale = fit * self.zoom
+		return scale, QPointF((self.width() - self.image.width() * scale) / 2, (self.height() - self.image.height() * scale) / 2) + self.pan
+
+	def resetView(self):
+		self.zoom, self.pan = 1.0, QPointF()
+		self.update()
+
+	def zoomAt(self, pos: QPointF, factor: float):
+		"""Change the zoom by `factor` (1 is the whole picture, up to 8) keeping the point under `pos` where it is."""
+		zoom = max(1.0, min(8.0, self.zoom * factor))
+		if zoom == self.zoom:
+			return
+		spot = self._toScene(pos)
+		self.zoom, self.pan = zoom, QPointF()
+		scale, off = self._fit()
+		self.pan = pos - (off + spot * scale)
+		if zoom == 1.0:
+			self.pan = QPointF()
+		self.update()
+
+	def wheelEvent(self, event):
+		if event.modifiers() & Qt.KeyboardModifier.ControlModifier and self.image is not None:
+			self.zoomAt(event.position(), 1.0015 ** event.angleDelta().y())
+			event.accept()
+		else:
+			super().wheelEvent(event)
 
 	def _toScene(self, pos: QPointF) -> QPointF:
 		scale, off = self._fit()
@@ -752,6 +782,10 @@ class Stage(QWidget):
 
 	def mousePressEvent(self, event):
 		pos = event.position()
+		if event.button() == Qt.MouseButton.MiddleButton:
+			self._panning = (pos, QPointF(self.pan))
+			self.setCursor(Qt.CursorShape.ClosedHandCursor)
+			return
 		corner = self._corner(pos)
 		if corner:
 			self._drag = ('resize', corner, pos, QRectF(self.rects[self.path]))
@@ -765,6 +799,11 @@ class Stage(QWidget):
 
 	def mouseMoveEvent(self, event):
 		pos = event.position()
+		if self._panning is not None:
+			start, pan = self._panning
+			self.pan = pan + (pos - start)
+			self.update()
+			return
 		if self._drag is None:
 			corner = self._corner(pos)
 			self.setCursor(Qt.CursorShape.SizeFDiagCursor if corner in ('tl', 'br') else Qt.CursorShape.SizeBDiagCursor if corner else Qt.CursorShape.ArrowCursor)
@@ -807,6 +846,9 @@ class Stage(QWidget):
 		self.dragged.emit(self.path, geometry)
 
 	def mouseReleaseEvent(self, _):
+		if self._panning is not None:
+			self._panning = None
+			self.setCursor(Qt.CursorShape.ArrowCursor)
 		if self._drag is not None:
 			self._drag = None
 			self.guides = ([], [])
