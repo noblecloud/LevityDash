@@ -318,3 +318,9 @@ def test_area_placement_places_an_item_over_its_area():
 def test_area_placement_names_an_unknown_area():
 	with pytest.raises(ValueError, match="no area named 'x'"):
 		area_placement(parse_template_areas(_AREAS), 'x')
+
+
+def test_a_math_function_is_a_track_length():
+	tracks = parse_track_list('calc(100% - 40px) 1fr minmax(min(10%, 50px), 1fr)', to_px=lambda v, u: v * 10 if u == '%' else v)
+	assert tracks[0] == TrackSize(960.0, 960.0)
+	assert tracks[2] == TrackSize(50.0, Fr(1))

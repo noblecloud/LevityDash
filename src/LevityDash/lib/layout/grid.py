@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from math import floor, isinf
 
+from .calc import evaluate_math, is_math
 from .align import distribute_content, align_offset
 from .spec import implements
 from .types import Alignment, ContentAlign, Edge, Gap, INF, ItemAlign, Rect
@@ -286,6 +287,10 @@ _KEYWORDS = {'auto': Keyword.auto, 'min-content': Keyword.min_content, 'max-cont
 def _breadth(token: str, to_px, *, maximum: bool) -> Breadth:
 	if token in _KEYWORDS:
 		return _KEYWORDS[token]
+	if is_math(token):
+		if to_px is None:
+			raise ValueError(f'{token!r}: a math function needs a to_px function')
+		return evaluate_math(token, to_px)
 	match = _NUMBER.fullmatch(token)
 	if not match:
 		raise ValueError(f'not a track size: {token!r}')
@@ -318,10 +323,11 @@ def _track(token: str, to_px) -> TrackSize | Repeat:
 			raise ValueError(f'repeat takes plain track sizes: {token!r}')
 		return Repeat(repeat_count, tracks)
 	if token.startswith('minmax(') and token.endswith(')'):
-		low, sep, high = token[7:-1].partition(',')
-		if not sep:
+		arguments = _split(token[7:-1], ',')
+		if len(arguments) != 2:
 			raise ValueError(f'minmax needs two arguments: {token!r}')
-		return TrackSize(min=_breadth(low.strip(), to_px, maximum=False), max=_breadth(high.strip(), to_px, maximum=True))
+		low, high = arguments
+		return TrackSize(min=_breadth(low, to_px, maximum=False), max=_breadth(high, to_px, maximum=True))
 	if token.startswith('fit-content(') and token.endswith(')'):
 		limit = _breadth(token[12:-1].strip(), to_px, maximum=False)
 		if not _fixed(limit):

@@ -24,14 +24,14 @@
       name: tiles
       geometry: {x: 2%, y: 36%, width: 96%, height: 60%}
       spacing: 14px
-      grid: {columns: [30%, 1fr, 1fr], rows: [1fr, 1fr]}
+      grid: {columns: [30%, calc(100% - 30% - 700px), 700px], rows: [1fr, 1fr]}
       shared:
         title: {matchingGroup: {group: tilesTitle@tiles, matchAll: true}}
         display: {valueLabel: {matchingGroup: {group: tilesValue@tiles, matchAll: true}}}
       items:
         - {type: realtime.text, key: environment.temperature.temperature, title: {text: Plain}, border: {enabled: true, edges: all}}
         - {type: realtime.text, key: environment.humidity.humidity, title: {text: Margin 40px}, grid: {margin: 40px}, border: {enabled: true, edges: all}}
-        - {type: realtime.text, key: environment.pressure.pressure, title: {text: Margin 4%}, grid: {margin: 4%}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.pressure.pressure, title: {text: Margin calc(2% + 12px)}, grid: {margin: calc(2% + 12px)}, border: {enabled: true, edges: all}}
         - {type: realtime.text, key: environment.light.uvi, title: {text: Plain}, border: {enabled: true, edges: all}}
         - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Margin left 120px}, grid: {margin: [0, 0, 0, 120px]}, border: {enabled: true, edges: all}}
         - {type: realtime.text, key: environment.wind.gust.gust, title: {text: Plain}, border: {enabled: true, edges: all}}

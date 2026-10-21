@@ -42,7 +42,7 @@ Put `flex:` on the stack for the container options. Put `flex:` on an item for t
 | `order` | Items go in order of this number, then in file order. Default 0. | `order` |
 | `margin` | Space around the item: one, two or four values (top, right, bottom, left), as a list or a string. A side can be `auto` or a `%` (of the stack's inner width, on every side). `auto` takes the free space on that side. `margin: [0, 0, 0, auto]` pushes the item and all after it to the end. | `margin` |
 
-Sizes take `%`, `px`, `mm`, `cm` and `in`, as everywhere else.
+Sizes take `%`, `px`, `mm`, `cm` and `in`, as everywhere else. Anywhere a length goes in `flex:` or `grid:` (sizes, margins, gaps, track sizes) you can write `calc()`, `min()`, `max()` or `clamp()`: `calc(100% - 2 * 12px)`. `+` and `-` need a space on both sides, and a length cannot be multiplied by a length. This is css-values-4 section 10.
 
 An item with a `size:` and no `flex:` keys does not grow, and it can shrink. This is the CSS default. A stack that has only `flex: {justify: ...}` can therefore shrink items that do not fit, where a plain stack lets them overflow.
 
@@ -97,7 +97,7 @@ An item that shows a number reports its size from its **format hint**, the wides
 - A mistake in `flex:` or `grid:` (an unknown key, a wrong word) is an error on that item. The rest of the dashboard loads.
 - Dividers are not drawn in a flex or grid stack.
 - A cell sizes its own text. To make the values in a grid or flex stack the same size, add a `shared:` size group (see the example dashboard).
-- Not yet supported: `subgrid`, named lines, `calc()`, and sizing by anything but the text of a value (a gauge, a graph or a container has no content size, so for them `auto` is 0).
+- Not yet supported: `subgrid`, named lines, math functions in `size:` and `geometry:` (only `flex:` and `grid:` take them), and sizing by anything but the text of a value (a gauge, a graph or a container has no content size, so for them `auto` is 0).
 
 Example dashboards: `docs/design-references/grid-areas.levity` (named areas), `docs/design-references/layout-margins.levity` (margins), `docs/design-references/css-layout.levity` (render: `docs/design-references/css-layout.png`) and `docs/design-references/grid-bento.levity`, a dense bento board with spans, a `shrink` item and an `auto-fill` strip.
 

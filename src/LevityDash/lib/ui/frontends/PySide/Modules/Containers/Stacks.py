@@ -19,7 +19,7 @@ from LevityDash.lib.ui.Geometry import (
 	Alignment, AlignmentFlag, Dimension, DimensionType, Direction, DisplayPosition, Geometry, parseHeight, parseSize, parseWidth,
 	Position, Size, size_float, size_px
 )
-from LevityDash.lib.layout import flex as cssflex, grid as cssgrid, parse as cssparse
+from LevityDash.lib.layout import calc as cssmath, flex as cssflex, grid as cssgrid, parse as cssparse
 from LevityDash.lib.layout.types import Direction as CssDirection, Edge as CssEdge, Gap as CssGap, ItemAlign as CssItemAlign, Rect as CssRect
 from LevityDash.lib.utils import DeepChainMap, mostSimilarDict, sortDict
 from WeatherUnits import Length, Percentage
@@ -804,7 +804,9 @@ class Stack(Panel, tag='stack'):
 		)
 
 	def cssPx(self, value, vertical: bool) -> float:
-		"""A `.levity` length (`40%`, `12px`, `3mm`, `0.5`) as pixels along one axis of this stack."""
+		"""A `.levity` length (`40%`, `12px`, `3mm`, `0.5`, `calc(100% - 12px)`) as pixels along one axis of this stack."""
+		if cssmath.is_math(value):
+			return cssmath.evaluate_math(value, lambda number, unit: self.cssPx(f'{number}{unit}', vertical))
 		dimension = DimensionType.height if vertical else DimensionType.width
 		parsed = parseSize(value, None, dimension=dimension)
 		if parsed is None:
@@ -818,7 +820,7 @@ class Stack(Panel, tag='stack'):
 		"""
 		if value is None:
 			return 0.0, 0.0, 0.0, 0.0
-		parts = value.replace(',', ' ').split() if isinstance(value, str) else list(value) if isinstance(value, (list, tuple)) else [value]
+		parts = cssmath.split_values(value) if isinstance(value, str) else list(value) if isinstance(value, (list, tuple)) else [value]
 		if len(parts) not in (1, 2, 4):
 			raise ValueError(f'margin: expected 1, 2 or 4 values, got {value!r}')
 		top, right, bottom, left = {1: parts * 4, 2: parts + parts, 4: parts}[len(parts)]
@@ -828,6 +830,8 @@ class Stack(Panel, tag='stack'):
 		def length(v, vertical):
 			if str(v).casefold() == 'auto':
 				return None
+			if cssmath.is_math(v):  # `%` inside is a share of the inline size too
+				return cssmath.evaluate_math(v, lambda number, unit: number / 100 * inline if unit == '%' else self.cssPx(f'{number}{unit}', vertical))
 			if str(v).strip().endswith('%'):  # a percent margin is a share of the inline size, on every side (CSS)
 				return float(str(v).strip()[:-1]) / 100 * inline
 			return self.cssPx(v, vertical)
