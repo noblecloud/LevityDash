@@ -380,3 +380,18 @@ def test_tree_shortcuts_copy_paste_delete_duplicate_and_move(board):
 	[s for k, s in keys.items() if 'del' in k.lower()][0].activated.emit()
 	assert len(win.piece.node(target[:-1])['items']) == count
 	assert win.tree.contextMenuPolicy() == Qt.ContextMenuPolicy.CustomContextMenu
+
+
+def test_hovering_a_tree_row_or_the_stage_outlines_the_item(board):
+	win, path = board('station')
+	assert win.stage.hover is None
+	row = win.tree.topLevelItem(0).child(0)
+	win.tree.itemEntered.emit(row, 0)
+	assert win.stage.hover == row.data(0, 256)
+	win.tree.left.emit()
+	assert win.stage.hover is None
+	win.stage.rects = {(0,): QRectF(0, 0, 32, 20)}
+	win.stage.setHover((0,))
+	assert win.stage.hover == (0,)
+	win.stage.setHover(None)
+	assert win.stage.hover is None
