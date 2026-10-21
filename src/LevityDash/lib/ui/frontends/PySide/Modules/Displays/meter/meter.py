@@ -247,9 +247,15 @@ class GaugeRange(StatefulGaugeItem):
 		steps = ceil(round(float(rounded_range) / round_to, 9))
 		return self._gauge.valueClass(float(self.rounded_min) + steps * round_to)
 
+	def _span(self, high: Measurement, low: Measurement) -> Measurement:
+		"""The distance between two values, in the gauge's own unit. The gauge treats a span as a
+		value (an interval divides a span, a tick count counts spans), so it stays one, where
+		subtracting two temperature readings gives a change."""
+		return self._gauge.valueClass(abs(float(high) - float(low)))
+
 	@property
 	def range(self) -> Measurement:
-		return abs(self.max - self.min)
+		return self._span(self.max, self.min)
 
 	@range.setter
 	def range(self, value: MinMax):
@@ -257,11 +263,11 @@ class GaugeRange(StatefulGaugeItem):
 
 	@cached_property
 	def rounded_range(self) -> Measurement:
-		return abs(self.rounded_max - self.rounded_min)
+		return self._span(self.rounded_max, self.rounded_min)
 
 	@cached_property
 	def _rounded_range(self) -> Measurement:
-		return abs(self._rounded_max - self.rounded_min)
+		return self._span(self._rounded_max, self.rounded_min)
 
 	@cached_property
 	def range_int(self) -> int:

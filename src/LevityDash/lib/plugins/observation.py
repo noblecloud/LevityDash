@@ -31,6 +31,7 @@ from PySide6.QtWidgets import QApplication
 from rich.progress import Progress
 
 import WeatherUnits as wu
+from WeatherUnits.temperature import summingReadings
 from LevityDash.lib.log import LevityPluginLog as log
 from LevityDash.lib.plugins.categories import CategoryDict, CategoryItem, UnitMetaData
 from LevityDash.lib.plugins.errors import InvalidData
@@ -741,7 +742,8 @@ class TimeSeriesItem(TimeAwareValue):
 		if valueCls is str:
 			value = mostFrequentValue([str(item) for item in items])
 		else:
-			value = float(sum(values)) / len(values)
+			with summingReadings():
+				value = float(sum(values)) / len(values)
 		timestamp = datetime.fromtimestamp(time / len(items), tz=_timezones.utc).astimezone(LOCAL_TIMEZONE)
 		return TimeSeriesItem(valueCls(value), timestamp)
 
@@ -757,7 +759,8 @@ class TimeSeriesItem(TimeAwareValue):
 		valueCls = mostCommonClass(item.value for item in items)
 		try:
 			values = [item.value for item in items]
-			value = float(operator(*values))
+			with summingReadings():
+				value = float(operator(*values))
 			times = [item.timestamp.timestamp() for item in items]
 		except TypeError:
 			value = mostFrequentValue([str(item) for item in items])

@@ -151,7 +151,11 @@ Write a key as you write it in `key:`. A key has at least two parts that are joi
 
 Units that have no name of their own are shown in SI units (`m²`, `kg·m⁻³`). A result can go on to further `*` and `/`. A power of a unit goes up to three (`m³`).
 
-A temperature reading does not multiply or divide. `20°C * 2` is not `40°C`, so the expression has an error. Use `+` and `-` with a unit literal to change a temperature (`temperature - 5°F`).
+A temperature reading does not multiply or divide. `20°C * 2` is not `40°C`, so the expression has an error.
+
+Two temperature readings subtract to a **change**: `outdoor.temperature - indoor.temperature` is a number of degrees, not a temperature. A change converts by a factor (10 °C is 18 °F). A reading plus or minus a change is a reading, so `temperature - 5°F` takes 5 degrees off, in any unit. Two readings do not add (`20°C + 10°C` is not a temperature), but `avg(a, b)` of readings works.
+
+Power times time is energy (`power.watts * 3h` in `kWh`), energy over time is power, and a length times a length is an area.
 
 ## Units in an expression
 

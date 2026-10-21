@@ -30,6 +30,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, FrozenSet, Mapping, Optional, Protocol, Sequence, Tuple
 
 import WeatherUnits as wu
+from WeatherUnits.temperature import summingReadings
 
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.stopunits import StopUnitError, family, measure, toDataUnit
@@ -381,6 +382,13 @@ def _check(tree: ast.AST, placeholders: Mapping[str, Any], text: str) -> None:
 				raise ExpressionError(f'{text!r}: two durations cannot be multiplied or divided')
 
 
+def _mean(values: Sequence[Any]) -> Any:
+	"""The mean of readings. A sum of temperature readings is refused outside this, because it
+	depends on the unit; the mean of them does not."""
+	with summingReadings():
+		return sum(values[1:], values[0]) / len(values)
+
+
 def _isDuration(node: ast.AST, placeholders: Mapping[str, Any]) -> bool:
 	return isinstance(node, ast.Name) and isinstance(placeholders.get(node.id), timedelta)
 
@@ -560,12 +568,20 @@ class _Evaluator:
 				return -operand
 		raise ExpressionError(f'{self.text!r}: unknown operator {type(op).__name__}')
 
-	def _withUnits(self, left: Any, right: Any) -> Tuple[Any, Any]:
+	def _withUnits(self, left: Any, right: Any, change: bool = False) -> Tuple[Any, Any]:
 		"""A unit literal beside a measurement, as a measurement of the same class."""
 		for literal, other, swap in ((right, left, False), (left, right, True)):
 			if isinstance(literal, UnitLiteral):
 				if not _isMeasurement(other):
 					raise ExpressionError(f'{self.text!r}: {literal.number:g}{literal.unit} needs a measurement to compare with')
+				if change and isinstance(other, wu.Temperature):
+					# `temperature - 5°F` takes 5 degrees off a reading: the literal is a change
+					try:
+						reading = measure(literal.number, literal.unit)
+					except StopUnitError as e:
+						raise ExpressionError(f'{self.text!r}: {e}') from e
+					converted = type(reading).change(float(reading))
+					return (converted, other) if swap else (other, converted)
 				try:
 					number = toDataUnit(literal.number, literal.unit, type(other))
 				except StopUnitError as e:
@@ -598,12 +614,14 @@ class _Evaluator:
 	def _binary(self, op: ast.operator, left: Any, right: Any) -> Any:
 		if left is Missing or right is Missing:
 			return Missing
-		left, right = self._withUnits(left, right)
+		left, right = self._withUnits(left, right, change=isinstance(op, (ast.Add, ast.Sub)))
 		self._checkUnits(op, left, right)
 		try:
 			return _BINARY_OPERATORS[type(op)](left, right)
 		except ZeroDivisionError:
 			return Missing
+		except (TypeError, ValueError) as e:
+			raise ExpressionError(f'{self.text!r}: {e}') from e
 
 	def _compare(self, left: ast.AST, ops: Sequence[ast.cmpop], comparators: Sequence[ast.AST]) -> Any:
 		current = self.eval(left)
@@ -651,7 +669,7 @@ class _Evaluator:
 				case 'max':
 					return max(values)
 				case 'avg':
-					return sum(values[1:], values[0]) / len(values)
+					return _mean(values)
 		values = [self.eval(arg) for arg in args]
 		if any(v is Missing for v in values):
 			return Missing
@@ -663,5 +681,5 @@ class _Evaluator:
 			case 'max':
 				return max(values)
 			case 'avg':
-				return sum(values[1:], values[0]) / len(values)
+				return _mean(values)
 		raise ExpressionError(f'{self.text!r}: cannot call {name}()')

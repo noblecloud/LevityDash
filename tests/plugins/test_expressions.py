@@ -187,7 +187,7 @@ def test_conditional_only_evaluates_the_branch_taken():
 def test_measurement_arithmetic_converts_units():
 	resolver = FakeResolver(current={TEMP: Fahrenheit(70), DEW: Celsius(20)})
 	result = Expression.parse(f'{TEMP} - {DEW}').evaluate(resolver, NOW)
-	assert isinstance(result, Fahrenheit)
+	assert isinstance(result, wu.temperature.FahrenheitChange)
 	assert float(result) == pytest.approx(2)
 
 
@@ -317,3 +317,29 @@ def test_same_dimension_division_is_a_plain_ratio():
 def test_a_duration_is_still_refused_where_it_means_nothing(text):
 	with pytest.raises(ExpressionError):
 		Expression.parse(text)
+
+
+# -- temperature readings and changes -----------------------------------------------
+
+def test_the_difference_of_two_temperatures_is_a_change():
+	resolver = FakeResolver(current={TEMP: Celsius(30), DEW: Celsius(20)})
+	result = Expression.parse(f'{TEMP} - {DEW}').evaluate(resolver, NOW)
+	assert isinstance(result, wu.temperature.CelsiusChange) and float(result) == 10
+
+
+def test_a_unit_literal_taken_from_a_reading_is_a_change_in_its_own_scale():
+	resolver = FakeResolver(current={TEMP: Fahrenheit(95)})
+	result = Expression.parse(f'{TEMP} - 5°C').evaluate(resolver, NOW)
+	assert isinstance(result, Fahrenheit) and float(result) == pytest.approx(86)
+
+
+def test_the_mean_of_temperature_readings_still_works():
+	resolver = FakeResolver(current={TEMP: Celsius(30), DEW: Celsius(20)})
+	result = Expression.parse(f'avg({TEMP}, {DEW})').evaluate(resolver, NOW)
+	assert isinstance(result, Celsius) and float(result) == 25
+
+
+def test_two_temperature_readings_do_not_add():
+	resolver = FakeResolver(current={TEMP: Celsius(30), DEW: Celsius(20)})
+	with pytest.raises(ExpressionError, match='two temperature readings'):
+		Expression.parse(f'{TEMP} + {DEW}').evaluate(resolver, NOW)
