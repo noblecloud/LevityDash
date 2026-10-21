@@ -119,6 +119,18 @@ A value that picks between two keys. This shows the gust when the gust is more t
 | `avg(a, b, ...)` | The average of two or more values, such as the current values of several keys. `mean` is another name for `avg`. |
 | `abs(x)` | The size of a number, without its sign. |
 
+### <div class=mono>Combining sources</div>
+
+A key with a source in front reads that source, not the one the dashboard prefers. This makes a high or a low that no one source reports: the highest of what two forecasts predict, or how far apart they are.
+
+```yaml
+vars:
+  high: max(OpenMeteo:environment.temperature.high, PirateWeather:environment.temperature.high)
+  disagree: PirateWeather:environment.temperature.high - OpenMeteo:environment.temperature.high
+```
+
+A source that does not have the key gives no value, so the result has no value. A key a source does report, such as a forecast's `.high`, stays an ordinary key.
+
 ### <div class=mono>Windows and offsets</div>
 
 A window is the span of time that a function reads.

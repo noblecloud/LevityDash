@@ -446,7 +446,7 @@ class ComputedEngine(QObject):
 		if not multiSource:
 			return None
 		try:
-			observation = multiSource.value.value
+			observation = _container(multiSource, key).value
 		except Exception:
 			return None
 		return getattr(observation, 'value', None)
@@ -456,7 +456,7 @@ class ComputedEngine(QObject):
 		if not multiSource:
 			return None
 		try:
-			source = multiSource.value.source
+			source = _container(multiSource, key).source
 		except Exception:
 			return None
 		if not hasattr(source, 'observations'):
@@ -469,6 +469,16 @@ class ComputedEngine(QObject):
 				source, key, minPeriod=timedelta(0), maxPeriod=DAILY_CUTOFF
 			)
 		return timeseries
+
+
+def _container(multiSource, key: CategoryItem):
+	"""The container a key reads from: the one its own source names (`OpenMeteo:environment.temperature.high`), else the one the dashboard prefers.
+
+	A source that has no such key raises KeyError; the callers treat that as a missing value.
+	"""
+	if (source := getattr(key, 'source', None)):
+		return multiSource[source if isinstance(source, str) else ':'.join(source)]
+	return multiSource.value
 
 
 _engine: Optional[ComputedEngine] = None

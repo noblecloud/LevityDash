@@ -75,3 +75,62 @@ def test_malformed_expression_returns_none_without_raising(engine, caplog, text)
 		releaseValueSource(text)
 	assert not engine._entries
 	assert any(repr(text) in record.getMessage() for record in caplog.records)
+
+
+def _wait(engine, entry, timeout=5.0):
+	import time
+	from PySide6.QtCore import QCoreApplication
+	end = time.monotonic() + timeout
+	while time.monotonic() < end:
+		QCoreApplication.processEvents()
+		if entry.state == 'idle':
+			return
+		time.sleep(0.01)
+	raise AssertionError('the computation did not finish')
+
+
+class _Reading:
+	def __init__(self, value):
+		self.value = value
+
+
+class _Multi(dict):
+	"""Containers by source name; `.value` is the preferred source's container, as in MultiSourceContainer."""
+
+	def __init__(self, preferred, **containers):
+		super().__init__(containers)
+		self._preferred = preferred
+
+	@property
+	def value(self):
+		return self[self._preferred]
+
+
+class _SourceDispatcher(StubDispatcher):
+	def __init__(self, containers):
+		super().__init__()
+		self.containers = containers
+
+	def getContainer(self, key, default=None):
+		return self.containers.get(str(key.path) if hasattr(key, 'path') else '.'.join(key), default)
+
+
+def test_a_key_with_a_source_reads_that_source_not_the_preferred_one():
+	from WeatherUnits.temperature import Fahrenheit
+
+	class _Box:
+		def __init__(self, degrees):
+			self.value = _Reading(Fahrenheit(degrees))
+
+	multi = _Multi('OpenMeteo', OpenMeteo=_Box(70), PirateWeather=_Box(75))
+	engine = ComputedEngine(_SourceDispatcher({'environment.temperature.high': multi}))
+	from LevityDash.lib.plugins.expressions import Expression
+	expression = Expression.parse('max(OpenMeteo:environment.temperature.high, PirateWeather:environment.temperature.high)')
+	engine.register(expression)
+	_wait(engine, engine._entries[expression.key])
+	assert engine.source[expression.key].value.rawValue == Fahrenheit(75)
+
+	spread = Expression.parse('PirateWeather:environment.temperature.high - OpenMeteo:environment.temperature.high')
+	engine.register(spread)
+	_wait(engine, engine._entries[spread.key])
+	assert engine.source[spread.key].value.rawValue == 5
