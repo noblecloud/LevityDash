@@ -314,9 +314,9 @@ def _checkedKeys(value: Mapping | None, allowed: set[str], what: str) -> dict | 
 
 # One `flex:` mapping serves both roles, because a stack can be a flex item and a flex container
 # at once. The two sets do not overlap: `align-self` is the item's, `align-items` the container's.
-_FLEX_ITEM_KEYS = {'grow', 'shrink', 'basis', 'min', 'max', 'cross', 'align-self', 'order'}
+_FLEX_ITEM_KEYS = {'grow', 'shrink', 'basis', 'min', 'max', 'cross', 'align-self', 'order', 'margin'}
 _FLEX_STACK_KEYS = {'justify', 'align-items', 'wrap'}
-_GRID_ITEM_KEYS = {'column', 'row', 'column-span', 'row-span', 'justify-self', 'align-self', 'shrink'}
+_GRID_ITEM_KEYS = {'column', 'row', 'column-span', 'row-span', 'justify-self', 'align-self', 'shrink', 'margin'}
 _GRID_KEYS = {'columns', 'rows', 'auto-columns', 'auto-rows', 'auto-flow', 'dense', 'gap', 'justify-content', 'align-content', 'justify-items', 'align-items'}
 
 
@@ -394,7 +394,7 @@ class StackedItem(Stateful, tag=...):
 
 	@StateProperty(key='flex', default=None, sortOrder=2, allowNone=True)
 	def flexProps(self) -> dict | None:
-		"""CSS flex item options: `grow`, `shrink`, `basis`, `min`, `max`, `cross`, `align-self`, `order`.
+		"""CSS flex item options: `grow`, `shrink`, `basis`, `min`, `max`, `cross`, `align-self`, `order`, `margin`.
 
 		Any of them turns on the flex engine for the stack that holds this item.
 		"""
@@ -811,6 +811,20 @@ class Stack(Panel, tag='stack'):
 			raise ValueError(f'{value!r} is not a size')
 		return float(size_px(parsed, self.geometry, dimension))
 
+	def cssMargin(self, value) -> tuple[float | None, float | None, float | None, float | None]:
+		"""A CSS `margin` shorthand (one, two or four values, a string or a list) as pixels: top, right, bottom, left.
+
+		`auto` is None. Top and bottom are shares of the height, left and right of the width.
+		"""
+		if value is None:
+			return 0.0, 0.0, 0.0, 0.0
+		parts = value.replace(',', ' ').split() if isinstance(value, str) else list(value) if isinstance(value, (list, tuple)) else [value]
+		if len(parts) not in (1, 2, 4):
+			raise ValueError(f'margin: expected 1, 2 or 4 values, got {value!r}')
+		top, right, bottom, left = {1: parts * 4, 2: parts + parts, 4: parts}[len(parts)]
+		lengths = [None if str(v).casefold() == 'auto' else self.cssPx(v, vertical) for v, vertical in ((top, True), (right, False), (bottom, True), (left, False))]
+		return tuple(lengths)
+
 	def cssGapPx(self) -> float:
 		return float(self.spacing_px)
 
@@ -840,7 +854,10 @@ class Stack(Panel, tag='stack'):
 		sized = basis is not None or basis_auto
 		cross = props.get('cross')
 		align = props.get('align-self')
+		top, right, bottom, left = self.cssMargin(props.get('margin'))
 		return cssflex.FlexItem(
+			margin_main=CssEdge(top, bottom) if vertical else CssEdge(left, right),
+			margin_cross=CssEdge(left, right) if vertical else CssEdge(top, bottom),
 			grow=float(props.get('grow', 0.0 if sized else 1.0)),
 			shrink=float(props.get('shrink', 1.0)),
 			basis=None if basis_auto else (0.0 if basis is None else basis),
@@ -1653,7 +1670,9 @@ class GridStack(Stack, tag='grid'):
 		for geometry in self.geometries.values():
 			spec = getattr(geometry.surface, 'gridProps', None) or {}
 			aspect = self.cssAspect(geometry.surface)
+			top, right, bottom, left = self.cssMargin(spec.get('margin'))
 			items.append(cssgrid.GridItem(
+				margin_inline=CssEdge(left, right), margin_block=CssEdge(top, bottom),
 				max_content=(0.0, 0.0) if aspect is None else (aspect * natural_h, natural_h),
 				placement=cssgrid.Placement(
 					column_start=spec.get('column'), column_span=int(spec.get('column-span', 1)),

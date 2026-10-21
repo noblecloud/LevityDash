@@ -242,3 +242,32 @@ def test_shrink_needs_explicit_rows_to_shrink_into():
 	]
 	# no explicit rows: the item keeps its span and opens a new row
 	assert place_items(items, container, 3, 0) == [(0, 0, 1, 2), (0, 2, 3, 1)]
+
+
+# --- css-grid-1 §6.2: margins --------------------------------------------------------------
+
+from LevityDash.lib.layout.types import Edge
+
+
+def test_fixed_margins_shrink_a_stretched_item():
+	container = GridContainer(columns=[TrackSize(Keyword.auto, Fr(1))], rows=[TrackSize(Keyword.auto, Fr(1))], width=200, height=100)
+	(rect,) = layout_grid([item(margin_inline=Edge(10, 30), margin_block=Edge(5, 5))], container)
+	assert (rect.x, rect.width, rect.y, rect.height) == (10, 160, 5, 90)
+
+
+def test_margins_count_toward_an_auto_track():
+	container = GridContainer(columns=[TrackSize(Keyword.auto, Keyword.auto)], rows=[TrackSize(100.0, 100.0)], width=None, height=100)
+	(rect,) = layout_grid([item(max_content=(50, 20), min_content=(50, 20), margin_inline=Edge(10, 15))], container)
+	assert rect.x == 10 and rect.width == 50  # the track is 75 wide: 50 plus both margins
+
+
+def test_auto_margin_pushes_a_sized_item_to_the_end():
+	container = GridContainer(columns=[TrackSize(Keyword.auto, Fr(1))], rows=[TrackSize(Keyword.auto, Fr(1))], width=200, height=100)
+	(rect,) = layout_grid([item(max_content=(50, 20), min_content=(50, 20), margin_inline=Edge(None, 0))], container)
+	assert (rect.x, rect.width) == (150, 50)
+
+
+def test_two_auto_margins_centre_the_item():
+	container = GridContainer(columns=[TrackSize(Keyword.auto, Fr(1))], rows=[TrackSize(Keyword.auto, Fr(1))], width=200, height=100)
+	(rect,) = layout_grid([item(max_content=(50, 20), min_content=(50, 20), margin_inline=Edge(None, None), margin_block=Edge(None, None))], container)
+	assert (rect.x, rect.y, rect.width, rect.height) == (75, 40, 50, 20)

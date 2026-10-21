@@ -40,6 +40,7 @@ Put `flex:` on the stack for the container options. Put `flex:` on an item for t
 | `cross` | The size across the stack. Default: the full width of the line. | `height` in a row |
 | `align-self` | Overrides `align-items` for one item. | `align-self` |
 | `order` | Items go in order of this number, then in file order. Default 0. | `order` |
+| `margin` | Space around the item: one, two or four values (top, right, bottom, left), as a list or a string. A side can be `auto`, which takes the free space on that side. `margin: [0, 0, 0, auto]` pushes the item and all after it to the end. | `margin` |
 
 Sizes take `%`, `px`, `mm`, `cm` and `in`, as everywhere else.
 
@@ -72,7 +73,7 @@ An item with a `size:` and no `flex:` keys does not grow, and it can shrink. Thi
 
 ### Grid item options (on an item)
 
-`grid: {column, row, column-span, row-span, justify-self, align-self, shrink}`. Lines count from 1. An item with no `column` or `row` goes in the next free cell.
+`grid: {column, row, column-span, row-span, justify-self, align-self, shrink, margin}`. Lines count from 1. `margin` is the same shorthand as in flex. The margin box counts toward track sizes, and an `auto` side turns stretching off and takes the free space in the area, so two `auto` sides centre the item. An item with no `column` or `row` goes in the next free cell.
 
 Spans are how a layout gets a bento look: put `dense: true` on the grid, give the large items a `column-span` or `row-span`, and the small ones fill the holes in order.
 
@@ -95,9 +96,9 @@ An item that shows a number reports its size from its **format hint**, the wides
 - A mistake in `flex:` or `grid:` (an unknown key, a wrong word) is an error on that item. The rest of the dashboard loads.
 - Dividers are not drawn in a flex or grid stack.
 - A cell sizes its own text. To make the values in a grid or flex stack the same size, add a `shared:` size group (see the example dashboard).
-- Not yet supported: `subgrid`, named areas, `calc()`, `%` inside a track list, margins on items, and sizing by anything but the text of a value (a gauge, a graph or a container has no content size, so for them `auto` is 0).
+- Not yet supported: `subgrid`, named areas, `calc()`, `%` inside a track list, `%` margins, and sizing by anything but the text of a value (a gauge, a graph or a container has no content size, so for them `auto` is 0).
 
-Example dashboards: `docs/design-references/css-layout.levity` (render: `docs/design-references/css-layout.png`) and `docs/design-references/grid-bento.levity`, a dense bento board with spans, a `shrink` item and an `auto-fill` strip.
+Example dashboards: `docs/design-references/layout-margins.levity` (margins), `docs/design-references/css-layout.levity` (render: `docs/design-references/css-layout.png`) and `docs/design-references/grid-bento.levity`, a dense bento board with spans, a `shrink` item and an `auto-fill` strip.
 
 ## In the Studio
 

@@ -13,6 +13,9 @@ Simplifications, each also noted where it is made:
   grows to its growth limit. A min-content constraint is not modelled.
 - Indefinite free space in `expand_flexible_tracks` uses the tracks only, not the item
   terms of §12.7.1.
+- Margins (§6.2, §6.3): a margin box contributes to track sizing; `auto` margins take the free
+  space of the area and turn stretching off (the item is then fit-content). Percent margins are
+  the caller's to resolve.
 - Content and self alignment other than `start`, `stretch` and `normal` go to `align.py`.
 """
 
@@ -23,7 +26,7 @@ from math import floor, isinf
 
 from .align import distribute_content, align_offset
 from .spec import implements
-from .types import Alignment, ContentAlign, Gap, INF, ItemAlign, Rect
+from .types import Alignment, ContentAlign, Edge, Gap, INF, ItemAlign, Rect
 
 __all__ = [
 	'Fr', 'Keyword', 'TrackSize', 'Repeat', 'GridContainer', 'GridItem', 'Placement', 'Track',
@@ -97,6 +100,8 @@ class GridItem:
 	min_size: tuple[float | None, float | None] = (None, None)  # None is the automatic minimum
 	justify_self: ItemAlign = ItemAlign.auto
 	align_self: ItemAlign = ItemAlign.auto
+	margin_inline: Edge = Edge()  # left and right margins; `None` is `auto`
+	margin_block: Edge = Edge()  # top and bottom margins; `None` is `auto`
 
 
 @dataclass(slots=True)
@@ -491,6 +496,33 @@ def _box(start: float, area: float, low: float, high: float, alignment: Alignmen
 	return start + align_offset(area - size, alignment), size
 
 
+def _margin(item: GridItem, axis: int) -> Edge:
+	return item.margin_inline if axis == 0 else item.margin_block
+
+
+def _margin_sum(margin: Edge) -> float:
+	"""The fixed part of a margin pair. An `auto` side counts as zero."""
+	return (margin.start or 0.0) + (margin.end or 0.0)
+
+
+def _margin_box(start: float, area: float, margin: Edge, low: float, high: float, alignment: Alignment) -> tuple[float, float]:
+	"""Position and size of one item's border box in its area, inside its margins (§6.2).
+
+	With no `auto` margin this is `_box` on the area less the margins. An `auto` margin switches
+	stretching off, sizes the item fit-content, and gives the free space to the `auto` sides
+	equally. When nothing is free an `auto` margin is zero.
+	"""
+	before, after = margin
+	inner = area - _margin_sum(margin)
+	if before is not None and after is not None:
+		return _box(start + before, inner, low, high, alignment)
+	size = max(low, min(high, inner))
+	free = max(0.0, inner - size)
+	autos = (before is None) + (after is None)
+	share = free / autos
+	return start + (share if before is None else before), size
+
+
 def _resolve_self(value: ItemAlign, default: Alignment) -> Alignment:
 	return default if value is ItemAlign.auto else Alignment(value)
 
@@ -600,15 +632,18 @@ def resolve_intrinsic_track_sizes(tracks: list[Track], items: list[GridItem], sp
 	`axis` picks the width (0) or the height (1) of each item's contributions.
 	"""
 
+	def margins(i: int) -> float:
+		return _margin_sum(_margin(items[i], axis))
+
 	def minimum(i: int) -> float:
 		size = items[i].min_size[axis]
-		return items[i].min_content[axis] if size is None else size
+		return (items[i].min_content[axis] if size is None else size) + margins(i)
 
 	def smallest(i: int) -> float:
-		return items[i].min_content[axis]
+		return items[i].min_content[axis] + margins(i)
 
 	def largest(i: int) -> float:
-		return items[i].max_content[axis]
+		return items[i].max_content[axis] + margins(i)
 
 	def phases(group: list[int], include=_any, weight=_one) -> None:
 		common = {'include': include, 'weight': weight}
@@ -771,7 +806,7 @@ def layout_grid(items: list[GridItem], container: GridContainer) -> list[Rect]:
 		area_w = col_starts[c + cs - 1] + col_sizes[c + cs - 1] - x0
 		y0 = row_starts[r]
 		area_h = row_starts[r + rs - 1] + row_sizes[r + rs - 1] - y0
-		x, w = _box(x0, area_w, item.min_content[0], item.max_content[0], _resolve_self(item.justify_self, container.justify_items))
-		y, h = _box(y0, area_h, item.min_content[1], item.max_content[1], _resolve_self(item.align_self, container.align_items))
+		x, w = _margin_box(x0, area_w, item.margin_inline, item.min_content[0], item.max_content[0], _resolve_self(item.justify_self, container.justify_items))
+		y, h = _margin_box(y0, area_h, item.margin_block, item.min_content[1], item.max_content[1], _resolve_self(item.align_self, container.align_items))
 		rects.append(Rect(x, y, w, h))
 	return rects
