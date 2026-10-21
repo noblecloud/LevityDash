@@ -380,3 +380,21 @@ def test_tree_shortcuts_copy_paste_delete_duplicate_and_move(board):
 	[s for k, s in keys.items() if 'del' in k.lower()][0].activated.emit()
 	assert len(win.piece.node(target[:-1])['items']) == count
 	assert win.tree.contextMenuPolicy() == Qt.ContextMenuPolicy.CustomContextMenu
+
+
+def test_align_sets_x_or_y_from_the_item_and_parent_size(board):
+	win, path = board('station')
+	target = next(p for p, n in win.piece.walk() if len(p) >= 2 and 'geometry' in n and not m.opaque(n)
+	              and str(win.piece.node(p[:-1]).get('type') or 'group') in ('group', 'titled-group'))
+	win.stage.rects = {target[:-1]: QRectF(0, 0, 1000, 500), target: QRectF(100, 50, 400, 100)}
+	win.select(target)
+	win.alignItem('Right')
+	assert win.piece.node(target)['geometry']['x'] == '60%'
+	win.alignItem('Centre')
+	assert win.piece.node(target)['geometry']['x'] == '30%'
+	win.alignItem('Bottom')
+	assert win.piece.node(target)['geometry']['y'] == '80%'
+	win.alignItem('Left')
+	assert win.piece.node(target)['geometry']['x'] == '0%'
+	win.undo()
+	assert win.piece.node(target)['geometry']['x'] == '30%'

@@ -1764,6 +1764,26 @@ class Builder(QWidget):
 			self._syncStage()
 			self.schedule()
 
+	#: Where each alignment puts the item inside its parent: (axis, share of the free space before it).
+	ALIGN = {'Left': ('x', 0.0), 'Centre': ('x', 0.5), 'Right': ('x', 1.0), 'Top': ('y', 0.0), 'Middle': ('y', 0.5), 'Bottom': ('y', 1.0)}
+
+	def alignItem(self, how: str):
+		"""Move the selected item to the `how` edge or centre of its parent by setting its geometry `x` or `y` (a share of the parent)."""
+		path = self.selection
+		node = self.piece.node(path) if path else None
+		rect, parent = self.stage.rects.get(path), self.stage.rects.get(path[:-1]) if path else None
+		holder = self.piece.node(path[:-1]) if path else None
+		if node is None or rect is None or parent is None or not parent.width() or not parent.height():
+			self.status.setText('Pick an item inside the dashboard to align')
+			return
+		if str(holder.get('type') or 'group') not in ('group', 'titled-group'):
+			self.status.setText('Only an item in a group has an x and y of its own; a stack, split or switch places it')
+			return
+		axis, share = self.ALIGN[how]
+		size = (rect.width() / parent.width()) if axis == 'x' else (rect.height() / parent.height())
+		self._dragged(path, {axis: f'{round((1 - size) * share * 100, 2):g}%'})
+		self._dragDone()
+
 	def copyItem(self):
 		"""Put the selected item on the clipboard as the YAML a `.levity` would hold, so it pastes here, into another Studio, or into a file."""
 		raw = self.piece.raw(self.selection) if self.selection else None
@@ -1800,6 +1820,9 @@ class Builder(QWidget):
 		menu.addAction('Paste', self.pasteItem, QKeySequence.StandardKey.Paste)
 		menu.addAction('Duplicate', self.duplicateItem, QKeySequence('Ctrl+D'))
 		menu.addAction('Delete', self.deleteItem, QKeySequence.StandardKey.Delete)
+		align = menu.addMenu('Align in parent')
+		for how in self.ALIGN:
+			align.addAction(how, lambda h=how: self.alignItem(h))
 		menu.exec(self.tree.viewport().mapToGlobal(at))
 
 	def extractPreset(self, name: Optional[str] = None):
