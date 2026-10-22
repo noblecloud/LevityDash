@@ -22,8 +22,7 @@ def test_a_difference_is_evaluated_at_every_sample_with_units():
 	out = derive(Expression.parse(f'{T} - {D}'), {T: hourly([70, 72, 75]), D: hourly([60, 61, 60])}, START + timedelta(hours=2))
 	assert out.values == [10.0, 11.0, 15.0]
 	assert out.times == hourly([0, 0, 0]).times
-	# WeatherUnits: the difference of two readings is a change in temperature.
-	assert out.now == 15.0 and out.cls is wu.Temperature.FahrenheitChange
+	assert out.now == 15.0 and out.cls is wu.temperature.FahrenheitChange
 
 
 def test_a_sample_before_an_input_has_a_value_is_left_out_and_a_slow_input_holds():

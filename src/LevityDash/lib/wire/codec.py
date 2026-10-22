@@ -32,10 +32,11 @@ frontend-side, in lib/wire/containers.py, specifically to keep this module
 free of UI imports - see RemoteObservationValue's icon_alias handling.
 """
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, List, Optional, Sequence, Tuple
 
 from WeatherUnits import Measurement
+from WeatherUnits.base import Compound
 from WeatherUnits.others import Percentage
 from WeatherUnits.base.Registry import UnitRegistry
 
@@ -69,6 +70,12 @@ def encode_measurement(value: Measurement) -> dict:
 	if (unit_type := getattr(type(value), 'type', None)) is not None:
 		if (type_name := getattr(unit_type, 'name', None)):
 			payload['type'] = type_name
+	if isinstance(value, Compound):
+		# A product or quotient with no named type (m², kg·m⁻³) is its exponent
+		# vector over m, kg, s and K; the unit text is derived from it.
+		payload['vector'] = list(value._vector)
+	if (period := getattr(value, 'period', None)) is not None:
+		payload['period'] = period.total_seconds()
 	timestamp = getattr(value, 'timestamp', None)
 	if isinstance(timestamp, datetime):
 		payload['ts'] = timestamp.astimezone(timezone.utc).isoformat()
@@ -179,10 +186,22 @@ def _resolve_measurement_class(cls_name: Optional[str], unit: Optional[str], typ
 	# it fell through to None and arrived as a bare float, printing raw digits.
 	if cls_name == Measurement.__name__:
 		return Measurement
+	# A rate built as ``DistanceOverTime.MetersPerSecond`` carries a class name
+	# that is not registered and a symbol no class declares, but its unit type
+	# and symbol name the parametrized form exactly.
+	if unit and '/' in unit and type_name:
+		if (parametrized := _resolve_parametrized_class(f'{type_name.replace(" ", "")}[{unit}]')) is not None:
+			return parametrized
 	return registry.get(unit) if unit else None
 
 
 def decode_measurement(payload: dict) -> Measurement | float:
+	if (vector := payload.get('vector')) is not None and payload.get('cls') == Compound.__name__:
+		try:
+			measurement = Compound(payload['value'], tuple(vector))
+		except Exception:
+			return payload['value']
+		return _restoreMetadata(measurement, payload)
 	cls = _resolve_measurement_class(payload.get('cls'), payload.get('unit'), payload.get('type'))
 	value = payload['value']
 	if cls is None:
@@ -205,6 +224,12 @@ def decode_measurement(payload: dict) -> Measurement | float:
 		# (surfaced by mode=remote - loopback had been silently skipping
 		# these keys via its per-key relay guard all along).
 		return value
+	return _restoreMetadata(measurement, payload)
+
+
+def _restoreMetadata(measurement: Measurement, payload: dict) -> Measurement:
+	if (period := payload.get('period')) is not None:
+		measurement.period = timedelta(seconds=period)
 	ts = payload.get('ts')
 	if ts and hasattr(measurement, 'timestamp'):
 		# Measurement.timestamp is a read-only property backed by

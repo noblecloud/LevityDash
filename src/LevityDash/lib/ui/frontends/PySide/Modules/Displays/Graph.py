@@ -78,7 +78,7 @@ from LevityDash.lib.utils.shared import (
 	Unset, Worker
 )
 from LevityDash.lib.utils.various import DateTimeRange
-from WeatherUnits import DerivedMeasurement, Length, Measurement, Time
+from WeatherUnits import Length, Measurement, Time
 from WeatherUnits.derived.precipitation import PrecipitationRate
 from WeatherUnits.length import Centimeter, Millimeter
 from WeatherUnits.time_.time import Hour, Second
@@ -972,10 +972,6 @@ class GraphItemData(Stateful, tag=...):
 		xS = np.linspace(x[0], x[-1], s)
 		y, x = interp1d(x, y)(xS), xS
 
-		if issubclass(dataType, DerivedMeasurement):
-			n = dataType.numeratorClass
-			d = dataType.denominatorClass(1)
-			return [TimeSeriesItem(dataType(n(y), d), timestampToTimezone(x, tz=tz)) for x, y in zip(x, y)]
 		return [TimeSeriesItem(dataType(y), timestampToTimezone(x, tz=tz)) for x, y in zip(x, y)]
 
 	@property
