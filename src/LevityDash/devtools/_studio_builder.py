@@ -808,6 +808,27 @@ class Stage(QWidget):
 				p.setBrush(QColor('#2f81f7'))
 				for c in (r.topLeft(), r.topRight(), r.bottomLeft(), r.bottomRight()):
 					p.drawRect(QRectF(c.x() - self.HANDLE / 2, c.y() - self.HANDLE / 2, self.HANDLE, self.HANDLE))
+			self._paintBadge(p, r)
+
+	def sizeText(self, path: tuple) -> str:
+		"""The selected item's size in dashboard pixels and as a share of its parent, for the badge under it."""
+		rect = self.rects[path]
+		parent = self.rects.get(path[:-1]) if path else None
+		if parent is None:
+			parent = QRectF(0, 0, self.image.width(), self.image.height()) if self.image else rect
+		share = (rect.width() / parent.width() * 100 if parent.width() else 0, rect.height() / parent.height() * 100 if parent.height() else 0)
+		return f'{rect.width():.0f} × {rect.height():.0f} px  ·  {share[0]:.1f}% × {share[1]:.1f}%'
+
+	def _paintBadge(self, p: QPainter, r: QRectF):
+		text = self.sizeText(self.path)
+		box = QRectF(0, 0, p.fontMetrics().horizontalAdvance(text) + 12, p.fontMetrics().height() + 6)
+		below = r.bottom() + 6 + box.height() <= self.height()
+		box.moveTo(max(2, min(r.left(), self.width() - box.width() - 2)), r.bottom() + 6 if below else max(2, r.top() - 6 - box.height()))
+		p.setPen(Qt.PenStyle.NoPen)
+		p.setBrush(QColor(20, 24, 31, 220))
+		p.drawRoundedRect(box, 4, 4)
+		p.setPen(QColor('#e6edf3'))
+		p.drawText(box, Qt.AlignmentFlag.AlignCenter, text)
 
 	def _corner(self, pos: QPointF) -> Optional[str]:
 		if self.path is None or self.path not in self.rects or not self.movable:
