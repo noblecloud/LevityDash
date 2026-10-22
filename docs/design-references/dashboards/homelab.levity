@@ -382,7 +382,7 @@ items:
         items:
         - {type: realtime.text, key: 'min(system.disk.usage, today)', title: {text: Day start}, display: {precision: 0}}
         - {type: realtime.text, key: 'at(system.disk.usage, -6h)', title: {text: 6 h ago}, display: {precision: 0}}
-        - {type: realtime.text, key: 'system.process.top.1.name', title: {text: Top process}, display: {precision: 0, valueLabel: {color: $accent}}}
+        - {type: realtime.text, size: 34%, key: 'system.process.top.1.name', title: {text: Top process}, display: {precision: 0, format-hint: postgres, valueLabel: {color: $accent}}}
         - {type: realtime.text, key: 'system.process.count', title: {text: Processes}, display: {precision: 0}}
     - preset: headline-panel
       name: hot-core
