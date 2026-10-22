@@ -30,6 +30,7 @@ from LevityDash.lib.ui.frontends.PySide import UILogger as guiLog
 from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, mouseHoldTimer, DebugPaint, addRect
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Label import NonInteractiveLabel as Label, TitleLabel
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import Text
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.scale import formatDuration
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Resize import ResizeHandle
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Splitters import TitleValueSplitter, MeasurementUnitSplitter
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import RealtimeContextMenu
@@ -1572,6 +1573,8 @@ class MeasurementDisplayProperties(Stateful):
 			if (precision := self.precision) is not Unset and measurement.precision != precision:
 				measurement.precision = precision
 			if (formatString := self.formatString) is not None and measurement is not None:
+				if formatString == 'duration':
+					return formatDuration(measurement)
 				if isinstance(formatString, dict):
 					formatString = f'{", ".join(f"{k}={value}" for k, value in formatString.items())}'
 				return f'{measurement:{formatString}}'
