@@ -131,10 +131,10 @@ items:
 `background:` can follow a key or an expression, so the ground moves with it. The two ends of the gradient are scales; each is read at the current value, and the colour between two stops is mixed in Oklab.
 
 ```yaml
-background: {by: astronomy.sun.elevation, top: $sky-top, bottom: $sky-horizon}
+background: {by: astronomy.sun.elevation, top: $sky-top, bottom: $sky-horizon, haze: environment.clouds.cover.cover}
 ```
 
-`by` is the key. `top` and `bottom` are scale tokens, or stops written in place. `angle` is optional (CSS degrees, default 180). A value past the first or last stop takes that stop's colour. Until the key has a value, the ground is the theme's `background`.
+`by` is the key. `top` and `bottom` are scale tokens, or stops written in place. `angle` is optional (CSS degrees, default 180). `haze` is a second key, cloud cover as a percentage (a plain number is read as a share from 0 to 1). Cloud takes colour out of the sky: `haze-strength` (default `0.8`) is the share of chroma removed at 100 %, at the same lightness. A value past the first or last stop takes that stop's colour. Until the key has a value, the ground is the theme's `background`.
 
 `astronomy.sun.elevation` is the sun's height above the horizon in degrees, from the Astronomy plugin. The `default` theme defines `sky-top` and `sky-horizon` for it: navy at night, purple then orange near the horizon, blue by day. They stay dark enough for light text. A theme can recolour them under `scales`.
 
