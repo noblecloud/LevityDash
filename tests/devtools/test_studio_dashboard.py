@@ -382,6 +382,27 @@ def test_tree_shortcuts_copy_paste_delete_duplicate_and_move(board):
 	assert win.tree.contextMenuPolicy() == Qt.ContextMenuPolicy.CustomContextMenu
 
 
+def test_stage_zoom_keeps_the_point_under_the_pointer_and_resets(board):
+	from PySide6.QtCore import QPointF
+	win, path = board('station')
+	stage = win.stage
+	stage.resize(800, 500)
+	stage.image = QImage(1440, 900, QImage.Format.Format_ARGB32)
+	pos = QPointF(300, 200)
+	spot = stage._toScene(pos)
+	stage.zoomAt(pos, 2.0)
+	assert stage.zoom == 2.0
+	after = stage._toScene(pos)
+	assert abs(after.x() - spot.x()) < 0.01 and abs(after.y() - spot.y()) < 0.01
+	stage.zoomAt(pos, 100)
+	assert stage.zoom == 8.0  # capped
+	stage.zoomAt(pos, 0.0001)
+	assert stage.zoom == 1.0 and stage.pan.isNull()  # never smaller than the whole picture
+	stage.zoomAt(pos, 3.0)
+	stage.resetView()
+	assert stage.zoom == 1.0 and stage.pan.isNull()
+
+
 def test_hovering_a_tree_row_or_the_stage_outlines_the_item(board):
 	win, path = board('station')
 	assert win.stage.hover is None
