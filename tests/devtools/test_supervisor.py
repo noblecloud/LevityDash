@@ -159,3 +159,39 @@ def test_child_output_is_captured_to_a_file(tmp_path):
 def test_capture_can_be_turned_off(tmp_path):
 	child = Child('frontend', [sys.executable, '-c', 'pass'], tmp_path)
 	assert child.logPath is None
+
+
+def test_a_log_rolls_over_at_its_size_and_keeps_a_few(tmp_path):
+	from LevityDash.devtools.supervisor import RotatingLog
+	path = tmp_path / 'backend.out'
+	log = RotatingLog(path, maxBytes=100, backups=2)
+	log.open()
+	for n in range(40):
+		log.write(f'line {n:02d} {"x" * 10}\n')
+	log.close()
+	names = sorted(p.name for p in tmp_path.iterdir())
+	assert names == ['backend.out', 'backend.out.1', 'backend.out.2'], 'the oldest is dropped, not kept'
+	assert path.stat().st_size < 200
+	assert 'line 39' in path.read_text(), 'the newest lines are in the live file'
+
+
+def test_a_file_left_over_the_limit_by_an_older_supervisor_is_rolled_on_open(tmp_path):
+	from LevityDash.devtools.supervisor import RotatingLog
+	path = tmp_path / 'backend.out'
+	path.write_text('old\n' * 100)
+	log = RotatingLog(path, maxBytes=100, backups=3)
+	log.open()
+	log.write('fresh\n')
+	log.close()
+	assert path.read_text() == 'fresh\n'
+	assert (tmp_path / 'backend.out.1').read_text().startswith('old')
+
+
+def test_a_limit_of_zero_never_rolls(tmp_path):
+	from LevityDash.devtools.supervisor import RotatingLog
+	log = RotatingLog(tmp_path / 'x.out', maxBytes=0)
+	log.open()
+	for _ in range(50):
+		log.write('y' * 100 + '\n')
+	log.close()
+	assert [p.name for p in tmp_path.iterdir()] == ['x.out']

@@ -126,6 +126,18 @@ items:
     geometry: {x: 5%, y: 5%, width: 50%, height: 40%}
 ```
 
+## A ground that follows a value
+
+`background:` can follow a key or an expression, so the ground moves with it. The two ends of the gradient are scales; each is read at the current value, and the colour between two stops is mixed in Oklab.
+
+```yaml
+background: {by: astronomy.sun.elevation, top: $sky-top, bottom: $sky-horizon, haze: environment.clouds.cover.cover}
+```
+
+`by` is the key. `top` and `bottom` are scale tokens, or stops written in place. `angle` is optional (CSS degrees, default 180). `haze` is a second key, cloud cover as a percentage (a plain number is read as a share from 0 to 1). Cloud takes colour out of the sky: `haze-strength` (default `0.8`) is the share of chroma removed at 100 %, at the same lightness. A value past the first or last stop takes that stop's colour. Until the key has a value, the ground is the theme's `background`.
+
+`astronomy.sun.elevation` is the sun's height above the horizon in degrees, from the Astronomy plugin. The `default` theme defines `sky-top` and `sky-horizon` for it: navy at night, purple then orange near the horizon, blue by day. They stay dark enough for light text. A theme can recolour them under `scales`.
+
 ## Make a theme file
 
 A theme is a YAML file. Put it in a folder named `themes` in your [config folder](/config.md). Make the folder if it is not there. A theme in your folder wins over a built-in theme of the same name. The file name is the theme name: `themes/harbor.yaml` is `theme: harbor`.
@@ -198,6 +210,26 @@ muted: {color: $text, alpha: 0.65}
 | `mix: {with: $background, by: 0.3}` | Moves the color toward another color. `by: 1` gives the other color. |
 
 Lightness, chroma, and hue use the Oklch color space. Mixing uses Oklab. You can use a modifier in a theme file and on an item in a dashboard.
+
+## Colour a reading by its value
+
+A `color:` may name a scale and a value, and then it follows the value:
+
+```yaml
+- type: realtime.text
+  key: environment.temperature.temperature
+  display:
+    valueLabel:
+      color: {scale: $temperature, of: environment.temperature.feelsLike}
+```
+
+| Key | Meaning |
+|---|---|
+| `scale` | A theme scale (`$temperature`), a preset gradient name, or a gradient written in place. Stops with units (`32°F`) place themselves by reading, in any unit. |
+| `of` | A key or an expression, as for any value source. It need not be the key the item shows. |
+| `fallback` | Optional colour used until the value has a number. Default: the default text colour. |
+
+The colour changes when the value does. A plain colour is the same property with no mapping, so nothing else about the item changes. An unknown scale name is an error (a gradient would otherwise pick the nearest preset). A saved dashboard writes the mapping back as written, with a theme scale shown as its resolved gradient.
 
 ## What a theme does not change yet
 

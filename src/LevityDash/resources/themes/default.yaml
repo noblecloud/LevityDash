@@ -43,3 +43,7 @@ scales:
   temperature: TemperatureGradient
   # The dashboard's ground as a gradient. Flat here, so a dashboard that writes `background: $sky` looks the same as without it.
   sky: {0: $background, 1: $background}
+  # The ground that follows the sun: `background: {by: astronomy.sun.elevation, top: $sky-top, bottom: $sky-horizon}`.
+  # Stops are the sun's height in degrees. Both stay dark enough for light text at every height; a theme may recolour them.
+  sky-top: {-18: '#03050b', -12: '#060a18', -6: '#0e1530', -2: '#1b1b45', 0: '#1f2d5c', 6: '#173a73', 20: '#0f3a7a', 60: '#0b3470'}
+  sky-horizon: {-18: '#070a14', -12: '#0d1426', -6: '#2a2347', -2: '#6b2f4f', 0: '#b4573a', 6: '#a77a52', 20: '#3f78ad', 60: '#4a86bd'}

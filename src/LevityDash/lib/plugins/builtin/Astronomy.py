@@ -1,8 +1,10 @@
 """The sun, from the clock and the configured location. No network, no key.
 
-Publishes two realtime keys that a sun-arc dial reads:
+Publishes three realtime keys that a sun-arc dial reads:
 
 - ``astronomy.sun.hour``: the local hour of day as a decimal (15.5 is 15:30).
+- ``astronomy.sun.elevation``: the sun's height above the horizon in degrees, negative at night
+  (-6 is the end of civil twilight, -18 full dark). A dashboard's ``background: {by: ...}`` follows it.
 - ``astronomy.sun.remaining``: minutes of daylight left today. It is 0 at night
   and counts down from the day's length at sunrise.
 
@@ -15,6 +17,7 @@ The plugin is on by default. Set ``enabled = False`` in
 either key wins over it, so renders stay repeatable.
 """
 import asyncio
+import math
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
@@ -32,6 +35,7 @@ log = LevityPluginLog.getChild('Astronomy')
 ASTRONOMY_KEYS = {
 	'astronomy.sun.hour': dict(unit='int', min=0, max=24, title='Hour of day'),
 	'astronomy.sun.remaining': dict(unit='int', min=0, max=1440, title='Daylight left (minutes)'),
+	'astronomy.sun.elevation': dict(unit='int', min=-90, max=90, title='Sun elevation (degrees)'),
 }
 
 
@@ -67,6 +71,16 @@ def sunValues(lat: float, lon: float, now: Optional[datetime] = None) -> Tuple[f
 	return hour, round((sset - now) / timedelta(minutes=1), 1)
 
 
+def sunElevation(lat: float, lon: float, now: Optional[datetime] = None) -> float:
+	"""The sun's height above the horizon at ``now`` in degrees, negative below it. Pure, so a test can call it."""
+	now = (now or datetime.now()).astimezone()
+	observer = ephem.Observer()
+	observer.lat, observer.lon = str(lat), str(lon)
+	observer.pressure = 0
+	observer.date = now.astimezone(timezone.utc).replace(tzinfo=None)
+	return round(math.degrees(float(ephem.Sun(observer).alt)), 2)
+
+
 class Astronomy(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 	"""Publishes ``ASTRONOMY_KEYS``. See the module docstring."""
 
@@ -99,7 +113,11 @@ class Astronomy(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 
 	def publish(self) -> None:
 		hour, remaining = sunValues(float(userConfig.lat), float(userConfig.lon))
-		values = {'astronomy.sun.hour': hour, 'astronomy.sun.remaining': remaining}
+		values = {
+			'astronomy.sun.hour': hour,
+			'astronomy.sun.remaining': remaining,
+			'astronomy.sun.elevation': sunElevation(float(userConfig.lat), float(userConfig.lon)),
+		}
 		realtime = {'time': datetime.now().replace(microsecond=0).strftime(_TIME_FORMAT)}
 		for key, value in values.items():
 			if key not in self._scenarioKeys:

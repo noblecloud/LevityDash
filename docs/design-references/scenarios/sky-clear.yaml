@@ -135,6 +135,10 @@ keys:
     value: 181
     unit: int
     title: 'Daylight left (minutes)'
+  astronomy.sun.elevation:
+    value: 18
+    unit: int
+    title: 'Sun elevation (degrees)'
 
   # Indoors: the terrarium (a plant light on a timer) and the bedroom.
   indoor.temperature.temperature#terrarium:

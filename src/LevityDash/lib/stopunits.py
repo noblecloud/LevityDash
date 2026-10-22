@@ -58,9 +58,13 @@ def parseStop(text) -> Optional[Tuple[float, Optional[str]]]:
 	return float(found.group('number')), unit
 
 
+_POWERS = {'2': '²', '3': '³'}
+
+
 def _plain(unit: str) -> str:
-	"""A unit with the degree sign removed: `°F` is `F`."""
-	return re.sub(r'^[°º˚]\s*', '', unit.strip())
+	"""A unit with the degree sign removed (`°F` is `F`) and a power written `m^2` read as `m²`."""
+	text = re.sub(r'^[°º˚]\s*', '', unit.strip())
+	return re.sub(r'\^([23])\b', lambda found: _POWERS[found.group(1)], text)
 
 
 def _unitClass(unit: str) -> Type[Measurement]:
@@ -87,10 +91,20 @@ def measure(number: float, unit: str) -> Measurement:
 			raise StopUnitError(f'unknown unit {unit!r}')
 		length, span = _unitClass(top), _unitClass(bottom)
 		if family(length) != 'length' or family(span) != 'time':
-			raise StopUnitError(f'unknown unit {unit!r}')
+			# Not a speed or a rate (`W/m²`, `kWh/day`): the quotient of the two units, which unitcorn names when it can.
+			return _quotient(number, top, bottom, unit)
 		# Through metres per second: unitcorn converts from there to every speed and rate it has.
 		return Wind.MetersPerSecond(float(Length.Meter(length(number))) / float(Time.Second(span(1))))
 	return _unitClass(text)(number)
+
+
+def _quotient(number: float, top: str, bottom: str, unit: str) -> Measurement:
+	try:
+		return _unitClass(top)(number) / _unitClass(bottom)(1)
+	except StopUnitError:
+		raise
+	except Exception as e:  # noqa: BLE001 - the algebra refuses a pair it has no dimension for
+		raise StopUnitError(f'unknown unit {unit!r}') from e
 
 
 def family(cls: type) -> str:

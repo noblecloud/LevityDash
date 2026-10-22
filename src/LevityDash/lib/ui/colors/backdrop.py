@@ -9,6 +9,23 @@ A dashboard writes it as a root key, ``background:``, beside ``theme:``::
 	background: {0: '#0b1020', 1: '#2a1f3d'}     # a gradient written in place
 	background: {gradient: $sky, angle: 160}     # with a direction
 
+A ground can follow a reading. ``by`` is a key or an expression, ``top`` and ``bottom`` are scales of the theme (or
+stops written in place) that are read at the reading's value, and the ground is the gradient between the two colours::
+
+	background:
+	  by: astronomy.sun.elevation     # the sun's height in degrees
+	  top: $sky-top                   # the colour overhead at that height
+	  bottom: $sky-horizon            # the colour at the horizon at that height
+	  angle: 180                      # optional, as above
+
+``haze`` is a second key, cloud cover as a percentage. Cloud takes the colour out of the sky: ``haze-strength`` (default
+0.8) is the share of chroma removed at 100 %, at the same lightness::
+
+	  haze: environment.clouds.cover.cover
+
+The scene watches the readings and repaints when it changes. Until the reading has a value the ground is the theme's
+own. Colours between stops mix in Oklab.
+
 Without the key the dashboard takes the theme's ``backdrop`` scale if it has one, and its ``background`` colour if
 not. A gradient runs top to bottom unless ``angle`` says otherwise. The angle is in CSS degrees: 0 is towards
 the top, 90 towards the right, 180 (the default) towards the bottom. Stops sit at their own values, stretched
@@ -25,6 +42,7 @@ from PySide6.QtGui import QBrush, QColor, QLinearGradient
 from LevityDash.lib.ui.colors import theme as _theme
 from LevityDash.lib.ui.colors.color import Color
 from LevityDash.lib.ui.colors.gradient import Gradient, setStops
+from LevityDash.lib.ui.colors.oklch import mix_oklab, oklab_to_srgb, srgb_to_oklab
 
 #: The scale a theme may define to give every dashboard that does not choose its own a gradient ground.
 BACKDROP_SCALE = 'backdrop'
@@ -86,10 +104,78 @@ def _gradient(spec: Any, angle: float) -> Backdrop:
 	return Backdrop(stops=stops, angle=angle, space=getattr(gradient, 'space', 'srgb'))
 
 
-def decode(spec: Any = None, active: Optional[_theme.Theme] = None) -> Backdrop:
-	"""The ground a ``background:`` value names, read against ``active`` (default: the active theme)."""
+FOLLOW_KEYS = frozenset({'by', 'top', 'bottom', 'angle', 'haze', 'haze-strength'})
+HAZE_STRENGTH = 0.8
+
+
+def follows(spec: Any) -> Optional[str]:
+	"""The key or expression a ``background:`` follows (its ``by``), or ``None`` for a ground that does not move."""
+	if isinstance(spec, dict) and 'by' in spec:
+		by = spec['by']
+		return by if isinstance(by, str) and by.strip() else None
+	return None
+
+
+def hazeKey(spec: Any) -> Optional[str]:
+	"""The key or expression a following ground's ``haze`` reads (cloud cover, a percentage), or ``None``."""
+	if isinstance(spec, dict) and 'by' in spec:
+		haze = spec.get('haze')
+		return haze if isinstance(haze, str) and haze.strip() else None
+	return None
+
+
+def _hazed(color: QColor, share: float) -> QColor:
+	"""``color`` with ``share`` of its chroma gone, at the same lightness: the sky under cloud."""
+	r, g, b = srgb_to_oklab((color.redF(), color.greenF(), color.blueF()))
+	grey = (r, 0.0, 0.0)
+	out = mix_oklab((color.redF(), color.greenF(), color.blueF()), oklab_to_srgb(grey), share)
+	return QColor.fromRgbF(*(min(1.0, max(0.0, c)) for c in out), color.alphaF())
+
+
+def _sample(spec: Any, value: float) -> QColor:
+	"""The colour of the scale ``spec`` (a token, or stops written in place) at ``value``, mixed in Oklab between stops."""
+	items = sorted(Gradient.decode(spec).as_list, key=lambda item: float(item.value))
+	if not items:
+		raise _theme.ThemeError(f'background scale {spec!r} has no stops')
+	if value <= float(items[0].value):
+		return items[0].color.QColor
+	for low, high in zip(items, items[1:]):
+		a, b = float(low.value), float(high.value)
+		if value <= b:
+			t = (value - a) / ((b - a) or 1.0)
+			ca, cb = low.color.QColor, high.color.QColor
+			r, g, bl = mix_oklab((ca.redF(), ca.greenF(), ca.blueF()), (cb.redF(), cb.greenF(), cb.blueF()), t)
+			return QColor.fromRgbF(r, g, bl, ca.alphaF() + (cb.alphaF() - ca.alphaF()) * t)
+	return items[-1].color.QColor
+
+
+def _follow(spec: dict, value: Optional[float], active: _theme.Theme, haze: Optional[float] = None) -> Backdrop:
+	unknown = set(spec) - FOLLOW_KEYS
+	if unknown:
+		raise _theme.ThemeError(f'background: unknown keys {sorted(map(str, unknown))}; expected {", ".join(sorted(FOLLOW_KEYS))}')
+	missing = {'top', 'bottom'} - set(spec)
+	if missing:
+		raise _theme.ThemeError(f'background: a ground that follows {spec["by"]!r} needs {" and ".join(sorted(missing))}')
+	if value is None:
+		return Backdrop(color=active.color('background').QColor)
+	angle = float(spec.get('angle', DEFAULT_ANGLE))
+	top, bottom = _sample(spec['top'], value), _sample(spec['bottom'], value)
+	share = min(1.0, max(0.0, haze)) * float(spec.get('haze-strength', HAZE_STRENGTH)) if haze is not None else 0.0
+	if share > 0:
+		top, bottom = _hazed(top, share), _hazed(bottom, share)
+	return Backdrop(stops=((0.0, top), (1.0, bottom)), angle=angle, space='oklab')
+
+
+def decode(spec: Any = None, active: Optional[_theme.Theme] = None, value: Optional[float] = None, haze: Optional[float] = None) -> Backdrop:
+	"""The ground a ``background:`` value names, read against ``active`` (default: the active theme).
+
+	``value`` is the current reading of a ground that follows one (``by:``); ``None`` until it has one.
+	``haze`` is the reading of its ``haze:`` key as a share, 0 to 1 (a percentage reads as that); ``None`` means clear.
+	"""
 	active = active or _theme.active()
 	angle = DEFAULT_ANGLE
+	if isinstance(spec, dict) and 'by' in spec:
+		return _follow(spec, value, active, haze)
 	if isinstance(spec, dict) and 'gradient' in spec:
 		unknown = set(spec) - {'gradient', 'angle'}
 		if unknown:
@@ -116,4 +202,4 @@ def _isColorTuple(spec) -> bool:
 	return isinstance(spec, (list, tuple)) and len(spec) in (3, 4) and all(isinstance(v, (int, float)) for v in spec)
 
 
-__all__ = ('BACKDROP_SCALE', 'Backdrop', 'DEFAULT_ANGLE', 'decode', 'linearGradient')
+__all__ = ('BACKDROP_SCALE', 'Backdrop', 'DEFAULT_ANGLE', 'decode', 'follows', 'hazeKey', 'linearGradient')

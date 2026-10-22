@@ -1,0 +1,189 @@
+# Amounts: what a rate adds up to. A 15in 16:10 screen, written for a wet, windy morning.
+#
+# Every big number here is a rate multiplied by a span of time, or a difference of two readings. Gust minus mean wind is a speed. A rain rate in in/hr times
+# `3h` is the rain that falls in three hours, a length. Wind speed times `6h` is the distance the air travels, in
+# miles. Temperature minus dew point is a change in degrees, not
+# a temperature, so it never reads as one. Nothing is computed in the file: each card writes the expression as its key.
+#
+# The grid has three columns and two bands. The top band is four cards of amounts, the bottom band a row of rings and
+# a slot that takes the screen when the rate is heavy (`when: ... > 0.3 in/hr`, a unit literal that converts to the
+# data's own unit).
+#
+# Text sizes come from the dashboard-wide size groups global.title, global.value and global.head, set by the
+# presets. Layers: none. Each card is a headline, one big reading and its neighbours.
+#
+# Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/amounts.levity
+#           --scenario rain-day --size 2880x1800 --freeze-time 2026-10-15T09:10:00
+#
+# Hex colours are quoted. Unquoted, YAML reads '#' as a comment.
+theme:
+  extends: default
+  colors:
+    background: '#05070b'
+    muted: '#a9b3c0'
+    faint: '#7a8492'
+    rule: '#262c36'
+    accent: '#ff9124'
+    good: '#14e3c0'
+    warn: '#ffd400'
+    bad: '#ff3048'
+    info: '#1a8cff'
+  fonts:
+    display: Nunito
+    mono: Roboto Mono
+    body: Roboto
+vars:
+  rate: environment.precipitation.precipitation
+  wind: environment.wind.speed.speed
+  gust: environment.wind.speed.gust
+  t: environment.temperature.temperature
+  dew: environment.temperature.dewpoint
+items:
+- type: grid
+  name: board
+  geometry: {x: 0.6%, y: 0.8%, width: 98.8%, height: 98.4%}
+  spacing: 1.2%
+  padding: 0
+  grid:
+    columns: [1fr, 1fr, 1fr, 1fr]
+    rows: [58fr, 40fr]
+    areas:
+    - rain wind gusty fog
+    - rings rings rings slot
+  items:
+
+  # ================= FOUR AMOUNTS ==========================================
+  - preset: headline-panel
+    name: rain
+    grid: {area: rain}
+    props:
+      headline: If it keeps up
+      headline_color: $info
+      key: $rate * 3h
+      title: Rain in the next 3 h
+      color: $info
+      precision: 2
+      unit_position: Inline
+      headline_box: {x: 0%, y: 0%, width: 100%, height: 12%}
+      hero_box: {x: 0%, y: 14%, width: 100%, height: 42%}
+      list_box: {x: 0%, y: 62%, width: 100%, height: 38%}
+      items:
+      - {type: realtime.text, key: $rate, title: {text: Now in/hr}, display: {precision: 2, unitPosition: Hidden}}
+      - {type: realtime.text, key: '$rate * 1h', title: {text: In 1 h}, display: {precision: 2, valueLabel: {color: $info}}}
+      - {type: realtime.text, key: '$rate * 6h', title: {text: In 6 h}, display: {precision: 2, valueLabel: {color: $info}}}
+      - {type: realtime.text, key: '$rate * 12h', title: {text: In 12 h}, display: {precision: 2}}
+  - preset: headline-panel
+    name: wind
+    grid: {area: wind}
+    props:
+      headline: Wind run
+      headline_color: $good
+      key: $wind * 6h
+      title: Air moved in 6 h
+      color: $good
+      precision: 0
+      unit_position: Inline
+      headline_box: {x: 0%, y: 0%, width: 100%, height: 12%}
+      hero_box: {x: 0%, y: 14%, width: 100%, height: 42%}
+      list_box: {x: 0%, y: 62%, width: 100%, height: 38%}
+      items:
+      - {type: realtime.text, key: $wind, title: {text: Now}, display: {precision: 0, unitPosition: Hidden}}
+      - {type: realtime.text, key: '$wind * 1h', title: {text: In 1 h}, display: {precision: 1}}
+      - {type: realtime.text, key: '$wind * 3h', title: {text: In 3 h}, display: {precision: 0}}
+      - {type: realtime.text, key: '$wind * 12h', title: {text: In 12 h}, display: {precision: 0, valueLabel: {color: $good}}}
+  - preset: headline-panel
+    name: gusty
+    grid: {area: gusty}
+    props:
+      headline: Gust margin
+      headline_color: $warn
+      key: $gust - $wind
+      title: Gust above the mean wind
+      color: $warn
+      precision: 0
+      unit_position: Inline
+      headline_box: {x: 0%, y: 0%, width: 100%, height: 12%}
+      hero_box: {x: 0%, y: 14%, width: 100%, height: 42%}
+      list_box: {x: 0%, y: 62%, width: 100%, height: 38%}
+      items:
+      - {type: realtime.text, key: $wind, title: {text: Wind}, display: {precision: 0, unitPosition: Hidden}}
+      - {type: realtime.text, key: $gust, title: {text: Gust}, display: {precision: 0, unitPosition: Hidden, valueLabel: {color: $warn}}}
+      - {type: realtime.text, key: '$gust * 1h', title: {text: Gust run, 1 h}, display: {precision: 1}}
+  - preset: headline-panel
+    name: fog
+    grid: {area: fog}
+    props:
+      headline: Fog gap
+      headline_color: $accent
+      key: $t - $dew
+      title: Air minus dew point
+      color: $accent
+      precision: 1
+      unit_position: Inline
+      headline_box: {x: 0%, y: 0%, width: 100%, height: 12%}
+      hero_box: {x: 0%, y: 14%, width: 100%, height: 42%}
+      list_box: {x: 0%, y: 62%, width: 100%, height: 38%}
+      items:
+      - {type: realtime.text, key: $t, title: {text: Air}, display: {precision: 0}}
+      - {type: realtime.text, key: $dew, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
+      - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels}, display: {precision: 0, valueLabel: {color: $accent}}}
+
+  # ================= THE RINGS =============================================
+  - type: stack
+    name: rings
+    grid: {area: rings}
+    direction: Horizontal
+    spacing: 2mm
+    items:
+    - preset: ring-reading
+      props: {key: environment.precipitation.daily, title: Today so far, color: $info, text_color: $info, min: 0, max: 2, weight: 9%, radius: 96%, precision: 2}
+    - preset: ring-reading
+      props: {key: environment.precipitation.probability, title: Chance now, color: $info, text_color: $info, weight: 9%, radius: 96%}
+    - preset: ring-reading
+      props: {key: environment.humidity.humidity, title: Humidity, color: $good, text_color: $good, weight: 9%, radius: 96%}
+    - preset: ring-reading
+      props: {key: environment.clouds.cover.cover, title: Cloud, color: $muted, text_color: $muted, weight: 9%, radius: 96%}
+    - preset: ring-reading
+      props: {key: environment.wind.speed.gust, title: Gust, color: $warn, text_color: $warn, min: 0, max: 40, weight: 9%, radius: 96%}
+
+  # ================= THE SLOT ==============================================
+  # `0.3 in/hr` converts to whatever unit the data is in, so the test is the same on a metric install.
+  - type: switch
+    name: slot
+    grid: {area: slot}
+    hold: 10s
+    fade: 0.4s
+    items:
+    - preset: headline-panel
+      name: heavy
+      when: '$rate > 0.3 in/hr'
+      props:
+        headline: Heavy rain
+        headline_color: $bad
+        key: $rate * 1h
+        title: This hour, at this rate
+        color: $bad
+        precision: 2
+        unit_position: Inline
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
+        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
+        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+        items:
+        - {type: realtime.text, key: $rate, title: {text: Rate}, display: {precision: 2}}
+        - {type: realtime.text, key: environment.precipitation.daily, title: {text: Today}, display: {precision: 2, valueLabel: {color: $info}}}
+    - preset: headline-panel
+      name: drying
+      props:
+        headline: Rest of the day
+        headline_color: $good
+        key: at($rate, 6h) * 3h
+        title: Rain in 3 h, from 3 pm
+        color: $good
+        precision: 2
+        unit_position: Inline
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
+        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
+        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+        items:
+        - {type: realtime.text, key: 'at($rate, 12h) * 3h', title: {text: 9 pm}, display: {precision: 2}}
+        - {type: realtime.text, key: 'at(environment.temperature.temperature, 9h)', title: {text: 6 pm}, display: {precision: 0, valueLabel: {color: $info}}}

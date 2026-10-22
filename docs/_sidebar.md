@@ -19,6 +19,7 @@
 		- [Split](config/dashboard/split.md)
 		- [Bars](config/dashboard/bar.md)
 		- [Flex and grid](config/dashboard/layout.md)
+		- [Studio](config/dashboard/studio.md)
 	- [Plugins](config/plugins.md ':id=plugin-config')
 - [Development](development.md)
   - [Bug Reports](development/issues.md)

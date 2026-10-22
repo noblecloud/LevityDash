@@ -153,3 +153,40 @@ def test_where_does_not_override_a_key_that_names_a_device(dashboard, house):
 		assert str(panel.key) == 'indoor.temperature.temperature#office'
 	finally:
 		_drop(sandbox)
+
+
+# -- period -----------------------------------------------------------------------
+
+TEMP = 'environment.temperature.temperature'
+
+
+def test_period_opens_the_matching_expression(dashboard):
+	sandbox, panel = _panel(dashboard, key=TEMP, period='yesterday', using='high')
+	try:
+		assert panel._keySource.text == f'max({TEMP}, yesterday)'
+	finally:
+		panel.delete()
+		_drop(sandbox)
+
+
+def test_period_saves_back_with_the_key_as_written(dashboard):
+	sandbox, panel = _panel(dashboard, key=TEMP, period='3h', using='avg')
+	try:
+		state = panel.state
+		assert state['key'] == TEMP
+		assert (state['period'], state['using']) == ('3h', 'avg')
+	finally:
+		panel.delete()
+		_drop(sandbox)
+
+
+def test_period_and_where_together(dashboard, house):
+	sandbox, panel = _panel(dashboard, key='indoor.temperature.temperature', where='home.upstairs.bedroom', period='today', using='min')
+	try:
+		assert panel._keySource.text == 'min(indoor.temperature.temperature#bedroom, today)'
+		state = panel.state
+		assert state['key'] == 'indoor.temperature.temperature'
+		assert state['where'] == 'home.upstairs.bedroom'
+	finally:
+		panel.delete()
+		_drop(sandbox)
