@@ -116,6 +116,9 @@ class FocusStack(list):
 
 # Section Scene
 class LevityScene(RendererScene):
+	#: A moving ground (``background: {by: ...}``) got a new reading. A signal, so a reading that arrives on a
+	#: plugin thread repaints on the GUI thread.
+	backdropReading = Signal(object)
 	preventCollisions = False
 	editingMode = False
 	frozen: bool
@@ -135,6 +138,9 @@ class LevityScene(RendererScene):
 		self.setBackgroundBrush(Qt.transparent)
 		self._backdropSpec = None
 		self._backdropCache = None
+		self._backdropValue = None
+		self._backdropBinding = None
+		self.backdropReading.connect(self._setBackdropReading)
 		theme.on_change(self._themeChanged, call_now=False)
 		self.busyBlocker = QGraphicsRectItem(self.sceneRect())
 		self.busyBlocker.setVisible(False)
@@ -147,8 +153,33 @@ class LevityScene(RendererScene):
 
 	@backdropSpec.setter
 	def backdropSpec(self, value):
+		self._unbindBackdrop()
 		self._backdropSpec = value
+		if (follow := backdrop.follows(value)) is not None:
+			self._bindBackdrop(follow)
 		self.refreshBackdrop()
+
+	def _bindBackdrop(self, follow: str) -> None:
+		"""Watch the key or expression a moving ground follows. Releases with the spec, so a reload lets go of it."""
+		from LevityDash.lib.stateful import Binding
+		from LevityDash.lib.valuesource import openValueSource
+		if (source := openValueSource(follow, 'background by', 'the ground stays the theme\'s own')) is not None:
+			self._backdropBinding = Binding(source, lambda reading: self.backdropReading.emit(reading))
+
+	def _unbindBackdrop(self) -> None:
+		if self._backdropBinding is not None:
+			self._backdropBinding.unlink()
+			self._backdropBinding = None
+		self._backdropValue = None
+
+	def _setBackdropReading(self, reading) -> None:
+		try:
+			value = float(getattr(reading, 'value', reading))
+		except (TypeError, ValueError):
+			return
+		if value != self._backdropValue:
+			self._backdropValue = value
+			self.refreshBackdrop()
 
 	def refreshBackdrop(self):
 		self._backdropCache = None
@@ -161,10 +192,10 @@ class LevityScene(RendererScene):
 
 	def backdrop(self):
 		"""The resolved ground, kept until the spec, the theme or the scene size changes."""
-		key = (id(theme.active()), self._backdropSpec is None or repr(self._backdropSpec), self.sceneRect().getRect())
+		key = (id(theme.active()), self._backdropSpec is None or repr(self._backdropSpec), self.sceneRect().getRect(), self._backdropValue)
 		if self._backdropCache is None or self._backdropCache[0] != key:
 			try:
-				ground = backdrop.decode(self._backdropSpec)
+				ground = backdrop.decode(self._backdropSpec, value=self._backdropValue)
 			except Exception as error:
 				guiLog.error(f'background {self._backdropSpec!r}: {error}. Using the theme ground.')
 				ground = backdrop.decode(None)
