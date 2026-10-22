@@ -43,6 +43,9 @@ DEFAULT_PORT = 8667
 #: fault - keep them in step if either changes.
 _HEARTBEAT_INTERVAL = 5.0
 
+#: Seconds between looks at whether a plugin has gone quiet.
+_WATCHDOG_INTERVAL = 30
+
 
 def main() -> int:
 	# Must be set before LevityDashboard.init(): the QApplication instance is
@@ -148,6 +151,28 @@ def main() -> int:
 	control.timeout.connect(bridge.tick)
 	control.start(int(_HEARTBEAT_INTERVAL * 1000))
 	QTimer.singleShot(50, bridge.tick)  # first beat without waiting a full interval
+
+	# Watchdog: a plugin that is running but has stopped publishing is logged, and with
+	# `[Backend] watchdog = restart` stopped and started again. See lib/plugins/watchdog.py.
+	from LevityDash.lib.plugins.watchdog import POLICIES, PluginWatch, restartPlugin, sweep
+	from LevityDash.lib.utils.shared import now as _now
+	policy = userConfig.getOrSet('Backend', 'watchdog', 'log').strip().lower()
+	if policy not in POLICIES:
+		log.warning(f'[Backend] watchdog = {policy!r} is not one of {", ".join(POLICIES)}; using log')
+		policy = 'log'
+	watch = PluginWatch(policy)
+
+	def _restart(plugin) -> None:
+		def run() -> None:
+			try:
+				restartPlugin(plugin)
+			except Exception as e:  # noqa: BLE001
+				log.error(f'{plugin.name}: restart failed: {e!r}')
+		threading.Thread(target=run, name=f'Restart-{plugin.name}', daemon=True).start()
+
+	patrol = QTimer()
+	patrol.timeout.connect(lambda: sweep(watch, LevityDashboard.plugins, bridge._lastPublish, _now(), log, _restart))
+	patrol.start(_WATCHDOG_INTERVAL * 1000)
 
 	code = app.exec()
 
