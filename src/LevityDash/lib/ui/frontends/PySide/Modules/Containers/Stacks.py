@@ -19,7 +19,7 @@ from LevityDash.lib.ui.Geometry import (
 	Alignment, AlignmentFlag, Dimension, DimensionType, Direction, DisplayPosition, Geometry, parseHeight, parseSize, parseWidth,
 	Position, Size, size_float, size_px
 )
-from LevityDash.lib.layout import flex as cssflex, grid as cssgrid, parse as cssparse
+from LevityDash.lib.layout import calc as cssmath, flex as cssflex, grid as cssgrid, parse as cssparse
 from LevityDash.lib.layout.types import Direction as CssDirection, Edge as CssEdge, Gap as CssGap, ItemAlign as CssItemAlign, Rect as CssRect
 from LevityDash.lib.utils import DeepChainMap, mostSimilarDict, sortDict
 from WeatherUnits import Length, Percentage
@@ -314,10 +314,10 @@ def _checkedKeys(value: Mapping | None, allowed: set[str], what: str) -> dict | 
 
 # One `flex:` mapping serves both roles, because a stack can be a flex item and a flex container
 # at once. The two sets do not overlap: `align-self` is the item's, `align-items` the container's.
-_FLEX_ITEM_KEYS = {'grow', 'shrink', 'basis', 'min', 'max', 'cross', 'align-self', 'order'}
+_FLEX_ITEM_KEYS = {'grow', 'shrink', 'basis', 'min', 'max', 'cross', 'align-self', 'order', 'margin'}
 _FLEX_STACK_KEYS = {'justify', 'align-items', 'wrap'}
-_GRID_ITEM_KEYS = {'column', 'row', 'column-span', 'row-span', 'justify-self', 'align-self', 'shrink'}
-_GRID_KEYS = {'columns', 'rows', 'auto-columns', 'auto-rows', 'auto-flow', 'dense', 'gap', 'justify-content', 'align-content', 'justify-items', 'align-items'}
+_GRID_ITEM_KEYS = {'column', 'row', 'column-span', 'row-span', 'justify-self', 'align-self', 'shrink', 'margin', 'area'}
+_GRID_KEYS = {'areas', 'columns', 'rows', 'auto-columns', 'auto-rows', 'auto-flow', 'dense', 'gap', 'justify-content', 'align-content', 'justify-items', 'align-items'}
 
 
 def _scalarsOverShared(state: dict, shared: Mapping, itemType: Type) -> dict:
@@ -394,7 +394,7 @@ class StackedItem(Stateful, tag=...):
 
 	@StateProperty(key='flex', default=None, sortOrder=2, allowNone=True)
 	def flexProps(self) -> dict | None:
-		"""CSS flex item options: `grow`, `shrink`, `basis`, `min`, `max`, `cross`, `align-self`, `order`.
+		"""CSS flex item options: `grow`, `shrink`, `basis`, `min`, `max`, `cross`, `align-self`, `order`, `margin`.
 
 		Any of them turns on the flex engine for the stack that holds this item.
 		"""
@@ -804,12 +804,39 @@ class Stack(Panel, tag='stack'):
 		)
 
 	def cssPx(self, value, vertical: bool) -> float:
-		"""A `.levity` length (`40%`, `12px`, `3mm`, `0.5`) as pixels along one axis of this stack."""
+		"""A `.levity` length (`40%`, `12px`, `3mm`, `0.5`, `calc(100% - 12px)`) as pixels along one axis of this stack."""
+		if cssmath.is_math(value):
+			return cssmath.evaluate_math(value, lambda number, unit: self.cssPx(f'{number}{unit}', vertical))
 		dimension = DimensionType.height if vertical else DimensionType.width
 		parsed = parseSize(value, None, dimension=dimension)
 		if parsed is None:
 			raise ValueError(f'{value!r} is not a size')
 		return float(size_px(parsed, self.geometry, dimension))
+
+	def cssMargin(self, value) -> tuple[float | None, float | None, float | None, float | None]:
+		"""A CSS `margin` shorthand (one, two or four values, a string or a list) as pixels: top, right, bottom, left.
+
+		`auto` is None. A `%` is a share of the stack's inner width on every side, as in CSS.
+		"""
+		if value is None:
+			return 0.0, 0.0, 0.0, 0.0
+		parts = cssmath.split_values(value) if isinstance(value, str) else list(value) if isinstance(value, (list, tuple)) else [value]
+		if len(parts) not in (1, 2, 4):
+			raise ValueError(f'margin: expected 1, 2 or 4 values, got {value!r}')
+		top, right, bottom, left = {1: parts * 4, 2: parts + parts, 4: parts}[len(parts)]
+		width, _, padLeft, _, padRight, _ = self.cssBox()
+		inline = width - padLeft - padRight
+
+		def length(v, vertical):
+			if str(v).casefold() == 'auto':
+				return None
+			if cssmath.is_math(v):  # `%` inside is a share of the inline size too
+				return cssmath.evaluate_math(v, lambda number, unit: number / 100 * inline if unit == '%' else self.cssPx(f'{number}{unit}', vertical))
+			if str(v).strip().endswith('%'):  # a percent margin is a share of the inline size, on every side (CSS)
+				return float(str(v).strip()[:-1]) / 100 * inline
+			return self.cssPx(v, vertical)
+
+		return tuple(length(v, vertical) for v, vertical in ((top, True), (right, False), (bottom, True), (left, False)))
 
 	def cssGapPx(self) -> float:
 		return float(self.spacing_px)
@@ -840,7 +867,10 @@ class Stack(Panel, tag='stack'):
 		sized = basis is not None or basis_auto
 		cross = props.get('cross')
 		align = props.get('align-self')
+		top, right, bottom, left = self.cssMargin(props.get('margin'))
 		return cssflex.FlexItem(
+			margin_main=CssEdge(top, bottom) if vertical else CssEdge(left, right),
+			margin_cross=CssEdge(left, right) if vertical else CssEdge(top, bottom),
 			grow=float(props.get('grow', 0.0 if sized else 1.0)),
 			shrink=float(props.get('shrink', 1.0)),
 			basis=None if basis_auto else (0.0 if basis is None else basis),
@@ -1606,12 +1636,18 @@ class GridStack(Stack, tag='grid'):
 	def _tracks(self, value, vertical: bool):
 		if value is None:
 			return []
-		return cssgrid.parse_track_list(value, lambda number, unit: self.cssPx(f'{number}{unit}', vertical))
+		return cssgrid.parse_track_list(value, self._trackPx(vertical))
+
+	def _trackPx(self, vertical: bool):
+		"""Length resolver for a track list. `%` is a share of the grid's inner size, as in CSS."""
+		width, height, left, top, right, bottom = self.cssBox()
+		inner = (height - top - bottom) if vertical else (width - left - right)
+		return lambda number, unit: number / 100 * inner if unit == '%' else self.cssPx(f'{number}{unit}', vertical)
 
 	def _trackSize(self, value, vertical: bool) -> cssgrid.TrackSize:
 		if value is None:
 			return cssgrid.TrackSize(cssgrid.Keyword.auto, cssgrid.Fr(1))
-		(track,) = cssgrid.parse_track_list(value, lambda number, unit: self.cssPx(f'{number}{unit}', vertical))
+		(track,) = cssgrid.parse_track_list(value, self._trackPx(vertical))
 		return track
 
 	def setCssGeometries(self):
@@ -1638,6 +1674,14 @@ class GridStack(Stack, tag='grid'):
 			width=inner_w,
 			height=inner_h,
 		)
+		areas = {}
+		if props.get('areas') is not None:
+			# `areas` makes the explicit grid at least as big as its picture; the extra tracks are sized by `auto-columns` / `auto-rows`
+			areas = cssgrid.parse_template_areas(props['areas'])
+			area_columns, area_rows = cssgrid.area_size(props['areas'])
+			for axis, wanted, vertical in (('columns', area_columns, False), ('rows', area_rows, True)):
+				have = len(cssgrid.expand_repeat(getattr(container, axis), inner_h if vertical else inner_w, gap_row if vertical else gap_column))
+				getattr(container, axis).extend([self._trackSize(props.get('auto-rows' if vertical else 'auto-columns'), vertical)] * max(0, wanted - have))
 		for key, name in (('justify-content', 'justify_content'), ('align-content', 'align_content')):
 			if props.get(key) is not None:
 				setattr(container, name, cssparse.parse_content_align(props[key]))
@@ -1653,13 +1697,22 @@ class GridStack(Stack, tag='grid'):
 		for geometry in self.geometries.values():
 			spec = getattr(geometry.surface, 'gridProps', None) or {}
 			aspect = self.cssAspect(geometry.surface)
-			items.append(cssgrid.GridItem(
-				max_content=(0.0, 0.0) if aspect is None else (aspect * natural_h, natural_h),
-				placement=cssgrid.Placement(
+			top, right, bottom, left = self.cssMargin(spec.get('margin'))
+			if (area := spec.get('area')) is not None:
+				if any(key in spec for key in ('column', 'row', 'column-span', 'row-span')):
+					raise ValueError('grid: `area` cannot be combined with column, row or a span')
+				placement = cssgrid.area_placement(areas, str(area))
+				placement = cssgrid.Placement(placement.column_start, placement.column_span, placement.row_start, placement.row_span, bool(spec.get('shrink', False)))
+			else:
+				placement = cssgrid.Placement(
 					column_start=spec.get('column'), column_span=int(spec.get('column-span', 1)),
 					row_start=spec.get('row'), row_span=int(spec.get('row-span', 1)),
 					shrink=bool(spec.get('shrink', False)),
-				),
+				)
+			items.append(cssgrid.GridItem(
+				margin_inline=CssEdge(left, right), margin_block=CssEdge(top, bottom),
+				max_content=(0.0, 0.0) if aspect is None else (aspect * natural_h, natural_h),
+				placement=placement,
 				justify_self=CssItemAlign.auto if 'justify-self' not in spec else cssparse.parse_item_align(spec['justify-self']).value,
 				align_self=CssItemAlign.auto if 'align-self' not in spec else cssparse.parse_item_align(spec['align-self']).value,
 			))
