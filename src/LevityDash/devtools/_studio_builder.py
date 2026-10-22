@@ -1369,6 +1369,12 @@ class Builder(QWidget):
 		# Two rows: one row of six buttons set the tree column's minimum width, which left the preview a sliver in a one-window Studio.
 		lbox.addLayout(tools)
 		lbox.addLayout(moves)
+		self.filterBox = QLineEdit()
+		self.filterBox.setPlaceholderText('Filter items…')
+		self.filterBox.setClearButtonEnabled(True)
+		self.filterBox.setToolTip('Show only the items whose type, name or key contains this text, with the containers around them')
+		self.filterBox.textChanged.connect(self.applyFilter)
+		lbox.addWidget(self.filterBox)
 		self.tree = ItemTree()
 		self.tree.setHeaderHidden(True)
 		self.tree.setMinimumWidth(200)
@@ -1701,7 +1707,25 @@ class Builder(QWidget):
 				row.setExpanded(True)
 
 			add(None, self.piece.template, ())
+		self.applyFilter()
 		self._selectRow()
+
+	def applyFilter(self, _text: str = ''):
+		"""Hide the rows that do not match the filter box, keeping every row that holds a match."""
+		needle = self.filterBox.text().strip().casefold()
+
+		def visit(row) -> bool:
+			hit = not needle or needle in row.text(0).casefold()
+			kids = [visit(row.child(i)) for i in range(row.childCount())]
+			show = hit or any(kids)
+			row.setHidden(not show)
+			if needle and any(kids):
+				row.setExpanded(True)
+			return show
+
+		root = self.tree.invisibleRootItem()
+		for i in range(root.childCount()):
+			visit(root.child(i))
 
 	def _selectRow(self):
 		it = self.tree.invisibleRootItem()

@@ -58,7 +58,8 @@ from PySide6.QtCore import QObject, Qt, QTimer, Signal, Slot
 from LevityDash import LevityDashboard
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.plugins.categories import CategoryItem
-from LevityDash.lib.plugins.expressions import Expression, ExpressionError, Missing
+from LevityDash.lib.plugins.expressions import Expression, ExpressionError, Missing, PlacedKey
+from LevityDash.lib.plugins.places import identitiesAt
 from LevityDash.lib.plugins.observation import DAILY_CUTOFF, MeasurementTimeSeries
 from LevityDash.lib.utils.data import KeyData
 from LevityDash.lib.utils.shared import now as localNow, singleShotSafe, startTimerSafe
@@ -67,7 +68,7 @@ from LevityDash.lib.wire.containers import ContainerFlags, RemotePublisher, Remo
 log = LevityPluginLog.getChild('Computed')
 
 __all__ = [
-	'COMPUTED_SOURCE', 'ComputedSource', 'ComputedEngine', 'computedEngine',
+	'COMPUTED_SOURCE', 'COUNT_ATOM', 'ComputedSource', 'ComputedEngine', 'computedEngine',
 	'acquireValueSource', 'releaseValueSource',
 ]
 
@@ -78,6 +79,11 @@ COMPUTED_SOURCE = 'Computed'
 #: realtime. isTimeseriesOnly must be False, or the dispatcher would try to
 #: fetch a timeseries for it before calling a panel back.
 _FLAGS = ContainerFlags(isRealtime=True, isTimeseriesOnly=False)
+
+#: The last atom of an aggregate's companion key: ``computed.x3f9a0c21b7de.count``
+#: holds how many readings at a place the aggregate used. Nothing else in the
+#: ``computed`` root has more than two atoms, so it cannot meet another key.
+COUNT_ATOM = 'count'
 
 #: Realtime.connectRealtime reads metadata['type'] unguarded.
 _METADATA = {'type': 'computed'}
@@ -146,11 +152,20 @@ class _SnapshotResolver:
 	"""A ``Resolver`` over values read on the main thread and series rebuilt
 	on the worker thread. Built and used on the worker thread only."""
 
-	__slots__ = ('_current', '_series')
+	__slots__ = ('_current', '_series', '_members')
 
-	def __init__(self, current: Dict[CategoryItem, Any], series: Dict[CategoryItem, Optional[MeasurementTimeSeries]]):
+	def __init__(
+		self,
+		current: Dict[CategoryItem, Any],
+		series: Dict[CategoryItem, Optional[MeasurementTimeSeries]],
+		members: Optional[Dict[PlacedKey, List[Tuple[Any, Optional[datetime]]]]] = None,
+	):
 		self._current = current
 		self._series = series
+		self._members = members or {}
+
+	def members(self, placed: PlacedKey) -> List[Tuple[Any, Optional[datetime]]]:
+		return self._members.get(placed, [])
 
 	def current(self, key: CategoryItem) -> Any:
 		return self._current.get(key)
@@ -207,6 +222,15 @@ def _msUntilExpiry(expression: Expression, resolver, now: datetime) -> Optional[
 			continue
 		reaches = min(later) - item.offset - now
 		soonest = reaches if soonest is None else min(soonest, reaches)
+	# A reading at a place goes stale by itself, with no input changing.
+	for placed in expression.places:
+		for _, taken in resolver.members(placed):
+			if taken is None:
+				continue
+			for bound in expression.stales:
+				goes = taken + bound - now
+				if goes > timedelta(0):
+					soonest = goes if soonest is None else min(soonest, goes)
 	if soonest is None:
 		return None
 	# A second past the edge, so the reading is out when the recompute looks.
@@ -214,10 +238,12 @@ def _msUntilExpiry(expression: Expression, resolver, now: datetime) -> Optional[
 
 
 class _Entry:
-	__slots__ = ('expression', 'count', 'state', 'stale', 'lastError', 'expiry')
+	__slots__ = ('expression', 'count', 'state', 'stale', 'lastError', 'expiry', 'members')
 
 	def __init__(self, expression: Expression):
 		self.expression = expression
+		#: Each place the expression reads, and the keys of the devices there.
+		self.members: Dict[PlacedKey, Tuple[CategoryItem, ...]] = {}
 		self.count = 1
 		#: idle | scheduled | running
 		self.state = 'idle'
@@ -278,6 +304,7 @@ class ComputedEngine(QObject):
 		entry = self._entries[key] = _Entry(expression)
 		for inputKey in expression.inputKeys:
 			self._dependents[inputKey].add(key)
+		self._resolveMembers(entry)
 		if entry.usesToday:
 			self._scheduleMidnight()
 		log.debug(f'registered {key} = {expression.text!r}')
@@ -299,7 +326,7 @@ class ComputedEngine(QObject):
 			entry.expiry.stop()
 			entry.expiry.deleteLater()
 			entry.expiry = None
-		for inputKey in entry.expression.inputKeys:
+		for inputKey in entry.expression.inputKeys | self._memberKeys(entry):
 			dependents = self._dependents.get(inputKey)
 			if dependents is not None:
 				dependents.discard(key)
@@ -307,6 +334,32 @@ class ComputedEngine(QObject):
 					del self._dependents[inputKey]
 		log.debug(f'released {key} = {entry.expression.text!r}')
 		return True
+
+	@staticmethod
+	def _memberKeys(entry: _Entry) -> Set[CategoryItem]:
+		return {key for keys in entry.members.values() for key in keys}
+
+	def _resolveMembers(self, entry: _Entry) -> None:
+		"""Find the devices at each place the expression reads, and watch their
+		keys. Run when it registers and before each computation, so a plugin that
+		loaded later is picked up."""
+		if not entry.expression.places:
+			return
+		before = self._memberKeys(entry)
+		plugins = LevityDashboard.plugins
+		entry.members = {
+			placed: tuple(placed.key.withIdentity(identity) for identity in identitiesAt(placed.place, plugins))
+			for placed in entry.expression.places
+		}
+		after = self._memberKeys(entry)
+		key = entry.expression.key
+		for gone in before - after:
+			if (dependents := self._dependents.get(gone)) is not None:
+				dependents.discard(key)
+				if not dependents:
+					del self._dependents[gone]
+		for added in after - before:
+			self._dependents[added].add(key)
 
 	def refcount(self, key: CategoryItem) -> int:
 		entry = self._entries.get(key)
@@ -379,31 +432,36 @@ class ComputedEngine(QObject):
 		entry.state = 'running'
 		entry.stale = False
 		try:
+			self._resolveMembers(entry)
+			members = {
+				placed: [self._currentReading(key) for key in entry.members.get(placed, ())]
+				for placed in expression.places
+			}
 			current = {key: self._currentValue(key) for key in expression.keys}
 			windowed = {i.key for i in expression.series} | {i.key for i in expression.points}
 			series = {key: self._timeseriesFor(key) for key in windowed}
-			self._executor.submit(self._compute, entry, current, series, self.clock())
+			self._executor.submit(self._compute, entry, current, series, members, self.clock())
 		except Exception as e:
-			self._finished.emit((entry, Missing, f'could not read its inputs: {e!r}', None))
+			self._finished.emit((entry, Missing, f'could not read its inputs: {e!r}', None, None))
 
-	def _compute(self, entry: _Entry, current: dict, series: dict, now: datetime) -> None:
+	def _compute(self, entry: _Entry, current: dict, series: dict, members: dict, now: datetime) -> None:
 		"""Worker thread."""
 		try:
 			for timeseries in {id(s): s for s in series.values() if s is not None}.values():
 				timeseries.update()
-			resolver = _SnapshotResolver(current, series)
-			result = entry.expression.evaluate(resolver, now)
+			resolver = _SnapshotResolver(current, series, members)
+			result, used = entry.expression.evaluateCounted(resolver, now)
 			error = None
 			expiry = _msUntilExpiry(entry.expression, resolver, now)
 		except ExpressionError as e:
-			result, error, expiry = Missing, str(e), None
+			result, error, expiry, used = Missing, str(e), None, None
 		except Exception as e:
-			result, error, expiry = Missing, f'{entry.expression.text!r}: {type(e).__name__}: {e}', None
-		self._finished.emit((entry, result, error, expiry))
+			result, error, expiry, used = Missing, f'{entry.expression.text!r}: {type(e).__name__}: {e}', None, None
+		self._finished.emit((entry, result, error, expiry, used if entry.expression.places else None))
 
 	@Slot(object)
 	def _onFinished(self, outcome) -> None:
-		entry, result, error, expiry = outcome
+		entry, result, error, expiry, used = outcome
 		entry.state = 'idle'
 		if self._entries.get(entry.expression.key) is not entry:
 			return  # released while running
@@ -411,12 +469,16 @@ class ComputedEngine(QObject):
 			entry.lastError = error
 			log.error(f'computed value {entry.expression.text!r} has no value: {error}')
 		self._publish(entry, result)
+		if used is not None:
+			self._publishValue(CategoryItem([*entry.expression.key, COUNT_ATOM]), used, f'{entry.expression.text} (members)')
 		self._armExpiry(entry, expiry)
 		if entry.stale:
 			self._schedule(entry, entry.delay)
 
 	def _publish(self, entry: _Entry, result: Any) -> None:
-		key = entry.expression.key
+		self._publishValue(entry.expression.key, result, entry.expression.text)
+
+	def _publishValue(self, key: CategoryItem, result: Any, title: str) -> None:
 		container = self.source.getOrCreate(key)
 		if result is Missing:
 			# Nothing yet: stay silent, so a panel keeps waiting. Had a value:
@@ -437,9 +499,20 @@ class ComputedEngine(QObject):
 			timestamp=localNow(),
 			metadata=dict(_METADATA),
 			flags=_FLAGS,
-			title=entry.expression.text,
+			title=title,
 		)
 		self.source.publisher.publish({key})
+
+	def _currentReading(self, key: CategoryItem) -> Tuple[Any, Optional[datetime]]:
+		"""``(value, time of the reading)``; ``(None, None)`` with no value."""
+		multiSource = self._dispatcher.getContainer(key)
+		if not multiSource:
+			return None, None
+		try:
+			observation = multiSource.value.value
+		except Exception:
+			return None, None
+		return getattr(observation, 'value', None), getattr(observation, 'timestamp', None)
 
 	def _currentValue(self, key: CategoryItem) -> Any:
 		multiSource = self._dispatcher.getContainer(key)

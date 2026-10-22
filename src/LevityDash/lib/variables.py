@@ -25,17 +25,22 @@ items:
   resolved to when it loaded, and the file as written: wherever the live value still equals the
   resolved one, it writes the template's text; wherever it differs (the user edited it, or the app
   normalised it) it writes the live value.
+- A `vars.yaml` beside `config.ini` holds variables for every dashboard. The file's own `vars:` is read after it,
+  so a name defined in both takes the file's value, and a file variable may use a shared one.
 - Nothing here raises: a bad `vars:` is logged and the file loads without it.
 
 Qt-free and import-free, so a tool can resolve a file without booting the app.
 """
 import logging
 import re
+from pathlib import Path
 from typing import Any, Dict
 
-__all__ = ["resolveVariables", "retemplate", "substitute"]
+__all__ = ["VARIABLES_FILE", "loadSharedVariables", "resolveVariables", "retemplate", "substitute", "variableDefinitions"]
 
 log = logging.getLogger("LevityDash.variables")
+
+VARIABLES_FILE = 'vars.yaml'
 
 _REFERENCE = re.compile(r'\$(?:\{([A-Za-z_][\w-]*)\}|([A-Za-z_]\w*))')
 _WHOLE = re.compile(r'^\s*\$(?:\{([A-Za-z_][\w-]*)\}|([A-Za-z_]\w*))\s*$')
@@ -59,11 +64,12 @@ def substitute(value: Any, variables: Dict[str, Any]) -> Any:
 	return value
 
 
-def _definitions(raw: Any) -> Dict[str, Any]:
+def _definitions(raw: Any, shared: Dict[str, Any] | None = None) -> Dict[str, Any]:
+	"""`raw` (a `vars:` mapping) resolved in order. `shared` names are available to it and lose to a name `raw` defines."""
 	if not isinstance(raw, dict):
 		log.error(f'vars must be a mapping of names to values, not {raw!r}; the file loads without variables')
-		return {}
-	variables: Dict[str, Any] = {}
+		return dict(shared or {})
+	variables: Dict[str, Any] = dict(shared or {})
 	for name, value in raw.items():
 		if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z_][\w-]*', name):
 			log.error(f'variable name {name!r} is not a plain name; it is skipped')
@@ -72,12 +78,43 @@ def _definitions(raw: Any) -> Dict[str, Any]:
 	return variables
 
 
-def resolveVariables(state: Any) -> Any:
-	"""The root of a dashboard with its `vars:` applied to everything else. The `vars:` block stays, so a save keeps the definitions."""
-	if not isinstance(state, dict) or 'vars' not in state:
+def variableDefinitions(state: Any, shared: Dict[str, Any] | None = None) -> Dict[str, Any]:
+	"""Every variable `state` can use: the shared ones, then its own `vars:`."""
+	raw = state.get('vars') if isinstance(state, dict) else state
+	if raw is None:
+		return dict(shared or {})
+	return _definitions(raw, shared)
+
+
+def loadSharedVariables(path: Path | str | None) -> Dict[str, Any]:
+	"""The variables in the `vars.yaml` at `path` (a file, or the folder that holds it). Empty when there is none; a bad file is logged."""
+	try:
+		if path is None:
+			return {}
+		path = Path(path)
+		if path.is_dir():
+			path = path / VARIABLES_FILE
+		if not path.is_file():
+			return {}
+		import yaml
+		raw = yaml.safe_load(path.read_text(encoding='utf-8'))
+		if raw is None:
+			return {}
+		# A file may put the names at the top level or under `vars:`.
+		if isinstance(raw, dict) and set(raw) == {'vars'}:
+			raw = raw['vars']
+		return _definitions(raw)
+	except Exception:
+		log.exception(f'{path} could not be read; the dashboards load without shared variables')
+		return {}
+
+
+def resolveVariables(state: Any, shared: Dict[str, Any] | None = None) -> Any:
+	"""The root of a dashboard with its `vars:` (and the `shared` ones) applied to everything else. The `vars:` block stays, so a save keeps the definitions."""
+	if not isinstance(state, dict) or ('vars' not in state and not shared):
 		return state
 	try:
-		variables = _definitions(state['vars'])
+		variables = variableDefinitions(state, shared)
 		if not variables:
 			return state
 		return {key: (item if key == 'vars' else substitute(item, variables)) for key, item in state.items()}

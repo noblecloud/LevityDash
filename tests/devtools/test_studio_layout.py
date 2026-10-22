@@ -89,3 +89,27 @@ def test_unknown_keys_survive_an_edit(builder):
 	form.parts['wrap'].setValue('wrap')
 	assert form.value() == {'justify': 'center', 'future': 1, 'wrap': 'wrap'}
 
+
+
+def test_a_grid_edits_areas_and_an_item_names_its_area_and_margin(builder):
+	builder.addItem('grid')
+	form = row(builder, 'grid').editor.form
+	form.parts['areas'].text.setPlainText('head head\nside   main')
+	form._emit()
+	assert builder.piece.node((0,))['grid'] == {'areas': ['head head', 'side main']}
+	builder.addItem('realtime.text')
+	cell = row(builder, 'grid').editor.form
+	assert cell.parts['area'].isVisibleTo(cell) and not cell.parts['areas'].isVisibleTo(cell)
+	cell.parts['area'].line.setText('main')
+	cell.parts['margin'].line.setText('0 auto')
+	cell._emit()
+	assert builder.piece.node((0, 0))['grid'] == {'area': 'main', 'margin': '0 auto'}
+
+
+def test_a_flex_item_edits_its_margin(builder):
+	builder.addItem('stack')
+	builder.addItem('realtime.text')
+	form = row(builder, 'flex').editor.form
+	form.parts['margin'].line.setText('0 0 0 auto')
+	form._emit()
+	assert builder.piece.node((0, 0))['flex'] == {'margin': '0 0 0 auto'}

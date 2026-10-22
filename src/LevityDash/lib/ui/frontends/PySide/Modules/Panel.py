@@ -746,6 +746,9 @@ class Panel(_Panel, Stateful, tag='group'):
 			hook(self)
 		elif self.__dict__.get('_whenCondition') is not None:
 			self.setVisible(self.condition.holds)
+			# A stack closes up around an item that is not shown.
+			if (relayout := getattr(self.parentItem(), '_reflowShown', None)) is not None:
+				relayout()
 
 	@StateProperty(key='when', default=None, allowNone=True, sortOrder=51)
 	def when(self) -> Optional[str | bool]:

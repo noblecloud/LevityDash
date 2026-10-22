@@ -117,7 +117,27 @@ A value that picks between two keys. This shows the gust when the gust is more t
 | `min(a, b, ...)` | The lowest of two or more values. |
 | `max(a, b, ...)` | The highest of two or more values. |
 | `avg(a, b, ...)` | The average of two or more values, such as the current values of several keys. `mean` is another name for `avg`. |
+| `count(key, where=place)` | How many fresh readings the place has for the key. |
 | `abs(x)` | The size of a number, without its sign. |
+
+### <div class=mono>Places</div>
+
+A place is a dotted name, such as `home.upstairs.bedroom`. A device says where it is with `where` in its own settings ([Govee](/config/plugins/Govee.md)). A device with no `where` uses its alias as its place.
+
+`min`, `max`, `avg`, `mean` and `count` can take one key and a place. They then read every device at that place, and at every place inside it. `home.upstairs` includes `home.upstairs.bedroom` but not `home.upstairs2`.
+
+```yaml
+avg(indoor.temperature.temperature, where=home.upstairs)
+avg(indoor.temperature.temperature@home.upstairs)   # the same
+max(indoor.temperature.temperature, where=home.upstairs)
+count(indoor.temperature.temperature, where=home.upstairs)
+avg(indoor.temperature.temperature@home.upstairs.bedroom, indoor.temperature.temperature@home.basement)
+```
+
+- `where=` and `@place` mean the same. Use one place for each key. A key cannot have both `#device` and `@place`.
+- A reading older than one hour is left out. `stale=2h` in the call changes the limit for that call: `avg(key, where=home.upstairs, stale=2h)`.
+- If no device has a fresh reading, the result has no value, and `count` is 0.
+- Every expression also publishes the number of readings it used, as the key of the expression with `.count` added. `count(...)` is the way to show it in a dashboard.
 
 ### <div class=mono>Windows and offsets</div>
 

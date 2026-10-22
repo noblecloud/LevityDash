@@ -401,3 +401,28 @@ def test_wrap_and_unwrap_keep_placement_and_undo(board):
 	win.select(())
 	win.wrapItem()
 	assert win.piece.template is not None and len(win.history) == 0
+
+
+def test_tree_filter_keeps_matches_and_their_containers(board):
+	win, path = board('station')
+
+	def shown():
+		rows, stack = [], [win.tree.topLevelItem(0)]
+		while stack:
+			row = stack.pop()
+			if not row.isHidden():
+				rows.append(row.text(0))
+				stack += [row.child(i) for i in range(row.childCount())]
+		return rows
+
+	everything = shown()
+	win.filterBox.setText('wind')
+	some = shown()
+	assert 0 < len(some) < len(everything)
+	assert any('wind' in r.lower() for r in some[1:])
+	win.rebuildTree()
+	assert shown() == some  # a rebuild after an edit keeps the filter
+	win.filterBox.setText('')
+	assert len(shown()) == len(everything)
+	win.filterBox.setText('zzzz-no-such-item')
+	assert win.tree.topLevelItem(0).isHidden()

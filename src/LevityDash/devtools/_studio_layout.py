@@ -9,7 +9,7 @@ set stays a plain stack, and a save carries only what differs.
 from typing import Any, List, Optional
 
 from PySide6.QtCore import QSignalBlocker
-from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel
+from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit
 
 from LevityDash.devtools import _studio_editors as editors
 
@@ -28,10 +28,10 @@ SELF = ['auto'] + ITEMS
 TRACKS = ['1fr', '2fr', '3fr', 'auto', 'min-content', 'max-content', 'minmax(100px, 1fr)', 'fit-content(200px)', '100px', '25%']
 
 FLEX_CONTAINER = ('justify', 'align-items', 'wrap')
-FLEX_ITEM = ('grow', 'shrink', 'basis', 'min', 'max', 'cross', 'order', 'align-self')
-GRID_CONTAINER = ('columns', 'rows', 'auto-columns', 'auto-rows', 'auto-flow', 'dense', 'gap',
+FLEX_ITEM = ('grow', 'shrink', 'basis', 'min', 'max', 'cross', 'order', 'align-self', 'margin')
+GRID_CONTAINER = ('areas', 'columns', 'rows', 'auto-columns', 'auto-rows', 'auto-flow', 'dense', 'gap',
                   'justify-content', 'align-content', 'justify-items', 'align-items')
-GRID_ITEM = ('column', 'row', 'column-span', 'row-span', 'justify-self', 'align-self')
+GRID_ITEM = ('area', 'column', 'row', 'column-span', 'row-span', 'justify-self', 'align-self', 'margin')
 
 
 def choice(options: List[str], unset: str) -> editors.ChoiceEdit:
@@ -68,6 +68,53 @@ class TrackListEdit(editors.ListEditor):
 
 	def __init__(self, what: str):
 		super().__init__(TrackEdit, lambda items: '1fr', f'+ Add {what}', f'No {what}s. Items make their own as they are placed.')
+
+
+class TextPartEdit(Editor):
+	"""One line of text: a margin (`10px auto`, `calc(2% + 4px)`) or an area name. Empty saves as nothing."""
+
+	def __init__(self, placeholder: str = ''):
+		super().__init__()
+		box = QHBoxLayout(self)
+		box.setContentsMargins(0, 0, 0, 0)
+		self.line = QLineEdit()
+		self.line.setPlaceholderText(placeholder)
+		self.line.editingFinished.connect(self._emit)
+		box.addWidget(self.line, 1)
+
+	def setValue(self, value):
+		with QSignalBlocker(self.line):
+			text = ' '.join(str(v) for v in value) if isinstance(value, (list, tuple)) else value
+			self.line.setText('' if text is None else str(text))
+
+	def value(self):
+		return self.line.text().strip() or None
+
+
+class AreasEdit(Editor):
+	"""`areas`: the grid as a picture. One row per line, one word per cell, `.` for an empty cell."""
+
+	wide = True
+
+	def __init__(self):
+		super().__init__()
+		box = QHBoxLayout(self)
+		box.setContentsMargins(0, 0, 0, 0)
+		self.text = QPlainTextEdit()
+		self.text.setPlaceholderText('head head\nside main')
+		self.text.setFixedHeight(72)
+		self.text.setStyleSheet('font-family: monospace;')
+		self.text.setTabChangesFocus(True)
+		self.text.textChanged.connect(self._emit)
+		box.addWidget(self.text, 1)
+
+	def setValue(self, value):
+		with QSignalBlocker(self.text):
+			self.text.setPlainText('' if value is None else '\n'.join(value) if isinstance(value, (list, tuple)) else str(value))
+
+	def value(self):
+		rows = [' '.join(line.split()) for line in self.text.toPlainText().splitlines() if line.strip()]
+		return rows or None
 
 
 class BasisEdit(Editor):
@@ -176,6 +223,7 @@ class FlexForm(LayoutForm):
 		self.part('cross', 'cross size', editors.SizeEdit(nullable=True, autoText='fill', ref='full'), 'Size across the stack; by default the item fills it.')
 		self.part('order', 'order', editors.NumberEdit(autoText='as written', lo=-5, hi=5, integer=True), 'Items sort by order, then as written.')
 		self.part('align-self', 'align self', choice(ALIGN_SELF[1:], 'auto'), 'Overrides the stack\'s align items for this item.')
+		self.part('margin', 'margin', TextPartEdit('0'), 'CSS margin: one, two or four values (top right bottom left). A side can be auto, a % or calc().')
 
 	def value(self):
 		out = super().value()
@@ -191,7 +239,8 @@ class GridForm(LayoutForm):
 
 	def __init__(self):
 		super().__init__()
-		self.head('columns', 'This grid')
+		self.head('areas', 'This grid')
+		self.part('areas', 'areas', AreasEdit(), 'grid-template-areas: name the cells, then put an item on a name. One row per line.')
 		self.part('columns', 'columns', TrackListEdit('column'), 'grid-template-columns')
 		self.part('rows', 'rows', TrackListEdit('row'), 'grid-template-rows')
 		self.part('auto-columns', 'auto columns', AutoTrackEdit(), 'The size of a column the items need and the list does not give.')
@@ -203,13 +252,15 @@ class GridForm(LayoutForm):
 		self.part('align-content', 'align content', choice(CONTENT[1:], 'normal'), 'Where the tracks sit down the height when they do not fill it.')
 		self.part('justify-items', 'justify items', choice(ITEMS[1:], 'stretch'), 'How each item sits in its cell across.')
 		self.part('align-items', 'align items', choice(ITEMS[1:], 'stretch'), 'How each item sits in its cell down.')
-		self.head('column', 'This item in a grid')
+		self.head('area', 'This item in a grid')
+		self.part('area', 'area', TextPartEdit('a name from areas'), 'grid-area: which named area it fills. Replaces column, row and the spans.')
 		self.part('column', 'column', editors.NumberEdit(autoText='auto', lo=1, hi=12, integer=True), 'Which column it starts in, counted from 1.')
 		self.part('row', 'row', editors.NumberEdit(autoText='auto', lo=1, hi=12, integer=True), 'Which row it starts in, counted from 1.')
 		self.part('column-span', 'column span', editors.NumberEdit(autoText='1', lo=1, hi=12, integer=True))
 		self.part('row-span', 'row span', editors.NumberEdit(autoText='1', lo=1, hi=12, integer=True))
 		self.part('justify-self', 'justify self', choice(SELF[1:], 'auto'), 'Overrides the grid\'s justify items for this item.')
 		self.part('align-self', 'align self', choice(SELF[1:], 'auto'), 'Overrides the grid\'s align items for this item.')
+		self.part('margin', 'margin', TextPartEdit('0'), 'CSS margin: one, two or four values (top right bottom left). A side can be auto, a % or calc().')
 
 	def value(self):
 		out = super().value()
