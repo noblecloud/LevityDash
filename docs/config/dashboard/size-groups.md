@@ -21,6 +21,8 @@ Write `matchingGroup:` on a label. A label is a `text` item, the `title` of a re
 
 `shared:` on a panel gives its setting to every reading inside, so write the group once per panel.
 
+A bare title on an item, such as `title: Dewpoint`, keeps the group from `shared:`. The text becomes the title and the group stays.
+
 ## Where a group lives
 
 The text before the dot, or after the `@`, says which panel owns the group. The key after the dot is yours. Labels with the same owner and the same key are one group.
@@ -47,7 +49,7 @@ A group is made the first time a label asks for it, so the first `matchAll` sett
 
 ## Mistakes
 
-- A name that no panel has. LevityDash does not report it. Each label gets a group of its own, and the sizes do not match. Check the spelling of the `name:`.
+- A name that no panel has. LevityDash logs a warning, and the label gets a group of its own, so the sizes do not match. The Studio size groups tab flags it too. Check the spelling of the `name:`.
 - A fixed font size on a label in the group. The group does not resize it.
 - A grid, a flex stack or a stack of `realtime.text` items that has no group. A layout does not match text sizes. Add a group.
 - A title and a value in one group. They have boxes of different height, so they land in different tiers and never match. Give each role its own key.

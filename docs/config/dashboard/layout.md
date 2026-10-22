@@ -122,4 +122,4 @@ Example dashboards: `docs/design-references/grid-areas.levity` (named areas), th
 
 ## In the Studio
 
-`studio.py` (the Studio builder) edits these keys. A stack, a `grid`, and each of their items has a **Layout** section on the Item tab with a `flex` or `grid` popover. The popover shows the container options when the item is a stack or grid and the item options when its parent is one; an option left on its default is not written, and a stack with nothing set stays a plain stack. The popovers also edit `margin` (flex and grid items), `areas` (one row per line) and `area`.
+`studio.py` (the Studio builder) edits these keys. A stack, a `grid`, and each of their items has a **Layout** section on the Item tab with a `flex` or `grid` popover. The popover shows the container options when the item is a stack or grid and the item options when its parent is one; an option left on its default is not written, and a stack with nothing set stays a plain stack. The popovers also edit `margin` (flex and grid items), `areas` (one row per line) and `area`. The [Studio page](/config/dashboard/studio.md) covers the rest of the editor.

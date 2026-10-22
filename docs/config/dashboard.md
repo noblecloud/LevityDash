@@ -44,6 +44,7 @@ These pages cover the properties that work on a whole dashboard:
 - [Switch](/config/dashboard/switch.md): shows one of several items.
 - [Split](/config/dashboard/split.md): two items either side of a divider that you can drag.
 - [Flex and grid](/config/dashboard/layout.md): CSS flexbox and grid layout for stacks.
+- [Studio](/config/dashboard/studio.md): the editor for dashboard files, with its item tree, groups and zoom.
 
 ## Shared Properties
 
