@@ -106,6 +106,7 @@ def test_parse_interns_identical_text():
 	'temperature',                      # one atom is not a key
 	f'{TEMP} + 3h',                     # a duration outside a window
 	f'today',
+	f'yesterday',
 	f'avg({TEMP})',
 	f'avg(1, 24h)',
 	f'at({TEMP}, today)',
@@ -138,6 +139,19 @@ def test_today_window_covers_the_local_day():
 	assert Expression.parse(f'min({TEMP}, today)').evaluate(resolver, NOW) == Fahrenheit(60)
 	_, start, end = resolver.seriesRequests[0]
 	assert (start.hour, end.hour, (end - start)) == (0, 0, timedelta(days=1))
+
+
+def test_yesterday_window_covers_the_day_before():
+	resolver = FakeResolver(series={TEMP: hourly(*[Fahrenheit(60 + i) for i in range(24)], start=datetime(2026, 10, 3, 0, 0, tzinfo=NOW.tzinfo))})
+	assert Expression.parse(f'max({TEMP}, yesterday)').evaluate(resolver, NOW) == Fahrenheit(83)
+	assert Expression.parse(f'min({TEMP}, yesterday)').evaluate(resolver, NOW) == Fahrenheit(60)
+	_, start, end = resolver.seriesRequests[0]
+	assert (start.day, start.hour, end.day, end.hour) == (3, 0, 4, 0)
+
+
+def test_yesterday_is_not_today():
+	assert Expression.parse(f'max({TEMP}, yesterday)').key != Expression.parse(f'max({TEMP}, today)').key
+	assert str(next(iter(Expression.parse(f'max({TEMP}, yesterday)').series)).window) == 'yesterday'
 
 
 def test_duration_window_covers_the_past():

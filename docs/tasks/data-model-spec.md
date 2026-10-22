@@ -127,7 +127,9 @@ The dashboard already picks displays by shape (`realtime.text` vs `gauge` vs
 | `period` | which **time window** |
 | `resolution` | how **fine-grained** |
 
-`period` is reserved and not part of the first cut (section 12, item 3).
+`period` is built (`lib/plugins/periods.py`): it picks a window a plugin reports
+(`temperature.high` for today's high), and falls back to the matching expression
+(`max(key, today)`). Neal agreed on 2026-10-22.
 
 ⚠️ `where` and `provider` are **not** the same axis, and both are needed at
 once: *"backyard temperature, according to WeatherFlow."* Collapse them and
@@ -488,9 +490,9 @@ Step 3 is the scary one and also the most deferrable.
 1. Shape-discriminator vocabulary: a closed set? Does it map to display types?
 2. Staging for events, lists and non-numeric values: can numeric and enum land
    first without forcing a second migration?
-3. A `period` label for windows that a source does not provide. The
-   expression language already covers `max(key, 3h)`, so this may not be
-   needed. Decide when a panel needs a window the expressions cannot write.
+3. ~~A `period` label.~~ Built (Neal, 2026-10-22). It selects reported
+   windows and falls back to the expression. Reported keys are `.high` and `.low`
+   for `today` with `max` and `min`; every other window is an expression.
 
 Settled and removed from this list: flat versus nested semantics for several
 dimensions (section 5) and the shape of the connection (section 4), on

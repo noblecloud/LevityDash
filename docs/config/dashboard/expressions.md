@@ -124,6 +124,7 @@ A value that picks between two keys. This shows the gust when the gust is more t
 A window is the span of time that a function reads.
 
 - `today` is from midnight to the next midnight, in your time zone. It includes the data that has been recorded and the forecast.
+- `yesterday` is the day before `today`, from midnight to midnight.
 - A duration, such as `24h`, is the last 24 hours. It ends now.
 
 A duration is a number and one of these units: `ms`, `s`, `m` (minutes), `h`, `d`, `w`. Examples: `90s`, `3h`, `7d`.
@@ -136,6 +137,21 @@ A window or an offset can be the second argument of `min`, `max`, `avg`, or `at`
 ### <div class=mono>Keys</div>
 
 Write a key as you write it in `key:`. A key has at least two parts that are joined with a dot. A key can have a source before it (`OpenMeteo:environment.temperature.temperature`) and an identity after it (`indoor.temperature.temperature#bedroom`).
+
+## Periods
+
+A connection can name a window with `period:` instead of an expression. `using:` says what to take from it: `max`, `min` or `avg` (`high`, `low` and `mean` are other names). The default is `max`.
+
+```yaml
+- type: realtime.text
+  key: environment.temperature.temperature
+  period: today
+  using: max
+```
+
+A period is `today`, `yesterday` or a duration such as `3h`. When a loaded plugin reports that window itself, the item reads the plugin's key (today's `max` is `environment.temperature.high`). Otherwise the item reads the matching expression, `max(environment.temperature.temperature, today)`. The file keeps the key and the period as you wrote them.
+
+`period` works with `where:`. It does not work on a key that is already an expression.
 
 ## Units in an expression
 
