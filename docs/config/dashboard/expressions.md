@@ -114,6 +114,7 @@ A value that picks between two keys. This shows the gust when the gust is more t
 | `max(key, window)` | The highest value of the key in the window. |
 | `avg(key, window)` | The average value of the key in the window. |
 | `at(key, offset)` | The value of the key at a time, counted from now. `-3h` is three hours ago. `3h` is three hours ahead. |
+| `at(expression, offset)` | A calculation as it was, or will be, at that time: every key in it is read at the offset. `at(indoor.temperature.temperature - environment.temperature.temperature, -3h)` is the gap between inside and outside three hours ago. |
 | `min(a, b, ...)` | The lowest of two or more values. |
 | `max(a, b, ...)` | The highest of two or more values. |
 | `avg(a, b, ...)` | The average of two or more values, such as the current values of several keys. `mean` is another name for `avg`. |

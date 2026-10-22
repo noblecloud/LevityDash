@@ -440,3 +440,30 @@ def test_a_resolver_without_places_is_an_error_where_it_is_asked():
 def test_place_forms_that_are_rejected(text):
 	with pytest.raises(ExpressionError):
 		Expression.parse(text)
+
+
+# -- at() of a calculation ------------------------------------------------------------
+
+def _hourlyTemperatures(*values):
+	return [(t, Fahrenheit(v)) for t, v in hourly(*values)]
+
+
+def test_at_reads_a_whole_expression_as_it_was_then():
+	resolver = FakeResolver(
+		current={TEMP: Fahrenheit(59), DEW: Fahrenheit(40)},
+		series={TEMP: _hourlyTemperatures(*[50 + i for i in range(10)]), DEW: _hourlyTemperatures(*[40] * 10)},
+	)
+	now = datetime(2026, 10, 4, 9, 0, tzinfo=timezone(timedelta(hours=-5)))
+	assert float(Expression.parse(f'{TEMP} - {DEW}').evaluate(resolver, now)) == pytest.approx(19)
+	assert float(Expression.parse(f'at({TEMP} - {DEW}, -3h)').evaluate(resolver, now)) == pytest.approx(16)
+
+
+def test_at_of_an_expression_reports_each_key_as_a_point():
+	expression = Expression.parse(f'at({TEMP} - {DEW}, -3h)')
+	assert {(p.key, p.offset) for p in expression.points} == {(CategoryItem(TEMP), timedelta(hours=-3)), (CategoryItem(DEW), timedelta(hours=-3))}
+	assert not expression.keys
+
+
+def test_at_of_an_expression_still_needs_an_offset():
+	with pytest.raises(ExpressionError):
+		Expression.parse(f'at({TEMP} - {DEW})')

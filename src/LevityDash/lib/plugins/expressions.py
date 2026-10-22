@@ -459,7 +459,7 @@ def _check(tree: ast.AST, placeholders: Mapping[str, Any], text: str) -> None:
 	# duration, as a factor or divisor: a rate times a duration is an amount.
 	allowed = set()
 	for node in ast.walk(tree):
-		if isinstance(node, ast.Call) and len(node.args) == 2 and _isWindowCall(node, placeholders):
+		if isinstance(node, ast.Call) and len(node.args) == 2 and (_isWindowCall(node, placeholders) or _isAtExpression(node, placeholders)):
 			allowed.update(id(n) for n in ast.walk(node.args[1]))
 		elif isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Mult, ast.Div)):
 			allowed.update(id(side) for side in (node.left, node.right) if _isDuration(side, placeholders))
@@ -525,19 +525,26 @@ def _windowOf(node: ast.AST, placeholders: Mapping[str, Any]) -> Optional[Window
 	return None
 
 
+def _isAtExpression(node: ast.AST, placeholders: Mapping[str, Any]) -> bool:
+	"""``at(expression, offset)``: a calculation worked out as it would have been at that time."""
+	return (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'at'
+	        and len(node.args) == 2 and not _isKey(node.args[0], placeholders))
+
+
 def _isWindowCall(node: ast.Call, placeholders: Mapping[str, Any]) -> bool:
 	"""``min/max/avg(key, window)`` or ``at(key, offset)``."""
 	name = node.func.id
 	if name == 'at':
-		return True
+		# `at(key, offset)`; any other first argument is a whole expression read at that time (`_atTime`)
+		return bool(node.args) and _isKey(node.args[0], placeholders)
 	return name in _WINDOW_FUNCTIONS and len(node.args) == 2 and _windowOf(node.args[1], placeholders) is not None
 
 
 def _checkCall(name: str, args: Sequence[ast.AST], placeholders: Mapping[str, Any], text: str) -> None:
 	match name:
 		case 'at':
-			if len(args) != 2 or not _isKey(args[0], placeholders) or _durationOf(args[1], placeholders) is None:
-				raise ExpressionError(f'{text!r}: at() takes a key and an offset, like at(a.b, -3h)')
+			if len(args) != 2 or _durationOf(args[1], placeholders) is None:
+				raise ExpressionError(f'{text!r}: at() takes a key or an expression and an offset, like at(a.b, -3h)')
 		case 'abs':
 			if len(args) != 1:
 				raise ExpressionError(f'{text!r}: abs() takes one argument')
@@ -566,7 +573,14 @@ def _inputs(tree: ast.AST, placeholders: Mapping[str, Any], text: str):
 	keys, series, points, places = set(), set(), set(), set()
 	windowed = set()
 	for node in ast.walk(tree):
-		if isinstance(node, ast.Call) and _isWindowCall(node, placeholders):
+		if _isAtExpression(node, placeholders):
+			# Every key of the expression is read at the offset, so each is a point and none is a plain input.
+			offset = _durationOf(node.args[1], placeholders)
+			for inner in ast.walk(node.args[0]):
+				if _isKey(inner, placeholders):
+					points.add(PointInput(placeholders[inner.id], offset))
+					windowed.add(id(inner))
+		elif isinstance(node, ast.Call) and _isWindowCall(node, placeholders):
 			key = placeholders[node.args[0].id]
 			windowed.add(id(node.args[0]))
 			if node.func.id == 'at':
@@ -625,9 +639,11 @@ def _isBareNumber(value: Any) -> bool:
 
 
 class _Evaluator:
-	__slots__ = ('resolver', 'now', 'value', 'placeholders', 'text', 'counted')
+	__slots__ = ('resolver', 'now', 'value', 'placeholders', 'text', 'counted', 'asOf')
 
-	def __init__(self, resolver: Resolver, now: datetime, value: Any, placeholders: Mapping[str, Any], text: str):
+	def __init__(self, resolver: Resolver, now: datetime, value: Any, placeholders: Mapping[str, Any], text: str, asOf: Optional[datetime] = None):
+		#: When the keys are read, for an expression inside ``at``; None reads them as they are now.
+		self.asOf = asOf
 		#: Readings at a place that the aggregates used so far.
 		self.counted = 0
 		self.resolver = resolver
@@ -671,6 +687,8 @@ class _Evaluator:
 			# Out of an aggregate a place has to name one device, as `where:` on a panel does.
 			members = self._members(key, DEFAULT_STALE)
 			return members[0] if len(members) == 1 else Missing
+		if self.asOf is not None:
+			return self._present(self.resolver.at(key, self.asOf))
 		return self._present(self.resolver.current(key))
 
 	def _members(self, placed: PlacedKey, stale: timedelta) -> list:
@@ -826,6 +844,12 @@ class _Evaluator:
 	def _call(self, node: ast.Call) -> Any:
 		name = node.func.id
 		args = node.args
+		if _isAtExpression(node, self.placeholders):
+			when = self.now + _durationOf(args[1], self.placeholders)
+			inner = _Evaluator(self.resolver, when, self.value, self.placeholders, self.text, asOf=when)
+			result = inner.eval(args[0])
+			self.counted += inner.counted
+			return result
 		if _isWindowCall(node, self.placeholders):
 			key = self.placeholders[args[0].id]
 			if name == 'at':
