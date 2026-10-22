@@ -62,6 +62,7 @@ def _restore_process_globals():
 	feed = sys.modules.get('LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.feed')
 	saved = valuesource._standIn if valuesource else None
 	savedFeed = feed._standIn if feed else None
+	leasesBefore = _computed_leases()
 	yield
 	valuesource = sys.modules.get('LevityDash.lib.valuesource')
 	if valuesource is not None:
@@ -72,6 +73,18 @@ def _restore_process_globals():
 	computed = sys.modules.get('LevityDash.lib.plugins.computed')
 	if computed is not None and computed._engine is not None:
 		_clear_unused_computed(computed, computed._engine)
+	leaked = {key: n for key, n in _computed_leases().items() if n > leasesBefore.get(key, 0)}
+	# A lease left behind keeps its value alive for every later test that reads the same expression. Panels give
+	# theirs back in ``delete()``; taking one out of the scene does not.
+	assert not leaked, f'this test left computed-value leases held: {leaked}; call .delete() on the panel'
+
+
+def _computed_leases() -> dict:
+	"""``{computed key: users}`` of the process's engine, empty when none was created."""
+	import sys
+	computed = sys.modules.get('LevityDash.lib.plugins.computed')
+	engine = computed._engine if computed is not None else None
+	return {str(key): entry.count for key, entry in engine._entries.items()} if engine is not None else {}
 
 
 def _clear_unused_computed(computed, engine) -> None:
