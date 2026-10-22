@@ -12,6 +12,7 @@ from PySide6.QtCore import QSignalBlocker
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit
 
 from LevityDash.devtools import _studio_editors as editors
+from LevityDash.lib.layout.grid import parse_template_areas
 
 Editor = editors.Editor
 
@@ -89,6 +90,47 @@ class TextPartEdit(Editor):
 
 	def value(self):
 		return self.line.text().strip() or None
+
+
+class AreaPickEdit(Editor):
+	"""`area`: a name from the parent grid's `areas`, picked from a list. A name that is not there can still be typed."""
+
+	def __init__(self):
+		super().__init__()
+		box = QHBoxLayout(self)
+		box.setContentsMargins(0, 0, 0, 0)
+		self.combo = QComboBox()
+		self.combo.setEditable(True)
+		self.combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+		self.combo.lineEdit().setPlaceholderText('a name from areas')
+		self.combo.activated.connect(self._emit)
+		self.combo.lineEdit().editingFinished.connect(self._emit)
+		box.addWidget(self.combo, 1)
+
+	def setNames(self, names):
+		with QSignalBlocker(self.combo):
+			text = self.combo.currentText()
+			self.combo.clear()
+			self.combo.addItems(list(names))
+			self.combo.setCurrentText(text)
+
+	def setValue(self, value):
+		with QSignalBlocker(self.combo):
+			self.combo.setCurrentText('' if value is None else str(value))
+
+	def value(self):
+		return self.combo.currentText().strip() or None
+
+
+def areaNames(areas) -> list:
+	"""The names a `grid.areas` picture holds, in reading order; empty when it is missing or does not parse."""
+	if not areas:
+		return []
+	try:
+		found = parse_template_areas(areas)
+	except ValueError:
+		return []
+	return [name for name, _ in sorted(found.items(), key=lambda kv: (kv[1][1], kv[1][0]))]
 
 
 class AreasEdit(Editor):
@@ -253,7 +295,7 @@ class GridForm(LayoutForm):
 		self.part('justify-items', 'justify items', choice(ITEMS[1:], 'stretch'), 'How each item sits in its cell across.')
 		self.part('align-items', 'align items', choice(ITEMS[1:], 'stretch'), 'How each item sits in its cell down.')
 		self.head('area', 'This item in a grid')
-		self.part('area', 'area', TextPartEdit('a name from areas'), 'grid-area: which named area it fills. Replaces column, row and the spans.')
+		self.part('area', 'area', AreaPickEdit(), 'grid-area: which named area it fills. Replaces column, row and the spans.')
 		self.part('column', 'column', editors.NumberEdit(autoText='auto', lo=1, hi=12, integer=True), 'Which column it starts in, counted from 1.')
 		self.part('row', 'row', editors.NumberEdit(autoText='auto', lo=1, hi=12, integer=True), 'Which row it starts in, counted from 1.')
 		self.part('column-span', 'column span', editors.NumberEdit(autoText='1', lo=1, hi=12, integer=True))
@@ -294,3 +336,7 @@ class FlexEdit(_LayoutPopover):
 
 class GridEdit(_LayoutPopover):
 	formClass, noun, title = GridForm, 'Grid', 'Grid'
+
+	def setAreaNames(self, names):
+		"""The names the item's parent grid declares, for the area picker."""
+		self.form.parts['area'].setNames(names)

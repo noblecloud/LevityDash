@@ -1,0 +1,190 @@
+# Pocket: the day on a phone, portrait. A 1170 x 2532 screen (19.5:9).
+#
+# One column of bands, placed by a grid with named areas, so the picture of the layout is the layout. The margins on
+# each band are `calc()` sums of percent lengths: the hour table is inset by the same share on both sides, and the
+# range bar is pulled in by a margin that is a fraction of the column. Nothing is sized in pixels, so the same file
+# fits a 1080 x 2340 phone or a tablet in portrait.
+#
+# From the top: the temperature laid over its own day with its context row, a strip that turns to what needs a look
+# (a stack of `when:` items: a strip that is off gives up its height and the bands below stay put because the grid row
+# is `auto` sized by what is left), the next four hours, the next three days, and two rings.
+#
+# Text sizes come from the dashboard-wide size groups global.title, global.value and global.head, set by the
+# presets. Layers: the temperature over its day.
+#
+# Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/pocket.levity
+#           --scenario week-ahead --size 1170x2532 --freeze-time 2026-10-07T15:40:00
+#
+# Hex colours are quoted. Unquoted, YAML reads '#' as a comment.
+theme:
+  extends: default
+  colors:
+    background: '#050505'
+    muted: '#b0b0b8'
+    faint: '#80808a'
+    rule: '#2c2c33'
+    accent: '#ff9124'
+    good: '#14e3c0'
+    warn: '#ffd400'
+    bad: '#ff3048'
+    info: '#1a8cff'
+  fonts:
+    display: Nunito
+    mono: Roboto Mono
+    body: Roboto
+vars:
+  t: environment.temperature.temperature
+items:
+- type: grid
+  name: board
+  geometry: {x: 3%, y: 1.6%, width: 94%, height: 96.8%}
+  spacing: 0
+  padding: 0
+  shared:
+    display:
+      font: Roboto Mono
+  grid:
+    columns: [1fr]
+    rows: [30fr, 1.5fr, 9fr, 1.5fr, 15fr, 1.5fr, 18fr, 1.5fr, 14fr]
+    areas:
+    - now
+    - .
+    - watch
+    - .
+    - hours
+    - .
+    - days
+    - .
+    - rings
+  items:
+
+  # ================= NOW ===================================================
+  - type: group
+    name: now
+    grid: {area: now}
+    items:
+    - {type: text, text: Outside, font: $display, color: $muted, alignment: CenterLeft, geometry: {x: 1%, y: 0%, width: 40%, height: 6%}}
+    - preset: metric-tile
+      geometry: {x: 0%, y: 5%, width: 100%, height: 58%}
+      props:
+        key: $t
+        hours: 24
+        line: {type: plot, gradient: TemperatureGradient, weight: 1.4}
+        hero_box: {x: 0%, y: 2%, width: 52%, height: 70%}
+        graph_box: {x: 0%, y: 14%, width: 100%, height: 74%}
+        list_box: {x: 0%, y: 78%, width: 100%, height: 22%}
+        items:
+        - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels}, display: {precision: 0, valueLabel: {color: $accent}}}
+        - {type: realtime.text, key: environment.temperature.dewpoint, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
+        - {type: realtime.text, key: environment.humidity.humidity, title: {text: Humid}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Wind}, display: {precision: 0}}
+    - preset: range-bar
+      geometry: {x: 0%, y: 66%, width: 100%, height: 34%}
+      props:
+        key: $t
+        min: 30
+        max: 90
+        interval: 10
+        low: environment.temperature.low
+        high: environment.temperature.high
+
+  # ================= THE STRIP =============================================
+  # Four takeovers, ranked. The first whose `when:` holds shows; the one with no `when:` is the quiet fallback.
+  - type: switch
+    name: watch
+    grid: {area: watch}
+    hold: 8s
+    fade: 0.4s
+    items:
+    - preset: alert-strip
+      name: frost
+      when: 'at(environment.temperature.low, 5d) < 36°F'
+      props:
+        headline: Frost
+        color: $info
+        key: at(environment.temperature.low, 5d)
+        title: Monday night
+        precision: 0
+        headline_box: {x: 0%, y: 0%, width: 28%, height: 100%}
+        hero_box: {x: 30%, y: 0%, width: 26%, height: 100%}
+        list_box: {x: 58%, y: 4%, width: 42%, height: 92%}
+        items:
+        - {type: realtime.text, key: 'at(environment.temperature.low, 4d)', title: {text: Sun}, display: {precision: 0}}
+        - {type: realtime.text, key: 'at(environment.temperature.low, 6d)', title: {text: Tue}, display: {precision: 0, valueLabel: {color: $info}}}
+    - preset: alert-strip
+      name: rain
+      when: 'at(environment.precipitation.probability, 36h) > 60%'
+      props:
+        headline: Rain
+        color: $info
+        key: at(environment.precipitation.probability, 36h)
+        title: Friday chance
+        precision: 0
+        headline_box: {x: 0%, y: 0%, width: 28%, height: 100%}
+        hero_box: {x: 30%, y: 0%, width: 26%, height: 100%}
+        list_box: {x: 58%, y: 4%, width: 42%, height: 92%}
+        items:
+        - {type: realtime.text, key: 'at(environment.precipitation.daily, 2d)', title: {text: Fri}, display: {precision: 2}}
+        - {type: realtime.text, key: 'at(environment.precipitation.daily, 3d)', title: {text: Sat}, display: {precision: 2, valueLabel: {color: $info}}}
+    - preset: alert-strip
+      name: fine
+      props:
+        headline: Fine
+        color: $good
+        key: at(environment.temperature.high, 1d)
+        title: High tomorrow
+        precision: 0
+        headline_box: {x: 0%, y: 0%, width: 28%, height: 100%}
+        hero_box: {x: 30%, y: 0%, width: 26%, height: 100%}
+        list_box: {x: 58%, y: 4%, width: 42%, height: 92%}
+        items:
+        - {type: realtime.text, key: environment.light.uvi, title: {text: UV}, display: {precision: 1, valueLabel: {color: $warn}}}
+        - {type: realtime.text, key: environment.clouds.cover.cover, title: {text: Cloud}, display: {precision: 0}}
+
+  # ================= THE NEXT FOUR HOURS ===================================
+  # Inset by calc() so the table has the same breathing room as the strip's headline.
+  - type: stack
+    name: hours
+    grid: {area: hours, margin: [0, calc(0.5% + 1mm), 0, calc(0.5% + 1mm)]}
+    direction: Horizontal
+    defaultType: value-stack
+    spacing: 1mm
+    dividers: {enabled: true, opacity: 40%, size: 90%}
+    shared:
+      display:
+        font: Roboto Mono
+    items:
+    - {preset: hour-column, props: {label: '+1h', offset: 1h}}
+    - {preset: hour-column, props: {label: '+2h', offset: 2h}}
+    - {preset: hour-column, props: {label: '+3h', offset: 3h}}
+    - {preset: hour-column, props: {label: '+4h', offset: 4h}}
+
+  # ================= THE NEXT THREE DAYS ====================================
+  - type: stack
+    name: days
+    grid: {area: days}
+    direction: Horizontal
+    defaultType: value-stack
+    spacing: 1mm
+    dividers: {enabled: true, opacity: 40%, size: 90%}
+    shared:
+      display:
+        font: Roboto Mono
+    items:
+    - {preset: day-column, props: {label: Thu, offset: 1d}}
+    - {preset: day-column, props: {label: Fri, offset: 2d}}
+    - {preset: day-column, props: {label: Sat, offset: 3d}}
+
+  # ================= TWO RINGS =============================================
+  - type: stack
+    name: rings
+    grid: {area: rings}
+    direction: Horizontal
+    spacing: 2mm
+    items:
+    - preset: ring-reading
+      props: {key: environment.clouds.cover.cover, title: Cloud, color: $muted, text_color: $muted, weight: 9%, radius: 96%}
+    - preset: ring-reading
+      props: {key: environment.precipitation.probability, title: Rain chance, color: $info, text_color: $info, weight: 9%, radius: 96%}
+    - preset: ring-reading
+      props: {key: environment.humidity.humidity, title: Humidity, color: $good, text_color: $good, weight: 9%, radius: 96%}
