@@ -165,6 +165,7 @@ def test_period_opens_the_matching_expression(dashboard):
 	try:
 		assert panel._keySource.text == f'max({TEMP}, yesterday)'
 	finally:
+		panel.delete()
 		_drop(sandbox)
 
 
@@ -175,6 +176,7 @@ def test_period_saves_back_with_the_key_as_written(dashboard):
 		assert state['key'] == TEMP
 		assert (state['period'], state['using']) == ('3h', 'avg')
 	finally:
+		panel.delete()
 		_drop(sandbox)
 
 
@@ -186,4 +188,5 @@ def test_period_and_where_together(dashboard, house):
 		assert state['key'] == 'indoor.temperature.temperature'
 		assert state['where'] == 'home.upstairs.bedroom'
 	finally:
+		panel.delete()
 		_drop(sandbox)
