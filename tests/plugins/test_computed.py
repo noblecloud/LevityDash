@@ -8,7 +8,7 @@ backend and frontend (see the value-sources brief).
 import logging
 
 import pytest
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QCoreApplication, QObject, Signal
 
 from LevityDash.lib.plugins import computed
 from LevityDash.lib.plugins.categories import CategoryItem
@@ -41,7 +41,10 @@ def engine(monkeypatch):
 	engine = ComputedEngine(StubDispatcher())
 	monkeypatch.setattr(computed, '_engine', engine)
 	monkeypatch.setattr(computed, '_remote', lambda: None)
-	return engine
+	yield engine
+	# A worker still computing would emit on an engine Python is about to free.
+	engine._executor.shutdown(wait=True)
+	QCoreApplication.sendPostedEvents(engine)
 
 
 def test_register_and_release_are_refcounted(engine):

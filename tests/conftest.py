@@ -47,6 +47,58 @@ def wait_until(app, condition, timeout: float = 5.0, message: str = '') -> None:
 		time.sleep(0.005)
 
 
+@pytest.fixture(autouse=True)
+def _restore_process_globals():
+	"""Undo what a test leaves in process-wide state, whatever order the tests run in.
+
+	- ``valuesource._standIn``: ``StudioGauge`` installs one that answers every key from made-up data. Left
+	  installed, a later test's key becomes a ``Constant`` and never reaches the dispatcher.
+	- ``polar.feed._standIn``: the polar Studio's equivalent.
+	- Computed values nobody holds any more: the engine keeps the last value of a released expression, so the next
+	  test using the same expression would start from the previous test's reading.
+	"""
+	import sys
+	valuesource = sys.modules.get('LevityDash.lib.valuesource')
+	feed = sys.modules.get('LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.feed')
+	saved = valuesource._standIn if valuesource else None
+	savedFeed = feed._standIn if feed else None
+	leasesBefore = _computed_leases()
+	yield
+	valuesource = sys.modules.get('LevityDash.lib.valuesource')
+	if valuesource is not None:
+		valuesource.installStandIn(saved)
+	feed = sys.modules.get('LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.feed')
+	if feed is not None:
+		feed.installStandIn(savedFeed)
+	computed = sys.modules.get('LevityDash.lib.plugins.computed')
+	if computed is not None and computed._engine is not None:
+		_clear_unused_computed(computed, computed._engine)
+	leaked = {key: n for key, n in _computed_leases().items() if n > leasesBefore.get(key, 0)}
+	# A lease left behind keeps its value alive for every later test that reads the same expression. Panels give
+	# theirs back in ``delete()``; taking one out of the scene does not.
+	assert not leaked, f'this test left computed-value leases held: {leaked}; call .delete() on the panel'
+
+
+def _computed_leases() -> dict:
+	"""``{computed key: users}`` of the process's engine, empty when none was created."""
+	import sys
+	computed = sys.modules.get('LevityDash.lib.plugins.computed')
+	engine = computed._engine if computed is not None else None
+	return {str(key): entry.count for key, entry in engine._entries.items()} if engine is not None else {}
+
+
+def _clear_unused_computed(computed, engine) -> None:
+	"""Empty the value of every computed key no panel holds a lease on."""
+	for key in list(engine.source.keys()):
+		if key in engine:
+			continue
+		container = engine.source.getOrCreate(key)
+		if container.value is None or container.value.rawValue is None:
+			continue
+		container._update(None, timestamp=container.value.timestamp, metadata=dict(computed._METADATA), flags=computed._FLAGS)
+		engine.source.publisher.publish({key})
+
+
 # A fixed, unremarkable instant used to make time-dependent widgets (clock,
 # date) deterministic across runs. 2025-06-18 is a Wednesday at 14:30.
 import datetime as _dt
