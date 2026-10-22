@@ -81,24 +81,27 @@ Missing = _MissingType()
 class Window:
 	"""A span of time that a window function reads.
 
-	``span=None`` is ``today``: local midnight to the next local midnight,
-	so it covers observed and forecast points for the day. A duration covers
-	the past, ending now: ``24h`` is the last 24 hours.
+	``span=None`` is a calendar day: ``today`` (``day=0``) is local midnight to
+	the next local midnight, so it covers observed and forecast points for the
+	day; ``yesterday`` (``day=-1``) is the day before. A duration covers the
+	past, ending now: ``24h`` is the last 24 hours.
 	"""
 	span: Optional[timedelta] = None
+	day: int = 0
 
 	def bounds(self, now: datetime) -> Tuple[datetime, datetime]:
 		if self.span is None:
-			start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-			# Overshoot by a few hours and snap back, so the end is the next
-			# calendar midnight rather than exactly 24 hours later.
+			# Overshoot by a few hours and snap back, so each edge is a calendar
+			# midnight rather than exactly 24 hours from the last one.
+			midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+			start = (midnight + timedelta(days=self.day, hours=3)).replace(hour=0)
 			end = (start + timedelta(days=1, hours=3)).replace(hour=0)
 			return start, end
 		return now - abs(self.span), now
 
 	def __str__(self):
 		if self.span is None:
-			return 'today'
+			return _DAY_NAMES[self.day]
 		return _formatDuration(self.span)
 
 
@@ -186,8 +189,12 @@ _DURATION_PREFIX = '__duration'
 
 #: Names an expression may use besides keys.
 _TODAY = 'today'
+_YESTERDAY = 'yesterday'
 _VALUE = 'value'
-_RESERVED_NAMES = frozenset({_TODAY, _VALUE})
+#: The calendar-day windows: name to days from today.
+_DAYS = {_TODAY: 0, _YESTERDAY: -1}
+_DAY_NAMES = {day: name for name, day in _DAYS.items()}
+_RESERVED_NAMES = frozenset({_TODAY, _YESTERDAY, _VALUE})
 
 _WINDOW_FUNCTIONS = frozenset({'min', 'max', 'avg'})
 #: Functions that can take keys at a place, and the one that counts them.
@@ -493,9 +500,9 @@ def _check(tree: ast.AST, placeholders: Mapping[str, Any], text: str) -> None:
 				allowed.update(id(n) for n in ast.walk(keyword.value))
 	for node in ast.walk(tree):
 		if isinstance(node, ast.Name) and id(node) not in allowed:
-			if node.id == _TODAY or isinstance(placeholders.get(node.id), timedelta):
+			if node.id in _DAYS or isinstance(placeholders.get(node.id), timedelta):
 				raise ExpressionError(
-					f'{text!r}: a duration or today can only be the second argument of min, max, avg or at; '
+					f'{text!r}: a duration, today or yesterday can only be the second argument of min, max, avg or at; '
 					f'a duration can also multiply or divide a measurement'
 				)
 	for node in ast.walk(tree):
@@ -543,8 +550,8 @@ def _durationOf(node: ast.AST, placeholders: Mapping[str, Any]) -> Optional[time
 
 
 def _windowOf(node: ast.AST, placeholders: Mapping[str, Any]) -> Optional[Window]:
-	if isinstance(node, ast.Name) and node.id == _TODAY:
-		return Window()
+	if isinstance(node, ast.Name) and node.id in _DAYS:
+		return Window(day=_DAYS[node.id])
 	if (span := _durationOf(node, placeholders)) is not None:
 		return Window(span)
 	return None

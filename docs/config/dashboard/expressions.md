@@ -158,6 +158,7 @@ A source that does not have the key gives no value, so the result has no value. 
 A window is the span of time that a function reads.
 
 - `today` is from midnight to the next midnight, in your time zone. It includes the data that has been recorded and the forecast.
+- `yesterday` is the day before `today`, from midnight to midnight.
 - A duration, such as `24h`, is the last 24 hours. It ends now.
 
 A duration is a number and one of these units: `ms`, `s`, `m` (minutes), `h`, `d`, `w`. Examples: `90s`, `3h`, `7d`.
@@ -190,6 +191,21 @@ A temperature reading does not multiply or divide. `20°C * 2` is not `40°C`, s
 Two temperature readings subtract to a **change**: `outdoor.temperature - indoor.temperature` is a number of degrees, not a temperature. A change converts by a factor (10 °C is 18 °F). A reading plus or minus a change is a reading, so `temperature - 5°F` takes 5 degrees off, in any unit. Two readings do not add (`20°C + 10°C` is not a temperature), but `avg(a, b)` of readings works.
 
 Power times time is energy (`power.watts * 3h` in `kWh`), energy over time is power, and a length times a length is an area. Irradiance is power per area: `irradiance * 24m²` is a power, and `* 3h` more makes an energy. An answer comes in SI units (`J`, `W`); `to(…, kWh)` gives it in the unit you want.
+
+## Periods
+
+A connection can name a window with `period:` instead of an expression. `using:` says what to take from it: `max`, `min` or `avg` (`high`, `low` and `mean` are other names). The default is `max`.
+
+```yaml
+- type: realtime.text
+  key: environment.temperature.temperature
+  period: today
+  using: max
+```
+
+A period is `today`, `yesterday` or a duration such as `3h`. When a loaded plugin reports that window itself, the item reads the plugin's key (today's `max` is `environment.temperature.high`). Otherwise the item reads the matching expression, `max(environment.temperature.temperature, today)`. The file keeps the key and the period as you wrote them.
+
+`period` works with `where:`. It does not work on a key that is already an expression.
 
 ## Units in an expression
 

@@ -96,7 +96,7 @@ class Connection(Stateful, tag=...):
 	def key(self) -> CategoryItem:
 		# A key at a `where` is scoped to a device while it runs; the file keeps
 		# the key as written.
-		if getattr(self.owner, '_where', None) and isinstance(text := getattr(self.owner, '_keyText', None), str):
+		if (getattr(self.owner, '_where', None) or getattr(self.owner, '_period', None)) and isinstance(text := getattr(self.owner, '_keyText', None), str):
 			return CategoryItem(text)
 		return getattr(self.owner, '_key', None)
 
@@ -111,7 +111,10 @@ class Connection(Stateful, tag=...):
 
 	@key.encode
 	def key(self, value) -> str:
-		# Save what the file said: the expression text, not its computed key.
+		# Save what the file said: the expression text, not its computed key; and
+		# under a `period:`, the key the period was written on.
+		if getattr(self, 'owner', None) is not None and getattr(self.owner, '_period', None) and isinstance(written := getattr(self.owner, '_keyText', None), str):
+			return written
 		if (source := getattr(self.owner, '_keySource', None)) is not None:
 			if (text := getattr(source, 'text', None)) is not None:
 				return text
@@ -128,6 +131,22 @@ class Connection(Stateful, tag=...):
 		except ValueError as e:
 			log.warning(f'Realtime panel where: {e}; ignoring it')
 			self.owner._where = None
+
+	@StateProperty(key='period', sortOrder=3, default=None)
+	def period(self) -> str | None:
+		return getattr(self.owner, '_period', None)
+
+	@period.setter
+	def period(self, value):
+		self.owner._period = None if value is None else str(value)
+
+	@StateProperty(key='using', sortOrder=4, default=None)
+	def using(self) -> str | None:
+		return getattr(self.owner, '_using', None)
+
+	@using.setter
+	def using(self, value):
+		self.owner._using = None if value is None else str(value)
 
 	@StateProperty(key='source', sortOrder=1, default=AnySource)
 	def source(self) -> Plugin | SomePlugin:
@@ -242,6 +261,8 @@ class Realtime(Panel, tag='realtime'):
 		flattenConnection(kwargs)
 		if (placed := placeConnection(kwargs, LevityDashboard.plugins)) is not None:
 			self.rememberPlace(*placed)
+		if (timed := placePeriod(kwargs, LevityDashboard.plugins, placed[1] if placed else None)) is not None:
+			self.rememberPeriod(*timed)
 		super(Realtime, self)._init_args_(*args, **kwargs)
 
 	def __repr__(self):
@@ -344,6 +365,16 @@ class Realtime(Panel, tag='realtime'):
 	def rememberPlace(self, where: str, written):
 		"""Keep `where:` and the key as the file wrote them (see `placeConnection`)."""
 		self._where, self._keyText = where, written
+
+	#: `period:` and `using:` as written (see `placePeriod`).
+	_period = None
+	_using = None
+
+	def rememberPeriod(self, period: str, using: str | None, written):
+		"""Keep `period:`, `using:` and the key as the file wrote them (see `placePeriod`)."""
+		self._period, self._using = period, using
+		if self._keyText is None:
+			self._keyText = written
 
 	def _openKey(self, value):
 		#! self.display can not be accessed here
@@ -881,6 +912,9 @@ class Realtime(Panel, tag='realtime'):
 		super(Realtime, self).__del__()
 
 
+from LevityDash.lib.plugins.periods import resolvePeriod
+
+
 def _isExpression(text: str) -> bool:
 	try:
 		return Expression.parse(text).plainKey is None
@@ -952,6 +986,35 @@ def placeConnection(item: dict, plugins) -> tuple | None:
 	else:
 		log.warning(f'Realtime panel {key}: where: {where} matches no device; check the place in the plugin config')
 	return where, written
+
+
+def placePeriod(item: dict, plugins, written=None) -> tuple | None:
+	"""Turn `period:` (and `using:`) on a flat raw item into the key it stands for, in place.
+
+	The item's `key` becomes the key a plugin reports that window under, or the
+	matching expression (see `lib/plugins/periods.py`); `period` and `using`
+	leave the item. Returns `(period, using, key as written)` for
+	`Realtime.rememberPeriod`, or None when the item has no `period`. A period
+	that cannot be read is logged and the key stays as written. `written` is the
+	key before `placeConnection` scoped it, when it did.
+	"""
+	if 'period' not in item:
+		item.pop('using', None)
+		return None
+	period, using = item.pop('period'), item.pop('using', None)
+	text = item.get('key')
+	if written is None:
+		written = text
+	if period is None:
+		return None
+	if not isinstance(text, str) or _isExpression(text):
+		log.warning(f'Realtime panel {text!r}: period applies to a plain key, not an expression; ignoring period: {period}')
+		return str(period), using, written
+	try:
+		item['key'] = resolvePeriod(text, period, using, lambda k: any(k in getattr(p, 'schema', ()) for p in plugins))
+	except ValueError as e:
+		log.warning(f'Realtime panel {text}: {e}; ignoring period')
+	return str(period), using, written
 
 
 class RealtimeText(Realtime, tag='realtime.text'):
