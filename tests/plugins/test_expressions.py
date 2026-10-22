@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import WeatherUnits as wu
 from WeatherUnits.length import Millimeter
-from WeatherUnits.temperature import Celsius, Fahrenheit, FahrenheitChange
+from WeatherUnits.temperature import Celsius, Fahrenheit
 
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.expressions import Expression, ExpressionError, Missing, PlacedKey, PointInput, SeriesInput, Window
@@ -234,7 +234,7 @@ def test_unit_literals_compare_in_the_measurements_own_unit():
 	assert ev(f'{wind} >= 30 mph') is True
 	assert ev(f'{wind} < 20 kn') is False     # 20 kn is 23 mph
 	assert ev(f'1 if {TEMP} > 90°F else 2') == 1
-	assert ev(f'{TEMP} - 5°F') == FahrenheitChange(90)
+	assert ev(f'{TEMP} - 5°F') == Fahrenheit(90)  # a literal after - on a reading is a change
 
 
 def test_a_unit_literal_must_match_what_it_is_compared_with():
