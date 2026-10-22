@@ -170,6 +170,7 @@ def main() -> int:
 				log.error(f'{plugin.name}: restart failed: {e!r}')
 		threading.Thread(target=run, name=f'Restart-{plugin.name}', daemon=True).start()
 
+	bridge.healthSource = watch.health
 	patrol = QTimer()
 	patrol.timeout.connect(lambda: sweep(watch, LevityDashboard.plugins, bridge._lastPublish, _now(), log, _restart))
 	patrol.start(_WATCHDOG_INTERVAL * 1000)

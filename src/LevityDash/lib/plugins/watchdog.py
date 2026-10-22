@@ -99,6 +99,10 @@ class PluginWatch:
 			track.since, track.lastPublish = now, None
 		return Judgement(name, state, quietFor, stale, restart, changed)
 
+	def health(self) -> Dict[str, str]:
+		"""`{plugin name: ok|quiet|silent}` for every plugin judged so far, for the status the backend sends frontends."""
+		return {name: track.state for name, track in self._tracks.items()}
+
 	def forget(self, name: str) -> None:
 		self._tracks.pop(name, None)
 
