@@ -77,6 +77,33 @@ def test_malformed_expression_returns_none_without_raising(engine, caplog, text)
 	assert any(repr(text) in record.getMessage() for record in caplog.records)
 
 
+# -- places ----------------------------------------------------------------------
+
+class _Reading:
+	def __init__(self, value, taken):
+		self.value = value
+		self.timestamp = taken
+
+
+class _Container:
+	"""What `getContainer(key).value.value` reads: one reading."""
+
+	def __init__(self, value, taken):
+		self.value = type('Latest', (), {'value': _Reading(value, taken)})()
+
+	def __bool__(self):
+		return True
+
+
+class _PlacedDispatcher(StubDispatcher):
+	def __init__(self, readings):
+		super().__init__()
+		self.readings = readings
+
+	def getContainer(self, key, default=None):
+		return self.readings.get(str(key), default)
+
+
 def _wait(engine, entry, timeout=5.0):
 	import time
 	from PySide6.QtCore import QCoreApplication
@@ -89,7 +116,45 @@ def _wait(engine, entry, timeout=5.0):
 	raise AssertionError('the computation did not finish')
 
 
-class _Reading:
+class _Placed:
+	def __init__(self, **places):
+		self.places = places
+
+
+def test_an_aggregate_over_a_place_publishes_its_value_and_a_member_count(monkeypatch):
+	from datetime import datetime, timedelta
+	from LevityDash import LevityDashboard
+	from WeatherUnits.temperature import Fahrenheit
+	from LevityDash.lib.plugins.expressions import Expression
+
+	fresh, old = datetime.now().astimezone(), datetime.now().astimezone() - timedelta(hours=2)
+	readings = {
+		'indoor.temperature.temperature#bedroom': _Container(Fahrenheit(20), fresh),
+		'indoor.temperature.temperature#office': _Container(Fahrenheit(24), fresh),
+		'indoor.temperature.temperature#attic': _Container(Fahrenheit(99), old),
+	}
+	plugins = [_Placed(bedroom='home.upstairs.bedroom', office='home.upstairs.office', attic='home.upstairs.attic', garage='home.garage')]
+	monkeypatch.setattr(type(LevityDashboard.plugins), '__iter__', lambda self: iter(plugins))
+
+	engine = ComputedEngine(_PlacedDispatcher(readings))
+	expression = Expression.parse('avg(indoor.temperature.temperature, where=home.upstairs)')
+	engine.register(expression)
+	entry = engine._entries[expression.key]
+	_wait(engine, entry)
+
+	# The old attic reading is left out: 2 of the 3 devices there.
+	assert engine.source[expression.key].value.rawValue == Fahrenheit(22)
+	countKey = CategoryItem([*expression.key, computed.COUNT_ATOM])
+	assert engine.source[countKey].value.rawValue == 2
+	# The three upstairs devices are watched, and the garage is not.
+	assert {str(k) for k in engine._memberKeys(entry)} == set(list(readings))
+	assert all(expression.key in engine._dependents[CategoryItem(k)] for k in readings)
+
+	engine.release(expression.key)
+	assert not engine._dependents
+
+
+class _SourceReading:
 	def __init__(self, value):
 		self.value = value
 
@@ -120,7 +185,7 @@ def test_a_key_with_a_source_reads_that_source_not_the_preferred_one():
 
 	class _Box:
 		def __init__(self, degrees):
-			self.value = _Reading(Fahrenheit(degrees))
+			self.value = _SourceReading(Fahrenheit(degrees))
 
 	multi = _Multi('OpenMeteo', OpenMeteo=_Box(70), PirateWeather=_Box(75))
 	engine = ComputedEngine(_SourceDispatcher({'environment.temperature.high': multi}))

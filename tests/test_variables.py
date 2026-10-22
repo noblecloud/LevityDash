@@ -103,3 +103,31 @@ def test_a_degree_sign_added_by_the_app_is_not_an_edit():
 	template = {'range': {'min': '$lo'}}
 	assert retemplate({'range': {'min': '30°'}}, {'range': {'min': 30}}, template) == template
 	assert retemplate({'range': {'min': '31°'}}, {'range': {'min': 30}}, template) == {'range': {'min': '31°'}}
+
+
+def test_shared_variables_apply_to_a_file_with_no_vars():
+	state = {'items': [{'key': '$upstairs', 'padding': '$gap'}]}
+	out = resolveVariables(state, {'upstairs': 'avg(a, where=home.upstairs)', 'gap': 3})
+	assert out['items'] == [{'key': 'avg(a, where=home.upstairs)', 'padding': 3}]
+
+
+def test_the_files_own_vars_win_over_shared_ones():
+	state = {'vars': {'gap': 5}, 'items': [{'padding': '$gap', 'spacing': '$other'}]}
+	out = resolveVariables(state, {'gap': 3, 'other': 1})
+	assert out['items'] == [{'padding': 5, 'spacing': 1}]
+
+
+def test_a_file_variable_may_use_a_shared_one():
+	state = {'vars': {'wide': '$gap * 2'}, 'items': [{'x': '$wide'}]}
+	assert resolveVariables(state, {'gap': 3})['items'] == [{'x': '3 * 2'}]
+
+
+def test_vars_yaml_beside_config(tmp_path):
+	from LevityDash.lib.variables import loadSharedVariables
+	assert loadSharedVariables(tmp_path) == {}
+	(tmp_path / 'vars.yaml').write_text('upstairs: avg(a, where=home.upstairs)\nfloor: $upstairs\n')
+	assert loadSharedVariables(tmp_path) == {'upstairs': 'avg(a, where=home.upstairs)', 'floor': 'avg(a, where=home.upstairs)'}
+	(tmp_path / 'vars.yaml').write_text('vars:\n  gap: 3\n')
+	assert loadSharedVariables(tmp_path / 'vars.yaml') == {'gap': 3}
+	(tmp_path / 'vars.yaml').write_text(': : bad')
+	assert loadSharedVariables(tmp_path) == {}

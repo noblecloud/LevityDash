@@ -11,7 +11,7 @@ from WeatherUnits.length import Millimeter
 from WeatherUnits.temperature import Celsius, Fahrenheit
 
 from LevityDash.lib.plugins.categories import CategoryItem
-from LevityDash.lib.plugins.expressions import Expression, ExpressionError, Missing, PointInput, SeriesInput, Window
+from LevityDash.lib.plugins.expressions import Expression, ExpressionError, Missing, PlacedKey, PointInput, SeriesInput, Window
 
 TEMP = 'environment.temperature.temperature'
 DEW = 'environment.temperature.dewpoint'
@@ -22,10 +22,11 @@ NOW = datetime(2026, 10, 4, 15, 0, tzinfo=timezone(timedelta(hours=-5)))
 
 
 class FakeResolver:
-	def __init__(self, current=None, series=None):
+	def __init__(self, current=None, series=None, members=None):
 		self._current = {CategoryItem(k): v for k, v in (current or {}).items()}
 		self._series = {CategoryItem(k): v for k, v in (series or {}).items()}
 		self.seriesRequests = []
+		self._members = members or {}
 
 	def current(self, key):
 		return self._current.get(key)
@@ -42,6 +43,10 @@ class FakeResolver:
 		if not points:
 			return None
 		return min(points, key=lambda p: abs(p[0] - when))[1]
+
+	def members(self, placed):
+		self.placesAsked = getattr(self, 'placesAsked', []) + [placed]
+		return self._members.get((str(placed.key), placed.place), [])
 
 
 def hourly(*values, start=datetime(2026, 10, 4, 0, 0, tzinfo=timezone(timedelta(hours=-5)))):
@@ -276,3 +281,95 @@ def test_elementwise_min_max():
 	resolver = FakeResolver(current={GUST: 20.0, SPEED: 10.0})
 	assert Expression.parse(f'max({GUST}, {SPEED})').evaluate(resolver, NOW) == 20.0
 	assert Expression.parse(f'min({GUST}, {SPEED}, 5)').evaluate(resolver, NOW) == 5
+
+
+# -- places ---------------------------------------------------------------------
+
+IN = 'indoor.temperature.temperature'
+UP = (IN, 'home.upstairs')
+HOUR = timedelta(hours=1)
+
+
+def _at(*readings):
+	"""Members at a place: (degrees F, minutes old) for each device."""
+	return [(Fahrenheit(degrees), NOW - timedelta(minutes=age)) for degrees, age in readings]
+
+
+def test_where_keyword_and_suffix_are_the_same_expression():
+	keyword = Expression.parse(f'avg({IN}, where=home.upstairs)')
+	suffix = Expression.parse(f'avg({IN}@home.upstairs)')
+	assert keyword == suffix
+	assert keyword.places == {PlacedKey(CategoryItem(IN), 'home.upstairs')}
+	assert keyword.keys == frozenset()
+	assert Expression.parse(f'mean({IN}@home.upstairs)') == suffix
+
+
+def test_where_takes_a_one_word_place():
+	assert Expression.parse(f'max({IN}, where=bedroom)').places == {PlacedKey(CategoryItem(IN), 'bedroom')}
+
+
+@pytest.mark.parametrize('function, expected', [('avg', 21), ('min', 20), ('max', 22), ('count', 3)])
+def test_a_place_aggregates_every_reading_there(function, expected):
+	resolver = FakeResolver(members={UP: _at((20, 1), (22, 5), (21, 30))})
+	result = Expression.parse(f'{function}({IN}@home.upstairs)').evaluate(resolver, NOW)
+	assert result == (expected if function == 'count' else Fahrenheit(expected))
+
+
+def test_a_reading_older_than_an_hour_is_left_out():
+	resolver = FakeResolver(members={UP: _at((20, 1), (30, 61), (22, 59))})
+	expression = Expression.parse(f'avg({IN}@home.upstairs)')
+	assert expression.evaluate(resolver, NOW) == Fahrenheit(21)
+	assert expression.evaluateCounted(resolver, NOW)[1] == 2
+
+
+def test_stale_sets_the_bound_for_one_aggregate():
+	resolver = FakeResolver(members={UP: _at((20, 1), (30, 61))})
+	assert Expression.parse(f'count({IN}@home.upstairs)').evaluate(resolver, NOW) == 1
+	assert Expression.parse(f'count({IN}@home.upstairs, stale=2h)').evaluate(resolver, NOW) == 2
+	assert Expression.parse(f'avg({IN}, where=home.upstairs, stale=2h)').evaluate(resolver, NOW) == Fahrenheit(25)
+
+
+def test_a_place_with_no_fresh_reading_has_no_average_and_a_count_of_zero():
+	resolver = FakeResolver(members={UP: _at((30, 90))})
+	assert Expression.parse(f'avg({IN}@home.upstairs)').evaluate(resolver, NOW) is Missing
+	assert Expression.parse(f'count({IN}@home.upstairs)').evaluate(resolver, NOW) == 0
+	assert Expression.parse(f'avg({IN}@home.garage)').evaluate(resolver, NOW) is Missing
+
+
+def test_places_and_plain_keys_mix_in_one_aggregate():
+	resolver = FakeResolver(current={TEMP: Fahrenheit(60)}, members={UP: _at((20, 1), (22, 1))})
+	assert Expression.parse(f'avg({TEMP}, {IN}@home.upstairs)').evaluate(resolver, NOW) == Fahrenheit((60 + 20 + 22) / 3)
+	# A plain key with no value still makes the result Missing, as before.
+	assert Expression.parse(f'avg({DEW}, {IN}@home.upstairs)').evaluate(resolver, NOW) is Missing
+
+
+def test_a_bare_place_is_the_one_device_there():
+	one = FakeResolver(members={(IN, 'home.upstairs.bedroom'): _at((20, 1))})
+	assert Expression.parse(f'{IN}@home.upstairs.bedroom').evaluate(one, NOW) == Fahrenheit(20)
+	two = FakeResolver(members={UP: _at((20, 1), (22, 1))})
+	assert Expression.parse(f'{IN}@home.upstairs').evaluate(two, NOW) is Missing
+
+
+def test_a_resolver_without_places_is_an_error_where_it_is_asked():
+	class Plain:
+		def current(self, key):
+			return None
+	with pytest.raises(ExpressionError, match='cannot read places'):
+		Expression.parse(f'avg({IN}@home)').evaluate(Plain(), NOW)
+
+
+@pytest.mark.parametrize('text', [
+	f'avg({IN}, {TEMP}, where=home)',           # which key does the place go with
+	f'avg(where=home)',
+	f'{IN}#bedroom@home',                       # a device and a place at once
+	f'abs({IN}, where=home)',                   # where= only goes with min, max, avg, count
+	f'avg({IN}@home, 3h)',                      # a window reads one device
+	f'avg({IN}, where=home, stale=1)',          # stale= is a duration
+	f'avg({IN}, where=home, window=3h)',
+	f'count()',
+	f'count(1, 2)',
+	f'avg({IN}, where=1)',
+])
+def test_place_forms_that_are_rejected(text):
+	with pytest.raises(ExpressionError):
+		Expression.parse(text)
