@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import WeatherUnits as wu
 from WeatherUnits.length import Millimeter
-from WeatherUnits.temperature import Celsius, Fahrenheit
+from WeatherUnits.temperature import Celsius, Fahrenheit, FahrenheitChange
 
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.expressions import Expression, ExpressionError, Missing, PlacedKey, PointInput, SeriesInput, Window
@@ -192,7 +192,8 @@ def test_conditional_only_evaluates_the_branch_taken():
 def test_measurement_arithmetic_converts_units():
 	resolver = FakeResolver(current={TEMP: Fahrenheit(70), DEW: Celsius(20)})
 	result = Expression.parse(f'{TEMP} - {DEW}').evaluate(resolver, NOW)
-	assert isinstance(result, Fahrenheit)
+	# WeatherUnits: the difference of two readings is a change, not a reading.
+	assert isinstance(result, FahrenheitChange)
 	assert float(result) == pytest.approx(2)
 
 
@@ -234,7 +235,7 @@ def test_unit_literals_compare_in_the_measurements_own_unit():
 	assert ev(f'{wind} >= 30 mph') is True
 	assert ev(f'{wind} < 20 kn') is False     # 20 kn is 23 mph
 	assert ev(f'1 if {TEMP} > 90°F else 2') == 1
-	assert ev(f'{TEMP} - 5°F') == Fahrenheit(90)
+	assert ev(f'{TEMP} - 5°F') == FahrenheitChange(90)
 
 
 def test_a_unit_literal_must_match_what_it_is_compared_with():

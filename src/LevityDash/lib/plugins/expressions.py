@@ -30,6 +30,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, FrozenSet, Mapping, Optional, Protocol, Sequence, Tuple
 
 import WeatherUnits as wu
+from WeatherUnits.temperature import summingReadings
 
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.places import normalizePlace
@@ -226,6 +227,13 @@ def _formatDuration(span: timedelta) -> str:
 		if seconds >= unit and seconds % unit == 0:
 			return f'{sign}{int(seconds // unit)}{suffix}'
 	return f'{sign}{seconds}s'
+
+
+def _mean(values: Sequence[Any]) -> Any:
+	"""The mean, in the first value's unit. Temperature readings add only inside
+	`summingReadings`; a mean of readings is the case that allows."""
+	with summingReadings():
+		return sum(values[1:], values[0]) / len(values)
 
 
 # -- parsing --------------------------------------------------------------------
@@ -771,7 +779,7 @@ class _Evaluator:
 				return min(values)
 			case 'max':
 				return max(values)
-		return sum(values[1:], values[0]) / len(values)
+		return _mean(values)
 
 	def _call(self, node: ast.Call) -> Any:
 		name = node.func.id
@@ -792,7 +800,7 @@ class _Evaluator:
 				case 'max':
 					return max(values)
 				case 'avg':
-					return sum(values[1:], values[0]) / len(values)
+					return _mean(values)
 		if name in _AGGREGATES:
 			return self._aggregate(node)
 		values = [self.eval(arg) for arg in args]

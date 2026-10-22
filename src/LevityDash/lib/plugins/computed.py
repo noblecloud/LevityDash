@@ -324,7 +324,10 @@ class ComputedEngine(QObject):
 		del self._entries[key]
 		if entry.expiry is not None:
 			entry.expiry.stop()
-			entry.expiry.deleteLater()
+			# Not deleteLater(): its queued delete outlives an engine that is freed first, and the
+			# next event loop to run calls into the freed timer (a segfault in the next test to pump
+			# events). Without a parent Python frees the timer as soon as the entry goes.
+			entry.expiry.setParent(None)
 			entry.expiry = None
 		for inputKey in entry.expression.inputKeys | self._memberKeys(entry):
 			dependents = self._dependents.get(inputKey)
