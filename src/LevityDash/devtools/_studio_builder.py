@@ -30,7 +30,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 import yaml
 from PySide6.QtCore import QPointF, QRectF, QSignalBlocker, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QImage, QKeySequence, QPainter, QPen, QShortcut
+from PySide6.QtGui import QColor, QIcon, QImage, QKeySequence, QPainter, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (
 	QAbstractItemView, QApplication, QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMenu,
 	QPlainTextEdit, QPushButton, QScrollArea, QSplitter, QTabWidget, QToolButton, QTreeWidget, QTreeWidgetItem,
@@ -607,6 +607,33 @@ def snapDrag(rect: QRectF, mode: str, corner: Optional[str], parent: QRectF, oth
 
 
 # Section: the stage
+#: What a tree row's coloured square says: a container, a display, a preset's use, or something kept as written.
+KIND_COLOURS = {'container': '#2f81f7', 'display': '#3fb950', 'preset': '#a371f7', 'shorthand': '#8b949e'}
+_icons: Dict[str, QIcon] = {}
+
+
+def _kind(node: Any) -> str:
+	if not isinstance(node, dict) or model.opaque(node):
+		return 'shorthand'
+	if model.PRESET_KEY in node:
+		return 'preset'
+	return 'container' if model.holds(node) or not node.get('type') else 'display'
+
+
+def _kindIcon(kind: str) -> QIcon:
+	if kind not in _icons:
+		pix = QPixmap(14, 14)
+		pix.fill(Qt.GlobalColor.transparent)
+		p = QPainter(pix)
+		p.setRenderHint(QPainter.RenderHint.Antialiasing)
+		p.setPen(Qt.PenStyle.NoPen)
+		p.setBrush(QColor(KIND_COLOURS[kind]))
+		p.drawRoundedRect(QRectF(2, 2, 10, 10), 3, 3)
+		p.end()
+		_icons[kind] = QIcon(pix)
+	return _icons[kind]
+
+
 class ItemTree(QTreeWidget):
 	"""The item tree. A row dragged onto another row says where it wants to go; the builder moves it in the model and
 	draws the tree again, so Qt never moves a row itself."""
@@ -1764,6 +1791,7 @@ class Builder(QWidget):
 					if not path and self.piece.root is not None:
 						label, detail = 'dashboard', self.path.name if self.path else self.piece.name
 				row = QTreeWidgetItem([f'{label}  ·  {detail}' if detail else label])
+				row.setIcon(0, _kindIcon(_kind(node)))
 				row.setData(0, Qt.ItemDataRole.UserRole, path)
 				(parent.addChild if parent is not None else self.tree.addTopLevelItem)(row)
 				if isinstance(node, dict) and not model.opaque(node):
