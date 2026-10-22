@@ -70,11 +70,14 @@ def encode_container(container: 'Container') -> Optional[dict]:
 			log.warning(f'{container.key}: failed to resolve icon alias for wire push: {e}')
 		rawValue = None
 
+	wireMetadata = {k: metadata[k] for k in ('title', 'type', 'iconType') if k in metadata}
+	if (shape := getattr(metadata, 'shape', None)) is not None:
+		wireMetadata['shape'] = shape
 	return {
 		'value': encode_value(rawValue) if rawValue is not None else None,
 		'timestamp': encode_value(observationValue.timestamp) if isinstance(observationValue.timestamp, datetime) else None,
 		'title': container.title,
-		'metadata': {k: metadata[k] for k in ('title', 'type', 'iconType') if k in metadata},
+		'metadata': wireMetadata,
 		'icon_alias': icon_alias,
 		'flags': {name: getattr(container, name) for name in _FLAG_NAMES},
 	}

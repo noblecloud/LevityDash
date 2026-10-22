@@ -380,3 +380,118 @@ def test_tree_shortcuts_copy_paste_delete_duplicate_and_move(board):
 	[s for k, s in keys.items() if 'del' in k.lower()][0].activated.emit()
 	assert len(win.piece.node(target[:-1])['items']) == count
 	assert win.tree.contextMenuPolicy() == Qt.ContextMenuPolicy.CustomContextMenu
+
+
+def test_tree_rows_carry_a_square_for_what_the_item_is(board):
+	win, path = board('station')
+	seen = {}
+	stack = [win.tree.topLevelItem(0)]
+	while stack:
+		row = stack.pop()
+		node = win.piece.raw(row.data(0, 256))
+		seen.setdefault(sb._kind(node), []).append(row)
+		assert not row.icon(0).isNull()
+		stack += [row.child(i) for i in range(row.childCount())]
+	assert {'container', 'display'} <= set(seen)
+	assert sb._kind({'type': 'group'}) == 'container' and sb._kind({'type': 'realtime.text'}) == 'display'
+	assert sb._kind('environment.wind.speed') == 'shorthand' and sb._kind({'preset': 'stat-row'}) == 'preset'
+
+
+def test_align_sets_x_or_y_from_the_item_and_parent_size(board):
+	win, path = board('station')
+	target = next(p for p, n in win.piece.walk() if len(p) >= 2 and 'geometry' in n and not m.opaque(n)
+	              and str(win.piece.node(p[:-1]).get('type') or 'group') in ('group', 'titled-group'))
+	win.stage.rects = {target[:-1]: QRectF(0, 0, 1000, 500), target: QRectF(100, 50, 400, 100)}
+	win.select(target)
+	win.alignItem('Right')
+	assert win.piece.node(target)['geometry']['x'] == '60%'
+	win.alignItem('Centre')
+	assert win.piece.node(target)['geometry']['x'] == '30%'
+	win.alignItem('Bottom')
+	assert win.piece.node(target)['geometry']['y'] == '80%'
+	win.alignItem('Left')
+	assert win.piece.node(target)['geometry']['x'] == '0%'
+	win.undo()
+	assert win.piece.node(target)['geometry']['x'] == '30%'
+
+
+def test_stage_zoom_keeps_the_point_under_the_pointer_and_resets(board):
+	from PySide6.QtCore import QPointF
+	win, path = board('station')
+	stage = win.stage
+	stage.resize(800, 500)
+	stage.image = QImage(1440, 900, QImage.Format.Format_ARGB32)
+	pos = QPointF(300, 200)
+	spot = stage._toScene(pos)
+	stage.zoomAt(pos, 2.0)
+	assert stage.zoom == 2.0
+	after = stage._toScene(pos)
+	assert abs(after.x() - spot.x()) < 0.01 and abs(after.y() - spot.y()) < 0.01
+	stage.zoomAt(pos, 100)
+	assert stage.zoom == 8.0  # capped
+	stage.zoomAt(pos, 0.0001)
+	assert stage.zoom == 1.0 and stage.pan.isNull()  # never smaller than the whole picture
+	stage.zoomAt(pos, 3.0)
+	stage.resetView()
+	assert stage.zoom == 1.0 and stage.pan.isNull()
+
+
+def test_hovering_a_tree_row_or_the_stage_outlines_the_item(board):
+	win, path = board('station')
+	assert win.stage.hover is None
+	row = win.tree.topLevelItem(0).child(0)
+	win.tree.itemEntered.emit(row, 0)
+	assert win.stage.hover == row.data(0, 256)
+	win.tree.left.emit()
+	assert win.stage.hover is None
+	win.stage.rects = {(0,): QRectF(0, 0, 32, 20)}
+	win.stage.setHover((0,))
+	assert win.stage.hover == (0,)
+	win.stage.setHover(None)
+	assert win.stage.hover is None
+
+
+def test_wrap_and_unwrap_keep_placement_and_undo(board):
+	win, path = board('station')
+	target = next(p for p, n in win.piece.walk() if len(p) >= 2 and 'geometry' in n and not m.opaque(n))
+	before = yaml.safe_dump(win.piece.template)
+	geometry = win.piece.node(target)['geometry']
+	win.select(target)
+	win.wrapItem()
+	box = win.piece.node(target)
+	assert box['type'] == 'group' and box['geometry'] == geometry
+	assert 'geometry' not in box['items'][0]
+	win.unwrapItem()
+	assert yaml.safe_dump(win.piece.template) == before  # unwrap is the exact inverse
+	win.undo()
+	win.undo()
+	assert yaml.safe_dump(win.piece.template) == before
+	# the dashboard itself is left alone
+	win.select(())
+	win.wrapItem()
+	assert win.piece.template is not None and len(win.history) == 0
+
+
+def test_tree_filter_keeps_matches_and_their_containers(board):
+	win, path = board('station')
+
+	def shown():
+		rows, stack = [], [win.tree.topLevelItem(0)]
+		while stack:
+			row = stack.pop()
+			if not row.isHidden():
+				rows.append(row.text(0))
+				stack += [row.child(i) for i in range(row.childCount())]
+		return rows
+
+	everything = shown()
+	win.filterBox.setText('wind')
+	some = shown()
+	assert 0 < len(some) < len(everything)
+	assert any('wind' in r.lower() for r in some[1:])
+	win.rebuildTree()
+	assert shown() == some  # a rebuild after an edit keeps the filter
+	win.filterBox.setText('')
+	assert len(shown()) == len(everything)
+	win.filterBox.setText('zzzz-no-such-item')
+	assert win.tree.topLevelItem(0).isHidden()

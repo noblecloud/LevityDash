@@ -127,6 +127,7 @@ items:
     geometry: {x: 1%, y: 56%, width: 42%, height: 10%}
     props:
       font: Roboto Mono
+      spacing: 5mm
       items:
       - {type: realtime.text, key: 'min($d, 3h)', title: {text: Nearest 3h}, display: {valueLabel: {color: $bad}}}
       - {type: realtime.text, key: 'avg($d, 3h)', title: {text: Average 3h}}
@@ -287,7 +288,7 @@ items:
           valueLabel: {margins: 2%}
         geometry: {x: 0%, y: 0%, width: 100%, height: 42%}
       - preset: sparkline
-        geometry: {x: 0%, y: 43%, width: 100%, height: 22%}
+        geometry: {x: 0%, y: 43%, width: 100%, height: 19%}
         props:
           figure: temperature
           min: 55
@@ -295,9 +296,9 @@ items:
           key: environment.temperature.temperature
           plot: {type: plot, gradient: TemperatureGradient, weight: 0.6}
       - preset: reading-list
-        geometry: {x: 0%, y: 68%, width: 100%, height: 32%}
+        geometry: {x: 0%, y: 63%, width: 100%, height: 37%}
         props:
-          spacing: 0.4mm
+          spacing: 2.5mm
           items:
           - {type: realtime.text, key: '$t - max($t, 6h)', title: {text: Since the peak}, display: {valueLabel: {color: $info}}}
           - {type: realtime.text, key: 'environment.humidity.humidity', title: {text: Humidity}, display: {precision: 0}}

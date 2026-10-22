@@ -21,11 +21,12 @@ Layout of the package
 - `align.py`  CSS Box Alignment: gaps, content distribution, self-alignment, baselines
 - `flex.py`   CSS Flexbox section 9
 - `grid.py`   CSS Grid sections 7, 8 and 12
+- `calc.py`   CSS math functions for lengths (`calc`, `min`, `max`, `clamp`)
 - `parse.py`  CSS keywords from `.levity` values
 - `legacy.py` how today's `Stack` maps to flex, so existing dashboards render the same
 """
 
-from . import align, flex, grid, legacy, parse, types
+from . import align, calc, flex, grid, legacy, parse, types
 from .spec import REGISTRY, Section, implements, pending
 
-__all__ = ['align', 'flex', 'grid', 'legacy', 'parse', 'types', 'REGISTRY', 'Section', 'implements', 'pending']
+__all__ = ['align', 'calc', 'flex', 'grid', 'legacy', 'parse', 'types', 'REGISTRY', 'Section', 'implements', 'pending']

@@ -46,6 +46,17 @@ Decided on 2026-10-16:
 10. **`avg(a, b, ...)`** is added to the expression language: the mean of two
     or more current values.
 11. **`mean` is accepted as another name for `avg`.** Docs use the plain word.
+
+Built in step 2 (aggregates), from Neal's answers of 2026-10-16:
+
+- A place selects with `where=` and with an `@place` suffix on a key. Both mean the
+  same. The suffix has no clash inside expressions, which read keys with their own
+  pattern. Elsewhere `@` is the schema wildcard and the size-group `key@name`, which
+  are separate places in the file.
+- `count(key, where=place)` exists, and every expression publishes its reading count
+  at its own key with `.count` added.
+- Shared variables live in `vars.yaml` beside `config.ini`. A dashboard's own `vars:`
+  wins on a name clash.
 12. **Named aggregates can be written in two places:** a global vars file that
     every dashboard shares, and the `vars:` of a single dashboard. A dashboard
     entry wins over the global one of the same name.
@@ -101,6 +112,14 @@ them.** This migration mostly *deletes* duplication rather than adding a layer.
 ---
 
 ## 2. Keep a prefix — change what it discriminates
+
+> **First cut, built 2026-10-22:** the shape is a property of the schema entry, not a
+> prefix of the key, so no key changes. `lib/plugins/shapes.py` holds the closed set. An
+> entry may say `shape:`; otherwise the shape comes from its `sourceUnit` and `type`
+> (`str` is text, `epoch` or `ISO8601` is time, `bool` or `WeatherCode` is an enum,
+> everything else is a number). `UnitMetaData.shape` and `.choices` read it, and the wire
+> sends it in each key's metadata. Moving the shape into the key waits with the rest of
+> the namespace (decision 15).
 
 | Prefix | Discriminates | |
 |---|---|---|
@@ -478,7 +497,8 @@ honestly rather than show nothing. OTel treats this as first-class
 3. **Key namespace.** The big one. Do it when health or service data actually
    arrives, so the migration serves a real need and not a predicted one. The
    `key:` to `connection:` rename and `source` to `provider` go here.
-4. **Conditionals in stacks.** Cheap, any time.
+4. **Conditionals in stacks.** Cheap, any time. Done: an item's `when:` hides it and a
+   stack closes up around it.
 
 Steps 1-2 deliver most of the value without touching a single existing key.
 Step 3 is the scary one and also the most deferrable.
