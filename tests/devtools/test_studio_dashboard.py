@@ -496,3 +496,42 @@ def test_tree_filter_keeps_matches_and_their_containers(board):
 	assert len(shown()) == len(everything)
 	win.filterBox.setText('zzzz-no-such-item')
 	assert win.tree.topLevelItem(0).isHidden()
+
+
+def test_stage_badge_text_gives_pixels_and_share_of_the_parent(board):
+	win, path = board('station')
+	stage = win.stage
+	stage.image = QImage(1440, 900, QImage.Format.Format_ARGB32)
+	stage.rects = {(): QRectF(0, 0, 1440, 900), (0,): QRectF(100, 50, 720, 450), (0, 1): QRectF(110, 60, 360, 90)}
+	assert stage.sizeText((0,)) == '720 × 450 px  ·  50.0% × 50.0%'
+	assert stage.sizeText((0, 1)) == '360 × 90 px  ·  50.0% × 20.0%'
+	stage.resize(800, 500)
+	stage.select((0, 1), True)
+	assert not stage.grab().isNull()  # paints with the badge
+
+
+def test_tree_keeps_folded_rows_across_an_edit_and_folds_all(board):
+	win, path = board('station')
+	win.foldAll(False)
+	assert win.collapsed
+	folded = set(win.collapsed)
+	win.rebuildTree()
+	assert win.collapsed == folded
+	assert all(not win.tree.topLevelItem(0).child(i).isExpanded() for i in range(win.tree.topLevelItem(0).childCount()))
+	win.foldAll(True)
+	assert not win.collapsed
+	win.rebuildTree()
+	assert win.tree.topLevelItem(0).child(0).isExpanded()
+
+
+def test_reset_geometry_removes_it_in_one_undo_step(board):
+	win, path = board('station')
+	target = next(p for p, n in win.piece.walk() if len(p) >= 2 and 'geometry' in n and not m.opaque(n))
+	geometry = dict(win.piece.node(target)['geometry'])
+	win.select(target)
+	win.resetGeometry()
+	assert 'geometry' not in win.piece.node(target)
+	win.resetGeometry()  # nothing left to reset: no new undo step
+	assert len(win.history) == 1
+	win.undo()
+	assert win.piece.node(target)['geometry'] == geometry

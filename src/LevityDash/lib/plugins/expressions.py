@@ -34,6 +34,7 @@ from WeatherUnits.temperature import summingReadings
 
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.places import normalizePlace
+from WeatherUnits.base import _Algebra
 from LevityDash.lib.stopunits import StopUnitError, family, measure, toDataUnit
 
 __all__ = [
@@ -80,24 +81,27 @@ Missing = _MissingType()
 class Window:
 	"""A span of time that a window function reads.
 
-	``span=None`` is ``today``: local midnight to the next local midnight,
-	so it covers observed and forecast points for the day. A duration covers
-	the past, ending now: ``24h`` is the last 24 hours.
+	``span=None`` is a calendar day: ``today`` (``day=0``) is local midnight to
+	the next local midnight, so it covers observed and forecast points for the
+	day; ``yesterday`` (``day=-1``) is the day before. A duration covers the
+	past, ending now: ``24h`` is the last 24 hours.
 	"""
 	span: Optional[timedelta] = None
+	day: int = 0
 
 	def bounds(self, now: datetime) -> Tuple[datetime, datetime]:
 		if self.span is None:
-			start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-			# Overshoot by a few hours and snap back, so the end is the next
-			# calendar midnight rather than exactly 24 hours later.
+			# Overshoot by a few hours and snap back, so each edge is a calendar
+			# midnight rather than exactly 24 hours from the last one.
+			midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+			start = (midnight + timedelta(days=self.day, hours=3)).replace(hour=0)
 			end = (start + timedelta(days=1, hours=3)).replace(hour=0)
 			return start, end
 		return now - abs(self.span), now
 
 	def __str__(self):
 		if self.span is None:
-			return 'today'
+			return _DAY_NAMES[self.day]
 		return _formatDuration(self.span)
 
 
@@ -168,11 +172,14 @@ _DURATION_UNITS = {
 	'w':  timedelta(weeks=1),
 }
 
-#: A number with a unit: `90°F`, `30 mph`, `0.1 in/hr`, `55%`, `1013 hPa`. A unit that is only
-#: letters needs two of them (`5 m` is not metres), and the duration units are left to durations.
+#: A number with a unit: `90°F`, `30 mph`, `0.1 in/hr`, `55%`, `1013 hPa`, `24 m²`, `600 W/m²`. A unit that is only
+#: letters needs two of them (`5 m` is not metres) unless it has a power or a slash, and the duration units are left to durations.
 _UNIT_PATTERN = re.compile(
 	r'(?<![\w.])(\d+(?:\.\d+)?)\s*'
-	r'([°º˚]\s?[A-Za-z]+|%|[A-Za-z]{2,}(?:\s?/\s?[A-Za-z]+)?)(?![\w.])'
+	r'([°º˚]\s?[A-Za-z]+|%'
+	r'|[A-Za-z]{2,}(?:[²³]|\^[23])?(?:\s?/\s?[A-Za-z]+(?:[²³]|\^[23])?)?'
+	r'|[A-Za-z](?:[²³]|\^[23])(?:\s?/\s?[A-Za-z]+(?:[²³]|\^[23])?)?'
+	r'|[A-Za-z]\s?/\s?[A-Za-z]+(?:[²³]|\^[23])?)(?![\w.])'
 )
 _NOT_UNITS = frozenset({'ms', 'if', 'else', 'and', 'or', 'not', 'is'})
 
@@ -182,13 +189,17 @@ _DURATION_PREFIX = '__duration'
 
 #: Names an expression may use besides keys.
 _TODAY = 'today'
+_YESTERDAY = 'yesterday'
 _VALUE = 'value'
-_RESERVED_NAMES = frozenset({_TODAY, _VALUE})
+#: The calendar-day windows: name to days from today.
+_DAYS = {_TODAY: 0, _YESTERDAY: -1}
+_DAY_NAMES = {day: name for name, day in _DAYS.items()}
+_RESERVED_NAMES = frozenset({_TODAY, _YESTERDAY, _VALUE})
 
 _WINDOW_FUNCTIONS = frozenset({'min', 'max', 'avg'})
 #: Functions that can take keys at a place, and the one that counts them.
 _AGGREGATES = frozenset({'min', 'max', 'avg', 'count'})
-_FUNCTIONS = frozenset({'min', 'max', 'avg', 'count', 'at', 'abs'})
+_FUNCTIONS = frozenset({'min', 'max', 'avg', 'count', 'at', 'abs', 'to'})
 #: Other names for a function. ``mean`` is the plain word for ``avg``.
 _ALIASES = {'mean': 'avg'}
 
@@ -227,6 +238,13 @@ def _formatDuration(span: timedelta) -> str:
 		if seconds >= unit and seconds % unit == 0:
 			return f'{sign}{int(seconds // unit)}{suffix}'
 	return f'{sign}{seconds}s'
+
+
+def _mean(values: Sequence[Any]) -> Any:
+	"""The mean, in the first value's unit. Temperature readings add only inside
+	`summingReadings`; a mean of readings is the case that allows."""
+	with summingReadings():
+		return sum(values[1:], values[0]) / len(values)
 
 
 # -- parsing --------------------------------------------------------------------
@@ -422,10 +440,31 @@ def _applyKeywords(tree: ast.AST, placeholders: Dict[str, Any], text: str) -> No
 		node.keywords = kept
 
 
+def _dimensionOf(cls: type) -> Any:
+	"""What ``cls`` measures: its exponent vector when the algebra has one, else the family."""
+	try:
+		return _Algebra.vectorOf(cls(1))
+	except Exception:  # noqa: BLE001 - a class the algebra has no dimension for
+		return family(cls)
+
+
+def _unitText(node: ast.AST) -> Optional[str]:
+	"""The unit named by the second argument of ``to``: a bare word (``kWh``) or a string (``'ft²'``)."""
+	if isinstance(node, ast.Name):
+		return node.id
+	if isinstance(node, ast.Constant) and isinstance(node.value, str):
+		return node.value
+	return None
+
+
 def _check(tree: ast.AST, placeholders: Mapping[str, Any], text: str) -> None:
+	unitArgs = {id(call.args[1]) for call in ast.walk(tree)
+	            if isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and call.func.id == 'to' and len(call.args) == 2}
 	for node in ast.walk(tree):
 		if not isinstance(node, _ALLOWED_NODES):
 			raise ExpressionError(f'{text!r}: {type(node).__name__} is not allowed in an expression')
+		if id(node) in unitArgs:
+			continue
 		match node:
 			case ast.Constant(value=value):
 				if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -452,7 +491,7 @@ def _check(tree: ast.AST, placeholders: Mapping[str, Any], text: str) -> None:
 	# duration, as a factor or divisor: a rate times a duration is an amount.
 	allowed = set()
 	for node in ast.walk(tree):
-		if isinstance(node, ast.Call) and len(node.args) == 2 and _isWindowCall(node, placeholders):
+		if isinstance(node, ast.Call) and len(node.args) == 2 and (_isWindowCall(node, placeholders) or _isAtExpression(node, placeholders)):
 			allowed.update(id(n) for n in ast.walk(node.args[1]))
 		elif isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Mult, ast.Div)):
 			allowed.update(id(side) for side in (node.left, node.right) if _isDuration(side, placeholders))
@@ -461,9 +500,9 @@ def _check(tree: ast.AST, placeholders: Mapping[str, Any], text: str) -> None:
 				allowed.update(id(n) for n in ast.walk(keyword.value))
 	for node in ast.walk(tree):
 		if isinstance(node, ast.Name) and id(node) not in allowed:
-			if node.id == _TODAY or isinstance(placeholders.get(node.id), timedelta):
+			if node.id in _DAYS or isinstance(placeholders.get(node.id), timedelta):
 				raise ExpressionError(
-					f'{text!r}: a duration or today can only be the second argument of min, max, avg or at; '
+					f'{text!r}: a duration, today or yesterday can only be the second argument of min, max, avg or at; '
 					f'a duration can also multiply or divide a measurement'
 				)
 	for node in ast.walk(tree):
@@ -511,26 +550,41 @@ def _durationOf(node: ast.AST, placeholders: Mapping[str, Any]) -> Optional[time
 
 
 def _windowOf(node: ast.AST, placeholders: Mapping[str, Any]) -> Optional[Window]:
-	if isinstance(node, ast.Name) and node.id == _TODAY:
-		return Window()
+	if isinstance(node, ast.Name) and node.id in _DAYS:
+		return Window(day=_DAYS[node.id])
 	if (span := _durationOf(node, placeholders)) is not None:
 		return Window(span)
 	return None
+
+
+def _isAtExpression(node: ast.AST, placeholders: Mapping[str, Any]) -> bool:
+	"""``at(expression, offset)``: a calculation worked out as it would have been at that time."""
+	return (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'at'
+	        and len(node.args) == 2 and not _isKey(node.args[0], placeholders))
 
 
 def _isWindowCall(node: ast.Call, placeholders: Mapping[str, Any]) -> bool:
 	"""``min/max/avg(key, window)`` or ``at(key, offset)``."""
 	name = node.func.id
 	if name == 'at':
-		return True
+		# `at(key, offset)`; any other first argument is a whole expression read at that time (`_atTime`)
+		return bool(node.args) and _isKey(node.args[0], placeholders)
 	return name in _WINDOW_FUNCTIONS and len(node.args) == 2 and _windowOf(node.args[1], placeholders) is not None
 
 
 def _checkCall(name: str, args: Sequence[ast.AST], placeholders: Mapping[str, Any], text: str) -> None:
 	match name:
+		case 'to':
+			unit = _unitText(args[1]) if len(args) == 2 else None
+			if unit is None:
+				raise ExpressionError(f'{text!r}: to() takes a value and a unit, like to(a.b * 3h, kWh) or to(a.b, \'ft²\')')
+			try:
+				measure(1, unit)
+			except StopUnitError as e:
+				raise ExpressionError(f'{text!r}: {e}') from e
 		case 'at':
-			if len(args) != 2 or not _isKey(args[0], placeholders) or _durationOf(args[1], placeholders) is None:
-				raise ExpressionError(f'{text!r}: at() takes a key and an offset, like at(a.b, -3h)')
+			if len(args) != 2 or _durationOf(args[1], placeholders) is None:
+				raise ExpressionError(f'{text!r}: at() takes a key or an expression and an offset, like at(a.b, -3h)')
 		case 'abs':
 			if len(args) != 1:
 				raise ExpressionError(f'{text!r}: abs() takes one argument')
@@ -559,7 +613,14 @@ def _inputs(tree: ast.AST, placeholders: Mapping[str, Any], text: str):
 	keys, series, points, places = set(), set(), set(), set()
 	windowed = set()
 	for node in ast.walk(tree):
-		if isinstance(node, ast.Call) and _isWindowCall(node, placeholders):
+		if _isAtExpression(node, placeholders):
+			# Every key of the expression is read at the offset, so each is a point and none is a plain input.
+			offset = _durationOf(node.args[1], placeholders)
+			for inner in ast.walk(node.args[0]):
+				if _isKey(inner, placeholders):
+					points.add(PointInput(placeholders[inner.id], offset))
+					windowed.add(id(inner))
+		elif isinstance(node, ast.Call) and _isWindowCall(node, placeholders):
 			key = placeholders[node.args[0].id]
 			windowed.add(id(node.args[0]))
 			if node.func.id == 'at':
@@ -618,9 +679,11 @@ def _isBareNumber(value: Any) -> bool:
 
 
 class _Evaluator:
-	__slots__ = ('resolver', 'now', 'value', 'placeholders', 'text', 'counted')
+	__slots__ = ('resolver', 'now', 'value', 'placeholders', 'text', 'counted', 'asOf')
 
-	def __init__(self, resolver: Resolver, now: datetime, value: Any, placeholders: Mapping[str, Any], text: str):
+	def __init__(self, resolver: Resolver, now: datetime, value: Any, placeholders: Mapping[str, Any], text: str, asOf: Optional[datetime] = None):
+		#: When the keys are read, for an expression inside ``at``; None reads them as they are now.
+		self.asOf = asOf
 		#: Readings at a place that the aggregates used so far.
 		self.counted = 0
 		self.resolver = resolver
@@ -664,6 +727,8 @@ class _Evaluator:
 			# Out of an aggregate a place has to name one device, as `where:` on a panel does.
 			members = self._members(key, DEFAULT_STALE)
 			return members[0] if len(members) == 1 else Missing
+		if self.asOf is not None:
+			return self._present(self.resolver.at(key, self.asOf))
 		return self._present(self.resolver.current(key))
 
 	def _members(self, placed: PlacedKey, stale: timedelta) -> list:
@@ -699,6 +764,16 @@ class _Evaluator:
 			case ast.USub():
 				return -operand
 		raise ExpressionError(f'{self.text!r}: unknown operator {type(op).__name__}')
+
+	def _asQuantity(self, operand: Any) -> Any:
+		"""A unit literal in a product or a quotient stands for itself (`24m²`, `0.5kW`), not for the unit of its other side.
+		A percent or degree literal still takes the other side's unit."""
+		if isinstance(operand, UnitLiteral) and operand.unit[0] not in '%°º˚':
+			try:
+				return measure(operand.number, operand.unit)
+			except StopUnitError as e:
+				raise ExpressionError(f'{self.text!r}: {e}') from e
+		return operand
 
 	def _withUnits(self, left: Any, right: Any, change: bool = False) -> Tuple[Any, Any]:
 		"""A unit literal beside a measurement, as a measurement of the same class."""
@@ -746,6 +821,8 @@ class _Evaluator:
 	def _binary(self, op: ast.operator, left: Any, right: Any) -> Any:
 		if left is Missing or right is Missing:
 			return Missing
+		if isinstance(op, (ast.Mult, ast.Div)):
+			left, right = self._asQuantity(left), self._asQuantity(right)
 		left, right = self._withUnits(left, right, change=isinstance(op, (ast.Add, ast.Sub)))
 		self._checkUnits(op, left, right)
 		try:
@@ -816,9 +893,31 @@ class _Evaluator:
 				return max(values)
 		return _mean(values)
 
+	def _convert(self, value: Any, unit: str) -> Any:
+		"""``value`` in ``unit``: the energy of a power times a time, in kWh."""
+		if value is Missing:
+			return Missing
+		if not _isMeasurement(value):
+			raise ExpressionError(f'{self.text!r}: to() needs a measurement, not a plain number')
+		target = type(measure(1, unit))
+		if isinstance(value, wu.Temperature.Change) and issubclass(target, wu.Temperature):
+			target = target.change  # a change converts in its own units: 10 °C is 18 °F
+		elif _dimensionOf(target) != _dimensionOf(type(value)):
+			raise ExpressionError(f'{self.text!r}: {unit} does not measure what the value does ({type(value).__name__})')
+		try:
+			return target(value)
+		except (TypeError, ValueError) as e:
+			raise ExpressionError(f'{self.text!r}: {e}') from e
+
 	def _call(self, node: ast.Call) -> Any:
 		name = node.func.id
 		args = node.args
+		if _isAtExpression(node, self.placeholders):
+			when = self.now + _durationOf(args[1], self.placeholders)
+			inner = _Evaluator(self.resolver, when, self.value, self.placeholders, self.text, asOf=when)
+			result = inner.eval(args[0])
+			self.counted += inner.counted
+			return result
 		if _isWindowCall(node, self.placeholders):
 			key = self.placeholders[args[0].id]
 			if name == 'at':
@@ -838,6 +937,8 @@ class _Evaluator:
 					return _mean(values)
 		if name in _AGGREGATES:
 			return self._aggregate(node)
+		if name == 'to':
+			return self._convert(self.eval(args[0]), _unitText(args[1]))
 		values = [self.eval(arg) for arg in args]
 		if any(v is Missing for v in values):
 			return Missing

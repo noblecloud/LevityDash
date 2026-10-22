@@ -1088,7 +1088,7 @@ class Graduations(ColorGradientMixin, StatefulGaugeItem):
 			if preferred_interval in compatible_intervals:
 				interval_candidates.append(preferred_interval)
 				continue
-			elif float(range_value / preferred_interval).is_integer():
+			elif (float(range_value) / float(preferred_interval)).is_integer():
 				interval_candidates.append(preferred_interval)
 				continue
 			preferred_interval = float(preferred_interval)
@@ -1753,7 +1753,8 @@ class GaugeTickText(GlowMixin, GaugeItem, AnnotationText, Stateful):
 
 		arch_length_px = float(radius * self.gauge.fullAngle / 180 * pi)
 
-		interval_arch_coverage = float(interval / self.gauge.range.rounded_range)
+		# A range is a change in temperature, and a reading over a change has no meaning to WeatherUnits: take both as numbers in the gauge's unit.
+		interval_arch_coverage = float(interval) / float(self.gauge.range.rounded_range)
 
 		return arch_length_px * interval_arch_coverage
 

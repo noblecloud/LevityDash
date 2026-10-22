@@ -211,6 +211,10 @@ class Label(Panel, ColorMixin, tag='label'):
 	def _set_fill_brush(self, brush: QBrush):
 		self.textBox.fill_brush = brush
 
+	def delete(self):
+		self._releaseColor()
+		super().delete()
+
 	@StateProperty(key='font', default=defaultFont.family(), repr=True, allowNone=False)
 	def fontFamily(self) -> str:
 		return self.textBox.font().family()

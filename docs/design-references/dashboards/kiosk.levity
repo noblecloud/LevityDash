@@ -1,0 +1,135 @@
+# Kiosk: a lobby screen. A 1920 x 1080 (16:9) display with fixed-width wings and a flexible middle.
+#
+# The point of this board is the layout vocabulary of CSS. The header is a flex row whose clock has `margin-left:
+# auto`, which pushes the clock and everything after it to the right edge. The body is a grid whose columns are
+# `[260px, calc(100% - 260px - 480px - 48px), 480px]`: two wings of fixed width and a middle that takes what is left, so the
+# same file fits a 1280 or a 3840 wide screen with wings of the same size. The hero in the middle has two `auto`
+# margins, which centres it in its area, and the footer is a switch that rotates a short notice on a timer.
+#
+# Text sizes come from the dashboard-wide size groups global.title, global.value and global.head; hand-written
+# readings join them through the board's `shared:`.
+#
+# Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/kiosk.levity
+#           --scenario week-ahead --size 1920x1080 --freeze-time 2026-10-07T15:40:00
+theme:
+  extends: default
+  colors:
+    background: '#0a0c10'
+    muted: '#a6adba'
+    faint: '#767d8b'
+    rule: '#2a2f3a'
+    accent: '#ff9124'
+    good: '#14e3c0'
+    warn: '#ffd400'
+    bad: '#ff3048'
+    info: '#1a8cff'
+  fonts:
+    display: Nunito
+    mono: Roboto Mono
+    body: Roboto
+vars:
+  t: environment.temperature.temperature
+items:
+- type: grid
+  name: board
+  geometry: {x: 1.5%, y: 2%, width: 97%, height: 96%}
+  spacing: 24px
+  padding: 0
+  shared:
+    title:
+      matchingGroup: {group: global.title, matchAll: true}
+    display:
+      valueLabel:
+        matchingGroup: {group: global.value, matchAll: true}
+  grid:
+    columns: [260px, calc(100% - 260px - 480px - 48px), 480px]
+    rows: [12fr, 62fr, 14fr]
+    areas:
+    - head head head
+    - left hero right
+    - foot foot foot
+  items:
+
+  # ================= HEADER: A FLEX ROW ====================================
+  - type: stack
+    name: head
+    grid: {area: head}
+    direction: Horizontal
+    spacing: 2%
+    items:
+    - {type: text, text: Front desk, font: Nunito, weight: ExtraBold, color: $text, alignment: CenterLeft, size: 28%}
+    - {type: text, text: Open until 6 pm, font: $display, color: $muted, alignment: CenterLeft, size: 24%}
+    - {type: realtime.text, key: $t, title: false, size: 14%, flex: {margin: [0, 0, 0, auto]}, display: {precision: 0, font: Nunito, valueLabel: {color: $accent}}}
+    - {type: realtime.text, key: environment.humidity.humidity, title: false, size: 12%, display: {precision: 0, font: Nunito, valueLabel: {color: $info}}}
+
+  # ================= LEFT WING: FIXED 260px ================================
+  - type: stack
+    name: left
+    grid: {area: left}
+    direction: Vertical
+    spacing: 3%
+    items:
+    - preset: ring-reading
+      props: {key: environment.humidity.humidity, title: Humidity, color: $info, text_color: $info, weight: 9%, radius: 96%}
+    - preset: ring-reading
+      props: {key: environment.clouds.cover.cover, title: Cloud, color: $muted, text_color: $muted, weight: 9%, radius: 96%}
+    - preset: ring-reading
+      props: {key: environment.precipitation.probability, title: Rain, color: $good, text_color: $good, weight: 9%, radius: 96%}
+
+  # ================= THE HERO: TWO AUTO MARGINS CENTRE IT ==================
+  - type: realtime.text
+    name: hero
+    key: $t
+    title: {text: Right now, color: $muted}
+    grid: {area: hero, margin: [auto, auto, auto, auto]}
+    display:
+      font: Nunito
+      weight: ExtraLight
+      precision: 0
+      unitPosition: FloatUnder
+      valueLabel: {color: $text}
+
+  # ================= RIGHT WING: FIXED 480px ===============================
+  - preset: list-panel
+    name: right
+    grid: {area: right}
+    props:
+      title: Today
+      items:
+      - {type: realtime.text, key: environment.temperature.high, title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
+      - {type: realtime.text, key: environment.temperature.low, title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
+      - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels like}, display: {precision: 0, valueLabel: {color: $accent}}}
+      - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Wind}, display: {precision: 0}}
+      - {type: realtime.text, key: environment.wind.speed.gust, title: {text: Gust}, display: {precision: 0, valueLabel: {color: $warn}}}
+      - {type: realtime.text, key: environment.light.uvi, title: {text: UV}, display: {precision: 1, valueLabel: {color: $warn}}}
+
+  # ================= THE FOOTER: A ROTATING NOTICE =========================
+  - type: switch
+    name: foot
+    grid: {area: foot}
+    cycle: 8s
+    fade: 0.4s
+    hold: 8s
+    items:
+    - preset: alert-strip
+      name: uv
+      when: '$t > 85°F'
+      props:
+        headline: Hot day
+        color: $bad
+        key: $t
+        title: Outside now
+        precision: 0
+        items:
+        - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels like}, display: {precision: 0, valueLabel: {color: $accent}}}
+    - preset: alert-strip
+      name: tomorrow
+      props:
+        headline: Tomorrow
+        color: $info
+        key: at(environment.temperature.high, 1d)
+        title: High
+        precision: 0
+        items:
+        - {type: realtime.text, key: 'at(environment.temperature.low, 1d)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: 'at(environment.precipitation.probability, 1d)', title: {text: Rain}, display: {precision: 0}}

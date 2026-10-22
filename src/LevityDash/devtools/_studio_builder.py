@@ -30,7 +30,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 import yaml
 from PySide6.QtCore import QPointF, QRectF, QSignalBlocker, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QIcon, QImage, QKeySequence, QPainter, QPen, QPixmap, QShortcut
+from PySide6.QtGui import QColor, QFont, QIcon, QImage, QKeySequence, QPainter, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (
 	QAbstractItemView, QApplication, QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMenu,
 	QPlainTextEdit, QPushButton, QScrollArea, QSplitter, QTabWidget, QToolButton, QTreeWidget, QTreeWidgetItem,
@@ -705,6 +705,7 @@ class Stage(QWidget):
 		self.zoom = 1.0  # Ctrl + wheel zooms about the pointer, a middle-button drag pans, 0 shows the whole picture again
 		self.pan = QPointF()
 		self._panning: Optional[tuple] = None
+		self.areaTags: Dict[tuple, str] = {}  # item path -> the grid area it fills, drawn as a badge while its grid or one of its cells is selected
 		self.hover: Optional[tuple] = None  # the item under the pointer, here or in the tree: a thin outline, never a selection
 		self.setMinimumSize(320, 220)
 		self.setMouseTracking(True)
@@ -826,6 +827,19 @@ class Stage(QWidget):
 			p.setPen(QPen(QColor('#2f81f7'), 1, Qt.PenStyle.DashLine))
 			p.setBrush(QColor(47, 129, 247, 38))
 			p.drawRect(self._toView(self.rects[self.hover]))
+		if self.areaTags:
+			p.setFont(QFont(p.font().family(), 9, QFont.Weight.DemiBold))
+			for path, name in self.areaTags.items():
+				if path not in self.rects:
+					continue
+				cell = self._toView(self.rects[path])
+				p.setPen(QPen(QColor('#a371f7'), 1, Qt.PenStyle.DashLine))
+				p.setBrush(Qt.BrushStyle.NoBrush)
+				p.drawRect(cell)
+				tag = QRectF(cell.x(), cell.y(), min(cell.width(), p.fontMetrics().horizontalAdvance(name) + 10), 16)
+				p.fillRect(tag, QColor('#a371f7'))
+				p.setPen(QColor('#ffffff'))
+				p.drawText(tag, Qt.AlignmentFlag.AlignCenter, name)
 		if self.path is not None and self.path in self.rects:
 			r = self._toView(self.rects[self.path])
 			p.setPen(QPen(QColor('#2f81f7'), 2))
@@ -843,6 +857,27 @@ class Stage(QWidget):
 				p.setBrush(QColor('#2f81f7'))
 				for c in (r.topLeft(), r.topRight(), r.bottomLeft(), r.bottomRight()):
 					p.drawRect(QRectF(c.x() - self.HANDLE / 2, c.y() - self.HANDLE / 2, self.HANDLE, self.HANDLE))
+			self._paintBadge(p, r)
+
+	def sizeText(self, path: tuple) -> str:
+		"""The selected item's size in dashboard pixels and as a share of its parent, for the badge under it."""
+		rect = self.rects[path]
+		parent = self.rects.get(path[:-1]) if path else None
+		if parent is None:
+			parent = QRectF(0, 0, self.image.width(), self.image.height()) if self.image else rect
+		share = (rect.width() / parent.width() * 100 if parent.width() else 0, rect.height() / parent.height() * 100 if parent.height() else 0)
+		return f'{rect.width():.0f} × {rect.height():.0f} px  ·  {share[0]:.1f}% × {share[1]:.1f}%'
+
+	def _paintBadge(self, p: QPainter, r: QRectF):
+		text = self.sizeText(self.path)
+		box = QRectF(0, 0, p.fontMetrics().horizontalAdvance(text) + 12, p.fontMetrics().height() + 6)
+		below = r.bottom() + 6 + box.height() <= self.height()
+		box.moveTo(max(2, min(r.left(), self.width() - box.width() - 2)), r.bottom() + 6 if below else max(2, r.top() - 6 - box.height()))
+		p.setPen(Qt.PenStyle.NoPen)
+		p.setBrush(QColor(20, 24, 31, 220))
+		p.drawRoundedRect(box, 4, 4)
+		p.setPen(QColor('#e6edf3'))
+		p.drawText(box, Qt.AlignmentFlag.AlignCenter, text)
 
 	def _corner(self, pos: QPointF) -> Optional[str]:
 		if self.path is None or self.path not in self.rects or not self.movable:
@@ -1098,6 +1133,8 @@ class ItemTab(QWidget):
 			if gridContainer or gridItem:
 				edit = layout.GridEdit()
 				edit.setRoles(gridContainer, gridItem)
+				if gridItem:
+					edit.setAreaNames(layout.areaNames((parent.get('grid') or {}).get('areas')))
 				self._row(arrange, 'grid', 'grid', edit, bindable=False, value=node.get('grid'))
 
 		where = Section('Geometry' + (' (a share of its parent; in a stack it sets the size)' if inLayout else ' (a share of its parent)'), expanded=True)
@@ -1512,6 +1549,9 @@ class Builder(QWidget):
 		                (QKeySequence('Alt+Up'), lambda: self.moveItem(-1)), (QKeySequence('Alt+Down'), lambda: self.moveItem(1))):
 			QShortcut(key, self.tree, fn).setContext(Qt.ShortcutContext.WidgetShortcut)
 		self.tree.currentItemChanged.connect(self._treePicked)
+		self.collapsed: set = set()  # paths of the rows the user folded; kept across the redraws an edit causes
+		self.tree.itemCollapsed.connect(lambda row: self.collapsed.add(row.data(0, Qt.ItemDataRole.UserRole)))
+		self.tree.itemExpanded.connect(lambda row: self.collapsed.discard(row.data(0, Qt.ItemDataRole.UserRole)))
 		self.tree.setMouseTracking(True)
 		self.tree.itemEntered.connect(lambda row, _c: self.stage.setHover(row.data(0, Qt.ItemDataRole.UserRole)))
 		self.tree.left.connect(lambda: self.stage.setHover(None))
@@ -1836,11 +1876,20 @@ class Builder(QWidget):
 				if isinstance(node, dict) and not model.opaque(node):
 					for i, kid in enumerate(node.get(model.ITEMS_KEY) or []):
 						add(row, kid, path + (i,))
-				row.setExpanded(True)
+				row.setExpanded(path not in self.collapsed)
 
 			add(None, self.piece.template, ())
 		self.applyFilter()
 		self._selectRow()
+
+	def foldAll(self, expand: bool):
+		"""Open or close every row of the tree below the dashboard row."""
+		stack = [self.tree.topLevelItem(i) for i in range(self.tree.topLevelItemCount())]
+		while stack:
+			row = stack.pop()
+			if row.parent() is not None or expand:
+				row.setExpanded(expand)
+			stack += [row.child(i) for i in range(row.childCount())]
 
 	def applyFilter(self, _text: str = ''):
 		"""Hide the rows that do not match the filter box, keeping every row that holds a match."""
@@ -1896,7 +1945,26 @@ class Builder(QWidget):
 		parent = self.piece.node(self.selection[:-1])
 		return parent is not None and str(parent.get('type')) not in LAYOUT_PARENTS
 
+	def _areaTags(self) -> Dict[tuple, str]:
+		"""The area name of every item in the selected grid, or in the grid the selected item sits in."""
+		if self.selection is None or self.piece is None:
+			return {}
+		grid = self.selection
+		node = self.piece.node(grid)
+		if node is None or str(node.get('type')) != layout.GRID_KIND:
+			grid = self.selection[:-1]
+			node = self.piece.node(grid) if self.selection else None
+		if node is None or str(node.get('type')) != layout.GRID_KIND:
+			return {}
+		tags = {}
+		for i, kid in enumerate(node.get(model.ITEMS_KEY) or []):
+			spec = kid.get('grid') if isinstance(kid, dict) else None
+			if isinstance(spec, dict) and spec.get('area'):
+				tags[grid + (i,)] = str(spec['area'])
+		return tags
+
 	def _syncStage(self):
+		self.stage.areaTags = self._areaTags()
 		self.stage.select(self.selection, self._movable())
 		editors.CONTEXT.ref = self._refPixels
 
@@ -1977,6 +2045,18 @@ class Builder(QWidget):
 		self._syncStage()
 		self.schedule()
 
+	def resetGeometry(self):
+		"""Remove the selected item's `geometry`, so its parent places and sizes it again."""
+		node = self.piece.node(self.selection) if self.selection else None
+		if node is None or 'geometry' not in node:
+			self.status.setText('This item has no geometry to reset')
+			return
+		self.push()
+		model.setField(node, 'geometry', None)
+		self.rebuildAll()
+		self._syncStage()
+		self.schedule()
+
 	def copyItem(self):
 		"""Put the selected item on the clipboard as the YAML a `.levity` would hold, so it pastes here, into another Studio, or into a file."""
 		raw = self.piece.raw(self.selection) if self.selection else None
@@ -2013,12 +2093,16 @@ class Builder(QWidget):
 		menu.addAction('Paste', self.pasteItem, QKeySequence.StandardKey.Paste)
 		menu.addAction('Duplicate', self.duplicateItem, QKeySequence('Ctrl+D'))
 		menu.addAction('Delete', self.deleteItem, QKeySequence.StandardKey.Delete)
+		menu.addAction('Reset geometry', self.resetGeometry)
 		align = menu.addMenu('Align in parent')
 		for how in self.ALIGN:
 			align.addAction(how, lambda h=how: self.alignItem(h))
 		menu.addSeparator()
 		menu.addAction('Put in group', self.wrapItem, QKeySequence('Ctrl+G'))
 		menu.addAction('Ungroup', self.unwrapItem, QKeySequence('Ctrl+Shift+G'))
+		menu.addSeparator()
+		menu.addAction('Expand all', lambda: self.foldAll(True))
+		menu.addAction('Collapse all', lambda: self.foldAll(False))
 		menu.exec(self.tree.viewport().mapToGlobal(at))
 
 	def extractPreset(self, name: Optional[str] = None):

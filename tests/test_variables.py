@@ -131,3 +131,30 @@ def test_vars_yaml_beside_config(tmp_path):
 	assert loadSharedVariables(tmp_path / 'vars.yaml') == {'gap': 3}
 	(tmp_path / 'vars.yaml').write_text(': : bad')
 	assert loadSharedVariables(tmp_path) == {}
+
+
+def test_a_variable_in_a_mapping_key_is_replaced():
+	assert substitute({'$temp': {'plot': 1}, 'plain': 2}, {'temp': 'environment.temperature.temperature'}) == {
+		'environment.temperature.temperature': {'plot': 1},
+		'plain': 2,
+	}
+
+
+def test_a_key_that_is_not_a_variable_or_not_text_is_left_alone():
+	assert substitute({'$accent': 1, '$n': 2}, {'n': 5}) == {'$accent': 1, '$n': 2}
+
+
+def test_a_save_keeps_a_variable_used_as_a_mapping_key():
+	template = {'vars': {'temp': 'environment.temperature.temperature', 'line': 'bar'}, 'items': [{'$temp': {'plot': '$line', 'size': 1}, 'plain': 2}]}
+	resolved = resolveVariables(template)
+	live = {'vars': template['vars'], 'items': [{'environment.temperature.temperature': {'plot': 'bar', 'size': 3}, 'plain': 2}]}
+	assert retemplate(live, resolved, template)['items'] == [{'$temp': {'plot': '$line', 'size': 3}, 'plain': 2}]
+
+
+def test_vars_yaml_through_the_config_path_type(tmp_path):
+	# The loader hands over `userConfig.userPath`, an EasyPath, not a Path.
+	from LevityDash.lib.EasyPath import EasyPath
+	from LevityDash.lib.variables import loadSharedVariables
+	(tmp_path / 'vars.yaml').write_text('gap: 3\n')
+	assert loadSharedVariables(EasyPath(tmp_path)) == {'gap': 3}
+	assert loadSharedVariables(EasyPath(tmp_path / 'vars.yaml')) == {'gap': 3}

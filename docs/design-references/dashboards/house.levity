@@ -69,244 +69,256 @@ items:
     - preset: climate-card
       name: nursery
       props: {title: Nursery, title_color: $pink, id: nursery, temp_min: 62, temp_max: 76, humid_min: 0.2, humid_max: 0.8, humid_color: $pink}
-
-  # ================= OUTSIDE ===============================================
-  - type: group
-    name: outside
-    geometry: {x: 0.6%, y: 40.5%, width: 25%, height: 34%}
+  - type: grid
+    name: middle
+    geometry: {x: 0.6%, y: 40.5%, width: 98.8%, height: 34%}
+    spacing: 0
+    padding: 0
+    grid:
+      columns: [25fr, 0.8fr, 22fr, 1fr, 28fr, 1.4fr, 20.6fr]
+      rows: [34fr]
+      areas:
+      - outside . compare . damp . watch
     items:
-    - type: text
-      text: Outside
-      font: $display
-      color: $muted
-      alignment: CenterLeft
-      geometry: {x: 2%, y: 0%, width: 40%, height: 7%}
-    - preset: metric-tile
-      geometry: {x: 0%, y: 7%, width: 100%, height: 50%}
-      props:
-        key: environment.temperature.temperature
-        hours: 24
-        hero_box: {x: 0%, y: 0%, width: 44%, height: 70%}
-        graph_box: {x: 0%, y: 10%, width: 100%, height: 74%}
-        list_box: {x: 0%, y: 80%, width: 100%, height: 20%}
-        items:
-        - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels}, display: {precision: 0, valueLabel: {color: $accent}}}
-        - {type: realtime.text, key: $dew, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
-        - {type: realtime.text, key: $rh, title: {text: Humidity}, display: {precision: 0, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Wind}, display: {precision: 0}}
-        - {type: realtime.text, key: environment.clouds.cover.cover, title: {text: Cloud}, display: {precision: 0}}
-    - preset: range-bar
-      geometry: {x: 0%, y: 60%, width: 100%, height: 40%}
-      props:
-        key: $t
-        min: 40
-        max: 70
-        interval: 5
-        low: environment.temperature.low
-        high: environment.temperature.high
 
-  # ================= SIX TEMPERATURES, SIDE BY SIDE ========================
-  # Bars share one scale, coloured by comfort: cool blue, comfortable green, warm yellow, hot red.
-  - type: group
-    name: compare
-    geometry: {x: 26.4%, y: 40.5%, width: 22%, height: 34%}
-    items:
-    - type: text
-      text: Rooms now
-      font: $display
-      color: $muted
-      alignment: CenterLeft
-      geometry: {x: 2%, y: 0%, width: 60%, height: 7%}
-    - preset: bar-stack
-      geometry: {x: 0%, y: 8%, width: 100%, height: 62%}
-      props:
-        items:
-        - preset: readout-bar
-          props: {key: 'indoor.temperature.temperature#livingroom', min: 55, max: 80, weight: 24%, precision: 1}
-          display:
-            caption: {text: Living room, size: 220%}
-            fill: {color: zone}
-            zones:
-            - {to: 64, color: $info, opacity: 0}
-            - {from: 64, to: 72, color: $good, opacity: 0}
-            - {from: 72, to: 76, color: $warn, opacity: 0}
-            - {from: 76, color: $bad, opacity: 0}
-        - preset: readout-bar
-          props: {key: 'indoor.temperature.temperature#kitchen', min: 55, max: 80, weight: 24%, precision: 1}
-          display:
-            caption: {text: Kitchen, size: 220%}
-            fill: {color: zone}
-            zones:
-            - {to: 64, color: $info, opacity: 0}
-            - {from: 64, to: 72, color: $good, opacity: 0}
-            - {from: 72, to: 76, color: $warn, opacity: 0}
-            - {from: 76, color: $bad, opacity: 0}
-        - preset: readout-bar
-          props: {key: 'indoor.temperature.temperature#bedroom', min: 55, max: 80, weight: 24%, precision: 1}
-          display:
-            caption: {text: Bedroom, size: 220%}
-            fill: {color: zone}
-            zones:
-            - {to: 64, color: $info, opacity: 0}
-            - {from: 64, to: 72, color: $good, opacity: 0}
-            - {from: 72, to: 76, color: $warn, opacity: 0}
-            - {from: 76, color: $bad, opacity: 0}
-        - preset: readout-bar
-          props: {key: 'indoor.temperature.temperature#office', min: 55, max: 80, weight: 24%, precision: 1}
-          display:
-            caption: {text: Office, size: 220%}
-            fill: {color: zone}
-            zones:
-            - {to: 64, color: $info, opacity: 0}
-            - {from: 64, to: 72, color: $good, opacity: 0}
-            - {from: 72, to: 76, color: $warn, opacity: 0}
-            - {from: 76, color: $bad, opacity: 0}
-        - preset: readout-bar
-          props: {key: 'indoor.temperature.temperature#basement', min: 55, max: 80, weight: 24%, precision: 1}
-          display:
-            caption: {text: Basement, size: 220%}
-            fill: {color: zone}
-            zones:
-            - {to: 64, color: $info, opacity: 0}
-            - {from: 64, to: 72, color: $good, opacity: 0}
-            - {from: 72, to: 76, color: $warn, opacity: 0}
-            - {from: 76, color: $bad, opacity: 0}
-        - preset: readout-bar
-          props: {key: 'indoor.temperature.temperature#nursery', min: 55, max: 80, weight: 24%, precision: 1}
-          display:
-            caption: {text: Nursery, size: 220%}
-            fill: {color: zone}
-            zones:
-            - {to: 64, color: $info, opacity: 0}
-            - {from: 64, to: 72, color: $good, opacity: 0}
-            - {from: 72, to: 76, color: $warn, opacity: 0}
-            - {from: 76, color: $bad, opacity: 0}
-    - preset: stat-row
-      geometry: {x: 0%, y: 74%, width: 100%, height: 26%}
-      props:
-        items:
-        - {type: realtime.text, key: 'max(indoor.temperature.temperature#office, today)', title: {text: Office peak}, display: {precision: 1, valueLabel: {color: $bad}}}
-        - {type: realtime.text, key: 'min(indoor.temperature.temperature#bedroom, today)', title: {text: Bedroom low}, display: {precision: 1, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: 'at(indoor.temperature.temperature#kitchen, 3h)', title: {text: Kitchen +3h}, display: {precision: 1}}
-
-  # ================= SIX HUMIDITIES ========================================
-  - type: group
-    name: damp
-    geometry: {x: 49.4%, y: 40.5%, width: 28%, height: 34%}
-    items:
-    - type: text
-      text: Humidity
-      font: $display
-      color: $muted
-      alignment: CenterLeft
-      geometry: {x: 2%, y: 0%, width: 40%, height: 7%}
-    - type: stack
-      direction: Horizontal
-      geometry: {x: 0%, y: 8%, width: 100%, height: 62%}
-      spacing: 0.5mm
+    # ================= OUTSIDE ===============================================
+    - type: group
+      name: outside
+      grid: {area: outside}
       items:
-      - preset: ring-reading
-        props: {key: 'indoor.humidity.humidity#livingroom', title: Living room, color: $info, text_color: $info, min: 0.2, max: 0.8, weight: 9%, radius: 96%, precision: 0}
-      - preset: ring-reading
-        props: {key: 'indoor.humidity.humidity#kitchen', title: Kitchen, color: $warn, text_color: $warn, min: 0.2, max: 0.8, weight: 9%, radius: 96%, precision: 0}
-      - preset: ring-reading
-        props: {key: 'indoor.humidity.humidity#bedroom', title: Bedroom, color: $info, text_color: $info, min: 0.2, max: 0.8, weight: 9%, radius: 96%, precision: 0}
-      - preset: ring-reading
-        props: {key: 'indoor.humidity.humidity#office', title: Office, color: $bad, text_color: $bad, min: 0.2, max: 0.8, weight: 9%, radius: 96%, precision: 0}
-      - preset: ring-reading
-        props: {key: 'indoor.humidity.humidity#basement', title: Basement, color: $good, text_color: $good, min: 0.2, max: 0.8, weight: 9%, radius: 96%, precision: 0}
-      - preset: ring-reading
-        props: {key: 'indoor.humidity.humidity#nursery', title: Nursery, color: $pink, text_color: $pink, min: 0.2, max: 0.8, weight: 9%, radius: 96%, precision: 0}
-    - preset: stat-row
-      geometry: {x: 0%, y: 74%, width: 100%, height: 26%}
-      props:
-        items:
-        - {type: realtime.text, key: 'max(indoor.humidity.humidity#basement, today)', title: {text: Basement peak}, display: {precision: 0, valueLabel: {color: $good}}}
-        - {type: realtime.text, key: 'min(indoor.humidity.humidity#office, today)', title: {text: Office low}, display: {precision: 0, valueLabel: {color: $bad}}}
-        - {type: realtime.text, key: 'indoor.temperature.dewpoint#basement', title: {text: Basement dew}, display: {precision: 0}}
-        - {type: realtime.text, key: 'indoor.temperature.dewpoint#nursery', title: {text: Nursery dew}, display: {precision: 0}}
+      - type: text
+        text: Outside
+        font: $display
+        color: $muted
+        alignment: CenterLeft
+        geometry: {x: 2%, y: 0%, width: 40%, height: 7%}
+      - preset: metric-tile
+        geometry: {x: 0%, y: 7%, width: 100%, height: 50%}
+        props:
+          key: environment.temperature.temperature
+          hours: 24
+          hero_box: {x: 0%, y: 0%, width: 44%, height: 70%}
+          graph_box: {x: 0%, y: 10%, width: 100%, height: 74%}
+          list_box: {x: 0%, y: 80%, width: 100%, height: 20%}
+          items:
+          - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels}, display: {precision: 0, valueLabel: {color: $accent}}}
+          - {type: realtime.text, key: $dew, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
+          - {type: realtime.text, key: $rh, title: {text: Humidity}, display: {precision: 0, valueLabel: {color: $info}}}
+          - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Wind}, display: {precision: 0}}
+          - {type: realtime.text, key: environment.clouds.cover.cover, title: {text: Cloud}, display: {precision: 0}}
+      - preset: range-bar
+        geometry: {x: 0%, y: 60%, width: 100%, height: 40%}
+        props:
+          key: $t
+          min: 40
+          max: 70
+          interval: 5
+          low: environment.temperature.low
+          high: environment.temperature.high
 
-  # ================= THE SLOT ==============================================
-  - type: switch
-    name: watch
-    geometry: {x: 78.8%, y: 40.5%, width: 20.6%, height: 34%}
-    cycle: 10s
-    fade: 0.4s
-    hold: 10s
-    items:
-    - preset: headline-panel
-      name: damp-basement
-      when: 'indoor.humidity.humidity#basement > 60%'
-      props:
-        headline: Basement damp
-        headline_color: $good
-        key: indoor.humidity.humidity#basement
-        title: Humidity
-        color: $good
-        precision: 0
-        unit_position: Inline
-        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
-        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
-        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+    # ================= SIX TEMPERATURES, SIDE BY SIDE ========================
+    # Bars share one scale, coloured by comfort: cool blue, comfortable green, warm yellow, hot red.
+    - type: group
+      name: compare
+      grid: {area: compare}
+      items:
+      - type: text
+        text: Rooms now
+        font: $display
+        color: $muted
+        alignment: CenterLeft
+        geometry: {x: 2%, y: 0%, width: 60%, height: 7%}
+      - preset: bar-stack
+        geometry: {x: 0%, y: 8%, width: 100%, height: 62%}
+        props:
+          items:
+          - preset: readout-bar
+            props: {key: 'indoor.temperature.temperature#livingroom', min: 55, max: 80, weight: 24%, precision: 1}
+            display:
+              caption: {text: Living room, size: 220%}
+              fill: {color: zone}
+              zones:
+              - {to: 64, color: $info, opacity: 0}
+              - {from: 64, to: 72, color: $good, opacity: 0}
+              - {from: 72, to: 76, color: $warn, opacity: 0}
+              - {from: 76, color: $bad, opacity: 0}
+          - preset: readout-bar
+            props: {key: 'indoor.temperature.temperature#kitchen', min: 55, max: 80, weight: 24%, precision: 1}
+            display:
+              caption: {text: Kitchen, size: 220%}
+              fill: {color: zone}
+              zones:
+              - {to: 64, color: $info, opacity: 0}
+              - {from: 64, to: 72, color: $good, opacity: 0}
+              - {from: 72, to: 76, color: $warn, opacity: 0}
+              - {from: 76, color: $bad, opacity: 0}
+          - preset: readout-bar
+            props: {key: 'indoor.temperature.temperature#bedroom', min: 55, max: 80, weight: 24%, precision: 1}
+            display:
+              caption: {text: Bedroom, size: 220%}
+              fill: {color: zone}
+              zones:
+              - {to: 64, color: $info, opacity: 0}
+              - {from: 64, to: 72, color: $good, opacity: 0}
+              - {from: 72, to: 76, color: $warn, opacity: 0}
+              - {from: 76, color: $bad, opacity: 0}
+          - preset: readout-bar
+            props: {key: 'indoor.temperature.temperature#office', min: 55, max: 80, weight: 24%, precision: 1}
+            display:
+              caption: {text: Office, size: 220%}
+              fill: {color: zone}
+              zones:
+              - {to: 64, color: $info, opacity: 0}
+              - {from: 64, to: 72, color: $good, opacity: 0}
+              - {from: 72, to: 76, color: $warn, opacity: 0}
+              - {from: 76, color: $bad, opacity: 0}
+          - preset: readout-bar
+            props: {key: 'indoor.temperature.temperature#basement', min: 55, max: 80, weight: 24%, precision: 1}
+            display:
+              caption: {text: Basement, size: 220%}
+              fill: {color: zone}
+              zones:
+              - {to: 64, color: $info, opacity: 0}
+              - {from: 64, to: 72, color: $good, opacity: 0}
+              - {from: 72, to: 76, color: $warn, opacity: 0}
+              - {from: 76, color: $bad, opacity: 0}
+          - preset: readout-bar
+            props: {key: 'indoor.temperature.temperature#nursery', min: 55, max: 80, weight: 24%, precision: 1}
+            display:
+              caption: {text: Nursery, size: 220%}
+              fill: {color: zone}
+              zones:
+              - {to: 64, color: $info, opacity: 0}
+              - {from: 64, to: 72, color: $good, opacity: 0}
+              - {from: 72, to: 76, color: $warn, opacity: 0}
+              - {from: 76, color: $bad, opacity: 0}
+      - preset: stat-row
+        geometry: {x: 0%, y: 74%, width: 100%, height: 26%}
+        props:
+          items:
+          - {type: realtime.text, key: 'max(indoor.temperature.temperature#office, today)', title: {text: Office peak}, display: {precision: 1, valueLabel: {color: $bad}}}
+          - {type: realtime.text, key: 'min(indoor.temperature.temperature#bedroom, today)', title: {text: Bedroom low}, display: {precision: 1, valueLabel: {color: $info}}}
+          - {type: realtime.text, key: 'at(indoor.temperature.temperature#kitchen, 3h)', title: {text: Kitchen +3h}, display: {precision: 1}}
+
+    # ================= SIX HUMIDITIES ========================================
+    - type: group
+      name: damp
+      grid: {area: damp}
+      items:
+      - type: text
+        text: Humidity
+        font: $display
+        color: $muted
+        alignment: CenterLeft
+        geometry: {x: 2%, y: 0%, width: 40%, height: 7%}
+      - type: stack
+        direction: Horizontal
+        geometry: {x: 0%, y: 8%, width: 100%, height: 62%}
+        spacing: 0.5mm
         items:
-        - {type: realtime.text, key: 'indoor.temperature.temperature#basement', title: {text: Temp}, display: {precision: 1}}
-        - {type: realtime.text, key: 'indoor.temperature.dewpoint#basement', title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: 'max(indoor.humidity.humidity#basement, today)', title: {text: Peak}, display: {precision: 0}}
-        - {type: realtime.text, key: 'indoor.battery.battery#basement', title: {text: Batt}, display: {precision: 0}}
-    - preset: headline-panel
-      name: hot-office
-      when: 'indoor.temperature.temperature#office > 76°F'
-      props:
-        headline: Office hot
-        headline_color: $bad
-        key: indoor.temperature.temperature#office
-        title: Temperature
-        color: $bad
-        precision: 1
-        unit_position: Inline
-        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
-        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
-        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
-        items:
-        - {type: realtime.text, key: 'indoor.humidity.humidity#office', title: {text: Humidity}, display: {precision: 0, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: 'max(indoor.temperature.temperature#office, today)', title: {text: Peak}, display: {precision: 1}}
-        - {type: realtime.text, key: $t, title: {text: Outside}, display: {precision: 0, valueLabel: {color: $good}}}
-    - preset: headline-panel
-      name: battery
-      when: 'indoor.battery.battery#nursery < 25%'
-      props:
-        headline: Sensor battery
-        headline_color: $warn
-        key: indoor.battery.battery#nursery
-        title: Nursery
-        color: $warn
-        precision: 0
-        unit_position: Inline
-        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
-        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
-        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
-        items:
-        - {type: realtime.text, key: 'indoor.battery.battery#basement', title: {text: Basement}, display: {precision: 0, valueLabel: {color: $warn}}}
-        - {type: realtime.text, key: 'indoor.battery.battery#bedroom', title: {text: Bedroom}, display: {precision: 0}}
-        - {type: realtime.text, key: 'indoor.battery.battery#kitchen', title: {text: Kitchen}, display: {precision: 0}}
-        - {type: realtime.text, key: 'indoor.battery.battery#livingroom', title: {text: Living}, display: {precision: 0}}
-    - preset: headline-panel
-      name: tonight
-      props:
-        headline: Tonight outside
-        headline_color: $info
-        key: at(environment.temperature.temperature, 9h)
-        title: At midnight
-        color: $info
-        precision: 0
-        unit_position: Inline
-        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
-        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
-        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
-        items:
-        - {type: realtime.text, key: 'at($rh, 9h)', title: {text: Humidity}, display: {precision: 0}}
-        - {type: realtime.text, key: 'at(environment.wind.speed.speed, 9h)', title: {text: Wind}, display: {precision: 0, unitPosition: Hidden}}
-        - {type: realtime.text, key: 'at(environment.clouds.cover.cover, 9h)', title: {text: Cloud}, display: {precision: 0}}
+        - preset: ring-reading
+          props: {key: 'indoor.humidity.humidity#livingroom', title: Living room, color: $info, text_color: $info, min: 0.2, max: 0.8, weight: 9%, radius: 96%, precision: 0}
+        - preset: ring-reading
+          props: {key: 'indoor.humidity.humidity#kitchen', title: Kitchen, color: $warn, text_color: $warn, min: 0.2, max: 0.8, weight: 9%, radius: 96%, precision: 0}
+        - preset: ring-reading
+          props: {key: 'indoor.humidity.humidity#bedroom', title: Bedroom, color: $info, text_color: $info, min: 0.2, max: 0.8, weight: 9%, radius: 96%, precision: 0}
+        - preset: ring-reading
+          props: {key: 'indoor.humidity.humidity#office', title: Office, color: $bad, text_color: $bad, min: 0.2, max: 0.8, weight: 9%, radius: 96%, precision: 0}
+        - preset: ring-reading
+          props: {key: 'indoor.humidity.humidity#basement', title: Basement, color: $good, text_color: $good, min: 0.2, max: 0.8, weight: 9%, radius: 96%, precision: 0}
+        - preset: ring-reading
+          props: {key: 'indoor.humidity.humidity#nursery', title: Nursery, color: $pink, text_color: $pink, min: 0.2, max: 0.8, weight: 9%, radius: 96%, precision: 0}
+      - preset: stat-row
+        geometry: {x: 0%, y: 74%, width: 100%, height: 26%}
+        props:
+          items:
+          - {type: realtime.text, key: 'max(indoor.humidity.humidity#basement, today)', title: {text: Basement peak}, display: {precision: 0, valueLabel: {color: $good}}}
+          - {type: realtime.text, key: 'min(indoor.humidity.humidity#office, today)', title: {text: Office low}, display: {precision: 0, valueLabel: {color: $bad}}}
+          - {type: realtime.text, key: 'indoor.temperature.dewpoint#basement', title: {text: Basement dew}, display: {precision: 0}}
+          - {type: realtime.text, key: 'indoor.temperature.dewpoint#nursery', title: {text: Nursery dew}, display: {precision: 0}}
+
+    # ================= THE SLOT ==============================================
+    - type: switch
+      name: watch
+      grid: {area: watch}
+      cycle: 10s
+      fade: 0.4s
+      hold: 10s
+      items:
+      - preset: headline-panel
+        name: damp-basement
+        when: 'indoor.humidity.humidity#basement > 60%'
+        props:
+          headline: Basement damp
+          headline_color: $good
+          key: indoor.humidity.humidity#basement
+          title: Humidity
+          color: $good
+          precision: 0
+          unit_position: Inline
+          headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
+          hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
+          list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+          items:
+          - {type: realtime.text, key: 'indoor.temperature.temperature#basement', title: {text: Temp}, display: {precision: 1}}
+          - {type: realtime.text, key: 'indoor.temperature.dewpoint#basement', title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $info}}}
+          - {type: realtime.text, key: 'max(indoor.humidity.humidity#basement, today)', title: {text: Peak}, display: {precision: 0}}
+          - {type: realtime.text, key: 'indoor.battery.battery#basement', title: {text: Batt}, display: {precision: 0}}
+      - preset: headline-panel
+        name: hot-office
+        when: 'indoor.temperature.temperature#office > 76°F'
+        props:
+          headline: Office hot
+          headline_color: $bad
+          key: indoor.temperature.temperature#office
+          title: Temperature
+          color: $bad
+          precision: 1
+          unit_position: Inline
+          headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
+          hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
+          list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+          items:
+          - {type: realtime.text, key: 'indoor.humidity.humidity#office', title: {text: Humidity}, display: {precision: 0, valueLabel: {color: $info}}}
+          - {type: realtime.text, key: 'max(indoor.temperature.temperature#office, today)', title: {text: Peak}, display: {precision: 1}}
+          - {type: realtime.text, key: $t, title: {text: Outside}, display: {precision: 0, valueLabel: {color: $good}}}
+      - preset: headline-panel
+        name: battery
+        when: 'indoor.battery.battery#nursery < 25%'
+        props:
+          headline: Sensor battery
+          headline_color: $warn
+          key: indoor.battery.battery#nursery
+          title: Nursery
+          color: $warn
+          precision: 0
+          unit_position: Inline
+          headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
+          hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
+          list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+          items:
+          - {type: realtime.text, key: 'indoor.battery.battery#basement', title: {text: Basement}, display: {precision: 0, valueLabel: {color: $warn}}}
+          - {type: realtime.text, key: 'indoor.battery.battery#bedroom', title: {text: Bedroom}, display: {precision: 0}}
+          - {type: realtime.text, key: 'indoor.battery.battery#kitchen', title: {text: Kitchen}, display: {precision: 0}}
+          - {type: realtime.text, key: 'indoor.battery.battery#livingroom', title: {text: Living}, display: {precision: 0}}
+      - preset: headline-panel
+        name: tonight
+        props:
+          headline: Tonight outside
+          headline_color: $info
+          key: at(environment.temperature.temperature, 9h)
+          title: At midnight
+          color: $info
+          precision: 0
+          unit_position: Inline
+          headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
+          hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
+          list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+          items:
+          - {type: realtime.text, key: 'at($rh, 9h)', title: {text: Humidity}, display: {precision: 0}}
+          - {type: realtime.text, key: 'at(environment.wind.speed.speed, 9h)', title: {text: Wind}, display: {precision: 0, unitPosition: Hidden}}
+          - {type: realtime.text, key: 'at(environment.clouds.cover.cover, 9h)', title: {text: Cloud}, display: {precision: 0}}
+
 
   # ================= THE FLOOR =============================================
   - type: realtime.text
