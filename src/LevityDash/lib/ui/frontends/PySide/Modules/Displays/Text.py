@@ -211,7 +211,7 @@ class Text(QGraphicsPathItem):
 				if self._relativeTo is None:
 					raise ValueError('RelativeTo is not set')
 				return height.toAbsolute(self._relativeTo.absoluteHeight)
-			case wu.Length(), _:
+			case wu.Length():
 				dpi = getDPI(self.surface.scene().view.screen())
 				value = float(height.inch) * dpi
 				self._height_px_cache = value
@@ -356,7 +356,14 @@ class Text(QGraphicsPathItem):
 		translating the parent's marginRect by -pos gives it in this item's
 		coordinate space at identity scale.
 		"""
-		return self.parent.marginRect.translated(-self.pos())
+		rect = self.parent.marginRect.translated(-self.pos())
+		# `text-height` narrows the band to a fixed height, centred in the box. It lives
+		# here, not in updateTransform, so a size group's tier and fit read it too.
+		if (height := self.height_px) is not None and 0 < height < rect.height():
+			centre = rect.center()
+			rect.setHeight(height)
+			rect.moveCenter(centre)
+		return rect
 
 	@property
 	def sceneLimitRect(self) -> QRectF:
@@ -368,7 +375,7 @@ class Text(QGraphicsPathItem):
 
 	@property
 	def height_limit(self) -> float:
-		return self.parent.marginRect.height()
+		return self.limitRect.height()
 
 	@property
 	def containingRect(self) -> QRectF:
@@ -406,11 +413,6 @@ class Text(QGraphicsPathItem):
 			self.setTransform(transform)
 
 		limitRect = self.limitRect
-
-		if (height := self.height_px) is not None:
-			center = limitRect.center()
-			limitRect.setHeight(height)
-			limitRect.moveCenter(center)
 
 		rect = self.currentTextRect()
 		self.setTransformOriginPoint(0, 0)

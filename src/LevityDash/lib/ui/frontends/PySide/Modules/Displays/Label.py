@@ -335,8 +335,8 @@ class Label(Panel, ColorMixin, tag='label'):
 		return self.textBox.height
 
 	@textHeight.setter
-	def textHeight(self, value: Size.Height):
-		if value.relative:
+	def textHeight(self, value: Size.Height | Length | None):
+		if isinstance(value, Size.Height) and value.relative:
 			self.textBox.setRelativeHeight(value, self.localGroup.geometry)
 		else:
 			self.textBox.setAbsoluteHeight(value)
