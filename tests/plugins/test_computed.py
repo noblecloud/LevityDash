@@ -8,7 +8,7 @@ backend and frontend (see the value-sources brief).
 import logging
 
 import pytest
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QCoreApplication, QObject, Signal
 
 from LevityDash.lib.plugins import computed
 from LevityDash.lib.plugins.categories import CategoryItem
@@ -41,7 +41,10 @@ def engine(monkeypatch):
 	engine = ComputedEngine(StubDispatcher())
 	monkeypatch.setattr(computed, '_engine', engine)
 	monkeypatch.setattr(computed, '_remote', lambda: None)
-	return engine
+	yield engine
+	# A worker still computing would emit on an engine Python is about to free.
+	engine._executor.shutdown(wait=True)
+	QCoreApplication.sendPostedEvents(engine)
 
 
 def test_register_and_release_are_refcounted(engine):
@@ -152,3 +155,50 @@ def test_an_aggregate_over_a_place_publishes_its_value_and_a_member_count(monkey
 
 	engine.release(expression.key)
 	assert not engine._dependents
+
+
+class _SourceReading:
+	def __init__(self, value):
+		self.value = value
+
+
+class _Multi(dict):
+	"""Containers by source name; `.value` is the preferred source's container, as in MultiSourceContainer."""
+
+	def __init__(self, preferred, **containers):
+		super().__init__(containers)
+		self._preferred = preferred
+
+	@property
+	def value(self):
+		return self[self._preferred]
+
+
+class _SourceDispatcher(StubDispatcher):
+	def __init__(self, containers):
+		super().__init__()
+		self.containers = containers
+
+	def getContainer(self, key, default=None):
+		return self.containers.get(str(key.path) if hasattr(key, 'path') else '.'.join(key), default)
+
+
+def test_a_key_with_a_source_reads_that_source_not_the_preferred_one():
+	from WeatherUnits.temperature import Fahrenheit
+
+	class _Box:
+		def __init__(self, degrees):
+			self.value = _SourceReading(Fahrenheit(degrees))
+
+	multi = _Multi('OpenMeteo', OpenMeteo=_Box(70), PirateWeather=_Box(75))
+	engine = ComputedEngine(_SourceDispatcher({'environment.temperature.high': multi}))
+	from LevityDash.lib.plugins.expressions import Expression
+	expression = Expression.parse('max(OpenMeteo:environment.temperature.high, PirateWeather:environment.temperature.high)')
+	engine.register(expression)
+	_wait(engine, engine._entries[expression.key])
+	assert engine.source[expression.key].value.rawValue == Fahrenheit(75)
+
+	spread = Expression.parse('PirateWeather:environment.temperature.high - OpenMeteo:environment.temperature.high')
+	engine.register(spread)
+	_wait(engine, engine._entries[spread.key])
+	assert engine.source[spread.key].value.rawValue == 5

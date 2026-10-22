@@ -113,6 +113,14 @@ them.** This migration mostly *deletes* duplication rather than adding a layer.
 
 ## 2. Keep a prefix — change what it discriminates
 
+> **First cut, built 2026-10-22:** the shape is a property of the schema entry, not a
+> prefix of the key, so no key changes. `lib/plugins/shapes.py` holds the closed set. An
+> entry may say `shape:`; otherwise the shape comes from its `sourceUnit` and `type`
+> (`str` is text, `epoch` or `ISO8601` is time, `bool` or `WeatherCode` is an enum,
+> everything else is a number). `UnitMetaData.shape` and `.choices` read it, and the wire
+> sends it in each key's metadata. Moving the shape into the key waits with the rest of
+> the namespace (decision 15).
+
 | Prefix | Discriminates | |
 |---|---|---|
 | `environment.` `indoor.` | location | ❌ |

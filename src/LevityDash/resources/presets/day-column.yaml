@@ -18,6 +18,6 @@ template:
     - {type: text, text: $label, font: $display, color: $text, alignment: Center, matchingGroup: {group: $headGroup, matchAll: true}}
     - {type: realtime.text, key: $high, title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
     - {type: realtime.text, key: $low, title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
-    - {type: realtime.text, key: $rain, title: {text: Rain}, display: {precision: 2, valueLabel: {color: $info}}}
-    - {type: realtime.text, key: $gust, title: {text: Gust}, display: {precision: 0, valueLabel: {color: $warn}}}
+    - {type: realtime.text, key: $rain, title: {text: Rain in}, display: {precision: 2, unitPosition: Hidden, valueLabel: {color: $info}}}
+    - {type: realtime.text, key: $gust, title: {text: Gust mph}, display: {precision: 0, unitPosition: Hidden, valueLabel: {color: $warn}}}
     - {type: realtime.text, key: $heading, title: {text: From}, display: {precision: 0}}

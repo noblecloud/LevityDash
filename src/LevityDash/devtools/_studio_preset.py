@@ -328,6 +328,48 @@ class Piece:
 		kids.insert(path[-1] + 1, copy.deepcopy(kids[path[-1]]))
 		return path[:-1] + (path[-1] + 1,)
 
+	#: Placement an item hands to the group wrapped around it, and gets back when that group is taken away.
+	PLACEMENT = ('geometry', 'flex', 'grid', 'when')
+
+	def wrap(self, path: Path, kind: str = 'group') -> Optional[Path]:
+		"""Put the item at `path` inside a new container of type `kind`; the container's path, or None for the root or an item kept as written.
+
+		The container takes the item's placement (`geometry`, `flex`, `grid`, `when`), so the item keeps its place on the stage and
+		now fills the container.
+		"""
+		item = self.raw(path) if path else None
+		if not isinstance(item, dict) or opaque(item):
+			return None
+		box: dict = {'type': kind}
+		for key in self.PLACEMENT:
+			if key in item:
+				box[key] = item.pop(key)
+		box[ITEMS_KEY] = [item]
+		self.node(path[:-1])[ITEMS_KEY][path[-1]] = box
+		return path
+
+	def unwrap(self, path: Path) -> Optional[Path]:
+		"""Replace the container at `path` by the items inside it, in the same place; the path of the first one.
+
+		None when that would change what is drawn: the root, a container that is not a bare group or stack of editable
+		items, or one that sets placement of its own with more than one item inside it. With one item inside, that item takes the
+		container's placement back (what `wrap` did the other way).
+		"""
+		node = self.node(path) if path else None
+		if not holds(node) or not node.get(ITEMS_KEY):
+			return None
+		if set(node) - {'type', ITEMS_KEY, 'name', *self.PLACEMENT} or any(opaque(k) for k in node[ITEMS_KEY]):
+			return None
+		placed = {k: node[k] for k in self.PLACEMENT if k in node}
+		if placed:
+			only = node[ITEMS_KEY][0]
+			if len(node[ITEMS_KEY]) != 1 or any(k in only for k in placed):
+				return None
+			only.update(placed)
+		kids = self.node(path[:-1])[ITEMS_KEY]
+		kids[path[-1]:path[-1] + 1] = node[ITEMS_KEY]
+		return path
+
 	#: What stays on the use when an item becomes a preset: where it sits and when it shows, not what it is.
 	USE_FIELDS = ('name', 'geometry', 'flex', 'grid', 'when')
 

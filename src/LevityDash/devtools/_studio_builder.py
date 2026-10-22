@@ -30,7 +30,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 import yaml
 from PySide6.QtCore import QPointF, QRectF, QSignalBlocker, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QImage, QKeySequence, QPainter, QPen, QShortcut
+from PySide6.QtGui import QColor, QIcon, QImage, QKeySequence, QPainter, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (
 	QAbstractItemView, QApplication, QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMenu,
 	QPlainTextEdit, QPushButton, QScrollArea, QSplitter, QTabWidget, QToolButton, QTreeWidget, QTreeWidgetItem,
@@ -607,16 +607,48 @@ def snapDrag(rect: QRectF, mode: str, corner: Optional[str], parent: QRectF, oth
 
 
 # Section: the stage
+#: What a tree row's coloured square says: a container, a display, a preset's use, or something kept as written.
+KIND_COLOURS = {'container': '#2f81f7', 'display': '#3fb950', 'preset': '#a371f7', 'shorthand': '#8b949e'}
+_icons: Dict[str, QIcon] = {}
+
+
+def _kind(node: Any) -> str:
+	if not isinstance(node, dict) or model.opaque(node):
+		return 'shorthand'
+	if model.PRESET_KEY in node:
+		return 'preset'
+	return 'container' if model.holds(node) or not node.get('type') else 'display'
+
+
+def _kindIcon(kind: str) -> QIcon:
+	if kind not in _icons:
+		pix = QPixmap(14, 14)
+		pix.fill(Qt.GlobalColor.transparent)
+		p = QPainter(pix)
+		p.setRenderHint(QPainter.RenderHint.Antialiasing)
+		p.setPen(Qt.PenStyle.NoPen)
+		p.setBrush(QColor(KIND_COLOURS[kind]))
+		p.drawRoundedRect(QRectF(2, 2, 10, 10), 3, 3)
+		p.end()
+		_icons[kind] = QIcon(pix)
+	return _icons[kind]
+
+
 class ItemTree(QTreeWidget):
 	"""The item tree. A row dragged onto another row says where it wants to go; the builder moves it in the model and
 	draws the tree again, so Qt never moves a row itself."""
 
 	moved = Signal(tuple, tuple, int)  # path, new parent's path, index in it
+	left = Signal()  # the pointer left the tree
 
 	def __init__(self):
 		super().__init__()
 		self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
 		self.setDefaultDropAction(Qt.DropAction.MoveAction)
+
+	def leaveEvent(self, event):
+		self.left.emit()
+		super().leaveEvent(event)
 
 	def dropEvent(self, event):
 		source, target = self.currentItem(), self.itemAt(event.position().toPoint())
@@ -652,12 +684,18 @@ class Stage(QWidget):
 		self.snap = True  # drags stick to the parent's and the siblings' edges and centres; Alt held turns it off
 		self.guides: Tuple[List[float], List[float]] = ([], [])
 		self.marks: List[QRectF] = []  # boxes the Size groups tab points at, in scene pixels
+		self.zoom = 1.0  # Ctrl + wheel zooms about the pointer, a middle-button drag pans, 0 shows the whole picture again
+		self.pan = QPointF()
+		self._panning: Optional[tuple] = None
+		self.hover: Optional[tuple] = None  # the item under the pointer, here or in the tree: a thin outline, never a selection
 		self.setMinimumSize(320, 220)
 		self.setMouseTracking(True)
 		self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
 	def keyPressEvent(self, event):
 		"""Arrow keys move the selected item by 1% of its parent; Shift 5%, Alt 0.1%."""
+		if event.key() == Qt.Key.Key_0:
+			return self.resetView()
 		step = {Qt.Key.Key_Left: (-1, 0), Qt.Key.Key_Right: (1, 0), Qt.Key.Key_Up: (0, -1), Qt.Key.Key_Down: (0, 1)}.get(event.key())
 		rect = self.rects.get(self.path) if self.path else None
 		if step is None or rect is None or not self.movable:
@@ -684,6 +722,15 @@ class Stage(QWidget):
 		self.path, self.movable = path, movable
 		self.update()
 
+	def setHover(self, path: Optional[tuple]):
+		if path != self.hover:
+			self.hover = path
+			self.update()
+
+	def leaveEvent(self, event):
+		self.setHover(None)
+		super().leaveEvent(event)
+
 	def setMarks(self, rects: List[QRectF]):
 		self.marks = list(rects)
 		self.update()
@@ -691,8 +738,33 @@ class Stage(QWidget):
 	def _fit(self) -> Tuple[float, QPointF]:
 		if self.image is None:
 			return 1.0, QPointF()
-		scale = min(self.width() / self.image.width(), self.height() / self.image.height())
-		return scale, QPointF((self.width() - self.image.width() * scale) / 2, (self.height() - self.image.height() * scale) / 2)
+		fit = min(self.width() / self.image.width(), self.height() / self.image.height())
+		scale = fit * self.zoom
+		return scale, QPointF((self.width() - self.image.width() * scale) / 2, (self.height() - self.image.height() * scale) / 2) + self.pan
+
+	def resetView(self):
+		self.zoom, self.pan = 1.0, QPointF()
+		self.update()
+
+	def zoomAt(self, pos: QPointF, factor: float):
+		"""Change the zoom by `factor` (1 is the whole picture, up to 8) keeping the point under `pos` where it is."""
+		zoom = max(1.0, min(8.0, self.zoom * factor))
+		if zoom == self.zoom:
+			return
+		spot = self._toScene(pos)
+		self.zoom, self.pan = zoom, QPointF()
+		scale, off = self._fit()
+		self.pan = pos - (off + spot * scale)
+		if zoom == 1.0:
+			self.pan = QPointF()
+		self.update()
+
+	def wheelEvent(self, event):
+		if event.modifiers() & Qt.KeyboardModifier.ControlModifier and self.image is not None:
+			self.zoomAt(event.position(), 1.0015 ** event.angleDelta().y())
+			event.accept()
+		else:
+			super().wheelEvent(event)
 
 	def _toScene(self, pos: QPointF) -> QPointF:
 		scale, off = self._fit()
@@ -715,6 +787,10 @@ class Stage(QWidget):
 			p.setBrush(QColor(255, 176, 32, 50))
 			for m in self.marks:
 				p.drawRect(self._toView(m))
+		if self.hover is not None and self.hover != self.path and self.hover in self.rects:
+			p.setPen(QPen(QColor('#2f81f7'), 1, Qt.PenStyle.DashLine))
+			p.setBrush(QColor(47, 129, 247, 38))
+			p.drawRect(self._toView(self.rects[self.hover]))
 		if self.path is not None and self.path in self.rects:
 			r = self._toView(self.rects[self.path])
 			p.setPen(QPen(QColor('#2f81f7'), 2))
@@ -752,6 +828,10 @@ class Stage(QWidget):
 
 	def mousePressEvent(self, event):
 		pos = event.position()
+		if event.button() == Qt.MouseButton.MiddleButton:
+			self._panning = (pos, QPointF(self.pan))
+			self.setCursor(Qt.CursorShape.ClosedHandCursor)
+			return
 		corner = self._corner(pos)
 		if corner:
 			self._drag = ('resize', corner, pos, QRectF(self.rects[self.path]))
@@ -765,8 +845,14 @@ class Stage(QWidget):
 
 	def mouseMoveEvent(self, event):
 		pos = event.position()
+		if self._panning is not None:
+			start, pan = self._panning
+			self.pan = pan + (pos - start)
+			self.update()
+			return
 		if self._drag is None:
 			corner = self._corner(pos)
+			self.setHover(None if corner else self.hit(self._toScene(pos)))
 			self.setCursor(Qt.CursorShape.SizeFDiagCursor if corner in ('tl', 'br') else Qt.CursorShape.SizeBDiagCursor if corner else Qt.CursorShape.ArrowCursor)
 			return
 		mode, corner, start, rect = self._drag
@@ -807,6 +893,9 @@ class Stage(QWidget):
 		self.dragged.emit(self.path, geometry)
 
 	def mouseReleaseEvent(self, _):
+		if self._panning is not None:
+			self._panning = None
+			self.setCursor(Qt.CursorShape.ArrowCursor)
 		if self._drag is not None:
 			self._drag = None
 			self.guides = ([], [])
@@ -1384,9 +1473,13 @@ class Builder(QWidget):
 		# Only while the tree has the focus, so a text field keeps its own copy and paste.
 		for key, fn in ((QKeySequence.StandardKey.Copy, self.copyItem), (QKeySequence.StandardKey.Paste, self.pasteItem),
 		                (QKeySequence.StandardKey.Delete, self.deleteItem), (QKeySequence('Ctrl+D'), self.duplicateItem),
+		                (QKeySequence('Ctrl+G'), self.wrapItem), (QKeySequence('Ctrl+Shift+G'), self.unwrapItem),
 		                (QKeySequence('Alt+Up'), lambda: self.moveItem(-1)), (QKeySequence('Alt+Down'), lambda: self.moveItem(1))):
 			QShortcut(key, self.tree, fn).setContext(Qt.ShortcutContext.WidgetShortcut)
 		self.tree.currentItemChanged.connect(self._treePicked)
+		self.tree.setMouseTracking(True)
+		self.tree.itemEntered.connect(lambda row, _c: self.stage.setHover(row.data(0, Qt.ItemDataRole.UserRole)))
+		self.tree.left.connect(lambda: self.stage.setHover(None))
 		lbox.addWidget(self.tree, 1)
 		split.addWidget(left)
 
@@ -1651,6 +1744,11 @@ class Builder(QWidget):
 		self.future.clear()
 		self._updateHistory()
 
+	def _dropPush(self):
+		"""Forget the undo step `push` just made, for an edit that turned out to change nothing."""
+		self.history.pop()
+		self._updateHistory()
+
 	def _updateHistory(self):
 		self.undoButton.setEnabled(bool(self.history))
 		self.redoButton.setEnabled(bool(self.future))
@@ -1693,6 +1791,7 @@ class Builder(QWidget):
 					if not path and self.piece.root is not None:
 						label, detail = 'dashboard', self.path.name if self.path else self.piece.name
 				row = QTreeWidgetItem([f'{label}  ·  {detail}' if detail else label])
+				row.setIcon(0, _kindIcon(_kind(node)))
 				row.setData(0, Qt.ItemDataRole.UserRole, path)
 				(parent.addChild if parent is not None else self.tree.addTopLevelItem)(row)
 				if isinstance(node, dict) and not model.opaque(node):
@@ -1788,6 +1887,51 @@ class Builder(QWidget):
 			self._syncStage()
 			self.schedule()
 
+	#: Where each alignment puts the item inside its parent: (axis, share of the free space before it).
+	ALIGN = {'Left': ('x', 0.0), 'Centre': ('x', 0.5), 'Right': ('x', 1.0), 'Top': ('y', 0.0), 'Middle': ('y', 0.5), 'Bottom': ('y', 1.0)}
+
+	def alignItem(self, how: str):
+		"""Move the selected item to the `how` edge or centre of its parent by setting its geometry `x` or `y` (a share of the parent)."""
+		path = self.selection
+		node = self.piece.node(path) if path else None
+		rect, parent = self.stage.rects.get(path), self.stage.rects.get(path[:-1]) if path else None
+		holder = self.piece.node(path[:-1]) if path else None
+		if node is None or rect is None or parent is None or not parent.width() or not parent.height():
+			self.status.setText('Pick an item inside the dashboard to align')
+			return
+		if str(holder.get('type') or 'group') not in ('group', 'titled-group'):
+			self.status.setText('Only an item in a group has an x and y of its own; a stack, split or switch places it')
+			return
+		axis, share = self.ALIGN[how]
+		size = (rect.width() / parent.width()) if axis == 'x' else (rect.height() / parent.height())
+		self._dragged(path, {axis: f'{round((1 - size) * share * 100, 2):g}%'})
+		self._dragDone()
+	def wrapItem(self):
+		"""Put the selected item inside a new group that takes its place on the stage."""
+		if not self.selection:
+			return
+		self.push()
+		if self.piece.wrap(self.selection) is None:
+			self._dropPush()
+			self.status.setText('This item cannot be put in a group (the dashboard itself, or an item kept as written)')
+			return
+		self.rebuildAll()
+		self._syncStage()
+		self.schedule()
+
+	def unwrapItem(self):
+		"""Replace the selected group by the items inside it."""
+		if not self.selection:
+			return
+		self.push()
+		if self.piece.unwrap(self.selection) is None:
+			self._dropPush()
+			self.status.setText('Only a group with no placement of its own, holding ordinary items, can be taken apart')
+			return
+		self.rebuildAll()
+		self._syncStage()
+		self.schedule()
+
 	def copyItem(self):
 		"""Put the selected item on the clipboard as the YAML a `.levity` would hold, so it pastes here, into another Studio, or into a file."""
 		raw = self.piece.raw(self.selection) if self.selection else None
@@ -1824,6 +1968,12 @@ class Builder(QWidget):
 		menu.addAction('Paste', self.pasteItem, QKeySequence.StandardKey.Paste)
 		menu.addAction('Duplicate', self.duplicateItem, QKeySequence('Ctrl+D'))
 		menu.addAction('Delete', self.deleteItem, QKeySequence.StandardKey.Delete)
+		align = menu.addMenu('Align in parent')
+		for how in self.ALIGN:
+			align.addAction(how, lambda h=how: self.alignItem(h))
+		menu.addSeparator()
+		menu.addAction('Put in group', self.wrapItem, QKeySequence('Ctrl+G'))
+		menu.addAction('Ungroup', self.unwrapItem, QKeySequence('Ctrl+Shift+G'))
 		menu.exec(self.tree.viewport().mapToGlobal(at))
 
 	def extractPreset(self, name: Optional[str] = None):

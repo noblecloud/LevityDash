@@ -3118,7 +3118,7 @@ anyio = ">=3.0.0"
 
 [[package]]
 name = "weatherunits"
-version = "0.7.1"
+version = "0.8.0"
 description = "Easy conversion for common units"
 optional = false
 python-versions = ">=3.10,<3.15"

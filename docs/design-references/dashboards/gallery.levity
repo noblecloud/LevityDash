@@ -20,88 +20,70 @@ items:
 - type: group
   name: gallery
   items:
-  - type: grid
-    name: cells
-    geometry: {x: 0.6%, y: 1%, width: 98.8%, height: 97.5%}
-    spacing: 0
-    padding: 0
-    grid:
-      columns: [0.4fr, 30fr, 1.6fr, 1.4fr, 15fr, 0.5fr, 1.5fr, 13fr, 0.5fr, 1.5fr, 30fr, 3fr, 0.4fr]
-      rows: [3fr, 0.5fr, 43fr, 3.5fr, 3fr, 0.5fr, 20fr, 2.5fr, 3fr, 0.5fr, 18fr]
-      areas:
-      - . t-metric . . t-ring t-ring t-ring t-ring . . t-climate . .
-      - . . . . . . . . . . . . .
-      - metric metric metric . ring-a . ring-b ring-b ring-b . climate climate .
-      - . . . . . . . . . . . . .
-      - . t-range . . t-bars t-bars t-bars t-bars . . t-alert . .
-      - . . . . . . . . . . . . .
-      - range range range . bars bars bars bars . . alert alert .
-      - . . . . . . . . . . . . .
-      - . t-stats t-stats t-stats t-stats t-stats t-stats . . . . . .
-      - . . . . . . . . . . . . .
-      - stats stats stats stats stats stats stats stats stats stats stats stats stats
-    items:
-    - {type: text, text: metric-tile, color: $muted, alignment: CenterLeft, grid: {area: t-metric}}
-    - preset: metric-tile
-      grid: {area: metric}
-      props:
-        key: environment.temperature.temperature
-        hours: 24
-        hero_box: {x: 0%, y: 0%, width: 44%, height: 62%}
-        graph_box: {x: 0%, y: 10%, width: 100%, height: 70%}
-        list_box: {x: 0%, y: 78%, width: 100%, height: 22%}
-        items:
-        - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels}, display: {precision: 0, valueLabel: {color: $accent}}}
-        - {type: realtime.text, key: environment.temperature.dewpoint, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
-        - {type: realtime.text, key: environment.humidity.humidity, title: {text: Humidity}, display: {precision: 0, valueLabel: {color: $info}}}
-    - {type: text, text: ring-reading, color: $muted, alignment: CenterLeft, grid: {area: t-ring}}
-    - preset: ring-reading
-      grid: {area: ring-a}
-      props: {key: 'indoor.humidity.humidity#basement', title: Basement, color: $good, text_color: $good, min: 0.2, max: 0.8, precision: 0}
-    - preset: ring-reading
-      grid: {area: ring-b}
-      props: {key: environment.clouds.cover.cover, title: Cloud, color: $info, text_color: $info, min: 0, max: 100, precision: 0}
-    - {type: text, text: climate-card, color: $muted, alignment: CenterLeft, grid: {area: t-climate}}
-    - preset: climate-card
-      grid: {area: climate}
-      props: {title: Kitchen, title_color: $warn, id: kitchen, temp_min: 64, temp_max: 84, humid_min: 0.2, humid_max: 0.8, humid_color: $warn}
-    - {type: text, text: range-bar, color: $muted, alignment: CenterLeft, grid: {area: t-range}}
-    - preset: range-bar
-      grid: {area: range}
-      props: {key: environment.temperature.temperature, min: 40, max: 70, interval: 5, low: environment.temperature.low, high: environment.temperature.high}
-    - {type: text, text: bar-stack of readout-bar, color: $muted, alignment: CenterLeft, grid: {area: t-bars}}
-    - preset: bar-stack
-      grid: {area: bars}
-      props:
-        items:
-        - preset: readout-bar
-          props: {key: 'indoor.temperature.temperature#livingroom', min: 55, max: 80, weight: 30%, precision: 1}
-          display: {caption: {text: Living room, size: 220%}, fill: {color: $accent}}
-        - preset: readout-bar
-          props: {key: 'indoor.temperature.temperature#office', min: 55, max: 80, weight: 30%, precision: 1}
-          display: {caption: {text: Office, size: 220%}, fill: {color: $bad}}
-        - preset: readout-bar
-          props: {key: 'indoor.temperature.temperature#basement', min: 55, max: 80, weight: 30%, precision: 1}
-          display: {caption: {text: Basement, size: 220%}, fill: {color: $good}}
-    - {type: text, text: alert-strip, color: $muted, alignment: CenterLeft, grid: {area: t-alert}}
-    - preset: alert-strip
-      grid: {area: alert}
-      props:
-        headline: Office hot
-        color: $bad
-        key: 'indoor.temperature.temperature#office'
-        precision: 1
-        items:
-        - {type: realtime.text, key: 'indoor.humidity.humidity#office', title: {text: Humidity}, display: {precision: 0}}
-        - {type: realtime.text, key: environment.temperature.temperature, title: {text: Outside}, display: {precision: 0, valueLabel: {color: $good}}}
-    - {type: text, text: stat-row, color: $muted, alignment: CenterLeft, grid: {area: t-stats}}
-    - preset: stat-row
-      grid: {area: stats}
-      props:
-        items:
-        - {type: realtime.text, key: 'indoor.temperature.temperature#livingroom', title: {text: Living}, display: {precision: 1}}
-        - {type: realtime.text, key: 'indoor.temperature.temperature#kitchen', title: {text: Kitchen}, display: {precision: 1, valueLabel: {color: $warn}}}
-        - {type: realtime.text, key: 'indoor.temperature.temperature#bedroom', title: {text: Bedroom}, display: {precision: 1, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: 'indoor.temperature.temperature#office', title: {text: Office}, display: {precision: 1, valueLabel: {color: $bad}}}
-        - {type: realtime.text, key: 'indoor.temperature.temperature#basement', title: {text: Basement}, display: {precision: 1, valueLabel: {color: $good}}}
-
+  - {type: text, text: metric-tile, color: $muted, alignment: CenterLeft, geometry: {x: 1%, y: 1%, width: 30%, height: 3%}}
+  - preset: metric-tile
+    geometry: {x: 0.6%, y: 4.5%, width: 32%, height: 43%}
+    props:
+      key: environment.temperature.temperature
+      hours: 24
+      hero_box: {x: 0%, y: 0%, width: 44%, height: 62%}
+      graph_box: {x: 0%, y: 10%, width: 100%, height: 70%}
+      list_box: {x: 0%, y: 78%, width: 100%, height: 22%}
+      items:
+      - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels}, display: {precision: 0, valueLabel: {color: $accent}}}
+      - {type: realtime.text, key: environment.temperature.dewpoint, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
+      - {type: realtime.text, key: environment.humidity.humidity, title: {text: Humidity}, display: {precision: 0, valueLabel: {color: $info}}}
+  - {type: text, text: ring-reading, color: $muted, alignment: CenterLeft, geometry: {x: 34%, y: 1%, width: 30%, height: 3%}}
+  - preset: ring-reading
+    geometry: {x: 34%, y: 4.5%, width: 15%, height: 43%}
+    props: {key: 'indoor.humidity.humidity#basement', title: Basement, color: $good, text_color: $good, min: 0.2, max: 0.8, precision: 0}
+  - preset: ring-reading
+    geometry: {x: 49.5%, y: 4.5%, width: 15%, height: 43%}
+    props: {key: environment.clouds.cover.cover, title: Cloud, color: $info, text_color: $info, min: 0, max: 100, precision: 0}
+  - {type: text, text: climate-card, color: $muted, alignment: CenterLeft, geometry: {x: 66%, y: 1%, width: 30%, height: 3%}}
+  - preset: climate-card
+    geometry: {x: 66%, y: 4.5%, width: 33%, height: 43%}
+    props: {title: Kitchen, title_color: $warn, id: kitchen, temp_min: 64, temp_max: 84, humid_min: 0.2, humid_max: 0.8, humid_color: $warn}
+  - {type: text, text: range-bar, color: $muted, alignment: CenterLeft, geometry: {x: 1%, y: 51%, width: 30%, height: 3%}}
+  - preset: range-bar
+    geometry: {x: 0.6%, y: 54.5%, width: 32%, height: 20%}
+    props: {key: environment.temperature.temperature, min: 40, max: 70, interval: 5, low: environment.temperature.low, high: environment.temperature.high}
+  - {type: text, text: bar-stack of readout-bar, color: $muted, alignment: CenterLeft, geometry: {x: 34%, y: 51%, width: 30%, height: 3%}}
+  - preset: bar-stack
+    geometry: {x: 34%, y: 54.5%, width: 30%, height: 20%}
+    props:
+      items:
+      - preset: readout-bar
+        props: {key: 'indoor.temperature.temperature#livingroom', min: 55, max: 80, weight: 30%, precision: 1}
+        display: {caption: {text: Living room, size: 220%}, fill: {color: $accent}}
+      - preset: readout-bar
+        props: {key: 'indoor.temperature.temperature#office', min: 55, max: 80, weight: 30%, precision: 1}
+        display: {caption: {text: Office, size: 220%}, fill: {color: $bad}}
+      - preset: readout-bar
+        props: {key: 'indoor.temperature.temperature#basement', min: 55, max: 80, weight: 30%, precision: 1}
+        display: {caption: {text: Basement, size: 220%}, fill: {color: $good}}
+  - {type: text, text: alert-strip, color: $muted, alignment: CenterLeft, geometry: {x: 66%, y: 51%, width: 30%, height: 3%}}
+  - preset: alert-strip
+    geometry: {x: 66%, y: 54.5%, width: 33%, height: 20%}
+    props:
+      headline: Office hot
+      color: $bad
+      headline_box: {x: 0%, y: 0%, width: 24%, height: 100%}
+      hero_box: {x: 29%, y: 0%, width: 22%, height: 100%}
+      list_box: {x: 53%, y: 4%, width: 47%, height: 92%}
+      key: 'indoor.temperature.temperature#office'
+      precision: 1
+      items:
+      - {type: realtime.text, key: 'indoor.humidity.humidity#office', title: {text: Humidity}, display: {precision: 0}}
+      - {type: realtime.text, key: environment.temperature.temperature, title: {text: Outside}, display: {precision: 0, valueLabel: {color: $good}}}
+  - {type: text, text: stat-row, color: $muted, alignment: CenterLeft, geometry: {x: 1%, y: 77%, width: 50%, height: 3%}}
+  - preset: stat-row
+    geometry: {x: 0.6%, y: 80.5%, width: 98.8%, height: 18%}
+    props:
+      spacing: 6mm
+      items:
+      - {type: realtime.text, key: 'indoor.temperature.temperature#livingroom', title: {text: Living}, display: {precision: 1}}
+      - {type: realtime.text, key: 'indoor.temperature.temperature#kitchen', title: {text: Kitchen}, display: {precision: 1, valueLabel: {color: $warn}}}
+      - {type: realtime.text, key: 'indoor.temperature.temperature#bedroom', title: {text: Bedroom}, display: {precision: 1, valueLabel: {color: $info}}}
+      - {type: realtime.text, key: 'indoor.temperature.temperature#office', title: {text: Office}, display: {precision: 1, valueLabel: {color: $bad}}}
+      - {type: realtime.text, key: 'indoor.temperature.temperature#basement', title: {text: Basement}, display: {precision: 1, valueLabel: {color: $good}}}

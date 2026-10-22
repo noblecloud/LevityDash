@@ -45,6 +45,17 @@ The plugin is on by default. To turn it off, set `enabled = False` in `CONFIG_DI
 
 REST plugins retry a failed request. The UDP listener and the WeatherFlow websocket also reconnect after a drop. They wait a little longer after each failed try, from 2 seconds up to 5 minutes, and then reconnect on their own. You do not need to restart the app.
 
+## Saved history
+
+A plugin that keeps a log (WeatherFlow and Govee) writes it to a small file as it runs. When the app starts again, it reads the last two days back, so a graph of what your sensors measured is not empty while the plugins warm up.
+
+- The file is `history.sqlite3` in the app's cache folder. It is a cache. You can delete it and nothing else changes.
+- A plugin writes at most once a minute. Rows older than two days are deleted.
+- Only the log comes back. The current value of a key does not. It shows when the sensor next reports, so a value that is hours old never looks fresh.
+- A restored value keeps the time it was recorded. If you change a unit setting, the old values show in the new unit.
+- If the file cannot be opened or written, the plugins run without history and the app logs it once.
+- Set `LEVITYDASH_HISTORY=off` to turn it off. Set `LEVITYDASH_HISTORY_DB` to a file path to keep it somewhere else.
+
 ---
 
 

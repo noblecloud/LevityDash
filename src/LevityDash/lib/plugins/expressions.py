@@ -30,6 +30,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, FrozenSet, Mapping, Optional, Protocol, Sequence, Tuple
 
 import WeatherUnits as wu
+from WeatherUnits.temperature import summingReadings
 
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.places import normalizePlace
@@ -447,18 +448,49 @@ def _check(tree: ast.AST, placeholders: Mapping[str, Any], text: str) -> None:
 	for node in ast.walk(tree):
 		if isinstance(node, ast.Name) and node.id in _FUNCTIONS and id(node) not in called:
 			raise ExpressionError(f'{text!r}: {node.id} is a function; call it as {node.id}(...)')
-	# Durations and today only make sense as a window or an offset.
+	# Durations and today only make sense as a window or an offset, or, for a
+	# duration, as a factor or divisor: a rate times a duration is an amount.
 	allowed = set()
 	for node in ast.walk(tree):
 		if isinstance(node, ast.Call) and len(node.args) == 2 and _isWindowCall(node, placeholders):
 			allowed.update(id(n) for n in ast.walk(node.args[1]))
+		elif isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Mult, ast.Div)):
+			allowed.update(id(side) for side in (node.left, node.right) if _isDuration(side, placeholders))
 		if isinstance(node, ast.Call):
 			for keyword in node.keywords:
 				allowed.update(id(n) for n in ast.walk(keyword.value))
 	for node in ast.walk(tree):
 		if isinstance(node, ast.Name) and id(node) not in allowed:
 			if node.id == _TODAY or isinstance(placeholders.get(node.id), timedelta):
-				raise ExpressionError(f'{text!r}: a duration or today can only be the second argument of min, max, avg or at')
+				raise ExpressionError(
+					f'{text!r}: a duration or today can only be the second argument of min, max, avg or at; '
+					f'a duration can also multiply or divide a measurement'
+				)
+	for node in ast.walk(tree):
+		if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Mult, ast.Div)):
+			if _isDuration(node.left, placeholders) and _isDuration(node.right, placeholders):
+				raise ExpressionError(f'{text!r}: two durations cannot be multiplied or divided')
+
+
+def _mean(values: Sequence[Any]) -> Any:
+	"""The mean of readings. A sum of temperature readings is refused outside this, because it
+	depends on the unit; the mean of them does not."""
+	with summingReadings():
+		return sum(values[1:], values[0]) / len(values)
+
+
+def _isDuration(node: ast.AST, placeholders: Mapping[str, Any]) -> bool:
+	return isinstance(node, ast.Name) and isinstance(placeholders.get(node.id), timedelta)
+
+
+def _asTime(span: timedelta) -> wu.Time:
+	"""A duration as a measurement of time, in the largest unit that holds it whole, so
+	``rain / 3h`` is per hour and not per second."""
+	seconds = span.total_seconds()
+	for unit, size in ((wu.Time.Day, 86400), (wu.Time.Hour, 3600), (wu.Time.Minute, 60)):
+		if seconds and seconds % size == 0:
+			return unit(seconds / size)
+	return wu.Time.Second(seconds)
 
 
 def _isKey(node: ast.AST, placeholders: Mapping[str, Any]) -> bool:
@@ -626,6 +658,8 @@ class _Evaluator:
 		key = self.placeholders[name]
 		if isinstance(key, UnitLiteral):
 			return key
+		if isinstance(key, timedelta):
+			return _asTime(key)
 		if isinstance(key, PlacedKey):
 			# Out of an aggregate a place has to name one device, as `where:` on a panel does.
 			members = self._members(key, DEFAULT_STALE)
@@ -663,16 +697,23 @@ class _Evaluator:
 			case ast.UAdd():
 				return operand
 			case ast.USub():
-				# WeatherUnits' __neg__ returns a bare float, dropping the unit.
-				return operand * -1
+				return -operand
 		raise ExpressionError(f'{self.text!r}: unknown operator {type(op).__name__}')
 
-	def _withUnits(self, left: Any, right: Any) -> Tuple[Any, Any]:
+	def _withUnits(self, left: Any, right: Any, change: bool = False) -> Tuple[Any, Any]:
 		"""A unit literal beside a measurement, as a measurement of the same class."""
 		for literal, other, swap in ((right, left, False), (left, right, True)):
 			if isinstance(literal, UnitLiteral):
 				if not _isMeasurement(other):
 					raise ExpressionError(f'{self.text!r}: {literal.number:g}{literal.unit} needs a measurement to compare with')
+				if change and isinstance(other, wu.Temperature):
+					# `temperature - 5°F` takes 5 degrees off a reading: the literal is a change
+					try:
+						reading = measure(literal.number, literal.unit)
+					except StopUnitError as e:
+						raise ExpressionError(f'{self.text!r}: {e}') from e
+					converted = type(reading).change(float(reading))
+					return (converted, other) if swap else (other, converted)
 				try:
 					number = toDataUnit(literal.number, literal.unit, type(other))
 				except StopUnitError as e:
@@ -705,12 +746,14 @@ class _Evaluator:
 	def _binary(self, op: ast.operator, left: Any, right: Any) -> Any:
 		if left is Missing or right is Missing:
 			return Missing
-		left, right = self._withUnits(left, right)
+		left, right = self._withUnits(left, right, change=isinstance(op, (ast.Add, ast.Sub)))
 		self._checkUnits(op, left, right)
 		try:
 			return _BINARY_OPERATORS[type(op)](left, right)
 		except ZeroDivisionError:
 			return Missing
+		except (TypeError, ValueError) as e:
+			raise ExpressionError(f'{self.text!r}: {e}') from e
 
 	def _compare(self, left: ast.AST, ops: Sequence[ast.cmpop], comparators: Sequence[ast.AST]) -> Any:
 		current = self.eval(left)
@@ -771,7 +814,7 @@ class _Evaluator:
 				return min(values)
 			case 'max':
 				return max(values)
-		return sum(values[1:], values[0]) / len(values)
+		return _mean(values)
 
 	def _call(self, node: ast.Call) -> Any:
 		name = node.func.id
@@ -792,7 +835,7 @@ class _Evaluator:
 				case 'max':
 					return max(values)
 				case 'avg':
-					return sum(values[1:], values[0]) / len(values)
+					return _mean(values)
 		if name in _AGGREGATES:
 			return self._aggregate(node)
 		values = [self.eval(arg) for arg in args]
