@@ -18,6 +18,7 @@ from typing import Any, Callable, Mapping, Optional
 
 from WeatherUnits import Measurement
 
+from LevityDash.lib.ui.colors import theme as _theme
 from LevityDash.lib.ui.colors.color import Color
 from LevityDash.lib.ui.colors.gradient import Gradient
 
@@ -45,7 +46,10 @@ class BoundColor:
 			raise TypeError(f'of must be a key or an expression, not {of!r}')
 		self.spec = dict(spec)
 		self.of = of
-		self.gradient = Gradient.decode(spec['scale'])
+		scale = spec['scale']
+		if isinstance(scale, str) and not _theme.is_token(scale) and scale not in Gradient.__presets__ and scale not in _theme.active().names('scales'):
+			raise ValueError(f'unknown scale {scale!r}; Gradient would quietly pick the closest preset')
+		self.gradient = Gradient.decode(scale)
 		self.fallback = Color.decode(spec['fallback']) if spec.get('fallback') is not None else None
 
 	def colorFor(self, value: Any) -> Optional[Color]:

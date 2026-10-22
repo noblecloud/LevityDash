@@ -142,7 +142,8 @@ class ColorMixin(FillBrushMixin):
 	@color.encode
 	def color(self, value: Color):
 		bound = getattr(self, '_boundColor', None)
-		return dict(bound.spec) if bound is not None else value
+		# The default is encoded through here too (to compare against), and it is not the colour the item follows.
+		return dict(bound.spec) if bound is not None and value is self._color else value
 
 	_boundColor: BoundColor | None = None
 	_colorFollower: ColorFollower | None = None

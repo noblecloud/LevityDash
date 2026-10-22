@@ -199,6 +199,26 @@ muted: {color: $text, alpha: 0.65}
 
 Lightness, chroma, and hue use the Oklch color space. Mixing uses Oklab. You can use a modifier in a theme file and on an item in a dashboard.
 
+## Colour a reading by its value
+
+A `color:` may name a scale and a value, and then it follows the value:
+
+```yaml
+- type: realtime.text
+  key: environment.temperature.temperature
+  display:
+    valueLabel:
+      color: {scale: $temperature, of: environment.temperature.feelsLike}
+```
+
+| Key | Meaning |
+|---|---|
+| `scale` | A theme scale (`$temperature`), a preset gradient name, or a gradient written in place. Stops with units (`32°F`) place themselves by reading, in any unit. |
+| `of` | A key or an expression, as for any value source. It need not be the key the item shows. |
+| `fallback` | Optional colour used until the value has a number. Default: the default text colour. |
+
+The colour changes when the value does. A plain colour is the same property with no mapping, so nothing else about the item changes. An unknown scale name is an error (a gradient would otherwise pick the nearest preset). A saved dashboard writes the mapping back as written, with a theme scale shown as its resolved gradient.
+
 ## What a theme does not change yet
 
 - The dark glow on a gauge needle.

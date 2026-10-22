@@ -68,7 +68,7 @@ def test_a_label_takes_the_colour_of_its_value_and_saves_the_spec(dashboard):
 			expected = BoundColor(spec).colorFor(F(100))
 			assert label.color == expected
 			assert label.color != Color.default
-			assert label.encodedState['color'] == spec
+			assert label.encodedState()['color'] == spec
 		finally:
 			sandbox.scene().removeItem(sandbox)
 	finally:
