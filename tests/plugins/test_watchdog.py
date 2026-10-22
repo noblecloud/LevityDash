@@ -125,3 +125,14 @@ def test_a_sweep_logs_a_change_once_and_hands_a_restart_to_the_runner():
 	assert len([m for m in records if 'quiet' in m]) == 1 and not restarted
 	sweep(watch, [plugin], {'Tempest': last}, last + stale * 2 + timedelta(seconds=1), log, restarted.append)
 	assert restarted == [plugin] and any('starting it again' in m for m in records)
+
+
+def test_health_lists_each_judged_plugin_by_state_and_drops_a_stopped_one():
+	watch = PluginWatch()
+	last = steady(watch, 'Fast')
+	watch.judge('Slow', True, None, last)
+	stale = watch.judge('Fast', True, last, last).staleAfter
+	watch.judge('Fast', True, last, last + stale + timedelta(seconds=1))
+	assert watch.health() == {'Fast': QUIET, 'Slow': OK}
+	watch.judge('Slow', False, None, last)
+	assert watch.health() == {'Fast': QUIET}

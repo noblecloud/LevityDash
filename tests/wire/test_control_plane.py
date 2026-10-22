@@ -44,6 +44,20 @@ class TestPluginStatusMessage:
 		assert states['WeatherFlow'] == PluginState('WeatherFlow', True, True, 42, published)
 		assert states['Govee'] == PluginState('Govee', False, False, 3, None)
 
+	def test_health_rides_the_status_and_an_older_backend_without_it_decodes_to_nothing(self):
+		message = encode_plugin_status(plugins=[FakePlugin('Tempest'), FakePlugin('Govee')], health={'Tempest': 'silent'})
+		states = parse_plugin_status(message)
+		assert states['Tempest'].health == 'silent' and states['Govee'].health == ''
+		for entry in message['plugins']:
+			del entry['health']
+		assert parse_plugin_status(message)['Tempest'].health == ''
+
+	def test_the_backend_asks_its_health_source_for_each_status(self):
+		backend = RemoteBackend(send=lambda m: None)
+		backend.healthSource = lambda: {'Tempest': 'quiet'}
+		backend._plugins['Tempest'] = FakePlugin('Tempest')
+		assert parse_plugin_status(backend.plugin_status_message())['Tempest'].health == 'quiet'
+
 	def test_entries_are_sorted_so_equal_snapshots_compare_equal(self):
 		# tick() suppresses an unchanged status by dict equality, which only
 		# works if plugin ordering is stable regardless of attach order.

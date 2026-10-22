@@ -630,6 +630,8 @@ class PluginsMenu(QMenu):
 			parts = [running, enabled, keys]
 			if snap.lastPublish is not None:
 				parts.append(f'updated {snap.lastPublish.strftime("%H:%M")}')
+			if snap.health in ('quiet', 'silent'):
+				parts.append('overdue' if snap.health == 'quiet' else 'not publishing')
 			return f'{plugin.name}: ' + ' · '.join(parts)
 		# Live mode: read the local plugin directly. Use the same
 		# keys()/containers/len() fallback chain plugin_status uses on the
