@@ -5,6 +5,7 @@ from typing import TypeVar
 
 from LevityDash.lib.stateful import StateProperty, StatefulMixin
 from LevityDash.lib.ui import Color, Gradient
+from LevityDash.lib.ui.colors.bound import BoundColor, ColorFollower, decodeColor
 from LevityDash.lib.utils import defer
 
 Brush = TypeVar('Brush')
@@ -98,7 +99,7 @@ class ColorMixin(FillBrushMixin):
 
 	"""
 
-	@StateProperty(key='color', default=Color.default, allowNone=False, after=FillBrushMixin._update_appearance, decode=Color.decode)
+	@StateProperty(key='color', default=Color.default, allowNone=False, after=FillBrushMixin._update_appearance, decode=decodeColor)
 	def color(self) -> Color:
 		"""
 		Color to use for the item's fill brush
@@ -112,10 +113,13 @@ class ColorMixin(FillBrushMixin):
 		Example Config
 		--------------
 
+		- A mapping `{scale: ..., of: ...}`: the colour of a scale at a value, following it (see `lib/ui/colors/bound.py`)
+
 		```yaml
 		color: '#ff0000'
 		color: white
 		color: 255, 0, 0
+		color: {scale: $temperature, of: environment.temperature.feelsLike}
 		```
 
 		Returns
@@ -126,8 +130,34 @@ class ColorMixin(FillBrushMixin):
 		return self._color
 
 	@color.setter
+	def color(self, value: Color | BoundColor):
+		self._releaseColor()
+		if isinstance(value, BoundColor):
+			self._boundColor = value
+			self._color = value.fallback or Color.default
+			self._colorFollower = ColorFollower(value, self._followColor, f'{type(self).__name__} color')
+		else:
+			self._color = value
+
+	@color.encode
 	def color(self, value: Color):
-		self._color = value
+		bound = getattr(self, '_boundColor', None)
+		return dict(bound.spec) if bound is not None else value
+
+	_boundColor: BoundColor | None = None
+	_colorFollower: ColorFollower | None = None
+
+	def _followColor(self, color: Color) -> None:
+		"""A bound colour's value changed. GUI thread."""
+		self._color = color
+		self._set_fill_brush(self.fill_brush)
+
+	def _releaseColor(self) -> None:
+		"""Let go of a bound colour's value source."""
+		self._boundColor = None
+		if (follower := self._colorFollower) is not None:
+			self._colorFollower = None
+			follower.close()
 
 	@property
 	def fill_brush(self) -> QBrush:
