@@ -1800,6 +1800,16 @@ def preventAppNap() -> None:
 	)
 
 
+def mainThread() -> QThread:
+	"""The Qt main thread, asked of the application each time.
+
+	Not `LevityDashboard.main_thread`: PySide ties the wrapper `obj.thread()` returns to `obj`, so when a
+	QObject that was asked for its thread (`startTimerSafe` does) is freed, the shared wrapper is invalidated
+	and the next `moveToThread` raises "Internal C++ object (QThread) already deleted". A fresh call makes a new wrapper.
+	"""
+	return QtCore.QCoreApplication.instance().thread()
+
+
 def startTimerSafe(timer: QTimer, msec: int = None):
 	"""
 	Start a QTimer from any thread.
@@ -1944,7 +1954,7 @@ class Worker(Generic[Self], _BaseWorker, QtCore.QRunnable):
 		self.args = args
 		self.kwargs = kwargs
 		self.signals = WorkerSignals()
-		self.signals.moveToThread(LevityDashboard.main_thread)
+		self.signals.moveToThread(mainThread())
 
 	def __rich_repr__(self):
 		yield 'status', self.status.name
@@ -2036,7 +2046,7 @@ class Worker(Generic[Self], _BaseWorker, QtCore.QRunnable):
 				self.on_finish()
 			else:
 				signals = self.signals
-				signals.moveToThread(LevityDashboard.main_thread)
+				signals.moveToThread(mainThread())
 				signals.finished.emit()
 			utilLog.verbose(f'Finished {self.fn!s} in thread', verbosity=5)
 

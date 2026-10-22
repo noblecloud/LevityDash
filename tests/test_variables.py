@@ -149,3 +149,12 @@ def test_a_save_keeps_a_variable_used_as_a_mapping_key():
 	resolved = resolveVariables(template)
 	live = {'vars': template['vars'], 'items': [{'environment.temperature.temperature': {'plot': 'bar', 'size': 3}, 'plain': 2}]}
 	assert retemplate(live, resolved, template)['items'] == [{'$temp': {'plot': '$line', 'size': 3}, 'plain': 2}]
+
+
+def test_vars_yaml_through_the_config_path_type(tmp_path):
+	# The loader hands over `userConfig.userPath`, an EasyPath, not a Path.
+	from LevityDash.lib.EasyPath import EasyPath
+	from LevityDash.lib.variables import loadSharedVariables
+	(tmp_path / 'vars.yaml').write_text('gap: 3\n')
+	assert loadSharedVariables(EasyPath(tmp_path)) == {'gap': 3}
+	assert loadSharedVariables(EasyPath(tmp_path / 'vars.yaml')) == {'gap': 3}

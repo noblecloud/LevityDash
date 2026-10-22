@@ -229,6 +229,13 @@ def _formatDuration(span: timedelta) -> str:
 	return f'{sign}{seconds}s'
 
 
+def _mean(values: Sequence[Any]) -> Any:
+	"""The mean, in the first value's unit. Temperature readings add only inside
+	`summingReadings`; a mean of readings is the case that allows."""
+	with summingReadings():
+		return sum(values[1:], values[0]) / len(values)
+
+
 # -- parsing --------------------------------------------------------------------
 
 class Expression:

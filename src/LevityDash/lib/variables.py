@@ -100,7 +100,8 @@ def loadSharedVariables(path: Path | str | None) -> Dict[str, Any]:
 	try:
 		if path is None:
 			return {}
-		path = Path(path)
+		# The config's `userPath` is an `EasyPath`, which wraps a `Path` rather than being one.
+		path = Path(getattr(path, 'path', path))
 		if path.is_dir():
 			path = path / VARIABLES_FILE
 		if not path.is_file():
