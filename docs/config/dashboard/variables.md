@@ -94,6 +94,17 @@ items:
     geometry: {x: 5%, y: 5%, width: 40%, height: 40%}
 ```
 
+## Shared variables
+
+Put variables that every dashboard uses in `vars.yaml`, in the same folder as `config.ini`. Write the names at the top level.
+
+```yaml
+upstairs: avg(indoor.temperature.temperature, where=home.upstairs)
+hot: 90°F
+```
+
+A dashboard then uses `$upstairs` with no `vars:` of its own. If a dashboard defines the same name in its own `vars:`, the dashboard's value wins. A variable in the dashboard can use a shared one. A bad `vars.yaml` is logged, and the dashboards load without it.
+
 ## Rules
 
 - A variable can use a variable that is defined before it. It cannot use one that is defined after it.
