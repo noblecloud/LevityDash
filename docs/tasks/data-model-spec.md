@@ -46,6 +46,17 @@ Decided on 2026-10-16:
 10. **`avg(a, b, ...)`** is added to the expression language: the mean of two
     or more current values.
 11. **`mean` is accepted as another name for `avg`.** Docs use the plain word.
+
+Built in step 2 (aggregates), from Neal's answers of 2026-10-16:
+
+- A place selects with `where=` and with an `@place` suffix on a key. Both mean the
+  same. The suffix has no clash inside expressions, which read keys with their own
+  pattern. Elsewhere `@` is the schema wildcard and the size-group `key@name`, which
+  are separate places in the file.
+- `count(key, where=place)` exists, and every expression publishes its reading count
+  at its own key with `.count` added.
+- Shared variables live in `vars.yaml` beside `config.ini`. A dashboard's own `vars:`
+  wins on a name clash.
 12. **Named aggregates can be written in two places:** a global vars file that
     every dashboard shares, and the `vars:` of a single dashboard. A dashboard
     entry wins over the global one of the same name.
