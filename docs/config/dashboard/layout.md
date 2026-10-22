@@ -40,8 +40,9 @@ Put `flex:` on the stack for the container options. Put `flex:` on an item for t
 | `cross` | The size across the stack. Default: the full width of the line. | `height` in a row |
 | `align-self` | Overrides `align-items` for one item. | `align-self` |
 | `order` | Items go in order of this number, then in file order. Default 0. | `order` |
+| `margin` | Space around the item: one, two or four values (top, right, bottom, left), as a list or a string. A side can be `auto` or a `%` (of the stack's inner width, on every side). `auto` takes the free space on that side. `margin: [0, 0, 0, auto]` pushes the item and all after it to the end. | `margin` |
 
-Sizes take `%`, `px`, `mm`, `cm` and `in`, as everywhere else.
+Sizes take `%`, `px`, `mm`, `cm` and `in`, as everywhere else. Anywhere a length goes in `flex:` or `grid:` (`basis`, `min`, `max`, `cross`, `margin`, `gap`, track sizes) you can write `calc()`, `min()`, `max()` or `clamp()`: `calc(100% - 2 * 12px)`. `+` and `-` need a space on both sides, and a length cannot be multiplied by a length. This is css-values-4 section 10.
 
 An item with a `size:` and no `flex:` keys does not grow, and it can shrink. This is the CSS default. A stack that has only `flex: {justify: ...}` can therefore shrink items that do not fit, where a plain stack lets them overflow.
 
@@ -58,11 +59,32 @@ An item with a `size:` and no `flex:` keys does not grow, and it can shrink. Thi
     - {type: realtime.text, key: environment.wind.speed.speed, grid: {column: 2, column-span: 2}}
 ```
 
+Named areas read like the board. `.` is an empty cell, and a name repeated over cells is one rectangle:
+
+```yaml
+- type: grid
+  spacing: 0
+  padding: 0
+  grid:
+    columns: [38fr, 2fr, 33fr]
+    rows: [24fr, 12fr]
+    areas:
+      - clock . now
+      - stats . now
+  items:
+    - {type: realtime.text, key: environment.temperature.temperature, grid: {area: now}}
+    - {type: realtime.text, key: environment.humidity.humidity, grid: {area: clock}}
+    - {type: realtime.text, key: environment.pressure.pressure, grid: {area: stats, margin: [0, 8px]}}
+```
+
+A `.` is a real track, so `spacing` (the gap) applies on both sides of it, and so does `padding`. Set both to 0 when the picture spells out its own gaps, as above.
+
 ### Grid options (on the `type: grid`)
 
 | Key | Meaning | CSS |
 |---|---|---|
-| `columns`, `rows` | A list of track sizes: lengths, `fr`, `auto`, `min-content`, `max-content`, `minmax(a, b)`, `fit-content(x)`, `repeat(n, ...)`, `repeat(auto-fill, ...)` and `repeat(auto-fit, ...)`. A string such as `'repeat(3, 1fr)'` works too. `repeat(auto-fill, minmax(200px, 1fr))` makes as many 200px-or-wider columns as the grid's width holds, and the count changes when the window does. `auto-fit` does the same and then drops the empty columns. | `grid-template-columns`, `grid-template-rows` |
+| `columns`, `rows` | A list of track sizes: lengths, `fr`, `auto`, `min-content`, `max-content`, `minmax(a, b)`, `fit-content(x)`, `repeat(n, ...)`, `repeat(auto-fill, ...)` and `repeat(auto-fit, ...)`. A `%` is a share of the grid's inner size. A string such as `'repeat(3, 1fr)'` works too. `repeat(auto-fill, minmax(200px, 1fr))` makes as many 200px-or-wider columns as the grid's width holds, and the count changes when the window does. `auto-fit` does the same and then drops the empty columns. | `grid-template-columns`, `grid-template-rows` |
+| `areas` | A picture of the grid: a list with one string per row and one word per cell, `.` for an empty cell. Each name must cover one rectangle. It makes the explicit grid at least as big as the picture; tracks `columns` and `rows` do not list are sized by `auto-columns` and `auto-rows`. An item picks its place with `grid: {area: name}`. | `grid-template-areas` |
 | `auto-columns`, `auto-rows` | The size of a track that the items need and the list does not give. Default `1fr`. | `grid-auto-columns`, `grid-auto-rows` |
 | `auto-flow` | `row` (default) or `column`. | `grid-auto-flow` |
 | `dense` | `true` fills earlier holes. | `dense` |
@@ -72,7 +94,7 @@ An item with a `size:` and no `flex:` keys does not grow, and it can shrink. Thi
 
 ### Grid item options (on an item)
 
-`grid: {column, row, column-span, row-span, justify-self, align-self, shrink}`. Lines count from 1. An item with no `column` or `row` goes in the next free cell.
+`grid: {column, row, column-span, row-span, area, justify-self, align-self, shrink, margin}`. `area: name` places the item on a named area of `areas` and cannot be combined with `column`, `row` or a span. Lines count from 1. `margin` is the same shorthand as in flex. The margin box counts toward track sizes, and an `auto` side turns stretching off and takes the free space in the area, so two `auto` sides centre the item. An item with no `column` or `row` goes in the next free cell.
 
 Spans are how a layout gets a bento look: put `dense: true` on the grid, give the large items a `column-span` or `row-span`, and the small ones fill the holes in order.
 
@@ -93,12 +115,11 @@ An item that shows a number reports its size from its **format hint**, the wides
 
 - A stack without any `flex:` key, and no item with one, is laid out exactly as before. A grid is always laid out by the grid engine.
 - A mistake in `flex:` or `grid:` (an unknown key, a wrong word) is an error on that item. The rest of the dashboard loads.
-- Dividers are not drawn in a flex or grid stack.
 - A cell sizes its own text. To make the values in a grid or flex stack the same size, add a `shared:` size group (see the example dashboard).
-- Not yet supported: `subgrid`, named areas, `calc()`, `%` inside a track list, margins on items, and sizing by anything but the text of a value (a gauge, a graph or a container has no content size, so for them `auto` is 0).
+- Not yet supported: `subgrid`, named lines, math functions in `size:`, `geometry:` and `spacing:` (only `flex:` and `grid:` take them), and sizing by anything but the text of a value (a gauge, a graph or a container has no content size, so for them `auto` is 0).
 
-Example dashboards: `docs/design-references/css-layout.levity` (render: `docs/design-references/css-layout.png`) and `docs/design-references/grid-bento.levity`, a dense bento board with spans, a `shrink` item and an `auto-fill` strip.
+Example dashboards: `docs/design-references/grid-areas.levity` (named areas), the glance and homelab dashboards in `docs/design-references/dashboards/` (areas replacing hand-placed boxes), `docs/design-references/layout-margins.levity` (margins), `docs/design-references/css-layout.levity` (render: `docs/design-references/css-layout.png`) and `docs/design-references/grid-bento.levity`, a dense bento board with spans, a `shrink` item and an `auto-fill` strip.
 
 ## In the Studio
 
-`studio.py` (the Studio builder) edits these keys. A stack, a `grid`, and each of their items has a **Layout** section on the Item tab with a `flex` or `grid` popover. The popover shows the container options when the item is a stack or grid and the item options when its parent is one; an option left on its default is not written, and a stack with nothing set stays a plain stack.
+`studio.py` (the Studio builder) edits these keys. A stack, a `grid`, and each of their items has a **Layout** section on the Item tab with a `flex` or `grid` popover. The popover shows the container options when the item is a stack or grid and the item options when its parent is one; an option left on its default is not written, and a stack with nothing set stays a plain stack. The popovers also edit `margin` (flex and grid items), `areas` (one row per line) and `area`.

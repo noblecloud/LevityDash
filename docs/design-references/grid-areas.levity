@@ -1,0 +1,26 @@
+# Named grid areas: the picture in `areas:` places the items, with no line numbers.
+# Each name is a rectangle of cells; `.` is an empty cell. `grid: {area: name}` on an item puts it there.
+# Render: render_dashboard.py OUT.png --levity THIS --scenario hot-clear-day --size 2880x1800
+- type: group
+  name: main
+  items:
+    - type: grid
+      name: areas
+      geometry: {x: 2%, y: 2%, width: 96%, height: 96%}
+      spacing: 14px
+      grid:
+        columns: [1fr, 2fr, 1fr]
+        rows: [1fr, 2fr, 1fr]
+        areas:
+          - head head head
+          - side hero uv
+          - side wide wide
+      shared:
+        title: {matchingGroup: {group: areasTitle@areas, matchAll: true}}
+        display: {valueLabel: {matchingGroup: {group: areasValue@areas, matchAll: true}}}
+      items:
+        - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Wind}, grid: {area: head}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.humidity.humidity, title: {text: Humidity}, grid: {area: side}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.temperature.temperature, title: {text: Temperature}, grid: {area: hero}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.light.uvi, title: {text: UV}, grid: {area: uv}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.pressure.pressure, title: {text: Pressure}, grid: {area: wide}, border: {enabled: true, edges: all}}
