@@ -106,6 +106,19 @@ A child of a switch does not need a `geometry:`. It fills the switch.
   when: environment.temperature.temperature < 32°F
 ```
 
+## An item in a stack
+
+An item in a `stack` (or a `grid` stack) can use `when:` too. While the condition is false the item is hidden and takes no room, so the items after it move up and the others grow to fill the space. When the condition holds again the item comes back.
+
+```yaml
+- type: stack
+  direction: Horizontal
+  items:
+    - {type: realtime.text, key: environment.temperature.temperature}
+    - {type: realtime.text, key: environment.precipitation.precipitation, when: environment.precipitation.precipitation > 0}
+    - {type: realtime.text, key: environment.wind.speed.speed}
+```
+
 ## Stop a flicker
 
 A value near a limit can cross the limit again and again. A switch that follows it would flip all the time. `hold:` prevents this.

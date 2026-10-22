@@ -644,6 +644,15 @@ class Stack(Panel, tag='stack'):
 			getter = lambda g: g.surface.sceneBoundingRect().center().x()
 		return [getter(i) for i in sorted(self.geometries.values(), key=lambda i: i.index)]
 
+	@staticmethod
+	def _shown(geometry) -> bool:
+		"""False for an item whose `when:` does not hold. It takes no room, so the items after it close up."""
+		condition = geometry.surface.__dict__.get('_whenCondition')
+		return condition is None or condition.holds
+
+	def _reflowShown(self) -> None:
+		self.setGeometries()
+
 	def setGeometries(self, manualSize: Size.Height | Size.Width | float | int | Length = None, exclude=None):
 		if not self.geometries or self.state_is_loading:
 			return  # no items
@@ -663,7 +672,8 @@ class Stack(Panel, tag='stack'):
 		PrimarySize, PrimaryPosition = self.primaryDimension
 		OrthogonalSize, OrthogonalPosition = self.orthogonalDimension
 
-		geometries = list(self.geometries.values())
+		allGeometries = list(self.geometries.values())
+		geometries = [i for i in allGeometries if self._shown(i)]
 
 		fixedSizes = [f for i in geometries if (f := getattr(i.surface, 'fixedSize', None)) is not None]
 
@@ -691,7 +701,7 @@ class Stack(Panel, tag='stack'):
 		if cellSize is not None and cellSize < 0:
 			self.setGeometries(manualSize=PrimarySize(1, absolute=False))
 			cellSize = getSize(max((i.boundingRect() for i in self._attrGroups['text'].items), key=lambda i: getSize(i)))
-		length = len(self.geometries)
+		length = len(geometries)
 		if cellSize is None:
 			breaks = length - 1
 			spacingTotal = breaks * absoluteSpacing
@@ -746,8 +756,11 @@ class Stack(Panel, tag='stack'):
 			position.y = position.y.toRelative(own_ortho_size_px)
 
 		with self.action_pool:
-			for index, geometry in enumerate(geometries):
+			for index, geometry in enumerate(allGeometries):
 				geometry.index = index
+				if geometry not in geometries:
+					continue
+				shownIndex = geometries.index(geometry)
 				geometry.position = Position(position)
 
 				if (fixedSize := getattr(geometry.surface, 'fixedSize', None)) is not None:
@@ -761,7 +774,7 @@ class Stack(Panel, tag='stack'):
 				geometry.updateSurface()
 				position += offset
 
-				if dividers and index < length - 1:
+				if dividers and shownIndex < length - 1:
 					if self._dividers:
 						try:
 							firstPoint, secondPoint = [i + offset for i in self._dividers[-1]]
@@ -902,7 +915,7 @@ class Stack(Panel, tag='stack'):
 			container.justify_content = cssparse.parse_content_align(justify)
 		if (align := props.get('align-items')) is not None:
 			container.align_items = cssparse.parse_item_align(align)
-		surfaces = [geometry.surface for geometry in self.geometries.values()]
+		surfaces = [geometry.surface for geometry in self.geometries.values() if self._shown(geometry)]
 		items = [self.cssFlexItem(surface, vertical, container.cross) for surface in surfaces]
 		rects = cssflex.layout_flex(items, container)
 		self.applyCssRects(rects, left, top, width, height)
@@ -972,8 +985,10 @@ class Stack(Panel, tag='stack'):
 	def applyCssRects(self, rects: list[CssRect], left: float, top: float, width: float, height: float):
 		"""Give every item its rect (pixels inside the padding) as shares of this stack."""
 		with self.action_pool:
-			for index, (geometry, rect) in enumerate(zip(list(self.geometries.values()), rects)):
+			everything = list(self.geometries.values())
+			for index, geometry in enumerate(everything):
 				geometry.index = index
+			for geometry, rect in zip([i for i in everything if self._shown(i)], rects):
 				geometry.position = Position(
 					Position.X((left + rect.x) / width, absolute=False),
 					Position.Y((top + rect.y) / height, absolute=False),
