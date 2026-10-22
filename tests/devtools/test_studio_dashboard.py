@@ -382,6 +382,27 @@ def test_tree_shortcuts_copy_paste_delete_duplicate_and_move(board):
 	assert win.tree.contextMenuPolicy() == Qt.ContextMenuPolicy.CustomContextMenu
 
 
+def test_wrap_and_unwrap_keep_placement_and_undo(board):
+	win, path = board('station')
+	target = next(p for p, n in win.piece.walk() if len(p) >= 2 and 'geometry' in n and not m.opaque(n))
+	before = yaml.safe_dump(win.piece.template)
+	geometry = win.piece.node(target)['geometry']
+	win.select(target)
+	win.wrapItem()
+	box = win.piece.node(target)
+	assert box['type'] == 'group' and box['geometry'] == geometry
+	assert 'geometry' not in box['items'][0]
+	win.unwrapItem()
+	assert yaml.safe_dump(win.piece.template) == before  # unwrap is the exact inverse
+	win.undo()
+	win.undo()
+	assert yaml.safe_dump(win.piece.template) == before
+	# the dashboard itself is left alone
+	win.select(())
+	win.wrapItem()
+	assert win.piece.template is not None and len(win.history) == 0
+
+
 def test_tree_filter_keeps_matches_and_their_containers(board):
 	win, path = board('station')
 
