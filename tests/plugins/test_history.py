@@ -93,7 +93,7 @@ def test_a_restart_gets_the_log_back_at_the_times_it_was_written(db, monkeypatch
 	restored, original = entry[KEY], plugin.realtime.archived[KEY]
 	assert float(restored.value) == pytest.approx(float(original.value))
 	assert type(restored.value).__name__ == type(original.value).__name__
-	assert abs((restored.timestamp - earlier).total_seconds()) < 5
+	assert abs((restored.timestamp - earlier).total_seconds()) <= 30  # a value's time is rounded to the minute
 
 
 def test_restoring_with_nothing_stored_changes_nothing(db, monkeypatch):
