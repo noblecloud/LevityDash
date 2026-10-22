@@ -139,6 +139,18 @@ avg(indoor.temperature.temperature@home.upstairs.bedroom, indoor.temperature.tem
 - If no device has a fresh reading, the result has no value, and `count` is 0.
 - Every expression also publishes the number of readings it used, as the key of the expression with `.count` added. `count(...)` is the way to show it in a dashboard.
 
+### <div class=mono>Combining sources</div>
+
+A key with a source in front reads that source, not the one the dashboard prefers. This makes a high or a low that no one source reports: the highest of what two forecasts predict, or how far apart they are.
+
+```yaml
+vars:
+  high: max(OpenMeteo:environment.temperature.high, PirateWeather:environment.temperature.high)
+  disagree: PirateWeather:environment.temperature.high - OpenMeteo:environment.temperature.high
+```
+
+A source that does not have the key gives no value, so the result has no value. A key a source does report, such as a forecast's `.high`, stays an ordinary key.
+
 ### <div class=mono>Windows and offsets</div>
 
 A window is the span of time that a function reads.
