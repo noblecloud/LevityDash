@@ -19,6 +19,7 @@ items:
 - `$name` or `${name}` inside longer text is spliced in as text. Use the braces when a letter,
   digit or hyphen follows (`${room}-1`).
 - A variable may use the ones defined before it.
+- A mapping key may be a variable too (`$temp: {plot: …}`) when the variable is text.
 - A name that is not a variable is left as written, so theme tokens (`$accent`) go on to the
   theme engine, which reports the ones it does not know.
 - A save writes the `$name` back. `retemplate` takes what the app would save now, what the file
@@ -58,10 +59,18 @@ def substitute(value: Any, variables: Dict[str, Any]) -> Any:
 
 		return _REFERENCE.sub(splice, value) if '$' in value else value
 	if isinstance(value, dict):
-		return {key: substitute(item, variables) for key, item in value.items()}
+		return {_key(key, variables): substitute(item, variables) for key, item in value.items()}
 	if isinstance(value, list):
 		return [substitute(item, variables) for item in value]
 	return value
+
+
+def _key(key: Any, variables: Dict[str, Any]) -> Any:
+	"""A mapping key with its `$name` replaced, when that gives text (a preset's `$key: {...}` is a series named by a variable)."""
+	if isinstance(key, str) and '$' in key:
+		resolved = substitute(key, variables)
+		return resolved if isinstance(resolved, str) else key
+	return key
 
 
 def _definitions(raw: Any, shared: Dict[str, Any] | None = None) -> Dict[str, Any]:
