@@ -100,7 +100,7 @@ def test_a_grid_edits_areas_and_an_item_names_its_area_and_margin(builder):
 	builder.addItem('realtime.text')
 	cell = row(builder, 'grid').editor.form
 	assert cell.parts['area'].isVisibleTo(cell) and not cell.parts['areas'].isVisibleTo(cell)
-	cell.parts['area'].line.setText('main')
+	cell.parts['area'].combo.setCurrentText('main')
 	cell.parts['margin'].line.setText('0 auto')
 	cell._emit()
 	assert builder.piece.node((0, 0))['grid'] == {'area': 'main', 'margin': '0 auto'}
@@ -113,3 +113,25 @@ def test_a_flex_item_edits_its_margin(builder):
 	form.parts['margin'].line.setText('0 0 0 auto')
 	form._emit()
 	assert builder.piece.node((0, 0))['flex'] == {'margin': '0 0 0 auto'}
+
+
+def test_the_area_picker_lists_the_parent_grids_names_and_the_stage_tags_the_cells(builder):
+	builder.addItem('grid')
+	form = row(builder, 'grid').editor.form
+	form.parts['areas'].text.setPlainText('head head\nside main')
+	form._emit()
+	builder.addItem('realtime.text')
+	pick = row(builder, 'grid').editor.form.parts['area']
+	assert [pick.combo.itemText(i) for i in range(pick.combo.count())] == ['head', 'side', 'main']
+	pick.combo.setCurrentText('side')
+	row(builder, 'grid').editor.form._emit()
+	assert builder.piece.node((0, 0))['grid'] == {'area': 'side'}
+	assert builder._areaTags() == {(0, 0): 'side'}
+	builder.selection = (0,)
+	assert builder._areaTags() == {(0, 0): 'side'}
+
+
+def test_area_names_ignore_a_bad_picture():
+	assert layout.areaNames(['a a', 'b']) == []
+	assert layout.areaNames(None) == []
+	assert layout.areaNames('head head\nside main') == ['head', 'side', 'main']

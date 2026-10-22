@@ -30,7 +30,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 import yaml
 from PySide6.QtCore import QPointF, QRectF, QSignalBlocker, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QIcon, QImage, QKeySequence, QPainter, QPen, QPixmap, QShortcut
+from PySide6.QtGui import QColor, QFont, QIcon, QImage, QKeySequence, QPainter, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (
 	QAbstractItemView, QApplication, QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMenu,
 	QPlainTextEdit, QPushButton, QScrollArea, QSplitter, QTabWidget, QToolButton, QTreeWidget, QTreeWidgetItem,
@@ -687,6 +687,7 @@ class Stage(QWidget):
 		self.zoom = 1.0  # Ctrl + wheel zooms about the pointer, a middle-button drag pans, 0 shows the whole picture again
 		self.pan = QPointF()
 		self._panning: Optional[tuple] = None
+		self.areaTags: Dict[tuple, str] = {}  # item path -> the grid area it fills, drawn as a badge while its grid or one of its cells is selected
 		self.hover: Optional[tuple] = None  # the item under the pointer, here or in the tree: a thin outline, never a selection
 		self.setMinimumSize(320, 220)
 		self.setMouseTracking(True)
@@ -791,6 +792,19 @@ class Stage(QWidget):
 			p.setPen(QPen(QColor('#2f81f7'), 1, Qt.PenStyle.DashLine))
 			p.setBrush(QColor(47, 129, 247, 38))
 			p.drawRect(self._toView(self.rects[self.hover]))
+		if self.areaTags:
+			p.setFont(QFont(p.font().family(), 9, QFont.Weight.DemiBold))
+			for path, name in self.areaTags.items():
+				if path not in self.rects:
+					continue
+				cell = self._toView(self.rects[path])
+				p.setPen(QPen(QColor('#a371f7'), 1, Qt.PenStyle.DashLine))
+				p.setBrush(Qt.BrushStyle.NoBrush)
+				p.drawRect(cell)
+				tag = QRectF(cell.x(), cell.y(), min(cell.width(), p.fontMetrics().horizontalAdvance(name) + 10), 16)
+				p.fillRect(tag, QColor('#a371f7'))
+				p.setPen(QColor('#ffffff'))
+				p.drawText(tag, Qt.AlignmentFlag.AlignCenter, name)
 		if self.path is not None and self.path in self.rects:
 			r = self._toView(self.rects[self.path])
 			p.setPen(QPen(QColor('#2f81f7'), 2))
@@ -1063,6 +1077,8 @@ class ItemTab(QWidget):
 			if gridContainer or gridItem:
 				edit = layout.GridEdit()
 				edit.setRoles(gridContainer, gridItem)
+				if gridItem:
+					edit.setAreaNames(layout.areaNames((parent.get('grid') or {}).get('areas')))
 				self._row(arrange, 'grid', 'grid', edit, bindable=False, value=node.get('grid'))
 
 		where = Section('Geometry' + (' (a share of its parent; in a stack it sets the size)' if inLayout else ' (a share of its parent)'), expanded=True)
@@ -1851,7 +1867,26 @@ class Builder(QWidget):
 		parent = self.piece.node(self.selection[:-1])
 		return parent is not None and str(parent.get('type')) not in LAYOUT_PARENTS
 
+	def _areaTags(self) -> Dict[tuple, str]:
+		"""The area name of every item in the selected grid, or in the grid the selected item sits in."""
+		if self.selection is None or self.piece is None:
+			return {}
+		grid = self.selection
+		node = self.piece.node(grid)
+		if node is None or str(node.get('type')) != layout.GRID_KIND:
+			grid = self.selection[:-1]
+			node = self.piece.node(grid) if self.selection else None
+		if node is None or str(node.get('type')) != layout.GRID_KIND:
+			return {}
+		tags = {}
+		for i, kid in enumerate(node.get(model.ITEMS_KEY) or []):
+			spec = kid.get('grid') if isinstance(kid, dict) else None
+			if isinstance(spec, dict) and spec.get('area'):
+				tags[grid + (i,)] = str(spec['area'])
+		return tags
+
 	def _syncStage(self):
+		self.stage.areaTags = self._areaTags()
 		self.stage.select(self.selection, self._movable())
 		editors.CONTEXT.ref = self._refPixels
 
