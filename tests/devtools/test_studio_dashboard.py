@@ -382,6 +382,21 @@ def test_tree_shortcuts_copy_paste_delete_duplicate_and_move(board):
 	assert win.tree.contextMenuPolicy() == Qt.ContextMenuPolicy.CustomContextMenu
 
 
+def test_hovering_a_tree_row_or_the_stage_outlines_the_item(board):
+	win, path = board('station')
+	assert win.stage.hover is None
+	row = win.tree.topLevelItem(0).child(0)
+	win.tree.itemEntered.emit(row, 0)
+	assert win.stage.hover == row.data(0, 256)
+	win.tree.left.emit()
+	assert win.stage.hover is None
+	win.stage.rects = {(0,): QRectF(0, 0, 32, 20)}
+	win.stage.setHover((0,))
+	assert win.stage.hover == (0,)
+	win.stage.setHover(None)
+	assert win.stage.hover is None
+
+
 def test_wrap_and_unwrap_keep_placement_and_undo(board):
 	win, path = board('station')
 	target = next(p for p, n in win.piece.walk() if len(p) >= 2 and 'geometry' in n and not m.opaque(n))

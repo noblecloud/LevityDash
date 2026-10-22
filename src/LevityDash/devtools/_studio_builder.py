@@ -612,11 +612,16 @@ class ItemTree(QTreeWidget):
 	draws the tree again, so Qt never moves a row itself."""
 
 	moved = Signal(tuple, tuple, int)  # path, new parent's path, index in it
+	left = Signal()  # the pointer left the tree
 
 	def __init__(self):
 		super().__init__()
 		self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
 		self.setDefaultDropAction(Qt.DropAction.MoveAction)
+
+	def leaveEvent(self, event):
+		self.left.emit()
+		super().leaveEvent(event)
 
 	def dropEvent(self, event):
 		source, target = self.currentItem(), self.itemAt(event.position().toPoint())
@@ -652,6 +657,7 @@ class Stage(QWidget):
 		self.snap = True  # drags stick to the parent's and the siblings' edges and centres; Alt held turns it off
 		self.guides: Tuple[List[float], List[float]] = ([], [])
 		self.marks: List[QRectF] = []  # boxes the Size groups tab points at, in scene pixels
+		self.hover: Optional[tuple] = None  # the item under the pointer, here or in the tree: a thin outline, never a selection
 		self.setMinimumSize(320, 220)
 		self.setMouseTracking(True)
 		self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -684,6 +690,15 @@ class Stage(QWidget):
 		self.path, self.movable = path, movable
 		self.update()
 
+	def setHover(self, path: Optional[tuple]):
+		if path != self.hover:
+			self.hover = path
+			self.update()
+
+	def leaveEvent(self, event):
+		self.setHover(None)
+		super().leaveEvent(event)
+
 	def setMarks(self, rects: List[QRectF]):
 		self.marks = list(rects)
 		self.update()
@@ -715,6 +730,10 @@ class Stage(QWidget):
 			p.setBrush(QColor(255, 176, 32, 50))
 			for m in self.marks:
 				p.drawRect(self._toView(m))
+		if self.hover is not None and self.hover != self.path and self.hover in self.rects:
+			p.setPen(QPen(QColor('#2f81f7'), 1, Qt.PenStyle.DashLine))
+			p.setBrush(QColor(47, 129, 247, 38))
+			p.drawRect(self._toView(self.rects[self.hover]))
 		if self.path is not None and self.path in self.rects:
 			r = self._toView(self.rects[self.path])
 			p.setPen(QPen(QColor('#2f81f7'), 2))
@@ -767,6 +786,7 @@ class Stage(QWidget):
 		pos = event.position()
 		if self._drag is None:
 			corner = self._corner(pos)
+			self.setHover(None if corner else self.hit(self._toScene(pos)))
 			self.setCursor(Qt.CursorShape.SizeFDiagCursor if corner in ('tl', 'br') else Qt.CursorShape.SizeBDiagCursor if corner else Qt.CursorShape.ArrowCursor)
 			return
 		mode, corner, start, rect = self._drag
@@ -1388,6 +1408,9 @@ class Builder(QWidget):
 		                (QKeySequence('Alt+Up'), lambda: self.moveItem(-1)), (QKeySequence('Alt+Down'), lambda: self.moveItem(1))):
 			QShortcut(key, self.tree, fn).setContext(Qt.ShortcutContext.WidgetShortcut)
 		self.tree.currentItemChanged.connect(self._treePicked)
+		self.tree.setMouseTracking(True)
+		self.tree.itemEntered.connect(lambda row, _c: self.stage.setHover(row.data(0, Qt.ItemDataRole.UserRole)))
+		self.tree.left.connect(lambda: self.stage.setHover(None))
 		lbox.addWidget(self.tree, 1)
 		split.addWidget(left)
 
