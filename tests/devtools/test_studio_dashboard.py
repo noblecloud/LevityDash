@@ -507,3 +507,17 @@ def test_stage_badge_text_gives_pixels_and_share_of_the_parent(board):
 	stage.resize(800, 500)
 	stage.select((0, 1), True)
 	assert not stage.grab().isNull()  # paints with the badge
+
+
+def test_tree_keeps_folded_rows_across_an_edit_and_folds_all(board):
+	win, path = board('station')
+	win.foldAll(False)
+	assert win.collapsed
+	folded = set(win.collapsed)
+	win.rebuildTree()
+	assert win.collapsed == folded
+	assert all(not win.tree.topLevelItem(0).child(i).isExpanded() for i in range(win.tree.topLevelItem(0).childCount()))
+	win.foldAll(True)
+	assert not win.collapsed
+	win.rebuildTree()
+	assert win.tree.topLevelItem(0).child(0).isExpanded()

@@ -52,3 +52,15 @@ def test_resolve_converts_to_the_data_unit_and_skips_a_bad_stop():
 	r = g.resolve(wu.Temperature.Fahrenheit)
 	values = sorted(round(float(s.value), 1) for s in r.values())
 	assert values == [32.0, 98.6]
+
+
+@pytest.mark.parametrize('unit', ['m²', 'm^2'])
+def test_an_area_unit_reads_with_a_superscript_or_a_caret(unit):
+	from LevityDash.lib.stopunits import measure
+	assert isinstance(measure(24, unit), wu.Area) and float(measure(24, unit)) == pytest.approx(24)
+
+
+def test_a_quotient_of_units_is_the_dimension_it_makes():
+	from LevityDash.lib.stopunits import measure
+	assert isinstance(measure(600, 'W/m²'), wu.Light.Irradiance) and float(measure(600, 'W/m²')) == pytest.approx(600)
+	assert isinstance(measure(6, 'kWh/day'), wu.Power)

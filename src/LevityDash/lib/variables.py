@@ -19,6 +19,7 @@ items:
 - `$name` or `${name}` inside longer text is spliced in as text. Use the braces when a letter,
   digit or hyphen follows (`${room}-1`).
 - A variable may use the ones defined before it.
+- A mapping key may be a variable too (`$temp: {plot: …}`) when the variable is text.
 - A name that is not a variable is left as written, so theme tokens (`$accent`) go on to the
   theme engine, which reports the ones it does not know.
 - A save writes the `$name` back. `retemplate` takes what the app would save now, what the file
@@ -58,10 +59,18 @@ def substitute(value: Any, variables: Dict[str, Any]) -> Any:
 
 		return _REFERENCE.sub(splice, value) if '$' in value else value
 	if isinstance(value, dict):
-		return {key: substitute(item, variables) for key, item in value.items()}
+		return {_key(key, variables): substitute(item, variables) for key, item in value.items()}
 	if isinstance(value, list):
 		return [substitute(item, variables) for item in value]
 	return value
+
+
+def _key(key: Any, variables: Dict[str, Any]) -> Any:
+	"""A mapping key with its `$name` replaced, when that gives text (a preset's `$key: {...}` is a series named by a variable)."""
+	if isinstance(key, str) and '$' in key:
+		resolved = substitute(key, variables)
+		return resolved if isinstance(resolved, str) else key
+	return key
 
 
 def _definitions(raw: Any, shared: Dict[str, Any] | None = None) -> Dict[str, Any]:
@@ -91,7 +100,8 @@ def loadSharedVariables(path: Path | str | None) -> Dict[str, Any]:
 	try:
 		if path is None:
 			return {}
-		path = Path(path)
+		# The config's `userPath` is an `EasyPath`, which wraps a `Path` rather than being one.
+		path = Path(getattr(path, 'path', path))
 		if path.is_dir():
 			path = path / VARIABLES_FILE
 		if not path.is_file():
@@ -158,8 +168,10 @@ def retemplate(live: Any, resolved: Any, template: Any, collapse: Any = None) ->
 		if collapse is not None and isinstance(template, dict) and 'preset' in template and (short := collapse(live, template, resolved)) is not None:
 			return short
 		if isinstance(live, dict) and isinstance(resolved, dict) and isinstance(template, dict):
+			# `resolved` is built from `template` in order, so the two line up by position even where a `$name` key was replaced.
+			written = dict(zip(resolved, template)) if len(resolved) == len(template) else {}
 			return {
-				key: retemplate(value, resolved[key], template[key], collapse) if key in resolved and key in template else value
+				written.get(key, key): retemplate(value, resolved[key], template[written.get(key, key)], collapse) if key in resolved and written.get(key, key) in template else value
 				for key, value in live.items()
 			}
 		if isinstance(live, list) and isinstance(resolved, list) and isinstance(template, list) and len(resolved) == len(template):

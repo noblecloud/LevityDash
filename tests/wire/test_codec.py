@@ -321,3 +321,19 @@ def test_symbol_resolution_is_deterministic_without_a_type():
 	results = {type(decode_measurement(payload)) for _ in range(5)}
 	assert len(results) == 1
 	assert isinstance(decode_measurement(payload), wu.Wind.MilesPerHour)
+
+
+def test_a_metres_per_second_rate_survives_the_round_trip():
+	from WeatherUnits import Length, Time
+	speed = Length.Meter(10) / Time.Second(2)
+	back = decode_measurement(encode_measurement(speed))
+	assert back.unit == 'm/s' and float(back) == 5
+
+
+def test_a_compound_value_and_a_period_survive_the_round_trip():
+	from datetime import timedelta
+	from WeatherUnits import Length
+	area = Length.Meter(2) * Length.Meter(3)
+	area.period = timedelta(hours=1)
+	back = decode_measurement(encode_measurement(area))
+	assert back.unit == 'm²' and float(back) == 6 and back.period == timedelta(hours=1)

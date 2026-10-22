@@ -1498,6 +1498,9 @@ class Builder(QWidget):
 		                (QKeySequence('Alt+Up'), lambda: self.moveItem(-1)), (QKeySequence('Alt+Down'), lambda: self.moveItem(1))):
 			QShortcut(key, self.tree, fn).setContext(Qt.ShortcutContext.WidgetShortcut)
 		self.tree.currentItemChanged.connect(self._treePicked)
+		self.collapsed: set = set()  # paths of the rows the user folded; kept across the redraws an edit causes
+		self.tree.itemCollapsed.connect(lambda row: self.collapsed.add(row.data(0, Qt.ItemDataRole.UserRole)))
+		self.tree.itemExpanded.connect(lambda row: self.collapsed.discard(row.data(0, Qt.ItemDataRole.UserRole)))
 		self.tree.setMouseTracking(True)
 		self.tree.itemEntered.connect(lambda row, _c: self.stage.setHover(row.data(0, Qt.ItemDataRole.UserRole)))
 		self.tree.left.connect(lambda: self.stage.setHover(None))
@@ -1818,11 +1821,20 @@ class Builder(QWidget):
 				if isinstance(node, dict) and not model.opaque(node):
 					for i, kid in enumerate(node.get(model.ITEMS_KEY) or []):
 						add(row, kid, path + (i,))
-				row.setExpanded(True)
+				row.setExpanded(path not in self.collapsed)
 
 			add(None, self.piece.template, ())
 		self.applyFilter()
 		self._selectRow()
+
+	def foldAll(self, expand: bool):
+		"""Open or close every row of the tree below the dashboard row."""
+		stack = [self.tree.topLevelItem(i) for i in range(self.tree.topLevelItemCount())]
+		while stack:
+			row = stack.pop()
+			if row.parent() is not None or expand:
+				row.setExpanded(expand)
+			stack += [row.child(i) for i in range(row.childCount())]
 
 	def applyFilter(self, _text: str = ''):
 		"""Hide the rows that do not match the filter box, keeping every row that holds a match."""
@@ -1995,6 +2007,9 @@ class Builder(QWidget):
 		menu.addSeparator()
 		menu.addAction('Put in group', self.wrapItem, QKeySequence('Ctrl+G'))
 		menu.addAction('Ungroup', self.unwrapItem, QKeySequence('Ctrl+Shift+G'))
+		menu.addSeparator()
+		menu.addAction('Expand all', lambda: self.foldAll(True))
+		menu.addAction('Collapse all', lambda: self.foldAll(False))
 		menu.exec(self.tree.viewport().mapToGlobal(at))
 
 	def extractPreset(self, name: Optional[str] = None):

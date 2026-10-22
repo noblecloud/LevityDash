@@ -114,11 +114,13 @@ A value that picks between two keys. This shows the gust when the gust is more t
 | `max(key, window)` | The highest value of the key in the window. |
 | `avg(key, window)` | The average value of the key in the window. |
 | `at(key, offset)` | The value of the key at a time, counted from now. `-3h` is three hours ago. `3h` is three hours ahead. |
+| `at(expression, offset)` | A calculation as it was, or will be, at that time: every key in it is read at the offset. `at(indoor.temperature.temperature - environment.temperature.temperature, -3h)` is the gap between inside and outside three hours ago. |
 | `min(a, b, ...)` | The lowest of two or more values. |
 | `max(a, b, ...)` | The highest of two or more values. |
 | `avg(a, b, ...)` | The average of two or more values, such as the current values of several keys. `mean` is another name for `avg`. |
 | `count(key, where=place)` | How many fresh readings the place has for the key. |
 | `abs(x)` | The size of a number, without its sign. |
+| `to(x, unit)` | `x` in that unit. `to(irradiance * 24m² * 3h, kWh)`. The unit is a word (`kWh`) or a string for a sign a word cannot hold (`to(a * b, 'ft²')`). It must measure what `x` does: a power does not become an energy. |
 
 ### <div class=mono>Places</div>
 
@@ -156,11 +158,12 @@ A source that does not have the key gives no value, so the result has no value. 
 A window is the span of time that a function reads.
 
 - `today` is from midnight to the next midnight, in your time zone. It includes the data that has been recorded and the forecast.
+- `yesterday` is the day before `today`, from midnight to midnight.
 - A duration, such as `24h`, is the last 24 hours. It ends now.
 
 A duration is a number and one of these units: `ms`, `s`, `m` (minutes), `h`, `d`, `w`. Examples: `90s`, `3h`, `7d`.
 
-A window or an offset can be the second argument of `min`, `max`, `avg`, or `at`. It cannot be used in other places.
+A window or an offset can be the second argument of `min`, `max`, `avg`, or `at`. A duration can also multiply or divide a measurement (see [Rates and amounts](#rates-and-amounts)). It cannot be used in other places.
 
 > [!NOTE]
 > A window needs data over time. A source that gives only the current value has no history to read. `min(key, today)` then has no value.
@@ -169,9 +172,44 @@ A window or an offset can be the second argument of `min`, `max`, `avg`, or `at`
 
 Write a key as you write it in `key:`. A key has at least two parts that are joined with a dot. A key can have a source before it (`OpenMeteo:environment.temperature.temperature`) and an identity after it (`indoor.temperature.temperature#bedroom`).
 
+## Rates and amounts
+
+`*` and `/` between two measurements follow their units.
+
+| Expression | Result |
+|------------|--------|
+| `environment.precipitation.rate * 3h` | The rain that falls in 3 hours, as a length (`mm`). |
+| `3h * environment.precipitation.rate` | The same. |
+| `environment.precipitation.hourly / 3h` | A rate, in `mm/hr`. The rate is in the largest unit that holds the duration whole: `3h` gives per hour, `2d` gives per day, `90s` gives per second. |
+| `environment.wind.speed.gust / environment.wind.speed.speed` | A plain number. Two measurements of the same kind divide to a ratio, whatever their units. |
+| `a.b.length * a.b.width` | An area, in `m²`. |
+
+Units that have no name of their own are shown in SI units (`m²`, `kg·m⁻³`). A result can go on to further `*` and `/`. A power of a unit goes up to three (`m³`).
+
+A temperature reading does not multiply or divide. `20°C * 2` is not `40°C`, so the expression has an error.
+
+Two temperature readings subtract to a **change**: `outdoor.temperature - indoor.temperature` is a number of degrees, not a temperature. A change converts by a factor (10 °C is 18 °F). A reading plus or minus a change is a reading, so `temperature - 5°F` takes 5 degrees off, in any unit. Two readings do not add (`20°C + 10°C` is not a temperature), but `avg(a, b)` of readings works.
+
+Power times time is energy (`power.watts * 3h` in `kWh`), energy over time is power, and a length times a length is an area. Irradiance is power per area: `irradiance * 24m²` is a power, and `* 3h` more makes an energy. An answer comes in SI units (`J`, `W`); `to(…, kWh)` gives it in the unit you want.
+
+## Periods
+
+A connection can name a window with `period:` instead of an expression. `using:` says what to take from it: `max`, `min` or `avg` (`high`, `low` and `mean` are other names). The default is `max`.
+
+```yaml
+- type: realtime.text
+  key: environment.temperature.temperature
+  period: today
+  using: max
+```
+
+A period is `today`, `yesterday` or a duration such as `3h`. When a loaded plugin reports that window itself, the item reads the plugin's key (today's `max` is `environment.temperature.high`). Otherwise the item reads the matching expression, `max(environment.temperature.temperature, today)`. The file keeps the key and the period as you wrote them.
+
+`period` works with `where:`. It does not work on a key that is already an expression.
+
 ## Units in an expression
 
-A number can have a unit. This is a unit literal.
+A number can have a unit. This is a unit literal. Next to `+`, `-` or a comparison it takes the unit of the other side. Next to `*` or `/` it stands for itself: `1.5kW * 3h` is 4.5 kWh, `24m²` is an area, and `600 W/m²` is an irradiance. A power or a slash may follow the unit (`m²`, `m^2`, `W/m²`, `kWh/day`); a single letter alone (`5 m`) is not a unit.
 
 ```yaml
 - type: text
@@ -204,7 +242,7 @@ A space between the number and the unit is optional.
 #### <div class=mono>What you cannot write</div>
 
 - A unit of one letter. `5 m` is not read as metres. Use `5 mm`, `5 cm`, or another unit with at least two letters.
-- A span of time. `3h` is a duration. A duration is only for a window or an offset.
+- A span of time. `3h` is a duration. A duration is for a window or an offset, or it multiplies or divides a measurement.
 
 #### <div class=mono>Units must match</div>
 

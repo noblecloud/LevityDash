@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import WeatherUnits as wu
 from WeatherUnits.length import Millimeter
-from WeatherUnits.temperature import Celsius, Fahrenheit
+from WeatherUnits.temperature import Celsius, Fahrenheit, FahrenheitChange
 
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.expressions import Expression, ExpressionError, Missing, PlacedKey, PointInput, SeriesInput, Window
@@ -111,6 +111,7 @@ def test_parse_interns_identical_text():
 	'temperature',                      # one atom is not a key
 	f'{TEMP} + 3h',                     # a duration outside a window
 	f'today',
+	f'yesterday',
 	f'avg({TEMP})',
 	f'avg(1, 24h)',
 	f'at({TEMP}, today)',
@@ -143,6 +144,19 @@ def test_today_window_covers_the_local_day():
 	assert Expression.parse(f'min({TEMP}, today)').evaluate(resolver, NOW) == Fahrenheit(60)
 	_, start, end = resolver.seriesRequests[0]
 	assert (start.hour, end.hour, (end - start)) == (0, 0, timedelta(days=1))
+
+
+def test_yesterday_window_covers_the_day_before():
+	resolver = FakeResolver(series={TEMP: hourly(*[Fahrenheit(60 + i) for i in range(24)], start=datetime(2026, 10, 3, 0, 0, tzinfo=NOW.tzinfo))})
+	assert Expression.parse(f'max({TEMP}, yesterday)').evaluate(resolver, NOW) == Fahrenheit(83)
+	assert Expression.parse(f'min({TEMP}, yesterday)').evaluate(resolver, NOW) == Fahrenheit(60)
+	_, start, end = resolver.seriesRequests[0]
+	assert (start.day, start.hour, end.day, end.hour) == (3, 0, 4, 0)
+
+
+def test_yesterday_is_not_today():
+	assert Expression.parse(f'max({TEMP}, yesterday)').key != Expression.parse(f'max({TEMP}, today)').key
+	assert str(next(iter(Expression.parse(f'max({TEMP}, yesterday)').series)).window) == 'yesterday'
 
 
 def test_duration_window_covers_the_past():
@@ -192,7 +206,7 @@ def test_conditional_only_evaluates_the_branch_taken():
 def test_measurement_arithmetic_converts_units():
 	resolver = FakeResolver(current={TEMP: Fahrenheit(70), DEW: Celsius(20)})
 	result = Expression.parse(f'{TEMP} - {DEW}').evaluate(resolver, NOW)
-	assert isinstance(result, Fahrenheit)
+	assert isinstance(result, wu.temperature.FahrenheitChange)
 	assert float(result) == pytest.approx(2)
 
 
@@ -234,7 +248,7 @@ def test_unit_literals_compare_in_the_measurements_own_unit():
 	assert ev(f'{wind} >= 30 mph') is True
 	assert ev(f'{wind} < 20 kn') is False     # 20 kn is 23 mph
 	assert ev(f'1 if {TEMP} > 90°F else 2') == 1
-	assert ev(f'{TEMP} - 5°F') == Fahrenheit(90)
+	assert ev(f'{TEMP} - 5°F') == Fahrenheit(90)  # a reading less a change is a reading
 
 
 def test_a_unit_literal_must_match_what_it_is_compared_with():
@@ -281,6 +295,130 @@ def test_elementwise_min_max():
 	resolver = FakeResolver(current={GUST: 20.0, SPEED: 10.0})
 	assert Expression.parse(f'max({GUST}, {SPEED})').evaluate(resolver, NOW) == 20.0
 	assert Expression.parse(f'min({GUST}, {SPEED}, 5)').evaluate(resolver, NOW) == 5
+
+
+# -- rates and durations -------------------------------------------------------------
+
+RAIN = 'environment.precipitation.rate'
+TOTAL = 'environment.precipitation.hourly'
+
+
+def test_a_rate_times_a_duration_is_an_amount():
+	rate = wu.Precipitation.Hourly(Millimeter(2), wu.Time.Hour(1))
+	result = Expression.parse(f'{RAIN} * 3h').evaluate(FakeResolver(current={RAIN: rate}), NOW)
+	assert isinstance(result, wu.Length) and result.unit == 'mm' and float(result) == pytest.approx(6)
+
+
+def test_a_duration_times_a_rate_is_the_same_amount():
+	rate = wu.Precipitation.Hourly(Millimeter(2), wu.Time.Hour(1))
+	result = Expression.parse(f'90m * {RAIN}').evaluate(FakeResolver(current={RAIN: rate}), NOW)
+	assert isinstance(result, wu.Length) and float(result) == pytest.approx(3)
+
+
+def test_an_amount_over_a_duration_is_a_rate_in_that_duration():
+	result = Expression.parse(f'{TOTAL} / 3h').evaluate(FakeResolver(current={TOTAL: Millimeter(6)}), NOW)
+	assert result.unit == 'mm/hr' and float(result) == pytest.approx(2)
+
+
+def test_two_lengths_make_an_area_not_a_length():
+	resolver = FakeResolver(current={'a.b.c': wu.Length.Meter(2), 'a.b.d': wu.Length.Meter(3)})
+	result = Expression.parse('a.b.c * a.b.d').evaluate(resolver, NOW)
+	assert result.unit == 'm²' and float(result) == pytest.approx(6)
+
+
+def test_same_dimension_division_is_a_plain_ratio():
+	resolver = FakeResolver(current={'a.b.c': wu.Length.Meter(6), 'a.b.d': wu.Length.Foot(3.28084)})
+	result = Expression.parse('a.b.c / a.b.d').evaluate(resolver, NOW)
+	assert type(result) is float and result == pytest.approx(6.0, rel=1e-3)
+
+
+@pytest.mark.parametrize('text', [f'{RAIN} + 3h', '3h * 3h', '3h / 3h', 'today * 2'])
+def test_a_duration_is_still_refused_where_it_means_nothing(text):
+	with pytest.raises(ExpressionError):
+		Expression.parse(text)
+
+
+# -- unit literals that stand for themselves ------------------------------------------
+
+def test_a_power_literal_times_a_duration_is_energy():
+	result = Expression.parse('1.5kW * 3h').evaluate(FakeResolver(), NOW)
+	assert isinstance(result, wu.Energy) and float(result['kWh']) == pytest.approx(4.5)
+
+
+def test_irradiance_over_an_area_for_a_time_is_energy():
+	resolver = FakeResolver(current={'a.b.sun': wu.Light.Irradiance(500)})
+	result = Expression.parse('a.b.sun * 20m² * 3h').evaluate(resolver, NOW)
+	assert isinstance(result, wu.Energy) and float(result['kWh']) == pytest.approx(30)
+
+
+@pytest.mark.parametrize('text', ['a.b.sun * 20m^2', 'a.b.sun * 20 m²', '20m² * a.b.sun'])
+def test_an_area_literal_is_written_with_a_superscript_or_a_caret(text):
+	resolver = FakeResolver(current={'a.b.sun': wu.Light.Irradiance(500)})
+	result = Expression.parse(text).evaluate(resolver, NOW)
+	assert isinstance(result, wu.Power) and float(result['kW']) == pytest.approx(10)
+
+
+def test_a_compound_unit_literal_compares_with_a_reading():
+	resolver = FakeResolver(current={'a.b.sun': wu.Light.Irradiance(610)})
+	assert Expression.parse('a.b.sun > 600 W/m²').evaluate(resolver, NOW) is True
+	assert Expression.parse('a.b.sun > 700 W/m²').evaluate(resolver, NOW) is False
+
+
+def test_an_energy_literal_over_a_duration_is_power():
+	result = Expression.parse('6kWh / 3h').evaluate(FakeResolver(), NOW)
+	assert isinstance(result, wu.Power) and float(result['kW']) == pytest.approx(2)
+
+
+# -- to(): the unit of the answer ---------------------------------------------------
+
+def test_to_gives_energy_in_the_unit_asked_for():
+	resolver = FakeResolver(current={'a.b.sun': wu.Light.Irradiance(500)})
+	result = Expression.parse('to(a.b.sun * 20m² * 3h, kWh)').evaluate(resolver, NOW)
+	assert isinstance(result, wu.Energy.KilowattHour) and float(result) == pytest.approx(30)
+
+
+def test_to_takes_a_unit_written_as_a_string():
+	result = Expression.parse("to(12ft * 14ft, 'ft²')").evaluate(FakeResolver(), NOW)
+	assert result.unit == 'ft²' and float(result) == pytest.approx(168)
+
+
+def test_to_converts_a_change_in_its_own_units():
+	resolver = FakeResolver(current={TEMP: Celsius(30), DEW: Celsius(20)})
+	result = Expression.parse(f"to({TEMP} - {DEW}, '°F')").evaluate(resolver, NOW)
+	assert float(result) == pytest.approx(18)
+
+
+@pytest.mark.parametrize('text', ['to(a.b.c, kWh)', 'to(a.b.c, zzz)', 'to(a.b.c)', 'to(a.b.c, 3)'])
+def test_to_refuses_a_unit_that_does_not_fit(text):
+	resolver = FakeResolver(current={'a.b.c': wu.Power.Kilowatt(2)})
+	with pytest.raises(ExpressionError):
+		Expression.parse(text).evaluate(resolver, NOW)
+
+
+# -- temperature readings and changes -----------------------------------------------
+
+def test_the_difference_of_two_temperatures_is_a_change():
+	resolver = FakeResolver(current={TEMP: Celsius(30), DEW: Celsius(20)})
+	result = Expression.parse(f'{TEMP} - {DEW}').evaluate(resolver, NOW)
+	assert isinstance(result, wu.temperature.CelsiusChange) and float(result) == 10
+
+
+def test_a_unit_literal_taken_from_a_reading_is_a_change_in_its_own_scale():
+	resolver = FakeResolver(current={TEMP: Fahrenheit(95)})
+	result = Expression.parse(f'{TEMP} - 5°C').evaluate(resolver, NOW)
+	assert isinstance(result, Fahrenheit) and float(result) == pytest.approx(86)
+
+
+def test_the_mean_of_temperature_readings_still_works():
+	resolver = FakeResolver(current={TEMP: Celsius(30), DEW: Celsius(20)})
+	result = Expression.parse(f'avg({TEMP}, {DEW})').evaluate(resolver, NOW)
+	assert isinstance(result, Celsius) and float(result) == 25
+
+
+def test_two_temperature_readings_do_not_add():
+	resolver = FakeResolver(current={TEMP: Celsius(30), DEW: Celsius(20)})
+	with pytest.raises(ExpressionError, match='two temperature readings'):
+		Expression.parse(f'{TEMP} + {DEW}').evaluate(resolver, NOW)
 
 
 # -- places ---------------------------------------------------------------------
@@ -373,3 +511,30 @@ def test_a_resolver_without_places_is_an_error_where_it_is_asked():
 def test_place_forms_that_are_rejected(text):
 	with pytest.raises(ExpressionError):
 		Expression.parse(text)
+
+
+# -- at() of a calculation ------------------------------------------------------------
+
+def _hourlyTemperatures(*values):
+	return [(t, Fahrenheit(v)) for t, v in hourly(*values)]
+
+
+def test_at_reads_a_whole_expression_as_it_was_then():
+	resolver = FakeResolver(
+		current={TEMP: Fahrenheit(59), DEW: Fahrenheit(40)},
+		series={TEMP: _hourlyTemperatures(*[50 + i for i in range(10)]), DEW: _hourlyTemperatures(*[40] * 10)},
+	)
+	now = datetime(2026, 10, 4, 9, 0, tzinfo=timezone(timedelta(hours=-5)))
+	assert float(Expression.parse(f'{TEMP} - {DEW}').evaluate(resolver, now)) == pytest.approx(19)
+	assert float(Expression.parse(f'at({TEMP} - {DEW}, -3h)').evaluate(resolver, now)) == pytest.approx(16)
+
+
+def test_at_of_an_expression_reports_each_key_as_a_point():
+	expression = Expression.parse(f'at({TEMP} - {DEW}, -3h)')
+	assert {(p.key, p.offset) for p in expression.points} == {(CategoryItem(TEMP), timedelta(hours=-3)), (CategoryItem(DEW), timedelta(hours=-3))}
+	assert not expression.keys
+
+
+def test_at_of_an_expression_still_needs_an_offset():
+	with pytest.raises(ExpressionError):
+		Expression.parse(f'at({TEMP} - {DEW})')
