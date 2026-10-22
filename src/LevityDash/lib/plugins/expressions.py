@@ -34,6 +34,7 @@ from WeatherUnits.temperature import summingReadings
 
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.places import normalizePlace
+from WeatherUnits.base import _Algebra
 from LevityDash.lib.stopunits import StopUnitError, family, measure, toDataUnit
 
 __all__ = [
@@ -168,11 +169,14 @@ _DURATION_UNITS = {
 	'w':  timedelta(weeks=1),
 }
 
-#: A number with a unit: `90°F`, `30 mph`, `0.1 in/hr`, `55%`, `1013 hPa`. A unit that is only
-#: letters needs two of them (`5 m` is not metres), and the duration units are left to durations.
+#: A number with a unit: `90°F`, `30 mph`, `0.1 in/hr`, `55%`, `1013 hPa`, `24 m²`, `600 W/m²`. A unit that is only
+#: letters needs two of them (`5 m` is not metres) unless it has a power or a slash, and the duration units are left to durations.
 _UNIT_PATTERN = re.compile(
 	r'(?<![\w.])(\d+(?:\.\d+)?)\s*'
-	r'([°º˚]\s?[A-Za-z]+|%|[A-Za-z]{2,}(?:\s?/\s?[A-Za-z]+)?)(?![\w.])'
+	r'([°º˚]\s?[A-Za-z]+|%'
+	r'|[A-Za-z]{2,}(?:[²³]|\^[23])?(?:\s?/\s?[A-Za-z]+(?:[²³]|\^[23])?)?'
+	r'|[A-Za-z](?:[²³]|\^[23])(?:\s?/\s?[A-Za-z]+(?:[²³]|\^[23])?)?'
+	r'|[A-Za-z]\s?/\s?[A-Za-z]+(?:[²³]|\^[23])?)(?![\w.])'
 )
 _NOT_UNITS = frozenset({'ms', 'if', 'else', 'and', 'or', 'not', 'is'})
 
@@ -188,7 +192,7 @@ _RESERVED_NAMES = frozenset({_TODAY, _VALUE})
 _WINDOW_FUNCTIONS = frozenset({'min', 'max', 'avg'})
 #: Functions that can take keys at a place, and the one that counts them.
 _AGGREGATES = frozenset({'min', 'max', 'avg', 'count'})
-_FUNCTIONS = frozenset({'min', 'max', 'avg', 'count', 'at', 'abs'})
+_FUNCTIONS = frozenset({'min', 'max', 'avg', 'count', 'at', 'abs', 'to'})
 #: Other names for a function. ``mean`` is the plain word for ``avg``.
 _ALIASES = {'mean': 'avg'}
 
@@ -422,10 +426,31 @@ def _applyKeywords(tree: ast.AST, placeholders: Dict[str, Any], text: str) -> No
 		node.keywords = kept
 
 
+def _dimensionOf(cls: type) -> Any:
+	"""What ``cls`` measures: its exponent vector when the algebra has one, else the family."""
+	try:
+		return _Algebra.vectorOf(cls(1))
+	except Exception:  # noqa: BLE001 - a class the algebra has no dimension for
+		return family(cls)
+
+
+def _unitText(node: ast.AST) -> Optional[str]:
+	"""The unit named by the second argument of ``to``: a bare word (``kWh``) or a string (``'ft²'``)."""
+	if isinstance(node, ast.Name):
+		return node.id
+	if isinstance(node, ast.Constant) and isinstance(node.value, str):
+		return node.value
+	return None
+
+
 def _check(tree: ast.AST, placeholders: Mapping[str, Any], text: str) -> None:
+	unitArgs = {id(call.args[1]) for call in ast.walk(tree)
+	            if isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and call.func.id == 'to' and len(call.args) == 2}
 	for node in ast.walk(tree):
 		if not isinstance(node, _ALLOWED_NODES):
 			raise ExpressionError(f'{text!r}: {type(node).__name__} is not allowed in an expression')
+		if id(node) in unitArgs:
+			continue
 		match node:
 			case ast.Constant(value=value):
 				if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -528,6 +553,14 @@ def _isWindowCall(node: ast.Call, placeholders: Mapping[str, Any]) -> bool:
 
 def _checkCall(name: str, args: Sequence[ast.AST], placeholders: Mapping[str, Any], text: str) -> None:
 	match name:
+		case 'to':
+			unit = _unitText(args[1]) if len(args) == 2 else None
+			if unit is None:
+				raise ExpressionError(f'{text!r}: to() takes a value and a unit, like to(a.b * 3h, kWh) or to(a.b, \'ft²\')')
+			try:
+				measure(1, unit)
+			except StopUnitError as e:
+				raise ExpressionError(f'{text!r}: {e}') from e
 		case 'at':
 			if len(args) != 2 or not _isKey(args[0], placeholders) or _durationOf(args[1], placeholders) is None:
 				raise ExpressionError(f'{text!r}: at() takes a key and an offset, like at(a.b, -3h)')
@@ -700,6 +733,16 @@ class _Evaluator:
 				return -operand
 		raise ExpressionError(f'{self.text!r}: unknown operator {type(op).__name__}')
 
+	def _asQuantity(self, operand: Any) -> Any:
+		"""A unit literal in a product or a quotient stands for itself (`24m²`, `0.5kW`), not for the unit of its other side.
+		A percent or degree literal still takes the other side's unit."""
+		if isinstance(operand, UnitLiteral) and operand.unit[0] not in '%°º˚':
+			try:
+				return measure(operand.number, operand.unit)
+			except StopUnitError as e:
+				raise ExpressionError(f'{self.text!r}: {e}') from e
+		return operand
+
 	def _withUnits(self, left: Any, right: Any, change: bool = False) -> Tuple[Any, Any]:
 		"""A unit literal beside a measurement, as a measurement of the same class."""
 		for literal, other, swap in ((right, left, False), (left, right, True)):
@@ -746,6 +789,8 @@ class _Evaluator:
 	def _binary(self, op: ast.operator, left: Any, right: Any) -> Any:
 		if left is Missing or right is Missing:
 			return Missing
+		if isinstance(op, (ast.Mult, ast.Div)):
+			left, right = self._asQuantity(left), self._asQuantity(right)
 		left, right = self._withUnits(left, right, change=isinstance(op, (ast.Add, ast.Sub)))
 		self._checkUnits(op, left, right)
 		try:
@@ -816,6 +861,22 @@ class _Evaluator:
 				return max(values)
 		return _mean(values)
 
+	def _convert(self, value: Any, unit: str) -> Any:
+		"""``value`` in ``unit``: the energy of a power times a time, in kWh."""
+		if value is Missing:
+			return Missing
+		if not _isMeasurement(value):
+			raise ExpressionError(f'{self.text!r}: to() needs a measurement, not a plain number')
+		target = type(measure(1, unit))
+		if isinstance(value, wu.Temperature.Change) and issubclass(target, wu.Temperature):
+			target = target.change  # a change converts in its own units: 10 °C is 18 °F
+		elif _dimensionOf(target) != _dimensionOf(type(value)):
+			raise ExpressionError(f'{self.text!r}: {unit} does not measure what the value does ({type(value).__name__})')
+		try:
+			return target(value)
+		except (TypeError, ValueError) as e:
+			raise ExpressionError(f'{self.text!r}: {e}') from e
+
 	def _call(self, node: ast.Call) -> Any:
 		name = node.func.id
 		args = node.args
@@ -838,6 +899,8 @@ class _Evaluator:
 					return _mean(values)
 		if name in _AGGREGATES:
 			return self._aggregate(node)
+		if name == 'to':
+			return self._convert(self.eval(args[0]), _unitText(args[1]))
 		values = [self.eval(arg) for arg in args]
 		if any(v is Missing for v in values):
 			return Missing

@@ -119,6 +119,7 @@ A value that picks between two keys. This shows the gust when the gust is more t
 | `avg(a, b, ...)` | The average of two or more values, such as the current values of several keys. `mean` is another name for `avg`. |
 | `count(key, where=place)` | How many fresh readings the place has for the key. |
 | `abs(x)` | The size of a number, without its sign. |
+| `to(x, unit)` | `x` in that unit. `to(irradiance * 24m² * 3h, kWh)`. The unit is a word (`kWh`) or a string for a sign a word cannot hold (`to(a * b, 'ft²')`). It must measure what `x` does: a power does not become an energy. |
 
 ### <div class=mono>Places</div>
 
@@ -187,11 +188,11 @@ A temperature reading does not multiply or divide. `20°C * 2` is not `40°C`, s
 
 Two temperature readings subtract to a **change**: `outdoor.temperature - indoor.temperature` is a number of degrees, not a temperature. A change converts by a factor (10 °C is 18 °F). A reading plus or minus a change is a reading, so `temperature - 5°F` takes 5 degrees off, in any unit. Two readings do not add (`20°C + 10°C` is not a temperature), but `avg(a, b)` of readings works.
 
-Power times time is energy (`power.watts * 3h` in `kWh`), energy over time is power, and a length times a length is an area.
+Power times time is energy (`power.watts * 3h` in `kWh`), energy over time is power, and a length times a length is an area. Irradiance is power per area: `irradiance * 24m²` is a power, and `* 3h` more makes an energy. An answer comes in SI units (`J`, `W`); `to(…, kWh)` gives it in the unit you want.
 
 ## Units in an expression
 
-A number can have a unit. This is a unit literal.
+A number can have a unit. This is a unit literal. Next to `+`, `-` or a comparison it takes the unit of the other side. Next to `*` or `/` it stands for itself: `1.5kW * 3h` is 4.5 kWh, `24m²` is an area, and `600 W/m²` is an irradiance. A power or a slash may follow the unit (`m²`, `m^2`, `W/m²`, `kWh/day`); a single letter alone (`5 m`) is not a unit.
 
 ```yaml
 - type: text
