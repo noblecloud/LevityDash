@@ -687,6 +687,7 @@ class Stage(QWidget):
 	selected = Signal(tuple)
 	dragged = Signal(tuple, dict)  # path, geometry in % of the parent
 	dragDone = Signal()
+	parentAsked = Signal()  # Esc: select the selected item's parent
 	keyDropped = Signal(tuple, str)  # item path, key dragged from the Keys tab
 
 	HANDLE = 9
@@ -732,6 +733,8 @@ class Stage(QWidget):
 		"""Arrow keys move the selected item by 1% of its parent; Shift 5%, Alt 0.1%."""
 		if event.key() == Qt.Key.Key_0:
 			return self.resetView()
+		if event.key() == Qt.Key.Key_Escape:
+			return self.parentAsked.emit()
 		step = {Qt.Key.Key_Left: (-1, 0), Qt.Key.Key_Right: (1, 0), Qt.Key.Key_Up: (0, -1), Qt.Key.Key_Down: (0, 1)}.get(event.key())
 		rect = self.rects.get(self.path) if self.path else None
 		if step is None or rect is None or not self.movable:
@@ -1566,6 +1569,7 @@ class Builder(QWidget):
 		self.stage.dragged.connect(self._dragged)
 		self.snapBox.toggled.connect(lambda on: setattr(self.stage, 'snap', on))
 		self.stage.dragDone.connect(self._dragDone)
+		self.stage.parentAsked.connect(self.selectParent)
 		self.stage.keyDropped.connect(self._keyDropped)
 		self.tree.keyDropped.connect(self._keyDropped)
 		mbox.addWidget(self.stage, 1)
@@ -1934,6 +1938,10 @@ class Builder(QWidget):
 		self.keysTab.selectionChanged()
 		self._syncStage()
 
+	def selectParent(self):
+		"""Select the selected item's parent container; a top-level item has none, so nothing changes."""
+		if self.selection and len(self.selection) > 1:
+			self.select(self.selection[:-1])
 	def _keyDropped(self, path: tuple, key: str):
 		"""A key from the Keys tab landed on an item: select it and set its key."""
 		if not self.keysTab.useText(key, path):
@@ -2093,6 +2101,7 @@ class Builder(QWidget):
 		menu.addAction('Paste', self.pasteItem, QKeySequence.StandardKey.Paste)
 		menu.addAction('Duplicate', self.duplicateItem, QKeySequence('Ctrl+D'))
 		menu.addAction('Delete', self.deleteItem, QKeySequence.StandardKey.Delete)
+		menu.addAction('Select parent', self.selectParent, QKeySequence('Esc'))
 		menu.addAction('Reset geometry', self.resetGeometry)
 		align = menu.addMenu('Align in parent')
 		for how in self.ALIGN:

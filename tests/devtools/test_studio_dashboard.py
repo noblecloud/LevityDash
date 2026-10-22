@@ -416,6 +416,17 @@ def test_align_sets_x_or_y_from_the_item_and_parent_size(board):
 	assert win.piece.node(target)['geometry']['x'] == '30%'
 
 
+def test_select_parent_walks_up_and_stops_at_the_top(board):
+	win, path = board('station')
+	deep = next(p for p, n in win.piece.walk() if len(p) >= 3)
+	win.select(deep)
+	win.selectParent()
+	assert win.selection == deep[:-1]
+	win.select(deep[:1])
+	win.selectParent()
+	assert win.selection == deep[:1]
+
+
 def test_stage_zoom_keeps_the_point_under_the_pointer_and_resets(board):
 	from PySide6.QtCore import QPointF
 	win, path = board('station')
