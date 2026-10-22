@@ -81,7 +81,9 @@ def test_an_expression_key_saves_as_its_text(dashboard):
 		assert engine.refcount(computedKey) == before + 1
 		assert panel.state['key'] == EXPR
 	finally:
+		panel.delete()
 		_drop(sandbox)
+	assert engine.refcount(computedKey) == before, 'deleting the panel gives its lease back'
 
 
 def test_setting_key_on_the_item_goes_through_the_connection(dashboard):

@@ -8,10 +8,10 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import WeatherUnits as wu
 from WeatherUnits.length import Millimeter
-from WeatherUnits.temperature import Celsius, Fahrenheit
+from WeatherUnits.temperature import Celsius, Fahrenheit, FahrenheitChange
 
 from LevityDash.lib.plugins.categories import CategoryItem
-from LevityDash.lib.plugins.expressions import Expression, ExpressionError, Missing, PointInput, SeriesInput, Window
+from LevityDash.lib.plugins.expressions import Expression, ExpressionError, Missing, PlacedKey, PointInput, SeriesInput, Window
 
 TEMP = 'environment.temperature.temperature'
 DEW = 'environment.temperature.dewpoint'
@@ -22,10 +22,11 @@ NOW = datetime(2026, 10, 4, 15, 0, tzinfo=timezone(timedelta(hours=-5)))
 
 
 class FakeResolver:
-	def __init__(self, current=None, series=None):
+	def __init__(self, current=None, series=None, members=None):
 		self._current = {CategoryItem(k): v for k, v in (current or {}).items()}
 		self._series = {CategoryItem(k): v for k, v in (series or {}).items()}
 		self.seriesRequests = []
+		self._members = members or {}
 
 	def current(self, key):
 		return self._current.get(key)
@@ -42,6 +43,10 @@ class FakeResolver:
 		if not points:
 			return None
 		return min(points, key=lambda p: abs(p[0] - when))[1]
+
+	def members(self, placed):
+		self.placesAsked = getattr(self, 'placesAsked', []) + [placed]
+		return self._members.get((str(placed.key), placed.place), [])
 
 
 def hourly(*values, start=datetime(2026, 10, 4, 0, 0, tzinfo=timezone(timedelta(hours=-5)))):
@@ -201,7 +206,7 @@ def test_conditional_only_evaluates_the_branch_taken():
 def test_measurement_arithmetic_converts_units():
 	resolver = FakeResolver(current={TEMP: Fahrenheit(70), DEW: Celsius(20)})
 	result = Expression.parse(f'{TEMP} - {DEW}').evaluate(resolver, NOW)
-	assert isinstance(result, Fahrenheit)
+	assert isinstance(result, wu.temperature.FahrenheitChange)
 	assert float(result) == pytest.approx(2)
 
 
@@ -243,7 +248,7 @@ def test_unit_literals_compare_in_the_measurements_own_unit():
 	assert ev(f'{wind} >= 30 mph') is True
 	assert ev(f'{wind} < 20 kn') is False     # 20 kn is 23 mph
 	assert ev(f'1 if {TEMP} > 90°F else 2') == 1
-	assert ev(f'{TEMP} - 5°F') == Fahrenheit(90)
+	assert ev(f'{TEMP} - 5°F') == FahrenheitChange(90)
 
 
 def test_a_unit_literal_must_match_what_it_is_compared_with():
@@ -290,3 +295,162 @@ def test_elementwise_min_max():
 	resolver = FakeResolver(current={GUST: 20.0, SPEED: 10.0})
 	assert Expression.parse(f'max({GUST}, {SPEED})').evaluate(resolver, NOW) == 20.0
 	assert Expression.parse(f'min({GUST}, {SPEED}, 5)').evaluate(resolver, NOW) == 5
+
+
+# -- rates and durations -------------------------------------------------------------
+
+RAIN = 'environment.precipitation.rate'
+TOTAL = 'environment.precipitation.hourly'
+
+
+def test_a_rate_times_a_duration_is_an_amount():
+	rate = wu.Precipitation.Hourly(Millimeter(2), wu.Time.Hour(1))
+	result = Expression.parse(f'{RAIN} * 3h').evaluate(FakeResolver(current={RAIN: rate}), NOW)
+	assert isinstance(result, wu.Length) and result.unit == 'mm' and float(result) == pytest.approx(6)
+
+
+def test_a_duration_times_a_rate_is_the_same_amount():
+	rate = wu.Precipitation.Hourly(Millimeter(2), wu.Time.Hour(1))
+	result = Expression.parse(f'90m * {RAIN}').evaluate(FakeResolver(current={RAIN: rate}), NOW)
+	assert isinstance(result, wu.Length) and float(result) == pytest.approx(3)
+
+
+def test_an_amount_over_a_duration_is_a_rate_in_that_duration():
+	result = Expression.parse(f'{TOTAL} / 3h').evaluate(FakeResolver(current={TOTAL: Millimeter(6)}), NOW)
+	assert result.unit == 'mm/hr' and float(result) == pytest.approx(2)
+
+
+def test_two_lengths_make_an_area_not_a_length():
+	resolver = FakeResolver(current={'a.b.c': wu.Length.Meter(2), 'a.b.d': wu.Length.Meter(3)})
+	result = Expression.parse('a.b.c * a.b.d').evaluate(resolver, NOW)
+	assert result.unit == 'm²' and float(result) == pytest.approx(6)
+
+
+def test_same_dimension_division_is_a_plain_ratio():
+	resolver = FakeResolver(current={'a.b.c': wu.Length.Meter(6), 'a.b.d': wu.Length.Foot(3.28084)})
+	result = Expression.parse('a.b.c / a.b.d').evaluate(resolver, NOW)
+	assert type(result) is float and result == pytest.approx(6.0, rel=1e-3)
+
+
+@pytest.mark.parametrize('text', [f'{RAIN} + 3h', '3h * 3h', '3h / 3h', 'today * 2'])
+def test_a_duration_is_still_refused_where_it_means_nothing(text):
+	with pytest.raises(ExpressionError):
+		Expression.parse(text)
+
+
+# -- temperature readings and changes -----------------------------------------------
+
+def test_the_difference_of_two_temperatures_is_a_change():
+	resolver = FakeResolver(current={TEMP: Celsius(30), DEW: Celsius(20)})
+	result = Expression.parse(f'{TEMP} - {DEW}').evaluate(resolver, NOW)
+	assert isinstance(result, wu.temperature.CelsiusChange) and float(result) == 10
+
+
+def test_a_unit_literal_taken_from_a_reading_is_a_change_in_its_own_scale():
+	resolver = FakeResolver(current={TEMP: Fahrenheit(95)})
+	result = Expression.parse(f'{TEMP} - 5°C').evaluate(resolver, NOW)
+	assert isinstance(result, Fahrenheit) and float(result) == pytest.approx(86)
+
+
+def test_the_mean_of_temperature_readings_still_works():
+	resolver = FakeResolver(current={TEMP: Celsius(30), DEW: Celsius(20)})
+	result = Expression.parse(f'avg({TEMP}, {DEW})').evaluate(resolver, NOW)
+	assert isinstance(result, Celsius) and float(result) == 25
+
+
+def test_two_temperature_readings_do_not_add():
+	resolver = FakeResolver(current={TEMP: Celsius(30), DEW: Celsius(20)})
+	with pytest.raises(ExpressionError, match='two temperature readings'):
+		Expression.parse(f'{TEMP} + {DEW}').evaluate(resolver, NOW)
+
+
+# -- places ---------------------------------------------------------------------
+
+IN = 'indoor.temperature.temperature'
+UP = (IN, 'home.upstairs')
+HOUR = timedelta(hours=1)
+
+
+def _at(*readings):
+	"""Members at a place: (degrees F, minutes old) for each device."""
+	return [(Fahrenheit(degrees), NOW - timedelta(minutes=age)) for degrees, age in readings]
+
+
+def test_where_keyword_and_suffix_are_the_same_expression():
+	keyword = Expression.parse(f'avg({IN}, where=home.upstairs)')
+	suffix = Expression.parse(f'avg({IN}@home.upstairs)')
+	assert keyword == suffix
+	assert keyword.places == {PlacedKey(CategoryItem(IN), 'home.upstairs')}
+	assert keyword.keys == frozenset()
+	assert Expression.parse(f'mean({IN}@home.upstairs)') == suffix
+
+
+def test_where_takes_a_one_word_place():
+	assert Expression.parse(f'max({IN}, where=bedroom)').places == {PlacedKey(CategoryItem(IN), 'bedroom')}
+
+
+@pytest.mark.parametrize('function, expected', [('avg', 21), ('min', 20), ('max', 22), ('count', 3)])
+def test_a_place_aggregates_every_reading_there(function, expected):
+	resolver = FakeResolver(members={UP: _at((20, 1), (22, 5), (21, 30))})
+	result = Expression.parse(f'{function}({IN}@home.upstairs)').evaluate(resolver, NOW)
+	assert result == (expected if function == 'count' else Fahrenheit(expected))
+
+
+def test_a_reading_older_than_an_hour_is_left_out():
+	resolver = FakeResolver(members={UP: _at((20, 1), (30, 61), (22, 59))})
+	expression = Expression.parse(f'avg({IN}@home.upstairs)')
+	assert expression.evaluate(resolver, NOW) == Fahrenheit(21)
+	assert expression.evaluateCounted(resolver, NOW)[1] == 2
+
+
+def test_stale_sets_the_bound_for_one_aggregate():
+	resolver = FakeResolver(members={UP: _at((20, 1), (30, 61))})
+	assert Expression.parse(f'count({IN}@home.upstairs)').evaluate(resolver, NOW) == 1
+	assert Expression.parse(f'count({IN}@home.upstairs, stale=2h)').evaluate(resolver, NOW) == 2
+	assert Expression.parse(f'avg({IN}, where=home.upstairs, stale=2h)').evaluate(resolver, NOW) == Fahrenheit(25)
+
+
+def test_a_place_with_no_fresh_reading_has_no_average_and_a_count_of_zero():
+	resolver = FakeResolver(members={UP: _at((30, 90))})
+	assert Expression.parse(f'avg({IN}@home.upstairs)').evaluate(resolver, NOW) is Missing
+	assert Expression.parse(f'count({IN}@home.upstairs)').evaluate(resolver, NOW) == 0
+	assert Expression.parse(f'avg({IN}@home.garage)').evaluate(resolver, NOW) is Missing
+
+
+def test_places_and_plain_keys_mix_in_one_aggregate():
+	resolver = FakeResolver(current={TEMP: Fahrenheit(60)}, members={UP: _at((20, 1), (22, 1))})
+	assert Expression.parse(f'avg({TEMP}, {IN}@home.upstairs)').evaluate(resolver, NOW) == Fahrenheit((60 + 20 + 22) / 3)
+	# A plain key with no value still makes the result Missing, as before.
+	assert Expression.parse(f'avg({DEW}, {IN}@home.upstairs)').evaluate(resolver, NOW) is Missing
+
+
+def test_a_bare_place_is_the_one_device_there():
+	one = FakeResolver(members={(IN, 'home.upstairs.bedroom'): _at((20, 1))})
+	assert Expression.parse(f'{IN}@home.upstairs.bedroom').evaluate(one, NOW) == Fahrenheit(20)
+	two = FakeResolver(members={UP: _at((20, 1), (22, 1))})
+	assert Expression.parse(f'{IN}@home.upstairs').evaluate(two, NOW) is Missing
+
+
+def test_a_resolver_without_places_is_an_error_where_it_is_asked():
+	class Plain:
+		def current(self, key):
+			return None
+	with pytest.raises(ExpressionError, match='cannot read places'):
+		Expression.parse(f'avg({IN}@home)').evaluate(Plain(), NOW)
+
+
+@pytest.mark.parametrize('text', [
+	f'avg({IN}, {TEMP}, where=home)',           # which key does the place go with
+	f'avg(where=home)',
+	f'{IN}#bedroom@home',                       # a device and a place at once
+	f'abs({IN}, where=home)',                   # where= only goes with min, max, avg, count
+	f'avg({IN}@home, 3h)',                      # a window reads one device
+	f'avg({IN}, where=home, stale=1)',          # stale= is a duration
+	f'avg({IN}, where=home, window=3h)',
+	f'count()',
+	f'count(1, 2)',
+	f'avg({IN}, where=1)',
+])
+def test_place_forms_that_are_rejected(text):
+	with pytest.raises(ExpressionError):
+		Expression.parse(text)

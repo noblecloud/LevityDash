@@ -117,7 +117,39 @@ A value that picks between two keys. This shows the gust when the gust is more t
 | `min(a, b, ...)` | The lowest of two or more values. |
 | `max(a, b, ...)` | The highest of two or more values. |
 | `avg(a, b, ...)` | The average of two or more values, such as the current values of several keys. `mean` is another name for `avg`. |
+| `count(key, where=place)` | How many fresh readings the place has for the key. |
 | `abs(x)` | The size of a number, without its sign. |
+
+### <div class=mono>Places</div>
+
+A place is a dotted name, such as `home.upstairs.bedroom`. A device says where it is with `where` in its own settings ([Govee](/config/plugins/Govee.md)). A device with no `where` uses its alias as its place.
+
+`min`, `max`, `avg`, `mean` and `count` can take one key and a place. They then read every device at that place, and at every place inside it. `home.upstairs` includes `home.upstairs.bedroom` but not `home.upstairs2`.
+
+```yaml
+avg(indoor.temperature.temperature, where=home.upstairs)
+avg(indoor.temperature.temperature@home.upstairs)   # the same
+max(indoor.temperature.temperature, where=home.upstairs)
+count(indoor.temperature.temperature, where=home.upstairs)
+avg(indoor.temperature.temperature@home.upstairs.bedroom, indoor.temperature.temperature@home.basement)
+```
+
+- `where=` and `@place` mean the same. Use one place for each key. A key cannot have both `#device` and `@place`.
+- A reading older than one hour is left out. `stale=2h` in the call changes the limit for that call: `avg(key, where=home.upstairs, stale=2h)`.
+- If no device has a fresh reading, the result has no value, and `count` is 0.
+- Every expression also publishes the number of readings it used, as the key of the expression with `.count` added. `count(...)` is the way to show it in a dashboard.
+
+### <div class=mono>Combining sources</div>
+
+A key with a source in front reads that source, not the one the dashboard prefers. This makes a high or a low that no one source reports: the highest of what two forecasts predict, or how far apart they are.
+
+```yaml
+vars:
+  high: max(OpenMeteo:environment.temperature.high, PirateWeather:environment.temperature.high)
+  disagree: PirateWeather:environment.temperature.high - OpenMeteo:environment.temperature.high
+```
+
+A source that does not have the key gives no value, so the result has no value. A key a source does report, such as a forecast's `.high`, stays an ordinary key.
 
 ### <div class=mono>Windows and offsets</div>
 
@@ -129,7 +161,7 @@ A window is the span of time that a function reads.
 
 A duration is a number and one of these units: `ms`, `s`, `m` (minutes), `h`, `d`, `w`. Examples: `90s`, `3h`, `7d`.
 
-A window or an offset can be the second argument of `min`, `max`, `avg`, or `at`. It cannot be used in other places.
+A window or an offset can be the second argument of `min`, `max`, `avg`, or `at`. A duration can also multiply or divide a measurement (see [Rates and amounts](#rates-and-amounts)). It cannot be used in other places.
 
 > [!NOTE]
 > A window needs data over time. A source that gives only the current value has no history to read. `min(key, today)` then has no value.
@@ -137,6 +169,26 @@ A window or an offset can be the second argument of `min`, `max`, `avg`, or `at`
 ### <div class=mono>Keys</div>
 
 Write a key as you write it in `key:`. A key has at least two parts that are joined with a dot. A key can have a source before it (`OpenMeteo:environment.temperature.temperature`) and an identity after it (`indoor.temperature.temperature#bedroom`).
+
+## Rates and amounts
+
+`*` and `/` between two measurements follow their units.
+
+| Expression | Result |
+|------------|--------|
+| `environment.precipitation.rate * 3h` | The rain that falls in 3 hours, as a length (`mm`). |
+| `3h * environment.precipitation.rate` | The same. |
+| `environment.precipitation.hourly / 3h` | A rate, in `mm/hr`. The rate is in the largest unit that holds the duration whole: `3h` gives per hour, `2d` gives per day, `90s` gives per second. |
+| `environment.wind.speed.gust / environment.wind.speed.speed` | A plain number. Two measurements of the same kind divide to a ratio, whatever their units. |
+| `a.b.length * a.b.width` | An area, in `m²`. |
+
+Units that have no name of their own are shown in SI units (`m²`, `kg·m⁻³`). A result can go on to further `*` and `/`. A power of a unit goes up to three (`m³`).
+
+A temperature reading does not multiply or divide. `20°C * 2` is not `40°C`, so the expression has an error.
+
+Two temperature readings subtract to a **change**: `outdoor.temperature - indoor.temperature` is a number of degrees, not a temperature. A change converts by a factor (10 °C is 18 °F). A reading plus or minus a change is a reading, so `temperature - 5°F` takes 5 degrees off, in any unit. Two readings do not add (`20°C + 10°C` is not a temperature), but `avg(a, b)` of readings works.
+
+Power times time is energy (`power.watts * 3h` in `kWh`), energy over time is power, and a length times a length is an area.
 
 ## Periods
 
@@ -188,7 +240,7 @@ A space between the number and the unit is optional.
 #### <div class=mono>What you cannot write</div>
 
 - A unit of one letter. `5 m` is not read as metres. Use `5 mm`, `5 cm`, or another unit with at least two letters.
-- A span of time. `3h` is a duration. A duration is only for a window or an offset.
+- A span of time. `3h` is a duration. A duration is for a window or an offset, or it multiplies or divides a measurement.
 
 #### <div class=mono>Units must match</div>
 

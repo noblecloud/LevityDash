@@ -68,6 +68,9 @@ items:
     props:
       headline: Office hot
       color: $bad
+      headline_box: {x: 0%, y: 0%, width: 24%, height: 100%}
+      hero_box: {x: 29%, y: 0%, width: 22%, height: 100%}
+      list_box: {x: 53%, y: 4%, width: 47%, height: 92%}
       key: 'indoor.temperature.temperature#office'
       precision: 1
       items:
@@ -77,6 +80,7 @@ items:
   - preset: stat-row
     geometry: {x: 0.6%, y: 80.5%, width: 98.8%, height: 18%}
     props:
+      spacing: 6mm
       items:
       - {type: realtime.text, key: 'indoor.temperature.temperature#livingroom', title: {text: Living}, display: {precision: 1}}
       - {type: realtime.text, key: 'indoor.temperature.temperature#kitchen', title: {text: Kitchen}, display: {precision: 1, valueLabel: {color: $warn}}}

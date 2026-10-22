@@ -49,7 +49,7 @@ def test_parse_track_list_keywords_and_fit_content():
 
 
 @pytest.mark.parametrize('text, bad', [
-	('10%', '10%'),  # % needs the container, the caller resolves it
+	('10%', '10%'),  # % needs a to_px that knows the container
 	('-5px', '-5px'),
 	('2xy 1fr', '2xy'),  # unit with no resolver
 	('minmax(1fr, 2px)', '1fr'),  # fr is only a max
@@ -242,3 +242,85 @@ def test_shrink_needs_explicit_rows_to_shrink_into():
 	]
 	# no explicit rows: the item keeps its span and opens a new row
 	assert place_items(items, container, 3, 0) == [(0, 0, 1, 2), (0, 2, 3, 1)]
+
+
+# --- css-grid-1 §6.2: margins --------------------------------------------------------------
+
+from LevityDash.lib.layout.types import Edge
+
+
+def test_fixed_margins_shrink_a_stretched_item():
+	container = GridContainer(columns=[TrackSize(Keyword.auto, Fr(1))], rows=[TrackSize(Keyword.auto, Fr(1))], width=200, height=100)
+	(rect,) = layout_grid([item(margin_inline=Edge(10, 30), margin_block=Edge(5, 5))], container)
+	assert (rect.x, rect.width, rect.y, rect.height) == (10, 160, 5, 90)
+
+
+def test_margins_count_toward_an_auto_track():
+	container = GridContainer(columns=[TrackSize(Keyword.auto, Keyword.auto)], rows=[TrackSize(100.0, 100.0)], width=None, height=100)
+	(rect,) = layout_grid([item(max_content=(50, 20), min_content=(50, 20), margin_inline=Edge(10, 15))], container)
+	assert rect.x == 10 and rect.width == 50  # the track is 75 wide: 50 plus both margins
+
+
+def test_auto_margin_pushes_a_sized_item_to_the_end():
+	container = GridContainer(columns=[TrackSize(Keyword.auto, Fr(1))], rows=[TrackSize(Keyword.auto, Fr(1))], width=200, height=100)
+	(rect,) = layout_grid([item(max_content=(50, 20), min_content=(50, 20), margin_inline=Edge(None, 0))], container)
+	assert (rect.x, rect.width) == (150, 50)
+
+
+def test_two_auto_margins_centre_the_item():
+	container = GridContainer(columns=[TrackSize(Keyword.auto, Fr(1))], rows=[TrackSize(Keyword.auto, Fr(1))], width=200, height=100)
+	(rect,) = layout_grid([item(max_content=(50, 20), min_content=(50, 20), margin_inline=Edge(None, None), margin_block=Edge(None, None))], container)
+	assert (rect.x, rect.y, rect.width, rect.height) == (75, 40, 50, 20)
+
+
+def test_percent_track_goes_through_to_px_with_its_unit():
+	seen = []
+	result = parse_track_list('25% 1fr', to_px=lambda v, u: seen.append((v, u)) or v * 8)
+	assert seen == [(25.0, '%')] and result[0] == TrackSize(200.0, 200.0)
+
+
+# --- 7.3: grid-template-areas --------------------------------------------------------------
+
+from LevityDash.lib.layout.grid import area_placement, area_size, parse_template_areas
+
+_AREAS = ['head head head', 'nav main side', 'nav foot foot']
+
+
+def test_template_areas_give_each_name_its_rectangle():
+	areas = parse_template_areas(_AREAS)
+	assert areas['head'] == (1, 1, 3, 1)
+	assert areas['nav'] == (1, 2, 1, 2)
+	assert areas['foot'] == (2, 3, 2, 1)
+	assert area_size(_AREAS) == (3, 3)
+
+
+def test_template_areas_accept_one_multiline_string_and_dots():
+	areas = parse_template_areas('a . b\na . b')
+	assert areas == {'a': (1, 1, 1, 2), 'b': (3, 1, 1, 2)}
+
+
+def test_template_areas_refuse_a_ragged_row_and_a_non_rectangle():
+	with pytest.raises(ValueError, match='row 2 has 2 cells'):
+		parse_template_areas(['a b c', 'a b'])
+	with pytest.raises(ValueError, match="'a' is not a rectangle"):
+		parse_template_areas(['a a', 'a b'])
+
+
+def test_area_placement_places_an_item_over_its_area():
+	areas = parse_template_areas(_AREAS)
+	container = GridContainer(columns=parse_track_list('100px 100px 100px'), rows=parse_track_list('50px 50px 50px'), width=300, height=150)
+	items = [GridItem(placement=area_placement(areas, 'nav')), GridItem(placement=area_placement(areas, 'head'))]
+	nav, head = layout_grid(items, container)
+	assert (nav.x, nav.y, nav.width, nav.height) == (0, 50, 100, 100)
+	assert (head.x, head.y, head.width, head.height) == (0, 0, 300, 50)
+
+
+def test_area_placement_names_an_unknown_area():
+	with pytest.raises(ValueError, match="no area named 'x'"):
+		area_placement(parse_template_areas(_AREAS), 'x')
+
+
+def test_a_math_function_is_a_track_length():
+	tracks = parse_track_list('calc(100% - 40px) 1fr minmax(min(10%, 50px), 1fr)', to_px=lambda v, u: v * 10 if u == '%' else v)
+	assert tracks[0] == TrackSize(960.0, 960.0)
+	assert tracks[2] == TrackSize(50.0, Fr(1))

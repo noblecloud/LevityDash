@@ -3,7 +3,7 @@
 Spec: https://www.w3.org/TR/css-grid-1/ Sections 7, 8 and 12.
 
 Pure functions. No Qt. Sizes are pixels. See `types.py` for the conventions.
-Out of scope: `subgrid`, named areas by string art, masonry, intrinsic sizing from
+Out of scope: `subgrid`, named lines, masonry, intrinsic sizing from
 wrapped text. Do not add them without asking.
 
 Simplifications, each also noted where it is made:
@@ -13,6 +13,9 @@ Simplifications, each also noted where it is made:
   grows to its growth limit. A min-content constraint is not modelled.
 - Indefinite free space in `expand_flexible_tracks` uses the tracks only, not the item
   terms of §12.7.1.
+- Margins (§6.2, §6.3): a margin box contributes to track sizing; `auto` margins take the free
+  space of the area and turn stretching off (the item is then fit-content). Percent margins are
+  the caller's to resolve.
 - Content and self alignment other than `start`, `stretch` and `normal` go to `align.py`.
 """
 
@@ -21,15 +24,16 @@ from dataclasses import dataclass, field
 from enum import Enum
 from math import floor, isinf
 
+from .calc import evaluate_math, is_math
 from .align import distribute_content, align_offset
 from .spec import implements
-from .types import Alignment, ContentAlign, Gap, INF, ItemAlign, Rect
+from .types import Alignment, ContentAlign, Edge, Gap, INF, ItemAlign, Rect
 
 __all__ = [
 	'Fr', 'Keyword', 'TrackSize', 'Repeat', 'GridContainer', 'GridItem', 'Placement', 'Track',
 	'parse_track_list', 'expand_repeat', 'place_items', 'initialize_track_sizes',
 	'resolve_intrinsic_track_sizes', 'maximize_tracks', 'expand_flexible_tracks',
-	'stretch_auto_tracks', 'layout_grid',
+	'stretch_auto_tracks', 'layout_grid', 'parse_template_areas', 'area_size', 'area_placement',
 ]
 
 _EPS = 1e-9
@@ -97,6 +101,8 @@ class GridItem:
 	min_size: tuple[float | None, float | None] = (None, None)  # None is the automatic minimum
 	justify_self: ItemAlign = ItemAlign.auto
 	align_self: ItemAlign = ItemAlign.auto
+	margin_inline: Edge = Edge()  # left and right margins; `None` is `auto`
+	margin_block: Edge = Edge()  # top and bottom margins; `None` is `auto`
 
 
 @dataclass(slots=True)
@@ -281,6 +287,10 @@ _KEYWORDS = {'auto': Keyword.auto, 'min-content': Keyword.min_content, 'max-cont
 def _breadth(token: str, to_px, *, maximum: bool) -> Breadth:
 	if token in _KEYWORDS:
 		return _KEYWORDS[token]
+	if is_math(token):
+		if to_px is None:
+			raise ValueError(f'{token!r}: a math function needs a to_px function')
+		return evaluate_math(token, to_px)
 	match = _NUMBER.fullmatch(token)
 	if not match:
 		raise ValueError(f'not a track size: {token!r}')
@@ -291,8 +301,6 @@ def _breadth(token: str, to_px, *, maximum: bool) -> Breadth:
 		return Fr(value)
 	if unit in ('', 'px'):
 		return value
-	if unit == '%':
-		raise ValueError(f'{token!r}: % needs the container size, so resolve it to px first')
 	if to_px is None:
 		raise ValueError(f'{token!r}: unit {unit!r} needs a to_px function')
 	return float(to_px(value, unit))
@@ -315,10 +323,11 @@ def _track(token: str, to_px) -> TrackSize | Repeat:
 			raise ValueError(f'repeat takes plain track sizes: {token!r}')
 		return Repeat(repeat_count, tracks)
 	if token.startswith('minmax(') and token.endswith(')'):
-		low, sep, high = token[7:-1].partition(',')
-		if not sep:
+		arguments = _split(token[7:-1], ',')
+		if len(arguments) != 2:
 			raise ValueError(f'minmax needs two arguments: {token!r}')
-		return TrackSize(min=_breadth(low.strip(), to_px, maximum=False), max=_breadth(high.strip(), to_px, maximum=True))
+		low, high = arguments
+		return TrackSize(min=_breadth(low, to_px, maximum=False), max=_breadth(high, to_px, maximum=True))
 	if token.startswith('fit-content(') and token.endswith(')'):
 		limit = _breadth(token[12:-1].strip(), to_px, maximum=False)
 		if not _fixed(limit):
@@ -491,6 +500,33 @@ def _box(start: float, area: float, low: float, high: float, alignment: Alignmen
 	return start + align_offset(area - size, alignment), size
 
 
+def _margin(item: GridItem, axis: int) -> Edge:
+	return item.margin_inline if axis == 0 else item.margin_block
+
+
+def _margin_sum(margin: Edge) -> float:
+	"""The fixed part of a margin pair. An `auto` side counts as zero."""
+	return (margin.start or 0.0) + (margin.end or 0.0)
+
+
+def _margin_box(start: float, area: float, margin: Edge, low: float, high: float, alignment: Alignment) -> tuple[float, float]:
+	"""Position and size of one item's border box in its area, inside its margins (§6.2).
+
+	With no `auto` margin this is `_box` on the area less the margins. An `auto` margin switches
+	stretching off, sizes the item fit-content, and gives the free space to the `auto` sides
+	equally. When nothing is free an `auto` margin is zero.
+	"""
+	before, after = margin
+	inner = area - _margin_sum(margin)
+	if before is not None and after is not None:
+		return _box(start + before, inner, low, high, alignment)
+	size = max(low, min(high, inner))
+	free = max(0.0, inner - size)
+	autos = (before is None) + (after is None)
+	share = free / autos
+	return start + (share if before is None else before), size
+
+
 def _resolve_self(value: ItemAlign, default: Alignment) -> Alignment:
 	return default if value is ItemAlign.auto else Alignment(value)
 
@@ -556,6 +592,54 @@ def expand_repeat(tracks: list[TrackSize | Repeat], available: float | None, gap
 	return _expand(tracks, available, gap)[0]
 
 
+@implements('css-grid-1', 'Named Areas: the grid-template-areas property', '7.3', status='done')
+def parse_template_areas(rows: str | list[str]) -> dict[str, tuple[int, int, int, int]]:
+	"""Read `grid-template-areas`: one string per row, one word per cell, `.` for an empty cell.
+
+	Returns `{name: (column, row, column_span, row_span)}` with lines counted from 1 as in CSS.
+	Every row must have the same number of cells, and each name must cover one rectangle
+	(§7.3). The grid has as many columns as a row has cells and as many rows as there are
+	strings; `area_size` gives that.
+	"""
+	lines = [line for line in (rows.splitlines() if isinstance(rows, str) else rows) if str(line).strip()]
+	if not lines:
+		raise ValueError('grid-template-areas: no rows')
+	table = [str(line).split() for line in lines]
+	width = len(table[0])
+	for number, row in enumerate(table, 1):
+		if len(row) != width:
+			raise ValueError(f'grid-template-areas: row {number} has {len(row)} cells, row 1 has {width}')
+	cells: dict[str, list[tuple[int, int]]] = {}
+	for r, row in enumerate(table):
+		for c, name in enumerate(row):
+			if name.strip('.') == '':  # any run of dots is a null cell
+				continue
+			cells.setdefault(name, []).append((r, c))
+	areas = {}
+	for name, found in cells.items():
+		rows_used = sorted({r for r, _ in found})
+		cols_used = sorted({c for _, c in found})
+		top, bottom, left, right = rows_used[0], rows_used[-1], cols_used[0], cols_used[-1]
+		if len(found) != (bottom - top + 1) * (right - left + 1):
+			raise ValueError(f'grid-template-areas: {name!r} is not a rectangle')
+		areas[name] = (left + 1, top + 1, right - left + 1, bottom - top + 1)
+	return areas
+
+
+def area_size(rows: str | list[str]) -> tuple[int, int]:
+	"""`(columns, rows)` of the explicit grid that `grid-template-areas` defines."""
+	lines = [line for line in (rows.splitlines() if isinstance(rows, str) else rows) if str(line).strip()]
+	return (len(str(lines[0]).split()) if lines else 0), len(lines)
+
+
+def area_placement(areas: dict[str, tuple[int, int, int, int]], name: str) -> Placement:
+	"""The `Placement` for `grid-area: name`. An unknown name is an error, not `auto`."""
+	if name not in areas:
+		raise ValueError(f'grid-area: no area named {name!r}; the template has {sorted(areas)}')
+	column, row, column_span, row_span = areas[name]
+	return Placement(column_start=column, column_span=column_span, row_start=row, row_span=row_span)
+
+
 @implements('css-grid-1', 'Grid Item Placement Algorithm', '8.5', status='done')
 def place_items(items: list[GridItem], container: GridContainer, columns: int, rows: int) -> list[tuple[int, int, int, int]]:
 	"""Return `(column, row, column_span, row_span)` for each item, 0-based, in item order.
@@ -600,15 +684,18 @@ def resolve_intrinsic_track_sizes(tracks: list[Track], items: list[GridItem], sp
 	`axis` picks the width (0) or the height (1) of each item's contributions.
 	"""
 
+	def margins(i: int) -> float:
+		return _margin_sum(_margin(items[i], axis))
+
 	def minimum(i: int) -> float:
 		size = items[i].min_size[axis]
-		return items[i].min_content[axis] if size is None else size
+		return (items[i].min_content[axis] if size is None else size) + margins(i)
 
 	def smallest(i: int) -> float:
-		return items[i].min_content[axis]
+		return items[i].min_content[axis] + margins(i)
 
 	def largest(i: int) -> float:
-		return items[i].max_content[axis]
+		return items[i].max_content[axis] + margins(i)
 
 	def phases(group: list[int], include=_any, weight=_one) -> None:
 		common = {'include': include, 'weight': weight}
@@ -771,7 +858,7 @@ def layout_grid(items: list[GridItem], container: GridContainer) -> list[Rect]:
 		area_w = col_starts[c + cs - 1] + col_sizes[c + cs - 1] - x0
 		y0 = row_starts[r]
 		area_h = row_starts[r + rs - 1] + row_sizes[r + rs - 1] - y0
-		x, w = _box(x0, area_w, item.min_content[0], item.max_content[0], _resolve_self(item.justify_self, container.justify_items))
-		y, h = _box(y0, area_h, item.min_content[1], item.max_content[1], _resolve_self(item.align_self, container.align_items))
+		x, w = _margin_box(x0, area_w, item.margin_inline, item.min_content[0], item.max_content[0], _resolve_self(item.justify_self, container.justify_items))
+		y, h = _margin_box(y0, area_h, item.margin_block, item.min_content[1], item.max_content[1], _resolve_self(item.align_self, container.align_items))
 		rects.append(Rect(x, y, w, h))
 	return rects

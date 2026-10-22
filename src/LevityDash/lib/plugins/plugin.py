@@ -13,6 +13,7 @@ from typing import Any, Dict, Iterable, Optional, Set, Text, Tuple, Type, TYPE_C
 from LevityDash.lib.EasyPath import EasyPath, EasyPathFile
 from LevityDash.lib.config import pluginConfig, PluginConfig
 from LevityDash.lib.log import LevityPluginLog as pluginLog
+from LevityDash.lib.plugins import history
 from LevityDash.lib.plugins.categories import CategoryDict, CategoryItem
 from LevityDash.lib.plugins.observation import (
 	ArchivedObservationValue, Container, Observation, ObservationDict, ObservationLog, ObservationRealtime,
@@ -549,6 +550,7 @@ class Plugin(metaclass=PluginMeta):
 		archive = self.realtime.archived
 		if len(archive) > 0:
 			await self.log.asyncUpdate(archive)
+			history.recordLog(self, archive.items())
 
 
 __all__ = ['Plugin', 'ObservationList', 'Classes']

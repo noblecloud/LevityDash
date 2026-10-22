@@ -1,0 +1,37 @@
+# Item margins in flex and grid: fixed gaps around one item, and `auto` margins that take free space.
+# Top: a flex row of four fixed-size items. The third has `margin-left: auto`, so it and the one after it move to the right.
+# Bottom: a grid where three items have fixed margins and the others have none.
+# Render: render_dashboard.py OUT.png --levity THIS --scenario hot-clear-day --size 2880x1800
+- type: group
+  name: main
+  items:
+    - type: stack
+      name: row
+      direction: horizontal
+      geometry: {x: 2%, y: 2%, width: 96%, height: 30%}
+      spacing: 14px
+      flex: {justify: flex-start}
+      shared:
+        title: {matchingGroup: {group: rowTitle@row, matchAll: true}}
+        display: {valueLabel: {matchingGroup: {group: rowValue@row, matchAll: true}}}
+      items:
+        - {type: realtime.text, key: environment.temperature.temperature, title: {text: Temperature}, size: 18%, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.humidity.humidity, title: {text: Humidity}, size: 18%, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.pressure.pressure, title: {text: Pressure}, size: 18%, flex: {margin: [0, 0, 0, auto]}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.light.uvi, title: {text: UV}, size: 18%, border: {enabled: true, edges: all}}
+
+    - type: grid
+      name: tiles
+      geometry: {x: 2%, y: 36%, width: 96%, height: 60%}
+      spacing: 14px
+      grid: {columns: [30%, calc(100% - 30% - 700px), 700px], rows: [1fr, 1fr]}
+      shared:
+        title: {matchingGroup: {group: tilesTitle@tiles, matchAll: true}}
+        display: {valueLabel: {matchingGroup: {group: tilesValue@tiles, matchAll: true}}}
+      items:
+        - {type: realtime.text, key: environment.temperature.temperature, title: {text: Plain}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.humidity.humidity, title: {text: Margin 40px}, grid: {margin: 40px}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.pressure.pressure, title: {text: Margin calc(2% + 12px)}, grid: {margin: calc(2% + 12px)}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.light.uvi, title: {text: Plain}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Margin left 120px}, grid: {margin: [0, 0, 0, 120px]}, border: {enabled: true, edges: all}}
+        - {type: realtime.text, key: environment.wind.gust.gust, title: {text: Plain}, border: {enabled: true, edges: all}}

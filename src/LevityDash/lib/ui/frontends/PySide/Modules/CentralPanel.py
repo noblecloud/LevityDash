@@ -18,7 +18,7 @@ from LevityDash.lib.EasyPath import EasyPathFile
 from LevityDash.lib.log import debug
 from LevityDash.lib.stateful import StatefulDumper, StateProperty
 from LevityDash.lib import presets
-from LevityDash.lib.variables import _definitions, resolveVariables, retemplate
+from LevityDash.lib.variables import loadSharedVariables, resolveVariables, retemplate, variableDefinitions
 from LevityDash.lib.ui.colors import theme
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import CentralPanelContextMenu
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
@@ -182,6 +182,7 @@ class CentralPanel(Panel, tag="dashboard"):
 		self.scene().backdropSpec = value
 
 	_vars: Any = None
+	_sharedVars: dict | None = None
 	_written: Any = None
 	_resolved: Any = None
 	_usesPresets: bool = False
@@ -244,7 +245,7 @@ class CentralPanel(Panel, tag="dashboard"):
 			try:
 				state = self.state
 				yaml.dump(state, f, Dumper=StatefulDumper, default_flow_style=False, allow_unicode=True, sort_keys=False)
-				if self._vars or self._usesPresets:
+				if self._vars or self._sharedVars or self._usesPresets:
 					self._restoreVariables(f)
 
 				YAMLPreprocessor(f)
@@ -274,7 +275,7 @@ class CentralPanel(Panel, tag="dashboard"):
 		try:
 			f.seek(0)
 			live = type(self).__loader__(YAMLPreprocessor(f.read())).get_data()
-			variables = _definitions(self._vars) if self._vars else {}
+			variables = variableDefinitions(self._vars, self._sharedVars)
 			# With presets the baseline is what the app wrote right after loading, not the raw file: the two differ by
 			# everything the app adds on a dump, and a preset's fields are compared against that.
 			baseline = self._loaded if self._usesPresets and self._loaded is not None else self._resolved
@@ -339,7 +340,8 @@ class CentralPanel(Panel, tag="dashboard"):
 				self._written = deepcopy(state)
 				state = presets.expand(state)
 				self._usesPresets = state != self._written
-				state = resolveVariables(state)
+				self._sharedVars = loadSharedVariables(userConfig.userPath)
+				state = resolveVariables(state, self._sharedVars)
 				# Loading consumes the dicts it is given, so the save keeps its own copies.
 				self._resolved = deepcopy(state)
 		except yaml.YAMLError as error:
