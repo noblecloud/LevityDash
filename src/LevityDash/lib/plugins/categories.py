@@ -413,6 +413,18 @@ class UnitMetaData(dict):
 		return self.get('sourceUnit', None)
 
 	@property
+	def shape(self) -> str:
+		"""`number`, `enum`, `text`, `time`, `list` or `point` (`lib/plugins/shapes.py`)."""
+		from LevityDash.lib.plugins.shapes import shapeOf
+		return shapeOf(self)
+
+	@property
+	def choices(self):
+		"""The values an `enum` key can take, or None."""
+		from LevityDash.lib.plugins.shapes import choicesOf
+		return choicesOf(self)
+
+	@property
 	def symbol(self):
 		return self.get('symbol', None)
 
