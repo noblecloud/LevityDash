@@ -364,6 +364,24 @@ class ComputedEngine(QObject):
 		for added in after - before:
 			self._dependents[added].add(key)
 
+	def peek(self, expression: Expression, now: Optional[datetime] = None) -> Tuple[Any, int]:
+		"""``(result, members)`` of ``expression`` worked out now on the calling thread. Nothing is registered or
+		published, so a tool can show what an expression would read."""
+		plugins = LevityDashboard.plugins
+		members = {
+			placed: [
+				self._currentReading(placed.key.withIdentity(identity))
+				for identity in identitiesAt(placed.place, plugins)
+			]
+			for placed in expression.places
+		}
+		current = {key: self._currentValue(key) for key in expression.keys}
+		series = {key: self._timeseriesFor(key) for key in {i.key for i in expression.series} | {i.key for i in expression.points}}
+		for timeseries in {id(t): t for t in series.values() if t is not None}.values():
+			timeseries.update()
+		resolver = _SnapshotResolver(current, series, members)
+		return expression.evaluateCounted(resolver, now or self.clock())
+
 	def refcount(self, key: CategoryItem) -> int:
 		entry = self._entries.get(key)
 		return entry.count if entry is not None else 0
