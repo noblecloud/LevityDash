@@ -1595,6 +1595,12 @@ class MeasurementDisplayProperties(Stateful):
 			return None
 		if (not measurement) and self.nullValue is not None:
 			return self.nullValue
+		if isinstance(measurement, float):
+			# A plain number (a ratio such as gust / wind) has no unit to carry the precision, so the display applies it;
+			# with none set it keeps two decimals, not every digit of the float.
+			if (precision := self.precision) is not Unset:
+				return f'{measurement:.{int(precision)}f}'
+			return f'{measurement:.2f}'.rstrip('0').rstrip('.') or '0'
 		return str(measurement).strip() or self.nullValue
 
 	@StateProperty(key='null', default=None, after=updateLabels)
