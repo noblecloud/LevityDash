@@ -119,6 +119,7 @@ class LevityScene(RendererScene):
 	#: A moving ground (``background: {by: ...}``) got a new reading. A signal, so a reading that arrives on a
 	#: plugin thread repaints on the GUI thread.
 	backdropReading = Signal(object)
+	backdropHaze = Signal(object)
 	preventCollisions = False
 	editingMode = False
 	frozen: bool
@@ -139,8 +140,11 @@ class LevityScene(RendererScene):
 		self._backdropSpec = None
 		self._backdropCache = None
 		self._backdropValue = None
+		self._backdropHaze = None
 		self._backdropBinding = None
+		self._hazeBinding = None
 		self.backdropReading.connect(self._setBackdropReading)
+		self.backdropHaze.connect(self._setBackdropHaze)
 		theme.on_change(self._themeChanged, call_now=False)
 		self.busyBlocker = QGraphicsRectItem(self.sceneRect())
 		self.busyBlocker.setVisible(False)
@@ -157,6 +161,8 @@ class LevityScene(RendererScene):
 		self._backdropSpec = value
 		if (follow := backdrop.follows(value)) is not None:
 			self._bindBackdrop(follow)
+		if (haze := backdrop.hazeKey(value)) is not None:
+			self._bindHaze(haze)
 		self.refreshBackdrop()
 
 	def _bindBackdrop(self, follow: str) -> None:
@@ -166,11 +172,31 @@ class LevityScene(RendererScene):
 		if (source := openValueSource(follow, 'background by', 'the ground stays the theme\'s own')) is not None:
 			self._backdropBinding = Binding(source, lambda reading: self.backdropReading.emit(reading))
 
+	def _bindHaze(self, key: str) -> None:
+		"""Watch the cloud cover a moving ground is hazed by."""
+		from LevityDash.lib.stateful import Binding
+		from LevityDash.lib.valuesource import openValueSource
+		if (source := openValueSource(key, 'background haze', 'the sky is drawn clear')) is not None:
+			self._hazeBinding = Binding(source, lambda reading: self.backdropHaze.emit(reading))
+
 	def _unbindBackdrop(self) -> None:
 		if self._backdropBinding is not None:
 			self._backdropBinding.unlink()
 			self._backdropBinding = None
+		if self._hazeBinding is not None:
+			self._hazeBinding.unlink()
+			self._hazeBinding = None
 		self._backdropValue = None
+		self._backdropHaze = None
+
+	def _setBackdropHaze(self, reading) -> None:
+		try:
+			value = float(getattr(reading, 'value', reading))
+		except (TypeError, ValueError):
+			return
+		if value != self._backdropHaze:
+			self._backdropHaze = value
+			self.refreshBackdrop()
 
 	def _setBackdropReading(self, reading) -> None:
 		try:
@@ -192,10 +218,10 @@ class LevityScene(RendererScene):
 
 	def backdrop(self):
 		"""The resolved ground, kept until the spec, the theme or the scene size changes."""
-		key = (id(theme.active()), self._backdropSpec is None or repr(self._backdropSpec), self.sceneRect().getRect(), self._backdropValue)
+		key = (id(theme.active()), self._backdropSpec is None or repr(self._backdropSpec), self.sceneRect().getRect(), self._backdropValue, self._backdropHaze)
 		if self._backdropCache is None or self._backdropCache[0] != key:
 			try:
-				ground = backdrop.decode(self._backdropSpec, value=self._backdropValue)
+				ground = backdrop.decode(self._backdropSpec, value=self._backdropValue, haze=self._backdropHaze)
 			except Exception as error:
 				guiLog.error(f'background {self._backdropSpec!r}: {error}. Using the theme ground.')
 				ground = backdrop.decode(None)

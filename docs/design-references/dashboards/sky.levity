@@ -38,8 +38,8 @@ theme:
     body: Roboto
   scales:
     sky: {0: '#08182b', 0.5: '#103a5a', 1: '#2a5a68'}
-# The ground follows the sun: navy at night, orange at the horizon, blue by day.
-background: {by: astronomy.sun.elevation, top: $sky-top, bottom: $sky-horizon, angle: 175}
+# The ground follows the sun: navy at night, orange at the horizon, blue by day, greyer under cloud.
+background: {by: astronomy.sun.elevation, top: $sky-top, bottom: $sky-horizon, angle: 175, haze: environment.clouds.cover.cover}
 vars:
   t: environment.temperature.temperature
   uvi: environment.light.uvi
