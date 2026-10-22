@@ -311,3 +311,11 @@ def preview(text: str) -> str:
 		return 'no value yet'
 	note = f' from {used} reading{"" if used == 1 else "s"}' if expression.places else ''
 	return f'= {result}{note}'
+
+
+def isExpression(text: str) -> bool:
+	"""True when ``text`` is maths over keys, not one key."""
+	try:
+		return Expression.parse(text).plainKey is None
+	except Exception:  # noqa: BLE001
+		return False

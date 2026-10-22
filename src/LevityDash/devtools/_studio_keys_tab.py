@@ -8,11 +8,12 @@ from typing import List, Optional
 from PySide6.QtCore import QMimeData, QSignalBlocker, Qt, QTimer, Signal
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
-	QAbstractItemView, QCheckBox, QComboBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMenu, QPlainTextEdit, QPushButton,
+	QAbstractItemView, QCheckBox, QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMenu, QPlainTextEdit, QPushButton,
 	QStyledItemDelegate, QToolButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
 from LevityDash.devtools import _studio_keys as keys
+from LevityDash.lib.plugins import periods, places
 
 KEY_MIME = 'application/x-levity-key'
 #: The items whose `key:` the tab can set.
@@ -115,6 +116,37 @@ class KeysTab(QWidget):
 		row.addWidget(self.insertButton)
 		row.addStretch(1)
 		box.addLayout(row)
+
+		self.pin = QGroupBox('Pin the selected item to a place or a period')
+		form = QFormLayout(self.pin)
+		self.placeBox = QComboBox()
+		self.placeBox.setEditable(True)
+		self.placeBox.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+		self.placeBox.lineEdit().setPlaceholderText('any device')
+		self.placeBox.setToolTip('`where:` the one device at this place (home.upstairs.bedroom). A key that already names a device (#bedroom) or an expression ignores it.')
+		self.placeBox.activated.connect(lambda _: self._pinned())
+		self.placeBox.lineEdit().editingFinished.connect(self._pinned)
+		form.addRow('Place', self.placeBox)
+		window = QHBoxLayout()
+		self.periodBox = QComboBox()
+		self.periodBox.setEditable(True)
+		self.periodBox.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+		self.periodBox.addItems(['', *periods.PERIODS, '1h', '3h', '6h', '24h', '7d'])
+		self.periodBox.lineEdit().setPlaceholderText('now')
+		self.periodBox.setToolTip('`period:` the window the reading covers: today, yesterday or a duration such as 3h')
+		self.periodBox.activated.connect(lambda _: self._pinned())
+		self.periodBox.lineEdit().editingFinished.connect(self._pinned)
+		self.usingBox = QComboBox()
+		self.usingBox.addItems(['max', 'min', 'avg'])
+		self.usingBox.setToolTip('`using:` how the window is summed up')
+		self.usingBox.activated.connect(lambda _: self._pinned())
+		window.addWidget(self.periodBox, 1)
+		window.addWidget(self.usingBox)
+		form.addRow('Period', window)
+		self.pinNote = QLabel()
+		self.pinNote.setWordWrap(True)
+		form.addRow('', self.pinNote)
+		box.addWidget(self.pin)
 
 		box.addWidget(QLabel('Expression'))
 		self.text = QPlainTextEdit()
@@ -271,6 +303,9 @@ class KeysTab(QWidget):
 		menu = QMenu(self.tree)
 		menu.addAction('Set on item', lambda: self.useRow(row))
 		menu.addAction('Add to expression', lambda: self.insertKey(row))
+		info = self._infoFor(row)
+		if info is not None and info.identity and info.place:
+			menu.addAction(f'Set on item at {info.place}', lambda: self.useAtPlace(info))
 		menu.addAction('Copy key', lambda: self.copyKey(row))
 		menu.exec(self.tree.viewport().mapToGlobal(point))
 
@@ -294,6 +329,7 @@ class KeysTab(QWidget):
 			self.target.setText('The selected item is a preset use: set its key in the Instance or Item tab.')
 		else:
 			self.target.setText('Select a realtime or graph item to set its key.')
+		self._loadPin(node if self.keyed else None)
 		self._status()
 
 	def _node(self) -> Optional[dict]:
@@ -333,6 +369,89 @@ class KeysTab(QWidget):
 
 	# the expression
 
+	def _infoFor(self, row) -> Optional[keys.KeyInfo]:
+		key = row.data(0, Qt.ItemDataRole.UserRole) if row is not None else None
+		return next((i for i in self.infos if i.key == key), None)
+
+	def useAtPlace(self, info: keys.KeyInfo) -> bool:
+		"""Set the device-less key and its place, so the item follows whichever device sits there."""
+		if not getattr(self, 'keyed', False):
+			return False
+		b = self.builder
+		b.editField('key', info.path)
+		b.editField('where', info.place)
+		b.itemTab.load(b.selection)
+		self.selectionChanged()
+		return True
+
+	# place and period
+
+	def _placeChoices(self) -> List[str]:
+		found = {i.place for i in self.infos if i.place}
+		with_parents = {'.'.join(p.split('.')[:n]) for p in found for n in range(1, p.count('.') + 2)}
+		return sorted(with_parents)
+
+	def _loadPin(self, node: Optional[dict]):
+		for widget in (self.placeBox, self.periodBox, self.usingBox):
+			widget.blockSignals(True)
+		self.pin.setEnabled(node is not None)
+		self.placeBox.clear()
+		self.placeBox.addItems(['', *self._placeChoices()])
+		node = node or {}
+		self.placeBox.setCurrentText(str(node.get('where') or ''))
+		self.periodBox.setCurrentText(str(node.get('period') or ''))
+		self.usingBox.setCurrentText(keys_using(node.get('using')))
+		for widget in (self.placeBox, self.periodBox, self.usingBox):
+			widget.blockSignals(False)
+		self._pinNote(node)
+
+	def _pinNote(self, node: dict):
+		where, period = (node.get('where') or ''), (node.get('period') or '')
+		text, bad = [], False
+		key = node.get('key')
+		if where:
+			try:
+				where = places.normalizePlace(where)
+			except ValueError as error:
+				text.append(str(error))
+				bad = True
+			else:
+				found = [i.key for i in self.infos if i.place and places.placeContains(where, i.place) and str(key) == i.path]
+				if isinstance(key, str) and ('#' in key or keys.isExpression(key)):
+					text.append('The key already names a device or is an expression: where is ignored.')
+					bad = True
+				elif len(found) == 1:
+					text.append(f'Reads {found[0]}.')
+				elif found:
+					text.append(f'{len(found)} devices are at {where}; an item needs one. Name a single place.')
+					bad = True
+				else:
+					text.append(f'No device with {key} is at {where}.')
+					bad = True
+		if period and isinstance(key, str):
+			try:
+				known = {i.key for i in self.infos}
+				text.append('Reads ' + periods.resolvePeriod(key, period, node.get('using'), lambda k: str(k) in known) + '.')
+			except ValueError as error:
+				text.append(str(error))
+				bad = True
+		self.pinNote.setText('\n'.join(text))
+		self.pinNote.setStyleSheet(f'color: {WARN if bad else "palette(placeholder-text)"};')
+
+	def _pinned(self):
+		"""Place, period or summary edited: write `where`, `period` and `using` on the selected item."""
+		node = self._node()
+		if node is None or not getattr(self, 'keyed', False):
+			return
+		b = self.builder
+		place = self.placeBox.currentText().strip() or None
+		period = self.periodBox.currentText().strip() or None
+		using = self.usingBox.currentText() if period else None
+		for field, value in (('where', place), ('period', period), ('using', using)):
+			if node.get(field) != value:
+				b.editField(field, value)
+		self._pinNote(self._node() or {})
+
 	def value(self) -> Optional[str]:
 		return self.text.toPlainText().strip() or None
 
@@ -363,3 +482,8 @@ class KeysTab(QWidget):
 		color = BAD if not report.ok else WARN if report.unknown or report.waiting else 'palette(placeholder-text)'
 		self.report.setStyleSheet(f'color: {color};')
 		self.result.setText(keys.preview(text) if report.ok else '')
+
+
+def keys_using(value) -> str:
+	"""The summary an item's `using:` names, as the menu spells it."""
+	return periods.USING.get(str(value or 'max').lower(), 'max')

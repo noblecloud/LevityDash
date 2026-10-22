@@ -65,6 +65,7 @@ def _sample():
 	table = {
 		CategoryItem('indoor.temperature.temperature#bedroom'): {'Fixture': container(FakeValue(), title='Bedroom')},
 		CategoryItem('indoor.humidity.humidity#office'): {'Fixture': container(None, title='Humidity')},
+		CategoryItem('indoor.temperature.temperature#office'): {'Fixture': container(FakeValue(), title='Office')},
 	}
 	return keys.collectKeys(SimpleNamespace(items=table.items), [plugin('Fixture', True, places={'bedroom': 'home.upstairs.bedroom', 'office': 'home.upstairs.office'})])
 
@@ -72,12 +73,12 @@ def _sample():
 def test_search_words_and_filters():
 	rows = _sample()
 	find = lambda text: [i.key for i in rows if keys.matches(i, text)]
-	assert len(find('')) == 2
+	assert len(find('')) == 3
 	assert find('humid') == ['indoor.humidity.humidity#office']
-	assert len(find('place:home.upstairs')) == 2
+	assert len(find('place:home.upstairs')) == 3
 	assert find('place:home.upstairs.bedroom') == ['indoor.temperature.temperature#bedroom']
-	assert find('state:live') == ['indoor.temperature.temperature#bedroom']
-	assert find('source:fix unit:°f') == ['indoor.temperature.temperature#bedroom']
+	assert find('state:live') == ['indoor.temperature.temperature#bedroom', 'indoor.temperature.temperature#office']
+	assert find('source:fix unit:°f') == ['indoor.temperature.temperature#bedroom', 'indoor.temperature.temperature#office']
 	assert find('shape:enum') == []
 	assert find('bedroom shape:number') == ['indoor.temperature.temperature#bedroom']
 
@@ -123,7 +124,7 @@ def _firstKeyed(win):
 def test_the_tab_lists_filters_and_sets_the_key_of_the_selected_item(builder):
 	win = builder
 	box = win.keysTab
-	assert box.tree.topLevelItemCount() == 2
+	assert box.tree.topLevelItemCount() == 3
 	box.search.setText('humid')
 	assert box.tree.topLevelItemCount() == 1
 	box.search.setText('')
@@ -180,3 +181,74 @@ def test_peek_works_out_an_expression_without_publishing_it():
 	assert set(engine._entries) == before
 	assert keys.preview('1 + 2') == '= 3'
 	assert 'cannot parse' in keys.preview('1 +')
+
+
+def _plain(win):
+	"""A keyed display whose key is a plain key, selected."""
+	path = _firstKeyed(win)
+	win.select(path)
+	win.editField('key', 'indoor.temperature.temperature')
+	win.keysTab.selectionChanged()
+	return path
+
+
+def test_a_place_pins_the_item_and_the_note_says_which_device(builder):
+	win = builder
+	box = win.keysTab
+	path = _plain(win)
+	assert box.pin.isEnabled()
+	assert 'home.upstairs.bedroom' in [box.placeBox.itemText(i) for i in range(box.placeBox.count())]
+	assert 'home.upstairs' in [box.placeBox.itemText(i) for i in range(box.placeBox.count())]
+	box.placeBox.setCurrentText('home.upstairs.bedroom')
+	box._pinned()
+	assert win.piece.node(path)['where'] == 'home.upstairs.bedroom'
+	assert 'indoor.temperature.temperature#bedroom' in box.pinNote.text()
+	box.placeBox.setCurrentText('home.upstairs')
+	box._pinned()
+	assert '2 devices' in box.pinNote.text()
+	box.placeBox.setCurrentText('')
+	box._pinned()
+	assert 'where' not in win.piece.node(path)
+
+
+def test_a_period_is_written_with_its_summary_and_cleared_with_the_period(builder):
+	win = builder
+	box = win.keysTab
+	path = _plain(win)
+	box.periodBox.setCurrentText('today')
+	box.usingBox.setCurrentText('min')
+	box._pinned()
+	node = win.piece.node(path)
+	assert (node['period'], node['using']) == ('today', 'min')
+	assert 'min(indoor.temperature.temperature, today)' in box.pinNote.text()
+	box.periodBox.setCurrentText('soon')
+	box._pinned()
+	assert 'soon' in box.pinNote.text()
+	box.periodBox.setCurrentText('')
+	box._pinned()
+	node = win.piece.node(path)
+	assert 'period' not in node and 'using' not in node
+
+
+def test_a_row_with_a_place_sets_the_key_and_where_together(builder):
+	win = builder
+	box = win.keysTab
+	path = _plain(win)
+	info = next(i for i in box.infos if i.identity == 'bedroom')
+	assert box.useAtPlace(info)
+	node = win.piece.node(path)
+	assert (node['key'], node['where']) == ('indoor.temperature.temperature', 'home.upstairs.bedroom')
+	win.undo()
+	win.undo()
+	assert 'where' not in win.piece.node(path)
+
+
+def test_a_device_key_or_an_expression_says_where_is_ignored(builder):
+	win = builder
+	box = win.keysTab
+	path = _plain(win)
+	win.editField('key', 'indoor.temperature.temperature#bedroom')
+	box.selectionChanged()
+	box.placeBox.setCurrentText('home.upstairs')
+	box._pinned()
+	assert 'ignored' in box.pinNote.text()
