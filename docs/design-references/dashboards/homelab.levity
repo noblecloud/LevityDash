@@ -47,291 +47,313 @@ items:
   items:
 
   # ================= THE VITALS ============================================
-  - type: group
-    name: cpu
-    geometry: {x: 0.6%, y: 0.8%, width: 24%, height: 36%}
+  - type: grid
+    name: vitals
+    geometry: {x: 0.6%, y: 0.8%, width: 99%, height: 36%}
+    spacing: 0
+    padding: 0
+    grid:
+      columns: [24fr, 1fr, 24fr, 1fr, 24fr, 1fr, 24fr]
+      rows: [1fr]
+      areas:
+      - cpu . memory . disk . heat
     items:
-    - type: text
-      text: CPU
-      font: $display
-      color: $cpu
-      alignment: CenterLeft
-      geometry: {x: 2%, y: 0%, width: 60%, height: 8%}
-    - preset: metric-tile
-      geometry: {x: 0%, y: 7%, width: 100%, height: 93%}
-      props:
-        key: system.cpu.usage
+    - type: group
+      name: cpu
+      grid: {area: cpu}
+      items:
+      - type: text
+        text: CPU
+        font: $display
         color: $cpu
-        line: {type: plot, color: $cpu, weight: 1.1}
-        hours: 24
-        min: 0
-        max: 1
-        hint: '100%'
-        precision: 0
-        hero_box: {x: 0%, y: 6%, width: 46%, height: 44%}
-        graph_box: {x: 0%, y: 12%, width: 100%, height: 52%}
-        list_box: {x: 0%, y: 68%, width: 100%, height: 32%}
-        items:
-        - {type: realtime.text, key: 'min(system.cpu.usage, today)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: 'max(system.cpu.usage, today)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
-        - {type: realtime.text, key: 'avg(system.cpu.usage, 6h)', title: {text: Avg 6h}, display: {precision: 0}}
-        - {type: realtime.text, key: 'at(system.cpu.usage, -3h)', title: {text: 3 h ago}, display: {precision: 0}}
-  - type: group
-    name: memory
-    geometry: {x: 25.6%, y: 0.8%, width: 24%, height: 36%}
-    items:
-    - type: text
-      text: Memory
-      font: $display
-      color: $mem
-      alignment: CenterLeft
-      geometry: {x: 2%, y: 0%, width: 60%, height: 8%}
-    - preset: metric-tile
-      geometry: {x: 0%, y: 7%, width: 100%, height: 93%}
-      props:
-        key: system.memory.usage
+        alignment: CenterLeft
+        geometry: {x: 2%, y: 0%, width: 60%, height: 8%}
+      - preset: metric-tile
+        geometry: {x: 0%, y: 7%, width: 100%, height: 93%}
+        props:
+          key: system.cpu.usage
+          color: $cpu
+          line: {type: plot, color: $cpu, weight: 1.1}
+          hours: 24
+          min: 0
+          max: 1
+          hint: '100%'
+          precision: 0
+          hero_box: {x: 0%, y: 6%, width: 46%, height: 44%}
+          graph_box: {x: 0%, y: 12%, width: 100%, height: 52%}
+          list_box: {x: 0%, y: 68%, width: 100%, height: 32%}
+          items:
+          - {type: realtime.text, key: 'min(system.cpu.usage, today)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
+          - {type: realtime.text, key: 'max(system.cpu.usage, today)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
+          - {type: realtime.text, key: 'avg(system.cpu.usage, 6h)', title: {text: Avg 6h}, display: {precision: 0}}
+          - {type: realtime.text, key: 'at(system.cpu.usage, -3h)', title: {text: 3 h ago}, display: {precision: 0}}
+    - type: group
+      name: memory
+      grid: {area: memory}
+      items:
+      - type: text
+        text: Memory
+        font: $display
         color: $mem
-        line: {type: plot, color: $mem, weight: 1.1}
-        hours: 24
-        min: 0
-        max: 1
-        hint: '100%'
-        precision: 0
-        hero_box: {x: 0%, y: 6%, width: 46%, height: 44%}
-        graph_box: {x: 0%, y: 12%, width: 100%, height: 52%}
-        list_box: {x: 0%, y: 68%, width: 100%, height: 32%}
-        items:
-        - {type: realtime.text, key: 'min(system.memory.usage, today)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: 'max(system.memory.usage, today)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
-        - {type: realtime.text, key: 'avg(system.memory.usage, 6h)', title: {text: Avg 6h}, display: {precision: 0}}
-        - {type: realtime.text, key: 'at(system.memory.usage, -3h)', title: {text: 3 h ago}, display: {precision: 0}}
-  - type: group
-    name: disk
-    geometry: {x: 50.6%, y: 0.8%, width: 24%, height: 36%}
-    items:
-    - type: text
-      text: Disk
-      font: $display
-      color: $disk
-      alignment: CenterLeft
-      geometry: {x: 2%, y: 0%, width: 60%, height: 8%}
-    - preset: metric-tile
-      geometry: {x: 0%, y: 7%, width: 100%, height: 93%}
-      props:
-        key: system.disk.usage
+        alignment: CenterLeft
+        geometry: {x: 2%, y: 0%, width: 60%, height: 8%}
+      - preset: metric-tile
+        geometry: {x: 0%, y: 7%, width: 100%, height: 93%}
+        props:
+          key: system.memory.usage
+          color: $mem
+          line: {type: plot, color: $mem, weight: 1.1}
+          hours: 24
+          min: 0
+          max: 1
+          hint: '100%'
+          precision: 0
+          hero_box: {x: 0%, y: 6%, width: 46%, height: 44%}
+          graph_box: {x: 0%, y: 12%, width: 100%, height: 52%}
+          list_box: {x: 0%, y: 68%, width: 100%, height: 32%}
+          items:
+          - {type: realtime.text, key: 'min(system.memory.usage, today)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
+          - {type: realtime.text, key: 'max(system.memory.usage, today)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
+          - {type: realtime.text, key: 'avg(system.memory.usage, 6h)', title: {text: Avg 6h}, display: {precision: 0}}
+          - {type: realtime.text, key: 'at(system.memory.usage, -3h)', title: {text: 3 h ago}, display: {precision: 0}}
+    - type: group
+      name: disk
+      grid: {area: disk}
+      items:
+      - type: text
+        text: Disk
+        font: $display
         color: $disk
-        line: {type: plot, color: $disk, weight: 1.1}
-        hours: 24
-        min: 0
-        max: 1
-        hint: '100%'
-        precision: 0
-        hero_box: {x: 0%, y: 6%, width: 46%, height: 44%}
-        graph_box: {x: 0%, y: 12%, width: 100%, height: 52%}
-        list_box: {x: 0%, y: 68%, width: 100%, height: 32%}
-        items:
-        - {type: realtime.text, key: 'min(system.disk.usage, today)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: 'max(system.disk.usage, today)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
-        - {type: realtime.text, key: 'avg(system.disk.usage, 6h)', title: {text: Avg 6h}, display: {precision: 0}}
-        - {type: realtime.text, key: 'at(system.disk.usage, -3h)', title: {text: 3 h ago}, display: {precision: 0}}
-  - type: group
-    name: heat
-    geometry: {x: 75.6%, y: 0.8%, width: 24%, height: 36%}
-    items:
-    - type: text
-      text: Core temperature
-      font: $display
-      color: $heat
-      alignment: CenterLeft
-      geometry: {x: 2%, y: 0%, width: 60%, height: 8%}
-    - preset: metric-tile
-      geometry: {x: 0%, y: 7%, width: 100%, height: 93%}
-      props:
-        key: system.cpu.temperature
+        alignment: CenterLeft
+        geometry: {x: 2%, y: 0%, width: 60%, height: 8%}
+      - preset: metric-tile
+        geometry: {x: 0%, y: 7%, width: 100%, height: 93%}
+        props:
+          key: system.disk.usage
+          color: $disk
+          line: {type: plot, color: $disk, weight: 1.1}
+          hours: 24
+          min: 0
+          max: 1
+          hint: '100%'
+          precision: 0
+          hero_box: {x: 0%, y: 6%, width: 46%, height: 44%}
+          graph_box: {x: 0%, y: 12%, width: 100%, height: 52%}
+          list_box: {x: 0%, y: 68%, width: 100%, height: 32%}
+          items:
+          - {type: realtime.text, key: 'min(system.disk.usage, today)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
+          - {type: realtime.text, key: 'max(system.disk.usage, today)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
+          - {type: realtime.text, key: 'avg(system.disk.usage, 6h)', title: {text: Avg 6h}, display: {precision: 0}}
+          - {type: realtime.text, key: 'at(system.disk.usage, -3h)', title: {text: 3 h ago}, display: {precision: 0}}
+    - type: group
+      name: heat
+      grid: {area: heat}
+      items:
+      - type: text
+        text: Core temperature
+        font: $display
         color: $heat
-        line: {type: plot, color: $heat, weight: 1.1}
-        hours: 24
-        min: 90
-        max: 190
-        hint: '200°'
-        precision: 0
-        hero_box: {x: 0%, y: 6%, width: 46%, height: 44%}
-        graph_box: {x: 0%, y: 12%, width: 100%, height: 52%}
-        list_box: {x: 0%, y: 68%, width: 100%, height: 32%}
-        items:
-        - {type: realtime.text, key: 'min(system.cpu.temperature, today)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: 'max(system.cpu.temperature, today)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
-        - {type: realtime.text, key: 'avg(system.cpu.temperature, 6h)', title: {text: Avg 6h}, display: {precision: 0}}
-        - {type: realtime.text, key: 'at(system.cpu.temperature, -3h)', title: {text: 3 h ago}, display: {precision: 0}}
+        alignment: CenterLeft
+        geometry: {x: 2%, y: 0%, width: 60%, height: 8%}
+      - preset: metric-tile
+        geometry: {x: 0%, y: 7%, width: 100%, height: 93%}
+        props:
+          key: system.cpu.temperature
+          color: $heat
+          line: {type: plot, color: $heat, weight: 1.1}
+          hours: 24
+          min: 90
+          max: 190
+          hint: '200°'
+          precision: 0
+          hero_box: {x: 0%, y: 6%, width: 46%, height: 44%}
+          graph_box: {x: 0%, y: 12%, width: 100%, height: 52%}
+          list_box: {x: 0%, y: 68%, width: 100%, height: 32%}
+          items:
+          - {type: realtime.text, key: 'min(system.cpu.temperature, today)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
+          - {type: realtime.text, key: 'max(system.cpu.temperature, today)', title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
+          - {type: realtime.text, key: 'avg(system.cpu.temperature, 6h)', title: {text: Avg 6h}, display: {precision: 0}}
+          - {type: realtime.text, key: 'at(system.cpu.temperature, -3h)', title: {text: 3 h ago}, display: {precision: 0}}
 
   # ================= THE NETWORK ===========================================
-  - type: group
-    name: network
-    geometry: {x: 0.6%, y: 39%, width: 54%, height: 36%}
+  - type: grid
+    name: middle
+    geometry: {x: 0.6%, y: 39%, width: 98.8%, height: 36%}
+    spacing: 0
+    padding: 0
+    grid:
+      columns: [54fr, 1fr, 43.8fr]
+      rows: [1fr]
+      areas:
+      - network . processes
     items:
-    - type: text
-      text: Network, kB/s
-      font: $display
-      color: $muted
-      alignment: CenterLeft
-      geometry: {x: 2%, y: 0%, width: 40%, height: 7%}
-    - type: realtime.text
-      name: process-watermark
-      key: system.process.count
-      title: false
-      geometry: {x: 28%, y: 10%, width: 46%, height: 80%}
-      display:
-        font: Barlow Condensed
-        weight: ExtraBold
-        precision: 0
-        unitPosition: Hidden
-        valueLabel: {color: '#182438'}
-    - type: graph
-      name: net-graph
-      timeframe: {days: 1}
-      geometry: {x: 0%, y: 8%, width: 100%, height: 70%}
-      annotations:
-        dayLabels: {enabled: false}
-        hourLabels: {alignment: BottomCenter, spacingIntervals: '3, 6, 12'}
-        lines: {spacing: 8 mm, weight: 0.4}
-      figures:
-      - figure: down
-        margins: {top: 12%, bottom: 14%}
-        min: 0
-        system.network.down:
-          plot: {type: bar, color: '#1a8cff', width: 0.8, radius: 0.2}
-      - figure: up
-        margins: {top: 12%, bottom: 14%}
-        min: 0
-        system.network.up:
-          plot: {type: plot, color: '#ff9124', weight: 1}
-    - preset: stat-row
-      geometry: {x: 0%, y: 80%, width: 100%, height: 20%}
-      props:
-        items:
-        - {type: realtime.text, key: system.network.down, title: {text: Down now}, display: {precision: 0, unitPosition: Hidden, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: system.network.up, title: {text: Up now}, display: {precision: 0, unitPosition: Hidden, valueLabel: {color: $accent}}}
-        - {type: realtime.text, key: 'max(system.network.down, today)', title: {text: Peak down}, display: {precision: 0, unitPosition: Hidden}}
-        - {type: realtime.text, key: 'max(system.network.up, today)', title: {text: Peak up}, display: {precision: 0, unitPosition: Hidden}}
-        - {type: realtime.text, key: 'avg(system.network.down, 6h)', title: {text: Down 6h avg}, display: {precision: 0, unitPosition: Hidden}}
-        - {type: realtime.text, key: system.process.count, title: {text: Processes}, display: {precision: 0, unitPosition: Hidden, valueLabel: {color: $warn}}}
-
-  # ================= THE PROCESS TABLE =====================================
-  # One column per field, one row per rank. The cells are one size group (cell@table, matchAll), the headers share
-  # global.head. A ring behind each CPU share makes the table readable at a glance.
-  - type: group
-    name: processes
-    geometry: {x: 55.6%, y: 39%, width: 43.8%, height: 36%}
-    items:
-    - type: text
-      text: Busiest processes
-      font: $display
-      color: $muted
-      alignment: CenterLeft
-      geometry: {x: 2%, y: 0%, width: 60%, height: 7%}
-    - type: stack
-      name: table
-      direction: Horizontal
-      spacing: 1.5%
-      geometry: {x: 0%, y: 8%, width: 100%, height: 92%}
-      shared:
-        spacing: 0
-        defaultType: realtime.text
-        title: false
-        display:
-          font: Roboto Mono
-          valueLabel:
-            margins: {left: 0, right: 0, top: 14%, bottom: 14%}
-            matchingGroup: {group: cell@table, matchAll: true}
+    - type: group
+      name: network
+      grid: {area: network}
       items:
+      - type: text
+        text: Network, kB/s
+        font: $display
+        color: $muted
+        alignment: CenterLeft
+        geometry: {x: 2%, y: 0%, width: 40%, height: 7%}
+      - type: realtime.text
+        name: process-watermark
+        key: system.process.count
+        title: false
+        geometry: {x: 28%, y: 10%, width: 46%, height: 80%}
+        display:
+          font: Barlow Condensed
+          weight: ExtraBold
+          precision: 0
+          unitPosition: Hidden
+          valueLabel: {color: '#182438'}
+      - type: graph
+        name: net-graph
+        timeframe: {days: 1}
+        geometry: {x: 0%, y: 8%, width: 100%, height: 70%}
+        annotations:
+          dayLabels: {enabled: false}
+          hourLabels: {alignment: BottomCenter, spacingIntervals: '3, 6, 12'}
+          lines: {spacing: 8 mm, weight: 0.4}
+        figures:
+        - figure: down
+          margins: {top: 12%, bottom: 14%}
+          min: 0
+          system.network.down:
+            plot: {type: bar, color: '#1a8cff', width: 0.8, radius: 0.2}
+        - figure: up
+          margins: {top: 12%, bottom: 14%}
+          min: 0
+          system.network.up:
+            plot: {type: plot, color: '#ff9124', weight: 1}
+      - preset: stat-row
+        geometry: {x: 0%, y: 80%, width: 100%, height: 20%}
+        props:
+          items:
+          - {type: realtime.text, key: system.network.down, title: {text: Down now}, display: {precision: 0, unitPosition: Hidden, valueLabel: {color: $info}}}
+          - {type: realtime.text, key: system.network.up, title: {text: Up now}, display: {precision: 0, unitPosition: Hidden, valueLabel: {color: $accent}}}
+          - {type: realtime.text, key: 'max(system.network.down, today)', title: {text: Peak down}, display: {precision: 0, unitPosition: Hidden}}
+          - {type: realtime.text, key: 'max(system.network.up, today)', title: {text: Peak up}, display: {precision: 0, unitPosition: Hidden}}
+          - {type: realtime.text, key: 'avg(system.network.down, 6h)', title: {text: Down 6h avg}, display: {precision: 0, unitPosition: Hidden}}
+          - {type: realtime.text, key: system.process.count, title: {text: Processes}, display: {precision: 0, unitPosition: Hidden, valueLabel: {color: $warn}}}
+
+    # ================= THE PROCESS TABLE =====================================
+    # One column per field, one row per rank. The cells are one size group (cell@table, matchAll), the headers share
+    # global.head. A ring behind each CPU share makes the table readable at a glance.
+    - type: group
+      name: processes
+      grid: {area: processes}
+      items:
+      - type: text
+        text: Busiest processes
+        font: $display
+        color: $muted
+        alignment: CenterLeft
+        geometry: {x: 2%, y: 0%, width: 60%, height: 7%}
       - type: stack
-        name: name
-        size: 38%
+        name: table
+        direction: Horizontal
+        spacing: 1.5%
+        geometry: {x: 0%, y: 8%, width: 100%, height: 92%}
         shared:
-          display: {valueLabel: {alignment: CenterLeft}}
-        items:
-          - {type: text, text: Name, alignment: CenterLeft, color: '#7b8896', margins: {left: 0, right: 0, top: 26%, bottom: 26%}, matchingGroup: global.head}
-          - system.process.top.1.name
-          - system.process.top.2.name
-          - system.process.top.3.name
-          - system.process.top.4.name
-          - system.process.top.5.name
-          - system.process.top.6.name
-          - system.process.top.7.name
-          - system.process.top.8.name
-      - type: stack
-        name: pid
-        size: 13%
-        shared:
-          display: {valueLabel: {alignment: CenterRight}}
-        items:
-          - {type: text, text: PID, alignment: CenterRight, color: '#7b8896', margins: {left: 0, right: 0, top: 26%, bottom: 26%}, matchingGroup: global.head}
-          - system.process.top.1.pid
-          - system.process.top.2.pid
-          - system.process.top.3.pid
-          - system.process.top.4.pid
-          - system.process.top.5.pid
-          - system.process.top.6.pid
-          - system.process.top.7.pid
-          - system.process.top.8.pid
-      - type: stack
-        name: cpu
-        size: 20%
-        shared:
-          display: {precision: 1, max-length: 4, valueLabel: {alignment: CenterRight}}
-        items:
-          - {type: text, text: CPU, alignment: CenterRight, color: '#7b8896', margins: {left: 0, right: 0, top: 26%, bottom: 26%}, matchingGroup: global.head}
-          - system.process.top.1.cpu
-          - system.process.top.2.cpu
-          - system.process.top.3.cpu
-          - system.process.top.4.cpu
-          - system.process.top.5.cpu
-          - system.process.top.6.cpu
-          - system.process.top.7.cpu
-          - system.process.top.8.cpu
-      - type: stack
-        name: memory
-        size: 15%
-        shared:
-          display: {precision: 1, max-length: 4, valueLabel: {alignment: CenterRight}}
-        items:
-          - {type: text, text: Mem, alignment: CenterRight, color: '#7b8896', margins: {left: 0, right: 0, top: 26%, bottom: 26%}, matchingGroup: global.head}
-          - system.process.top.1.memory
-          - system.process.top.2.memory
-          - system.process.top.3.memory
-          - system.process.top.4.memory
-          - system.process.top.5.memory
-          - system.process.top.6.memory
-          - system.process.top.7.memory
-          - system.process.top.8.memory
-      - type: stack
-        name: cpuRing
-        size: 9%
-        defaultType: realtime.gauge
-        shared:
-          '~clear': true
+          spacing: 0
+          defaultType: realtime.text
           title: false
           display:
-            radius: 72%
-            arc: {start-angle: 0, end-angle: 360, weight: 14%, color: '#26303c', cap: flat}
-            range: {min: 0, max: 1}
-            fill: {weight: 14%, color: '#ff9124', cap: flat}
-            major: {enabled: false}
-            minor: {enabled: false}
-            micro: {enabled: false}
-            needle: {type: circle, width: 0%}
-            value-label: {visible: false}
-            unit-label: {visible: false}
+            font: Roboto Mono
+            valueLabel:
+              margins: {left: 0, right: 0, top: 14%, bottom: 14%}
+              matchingGroup: {group: cell@table, matchAll: true}
         items:
-          - spacer
-          - system.process.top.1.cpu
-          - system.process.top.2.cpu
-          - system.process.top.3.cpu
-          - system.process.top.4.cpu
-          - system.process.top.5.cpu
-          - system.process.top.6.cpu
-          - system.process.top.7.cpu
-          - system.process.top.8.cpu
+        - type: stack
+          name: name
+          size: 38%
+          shared:
+            display: {valueLabel: {alignment: CenterLeft}}
+          items:
+            - {type: text, text: Name, alignment: CenterLeft, color: '#7b8896', margins: {left: 0, right: 0, top: 26%, bottom: 26%}, matchingGroup: global.head}
+            - system.process.top.1.name
+            - system.process.top.2.name
+            - system.process.top.3.name
+            - system.process.top.4.name
+            - system.process.top.5.name
+            - system.process.top.6.name
+            - system.process.top.7.name
+            - system.process.top.8.name
+        - type: stack
+          name: pid
+          size: 13%
+          shared:
+            display: {valueLabel: {alignment: CenterRight}}
+          items:
+            - {type: text, text: PID, alignment: CenterRight, color: '#7b8896', margins: {left: 0, right: 0, top: 26%, bottom: 26%}, matchingGroup: global.head}
+            - system.process.top.1.pid
+            - system.process.top.2.pid
+            - system.process.top.3.pid
+            - system.process.top.4.pid
+            - system.process.top.5.pid
+            - system.process.top.6.pid
+            - system.process.top.7.pid
+            - system.process.top.8.pid
+        - type: stack
+          name: cpu
+          size: 20%
+          shared:
+            display: {precision: 1, max-length: 4, valueLabel: {alignment: CenterRight}}
+          items:
+            - {type: text, text: CPU, alignment: CenterRight, color: '#7b8896', margins: {left: 0, right: 0, top: 26%, bottom: 26%}, matchingGroup: global.head}
+            - system.process.top.1.cpu
+            - system.process.top.2.cpu
+            - system.process.top.3.cpu
+            - system.process.top.4.cpu
+            - system.process.top.5.cpu
+            - system.process.top.6.cpu
+            - system.process.top.7.cpu
+            - system.process.top.8.cpu
+        - type: stack
+          name: memory
+          size: 15%
+          shared:
+            display: {precision: 1, max-length: 4, valueLabel: {alignment: CenterRight}}
+          items:
+            - {type: text, text: Mem, alignment: CenterRight, color: '#7b8896', margins: {left: 0, right: 0, top: 26%, bottom: 26%}, matchingGroup: global.head}
+            - system.process.top.1.memory
+            - system.process.top.2.memory
+            - system.process.top.3.memory
+            - system.process.top.4.memory
+            - system.process.top.5.memory
+            - system.process.top.6.memory
+            - system.process.top.7.memory
+            - system.process.top.8.memory
+        - type: stack
+          name: cpuRing
+          size: 9%
+          defaultType: realtime.gauge
+          shared:
+            '~clear': true
+            title: false
+            display:
+              radius: 72%
+              arc: {start-angle: 0, end-angle: 360, weight: 14%, color: '#26303c', cap: flat}
+              range: {min: 0, max: 1}
+              fill: {weight: 14%, color: '#ff9124', cap: flat}
+              major: {enabled: false}
+              minor: {enabled: false}
+              micro: {enabled: false}
+              needle: {type: circle, width: 0%}
+              value-label: {visible: false}
+              unit-label: {visible: false}
+          items:
+            - spacer
+            - system.process.top.1.cpu
+            - system.process.top.2.cpu
+            - system.process.top.3.cpu
+            - system.process.top.4.cpu
+            - system.process.top.5.cpu
+            - system.process.top.6.cpu
+            - system.process.top.7.cpu
+            - system.process.top.8.cpu
 
   # ================= THE FLOOR =============================================
   # Left: a slot that takes the dashboard when something is wrong. Right: the three usage curves on one day, the CPU

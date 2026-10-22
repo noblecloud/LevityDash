@@ -395,3 +395,49 @@ def test_hovering_a_tree_row_or_the_stage_outlines_the_item(board):
 	assert win.stage.hover == (0,)
 	win.stage.setHover(None)
 	assert win.stage.hover is None
+
+
+def test_wrap_and_unwrap_keep_placement_and_undo(board):
+	win, path = board('station')
+	target = next(p for p, n in win.piece.walk() if len(p) >= 2 and 'geometry' in n and not m.opaque(n))
+	before = yaml.safe_dump(win.piece.template)
+	geometry = win.piece.node(target)['geometry']
+	win.select(target)
+	win.wrapItem()
+	box = win.piece.node(target)
+	assert box['type'] == 'group' and box['geometry'] == geometry
+	assert 'geometry' not in box['items'][0]
+	win.unwrapItem()
+	assert yaml.safe_dump(win.piece.template) == before  # unwrap is the exact inverse
+	win.undo()
+	win.undo()
+	assert yaml.safe_dump(win.piece.template) == before
+	# the dashboard itself is left alone
+	win.select(())
+	win.wrapItem()
+	assert win.piece.template is not None and len(win.history) == 0
+
+
+def test_tree_filter_keeps_matches_and_their_containers(board):
+	win, path = board('station')
+
+	def shown():
+		rows, stack = [], [win.tree.topLevelItem(0)]
+		while stack:
+			row = stack.pop()
+			if not row.isHidden():
+				rows.append(row.text(0))
+				stack += [row.child(i) for i in range(row.childCount())]
+		return rows
+
+	everything = shown()
+	win.filterBox.setText('wind')
+	some = shown()
+	assert 0 < len(some) < len(everything)
+	assert any('wind' in r.lower() for r in some[1:])
+	win.rebuildTree()
+	assert shown() == some  # a rebuild after an edit keeps the filter
+	win.filterBox.setText('')
+	assert len(shown()) == len(everything)
+	win.filterBox.setText('zzzz-no-such-item')
+	assert win.tree.topLevelItem(0).isHidden()

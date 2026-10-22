@@ -1389,6 +1389,12 @@ class Builder(QWidget):
 		# Two rows: one row of six buttons set the tree column's minimum width, which left the preview a sliver in a one-window Studio.
 		lbox.addLayout(tools)
 		lbox.addLayout(moves)
+		self.filterBox = QLineEdit()
+		self.filterBox.setPlaceholderText('Filter items…')
+		self.filterBox.setClearButtonEnabled(True)
+		self.filterBox.setToolTip('Show only the items whose type, name or key contains this text, with the containers around them')
+		self.filterBox.textChanged.connect(self.applyFilter)
+		lbox.addWidget(self.filterBox)
 		self.tree = ItemTree()
 		self.tree.setHeaderHidden(True)
 		self.tree.setMinimumWidth(200)
@@ -1398,6 +1404,7 @@ class Builder(QWidget):
 		# Only while the tree has the focus, so a text field keeps its own copy and paste.
 		for key, fn in ((QKeySequence.StandardKey.Copy, self.copyItem), (QKeySequence.StandardKey.Paste, self.pasteItem),
 		                (QKeySequence.StandardKey.Delete, self.deleteItem), (QKeySequence('Ctrl+D'), self.duplicateItem),
+		                (QKeySequence('Ctrl+G'), self.wrapItem), (QKeySequence('Ctrl+Shift+G'), self.unwrapItem),
 		                (QKeySequence('Alt+Up'), lambda: self.moveItem(-1)), (QKeySequence('Alt+Down'), lambda: self.moveItem(1))):
 			QShortcut(key, self.tree, fn).setContext(Qt.ShortcutContext.WidgetShortcut)
 		self.tree.currentItemChanged.connect(self._treePicked)
@@ -1668,6 +1675,11 @@ class Builder(QWidget):
 		self.future.clear()
 		self._updateHistory()
 
+	def _dropPush(self):
+		"""Forget the undo step `push` just made, for an edit that turned out to change nothing."""
+		self.history.pop()
+		self._updateHistory()
+
 	def _updateHistory(self):
 		self.undoButton.setEnabled(bool(self.history))
 		self.redoButton.setEnabled(bool(self.future))
@@ -1718,7 +1730,25 @@ class Builder(QWidget):
 				row.setExpanded(True)
 
 			add(None, self.piece.template, ())
+		self.applyFilter()
 		self._selectRow()
+
+	def applyFilter(self, _text: str = ''):
+		"""Hide the rows that do not match the filter box, keeping every row that holds a match."""
+		needle = self.filterBox.text().strip().casefold()
+
+		def visit(row) -> bool:
+			hit = not needle or needle in row.text(0).casefold()
+			kids = [visit(row.child(i)) for i in range(row.childCount())]
+			show = hit or any(kids)
+			row.setHidden(not show)
+			if needle and any(kids):
+				row.setExpanded(True)
+			return show
+
+		root = self.tree.invisibleRootItem()
+		for i in range(root.childCount()):
+			visit(root.child(i))
 
 	def _selectRow(self):
 		it = self.tree.invisibleRootItem()
@@ -1787,6 +1817,32 @@ class Builder(QWidget):
 			self._syncStage()
 			self.schedule()
 
+	def wrapItem(self):
+		"""Put the selected item inside a new group that takes its place on the stage."""
+		if not self.selection:
+			return
+		self.push()
+		if self.piece.wrap(self.selection) is None:
+			self._dropPush()
+			self.status.setText('This item cannot be put in a group (the dashboard itself, or an item kept as written)')
+			return
+		self.rebuildAll()
+		self._syncStage()
+		self.schedule()
+
+	def unwrapItem(self):
+		"""Replace the selected group by the items inside it."""
+		if not self.selection:
+			return
+		self.push()
+		if self.piece.unwrap(self.selection) is None:
+			self._dropPush()
+			self.status.setText('Only a group with no placement of its own, holding ordinary items, can be taken apart')
+			return
+		self.rebuildAll()
+		self._syncStage()
+		self.schedule()
+
 	def copyItem(self):
 		"""Put the selected item on the clipboard as the YAML a `.levity` would hold, so it pastes here, into another Studio, or into a file."""
 		raw = self.piece.raw(self.selection) if self.selection else None
@@ -1823,6 +1879,9 @@ class Builder(QWidget):
 		menu.addAction('Paste', self.pasteItem, QKeySequence.StandardKey.Paste)
 		menu.addAction('Duplicate', self.duplicateItem, QKeySequence('Ctrl+D'))
 		menu.addAction('Delete', self.deleteItem, QKeySequence.StandardKey.Delete)
+		menu.addSeparator()
+		menu.addAction('Put in group', self.wrapItem, QKeySequence('Ctrl+G'))
+		menu.addAction('Ungroup', self.unwrapItem, QKeySequence('Ctrl+Shift+G'))
 		menu.exec(self.tree.viewport().mapToGlobal(at))
 
 	def extractPreset(self, name: Optional[str] = None):
