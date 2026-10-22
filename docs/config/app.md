@@ -27,7 +27,7 @@ Controls whether the frontend runs its own plugins or attaches to a standalone b
 
 ### <div class=mono>watchdog</div>
 
-What the standalone backend does about a plugin that is running but has stopped publishing (a socket that stays bound with nothing on it, a stuck poll). It compares the quiet time with how often the plugin normally publishes.
+What the standalone backend, and the app when it runs plugins itself (`live` mode), does about a plugin that is running but has stopped publishing (a socket that stays bound with nothing on it, a stuck poll). It compares the quiet time with how often the plugin normally publishes.
 
 - `log` (default) — one log line when a plugin is overdue, one when it is far overdue, one when it publishes again.
 - `restart` — also stops a far-overdue plugin and starts it again, at most three times, waiting longer between tries (a minute, then two, then four). Publishing again gives the tries back.
