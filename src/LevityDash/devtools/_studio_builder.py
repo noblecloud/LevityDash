@@ -1944,6 +1944,18 @@ class Builder(QWidget):
 		self._syncStage()
 		self.schedule()
 
+	def resetGeometry(self):
+		"""Remove the selected item's `geometry`, so its parent places and sizes it again."""
+		node = self.piece.node(self.selection) if self.selection else None
+		if node is None or 'geometry' not in node:
+			self.status.setText('This item has no geometry to reset')
+			return
+		self.push()
+		model.setField(node, 'geometry', None)
+		self.rebuildAll()
+		self._syncStage()
+		self.schedule()
+
 	def copyItem(self):
 		"""Put the selected item on the clipboard as the YAML a `.levity` would hold, so it pastes here, into another Studio, or into a file."""
 		raw = self.piece.raw(self.selection) if self.selection else None
@@ -1980,6 +1992,7 @@ class Builder(QWidget):
 		menu.addAction('Paste', self.pasteItem, QKeySequence.StandardKey.Paste)
 		menu.addAction('Duplicate', self.duplicateItem, QKeySequence('Ctrl+D'))
 		menu.addAction('Delete', self.deleteItem, QKeySequence.StandardKey.Delete)
+		menu.addAction('Reset geometry', self.resetGeometry)
 		align = menu.addMenu('Align in parent')
 		for how in self.ALIGN:
 			align.addAction(how, lambda h=how: self.alignItem(h))
