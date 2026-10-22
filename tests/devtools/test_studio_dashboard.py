@@ -495,3 +495,17 @@ def test_tree_filter_keeps_matches_and_their_containers(board):
 	assert len(shown()) == len(everything)
 	win.filterBox.setText('zzzz-no-such-item')
 	assert win.tree.topLevelItem(0).isHidden()
+
+
+def test_tree_keeps_folded_rows_across_an_edit_and_folds_all(board):
+	win, path = board('station')
+	win.foldAll(False)
+	assert win.collapsed
+	folded = set(win.collapsed)
+	win.rebuildTree()
+	assert win.collapsed == folded
+	assert all(not win.tree.topLevelItem(0).child(i).isExpanded() for i in range(win.tree.topLevelItem(0).childCount()))
+	win.foldAll(True)
+	assert not win.collapsed
+	win.rebuildTree()
+	assert win.tree.topLevelItem(0).child(0).isExpanded()
