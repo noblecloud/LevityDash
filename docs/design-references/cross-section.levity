@@ -236,7 +236,7 @@
         title: false
         display:
           unitPosition: Inline
-          valueLabel: {matchingGroup: value@indoor}
+          valueLabel: {matchingGroup: {group: value@ground, matchAll: true}}
         geometry: {x: 0%, y: 0%, width: 54%, height: 40%}
       - type: mini-graph
         timeframe: {hours: 12}
@@ -270,7 +270,7 @@
         title: false
         display:
           unitPosition: Inline
-          valueLabel: {matchingGroup: value@indoor}
+          valueLabel: {matchingGroup: {group: value@ground, matchAll: true}}
         geometry: {x: 0%, y: 0%, width: 54%, height: 40%}
       - type: mini-graph
         timeframe: {hours: 12}
@@ -318,7 +318,7 @@
         title: false
         display:
           unitPosition: Hidden
-          valueLabel: {matchingGroup: value@gauge}
+          valueLabel: {matchingGroup: {group: gauge@ground, matchAll: true}}
         geometry: {x: 26%, y: 26%, width: 48%, height: 22%}
       - type: value-stack
         padding: {left: 1mm, right: 1mm, top: 0.5mm, bottom: 3%}
@@ -351,7 +351,7 @@
         title: false
         display:
           unitPosition: Hidden
-          valueLabel: {matchingGroup: value@gauge}
+          valueLabel: {matchingGroup: {group: gauge@ground, matchAll: true}}
         geometry: {x: 30%, y: 20%, width: 40%, height: 22%}
       - type: value-stack
         padding: {left: 1mm, right: 1mm, top: 0.5mm, bottom: 3%}
