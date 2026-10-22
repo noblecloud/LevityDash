@@ -382,6 +382,21 @@ def test_tree_shortcuts_copy_paste_delete_duplicate_and_move(board):
 	assert win.tree.contextMenuPolicy() == Qt.ContextMenuPolicy.CustomContextMenu
 
 
+def test_tree_rows_carry_a_square_for_what_the_item_is(board):
+	win, path = board('station')
+	seen = {}
+	stack = [win.tree.topLevelItem(0)]
+	while stack:
+		row = stack.pop()
+		node = win.piece.raw(row.data(0, 256))
+		seen.setdefault(sb._kind(node), []).append(row)
+		assert not row.icon(0).isNull()
+		stack += [row.child(i) for i in range(row.childCount())]
+	assert {'container', 'display'} <= set(seen)
+	assert sb._kind({'type': 'group'}) == 'container' and sb._kind({'type': 'realtime.text'}) == 'display'
+	assert sb._kind('environment.wind.speed') == 'shorthand' and sb._kind({'preset': 'stat-row'}) == 'preset'
+
+
 def test_align_sets_x_or_y_from_the_item_and_parent_size(board):
 	win, path = board('station')
 	target = next(p for p, n in win.piece.walk() if len(p) >= 2 and 'geometry' in n and not m.opaque(n)

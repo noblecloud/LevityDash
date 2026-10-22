@@ -46,9 +46,10 @@ template:
 def library(tmp_path):
 	for name, text in {'dial': DIAL, 'outer': OUTER, 'loop': LOOP, 'spark': SPARK}.items():
 		(tmp_path / f'{name}.yaml').write_text(text)
+	saved = list(presets._search)  # keep the providers other code registered once (the Studio's, the config folder's)
 	presets.add_search_path(lambda: [tmp_path])
 	yield tmp_path
-	presets._search.clear()
+	presets._search[:] = saved
 	presets.clear_cache()
 
 

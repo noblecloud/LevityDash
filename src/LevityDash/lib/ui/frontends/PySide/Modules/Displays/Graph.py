@@ -78,7 +78,7 @@ from LevityDash.lib.utils.shared import (
 	Unset, Worker
 )
 from LevityDash.lib.utils.various import DateTimeRange
-from WeatherUnits import DerivedMeasurement, Length, Measurement, Time
+from WeatherUnits import Length, Measurement, Time
 from WeatherUnits.derived.precipitation import PrecipitationRate
 from WeatherUnits.length import Centimeter, Millimeter
 from WeatherUnits.time_.time import Hour, Second
@@ -972,10 +972,6 @@ class GraphItemData(Stateful, tag=...):
 		xS = np.linspace(x[0], x[-1], s)
 		y, x = interp1d(x, y)(xS), xS
 
-		if issubclass(dataType, DerivedMeasurement):
-			n = dataType.numeratorClass
-			d = dataType.denominatorClass(1)
-			return [TimeSeriesItem(dataType(n(y), d), timestampToTimezone(x, tz=tz)) for x, y in zip(x, y)]
 		return [TimeSeriesItem(dataType(y), timestampToTimezone(x, tz=tz)) for x, y in zip(x, y)]
 
 	@property
@@ -2852,6 +2848,11 @@ class PlotLabels(GraphAnnotationLabels[PlotLabel]):
 		# merged: List = sorted([x for x in chain.from_iterable(zip_longest(peaks, troughs)) if x is not None], key=lambda x: x.timestamp)[1:-1]
 		if peaks_troughs:
 			peaks_troughs.pop(-1)
+		# The first sample is a trough or peak only because nothing sits behind it; a label there is
+		# centred on the plot's left edge and half of it is clipped.
+		smoothed = self.source.smoothed
+		if peaks_troughs and smoothed and peaks_troughs[0].timestamp <= smoothed[0].timestamp:
+			peaks_troughs.pop(0)
 		self.data = peaks_troughs
 		self.waiting_for_data = False
 		if callback is not None:

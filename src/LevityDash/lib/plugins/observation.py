@@ -31,6 +31,7 @@ from PySide6.QtWidgets import QApplication
 from rich.progress import Progress
 
 import WeatherUnits as wu
+from WeatherUnits.temperature import summingReadings
 from LevityDash.lib.log import LevityPluginLog as log
 from LevityDash.lib.plugins.categories import CategoryDict, CategoryItem, UnitMetaData
 from LevityDash.lib.plugins.errors import InvalidData
@@ -741,14 +742,9 @@ class TimeSeriesItem(TimeAwareValue):
 		if valueCls is str:
 			value = mostFrequentValue([str(item) for item in items])
 		else:
-			value = float(sum(values)) / len(values)
+			with summingReadings():
+				value = float(sum(values)) / len(values)
 		timestamp = datetime.fromtimestamp(time / len(items), tz=_timezones.utc).astimezone(LOCAL_TIMEZONE)
-		if issubclass(valueCls, wu.Measurement) and {'denominator', 'numerator'}.intersection(valueCls.__init__.__annotations__.keys()):
-			ref = values[0]
-			n = type(ref.n)
-			d = type(ref.d)(1)
-			value = valueCls(numerator=n(value), denominator=d)
-			return TimeSeriesItem(value, timestamp)
 		return TimeSeriesItem(valueCls(value), timestamp)
 
 	@classmethod
@@ -763,19 +759,14 @@ class TimeSeriesItem(TimeAwareValue):
 		valueCls = mostCommonClass(item.value for item in items)
 		try:
 			values = [item.value for item in items]
-			value = float(operator(*values))
+			with summingReadings():
+				value = float(operator(*values))
 			times = [item.timestamp.timestamp() for item in items]
 		except TypeError:
 			value = mostFrequentValue([str(item) for item in items])
 			values = [value]
 			times = [item.timestamp.timestamp() for item in items if str(item) == value]
 		timestamp = datetime.fromtimestamp(max(times)).astimezone(_timezones.utc).astimezone(tz=LOCAL_TIMEZONE)
-		if issubclass(valueCls, wu.Measurement) and {'denominator', 'numerator'}.intersection(valueCls.__init__.__annotations__.keys()):
-			ref = values[0]
-			n = type(ref.n)
-			d = type(ref.d)(1)
-			value = valueCls(numerator=n(value), denominator=d)
-			return TimeSeriesItem(value, timestamp)
 		return TimeSeriesItem(valueCls(value), timestamp)
 
 
