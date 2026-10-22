@@ -131,3 +131,12 @@ def test_vars_yaml_beside_config(tmp_path):
 	assert loadSharedVariables(tmp_path / 'vars.yaml') == {'gap': 3}
 	(tmp_path / 'vars.yaml').write_text(': : bad')
 	assert loadSharedVariables(tmp_path) == {}
+
+
+def test_vars_yaml_through_the_config_path_type(tmp_path):
+	# The loader hands over `userConfig.userPath`, an EasyPath, not a Path.
+	from LevityDash.lib.EasyPath import EasyPath
+	from LevityDash.lib.variables import loadSharedVariables
+	(tmp_path / 'vars.yaml').write_text('gap: 3\n')
+	assert loadSharedVariables(EasyPath(tmp_path)) == {'gap': 3}
+	assert loadSharedVariables(EasyPath(tmp_path / 'vars.yaml')) == {'gap': 3}
