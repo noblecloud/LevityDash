@@ -3,7 +3,7 @@ name: Report
 
 on:
   pull_request:
-    branches: [ feat/value-sources ]
+    branches: [ dev, feat/value-sources ]
   workflow_dispatch:
 
 concurrency:
@@ -38,6 +38,34 @@ jobs:
             echo "Exit code: $status. \`test_remote_connection_signal\` is known flaky."
             echo '```'
             grep -E '^(FAILED|ERROR)|passed|failed' ../suite.log | tail -40
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+  random-order:
+    name: Test suite in random order (3.14, offscreen)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: LevityDash
+      - uses: ./LevityDash/.github/actions/setup
+      - name: Run suite shuffled
+        working-directory: LevityDash
+        run: |
+          set +e
+          .venv/bin/python -m pip install -q pytest-randomly
+          # The slow text-alignment sweep runs in the job above; its order does not matter.
+          .venv/bin/python -m pytest tests -q -p no:cacheprovider -p randomly -rfE \
+            --deselect tests/devtools/test_text_alignment.py 2>&1 | tee ../shuffled.log
+          status=${PIPESTATUS[0]}
+          {
+            echo '### Test suite, random order (Python 3.14)'
+            echo
+            echo "Exit code: $status. A failure here that passes in the job above is an order dependency: rerun with the seed below (\`-p randomly --randomly-seed=N\`)."
+            echo '```'
+            grep -E 'randomly-seed|^(FAILED|ERROR)|passed|failed' ../shuffled.log | tail -40
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit 0
