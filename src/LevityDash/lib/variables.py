@@ -167,8 +167,10 @@ def retemplate(live: Any, resolved: Any, template: Any, collapse: Any = None) ->
 		if collapse is not None and isinstance(template, dict) and 'preset' in template and (short := collapse(live, template, resolved)) is not None:
 			return short
 		if isinstance(live, dict) and isinstance(resolved, dict) and isinstance(template, dict):
+			# `resolved` is built from `template` in order, so the two line up by position even where a `$name` key was replaced.
+			written = dict(zip(resolved, template)) if len(resolved) == len(template) else {}
 			return {
-				key: retemplate(value, resolved[key], template[key], collapse) if key in resolved and key in template else value
+				written.get(key, key): retemplate(value, resolved[key], template[written.get(key, key)], collapse) if key in resolved and written.get(key, key) in template else value
 				for key, value in live.items()
 			}
 		if isinstance(live, list) and isinstance(resolved, list) and isinstance(template, list) and len(resolved) == len(template):

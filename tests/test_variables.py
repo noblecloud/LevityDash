@@ -142,3 +142,10 @@ def test_a_variable_in_a_mapping_key_is_replaced():
 
 def test_a_key_that_is_not_a_variable_or_not_text_is_left_alone():
 	assert substitute({'$accent': 1, '$n': 2}, {'n': 5}) == {'$accent': 1, '$n': 2}
+
+
+def test_a_save_keeps_a_variable_used_as_a_mapping_key():
+	template = {'vars': {'temp': 'environment.temperature.temperature', 'line': 'bar'}, 'items': [{'$temp': {'plot': '$line', 'size': 1}, 'plain': 2}]}
+	resolved = resolveVariables(template)
+	live = {'vars': template['vars'], 'items': [{'environment.temperature.temperature': {'plot': 'bar', 'size': 3}, 'plain': 2}]}
+	assert retemplate(live, resolved, template)['items'] == [{'$temp': {'plot': '$line', 'size': 3}, 'plain': 2}]
