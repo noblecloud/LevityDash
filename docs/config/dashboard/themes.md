@@ -126,6 +126,18 @@ items:
     geometry: {x: 5%, y: 5%, width: 50%, height: 40%}
 ```
 
+## A ground that follows a value
+
+`background:` can follow a key or an expression, so the ground moves with it. The two ends of the gradient are scales; each is read at the current value, and the colour between two stops is mixed in Oklab.
+
+```yaml
+background: {by: astronomy.sun.elevation, top: $sky-top, bottom: $sky-horizon}
+```
+
+`by` is the key. `top` and `bottom` are scale tokens, or stops written in place. `angle` is optional (CSS degrees, default 180). A value past the first or last stop takes that stop's colour. Until the key has a value, the ground is the theme's `background`.
+
+`astronomy.sun.elevation` is the sun's height above the horizon in degrees, from the Astronomy plugin. The `default` theme defines `sky-top` and `sky-horizon` for it: navy at night, purple then orange near the horizon, blue by day. They stay dark enough for light text. A theme can recolour them under `scales`.
+
 ## Make a theme file
 
 A theme is a YAML file. Put it in a folder named `themes` in your [config folder](/config.md). Make the folder if it is not there. A theme in your folder wins over a built-in theme of the same name. The file name is the theme name: `themes/harbor.yaml` is `theme: harbor`.
