@@ -324,6 +324,63 @@ def test_a_duration_is_still_refused_where_it_means_nothing(text):
 		Expression.parse(text)
 
 
+# -- unit literals that stand for themselves ------------------------------------------
+
+def test_a_power_literal_times_a_duration_is_energy():
+	result = Expression.parse('1.5kW * 3h').evaluate(FakeResolver(), NOW)
+	assert isinstance(result, wu.Energy) and float(result['kWh']) == pytest.approx(4.5)
+
+
+def test_irradiance_over_an_area_for_a_time_is_energy():
+	resolver = FakeResolver(current={'a.b.sun': wu.Light.Irradiance(500)})
+	result = Expression.parse('a.b.sun * 20m² * 3h').evaluate(resolver, NOW)
+	assert isinstance(result, wu.Energy) and float(result['kWh']) == pytest.approx(30)
+
+
+@pytest.mark.parametrize('text', ['a.b.sun * 20m^2', 'a.b.sun * 20 m²', '20m² * a.b.sun'])
+def test_an_area_literal_is_written_with_a_superscript_or_a_caret(text):
+	resolver = FakeResolver(current={'a.b.sun': wu.Light.Irradiance(500)})
+	result = Expression.parse(text).evaluate(resolver, NOW)
+	assert isinstance(result, wu.Power) and float(result['kW']) == pytest.approx(10)
+
+
+def test_a_compound_unit_literal_compares_with_a_reading():
+	resolver = FakeResolver(current={'a.b.sun': wu.Light.Irradiance(610)})
+	assert Expression.parse('a.b.sun > 600 W/m²').evaluate(resolver, NOW) is True
+	assert Expression.parse('a.b.sun > 700 W/m²').evaluate(resolver, NOW) is False
+
+
+def test_an_energy_literal_over_a_duration_is_power():
+	result = Expression.parse('6kWh / 3h').evaluate(FakeResolver(), NOW)
+	assert isinstance(result, wu.Power) and float(result['kW']) == pytest.approx(2)
+
+
+# -- to(): the unit of the answer ---------------------------------------------------
+
+def test_to_gives_energy_in_the_unit_asked_for():
+	resolver = FakeResolver(current={'a.b.sun': wu.Light.Irradiance(500)})
+	result = Expression.parse('to(a.b.sun * 20m² * 3h, kWh)').evaluate(resolver, NOW)
+	assert isinstance(result, wu.Energy.KilowattHour) and float(result) == pytest.approx(30)
+
+
+def test_to_takes_a_unit_written_as_a_string():
+	result = Expression.parse("to(12ft * 14ft, 'ft²')").evaluate(FakeResolver(), NOW)
+	assert result.unit == 'ft²' and float(result) == pytest.approx(168)
+
+
+def test_to_converts_a_change_in_its_own_units():
+	resolver = FakeResolver(current={TEMP: Celsius(30), DEW: Celsius(20)})
+	result = Expression.parse(f"to({TEMP} - {DEW}, '°F')").evaluate(resolver, NOW)
+	assert float(result) == pytest.approx(18)
+
+
+@pytest.mark.parametrize('text', ['to(a.b.c, kWh)', 'to(a.b.c, zzz)', 'to(a.b.c)', 'to(a.b.c, 3)'])
+def test_to_refuses_a_unit_that_does_not_fit(text):
+	resolver = FakeResolver(current={'a.b.c': wu.Power.Kilowatt(2)})
+	with pytest.raises(ExpressionError):
+		Expression.parse(text).evaluate(resolver, NOW)
+
+
 # -- temperature readings and changes -----------------------------------------------
 
 def test_the_difference_of_two_temperatures_is_a_change():
