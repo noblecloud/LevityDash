@@ -54,6 +54,11 @@ DEFAULT_BACKEND_PORT = 8667
 #: A child that dies sooner than this after starting is treated as crash-looping
 #: rather than as a one-off failure, and its restart is backed off.
 HEALTHY_RUN_S = 20.0
+
+#: A child's .out file rolls over at this size, keeping this many older files.
+#: Before 2026-10 it never rolled: lambda's backend.out reached 318 MB.
+LOG_MAX_BYTES = 10 * 1024 * 1024
+LOG_BACKUPS = 3
 BACKOFF_S = (1.0, 2.0, 5.0, 15.0, 30.0)
 
 # src/LevityDash/devtools/supervisor.py -> repo root is 3 parents up.
@@ -101,11 +106,56 @@ class SupervisorState:
 		return asdict(self)
 
 
+class RotatingLog:
+	"""An append-only text log that rolls over at a size, like `RotatingFileHandler`.
+
+	`name.out` becomes `name.out.1`, that `.2`, and so on up to `backups`; the oldest
+	is dropped. A file already over the limit when opened (left by an older
+	supervisor, which never rotated) is rolled over first. `maxBytes` of 0 turns
+	rotation off.
+	"""
+
+	def __init__(self, path: Path, maxBytes: int = 10 * 1024 * 1024, backups: int = 3):
+		self.path = path
+		self.maxBytes = maxBytes
+		self.backups = max(backups, 1)
+		self._fh = None
+		self._size = 0
+
+	def open(self) -> None:
+		self.path.parent.mkdir(parents=True, exist_ok=True)
+		if self.maxBytes and self.path.exists() and self.path.stat().st_size >= self.maxBytes:
+			self._roll()
+		self._fh = self.path.open('a', buffering=1, errors='replace')
+		self._size = self._fh.tell()
+
+	def write(self, text: str) -> None:
+		if self.maxBytes and self._size >= self.maxBytes:
+			self._fh.close()
+			self._roll()
+			self._fh = self.path.open('a', buffering=1, errors='replace')
+			self._size = 0
+		self._fh.write(text)
+		self._size += len(text.encode(errors='replace'))
+
+	def close(self) -> None:
+		if self._fh is not None:
+			self._fh.close()
+			self._fh = None
+
+	def _roll(self) -> None:
+		for n in range(self.backups, 0, -1):
+			older = self.path.with_name(f'{self.path.name}.{n}')
+			newer = self.path if n == 1 else self.path.with_name(f'{self.path.name}.{n - 1}')
+			if newer.exists():
+				newer.replace(older)
+
+
 class Child:
 	"""One supervised subprocess, restarted whenever it is not running."""
 
 	def __init__(self, name: str, argv: List[str], cwd: Path, env: Optional[dict] = None,
-	             logDir: Optional[Path] = None):
+	             logDir: Optional[Path] = None, logMaxBytes: int = LOG_MAX_BYTES, logBackups: int = LOG_BACKUPS):
 		self.name = name
 		self.argv = argv
 		self.cwd = cwd
@@ -123,6 +173,8 @@ class Child:
 		#: docs/tasks/dashboard-wont-load.md - "the traceback never reached a
 		#: log file ... it was terminal-only".
 		self.logPath: Optional[Path] = (logDir / f'{name}.out') if logDir else None
+		self.logMaxBytes = logMaxBytes
+		self.logBackups = logBackups
 		self._pump: Optional[asyncio.Task] = None
 
 	@property
@@ -153,22 +205,24 @@ class Child:
 		interactively, and the file is what is still there tomorrow when the
 		display did something odd overnight.
 		"""
+		log = RotatingLog(self.logPath, self.logMaxBytes, self.logBackups)
 		try:
-			self.logPath.parent.mkdir(parents=True, exist_ok=True)
-			with self.logPath.open('a', buffering=1, errors='replace') as fh:
-				fh.write(f'\n===== {self.name} started {datetime.now(timezone.utc).isoformat()} =====\n')
-				while True:
-					line = await proc.stdout.readline()
-					if not line:
-						break
-					text = line.decode(errors='replace')
-					fh.write(text)
-					sys.stdout.write(f'[{self.name}] {text}')
-					sys.stdout.flush()
+			log.open()
+			log.write(f'\n===== {self.name} started {datetime.now(timezone.utc).isoformat()} =====\n')
+			while True:
+				line = await proc.stdout.readline()
+				if not line:
+					break
+				text = line.decode(errors='replace')
+				log.write(text)
+				sys.stdout.write(f'[{self.name}] {text}')
+				sys.stdout.flush()
 		except asyncio.CancelledError:
 			raise
 		except Exception as e:  # noqa: BLE001 - losing the log must not kill the child
 			print(f'[run] {self.name}: output capture stopped ({e})')
+		finally:
+			log.close()
 
 	async def stop(self, timeout: float = 10.0) -> None:
 		if not self.is_alive:
@@ -273,13 +327,14 @@ class Runner:
 		if self.mode != 'remote' and not args.no_backend:
 			print(f'[run] mode={self.mode}: the frontend runs plugins itself, so no separate backend')
 		logDir = None if args.no_capture else Path(args.log_dir).expanduser()
+		maxBytes = int(args.log_max_mb * 1024 * 1024)
 		if wantBackend:
 			self.backendChild = Child('backend', [sys.executable, '-m', 'LevityDash.backend'],
-			                          REPO_ROOT, logDir=logDir)
+			                          REPO_ROOT, logDir=logDir, logMaxBytes=maxBytes, logBackups=args.log_backups)
 			self.children.append(self.backendChild)
 		if not args.no_frontend:
 			self.frontendChild = Child('frontend', [sys.executable, '-m', 'LevityDash'],
-			                           REPO_ROOT, logDir=logDir)
+			                           REPO_ROOT, logDir=logDir, logMaxBytes=maxBytes, logBackups=args.log_backups)
 			self.children.append(self.frontendChild)
 
 	async def startAll(self) -> None:
@@ -452,6 +507,14 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 		'--log-dir', default=os.environ.get('LEVITYDASH_SUPERVISOR_LOG_DIR',
 		                                    '~/Library/Logs/LevityDash'),
 		help="Where to keep each child's stdout/stderr (default: ~/Library/Logs/LevityDash)",
+	)
+	parser.add_argument(
+		'--log-max-mb', type=float, default=float(os.environ.get('LEVITYDASH_SUPERVISOR_LOG_MAX_MB', LOG_MAX_BYTES // (1024 * 1024))),
+		help="Roll a child's .out file over at this size in MB; 0 never rolls (default: 10)",
+	)
+	parser.add_argument(
+		'--log-backups', type=int, default=LOG_BACKUPS,
+		help="Rolled-over .out files to keep per child, as name.out.1 and up (default: 3)",
 	)
 	parser.add_argument(
 		'--no-capture', action='store_true',

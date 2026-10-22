@@ -1,0 +1,230 @@
+# Power: where the house's electricity goes. A 15in 16:10 screen, written for a weekday evening with solar and an EV.
+#
+# Not weather: every key is a power in kW or an energy in kWh (`home.power.*`, `home.energy.*`; on a real install these
+# come from a plugin or a smart meter). The numbers that are made on the dashboard use units algebra: the draw times
+# a span of time is an energy (`home.power.total * 1h`), an energy over a span is a power (`home.energy.today / 19h`),
+# and `to(x, kWh)` says which unit the answer is shown in, since an algebra result is SI (J, W) until told otherwise.
+# `units.levity` is the weather-side tour of the same algebra; this one is a working board.
+#
+# Top left is the draw now with the three questions it begs: what is this hour at this draw, what is a day of it, what
+# was the average so far. Beside it is the day as a graph of draw and solar on one scale. The row of rings is the
+# circuits against a 3 kW scale. The right column is a switch whose items turn on by `when:` with unit literals (`> 4
+# kW`), so a heavy evening or a car on charge takes the slot. The floor is today's energy: used, yesterday, made, and
+# bought (used minus made).
+#
+# Text sizes come from the dashboard-wide size groups global.title, global.value and global.head, set by the presets.
+# Layers: the draw over the day's draw, a ring behind each circuit.
+#
+# Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/power.levity
+#           --scenario energy-day --size 2880x1800 --freeze-time 2026-10-15T19:30:00
+#
+# Hex colours are quoted. Unquoted, YAML reads '#' as a comment.
+theme:
+  extends: default
+  colors:
+    background: '#07090c'
+    muted: '#aab2bd'
+    faint: '#7c8591'
+    rule: '#262c35'
+    accent: '#ffb347'
+    good: '#14e3c0'
+    warn: '#ffd400'
+    bad: '#ff3048'
+    info: '#3da5ff'
+    solar: '#ffd400'
+    draw: '#ff6a3d'
+  fonts:
+    display: Nunito
+    mono: Roboto Mono
+    body: Roboto
+vars:
+  pw: home.power.total
+  pv: home.power.solar
+  used: home.energy.today
+  made: home.energy.solar
+items:
+- type: grid
+  name: board
+  geometry: {x: 0.6%, y: 0.8%, width: 98.8%, height: 98.4%}
+  spacing: 1.2%
+  padding: 0
+  grid:
+    columns: [1fr, 1fr, 1fr, 1fr]
+    rows: [42fr, 28fr, 25fr]
+    areas:
+    - now graph graph slot
+    - rings rings rings slot
+    - used yest made bought
+  items:
+
+  # ================= THE DRAW NOW ==========================================
+  - preset: callout
+    name: now
+    grid: {area: now}
+    props:
+      key: $pw
+      title: House draw
+      title_height: 12%
+      color: $draw
+      precision: 1
+      hero_box: {x: 0%, y: 6%, width: 100%, height: 38%}
+      list_box: {x: 0%, y: 48%, width: 100%, height: 52%}
+      items:
+      - {type: realtime.text, key: 'to($pw * 1h, kWh)', title: {text: This hour at this draw}, display: {precision: 1}}
+      - {type: realtime.text, key: 'to($pw * 24h, kWh)', title: {text: A day of it}, display: {precision: 0, valueLabel: {color: $bad}}}
+      - {type: realtime.text, key: 'to($used / 19h, kW)', title: {text: Average so far}, display: {precision: 2, valueLabel: {color: $good}}}
+
+  # ================= THE DAY ===============================================
+  - type: graph
+    name: day
+    grid: {area: graph}
+    timeframe: {days: 1}
+    annotations:
+      dayLabels: {enabled: false}
+      hourLabels: {alignment: BottomCenter, spacingIntervals: '3, 6, 12'}
+      lines: {spacing: 10 mm, weight: 0.4}
+    figures:
+    - figure: power
+      margins: {top: 10%, bottom: 14%}
+      min: 0
+      max: 5
+      home.power.total:
+        plot: {type: plot, color: '#ff6a3d', weight: 1.0}
+        resolution: 2
+      home.power.solar:
+        plot: {type: plot, color: '#ffd400', weight: 0.7}
+        resolution: 2
+      home.power.hvac:
+        plot: {type: plot, color: '#3da5ff', weight: 0.4, dashPattern: '4, 4'}
+        resolution: 2
+
+  # ================= THE CIRCUITS ==========================================
+  - type: stack
+    name: rings
+    grid: {area: rings}
+    direction: Horizontal
+    spacing: 2mm
+    items:
+    - preset: ring-reading
+      props: {key: home.power.hvac, title: Heat pump, color: $info, text_color: $info, min: 0, max: 3, weight: 9%, radius: 96%, precision: 1}
+    - preset: ring-reading
+      props: {key: home.power.ev, title: Car, color: $good, text_color: $good, min: 0, max: 3, weight: 9%, radius: 96%, precision: 1}
+    - preset: ring-reading
+      props: {key: home.power.kitchen, title: Kitchen, color: $accent, text_color: $accent, min: 0, max: 3, weight: 9%, radius: 96%, precision: 1}
+    - preset: ring-reading
+      props: {key: home.power.water, title: Water heater, color: $draw, text_color: $draw, min: 0, max: 3, weight: 9%, radius: 96%, precision: 1}
+    - preset: ring-reading
+      props: {key: home.power.solar, title: Solar, color: $solar, text_color: $solar, min: 0, max: 4, weight: 9%, radius: 96%, precision: 1}
+
+  # ================= THE SLOT ==============================================
+  - type: switch
+    name: slot
+    grid: {area: slot}
+    cycle: 10s
+    fade: 0.4s
+    hold: 10s
+    items:
+    - preset: headline-panel
+      name: heavy
+      when: '$pw > 4 kW'
+      props:
+        headline: Heavy draw
+        headline_color: $bad
+        key: $pw
+        title: House now
+        color: $bad
+        precision: 1
+        unit_position: Inline
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 14%}
+        hero_box: {x: 0%, y: 16%, width: 100%, height: 40%}
+        list_box: {x: 0%, y: 62%, width: 100%, height: 38%}
+        items:
+        - {type: realtime.text, key: home.power.hvac, title: {text: Heat pump}, display: {precision: 1, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: home.power.kitchen, title: {text: Kitchen}, display: {precision: 1, valueLabel: {color: $accent}}}
+        - {type: realtime.text, key: home.power.ev, title: {text: Car}, display: {precision: 1, valueLabel: {color: $good}}}
+    - preset: headline-panel
+      name: charging
+      when: 'home.power.ev > 1 kW'
+      props:
+        headline: Car charging
+        headline_color: $good
+        key: to(home.power.ev * 4h, kWh)
+        title: Added in 4 h at this rate
+        color: $good
+        precision: 1
+        unit_position: Inline
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 14%}
+        hero_box: {x: 0%, y: 16%, width: 100%, height: 40%}
+        list_box: {x: 0%, y: 62%, width: 100%, height: 38%}
+        items:
+        - {type: realtime.text, key: home.power.ev, title: {text: Charger}, display: {precision: 1}}
+        - {type: realtime.text, key: 'to(home.power.ev * 1h, kWh)', title: {text: Each hour}, display: {precision: 1, valueLabel: {color: $good}}}
+    - preset: headline-panel
+      name: quiet
+      props:
+        headline: Baseline
+        headline_color: $info
+        key: to(home.power.total * 8h, kWh)
+        title: A night at this draw
+        color: $info
+        precision: 1
+        unit_position: Inline
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 14%}
+        hero_box: {x: 0%, y: 16%, width: 100%, height: 40%}
+        list_box: {x: 0%, y: 62%, width: 100%, height: 38%}
+        items:
+        - {type: realtime.text, key: home.power.total, title: {text: Now}, display: {precision: 1}}
+
+  # ================= TODAY'S ENERGY ========================================
+  - preset: callout
+    name: used
+    grid: {area: used}
+    props:
+      key: $used
+      title: Used today
+      title_height: 16%
+      color: $draw
+      precision: 1
+      hero_box: {x: 0%, y: 8%, width: 100%, height: 60%}
+      list_box: {x: 0%, y: 72%, width: 100%, height: 28%}
+      items:
+      - {type: realtime.text, key: 'to($used / 19h, kW)', title: {text: Average}, display: {precision: 2}}
+  - preset: callout
+    name: yest
+    grid: {area: yest}
+    props:
+      key: home.energy.yesterday
+      title: Used yesterday
+      title_height: 16%
+      color: $muted
+      precision: 1
+      hero_box: {x: 0%, y: 8%, width: 100%, height: 60%}
+      list_box: {x: 0%, y: 72%, width: 100%, height: 28%}
+      items:
+      - {type: realtime.text, key: '$used - home.energy.yesterday', title: {text: Difference so far}, display: {precision: 1, valueLabel: {color: $good}}}
+  - preset: callout
+    name: made
+    grid: {area: made}
+    props:
+      key: $made
+      title: Solar today
+      title_height: 16%
+      color: $solar
+      precision: 1
+      hero_box: {x: 0%, y: 8%, width: 100%, height: 60%}
+      list_box: {x: 0%, y: 72%, width: 100%, height: 28%}
+      items:
+      - {type: realtime.text, key: $pv, title: {text: Now}, display: {precision: 1}}
+  - preset: callout
+    name: bought
+    grid: {area: bought}
+    props:
+      key: '$used - $made'
+      title: Bought from the grid
+      title_height: 16%
+      color: $info
+      precision: 1
+      hero_box: {x: 0%, y: 8%, width: 100%, height: 60%}
+      list_box: {x: 0%, y: 72%, width: 100%, height: 28%}
+      items:
+      - {type: realtime.text, key: 'to(($used - $made) / 19h, kW)', title: {text: Average draw}, display: {precision: 2}}

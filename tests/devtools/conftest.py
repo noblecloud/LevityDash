@@ -12,7 +12,11 @@ pytest.importorskip('PySide6')
 
 @pytest.fixture(autouse=True)
 def _delete_studio_windows():
+	# Presets are cached by name, and each test writes its own `row-preset` into a fresh Studio folder.
+	from LevityDash.lib import presets
+	presets.clear_cache()
 	yield
+	presets.clear_cache()
 	from PySide6.QtCore import QCoreApplication, QEvent
 	from PySide6.QtWidgets import QApplication
 	from LevityDash.devtools import _studio_builder, _studio_polar, _studio_suite, studio

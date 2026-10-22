@@ -46,126 +46,138 @@ items:
 - type: group
   name: board
   items:
-
-  # ================= THE COMPASS ===========================================
-  - type: group
-    name: compass
-    geometry: {x: 0.6%, y: 0.8%, width: 24.4%, height: 51%}
+  - type: grid
+    name: top
+    geometry: {x: 0.6%, y: 0.8%, width: 98.8%, height: 51%}
+    spacing: 0
+    padding: 0
+    grid:
+      columns: [24.4fr, 0.4fr, 25.4fr, 0.4fr, 25.4fr, 0.8fr, 22fr]
+      rows: [51fr]
+      areas:
+      - compass . rose . trail . aloft
     items:
-    - type: text
-      text: Wind now
-      font: $display
-      color: $muted
-      alignment: CenterLeft
-      geometry: {x: 2%, y: 0%, width: 50%, height: 6%}
-    - preset: compass
-      geometry: {x: 0%, y: 6%, width: 100%, height: 62%}
-      props: {caption_size: 22%, label_size: 7%, arc_weight: 2.4%, needle_length: 36%}
-    - preset: stat-row
-      geometry: {x: 0%, y: 70%, width: 100%, height: 14%}
-      props:
-        items:
-        - {type: realtime.text, key: $wg, title: {text: Gust}, display: {precision: 0, valueLabel: {color: $gust}}}
-        - {type: realtime.text, key: 'max($wg, today)', title: {text: Peak}, display: {precision: 0, valueLabel: {color: $bad}}}
-        - {type: realtime.text, key: 'avg($ws, 3h)', title: {text: Avg 3h}, display: {precision: 0}}
-        - {type: realtime.text, key: '$wg - $ws', title: {text: Gusty by}, display: {precision: 0, valueLabel: {color: $accent}}}
-    - preset: stat-row
-      geometry: {x: 0%, y: 86%, width: 100%, height: 14%}
-      props:
-        items:
-        - {type: realtime.text, key: $wd, title: {text: From}, display: {precision: 0}}
-        - {type: realtime.text, key: 'environment.wind.direction.dominant', title: {text: Day mainly}, display: {precision: 0}}
-        - {type: realtime.text, key: 'at($ws, 3h)', title: {text: Speed +3h}, display: {precision: 0}}
-        - {type: realtime.text, key: 'at($wg, 3h)', title: {text: Gust +3h}, display: {precision: 0, valueLabel: {color: $gust}}}
 
-  # ================= ROSE AND TRAIL ========================================
-  - preset: polar-card
-    name: rose
-    geometry: {x: 25.4%, y: 0.8%, width: 25.4%, height: 51%}
-    props:
-      title: Where it came from today
-      plot: rose
-  - preset: polar-card
-    name: trail
-    geometry: {x: 51.2%, y: 0.8%, width: 25.4%, height: 51%}
-    props:
-      title: Where it pointed, hour by hour
-      plot: trail
+    # ================= THE COMPASS ===========================================
+    - type: group
+      name: compass
+      grid: {area: compass}
+      items:
+      - type: text
+        text: Wind now
+        font: $display
+        color: $muted
+        alignment: CenterLeft
+        geometry: {x: 2%, y: 0%, width: 50%, height: 6%}
+      - preset: compass
+        geometry: {x: 0%, y: 6%, width: 100%, height: 62%}
+        props: {caption_size: 22%, label_size: 7%, arc_weight: 2.4%, needle_length: 36%}
+      - preset: stat-row
+        geometry: {x: 0%, y: 70%, width: 100%, height: 14%}
+        props:
+          items:
+          - {type: realtime.text, key: $wg, title: {text: Gust}, display: {precision: 0, valueLabel: {color: $gust}}}
+          - {type: realtime.text, key: 'max($wg, today)', title: {text: Peak}, display: {precision: 0, valueLabel: {color: $bad}}}
+          - {type: realtime.text, key: 'avg($ws, 3h)', title: {text: Avg 3h}, display: {precision: 0}}
+          - {type: realtime.text, key: '$wg - $ws', title: {text: Gusty by}, display: {precision: 0, valueLabel: {color: $accent}}}
+      - preset: stat-row
+        geometry: {x: 0%, y: 86%, width: 100%, height: 14%}
+        props:
+          items:
+          - {type: realtime.text, key: $wd, title: {text: From}, display: {precision: 0}}
+          - {type: realtime.text, key: 'environment.wind.direction.dominant', title: {text: Day mainly}, display: {precision: 0}}
+          - {type: realtime.text, key: 'at($ws, 3h)', title: {text: Speed +3h}, display: {precision: 0}}
+          - {type: realtime.text, key: 'at($wg, 3h)', title: {text: Gust +3h}, display: {precision: 0, valueLabel: {color: $gust}}}
 
-  # ================= THE WIND ALOFT ========================================
-  - type: group
-    name: aloft
-    geometry: {x: 77.4%, y: 0.8%, width: 22%, height: 51%}
-    items:
-    - type: text
-      text: Aloft
-      font: $display
-      color: $muted
-      alignment: CenterLeft
-      geometry: {x: 2%, y: 0%, width: 50%, height: 6%}
-    - preset: bar-stack
-      geometry: {x: 0%, y: 7%, width: 100%, height: 56%}
+    # ================= ROSE AND TRAIL ========================================
+    - preset: polar-card
+      name: rose
+      grid: {area: rose}
       props:
-        items:
-        - preset: readout-bar
-          props: {key: $ws, min: 0, max: 60, weight: 28%, precision: 0}
-          display:
-            caption: {text: Surface, size: 220%}
-            fill: {color: zone}
-            zones:
-            - {to: 8, color: $info, opacity: 0}
-            - {from: 8, to: 18, color: $breeze, opacity: 0}
-            - {from: 18, to: 30, color: $gust, opacity: 0}
-            - {from: 30, to: 40, color: $accent, opacity: 0}
-            - {from: 40, color: $bad, opacity: 0}
-        - preset: readout-bar
-          props: {key: environment.wind.speed.80m, min: 0, max: 60, weight: 28%, precision: 0}
-          display:
-            caption: {text: 80 m, size: 220%}
-            fill: {color: zone}
-            zones:
-            - {to: 8, color: $info, opacity: 0}
-            - {from: 8, to: 18, color: $breeze, opacity: 0}
-            - {from: 18, to: 30, color: $gust, opacity: 0}
-            - {from: 30, to: 40, color: $accent, opacity: 0}
-            - {from: 40, color: $bad, opacity: 0}
-        - preset: readout-bar
-          props: {key: environment.wind.speed.120m, min: 0, max: 60, weight: 28%, precision: 0}
-          display:
-            caption: {text: 120 m, size: 220%}
-            fill: {color: zone}
-            zones:
-            - {to: 8, color: $info, opacity: 0}
-            - {from: 8, to: 18, color: $breeze, opacity: 0}
-            - {from: 18, to: 30, color: $gust, opacity: 0}
-            - {from: 30, to: 40, color: $accent, opacity: 0}
-            - {from: 40, color: $bad, opacity: 0}
-        - preset: readout-bar
-          props: {key: environment.wind.speed.180m, min: 0, max: 60, weight: 28%, precision: 0}
-          display:
-            caption: {text: 180 m, size: 220%}
-            fill: {color: zone}
-            zones:
-            - {to: 8, color: $info, opacity: 0}
-            - {from: 8, to: 18, color: $breeze, opacity: 0}
-            - {from: 18, to: 30, color: $gust, opacity: 0}
-            - {from: 30, to: 40, color: $accent, opacity: 0}
-            - {from: 40, color: $bad, opacity: 0}
-    - preset: stat-row
-      geometry: {x: 0%, y: 66%, width: 100%, height: 16%}
+        title: Where it came from today
+        plot: rose
+    - preset: polar-card
+      name: trail
+      grid: {area: trail}
       props:
-        items:
-        - {type: realtime.text, key: $wd, title: {text: Surface}, display: {precision: 0}}
-        - {type: realtime.text, key: environment.wind.direction.80m, title: {text: 80 m}, display: {precision: 0}}
-        - {type: realtime.text, key: environment.wind.direction.120m, title: {text: 120 m}, display: {precision: 0}}
-        - {type: realtime.text, key: environment.wind.direction.180m, title: {text: 180 m}, display: {precision: 0, valueLabel: {color: $accent}}}
-    - preset: stat-row
-      geometry: {x: 0%, y: 84%, width: 100%, height: 16%}
-      props:
-        items:
-        - {type: realtime.text, key: 'environment.wind.speed.180m - $ws', title: {text: Shear}, display: {precision: 0, valueLabel: {color: $accent}}}
-        - {type: realtime.text, key: 'max(environment.wind.speed.180m, today)', title: {text: 180 m peak}, display: {precision: 0}}
-        - {type: realtime.text, key: environment.wind.speed.gustMax, title: {text: Gust record}, display: {precision: 0, valueLabel: {color: $bad}}}
+        title: Where it pointed, hour by hour
+        plot: trail
+
+    # ================= THE WIND ALOFT ========================================
+    - type: group
+      name: aloft
+      grid: {area: aloft}
+      items:
+      - type: text
+        text: Aloft
+        font: $display
+        color: $muted
+        alignment: CenterLeft
+        geometry: {x: 2%, y: 0%, width: 50%, height: 6%}
+      - preset: bar-stack
+        geometry: {x: 0%, y: 7%, width: 100%, height: 56%}
+        props:
+          items:
+          - preset: readout-bar
+            props: {key: $ws, min: 0, max: 60, weight: 28%, precision: 0}
+            display:
+              caption: {text: Surface, size: 220%}
+              fill: {color: zone}
+              zones:
+              - {to: 8, color: $info, opacity: 0}
+              - {from: 8, to: 18, color: $breeze, opacity: 0}
+              - {from: 18, to: 30, color: $gust, opacity: 0}
+              - {from: 30, to: 40, color: $accent, opacity: 0}
+              - {from: 40, color: $bad, opacity: 0}
+          - preset: readout-bar
+            props: {key: environment.wind.speed.80m, min: 0, max: 60, weight: 28%, precision: 0}
+            display:
+              caption: {text: 80 m, size: 220%}
+              fill: {color: zone}
+              zones:
+              - {to: 8, color: $info, opacity: 0}
+              - {from: 8, to: 18, color: $breeze, opacity: 0}
+              - {from: 18, to: 30, color: $gust, opacity: 0}
+              - {from: 30, to: 40, color: $accent, opacity: 0}
+              - {from: 40, color: $bad, opacity: 0}
+          - preset: readout-bar
+            props: {key: environment.wind.speed.120m, min: 0, max: 60, weight: 28%, precision: 0}
+            display:
+              caption: {text: 120 m, size: 220%}
+              fill: {color: zone}
+              zones:
+              - {to: 8, color: $info, opacity: 0}
+              - {from: 8, to: 18, color: $breeze, opacity: 0}
+              - {from: 18, to: 30, color: $gust, opacity: 0}
+              - {from: 30, to: 40, color: $accent, opacity: 0}
+              - {from: 40, color: $bad, opacity: 0}
+          - preset: readout-bar
+            props: {key: environment.wind.speed.180m, min: 0, max: 60, weight: 28%, precision: 0}
+            display:
+              caption: {text: 180 m, size: 220%}
+              fill: {color: zone}
+              zones:
+              - {to: 8, color: $info, opacity: 0}
+              - {from: 8, to: 18, color: $breeze, opacity: 0}
+              - {from: 18, to: 30, color: $gust, opacity: 0}
+              - {from: 30, to: 40, color: $accent, opacity: 0}
+              - {from: 40, color: $bad, opacity: 0}
+      - preset: stat-row
+        geometry: {x: 0%, y: 66%, width: 100%, height: 16%}
+        props:
+          items:
+          - {type: realtime.text, key: $wd, title: {text: Surface}, display: {precision: 0}}
+          - {type: realtime.text, key: environment.wind.direction.80m, title: {text: 80 m}, display: {precision: 0}}
+          - {type: realtime.text, key: environment.wind.direction.120m, title: {text: 120 m}, display: {precision: 0}}
+          - {type: realtime.text, key: environment.wind.direction.180m, title: {text: 180 m}, display: {precision: 0, valueLabel: {color: $accent}}}
+      - preset: stat-row
+        geometry: {x: 0%, y: 84%, width: 100%, height: 16%}
+        props:
+          items:
+          - {type: realtime.text, key: 'environment.wind.speed.180m - $ws', title: {text: Shear}, display: {precision: 0, valueLabel: {color: $accent}}}
+          - {type: realtime.text, key: 'max(environment.wind.speed.180m, today)', title: {text: 180 m peak}, display: {precision: 0}}
+          - {type: realtime.text, key: environment.wind.speed.gustMax, title: {text: Gust record}, display: {precision: 0, valueLabel: {color: $bad}}}
+
 
   # ================= THE FRONT =============================================
   # Heading as a word, huge and dark, behind two days of wind.

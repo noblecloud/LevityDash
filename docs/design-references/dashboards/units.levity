@@ -1,0 +1,141 @@
+# Units: what `*` and `/` can do with the units of a reading. Six cards, each a headline calculation with the
+# calculations that follow from it. Nothing here is a key a plugin reports; every number is made on the dashboard.
+#
+# Rain turns a rate into an amount (`rate * 3h`) and an amount into a rate (`daily / 24h`). The solar card turns the
+# sun's irradiance into power (`irradiance * 24m²`) and power into energy (`* 3h`, shown in kWh). The house card is
+# a temperature difference, which is a change and not a temperature. The wind card divides two speeds to a plain
+# ratio. The pressure card is a change over three hours. The last card is only unit literals: `1.5kW * 3h`.
+#
+# Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/units.levity
+#           --scenario units-day --size 2880x1800 --freeze-time 2026-10-15T13:30:00
+#
+# Hex colours are quoted. Unquoted, YAML reads '#' as a comment.
+theme:
+  extends: default
+  colors:
+    background: '#07090c'
+    muted: '#aab2bd'
+    faint: '#7c8591'
+    rule: '#262c35'
+    accent: '#ffb347'
+    good: '#14e3c0'
+    warn: '#ffd400'
+    bad: '#ff3048'
+    info: '#3da5ff'
+  fonts:
+    display: Nunito
+    mono: Roboto Mono
+    body: Roboto
+vars:
+  rain: environment.precipitation.precipitation
+  sun: environment.light.irradiance.irradiance
+  inside: indoor.temperature.temperature#livingroom
+  outside: environment.temperature.temperature
+  gust: environment.wind.speed.gust
+  wind: environment.wind.speed.speed
+  pressure: environment.pressure.pressure
+items:
+- type: grid
+  name: board
+  geometry: {x: 1%, y: 1.5%, width: 98%, height: 97%}
+  spacing: 1.2%
+  grid:
+    columns: [1fr, 1fr, 1fr]
+    rows: [1fr, 1fr]
+  items:
+
+  # ================= RAIN: a rate and an amount =============================
+  - preset: callout
+    name: rain
+    props:
+      key: $rain
+      title: Rain rate
+      title_height: 12%
+      color: $info
+      precision: 2
+      hero_box: {x: 0%, y: 6%, width: 100%, height: 38%}
+      list_box: {x: 0%, y: 48%, width: 100%, height: 52%}
+      items:
+      - {type: realtime.text, key: '$rain * 3h', title: {text: In 3 hours at this rate}, display: {precision: 2}}
+      - {type: realtime.text, key: '$rain * 24h', title: {text: If it kept on all day}, display: {precision: 1}}
+      - {type: realtime.text, key: 'max($rain, today)', title: {text: Heaviest today}, display: {precision: 2}}
+
+  # ================= SOLAR: irradiance, power, energy =======================
+  - preset: callout
+    name: solar
+    props:
+      key: to($sun * 24m², kW)
+      title: Solar, 24 m² of panels
+      title_height: 12%
+      color: $warn
+      precision: 1
+      hero_box: {x: 0%, y: 6%, width: 100%, height: 38%}
+      list_box: {x: 0%, y: 48%, width: 100%, height: 52%}
+      items:
+      - {type: realtime.text, key: '$sun', title: {text: Sun on the panels}, display: {precision: 0}}
+      - {type: realtime.text, key: 'to($sun * 24m² * 3h, kWh)', title: {text: Energy in the next 3 hours}, display: {precision: 1}}
+      - {type: realtime.text, key: 'to(max($sun, today) * 24m², kW)', title: {text: Peak today}, display: {precision: 1}}
+
+  # ================= HOUSE: a change, not a temperature =====================
+  - preset: callout
+    name: house
+    props:
+      key: $inside - $outside
+      title: Warmer inside by
+      title_height: 12%
+      color: $accent
+      precision: 0
+      hero_box: {x: 0%, y: 6%, width: 100%, height: 38%}
+      list_box: {x: 0%, y: 48%, width: 100%, height: 52%}
+      items:
+      - {type: realtime.text, key: '$inside', title: {text: Living room}, display: {precision: 0}}
+      - {type: realtime.text, key: '$outside', title: {text: Outside}, display: {precision: 0}}
+      - {type: realtime.text, key: '$outside + ($inside - $outside) / 2', title: {text: Halfway}, display: {precision: 1}}
+
+  # ================= WIND: two speeds make a ratio ==========================
+  - preset: callout
+    name: gusts
+    props:
+      key: $gust / $wind
+      title: Gusts against the wind
+      title_height: 12%
+      color: $good
+      precision: 1
+      hero_box: {x: 0%, y: 6%, width: 100%, height: 38%}
+      list_box: {x: 0%, y: 48%, width: 100%, height: 52%}
+      items:
+      - {type: realtime.text, key: '$gust', title: {text: Gust}, display: {precision: 0}}
+      - {type: realtime.text, key: '$wind', title: {text: Wind}, display: {precision: 0}}
+      - {type: realtime.text, key: '$gust - $wind', title: {text: Gap}, display: {precision: 0}}
+
+  # ================= PRESSURE: a change over time ===========================
+  - preset: callout
+    name: pressure
+    props:
+      key: $pressure - at($pressure, -3h)
+      title: Pressure, last 3 hours
+      title_height: 12%
+      color: $info
+      precision: 2
+      hero_box: {x: 0%, y: 6%, width: 100%, height: 38%}
+      list_box: {x: 0%, y: 48%, width: 100%, height: 52%}
+      items:
+      - {type: realtime.text, key: '$pressure', title: {text: Now}, display: {precision: 2}}
+      - {type: realtime.text, key: 'at($pressure, -3h)', title: {text: 3 hours ago}, display: {precision: 2}}
+      - {type: realtime.text, key: '$pressure - at($pressure, -12h)', title: {text: Last 12 hours}, display: {precision: 2}}
+
+  # ================= LITERALS: units written in the expression ==============
+  - preset: callout
+    name: literals
+    props:
+      key: to(1.5kW * 3h, kWh)
+      title: A 1.5 kW heater for 3 hours
+      title_height: 12%
+      color: $accent
+      precision: 1
+      hero_box: {x: 0%, y: 6%, width: 100%, height: 38%}
+      list_box: {x: 0%, y: 48%, width: 100%, height: 52%}
+      items:
+      - {type: realtime.text, key: 'to(6kWh / 3h, kW)', title: {text: 6 kWh over 3 hours}, display: {precision: 1}}
+      - {type: realtime.text, key: 'to(600 W/m² * 20m², kW)', title: {text: 600 W/m² on 20 m²}, display: {precision: 1}}
+      - {type: realtime.text, key: "to(12ft * 14ft, 'ft²')", title: {text: A room, 12 ft by 14 ft}, display: {precision: 0}}

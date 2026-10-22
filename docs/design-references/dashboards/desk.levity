@@ -1,0 +1,118 @@
+# Desk: a small clock-first screen for a desk or a bedside shelf. An 8in 16:10 panel, 1280 x 800.
+#
+# This is the quiet end of the set: the shipped `dusk` theme with no colours of its own, one large clock with the moon,
+# a half-dial of the daylight left, and two short tables (the bedroom, and outside against tomorrow). The grid has a
+# `.` track between every pair of areas, so the gutters are part of the picture, and its margin is a `calc()` of two
+# percent lengths so the clock sits a little off the edge.
+#
+# The bottom strip is a stack with `when:` on its first item. While it is 60°F or warmer outside the item is off and
+# gives up its room, so the "tomorrow" strip takes the whole row. When it turns cool the cool strip appears beside it
+# and both share the row. Hand-written readings join the size groups global.title and
+# global.value through the board's `shared:`.
+#
+# Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/desk.levity
+#           --scenario sky-clear --size 1280x800 --freeze-time 2026-10-07T15:40:00
+theme: dusk
+vars:
+  t: environment.temperature.temperature
+items:
+- type: grid
+  name: board
+  geometry: {x: 2%, y: 2.5%, width: 96%, height: 95%}
+  spacing: 0
+  padding: 0
+  shared:
+    title:
+      color: $muted
+      matchingGroup: {group: global.title, matchAll: true}
+    display:
+      font: Nunito
+      valueLabel:
+        matchingGroup: {group: global.value, matchAll: true}
+  grid:
+    columns: [58fr, 2fr, 40fr]
+    rows: [44fr, 3fr, 26fr, 3fr, 24fr]
+    areas:
+    - clock . sun
+    - . . .
+    - room . out
+    - . . .
+    - strip strip strip
+  items:
+
+  # ================= THE CLOCK =============================================
+  - preset: clock
+    name: clock
+    grid: {area: clock, margin: [0, calc(1% + 2mm), 0, 0]}
+
+  # ================= THE SUN ===============================================
+  - type: realtime.gauge
+    name: sun
+    grid: {area: sun}
+    key: astronomy.sun.remaining
+    title: false
+    display:
+      radius: 96%
+      arc: {start-angle: -90, end-angle: 90, weight: 5%, color: $rule, cap: round}
+      range: {min: 7.07, max: 18.68}
+      major: {enabled: false}
+      minor: {enabled: false}
+      micro: {enabled: false}
+      fill: {to: astronomy.sun.hour, weight: 5%, color: $accent}
+      needle: {visible: false}
+      markers:
+      - {value: astronomy.sun.hour, type: dot, width: 10%, halo: 2.4%, halo-color: $background, color: $text}
+      value-label: {position: center, size: 19%, format: duration}
+      unit-label: {visible: false}
+      sub-label: {text: of daylight left, size: 7%}
+
+  # ================= TWO SHORT TABLES ======================================
+  - preset: list-panel
+    name: room
+    grid: {area: room}
+    props:
+      title: Bedroom
+      items:
+      - {type: realtime.text, key: 'indoor.temperature.temperature#bedroom', title: {text: Temperature}, display: {precision: 1, valueLabel: {color: $accent}}}
+      - {type: realtime.text, key: 'indoor.humidity.humidity#bedroom', title: {text: Humidity}, display: {precision: 0, valueLabel: {color: $info}}}
+      - {type: realtime.text, key: 'indoor.temperature.dewpoint#bedroom', title: {text: Dew point}, display: {precision: 0}}
+  - preset: list-panel
+    name: out
+    grid: {area: out}
+    props:
+      title: Outside
+      items:
+      - {type: realtime.text, key: $t, title: {text: Now}, display: {precision: 0}}
+      - {type: realtime.text, key: environment.light.uvi, title: {text: UV}, display: {precision: 1, valueLabel: {color: $warn}}}
+      - {type: realtime.text, key: environment.clouds.cover.cover, title: {text: Cloud}, display: {precision: 0}}
+
+  # ================= THE STRIP =============================================
+  - type: stack
+    name: strip
+    grid: {area: strip}
+    direction: Horizontal
+    spacing: 2%
+    items:
+    - preset: alert-strip
+      name: cool
+      when: '$t < 60°F'
+      props:
+        headline: Cool
+        color: $info
+        key: $t
+        title: Outside now
+        precision: 0
+        items:
+        - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels}, display: {precision: 0, valueLabel: {color: $info}}}
+    - preset: alert-strip
+      name: tomorrow
+      props:
+        headline: Tomorrow
+        color: $info
+        key: at(environment.temperature.temperature, 24h)
+        title: This time
+        precision: 0
+        items:
+        - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Wind}, display: {precision: 0, unitPosition: Hidden}}
+        - {type: realtime.text, key: environment.light.uvi, title: {text: UV}, display: {precision: 1, valueLabel: {color: $warn}}}
+        - {type: realtime.text, key: environment.precipitation.probability, title: {text: Rain}, display: {precision: 0}}

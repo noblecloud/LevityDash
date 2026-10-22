@@ -1,0 +1,177 @@
+# Magazine: the week as a printed page. A 15in 16:10 screen, in the shipped `paper` theme (dark ink on warm paper).
+#
+# A masthead, a lead story and three features, set on a grid whose areas read like the page. The lead is the week as
+# one graph with the day names behind it. Each feature is a headline word, one big figure and the numbers around it: the
+# warm days, the rain, the frost. Nothing here names a colour: ink, rules and the accent come from the theme, so
+# `render_dashboard.py --theme dusk` turns the same page into a night edition.
+#
+# Layout is one grid whose areas read like the page, with a `.` row between the bands and `spacing` for the gutters. The masthead's date rule is a
+# bordered text item. The sidebar is a stack of `when:` items, so a frost note exists only in a week that has one.
+#
+# Text sizes come from the dashboard-wide size groups global.title, global.value and global.head; the hand-written
+# readings join them in the board's `shared:`. Layers: the day names behind the graph.
+#
+# Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/magazine.levity
+#           --scenario week-ahead --size 2880x1800 --freeze-time 2026-10-07T15:40:00
+theme: paper
+vars:
+  t: environment.temperature.temperature
+items:
+- type: grid
+  name: page
+  geometry: {x: 1.2%, y: 1.6%, width: 97.6%, height: 96.8%}
+  spacing: 1.2%
+  padding: 0
+  shared:
+    title:
+      matchingGroup: {group: global.title, matchAll: true}
+    display:
+      valueLabel:
+        matchingGroup: {group: global.value, matchAll: true}
+  grid:
+    columns: [1fr, 1fr, 1fr, 1.15fr]
+    rows: [11fr, 1fr, 50fr, 1fr, 34fr]
+    areas:
+    - mast mast mast side
+    - . . . side
+    - lead lead lead side
+    - . . . side
+    - one two three side
+  items:
+
+  # ================= THE MASTHEAD ==========================================
+  - type: group
+    name: mast
+    grid: {area: mast}
+    items:
+    - {type: text, text: The Week Ahead, font: Nunito, weight: ExtraBold, color: $text, alignment: CenterLeft, geometry: {x: 0%, y: 0%, width: 56%, height: 82%}}
+    - type: text
+      text: Wednesday, October 7th
+      font: $display
+      color: $muted
+      alignment: CenterRight
+      geometry: {x: 56%, y: 8%, width: 44%, height: 52%}
+    - {type: text, text: '', border: {enabled: true, edges: bottom}, geometry: {x: 0%, y: 94%, width: 100%, height: 6%}}
+
+  # ================= THE LEAD ==============================================
+  - type: graph
+    name: lead
+    grid: {area: lead}
+    timeframe: {days: 7}
+    annotations:
+      dayLabels: {position: Top, alignment: Center, opacity: 14%, height: 8%}
+      hourLabels: {alignment: BottomCenter, spacingIntervals: '12, 24'}
+      lines: {spacing: 12 mm, weight: 0.4}
+    figures:
+    - figure: temperature
+      margins: {top: 38%, bottom: 22%}
+      environment.temperature.temperature:
+        labels: {enabled: true}
+        plot: {type: plot, gradient: TemperatureGradient, weight: 1.0}
+        resolution: 2
+      environment.temperature.dewpoint:
+        plot: {type: plot, color: $info, weight: 0.4, dashPattern: '4, 4'}
+        resolution: 2
+    - figure: rain
+      margins: {top: 82%, bottom: 4%}
+      min: 0
+      max: 0.4
+      environment.precipitation.precipitation:
+        plot: {type: bar, color: $info, width: 0.8, radius: 0.25}
+
+  # ================= THREE FEATURES ========================================
+  - preset: headline-panel
+    name: one
+    grid: {area: one}
+    props:
+      headline: Warm to Friday
+      headline_color: $accent
+      key: max(at(environment.temperature.high, 1d), at(environment.temperature.high, 2d))
+      title: Thursday and Friday highs
+      color: $accent
+      precision: 0
+      unit_position: Inline
+      headline_box: {x: 0%, y: 0%, width: 100%, height: 16%}
+      hero_box: {x: 0%, y: 18%, width: 100%, height: 42%}
+      list_box: {x: 0%, y: 66%, width: 100%, height: 34%}
+      items:
+      - {type: realtime.text, key: environment.temperature.high, title: {text: Today}, display: {precision: 0, valueLabel: {color: $accent}}}
+      - {type: realtime.text, key: 'at(environment.temperature.low, 1d)', title: {text: Thu night}, display: {precision: 0}}
+      - {type: realtime.text, key: 'at(environment.wind.speed.gustMax, 1d)', title: {text: Thu gust}, display: {precision: 0, unitPosition: Hidden}}
+  - preset: headline-panel
+    name: two
+    grid: {area: two}
+    props:
+      headline: Rain by night
+      headline_color: $info
+      key: at(environment.precipitation.daily, 3d)
+      title: Saturday total, inches
+      color: $info
+      precision: 1
+      unit_position: Hidden
+      headline_box: {x: 0%, y: 0%, width: 100%, height: 16%}
+      hero_box: {x: 0%, y: 18%, width: 100%, height: 42%}
+      list_box: {x: 0%, y: 66%, width: 100%, height: 34%}
+      items:
+      - {type: realtime.text, key: 'at(environment.precipitation.daily, 2d)', title: {text: Fri}, display: {precision: 1, valueLabel: {color: $info}}}
+      - {type: realtime.text, key: 'at(environment.precipitation.daily, 4d)', title: {text: Sun}, display: {precision: 2}}
+      - {type: realtime.text, key: 'at(environment.wind.speed.gustMax, 3d)', title: {text: Sat gust}, display: {precision: 0, unitPosition: Hidden}}
+  - preset: headline-panel
+    name: three
+    grid: {area: three}
+    props:
+      headline: Cold, then clear
+      headline_color: $good
+      key: at(environment.temperature.low, 5d)
+      title: Monday night low
+      color: $good
+      precision: 0
+      unit_position: Inline
+      headline_box: {x: 0%, y: 0%, width: 100%, height: 16%}
+      hero_box: {x: 0%, y: 18%, width: 100%, height: 42%}
+      list_box: {x: 0%, y: 66%, width: 100%, height: 34%}
+      items:
+      - {type: realtime.text, key: 'at(environment.temperature.low, 4d)', title: {text: Sun}, display: {precision: 0}}
+      - {type: realtime.text, key: 'at(environment.temperature.low, 6d)', title: {text: Tue}, display: {precision: 0, valueLabel: {color: $good}}}
+      - {type: realtime.text, key: 'at(environment.temperature.high, 5d)', title: {text: Mon high}, display: {precision: 0}}
+
+  # ================= THE SIDEBAR ===========================================
+  # Notes with a `when:` exist only in a week that earns them; the last note is always there.
+  - type: stack
+    name: side
+    grid: {area: side}
+    direction: Vertical
+    spacing: 3%
+    items:
+    - preset: list-panel
+      name: now
+      props:
+        title: Right now
+        items:
+        - {type: realtime.text, key: $t, title: {text: Outside}, display: {precision: 0}}
+        - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels like}, display: {precision: 0, valueLabel: {color: $accent}}}
+        - {type: realtime.text, key: environment.humidity.humidity, title: {text: Humidity}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Wind}, display: {precision: 0}}
+        - {type: realtime.text, key: environment.pressure.pressure, title: {text: Pressure}, display: {precision: 2}}
+    - preset: list-panel
+      name: frost
+      when: 'at(environment.temperature.low, 5d) < 36°F'
+      props:
+        title: Frost note
+        items:
+        - {type: realtime.text, key: 'at(environment.temperature.low, 4d)', title: {text: Sunday night}, display: {precision: 0}}
+        - {type: realtime.text, key: 'at(environment.temperature.low, 5d)', title: {text: Monday night}, display: {precision: 0, valueLabel: {color: $info}}}
+    - preset: list-panel
+      name: heat
+      when: 'at(environment.temperature.high, 1d) > 95°F'
+      props:
+        title: Heat note
+        items:
+        - {type: realtime.text, key: 'at(environment.temperature.high, 1d)', title: {text: Thursday}, display: {precision: 0, valueLabel: {color: $bad}}}
+    - preset: list-panel
+      name: wet
+      props:
+        title: The wet days
+        items:
+        - {type: realtime.text, key: 'at(environment.precipitation.probability, 2d)', title: {text: Fri chance}, display: {precision: 0}}
+        - {type: realtime.text, key: 'at(environment.precipitation.probability, 3d)', title: {text: Sat chance}, display: {precision: 0, valueLabel: {color: $info}}}

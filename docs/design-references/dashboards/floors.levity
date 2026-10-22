@@ -1,0 +1,290 @@
+# Floors: the house by floor, not by room. A 15in 16:10 screen.
+#
+# Where `house` reads each room by name, this board asks a floor a question and lets the places answer. Every number
+# in a floor's column is an aggregate over a place: `avg(indoor.temperature.temperature, where=home.upstairs)` is the
+# mean of the upstairs rooms, `count(...)` how many sensors answered, and a range bar runs from the coolest room to
+# the warmest with the mean as its pointer. The rooms' places come from the scenario (`home.upstairs.bedroom`, ...);
+# on a real install they come from `where` in each device's block of Govee.ini. A new sensor on a floor joins its
+# column with no change to this file.
+#
+# The right column is the whole house against outside: the indoor mean, the gap to outdoors (two readings subtract to
+# a change, so it is a number of degrees, never a temperature) and the spread between the warmest and coolest room.
+# The floor is a rotating slot of takeovers: `when:` on the items of a stack, so a hidden item gives up its room and
+# the others grow to fill it.
+#
+# Text sizes come from the dashboard-wide size groups global.title, global.value and global.head; the hand-written
+# readings join them in the board's `shared:`. Layers: none, on purpose. This board is tables and bars.
+#
+# Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/floors.levity
+#           --scenario house-day --size 2880x1800 --freeze-time 2026-10-15T15:10:00
+#
+# Hex colours are quoted. Unquoted, YAML reads '#' as a comment.
+theme:
+  extends: default
+  colors:
+    background: '#06070a'
+    muted: '#aab1bd'
+    faint: '#7c8391'
+    rule: '#272b35'
+    accent: '#ff9124'
+    good: '#14e3c0'
+    warn: '#ffd400'
+    bad: '#ff3048'
+    info: '#1a8cff'
+    up: '#ff9124'
+    down: '#14e3c0'
+    base: '#1a8cff'
+  fonts:
+    display: Nunito
+    mono: Roboto Mono
+    body: Roboto
+vars:
+  t: indoor.temperature.temperature
+  rh: indoor.humidity.humidity
+  outside: environment.temperature.temperature
+  upstairs: avg(indoor.temperature.temperature, where=home.upstairs)
+  downstairs: avg(indoor.temperature.temperature, where=home.downstairs)
+  basement: avg(indoor.temperature.temperature, where=home.basement)
+  house: avg(indoor.temperature.temperature, where=home)
+items:
+- type: grid
+  name: board
+  geometry: {x: 0.6%, y: 0.8%, width: 98.8%, height: 98.4%}
+  spacing: 1.2%
+  padding: 0
+  shared:
+    title:
+      matchingGroup: {group: global.title, matchAll: true}
+    display:
+      valueLabel:
+        matchingGroup: {group: global.value, matchAll: true}
+  grid:
+    columns: [1fr, 1fr, 1fr, 1.15fr]
+    rows: [60fr, 36fr]
+    areas:
+    - up down base house
+    - slot slot slot slot
+  items:
+
+  # ================= ONE COLUMN PER FLOOR ==================================
+  # The same four lines three times, each pointing at a different place. `$place` is the only change.
+  - type: group
+    name: upstairs
+    grid: {area: up}
+    items:
+    - {type: text, text: Upstairs, font: $display, color: $up, alignment: CenterLeft, geometry: {x: 2%, y: 0%, width: 60%, height: 6%}}
+    - {type: text, text: bedroom, font: $display, color: $faint, alignment: CenterRight, geometry: {x: 60%, y: 0%, width: 38%, height: 6%}}
+    - type: realtime.text
+      key: $upstairs
+      title: false
+      geometry: {x: 0%, y: 6%, width: 100%, height: 24%}
+      display: {font: Nunito, weight: ExtraLight, precision: 1, unitPosition: FloatUnder, valueLabel: {color: $up}}
+    - preset: range-bar
+      geometry: {x: 0%, y: 31%, width: 100%, height: 24%}
+      props:
+        key: $upstairs
+        low: min(indoor.temperature.temperature, where=home.upstairs)
+        high: max(indoor.temperature.temperature, where=home.upstairs)
+        min: 60
+        max: 80
+        interval: 5
+        precision: 1
+    - preset: stat-row
+      geometry: {x: 0%, y: 58%, width: 100%, height: 16%}
+      props:
+        items:
+        - {type: realtime.text, key: 'count(indoor.temperature.temperature, where=home.upstairs)', title: {text: Sensors}, display: {precision: 0, unitPosition: Hidden}}
+        - {type: realtime.text, key: 'max(indoor.humidity.humidity, where=home.upstairs)', title: {text: Dampest}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: 'min(indoor.battery.battery, where=home.upstairs)', title: {text: Weakest batt}, display: {precision: 0, valueLabel: {color: $warn}}}
+    - preset: sparkline
+      geometry: {x: 0%, y: 78%, width: 100%, height: 22%}
+      props:
+        key: indoor.temperature.temperature#office
+        plot: {type: plot, color: $bad, weight: 0.5}
+        key2: indoor.temperature.temperature#nursery
+        plot2: {type: plot, color: $up, weight: 0.5}
+        figure: upstairs
+        min: 60
+        max: 80
+
+  - type: group
+    name: downstairs
+    grid: {area: down}
+    items:
+    - {type: text, text: Downstairs, font: $display, color: $down, alignment: CenterLeft, geometry: {x: 2%, y: 0%, width: 60%, height: 6%}}
+    - {type: text, text: living room, font: $display, color: $faint, alignment: CenterRight, geometry: {x: 60%, y: 0%, width: 38%, height: 6%}}
+    - type: realtime.text
+      key: $downstairs
+      title: false
+      geometry: {x: 0%, y: 6%, width: 100%, height: 24%}
+      display: {font: Nunito, weight: ExtraLight, precision: 1, unitPosition: FloatUnder, valueLabel: {color: $down}}
+    - preset: range-bar
+      geometry: {x: 0%, y: 31%, width: 100%, height: 24%}
+      props:
+        key: $downstairs
+        low: min(indoor.temperature.temperature, where=home.downstairs)
+        high: max(indoor.temperature.temperature, where=home.downstairs)
+        min: 60
+        max: 80
+        interval: 5
+        precision: 1
+    - preset: stat-row
+      geometry: {x: 0%, y: 58%, width: 100%, height: 16%}
+      props:
+        items:
+        - {type: realtime.text, key: 'count(indoor.temperature.temperature, where=home.downstairs)', title: {text: Sensors}, display: {precision: 0, unitPosition: Hidden}}
+        - {type: realtime.text, key: 'max(indoor.humidity.humidity, where=home.downstairs)', title: {text: Dampest}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: 'min(indoor.battery.battery, where=home.downstairs)', title: {text: Weakest batt}, display: {precision: 0, valueLabel: {color: $warn}}}
+    - preset: sparkline
+      geometry: {x: 0%, y: 78%, width: 100%, height: 22%}
+      props:
+        key: indoor.temperature.temperature#livingroom
+        plot: {type: plot, color: $down, weight: 0.5}
+        key2: indoor.temperature.temperature#kitchen
+        plot2: {type: plot, color: $warn, weight: 0.5}
+        figure: downstairs
+        min: 60
+        max: 80
+
+  - type: group
+    name: basement
+    grid: {area: base}
+    items:
+    - {type: text, text: Basement, font: $display, color: $base, alignment: CenterLeft, geometry: {x: 2%, y: 0%, width: 60%, height: 6%}}
+    - {type: text, text: one sensor, font: $display, color: $faint, alignment: CenterRight, geometry: {x: 60%, y: 0%, width: 38%, height: 6%}}
+    - type: realtime.text
+      key: $basement
+      title: false
+      geometry: {x: 0%, y: 6%, width: 100%, height: 24%}
+      display: {font: Nunito, weight: ExtraLight, precision: 1, unitPosition: FloatUnder, valueLabel: {color: $base}}
+    - preset: range-bar
+      geometry: {x: 0%, y: 31%, width: 100%, height: 24%}
+      props:
+        key: $basement
+        low: min(indoor.temperature.temperature, where=home.basement)
+        high: max(indoor.temperature.temperature, where=home.basement)
+        min: 60
+        max: 80
+        interval: 5
+        precision: 1
+    - preset: stat-row
+      geometry: {x: 0%, y: 58%, width: 100%, height: 16%}
+      props:
+        items:
+        - {type: realtime.text, key: 'count(indoor.temperature.temperature, where=home.basement)', title: {text: Sensors}, display: {precision: 0, unitPosition: Hidden}}
+        - {type: realtime.text, key: 'max(indoor.humidity.humidity, where=home.basement)', title: {text: Dampest}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: 'min(indoor.battery.battery, where=home.basement)', title: {text: Weakest batt}, display: {precision: 0, valueLabel: {color: $warn}}}
+    - preset: sparkline
+      geometry: {x: 0%, y: 78%, width: 100%, height: 22%}
+      props:
+        key: indoor.temperature.temperature#basement
+        plot: {type: plot, color: $base, weight: 0.5}
+        figure: basement
+        min: 60
+        max: 80
+
+  # ================= THE HOUSE AGAINST OUTSIDE =============================
+  - type: group
+    name: house
+    grid: {area: house}
+    items:
+    - {type: text, text: The house, font: $display, color: $muted, alignment: CenterLeft, geometry: {x: 2%, y: 0%, width: 60%, height: 6%}}
+    - type: realtime.text
+      key: $house
+      title: false
+      geometry: {x: 0%, y: 6%, width: 100%, height: 24%}
+      display: {font: Nunito, weight: ExtraLight, precision: 1, unitPosition: FloatUnder}
+    - preset: list-panel
+      geometry: {x: 0%, y: 33%, width: 100%, height: 67%}
+      props:
+        title: Against outside
+        items:
+        - {type: realtime.text, key: $outside, title: {text: Outside now}, display: {precision: 1}}
+        - {type: realtime.text, key: '$house - $outside', title: {text: Indoors over outdoors}, display: {precision: 1, valueLabel: {color: $warn}}}
+        - {type: realtime.text, key: 'max(indoor.temperature.temperature, where=home) - min(indoor.temperature.temperature, where=home)', title: {text: Warmest minus coolest}, display: {precision: 1, valueLabel: {color: $bad}}}
+        - {type: realtime.text, key: '$upstairs - $downstairs', title: {text: Up over down}, display: {precision: 1}}
+        - {type: realtime.text, key: '$downstairs - $basement', title: {text: Down over basement}, display: {precision: 1, valueLabel: {color: $base}}}
+        - {type: realtime.text, key: 'max(indoor.humidity.humidity, where=home)', title: {text: Dampest room}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: 'count(indoor.temperature.temperature, where=home)', title: {text: Sensors answering}, display: {precision: 0, unitPosition: Hidden}}
+        - {type: realtime.text, key: 'min(indoor.battery.battery, where=home)', title: {text: Weakest battery}, display: {precision: 0, valueLabel: {color: $warn}}}
+
+  # ================= THE SLOT ==============================================
+  # Takeovers. Each strip shows only while its `when:` holds; a strip that is off gives up its room, so one strip
+  # fills the row and three share it. The last strip has no `when:` and is always there.
+  - type: stack
+    name: slot
+    grid: {area: slot}
+    direction: Horizontal
+    spacing: 1.2%
+    items:
+    - preset: headline-panel
+      name: damp
+      when: 'max(indoor.humidity.humidity, where=home) > 60%'
+      props:
+        headline: Damp
+        headline_color: $base
+        key: max(indoor.humidity.humidity, where=home)
+        title: Dampest room
+        color: $base
+        precision: 0
+        unit_position: Inline
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
+        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
+        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+        items:
+        - {type: realtime.text, key: 'indoor.humidity.humidity#basement', title: {text: Basement}, display: {precision: 0}}
+        - {type: realtime.text, key: 'indoor.temperature.temperature#basement', title: {text: Basement temp}, display: {precision: 0, valueLabel: {color: $base}}}
+        - {type: realtime.text, key: 'max(indoor.humidity.humidity, where=home.upstairs)', title: {text: Upstairs}, display: {precision: 0, valueLabel: {color: $info}}}
+    - preset: headline-panel
+      name: hot
+      when: 'max(indoor.temperature.temperature, where=home) > 75°F'
+      props:
+        headline: Warm
+        headline_color: $bad
+        key: max(indoor.temperature.temperature, where=home)
+        title: Warmest room
+        color: $bad
+        precision: 1
+        unit_position: Inline
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
+        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
+        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+        items:
+        - {type: realtime.text, key: 'indoor.temperature.temperature#office', title: {text: Office}, display: {precision: 1}}
+        - {type: realtime.text, key: 'max(indoor.temperature.temperature#office, today)', title: {text: Day peak}, display: {precision: 1, valueLabel: {color: $bad}}}
+        - {type: realtime.text, key: $outside, title: {text: Outside}, display: {precision: 0, valueLabel: {color: $good}}}
+    - preset: headline-panel
+      name: battery
+      when: 'min(indoor.battery.battery, where=home) < 25%'
+      props:
+        headline: Weak
+        headline_color: $warn
+        key: min(indoor.battery.battery, where=home)
+        title: Weakest battery
+        color: $warn
+        precision: 0
+        unit_position: Inline
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
+        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
+        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+        items:
+        - {type: realtime.text, key: 'indoor.battery.battery#nursery', title: {text: Nursery}, display: {precision: 0, valueLabel: {color: $warn}}}
+        - {type: realtime.text, key: 'indoor.battery.battery#bedroom', title: {text: Bedroom}, display: {precision: 0}}
+        - {type: realtime.text, key: 'indoor.battery.battery#basement', title: {text: Basement}, display: {precision: 0}}
+    - preset: headline-panel
+      name: tonight
+      props:
+        headline: Tonight
+        headline_color: $info
+        key: at(environment.temperature.temperature, 9h)
+        title: At midnight
+        color: $info
+        precision: 0
+        unit_position: Inline
+        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
+        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
+        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+        items:
+        - {type: realtime.text, key: 'at(environment.wind.speed.speed, 9h)', title: {text: Wind}, display: {precision: 0, unitPosition: Hidden}}
+        - {type: realtime.text, key: environment.temperature.low, title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: 'at(environment.clouds.cover.cover, 9h)', title: {text: Cloud}, display: {precision: 0}}
