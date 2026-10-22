@@ -1,16 +1,21 @@
 # Amounts: what a rate adds up to. A 15in 16:10 screen, written for a wet, windy morning.
 #
-# Every big number here is a rate multiplied by a span of time, or a difference of two readings. Gust minus mean wind is a speed. A rain rate in in/hr times
-# `3h` is the rain that falls in three hours, a length. Wind speed times `6h` is the distance the air travels, in
-# miles. Temperature minus dew point is a change in degrees, not
-# a temperature, so it never reads as one. Nothing is computed in the file: each card writes the expression as its key.
+# Every big number here is a rate multiplied by a span of time, or a difference of two readings. Gust minus mean
+# wind is a speed. A rain rate in in/hr times `3h` is the rain that falls in three hours, a length. Wind speed
+# times `6h` is the distance the air travels, in miles. Temperature minus dew point is a change in degrees, not a
+# temperature, so it never reads as one. Nothing is computed in the file: each panel writes the expression as its key.
 #
-# The grid has three columns and two bands. The top band is four cards of amounts, the bottom band a row of rings and
-# a slot that takes the screen when the rate is heavy (`when: ... > 0.3 in/hr`, a unit literal that converts to the
-# data's own unit).
+# Four panels across the top, each a header, a line saying what the number is and in what unit, the number, and
+# three readings of the same quantity. Under them four rings and a slot that takes over when the rain is heavy
+# (`when: ... > 0.3 in/hr`, a unit literal that converts to the data's own unit).
 #
-# Text sizes come from the dashboard-wide size groups global.title, global.value and global.head, set by the
-# presets. Layers: none. Each card is a headline, one big reading and its neighbours.
+# Type: five sizes, each one dashboard-wide size group with `matchAll`, pinned with `text-height` (the `vars:`
+# below are the whole scale): labels `global.title`, values `global.value`, headers `global.head`, ring and slot
+# readings `global.big`, and the four panel numbers `global.hero`. Units are said once, in the line under the
+# header or in the label, so a number never carries a unit beside it at full size. Colour means a quantity and
+# nothing else: rain blue, wind teal, temperature orange, humidity violet, cloud grey; red only for heavy rain.
+#
+# Space: a 96 px outer margin, 64 px between panels across and 96 px between the two bands, 24 px inside.
 #
 # Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/amounts.levity
 #           --scenario rain-day --size 2880x1800 --freeze-time 2026-10-15T09:10:00
@@ -23,11 +28,12 @@ theme:
     muted: '#a9b3c0'
     faint: '#7a8492'
     rule: '#262c36'
-    accent: '#ff9124'
-    good: '#14e3c0'
-    warn: '#ffd400'
     bad: '#ff3048'
-    info: '#1a8cff'
+    hue-rain: '#2f95ff'
+    hue-wind: '#14e3c0'
+    hue-temp: '#ff9124'
+    hue-humid: '#b48cff'
+    hue-cloud: '#a9b3c0'
   fonts:
     display: Nunito
     mono: Roboto Mono
@@ -38,113 +44,181 @@ vars:
   gust: environment.wind.speed.gust
   t: environment.temperature.temperature
   dew: environment.temperature.dewpoint
+  # the type scale
+  label: 40px
+  value: 42px
+  head: 70px
+  big: 150px
+  hero: 200px
 items:
 - type: grid
   name: board
-  geometry: {x: 0.6%, y: 0.8%, width: 98.8%, height: 98.4%}
-  spacing: 1.2%
+  geometry: {x: 3.333%, y: 5.333%, width: 93.333%, height: 89.333%}
+  spacing: 0
   padding: 0
   grid:
     columns: [1fr, 1fr, 1fr, 1fr]
-    rows: [58fr, 40fr]
+    rows: [60fr, 40fr]
+    gap: [96px, 64px]
     areas:
     - rain wind gusty fog
     - rings rings rings slot
   items:
 
   # ================= FOUR AMOUNTS ==========================================
-  - preset: headline-panel
+  # Each panel: header, what the number is, the number, then three readings of the same thing in a row.
+  - type: group
     name: rain
     grid: {area: rain}
-    props:
-      headline: If it keeps up
-      headline_color: $info
+    items:
+    - &head {type: text, text: If it keeps up, alignment: Left, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 10%}}
+    - &what {type: text, text: 'Rain in 3 h, inches', alignment: Left, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 0%, y: 12%, width: 100%, height: 6%}}
+    - &hero
+      type: realtime.text
       key: $rate * 3h
-      title: Rain in the next 3 h
-      color: $info
-      precision: 2
-      unit_position: Inline
-      headline_box: {x: 0%, y: 0%, width: 100%, height: 12%}
-      hero_box: {x: 0%, y: 14%, width: 100%, height: 42%}
-      list_box: {x: 0%, y: 62%, width: 100%, height: 38%}
+      title: {visible: false}
+      geometry: {x: 0%, y: 22%, width: 100%, height: 34%}
+      display:
+        precision: 2
+        unitPosition: Hidden
+        weight: Light
+        format-hint: '0.00'
+        valueLabel: {alignment: Left, margins: 0px, color: $hue-rain, text-height: $hero, matchingGroup: {group: global.hero, matchAll: true}}
+    - type: grid
+      spacing: 0
+      grid: {columns: [1fr, 1fr, 1fr], rows: [1fr], gap: 24px}
+      geometry: {x: 0%, y: 64%, width: 82%, height: 30%}
+      shared: &cells
+        title: {color: $muted, position: Top, size: 0.42, alignment: BottomLeft, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+        display: {unitPosition: Hidden, valueLabel: {alignment: TopLeft, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
       items:
-      - {type: realtime.text, key: $rate, title: {text: Now in/hr}, display: {precision: 2, unitPosition: Hidden}}
-      - {type: realtime.text, key: '$rate * 1h', title: {text: In 1 h}, display: {precision: 2, valueLabel: {color: $info}}}
-      - {type: realtime.text, key: '$rate * 6h', title: {text: In 6 h}, display: {precision: 2, valueLabel: {color: $info}}}
-      - {type: realtime.text, key: '$rate * 12h', title: {text: In 12 h}, display: {precision: 2}}
-  - preset: headline-panel
+      - {type: realtime.text, key: '$rate * 1h', title: In 1 h, display: {precision: 2, format-hint: '0.00'}}
+      - {type: realtime.text, key: '$rate * 6h', title: In 6 h, display: {precision: 2, format-hint: '0.00'}}
+      - {type: realtime.text, key: '$rate * 12h', title: In 12 h, display: {precision: 2, format-hint: '0.00'}}
+  - type: group
     name: wind
     grid: {area: wind}
-    props:
-      headline: Wind run
-      headline_color: $good
+    items:
+    - {<<: *head, text: Wind run}
+    - {<<: *what, text: 'Air moved in 6 h, miles'}
+    - <<: *hero
       key: $wind * 6h
-      title: Air moved in 6 h
-      color: $good
-      precision: 0
-      unit_position: Inline
-      headline_box: {x: 0%, y: 0%, width: 100%, height: 12%}
-      hero_box: {x: 0%, y: 14%, width: 100%, height: 42%}
-      list_box: {x: 0%, y: 62%, width: 100%, height: 38%}
+      display:
+        precision: 0
+        unitPosition: Hidden
+        weight: Light
+        format-hint: '000'
+        valueLabel: {alignment: Left, margins: 0px, color: $hue-wind, text-height: $hero, matchingGroup: {group: global.hero, matchAll: true}}
+    - type: grid
+      spacing: 0
+      grid: {columns: [1fr, 1fr, 1fr], rows: [1fr], gap: 24px}
+      geometry: {x: 0%, y: 64%, width: 82%, height: 30%}
+      shared: *cells
       items:
-      - {type: realtime.text, key: $wind, title: {text: Now}, display: {precision: 0, unitPosition: Hidden}}
-      - {type: realtime.text, key: '$wind * 1h', title: {text: In 1 h}, display: {precision: 1}}
-      - {type: realtime.text, key: '$wind * 3h', title: {text: In 3 h}, display: {precision: 0}}
-      - {type: realtime.text, key: '$wind * 12h', title: {text: In 12 h}, display: {precision: 0, valueLabel: {color: $good}}}
-  - preset: headline-panel
+      - {type: realtime.text, key: '$wind * 1h', title: In 1 h, display: {precision: 0, format-hint: '000'}}
+      - {type: realtime.text, key: '$wind * 3h', title: In 3 h, display: {precision: 0, format-hint: '000'}}
+      - {type: realtime.text, key: '$wind * 12h', title: In 12 h, display: {precision: 0, format-hint: '000'}}
+  - type: group
     name: gusty
     grid: {area: gusty}
-    props:
-      headline: Gust margin
-      headline_color: $warn
+    items:
+    - {<<: *head, text: Gust margin}
+    - {<<: *what, text: 'Above the mean, mph'}
+    - <<: *hero
       key: $gust - $wind
-      title: Gust above the mean wind
-      color: $warn
-      precision: 0
-      unit_position: Inline
-      headline_box: {x: 0%, y: 0%, width: 100%, height: 12%}
-      hero_box: {x: 0%, y: 14%, width: 100%, height: 42%}
-      list_box: {x: 0%, y: 62%, width: 100%, height: 38%}
+      display:
+        precision: 0
+        unitPosition: Hidden
+        weight: Light
+        format-hint: '00'
+        valueLabel: {alignment: Left, margins: 0px, color: $hue-wind, text-height: $hero, matchingGroup: {group: global.hero, matchAll: true}}
+    - type: grid
+      spacing: 0
+      grid: {columns: [1fr, 1fr, 1fr], rows: [1fr], gap: 24px}
+      geometry: {x: 0%, y: 64%, width: 82%, height: 30%}
+      shared: *cells
       items:
-      - {type: realtime.text, key: $wind, title: {text: Wind}, display: {precision: 0, unitPosition: Hidden}}
-      - {type: realtime.text, key: $gust, title: {text: Gust}, display: {precision: 0, unitPosition: Hidden, valueLabel: {color: $warn}}}
-      - {type: realtime.text, key: '$gust * 1h', title: {text: Gust run, 1 h}, display: {precision: 1}}
-  - preset: headline-panel
+      - {type: realtime.text, key: $wind, title: Mean, display: {precision: 0, format-hint: '00'}}
+      - {type: realtime.text, key: $gust, title: Gust, display: {precision: 0, format-hint: '00'}}
+      - {type: realtime.text, key: 'max($gust, 3h)', title: Peak 3 h, display: {precision: 0, format-hint: '00'}}
+  - type: group
     name: fog
     grid: {area: fog}
-    props:
-      headline: Fog gap
-      headline_color: $accent
+    items:
+    - {<<: *head, text: Fog gap}
+    - {<<: *what, text: Air minus dew point}
+    - <<: *hero
       key: $t - $dew
-      title: Air minus dew point
-      color: $accent
-      precision: 1
-      unit_position: Inline
-      headline_box: {x: 0%, y: 0%, width: 100%, height: 12%}
-      hero_box: {x: 0%, y: 14%, width: 100%, height: 42%}
-      list_box: {x: 0%, y: 62%, width: 100%, height: 38%}
+      display:
+        precision: 1
+        unitPosition: Hidden
+        weight: Light
+        format-hint: '00.0'
+        valueLabel: {alignment: Left, margins: 0px, color: $hue-temp, text-height: $hero, matchingGroup: {group: global.hero, matchAll: true}}
+    - type: grid
+      spacing: 0
+      grid: {columns: [1fr, 1fr, 1fr], rows: [1fr], gap: 24px}
+      geometry: {x: 0%, y: 64%, width: 82%, height: 30%}
+      shared: *cells
       items:
-      - {type: realtime.text, key: $t, title: {text: Air}, display: {precision: 0}}
-      - {type: realtime.text, key: $dew, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
-      - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels}, display: {precision: 0, valueLabel: {color: $accent}}}
+      - {type: realtime.text, key: $t, title: Air, display: {precision: 0, format-hint: '00°'}}
+      - {type: realtime.text, key: $dew, title: Dew pt, display: {precision: 0, format-hint: '00°'}}
+      - {type: realtime.text, key: environment.temperature.feelsLike, title: Feels, display: {precision: 0, format-hint: '00°'}}
 
   # ================= THE RINGS =============================================
+  # Each ring: the gauge, its reading in the middle (global.big) and a label under it (global.title).
   - type: stack
     name: rings
     grid: {area: rings}
     direction: Horizontal
-    spacing: 2mm
+    spacing: 64px
     items:
-    - preset: ring-reading
-      props: {key: environment.precipitation.daily, title: Today so far, color: $info, text_color: $info, min: 0, max: 2, weight: 9%, radius: 96%, precision: 2}
-    - preset: ring-reading
-      props: {key: environment.precipitation.probability, title: Chance now, color: $info, text_color: $info, weight: 9%, radius: 96%}
-    - preset: ring-reading
-      props: {key: environment.humidity.humidity, title: Humidity, color: $good, text_color: $good, weight: 9%, radius: 96%}
-    - preset: ring-reading
-      props: {key: environment.clouds.cover.cover, title: Cloud, color: $muted, text_color: $muted, weight: 9%, radius: 96%}
-    - preset: ring-reading
-      props: {key: environment.wind.speed.gust, title: Gust, color: $warn, text_color: $warn, min: 0, max: 40, weight: 9%, radius: 96%}
+    - &ring
+      type: group
+      items:
+      - &arc
+        type: realtime.gauge
+        key: environment.precipitation.daily
+        title: {visible: false}
+        geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+        display: &arcdisplay
+          radius: 96%
+          arc: {start-angle: -135, end-angle: 135, weight: 7%, color: $rule}
+          range: {min: 0, max: 2}
+          fill: {weight: 7%, color: $hue-rain}
+          major: {enabled: false}
+          minor: {enabled: false}
+          micro: {enabled: false}
+          needle: {visible: false}
+          value-label: {visible: false}
+          unit-label: {visible: false}
+      - &ringvalue
+        type: realtime.text
+        key: environment.precipitation.daily
+        title: {visible: false}
+        geometry: {x: 13%, y: 36%, width: 74%, height: 28%}
+        display:
+          precision: 2
+          unitPosition: Hidden
+          weight: Light
+          format-hint: '0.00'
+          valueLabel: {alignment: Center, margins: 0px, text-height: $big, matchingGroup: {group: global.big, matchAll: true}}
+      - &ringlabel {type: text, text: 'Rain today, in', alignment: Center, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 10%, y: 80%, width: 80%, height: 10%}}
+    - type: group
+      items:
+      - {<<: *arc, key: environment.precipitation.probability, display: {<<: *arcdisplay, range: {min: 0, max: 100}}}
+      - {<<: *ringvalue, key: environment.precipitation.probability, display: {precision: 0, unitPosition: Hidden, weight: Light, format-hint: '000%', valueLabel: {alignment: Center, margins: 0px, text-height: $big, matchingGroup: {group: global.big, matchAll: true}}}}
+      - {<<: *ringlabel, text: Rain chance}
+    - type: group
+      items:
+      - {<<: *arc, key: environment.humidity.humidity, display: {<<: *arcdisplay, range: {min: 0, max: 100}, fill: {weight: 7%, color: $hue-humid}}}
+      - {<<: *ringvalue, key: environment.humidity.humidity, display: {precision: 0, unitPosition: Hidden, weight: Light, format-hint: '000%', valueLabel: {alignment: Center, margins: 0px, text-height: $big, matchingGroup: {group: global.big, matchAll: true}}}}
+      - {<<: *ringlabel, text: Humidity}
+    - type: group
+      items:
+      - {<<: *arc, key: environment.clouds.cover.cover, display: {<<: *arcdisplay, range: {min: 0, max: 100}, fill: {weight: 7%, color: $hue-cloud}}}
+      - {<<: *ringvalue, key: environment.clouds.cover.cover, display: {precision: 0, unitPosition: Hidden, weight: Light, format-hint: '000%', valueLabel: {alignment: Center, margins: 0px, text-height: $big, matchingGroup: {group: global.big, matchAll: true}}}}
+      - {<<: *ringlabel, text: Cloud}
 
   # ================= THE SLOT ==============================================
   # `0.3 in/hr` converts to whatever unit the data is in, so the test is the same on a metric install.
@@ -154,36 +228,42 @@ items:
     hold: 10s
     fade: 0.4s
     items:
-    - preset: headline-panel
+    - type: group
       name: heavy
       when: '$rate > 0.3 in/hr'
-      props:
-        headline: Heavy rain
-        headline_color: $bad
+      items:
+      - {<<: *head, text: Heavy rain, color: $bad, geometry: {x: 0%, y: 0%, width: 100%, height: 16%}}
+      - {<<: *what, text: 'This hour, inches', geometry: {x: 0%, y: 19%, width: 100%, height: 9%}}
+      - &slotvalue
+        type: realtime.text
         key: $rate * 1h
-        title: This hour, at this rate
-        color: $bad
-        precision: 2
-        unit_position: Inline
-        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
-        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
-        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+        title: {visible: false}
+        geometry: {x: 0%, y: 32%, width: 100%, height: 28%}
+        display:
+          precision: 2
+          unitPosition: Hidden
+          weight: Light
+          format-hint: '0.00'
+          valueLabel: {alignment: Left, margins: 0px, color: $hue-rain, text-height: $big, matchingGroup: {group: global.big, matchAll: true}}
+      - type: grid
+        spacing: 0
+        grid: {columns: [1fr, 1fr], rows: [1fr], gap: 24px}
+        geometry: {x: 0%, y: 64%, width: 82%, height: 36%}
+        shared: *cells
         items:
-        - {type: realtime.text, key: $rate, title: {text: Rate}, display: {precision: 2}}
-        - {type: realtime.text, key: environment.precipitation.daily, title: {text: Today}, display: {precision: 2, valueLabel: {color: $info}}}
-    - preset: headline-panel
-      name: drying
-      props:
-        headline: Rest of the day
-        headline_color: $good
-        key: at($rate, 6h) * 3h
-        title: Rain in 3 h, from 3 pm
-        color: $good
-        precision: 2
-        unit_position: Inline
-        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
-        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
-        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+        - {type: realtime.text, key: $rate, title: 'Rate, in/hr', display: {precision: 2, format-hint: '0.00'}}
+        - {type: realtime.text, key: environment.precipitation.daily, title: 'Today, in', display: {precision: 2, format-hint: '0.00'}}
+    - type: group
+      name: later
+      items:
+      - {<<: *head, text: Later today, geometry: {x: 0%, y: 0%, width: 100%, height: 16%}}
+      - {<<: *what, text: 'In 3 h from 3 pm, inches', geometry: {x: 0%, y: 19%, width: 100%, height: 9%}}
+      - {<<: *slotvalue, key: 'at($rate, 6h) * 3h', title: {visible: false}}
+      - type: grid
+        spacing: 0
+        grid: {columns: [1fr, 1fr], rows: [1fr], gap: 24px}
+        geometry: {x: 0%, y: 64%, width: 82%, height: 36%}
+        shared: *cells
         items:
-        - {type: realtime.text, key: 'at($rate, 12h) * 3h', title: {text: 9 pm}, display: {precision: 2}}
-        - {type: realtime.text, key: 'at(environment.temperature.temperature, 9h)', title: {text: 6 pm}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: 'at($rate, 9h) * 3h', title: From 6 pm, display: {precision: 2, format-hint: '0.00'}}
+        - {type: realtime.text, key: 'at($rate, 12h) * 3h', title: From 9 pm, display: {precision: 2, format-hint: '0.00'}}
