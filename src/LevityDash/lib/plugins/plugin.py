@@ -23,7 +23,7 @@ from LevityDash.lib.plugins.schema import Schema
 from LevityDash.lib.plugins.utils import Publisher
 from LevityDash.lib.utils.shared import closest, Period, PluginThread, Pool, Worker
 from LevityDash.lib.utils.shared import get
-from WeatherUnits import Time
+from unitcorn import Time
 
 if TYPE_CHECKING:
 	from LevityDash.lib.plugins import PluginsLoader

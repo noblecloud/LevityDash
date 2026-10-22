@@ -64,7 +64,7 @@ class LoopbackBridge:
 			try:
 				remoteContainer = self._relay(remoteSource, key, container)
 			except Exception as e:
-				# One bad value (e.g. a WeatherUnits localize() failure on
+				# One bad value (e.g. a unitcorn localize() failure on
 				# an unresolved unit type - seen live with a real plugin)
 				# must not take the rest of this batch down with it; every
 				# other key in `keys` still needs to reach the dispatcher.

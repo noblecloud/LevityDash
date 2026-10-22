@@ -56,7 +56,7 @@ from LevityDash.lib.utils.shared import (
 	guarded_cached_property, now, radialPoint,
 )
 from LevityDash.lib.valuesource import openValueSource
-from WeatherUnits import Angle, Length, Measurement, Percentage
+from unitcorn import Angle, Length, Measurement, Percentage
 
 from .scale import (
 	CLOCK_HANDS, GaugeValue, Numeric, _isWholeSteps, clockTurn, decode_measurement, filter_factors, formatDuration,
@@ -955,7 +955,7 @@ class Graduations(ColorGradientMixin, StatefulGaugeItem):
 		# A minor tick subdivides a major one, and a micro subdivides a minor -
 		# so each asks its parent for a count. `count` is 0 for a *disabled*
 		# graduation, and dividing by it raised ZeroDivisionError out of
-		# WeatherUnits' __truediv__, taking the whole gauge down. Disabling
+		# unitcorn's __truediv__, taking the whole gauge down. Disabling
 		# major while leaving minor on is the documented way to get a plain
 		# ring (docs: "major/minor/micro: {enabled: false}"), so this crashed
 		# on exactly the configuration the design notes recommend.
@@ -1753,7 +1753,7 @@ class GaugeTickText(GlowMixin, GaugeItem, AnnotationText, Stateful):
 
 		arch_length_px = float(radius * self.gauge.fullAngle / 180 * pi)
 
-		# A range is a change in temperature, and a reading over a change has no meaning to WeatherUnits: take both as numbers in the gauge's unit.
+		# A range is a change in temperature, and a reading over a change has no meaning to unitcorn: take both as numbers in the gauge's unit.
 		interval_arch_coverage = float(interval) / float(self.gauge.range.rounded_range)
 
 		return arch_length_px * interval_arch_coverage
@@ -1855,7 +1855,7 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText], GlowMixin):
 	# label, rather than on every tick. Symbols ('°', '%') stay glued to the
 	# number, for the reason given on GaugeValueLabel's defaults.
 	#
-	# `compact=True` asks WeatherUnits for the unit's own *label* convention
+	# `compact=True` asks unitcorn for the unit's own *label* convention
 	# rather than its reading convention. A dial face is not a readout: inHg
 	# reads 29.92 but its ticks are 28, 29, 30, and hPa reads 1013.2 but its
 	# ticks are 1000, 1010, 1020. That difference belongs to the unit, so it
@@ -4804,7 +4804,7 @@ class GaugeUnit(GaugeLabel):
 		def _textAccessor(self) -> str:
 			value_class = self.parent.parent.valueClass
 			# A key with no unit class (a bare float, e.g. a plugin value whose
-			# unit WeatherUnits does not know) has no unit to show. Raising here
+			# unit unitcorn does not know) has no unit to show. Raising here
 			# aborted the whole dashboard load.
 			return getattr(value_class, 'unit', None) or getattr(value_class, 'unit_symbol', None) or ''
 

@@ -12,7 +12,7 @@ Publishes, once every ``interval`` seconds:
   Nth by CPU right now. A panel binds to a slot and never to a process, so the ranking can change under it.
   This is what ``docs/design-references/presets/process-table.levity`` reads.
 
-Percentages are fractions (0.458 is 45.8 %), because WeatherUnits reads a value above 1 as a whole percent and one
+Percentages are fractions (0.458 is 45.8 %), because unitcorn reads a value above 1 as a whole percent and one
 at or below 1 as a fraction, so a whole-percent 0.1 would show as 10 %. A process's ``cpu`` is a share of the
 whole machine, not of one core.
 

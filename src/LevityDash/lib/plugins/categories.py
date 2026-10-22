@@ -12,7 +12,7 @@ from LevityDash.lib.plugins.utils import SchemaProperty, unitDict
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.utils.shared import (clearCacheAttr, ColorStr, get, getOrSet, LOCAL_TIMEZONE, matchWildCard, operatorDict,
                                          removeSimilar, subsequenceCheck, Unset)
-from WeatherUnits import Measurement, auto as wu_auto
+from unitcorn import Measurement, auto as wu_auto
 
 log = LevityPluginLog.getChild('Categories')
 
@@ -600,7 +600,7 @@ def _rebuildCategoryItem(atoms: tuple, source, identity):
 
 
 # Section CategoryItem
-#: Unit ids that build a WeatherUnits percentage class
+#: Unit ids that build a unitcorn percentage class
 PERCENT_UNITS = frozenset({'%', '%h', '%c', '%p', '%%', '%bat'})
 
 

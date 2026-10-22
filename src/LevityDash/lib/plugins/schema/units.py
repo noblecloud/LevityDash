@@ -1,7 +1,7 @@
 from datetime import datetime
 
 import pytz
-import WeatherUnits as wu
+import unitcorn as wu
 from typing import Dict, Type, Union
 
 from LevityDash.lib.utils.shared import SmartString

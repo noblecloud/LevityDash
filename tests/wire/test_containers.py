@@ -13,7 +13,7 @@ RemoteContainer is a genuine drop-in for its reconciliation logic is the
 actual point of Phase 4.1's "operating on RemoteContainer stand-ins instead
 of real Containers, unchanged" design.
 """
-import WeatherUnits as wu
+import unitcorn as wu
 
 # Import LevityDash before `datetime` - see test_codec.py's import-order
 # comment for why (shims/_datetime_shim.install() swaps sys.modules['datetime']).

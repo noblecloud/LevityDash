@@ -127,7 +127,7 @@ class _Placed:
 def test_an_aggregate_over_a_place_publishes_its_value_and_a_member_count(monkeypatch):
 	from datetime import datetime, timedelta
 	from LevityDash import LevityDashboard
-	from WeatherUnits.temperature import Fahrenheit
+	from unitcorn.temperature import Fahrenheit
 	from LevityDash.lib.plugins.expressions import Expression
 
 	fresh, old = datetime.now().astimezone(), datetime.now().astimezone() - timedelta(hours=2)
@@ -184,7 +184,7 @@ class _SourceDispatcher(StubDispatcher):
 
 
 def test_a_key_with_a_source_reads_that_source_not_the_preferred_one():
-	from WeatherUnits.temperature import Fahrenheit
+	from unitcorn.temperature import Fahrenheit
 
 	class _Box:
 		def __init__(self, degrees):

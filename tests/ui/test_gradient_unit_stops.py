@@ -1,6 +1,6 @@
 """Gradient stops pinned to unit values: the parse and convert maths, and the YAML forms."""
 import pytest
-import WeatherUnits as wu
+import unitcorn as wu
 
 from LevityDash.lib.ui.colors.stopunits import StopUnitError, formatStop, parseStop, toDataUnit
 from LevityDash.lib.ui.colors.gradient import Gradient

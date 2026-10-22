@@ -11,7 +11,7 @@ Four things get encoded today:
     the tokenizing regex is word-chars only, so ':' was neither delimiter nor
     atom content and the source was silently folded into the path atoms
     ('Govee:a.b' -> ('Govee', 'a', 'b')).
-  - WeatherUnits Measurement <-> {"value", "unit", "cls", "ts"} - value is
+  - unitcorn Measurement <-> {"value", "unit", "cls", "ts"} - value is
     the plain float (a Measurement is a float subclass), unit/cls are used
     together to resolve the exact class on decode (unit alone can be
     ambiguous - e.g. a bare "%" is shared by several dimensions).
@@ -35,10 +35,10 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, List, Optional, Sequence, Tuple
 
-from WeatherUnits import Measurement
-from WeatherUnits.base import Compound
-from WeatherUnits.others import Percentage
-from WeatherUnits.base.Registry import UnitRegistry
+from unitcorn import Measurement
+from unitcorn.base import Compound
+from unitcorn.others import Percentage
+from unitcorn.base.Registry import UnitRegistry
 
 from LevityDash.lib.plugins.categories import CategoryItem
 
@@ -205,7 +205,7 @@ def decode_measurement(payload: dict) -> Measurement | float:
 	cls = _resolve_measurement_class(payload.get('cls'), payload.get('unit'), payload.get('type'))
 	value = payload['value']
 	if cls is None:
-		# Unknown unit type (e.g. a frontend running behind on a WeatherUnits
+		# Unknown unit type (e.g. a frontend running behind on a unitcorn
 		# version that hasn't registered it yet) - degrade to a plain float
 		# rather than raising, so a single unrecognized measurement doesn't
 		# take down an entire snapshot/update message.
@@ -233,7 +233,7 @@ def _restoreMetadata(measurement: Measurement, payload: dict) -> Measurement:
 	ts = payload.get('ts')
 	if ts and hasattr(measurement, 'timestamp'):
 		# Measurement.timestamp is a read-only property backed by
-		# `_timestamp` (WeatherUnits base/_Measurement.py) - assigning
+		# `_timestamp` (unitcorn base/_Measurement.py) - assigning
 		# `.timestamp` directly always raises AttributeError, so this has to
 		# go through the backing attribute instead.
 		try:
@@ -316,7 +316,7 @@ def encode_value(value: Any) -> Any:
 	datetime, or already JSON-safe (str/int/float/bool/None/dict/list)."""
 	# isinstance(value, Measurement) before datetime: Measurement is a float
 	# subclass, not a datetime subclass, so there's no ordering hazard - but
-	# WeatherUnits' own Time measurements wrap durations, not calendar
+	# unitcorn's own Time measurements wrap durations, not calendar
 	# dates, so datetime is checked as its own branch, not folded into it.
 	if isinstance(value, Measurement):
 		return {'__type__': 'measurement', **encode_measurement(value)}

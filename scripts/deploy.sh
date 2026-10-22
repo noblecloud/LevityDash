@@ -135,18 +135,18 @@ post_sync() {
     echo "  → Configuring Poetry to use local .venv..."
     poetry config virtualenvs.in-project true --local 2>/dev/null || true
 
-    echo "  → Installing WeatherUnits deps..."
+    echo "  → Installing unitcorn deps..."
     cd "$WU_DIR"
     poetry config virtualenvs.in-project true
     poetry install --no-interaction
 
-    echo "  → Installing LevityDash deps (picks up WeatherUnits from ../WeatherUnits) ..."
+    echo "  → Installing LevityDash deps (picks up unitcorn from ../WeatherUnits) ..."
     cd "$LEVITY_DIR"
     poetry config virtualenvs.in-project true
     poetry install --no-interaction
 
-    echo "  → Verifying WeatherUnits source..."
-    python3 -c "import WeatherUnits; print(f'WeatherUnits {WeatherUnits.__version__} from {WeatherUnits.__file__}')"
+    echo "  → Verifying unitcorn source..."
+    poetry run python -c "import unitcorn, importlib.metadata as m; print(f'unitcorn {m.version(\"unitcorn\")} from {unitcorn.__file__}')"
 
     echo "✅ Deploy complete on ${REMOTE_HOST}"
 REMOTE_SCRIPT

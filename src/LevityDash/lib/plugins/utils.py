@@ -17,7 +17,7 @@ from typing import (
 	Union
 )
 
-import WeatherUnits as wu
+import unitcorn as wu
 from LevityDash.lib.log import LevityPluginLog as log
 from LevityDash.lib.utils import abbreviatedIterable, KeyData, Now, now, SmartString
 from LevityDash.lib.utils.shared import startTimerSafe
@@ -107,7 +107,7 @@ unitDict: Dict[
 def localizeValue(value: Any) -> Any:
 	"""``value`` in the unit the config prefers for its dimension, deterministically.
 
-	WeatherUnits' own ``Measurement.localize`` resolves the preferred unit
+	unitcorn's own ``Measurement.localize`` resolves the preferred unit
 	through ``type(value).Generic``, and ``_SmartFloat.Generic`` picks a base
 	*at random from a set* of generic bases - so the same reading localizes to
 	``mi`` in one process and stays ``km`` in the next. ``Length`` is the one
@@ -119,7 +119,7 @@ def localizeValue(value: Any) -> Any:
 	the config for its unit: ``Length`` matches the config's ``length`` by name,
 	and ``unitDict`` maps the symbol it names (``mi``) to the class, so nothing
 	reads the ambiguous ``Generic``. A value this cannot resolve (a
-	compound/derived unit, or no ``[Units]`` section) keeps WeatherUnits' own
+	compound/derived unit, or no ``[Units]`` section) keeps unitcorn's own
 	result.
 	"""
 	if not isinstance(value, wu.Measurement):
@@ -127,7 +127,7 @@ def localizeValue(value: Any) -> Any:
 	try:
 		units = wu.config.localUnits
 	except Exception:
-		# No `[Units]` section: WeatherUnits leaves the value in its own unit.
+		# No `[Units]` section: unitcorn leaves the value in its own unit.
 		return value.localize
 	for base in type(value).__mro__:
 		name = getattr(base, 'name', None)
@@ -136,7 +136,7 @@ def localizeValue(value: Any) -> Any:
 		symbol = units[name.lower()]
 		unit = unitDict.get(symbol) if isinstance(symbol, str) else None
 		if not (isinstance(unit, type) and issubclass(unit, wu.Measurement)):
-			# Not a symbol `unitDict` knows: fall back to WeatherUnits' own
+			# Not a symbol `unitDict` knows: fall back to unitcorn's own
 			# resolution for this dimension class.
 			unit = getattr(base, 'localizedUnit', None)
 		if isinstance(unit, type) and issubclass(unit, wu.Measurement):

@@ -29,8 +29,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, FrozenSet, Mapping, Optional, Protocol, Sequence, Tuple
 
-import WeatherUnits as wu
-from WeatherUnits.temperature import summingReadings
+import unitcorn as wu
+from unitcorn.temperature import summingReadings
 
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.places import normalizePlace
@@ -370,7 +370,7 @@ def _substitute(text: str) -> Tuple[str, Dict[str, Any]]:
 			return match.group(0)
 		try:
 			found = measure(float(match.group(1)), unit)
-		except Exception:  # noqa: BLE001 - not a unit WeatherUnits knows: leave the text for the parser to refuse
+		except Exception:  # noqa: BLE001 - not a unit unitcorn knows: leave the text for the parser to refuse
 			return match.group(0)
 		if family(type(found)) == 'time':
 			return match.group(0)  # spans are durations (`3h`), which only a window or an offset takes

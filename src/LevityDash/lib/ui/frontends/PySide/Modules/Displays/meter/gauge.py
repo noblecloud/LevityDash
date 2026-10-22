@@ -59,7 +59,7 @@ from LevityDash.lib.utils import Axis
 from LevityDash.lib.utils.data import MinMax
 from LevityDash.lib.utils.shared import radialPoint, defer, factors, is_prime, Unset, clearCacheAttr, \
 	INVERSE_GOLDEN_RATIO, closestStringInList, camelCase, guarded_cached_property, get, ClosestMatchEnumMeta, now
-from WeatherUnits import Measurement, Angle, Wind, Humidity, auto as auto_wu, Length, Percentage
+from unitcorn import Measurement, Angle, Wind, Humidity, auto as auto_wu, Length, Percentage
 
 log = UILogger.getChild('Gauge')
 

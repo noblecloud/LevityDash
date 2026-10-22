@@ -52,7 +52,7 @@ One word per idea, in docs, UI strings and new code. The class `Panel`, `Central
 ## Environment
 
 - Poetry; Python `>=3.13,<3.15` (developed and run on 3.14).
-- The `dev` dependency group path-depends on a sibling checkout `../WeatherUnits` (develop mode). Without it, `poetry install --without dev`.
+- The `dev` dependency group path-depends on a sibling checkout `../WeatherUnits` (develop mode). That repo is the unitcorn library, imported as `import unitcorn as wu`; it was renamed from WeatherUnits in 0.9.0 and the checkout directory kept the old name. Without it, `poetry install --without dev`.
 - After dependency churn, the editable install can come unlinked — fix with `poetry run pip install -e . --no-deps`.
 - Keep `pyside6` at its pinned floor; loose upgrades have pulled broken Qt builds before.
 

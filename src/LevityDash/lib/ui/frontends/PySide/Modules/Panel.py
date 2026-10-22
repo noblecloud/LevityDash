@@ -42,7 +42,7 @@ from LevityDash.lib.utils.shared import (
 	_Panel, boolFilter, clearCacheAttr, connectSignal, defer, disconnectSignal, getItemsWithType, hasState, Numeric,
 	SimilarValue, block_pools
 )
-from WeatherUnits import Length
+from unitcorn import Length
 from .Handles import Handle, HandleGroup
 from .Handles.Resize import ResizeHandles
 from .Menus import BaseContextMenu
@@ -203,7 +203,7 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 
 		Returns
 		-----
-		`LevityDash.lib.ui.Geometry.Dimension` | `WeatherUnits.Length`
+		`LevityDash.lib.ui.Geometry.Dimension` | `unitcorn.Length`
 
 		Decoding
 		--------

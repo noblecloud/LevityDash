@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Optional, Sequence, Type, Union
 from numpy import ceil
 from PySide6.QtCore import QPointF, QRectF, QSizeF, Signal, Slot
 from PySide6.QtGui import QTransform
-from WeatherUnits import Humidity, Length, Measurement, Wind
+from unitcorn import Humidity, Length, Measurement, Wind
 
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.stateful import StateProperty
