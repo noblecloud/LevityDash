@@ -21,7 +21,7 @@ colors:
   series-3: '#3ddc97'
   series-4: '#b48cff'
   series-5: '#ffb454'
-  series-6: '#ff6b4a'
+  series-6: '#b6e05a'
 
   # Needle shadow, and the moon: lit face, dark side, glow. Defaults reproduce the original look.
   needle-glow: '#000000'
