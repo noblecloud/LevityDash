@@ -36,6 +36,7 @@ timer is stopped.
 from __future__ import annotations
 
 import math
+import time
 from typing import Any, Optional
 
 from PySide6.QtCore import QRectF, Qt
@@ -301,6 +302,7 @@ class PanelBeam(GlowMixin, QGraphicsItem, Stateful, tag=...):
 		ctx = self.paintContext()
 		if ctx is None or ctx.fade <= 0.0:
 			return
+		started = time.perf_counter()
 		painter.save()
 		try:
 			painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -320,6 +322,7 @@ class PanelBeam(GlowMixin, QGraphicsItem, Stateful, tag=...):
 				styles.paint_ring_front(painter, ctx)
 		finally:
 			painter.restore()
+			PulseDriver.shared().note_paint(time.perf_counter() - started)
 
 	def paintBehind(self, painter: QPainter) -> None:
 		"""The halo (pulse-outside only), then the card fill."""

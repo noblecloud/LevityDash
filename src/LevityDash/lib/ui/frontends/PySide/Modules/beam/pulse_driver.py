@@ -13,6 +13,8 @@ Differences from `border-beam-qt`, which counted references:
   Tests and renders freeze it so a frame is the same every run.
 - The clock advances by the real time since the last tick (capped), not by a fixed 1/30 s.
   A slow machine then drops frames instead of slowing the animation.
+- Beams report how long each paint took. When the paints take more than `_TARGET_DUTY` of a
+  frame the interval grows (down to 4 fps), so a slow CPU is not kept busy painting the beams.
 """
 
 from __future__ import annotations
@@ -22,6 +24,9 @@ import time
 from PySide6.QtCore import QObject, QTimer
 
 _MAX_STEP = 0.1  # seconds; a stalled GUI thread must not make the clock jump
+_MIN_INTERVAL = 33  # ms; ~30 fps
+_MAX_INTERVAL = 250  # ms; the slowest the driver will drop to
+_TARGET_DUTY = 0.4  # share of each frame the beams may spend painting
 
 
 class PulseDriver(QObject):
@@ -38,6 +43,8 @@ class PulseDriver(QObject):
 		self._last = 0.0
 		self._frozen = False
 		self._subscribers: list = []
+		self._paintCost = 0.0  # seconds spent painting since the last tick
+		self._smoothCost = 0.0
 
 	@classmethod
 	def shared(cls) -> PulseDriver:
@@ -106,7 +113,20 @@ class PulseDriver(QObject):
 		except RuntimeError:
 			pass
 
+	def note_paint(self, seconds: float) -> None:
+		"""A beam reports what one paint cost."""
+		self._paintCost += seconds
+
+	def _adapt(self) -> None:
+		"""Stretch the frame interval while painting takes too large a share of it."""
+		self._smoothCost = self._smoothCost * 0.7 + self._paintCost * 0.3
+		self._paintCost = 0.0
+		wanted = int(min(_MAX_INTERVAL, max(_MIN_INTERVAL, self._smoothCost * 1000.0 / _TARGET_DUTY)))
+		if abs(wanted - self._timer.interval()) > 8:
+			self._timer.setInterval(wanted)
+
 	def _tick(self) -> None:
+		self._adapt()
 		now = time.monotonic()
 		self._t += min(now - self._last, _MAX_STEP)
 		self._last = now
