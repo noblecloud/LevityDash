@@ -1,0 +1,16 @@
+# A line with its own fill: `plot: {type: plot, fill: {opacity: 0.3, base: 40}}`.
+# One key, one plot: the fill is drawn under the line in the line's colour or gradient.
+# `fill: true` uses the defaults (opacity 0.25, down to the bottom of the figure); a number is the opacity.
+# Render: render_dashboard.py OUT.png --levity docs/design-references/line-fill.levity --scenario rain-day --size 1600x600
+- type: graph
+  name: temperature
+  timeframe: {days: 1, hours: 12}
+  annotations:
+    dayLabels: {enabled: false}
+    hourLabels: {alignment: BottomCenter}
+  figures:
+  - figure: temperature
+    margins: {bottom: 20%, top: 15%}
+    environment.temperature.temperature:
+      plot: {type: plot, gradient: TemperatureGradient, weight: 1.2, fill: {opacity: 0.35, base: 45}}
+      resolution: 2

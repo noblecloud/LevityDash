@@ -1884,6 +1884,7 @@ class LinePlot(Plot):
 
 	_thickness: Optional[dict] = None
 	_pins: Optional[dict] = None
+	_fillSpec: Optional[dict] = None
 	#: Marks sit in a row at this height (0..1) unless the pins say `at:`; None rides the line.
 	_rowAt: Optional[float] = None
 	_drawsLine: bool = True
@@ -1999,6 +2000,57 @@ class LinePlot(Plot):
 			**({'at': clamp(float(value['at']), 0.0, 1.0)} if value.get('at') is not None else {}),
 		}
 
+	@StateProperty(default=None, allowNone=True, after=Plot.updateAppearance)
+	def fill(self) -> Optional[dict]:
+		"""The space under the line filled with the line's own colour or gradient: `{opacity: 0.25, base: 50}`.
+
+		`opacity` is how strong the fill is (default 0.25). `base` is the value it reaches, in the unit of the
+		data and held inside the axis range; without it the fill reaches the bottom of the figure. `true` is
+		the defaults and a number is the opacity. A line and a fill of one key is `fill` on the line; an
+		`area` plot is the fill alone.
+		"""
+		return self._fillSpec
+
+	@fill.setter
+	def fill(self, value: Optional[dict]):
+		self._fillSpec = value
+		if self.data is not None and getattr(self, 'figure', None) is not None and (value or {}).get('base') is not None:
+			self.figure.dataValueRange.emitChanged()
+
+	@fill.decode
+	def fill(value) -> Optional[dict]:
+		if value in (None, False):
+			return None
+		if value is True:
+			return {'opacity': 0.25, 'base': None}
+		if isinstance(value, (int, float)):
+			return {'opacity': clamp(float(value), 0.0, 1.0), 'base': None}
+		if not isinstance(value, Mapping):
+			raise ValueError(f'fill needs true, an opacity or a mapping, not {value!r}')
+		base = value.get('base')
+		return {'opacity': clamp(float(value.get('opacity', 0.25)), 0.0, 1.0), 'base': None if base is None else float(base)}
+
+	def valueAnchor(self) -> Optional[float]:
+		return None if not self._fillSpec else self._fillSpec.get('base')
+
+	def _fillPath(self, path: QPainterPath) -> QPainterPath:
+		"""The line's path closed down to the fill's baseline, in the pixmap's own coordinates."""
+		base = self._fillSpec.get('base')
+		pad = self.img_padding.height() / 2
+		if base is None:
+			bottom = self.figure.height() + pad
+		else:
+			axis = self.figure.dataValueRange
+			low, high = axis.min, axis.max
+			share = (clamp(base, low, high) - low) / ((high - low) or 1.0)
+			bottom = self.figure.figureTransform.map(QPointF(0, share)).y() + pad
+		filled = QPainterPath(path)
+		end = path.currentPosition()
+		filled.lineTo(end.x(), bottom)
+		filled.lineTo(path.elementAt(0).x, bottom)
+		filled.closeSubpath()
+		return filled
+
 	def delete(self):
 		"""Give both acquires back; a plot torn down must not hold an expression up."""
 		self._swapValueSource('_thicknessSource', None, 'thickness')
@@ -2006,6 +2058,9 @@ class LinePlot(Plot):
 
 	def _renderExtras(self, path: QPainterPath) -> dict:
 		extras = {}
+		if self._fillSpec and self.data.hasData and self._drawsLine:
+			extras['fill'] = self._fillPath(path)
+			extras['fillOpacity'] = self._fillSpec['opacity']
 		if not self.data.hasData or not (self._thickness or self._pins):
 			return extras
 		# The sample times come back out of the normalised x the path was built from: the data itself can be
@@ -2045,6 +2100,14 @@ class LinePlot(Plot):
 		img.setDevicePixelRatio(dpr)
 		img.fill(Qt.transparent)
 		painter = EffectPainter(img)
+		if (fill := extras.get('fill')) is not None:
+			painter.save()
+			painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+			painter.setOpacity(extras.get('fillOpacity', 0.25))
+			painter.setPen(Qt.NoPen)
+			painter.setBrush(pen.brush())
+			painter.drawPath(fill)
+			painter.restore()
 		if self._drawsLine:
 			paintGlow(painter, path, pen.brush(), pen.widthF(), glow)
 		if not self._drawsLine:

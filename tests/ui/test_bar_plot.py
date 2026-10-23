@@ -98,3 +98,25 @@ def test_a_rotated_pin_turns_its_glyph_by_the_value():
 	assert up.height() > up.width()
 	assert right.width() > right.height()
 	assert pinPath(times, xs, ys, np.array([50.0]), ['north'], config, 96).isEmpty()
+
+
+def test_fill_reads_true_a_number_or_a_mapping():
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph import LinePlot
+
+	decode = LinePlot.statefulItems['fill'].decodeValue
+	assert decode(None, None) is None
+	assert decode(False, None) is None
+	assert decode(True, None) == {'opacity': 0.25, 'base': None}
+	assert decode(0.4, None) == {'opacity': 0.4, 'base': None}
+	assert decode({'opacity': 3, 'base': 50}, None) == {'opacity': 1.0, 'base': 50.0}
+
+
+def test_a_line_fill_holds_the_axis_to_its_base(dashboard):
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph import GraphItemData, LinePlot
+
+	items = [i for i in dashboard.scene.items() if isinstance(i, LinePlot)]
+	data: GraphItemData = items[0].data
+	GraphItemData.graphic.setState(data, {'type': 'plot', 'fill': {'opacity': 0.3, 'base': 12}})
+	assert data.graphic.valueAnchor() == 12
+	GraphItemData.graphic.setState(data, {'type': 'plot', 'fill': True})
+	assert data.graphic.valueAnchor() is None
