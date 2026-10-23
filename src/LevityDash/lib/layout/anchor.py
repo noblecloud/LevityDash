@@ -58,7 +58,7 @@ class Anchor:
 		if not isinstance(spec.get('to'), str) or not spec['to']:
 			raise AnchorError('align-to needs `to:`, the name of a sibling')
 		x, y = spec.get('x'), spec.get('y')
-		if x is None and y is None:
+		if x is None and y is None and 'self-x' not in spec and 'self-y' not in spec:
 			x = y = 'center'  # centre on the sibling, both ways
 		self_x, self_y = spec.get('self-x', x), spec.get('self-y', y)
 		for name, value, allowed in (('x', x, POINTS_X), ('self-x', self_x, POINTS_X), ('y', y, POINTS_Y), ('self-y', self_y, POINTS_Y)):

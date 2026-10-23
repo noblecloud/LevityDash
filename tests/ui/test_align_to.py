@@ -1,5 +1,6 @@
 """`align-to:` puts a point of an item on a point of a named sibling."""
 import pytest
+from PySide6.QtCore import QRectF
 
 from tests.conftest import pump
 from LevityDash.lib.ui.frontends.PySide.Modules import Panel
@@ -39,7 +40,7 @@ def test_a_string_centres_both_ways_and_an_unnamed_axis_keeps_its_place(dashboar
 	group, kids = build(dashboard, slot, [
 		{'type': 'group', 'name': 'a', 'geometry': {'x': '10%', 'y': '10%', 'width': '40%', 'height': '30%'}},
 		{'type': 'group', 'name': 'b', 'geometry': {'width': '10%', 'height': '10%'}, 'align-to': 'a'},
-		{'type': 'group', 'name': 'c', 'geometry': {'x': '70%', 'y': '70%', 'width': '10%', 'height': '10%'}, 'align-to': {'to': 'a', 'x': 'right'}},
+		{'type': 'group', 'name': 'c', 'geometry': {'x': '70%', 'y': '70%', 'width': '10%', 'height': '10%'}, 'align-to': {'to': 'a', 'x': 'right', 'self-x': 'left'}},
 	])
 	a, b, c = (box(kids[n]) for n in 'abc')
 	assert (b[0] + b[2] / 2, b[1] + b[3] / 2) == pytest.approx((a[0] + a[2] / 2, a[1] + a[3] / 2), abs=1)
@@ -51,7 +52,7 @@ def test_it_follows_the_sibling_when_the_dashboard_is_resized(dashboard, slot):
 		{'type': 'group', 'name': 'a', 'geometry': {'x': '10%', 'y': '10%', 'width': '40%', 'height': '30%'}},
 		{'type': 'group', 'name': 'b', 'geometry': {'width': '10%', 'height': '10%'}, 'align-to': {'to': 'a', 'x': 'right', 'self-x': 'left'}},
 	])
-	slot.setRect(0, 0, slot.rect().width() / 2, slot.rect().height())
+	slot.setRect(QRectF(0, 0, slot.rect().width() / 2, slot.rect().height()))
 	slot.signals.resized.emit(slot.rect())
 	pump(dashboard.app, 0.2)
 	a, b = box(kids['a']), box(kids['b'])
@@ -61,3 +62,12 @@ def test_it_follows_the_sibling_when_the_dashboard_is_resized(dashboard, slot):
 def test_a_missing_sibling_is_quiet_and_round_trips():
 	from LevityDash.lib.layout.anchor import Anchor
 	assert Anchor.decode({'to': 'a', 'x': 'left', 'self-x': 'right', 'offset': {'x': '2mm'}}).encode() == {'to': 'a', 'x': 'left', 'self-x': 'right', 'offset': {'x': '2mm'}}
+
+
+def test_the_setting_is_saved_back(dashboard, slot):
+	group, kids = build(dashboard, slot, [
+		{'type': 'group', 'name': 'a', 'geometry': {'x': '10%', 'y': '10%', 'width': '40%', 'height': '30%'}},
+		{'type': 'group', 'name': 'b', 'geometry': {'width': '10%', 'height': '10%'}, 'align-to': {'to': 'a', 'y': 'bottom', 'self-y': 'top'}},
+	])
+	assert kids['b'].state['align-to'] == {'to': 'a', 'y': 'bottom', 'self-y': 'top'}
+	assert 'align-to' not in kids['a'].state

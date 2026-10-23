@@ -14,7 +14,7 @@ SRC = Path(__file__).parents[2] / 'src'
 def test_every_stub_names_its_spec_section():
 	assert len(REGISTRY) >= 20
 	for name, section in REGISTRY.items():
-		assert section.spec in {'css-flexbox-1', 'css-grid-1', 'css-align-3', 'css-values-4'}, name
+		assert section.spec in {'css-flexbox-1', 'css-grid-1', 'css-align-3', 'css-values-4', 'css-anchor-position-1'}, name
 		assert section.title, name
 
 

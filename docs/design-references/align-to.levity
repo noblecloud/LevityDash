@@ -1,0 +1,24 @@
+# align-to: put a point of an item on a point of a named sibling. The captions follow the numbers when the window is resized.
+items:
+  - type: group
+    items:
+      - name: temp
+        type: realtime.text
+        key: environment.temperature.temperature
+        title: false
+        geometry: {x: 8%, y: 15%, width: 40%, height: 45%}
+      - type: text
+        text: Outside
+        color: $muted
+        geometry: {x: 0%, y: 0%, width: 40%, height: 10%}
+        align-to: {to: temp, x: center, y: bottom, self-y: top, offset: {y: 1mm}}
+      - name: humid
+        type: realtime.text
+        key: environment.humidity.humidity
+        title: false
+        geometry: {x: 55%, y: 25%, width: 30%, height: 25%}
+      - type: text
+        text: Humidity
+        color: $muted
+        geometry: {x: 0%, y: 0%, width: 30%, height: 8%}
+        align-to: {to: humid, x: center, y: top, self-y: bottom}

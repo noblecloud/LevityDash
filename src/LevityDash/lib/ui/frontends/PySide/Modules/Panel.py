@@ -37,7 +37,7 @@ from LevityDash.lib.ui.Groups import SizeGroup
 from LevityDash.lib.ui.bound_number import BoundNumber, NumberSlots, decodeNumber
 from LevityDash.lib.ui.colors import Color
 from LevityDash.lib.ui.Geometry import (
-	AlignmentFlag, Dimension, Edge, Geometry, LocationFlag, Margins, Padding, parseSize, polygon_area, Position, Size,
+	AlignmentFlag, Dimension, DimensionType, Edge, Geometry, LocationFlag, Margins, Padding, parseSize, polygon_area, Position, Size,
 	size_px, PositionLiteral
 )
 from LevityDash.lib.utils.shared import (
