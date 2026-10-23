@@ -1712,7 +1712,8 @@ class GridStack(Stack, tag='grid'):
 		for geometry in self.geometries.values():
 			spec = getattr(geometry.surface, 'gridProps', None) or {}
 			aspect = self.cssAspect(geometry.surface)
-			top, right, bottom, left = self.cssMargin(spec.get('margin'))
+			# not `top`/`left`: those are this grid's padding, which places every item below
+			m_top, m_right, m_bottom, m_left = self.cssMargin(spec.get('margin'))
 			if (area := spec.get('area')) is not None:
 				if any(key in spec for key in ('column', 'row', 'column-span', 'row-span')):
 					raise ValueError('grid: `area` cannot be combined with column, row or a span')
@@ -1725,7 +1726,7 @@ class GridStack(Stack, tag='grid'):
 					shrink=bool(spec.get('shrink', False)),
 				)
 			items.append(cssgrid.GridItem(
-				margin_inline=CssEdge(left, right), margin_block=CssEdge(top, bottom),
+				margin_inline=CssEdge(m_left, m_right), margin_block=CssEdge(m_top, m_bottom),
 				max_content=(0.0, 0.0) if aspect is None else (aspect * natural_h, natural_h),
 				placement=placement,
 				justify_self=CssItemAlign.auto if 'justify-self' not in spec else cssparse.parse_item_align(spec['justify-self']).value,
