@@ -1160,6 +1160,34 @@ The strip's own key sets the time span and nothing else. Use any number key that
 
 The pins take the text colour unless they have a `color`.
 
+### Hourly rows
+
+> [!NOTE]
+`preset: hourly-row` puts columns of readings under the matching times of a graph, like the hourly strip under a forecast chart.
+
+Each column is a vertical stack: the time, then one reading for every row you give. The columns are `step` hours apart, all the same width, and centred on their time. The readings and the time are always for the same moment: `{offset}` in a row's key becomes the column's distance from now (`0h`, `3h`, `1.5h`), so `at(environment.temperature.temperature, {offset})` is the forecast for that column. The time is a `clock` with an `offset`.
+
+Heads and numbers are in size groups that span the whole dashboard (`global.title` and `global.value`), so the row reads like every other table. Give a number a `color` to tell the rows apart.
+
+```yaml
+- type: graph
+  name: temperature
+  timeframe: {days: 1, hours: 12}
+  # ...
+- preset: hourly-row
+  props:
+    timeframe: {days: 1, hours: 12}   # the graph's
+    step: 3
+    graph: temperature                # the graph's name
+    rows:
+    - {key: 'at(environment.temperature.temperature, {offset})', precision: 0}
+    - {key: 'at(environment.precipitation.probability, {offset})', precision: 0, color: $info}
+```
+
+Give the row the same width as the graph (a `stack` or a `group` that holds both). With `graph:` set, each column follows the graph's real time axis. That matters because a graph starts at the earliest of `now + offset` and its oldest data, so the left edge is not always where `timeframe` says. Without `graph:`, columns sit where `timeframe` puts them. Properties: `docs` of the preset (`step`, `past`, `head`, `headFormat`, `nowLabel`, `numberAlign`, `titleGroup`, `valueGroup`, `font`). An example: `docs/design-references/hourly-row.levity`.
+
+Under it are two items you can use by themselves. `time-axis: {graph: <name>, at: 3h}` on any item centres it on that time of a graph and keeps it there as the graph scrolls or resizes (only x is set; the item keeps its size). A `clock` component takes `offset: 3h` and shows that much later (or earlier, `-90min`).
+
 ### <div class=mono>rotate: bool</div>
 
 When `true`, the lit part of the moon turns to match how the moon looks to someone at your location. The default is `true`. When `false`, the moon always draws with its lit side to the right (waxing) or to the left (waning).

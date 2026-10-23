@@ -6,6 +6,7 @@ from typing import ClassVar, List
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QDialog, QInputDialog
+from datetime import datetime, timedelta
 from time import strftime
 
 from LevityDash import LevityDashboard
@@ -48,7 +49,8 @@ class ClockComponent(Label, tag=...):
 			pass
 
 		def _format_value_func(self, *args, **kwargs) -> str:
-			return strftime(self.parent.format)
+			offset = self.parent.offsetSeconds
+			return (datetime.now().astimezone() + timedelta(seconds=offset)).strftime(self.parent.format) if offset else strftime(self.parent.format)
 
 	TextBox = ClockTextBox
 
@@ -106,6 +108,40 @@ class ClockComponent(Label, tag=...):
 	@format.after
 	def format(self):
 		self.textBox.updateText()
+
+	_offset: float = 0.0
+
+	@property
+	def offsetSeconds(self) -> float:
+		return self._offset
+
+	@StateProperty(default=0.0, allowNone=False)
+	def offset(self) -> float:
+		"""Show the time this far from now: `3h`, `-90min`, or hours as a number. Used by a column that sits under a later time."""
+		return self._offset / 3600
+
+	@offset.setter
+	def offset(self, value: float):
+		self._offset = float(value) * 3600
+
+	@offset.after
+	def offset(self):
+		self.textBox.updateText()
+
+	@offset.decode
+	def offset(value) -> float:
+		if isinstance(value, (int, float)):
+			return float(value)
+		match = re.fullmatch(r'\s*([+-]?[\d.]+)\s*(h|hr|hours?|m|min|minutes?|s|sec|d|days?)?\s*', str(value).lower())
+		if match is None:
+			raise ValueError(f'clock offset must look like 3h, -90min or a number of hours, not {value!r}')
+		hours = {None: 1, 'h': 1, 'hr': 1, 'hour': 1, 'hours': 1, 'm': 1 / 60, 'min': 1 / 60, 'minute': 1 / 60, 'minutes': 1 / 60,
+			's': 1 / 3600, 'sec': 1 / 3600, 'd': 24, 'day': 24, 'days': 24}[match[2]]
+		return float(match[1]) * hours
+
+	@offset.encode
+	def offset(value: float) -> str:
+		return f'{value:g}h'
 
 	def setFormat(self):
 		dialog = QInputDialog()

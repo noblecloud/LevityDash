@@ -4139,6 +4139,7 @@ class GraphPanel(Panel, tag='graph'):
 		self.syncTimer = QTimer(timeout=self.refresh, interval=300000)
 		self.axisTransformed = AxisSignal(self)
 		self.signals.resized.connect(self.updateSyncTimer)
+		self.signals.resized.connect(lambda *_: self.leftTime is not None and self._notifyAxis())
 		self.axisTransformed.connectSlot(self.onAxisChange)
 		# The annotations are laid out once per event-loop turn, however many
 		# series and axis announcements asked for it in that turn.
@@ -4265,6 +4266,8 @@ class GraphPanel(Panel, tag='graph'):
 			min((figure.figureMinStart for figure in self.figures), default=self.timeframe.displayPosition)
 		)
 		self.proxy.snapToTime(t)
+		self.leftTime = t
+		self._notifyAxis()
 		# The "now" indicator only repositions on an actual panel resize
 		# (its updatePosition is wired to self.signals.resized, never to a
 		# timer) - piggyback on this timer, already ticking at msPerPixel
@@ -4273,8 +4276,29 @@ class GraphPanel(Panel, tag='graph'):
 		if (indicator := getattr(self, '_indicator', None)) is not None:
 			indicator.updatePosition()
 
-	def timeToX(self, time: datetime):
-		pass
+	leftTime: Optional[datetime] = None
+
+	def timeToX(self, time: datetime) -> float:
+		"""Where `time` sits on the graph, in this panel's own coordinates (0 is its left edge). Needs one `syncDisplay` first."""
+		if self.leftTime is None:
+			raise ValueError('the graph has not placed its time axis yet')
+		return (time - self.leftTime).total_seconds() * self.pixelsPerSecond
+
+	def watchAxis(self, callback):
+		"""Call `callback()` whenever the time axis moves a pixel or more or the graph is resized (items placed by time)."""
+		self.__dict__.setdefault('_axisWatchers', []).append(callback)
+
+	def _notifyAxis(self, force: bool = False):
+		stamp = (self.leftTime, self.width())
+		last = self.__dict__.get('_axisStamp')
+		if not force and last is not None and last[1] == stamp[1] and abs((stamp[0] - last[0]).total_seconds() * self.pixelsPerSecond) < 1:
+			return
+		self._axisStamp = stamp
+		for callback in list(self.__dict__.get('_axisWatchers', ())):
+			try:
+				callback()
+			except RuntimeError:
+				self._axisWatchers.remove(callback)  # its item is gone
 
 	def refresh(self):
 		for figure in self.figures:
