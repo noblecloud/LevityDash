@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from LevityDash.devtools import _studio_groups as groups
+from LevityDash.devtools import _studio_rhythm as rhythm
 from LevityDash.devtools import _studio_tiers as tiers
 from LevityDash.devtools import _studio_preset as model
 
@@ -41,7 +42,7 @@ class GroupsTab(QWidget):
 		self.checks = QListWidget()
 		self.checks.setMaximumHeight(96)
 		self.checks.setWordWrap(True)
-		self.checks.setToolTip('Tier order: a header larger than its labels, a label no larger than its value. Click one to outline the text it is about.')
+		self.checks.setToolTip('Tier order (a header larger than its labels, a label no larger than its value) and rhythm (spacing off the theme scale, panels on different baselines). Click one to outline the text or select the item it is about.')
 		self.checks.currentItemChanged.connect(self._checked)
 		self.checks.hide()
 		box.addWidget(self.checks)
@@ -106,6 +107,10 @@ class GroupsTab(QWidget):
 	def _fillChecks(self):
 		self.checks.clear()
 		self.findings = tiers.check(found for found in self.found)
+		try:
+			self.findings += rhythm.check(self.builder.piece.walk(), self.builder.themeSizes(), self.found)
+		except Exception:  # noqa: BLE001 - a check that cannot run must not hide the tier checks
+			pass
 		for f in self.findings:
 			row = QListWidgetItem(('⚠ ' if f.severity == tiers.WARN else 'ℹ ') + f.message)
 			row.setForeground(QBrush(WARN if f.severity == tiers.WARN else NOTE))
@@ -116,6 +121,8 @@ class GroupsTab(QWidget):
 	def _checked(self, item, _prev=None):
 		finding = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
 		self.builder.stage.setMarks(finding.rects if finding is not None else [])
+		if finding is not None and finding.path is not None:
+			self.builder.select(finding.path)
 
 	def shown(self) -> List[groups.Group]:
 		path = self.builder.selection
