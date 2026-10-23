@@ -1,0 +1,30 @@
+# Rain as bars coloured by how hard it falls, with the chance of rain as a thin line over them. The rate scale
+# always spans at least 0.1 in/hr (see the engine), so a drizzle still reads; the chance runs the full height.
+doc: Rain rate bars with the chance of rain as a line over them
+props:
+  key: {default: environment.precipitation.precipitation, type: key, doc: "The rain rate"}
+  chance: {default: environment.precipitation.probability, type: key, doc: "The chance of rain; null for none"}
+  gradient: {default: PrecipitationRateGradient, type: text, doc: "Named scale that colours the bars by rate"}
+  line_color: {default: $info, type: color, doc: "Colour of the chance line"}
+  hours: {default: 24, type: number, min: 1, doc: "How far the graph reaches, in hours"}
+  top: {default: 14%, type: size, doc: "Space above the bars"}
+  bottom: {default: 22%, type: size, doc: "Space below the bars"}
+template:
+  type: graph
+  timeframe: {hours: $hours}
+  annotations:
+    dayLabels: {enabled: false}
+    hourLabels: {alignment: BottomCenter, spacingIntervals: '3, 6'}
+    lines: {spacing: 10 mm, weight: 0.3}
+  figures:
+    - figure: chance
+      margins: {top: $top, bottom: $bottom}
+      min: 0
+      max: 1
+      $chance:
+        plot: {type: plot, color: $line_color, weight: 0.4, dashPattern: '2, 3'}
+    - figure: rain
+      margins: {top: $top, bottom: $bottom}
+      min: 0
+      $key:
+        plot: {type: bar, gradient: $gradient, width: 0.8, radius: 0.25}

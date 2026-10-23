@@ -1,0 +1,30 @@
+# One quiet line: a thin stroke in one colour, hairline hour lines, the day's high and low printed on it. Reads like
+# a sketch of the day; everything is as thin as it can be and still seen across a room.
+doc: Thin single-colour line graph with its peaks labelled
+props:
+  key: {default: environment.temperature.temperature, type: key, doc: "The series"}
+  color: {default: $text, type: color, doc: "Colour of the line"}
+  weight: {default: 0.45, type: number, min: 0.1, max: 3, doc: "Thickness of the line"}
+  hours: {default: 24, type: number, min: 1, doc: "How far the graph reaches, in hours"}
+  figure: {default: temperature, type: text, doc: "Name of the scale"}
+  min: {default: null, type: number, doc: "Bottom of the scale; unset fits the data"}
+  max: {default: null, type: number, doc: "Top of the scale; unset fits the data"}
+  top: {default: 22%, type: size, doc: "Space above the line"}
+  bottom: {default: 22%, type: size, doc: "Space below the line, over the hour labels"}
+  labels: {default: true, type: bool, doc: "Print the high and low on the line"}
+template:
+  type: graph
+  timeframe: {hours: $hours}
+  annotations:
+    dayLabels: {enabled: false}
+    hourLabels: {alignment: BottomCenter, spacingIntervals: '3, 6'}
+    lines: {spacing: 12 mm, weight: 0.2}
+  figures:
+    - figure: $figure
+      margins: {top: $top, bottom: $bottom}
+      min: $min
+      max: $max
+      $key:
+        labels: {enabled: $labels}
+        plot: {type: plot, color: $color, weight: $weight}
+        resolution: 2
