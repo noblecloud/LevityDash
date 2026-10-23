@@ -12,8 +12,12 @@ props:
   rain: {default: 'at(environment.precipitation.daily, $offset)', type: key, doc: The rain for the day}
   gust: {default: 'at(environment.wind.speed.gustMax, $offset)', type: key, doc: The day's strongest gust}
   heading: {default: 'at(environment.wind.direction.dominant, $offset)', type: key, doc: Where the wind comes from}
+  numberAlign: {default: decimal, type: text, doc: "How the readings line up in the column: decimal, end or none (see reading-list)"}
   headGroup: {default: global.head, type: text, doc: "Size group of the day names; the default spans the whole dashboard"}
 template:
+  shared:
+    display:
+      valueLabel: {number-align: $numberAlign}
   items:
     - {type: text, text: $label, font: $display, color: $text, alignment: Center, matchingGroup: {group: $headGroup, matchAll: true}}
     - {type: realtime.text, key: $high, title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}

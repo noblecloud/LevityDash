@@ -16,6 +16,7 @@ from LevityDash.lib.ui import Color
 from LevityDash.lib.ui.colors import theme
 from LevityDash.lib.ui.Geometry import Alignment, AlignmentFlag, Geometry, getDPI, Size
 from LevityDash.lib.ui.Groups import SizeGroupItem
+from LevityDash.lib.ui import numberalign
 from LevityDash.lib.ui.fonts import defaultFont, FontWeight, getFontFamily
 from LevityDash.lib.ui.frontends.PySide.utils import addCrosshair, addRect, colorPalette, DebugPaint, addPath, move_shape_into_rect, rect_to_shape, add_corner_at_point
 from LevityDash.lib.ui.icons import fa as FontAwesome, Icon
@@ -322,7 +323,74 @@ class Text(QGraphicsPathItem):
 			font.setPointSizeF(g.font_size_for(self))
 		else:
 			font.setPointSize(self.fontSize)
+		if self._tabular or self._numberAlign:
+			self._enableTabular(font)
 		return font
+
+	@staticmethod
+	def _enableTabular(font: QFont):
+		"""`font-variant-numeric: tabular-nums`. A font without the feature keeps the digits it has; the
+		bundled Nunito, Roboto and Roboto Mono already set every digit to one width."""
+		try:
+			font.setFeature(QFont.Tag('tnum'), 1)
+		except (AttributeError, TypeError, ValueError):
+			pass
+
+	_tabular: bool = False
+	_numberAlign: Optional[str] = None
+	_numExtentKey: tuple = None
+	_numExtent: tuple = (0.0, 0.0)
+
+	def setTabular(self, value: bool):
+		self._tabular = bool(value)
+		self.updateTransform(reason='tabular')
+
+	def setNumberAlign(self, value: Optional[str]):
+		self._numberAlign = value or None
+		self.updateTransform(reason='number-align')
+
+	def _numberExtents(self) -> Optional[tuple[float, float]]:
+		"""Width of this item's head and tail, over its text and its format hint, in its own font."""
+		mode = self._numberAlign
+		if not mode or self.icon is not None:
+			return None
+		text = self.text or ''
+		hint = getattr(self, '_formatHint', None) or ''
+		if not any(c.isdigit() for c in text + hint):
+			# a compass point, a name or a placeholder is not a number: it keeps its plain placement and
+			# adds nothing to the column
+			return None
+		font = self.font()
+		key = (text, hint, mode, font.key())
+		if self._numExtentKey != key:
+			fm = QFontMetricsF(font)
+			head = tail = 0.0
+			for string in (text, hint):
+				h, t = numberalign.split(string, mode)
+				head = max(head, fm.horizontalAdvance(h))
+				tail = max(tail, fm.horizontalAdvance(t))
+			self._numExtentKey, self._numExtent = key, (head, tail)
+		return self._numExtent
+
+	def _numberColumn(self) -> Optional[tuple[float, float]]:
+		"""The shared column: the widest head and tail among the members of this item's size group that
+		sit in its tier (so, at its font size). With no group it is the item's own."""
+		own = self._numberExtents()
+		if own is None:
+			return None
+		head, tail = own
+		if (group := getattr(self, '_sized', None)) is not None:
+			try:
+				tier = group.make_size_key(self)
+				for other in tuple(group.items):
+					if other is self or getattr(other, '_numberAlign', None) is None:
+						continue
+					if group.make_size_key(other) != tier or (extent := other._numberExtents()) is None:
+						continue
+					head, tail = max(head, extent[0]), max(tail, extent[1])
+			except (AttributeError, RuntimeError):
+				pass
+		return head, tail
 
 	def setFontFamily(self, family: str, update: bool=True):
 		if theme.is_token(family):
@@ -746,6 +814,9 @@ class Text(QGraphicsPathItem):
 			getattr(self, '_formatHint', None),
 			self.height_px,
 			self._warp,
+			self._tabular,
+			self._numberAlign,
+			self._numberColumn() if self._numberAlign else None,
 		)
 
 	def refresh(self):
@@ -1075,8 +1146,34 @@ class Text(QGraphicsPathItem):
 				text_rect.moveCenter(QPoint(text_rect.center().x(), fmt_hint_rect.center().y()))
 				# path_size_hint.translate(0, fmt_hint_rect.center().y() - path_size_hint.boundingRect().center().y())
 
+		column = self._numberColumn() if not self.isIcon else None
+		if column is not None:
+			# Number alignment replaces the horizontal placement above. The block (widest head + widest tail)
+			# takes the box edge or centre; the alignment edge sits `head` in from its left, and each string is
+			# drawn so its own cut lands on it.
+			head, tail = column
+			match align.horizontal:
+				case AlignmentFlag.Left:
+					block_left = 0.0
+				case AlignmentFlag.Right:
+					block_left = -(head + tail)
+				case _:
+					block_left = -(head + tail) / 2
+			edge = block_left + head
+			mode = self._numberAlign
+			text_x = edge - fm.horizontalAdvance(numberalign.split(text, mode)[0])
+			hint_x = edge - fm.horizontalAdvance(numberalign.split(fmt_hint_text, mode)[0])
+			ink = fm.tightBoundingRect(text)
+			hint_ink = fm.tightBoundingRect(fmt_hint_text)
+			text_rect = QRectF(text_x + ink.left(), text_rect.top(), ink.width(), text_rect.height())
+			hint_placed = QRectF(hint_x + hint_ink.left(), fmt_hint_rect.top(), hint_ink.width(), fmt_hint_rect.height())
+			fmt_hint_rect = hint_placed | text_rect
+
 		self._text_pos = text_pos = text_rect.bottomLeft() - text_bearing
 		self._fmt_text_pos = fmt_text_pos = fmt_hint_rect.bottomLeft() - fmt_hint_bearing
+		if column is not None:
+			text_pos.setX(text_x)
+			fmt_text_pos.setX(hint_x)
 
 		# `addText` takes the BASELINE origin, and the rects above are ink
 		# extents from tightBoundingRect - they hug the glyphs, so '12p' has a
@@ -1167,6 +1264,11 @@ class Text(QGraphicsPathItem):
 		# the bottom of the box, and `Bottom` and `Center` do the same the other way. Put the band itself on the
 		# edge instead. It is a property of the font and the hint, never of the string, so a descender still does
 		# not move a baseline.
+		if column is not None:
+			# the whole column is part of the fit width, so a short value beside a long one fits the same box
+			path_size_hint.moveTo(QPointF(block_left, fmt_text_pos.y()))
+			path_size_hint.lineTo(QPointF(block_left + head + tail, fmt_text_pos.y()))
+
 		band = path_size_hint.boundingRect()
 		if band.height() > 0:
 			match align.vertical:
