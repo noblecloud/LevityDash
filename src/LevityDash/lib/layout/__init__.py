@@ -26,7 +26,7 @@ Layout of the package
 - `legacy.py` how today's `Stack` maps to flex, so existing dashboards render the same
 """
 
-from . import align, calc, flex, grid, legacy, parse, types
+from . import align, anchor, calc, flex, grid, legacy, parse, types
 from .spec import REGISTRY, Section, implements, pending
 
-__all__ = ['align', 'calc', 'flex', 'grid', 'legacy', 'parse', 'types', 'REGISTRY', 'Section', 'implements', 'pending']
+__all__ = ['align', 'anchor', 'calc', 'flex', 'grid', 'legacy', 'parse', 'types', 'REGISTRY', 'Section', 'implements', 'pending']
