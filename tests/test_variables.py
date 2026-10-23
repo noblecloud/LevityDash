@@ -158,3 +158,11 @@ def test_vars_yaml_through_the_config_path_type(tmp_path):
 	(tmp_path / 'vars.yaml').write_text('gap: 3\n')
 	assert loadSharedVariables(EasyPath(tmp_path)) == {'gap': 3}
 	assert loadSharedVariables(EasyPath(tmp_path / 'vars.yaml')) == {'gap': 3}
+
+
+def test_a_themes_sizes_are_variables_that_a_file_can_override():
+	from LevityDash.lib.ui.colors import theme
+	sizes = theme.load('default').sizes()
+	state = {'vars': {'space_3': '9mm'}, 'items': [{'type': 'stack', 'spacing': '$space_3', 'padding': '$space_5', 'size': '$type_head'}]}
+	item = resolveVariables(state, sizes)['items'][0]
+	assert item == {'type': 'stack', 'spacing': '9mm', 'padding': '8mm', 'size': '160%'}

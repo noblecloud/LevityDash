@@ -69,10 +69,6 @@ def _size(raw, name: str):
 	return value
 
 
-def _color(raw) -> QColor:
-	return Color.decode(raw).QColor
-
-
 def _number(raw, name: str) -> float:
 	if isinstance(raw, bool) or not isinstance(raw, (int, float)) or not isfinite(raw):
 		raise TypeError(f'{name} must be a finite number, not {raw!r}')
@@ -349,6 +345,7 @@ class Bar(GlowMixin, Meter):
 		self._fontSpec = value
 
 	def _decodeMapping(self, name: str, value, known: set) -> Optional[dict]:
+		self.colors.release(self.colors)
 		if value is None:
 			return None
 		if not isinstance(value, Mapping):
@@ -535,6 +532,7 @@ class Bar(GlowMixin, Meter):
 
 	@zones.decode
 	def zones(self, value) -> list:
+		self.colors.release(self.colors)
 		if isinstance(value, Mapping):
 			value = [value]
 		if not isinstance(value, (list, tuple)):
@@ -674,6 +672,7 @@ class Bar(GlowMixin, Meter):
 
 	@markers.decode
 	def markers(self, value) -> list:
+		self.colors.release(self.colors)
 		if isinstance(value, Mapping):
 			value = [value]
 		if not isinstance(value, (list, tuple)):
@@ -777,7 +776,7 @@ class Bar(GlowMixin, Meter):
 		text = spec.get('text')
 		if text is None and spec.get('value') is not None:
 			text = self._text(self._toData(self._valueOf(spec['value'])), spec.get('format'))
-		color = _color(spec['color']) if spec.get('color') is not None else None
+		color = self._qc(spec['color']) if spec.get('color') is not None else None
 		return str(text or ''), color, float(spec['size'] if isinstance(spec.get('size'), (int, float)) else 0.0)
 
 	def _valueOf(self, raw):
@@ -968,10 +967,14 @@ class Bar(GlowMixin, Meter):
 			log.warning(f'Bar {gaugeKeyName(self)} gradient not applied: {e!r}')
 			return None
 
+	def _qc(self, raw) -> QColor:
+		"""A colour spec as a QColor now; a ``{scale, of}`` spec follows its value (`colors/bound.py`)."""
+		return self.colors.qcolor(raw)
+
 	def _underColor(self, t: float) -> QColor:
 		"""The colour the track shows at position ``t``: the fill where it reaches, the track elsewhere."""
 		track = self._trackSpec or {}
-		color = _color(track['color']) if track.get('color') is not None else _color('$rule')
+		color = self._qc(track['color']) if track.get('color') is not None else self._qc('$rule')
 		fill = self._fill
 		if fill is None or self._pending:
 			return color
@@ -983,8 +986,8 @@ class Bar(GlowMixin, Meter):
 		if fill['gradient'] is not None and (gradient := self._resolveGradient(fill['gradient'])) is not None:
 			return self._gradientColorAt(gradient, t)
 		if fill['zone']:
-			return self._zoneColorAt(t) or _color('$accent')
-		return _color(fill['color']) if fill['color'] is not None else _color('$accent')
+			return self._zoneColorAt(t) or self._qc('$accent')
+		return self._qc(fill['color']) if fill['color'] is not None else self._qc('$accent')
 
 	def _zoneColorAt(self, t: float) -> Optional[QColor]:
 		"""The colour of the zone holding the position ``t``; the later zone wins on a shared cutoff.
@@ -998,7 +1001,7 @@ class Bar(GlowMixin, Meter):
 			b = 1.0 if zone['to'] is None else self._t(zone['to'])
 			if min(a, b) - 1e-9 <= t <= max(a, b) + 1e-9:
 				found = zone['color']
-		return None if found is None else _color(found)
+		return None if found is None else self._qc(found)
 
 	def _stroke(self, painter: QPainter, path: QPainterPath, brush, width: float, cap: Qt.PenCapStyle, glow: Optional[Glow] = None):
 		if path.isEmpty() or width <= 0:
@@ -1029,7 +1032,7 @@ class Bar(GlowMixin, Meter):
 		if isinstance(track.get('segments'), int) and not isinstance(track.get('segments'), bool):
 			segments = track['segments']
 		gap = self._px((track.get('gap') if track.get('gap') is not None else (fill or {}).get('gap')), layout['u'], 0.06) if segments else 0.0
-		trackColor = _color(track['color']) if track.get('color') is not None else _color('$rule')
+		trackColor = self._qc(track['color']) if track.get('color') is not None else self._qc('$rule')
 		cap = layout['cap']
 		painter.save()
 		try:
@@ -1059,7 +1062,7 @@ class Bar(GlowMixin, Meter):
 			painter.drawPath(shape)
 			return
 		if style == 'battery':
-			shell = QPen(_color('$muted'), max(layout['u'] * 0.045, 1.5))
+			shell = QPen(self._qc('$muted'), max(layout['u'] * 0.045, 1.5))
 			shell.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
 			a, b = line.pointAt(0), line.pointAt(1)
 			pad = w * 0.16
@@ -1087,7 +1090,7 @@ class Bar(GlowMixin, Meter):
 			weight = layout['weight'] if zone['weight'] is None else size_px(zone['weight'], layout['u'], dimension=DimensionType.width)
 			if zone['opacity'] <= 0:
 				continue
-			color = _color(zone['color'])
+			color = self._qc(zone['color'])
 			color.setAlphaF(color.alphaF() * zone['opacity'])
 			self._stroke(painter, line.subPath(t0, t1), color, weight, Qt.PenCapStyle.FlatCap, resolveGlow(zone['glow'], self.glow))
 
@@ -1109,7 +1112,7 @@ class Bar(GlowMixin, Meter):
 			w = w * 0.84
 		if style == 'thermometer':
 			w = layout['weight'] * 0.62
-		base = _color(fill['color']) if fill['color'] is not None else _color('$accent')
+		base = self._qc(fill['color']) if fill['color'] is not None else self._qc('$accent')
 		brush = None
 		if fill['gradient'] is not None:
 			brush = self._gradientBrush(line, fill['gradient'])
@@ -1199,7 +1202,7 @@ class Bar(GlowMixin, Meter):
 				continue
 			sides = _SIDES.get(str(spec.get('side', 'after')).lower(), 'after')
 			sides = ('before', 'after') if sides == 'both' else (sides,)
-			color = _color(spec['color']) if spec.get('color') is not None else _color('$faint')
+			color = self._qc(spec['color']) if spec.get('color') is not None else self._qc('$faint')
 			length = self._px(spec.get('length'), u, 0.1 if major else 0.06)
 			width = self._px(spec.get('width'), u, 0.025 if major else 0.015)
 			width = max(width, 1.0)
@@ -1234,7 +1237,7 @@ class Bar(GlowMixin, Meter):
 		px = layout['tickLabelPx'] or u * 0.14
 		font = self._valueFont(px)
 		fm = QFontMetricsF(font)
-		color = _color(spec['color']) if spec.get('color') is not None else _color('$faint')
+		color = self._qc(spec['color']) if spec.get('color') is not None else self._qc('$faint')
 		fmt = dict(spec.get('format') or {})
 		if 'precision' not in fmt and len(values) > 1:
 			step = abs(values[1] - values[0])
@@ -1285,7 +1288,7 @@ class Bar(GlowMixin, Meter):
 		line: LineTrack = layout['line']
 		w, u = layout['weight'], layout['u']
 		extent = size_px(size, u, dimension=DimensionType.width) if size is not None else w * 0.9
-		fill = _color(color) if color is not None else _color('$text')
+		fill = self._qc(color) if color is not None else self._qc('$text')
 		sign = -1.0 if side == 'before' else 1.0
 		center = self._point(line, t)
 		painter.save()
@@ -1306,7 +1309,7 @@ class Bar(GlowMixin, Meter):
 			painter.drawPolygon(poly)
 		elif kind == 'dot':
 			r = extent * 0.5
-			ring = QPen(_color('$background'), max(r * 0.25, 1.0))
+			ring = QPen(self._qc('$background'), max(r * 0.25, 1.0))
 			path = QPainterPath()
 			path.addEllipse(center, r, r)
 			paintGlow(painter, path, QBrush(fill), r, glow, filled=True)
@@ -1346,7 +1349,7 @@ class Bar(GlowMixin, Meter):
 		if layout['captionText']:
 			font = self._valueFont(layout['capPx'])
 			painter.setFont(font)
-			painter.setPen(layout['captionColor'] or _color('$faint'))
+			painter.setPen(layout['captionColor'] or self._qc('$faint'))
 			fm = QFontMetricsF(font)
 			x = rect.center().x() if vertical else layout['avail'].left()
 			y = rect.top() + layout['capPx'] * 0.6
@@ -1354,7 +1357,7 @@ class Bar(GlowMixin, Meter):
 		if layout['subText']:
 			font = self._valueFont(layout['subPx'])
 			painter.setFont(font)
-			painter.setPen(layout['subColor'] or _color('$faint'))
+			painter.setPen(layout['subColor'] or self._qc('$faint'))
 			fm = QFontMetricsF(font)
 			x = rect.center().x() if vertical else layout['avail'].left()
 			y = rect.bottom() - layout['subPx'] * 0.6
@@ -1367,7 +1370,7 @@ class Bar(GlowMixin, Meter):
 		text = layout['valueText']
 		a, b = line.pointAt(0), line.pointAt(1)
 		mid = line.pointAt(0.5)
-		color = _color(spec['color']) if spec.get('color') is not None else _color('$text')
+		color = self._qc(spec['color']) if spec.get('color') is not None else self._qc('$text')
 		align = str(spec.get('align', '')).lower()
 		gap = layout['gap']
 		unit = layout['unitText']
@@ -1385,7 +1388,7 @@ class Bar(GlowMixin, Meter):
 			self._drawText(painter, text, fm, QPointF(left, anchor.y()), -1, v)
 			if unit:
 				painter.setFont(unitFont)
-				unitColor = _color(self._unitSpec['color']) if self._unitSpec.get('color') is not None else _color('$faint')
+				unitColor = self._qc(self._unitSpec['color']) if self._unitSpec.get('color') is not None else self._qc('$faint')
 				painter.setPen(unitColor)
 				self._drawText(painter, f' {unit}', unitFm, QPointF(left + valueW, anchor.y()), -1, v)
 

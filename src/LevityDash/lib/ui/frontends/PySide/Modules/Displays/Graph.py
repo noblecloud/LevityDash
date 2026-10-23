@@ -3991,6 +3991,11 @@ class GraphPanel(Panel, tag='graph'):
 		self.axisTransformed = AxisSignal(self)
 		self.signals.resized.connect(self.updateSyncTimer)
 		self.axisTransformed.connectSlot(self.onAxisChange)
+		# The annotations are laid out once per event-loop turn, however many
+		# series and axis announcements asked for it in that turn.
+		self._pendingFrameAxis = Axis.Neither
+		self._frameTimer = QTimer(singleShot=True, interval=0)
+		self._frameTimer.timeout.connect(self._flushFrameChange)
 
 	def _afterSetState(self):
 		clearCacheAttr(self, 'plots, annotatedPlots')
@@ -4072,9 +4077,15 @@ class GraphPanel(Panel, tag='graph'):
 		# def onAxisChange(self, axis: Axis):
 		if axis & Axis.X:
 			self.__clearCache()
-			if annotations := getattr(self, '_annotations', None):
-				annotations.onFrameChange(axis)
+			if getattr(self, '_annotations', None):
+				self._pendingFrameAxis |= axis
+				startTimerSafe(self._frameTimer)
 		self.updateSyncTimer()
+
+	def _flushFrameChange(self):
+		axis, self._pendingFrameAxis = self._pendingFrameAxis, Axis.Neither
+		if axis and (annotations := getattr(self, '_annotations', None)):
+			annotations.onFrameChange(axis)
 
 	def parentResized(self, *args):
 		super(GraphPanel, self).parentResized(*args)

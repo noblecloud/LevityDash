@@ -124,7 +124,7 @@ items:
       items:
       - type: realtime.text
         key: $prob
-        title: {text: Rain chance, height: 18%, color: $muted}
+        title: {text: Rain chance, height: 0.8cm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
         display:
           precision: 0
           font: Nunito
@@ -142,7 +142,7 @@ items:
           - environment.yesterday.precipitation.precipitation: {title: {text: Yesterday}}
       - type: realtime.text
         key: $pres
-        title: {text: Pressure, height: 18%, color: $muted}
+        title: {text: Pressure, height: 0.8cm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
         display:
           unitPosition: FloatUnder
         geometry: {x: 0%, y: 44%, width: 48%, height: 34%}
@@ -179,7 +179,7 @@ items:
           key: environment.lightning.distance
           title: Lightning
           title_color: $bad
-          title_height: 14%
+          title_height: 0.8cm
           color: $warn
           hero_box: {x: 0%, y: 0%, width: 100%, height: 50%}
           list_box: {x: 0%, y: 54%, width: 100%, height: 46%}
@@ -194,7 +194,7 @@ items:
           key: $rain
           title: Raining
           title_color: $info
-          title_height: 14%
+          title_height: 0.8cm
           color: $info
           hero_box: {x: 0%, y: 0%, width: 100%, height: 50%}
           list_box: {x: 0%, y: 54%, width: 100%, height: 46%}
@@ -243,10 +243,10 @@ items:
         props:
           key: environment.clouds.cover.cover
           title: Cloud
-          title_height: 14%
+          title_height: 0.8cm
           precision: 0
           hero_box: {x: 0%, y: 0%, width: 100%, height: 34%}
-          list_box: {x: 0%, y: 40%, width: 100%, height: 60%}
+          list_box: {x: 0%, y: 42%, width: 100%, height: 46%}
           items:
           - environment.clouds.cover.low:  {title: {text: Low}, display: {precision: 0}}
           - environment.clouds.cover.mid:  {title: {text: Mid}, display: {precision: 0}}
@@ -275,6 +275,7 @@ items:
       size: 31%
       props:
         title: Indoor
+        title_height: 0.8cm
         key: indoor.temperature.temperature#bedroom
         graph:
           preset: sparkline
@@ -300,6 +301,7 @@ items:
       size: 37%
       props:
         title: Terrarium
+        title_height: 0.8cm
         title_color: $good
         key: indoor.temperature.temperature#terrarium
         hero_box: {x: 0%, y: 0%, width: 31%, height: 58%}
@@ -352,6 +354,8 @@ items:
           title_color: $bad
           color: $bad
           spacing: 0.4mm
+          hero_box: {x: 0%, y: 18%, width: 38%, height: 82%}
+          list_box: {x: 40%, y: 22%, width: 60%, height: 70%}
           items:
           - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels}, display: {valueLabel: {color: $accent}}}
           - environment.temperature.wetBulb: {title: {text: Wet bulb}}
@@ -362,11 +366,13 @@ items:
         when: 'at($prob, 2h) > 60%'
         props:
           key: at($prob, 2h)
-          title: Storms ahead
+          title: Storms
           title_color: $info
           color: $info
           precision: 0
           spacing: 0.4mm
+          hero_box: {x: 0%, y: 18%, width: 38%, height: 82%}
+          list_box: {x: 40%, y: 22%, width: 60%, height: 70%}
           items:
           - {type: realtime.text, key: 'at($rain, 2h)', title: {text: Rate +2h}}
           - {type: realtime.text, key: 'at($wg, 2h)', title: {text: Gust +2h}, display: {valueLabel: {color: $accent}}}
@@ -377,11 +383,13 @@ items:
         when: 'indoor.humidity.humidity#terrarium < 70%'
         props:
           key: indoor.humidity.humidity#terrarium
-          title: Terrarium dry
+          title: Dry
           title_color: $warn
           color: $warn
           precision: 0
           spacing: 0.4mm
+          hero_box: {x: 0%, y: 18%, width: 38%, height: 82%}
+          list_box: {x: 40%, y: 22%, width: 60%, height: 70%}
           items:
           - {type: realtime.text, key: 'min(indoor.humidity.humidity#terrarium, today)', title: {text: Low}, display: {precision: 0}}
           - {type: realtime.text, key: indoor.temperature.temperature#terrarium, title: {text: Temp}}
@@ -390,10 +398,12 @@ items:
         when: 'indoor.temperature.temperature#terrarium > 86°F'
         props:
           key: indoor.temperature.temperature#terrarium
-          title: Terrarium hot
+          title: Hot
           title_color: $bad
           color: $bad
           spacing: 0.4mm
+          hero_box: {x: 0%, y: 18%, width: 38%, height: 82%}
+          list_box: {x: 40%, y: 22%, width: 60%, height: 70%}
           items:
           - {type: realtime.text, key: indoor.humidity.humidity#terrarium, title: {text: Humid}, display: {precision: 0}}
           - {type: realtime.text, key: 'max(indoor.temperature.temperature#terrarium, today)', title: {text: High}}
@@ -402,11 +412,13 @@ items:
         when: 'indoor.battery.battery#terrarium < 20%'
         props:
           key: indoor.battery.battery#terrarium
-          title: Sensor battery
+          title: Battery
           title_color: $warn
           color: $warn
           precision: 0
           spacing: 0.4mm
+          hero_box: {x: 0%, y: 18%, width: 38%, height: 82%}
+          list_box: {x: 40%, y: 22%, width: 60%, height: 70%}
           items:
           - {type: realtime.text, key: indoor.battery.battery#bedroom, title: {text: Bedroom}, display: {precision: 0}}
           - {type: realtime.text, key: indoor.battery.battery#terrarium, title: {text: Terrarium}, display: {precision: 0, valueLabel: {color: $warn}}}
@@ -414,10 +426,12 @@ items:
         name: inside-out
         props:
           key: indoor.temperature.temperature#bedroom - $t
-          title: Inside vs out
+          title: In vs out
           color: $info
           precision: 0
           spacing: 0.4mm
+          hero_box: {x: 0%, y: 18%, width: 38%, height: 82%}
+          list_box: {x: 40%, y: 22%, width: 60%, height: 70%}
           items:
           - {type: realtime.text, key: 'indoor.temperature.dewpoint#bedroom - environment.temperature.dewpoint', title: {text: Dew pt}, display: {precision: 0}}
           - {type: realtime.text, key: 'indoor.temperature.heatIndex#bedroom - environment.temperature.heatIndex', title: {text: Heat idx}, display: {precision: 0}}
@@ -459,8 +473,7 @@ items:
         environment.pressure.pressure:
           plot: {type: plot, color: '#e0e3e8', weight: 0.3, dashPattern: '1, 3'}
       - figure: rain
-        margins: {top: 70%, bottom: 6%}
-        max: 0.5
+        margins: {top: 45%, bottom: 6%}
         environment.precipitation.precipitation:
           plot: {type: bar, gradient: PrecipitationRateGradient, width: 0.8, radius: 0.25}
       - figure: chance
@@ -476,6 +489,7 @@ items:
       size: 18%
       props:
         title: Ahead
+        title_height: 0.8cm
         title_color: null
         spacing: 0.5mm
         items:
