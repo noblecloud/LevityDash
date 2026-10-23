@@ -630,6 +630,8 @@ class PluginsMenu(QMenu):
 			parts = [running, enabled, keys]
 			if snap.lastPublish is not None:
 				parts.append(f'updated {snap.lastPublish.strftime("%H:%M")}')
+			if snap.health in ('quiet', 'silent'):
+				parts.append('overdue' if snap.health == 'quiet' else 'not publishing')
 			return f'{plugin.name}: ' + ' · '.join(parts)
 		# Live mode: read the local plugin directly. Use the same
 		# keys()/containers/len() fallback chain plugin_status uses on the
@@ -639,7 +641,12 @@ class PluginsMenu(QMenu):
 		running = 'Running' if plugin.running else 'Stopped'
 		enabled = 'Enabled' if getattr(plugin, 'enabled', True) else 'Disabled'
 		keys = f'{plugin_key_count(plugin)} keys'
-		return f'{plugin.name}: ' + ' · '.join([running, enabled, keys])
+		parts = [running, enabled, keys]
+		patrol = getattr(LevityDashboard.app, 'patrol', None)
+		health = patrol.health().get(plugin.name) if patrol is not None else None
+		if health in ('quiet', 'silent'):
+			parts.append('overdue' if health == 'quiet' else 'not publishing')
+		return f'{plugin.name}: ' + ' · '.join(parts)
 
 	def buildItems(self):
 		for plugin in LevityDashboard.plugins:

@@ -196,3 +196,59 @@ def test_a_range_property_gets_the_unit_selector_of_its_key(builder, monkeypatch
 	edit.unit.activated.emit(edit.unit.currentIndex())
 	assert builder.given['lo'] == '0\u00b0F'
 	assert 'lo: "0\u00b0F"' in builder.instanceTab.out.toPlainText() or "lo: 0\u00b0F" in builder.instanceTab.out.toPlainText()
+
+
+def _alignRow(builder):
+	return next((builder.itemTab.rows[f] for f in sb.NUMBER_ALIGN_FIELDS if f in builder.itemTab.rows), None)
+
+
+def test_number_align_is_written_where_each_kind_of_item_reads_it(builder):
+	builder.addItem('stack')
+	builder.addItem('realtime.text')
+	builder.select((0, 0))
+	assert _alignRow(builder).field == 'display.valueLabel.number-align'
+	builder.editField('display.valueLabel.number-align', 'decimal')
+	assert builder.piece.node((0, 0))['display']['valueLabel']['number-align'] == 'decimal'
+	builder.editField('display.valueLabel.number-align', None)
+	assert 'display' not in builder.piece.node((0, 0)), 'off removes the field and the mapping it emptied'
+
+	builder.addItem('text')
+	text = builder.selection
+	assert _alignRow(builder).field == 'number-align'
+	builder.editField('number-align', 'end')
+	assert builder.piece.node(text)['number-align'] == 'end'
+
+	builder.select((0,))
+	assert _alignRow(builder).field == 'shared.display.valueLabel.number-align'
+	builder.editField('shared.display.valueLabel.number-align', 'decimal')
+	assert builder.piece.node((0,))['shared']['display']['valueLabel']['number-align'] == 'decimal'
+
+
+def test_number_align_stays_out_of_the_more_popover(builder):
+	builder.addItem('realtime.text')
+	builder.editField('display.valueLabel.number-align', 'decimal')
+	assert sb.restOf(builder.piece.node((0,))) == {}
+
+
+def test_a_preset_use_passes_it_as_a_property_and_off_is_written(builder):
+	builder.addItem('stack')
+	node = builder.piece.node((0,))
+	node.clear()
+	node.update({'preset': 'reading-list'})
+	builder.select(())
+	builder.select((0,))
+	row = _alignRow(builder)
+	assert row.field == 'props.numberAlign'
+	assert row.editor.value() == 'decimal', 'an instance that says nothing shows the preset default'
+	builder.editField('props.numberAlign', 'none')
+	assert builder.piece.node((0,))['props']['numberAlign'] == 'none'
+
+
+def test_a_preset_without_the_property_has_no_control(builder):
+	builder.addItem('stack')
+	node = builder.piece.node((0,))
+	node.clear()
+	node.update({'preset': 'callout'})
+	builder.select(())
+	builder.select((0,))
+	assert _alignRow(builder) is None

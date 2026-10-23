@@ -340,6 +340,19 @@ class Meter(Display):
 	answers the same size questions with its own extents.
 	"""
 
+	@property
+	def colors(self):
+		"""The colour settings of this meter and its elements (`colors/bound.py`): plain or following a value."""
+		if (slots := self.__dict__.get('_colorSlots')) is None:
+			from LevityDash.lib.ui.colors.bound import ColorSlots
+			slots = self._colorSlots = ColorSlots(lambda: self.refresh(), type(self).__name__)
+		return slots
+
+	def delete(self):
+		if (slots := self.__dict__.get('_colorSlots')) is not None:
+			slots.releaseAll()
+		super().delete()
+
 	def _buildLabel(self, attr: str, labelType: type, value):
 		"""Turn a `value-label`/`unit-label` mapping into a real label.
 

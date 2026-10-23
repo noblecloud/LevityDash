@@ -36,7 +36,7 @@ from PySide6.QtGui import (
 	QBrush, QColor, QFontDatabase, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QRegularExpressionValidator,
 )
 from PySide6.QtWidgets import (
-	QCheckBox, QColorDialog, QComboBox, QCompleter, QDoubleSpinBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
+	QCheckBox, QColorDialog, QComboBox, QCompleter, QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
 	QSlider, QSpinBox, QTimeEdit, QToolButton, QVBoxLayout, QWidget,
 )
 
@@ -508,12 +508,15 @@ class ColorEdit(Editor):
 		self.text.editingFinished.connect(self._typed)
 		box.addWidget(self.swatch)
 		box.addWidget(self.text, 1)
+		self.follow = _tool('⟳', 'Follow a value: the colour of a scale at a key or expression')
+		self.follow.clicked.connect(self._follow)
+		box.addWidget(self.follow)
 		self.clear: Optional[QToolButton] = None
 		if nullable:
 			self.clear = _tool('×', 'Back to the default colour')
 			self.clear.clicked.connect(self._cleared)
 			box.addWidget(self.clear)
-		self._color: Optional[str] = None
+		self._color: Optional[str | dict] = None
 
 	def _pick(self):
 		chosen = QColorDialog.getColor(QColor(self._color or 'white'), self, 'Colour')
@@ -536,15 +539,41 @@ class ColorEdit(Editor):
 		self._set(None)
 		self._emit()
 
-	def _set(self, value: Optional[str]):
+	def _follow(self):
+		"""Edit the `{scale, of, fallback}` mapping of a colour that follows a value (`lib/ui/colors/bound.py`)."""
+		spec = dict(self._color) if isinstance(self._color, dict) else {}
+		dialog = QDialog(self)
+		dialog.setWindowTitle('Colour follows a value')
+		form = QFormLayout(dialog)
+		fields = {}
+		for key, label, tip in (('scale', 'Scale', 'A theme scale ($temperature), a preset gradient, or stops'),
+		                        ('of', 'Of', 'A key or an expression'),
+		                        ('fallback', 'Fallback', 'Colour until there is a value (optional)')):
+			fields[key] = QLineEdit('' if spec.get(key) is None else str(spec[key]))
+			fields[key].setToolTip(tip)
+			form.addRow(label, fields[key])
+		buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+		buttons.accepted.connect(dialog.accept)
+		buttons.rejected.connect(dialog.reject)
+		form.addRow(buttons)
+		if dialog.exec() != QDialog.DialogCode.Accepted:
+			return
+		new = {k: f.text().strip() for k, f in fields.items() if f.text().strip()}
+		if 'scale' in new and 'of' in new:
+			self._set(new)
+			self._emit()
+
+	def _set(self, value: Optional[str | dict]):
 		self._color = value
+		bound = isinstance(value, dict)
 		with QSignalBlocker(self.text):
-			self.text.setText('' if value is None else str(value))
-		color = QColor(value) if value else QColor()
+			self.text.setText('' if value is None else f"{value.get('scale')} ← {value.get('of')}" if bound else str(value))
+		self.text.setReadOnly(bound)
+		color = QColor(value) if value and not bound else QColor()
 		self.swatch.setStyleSheet(f'background: {color.name() if color.isValid() else "transparent"}; border: 1px solid #888;')
 
 	def setValue(self, value):
-		self._set(None if value is None else str(value))
+		self._set(dict(value) if isinstance(value, dict) else None if value is None else str(value))
 
 	def value(self):
 		return self._color

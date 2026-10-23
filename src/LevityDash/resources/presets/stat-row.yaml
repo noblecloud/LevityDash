@@ -7,6 +7,7 @@ props:
   items: {default: [], doc: "The readings, written as the items of a value-stack"}
   titleGroup: {default: global.title, type: text, doc: "Size group of the titles; the default spans the whole dashboard"}
   valueGroup: {default: global.value, type: text, doc: "Size group of the values; the default spans the whole dashboard"}
+  numberAlign: {default: null, type: text, doc: "decimal or end to line the values up on the number; unset keeps each value centred as a whole, which suits a row. A column of readings is what this is for (see reading-list)"}
   spacing: {default: 1mm, type: size, doc: "Gap between readings"}
   font: {default: null, type: text, doc: "Font of the values; unset keeps the font of the panel around it"}
 template:
@@ -16,7 +17,7 @@ template:
     display:
       unitPosition: Hidden
       font: $font
-      valueLabel: {matchingGroup: {group: $valueGroup, matchAll: true}}
+      valueLabel: {matchingGroup: {group: $valueGroup, matchAll: true}, number-align: $numberAlign}
   direction: Horizontal
   spacing: $spacing
   items: $items
