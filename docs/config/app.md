@@ -25,6 +25,14 @@ Controls whether the frontend runs its own plugins or attaches to a standalone b
 - `live` (default) — plugins, data pipeline, and the Qt window all run in one process.
 - `remote` — the Qt window acts as a frontend only, connecting to a standalone backend (`LevityDash-backend`) over WebSocket. Graphs are realtime-only in remote mode (timeseries is a planned milestone).
 
+### <div class=mono>watchdog</div>
+
+What the standalone backend, and the app when it runs plugins itself (`live` mode), does about a plugin that is running but has stopped publishing (a socket that stays bound with nothing on it, a stuck poll). It compares the quiet time with how often the plugin normally publishes.
+
+- `log` (default) — one log line when a plugin is overdue, one when it is far overdue, one when it publishes again.
+- `restart` — also stops a far-overdue plugin and starts it again, at most three times, waiting longer between tries (a minute, then two, then four). Publishing again gives the tries back.
+- `off` — never looks.
+
 The standalone backend ignores this setting — it always ingests plugins live.
 
 ## Display

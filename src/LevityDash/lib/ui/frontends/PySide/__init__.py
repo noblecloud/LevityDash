@@ -51,6 +51,10 @@ class LevityDashApp(QApplication):
 	def start_plugins(self):
 		self.main_window.centralWidget().loadingFinished.disconnect(self.start_plugins)
 		QTimer.singleShot(10, LevityDashboard.plugins.start)
+		# The backend does this for mode=remote; here the plugins run in this process
+		from LevityDash.lib.config import userConfig
+		from LevityDash.lib.plugins.patrol import Patrol, policyFromConfig
+		self.patrol = Patrol(LevityDashboard.plugins, policyFromConfig(userConfig, qtLogger))
 
 
 LevityDashAppInstance = LevityDashApp()
