@@ -98,6 +98,25 @@ A child of a switch does not need a `geometry:`. It fills the switch.
 - If the expression is wrong, LevityDash logs the error once. The condition is then false.
 - If no child is true, the switch shows nothing.
 
+### Size conditions
+
+A mapping under `when:` tests the size of the window, or of the item's parent, in the frontend. It is a media query for a dashboard.
+
+```yaml
+when: {min-width: 1200px}
+when: {max-width: 800px, orientation: portrait}
+when: {of: parent, min-aspect: 16:9}
+when: {min-width: 1200px, and: environment.precipitation.precipitation > 0}
+```
+
+- `min-width`, `max-width`, `min-height`, `max-height`: pixels. `900` and `900px` are the same; other units are an error.
+- `min-aspect`, `max-aspect`: width over height, as a number or a ratio (`16:9`).
+- `orientation`: `landscape` (also a square) or `portrait`.
+- `of`: `window` (the default) or `parent`.
+- `and`: a [value source](/config/dashboard/expressions.md) that must also hold. Size and data combine here.
+
+Everything written must hold. A bad condition logs once and counts as false. Size is a fact of this display, so it never goes through the plugins or a backend, and in `remote` mode the frontend reads its own window. In a `switch`, the first child whose size fits is shown, so a narrow layout can follow a wide one. The Studio's `when` popover has a *window or parent size* mode.
+
 `when:` also works on an item that is not in a switch. The item is shown only while the condition is true.
 
 ```yaml
