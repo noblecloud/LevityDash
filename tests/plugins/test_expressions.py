@@ -6,9 +6,9 @@ dict-backed one and never start a plugin, Qt or the wire.
 from datetime import datetime, timedelta, timezone
 
 import pytest
-import WeatherUnits as wu
-from WeatherUnits.length import Millimeter
-from WeatherUnits.temperature import Celsius, Fahrenheit, FahrenheitChange
+import unitcorn as wu
+from unitcorn.length import Millimeter
+from unitcorn.temperature import Celsius, Fahrenheit, FahrenheitChange
 
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.expressions import Expression, ExpressionError, Missing, PlacedKey, PointInput, SeriesInput, Window

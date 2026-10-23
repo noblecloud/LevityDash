@@ -8,7 +8,7 @@ from LevityDash.lib.utils import clamp, clearCacheAttr, ScaleFloat, defer, DeepC
 from LevityDash.lib.ui.Geometry import getDPI, Size, parseSize, LocationFlag, DisplayPosition, RelativeFloat
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles import Handle
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Label import TitleLabel
-from WeatherUnits import Length
+from unitcorn import Length
 
 if TYPE_CHECKING:
 	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import DisplayLabel, MeasurementDisplayProperties

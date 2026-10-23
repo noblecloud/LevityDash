@@ -2961,6 +2961,20 @@ files = [
 ]
 
 [[package]]
+name = "unitcorn"
+version = "0.9.0"
+description = "Units that convert, localize and format themselves, with weather-flavoured defaults"
+optional = false
+python-versions = ">=3.10,<3.15"
+groups = ["main", "dev"]
+files = []
+develop = true
+
+[package.source]
+type = "directory"
+url = "../WeatherUnits"
+
+[[package]]
 name = "urllib3"
 version = "2.7.0"
 description = "HTTP library with thread-safe connection pooling, file post, and more."
@@ -3115,20 +3129,6 @@ files = [
 
 [package.dependencies]
 anyio = ">=3.0.0"
-
-[[package]]
-name = "weatherunits"
-version = "0.8.0"
-description = "Easy conversion for common units"
-optional = false
-python-versions = ">=3.10,<3.15"
-groups = ["main", "dev"]
-files = []
-develop = true
-
-[package.source]
-type = "directory"
-url = "../WeatherUnits"
 
 [[package]]
 name = "wheel"
@@ -3612,4 +3612,4 @@ monitoring = ["logtail-python", "sentry-sdk"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.13,<3.15"
-content-hash = "de522dfe35fd5fa7efb3562a2d795721454a99c0ecaad6c73bb33802935bd7e2"
+content-hash = "8367a527948764f6e373488fc73604a2a8fd700c333d66debd6750422eb43444"

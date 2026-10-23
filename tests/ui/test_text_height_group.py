@@ -74,7 +74,7 @@ def test_text_height_in_physical_units_loads(dashboard, sandbox):
 
 def test_format_duration_on_a_realtime_text(dashboard, sandbox):
 	"""`format: duration` writes minutes as hours and minutes, as it already did on a gauge."""
-	import WeatherUnits as wu
+	import unitcorn as wu
 	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import Realtime
 
 	sandbox.state = {'items': [{'type': 'realtime.text', 'key': 'astronomy.sun.remaining', 'display': {'format': 'duration'}, 'geometry': {'x': '0%', 'y': '0%', 'width': '50%', 'height': '50%'}}]}

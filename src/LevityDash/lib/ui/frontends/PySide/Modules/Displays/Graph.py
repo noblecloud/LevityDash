@@ -78,10 +78,10 @@ from LevityDash.lib.utils.shared import (
 	Unset, Worker
 )
 from LevityDash.lib.utils.various import DateTimeRange
-from WeatherUnits import Length, Measurement, Time
-from WeatherUnits.derived.precipitation import PrecipitationRate
-from WeatherUnits.length import Centimeter, Millimeter
-from WeatherUnits.time_.time import Hour, Second
+from unitcorn import Length, Measurement, Time
+from unitcorn.derived.precipitation import PrecipitationRate
+from unitcorn.length import Centimeter, Millimeter
+from unitcorn.time_.time import Hour, Second
 
 if TYPE_CHECKING:
 	from LevityDash.lib.ui.frontends.PySide.app import LevityScene

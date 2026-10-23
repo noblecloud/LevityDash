@@ -22,7 +22,7 @@ from LevityDash.lib.ui.Geometry import (
 from LevityDash.lib.layout import calc as cssmath, flex as cssflex, grid as cssgrid, parse as cssparse
 from LevityDash.lib.layout.types import Direction as CssDirection, Edge as CssEdge, Gap as CssGap, ItemAlign as CssItemAlign, Rect as CssRect
 from LevityDash.lib.utils import DeepChainMap, mostSimilarDict, sortDict
-from WeatherUnits import Length, Percentage
+from unitcorn import Length, Percentage
 
 
 @dataclass(frozen=True, slots=True, order=True)

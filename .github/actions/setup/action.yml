@@ -1,5 +1,5 @@
 name: Set up LevityDash
-description: Python 3.14, Qt runtime libraries, en_US locale, WeatherUnits beside the repo, Poetry install into LevityDash/.venv. Expects the repo checked out at ./LevityDash.
+description: Python 3.14, Qt runtime libraries, en_US locale, unitcorn (the WeatherUnits repo) beside the repo, Poetry install into LevityDash/.venv. Expects the repo checked out at ./LevityDash.
 runs:
   using: composite
   steps:
@@ -13,7 +13,7 @@ runs:
         sudo apt-get install -y -qq libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3 \
           libglib2.0-0 libxcb-cursor0 locales fonts-dejavu-core
         sudo locale-gen en_US.UTF-8
-    - name: WeatherUnits (path dependency)
+    - name: unitcorn (path dependency, WeatherUnits repo)
       shell: bash
       run: git clone --depth 1 --branch dev https://github.com/noblecloud/WeatherUnits.git WeatherUnits
     - name: Install dependencies

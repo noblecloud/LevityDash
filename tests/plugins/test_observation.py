@@ -111,7 +111,7 @@ def test_calculate_missing_skips_dewpoint_when_schema_does_not_declare_it():
 
 
 def test_calculate_missing_computes_dewpoint_when_schema_declares_it():
-	import WeatherUnits as wu
+	import unitcorn as wu
 
 	temperature = FakeTemperature(wu.Temperature.Fahrenheit(75), timestamp=None)
 	humidity = FakeHumidity(50)
@@ -146,7 +146,7 @@ def test_calculate_missing_derives_per_identity():
 	# 'indoor.temperature.temperature' matched none of the identity-scoped
 	# keys and the whole indoor branch was skipped - both Govee thermometers
 	# showed a permanent placeholder where the dewpoint should be.
-	import WeatherUnits as wu
+	import unitcorn as wu
 
 	obs = FakeIndoorObservation({
 		_indoor('indoor.temperature.temperature', 'bedroom'): FakeTemperature(wu.Temperature.Fahrenheit(70), timestamp=None),
@@ -169,7 +169,7 @@ def test_calculate_missing_derives_per_identity():
 
 def test_calculate_missing_does_not_cross_identities():
 	"""A lone reading derives nothing - it must not borrow another device's."""
-	import WeatherUnits as wu
+	import unitcorn as wu
 
 	obs = FakeIndoorObservation({
 		_indoor('indoor.temperature.temperature', 'bedroom'): FakeTemperature(wu.Temperature.Fahrenheit(70), timestamp=None),
@@ -184,7 +184,7 @@ def test_calculate_missing_does_not_cross_identities():
 
 def test_calculate_missing_still_handles_unscoped_keys_alongside_identities():
 	"""Outdoor keys carry no identity; they must survive the per-identity loop."""
-	import WeatherUnits as wu
+	import unitcorn as wu
 
 	obs = FakeIndoorObservation({
 		'indoor.temperature.temperature': FakeTemperature(wu.Temperature.Fahrenheit(72), timestamp=None),
@@ -225,7 +225,7 @@ def test_calculate_missing_derives_nothing_at_zero_humidity():
 
 def test_calculate_missing_indoor_derives_nothing_at_zero_humidity():
 	"""The exact shape from the live log: an indoor Govee reading humidity 0."""
-	import WeatherUnits as wu
+	import unitcorn as wu
 
 	obs = FakeIndoorObservation({
 		_indoor('indoor.temperature.temperature', 'terrarium'): FakeTemperature(wu.Temperature.Fahrenheit(85), timestamp=None),
@@ -240,7 +240,7 @@ def test_calculate_missing_indoor_derives_nothing_at_zero_humidity():
 
 def test_calculate_missing_indoor_survives_a_trace_humidity():
 	"""A humidity above 0 that rounds to 0 % used to raise inside dewpoint() and drop the whole advertisement."""
-	import WeatherUnits as wu
+	import unitcorn as wu
 
 	for reading in (0.0, 0.004):
 		obs = FakeIndoorObservation({

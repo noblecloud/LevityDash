@@ -16,7 +16,7 @@ from LevityDash.lib.ui.colors.oklch import oklab_stops
 from LevityDash.lib.ui.colors.stopunits import StopUnitError, formatStop, parseStop, toDataUnit
 from LevityDash.lib.utils import getOrSet, classproperty
 from LevityDash.shims.Qt import QImage
-from WeatherUnits import Measurement, Percentage
+from unitcorn import Measurement, Percentage
 
 GradientValueType = TypeVar('GradientValueType', bound=Number)
 

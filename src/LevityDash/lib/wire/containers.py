@@ -83,7 +83,7 @@ class _RemoteRealtimeValueSource(_RemoteValueSource):
 
 class RemoteObservationValue:
 	"""Stand-in for `observation.ObservationValue`. Holds an already
-	backend-converted value (a real WeatherUnits Measurement, a datetime, or
+	backend-converted value (a real unitcorn Measurement, a datetime, or
 	a plain scalar) - no schema, no unit conversion, no rawValue/value
 	distinction, since the backend already did that work before pushing.
 
@@ -153,11 +153,11 @@ class RemoteObservationValue:
 		return str(self.value)
 
 	def __format__(self, format_spec: str):
-		# Delegates to the underlying value's own __format__ (WeatherUnits
+		# Delegates to the underlying value's own __format__ (unitcorn
 		# Measurements implement precision/unit formatting themselves).
 		# Does not replicate ObservationValue's 'human' relative-date DSL -
 		# a documented simplification, not a correctness gap: timestamp
-		# values still format via WeatherUnits' own Time type.
+		# values still format via unitcorn's own Time type.
 		value = self.value
 		spec = format_spec.replace('human', '').strip(':')
 		try:
@@ -647,7 +647,7 @@ class RemoteContainer:
 		try:
 			return type(self._value.value)
 		except Exception:
-			from WeatherUnits import Measurement
+			from unitcorn import Measurement
 			return Measurement
 
 	@property

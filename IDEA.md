@@ -13,7 +13,7 @@ in daily use. Three folders, because they move together:
 - Code/LevityDash — the app. Contains qolkit (generic utils) <- statekit
   (declarative state + YAML persistence, Qt-free) <- LevityDash. Dependency
   direction is strict; never import Qt or LevityDash from the lower two.
-- Code/WeatherUnits — sibling library every displayed value is formatted
+- Code/WeatherUnits — unitcorn, the sibling library every displayed value is formatted
   through. LevityDash path-depends on it in develop mode, so changes here
   immediately affect the dashboard.
 - Library/Application Support/LevityDash — the LIVE config: real dashboards

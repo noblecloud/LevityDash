@@ -71,7 +71,7 @@ When ```True```, Levity will run in fullscreen mode.
 
 ### <div class=mono>width/height</div> 
 
-The starting width and height of the window in pixels `px`, percentage `%`, centimeters `cm`, millimeters `mm`, inches `in` or pretty much any length unit supported by WeatherUnits. For values without a unit, integers are assumed to be
+The starting width and height of the window in pixels `px`, percentage `%`, centimeters `cm`, millimeters `mm`, inches `in` or pretty much any length unit supported by unitcorn. For values without a unit, integers are assumed to be
 pixels and floats, percentages.
 If provided a real-world measurement like centimeters, the value will be estimated based on the displays reported DPI.
 
@@ -222,10 +222,10 @@ when helping debug issues with someone not accustomed to reading error messages 
 
 The maximum size of the folder where pretty error files are stored. This is only used when `prettyErrors` is `True`. The default is `50mb`.
 
-## WeatherUnits <!-- {docsify-ignore} -->
+## unitcorn <!-- {docsify-ignore} -->
 
-The sections below are for the WeatherUnit Module. WeatherUnits is what is used to convert/localize measurements for display. More information on how it's configured can be found in
-the [WeatherUnits repo](https://github.com/noblecloud/WeatherUnits).
+The sections below are for unitcorn (formerly WeatherUnits), the library that converts and localizes measurements for display. More information on how it's configured can be found in
+the [unitcorn repo](https://github.com/noblecloud/WeatherUnits).
 
 ```ini
 [Units]

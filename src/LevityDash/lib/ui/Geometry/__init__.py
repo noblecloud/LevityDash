@@ -25,7 +25,7 @@ from LevityDash.lib.log import LevityUtilsLog as log
 from LevityDash.lib.ui import UILogger as guiLog
 from LevityDash.lib.utils import Axis, camelCase, clearCacheAttr, ClosestMatchEnumMeta, DType, IgnoreOr
 from LevityDash.lib.utils.shared import _Panel, clamp, mostly, get, classproperty
-from WeatherUnits import auto as auto_unit, Length, Measurement, Percentage
+from unitcorn import auto as auto_unit, Length, Measurement, Percentage
 
 if TYPE_CHECKING:
 	from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
@@ -3374,7 +3374,7 @@ def size_px(
 	dimension: DimensionType = DimensionType.height
 ) -> float | int:
 	if isinstance(value, Percentage):
-		# Percentage is a WeatherUnits measurement, not a Dimension/Length -
+		# Percentage is a unitcorn measurement, not a Dimension/Length -
 		# neither branch below matches it, so without this it passed through
 		# unconverted (still a Percentage object, not pixels). Callers that
 		# divide the result by `relativeTo` expecting a plain float (e.g.

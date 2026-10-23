@@ -16,7 +16,7 @@ colour yet (the source has none, or it is not a number) leaves the ``fallback``,
 """
 from typing import Any, Callable, Mapping, Optional
 
-from WeatherUnits import Measurement
+from unitcorn import Measurement
 
 from LevityDash.lib.ui.colors import theme as _theme
 from LevityDash.lib.ui.colors.color import Color

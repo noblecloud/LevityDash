@@ -56,7 +56,7 @@ LevityDash-run = 'LevityDash.devtools.supervisor:cli'
 [tool.poetry.dependencies]
 python = ">=3.13,<3.15"
 pylunar = "^0.11.1"
-WeatherUnits = ">=0.7.1"
+unitcorn = ">=0.9.0"
 numpy = "^2.0"
 pytz = ">=2023.3"
 scipy = "^1.11.1"
@@ -95,7 +95,7 @@ psutil = "^7.2.2"
 "Discussions" = "https://github.com/noblecloud/LevityDash/discussions"
 
 [tool.poetry.group.dev.dependencies]
-WeatherUnits = { develop = true, path = "../WeatherUnits" }
+unitcorn = { develop = true, path = "../WeatherUnits" }
 python-semantic-release = "^7.34.6"
 pytest = ">=8.0"
 watchfiles = "^1.0"

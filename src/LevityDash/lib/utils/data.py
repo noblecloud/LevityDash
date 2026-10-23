@@ -306,8 +306,8 @@ RAIN_SPAN_INCHES = 0.1
 def _rainSpan(plots) -> float | None:
 	"""The least a rain rate axis spans, in the unit its plots hold, or None for any other data."""
 	try:
-		from WeatherUnits import Length
-		from WeatherUnits.derived.precipitation import PrecipitationRate
+		from unitcorn import Length
+		from unitcorn.derived.precipitation import PrecipitationRate
 		sample = next(i.timeseries.first.value for i in plots if i.hasData)
 		if not isinstance(sample, PrecipitationRate):
 			return None

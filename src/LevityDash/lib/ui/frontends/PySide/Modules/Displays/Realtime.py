@@ -17,7 +17,7 @@ from LevityDash.lib.plugins.freshness import RefreshEstimator
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.DisplayBase import Display
 from LevityDash.lib.ui.icons import fa as FontAwesome, getIcon, Icon
 from LevityDash.lib.utils.shared import singleShotSafe, startTimerSafe, stopTimerSafe
-from WeatherUnits.time_.time import Second
+from unitcorn.time_.time import Second
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.valuesource import openValueSource
 from LevityDash.lib.plugins.expressions import Expression
@@ -46,7 +46,7 @@ from LevityDash.lib.utils.shared import (
 from LevityDash.lib.stateful import StateProperty, Stateful
 from LevityDash.lib.plugins.observation import RealtimeSource, ObservationValue, TimeseriesSource
 from LevityDash.lib.wire.containers import RemoteObservationValue
-from WeatherUnits import Measurement, auto as autoMeasurement, Length
+from unitcorn import Measurement, auto as autoMeasurement, Length
 
 qApp: QApplication
 
@@ -58,7 +58,7 @@ log = guiLog.getChild(__name__)
 # schema/source/container-coupled constructor. Every place below that used
 # to check isinstance(value, ObservationValue) alone silently fell through
 # to the generic str(value) fallback for a wire-sourced value instead of
-# unwrapping to the real WeatherUnits Measurement - hiding the separate unit
+# unwrapping to the real unitcorn Measurement - hiding the separate unit
 # box (hasUnit read false) while baking the unit into the value text anyway
 # (str() on the wrapper delegates to the wrapped measurement's own __str__).
 # Reproduced live: mode=remote's wind speed showed "3.6 mph" merged into the

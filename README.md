@@ -46,7 +46,7 @@ cd LevityDash
 poetry install --without dev
 ```
 
-The `dev` dependency group expects a sibling checkout of the WeatherUnits repo (`../WeatherUnits`) for library development; `--without dev` skips it and uses the released WeatherUnits from PyPI.
+The `dev` dependency group expects a sibling checkout of the unitcorn repo, formerly WeatherUnits (`../WeatherUnits`), for library development; `--without dev` skips it and uses the released unitcorn from PyPI.
 
 ## Running
 

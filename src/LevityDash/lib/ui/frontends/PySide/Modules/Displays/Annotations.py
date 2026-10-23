@@ -15,8 +15,8 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Displays import Text, Surface
 from LevityDash.lib.ui.frontends.PySide.utils import SoftShadow, ViewScale
 from LevityDash.lib.utils import numberRegex, Unset, Axis
 from LevityDash.lib.utils.protocols import GraphItem, HasWeight
-from WeatherUnits import Length, Percentage, Measurement
-from WeatherUnits.length import Centimeter, Millimeter, Inch
+from unitcorn import Length, Percentage, Measurement
+from unitcorn.length import Centimeter, Millimeter, Inch
 
 log = UILogger.getChild('Annotations')
 
