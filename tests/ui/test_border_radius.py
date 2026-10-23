@@ -1,6 +1,6 @@
 """`border: {radius: …}` rounds the corners of a border on all edges."""
 import pytest
-from PySide6.QtCore import QPointF
+from PySide6.QtCore import QPointF, Qt
 
 from tests.conftest import pump
 from LevityDash.lib.ui.frontends.PySide.Modules import Panel
@@ -51,3 +51,31 @@ def test_the_radius_survives_a_save(dashboard, box):
 	edge = border(dashboard, box, radius='12px')
 	assert edge.state['radius'] == '12px'
 	assert edge.radius_px(box.rect()) == pytest.approx(12.0)
+
+
+def test_a_fill_paints_inside_the_rounded_border_and_sits_behind_the_content(dashboard, box):
+	edge = border(dashboard, box, radius='20px', fill='#336699', weight=0)
+	assert edge.brush().color().name() == '#336699'
+	assert edge.pen().style() == Qt.NoPen
+	assert edge.flags() & edge.GraphicsItemFlag.ItemStacksBehindParent
+
+
+def test_no_fill_leaves_the_border_a_line_on_top(dashboard, box):
+	edge = border(dashboard, box, radius='20px')
+	assert edge.brush().style() == Qt.NoBrush
+	assert not edge.flags() & edge.GraphicsItemFlag.ItemStacksBehindParent
+
+
+def test_a_fill_on_some_edges_only_is_ignored(dashboard, box):
+	edge = border(dashboard, box, edges='top', fill='#336699')
+	assert edge.brush().style() == Qt.NoBrush
+
+
+def test_a_fill_takes_a_translucent_colour(dashboard, box):
+	edge = border(dashboard, box, radius='20px', fill='#ffffff22', weight=0)
+	assert edge.brush().color().alpha() == 0x22
+
+
+def test_a_fill_takes_a_colour_with_alpha_written_as_a_mapping(dashboard, box):
+	edge = border(dashboard, box, radius='20px', fill={'color': '#ffffff', 'alpha': 0.2}, weight=0)
+	assert edge.brush().color().alpha() == pytest.approx(51, abs=1)

@@ -113,7 +113,9 @@ An item that shows a number reports its size from its **format hint**, the wides
 
 ## Border radius
 
-`border: {enabled: true, radius: 12px}` rounds the corners of a border on all edges. A number or `px` is pixels; `8%` is a share of the shorter side, so `50%` makes a pill (or a circle in a square). The radius never passes half the shorter side. A border on some edges only stays straight. To keep the curves parallel in a nested box, give the inner border `offset: X` and the same `$gap` in `padding`, with the inner radius the outer radius less `X`.
+`border: {enabled: true, radius: 12px}` rounds the corners of a border on all edges. A number or `px` is pixels; `8%` is a share of the shorter side, so `50%` makes a pill (or a circle in a square). The radius never passes half the shorter side. A border on some edges only stays straight.
+
+`fill: '#2a4a6a'` fills the inside of a border on all edges, following the radius and sitting behind the item's content; `weight: 0` leaves the fill with no line. Any colour form works, tokens and alpha included (`fill: {color: $surface, alpha: 0.6}`). A fill on some edges only is ignored. To keep the curves parallel in a nested box, give the inner border `offset: X` and the same `$gap` in `padding`, with the inner radius the outer radius less `X`.
 
 ## Rules
 

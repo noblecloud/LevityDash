@@ -127,6 +127,8 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 					path.lineTo(right, rect.bottom())
 		self.setPath(path)
 		self.setEnabled(path.elementCount() > 0)
+		if getattr(self, '_fill', None) is not None:
+			self.updatePen()
 
 	def updatePen(self) -> None:
 		pen = self.pen()
@@ -134,7 +136,12 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 		color = self.color
 		pen.setWidthF(weight)
 		pen.setColor(color.QColor)
-		self.setPen(pen)
+		fill = getattr(self, '_fill', None)
+		filled = fill is not None and self.edges == LocationFlag.Edges
+		self.setPen(Qt.NoPen if filled and weight <= 0 else pen)
+		self.setBrush(fill.QColor if filled else Qt.NoBrush)
+		# a fill sits behind what the parent holds; a line sits on top, as before
+		self.setFlag(self.GraphicsItemFlag.ItemStacksBehindParent, filled)
 
 	@StateProperty(default=LocationFlag.Edges, allowNone=False, after=updatePath)
 	def edges(self) -> LocationFlag:
@@ -380,6 +387,34 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 			case _:
 				log.error(f'{value} is not a valid value for Color.  Using default value of #ffffff for now.')
 				return Color('#ffffff')
+
+	@StateProperty(default=None, allowNone=True, after=updatePen)
+	def fill(self) -> Color | None:
+		"""A colour that fills the inside of a border on all edges, following its `radius`.
+
+		With `weight: 0` there is no line, only the fill. Colours take the usual forms, `$tokens` and `alpha` included.
+
+		Example Config
+		--------------
+		```yaml
+		border: {enabled: true, radius: 16px, fill: '#ffffff22', weight: 0}
+		```
+		"""
+		return getattr(self, '_fill', None)
+
+	@fill.setter
+	def fill(self, value: Color | None):
+		self._fill = value
+
+	@fill.decode
+	def fill(self, value) -> Color | None:
+		if value is None:
+			return None
+		try:
+			return Color.decode(value)
+		except Exception:
+			log.error(f'{value!r} is not a valid border fill. Using no fill.')
+			return None
 
 	@StateProperty(default=False, allowNone=False)
 	def enabled(self) -> bool:
