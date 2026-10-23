@@ -117,3 +117,23 @@ def test_a_theme_file_in_the_config_folder_is_found():
 	finally:
 		file.unlink()
 		theme.reset()
+
+
+def test_a_theme_has_a_type_and_spacing_scale_that_themes_can_extend_and_change():
+	sizes = theme.load('default').sizes()
+	assert sizes['type_head'] == '160%' and sizes['space_3'] == '4mm'
+	assert theme.load('paper').sizes() == sizes  # taken from default
+	inline = theme.decode({'extends': 'default', 'sizes': {'space_3': '5mm', 'gap_wide': '$space_5'}}).sizes()
+	assert inline['space_3'] == '5mm' and inline['gap_wide'] == '8mm' and inline['type_head'] == '160%'
+
+
+def test_a_size_token_is_not_a_colour():
+	with pytest.raises(theme.ThemeError, match='is a size'):
+		theme.active().resolve('$space_3', 'colors')
+
+
+def test_type_steps_rise_about_a_major_third():
+	sizes = theme.load('default').sizes()
+	steps = [float(sizes[k].rstrip('%')) for k in ('type_caption', 'type_label', 'type_value', 'type_head')]
+	assert steps == sorted(steps)
+	assert all(1.2 <= b / a <= 1.6 for a, b in zip(steps, steps[1:]))

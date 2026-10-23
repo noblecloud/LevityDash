@@ -97,6 +97,7 @@ Every theme defines these tokens.
 | Colors | `background` `surface` `text` `muted` `faint` `rule` `accent` `good` `warn` `bad` `info` `series-1` to `series-6` |
 | Fonts | `display` `mono` `body` |
 | Gradients | `load` `temperature` |
+| Sizes | `unit` `type_caption` `type_label` `type_value` `type_head` `type_hero` `space_1` to `space_6` |
 
 - `background` is behind the whole dashboard. `surface` is the face of a card.
 - `text` is for values. `muted` is for titles and captions. `faint` is for units and tick marks.
@@ -107,7 +108,46 @@ Every theme defines these tokens.
 - `display` is for titles and labels. `mono` is for numbers that line up. `body` is for everything else.
 - `load` is for a value from 0 to 100. `temperature` has stops pinned to °F. The stops follow the reading when the data is in °C.
 
+- The sizes are a type scale and a spacing scale. See [Sizes](#sizes).
+
 A theme can add more tokens. For example, a theme can define `solar` and `grid` for a dashboard that shows energy.
+
+## Sizes
+
+A theme can give a dashboard one set of type and spacing steps, so every panel uses the same few numbers. Write a size as a [variable](/config/dashboard/variables.md): `$space_3`, `$type_head`. A theme's sizes are the first variables of a dashboard. A `vars.yaml` or the file's own `vars:` can replace one.
+
+```yaml
+items:
+  - type: stack
+    spacing: $space_3          # 4mm
+    padding: $space_5          # 8mm
+    items:
+      - type: text
+        text: Wind
+        size: $type_head       # 160%
+```
+
+| Token | Default | Use |
+|-------|---------|-----|
+| `unit` | `2mm` | The base step. |
+| `type_caption` | `80%` | Axis ticks, units, column heads. |
+| `type_label` | `100%` | The words that name a value. |
+| `type_value` | `125%` | Every other number. |
+| `type_head` | `160%` | The words that name a panel. |
+| `type_hero` | `400%` | The one number a panel is about. |
+| `space_1` to `space_6` | `1mm` `2mm` `4mm` `6mm` `8mm` `12mm` | Inside a cell, between cells, between panels, the outer margin. |
+
+The type steps are percentages of the label size, about 1.25 apart. They set the ratio between roles where a size is written as a percentage. A text item that fits its box is sized by its [size group](/config/dashboard/size-groups.md), not by these.
+
+Size names use underscores, not hyphens, because a variable name ends at a hyphen. Change the sizes in a theme with a `sizes:` group, the same as colors:
+
+```yaml
+theme:
+  extends: default
+  sizes:
+    space_3: 5mm
+    type_head: 180%
+```
 
 ## Change a few tokens for one dashboard
 

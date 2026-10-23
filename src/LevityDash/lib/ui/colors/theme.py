@@ -20,8 +20,11 @@ Theme file::
 	  mono: Roboto Mono
 	scales:                         # named gradients; same forms as ``gradient:`` in a .levity
 	  load: {0: $good, 60: $warn, 90: $bad}
+	sizes:                          # lengths and ratios: a type scale and a spacing scale
+	  type_value: 125%
+	  space_2: 2mm
 
-A token has one namespace across the three groups, so ``$mono`` is a font and ``$muted`` a colour, and the
+A token has one namespace across the four groups, so ``$mono`` is a font and ``$muted`` a colour, and the
 place that reads the value decides which group it wants. A colour may also be a modifier mapping::
 
 	{color: $accent, alpha: 0.4}                  # opacity
@@ -47,7 +50,7 @@ from LevityDash.lib.ui import UILogger
 log = UILogger.getChild('Theme')
 
 #: Token groups a theme file holds.
-GROUPS = ('colors', 'fonts', 'scales')
+GROUPS = ('colors', 'fonts', 'scales', 'sizes')
 
 #: Keys of a colour modifier mapping, beside ``color``.
 MODIFIERS = frozenset({'alpha', 'lighten', 'darken', 'chroma', 'hue-shift', 'mix'})
@@ -63,6 +66,9 @@ STANDARD_TOKENS: dict[str, tuple[str, ...]] = {
 	),
 	'fonts':  ('display', 'mono', 'body'),
 	'scales': ('load', 'temperature', 'sky', 'sky-top', 'sky-horizon'),
+	# Names use underscores, not hyphens: a size is spliced into a dashboard as a variable, and a bare `$name` there stops at a hyphen.
+	'sizes':  ('unit', 'type_caption', 'type_label', 'type_value', 'type_head', 'type_hero',
+	           'space_1', 'space_2', 'space_3', 'space_4', 'space_5', 'space_6'),
 }
 
 DEFAULT_NAME = 'default'
@@ -207,6 +213,14 @@ class Theme:
 		if not isinstance(value, str):
 			raise ThemeError(f'theme {self.name!r}: font ${token} must be a family name, not {value!r}')
 		return value
+
+	def size(self, token: str):
+		"""The value of a size token: a length (``4mm``), a percentage (``125%``) or a number, as the theme wrote it."""
+		return self.resolve(f'${token}', 'sizes')
+
+	def sizes(self) -> dict[str, Any]:
+		"""Every size token of this theme and the ones it extends, resolved. The dashboard loader offers them as variables (``$space_2``)."""
+		return {name: self.size(name) for name in sorted(self.names('sizes'))}
 
 	def scale(self, token: str):
 		"""The resolved gradient spec of a scale token, ready for ``Gradient.decode``."""
