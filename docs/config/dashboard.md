@@ -1079,6 +1079,14 @@ The smallest gap between two pins, in pin sizes. A pin that would be closer than
 
 The color of the pins. If you leave it out, the pins are painted like the line, with the same color or gradient.
 
+#### <div class=mono>only: peaks | troughs | extremes</div>
+
+Puts pins only where the line turns, not at every sample. Each takes the pin value nearest that time, so a condition key gives an icon at each high and low, and the line's own key with no `steps` prints the highs and lows. A trough takes the other side of the line from the `offset`. A turn counts when it stands out from its surroundings by `prominence`. See `docs/design-references/pins-at-peaks.levity`.
+
+#### <div class=mono>prominence: float</div>
+
+How far a turn must stand out for `only`, as a share of the line's whole range, from `0.01` to `1`. The default is `0.15`.
+
 #### <div class=mono>glyph: str</div>
 
 One icon for every pin, such as `wi:direction-up`. The value then only places the pin, and turns it if `rotate` is set.

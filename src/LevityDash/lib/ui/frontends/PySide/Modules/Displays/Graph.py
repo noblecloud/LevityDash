@@ -32,7 +32,7 @@ from math import inf, prod, sqrt
 from rich.repr import auto
 from scipy.constants import golden
 from scipy.interpolate import CubicSpline, interp1d, UnivariateSpline
-from scipy.signal import savgol_filter
+from scipy.signal import find_peaks, savgol_filter
 from time import perf_counter, time
 from types import SimpleNamespace
 from typing import (
@@ -1963,6 +1963,10 @@ class LinePlot(Plot):
 		or `map` (`{0: 'wi:day-sunny'}`: exact values); with neither, the value prints as text.
 		`at` (0 bottom to 1 top of the figure) sets every mark at that height instead of on the line,
 		which makes a row of glyphs: a condition timeline. A `strip` plot draws only that row.
+		`only: peaks | troughs | extremes` puts pins only where the line turns (a turn must stand out by
+		`prominence`, a share of the line's range, default 0.15), each taking the pin value nearest that time:
+		with the line's own key and no steps, that prints the day's highs and lows; with a condition key,
+		an icon at each. Troughs take the offset's opposite side.
 		`glyph` draws one glyph for every value (`wi:direction-up`) and `rotate` turns it by the value read as
 		degrees clockwise, plus the number of degrees `rotate` gives (`rotate: 180` makes wind direction,
 		which names where the wind comes from, point the way it blows). `rotate: true` adds nothing.
@@ -1998,6 +2002,7 @@ class LinePlot(Plot):
 			'color':   value.get('color'), 'glyph': None if value.get('glyph') is None else str(value['glyph']),
 			'rotate':  None if value.get('rotate') in (None, False) else (0.0 if value['rotate'] is True else float(value['rotate'])),
 			**({'at': clamp(float(value['at']), 0.0, 1.0)} if value.get('at') is not None else {}),
+			'only':    _pinsOnly(value.get('only')), 'prominence': clamp(float(value.get('prominence', 0.15)), 0.01, 1.0),
 		}
 
 	@StateProperty(default=None, allowNone=True, after=Plot.updateAppearance)
@@ -2213,7 +2218,40 @@ class LinePlot(Plot):
 
 
 # What a pins mapping falls back to for a key it leaves out (state may hand it back with defaults dropped).
-PIN_DEFAULTS = {'steps': [], 'map': {}, 'size': 14, 'offset': -1.2, 'spacing': 1.6, 'color': None, 'glyph': None, 'rotate': None}
+PIN_DEFAULTS = {'steps': [], 'map': {}, 'size': 14, 'offset': -1.2, 'spacing': 1.6, 'color': None, 'glyph': None, 'rotate': None, 'only': None, 'prominence': 0.15}
+
+
+def _pinsOnly(value) -> Optional[str]:
+	"""Where pins go: everywhere (None), or only on the line's `peaks`, `troughs` or both (`extremes`)."""
+	if value is None:
+		return None
+	value = str(value).strip().lower()
+	if value in ('peaks', 'highs'):
+		return 'peaks'
+	if value in ('troughs', 'lows'):
+		return 'troughs'
+	if value in ('extremes', 'extrema', 'both'):
+		return 'extremes'
+	raise ValueError(f'pins only must be peaks, troughs or extremes, not {value!r}')
+
+
+def extremeTimes(times: np.ndarray, ys: np.ndarray, kind: str, prominence: float) -> list[tuple[float, int]]:
+	"""The times of the line's peaks and troughs, with the way each one points (-1 above the line, 1 below).
+
+	`ys` are pixels, so a peak is a low `y`. A turn counts when it stands out from its surroundings by
+	`prominence` of the line's whole range, which leaves out wobble.
+	"""
+	if len(ys) < 3:
+		return []
+	span = float(np.ptp(ys))
+	if span <= 0:
+		return []
+	found = []
+	if kind in ('peaks', 'extremes'):
+		found += [(float(times[i]), -1) for i in find_peaks(-ys, prominence=prominence * span)[0]]
+	if kind in ('troughs', 'extremes'):
+		found += [(float(times[i]), 1) for i in find_peaks(ys, prominence=prominence * span)[0]]
+	return sorted(found)
 
 
 def variableWidths(times: np.ndarray, sideTimes: np.ndarray, sideValues: list, weight: Sequence[float], span: Optional[Sequence[float]]) -> Optional[np.ndarray]:
@@ -2284,7 +2322,17 @@ def pinPath(times: np.ndarray, xs: np.ndarray, ys: np.ndarray, pinTimes: np.ndar
 	size = float(size) if isinstance(size, (int, float)) else float(re.sub(r'[a-z]+$', '', str(size))) * dpi / (25.4 if str(size).endswith('mm') else 2.54 if str(size).endswith('cm') else 1)
 	path = QPainterPath()
 	lastX = -np.inf
-	for t, value in zip(pinTimes, pinValues):
+	candidates = [(t, value, -1) for t, value in zip(pinTimes, pinValues)]
+	if config.get('only') and len(pinTimes):
+		pinTimes = np.asarray(pinTimes)
+		nearest = lambda t: int(np.clip(np.searchsorted(pinTimes, t), 1, len(pinTimes) - 1)) if len(pinTimes) > 1 else 0
+		candidates = []
+		for t, way in extremeTimes(times, ys, config['only'], config['prominence']):
+			i = nearest(t)
+			if len(pinTimes) > 1 and abs(pinTimes[i - 1] - t) < abs(pinTimes[i] - t):
+				i -= 1
+			candidates.append((t, pinValues[i], way))
+	for t, value, way in candidates:
 		if not times[0] <= t <= times[-1]:
 			continue
 		x = float(np.interp(t, times, xs))
@@ -2302,7 +2350,9 @@ def pinPath(times: np.ndarray, xs: np.ndarray, ys: np.ndarray, pinTimes: np.ndar
 		font = font or QFont(QApplication.font())
 		font.setPixelSize(max(int(round(size)), 1))
 		box = QFontMetricsF(font).boundingRect(text)
-		y = rowY if rowY is not None else float(np.interp(t, times, ys)) + config['offset'] * size
+		# A peak keeps the offset's side (negative is above); a trough takes the other.
+		below = -1 if (config.get('only') and way > 0) else 1
+		y = rowY if rowY is not None else float(np.interp(t, times, ys)) + below * config['offset'] * size
 		if angle is None:
 			path.addText(QPointF(x - box.center().x(), y - box.center().y()), font, text)
 		else:
