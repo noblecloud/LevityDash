@@ -1,57 +1,55 @@
 # Magazine: the week as a printed page. A 15in 16:10 screen, in the shipped `paper` theme (dark ink on warm paper).
 #
-# A masthead, a lead story and three features, set on a grid whose areas read like the page. The lead is the week as
-# one graph with the day names behind it. Each feature is a headline word, one big figure and the numbers around it: the
-# warm days, the rain, the frost. Nothing here names a colour: ink, rules and the accent come from the theme, so
-# `render_dashboard.py --theme dusk` turns the same page into a night edition.
+# A masthead over a hairline, a lead story and three features, set on a grid whose areas read like the page. The lead
+# is the week as one graph with the day names behind it. Each feature is a headline, a line saying what its figure is,
+# the figure, and three numbers around it. The sidebar is a column of notes; a note with `when:` exists only in a week
+# that earns it, and gives its room to the others when it is off. Nothing here names a colour: ink, rules and the
+# accent come from the theme, so `render_dashboard.py --theme dusk` turns the same page into a night edition.
 #
-# Layout is one grid whose areas read like the page, with a `.` row between the bands and `spacing` for the gutters. The masthead's date rule is a
-# bordered text item. The sidebar is a stack of `when:` items, so a frost note exists only in a week that has one.
+# Type: each text role is one dashboard-wide size group with `matchAll`, pinned with `text-height`. The `vars:` below
+# are the whole scale: labels (`global.title`), values (`global.value`), headlines (`global.head`) and the big figures
+# (`global.big`). The masthead is in the big group too, set ExtraBold where the figures are Light, so the page has
+# four sizes and the masthead and the figures carry the same weight of ink. Labels sit left; every number is left
+# aligned in a feature and right aligned in a note, so numbers in a column share an edge. Units are said once, in the
+# label. Temperatures are the accent and rain is `$info`; headlines and labels are ink, so colour marks data only.
 #
-# Text sizes come from the dashboard-wide size groups global.title, global.value and global.head; the hand-written
-# readings join them in the board's `shared:`. Layers: the day names behind the graph.
+# Space: a 96 px margin, 96 px between columns and 64 px between bands; inside a panel the gaps are 32 px.
 #
 # Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/magazine.levity
 #           --scenario week-ahead --size 2880x1800 --freeze-time 2026-10-07T15:40:00
 theme: paper
 vars:
   t: environment.temperature.temperature
+  # the type scale: label, value, headline, and the big figures (the masthead shares their size)
+  label: 30px
+  value: 30px
+  head: 52px
+  big: 130px
 items:
 - type: grid
   name: page
-  geometry: {x: 1.2%, y: 1.6%, width: 97.6%, height: 96.8%}
-  spacing: 1.2%
+  geometry: {x: 3.333%, y: 5.333%, width: 93.333%, height: 89.333%}
+  spacing: 0
   padding: 0
-  shared:
-    title:
-      matchingGroup: {group: global.title, matchAll: true}
-    display:
-      valueLabel:
-        matchingGroup: {group: global.value, matchAll: true}
   grid:
-    columns: [1fr, 1fr, 1fr, 1.15fr]
-    rows: [11fr, 1fr, 50fr, 1fr, 34fr]
+    columns: [1fr, 1fr, 1fr, 1.1fr]
+    rows: [12fr, 50fr, 41fr]
+    gap: [64px, 96px]
     areas:
-    - mast mast mast side
-    - . . . side
+    - mast mast mast mast
     - lead lead lead side
-    - . . . side
     - one two three side
   items:
 
   # ================= THE MASTHEAD ==========================================
+  # The title and the date share a baseline; a hairline under them closes the band.
   - type: group
     name: mast
     grid: {area: mast}
     items:
-    - {type: text, text: The Week Ahead, font: Nunito, weight: ExtraBold, color: $text, alignment: CenterLeft, geometry: {x: 0%, y: 0%, width: 56%, height: 82%}}
-    - type: text
-      text: Wednesday, October 7th
-      font: $display
-      color: $muted
-      alignment: CenterRight
-      geometry: {x: 56%, y: 8%, width: 44%, height: 52%}
-    - {type: text, text: '', border: {enabled: true, edges: bottom}, geometry: {x: 0%, y: 94%, width: 100%, height: 6%}}
+    - {type: text, text: The Week Ahead, font: Nunito, weight: ExtraBold, alignment: BottomLeft, text-height: $big, matchingGroup: {group: global.big, matchAll: true}, geometry: {x: 0%, y: 0%, width: 60%, height: 90%}}
+    - {type: text, text: 'Wednesday, October 7th', color: $muted, alignment: BottomRight, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 60%, y: 0%, width: 40%, height: 86%}}
+    - {type: text, text: '', border: {enabled: true, edges: bottom}, geometry: {x: 0%, y: 96%, width: 100%, height: 4%}}
 
   # ================= THE LEAD ==============================================
   - type: graph
@@ -78,99 +76,136 @@ items:
       environment.precipitation.precipitation:
         plot: {type: bar, color: $info, width: 0.8, radius: 0.25}
 
+
   # ================= THREE FEATURES ========================================
-  - preset: headline-panel
+  - type: group
     name: one
     grid: {area: one}
-    props:
-      headline: Warm to Friday
-      headline_color: $accent
-      key: max(at(environment.temperature.high, 1d), at(environment.temperature.high, 2d))
-      title: Thursday and Friday highs
-      color: $accent
-      precision: 0
-      unit_position: Inline
-      headline_box: {x: 0%, y: 0%, width: 100%, height: 16%}
-      hero_box: {x: 0%, y: 18%, width: 100%, height: 42%}
-      list_box: {x: 0%, y: 66%, width: 100%, height: 34%}
+    items:
+    - {type: text, text: Warm to Friday, alignment: BottomLeft, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 12%}}
+    - {type: text, text: 'Highest of Thursday and Friday', alignment: TopLeft, font: Roboto, weight: Light, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 0%, y: 15%, width: 100%, height: 8%}}
+    - type: realtime.text
+      key: 'max(at(environment.temperature.high, 1d), at(environment.temperature.high, 2d))'
+      title: {visible: false}
+      geometry: {x: 0%, y: 25%, width: 100%, height: 38%}
+      display: {precision: 0, weight: Light, unitPosition: Hidden, format-hint: '00°', valueLabel: {alignment: Left, margins: 0px, color: $accent, text-height: $big, matchingGroup: {group: global.big, matchAll: true}}}
+    - type: grid
+      geometry: {x: 0%, y: 70%, width: 100%, height: 30%}
+      spacing: 0
+      grid: {columns: [1fr, 1fr, 1fr], rows: [1fr], gap: 32px}
+      shared:
+        title: {color: $muted, position: Top, size: 0.45, alignment: BottomLeft, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+        display: {unitPosition: Hidden, valueLabel: {alignment: TopLeft, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
       items:
-      - {type: realtime.text, key: environment.temperature.high, title: {text: Today}, display: {precision: 0, valueLabel: {color: $accent}}}
-      - {type: realtime.text, key: 'at(environment.temperature.low, 1d)', title: {text: Thu night}, display: {precision: 0}}
-      - {type: realtime.text, key: 'at(environment.wind.speed.gustMax, 1d)', title: {text: Thu gust}, display: {precision: 0, unitPosition: Hidden}}
-  - preset: headline-panel
+      - {type: realtime.text, key: 'environment.temperature.high', title: Today high, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}}
+      - {type: realtime.text, key: 'at(environment.temperature.low, 1d)', title: Thu low, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}}
+      - {type: realtime.text, key: 'at(environment.temperature.high, 3d)', title: Sat high, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}}
+  - type: group
     name: two
     grid: {area: two}
-    props:
-      headline: Rain by night
-      headline_color: $info
-      key: at(environment.precipitation.daily, 3d)
-      title: Saturday total, inches
-      color: $info
-      precision: 1
-      unit_position: Hidden
-      headline_box: {x: 0%, y: 0%, width: 100%, height: 16%}
-      hero_box: {x: 0%, y: 18%, width: 100%, height: 42%}
-      list_box: {x: 0%, y: 66%, width: 100%, height: 34%}
+    items:
+    - {type: text, text: Rain by night, alignment: BottomLeft, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 12%}}
+    - {type: text, text: "Saturday's rain, inches", alignment: TopLeft, font: Roboto, weight: Light, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 0%, y: 15%, width: 100%, height: 8%}}
+    - type: realtime.text
+      key: 'at(environment.precipitation.daily, 3d)'
+      title: {visible: false}
+      geometry: {x: 0%, y: 25%, width: 100%, height: 38%}
+      display: {precision: 1, weight: Light, unitPosition: Hidden, format-hint: '0.0', valueLabel: {alignment: Left, margins: 0px, color: $info, text-height: $big, matchingGroup: {group: global.big, matchAll: true}}}
+    - type: grid
+      geometry: {x: 0%, y: 70%, width: 100%, height: 30%}
+      spacing: 0
+      grid: {columns: [1fr, 1fr, 1fr], rows: [1fr], gap: 32px}
+      shared:
+        title: {color: $muted, position: Top, size: 0.45, alignment: BottomLeft, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+        display: {unitPosition: Hidden, valueLabel: {alignment: TopLeft, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
       items:
-      - {type: realtime.text, key: 'at(environment.precipitation.daily, 2d)', title: {text: Fri}, display: {precision: 1, valueLabel: {color: $info}}}
-      - {type: realtime.text, key: 'at(environment.precipitation.daily, 4d)', title: {text: Sun}, display: {precision: 2}}
-      - {type: realtime.text, key: 'at(environment.wind.speed.gustMax, 3d)', title: {text: Sat gust}, display: {precision: 0, unitPosition: Hidden}}
-  - preset: headline-panel
+      - {type: realtime.text, key: 'at(environment.precipitation.daily, 2d)', title: Fri in, display: {precision: 1, format-hint: '0.0', valueLabel: {color: $info}}}
+      - {type: realtime.text, key: 'at(environment.precipitation.daily, 4d)', title: Sun in, display: {precision: 2, format-hint: '0.00', valueLabel: {color: $info}}}
+      - {type: realtime.text, key: 'at(environment.precipitation.probability, 3d)', title: Sat chance, display: {precision: 0, format-hint: '00%', valueLabel: {color: $info}}}
+  - type: group
     name: three
     grid: {area: three}
-    props:
-      headline: Cold, then clear
-      headline_color: $good
-      key: at(environment.temperature.low, 5d)
-      title: Monday night low
-      color: $good
-      precision: 0
-      unit_position: Inline
-      headline_box: {x: 0%, y: 0%, width: 100%, height: 16%}
-      hero_box: {x: 0%, y: 18%, width: 100%, height: 42%}
-      list_box: {x: 0%, y: 66%, width: 100%, height: 34%}
+    items:
+    - {type: text, text: 'Cold, then clear', alignment: BottomLeft, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 12%}}
+    - {type: text, text: 'Monday night low', alignment: TopLeft, font: Roboto, weight: Light, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 0%, y: 15%, width: 100%, height: 8%}}
+    - type: realtime.text
+      key: 'at(environment.temperature.low, 5d)'
+      title: {visible: false}
+      geometry: {x: 0%, y: 25%, width: 100%, height: 38%}
+      display: {precision: 0, weight: Light, unitPosition: Hidden, format-hint: '00°', valueLabel: {alignment: Left, margins: 0px, color: $accent, text-height: $big, matchingGroup: {group: global.big, matchAll: true}}}
+    - type: grid
+      geometry: {x: 0%, y: 70%, width: 100%, height: 30%}
+      spacing: 0
+      grid: {columns: [1fr, 1fr, 1fr], rows: [1fr], gap: 32px}
+      shared:
+        title: {color: $muted, position: Top, size: 0.45, alignment: BottomLeft, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+        display: {unitPosition: Hidden, valueLabel: {alignment: TopLeft, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
       items:
-      - {type: realtime.text, key: 'at(environment.temperature.low, 4d)', title: {text: Sun}, display: {precision: 0}}
-      - {type: realtime.text, key: 'at(environment.temperature.low, 6d)', title: {text: Tue}, display: {precision: 0, valueLabel: {color: $good}}}
-      - {type: realtime.text, key: 'at(environment.temperature.high, 5d)', title: {text: Mon high}, display: {precision: 0}}
+      - {type: realtime.text, key: 'at(environment.temperature.low, 4d)', title: Sun low, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}}
+      - {type: realtime.text, key: 'at(environment.temperature.low, 6d)', title: Tue low, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}}
+      - {type: realtime.text, key: 'at(environment.temperature.high, 5d)', title: Mon high, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}}
 
   # ================= THE SIDEBAR ===========================================
-  # Notes with a `when:` exist only in a week that earns them; the last note is always there.
+  # A column of notes, each a headline over rows of a label and its value. Every row is the same height: a note's
+  # `flex: {grow:}` is its number of rows, the headline counted. A note with `when:` is off unless the week earns it.
   - type: stack
     name: side
     grid: {area: side}
     direction: Vertical
-    spacing: 3%
+    spacing: 64px
     items:
-    - preset: list-panel
+    - type: grid
       name: now
-      props:
-        title: Right now
-        items:
-        - {type: realtime.text, key: $t, title: {text: Outside}, display: {precision: 0}}
-        - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels like}, display: {precision: 0, valueLabel: {color: $accent}}}
-        - {type: realtime.text, key: environment.humidity.humidity, title: {text: Humidity}, display: {precision: 0, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Wind}, display: {precision: 0}}
-        - {type: realtime.text, key: environment.pressure.pressure, title: {text: Pressure}, display: {precision: 2}}
-    - preset: list-panel
+      flex: {grow: 9}
+      spacing: 0
+      grid: {columns: [1fr], rows: [1fr, 1fr, 1fr, 1fr, 1fr, 1fr, 1fr, 1fr, 1fr]}
+      shared:
+          title: {color: $muted, alignment: Left, position: Left, size: 0.62, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+          display: {unitPosition: Hidden, valueLabel: {alignment: Right, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
+      items:
+      - {type: text, text: Right now, alignment: BottomLeft, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}}
+      - {type: realtime.text, key: '$t', title: Outside, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}}
+      - {type: realtime.text, key: 'environment.temperature.feelsLike', title: Feels like, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}}
+      - {type: realtime.text, key: 'environment.temperature.dewpoint', title: Dew point, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}}
+      - {type: realtime.text, key: 'environment.humidity.humidity', title: Humidity, display: {precision: 0, format-hint: '00%'}}
+      - {type: realtime.text, key: 'environment.wind.speed.speed', title: Wind mph, display: {precision: 0, format-hint: '00'}}
+      - {type: realtime.text, key: 'environment.wind.speed.gust', title: Gust mph, display: {precision: 0, format-hint: '00'}}
+      - {type: realtime.text, key: 'environment.pressure.pressure', title: Pressure inHg, display: {precision: 2, format-hint: '00.00'}}
+      - {type: realtime.text, key: 'environment.light.uvi', title: UV index, display: {precision: 1, format-hint: '0.0'}}
+    - type: grid
       name: frost
       when: 'at(environment.temperature.low, 5d) < 36°F'
-      props:
-        title: Frost note
-        items:
-        - {type: realtime.text, key: 'at(environment.temperature.low, 4d)', title: {text: Sunday night}, display: {precision: 0}}
-        - {type: realtime.text, key: 'at(environment.temperature.low, 5d)', title: {text: Monday night}, display: {precision: 0, valueLabel: {color: $info}}}
-    - preset: list-panel
+      flex: {grow: 3}
+      spacing: 0
+      grid: {columns: [1fr], rows: [1fr, 1fr, 1fr]}
+      shared:
+          title: {color: $muted, alignment: Left, position: Left, size: 0.62, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+          display: {unitPosition: Hidden, valueLabel: {alignment: Right, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
+      items:
+      - {type: text, text: Frost note, alignment: BottomLeft, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}}
+      - {type: realtime.text, key: 'at(environment.temperature.low, 4d)', title: Sunday night, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}}
+      - {type: realtime.text, key: 'at(environment.temperature.low, 5d)', title: Monday night, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}}
+    - type: grid
       name: heat
       when: 'at(environment.temperature.high, 1d) > 95°F'
-      props:
-        title: Heat note
-        items:
-        - {type: realtime.text, key: 'at(environment.temperature.high, 1d)', title: {text: Thursday}, display: {precision: 0, valueLabel: {color: $bad}}}
-    - preset: list-panel
+      flex: {grow: 2}
+      spacing: 0
+      grid: {columns: [1fr], rows: [1fr, 1fr]}
+      shared:
+          title: {color: $muted, alignment: Left, position: Left, size: 0.62, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+          display: {unitPosition: Hidden, valueLabel: {alignment: Right, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
+      items:
+      - {type: text, text: Heat note, alignment: BottomLeft, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}}
+      - {type: realtime.text, key: 'at(environment.temperature.high, 1d)', title: Thursday, display: {precision: 0, format-hint: '00°', valueLabel: {color: $bad}}}
+    - type: grid
       name: wet
-      props:
-        title: The wet days
-        items:
-        - {type: realtime.text, key: 'at(environment.precipitation.probability, 2d)', title: {text: Fri chance}, display: {precision: 0}}
-        - {type: realtime.text, key: 'at(environment.precipitation.probability, 3d)', title: {text: Sat chance}, display: {precision: 0, valueLabel: {color: $info}}}
+      flex: {grow: 3}
+      spacing: 0
+      grid: {columns: [1fr], rows: [1fr, 1fr, 1fr]}
+      shared:
+          title: {color: $muted, alignment: Left, position: Left, size: 0.62, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+          display: {unitPosition: Hidden, valueLabel: {alignment: Right, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
+      items:
+      - {type: text, text: The wet days, alignment: BottomLeft, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}}
+      - {type: realtime.text, key: 'at(environment.precipitation.probability, 2d)', title: Friday chance, display: {precision: 0, format-hint: '00%', valueLabel: {color: $info}}}
+      - {type: realtime.text, key: 'at(environment.precipitation.probability, 3d)', title: Saturday chance, display: {precision: 0, format-hint: '00%', valueLabel: {color: $info}}}
