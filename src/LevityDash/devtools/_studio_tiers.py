@@ -37,6 +37,7 @@ class Finding:
 	severity: str  # WARN or NOTE
 	message: str
 	members: list = field(default_factory=list)  # the members the message is about, so the stage can outline them
+	path: Optional[tuple] = None  # the item the message is about, when it is not about text
 
 	@property
 	def rects(self):
