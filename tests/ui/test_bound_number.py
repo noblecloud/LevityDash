@@ -101,3 +101,44 @@ def test_changing_a_bound_opacity_to_a_plain_one_lets_go_of_the_source(dashboard
 			sandbox.scene().removeItem(sandbox)
 	finally:
 		installStandIn(saved)
+
+
+def _gauge(dashboard, arc):
+	sandbox = Panel(parent=dashboard.scene.base, geometry={'x': '0%', 'y': '0%', 'width': '30%', 'height': '30%'})
+	sandbox.state = {'items': [{
+		'type': 'realtime.gauge', 'name': 'g', 'key': 'environment.temperature.temperature',
+		'geometry': {'x': '0%', 'y': '0%', 'width': '100%', 'height': '100%'},
+		'display': {'range': {'min': 0, 'max': 100}, 'arc': arc},
+	}]}
+	dashboard.app.processEvents()
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import Realtime
+	return sandbox, next(c for c in sandbox.childPanels if isinstance(c, Realtime)).display
+
+
+def test_an_arc_weight_and_angles_follow_a_value_and_save_their_specs(dashboard):
+	weight = {'of': 'a.b', 'from': [0, 100], 'to': [0.02, 0.12]}
+	start = {'of': 'a.b', 'from': [0, 100], 'to': [-120, -60]}
+	end = {'of': 'a.b', 'from': [0, 100], 'to': [120, 60]}
+	saved = valuesource._standIn
+	installStandIn(lambda value, label='', effect='': Constant(50))
+	try:
+		sandbox, gauge = _gauge(dashboard, {'weight': weight, 'start-angle': start, 'end-angle': end})
+		try:
+			assert float(gauge.arc.startAngle) == pytest.approx(-90) and float(gauge.arc.endAngle) == pytest.approx(90)
+			assert float(gauge.arc.weight) == pytest.approx(0.07)
+			state = gauge.arc.encodedState()
+			assert state['weight'] == weight and state['start-angle'] == start and state['end-angle'] == end
+		finally:
+			sandbox.scene().removeItem(sandbox)
+	finally:
+		installStandIn(saved)
+
+
+def test_a_plain_arc_is_unchanged(dashboard):
+	sandbox, gauge = _gauge(dashboard, {'weight': '9%', 'start-angle': -100, 'end-angle': 100})
+	try:
+		assert gauge.arc.startAngle == -100 and gauge.arc.endAngle == 100
+		state = gauge.arc.encodedState()
+		assert state['start-angle'] == -100 and 'weight' in state and not isinstance(state['weight'], dict)
+	finally:
+		sandbox.scene().removeItem(sandbox)

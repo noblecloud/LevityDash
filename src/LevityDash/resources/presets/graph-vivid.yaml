@@ -1,0 +1,36 @@
+# A bold line coloured by its own value, with a soft glow, and a second thinner series under it for the thing the
+# first one is chased by (the dew point behind the temperature). The colour comes from a named scale, so a theme
+# can recolour it.
+doc: Bold line coloured by value with a glow and an optional second series
+props:
+  key: {default: environment.temperature.temperature, type: key, doc: "The main series"}
+  gradient: {default: TemperatureGradient, type: text, doc: "Named scale that colours the line by value"}
+  weight: {default: 1.8, type: number, min: 0.2, max: 4, doc: "Thickness of the main line"}
+  glow: {default: {strength: 0.8, reach: 2.0, passes: 4}, doc: "Glow round the main line; false for none"}
+  key2: {default: environment.temperature.dewpoint, type: key, doc: "A second series on the same scale; null for none"}
+  color2: {default: $good, type: color, doc: "Colour of the second series"}
+  hours: {default: 24, type: number, min: 1, doc: "How far the graph reaches, in hours"}
+  figure: {default: temperature, type: text, doc: "Name of the scale"}
+  min: {default: null, type: number, doc: "Bottom of the scale; unset fits the data"}
+  max: {default: null, type: number, doc: "Top of the scale; unset fits the data"}
+  top: {default: 18%, type: size, doc: "Space above the lines"}
+  bottom: {default: 24%, type: size, doc: "Space below the lines"}
+template:
+  type: graph
+  timeframe: {hours: $hours}
+  annotations:
+    dayLabels: {enabled: false}
+    hourLabels: {alignment: BottomCenter, spacingIntervals: '3, 6'}
+    lines: {spacing: 10 mm, weight: 0.3}
+  figures:
+    - figure: $figure
+      margins: {top: $top, bottom: $bottom}
+      min: $min
+      max: $max
+      $key2:
+        plot: {type: plot, color: $color2, weight: 0.5}
+        resolution: 2
+      $key:
+        labels: {enabled: true}
+        plot: {type: plot, gradient: $gradient, weight: $weight, glow: $glow}
+        resolution: 2

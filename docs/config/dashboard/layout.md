@@ -129,3 +129,38 @@ Example dashboards: `docs/design-references/grid-areas.levity` (named areas), th
 ## In the Studio
 
 `studio.py` (the Studio builder) edits these keys. A stack, a `grid`, and each of their items has a **Layout** section on the Item tab with a `flex` or `grid` popover. The popover shows the container options when the item is a stack or grid and the item options when its parent is one; an option left on its default is not written, and a stack with nothing set stays a plain stack. The popovers also edit `margin` (flex and grid items), `areas` (one row per line) and `area`. `area` is a picker over the names in the parent grid's `areas` (a name that is not there can still be typed). Select a grid, or an item in one, and the stage tags every cell with its area name. The [Studio page](/config/dashboard/studio.md) covers the rest of the editor.
+
+## Aligning to a sibling
+
+`align-to:` puts one point of an item on one point of a named sibling in the same `group`, instead of placing it by the parent's box. It is CSS anchor positioning (`anchor()`), with the sibling's `name:` as the anchor name. The item's size still comes from `geometry:`; the position comes from the sibling, so the item follows when the sibling moves or the dashboard is resized.
+
+```yaml
+- {name: temp, type: realtime.text, key: environment.temperature.temperature, geometry: {x: 8%, y: 15%, width: 40%, height: 45%}}
+- type: text
+  text: Outside
+  geometry: {x: 0%, y: 0%, width: 40%, height: 10%}
+  align-to: {to: temp, x: center, y: bottom, self-y: top, offset: {y: 1mm}}
+```
+
+| Setting | Meaning |
+| --- | --- |
+| `to` | The `name` of the sibling. `align-to: temp` alone centres the item on it both ways. |
+| `x` | The point on the sibling: `left`, `center` or `right`. |
+| `y` | The point on the sibling: `top`, `center` or `bottom`. |
+| `self-x`, `self-y` | The point on this item. Default: the same word as `x` and `y`, so `x: right` lines the right edges up, and `x: right, self-x: left` puts the item beside the sibling. |
+| `offset` | `{x, y}` lengths added last; positive is right and down. |
+
+Name only `x` or only `y` to follow the sibling on one axis and keep the item's own position on the other. An item that is itself aligned settles first, so a chain works; a loop does not (the items stay where they are). A sibling that does not exist logs one warning. `align-to` is not `anchor:` because a gauge already has an `anchor`. Example: `docs/design-references/align-to.levity`; code: `lib/layout/anchor.py`.
+
+## Overflow and scrolling
+
+`overflow:` on a `stack` (flex or grid) says what happens to content that does not fit. It is CSS `overflow`.
+
+| Value | Effect |
+|---|---|
+| `visible` | The default. Nothing is cut off; items shrink by `shrink` as before. |
+| `hidden`, `clip` | Content past the stack's box is cut off. The user cannot move it. |
+| `scroll` | Cut off, and the wheel or trackpad moves the content. A thin bar always shows. |
+| `auto` | As `scroll`, but the bar shows only while the content is longer than the box. |
+
+The scroll axis is the stack's main axis (`direction`). In a scrolling stack an item that has a size (`size:`) defaults to `shrink: 0`, so it keeps that size and overflows instead of being squeezed; give an item `shrink: 1` to let it give. The scroll stops at both ends. Wheel and trackpad only: there is no touch drag yet, and a wrapping stack does not scroll on its cross axis. Example: `docs/design-references/overflow.levity`; code: `lib/layout/overflow.py` (Qt-free math) and `Stack.cssScroll`.

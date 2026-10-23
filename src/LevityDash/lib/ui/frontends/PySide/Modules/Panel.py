@@ -32,11 +32,12 @@ from LevityDash.lib.EasyPath import EasyPathFile
 from LevityDash.lib.log import debug
 from LevityDash.lib.stateful import DefaultGroup, Stateful, StateProperty
 from LevityDash.lib.ui import UILogger as log
+from LevityDash.lib.layout.anchor import Anchor, place as place_anchor
 from LevityDash.lib.ui.Groups import SizeGroup
 from LevityDash.lib.ui.bound_number import BoundNumber, NumberSlots, decodeNumber
 from LevityDash.lib.ui.colors import Color
 from LevityDash.lib.ui.Geometry import (
-	AlignmentFlag, Dimension, Edge, Geometry, LocationFlag, Margins, Padding, parseSize, polygon_area, Position, Size,
+	AlignmentFlag, Dimension, DimensionType, Edge, Geometry, LocationFlag, Margins, Padding, parseSize, polygon_area, Position, Size,
 	size_px, PositionLiteral
 )
 from LevityDash.lib.utils.shared import (
@@ -501,7 +502,7 @@ class Panel(_Panel, Stateful, tag='group'):
 		self.previousParent = self.parent
 		self.add_defaults_to_state(kwargs)
 		self._init_args_(*args, **kwargs)
-		self.setFlag(self.GraphicsItemFlag.ItemClipsChildrenToShape, False)
+		self.setFlag(self.GraphicsItemFlag.ItemClipsChildrenToShape, getattr(self, '_overflow', 'visible') != 'visible')
 		self.setFlag(self.GraphicsItemFlag.ItemClipsToShape, False)
 
 	def _init_args_(self, *args, **kwargs) -> None:
@@ -753,6 +754,73 @@ class Panel(_Panel, Stateful, tag='group'):
 			value = Geometry(**value)
 		g.scoreSimilarity(value)
 
+	@StateProperty(key='align-to', default=None, allowNone=True, sortOrder=1)
+	def alignTo(self) -> Optional[Anchor]:
+		"""Put a point of this item on a point of a named sibling: `align-to: temp`, or `{to, x, y, self-x, self-y, offset}`.
+
+		Overrides `geometry`'s position on the axes it names; the size is still the geometry's. See `lib/layout/anchor.py`."""
+		return getattr(self, '_alignTo', None)
+
+	@alignTo.setter
+	def alignTo(self, value: Optional[Anchor]):
+		self._alignTo = value
+		if value is not None and (parent := self.parentItem()) is not None:
+			parent._alignChildren = True
+			self.applyAlignTo()
+
+	@alignTo.decode
+	def alignTo(self, value) -> Optional[Anchor]:
+		return None if value is None else Anchor.decode(value)
+
+	@alignTo.encode
+	def alignTo(value: Optional[Anchor]):
+		return None if value is None else value.encode()
+
+	def _alignLength(self, value, vertical: bool) -> float:
+		if value in (None, 0, '0'):
+			return 0.0
+		parsed = parseSize(value, None, dimension=DimensionType.height if vertical else DimensionType.width)
+		if parsed is None:
+			raise ValueError(f'align-to offset {value!r} is not a size')
+		return float(size_px(parsed, self.parent.geometry, DimensionType.height if vertical else DimensionType.width))
+
+	def applyAlignTo(self, _chain: tuple = ()):
+		"""Move this item so its `align-to` point sits on the sibling's. Quiet when there is no such sibling yet."""
+		anchor = getattr(self, '_alignTo', None)
+		parent = self.parentItem()
+		if anchor is None or parent is None or self in _chain:
+			return
+		target = next((c for c in parent.childItems() if c is not self and getattr(c, 'stateName', None) == anchor.to), None)
+		if target is None:
+			if not getattr(self, '_alignWarned', False):
+				self._alignWarned = True
+				log.warning(f'align-to: no sibling named {anchor.to!r} next to {self.stateName or type(self).__name__}')
+			return
+		if getattr(target, '_alignTo', None) is not None:
+			target.applyAlignTo((*_chain, self))  # an item that is itself aligned settles first
+		box = parent.mapRectFromItem(target, target.rect())
+		mine = parent.mapRectFromItem(self, self.rect())
+		try:
+			offset = (self._alignLength(anchor.offset_x, False), self._alignLength(anchor.offset_y, True))
+		except ValueError as error:
+			log.warning(str(error))
+			return
+		x, y = place_anchor(anchor, (box.x(), box.y(), box.width(), box.height()), (mine.width(), mine.height()), (mine.x(), mine.y()), offset)
+		if abs(x - mine.x()) > 1e-6 or abs(y - mine.y()) > 1e-6:
+			self.setPos(self.pos() + QPointF(x - mine.x(), y - mine.y()))
+
+	def afterSurface(self):
+		"""Called at the end of `Geometry.updateSurface`: settle this item's `align-to`, and the siblings aligned to it."""
+		if getattr(self, '_alignTo', None) is not None:
+			self.applyAlignTo()
+		parent = self.parentItem()
+		if parent is not None and getattr(parent, '_alignChildren', False):
+			name = getattr(self, 'stateName', None)
+			if name is not None:
+				for sibling in parent.childItems():
+					if sibling is not self and getattr(getattr(sibling, '_alignTo', None), 'to', None) == name:
+						sibling.applyAlignTo()
+
 	@StateProperty(default=Margins.default(), allowNone=False, dependencies={'geometry'}, decoder=Margins.decode)
 	def margins(self) -> Margins:
 		return self._margins
@@ -833,18 +901,17 @@ class Panel(_Panel, Stateful, tag='group'):
 				relayout()
 
 	@StateProperty(key='opacity', default=1.0, allowNone=False, sortOrder=52)
-	def itemOpacity(self) -> float | BoundNumber:
-		"""How opaque the item and everything in it is, 0 to 1. A mapping `{of, from, to}` makes it follow a value (`ui/bound_number.py`)."""
-		return self._boundOpacity or self.opacity()
+	def itemOpacity(self) -> float:
+		"""How opaque the item and everything in it is, 0 to 1. A mapping `{of, from, to}` makes it follow a value (see `ui/bound_number.py`)."""
+		return self.opacity()
+
+	@itemOpacity.state
+	def itemOpacity(self):
+		return self.numbers.current(self, 'opacity', self.opacity())
 
 	@itemOpacity.setter
 	def itemOpacity(self, value: float | BoundNumber):
-		start = self.numbers.follow(self, 'opacity', value, self._setOpacityClamped)
-		self._boundOpacity = value if isinstance(value, BoundNumber) else None
-		if self._boundOpacity is None:
-			self._setOpacityClamped(value)
-		elif start is not None:
-			self._setOpacityClamped(start)
+		self.numbers.assign(self, 'opacity', value, self._setOpacityClamped)
 
 	@itemOpacity.decode
 	def itemOpacity(self, value: int | float | str | dict) -> float | BoundNumber:
@@ -852,9 +919,7 @@ class Panel(_Panel, Stateful, tag='group'):
 
 	@itemOpacity.encode
 	def itemOpacity(self, value) -> float | dict:
-		return dict(value.spec) if isinstance(value, BoundNumber) else value
-
-	_boundOpacity: BoundNumber | None = None
+		return self.numbers.spec(value)
 
 	def _setOpacityClamped(self, value: float) -> None:
 		self.setOpacity(min(1.0, max(0.0, value)))
