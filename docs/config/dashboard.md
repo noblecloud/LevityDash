@@ -1062,6 +1062,14 @@ The smallest gap between two pins, in pin sizes. A pin that would be closer than
 
 The color of the pins. If you leave it out, the pins are painted like the line, with the same color or gradient.
 
+#### <div class=mono>glyph: str</div>
+
+One icon for every pin, such as `wi:direction-up`. The value then only places the pin, and turns it if `rotate` is set.
+
+#### <div class=mono>rotate: float | true</div>
+
+Turns each pin by its value, read as degrees clockwise, plus this many degrees. `true` adds none. Wind direction names where the wind comes from, so `rotate: 180` with an up arrow points the way the wind blows. A value that is not a number is not drawn. See `docs/design-references/wind-arrows.levity`.
+
 </div>
 
 If a key gives an icon, the pin shows that icon, and you do not need `steps` or `map`. If you give neither `steps`, `map`, nor an icon, the value is printed as text.

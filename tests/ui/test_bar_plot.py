@@ -84,3 +84,17 @@ def test_a_band_with_no_partner_draws_nothing(dashboard):
 	GraphItemData.graphic.setState(data, {'type': 'band', 'to': 'no.such.key'})
 	assert isinstance(data.graphic, BandPlot)
 	assert data.graphic._shapes(np.array([0.0, 1.0]), np.array([1.0, 2.0])).elementCount() == 0
+
+
+def test_a_rotated_pin_turns_its_glyph_by_the_value():
+	import numpy as np
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph import PIN_DEFAULTS, pinPath
+
+	times = np.array([0.0, 100.0])
+	xs, ys = np.array([0.0, 100.0]), np.array([50.0, 50.0])
+	config = {**PIN_DEFAULTS, 'glyph': 'fa:arrow-up', 'rotate': 0.0, 'size': 20, 'offset': 0.0}
+	up = pinPath(times, xs, ys, np.array([50.0]), [0.0], config, 96).boundingRect()
+	right = pinPath(times, xs, ys, np.array([50.0]), [90.0], config, 96).boundingRect()
+	assert up.height() > up.width()
+	assert right.width() > right.height()
+	assert pinPath(times, xs, ys, np.array([50.0]), ['north'], config, 96).isEmpty()

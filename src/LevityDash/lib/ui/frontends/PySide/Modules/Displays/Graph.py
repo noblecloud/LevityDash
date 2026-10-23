@@ -1960,8 +1960,14 @@ class LinePlot(Plot):
 		gap between marks in sizes. An icon value draws as its glyph. Other values need `steps`
 		(`[[0, wi:day-sunny], [0.05, wi:showers], [0.3, wi:rain]]`: a number takes the last row it reaches)
 		or `map` (`{0: 'wi:day-sunny'}`: exact values); with neither, the value prints as text.
+<<<<<<< Updated upstream
 		`at` (0 bottom to 1 top of the figure) sets every mark at that height instead of on the line,
 		which makes a row of glyphs: a condition timeline. A `strip` plot draws only that row.
+=======
+		`glyph` draws one glyph for every value (`wi:direction-up`) and `rotate` turns it by the value read as
+		degrees clockwise, plus the number of degrees `rotate` gives (`rotate: 180` makes wind direction,
+		which names where the wind comes from, point the way it blows). `rotate: true` adds nothing.
+>>>>>>> Stashed changes
 		"""
 		return self._pins
 
@@ -1991,8 +1997,13 @@ class LinePlot(Plot):
 		return {
 			'key':     str(value['key']), 'steps': steps, 'map': {str(k): str(v) for k, v in dict(value.get('map', {})).items()},
 			'size':    value.get('size', 14), 'offset': float(value.get('offset', -1.2)), 'spacing': float(value.get('spacing', 1.6)),
+<<<<<<< Updated upstream
 			'color':   value.get('color'),
 			**({'at': clamp(float(value['at']), 0.0, 1.0)} if value.get('at') is not None else {}),
+=======
+			'color':   value.get('color'), 'glyph': None if value.get('glyph') is None else str(value['glyph']),
+			'rotate':  None if value.get('rotate') in (None, False) else (0.0 if value['rotate'] is True else float(value['rotate'])),
+>>>>>>> Stashed changes
 		}
 
 	def delete(self):
@@ -2146,7 +2157,7 @@ class LinePlot(Plot):
 
 
 # What a pins mapping falls back to for a key it leaves out (state may hand it back with defaults dropped).
-PIN_DEFAULTS = {'steps': [], 'map': {}, 'size': 14, 'offset': -1.2, 'spacing': 1.6, 'color': None}
+PIN_DEFAULTS = {'steps': [], 'map': {}, 'size': 14, 'offset': -1.2, 'spacing': 1.6, 'color': None, 'glyph': None, 'rotate': None}
 
 
 def variableWidths(times: np.ndarray, sideTimes: np.ndarray, sideValues: list, weight: Sequence[float], span: Optional[Sequence[float]]) -> Optional[np.ndarray]:
@@ -2223,14 +2234,30 @@ def pinPath(times: np.ndarray, xs: np.ndarray, ys: np.ndarray, pinTimes: np.ndar
 		x = float(np.interp(t, times, xs))
 		if x - lastX < config['spacing'] * size:
 			continue
-		text, font = pinText(value, config)
+		angle = None
+		if config['rotate'] is not None:
+			try:
+				angle = float(value) + config['rotate']
+			except (TypeError, ValueError):
+				continue
+		text, font = pinText(config['glyph'] if config['glyph'] else value, config)
 		if not text:
 			continue
 		font = font or QFont(QApplication.font())
 		font.setPixelSize(max(int(round(size)), 1))
 		box = QFontMetricsF(font).boundingRect(text)
+<<<<<<< Updated upstream
 		y = rowY if rowY is not None else float(np.interp(t, times, ys)) + config['offset'] * size
 		path.addText(QPointF(x - box.center().x(), y - box.center().y()), font, text)
+=======
+		y = float(np.interp(t, times, ys)) + config['offset'] * size
+		if angle is None:
+			path.addText(QPointF(x - box.center().x(), y - box.center().y()), font, text)
+		else:
+			glyph = QPainterPath()
+			glyph.addText(QPointF(-box.center().x(), -box.center().y()), font, text)
+			path.addPath(QTransform().translate(x, y).rotate(angle).map(glyph))
+>>>>>>> Stashed changes
 		lastX = x
 	return path
 
