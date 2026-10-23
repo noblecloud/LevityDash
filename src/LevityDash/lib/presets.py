@@ -286,10 +286,13 @@ class BuiltPreset(Preset):
 
 
 def _built() -> Dict[str, Preset]:
-	from LevityDash.lib import table
-	preset = BuiltPreset(table.NAME, {k: Prop(k, default, doc=doc) for k, (default, doc) in table.PROPS.items()}, {}, 'built in', table.__doc__.split('\n')[0])
-	preset.builder = table.build
-	return {table.NAME: preset}
+	from LevityDash.lib import hourly, table
+	built = {}
+	for module in (table, hourly):
+		preset = BuiltPreset(module.NAME, {k: Prop(k, default, doc=doc) for k, (default, doc) in module.PROPS.items()}, {}, 'built in', module.__doc__.split('\n')[0])
+		preset.builder = module.build
+		built[module.NAME] = preset
+	return built
 
 
 def load(name: str) -> Optional[Preset]:

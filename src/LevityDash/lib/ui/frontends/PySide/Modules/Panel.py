@@ -42,7 +42,7 @@ from LevityDash.lib.ui.Geometry import (
 )
 from LevityDash.lib.utils.shared import (
 	_Panel, boolFilter, clearCacheAttr, connectSignal, defer, disconnectSignal, getItemsWithType, hasState, Numeric,
-	SimilarValue, block_pools
+	SimilarValue, block_pools, now
 )
 from unitcorn import Length
 from .Handles import Handle, HandleGroup
@@ -776,6 +776,62 @@ class Panel(_Panel, Stateful, tag='group'):
 	def alignTo(value: Optional[Anchor]):
 		return None if value is None else value.encode()
 
+	@StateProperty(key='time-axis', default=None, allowNone=True, sortOrder=1)
+	def timeAxis(self) -> Optional[dict]:
+		"""Centre this item on a time of a named graph: `time-axis: {graph: temps, at: 3h}`.
+
+		`at` is the distance from now (`3h`, `-90min`, `0h`). The item keeps its size and follows the graph's x axis as the
+		graph scrolls or resizes, so a column of readings stays under the graph's line at that time. Only x is set."""
+		return getattr(self, '_timeAxis', None)
+
+	@timeAxis.setter
+	def timeAxis(self, value: Optional[dict]):
+		self._timeAxis = value
+		self._axisGraph = None
+		if value is not None:
+			self.applyTimeAxis()
+
+	@timeAxis.decode
+	def timeAxis(self, value) -> Optional[dict]:
+		if value is None:
+			return None
+		if not isinstance(value, dict) or set(value) - {'graph', 'at'} or not value.get('graph'):
+			raise ValueError(f'time-axis is {{graph: <name of a graph>, at: <hours from now>}}, not {value!r}')
+		from LevityDash.lib.hourly import spanHours
+		spanHours(value.get('at', 0), 'time-axis at')  # fail at load, not on the first draw
+		return {'graph': str(value['graph']), 'at': value.get('at', 0)}
+
+	@timeAxis.encode
+	def timeAxis(value: Optional[dict]):
+		return None if value is None else {'graph': value['graph'], 'at': value['at']}
+
+	def applyTimeAxis(self):
+		"""Put the centre of this item on the graph's x for `now + at`. Quiet while the graph has not placed its axis."""
+		spec = getattr(self, '_timeAxis', None)
+		scene = self.scene()
+		if spec is None or scene is None:
+			return
+		graph = getattr(self, '_axisGraph', None)
+		if graph is None:
+			graph = next((i for i in scene.items() if hasattr(i, 'timeToX') and getattr(i, 'stateName', None) == spec['graph']), None)
+			if graph is None:
+				if not getattr(self, '_axisWarned', False):
+					self._axisWarned = True
+					log.warning(f'time-axis: no graph named {spec["graph"]!r}')
+				return
+			self._axisGraph = graph
+			graph.watchAxis(self.applyTimeAxis)
+		if graph.leftTime is None:
+			return
+		from datetime import timedelta
+		from LevityDash.lib.hourly import spanHours
+		x = graph.timeToX(now() + timedelta(hours=spanHours(spec['at'], 'time-axis at')))
+		centre = self.mapFromScene(graph.mapToScene(QPointF(x, 0))).x()
+		mine = self.rect()
+		shift = centre - (mine.x() + mine.width() / 2)
+		if abs(shift) > 1e-6:
+			self.setPos(self.pos() + QPointF(shift, 0))
+
 	def _alignLength(self, value, vertical: bool) -> float:
 		if value in (None, 0, '0'):
 			return 0.0
@@ -813,6 +869,8 @@ class Panel(_Panel, Stateful, tag='group'):
 		"""Called at the end of `Geometry.updateSurface`: settle this item's `align-to`, and the siblings aligned to it."""
 		if getattr(self, '_alignTo', None) is not None:
 			self.applyAlignTo()
+		if getattr(self, '_timeAxis', None) is not None:
+			self.applyTimeAxis()
 		parent = self.parentItem()
 		if parent is not None and getattr(parent, '_alignChildren', False):
 			name = getattr(self, 'stateName', None)

@@ -444,7 +444,7 @@ class Label(Panel, ColorMixin, tag='label'):
 	def matchingGroup(self, value: SizeGroup) -> str | dict | None:
 		if value is None:
 			return None
-		if (g := self._rawItemState.get('matchingGroup')) is not None:
+		if (g := (getattr(self, '_rawItemState', None) or {}).get('matchingGroup')) is not None:
 			return g
 		parent = value.parent
 		if parent is self.localGroup:
@@ -461,7 +461,7 @@ class Label(Panel, ColorMixin, tag='label'):
 		# 	prefix = f'{parent.name}@{parent.parent.name}'
 		else:
 			raise ValueError(f'invalid group {value}')
-		return {'group': f'{prefix}.{value.name}', 'matchAll': value.matchAll}
+		return {'group': f'{prefix}.{value.key}', 'matchAll': isinstance(value, MatchAllSizeGroup)}
 
 	# Section .paint
 	def _debug_paint(self, painter: QPainter, option, widget):
