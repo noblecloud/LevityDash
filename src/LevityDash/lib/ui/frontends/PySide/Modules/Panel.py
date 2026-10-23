@@ -91,7 +91,10 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 		size = self.size
 		edges = self.edges
 		if edges == LocationFlag.Edges:
-			path.addRect(rect)
+			if radius := self.radius_px(rect):
+				path.addRoundedRect(rect, radius, radius)
+			else:
+				path.addRect(rect)
 		elif edges == LocationFlag.Center:
 			pass
 		else:
@@ -196,6 +199,49 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 		if name is None:
 			return ', '.join(str(x.name).lower() for x in LocationFlag.edges() if value & x)
 		return name.lower()
+
+	@StateProperty(default='0', allowNone=False, after=updatePath)
+	def radius(self) -> str:
+		"""How round the corners are when the border is on all edges.
+
+		A number or `12px` is pixels; `8%` is a share of the shorter side, so `50%` makes a pill or a circle.
+		It is held as written and read against the parent's size each time the path is built.
+
+		Example Config
+		--------------
+		radius: 12px
+
+		radius: 50%
+		"""
+		return getattr(self, '_radius', '0')
+
+	@radius.setter
+	def radius(self, value: str):
+		self._radius = value
+
+	@radius.decode
+	def radius(self, value: str | int | float) -> str:
+		text = str(value).strip().replace(' ', '')
+		number = text[:-2] if text.endswith('px') else text[:-1] if text.endswith('%') else text
+		try:
+			if float(number) < 0:
+				raise ValueError
+		except ValueError:
+			log.error(f'{value!r} is not a valid border radius (a number, 12px or 8%). Using 0.')
+			return '0'
+		return text
+
+	def radius_px(self, rect) -> float:
+		"""The radius in pixels for `rect`, never more than half its shorter side."""
+		text = self._radius if hasattr(self, '_radius') else '0'
+		try:
+			if text.endswith('%'):
+				radius = min(rect.width(), rect.height())*float(text[:-1])/100
+			else:
+				radius = float(text[:-2] if text.endswith('px') else text)
+		except ValueError:
+			return 0.0
+		return max(0.0, min(radius, rect.width()/2, rect.height()/2))
 
 	@StateProperty(default=Dimension(0, absolute=True), after=updatePath)
 	def offset(self) -> Dimension | Length:

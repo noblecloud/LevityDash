@@ -111,6 +111,10 @@ An item that shows a number reports its size from its **format hint**, the wides
 
 `dividers: {enabled: true}` draws a line in the middle of the gap between neighbours, as in a plain stack: between columns in a row, between rows in a column, and both in a grid. `dividers.size` shortens the lines.
 
+## Border radius
+
+`border: {enabled: true, radius: 12px}` rounds the corners of a border on all edges. A number or `px` is pixels; `8%` is a share of the shorter side, so `50%` makes a pill (or a circle in a square). The radius never passes half the shorter side. A border on some edges only stays straight. To keep the curves parallel in a nested box, give the inner border `offset: X` and the same `$gap` in `padding`, with the inner radius the outer radius less `X`.
+
 ## Rules
 
 - A stack without any `flex:` key, and no item with one, is laid out exactly as before. A grid is always laid out by the grid engine.
