@@ -73,9 +73,8 @@ items:
         plot: {type: plot, color: $info, weight: 0.4, dashPattern: '4, 4'}
         resolution: 2
     - figure: rain
-      margins: {top: 82%, bottom: 4%}
+      margins: {top: 55%, bottom: 4%}
       min: 0
-      max: 0.4
       environment.precipitation.precipitation:
         plot: {type: bar, color: $info, width: 0.8, radius: 0.25}
 
