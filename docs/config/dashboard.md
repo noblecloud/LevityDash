@@ -815,6 +815,23 @@ A bar plot draws one bar for each slot of the data. If a current value falls bet
 
 To draw a line over bars, put each in its own figure. Give the two figures the same margins. A figure keeps its own range.
 
+### Fill under a line
+
+A line plot can carry its own fill, so one key gives a line and the space under it. Use it where an area plot alone would lose the line.
+
+```yaml
+environment.temperature.temperature:
+  plot: {type: plot, gradient: TemperatureGradient, fill: {opacity: 0.35, base: 45}}
+```
+
+<div class="indent">
+
+#### <div class=mono>fill: true | float | {opacity, base}</div>
+
+`opacity` is how strong the fill is, from `0` to `1` (default `0.25`). `base` is the value the fill reaches, in the unit of the data; the axis always includes it. Without `base` the fill reaches the bottom of the figure. `true` takes the defaults and a number sets the opacity. The fill takes the line's colour or gradient.
+
+</div>
+
 ### Area plots
 
 > [!NOTE]
