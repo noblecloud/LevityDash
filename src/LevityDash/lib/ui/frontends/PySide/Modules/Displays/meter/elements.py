@@ -37,6 +37,7 @@ from LevityDash.lib.stateful import Binding, SourceType, StateProperty, Stateful
 from LevityDash.lib.stateful_mixins import ColorGradientMixin
 from LevityDash.lib.ui import Color, Gradient, UILogger
 from LevityDash.lib.ui.colors import theme
+from LevityDash.lib.ui.bound_number import BoundNumber, decodeNumber
 from LevityDash.lib.ui.colors.bound import BoundColor, decodeColor
 from LevityDash.lib.ui.glow import Glow, GlowMixin, paintGlow, resolveGlow
 from LevityDash.lib.ui.Geometry import (
@@ -2494,8 +2495,19 @@ class Needle(GlowMixin, StatefulGaugePathItem):
 		return self._width
 
 	@width.setter
-	def width(self, value: Size.Width | Length):
+	def width(self, value: Size.Width | Length | BoundNumber):
+		self.gauge.numbers.assign(self, 'width', value, self._storeWidth, lambda n: Size.Width(n, relative=True), self.gauge.refresh)
+
+	def _storeWidth(self, value) -> None:
 		self._width = value
+
+	@width.state
+	def width(self):
+		return self.gauge.numbers.current(self, 'width', getattr(self, '_width', Unset))
+
+	@width.encode
+	def width(self, value):
+		return self.gauge.numbers.spec(value)
 
 	@width.item_default
 	def width(self) -> Size.Width | Length:
@@ -2515,8 +2527,8 @@ class Needle(GlowMixin, StatefulGaugePathItem):
 				return Size.Width(0.1, relative=True)
 
 	@width.decode
-	def width(self, value: str | float | int) -> Size.Width | Length:
-		return parseWidth(value, type(self).width.default(type(self), self, update_source=False))
+	def width(self, value: str | float | int | dict) -> Size.Width | Length | BoundNumber:
+		return decodeNumber(value, lambda v: parseWidth(v, type(self).width.default(type(self), self, update_source=False)))
 
 	@property
 	def width_px(self) -> float:
@@ -2527,8 +2539,19 @@ class Needle(GlowMixin, StatefulGaugePathItem):
 		return self._length
 
 	@length.setter
-	def length(self, value: Size.Height | Length):
+	def length(self, value: Size.Height | Length | BoundNumber):
+		self.gauge.numbers.assign(self, 'length', value, self._storeLength, lambda n: Size.Height(n, relative=True), self.gauge.refresh)
+
+	def _storeLength(self, value) -> None:
 		self._length = value
+
+	@length.state
+	def length(self):
+		return self.gauge.numbers.current(self, 'length', getattr(self, '_length', Unset))
+
+	@length.encode
+	def length(self, value):
+		return self.gauge.numbers.spec(value)
 
 	@length.item_default
 	def length(self) -> Size.Height | Length:
@@ -2555,8 +2578,8 @@ class Needle(GlowMixin, StatefulGaugePathItem):
 				return Size.Height(1.0, relative=True)
 
 	@length.decode
-	def length(self, value: str | float | int) -> Size.Height | Length:
-		return parseHeight(value, type(self).length.default(type(self), self, update_source=False))
+	def length(self, value: str | float | int | dict) -> Size.Height | Length | BoundNumber:
+		return decodeNumber(value, lambda v: parseHeight(v, type(self).length.default(type(self), self, update_source=False)))
 
 	@property
 	def length_px(self) -> float:

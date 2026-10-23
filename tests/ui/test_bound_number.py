@@ -103,12 +103,12 @@ def test_changing_a_bound_opacity_to_a_plain_one_lets_go_of_the_source(dashboard
 		installStandIn(saved)
 
 
-def _gauge(dashboard, arc):
+def _gauge(dashboard, arc, **display):
 	sandbox = Panel(parent=dashboard.scene.base, geometry={'x': '0%', 'y': '0%', 'width': '30%', 'height': '30%'})
 	sandbox.state = {'items': [{
 		'type': 'realtime.gauge', 'name': 'g', 'key': 'environment.temperature.temperature',
 		'geometry': {'x': '0%', 'y': '0%', 'width': '100%', 'height': '100%'},
-		'display': {'range': {'min': 0, 'max': 100}, 'arc': arc},
+		'display': {'range': {'min': 0, 'max': 100}, 'arc': arc, **display},
 	}]}
 	dashboard.app.processEvents()
 	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import Realtime
@@ -140,5 +140,31 @@ def test_a_plain_arc_is_unchanged(dashboard):
 		assert gauge.arc.startAngle == -100 and gauge.arc.endAngle == 100
 		state = gauge.arc.encodedState()
 		assert state['start-angle'] == -100 and 'weight' in state and not isinstance(state['weight'], dict)
+	finally:
+		sandbox.scene().removeItem(sandbox)
+
+
+def test_a_needles_width_and_length_follow_a_value_and_save_their_specs(dashboard):
+	width = {'of': 'a.b', 'from': [0, 100], 'to': [0.02, 0.1]}
+	length = {'of': 'a.b', 'from': [0, 100], 'to': [0.5, 1.0]}
+	saved = valuesource._standIn
+	installStandIn(lambda value, label='', effect='': Constant(50))
+	try:
+		sandbox, gauge = _gauge(dashboard, {}, needle={'width': width, 'length': length})
+		try:
+			assert float(gauge.needle.width) == pytest.approx(0.06) and float(gauge.needle.length) == pytest.approx(0.75)
+			state = gauge.needle.encodedState()
+			assert state['width'] == width and state['length'] == length
+		finally:
+			sandbox.scene().removeItem(sandbox)
+	finally:
+		installStandIn(saved)
+
+
+def test_a_plain_needle_is_unchanged(dashboard):
+	sandbox, gauge = _gauge(dashboard, {}, needle={'width': '8%', 'length': '90%'})
+	try:
+		state = gauge.needle.encodedState()
+		assert not isinstance(state['width'], dict) and not isinstance(state['length'], dict)
 	finally:
 		sandbox.scene().removeItem(sandbox)
