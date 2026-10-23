@@ -125,7 +125,7 @@ Triaged from `_planned-features.md`, grouped by area. ~~Struck~~ items are alrea
 - **Screen-size conditions for size options** — different sizing rules per display size.
 - **Scrolling in overfilled stacks.**
 - **Condensed-title option** — possibly automatic by available size.
-- **Corner radius** on items — a border on all edges takes `radius:` (2026-10-23, see [layout](config/dashboard/layout.md)). Still open: a background fill that follows it.
+- **Corner radius** on items — a border on all edges takes `radius:` (2026-10-23, see [layout](config/dashboard/layout.md)). `border.fill` gives a colour fill that follows it; gradients and images wait for the fill object.
 - **Fill object** — one abstraction accepting colors, gradients, images, and patterns; today `FillBrushMixin` handles color + gradient only. Include dynamic color functions and plot-line section dividers.
 - ~~**Composite presets** — file-loadable items combining multiple values into one composite display.~~ **Done 2026-10-07**: a preset's `template:` can be a composite (`hero-readings` is a titled group of four readings) with props that land on its sub-items. The Studio builder edits presets, and its *To preset* button saves a selected item as a preset (2026-10-10).
 - **Layout in a separate file** — split item layout from the rest of the dashboard spec.
