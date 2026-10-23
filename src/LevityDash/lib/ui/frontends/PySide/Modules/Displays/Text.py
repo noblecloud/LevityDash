@@ -1008,6 +1008,8 @@ class Text(QGraphicsPathItem):
 
 		if self._value is None:
 			return self.default
+		if self._alternates and isinstance(self._value, str):
+			return self._alternates[self._alternateIndex]
 		if isinstance(self._value, (str, int, float, datetime, timedelta, Icon)):
 			value = self._value
 		else:
@@ -1036,6 +1038,11 @@ class Text(QGraphicsPathItem):
 
 	@value.setter
 	def value(self, value):
+		if isinstance(value, (list, tuple)) and value and all(isinstance(v, str) for v in value):
+			self.setAlternates(value)
+			value = self._alternates[0]
+		elif self._alternates and not isinstance(value, Icon):
+			self._alternates = ()
 		if str(value) != self.text:
 			self._value = value
 			self.updateTransform(reason='value-set', updatePath=True, updateShared=True)
@@ -1085,8 +1092,56 @@ class Text(QGraphicsPathItem):
 		self._scaleType = value
 		self.updateTransform(reason='setScaleType')
 
+	_alternates: tuple[str, ...] = ()
+	_alternateIndex: int = 0
+	_condense: float = 0.85
+
+	@property
+	def alternates(self) -> tuple[str, ...]:
+		"""The texts this item may show, longest first; empty when it has one text."""
+		return self._alternates
+
+	def setAlternates(self, texts, condense: float | None = None):
+		texts = tuple(str(t) for t in texts)
+		if condense is not None:
+			self._condense = float(condense)
+		if texts == self._alternates and condense is None:
+			return
+		self._alternates = texts if len(texts) > 1 else ()
+		self._alternateIndex = 0
+		self._value = texts[0] if texts else None
+
+	def _pickAlternate(self) -> None:
+		"""Show the longest text that does not have to shrink much to fit the box.
+
+		A text is too long when fitting its width asks for less than `condense` of the size the box's
+		height allows; the next, shorter text is tried then, and the last is used whatever it takes.
+		Both limits are ratios, so the choice is the same at any font size and a size group, which sets
+		the size, cannot move it: the choice depends on the box and the font family alone.
+		"""
+		if not self._alternates:
+			return
+		limit = self.limitRect
+		index = len(self._alternates) - 1
+		if limit.width() > 0 and limit.height() > 0:
+			font = QFont(self.font())
+			font.setPixelSize(100)
+			metrics = QFontMetricsF(font)
+			band = metrics.tightBoundingRect('|').height() or metrics.height()
+			heightScale = limit.height() / band
+			for i, candidate in enumerate(self._alternates):
+				width = metrics.tightBoundingRect(candidate).width() or 1
+				if limit.width() / width >= self._condense * heightScale:
+					index = i
+					break
+		if index != self._alternateIndex:
+			self._alternateIndex = index
+			if (group := getattr(self, '_sized', None)) is not None:
+				group.mark_dirty()
+
 	def _update_path(self, /, update_others: bool = False) -> QRectF:
 		self.resetTransform()
+		self._pickAlternate()
 		font = self.font()
 		fm = QFontMetricsF(font)
 
