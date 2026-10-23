@@ -22,6 +22,7 @@ from numpy import ceil, cos, pi, radians, sin, sqrt, number as np_number
 from collections.abc import Mapping
 from typing import Any, Optional, Type, Union, Iterator, Iterable, TypeVar, Sequence, Dict
 
+from LevityDash.lib.ui.colors.bound import BoundColor, decodeColor
 from LevityDash import LevityDashboard
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.expressions import Expression, ExpressionError
@@ -248,16 +249,16 @@ class GaugeArc(GlowMixin, StatefulGaugePathItem):
 		return getattr(self, '_color', None)
 
 	@color.setter
-	def color(self, value: Color | None):
-		self._color = value
+	def color(self, value: Color | BoundColor | None):
+		self._color = self.gauge.colors.adopt(self, 'color', value)
 
 	@color.decode
-	def color(self, value) -> Color | None:
-		return None if value is None else Color.decode(value)
+	def color(self, value) -> Color | BoundColor | None:
+		return None if value is None else decodeColor(value)
 
 	@color.encode
-	def color(self, value: Color | None) -> str | None:
-		return None if value is None else str(value)
+	def color(self, value) -> str | dict | None:
+		return self.gauge.colors.spec(value)
 
 	@StateProperty(key='gradient', default=None, after=refresh, decoder=Gradient.decode)
 	def gradient(self) -> Gradient | None:

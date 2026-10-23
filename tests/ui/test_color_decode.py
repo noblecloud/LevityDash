@@ -43,3 +43,23 @@ def test_decode_leaves_the_mapping_alone():
 def test_unknown_string_raises():
 	with pytest.raises(ValueError):
 		Color.decode('nonsense')
+
+
+@pytest.mark.parametrize('value,alpha', [
+	('#ff880080', 0x80),
+	('#f808', 0x88),
+	('255, 136, 0, 128', 128),
+	([255, 136, 0, 128], 128),
+	((255, 136, 0, 64), 64),
+	({'r': 255, 'g': 136, 'b': 0, 'a': 32}, 32),
+	('#ff8800', 255),
+])
+def test_the_constructor_keeps_the_alpha_in_the_value(value, alpha):
+	assert Color(value).alpha == alpha
+	assert Color(value).QColor.alpha() == alpha
+
+
+def test_an_alpha_argument_overrides_the_alpha_in_the_value():
+	assert Color('#ff880080', alpha=10).alpha == 10
+	assert Color(red=1, green=2, blue=3).alpha == 255
+	assert Color(red=1, green=2, blue=3, alpha=9).alpha == 9

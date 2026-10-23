@@ -47,3 +47,26 @@ scales:
   # Stops are the sun's height in degrees. Both stay dark enough for light text at every height; a theme may recolour them.
   sky-top: {-18: '#03050b', -12: '#060a18', -6: '#0e1530', -2: '#1b1b45', 0: '#1f2d5c', 6: '#173a73', 20: '#0f3a7a', 60: '#0b3470'}
   sky-horizon: {-18: '#070a14', -12: '#0d1426', -6: '#2a2347', -2: '#6b2f4f', 0: '#b4573a', 6: '#a77a52', 20: '#3f78ad', 60: '#4a86bd'}
+
+# Sizes: a type scale and a spacing scale, written in a dashboard as variables (`$type_value`, `$space_3`).
+# A theme gives the whole board one set of steps instead of each board repeating its own numbers.
+# Names use underscores because a variable name stops at a hyphen.
+#
+# The type steps are percentages of the label size, about 1.25 apart (major third), for anything that
+# takes a percentage size: a caption's `size`, a unit line, a gauge's text. A text item that fits a
+# box (size groups) is not sized by these; they set the ratio between roles where a size is written.
+# The spacing steps are multiples of one unit, in millimetres so they hold on any screen:
+# inside a cell (1 to 2), between cells (3), between panels (4 to 5), the outer margin (5 to 6).
+sizes:
+  unit: 2mm
+  type_caption: 80%       # axis ticks, units, column heads
+  type_label: 100%        # the words that name a value
+  type_value: 125%        # every other number
+  type_head: 160%         # the words that name a panel
+  type_hero: 400%         # the one number a panel is about
+  space_1: 1mm
+  space_2: 2mm
+  space_3: 4mm
+  space_4: 6mm
+  space_5: 8mm
+  space_6: 12mm

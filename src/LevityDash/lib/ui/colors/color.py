@@ -200,12 +200,13 @@ class Color:
 			self.__red = self.__ensureCorrectValue(red) or 0
 			self.__green = self.__ensureCorrectValue(green) or 0
 			self.__blue = self.__ensureCorrectValue(blue) or 0
+			self.__alpha = 255
 		else:
 			self.__parse(color)
 
-		if alpha is None:
-			alpha = 255
-		self.__alpha = self.__ensureCorrectValue(255 if alpha is None else alpha)
+		# an alpha in the colour itself (`#ff880080`, a four-channel list) stands unless one is passed
+		if alpha is not None:
+			self.__alpha = self.__ensureCorrectValue(alpha)
 
 		if name is None and _theme.is_token(color):
 			name = color

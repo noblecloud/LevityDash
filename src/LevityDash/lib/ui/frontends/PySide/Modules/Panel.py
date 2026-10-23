@@ -91,7 +91,10 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 		size = self.size
 		edges = self.edges
 		if edges == LocationFlag.Edges:
-			path.addRect(rect)
+			if radius := self.radius_px(rect):
+				path.addRoundedRect(rect, radius, radius)
+			else:
+				path.addRect(rect)
 		elif edges == LocationFlag.Center:
 			pass
 		else:
@@ -124,6 +127,8 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 					path.lineTo(right, rect.bottom())
 		self.setPath(path)
 		self.setEnabled(path.elementCount() > 0)
+		if getattr(self, '_fill', None) is not None:
+			self.updatePen()
 
 	def updatePen(self) -> None:
 		pen = self.pen()
@@ -131,7 +136,12 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 		color = self.color
 		pen.setWidthF(weight)
 		pen.setColor(color.QColor)
-		self.setPen(pen)
+		fill = getattr(self, '_fill', None)
+		filled = fill is not None and self.edges == LocationFlag.Edges
+		self.setPen(Qt.NoPen if filled and weight <= 0 else pen)
+		self.setBrush(fill.QColor if filled else Qt.NoBrush)
+		# a fill sits behind what the parent holds; a line sits on top, as before
+		self.setFlag(self.GraphicsItemFlag.ItemStacksBehindParent, filled)
 
 	@StateProperty(default=LocationFlag.Edges, allowNone=False, after=updatePath)
 	def edges(self) -> LocationFlag:
@@ -196,6 +206,49 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 		if name is None:
 			return ', '.join(str(x.name).lower() for x in LocationFlag.edges() if value & x)
 		return name.lower()
+
+	@StateProperty(default='0', allowNone=False, after=updatePath)
+	def radius(self) -> str:
+		"""How round the corners are when the border is on all edges.
+
+		A number or `12px` is pixels; `8%` is a share of the shorter side, so `50%` makes a pill or a circle.
+		It is held as written and read against the parent's size each time the path is built.
+
+		Example Config
+		--------------
+		radius: 12px
+
+		radius: 50%
+		"""
+		return getattr(self, '_radius', '0')
+
+	@radius.setter
+	def radius(self, value: str):
+		self._radius = value
+
+	@radius.decode
+	def radius(self, value: str | int | float) -> str:
+		text = str(value).strip().replace(' ', '')
+		number = text[:-2] if text.endswith('px') else text[:-1] if text.endswith('%') else text
+		try:
+			if float(number) < 0:
+				raise ValueError
+		except ValueError:
+			log.error(f'{value!r} is not a valid border radius (a number, 12px or 8%). Using 0.')
+			return '0'
+		return text
+
+	def radius_px(self, rect) -> float:
+		"""The radius in pixels for `rect`, never more than half its shorter side."""
+		text = self._radius if hasattr(self, '_radius') else '0'
+		try:
+			if text.endswith('%'):
+				radius = min(rect.width(), rect.height())*float(text[:-1])/100
+			else:
+				radius = float(text[:-2] if text.endswith('px') else text)
+		except ValueError:
+			return 0.0
+		return max(0.0, min(radius, rect.width()/2, rect.height()/2))
 
 	@StateProperty(default=Dimension(0, absolute=True), after=updatePath)
 	def offset(self) -> Dimension | Length:
@@ -334,6 +387,34 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 			case _:
 				log.error(f'{value} is not a valid value for Color.  Using default value of #ffffff for now.')
 				return Color('#ffffff')
+
+	@StateProperty(default=None, allowNone=True, after=updatePen)
+	def fill(self) -> Color | None:
+		"""A colour that fills the inside of a border on all edges, following its `radius`.
+
+		With `weight: 0` there is no line, only the fill. Colours take the usual forms, `$tokens` and `alpha` included.
+
+		Example Config
+		--------------
+		```yaml
+		border: {enabled: true, radius: 16px, fill: '#ffffff22', weight: 0}
+		```
+		"""
+		return getattr(self, '_fill', None)
+
+	@fill.setter
+	def fill(self, value: Color | None):
+		self._fill = value
+
+	@fill.decode
+	def fill(self, value) -> Color | None:
+		if value is None:
+			return None
+		try:
+			return Color.decode(value)
+		except Exception:
+			log.error(f'{value!r} is not a valid border fill. Using no fill.')
+			return None
 
 	@StateProperty(default=False, allowNone=False)
 	def enabled(self) -> bool:
