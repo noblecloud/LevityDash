@@ -20,7 +20,7 @@ from typing import Iterable, Optional, Sequence
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.scale import Scale
 
 __all__ = [
-	'COMPASS_16', 'RoseData', 'angleScale', 'bezierThrough', 'clockAngle', 'compassName', 'niceStep',
+	'COMPASS_16', 'CarouselMark', 'RoseData', 'angleScale', 'bezierThrough', 'carouselMarks', 'clockAngle', 'compassName', 'niceStep',
 	'niceSpeedEdges', 'parseWindow', 'polarPoint', 'roseBins', 'timeOfDay', 'windowBounds',
 ]
 
@@ -228,3 +228,38 @@ def windowBounds(window: tuple[str, timedelta], now: datetime) -> tuple[datetime
 			return now, now + length
 		case _:
 			return now - length, now
+
+
+@dataclass(frozen=True)
+class CarouselMark:
+	"""One tick or letter on a carousel. ``offset`` is its place across the strip, -0.5 (left edge) to 0.5 (right)."""
+	offset: float
+	degrees: float
+	label: Optional[str]
+	kind: str  # 'cardinal' | 'point' | 'minor'
+
+
+def carouselMarks(center: float, view: float, points: int = 16) -> list[CarouselMark]:
+	"""The marks of a sliding compass strip showing ``view`` degrees with ``center`` in the middle.
+
+	A letter sits on every compass point (``points`` is 4, 8 or 16) and a tick halfway between two
+	points. Marks wrap, so a strip centred on 350 shows N to the right of the middle."""
+	if points not in (4, 8, 16):
+		raise ValueError(f'a compass has 4, 8 or 16 points, not {points}')
+	if view <= 0:
+		raise ValueError(f'a carousel shows a positive number of degrees, not {view}')
+	step = 360 / points / 2
+	first = math.floor((center - view / 2) / step)
+	last = math.ceil((center + view / 2) / step)
+	marks = []
+	for i in range(first, last + 1):
+		degrees = i * step
+		offset = (degrees - center) / view
+		if abs(offset) > 0.5 + 1e-9:
+			continue
+		if i % 2:
+			marks.append(CarouselMark(offset, degrees % 360, None, 'minor'))
+			continue
+		name = compassName(degrees, points)
+		marks.append(CarouselMark(offset, degrees % 360, name, 'cardinal' if len(name) == 1 else 'point'))
+	return marks
