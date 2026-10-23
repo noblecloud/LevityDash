@@ -32,7 +32,7 @@ from math import inf, prod, sqrt
 from rich.repr import auto
 from scipy.constants import golden
 from scipy.interpolate import CubicSpline, interp1d, UnivariateSpline
-from scipy.signal import savgol_filter
+from scipy.signal import find_peaks, savgol_filter
 from time import perf_counter, time
 from types import SimpleNamespace
 from typing import (
@@ -1884,6 +1884,10 @@ class LinePlot(Plot):
 
 	_thickness: Optional[dict] = None
 	_pins: Optional[dict] = None
+	_fillSpec: Optional[dict] = None
+	#: Marks sit in a row at this height (0..1) unless the pins say `at:`; None rides the line.
+	_rowAt: Optional[float] = None
+	_drawsLine: bool = True
 	#: The acquire behind `_thickness['key']` / `_pins['key']` when the key came from a
 	#: `.levity` slot. Holds the text the file said, so encode writes the expression back.
 	_thicknessSource: Optional[KeySource] = None
@@ -1957,6 +1961,15 @@ class LinePlot(Plot):
 		gap between marks in sizes. An icon value draws as its glyph. Other values need `steps`
 		(`[[0, wi:day-sunny], [0.05, wi:showers], [0.3, wi:rain]]`: a number takes the last row it reaches)
 		or `map` (`{0: 'wi:day-sunny'}`: exact values); with neither, the value prints as text.
+		`at` (0 bottom to 1 top of the figure) sets every mark at that height instead of on the line,
+		which makes a row of glyphs: a condition timeline. A `strip` plot draws only that row.
+		`only: peaks | troughs | extremes` puts pins only where the line turns (a turn must stand out by
+		`prominence`, a share of the line's range, default 0.15), each taking the pin value nearest that time:
+		with the line's own key and no steps, that prints the day's highs and lows; with a condition key,
+		an icon at each. Troughs take the offset's opposite side.
+		`glyph` draws one glyph for every value (`wi:direction-up`) and `rotate` turns it by the value read as
+		degrees clockwise, plus the number of degrees `rotate` gives (`rotate: 180` makes wind direction,
+		which names where the wind comes from, point the way it blows). `rotate: true` adds nothing.
 		"""
 		return self._pins
 
@@ -1986,8 +1999,62 @@ class LinePlot(Plot):
 		return {
 			'key':     str(value['key']), 'steps': steps, 'map': {str(k): str(v) for k, v in dict(value.get('map', {})).items()},
 			'size':    value.get('size', 14), 'offset': float(value.get('offset', -1.2)), 'spacing': float(value.get('spacing', 1.6)),
-			'color':   value.get('color'),
+			'color':   value.get('color'), 'glyph': None if value.get('glyph') is None else str(value['glyph']),
+			'rotate':  None if value.get('rotate') in (None, False) else (0.0 if value['rotate'] is True else float(value['rotate'])),
+			**({'at': clamp(float(value['at']), 0.0, 1.0)} if value.get('at') is not None else {}),
+			'only':    _pinsOnly(value.get('only')), 'prominence': clamp(float(value.get('prominence', 0.15)), 0.01, 1.0),
 		}
+
+	@StateProperty(default=None, allowNone=True, after=Plot.updateAppearance)
+	def fill(self) -> Optional[dict]:
+		"""The space under the line filled with the line's own colour or gradient: `{opacity: 0.25, base: 50}`.
+
+		`opacity` is how strong the fill is (default 0.25). `base` is the value it reaches, in the unit of the
+		data and held inside the axis range; without it the fill reaches the bottom of the figure. `true` is
+		the defaults and a number is the opacity. A line and a fill of one key is `fill` on the line; an
+		`area` plot is the fill alone.
+		"""
+		return self._fillSpec
+
+	@fill.setter
+	def fill(self, value: Optional[dict]):
+		self._fillSpec = value
+		if self.data is not None and getattr(self, 'figure', None) is not None and (value or {}).get('base') is not None:
+			self.figure.dataValueRange.emitChanged()
+
+	@fill.decode
+	def fill(value) -> Optional[dict]:
+		if value in (None, False):
+			return None
+		if value is True:
+			return {'opacity': 0.25, 'base': None}
+		if isinstance(value, (int, float)):
+			return {'opacity': clamp(float(value), 0.0, 1.0), 'base': None}
+		if not isinstance(value, Mapping):
+			raise ValueError(f'fill needs true, an opacity or a mapping, not {value!r}')
+		base = value.get('base')
+		return {'opacity': clamp(float(value.get('opacity', 0.25)), 0.0, 1.0), 'base': None if base is None else float(base)}
+
+	def valueAnchor(self) -> Optional[float]:
+		return None if not self._fillSpec else self._fillSpec.get('base')
+
+	def _fillPath(self, path: QPainterPath) -> QPainterPath:
+		"""The line's path closed down to the fill's baseline, in the pixmap's own coordinates."""
+		base = self._fillSpec.get('base')
+		pad = self.img_padding.height() / 2
+		if base is None:
+			bottom = self.figure.height() + pad
+		else:
+			axis = self.figure.dataValueRange
+			low, high = axis.min, axis.max
+			share = (clamp(base, low, high) - low) / ((high - low) or 1.0)
+			bottom = self.figure.figureTransform.map(QPointF(0, share)).y() + pad
+		filled = QPainterPath(path)
+		end = path.currentPosition()
+		filled.lineTo(end.x(), bottom)
+		filled.lineTo(path.elementAt(0).x, bottom)
+		filled.closeSubpath()
+		return filled
 
 	def delete(self):
 		"""Give both acquires back; a plot torn down must not hold an expression up."""
@@ -1996,6 +2063,9 @@ class LinePlot(Plot):
 
 	def _renderExtras(self, path: QPainterPath) -> dict:
 		extras = {}
+		if self._fillSpec and self.data.hasData and self._drawsLine:
+			extras['fill'] = self._fillPath(path)
+			extras['fillOpacity'] = self._fillSpec['opacity']
 		if not self.data.hasData or not (self._thickness or self._pins):
 			return extras
 		# The sample times come back out of the normalised x the path was built from: the data itself can be
@@ -2019,9 +2089,14 @@ class LinePlot(Plot):
 				extras['ribbon'] = ribbonPath(xs, ys, np.concatenate(([widths[0]], widths, [widths[-1]] * tail)))
 		if self._pins and (side := self.data.sideSeries(self._pins['key'])) is not None:
 			screen = self.scene().view.screen()
-			extras['pins'] = pinPath(times, xs[1:count - tail], ys[1:count - tail], *side, {**PIN_DEFAULTS, **self._pins}, getDPI(screen))
+			config = {**PIN_DEFAULTS, **({'at': self._rowAt} if self._rowAt is not None else {}), **self._pins}
+			rowY = None
+			if config.get('at') is not None:
+				rowY = self.figure.figureTransform.map(QPointF(0, config['at'])).y()
+			extras['pins'] = pinPath(times, xs[1:count - tail], ys[1:count - tail], *side, config, getDPI(screen), rowY)
 			color = self._pins.get('color')
-			extras['pinColor'] = Color.decode(color).QColor if color else None
+			# A row has no line to borrow its colour from: the text colour, unless the pins say.
+			extras['pinColor'] = Color.decode(color).QColor if color else (None if self._drawsLine else Color.text.QColor)
 		return extras
 
 	def _render_paint(self, size: QSize, dpr: float, pen: QPen, path: QPainterPath, glow=None, extras=None) -> QImage:
@@ -2030,8 +2105,19 @@ class LinePlot(Plot):
 		img.setDevicePixelRatio(dpr)
 		img.fill(Qt.transparent)
 		painter = EffectPainter(img)
-		paintGlow(painter, path, pen.brush(), pen.widthF(), glow)
-		if (ribbon := extras.get('ribbon')) is not None:
+		if (fill := extras.get('fill')) is not None:
+			painter.save()
+			painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+			painter.setOpacity(extras.get('fillOpacity', 0.25))
+			painter.setPen(Qt.NoPen)
+			painter.setBrush(pen.brush())
+			painter.drawPath(fill)
+			painter.restore()
+		if self._drawsLine:
+			paintGlow(painter, path, pen.brush(), pen.widthF(), glow)
+		if not self._drawsLine:
+			pass
+		elif (ribbon := extras.get('ribbon')) is not None:
 			painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 			painter.setPen(Qt.NoPen)
 			painter.setBrush(pen.brush())
@@ -2132,7 +2218,40 @@ class LinePlot(Plot):
 
 
 # What a pins mapping falls back to for a key it leaves out (state may hand it back with defaults dropped).
-PIN_DEFAULTS = {'steps': [], 'map': {}, 'size': 14, 'offset': -1.2, 'spacing': 1.6, 'color': None}
+PIN_DEFAULTS = {'steps': [], 'map': {}, 'size': 14, 'offset': -1.2, 'spacing': 1.6, 'color': None, 'glyph': None, 'rotate': None, 'only': None, 'prominence': 0.15}
+
+
+def _pinsOnly(value) -> Optional[str]:
+	"""Where pins go: everywhere (None), or only on the line's `peaks`, `troughs` or both (`extremes`)."""
+	if value is None:
+		return None
+	value = str(value).strip().lower()
+	if value in ('peaks', 'highs'):
+		return 'peaks'
+	if value in ('troughs', 'lows'):
+		return 'troughs'
+	if value in ('extremes', 'extrema', 'both'):
+		return 'extremes'
+	raise ValueError(f'pins only must be peaks, troughs or extremes, not {value!r}')
+
+
+def extremeTimes(times: np.ndarray, ys: np.ndarray, kind: str, prominence: float) -> list[tuple[float, int]]:
+	"""The times of the line's peaks and troughs, with the way each one points (-1 above the line, 1 below).
+
+	`ys` are pixels, so a peak is a low `y`. A turn counts when it stands out from its surroundings by
+	`prominence` of the line's whole range, which leaves out wobble.
+	"""
+	if len(ys) < 3:
+		return []
+	span = float(np.ptp(ys))
+	if span <= 0:
+		return []
+	found = []
+	if kind in ('peaks', 'extremes'):
+		found += [(float(times[i]), -1) for i in find_peaks(-ys, prominence=prominence * span)[0]]
+	if kind in ('troughs', 'extremes'):
+		found += [(float(times[i]), 1) for i in find_peaks(ys, prominence=prominence * span)[0]]
+	return sorted(found)
 
 
 def variableWidths(times: np.ndarray, sideTimes: np.ndarray, sideValues: list, weight: Sequence[float], span: Optional[Sequence[float]]) -> Optional[np.ndarray]:
@@ -2197,28 +2316,65 @@ def pinText(value: Any, config: Mapping) -> tuple[str, Optional[QFont]]:
 	return resolve(str(value))
 
 
-def pinPath(times: np.ndarray, xs: np.ndarray, ys: np.ndarray, pinTimes: np.ndarray, pinValues: list, config: Mapping, dpi: float) -> QPainterPath:
-	"""The glyphs for a pinned series, set on the line through (xs, ys) at each pin's own time."""
+def pinPath(times: np.ndarray, xs: np.ndarray, ys: np.ndarray, pinTimes: np.ndarray, pinValues: list, config: Mapping, dpi: float, rowY: Optional[float] = None) -> QPainterPath:
+	"""The glyphs for a pinned series, set on the line through (xs, ys) at each pin's own time, or all at `rowY` (a row)."""
 	size = config['size']
 	size = float(size) if isinstance(size, (int, float)) else float(re.sub(r'[a-z]+$', '', str(size))) * dpi / (25.4 if str(size).endswith('mm') else 2.54 if str(size).endswith('cm') else 1)
 	path = QPainterPath()
 	lastX = -np.inf
-	for t, value in zip(pinTimes, pinValues):
+	candidates = [(t, value, -1) for t, value in zip(pinTimes, pinValues)]
+	if config.get('only') and len(pinTimes):
+		pinTimes = np.asarray(pinTimes)
+		nearest = lambda t: int(np.clip(np.searchsorted(pinTimes, t), 1, len(pinTimes) - 1)) if len(pinTimes) > 1 else 0
+		candidates = []
+		for t, way in extremeTimes(times, ys, config['only'], config['prominence']):
+			i = nearest(t)
+			if len(pinTimes) > 1 and abs(pinTimes[i - 1] - t) < abs(pinTimes[i] - t):
+				i -= 1
+			candidates.append((t, pinValues[i], way))
+	for t, value, way in candidates:
 		if not times[0] <= t <= times[-1]:
 			continue
 		x = float(np.interp(t, times, xs))
 		if x - lastX < config['spacing'] * size:
 			continue
-		text, font = pinText(value, config)
+		angle = None
+		if config['rotate'] is not None:
+			try:
+				angle = float(value) + config['rotate']
+			except (TypeError, ValueError):
+				continue
+		text, font = pinText(config['glyph'] if config['glyph'] else value, config)
 		if not text:
 			continue
 		font = font or QFont(QApplication.font())
 		font.setPixelSize(max(int(round(size)), 1))
 		box = QFontMetricsF(font).boundingRect(text)
-		y = float(np.interp(t, times, ys)) + config['offset'] * size
-		path.addText(QPointF(x - box.center().x(), y - box.center().y()), font, text)
+		# A peak keeps the offset's side (negative is above); a trough takes the other.
+		below = -1 if (config.get('only') and way > 0) else 1
+		y = rowY if rowY is not None else float(np.interp(t, times, ys)) + below * config['offset'] * size
+		if angle is None:
+			path.addText(QPointF(x - box.center().x(), y - box.center().y()), font, text)
+		else:
+			glyph = QPainterPath()
+			glyph.addText(QPointF(-box.center().x(), -box.center().y()), font, text)
+			path.addPath(QTransform().translate(x, y).rotate(angle).map(glyph))
 		lastX = x
 	return path
+
+
+# Section StripPlot
+class StripPlot(LinePlot):
+	"""A row of marks and no line: `plot: {type: strip, pins: {key: environment.condition.icon}}`.
+
+	It is a line plot that draws only its pins, all at one height (`pins.at`, default the middle of
+	its figure), so a string key (a condition, a phase) reads as a timeline along the time axis.
+	The plot's own key sets the time span and nothing else: give the strip a figure of its own and
+	any numeric key that covers the window, such as the temperature.
+	"""
+	displayType = DisplayType.StripPlot
+	_rowAt = 0.5
+	_drawsLine = False
 
 
 # Section FilledPlot
@@ -2471,6 +2627,78 @@ class AreaPlot(BasedPlot):
 		return path
 
 
+# Section BandPlot
+class BandPlot(FilledPlot):
+	"""The space between this series and another on the same figure: `plot: {type: band, to: <key>}`.
+
+	Put it on the upper (or lower) of the two keys and name the other in `to`, a key as written under
+	`figures:` (or its tail, `wind.speed.speed`). The other series is read at this one's sample times, so
+	the two need not share a grid. A gust band is `environment.wind.speed.gust` with
+	`to: environment.wind.speed.speed`. Straight between samples, one sample for each slot. The axis spans
+	both series. Colour, gradient, `opacity` and `glow` work as on a line. With no `to`, or none that
+	matches a series with data, nothing is drawn.
+	"""
+	displayType = DisplayType.BandPlot
+
+	_to: str | None = None
+
+	@StateProperty(default=None, after=Plot.updateAppearance)
+	def to(self) -> str | None:
+		return self._to
+
+	@to.setter
+	def to(self, value: str | None):
+		self._to = value
+		self._pathDirty = True
+
+	@to.decode
+	def to(value) -> str | None:
+		"""The key of the series the band reaches, as written under `figures:`."""
+		return None if value is None else str(value).strip()
+
+	def _partner(self):
+		if not self._to:
+			return None
+		wanted = self._to.lower()
+		for item in self.figure.plotData:
+			if item is self.data or not item.hasData:
+				continue
+			name = str(item.key).lower()
+			if name == wanted or name.endswith('.' + wanted) or wanted.endswith('.' + name):
+				return item
+		return None
+
+	def _partnerPixels(self, partner, xs: np.ndarray) -> np.ndarray | None:
+		path = QPainterPath()
+		for i, value in enumerate(partner.plotValues):
+			path.moveTo(value) if not i else path.lineTo(value)
+		points = partner.combinedTransform.map(path)
+		count = points.elementCount()
+		if count < 2:
+			return None
+		px = np.array([points.elementAt(i).x for i in range(count)])
+		py = np.array([points.elementAt(i).y for i in range(count)])
+		return np.interp(xs, px, py)
+
+	def _shapes(self, xs: np.ndarray, ys: np.ndarray) -> QPainterPath:
+		path = QPainterPath()
+		partner = self._partner()
+		if not len(xs) or partner is None:
+			return path
+		xs, ys = self._onePerSlot(xs, ys)
+		other = self._partnerPixels(partner, xs)
+		if other is None:
+			return path
+		self._barPixels = 1.0
+		path.moveTo(xs[0], ys[0])
+		for x, y in zip(xs, ys):
+			path.lineTo(x, y)
+		for x, y in zip(xs[::-1], other[::-1]):
+			path.lineTo(x, y)
+		path.closeSubpath()
+		return path
+
+
 # Section ViolinPlot
 _DURATION_UNITS = {'s': 1, 'sec': 1, 'm': 60, 'min': 60, 'h': 3600, 'hr': 3600, 'd': 86400, 'w': 604800}
 
@@ -2576,7 +2804,9 @@ class ViolinPlot(FilledPlot):
 
 _PLOT_KINDS = {
 	'bar': BarPlot, 'bars': BarPlot, 'barplot': BarPlot, 'bargraph': BarPlot,
+	'strip': StripPlot, 'row': StripPlot, 'timeline': StripPlot,
 	'area': AreaPlot, 'areas': AreaPlot, 'areaplot': AreaPlot, 'filled': AreaPlot,
+	'band': BandPlot, 'bands': BandPlot, 'bandplot': BandPlot, 'range': BandPlot,
 	'violin': ViolinPlot, 'violins': ViolinPlot, 'violinplot': ViolinPlot,
 }
 

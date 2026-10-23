@@ -502,7 +502,7 @@ class Panel(_Panel, Stateful, tag='group'):
 		self.previousParent = self.parent
 		self.add_defaults_to_state(kwargs)
 		self._init_args_(*args, **kwargs)
-		self.setFlag(self.GraphicsItemFlag.ItemClipsChildrenToShape, False)
+		self.setFlag(self.GraphicsItemFlag.ItemClipsChildrenToShape, getattr(self, '_overflow', 'visible') != 'visible')
 		self.setFlag(self.GraphicsItemFlag.ItemClipsToShape, False)
 
 	def _init_args_(self, *args, **kwargs) -> None:

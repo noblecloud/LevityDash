@@ -745,7 +745,9 @@ The type of plot. The default is a line.
 
 - `plot`: a line. This is the default.
 - `bar`: one bar for each sample. See [Bar plots](#bar-plots).
+- `strip`: a row of marks and no line, for a key that is not a number. See [Strip plots](#strip-plots).
 - `area`: the line's shape filled down to a baseline. See [Area plots](#area-plots).
+- `band`: the space between two series. See [Band plots](#band-plots).
 - `violin`: one violin for each stretch of time. See [Violin plots](#violin-plots).
 
 ```yaml
@@ -813,6 +815,23 @@ A bar plot draws one bar for each slot of the data. If a current value falls bet
 
 To draw a line over bars, put each in its own figure. Give the two figures the same margins. A figure keeps its own range.
 
+### Fill under a line
+
+A line plot can carry its own fill, so one key gives a line and the space under it. Use it where an area plot alone would lose the line.
+
+```yaml
+environment.temperature.temperature:
+  plot: {type: plot, gradient: TemperatureGradient, fill: {opacity: 0.35, base: 45}}
+```
+
+<div class="indent">
+
+#### <div class=mono>fill: true | float | {opacity, base}</div>
+
+`opacity` is how strong the fill is, from `0` to `1` (default `0.25`). `base` is the value the fill reaches, in the unit of the data; the axis always includes it. Without `base` the fill reaches the bottom of the figure. `true` takes the defaults and a number sets the opacity. The fill takes the line's colour or gradient.
+
+</div>
+
 ### Area plots
 
 > [!NOTE]
@@ -838,6 +857,33 @@ The value the fill reaches, in the unit of the data. The axis always includes it
 </div>
 
 Colour, `gradient`, `opacity` and `glow` work as they do for a line. The gradient follows the value against height. Like a bar plot, an area plot keeps one sample for each slot of the source's own grid.
+
+### Band plots
+
+A band plot fills the space between two series on the same figure. Use it for a range, such as the gust over the wind speed, or the high over the low.
+
+```yaml
+- type: graph
+  name: wind
+  timeframe: {days: 1}
+  figures:
+  - figure: wind
+    min: 0
+    environment.wind.speed.gust:
+      plot: {type: band, to: environment.wind.speed.speed, opacity: 0.35}
+    environment.wind.speed.speed:
+      plot: {type: plot}
+```
+
+<div class="indent">
+
+#### <div class=mono>to: key</div>
+
+The other series, as written under `figures:` or its tail (`wind.speed.speed`). It is read at the band's own sample times, so the two need not share a grid. With no `to`, or none that matches a series with data, nothing is drawn. The axis spans both series.
+
+</div>
+
+Colour, `gradient`, `opacity` and `glow` work as they do for a line. Like an area plot, a band keeps one sample for each slot. The band is redrawn when its own series changes, not when the other one does.
 
 ### Violin plots
 
@@ -1017,6 +1063,10 @@ A list of exact values and their symbols, such as `{0: 'wi:day-sunny'}`. Use `ma
 
 The size of a pin in pixels, or a length such as `5mm`. The default is `14`.
 
+#### <div class=mono>at: float</div>
+
+Put every pin at this height instead of on the line: `0` is the bottom of the figure, `1` the top. `offset` then does nothing. A [strip plot](#strip-plots) uses `0.5` when it has none.
+
 #### <div class=mono>offset: float</div>
 
 The distance between the pin and the line, in pin sizes. A negative number puts the pin above the line. The default is `-1.2`.
@@ -1028,6 +1078,22 @@ The smallest gap between two pins, in pin sizes. A pin that would be closer than
 #### <div class=mono>color: str</div>
 
 The color of the pins. If you leave it out, the pins are painted like the line, with the same color or gradient.
+
+#### <div class=mono>only: peaks | troughs | extremes</div>
+
+Puts pins only where the line turns, not at every sample. Each takes the pin value nearest that time, so a condition key gives an icon at each high and low, and the line's own key with no `steps` prints the highs and lows. A trough takes the other side of the line from the `offset`. A turn counts when it stands out from its surroundings by `prominence`. See `docs/design-references/pins-at-peaks.levity`.
+
+#### <div class=mono>prominence: float</div>
+
+How far a turn must stand out for `only`, as a share of the line's whole range, from `0.01` to `1`. The default is `0.15`.
+
+#### <div class=mono>glyph: str</div>
+
+One icon for every pin, such as `wi:direction-up`. The value then only places the pin, and turns it if `rotate` is set.
+
+#### <div class=mono>rotate: float | true</div>
+
+Turns each pin by its value, read as degrees clockwise, plus this many degrees. `true` adds none. Wind direction names where the wind comes from, so `rotate: 180` with an up arrow points the way the wind blows. A value that is not a number is not drawn. See `docs/design-references/wind-arrows.levity`.
 
 </div>
 
@@ -1092,6 +1158,32 @@ The Moon Phase shows the phase of the moon and tilts it as it looks in the sky. 
   interval:
     minutes: 20
 ```
+
+### Strip plots
+
+> [!NOTE]
+A strip plot is a row of marks and no line. Use it for a key that is not a number, such as a weather condition, to show it along the time axis.
+
+A strip is a line plot that draws only its [pins](#pins-on-a-line). All the pins sit at one height, `pins.at`, from `0` (bottom of the figure) to `1` (top). The default is `0.5`, the middle. `at:` also works on a line plot, to put the pins in a row over a line instead of on it.
+
+The strip's own key sets the time span and nothing else. Use any number key that covers the window, such as the temperature. Give the strip a figure of its own. Its `margins` then decide the band it sits in, and it does not change the axis of the figure below it.
+
+```yaml
+- figure: strip
+  margins: {bottom: 20%, top: 70%}
+  environment.temperature.dewpoint:
+    plot:
+      type: strip
+      pins:
+        key: environment.precipitation.precipitation
+        size: 26
+        steps:
+        - [0,    'wi:day-sunny']
+        - [0.1,  'wi:showers']
+        - [0.3,  'wi:rain']
+```
+
+The pins take the text colour unless they have a `color`.
 
 ### <div class=mono>rotate: bool</div>
 

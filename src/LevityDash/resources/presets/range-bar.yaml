@@ -14,9 +14,11 @@ props:
   low_color: {default: $info, type: color, doc: "Colour of the low mark and its reading"}
   high_color: {default: $bad, type: color, doc: "Colour of the high mark and its reading"}
   now_color: {default: $text, type: color, doc: "Colour of the pointer and the middle reading"}
+  scale_size: {default: 24%, type: size, doc: "Height of the numbers along the bar, as a share of the bar's height"}
+  title_size: {default: 0.4, type: number, min: 0.1, max: 0.8, doc: "Share of each reading that the Low, Now and High label takes"}
   precision: {default: 0, type: number, min: 0, doc: "Decimals of the three readings"}
-  bar_box: {default: {x: 0%, y: 0%, width: 100%, height: 60%}, doc: "Where the bar sits"}
-  list_box: {default: {x: 0%, y: 68%, width: 100%, height: 32%}, doc: "Where the Low, Now, High row sits"}
+  bar_box: {default: {x: 0%, y: 0%, width: 100%, height: 42%}, doc: "Where the bar sits"}
+  list_box: {default: {x: 0%, y: 46%, width: 100%, height: 54%}, doc: "Where the Low, Now, High row sits"}
 template:
   type: group
   items:
@@ -32,12 +34,12 @@ template:
         markers:
           - {value: $low, type: line, color: $low_color}
           - {value: $high, type: line, color: $high_color}
-        major: {interval: $interval, side: after, labels: true}
+        major: {interval: $interval, side: after, labels: true, size: $scale_size}
         value-label: {visible: false}
     - preset: stat-row
       geometry: $list_box
       props:
         items:
-          - {type: realtime.text, key: $low, title: {text: Low}, display: {precision: $precision, valueLabel: {color: $low_color}}}
-          - {type: realtime.text, key: $key, title: {text: Now}, display: {precision: $precision, valueLabel: {color: $now_color}}}
-          - {type: realtime.text, key: $high, title: {text: High}, display: {precision: $precision, valueLabel: {color: $high_color}}}
+          - {type: realtime.text, key: $low, title: {text: Low, size: $title_size}, display: {precision: $precision, valueLabel: {color: $low_color}}}
+          - {type: realtime.text, key: $key, title: {text: Now, size: $title_size}, display: {precision: $precision, valueLabel: {color: $now_color}}}
+          - {type: realtime.text, key: $high, title: {text: High, size: $title_size}, display: {precision: $precision, valueLabel: {color: $high_color}}}

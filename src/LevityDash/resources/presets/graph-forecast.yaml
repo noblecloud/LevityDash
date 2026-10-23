@@ -1,0 +1,47 @@
+# A forecast card in one graph: a row of weather glyphs on top, the temperature as a line over a faint fill of itself, and a thin ribbon of cloud cover along the bottom. Three figures, so each keeps its own scale.
+doc: Glyph row, temperature line with a fill, cloud ribbon
+props:
+  key: {default: environment.temperature.temperature, type: key, doc: "The temperature series"}
+  glyph_key: {default: environment.precipitation.precipitation, type: key, doc: "What picks each glyph, by `steps`"}
+  cloud: {default: environment.clouds.cover.cover, type: key, doc: "The cloud cover for the ribbon"}
+  base: {default: 40, type: number, doc: "The value the fill under the line reaches, in the unit of the key"}
+  fill: {default: 0.28, type: number, min: 0, max: 1, doc: "Opacity of the fill under the line; 0 for none"}
+  gradient: {default: TemperatureGradient, type: text, doc: "Named scale that colours the line by value"}
+  hours: {default: 36, type: number, min: 1, doc: "How far the graph reaches, in hours"}
+  icon_size: {default: 30, type: number, min: 8, doc: "Pixels of each glyph"}
+  ribbon_color: {default: $muted, type: color, doc: "Colour of the cloud ribbon"}
+template:
+  type: graph
+  timeframe: {hours: $hours}
+  annotations:
+    dayLabels: {enabled: false}
+    hourLabels: {alignment: BottomCenter, spacingIntervals: '3, 6'}
+    lines: {spacing: 12 mm, weight: 0.2}
+  figures:
+    - figure: glyphs
+      margins: {top: 4%, bottom: 84%}
+      $key:
+        plot:
+          type: strip
+          pins:
+            key: $glyph_key
+            size: $icon_size
+            at: 0.5
+            spacing: 2.4
+            steps:
+              - [0,    'wi:day-sunny']
+              - [0.02, 'wi:sprinkle']
+              - [0.1,  'wi:showers']
+              - [0.3,  'wi:rain']
+    - figure: temperature
+      margins: {top: 26%, bottom: 28%}
+      $key:
+        labels: {enabled: true}
+        plot: {type: plot, gradient: $gradient, weight: 1.2, fill: {opacity: $fill, base: $base}}
+        resolution: 2
+    - figure: clouds
+      margins: {top: 92%, bottom: 12%}
+      min: 0
+      max: 1
+      $cloud:
+        plot: {type: area, base: 0, color: $ribbon_color, opacity: 0.35}

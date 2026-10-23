@@ -23,6 +23,16 @@ Write `matchingGroup:` on a label. A label is a `text` item, the `title` of a re
 
 A bare title on an item, such as `title: Dewpoint`, keeps the group from `shared:`. The text becomes the title and the group stays.
 
+## A shorter title when the box is narrow
+
+Write a title as a list, longest first, and the label shows the longest text that fits its box without shrinking much:
+
+```yaml
+title: {text: [Temperature, Temp, T]}
+```
+
+A text is too long when fitting its width asks for less than `condense` of the size the box's height allows. The default is `0.85`. `condense: 0.6` keeps the long text longer, and `0` always shows the first. The choice looks at the box and the font only, never at the group's shared size, so a group still gives every member one size. The group reads the text that is shown, so a short title in a narrow box does not drag the rest of the group down. It works on any `text` item too, and the list is saved as written. See `docs/design-references/condensed-titles.levity`.
+
 ## Where a group lives
 
 The text before the dot, or after the `@`, says which panel owns the group. The key after the dot is yours. Labels with the same owner and the same key are one group.

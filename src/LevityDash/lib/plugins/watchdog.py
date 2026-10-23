@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Callable, Dict, Iterable, Optional
 
-from LevityDash.lib.plugins.freshness import RefreshEstimator
+from LevityDash.lib.plugins.freshness import BURST, RefreshEstimator
 from LevityDash.lib.plugins.web.reconnect import Backoff
 
 __all__ = ['OK', 'QUIET', 'SILENT', 'POLICIES', 'Judgement', 'PluginWatch', 'restartPlugin', 'sweep']
@@ -43,7 +43,8 @@ class Judgement:
 
 class _Track:
 	def __init__(self, seen: datetime):
-		self.estimator = RefreshEstimator()
+		# A poll that publishes its keys one after another is one update, not forty.
+		self.estimator = RefreshEstimator(burst=BURST)
 		self.lastPublish: Optional[datetime] = None
 		self.since = seen
 		self.state = OK
@@ -128,7 +129,7 @@ def sweep(watch: PluginWatch, plugins: Iterable, lastPublish: Dict[str, datetime
 			running = bool(plugin.running and plugin.enabled)
 		except Exception:  # noqa: BLE001 - a plugin that cannot say is not judged
 			continue
-		verdict = watch.judge(name, running, lastPublish.get(name), now)
+		verdict = watch.judge(name, running, lastPublish.get(name), now, declared=getattr(plugin, 'refreshPeriod', None))
 		if verdict is None:
 			continue
 		minutes = verdict.quietFor.total_seconds() / 60

@@ -1,0 +1,32 @@
+# A strip plot: a row of marks and no line, for a key that is not a number (a condition,
+# a phase). `plot: {type: strip, pins: {...}}` is a line plot that draws only its pins; they
+# all sit at one height (`pins.at`, 0 bottom to 1 top of the figure, default the middle).
+# The plot's own key only gives the time span: use any numeric key that covers the window.
+# Give the strip a figure of its own, so it keeps its own margins and does not move the
+# temperature figure's axis.
+- type: graph
+  name: conditions
+  timeframe: {days: 1, hours: 12}
+  annotations:
+    dayLabels: {enabled: false}
+    hourLabels: {alignment: BottomCenter}
+  figures:
+  - figure: strip
+    margins: {bottom: 20%, top: 70%}
+    environment.temperature.dewpoint:
+      plot:
+        type: strip
+        pins:
+          key: environment.precipitation.precipitation
+          size: 26
+          at: 0.5
+          steps:
+          - [0,    'wi:day-sunny']
+          - [0.02, 'wi:sprinkle']
+          - [0.1,  'wi:showers']
+          - [0.3,  'wi:rain']
+  - figure: temperature
+    margins: {bottom: 20%, top: 40%}
+    environment.temperature.temperature:
+      plot: {type: plot, gradient: TemperatureGradient}
+      resolution: 2

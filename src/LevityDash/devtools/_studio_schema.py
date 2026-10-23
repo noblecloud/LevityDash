@@ -377,7 +377,7 @@ def _classify(prop: StateProperty, raw: Any, owner: Stateful) -> Optional[Field]
 
 
 # Numbers that follow a value source (`lib/ui/bound_number.py`): (owner class, key); '*' is any owner.
-BINDABLE = {('GaugeArc', 'weight'), ('GaugeArc', 'start-angle'), ('GaugeArc', 'end-angle'), ('*', 'opacity')}
+BINDABLE = {('GaugeArc', 'weight'), ('GaugeArc', 'start-angle'), ('GaugeArc', 'end-angle'), ('Needle', 'width'), ('Needle', 'length'), ('*', 'opacity')}
 
 
 # A `Bar` inherits the needle from `Meter` and never draws it: its pointer is the `pointer` property.

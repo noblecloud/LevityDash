@@ -1,0 +1,33 @@
+# Wind as one line whose width follows the gust: calm hours are a hairline, gusty hours swell. The speed is
+# coloured by its own value and the gust rides above it as a dashed line.
+doc: Wind speed line that thickens with the gust, with the gust as a dashed line
+props:
+  key: {default: environment.wind.speed.speed, type: key, doc: "The speed"}
+  gust: {default: environment.wind.speed.gust, type: key, doc: "The gust"}
+  gradient: {default: WindSpeedGradient, type: text, doc: "Named scale that colours the speed by value"}
+  weight: {default: [0.3, 3.2], doc: "Thin and thick ends of the line, thin where the gust is lowest"}
+  gust_color: {default: $warn, type: color, doc: "Colour of the dashed gust line"}
+  hours: {default: 24, type: number, min: 1, doc: "How far the graph reaches, in hours"}
+  min: {default: 0, type: number, doc: "Bottom of the scale"}
+  max: {default: null, type: number, doc: "Top of the scale; unset fits the data"}
+  top: {default: 18%, type: size, doc: "Space above the lines"}
+  bottom: {default: 22%, type: size, doc: "Space below the lines"}
+template:
+  type: graph
+  timeframe: {hours: $hours}
+  annotations:
+    dayLabels: {enabled: false}
+    hourLabels: {alignment: BottomCenter, spacingIntervals: '3, 6'}
+    lines: {spacing: 10 mm, weight: 0.3}
+  figures:
+    - figure: wind
+      margins: {top: $top, bottom: $bottom}
+      min: $min
+      max: $max
+      $gust:
+        plot: {type: plot, color: $gust_color, weight: 0.4, dashPattern: '4, 4'}
+        resolution: 2
+      $key:
+        labels: {enabled: true}
+        plot: {type: plot, gradient: $gradient, weight: 1, thickness: {key: $gust, weight: $weight}}
+        resolution: 2

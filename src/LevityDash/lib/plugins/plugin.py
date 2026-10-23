@@ -315,6 +315,10 @@ class Plugin(metaclass=PluginMeta):
 
 	requirements: Set[Requirement]
 
+	#: How often the plugin publishes when it polls on a timer, or None when it has no fixed rhythm.
+	#: The watchdog trusts it over the period it learns from the gaps between publishes.
+	refreshPeriod: Optional[timedelta] = None
+
 	manager: 'PluginsLoader'
 	schema: Schema
 	publisher: Publisher

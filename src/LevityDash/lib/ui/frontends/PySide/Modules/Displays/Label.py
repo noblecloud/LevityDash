@@ -166,12 +166,40 @@ class Label(Panel, ColorMixin, tag='label'):
 		return self.textBox.text if not self.hasIcon else ...
 
 	@text.setter
-	def text(self, value: str):
+	def text(self, value: str | list[str]):
 		self.textBox.value = value
+
+	@text.encode
+	def text(self, value):
+		"""A list of texts is saved as the list, not as the one the box shows now."""
+		return list(self.textBox.alternates) or value
 
 	@text.after
 	def text(self) -> Callable:
 		return self.textBox.updateText
+
+	@StateProperty(default=0.85, allowNone=False)
+	def condense(self) -> float:
+		"""With `text:` a list (longest first), how much a text may shrink before a shorter one is used.
+
+		`text: [Temperature, Temp, T]` shows `Temperature` while fitting its width asks for at least
+		0.85 of the size the box's height allows, then `Temp`, then `T`. Use a higher number to
+		switch sooner and 0 to always show the first. It looks at the box and the font only, so a
+		size group's shared size does not change which text shows.
+		"""
+		return self.textBox._condense
+
+	@condense.setter
+	def condense(self, value: float):
+		self.textBox._condense = float(value)
+		self.textBox.updateText()
+
+	@condense.decode
+	def condense(value) -> float:
+		value = float(value)
+		if not 0 <= value <= 1:
+			raise ValueError(f'condense is a share from 0 to 1, not {value!r}')
+		return value
 
 	@text.condition
 	def text(value):
@@ -606,6 +634,10 @@ class TitleLabel(NonInteractiveLabel, defaultText='-'):
 	def text(self, value: str):
 		self.textBox.setTextAccessor(None)
 		Label.text.__set__(self, value)
+
+	@text.encode
+	def text(self, value):
+		return list(self.textBox.alternates) or value
 
 	@text.condition
 	def text(self):

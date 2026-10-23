@@ -85,6 +85,8 @@ LEVITYDASH_CONFIG_DEBUG=1 poetry run python -m LevityDash   # pristine temp conf
 
 `align-to: {to: <sibling name>, x, y, self-x, self-y, offset}` on an item puts a point of it on a point of a named sibling in the same group (CSS anchor positioning; `lib/layout/anchor.py` is the Qt-free math, `Panel.applyAlignTo` the hook, run from `Geometry.updateSurface` through `Panel.afterSurface`). Not `anchor:`: a gauge owns that key. Docs: `docs/config/dashboard/layout.md`.
 
+`overflow: visible|hidden|clip|scroll|auto` on a stack (CSS overflow; `lib/layout/overflow.py` is the Qt-free math, `Stack.cssScroll` applies it inside the shared CSS layout path, so flex and grid both scroll). Scroll axis is the main axis, sized items default to `shrink: 0` when the stack scrolls, wheel only. Docs: `docs/config/dashboard/layout.md`.
+
 ## Polar plots
 
 `type: polar` (`Displays/polar/`) draws `plot: rose | trail | clock` from whole series, read through `feed.openFeed`. `key:` (clock) and `direction:`/`speed:` (rose, trail) take a key or an expression. A computed key (`lib/plugins/computed.py`) holds one value and no history, so an expression here is not published: `feed.DerivedFeed` opens a feed for every key it reads and `series.derive` evaluates it at every sample time, each key standing for its last sample at or before that time and `max(key, 3h)` looking back from it. A time where an input has no value yet is left out. Options in the item's docstring; try them in the Studio's polar panel. `plot: carousel` is the odd one: a sliding compass strip (`drawCarousel`, marks from `geometry.carouselMarks`) that reads one live number through `feed.openValue` (a value source in the app, the stand-in's last sample in the Studio), not a series.

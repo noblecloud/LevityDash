@@ -64,3 +64,78 @@ def test_a_loaded_line_plot_becomes_an_area_plot_that_rises_from_its_base(dashbo
 	GraphItemData.graphic.setState(data, {'type': 'area', 'base': 12})
 	assert isinstance(data.graphic, AreaPlot)
 	assert data.graphic.valueAnchor() == 12
+
+
+def test_band_names_pick_the_band_plot():
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph import BandPlot, plotClassFor
+
+	for name in ('band', 'Bands', 'band-plot', 'range'):
+		assert plotClassFor({'type': name}) is BandPlot
+	assert BandPlot.statefulItems['to'].decodeValue(' wind.speed ', None) == 'wind.speed'
+	assert BandPlot.statefulItems['to'].decodeValue(None, None) is None
+
+
+def test_a_band_with_no_partner_draws_nothing(dashboard):
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph import BandPlot, GraphItemData, LinePlot
+	import numpy as np
+
+	items = [i for i in dashboard.scene.items() if isinstance(i, LinePlot)]
+	data: GraphItemData = items[0].data
+	GraphItemData.graphic.setState(data, {'type': 'band', 'to': 'no.such.key'})
+	assert isinstance(data.graphic, BandPlot)
+	assert data.graphic._shapes(np.array([0.0, 1.0]), np.array([1.0, 2.0])).elementCount() == 0
+
+
+def test_a_rotated_pin_turns_its_glyph_by_the_value():
+	import numpy as np
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph import PIN_DEFAULTS, pinPath
+
+	times = np.array([0.0, 100.0])
+	xs, ys = np.array([0.0, 100.0]), np.array([50.0, 50.0])
+	config = {**PIN_DEFAULTS, 'glyph': 'fa:arrow-up', 'rotate': 0.0, 'size': 20, 'offset': 0.0}
+	up = pinPath(times, xs, ys, np.array([50.0]), [0.0], config, 96).boundingRect()
+	right = pinPath(times, xs, ys, np.array([50.0]), [90.0], config, 96).boundingRect()
+	assert up.height() > up.width()
+	assert right.width() > right.height()
+	assert pinPath(times, xs, ys, np.array([50.0]), ['north'], config, 96).isEmpty()
+
+
+def test_fill_reads_true_a_number_or_a_mapping():
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph import LinePlot
+
+	decode = LinePlot.statefulItems['fill'].decodeValue
+	assert decode(None, None) is None
+	assert decode(False, None) is None
+	assert decode(True, None) == {'opacity': 0.25, 'base': None}
+	assert decode(0.4, None) == {'opacity': 0.4, 'base': None}
+	assert decode({'opacity': 3, 'base': 50}, None) == {'opacity': 1.0, 'base': 50.0}
+
+
+def test_a_line_fill_holds_the_axis_to_its_base(dashboard):
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph import GraphItemData, LinePlot
+
+	items = [i for i in dashboard.scene.items() if isinstance(i, LinePlot)]
+	data: GraphItemData = items[0].data
+	GraphItemData.graphic.setState(data, {'type': 'plot', 'fill': {'opacity': 0.3, 'base': 12}})
+	assert data.graphic.valueAnchor() == 12
+	GraphItemData.graphic.setState(data, {'type': 'plot', 'fill': True})
+	assert data.graphic.valueAnchor() is None
+
+
+def test_pins_only_on_the_turns_of_the_line():
+	import numpy as np
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph import PIN_DEFAULTS, extremeTimes, LinePlot, pinPath
+
+	times = np.arange(0.0, 25.0)
+	ys = -np.sin(times / 24 * 4 * np.pi) * 40 + 60  # two highs, two lows
+	assert len(extremeTimes(times, ys, 'peaks', 0.15)) == 2
+	assert len(extremeTimes(times, ys, 'extremes', 0.15)) == 4
+	assert extremeTimes(times, np.full(25, 5.0), 'extremes', 0.15) == []
+	assert extremeTimes(times, ys + np.random.default_rng(0).normal(0, 0.5, 25), 'peaks', 0.5) != []
+	decode = LinePlot.statefulItems['pins'].decodeValue
+	assert decode({'key': 'k', 'only': 'highs'}, None)['only'] == 'peaks'
+	with pytest.raises(ValueError):
+		decode({'key': 'k', 'only': 'sideways'}, None)
+	config = {**PIN_DEFAULTS, 'only': 'extremes', 'size': 12, 'offset': 0.0, 'spacing': 0.0}
+	path = pinPath(times, times * 10, ys, times, [str(i) for i in times], config, 96)
+	assert not path.isEmpty()
