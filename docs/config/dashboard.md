@@ -889,6 +889,57 @@ The values of the key that the two weights are for. A value outside the range us
 
 </div>
 
+### Value axis
+
+> [!NOTE]
+A value axis writes round numbers down one edge of a figure. Each number is at the height its value has on the plot. Put `y-axis:` on the figure, next to `margins:`.
+
+```yaml
+- type: graph
+  name: temperature
+  timeframe: {days: 1, hours: 12}
+  figures:
+  - figure: temperature
+    margins: {bottom: 20%, top: 15%, left: 6%}
+    y-axis: {side: left, ticks: 5, format: '{:.0f}°', grid: true}
+    environment.temperature.temperature:
+      plot: {type: plot, gradient: TemperatureGradient}
+```
+
+`y-axis: true` takes every default. The labels follow the figure's own range, so a `min:` or `max:` on the figure moves them. A figure with no data shows none. Make room for the labels with a margin on that side.
+
+<div class="indent">
+
+#### <div class=mono>side: str</div>
+
+`left` or `right`. The default is `left`.
+
+#### <div class=mono>ticks: int | list</div>
+
+About how many numbers to show, or a list of the values to mark. The step is a round one (1, 2, 2.5 or 5 times a power of ten), so 0 to 100 gives 0, 50 and 100 for `3`. The default is `4`.
+
+#### <div class=mono>format: str</div>
+
+A format for each number, such as `'{:.0f}°'` or `.1f`. With none, the digits follow the step. The default is none.
+
+#### <div class=mono>size: int</div>
+
+The text height in pixels. The default is `12`.
+
+#### <div class=mono>color: color</div>
+
+The colour of the text. The default is the theme's text colour, a little dimmed.
+
+#### <div class=mono>grid: bool</div>
+
+Draw a faint line across the figure at each number. The default is `false`.
+
+#### <div class=mono>inset: int</div>
+
+The gap between the text and the edge, in pixels. The default is `4`.
+
+</div>
+
 ### Pins on a line
 
 > [!NOTE]

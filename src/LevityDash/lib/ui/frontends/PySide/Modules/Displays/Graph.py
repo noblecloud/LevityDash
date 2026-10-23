@@ -70,6 +70,7 @@ from LevityDash.lib.ui.frontends.PySide.utils import (
 	addCrosshair, colorPalette, DebugPaint, DisplayType, EffectPainter, GraphicsItemSignals,
 	modifyTransformValues, RendererScene, SoftShadow
 )
+from LevityDash.lib.ticks import formatTick, niceTicks
 from LevityDash.lib.utils.data import AxisMetaData, DataTimeRange, findPeaksAndTroughs, gaussianKernel, TimeFrameWindow
 from LevityDash.lib.utils.shared import (
 	_Panel, camelCase, clamp, clearCacheAttr, closestStringInList, connectSignal, defer, disconnectSignal,
@@ -4639,6 +4640,95 @@ class GraphProxy(QGraphicsItemGroup):
 		return 0
 
 
+Y_AXIS_DEFAULTS = {'side': 'left', 'ticks': 4, 'format': None, 'size': 12, 'color': None, 'grid': False, 'inset': 4}
+
+
+class YAxisLabels(QGraphicsItem):
+	"""Round values down one edge of a figure, at the height each stands at on the plot.
+
+	It reads the figure's own value range, so the labels move with it, and takes the graph's rect, so
+	it draws over the margins the figure leaves free. Not a Stateful item: the figure's `y-axis` holds
+	the settings and saves them.
+	"""
+
+	def __init__(self, figure: 'Figure', config: Mapping):
+		super().__init__(figure.graph)
+		self.figure = figure
+		self.config = {**Y_AXIS_DEFAULTS, **config}
+		self.setZValue(figure.zValue() + 1)
+		self.setAcceptedMouseButtons(Qt.NoButton)
+		figure.axisTransformed.connectSlot(self.onAxisChange)
+		figure.dataValueRange.changed.connect(self.onAxisChange)
+
+	def configure(self, config: Mapping):
+		self.config = {**Y_AXIS_DEFAULTS, **config}
+		self.update()
+
+	def release(self):
+		figure = self.figure
+		figure.axisTransformed.disconnectSlot(self.onAxisChange)
+		with suppress(RuntimeError, TypeError):
+			figure.dataValueRange.changed.disconnect(self.onAxisChange)
+		if self.scene() is not None:
+			self.scene().removeItem(self)
+
+	def onAxisChange(self, *_):
+		self.prepareGeometryChange()
+		self.update()
+
+	def boundingRect(self) -> QRectF:
+		return QRectF(self.figure.graph.rect())
+
+	def marks(self) -> list[tuple[float, str]]:
+		"""(y in graph pixels, text) for each value the axis shows. Empty until the figure has a range."""
+		figure = self.figure
+		if not figure.plots:
+			return []
+		try:
+			low, high = figure.dataValueRange.min, figure.dataValueRange.max
+			span = figure.dataValueRange.range
+		except ValueError:
+			return []
+		ticks = self.config['ticks']
+		values = [float(v) for v in ticks] if isinstance(ticks, (list, tuple)) else niceTicks(low, high, int(ticks))
+		step = (values[1] - values[0]) if len(values) > 1 else None
+		transform = figure.figureTransform
+		rect = self.boundingRect()
+		marks = []
+		for value in values:
+			y = transform.map(QPointF(0, (value - low) / span)).y()
+			if rect.top() - 1 <= y <= rect.bottom() + 1:
+				marks.append((y, formatTick(value, self.config['format'], step)))
+		return marks
+
+	def paint(self, painter: QPainter, option: QStyleOptionGraphicsItem, widget=None):
+		config = self.config
+		marks = self.marks()
+		if not marks:
+			return
+		rect = self.boundingRect()
+		font = QFont(painter.font())
+		font.setPixelSize(max(int(config['size']), 1))
+		painter.setFont(font)
+		metrics = QFontMetricsF(font)
+		colour = QColor((config['color'] and Color(config['color']) or Color.text).QColor)
+		colour.setAlphaF(colour.alphaF() * 0.7)
+		inset = float(config['inset'])
+		right = config['side'] == 'right'
+		if config['grid']:
+			faint = QColor(colour)
+			faint.setAlphaF(0.15)
+			painter.setPen(QPen(faint, 1))
+			for y, _ in marks:
+				painter.drawLine(QLineF(rect.left(), y, rect.right(), y))
+		painter.setPen(QPen(colour, 1))
+		for y, text in marks:
+			width = metrics.horizontalAdvance(text)
+			x = rect.right() - inset - width if right else rect.left() + inset
+			# the label sits on its mark: centred on the x-height, not the full line
+			painter.drawText(QPointF(x, y + metrics.capHeight() / 2), text)
+
+
 class Figure(NonInteractivePanel, tag=...):
 	_default: str = None
 	_margins: Margins
@@ -4668,6 +4758,8 @@ class Figure(NonInteractivePanel, tag=...):
 		self._transform = None
 		self._lowerLimit = None
 		self._upperLimit = None
+		self._yAxis = None
+		self._yAxisItem = None
 
 		self.axisTransformed = AxisSignal(self)
 		super(Figure, self).__init__(parent=graph)
@@ -4819,6 +4911,59 @@ class Figure(NonInteractivePanel, tag=...):
 	@sharedKey.encode
 	def sharedKey(value: CategoryItem):
 		return value.name
+
+	@StateProperty(key='y-axis', default=None, allowNone=True, sortOrder=-3)
+	def yAxis(self) -> Optional[dict]:
+		"""Round values down one edge of the figure, at the height each stands at on the plot.
+
+		`{side: left, ticks: 4, format: '{:.0f}°', size: 12, color: '#888', grid: true, inset: 4}`.
+		`side` is `left` or `right`. `ticks` is about how many marks to show (the step is a round one,
+		so 0 to 100 asked for 4 gives 0, 50, 100), or a list of the values to mark. `format` is a
+		format spec (`'{:.0f}°'`, `.1f`); with none the digits follow the step. `size` is pixels,
+		`color` any colour (default the text colour, dimmed), `grid` draws a faint line across at
+		each mark, `inset` is the gap to the edge in pixels. `y-axis: true` takes every default.
+		"""
+		return self._yAxis
+
+	@yAxis.setter
+	def yAxis(self, value: Optional[dict]):
+		self._yAxis = value
+		item = self._yAxisItem
+		if value is None:
+			if item is not None:
+				item.release()
+				self._yAxisItem = None
+		elif item is None:
+			self._yAxisItem = YAxisLabels(self, value)
+		else:
+			item.configure(value)
+
+	@yAxis.decode
+	def yAxis(value) -> Optional[dict]:
+		if value in (None, False):
+			return None
+		if value is True:
+			return dict(Y_AXIS_DEFAULTS)
+		if not isinstance(value, Mapping):
+			raise ValueError(f'y-axis takes a mapping or true, not {value!r}')
+		unknown = set(value) - set(Y_AXIS_DEFAULTS)
+		if unknown:
+			raise ValueError(f'y-axis has no {sorted(unknown)}; it takes {sorted(Y_AXIS_DEFAULTS)}')
+		config = {**Y_AXIS_DEFAULTS, **value}
+		if config['side'] not in ('left', 'right'):
+			raise ValueError(f"y-axis side is left or right, not {config['side']!r}")
+		ticks = config['ticks']
+		if isinstance(ticks, (list, tuple)):
+			config['ticks'] = [float(v) for v in ticks]
+		elif not isinstance(ticks, int) or isinstance(ticks, bool) or ticks < 1:
+			raise ValueError(f'y-axis ticks is a count of 1 or more or a list of values, not {ticks!r}')
+		return config
+
+	@yAxis.encode
+	def yAxis(value: Optional[dict]) -> Optional[dict]:
+		if value is None:
+			return None
+		return {k: v for k, v in value.items() if v != Y_AXIS_DEFAULTS.get(k)} or True
 
 	@StateProperty(key='max', sortOrder=-2, default=inf)
 	def upperLimit(self) -> float:
