@@ -11,6 +11,8 @@ props:
   headline_box: {default: {x: 0%, y: 0%, width: 100%, height: 30%}, doc: "Where the headline sits"}
   key: {default: environment.temperature.temperature, type: key, doc: "The big reading"}
   title: {default: null, type: text, doc: "Text over the big reading"}
+  headGroup: {default: global.head, type: text, doc: "Size group of the title; the default spans the whole dashboard"}
+  heroGroup: {default: global.hero, type: text, doc: "Size group of the big reading; the default spans the whole dashboard"}
   title_height: {default: 14%, type: size, doc: "Height of that text, as a share of the panel"}
   color: {default: null, type: color, doc: "Colour of the big reading"}
   precision: {default: null, type: number, min: 0, doc: "Decimals of the big reading; unset keeps the key's own"}
@@ -33,17 +35,18 @@ template:
       font: $headline_font
       weight: $headline_weight
       color: $headline_color
+      matchingGroup: {group: $headGroup, matchAll: true}
       geometry: $headline_box
     - type: realtime.text
       key: $key
-      title: {text: $title, height: $title_height, color: $muted}
+      title: {text: $title, height: $title_height, color: $muted, matchingGroup: {group: $headGroup, matchAll: true}}
       display:
         font: $font
         weight: $weight
         unitPosition: $unit_position
         format: $format
         precision: $precision
-        valueLabel: {color: $color}
+        valueLabel: {color: $color, matchingGroup: {group: $heroGroup, matchAll: true}}
       geometry: $hero_box
     - preset: reading-list
       props: {items: $items, direction: $direction, spacing: $spacing, font: $list_font, precision: $list_precision}

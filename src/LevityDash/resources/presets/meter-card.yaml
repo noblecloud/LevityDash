@@ -5,6 +5,10 @@ doc: Big reading, a zoned bar, and a row of context readings
 props:
   key: {default: environment.precipitation.precipitation, type: key, doc: "The reading and the value the bar shows"}
   title: {default: null, type: text, doc: "Text over the reading"}
+  headGroup: {default: global.head, type: text, doc: "Size group of the title; the default spans the whole dashboard"}
+  heroGroup: {default: global.hero, type: text, doc: "Size group of the big reading; the default spans the whole dashboard"}
+  title_height: {default: 11%, type: size, doc: "Height of the text over the reading"}
+  unit_position: {default: FloatUnder, type: text, doc: "Where the unit goes: Inline, FloatUnder, Hidden"}
   color: {default: $text, type: color, doc: "Colour of that text and the reading"}
   font: {default: null, type: text, doc: "Font of the reading"}
   weight: {default: null, type: text, doc: "Weight of the reading"}
@@ -22,12 +26,12 @@ template:
   items:
     - type: realtime.text
       key: $key
-      title: {text: $title, height: 11%, color: $color}
+      title: {text: $title, height: $title_height, color: $color, matchingGroup: {group: $headGroup, matchAll: true}}
       display:
         font: $font
         weight: $weight
-        unitPosition: FloatUnder
-        valueLabel: {color: $color, margins: 2%}
+        unitPosition: $unit_position
+        valueLabel: {color: $color, margins: 2%, matchingGroup: {group: $heroGroup, matchAll: true}}
       geometry: $hero_box
     - type: realtime.bar
       key: $key

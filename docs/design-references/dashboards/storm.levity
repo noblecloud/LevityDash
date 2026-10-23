@@ -165,6 +165,8 @@ items:
         props:
           key: $rain
           title: Rain rate
+          title_height: 1.5cm
+          unit_position: Inline
           color: $info
           font: Barlow Condensed
           weight: Bold
@@ -188,6 +190,8 @@ items:
         props:
           key: $wg
           title: Gust
+          title_height: 1.5cm
+          unit_position: Inline
           color: $accent
           font: Barlow Condensed
           weight: Bold
@@ -211,12 +215,12 @@ items:
         items:
         - type: realtime.text
           key: $pres
-          title: {text: Pressure, height: 11%, color: $bad}
+          title: {text: Pressure, height: 1.5cm, color: $bad, matchingGroup: {group: global.head, matchAll: true}}
           display:
             font: Barlow Condensed
             weight: Bold
             unitPosition: FloatUnder
-            valueLabel: {color: $text, margins: 2%}
+            valueLabel: {color: $text, margins: 2%, matchingGroup: {group: global.hero, matchAll: true}}
           geometry: {x: 0%, y: 0%, width: 62%, height: 50%}
         - preset: sparkline
           geometry: {x: 62%, y: 4%, width: 38%, height: 52%}
@@ -301,7 +305,7 @@ items:
             font: Barlow Condensed
             weight: Bold
             unitPosition: Inline
-            valueLabel: {margins: 2%}
+            valueLabel: {margins: 2%, matchingGroup: {group: global.hero, matchAll: true}}
           geometry: {x: 0%, y: 0%, width: 100%, height: 42%}
         - preset: sparkline
           geometry: {x: 0%, y: 43%, width: 100%, height: 19%}
@@ -391,7 +395,7 @@ items:
           props:
             key: environment.visibility
             title: Visibility
-            title_height: 14%
+            title_height: 1.5cm
             font: Barlow Condensed
             weight: SemiBold
             hero_box: {x: 0%, y: 0%, width: 100%, height: 40%}
@@ -406,6 +410,7 @@ items:
         name: inside
         props:
           title: Inside
+          title_height: 1.5cm
           spacing: 0.4mm
           items:
           - {type: realtime.text, key: 'indoor.temperature.temperature#bedroom', title: {text: Bedroom}, display: {precision: 0}}
@@ -473,6 +478,7 @@ items:
       size: 15%
       props:
         title: Ahead
+        title_height: 1.5cm
         spacing: 0.4mm
         font: Roboto Mono
         items:

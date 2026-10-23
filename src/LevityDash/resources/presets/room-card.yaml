@@ -5,6 +5,8 @@
 doc: "A room: temperature hero, a day graph and a row of readings"
 props:
   title: {default: Room, type: text, doc: The room's name}
+  headGroup: {default: global.head, type: text, doc: "Size group of the room's name; the default spans the whole dashboard"}
+  title_height: {default: 0.5cm, type: size, doc: Height of the room's name}
   title_color: {default: $muted, type: color, doc: Colour of the name}
   key: {default: indoor.temperature.temperature, type: key, doc: The hero reading}
   hero_box: {default: {x: 0%, y: 0%, width: 40%, height: 58%}, doc: Where the hero sits}
@@ -13,7 +15,7 @@ props:
   items: {default: [], doc: "The row of readings, written as the items of a value-stack"}
 template:
   type: titled-group
-  title: {text: $title, height: 0.5cm, color: $title_color}
+  title: {text: $title, height: $title_height, color: $title_color, matchingGroup: {group: $headGroup, matchAll: true}}
   items:
     - type: realtime.text
       key: $key
