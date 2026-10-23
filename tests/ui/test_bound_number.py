@@ -1,6 +1,6 @@
 """A number that follows a value: `opacity: {of, from, to}` (lib/ui/bound_number.py)."""
 import pytest
-import WeatherUnits as wu
+import unitcorn as wu
 
 from LevityDash.lib import valuesource
 from LevityDash.lib.ui.bound_number import BoundNumber, decodeNumber, isBound

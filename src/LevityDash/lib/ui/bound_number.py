@@ -15,7 +15,7 @@ This is the number counterpart of a colour that follows a value (``colors/bound.
 """
 from typing import Any, Callable, Mapping, Optional
 
-from WeatherUnits import Measurement
+from unitcorn import Measurement
 
 from LevityDash.lib.stopunits import parseStop, toDataUnit
 from LevityDash.lib.ui.follow import Followers, ValueFollower
