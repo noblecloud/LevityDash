@@ -77,15 +77,16 @@ items:
         font: $display
         color: $muted
         alignment: CenterLeft
+        matchingGroup: {group: global.head, matchAll: true}
         geometry: {x: 2%, y: 0%, width: 40%, height: 8%}
       - preset: metric-tile
         geometry: {x: 0%, y: 7%, width: 100%, height: 56%}
         props:
           key: $t
           hours: 24
-          hero_box: {x: 0%, y: 4%, width: 46%, height: 60%}
-          graph_box: {x: 0%, y: 12%, width: 100%, height: 76%}
-          list_box: {x: 0%, y: 74%, width: 100%, height: 26%}
+          hero_box: {x: 0%, y: 2%, width: 46%, height: 56%}
+          graph_box: {x: 0%, y: 8%, width: 100%, height: 62%}
+          list_box: {x: 0%, y: 68%, width: 100%, height: 32%}
           items:
           - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels}, display: {precision: 0, valueLabel: {color: $accent}}}
           - {type: realtime.text, key: environment.temperature.dewpoint, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
