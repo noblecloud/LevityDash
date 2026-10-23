@@ -136,13 +136,13 @@ items:
   - type: realtime.text
     name: sunrise
     key: environment.light.sunrise
-    title: {text: Sunrise, height: 20%, color: $muted}
+    title: {text: Sunrise, height: 20%, color: $muted, matchingGroup: {group: global.title, matchAll: true}}
     geometry: {x: 1.5%, y: 43%, width: 9%, height: 10%}
     display: {font: Nunito, weight: Light, format: '%-I:%M', valueLabel: {color: $sun}}
   - type: realtime.text
     name: sunset
     key: environment.light.sunset
-    title: {text: Sunset, height: 20%, color: $muted}
+    title: {text: Sunset, height: 20%, color: $muted, matchingGroup: {group: global.title, matchAll: true}}
     geometry: {x: 48.5%, y: 43%, width: 9%, height: 10%}
     display: {font: Nunito, weight: Light, format: '%-I:%M', valueLabel: {color: $accent}}
   - preset: stat-row
@@ -205,7 +205,7 @@ items:
       items:
       - type: realtime.text
         key: $uvi
-        title: {text: UV index, height: 8%, color: $uv}
+        title: {text: UV index, height: 1.5cm, color: $uv, matchingGroup: {group: global.head, matchAll: true}}
         display:
           font: Nunito
           weight: ExtraLight
@@ -230,7 +230,7 @@ items:
           major: {interval: 3, side: before, labels: true}
           value-label: {visible: false}
       - preset: reading-list
-        geometry: {x: 36%, y: 22%, width: 64%, height: 38%}
+        geometry: {x: 36%, y: 20%, width: 64%, height: 44%}
         props:
           spacing: 0.4mm
           items:
@@ -238,7 +238,7 @@ items:
           - {type: realtime.text, key: 'at($uvi, 1h)', title: {text: UV in 1 h}, display: {precision: 1}}
           - {type: realtime.text, key: 'at($uvi, 3h)', title: {text: UV in 3 h}, display: {precision: 1}}
       - preset: stat-row
-        geometry: {x: 0%, y: 64%, width: 100%, height: 36%}
+        geometry: {x: 0%, y: 68%, width: 100%, height: 32%}
         props:
           font: Roboto Mono
           items:
@@ -251,7 +251,7 @@ items:
       items:
       - type: realtime.text
         key: environment.soil.temperature.temperature
-        title: {text: Soil, height: 8%, color: $good}
+        title: {text: Soil, height: 1.5cm, color: $good, matchingGroup: {group: global.head, matchAll: true}}
         display: {font: Nunito, weight: ExtraLight, valueLabel: {color: $good, margins: 2%}}
         geometry: {x: 0%, y: 0%, width: 40%, height: 60%}
       - preset: reading-list
@@ -299,7 +299,7 @@ items:
           color: '#e8f3fa'
       - type: realtime.text
         key: $cc
-        title: {text: Cloud, height: 14%, color: $muted}
+        title: {text: Cloud, height: 1.5cm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
         display: {font: Nunito, weight: Light, precision: 0, valueLabel: {color: $cloud}}
         geometry: {x: 22%, y: 28%, width: 56%, height: 44%}
     - preset: reading-list
@@ -369,7 +369,7 @@ items:
     items:
     - type: group
       name: moon
-      size: 22%
+      size: 17%
       items:
       - type: moon
         glowStrength: 2
@@ -379,32 +379,32 @@ items:
         text: Moon
         font: $display
         color: $muted
+        matchingGroup: {group: global.head, matchAll: true}
         geometry: {x: 0%, y: 86%, width: 100%, height: 10%}
     - preset: list-panel
       name: aloft
-      size: 26%
+      size: 33%
       props:
         title: Aloft
+        title_height: 1.5cm
         spacing: 0.4mm
         items:
         - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Surface}, display: {precision: 0}}
         - {type: realtime.text, key: environment.wind.speed.80m, title: {text: 80 m}, display: {precision: 0}}
-        - {type: realtime.text, key: environment.wind.speed.120m, title: {text: 120 m}, display: {precision: 0}}
         - {type: realtime.text, key: environment.wind.speed.180m, title: {text: 180 m}, display: {precision: 0, valueLabel: {color: $accent}}}
-        - {type: realtime.text, key: environment.pressure.pressure, title: {text: Pressure}}
-        - {type: realtime.text, key: 'environment.pressure.pressure - at(environment.pressure.pressure, -3h)', title: {text: 3 hr}, display: {valueLabel: {color: $info}}}
+        - {type: realtime.text, key: environment.pressure.pressure, title: {text: Pressure}, display: {unitPosition: Hidden}}
     - type: titled-group
       name: inside
-      title: {text: Inside, height: 0.5cm, color: $good}
+      title: {text: Inside, height: 1.5cm, color: $good, matchingGroup: {group: global.head, matchAll: true}}
       items:
       - type: realtime.text
         key: 'indoor.temperature.temperature#terrarium'
-        title: {text: Terrarium, height: 12%, color: $good}
+        title: {text: Terrarium, height: 1.5cm, color: $good, matchingGroup: {group: global.head, matchAll: true}}
         display: {font: Nunito, weight: Light, precision: 0, unitPosition: Inline}
         geometry: {x: 0%, y: 0%, width: 50%, height: 36%}
       - type: realtime.text
         key: 'indoor.humidity.humidity#terrarium'
-        title: {text: Humidity, height: 12%, color: $info}
+        title: {text: Humidity, height: 1.5cm, color: $info, matchingGroup: {group: global.head, matchAll: true}}
         display: {font: Nunito, weight: Light, precision: 0, unitPosition: Inline, valueLabel: {color: $info}}
         geometry: {x: 50%, y: 0%, width: 50%, height: 36%}
       - type: mini-graph
@@ -423,9 +423,9 @@ items:
           max: 90
           indoor.temperature.temperature#terrarium:
             plot: {type: plot, gradient: TemperatureGradient, weight: 0.5}
-        geometry: {x: 0%, y: 38%, width: 100%, height: 22%}
+        geometry: {x: 0%, y: 38%, width: 100%, height: 18%}
       - preset: reading-list
-        geometry: {x: 0%, y: 62%, width: 100%, height: 38%}
+        geometry: {x: 0%, y: 58%, width: 100%, height: 42%}
         props:
           spacing: 0.4mm
           items:
