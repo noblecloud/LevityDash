@@ -56,3 +56,28 @@ def test_the_family_is_detected_by_name_and_does_not_steal_the_others():
 		assert detect_model(name).model == 'H5074'
 	assert detect_model('GVH5102_6736').model == 'H5102'
 	assert detect_model('GVH5075_A1B2').model == 'H5075'
+
+
+# Existing models must read exactly as before: real GVH5102 captures (tests/plugins/test_govee.py).
+CAPTURE = bytes.fromhex('0101038cb2604c000215494e54454c4c495f524f434b535f48575075f2ff0c')
+
+
+def test_existing_presets_carry_no_new_options():
+	from LevityDash.lib.plugins.govee.models import PRESETS
+	for model in ('H5102', 'H5075'):
+		for params in PRESETS[model].fields.values():
+			assert 'byteOrder' not in params and 'signed' not in params
+
+
+def test_a_parser_with_no_new_options_reads_big_endian_unsigned_as_before():
+	payload = bytes.fromhex('0101038cb2')
+	assert BLEPayloadParser('v', 4, 10)(payload)['v'] == 0x038cb2
+	assert BLEPayloadParser('v', 4, 10, signBit=23)(bytes.fromhex('010180ffff'))['v'] == -0xffff  # the flag bit makes it negative, as before
+
+
+def test_the_h5102_preset_reads_a_real_capture_like_the_hand_written_parsers():
+	payload = CAPTURE
+	values = decode('H5102', payload)
+	assert values['temperature'] == pytest.approx(23.2626, abs=1e-4)
+	hand = BLEPayloadParser('temperature', 4, 10, expression='val / 10000')(payload)['temperature']
+	assert values['temperature'] == hand
