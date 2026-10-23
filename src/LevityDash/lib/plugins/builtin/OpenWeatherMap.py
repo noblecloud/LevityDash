@@ -123,6 +123,7 @@ class OpenWeatherMap(REST, realtime=True, daily=False, hourly=False, logged=Fals
 	urls: OWMURLs = OWMURLs()
 	schema = schema
 	name = 'OpenWeatherMap'
+	refreshPeriod = timedelta(minutes=15)
 
 	__defaultConfig__ = _defaultConfig
 	__configRequired = ['apikey']

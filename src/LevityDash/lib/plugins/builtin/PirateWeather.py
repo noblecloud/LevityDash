@@ -160,6 +160,7 @@ class PirateWeather(REST, realtime=True, daily=True, hourly=True, minutely=True,
 	urls: PWURLs = PWURLs()
 	schema = schema
 	name = 'PirateWeather'
+	refreshPeriod = timedelta(minutes=15)
 
 	__defaultConfig__ = _defaultConfig
 	__configRequired = ['apikey']
