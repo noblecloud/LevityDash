@@ -168,3 +168,30 @@ def test_a_plain_needle_is_unchanged(dashboard):
 		assert not isinstance(state['width'], dict) and not isinstance(state['length'], dict)
 	finally:
 		sandbox.scene().removeItem(sandbox)
+
+
+def test_a_dial_ticks_length_and_width_follow_a_value_and_save_their_specs(dashboard):
+	length = {'of': 'a.b', 'from': [0, 100], 'to': [0.05, 0.25]}
+	width = {'of': 'a.b', 'from': [0, 100], 'to': [0.2, 0.6]}
+	saved = valuesource._standIn
+	installStandIn(lambda value, label='', effect='': Constant(50))
+	try:
+		sandbox, gauge = _gauge(dashboard, {}, major={'length': length, 'width': width})
+		try:
+			ticks = gauge.majorDivisions
+			assert float(ticks.length) == pytest.approx(0.15) and float(ticks.width) == pytest.approx(0.4)
+			state = ticks.encodedState()
+			assert state['length'] == length and state['width'] == width
+		finally:
+			sandbox.scene().removeItem(sandbox)
+	finally:
+		installStandIn(saved)
+
+
+def test_plain_dial_ticks_are_unchanged(dashboard):
+	sandbox, gauge = _gauge(dashboard, {}, major={'length': '12%', 'width': '3%'})
+	try:
+		state = gauge.majorDivisions.encodedState()
+		assert not isinstance(state.get('length'), dict) and not isinstance(state.get('width'), dict)
+	finally:
+		sandbox.scene().removeItem(sandbox)

@@ -125,6 +125,7 @@ class NumberSlots(Followers):
 		super().__init__()
 		self._label = label
 		self._bound: dict[Any, BoundNumber] = {}
+		self._read: dict[Any, tuple[BoundNumber, Optional[float]]] = {}
 
 	def assign(self, owner: Any, name: Any, value: Any, store: Callable[[Any], None],
 	           convert: Callable[[float], Any] = float, then: Optional[Callable[[], None]] = None) -> None:
@@ -146,6 +147,26 @@ class NumberSlots(Followers):
 		if value.fallback is not None:
 			store(convert(value.fallback))
 
+	def read(self, spec: Mapping, owner: Any, then: Optional[Callable[[], None]] = None) -> Optional[float]:
+		"""The number a bound ``spec`` gives now, or None while it has none (and no ``fallback``).
+
+		For a number that lives inside a mapping (a bar's ``track.weight``) and is read each time it is drawn:
+		the spec is followed on the first read and remembered, however many paints ask. ``then`` runs after each
+		change (a redraw).
+		"""
+		key = (owner, ('read', repr(sorted(spec.items(), key=lambda item: str(item[0])))))
+		if (found := self._read.get(key)) is None:
+			bound = BoundNumber(spec)
+			found = self._read[key] = [bound, bound.fallback]
+
+			def apply(number: float) -> None:
+				found[1] = number
+				if then is not None:
+					then()
+
+			self._attach(owner, key[1], ValueFollower(bound, apply, f'{self._label} {key[1][0]}'))
+		return found[1]
+
 	def current(self, owner: Any, name: Any, plain: Any) -> Any:
 		"""For a getter: the bound spec while one is followed, else ``plain``."""
 		return self._bound.get((owner, name), plain)
@@ -159,7 +180,10 @@ class NumberSlots(Followers):
 		super().release(owner)
 		for key in [k for k in self._bound if k[0] is owner]:
 			del self._bound[key]
+		for key in [k for k in self._read if k[0] is owner]:
+			del self._read[key]
 
 	def releaseAll(self) -> None:
 		super().releaseAll()
 		self._bound.clear()
+		self._read.clear()

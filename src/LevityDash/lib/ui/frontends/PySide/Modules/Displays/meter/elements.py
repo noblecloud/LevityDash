@@ -37,7 +37,7 @@ from LevityDash.lib.stateful import Binding, SourceType, StateProperty, Stateful
 from LevityDash.lib.stateful_mixins import ColorGradientMixin
 from LevityDash.lib.ui import Color, Gradient, UILogger
 from LevityDash.lib.ui.colors import theme
-from LevityDash.lib.ui.bound_number import BoundNumber, decodeNumber
+from LevityDash.lib.ui.bound_number import BoundNumber, decodeNumber, isBound
 from LevityDash.lib.ui.colors.bound import BoundColor, decodeColor
 from LevityDash.lib.ui.glow import Glow, GlowMixin, paintGlow, resolveGlow
 from LevityDash.lib.ui.Geometry import (
@@ -386,11 +386,20 @@ class Graduations(ColorGradientMixin, StatefulGaugeItem):
 				raise ValueError(f'Invalid tick type: {self.tick_type}')
 
 	@length.setter
-	def length(self, value: float):
+	def length(self, value: float | BoundNumber):
+		self.gauge.numbers.assign(self, 'length', value, self._storeLength, Percentage, self.gauge.refresh)
+
+	def _storeLength(self, value) -> None:
 		self._length = value
 
+	@length.state
+	def length(self):
+		return self.gauge.numbers.current(self, 'length', getattr(self, '_length', Unset))
+
 	@length.decode
-	def length(self, value: str | float) -> Dimension | Length | Percentage:
+	def length(self, value: str | float | dict) -> Dimension | Length | Percentage | BoundNumber:
+		if isBound(value):
+			return BoundNumber(value)
 		parsed_value = parseSize(value, default=Unset, allowFloat=True, dimension=DimensionType.length)
 		if parsed_value is Unset:
 			parsed_value = type(self).length.default(type(self))
@@ -399,8 +408,8 @@ class Graduations(ColorGradientMixin, StatefulGaugeItem):
 		return parsed_value
 
 	@length.encode
-	def length(self, value: Percentage | Length) -> str:
-		return str(value)
+	def length(self, value: Percentage | Length) -> str | dict:
+		return self.gauge.numbers.spec(value) if isinstance(value, BoundNumber) else str(value)
 
 	@property
 	def length_px(self) -> float:
@@ -431,17 +440,30 @@ class Graduations(ColorGradientMixin, StatefulGaugeItem):
 		return self._width
 
 	@width.setter
-	def width(self, value: float):
+	def width(self, value: float | BoundNumber):
+		self.gauge.numbers.assign(self, 'width', value, self._storeWidth, Percentage, self.gauge.refresh)
+
+	def _storeWidth(self, value) -> None:
 		self._width = value
 
+	@width.state
+	def width(self):
+		return self.gauge.numbers.current(self, 'width', getattr(self, '_width', Unset))
+
 	@width.decode
-	def width(self, value: str) -> Dimension | Length | Percentage:
+	def width(self, value: str | float | dict) -> Dimension | Length | Percentage | BoundNumber:
+		if isBound(value):
+			return BoundNumber(value)
 		parsed_value = parseSize(value, default=Unset, allowFloat=True, dimension=DimensionType.length)
 		if parsed_value is Unset:
 			parsed_value = type(self).width.default(type(self))
 		if type(parsed_value) is float:
 			parsed_value = Percentage(parsed_value)
 		return parsed_value
+
+	@width.encode
+	def width(self, value: Percentage | Length) -> str | dict:
+		return self.gauge.numbers.spec(value) if isinstance(value, BoundNumber) else str(value)
 
 	@width.item_default
 	def width(self) -> float:
