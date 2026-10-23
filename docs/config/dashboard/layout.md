@@ -151,3 +151,16 @@ Example dashboards: `docs/design-references/grid-areas.levity` (named areas), th
 | `offset` | `{x, y}` lengths added last; positive is right and down. |
 
 Name only `x` or only `y` to follow the sibling on one axis and keep the item's own position on the other. An item that is itself aligned settles first, so a chain works; a loop does not (the items stay where they are). A sibling that does not exist logs one warning. `align-to` is not `anchor:` because a gauge already has an `anchor`. Example: `docs/design-references/align-to.levity`; code: `lib/layout/anchor.py`.
+
+## Overflow and scrolling
+
+`overflow:` on a `stack` (flex or grid) says what happens to content that does not fit. It is CSS `overflow`.
+
+| Value | Effect |
+|---|---|
+| `visible` | The default. Nothing is cut off; items shrink by `shrink` as before. |
+| `hidden`, `clip` | Content past the stack's box is cut off. The user cannot move it. |
+| `scroll` | Cut off, and the wheel or trackpad moves the content. A thin bar always shows. |
+| `auto` | As `scroll`, but the bar shows only while the content is longer than the box. |
+
+The scroll axis is the stack's main axis (`direction`). In a scrolling stack an item that has a size (`size:`) defaults to `shrink: 0`, so it keeps that size and overflows instead of being squeezed; give an item `shrink: 1` to let it give. The scroll stops at both ends. Wheel and trackpad only: there is no touch drag yet, and a wrapping stack does not scroll on its cross axis. Example: `docs/design-references/overflow.levity`; code: `lib/layout/overflow.py` (Qt-free math) and `Stack.cssScroll`.
