@@ -64,3 +64,23 @@ def test_a_loaded_line_plot_becomes_an_area_plot_that_rises_from_its_base(dashbo
 	GraphItemData.graphic.setState(data, {'type': 'area', 'base': 12})
 	assert isinstance(data.graphic, AreaPlot)
 	assert data.graphic.valueAnchor() == 12
+
+
+def test_band_names_pick_the_band_plot():
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph import BandPlot, plotClassFor
+
+	for name in ('band', 'Bands', 'band-plot', 'range'):
+		assert plotClassFor({'type': name}) is BandPlot
+	assert BandPlot.statefulItems['to'].decodeValue(' wind.speed ', None) == 'wind.speed'
+	assert BandPlot.statefulItems['to'].decodeValue(None, None) is None
+
+
+def test_a_band_with_no_partner_draws_nothing(dashboard):
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph import BandPlot, GraphItemData, LinePlot
+	import numpy as np
+
+	items = [i for i in dashboard.scene.items() if isinstance(i, LinePlot)]
+	data: GraphItemData = items[0].data
+	GraphItemData.graphic.setState(data, {'type': 'band', 'to': 'no.such.key'})
+	assert isinstance(data.graphic, BandPlot)
+	assert data.graphic._shapes(np.array([0.0, 1.0]), np.array([1.0, 2.0])).elementCount() == 0

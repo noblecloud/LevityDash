@@ -746,6 +746,7 @@ The type of plot. The default is a line.
 - `plot`: a line. This is the default.
 - `bar`: one bar for each sample. See [Bar plots](#bar-plots).
 - `area`: the line's shape filled down to a baseline. See [Area plots](#area-plots).
+- `band`: the space between two series. See [Band plots](#band-plots).
 - `violin`: one violin for each stretch of time. See [Violin plots](#violin-plots).
 
 ```yaml
@@ -838,6 +839,33 @@ The value the fill reaches, in the unit of the data. The axis always includes it
 </div>
 
 Colour, `gradient`, `opacity` and `glow` work as they do for a line. The gradient follows the value against height. Like a bar plot, an area plot keeps one sample for each slot of the source's own grid.
+
+### Band plots
+
+A band plot fills the space between two series on the same figure. Use it for a range, such as the gust over the wind speed, or the high over the low.
+
+```yaml
+- type: graph
+  name: wind
+  timeframe: {days: 1}
+  figures:
+  - figure: wind
+    min: 0
+    environment.wind.speed.gust:
+      plot: {type: band, to: environment.wind.speed.speed, opacity: 0.35}
+    environment.wind.speed.speed:
+      plot: {type: plot}
+```
+
+<div class="indent">
+
+#### <div class=mono>to: key</div>
+
+The other series, as written under `figures:` or its tail (`wind.speed.speed`). It is read at the band's own sample times, so the two need not share a grid. With no `to`, or none that matches a series with data, nothing is drawn. The axis spans both series.
+
+</div>
+
+Colour, `gradient`, `opacity` and `glow` work as they do for a line. Like an area plot, a band keeps one sample for each slot. The band is redrawn when its own series changes, not when the other one does.
 
 ### Violin plots
 

@@ -2471,6 +2471,78 @@ class AreaPlot(BasedPlot):
 		return path
 
 
+# Section BandPlot
+class BandPlot(FilledPlot):
+	"""The space between this series and another on the same figure: `plot: {type: band, to: <key>}`.
+
+	Put it on the upper (or lower) of the two keys and name the other in `to`, a key as written under
+	`figures:` (or its tail, `wind.speed.speed`). The other series is read at this one's sample times, so
+	the two need not share a grid. A gust band is `environment.wind.speed.gust` with
+	`to: environment.wind.speed.speed`. Straight between samples, one sample for each slot. The axis spans
+	both series. Colour, gradient, `opacity` and `glow` work as on a line. With no `to`, or none that
+	matches a series with data, nothing is drawn.
+	"""
+	displayType = DisplayType.BandPlot
+
+	_to: str | None = None
+
+	@StateProperty(default=None, after=Plot.updateAppearance)
+	def to(self) -> str | None:
+		return self._to
+
+	@to.setter
+	def to(self, value: str | None):
+		self._to = value
+		self._pathDirty = True
+
+	@to.decode
+	def to(value) -> str | None:
+		"""The key of the series the band reaches, as written under `figures:`."""
+		return None if value is None else str(value).strip()
+
+	def _partner(self):
+		if not self._to:
+			return None
+		wanted = self._to.lower()
+		for item in self.figure.plotData:
+			if item is self.data or not item.hasData:
+				continue
+			name = str(item.key).lower()
+			if name == wanted or name.endswith('.' + wanted) or wanted.endswith('.' + name):
+				return item
+		return None
+
+	def _partnerPixels(self, partner, xs: np.ndarray) -> np.ndarray | None:
+		path = QPainterPath()
+		for i, value in enumerate(partner.plotValues):
+			path.moveTo(value) if not i else path.lineTo(value)
+		points = partner.combinedTransform.map(path)
+		count = points.elementCount()
+		if count < 2:
+			return None
+		px = np.array([points.elementAt(i).x for i in range(count)])
+		py = np.array([points.elementAt(i).y for i in range(count)])
+		return np.interp(xs, px, py)
+
+	def _shapes(self, xs: np.ndarray, ys: np.ndarray) -> QPainterPath:
+		path = QPainterPath()
+		partner = self._partner()
+		if not len(xs) or partner is None:
+			return path
+		xs, ys = self._onePerSlot(xs, ys)
+		other = self._partnerPixels(partner, xs)
+		if other is None:
+			return path
+		self._barPixels = 1.0
+		path.moveTo(xs[0], ys[0])
+		for x, y in zip(xs, ys):
+			path.lineTo(x, y)
+		for x, y in zip(xs[::-1], other[::-1]):
+			path.lineTo(x, y)
+		path.closeSubpath()
+		return path
+
+
 # Section ViolinPlot
 _DURATION_UNITS = {'s': 1, 'sec': 1, 'm': 60, 'min': 60, 'h': 3600, 'hr': 3600, 'd': 86400, 'w': 604800}
 
@@ -2577,6 +2649,7 @@ class ViolinPlot(FilledPlot):
 _PLOT_KINDS = {
 	'bar': BarPlot, 'bars': BarPlot, 'barplot': BarPlot, 'bargraph': BarPlot,
 	'area': AreaPlot, 'areas': AreaPlot, 'areaplot': AreaPlot, 'filled': AreaPlot,
+	'band': BandPlot, 'bands': BandPlot, 'bandplot': BandPlot, 'range': BandPlot,
 	'violin': ViolinPlot, 'violins': ViolinPlot, 'violinplot': ViolinPlot,
 }
 
