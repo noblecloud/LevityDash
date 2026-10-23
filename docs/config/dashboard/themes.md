@@ -269,6 +269,8 @@ A `color:` may name a scale and a value, and then it follows the value:
 | `of` | A key or an expression, as for any value source. It need not be the key the item shows. |
 | `fallback` | Optional colour used until the value has a number. Default: the default text colour. |
 
+It works on every colour of a text, a gauge (arc, fill, zones, markers, needle, hub, halo, labels) and a bar (track, fill, zones, markers, pointer, labels). All of them read their colour through one place (`ColorSlots`, `lib/ui/colors/bound.py`), so a colour written as a mapping follows its value wherever it is written. The Studio's colour control has a ⟳ button for it.
+
 The colour changes when the value does. A plain colour is the same property with no mapping, so nothing else about the item changes. An unknown scale name is an error (a gradient would otherwise pick the nearest preset). A saved dashboard writes the mapping back as written, with a theme scale shown as its resolved gradient.
 
 ## What a theme does not change yet
