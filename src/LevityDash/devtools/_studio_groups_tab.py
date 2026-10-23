@@ -7,14 +7,16 @@ from typing import List, Optional
 from PySide6.QtCore import QRectF, QStringListModel, Qt
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
-	QCheckBox, QComboBox, QCompleter, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QTreeWidget,
+	QCheckBox, QComboBox, QCompleter, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QTreeWidget,
 	QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
 from LevityDash.devtools import _studio_groups as groups
+from LevityDash.devtools import _studio_tiers as tiers
 from LevityDash.devtools import _studio_preset as model
 
 WARN = QColor('#ff5c5c')
+NOTE = QColor('#e0a526')
 HELP = ('A size group makes the text in it agree on one size per tier. Scope decides how far it reaches: '
         '`global.value` the whole dashboard, `title@name` the panel with that `name:`, `group.title` the nearest group.')
 
@@ -30,11 +32,19 @@ class GroupsTab(QWidget):
 		super().__init__()
 		self.builder = builder
 		self.found: List[groups.Group] = []
+		self.findings: List[tiers.Finding] = []
 		box = QVBoxLayout(self)
 		box.setContentsMargins(8, 8, 8, 8)
 		self.summary = QLabel()
 		self.summary.setWordWrap(True)
 		box.addWidget(self.summary)
+		self.checks = QListWidget()
+		self.checks.setMaximumHeight(96)
+		self.checks.setWordWrap(True)
+		self.checks.setToolTip('Tier order: a header larger than its labels, a label no larger than its value. Click one to outline the text it is about.')
+		self.checks.currentItemChanged.connect(self._checked)
+		self.checks.hide()
+		box.addWidget(self.checks)
 		self.only = QCheckBox('Only the selected item')
 		self.only.setToolTip('Show the groups that have text in the selected item or inside it')
 		self.only.toggled.connect(lambda _: self._fill())
@@ -90,7 +100,22 @@ class GroupsTab(QWidget):
 		self.found = found
 		self.names.setStringList(sorted({g.label for g in found if not g.unresolved}))
 		self._fill()
+		self._fillChecks()
 		self.selectionChanged()
+
+	def _fillChecks(self):
+		self.checks.clear()
+		self.findings = tiers.check(found for found in self.found)
+		for f in self.findings:
+			row = QListWidgetItem(('⚠ ' if f.severity == tiers.WARN else 'ℹ ') + f.message)
+			row.setForeground(QBrush(WARN if f.severity == tiers.WARN else NOTE))
+			row.setData(Qt.ItemDataRole.UserRole, f)
+			self.checks.addItem(row)
+		self.checks.setVisible(bool(self.findings))
+
+	def _checked(self, item, _prev=None):
+		finding = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+		self.builder.stage.setMarks(finding.rects if finding is not None else [])
 
 	def shown(self) -> List[groups.Group]:
 		path = self.builder.selection

@@ -25,6 +25,7 @@ class Member:
 	tier: int
 	font: float
 	rect: QRectF
+	role: str = ''  # 'label' for a reading's title, 'value' for its value, '' for any other text
 
 
 @dataclass
@@ -72,6 +73,20 @@ def _pathOf(item, names: Dict[str, tuple]) -> Optional[tuple]:
 	return None
 
 
+def _roleOf(item) -> str:
+	"""Whether a text is a reading's title or its value, from the item it sits in (the text is inside a `TitleLabel` or a `DisplayLabel`)."""
+	while item is not None:
+		names = {c.__name__ for c in type(item).__mro__}
+		if 'TitleLabel' in names:
+			return 'label'
+		if 'DisplayLabel' in names:
+			return 'value'
+		if 'Realtime' in names:
+			return ''
+		item = item.parentItem()
+	return ''
+
+
 def _label(group, scene, names: Dict[str, tuple]) -> str:
 	if group.unresolvedScope:
 		return f'{group.key}@{group.unresolvedScope}'
@@ -102,7 +117,7 @@ def collect(scene, names: Dict[str, tuple]) -> List[Group]:
 		out = Group(_label(g, scene, names), g.key, isinstance(g, MatchAllSizeGroup), unresolved=g.unresolvedScope)
 		for i in items:
 			try:
-				out.members.append(Member(_pathOf(i, names), str(getattr(i, 'text', '') or '')[:40], g.make_size_key(i), float(g.font_size_for(i)), i.sceneBoundingRect().translated(-origin)))
+				out.members.append(Member(_pathOf(i, names), str(getattr(i, 'text', '') or '')[:40], g.make_size_key(i), float(g.font_size_for(i)), i.sceneBoundingRect().translated(-origin), _roleOf(i)))
 			except Exception:  # noqa: BLE001 - one item that cannot report must not hide the rest
 				continue
 		if out.members:
