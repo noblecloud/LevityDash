@@ -62,9 +62,8 @@ items:
         plot: {type: plot, color: '#14e3c0', weight: 0.5}
         resolution: 2
     - figure: rain
-      margins: {top: 78%, bottom: 9%}
+      margins: {top: 50%, bottom: 9%}
       min: 0
-      max: 0.4
       environment.precipitation.precipitation:
         plot: {type: bar, gradient: PrecipitationRateGradient, width: 0.8, radius: 0.25}
     - figure: chance

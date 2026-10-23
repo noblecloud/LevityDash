@@ -473,8 +473,7 @@ items:
         environment.pressure.pressure:
           plot: {type: plot, color: '#e0e3e8', weight: 0.3, dashPattern: '1, 3'}
       - figure: rain
-        margins: {top: 70%, bottom: 6%}
-        max: 0.5
+        margins: {top: 45%, bottom: 6%}
         environment.precipitation.precipitation:
           plot: {type: bar, gradient: PrecipitationRateGradient, width: 0.8, radius: 0.25}
       - figure: chance
