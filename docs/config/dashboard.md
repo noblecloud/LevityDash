@@ -745,6 +745,7 @@ The type of plot. The default is a line.
 
 - `plot`: a line. This is the default.
 - `bar`: one bar for each sample. See [Bar plots](#bar-plots).
+- `strip`: a row of marks and no line, for a key that is not a number. See [Strip plots](#strip-plots).
 - `violin`: one violin for each stretch of time. See [Violin plots](#violin-plots).
 
 ```yaml
@@ -939,6 +940,10 @@ A list of exact values and their symbols, such as `{0: 'wi:day-sunny'}`. Use `ma
 
 The size of a pin in pixels, or a length such as `5mm`. The default is `14`.
 
+#### <div class=mono>at: float</div>
+
+Put every pin at this height instead of on the line: `0` is the bottom of the figure, `1` the top. `offset` then does nothing. A [strip plot](#strip-plots) uses `0.5` when it has none.
+
 #### <div class=mono>offset: float</div>
 
 The distance between the pin and the line, in pin sizes. A negative number puts the pin above the line. The default is `-1.2`.
@@ -1014,6 +1019,32 @@ The Moon Phase shows the phase of the moon and tilts it as it looks in the sky. 
   interval:
     minutes: 20
 ```
+
+### Strip plots
+
+> [!NOTE]
+A strip plot is a row of marks and no line. Use it for a key that is not a number, such as a weather condition, to show it along the time axis.
+
+A strip is a line plot that draws only its [pins](#pins-on-a-line). All the pins sit at one height, `pins.at`, from `0` (bottom of the figure) to `1` (top). The default is `0.5`, the middle. `at:` also works on a line plot, to put the pins in a row over a line instead of on it.
+
+The strip's own key sets the time span and nothing else. Use any number key that covers the window, such as the temperature. Give the strip a figure of its own. Its `margins` then decide the band it sits in, and it does not change the axis of the figure below it.
+
+```yaml
+- figure: strip
+  margins: {bottom: 20%, top: 70%}
+  environment.temperature.dewpoint:
+    plot:
+      type: strip
+      pins:
+        key: environment.precipitation.precipitation
+        size: 26
+        steps:
+        - [0,    'wi:day-sunny']
+        - [0.1,  'wi:showers']
+        - [0.3,  'wi:rain']
+```
+
+The pins take the text colour unless they have a `color`.
 
 ### <div class=mono>rotate: bool</div>
 

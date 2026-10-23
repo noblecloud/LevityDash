@@ -1883,6 +1883,9 @@ class LinePlot(Plot):
 
 	_thickness: Optional[dict] = None
 	_pins: Optional[dict] = None
+	#: Marks sit in a row at this height (0..1) unless the pins say `at:`; None rides the line.
+	_rowAt: Optional[float] = None
+	_drawsLine: bool = True
 	#: The acquire behind `_thickness['key']` / `_pins['key']` when the key came from a
 	#: `.levity` slot. Holds the text the file said, so encode writes the expression back.
 	_thicknessSource: Optional[KeySource] = None
@@ -1956,6 +1959,8 @@ class LinePlot(Plot):
 		gap between marks in sizes. An icon value draws as its glyph. Other values need `steps`
 		(`[[0, wi:day-sunny], [0.05, wi:showers], [0.3, wi:rain]]`: a number takes the last row it reaches)
 		or `map` (`{0: 'wi:day-sunny'}`: exact values); with neither, the value prints as text.
+		`at` (0 bottom to 1 top of the figure) sets every mark at that height instead of on the line,
+		which makes a row of glyphs: a condition timeline. A `strip` plot draws only that row.
 		"""
 		return self._pins
 
@@ -1986,6 +1991,7 @@ class LinePlot(Plot):
 			'key':     str(value['key']), 'steps': steps, 'map': {str(k): str(v) for k, v in dict(value.get('map', {})).items()},
 			'size':    value.get('size', 14), 'offset': float(value.get('offset', -1.2)), 'spacing': float(value.get('spacing', 1.6)),
 			'color':   value.get('color'),
+			**({'at': clamp(float(value['at']), 0.0, 1.0)} if value.get('at') is not None else {}),
 		}
 
 	def delete(self):
@@ -2018,9 +2024,14 @@ class LinePlot(Plot):
 				extras['ribbon'] = ribbonPath(xs, ys, np.concatenate(([widths[0]], widths, [widths[-1]] * tail)))
 		if self._pins and (side := self.data.sideSeries(self._pins['key'])) is not None:
 			screen = self.scene().view.screen()
-			extras['pins'] = pinPath(times, xs[1:count - tail], ys[1:count - tail], *side, {**PIN_DEFAULTS, **self._pins}, getDPI(screen))
+			config = {**PIN_DEFAULTS, **({'at': self._rowAt} if self._rowAt is not None else {}), **self._pins}
+			rowY = None
+			if config.get('at') is not None:
+				rowY = self.figure.figureTransform.map(QPointF(0, config['at'])).y()
+			extras['pins'] = pinPath(times, xs[1:count - tail], ys[1:count - tail], *side, config, getDPI(screen), rowY)
 			color = self._pins.get('color')
-			extras['pinColor'] = Color.decode(color).QColor if color else None
+			# A row has no line to borrow its colour from: the text colour, unless the pins say.
+			extras['pinColor'] = Color.decode(color).QColor if color else (None if self._drawsLine else Color.text.QColor)
 		return extras
 
 	def _render_paint(self, size: QSize, dpr: float, pen: QPen, path: QPainterPath, glow=None, extras=None) -> QImage:
@@ -2029,8 +2040,11 @@ class LinePlot(Plot):
 		img.setDevicePixelRatio(dpr)
 		img.fill(Qt.transparent)
 		painter = EffectPainter(img)
-		paintGlow(painter, path, pen.brush(), pen.widthF(), glow)
-		if (ribbon := extras.get('ribbon')) is not None:
+		if self._drawsLine:
+			paintGlow(painter, path, pen.brush(), pen.widthF(), glow)
+		if not self._drawsLine:
+			pass
+		elif (ribbon := extras.get('ribbon')) is not None:
 			painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 			painter.setPen(Qt.NoPen)
 			painter.setBrush(pen.brush())
@@ -2196,8 +2210,8 @@ def pinText(value: Any, config: Mapping) -> tuple[str, Optional[QFont]]:
 	return resolve(str(value))
 
 
-def pinPath(times: np.ndarray, xs: np.ndarray, ys: np.ndarray, pinTimes: np.ndarray, pinValues: list, config: Mapping, dpi: float) -> QPainterPath:
-	"""The glyphs for a pinned series, set on the line through (xs, ys) at each pin's own time."""
+def pinPath(times: np.ndarray, xs: np.ndarray, ys: np.ndarray, pinTimes: np.ndarray, pinValues: list, config: Mapping, dpi: float, rowY: Optional[float] = None) -> QPainterPath:
+	"""The glyphs for a pinned series, set on the line through (xs, ys) at each pin's own time, or all at `rowY` (a row)."""
 	size = config['size']
 	size = float(size) if isinstance(size, (int, float)) else float(re.sub(r'[a-z]+$', '', str(size))) * dpi / (25.4 if str(size).endswith('mm') else 2.54 if str(size).endswith('cm') else 1)
 	path = QPainterPath()
@@ -2214,10 +2228,24 @@ def pinPath(times: np.ndarray, xs: np.ndarray, ys: np.ndarray, pinTimes: np.ndar
 		font = font or QFont(QApplication.font())
 		font.setPixelSize(max(int(round(size)), 1))
 		box = QFontMetricsF(font).boundingRect(text)
-		y = float(np.interp(t, times, ys)) + config['offset'] * size
+		y = rowY if rowY is not None else float(np.interp(t, times, ys)) + config['offset'] * size
 		path.addText(QPointF(x - box.center().x(), y - box.center().y()), font, text)
 		lastX = x
 	return path
+
+
+# Section StripPlot
+class StripPlot(LinePlot):
+	"""A row of marks and no line: `plot: {type: strip, pins: {key: environment.condition.icon}}`.
+
+	It is a line plot that draws only its pins, all at one height (`pins.at`, default the middle of
+	its figure), so a string key (a condition, a phase) reads as a timeline along the time axis.
+	The plot's own key sets the time span and nothing else: give the strip a figure of its own and
+	any numeric key that covers the window, such as the temperature.
+	"""
+	displayType = DisplayType.StripPlot
+	_rowAt = 0.5
+	_drawsLine = False
 
 
 # Section FilledPlot
@@ -2545,6 +2573,7 @@ class ViolinPlot(FilledPlot):
 
 _PLOT_KINDS = {
 	'bar': BarPlot, 'bars': BarPlot, 'barplot': BarPlot, 'bargraph': BarPlot,
+	'strip': StripPlot, 'row': StripPlot, 'timeline': StripPlot,
 	'violin': ViolinPlot, 'violins': ViolinPlot, 'violinplot': ViolinPlot,
 }
 
