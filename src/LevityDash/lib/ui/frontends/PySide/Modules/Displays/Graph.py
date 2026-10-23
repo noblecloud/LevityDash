@@ -2344,13 +2344,40 @@ class FilledPlot(Plot):
 		return img
 
 
+class BasedPlot(FilledPlot):
+	"""A filled plot that rises from a baseline value (`base`), which the axis is held to reach."""
+	_base: float = 0.0
+
+	@StateProperty(default=0.0, after=Plot.updateAppearance)
+	def base(self) -> float:
+		return self._base
+
+	@base.setter
+	def base(self, value: float):
+		self._base = value
+		self.data.figure.dataValueRange.emitChanged()
+
+	@base.decode
+	def base(value) -> float:
+		"""The value the bars rise from (in the data's own unit). Held inside the axis range."""
+		return float(value)
+
+	def valueAnchor(self) -> float:
+		return self._base
+
+	def _baselineY(self) -> float:
+		axis = self.figure.dataValueRange
+		low, high = axis.min, axis.max
+		share = (clamp(self._base, low, high) - low) / (high - low)
+		return self.figure.figureTransform.map(QPointF(0, share)).y()
+
+
 # Section BarPlot
-class BarPlot(FilledPlot):
+class BarPlot(BasedPlot):
 	"""Filled bars, one per source sample, rising from a baseline: `plot: {type: bar}`."""
 	displayType = DisplayType.BarPlot
 
 	_radius: float = 0.2
-	_base: float = 0.0
 	_align: str = 'center'
 
 	@StateProperty(default=0.2, after=Plot.updateAppearance)
@@ -2370,20 +2397,6 @@ class BarPlot(FilledPlot):
 	def radius(value: float) -> float:
 		return round(value, 3)
 
-	@StateProperty(default=0.0, after=Plot.updateAppearance)
-	def base(self) -> float:
-		return self._base
-
-	@base.setter
-	def base(self, value: float):
-		self._base = value
-		self.data.figure.dataValueRange.emitChanged()
-
-	@base.decode
-	def base(value) -> float:
-		"""The value the bars rise from (in the data's own unit). Held inside the axis range."""
-		return float(value)
-
 	@StateProperty(default='center', after=Plot.updateAppearance)
 	def align(self) -> str:
 		return self._align
@@ -2399,15 +2412,6 @@ class BarPlot(FilledPlot):
 		if value not in ('center', 'start', 'end'):
 			raise ValueError(f'bar align must be center, start or end, not {value!r}')
 		return value
-
-	def valueAnchor(self) -> float:
-		return self._base
-
-	def _baselineY(self) -> float:
-		axis = self.figure.dataValueRange
-		low, high = axis.min, axis.max
-		share = (clamp(self._base, low, high) - low) / (high - low)
-		return self.figure.figureTransform.map(QPointF(0, share)).y()
 
 	def _shapes(self, xs: np.ndarray, ys: np.ndarray) -> QPainterPath:
 		path = QPainterPath()
@@ -2438,6 +2442,32 @@ class BarPlot(FilledPlot):
 			path.quadTo(left + width, y, left + width, y - tip * r)
 			path.lineTo(left + width, base)
 			path.closeSubpath()
+		return path
+
+
+# Section AreaPlot
+class AreaPlot(BasedPlot):
+	"""The line's shape filled down (or up) to a baseline: `plot: {type: area}`.
+
+	Straight between samples. Like a bar plot it keeps one sample for each slot, so a current reading
+	between two forecast hours does not spike the edge. `base` is the value the fill reaches (default 0,
+	held inside the axis range), so a temperature area with `base: 50` fills from fifty. The plot's
+	gradient (value against height), colour, `opacity` and `glow` work as on a line.
+	"""
+	displayType = DisplayType.AreaPlot
+
+	def _shapes(self, xs: np.ndarray, ys: np.ndarray) -> QPainterPath:
+		path = QPainterPath()
+		if not len(xs):
+			return path
+		xs, ys = self._onePerSlot(xs, ys)
+		base = self._baselineY()
+		self._barPixels = 1.0
+		path.moveTo(xs[0], base)
+		for x, y in zip(xs, ys):
+			path.lineTo(x, y)
+		path.lineTo(xs[-1], base)
+		path.closeSubpath()
 		return path
 
 
@@ -2546,6 +2576,7 @@ class ViolinPlot(FilledPlot):
 
 _PLOT_KINDS = {
 	'bar': BarPlot, 'bars': BarPlot, 'barplot': BarPlot, 'bargraph': BarPlot,
+	'area': AreaPlot, 'areas': AreaPlot, 'areaplot': AreaPlot, 'filled': AreaPlot,
 	'violin': ViolinPlot, 'violins': ViolinPlot, 'violinplot': ViolinPlot,
 }
 

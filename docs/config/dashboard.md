@@ -745,6 +745,7 @@ The type of plot. The default is a line.
 
 - `plot`: a line. This is the default.
 - `bar`: one bar for each sample. See [Bar plots](#bar-plots).
+- `area`: the line's shape filled down to a baseline. See [Area plots](#area-plots).
 - `violin`: one violin for each stretch of time. See [Violin plots](#violin-plots).
 
 ```yaml
@@ -811,6 +812,32 @@ Where the bar sits against the time of its sample. `center` puts the time in the
 A bar plot draws one bar for each slot of the data. If a current value falls between two hourly samples, LevityDash draws only the sample that is closest to the middle of the slot.
 
 To draw a line over bars, put each in its own figure. Give the two figures the same margins. A figure keeps its own range.
+
+### Area plots
+
+> [!NOTE]
+An area plot is a line with the space under it filled. Use it for a level that you read as a quantity, such as the load on a machine or the cloud cover.
+
+```yaml
+- type: graph
+  name: temperature
+  timeframe: {days: 1, hours: 12}
+  figures:
+  - figure: temperature
+    margins: {bottom: 20%, top: 15%}
+    environment.temperature.temperature:
+      plot: {type: area, base: 60, gradient: TemperatureGradient, opacity: 0.6}
+```
+
+<div class="indent">
+
+#### <div class=mono>base: float</div>
+
+The value the fill reaches, in the unit of the data. The axis always includes it. A value below `base` is filled upward to it. The default is `0`, so a plot of a value far from zero, such as a temperature, looks flat unless you set `base` near its low.
+
+</div>
+
+Colour, `gradient`, `opacity` and `glow` work as they do for a line. The gradient follows the value against height. Like a bar plot, an area plot keeps one sample for each slot of the source's own grid.
 
 ### Violin plots
 
