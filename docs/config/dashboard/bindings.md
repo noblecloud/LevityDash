@@ -39,7 +39,12 @@ The reading is placed on the `from` range and the setting takes the matching poi
 | `clamp` | `true` (default) keeps the setting between the ends of `to`; `false` lets it run on. |
 | `fallback` | Optional number used until the value has a number. Default: the number the item already had. |
 
-`opacity` is the first property to take it. Every item has `opacity` (0 to 1, and it fades everything inside the item); a result outside 0 to 1 is held to it.
+These numbers take it:
+
+- item `opacity` (0 to 1, and it fades everything inside the item); a result outside 0 to 1 is held to it.
+- a gauge arc's `weight` (a share of the gauge width, so `0.05` is 5%), `start-angle` and `end-angle` (degrees).
+
+The Studio's gauge editor and builder show a ⟳ button beside each of these; it opens a form for `of`, `from`, `to`, `fallback` and `clamp`, and *Make plain* turns it back into a number.
 
 ## For code
 

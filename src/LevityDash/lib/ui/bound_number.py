@@ -15,7 +15,7 @@ This is the number counterpart of a colour that follows a value (``colors/bound.
 """
 from typing import Any, Callable, Mapping, Optional
 
-from WeatherUnits import Measurement
+from unitcorn import Measurement
 
 from LevityDash.lib.stopunits import parseStop, toDataUnit
 from LevityDash.lib.ui.follow import Followers, ValueFollower
@@ -107,17 +107,59 @@ def decodeNumber(spec: Any, plain: Callable[[Any], Any]) -> Any:
 
 
 class NumberSlots(Followers):
-	"""The bound numbers of one item. ``follow`` is for a setter: it opens the source and keeps the spec for the encoder."""
+	"""The bound numbers of one item, behind one door for every numeric StateProperty.
+
+	A property keeps its number in an attribute. Its setter calls ``assign`` with what the decoder returned, its
+	getter returns ``current(...)`` (the bound spec while one is followed, else the plain value) and its encoder
+	``spec`` writes it back::
+
+		@opacity.setter
+		def opacity(self, value):
+			self.numbers.assign(self, 'opacity', value, self.setOpacity)
+
+	``store`` takes a plain value; ``convert`` turns each followed number into what ``store`` takes (a relative
+	size, say); ``then`` runs after every change a followed value makes (a redraw).
+	"""
 
 	def __init__(self, label: str = 'number'):
 		super().__init__()
 		self._label = label
+		self._bound: dict[Any, BoundNumber] = {}
 
-	def follow(self, owner: Any, name: Any, value: Any, apply: Callable[[float], None]) -> Any:
-		"""Keep ``value`` (what a decoder returned). A `BoundNumber` is followed and ``apply`` gets each number; the
-		number to start with is returned (its fallback), or None to leave the item as it is."""
+	def assign(self, owner: Any, name: Any, value: Any, store: Callable[[Any], None],
+	           convert: Callable[[float], Any] = float, then: Optional[Callable[[], None]] = None) -> None:
+		"""Keep ``value`` (what a decoder returned): store it, or follow it if it is a `BoundNumber`."""
+		key = (owner, name)
 		if not isinstance(value, BoundNumber):
+			self._bound.pop(key, None)
 			self._release(owner, name)
-			return value
+			store(value)
+			return
+		self._bound[key] = value
+
+		def apply(number: float) -> None:
+			store(convert(number))
+			if then is not None:
+				then()
+
 		self._attach(owner, name, ValueFollower(value, apply, f'{self._label} {name}'))
-		return value.fallback
+		if value.fallback is not None:
+			store(convert(value.fallback))
+
+	def current(self, owner: Any, name: Any, plain: Any) -> Any:
+		"""For a getter: the bound spec while one is followed, else ``plain``."""
+		return self._bound.get((owner, name), plain)
+
+	@staticmethod
+	def spec(value: Any) -> Any:
+		"""For an encoder: the mapping of a bound number, else the value as it is."""
+		return dict(value.spec) if isinstance(value, BoundNumber) else value
+
+	def release(self, owner: Any = None) -> None:
+		super().release(owner)
+		for key in [k for k in self._bound if k[0] is owner]:
+			del self._bound[key]
+
+	def releaseAll(self) -> None:
+		super().releaseAll()
+		self._bound.clear()
