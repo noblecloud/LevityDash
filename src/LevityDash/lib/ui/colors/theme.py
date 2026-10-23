@@ -270,8 +270,18 @@ def load(name: str) -> Theme:
 					raise ThemeError(f'{path}: a theme is a mapping')
 				theme = Theme.decode(data, name=name, source=str(path))
 				_cache[name] = theme
+				_audit(theme)
 				return theme
 		raise ThemeError(f'no theme named {name!r}. Available: {", ".join(available()) or "none"}')
+
+
+def _audit(theme: Theme):
+	"""Warn, once per theme, about text that is hard to read on the background and data colours that look alike."""
+	try:
+		from LevityDash.lib.ui.colors import contrast
+		contrast.check_theme(theme, log)
+	except Exception:
+		log.exception(f'palette check of theme {theme.name!r} failed')
 
 
 def decode(spec: Any) -> Theme:
@@ -286,6 +296,7 @@ def decode(spec: Any) -> Theme:
 		key = json.dumps(spec, sort_keys=True, default=str)
 		if key not in _inline:
 			_inline[key] = Theme.decode(deepcopy(spec), name='inline')
+			_audit(_inline[key])
 		return _inline[key]
 	raise ThemeError(f'theme is a name or a mapping, not {spec!r}')
 

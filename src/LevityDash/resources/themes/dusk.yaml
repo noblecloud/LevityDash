@@ -8,7 +8,7 @@ colors:
   surface: '#161b26'
   text: '#e8ecf4'
   muted: '#aab3c5'
-  faint: '#6b7489'
+  faint: '#7a8398'
   rule: '#2a3142'
   accent: '#ffb454'
   good: '#3ddc97'
