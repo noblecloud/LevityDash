@@ -120,3 +120,22 @@ def test_a_line_fill_holds_the_axis_to_its_base(dashboard):
 	assert data.graphic.valueAnchor() == 12
 	GraphItemData.graphic.setState(data, {'type': 'plot', 'fill': True})
 	assert data.graphic.valueAnchor() is None
+
+
+def test_pins_only_on_the_turns_of_the_line():
+	import numpy as np
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph import PIN_DEFAULTS, extremeTimes, LinePlot, pinPath
+
+	times = np.arange(0.0, 25.0)
+	ys = -np.sin(times / 24 * 4 * np.pi) * 40 + 60  # two highs, two lows
+	assert len(extremeTimes(times, ys, 'peaks', 0.15)) == 2
+	assert len(extremeTimes(times, ys, 'extremes', 0.15)) == 4
+	assert extremeTimes(times, np.full(25, 5.0), 'extremes', 0.15) == []
+	assert extremeTimes(times, ys + np.random.default_rng(0).normal(0, 0.5, 25), 'peaks', 0.5) != []
+	decode = LinePlot.statefulItems['pins'].decodeValue
+	assert decode({'key': 'k', 'only': 'highs'}, None)['only'] == 'peaks'
+	with pytest.raises(ValueError):
+		decode({'key': 'k', 'only': 'sideways'}, None)
+	config = {**PIN_DEFAULTS, 'only': 'extremes', 'size': 12, 'offset': 0.0, 'spacing': 0.0}
+	path = pinPath(times, times * 10, ys, times, [str(i) for i in times], config, 96)
+	assert not path.isEmpty()
