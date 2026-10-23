@@ -682,6 +682,7 @@ class DisplayType(str, Enum, metaclass=ClosestMatchEnumMeta):
 	ViolinPlot = 'violin'
 	StripPlot = 'strip'
 	AreaPlot = 'area'
+	BandPlot = 'band'
 	BarGraph = 'bargraph'
 	WindVein = 'windVein'
 	Custom = 'custom'
