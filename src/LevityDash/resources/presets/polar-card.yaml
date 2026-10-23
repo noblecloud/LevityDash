@@ -5,6 +5,7 @@ doc: A polar plot (wind rose, trail or day clock) under a small title
 props:
   title: {default: Wind, type: text, doc: "The small text over the plot"}
   title_color: {default: $muted, type: color, doc: "Colour of that text"}
+  headGroup: {default: global.head, type: text, doc: "Size group of the title; the default spans the whole dashboard"}
   plot: {default: rose, type: text, doc: "rose, trail or clock"}
   direction: {default: environment.wind.direction.direction, type: key, doc: "Where the wind comes from (rose and trail)"}
   speed: {default: environment.wind.speed.speed, type: key, doc: "How hard it blows (rose and trail)"}
@@ -26,6 +27,7 @@ template:
       text: $title
       font: $display
       color: $title_color
+      matchingGroup: {group: $headGroup, matchAll: true}
       geometry: {x: 2%, y: 0%, width: 96%, height: 7%}
     - type: polar
       plot: $plot
