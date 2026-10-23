@@ -19,10 +19,11 @@ from typing import Any, Callable, Mapping, Optional
 from unitcorn import Measurement
 
 from LevityDash.lib.ui.colors import theme as _theme
+from LevityDash.lib.ui.follow import Followers, ValueFollower
 from LevityDash.lib.ui.colors.color import Color
 from LevityDash.lib.ui.colors.gradient import Gradient
 
-__all__ = ('BoundColor', 'ColorFollower', 'ColorSlots', 'LiveColor', 'decodeColor', 'isBound')
+__all__ = ('BoundColor', 'ColorSlots', 'LiveColor', 'decodeColor', 'isBound')
 
 KEYS = frozenset({'scale', 'of', 'fallback'})
 
@@ -70,6 +71,8 @@ class BoundColor:
 			return None
 		return gradient.get_color_for_value(number)
 
+	resolve = colorFor
+
 	def __repr__(self):
 		return f'BoundColor({self.spec!r})'
 
@@ -77,37 +80,6 @@ class BoundColor:
 def decodeColor(spec) -> Color | BoundColor:
 	"""``Color.decode``, except that a ``{scale, of}`` mapping gives a ``BoundColor``. One argument, as a StateProperty decoder is called."""
 	return BoundColor(spec) if isBound(spec) else Color.decode(spec)
-
-
-class ColorFollower:
-	"""Holds a bound colour's value source and hands each new colour to ``apply`` (on the GUI thread).
-
-	``close()`` releases the source. With no source, or before a value arrives, ``apply`` is not called: the item
-	keeps the colour it was given (its fallback).
-	"""
-
-	def __init__(self, bound: BoundColor, apply: Callable[[Color], None], label: str = 'colour'):
-		from LevityDash.lib.valuesource import openValueSource
-		from LevityDash.lib.stateful import Binding
-
-		self._bound = bound
-		self._apply = apply
-		self._binding = None
-		if (source := openValueSource(bound.of, f'{label} value', 'it keeps its fallback colour')) is not None:
-			self._binding = Binding(source, self._deliver)
-
-	def _deliver(self, value: Any) -> None:
-		color = self._bound.colorFor(value)
-		if color is None:
-			if self._bound.fallback is not None:
-				self._apply(self._bound.fallback)
-			return
-		self._apply(color)
-
-	def close(self) -> None:
-		if self._binding is not None:
-			self._binding.unlink()
-			self._binding = None
 
 
 class LiveColor:
@@ -127,7 +99,7 @@ class LiveColor:
 		return f'LiveColor({self.spec!r})'
 
 
-class ColorSlots:
+class ColorSlots(Followers):
 	"""Every colour setting of one item, plain or following a value, behind one door.
 
 	An item that paints in several colours (a gauge, a bar) reads each colour spec through here, so a spec that
@@ -142,9 +114,9 @@ class ColorSlots:
 	"""
 
 	def __init__(self, changed: Callable[[], None], label: str = 'colour'):
+		super().__init__()
 		self._changed = changed
 		self._label = label
-		self._followers: dict[Any, dict[Any, ColorFollower]] = {}
 		self._byKey: dict[str, 'Color | LiveColor'] = {}
 
 	def _follow(self, bound: BoundColor, owner: Any, name: Any) -> LiveColor:
@@ -154,8 +126,7 @@ class ColorSlots:
 			live.color = color
 			self._changed()
 
-		self._release(owner, name)
-		self._followers.setdefault(owner, {})[name] = ColorFollower(bound, apply, self._label)
+		self._attach(owner, name, ValueFollower(bound, apply, self._label))
 		return live
 
 	def slot(self, raw: Any, owner: Any = None, name: Any = None) -> 'Color | LiveColor':
@@ -189,18 +160,11 @@ class ColorSlots:
 			found = self._byKey[key] = self.slot(raw, owner=self, name=key)
 		return found.QColor
 
-	def _release(self, owner: Any, name: Any) -> None:
-		if (follower := self._followers.get(owner, {}).pop(name, None)) is not None:
-			follower.close()
-
 	def release(self, owner: Any = None) -> None:
-		"""Let go of the value sources one element opened."""
-		for follower in self._followers.pop(owner, {}).values():
-			follower.close()
+		super().release(owner)
 		if owner is self:
 			self._byKey.clear()
 
 	def releaseAll(self) -> None:
-		for owner in list(self._followers):
-			self.release(owner)
+		super().releaseAll()
 		self._byKey.clear()
