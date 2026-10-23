@@ -500,7 +500,7 @@ class MeasurementUnitSplitter(Splitter, Stateful):
 			clearCacheAttr(self.unit, 'contentsRect')
 		if self.displayProperties.unitPosition == 'auto':
 			self.__decideAuto()
-		elif self.displayProperties.unitPosition in ['hidden', 'inline']:
+		elif self.displayProperties.unitPosition in ['hidden', 'inline', 'baseline']:
 			self.unit.hide()
 			# Show the value explicitly: it fills the whole surface in these
 			# modes, but the base Splitter.__init__ runs ratio->setGeometries
@@ -530,14 +530,14 @@ class MeasurementUnitSplitter(Splitter, Stateful):
 
 	@property
 	def _ratio(self):
-		if self.displayProperties.unitPosition in {'hidden', 'inline', 'floating'}:
+		if self.displayProperties.unitPosition in {'hidden', 'inline', 'baseline', 'floating'}:
 			return 0
 		if self.unit is self.secondary:
 			return 1 - self.displayProperties.valueUnitRatio
 		return self.displayProperties.valueUnitRatio
 
 	def interactiveResize(self, mouseEvent):
-		if self.displayProperties.unitPosition in {'hidden', 'inline', 'floating'}:
+		if self.displayProperties.unitPosition in {'hidden', 'inline', 'baseline', 'floating'}:
 			return
 		super().interactiveResize(mouseEvent, invert=self.primary is self.value)
 

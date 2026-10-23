@@ -1437,6 +1437,22 @@ class MeasurementDisplayProperties(Stateful):
 
 		self.__valueUnitRatio = value
 
+	#: The size of a baseline unit as a share of the value, when `unitSize` does not set one. design-standards.md asks for 40 to 50 %.
+	baselineUnitRatio: float = 0.45
+
+	@staticmethod
+	def unitTail(measurement) -> str:
+		"""The unit text to draw small after a value, or '' when it belongs at the value's size.
+
+		A degree or percent sign is a mark on the number, not a word beside it, so it stays in the value's own run.
+		"""
+		if not isinstance(measurement, Measurement):
+			return ''
+		# What the measurement prints after its number is the unit as the display shows it ('mph', '°', '%').
+		whole, bare = str(measurement).strip(), str(measurement.withoutUnit).strip()
+		unit = whole[len(bare):].strip() if bare and whole.startswith(bare) else ''
+		return unit if any(c.isalpha() for c in unit) else ''
+
 	@property
 	def default_unit_ratio(self) -> float:
 		"""Relative unit height used when no explicit unitSize is configured."""
@@ -1643,6 +1659,8 @@ class MeasurementDisplayProperties(Stateful):
 				return f'{measurement:{formatString}}'
 			elif measurement is None:
 				return None
+			elif self.unitPosition == DisplayPosition.Baseline and not self.unitTail(measurement):
+				return str(measurement).strip()  # a unit that is only a mark (°, %) stays in the value's run
 			elif self.unitPosition != DisplayPosition.Inline:
 				return measurement.withoutUnit
 			return str(measurement).strip()
@@ -1790,6 +1808,22 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 		__exclude__ = {..., 'format-hint'}
 
 		class TextBox(Label.TextBox):
+
+			def tailRun(self) -> tuple[str, float] | None:
+				"""The unit as a smaller run on the value's baseline when `unitPosition` is `baseline`."""
+				try:
+					display = self.surface.parent
+					props = display.displayProperties
+					if props.unitPosition is not DisplayPosition.Baseline:
+						return None
+					unit = props.unitTail(display.measurement)
+					if not unit:
+						return None
+					size = props.unitSize
+					ratio = float(size) if size is not None and 0 < float(size) <= 1 else props.baselineUnitRatio
+					return unit, ratio
+				except (AttributeError, TypeError, ValueError):
+					return None
 
 			@property
 			def tierHeight(self) -> float:

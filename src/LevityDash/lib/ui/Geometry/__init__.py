@@ -685,6 +685,7 @@ class DisplayPosition(str, Enum, metaclass=ClosestMatchEnumMeta):
 	Above = 'above'  # Displays the unit above the value
 	Below = 'below'  # Displays the unit below the value
 	Hidden = 'hidden'  # Hides the unit completely
+	Baseline = 'baseline'  # Displays the unit in a smaller run on the value's baseline, in the same line
 	Inside = 'inside'
 	Outside = 'outside'
 	Floating = 'floating'  # Displays the unit in a separate label that can be placed anywhere

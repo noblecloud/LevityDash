@@ -430,9 +430,10 @@ The number of decimal places to display.  This is only used for numeric values.
 #### <div class=mono>unitPosition: str[fuzzy] | DisplayPosition</div>
 
 The position of the unit string.
-The options are `auto`, `above`/`top`, `below`/`bottom`, `left`, `right`, `inline` or `float-under` with `auto` as the default.
+The options are `auto`, `above`/`top`, `below`/`bottom`, `left`, `right`, `inline`, `baseline` or `float-under` with `auto` as the default.
 The `auto` option will place the unit inline if there is enough space, otherwise it will place it below the value.
 `float-under` places the unit directly under the value.
+`baseline` draws the unit in a smaller run right after the value, on the value's baseline, as part of the same text: `7` then a small `mph`. The run is 45 % of the value's size, or the `unitSize` when one is set as a share (`unitSize: 30%`). A unit that is only a mark, like `°` or `%`, stays at the value's size, because a mark belongs to the number. The unit counts in the fit, the alignment and the size group, so the value's size does not follow the unit.
 When `float-under` is set, `float-offset` is used to determine the offset of the unit from the value.
 
 #### <div class=mono>unitSize: RelativeValue | AbsolutePixelValue | AbsolutePhysicalValue </div>
