@@ -67,3 +67,25 @@ def test_a_word_is_not_a_number(dashboard):
 	finally:
 		for t in (number, word):
 			t.scene() and t.scene().removeItem(t)
+
+
+def test_a_column_is_shared_only_by_items_on_one_edge(dashboard, monkeypatch):
+	"""A dashboard-wide group holds values in many columns. Only the items whose boxes end on the same edge share
+	the column, so a short value in one cell does not make room for the widest number elsewhere."""
+	panel = dashboard.scene.base
+	group = MatchAllSizeGroup(panel, 'number-align-columns')
+	short, wide, beside = Text(panel, value='7'), Text(panel, value='30.09'), Text(panel, value='12.5')
+	for t in (short, wide, beside):
+		t.setNumberAlign('decimal')
+		t.alignment = AlignmentFlag.Right
+		group.addItem(t)
+	try:
+		assert short._columnEdge() == wide._columnEdge(), 'one box, one edge'
+		assert short._numberColumn()[0] == wide._numberExtents()[0], 'same edge: the column is shared'
+		monkeypatch.setattr(wide, '_columnEdge', lambda: short._columnEdge() - 200)
+		assert short._numberColumn()[1] == max(short._numberExtents()[1], beside._numberExtents()[1])
+		assert short._numberColumn()[0] == max(short._numberExtents()[0], beside._numberExtents()[0]), \
+			'another column does not widen this one'
+	finally:
+		for t in (short, wide, beside):
+			t.scene() and t.scene().removeItem(t)

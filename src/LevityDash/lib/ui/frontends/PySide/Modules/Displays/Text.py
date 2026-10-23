@@ -361,7 +361,8 @@ class Text(QGraphicsPathItem):
 			# adds nothing to the column
 			return None
 		font = self.font()
-		key = (text, hint, mode, font.key())
+		run = self.tailRun()
+		key = (text, hint, mode, font.key(), run)
 		if self._numExtentKey != key:
 			fm = QFontMetricsF(font)
 			head = tail = 0.0
@@ -369,12 +370,38 @@ class Text(QGraphicsPathItem):
 				h, t = numberalign.split(string, mode)
 				head = max(head, fm.horizontalAdvance(h))
 				tail = max(tail, fm.horizontalAdvance(t))
+			# a unit on the baseline follows the number, so it is part of the tail: the column leaves room for the
+			# widest unit and the cut still lines up when the units differ
+			tail += self._tailWidth(font, run)[0]
 			self._numExtentKey, self._numExtent = key, (head, tail)
 		return self._numExtent
 
+	def _columnEdge(self) -> Optional[float]:
+		"""The x, in the scene, of the edge this item's column lines up on: the right of its box for Right, the left
+		for Left, the middle for Center."""
+		# the parent's box and not sceneLimitRect, which maps through this item's own scale and so moves while it fits
+		try:
+			parent = self.parentItem()
+			rect = parent.mapRectToScene(self.parent.marginRect)
+		except (AttributeError, RuntimeError):
+			return None
+		match self.alignment.horizontal:
+			case AlignmentFlag.Left:
+				return rect.left()
+			case AlignmentFlag.Right:
+				return rect.right()
+			case _:
+				return rect.center().x()
+
 	def _numberColumn(self) -> Optional[tuple[float, float]]:
-		"""The shared column: the widest head and tail among the members of this item's size group that
-		sit in its tier (so, at its font size). With no group it is the item's own."""
+		"""The shared column: the widest head and tail among the members of this item's size group that sit in its
+		tier (so, at its font size) and in its column (their boxes line up on the same edge). With no group it is the
+		item's own.
+
+		The column is the edge and not the whole group because a dashboard-wide group holds values in many columns:
+		sharing one width across all of them pushes a short value in a narrow cell off its edge to make room for the
+		widest number elsewhere on the dashboard.
+		"""
 		own = self._numberExtents()
 		if own is None:
 			return None
@@ -382,10 +409,13 @@ class Text(QGraphicsPathItem):
 		if (group := getattr(self, '_sized', None)) is not None:
 			try:
 				tier = group.make_size_key(self)
+				edge = self._columnEdge()
 				for other in tuple(group.items):
 					if other is self or getattr(other, '_numberAlign', None) is None:
 						continue
 					if group.make_size_key(other) != tier or (extent := other._numberExtents()) is None:
+						continue
+					if edge is not None and (theirs := other._columnEdge()) is not None and abs(theirs - edge) > 0.5:
 						continue
 					head, tail = max(head, extent[0]), max(tail, extent[1])
 			except (AttributeError, RuntimeError):
@@ -781,6 +811,15 @@ class Text(QGraphicsPathItem):
 		"""
 		return None
 
+	def _tailWidth(self, font: QFont, run: tuple[str, float] | None) -> tuple[float, float, float, QFont | None]:
+		"""`(width, gap, left bearing, font)` of a tail run after text in `font`; all zero with no run."""
+		if not run or not run[0]:
+			return 0.0, 0.0, 0.0, None
+		tail_font = self._tailFont(font, run[1])
+		tail_rect = QFontMetricsF(tail_font).tightBoundingRect(run[0])
+		gap = QFontMetricsF(font).horizontalAdvance(' ') * 0.2
+		return gap + tail_rect.width() + tail_rect.left(), gap, tail_rect.left(), tail_font
+
 	def _tailFont(self, font: QFont, ratio: float) -> QFont:
 		tail = QFont(font)
 		if font.pixelSize() > 0:
@@ -1114,17 +1153,11 @@ class Text(QGraphicsPathItem):
 
 		# A tail (the unit of a value) sits after the text on its baseline, so it widens the text and the format hint by
 		# its own width and a small gap; the hint's tail is the same, so the value's size does not follow the unit.
-		tail = self.tailRun()
-		tail_font = tail_gap = tail_width = tail_bearing = 0
+		tail_run = self.tailRun()
+		tail_width, tail_gap, tail_bearing, tail_font = self._tailWidth(font, tail_run)
 		main_width = text_rect.width()
 		hint_width = fmt_hint_rect.width()
-		if tail and tail[0]:
-			tail_font = self._tailFont(font, tail[1])
-			tail_metrics = QFontMetricsF(tail_font)
-			tail_rect = tail_metrics.tightBoundingRect(tail[0])
-			tail_bearing = tail_rect.left()
-			tail_gap = fm.horizontalAdvance(' ') * 0.2
-			tail_width = tail_gap + tail_rect.width() + tail_bearing
+		if tail_font:
 			text_rect.setWidth(main_width + tail_width)
 			fmt_hint_rect.setWidth(hint_width + tail_width)
 		text_bearing = QPointF(fm.leftBearing(text[0] if text else ' '), 0)
@@ -1184,22 +1217,22 @@ class Text(QGraphicsPathItem):
 			# Number alignment replaces the horizontal placement above. The block (widest head + widest tail)
 			# takes the box edge or centre; the alignment edge sits `head` in from its left, and each string is
 			# drawn so its own cut lands on it.
-			head, tail = column
+			col_head, col_tail = column
 			match align.horizontal:
 				case AlignmentFlag.Left:
 					block_left = 0.0
 				case AlignmentFlag.Right:
-					block_left = -(head + tail)
+					block_left = -(col_head + col_tail)
 				case _:
-					block_left = -(head + tail) / 2
-			edge = block_left + head
+					block_left = -(col_head + col_tail) / 2
+			edge = block_left + col_head
 			mode = self._numberAlign
 			text_x = edge - fm.horizontalAdvance(numberalign.split(text, mode)[0])
 			hint_x = edge - fm.horizontalAdvance(numberalign.split(fmt_hint_text, mode)[0])
 			ink = fm.tightBoundingRect(text)
 			hint_ink = fm.tightBoundingRect(fmt_hint_text)
-			text_rect = QRectF(text_x + ink.left(), text_rect.top(), ink.width(), text_rect.height())
-			hint_placed = QRectF(hint_x + hint_ink.left(), fmt_hint_rect.top(), hint_ink.width(), fmt_hint_rect.height())
+			text_rect = QRectF(text_x + ink.left(), text_rect.top(), ink.width() + tail_width, text_rect.height())
+			hint_placed = QRectF(hint_x + hint_ink.left(), fmt_hint_rect.top(), hint_ink.width() + tail_width, fmt_hint_rect.height())
 			fmt_hint_rect = hint_placed | text_rect
 
 		self._text_pos = text_pos = text_rect.bottomLeft() - text_bearing
@@ -1243,8 +1276,8 @@ class Text(QGraphicsPathItem):
 		path.addText(text_pos, font, text)
 		if tail_font:
 			# ink right edge of the text, then the gap; the tail's own left bearing is taken off so its ink starts there
-			path.addText(QPointF(text_rect.left() + main_width + tail_gap - tail_bearing, text_pos.y()), tail_font, tail[0])
-			fmt_hint_text_path.addText(QPointF(fmt_hint_rect.left() + hint_width + tail_gap - tail_bearing, fmt_text_pos.y()), tail_font, tail[0])
+			path.addText(QPointF(text_rect.left() + main_width + tail_gap - tail_bearing, text_pos.y()), tail_font, tail_run[0])
+			fmt_hint_text_path.addText(QPointF(fmt_hint_rect.left() + hint_width + tail_gap - tail_bearing, fmt_text_pos.y()), tail_font, tail_run[0])
 
 		# Determine the scale type and add the path to the size hint path
 		match scaleType:
@@ -1304,7 +1337,7 @@ class Text(QGraphicsPathItem):
 		if column is not None:
 			# the whole column is part of the fit width, so a short value beside a long one fits the same box
 			path_size_hint.moveTo(QPointF(block_left, fmt_text_pos.y()))
-			path_size_hint.lineTo(QPointF(block_left + head + tail, fmt_text_pos.y()))
+			path_size_hint.lineTo(QPointF(block_left + col_head + col_tail, fmt_text_pos.y()))
 
 		band = path_size_hint.boundingRect()
 		if band.height() > 0:
