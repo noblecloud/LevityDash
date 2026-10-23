@@ -1,0 +1,43 @@
+# Wind on one line: a band from the speed up to the gust, the speed coloured by value, and an arrow for each
+# hour pointing the way the wind blows. Direction names where the wind comes from, so the arrows turn it by 180.
+doc: Wind speed with a gust band and direction arrows
+props:
+  key: {default: environment.wind.speed.speed, type: key, doc: "The speed"}
+  gust: {default: environment.wind.speed.gust, type: key, doc: "The gust the band reaches"}
+  direction: {default: environment.wind.direction.direction, type: key, doc: "The direction, in degrees; null for no arrows"}
+  gradient: {default: WindSpeedGradient, type: text, doc: "Named scale that colours the speed by value"}
+  band_color: {default: $warn, type: color, doc: "Colour of the gust band"}
+  band_opacity: {default: 0.35, type: number, min: 0, max: 1, doc: "Opacity of the gust band"}
+  arrow_size: {default: 34, type: number, min: 8, doc: "Pixels of each arrow"}
+  hours: {default: 24, type: number, min: 1, doc: "How far the graph reaches, in hours"}
+  top: {default: 36%, type: size, doc: "Space above the lines, for the arrows"}
+  bottom: {default: 20%, type: size, doc: "Space below the lines"}
+template:
+  type: graph
+  timeframe: {hours: $hours}
+  annotations:
+    dayLabels: {enabled: false}
+    hourLabels: {alignment: BottomCenter, spacingIntervals: '3, 6'}
+    lines: {spacing: 10 mm, weight: 0.3}
+  figures:
+    - figure: wind
+      margins: {top: $top, bottom: $bottom}
+      min: 0
+      $gust:
+        plot: {type: band, to: $key, color: $band_color, opacity: $band_opacity}
+        resolution: 2
+      $key:
+        labels: {enabled: true}
+        plot:
+          type: plot
+          gradient: $gradient
+          weight: 1
+          pins:
+            key: $direction
+            glyph: 'wi:direction-up'
+            rotate: 180
+            size: $arrow_size
+            spacing: 1.4
+            offset: -2.4
+            color: $text
+        resolution: 2
