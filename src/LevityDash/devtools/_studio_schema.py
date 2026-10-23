@@ -93,6 +93,8 @@ class Field:
 	measured: bool = False
 	#: Needle types that use the property. None means every type.
 	types: Optional[frozenset] = None
+	#: The property accepts `{of, from, to}` in place of a number, so the studio offers the ⟳ binding control.
+	bindable: bool = False
 
 	@property
 	def key(self) -> str:
@@ -198,7 +200,21 @@ def read(root: Stateful, path: tuple) -> Any:
 		raw = prop.__get__(owner, type(owner))
 	except Exception:
 		return None
+	if (bound := _boundNumber(prop, owner)) is not None:
+		return bound
 	return saved(prop, raw, owner)
+
+
+def _boundNumber(prop: StateProperty, owner: Stateful) -> Optional[dict]:
+	"""The `{of, from, to}` mapping of a numeric property that follows a value, else None."""
+	numbers = getattr(owner, 'numbers', None) or getattr(getattr(owner, 'gauge', None), 'numbers', None)
+	if numbers is None or not numbers._bound:
+		return None
+	try:
+		_, state = prop.getState(owner)
+	except Exception:
+		return None
+	return state if isinstance(state, dict) and 'of' in state and 'from' in state else None
 
 
 def write(root: Stateful, path: tuple, value: Any) -> Optional[str]:
@@ -360,6 +376,10 @@ def _classify(prop: StateProperty, raw: Any, owner: Stateful) -> Optional[Field]
 	return Field((), 'text')
 
 
+# Numbers that follow a value source (`lib/ui/bound_number.py`): (owner class, key); '*' is any owner.
+BINDABLE = {('GaugeArc', 'weight'), ('GaugeArc', 'start-angle'), ('GaugeArc', 'end-angle'), ('Needle', 'width'), ('Needle', 'length'), ('Graduations', 'length'), ('Graduations', 'width'), ('*', 'opacity')}
+
+
 # A `Bar` inherits the needle from `Meter` and never draws it: its pointer is the `pointer` property.
 NOT_ON_BARS = {('Bar', 'needle')}
 # Its two words-from-a-list settings are strings, which the enum introspection does not see.
@@ -398,6 +418,7 @@ def describe(owner: Stateful, path: tuple = (), title: str = 'Gauge', _seen: Opt
 			continue
 		found.path = path + (prop.key,)
 		found = _refine(found, prop, raw, owner)
+		found.bindable = found.kind in ('number', 'size') and bool({(type(owner).__name__, prop.key), ('*', prop.key)} & BINDABLE)
 		group.fields.append(found)
 	return group
 

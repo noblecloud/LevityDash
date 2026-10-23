@@ -18,7 +18,7 @@ from LevityDash.lib.plugins.plugin import AnySource
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.series import Series, derive, number
 from LevityDash.lib.utils.shared import now as localNow
 
-__all__ = ['Series', 'SeriesFeed', 'DerivedFeed', 'openFeed', 'installStandIn', 'standIn']
+__all__ = ['Series', 'SeriesFeed', 'DerivedFeed', 'openFeed', 'openValue', 'installStandIn', 'standIn']
 
 log = LevityPluginLog.getChild('PolarFeed')
 
@@ -162,3 +162,39 @@ def openFeed(text: str, onChange: Callable[[], None]):
 	if expression.plainKey is not None:
 		return _openKey(str(expression.plainKey), onChange)
 	return DerivedFeed(expression, onChange, _openKey)
+
+
+class ValueFeed:
+	"""One current number for a key or an expression: a value source on the GUI thread, or a stand-in's last sample."""
+
+	def __init__(self, text: str, onChange: Callable[[float], None]):
+		self._onChange = onChange
+		self._source = None
+		self._input = None
+		if _standIn is not None:
+			self._input = _standIn(text, lambda: self._emit(self._input.series.now if self._input else None))
+			self._emit(self._input.series.now)
+			return
+		from LevityDash.lib.valuesource import openValueSource
+		self._source = openValueSource(text, 'polar direction', 'the carousel stays empty')
+		if self._source is not None:
+			self._source.subscribe(self._emit)
+			self._emit(self._source.get())
+
+	def _emit(self, value) -> None:
+		number_ = number(value)
+		if number_ is not None:
+			self._onChange(number_)
+
+	def close(self) -> None:
+		source, self._source = self._source, None
+		if source is not None and hasattr(source, 'release'):
+			source.release()
+		if self._input is not None:
+			self._input.close()
+			self._input = None
+
+
+def openValue(text: str, onChange: Callable[[float], None]) -> ValueFeed:
+	"""A live number for a key or an expression; ``onChange`` gets each new one. `close()` lets go."""
+	return ValueFeed(text, onChange)

@@ -54,6 +54,7 @@ USED = {
 	'rose': {'direction', 'speed', 'sectors', 'rings', 'max', 'compass', 'gradient', 'legend'},
 	'trail': {'direction', 'speed', 'rings', 'max', 'compass', 'gradient', 'stamps'},
 	'clock': {'key', 'rings', 'max', 'min', 'gradient', 'accent', 'span', 'top', 'smooth', 'marks'},
+	'carousel': {'direction', 'view', 'compass', 'legend'},
 }
 ALWAYS = {'plot', 'window', 'beam', 'when'}
 
@@ -61,7 +62,7 @@ ALWAYS = {'plot', 'window', 'beam', 'when'}
 SECTIONS = (
 	('Plot', ('plot', 'window')),
 	('Data', ('key', 'direction', 'speed')),
-	('Scale', ('max', 'min', 'rings', 'sectors', 'compass', 'span', 'top')),
+	('Scale', ('max', 'min', 'rings', 'sectors', 'compass', 'span', 'top', 'view')),
 	('Look', ('gradient', 'accent', 'smooth', 'legend', 'marks', 'stamps')),
 	('Panel', ('beam', 'when')),
 )
@@ -74,13 +75,13 @@ DEFAULT_KEYS = {
 }
 #: The feed a property opens, where the name differs.
 FEEDS = {'key': 'value'}
-NEEDS = {'rose': ('direction', 'speed'), 'trail': ('direction', 'speed'), 'clock': ('key',)}
+NEEDS = {'rose': ('direction', 'speed'), 'trail': ('direction', 'speed'), 'clock': ('key',), 'carousel': ('direction',)}
 
 STEPS = {'sectors': (4, 8, 12, 16, 24, 32), 'compass': (4, 8, 16), 'span': (12, 24)}
-CHOICES = {'plot': ('rose', 'trail', 'clock'), 'top': ('noon', 'midnight')}
+CHOICES = {'plot': ('rose', 'trail', 'clock', 'carousel'), 'top': ('noon', 'midnight')}
 WINDOWS = ('today', '24h', '+24h', '3d')
 #: Slider limits for the two numbers that mean a different thing in each plot (percent, speed, a reading).
-LIMITS = {'max': (0.0, 100.0, 0.5), 'min': (-40.0, 100.0, 0.5)}
+LIMITS = {'max': (0.0, 100.0, 0.5), 'min': (-40.0, 100.0, 0.5), 'view': (20.0, 360.0, 5.0)}
 INTEGERS = {'rings': (1, 12), 'stamps': (0, 24)}
 
 

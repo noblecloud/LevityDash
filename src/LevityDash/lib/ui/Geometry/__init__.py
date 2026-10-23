@@ -2645,6 +2645,8 @@ class Geometry:
 					parent.geometry.updateSurface()
 				self.surface.setRect(self.absoluteRect())
 				self.surface.setPos(self.absolutePosition().asQPointF())
+		if (after := getattr(self.surface, 'afterSurface', None)) is not None:
+			after()
 
 	def posFromParentPos(self, parentRect: QRectF):
 		if self.position.x.absolute:

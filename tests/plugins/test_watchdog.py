@@ -136,3 +136,27 @@ def test_health_lists_each_judged_plugin_by_state_and_drops_a_stopped_one():
 	assert watch.health() == {'Fast': QUIET, 'Slow': OK}
 	watch.judge('Slow', False, None, last)
 	assert watch.health() == {'Fast': QUIET}
+
+
+def test_a_poll_that_publishes_many_keys_in_a_burst_is_not_flagged_between_polls():
+	watch = PluginWatch()
+	for poll in range(0, 61, 15):
+		# the keys land over three seconds; sweeps happen to catch two moments of it
+		watch.judge('OpenMeteo', True, at(poll), at(poll) + timedelta(seconds=1))
+		verdict = watch.judge('OpenMeteo', True, at(poll) + timedelta(seconds=3), at(poll) + timedelta(seconds=30))
+		assert verdict.state == OK
+	late = watch.judge('OpenMeteo', True, at(60) + timedelta(seconds=3), at(60) + timedelta(minutes=14))
+	assert late.state == OK
+	assert late.staleAfter >= timedelta(minutes=30)
+
+
+def test_the_period_a_plugin_declares_is_passed_to_the_judgement():
+	asked = []
+	watch = PluginWatch()
+	real = watch.judge
+	watch.judge = lambda *a, **k: asked.append(k.get('declared')) or real(*a, **k)
+	plugin = SimpleNamespace(name='OpenMeteo', running=True, enabled=True, refreshPeriod=timedelta(minutes=15))
+	from LevityDash.lib.plugins.watchdog import sweep
+	log = SimpleNamespace(warning=lambda *a: None, info=lambda *a: None)
+	sweep(watch, [plugin], {'OpenMeteo': at(0)}, at(1), log, lambda p: None)
+	assert asked == [timedelta(minutes=15)]

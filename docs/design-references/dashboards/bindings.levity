@@ -1,0 +1,70 @@
+# Bindings: a setting that follows a value. Four cards on one scenario.
+#
+# Temperature card: the number takes its colour from the temperature scale at the feels-like reading, a key
+#   the card does not show. Humidity card: the whole card is faint when the air is dry and solid when it is
+#   damp (`opacity: {of, from, to}`). Wind card: a bar whose fill takes a colour from the wind speed.
+#   Gauge card: arc and needle both follow the temperature.
+#
+# Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/bindings.levity
+#           --scenario hot-clear-day --size 2000x700 --freeze-time
+#
+# Hex colours are quoted. Unquoted, YAML reads '#' as a comment.
+vars:
+  temp: environment.temperature.temperature
+  feels: environment.temperature.feelsLike
+  humidity: environment.humidity.humidity
+  wind: environment.wind.speed.speed
+items:
+- type: group
+  name: board
+  geometry: {x: 1%, y: 2%, width: 98%, height: 96%}
+  items:
+  - type: group
+    name: temperature
+    geometry: {x: 0%, y: 0%, width: 24%, height: 100%}
+    border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+    items:
+    - type: realtime.text
+      key: $temp
+      geometry: {x: 6%, y: 8%, width: 88%, height: 70%}
+      display:
+        valueLabel:
+          color: {scale: $temperature, of: $feels}
+    - {type: text, text: 'colour = feels-like', alignment: CenterLeft, opacity: 0.6, geometry: {x: 6%, y: 80%, width: 88%, height: 8%}}
+  - type: group
+    name: humidity
+    geometry: {x: 25.3%, y: 0%, width: 24%, height: 100%}
+    border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+    opacity: {of: $humidity, from: [0, 100], to: [0.2, 1]}
+    items:
+    - type: realtime.text
+      key: $humidity
+      geometry: {x: 6%, y: 8%, width: 88%, height: 70%}
+    - {type: text, text: 'opacity = humidity', alignment: CenterLeft, geometry: {x: 6%, y: 80%, width: 88%, height: 8%}}
+  - type: group
+    name: wind
+    geometry: {x: 50.6%, y: 0%, width: 24%, height: 100%}
+    border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+    items:
+    - {type: text, text: Wind, alignment: CenterLeft, geometry: {x: 6%, y: 5%, width: 88%, height: 10%}}
+    - type: realtime.bar
+      key: $wind
+      geometry: {x: 6%, y: 30%, width: 88%, height: 14%}
+      display:
+        range: {min: 0, max: 40}
+        fill: {color: {scale: WindSpeedGradient, of: $wind}}
+    - {type: text, text: 'fill colour = wind speed', alignment: CenterLeft, opacity: 0.6, geometry: {x: 6%, y: 80%, width: 88%, height: 8%}}
+  - type: group
+    name: dial
+    geometry: {x: 75.9%, y: 0%, width: 24%, height: 100%}
+    border: {enabled: true, color: '#ffffff', opacity: 0.14, weight: 1}
+    items:
+    - {type: text, text: Dial, alignment: CenterLeft, geometry: {x: 6%, y: 5%, width: 88%, height: 10%}}
+    - type: realtime.gauge
+      key: $temp
+      geometry: {x: 10%, y: 18%, width: 80%, height: 62%}
+      display:
+        range: {min: 0, max: 110}
+        arc: {color: {scale: $temperature, of: $feels}}
+        needle: {color: {scale: $temperature, of: $feels}}
+    - {type: text, text: 'arc and needle = feels-like', alignment: CenterLeft, opacity: 0.6, geometry: {x: 6%, y: 88%, width: 88%, height: 8%}}

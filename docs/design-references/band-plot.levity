@@ -1,0 +1,19 @@
+# A band plot: the space between two series, `plot: {type: band, to: <key>}`.
+# Here the gust band over the wind speed: the band sits on the gust and reaches down to the speed.
+# Render: render_dashboard.py OUT.png --levity docs/design-references/band-plot.levity --scenario rain-day --size 1600x600
+- type: graph
+  name: wind
+  timeframe: {days: 1}
+  annotations:
+    dayLabels: {enabled: false}
+    hourLabels: {alignment: BottomCenter}
+  figures:
+  - figure: wind
+    margins: {bottom: 20%, top: 15%}
+    min: 0
+    environment.wind.speed.gust:
+      plot: {type: band, to: environment.wind.speed.speed, color: '#ffd400', opacity: 0.35}
+      resolution: 2
+    environment.wind.speed.speed:
+      plot: {type: plot, color: '#14e3c0', weight: 1}
+      resolution: 2

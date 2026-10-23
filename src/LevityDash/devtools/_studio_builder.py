@@ -1660,6 +1660,11 @@ class Builder(QWidget):
 		inline = isinstance((self.piece.root or {}).get('theme'), dict)
 		self.editField('#theme.extends' if inline else '#theme', None if name == theme.DEFAULT_NAME and not inline else name)
 
+	def themeSizes(self) -> dict:
+		"""The size tokens (type and spacing scales) of the theme the dashboard in the preview uses."""
+		spec = (self.piece.root or {}).get('theme')
+		return (theme.override() or theme.decode(spec)).sizes()
+
 	def _syncThemePicker(self):
 		"""A dashboard's picker shows the theme its file names, not a forced one."""
 		if self.piece.root is None:

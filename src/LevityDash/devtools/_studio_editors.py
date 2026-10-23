@@ -244,7 +244,118 @@ class UnitBox(QComboBox):
 		self.setVisible(bool(CONTEXT.units))
 
 
-class NumberEdit(Editor):
+def _bind_value(text: str):
+	"""One end of `from`: a number, or a measured number kept as text (`99°F`)."""
+	try:
+		return float(text)
+	except ValueError:
+		return text.strip()
+
+
+def editBound(parent: QWidget, spec: Optional[dict]) -> Optional[Optional[dict]]:
+	"""Ask for the `{of, from, to, clamp, fallback}` mapping of a number that follows a value.
+
+	Returns the mapping, None to make the setting a plain number again, or Ellipsis when cancelled.
+	"""
+	spec = dict(spec or {})
+	dialog = QDialog(parent)
+	dialog.setWindowTitle('Number follows a value')
+	form = QFormLayout(dialog)
+	low, high = (list(spec.get('from') or ['', '']) + ['', ''])[:2]
+	start, stop = (list(spec.get('to') or ['', '']) + ['', ''])[:2]
+	fields = {
+		'of': QLineEdit('' if spec.get('of') is None else str(spec['of'])),
+		'low': QLineEdit(str(low)), 'high': QLineEdit(str(high)),
+		'start': QLineEdit(str(start)), 'stop': QLineEdit(str(stop)),
+		'fallback': QLineEdit('' if spec.get('fallback') is None else str(spec['fallback'])),
+	}
+	fields['of'].setToolTip('A key or an expression')
+	fields['low'].setToolTip('Reading at the low end; a unit is fine (32°F)')
+	fields['fallback'].setToolTip('Setting until there is a value (optional)')
+	for label, key in (('Of', 'of'), ('From, low', 'low'), ('From, high', 'high'), ('To, at low', 'start'), ('To, at high', 'stop'), ('Fallback', 'fallback')):
+		form.addRow(label, fields[key])
+	clamp = QCheckBox('Stay between the ends of To')
+	clamp.setChecked(spec.get('clamp', True))
+	form.addRow(clamp)
+	buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+	plain = buttons.addButton('Make plain', QDialogButtonBox.ButtonRole.DestructiveRole)
+	chosen = {}
+	plain.clicked.connect(lambda: (chosen.setdefault('plain', True), dialog.accept()))
+	buttons.accepted.connect(dialog.accept)
+	buttons.rejected.connect(dialog.reject)
+	form.addRow(buttons)
+	if dialog.exec() != QDialog.DialogCode.Accepted:
+		return ...
+	if chosen.get('plain'):
+		return None
+	try:
+		new = {'of': fields['of'].text().strip(), 'from': [_bind_value(fields['low'].text()), _bind_value(fields['high'].text())],
+		       'to': [float(fields['start'].text()), float(fields['stop'].text())]}
+	except ValueError:
+		return ...
+	if not new['of'] or '' in new['from']:
+		return ...
+	if not clamp.isChecked():
+		new['clamp'] = False
+	if fields['fallback'].text().strip():
+		try:
+			new['fallback'] = float(fields['fallback'].text())
+		except ValueError:
+			return ...
+	return new
+
+
+class FollowMixin:
+	"""The ⟳ button of a numeric editor: the setting follows a value, shown as a summary in place of the plain controls.
+
+	The editor lists what the plain controls are (`_plainWidgets`) and starts the mixin with `_initFollow(box)`; its
+	`value()` returns `_bound` while one is set, and its `setValue` passes a mapping to `_takeBound`.
+	"""
+	_bound: Optional[dict] = None
+
+	def _initFollow(self, box):
+		self.summary = QLabel()
+		self.summary.hide()
+		self.follow = _tool('⟳', 'Follow a value: the number takes a point of a range as a key or expression changes')
+		self.follow.setCheckable(True)
+		self.follow.clicked.connect(self._followClicked)
+		box.addWidget(self.summary, 1)
+		box.addWidget(self.follow)
+
+	def _plainWidgets(self) -> list:
+		raise NotImplementedError
+
+	def _setBound(self, spec: Optional[dict]) -> None:
+		self._bound = None if spec is None else dict(spec)
+		for widget in self._plainWidgets():
+			widget.setVisible(spec is None)
+		self.summary.setVisible(spec is not None)
+		if spec is not None:
+			low, high = spec.get('from', ['?', '?'])
+			start, stop = spec.get('to', ['?', '?'])
+			self.summary.setText(f"{spec.get('of')}: {low}…{high} → {start}…{stop}")
+			self.summary.setToolTip(str(spec))
+		with QSignalBlocker(self.follow):
+			self.follow.setChecked(spec is not None)
+
+	def _takeBound(self, value) -> bool:
+		"""Show ``value`` if it is a mapping; a plain value clears it. True when it was a mapping."""
+		bound = isinstance(value, dict) and 'of' in value
+		if bound or self._bound is not None:
+			self._setBound(value if bound else None)
+		return bound
+
+	def _followClicked(self, _checked=False):
+		result = editBound(self, self._bound or {})
+		if result is ...:
+			with QSignalBlocker(self.follow):
+				self.follow.setChecked(self._bound is not None)
+			return
+		self._setBound(result)
+		self._emit()
+
+
+class NumberEdit(FollowMixin, Editor):
 	"""A number, with an optional 'off' state (`autoText` names what off means).
 
 	A `measured` number is in the gauge's own unit (degrees F, inHg, mph). It is held in that
@@ -289,10 +400,14 @@ class NumberEdit(Editor):
 			self.unitBox = UnitBox()
 			box.addWidget(self.unitBox)
 		self._applySuffix()
+		self._initFollow(box)
 		if self.auto is not None:
 			self.spin.setEnabled(False)
 			if self.slide is not None:
 				self.slide.setEnabled(False)
+
+	def _plainWidgets(self) -> list:
+		return [w for w in (self.auto, self.slide, self.spin, self.unitBox) if w is not None]
 
 	def _fitSlider(self):
 		# The scale: the data range (in the shown unit) for a measured number, else the limits given (0 to 100 when none).
@@ -349,6 +464,8 @@ class NumberEdit(Editor):
 		self._emit()
 
 	def setValue(self, value):
+		if self._takeBound(value):
+			return
 		if self.auto is not None:
 			with QSignalBlocker(self.auto):
 				self.auto.setChecked(value is None)
@@ -365,6 +482,8 @@ class NumberEdit(Editor):
 			self.slide.showValue(None)
 
 	def value(self):
+		if self._bound is not None:
+			return dict(self._bound)
 		if self.auto is not None and self.auto.isChecked():
 			return None
 		v = self.native
@@ -374,7 +493,7 @@ class NumberEdit(Editor):
 		return self.spin.hasFocus() or (self.slide is not None and self.slide.isSliderDown())
 
 
-class SizeEdit(Editor):
+class SizeEdit(FollowMixin, Editor):
 	"""A size: a number and its unit. `nullable` adds an 'auto' box that unsets it."""
 
 	def __init__(self, nullable: bool = False, autoText: str = 'auto', units: Optional[List[str]] = None, ref: str = 'radius'):
@@ -407,10 +526,14 @@ class SizeEdit(Editor):
 		box.addWidget(self.spin)
 		box.addWidget(self.unit)
 		self._fitSlider()
+		self._initFollow(box)
 		if nullable:
 			self.spin.setEnabled(False)
 			self.unit.setEnabled(False)
 			self.slide.setEnabled(False)
+
+	def _plainWidgets(self) -> list:
+		return [w for w in (self.auto, self.slide, self.spin, self.unit) if w is not None]
 
 	#: The scale of the slider for each unit: a share of the dial, scene pixels, then physical sizes.
 	SPANS = {'%': (0.0, 100.0), 'px': (0.0, 500.0), 'mm': (0.0, 50.0), 'cm': (0.0, 5.0), 'in': (0.0, 2.0)}
@@ -461,6 +584,8 @@ class SizeEdit(Editor):
 	_unit = '%'
 
 	def setValue(self, value):
+		if self._takeBound(value):
+			return
 		with QSignalBlocker(self.spin), QSignalBlocker(self.unit):
 			if self.auto is not None:
 				with QSignalBlocker(self.auto):
@@ -483,6 +608,8 @@ class SizeEdit(Editor):
 			self._fitSlider()
 
 	def value(self):
+		if self._bound is not None:
+			return dict(self._bound)
 		if self.auto is not None and self.auto.isChecked():
 			return None
 		return f'{self.spin.value():g}{self.unit.currentText()}'
@@ -2219,28 +2346,91 @@ class CaptionEdit(_Toggled):
 		return 'Label'
 
 
+class SizeConditionEdit(Editor):
+	"""A size condition (`lib/sizequery.py`): limits on the window's or the parent's size, and an optional `and:`."""
+
+	LIMITS = ('min-width', 'max-width', 'min-height', 'max-height')
+
+	def __init__(self):
+		super().__init__()
+		grid = QGridLayout(self)
+		grid.setContentsMargins(0, 0, 0, 0)
+		grid.setSpacing(4)
+		self.limits = {}
+		for i, name in enumerate(self.LIMITS):
+			edit = QLineEdit()
+			edit.setPlaceholderText(f'{name} (px)')
+			edit.editingFinished.connect(self._emit)
+			self.limits[name] = edit
+			grid.addWidget(edit, i // 2, i % 2)
+		self.orientation = QComboBox()
+		for label in ('any shape', 'landscape', 'portrait'):
+			self.orientation.addItem(label)
+		self.orientation.activated.connect(self._emit)
+		self.scope = QComboBox()
+		for label in ('of the window', 'of the parent'):
+			self.scope.addItem(label)
+		self.scope.activated.connect(self._emit)
+		grid.addWidget(self.orientation, 2, 0)
+		grid.addWidget(self.scope, 2, 1)
+		self.data = KeyEdit('and: environment.precipitation.precipitation > 0')
+		self.data.changed.connect(self._emit)
+		grid.addWidget(self.data, 3, 0, 1, 2)
+		self._extra = {}
+
+	def setValue(self, value):
+		value = value if isinstance(value, dict) else {}
+		with QSignalBlocker(self.orientation), QSignalBlocker(self.scope):
+			for name, edit in self.limits.items():
+				edit.setText('' if name not in value else str(value[name]))
+			self.orientation.setCurrentIndex({'landscape': 1, 'portrait': 2}.get(str(value.get('orientation', '')).lower(), 0))
+			self.scope.setCurrentIndex(1 if str(value.get('of', 'window')).lower() == 'parent' else 0)
+		self.data.setValue(value.get('and'))
+		# keys this form has no control for (the aspect limits) ride along unchanged
+		self._extra = {k: v for k, v in value.items() if k not in (*self.LIMITS, 'orientation', 'of', 'and')}
+
+	def value(self):
+		out = dict(self._extra)
+		for name, edit in self.limits.items():
+			text = edit.text().strip()
+			if text:
+				out[name] = int(text) if text.isdigit() else text
+		if self.orientation.currentIndex():
+			out['orientation'] = ('landscape', 'portrait')[self.orientation.currentIndex() - 1]
+		if self.scope.currentIndex():
+			out['of'] = 'parent'
+		if (data := self.data.value()) is not None:
+			out['and'] = data
+		return out or None
+
+
 class ConditionEdit(Editor):
 	"""`when:` and a beam's `active:` and `sweep:`: nothing, a bool, or a key or an expression."""
 
-	MODES = [('not set', None), ('always (true)', True), ('never (false)', False), ('key or expression', '')]
+	MODES = [('not set', None), ('always (true)', True), ('never (false)', False), ('key or expression', ''), ('window or parent size', {})]
 
-	def __init__(self, unsetText: str = 'not set', placeholder: str = 'environment.wind.speed.speed > 25 mph'):
+	def __init__(self, unsetText: str = 'not set', placeholder: str = 'environment.wind.speed.speed > 25 mph', size: bool = False):
 		super().__init__()
 		box = QHBoxLayout(self)
 		box.setContentsMargins(0, 0, 0, 0)
 		box.setSpacing(4)
 		self.mode = QComboBox()
-		for i, (label, _) in enumerate(self.MODES):
+		for i, (label, _) in enumerate(self.MODES[:5 if size else 4]):
 			self.mode.addItem(unsetText if i == 0 else label)
 		self.mode.activated.connect(self._modeChanged)
 		self.text = KeyEdit(placeholder)
 		self.text.changed.connect(self._emit)
+		self.size = SizeConditionEdit()
+		self.size.changed.connect(self._emit)
+		self.size.setVisible(False)
 		box.addWidget(self.mode)
 		box.addWidget(self.text, 1)
+		box.addWidget(self.size, 1)
 		self._showMode()
 
 	def _showMode(self):
 		self.text.setVisible(self.mode.currentIndex() == 3)
+		self.size.setVisible(self.mode.currentIndex() == 4)
 
 	def _modeChanged(self, _):
 		self._showMode()
@@ -2253,17 +2443,23 @@ class ConditionEdit(Editor):
 			index = 0
 		elif isinstance(value, bool):
 			index = 1 if value else 2
+		elif isinstance(value, dict):
+			index = 4 if self.mode.count() > 4 else 3
 		else:
 			index = 3
 		with QSignalBlocker(self.mode):
 			self.mode.setCurrentIndex(index)
 		self.text.setValue(str(value) if index == 3 else None)
+		if index == 4:
+			self.size.setValue(value)
 		self._showMode()
 
 	def value(self):
 		index = self.mode.currentIndex()
 		if index == 3:
 			return self.text.value()
+		if index == 4:
+			return self.size.value() or {}
 		return self.MODES[index][1]
 
 	def isEditing(self) -> bool:
@@ -2407,7 +2603,7 @@ class WhenEdit(_Popover):
 
 	def __init__(self):
 		form = _Form()
-		self.condition = form.part('when', 'when', ConditionEdit(unsetText='always shown'),
+		self.condition = form.part('when', 'when', ConditionEdit(unsetText='always shown', size=True),
 		                           'Show this item only while the condition holds. A switch picks among its children by it.')
 		hint = QLabel('A key is true when its value is not zero. An expression can use units: '
 		              'environment.temperature.temperature < 32\u00b0F. A missing value counts as false.')
@@ -2427,6 +2623,8 @@ class WhenEdit(_Popover):
 			return 'When: always shown'
 		if isinstance(v, bool):
 			return 'When: ' + ('true' if v else 'false')
+		if isinstance(v, dict):
+			return 'When: ' + (', '.join(f'{k} {x}' for k, x in v.items()) or 'a size')
 		return f'When: {v}'
 
 
@@ -2443,6 +2641,8 @@ def make(field: 'schema.Field') -> Optional[Editor]:
 		return EXTRA[kind](field)
 	if kind == 'size':
 		return SizeEdit(nullable=field.nullable, ref='full' if field.key in ('radius', 'inset') else 'radius')
+	if kind == 'number' and field.bindable and not field.measured:
+		return NumberEdit(lo=field.lo, hi=field.hi, step=field.step, integer=field.integer)
 	if kind == 'number' and field.measured:
 		return NumberEdit(autoText='auto' if field.nullable else None, measured=True, step=field.step, unitBox=True,
 		                  integer=field.integer)

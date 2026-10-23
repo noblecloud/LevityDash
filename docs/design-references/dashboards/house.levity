@@ -91,9 +91,10 @@ items:
         font: $display
         color: $muted
         alignment: CenterLeft
+        matchingGroup: {group: global.head, matchAll: true}
         geometry: {x: 2%, y: 0%, width: 40%, height: 7%}
       - preset: metric-tile
-        geometry: {x: 0%, y: 7%, width: 100%, height: 50%}
+        geometry: {x: 0%, y: 7%, width: 100%, height: 43%}
         props:
           key: environment.temperature.temperature
           hours: 24
@@ -107,7 +108,7 @@ items:
           - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Wind}, display: {precision: 0}}
           - {type: realtime.text, key: environment.clouds.cover.cover, title: {text: Cloud}, display: {precision: 0}}
       - preset: range-bar
-        geometry: {x: 0%, y: 60%, width: 100%, height: 40%}
+        geometry: {x: 0%, y: 52%, width: 100%, height: 48%}
         props:
           key: $t
           min: 40
@@ -127,6 +128,7 @@ items:
         font: $display
         color: $muted
         alignment: CenterLeft
+        matchingGroup: {group: global.head, matchAll: true}
         geometry: {x: 2%, y: 0%, width: 60%, height: 7%}
       - preset: bar-stack
         geometry: {x: 0%, y: 8%, width: 100%, height: 62%}
@@ -210,6 +212,7 @@ items:
         font: $display
         color: $muted
         alignment: CenterLeft
+        matchingGroup: {group: global.head, matchAll: true}
         geometry: {x: 2%, y: 0%, width: 40%, height: 7%}
       - type: stack
         direction: Horizontal
@@ -374,6 +377,7 @@ items:
     geometry: {x: 62%, y: 76.5%, width: 37.4%, height: 22%}
     props:
       title: The house
+      title_height: 1.5cm
       items:
       - {type: realtime.text, key: 'max(indoor.temperature.temperature#office, today)', title: {text: Warmest room peak}, display: {precision: 1, valueLabel: {color: $bad}}}
       - {type: realtime.text, key: 'min(indoor.temperature.temperature#basement, today)', title: {text: Coolest room low}, display: {precision: 1, valueLabel: {color: $good}}}

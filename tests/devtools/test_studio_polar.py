@@ -82,7 +82,7 @@ def test_every_polar_template_loads_and_exports_back_to_itself(panel, tmp_path):
 		panel.loadFile(path)
 		_pump()
 		assert 'Could not load' not in panel.status.text(), path
-		assert _lit(panel) > 500, path
+		assert _lit(panel) > 300, path  # a carousel is a thin strip, a rose fills the square
 		saved = tmp_path / path.name
 		saved.write_text(panel.exportLevity(), encoding='utf-8')
 		again = sp.PolarStudio(saved)

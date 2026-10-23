@@ -2,7 +2,7 @@
 
 ```yaml
 - type: polar
-  plot: rose                  # rose | trail | clock
+  plot: rose                  # rose | trail | clock | carousel
   direction: environment.wind.direction.direction   # rose and trail
   speed: environment.wind.speed.speed               # rose and trail; a key or an expression
   window: today               # today | 24h | +24h | 3d
@@ -21,7 +21,20 @@
   accent: '#ff9124'           # the line, when there is no gradient
 ```
 
-The three plots read whole series from the dispatcher (`feed.SeriesFeed`), so they draw the same
+```yaml
+- type: polar
+  plot: carousel
+  direction: environment.wind.direction.direction   # one current value, not a series
+  view: 120                   # degrees across the strip
+  compass: 16                 # letters: 4 | 8 | 16
+  legend: true                # the bearing and its name under the pointer
+```
+
+The carousel is a strip of compass letters that slides so the current direction stays under a pointer
+in the middle (`[w N e]`). It reads one live value (`lib/valuesource.py`), not a series, and slides the
+short way round, so 350 to 10 does not spin through south.
+
+The other plots read whole series from the dispatcher (`feed.SeriesFeed`), so they draw the same
 values a graph of that key would. `key`, `direction` and `speed` also take an expression over keys
 (`key: environment.temperature.temperature - environment.temperature.dewpoint`, `speed: max(a, b)`).
 It is evaluated at every sample time (`series.derive`), because a computed key holds one value and no
@@ -31,7 +44,7 @@ file reads the settings, owns the feeds and chooses what to hand to the painter.
 from datetime import datetime, timedelta
 from typing import Optional
 
-from PySide6.QtCore import QRectF, QTimer
+from PySide6.QtCore import QEasingCurve, QRectF, QTimer, QVariantAnimation
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import QGraphicsItem
 
@@ -41,7 +54,7 @@ from LevityDash.lib.stateful import StateProperty
 from LevityDash.lib.ui.colors import Color, Gradient, theme
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar import draw
-from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.feed import Series, openFeed
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.feed import Series, openFeed, openValue
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.geometry import (
 	parseWindow, roseBins, windowBounds,
 )
@@ -51,7 +64,7 @@ __all__ = ['Polar']
 
 log = LevityPluginLog.getChild('Polar')
 
-_PLOTS = ('rose', 'trail', 'clock')
+_PLOTS = ('rose', 'trail', 'clock', 'carousel')
 
 
 def _oneOf(name: str, value, allowed: tuple):
@@ -97,6 +110,11 @@ class Polar(Panel, tag='polar'):
 		self._stamps = 6
 		self._legend = True
 		self._marks = True
+		self._view = 120.0
+		self._shown: Optional[float] = None
+		self._slide = None
+		self._source = None
+		self._sourceText = None
 		self._feeds: dict[str, object] = {}
 		self._feedText: dict[str, str] = {}
 		super().__init__(*args, **kwargs)
@@ -117,6 +135,46 @@ class Polar(Panel, tag='polar'):
 	def _changed(self):
 		self.update()
 
+	def _connectDirection(self):
+		"""The carousel reads one live value, so it takes a value feed, not a series feed."""
+		text = self._direction if self._plot == 'carousel' else None
+		if text == self._sourceText:
+			return
+		self._dropSource()
+		self._sourceText = text
+		if text:
+			try:
+				self._source = openValue(text, self._follow)
+			except Exception as error:  # noqa: BLE001 - a bad key must not abort the dashboard load
+				log.warning(f'polar direction {text!r}: {error!r}; it shows no data')
+
+	def _dropSource(self):
+		source, self._source = self._source, None
+		if source is not None:
+			source.close()
+
+	def _follow(self, target: float):
+		"""Slide the carousel to a new direction, the short way round the circle."""
+		target %= 360
+		if self._shown is None or not self.isVisible():
+			self._shown = target
+			self.update()
+			return
+		start = self._shown
+		delta = ((target - start + 180) % 360) - 180
+		if self._slide is not None:
+			self._slide.stop()
+		if abs(delta) < 0.01:
+			return
+		self._slide = QVariantAnimation(self, startValue=0.0, endValue=delta, duration=700)
+		self._slide.setEasingCurve(QEasingCurve.Type.InOutCubic)
+		self._slide.valueChanged.connect(lambda step, start=start: self._step(start + step))
+		self._slide.start()
+
+	def _step(self, degrees: float):
+		self._shown = float(degrees) % 360
+		self.update()
+
 	# -- data ---------------------------------------------------------------------------------
 
 	def _connect(self):
@@ -128,8 +186,10 @@ class Polar(Panel, tag='polar'):
 			'rose': {'direction': self._direction, 'speed': self._speed},
 			'trail': {'direction': self._direction, 'speed': self._speed},
 			'clock': {'value': self._key},
+			'carousel': {},
 		}[self._plot]
 		wanted = {name: key for name, key in wanted.items() if key}
+		self._connectDirection()
 		for name in list(self._feeds):
 			if wanted.get(name) != self._feedText.get(name):
 				self._feeds.pop(name).close()
@@ -146,6 +206,9 @@ class Polar(Panel, tag='polar'):
 	def release(self):
 		"""Stop the clock and let go of every feed. A dashboard reload and `delete` both end here."""
 		self._clock.stop()
+		if self._slide is not None:
+			self._slide.stop()
+		self._dropSource()
 		for feed in self._feeds.values():
 			feed.close()
 		self._feeds.clear()
@@ -334,6 +397,21 @@ class Polar(Panel, tag='polar'):
 	def top(self, value) -> str:
 		return _oneOf('top', str(value).lower(), ('noon', 'midnight'))
 
+	@StateProperty(key='view', default=120.0, allowNone=False, after=refresh)
+	def view(self) -> float:
+		return self._view
+
+	@view.setter
+	def view(self, value: float):
+		self._view = value
+
+	@view.decode
+	def view(self, value) -> float:
+		value = float(value)
+		if not 20 <= value <= 360:
+			raise ValueError(f'view is 20 to 360 degrees, not {value}')
+		return value
+
 	@StateProperty(key='smooth', default=True, allowNone=False, after=refresh)
 	def smooth(self) -> bool:
 		return self._smooth
@@ -405,6 +483,8 @@ class Polar(Panel, tag='polar'):
 					self._paintTrail(painter, look, rect)
 				case 'clock':
 					self._paintClock(painter, look, rect)
+				case 'carousel':
+					draw.drawCarousel(painter, look, rect, self._shown, self._view, self._compass, self._legend)
 		except Exception as error:  # noqa: BLE001 - a paint error must not take the dashboard down
 			if getattr(self, '_paintError', None) != repr(error):
 				self._paintError = repr(error)

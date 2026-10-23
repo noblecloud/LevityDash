@@ -1,0 +1,12 @@
+# A title written as a list takes the longest text that fits its box: `text: [Temperature, Temp, T]`.
+# `condense` (default 0.85) is how much a text may shrink, against the size the box's height allows,
+# before the next shorter one is used. The choice looks at the box and the font only, so the
+# size group, which sets the size of every title, keeps one size across the dashboard.
+- type: stack
+  direction: Horizontal
+  shared:
+    title: {matchingGroup: {group: global.title, matchAll: true}}
+  items:
+  - {type: realtime.text, size: 14%, key: environment.temperature.temperature, title: {text: [Temperature, Temp, T]}}
+  - {type: realtime.text, size: 28%, key: environment.temperature.dewpoint, title: {text: [Dewpoint, Dew, D]}}
+  - {type: realtime.text, key: environment.wind.speed.speed, title: {text: [Wind speed, Wind, W]}}

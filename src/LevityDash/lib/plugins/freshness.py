@@ -12,7 +12,7 @@ from datetime import timedelta
 from statistics import median
 from typing import Deque, Optional
 
-__all__ = ['RefreshEstimator', 'DEFAULT_STALE_AFTER']
+__all__ = ['RefreshEstimator', 'DEFAULT_STALE_AFTER', 'BURST']
 
 #: What to use before there is anything to learn from.
 DEFAULT_STALE_AFTER = timedelta(minutes=15)
@@ -23,6 +23,12 @@ MISSED_AFTER_PERIODS = 2.5
 #: Never flag a reading younger than this, however fast the source runs.
 MIN_STALE_AFTER = timedelta(seconds=60)
 
+#: Updates this close together are one update (a poll that publishes forty keys in a row).
+BURST = timedelta(seconds=5)
+
+#: A run of updates is cut into bursts of at most this long, so a source that never pauses still shows a period.
+MAX_BURST = timedelta(seconds=30)
+
 
 class RefreshEstimator:
 	"""The period of a source, from the gaps between the updates it delivered.
@@ -32,14 +38,25 @@ class RefreshEstimator:
 	not move it far.
 	"""
 
-	def __init__(self, window: int = 8):
+	def __init__(self, window: int = 8, burst: Optional[timedelta] = None):
 		self._gaps: Deque[float] = deque(maxlen=window)
 		self._last: Optional[float] = None
+		self._burstStart: Optional[float] = None
+		self._burst = burst.total_seconds() if burst else 0.0
 
 	def observe(self, now: float) -> None:
-		if self._last is not None and now > self._last:
-			self._gaps.append(now - self._last)
-		self._last = now
+		"""Take one update. With `burst`, updates within that many seconds of the last one join the same burst
+		and the period is measured between the starts of bursts (capped at `MAX_BURST`)."""
+		if self._last is None:
+			self._burstStart = self._last = now
+			return
+		if now <= self._last:
+			return
+		if self._burst and now - self._last <= self._burst and now - self._burstStart <= MAX_BURST.total_seconds():
+			self._last = now
+			return
+		self._gaps.append(now - (self._burstStart if self._burst else self._last))
+		self._burstStart = self._last = now
 
 	@property
 	def period(self) -> Optional[timedelta]:

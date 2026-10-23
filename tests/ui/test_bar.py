@@ -139,3 +139,66 @@ def test_fill_follows_source_and_releases(dashboard):
 	assert engine.refcount(key) == before - 1, 'dropping the fill releases its source'
 	assert not bar._bindings
 	sandbox.scene().removeItem(sandbox)
+
+
+def _layoutWeight(bar) -> float:
+	image = QImage(10, 10, QImage.Format.Format_ARGB32)
+	painter = QPainter(image)
+	try:
+		return bar._layout(painter)['weight']
+	finally:
+		painter.end()
+
+
+def test_a_bound_track_zone_fill_and_pointer_size_follow_a_value_and_save_their_specs(dashboard):
+	from LevityDash.lib import valuesource
+	from LevityDash.lib.valuesource import installStandIn
+	from statekit.binding import Constant
+	bound = lambda a, b: {'of': 'a.b', 'from': [0, 100], 'to': [a, b]}
+	saved = valuesource._standIn
+	installStandIn(lambda value, label='', effect='': Constant(50))
+	try:
+		display = {'track': {'weight': bound(0.1, 0.5)},
+			'zones': [{'from': 0, 'to': 50, 'color': '#f00', 'weight': bound(0.1, 0.3)}],
+			'fill': {'weight': bound(0.2, 0.4)}, 'pointer': {'type': 'dot', 'size': bound(0.2, 0.6)}}
+		sandbox, panel, bar = _bar(dashboard, display)
+		plain = None
+		try:
+			state = bar.encodedState()
+			assert state['track']['weight'] == display['track']['weight']
+			assert state['zones'][0]['weight'] == display['zones'][0]['weight']
+			assert state['fill']['weight'] == display['fill']['weight']
+			assert state['pointer']['size'] == display['pointer']['size']
+			_paint(bar)
+			width = _layoutWeight(bar)
+			sandbox2, panel2, plain = _bar(dashboard, {'track': {'weight': 0.3}})
+			assert width == pytest.approx(_layoutWeight(plain))
+		finally:
+			sandbox.scene().removeItem(sandbox)
+			if plain is not None:
+				sandbox2.scene().removeItem(sandbox2)
+	finally:
+		installStandIn(saved)
+
+
+def test_bound_bar_tick_and_label_sizes_follow_a_value(dashboard):
+	from LevityDash.lib import valuesource
+	from LevityDash.lib.valuesource import installStandIn
+	from statekit.binding import Constant
+	bound = lambda a, b: {'of': 'a.b', 'from': [0, 100], 'to': [a, b]}
+	saved = valuesource._standIn
+	installStandIn(lambda value, label='', effect='': Constant(50))
+	try:
+		display = {'major': {'length': bound(0.1, 0.3), 'width': bound(0.02, 0.06), 'labels': True, 'size': bound(0.1, 0.2)},
+			'value-label': {'size': bound(0.2, 0.4)}, 'markers': [{'value': 40, 'size': bound(0.1, 0.5)}]}
+		sandbox, panel, bar = _bar(dashboard, display)
+		try:
+			assert _ink(_paint(bar)) > 0
+			state = bar.encodedState()
+			assert state['major']['length'] == display['major']['length']
+			assert state['value-label']['size'] == display['value-label']['size']
+			assert state['markers'][0]['size'] == display['markers'][0]['size']
+		finally:
+			sandbox.scene().removeItem(sandbox)
+	finally:
+		installStandIn(saved)

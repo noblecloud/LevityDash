@@ -21,14 +21,12 @@ slices ``payload.hex()``, so each byte is two positions: HA's ``data[2:5]`` is
 ``[4:10]`` here. Preserved rather than "fixed" because it is the format already
 in every user's config file.
 
-**Coverage.** The plaintext families whose layout the slice+expression model
+**Coverage.** The H5074 family is little-endian, which a parser reads with ``byteOrder: little`` and ``signed``. The plaintext families whose layout the slice+expression model
 can express, centred on the H5102 and H5075 families (the physically tested
 hardware). Deliberately absent:
 
 - **H5121-H5130** - encrypted payloads (AES + CRC). Out of scope by decision;
   needs real crypto, not a byte slice.
-- **H5074 / H5051 / H5052 / H5071** - little-endian ``struct``-packed. The
-  slice model reads big-endian hex runs and cannot express these.
 - **H5178 / H5181-H5198** - multi-probe: one advertisement carries several
   sensors distinguished by an in-payload sensor ID, which needs a key per
   probe rather than a key per field.
@@ -113,6 +111,21 @@ PRESETS: Dict[str, ModelPreset] = {
 			'battery': {'startingByte': 8, 'endingByte': 10, **_BATTERY},
 		},
 		notes='Untested against hardware; offsets follow govee-ble data[1:5].',
+	),
+
+	# --- H5074 family: little-endian int16 / uint16 ---------------------------
+	# data[1:3] is a signed temperature in hundredths of a degree, data[3:5] an
+	# unsigned humidity in hundredths of a percent, data[5] the battery.
+	'H5074': ModelPreset(
+		model='H5074',
+		names=('H5074', 'H5051', 'H5052', 'H5071'),
+		lengths=(7,),
+		fields={
+			'temperature': {'startingByte': 2, 'endingByte': 6, 'byteOrder': 'little', 'signed': True, 'expression': 'val / 100'},
+			'humidity': {'startingByte': 6, 'endingByte': 10, 'byteOrder': 'little', 'expression': 'val / 100'},
+			'battery': {'startingByte': 10, 'endingByte': 12, **_BATTERY},
+		},
+		notes='Untested against hardware; offsets follow govee-ble data[1:6] (<hHB).',
 	),
 
 	# --- H5127 presence sensor ----------------------------------------------

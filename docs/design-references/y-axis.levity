@@ -1,0 +1,18 @@
+# A value axis: round values down one edge of a figure, at the height each stands at on the plot.
+# `y-axis: true` takes the defaults; `side` is left or right, `ticks` a count or a list of values,
+# `format` a format spec, `grid` a faint line across at each mark.
+- type: graph
+  name: temperature
+  timeframe: {days: 1, hours: 12}
+  annotations:
+    dayLabels: {enabled: false}
+    hourLabels: {alignment: BottomCenter}
+  figures:
+  - figure: temperature
+    margins: {bottom: 20%, top: 15%, left: 6%}
+    y-axis: {side: left, ticks: 5, format: '{:.0f}°', grid: true}
+    environment.temperature.temperature:
+      plot:
+        type: plot
+        gradient: TemperatureGradient
+      resolution: 2

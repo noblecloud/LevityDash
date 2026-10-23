@@ -178,6 +178,15 @@ background: {by: astronomy.sun.elevation, top: $sky-top, bottom: $sky-horizon, h
 
 `astronomy.sun.elevation` is the sun's height above the horizon in degrees, from the Astronomy plugin. The `default` theme defines `sky-top` and `sky-horizon` for it: navy at night, purple then orange near the horizon, blue by day. They stay dark enough for light text. A theme can recolour them under `scales`.
 
+## Palette check
+
+When a theme loads, the log warns about two things in its palette:
+
+- `text`, `muted` or `faint` under 4.5:1 contrast on `background` (WCAG AA for text; a colour with alpha is measured laid over the background).
+- two of `series-1` to `series-6` within 20 degrees of hue in Oklch (both coloured, chroma above 0.04), which makes two lines or quantities look alike.
+
+Each warning names the theme and the tokens, once per run. The check changes nothing; the shipped themes pass it. The code is `lib/ui/colors/contrast.py`.
+
 ## Make a theme file
 
 A theme is a YAML file. Put it in a folder named `themes` in your [config folder](/config.md). Make the folder if it is not there. A theme in your folder wins over a built-in theme of the same name. The file name is the theme name: `themes/harbor.yaml` is `theme: harbor`.
@@ -253,25 +262,7 @@ Lightness, chroma, and hue use the Oklch color space. Mixing uses Oklab. You can
 
 ## Colour a reading by its value
 
-A `color:` may name a scale and a value, and then it follows the value:
-
-```yaml
-- type: realtime.text
-  key: environment.temperature.temperature
-  display:
-    valueLabel:
-      color: {scale: $temperature, of: environment.temperature.feelsLike}
-```
-
-| Key | Meaning |
-|---|---|
-| `scale` | A theme scale (`$temperature`), a preset gradient name, or a gradient written in place. Stops with units (`32°F`) place themselves by reading, in any unit. |
-| `of` | A key or an expression, as for any value source. It need not be the key the item shows. |
-| `fallback` | Optional colour used until the value has a number. Default: the default text colour. |
-
-It works on every colour of a text, a gauge (arc, fill, zones, markers, needle, hub, halo, labels) and a bar (track, fill, zones, markers, pointer, labels). All of them read their colour through one place (`ColorSlots`, `lib/ui/colors/bound.py`), so a colour written as a mapping follows its value wherever it is written. The Studio's colour control has a ⟳ button for it.
-
-The colour changes when the value does. A plain colour is the same property with no mapping, so nothing else about the item changes. An unknown scale name is an error (a gradient would otherwise pick the nearest preset). A saved dashboard writes the mapping back as written, with a theme scale shown as its resolved gradient.
+A `color:` may name a scale and a value, and then it follows the value. See [bindings](/config/dashboard/bindings.md).
 
 ## What a theme does not change yet
 

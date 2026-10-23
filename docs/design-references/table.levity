@@ -1,0 +1,14 @@
+# A table: row labels once on the left, units once in the column head, numbers lined up on the decimal.
+items:
+  - preset: table
+    geometry: {x: 4%, y: 6%, width: 92%, height: 40%}
+    props:
+      columns:
+        - {head: Temp, unit: °F, key: 'indoor.temperature.temperature#{row}', precision: 1}
+        - {head: Dew point, unit: °F, key: 'indoor.temperature.dewpoint#{row}', precision: 1}
+        - {head: Humidity, unit: '%', key: 'indoor.humidity.humidity#{row}', precision: 0}
+      rows:
+        - {label: Living room, row: livingroom}
+        - {label: Bedroom, row: bedroom}
+        - {label: Office, row: office}
+        - {label: Kitchen, row: kitchen}

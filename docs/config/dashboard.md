@@ -745,6 +745,9 @@ The type of plot. The default is a line.
 
 - `plot`: a line. This is the default.
 - `bar`: one bar for each sample. See [Bar plots](#bar-plots).
+- `strip`: a row of marks and no line, for a key that is not a number. See [Strip plots](#strip-plots).
+- `area`: the line's shape filled down to a baseline. See [Area plots](#area-plots).
+- `band`: the space between two series. See [Band plots](#band-plots).
 - `violin`: one violin for each stretch of time. See [Violin plots](#violin-plots).
 
 ```yaml
@@ -811,6 +814,76 @@ Where the bar sits against the time of its sample. `center` puts the time in the
 A bar plot draws one bar for each slot of the data. If a current value falls between two hourly samples, LevityDash draws only the sample that is closest to the middle of the slot.
 
 To draw a line over bars, put each in its own figure. Give the two figures the same margins. A figure keeps its own range.
+
+### Fill under a line
+
+A line plot can carry its own fill, so one key gives a line and the space under it. Use it where an area plot alone would lose the line.
+
+```yaml
+environment.temperature.temperature:
+  plot: {type: plot, gradient: TemperatureGradient, fill: {opacity: 0.35, base: 45}}
+```
+
+<div class="indent">
+
+#### <div class=mono>fill: true | float | {opacity, base}</div>
+
+`opacity` is how strong the fill is, from `0` to `1` (default `0.25`). `base` is the value the fill reaches, in the unit of the data; the axis always includes it. Without `base` the fill reaches the bottom of the figure. `true` takes the defaults and a number sets the opacity. The fill takes the line's colour or gradient.
+
+</div>
+
+### Area plots
+
+> [!NOTE]
+An area plot is a line with the space under it filled. Use it for a level that you read as a quantity, such as the load on a machine or the cloud cover.
+
+```yaml
+- type: graph
+  name: temperature
+  timeframe: {days: 1, hours: 12}
+  figures:
+  - figure: temperature
+    margins: {bottom: 20%, top: 15%}
+    environment.temperature.temperature:
+      plot: {type: area, base: 60, gradient: TemperatureGradient, opacity: 0.6}
+```
+
+<div class="indent">
+
+#### <div class=mono>base: float</div>
+
+The value the fill reaches, in the unit of the data. The axis always includes it. A value below `base` is filled upward to it. The default is `0`, so a plot of a value far from zero, such as a temperature, looks flat unless you set `base` near its low.
+
+</div>
+
+Colour, `gradient`, `opacity` and `glow` work as they do for a line. The gradient follows the value against height. Like a bar plot, an area plot keeps one sample for each slot of the source's own grid.
+
+### Band plots
+
+A band plot fills the space between two series on the same figure. Use it for a range, such as the gust over the wind speed, or the high over the low.
+
+```yaml
+- type: graph
+  name: wind
+  timeframe: {days: 1}
+  figures:
+  - figure: wind
+    min: 0
+    environment.wind.speed.gust:
+      plot: {type: band, to: environment.wind.speed.speed, opacity: 0.35}
+    environment.wind.speed.speed:
+      plot: {type: plot}
+```
+
+<div class="indent">
+
+#### <div class=mono>to: key</div>
+
+The other series, as written under `figures:` or its tail (`wind.speed.speed`). It is read at the band's own sample times, so the two need not share a grid. With no `to`, or none that matches a series with data, nothing is drawn. The axis spans both series.
+
+</div>
+
+Colour, `gradient`, `opacity` and `glow` work as they do for a line. Like an area plot, a band keeps one sample for each slot. The band is redrawn when its own series changes, not when the other one does.
 
 ### Violin plots
 
@@ -889,6 +962,57 @@ The values of the key that the two weights are for. A value outside the range us
 
 </div>
 
+### Value axis
+
+> [!NOTE]
+A value axis writes round numbers down one edge of a figure. Each number is at the height its value has on the plot. Put `y-axis:` on the figure, next to `margins:`.
+
+```yaml
+- type: graph
+  name: temperature
+  timeframe: {days: 1, hours: 12}
+  figures:
+  - figure: temperature
+    margins: {bottom: 20%, top: 15%, left: 6%}
+    y-axis: {side: left, ticks: 5, format: '{:.0f}°', grid: true}
+    environment.temperature.temperature:
+      plot: {type: plot, gradient: TemperatureGradient}
+```
+
+`y-axis: true` takes every default. The labels follow the figure's own range, so a `min:` or `max:` on the figure moves them. A figure with no data shows none. Make room for the labels with a margin on that side.
+
+<div class="indent">
+
+#### <div class=mono>side: str</div>
+
+`left` or `right`. The default is `left`.
+
+#### <div class=mono>ticks: int | list</div>
+
+About how many numbers to show, or a list of the values to mark. The step is a round one (1, 2, 2.5 or 5 times a power of ten), so 0 to 100 gives 0, 50 and 100 for `3`. The default is `4`.
+
+#### <div class=mono>format: str</div>
+
+A format for each number, such as `'{:.0f}°'` or `.1f`. With none, the digits follow the step. The default is none.
+
+#### <div class=mono>size: int</div>
+
+The text height in pixels. The default is `12`.
+
+#### <div class=mono>color: color</div>
+
+The colour of the text. The default is the theme's text colour, a little dimmed.
+
+#### <div class=mono>grid: bool</div>
+
+Draw a faint line across the figure at each number. The default is `false`.
+
+#### <div class=mono>inset: int</div>
+
+The gap between the text and the edge, in pixels. The default is `4`.
+
+</div>
+
 ### Pins on a line
 
 > [!NOTE]
@@ -939,6 +1063,10 @@ A list of exact values and their symbols, such as `{0: 'wi:day-sunny'}`. Use `ma
 
 The size of a pin in pixels, or a length such as `5mm`. The default is `14`.
 
+#### <div class=mono>at: float</div>
+
+Put every pin at this height instead of on the line: `0` is the bottom of the figure, `1` the top. `offset` then does nothing. A [strip plot](#strip-plots) uses `0.5` when it has none.
+
 #### <div class=mono>offset: float</div>
 
 The distance between the pin and the line, in pin sizes. A negative number puts the pin above the line. The default is `-1.2`.
@@ -950,6 +1078,22 @@ The smallest gap between two pins, in pin sizes. A pin that would be closer than
 #### <div class=mono>color: str</div>
 
 The color of the pins. If you leave it out, the pins are painted like the line, with the same color or gradient.
+
+#### <div class=mono>only: peaks | troughs | extremes</div>
+
+Puts pins only where the line turns, not at every sample. Each takes the pin value nearest that time, so a condition key gives an icon at each high and low, and the line's own key with no `steps` prints the highs and lows. A trough takes the other side of the line from the `offset`. A turn counts when it stands out from its surroundings by `prominence`. See `docs/design-references/pins-at-peaks.levity`.
+
+#### <div class=mono>prominence: float</div>
+
+How far a turn must stand out for `only`, as a share of the line's whole range, from `0.01` to `1`. The default is `0.15`.
+
+#### <div class=mono>glyph: str</div>
+
+One icon for every pin, such as `wi:direction-up`. The value then only places the pin, and turns it if `rotate` is set.
+
+#### <div class=mono>rotate: float | true</div>
+
+Turns each pin by its value, read as degrees clockwise, plus this many degrees. `true` adds none. Wind direction names where the wind comes from, so `rotate: 180` with an up arrow points the way the wind blows. A value that is not a number is not drawn. See `docs/design-references/wind-arrows.levity`.
 
 </div>
 
@@ -1014,6 +1158,60 @@ The Moon Phase shows the phase of the moon and tilts it as it looks in the sky. 
   interval:
     minutes: 20
 ```
+
+### Strip plots
+
+> [!NOTE]
+A strip plot is a row of marks and no line. Use it for a key that is not a number, such as a weather condition, to show it along the time axis.
+
+A strip is a line plot that draws only its [pins](#pins-on-a-line). All the pins sit at one height, `pins.at`, from `0` (bottom of the figure) to `1` (top). The default is `0.5`, the middle. `at:` also works on a line plot, to put the pins in a row over a line instead of on it.
+
+The strip's own key sets the time span and nothing else. Use any number key that covers the window, such as the temperature. Give the strip a figure of its own. Its `margins` then decide the band it sits in, and it does not change the axis of the figure below it.
+
+```yaml
+- figure: strip
+  margins: {bottom: 20%, top: 70%}
+  environment.temperature.dewpoint:
+    plot:
+      type: strip
+      pins:
+        key: environment.precipitation.precipitation
+        size: 26
+        steps:
+        - [0,    'wi:day-sunny']
+        - [0.1,  'wi:showers']
+        - [0.3,  'wi:rain']
+```
+
+The pins take the text colour unless they have a `color`.
+
+### Hourly rows
+
+> [!NOTE]
+`preset: hourly-row` puts columns of readings under the matching times of a graph, like the hourly strip under a forecast chart.
+
+Each column is a vertical stack: the time, then one reading for every row you give. The columns are `step` hours apart, all the same width, and centred on their time. The readings and the time are always for the same moment: `{offset}` in a row's key becomes the column's distance from now (`0h`, `3h`, `1.5h`), so `at(environment.temperature.temperature, {offset})` is the forecast for that column. The time is a `clock` with an `offset`.
+
+Heads and numbers are in size groups that span the whole dashboard (`global.title` and `global.value`), so the row reads like every other table. Give a number a `color` to tell the rows apart.
+
+```yaml
+- type: graph
+  name: temperature
+  timeframe: {days: 1, hours: 12}
+  # ...
+- preset: hourly-row
+  props:
+    timeframe: {days: 1, hours: 12}   # the graph's
+    step: 3
+    graph: temperature                # the graph's name
+    rows:
+    - {key: 'at(environment.temperature.temperature, {offset})', precision: 0}
+    - {key: 'at(environment.precipitation.probability, {offset})', precision: 0, color: $info}
+```
+
+Give the row the same width as the graph (a `stack` or a `group` that holds both). With `graph:` set, each column follows the graph's real time axis. That matters because a graph starts at the earliest of `now + offset` and its oldest data, so the left edge is not always where `timeframe` says. Without `graph:`, columns sit where `timeframe` puts them. Properties: `docs` of the preset (`step`, `past`, `head`, `headFormat`, `nowLabel`, `numberAlign`, `titleGroup`, `valueGroup`, `font`). An example: `docs/design-references/hourly-row.levity`.
+
+Under it are two items you can use by themselves. `time-axis: {graph: <name>, at: 3h}` on any item centres it on that time of a graph and keeps it there as the graph scrolls or resizes (only x is set; the item keeps its size). A `clock` component takes `offset: 3h` and shows that much later (or earlier, `-90min`).
 
 ### <div class=mono>rotate: bool</div>
 

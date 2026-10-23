@@ -45,4 +45,4 @@ items:
         display:
           valueLabel: {matchingGroup: {group: global.value, matchAll: true}}
       items:
-      - {type: realtime.text, key: environment.precipitation.probability, title: {text: Rain chance}}
+      - {type: realtime.text, key: environment.precipitation.probability, title: {text: Rain chance}, display: {precision: 0}}
