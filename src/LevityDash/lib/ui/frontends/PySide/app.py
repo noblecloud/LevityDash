@@ -642,7 +642,7 @@ class PluginsMenu(QMenu):
 		enabled = 'Enabled' if getattr(plugin, 'enabled', True) else 'Disabled'
 		keys = f'{plugin_key_count(plugin)} keys'
 		parts = [running, enabled, keys]
-		patrol = getattr(LevityDashboard.app, 'patrol', None)
+		patrol = getattr(getattr(LevityDashboard, 'app', None), 'patrol', None)
 		health = patrol.health().get(plugin.name) if patrol is not None else None
 		if health in ('quiet', 'silent'):
 			parts.append('overdue' if health == 'quiet' else 'not publishing')
