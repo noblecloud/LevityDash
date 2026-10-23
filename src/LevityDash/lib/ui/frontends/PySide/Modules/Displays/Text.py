@@ -773,6 +773,22 @@ class Text(QGraphicsPathItem):
 
 	_builtSignature = None
 
+	def tailRun(self) -> tuple[str, float] | None:
+		"""A smaller run drawn after the text on its baseline: `(text, size as a share of this font)`, or None.
+
+		A value with `unitPosition: baseline` uses it for its unit. The run is part of the text, so it counts in the
+		fit, the alignment and the size group.
+		"""
+		return None
+
+	def _tailFont(self, font: QFont, ratio: float) -> QFont:
+		tail = QFont(font)
+		if font.pixelSize() > 0:
+			tail.setPixelSize(max(1, round(font.pixelSize() * ratio)))
+		else:
+			tail.setPointSizeF(max(0.5, font.pointSizeF() * ratio))
+		return tail
+
 	def currentTextRect(self) -> QRectF:
 		"""The text rect for the item as it is now, rebuilt if its inputs moved.
 
@@ -814,6 +830,7 @@ class Text(QGraphicsPathItem):
 			getattr(self, '_formatHint', None),
 			self.height_px,
 			self._warp,
+			self.tailRun(),
 			self._tabular,
 			self._numberAlign,
 			self._numberColumn() if self._numberAlign else None,
@@ -1094,6 +1111,22 @@ class Text(QGraphicsPathItem):
 		fmt_hint_bearing = QPointF(fm.leftBearing(fmt_hint_text[0] if fmt_hint_text else ' '), 0)
 
 		text_rect = fm.tightBoundingRect(text)
+
+		# A tail (the unit of a value) sits after the text on its baseline, so it widens the text and the format hint by
+		# its own width and a small gap; the hint's tail is the same, so the value's size does not follow the unit.
+		tail = self.tailRun()
+		tail_font = tail_gap = tail_width = tail_bearing = 0
+		main_width = text_rect.width()
+		hint_width = fmt_hint_rect.width()
+		if tail and tail[0]:
+			tail_font = self._tailFont(font, tail[1])
+			tail_metrics = QFontMetricsF(tail_font)
+			tail_rect = tail_metrics.tightBoundingRect(tail[0])
+			tail_bearing = tail_rect.left()
+			tail_gap = fm.horizontalAdvance(' ') * 0.2
+			tail_width = tail_gap + tail_rect.width() + tail_bearing
+			text_rect.setWidth(main_width + tail_width)
+			fmt_hint_rect.setWidth(hint_width + tail_width)
 		text_bearing = QPointF(fm.leftBearing(text[0] if text else ' '), 0)
 
 		pipe_rect = fm.tightBoundingRect('|')
@@ -1208,6 +1241,10 @@ class Text(QGraphicsPathItem):
 		# Draw the value and format hint text
 		fmt_hint_text_path.addText(fmt_text_pos, font, fmt_hint_text)
 		path.addText(text_pos, font, text)
+		if tail_font:
+			# ink right edge of the text, then the gap; the tail's own left bearing is taken off so its ink starts there
+			path.addText(QPointF(text_rect.left() + main_width + tail_gap - tail_bearing, text_pos.y()), tail_font, tail[0])
+			fmt_hint_text_path.addText(QPointF(fmt_hint_rect.left() + hint_width + tail_gap - tail_bearing, fmt_text_pos.y()), tail_font, tail[0])
 
 		# Determine the scale type and add the path to the size hint path
 		match scaleType:
