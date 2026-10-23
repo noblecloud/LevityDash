@@ -1,13 +1,18 @@
 # Kiosk: a lobby screen. A 1920 x 1080 (16:9) display with fixed-width wings and a flexible middle.
 #
-# The point of this board is the layout vocabulary of CSS. The header is a flex row whose clock has `margin-left:
-# auto`, which pushes the clock and everything after it to the right edge. The body is a grid whose columns are
-# `[260px, calc(100% - 260px - 480px - 48px), 480px]`: two wings of fixed width and a middle that takes what is left, so the
-# same file fits a 1280 or a 3840 wide screen with wings of the same size. The hero in the middle has two `auto`
-# margins, which centres it in its area, and the footer is a switch that rotates a short notice on a timer.
+# The point of this board is the layout vocabulary of CSS. The header is a flex row whose day's high has
+# `margin-left: auto`, which pushes it and everything after it to the right edge. The body is a grid whose columns are
+# `[260px, calc(100% - 260px - 480px - 96px), 480px]`: two wings of fixed width and a middle that takes what is left,
+# so the same file fits a 1280 or a 3840 wide screen with wings of the same size. The hero in the middle has two
+# `auto` margins, which centres it in its area, and the footer is a switch that rotates a short notice on a timer.
 #
-# Text sizes come from the dashboard-wide size groups global.title, global.value and global.head; hand-written
-# readings join them through the board's `shared:`.
+# Type: each text role is one dashboard-wide size group with `matchAll`, pinned with `text-height`. The `vars:` below
+# are the whole scale: labels (`global.title`), values (`global.value`), headers and the ring readings
+# (`global.head`), the footer's figures (`global.big`) and the hero. Labels sit left and values right in the table,
+# so its numbers share one right edge. Units are said once, in the label. Temperatures are the accent, humidity
+# `$good`, rain `$info`, UV `$warn`; headers and labels are text and muted, so colour marks data only.
+#
+# Space: a 64 px margin and 48 px between areas; inside an area the gaps are 24 to 48 px.
 #
 # Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/kiosk.levity
 #           --scenario week-ahead --size 1920x1080 --freeze-time 2026-10-07T15:40:00
@@ -29,21 +34,22 @@ theme:
     body: Roboto
 vars:
   t: environment.temperature.temperature
+  # the type scale: label, value, header, the footer's figures, and the hero
+  label: 22px
+  value: 22px
+  head: 38px
+  big: 64px
+  hero: 230px
 items:
 - type: grid
   name: board
-  geometry: {x: 1.5%, y: 2%, width: 97%, height: 96%}
-  spacing: 24px
+  geometry: {x: 3.333%, y: 5.926%, width: 93.333%, height: 88.148%}
+  spacing: 0
   padding: 0
-  shared:
-    title:
-      matchingGroup: {group: global.title, matchAll: true}
-    display:
-      valueLabel:
-        matchingGroup: {group: global.value, matchAll: true}
   grid:
-    columns: [260px, calc(100% - 260px - 480px - 48px), 480px]
-    rows: [12fr, 62fr, 14fr]
+    columns: [260px, calc(100% - 260px - 480px - 96px), 480px]
+    rows: [8fr, 72fr, 20fr]
+    gap: 48px
     areas:
     - head head head
     - left hero right
@@ -51,59 +57,134 @@ items:
   items:
 
   # ================= HEADER: A FLEX ROW ====================================
+  # Everything is the header size. The high's `margin-left: auto` pushes it and the low to the right edge.
   - type: stack
     name: head
     grid: {area: head}
     direction: Horizontal
-    spacing: 2%
+    spacing: 48px
+    shared:
+      title: {color: $muted, alignment: Left, position: Left, size: 0.42, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+      display: {unitPosition: Hidden, valueLabel: {alignment: Right, margins: 0px, text-height: $head, matchingGroup: {group: global.head, matchAll: true}}}
     items:
-    - {type: text, text: Front desk, font: Nunito, weight: ExtraBold, color: $text, alignment: CenterLeft, size: 28%}
-    - {type: text, text: Open until 6 pm, font: $display, color: $muted, alignment: CenterLeft, size: 24%}
-    - {type: realtime.text, key: $t, title: false, size: 14%, flex: {margin: [0, 0, 0, auto]}, display: {precision: 0, font: Nunito, valueLabel: {color: $accent}}}
-    - {type: realtime.text, key: environment.humidity.humidity, title: false, size: 12%, display: {precision: 0, font: Nunito, valueLabel: {color: $info}}}
+    - {type: text, text: Front desk, alignment: Left, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, size: 13%}
+    - {type: text, text: Open until 6 pm, color: $muted, alignment: Left, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, size: 18%}
+    - {type: realtime.text, key: environment.temperature.high, title: High, size: 11%, flex: {margin: [0, 0, 0, auto]}, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}}
+    - {type: realtime.text, key: environment.temperature.low, title: Low, size: 11%, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}}
 
   # ================= LEFT WING: FIXED 260px ================================
+  # Three rings, each a reading at the header size with its label in the opening.
   - type: stack
     name: left
     grid: {area: left}
     direction: Vertical
-    spacing: 3%
+    spacing: 32px
     items:
-    - preset: ring-reading
-      props: {key: environment.humidity.humidity, title: Humidity, color: $info, text_color: $info, weight: 9%, radius: 96%}
-    - preset: ring-reading
-      props: {key: environment.clouds.cover.cover, title: Cloud, color: $muted, text_color: $muted, weight: 9%, radius: 96%}
-    - preset: ring-reading
-      props: {key: environment.precipitation.probability, title: Rain, color: $good, text_color: $good, weight: 9%, radius: 96%}
+    - type: group
+      items:
+      - type: realtime.gauge
+        key: environment.humidity.humidity
+        title: {visible: false}
+        geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+        display:
+          radius: 96%
+          arc: {start-angle: -120, end-angle: 120, weight: 7%, color: $rule}
+          range: {min: 0, max: 100}
+          fill: {weight: 7%, color: $good}
+          major: {enabled: false}
+          minor: {enabled: false}
+          micro: {enabled: false}
+          needle: {visible: false}
+          value-label: {visible: false}
+          unit-label: {visible: false}
+      - type: realtime.text
+        key: environment.humidity.humidity
+        title: {visible: false}
+        geometry: {x: 13%, y: 34%, width: 74%, height: 30%}
+        display: {precision: 0, unitPosition: Hidden, format-hint: '000%', valueLabel: {alignment: Center, margins: 0px, color: $good, text-height: $head, matchingGroup: {group: global.head, matchAll: true}}}
+      - {type: text, text: Humidity, alignment: Center, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 10%, y: 82%, width: 80%, height: 14%}}
+    - type: group
+      items:
+      - type: realtime.gauge
+        key: environment.clouds.cover.cover
+        title: {visible: false}
+        geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+        display:
+          radius: 96%
+          arc: {start-angle: -120, end-angle: 120, weight: 7%, color: $rule}
+          range: {min: 0, max: 100}
+          fill: {weight: 7%, color: $muted}
+          major: {enabled: false}
+          minor: {enabled: false}
+          micro: {enabled: false}
+          needle: {visible: false}
+          value-label: {visible: false}
+          unit-label: {visible: false}
+      - type: realtime.text
+        key: environment.clouds.cover.cover
+        title: {visible: false}
+        geometry: {x: 13%, y: 34%, width: 74%, height: 30%}
+        display: {precision: 0, unitPosition: Hidden, format-hint: '000%', valueLabel: {alignment: Center, margins: 0px, color: $muted, text-height: $head, matchingGroup: {group: global.head, matchAll: true}}}
+      - {type: text, text: Cloud, alignment: Center, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 10%, y: 82%, width: 80%, height: 14%}}
+    - type: group
+      items:
+      - type: realtime.gauge
+        key: environment.precipitation.probability
+        title: {visible: false}
+        geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+        display:
+          radius: 96%
+          arc: {start-angle: -120, end-angle: 120, weight: 7%, color: $rule}
+          range: {min: 0, max: 100}
+          fill: {weight: 7%, color: $info}
+          major: {enabled: false}
+          minor: {enabled: false}
+          micro: {enabled: false}
+          needle: {visible: false}
+          value-label: {visible: false}
+          unit-label: {visible: false}
+      - type: realtime.text
+        key: environment.precipitation.probability
+        title: {visible: false}
+        geometry: {x: 13%, y: 34%, width: 74%, height: 30%}
+        display: {precision: 0, unitPosition: Hidden, format-hint: '000%', valueLabel: {alignment: Center, margins: 0px, color: $info, text-height: $head, matchingGroup: {group: global.head, matchAll: true}}}
+      - {type: text, text: Rain, alignment: Center, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 10%, y: 82%, width: 80%, height: 14%}}
 
   # ================= THE HERO: TWO AUTO MARGINS CENTRE IT ==================
   - type: realtime.text
     name: hero
     key: $t
-    title: {text: Right now, color: $muted}
+    title: {text: Outside now, color: $muted, position: Top, size: 0.16, alignment: BottomLeft, margins: 0px, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}}
     grid: {area: hero, margin: [auto, auto, auto, auto]}
+    geometry: {width: 560px, height: 380px}
     display:
-      font: Nunito
-      weight: ExtraLight
+      weight: Light
       precision: 0
-      unitPosition: FloatUnder
-      valueLabel: {color: $text}
+      unitPosition: Hidden
+      format-hint: '00°'
+      valueLabel: {alignment: Left, margins: 0px, color: $accent, text-height: $hero, matchingGroup: {group: global.hero, matchAll: true}}
 
   # ================= RIGHT WING: FIXED 480px ===============================
-  - preset: list-panel
+  # A header over six rows; every row is the same height, labels left and values right.
+  - type: grid
     name: right
     grid: {area: right}
-    props:
-      title: Today
-      items:
-      - {type: realtime.text, key: environment.temperature.high, title: {text: High}, display: {precision: 0, valueLabel: {color: $bad}}}
-      - {type: realtime.text, key: environment.temperature.low, title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
-      - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels like}, display: {precision: 0, valueLabel: {color: $accent}}}
-      - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Wind}, display: {precision: 0}}
-      - {type: realtime.text, key: environment.wind.speed.gust, title: {text: Gust}, display: {precision: 0, valueLabel: {color: $warn}}}
-      - {type: realtime.text, key: environment.light.uvi, title: {text: UV}, display: {precision: 1, valueLabel: {color: $warn}}}
+    spacing: 0
+    grid: {columns: [1fr], rows: [1fr, 1fr, 1fr, 1fr, 1fr, 1fr, 1fr]}
+    shared:
+      title: {color: $muted, alignment: Left, position: Left, size: 0.6, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+      display: {unitPosition: Hidden, valueLabel: {alignment: Right, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
+    items:
+    - {type: text, text: Today, alignment: BottomLeft, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}}
+    - {type: realtime.text, key: 'environment.temperature.feelsLike', title: Feels like, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}}
+    - {type: realtime.text, key: 'environment.temperature.dewpoint', title: Dew point, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}}
+    - {type: realtime.text, key: 'environment.wind.speed.speed', title: Wind mph, display: {precision: 0, format-hint: '00'}}
+    - {type: realtime.text, key: 'environment.wind.speed.gust', title: Gust mph, display: {precision: 0, format-hint: '00'}}
+    - {type: realtime.text, key: 'environment.light.uvi', title: UV index, display: {precision: 1, format-hint: '0.0', valueLabel: {color: $warn}}}
+    - {type: realtime.text, key: 'environment.pressure.pressure', title: Pressure inHg, display: {precision: 2, format-hint: '00.00'}}
 
   # ================= THE FOOTER: A ROTATING NOTICE =========================
+  # A switch: each notice is a header over four figures. A notice with `when:` joins the rotation only while it holds.
   - type: switch
     name: foot
     grid: {area: foot}
@@ -111,25 +192,36 @@ items:
     fade: 0.4s
     hold: 8s
     items:
-    - preset: alert-strip
-      name: uv
+    - type: group
+      name: hot
       when: '$t > 85°F'
-      props:
-        headline: Hot day
-        color: $bad
-        key: $t
-        title: Outside now
-        precision: 0
+      items:
+      - {type: text, text: Hot day, color: $bad, alignment: TopLeft, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 28%}}
+      - type: grid
+        geometry: {x: 0%, y: 36%, width: 100%, height: 64%}
+        spacing: 0
+        grid: {columns: [1fr, 1fr, 1fr, 1fr], rows: [1fr], gap: 48px}
+        shared:
+          title: {color: $muted, position: Top, size: 0.36, alignment: BottomLeft, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+          display: {unitPosition: Hidden, weight: Light, valueLabel: {alignment: TopLeft, margins: 0px, text-height: $big, matchingGroup: {group: global.big, matchAll: true}}}
         items:
-        - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels like}, display: {precision: 0, valueLabel: {color: $accent}}}
-    - preset: alert-strip
+        - {type: realtime.text, key: '$t', title: Outside, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}}
+        - {type: realtime.text, key: 'environment.temperature.feelsLike', title: Feels like, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}}
+        - {type: realtime.text, key: 'environment.temperature.high', title: High today, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}}
+        - {type: realtime.text, key: 'environment.light.uvi', title: UV index, display: {precision: 1, format-hint: '0.0', valueLabel: {color: $warn}}}
+    - type: group
       name: tomorrow
-      props:
-        headline: Tomorrow
-        color: $info
-        key: at(environment.temperature.high, 1d)
-        title: High
-        precision: 0
+      items:
+      - {type: text, text: Tomorrow, color: $text, alignment: TopLeft, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 28%}}
+      - type: grid
+        geometry: {x: 0%, y: 36%, width: 100%, height: 64%}
+        spacing: 0
+        grid: {columns: [1fr, 1fr, 1fr, 1fr], rows: [1fr], gap: 48px}
+        shared:
+          title: {color: $muted, position: Top, size: 0.36, alignment: BottomLeft, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+          display: {unitPosition: Hidden, weight: Light, valueLabel: {alignment: TopLeft, margins: 0px, text-height: $big, matchingGroup: {group: global.big, matchAll: true}}}
         items:
-        - {type: realtime.text, key: 'at(environment.temperature.low, 1d)', title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: 'at(environment.precipitation.probability, 1d)', title: {text: Rain}, display: {precision: 0}}
+        - {type: realtime.text, key: 'at(environment.temperature.high, 1d)', title: High, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}}
+        - {type: realtime.text, key: 'at(environment.temperature.low, 1d)', title: Low, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}}
+        - {type: realtime.text, key: 'at(environment.precipitation.probability, 1d)', title: Rain chance, display: {precision: 0, format-hint: '00%', valueLabel: {color: $info}}}
+        - {type: realtime.text, key: 'at(environment.wind.speed.speed, 1d)', title: Wind mph, display: {precision: 0, format-hint: '00'}}
