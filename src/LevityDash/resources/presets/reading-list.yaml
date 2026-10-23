@@ -7,6 +7,7 @@ props:
   spacing: {default: null, type: size, doc: "Gap between readings; unset keeps the value-stack's own"}
   font: {default: null, type: text, doc: "Font of the values; unset keeps the font of the panel around it"}
   precision: {default: null, type: number, min: 0, doc: "Decimals of every value; unset keeps each key's own"}
+  numberAlign: {default: decimal, type: text, doc: "How the values line up: decimal (points on one line), end (digits right-aligned) or none. The unit hangs to the right, and every value in the size group shares the line"}
   titleGroup: {default: global.title, type: text, doc: "Size group of the titles. The default spans the whole dashboard, so every list reads alike"}
   valueGroup: {default: global.value, type: text, doc: "Size group of the values; the default spans the whole dashboard"}
 template:
@@ -16,7 +17,7 @@ template:
     display:
       font: $font
       precision: $precision
-      valueLabel: {matchingGroup: {group: $valueGroup, matchAll: true}}
+      valueLabel: {matchingGroup: {group: $valueGroup, matchAll: true}, number-align: $numberAlign}
   direction: $direction
   spacing: $spacing
   items: $items

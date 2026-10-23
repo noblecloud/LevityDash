@@ -459,6 +459,31 @@ This property is used to override the string used for sizing/alignment. If you l
 For example, wind speed frequently changes between 0 and some non-zero float causing the text to constantly resize.
 To fix this, `format-hint` can be set to `'10.0'`.  Note, the quotes are required, without the quotes, the value will be interpreted as a float and the decimal will be dropped.  Since this string will be used to determine the size of the text, it is important that the string is the same length as the longest string that will be displayed.
 
+#### <div class=mono>number-align: end | decimal </div>
+
+Lines a column of values up on the number and not on the whole string. Without it a `72.4°` and a `44%` in one column end at the same edge, so their digits do not line up.
+
+- `decimal` puts every decimal point on one vertical line. A value with no point is treated as if the point sat just after its last digit, so `44%` and `0` line up with `72.4°` on the digits to the left of the point.
+- `end` right-aligns the digits. Everything after the last digit (the unit, a `%`, a `°`) hangs to the right.
+
+The text is never changed: nothing is padded and no decimals are added, so `0` stays `0` and `0.0` stays `0.0`. A value with no digit (a compass point such as `WSW`) is not a number and keeps its normal alignment.
+
+The line is shared by the items of one size group, in one tier (so at one font size). Set it where the group is set, usually in `shared:`:
+
+```yaml
+shared:
+  display:
+    valueLabel:
+      matchingGroup: {group: global.value, matchAll: true}
+      number-align: decimal
+```
+
+The column is as wide as the widest head plus the widest tail in the group, and the text is fitted to that width. A group with one `0.02` among whole numbers therefore fits smaller than one without. Put the number-heavy columns in their own group, or set `format-hint`, to keep the size you want. The `reading-list`, `list-panel`, `hour-column` and `day-column` presets default to `decimal` (property `numberAlign`); `stat-row` leaves it off, because a row of separate cells reads better centred.
+
+#### <div class=mono>tabular: bool </div>
+
+Digits of one width (CSS `font-variant-numeric: tabular-nums`). Implied by `number-align`. The bundled Nunito, Roboto and Roboto Mono already set every digit to one width, so it only matters for a font that does not.
+
 #### <div class=mono>convertTo: str </div>
 
 The unit to convert the value to.

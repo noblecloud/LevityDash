@@ -10,8 +10,12 @@ props:
   chance: {default: 'at(environment.precipitation.probability, $offset)', type: key, doc: The chance of rain}
   rain: {default: 'at(environment.precipitation.precipitation, $offset)', type: key, doc: The rain rate}
   gust: {default: 'at(environment.wind.speed.gust, $offset)', type: key, doc: The gust}
+  numberAlign: {default: decimal, type: text, doc: "How the readings line up in the column: decimal, end or none (see reading-list)"}
   headGroup: {default: global.head, type: text, doc: "Size group of the hour names; the default spans the whole dashboard"}
 template:
+  shared:
+    display:
+      valueLabel: {number-align: $numberAlign}
   items:
     - {type: text, text: $label, font: $display, color: $text, alignment: Center, matchingGroup: {group: $headGroup, matchAll: true}}
     - {type: realtime.text, key: $temp, title: {text: Temp}, display: {precision: 0, valueLabel: {color: $accent}}}

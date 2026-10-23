@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QGraphicsItem, QLineEdit
 
 from LevityDash.lib.stateful import DefaultFalse, DefaultTrue, StateProperty
 from LevityDash.lib.stateful_mixins import ColorMixin
+from LevityDash.lib.ui import numberalign
 from LevityDash.lib.ui.Groups import SizeGroup, MatchAllSizeGroup
 from LevityDash.lib.ui.colors import theme
 from LevityDash.lib.ui.fonts import fontDict as fonts, FontWeight, getFontFamily
@@ -329,6 +330,38 @@ class Label(Panel, ColorMixin, tag='label'):
 	@formatHint.setter
 	def formatHint(self, value: str):
 		self.textBox._formatHint = value
+
+	@StateProperty(key='number-align', default=None, allowNone=True, dependencies={'geometry', 'text', 'alignment'})
+	def numberAlign(self) -> str | None:
+		"""Line numbers up on the number and not on the whole string: `end` right-aligns the digits, `decimal`
+		puts the decimal point on one line (a value with no point acts as if it ended in one). The unit and any
+		other text after the cut hang to its right. Members of one size group (and one tier) share the line.
+		The text is not changed: nothing is padded."""
+		return self.textBox._numberAlign
+
+	@numberAlign.setter
+	def numberAlign(self, value: str | None):
+		self.textBox.setNumberAlign(value)
+
+	@numberAlign.decode
+	def numberAlign(self, value) -> str | None:
+		if value in (None, False, 'none', 'off'):
+			return None
+		if value is True:
+			return 'decimal'
+		value = str(value).lower()
+		if value not in numberalign.MODES:
+			raise ValueError(f'number-align must be one of {", ".join(numberalign.MODES)} or none, not {value!r}')
+		return value
+
+	@StateProperty(key='tabular', default=False, dependencies={'geometry', 'text'})
+	def tabular(self) -> bool:
+		"""`font-variant-numeric: tabular-nums`: digits of one width. On whenever `number-align` is set."""
+		return self.textBox._tabular
+
+	@tabular.setter
+	def tabular(self, value: bool):
+		self.textBox.setTabular(value)
 
 	@StateProperty(key='text-height', default=None, dependencies={'geometry', 'text', 'alignment'})
 	def textHeight(self) -> Size.Height | Length | None:
