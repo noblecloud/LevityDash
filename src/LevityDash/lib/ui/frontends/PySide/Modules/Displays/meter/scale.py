@@ -20,7 +20,7 @@ from typing import Type, TypeVar, Union
 from numpy import number as np_number
 
 from LevityDash.lib.utils.shared import factors, Unset
-from WeatherUnits import Measurement, auto as auto_wu
+from unitcorn import Measurement, auto as auto_wu
 
 #: The value types a gauge deals with, and the type variable the classes that
 #: hold one are generic over. (`shared.Numeric` is the same union; this file's

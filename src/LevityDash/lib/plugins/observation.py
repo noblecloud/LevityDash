@@ -30,8 +30,8 @@ from PySide6.QtCore import QThread, Signal, Slot, QTimer
 from PySide6.QtWidgets import QApplication
 from rich.progress import Progress
 
-import WeatherUnits as wu
-from WeatherUnits.temperature import summingReadings
+import unitcorn as wu
+from unitcorn.temperature import summingReadings
 from LevityDash.lib.log import LevityPluginLog as log
 from LevityDash.lib.plugins.categories import CategoryDict, CategoryItem, UnitMetaData
 from LevityDash.lib.plugins.errors import InvalidData
@@ -1292,7 +1292,7 @@ class PublishedDict(T, metaclass=ABCMeta):
 def _humidityDerivable(value) -> bool:
 	"""True when a humidity reading can feed a dewpoint or heat index.
 
-	WeatherUnits rounds the reading to a whole percent and takes its log, so
+	unitcorn rounds the reading to a whole percent and takes its log, so
 	anything that rounds to 0 % (0.0, or a trace such as 0.004) raises.
 	"""
 	try:

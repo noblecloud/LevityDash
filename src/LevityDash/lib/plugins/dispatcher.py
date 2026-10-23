@@ -19,7 +19,7 @@ from LevityDash.lib.plugins.utils import Request, GuardedRequest, ChannelSignal,
 from LevityDash.lib.utils.data import KeyData
 from LevityDash.lib.utils.shared import clearCacheAttr, Period, singleShotSafe
 from LevityDash.lib.wire.bridge import LoopbackBridge
-from WeatherUnits import Measurement, auto as wu_auto
+from unitcorn import Measurement, auto as wu_auto
 
 log = LevityPluginLog.getChild('Dispatcher')
 

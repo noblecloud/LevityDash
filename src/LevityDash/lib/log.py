@@ -748,12 +748,12 @@ class PrettyErrorLogger(_LevityLogger):
 		# 	console = self.fileHandler.console
 		# 	console.save_html(path=self.genPrettyErrorFileName(_type, value, tb), inline_styles=False)
 
-weatherUnitsLog = logging.getLogger("WeatherUnits")
-weatherUnitsLogUtils = weatherUnitsLog.getChild("utils")
-weatherUnitsLogConfig = weatherUnitsLog.getChild("config")
-weatherUnitsLogUtils.setLevel(logging.INFO)
-weatherUnitsLogConfig.setLevel(logging.INFO)
-weatherUnitsLog.setLevel(logging.INFO)
+unitcornLog = logging.getLogger("unitcorn")
+unitcornLogUtils = unitcornLog.getChild("utils")
+unitcornLogConfig = unitcornLog.getChild("config")
+unitcornLogUtils.setLevel(logging.INFO)
+unitcornLogConfig.setLevel(logging.INFO)
+unitcornLog.setLevel(logging.INFO)
 
 logging.getLogger("urllib3").setLevel(logging.ERROR)
 logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)

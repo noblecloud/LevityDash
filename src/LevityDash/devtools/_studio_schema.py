@@ -39,7 +39,7 @@ from enum import Enum
 from typing import Any, List, Optional, Union
 
 import yaml
-import WeatherUnits as wu
+import unitcorn as wu
 from statekit.core import Stateful, StateProperty
 from statekit.yaml import StatefulDumper
 from statekit.validate import StateError

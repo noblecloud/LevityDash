@@ -4,25 +4,25 @@ A stop key is a number with an optional unit. `parseStop` splits the two. `toDat
 converts the stop into the unit of the data a display shows, so the colour sits at the same
 reading whatever unit the data arrives in.
 
-WeatherUnits does the unit lookup and the conversion (`auto`, the unit classes). It does not
+unitcorn does the unit lookup and the conversion (`auto`, the unit classes). It does not
 parse a degree sign, a rate such as `in/hr`, or `km/h`, so this module handles those first and
-leaves the rest to WeatherUnits. WeatherUnits also converts across dimensions without a word
+leaves the rest to unitcorn. unitcorn also converts across dimensions without a word
 (`Fahrenheit(MilesPerHour(30))` is `30°F`), so `toDataUnit` checks that both units measure the
 same kind of thing before it converts.
 """
 import re
 from typing import Optional, Tuple, Type
 
-from WeatherUnits import Length, Measurement, Time, Wind, auto
+from unitcorn import Length, Measurement, Time, Wind, auto
 
 __all__ = ('StopUnitError', 'parseStop', 'measure', 'toDataUnit', 'formatStop', 'family', 'unitText')
 
 _STOP = re.compile(r'^\s*(?P<number>[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*(?P<unit>.*?)\s*$')
 
-#: Speed units WeatherUnits has no class for, as metres per second in one of them.
+#: Speed units unitcorn has no class for, as metres per second in one of them.
 _SPEEDS = {'kn': 0.514444, 'kt': 0.514444, 'kts': 0.514444, 'knot': 0.514444, 'knots': 0.514444,
            'kph': 1 / 3.6, 'kmh': 1 / 3.6}
-#: Time units a rate may divide by that WeatherUnits does not know by that spelling.
+#: Time units a rate may divide by that unitcorn does not know by that spelling.
 _PER = {'h': 'hr', 'hour': 'hr', 'hours': 'hr', 'sec': 's', 'second': 's', 'min': 'min', 'minute': 'min', 'day': 'd'}
 
 #: Class names that name a dimension, and the group each one belongs to.
@@ -70,7 +70,7 @@ def _plain(unit: str) -> str:
 def _unitClass(unit: str) -> Type[Measurement]:
 	try:
 		found = auto(unit)
-	except Exception as e:  # noqa: BLE001 - WeatherUnits raises several kinds for a unit it does not know
+	except Exception as e:  # noqa: BLE001 - unitcorn raises several kinds for a unit it does not know
 		raise StopUnitError(f'unknown unit {unit!r}') from e
 	if isinstance(found, tuple):
 		found = found[0] if len(found) == 1 else None
@@ -91,9 +91,9 @@ def measure(number: float, unit: str) -> Measurement:
 			raise StopUnitError(f'unknown unit {unit!r}')
 		length, span = _unitClass(top), _unitClass(bottom)
 		if family(length) != 'length' or family(span) != 'time':
-			# Not a speed or a rate (`W/m²`, `kWh/day`): the quotient of the two units, which WeatherUnits names when it can.
+			# Not a speed or a rate (`W/m²`, `kWh/day`): the quotient of the two units, which unitcorn names when it can.
 			return _quotient(number, top, bottom, unit)
-		# Through metres per second: WeatherUnits converts from there to every speed and rate it has.
+		# Through metres per second: unitcorn converts from there to every speed and rate it has.
 		return Wind.MetersPerSecond(float(Length.Meter(length(number))) / float(Time.Second(span(1))))
 	return _unitClass(text)(number)
 
@@ -163,10 +163,10 @@ def unitText(cls: type) -> Optional[str]:
 	for text in candidates:
 		try:
 			found = measure(1.0, text)
-			# WeatherUnits may answer with a sibling class (Wind.MilesPerHour for rate.MilesPerHour),
+			# unitcorn may answer with a sibling class (Wind.MilesPerHour for rate.MilesPerHour),
 			# so the test is the same kind of thing and one of it converting to exactly one.
 			if family(type(found)) == family(cls) and abs(float(cls(found)) - 1.0) < 1e-9:
 				return text
-		except Exception:  # noqa: BLE001 - WeatherUnits raises several kinds for a unit it cannot convert
+		except Exception:  # noqa: BLE001 - unitcorn raises several kinds for a unit it cannot convert
 			continue
 	return None

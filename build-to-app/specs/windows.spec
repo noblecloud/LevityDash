@@ -17,7 +17,7 @@ src = Path.cwd().absolute()
 
 sys.path.append(str(src))
 
-datas += collect_data_files('WeatherUnits')
+datas += collect_data_files('unitcorn')
 datas += collect_data_files('aiohttp')
 datas += collect_data_files('certifi')
 

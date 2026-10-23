@@ -20,7 +20,7 @@ def test_there_is_one_unit_table():
 
 def test_power_energy_and_area_units_are_in_the_unit_table():
 	import pytest
-	import WeatherUnits as wu
+	import unitcorn as wu
 	from LevityDash.lib.plugins.utils import unitDict
 	for text, cls in (('W', wu.Power), ('kW', wu.Power), ('hp', wu.Power), ('kWh', wu.Energy), ('J', wu.Energy), ('m²', wu.Area), ('ha', wu.Area), ('ft²', wu.Area)):
 		value = unitDict[text](2)
@@ -36,7 +36,7 @@ def test_a_scenario_can_name_a_power_and_an_energy():
 
 def test_a_scenario_with_kw_loads_as_a_power_and_does_energy_sums(tmp_path, monkeypatch):
 	"""`unit: kW` in a scenario goes through the real plugin schema, and the value takes part in expressions."""
-	import WeatherUnits as wu
+	import unitcorn as wu
 	from datetime import datetime, timedelta, timezone
 	from LevityDash.lib.plugins.builtin.Fixture import ENV_VAR, Fixture
 	from LevityDash.lib.plugins.expressions import Expression

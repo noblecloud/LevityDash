@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
-import WeatherUnits as wu
+import unitcorn as wu
 from PySide6.QtCore import QEvent, QRectF, QSignalBlocker, Qt, QTimer
 from PySide6.QtGui import QColor, QImage, QKeySequence, QPainter, QShortcut
 from PySide6.QtWidgets import (

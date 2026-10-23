@@ -53,7 +53,7 @@ from LevityDash.lib.ui.Geometry import (
 from LevityDash.lib.utils import (
 	BusyContext, clearCacheAttr, connectSignal, joinCase, threadPool, Worker, Pool
 )
-from WeatherUnits import Length, Time
+from unitcorn import Length, Time
 
 ACTIVITY_EVENTS = {QEvent.KeyPress, QEvent.MouseButtonPress, QEvent.MouseButtonRelease, QEvent.MouseMove, QEvent.GraphicsSceneMouseMove, QEvent.GraphicsSceneMouseRelease, QEvent.GraphicsSceneMousePress, QEvent.InputMethod,
                    QEvent.InputMethodQuery}

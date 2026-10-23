@@ -1,11 +1,11 @@
 from collections import ChainMap
 from typing import MutableMapping
 
-from WeatherUnits import Probability, Temperature, Percentage
-from WeatherUnits.derived.precipitation import Hourly
-from WeatherUnits.derived.rate import MilesPerHour
-from WeatherUnits.length import Millimeter
-from WeatherUnits.others.light import Irradiance, Lux
+from unitcorn import Probability, Temperature, Percentage
+from unitcorn.derived.precipitation import Hourly
+from unitcorn.derived.rate import MilesPerHour
+from unitcorn.length import Millimeter
+from unitcorn.others.light import Irradiance, Lux
 from LevityDash.lib.utils.data import AttrDict
 
 from .color import Color

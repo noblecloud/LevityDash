@@ -62,7 +62,7 @@ class Context:
 	#: Pixels a '%' size is a share of: 'radius' is the dial's radius now, 'full' the radius at 100%.
 	ref: Callable[[str], float] = lambda kind='radius': 100.0
 	dpi: float = 100.0
-	#: The class of the gauge's data (a WeatherUnits unit class), which a stop in another unit converts to.
+	#: The class of the gauge's data (a unitcorn unit class), which a stop in another unit converts to.
 	valueClass: Callable[[], Optional[type]] = lambda: None
 	#: The range the dial spans, in the gauge's own unit.
 	span: Callable[[], tuple] = lambda: (0.0, 100.0)
@@ -398,7 +398,7 @@ class SizeEdit(Editor):
 		self.slide = Slide(digits=2)
 		self.slide.moved.connect(self._slid)
 		self.unit = QComboBox()
-		# Inches are left out of the small sizes (weights, gaps): WeatherUnits calls any inch value
+		# Inches are left out of the small sizes (weights, gaps): unitcorn calls any inch value
 		# within about 0.05 of a default equal to it, so the export drops 0.09 in and the gauge falls back.
 		self.unit.addItems(units or (UNITS if ref == 'full' else [u for u in UNITS if u != 'in']))
 		self.unit.setToolTip('% is a share of the dial; px is scene pixels; mm, cm and in are physical')

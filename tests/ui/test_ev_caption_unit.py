@@ -1,7 +1,7 @@
 """The EV caption's unit is stable from the first paint.
 
 The showcase's EV gauge caption reads ``ev.charge.range`` and printed ``313 km``
-in some renders and ``194 mi`` in others. The value is a Length, and WeatherUnits'
+in some renders and ``194 mi`` in others. The value is a Length, and unitcorn's
 ``Measurement.localize`` resolved the preferred unit through ``Generic`` - a
 *set* of generic bases iterated in class-hash order - so ``[Units] length = mi``
 was applied or not from one process to the next (length is the one dimension
@@ -32,13 +32,13 @@ PREFERRED = 'mi'
 def pinned_length_unit(monkeypatch):
 	"""Pin the preferred length unit the caption resolves against.
 
-	The suite's WeatherUnits config is whatever ``WU_CONFIG_PATH`` pointed at when
-	WeatherUnits was first imported. The app sets that at ``lib.config`` import,
-	but a devtools test can import WeatherUnits first, leaving the process on
-	WeatherUnits' own ``si.ini`` - which has no ``[Units]``. Pin the one dimension
+	The suite's unitcorn config is whatever ``UNITCORN_CONFIG_PATH`` pointed at when
+	unitcorn was first imported. The app sets that at ``lib.config`` import,
+	but a devtools test can import unitcorn first, leaving the process on
+	unitcorn's own ``si.ini`` - which has no ``[Units]``. Pin the one dimension
 	this test asserts, so it does not depend on the import order.
 	"""
-	import WeatherUnits as wu
+	import unitcorn as wu
 	monkeypatch.setattr(type(wu.config), 'localUnits', property(lambda self: {'length': PREFERRED}))
 
 

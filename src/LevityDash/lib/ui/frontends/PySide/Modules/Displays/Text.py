@@ -9,7 +9,7 @@ from functools import cached_property, lru_cache
 from rich.repr import rich_repr
 from typing import Any, Callable, List, Optional, TYPE_CHECKING, Union, get_type_hints, Set
 
-import WeatherUnits as wu
+import unitcorn as wu
 from LevityDash.lib.plugins import Container
 from LevityDash.lib.plugins.observation import TimeHash
 from LevityDash.lib.ui import Color
@@ -856,7 +856,7 @@ class Text(QGraphicsPathItem):
 		# 	refreshTask = getattr(self, 'refreshTask', None)
 		# 	if refreshTask is not None:
 		# 		refreshTask.cancel()
-			# TODO: change this to properly use abs once WeatherUnits has it implemented
+			# TODO: change this to properly use abs once unitcorn has it implemented
 			# if wu.Time.Minute(abs(value.minute)) < wu.Time.Minute(1):
 			# 	self.refreshTask = loop.call_later(1, self.refresh)
 			# elif wu.Time.Hour(abs(value.hour)) < wu.Time.Hour(1):

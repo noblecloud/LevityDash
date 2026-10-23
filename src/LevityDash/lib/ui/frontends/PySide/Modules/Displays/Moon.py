@@ -18,7 +18,7 @@ from LevityDash.lib.utils.shared import now
 from LevityDash.lib.stateful import StateProperty
 from LevityDash.lib.config import userConfig
 from LevityDash.lib.ui import UILogger
-from WeatherUnits import Angle, Time, Percentage
+from unitcorn import Angle, Time, Percentage
 
 
 __all__ = ["Moon"]

@@ -6,7 +6,7 @@ back in memory - that's the actual thing 4.1 needs proven.
 """
 import json
 
-import WeatherUnits as wu
+import unitcorn as wu
 
 # Import something from LevityDash BEFORE `datetime` - LevityDash/__init__.py
 # installs shims/_datetime_shim (sys.modules['datetime'] gets replaced with a
@@ -92,7 +92,7 @@ def test_measurement_roundtrip_preserves_unit():
 
 
 def test_decode_measurement_restores_ts_when_present():
-	# Concrete WeatherUnits units (Fahrenheit.__new__(cls, value)) don't
+	# Concrete unitcorn units (Fahrenheit.__new__(cls, value)) don't
 	# accept a timestamp through their public constructor, so this exercises
 	# encode_measurement's optional 'ts' field and decode_measurement's
 	# restoration of it directly, at the payload level, rather than trying
@@ -109,7 +109,7 @@ def test_encode_measurement_omits_ts_when_absent():
 
 
 def test_measurement_unknown_unit_degrades_to_plain_float_not_exception():
-	# A payload claiming a class/unit this WeatherUnits version doesn't
+	# A payload claiming a class/unit this unitcorn version doesn't
 	# recognize (e.g. a frontend running behind a newer backend) must not
 	# take down the whole message - see decode_measurement's docstring.
 	payload = {'value': 42.0, 'unit': 'not-a-real-unit', 'cls': 'NotARealClass'}
@@ -265,7 +265,7 @@ def test_parametrized_derived_unit_survives_the_round_trip():
 		f'degraded to a bare float: {decoded!r}'
 	# Asserts the reconstructed TYPE, not a rendered string - how it renders
 	# depends on the app's [UnitProperties] config (precision/max/leadingZero),
-	# which is a formatting concern covered by WeatherUnits' own suite.
+	# which is a formatting concern covered by unitcorn's own suite.
 	assert decoded.unit == 'in/hr'
 	assert abs(float(decoded) - 0.0416496062992126) < 1e-9
 
@@ -324,7 +324,7 @@ def test_symbol_resolution_is_deterministic_without_a_type():
 
 
 def test_a_metres_per_second_rate_survives_the_round_trip():
-	from WeatherUnits import Length, Time
+	from unitcorn import Length, Time
 	speed = Length.Meter(10) / Time.Second(2)
 	back = decode_measurement(encode_measurement(speed))
 	assert back.unit == 'm/s' and float(back) == 5
@@ -332,7 +332,7 @@ def test_a_metres_per_second_rate_survives_the_round_trip():
 
 def test_a_compound_value_and_a_period_survive_the_round_trip():
 	from datetime import timedelta
-	from WeatherUnits import Length
+	from unitcorn import Length
 	area = Length.Meter(2) * Length.Meter(3)
 	area.period = timedelta(hours=1)
 	back = decode_measurement(encode_measurement(area))

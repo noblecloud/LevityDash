@@ -23,7 +23,7 @@ from LevityDash.lib.ui.colors import theme
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import CentralPanelContextMenu
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.utils import BusyContext, ActionPool
-from WeatherUnits import Time
+from unitcorn import Time
 from .. import UILogger as guiLog
 
 log = guiLog.getChild(__name__)

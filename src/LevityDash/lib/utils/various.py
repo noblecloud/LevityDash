@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Union
 
-import WeatherUnits as wu
+import unitcorn as wu
 from .shared import now
 
 

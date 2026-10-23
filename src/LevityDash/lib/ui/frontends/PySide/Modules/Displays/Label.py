@@ -22,7 +22,7 @@ from LevityDash.lib.ui.frontends.PySide.utils import addRect, DebugPaint
 from LevityDash.lib.ui.Geometry import Alignment, AlignmentFlag, Geometry, parseSize, Position, Size, Margins
 from LevityDash.lib.ui.icons import getIcon, Icon
 from LevityDash.lib.utils import clearCacheAttr
-from WeatherUnits.length import Length
+from unitcorn.length import Length
 
 log = guiLog.getChild(__name__)
 

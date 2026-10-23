@@ -44,7 +44,7 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.bar import Bar
 from statekit.actions import ActionPool
 from statekit.binding import Constant
 from qolkit import Unset
-import WeatherUnits as wu
+import unitcorn as wu
 
 __all__ = ['DataPreset', 'DATA_PRESETS', 'presetForKey', 'StudioScene', 'StudioStage', 'StudioGauge', 'installSources']
 
@@ -100,7 +100,7 @@ def _linear(convert: Callable[[float], float]):
 
 
 def _wu(cls: Callable, make: Callable[[float], Any]):
-	"""A conversion from the preset's own unit to `cls`, done by WeatherUnits."""
+	"""A conversion from the preset's own unit to `cls`, done by unitcorn."""
 	return _linear(lambda v: float(cls(make(v))))
 
 

@@ -1,11 +1,11 @@
 import re
 
 from LevityDash.lib.plugins.schema.units import unitDict
-from WeatherUnits import Measurement, Time
+from unitcorn import Measurement, Time
 from LevityDash.lib import config, utils
 
 from LevityDash.lib.log import LevityPluginLog as logging
-from WeatherUnits.defaults.WeatherFlow import UDPClasses
+from unitcorn.defaults.WeatherFlow import UDPClasses
 
 log = logging.getLogger(__name__)
 
