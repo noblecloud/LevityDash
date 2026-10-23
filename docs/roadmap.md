@@ -138,7 +138,7 @@ Triaged from `_planned-features.md`, grouped by area. ~~Struck~~ items are alrea
   - Regular sources can declare their period. **Irregular ones (BLE, push) should infer it** from observed update intervals — a rolling median of recent gaps, so the threshold adapts instead of being guessed. That also makes the indicator meaningful: it then means "this source has gone quiet relative to its own habits", which is the thing worth knowing.
   - Related: the backend now tracks `lastPublish` per plugin for the control plane (`lib/wire/messages.py`), which is the same measurement one layer up — worth sharing the inference rather than computing staleness twice.
 - ~~**Graph Y-axis labeling**~~ — done 2026-10-23: `y-axis:` on a figure ([value axis](config/dashboard.md#value-axis)). Still open: more than one axis per figure and an axis in the unit the user reads.
-- **Carousel-style direction display** — `[w N e]` sliding compass.
+- ~~**Carousel-style direction display**~~ — **done 2026-10-23**: `type: polar`, `plot: carousel` is a strip of compass letters that slides the short way round so the current direction stays under a pointer (`view:` degrees across, `compass:`, `legend:` for the bearing). Example: `docs/design-references/presets/polar-carousel.levity`. Not done: a preset card.
 - **String plots with a placement key** — plot glyph/condition strings positioned by a second key; combined with position-matched offset plots this enables mini forecast infographics.
 - **Items menu with live preview** — insert menu shows a summary + two-day mini graph per item.
 - **Duotone / two-color icons** — `fa:`/`mdi:`/`wi:` packs exist, single-color only.
