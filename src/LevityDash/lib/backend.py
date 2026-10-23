@@ -149,6 +149,12 @@ def main() -> int:
 	control.start(int(_HEARTBEAT_INTERVAL * 1000))
 	QTimer.singleShot(50, bridge.tick)  # first beat without waiting a full interval
 
+	# Watchdog: a plugin that is running but has stopped publishing is logged, and with
+	# `[Backend] watchdog = restart` stopped and started again. See lib/plugins/watchdog.py.
+	from LevityDash.lib.plugins.patrol import Patrol, policyFromConfig
+	patrol = Patrol(LevityDashboard.plugins, policyFromConfig(userConfig, log), log, lastPublish=bridge._lastPublish)
+	bridge.healthSource = patrol.health
+
 	code = app.exec()
 
 	try:

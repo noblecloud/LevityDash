@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
 from LevityDash.devtools import _studio_editors as editors
 from LevityDash.devtools import _studio_groups as groups
 from LevityDash.devtools._studio_groups_tab import GroupsTab
+from LevityDash.devtools._studio_keys_tab import KEY_MIME, KeysTab
 from LevityDash.devtools import _yamlpatch as yamlpatch
 from LevityDash.lib.ui.colors import theme
 from LevityDash.devtools import _studio_layout as layout
@@ -640,17 +641,33 @@ class ItemTree(QTreeWidget):
 
 	moved = Signal(tuple, tuple, int)  # path, new parent's path, index in it
 	left = Signal()  # the pointer left the tree
+	keyDropped = Signal(tuple, str)  # item path, key dragged from the Keys tab
 
 	def __init__(self):
 		super().__init__()
 		self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
 		self.setDefaultDropAction(Qt.DropAction.MoveAction)
 
+	def dragEnterEvent(self, event):
+		if event.mimeData().hasFormat(KEY_MIME):
+			return event.acceptProposedAction()
+		super().dragEnterEvent(event)
+
+	def dragMoveEvent(self, event):
+		if event.mimeData().hasFormat(KEY_MIME):
+			return event.acceptProposedAction()
+		super().dragMoveEvent(event)
+
 	def leaveEvent(self, event):
 		self.left.emit()
 		super().leaveEvent(event)
 
 	def dropEvent(self, event):
+		if event.mimeData().hasFormat(KEY_MIME):
+			row = self.itemAt(event.position().toPoint())
+			if row is not None:
+				self.keyDropped.emit(row.data(0, Qt.ItemDataRole.UserRole), bytes(event.mimeData().data(KEY_MIME)).decode())
+			return event.acceptProposedAction()
 		source, target = self.currentItem(), self.itemAt(event.position().toPoint())
 		event.ignore()
 		if source is None or target is None:
@@ -670,6 +687,8 @@ class Stage(QWidget):
 	selected = Signal(tuple)
 	dragged = Signal(tuple, dict)  # path, geometry in % of the parent
 	dragDone = Signal()
+	parentAsked = Signal()  # Esc: select the selected item's parent
+	keyDropped = Signal(tuple, str)  # item path, key dragged from the Keys tab
 
 	HANDLE = 9
 	SNAP = 6  # view pixels
@@ -692,11 +711,30 @@ class Stage(QWidget):
 		self.setMinimumSize(320, 220)
 		self.setMouseTracking(True)
 		self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+		self.setAcceptDrops(True)
+
+	def dragEnterEvent(self, event):
+		if event.mimeData().hasFormat(KEY_MIME):
+			event.acceptProposedAction()
+
+	def dragMoveEvent(self, event):
+		if event.mimeData().hasFormat(KEY_MIME):
+			self.setHover(self.hit(self._toScene(event.position())))
+			event.acceptProposedAction()
+
+	def dropEvent(self, event):
+		hit = self.hit(self._toScene(event.position()))
+		self.setHover(None)
+		if hit is not None and event.mimeData().hasFormat(KEY_MIME):
+			self.keyDropped.emit(hit, bytes(event.mimeData().data(KEY_MIME)).decode())
+			event.acceptProposedAction()
 
 	def keyPressEvent(self, event):
 		"""Arrow keys move the selected item by 1% of its parent; Shift 5%, Alt 0.1%."""
 		if event.key() == Qt.Key.Key_0:
 			return self.resetView()
+		if event.key() == Qt.Key.Key_Escape:
+			return self.parentAsked.emit()
 		step = {Qt.Key.Key_Left: (-1, 0), Qt.Key.Key_Right: (1, 0), Qt.Key.Key_Up: (0, -1), Qt.Key.Key_Down: (0, 1)}.get(event.key())
 		rect = self.rects.get(self.path) if self.path else None
 		if step is None or rect is None or not self.movable:
@@ -1531,6 +1569,9 @@ class Builder(QWidget):
 		self.stage.dragged.connect(self._dragged)
 		self.snapBox.toggled.connect(lambda on: setattr(self.stage, 'snap', on))
 		self.stage.dragDone.connect(self._dragDone)
+		self.stage.parentAsked.connect(self.selectParent)
+		self.stage.keyDropped.connect(self._keyDropped)
+		self.tree.keyDropped.connect(self._keyDropped)
 		mbox.addWidget(self.stage, 1)
 		self.status = QLabel()
 		self.status.setWordWrap(True)
@@ -1545,10 +1586,12 @@ class Builder(QWidget):
 		self.yamlView = QPlainTextEdit()
 		self.yamlView.setReadOnly(True)
 		self.groupsTab = GroupsTab(self)
+		self.keysTab = KeysTab(self)
 		self.tabs.addTab(self.itemTab, 'Item')
 		self.tabs.addTab(self.propsTab, 'Properties')
 		self.tabs.addTab(self.instanceTab, 'Instance')
 		self.tabs.addTab(self.groupsTab, 'Size groups')
+		self.tabs.addTab(self.keysTab, 'Keys')
 		self.tabs.addTab(self.yamlView, 'YAML')
 		self.tabs.setMinimumWidth(440)
 		self.tabs.currentChanged.connect(lambda _: self.refreshYaml())
@@ -1892,7 +1935,17 @@ class Builder(QWidget):
 			self._selectRow()
 		self.itemTab.load(path)
 		self.groupsTab.selectionChanged()
+		self.keysTab.selectionChanged()
 		self._syncStage()
+
+	def selectParent(self):
+		"""Select the selected item's parent container; a top-level item has none, so nothing changes."""
+		if self.selection and len(self.selection) > 1:
+			self.select(self.selection[:-1])
+	def _keyDropped(self, path: tuple, key: str):
+		"""A key from the Keys tab landed on an item: select it and set its key."""
+		if not self.keysTab.useText(key, path):
+			self.status.setText('That item takes no key: drop it on a realtime or graph item.')
 
 	def _movable(self) -> bool:
 		if not self.selection:
@@ -2000,6 +2053,18 @@ class Builder(QWidget):
 		self._syncStage()
 		self.schedule()
 
+	def resetGeometry(self):
+		"""Remove the selected item's `geometry`, so its parent places and sizes it again."""
+		node = self.piece.node(self.selection) if self.selection else None
+		if node is None or 'geometry' not in node:
+			self.status.setText('This item has no geometry to reset')
+			return
+		self.push()
+		model.setField(node, 'geometry', None)
+		self.rebuildAll()
+		self._syncStage()
+		self.schedule()
+
 	def copyItem(self):
 		"""Put the selected item on the clipboard as the YAML a `.levity` would hold, so it pastes here, into another Studio, or into a file."""
 		raw = self.piece.raw(self.selection) if self.selection else None
@@ -2036,6 +2101,8 @@ class Builder(QWidget):
 		menu.addAction('Paste', self.pasteItem, QKeySequence.StandardKey.Paste)
 		menu.addAction('Duplicate', self.duplicateItem, QKeySequence('Ctrl+D'))
 		menu.addAction('Delete', self.deleteItem, QKeySequence.StandardKey.Delete)
+		menu.addAction('Select parent', self.selectParent, QKeySequence('Esc'))
+		menu.addAction('Reset geometry', self.resetGeometry)
 		align = menu.addMenu('Align in parent')
 		for how in self.ALIGN:
 			align.addAction(how, lambda h=how: self.alignItem(h))

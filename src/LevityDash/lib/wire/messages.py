@@ -195,6 +195,9 @@ class PluginState(NamedTuple):
 	#: internals - the backend already sees every publish, and nothing on
 	#: Plugin tracks this today.
 	lastPublish: Optional[datetime] = None
+	#: The backend watchdog's verdict (`ok`, `quiet` or `silent`; see lib/plugins/watchdog.py), or '' when it has none
+	#: (the watchdog is off, the plugin is stopped, or the backend is older).
+	health: str = ''
 
 
 def plugin_key_count(plugin: Any) -> int:
@@ -218,7 +221,7 @@ def plugin_key_count(plugin: Any) -> int:
 	return 0
 
 
-def encode_plugin_status(*, plugins: Sequence[Any], lastPublish: Optional[dict] = None) -> dict:
+def encode_plugin_status(*, plugins: Sequence[Any], lastPublish: Optional[dict] = None, health: Optional[dict] = None) -> dict:
 	"""Build a 'plugin_status' message from live plugin objects.
 
 	Attributes are read duck-typed (``name``/``enabled``/``running``, and
@@ -227,6 +230,7 @@ def encode_plugin_status(*, plugins: Sequence[Any], lastPublish: Optional[dict] 
 	takes for containers.
 	"""
 	lastPublish = lastPublish or {}
+	health = health or {}
 	entries = []
 	for plugin in plugins:
 		name = getattr(plugin, 'name', None)
@@ -240,6 +244,7 @@ def encode_plugin_status(*, plugins: Sequence[Any], lastPublish: Optional[dict] 
 			'running': bool(getattr(plugin, 'running', False)),
 			'keyCount': keyCount,
 			'lastPublish': encode_value(published) if isinstance(published, datetime) else None,
+			'health': health.get(name) or '',
 		})
 	return {
 		'v': WIRE_VERSION,
@@ -265,6 +270,7 @@ def parse_plugin_status(message: dict) -> Dict[str, PluginState]:
 				running=bool(entry.get('running', False)),
 				keyCount=int(entry.get('keyCount') or 0),
 				lastPublish=decode_value(published) if published is not None else None,
+				health=str(entry.get('health') or ''),
 			)
 		except Exception as e:
 			log.warning(f'skipping malformed plugin_status entry {entry!r}: {e!r}')

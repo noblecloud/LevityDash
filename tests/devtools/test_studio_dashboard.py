@@ -357,7 +357,8 @@ def test_dropping_a_tree_row_onto_a_container_moves_it_in(board):
 	win.tree.dropIndicatorPosition = lambda: QAbstractItemView.DropIndicatorPosition.OnItem
 	before = yaml.safe_dump(win.piece.template, sort_keys=False)
 	at = QPointF(win.tree.visualItemRect(target).center())
-	win.tree.dropEvent(QDropEvent(at, Qt.DropAction.MoveAction, QMimeData(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
+	mime = QMimeData()  # the event does not own it; a temporary would be freed under the drop handler
+	win.tree.dropEvent(QDropEvent(at, Qt.DropAction.MoveAction, mime, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
 	assert yaml.safe_dump(win.piece.template, sort_keys=False) != before
 	win.undo()
 	assert yaml.safe_dump(win.piece.template, sort_keys=False) == before
@@ -413,6 +414,17 @@ def test_align_sets_x_or_y_from_the_item_and_parent_size(board):
 	assert win.piece.node(target)['geometry']['x'] == '0%'
 	win.undo()
 	assert win.piece.node(target)['geometry']['x'] == '30%'
+
+
+def test_select_parent_walks_up_and_stops_at_the_top(board):
+	win, path = board('station')
+	deep = next(p for p, n in win.piece.walk() if len(p) >= 3)
+	win.select(deep)
+	win.selectParent()
+	assert win.selection == deep[:-1]
+	win.select(deep[:1])
+	win.selectParent()
+	assert win.selection == deep[:1]
 
 
 def test_stage_zoom_keeps_the_point_under_the_pointer_and_resets(board):
@@ -521,3 +533,16 @@ def test_tree_keeps_folded_rows_across_an_edit_and_folds_all(board):
 	assert not win.collapsed
 	win.rebuildTree()
 	assert win.tree.topLevelItem(0).child(0).isExpanded()
+
+
+def test_reset_geometry_removes_it_in_one_undo_step(board):
+	win, path = board('station')
+	target = next(p for p, n in win.piece.walk() if len(p) >= 2 and 'geometry' in n and not m.opaque(n))
+	geometry = dict(win.piece.node(target)['geometry'])
+	win.select(target)
+	win.resetGeometry()
+	assert 'geometry' not in win.piece.node(target)
+	win.resetGeometry()  # nothing left to reset: no new undo step
+	assert len(win.history) == 1
+	win.undo()
+	assert win.piece.node(target)['geometry'] == geometry
