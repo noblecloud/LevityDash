@@ -33,6 +33,7 @@ from LevityDash.lib.log import debug
 from LevityDash.lib.stateful import DefaultGroup, Stateful, StateProperty
 from LevityDash.lib.ui import UILogger as log
 from LevityDash.lib.ui.Groups import SizeGroup
+from LevityDash.lib.ui.bound_number import BoundNumber, NumberSlots, decodeNumber
 from LevityDash.lib.ui.colors import Color
 from LevityDash.lib.ui.Geometry import (
 	AlignmentFlag, Dimension, Edge, Geometry, LocationFlag, Margins, Padding, parseSize, polygon_area, Position, Size,
@@ -795,6 +796,40 @@ class Panel(_Panel, Stateful, tag='group'):
 			# A stack closes up around an item that is not shown.
 			if (relayout := getattr(self.parentItem(), '_reflowShown', None)) is not None:
 				relayout()
+
+	@StateProperty(key='opacity', default=1.0, allowNone=False, sortOrder=52)
+	def itemOpacity(self) -> float | BoundNumber:
+		"""How opaque the item and everything in it is, 0 to 1. A mapping `{of, from, to}` makes it follow a value (`ui/bound_number.py`)."""
+		return self._boundOpacity or self.opacity()
+
+	@itemOpacity.setter
+	def itemOpacity(self, value: float | BoundNumber):
+		start = self.numbers.follow(self, 'opacity', value, self._setOpacityClamped)
+		self._boundOpacity = value if isinstance(value, BoundNumber) else None
+		if self._boundOpacity is None:
+			self._setOpacityClamped(value)
+		elif start is not None:
+			self._setOpacityClamped(start)
+
+	@itemOpacity.decode
+	def itemOpacity(self, value: int | float | str | dict) -> float | BoundNumber:
+		return decodeNumber(value, float)
+
+	@itemOpacity.encode
+	def itemOpacity(self, value) -> float | dict:
+		return dict(value.spec) if isinstance(value, BoundNumber) else value
+
+	_boundOpacity: BoundNumber | None = None
+
+	def _setOpacityClamped(self, value: float) -> None:
+		self.setOpacity(min(1.0, max(0.0, value)))
+
+	@property
+	def numbers(self) -> NumberSlots:
+		"""The settings of this item that follow a value (`ui/bound_number.py`)."""
+		if (slots := self.__dict__.get('_numberSlots')) is None:
+			slots = self._numberSlots = NumberSlots(type(self).__name__)
+		return slots
 
 	@StateProperty(key='when', default=None, allowNone=True, sortOrder=51)
 	def when(self) -> Optional[str | bool]:
@@ -2017,6 +2052,8 @@ class Panel(_Panel, Stateful, tag='group'):
 			self._saveAs()
 
 	def delete(self):
+		if (slots := self.__dict__.get('_numberSlots')) is not None:
+			slots.releaseAll()
 		for item in self.childItems():
 			if hasattr(item, 'delete'):
 				item.delete()

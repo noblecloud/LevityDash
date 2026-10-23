@@ -11,6 +11,7 @@
 	- [Application](config/app.md "Application Configuration")
 	- [Dashboards](config/dashboard.md)
 		- [Themes](config/dashboard/themes.md)
+		- [Bindings](config/dashboard/bindings.md)
 		- [Variables](config/dashboard/variables.md)
 		- [Presets](config/dashboard/presets.md)
 		- [Size groups](config/dashboard/size-groups.md)
