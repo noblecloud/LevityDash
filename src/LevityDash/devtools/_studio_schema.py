@@ -335,7 +335,8 @@ def _classify(prop: StateProperty, raw: Any, owner: Stateful) -> Optional[Field]
 			text = saved(prop, member, owner)
 			choices.append((text if isinstance(text, str) else str(member.name), text if isinstance(text, (str, int, float)) else member.name))
 		return Field((), 'enum', choices=choices)
-	if any(r.__name__ == 'Color' for r in returns) or type(raw).__name__ == 'Color':
+	colours = ('Color', 'BoundColor', 'LiveColor')
+	if any(r.__name__ in colours for r in returns) or type(raw).__name__ in colours:
 		return Field((), 'color')
 	# A temperature, speed or other measurement on a gauge scale: a number in the gauge's unit.
 	if isinstance(raw, wu.Measurement) and not isinstance(raw, (wu.Percentage, wu.Length)):

@@ -37,6 +37,7 @@ from LevityDash.lib.stateful import Binding, SourceType, StateProperty, Stateful
 from LevityDash.lib.stateful_mixins import ColorGradientMixin
 from LevityDash.lib.ui import Color, Gradient, UILogger
 from LevityDash.lib.ui.colors import theme
+from LevityDash.lib.ui.colors.bound import BoundColor, decodeColor
 from LevityDash.lib.ui.glow import Glow, GlowMixin, paintGlow, resolveGlow
 from LevityDash.lib.ui.Geometry import (
 	Alignment, AlignmentFlag, Dimension, DimensionType, DisplayPosition, RelativeFloat, Size, UnitDisplayPosition,
@@ -2587,16 +2588,16 @@ class Needle(GlowMixin, StatefulGaugePathItem):
 		return getattr(self, '_color', None)
 
 	@color.setter
-	def color(self, value: Color | None):
-		self._color = value
+	def color(self, value: Color | BoundColor | None):
+		self._color = self.gauge.colors.adopt(self, 'color', value)
 
 	@color.decode
-	def color(self, value) -> Color | None:
-		return None if value is None else Color.decode(value)
+	def color(self, value) -> Color | BoundColor | None:
+		return None if value is None else decodeColor(value)
 
 	@color.encode
-	def color(self, value: Color | None) -> str | None:
-		return None if value is None else str(value)
+	def color(self, value) -> str | dict | None:
+		return self.gauge.colors.spec(value)
 
 	@staticmethod
 	def _optionalSize(parse, value):
@@ -2699,15 +2700,15 @@ class Needle(GlowMixin, StatefulGaugePathItem):
 
 	@hubColor.setter
 	def hubColor(self, value):
-		self._hubColor = value
+		self._hubColor = self.gauge.colors.adopt(self, 'hub-color', value)
 
 	@hubColor.decode
-	def hubColor(self, value):
-		return None if value is None else Color.decode(value)
+	def hubColor(self, value) -> Color | BoundColor | None:
+		return None if value is None else decodeColor(value)
 
 	@hubColor.encode
 	def hubColor(self, value):
-		return None if value is None else str(value)
+		return self.gauge.colors.spec(value)
 
 	@StateProperty(key='hub-hole', default=None, allowNone=True, after=refresh)
 	def hubHole(self) -> float | None:
@@ -2749,15 +2750,15 @@ class Needle(GlowMixin, StatefulGaugePathItem):
 
 	@haloColor.setter
 	def haloColor(self, value):
-		self._haloColor = value
+		self._haloColor = self.gauge.colors.adopt(self, 'halo-color', value)
 
 	@haloColor.decode
-	def haloColor(self, value):
-		return None if value is None else Color.decode(value)
+	def haloColor(self, value) -> Color | BoundColor | None:
+		return None if value is None else decodeColor(value)
 
 	@haloColor.encode
 	def haloColor(self, value):
-		return None if value is None else str(value)
+		return self.gauge.colors.spec(value)
 
 	@StateProperty(key='animate', default=0, allowNone=False, after=refresh)
 	def animate(self) -> float:
@@ -3259,7 +3260,7 @@ class GaugeMarker(Needle):
 	"""
 
 	_markerValue = None
-	_markerColor: Optional[QColor] = None
+	_markerColor = None
 	_binding: Optional[Binding] = None
 	_warned = False
 	_clockTimer: Optional[QTimer] = None
@@ -3279,7 +3280,7 @@ class GaugeMarker(Needle):
 			self.setItemState(visual)
 
 		if (color := spec.get('color')) is not None:
-			self._markerColor = Color.decode(color).QColor
+			self._markerColor = self.gauge.colors.slot(color, self, 'color')
 
 		if spec.get('time') is not None:
 			self._followClock(spec['time'], spec.get('at'))
@@ -3299,6 +3300,7 @@ class GaugeMarker(Needle):
 		self.refresh()
 
 	def close(self):
+		self.gauge.colors.release(self)
 		self._stopAnimation()
 		if self._clockTimer is not None:
 			self._clockTimer.stop()
@@ -3384,7 +3386,7 @@ class GaugeMarker(Needle):
 	def refresh(self):
 		gauge = self.gauge
 		self.resetTransform()
-		self.setBrush(QBrush(gauge.defaultColor if self._markerColor is None else self._markerColor))
+		self.setBrush(QBrush(gauge.defaultColor if self._markerColor is None else self._markerColor.QColor))
 		self.draw()
 		angle = self._markerAngle()
 		if angle is None:
@@ -3420,11 +3422,13 @@ class GaugeZones(GaugeItem, QGraphicsItem):
 		self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemHasNoContents, False)
 
 	def close(self):
+		self.gauge.colors.release(self)
 		self._zones = []
 		self._strokes = []
 
 	def configure(self, specs: Sequence) -> list:
 		"""Validate ``specs``; keep the good ones. Returns the plain mappings kept."""
+		self.close()
 		name = gaugeKeyName(self.gauge)
 		zones, kept = [], []
 		for spec in specs:
@@ -3445,7 +3449,7 @@ class GaugeZones(GaugeItem, QGraphicsItem):
 					ends.append(float(raw))
 				if spec.get('color') is None:
 					raise ValueError('a zone needs a color')
-				color = Color.decode(spec['color']).QColor
+				color = self.gauge.colors.slot(spec['color'], self, len(zones))
 				weight = None
 				if (raw := spec.get('weight')) is not None:
 					weight = parseWidth(raw, None)
@@ -3474,7 +3478,7 @@ class GaugeZones(GaugeItem, QGraphicsItem):
 			except Exception:
 				continue
 			if lo - 1e-9 <= angle <= hi + 1e-9:
-				found = zone['color']
+				found = zone['color'].QColor
 		return found
 
 	def colorAt(self, value) -> Optional[QColor]:
@@ -3516,7 +3520,7 @@ class GaugeZones(GaugeItem, QGraphicsItem):
 				path = QPainterPath()
 				path.arcMoveTo(rect, -a + 90)
 				path.arcTo(rect, -a + 90, -(b - a))
-				pen = QPen(zone['color'], weight)
+				pen = QPen(zone['color'].QColor, weight)
 				pen.setCapStyle(Qt.PenCapStyle.FlatCap)
 				glow = resolveGlow(zone['glow'], gauge.glow)
 				self._strokes.append((path, pen, glow))
@@ -3596,6 +3600,7 @@ class GaugeFill(GaugePathItem):
 
 	def close(self):
 		"""Unlink the bindings, which releases the value sources."""
+		self.gauge.colors.release(self)
 		bindings = self._bindings
 		self._bindings, self._pending = [], set()
 		for binding in bindings:
@@ -3659,7 +3664,7 @@ class GaugeFill(GaugePathItem):
 			if isinstance(spec.get('color'), str) and spec['color'].strip().lower() == 'zone':
 				self._colorFromZones = True
 			elif (color := spec.get('color')) is not None:
-				self._color = Color.decode(color).QColor
+				self._color = self.gauge.colors.slot(color, self, 'color')
 			if (segments := spec.get('segments')) is not None:
 				if isinstance(segments, bool) or not isinstance(segments, int) or segments < 1:
 					raise TypeError(f'segments must be a whole number of 1 or more, not {segments!r}')
@@ -3727,7 +3732,7 @@ class GaugeFill(GaugePathItem):
 		weight = gauge.sizeAcross(self._weight, dimension=DimensionType.width) if self._weight is not None else gauge.arc.weight_px
 		rect = gauge.arc.centered_gauge_rect
 		zones = gauge._zonesItem
-		base = gauge.defaultColor if self._color is None else self._color
+		base = gauge.defaultColor if self._color is None else self._color.QColor
 		strokes = []
 		radius = rect.width() / 2 or 1
 		# A round or square cap reaches half the weight past the end of its
@@ -3885,6 +3890,7 @@ class GaugeCaption(GlowMixin, GaugePathItem, Stateful):
 		self.hide()
 
 	def close(self):
+		self.gauge.colors.release(self)
 		if self._binding is not None:
 			self._binding.unlink()
 			self._binding = None
@@ -3926,7 +3932,7 @@ class GaugeCaption(GlowMixin, GaugePathItem, Stateful):
 		self._format = spec.get('format')
 		self._size = parseHeight(spec.get('size', '7%'), None)
 		self._gap = parseHeight(spec.get('gap', '2%'), None)
-		self._color = Color.decode(spec['color']).QColor if spec.get('color') is not None else None
+		self._color = self.gauge.colors.slot(spec['color'], self, 'color') if spec.get('color') is not None else None
 		self._bold = str(spec.get('weight', '')).lower() == 'bold'
 		raw = spec.get('value')
 		if raw is not None:
@@ -3981,7 +3987,7 @@ class GaugeCaption(GlowMixin, GaugePathItem, Stateful):
 		self.setTransform(QTransform().scale(scale, scale))
 		self.setRotation(place.rotation)
 		self.setPos(place.point)
-		color = self._color
+		color = None if self._color is None else self._color.QColor
 		if color is None:
 			color = QColor(gauge.defaultColor)
 			color.setAlphaF(0.65)
@@ -4025,7 +4031,7 @@ class GaugeCaption(GlowMixin, GaugePathItem, Stateful):
 			self.prepareGeometryChange()
 			self.setPath(path)
 			self.setPos(x, y)
-			color = self._color
+			color = None if self._color is None else self._color.QColor
 			if color is None:
 				color = QColor(gauge.defaultColor)
 				color.setAlphaF(0.65)
