@@ -203,36 +203,37 @@ items:
     - {type: realtime.text, key: 'at(environment.wind.speed.gust, 4h)', display: {precision: 0, format-hint: '00', valueLabel: {color: $hue-wind}}, grid: {row: 6, column: 5}}
 
   # ================= THE NEXT THREE DAYS ====================================
+  # One row per day: the low dimmed, a bar from the low to the high, the high bright, then the rain. Every bar is
+  # on the same 30 to 90°F track as the range bar at the top, so the days compare by eye before any number is read.
   - type: grid
     name: days
     grid: {area: days}
     spacing: 0
     grid:
-      columns: [1.2fr, 1fr, 1fr, 1fr, 1fr]
+      columns: [1.2fr, 0.8fr, 2fr, 0.8fr, 1fr]
       rows: [1.3fr, 1fr, 1fr, 1fr, 1fr]
       gap: [0, 24px]
     shared: *cell
     items:
     - {type: text, text: Next days, alignment: Left, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, grid: {row: 1, column: 1, column-span: 5}}
-    - {<<: *colhead, text: High, grid: {row: 2, column: 2}}
-    - {<<: *colhead, text: Low, grid: {row: 2, column: 3}}
-    - {<<: *colhead, text: Rain in, grid: {row: 2, column: 4}}
-    - {<<: *colhead, text: Gust mph, grid: {row: 2, column: 5}}
+    - {<<: *colhead, text: Low, grid: {row: 2, column: 2}}
+    - {<<: *colhead, text: High, grid: {row: 2, column: 4}}
+    - {<<: *colhead, text: Rain in, grid: {row: 2, column: 5}}
     - {<<: *rowhead, text: Thursday, grid: {row: 3, column: 1}}
+    - {type: realtime.text, key: 'at(environment.temperature.low, 1d)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $muted}}, grid: {row: 3, column: 2}}
+    - {type: realtime.bar, key: 'at(environment.temperature.high, 1d)', title: {visible: false}, grid: {row: 3, column: 3}, display: {range: {min: 30, max: 90}, track: {weight: 22%, color: $rule}, fill: {from: 'at(environment.temperature.low, 1d)', to: 'at(environment.temperature.high, 1d)', gradient: TemperatureGradient}, value-label: {visible: false}}}
+    - {type: realtime.text, key: 'at(environment.temperature.high, 1d)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}, grid: {row: 3, column: 4}}
+    - {type: realtime.text, key: 'at(environment.precipitation.daily, 1d)', display: {precision: 2, format-hint: '0.00', valueLabel: {color: $hue-rain}}, grid: {row: 3, column: 5}}
     - {<<: *rowhead, text: Friday, grid: {row: 4, column: 1}}
+    - {type: realtime.text, key: 'at(environment.temperature.low, 2d)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $muted}}, grid: {row: 4, column: 2}}
+    - {type: realtime.bar, key: 'at(environment.temperature.high, 2d)', title: {visible: false}, grid: {row: 4, column: 3}, display: {range: {min: 30, max: 90}, track: {weight: 22%, color: $rule}, fill: {from: 'at(environment.temperature.low, 2d)', to: 'at(environment.temperature.high, 2d)', gradient: TemperatureGradient}, value-label: {visible: false}}}
+    - {type: realtime.text, key: 'at(environment.temperature.high, 2d)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}, grid: {row: 4, column: 4}}
+    - {type: realtime.text, key: 'at(environment.precipitation.daily, 2d)', display: {precision: 2, format-hint: '0.00', valueLabel: {color: $hue-rain}}, grid: {row: 4, column: 5}}
     - {<<: *rowhead, text: Saturday, grid: {row: 5, column: 1}}
-    - {type: realtime.text, key: 'at(environment.temperature.high, 1d)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}, grid: {row: 3, column: 2}}
-    - {type: realtime.text, key: 'at(environment.temperature.high, 2d)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}, grid: {row: 4, column: 2}}
-    - {type: realtime.text, key: 'at(environment.temperature.high, 3d)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}, grid: {row: 5, column: 2}}
-    - {type: realtime.text, key: 'at(environment.temperature.low, 1d)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}, grid: {row: 3, column: 3}}
-    - {type: realtime.text, key: 'at(environment.temperature.low, 2d)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}, grid: {row: 4, column: 3}}
-    - {type: realtime.text, key: 'at(environment.temperature.low, 3d)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}, grid: {row: 5, column: 3}}
-    - {type: realtime.text, key: 'at(environment.precipitation.daily, 1d)', display: {precision: 2, format-hint: '0.00', valueLabel: {color: $hue-rain}}, grid: {row: 3, column: 4}}
-    - {type: realtime.text, key: 'at(environment.precipitation.daily, 2d)', display: {precision: 2, format-hint: '0.00', valueLabel: {color: $hue-rain}}, grid: {row: 4, column: 4}}
-    - {type: realtime.text, key: 'at(environment.precipitation.daily, 3d)', display: {precision: 2, format-hint: '0.00', valueLabel: {color: $hue-rain}}, grid: {row: 5, column: 4}}
-    - {type: realtime.text, key: 'at(environment.wind.speed.gustMax, 1d)', display: {precision: 0, format-hint: '00', valueLabel: {color: $hue-wind}}, grid: {row: 3, column: 5}}
-    - {type: realtime.text, key: 'at(environment.wind.speed.gustMax, 2d)', display: {precision: 0, format-hint: '00', valueLabel: {color: $hue-wind}}, grid: {row: 4, column: 5}}
-    - {type: realtime.text, key: 'at(environment.wind.speed.gustMax, 3d)', display: {precision: 0, format-hint: '00', valueLabel: {color: $hue-wind}}, grid: {row: 5, column: 5}}
+    - {type: realtime.text, key: 'at(environment.temperature.low, 3d)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $muted}}, grid: {row: 5, column: 2}}
+    - {type: realtime.bar, key: 'at(environment.temperature.high, 3d)', title: {visible: false}, grid: {row: 5, column: 3}, display: {range: {min: 30, max: 90}, track: {weight: 22%, color: $rule}, fill: {from: 'at(environment.temperature.low, 3d)', to: 'at(environment.temperature.high, 3d)', gradient: TemperatureGradient}, value-label: {visible: false}}}
+    - {type: realtime.text, key: 'at(environment.temperature.high, 3d)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}, grid: {row: 5, column: 4}}
+    - {type: realtime.text, key: 'at(environment.precipitation.daily, 3d)', display: {precision: 2, format-hint: '0.00', valueLabel: {color: $hue-rain}}, grid: {row: 5, column: 5}}
 
   # ================= THREE RINGS ===========================================
   # Each ring: the gauge, its reading in the middle (global.big) and a label under it (global.title).
