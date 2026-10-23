@@ -1,0 +1,16 @@
+# An area plot: the line's shape filled down to `base` (default 0): `plot: {type: area}`.
+# `base` is the value the fill reaches and the axis is held to include it, so a
+# temperature area with `base: 60` fills from sixty and keeps the line tall.
+# The gradient maps value to height as on a line; `opacity` softens the fill.
+- type: graph
+  name: temperature
+  timeframe: {days: 1, hours: 12}
+  annotations:
+    dayLabels: {enabled: false}
+    hourLabels: {alignment: BottomCenter}
+  figures:
+  - figure: temperature
+    margins: {bottom: 20%, top: 15%}
+    environment.temperature.temperature:
+      plot: {type: area, base: 60, gradient: TemperatureGradient, opacity: 0.6}
+      resolution: 2

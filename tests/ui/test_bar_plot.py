@@ -44,3 +44,23 @@ def test_violin_bucket_rejects_nonsense():
 
 	with pytest.raises(ValueError):
 		ViolinPlot.statefulItems['bucket'].decodeValue('soon', None)
+
+
+def test_area_names_pick_the_area_plot():
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph import AreaPlot, BarPlot, plotClassFor
+
+	for name in ('area', 'Area', 'areas', 'area-plot', 'filled'):
+		assert plotClassFor({'type': name}) is AreaPlot
+	assert AreaPlot.statefulItems['base'] is not None
+	assert BarPlot.statefulItems['base'] is not None
+
+
+def test_a_loaded_line_plot_becomes_an_area_plot_that_rises_from_its_base(dashboard):
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph import AreaPlot, GraphItemData, LinePlot
+
+	items = [i for i in dashboard.scene.items() if isinstance(i, LinePlot)]
+	assert items, 'expected the seeded dashboard to contain a line plot'
+	data: GraphItemData = items[0].data
+	GraphItemData.graphic.setState(data, {'type': 'area', 'base': 12})
+	assert isinstance(data.graphic, AreaPlot)
+	assert data.graphic.valueAnchor() == 12

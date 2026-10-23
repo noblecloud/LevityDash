@@ -680,6 +680,7 @@ class DisplayType(str, Enum, metaclass=ClosestMatchEnumMeta):
 	#: the bar itself reports `Gauge`, so the value feed that drives a dial drives it too.
 	Bar = 'meter-bar'
 	ViolinPlot = 'violin'
+	AreaPlot = 'area'
 	BarGraph = 'bargraph'
 	WindVein = 'windVein'
 	Custom = 'custom'

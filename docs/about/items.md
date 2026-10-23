@@ -26,6 +26,10 @@ Any scalar value can be plotted as a line. The line can be colored by a scalar v
 
 One bar for each sample, for amounts such as rain in each hour. A bar plot takes a gradient that follows the value.
 
+#### Area  <!-- {docsify-ignore} -->
+
+A line with the space under it filled, down to a base value.
+
 #### Violin  <!-- {docsify-ignore} -->
 
 One violin for each stretch of time. It shows how the values in the stretch are spread.
