@@ -1,0 +1,16 @@
+# overflow: auto on a stack. Eight fixed-height rows in a box that holds five: the rest is cut off, a thin bar shows where you are, and the wheel scrolls.
+items:
+  - type: stack
+    direction: Vertical
+    overflow: auto
+    spacing: 1mm
+    geometry: {x: 6%, y: 8%, width: 40%, height: 70%}
+    items:
+      - {type: realtime.text, key: environment.temperature.temperature, title: {text: Temperature}, size: 18%}
+      - {type: realtime.text, key: environment.humidity.humidity, title: {text: Humidity}, size: 18%}
+      - {type: realtime.text, key: environment.temperature.dewpoint, title: {text: Dew point}, size: 18%}
+      - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Wind}, size: 18%}
+      - {type: realtime.text, key: environment.pressure.pressure, title: {text: Pressure}, size: 18%}
+      - {type: realtime.text, key: environment.light.uvi, title: {text: UV}, size: 18%}
+      - {type: realtime.text, key: environment.temperature.heatIndex, title: {text: Heat index}, size: 18%}
+      - {type: realtime.text, key: environment.temperature.windChill, title: {text: Wind chill}, size: 18%}
