@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
-from WeatherUnits import Length, Temperature
-from WeatherUnits.derived.precipitation import PrecipitationRate
+from unitcorn import Length, Temperature
+from unitcorn.derived.precipitation import PrecipitationRate
 
 from LevityDash.lib.utils.data import _rainSpan
 

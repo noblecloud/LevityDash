@@ -2,8 +2,8 @@
 import pytest
 
 import LevityDash
-from WeatherUnits import Length, Temperature
-from WeatherUnits.derived import Wind
+from unitcorn import Length, Temperature
+from unitcorn.derived import Wind
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Realtime import MeasurementDisplayProperties
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Label import Label
 from LevityDash.lib.ui.Geometry import DisplayPosition

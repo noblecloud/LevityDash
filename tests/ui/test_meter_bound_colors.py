@@ -1,6 +1,6 @@
 """Gauge and bar colours go through one door (`ColorSlots`), so a `{scale, of}` colour follows its value anywhere."""
 import pytest
-import WeatherUnits as wu
+import unitcorn as wu
 
 from LevityDash.lib import valuesource
 from LevityDash.lib.ui.colors.bound import ColorSlots, LiveColor
