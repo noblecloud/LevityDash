@@ -5,7 +5,8 @@ from typing import TypeVar
 
 from LevityDash.lib.stateful import StateProperty, StatefulMixin
 from LevityDash.lib.ui import Color, Gradient
-from LevityDash.lib.ui.colors.bound import BoundColor, ColorFollower, decodeColor
+from LevityDash.lib.ui.colors.bound import BoundColor, decodeColor
+from LevityDash.lib.ui.follow import ValueFollower
 from LevityDash.lib.utils import defer
 
 Brush = TypeVar('Brush')
@@ -135,7 +136,7 @@ class ColorMixin(FillBrushMixin):
 		if isinstance(value, BoundColor):
 			self._boundColor = value
 			self._color = value.fallback or Color.default
-			self._colorFollower = ColorFollower(value, self._followColor, f'{type(self).__name__} color')
+			self._colorFollower = ValueFollower(value, self._followColor, f'{type(self).__name__} color')
 		else:
 			self._color = value
 
@@ -146,7 +147,7 @@ class ColorMixin(FillBrushMixin):
 		return dict(bound.spec) if bound is not None and value is self._color else value
 
 	_boundColor: BoundColor | None = None
-	_colorFollower: ColorFollower | None = None
+	_colorFollower: ValueFollower | None = None
 
 	def _followColor(self, color: Color) -> None:
 		"""A bound colour's value changed. GUI thread."""

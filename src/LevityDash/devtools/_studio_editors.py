@@ -2219,28 +2219,91 @@ class CaptionEdit(_Toggled):
 		return 'Label'
 
 
+class SizeConditionEdit(Editor):
+	"""A size condition (`lib/sizequery.py`): limits on the window's or the parent's size, and an optional `and:`."""
+
+	LIMITS = ('min-width', 'max-width', 'min-height', 'max-height')
+
+	def __init__(self):
+		super().__init__()
+		grid = QGridLayout(self)
+		grid.setContentsMargins(0, 0, 0, 0)
+		grid.setSpacing(4)
+		self.limits = {}
+		for i, name in enumerate(self.LIMITS):
+			edit = QLineEdit()
+			edit.setPlaceholderText(f'{name} (px)')
+			edit.editingFinished.connect(self._emit)
+			self.limits[name] = edit
+			grid.addWidget(edit, i // 2, i % 2)
+		self.orientation = QComboBox()
+		for label in ('any shape', 'landscape', 'portrait'):
+			self.orientation.addItem(label)
+		self.orientation.activated.connect(self._emit)
+		self.scope = QComboBox()
+		for label in ('of the window', 'of the parent'):
+			self.scope.addItem(label)
+		self.scope.activated.connect(self._emit)
+		grid.addWidget(self.orientation, 2, 0)
+		grid.addWidget(self.scope, 2, 1)
+		self.data = KeyEdit('and: environment.precipitation.precipitation > 0')
+		self.data.changed.connect(self._emit)
+		grid.addWidget(self.data, 3, 0, 1, 2)
+		self._extra = {}
+
+	def setValue(self, value):
+		value = value if isinstance(value, dict) else {}
+		with QSignalBlocker(self.orientation), QSignalBlocker(self.scope):
+			for name, edit in self.limits.items():
+				edit.setText('' if name not in value else str(value[name]))
+			self.orientation.setCurrentIndex({'landscape': 1, 'portrait': 2}.get(str(value.get('orientation', '')).lower(), 0))
+			self.scope.setCurrentIndex(1 if str(value.get('of', 'window')).lower() == 'parent' else 0)
+		self.data.setValue(value.get('and'))
+		# keys this form has no control for (the aspect limits) ride along unchanged
+		self._extra = {k: v for k, v in value.items() if k not in (*self.LIMITS, 'orientation', 'of', 'and')}
+
+	def value(self):
+		out = dict(self._extra)
+		for name, edit in self.limits.items():
+			text = edit.text().strip()
+			if text:
+				out[name] = int(text) if text.isdigit() else text
+		if self.orientation.currentIndex():
+			out['orientation'] = ('landscape', 'portrait')[self.orientation.currentIndex() - 1]
+		if self.scope.currentIndex():
+			out['of'] = 'parent'
+		if (data := self.data.value()) is not None:
+			out['and'] = data
+		return out or None
+
+
 class ConditionEdit(Editor):
 	"""`when:` and a beam's `active:` and `sweep:`: nothing, a bool, or a key or an expression."""
 
-	MODES = [('not set', None), ('always (true)', True), ('never (false)', False), ('key or expression', '')]
+	MODES = [('not set', None), ('always (true)', True), ('never (false)', False), ('key or expression', ''), ('window or parent size', {})]
 
-	def __init__(self, unsetText: str = 'not set', placeholder: str = 'environment.wind.speed.speed > 25 mph'):
+	def __init__(self, unsetText: str = 'not set', placeholder: str = 'environment.wind.speed.speed > 25 mph', size: bool = False):
 		super().__init__()
 		box = QHBoxLayout(self)
 		box.setContentsMargins(0, 0, 0, 0)
 		box.setSpacing(4)
 		self.mode = QComboBox()
-		for i, (label, _) in enumerate(self.MODES):
+		for i, (label, _) in enumerate(self.MODES[:5 if size else 4]):
 			self.mode.addItem(unsetText if i == 0 else label)
 		self.mode.activated.connect(self._modeChanged)
 		self.text = KeyEdit(placeholder)
 		self.text.changed.connect(self._emit)
+		self.size = SizeConditionEdit()
+		self.size.changed.connect(self._emit)
+		self.size.setVisible(False)
 		box.addWidget(self.mode)
 		box.addWidget(self.text, 1)
+		box.addWidget(self.size, 1)
 		self._showMode()
 
 	def _showMode(self):
 		self.text.setVisible(self.mode.currentIndex() == 3)
+		self.size.setVisible(self.mode.currentIndex() == 4)
 
 	def _modeChanged(self, _):
 		self._showMode()
@@ -2253,17 +2316,23 @@ class ConditionEdit(Editor):
 			index = 0
 		elif isinstance(value, bool):
 			index = 1 if value else 2
+		elif isinstance(value, dict):
+			index = 4 if self.mode.count() > 4 else 3
 		else:
 			index = 3
 		with QSignalBlocker(self.mode):
 			self.mode.setCurrentIndex(index)
 		self.text.setValue(str(value) if index == 3 else None)
+		if index == 4:
+			self.size.setValue(value)
 		self._showMode()
 
 	def value(self):
 		index = self.mode.currentIndex()
 		if index == 3:
 			return self.text.value()
+		if index == 4:
+			return self.size.value() or {}
 		return self.MODES[index][1]
 
 	def isEditing(self) -> bool:
@@ -2407,7 +2476,7 @@ class WhenEdit(_Popover):
 
 	def __init__(self):
 		form = _Form()
-		self.condition = form.part('when', 'when', ConditionEdit(unsetText='always shown'),
+		self.condition = form.part('when', 'when', ConditionEdit(unsetText='always shown', size=True),
 		                           'Show this item only while the condition holds. A switch picks among its children by it.')
 		hint = QLabel('A key is true when its value is not zero. An expression can use units: '
 		              'environment.temperature.temperature < 32\u00b0F. A missing value counts as false.')
@@ -2427,6 +2496,8 @@ class WhenEdit(_Popover):
 			return 'When: always shown'
 		if isinstance(v, bool):
 			return 'When: ' + ('true' if v else 'false')
+		if isinstance(v, dict):
+			return 'When: ' + (', '.join(f'{k} {x}' for k, x in v.items()) or 'a size')
 		return f'When: {v}'
 
 
