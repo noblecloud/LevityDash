@@ -901,18 +901,17 @@ class Panel(_Panel, Stateful, tag='group'):
 				relayout()
 
 	@StateProperty(key='opacity', default=1.0, allowNone=False, sortOrder=52)
-	def itemOpacity(self) -> float | BoundNumber:
-		"""How opaque the item and everything in it is, 0 to 1. A mapping `{of, from, to}` makes it follow a value (`ui/bound_number.py`)."""
-		return self._boundOpacity or self.opacity()
+	def itemOpacity(self) -> float:
+		"""How opaque the item and everything in it is, 0 to 1. A mapping `{of, from, to}` makes it follow a value (see `ui/bound_number.py`)."""
+		return self.opacity()
+
+	@itemOpacity.state
+	def itemOpacity(self):
+		return self.numbers.current(self, 'opacity', self.opacity())
 
 	@itemOpacity.setter
 	def itemOpacity(self, value: float | BoundNumber):
-		start = self.numbers.follow(self, 'opacity', value, self._setOpacityClamped)
-		self._boundOpacity = value if isinstance(value, BoundNumber) else None
-		if self._boundOpacity is None:
-			self._setOpacityClamped(value)
-		elif start is not None:
-			self._setOpacityClamped(start)
+		self.numbers.assign(self, 'opacity', value, self._setOpacityClamped)
 
 	@itemOpacity.decode
 	def itemOpacity(self, value: int | float | str | dict) -> float | BoundNumber:
@@ -920,9 +919,7 @@ class Panel(_Panel, Stateful, tag='group'):
 
 	@itemOpacity.encode
 	def itemOpacity(self, value) -> float | dict:
-		return dict(value.spec) if isinstance(value, BoundNumber) else value
-
-	_boundOpacity: BoundNumber | None = None
+		return self.numbers.spec(value)
 
 	def _setOpacityClamped(self, value: float) -> None:
 		self.setOpacity(min(1.0, max(0.0, value)))

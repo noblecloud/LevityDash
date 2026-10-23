@@ -244,7 +244,118 @@ class UnitBox(QComboBox):
 		self.setVisible(bool(CONTEXT.units))
 
 
-class NumberEdit(Editor):
+def _bind_value(text: str):
+	"""One end of `from`: a number, or a measured number kept as text (`99°F`)."""
+	try:
+		return float(text)
+	except ValueError:
+		return text.strip()
+
+
+def editBound(parent: QWidget, spec: Optional[dict]) -> Optional[Optional[dict]]:
+	"""Ask for the `{of, from, to, clamp, fallback}` mapping of a number that follows a value.
+
+	Returns the mapping, None to make the setting a plain number again, or Ellipsis when cancelled.
+	"""
+	spec = dict(spec or {})
+	dialog = QDialog(parent)
+	dialog.setWindowTitle('Number follows a value')
+	form = QFormLayout(dialog)
+	low, high = (list(spec.get('from') or ['', '']) + ['', ''])[:2]
+	start, stop = (list(spec.get('to') or ['', '']) + ['', ''])[:2]
+	fields = {
+		'of': QLineEdit('' if spec.get('of') is None else str(spec['of'])),
+		'low': QLineEdit(str(low)), 'high': QLineEdit(str(high)),
+		'start': QLineEdit(str(start)), 'stop': QLineEdit(str(stop)),
+		'fallback': QLineEdit('' if spec.get('fallback') is None else str(spec['fallback'])),
+	}
+	fields['of'].setToolTip('A key or an expression')
+	fields['low'].setToolTip('Reading at the low end; a unit is fine (32°F)')
+	fields['fallback'].setToolTip('Setting until there is a value (optional)')
+	for label, key in (('Of', 'of'), ('From, low', 'low'), ('From, high', 'high'), ('To, at low', 'start'), ('To, at high', 'stop'), ('Fallback', 'fallback')):
+		form.addRow(label, fields[key])
+	clamp = QCheckBox('Stay between the ends of To')
+	clamp.setChecked(spec.get('clamp', True))
+	form.addRow(clamp)
+	buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+	plain = buttons.addButton('Make plain', QDialogButtonBox.ButtonRole.DestructiveRole)
+	chosen = {}
+	plain.clicked.connect(lambda: (chosen.setdefault('plain', True), dialog.accept()))
+	buttons.accepted.connect(dialog.accept)
+	buttons.rejected.connect(dialog.reject)
+	form.addRow(buttons)
+	if dialog.exec() != QDialog.DialogCode.Accepted:
+		return ...
+	if chosen.get('plain'):
+		return None
+	try:
+		new = {'of': fields['of'].text().strip(), 'from': [_bind_value(fields['low'].text()), _bind_value(fields['high'].text())],
+		       'to': [float(fields['start'].text()), float(fields['stop'].text())]}
+	except ValueError:
+		return ...
+	if not new['of'] or '' in new['from']:
+		return ...
+	if not clamp.isChecked():
+		new['clamp'] = False
+	if fields['fallback'].text().strip():
+		try:
+			new['fallback'] = float(fields['fallback'].text())
+		except ValueError:
+			return ...
+	return new
+
+
+class FollowMixin:
+	"""The ⟳ button of a numeric editor: the setting follows a value, shown as a summary in place of the plain controls.
+
+	The editor lists what the plain controls are (`_plainWidgets`) and starts the mixin with `_initFollow(box)`; its
+	`value()` returns `_bound` while one is set, and its `setValue` passes a mapping to `_takeBound`.
+	"""
+	_bound: Optional[dict] = None
+
+	def _initFollow(self, box):
+		self.summary = QLabel()
+		self.summary.hide()
+		self.follow = _tool('⟳', 'Follow a value: the number takes a point of a range as a key or expression changes')
+		self.follow.setCheckable(True)
+		self.follow.clicked.connect(self._followClicked)
+		box.addWidget(self.summary, 1)
+		box.addWidget(self.follow)
+
+	def _plainWidgets(self) -> list:
+		raise NotImplementedError
+
+	def _setBound(self, spec: Optional[dict]) -> None:
+		self._bound = None if spec is None else dict(spec)
+		for widget in self._plainWidgets():
+			widget.setVisible(spec is None)
+		self.summary.setVisible(spec is not None)
+		if spec is not None:
+			low, high = spec.get('from', ['?', '?'])
+			start, stop = spec.get('to', ['?', '?'])
+			self.summary.setText(f"{spec.get('of')}: {low}…{high} → {start}…{stop}")
+			self.summary.setToolTip(str(spec))
+		with QSignalBlocker(self.follow):
+			self.follow.setChecked(spec is not None)
+
+	def _takeBound(self, value) -> bool:
+		"""Show ``value`` if it is a mapping; a plain value clears it. True when it was a mapping."""
+		bound = isinstance(value, dict) and 'of' in value
+		if bound or self._bound is not None:
+			self._setBound(value if bound else None)
+		return bound
+
+	def _followClicked(self, _checked=False):
+		result = editBound(self, self._bound or {})
+		if result is ...:
+			with QSignalBlocker(self.follow):
+				self.follow.setChecked(self._bound is not None)
+			return
+		self._setBound(result)
+		self._emit()
+
+
+class NumberEdit(FollowMixin, Editor):
 	"""A number, with an optional 'off' state (`autoText` names what off means).
 
 	A `measured` number is in the gauge's own unit (degrees F, inHg, mph). It is held in that
@@ -289,10 +400,14 @@ class NumberEdit(Editor):
 			self.unitBox = UnitBox()
 			box.addWidget(self.unitBox)
 		self._applySuffix()
+		self._initFollow(box)
 		if self.auto is not None:
 			self.spin.setEnabled(False)
 			if self.slide is not None:
 				self.slide.setEnabled(False)
+
+	def _plainWidgets(self) -> list:
+		return [w for w in (self.auto, self.slide, self.spin, self.unitBox) if w is not None]
 
 	def _fitSlider(self):
 		# The scale: the data range (in the shown unit) for a measured number, else the limits given (0 to 100 when none).
@@ -349,6 +464,8 @@ class NumberEdit(Editor):
 		self._emit()
 
 	def setValue(self, value):
+		if self._takeBound(value):
+			return
 		if self.auto is not None:
 			with QSignalBlocker(self.auto):
 				self.auto.setChecked(value is None)
@@ -365,6 +482,8 @@ class NumberEdit(Editor):
 			self.slide.showValue(None)
 
 	def value(self):
+		if self._bound is not None:
+			return dict(self._bound)
 		if self.auto is not None and self.auto.isChecked():
 			return None
 		v = self.native
@@ -374,7 +493,7 @@ class NumberEdit(Editor):
 		return self.spin.hasFocus() or (self.slide is not None and self.slide.isSliderDown())
 
 
-class SizeEdit(Editor):
+class SizeEdit(FollowMixin, Editor):
 	"""A size: a number and its unit. `nullable` adds an 'auto' box that unsets it."""
 
 	def __init__(self, nullable: bool = False, autoText: str = 'auto', units: Optional[List[str]] = None, ref: str = 'radius'):
@@ -407,10 +526,14 @@ class SizeEdit(Editor):
 		box.addWidget(self.spin)
 		box.addWidget(self.unit)
 		self._fitSlider()
+		self._initFollow(box)
 		if nullable:
 			self.spin.setEnabled(False)
 			self.unit.setEnabled(False)
 			self.slide.setEnabled(False)
+
+	def _plainWidgets(self) -> list:
+		return [w for w in (self.auto, self.slide, self.spin, self.unit) if w is not None]
 
 	#: The scale of the slider for each unit: a share of the dial, scene pixels, then physical sizes.
 	SPANS = {'%': (0.0, 100.0), 'px': (0.0, 500.0), 'mm': (0.0, 50.0), 'cm': (0.0, 5.0), 'in': (0.0, 2.0)}
@@ -461,6 +584,8 @@ class SizeEdit(Editor):
 	_unit = '%'
 
 	def setValue(self, value):
+		if self._takeBound(value):
+			return
 		with QSignalBlocker(self.spin), QSignalBlocker(self.unit):
 			if self.auto is not None:
 				with QSignalBlocker(self.auto):
@@ -483,6 +608,8 @@ class SizeEdit(Editor):
 			self._fitSlider()
 
 	def value(self):
+		if self._bound is not None:
+			return dict(self._bound)
 		if self.auto is not None and self.auto.isChecked():
 			return None
 		return f'{self.spin.value():g}{self.unit.currentText()}'
@@ -2514,6 +2641,8 @@ def make(field: 'schema.Field') -> Optional[Editor]:
 		return EXTRA[kind](field)
 	if kind == 'size':
 		return SizeEdit(nullable=field.nullable, ref='full' if field.key in ('radius', 'inset') else 'radius')
+	if kind == 'number' and field.bindable and not field.measured:
+		return NumberEdit(lo=field.lo, hi=field.hi, step=field.step, integer=field.integer)
 	if kind == 'number' and field.measured:
 		return NumberEdit(autoText='auto' if field.nullable else None, measured=True, step=field.step, unitBox=True,
 		                  integer=field.integer)
