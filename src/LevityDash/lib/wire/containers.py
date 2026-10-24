@@ -376,6 +376,8 @@ class RemoteTimeSeries:
 #: Seconds before the first retry of a refetch that got no answer; doubles up to the maximum.
 _REFETCH_RETRY_START = 15
 _REFETCH_RETRY_MAX = 300
+#: Seconds before a requester is called back after a timeseries request that left it with no series.
+_EMPTY_TS_RETRY = 5
 
 
 class RemoteContainer:
@@ -503,6 +505,13 @@ class RemoteContainer:
 		# path only calls back once MeasurementTimeSeries.update() finishes.
 		def on_response(response: Optional[dict]) -> None:
 			self._applyTsResponse(response)
+			if self._timeseries is None and not self.isTimeseriesOnly:
+				# Nothing came back (no points yet, or no connection). The requester
+				# asks again when called back, so calling back at once makes it a
+				# request loop; wait instead.
+				from LevityDash.lib.utils.shared import singleShotSafe  # deferred - Qt-side helper
+				singleShotSafe(_EMPTY_TS_RETRY * 1000, request.callback)
+				return
 			request.callback()
 
 		self._tsPeriod = self._resolve_ts_period(request)
