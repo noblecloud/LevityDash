@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
 )
 
 from LevityDash.devtools import _studio_editors as editors
+from LevityDash.devtools import _studio_graph as graphs
 from LevityDash.devtools import _studio_groups as groups
 from LevityDash.devtools._studio_groups_tab import GroupsTab
 from LevityDash.devtools._studio_keys_tab import KEY_MIME, KeysTab
@@ -96,7 +97,7 @@ def numberAlignField(node: dict, kind: str) -> Optional[str]:
 
 
 #: Fields the Item tab has a control for. Everything else an item holds goes to the "more properties" popover.
-OWNED = {'type', model.PRESET_KEY, 'name', 'key', 'text', 'color', 'direction', 'spacing', 'flex', 'grid', 'when', model.ITEMS_KEY}
+OWNED = {'type', model.PRESET_KEY, 'name', 'key', 'text', 'color', 'direction', 'spacing', 'flex', 'grid', 'when', 'figures', model.ITEMS_KEY}
 OWNED_PATHS = ['geometry.x', 'geometry.y', 'geometry.width', 'geometry.height', 'display.range.min', 'display.range.max', 'display.arc.gradient',
                *NUMBER_ALIGN_FIELDS]
 
@@ -1131,6 +1132,10 @@ class ItemTab(QWidget):
 			self._row(head, 'key', 'key', editors.KeyEdit(), value=node.get('key'))
 		if kind in ('text', 'label'):
 			self._row(head, 'text', 'text', TextEdit(), value=node.get('text'))
+		if kind in ('graph', 'mini-graph'):
+			plots = Section('Plots', expanded=True)
+			self.layout_.addWidget(plots)
+			self._row(plots, 'figures', '', graphs.GraphPlotsEdit(), bindable=False, value=node.get('figures'))
 		if kind in ('realtime.gauge', 'realtime.bar'):
 			scale = Section('Scale', expanded=True)
 			self.layout_.addWidget(scale)
@@ -1550,8 +1555,10 @@ class Builder(QWidget):
 		for kind in DISPLAYS:
 			menu.addAction(kind, lambda k=kind: self.addItem(k))
 		menu.addSection('Presets')
+		styles = menu.addMenu('Graph styles')
 		for name in lib.available():
-			menu.addAction(name, lambda n=name: self.addItem(f'preset:{n}'))
+			target = styles if name.startswith('graph-') else menu
+			target.addAction(name, lambda n=name: self.addItem(f'preset:{n}'))
 		self.addButton.setMenu(menu)
 		tools.addWidget(self.addButton)
 		moves = QHBoxLayout()
