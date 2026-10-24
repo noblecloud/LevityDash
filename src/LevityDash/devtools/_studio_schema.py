@@ -383,6 +383,9 @@ BINDABLE = {('GaugeArc', 'weight'), ('GaugeArc', 'start-angle'), ('GaugeArc', 'e
 # A `Bar` inherits the needle from `Meter` and never draws it: its pointer is the `pointer` property.
 NOT_ON_BARS = {('Bar', 'needle')}
 # Its two words-from-a-list settings are strings, which the enum introspection does not see.
+#: A bar's own mappings, each with a form of its own (`_studio_editors.TrackEdit` and the rest).
+BAR_MAPPINGS = {'track': 'bar-track', 'pointer': 'bar-pointer', 'major': 'bar-major', 'minor': 'bar-minor',
+		'value-label': 'bar-value', 'unit-label': 'bar-unit'}
 BAR_CHOICES = {'orientation': ('horizontal', 'vertical'), 'style': ('bar', 'battery', 'thermometer')}
 
 
@@ -443,6 +446,8 @@ def _refine(found: Field, prop: StateProperty, raw: Any, owner: Stateful) -> Fie
 	if ownerName == 'Bar' and key in BAR_CHOICES:
 		found.kind = 'enum'
 		found.choices = [(c, c) for c in BAR_CHOICES[key]]
+	elif ownerName == 'Bar' and key in BAR_MAPPINGS:
+		found.kind = BAR_MAPPINGS[key]
 	elif key == 'fill':
 		found.kind = 'fill'
 	elif key in ('caption', 'sub-label'):
