@@ -58,6 +58,8 @@ fill: {weight: {of: system.cpu.load, from: [0, 1], to: [0.2, 0.4]}}
 pointer: {type: dot, size: {of: system.cpu.load, from: [0, 1], to: [0.2, 0.6]}}
 ```
 
+In the Studio's gauge editor a bar's `track`, `pointer`, `major` and `minor` ticks, `value-label` and `unit-label` each have a popover form; its size rows show the ⟳ button, and anything the form has no control for (`segments: false`, unknown keys) is kept as written.
+
 The mapping is kept as written (so it saves unchanged) and followed when the bar draws, the way a colour in the same place is; `track.weight`, `zones[].weight`, `fill.weight`, `pointer.size`, marker `size`, tick `length`, `width` and `size`, and `value-label.size` take it.
 
 The Studio's gauge editor and builder show a ⟳ button beside each of these; it opens a form for `of`, `from`, `to`, `fallback` and `clamp`, and *Make plain* turns it back into a number.
