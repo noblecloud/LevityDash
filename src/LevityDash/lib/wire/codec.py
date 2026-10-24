@@ -146,7 +146,13 @@ def _resolve_measurement_class(cls_name: Optional[str], unit: Optional[str], typ
 	# the SPECIALIZED class (MilesPerHour), which builds fine. So prefer a
 	# non-generic candidate, name first, symbol second.
 	registry = UnitRegistry
-	by_name = registry._units_by_name.get(cls_name.lower()) if cls_name else None
+	# The registry files multi-word classes under a spaced lowercase name
+	# ('battery percentage'), so the bare lowercased class name misses them.
+	by_name = None
+	if cls_name:
+		by_name = registry._units_by_name.get(cls_name.lower())
+		if by_name is None:
+			by_name = registry._units_by_name.get(re.sub(r'(?<!^)(?=[A-Z])', ' ', cls_name).lower())
 	if by_name is not None and not getattr(by_name, 'isGeneric', False) and _matches_type(by_name, type_name):
 		return by_name
 	if unit:

@@ -337,3 +337,12 @@ def test_a_compound_value_and_a_period_survive_the_round_trip():
 	area.period = timedelta(hours=1)
 	back = decode_measurement(encode_measurement(area))
 	assert back.unit == 'm²' and float(back) == 6 and back.period == timedelta(hours=1)
+
+
+def test_a_battery_percentage_keeps_its_class_over_the_wire():
+	# The registry files multi-word classes under a spaced name, so 'BatteryPercentage'
+	# once resolved to nothing and arrived as a bare 0.55 instead of "55%".
+	from unitcorn.others import BatteryPercentage
+	decoded = decode_measurement(encode_measurement(BatteryPercentage(55, isPercentage=True)))
+	assert isinstance(decoded, BatteryPercentage)
+	assert str(decoded).startswith('55')
