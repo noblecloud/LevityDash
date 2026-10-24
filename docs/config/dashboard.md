@@ -1211,7 +1211,7 @@ Heads and numbers are in size groups that span the whole dashboard (`global.titl
 
 Give the row the same width as the graph (a `stack` or a `group` that holds both). With `graph:` set, each column follows the graph's real time axis. That matters because a graph starts at the earliest of `now + offset` and its oldest data, so the left edge is not always where `timeframe` says. Without `graph:`, columns sit where `timeframe` puts them. Properties: `docs` of the preset (`step`, `past`, `head`, `headFormat`, `nowLabel`, `numberAlign`, `titleGroup`, `valueGroup`, `font`). An example: `docs/design-references/hourly-row.levity`.
 
-Under it are two items you can use by themselves. `time-axis: {graph: <name>, at: 3h}` on any item centres it on that time of a graph and keeps it there as the graph scrolls or resizes (only x is set; the item keeps its size). A `clock` component takes `offset: 3h` and shows that much later (or earlier, `-90min`).
+Under it are two items you can use by themselves. `time-axis: {graph: <name>, at: 3h}` on any item centres it on that time of a graph and keeps it there as the graph scrolls or resizes (only x is set; the item keeps its size). An item that would hang over the graph's edge is hidden until it fits. A `clock` component takes `offset: 3h` and shows that much later (or earlier, `-90min`).
 
 ### <div class=mono>rotate: bool</div>
 
