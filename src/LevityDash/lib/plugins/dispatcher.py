@@ -411,7 +411,11 @@ class MultiSourceContainer(dict):
 		for container in candidates:
 			if ready(container):
 				request = Request(requester, callback)
-				if container.isTimeseriesOnly:
+				# A container that is not timeseries-only but has not fetched its
+				# series (a RemoteContainer in mode=remote) still has to be asked:
+				# calling back at once finds no series again, asks again, and so
+				# on every millisecond for as long as the display runs.
+				if container.isTimeseriesOnly or (timeseriesOnly and container.timeseries is None):
 					container.prepare_for_ts_connection(request)
 				else:
 					singleShotSafe(1, request.callback)
