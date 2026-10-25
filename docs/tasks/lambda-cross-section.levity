@@ -13,22 +13,56 @@
 # Hex colours are quoted. Unquoted, YAML reads '#' as a comment and the value becomes null.
 theme:
   extends: default
+  # One colour space: Oklch. The greys step evenly in lightness; every data hue sits at one lightness and chroma
+  # (L 0.80, C 0.17, except yellow, which needs more light to read as yellow), so no colour shouts over another.
+  # The gradients are rebuilt the same way, lightness rising with the value, so a scale also reads in grey.
   colors:
     background: '#000000'
-    muted: '#a8a8b2'
-    faint: '#6d6d78'
-    rule: '#2c2c33'
-    accent: '#ff9124'
-    good: '#14e3c0'
-    warn: '#ffd400'
-    bad: '#ff3048'
-    info: '#1a8cff'
-    rain: '#2e9bff'
-    wind: '#ffd400'
+    surface: 'oklch(0.17 0 0)'
+    text: 'oklch(0.96 0 0)'
+    muted: 'oklch(0.74 0.01 260)'
+    faint: 'oklch(0.56 0.01 260)'
+    rule: 'oklch(0.30 0.01 260)'
+    accent: 'oklch(0.80 0.17 60)'
+    good: 'oklch(0.80 0.15 170)'
+    warn: 'oklch(0.88 0.17 95)'
+    bad: 'oklch(0.70 0.20 25)'
+    info: 'oklch(0.76 0.14 245)'
+    rain: 'oklch(0.74 0.15 245)'
+    wind: 'oklch(0.88 0.17 95)'
+    cloud: 'oklch(0.86 0.03 245)'
+    cloud-2: 'oklch(0.70 0.04 245)'
+    soil: 'oklch(0.76 0.12 70)'
   fonts:
-    display: Nunito
-    mono: Roboto Mono
+    display: Barlow Condensed
     body: Roboto
+    mono: Roboto Mono
+  scales:
+    TemperatureGradient:
+      10°F: 'oklch(0.62 0.17 290)'
+      30°F: 'oklch(0.70 0.15 255)'
+      45°F: 'oklch(0.78 0.12 215)'
+      58°F: 'oklch(0.83 0.14 170)'
+      68°F: 'oklch(0.88 0.16 120)'
+      77°F: 'oklch(0.86 0.17 90)'
+      86°F: 'oklch(0.78 0.18 60)'
+      96°F: 'oklch(0.68 0.21 30)'
+      108°F: 'oklch(0.60 0.22 0)'
+    UVIndexGradient:
+      0: 'oklch(0.80 0.16 150)'
+      3: 'oklch(0.88 0.17 100)'
+      6: 'oklch(0.78 0.18 60)'
+      8: 'oklch(0.68 0.21 28)'
+      11: 'oklch(0.62 0.20 330)'
+    WindSpeedGradient:
+      0: 'oklch(0.70 0.06 230)'
+      8: 'oklch(0.80 0.13 190)'
+      16: 'oklch(0.88 0.16 110)'
+      26: 'oklch(0.80 0.18 60)'
+      40: 'oklch(0.68 0.21 28)'
+    PressureGradient:
+      0: 'oklch(0.70 0.10 250)'
+      1: 'oklch(0.85 0.10 200)'
 vars:
   t: environment.temperature.temperature
 items:
@@ -60,6 +94,8 @@ items:
         color: $muted
         geometry: {x: 0%, y: 0%, width: 100%, height: 20%}
       - format: '%-I:%M'
+        font: $body
+        weight: Light
         alignment: CenterRight
         format-hint: '10:00'
         geometry: {x: 0%, y: 20%, width: 78%, height: 80%}
@@ -70,15 +106,15 @@ items:
       - format: '%p'
         filters: [Lower]
         color: $muted
-        geometry: {x: 80%, y: 66%, width: 20%, height: 30%}
+        geometry: {x: 80%, y: 70%, width: 20%, height: 18%}
 
     # Cloud by layer: a bar each, so a high thin veil and a low deck read differently at a glance.
     - type: titled-group
       name: cloud
       size: 17%
-      title: {text: Cloud, height: 7mm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
+      title: {text: CLOUD, height: 7mm, font: $display, weight: SemiBold, color: $faint, alignment: CenterLeft, matchingGroup: {group: global.head, matchAll: true}}
       items:
-      - {type: text, text: Total, color: $muted, alignment: CenterLeft, text-height: 4.6mm, geometry: {x: 0%, y: 0%, width: 24%, height: 25%}}
+      - {type: text, text: Total, color: $muted, alignment: CenterLeft, text-height: 4.2mm, geometry: {x: 0%, y: 0%, width: 24%, height: 25%}}
       - type: realtime.bar
         key: environment.clouds.cover.cover
         title: false
@@ -86,9 +122,9 @@ items:
         display:
           range: {min: 0, max: 100}
           track: {weight: 40%}
-          fill: {color: '#c9d6e2'}
+          fill: {color: $cloud}
           value-label: {position: end, format: {precision: 0}}
-      - {type: text, text: High, color: $muted, alignment: CenterLeft, text-height: 4.6mm, geometry: {x: 0%, y: 25%, width: 24%, height: 25%}}
+      - {type: text, text: High, color: $muted, alignment: CenterLeft, text-height: 4.2mm, geometry: {x: 0%, y: 25%, width: 24%, height: 25%}}
       - type: realtime.bar
         key: environment.clouds.cover.high
         title: false
@@ -96,9 +132,9 @@ items:
         display:
           range: {min: 0, max: 100}
           track: {weight: 40%}
-          fill: {color: '#8fa3b8'}
+          fill: {color: $cloud-2}
           value-label: {position: end, format: {precision: 0}}
-      - {type: text, text: Mid, color: $muted, alignment: CenterLeft, text-height: 4.6mm, geometry: {x: 0%, y: 50%, width: 24%, height: 25%}}
+      - {type: text, text: Mid, color: $muted, alignment: CenterLeft, text-height: 4.2mm, geometry: {x: 0%, y: 50%, width: 24%, height: 25%}}
       - type: realtime.bar
         key: environment.clouds.cover.mid
         title: false
@@ -106,9 +142,9 @@ items:
         display:
           range: {min: 0, max: 100}
           track: {weight: 40%}
-          fill: {color: '#8fa3b8'}
+          fill: {color: $cloud-2}
           value-label: {position: end, format: {precision: 0}}
-      - {type: text, text: Low, color: $muted, alignment: CenterLeft, text-height: 4.6mm, geometry: {x: 0%, y: 75%, width: 24%, height: 25%}}
+      - {type: text, text: Low, color: $muted, alignment: CenterLeft, text-height: 4.2mm, geometry: {x: 0%, y: 75%, width: 24%, height: 25%}}
       - type: realtime.bar
         key: environment.clouds.cover.low
         title: false
@@ -116,23 +152,23 @@ items:
         display:
           range: {min: 0, max: 100}
           track: {weight: 40%}
-          fill: {color: '#8fa3b8'}
+          fill: {color: $cloud-2}
           value-label: {position: end, format: {precision: 0}}
 
     - type: titled-group
       name: windAloft
       size: 15%
-      title: {text: Wind aloft, height: 7mm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
+      title: {text: WIND ALOFT, height: 7mm, font: $display, weight: SemiBold, color: $faint, alignment: CenterLeft, matchingGroup: {group: global.head, matchAll: true}}
       items:
       - preset: table
         geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
         props:
           labelWidth: 30%
           alignment: Right
-          font: $mono
+          font: $body
           titleGroup: global.cellhead
           valueGroup: global.cell
-          textHeight: 4.6mm
+          textHeight: 4.2mm
           columns:
           - {head: mph, key: 'environment.wind.speed.{row}', precision: 0, color: $wind}
           - {head: from, key: 'environment.wind.direction.{row}'}
@@ -145,25 +181,59 @@ items:
     - type: titled-group
       name: sun
       size: 15%
-      title: {text: Sun, height: 7mm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
+      title: {text: SUN, height: 7mm, font: $display, weight: SemiBold, color: $faint, alignment: CenterLeft, matchingGroup: {group: global.head, matchAll: true}}
       items:
-      - preset: reading-list
-        shared: {title: {text-height: 4.6mm}, display: {valueLabel: {text-height: 4.6mm}}}
+      - preset: table
+        geometry: {x: 0%, y: 0%, width: 100%, height: 50%}
         props:
-          numberAlign: end
-          items:
-          - astronomy.sun.rise: {title: {text: Rise}, display: {format: '%-I:%M'}}
-          - astronomy.sun.set:  {title: {text: Set}, display: {format: '%-I:%M'}}
-          - astronomy.sun.remaining:   {title: {text: Daylight}, display: {format: duration, valueLabel: {color: $warn}}}
-          - astronomy.moon.phase:      {title: {text: Moon}, display: {precision: 0}}
+          labelWidth: 50%
+          headHeight: 0.01fr
+          alignment: Right
+          font: $body
+          titleGroup: global.cellhead
+          valueGroup: global.cell
+          textHeight: 4.2mm
+          columns:
+          - {head: '', key: astronomy.sun.rise, format: '%-I:%M'}
+          rows:
+          - {label: Rise, keys: [astronomy.sun.rise]}
+          - {label: Set, keys: [astronomy.sun.set]}
+      - preset: table
+        geometry: {x: 0%, y: 50%, width: 100%, height: 25%}
+        props:
+          labelWidth: 50%
+          headHeight: 0.01fr
+          alignment: Right
+          font: $body
+          titleGroup: global.cellhead
+          valueGroup: global.cell
+          textHeight: 4.2mm
+          columns:
+          - {head: '', key: astronomy.sun.rise, format: duration, color: $warn}
+          rows:
+          - {label: Daylight, keys: [astronomy.sun.remaining]}
+      - preset: table
+        geometry: {x: 0%, y: 75%, width: 100%, height: 25%}
+        props:
+          labelWidth: 50%
+          headHeight: 0.01fr
+          alignment: Right
+          font: $body
+          titleGroup: global.cellhead
+          valueGroup: global.cell
+          textHeight: 4.2mm
+          columns:
+          - {head: '', key: astronomy.sun.rise, precision: 0}
+          rows:
+          - {label: Moon %, keys: [astronomy.moon.phase]}
 
     # Pressure: the number over its own 12 hours, and which way it is going in words.
     - type: titled-group
       name: pressure
-      title: {text: Pressure, height: 7mm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
+      title: {text: PRESSURE, height: 7mm, font: $display, weight: SemiBold, color: $faint, alignment: CenterLeft, matchingGroup: {group: global.head, matchAll: true}}
       items:
       - preset: sparkline
-        geometry: {x: 0%, y: 0%, width: 100%, height: 62%}
+        geometry: {x: 52%, y: 4%, width: 48%, height: 52%}
         props:
           key: environment.pressure.pressure
           hours: 12
@@ -175,31 +245,31 @@ items:
         key: environment.pressure.pressure
         title: false
         display:
-          font: $mono
+          font: $body
           weight: Light
           unitPosition: Hidden
           precision: 2
           format-hint: '00.00'
-          valueLabel: {text-height: 13mm, matchingGroup: {group: global.hero, matchAll: true}}
-        geometry: {x: 0%, y: 0%, width: 62%, height: 62%}
+          valueLabel: {text-height: 12mm, matchingGroup: {group: global.hero2, matchAll: true}}
+        geometry: {x: 0%, y: 0%, width: 50%, height: 46%}
       - type: switch
         name: tendency
         hold: 10m
         fade: 0.4s
-        geometry: {x: 64%, y: 44%, width: 36%, height: 14%}
+        geometry: {x: 0%, y: 46%, width: 50%, height: 14%}
         items:
-        - {type: text, text: Rising, color: $good, alignment: CenterRight, when: 'environment.pressure.pressure - at(environment.pressure.pressure, -3h) > 0.03 inHg'}
-        - {type: text, text: Falling, color: $warn, alignment: CenterRight, when: 'environment.pressure.pressure - at(environment.pressure.pressure, -3h) < -0.03 inHg'}
-        - {type: text, text: Steady, color: $muted, alignment: CenterRight}
+        - {type: text, text: Rising, text-height: 4.2mm, color: $good, alignment: CenterLeft, when: 'environment.pressure.pressure - at(environment.pressure.pressure, -3h) > 0.03 inHg'}
+        - {type: text, text: Falling, text-height: 4.2mm, color: $warn, alignment: CenterLeft, when: 'environment.pressure.pressure - at(environment.pressure.pressure, -3h) < -0.03 inHg'}
+        - {type: text, text: Steady, text-height: 4.2mm, color: $muted, alignment: CenterLeft}
       - preset: table
         geometry: {x: 0%, y: 64%, width: 100%, height: 36%}
         props:
           labelWidth: 1%
           alignment: Right
-          font: $mono
+          font: $body
           titleGroup: global.cellhead
           valueGroup: global.cell
-          textHeight: 4.6mm
+          textHeight: 4.2mm
           columns:
           - {head: 3 h, key: 'environment.pressure.pressure - at(environment.pressure.pressure, -3h)', precision: 2}
           - {head: 24 h, key: 'environment.pressure.pressure - at(environment.pressure.pressure, -24h)', precision: 2}
@@ -223,7 +293,7 @@ items:
         key: $t
         title: false
         display:
-          font: $mono
+          font: $body
           weight: Light
           unitPosition: Inline
           format-hint: '00°'
@@ -252,10 +322,10 @@ items:
         props:
           labelWidth: 50%
           alignment: Right
-          font: $mono
+          font: $body
           titleGroup: global.cellhead
           valueGroup: global.cell
-          textHeight: 4.6mm
+          textHeight: 4.2mm
           columns:
           - {head: '', key: $t, precision: 0}
           rows:
@@ -271,18 +341,18 @@ items:
       name: forecast
       timeframe: {days: 2, hours: 12}
       annotations:
-        dayLabels: {alignment: TopCenter, opacity: 0.35}
+        dayLabels: {enabled: false}
         hourLabels: {alignment: BottomCenter, spacingIntervals: '3, 6, 12'}
         lines: {spacing: 8 mm, weight: 0.5}
       figures:
       - figure: glyphs
-        margins: {top: 1%, bottom: 90%}
+        margins: {top: 7%, bottom: 85%}
         environment.temperature.dewpoint:
           plot:
             type: strip
             pins:
               key: environment.precipitation.precipitation
-              size: 22
+              size: 24
               at: 0.5
               steps:
               - [0,    'wi:day-sunny']
@@ -290,7 +360,7 @@ items:
               - [0.1,  'wi:showers']
               - [0.3,  'wi:rain']
       - figure: windarrows
-        margins: {top: 10%, bottom: 84%}
+        margins: {top: 15%, bottom: 79%}
         environment.temperature.dewpoint:
           plot:
             type: strip
@@ -298,11 +368,11 @@ items:
               key: environment.wind.direction.direction
               glyph: 'wi:direction-up'
               rotate: 180
-              size: 14
+              size: 20
               at: 0.5
               color: $wind
       - figure: temperature
-        margins: {bottom: 38%, top: 22%}
+        margins: {bottom: 38%, top: 27%}
         environment.temperature.temperature:
           labels: {enabled: true}
           plot: {type: plot, gradient: TemperatureGradient, weight: 1.0, fill: {opacity: 0.18, base: 40}}
@@ -317,7 +387,7 @@ items:
         min: 0
         max: 1
         environment.precipitation.probability:
-          plot: {type: plot, color: $rain, dashPattern: '2, 3', weight: 0.35, opacity: 0.5}
+          plot: {type: plot, color: $rain, dashPattern: '3, 3', weight: 0.5, opacity: 0.85}
       - figure: precipitation
         margins: {bottom: 5%, top: 68%}
         min: 0
@@ -338,26 +408,27 @@ items:
       - type: titled-group
         name: rainAlert
         when: 'max(environment.precipitation.probability, 12h) > 50%'
-        title: {text: Rain coming, height: 7mm, color: $rain, matchingGroup: {group: global.head, matchAll: true}}
+        title: {text: RAIN COMING, height: 7mm, font: $display, weight: SemiBold, color: $rain, alignment: CenterLeft, matchingGroup: {group: global.head, matchAll: true}}
         items:
         - type: realtime.text
           key: 'max(environment.precipitation.probability, 12h)'
           title: false
-          display: {font: $mono, weight: Light, precision: 0, valueLabel: {color: $rain, text-height: 18mm}}
+          display: {font: $body, weight: Light, precision: 0, valueLabel: {color: $rain, text-height: 12mm, matchingGroup: {group: global.hero2, matchAll: true}}}
           geometry: {x: 0%, y: 0%, width: 100%, height: 34%}
         - type: text
           text: chance in the next 12 h
           color: $muted
+          text-height: 4.2mm
           geometry: {x: 0%, y: 34%, width: 100%, height: 8%}
         - preset: table
           geometry: {x: 0%, y: 46%, width: 100%, height: 54%}
           props:
             labelWidth: 52%
             alignment: Right
-            font: $mono
+            font: $body
             titleGroup: global.cellhead
             valueGroup: global.cell
-            textHeight: 4.6mm
+            textHeight: 4.2mm
             columns:
             - {head: in, key: environment.precipitation.precipitation, precision: 2, color: $rain}
             rows:
@@ -368,26 +439,27 @@ items:
       - type: titled-group
         name: frostAlert
         when: 'min(environment.temperature.temperature, 24h) < 34°F'
-        title: {text: Frost tonight, height: 7mm, color: $info, matchingGroup: {group: global.head, matchAll: true}}
+        title: {text: FROST TONIGHT, height: 7mm, font: $display, weight: SemiBold, color: $info, alignment: CenterLeft, matchingGroup: {group: global.head, matchAll: true}}
         items:
         - type: realtime.text
           key: environment.temperature.low
           title: false
-          display: {font: $mono, weight: Light, precision: 0, unitPosition: Inline, valueLabel: {color: $info, text-height: 18mm}}
+          display: {font: $body, weight: Light, precision: 0, unitPosition: Inline, valueLabel: {color: $info, text-height: 12mm, matchingGroup: {group: global.hero2, matchAll: true}}}
           geometry: {x: 0%, y: 0%, width: 100%, height: 34%}
         - type: text
           text: low tonight
           color: $muted
+          text-height: 4.2mm
           geometry: {x: 0%, y: 34%, width: 100%, height: 8%}
         - preset: table
           geometry: {x: 0%, y: 46%, width: 100%, height: 54%}
           props:
             labelWidth: 52%
             alignment: Right
-            font: $mono
+            font: $body
             titleGroup: global.cellhead
             valueGroup: global.cell
-            textHeight: 4.6mm
+            textHeight: 4.2mm
             columns:
             - {head: '', key: $t, precision: 0}
             rows:
@@ -398,26 +470,27 @@ items:
       - type: titled-group
         name: windAlert
         when: 'environment.wind.speed.gust > 25mph'
-        title: {text: Gusty, height: 7mm, color: $wind, matchingGroup: {group: global.head, matchAll: true}}
+        title: {text: GUSTY, height: 7mm, font: $display, weight: SemiBold, color: $wind, alignment: CenterLeft, matchingGroup: {group: global.head, matchAll: true}}
         items:
         - type: realtime.text
           key: environment.wind.speed.gust
           title: false
-          display: {font: $mono, weight: Light, precision: 0, unitPosition: Hidden, valueLabel: {color: $wind, text-height: 18mm}}
+          display: {font: $body, weight: Light, precision: 0, unitPosition: Hidden, valueLabel: {color: $wind, text-height: 12mm, matchingGroup: {group: global.hero2, matchAll: true}}}
           geometry: {x: 0%, y: 0%, width: 100%, height: 34%}
         - type: text
           text: mph gust now
           color: $muted
+          text-height: 4.2mm
           geometry: {x: 0%, y: 34%, width: 100%, height: 8%}
         - preset: table
           geometry: {x: 0%, y: 46%, width: 100%, height: 54%}
           props:
             labelWidth: 52%
             alignment: Right
-            font: $mono
+            font: $body
             titleGroup: global.cellhead
             valueGroup: global.cell
-            textHeight: 4.6mm
+            textHeight: 4.2mm
             columns:
             - {head: mph, key: environment.wind.speed.speed, precision: 0, color: $wind}
             rows:
@@ -428,26 +501,27 @@ items:
       - type: titled-group
         name: uvAlert
         when: 'environment.light.uvi >= 6 uvi'
-        title: {text: Strong sun, height: 7mm, color: $bad, matchingGroup: {group: global.head, matchAll: true}}
+        title: {text: STRONG SUN, height: 7mm, font: $display, weight: SemiBold, color: $bad, alignment: CenterLeft, matchingGroup: {group: global.head, matchAll: true}}
         items:
         - type: realtime.text
           key: environment.light.uvi
           title: false
-          display: {font: $mono, weight: Light, precision: 0, valueLabel: {color: {scale: UVIndexGradient, of: environment.light.uvi}, text-height: 18mm}}
+          display: {font: $body, weight: Light, precision: 0, valueLabel: {color: {scale: UVIndexGradient, of: environment.light.uvi}, text-height: 12mm, matchingGroup: {group: global.hero2, matchAll: true}}}
           geometry: {x: 0%, y: 0%, width: 100%, height: 34%}
         - type: text
           text: UV index
           color: $muted
+          text-height: 4.2mm
           geometry: {x: 0%, y: 34%, width: 100%, height: 8%}
         - preset: table
           geometry: {x: 0%, y: 46%, width: 100%, height: 54%}
           props:
             labelWidth: 52%
             alignment: Right
-            font: $mono
+            font: $body
             titleGroup: global.cellhead
             valueGroup: global.cell
-            textHeight: 4.6mm
+            textHeight: 4.2mm
             columns:
             - {head: '', key: environment.light.uvi, precision: 0}
             rows:
@@ -458,17 +532,17 @@ items:
       # No alert: these two take turns.
       - type: titled-group
         name: today
-        title: {text: Today, height: 7mm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
+        title: {text: TODAY, height: 7mm, font: $display, weight: SemiBold, color: $faint, alignment: CenterLeft, matchingGroup: {group: global.head, matchAll: true}}
         items:
         - preset: table
           geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
           props:
             labelWidth: 40%
             alignment: Right
-            font: $mono
+            font: $body
             titleGroup: global.cellhead
             valueGroup: global.cell
-            textHeight: 4.6mm
+            textHeight: 4.2mm
             columns:
             - {head: °F, key: $t, precision: 0}
             - {head: at, key: environment.temperature.highTime, format: '%-I:%M'}
@@ -487,11 +561,13 @@ items:
           key: environment.temperature.temperature
           window: today
           gradient:
-          - {at: 30, color: '#1a8cff'}
-          - {at: 50, color: '#14e3c0'}
-          - {at: 65, color: '#ffd400'}
-          - {at: 80, color: '#ff9124'}
-          - {at: 95, color: '#ff3048'}
+          - {at: 30, color: 'oklch(0.70 0.15 255)'}
+          - {at: 45, color: 'oklch(0.78 0.12 215)'}
+          - {at: 58, color: 'oklch(0.83 0.14 170)'}
+          - {at: 68, color: 'oklch(0.88 0.16 120)'}
+          - {at: 77, color: 'oklch(0.86 0.17 90)'}
+          - {at: 86, color: 'oklch(0.78 0.18 60)'}
+          - {at: 96, color: 'oklch(0.68 0.21 30)'}
 
   # ================= GROUND ===============================================
   - type: stack
@@ -506,7 +582,7 @@ items:
     - type: titled-group
       name: bedroom
       size: 24%
-      title: {text: Bedroom, height: 7mm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
+      title: {text: BEDROOM, height: 7mm, font: $display, weight: SemiBold, color: $faint, alignment: CenterLeft, matchingGroup: {group: global.head, matchAll: true}}
       items:
       - preset: sparkline
         geometry: {x: 0%, y: 0%, width: 62%, height: 56%}
@@ -523,12 +599,12 @@ items:
         key: indoor.temperature.temperature#bedroom
         title: false
         display:
-          font: $mono
+          font: $body
           weight: Light
           unitPosition: Inline
           format-hint: '00°'
           precision: 0
-          valueLabel: {text-height: 15mm, matchingGroup: {group: global.room, matchAll: true}, color: {scale: $temperature, of: indoor.temperature.temperature#bedroom}}
+          valueLabel: {text-height: 12mm, matchingGroup: {group: global.hero2, matchAll: true}, color: {scale: $temperature, of: indoor.temperature.temperature#bedroom}}
         geometry: {x: 0%, y: 0%, width: 62%, height: 40%}
       - preset: ring-reading
         geometry: {x: 64%, y: 0%, width: 36%, height: 56%}
@@ -538,10 +614,10 @@ items:
         props:
           labelWidth: 34%
           alignment: Right
-          font: $mono
+          font: $body
           titleGroup: global.cellhead
           valueGroup: global.cell
-          textHeight: 4.6mm
+          textHeight: 4.2mm
           columns:
           - {head: °F, key: indoor.temperature.temperature#bedroom, precision: 0}
           - {head: RH %, key: indoor.humidity.humidity#bedroom, precision: 0, color: $info}
@@ -564,7 +640,7 @@ items:
       - type: text
         text: Battery
         color: $muted
-        text-height: 4.6mm
+        text-height: 4.2mm
         alignment: CenterLeft
         geometry: {x: 0%, y: 91%, width: 48%, height: 9%}
 
@@ -572,7 +648,7 @@ items:
     - type: titled-group
       name: terrarium
       size: 24%
-      title: {text: Terrarium, height: 7mm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
+      title: {text: TERRARIUM, height: 7mm, font: $display, weight: SemiBold, color: $faint, alignment: CenterLeft, matchingGroup: {group: global.head, matchAll: true}}
       items:
       - preset: sparkline
         geometry: {x: 0%, y: 0%, width: 62%, height: 56%}
@@ -589,12 +665,12 @@ items:
         key: indoor.temperature.temperature#terrarium
         title: false
         display:
-          font: $mono
+          font: $body
           weight: Light
           unitPosition: Inline
           format-hint: '00°'
           precision: 0
-          valueLabel: {text-height: 15mm, matchingGroup: {group: global.room, matchAll: true}, color: {scale: $temperature, of: indoor.temperature.temperature#terrarium}}
+          valueLabel: {text-height: 12mm, matchingGroup: {group: global.hero2, matchAll: true}, color: {scale: $temperature, of: indoor.temperature.temperature#terrarium}}
         geometry: {x: 0%, y: 0%, width: 62%, height: 40%}
       - preset: ring-reading
         geometry: {x: 64%, y: 0%, width: 36%, height: 56%}
@@ -604,10 +680,10 @@ items:
         props:
           labelWidth: 34%
           alignment: Right
-          font: $mono
+          font: $body
           titleGroup: global.cellhead
           valueGroup: global.cell
-          textHeight: 4.6mm
+          textHeight: 4.2mm
           columns:
           - {head: °F, key: indoor.temperature.temperature#terrarium, precision: 0}
           - {head: RH %, key: indoor.humidity.humidity#terrarium, precision: 0, color: $good}
@@ -630,27 +706,27 @@ items:
       - type: text
         text: Battery
         color: $muted
-        text-height: 4.6mm
+        text-height: 4.2mm
         alignment: CenterLeft
         geometry: {x: 0%, y: 91%, width: 48%, height: 9%}
 
     - type: titled-group
       name: wind
       size: 14%
-      title: {text: Wind mph, height: 7mm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
+      title: {text: WIND MPH, height: 7mm, font: $display, weight: SemiBold, color: $faint, alignment: CenterLeft, matchingGroup: {group: global.head, matchAll: true}}
       items:
       - preset: compass
-        geometry: {x: 0%, y: 0%, width: 100%, height: 64%}
+        geometry: {x: 8%, y: 2%, width: 84%, height: 58%}
         props: {label: mph}
       - preset: table
         geometry: {x: 0%, y: 62%, width: 100%, height: 38%}
         props:
           labelWidth: 50%
           alignment: Right
-          font: $mono
+          font: $body
           titleGroup: global.cellhead
           valueGroup: global.cell
-          textHeight: 4.6mm
+          textHeight: 4.2mm
           columns:
           - {head: '', key: environment.wind.speed.gust, precision: 0, color: $wind}
           rows:
@@ -661,21 +737,21 @@ items:
     - type: titled-group
       name: uv
       size: 14%
-      title: {text: UV and sun, height: 7mm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
+      title: {text: UV AND SUN, height: 7mm, font: $display, weight: SemiBold, color: $faint, alignment: CenterLeft, matchingGroup: {group: global.head, matchAll: true}}
       items:
       - preset: zone-dial
-        geometry: {x: 0%, y: 0%, width: 100%, height: 64%}
+        geometry: {x: 8%, y: 2%, width: 84%, height: 58%}
         props:
           key: environment.light.uvi
           min: 0
           max: 12
           interval: 3
           zones:
-          - {from: 0, to: 3, color: '#3ea72d'}
-          - {from: 3, to: 6, color: '#fff300'}
-          - {from: 6, to: 8, color: '#f18b00'}
-          - {from: 8, to: 11, color: '#e53210'}
-          - {from: 11, to: 12, color: '#b567a4'}
+          - {from: 0, to: 3, color: 'oklch(0.80 0.16 150)'}
+          - {from: 3, to: 6, color: 'oklch(0.88 0.17 100)'}
+          - {from: 6, to: 8, color: 'oklch(0.78 0.18 60)'}
+          - {from: 8, to: 11, color: 'oklch(0.68 0.21 28)'}
+          - {from: 11, to: 12, color: 'oklch(0.62 0.20 330)'}
         display:
           needle: {type: marker, width: 9%, length: 12%}
           value-label: {position: center, size: 22%}
@@ -684,10 +760,10 @@ items:
         props:
           labelWidth: 50%
           alignment: Right
-          font: $mono
+          font: $body
           titleGroup: global.cellhead
           valueGroup: global.cell
-          textHeight: 4.6mm
+          textHeight: 4.2mm
           columns:
           - {head: '', key: environment.light.irradiance.irradiance, precision: 0, color: $warn}
           rows:
@@ -698,17 +774,17 @@ items:
     # Soil as a cross-section: one row per depth, temperature and moisture side by side, wetness as a bar.
     - type: titled-group
       name: soil
-      title: {text: Soil, height: 7mm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
+      title: {text: SOIL, height: 7mm, font: $display, weight: SemiBold, color: $faint, alignment: CenterLeft, matchingGroup: {group: global.head, matchAll: true}}
       items:
       - preset: table
         geometry: {x: 0%, y: 0%, width: 100%, height: 60%}
         props:
           labelWidth: 34%
           alignment: Right
-          font: $mono
+          font: $body
           titleGroup: global.cellhead
           valueGroup: global.cell
-          textHeight: 4.6mm
+          textHeight: 4.2mm
           columns:
           - {head: °F, key: environment.soil.temperature.temperature, precision: 0, color: $accent}
           - {head: wet %, key: environment.soil.moisture.1-3cm, precision: 0, color: $info}
@@ -717,12 +793,43 @@ items:
           - {label: 6 cm, keys: [environment.soil.temperature.6cm, environment.soil.moisture.3-9cm]}
           - {label: 18 cm, keys: [environment.soil.temperature.18cm, environment.soil.moisture.9-27cm]}
           - {label: 54 cm, keys: [environment.soil.temperature.54cm, environment.soil.moisture.27-81cm]}
-      - preset: bar-stack
-        geometry: {x: 0%, y: 64%, width: 100%, height: 36%}
-        props:
-          spacing: 0.6mm
-          items:
-          - {preset: readout-bar, props: {key: environment.soil.moisture.1-3cm, max: 50, weight: 34%}, display: {fill: {color: $info}}}
-          - {preset: readout-bar, props: {key: environment.soil.moisture.3-9cm, max: 50, weight: 34%}, display: {fill: {color: $info}}}
-          - {preset: readout-bar, props: {key: environment.soil.moisture.9-27cm, max: 50, weight: 34%}, display: {fill: {color: $info}}}
-          - {preset: readout-bar, props: {key: environment.soil.moisture.27-81cm, max: 50, weight: 34%}, display: {fill: {color: $info}}}
+      - {type: text, text: '1-3 cm', color: $faint, alignment: CenterLeft, text-height: 3.2mm, geometry: {x: 0%, y: 64%, width: 24%, height: 9%}}
+      - type: realtime.bar
+        key: environment.soil.moisture.1-3cm
+        title: false
+        geometry: {x: 25%, y: 65.5%, width: 75%, height: 6%}
+        display:
+          range: {min: 0, max: 50}
+          track: {weight: 50%}
+          fill: {color: $info}
+          value-label: {position: end, format: {precision: 0}}
+      - {type: text, text: '3-9 cm', color: $faint, alignment: CenterLeft, text-height: 3.2mm, geometry: {x: 0%, y: 73%, width: 24%, height: 9%}}
+      - type: realtime.bar
+        key: environment.soil.moisture.3-9cm
+        title: false
+        geometry: {x: 25%, y: 74.5%, width: 75%, height: 6%}
+        display:
+          range: {min: 0, max: 50}
+          track: {weight: 50%}
+          fill: {color: $info}
+          value-label: {position: end, format: {precision: 0}}
+      - {type: text, text: '9-27 cm', color: $faint, alignment: CenterLeft, text-height: 3.2mm, geometry: {x: 0%, y: 82%, width: 24%, height: 9%}}
+      - type: realtime.bar
+        key: environment.soil.moisture.9-27cm
+        title: false
+        geometry: {x: 25%, y: 83.5%, width: 75%, height: 6%}
+        display:
+          range: {min: 0, max: 50}
+          track: {weight: 50%}
+          fill: {color: $info}
+          value-label: {position: end, format: {precision: 0}}
+      - {type: text, text: '27-81', color: $faint, alignment: CenterLeft, text-height: 3.2mm, geometry: {x: 0%, y: 91%, width: 24%, height: 9%}}
+      - type: realtime.bar
+        key: environment.soil.moisture.27-81cm
+        title: false
+        geometry: {x: 25%, y: 92.5%, width: 75%, height: 6%}
+        display:
+          range: {min: 0, max: 50}
+          track: {weight: 50%}
+          fill: {color: $info}
+          value-label: {position: end, format: {precision: 0}}
