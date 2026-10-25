@@ -6,8 +6,8 @@ import yaml
 
 TH = os.environ.get('TH', '5.5mm')
 
-CAP = '3.8mm'     # caption over a tile
-VAL = '8.5mm'     # a tile's number
+CAP = '4.4mm'     # caption over a tile
+VAL = '11mm'     # a tile's number
 HERO2 = '15mm'    # room, pressure, alert heroes
 HERO = '30mm'     # the outside temperature
 
@@ -17,7 +17,7 @@ def g(x, y, w, h):
 
 
 def head(text, color='$accent'):
-	return {'text': text, 'height': '7mm', 'font': '$display', 'weight': 'SemiBold', 'color': color,
+	return {'text': text, 'height': '10mm', 'font': '$display', 'weight': 'SemiBold', 'color': color,
 	        'alignment': 'CenterLeft', 'matchingGroup': {'group': 'global.head', 'matchAll': True}}
 
 
@@ -35,11 +35,11 @@ def cap(text, geom, color='$muted'):
 	        'alignment': 'BottomLeft', 'text-height': CAP, 'geometry': geom}
 
 
-def val(key, geom, color='$text', precision=0, unit='Hidden', hint=None, height=VAL, group='global.tile', align='BottomLeft', fmt=None, weight='Regular'):
-	label = {'text-height': height, 'color': color}
+def val(key, geom, color='$text', precision=0, unit='Hidden', hint=None, height=VAL, group='global.tile', align='BottomLeft', fmt=None, weight='Bold'):
+	label = {'text-height': height, 'color': color, 'font': '$body', 'weight': weight}
 	if group:
 		label['matchingGroup'] = {'group': group, 'matchAll': True}
-	d = {'font': '$body', 'weight': weight, 'unitPosition': unit, 'precision': precision, 'valueLabel': label}
+	d = {'unitPosition': unit, 'precision': precision, 'valueLabel': label}
 	if hint:
 		d['format-hint'] = hint
 	if fmt:
@@ -78,14 +78,14 @@ def temp_scale(key):
 theme = {
 	'extends': 'default',
 	'colors': {
-		'background': '#05030b', 'surface': '#0e0a1c',
-		'text': '#f4f1ff', 'muted': '#a99de0', 'faint': '#6a5f9e', 'rule': '#2b2350',
+		'background': '#000000', 'surface': '#100c22',
+		'text': '#f4f1ff', 'muted': '#d2ccf5', 'faint': '#9a92c8', 'rule': '#3b3372',
 		'accent': '#00f0ff', 'good': '#39ff88', 'warn': '#ffe600', 'bad': '#ff3b3b', 'info': '#38b6ff',
-		'rain': '#3d8bff', 'wind': '#b6ff00', 'cloud': '#c9b8ff', 'cloud-2': '#8a5cff', 'soil': '#ff9a1f', 'pink': '#ff2bd6',
+		'rain': '#3d8bff', 'wind': '#b6ff00', 'cloud': '#c9b8ff', 'cloud-2': '#b08cff', 'soil': '#ff9a1f', 'pink': '#ff2bd6',
 		'series-1': '#00e5ff', 'series-2': '#ff9a1f', 'series-3': '#b6ff00', 'series-4': '#ffe600',
 		'series-5': '#8a5cff', 'series-6': '#ff9a1f',
 	},
-	'fonts': {'display': 'Barlow Condensed', 'body': 'Roboto', 'mono': 'Roboto Mono'},
+	'fonts': {'display': 'Barlow Condensed', 'body': 'B612', 'mono': 'Roboto Mono'},
 	'scales': {
 		'TemperatureGradient': {'10°F': '#8a2bff', '30°F': '#3d6bff', '45°F': '#00e5ff', '58°F': '#00ffa8',
 		                        '68°F': '#b6ff00', '77°F': '#ffe600', '86°F': '#ff9a1f', '96°F': '#ff4a3d', '108°F': '#ff2a2a'},
@@ -95,7 +95,7 @@ theme = {
 	},
 }
 
-GLOW = {'strength': 1.0, 'reach': 1.6, 'passes': 5}
+GLOW = {'strength': 1.5, 'reach': 2.0, 'passes': 6}
 T = 'environment.temperature.temperature'
 
 # ---------------------------------------------------------------- sky
@@ -106,11 +106,11 @@ clock = {
 		 'color': '$accent', 'geometry': g(0, 0, 100, 18)},
 		# The time and am/pm both sit on the bottom edge of the panel; each one's hint has no descender, so the
 		# bottom of its fit rect is the baseline, and the two baselines meet.
-		{'format': '%-I:%M', 'font': '$body', 'weight': 'Light', 'alignment': 'BottomRight', 'format-hint': '10:00',
-		 'margins': 0, 'geometry': g(0, 22, 76, 78)},
-		{'type': 'moon', 'glowStrength': 2, 'interval': {'minutes': 20}, 'geometry': g(79, 24, 21, 40)},
-		{'format': '%p', 'font': '$body', 'filters': ['Lower'], 'color': '$info', 'alignment': 'BottomLeft',
-		 'format-hint': 'am', 'margins': 0, 'geometry': g(79, 74, 21, 26)},
+		{'format': '%-I:%M', 'font': '$display', 'weight': 'SemiBold', 'alignment': 'BottomRight', 'format-hint': '10:00',
+		 'margins': 0, 'geometry': g(0, 19, 80, 81)},
+		{'type': 'moon', 'glowStrength': 2, 'interval': {'minutes': 20}, 'geometry': g(82, 22, 18, 36)},
+		{'format': '%p', 'font': '$display', 'weight': 'SemiBold', 'filters': ['Lower'], 'color': '$info', 'alignment': 'BottomLeft',
+		 'format-hint': 'am', 'margins': 0, 'geometry': g(81.5, 76, 18.5, 24)},
 	],
 }
 
@@ -135,7 +135,7 @@ cloud = panel('cloud', 'CLOUD', [
 aloft = panel('windAloft', 'WIND ALOFT', [{
 	'preset': 'table', 'geometry': g(0, 0, 100, 100),
 	'props': {
-		'labelWidth': '34%', 'alignment': 'Right', 'font': '$body', 'titleGroup': 'global.aloft-head',
+		'labelWidth': '34%', 'alignment': 'Right', 'font': '$body', 'labelFont': '$display', 'titleGroup': 'global.aloft-head',
 		'valueGroup': 'global.aloft-cell',
 		'columns': [{'head': 'mph', 'key': 'environment.wind.speed.{row}', 'precision': 0, 'hint': '00', 'color': '$wind'},
 		            {'head': 'from', 'key': 'environment.wind.direction.{row}', 'hint': 'SSW', 'color': '$info'}],
@@ -154,12 +154,12 @@ sun = panel('sun', 'SUN AND MOON', tiles([
 P = 'environment.pressure.pressure'
 pressure = panel('pressure', 'PRESSURE INHG', [
 	spark(P, g(0, 0, 100, 58), 'pressure', {'type': 'plot', 'gradient': 'PressureGradient', 'weight': 0.7, 'opacity': 0.8, 'glow': GLOW}),
-	val(P, g(0, 0, 60, 46), '$text', precision=2, hint='00.00', height=HERO2, group='global.hero2', weight='Light'),
+	val(P, g(0, 0, 60, 46), '$text', precision=2, hint='00.00', height=HERO2, group='global.hero2', weight='Bold'),
 	{'type': 'switch', 'name': 'tendency', 'hold': '10m', 'fade': '0.4s', 'geometry': g(0, 44, 60, 14), 'items': [
 		{'type': 'text', 'text': 'RISING ▲', 'font': '$display', 'weight': 'SemiBold', 'text-height': CAP, 'color': '$good', 'alignment': 'CenterLeft',
 		 'when': f'{P} - at({P}, -3h) > 0.03 inHg'},
 		{'type': 'text', 'text': 'FALLING ▼', 'font': '$display', 'weight': 'SemiBold', 'text-height': CAP, 'color': '$bad', 'alignment': 'CenterLeft',
-		 'when': f'{P} - at({P}, -3h) < -0.03 inHg'},
+		 'when': f'at({P}, -3h) - {P} > 0.03 inHg'},
 		{'type': 'text', 'text': 'STEADY', 'font': '$display', 'weight': 'SemiBold', 'text-height': CAP, 'color': '$muted', 'alignment': 'CenterLeft'},
 	]},
 	*tiles([
@@ -175,9 +175,9 @@ sky = {'type': 'stack', 'name': 'sky', 'direction': 'Horizontal', 'size': '23%',
 
 # ---------------------------------------------------------------- surface
 now = {'type': 'group', 'name': 'now', 'size': '20%', 'items': [
-	val(T, g(0, 0, 100, 36), temp_scale(T), unit='Inline', hint='00°', height=HERO, group=None, weight='Light', align='CenterLeft'),
+	val(T, g(0, 0, 100, 36), temp_scale(T), unit='Inline', hint='00°', height=HERO, group=None, weight='Bold', align='CenterLeft'),
 	{'type': 'realtime.text', 'key': 'environment.condition.condition', 'title': False, 'alignment': 'CenterLeft',
-	 'display': {'font': '$display', 'weight': 'SemiBold', 'valueLabel': {'color': '$info', 'text-height': '6mm'}},
+	 'display': {'valueLabel': {'color': '$info', 'text-height': '6mm', 'font': '$display', 'weight': 'SemiBold'}},
 	 'geometry': g(0, 36, 100, 9)},
 	{'type': 'realtime.bar', 'key': T, 'title': False, 'geometry': g(0, 44, 100, 14),
 	 'display': {'range': {'min': 30, 'max': 100}, 'track': {'weight': '26%', 'color': '$rule'},
@@ -209,10 +209,10 @@ forecast = {
 		 'environment.temperature.dewpoint': {'plot': {'type': 'strip', 'pins': {
 			 'key': 'environment.wind.direction.direction', 'glyph': 'wi:direction-up', 'rotate': 180,
 			 'size': 20, 'at': 0.5, 'color': '$wind'}}}},
-		{'figure': 'temperature', 'margins': {'bottom': '38%', 'top': '27%'},
+		{'figure': 'temperature', 'margins': {'bottom': '30%', 'top': '25%'},
 		 T: {'labels': {'enabled': True},
 		     'plot': {'type': 'plot', 'gradient': 'TemperatureGradient', 'weight': 1.0, 'glow': GLOW,
-		              'fill': {'opacity': 0.22, 'base': 40}}, 'resolution': 2},
+		              'fill': {'opacity': 0.45, 'fade': True}}, 'resolution': 2},
 		 'environment.temperature.feelsLike': {'plot': {'type': 'plot', 'gradient': 'TemperatureGradient', 'weight': 0.35, 'opacity': 0.6}, 'resolution': 2},
 		 'environment.temperature.dewpoint': {'plot': {'type': 'plot', 'cap': 'square', 'color': '$good', 'dashPattern': '5, 5', 'weight': 0.35}}},
 		{'figure': 'chance', 'margins': {'bottom': '5%', 'top': '68%'}, 'min': 0, 'max': 1,
@@ -225,7 +225,7 @@ forecast = {
 
 def alert(name, when, title, color, hero, caption, rest):
 	return {'type': 'titled-group', 'name': name, 'when': when, 'title': head(title, color), 'items': [
-		val(hero[0], g(0, 0, 100, 32), color, height=HERO2, group='global.hero2', weight='Light', **hero[1]),
+		val(hero[0], g(0, 0, 100, 32), color, height=HERO2, group='global.hero2', weight='Bold', **hero[1]),
 		cap(caption, g(0, 30, 100, 9)),
 		*tiles(rest, 0, 42, 100, 58, 2),
 	]}
@@ -288,13 +288,13 @@ def room(name, title, ident, hum_color, tlo, thi):
 	return panel(name, title, [
 		spark(t, g(0, 14, 50, 46), 'indoor', {'type': 'plot', 'gradient': 'TemperatureGradient', 'weight': 0.7, 'opacity': 0.85, 'glow': GLOW}, tlo, thi),
 		spark(h, g(52, 14, 48, 46), 'humid', {'type': 'plot', 'color': hum_color, 'weight': 0.7, 'opacity': 0.85, 'glow': GLOW}, 20, 100),
-		cap('TEMP', g(0, 0, 48, 10)),
-		val(t, g(0, 10, 50, 34), temp_scale(t), unit='Inline', hint='00°', height=HERO2, group='global.hero2', weight='Light'),
+		cap('TEMP °F', g(0, 0, 48, 10)),
+		val(t, g(0, 10, 50, 34), temp_scale(t), unit='Hidden', hint='00', fmt={'unit_symbol': False}, height=HERO2, group='global.hero2', weight='Bold'),
 		cap('HUMIDITY', g(52, 0, 48, 10)),
-		val(h, g(52, 10, 48, 34), hum_color, unit='Inline', hint='00%', height=HERO2, group='global.hero2', weight='Light'),
+		val(h, g(52, 10, 48, 34), hum_color, unit='Inline', hint='00%', height=HERO2, group='global.hero2', weight='Bold'),
 		*tiles([
-			('LOW', f'min({t}, 24h)', {'unit': 'Inline', 'color': '$info'}),
-			('HIGH', f'max({t}, 24h)', {'unit': 'Inline', 'color': '$bad'}),
+			('LOW °F', f'min({t}, 24h)', {'color': '$info', 'fmt': {'unit_symbol': False}}),
+			('HIGH °F', f'max({t}, 24h)', {'color': '$bad', 'fmt': {'unit_symbol': False}}),
 		], 0, 62, 50, 26, 2),
 		*tiles([
 			('LOW', f'min({h}, 24h)', {'unit': 'Inline', 'color': hum_color}),

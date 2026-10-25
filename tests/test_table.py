@@ -68,6 +68,12 @@ def test_a_column_hint_becomes_the_format_hint_of_its_cells():
 	assert not any(hints[1::2])
 
 
+def test_fonts_reach_the_value_labels_and_the_labels():
+	item = presets.expand({'items': [table(font='B612', labelFont='Barlow Condensed')]})['items'][0]
+	assert all(c['display']['valueLabel']['font'] == 'B612' for c in cells(item))
+	assert all(t['font'] == 'Barlow Condensed' for t in texts(item))
+
+
 def test_gutter_is_the_column_gap():
 	item = presets.expand({'items': [table(gutter='10mm', rowGap='1mm')]})['items'][0]
 	assert item['grid']['gap'] == ['1mm', '10mm']

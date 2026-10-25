@@ -11,7 +11,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
 	QBrush, QColor, QCursor, QFont, QFontMetricsF, QImage, QPainter, QPainterPath, QPainterPathStroker, QPen,
-	QPixmap, QPolygonF, QTransform, QAction
+	QLinearGradient, QPixmap, QPolygonF, QTransform, QAction
 )
 from PySide6.QtWidgets import (
 	QGraphicsEffect, QGraphicsItem, QGraphicsItemGroup, QGraphicsLineItem, QGraphicsPixmapItem,
@@ -2009,7 +2009,7 @@ class LinePlot(Plot):
 	def fill(self) -> Optional[dict]:
 		"""The space under the line filled with the line's own colour or gradient: `{opacity: 0.25, base: 50}`.
 
-		`opacity` is how strong the fill is (default 0.25). `base` is the value it reaches, in the unit of the
+		`opacity` is how strong the fill is (default 0.25); `fade: true` fades it out toward the baseline. `base` is the value it reaches, in the unit of the
 		data and held inside the axis range; without it the fill reaches the bottom of the figure. `true` is
 		the defaults and a number is the opacity. A line and a fill of one key is `fill` on the line; an
 		`area` plot is the fill alone.
@@ -2027,13 +2027,16 @@ class LinePlot(Plot):
 		if value in (None, False):
 			return None
 		if value is True:
-			return {'opacity': 0.25, 'base': None}
+			return {'opacity': 0.25, 'base': None, 'fade': False}
 		if isinstance(value, (int, float)):
-			return {'opacity': clamp(float(value), 0.0, 1.0), 'base': None}
+			return {'opacity': clamp(float(value), 0.0, 1.0), 'base': None, 'fade': False}
 		if not isinstance(value, Mapping):
 			raise ValueError(f'fill needs true, an opacity or a mapping, not {value!r}')
 		base = value.get('base')
-		return {'opacity': clamp(float(value.get('opacity', 0.25)), 0.0, 1.0), 'base': None if base is None else float(base)}
+		return {
+			'opacity': clamp(float(value.get('opacity', 0.25)), 0.0, 1.0), 'base': None if base is None else float(base),
+			'fade': bool(value.get('fade', False)),
+		}
 
 	def valueAnchor(self) -> Optional[float]:
 		return None if not self._fillSpec else self._fillSpec.get('base')
@@ -2066,6 +2069,7 @@ class LinePlot(Plot):
 		if self._fillSpec and self.data.hasData and self._drawsLine:
 			extras['fill'] = self._fillPath(path)
 			extras['fillOpacity'] = self._fillSpec['opacity']
+			extras['fillFade'] = self._fillSpec.get('fade', False)
 		if not self.data.hasData or not (self._thickness or self._pins):
 			return extras
 		# The sample times come back out of the normalised x the path was built from: the data itself can be
@@ -2112,6 +2116,16 @@ class LinePlot(Plot):
 			painter.setPen(Qt.NoPen)
 			painter.setBrush(pen.brush())
 			painter.drawPath(fill)
+			if extras.get('fillFade'):
+				# Nothing else is drawn yet, so masking the fill's box fades the fill alone: full strength at its
+				# highest point, nothing at its baseline.
+				box = fill.boundingRect()
+				fade = QLinearGradient(box.topLeft(), box.bottomLeft())
+				fade.setColorAt(0, QColor(0, 0, 0, 255))
+				fade.setColorAt(1, QColor(0, 0, 0, 0))
+				painter.setOpacity(1)
+				painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
+				painter.fillRect(box, QBrush(fade))
 			painter.restore()
 		if self._drawsLine:
 			paintGlow(painter, path, pen.brush(), pen.widthF(), glow)

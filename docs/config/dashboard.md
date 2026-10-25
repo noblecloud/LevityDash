@@ -826,9 +826,9 @@ environment.temperature.temperature:
 
 <div class="indent">
 
-#### <div class=mono>fill: true | float | {opacity, base}</div>
+#### <div class=mono>fill: true | float | {opacity, base, fade}</div>
 
-`opacity` is how strong the fill is, from `0` to `1` (default `0.25`). `base` is the value the fill reaches, in the unit of the data; the axis always includes it. Without `base` the fill reaches the bottom of the figure. `true` takes the defaults and a number sets the opacity. The fill takes the line's colour or gradient.
+`opacity` is how strong the fill is, from `0` to `1` (default `0.25`). `base` is the value the fill reaches, in the unit of the data; the axis always includes it. Without `base` the fill reaches the bottom of the figure. `fade: true` fades the fill out from the line's highest point to the baseline instead of ending in a hard edge. `true` takes the defaults and a number sets the opacity. The fill takes the line's colour or gradient.
 
 </div>
 

@@ -27,7 +27,7 @@ A full example is `docs/design-references/table.levity` (scenario `house-day`).
 | `numberAlign` | `decimal` (default), `end` or `none`; see `number-align` in the dashboard reference. |
 | `alignment` | `Left`, `Center` (default) or `Right`: where the heads and numbers sit in their column. |
 | `titleGroup`, `valueGroup` | Size groups of the heads and row labels, and of the numbers. Defaults `global.title` and `global.value`, so the table reads like every other row on the dashboard. |
-| `font` | Font of the numbers. |
+| `font`, `labelFont` | Font of the numbers, and of the heads and row labels. |
 | `textHeight` | One text height (such as `4.5mm`) for every head, label and number. Tables of different row heights then read at one size; without it each is fitted to its own cells, and a size group splits them into tiers by cell height. |
 | `dividers` | Passed to the grid, for example `{enabled: true}`. |
 

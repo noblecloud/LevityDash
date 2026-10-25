@@ -36,6 +36,7 @@ PROPS: Dict[str, tuple] = {
 	'titleGroup': ('global.title', 'Size group of the heads and the row labels; the default spans the whole dashboard'),
 	'valueGroup': ('global.value', 'Size group of the numbers; the default spans the whole dashboard'),
 	'font': (None, 'Font of the numbers; unset keeps the font of the panel around it'),
+	'labelFont': (None, 'Font of the heads and the row labels; unset keeps the font of the panel around it'),
 	'textHeight': (None, 'Height of every head, label and number (text-height, such as 4.5mm), so tables of different row heights share one text size; unset fits each to its cell'),
 	'dividers': (None, 'dividers: settings (such as {enabled: true}) for lines between rows and columns'),
 }
@@ -79,6 +80,8 @@ def build(props: Dict[str, Any]) -> dict:
 	value_group = {'group': props['valueGroup'], 'matchAll': True}
 	text_height = props.get('textHeight')
 	sized = {'text-height': text_height} if text_height not in (None, '') else {}
+	if props.get('labelFont'):
+		sized['font'] = props['labelFont']
 	for at, column in enumerate(columns, start=1):
 		if (text := _head(column)):
 			items.append({
@@ -113,9 +116,10 @@ def build(props: Dict[str, Any]) -> dict:
 			color = column.get('color')
 			if color:
 				valueLabel['color'] = color
-			display: Dict[str, Any] = {'unitPosition': 'Hidden', 'valueLabel': valueLabel}
+			# The font goes on the value label: a display has no font of its own, and one written there is ignored.
 			if props.get('font'):
-				display['font'] = props['font']
+				valueLabel['font'] = props['font']
+			display: Dict[str, Any] = {'unitPosition': 'Hidden', 'valueLabel': valueLabel}
 			for name in ('precision', 'format'):
 				if column.get(name) is not None:
 					display[name] = column[name]
