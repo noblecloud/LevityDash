@@ -29,7 +29,7 @@ ROOM = {
 
 # The GVH5102 defaults from _defaultConfig / Govee.ini.
 TEMPERATURE = BLEPayloadParser(field='temperature', startingByte=4, endingByte=10, expression='val / 10000')
-HUMIDITY = BLEPayloadParser(field='humidity', startingByte=4, endingByte=10, expression='payload % 1000 / 1000')
+HUMIDITY = BLEPayloadParser(field='humidity', startingByte=4, endingByte=10, expression='payload % 1000 / 10')
 BATTERY = BLEPayloadParser(field='battery', startingByte=10, endingByte=12)
 
 
@@ -38,12 +38,12 @@ class TestPayloadDecode:
 
 	def test_terrarium_decodes(self):
 		assert TEMPERATURE(TERRARIUM['payload'])['temperature'] == pytest.approx(23.2626, abs=1e-4)
-		assert HUMIDITY(TERRARIUM['payload'])['humidity'] == pytest.approx(0.626, abs=1e-3)
+		assert HUMIDITY(TERRARIUM['payload'])['humidity'] == pytest.approx(62.6, abs=0.1)
 		assert BATTERY(TERRARIUM['payload'])['battery'] == 96
 
 	def test_room_decodes(self):
 		assert TEMPERATURE(ROOM['payload'])['temperature'] == pytest.approx(22.4477, abs=1e-4)
-		assert HUMIDITY(ROOM['payload'])['humidity'] == pytest.approx(0.477, abs=1e-3)
+		assert HUMIDITY(ROOM['payload'])['humidity'] == pytest.approx(47.7, abs=0.1)
 		assert BATTERY(ROOM['payload'])['battery'] == 83
 
 	def test_the_two_devices_really_do_differ(self):

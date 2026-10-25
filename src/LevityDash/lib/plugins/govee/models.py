@@ -73,7 +73,7 @@ class ModelPreset(NamedTuple):
 #: `if`/`else` into function parameters. Sign handling has to be data.
 _TEMP_HUMID_3BYTE = {
 	'temperature': {'expression': 'val / 10000', 'signBit': 23},
-	'humidity': {'expression': 'payload % 1000 / 1000'},
+	'humidity': {'expression': 'payload % 1000 / 10'},
 }
 
 #: Battery is a single byte; the high bit is an error flag upstream, so mask
