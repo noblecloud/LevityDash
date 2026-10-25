@@ -1,0 +1,728 @@
+# Cross-section: sky, surface, ground. The room display on lambda (1680x1050 logical).
+#
+# Three bands, as before. Each band reads left to right; every panel in it starts its rows on the same line, and a
+# column of numbers is a table (labels once on the left, the unit once in the head), so digits line up down and across.
+# Only keys lambda publishes: OpenMeteo, Astronomy, and the two Govee sensors (bedroom, terrarium).
+#
+#   Sky      clock and moon | cloud layers as bars | wind aloft table | sun and UV | pressure with its 12 h trace
+#   Surface  now (temperature over today's range) | 2.5-day forecast | a slot: rain, frost, wind or UV when one
+#            matters, otherwise a turn between Today and the day's temperature round the clock
+#   Ground   bedroom and terrarium as climate cards | wind compass | UV dial | soil, depth by depth
+#
+# Render: render_dashboard.py OUT.png --levity FILE --seed DIR --scenario lambda-day.yaml --size 1641x1026
+# Hex colours are quoted. Unquoted, YAML reads '#' as a comment and the value becomes null.
+theme:
+  extends: default
+  colors:
+    background: '#000000'
+    muted: '#a8a8b2'
+    faint: '#6d6d78'
+    rule: '#2c2c33'
+    accent: '#ff9124'
+    good: '#14e3c0'
+    warn: '#ffd400'
+    bad: '#ff3048'
+    info: '#1a8cff'
+    rain: '#2e9bff'
+    wind: '#ffd400'
+  fonts:
+    display: Nunito
+    mono: Roboto Mono
+    body: Roboto
+vars:
+  t: environment.temperature.temperature
+items:
+- type: stack
+  defaultType: group
+  name: main
+  padding: 3mm
+  spacing: 2mm
+  dividers: {enabled: true, opacity: 55%, size: 99%}
+  items:
+
+  # ================= SKY ==================================================
+  - type: stack
+    name: sky
+    direction: Horizontal
+    size: 22%
+    spacing: 3mm
+    dividers: {enabled: true, opacity: 45%, size: 80%}
+    items:
+
+    - type: clock
+      name: clock
+      size: 20%
+      items:
+      - format: '%A, %B %-d'
+        alignment: CenterLeft
+        filters: [AddOrdinal]
+        weight: Light
+        color: $muted
+        geometry: {x: 0%, y: 0%, width: 100%, height: 20%}
+      - format: '%-I:%M'
+        alignment: CenterRight
+        format-hint: '10:00'
+        geometry: {x: 0%, y: 20%, width: 78%, height: 80%}
+      - type: moon
+        glowStrength: 2
+        interval: {minutes: 20}
+        geometry: {x: 80%, y: 26%, width: 20%, height: 40%}
+      - format: '%p'
+        filters: [Lower]
+        color: $muted
+        geometry: {x: 80%, y: 66%, width: 20%, height: 30%}
+
+    # Cloud by layer: a bar each, so a high thin veil and a low deck read differently at a glance.
+    - type: titled-group
+      name: cloud
+      size: 17%
+      title: {text: Cloud, height: 7mm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
+      items:
+      - {type: text, text: Total, color: $muted, alignment: CenterLeft, text-height: 4.6mm, geometry: {x: 0%, y: 0%, width: 24%, height: 25%}}
+      - type: realtime.bar
+        key: environment.clouds.cover.cover
+        title: false
+        geometry: {x: 25%, y: 4%, width: 75%, height: 17%}
+        display:
+          range: {min: 0, max: 100}
+          track: {weight: 40%}
+          fill: {color: '#c9d6e2'}
+          value-label: {position: end, format: {precision: 0}}
+      - {type: text, text: High, color: $muted, alignment: CenterLeft, text-height: 4.6mm, geometry: {x: 0%, y: 25%, width: 24%, height: 25%}}
+      - type: realtime.bar
+        key: environment.clouds.cover.high
+        title: false
+        geometry: {x: 25%, y: 29%, width: 75%, height: 17%}
+        display:
+          range: {min: 0, max: 100}
+          track: {weight: 40%}
+          fill: {color: '#8fa3b8'}
+          value-label: {position: end, format: {precision: 0}}
+      - {type: text, text: Mid, color: $muted, alignment: CenterLeft, text-height: 4.6mm, geometry: {x: 0%, y: 50%, width: 24%, height: 25%}}
+      - type: realtime.bar
+        key: environment.clouds.cover.mid
+        title: false
+        geometry: {x: 25%, y: 54%, width: 75%, height: 17%}
+        display:
+          range: {min: 0, max: 100}
+          track: {weight: 40%}
+          fill: {color: '#8fa3b8'}
+          value-label: {position: end, format: {precision: 0}}
+      - {type: text, text: Low, color: $muted, alignment: CenterLeft, text-height: 4.6mm, geometry: {x: 0%, y: 75%, width: 24%, height: 25%}}
+      - type: realtime.bar
+        key: environment.clouds.cover.low
+        title: false
+        geometry: {x: 25%, y: 79%, width: 75%, height: 17%}
+        display:
+          range: {min: 0, max: 100}
+          track: {weight: 40%}
+          fill: {color: '#8fa3b8'}
+          value-label: {position: end, format: {precision: 0}}
+
+    - type: titled-group
+      name: windAloft
+      size: 15%
+      title: {text: Wind aloft, height: 7mm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
+      items:
+      - preset: table
+        geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+        props:
+          labelWidth: 30%
+          alignment: Right
+          font: $mono
+          titleGroup: global.cellhead
+          valueGroup: global.cell
+          textHeight: 4.6mm
+          columns:
+          - {head: mph, key: 'environment.wind.speed.{row}', precision: 0, color: $wind}
+          - {head: from, key: 'environment.wind.direction.{row}'}
+          rows:
+          - {label: 180 m, row: 180m}
+          - {label: 120 m, row: 120m}
+          - {label: 80 m, row: 80m}
+          - {label: Ground, keys: [environment.wind.speed.speed, environment.wind.direction.direction]}
+
+    - type: titled-group
+      name: sun
+      size: 15%
+      title: {text: Sun, height: 7mm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
+      items:
+      - preset: reading-list
+        shared: {title: {text-height: 4.6mm}, display: {valueLabel: {text-height: 4.6mm}}}
+        props:
+          numberAlign: end
+          items:
+          - astronomy.sun.rise: {title: {text: Rise}, display: {format: '%-I:%M'}}
+          - astronomy.sun.set:  {title: {text: Set}, display: {format: '%-I:%M'}}
+          - astronomy.sun.remaining:   {title: {text: Daylight}, display: {format: duration, valueLabel: {color: $warn}}}
+          - astronomy.moon.phase:      {title: {text: Moon}, display: {precision: 0}}
+
+    # Pressure: the number over its own 12 hours, and which way it is going in words.
+    - type: titled-group
+      name: pressure
+      title: {text: Pressure, height: 7mm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
+      items:
+      - preset: sparkline
+        geometry: {x: 0%, y: 0%, width: 100%, height: 62%}
+        props:
+          key: environment.pressure.pressure
+          hours: 12
+          figure: pressure
+          plot: {type: plot, gradient: PressureGradient, weight: 0.5, opacity: 0.55}
+          top: 10%
+          bottom: 10%
+      - type: realtime.text
+        key: environment.pressure.pressure
+        title: false
+        display:
+          font: $mono
+          weight: Light
+          unitPosition: Hidden
+          precision: 2
+          format-hint: '00.00'
+          valueLabel: {text-height: 13mm, matchingGroup: {group: global.hero, matchAll: true}}
+        geometry: {x: 0%, y: 0%, width: 62%, height: 62%}
+      - type: switch
+        name: tendency
+        hold: 10m
+        fade: 0.4s
+        geometry: {x: 64%, y: 44%, width: 36%, height: 14%}
+        items:
+        - {type: text, text: Rising, color: $good, alignment: CenterRight, when: 'environment.pressure.pressure - at(environment.pressure.pressure, -3h) > 0.03 inHg'}
+        - {type: text, text: Falling, color: $warn, alignment: CenterRight, when: 'environment.pressure.pressure - at(environment.pressure.pressure, -3h) < -0.03 inHg'}
+        - {type: text, text: Steady, color: $muted, alignment: CenterRight}
+      - preset: table
+        geometry: {x: 0%, y: 64%, width: 100%, height: 36%}
+        props:
+          labelWidth: 1%
+          alignment: Right
+          font: $mono
+          titleGroup: global.cellhead
+          valueGroup: global.cell
+          textHeight: 4.6mm
+          columns:
+          - {head: 3 h, key: 'environment.pressure.pressure - at(environment.pressure.pressure, -3h)', precision: 2}
+          - {head: 24 h, key: 'environment.pressure.pressure - at(environment.pressure.pressure, -24h)', precision: 2}
+          - {head: Vis mi, key: environment.visibility, precision: 1}
+          rows:
+          - {label: '', row: x}
+
+  # ================= SURFACE ==============================================
+  - type: stack
+    name: surface
+    direction: Horizontal
+    spacing: 3mm
+    items:
+
+    # Now: the temperature, the word for the weather, where now sits in today's range, and the air's moisture.
+    - type: group
+      name: now
+      size: 20%
+      items:
+      - type: realtime.text
+        key: $t
+        title: false
+        display:
+          font: $mono
+          weight: Light
+          unitPosition: Inline
+          format-hint: '00°'
+          precision: 0
+          valueLabel:
+            text-height: 24mm
+            color: {scale: $temperature, of: $t}
+        geometry: {x: 0%, y: 0%, width: 100%, height: 30%}
+      - type: realtime.text
+        key: environment.condition.condition
+        title: false
+        display:
+          font: $display
+          valueLabel: {color: $muted, text-height: 5.5mm}
+        geometry: {x: 0%, y: 30%, width: 100%, height: 8%}
+      - preset: range-bar
+        geometry: {x: 2%, y: 39%, width: 96%, height: 22%}
+        props:
+          low: environment.temperature.low
+          high: environment.temperature.high
+          min: 30
+          max: 100
+          interval: 10
+      - preset: table
+        geometry: {x: 0%, y: 62%, width: 100%, height: 38%}
+        props:
+          labelWidth: 50%
+          alignment: Right
+          font: $mono
+          titleGroup: global.cellhead
+          valueGroup: global.cell
+          textHeight: 4.6mm
+          columns:
+          - {head: '', key: $t, precision: 0}
+          rows:
+          - {label: Feels like, keys: [environment.temperature.feelsLike]}
+          - {label: Dew point, keys: [environment.temperature.dewpoint]}
+          - {label: Humidity, keys: [environment.humidity.humidity]}
+          - {label: VPD kPa, keys: ['environment.pressure.vaporPressureDeficit']}
+
+    # The forecast, two and a half days: weather glyphs on top, wind arrows under them, the temperature as a filled
+    # line with its highs and lows pinned, feels-like and dew point under it, and rain at the bottom on a fixed span
+    # (0 to 0.5 in/hr) so a drizzle is a sliver and a downpour fills the band; the chance of rain is the dashed line.
+    - type: graph
+      name: forecast
+      timeframe: {days: 2, hours: 12}
+      annotations:
+        dayLabels: {alignment: TopCenter, opacity: 0.35}
+        hourLabels: {alignment: BottomCenter, spacingIntervals: '3, 6, 12'}
+        lines: {spacing: 8 mm, weight: 0.5}
+      figures:
+      - figure: glyphs
+        margins: {top: 1%, bottom: 90%}
+        environment.temperature.dewpoint:
+          plot:
+            type: strip
+            pins:
+              key: environment.precipitation.precipitation
+              size: 22
+              at: 0.5
+              steps:
+              - [0,    'wi:day-sunny']
+              - [0.02, 'wi:sprinkle']
+              - [0.1,  'wi:showers']
+              - [0.3,  'wi:rain']
+      - figure: windarrows
+        margins: {top: 10%, bottom: 84%}
+        environment.temperature.dewpoint:
+          plot:
+            type: strip
+            pins:
+              key: environment.wind.direction.direction
+              glyph: 'wi:direction-up'
+              rotate: 180
+              size: 14
+              at: 0.5
+              color: $wind
+      - figure: temperature
+        margins: {bottom: 38%, top: 22%}
+        environment.temperature.temperature:
+          labels: {enabled: true}
+          plot: {type: plot, gradient: TemperatureGradient, weight: 1.0, fill: {opacity: 0.18, base: 40}}
+          resolution: 2
+        environment.temperature.feelsLike:
+          plot: {type: plot, gradient: TemperatureGradient, weight: 0.35, opacity: 0.6}
+          resolution: 2
+        environment.temperature.dewpoint:
+          plot: {type: plot, cap: square, color: $good, dashPattern: '5, 5', weight: 0.3}
+      - figure: chance
+        margins: {bottom: 5%, top: 68%}
+        min: 0
+        max: 1
+        environment.precipitation.probability:
+          plot: {type: plot, color: $rain, dashPattern: '2, 3', weight: 0.35, opacity: 0.5}
+      - figure: precipitation
+        margins: {bottom: 5%, top: 68%}
+        min: 0
+        max: 0.5
+        environment.precipitation.precipitation:
+          plot: {type: bar, color: $rain, width: 0.9}
+          smooth: false
+
+    # The slot. A condition that matters takes it over (rain, frost, wind, UV); with none, Today and the day's
+    # temperature round the clock take turns.
+    - type: switch
+      name: watch
+      size: 22%
+      hold: 2m
+      cycle: 20s
+      fade: 0.5s
+      items:
+      - type: titled-group
+        name: rainAlert
+        when: 'max(environment.precipitation.probability, 12h) > 50%'
+        title: {text: Rain coming, height: 7mm, color: $rain, matchingGroup: {group: global.head, matchAll: true}}
+        items:
+        - type: realtime.text
+          key: 'max(environment.precipitation.probability, 12h)'
+          title: false
+          display: {font: $mono, weight: Light, precision: 0, valueLabel: {color: $rain, text-height: 18mm}}
+          geometry: {x: 0%, y: 0%, width: 100%, height: 34%}
+        - type: text
+          text: chance in the next 12 h
+          color: $muted
+          geometry: {x: 0%, y: 34%, width: 100%, height: 8%}
+        - preset: table
+          geometry: {x: 0%, y: 46%, width: 100%, height: 54%}
+          props:
+            labelWidth: 52%
+            alignment: Right
+            font: $mono
+            titleGroup: global.cellhead
+            valueGroup: global.cell
+            textHeight: 4.6mm
+            columns:
+            - {head: in, key: environment.precipitation.precipitation, precision: 2, color: $rain}
+            rows:
+            - {label: Rate now /hr, keys: [environment.precipitation.precipitation]}
+            - {label: Peak /hr, keys: ['max(environment.precipitation.precipitation, 12h)']}
+            - {label: Today, keys: [environment.precipitation.rainDaily]}
+            - {label: Next 12 h, keys: ['avg(environment.precipitation.precipitation, 12h) * 12']}
+      - type: titled-group
+        name: frostAlert
+        when: 'min(environment.temperature.temperature, 24h) < 34°F'
+        title: {text: Frost tonight, height: 7mm, color: $info, matchingGroup: {group: global.head, matchAll: true}}
+        items:
+        - type: realtime.text
+          key: environment.temperature.low
+          title: false
+          display: {font: $mono, weight: Light, precision: 0, unitPosition: Inline, valueLabel: {color: $info, text-height: 18mm}}
+          geometry: {x: 0%, y: 0%, width: 100%, height: 34%}
+        - type: text
+          text: low tonight
+          color: $muted
+          geometry: {x: 0%, y: 34%, width: 100%, height: 8%}
+        - preset: table
+          geometry: {x: 0%, y: 46%, width: 100%, height: 54%}
+          props:
+            labelWidth: 52%
+            alignment: Right
+            font: $mono
+            titleGroup: global.cellhead
+            valueGroup: global.cell
+            textHeight: 4.6mm
+            columns:
+            - {head: '', key: $t, precision: 0}
+            rows:
+            - {label: Wind mph, keys: [environment.wind.speed.speed]}
+            - {label: Dew point, keys: [environment.temperature.dewpoint]}
+            - {label: Soil surface, keys: [environment.soil.temperature.temperature]}
+            - {label: Cloud, keys: [environment.clouds.cover.cover]}
+      - type: titled-group
+        name: windAlert
+        when: 'environment.wind.speed.gust > 25mph'
+        title: {text: Gusty, height: 7mm, color: $wind, matchingGroup: {group: global.head, matchAll: true}}
+        items:
+        - type: realtime.text
+          key: environment.wind.speed.gust
+          title: false
+          display: {font: $mono, weight: Light, precision: 0, unitPosition: Hidden, valueLabel: {color: $wind, text-height: 18mm}}
+          geometry: {x: 0%, y: 0%, width: 100%, height: 34%}
+        - type: text
+          text: mph gust now
+          color: $muted
+          geometry: {x: 0%, y: 34%, width: 100%, height: 8%}
+        - preset: table
+          geometry: {x: 0%, y: 46%, width: 100%, height: 54%}
+          props:
+            labelWidth: 52%
+            alignment: Right
+            font: $mono
+            titleGroup: global.cellhead
+            valueGroup: global.cell
+            textHeight: 4.6mm
+            columns:
+            - {head: mph, key: environment.wind.speed.speed, precision: 0, color: $wind}
+            rows:
+            - {label: Wind, keys: [environment.wind.speed.speed]}
+            - {label: Gust peak 12 h, keys: ['max(environment.wind.speed.gust, 12h)']}
+            - {label: At 80 m, keys: [environment.wind.speed.80m]}
+            - {label: At 180 m, keys: [environment.wind.speed.180m]}
+      - type: titled-group
+        name: uvAlert
+        when: 'environment.light.uvi >= 6 uvi'
+        title: {text: Strong sun, height: 7mm, color: $bad, matchingGroup: {group: global.head, matchAll: true}}
+        items:
+        - type: realtime.text
+          key: environment.light.uvi
+          title: false
+          display: {font: $mono, weight: Light, precision: 0, valueLabel: {color: {scale: UVIndexGradient, of: environment.light.uvi}, text-height: 18mm}}
+          geometry: {x: 0%, y: 0%, width: 100%, height: 34%}
+        - type: text
+          text: UV index
+          color: $muted
+          geometry: {x: 0%, y: 34%, width: 100%, height: 8%}
+        - preset: table
+          geometry: {x: 0%, y: 46%, width: 100%, height: 54%}
+          props:
+            labelWidth: 52%
+            alignment: Right
+            font: $mono
+            titleGroup: global.cellhead
+            valueGroup: global.cell
+            textHeight: 4.6mm
+            columns:
+            - {head: '', key: environment.light.uvi, precision: 0}
+            rows:
+            - {label: Peak today, keys: ['max(environment.light.uvi, today)']}
+            - {label: Sun W/m², keys: [environment.light.irradiance.irradiance]}
+            - {label: Cloud %, keys: [environment.clouds.cover.cover]}
+            - {label: Sun elev °, keys: [astronomy.sun.elevation]}
+      # No alert: these two take turns.
+      - type: titled-group
+        name: today
+        title: {text: Today, height: 7mm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
+        items:
+        - preset: table
+          geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+          props:
+            labelWidth: 40%
+            alignment: Right
+            font: $mono
+            titleGroup: global.cellhead
+            valueGroup: global.cell
+            textHeight: 4.6mm
+            columns:
+            - {head: °F, key: $t, precision: 0}
+            - {head: at, key: environment.temperature.highTime, format: '%-I:%M'}
+            rows:
+            - {label: High, keys: [environment.temperature.high, environment.temperature.highTime], color: $bad}
+            - {label: Low, keys: [environment.temperature.low, environment.temperature.lowTime], color: $info}
+            - {label: Feels hi, keys: [environment.temperature.feelsLikeHigh, null]}
+            - {label: Feels lo, keys: [environment.temperature.feelsLikeLow, null]}
+            - {label: Rain %, keys: ['max(environment.precipitation.probability, today)', null], color: $rain}
+            - {label: Rain in, keys: [environment.precipitation.rainDaily, null], color: $rain}
+      - preset: polar-card
+        name: dayClock
+        props:
+          title: Today round the clock
+          plot: clock
+          key: environment.temperature.temperature
+          window: today
+          gradient:
+          - {at: 30, color: '#1a8cff'}
+          - {at: 50, color: '#14e3c0'}
+          - {at: 65, color: '#ffd400'}
+          - {at: 80, color: '#ff9124'}
+          - {at: 95, color: '#ff3048'}
+
+  # ================= GROUND ===============================================
+  - type: stack
+    name: ground
+    direction: Horizontal
+    size: 38%
+    spacing: 3mm
+    dividers: {enabled: true, opacity: 45%, size: 88%}
+    items:
+
+    # Bedroom: the temperature over its own 12 hours, the humidity as a ring, the day's range under them, the battery.
+    - type: titled-group
+      name: bedroom
+      size: 24%
+      title: {text: Bedroom, height: 7mm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
+      items:
+      - preset: sparkline
+        geometry: {x: 0%, y: 0%, width: 62%, height: 56%}
+        props:
+          key: indoor.temperature.temperature#bedroom
+          hours: 12
+          figure: indoor
+          min: 60
+          max: 85
+          plot: {type: plot, gradient: TemperatureGradient, weight: 0.5, opacity: 0.55}
+          top: 8%
+          bottom: 4%
+      - type: realtime.text
+        key: indoor.temperature.temperature#bedroom
+        title: false
+        display:
+          font: $mono
+          weight: Light
+          unitPosition: Inline
+          format-hint: '00°'
+          precision: 0
+          valueLabel: {text-height: 15mm, matchingGroup: {group: global.room, matchAll: true}, color: {scale: $temperature, of: indoor.temperature.temperature#bedroom}}
+        geometry: {x: 0%, y: 0%, width: 62%, height: 40%}
+      - preset: ring-reading
+        geometry: {x: 64%, y: 0%, width: 36%, height: 56%}
+        props: {key: indoor.humidity.humidity#bedroom, title: Humidity, color: $info, text_color: $info, weight: 8%}
+      - preset: table
+        geometry: {x: 0%, y: 60%, width: 100%, height: 30%}
+        props:
+          labelWidth: 34%
+          alignment: Right
+          font: $mono
+          titleGroup: global.cellhead
+          valueGroup: global.cell
+          textHeight: 4.6mm
+          columns:
+          - {head: °F, key: indoor.temperature.temperature#bedroom, precision: 0}
+          - {head: RH %, key: indoor.humidity.humidity#bedroom, precision: 0, color: $info}
+          rows:
+          - {label: Low 24 h, keys: ['min(indoor.temperature.temperature#bedroom, 24h)', 'min(indoor.humidity.humidity#bedroom, 24h)'], color: $info}
+          - {label: High 24 h, keys: ['max(indoor.temperature.temperature#bedroom, 24h)', 'max(indoor.humidity.humidity#bedroom, 24h)'], color: $bad}
+      - type: realtime.bar
+        key: indoor.battery.battery#bedroom
+        title: false
+        geometry: {x: 50%, y: 91%, width: 50%, height: 9%}
+        display:
+          style: battery
+          range: {min: 0, max: 100}
+          fill: {color: zone}
+          zones:
+          - {to: 20, color: $bad, opacity: 0}
+          - {from: 20, to: 50, color: $warn, opacity: 0}
+          - {from: 50, color: $good, opacity: 0}
+          value-label: {position: end, format: {precision: 0}}
+      - type: text
+        text: Battery
+        color: $muted
+        text-height: 4.6mm
+        alignment: CenterLeft
+        geometry: {x: 0%, y: 91%, width: 48%, height: 9%}
+
+    # Terrarium: the temperature over its own 12 hours, the humidity as a ring, the day's range under them, the battery.
+    - type: titled-group
+      name: terrarium
+      size: 24%
+      title: {text: Terrarium, height: 7mm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
+      items:
+      - preset: sparkline
+        geometry: {x: 0%, y: 0%, width: 62%, height: 56%}
+        props:
+          key: indoor.temperature.temperature#terrarium
+          hours: 12
+          figure: indoor
+          min: 65
+          max: 90
+          plot: {type: plot, gradient: TemperatureGradient, weight: 0.5, opacity: 0.55}
+          top: 8%
+          bottom: 4%
+      - type: realtime.text
+        key: indoor.temperature.temperature#terrarium
+        title: false
+        display:
+          font: $mono
+          weight: Light
+          unitPosition: Inline
+          format-hint: '00°'
+          precision: 0
+          valueLabel: {text-height: 15mm, matchingGroup: {group: global.room, matchAll: true}, color: {scale: $temperature, of: indoor.temperature.temperature#terrarium}}
+        geometry: {x: 0%, y: 0%, width: 62%, height: 40%}
+      - preset: ring-reading
+        geometry: {x: 64%, y: 0%, width: 36%, height: 56%}
+        props: {key: indoor.humidity.humidity#terrarium, title: Humidity, color: $good, text_color: $good, weight: 8%}
+      - preset: table
+        geometry: {x: 0%, y: 60%, width: 100%, height: 30%}
+        props:
+          labelWidth: 34%
+          alignment: Right
+          font: $mono
+          titleGroup: global.cellhead
+          valueGroup: global.cell
+          textHeight: 4.6mm
+          columns:
+          - {head: °F, key: indoor.temperature.temperature#terrarium, precision: 0}
+          - {head: RH %, key: indoor.humidity.humidity#terrarium, precision: 0, color: $good}
+          rows:
+          - {label: Low 24 h, keys: ['min(indoor.temperature.temperature#terrarium, 24h)', 'min(indoor.humidity.humidity#terrarium, 24h)'], color: $info}
+          - {label: High 24 h, keys: ['max(indoor.temperature.temperature#terrarium, 24h)', 'max(indoor.humidity.humidity#terrarium, 24h)'], color: $bad}
+      - type: realtime.bar
+        key: indoor.battery.battery#terrarium
+        title: false
+        geometry: {x: 50%, y: 91%, width: 50%, height: 9%}
+        display:
+          style: battery
+          range: {min: 0, max: 100}
+          fill: {color: zone}
+          zones:
+          - {to: 20, color: $bad, opacity: 0}
+          - {from: 20, to: 50, color: $warn, opacity: 0}
+          - {from: 50, color: $good, opacity: 0}
+          value-label: {position: end, format: {precision: 0}}
+      - type: text
+        text: Battery
+        color: $muted
+        text-height: 4.6mm
+        alignment: CenterLeft
+        geometry: {x: 0%, y: 91%, width: 48%, height: 9%}
+
+    - type: titled-group
+      name: wind
+      size: 14%
+      title: {text: Wind mph, height: 7mm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
+      items:
+      - preset: compass
+        geometry: {x: 0%, y: 0%, width: 100%, height: 64%}
+        props: {label: mph}
+      - preset: table
+        geometry: {x: 0%, y: 62%, width: 100%, height: 38%}
+        props:
+          labelWidth: 50%
+          alignment: Right
+          font: $mono
+          titleGroup: global.cellhead
+          valueGroup: global.cell
+          textHeight: 4.6mm
+          columns:
+          - {head: '', key: environment.wind.speed.gust, precision: 0, color: $wind}
+          rows:
+          - {label: Gust, keys: [environment.wind.speed.gust]}
+          - {label: Peak today, keys: ['max(environment.wind.speed.gust, today)']}
+          - {label: From, keys: [environment.wind.direction.direction]}
+
+    - type: titled-group
+      name: uv
+      size: 14%
+      title: {text: UV and sun, height: 7mm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
+      items:
+      - preset: zone-dial
+        geometry: {x: 0%, y: 0%, width: 100%, height: 64%}
+        props:
+          key: environment.light.uvi
+          min: 0
+          max: 12
+          interval: 3
+          zones:
+          - {from: 0, to: 3, color: '#3ea72d'}
+          - {from: 3, to: 6, color: '#fff300'}
+          - {from: 6, to: 8, color: '#f18b00'}
+          - {from: 8, to: 11, color: '#e53210'}
+          - {from: 11, to: 12, color: '#b567a4'}
+        display:
+          needle: {type: marker, width: 9%, length: 12%}
+          value-label: {position: center, size: 22%}
+      - preset: table
+        geometry: {x: 0%, y: 62%, width: 100%, height: 38%}
+        props:
+          labelWidth: 50%
+          alignment: Right
+          font: $mono
+          titleGroup: global.cellhead
+          valueGroup: global.cell
+          textHeight: 4.6mm
+          columns:
+          - {head: '', key: environment.light.irradiance.irradiance, precision: 0, color: $warn}
+          rows:
+          - {label: Sun W/m², keys: [environment.light.irradiance.irradiance]}
+          - {label: Direct, keys: [environment.light.irradiance.direct]}
+          - {label: Diffuse, keys: [environment.light.irradiance.diffuse]}
+
+    # Soil as a cross-section: one row per depth, temperature and moisture side by side, wetness as a bar.
+    - type: titled-group
+      name: soil
+      title: {text: Soil, height: 7mm, color: $muted, matchingGroup: {group: global.head, matchAll: true}}
+      items:
+      - preset: table
+        geometry: {x: 0%, y: 0%, width: 100%, height: 60%}
+        props:
+          labelWidth: 34%
+          alignment: Right
+          font: $mono
+          titleGroup: global.cellhead
+          valueGroup: global.cell
+          textHeight: 4.6mm
+          columns:
+          - {head: °F, key: environment.soil.temperature.temperature, precision: 0, color: $accent}
+          - {head: wet %, key: environment.soil.moisture.1-3cm, precision: 0, color: $info}
+          rows:
+          - {label: Surface, keys: [environment.soil.temperature.temperature, environment.soil.moisture.1-3cm]}
+          - {label: 6 cm, keys: [environment.soil.temperature.6cm, environment.soil.moisture.3-9cm]}
+          - {label: 18 cm, keys: [environment.soil.temperature.18cm, environment.soil.moisture.9-27cm]}
+          - {label: 54 cm, keys: [environment.soil.temperature.54cm, environment.soil.moisture.27-81cm]}
+      - preset: bar-stack
+        geometry: {x: 0%, y: 64%, width: 100%, height: 36%}
+        props:
+          spacing: 0.6mm
+          items:
+          - {preset: readout-bar, props: {key: environment.soil.moisture.1-3cm, max: 50, weight: 34%}, display: {fill: {color: $info}}}
+          - {preset: readout-bar, props: {key: environment.soil.moisture.3-9cm, max: 50, weight: 34%}, display: {fill: {color: $info}}}
+          - {preset: readout-bar, props: {key: environment.soil.moisture.9-27cm, max: 50, weight: 34%}, display: {fill: {color: $info}}}
+          - {preset: readout-bar, props: {key: environment.soil.moisture.27-81cm, max: 50, weight: 34%}, display: {fill: {color: $info}}}
