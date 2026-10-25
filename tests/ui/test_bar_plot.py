@@ -106,9 +106,10 @@ def test_fill_reads_true_a_number_or_a_mapping():
 	decode = LinePlot.statefulItems['fill'].decodeValue
 	assert decode(None, None) is None
 	assert decode(False, None) is None
-	assert decode(True, None) == {'opacity': 0.25, 'base': None}
-	assert decode(0.4, None) == {'opacity': 0.4, 'base': None}
-	assert decode({'opacity': 3, 'base': 50}, None) == {'opacity': 1.0, 'base': 50.0}
+	assert decode(True, None) == {'opacity': 0.25, 'base': None, 'fade': False}
+	assert decode(0.4, None) == {'opacity': 0.4, 'base': None, 'fade': False}
+	assert decode({'opacity': 3, 'base': 50}, None) == {'opacity': 1.0, 'base': 50.0, 'fade': False}
+	assert decode({'fade': True}, None) == {'opacity': 0.25, 'base': None, 'fade': True}
 
 
 def test_a_line_fill_holds_the_axis_to_its_base(dashboard):

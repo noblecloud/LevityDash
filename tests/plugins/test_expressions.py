@@ -70,6 +70,17 @@ def test_key_affixes_survive_parsing():
 	assert key.identity == 'bedroom'
 
 
+def test_key_with_a_range_atom_is_one_key():
+	# OpenMeteo names soil layers by depth range; the hyphen is part of the key, not a subtraction.
+	expression = Expression.parse('environment.soil.moisture.1-3cm')
+	assert expression.plainKey == CategoryItem('environment.soil.moisture.1-3cm')
+	both = Expression.parse('environment.soil.moisture.1-3cm - environment.soil.moisture.27-81cm')
+	assert both.plainKey is None
+	assert {str(k) for k in both.keys} == {'environment.soil.moisture.1-3cm', 'environment.soil.moisture.27-81cm'}
+	# A word atom followed by a hyphen is still a subtraction.
+	assert Expression.parse(f'{TEMP}-5°F').plainKey is None
+
+
 def test_window_and_point_inputs():
 	expression = Expression.parse(f'max({TEMP}, today) - min({TEMP}, 24h) + at({DEW}, -3h) * 2')
 	assert expression.plainKey is None

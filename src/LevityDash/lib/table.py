@@ -25,7 +25,7 @@ NAME = 'table'
 
 #: property name -> (default, doc). The order is the order of the Studio's property list.
 PROPS: Dict[str, tuple] = {
-	'columns': ([], 'The columns: a list of {head, unit, key, precision, format, color}. `key` may hold {row}, replaced by each row\'s `row` name'),
+	'columns': ([], 'The columns: a list of {head, unit, key, precision, format, hint, color}. `key` may hold {row}, replaced by each row\'s `row` name'),
 	'rows': ([], 'The rows: a list of {label, row, keys, color}. `keys` (one per column, null for an empty cell) replaces the columns\' keys for that row'),
 	'labelWidth': ('1.2fr', 'Width of the label column, as a grid track size'),
 	'headHeight': ('1fr', 'Height of the head row, as a grid track size; the rows share the rest equally'),
@@ -36,10 +36,12 @@ PROPS: Dict[str, tuple] = {
 	'titleGroup': ('global.title', 'Size group of the heads and the row labels; the default spans the whole dashboard'),
 	'valueGroup': ('global.value', 'Size group of the numbers; the default spans the whole dashboard'),
 	'font': (None, 'Font of the numbers; unset keeps the font of the panel around it'),
+	'labelFont': (None, 'Font of the heads and the row labels; unset keeps the font of the panel around it'),
+	'textHeight': (None, 'Height of every head, label and number (text-height, such as 4.5mm), so tables of different row heights share one text size; unset fits each to its cell'),
 	'dividers': (None, 'dividers: settings (such as {enabled: true}) for lines between rows and columns'),
 }
 
-_COLUMN = {'head', 'unit', 'key', 'precision', 'format', 'color'}
+_COLUMN = {'head', 'unit', 'key', 'precision', 'format', 'hint', 'color'}
 _ROW = {'label', 'row', 'keys', 'color'}
 _ALIGN = {'Left': 'CenterLeft', 'Center': 'Center', 'Right': 'CenterRight'}
 
@@ -76,11 +78,15 @@ def build(props: Dict[str, Any]) -> dict:
 	items: List[dict] = []
 	title_group = {'group': props['titleGroup'], 'matchAll': True}
 	value_group = {'group': props['valueGroup'], 'matchAll': True}
+	text_height = props.get('textHeight')
+	sized = {'text-height': text_height} if text_height not in (None, '') else {}
+	if props.get('labelFont'):
+		sized['font'] = props['labelFont']
 	for at, column in enumerate(columns, start=1):
 		if (text := _head(column)):
 			items.append({
 				'type': 'text', 'text': text, 'color': '$muted', 'alignment': _ALIGN[align],
-				'matchingGroup': title_group, 'grid': {'column': at + 1, 'row': 1},
+				'matchingGroup': title_group, 'grid': {'column': at + 1, 'row': 1}, **sized,
 			})
 	for number, row in enumerate(rows, start=1):
 		keys = row.get('keys')
@@ -89,7 +95,7 @@ def build(props: Dict[str, Any]) -> dict:
 		if row.get('label') not in (None, ''):
 			label = {
 				'type': 'text', 'text': str(row['label']), 'alignment': 'CenterLeft', 'matchingGroup': title_group,
-				'grid': {'column': 1, 'row': number + 1},
+				'grid': {'column': 1, 'row': number + 1}, **sized,
 			}
 			if row.get('color'):
 				label['color'] = row['color']
@@ -104,18 +110,21 @@ def build(props: Dict[str, Any]) -> dict:
 				if row.get('row') in (None, ''):
 					raise ValueError(f'row {number} has no `row` name, and column {at} writes {{row}} in its key')
 				key = str(key).replace('{row}', str(row['row']))
-			valueLabel: Dict[str, Any] = {'matchingGroup': value_group, 'alignment': _ALIGN[align]}
+			valueLabel: Dict[str, Any] = {'matchingGroup': value_group, 'alignment': _ALIGN[align], **sized}
 			if number_align not in (None, 'none'):
 				valueLabel['number-align'] = number_align
 			color = column.get('color')
 			if color:
 				valueLabel['color'] = color
-			display: Dict[str, Any] = {'unitPosition': 'Hidden', 'valueLabel': valueLabel}
+			# The font goes on the value label: a display has no font of its own, and one written there is ignored.
 			if props.get('font'):
-				display['font'] = props['font']
+				valueLabel['font'] = props['font']
+			display: Dict[str, Any] = {'unitPosition': 'Hidden', 'valueLabel': valueLabel}
 			for name in ('precision', 'format'):
 				if column.get(name) is not None:
 					display[name] = column[name]
+			if column.get('hint') is not None:
+				display['format-hint'] = column['hint']
 			items.append({
 				'type': 'realtime.text', 'key': key, 'title': False, 'display': display,
 				'grid': {'column': at + 1, 'row': number + 1},

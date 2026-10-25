@@ -1,0 +1,231 @@
+key	state	sources	unit	shape	value	forecast	history
+astronomy.moon.phase	live	PirateWeather	%	number	47.0%		
+astronomy.sun.elevation	live	Astronomy		number	-29		
+astronomy.sun.hour	live	Astronomy		number	20.7		
+astronomy.sun.remaining	live	Astronomy		number	0		
+astronomy.sun.rise	live	PirateWeather,WeatherFlow	epoch	time	2026-10-25 11:22:20+00:00		
+astronomy.sun.set	live	PirateWeather,WeatherFlow	epoch	time	2026-10-25 22:15:25+00:00		
+device.@deviceSerial	off	WeatherFlow		number			
+device.@deviceSerial.RSSI	off	WeatherFlow	rssi	number			
+device.@deviceSerial.battery	off	WeatherFlow	volts	number			
+device.@deviceSerial.debug	off	WeatherFlow	bool	enum			
+device.@deviceSerial.deviceRSSI	off	WeatherFlow	rssi	number			
+device.@deviceSerial.firmware	off	WeatherFlow	int	number			
+device.@deviceSerial.resetFlags	off	WeatherFlow	str	text			
+device.@deviceSerial.sampleInterval.report	off	WeatherFlow	min	number			
+device.@deviceSerial.sampleInterval.wind	off	WeatherFlow	s	number			
+device.@deviceSerial.sensorStatus	off	WeatherFlow	str	text			
+device.@deviceSerial.serial	off	WeatherFlow	str	text			
+device.@deviceSerial.uptime	off	WeatherFlow	s	number			
+environment.airQuality.index	off	Mock	int	number			
+environment.clouds.cover	live	PirateWeather	%	number	0%		
+environment.clouds.cover.cover	live	OpenWeatherMap,OpenMeteo	%	number	0%		
+environment.clouds.cover.high	live	OpenMeteo	%	number	0%		
+environment.clouds.cover.low	live	OpenMeteo	%	number	35%		
+environment.clouds.cover.mid	live	OpenMeteo	%	number	0%		
+environment.condition.condition	live	OpenWeatherMap,PirateWeather,OpenMeteo,WeatherFlow	str	text	clear sky		
+environment.condition.icon	live	OpenWeatherMap,PirateWeather,OpenMeteo,WeatherFlow	str	text			
+environment.condition.weatherCode	live	OpenMeteo		enum	1		
+environment.humidity.humidity	live	OpenWeatherMap,PirateWeather,OpenMeteo,WeatherFlow	%	number	74%		
+environment.light.illuminance	off	WeatherFlow	lux	number			
+environment.light.irradiance	off	WeatherFlow	W/m^2	number			
+environment.light.irradiance.daily	waiting	OpenMeteo	MJ/m^2	number			
+environment.light.irradiance.diffuse	live	OpenMeteo		number	0 W/m²		
+environment.light.irradiance.diffuseNormal	waiting	OpenMeteo	W/m^2	number			
+environment.light.irradiance.direct	live	OpenMeteo		number	0 W/m²		
+environment.light.irradiance.directNormal	live	OpenMeteo		number	0 W/m²		
+environment.light.irradiance.global	waiting	OpenMeteo	W/m^2	number			
+environment.light.irradiance.irradiance	live	OpenMeteo		number	0 W/m²		
+environment.light.sunrise	live	OpenWeatherMap,OpenMeteo	ISO8601	time	2026-10-24 11:20:54+00:00		
+environment.light.sunset	live	OpenWeatherMap,OpenMeteo	ISO8601	time	2026-10-24 22:17:26+00:00		
+environment.light.uvi	live	PirateWeather,WeatherFlow	uvi	number	0		
+environment.lightning.count1hr	off	WeatherFlow	strike	number			
+environment.lightning.count3hr	off	WeatherFlow	strike	number			
+environment.lightning.distance	off	WeatherFlow	km	number			
+environment.lightning.distanceAverage	off	WeatherFlow	km	number			
+environment.lightning.energy	off	WeatherFlow	int	number			
+environment.lightning.last	off	WeatherFlow	epoch	time			
+environment.lightning.lightning	off	WeatherFlow	strike	number			
+environment.ozone	waiting	PirateWeather	mm	number			
+environment.precipitation	waiting	PirateWeather	mm/@period	number			
+environment.precipitation.accumulation	live	PirateWeather		number	0 in/hr		
+environment.precipitation.analysis	off	WeatherFlow	int	number			
+environment.precipitation.daily	waiting	OpenMeteo,WeatherFlow	mm/day	number			
+environment.precipitation.dailyNearCast	off	WeatherFlow	mm/day	number			
+environment.precipitation.description	off	WeatherFlow	str	text			
+environment.precipitation.error	waiting	PirateWeather		number			
+environment.precipitation.hourly	off	WeatherFlow	mm/hr	number			
+environment.precipitation.icon	off	WeatherFlow	str	text			
+environment.precipitation.max	live	PirateWeather		number	0 in/hr		
+environment.precipitation.maxTime	live	PirateWeather		time	2026-10-25 04:00:00+00:00		
+environment.precipitation.precipitation	live	PirateWeather,OpenMeteo,WeatherFlow	mm/@period	number	0 in/hr		
+environment.precipitation.precipitationNearCast	off	WeatherFlow	mm/@period	number			
+environment.precipitation.probability	live	PirateWeather,WeatherFlow	%	number	0%		
+environment.precipitation.rain	waiting	OpenMeteo	mm/hr	number			
+environment.precipitation.rainDaily	live	OpenMeteo		number	0 in/d		
+environment.precipitation.show	waiting	OpenMeteo	mm/hr	number			
+environment.precipitation.showDaily	live	OpenMeteo		number	0 in/d		
+environment.precipitation.showers	waiting	OpenMeteo	mm/hr	number			
+environment.precipitation.showersDaily	live	OpenMeteo		number	0 in/d		
+environment.precipitation.snowDepth	live	OpenMeteo		number	0 mi		
+environment.precipitation.time	waiting	OpenMeteo,WeatherFlow	hr	number			
+environment.precipitation.type	off	WeatherFlow	*	number			
+environment.pressure	waiting	OpenWeatherMap,PirateWeather,WeatherFlow	hPa	number			
+environment.pressure.pressure	live	OpenWeatherMap,PirateWeather,OpenMeteo,WeatherFlow		number	30.50 inHg		
+environment.pressure.pressureAbsolute	off	WeatherFlow		number			
+environment.pressure.pressureSeaLevel	off	WeatherFlow		number			
+environment.pressure.surface	live	OpenMeteo		number	30.47 inHg		
+environment.pressure.trend	off	WeatherFlow	str	text			
+environment.pressure.vaporPressureDeficit	live	OpenMeteo		number	0.28		
+environment.soil.freezingLevelHeight	live	OpenMeteo		number	2.2 mi		
+environment.soil.moisture.1-3cm	live	OpenMeteo	%	number	0%		
+environment.soil.moisture.27-81cm	live	OpenMeteo	%	number	0%		
+environment.soil.moisture.3-9cm	live	OpenMeteo	%	number	0%		
+environment.soil.moisture.9-27cm	live	OpenMeteo	%	number	0%		
+environment.soil.moisture.evapotranspiration	live	OpenMeteo		number	0 mm/hr		
+environment.soil.moisture.moisture	live	OpenMeteo	%	number	0%		
+environment.soil.temperature.18cm	live	OpenMeteo	°	number	62°		
+environment.soil.temperature.54cm	live	OpenMeteo	°	number	65°		
+environment.soil.temperature.6cm	live	OpenMeteo	°	number	60°		
+environment.soil.temperature.temperature	live	OpenMeteo	°	number	58°		
+environment.storm.bearing	waiting	PirateWeather	º	number			
+environment.storm.distance	waiting	PirateWeather	km	number			
+environment.temperature	waiting	OpenWeatherMap,PirateWeather,WeatherFlow	c	number			
+environment.temperature.deltaT	off	WeatherFlow		number			
+environment.temperature.dewpoint	live	OpenWeatherMap,PirateWeather,OpenMeteo,WeatherFlow	°	number	51°		
+environment.temperature.feelsLike	live	OpenWeatherMap,OpenMeteo,PirateWeather,WeatherFlow	°	number	59°		
+environment.temperature.feelsLikeHigh	live	PirateWeather,OpenMeteo	°	number	62°		
+environment.temperature.feelsLikeHighTime	live	PirateWeather		time	2026-10-25 16:00:00+00:00		
+environment.temperature.feelsLikeLow	live	PirateWeather,OpenMeteo	°	number	48°		
+environment.temperature.feelsLikeLowTime	live	PirateWeather		time	2026-10-26 10:00:00+00:00		
+environment.temperature.feelsLikeMax	live	PirateWeather	°	number	62°		
+environment.temperature.feelsLikeMaxTime	live	PirateWeather		time	2026-10-25 16:00:00+00:00		
+environment.temperature.feelsLikeMin	live	PirateWeather	°	number	51°		
+environment.temperature.feelsLikeMinTime	live	PirateWeather		time	2026-10-26 03:00:00+00:00		
+environment.temperature.heatIndex	off	WeatherFlow		number			
+environment.temperature.high	live	OpenWeatherMap,PirateWeather,OpenMeteo,WeatherFlow	°	number	61°		
+environment.temperature.highTime	live	PirateWeather		time	2026-10-25 17:00:00+00:00		
+environment.temperature.low	live	OpenWeatherMap,PirateWeather,OpenMeteo,WeatherFlow	°	number	58°		
+environment.temperature.lowTime	live	PirateWeather		time	2026-10-26 10:00:00+00:00		
+environment.temperature.max	live	PirateWeather	°	number	65°		
+environment.temperature.maxTime	live	PirateWeather		time	2026-10-25 17:00:00+00:00		
+environment.temperature.min	live	PirateWeather	°	number	53°		
+environment.temperature.minTime	live	PirateWeather		time	2026-10-26 03:00:00+00:00		
+environment.temperature.temperature	live	OpenWeatherMap,OpenMeteo,PirateWeather,WeatherFlow	°	number	60°		
+environment.temperature.wetBulb	off	WeatherFlow		number			
+environment.temperature.wetBulbGlobe	off	WeatherFlow		number			
+environment.temperature.windChill	off	WeatherFlow		number			
+environment.visibility	live	OpenWeatherMap,PirateWeather	km	number	6.2 mi		
+environment.wind	waiting	OpenWeatherMap,PirateWeather	m/s	number			
+environment.wind.direction	live	OpenWeatherMap,PirateWeather,WeatherFlow		number	50		
+environment.wind.direction.120m	live	OpenMeteo	°	number	ENE		
+environment.wind.direction.180m	live	OpenMeteo	°	number	NE		
+environment.wind.direction.80m	live	OpenMeteo	°	number	ENE		
+environment.wind.direction.cardinal	off	WeatherFlow	º[cardinal]	number			
+environment.wind.direction.direction	live	OpenMeteo,WeatherFlow	°	number	ENE		
+environment.wind.direction.dominant	waiting	OpenMeteo	º	number			
+environment.wind.speed	off	WeatherFlow	m/s	number			
+environment.wind.speed.120m	live	OpenMeteo		number	17.1 mph		
+environment.wind.speed.180m	live	OpenMeteo		number	21.1 mph		
+environment.wind.speed.80m	live	OpenMeteo		number	18.9 mph		
+environment.wind.speed.gust	live	PirateWeather,OpenMeteo,OpenWeatherMap,WeatherFlow		number	21.3 mph		
+environment.wind.speed.gustMax	waiting	OpenMeteo	km/hr	number			
+environment.wind.speed.gustMin	waiting	OpenMeteo	km/hr	number			
+environment.wind.speed.lull	off	WeatherFlow		number			
+environment.wind.speed.max	waiting	OpenMeteo	km/hr	number			
+environment.wind.speed.min	waiting	OpenMeteo	km/hr	number			
+environment.wind.speed.speed	live	OpenWeatherMap,PirateWeather,OpenMeteo,WeatherFlow		number	11.5 mph		
+environment.yesterday.precipitation.analysis	off	WeatherFlow	int	number			
+environment.yesterday.precipitation.precipitation	off	WeatherFlow	mm/day	number			
+environment.yesterday.precipitation.time	off	WeatherFlow	min	number			
+environment.yesterday.precipitation.timeRaw	off	WeatherFlow	min	number			
+ev.charge.added	off	Mock	int	number			
+ev.charge.level	off	Mock	%	number			
+ev.charge.range	off	Mock	km	number			
+ev.charge.rate	off	Mock	int	number			
+health.activity.exercise	off	Mock	%	number			
+health.activity.move	off	Mock	%	number			
+health.activity.stand	off	Mock	%	number			
+health.heart.rate	off	Mock	int	number			
+home.thermostat.setpoint	off	Mock	f	number			
+home.thermostat.temperature	off	Mock	f	number			
+home.washer.minutes	off	Mock	min	number			
+home.water.today	off	Mock	int	number			
+indoor.battery.battery	waiting	Govee-bedroom,Govee-terrarium	%bat	number			
+indoor.battery.battery#bedroom	live	Govee-bedroom		number	0.55		
+indoor.battery.battery#terrarium	live	Govee-terrarium		number	0.9		
+indoor.humidity.humidity	waiting	Govee-bedroom,Govee-terrarium	%h	number			
+indoor.humidity.humidity#bedroom	live	Govee-bedroom	%	number	1%		
+indoor.humidity.humidity#terrarium	live	Govee-terrarium	%	number	1%		
+indoor.rssi.rssi	waiting	Govee-bedroom,Govee-terrarium	rssi	number			
+indoor.rssi.rssi#bedroom	live	Govee-bedroom		number	-67 dBm		
+indoor.rssi.rssi#terrarium	live	Govee-terrarium		number	-45 dBm		
+indoor.temperature.dewpoint	waiting	Govee-bedroom,Govee-terrarium	c	number			
+indoor.temperature.heatIndex	waiting	Govee-bedroom,Govee-terrarium	c	number			
+indoor.temperature.temperature	waiting	Govee-bedroom,Govee-terrarium	c	number			
+indoor.temperature.temperature#bedroom	live	Govee-bedroom	°	number	74°		
+indoor.temperature.temperature#terrarium	live	Govee-terrarium	°	number	81°		
+power.battery.level	off	Mock	%	number			
+power.energy.car	off	Mock	int	number			
+power.energy.house	off	Mock	int	number			
+power.energy.net	off	Mock	int	number			
+power.energy.solar	off	Mock	int	number			
+power.energy.today	off	Mock	int	number			
+power.grid.net	off	Mock	int	number			
+power.solar.output	off	Mock	int	number			
+system.battery.charge	off	Host	%	number			
+system.cpu.temperature	off	Host,Mock	c	number			
+system.cpu.usage	off	Host,Mock	%	number			
+system.disk.usage	off	Host,Mock	%	number			
+system.memory.usage	off	Host,Mock	%	number			
+system.network.down	off	Host,Mock	int	number			
+system.network.up	off	Host	int	number			
+system.process.count	off	Host	int	number			
+system.process.top.1.cpu	off	Host	%	number			
+system.process.top.1.memory	off	Host	%	number			
+system.process.top.1.name	off	Host	str	text			
+system.process.top.1.pid	off	Host	int	number			
+system.process.top.10.cpu	off	Host	%	number			
+system.process.top.10.memory	off	Host	%	number			
+system.process.top.10.name	off	Host	str	text			
+system.process.top.10.pid	off	Host	int	number			
+system.process.top.2.cpu	off	Host	%	number			
+system.process.top.2.memory	off	Host	%	number			
+system.process.top.2.name	off	Host	str	text			
+system.process.top.2.pid	off	Host	int	number			
+system.process.top.3.cpu	off	Host	%	number			
+system.process.top.3.memory	off	Host	%	number			
+system.process.top.3.name	off	Host	str	text			
+system.process.top.3.pid	off	Host	int	number			
+system.process.top.4.cpu	off	Host	%	number			
+system.process.top.4.memory	off	Host	%	number			
+system.process.top.4.name	off	Host	str	text			
+system.process.top.4.pid	off	Host	int	number			
+system.process.top.5.cpu	off	Host	%	number			
+system.process.top.5.memory	off	Host	%	number			
+system.process.top.5.name	off	Host	str	text			
+system.process.top.5.pid	off	Host	int	number			
+system.process.top.6.cpu	off	Host	%	number			
+system.process.top.6.memory	off	Host	%	number			
+system.process.top.6.name	off	Host	str	text			
+system.process.top.6.pid	off	Host	int	number			
+system.process.top.7.cpu	off	Host	%	number			
+system.process.top.7.memory	off	Host	%	number			
+system.process.top.7.name	off	Host	str	text			
+system.process.top.7.pid	off	Host	int	number			
+system.process.top.8.cpu	off	Host	%	number			
+system.process.top.8.memory	off	Host	%	number			
+system.process.top.8.name	off	Host	str	text			
+system.process.top.8.pid	off	Host	int	number			
+system.process.top.9.cpu	off	Host	%	number			
+system.process.top.9.memory	off	Host	%	number			
+system.process.top.9.name	off	Host	str	text			
+system.process.top.9.pid	off	Host	int	number			
+time.day	off	WeatherFlow	day	number			
+time.hour	off	WeatherFlow	hr	number			
+time.month	off	WeatherFlow	month	number			
+time.timer.seconds	off	Mock	int	number			
+vehicle.engine.coolant	off	Mock	c	number			
+vehicle.engine.rpm	off	Mock	int	number			
+vehicle.fuel.level	off	Mock	%	number			
+vehicle.speed.speed	off	Mock	int	number			

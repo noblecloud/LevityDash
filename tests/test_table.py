@@ -52,6 +52,28 @@ def test_numbers_align_on_the_point_and_share_dashboard_wide_groups():
 	assert all(t['matchingGroup'] == {'group': 'global.title', 'matchAll': True} for t in texts(item))
 
 
+def test_text_height_sizes_heads_labels_and_numbers_alike():
+	item = presets.expand({'items': [table(textHeight='4.5mm')]})['items'][0]
+	assert all(t['text-height'] == '4.5mm' for t in texts(item))
+	assert all(c['display']['valueLabel']['text-height'] == '4.5mm' for c in cells(item))
+	plain = presets.expand({'items': [table()]})['items'][0]
+	assert not any('text-height' in t for t in texts(plain))
+
+
+def test_a_column_hint_becomes_the_format_hint_of_its_cells():
+	columns = [{'head': 'mph', 'key': 'environment.wind.speed.speed', 'hint': '00'}, {'head': 'from', 'key': 'environment.wind.direction.direction'}]
+	item = presets.expand({'items': [table(columns=columns)]})['items'][0]
+	hints = [c['display'].get('format-hint') for c in cells(item)]
+	assert hints[0::2] == ['00'] * (len(hints) // 2)
+	assert not any(hints[1::2])
+
+
+def test_fonts_reach_the_value_labels_and_the_labels():
+	item = presets.expand({'items': [table(font='B612', labelFont='Barlow Condensed')]})['items'][0]
+	assert all(c['display']['valueLabel']['font'] == 'B612' for c in cells(item))
+	assert all(t['font'] == 'Barlow Condensed' for t in texts(item))
+
+
 def test_gutter_is_the_column_gap():
 	item = presets.expand({'items': [table(gutter='10mm', rowGap='1mm')]})['items'][0]
 	assert item['grid']['gap'] == ['1mm', '10mm']
