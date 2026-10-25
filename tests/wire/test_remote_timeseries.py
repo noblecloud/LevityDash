@@ -26,6 +26,12 @@ def test_stores_items_sorted_by_timestamp_regardless_of_input_order():
 	assert [i.value for i in series] == [70.0, 72.0, 75.0]
 
 
+def test_list_is_the_items_in_time_order_like_a_real_series():
+	# The polar feed reads `.list`; a polar plot in mode=remote drew nothing without it.
+	series, base = make_series((75.0, 2), (70.0, 0), (72.0, 1))
+	assert [i.value for i in series.list] == [70.0, 72.0, 75.0]
+
+
 def test_first_returns_earliest_item():
 	series, base = make_series((72.0, 1), (70.0, 0), (75.0, 2))
 	assert series.first.value == 70.0

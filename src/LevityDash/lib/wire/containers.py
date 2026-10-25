@@ -320,9 +320,9 @@ class RemoteTimeSeries:
 	subclasses `OrderedDict` and is deeply entangled with `Observation`/
 	multi-source merge logic that doesn't exist wire-side.
 
-	Matches exactly the surface `Graph.py` reads off a real timeseries:
+	Matches exactly the surface `Graph.py` and the polar feed read off a real timeseries:
 	`.signals` (context manager + connect/disconnectSlot), datetime slicing
-	(`__getitem__`), `.first`, `len()` (also covers the truthiness checks at
+	(`__getitem__`), `.first`, `.list`, `len()` (also covers the truthiness checks at
 	`Graph.py`'s `if self.data.timeseries` sites - no separate `__bool__`
 	needed), and a redraw-only `.refresh()`.
 	"""
@@ -358,6 +358,12 @@ class RemoteTimeSeries:
 	@property
 	def first(self) -> Optional[TimeSeriesItem]:
 		return self._items[0] if self._items else None
+
+	@property
+	def list(self) -> List[TimeSeriesItem]:
+		# MeasurementTimeSeries.list: the items in time order. The polar feed (Displays/polar/feed.py) reads the
+		# series through it; without it a polar plot in mode=remote raised and drew nothing.
+		return list(self._items)
 
 	def refresh(self, callback: Optional[Callable] = None) -> None:
 		# Never fetches. GraphItemData.refresh (Graph.py) calls this from the
