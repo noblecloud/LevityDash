@@ -80,17 +80,17 @@ theme = {
 	'colors': {
 		'background': '#05030b', 'surface': '#0e0a1c',
 		'text': '#f4f1ff', 'muted': '#a99de0', 'faint': '#6a5f9e', 'rule': '#2b2350',
-		'accent': '#ff2bd6', 'good': '#39ff88', 'warn': '#ffe600', 'bad': '#ff2a55', 'info': '#00e5ff',
-		'rain': '#3d8bff', 'wind': '#b6ff00', 'cloud': '#c9b8ff', 'cloud-2': '#8a5cff', 'soil': '#ff9a1f',
-		'series-1': '#00e5ff', 'series-2': '#ff2bd6', 'series-3': '#b6ff00', 'series-4': '#ffe600',
+		'accent': '#00f0ff', 'good': '#39ff88', 'warn': '#ffe600', 'bad': '#ff3b3b', 'info': '#38b6ff',
+		'rain': '#3d8bff', 'wind': '#b6ff00', 'cloud': '#c9b8ff', 'cloud-2': '#8a5cff', 'soil': '#ff9a1f', 'pink': '#ff2bd6',
+		'series-1': '#00e5ff', 'series-2': '#ff9a1f', 'series-3': '#b6ff00', 'series-4': '#ffe600',
 		'series-5': '#8a5cff', 'series-6': '#ff9a1f',
 	},
 	'fonts': {'display': 'Barlow Condensed', 'body': 'Roboto', 'mono': 'Roboto Mono'},
 	'scales': {
 		'TemperatureGradient': {'10°F': '#8a2bff', '30°F': '#3d6bff', '45°F': '#00e5ff', '58°F': '#00ffa8',
-		                        '68°F': '#b6ff00', '77°F': '#ffe600', '86°F': '#ff9a1f', '96°F': '#ff2a6d', '108°F': '#ff00e6'},
-		'UVIndexGradient': {0: '#39ff88', 3: '#ffe600', 6: '#ff9a1f', 8: '#ff2a55', 11: '#d400ff'},
-		'WindSpeedGradient': {0: '#3d8bff', 8: '#00e5ff', 16: '#b6ff00', 26: '#ffe600', 40: '#ff2a55'},
+		                        '68°F': '#b6ff00', '77°F': '#ffe600', '86°F': '#ff9a1f', '96°F': '#ff4a3d', '108°F': '#ff2a2a'},
+		'UVIndexGradient': {0: '#39ff88', 3: '#ffe600', 6: '#ff9a1f', 8: '#ff3b3b', 11: '#9d5cff'},
+		'WindSpeedGradient': {0: '#3d8bff', 8: '#00e5ff', 16: '#b6ff00', 26: '#ffe600', 40: '#ff3b3b'},
 		'PressureGradient': {0: '#8a5cff', 1: '#00e5ff'},
 	},
 }
@@ -146,7 +146,7 @@ aloft = panel('windAloft', 'WIND ALOFT', [{
 
 sun = panel('sun', 'SUN AND MOON', tiles([
 	('RISE', 'astronomy.sun.rise', {'color': '$warn', 'fmt': '%-I:%M'}),
-	('SET', 'astronomy.sun.set', {'color': '$accent', 'fmt': '%-I:%M'}),
+	('SET', 'astronomy.sun.set', {'color': '$pink', 'fmt': '%-I:%M'}),
 	('DAYLIGHT LEFT', 'astronomy.sun.remaining', {'color': '$warn', 'fmt': 'duration'}),
 	('MOON', 'astronomy.moon.phase', {'color': '$cloud', 'unit': 'Inline'}),
 ], 0, 0, 100, 100, 2), size='15%')
@@ -216,7 +216,7 @@ forecast = {
 		 'environment.temperature.feelsLike': {'plot': {'type': 'plot', 'gradient': 'TemperatureGradient', 'weight': 0.35, 'opacity': 0.6}, 'resolution': 2},
 		 'environment.temperature.dewpoint': {'plot': {'type': 'plot', 'cap': 'square', 'color': '$good', 'dashPattern': '5, 5', 'weight': 0.35}}},
 		{'figure': 'chance', 'margins': {'bottom': '5%', 'top': '68%'}, 'min': 0, 'max': 1,
-		 'environment.precipitation.probability': {'plot': {'type': 'plot', 'color': '$accent', 'dashPattern': '3, 3', 'weight': 0.5, 'opacity': 0.9}}},
+		 'environment.precipitation.probability': {'plot': {'type': 'plot', 'color': '$pink', 'dashPattern': '3, 3', 'weight': 0.5, 'opacity': 0.9}}},
 		{'figure': 'precipitation', 'margins': {'bottom': '5%', 'top': '68%'}, 'min': 0, 'max': 0.5,
 		 'environment.precipitation.precipitation': {'plot': {'type': 'bar', 'color': '$rain', 'width': 0.9, 'glow': GLOW}, 'smooth': False}},
 	],
@@ -273,7 +273,7 @@ watch = {'type': 'switch', 'name': 'watch', 'size': '22%', 'hold': '2m', 'cycle'
 	{'preset': 'polar-card', 'name': 'dayClock', 'props': {
 		'title': 'Today round the clock', 'plot': 'clock', 'key': T, 'window': 'today',
 		'gradient': [{'at': a, 'color': c} for a, c in [(30, '#3d6bff'), (45, '#00e5ff'), (58, '#00ffa8'), (68, '#b6ff00'),
-		                                                  (77, '#ffe600'), (86, '#ff9a1f'), (96, '#ff2a6d')]]}},
+		                                                  (77, '#ffe600'), (86, '#ff9a1f'), (96, '#ff4a3d')]]}},
 ]}
 
 surface = {'type': 'stack', 'name': 'surface', 'direction': 'Horizontal', 'spacing': '4mm', 'items': [now, forecast, watch]}
@@ -325,8 +325,8 @@ uv = panel('uv', 'UV  /  SUN W/M²', [
 	{'preset': 'zone-dial', 'geometry': g(0, 0, 100, 62),
 	 'props': {'key': U, 'min': 0, 'max': 12, 'interval': 3,
 	           'zones': [{'from': 0, 'to': 3, 'color': '#39ff88'}, {'from': 3, 'to': 6, 'color': '#ffe600'},
-	                     {'from': 6, 'to': 8, 'color': '#ff9a1f'}, {'from': 8, 'to': 11, 'color': '#ff2a55'},
-	                     {'from': 11, 'to': 12, 'color': '#d400ff'}]},
+	                     {'from': 6, 'to': 8, 'color': '#ff9a1f'}, {'from': 8, 'to': 11, 'color': '#ff3b3b'},
+	                     {'from': 11, 'to': 12, 'color': '#9d5cff'}]},
 	 'display': {'needle': {'type': 'marker', 'width': '9%', 'length': '12%', 'glow': GLOW},
 	             'value-label': {'position': 'center', 'size': '30%'}, 'zones-glow': None}},
 	*tiles([
