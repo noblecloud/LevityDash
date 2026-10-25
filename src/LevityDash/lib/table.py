@@ -25,7 +25,7 @@ NAME = 'table'
 
 #: property name -> (default, doc). The order is the order of the Studio's property list.
 PROPS: Dict[str, tuple] = {
-	'columns': ([], 'The columns: a list of {head, unit, key, precision, format, color}. `key` may hold {row}, replaced by each row\'s `row` name'),
+	'columns': ([], 'The columns: a list of {head, unit, key, precision, format, hint, color}. `key` may hold {row}, replaced by each row\'s `row` name'),
 	'rows': ([], 'The rows: a list of {label, row, keys, color}. `keys` (one per column, null for an empty cell) replaces the columns\' keys for that row'),
 	'labelWidth': ('1.2fr', 'Width of the label column, as a grid track size'),
 	'headHeight': ('1fr', 'Height of the head row, as a grid track size; the rows share the rest equally'),
@@ -40,7 +40,7 @@ PROPS: Dict[str, tuple] = {
 	'dividers': (None, 'dividers: settings (such as {enabled: true}) for lines between rows and columns'),
 }
 
-_COLUMN = {'head', 'unit', 'key', 'precision', 'format', 'color'}
+_COLUMN = {'head', 'unit', 'key', 'precision', 'format', 'hint', 'color'}
 _ROW = {'label', 'row', 'keys', 'color'}
 _ALIGN = {'Left': 'CenterLeft', 'Center': 'Center', 'Right': 'CenterRight'}
 
@@ -119,6 +119,8 @@ def build(props: Dict[str, Any]) -> dict:
 			for name in ('precision', 'format'):
 				if column.get(name) is not None:
 					display[name] = column[name]
+			if column.get('hint') is not None:
+				display['format-hint'] = column['hint']
 			items.append({
 				'type': 'realtime.text', 'key': key, 'title': False, 'display': display,
 				'grid': {'column': at + 1, 'row': number + 1},
