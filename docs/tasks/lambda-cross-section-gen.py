@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Writes docs/tasks/lambda-cross-section.levity: the neon cross-section. Tiles: a small caption over a big number that fills its cell."""
+"""Writes docs/tasks/lambda-cross-section.levity: the neon cross-section. Needs SF Pro Display and SF Compact Display installed (Apple, developer.apple.com/fonts; not bundled). Tiles: a small caption over a big number that fills its cell."""
 import sys
 import os
 import yaml
 
 TH = os.environ.get('TH', '5.5mm')
 
-CAP = '4.4mm'     # caption over a tile
-VAL = '11mm'     # a tile's number
+CAP = '5.2mm'     # caption over a tile
+VAL = '13mm'     # a tile's number
 HERO2 = '15mm'    # room, pressure, alert heroes
 HERO = '30mm'     # the outside temperature
 
@@ -35,7 +35,7 @@ def cap(text, geom, color='$muted'):
 	        'alignment': 'BottomLeft', 'text-height': CAP, 'geometry': geom}
 
 
-def val(key, geom, color='$text', precision=0, unit='Hidden', hint=None, height=VAL, group='global.tile', align='BottomLeft', fmt=None, weight='Bold'):
+def val(key, geom, color='$text', precision=0, unit='Hidden', hint=None, height=VAL, group='global.tile', align='BottomLeft', fmt=None, weight='Regular'):
 	label = {'text-height': height, 'color': color, 'font': '$body', 'weight': weight}
 	if group:
 		label['matchingGroup'] = {'group': group, 'matchAll': True}
@@ -85,7 +85,7 @@ theme = {
 		'series-1': '#00e5ff', 'series-2': '#ff9a1f', 'series-3': '#b6ff00', 'series-4': '#ffe600',
 		'series-5': '#8a5cff', 'series-6': '#ff9a1f',
 	},
-	'fonts': {'display': 'Barlow Condensed', 'body': 'B612', 'mono': 'Roboto Mono'},
+	'fonts': {'display': 'SF Compact Display', 'body': 'SF Pro Display', 'mono': 'Roboto Mono'},
 	'scales': {
 		'TemperatureGradient': {'10°F': '#8a2bff', '30°F': '#3d6bff', '45°F': '#00e5ff', '58°F': '#00ffa8',
 		                        '68°F': '#b6ff00', '77°F': '#ffe600', '86°F': '#ff9a1f', '96°F': '#ff4a3d', '108°F': '#ff2a2a'},
@@ -100,7 +100,7 @@ T = 'environment.temperature.temperature'
 
 # ---------------------------------------------------------------- sky
 clock = {
-	'type': 'clock', 'name': 'clock', 'size': '19%',
+	'type': 'clock', 'name': 'clock', 'size': '21%',
 	'items': [
 		{'format': '%A, %B %-d', 'alignment': 'TopLeft', 'filters': ['AddOrdinal'], 'font': '$display', 'weight': 'Medium',
 		 'color': '$accent', 'geometry': g(0, 0, 100, 18)},
@@ -147,9 +147,9 @@ aloft = panel('windAloft', 'WIND ALOFT', [{
 sun = panel('sun', 'SUN AND MOON', tiles([
 	('RISE', 'astronomy.sun.rise', {'color': '$warn', 'fmt': '%-I:%M'}),
 	('SET', 'astronomy.sun.set', {'color': '$pink', 'fmt': '%-I:%M'}),
-	('DAYLIGHT LEFT', 'astronomy.sun.remaining', {'color': '$warn', 'fmt': 'duration'}),
+	('DAYLIGHT', 'astronomy.sun.remaining', {'color': '$warn', 'fmt': 'duration'}),
 	('MOON', 'astronomy.moon.phase', {'color': '$cloud', 'unit': 'Inline'}),
-], 0, 0, 100, 100, 2), size='15%')
+], 0, 0, 100, 100, 2), size='14%')
 
 P = 'environment.pressure.pressure'
 pressure = panel('pressure', 'PRESSURE INHG', [
@@ -179,11 +179,11 @@ now = {'type': 'group', 'name': 'now', 'size': '20%', 'items': [
 	{'type': 'realtime.text', 'key': 'environment.condition.condition', 'title': False, 'alignment': 'CenterLeft',
 	 'display': {'valueLabel': {'color': '$info', 'text-height': '6mm', 'font': '$display', 'weight': 'SemiBold'}},
 	 'geometry': g(0, 36, 100, 9)},
-	{'type': 'realtime.bar', 'key': T, 'title': False, 'geometry': g(0, 44, 100, 14),
+	{'type': 'realtime.bar', 'key': T, 'title': False, 'geometry': g(0, 44, 100, 16),
 	 'display': {'range': {'min': 30, 'max': 100}, 'track': {'weight': '26%', 'color': '$rule'},
 	             'fill': {'from': 'environment.temperature.low', 'to': 'environment.temperature.high', 'gradient': 'TemperatureGradient', 'glow': GLOW},
 	             'pointer': {'type': 'triangle', 'color': '$text', 'side': 'before'},
-	             'major': {'interval': 10, 'side': 'after', 'labels': True, 'size': '30%'},
+	             'major': {'interval': 10, 'side': 'after', 'labels': True, 'size': '45%'},
 	             'value-label': {'visible': False}}},
 	*tiles([
 		('LOW', 'environment.temperature.low', {'unit': 'Inline', 'color': '$info'}),
@@ -288,32 +288,33 @@ def room(name, title, ident, hum_color, tlo, thi):
 	return panel(name, title, [
 		spark(t, g(0, 14, 50, 46), 'indoor', {'type': 'plot', 'gradient': 'TemperatureGradient', 'weight': 0.7, 'opacity': 0.85, 'glow': GLOW}, tlo, thi),
 		spark(h, g(52, 14, 48, 46), 'humid', {'type': 'plot', 'color': hum_color, 'weight': 0.7, 'opacity': 0.85, 'glow': GLOW}, 20, 100),
-		cap('TEMP °F', g(0, 0, 48, 10)),
+		cap('TEMP °F · 24 H', g(0, 0, 50, 10)),
 		val(t, g(0, 10, 50, 34), temp_scale(t), unit='Hidden', hint='00', fmt={'unit_symbol': False}, height=HERO2, group='global.hero2', weight='Bold'),
-		cap('HUMIDITY', g(52, 0, 48, 10)),
+		cap('HUMIDITY %', g(52, 0, 48, 10)),
 		val(h, g(52, 10, 48, 34), hum_color, unit='Inline', hint='00%', height=HERO2, group='global.hero2', weight='Bold'),
 		*tiles([
-			('LOW °F', f'min({t}, 24h)', {'color': '$info', 'fmt': {'unit_symbol': False}}),
-			('HIGH °F', f'max({t}, 24h)', {'color': '$bad', 'fmt': {'unit_symbol': False}}),
+			('LO', f'min({t}, 24h)', {'color': '$info', 'fmt': {'unit_symbol': False}}),
+			('HI', f'max({t}, 24h)', {'color': '$bad', 'fmt': {'unit_symbol': False}}),
 		], 0, 62, 50, 26, 2),
 		*tiles([
-			('LOW', f'min({h}, 24h)', {'unit': 'Inline', 'color': hum_color}),
-			('HIGH', f'max({h}, 24h)', {'unit': 'Inline', 'color': hum_color}),
+			('LO', f'min({h}, 24h)', {'color': hum_color, 'fmt': {'unit_symbol': False}}),
+			('HI', f'max({h}, 24h)', {'color': hum_color, 'fmt': {'unit_symbol': False}}),
 		], 52, 62, 48, 26, 2),
-		cap('BATTERY', g(0, 90, 30, 10), '$faint'),
-		{'type': 'realtime.bar', 'key': b, 'title': False, 'geometry': g(30, 91, 70, 9),
+		{**cap('BATTERY', g(0, 89, 30, 11), '$muted'), 'alignment': 'CenterLeft'},
+		{'type': 'realtime.bar', 'key': b, 'title': False, 'geometry': g(32, 89, 68, 11),
 		 'display': {'style': 'battery', 'range': {'min': 0, 'max': 100}, 'fill': {'color': 'zone', 'glow': GLOW},
 		             'zones': [{'to': 20, 'color': '$bad', 'opacity': 0}, {'from': 20, 'to': 50, 'color': '$warn', 'opacity': 0},
 		                       {'from': 50, 'color': '$good', 'opacity': 0}],
-		             'value-label': {'position': 'end', 'format': {'precision': 0}}}},
+		             'value-label': {'position': 'end', 'size': '80%', 'format': {'precision': 0}}}},
 	], size='22%')
 
 
 W = 'environment.wind'
 wind = panel('wind', 'WIND MPH', [
 	{'preset': 'compass', 'geometry': g(0, 0, 100, 62),
-	 'props': {'label': 'mph', 'caption_size': '30%', 'label_size': '9%', 'arc_weight': '2.5%'},
-	 'display': {'arc': {'color': '$rule', 'glow': GLOW}, 'needle': {'color': '$wind', 'glow': GLOW}}},
+	 'props': {'label': 'mph', 'caption_size': '32%', 'label_size': '13%', 'arc_weight': '2.5%'},
+	 'display': {'arc': {'color': '$rule', 'glow': GLOW}, 'needle': {'color': '$wind', 'glow': GLOW},
+	             'major': {'labels': {'height': '14%', 'color': '$muted'}}}},
 	*tiles([
 		('GUST', f'{W}.speed.gust', {'color': '$wind'}),
 		('PEAK', f'max({W}.speed.gust, today)', {'color': '$warn'}),
@@ -328,9 +329,9 @@ uv = panel('uv', 'UV  /  SUN W/M²', [
 	                     {'from': 6, 'to': 8, 'color': '#ff9a1f'}, {'from': 8, 'to': 11, 'color': '#ff3b3b'},
 	                     {'from': 11, 'to': 12, 'color': '#9d5cff'}]},
 	 'display': {'needle': {'type': 'marker', 'width': '9%', 'length': '12%', 'glow': GLOW},
-	             'value-label': {'position': 'center', 'size': '30%'}, 'zones-glow': None}},
+	             'value-label': {'position': 'center', 'size': '32%'}, 'major': {'labels': {'height': '13%'}}, 'zones-glow': None}},
 	*tiles([
-		('TOTAL', 'environment.light.irradiance.irradiance', {'color': '$warn'}),
+		('ALL', 'environment.light.irradiance.irradiance', {'color': '$warn'}),
 		('DIRECT', 'environment.light.irradiance.direct', {'color': '$warn'}),
 		('DIFFUSE', 'environment.light.irradiance.diffuse', {'color': '$cloud'}),
 	], 0, 66, 100, 34, 3),
@@ -347,8 +348,8 @@ for i, (depth, tk, mk) in enumerate(SOIL):
 	soil_items += [
 		{'type': 'text', 'text': depth, 'font': '$display', 'weight': 'Medium', 'color': '$muted', 'alignment': 'CenterLeft',
 		 'text-height': '5mm', 'geometry': g(0, y, 34, 20)},
-		val(tk, g(34, y, 30, 20), '$soil', hint='00', align='CenterRight', unit='Hidden'),
-		val(mk, g(70, y, 30, 20), '$info', hint='00', align='CenterRight', unit='Hidden'),
+		val(tk, g(34, y, 30, 20), '$soil', hint='00', align='CenterRight', unit='Hidden', height='10mm', fmt={'unit_symbol': False}),
+		val(mk, g(70, y, 30, 20), '$info', hint='00', align='CenterRight', unit='Hidden', height='10mm', fmt={'unit_symbol': False}),
 	]
 # Wetness as a thin bar under each row, on a fixed 0 to 50 % span.
 for i, (depth, tk, mk) in enumerate(SOIL):
@@ -368,6 +369,22 @@ doc = {
 	           'dividers': {'enabled': True, 'opacity': '70%', 'size': '99%'},
 	           'items': [sky, surface, ground]}],
 }
+
+def scope_groups(node, panel=None):
+	if isinstance(node, dict):
+		if node.get('type') in ('titled-group', 'group', 'switch') and node.get('name'):
+			panel = node['name']
+		mg = node.get('matchingGroup')
+		if isinstance(mg, dict) and mg.get('group') == 'global.tile' and panel:
+			mg['group'] = f'global.tile-{panel}'
+		for v in node.values():
+			scope_groups(v, panel)
+	elif isinstance(node, list):
+		for v in node:
+			scope_groups(v, panel)
+
+
+scope_groups(doc)
 
 HEADER = """\
 # Cross-section, neon: sky, surface, ground. The room display on lambda (1680x1050 logical).
