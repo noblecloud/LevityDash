@@ -4383,7 +4383,12 @@ class GraphPanel(Panel, tag='graph'):
 			log.debug(f"Graph update frequency changed to {updateFrequency:format={'{value}'}} {type(updateFrequency).pluralName.lower()}")
 			# start(msec) sets the interval and (re)starts in one thread-safe call
 			startTimerSafe(self.syncTimer, newInterval)
-		else:
+		elif not self.syncTimer.isActive():
+			# Never restart a running timer: every data push lands here through
+			# onAxisChange, and QTimer.start on an active timer resets its
+			# countdown. A source that pushes more often than the interval (a
+			# minute, against ~3 minutes) kept it from ever firing, so refresh
+			# and syncDisplay never ran again and the plot drifted off the graph.
 			startTimerSafe(self.syncTimer)
 
 	@defer
