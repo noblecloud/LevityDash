@@ -1,0 +1,37 @@
+# An hourly row under a graph: each column sits under the time it shows, on the graph's own axis.
+# The row takes the graph's `timeframe` and the same width, so a column at now + 6 h is exactly under the line
+# at now + 6 h, whatever the width of the dashboard. `step` is the hours between columns. `{offset}` in a key is
+# the column's distance from now. The heads are clocks showing now + offset; the first column says Now.
+# Heads share `global.title`, numbers `global.value`, so the row reads like every other table on the dashboard.
+#
+# Render: render_dashboard.py OUT.png --levity docs/design-references/hourly-row.levity --scenario hot-clear-day
+#           --size 2000x700 --freeze-time 2026-10-07T15:40:00
+vars:
+  frame: {days: 1, hours: 12}
+items:
+- type: stack
+  direction: Vertical
+  spacing: 1%
+  items:
+  - type: graph
+    name: temperature
+    size: 62%
+    timeframe: {days: 1, hours: 12}
+    annotations:
+      dayLabels: {enabled: false}
+      hourLabels: {alignment: BottomCenter}
+    figures:
+    - figure: temperature
+      margins: {bottom: 20%, top: 15%}
+      environment.temperature.temperature:
+        plot: {type: plot, gradient: TemperatureGradient}
+        resolution: 2
+  - preset: hourly-row
+    props:
+      timeframe: {days: 1, hours: 12}
+      step: 3
+      graph: temperature
+      rows:
+      - {key: 'at(environment.temperature.temperature, {offset})', precision: 0}
+      - {key: 'at(environment.precipitation.probability, {offset})', precision: 0, color: $info}
+      - {key: 'at(environment.wind.speed.gust, {offset})', precision: 0, color: $warn}

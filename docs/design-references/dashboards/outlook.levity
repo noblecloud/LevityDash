@@ -1,0 +1,266 @@
+# Outlook: today and the week on a sky that follows the sun. A 15in 16:10 screen, 2880 x 1800.
+#
+# The ground is the sky: `background:` follows the sun's height and cloud cover takes colour out of it (`haze`), so
+# the dashboard is blue on a clear afternoon, grey under cloud and navy at night. Each card has a rounded,
+# translucent fill (`border: {radius, fill}`) so the text keeps its contrast whatever the sky does.
+#
+# Three cards, each a grid with the same first two rows (heading, then one line saying what the card shows), so the
+# headings sit on one line across the dashboard. Left, now: the temperature and today's high, low and rain beside
+# it, then eight readings. Middle, the next twelve hours as a table over a 24 hour graph. Right, the week as a
+# table (the low dimmed, a bar from the low to the high on one 30 to 90°F track, the high, the rain, the strongest
+# gust) over a seven day graph. Both graphs hold rain on a fixed 0 to 0.2 in/hr span, so a shower is always visible.
+#
+# Numbers line up on the decimal point (`number-align: decimal`): each column of a table and each reading list keep
+# their own line. A unit that is a word (mph, inHg, in) is drawn small on the value's baseline
+# (`unitPosition: Baseline`, the lists' default here); in the tables the unit is in the row or column label instead.
+#
+# Colour follows the value (`color: {scale, of}`): every temperature takes its colour from the theme's
+# `$temperature` scale at its own reading, and each gust from the wind-speed scale. Labels stay muted.
+#
+# Type and space come from the theme's scale (`sizes:` below): `$type_label`, `$type_value`, `$type_head` and
+# `$type_hero` are the `text-height` of the four roles, each one dashboard-wide size group with `matchAll`;
+# `$space_*` are the gaps and the card padding.
+#
+# Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/outlook.levity
+#           --scenario week-ahead --size 2880x1800 --freeze-time 2026-10-07T15:40:00
+theme:
+  extends: default
+  colors:
+    surface: '#0b1a33'
+    hue-rain: '#5fb4ff'
+    hue-humid: '#b48cff'
+  sizes:
+    type_label: 24px
+    type_value: 32px
+    type_head: 46px
+    type_hero: 150px
+    space_2: 16px
+    space_3: 24px
+    space_4: 32px
+    space_5: 48px
+    space_6: 96px
+background: {by: astronomy.sun.elevation, top: $sky-top, bottom: $sky-horizon, haze: environment.clouds.cover.cover}
+vars:
+  card_radius: 28px
+items:
+- type: grid
+  name: dashboard
+  geometry: {x: 3.333%, y: 5.333%, width: 93.333%, height: 89.333%}
+  spacing: 0
+  padding: 0
+  grid:
+    columns: [1fr, 1.35fr, 1.25fr]
+    rows: [1fr]
+    gap: $space_5
+    areas:
+    - now hours week
+  items:
+
+  # ================= NOW ===================================================
+  - type: grid
+    name: now
+    border: {enabled: true, radius: $card_radius, weight: 0, fill: {color: $surface, alpha: 0.55}}
+    padding: $space_5
+    spacing: 0
+    grid: {area: now, columns: [1fr], rows: [64px, 40px, 2.6fr, 1.1fr, 7fr], gap: [$space_3, 0]}
+    items:
+    - {type: text, text: Outside now, alignment: BottomLeft, weight: SemiBold, text-height: $type_head, matchingGroup: {group: global.head, matchAll: true}}
+    - {type: text, text: 'Wednesday afternoon, clear', alignment: TopLeft, color: $muted, weight: Light, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}}
+    - {type: realtime.text, key: environment.temperature.temperature, title: {visible: false}, display: {precision: 0, weight: Light, unitPosition: Hidden, format-hint: '00°', valueLabel: {alignment: Left, margins: 0px, color: {scale: $temperature, of: environment.temperature.temperature}, text-height: $type_hero, matchingGroup: {group: global.hero, matchAll: true}}}}
+    - type: grid
+      spacing: 0
+      grid: {columns: [1fr, 1fr, 1fr], rows: [1fr], gap: $space_5}
+      shared:
+        title: {color: $muted, position: Top, size: 0.42, alignment: BottomLeft, margins: 0px, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}}
+        display: {unitPosition: Baseline, valueLabel: {alignment: TopLeft, margins: 0px, text-height: $type_value, matchingGroup: {group: global.value, matchAll: true}}}
+      items:
+      - {type: realtime.text, key: environment.temperature.high, title: High, display: {precision: 0, format-hint: '00°', valueLabel: {color: {scale: $temperature, of: environment.temperature.high}}}}
+      - {type: realtime.text, key: environment.temperature.low, title: Low, display: {precision: 0, format-hint: '00°', valueLabel: {color: {scale: $temperature, of: environment.temperature.low}}}}
+      - {type: realtime.text, key: environment.precipitation.daily, title: Rain, display: {precision: 2, format-hint: '0.00 in', valueLabel: {color: $hue-rain}}}
+    - type: grid
+      spacing: 0
+      grid: {columns: [1fr], rows: [1fr, 1fr, 1fr, 1fr, 1fr, 1fr, 1fr, 1fr]}
+      shared:
+        title: {color: $muted, alignment: Left, position: Left, size: 0.55, margins: 0px, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}}
+        display: {unitPosition: Baseline, valueLabel: {alignment: Right, margins: 0px, number-align: decimal, text-height: $type_value, matchingGroup: {group: global.value, matchAll: true}}}
+      items:
+      - {type: realtime.text, key: environment.temperature.feelsLike, title: Feels like, display: {precision: 0, format-hint: '00°', valueLabel: {color: {scale: $temperature, of: environment.temperature.feelsLike}}}}
+      - {type: realtime.text, key: environment.temperature.dewpoint, title: Dew point, display: {precision: 0, format-hint: '00°', valueLabel: {color: {scale: $temperature, of: environment.temperature.dewpoint}}}}
+      - {type: realtime.text, key: environment.humidity.humidity, title: Humidity, display: {precision: 0, format-hint: '00%', valueLabel: {color: $hue-humid}}}
+      - {type: realtime.text, key: environment.wind.speed.speed, title: Wind, display: {precision: 0, format-hint: '00 mph'}}
+      - {type: realtime.text, key: environment.wind.speed.gust, title: Gust, display: {precision: 0, format-hint: '00 mph', valueLabel: {color: {scale: WindSpeedGradient, of: environment.wind.speed.gust}}}}
+      - {type: realtime.text, key: environment.pressure.pressure, title: Pressure, display: {precision: 2, format-hint: '00.00 inHg'}}
+      - {type: realtime.text, key: environment.clouds.cover.cover, title: Cloud cover, display: {precision: 0, format-hint: '000%'}}
+      - {type: realtime.text, key: environment.light.uvi, title: UV index, display: {precision: 1, format-hint: '00.0', valueLabel: {color: $warn}}}
+
+  # ================= THE NEXT TWELVE HOURS =================================
+  - type: grid
+    name: hours
+    border: {enabled: true, radius: $card_radius, weight: 0, fill: {color: $surface, alpha: 0.55}}
+    padding: $space_5
+    spacing: 0
+    grid: {area: hours, columns: [1fr], rows: [64px, 40px, 6fr, 5fr], gap: [$space_3, 0]}
+    items:
+    - {type: text, text: Next twelve hours, alignment: BottomLeft, weight: SemiBold, text-height: $type_head, matchingGroup: {group: global.head, matchAll: true}}
+    - {type: text, text: 'Cooling after sunset, dry until Friday', alignment: TopLeft, color: $muted, weight: Light, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}}
+    - type: grid
+      name: hour-table
+      spacing: 0
+      grid: {columns: [1.5fr, 1fr, 1fr, 1fr, 1fr, 1fr, 1fr], rows: [1fr, 1fr, 1fr, 1fr, 1fr, 1fr, 1fr], gap: [0, $space_3]}
+      shared:
+        title: {visible: false}
+        display: {valueLabel: {alignment: Right, margins: 0px, number-align: decimal, text-height: $type_value, matchingGroup: {group: global.value, matchAll: true}}}
+      items:
+      - {type: text, text: +2 h, alignment: BottomRight, color: $muted, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 1, column: 2}}
+      - {type: text, text: +4 h, alignment: BottomRight, color: $muted, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 1, column: 3}}
+      - {type: text, text: +6 h, alignment: BottomRight, color: $muted, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 1, column: 4}}
+      - {type: text, text: +8 h, alignment: BottomRight, color: $muted, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 1, column: 5}}
+      - {type: text, text: +10 h, alignment: BottomRight, color: $muted, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 1, column: 6}}
+      - {type: text, text: +12 h, alignment: BottomRight, color: $muted, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 1, column: 7}}
+      - {type: text, text: Temp, alignment: Left, color: $muted, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 2, column: 1}}
+      - {type: realtime.text, key: 'at(environment.temperature.temperature, 2h)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: {scale: $temperature, of: 'at(environment.temperature.temperature, 2h)'}}}, grid: {row: 2, column: 2}}
+      - {type: realtime.text, key: 'at(environment.temperature.temperature, 4h)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: {scale: $temperature, of: 'at(environment.temperature.temperature, 4h)'}}}, grid: {row: 2, column: 3}}
+      - {type: realtime.text, key: 'at(environment.temperature.temperature, 6h)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: {scale: $temperature, of: 'at(environment.temperature.temperature, 6h)'}}}, grid: {row: 2, column: 4}}
+      - {type: realtime.text, key: 'at(environment.temperature.temperature, 8h)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: {scale: $temperature, of: 'at(environment.temperature.temperature, 8h)'}}}, grid: {row: 2, column: 5}}
+      - {type: realtime.text, key: 'at(environment.temperature.temperature, 10h)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: {scale: $temperature, of: 'at(environment.temperature.temperature, 10h)'}}}, grid: {row: 2, column: 6}}
+      - {type: realtime.text, key: 'at(environment.temperature.temperature, 12h)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: {scale: $temperature, of: 'at(environment.temperature.temperature, 12h)'}}}, grid: {row: 2, column: 7}}
+      - {type: text, text: Feels, alignment: Left, color: $muted, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 3, column: 1}}
+      - {type: realtime.text, key: 'at(environment.temperature.feelsLike, 2h)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: {scale: $temperature, of: 'at(environment.temperature.feelsLike, 2h)'}}}, grid: {row: 3, column: 2}}
+      - {type: realtime.text, key: 'at(environment.temperature.feelsLike, 4h)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: {scale: $temperature, of: 'at(environment.temperature.feelsLike, 4h)'}}}, grid: {row: 3, column: 3}}
+      - {type: realtime.text, key: 'at(environment.temperature.feelsLike, 6h)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: {scale: $temperature, of: 'at(environment.temperature.feelsLike, 6h)'}}}, grid: {row: 3, column: 4}}
+      - {type: realtime.text, key: 'at(environment.temperature.feelsLike, 8h)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: {scale: $temperature, of: 'at(environment.temperature.feelsLike, 8h)'}}}, grid: {row: 3, column: 5}}
+      - {type: realtime.text, key: 'at(environment.temperature.feelsLike, 10h)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: {scale: $temperature, of: 'at(environment.temperature.feelsLike, 10h)'}}}, grid: {row: 3, column: 6}}
+      - {type: realtime.text, key: 'at(environment.temperature.feelsLike, 12h)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: {scale: $temperature, of: 'at(environment.temperature.feelsLike, 12h)'}}}, grid: {row: 3, column: 7}}
+      - {type: text, text: Rain chance, alignment: Left, color: $muted, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 4, column: 1}}
+      - {type: realtime.text, key: 'at(environment.precipitation.probability, 2h)', display: {precision: 0, format-hint: '000%', unitPosition: Hidden, valueLabel: {color: $hue-rain}}, grid: {row: 4, column: 2}}
+      - {type: realtime.text, key: 'at(environment.precipitation.probability, 4h)', display: {precision: 0, format-hint: '000%', unitPosition: Hidden, valueLabel: {color: $hue-rain}}, grid: {row: 4, column: 3}}
+      - {type: realtime.text, key: 'at(environment.precipitation.probability, 6h)', display: {precision: 0, format-hint: '000%', unitPosition: Hidden, valueLabel: {color: $hue-rain}}, grid: {row: 4, column: 4}}
+      - {type: realtime.text, key: 'at(environment.precipitation.probability, 8h)', display: {precision: 0, format-hint: '000%', unitPosition: Hidden, valueLabel: {color: $hue-rain}}, grid: {row: 4, column: 5}}
+      - {type: realtime.text, key: 'at(environment.precipitation.probability, 10h)', display: {precision: 0, format-hint: '000%', unitPosition: Hidden, valueLabel: {color: $hue-rain}}, grid: {row: 4, column: 6}}
+      - {type: realtime.text, key: 'at(environment.precipitation.probability, 12h)', display: {precision: 0, format-hint: '000%', unitPosition: Hidden, valueLabel: {color: $hue-rain}}, grid: {row: 4, column: 7}}
+      - {type: text, text: Rain in, alignment: Left, color: $muted, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 5, column: 1}}
+      - {type: realtime.text, key: 'at(environment.precipitation.precipitation, 2h)', display: {precision: 2, format-hint: '0.00', unitPosition: Hidden, valueLabel: {color: $hue-rain}}, grid: {row: 5, column: 2}}
+      - {type: realtime.text, key: 'at(environment.precipitation.precipitation, 4h)', display: {precision: 2, format-hint: '0.00', unitPosition: Hidden, valueLabel: {color: $hue-rain}}, grid: {row: 5, column: 3}}
+      - {type: realtime.text, key: 'at(environment.precipitation.precipitation, 6h)', display: {precision: 2, format-hint: '0.00', unitPosition: Hidden, valueLabel: {color: $hue-rain}}, grid: {row: 5, column: 4}}
+      - {type: realtime.text, key: 'at(environment.precipitation.precipitation, 8h)', display: {precision: 2, format-hint: '0.00', unitPosition: Hidden, valueLabel: {color: $hue-rain}}, grid: {row: 5, column: 5}}
+      - {type: realtime.text, key: 'at(environment.precipitation.precipitation, 10h)', display: {precision: 2, format-hint: '0.00', unitPosition: Hidden, valueLabel: {color: $hue-rain}}, grid: {row: 5, column: 6}}
+      - {type: realtime.text, key: 'at(environment.precipitation.precipitation, 12h)', display: {precision: 2, format-hint: '0.00', unitPosition: Hidden, valueLabel: {color: $hue-rain}}, grid: {row: 5, column: 7}}
+      - {type: text, text: Wind mph, alignment: Left, color: $muted, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 6, column: 1}}
+      - {type: realtime.text, key: 'at(environment.wind.speed.speed, 2h)', display: {precision: 0, format-hint: '00', unitPosition: Hidden}, grid: {row: 6, column: 2}}
+      - {type: realtime.text, key: 'at(environment.wind.speed.speed, 4h)', display: {precision: 0, format-hint: '00', unitPosition: Hidden}, grid: {row: 6, column: 3}}
+      - {type: realtime.text, key: 'at(environment.wind.speed.speed, 6h)', display: {precision: 0, format-hint: '00', unitPosition: Hidden}, grid: {row: 6, column: 4}}
+      - {type: realtime.text, key: 'at(environment.wind.speed.speed, 8h)', display: {precision: 0, format-hint: '00', unitPosition: Hidden}, grid: {row: 6, column: 5}}
+      - {type: realtime.text, key: 'at(environment.wind.speed.speed, 10h)', display: {precision: 0, format-hint: '00', unitPosition: Hidden}, grid: {row: 6, column: 6}}
+      - {type: realtime.text, key: 'at(environment.wind.speed.speed, 12h)', display: {precision: 0, format-hint: '00', unitPosition: Hidden}, grid: {row: 6, column: 7}}
+      - {type: text, text: Gust mph, alignment: Left, color: $muted, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 7, column: 1}}
+      - {type: realtime.text, key: 'at(environment.wind.speed.gust, 2h)', display: {precision: 0, format-hint: '00', unitPosition: Hidden, valueLabel: {color: {scale: WindSpeedGradient, of: 'at(environment.wind.speed.gust, 2h)'}}}, grid: {row: 7, column: 2}}
+      - {type: realtime.text, key: 'at(environment.wind.speed.gust, 4h)', display: {precision: 0, format-hint: '00', unitPosition: Hidden, valueLabel: {color: {scale: WindSpeedGradient, of: 'at(environment.wind.speed.gust, 4h)'}}}, grid: {row: 7, column: 3}}
+      - {type: realtime.text, key: 'at(environment.wind.speed.gust, 6h)', display: {precision: 0, format-hint: '00', unitPosition: Hidden, valueLabel: {color: {scale: WindSpeedGradient, of: 'at(environment.wind.speed.gust, 6h)'}}}, grid: {row: 7, column: 4}}
+      - {type: realtime.text, key: 'at(environment.wind.speed.gust, 8h)', display: {precision: 0, format-hint: '00', unitPosition: Hidden, valueLabel: {color: {scale: WindSpeedGradient, of: 'at(environment.wind.speed.gust, 8h)'}}}, grid: {row: 7, column: 5}}
+      - {type: realtime.text, key: 'at(environment.wind.speed.gust, 10h)', display: {precision: 0, format-hint: '00', unitPosition: Hidden, valueLabel: {color: {scale: WindSpeedGradient, of: 'at(environment.wind.speed.gust, 10h)'}}}, grid: {row: 7, column: 6}}
+      - {type: realtime.text, key: 'at(environment.wind.speed.gust, 12h)', display: {precision: 0, format-hint: '00', unitPosition: Hidden, valueLabel: {color: {scale: WindSpeedGradient, of: 'at(environment.wind.speed.gust, 12h)'}}}, grid: {row: 7, column: 7}}
+    - type: graph
+      timeframe: {hours: 24}
+      annotations:
+        dayLabels: {enabled: false}
+        hourLabels: {enabled: true, alignment: BottomCenter, spacingIntervals: '3, 6', opacity: 60%}
+        lines: {spacing: 10 mm, weight: 0.3}
+      figures:
+      - figure: temperature
+        margins: {top: 14%, bottom: 30%}
+        min: 30
+        max: 85
+        environment.temperature.temperature:
+          plot: {type: plot, gradient: TemperatureGradient, weight: 1.0}
+          resolution: 2
+      - figure: rain
+        margins: {top: 76%, bottom: 9%}
+        min: 0
+        max: 0.2
+        environment.precipitation.precipitation:
+          plot: {type: bar, color: $hue-rain, width: 0.8, radius: 0.25}
+
+  # ================= THE WEEK ==============================================
+  - type: grid
+    name: week
+    border: {enabled: true, radius: $card_radius, weight: 0, fill: {color: $surface, alpha: 0.55}}
+    padding: $space_5
+    spacing: 0
+    grid: {area: week, columns: [1fr], rows: [64px, 40px, 7fr, 5fr], gap: [$space_3, 0]}
+    items:
+    - {type: text, text: The week, alignment: BottomLeft, weight: SemiBold, text-height: $type_head, matchingGroup: {group: global.head, matchAll: true}}
+    - {type: text, text: 'Rain Friday night, then a frost Monday', alignment: TopLeft, color: $muted, weight: Light, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}}
+    - type: grid
+      name: week-table
+      spacing: 0
+      grid: {columns: [0.9fr, 0.75fr, 2.2fr, 0.75fr, 0.85fr, 0.75fr], rows: [1fr, 1fr, 1fr, 1fr, 1fr, 1fr, 1fr, 1fr], gap: [0, $space_3]}
+      shared:
+        title: {visible: false}
+        display: {valueLabel: {alignment: Right, margins: 0px, number-align: decimal, text-height: $type_value, matchingGroup: {group: global.value, matchAll: true}}}
+      items:
+      - {type: text, text: Low, alignment: BottomRight, color: $muted, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 1, column: 2}}
+      - {type: text, text: High, alignment: BottomRight, color: $muted, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 1, column: 4}}
+      - {type: text, text: Rain in, alignment: BottomRight, color: $muted, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 1, column: 5}}
+      - {type: text, text: Gust, alignment: BottomRight, color: $muted, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 1, column: 6}}
+      - {type: text, text: Today, alignment: Left, color: $text, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 2, column: 1}}
+      - {type: realtime.text, key: environment.temperature.low, display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: $muted}}, grid: {row: 2, column: 2}}
+      - {type: realtime.bar, key: environment.temperature.high, title: {visible: false}, display: {range: {min: 30, max: 90}, track: {weight: 22%, color: $rule}, fill: {from: environment.temperature.low, to: environment.temperature.high, gradient: $temperature}, value-label: {visible: false}}, grid: {row: 2, column: 3}}
+      - {type: realtime.text, key: environment.temperature.high, display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: {scale: $temperature, of: environment.temperature.high}}}, grid: {row: 2, column: 4}}
+      - {type: realtime.text, key: environment.precipitation.daily, display: {precision: 2, format-hint: '0.00', unitPosition: Hidden, valueLabel: {color: $hue-rain}}, grid: {row: 2, column: 5}}
+      - {type: realtime.text, key: environment.wind.speed.gustMax, display: {precision: 0, format-hint: '00', unitPosition: Hidden, valueLabel: {color: {scale: WindSpeedGradient, of: environment.wind.speed.gustMax}}}, grid: {row: 2, column: 6}}
+      - {type: text, text: Thu, alignment: Left, color: $text, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 3, column: 1}}
+      - {type: realtime.text, key: 'at(environment.temperature.low, 1d)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: $muted}}, grid: {row: 3, column: 2}}
+      - {type: realtime.bar, key: 'at(environment.temperature.high, 1d)', title: {visible: false}, display: {range: {min: 30, max: 90}, track: {weight: 22%, color: $rule}, fill: {from: 'at(environment.temperature.low, 1d)', to: 'at(environment.temperature.high, 1d)', gradient: $temperature}, value-label: {visible: false}}, grid: {row: 3, column: 3}}
+      - {type: realtime.text, key: 'at(environment.temperature.high, 1d)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: {scale: $temperature, of: 'at(environment.temperature.high, 1d)'}}}, grid: {row: 3, column: 4}}
+      - {type: realtime.text, key: 'at(environment.precipitation.daily, 1d)', display: {precision: 2, format-hint: '0.00', unitPosition: Hidden, valueLabel: {color: $hue-rain}}, grid: {row: 3, column: 5}}
+      - {type: realtime.text, key: 'at(environment.wind.speed.gustMax, 1d)', display: {precision: 0, format-hint: '00', unitPosition: Hidden, valueLabel: {color: {scale: WindSpeedGradient, of: 'at(environment.wind.speed.gustMax, 1d)'}}}, grid: {row: 3, column: 6}}
+      - {type: text, text: Fri, alignment: Left, color: $text, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 4, column: 1}}
+      - {type: realtime.text, key: 'at(environment.temperature.low, 2d)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: $muted}}, grid: {row: 4, column: 2}}
+      - {type: realtime.bar, key: 'at(environment.temperature.high, 2d)', title: {visible: false}, display: {range: {min: 30, max: 90}, track: {weight: 22%, color: $rule}, fill: {from: 'at(environment.temperature.low, 2d)', to: 'at(environment.temperature.high, 2d)', gradient: $temperature}, value-label: {visible: false}}, grid: {row: 4, column: 3}}
+      - {type: realtime.text, key: 'at(environment.temperature.high, 2d)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: {scale: $temperature, of: 'at(environment.temperature.high, 2d)'}}}, grid: {row: 4, column: 4}}
+      - {type: realtime.text, key: 'at(environment.precipitation.daily, 2d)', display: {precision: 2, format-hint: '0.00', unitPosition: Hidden, valueLabel: {color: $hue-rain}}, grid: {row: 4, column: 5}}
+      - {type: realtime.text, key: 'at(environment.wind.speed.gustMax, 2d)', display: {precision: 0, format-hint: '00', unitPosition: Hidden, valueLabel: {color: {scale: WindSpeedGradient, of: 'at(environment.wind.speed.gustMax, 2d)'}}}, grid: {row: 4, column: 6}}
+      - {type: text, text: Sat, alignment: Left, color: $text, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 5, column: 1}}
+      - {type: realtime.text, key: 'at(environment.temperature.low, 3d)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: $muted}}, grid: {row: 5, column: 2}}
+      - {type: realtime.bar, key: 'at(environment.temperature.high, 3d)', title: {visible: false}, display: {range: {min: 30, max: 90}, track: {weight: 22%, color: $rule}, fill: {from: 'at(environment.temperature.low, 3d)', to: 'at(environment.temperature.high, 3d)', gradient: $temperature}, value-label: {visible: false}}, grid: {row: 5, column: 3}}
+      - {type: realtime.text, key: 'at(environment.temperature.high, 3d)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: {scale: $temperature, of: 'at(environment.temperature.high, 3d)'}}}, grid: {row: 5, column: 4}}
+      - {type: realtime.text, key: 'at(environment.precipitation.daily, 3d)', display: {precision: 2, format-hint: '0.00', unitPosition: Hidden, valueLabel: {color: $hue-rain}}, grid: {row: 5, column: 5}}
+      - {type: realtime.text, key: 'at(environment.wind.speed.gustMax, 3d)', display: {precision: 0, format-hint: '00', unitPosition: Hidden, valueLabel: {color: {scale: WindSpeedGradient, of: 'at(environment.wind.speed.gustMax, 3d)'}}}, grid: {row: 5, column: 6}}
+      - {type: text, text: Sun, alignment: Left, color: $text, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 6, column: 1}}
+      - {type: realtime.text, key: 'at(environment.temperature.low, 4d)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: $muted}}, grid: {row: 6, column: 2}}
+      - {type: realtime.bar, key: 'at(environment.temperature.high, 4d)', title: {visible: false}, display: {range: {min: 30, max: 90}, track: {weight: 22%, color: $rule}, fill: {from: 'at(environment.temperature.low, 4d)', to: 'at(environment.temperature.high, 4d)', gradient: $temperature}, value-label: {visible: false}}, grid: {row: 6, column: 3}}
+      - {type: realtime.text, key: 'at(environment.temperature.high, 4d)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: {scale: $temperature, of: 'at(environment.temperature.high, 4d)'}}}, grid: {row: 6, column: 4}}
+      - {type: realtime.text, key: 'at(environment.precipitation.daily, 4d)', display: {precision: 2, format-hint: '0.00', unitPosition: Hidden, valueLabel: {color: $hue-rain}}, grid: {row: 6, column: 5}}
+      - {type: realtime.text, key: 'at(environment.wind.speed.gustMax, 4d)', display: {precision: 0, format-hint: '00', unitPosition: Hidden, valueLabel: {color: {scale: WindSpeedGradient, of: 'at(environment.wind.speed.gustMax, 4d)'}}}, grid: {row: 6, column: 6}}
+      - {type: text, text: Mon, alignment: Left, color: $text, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 7, column: 1}}
+      - {type: realtime.text, key: 'at(environment.temperature.low, 5d)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: $muted}}, grid: {row: 7, column: 2}}
+      - {type: realtime.bar, key: 'at(environment.temperature.high, 5d)', title: {visible: false}, display: {range: {min: 30, max: 90}, track: {weight: 22%, color: $rule}, fill: {from: 'at(environment.temperature.low, 5d)', to: 'at(environment.temperature.high, 5d)', gradient: $temperature}, value-label: {visible: false}}, grid: {row: 7, column: 3}}
+      - {type: realtime.text, key: 'at(environment.temperature.high, 5d)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: {scale: $temperature, of: 'at(environment.temperature.high, 5d)'}}}, grid: {row: 7, column: 4}}
+      - {type: realtime.text, key: 'at(environment.precipitation.daily, 5d)', display: {precision: 2, format-hint: '0.00', unitPosition: Hidden, valueLabel: {color: $hue-rain}}, grid: {row: 7, column: 5}}
+      - {type: realtime.text, key: 'at(environment.wind.speed.gustMax, 5d)', display: {precision: 0, format-hint: '00', unitPosition: Hidden, valueLabel: {color: {scale: WindSpeedGradient, of: 'at(environment.wind.speed.gustMax, 5d)'}}}, grid: {row: 7, column: 6}}
+      - {type: text, text: Tue, alignment: Left, color: $text, font: Roboto, text-height: $type_label, matchingGroup: {group: global.label, matchAll: true}, grid: {row: 8, column: 1}}
+      - {type: realtime.text, key: 'at(environment.temperature.low, 6d)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: $muted}}, grid: {row: 8, column: 2}}
+      - {type: realtime.bar, key: 'at(environment.temperature.high, 6d)', title: {visible: false}, display: {range: {min: 30, max: 90}, track: {weight: 22%, color: $rule}, fill: {from: 'at(environment.temperature.low, 6d)', to: 'at(environment.temperature.high, 6d)', gradient: $temperature}, value-label: {visible: false}}, grid: {row: 8, column: 3}}
+      - {type: realtime.text, key: 'at(environment.temperature.high, 6d)', display: {precision: 0, format-hint: '00°', unitPosition: Hidden, valueLabel: {color: {scale: $temperature, of: 'at(environment.temperature.high, 6d)'}}}, grid: {row: 8, column: 4}}
+      - {type: realtime.text, key: 'at(environment.precipitation.daily, 6d)', display: {precision: 2, format-hint: '0.00', unitPosition: Hidden, valueLabel: {color: $hue-rain}}, grid: {row: 8, column: 5}}
+      - {type: realtime.text, key: 'at(environment.wind.speed.gustMax, 6d)', display: {precision: 0, format-hint: '00', unitPosition: Hidden, valueLabel: {color: {scale: WindSpeedGradient, of: 'at(environment.wind.speed.gustMax, 6d)'}}}, grid: {row: 8, column: 6}}
+    - type: graph
+      timeframe: {days: 7}
+      annotations:
+        dayLabels: {enabled: true, position: Bottom, alignment: Center, opacity: 60%, height: 4%}
+        hourLabels: {enabled: false, alignment: BottomCenter, spacingIntervals: '12, 24', opacity: 60%}
+        lines: {spacing: 20 mm, weight: 0.3}
+      figures:
+      - figure: temperature
+        margins: {top: 14%, bottom: 30%}
+        min: 30
+        max: 85
+        environment.temperature.temperature:
+          plot: {type: plot, gradient: TemperatureGradient, weight: 1.0}
+          resolution: 2
+      - figure: rain
+        margins: {top: 76%, bottom: 9%}
+        min: 0
+        max: 0.2
+        environment.precipitation.precipitation:
+          plot: {type: bar, color: $hue-rain, width: 0.8, radius: 0.25}

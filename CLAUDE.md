@@ -89,7 +89,7 @@ LEVITYDASH_CONFIG_DEBUG=1 poetry run python -m LevityDash   # pristine temp conf
 
 ## Polar plots
 
-`type: polar` (`Displays/polar/`) draws `plot: rose | trail | clock` from whole series, read through `feed.openFeed`. `key:` (clock) and `direction:`/`speed:` (rose, trail) take a key or an expression. A computed key (`lib/plugins/computed.py`) holds one value and no history, so an expression here is not published: `feed.DerivedFeed` opens a feed for every key it reads and `series.derive` evaluates it at every sample time, each key standing for its last sample at or before that time and `max(key, 3h)` looking back from it. A time where an input has no value yet is left out. Options in the item's docstring; try them in the Studio's polar panel.
+`type: polar` (`Displays/polar/`) draws `plot: rose | trail | clock` from whole series, read through `feed.openFeed`. `key:` (clock) and `direction:`/`speed:` (rose, trail) take a key or an expression. A computed key (`lib/plugins/computed.py`) holds one value and no history, so an expression here is not published: `feed.DerivedFeed` opens a feed for every key it reads and `series.derive` evaluates it at every sample time, each key standing for its last sample at or before that time and `max(key, 3h)` looking back from it. A time where an input has no value yet is left out. Options in the item's docstring; try them in the Studio's polar panel. `plot: carousel` is the odd one: a sliding compass strip (`drawCarousel`, marks from `geometry.carouselMarks`) that reads one live number through `feed.openValue` (a value source in the app, the stand-in's last sample in the Studio), not a series.
 
 ## Bars
 

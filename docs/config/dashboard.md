@@ -470,7 +470,7 @@ Lines a column of values up on the number and not on the whole string. Without i
 
 The text is never changed: nothing is padded and no decimals are added, so `0` stays `0` and `0.0` stays `0.0`. A value with no digit (a compass point such as `WSW`) is not a number and keeps its normal alignment.
 
-The line is shared by the items of one size group, in one tier (so at one font size). Set it where the group is set, usually in `shared:`:
+The line is shared by the items of one size group, in one tier (so at one font size), whose boxes end on the same edge: the right edge for `Right`, the left for `Left`, the middle for `Center`. So the rows of a stack share one line, each column of a grid has its own, and a dashboard-wide group does not tie together values in different columns. Set it where the group is set, usually in `shared:`:
 
 ```yaml
 shared:
@@ -480,7 +480,7 @@ shared:
       number-align: decimal
 ```
 
-The column is as wide as the widest head plus the widest tail in the group, and the text is fitted to that width. A group with one `0.02` among whole numbers therefore fits smaller than one without. Put the number-heavy columns in their own group, or set `format-hint`, to keep the size you want. The `reading-list`, `list-panel`, `hour-column` and `day-column` presets default to `decimal` (property `numberAlign`); `stat-row` leaves it off, because a row of separate cells reads better centred.
+The column is as wide as the widest head plus the widest tail in it, and the text is fitted to that width. A unit drawn on the baseline (`unitPosition: baseline`) counts in the tail. A column with one `0.02` among whole numbers therefore fits smaller than one without. Put the number-heavy columns in their own group, or set `format-hint`, to keep the size you want. The `reading-list`, `list-panel`, `hour-column` and `day-column` presets default to `decimal` (property `numberAlign`); `stat-row` leaves it off, because a row of separate cells reads better centred.
 
 #### <div class=mono>tabular: bool </div>
 
@@ -826,9 +826,9 @@ environment.temperature.temperature:
 
 <div class="indent">
 
-#### <div class=mono>fill: true | float | {opacity, base}</div>
+#### <div class=mono>fill: true | float | {opacity, base, fade}</div>
 
-`opacity` is how strong the fill is, from `0` to `1` (default `0.25`). `base` is the value the fill reaches, in the unit of the data; the axis always includes it. Without `base` the fill reaches the bottom of the figure. `true` takes the defaults and a number sets the opacity. The fill takes the line's colour or gradient.
+`opacity` is how strong the fill is, from `0` to `1` (default `0.25`). `base` is the value the fill reaches, in the unit of the data; the axis always includes it. Without `base` the fill reaches the bottom of the figure. `fade: true` fades the fill out from the line's highest point to the baseline instead of ending in a hard edge. `true` takes the defaults and a number sets the opacity. The fill takes the line's colour or gradient.
 
 </div>
 
@@ -1184,6 +1184,34 @@ The strip's own key sets the time span and nothing else. Use any number key that
 ```
 
 The pins take the text colour unless they have a `color`.
+
+### Hourly rows
+
+> [!NOTE]
+`preset: hourly-row` puts columns of readings under the matching times of a graph, like the hourly strip under a forecast chart.
+
+Each column is a vertical stack: the time, then one reading for every row you give. The columns are `step` hours apart, all the same width, and centred on their time. The readings and the time are always for the same moment: `{offset}` in a row's key becomes the column's distance from now (`0h`, `3h`, `1.5h`), so `at(environment.temperature.temperature, {offset})` is the forecast for that column. The time is a `clock` with an `offset`.
+
+Heads and numbers are in size groups that span the whole dashboard (`global.title` and `global.value`), so the row reads like every other table. Give a number a `color` to tell the rows apart.
+
+```yaml
+- type: graph
+  name: temperature
+  timeframe: {days: 1, hours: 12}
+  # ...
+- preset: hourly-row
+  props:
+    timeframe: {days: 1, hours: 12}   # the graph's
+    step: 3
+    graph: temperature                # the graph's name
+    rows:
+    - {key: 'at(environment.temperature.temperature, {offset})', precision: 0}
+    - {key: 'at(environment.precipitation.probability, {offset})', precision: 0, color: $info}
+```
+
+Give the row the same width as the graph (a `stack` or a `group` that holds both). With `graph:` set, each column follows the graph's real time axis. That matters because a graph starts at the earliest of `now + offset` and its oldest data, so the left edge is not always where `timeframe` says. Without `graph:`, columns sit where `timeframe` puts them. Properties: `docs` of the preset (`step`, `past`, `head`, `headFormat`, `nowLabel`, `numberAlign`, `titleGroup`, `valueGroup`, `font`). An example: `docs/design-references/hourly-row.levity`.
+
+Under it are two items you can use by themselves. `time-axis: {graph: <name>, at: 3h}` on any item centres it on that time of a graph and keeps it there as the graph scrolls or resizes (only x is set; the item keeps its size). A `clock` component takes `offset: 3h` and shows that much later (or earlier, `-90min`).
 
 ### <div class=mono>rotate: bool</div>
 

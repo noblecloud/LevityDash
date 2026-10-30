@@ -11,7 +11,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
 	QBrush, QColor, QCursor, QFont, QFontMetricsF, QImage, QPainter, QPainterPath, QPainterPathStroker, QPen,
-	QPixmap, QPolygonF, QTransform, QAction
+	QLinearGradient, QPixmap, QPolygonF, QTransform, QAction
 )
 from PySide6.QtWidgets import (
 	QGraphicsEffect, QGraphicsItem, QGraphicsItemGroup, QGraphicsLineItem, QGraphicsPixmapItem,
@@ -2009,7 +2009,7 @@ class LinePlot(Plot):
 	def fill(self) -> Optional[dict]:
 		"""The space under the line filled with the line's own colour or gradient: `{opacity: 0.25, base: 50}`.
 
-		`opacity` is how strong the fill is (default 0.25). `base` is the value it reaches, in the unit of the
+		`opacity` is how strong the fill is (default 0.25); `fade: true` fades it out toward the baseline. `base` is the value it reaches, in the unit of the
 		data and held inside the axis range; without it the fill reaches the bottom of the figure. `true` is
 		the defaults and a number is the opacity. A line and a fill of one key is `fill` on the line; an
 		`area` plot is the fill alone.
@@ -2027,13 +2027,16 @@ class LinePlot(Plot):
 		if value in (None, False):
 			return None
 		if value is True:
-			return {'opacity': 0.25, 'base': None}
+			return {'opacity': 0.25, 'base': None, 'fade': False}
 		if isinstance(value, (int, float)):
-			return {'opacity': clamp(float(value), 0.0, 1.0), 'base': None}
+			return {'opacity': clamp(float(value), 0.0, 1.0), 'base': None, 'fade': False}
 		if not isinstance(value, Mapping):
 			raise ValueError(f'fill needs true, an opacity or a mapping, not {value!r}')
 		base = value.get('base')
-		return {'opacity': clamp(float(value.get('opacity', 0.25)), 0.0, 1.0), 'base': None if base is None else float(base)}
+		return {
+			'opacity': clamp(float(value.get('opacity', 0.25)), 0.0, 1.0), 'base': None if base is None else float(base),
+			'fade': bool(value.get('fade', False)),
+		}
 
 	def valueAnchor(self) -> Optional[float]:
 		return None if not self._fillSpec else self._fillSpec.get('base')
@@ -2066,6 +2069,7 @@ class LinePlot(Plot):
 		if self._fillSpec and self.data.hasData and self._drawsLine:
 			extras['fill'] = self._fillPath(path)
 			extras['fillOpacity'] = self._fillSpec['opacity']
+			extras['fillFade'] = self._fillSpec.get('fade', False)
 		if not self.data.hasData or not (self._thickness or self._pins):
 			return extras
 		# The sample times come back out of the normalised x the path was built from: the data itself can be
@@ -2112,6 +2116,16 @@ class LinePlot(Plot):
 			painter.setPen(Qt.NoPen)
 			painter.setBrush(pen.brush())
 			painter.drawPath(fill)
+			if extras.get('fillFade'):
+				# Nothing else is drawn yet, so masking the fill's box fades the fill alone: full strength at its
+				# highest point, nothing at its baseline.
+				box = fill.boundingRect()
+				fade = QLinearGradient(box.topLeft(), box.bottomLeft())
+				fade.setColorAt(0, QColor(0, 0, 0, 255))
+				fade.setColorAt(1, QColor(0, 0, 0, 0))
+				painter.setOpacity(1)
+				painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
+				painter.fillRect(box, QBrush(fade))
 			painter.restore()
 		if self._drawsLine:
 			paintGlow(painter, path, pen.brush(), pen.widthF(), glow)
@@ -4252,6 +4266,7 @@ class GraphPanel(Panel, tag='graph'):
 		self.syncTimer = QTimer(timeout=self.refresh, interval=300000)
 		self.axisTransformed = AxisSignal(self)
 		self.signals.resized.connect(self.updateSyncTimer)
+		self.signals.resized.connect(lambda *_: self.leftTime is not None and self._notifyAxis())
 		self.axisTransformed.connectSlot(self.onAxisChange)
 		# The annotations are laid out once per event-loop turn, however many
 		# series and axis announcements asked for it in that turn.
@@ -4368,7 +4383,12 @@ class GraphPanel(Panel, tag='graph'):
 			log.debug(f"Graph update frequency changed to {updateFrequency:format={'{value}'}} {type(updateFrequency).pluralName.lower()}")
 			# start(msec) sets the interval and (re)starts in one thread-safe call
 			startTimerSafe(self.syncTimer, newInterval)
-		else:
+		elif not self.syncTimer.isActive():
+			# Never restart a running timer: every data push lands here through
+			# onAxisChange, and QTimer.start on an active timer resets its
+			# countdown. A source that pushes more often than the interval (a
+			# minute, against ~3 minutes) kept it from ever firing, so refresh
+			# and syncDisplay never ran again and the plot drifted off the graph.
 			startTimerSafe(self.syncTimer)
 
 	@defer
@@ -4378,6 +4398,8 @@ class GraphPanel(Panel, tag='graph'):
 			min((figure.figureMinStart for figure in self.figures), default=self.timeframe.displayPosition)
 		)
 		self.proxy.snapToTime(t)
+		self.leftTime = t
+		self._notifyAxis()
 		# The "now" indicator only repositions on an actual panel resize
 		# (its updatePosition is wired to self.signals.resized, never to a
 		# timer) - piggyback on this timer, already ticking at msPerPixel
@@ -4386,8 +4408,29 @@ class GraphPanel(Panel, tag='graph'):
 		if (indicator := getattr(self, '_indicator', None)) is not None:
 			indicator.updatePosition()
 
-	def timeToX(self, time: datetime):
-		pass
+	leftTime: Optional[datetime] = None
+
+	def timeToX(self, time: datetime) -> float:
+		"""Where `time` sits on the graph, in this panel's own coordinates (0 is its left edge). Needs one `syncDisplay` first."""
+		if self.leftTime is None:
+			raise ValueError('the graph has not placed its time axis yet')
+		return (time - self.leftTime).total_seconds() * self.pixelsPerSecond
+
+	def watchAxis(self, callback):
+		"""Call `callback()` whenever the time axis moves a pixel or more or the graph is resized (items placed by time)."""
+		self.__dict__.setdefault('_axisWatchers', []).append(callback)
+
+	def _notifyAxis(self, force: bool = False):
+		stamp = (self.leftTime, self.width())
+		last = self.__dict__.get('_axisStamp')
+		if not force and last is not None and last[1] == stamp[1] and abs((stamp[0] - last[0]).total_seconds() * self.pixelsPerSecond) < 1:
+			return
+		self._axisStamp = stamp
+		for callback in list(self.__dict__.get('_axisWatchers', ())):
+			try:
+				callback()
+			except RuntimeError:
+				self._axisWatchers.remove(callback)  # its item is gone
 
 	def refresh(self):
 		for figure in self.figures:

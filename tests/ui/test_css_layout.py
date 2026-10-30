@@ -84,6 +84,16 @@ def test_grid_places_by_line_and_span(dashboard, slot):
 	assert found[2] == pytest.approx((0.25, 0.5, 0.75, 0.5), abs=0.01)
 
 
+def test_grid_padding_moves_the_items_in_not_only_shrinks_them(dashboard, slot):
+	"""An item's own `margin` used the names of the grid's padding, so every item kept the padded size but sat at the
+	grid's top-left corner."""
+	stack = build(dashboard, slot, 'grid', padding='10%', grid={'columns': ['1fr'], 'rows': ['1fr']}, items=[
+		{'type': 'group'},
+	])
+	(found,) = rects(stack)
+	assert found == pytest.approx((0.1, 0.1, 0.8, 0.8), abs=0.01)
+
+
 def test_unknown_keys_are_an_error_not_silence():
 	assert _checkedKeys({'Grow': 1}, {'grow'}, 'flex') == {'grow': 1}
 	with pytest.raises(ValueError, match='nope'):

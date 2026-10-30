@@ -1,0 +1,8 @@
+# A sliding compass strip: the wind direction stays under the pointer, the letters move.
+- type: polar
+  name: polar
+  plot: carousel
+  direction: environment.wind.direction.direction
+  view: 120
+  compass: 16
+  legend: true

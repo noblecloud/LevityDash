@@ -158,7 +158,8 @@ class Resolver(Protocol):
 _KEY_PATTERN = re.compile(
 	r'(?<![\w.])'
 	r'(?:[A-Za-z][\w-]*:)?'          # source: affix
-	r'[A-Za-z_]\w*(?:\.\w+)+'        # dotted path, at least two atoms
+	r'[A-Za-z_]\w*(?:\.(?:\d\w*(?:-\d\w*)+|\w+))+'  # dotted path, at least two atoms; an atom that
+	                                 # starts with a digit may hold a range (`soil.moisture.1-3cm`)
 	r'(?:#\w+)?'                     # #identity affix
 	r'(?:@\w+(?:\.\w+)*)?'          # @place affix
 )

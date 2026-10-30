@@ -37,6 +37,7 @@ from PySide6.QtWidgets import QGraphicsItem
 from LevityDash.lib.plugins.expressions import ExpressionError  # noqa: F401 - re-exported for specs that name it
 from LevityDash.lib.stateful import Binding, StateProperty
 from LevityDash.lib.ui import Color, Gradient, UILogger
+from LevityDash.lib.ui.bound_number import BoundNumber, isBound
 from LevityDash.lib.ui.Geometry import DimensionType, parseWidth, size_px
 from LevityDash.lib.ui.fonts import defaultFont
 from LevityDash.lib.ui.glow import Glow, GlowMixin, paintGlow, resolveGlow
@@ -67,6 +68,14 @@ def _size(raw, name: str):
 	if value is None:
 		raise ValueError(f'{name} {raw!r} is not a size')
 	return value
+
+
+def _sizeOrBound(raw, name: str):
+	"""`_size`, except that an ``{of, from, to}`` mapping stays as written (checked now, followed when drawn)."""
+	if isBound(raw):
+		BoundNumber(raw)
+		return dict(raw)
+	return _size(raw, name)
 
 
 def _number(raw, name: str) -> float:
@@ -346,6 +355,7 @@ class Bar(GlowMixin, Meter):
 
 	def _decodeMapping(self, name: str, value, known: set) -> Optional[dict]:
 		self.colors.release(self.colors)
+		self.numbers.release(self.numbers)
 		if value is None:
 			return None
 		if not isinstance(value, Mapping):
@@ -512,7 +522,7 @@ class Bar(GlowMixin, Meter):
 					'from': None if spec.get('from') is None else _number(spec['from'], 'from'),
 					'to': None if spec.get('to') is None else _number(spec['to'], 'to'),
 					'color': spec['color'],
-					'weight': None if spec.get('weight') is None else _size(spec['weight'], 'weight'),
+					'weight': None if spec.get('weight') is None else _sizeOrBound(spec['weight'], 'weight'),
 					'opacity': self._opacity(spec.get('opacity')),
 					'glow': Glow.decode(spec.get('glow')),
 				})
@@ -533,6 +543,7 @@ class Bar(GlowMixin, Meter):
 	@zones.decode
 	def zones(self, value) -> list:
 		self.colors.release(self.colors)
+		self.numbers.release(self.numbers)
 		if isinstance(value, Mapping):
 			value = [value]
 		if not isinstance(value, (list, tuple)):
@@ -600,7 +611,7 @@ class Bar(GlowMixin, Meter):
 			else:
 				fill[end] = _number(raw, end)
 		if (weight := spec.get('weight')) is not None:
-			fill['weight'] = _size(weight, 'weight')
+			fill['weight'] = _sizeOrBound(weight, 'weight')
 		if (cap := spec.get('cap')) is not None:
 			if str(cap).strip().lower() not in _CAPS:
 				raise ValueError(f'cap must be one of {", ".join(_CAPS)}, not {cap!r}')
@@ -673,6 +684,7 @@ class Bar(GlowMixin, Meter):
 	@markers.decode
 	def markers(self, value) -> list:
 		self.colors.release(self.colors)
+		self.numbers.release(self.numbers)
 		if isinstance(value, Mapping):
 			value = [value]
 		if not isinstance(value, (list, tuple)):
@@ -689,7 +701,7 @@ class Bar(GlowMixin, Meter):
 			log.warning(f'Bar {gaugeKeyName(self)} marker ignored unknown keys {sorted(map(str, unknown))}')
 		self._checkMarkerType(spec)
 		marker = {'type': str(spec.get('type', 'line')).strip().lower(), 'color': spec.get('color'), 'value': None,
-				'size': None if spec.get('size') is None else _size(spec['size'], 'size'),
+				'size': None if spec.get('size') is None else _sizeOrBound(spec['size'], 'size'),
 				'side': _SIDES.get(str(spec.get('side', 'before')).lower(), 'before'), 'glow': Glow.decode(spec.get('glow'))}
 		raw = spec.get('value')
 		if isinstance(raw, bool):
@@ -922,10 +934,19 @@ class Bar(GlowMixin, Meter):
 		"""A size spec in px; a missing one is ``default`` of ``ref``."""
 		if raw is None:
 			return default * ref
+		if isBound(raw):
+			return self._sizePx(raw, ref, default * ref)
 		value = parseWidth(raw, None)
 		if value is None:
 			return default * ref
 		return size_px(value, ref, dimension=DimensionType.width)
+
+	def _sizePx(self, raw, ref: float, fallback: float) -> float:
+		"""A size in px. A bound one is a share of ``ref`` that follows its value; ``fallback`` while it has none."""
+		if isBound(raw):
+			share = self.numbers.read(raw, self.numbers, self.refresh)
+			return fallback if share is None else share * ref
+		return size_px(raw, ref, dimension=DimensionType.width)
 
 	@staticmethod
 	def _physicalSide(position: str, vertical: bool) -> str:
@@ -1087,7 +1108,7 @@ class Bar(GlowMixin, Meter):
 			t0, t1 = sorted((0.0 if zone['from'] is None else self._t(zone['from']), 1.0 if zone['to'] is None else self._t(zone['to'])))
 			if t1 - t0 < 1e-9:
 				continue
-			weight = layout['weight'] if zone['weight'] is None else size_px(zone['weight'], layout['u'], dimension=DimensionType.width)
+			weight = layout['weight'] if zone['weight'] is None else self._sizePx(zone['weight'], layout['u'], layout['weight'])
 			if zone['opacity'] <= 0:
 				continue
 			color = self._qc(zone['color'])
@@ -1107,7 +1128,7 @@ class Bar(GlowMixin, Meter):
 		if tb - ta < 1e-9:
 			return
 		style = self._style
-		w = layout['weight'] if fill['weight'] is None else size_px(fill['weight'], layout['u'], dimension=DimensionType.width)
+		w = layout['weight'] if fill['weight'] is None else self._sizePx(fill['weight'], layout['u'], layout['weight'])
 		if style == 'battery':
 			w = w * 0.84
 		if style == 'thermometer':
@@ -1280,14 +1301,14 @@ class Bar(GlowMixin, Meter):
 			self._drawMarker(painter, layout, marker['type'], self._t(marker['value']), marker['color'], marker['size'], marker['side'], resolveGlow(marker['glow'], self.glow))
 		pointer = self._pointerSpec
 		if pointer is not None:
-			size = None if pointer.get('size') is None else _size(pointer['size'], 'size')
+			size = None if pointer.get('size') is None else _sizeOrBound(pointer['size'], 'size')
 			side = _SIDES.get(str(pointer.get('side', 'before')).lower(), 'before')
 			self._drawMarker(painter, layout, str(pointer.get('type', 'triangle')).lower(), self._t(self._value), pointer.get('color'), size, side, resolveGlow(Glow.decode(pointer.get('glow')), self.glow))
 
 	def _drawMarker(self, painter: QPainter, layout: dict, kind: str, t: float, color, size, side: str, glow: Optional[Glow]):
 		line: LineTrack = layout['line']
 		w, u = layout['weight'], layout['u']
-		extent = size_px(size, u, dimension=DimensionType.width) if size is not None else w * 0.9
+		extent = self._sizePx(size, u, w * 0.9) if size is not None else w * 0.9
 		fill = self._qc(color) if color is not None else self._qc('$text')
 		sign = -1.0 if side == 'before' else 1.0
 		center = self._point(line, t)

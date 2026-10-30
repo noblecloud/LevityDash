@@ -15,10 +15,10 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPen, QRadialGradient
 
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.geometry import (
-	RoseData, bezierThrough, clockAngle, compassName, niceStep, polarPoint, timeOfDay,
+	RoseData, bezierThrough, carouselMarks, clockAngle, compassName, niceStep, polarPoint, timeOfDay,
 )
 
-__all__ = ['Look', 'drawClock', 'drawRose', 'drawTrail', 'plotCircle', 'rampColor']
+__all__ = ['Look', 'drawCarousel', 'drawClock', 'drawRose', 'drawTrail', 'plotCircle', 'rampColor']
 
 _LABEL_ANGLE = 11.25  # degrees right of the top, in the gap between a rose's first two petals, where ring values sit
 
@@ -432,3 +432,47 @@ def drawClock(
 
 	if current is not None:
 		_text(painter, f'{_format(current)}{_suffix(unit)}', cx, cy, look.text, _font(look.mono, hole * 0.62, bold=True))
+
+
+# Carousel ----------------------------------------------------------------------------------
+
+def drawCarousel(
+	painter: QPainter, look: Look, rect: QRectF, shown: Optional[float], view: float, points: int, readout: bool = True,
+) -> None:
+	"""A strip of compass letters that slides so ``shown`` (degrees) stays under the pointer in the middle.
+
+	The ticks sit on a rule along the lower part of the strip, the letters above them, a triangle in the
+	accent colour marks the middle and, when ``readout`` is on, the bearing and its name are written under it.
+	Marks fade towards the edges so a letter never appears at full strength cut by the box."""
+	if shown is None:
+		return
+	width, height = rect.width(), rect.height()
+	fontPx = max(8.0, min(height * (0.24 if readout else 0.36), width / 16))
+	baseline = rect.top() + height * (0.62 if readout else 0.74)
+	tickLong, tickShort = fontPx * 0.5, fontPx * 0.28
+	painter.setPen(QPen(_alpha(look.rule, 0.9), max(1.0, fontPx * 0.06)))
+	painter.drawLine(QPointF(rect.left(), baseline), QPointF(rect.right(), baseline))
+	for mark in carouselMarks(shown, view, points):
+		x = rect.center().x() + mark.offset * width
+		fade = max(0.0, min(1.0, (0.5 - abs(mark.offset)) / 0.18))
+		if mark.kind == 'minor':
+			painter.setPen(QPen(_alpha(look.faint, fade), max(1.0, fontPx * 0.05)))
+			painter.drawLine(QPointF(x, baseline), QPointF(x, baseline - tickShort))
+			continue
+		cardinal = mark.kind == 'cardinal'
+		painter.setPen(QPen(_alpha(look.muted if cardinal else look.faint, fade), max(1.0, fontPx * 0.07)))
+		painter.drawLine(QPointF(x, baseline), QPointF(x, baseline - tickLong))
+		font = _font(look.display, fontPx * (1.0 if cardinal else 0.72), bold=cardinal)
+		_text(painter, mark.label, x, baseline - tickLong - fontPx * 0.62, _alpha(look.text if cardinal else look.muted, fade), font)
+	# The pointer, tip down onto the rule.
+	cx, size = rect.center().x(), fontPx * 0.32
+	pointer = QPainterPath(QPointF(cx, baseline + size * 0.2))
+	pointer.lineTo(QPointF(cx - size, baseline + size * 1.6))
+	pointer.lineTo(QPointF(cx + size, baseline + size * 1.6))
+	pointer.closeSubpath()
+	painter.setPen(Qt.PenStyle.NoPen)
+	painter.setBrush(look.accent)
+	painter.drawPath(pointer)
+	if readout:
+		text = f'{round(shown) % 360}\u00b0 {compassName(shown, 16)}'
+		_text(painter, text, cx, baseline + size * 1.6 + fontPx * 0.75, look.text, _font(look.mono, fontPx * 0.8))
