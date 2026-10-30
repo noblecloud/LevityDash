@@ -31,8 +31,12 @@ def panel(name, title, items, size=None, color='$accent'):
 
 
 def cap(text, geom, color='$muted'):
+	# Every caption in a panel shares one size group (scoped per panel by scope_groups), so a caption in a wide
+	# cell is not drawn larger than its neighbours: on lambda's screen `text-height` alone let them grow into
+	# each other.
 	return {'type': 'text', 'text': text, 'font': '$display', 'weight': 'Medium', 'color': color,
-	        'alignment': 'BottomLeft', 'text-height': CAP, 'geometry': geom}
+	        'alignment': 'BottomLeft', 'text-height': CAP, 'geometry': geom,
+	        'matchingGroup': {'group': 'global.cap', 'matchAll': True}}
 
 
 def val(key, geom, color='$text', precision=0, unit='Hidden', hint=None, height=VAL, group='global.tile', align='BottomLeft', fmt=None, weight='Regular'):
@@ -170,7 +174,7 @@ cloud = panel('cloud', 'CLOUD', [
 sun = panel('sun', 'SUN AND MOON', tiles([
 	('RISE', 'astronomy.sun.rise', {'color': '$warn', 'fmt': '%-I:%M', 'hint': '0:00'}),
 	('SET', 'astronomy.sun.set', {'color': '$pink', 'fmt': '%-I:%M', 'hint': '0:00'}),
-	('DAYLIGHT', 'astronomy.sun.remaining', {'color': '$warn', 'fmt': 'duration', 'hint': '0h 00m'}),
+	('DAY LEFT', 'astronomy.sun.remaining', {'color': '$warn', 'fmt': 'duration', 'hint': '0h 00m'}),
 	('MOON', 'astronomy.moon.phase', {'color': '$cloud', 'unit': 'Inline', 'hint': '00%'}),
 ], 0, 0, 100, 100, 2), size='16%')
 
@@ -221,7 +225,7 @@ now = {'type': 'group', 'name': 'now', 'size': '20%', 'items': [
 ]}
 
 forecast = {
-	'type': 'graph', 'name': 'forecast', 'timeframe': {'days': 2, 'hours': 12},
+	'type': 'graph', 'name': 'forecast', 'timeframe': {'days': 2, 'hours': 12, 'offset': {'hours': -1}},
 	'annotations': {'dayLabels': {'enabled': False},
 	                'hourLabels': {'alignment': 'BottomCenter', 'spacingIntervals': '3, 6, 12'},
 	                'lines': {'spacing': '8 mm', 'weight': 0.5}},
@@ -307,7 +311,7 @@ def room(name, title, ident, hum_color, tlo, thi):
 	return panel(name, title, [
 		mini(t, g(0, 12, 50, 48), gradient='TemperatureGradient', hours=24, past=True, lo=tlo, hi=thi, opacity=0.9, fill=0.4, figure='indoor', top='5%'),
 		mini(h, g(52, 12, 48, 48), color=hum_color, hours=24, past=True, opacity=0.9, fill=0.4, figure='humid', top='35%'),
-		cap('TEMP °F · 24 H', g(0, 0, 50, 10)),
+		cap('TEMP °F', g(0, 0, 50, 10)),
 		val(t, g(0, 10, 50, 34), temp_scale(t), unit='Hidden', hint='00', fmt={'unit_symbol': False}, height=HERO2, group='global.hero2', weight='Bold'),
 		cap('HUMIDITY %', g(52, 0, 48, 10)),
 		val(h, g(52, 10, 48, 34), hum_color, unit='Inline', hint='00%', height=HERO2, group='global.hero2', weight='Bold'),
@@ -401,8 +405,8 @@ def scope_groups(node, panel=None):
 		if node.get('type') in ('titled-group', 'group', 'switch') and node.get('name'):
 			panel = node['name']
 		mg = node.get('matchingGroup')
-		if isinstance(mg, dict) and mg.get('group') == 'global.tile' and panel:
-			mg['group'] = f'global.tile-{panel}'
+		if isinstance(mg, dict) and mg.get('group') in ('global.tile', 'global.cap') and panel:
+			mg['group'] = f"{mg['group']}-{panel}"
 		for v in node.values():
 			scope_groups(v, panel)
 	elif isinstance(node, list):

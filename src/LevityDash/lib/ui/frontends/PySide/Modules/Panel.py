@@ -828,6 +828,10 @@ class Panel(_Panel, Stateful, tag='group'):
 		x = graph.timeToX(now() + timedelta(hours=spanHours(spec['at'], 'time-axis at')))
 		centre = self.mapFromScene(graph.mapToScene(QPointF(x, 0))).x()
 		mine = self.rect()
+		# An item that would hang over the graph's edge is not on the graph's time any more: hide it, show it again when it fits
+		edge = self.mapFromScene(graph.mapToScene(QPointF(graph.rect().width(), 0))).x()
+		start = self.mapFromScene(graph.mapToScene(QPointF(0, 0))).x()
+		self.setVisible(centre - mine.width() / 2 >= start - 1 and centre + mine.width() / 2 <= edge + 1)
 		shift = centre - (mine.x() + mine.width() / 2)
 		if abs(shift) > 1e-6:
 			self.setPos(self.pos() + QPointF(shift, 0))
