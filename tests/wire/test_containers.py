@@ -473,3 +473,43 @@ def test_a_polar_feed_asks_for_more_than_the_default_window():
 	minPeriod, maxPeriod = SeriesFeed.wireTimeseriesPeriod.fget(None)
 	assert minPeriod <= timedelta(days=-1)
 	assert maxPeriod >= timedelta(days=3)
+
+
+def _room_sensor(multi, key, name='Govee-bedroom'):
+	# A realtime source that keeps its past in a recorded log: realtime and a timeseries, never a forecast.
+	source = RemoteSource(name=name)
+	remote = source.getOrCreate(key)
+	remote._update(value=wu.Temperature.Fahrenheit(74), flags=ContainerFlags(isRealtime=True, isTimeseries=True, isTimeseriesOnly=False))
+	multi.addValue(source, remote)
+	return source, remote
+
+
+def test_a_graph_of_a_room_sensor_asks_for_its_recorded_history():
+	# Govee keys have no forecast, only a log. A graph's request (timeseriesOnly) used to wait for a forecast that
+	# never comes, so the room mini graphs on lambda never asked the backend for their history.
+	key = CategoryItem('indoor.temperature.temperature#bedroom')
+	multi = MultiSourceContainer(key)
+	source, remote = _room_sensor(multi, key)
+	captured = []
+	source._ts_request_fn = lambda message, on_response: captured.append(message)
+
+	multi.getPreferredSourceContainer('graph', AnySource, lambda: None, timeseriesOnly=True)
+	assert len(captured) == 1
+
+	remote._timeseries = RemoteTimeSeries(source, key, [TimeSeriesItem.load_raw(74.0, datetime(2026, 10, 30, tzinfo=timezone.utc))])
+	assert multi.getTimeseries(strict=True) is remote
+
+
+def test_a_forecast_still_wins_over_a_recorded_log():
+	key = CategoryItem('environment.temperature.temperature')
+	multi = MultiSourceContainer(key)
+	_, log = _room_sensor(multi, key, name='WeatherFlow')
+	forecastSource = RemoteSource(name='OpenMeteo')
+	forecast = forecastSource.getOrCreate(key)
+	forecast._update(value=wu.Temperature.Fahrenheit(70), flags=ContainerFlags(isForecast=True, isTimeseries=True, isTimeseriesOnly=True))
+	multi.addValue(forecastSource, forecast)
+	at = datetime(2026, 10, 30, tzinfo=timezone.utc)
+	log._timeseries = RemoteTimeSeries(log.source, key, [TimeSeriesItem.load_raw(74.0, at)])
+	forecast._timeseries = RemoteTimeSeries(forecastSource, key, [TimeSeriesItem.load_raw(70.0, at)])
+	assert multi.getTimeseries(strict=True) is forecast
+	assert multi.getTimeseries() is forecast

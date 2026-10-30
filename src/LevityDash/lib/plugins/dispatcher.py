@@ -201,14 +201,14 @@ class MultiSourceContainer(dict):
 		# a live Container, so live-mode behavior is unchanged.
 		try:
 			preferred = self[preferredSource if preferredSource is not AnySource else None or self.preferredSource]
-			if preferred.timeseries is not None and (preferred.isForecast or (not strict and (preferred.isTimeseries or preferred.isDaily))):
+			if preferred.timeseries is not None and (preferred.isForecast or (not strict and preferred.isDaily) or self._historyOnly(preferred)):
 				return preferred
 		except KeyError:
 			pass
 		timeseriesContainers = sorted(
 			[
 				c for c in self.values()
-				if c.timeseries is not None and (c.isForecast or ((c.isTimeseries or c.isDaily) and not strict))
+				if c.timeseries is not None and (c.isForecast or (c.isDaily and not strict) or self._historyOnly(c))
 			],
 			key=lambda c: (c.isForecast, len(c.source.config.defaultFor)), reverse=True
 		)
@@ -216,6 +216,11 @@ class MultiSourceContainer(dict):
 			return timeseriesContainers[0]
 		except IndexError:
 			return None
+
+	def _historyOnly(self, container) -> bool:
+		"""A container whose only series is its recorded past (a Govee room sensor) stands in for a forecast when no
+		source of this key has one. A key that does have a forecast keeps it: a station's log never wins over it."""
+		return container.isTimeseries and not container.isForecast and not self.isForecast
 
 	def getDaily(self, preferredSource: Plugin | SomePlugin = AnySource) -> Container | None:
 		"""
@@ -338,7 +343,7 @@ class MultiSourceContainer(dict):
 					singleShotSafe(1, request.callback)
 
 		if requesters := (self.waitingForTimeseries[plugin] or self.waitingForTimeseries[AnySource]):
-			if plugin[self.key].isForecast:
+			if plugin[self.key].isForecast or self._historyOnly(plugin[self.key]):
 				log.verbose(f"{plugin.name} timeseries is ready for {self.key}", verbosity=2)
 				for request in (*self.waitingForTimeseries.pop(plugin, []), *self.waitingForTimeseries.pop(AnySource, [])):
 					log.verbose(f"Issuing callback for {request.requester!s}", verbosity=2)
@@ -394,7 +399,7 @@ class MultiSourceContainer(dict):
 		# waits, and without this check the request would hold until the
 		# source's next publish (a full poll cycle). Mirror checkAwaiting's
 		# fire conditions and short-circuit instead of queueing.
-		ready = (lambda c: c.isForecast) if timeseriesOnly else (lambda c: c.isRealtime or c.isRealtimeApproximate)
+		ready = (lambda c: c.isForecast or self._historyOnly(c)) if timeseriesOnly else (lambda c: c.isRealtime or c.isRealtimeApproximate)
 		if plugin is AnySource:
 			# Rank by the same key getTimeseries/getRealtimeContainer/getDaily
 			# use, so a source declaring itself default for more keys wins.

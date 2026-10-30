@@ -3005,8 +3005,10 @@ class Container:
 
 	@property
 	def isTimeseries(self) -> bool:
+		# abs: a recorded log (ObservationLog) runs backwards and reports a negative period, so a realtime source
+		# that keeps its history (Govee) never counted as having a series, and nothing could graph it.
 		return any(
-			obs.period > TIMESERIES_CUTOFF
+			abs(obs.period) > TIMESERIES_CUTOFF
 			for obs in self.source.observations
 			if self.__time_series_guard(obs)
 		)
