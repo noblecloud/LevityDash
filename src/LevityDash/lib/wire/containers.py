@@ -520,7 +520,10 @@ class RemoteContainer:
 				return
 			request.callback()
 
-		self._tsPeriod = self._resolve_ts_period(request)
+		# Several items share this container (a graph and a polar plot on one key), so the window only
+		# grows: one asking for less than another used to shrink every later refetch to its own span.
+		minPeriod, maxPeriod = self._resolve_ts_period(request)
+		self._tsPeriod = (min(self._tsPeriod[0], minPeriod), max(self._tsPeriod[1], maxPeriod))
 		self.source.request_timeseries(self.key, *self._tsPeriod, on_response)
 
 	def _applyTsResponse(self, response: Optional[dict]) -> None:
