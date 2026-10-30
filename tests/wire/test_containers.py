@@ -445,3 +445,31 @@ def test_getPreferredSourceContainer_ranks_by_defaultFor():
 		f'picked {picked}; PirateWeather was registered first, so insertion '
 		f'order would have chosen it'
 	)
+
+
+def test_prepare_for_ts_connection_never_shrinks_the_window():
+	# A graph and a polar plot share one container. The polar plot's request (or any narrower one)
+	# must not shrink the window every later refetch uses to its own span.
+	key = CategoryItem('environment.temperature.temperature')
+	source = RemoteSource(name='OpenMeteo')
+	remote = source.getOrCreate(key)
+
+	captured = []
+	source._ts_request_fn = lambda message, on_response: captured.append(message)
+
+	class Wide:
+		wireTimeseriesPeriod = (timedelta(days=-2), timedelta(days=16))
+
+	remote.prepare_for_ts_connection(Request(requester=Wide(), callback=lambda: None))
+	remote.prepare_for_ts_connection(Request(requester=object(), callback=lambda: None))
+
+	assert captured[-1]['minPeriod'] == timedelta(days=-2).total_seconds()
+	assert captured[-1]['maxPeriod'] == timedelta(days=16).total_seconds()
+
+
+def test_a_polar_feed_asks_for_more_than_the_default_window():
+	# `window: today` needs the whole day; the wire default is +-3 h.
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.feed import SeriesFeed
+	minPeriod, maxPeriod = SeriesFeed.wireTimeseriesPeriod.fget(None)
+	assert minPeriod <= timedelta(days=-1)
+	assert maxPeriod >= timedelta(days=3)

@@ -258,7 +258,9 @@ def alert(name, when, title, color, hero, caption, rest):
 
 PR = 'environment.precipitation.precipitation'
 U = 'environment.light.uvi'
-watch = {'type': 'switch', 'name': 'watch', 'size': '22%', 'hold': '2m', 'cycle': '20s', 'fade': '0.5s', 'items': [
+# An alert whose `when` holds takes the panel; otherwise the polar day clock shows. It used to share the quiet time
+# with a TODAY panel on a 20 s cycle, which read as the clock vanishing and coming back.
+watch = {'type': 'switch', 'name': 'watch', 'size': '22%', 'hold': '2m', 'fade': '0.5s', 'items': [
 	alert('rainAlert', 'max(environment.precipitation.probability, 12h) > 50%', 'RAIN COMING', '$rain',
 	      ('max(environment.precipitation.probability, 12h)', {'unit': 'Inline'}), 'CHANCE IN THE NEXT 12 H', [
 		      ('NOW IN/HR', PR, {'precision': 2, 'color': '$rain'}),
@@ -287,14 +289,6 @@ watch = {'type': 'switch', 'name': 'watch', 'size': '22%', 'hold': '2m', 'cycle'
 		      ('CLOUD', 'environment.clouds.cover.cover', {'unit': 'Inline', 'color': '$cloud'}),
 		      ('SUN ELEV', 'astronomy.sun.elevation', {'unit': 'Inline'}),
 	      ]),
-	{'type': 'titled-group', 'name': 'today', 'title': head('TODAY'), 'items': tiles([
-		('HIGH', 'environment.temperature.high', {'unit': 'Inline', 'color': '$bad'}),
-		('AT', 'environment.temperature.highTime', {'fmt': '%-I:%M', 'color': '$muted'}),
-		('LOW', 'environment.temperature.low', {'unit': 'Inline', 'color': '$info'}),
-		('AT', 'environment.temperature.lowTime', {'fmt': '%-I:%M', 'color': '$muted'}),
-		('RAIN CHANCE', 'max(environment.precipitation.probability, today)', {'unit': 'Inline', 'color': '$accent'}),
-		('RAIN IN', 'environment.precipitation.rainDaily', {'precision': 2, 'color': '$rain'}),
-	], 0, 0, 100, 100, 2)},
 	{'preset': 'polar-card', 'name': 'dayClock', 'props': {
 		'title': 'Today round the clock', 'plot': 'clock', 'key': T, 'window': 'today',
 		'gradient': [{'at': a, 'color': c} for a, c in [(30, '#3d6bff'), (45, '#00e5ff'), (58, '#00ffa8'), (68, '#b6ff00'),
