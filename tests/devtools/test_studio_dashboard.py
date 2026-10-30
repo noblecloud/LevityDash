@@ -416,6 +416,18 @@ def test_align_sets_x_or_y_from_the_item_and_parent_size(board):
 	assert win.piece.node(target)['geometry']['x'] == '30%'
 
 
+def test_select_sibling_steps_within_a_container_and_stops_at_the_ends(board):
+	win, path = board('station')
+	first = next(p for p, n in win.piece.walk() if len(p) >= 2 and p[-1] == 0 and len(win.piece.node(p[:-1]).get(m.ITEMS_KEY) or []) > 1)
+	win.select(first)
+	win.selectSibling(-1)
+	assert win.selection == first
+	win.selectSibling(1)
+	assert win.selection == first[:-1] + (1,)
+	win.selectSibling(-1)
+	assert win.selection == first
+
+
 def test_select_parent_walks_up_and_stops_at_the_top(board):
 	win, path = board('station')
 	deep = next(p for p, n in win.piece.walk() if len(p) >= 3)

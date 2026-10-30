@@ -712,6 +712,7 @@ class Stage(QWidget):
 	dragged = Signal(tuple, dict)  # path, geometry in % of the parent
 	dragDone = Signal()
 	parentAsked = Signal()  # Esc: select the selected item's parent
+	siblingAsked = Signal(int)  # [ and ]: select the previous or next item in the same container
 	keyDropped = Signal(tuple, str)  # item path, key dragged from the Keys tab
 
 	HANDLE = 9
@@ -759,6 +760,8 @@ class Stage(QWidget):
 			return self.resetView()
 		if event.key() == Qt.Key.Key_Escape:
 			return self.parentAsked.emit()
+		if event.key() in (Qt.Key.Key_BracketLeft, Qt.Key.Key_BracketRight):
+			return self.siblingAsked.emit(-1 if event.key() == Qt.Key.Key_BracketLeft else 1)
 		step = {Qt.Key.Key_Left: (-1, 0), Qt.Key.Key_Right: (1, 0), Qt.Key.Key_Up: (0, -1), Qt.Key.Key_Down: (0, 1)}.get(event.key())
 		rect = self.rects.get(self.path) if self.path else None
 		if step is None or rect is None or not self.movable:
@@ -1605,6 +1608,7 @@ class Builder(QWidget):
 		self.snapBox.toggled.connect(lambda on: setattr(self.stage, 'snap', on))
 		self.stage.dragDone.connect(self._dragDone)
 		self.stage.parentAsked.connect(self.selectParent)
+		self.stage.siblingAsked.connect(self.selectSibling)
 		self.stage.keyDropped.connect(self._keyDropped)
 		self.tree.keyDropped.connect(self._keyDropped)
 		mbox.addWidget(self.stage, 1)
@@ -1978,6 +1982,16 @@ class Builder(QWidget):
 		self.keysTab.selectionChanged()
 		self._syncStage()
 
+	def selectSibling(self, step: int):
+		"""Select the previous (-1) or next (1) item in the same container; the ends do not wrap."""
+		if not self.selection:
+			return
+		parent = self.piece.node(self.selection[:-1])
+		count = len(parent.get(model.ITEMS_KEY) or []) if parent is not None else 0
+		at = self.selection[-1] + step
+		if 0 <= at < count:
+			self.select(self.selection[:-1] + (at,))
+
 	def selectParent(self):
 		"""Select the selected item's parent container; a top-level item has none, so nothing changes."""
 		if self.selection and len(self.selection) > 1:
@@ -2142,6 +2156,8 @@ class Builder(QWidget):
 		menu.addAction('Duplicate', self.duplicateItem, QKeySequence('Ctrl+D'))
 		menu.addAction('Delete', self.deleteItem, QKeySequence.StandardKey.Delete)
 		menu.addAction('Select parent', self.selectParent, QKeySequence('Esc'))
+		menu.addAction('Select previous item', lambda: self.selectSibling(-1), QKeySequence('['))
+		menu.addAction('Select next item', lambda: self.selectSibling(1), QKeySequence(']'))
 		menu.addAction('Reset geometry', self.resetGeometry)
 		align = menu.addMenu('Align in parent')
 		for how in self.ALIGN:
