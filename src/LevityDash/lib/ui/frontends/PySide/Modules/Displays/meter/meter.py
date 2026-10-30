@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Optional, Sequence, Type, Union
 from numpy import ceil
 from PySide6.QtCore import QPointF, QRectF, QSizeF, Signal, Slot
 from PySide6.QtGui import QTransform
-from WeatherUnits import Humidity, Length, Measurement, Wind
+from unitcorn import Humidity, Length, Measurement, Wind
 
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.stateful import StateProperty
@@ -339,6 +339,19 @@ class Meter(Display):
 	radius-based sizing on top of this; a `Bar` (phase 3) adds a straight track and
 	answers the same size questions with its own extents.
 	"""
+
+	@property
+	def colors(self):
+		"""The colour settings of this meter and its elements (`colors/bound.py`): plain or following a value."""
+		if (slots := self.__dict__.get('_colorSlots')) is None:
+			from LevityDash.lib.ui.colors.bound import ColorSlots
+			slots = self._colorSlots = ColorSlots(lambda: self.refresh(), type(self).__name__)
+		return slots
+
+	def delete(self):
+		if (slots := self.__dict__.get('_colorSlots')) is not None:
+			slots.releaseAll()
+		super().delete()
 
 	def _buildLabel(self, attr: str, labelType: type, value):
 		"""Turn a `value-label`/`unit-label` mapping into a real label.

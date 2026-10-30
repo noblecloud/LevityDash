@@ -243,7 +243,7 @@ add_search_path(_user_presets)
 
 
 def available() -> List[str]:
-	return sorted({p.stem for d in search_paths() if d.is_dir() for p in d.glob('*.yaml')})
+	return sorted({p.stem for d in search_paths() if d.is_dir() for p in d.glob('*.yaml')} | set(_built()))
 
 
 def _find(name: str) -> Optional[Path]:
@@ -269,10 +269,39 @@ def parse(name: str, text: str, source: str = '') -> Preset:
 	return Preset(name, {str(k): _prop(str(k), v) for k, v in declared.items()}, data[TEMPLATE], source, str(data.get('doc', '')))
 
 
+class BuiltPreset(Preset):
+	"""A preset whose item is made by a function of its properties, for a layout whose size depends on them (`table`)."""
+	builder: Callable[[Dict[str, Any]], dict] = None
+
+	def instance(self, given: Optional[dict] = None, fields: Optional[dict] = None, _stack: tuple = ()) -> dict:
+		try:
+			item = self.builder(self.values(given))
+		except PresetError:
+			raise
+		except ValueError as error:
+			raise PresetError(f'{self.name}: {error}') from error
+		if fields:
+			item = merge(item, fields)
+		return _walk(item, (*_stack, self.name))
+
+
+def _built() -> Dict[str, Preset]:
+	from LevityDash.lib import hourly, table
+	built = {}
+	for module in (table, hourly):
+		preset = BuiltPreset(module.NAME, {k: Prop(k, default, doc=doc) for k, (default, doc) in module.PROPS.items()}, {}, 'built in', module.__doc__.split('\n')[0])
+		preset.builder = module.build
+		built[module.NAME] = preset
+	return built
+
+
 def load(name: str) -> Optional[Preset]:
 	"""The preset called `name`, or None when there is no such file. Raises `PresetError` for a file that is wrong."""
 	with _lock:
 		if name in _cache:
+			return _cache[name]
+		if name in _built():
+			_cache[name] = _built()[name]
 			return _cache[name]
 		path = _find(name)
 		if path is None:

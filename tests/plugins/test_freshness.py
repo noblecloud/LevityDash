@@ -41,3 +41,31 @@ def test_one_outage_does_not_move_the_median():
 	e = RefreshEstimator()
 	feed(e, 0, 30, 60, 90, 5000, 5030, 5060)
 	assert e.period == timedelta(seconds=30)
+
+
+def burst(start, count=43, step=0.2):
+	"""One poll that publishes `count` keys in a row."""
+	return [start + i * step for i in range(count)]
+
+
+def test_a_burst_of_keys_is_one_update():
+	e = RefreshEstimator(burst=timedelta(seconds=5))
+	for poll in (0, 900, 1800, 2700):
+		feed(e, *burst(poll))
+	assert e.period == timedelta(seconds=900)
+	assert e.staleAfter() == timedelta(seconds=2250)
+
+
+def test_without_burst_grouping_the_same_feed_collapses_to_the_step():
+	e = RefreshEstimator()
+	for poll in (0, 900, 1800, 2700):
+		feed(e, *burst(poll))
+	assert e.period < timedelta(seconds=1)
+	assert e.staleAfter() == timedelta(seconds=60)
+
+
+def test_a_source_that_never_pauses_still_learns_a_period():
+	e = RefreshEstimator(burst=timedelta(seconds=5))
+	feed(e, *[i * 3.0 for i in range(100)])
+	assert e.period is not None
+	assert timedelta(seconds=25) <= e.period <= timedelta(seconds=35)

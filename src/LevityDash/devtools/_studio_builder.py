@@ -69,12 +69,36 @@ BINDABLE = {
 	'key': ('key', ('key', 'text')), 'text': ('text', ('text', 'key')), 'color': ('color', ('color', 'text')),
 	'direction': ('text', ('text',)), 'spacing': ('size', ('size',)),
 	**{f: ('size', ('size',)) for f, _, _ in GEOMETRY},
+	**{f: ('text', ('text',)) for f in ('number-align', 'display.valueLabel.number-align', 'shared.display.valueLabel.number-align', 'props.numberAlign')},
 }
+
+#: Where `number-align` is written for each kind of item: a text item takes it itself, a reading takes it on its value label,
+#: a container hands it to every reading below it through `shared:`, and a preset use passes it as the `numberAlign` property.
+NUMBER_ALIGN_FIELDS = ('number-align', 'display.valueLabel.number-align', 'shared.display.valueLabel.number-align', 'props.numberAlign')
+NUMBER_ALIGN_CHOICES = [('as a whole string', None), ('decimal point', 'decimal'), ('end of the digits', 'end')]
+NUMBER_ALIGN_TIP = ('Line a column of values up on the number and not on the whole string. "decimal point" puts every point on one line '
+                    '(a value with none acts as if it ended in one); "end of the digits" right-aligns the digits. The unit hangs to the right, '
+                    'the text is never changed, and the items of one size group share the line.')
+
+
+def numberAlignField(node: dict, kind: str) -> Optional[str]:
+	"""The field this item's number alignment is written to, or None when the item has no number to align."""
+	if model.PRESET_KEY in node:
+		preset = lib.load(str(node[model.PRESET_KEY]))
+		return 'props.numberAlign' if preset is not None and 'numberAlign' in preset.props else None
+	if kind in ('text', 'label'):
+		return 'number-align'
+	if kind == 'realtime.text':
+		return 'display.valueLabel.number-align'
+	if kind in CONTAINERS:
+		return 'shared.display.valueLabel.number-align'
+	return None
 
 
 #: Fields the Item tab has a control for. Everything else an item holds goes to the "more properties" popover.
 OWNED = {'type', model.PRESET_KEY, 'name', 'key', 'text', 'color', 'direction', 'spacing', 'flex', 'grid', 'when', model.ITEMS_KEY}
-OWNED_PATHS = ['geometry.x', 'geometry.y', 'geometry.width', 'geometry.height', 'display.range.min', 'display.range.max', 'display.arc.gradient']
+OWNED_PATHS = ['geometry.x', 'geometry.y', 'geometry.width', 'geometry.height', 'display.range.min', 'display.range.max', 'display.arc.gradient',
+               *NUMBER_ALIGN_FIELDS]
 
 
 #: What a new property of each type starts as.
@@ -1121,6 +1145,17 @@ class ItemTab(QWidget):
 		if kind in ('text', 'label'):
 			color = editors.ColorEdit(nullable=True)
 			self._row(head, 'color', 'color', color, value=node.get('color'))
+		aligned = numberAlignField(node, kind)
+		if aligned is not None:
+			value = model.getField(node, aligned)
+			choices = NUMBER_ALIGN_CHOICES
+			if aligned.startswith('props.'):
+				# a preset's own default is on when the instance says nothing, so "off" must be written, as `none`
+				choices = [(label, 'none' if v is None else v) for label, v in choices]
+				if value is None:
+					value = lib.load(str(node[model.PRESET_KEY])).props['numberAlign'].default
+			row = self._row(head, aligned, 'number align', editors.ChoiceEdit(choices), bindable=not aligned.startswith('props.'), value=value)
+			row.setToolTip(NUMBER_ALIGN_TIP)
 		if kind in ('stack', 'value-stack'):
 			self._row(head, 'direction', 'direction', editors.ChoiceEdit([('Vertical', 'Vertical'), ('Horizontal', 'Horizontal')]), value=node.get('direction'))
 			self._row(head, 'spacing', 'spacing', editors.SizeEdit(nullable=True, ref='full'), value=node.get('spacing'))
@@ -1628,6 +1663,11 @@ class Builder(QWidget):
 		theme.set_override(None)
 		inline = isinstance((self.piece.root or {}).get('theme'), dict)
 		self.editField('#theme.extends' if inline else '#theme', None if name == theme.DEFAULT_NAME and not inline else name)
+
+	def themeSizes(self) -> dict:
+		"""The size tokens (type and spacing scales) of the theme the dashboard in the preview uses."""
+		spec = (self.piece.root or {}).get('theme')
+		return (theme.override() or theme.decode(spec)).sizes()
 
 	def _syncThemePicker(self):
 		"""A dashboard's picker shows the theme its file names, not a forced one."""

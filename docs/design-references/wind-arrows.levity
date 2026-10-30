@@ -1,0 +1,29 @@
+# Arrows along a line, turned by a reading: `pins: {key, glyph, rotate}`.
+# The wind speed line carries an arrow for each hour of the wind direction. Direction names where the wind comes
+# from, so `rotate: 180` turns the up arrow to point the way it blows. Without `rotate: 180` the arrow points to
+# the source.
+# Render: render_dashboard.py OUT.png --levity docs/design-references/wind-arrows.levity --scenario rain-day --size 1600x600
+- type: graph
+  name: wind
+  timeframe: {days: 1}
+  annotations:
+    dayLabels: {enabled: false}
+    hourLabels: {alignment: BottomCenter}
+  figures:
+  - figure: wind
+    margins: {bottom: 20%, top: 30%}
+    min: 0
+    environment.wind.speed.speed:
+      plot:
+        type: plot
+        gradient: WindSpeedGradient
+        weight: 1
+        pins:
+          key: environment.wind.direction.direction
+          glyph: 'wi:direction-up'
+          rotate: 180
+          size: 40
+          spacing: 1.4
+          offset: -1.4
+          color: '#ffffff'
+      resolution: 2

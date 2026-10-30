@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QGraphicsItem, QLineEdit
 
 from LevityDash.lib.stateful import DefaultFalse, DefaultTrue, StateProperty
 from LevityDash.lib.stateful_mixins import ColorMixin
+from LevityDash.lib.ui import numberalign
 from LevityDash.lib.ui.Groups import SizeGroup, MatchAllSizeGroup
 from LevityDash.lib.ui.colors import theme
 from LevityDash.lib.ui.fonts import fontDict as fonts, FontWeight, getFontFamily
@@ -21,7 +22,7 @@ from LevityDash.lib.ui.frontends.PySide.utils import addRect, DebugPaint
 from LevityDash.lib.ui.Geometry import Alignment, AlignmentFlag, Geometry, parseSize, Position, Size, Margins
 from LevityDash.lib.ui.icons import getIcon, Icon
 from LevityDash.lib.utils import clearCacheAttr
-from WeatherUnits.length import Length
+from unitcorn.length import Length
 
 log = guiLog.getChild(__name__)
 
@@ -165,12 +166,40 @@ class Label(Panel, ColorMixin, tag='label'):
 		return self.textBox.text if not self.hasIcon else ...
 
 	@text.setter
-	def text(self, value: str):
+	def text(self, value: str | list[str]):
 		self.textBox.value = value
+
+	@text.encode
+	def text(self, value):
+		"""A list of texts is saved as the list, not as the one the box shows now."""
+		return list(self.textBox.alternates) or value
 
 	@text.after
 	def text(self) -> Callable:
 		return self.textBox.updateText
+
+	@StateProperty(default=0.85, allowNone=False)
+	def condense(self) -> float:
+		"""With `text:` a list (longest first), how much a text may shrink before a shorter one is used.
+
+		`text: [Temperature, Temp, T]` shows `Temperature` while fitting its width asks for at least
+		0.85 of the size the box's height allows, then `Temp`, then `T`. Use a higher number to
+		switch sooner and 0 to always show the first. It looks at the box and the font only, so a
+		size group's shared size does not change which text shows.
+		"""
+		return self.textBox._condense
+
+	@condense.setter
+	def condense(self, value: float):
+		self.textBox._condense = float(value)
+		self.textBox.updateText()
+
+	@condense.decode
+	def condense(value) -> float:
+		value = float(value)
+		if not 0 <= value <= 1:
+			raise ValueError(f'condense is a share from 0 to 1, not {value!r}')
+		return value
 
 	@text.condition
 	def text(value):
@@ -334,13 +363,45 @@ class Label(Panel, ColorMixin, tag='label'):
 	def formatHint(self, value: str):
 		self.textBox._formatHint = value
 
+	@StateProperty(key='number-align', default=None, allowNone=True, dependencies={'geometry', 'text', 'alignment'})
+	def numberAlign(self) -> str | None:
+		"""Line numbers up on the number and not on the whole string: `end` right-aligns the digits, `decimal`
+		puts the decimal point on one line (a value with no point acts as if it ended in one). The unit and any
+		other text after the cut hang to its right. Members of one size group (and one tier) share the line.
+		The text is not changed: nothing is padded."""
+		return self.textBox._numberAlign
+
+	@numberAlign.setter
+	def numberAlign(self, value: str | None):
+		self.textBox.setNumberAlign(value)
+
+	@numberAlign.decode
+	def numberAlign(self, value) -> str | None:
+		if value in (None, False, 'none', 'off'):
+			return None
+		if value is True:
+			return 'decimal'
+		value = str(value).lower()
+		if value not in numberalign.MODES:
+			raise ValueError(f'number-align must be one of {", ".join(numberalign.MODES)} or none, not {value!r}')
+		return value
+
+	@StateProperty(key='tabular', default=False, dependencies={'geometry', 'text'})
+	def tabular(self) -> bool:
+		"""`font-variant-numeric: tabular-nums`: digits of one width. On whenever `number-align` is set."""
+		return self.textBox._tabular
+
+	@tabular.setter
+	def tabular(self, value: bool):
+		self.textBox.setTabular(value)
+
 	@StateProperty(key='text-height', default=None, dependencies={'geometry', 'text', 'alignment'})
 	def textHeight(self) -> Size.Height | Length | None:
 		return self.textBox.height
 
 	@textHeight.setter
-	def textHeight(self, value: Size.Height):
-		if value.relative:
+	def textHeight(self, value: Size.Height | Length | None):
+		if isinstance(value, Size.Height) and value.relative:
 			self.textBox.setRelativeHeight(value, self.localGroup.geometry)
 		else:
 			self.textBox.setAbsoluteHeight(value)
@@ -383,7 +444,7 @@ class Label(Panel, ColorMixin, tag='label'):
 	def matchingGroup(self, value: SizeGroup) -> str | dict | None:
 		if value is None:
 			return None
-		if (g := self._rawItemState.get('matchingGroup')) is not None:
+		if (g := (getattr(self, '_rawItemState', None) or {}).get('matchingGroup')) is not None:
 			return g
 		parent = value.parent
 		if parent is self.localGroup:
@@ -400,7 +461,7 @@ class Label(Panel, ColorMixin, tag='label'):
 		# 	prefix = f'{parent.name}@{parent.parent.name}'
 		else:
 			raise ValueError(f'invalid group {value}')
-		return {'group': f'{prefix}.{value.name}', 'matchAll': value.matchAll}
+		return {'group': f'{prefix}.{value.key}', 'matchAll': isinstance(value, MatchAllSizeGroup)}
 
 	# Section .paint
 	def _debug_paint(self, painter: QPainter, option, widget):
@@ -573,6 +634,10 @@ class TitleLabel(NonInteractiveLabel, defaultText='-'):
 	def text(self, value: str):
 		self.textBox.setTextAccessor(None)
 		Label.text.__set__(self, value)
+
+	@text.encode
+	def text(self, value):
+		return list(self.textBox.alternates) or value
 
 	@text.condition
 	def text(self):

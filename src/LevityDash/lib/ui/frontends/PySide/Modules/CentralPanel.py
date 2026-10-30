@@ -23,7 +23,7 @@ from LevityDash.lib.ui.colors import theme
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import CentralPanelContextMenu
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.utils import BusyContext, ActionPool
-from WeatherUnits import Time
+from unitcorn import Time
 from .. import UILogger as guiLog
 
 log = guiLog.getChild(__name__)
@@ -316,6 +316,15 @@ class CentralPanel(Panel, tag="dashboard"):
 			return base / 'OpenMeteo.levity'
 		return base / 'Empty.levity'
 
+	@staticmethod
+	def _themeSizes(state) -> dict:
+		"""The size tokens of the theme the dashboard asks for. A theme that cannot be read gives none; the load reports it when it activates the theme."""
+		try:
+			spec = state.get('theme') if isinstance(state, dict) else None
+			return theme.decode(spec).sizes() if not theme.override() else theme.override().sizes()
+		except Exception:
+			return {}
+
 	def _load(self, path: Path = None):
 		name = path.name
 		self.scene().view.parentWidget().setWindowTitle(f"Levity Dashboard - {name}")
@@ -340,7 +349,8 @@ class CentralPanel(Panel, tag="dashboard"):
 				self._written = deepcopy(state)
 				state = presets.expand(state)
 				self._usesPresets = state != self._written
-				self._sharedVars = loadSharedVariables(userConfig.userPath)
+				# The theme's sizes (`$space_2`, `$type_value`) come first, so a `vars.yaml` or the file's own `vars:` can override one.
+				self._sharedVars = {**self._themeSizes(state), **loadSharedVariables(userConfig.userPath)}
 				state = resolveVariables(state, self._sharedVars)
 				# Loading consumes the dicts it is given, so the save keeps its own copies.
 				self._resolved = deepcopy(state)

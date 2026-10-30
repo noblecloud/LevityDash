@@ -299,6 +299,23 @@ def _anchor(item) -> float | None:
 	return graphic.valueAnchor() if graphic is not None else None
 
 
+RAIN_SPAN_INCHES = 0.1
+"""A rain rate figure with no `max` of its own spans at least this many inches an hour: a trace never fills the figure, and any real rain stands tall."""
+
+
+def _rainSpan(plots) -> float | None:
+	"""The least a rain rate axis spans, in the unit its plots hold, or None for any other data."""
+	try:
+		from unitcorn import Length
+		from unitcorn.derived.precipitation import PrecipitationRate
+		sample = next(i.timeseries.first.value for i in plots if i.hasData)
+		if not isinstance(sample, PrecipitationRate):
+			return None
+		return float(type(sample.numerator)(Length.Inch(RAIN_SPAN_INCHES)))
+	except Exception:
+		return None
+
+
 class AxisMetaData(QObject):
 	changed = Signal(Axis)
 	min: Numeric
@@ -346,6 +363,8 @@ class AxisMetaData(QObject):
 		if plots := self._link.plots:
 			value = max(max(i.data[1]) for i in plots)
 			value = max([value, *(a for i in plots if (a := _anchor(i)) is not None)])
+			if self._link.upperLimit is inf and (span := _rainSpan(plots)) is not None:
+				value = max(value, span)
 		else:
 			value = self.__limits[1]
 		value = min(self._link.upperLimit, value)

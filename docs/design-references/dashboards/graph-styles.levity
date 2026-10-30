@@ -1,0 +1,126 @@
+# Graph styles: the graph presets side by side on the rain-day scenario. Each cell is one preset use; change
+# a property to see what it costs. Inspired by weather-app graph styles (thin line, vivid line, wind, rain), taking
+# type, spacing and alignment, not their look one to one.
+#
+# Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/graph-styles.levity
+#           --scenario rain-day --size 2880x1800 --freeze-time 2026-10-15T09:10:00
+#
+# Hex colours are quoted. Unquoted, YAML reads '#' as a comment.
+theme:
+  extends: default
+  colors:
+    background: '#050608'
+    muted: '#b0b4c0'
+    rule: '#2b2f3a'
+    accent: '#ff9124'
+    good: '#14e3c0'
+    warn: '#ffd400'
+    bad: '#ff3048'
+    info: '#1a8cff'
+items:
+- type: grid
+  name: styles
+  geometry: {x: 0.6%, y: 1%, width: 98.8%, height: 97.5%}
+  spacing: 1.5mm
+  grid:
+    columns: [1fr, 1fr]
+    rows: [1fr, 1fr, 1fr, 1fr]
+  items:
+  - type: group
+    name: ultralight
+    items:
+    - type: text
+      text: Ultralight
+      font: $display
+      color: $muted
+      alignment: CenterLeft
+      matchingGroup: {group: global.head, matchAll: true}
+      geometry: {x: 1%, y: 0%, width: 60%, height: 12%}
+    - preset: graph-ultralight
+      geometry: {x: 0%, y: 12%, width: 100%, height: 88%}
+  - type: group
+    name: ultralight-accent
+    items:
+    - type: text
+      text: Ultralight, accent
+      font: $display
+      color: $muted
+      alignment: CenterLeft
+      matchingGroup: {group: global.head, matchAll: true}
+      geometry: {x: 1%, y: 0%, width: 60%, height: 12%}
+    - preset: graph-ultralight
+      geometry: {x: 0%, y: 12%, width: 100%, height: 88%}
+      props: {key: environment.humidity.humidity, figure: humidity, color: $good, weight: 0.8, hours: 48}
+  - type: group
+    name: vivid
+    items:
+    - type: text
+      text: Vivid
+      font: $display
+      color: $muted
+      alignment: CenterLeft
+      matchingGroup: {group: global.head, matchAll: true}
+      geometry: {x: 1%, y: 0%, width: 60%, height: 12%}
+    - preset: graph-vivid
+      geometry: {x: 0%, y: 12%, width: 100%, height: 88%}
+  - type: group
+    name: vivid-two-days
+    items:
+    - type: text
+      text: Vivid, no glow
+      font: $display
+      color: $muted
+      alignment: CenterLeft
+      matchingGroup: {group: global.head, matchAll: true}
+      geometry: {x: 1%, y: 0%, width: 60%, height: 12%}
+    - preset: graph-vivid
+      geometry: {x: 0%, y: 12%, width: 100%, height: 88%}
+      props: {hours: 48, glow: false, key2: null, weight: 1.2}
+  - type: group
+    name: wind
+    items:
+    - type: text
+      text: Wind and gust
+      font: $display
+      color: $muted
+      alignment: CenterLeft
+      matchingGroup: {group: global.head, matchAll: true}
+      geometry: {x: 1%, y: 0%, width: 60%, height: 12%}
+    - preset: graph-wind
+      geometry: {x: 0%, y: 12%, width: 100%, height: 88%}
+  - type: group
+    name: rain
+    items:
+    - type: text
+      text: Rain and chance
+      font: $display
+      color: $muted
+      alignment: CenterLeft
+      matchingGroup: {group: global.head, matchAll: true}
+      geometry: {x: 1%, y: 0%, width: 60%, height: 12%}
+    - preset: graph-rain
+      geometry: {x: 0%, y: 12%, width: 100%, height: 88%}
+  - type: group
+    name: forecast
+    items:
+    - type: text
+      text: Forecast
+      font: $display
+      color: $muted
+      alignment: CenterLeft
+      matchingGroup: {group: global.head, matchAll: true}
+      geometry: {x: 1%, y: 0%, width: 60%, height: 12%}
+    - preset: graph-forecast
+      geometry: {x: 0%, y: 12%, width: 100%, height: 88%}
+  - type: group
+    name: gusts
+    items:
+    - type: text
+      text: Gusts and direction
+      font: $display
+      color: $muted
+      alignment: CenterLeft
+      matchingGroup: {group: global.head, matchAll: true}
+      geometry: {x: 1%, y: 0%, width: 60%, height: 12%}
+    - preset: graph-gusts
+      geometry: {x: 0%, y: 12%, width: 100%, height: 88%}

@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 src = Path.cwd().absolute()
 
 datas = []
-datas += collect_data_files('WeatherUnits')
+datas += collect_data_files('unitcorn')
 datas += collect_data_files('aiohttp')
 datas += collect_data_files('certifi')
 

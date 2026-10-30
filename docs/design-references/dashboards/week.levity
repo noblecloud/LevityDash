@@ -62,9 +62,8 @@ items:
         plot: {type: plot, color: '#14e3c0', weight: 0.5}
         resolution: 2
     - figure: rain
-      margins: {top: 78%, bottom: 9%}
+      margins: {top: 50%, bottom: 9%}
       min: 0
-      max: 0.4
       environment.precipitation.precipitation:
         plot: {type: bar, gradient: PrecipitationRateGradient, width: 0.8, radius: 0.25}
     - figure: chance
@@ -169,6 +168,7 @@ items:
       items:
       - type: text
         text: Hot days ahead
+        matchingGroup: {group: global.head, matchAll: true}
         font: Nunito
         weight: Light
         color: $bad
@@ -184,6 +184,7 @@ items:
       items:
       - type: text
         text: Wet spell
+        matchingGroup: {group: global.head, matchAll: true}
         font: Nunito
         weight: Light
         color: $info
@@ -209,6 +210,7 @@ items:
       items:
       - type: text
         text: A windy day
+        matchingGroup: {group: global.head, matchAll: true}
         font: Nunito
         weight: Light
         color: $warn
@@ -223,6 +225,7 @@ items:
       items:
       - type: text
         text: The week
+        matchingGroup: {group: global.head, matchAll: true}
         font: Nunito
         weight: Light
         color: $muted
@@ -263,15 +266,15 @@ items:
         gust: environment.wind.speed.gustMax
         heading: environment.wind.direction.dominant
     - preset: day-column
-      props: {label: Tomorrow, offset: 1d}
+      props: {label: Tomorrow, offset: 1d, high_title: false, low_title: false, rain_title: false, gust_title: false, heading_title: false}
     - preset: day-column
-      props: {label: In 2 days, offset: 2d}
+      props: {label: In 2 days, offset: 2d, high_title: false, low_title: false, rain_title: false, gust_title: false, heading_title: false}
     - preset: day-column
-      props: {label: In 3 days, offset: 3d}
+      props: {label: In 3 days, offset: 3d, high_title: false, low_title: false, rain_title: false, gust_title: false, heading_title: false}
     - preset: day-column
-      props: {label: In 4 days, offset: 4d}
+      props: {label: In 4 days, offset: 4d, high_title: false, low_title: false, rain_title: false, gust_title: false, heading_title: false}
     - preset: day-column
-      props: {label: In 5 days, offset: 5d}
+      props: {label: In 5 days, offset: 5d, high_title: false, low_title: false, rain_title: false, gust_title: false, heading_title: false}
     - preset: day-column
-      props: {label: In 6 days, offset: 6d}
+      props: {label: In 6 days, offset: 6d, high_title: false, low_title: false, rain_title: false, gust_title: false, heading_title: false}
 

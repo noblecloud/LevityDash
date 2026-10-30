@@ -116,7 +116,7 @@ class TestReadableConfig:
 		# Overridden expression, but the preset's slice survives.
 		assert device.fields['temperature']['expression'] == 'val / 1000'
 		assert device.fields['temperature']['startingByte'] == 4
-		assert device.fields['humidity']['expression'] == 'payload % 1000 / 1000'
+		assert device.fields['humidity']['expression'] == 'payload % 1000 / 10'
 
 	def test_legacy_fallback_does_not_double_register(self):
 		# The [plugin] device.name must not add a *second* copy of a device

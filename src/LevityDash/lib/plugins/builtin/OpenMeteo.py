@@ -660,6 +660,7 @@ class OpenMeteo(REST, realtime=False, hourly=True, daily=True, recorded=True):
 	urls = OpenMeteoURLs()
 	schema = schema
 	name = 'OpenMeteo'
+	refreshPeriod = timedelta(minutes=15)
 	requestTimer: ScheduledEvent
 
 	__defaultConfig__ = f"""

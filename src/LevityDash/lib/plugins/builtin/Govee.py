@@ -96,6 +96,10 @@ class BLEPayloadParser:
 	literal (``0x800000``) becomes a variable named ``x800000`` and a
 	conditional turns ``if``/``else`` into function parameters. Sign handling
 	has to be a parser feature rather than user arithmetic.
+
+	``byteOrder: little`` reads the slice's bytes last-first, and ``signed: true`` reads the result as two's
+	complement over the slice's width (a 4-digit slice is an int16). ``signBit`` is the other kind of sign: a
+	flag bit on a magnitude, as the H5102 family packs temperature.
 	"""
 
 	def __init__(
@@ -106,13 +110,19 @@ class BLEPayloadParser:
 		expression: Optional[Union[str, Callable]] = None,
 		base: int = 16,
 		signBit: Optional[int] = None,
+		byteOrder: str = 'big',
+		signed: bool = False,
 	):
+		if byteOrder not in ('big', 'little'):
+			raise ValueError(f"byteOrder is 'big' or 'little', not {byteOrder!r}")
 		self.__field = field
 		self.__startingByte = startingByte
 		self.__endingByte = endingByte
 		self.__expression: Optional[Callable] = None
 		self.__base = base
 		self.__signBit = signBit
+		self.__byteOrder = byteOrder
+		self.__signed = signed
 		match expression:
 			case FunctionType():
 				self.__expression = expression
@@ -120,7 +130,12 @@ class BLEPayloadParser:
 				self.__expression = parseMathString(expression)
 
 	def __call__(self, payload: bytes) -> dict[str, float | int]:
-		raw: int = int(payload.hex().upper()[self.__startingByte: self.__endingByte], self.__base)
+		digits = payload.hex().upper()[self.__startingByte: self.__endingByte]
+		if self.__byteOrder == 'little':
+			digits = ''.join(reversed([digits[i:i + 2] for i in range(0, len(digits), 2)]))
+		raw: int = int(digits, self.__base)
+		if self.__signed and digits and raw >= 1 << (len(digits) * 4 - 1):
+			raw -= 1 << (len(digits) * 4)  # two's complement over the slice's width
 		negative = False
 		if self.__signBit is not None:
 			mask = 1 << self.__signBit
@@ -198,7 +213,7 @@ _plugin_description = (
 	"This plugin connects to Govee BLE thermometers.  Devices are listed in "
 	"the plugin's config under [devices] as 'alias = advertised name'; the "
 	"model is detected from that name, so no byte-level configuration is "
-	"needed for known models (the H5100 and H5072 families, including the "
+	"needed for known models (the H5100, H5072 and H5074 families, including the "
 	"GVH5102 and GVH5075)."
 )
 

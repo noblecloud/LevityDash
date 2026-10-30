@@ -12,8 +12,13 @@
 # The floor is a rotating slot of takeovers: `when:` on the items of a stack, so a hidden item gives up its room and
 # the others grow to fill it.
 #
-# Text sizes come from the dashboard-wide size groups global.title, global.value and global.head; the hand-written
-# readings join them in the board's `shared:`. Layers: none, on purpose. This board is tables and bars.
+# Type: five sizes, each one dashboard-wide size group with `matchAll`, pinned with `text-height` (the `vars:`
+# below are the whole scale): labels `global.title`, values `global.value`, headers `global.head`, the slot
+# readings `global.big` and the four means `global.hero`. In each list the names sit left and the values right,
+# on one edge. Colour means a quantity: temperature orange, humidity violet, battery yellow; red only for a
+# warning in the slot. Layers: none, on purpose. This board is tables and bars.
+#
+# Space: a 96 px outer margin, 64 px between columns and 96 px between the two bands, 24 px inside.
 #
 # Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/floors.levity
 #           --scenario house-day --size 2880x1800 --freeze-time 2026-10-15T15:10:00
@@ -26,265 +31,297 @@ theme:
     muted: '#aab1bd'
     faint: '#7c8391'
     rule: '#272b35'
-    accent: '#ff9124'
-    good: '#14e3c0'
-    warn: '#ffd400'
     bad: '#ff3048'
-    info: '#1a8cff'
-    up: '#ff9124'
-    down: '#14e3c0'
-    base: '#1a8cff'
+    hue-temp: '#ff9124'
+    hue-humid: '#b48cff'
+    hue-batt: '#ffd400'
+    hue-wind: '#14e3c0'
+    hue-cloud: '#a9b3c0'
   fonts:
     display: Nunito
     mono: Roboto Mono
     body: Roboto
 vars:
   t: indoor.temperature.temperature
-  rh: indoor.humidity.humidity
   outside: environment.temperature.temperature
   upstairs: avg(indoor.temperature.temperature, where=home.upstairs)
   downstairs: avg(indoor.temperature.temperature, where=home.downstairs)
   basement: avg(indoor.temperature.temperature, where=home.basement)
   house: avg(indoor.temperature.temperature, where=home)
+  # the type scale
+  label: 40px
+  value: 42px
+  head: 70px
+  big: 84px
+  hero: 140px
 items:
 - type: grid
   name: board
-  geometry: {x: 0.6%, y: 0.8%, width: 98.8%, height: 98.4%}
-  spacing: 1.2%
+  geometry: {x: 3.333%, y: 5.333%, width: 93.333%, height: 89.333%}
+  spacing: 0
   padding: 0
-  shared:
-    title:
-      matchingGroup: {group: global.title, matchAll: true}
-    display:
-      valueLabel:
-        matchingGroup: {group: global.value, matchAll: true}
   grid:
-    columns: [1fr, 1fr, 1fr, 1.15fr]
-    rows: [60fr, 36fr]
+    columns: [1fr, 1fr, 1fr, 1.2fr]
+    rows: [58fr, 42fr]
+    gap: [96px, 64px]
     areas:
     - up down base house
     - slot slot slot slot
   items:
 
   # ================= ONE COLUMN PER FLOOR ==================================
-  # The same four lines three times, each pointing at a different place. `$place` is the only change.
+  # The same panel three times, each pointing at a different place: a header, the mean of the floor's rooms,
+  # a bar from its coolest room to its warmest with the pointer at the mean, those two ends, and three readings.
   - type: group
     name: upstairs
     grid: {area: up}
     items:
-    - {type: text, text: Upstairs, font: $display, color: $up, alignment: CenterLeft, geometry: {x: 2%, y: 0%, width: 60%, height: 6%}}
-    - {type: text, text: bedroom, font: $display, color: $faint, alignment: CenterRight, geometry: {x: 60%, y: 0%, width: 38%, height: 6%}}
+    - {type: text, text: Upstairs, alignment: Left, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 9%}}
+    - {type: text, text: Mean of its rooms, alignment: Left, font: Roboto, weight: Light, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 0%, y: 11%, width: 100%, height: 6%}}
     - type: realtime.text
+      key: '$upstairs'
+      title: {visible: false}
+      geometry: {x: 0%, y: 19%, width: 100%, height: 24%}
+      display: {precision: 1, weight: Light, format-hint: '00.0°', valueLabel: {alignment: Left, margins: 0px, color: $hue-temp, text-height: $hero, matchingGroup: {group: global.hero, matchAll: true}}}
+    - type: realtime.bar
       key: $upstairs
-      title: false
-      geometry: {x: 0%, y: 6%, width: 100%, height: 24%}
-      display: {font: Nunito, weight: ExtraLight, precision: 1, unitPosition: FloatUnder, valueLabel: {color: $up}}
-    - preset: range-bar
-      geometry: {x: 0%, y: 31%, width: 100%, height: 24%}
-      props:
-        key: $upstairs
-        low: min(indoor.temperature.temperature, where=home.upstairs)
-        high: max(indoor.temperature.temperature, where=home.upstairs)
-        min: 60
-        max: 80
-        interval: 5
-        precision: 1
-    - preset: stat-row
-      geometry: {x: 0%, y: 58%, width: 100%, height: 16%}
-      props:
-        items:
-        - {type: realtime.text, key: 'count(indoor.temperature.temperature, where=home.upstairs)', title: {text: Sensors}, display: {precision: 0, unitPosition: Hidden}}
-        - {type: realtime.text, key: 'max(indoor.humidity.humidity, where=home.upstairs)', title: {text: Dampest}, display: {precision: 0, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: 'min(indoor.battery.battery, where=home.upstairs)', title: {text: Weakest batt}, display: {precision: 0, valueLabel: {color: $warn}}}
-    - preset: sparkline
-      geometry: {x: 0%, y: 78%, width: 100%, height: 22%}
-      props:
-        key: indoor.temperature.temperature#office
-        plot: {type: plot, color: $bad, weight: 0.5}
-        key2: indoor.temperature.temperature#nursery
-        plot2: {type: plot, color: $up, weight: 0.5}
-        figure: upstairs
-        min: 60
-        max: 80
-
+      title: {visible: false}
+      geometry: {x: 0%, y: 47%, width: 100%, height: 6%}
+      display:
+        range: {min: 60, max: 80}
+        track: {weight: 34%, color: $rule}
+        fill: {from: 'min($t, where=home.upstairs)', to: 'max($t, where=home.upstairs)', gradient: TemperatureGradient}
+        pointer: {type: triangle, color: $text, side: before}
+        value-label: {visible: false}
+    - type: grid
+      geometry: {x: 0%, y: 56%, width: 100%, height: 13%}
+      spacing: 0
+      grid: {columns: [1fr, 1fr], rows: [1fr], gap: 48px}
+      shared:
+        title: {color: $muted, position: Top, size: 0.45, alignment: BottomLeft, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+        display: {unitPosition: Hidden, valueLabel: {alignment: TopLeft, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
+      items:
+      - {type: realtime.text, key: 'min($t, where=home.upstairs)', title: Coolest, display: {precision: 1, format-hint: '00.0°', valueLabel: {color: $hue-temp}}}
+      - {type: realtime.text, key: 'max($t, where=home.upstairs)', title: Warmest, display: {precision: 1, format-hint: '00.0°', valueLabel: {color: $hue-temp}}}
+    - type: grid
+      geometry: {x: 0%, y: 76%, width: 100%, height: 24%}
+      spacing: 0
+      grid: {columns: [1fr], rows: [1fr, 1fr, 1fr]}
+      shared:
+        title: {color: $muted, alignment: Left, position: Left, size: 0.6, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+        display: {unitPosition: Hidden, valueLabel: {alignment: Right, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
+      items:
+      - {type: realtime.text, key: 'count($t, where=home.upstairs)', title: Sensors, display: {precision: 0, format-hint: '00'}}
+      - {type: realtime.text, key: 'max(indoor.humidity.humidity, where=home.upstairs)', title: Dampest, display: {precision: 0, format-hint: '00%', valueLabel: {color: $hue-humid}}}
+      - {type: realtime.text, key: 'min(indoor.battery.battery, where=home.upstairs)', title: Weakest battery, display: {precision: 0, format-hint: '00%', valueLabel: {color: $hue-batt}}}
   - type: group
     name: downstairs
     grid: {area: down}
     items:
-    - {type: text, text: Downstairs, font: $display, color: $down, alignment: CenterLeft, geometry: {x: 2%, y: 0%, width: 60%, height: 6%}}
-    - {type: text, text: living room, font: $display, color: $faint, alignment: CenterRight, geometry: {x: 60%, y: 0%, width: 38%, height: 6%}}
+    - {type: text, text: Downstairs, alignment: Left, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 9%}}
+    - {type: text, text: Mean of its rooms, alignment: Left, font: Roboto, weight: Light, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 0%, y: 11%, width: 100%, height: 6%}}
     - type: realtime.text
+      key: '$downstairs'
+      title: {visible: false}
+      geometry: {x: 0%, y: 19%, width: 100%, height: 24%}
+      display: {precision: 1, weight: Light, format-hint: '00.0°', valueLabel: {alignment: Left, margins: 0px, color: $hue-temp, text-height: $hero, matchingGroup: {group: global.hero, matchAll: true}}}
+    - type: realtime.bar
       key: $downstairs
-      title: false
-      geometry: {x: 0%, y: 6%, width: 100%, height: 24%}
-      display: {font: Nunito, weight: ExtraLight, precision: 1, unitPosition: FloatUnder, valueLabel: {color: $down}}
-    - preset: range-bar
-      geometry: {x: 0%, y: 31%, width: 100%, height: 24%}
-      props:
-        key: $downstairs
-        low: min(indoor.temperature.temperature, where=home.downstairs)
-        high: max(indoor.temperature.temperature, where=home.downstairs)
-        min: 60
-        max: 80
-        interval: 5
-        precision: 1
-    - preset: stat-row
-      geometry: {x: 0%, y: 58%, width: 100%, height: 16%}
-      props:
-        items:
-        - {type: realtime.text, key: 'count(indoor.temperature.temperature, where=home.downstairs)', title: {text: Sensors}, display: {precision: 0, unitPosition: Hidden}}
-        - {type: realtime.text, key: 'max(indoor.humidity.humidity, where=home.downstairs)', title: {text: Dampest}, display: {precision: 0, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: 'min(indoor.battery.battery, where=home.downstairs)', title: {text: Weakest batt}, display: {precision: 0, valueLabel: {color: $warn}}}
-    - preset: sparkline
-      geometry: {x: 0%, y: 78%, width: 100%, height: 22%}
-      props:
-        key: indoor.temperature.temperature#livingroom
-        plot: {type: plot, color: $down, weight: 0.5}
-        key2: indoor.temperature.temperature#kitchen
-        plot2: {type: plot, color: $warn, weight: 0.5}
-        figure: downstairs
-        min: 60
-        max: 80
-
+      title: {visible: false}
+      geometry: {x: 0%, y: 47%, width: 100%, height: 6%}
+      display:
+        range: {min: 60, max: 80}
+        track: {weight: 34%, color: $rule}
+        fill: {from: 'min($t, where=home.downstairs)', to: 'max($t, where=home.downstairs)', gradient: TemperatureGradient}
+        pointer: {type: triangle, color: $text, side: before}
+        value-label: {visible: false}
+    - type: grid
+      geometry: {x: 0%, y: 56%, width: 100%, height: 13%}
+      spacing: 0
+      grid: {columns: [1fr, 1fr], rows: [1fr], gap: 48px}
+      shared:
+        title: {color: $muted, position: Top, size: 0.45, alignment: BottomLeft, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+        display: {unitPosition: Hidden, valueLabel: {alignment: TopLeft, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
+      items:
+      - {type: realtime.text, key: 'min($t, where=home.downstairs)', title: Coolest, display: {precision: 1, format-hint: '00.0°', valueLabel: {color: $hue-temp}}}
+      - {type: realtime.text, key: 'max($t, where=home.downstairs)', title: Warmest, display: {precision: 1, format-hint: '00.0°', valueLabel: {color: $hue-temp}}}
+    - type: grid
+      geometry: {x: 0%, y: 76%, width: 100%, height: 24%}
+      spacing: 0
+      grid: {columns: [1fr], rows: [1fr, 1fr, 1fr]}
+      shared:
+        title: {color: $muted, alignment: Left, position: Left, size: 0.6, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+        display: {unitPosition: Hidden, valueLabel: {alignment: Right, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
+      items:
+      - {type: realtime.text, key: 'count($t, where=home.downstairs)', title: Sensors, display: {precision: 0, format-hint: '00'}}
+      - {type: realtime.text, key: 'max(indoor.humidity.humidity, where=home.downstairs)', title: Dampest, display: {precision: 0, format-hint: '00%', valueLabel: {color: $hue-humid}}}
+      - {type: realtime.text, key: 'min(indoor.battery.battery, where=home.downstairs)', title: Weakest battery, display: {precision: 0, format-hint: '00%', valueLabel: {color: $hue-batt}}}
   - type: group
     name: basement
     grid: {area: base}
     items:
-    - {type: text, text: Basement, font: $display, color: $base, alignment: CenterLeft, geometry: {x: 2%, y: 0%, width: 60%, height: 6%}}
-    - {type: text, text: one sensor, font: $display, color: $faint, alignment: CenterRight, geometry: {x: 60%, y: 0%, width: 38%, height: 6%}}
+    - {type: text, text: Basement, alignment: Left, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 9%}}
+    - {type: text, text: Mean of its rooms, alignment: Left, font: Roboto, weight: Light, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 0%, y: 11%, width: 100%, height: 6%}}
     - type: realtime.text
+      key: '$basement'
+      title: {visible: false}
+      geometry: {x: 0%, y: 19%, width: 100%, height: 24%}
+      display: {precision: 1, weight: Light, format-hint: '00.0°', valueLabel: {alignment: Left, margins: 0px, color: $hue-temp, text-height: $hero, matchingGroup: {group: global.hero, matchAll: true}}}
+    - type: realtime.bar
       key: $basement
-      title: false
-      geometry: {x: 0%, y: 6%, width: 100%, height: 24%}
-      display: {font: Nunito, weight: ExtraLight, precision: 1, unitPosition: FloatUnder, valueLabel: {color: $base}}
-    - preset: range-bar
-      geometry: {x: 0%, y: 31%, width: 100%, height: 24%}
-      props:
-        key: $basement
-        low: min(indoor.temperature.temperature, where=home.basement)
-        high: max(indoor.temperature.temperature, where=home.basement)
-        min: 60
-        max: 80
-        interval: 5
-        precision: 1
-    - preset: stat-row
-      geometry: {x: 0%, y: 58%, width: 100%, height: 16%}
-      props:
-        items:
-        - {type: realtime.text, key: 'count(indoor.temperature.temperature, where=home.basement)', title: {text: Sensors}, display: {precision: 0, unitPosition: Hidden}}
-        - {type: realtime.text, key: 'max(indoor.humidity.humidity, where=home.basement)', title: {text: Dampest}, display: {precision: 0, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: 'min(indoor.battery.battery, where=home.basement)', title: {text: Weakest batt}, display: {precision: 0, valueLabel: {color: $warn}}}
-    - preset: sparkline
-      geometry: {x: 0%, y: 78%, width: 100%, height: 22%}
-      props:
-        key: indoor.temperature.temperature#basement
-        plot: {type: plot, color: $base, weight: 0.5}
-        figure: basement
-        min: 60
-        max: 80
+      title: {visible: false}
+      geometry: {x: 0%, y: 47%, width: 100%, height: 6%}
+      display:
+        range: {min: 60, max: 80}
+        track: {weight: 34%, color: $rule}
+        fill: {from: 'min($t, where=home.basement)', to: 'max($t, where=home.basement)', gradient: TemperatureGradient}
+        pointer: {type: triangle, color: $text, side: before}
+        value-label: {visible: false}
+    - type: grid
+      geometry: {x: 0%, y: 56%, width: 100%, height: 13%}
+      spacing: 0
+      grid: {columns: [1fr, 1fr], rows: [1fr], gap: 48px}
+      shared:
+        title: {color: $muted, position: Top, size: 0.45, alignment: BottomLeft, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+        display: {unitPosition: Hidden, valueLabel: {alignment: TopLeft, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
+      items:
+      - {type: realtime.text, key: 'min($t, where=home.basement)', title: Coolest, display: {precision: 1, format-hint: '00.0°', valueLabel: {color: $hue-temp}}}
+      - {type: realtime.text, key: 'max($t, where=home.basement)', title: Warmest, display: {precision: 1, format-hint: '00.0°', valueLabel: {color: $hue-temp}}}
+    - type: grid
+      geometry: {x: 0%, y: 76%, width: 100%, height: 24%}
+      spacing: 0
+      grid: {columns: [1fr], rows: [1fr, 1fr, 1fr]}
+      shared:
+        title: {color: $muted, alignment: Left, position: Left, size: 0.6, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+        display: {unitPosition: Hidden, valueLabel: {alignment: Right, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
+      items:
+      - {type: realtime.text, key: 'count($t, where=home.basement)', title: Sensors, display: {precision: 0, format-hint: '00'}}
+      - {type: realtime.text, key: 'max(indoor.humidity.humidity, where=home.basement)', title: Dampest, display: {precision: 0, format-hint: '00%', valueLabel: {color: $hue-humid}}}
+      - {type: realtime.text, key: 'min(indoor.battery.battery, where=home.basement)', title: Weakest battery, display: {precision: 0, format-hint: '00%', valueLabel: {color: $hue-batt}}}
 
   # ================= THE HOUSE AGAINST OUTSIDE =============================
+  # The mean of every room, then how the house stands against outside and how the floors stand against each other.
+  # Two readings subtract to a change, so a difference is a number of degrees, never a temperature.
   - type: group
     name: house
     grid: {area: house}
     items:
-    - {type: text, text: The house, font: $display, color: $muted, alignment: CenterLeft, geometry: {x: 2%, y: 0%, width: 60%, height: 6%}}
+    - {type: text, text: The house, alignment: Left, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 9%}}
+    - {type: text, text: Mean of every room, alignment: Left, font: Roboto, weight: Light, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 0%, y: 11%, width: 100%, height: 6%}}
     - type: realtime.text
-      key: $house
-      title: false
-      geometry: {x: 0%, y: 6%, width: 100%, height: 24%}
-      display: {font: Nunito, weight: ExtraLight, precision: 1, unitPosition: FloatUnder}
-    - preset: list-panel
-      geometry: {x: 0%, y: 33%, width: 100%, height: 67%}
-      props:
-        title: Against outside
-        items:
-        - {type: realtime.text, key: $outside, title: {text: Outside now}, display: {precision: 1}}
-        - {type: realtime.text, key: '$house - $outside', title: {text: Indoors over outdoors}, display: {precision: 1, valueLabel: {color: $warn}}}
-        - {type: realtime.text, key: 'max(indoor.temperature.temperature, where=home) - min(indoor.temperature.temperature, where=home)', title: {text: Warmest minus coolest}, display: {precision: 1, valueLabel: {color: $bad}}}
-        - {type: realtime.text, key: '$upstairs - $downstairs', title: {text: Up over down}, display: {precision: 1}}
-        - {type: realtime.text, key: '$downstairs - $basement', title: {text: Down over basement}, display: {precision: 1, valueLabel: {color: $base}}}
-        - {type: realtime.text, key: 'max(indoor.humidity.humidity, where=home)', title: {text: Dampest room}, display: {precision: 0, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: 'count(indoor.temperature.temperature, where=home)', title: {text: Sensors answering}, display: {precision: 0, unitPosition: Hidden}}
-        - {type: realtime.text, key: 'min(indoor.battery.battery, where=home)', title: {text: Weakest battery}, display: {precision: 0, valueLabel: {color: $warn}}}
+      key: '$house'
+      title: {visible: false}
+      geometry: {x: 0%, y: 19%, width: 100%, height: 24%}
+      display: {precision: 1, weight: Light, format-hint: '00.0°', valueLabel: {alignment: Left, margins: 0px, color: $hue-temp, text-height: $hero, matchingGroup: {group: global.hero, matchAll: true}}}
+    - type: grid
+      geometry: {x: 0%, y: 52%, width: 100%, height: 48%}
+      spacing: 0
+      grid: {columns: [1fr], rows: [1fr, 1fr, 1fr, 1fr, 1fr, 1fr]}
+      shared:
+        title: {color: $muted, alignment: Left, position: Left, size: 0.6, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+        display: {unitPosition: Hidden, valueLabel: {alignment: Right, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
+      items:
+      - {type: realtime.text, key: '$outside', title: Outside now, display: {precision: 1, format-hint: '00.0°', valueLabel: {color: $hue-temp}}}
+      - {type: realtime.text, key: '$house - $outside', title: Over outside, display: {precision: 1, format-hint: '00.0°', valueLabel: {color: $hue-temp}}}
+      - {type: realtime.text, key: 'max($t, where=home) - min($t, where=home)', title: Room spread, display: {precision: 1, format-hint: '00.0°', valueLabel: {color: $hue-temp}}}
+      - {type: realtime.text, key: '$upstairs - $downstairs', title: Up over down, display: {precision: 1, format-hint: '00.0°', valueLabel: {color: $hue-temp}}}
+      - {type: realtime.text, key: '$downstairs - $basement', title: Down over basement, display: {precision: 1, format-hint: '00.0°', valueLabel: {color: $hue-temp}}}
+      - {type: realtime.text, key: 'count($t, where=home)', title: Sensors answering, display: {precision: 0, format-hint: '00'}}
 
   # ================= THE SLOT ==============================================
-  # Takeovers. Each strip shows only while its `when:` holds; a strip that is off gives up its room, so one strip
-  # fills the row and three share it. The last strip has no `when:` and is always there.
+  # Takeovers. Each panel shows only while its `when:` holds; a panel that is off gives up its room, so one panel
+  # fills the row and three share it. The last panel has no `when:` and is always there.
   - type: stack
     name: slot
     grid: {area: slot}
     direction: Horizontal
-    spacing: 1.2%
+    spacing: 64px
+    dividers: {enabled: true, color: $rule, size: 100%}
     items:
-    - preset: headline-panel
+    - type: group
       name: damp
       when: 'max(indoor.humidity.humidity, where=home) > 60%'
-      props:
-        headline: Damp
-        headline_color: $base
-        key: max(indoor.humidity.humidity, where=home)
-        title: Dampest room
-        color: $base
-        precision: 0
-        unit_position: Inline
-        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
-        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
-        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+      items:
+      - {type: text, text: Damp, color: $bad, alignment: Left, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 16%}}
+      - {type: text, text: Dampest room, alignment: Left, font: Roboto, weight: Light, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 0%, y: 19%, width: 100%, height: 9%}}
+      - type: realtime.text
+        key: 'max(indoor.humidity.humidity, where=home)'
+        title: {visible: false}
+        geometry: {x: 0%, y: 32%, width: 100%, height: 30%}
+        display: {precision: 0, weight: Light, format-hint: '00%', valueLabel: {alignment: Left, margins: 0px, color: $hue-humid, text-height: $big, matchingGroup: {group: global.big, matchAll: true}}}
+      - type: grid
+        geometry: {x: 0%, y: 70%, width: 100%, height: 30%}
+        spacing: 0
+        grid: {columns: [1fr, 1fr, 1fr], rows: [1fr], gap: 32px}
+        shared:
+          title: {color: $muted, position: Top, size: 0.45, alignment: BottomLeft, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+          display: {unitPosition: Hidden, valueLabel: {alignment: TopLeft, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
         items:
-        - {type: realtime.text, key: 'indoor.humidity.humidity#basement', title: {text: Basement}, display: {precision: 0}}
-        - {type: realtime.text, key: 'indoor.temperature.temperature#basement', title: {text: Basement temp}, display: {precision: 0, valueLabel: {color: $base}}}
-        - {type: realtime.text, key: 'max(indoor.humidity.humidity, where=home.upstairs)', title: {text: Upstairs}, display: {precision: 0, valueLabel: {color: $info}}}
-    - preset: headline-panel
+        - {type: realtime.text, key: 'indoor.humidity.humidity#basement', title: Basement, display: {precision: 0, format-hint: '00%', valueLabel: {color: $hue-humid}}}
+        - {type: realtime.text, key: 'environment.humidity.humidity', title: Outside, display: {precision: 0, format-hint: '00%', valueLabel: {color: $hue-humid}}}
+        - {type: realtime.text, key: 'max(indoor.humidity.humidity, where=home.upstairs)', title: Upstairs, display: {precision: 0, format-hint: '00%', valueLabel: {color: $hue-humid}}}
+    - type: group
       name: hot
       when: 'max(indoor.temperature.temperature, where=home) > 75°F'
-      props:
-        headline: Warm
-        headline_color: $bad
-        key: max(indoor.temperature.temperature, where=home)
-        title: Warmest room
-        color: $bad
-        precision: 1
-        unit_position: Inline
-        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
-        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
-        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+      items:
+      - {type: text, text: Warm, color: $bad, alignment: Left, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 16%}}
+      - {type: text, text: Warmest room, alignment: Left, font: Roboto, weight: Light, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 0%, y: 19%, width: 100%, height: 9%}}
+      - type: realtime.text
+        key: 'max(indoor.temperature.temperature, where=home)'
+        title: {visible: false}
+        geometry: {x: 0%, y: 32%, width: 100%, height: 30%}
+        display: {precision: 1, weight: Light, format-hint: '00.0°', valueLabel: {alignment: Left, margins: 0px, color: $hue-temp, text-height: $big, matchingGroup: {group: global.big, matchAll: true}}}
+      - type: grid
+        geometry: {x: 0%, y: 70%, width: 100%, height: 30%}
+        spacing: 0
+        grid: {columns: [1fr, 1fr, 1fr], rows: [1fr], gap: 32px}
+        shared:
+          title: {color: $muted, position: Top, size: 0.45, alignment: BottomLeft, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+          display: {unitPosition: Hidden, valueLabel: {alignment: TopLeft, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
         items:
-        - {type: realtime.text, key: 'indoor.temperature.temperature#office', title: {text: Office}, display: {precision: 1}}
-        - {type: realtime.text, key: 'max(indoor.temperature.temperature#office, today)', title: {text: Day peak}, display: {precision: 1, valueLabel: {color: $bad}}}
-        - {type: realtime.text, key: $outside, title: {text: Outside}, display: {precision: 0, valueLabel: {color: $good}}}
-    - preset: headline-panel
+        - {type: realtime.text, key: 'indoor.temperature.temperature#office', title: Office, display: {precision: 1, format-hint: '00.0°', valueLabel: {color: $hue-temp}}}
+        - {type: realtime.text, key: 'max(indoor.temperature.temperature#office, today)', title: Day peak, display: {precision: 1, format-hint: '00.0°', valueLabel: {color: $hue-temp}}}
+        - {type: realtime.text, key: '$outside', title: Outside, display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}}
+    - type: group
       name: battery
       when: 'min(indoor.battery.battery, where=home) < 25%'
-      props:
-        headline: Weak
-        headline_color: $warn
-        key: min(indoor.battery.battery, where=home)
-        title: Weakest battery
-        color: $warn
-        precision: 0
-        unit_position: Inline
-        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
-        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
-        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+      items:
+      - {type: text, text: Weak battery, color: $bad, alignment: Left, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 16%}}
+      - {type: text, text: Weakest sensor, alignment: Left, font: Roboto, weight: Light, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 0%, y: 19%, width: 100%, height: 9%}}
+      - type: realtime.text
+        key: 'min(indoor.battery.battery, where=home)'
+        title: {visible: false}
+        geometry: {x: 0%, y: 32%, width: 100%, height: 30%}
+        display: {precision: 0, weight: Light, format-hint: '00%', valueLabel: {alignment: Left, margins: 0px, color: $hue-batt, text-height: $big, matchingGroup: {group: global.big, matchAll: true}}}
+      - type: grid
+        geometry: {x: 0%, y: 70%, width: 100%, height: 30%}
+        spacing: 0
+        grid: {columns: [1fr, 1fr, 1fr], rows: [1fr], gap: 32px}
+        shared:
+          title: {color: $muted, position: Top, size: 0.45, alignment: BottomLeft, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+          display: {unitPosition: Hidden, valueLabel: {alignment: TopLeft, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
         items:
-        - {type: realtime.text, key: 'indoor.battery.battery#nursery', title: {text: Nursery}, display: {precision: 0, valueLabel: {color: $warn}}}
-        - {type: realtime.text, key: 'indoor.battery.battery#bedroom', title: {text: Bedroom}, display: {precision: 0}}
-        - {type: realtime.text, key: 'indoor.battery.battery#basement', title: {text: Basement}, display: {precision: 0}}
-    - preset: headline-panel
+        - {type: realtime.text, key: 'indoor.battery.battery#nursery', title: Nursery, display: {precision: 0, format-hint: '00%', valueLabel: {color: $hue-batt}}}
+        - {type: realtime.text, key: 'indoor.battery.battery#bedroom', title: Bedroom, display: {precision: 0, format-hint: '00%', valueLabel: {color: $hue-batt}}}
+        - {type: realtime.text, key: 'indoor.battery.battery#basement', title: Basement, display: {precision: 0, format-hint: '00%', valueLabel: {color: $hue-batt}}}
+    - type: group
       name: tonight
-      props:
-        headline: Tonight
-        headline_color: $info
-        key: at(environment.temperature.temperature, 9h)
-        title: At midnight
-        color: $info
-        precision: 0
-        unit_position: Inline
-        headline_box: {x: 0%, y: 0%, width: 100%, height: 18%}
-        hero_box: {x: 0%, y: 20%, width: 100%, height: 46%}
-        list_box: {x: 0%, y: 70%, width: 100%, height: 30%}
+      items:
+      - {type: text, text: Tonight, alignment: Left, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 16%}}
+      - {type: text, text: Outside at midnight, alignment: Left, font: Roboto, weight: Light, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 0%, y: 19%, width: 100%, height: 9%}}
+      - type: realtime.text
+        key: 'at(environment.temperature.temperature, 9h)'
+        title: {visible: false}
+        geometry: {x: 0%, y: 32%, width: 100%, height: 30%}
+        display: {precision: 0, weight: Light, format-hint: '00°', valueLabel: {alignment: Left, margins: 0px, color: $hue-temp, text-height: $big, matchingGroup: {group: global.big, matchAll: true}}}
+      - type: grid
+        geometry: {x: 0%, y: 70%, width: 100%, height: 30%}
+        spacing: 0
+        grid: {columns: [1fr, 1fr, 1fr], rows: [1fr], gap: 32px}
+        shared:
+          title: {color: $muted, position: Top, size: 0.45, alignment: BottomLeft, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+          display: {unitPosition: Hidden, valueLabel: {alignment: TopLeft, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
         items:
-        - {type: realtime.text, key: 'at(environment.wind.speed.speed, 9h)', title: {text: Wind}, display: {precision: 0, unitPosition: Hidden}}
-        - {type: realtime.text, key: environment.temperature.low, title: {text: Low}, display: {precision: 0, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: 'at(environment.clouds.cover.cover, 9h)', title: {text: Cloud}, display: {precision: 0}}
+        - {type: realtime.text, key: 'environment.temperature.low', title: Low, display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}}
+        - {type: realtime.text, key: 'at(environment.wind.speed.speed, 9h)', title: Wind mph, display: {precision: 0, format-hint: '00', valueLabel: {color: $hue-wind}}}
+        - {type: realtime.text, key: 'at(environment.clouds.cover.cover, 9h)', title: Cloud, display: {precision: 0, format-hint: '00%', valueLabel: {color: $hue-cloud}}}

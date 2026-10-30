@@ -9,13 +9,14 @@ from functools import cached_property, lru_cache
 from rich.repr import rich_repr
 from typing import Any, Callable, List, Optional, TYPE_CHECKING, Union, get_type_hints, Set
 
-import WeatherUnits as wu
+import unitcorn as wu
 from LevityDash.lib.plugins import Container
 from LevityDash.lib.plugins.observation import TimeHash
 from LevityDash.lib.ui import Color
 from LevityDash.lib.ui.colors import theme
 from LevityDash.lib.ui.Geometry import Alignment, AlignmentFlag, Geometry, getDPI, Size
 from LevityDash.lib.ui.Groups import SizeGroupItem
+from LevityDash.lib.ui import numberalign
 from LevityDash.lib.ui.fonts import defaultFont, FontWeight, getFontFamily
 from LevityDash.lib.ui.frontends.PySide.utils import addCrosshair, addRect, colorPalette, DebugPaint, addPath, move_shape_into_rect, rect_to_shape, add_corner_at_point
 from LevityDash.lib.ui.icons import fa as FontAwesome, Icon
@@ -211,7 +212,7 @@ class Text(QGraphicsPathItem):
 				if self._relativeTo is None:
 					raise ValueError('RelativeTo is not set')
 				return height.toAbsolute(self._relativeTo.absoluteHeight)
-			case wu.Length(), _:
+			case wu.Length():
 				dpi = getDPI(self.surface.scene().view.screen())
 				value = float(height.inch) * dpi
 				self._height_px_cache = value
@@ -322,7 +323,104 @@ class Text(QGraphicsPathItem):
 			font.setPointSizeF(g.font_size_for(self))
 		else:
 			font.setPointSize(self.fontSize)
+		if self._tabular or self._numberAlign:
+			self._enableTabular(font)
 		return font
+
+	@staticmethod
+	def _enableTabular(font: QFont):
+		"""`font-variant-numeric: tabular-nums`. A font without the feature keeps the digits it has; the
+		bundled Nunito, Roboto and Roboto Mono already set every digit to one width."""
+		try:
+			font.setFeature(QFont.Tag('tnum'), 1)
+		except (AttributeError, TypeError, ValueError):
+			pass
+
+	_tabular: bool = False
+	_numberAlign: Optional[str] = None
+	_numExtentKey: tuple = None
+	_numExtent: tuple = (0.0, 0.0)
+
+	def setTabular(self, value: bool):
+		self._tabular = bool(value)
+		self.updateTransform(reason='tabular')
+
+	def setNumberAlign(self, value: Optional[str]):
+		self._numberAlign = value or None
+		self.updateTransform(reason='number-align')
+
+	def _numberExtents(self) -> Optional[tuple[float, float]]:
+		"""Width of this item's head and tail, over its text and its format hint, in its own font."""
+		mode = self._numberAlign
+		if not mode or self.icon is not None:
+			return None
+		text = self.text or ''
+		hint = getattr(self, '_formatHint', None) or ''
+		if not any(c.isdigit() for c in text + hint):
+			# a compass point, a name or a placeholder is not a number: it keeps its plain placement and
+			# adds nothing to the column
+			return None
+		font = self.font()
+		run = self.tailRun()
+		key = (text, hint, mode, font.key(), run)
+		if self._numExtentKey != key:
+			fm = QFontMetricsF(font)
+			head = tail = 0.0
+			for string in (text, hint):
+				h, t = numberalign.split(string, mode)
+				head = max(head, fm.horizontalAdvance(h))
+				tail = max(tail, fm.horizontalAdvance(t))
+			# a unit on the baseline follows the number, so it is part of the tail: the column leaves room for the
+			# widest unit and the cut still lines up when the units differ
+			tail += self._tailWidth(font, run)[0]
+			self._numExtentKey, self._numExtent = key, (head, tail)
+		return self._numExtent
+
+	def _columnEdge(self) -> Optional[float]:
+		"""The x, in the scene, of the edge this item's column lines up on: the right of its box for Right, the left
+		for Left, the middle for Center."""
+		# the parent's box and not sceneLimitRect, which maps through this item's own scale and so moves while it fits
+		try:
+			parent = self.parentItem()
+			rect = parent.mapRectToScene(self.parent.marginRect)
+		except (AttributeError, RuntimeError):
+			return None
+		match self.alignment.horizontal:
+			case AlignmentFlag.Left:
+				return rect.left()
+			case AlignmentFlag.Right:
+				return rect.right()
+			case _:
+				return rect.center().x()
+
+	def _numberColumn(self) -> Optional[tuple[float, float]]:
+		"""The shared column: the widest head and tail among the members of this item's size group that sit in its
+		tier (so, at its font size) and in its column (their boxes line up on the same edge). With no group it is the
+		item's own.
+
+		The column is the edge and not the whole group because a dashboard-wide group holds values in many columns:
+		sharing one width across all of them pushes a short value in a narrow cell off its edge to make room for the
+		widest number elsewhere on the dashboard.
+		"""
+		own = self._numberExtents()
+		if own is None:
+			return None
+		head, tail = own
+		if (group := getattr(self, '_sized', None)) is not None:
+			try:
+				tier = group.make_size_key(self)
+				edge = self._columnEdge()
+				for other in tuple(group.items):
+					if other is self or getattr(other, '_numberAlign', None) is None:
+						continue
+					if group.make_size_key(other) != tier or (extent := other._numberExtents()) is None:
+						continue
+					if edge is not None and (theirs := other._columnEdge()) is not None and abs(theirs - edge) > 0.5:
+						continue
+					head, tail = max(head, extent[0]), max(tail, extent[1])
+			except (AttributeError, RuntimeError):
+				pass
+		return head, tail
 
 	def setFontFamily(self, family: str, update: bool=True):
 		if theme.is_token(family):
@@ -356,7 +454,14 @@ class Text(QGraphicsPathItem):
 		translating the parent's marginRect by -pos gives it in this item's
 		coordinate space at identity scale.
 		"""
-		return self.parent.marginRect.translated(-self.pos())
+		rect = self.parent.marginRect.translated(-self.pos())
+		# `text-height` narrows the band to a fixed height, centred in the box. It lives
+		# here, not in updateTransform, so a size group's tier and fit read it too.
+		if (height := self.height_px) is not None and 0 < height < rect.height():
+			centre = rect.center()
+			rect.setHeight(height)
+			rect.moveCenter(centre)
+		return rect
 
 	@property
 	def sceneLimitRect(self) -> QRectF:
@@ -368,7 +473,7 @@ class Text(QGraphicsPathItem):
 
 	@property
 	def height_limit(self) -> float:
-		return self.parent.marginRect.height()
+		return self.limitRect.height()
 
 	@property
 	def containingRect(self) -> QRectF:
@@ -406,11 +511,6 @@ class Text(QGraphicsPathItem):
 			self.setTransform(transform)
 
 		limitRect = self.limitRect
-
-		if (height := self.height_px) is not None:
-			center = limitRect.center()
-			limitRect.setHeight(height)
-			limitRect.moveCenter(center)
 
 		rect = self.currentTextRect()
 		self.setTransformOriginPoint(0, 0)
@@ -703,6 +803,31 @@ class Text(QGraphicsPathItem):
 
 	_builtSignature = None
 
+	def tailRun(self) -> tuple[str, float] | None:
+		"""A smaller run drawn after the text on its baseline: `(text, size as a share of this font)`, or None.
+
+		A value with `unitPosition: baseline` uses it for its unit. The run is part of the text, so it counts in the
+		fit, the alignment and the size group.
+		"""
+		return None
+
+	def _tailWidth(self, font: QFont, run: tuple[str, float] | None) -> tuple[float, float, float, QFont | None]:
+		"""`(width, gap, left bearing, font)` of a tail run after text in `font`; all zero with no run."""
+		if not run or not run[0]:
+			return 0.0, 0.0, 0.0, None
+		tail_font = self._tailFont(font, run[1])
+		tail_rect = QFontMetricsF(tail_font).tightBoundingRect(run[0])
+		gap = QFontMetricsF(font).horizontalAdvance(' ') * 0.2
+		return gap + tail_rect.width() + tail_rect.left(), gap, tail_rect.left(), tail_font
+
+	def _tailFont(self, font: QFont, ratio: float) -> QFont:
+		tail = QFont(font)
+		if font.pixelSize() > 0:
+			tail.setPixelSize(max(1, round(font.pixelSize() * ratio)))
+		else:
+			tail.setPointSizeF(max(0.5, font.pointSizeF() * ratio))
+		return tail
+
 	def currentTextRect(self) -> QRectF:
 		"""The text rect for the item as it is now, rebuilt if its inputs moved.
 
@@ -744,6 +869,10 @@ class Text(QGraphicsPathItem):
 			getattr(self, '_formatHint', None),
 			self.height_px,
 			self._warp,
+			self.tailRun(),
+			self._tabular,
+			self._numberAlign,
+			self._numberColumn() if self._numberAlign else None,
 		)
 
 	def refresh(self):
@@ -766,7 +895,7 @@ class Text(QGraphicsPathItem):
 		# 	refreshTask = getattr(self, 'refreshTask', None)
 		# 	if refreshTask is not None:
 		# 		refreshTask.cancel()
-			# TODO: change this to properly use abs once WeatherUnits has it implemented
+			# TODO: change this to properly use abs once unitcorn has it implemented
 			# if wu.Time.Minute(abs(value.minute)) < wu.Time.Minute(1):
 			# 	self.refreshTask = loop.call_later(1, self.refresh)
 			# elif wu.Time.Hour(abs(value.hour)) < wu.Time.Hour(1):
@@ -918,6 +1047,8 @@ class Text(QGraphicsPathItem):
 
 		if self._value is None:
 			return self.default
+		if self._alternates and isinstance(self._value, str):
+			return self._alternates[self._alternateIndex]
 		if isinstance(self._value, (str, int, float, datetime, timedelta, Icon)):
 			value = self._value
 		else:
@@ -946,6 +1077,11 @@ class Text(QGraphicsPathItem):
 
 	@value.setter
 	def value(self, value):
+		if isinstance(value, (list, tuple)) and value and all(isinstance(v, str) for v in value):
+			self.setAlternates(value)
+			value = self._alternates[0]
+		elif self._alternates and not isinstance(value, Icon):
+			self._alternates = ()
 		if str(value) != self.text:
 			self._value = value
 			self.updateTransform(reason='value-set', updatePath=True, updateShared=True)
@@ -995,8 +1131,56 @@ class Text(QGraphicsPathItem):
 		self._scaleType = value
 		self.updateTransform(reason='setScaleType')
 
+	_alternates: tuple[str, ...] = ()
+	_alternateIndex: int = 0
+	_condense: float = 0.85
+
+	@property
+	def alternates(self) -> tuple[str, ...]:
+		"""The texts this item may show, longest first; empty when it has one text."""
+		return self._alternates
+
+	def setAlternates(self, texts, condense: float | None = None):
+		texts = tuple(str(t) for t in texts)
+		if condense is not None:
+			self._condense = float(condense)
+		if texts == self._alternates and condense is None:
+			return
+		self._alternates = texts if len(texts) > 1 else ()
+		self._alternateIndex = 0
+		self._value = texts[0] if texts else None
+
+	def _pickAlternate(self) -> None:
+		"""Show the longest text that does not have to shrink much to fit the box.
+
+		A text is too long when fitting its width asks for less than `condense` of the size the box's
+		height allows; the next, shorter text is tried then, and the last is used whatever it takes.
+		Both limits are ratios, so the choice is the same at any font size and a size group, which sets
+		the size, cannot move it: the choice depends on the box and the font family alone.
+		"""
+		if not self._alternates:
+			return
+		limit = self.limitRect
+		index = len(self._alternates) - 1
+		if limit.width() > 0 and limit.height() > 0:
+			font = QFont(self.font())
+			font.setPixelSize(100)
+			metrics = QFontMetricsF(font)
+			band = metrics.tightBoundingRect('|').height() or metrics.height()
+			heightScale = limit.height() / band
+			for i, candidate in enumerate(self._alternates):
+				width = metrics.tightBoundingRect(candidate).width() or 1
+				if limit.width() / width >= self._condense * heightScale:
+					index = i
+					break
+		if index != self._alternateIndex:
+			self._alternateIndex = index
+			if (group := getattr(self, '_sized', None)) is not None:
+				group.mark_dirty()
+
 	def _update_path(self, /, update_others: bool = False) -> QRectF:
 		self.resetTransform()
+		self._pickAlternate()
 		font = self.font()
 		fm = QFontMetricsF(font)
 
@@ -1021,6 +1205,16 @@ class Text(QGraphicsPathItem):
 		fmt_hint_bearing = QPointF(fm.leftBearing(fmt_hint_text[0] if fmt_hint_text else ' '), 0)
 
 		text_rect = fm.tightBoundingRect(text)
+
+		# A tail (the unit of a value) sits after the text on its baseline, so it widens the text and the format hint by
+		# its own width and a small gap; the hint's tail is the same, so the value's size does not follow the unit.
+		tail_run = self.tailRun()
+		tail_width, tail_gap, tail_bearing, tail_font = self._tailWidth(font, tail_run)
+		main_width = text_rect.width()
+		hint_width = fmt_hint_rect.width()
+		if tail_font:
+			text_rect.setWidth(main_width + tail_width)
+			fmt_hint_rect.setWidth(hint_width + tail_width)
 		text_bearing = QPointF(fm.leftBearing(text[0] if text else ' '), 0)
 
 		pipe_rect = fm.tightBoundingRect('|')
@@ -1073,8 +1267,34 @@ class Text(QGraphicsPathItem):
 				text_rect.moveCenter(QPoint(text_rect.center().x(), fmt_hint_rect.center().y()))
 				# path_size_hint.translate(0, fmt_hint_rect.center().y() - path_size_hint.boundingRect().center().y())
 
+		column = self._numberColumn() if not self.isIcon else None
+		if column is not None:
+			# Number alignment replaces the horizontal placement above. The block (widest head + widest tail)
+			# takes the box edge or centre; the alignment edge sits `head` in from its left, and each string is
+			# drawn so its own cut lands on it.
+			col_head, col_tail = column
+			match align.horizontal:
+				case AlignmentFlag.Left:
+					block_left = 0.0
+				case AlignmentFlag.Right:
+					block_left = -(col_head + col_tail)
+				case _:
+					block_left = -(col_head + col_tail) / 2
+			edge = block_left + col_head
+			mode = self._numberAlign
+			text_x = edge - fm.horizontalAdvance(numberalign.split(text, mode)[0])
+			hint_x = edge - fm.horizontalAdvance(numberalign.split(fmt_hint_text, mode)[0])
+			ink = fm.tightBoundingRect(text)
+			hint_ink = fm.tightBoundingRect(fmt_hint_text)
+			text_rect = QRectF(text_x + ink.left(), text_rect.top(), ink.width() + tail_width, text_rect.height())
+			hint_placed = QRectF(hint_x + hint_ink.left(), fmt_hint_rect.top(), hint_ink.width() + tail_width, fmt_hint_rect.height())
+			fmt_hint_rect = hint_placed | text_rect
+
 		self._text_pos = text_pos = text_rect.bottomLeft() - text_bearing
 		self._fmt_text_pos = fmt_text_pos = fmt_hint_rect.bottomLeft() - fmt_hint_bearing
+		if column is not None:
+			text_pos.setX(text_x)
+			fmt_text_pos.setX(hint_x)
 
 		# `addText` takes the BASELINE origin, and the rects above are ink
 		# extents from tightBoundingRect - they hug the glyphs, so '12p' has a
@@ -1109,6 +1329,10 @@ class Text(QGraphicsPathItem):
 		# Draw the value and format hint text
 		fmt_hint_text_path.addText(fmt_text_pos, font, fmt_hint_text)
 		path.addText(text_pos, font, text)
+		if tail_font:
+			# ink right edge of the text, then the gap; the tail's own left bearing is taken off so its ink starts there
+			path.addText(QPointF(text_rect.left() + main_width + tail_gap - tail_bearing, text_pos.y()), tail_font, tail_run[0])
+			fmt_hint_text_path.addText(QPointF(fmt_hint_rect.left() + hint_width + tail_gap - tail_bearing, fmt_text_pos.y()), tail_font, tail_run[0])
 
 		# Determine the scale type and add the path to the size hint path
 		match scaleType:
@@ -1165,6 +1389,11 @@ class Text(QGraphicsPathItem):
 		# the bottom of the box, and `Bottom` and `Center` do the same the other way. Put the band itself on the
 		# edge instead. It is a property of the font and the hint, never of the string, so a descender still does
 		# not move a baseline.
+		if column is not None:
+			# the whole column is part of the fit width, so a short value beside a long one fits the same box
+			path_size_hint.moveTo(QPointF(block_left, fmt_text_pos.y()))
+			path_size_hint.lineTo(QPointF(block_left + col_head + col_tail, fmt_text_pos.y()))
+
 		band = path_size_hint.boundingRect()
 		if band.height() > 0:
 			match align.vertical:

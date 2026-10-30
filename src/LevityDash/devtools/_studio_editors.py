@@ -36,7 +36,7 @@ from PySide6.QtGui import (
 	QBrush, QColor, QFontDatabase, QLinearGradient, QPainter, QPainterPath, QPalette, QPen, QRegularExpressionValidator,
 )
 from PySide6.QtWidgets import (
-	QCheckBox, QColorDialog, QComboBox, QCompleter, QDoubleSpinBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
+	QCheckBox, QColorDialog, QComboBox, QCompleter, QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
 	QSlider, QSpinBox, QTimeEdit, QToolButton, QVBoxLayout, QWidget,
 )
 
@@ -62,7 +62,7 @@ class Context:
 	#: Pixels a '%' size is a share of: 'radius' is the dial's radius now, 'full' the radius at 100%.
 	ref: Callable[[str], float] = lambda kind='radius': 100.0
 	dpi: float = 100.0
-	#: The class of the gauge's data (a WeatherUnits unit class), which a stop in another unit converts to.
+	#: The class of the gauge's data (a unitcorn unit class), which a stop in another unit converts to.
 	valueClass: Callable[[], Optional[type]] = lambda: None
 	#: The range the dial spans, in the gauge's own unit.
 	span: Callable[[], tuple] = lambda: (0.0, 100.0)
@@ -244,7 +244,118 @@ class UnitBox(QComboBox):
 		self.setVisible(bool(CONTEXT.units))
 
 
-class NumberEdit(Editor):
+def _bind_value(text: str):
+	"""One end of `from`: a number, or a measured number kept as text (`99°F`)."""
+	try:
+		return float(text)
+	except ValueError:
+		return text.strip()
+
+
+def editBound(parent: QWidget, spec: Optional[dict]) -> Optional[Optional[dict]]:
+	"""Ask for the `{of, from, to, clamp, fallback}` mapping of a number that follows a value.
+
+	Returns the mapping, None to make the setting a plain number again, or Ellipsis when cancelled.
+	"""
+	spec = dict(spec or {})
+	dialog = QDialog(parent)
+	dialog.setWindowTitle('Number follows a value')
+	form = QFormLayout(dialog)
+	low, high = (list(spec.get('from') or ['', '']) + ['', ''])[:2]
+	start, stop = (list(spec.get('to') or ['', '']) + ['', ''])[:2]
+	fields = {
+		'of': QLineEdit('' if spec.get('of') is None else str(spec['of'])),
+		'low': QLineEdit(str(low)), 'high': QLineEdit(str(high)),
+		'start': QLineEdit(str(start)), 'stop': QLineEdit(str(stop)),
+		'fallback': QLineEdit('' if spec.get('fallback') is None else str(spec['fallback'])),
+	}
+	fields['of'].setToolTip('A key or an expression')
+	fields['low'].setToolTip('Reading at the low end; a unit is fine (32°F)')
+	fields['fallback'].setToolTip('Setting until there is a value (optional)')
+	for label, key in (('Of', 'of'), ('From, low', 'low'), ('From, high', 'high'), ('To, at low', 'start'), ('To, at high', 'stop'), ('Fallback', 'fallback')):
+		form.addRow(label, fields[key])
+	clamp = QCheckBox('Stay between the ends of To')
+	clamp.setChecked(spec.get('clamp', True))
+	form.addRow(clamp)
+	buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+	plain = buttons.addButton('Make plain', QDialogButtonBox.ButtonRole.DestructiveRole)
+	chosen = {}
+	plain.clicked.connect(lambda: (chosen.setdefault('plain', True), dialog.accept()))
+	buttons.accepted.connect(dialog.accept)
+	buttons.rejected.connect(dialog.reject)
+	form.addRow(buttons)
+	if dialog.exec() != QDialog.DialogCode.Accepted:
+		return ...
+	if chosen.get('plain'):
+		return None
+	try:
+		new = {'of': fields['of'].text().strip(), 'from': [_bind_value(fields['low'].text()), _bind_value(fields['high'].text())],
+		       'to': [float(fields['start'].text()), float(fields['stop'].text())]}
+	except ValueError:
+		return ...
+	if not new['of'] or '' in new['from']:
+		return ...
+	if not clamp.isChecked():
+		new['clamp'] = False
+	if fields['fallback'].text().strip():
+		try:
+			new['fallback'] = float(fields['fallback'].text())
+		except ValueError:
+			return ...
+	return new
+
+
+class FollowMixin:
+	"""The ⟳ button of a numeric editor: the setting follows a value, shown as a summary in place of the plain controls.
+
+	The editor lists what the plain controls are (`_plainWidgets`) and starts the mixin with `_initFollow(box)`; its
+	`value()` returns `_bound` while one is set, and its `setValue` passes a mapping to `_takeBound`.
+	"""
+	_bound: Optional[dict] = None
+
+	def _initFollow(self, box):
+		self.summary = QLabel()
+		self.summary.hide()
+		self.follow = _tool('⟳', 'Follow a value: the number takes a point of a range as a key or expression changes')
+		self.follow.setCheckable(True)
+		self.follow.clicked.connect(self._followClicked)
+		box.addWidget(self.summary, 1)
+		box.addWidget(self.follow)
+
+	def _plainWidgets(self) -> list:
+		raise NotImplementedError
+
+	def _setBound(self, spec: Optional[dict]) -> None:
+		self._bound = None if spec is None else dict(spec)
+		for widget in self._plainWidgets():
+			widget.setVisible(spec is None)
+		self.summary.setVisible(spec is not None)
+		if spec is not None:
+			low, high = spec.get('from', ['?', '?'])
+			start, stop = spec.get('to', ['?', '?'])
+			self.summary.setText(f"{spec.get('of')}: {low}…{high} → {start}…{stop}")
+			self.summary.setToolTip(str(spec))
+		with QSignalBlocker(self.follow):
+			self.follow.setChecked(spec is not None)
+
+	def _takeBound(self, value) -> bool:
+		"""Show ``value`` if it is a mapping; a plain value clears it. True when it was a mapping."""
+		bound = isinstance(value, dict) and 'of' in value
+		if bound or self._bound is not None:
+			self._setBound(value if bound else None)
+		return bound
+
+	def _followClicked(self, _checked=False):
+		result = editBound(self, self._bound or {})
+		if result is ...:
+			with QSignalBlocker(self.follow):
+				self.follow.setChecked(self._bound is not None)
+			return
+		self._setBound(result)
+		self._emit()
+
+
+class NumberEdit(FollowMixin, Editor):
 	"""A number, with an optional 'off' state (`autoText` names what off means).
 
 	A `measured` number is in the gauge's own unit (degrees F, inHg, mph). It is held in that
@@ -289,10 +400,14 @@ class NumberEdit(Editor):
 			self.unitBox = UnitBox()
 			box.addWidget(self.unitBox)
 		self._applySuffix()
+		self._initFollow(box)
 		if self.auto is not None:
 			self.spin.setEnabled(False)
 			if self.slide is not None:
 				self.slide.setEnabled(False)
+
+	def _plainWidgets(self) -> list:
+		return [w for w in (self.auto, self.slide, self.spin, self.unitBox) if w is not None]
 
 	def _fitSlider(self):
 		# The scale: the data range (in the shown unit) for a measured number, else the limits given (0 to 100 when none).
@@ -349,6 +464,8 @@ class NumberEdit(Editor):
 		self._emit()
 
 	def setValue(self, value):
+		if self._takeBound(value):
+			return
 		if self.auto is not None:
 			with QSignalBlocker(self.auto):
 				self.auto.setChecked(value is None)
@@ -365,6 +482,8 @@ class NumberEdit(Editor):
 			self.slide.showValue(None)
 
 	def value(self):
+		if self._bound is not None:
+			return dict(self._bound)
 		if self.auto is not None and self.auto.isChecked():
 			return None
 		v = self.native
@@ -374,7 +493,7 @@ class NumberEdit(Editor):
 		return self.spin.hasFocus() or (self.slide is not None and self.slide.isSliderDown())
 
 
-class SizeEdit(Editor):
+class SizeEdit(FollowMixin, Editor):
 	"""A size: a number and its unit. `nullable` adds an 'auto' box that unsets it."""
 
 	def __init__(self, nullable: bool = False, autoText: str = 'auto', units: Optional[List[str]] = None, ref: str = 'radius'):
@@ -398,7 +517,7 @@ class SizeEdit(Editor):
 		self.slide = Slide(digits=2)
 		self.slide.moved.connect(self._slid)
 		self.unit = QComboBox()
-		# Inches are left out of the small sizes (weights, gaps): WeatherUnits calls any inch value
+		# Inches are left out of the small sizes (weights, gaps): unitcorn calls any inch value
 		# within about 0.05 of a default equal to it, so the export drops 0.09 in and the gauge falls back.
 		self.unit.addItems(units or (UNITS if ref == 'full' else [u for u in UNITS if u != 'in']))
 		self.unit.setToolTip('% is a share of the dial; px is scene pixels; mm, cm and in are physical')
@@ -407,10 +526,14 @@ class SizeEdit(Editor):
 		box.addWidget(self.spin)
 		box.addWidget(self.unit)
 		self._fitSlider()
+		self._initFollow(box)
 		if nullable:
 			self.spin.setEnabled(False)
 			self.unit.setEnabled(False)
 			self.slide.setEnabled(False)
+
+	def _plainWidgets(self) -> list:
+		return [w for w in (self.auto, self.slide, self.spin, self.unit) if w is not None]
 
 	#: The scale of the slider for each unit: a share of the dial, scene pixels, then physical sizes.
 	SPANS = {'%': (0.0, 100.0), 'px': (0.0, 500.0), 'mm': (0.0, 50.0), 'cm': (0.0, 5.0), 'in': (0.0, 2.0)}
@@ -461,6 +584,8 @@ class SizeEdit(Editor):
 	_unit = '%'
 
 	def setValue(self, value):
+		if self._takeBound(value):
+			return
 		with QSignalBlocker(self.spin), QSignalBlocker(self.unit):
 			if self.auto is not None:
 				with QSignalBlocker(self.auto):
@@ -483,6 +608,8 @@ class SizeEdit(Editor):
 			self._fitSlider()
 
 	def value(self):
+		if self._bound is not None:
+			return dict(self._bound)
 		if self.auto is not None and self.auto.isChecked():
 			return None
 		return f'{self.spin.value():g}{self.unit.currentText()}'
@@ -508,12 +635,15 @@ class ColorEdit(Editor):
 		self.text.editingFinished.connect(self._typed)
 		box.addWidget(self.swatch)
 		box.addWidget(self.text, 1)
+		self.follow = _tool('⟳', 'Follow a value: the colour of a scale at a key or expression')
+		self.follow.clicked.connect(self._follow)
+		box.addWidget(self.follow)
 		self.clear: Optional[QToolButton] = None
 		if nullable:
 			self.clear = _tool('×', 'Back to the default colour')
 			self.clear.clicked.connect(self._cleared)
 			box.addWidget(self.clear)
-		self._color: Optional[str] = None
+		self._color: Optional[str | dict] = None
 
 	def _pick(self):
 		chosen = QColorDialog.getColor(QColor(self._color or 'white'), self, 'Colour')
@@ -536,15 +666,41 @@ class ColorEdit(Editor):
 		self._set(None)
 		self._emit()
 
-	def _set(self, value: Optional[str]):
+	def _follow(self):
+		"""Edit the `{scale, of, fallback}` mapping of a colour that follows a value (`lib/ui/colors/bound.py`)."""
+		spec = dict(self._color) if isinstance(self._color, dict) else {}
+		dialog = QDialog(self)
+		dialog.setWindowTitle('Colour follows a value')
+		form = QFormLayout(dialog)
+		fields = {}
+		for key, label, tip in (('scale', 'Scale', 'A theme scale ($temperature), a preset gradient, or stops'),
+		                        ('of', 'Of', 'A key or an expression'),
+		                        ('fallback', 'Fallback', 'Colour until there is a value (optional)')):
+			fields[key] = QLineEdit('' if spec.get(key) is None else str(spec[key]))
+			fields[key].setToolTip(tip)
+			form.addRow(label, fields[key])
+		buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+		buttons.accepted.connect(dialog.accept)
+		buttons.rejected.connect(dialog.reject)
+		form.addRow(buttons)
+		if dialog.exec() != QDialog.DialogCode.Accepted:
+			return
+		new = {k: f.text().strip() for k, f in fields.items() if f.text().strip()}
+		if 'scale' in new and 'of' in new:
+			self._set(new)
+			self._emit()
+
+	def _set(self, value: Optional[str | dict]):
 		self._color = value
+		bound = isinstance(value, dict)
 		with QSignalBlocker(self.text):
-			self.text.setText('' if value is None else str(value))
-		color = QColor(value) if value else QColor()
+			self.text.setText('' if value is None else f"{value.get('scale')} ← {value.get('of')}" if bound else str(value))
+		self.text.setReadOnly(bound)
+		color = QColor(value) if value and not bound else QColor()
 		self.swatch.setStyleSheet(f'background: {color.name() if color.isValid() else "transparent"}; border: 1px solid #888;')
 
 	def setValue(self, value):
-		self._set(None if value is None else str(value))
+		self._set(dict(value) if isinstance(value, dict) else None if value is None else str(value))
 
 	def value(self):
 		return self._color
@@ -2190,28 +2346,91 @@ class CaptionEdit(_Toggled):
 		return 'Label'
 
 
+class SizeConditionEdit(Editor):
+	"""A size condition (`lib/sizequery.py`): limits on the window's or the parent's size, and an optional `and:`."""
+
+	LIMITS = ('min-width', 'max-width', 'min-height', 'max-height')
+
+	def __init__(self):
+		super().__init__()
+		grid = QGridLayout(self)
+		grid.setContentsMargins(0, 0, 0, 0)
+		grid.setSpacing(4)
+		self.limits = {}
+		for i, name in enumerate(self.LIMITS):
+			edit = QLineEdit()
+			edit.setPlaceholderText(f'{name} (px)')
+			edit.editingFinished.connect(self._emit)
+			self.limits[name] = edit
+			grid.addWidget(edit, i // 2, i % 2)
+		self.orientation = QComboBox()
+		for label in ('any shape', 'landscape', 'portrait'):
+			self.orientation.addItem(label)
+		self.orientation.activated.connect(self._emit)
+		self.scope = QComboBox()
+		for label in ('of the window', 'of the parent'):
+			self.scope.addItem(label)
+		self.scope.activated.connect(self._emit)
+		grid.addWidget(self.orientation, 2, 0)
+		grid.addWidget(self.scope, 2, 1)
+		self.data = KeyEdit('and: environment.precipitation.precipitation > 0')
+		self.data.changed.connect(self._emit)
+		grid.addWidget(self.data, 3, 0, 1, 2)
+		self._extra = {}
+
+	def setValue(self, value):
+		value = value if isinstance(value, dict) else {}
+		with QSignalBlocker(self.orientation), QSignalBlocker(self.scope):
+			for name, edit in self.limits.items():
+				edit.setText('' if name not in value else str(value[name]))
+			self.orientation.setCurrentIndex({'landscape': 1, 'portrait': 2}.get(str(value.get('orientation', '')).lower(), 0))
+			self.scope.setCurrentIndex(1 if str(value.get('of', 'window')).lower() == 'parent' else 0)
+		self.data.setValue(value.get('and'))
+		# keys this form has no control for (the aspect limits) ride along unchanged
+		self._extra = {k: v for k, v in value.items() if k not in (*self.LIMITS, 'orientation', 'of', 'and')}
+
+	def value(self):
+		out = dict(self._extra)
+		for name, edit in self.limits.items():
+			text = edit.text().strip()
+			if text:
+				out[name] = int(text) if text.isdigit() else text
+		if self.orientation.currentIndex():
+			out['orientation'] = ('landscape', 'portrait')[self.orientation.currentIndex() - 1]
+		if self.scope.currentIndex():
+			out['of'] = 'parent'
+		if (data := self.data.value()) is not None:
+			out['and'] = data
+		return out or None
+
+
 class ConditionEdit(Editor):
 	"""`when:` and a beam's `active:` and `sweep:`: nothing, a bool, or a key or an expression."""
 
-	MODES = [('not set', None), ('always (true)', True), ('never (false)', False), ('key or expression', '')]
+	MODES = [('not set', None), ('always (true)', True), ('never (false)', False), ('key or expression', ''), ('window or parent size', {})]
 
-	def __init__(self, unsetText: str = 'not set', placeholder: str = 'environment.wind.speed.speed > 25 mph'):
+	def __init__(self, unsetText: str = 'not set', placeholder: str = 'environment.wind.speed.speed > 25 mph', size: bool = False):
 		super().__init__()
 		box = QHBoxLayout(self)
 		box.setContentsMargins(0, 0, 0, 0)
 		box.setSpacing(4)
 		self.mode = QComboBox()
-		for i, (label, _) in enumerate(self.MODES):
+		for i, (label, _) in enumerate(self.MODES[:5 if size else 4]):
 			self.mode.addItem(unsetText if i == 0 else label)
 		self.mode.activated.connect(self._modeChanged)
 		self.text = KeyEdit(placeholder)
 		self.text.changed.connect(self._emit)
+		self.size = SizeConditionEdit()
+		self.size.changed.connect(self._emit)
+		self.size.setVisible(False)
 		box.addWidget(self.mode)
 		box.addWidget(self.text, 1)
+		box.addWidget(self.size, 1)
 		self._showMode()
 
 	def _showMode(self):
 		self.text.setVisible(self.mode.currentIndex() == 3)
+		self.size.setVisible(self.mode.currentIndex() == 4)
 
 	def _modeChanged(self, _):
 		self._showMode()
@@ -2224,17 +2443,23 @@ class ConditionEdit(Editor):
 			index = 0
 		elif isinstance(value, bool):
 			index = 1 if value else 2
+		elif isinstance(value, dict):
+			index = 4 if self.mode.count() > 4 else 3
 		else:
 			index = 3
 		with QSignalBlocker(self.mode):
 			self.mode.setCurrentIndex(index)
 		self.text.setValue(str(value) if index == 3 else None)
+		if index == 4:
+			self.size.setValue(value)
 		self._showMode()
 
 	def value(self):
 		index = self.mode.currentIndex()
 		if index == 3:
 			return self.text.value()
+		if index == 4:
+			return self.size.value() or {}
 		return self.MODES[index][1]
 
 	def isEditing(self) -> bool:
@@ -2378,7 +2603,7 @@ class WhenEdit(_Popover):
 
 	def __init__(self):
 		form = _Form()
-		self.condition = form.part('when', 'when', ConditionEdit(unsetText='always shown'),
+		self.condition = form.part('when', 'when', ConditionEdit(unsetText='always shown', size=True),
 		                           'Show this item only while the condition holds. A switch picks among its children by it.')
 		hint = QLabel('A key is true when its value is not zero. An expression can use units: '
 		              'environment.temperature.temperature < 32\u00b0F. A missing value counts as false.')
@@ -2398,7 +2623,248 @@ class WhenEdit(_Popover):
 			return 'When: always shown'
 		if isinstance(v, bool):
 			return 'When: ' + ('true' if v else 'false')
+		if isinstance(v, dict):
+			return 'When: ' + (', '.join(f'{k} {x}' for k, x in v.items()) or 'a size')
 		return f'When: {v}'
+
+
+# Section: a bar's mappings
+
+class BoolEdit(Editor):
+	"""A tick box. Reports None while it matches `default`, so only a real choice is written."""
+
+	def __init__(self, label: str, default: bool = False):
+		super().__init__()
+		self.default = default
+		box = QHBoxLayout(self)
+		box.setContentsMargins(0, 0, 0, 0)
+		self.box = QCheckBox(label)
+		self.box.toggled.connect(self._emit)
+		box.addWidget(self.box)
+
+	def setValue(self, value):
+		with QSignalBlocker(self.box):
+			self.box.setChecked(self.default if value is None else bool(value))
+
+	def value(self):
+		on = self.box.isChecked()
+		return None if on == self.default else on
+
+
+def _choice(*names: str, default: Optional[str] = None) -> ChoiceEdit:
+	"""A dropdown over `names`; the one called `default` is what leaving the key out means."""
+	return ChoiceEdit([(n + (' (default)' if n == default else ''), None if n == default else n) for n in names])
+
+
+class _MappingForm(_Form):
+	"""A bar's mapping (`track:`, `pointer:`, a tick set): the keys it has controls for, the rest kept as written.
+
+	Only keys with a value are written. A value a control cannot show (`segments: false`) stays with the
+	keys it does not know, so a round trip never drops it.
+	"""
+
+	#: Keys whose boolean value belongs to `_extra`, not to the control (a number box cannot show `false`).
+	KEEP_BOOL: tuple = ()
+
+	def setValue(self, value):
+		spec = dict(value) if isinstance(value, dict) else {}
+		self._extra = {k: v for k, v in spec.items() if k not in self._known or (k in self.KEEP_BOOL and isinstance(v, bool))}
+		for key, p in self.parts.items():
+			with QSignalBlocker(p):
+				p.setValue(None if key in self._extra else spec.get(key))
+
+	def value(self):
+		out = dict(self._extra)
+		for key, p in self.parts.items():
+			v = p.value()
+			if v is not None and key not in self._extra:
+				out[key] = v
+		return out
+
+
+class _SwitchedForm(_MappingForm):
+	"""A mapping that is off (None) or on; on with nothing set is a mapping with every default."""
+
+	def __init__(self, label: str):
+		super().__init__()
+		self.on = QCheckBox(label)
+		self.on.toggled.connect(self._switched)
+		self.grid.addWidget(self.on, self._r, 0, 1, 2)
+		self._r += 1
+
+	def _switched(self, on: bool):
+		for key in self.parts:
+			self.showPart(key, on)
+		self._emit()
+
+	def setValue(self, value):
+		on = value is not None and value is not False
+		with QSignalBlocker(self.on):
+			self.on.setChecked(on)
+		for key in self.parts:
+			self.showPart(key, on)
+		super().setValue(value if on else None)
+
+	def value(self):
+		return super().value() if self.on.isChecked() else None
+
+
+class TrackForm(_MappingForm):
+	KEEP_BOOL = ('segments',)
+
+	def __init__(self):
+		super().__init__()
+		self.part('color', 'colour', ColorEdit(nullable=True), 'The groove under the data.')
+		self.part('weight', 'weight', SizeEdit(nullable=True, autoText='by style', ref='full'),
+		          'Thickness across the bar. A share of the cross extent; the \u27f3 button makes it follow a value.')
+		self.part('cap', 'ends', _choice('round', 'square', 'flat', default='round'))
+		self.part('segments', 'segments', NumberEdit(autoText='solid', integer=True, lo=1, hi=200, step=1), 'Cut the track into this many cells.')
+		self.part('gap', 'gap', SizeEdit(nullable=True, autoText='auto', ref='full'), 'Space between cells.')
+
+
+class PointerForm(_SwitchedForm):
+	def __init__(self):
+		super().__init__('Show a pointer on the value')
+		self.part('type', 'shape', _choice('triangle', 'line', 'dot', 'notch', 'pointer', default='triangle'))
+		self.part('color', 'colour', ColorEdit(nullable=True))
+		self.part('size', 'size', SizeEdit(nullable=True, autoText='by track', ref='full'),
+		          'Size across the bar. A share of the cross extent; \u27f3 makes it follow a value.')
+		self.part('side', 'side', _choice('before', 'after', 'both', default='before'))
+		self.part('glow', 'glow', GlowEdit(), 'A halo around the pointer.')
+
+
+class TicksForm(_SwitchedForm):
+	def __init__(self, label: str, major: bool):
+		super().__init__(label)
+		if major:
+			self.part('interval', 'every', NumberEdit(autoText='round step', measured=True),
+			          'A tick each time the value moves this far. Left alone it picks a round step.')
+		self.part('count', 'count', NumberEdit(autoText='default', integer=True, lo=1, hi=100, step=1),
+		          'Cut each step into this many instead' if not major else 'This many steps across the range, instead of an interval.')
+		self.part('length', 'length', SizeEdit(nullable=True, autoText='default', ref='full'),
+		          'Share of the cross extent; \u27f3 makes it follow a value.')
+		self.part('width', 'width', SizeEdit(nullable=True, autoText='default', ref='full'))
+		self.part('side', 'side', _choice('before', 'after', 'both', default='after'))
+		self.part('color', 'colour', ColorEdit(nullable=True))
+		if major:
+			self.part('labels', 'numbers', BoolEdit('number the ticks'))
+			self.part('size', 'number size', SizeEdit(nullable=True, autoText='default', ref='full'))
+			self.part('format', 'format', FormatEdit())
+
+
+class ValueLabelForm(_MappingForm):
+	def __init__(self):
+		super().__init__()
+		self.part('visible', 'show', BoolEdit('show the value as text', default=True))
+		self.part('position', 'position', _choice('end', 'start', 'above', 'below', 'left', 'right', 'inside', default='end'))
+		self.part('align', 'align', ChoiceEdit([('auto', None), ('left', 'left'), ('center', 'center'), ('right', 'right')]))
+		self.part('size', 'size', SizeEdit(nullable=True, autoText='default', ref='full'),
+		          'Text height as a share of the cross extent. Sizes of text come from size groups on a dashboard, so this is not bound to a value.')
+		self.part('color', 'colour', ColorEdit(nullable=True))
+		self.part('format', 'format', FormatEdit())
+
+
+class UnitLabelForm(_MappingForm):
+	def __init__(self):
+		super().__init__()
+		self.part('visible', 'show', BoolEdit('show the unit word'))
+		self.part('text', 'text', LineText('mph'))
+		self.part('size', 'size', NumberEdit(autoText='default', lo=0.1, hi=1.5, step=0.05, decimals=2), 'Share of the value text.')
+		self.part('color', 'colour', ColorEdit(nullable=True))
+
+
+class _MappingPopover(_Popover):
+	"""A bar mapping behind a button that says what is set."""
+
+	label = ''
+	#: The keys the button names, in order, when they are set.
+	SHOWN: tuple = ()
+	#: What an unset mapping reads.
+	OFF = 'default'
+
+	def _tidy(self, value):
+		return value if isinstance(value, dict) and value else None
+
+	def summary(self) -> str:
+		spec = self._value if isinstance(self._value, dict) else {}
+		if not spec:
+			return f'{self.label}: {self.OFF}'
+		bits = [f'{spec[k]}' for k in self.SHOWN if spec.get(k) is not None]
+		return f'{self.label}: ' + (' \u00b7 '.join(map(self._bit, bits)) if bits else 'set')
+
+	@staticmethod
+	def _bit(value) -> str:
+		return 'bound' if isinstance(value, str) and value.startswith('{') else str(value)
+
+
+class TrackEdit(_MappingPopover):
+	title = 'Track'
+	label = 'Track'
+
+	def __init__(self):
+		super().__init__(TrackForm())
+
+
+class PointerEdit(_MappingPopover):
+	title = 'Pointer'
+	label = 'Pointer'
+	OFF = 'off'
+	SHOWN = ('type',)
+
+	def __init__(self):
+		super().__init__(PointerForm())
+
+	def _tidy(self, value):
+		return value if isinstance(value, dict) else None
+
+	def summary(self) -> str:
+		spec = self._value
+		return 'Pointer: off' if spec is None else f"Pointer: {spec.get('type', 'triangle')}"
+
+
+class TicksEdit(_MappingPopover):
+	OFF = 'off'
+
+	def __init__(self, label: str, major: bool):
+		self.title = self.label = label
+		super().__init__(TicksForm(f'Show {label.lower()}', major))
+
+	def _tidy(self, value):
+		return value if isinstance(value, dict) else None
+
+	def summary(self) -> str:
+		spec = self._value
+		if spec is None:
+			return f'{self.label}: off'
+		return f'{self.label}: ' + ('numbered' if spec.get('labels') else 'on')
+
+
+class ValueLabelEdit(_MappingPopover):
+	title = 'Value text'
+	label = 'Value text'
+	SHOWN = ('position',)
+
+	def __init__(self):
+		super().__init__(ValueLabelForm())
+
+	def summary(self) -> str:
+		spec = self._value if isinstance(self._value, dict) else {}
+		if spec.get('visible') is False:
+			return 'Value text: hidden'
+		return super().summary()
+
+
+class UnitLabelEdit(_MappingPopover):
+	title = 'Unit word'
+	label = 'Unit word'
+	OFF = 'off'
+
+	def __init__(self):
+		super().__init__(UnitLabelForm())
+
+	def summary(self) -> str:
+		spec = self._value if isinstance(self._value, dict) else {}
+		return 'Unit word: ' + ('shown' if spec.get('visible') else 'off')
 
 
 # Section: the factory
@@ -2414,6 +2880,8 @@ def make(field: 'schema.Field') -> Optional[Editor]:
 		return EXTRA[kind](field)
 	if kind == 'size':
 		return SizeEdit(nullable=field.nullable, ref='full' if field.key in ('radius', 'inset') else 'radius')
+	if kind == 'number' and field.bindable and not field.measured:
+		return NumberEdit(lo=field.lo, hi=field.hi, step=field.step, integer=field.integer)
 	if kind == 'number' and field.measured:
 		return NumberEdit(autoText='auto' if field.nullable else None, measured=True, step=field.step, unitBox=True,
 		                  integer=field.integer)
@@ -2447,4 +2915,16 @@ def make(field: 'schema.Field') -> Optional[Editor]:
 		return BeamEdit()
 	if kind == 'when':
 		return WhenEdit()
+	if kind == 'bar-track':
+		return TrackEdit()
+	if kind == 'bar-pointer':
+		return PointerEdit()
+	if kind == 'bar-major':
+		return TicksEdit('Major ticks', True)
+	if kind == 'bar-minor':
+		return TicksEdit('Minor ticks', False)
+	if kind == 'bar-value':
+		return ValueLabelEdit()
+	if kind == 'bar-unit':
+		return UnitLabelEdit()
 	return None

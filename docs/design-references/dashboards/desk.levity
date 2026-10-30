@@ -1,118 +1,173 @@
 # Desk: a small clock-first screen for a desk or a bedside shelf. An 8in 16:10 panel, 1280 x 800.
 #
-# This is the quiet end of the set: the shipped `dusk` theme with no colours of its own, one large clock with the moon,
-# a half-dial of the daylight left, and two short tables (the bedroom, and outside against tomorrow). The grid has a
-# `.` track between every pair of areas, so the gutters are part of the picture, and its margin is a `calc()` of two
-# percent lengths so the clock sits a little off the edge.
+# This is the quiet end of the set: the shipped `dusk` theme, one large clock, the daylight left over a bar
+# from sunrise to sunset, two short tables (the bedroom and outside), and a row for this time tomorrow.
 #
-# The bottom strip is a stack with `when:` on its first item. While it is 60°F or warmer outside the item is off and
-# gives up its room, so the "tomorrow" strip takes the whole row. When it turns cool the cool strip appears beside it
-# and both share the row. Hand-written readings join the size groups global.title and
-# global.value through the board's `shared:`.
+# Type: each text role is one dashboard-wide size group with `matchAll`, pinned to one height with `text-height`.
+# The `vars:` below are the whole type scale: labels (`global.title`), values (`global.value`), headers
+# (`global.head`), the daylight left as the one big reading (`global.big`), and the clock as the hero. Headers
+# are larger than labels and labels smaller than their values. Labels sit left and values right, so a table's
+# numbers share one right edge. Colour means one thing: temperatures are `$accent`, humidity `$info`, the
+# rest plain text.
+#
+# Space: a 40 px outer margin, 48 px between panels across and 32 px down.
+#
+# The last cell of the bottom row has `when:`. While it is 60°F or warmer outside the cell is off and gives up
+# its room; when it turns cool, "Feels like now" joins the row.
 #
 # Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/desk.levity
 #           --scenario sky-clear --size 1280x800 --freeze-time 2026-10-07T15:40:00
 theme: dusk
 vars:
   t: environment.temperature.temperature
+  # the type scale: label, value, header (each about 1.3x the one before), a big reading, and the hero
+  label: 19px
+  value: 24px
+  head: 38px
+  big: 64px
+  hero: 150px
 items:
 - type: grid
   name: board
-  geometry: {x: 2%, y: 2.5%, width: 96%, height: 95%}
+  geometry: {x: 3.125%, y: 5%, width: 93.75%, height: 90%}
   spacing: 0
   padding: 0
-  shared:
-    title:
-      color: $muted
-      matchingGroup: {group: global.title, matchAll: true}
-    display:
-      font: Nunito
-      valueLabel:
-        matchingGroup: {group: global.value, matchAll: true}
   grid:
-    columns: [58fr, 2fr, 40fr]
-    rows: [44fr, 3fr, 26fr, 3fr, 24fr]
+    columns: [1fr, 1fr]
+    rows: [44fr, 30fr, 26fr]
+    gap: [32px, 48px]
     areas:
-    - clock . sun
-    - . . .
-    - room . out
-    - . . .
-    - strip strip strip
+    - clock sun
+    - room out
+    - strip strip
   items:
 
   # ================= THE CLOCK =============================================
-  - preset: clock
+  - type: group
     name: clock
-    grid: {area: clock, margin: [0, calc(1% + 2mm), 0, 0]}
+    grid: {area: clock}
+    items:
+    - type: clock
+      frozen: true
+      geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+      items:
+      - format: '%A, %B %-d'
+        alignment: TopLeft
+        color: $muted
+        text-height: $head
+        matchingGroup: {group: global.head, matchAll: true}
+        filters: [0Add Ordinal]
+        geometry: {x: 0%, y: 0%, width: 100%, height: 22%}
+      - format: '%-I:%M'
+        alignment: BottomLeft
+        text-height: $hero
+        geometry: {x: 0%, y: 26%, width: 72%, height: 74%}
+      - format: '%p'
+        alignment: BottomLeft
+        color: $muted
+        text-height: $head
+        filters: [1Lower]
+        matchingGroup: {group: global.head, matchAll: true}
+        geometry: {x: 74%, y: 76%, width: 26%, height: 24%}
+    - type: moon
+      geometry: {x: 76%, y: 30%, width: 18%, height: 40%}
+      glowStrength: 2
+      interval: {minutes: 20}
 
   # ================= THE SUN ===============================================
-  - type: realtime.gauge
+  # The daylight left, and a bar from sunrise to sunset with the fill at now.
+  - type: group
     name: sun
     grid: {area: sun}
-    key: astronomy.sun.remaining
-    title: false
-    display:
-      radius: 96%
-      arc: {start-angle: -90, end-angle: 90, weight: 5%, color: $rule, cap: round}
-      range: {min: 7.07, max: 18.68}
-      major: {enabled: false}
-      minor: {enabled: false}
-      micro: {enabled: false}
-      fill: {to: astronomy.sun.hour, weight: 5%, color: $accent}
-      needle: {visible: false}
-      markers:
-      - {value: astronomy.sun.hour, type: dot, width: 10%, halo: 2.4%, halo-color: $background, color: $text}
-      value-label: {position: center, size: 19%, format: duration}
-      unit-label: {visible: false}
-      sub-label: {text: of daylight left, size: 7%}
+    items:
+    - type: text
+      text: Daylight
+      alignment: TopLeft
+      text-height: $head
+      matchingGroup: {group: global.head, matchAll: true}
+      geometry: {x: 0%, y: 0%, width: 100%, height: 22%}
+    - type: realtime.text
+      key: astronomy.sun.remaining
+      title: {text: left today, position: Bottom, size: 0.26, alignment: TopLeft, color: $muted, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+      geometry: {x: 0%, y: 26%, width: 100%, height: 50%}
+      display:
+        format: duration
+        format-hint: 0h 00m
+        valueLabel:
+          alignment: BottomLeft
+          margins: 0px
+          text-height: $big
+          matchingGroup: {group: global.big, matchAll: true}
+    - type: realtime.bar
+      key: astronomy.sun.hour
+      title: {visible: false}
+      geometry: {x: 0%, y: 84%, width: 100%, height: 8%}
+      display:
+        range: {min: 7.07, max: 18.68}
+        track: {weight: 40%, color: $rule}
+        fill: {color: $accent}
+        value-label: {visible: false}
 
   # ================= TWO SHORT TABLES ======================================
-  - preset: list-panel
+  # Each is a header over three rows; a row is a label on the left and its value on the right.
+  - type: grid
     name: room
     grid: {area: room}
-    props:
-      title: Bedroom
-      items:
-      - {type: realtime.text, key: 'indoor.temperature.temperature#bedroom', title: {text: Temperature}, display: {precision: 1, valueLabel: {color: $accent}}}
-      - {type: realtime.text, key: 'indoor.humidity.humidity#bedroom', title: {text: Humidity}, display: {precision: 0, valueLabel: {color: $info}}}
-      - {type: realtime.text, key: 'indoor.temperature.dewpoint#bedroom', title: {text: Dew point}, display: {precision: 0}}
-  - preset: list-panel
+    spacing: 0
+    shared: &rows
+      title:
+        color: $muted
+        alignment: Left
+        position: Left
+        size: 0.6
+        margins: 0px
+        text-height: $label
+        matchingGroup: {group: global.title, matchAll: true}
+      display:
+        font: Nunito
+        unitPosition: Hidden
+        valueLabel:
+          alignment: Right
+          margins: 0px
+          text-height: $value
+          matchingGroup: {group: global.value, matchAll: true}
+    grid:
+      rows: [30fr, 23fr, 23fr, 23fr]
+    items:
+    - {type: text, text: Bedroom, alignment: BottomLeft, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, grid: {row: 1}}
+    - {type: realtime.text, key: 'indoor.temperature.temperature#bedroom', title: Temperature, display: {precision: 1, format-hint: '00.0°', valueLabel: {color: $accent}}, grid: {row: 2}}
+    - {type: realtime.text, key: 'indoor.humidity.humidity#bedroom', title: Humidity, display: {precision: 0, format-hint: '00%', valueLabel: {color: $info}}, grid: {row: 3}}
+    - {type: realtime.text, key: 'indoor.temperature.dewpoint#bedroom', title: Dew pt, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}, grid: {row: 4}}
+  - type: grid
     name: out
     grid: {area: out}
-    props:
-      title: Outside
-      items:
-      - {type: realtime.text, key: $t, title: {text: Now}, display: {precision: 0}}
-      - {type: realtime.text, key: environment.light.uvi, title: {text: UV}, display: {precision: 1, valueLabel: {color: $warn}}}
-      - {type: realtime.text, key: environment.clouds.cover.cover, title: {text: Cloud}, display: {precision: 0}}
+    spacing: 0
+    shared: *rows
+    grid:
+      rows: [30fr, 23fr, 23fr, 23fr]
+    items:
+    - {type: text, text: Outside, alignment: BottomLeft, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, grid: {row: 1}}
+    - {type: realtime.text, key: $t, title: Temperature, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}, grid: {row: 2}}
+    - {type: realtime.text, key: environment.clouds.cover.cover, title: Cloud, display: {precision: 0, format-hint: '00%'}, grid: {row: 3}}
+    - {type: realtime.text, key: environment.light.uvi, title: UV index, display: {precision: 1, format-hint: '0.0'}, grid: {row: 4}}
 
   # ================= THE STRIP =============================================
-  - type: stack
+  # A header row and one row of readings, each a label over its value. The cool cell joins only when it is cool.
+  - type: group
     name: strip
     grid: {area: strip}
-    direction: Horizontal
-    spacing: 2%
     items:
-    - preset: alert-strip
-      name: cool
-      when: '$t < 60°F'
-      props:
-        headline: Cool
-        color: $info
-        key: $t
-        title: Outside now
-        precision: 0
-        items:
-        - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels}, display: {precision: 0, valueLabel: {color: $info}}}
-    - preset: alert-strip
-      name: tomorrow
-      props:
-        headline: Tomorrow
-        color: $info
-        key: at(environment.temperature.temperature, 24h)
-        title: This time
-        precision: 0
-        items:
-        - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Wind}, display: {precision: 0, unitPosition: Hidden}}
-        - {type: realtime.text, key: environment.light.uvi, title: {text: UV}, display: {precision: 1, valueLabel: {color: $warn}}}
-        - {type: realtime.text, key: environment.precipitation.probability, title: {text: Rain}, display: {precision: 0}}
+    - {type: text, text: Tomorrow at this time, alignment: BottomLeft, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 40%}}
+    - type: stack
+      direction: Horizontal
+      spacing: 48px
+      geometry: {x: 0%, y: 46%, width: 100%, height: 54%}
+      shared:
+        title: {color: $muted, position: Top, size: 0.45, alignment: BottomLeft, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+        display: {font: Nunito, unitPosition: Inline, valueLabel: {alignment: TopLeft, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
+      items:
+      - {type: realtime.text, key: 'at($t, 24h)', title: Temperature, display: {precision: 0, format-hint: '00°', valueLabel: {color: $accent}}}
+      - {type: realtime.text, key: 'at(environment.wind.speed.speed, 24h)', title: Wind, display: {precision: 0, format-hint: '00 mph'}}
+      - {type: realtime.text, key: 'at(environment.precipitation.probability, 24h)', title: Rain, display: {precision: 0, format-hint: '00%'}}
+      - {type: realtime.text, key: 'at(environment.light.uvi, 24h)', title: UV index, display: {precision: 1, format-hint: '0.0'}}
+      - {type: realtime.text, key: environment.temperature.feelsLike, when: '$t < 60°F', title: Feels like now, display: {precision: 0, format-hint: '00°', valueLabel: {color: $info}}}

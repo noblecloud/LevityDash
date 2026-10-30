@@ -1,6 +1,6 @@
 """A colour that follows a value: `color: {scale: ..., of: ...}` (lib/ui/colors/bound.py)."""
 import pytest
-import WeatherUnits as wu
+import unitcorn as wu
 
 from LevityDash.lib.ui.colors.bound import BoundColor, decodeColor, isBound
 from LevityDash.lib.ui.colors import Color

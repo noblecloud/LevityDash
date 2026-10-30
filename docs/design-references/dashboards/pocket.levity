@@ -1,16 +1,19 @@
 # Pocket: the day on a phone, portrait. A 1170 x 2532 screen (19.5:9).
 #
-# One column of bands, placed by a grid with named areas, so the picture of the layout is the layout. The margins on
-# each band are `calc()` sums of percent lengths: the hour table is inset by the same share on both sides, and the
-# range bar is pulled in by a margin that is a fraction of the column. Nothing is sized in pixels, so the same file
-# fits a 1080 x 2340 phone or a tablet in portrait.
+# One column of panels, placed by a grid with named areas, so the picture of the layout is the layout. From the
+# top: the temperature now with three readings beside it and today's range under it; a strip that turns to what
+# needs a look (a switch of `when:` panels; the one with no `when:` is the quiet fallback); the next four hours;
+# the next three days; and three rings.
 #
-# From the top: the temperature laid over its own day with its context row, a strip that turns to what needs a look
-# (a stack of `when:` items: a strip that is off gives up its height and the bands below stay put because the grid row
-# is `auto` sized by what is left), the next four hours, the next three days, and two rings.
+# The two tables are real tables: one column of row names, one column per quantity, and the quantity's unit
+# said once at the head of its column. Every column of numbers is right-aligned, so its digits share one edge.
 #
-# Text sizes come from the dashboard-wide size groups global.title, global.value and global.head, set by the
-# presets. Layers: the temperature over its day.
+# Type: five sizes, each one dashboard-wide size group with `matchAll`, pinned with `text-height` (the `vars:`
+# below are the whole scale): labels `global.title`, values `global.value`, headers `global.head`, ring readings
+# `global.big` and the temperature now `global.hero`. One numeral face, Nunito, for every number. Colour means a
+# quantity: temperature orange, rain blue, wind teal, humidity violet, cloud grey; red only for an alert.
+#
+# Space: a 64 px margin at the sides, 64 px between panels, 24 px inside a panel.
 #
 # Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/pocket.levity
 #           --scenario week-ahead --size 1170x2532 --freeze-time 2026-10-07T15:40:00
@@ -23,38 +26,39 @@ theme:
     muted: '#b0b0b8'
     faint: '#80808a'
     rule: '#2c2c33'
-    accent: '#ff9124'
-    good: '#14e3c0'
-    warn: '#ffd400'
     bad: '#ff3048'
-    info: '#1a8cff'
+    hue-temp: '#ff9124'
+    hue-rain: '#2f95ff'
+    hue-wind: '#14e3c0'
+    hue-humid: '#b48cff'
+    hue-cloud: '#a9b3c0'
   fonts:
     display: Nunito
     mono: Roboto Mono
     body: Roboto
 vars:
   t: environment.temperature.temperature
+  # the type scale
+  label: 36px
+  value: 40px
+  head: 62px
+  big: 84px
+  hero: 230px
 items:
 - type: grid
   name: board
-  geometry: {x: 3%, y: 1.6%, width: 94%, height: 96.8%}
+  geometry: {x: 5.47%, y: 4%, width: 89.06%, height: 93%}
   spacing: 0
   padding: 0
-  shared:
-    display:
-      font: Roboto Mono
   grid:
     columns: [1fr]
-    rows: [30fr, 1.5fr, 9fr, 1.5fr, 15fr, 1.5fr, 18fr, 1.5fr, 14fr]
+    rows: [21fr, 11fr, 22fr, 18fr, 16fr]
+    gap: 64px
     areas:
     - now
-    - .
     - watch
-    - .
     - hours
-    - .
     - days
-    - .
     - rings
   items:
 
@@ -63,128 +67,214 @@ items:
     name: now
     grid: {area: now}
     items:
-    - {type: text, text: Outside, font: $display, color: $muted, alignment: CenterLeft, geometry: {x: 1%, y: 0%, width: 40%, height: 6%}}
-    - preset: metric-tile
-      geometry: {x: 0%, y: 5%, width: 100%, height: 58%}
-      props:
-        key: $t
-        hours: 24
-        line: {type: plot, gradient: TemperatureGradient, weight: 1.4}
-        hero_box: {x: 0%, y: 2%, width: 52%, height: 70%}
-        graph_box: {x: 0%, y: 14%, width: 100%, height: 74%}
-        list_box: {x: 0%, y: 78%, width: 100%, height: 22%}
-        items:
-        - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels}, display: {precision: 0, valueLabel: {color: $accent}}}
-        - {type: realtime.text, key: environment.temperature.dewpoint, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
-        - {type: realtime.text, key: environment.humidity.humidity, title: {text: Humid}, display: {precision: 0, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Wind}, display: {precision: 0}}
-    - preset: range-bar
-      geometry: {x: 0%, y: 66%, width: 100%, height: 34%}
-      props:
-        key: $t
-        min: 30
-        max: 90
-        interval: 10
-        low: environment.temperature.low
-        high: environment.temperature.high
+    - &head {type: text, text: Outside, alignment: Left, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 14%}}
+    - type: realtime.text
+      key: $t
+      title: {visible: false}
+      geometry: {x: 0%, y: 16%, width: 50%, height: 52%}
+      display:
+        precision: 0
+        weight: Light
+        format-hint: '00°'
+        valueLabel: {alignment: Left, margins: 0px, color: $hue-temp, text-height: $hero, matchingGroup: {group: global.hero, matchAll: true}}
+    # three readings beside the temperature: a name on the left, the value on the right
+    - type: grid
+      geometry: {x: 56%, y: 22%, width: 44%, height: 42%}
+      spacing: 0
+      grid: {columns: [1fr], rows: [1fr, 1fr, 1fr]}
+      shared: &rows
+        title: {color: $muted, alignment: Left, position: Left, size: 0.55, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+        display: {unitPosition: Hidden, valueLabel: {alignment: Right, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
+      items:
+      - {type: realtime.text, key: environment.temperature.feelsLike, title: Feels, display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}}
+      - {type: realtime.text, key: environment.temperature.dewpoint, title: Dew pt, display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}}
+      - {type: realtime.text, key: environment.wind.speed.speed, title: Wind mph, display: {precision: 0, format-hint: '00', valueLabel: {color: $hue-wind}}}
+    # today's range: a bar from the low to the high with the pointer at now, the two ends named under it
+    - type: realtime.bar
+      key: $t
+      title: {visible: false}
+      geometry: {x: 0%, y: 74%, width: 100%, height: 8%}
+      display:
+        range: {min: 30, max: 90}
+        track: {weight: 30%, color: $rule}
+        fill: {from: environment.temperature.low, to: environment.temperature.high, gradient: TemperatureGradient}
+        pointer: {type: triangle, color: $text, side: before}
+        value-label: {visible: false}
+    - type: grid
+      geometry: {x: 0%, y: 86%, width: 100%, height: 14%}
+      spacing: 0
+      grid: {columns: [1fr, 1fr], rows: [1fr], gap: 64px}
+      shared: *rows
+      items:
+      - {type: realtime.text, key: environment.temperature.low, title: Low today, display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}, grid: {column: 1}}
+      - {type: realtime.text, key: environment.temperature.high, title: High today, display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}, grid: {column: 2}}
 
   # ================= THE STRIP =============================================
-  # Four takeovers, ranked. The first whose `when:` holds shows; the one with no `when:` is the quiet fallback.
+  # Three panels, ranked. The first whose `when:` holds shows; the one with no `when:` is the quiet fallback.
+  # Each is a header that says what needs a look and a row of readings.
   - type: switch
     name: watch
     grid: {area: watch}
     hold: 8s
     fade: 0.4s
     items:
-    - preset: alert-strip
+    - type: group
       name: frost
       when: 'at(environment.temperature.low, 5d) < 36°F'
-      props:
-        headline: Frost
-        color: $info
-        key: at(environment.temperature.low, 5d)
-        title: Monday night
-        precision: 0
-        headline_box: {x: 0%, y: 0%, width: 28%, height: 100%}
-        hero_box: {x: 30%, y: 0%, width: 26%, height: 100%}
-        list_box: {x: 58%, y: 4%, width: 42%, height: 92%}
+      items:
+      - {<<: *head, text: Frost on Monday night, color: $bad, geometry: {x: 0%, y: 0%, width: 100%, height: 28%}}
+      - type: grid
+        geometry: {x: 0%, y: 40%, width: 100%, height: 60%}
+        spacing: 0
+        grid: {columns: [1fr, 1fr, 1fr], rows: [1fr], gap: 64px}
+        shared: &cells
+          title: {color: $muted, position: Top, size: 0.45, alignment: BottomLeft, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+          display: {unitPosition: Hidden, valueLabel: {alignment: TopLeft, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
         items:
-        - {type: realtime.text, key: 'at(environment.temperature.low, 4d)', title: {text: Sun}, display: {precision: 0}}
-        - {type: realtime.text, key: 'at(environment.temperature.low, 6d)', title: {text: Tue}, display: {precision: 0, valueLabel: {color: $info}}}
-    - preset: alert-strip
+        - {type: realtime.text, key: 'at(environment.temperature.low, 4d)', title: Sun low, display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}}
+        - {type: realtime.text, key: 'at(environment.temperature.low, 5d)', title: Mon low, display: {precision: 0, format-hint: '00°', valueLabel: {color: $bad}}}
+        - {type: realtime.text, key: 'at(environment.temperature.low, 6d)', title: Tue low, display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}}
+    - type: group
       name: rain
       when: 'at(environment.precipitation.probability, 36h) > 60%'
-      props:
-        headline: Rain
-        color: $info
-        key: at(environment.precipitation.probability, 36h)
-        title: Friday chance
-        precision: 0
-        headline_box: {x: 0%, y: 0%, width: 28%, height: 100%}
-        hero_box: {x: 30%, y: 0%, width: 26%, height: 100%}
-        list_box: {x: 58%, y: 4%, width: 42%, height: 92%}
+      items:
+      - {<<: *head, text: Rain on Friday, color: $bad, geometry: {x: 0%, y: 0%, width: 100%, height: 28%}}
+      - type: grid
+        geometry: {x: 0%, y: 40%, width: 100%, height: 60%}
+        spacing: 0
+        grid: {columns: [1fr, 1fr, 1fr], rows: [1fr], gap: 64px}
+        shared: *cells
         items:
-        - {type: realtime.text, key: 'at(environment.precipitation.daily, 2d)', title: {text: Fri}, display: {precision: 2}}
-        - {type: realtime.text, key: 'at(environment.precipitation.daily, 3d)', title: {text: Sat}, display: {precision: 2, valueLabel: {color: $info}}}
-    - preset: alert-strip
+        - {type: realtime.text, key: 'at(environment.precipitation.probability, 36h)', title: Chance, display: {precision: 0, format-hint: '00%', valueLabel: {color: $hue-rain}}}
+        - {type: realtime.text, key: 'at(environment.precipitation.daily, 2d)', title: Fri in, display: {precision: 2, format-hint: '0.00', valueLabel: {color: $hue-rain}}}
+        - {type: realtime.text, key: 'at(environment.precipitation.daily, 3d)', title: Sat in, display: {precision: 2, format-hint: '0.00', valueLabel: {color: $hue-rain}}}
+    - type: group
       name: fine
-      props:
-        headline: Fine
-        color: $good
-        key: at(environment.temperature.high, 1d)
-        title: High tomorrow
-        precision: 0
-        headline_box: {x: 0%, y: 0%, width: 28%, height: 100%}
-        hero_box: {x: 30%, y: 0%, width: 26%, height: 100%}
-        list_box: {x: 58%, y: 4%, width: 42%, height: 92%}
+      items:
+      - {<<: *head, text: Fine tomorrow, geometry: {x: 0%, y: 0%, width: 100%, height: 28%}}
+      - type: grid
+        geometry: {x: 0%, y: 40%, width: 100%, height: 60%}
+        spacing: 0
+        grid: {columns: [1fr, 1fr, 1fr], rows: [1fr], gap: 64px}
+        shared: *cells
         items:
-        - {type: realtime.text, key: environment.light.uvi, title: {text: UV}, display: {precision: 1, valueLabel: {color: $warn}}}
-        - {type: realtime.text, key: environment.clouds.cover.cover, title: {text: Cloud}, display: {precision: 0}}
+        - {type: realtime.text, key: 'at(environment.temperature.high, 1d)', title: High, display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}}
+        - {type: realtime.text, key: environment.light.uvi, title: UV index, display: {precision: 1, format-hint: '0.0'}}
+        - {type: realtime.text, key: environment.clouds.cover.cover, title: Cloud, display: {precision: 0, format-hint: '00%', valueLabel: {color: $hue-cloud}}}
 
   # ================= THE NEXT FOUR HOURS ===================================
-  # Inset by calc() so the table has the same breathing room as the strip's headline.
-  - type: stack
+  # A table: the hours down the left, one column per quantity, each unit once at the head of its column.
+  - type: grid
     name: hours
-    grid: {area: hours, margin: [0, calc(0.5% + 1mm), 0, calc(0.5% + 1mm)]}
-    direction: Horizontal
-    defaultType: value-stack
-    spacing: 1mm
-    dividers: {enabled: true, opacity: 40%, size: 90%}
-    shared:
-      display:
-        font: Roboto Mono
+    grid: {area: hours}
+    spacing: 0
+    grid:
+      columns: [1.2fr, 1fr, 1fr, 1fr, 1fr]
+      rows: [1.3fr, 1fr, 1fr, 1fr, 1fr, 1fr]
+      gap: [0, 24px]
+    shared: &cell
+      title: {visible: false}
+      display: {unitPosition: Hidden, valueLabel: {alignment: Right, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
     items:
-    - {preset: hour-column, props: {label: '+1h', offset: 1h}}
-    - {preset: hour-column, props: {label: '+2h', offset: 2h}}
-    - {preset: hour-column, props: {label: '+3h', offset: 3h}}
-    - {preset: hour-column, props: {label: '+4h', offset: 4h}}
+    - {type: text, text: Next hours, alignment: Left, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, grid: {row: 1, column: 1, column-span: 5}}
+    - &colhead {type: text, text: Temp, alignment: Right, font: Roboto, weight: Light, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, grid: {row: 2, column: 2}}
+    - {<<: *colhead, text: Feels, grid: {row: 2, column: 3}}
+    - {<<: *colhead, text: Rain, grid: {row: 2, column: 4}}
+    - {<<: *colhead, text: Gust mph, grid: {row: 2, column: 5}}
+    - &rowhead {<<: *colhead, text: In 1 h, alignment: Left, grid: {row: 3, column: 1}}
+    - {<<: *rowhead, text: In 2 h, grid: {row: 4, column: 1}}
+    - {<<: *rowhead, text: In 3 h, grid: {row: 5, column: 1}}
+    - {<<: *rowhead, text: In 4 h, grid: {row: 6, column: 1}}
+    - {type: realtime.text, key: 'at($t, 1h)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}, grid: {row: 3, column: 2}}
+    - {type: realtime.text, key: 'at($t, 2h)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}, grid: {row: 4, column: 2}}
+    - {type: realtime.text, key: 'at($t, 3h)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}, grid: {row: 5, column: 2}}
+    - {type: realtime.text, key: 'at($t, 4h)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}, grid: {row: 6, column: 2}}
+    - {type: realtime.text, key: 'at(environment.temperature.feelsLike, 1h)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}, grid: {row: 3, column: 3}}
+    - {type: realtime.text, key: 'at(environment.temperature.feelsLike, 2h)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}, grid: {row: 4, column: 3}}
+    - {type: realtime.text, key: 'at(environment.temperature.feelsLike, 3h)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}, grid: {row: 5, column: 3}}
+    - {type: realtime.text, key: 'at(environment.temperature.feelsLike, 4h)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}, grid: {row: 6, column: 3}}
+    - {type: realtime.text, key: 'at(environment.precipitation.probability, 1h)', display: {precision: 0, format-hint: '00%', valueLabel: {color: $hue-rain}}, grid: {row: 3, column: 4}}
+    - {type: realtime.text, key: 'at(environment.precipitation.probability, 2h)', display: {precision: 0, format-hint: '00%', valueLabel: {color: $hue-rain}}, grid: {row: 4, column: 4}}
+    - {type: realtime.text, key: 'at(environment.precipitation.probability, 3h)', display: {precision: 0, format-hint: '00%', valueLabel: {color: $hue-rain}}, grid: {row: 5, column: 4}}
+    - {type: realtime.text, key: 'at(environment.precipitation.probability, 4h)', display: {precision: 0, format-hint: '00%', valueLabel: {color: $hue-rain}}, grid: {row: 6, column: 4}}
+    - {type: realtime.text, key: 'at(environment.wind.speed.gust, 1h)', display: {precision: 0, format-hint: '00', valueLabel: {color: $hue-wind}}, grid: {row: 3, column: 5}}
+    - {type: realtime.text, key: 'at(environment.wind.speed.gust, 2h)', display: {precision: 0, format-hint: '00', valueLabel: {color: $hue-wind}}, grid: {row: 4, column: 5}}
+    - {type: realtime.text, key: 'at(environment.wind.speed.gust, 3h)', display: {precision: 0, format-hint: '00', valueLabel: {color: $hue-wind}}, grid: {row: 5, column: 5}}
+    - {type: realtime.text, key: 'at(environment.wind.speed.gust, 4h)', display: {precision: 0, format-hint: '00', valueLabel: {color: $hue-wind}}, grid: {row: 6, column: 5}}
 
   # ================= THE NEXT THREE DAYS ====================================
-  - type: stack
+  # One row per day: the low dimmed, a bar from the low to the high, the high bright, then the rain. Every bar is
+  # on the same 30 to 90°F track as the range bar at the top, so the days compare by eye before any number is read.
+  - type: grid
     name: days
     grid: {area: days}
-    direction: Horizontal
-    defaultType: value-stack
-    spacing: 1mm
-    dividers: {enabled: true, opacity: 40%, size: 90%}
-    shared:
-      display:
-        font: Roboto Mono
+    spacing: 0
+    grid:
+      columns: [1.2fr, 0.8fr, 2fr, 0.8fr, 1fr]
+      rows: [1.3fr, 1fr, 1fr, 1fr, 1fr]
+      gap: [0, 24px]
+    shared: *cell
     items:
-    - {preset: day-column, props: {label: Thu, offset: 1d}}
-    - {preset: day-column, props: {label: Fri, offset: 2d}}
-    - {preset: day-column, props: {label: Sat, offset: 3d}}
+    - {type: text, text: Next days, alignment: Left, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, grid: {row: 1, column: 1, column-span: 5}}
+    - {<<: *colhead, text: Low, grid: {row: 2, column: 2}}
+    - {<<: *colhead, text: High, grid: {row: 2, column: 4}}
+    - {<<: *colhead, text: Rain in, grid: {row: 2, column: 5}}
+    - {<<: *rowhead, text: Thursday, grid: {row: 3, column: 1}}
+    - {type: realtime.text, key: 'at(environment.temperature.low, 1d)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $muted}}, grid: {row: 3, column: 2}}
+    - {type: realtime.bar, key: 'at(environment.temperature.high, 1d)', title: {visible: false}, grid: {row: 3, column: 3}, display: {range: {min: 30, max: 90}, track: {weight: 22%, color: $rule}, fill: {from: 'at(environment.temperature.low, 1d)', to: 'at(environment.temperature.high, 1d)', gradient: TemperatureGradient}, value-label: {visible: false}}}
+    - {type: realtime.text, key: 'at(environment.temperature.high, 1d)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}, grid: {row: 3, column: 4}}
+    - {type: realtime.text, key: 'at(environment.precipitation.daily, 1d)', display: {precision: 2, format-hint: '0.00', valueLabel: {color: $hue-rain}}, grid: {row: 3, column: 5}}
+    - {<<: *rowhead, text: Friday, grid: {row: 4, column: 1}}
+    - {type: realtime.text, key: 'at(environment.temperature.low, 2d)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $muted}}, grid: {row: 4, column: 2}}
+    - {type: realtime.bar, key: 'at(environment.temperature.high, 2d)', title: {visible: false}, grid: {row: 4, column: 3}, display: {range: {min: 30, max: 90}, track: {weight: 22%, color: $rule}, fill: {from: 'at(environment.temperature.low, 2d)', to: 'at(environment.temperature.high, 2d)', gradient: TemperatureGradient}, value-label: {visible: false}}}
+    - {type: realtime.text, key: 'at(environment.temperature.high, 2d)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}, grid: {row: 4, column: 4}}
+    - {type: realtime.text, key: 'at(environment.precipitation.daily, 2d)', display: {precision: 2, format-hint: '0.00', valueLabel: {color: $hue-rain}}, grid: {row: 4, column: 5}}
+    - {<<: *rowhead, text: Saturday, grid: {row: 5, column: 1}}
+    - {type: realtime.text, key: 'at(environment.temperature.low, 3d)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $muted}}, grid: {row: 5, column: 2}}
+    - {type: realtime.bar, key: 'at(environment.temperature.high, 3d)', title: {visible: false}, grid: {row: 5, column: 3}, display: {range: {min: 30, max: 90}, track: {weight: 22%, color: $rule}, fill: {from: 'at(environment.temperature.low, 3d)', to: 'at(environment.temperature.high, 3d)', gradient: TemperatureGradient}, value-label: {visible: false}}}
+    - {type: realtime.text, key: 'at(environment.temperature.high, 3d)', display: {precision: 0, format-hint: '00°', valueLabel: {color: $hue-temp}}, grid: {row: 5, column: 4}}
+    - {type: realtime.text, key: 'at(environment.precipitation.daily, 3d)', display: {precision: 2, format-hint: '0.00', valueLabel: {color: $hue-rain}}, grid: {row: 5, column: 5}}
 
-  # ================= TWO RINGS =============================================
-  - type: stack
+  # ================= THREE RINGS ===========================================
+  # Each ring: the gauge, its reading in the middle (global.big) and a label under it (global.title).
+  - type: grid
     name: rings
     grid: {area: rings}
-    direction: Horizontal
-    spacing: 2mm
+    spacing: 0
+    grid: {columns: [1fr, 1fr, 1fr], rows: [1fr], gap: 64px}
     items:
-    - preset: ring-reading
-      props: {key: environment.clouds.cover.cover, title: Cloud, color: $muted, text_color: $muted, weight: 9%, radius: 96%}
-    - preset: ring-reading
-      props: {key: environment.precipitation.probability, title: Rain chance, color: $info, text_color: $info, weight: 9%, radius: 96%}
-    - preset: ring-reading
-      props: {key: environment.humidity.humidity, title: Humidity, color: $good, text_color: $good, weight: 9%, radius: 96%}
+    - type: group
+      items:
+      - &arc
+        type: realtime.gauge
+        key: environment.clouds.cover.cover
+        title: {visible: false}
+        geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+        display: &arcdisplay
+          radius: 96%
+          arc: {start-angle: -135, end-angle: 135, weight: 7%, color: $rule}
+          range: {min: 0, max: 100}
+          fill: {weight: 7%, color: $hue-cloud}
+          major: {enabled: false}
+          minor: {enabled: false}
+          micro: {enabled: false}
+          needle: {visible: false}
+          value-label: {visible: false}
+          unit-label: {visible: false}
+      - &ringvalue
+        type: realtime.text
+        key: environment.clouds.cover.cover
+        title: {visible: false}
+        geometry: {x: 13%, y: 34%, width: 74%, height: 26%}
+        display: {precision: 0, unitPosition: Hidden, weight: Light, format-hint: '000%', valueLabel: {alignment: Center, margins: 0px, text-height: $big, matchingGroup: {group: global.big, matchAll: true}}}
+      - &ringlabel {type: text, text: Cloud, alignment: Center, font: Roboto, weight: Light, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 10%, y: 85%, width: 80%, height: 12%}}
+    - type: group
+      items:
+      - {<<: *arc, key: environment.precipitation.probability, display: {<<: *arcdisplay, fill: {weight: 7%, color: $hue-rain}}}
+      - {<<: *ringvalue, key: environment.precipitation.probability}
+      - {<<: *ringlabel, text: Rain chance}
+    - type: group
+      items:
+      - {<<: *arc, key: environment.humidity.humidity, display: {<<: *arcdisplay, fill: {weight: 7%, color: $hue-humid}}}
+      - {<<: *ringvalue, key: environment.humidity.humidity}
+      - {<<: *ringlabel, text: Humidity}

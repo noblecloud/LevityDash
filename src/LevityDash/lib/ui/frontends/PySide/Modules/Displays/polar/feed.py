@@ -6,6 +6,7 @@ own signal. `SeriesFeed` waits for a container that has one, reads it into ``(ti
 pairs on the GUI thread and calls ``onChange`` after every refresh, so the item never touches a
 plugin's objects from a worker.
 """
+from datetime import timedelta
 from typing import Callable, Dict, Optional
 
 from PySide6.QtCore import QObject, Slot
@@ -18,9 +19,15 @@ from LevityDash.lib.plugins.plugin import AnySource
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.series import Series, derive, number
 from LevityDash.lib.utils.shared import now as localNow
 
-__all__ = ['Series', 'SeriesFeed', 'DerivedFeed', 'openFeed', 'installStandIn', 'standIn']
+__all__ = ['Series', 'SeriesFeed', 'DerivedFeed', 'openFeed', 'openValue', 'installStandIn', 'standIn']
 
 log = LevityPluginLog.getChild('PolarFeed')
+
+# The span a mode=remote fetch asks for (RemoteContainer reads it as `wireTimeseriesPeriod`). The same as a
+# graph's (Graph.py), since the two share one series: without it a polar plot asked for the wire's +-3 h, and
+# whether `window: today` had its day depended on whether a graph on the same key had asked first.
+_WIRE_FETCH_LOOKBACK = timedelta(days=-2)
+_WIRE_FETCH_HORIZON = timedelta(days=16)
 
 
 class SeriesFeed(QObject):
@@ -39,6 +46,10 @@ class SeriesFeed(QObject):
 	@property
 	def series(self) -> Series:
 		return self._series
+
+	@property
+	def wireTimeseriesPeriod(self) -> tuple[timedelta, timedelta]:
+		return _WIRE_FETCH_LOOKBACK, _WIRE_FETCH_HORIZON
 
 	def _attach(self):
 		if self._closed or self._timeseries is not None:
@@ -162,3 +173,39 @@ def openFeed(text: str, onChange: Callable[[], None]):
 	if expression.plainKey is not None:
 		return _openKey(str(expression.plainKey), onChange)
 	return DerivedFeed(expression, onChange, _openKey)
+
+
+class ValueFeed:
+	"""One current number for a key or an expression: a value source on the GUI thread, or a stand-in's last sample."""
+
+	def __init__(self, text: str, onChange: Callable[[float], None]):
+		self._onChange = onChange
+		self._source = None
+		self._input = None
+		if _standIn is not None:
+			self._input = _standIn(text, lambda: self._emit(self._input.series.now if self._input else None))
+			self._emit(self._input.series.now)
+			return
+		from LevityDash.lib.valuesource import openValueSource
+		self._source = openValueSource(text, 'polar direction', 'the carousel stays empty')
+		if self._source is not None:
+			self._source.subscribe(self._emit)
+			self._emit(self._source.get())
+
+	def _emit(self, value) -> None:
+		number_ = number(value)
+		if number_ is not None:
+			self._onChange(number_)
+
+	def close(self) -> None:
+		source, self._source = self._source, None
+		if source is not None and hasattr(source, 'release'):
+			source.release()
+		if self._input is not None:
+			self._input.close()
+			self._input = None
+
+
+def openValue(text: str, onChange: Callable[[float], None]) -> ValueFeed:
+	"""A live number for a key or an expression; ``onChange`` gets each new one. `close()` lets go."""
+	return ValueFeed(text, onChange)

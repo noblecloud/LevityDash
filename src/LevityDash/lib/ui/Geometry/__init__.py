@@ -25,7 +25,7 @@ from LevityDash.lib.log import LevityUtilsLog as log
 from LevityDash.lib.ui import UILogger as guiLog
 from LevityDash.lib.utils import Axis, camelCase, clearCacheAttr, ClosestMatchEnumMeta, DType, IgnoreOr
 from LevityDash.lib.utils.shared import _Panel, clamp, mostly, get, classproperty
-from WeatherUnits import auto as auto_unit, Length, Measurement, Percentage
+from unitcorn import auto as auto_unit, Length, Measurement, Percentage
 
 if TYPE_CHECKING:
 	from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
@@ -685,6 +685,7 @@ class DisplayPosition(str, Enum, metaclass=ClosestMatchEnumMeta):
 	Above = 'above'  # Displays the unit above the value
 	Below = 'below'  # Displays the unit below the value
 	Hidden = 'hidden'  # Hides the unit completely
+	Baseline = 'baseline'  # Displays the unit in a smaller run on the value's baseline, in the same line
 	Inside = 'inside'
 	Outside = 'outside'
 	Floating = 'floating'  # Displays the unit in a separate label that can be placed anywhere
@@ -2644,6 +2645,8 @@ class Geometry:
 					parent.geometry.updateSurface()
 				self.surface.setRect(self.absoluteRect())
 				self.surface.setPos(self.absolutePosition().asQPointF())
+		if (after := getattr(self.surface, 'afterSurface', None)) is not None:
+			after()
 
 	def posFromParentPos(self, parentRect: QRectF):
 		if self.position.x.absolute:
@@ -3373,7 +3376,7 @@ def size_px(
 	dimension: DimensionType = DimensionType.height
 ) -> float | int:
 	if isinstance(value, Percentage):
-		# Percentage is a WeatherUnits measurement, not a Dimension/Length -
+		# Percentage is a unitcorn measurement, not a Dimension/Length -
 		# neither branch below matches it, so without this it passed through
 		# unconverted (still a Percentage object, not pixels). Callers that
 		# divide the result by `relativeTo` expecting a plain float (e.g.

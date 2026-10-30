@@ -33,7 +33,7 @@ from sys import exc_info, float_info, platform as _platform
 from collections import namedtuple, defaultdict, ChainMap
 
 import re
-import WeatherUnits as wu
+import unitcorn as wu
 from datetime import date, datetime, timedelta, timezone
 
 import numpy as np
@@ -42,7 +42,7 @@ from math import inf, isfinite, sqrt, degrees, atan2
 from numpy import cos, radians, sin
 from PySide6.QtGui import QPainterPath, QVector2D
 from pytz import utc
-from WeatherUnits import Measurement
+from unitcorn import Measurement
 
 from time import time
 from typing import (

@@ -83,7 +83,7 @@ class _RemoteRealtimeValueSource(_RemoteValueSource):
 
 class RemoteObservationValue:
 	"""Stand-in for `observation.ObservationValue`. Holds an already
-	backend-converted value (a real WeatherUnits Measurement, a datetime, or
+	backend-converted value (a real unitcorn Measurement, a datetime, or
 	a plain scalar) - no schema, no unit conversion, no rawValue/value
 	distinction, since the backend already did that work before pushing.
 
@@ -153,11 +153,11 @@ class RemoteObservationValue:
 		return str(self.value)
 
 	def __format__(self, format_spec: str):
-		# Delegates to the underlying value's own __format__ (WeatherUnits
+		# Delegates to the underlying value's own __format__ (unitcorn
 		# Measurements implement precision/unit formatting themselves).
 		# Does not replicate ObservationValue's 'human' relative-date DSL -
 		# a documented simplification, not a correctness gap: timestamp
-		# values still format via WeatherUnits' own Time type.
+		# values still format via unitcorn's own Time type.
 		value = self.value
 		spec = format_spec.replace('human', '').strip(':')
 		try:
@@ -320,9 +320,9 @@ class RemoteTimeSeries:
 	subclasses `OrderedDict` and is deeply entangled with `Observation`/
 	multi-source merge logic that doesn't exist wire-side.
 
-	Matches exactly the surface `Graph.py` reads off a real timeseries:
+	Matches exactly the surface `Graph.py` and the polar feed read off a real timeseries:
 	`.signals` (context manager + connect/disconnectSlot), datetime slicing
-	(`__getitem__`), `.first`, `len()` (also covers the truthiness checks at
+	(`__getitem__`), `.first`, `.list`, `len()` (also covers the truthiness checks at
 	`Graph.py`'s `if self.data.timeseries` sites - no separate `__bool__`
 	needed), and a redraw-only `.refresh()`.
 	"""
@@ -359,6 +359,12 @@ class RemoteTimeSeries:
 	def first(self) -> Optional[TimeSeriesItem]:
 		return self._items[0] if self._items else None
 
+	@property
+	def list(self) -> List[TimeSeriesItem]:
+		# MeasurementTimeSeries.list: the items in time order. The polar feed (Displays/polar/feed.py) reads the
+		# series through it; without it a polar plot in mode=remote raised and drew nothing.
+		return list(self._items)
+
 	def refresh(self, callback: Optional[Callable] = None) -> None:
 		# Never fetches. GraphItemData.refresh (Graph.py) calls this from the
 		# graph's sync timer, once per pixel of elapsed time - about once a
@@ -376,6 +382,8 @@ class RemoteTimeSeries:
 #: Seconds before the first retry of a refetch that got no answer; doubles up to the maximum.
 _REFETCH_RETRY_START = 15
 _REFETCH_RETRY_MAX = 300
+#: Seconds before a requester is called back after a timeseries request that left it with no series.
+_EMPTY_TS_RETRY = 5
 
 
 class RemoteContainer:
@@ -503,9 +511,19 @@ class RemoteContainer:
 		# path only calls back once MeasurementTimeSeries.update() finishes.
 		def on_response(response: Optional[dict]) -> None:
 			self._applyTsResponse(response)
+			if self._timeseries is None and not self.isTimeseriesOnly:
+				# Nothing came back (no points yet, or no connection). The requester
+				# asks again when called back, so calling back at once makes it a
+				# request loop; wait instead.
+				from LevityDash.lib.utils.shared import singleShotSafe  # deferred - Qt-side helper
+				singleShotSafe(_EMPTY_TS_RETRY * 1000, request.callback)
+				return
 			request.callback()
 
-		self._tsPeriod = self._resolve_ts_period(request)
+		# Several items share this container (a graph and a polar plot on one key), so the window only
+		# grows: one asking for less than another used to shrink every later refetch to its own span.
+		minPeriod, maxPeriod = self._resolve_ts_period(request)
+		self._tsPeriod = (min(self._tsPeriod[0], minPeriod), max(self._tsPeriod[1], maxPeriod))
 		self.source.request_timeseries(self.key, *self._tsPeriod, on_response)
 
 	def _applyTsResponse(self, response: Optional[dict]) -> None:
@@ -647,7 +665,7 @@ class RemoteContainer:
 		try:
 			return type(self._value.value)
 		except Exception:
-			from WeatherUnits import Measurement
+			from unitcorn import Measurement
 			return Measurement
 
 	@property

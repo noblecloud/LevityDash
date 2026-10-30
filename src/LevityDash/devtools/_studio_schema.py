@@ -39,7 +39,7 @@ from enum import Enum
 from typing import Any, List, Optional, Union
 
 import yaml
-import WeatherUnits as wu
+import unitcorn as wu
 from statekit.core import Stateful, StateProperty
 from statekit.yaml import StatefulDumper
 from statekit.validate import StateError
@@ -93,6 +93,8 @@ class Field:
 	measured: bool = False
 	#: Needle types that use the property. None means every type.
 	types: Optional[frozenset] = None
+	#: The property accepts `{of, from, to}` in place of a number, so the studio offers the ⟳ binding control.
+	bindable: bool = False
 
 	@property
 	def key(self) -> str:
@@ -198,7 +200,21 @@ def read(root: Stateful, path: tuple) -> Any:
 		raw = prop.__get__(owner, type(owner))
 	except Exception:
 		return None
+	if (bound := _boundNumber(prop, owner)) is not None:
+		return bound
 	return saved(prop, raw, owner)
+
+
+def _boundNumber(prop: StateProperty, owner: Stateful) -> Optional[dict]:
+	"""The `{of, from, to}` mapping of a numeric property that follows a value, else None."""
+	numbers = getattr(owner, 'numbers', None) or getattr(getattr(owner, 'gauge', None), 'numbers', None)
+	if numbers is None or not numbers._bound:
+		return None
+	try:
+		_, state = prop.getState(owner)
+	except Exception:
+		return None
+	return state if isinstance(state, dict) and 'of' in state and 'from' in state else None
 
 
 def write(root: Stateful, path: tuple, value: Any) -> Optional[str]:
@@ -335,7 +351,8 @@ def _classify(prop: StateProperty, raw: Any, owner: Stateful) -> Optional[Field]
 			text = saved(prop, member, owner)
 			choices.append((text if isinstance(text, str) else str(member.name), text if isinstance(text, (str, int, float)) else member.name))
 		return Field((), 'enum', choices=choices)
-	if any(r.__name__ == 'Color' for r in returns) or type(raw).__name__ == 'Color':
+	colours = ('Color', 'BoundColor', 'LiveColor')
+	if any(r.__name__ in colours for r in returns) or type(raw).__name__ in colours:
 		return Field((), 'color')
 	# A temperature, speed or other measurement on a gauge scale: a number in the gauge's unit.
 	if isinstance(raw, wu.Measurement) and not isinstance(raw, (wu.Percentage, wu.Length)):
@@ -359,9 +376,16 @@ def _classify(prop: StateProperty, raw: Any, owner: Stateful) -> Optional[Field]
 	return Field((), 'text')
 
 
+# Numbers that follow a value source (`lib/ui/bound_number.py`): (owner class, key); '*' is any owner.
+BINDABLE = {('GaugeArc', 'weight'), ('GaugeArc', 'start-angle'), ('GaugeArc', 'end-angle'), ('Needle', 'width'), ('Needle', 'length'), ('Graduations', 'length'), ('Graduations', 'width'), ('*', 'opacity')}
+
+
 # A `Bar` inherits the needle from `Meter` and never draws it: its pointer is the `pointer` property.
 NOT_ON_BARS = {('Bar', 'needle')}
 # Its two words-from-a-list settings are strings, which the enum introspection does not see.
+#: A bar's own mappings, each with a form of its own (`_studio_editors.TrackEdit` and the rest).
+BAR_MAPPINGS = {'track': 'bar-track', 'pointer': 'bar-pointer', 'major': 'bar-major', 'minor': 'bar-minor',
+		'value-label': 'bar-value', 'unit-label': 'bar-unit'}
 BAR_CHOICES = {'orientation': ('horizontal', 'vertical'), 'style': ('bar', 'battery', 'thermometer')}
 
 
@@ -397,6 +421,7 @@ def describe(owner: Stateful, path: tuple = (), title: str = 'Gauge', _seen: Opt
 			continue
 		found.path = path + (prop.key,)
 		found = _refine(found, prop, raw, owner)
+		found.bindable = found.kind in ('number', 'size') and bool({(type(owner).__name__, prop.key), ('*', prop.key)} & BINDABLE)
 		group.fields.append(found)
 	return group
 
@@ -421,6 +446,8 @@ def _refine(found: Field, prop: StateProperty, raw: Any, owner: Stateful) -> Fie
 	if ownerName == 'Bar' and key in BAR_CHOICES:
 		found.kind = 'enum'
 		found.choices = [(c, c) for c in BAR_CHOICES[key]]
+	elif ownerName == 'Bar' and key in BAR_MAPPINGS:
+		found.kind = BAR_MAPPINGS[key]
 	elif key == 'fill':
 		found.kind = 'fill'
 	elif key in ('caption', 'sub-label'):

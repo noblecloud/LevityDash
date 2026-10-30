@@ -22,6 +22,8 @@ from numpy import ceil, cos, pi, radians, sin, sqrt, number as np_number
 from collections.abc import Mapping
 from typing import Any, Optional, Type, Union, Iterator, Iterable, TypeVar, Sequence, Dict
 
+from LevityDash.lib.ui.bound_number import BoundNumber, decodeNumber
+from LevityDash.lib.ui.colors.bound import BoundColor, decodeColor
 from LevityDash import LevityDashboard
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.expressions import Expression, ExpressionError
@@ -59,7 +61,7 @@ from LevityDash.lib.utils import Axis
 from LevityDash.lib.utils.data import MinMax
 from LevityDash.lib.utils.shared import radialPoint, defer, factors, is_prime, Unset, clearCacheAttr, \
 	INVERSE_GOLDEN_RATIO, closestStringInList, camelCase, guarded_cached_property, get, ClosestMatchEnumMeta, now
-from WeatherUnits import Measurement, Angle, Wind, Humidity, auto as auto_wu, Length, Percentage
+from unitcorn import Measurement, Angle, Wind, Humidity, auto as auto_wu, Length, Percentage
 
 log = UILogger.getChild('Gauge')
 
@@ -248,16 +250,16 @@ class GaugeArc(GlowMixin, StatefulGaugePathItem):
 		return getattr(self, '_color', None)
 
 	@color.setter
-	def color(self, value: Color | None):
-		self._color = value
+	def color(self, value: Color | BoundColor | None):
+		self._color = self.gauge.colors.adopt(self, 'color', value)
 
 	@color.decode
-	def color(self, value) -> Color | None:
-		return None if value is None else Color.decode(value)
+	def color(self, value) -> Color | BoundColor | None:
+		return None if value is None else decodeColor(value)
 
 	@color.encode
-	def color(self, value: Color | None) -> str | None:
-		return None if value is None else str(value)
+	def color(self, value) -> str | dict | None:
+		return self.gauge.colors.spec(value)
 
 	@StateProperty(key='gradient', default=None, after=refresh, decoder=Gradient.decode)
 	def gradient(self) -> Gradient | None:
@@ -269,15 +271,27 @@ class GaugeArc(GlowMixin, StatefulGaugePathItem):
 
 	@StateProperty(key='weight', default=Size.Width(0.05, relative=True), after=refresh, allowNone=False, repr=True)
 	def weight(self) -> Size.Width | Length:
+		"""Width of the arc. A bound number is a share of the gauge's width (0.05 is 5 %)."""
 		return self._weight
 
 	@weight.setter
-	def weight(self, value: Size.Width | Length):
+	def weight(self, value: Size.Width | Length | BoundNumber):
+		self.gauge.numbers.assign(self, 'weight', value, self._storeWeight, lambda n: Size.Width(n, relative=True), self.gauge.refresh)
+
+	def _storeWeight(self, value) -> None:
 		self._weight = value
 
 	@weight.decode
-	def weight(self, value: Size.Width | Length) -> float:
-		return parseWidth(value, type(self).weight.default(type(self), self, update_source=False))
+	def weight(self, value: Size.Width | Length | dict) -> Size.Width | Length | BoundNumber:
+		return decodeNumber(value, lambda v: parseWidth(v, type(self).weight.default(type(self), self, update_source=False)))
+
+	@weight.state
+	def weight(self):
+		return self.gauge.numbers.current(self, 'weight', self._weight)
+
+	@weight.encode
+	def weight(self, value):
+		return self.gauge.numbers.spec(value)
 
 	@property
 	def weight_px(self) -> float:
@@ -285,19 +299,51 @@ class GaugeArc(GlowMixin, StatefulGaugePathItem):
 
 	@StateProperty(key='start-angle', default=-120, after=refresh, allowNone=False, repr=True)
 	def startAngle(self) -> float | int:
+		"""Where the arc starts, in degrees from straight up. A mapping `{of, from, to}` follows a value."""
 		return self._start_angle
 
 	@startAngle.setter
-	def startAngle(self, value: float | int):
+	def startAngle(self, value: float | int | BoundNumber):
+		self.gauge.numbers.assign(self, 'start-angle', value, self._storeStart, then=self.gauge.refresh)
+
+	def _storeStart(self, value) -> None:
 		self._start_angle = value
+
+	@startAngle.decode
+	def startAngle(self, value) -> float | int | BoundNumber:
+		return decodeNumber(value, lambda v: v)
+
+	@startAngle.state
+	def startAngle(self):
+		return self.gauge.numbers.current(self, 'start-angle', self._start_angle)
+
+	@startAngle.encode
+	def startAngle(self, value):
+		return self.gauge.numbers.spec(value)
 
 	@StateProperty(key='end-angle', default=120, after=refresh, allowNone=False, repr=True)
 	def endAngle(self) -> float | int:
+		"""Where the arc ends, in degrees from straight up. A mapping `{of, from, to}` follows a value."""
 		return self._end_angle
 
 	@endAngle.setter
-	def endAngle(self, value: float | int):
+	def endAngle(self, value: float | int | BoundNumber):
+		self.gauge.numbers.assign(self, 'end-angle', value, self._storeEnd, then=self.gauge.refresh)
+
+	def _storeEnd(self, value) -> None:
 		self._end_angle = value
+
+	@endAngle.decode
+	def endAngle(self, value) -> float | int | BoundNumber:
+		return decodeNumber(value, lambda v: v)
+
+	@endAngle.state
+	def endAngle(self):
+		return self.gauge.numbers.current(self, 'end-angle', self._end_angle)
+
+	@endAngle.encode
+	def endAngle(self, value):
+		return self.gauge.numbers.spec(value)
 
 	@StateProperty(key='cap', default=Qt.PenCapStyle.FlatCap, after=refresh, allowNone=False)
 	def capStyle(self) -> Qt.PenCapStyle:

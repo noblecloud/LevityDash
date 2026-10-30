@@ -17,7 +17,7 @@ from LevityDash.lib.plugins.freshness import RefreshEstimator
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.DisplayBase import Display
 from LevityDash.lib.ui.icons import fa as FontAwesome, getIcon, Icon
 from LevityDash.lib.utils.shared import singleShotSafe, startTimerSafe, stopTimerSafe
-from WeatherUnits.time_.time import Second
+from unitcorn.time_.time import Second
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.valuesource import openValueSource
 from LevityDash.lib.plugins.expressions import Expression
@@ -30,6 +30,7 @@ from LevityDash.lib.ui.frontends.PySide import UILogger as guiLog
 from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, mouseHoldTimer, DebugPaint, addRect
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Label import NonInteractiveLabel as Label, TitleLabel
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import Text
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.meter.scale import formatDuration
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Resize import ResizeHandle
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles.Splitters import TitleValueSplitter, MeasurementUnitSplitter
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import RealtimeContextMenu
@@ -45,7 +46,7 @@ from LevityDash.lib.utils.shared import (
 from LevityDash.lib.stateful import StateProperty, Stateful
 from LevityDash.lib.plugins.observation import RealtimeSource, ObservationValue, TimeseriesSource
 from LevityDash.lib.wire.containers import RemoteObservationValue
-from WeatherUnits import Measurement, auto as autoMeasurement, Length
+from unitcorn import Measurement, auto as autoMeasurement, Length
 
 qApp: QApplication
 
@@ -57,7 +58,7 @@ log = guiLog.getChild(__name__)
 # schema/source/container-coupled constructor. Every place below that used
 # to check isinstance(value, ObservationValue) alone silently fell through
 # to the generic str(value) fallback for a wire-sourced value instead of
-# unwrapping to the real WeatherUnits Measurement - hiding the separate unit
+# unwrapping to the real unitcorn Measurement - hiding the separate unit
 # box (hasUnit read false) while baking the unit into the value text anyway
 # (str() on the wrapper delegates to the wrapped measurement's own __str__).
 # Reproduced live: mode=remote's wind speed showed "3.6 mph" merged into the
@@ -1436,6 +1437,22 @@ class MeasurementDisplayProperties(Stateful):
 
 		self.__valueUnitRatio = value
 
+	#: The size of a baseline unit as a share of the value, when `unitSize` does not set one. design-standards.md asks for 40 to 50 %.
+	baselineUnitRatio: float = 0.45
+
+	@staticmethod
+	def unitTail(measurement) -> str:
+		"""The unit text to draw small after a value, or '' when it belongs at the value's size.
+
+		A degree or percent sign is a mark on the number, not a word beside it, so it stays in the value's own run.
+		"""
+		if not isinstance(measurement, Measurement):
+			return ''
+		# What the measurement prints after its number is the unit as the display shows it ('mph', '°', '%').
+		whole, bare = str(measurement).strip(), str(measurement.withoutUnit).strip()
+		unit = whole[len(bare):].strip() if bare and whole.startswith(bare) else ''
+		return unit if any(c.isalpha() for c in unit) else ''
+
 	@property
 	def default_unit_ratio(self) -> float:
 		"""Relative unit height used when no explicit unitSize is configured."""
@@ -1635,11 +1652,15 @@ class MeasurementDisplayProperties(Stateful):
 			if (precision := self.precision) is not Unset and measurement.precision != precision:
 				measurement.precision = precision
 			if (formatString := self.formatString) is not None and measurement is not None:
+				if formatString == 'duration':
+					return formatDuration(measurement)
 				if isinstance(formatString, dict):
 					formatString = f'{", ".join(f"{k}={value}" for k, value in formatString.items())}'
 				return f'{measurement:{formatString}}'
 			elif measurement is None:
 				return None
+			elif self.unitPosition == DisplayPosition.Baseline and not self.unitTail(measurement):
+				return str(measurement).strip()  # a unit that is only a mark (°, %) stays in the value's run
 			elif self.unitPosition != DisplayPosition.Inline:
 				return measurement.withoutUnit
 			return str(measurement).strip()
@@ -1787,6 +1808,22 @@ class DisplayLabel(Display, MeasurementDisplayProperties):
 		__exclude__ = {..., 'format-hint'}
 
 		class TextBox(Label.TextBox):
+
+			def tailRun(self) -> tuple[str, float] | None:
+				"""The unit as a smaller run on the value's baseline when `unitPosition` is `baseline`."""
+				try:
+					display = self.surface.parent
+					props = display.displayProperties
+					if props.unitPosition is not DisplayPosition.Baseline:
+						return None
+					unit = props.unitTail(display.measurement)
+					if not unit:
+						return None
+					size = props.unitSize
+					ratio = float(size) if size is not None and 0 < float(size) <= 1 else props.baselineUnitRatio
+					return unit, ratio
+				except (AttributeError, TypeError, ValueError):
+					return None
 
 			@property
 			def tierHeight(self) -> float:

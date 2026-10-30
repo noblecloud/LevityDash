@@ -32,17 +32,19 @@ from LevityDash.lib.EasyPath import EasyPathFile
 from LevityDash.lib.log import debug
 from LevityDash.lib.stateful import DefaultGroup, Stateful, StateProperty
 from LevityDash.lib.ui import UILogger as log
+from LevityDash.lib.layout.anchor import Anchor, place as place_anchor
 from LevityDash.lib.ui.Groups import SizeGroup
+from LevityDash.lib.ui.bound_number import BoundNumber, NumberSlots, decodeNumber
 from LevityDash.lib.ui.colors import Color
 from LevityDash.lib.ui.Geometry import (
-	AlignmentFlag, Dimension, Edge, Geometry, LocationFlag, Margins, Padding, parseSize, polygon_area, Position, Size,
+	AlignmentFlag, Dimension, DimensionType, Edge, Geometry, LocationFlag, Margins, Padding, parseSize, polygon_area, Position, Size,
 	size_px, PositionLiteral
 )
 from LevityDash.lib.utils.shared import (
 	_Panel, boolFilter, clearCacheAttr, connectSignal, defer, disconnectSignal, getItemsWithType, hasState, Numeric,
-	SimilarValue, block_pools
+	SimilarValue, block_pools, now
 )
-from WeatherUnits import Length
+from unitcorn import Length
 from .Handles import Handle, HandleGroup
 from .Handles.Resize import ResizeHandles
 from .Menus import BaseContextMenu
@@ -91,7 +93,10 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 		size = self.size
 		edges = self.edges
 		if edges == LocationFlag.Edges:
-			path.addRect(rect)
+			if radius := self.radius_px(rect):
+				path.addRoundedRect(rect, radius, radius)
+			else:
+				path.addRect(rect)
 		elif edges == LocationFlag.Center:
 			pass
 		else:
@@ -124,6 +129,8 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 					path.lineTo(right, rect.bottom())
 		self.setPath(path)
 		self.setEnabled(path.elementCount() > 0)
+		if getattr(self, '_fill', None) is not None:
+			self.updatePen()
 
 	def updatePen(self) -> None:
 		pen = self.pen()
@@ -131,7 +138,12 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 		color = self.color
 		pen.setWidthF(weight)
 		pen.setColor(color.QColor)
-		self.setPen(pen)
+		fill = getattr(self, '_fill', None)
+		filled = fill is not None and self.edges == LocationFlag.Edges
+		self.setPen(Qt.NoPen if filled and weight <= 0 else pen)
+		self.setBrush(fill.QColor if filled else Qt.NoBrush)
+		# a fill sits behind what the parent holds; a line sits on top, as before
+		self.setFlag(self.GraphicsItemFlag.ItemStacksBehindParent, filled)
 
 	@StateProperty(default=LocationFlag.Edges, allowNone=False, after=updatePath)
 	def edges(self) -> LocationFlag:
@@ -197,13 +209,56 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 			return ', '.join(str(x.name).lower() for x in LocationFlag.edges() if value & x)
 		return name.lower()
 
+	@StateProperty(default='0', allowNone=False, after=updatePath)
+	def radius(self) -> str:
+		"""How round the corners are when the border is on all edges.
+
+		A number or `12px` is pixels; `8%` is a share of the shorter side, so `50%` makes a pill or a circle.
+		It is held as written and read against the parent's size each time the path is built.
+
+		Example Config
+		--------------
+		radius: 12px
+
+		radius: 50%
+		"""
+		return getattr(self, '_radius', '0')
+
+	@radius.setter
+	def radius(self, value: str):
+		self._radius = value
+
+	@radius.decode
+	def radius(self, value: str | int | float) -> str:
+		text = str(value).strip().replace(' ', '')
+		number = text[:-2] if text.endswith('px') else text[:-1] if text.endswith('%') else text
+		try:
+			if float(number) < 0:
+				raise ValueError
+		except ValueError:
+			log.error(f'{value!r} is not a valid border radius (a number, 12px or 8%). Using 0.')
+			return '0'
+		return text
+
+	def radius_px(self, rect) -> float:
+		"""The radius in pixels for `rect`, never more than half its shorter side."""
+		text = self._radius if hasattr(self, '_radius') else '0'
+		try:
+			if text.endswith('%'):
+				radius = min(rect.width(), rect.height())*float(text[:-1])/100
+			else:
+				radius = float(text[:-2] if text.endswith('px') else text)
+		except ValueError:
+			return 0.0
+		return max(0.0, min(radius, rect.width()/2, rect.height()/2))
+
 	@StateProperty(default=Dimension(0, absolute=True), after=updatePath)
 	def offset(self) -> Dimension | Length:
 		"""The offset of the border from the parent.
 
 		Returns
 		-----
-		`LevityDash.lib.ui.Geometry.Dimension` | `WeatherUnits.Length`
+		`LevityDash.lib.ui.Geometry.Dimension` | `unitcorn.Length`
 
 		Decoding
 		--------
@@ -335,6 +390,34 @@ class Border(QGraphicsPathItem, Stateful, tag=...):
 				log.error(f'{value} is not a valid value for Color.  Using default value of #ffffff for now.')
 				return Color('#ffffff')
 
+	@StateProperty(default=None, allowNone=True, after=updatePen)
+	def fill(self) -> Color | None:
+		"""A colour that fills the inside of a border on all edges, following its `radius`.
+
+		With `weight: 0` there is no line, only the fill. Colours take the usual forms, `$tokens` and `alpha` included.
+
+		Example Config
+		--------------
+		```yaml
+		border: {enabled: true, radius: 16px, fill: '#ffffff22', weight: 0}
+		```
+		"""
+		return getattr(self, '_fill', None)
+
+	@fill.setter
+	def fill(self, value: Color | None):
+		self._fill = value
+
+	@fill.decode
+	def fill(self, value) -> Color | None:
+		if value is None:
+			return None
+		try:
+			return Color.decode(value)
+		except Exception:
+			log.error(f'{value!r} is not a valid border fill. Using no fill.')
+			return None
+
 	@StateProperty(default=False, allowNone=False)
 	def enabled(self) -> bool:
 		return self.isEnabled() and self.isVisible()
@@ -419,7 +502,7 @@ class Panel(_Panel, Stateful, tag='group'):
 		self.previousParent = self.parent
 		self.add_defaults_to_state(kwargs)
 		self._init_args_(*args, **kwargs)
-		self.setFlag(self.GraphicsItemFlag.ItemClipsChildrenToShape, False)
+		self.setFlag(self.GraphicsItemFlag.ItemClipsChildrenToShape, getattr(self, '_overflow', 'visible') != 'visible')
 		self.setFlag(self.GraphicsItemFlag.ItemClipsToShape, False)
 
 	def _init_args_(self, *args, **kwargs) -> None:
@@ -671,6 +754,131 @@ class Panel(_Panel, Stateful, tag='group'):
 			value = Geometry(**value)
 		g.scoreSimilarity(value)
 
+	@StateProperty(key='align-to', default=None, allowNone=True, sortOrder=1)
+	def alignTo(self) -> Optional[Anchor]:
+		"""Put a point of this item on a point of a named sibling: `align-to: temp`, or `{to, x, y, self-x, self-y, offset}`.
+
+		Overrides `geometry`'s position on the axes it names; the size is still the geometry's. See `lib/layout/anchor.py`."""
+		return getattr(self, '_alignTo', None)
+
+	@alignTo.setter
+	def alignTo(self, value: Optional[Anchor]):
+		self._alignTo = value
+		if value is not None and (parent := self.parentItem()) is not None:
+			parent._alignChildren = True
+			self.applyAlignTo()
+
+	@alignTo.decode
+	def alignTo(self, value) -> Optional[Anchor]:
+		return None if value is None else Anchor.decode(value)
+
+	@alignTo.encode
+	def alignTo(value: Optional[Anchor]):
+		return None if value is None else value.encode()
+
+	@StateProperty(key='time-axis', default=None, allowNone=True, sortOrder=1)
+	def timeAxis(self) -> Optional[dict]:
+		"""Centre this item on a time of a named graph: `time-axis: {graph: temps, at: 3h}`.
+
+		`at` is the distance from now (`3h`, `-90min`, `0h`). The item keeps its size and follows the graph's x axis as the
+		graph scrolls or resizes, so a column of readings stays under the graph's line at that time. Only x is set."""
+		return getattr(self, '_timeAxis', None)
+
+	@timeAxis.setter
+	def timeAxis(self, value: Optional[dict]):
+		self._timeAxis = value
+		self._axisGraph = None
+		if value is not None:
+			self.applyTimeAxis()
+
+	@timeAxis.decode
+	def timeAxis(self, value) -> Optional[dict]:
+		if value is None:
+			return None
+		if not isinstance(value, dict) or set(value) - {'graph', 'at'} or not value.get('graph'):
+			raise ValueError(f'time-axis is {{graph: <name of a graph>, at: <hours from now>}}, not {value!r}')
+		from LevityDash.lib.hourly import spanHours
+		spanHours(value.get('at', 0), 'time-axis at')  # fail at load, not on the first draw
+		return {'graph': str(value['graph']), 'at': value.get('at', 0)}
+
+	@timeAxis.encode
+	def timeAxis(value: Optional[dict]):
+		return None if value is None else {'graph': value['graph'], 'at': value['at']}
+
+	def applyTimeAxis(self):
+		"""Put the centre of this item on the graph's x for `now + at`. Quiet while the graph has not placed its axis."""
+		spec = getattr(self, '_timeAxis', None)
+		scene = self.scene()
+		if spec is None or scene is None:
+			return
+		graph = getattr(self, '_axisGraph', None)
+		if graph is None:
+			graph = next((i for i in scene.items() if hasattr(i, 'timeToX') and getattr(i, 'stateName', None) == spec['graph']), None)
+			if graph is None:
+				if not getattr(self, '_axisWarned', False):
+					self._axisWarned = True
+					log.warning(f'time-axis: no graph named {spec["graph"]!r}')
+				return
+			self._axisGraph = graph
+			graph.watchAxis(self.applyTimeAxis)
+		if graph.leftTime is None:
+			return
+		from datetime import timedelta
+		from LevityDash.lib.hourly import spanHours
+		x = graph.timeToX(now() + timedelta(hours=spanHours(spec['at'], 'time-axis at')))
+		centre = self.mapFromScene(graph.mapToScene(QPointF(x, 0))).x()
+		mine = self.rect()
+		shift = centre - (mine.x() + mine.width() / 2)
+		if abs(shift) > 1e-6:
+			self.setPos(self.pos() + QPointF(shift, 0))
+
+	def _alignLength(self, value, vertical: bool) -> float:
+		if value in (None, 0, '0'):
+			return 0.0
+		parsed = parseSize(value, None, dimension=DimensionType.height if vertical else DimensionType.width)
+		if parsed is None:
+			raise ValueError(f'align-to offset {value!r} is not a size')
+		return float(size_px(parsed, self.parent.geometry, DimensionType.height if vertical else DimensionType.width))
+
+	def applyAlignTo(self, _chain: tuple = ()):
+		"""Move this item so its `align-to` point sits on the sibling's. Quiet when there is no such sibling yet."""
+		anchor = getattr(self, '_alignTo', None)
+		parent = self.parentItem()
+		if anchor is None or parent is None or self in _chain:
+			return
+		target = next((c for c in parent.childItems() if c is not self and getattr(c, 'stateName', None) == anchor.to), None)
+		if target is None:
+			if not getattr(self, '_alignWarned', False):
+				self._alignWarned = True
+				log.warning(f'align-to: no sibling named {anchor.to!r} next to {self.stateName or type(self).__name__}')
+			return
+		if getattr(target, '_alignTo', None) is not None:
+			target.applyAlignTo((*_chain, self))  # an item that is itself aligned settles first
+		box = parent.mapRectFromItem(target, target.rect())
+		mine = parent.mapRectFromItem(self, self.rect())
+		try:
+			offset = (self._alignLength(anchor.offset_x, False), self._alignLength(anchor.offset_y, True))
+		except ValueError as error:
+			log.warning(str(error))
+			return
+		x, y = place_anchor(anchor, (box.x(), box.y(), box.width(), box.height()), (mine.width(), mine.height()), (mine.x(), mine.y()), offset)
+		if abs(x - mine.x()) > 1e-6 or abs(y - mine.y()) > 1e-6:
+			self.setPos(self.pos() + QPointF(x - mine.x(), y - mine.y()))
+
+	def afterSurface(self):
+		"""Called at the end of `Geometry.updateSurface`: settle this item's `align-to`, and the siblings aligned to it."""
+		if getattr(self, '_alignTo', None) is not None:
+			self.applyAlignTo()
+		if getattr(self, '_timeAxis', None) is not None:
+			self.applyTimeAxis()
+		parent = self.parentItem()
+		if parent is not None and getattr(parent, '_alignChildren', False):
+			name = getattr(self, 'stateName', None)
+			if name is not None:
+				for sibling in parent.childItems():
+					if sibling is not self and getattr(getattr(sibling, '_alignTo', None), 'to', None) == name:
+						sibling.applyAlignTo()
+
 	@StateProperty(default=Margins.default(), allowNone=False, dependencies={'geometry'}, decoder=Margins.decode)
 	def margins(self) -> Margins:
 		return self._margins
@@ -749,6 +957,37 @@ class Panel(_Panel, Stateful, tag='group'):
 			# A stack closes up around an item that is not shown.
 			if (relayout := getattr(self.parentItem(), '_reflowShown', None)) is not None:
 				relayout()
+
+	@StateProperty(key='opacity', default=1.0, allowNone=False, sortOrder=52)
+	def itemOpacity(self) -> float:
+		"""How opaque the item and everything in it is, 0 to 1. A mapping `{of, from, to}` makes it follow a value (see `ui/bound_number.py`)."""
+		return self.opacity()
+
+	@itemOpacity.state
+	def itemOpacity(self):
+		return self.numbers.current(self, 'opacity', self.opacity())
+
+	@itemOpacity.setter
+	def itemOpacity(self, value: float | BoundNumber):
+		self.numbers.assign(self, 'opacity', value, self._setOpacityClamped)
+
+	@itemOpacity.decode
+	def itemOpacity(self, value: int | float | str | dict) -> float | BoundNumber:
+		return decodeNumber(value, float)
+
+	@itemOpacity.encode
+	def itemOpacity(self, value) -> float | dict:
+		return self.numbers.spec(value)
+
+	def _setOpacityClamped(self, value: float) -> None:
+		self.setOpacity(min(1.0, max(0.0, value)))
+
+	@property
+	def numbers(self) -> NumberSlots:
+		"""The settings of this item that follow a value (`ui/bound_number.py`)."""
+		if (slots := self.__dict__.get('_numberSlots')) is None:
+			slots = self._numberSlots = NumberSlots(type(self).__name__)
+		return slots
 
 	@StateProperty(key='when', default=None, allowNone=True, sortOrder=51)
 	def when(self) -> Optional[str | bool]:
@@ -1971,6 +2210,8 @@ class Panel(_Panel, Stateful, tag='group'):
 			self._saveAs()
 
 	def delete(self):
+		if (slots := self.__dict__.get('_numberSlots')) is not None:
+			slots.releaseAll()
 		for item in self.childItems():
 			if hasattr(item, 'delete'):
 				item.delete()

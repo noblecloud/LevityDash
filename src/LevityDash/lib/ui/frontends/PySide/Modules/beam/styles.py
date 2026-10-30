@@ -540,36 +540,92 @@ def _stop_alpha(stops: tuple, pos: float) -> float:
 	return 0.0
 
 
+_path_points_cache: dict[tuple, list] = {}
+_sprite_cache: dict[float, QImage] = {}
+_travel_cache: dict[tuple, QImage] = {}
+_TRAVEL_CACHE_SIZE = 4
+
+
+def _path_points(ctx: PaintCtx, count: int) -> list:
+	"""`count` points evenly spaced along the custom path, kept for as long as the path is the same one.
+
+	`pointAtPercent` walks the path's segments on every call, which on a long
+	path costs more than the drawing it feeds.
+	"""
+	if ctx.path_key is None:
+		return [ctx.path.pointAtPercent(i / count) for i in range(count)]
+	key = (ctx.path_key, count)
+	points = _path_points_cache.get(key)
+	if points is None:
+		points = [ctx.path.pointAtPercent(i / count) for i in range(count)]
+		if len(_path_points_cache) > 64:
+			_path_points_cache.clear()
+		_path_points_cache[key] = points
+	return points
+
+
+def _reach_sprite(reach: float) -> QImage:
+	"""A white radial falloff, opaque at the centre and clear at `reach` px, drawn once per radius."""
+	sprite = _sprite_cache.get(reach)
+	if sprite is None:
+		size = int(reach) * 2 + 3
+		centre = size / 2.0
+		sprite = QImage(size, size, QImage.Format.Format_ARGB32_Premultiplied)
+		sprite.fill(Qt.GlobalColor.transparent)
+		gradient = QRadialGradient(QPointF(centre, centre), reach)
+		gradient.setColorAt(0.0, QColor(255, 255, 255, 255))
+		gradient.setColorAt(1.0, QColor(255, 255, 255, 0))
+		painter = QPainter(sprite)
+		painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+		painter.setPen(Qt.PenStyle.NoPen)
+		painter.setBrush(gradient)
+		painter.drawEllipse(QPointF(centre, centre), reach, reach)
+		painter.end()
+		if len(_sprite_cache) > 32:
+			_sprite_cache.clear()
+		_sprite_cache[reach] = sprite
+	return sprite
+
+
 def path_travel_mask(ctx: PaintCtx, w: int, h: int, progress: float, stops: tuple, reach: float) -> QImage:
 	"""A window that runs along the custom path by arc length.
 
 	`stops` is the conic profile of the rectangle version: its alpha at position p
 	becomes the alpha at that share of the way round the path. The window carries
 	`reach` px either side of the path, so it lights the band and the glow inside it.
+
+	A frame asks for the same window more than once (the stroke and the inner
+	glow share one), so the last few are kept, keyed on everything they depend on.
 	"""
+	cache_key = (ctx.path_key, w, h, progress, stops, reach) if ctx.path_key is not None else None
+	if cache_key is not None and (hit := _travel_cache.get(cache_key)) is not None:
+		return hit
 	path = ctx.path
-	img = QImage(w, h, QImage.Format.Format_ARGB32_Premultiplied)
-	img.fill(Qt.GlobalColor.transparent)
 	length = path.length()
 	if length < 1.0:
+		img = QImage(w, h, QImage.Format.Format_ARGB32_Premultiplied)
+		img.fill(Qt.GlobalColor.transparent)
 		return img
+	img = QImage(w, h, QImage.Format.Format_ARGB32_Premultiplied)
+	img.fill(Qt.GlobalColor.transparent)
 	count = max(48, min(600, int(length / 3.0)))
+	points = _path_points(ctx, count)
+	sprite = _reach_sprite(reach)
+	half = sprite.width() / 2.0
 	painter = QPainter(img)
-	painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 	painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Lighten)
-	painter.setPen(Qt.PenStyle.NoPen)
 	for i in range(count):
-		t = i / count
-		alpha = _stop_alpha(stops, (t - progress) % 1.0)
+		alpha = _stop_alpha(stops, (i / count - progress) % 1.0)
 		if alpha < 0.01:
 			continue
-		p = path.pointAtPercent(t)
-		gradient = QRadialGradient(p, reach)
-		gradient.setColorAt(0.0, QColor(255, 255, 255, int(alpha * 255)))
-		gradient.setColorAt(1.0, QColor(255, 255, 255, 0))
-		painter.setBrush(gradient)
-		painter.drawEllipse(p, reach, reach)
+		p = points[i]
+		painter.setOpacity(alpha)
+		painter.drawImage(QPointF(p.x() - half, p.y() - half), sprite)
 	painter.end()
+	if cache_key is not None:
+		if len(_travel_cache) >= _TRAVEL_CACHE_SIZE:
+			_travel_cache.pop(next(iter(_travel_cache)))
+		_travel_cache[cache_key] = img
 	return img
 
 

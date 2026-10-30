@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple, Type, Mapping
 
 from PySide6.QtCore import QPoint, QPointF, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetricsF, QPainter, QPen
-from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem
+from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem, QGraphicsRectItem
 
 from LevityDash import LevityDashboard
 from LevityDash.lib.plugins.categories import CategoryItem, SomeValidKey
@@ -19,10 +19,10 @@ from LevityDash.lib.ui.Geometry import (
 	Alignment, AlignmentFlag, Dimension, DimensionType, Direction, DisplayPosition, Geometry, parseHeight, parseSize, parseWidth,
 	Position, Size, size_float, size_px
 )
-from LevityDash.lib.layout import calc as cssmath, flex as cssflex, grid as cssgrid, parse as cssparse
+from LevityDash.lib.layout import calc as cssmath, flex as cssflex, grid as cssgrid, overflow as cssoverflow, parse as cssparse
 from LevityDash.lib.layout.types import Direction as CssDirection, Edge as CssEdge, Gap as CssGap, ItemAlign as CssItemAlign, Rect as CssRect
 from LevityDash.lib.utils import DeepChainMap, mostSimilarDict, sortDict
-from WeatherUnits import Length, Percentage
+from unitcorn import Length, Percentage
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -802,9 +802,88 @@ class Stack(Panel, tag='stack'):
 	def flexProps(self, value: dict | None):
 		self._flexProps = _checkedKeys(value, _FLEX_STACK_KEYS | _FLEX_ITEM_KEYS, 'flex')
 
+	@StateProperty(key='overflow', default='visible', after=setGeometries, allowNone=False, sortOrder=3)
+	def overflow(self) -> str:
+		"""What happens to content larger than the stack: `visible` (default), `clip`, `hidden`, `scroll` or `auto`.
+
+		`scroll` and `auto` let the wheel move the content along the stack's main axis; `auto` only when it overflows.
+		A scrolling stack gives items that have a size `shrink: 0`, so they keep it and overflow instead of squeezing.
+		See docs/config/dashboard/layout.md."""
+		return getattr(self, '_overflow', 'visible')
+
+	@overflow.setter
+	def overflow(self, value: str):
+		self._overflow = value
+		self._scroll = 0.0
+		self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemClipsChildrenToShape, cssoverflow.clips(value))
+
+	@overflow.decode
+	def overflow(value) -> str:
+		return cssoverflow.parse(value)
+
+	@property
+	def scrolls(self) -> bool:
+		return cssoverflow.scrolls(self.overflow)
+
+	def cssScroll(self, rects: list[CssRect], view: float, vertical: bool) -> list[CssRect]:
+		"""`rects` moved by the scroll offset, which is kept inside what the content allows. Records the limit for the bar and the wheel."""
+		limit = cssoverflow.max_offset(cssoverflow.content_end(rects, vertical), view)
+		self._scrollLimit, self._scrollView, self._scrollVertical = limit, view, vertical
+		self._scroll = cssoverflow.clamp(getattr(self, '_scroll', 0.0), limit)
+		self.updateScrollBar()
+		return cssoverflow.shift(rects, self._scroll, vertical)
+
+	def scrollTo(self, offset: float):
+		"""Scroll to `offset` pixels from the start (kept inside the content), and lay the items out again."""
+		offset = cssoverflow.clamp(offset, getattr(self, '_scrollLimit', 0.0))
+		if offset != getattr(self, '_scroll', 0.0):
+			self._scroll = offset
+			self.setGeometries()
+
+	def updateScrollBar(self):
+		"""Draw the scroll bar thumb: `scroll` always when there is anything to move, `auto` the same. Nothing for the other modes."""
+		bar = getattr(self, '_scrollBar', None)
+		place = None
+		if self.scrolls:
+			limit, view = getattr(self, '_scrollLimit', 0.0), getattr(self, '_scrollView', 0.0)
+			place = cssoverflow.thumb(getattr(self, '_scroll', 0.0), limit, view) if (limit > 0 or self.overflow == 'scroll') else None
+			if place is None and self.overflow == 'scroll' and view > 0:
+				place = (0.0, view)  # `scroll` shows its bar even when it has nothing to move
+		if place is None:
+			if bar is not None:
+				bar.hide()
+			return
+		if bar is None:
+			bar = self._scrollBar = QGraphicsRectItem(self)
+			bar.setPen(QPen(Qt.PenStyle.NoPen))
+			bar.setZValue(1e6)
+			bar.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+		from LevityDash.lib.ui.colors import theme
+		colour = theme.active().color('faint').QColor
+		colour.setAlphaF(0.6)
+		bar.setBrush(colour)
+		width, height = self.rect().width(), self.rect().height()
+		weight = max(2.0, min(width, height) * 0.01)
+		start, length = place
+		if getattr(self, '_scrollVertical', True):
+			bar.setRect(width - weight - 1, start, weight, length)
+		else:
+			bar.setRect(start, height - weight - 1, length, weight)
+		bar.show()
+
+	def wheelEvent(self, event):
+		if self.scrolls and getattr(self, '_scrollLimit', 0.0) > 0:
+			delta = event.delta() if hasattr(event, 'delta') else event.angleDelta().y()
+			before = getattr(self, '_scroll', 0.0)
+			self.scrollTo(before + cssoverflow.step(delta, getattr(self, '_scrollView', 0.0)))
+			if getattr(self, '_scroll', 0.0) != before:
+				event.accept()
+				return
+		super().wheelEvent(event)
+
 	@property
 	def usesCssLayout(self) -> bool:
-		return any(key in (self.flexProps or ()) for key in _FLEX_STACK_KEYS) or any(
+		return self.overflow != 'visible' or any(key in (self.flexProps or ()) for key in _FLEX_STACK_KEYS) or any(
 			getattr(geometry.surface, 'flexProps', None) is not None for geometry in self.geometries.values()
 		)
 
@@ -885,7 +964,7 @@ class Stack(Panel, tag='stack'):
 			margin_main=CssEdge(top, bottom) if vertical else CssEdge(left, right),
 			margin_cross=CssEdge(left, right) if vertical else CssEdge(top, bottom),
 			grow=float(props.get('grow', 0.0 if sized else 1.0)),
-			shrink=float(props.get('shrink', 1.0)),
+			shrink=float(props.get('shrink', 0.0 if sized and self.scrolls else 1.0)),
 			basis=None if basis_auto else (0.0 if basis is None else basis),
 			content_main=content_main,
 			min_main=px(props['min']) if props.get('min') is not None else 0.0,
@@ -918,6 +997,8 @@ class Stack(Panel, tag='stack'):
 		surfaces = [geometry.surface for geometry in self.geometries.values() if self._shown(geometry)]
 		items = [self.cssFlexItem(surface, vertical, container.cross) for surface in surfaces]
 		rects = cssflex.layout_flex(items, container)
+		if self.overflow != 'visible':
+			rects = self.cssScroll(rects, inner_h if vertical else inner_w, vertical)
 		self.applyCssRects(rects, left, top, width, height)
 		self.cssDividers(rects, left, top, width, height, columns=not vertical, rows=vertical)
 
@@ -1712,7 +1793,8 @@ class GridStack(Stack, tag='grid'):
 		for geometry in self.geometries.values():
 			spec = getattr(geometry.surface, 'gridProps', None) or {}
 			aspect = self.cssAspect(geometry.surface)
-			top, right, bottom, left = self.cssMargin(spec.get('margin'))
+			# not `top`/`left`: those are this grid's padding, which places every item below
+			m_top, m_right, m_bottom, m_left = self.cssMargin(spec.get('margin'))
 			if (area := spec.get('area')) is not None:
 				if any(key in spec for key in ('column', 'row', 'column-span', 'row-span')):
 					raise ValueError('grid: `area` cannot be combined with column, row or a span')
@@ -1725,12 +1807,14 @@ class GridStack(Stack, tag='grid'):
 					shrink=bool(spec.get('shrink', False)),
 				)
 			items.append(cssgrid.GridItem(
-				margin_inline=CssEdge(left, right), margin_block=CssEdge(top, bottom),
+				margin_inline=CssEdge(m_left, m_right), margin_block=CssEdge(m_top, m_bottom),
 				max_content=(0.0, 0.0) if aspect is None else (aspect * natural_h, natural_h),
 				placement=placement,
 				justify_self=CssItemAlign.auto if 'justify-self' not in spec else cssparse.parse_item_align(spec['justify-self']).value,
 				align_self=CssItemAlign.auto if 'align-self' not in spec else cssparse.parse_item_align(spec['align-self']).value,
 			))
 		rects = cssgrid.layout_grid(items, container)
+		if self.overflow != 'visible':
+			rects = self.cssScroll(rects, inner_h, True)
 		self.applyCssRects(rects, left, top, width, height)
 		self.cssDividers(rects, left, top, width, height, columns=True, rows=True)

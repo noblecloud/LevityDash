@@ -7,13 +7,18 @@
 # `units.levity` is the weather-side tour of the same algebra; this one is a working board.
 #
 # Top left is the draw now with the three questions it begs: what is this hour at this draw, what is a day of it, what
-# was the average so far. Beside it is the day as a graph of draw and solar on one scale. The row of rings is the
-# circuits against a 3 kW scale. The right column is a switch whose items turn on by `when:` with unit literals (`> 4
-# kW`), so a heavy evening or a car on charge takes the slot. The floor is today's energy: used, yesterday, made, and
-# bought (used minus made).
+# was the average so far. Beside it is the day as a graph of draw, solar and the heat pump on one scale. The row of
+# rings is the circuits against a 3 kW scale. The right column is a switch whose items turn on by `when:` with unit
+# literals (`> 4 kW`), so a heavy evening or a car on charge takes the slot. The floor is today's energy: used,
+# yesterday, made, and bought (used minus made).
 #
-# Text sizes come from the dashboard-wide size groups global.title, global.value and global.head, set by the presets.
-# Layers: the draw over the day's draw, a ring behind each circuit.
+# Type: each text role is one dashboard-wide size group with `matchAll`, pinned with `text-height`. The `vars:` below
+# are the whole scale: labels (`global.title`), values (`global.value`), headers and the ring readings
+# (`global.head`), the big figures (`global.big`) and the draw now (`global.hero`). Units are said once, in a label or
+# a header, never after each number. Each source keeps one colour (draw, solar, heat pump, car, kitchen) and the
+# headers and labels stay text and muted.
+#
+# Space: a 96 px margin, 96 px between columns and 64 px between rows.
 #
 # Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/power.levity
 #           --scenario energy-day --size 2880x1800 --freeze-time 2026-10-15T19:30:00
@@ -42,15 +47,22 @@ vars:
   pv: home.power.solar
   used: home.energy.today
   made: home.energy.solar
+  # the type scale: label, value, header, the big figures, and the draw now
+  label: 32px
+  value: 32px
+  head: 56px
+  big: 110px
+  hero: 150px
 items:
 - type: grid
   name: board
-  geometry: {x: 0.6%, y: 0.8%, width: 98.8%, height: 98.4%}
-  spacing: 1.2%
+  geometry: {x: 3.333%, y: 5.333%, width: 93.333%, height: 89.333%}
+  spacing: 0
   padding: 0
   grid:
     columns: [1fr, 1fr, 1fr, 1fr]
-    rows: [42fr, 28fr, 25fr]
+    rows: [42fr, 26fr, 32fr]
+    gap: [64px, 96px]
     areas:
     - now graph graph slot
     - rings rings rings slot
@@ -58,65 +70,190 @@ items:
   items:
 
   # ================= THE DRAW NOW ==========================================
-  - preset: callout
+  - type: group
     name: now
     grid: {area: now}
-    props:
-      key: $pw
-      title: House draw
-      title_height: 12%
-      color: $draw
-      precision: 1
-      hero_box: {x: 0%, y: 6%, width: 100%, height: 38%}
-      list_box: {x: 0%, y: 48%, width: 100%, height: 52%}
+    items:
+    - {type: text, text: House draw, alignment: BottomLeft, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 10%}}
+    - {type: text, text: Kilowatts now, alignment: TopLeft, font: Roboto, weight: Light, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 0%, y: 12%, width: 100%, height: 6%}}
+    - type: realtime.text
+      key: '$pw'
+      title: {visible: false}
+      geometry: {x: 0%, y: 20%, width: 100%, height: 30%}
+      display: {precision: 1, weight: Light, unitPosition: Hidden, format-hint: '0.0', valueLabel: {alignment: Left, margins: 0px, color: $draw, text-height: $hero, matchingGroup: {group: global.hero, matchAll: true}}}
+    - type: grid
+      geometry: {x: 0%, y: 58%, width: 100%, height: 42%}
+      spacing: 0
+      grid: {columns: [1fr], rows: [1fr, 1fr, 1fr]}
+      shared:
+        title: {color: $muted, alignment: Left, position: Left, size: 0.62, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+        display: {unitPosition: Hidden, valueLabel: {alignment: Right, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
       items:
-      - {type: realtime.text, key: 'to($pw * 1h, kWh)', title: {text: This hour at this draw}, display: {precision: 1}}
-      - {type: realtime.text, key: 'to($pw * 24h, kWh)', title: {text: A day of it}, display: {precision: 0, valueLabel: {color: $bad}}}
-      - {type: realtime.text, key: 'to($used / 19h, kW)', title: {text: Average so far}, display: {precision: 2, valueLabel: {color: $good}}}
+      - {type: realtime.text, key: 'to($pw * 1h, kWh)', title: 'This hour, kWh', display: {precision: 1, format-hint: '00.0'}}
+      - {type: realtime.text, key: 'to($pw * 24h, kWh)', title: 'A day of it, kWh', display: {precision: 0, format-hint: '000', valueLabel: {color: $bad}}}
+      - {type: realtime.text, key: 'to($used / 19h, kW)', title: 'Average so far, kW', display: {precision: 2, format-hint: '0.00', valueLabel: {color: $good}}}
 
   # ================= THE DAY ===============================================
-  - type: graph
+  # Draw, solar and the heat pump on one kW scale, in the colours they have everywhere else on the board.
+  - type: group
     name: day
     grid: {area: graph}
-    timeframe: {days: 1}
-    annotations:
-      dayLabels: {enabled: false}
-      hourLabels: {alignment: BottomCenter, spacingIntervals: '3, 6, 12'}
-      lines: {spacing: 10 mm, weight: 0.4}
-    figures:
-    - figure: power
-      margins: {top: 10%, bottom: 14%}
-      min: 0
-      max: 5
-      home.power.total:
-        plot: {type: plot, color: '#ff6a3d', weight: 1.0}
-        resolution: 2
-      home.power.solar:
-        plot: {type: plot, color: '#ffd400', weight: 0.7}
-        resolution: 2
-      home.power.hvac:
-        plot: {type: plot, color: '#3da5ff', weight: 0.4, dashPattern: '4, 4'}
-        resolution: 2
+    items:
+    - {type: text, text: The day, alignment: BottomLeft, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 10%}}
+    - {type: text, text: 'Draw, solar and heat pump, kW', alignment: TopLeft, font: Roboto, weight: Light, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 0%, y: 12%, width: 100%, height: 6%}}
+    - type: graph
+      geometry: {x: 0%, y: 22%, width: 100%, height: 78%}
+      timeframe: {days: 1}
+      annotations:
+        dayLabels: {enabled: false}
+        hourLabels: {alignment: BottomCenter, spacingIntervals: '3, 6, 12'}
+        lines: {spacing: 10 mm, weight: 0.4}
+      figures:
+      - figure: power
+        margins: {top: 6%, bottom: 14%}
+        min: 0
+        max: 5
+        home.power.total:
+          plot: {type: plot, color: '#ff6a3d', weight: 1.0}
+          resolution: 2
+        home.power.solar:
+          plot: {type: plot, color: '#ffd400', weight: 0.7}
+          resolution: 2
+        home.power.hvac:
+          plot: {type: plot, color: '#3da5ff', weight: 0.4, dashPattern: '4, 4'}
+          resolution: 2
 
   # ================= THE CIRCUITS ==========================================
-  - type: stack
+  # Each ring is a circuit against a 3 kW scale (solar against 4 kW), its reading at the header size.
+  - type: group
     name: rings
     grid: {area: rings}
-    direction: Horizontal
-    spacing: 2mm
     items:
-    - preset: ring-reading
-      props: {key: home.power.hvac, title: Heat pump, color: $info, text_color: $info, min: 0, max: 3, weight: 9%, radius: 96%, precision: 1}
-    - preset: ring-reading
-      props: {key: home.power.ev, title: Car, color: $good, text_color: $good, min: 0, max: 3, weight: 9%, radius: 96%, precision: 1}
-    - preset: ring-reading
-      props: {key: home.power.kitchen, title: Kitchen, color: $accent, text_color: $accent, min: 0, max: 3, weight: 9%, radius: 96%, precision: 1}
-    - preset: ring-reading
-      props: {key: home.power.water, title: Water heater, color: $draw, text_color: $draw, min: 0, max: 3, weight: 9%, radius: 96%, precision: 1}
-    - preset: ring-reading
-      props: {key: home.power.solar, title: Solar, color: $solar, text_color: $solar, min: 0, max: 4, weight: 9%, radius: 96%, precision: 1}
+    - {type: text, text: Circuits, alignment: BottomLeft, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 16%}}
+    - {type: text, text: 'Kilowatts, against 3 kW', alignment: TopLeft, font: Roboto, weight: Light, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 0%, y: 19%, width: 100%, height: 9%}}
+    - type: stack
+      geometry: {x: 0%, y: 32%, width: 100%, height: 68%}
+      direction: Horizontal
+      spacing: 48px
+      items:
+      - type: group
+        items:
+        - type: realtime.gauge
+          key: home.power.hvac
+          title: {visible: false}
+          geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+          display:
+            radius: 96%
+            arc: {start-angle: -120, end-angle: 120, weight: 7%, color: $rule}
+            range: {min: 0, max: 3}
+            fill: {weight: 7%, color: $info}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {visible: false}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+        - type: realtime.text
+          key: home.power.hvac
+          title: {visible: false}
+          geometry: {x: 13%, y: 34%, width: 74%, height: 30%}
+          display: {precision: 1, unitPosition: Hidden, format-hint: '0.0', valueLabel: {alignment: Center, margins: 0px, color: $info, text-height: $head, matchingGroup: {group: global.head, matchAll: true}}}
+        - {type: text, text: Heat pump, alignment: Center, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 5%, y: 82%, width: 90%, height: 14%}}
+      - type: group
+        items:
+        - type: realtime.gauge
+          key: home.power.ev
+          title: {visible: false}
+          geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+          display:
+            radius: 96%
+            arc: {start-angle: -120, end-angle: 120, weight: 7%, color: $rule}
+            range: {min: 0, max: 3}
+            fill: {weight: 7%, color: $good}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {visible: false}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+        - type: realtime.text
+          key: home.power.ev
+          title: {visible: false}
+          geometry: {x: 13%, y: 34%, width: 74%, height: 30%}
+          display: {precision: 1, unitPosition: Hidden, format-hint: '0.0', valueLabel: {alignment: Center, margins: 0px, color: $good, text-height: $head, matchingGroup: {group: global.head, matchAll: true}}}
+        - {type: text, text: Car, alignment: Center, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 5%, y: 82%, width: 90%, height: 14%}}
+      - type: group
+        items:
+        - type: realtime.gauge
+          key: home.power.kitchen
+          title: {visible: false}
+          geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+          display:
+            radius: 96%
+            arc: {start-angle: -120, end-angle: 120, weight: 7%, color: $rule}
+            range: {min: 0, max: 3}
+            fill: {weight: 7%, color: $accent}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {visible: false}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+        - type: realtime.text
+          key: home.power.kitchen
+          title: {visible: false}
+          geometry: {x: 13%, y: 34%, width: 74%, height: 30%}
+          display: {precision: 1, unitPosition: Hidden, format-hint: '0.0', valueLabel: {alignment: Center, margins: 0px, color: $accent, text-height: $head, matchingGroup: {group: global.head, matchAll: true}}}
+        - {type: text, text: Kitchen, alignment: Center, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 5%, y: 82%, width: 90%, height: 14%}}
+      - type: group
+        items:
+        - type: realtime.gauge
+          key: home.power.water
+          title: {visible: false}
+          geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+          display:
+            radius: 96%
+            arc: {start-angle: -120, end-angle: 120, weight: 7%, color: $rule}
+            range: {min: 0, max: 3}
+            fill: {weight: 7%, color: $draw}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {visible: false}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+        - type: realtime.text
+          key: home.power.water
+          title: {visible: false}
+          geometry: {x: 13%, y: 34%, width: 74%, height: 30%}
+          display: {precision: 1, unitPosition: Hidden, format-hint: '0.0', valueLabel: {alignment: Center, margins: 0px, color: $draw, text-height: $head, matchingGroup: {group: global.head, matchAll: true}}}
+        - {type: text, text: Water heater, alignment: Center, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 5%, y: 82%, width: 90%, height: 14%}}
+      - type: group
+        items:
+        - type: realtime.gauge
+          key: home.power.solar
+          title: {visible: false}
+          geometry: {x: 0%, y: 0%, width: 100%, height: 100%}
+          display:
+            radius: 96%
+            arc: {start-angle: -120, end-angle: 120, weight: 7%, color: $rule}
+            range: {min: 0, max: 4}
+            fill: {weight: 7%, color: $solar}
+            major: {enabled: false}
+            minor: {enabled: false}
+            micro: {enabled: false}
+            needle: {visible: false}
+            value-label: {visible: false}
+            unit-label: {visible: false}
+        - type: realtime.text
+          key: home.power.solar
+          title: {visible: false}
+          geometry: {x: 13%, y: 34%, width: 74%, height: 30%}
+          display: {precision: 1, unitPosition: Hidden, format-hint: '0.0', valueLabel: {alignment: Center, margins: 0px, color: $solar, text-height: $head, matchingGroup: {group: global.head, matchAll: true}}}
+        - {type: text, text: Solar, alignment: Center, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 5%, y: 82%, width: 90%, height: 14%}}
 
   # ================= THE SLOT ==============================================
+  # A switch. A notice with `when:` joins the rotation while its unit-literal test holds; the last is always there.
   - type: switch
     name: slot
     grid: {area: slot}
@@ -124,107 +261,144 @@ items:
     fade: 0.4s
     hold: 10s
     items:
-    - preset: headline-panel
+    - type: group
       name: heavy
       when: '$pw > 4 kW'
-      props:
-        headline: Heavy draw
-        headline_color: $bad
-        key: $pw
-        title: House now
-        color: $bad
-        precision: 1
-        unit_position: Inline
-        headline_box: {x: 0%, y: 0%, width: 100%, height: 14%}
-        hero_box: {x: 0%, y: 16%, width: 100%, height: 40%}
-        list_box: {x: 0%, y: 62%, width: 100%, height: 38%}
+      items:
+      - {type: text, text: Heavy draw, color: $bad, alignment: BottomLeft, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 6%}}
+      - {type: text, text: 'Over the 4 kW line, kW', alignment: TopLeft, font: Roboto, weight: Light, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 0%, y: 7.5%, width: 100%, height: 3.5%}}
+      - type: realtime.text
+        key: '$pw - 4 kW'
+        title: {visible: false}
+        geometry: {x: 0%, y: 13%, width: 100%, height: 15%}
+        display: {precision: 1, weight: Light, unitPosition: Hidden, format-hint: '00.0', valueLabel: {alignment: Left, margins: 0px, color: $bad, text-height: $big, matchingGroup: {group: global.big, matchAll: true}}}
+      - type: grid
+        geometry: {x: 0%, y: 34%, width: 100%, height: 24%}
+        spacing: 0
+        grid: {columns: [1fr], rows: [1fr, 1fr, 1fr]}
+        shared:
+          title: {color: $muted, alignment: Left, position: Left, size: 0.62, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+          display: {unitPosition: Hidden, valueLabel: {alignment: Right, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
         items:
-        - {type: realtime.text, key: home.power.hvac, title: {text: Heat pump}, display: {precision: 1, valueLabel: {color: $info}}}
-        - {type: realtime.text, key: home.power.kitchen, title: {text: Kitchen}, display: {precision: 1, valueLabel: {color: $accent}}}
-        - {type: realtime.text, key: home.power.ev, title: {text: Car}, display: {precision: 1, valueLabel: {color: $good}}}
-    - preset: headline-panel
+        - {type: realtime.text, key: '$pv', title: 'Solar now, kW', display: {precision: 1, format-hint: '0.0', valueLabel: {color: $solar}}}
+        - {type: realtime.text, key: '$pw - $pv', title: 'From the grid, kW', display: {precision: 1, format-hint: '0.0'}}
+        - {type: realtime.text, key: 'max($pw, 24h)', title: 'Peak today, kW', display: {precision: 1, format-hint: '0.0', valueLabel: {color: $draw}}}
+    - type: group
       name: charging
       when: 'home.power.ev > 1 kW'
-      props:
-        headline: Car charging
-        headline_color: $good
-        key: to(home.power.ev * 4h, kWh)
-        title: Added in 4 h at this rate
-        color: $good
-        precision: 1
-        unit_position: Inline
-        headline_box: {x: 0%, y: 0%, width: 100%, height: 14%}
-        hero_box: {x: 0%, y: 16%, width: 100%, height: 40%}
-        list_box: {x: 0%, y: 62%, width: 100%, height: 38%}
+      items:
+      - {type: text, text: Car charging, alignment: BottomLeft, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 6%}}
+      - {type: text, text: 'Added in 4 h at this rate, kWh', alignment: TopLeft, font: Roboto, weight: Light, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 0%, y: 7.5%, width: 100%, height: 3.5%}}
+      - type: realtime.text
+        key: 'to(home.power.ev * 4h, kWh)'
+        title: {visible: false}
+        geometry: {x: 0%, y: 13%, width: 100%, height: 15%}
+        display: {precision: 1, weight: Light, unitPosition: Hidden, format-hint: '00.0', valueLabel: {alignment: Left, margins: 0px, color: $good, text-height: $big, matchingGroup: {group: global.big, matchAll: true}}}
+      - type: grid
+        geometry: {x: 0%, y: 34%, width: 100%, height: 16%}
+        spacing: 0
+        grid: {columns: [1fr], rows: [1fr, 1fr]}
+        shared:
+          title: {color: $muted, alignment: Left, position: Left, size: 0.62, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+          display: {unitPosition: Hidden, valueLabel: {alignment: Right, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
         items:
-        - {type: realtime.text, key: home.power.ev, title: {text: Charger}, display: {precision: 1}}
-        - {type: realtime.text, key: 'to(home.power.ev * 1h, kWh)', title: {text: Each hour}, display: {precision: 1, valueLabel: {color: $good}}}
-    - preset: headline-panel
+        - {type: realtime.text, key: 'home.power.ev', title: 'Charger, kW', display: {precision: 1, format-hint: '0.0', valueLabel: {color: $good}}}
+        - {type: realtime.text, key: 'to(home.power.ev * 1h, kWh)', title: 'Each hour, kWh', display: {precision: 1, format-hint: '0.0', valueLabel: {color: $good}}}
+    - type: group
       name: quiet
-      props:
-        headline: Baseline
-        headline_color: $info
-        key: to(home.power.total * 8h, kWh)
-        title: A night at this draw
-        color: $info
-        precision: 1
-        unit_position: Inline
-        headline_box: {x: 0%, y: 0%, width: 100%, height: 14%}
-        hero_box: {x: 0%, y: 16%, width: 100%, height: 40%}
-        list_box: {x: 0%, y: 62%, width: 100%, height: 38%}
+      items:
+      - {type: text, text: Baseline, alignment: BottomLeft, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 6%}}
+      - {type: text, text: 'A night at this draw, kWh', alignment: TopLeft, font: Roboto, weight: Light, color: $muted, text-height: $label, matchingGroup: {group: global.title, matchAll: true}, geometry: {x: 0%, y: 7.5%, width: 100%, height: 3.5%}}
+      - type: realtime.text
+        key: 'to(home.power.total * 8h, kWh)'
+        title: {visible: false}
+        geometry: {x: 0%, y: 13%, width: 100%, height: 15%}
+        display: {precision: 1, weight: Light, unitPosition: Hidden, format-hint: '00.0', valueLabel: {alignment: Left, margins: 0px, color: $draw, text-height: $big, matchingGroup: {group: global.big, matchAll: true}}}
+      - type: grid
+        geometry: {x: 0%, y: 34%, width: 100%, height: 8%}
+        spacing: 0
+        grid: {columns: [1fr], rows: [1fr]}
+        shared:
+          title: {color: $muted, alignment: Left, position: Left, size: 0.62, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+          display: {unitPosition: Hidden, valueLabel: {alignment: Right, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
         items:
-        - {type: realtime.text, key: home.power.total, title: {text: Now}, display: {precision: 1}}
+        - {type: realtime.text, key: 'home.power.total', title: 'Now, kW', display: {precision: 1, format-hint: '0.0', valueLabel: {color: $draw}}}
 
   # ================= TODAY'S ENERGY ========================================
-  - preset: callout
+  # Four columns on one pattern: a header with the unit, the figure, and one row under it.
+  - type: group
     name: used
     grid: {area: used}
-    props:
-      key: $used
-      title: Used today
-      title_height: 16%
-      color: $draw
-      precision: 1
-      hero_box: {x: 0%, y: 8%, width: 100%, height: 60%}
-      list_box: {x: 0%, y: 72%, width: 100%, height: 28%}
+    items:
+    - {type: text, text: 'Used today, kWh', alignment: BottomLeft, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 18%}}
+    - type: realtime.text
+      key: '$used'
+      title: {visible: false}
+      geometry: {x: 0%, y: 22%, width: 100%, height: 46%}
+      display: {precision: 1, weight: Light, unitPosition: Hidden, format-hint: '00.0', valueLabel: {alignment: Left, margins: 0px, color: $draw, text-height: $big, matchingGroup: {group: global.big, matchAll: true}}}
+    - type: grid
+      geometry: {x: 0%, y: 78%, width: 100%, height: 22%}
+      spacing: 0
+      grid: {columns: [1fr], rows: [1fr]}
+      shared:
+        title: {color: $muted, alignment: Left, position: Left, size: 0.62, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+        display: {unitPosition: Hidden, valueLabel: {alignment: Right, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
       items:
-      - {type: realtime.text, key: 'to($used / 19h, kW)', title: {text: Average}, display: {precision: 2}}
-  - preset: callout
+      - {type: realtime.text, key: 'to($used / 19h, kW)', title: 'Average, kW', display: {precision: 2, format-hint: '0.00'}}
+  - type: group
     name: yest
     grid: {area: yest}
-    props:
-      key: home.energy.yesterday
-      title: Used yesterday
-      title_height: 16%
-      color: $muted
-      precision: 1
-      hero_box: {x: 0%, y: 8%, width: 100%, height: 60%}
-      list_box: {x: 0%, y: 72%, width: 100%, height: 28%}
+    items:
+    - {type: text, text: 'Yesterday, kWh', alignment: BottomLeft, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 18%}}
+    - type: realtime.text
+      key: 'home.energy.yesterday'
+      title: {visible: false}
+      geometry: {x: 0%, y: 22%, width: 100%, height: 46%}
+      display: {precision: 1, weight: Light, unitPosition: Hidden, format-hint: '00.0', valueLabel: {alignment: Left, margins: 0px, color: $muted, text-height: $big, matchingGroup: {group: global.big, matchAll: true}}}
+    - type: grid
+      geometry: {x: 0%, y: 78%, width: 100%, height: 22%}
+      spacing: 0
+      grid: {columns: [1fr], rows: [1fr]}
+      shared:
+        title: {color: $muted, alignment: Left, position: Left, size: 0.62, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+        display: {unitPosition: Hidden, valueLabel: {alignment: Right, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
       items:
-      - {type: realtime.text, key: '$used - home.energy.yesterday', title: {text: Difference so far}, display: {precision: 1, valueLabel: {color: $good}}}
-  - preset: callout
+      - {type: realtime.text, key: '$used - home.energy.yesterday', title: 'Today so far, kWh', display: {precision: 1, format-hint: '-00.0', valueLabel: {color: $good}}}
+  - type: group
     name: made
     grid: {area: made}
-    props:
-      key: $made
-      title: Solar today
-      title_height: 16%
-      color: $solar
-      precision: 1
-      hero_box: {x: 0%, y: 8%, width: 100%, height: 60%}
-      list_box: {x: 0%, y: 72%, width: 100%, height: 28%}
+    items:
+    - {type: text, text: 'Solar today, kWh', alignment: BottomLeft, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 18%}}
+    - type: realtime.text
+      key: '$made'
+      title: {visible: false}
+      geometry: {x: 0%, y: 22%, width: 100%, height: 46%}
+      display: {precision: 1, weight: Light, unitPosition: Hidden, format-hint: '00.0', valueLabel: {alignment: Left, margins: 0px, color: $solar, text-height: $big, matchingGroup: {group: global.big, matchAll: true}}}
+    - type: grid
+      geometry: {x: 0%, y: 78%, width: 100%, height: 22%}
+      spacing: 0
+      grid: {columns: [1fr], rows: [1fr]}
+      shared:
+        title: {color: $muted, alignment: Left, position: Left, size: 0.62, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+        display: {unitPosition: Hidden, valueLabel: {alignment: Right, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
       items:
-      - {type: realtime.text, key: $pv, title: {text: Now}, display: {precision: 1}}
-  - preset: callout
+      - {type: realtime.text, key: '$pv', title: 'Now, kW', display: {precision: 1, format-hint: '0.0', valueLabel: {color: $solar}}}
+  - type: group
     name: bought
     grid: {area: bought}
-    props:
+    items:
+    - {type: text, text: 'From the grid, kWh', alignment: BottomLeft, weight: SemiBold, text-height: $head, matchingGroup: {group: global.head, matchAll: true}, geometry: {x: 0%, y: 0%, width: 100%, height: 18%}}
+    - type: realtime.text
       key: '$used - $made'
-      title: Bought from the grid
-      title_height: 16%
-      color: $info
-      precision: 1
-      hero_box: {x: 0%, y: 8%, width: 100%, height: 60%}
-      list_box: {x: 0%, y: 72%, width: 100%, height: 28%}
+      title: {visible: false}
+      geometry: {x: 0%, y: 22%, width: 100%, height: 46%}
+      display: {precision: 1, weight: Light, unitPosition: Hidden, format-hint: '00.0', valueLabel: {alignment: Left, margins: 0px, color: $text, text-height: $big, matchingGroup: {group: global.big, matchAll: true}}}
+    - type: grid
+      geometry: {x: 0%, y: 78%, width: 100%, height: 22%}
+      spacing: 0
+      grid: {columns: [1fr], rows: [1fr]}
+      shared:
+        title: {color: $muted, alignment: Left, position: Left, size: 0.62, margins: 0px, text-height: $label, matchingGroup: {group: global.title, matchAll: true}}
+        display: {unitPosition: Hidden, valueLabel: {alignment: Right, margins: 0px, text-height: $value, matchingGroup: {group: global.value, matchAll: true}}}
       items:
-      - {type: realtime.text, key: 'to(($used - $made) / 19h, kW)', title: {text: Average draw}, display: {precision: 2}}
+      - {type: realtime.text, key: 'to(($used - $made) / 19h, kW)', title: 'Average, kW', display: {precision: 2, format-hint: '0.00'}}

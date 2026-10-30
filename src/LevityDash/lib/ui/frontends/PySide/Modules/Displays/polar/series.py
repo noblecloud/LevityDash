@@ -8,7 +8,7 @@ from bisect import bisect_left, bisect_right
 from datetime import datetime
 from typing import Any, Mapping, Optional, Sequence, Tuple
 
-import WeatherUnits as wu
+import unitcorn as wu
 
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.expressions import Expression, Missing

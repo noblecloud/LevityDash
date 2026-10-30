@@ -30,3 +30,21 @@ def test_beam_form_round_trips_glow():
 	assert form.value() == {'active': True, 'glow': True}
 	form.setValue({'active': True})
 	assert form.value() == {'active': True}, 'no glow stays out of the file'
+
+
+@pytest.mark.parametrize('spec', [
+	{'min-width': 900},
+	{'max-width': 800, 'orientation': 'portrait'},
+	{'of': 'parent', 'min-height': 300, 'max-height': 600},
+	{'min-width': 900, 'and': 'environment.precipitation.precipitation > 0'},
+	{'min-aspect': '16:9', 'min-width': 700},
+])
+def test_when_edit_round_trips_a_size_condition(spec):
+	edit = ConditionEdit(size=True)
+	edit.setValue(spec)
+	assert edit.value() == spec
+
+
+def test_only_when_offers_the_size_mode():
+	assert ConditionEdit(size=True).mode.count() == 5
+	assert ConditionEdit().mode.count() == 4

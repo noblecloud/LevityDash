@@ -25,6 +25,14 @@ Controls whether the frontend runs its own plugins or attaches to a standalone b
 - `live` (default) — plugins, data pipeline, and the Qt window all run in one process.
 - `remote` — the Qt window acts as a frontend only, connecting to a standalone backend (`LevityDash-backend`) over WebSocket. Graphs are realtime-only in remote mode (timeseries is a planned milestone).
 
+### <div class=mono>watchdog</div>
+
+What the standalone backend, and the app when it runs plugins itself (`live` mode), does about a plugin that is running but has stopped publishing (a socket that stays bound with nothing on it, a stuck poll). It compares the quiet time with how often the plugin normally publishes.
+
+- `log` (default) — one log line when a plugin is overdue, one when it is far overdue, one when it publishes again.
+- `restart` — also stops a far-overdue plugin and starts it again, at most three times, waiting longer between tries (a minute, then two, then four). Publishing again gives the tries back.
+- `off` — never looks.
+
 The standalone backend ignores this setting — it always ingests plugins live.
 
 ## Display
@@ -62,7 +70,7 @@ Which screen the window opens on, for multi-monitor setups. Accepts:
 
 ### <div class=mono>width/height</div> 
 
-The starting width and height of the window in pixels `px`, percentage `%`, centimeters `cm`, millimeters `mm`, inches `in` or pretty much any length unit supported by WeatherUnits. For values without a unit, integers are assumed to be
+The starting width and height of the window in pixels `px`, percentage `%`, centimeters `cm`, millimeters `mm`, inches `in` or pretty much any length unit supported by unitcorn. For values without a unit, integers are assumed to be
 pixels and floats, percentages.
 If provided a real-world measurement like centimeters, the value will be estimated based on the displays reported DPI.
 
@@ -217,10 +225,10 @@ The logger uses a rolling file logger, when the log file reaches this size, it w
 This is the number of files to keep with the rolling file logger. The default is `5`.
 
 
-## WeatherUnits <!-- {docsify-ignore} -->
+## unitcorn <!-- {docsify-ignore} -->
 
-The sections below are for the WeatherUnit Module. WeatherUnits is what is used to convert/localize measurements for display. More information on how it's configured can be found in
-the [WeatherUnits repo](https://github.com/noblecloud/WeatherUnits).
+The sections below are for unitcorn (formerly WeatherUnits), the library that converts and localizes measurements for display. More information on how it's configured can be found in
+the [unitcorn repo](https://github.com/noblecloud/WeatherUnits).
 
 ```ini
 [Units]

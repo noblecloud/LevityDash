@@ -7,6 +7,7 @@ doc: "A room or chamber: temperature over its day, humidity ring, dew point, gap
 props:
   title: {default: Room, type: text, doc: "The name on top"}
   title_color: {default: $muted, type: color, doc: "Colour of the name"}
+  headGroup: {default: global.head, type: text, doc: "Size group of the name; the default spans the whole dashboard"}
   id: {default: bedroom, type: text, doc: "The sensor's identity, the part after # in its keys"}
   color: {default: null, type: color, doc: "Colour of the temperature"}
   humid_color: {default: $info, type: color, doc: "Colour of the humidity ring and its reading"}
@@ -22,6 +23,7 @@ template:
       font: $display
       color: $title_color
       alignment: CenterLeft
+      matchingGroup: {group: $headGroup, matchAll: true}
       geometry: {x: 2%, y: 0%, width: 96%, height: 8%}
     - preset: metric-tile
       geometry: {x: 0%, y: 6%, width: 62%, height: 58%}

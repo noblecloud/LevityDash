@@ -88,6 +88,8 @@ class RemoteBackend:
 		# from Plugin because this object already observes every publish and
 		# nothing on Plugin records it - see PluginState.lastPublish.
 		self._lastPublish: Dict[str, datetime] = {}
+		#: Where plugin health comes from (the watchdog's `health`); None sends none.
+		self.healthSource: Optional[Callable[[], Dict[str, str]]] = None
 		# Last plugin_status payload actually sent, so an unchanged snapshot
 		# isn't rebroadcast every tick. Liveness rides on 'heartbeat' precisely
 		# so this one can stay silent when nothing has changed.
@@ -162,7 +164,8 @@ class RemoteBackend:
 		Reads live plugin state, so it must be called on the Qt main thread -
 		which is where lib/backend.py's QTimer already runs it.
 		"""
-		return encode_plugin_status(plugins=list(self._plugins.values()), lastPublish=self._lastPublish)
+		health = self.healthSource() if self.healthSource is not None else None
+		return encode_plugin_status(plugins=list(self._plugins.values()), lastPublish=self._lastPublish, health=health)
 
 	def tick(self) -> None:
 		"""One control-plane beat: always a heartbeat, plus a plugin_status if
