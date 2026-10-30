@@ -300,7 +300,9 @@ schema = {
 	},
 	'environment.soil.moisture.moisture':           {
 		'type':           'soil',
-		'sourceUnit':     '%',
+		'sourceUnit':     '%%',
+		# Open-Meteo gives m³/m³, a share of one: 0.31 is 31%, not 0.31%.
+		'kwargs':         {'isPercentage': False},
 		'title':          'Soil Moisture',
 		'description':    'Soil moisture',
 		'sourceKey':      'soil_moisture_0_1cm',
@@ -308,7 +310,9 @@ schema = {
 	},
 	'environment.soil.moisture.1-3cm':              {
 		'type':           'soil',
-		'sourceUnit':     '%',
+		'sourceUnit':     '%%',
+		# Open-Meteo gives m³/m³, a share of one: 0.31 is 31%, not 0.31%.
+		'kwargs':         {'isPercentage': False},
 		'title':          'Soil Moisture [1-3cm]',
 		'description':    'Soil moisture at 1-3cm depth',
 		'sourceKey':      'soil_moisture_1_3cm',
@@ -316,7 +320,9 @@ schema = {
 	},
 	'environment.soil.moisture.3-9cm':              {
 		'type':           'soil',
-		'sourceUnit':     '%',
+		'sourceUnit':     '%%',
+		# Open-Meteo gives m³/m³, a share of one: 0.31 is 31%, not 0.31%.
+		'kwargs':         {'isPercentage': False},
 		'title':          'Soil Moisture [3-9cm]',
 		'description':    'Soil moisture at 3-9cm depth',
 		'sourceKey':      'soil_moisture_3_9cm',
@@ -324,7 +330,9 @@ schema = {
 	},
 	'environment.soil.moisture.9-27cm':             {
 		'type':           'soil',
-		'sourceUnit':     '%',
+		'sourceUnit':     '%%',
+		# Open-Meteo gives m³/m³, a share of one: 0.31 is 31%, not 0.31%.
+		'kwargs':         {'isPercentage': False},
 		'title':          'Soil Moisture [9-27cm]',
 		'description':    'Soil moisture at 9-27cm depth',
 		'sourceKey':      'soil_moisture_9_27cm',
@@ -332,7 +340,9 @@ schema = {
 	},
 	'environment.soil.moisture.27-81cm':            {
 		'type':           'soil',
-		'sourceUnit':     '%',
+		'sourceUnit':     '%%',
+		# Open-Meteo gives m³/m³, a share of one: 0.31 is 31%, not 0.31%.
+		'kwargs':         {'isPercentage': False},
 		'title':          'Soil Moisture [27-81cm]',
 		'description':    'Soil moisture at 27-81cm depth',
 		'sourceKey':      'soil_moisture_27_81cm',
