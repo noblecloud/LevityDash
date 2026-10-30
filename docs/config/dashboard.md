@@ -470,7 +470,7 @@ Lines a column of values up on the number and not on the whole string. Without i
 
 The text is never changed: nothing is padded and no decimals are added, so `0` stays `0` and `0.0` stays `0.0`. A value with no digit (a compass point such as `WSW`) is not a number and keeps its normal alignment.
 
-The line is shared by the items of one size group, in one tier (so at one font size). Set it where the group is set, usually in `shared:`:
+The line is shared by the items of one size group, in one tier (so at one font size), whose boxes end on the same edge: the right edge for `Right`, the left for `Left`, the middle for `Center`. So the rows of a stack share one line, each column of a grid has its own, and a dashboard-wide group does not tie together values in different columns. Set it where the group is set, usually in `shared:`:
 
 ```yaml
 shared:
@@ -480,7 +480,7 @@ shared:
       number-align: decimal
 ```
 
-The column is as wide as the widest head plus the widest tail in the group, and the text is fitted to that width. A group with one `0.02` among whole numbers therefore fits smaller than one without. Put the number-heavy columns in their own group, or set `format-hint`, to keep the size you want. The `reading-list`, `list-panel`, `hour-column` and `day-column` presets default to `decimal` (property `numberAlign`); `stat-row` leaves it off, because a row of separate cells reads better centred.
+The column is as wide as the widest head plus the widest tail in it, and the text is fitted to that width. A unit drawn on the baseline (`unitPosition: baseline`) counts in the tail. A column with one `0.02` among whole numbers therefore fits smaller than one without. Put the number-heavy columns in their own group, or set `format-hint`, to keep the size you want. The `reading-list`, `list-panel`, `hour-column` and `day-column` presets default to `decimal` (property `numberAlign`); `stat-row` leaves it off, because a row of separate cells reads better centred.
 
 #### <div class=mono>tabular: bool </div>
 
@@ -826,9 +826,9 @@ environment.temperature.temperature:
 
 <div class="indent">
 
-#### <div class=mono>fill: true | float | {opacity, base}</div>
+#### <div class=mono>fill: true | float | {opacity, base, fade}</div>
 
-`opacity` is how strong the fill is, from `0` to `1` (default `0.25`). `base` is the value the fill reaches, in the unit of the data; the axis always includes it. Without `base` the fill reaches the bottom of the figure. `true` takes the defaults and a number sets the opacity. The fill takes the line's colour or gradient.
+`opacity` is how strong the fill is, from `0` to `1` (default `0.25`). `base` is the value the fill reaches, in the unit of the data; the axis always includes it. Without `base` the fill reaches the bottom of the figure. `fade: true` fades the fill out from the line's highest point to the baseline instead of ending in a hard edge. `true` takes the defaults and a number sets the opacity. The fill takes the line's colour or gradient.
 
 </div>
 

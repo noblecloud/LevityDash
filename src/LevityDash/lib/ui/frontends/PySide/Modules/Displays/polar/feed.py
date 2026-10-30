@@ -6,6 +6,7 @@ own signal. `SeriesFeed` waits for a container that has one, reads it into ``(ti
 pairs on the GUI thread and calls ``onChange`` after every refresh, so the item never touches a
 plugin's objects from a worker.
 """
+from datetime import timedelta
 from typing import Callable, Dict, Optional
 
 from PySide6.QtCore import QObject, Slot
@@ -21,6 +22,12 @@ from LevityDash.lib.utils.shared import now as localNow
 __all__ = ['Series', 'SeriesFeed', 'DerivedFeed', 'openFeed', 'openValue', 'installStandIn', 'standIn']
 
 log = LevityPluginLog.getChild('PolarFeed')
+
+# The span a mode=remote fetch asks for (RemoteContainer reads it as `wireTimeseriesPeriod`). The same as a
+# graph's (Graph.py), since the two share one series: without it a polar plot asked for the wire's +-3 h, and
+# whether `window: today` had its day depended on whether a graph on the same key had asked first.
+_WIRE_FETCH_LOOKBACK = timedelta(days=-2)
+_WIRE_FETCH_HORIZON = timedelta(days=16)
 
 
 class SeriesFeed(QObject):
@@ -39,6 +46,10 @@ class SeriesFeed(QObject):
 	@property
 	def series(self) -> Series:
 		return self._series
+
+	@property
+	def wireTimeseriesPeriod(self) -> tuple[timedelta, timedelta]:
+		return _WIRE_FETCH_LOOKBACK, _WIRE_FETCH_HORIZON
 
 	def _attach(self):
 		if self._closed or self._timeseries is not None:

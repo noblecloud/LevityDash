@@ -2628,6 +2628,245 @@ class WhenEdit(_Popover):
 		return f'When: {v}'
 
 
+# Section: a bar's mappings
+
+class BoolEdit(Editor):
+	"""A tick box. Reports None while it matches `default`, so only a real choice is written."""
+
+	def __init__(self, label: str, default: bool = False):
+		super().__init__()
+		self.default = default
+		box = QHBoxLayout(self)
+		box.setContentsMargins(0, 0, 0, 0)
+		self.box = QCheckBox(label)
+		self.box.toggled.connect(self._emit)
+		box.addWidget(self.box)
+
+	def setValue(self, value):
+		with QSignalBlocker(self.box):
+			self.box.setChecked(self.default if value is None else bool(value))
+
+	def value(self):
+		on = self.box.isChecked()
+		return None if on == self.default else on
+
+
+def _choice(*names: str, default: Optional[str] = None) -> ChoiceEdit:
+	"""A dropdown over `names`; the one called `default` is what leaving the key out means."""
+	return ChoiceEdit([(n + (' (default)' if n == default else ''), None if n == default else n) for n in names])
+
+
+class _MappingForm(_Form):
+	"""A bar's mapping (`track:`, `pointer:`, a tick set): the keys it has controls for, the rest kept as written.
+
+	Only keys with a value are written. A value a control cannot show (`segments: false`) stays with the
+	keys it does not know, so a round trip never drops it.
+	"""
+
+	#: Keys whose boolean value belongs to `_extra`, not to the control (a number box cannot show `false`).
+	KEEP_BOOL: tuple = ()
+
+	def setValue(self, value):
+		spec = dict(value) if isinstance(value, dict) else {}
+		self._extra = {k: v for k, v in spec.items() if k not in self._known or (k in self.KEEP_BOOL and isinstance(v, bool))}
+		for key, p in self.parts.items():
+			with QSignalBlocker(p):
+				p.setValue(None if key in self._extra else spec.get(key))
+
+	def value(self):
+		out = dict(self._extra)
+		for key, p in self.parts.items():
+			v = p.value()
+			if v is not None and key not in self._extra:
+				out[key] = v
+		return out
+
+
+class _SwitchedForm(_MappingForm):
+	"""A mapping that is off (None) or on; on with nothing set is a mapping with every default."""
+
+	def __init__(self, label: str):
+		super().__init__()
+		self.on = QCheckBox(label)
+		self.on.toggled.connect(self._switched)
+		self.grid.addWidget(self.on, self._r, 0, 1, 2)
+		self._r += 1
+
+	def _switched(self, on: bool):
+		for key in self.parts:
+			self.showPart(key, on)
+		self._emit()
+
+	def setValue(self, value):
+		on = value is not None and value is not False
+		with QSignalBlocker(self.on):
+			self.on.setChecked(on)
+		for key in self.parts:
+			self.showPart(key, on)
+		super().setValue(value if on else None)
+
+	def value(self):
+		return super().value() if self.on.isChecked() else None
+
+
+class TrackForm(_MappingForm):
+	KEEP_BOOL = ('segments',)
+
+	def __init__(self):
+		super().__init__()
+		self.part('color', 'colour', ColorEdit(nullable=True), 'The groove under the data.')
+		self.part('weight', 'weight', SizeEdit(nullable=True, autoText='by style', ref='full'),
+		          'Thickness across the bar. A share of the cross extent; the \u27f3 button makes it follow a value.')
+		self.part('cap', 'ends', _choice('round', 'square', 'flat', default='round'))
+		self.part('segments', 'segments', NumberEdit(autoText='solid', integer=True, lo=1, hi=200, step=1), 'Cut the track into this many cells.')
+		self.part('gap', 'gap', SizeEdit(nullable=True, autoText='auto', ref='full'), 'Space between cells.')
+
+
+class PointerForm(_SwitchedForm):
+	def __init__(self):
+		super().__init__('Show a pointer on the value')
+		self.part('type', 'shape', _choice('triangle', 'line', 'dot', 'notch', 'pointer', default='triangle'))
+		self.part('color', 'colour', ColorEdit(nullable=True))
+		self.part('size', 'size', SizeEdit(nullable=True, autoText='by track', ref='full'),
+		          'Size across the bar. A share of the cross extent; \u27f3 makes it follow a value.')
+		self.part('side', 'side', _choice('before', 'after', 'both', default='before'))
+		self.part('glow', 'glow', GlowEdit(), 'A halo around the pointer.')
+
+
+class TicksForm(_SwitchedForm):
+	def __init__(self, label: str, major: bool):
+		super().__init__(label)
+		if major:
+			self.part('interval', 'every', NumberEdit(autoText='round step', measured=True),
+			          'A tick each time the value moves this far. Left alone it picks a round step.')
+		self.part('count', 'count', NumberEdit(autoText='default', integer=True, lo=1, hi=100, step=1),
+		          'Cut each step into this many instead' if not major else 'This many steps across the range, instead of an interval.')
+		self.part('length', 'length', SizeEdit(nullable=True, autoText='default', ref='full'),
+		          'Share of the cross extent; \u27f3 makes it follow a value.')
+		self.part('width', 'width', SizeEdit(nullable=True, autoText='default', ref='full'))
+		self.part('side', 'side', _choice('before', 'after', 'both', default='after'))
+		self.part('color', 'colour', ColorEdit(nullable=True))
+		if major:
+			self.part('labels', 'numbers', BoolEdit('number the ticks'))
+			self.part('size', 'number size', SizeEdit(nullable=True, autoText='default', ref='full'))
+			self.part('format', 'format', FormatEdit())
+
+
+class ValueLabelForm(_MappingForm):
+	def __init__(self):
+		super().__init__()
+		self.part('visible', 'show', BoolEdit('show the value as text', default=True))
+		self.part('position', 'position', _choice('end', 'start', 'above', 'below', 'left', 'right', 'inside', default='end'))
+		self.part('align', 'align', ChoiceEdit([('auto', None), ('left', 'left'), ('center', 'center'), ('right', 'right')]))
+		self.part('size', 'size', SizeEdit(nullable=True, autoText='default', ref='full'),
+		          'Text height as a share of the cross extent. Sizes of text come from size groups on a dashboard, so this is not bound to a value.')
+		self.part('color', 'colour', ColorEdit(nullable=True))
+		self.part('format', 'format', FormatEdit())
+
+
+class UnitLabelForm(_MappingForm):
+	def __init__(self):
+		super().__init__()
+		self.part('visible', 'show', BoolEdit('show the unit word'))
+		self.part('text', 'text', LineText('mph'))
+		self.part('size', 'size', NumberEdit(autoText='default', lo=0.1, hi=1.5, step=0.05, decimals=2), 'Share of the value text.')
+		self.part('color', 'colour', ColorEdit(nullable=True))
+
+
+class _MappingPopover(_Popover):
+	"""A bar mapping behind a button that says what is set."""
+
+	label = ''
+	#: The keys the button names, in order, when they are set.
+	SHOWN: tuple = ()
+	#: What an unset mapping reads.
+	OFF = 'default'
+
+	def _tidy(self, value):
+		return value if isinstance(value, dict) and value else None
+
+	def summary(self) -> str:
+		spec = self._value if isinstance(self._value, dict) else {}
+		if not spec:
+			return f'{self.label}: {self.OFF}'
+		bits = [f'{spec[k]}' for k in self.SHOWN if spec.get(k) is not None]
+		return f'{self.label}: ' + (' \u00b7 '.join(map(self._bit, bits)) if bits else 'set')
+
+	@staticmethod
+	def _bit(value) -> str:
+		return 'bound' if isinstance(value, str) and value.startswith('{') else str(value)
+
+
+class TrackEdit(_MappingPopover):
+	title = 'Track'
+	label = 'Track'
+
+	def __init__(self):
+		super().__init__(TrackForm())
+
+
+class PointerEdit(_MappingPopover):
+	title = 'Pointer'
+	label = 'Pointer'
+	OFF = 'off'
+	SHOWN = ('type',)
+
+	def __init__(self):
+		super().__init__(PointerForm())
+
+	def _tidy(self, value):
+		return value if isinstance(value, dict) else None
+
+	def summary(self) -> str:
+		spec = self._value
+		return 'Pointer: off' if spec is None else f"Pointer: {spec.get('type', 'triangle')}"
+
+
+class TicksEdit(_MappingPopover):
+	OFF = 'off'
+
+	def __init__(self, label: str, major: bool):
+		self.title = self.label = label
+		super().__init__(TicksForm(f'Show {label.lower()}', major))
+
+	def _tidy(self, value):
+		return value if isinstance(value, dict) else None
+
+	def summary(self) -> str:
+		spec = self._value
+		if spec is None:
+			return f'{self.label}: off'
+		return f'{self.label}: ' + ('numbered' if spec.get('labels') else 'on')
+
+
+class ValueLabelEdit(_MappingPopover):
+	title = 'Value text'
+	label = 'Value text'
+	SHOWN = ('position',)
+
+	def __init__(self):
+		super().__init__(ValueLabelForm())
+
+	def summary(self) -> str:
+		spec = self._value if isinstance(self._value, dict) else {}
+		if spec.get('visible') is False:
+			return 'Value text: hidden'
+		return super().summary()
+
+
+class UnitLabelEdit(_MappingPopover):
+	title = 'Unit word'
+	label = 'Unit word'
+	OFF = 'off'
+
+	def __init__(self):
+		super().__init__(UnitLabelForm())
+
+	def summary(self) -> str:
+		spec = self._value if isinstance(self._value, dict) else {}
+		return 'Unit word: ' + ('shown' if spec.get('visible') else 'off')
+
+
 # Section: the factory
 
 #: Editors other tools add for kinds of their own (the polar panel): kind -> factory(field).
@@ -2676,4 +2915,16 @@ def make(field: 'schema.Field') -> Optional[Editor]:
 		return BeamEdit()
 	if kind == 'when':
 		return WhenEdit()
+	if kind == 'bar-track':
+		return TrackEdit()
+	if kind == 'bar-pointer':
+		return PointerEdit()
+	if kind == 'bar-major':
+		return TicksEdit('Major ticks', True)
+	if kind == 'bar-minor':
+		return TicksEdit('Minor ticks', False)
+	if kind == 'bar-value':
+		return ValueLabelEdit()
+	if kind == 'bar-unit':
+		return UnitLabelEdit()
 	return None

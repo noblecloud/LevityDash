@@ -57,3 +57,19 @@ def test_a_tail_is_drawn_after_the_text_on_its_baseline_and_widens_the_fit(label
 	assert tailed.width() > bare.width() * 1.2, 'the unit adds to the drawn text'
 	assert abs(tailed.bottom() - bare.bottom()) < bare.height() * 0.2 + 1, 'the tail shares the value baseline, it does not drop below'
 	assert box._textRect.width() > bareRect.width(), 'and to the width the fit and the size group see'
+
+
+def test_a_tail_with_number_align_is_drawn_and_counts_in_the_column(labelBox):
+	"""Both on together raised a TypeError in the path build (the column's widths shadowed the tail run), so the value
+	showed as dots."""
+	box = labelBox
+	box.setNumberAlign('decimal')
+	box.updateTransform(updatePath=True, updateShared=False, reason='test')
+	bare = box.path().boundingRect()
+	bareTail = box._numberExtents()[1]
+	box.tailRun = lambda: ('mph', 0.45)
+	box.updateTransform(updatePath=True, updateShared=False, reason='test')
+	tailed = box.path().boundingRect()
+	assert tailed.width() > bare.width() * 1.2, 'the unit is drawn after the number'
+	assert box._numberExtents()[1] > bareTail, 'and the column leaves room for it after the cut'
+	box.setNumberAlign(None)

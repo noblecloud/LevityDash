@@ -12,7 +12,7 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from LevityDash.lib.plugins.categories import CategoryItem
 from LevityDash.lib.plugins.observation import TimeSeriesItem
 from LevityDash.lib.plugins.utils import Request
-from LevityDash.lib.wire.containers import RemoteSource
+from LevityDash.lib.wire.containers import ContainerFlags, RemoteSource
 from LevityDash.lib.wire.messages import encode_ts_response
 from datetime import datetime, timedelta, timezone
 
@@ -176,3 +176,21 @@ def test_a_refetch_that_gets_no_answer_is_tried_again(monkeypatch):
 	container, series, graph = connected(backend)
 	container._refetchTimeseries()
 	assert len(backend.requests) == 3, 'the failed refetch was not retried'
+
+
+def test_a_request_that_leaves_no_series_calls_back_later_not_at_once(monkeypatch):
+	"""Calling back at once makes the requester ask again: a request loop every millisecond."""
+	from LevityDash.lib.utils import shared
+	delayed = []
+	monkeypatch.setattr(shared, 'singleShotSafe', lambda msec, callback: delayed.append((msec, callback)))
+
+	app()
+	called = []
+	source = RemoteSource(name='OpenMeteo', ts_request_fn=lambda message, on_response: on_response(None))
+	container = source.getOrCreate(KEY)
+	container._update(70.0, flags=ContainerFlags(isTimeseriesOnly=False))
+	container.prepare_for_ts_connection(Request(requester=Graph(), callback=lambda: called.append(1)))
+
+	assert container.timeseries is None
+	assert not called, 'the requester was called back at once'
+	assert delayed and delayed[0][0] >= 1000

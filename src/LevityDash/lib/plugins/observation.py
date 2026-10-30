@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone as _timezones, tzinfo
 from functools import cached_property, lru_cache, partial, wraps
 from inspect import Parameter, Signature
 from multiprocessing import Lock
+from threading import RLock
 from numbers import Number
 from operator import add
 from os import environ
@@ -2282,6 +2283,7 @@ class MeasurementTimeSeries(OrderedDict):
 		self.__lastHash = 0
 		self.__references = set()
 		self.__nullValue = None
+		self.__dataLock = RLock()
 		self._source = source
 		self.key = key
 		self.signals = TimeSeriesSignal(self)
@@ -2299,7 +2301,9 @@ class MeasurementTimeSeries(OrderedDict):
 					obs.add_subscribed_item(self.key)
 
 	def __valuesHash(self) -> int:
-		return hash(tuple(getattr(i, 'rawValue', i) for i in self.values()))
+		with self.__dataLock:
+			values = tuple(self.values())
+		return hash(tuple(getattr(i, 'rawValue', i) for i in values))
 
 	@property
 	def key(self) -> CategoryItem:
@@ -2436,7 +2440,6 @@ class MeasurementTimeSeries(OrderedDict):
 		return any(len(i) == 0 for i in self.__references if isinstance(i, MeasurementTimeSeries) and i.isMultiSource)
 
 	def update(self, changed: Set[Observation] = None) -> None:
-		# TODO: Add a lock to this operation
 		changed = changed or self.observations
 		with self.signals:
 			currentLength = len(self)
@@ -2445,36 +2448,29 @@ class MeasurementTimeSeries(OrderedDict):
 			else:
 				_logger = lambda msg, verbosity=0: log.debug(msg)
 			_logger(f'Updating {type(self).__name__}({self.sourceName}:{self.key.name})')
-			self.clear()
-			log.verbose(f'{self} cleared with length {len(self)}', verbosity=5)
 			key = self._key
+			# Read the source before taking the lock, so that two series never wait on each other. The worker thread
+			# of the computed values reads this series while a source change rebuilds it on the main thread.
 			if isinstance(self._source, ObservationTimeSeries):
 				_logger(f'{self} updating from single source of length {len(self._source.timeseries)}')
-				itemCount = 0
-				for item in [v[key] for v in tuple(self._source.timeseries.values()) if key in v]:
-					itemCount += 1
-					self[item.timestamp] = item
-				log.verbose(
-					f'{self} updated from single source with '
-					f'{itemCount} expected items and a change of '
-					f'{len(self) - currentLength} [{currentLength}'
-					f' -> {len(self)}]',
-					verbosity=5
-				)
+				items = [v[key] for v in tuple(self._source.timeseries.values()) if key in v]
 			else:
-				values = self.__sourcePull()
-
-				for item in values:
+				items = self.__sourcePull()
+			with self.__dataLock:
+				self.clear()
+				log.verbose(f'{self} cleared with length {len(self)}', verbosity=5)
+				for item in items:
 					self[item.timestamp] = item
-				log.verbose(
-					f'{self} updated from multiple sources with'
-					f' {len(self) - currentLength} [{currentLength}'
-					f' -> {len(self)}]',
-					verbosity=5
-				)
+				thisHash = self.__valuesHash()
+			log.verbose(
+				f'{self} updated from {"a single source" if isinstance(self._source, ObservationTimeSeries) else "multiple sources"} '
+				f'with {len(items)} items and a change of '
+				f'{len(self) - currentLength} [{currentLength}'
+				f' -> {len(self)}]',
+				verbosity=5
+			)
 			# self.removeOldValues()
 
-			thisHash = self.__valuesHash()
 			if thisHash != self.__lastHash:
 				_logger(f'{self} has changed, clearing cache and publishing changes', verbosity=3)
 				self.__clearCache()
@@ -2698,7 +2694,8 @@ class MeasurementTimeSeries(OrderedDict):
 
 	def updateItem(self, value):
 		key = DateKey(value.timestamp)
-		self[key] = value
+		with self.__dataLock:
+			self[key] = value
 
 	def get_slice_size(self, start: datetime, stop: datetime) -> int:
 		"""Check if the slice is valid for this timeseries"""
@@ -2729,7 +2726,8 @@ class MeasurementTimeSeries(OrderedDict):
 	def list(self):
 		if len(self) == 0:
 			self.update()
-		l = list(self.values())
+		with self.__dataLock:
+			l = list(self.values())
 		return sorted(l, key=lambda x: x.timestamp)
 
 	@cached_property

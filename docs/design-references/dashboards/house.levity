@@ -99,8 +99,8 @@ items:
           key: environment.temperature.temperature
           hours: 24
           hero_box: {x: 0%, y: 0%, width: 44%, height: 70%}
-          graph_box: {x: 0%, y: 10%, width: 100%, height: 74%}
-          list_box: {x: 0%, y: 80%, width: 100%, height: 20%}
+          graph_box: {x: 0%, y: 10%, width: 100%, height: 60%}
+          list_box: {x: 0%, y: 68%, width: 100%, height: 32%}
           items:
           - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels}, display: {precision: 0, valueLabel: {color: $accent}}}
           - {type: realtime.text, key: $dew, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
@@ -131,7 +131,7 @@ items:
         matchingGroup: {group: global.head, matchAll: true}
         geometry: {x: 2%, y: 0%, width: 60%, height: 7%}
       - preset: bar-stack
-        geometry: {x: 0%, y: 8%, width: 100%, height: 62%}
+        geometry: {x: 0%, y: 8%, width: 100%, height: 58%}
         props:
           items:
           - preset: readout-bar
@@ -195,7 +195,7 @@ items:
               - {from: 72, to: 76, color: $warn, opacity: 0}
               - {from: 76, color: $bad, opacity: 0}
       - preset: stat-row
-        geometry: {x: 0%, y: 74%, width: 100%, height: 26%}
+        geometry: {x: 0%, y: 68%, width: 100%, height: 32%}
         props:
           items:
           - {type: realtime.text, key: 'max(indoor.temperature.temperature#office, today)', title: {text: Office peak}, display: {precision: 1, valueLabel: {color: $bad}}}
@@ -216,7 +216,7 @@ items:
         geometry: {x: 2%, y: 0%, width: 40%, height: 7%}
       - type: stack
         direction: Horizontal
-        geometry: {x: 0%, y: 8%, width: 100%, height: 62%}
+        geometry: {x: 0%, y: 8%, width: 100%, height: 58%}
         spacing: 0.5mm
         items:
         - preset: ring-reading
@@ -232,7 +232,7 @@ items:
         - preset: ring-reading
           props: {key: 'indoor.humidity.humidity#nursery', title: Nursery, color: $pink, text_color: $pink, min: 0.2, max: 0.8, weight: 9%, radius: 96%, precision: 0}
       - preset: stat-row
-        geometry: {x: 0%, y: 74%, width: 100%, height: 26%}
+        geometry: {x: 0%, y: 68%, width: 100%, height: 32%}
         props:
           items:
           - {type: realtime.text, key: 'max(indoor.humidity.humidity#basement, today)', title: {text: Basement peak}, display: {precision: 0, valueLabel: {color: $good}}}
