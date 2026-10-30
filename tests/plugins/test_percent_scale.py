@@ -44,3 +44,11 @@ def test_fraction_source_reads_zero_to_one(key):
 def test_wire_round_trip_keeps_a_small_percentage_small():
 	small = convert(OpenMeteo, 'environment.humidity.humidity')(0.1)
 	assert float(decode_measurement(encode_measurement(small))) == pytest.approx(0.001)
+
+
+@pytest.mark.parametrize('key', ['environment.soil.moisture.moisture', 'environment.soil.moisture.1-3cm', 'environment.soil.moisture.27-81cm'])
+def test_open_meteo_soil_moisture_is_a_share_of_one(key):
+	# Open-Meteo reports m³/m³: 0.31 is 31 %. Read as percent it was 0.31 % and every soil row showed 0.
+	moisture = convert(OpenMeteo, key)(0.31)
+	assert float(moisture) == pytest.approx(0.31)
+	assert str(moisture).startswith('31')
