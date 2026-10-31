@@ -27,7 +27,7 @@ import ephem
 from LevityDash.lib.config import userConfig
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.plugins.ble import LifecyclePlugin
-from LevityDash.lib.plugins.builtin.Fixture import buildSchema, ENV_VAR, loadScenario, _TIME_FORMAT
+from LevityDash.lib.plugins.builtin.Fixture import buildSchema, ENV_VAR, loadScenario
 from LevityDash.lib.plugins.schema import LevityDatagram
 
 log = LevityPluginLog.getChild('Astronomy')
@@ -95,7 +95,7 @@ class Astronomy(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 	"""
 
 	def __init__(self):
-		self.schema, self._sourceKeys = buildSchema({'keys': {k: dict(v) for k, v in ASTRONOMY_KEYS.items()}})
+		self.schema, self._sourceKeys = buildSchema({'keys': {k: dict(v) for k, v in ASTRONOMY_KEYS.items()}}, epoch=True)
 		super().__init__()
 		self._scenarioKeys = set()
 		if os.environ.get(ENV_VAR, '').strip():
@@ -118,7 +118,7 @@ class Astronomy(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 			'astronomy.sun.remaining': remaining,
 			'astronomy.sun.elevation': sunElevation(float(userConfig.lat), float(userConfig.lon)),
 		}
-		realtime = {'time': datetime.now().replace(microsecond=0).strftime(_TIME_FORMAT)}
+		realtime = {'time': int(datetime.now().timestamp())}
 		for key, value in values.items():
 			if key not in self._scenarioKeys:
 				realtime[self._sourceKeys[key]] = value

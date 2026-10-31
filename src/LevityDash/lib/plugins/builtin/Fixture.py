@@ -105,16 +105,21 @@ def _openMeteoAliases() -> dict:
 IDENTITY_KEY = '@fixtureIdentity'
 
 
-def buildSchema(scenario: dict) -> tuple[dict, Dict[str, str]]:
+def buildSchema(scenario: dict, epoch: bool = False) -> tuple[dict, Dict[str, str]]:
 	"""The schema dict for a scenario, and ``{key: sourceKey}``.
 
 	Each key's source key is its own flattened name, so the realtime and the
 	series datagrams share one spelling.
+
+	A scenario writes its times as local wall-clock text. A plugin that publishes
+	live readings passes ``epoch=True`` and sends seconds instead: text cannot say
+	which of the two 01:00s of the autumn clock change it means.
 	"""
 	defaults = _openMeteoDefaults()
+	timeFormat = {'sourceUnit': 'epoch'} if epoch else {'sourceUnit': 'ISO8601', 'format': _TIME_FORMAT}
 	schema: Dict[str, Any] = {
 		'timestamp': {
-			'type': 'datetime', 'sourceUnit': 'ISO8601', 'format': _TIME_FORMAT,
+			'type': 'datetime', **timeFormat,
 			'title': 'Time', 'sourceKey': 'time', tsk.metaData: '@timestamp',
 		},
 		'dataMaps': {'forecast': {'hourly': 'hourly'}, 'realtime': {'realtime': ()}},
