@@ -683,7 +683,7 @@ class Realtime(Panel, tag='realtime'):
 					return any(isinstance(obs, RealtimeSource) for obs in sources)
 
 				# We have the correct source, but a realtime value has not been received yet
-				trueRealtimeContainer.notifyOnRequirementsMet(requirementCheck, approximateRealtimeOnLastAttempt())
+				trueRealtimeContainer.notifyOnRequirementsMet(self, requirementCheck, approximateRealtimeOnLastAttempt)
 				return
 
 			# Everything checks out, connect to the realtime source
