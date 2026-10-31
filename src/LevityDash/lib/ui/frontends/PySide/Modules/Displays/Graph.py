@@ -104,6 +104,16 @@ _WIRE_FETCH_LOOKBACK = timedelta(days=-2)
 _WIRE_FETCH_HORIZON = timedelta(days=16)
 
 
+def _uniqueByTime(arr: np.ndarray) -> np.ndarray:
+	"""Sort (time, value) rows by time and keep the last row for any repeated time.
+
+	np.unique(axis=0) only drops rows that repeat in both columns, so two samples with the same timestamp and
+	different values (the repeated hour when the clocks go back) left a repeated x and the spline raised.
+	"""
+	arr = arr[np.argsort(arr[:, 0], kind='stable')]
+	return arr[np.append(arr[1:, 0] != arr[:-1, 0], True)]
+
+
 def _isPlainKey(text: str) -> bool:
 	"""True for a bare key, False for an expression over keys (or for text that parses as neither)."""
 	try:
@@ -1054,7 +1064,8 @@ class GraphItemData(Stateful, tag=...):
 		arr = np.array([(i.timestamp.timestamp(), float(i.value)) for i in self.list])
 
 		# remove duplicates x values
-		x, y = np.unique(arr, axis=0).T
+		arr = _uniqueByTime(arr)
+		x, y = arr.T
 
 		if len(x) == 1:
 			return x, y
