@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
 )
 
 from LevityDash.devtools import _studio_editors as editors
+from LevityDash.devtools import _studio_graph as graphs
 from LevityDash.devtools import _studio_groups as groups
 from LevityDash.devtools._studio_groups_tab import GroupsTab
 from LevityDash.devtools._studio_keys_tab import KEY_MIME, KeysTab
@@ -96,7 +97,7 @@ def numberAlignField(node: dict, kind: str) -> Optional[str]:
 
 
 #: Fields the Item tab has a control for. Everything else an item holds goes to the "more properties" popover.
-OWNED = {'type', model.PRESET_KEY, 'name', 'key', 'text', 'color', 'direction', 'spacing', 'flex', 'grid', 'when', model.ITEMS_KEY}
+OWNED = {'type', model.PRESET_KEY, 'name', 'key', 'text', 'color', 'direction', 'spacing', 'flex', 'grid', 'when', 'figures', model.ITEMS_KEY}
 OWNED_PATHS = ['geometry.x', 'geometry.y', 'geometry.width', 'geometry.height', 'display.range.min', 'display.range.max', 'display.arc.gradient',
                *NUMBER_ALIGN_FIELDS]
 
@@ -712,6 +713,7 @@ class Stage(QWidget):
 	dragged = Signal(tuple, dict)  # path, geometry in % of the parent
 	dragDone = Signal()
 	parentAsked = Signal()  # Esc: select the selected item's parent
+	siblingAsked = Signal(int)  # [ and ]: select the previous or next item in the same container
 	keyDropped = Signal(tuple, str)  # item path, key dragged from the Keys tab
 
 	HANDLE = 9
@@ -759,6 +761,8 @@ class Stage(QWidget):
 			return self.resetView()
 		if event.key() == Qt.Key.Key_Escape:
 			return self.parentAsked.emit()
+		if event.key() in (Qt.Key.Key_BracketLeft, Qt.Key.Key_BracketRight):
+			return self.siblingAsked.emit(-1 if event.key() == Qt.Key.Key_BracketLeft else 1)
 		step = {Qt.Key.Key_Left: (-1, 0), Qt.Key.Key_Right: (1, 0), Qt.Key.Key_Up: (0, -1), Qt.Key.Key_Down: (0, 1)}.get(event.key())
 		rect = self.rects.get(self.path) if self.path else None
 		if step is None or rect is None or not self.movable:
@@ -1131,6 +1135,10 @@ class ItemTab(QWidget):
 			self._row(head, 'key', 'key', editors.KeyEdit(), value=node.get('key'))
 		if kind in ('text', 'label'):
 			self._row(head, 'text', 'text', TextEdit(), value=node.get('text'))
+		if kind in ('graph', 'mini-graph'):
+			plots = Section('Plots', expanded=True)
+			self.layout_.addWidget(plots)
+			self._row(plots, 'figures', '', graphs.GraphPlotsEdit(), bindable=False, value=node.get('figures'))
 		if kind in ('realtime.gauge', 'realtime.bar'):
 			scale = Section('Scale', expanded=True)
 			self.layout_.addWidget(scale)
@@ -1550,8 +1558,10 @@ class Builder(QWidget):
 		for kind in DISPLAYS:
 			menu.addAction(kind, lambda k=kind: self.addItem(k))
 		menu.addSection('Presets')
+		styles = menu.addMenu('Graph styles')
 		for name in lib.available():
-			menu.addAction(name, lambda n=name: self.addItem(f'preset:{n}'))
+			target = styles if name.startswith('graph-') else menu
+			target.addAction(name, lambda n=name: self.addItem(f'preset:{n}'))
 		self.addButton.setMenu(menu)
 		tools.addWidget(self.addButton)
 		moves = QHBoxLayout()
@@ -1605,6 +1615,7 @@ class Builder(QWidget):
 		self.snapBox.toggled.connect(lambda on: setattr(self.stage, 'snap', on))
 		self.stage.dragDone.connect(self._dragDone)
 		self.stage.parentAsked.connect(self.selectParent)
+		self.stage.siblingAsked.connect(self.selectSibling)
 		self.stage.keyDropped.connect(self._keyDropped)
 		self.tree.keyDropped.connect(self._keyDropped)
 		mbox.addWidget(self.stage, 1)
@@ -1978,6 +1989,16 @@ class Builder(QWidget):
 		self.keysTab.selectionChanged()
 		self._syncStage()
 
+	def selectSibling(self, step: int):
+		"""Select the previous (-1) or next (1) item in the same container; the ends do not wrap."""
+		if not self.selection:
+			return
+		parent = self.piece.node(self.selection[:-1])
+		count = len(parent.get(model.ITEMS_KEY) or []) if parent is not None else 0
+		at = self.selection[-1] + step
+		if 0 <= at < count:
+			self.select(self.selection[:-1] + (at,))
+
 	def selectParent(self):
 		"""Select the selected item's parent container; a top-level item has none, so nothing changes."""
 		if self.selection and len(self.selection) > 1:
@@ -2142,6 +2163,8 @@ class Builder(QWidget):
 		menu.addAction('Duplicate', self.duplicateItem, QKeySequence('Ctrl+D'))
 		menu.addAction('Delete', self.deleteItem, QKeySequence.StandardKey.Delete)
 		menu.addAction('Select parent', self.selectParent, QKeySequence('Esc'))
+		menu.addAction('Select previous item', lambda: self.selectSibling(-1), QKeySequence('['))
+		menu.addAction('Select next item', lambda: self.selectSibling(1), QKeySequence(']'))
 		menu.addAction('Reset geometry', self.resetGeometry)
 		align = menu.addMenu('Align in parent')
 		for how in self.ALIGN:

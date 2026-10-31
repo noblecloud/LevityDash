@@ -9,6 +9,8 @@ props:
   gradient: {default: TemperatureGradient, type: text, doc: "Named scale that colours the line by value"}
   hours: {default: 36, type: number, min: 1, doc: "How far the graph reaches, in hours"}
   icon_size: {default: 30, type: number, min: 8, doc: "Pixels of each glyph"}
+  labels: {default: true, type: bool, doc: "Print the value at the ends of the line; off when `peaks` names the highs and lows"}
+  peaks: {default: null, doc: "Pins on the line's highs and lows, written like `pins:` (for example {key: <the temperature key>, only: extremes, size: 22, offset: -1.6}); unset for none"}
   ribbon_color: {default: $muted, type: color, doc: "Colour of the cloud ribbon"}
 template:
   type: graph
@@ -36,8 +38,8 @@ template:
     - figure: temperature
       margins: {top: 26%, bottom: 28%}
       $key:
-        labels: {enabled: true}
-        plot: {type: plot, gradient: $gradient, weight: 1.2, fill: {opacity: $fill, base: $base}}
+        labels: {enabled: $labels}
+        plot: {type: plot, gradient: $gradient, weight: 1.2, fill: {opacity: $fill, base: $base}, pins: $peaks}
         resolution: 2
     - figure: clouds
       margins: {top: 92%, bottom: 12%}

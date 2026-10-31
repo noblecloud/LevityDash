@@ -168,6 +168,9 @@ items:
           y: 0%
           width: 48%
           height: 14%
+        matchingGroup:
+          group: global.cap-cloud
+          matchAll: true
       - type: realtime.text
         key: environment.clouds.cover.cover
         title: false
@@ -223,6 +226,9 @@ items:
           y: 0%
           width: 48%
           height: 14%
+        matchingGroup:
+          group: global.cap-cloud
+          matchAll: true
       - type: realtime.text
         key: environment.clouds.cover.high
         title: false
@@ -275,6 +281,9 @@ items:
           y: 52%
           width: 48%
           height: 14%
+        matchingGroup:
+          group: global.cap-cloud
+          matchAll: true
       - type: realtime.text
         key: environment.clouds.cover.mid
         title: false
@@ -327,6 +336,9 @@ items:
           y: 52%
           width: 48%
           height: 14%
+        matchingGroup:
+          group: global.cap-cloud
+          matchAll: true
       - type: realtime.text
         key: environment.clouds.cover.low
         title: false
@@ -393,6 +405,9 @@ items:
           y: 0.0%
           width: 50.0%
           height: 15.0%
+        matchingGroup:
+          group: global.cap-sun
+          matchAll: true
       - type: realtime.text
         key: astronomy.sun.rise
         title: false
@@ -427,6 +442,9 @@ items:
           y: 0.0%
           width: 50.0%
           height: 15.0%
+        matchingGroup:
+          group: global.cap-sun
+          matchAll: true
       - type: realtime.text
         key: astronomy.sun.set
         title: false
@@ -450,7 +468,7 @@ items:
           width: 50.0%
           height: 35.0%
       - type: text
-        text: DAYLIGHT
+        text: DAY LEFT
         font: $display
         weight: Medium
         color: $muted
@@ -461,6 +479,9 @@ items:
           y: 50.0%
           width: 50.0%
           height: 15.0%
+        matchingGroup:
+          group: global.cap-sun
+          matchAll: true
       - type: realtime.text
         key: astronomy.sun.remaining
         title: false
@@ -495,6 +516,9 @@ items:
           y: 50.0%
           width: 50.0%
           height: 15.0%
+        matchingGroup:
+          group: global.cap-sun
+          matchAll: true
       - type: realtime.text
         key: astronomy.moon.phase
         title: false
@@ -616,6 +640,9 @@ items:
           y: 60.0%
           width: 33.33%
           height: 12.0%
+        matchingGroup:
+          group: global.cap-pressure
+          matchAll: true
       - type: realtime.text
         key: environment.pressure.pressure - at(environment.pressure.pressure, -3h)
         title: false
@@ -649,6 +676,9 @@ items:
           y: 60.0%
           width: 33.33%
           height: 12.0%
+        matchingGroup:
+          group: global.cap-pressure
+          matchAll: true
       - type: realtime.text
         key: environment.pressure.pressure - at(environment.pressure.pressure, -24h)
         title: false
@@ -682,6 +712,9 @@ items:
           y: 60.0%
           width: 33.33%
           height: 12.0%
+        matchingGroup:
+          group: global.cap-pressure
+          matchAll: true
       - type: mini-graph
         geometry:
           x: 66.67%
@@ -825,6 +858,9 @@ items:
           y: 55.0%
           width: 33.33%
           height: 6.75%
+        matchingGroup:
+          group: global.cap-now
+          matchAll: true
       - type: realtime.text
         key: environment.temperature.low
         title: false
@@ -858,6 +894,9 @@ items:
           y: 55.0%
           width: 33.33%
           height: 6.75%
+        matchingGroup:
+          group: global.cap-now
+          matchAll: true
       - type: realtime.text
         key: environment.temperature.high
         title: false
@@ -891,6 +930,9 @@ items:
           y: 55.0%
           width: 33.33%
           height: 6.75%
+        matchingGroup:
+          group: global.cap-now
+          matchAll: true
       - type: mini-graph
         geometry:
           x: 66.67%
@@ -961,6 +1003,9 @@ items:
           y: 77.5%
           width: 33.33%
           height: 6.75%
+        matchingGroup:
+          group: global.cap-now
+          matchAll: true
       - type: mini-graph
         geometry:
           x: 0.0%
@@ -1029,6 +1074,9 @@ items:
           y: 77.5%
           width: 33.33%
           height: 6.75%
+        matchingGroup:
+          group: global.cap-now
+          matchAll: true
       - type: mini-graph
         geometry:
           x: 33.33%
@@ -1099,6 +1147,9 @@ items:
           y: 77.5%
           width: 33.33%
           height: 6.75%
+        matchingGroup:
+          group: global.cap-now
+          matchAll: true
       - type: mini-graph
         geometry:
           x: 66.67%
@@ -1160,6 +1211,8 @@ items:
       timeframe:
         days: 2
         hours: 12
+        offset:
+          hours: -1
       annotations:
         dayLabels:
           enabled: false
@@ -1313,6 +1366,9 @@ items:
             y: 30%
             width: 100%
             height: 9%
+          matchingGroup:
+            group: global.cap-rainAlert
+            matchAll: true
         - type: text
           text: NOW IN/HR
           font: $display
@@ -1325,6 +1381,9 @@ items:
             y: 42.0%
             width: 50.0%
             height: 8.7%
+          matchingGroup:
+            group: global.cap-rainAlert
+            matchAll: true
         - type: realtime.text
           key: environment.precipitation.precipitation
           title: false
@@ -1357,6 +1416,9 @@ items:
             y: 42.0%
             width: 50.0%
             height: 8.7%
+          matchingGroup:
+            group: global.cap-rainAlert
+            matchAll: true
         - type: realtime.text
           key: max(environment.precipitation.precipitation, 12h)
           title: false
@@ -1389,6 +1451,9 @@ items:
             y: 71.0%
             width: 50.0%
             height: 8.7%
+          matchingGroup:
+            group: global.cap-rainAlert
+            matchAll: true
         - type: realtime.text
           key: environment.precipitation.rainDaily
           title: false
@@ -1421,6 +1486,9 @@ items:
             y: 71.0%
             width: 50.0%
             height: 8.7%
+          matchingGroup:
+            group: global.cap-rainAlert
+            matchAll: true
         - type: realtime.text
           key: avg(environment.precipitation.precipitation, 12h) * 12
           title: false
@@ -1487,6 +1555,9 @@ items:
             y: 30%
             width: 100%
             height: 9%
+          matchingGroup:
+            group: global.cap-frostAlert
+            matchAll: true
         - type: text
           text: WIND MPH
           font: $display
@@ -1499,6 +1570,9 @@ items:
             y: 42.0%
             width: 50.0%
             height: 8.7%
+          matchingGroup:
+            group: global.cap-frostAlert
+            matchAll: true
         - type: realtime.text
           key: environment.wind.speed.speed
           title: false
@@ -1531,6 +1605,9 @@ items:
             y: 42.0%
             width: 50.0%
             height: 8.7%
+          matchingGroup:
+            group: global.cap-frostAlert
+            matchAll: true
         - type: realtime.text
           key: environment.temperature.dewpoint
           title: false
@@ -1563,6 +1640,9 @@ items:
             y: 71.0%
             width: 50.0%
             height: 8.7%
+          matchingGroup:
+            group: global.cap-frostAlert
+            matchAll: true
         - type: realtime.text
           key: environment.soil.temperature.temperature
           title: false
@@ -1595,6 +1675,9 @@ items:
             y: 71.0%
             width: 50.0%
             height: 8.7%
+          matchingGroup:
+            group: global.cap-frostAlert
+            matchAll: true
         - type: realtime.text
           key: environment.clouds.cover.cover
           title: false
@@ -1661,6 +1744,9 @@ items:
             y: 30%
             width: 100%
             height: 9%
+          matchingGroup:
+            group: global.cap-windAlert
+            matchAll: true
         - type: text
           text: WIND
           font: $display
@@ -1673,6 +1759,9 @@ items:
             y: 42.0%
             width: 50.0%
             height: 8.7%
+          matchingGroup:
+            group: global.cap-windAlert
+            matchAll: true
         - type: realtime.text
           key: environment.wind.speed.speed
           title: false
@@ -1705,6 +1794,9 @@ items:
             y: 42.0%
             width: 50.0%
             height: 8.7%
+          matchingGroup:
+            group: global.cap-windAlert
+            matchAll: true
         - type: realtime.text
           key: max(environment.wind.speed.gust, 12h)
           title: false
@@ -1737,6 +1829,9 @@ items:
             y: 71.0%
             width: 50.0%
             height: 8.7%
+          matchingGroup:
+            group: global.cap-windAlert
+            matchAll: true
         - type: realtime.text
           key: environment.wind.speed.80m
           title: false
@@ -1769,6 +1864,9 @@ items:
             y: 71.0%
             width: 50.0%
             height: 8.7%
+          matchingGroup:
+            group: global.cap-windAlert
+            matchAll: true
         - type: realtime.text
           key: environment.wind.speed.180m
           title: false
@@ -1835,6 +1933,9 @@ items:
             y: 30%
             width: 100%
             height: 9%
+          matchingGroup:
+            group: global.cap-uvAlert
+            matchAll: true
         - type: text
           text: PEAK TODAY
           font: $display
@@ -1847,6 +1948,9 @@ items:
             y: 42.0%
             width: 50.0%
             height: 8.7%
+          matchingGroup:
+            group: global.cap-uvAlert
+            matchAll: true
         - type: realtime.text
           key: max(environment.light.uvi, today)
           title: false
@@ -1879,6 +1983,9 @@ items:
             y: 42.0%
             width: 50.0%
             height: 8.7%
+          matchingGroup:
+            group: global.cap-uvAlert
+            matchAll: true
         - type: realtime.text
           key: environment.light.irradiance.irradiance
           title: false
@@ -1911,6 +2018,9 @@ items:
             y: 71.0%
             width: 50.0%
             height: 8.7%
+          matchingGroup:
+            group: global.cap-uvAlert
+            matchAll: true
         - type: realtime.text
           key: environment.clouds.cover.cover
           title: false
@@ -1943,6 +2053,9 @@ items:
             y: 71.0%
             width: 50.0%
             height: 8.7%
+          matchingGroup:
+            group: global.cap-uvAlert
+            matchAll: true
         - type: realtime.text
           key: astronomy.sun.elevation
           title: false
@@ -2082,7 +2195,7 @@ items:
                 fade: true
               color: $info
       - type: text
-        text: TEMP °F · 24 H
+        text: TEMP °F
         font: $display
         weight: Medium
         color: $muted
@@ -2093,6 +2206,9 @@ items:
           y: 0%
           width: 50%
           height: 10%
+        matchingGroup:
+          group: global.cap-bedroom
+          matchAll: true
       - type: realtime.text
         key: indoor.temperature.temperature#bedroom
         title: false
@@ -2130,6 +2246,9 @@ items:
           y: 0%
           width: 48%
           height: 10%
+        matchingGroup:
+          group: global.cap-bedroom
+          matchAll: true
       - type: realtime.text
         key: indoor.humidity.humidity#bedroom
         title: false
@@ -2163,6 +2282,9 @@ items:
           y: 62.0%
           width: 25.0%
           height: 7.8%
+        matchingGroup:
+          group: global.cap-bedroom
+          matchAll: true
       - type: realtime.text
         key: min(indoor.temperature.temperature#bedroom, 24h)
         title: false
@@ -2198,6 +2320,9 @@ items:
           y: 62.0%
           width: 25.0%
           height: 7.8%
+        matchingGroup:
+          group: global.cap-bedroom
+          matchAll: true
       - type: realtime.text
         key: max(indoor.temperature.temperature#bedroom, 24h)
         title: false
@@ -2233,6 +2358,9 @@ items:
           y: 62.0%
           width: 24.0%
           height: 7.8%
+        matchingGroup:
+          group: global.cap-bedroom
+          matchAll: true
       - type: realtime.text
         key: min(indoor.humidity.humidity#bedroom, 24h)
         title: false
@@ -2268,6 +2396,9 @@ items:
           y: 62.0%
           width: 24.0%
           height: 7.8%
+        matchingGroup:
+          group: global.cap-bedroom
+          matchAll: true
       - type: realtime.text
         key: max(indoor.humidity.humidity#bedroom, 24h)
         title: false
@@ -2303,6 +2434,9 @@ items:
           y: 89%
           width: 30%
           height: 11%
+        matchingGroup:
+          group: global.cap-bedroom
+          matchAll: true
       - type: realtime.bar
         key: indoor.battery.battery#bedroom
         title: false
@@ -2422,7 +2556,7 @@ items:
                 fade: true
               color: $good
       - type: text
-        text: TEMP °F · 24 H
+        text: TEMP °F
         font: $display
         weight: Medium
         color: $muted
@@ -2433,6 +2567,9 @@ items:
           y: 0%
           width: 50%
           height: 10%
+        matchingGroup:
+          group: global.cap-terrarium
+          matchAll: true
       - type: realtime.text
         key: indoor.temperature.temperature#terrarium
         title: false
@@ -2470,6 +2607,9 @@ items:
           y: 0%
           width: 48%
           height: 10%
+        matchingGroup:
+          group: global.cap-terrarium
+          matchAll: true
       - type: realtime.text
         key: indoor.humidity.humidity#terrarium
         title: false
@@ -2503,6 +2643,9 @@ items:
           y: 62.0%
           width: 25.0%
           height: 7.8%
+        matchingGroup:
+          group: global.cap-terrarium
+          matchAll: true
       - type: realtime.text
         key: min(indoor.temperature.temperature#terrarium, 24h)
         title: false
@@ -2538,6 +2681,9 @@ items:
           y: 62.0%
           width: 25.0%
           height: 7.8%
+        matchingGroup:
+          group: global.cap-terrarium
+          matchAll: true
       - type: realtime.text
         key: max(indoor.temperature.temperature#terrarium, 24h)
         title: false
@@ -2573,6 +2719,9 @@ items:
           y: 62.0%
           width: 24.0%
           height: 7.8%
+        matchingGroup:
+          group: global.cap-terrarium
+          matchAll: true
       - type: realtime.text
         key: min(indoor.humidity.humidity#terrarium, 24h)
         title: false
@@ -2608,6 +2757,9 @@ items:
           y: 62.0%
           width: 24.0%
           height: 7.8%
+        matchingGroup:
+          group: global.cap-terrarium
+          matchAll: true
       - type: realtime.text
         key: max(indoor.humidity.humidity#terrarium, 24h)
         title: false
@@ -2643,6 +2795,9 @@ items:
           y: 89%
           width: 30%
           height: 11%
+        matchingGroup:
+          group: global.cap-terrarium
+          matchAll: true
       - type: realtime.bar
         key: indoor.battery.battery#terrarium
         title: false
@@ -2723,6 +2878,9 @@ items:
           y: 0.0%
           width: 42.0%
           height: 8.1%
+        matchingGroup:
+          group: global.cap-wind
+          matchAll: true
       - type: mini-graph
         geometry:
           x: 58.0%
@@ -2791,6 +2949,9 @@ items:
           y: 27.0%
           width: 42.0%
           height: 8.1%
+        matchingGroup:
+          group: global.cap-wind
+          matchAll: true
       - type: realtime.text
         key: max(environment.wind.speed.gust, today)
         title: false
@@ -2904,6 +3065,9 @@ items:
           y: 0.0%
           width: 50.0%
           height: 15.0%
+        matchingGroup:
+          group: global.cap-uv
+          matchAll: true
       - type: realtime.text
         key: environment.light.uvi
         title: false
@@ -2938,6 +3102,9 @@ items:
           y: 0.0%
           width: 50.0%
           height: 15.0%
+        matchingGroup:
+          group: global.cap-uv
+          matchAll: true
       - type: realtime.text
         key: max(environment.light.uvi, today)
         title: false
@@ -3009,6 +3176,9 @@ items:
           y: 0%
           width: 30%
           height: 10%
+        matchingGroup:
+          group: global.cap-soil
+          matchAll: true
       - type: text
         text: WET %
         font: $display
@@ -3021,6 +3191,9 @@ items:
           y: 0%
           width: 30%
           height: 10%
+        matchingGroup:
+          group: global.cap-soil
+          matchAll: true
       - type: text
         text: SURFACE
         font: $display

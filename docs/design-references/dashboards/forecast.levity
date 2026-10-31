@@ -1,0 +1,142 @@
+# Forecast: the next day and a half on one time axis, a 15in 16:10 screen. A page of the graph work of this week.
+#
+# The top band is now: the temperature as the hero and the readings beside it. Under it three sections share one
+# x axis, so a time reads straight down the screen. Temperature: a row of weather glyphs (a strip plot), the line
+# coloured by value over a fill of itself, the highs and lows named in place (pins on the extremes) and a ribbon of
+# cloud along the floor. The hourly row hangs under it, each column exactly under the time it shows. Wind: speed
+# with a gust band and an arrow for each hour. Rain: bars by rate, and the chance of rain as a thin line.
+#
+# Text sizes come from the dashboard-wide size groups global.head, global.title, global.value and global.hero, so the
+# headers, the readings and the hourly numbers keep one size each over every section. The graphs are presets
+# (graph-forecast, graph-gusts, graph-rain); the hourly row is `hourly-row` with `graph:` set to the graph above it.
+# Inspiration only from weather apps with a graph under an hourly list: type, spacing and alignment.
+#
+# Render: render_dashboard.py OUT.png --levity docs/design-references/dashboards/forecast.levity
+#           --scenario rain-day --size 2880x1800 --freeze-time 2026-10-15T09:10:00
+#
+# Hex colours are quoted. Unquoted, YAML reads '#' as a comment.
+theme:
+  extends: default
+  colors:
+    background: '#050608'
+    muted: '#b0b4c0'
+    faint: '#8a8f9c'
+    rule: '#2b2f3a'
+    accent: '#ff9124'
+    good: '#14e3c0'
+    warn: '#ffd400'
+    bad: '#ff3048'
+    info: '#1a8cff'
+  fonts:
+    display: Nunito
+    mono: Roboto Mono
+    body: Roboto
+vars:
+  t: environment.temperature.temperature
+items:
+- type: group
+  name: board
+  items:
+
+  # ================= NOW ===================================================
+  - type: grid
+    name: now
+    geometry: {x: 1%, y: 1.5%, width: 98%, height: 15%}
+    spacing: 0
+    padding: 0
+    grid:
+      columns: [24fr, 2fr, 72fr]
+      rows: [100fr]
+      areas:
+      - hero . readings
+    items:
+    - type: realtime.text
+      name: hero
+      key: $t
+      title: false
+      grid: {area: hero}
+      display:
+        unitPosition: Hidden
+        precision: 0
+        font: $display
+        valueLabel: {matchingGroup: {group: global.hero, matchAll: true}, alignment: CenterLeft}
+    - preset: stat-row
+      name: readings
+      grid: {area: readings}
+      props:
+        items:
+        - {type: realtime.text, key: environment.temperature.feelsLike, title: {text: Feels}, display: {precision: 0, valueLabel: {color: $accent}}}
+        - {type: realtime.text, key: environment.temperature.dewpoint, title: {text: Dew pt}, display: {precision: 0, valueLabel: {color: $good}}}
+        - {type: realtime.text, key: environment.humidity.humidity, title: {text: Humidity}, display: {precision: 0}}
+        - {type: realtime.text, key: environment.precipitation.probability, title: {text: Rain chance}, display: {precision: 0, valueLabel: {color: $info}}}
+        - {type: realtime.text, key: environment.wind.speed.speed, title: {text: Wind}, display: {precision: 0}}
+        - {type: realtime.text, key: environment.wind.speed.gust, title: {text: Gust}, display: {precision: 0, valueLabel: {color: $warn}}}
+        - {type: realtime.text, key: environment.pressure.pressure, title: {text: Pressure}, display: {precision: 2}}
+
+  # ================= TEMPERATURE ===========================================
+  - type: group
+    name: temperature-section
+    geometry: {x: 1%, y: 18%, width: 98%, height: 38%}
+    items:
+    - type: text
+      text: Temperature
+      font: $display
+      color: $muted
+      alignment: CenterLeft
+      matchingGroup: {group: global.head, matchAll: true}
+      geometry: {x: 0%, y: 0%, width: 40%, height: 7%}
+    - type: stack
+      direction: Vertical
+      spacing: 0
+      geometry: {x: 0%, y: 7%, width: 100%, height: 93%}
+      items:
+      - preset: graph-forecast
+        name: temperature-graph
+        size: 70%
+        props:
+          hours: 36
+          icon_size: 40
+          labels: false
+          peaks: {key: environment.temperature.temperature, only: extremes, size: 26, offset: -1.8, color: $text}
+      - preset: hourly-row
+        props:
+          timeframe: {hours: 36}
+          step: 3
+          graph: temperature-graph
+          titleGroup: global.value
+          rows:
+          - {key: 'at(environment.temperature.feelsLike, {offset})', precision: 0, color: $accent}
+          - {key: 'at(environment.precipitation.probability, {offset})', precision: 0, color: $info}
+          - {key: 'at(environment.wind.speed.gust, {offset})', precision: 0, color: $warn}
+
+  # ================= WIND ==================================================
+  - type: group
+    name: wind-section
+    geometry: {x: 1%, y: 57.5%, width: 98%, height: 21%}
+    items:
+    - type: text
+      text: Wind and gusts
+      font: $display
+      color: $muted
+      alignment: CenterLeft
+      matchingGroup: {group: global.head, matchAll: true}
+      geometry: {x: 0%, y: 0%, width: 40%, height: 12%}
+    - preset: graph-gusts
+      geometry: {x: 0%, y: 12%, width: 100%, height: 88%}
+      props: {hours: 36}
+
+  # ================= RAIN ==================================================
+  - type: group
+    name: rain-section
+    geometry: {x: 1%, y: 79.5%, width: 98%, height: 19%}
+    items:
+    - type: text
+      text: Rain
+      font: $display
+      color: $muted
+      alignment: CenterLeft
+      matchingGroup: {group: global.head, matchAll: true}
+      geometry: {x: 0%, y: 0%, width: 40%, height: 13%}
+    - preset: graph-rain
+      geometry: {x: 0%, y: 13%, width: 100%, height: 87%}
+      props: {hours: 36}

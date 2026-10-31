@@ -672,7 +672,7 @@ class Realtime(Panel, tag='realtime'):
 			# If the preferred source does not have a realtime value
 			if trueRealtimeContainer.isRealtimeApproximate:
 				# However, the source plugin's schema says it never will
-				if trueRealtimeContainer.isTimeSeriesOnly:
+				if trueRealtimeContainer.isTimeseriesOnly:
 					self.connectRealtime(trueRealtimeContainer)
 
 				# For now, it's better than the current connection
