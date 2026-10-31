@@ -9,6 +9,7 @@ a debugging door for looking at live objects without restarting a multi-hour run
 """
 import gc
 from collections import Counter
+from weakref import ReferenceType
 import json
 import os
 import sys
@@ -33,13 +34,14 @@ def processStats() -> dict:
 	cpu = _process.cpu_times()
 	objects = gc.get_objects()
 	census = Counter(type(o).__name__ for o in objects)
+	weak = Counter(type(o()).__name__ for o in objects if type(o) is ReferenceType)
 	del objects
 	with _process.oneshot():
 		return {
 			'rssMB': round(_process.memory_info().rss / 2 ** 20, 2), 'threads': _process.num_threads(),
 			'fds': _process.num_fds(), 'cpuUser': round(cpu.user, 2), 'cpuSystem': round(cpu.system, 2),
 			'gcObjects': sum(census.values()), 'gcCounts': list(gc.get_count()),
-			'gcTop': census.most_common(12),
+			'gcTop': census.most_common(12), 'weakTop': weak.most_common(8),
 		}
 
 
