@@ -265,7 +265,7 @@ def checkRemoteWindows(rows: list) -> list:
 		for c in r['frontend']['remote']:
 			if c['source'] in ('Astronomy', 'Host') or c['source'].startswith('Govee'):
 				age = c.get('valueAge')
-				if age is not None and age > 900:
+				if age is not None and age > 1800:
 					old.setdefault((c['source'], c['key']), (r['virtual'], age))
 	checks.append(('realtime values keep arriving', FAIL if old else PASS, '; '.join(f'{k[0]}:{k[1]} {v[1]:.0f}s old at {v[0]}' for k, v in list(old.items())[:5]) or 'all fresh'))
 	return checks

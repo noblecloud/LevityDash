@@ -38,7 +38,7 @@ from typing import Any, Dict, Optional
 
 from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.plugins.ble import LifecyclePlugin
-from LevityDash.lib.plugins.builtin.Fixture import buildSchema, ENV_VAR, loadScenario, _TIME_FORMAT
+from LevityDash.lib.plugins.builtin.Fixture import buildSchema, ENV_VAR, loadScenario
 from LevityDash.lib.plugins.schema import LevityDatagram
 
 log = LevityPluginLog.getChild('Host')
@@ -158,7 +158,7 @@ class Host(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 	"""
 
 	def __init__(self):
-		self.schema, self._sourceKeys = buildSchema({'keys': {k: dict(v) for k, v in HOST_KEYS.items()}})
+		self.schema, self._sourceKeys = buildSchema({'keys': {k: dict(v) for k, v in HOST_KEYS.items()}}, epoch=True)
 		super().__init__()
 		self._counters = Counters()
 		self._scenarioKeys = set()
@@ -184,7 +184,7 @@ class Host(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 
 	def publish(self) -> None:
 		values = readHost(psutil, self._counters, self.top)
-		realtime = {'time': datetime.now().replace(microsecond=0).strftime(_TIME_FORMAT)}
+		realtime = {'time': int(datetime.now().timestamp())}
 		for key, value in values.items():
 			if key not in self._scenarioKeys:
 				realtime[self._sourceKeys[key]] = value
