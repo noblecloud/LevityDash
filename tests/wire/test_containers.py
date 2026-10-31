@@ -513,3 +513,20 @@ def test_a_forecast_still_wins_over_a_recorded_log():
 	forecast._timeseries = RemoteTimeSeries(forecastSource, key, [TimeSeriesItem.load_raw(70.0, at)])
 	assert multi.getTimeseries(strict=True) is forecast
 	assert multi.getTimeseries() is forecast
+
+
+def test_awaiting_guard_that_takes_sources_is_given_the_pushed_source():
+	# Realtime.py's requirementCheck(sources) iterates its argument, as it does
+	# on a live Container; handing it the container raised TypeError on every push.
+	key = CategoryItem('environment.temperature.temperature')
+	remote = RemoteSource(name='Astronomy').getOrCreate(key)
+	fired = []
+
+	def requirementCheck(sources):
+		return any(isinstance(source, RealtimeSource) for source in sources)
+
+	remote.notifyOnRequirementsMet(object(), requirementCheck, lambda: fired.append(True))
+	remote._update(value=wu.Temperature.Fahrenheit(70), flags=ContainerFlags(isRealtime=False))
+	assert not fired
+	remote._update(value=wu.Temperature.Fahrenheit(71), flags=ContainerFlags(isRealtime=True))
+	assert fired == [True]

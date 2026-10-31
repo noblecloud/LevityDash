@@ -449,12 +449,22 @@ class RemoteContainer:
 		# connect/disconnect behavior identical for widget code.
 		pass
 
+	def _guardMet(self, request: GuardedRequest) -> bool:
+		# observation.Container hands a guard what its parameter is named for;
+		# the realtime guards in Realtime.py take `sources` and iterate it.
+		signature = request.guard_signature
+		if 'sources' in signature:
+			return bool(request.guard([self._value.source] if self._value is not None else []))
+		if 'plugin' in signature:
+			return bool(request.guard(self.source))
+		return bool(request.guard(self))
+
 	def _checkAwaiting(self):
 		if not self._awaitingRequirements:
 			return
 		for request in list(self._awaitingRequirements.values()):
 			try:
-				guarded = not request.guard(self)
+				guarded = not self._guardMet(request)
 			except Exception as e:
 				log.warning(f'{self.log_repr}: awaiting-request guard raised {e!r}, treating as unmet')
 				continue
@@ -495,7 +505,7 @@ class RemoteContainer:
 
 		if self._value is not None:
 			try:
-				met = request.guard(self)
+				met = self._guardMet(request)
 			except Exception:
 				met = False
 			if met:
