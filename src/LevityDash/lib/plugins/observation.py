@@ -2783,6 +2783,10 @@ class Container:
 		return cls.__containers__[containerKey]
 
 	def __init__(self, source: 'Plugin', key: CategoryItem):
+		# __new__ hands back the cached instance, so Python runs __init__ again
+		# on every Container(source, key) call.
+		if hasattr(self, '_awaitingRequirements'):
+			return
 		self.__hash_key__ = Container.__buildKey(source, key)
 		self.source = source
 		self.key = key
