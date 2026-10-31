@@ -294,6 +294,10 @@ class ChannelSignal(MutableSignal):
 		return f'Signal for {self._source.name}:{self._key}'
 
 	def connectSlot(self, slot: Callable) -> bool:
+		# Qt connects a slot once per call, so a repeat would run it twice per
+		# emit and leave one more weakref behind each time.
+		if self._connections.get(slot.__self__) == slot:
+			return True
 		self._connections.update({slot.__self__: slot})
 		return self._signal.connect(slot)
 
