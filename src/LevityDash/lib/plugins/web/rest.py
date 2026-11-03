@@ -33,8 +33,7 @@ class REST(Web, prototype=True):
 					self.pluginLog.error(f'404: Invalid URL: {url}')
 				else:
 					error = await response.text()
-					reason = await response.reason()
-					self.pluginLog.error('API Error', reason, error)
+					self.pluginLog.error(f'API Error {response.status} {response.reason}: {error[:300]}')
 					raise APIError(response)
 
 	async def getData(self, endpoint: Endpoint, **kwargs) -> LevityDatagram:
