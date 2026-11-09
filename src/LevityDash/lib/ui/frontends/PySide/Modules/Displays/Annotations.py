@@ -21,6 +21,22 @@ from unitcorn.length import Centimeter, Millimeter, Inch
 log = UILogger.getChild('Annotations')
 
 
+
+#: (unit class, raw value) -> inches. `Length.inch` builds two or three unit objects per call and
+#: `textSize_px` runs for every annotation on every layout pass (~11k calls per 20 s on the station
+#: dashboard), while the label heights in use are a handful of fixed values.
+_inchesCache: dict = {}
+
+
+def _inches(length: Length) -> float:
+	key = (type(length), float(length))
+	try:
+		return _inchesCache[key]
+	except KeyError:
+		if len(_inchesCache) > 512:
+			_inchesCache.clear()
+		return _inchesCache.setdefault(key, float(length.inch))
+
 class AnnotationText(Text):
 	textSize: Length | Size.Height
 	shadow = SoftShadow
@@ -483,7 +499,7 @@ class AnnotationLabels(list[AnnotationTextVar], Stateful, ColorGradientMixin, ta
 			view = getattr(scene, 'view', None)
 			dpi = getDPI(view.screen() if view is not None else None)
 			# dpi = 1080 / Centimeter(13.5).inch
-			textHeight = float(textHeight.inch) * dpi
+			textHeight = _inches(textHeight) * dpi
 		return textHeight
 
 	@property
