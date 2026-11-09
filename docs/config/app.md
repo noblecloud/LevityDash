@@ -161,8 +161,9 @@ The compact font is used when the text will be rendered in space with a height l
 
 ```ini
 [Logging]
-level = INFO
+level = WARNING
 verbosity = 0
+rich = 1
 encoding = utf-8
 logFileFormat = %%Y-%%m-%%d_%%H-%%M-%%S
 logFileWidth = 120
@@ -173,8 +174,11 @@ rolloverCount = 5
 
 ### <div class=mono>level</div> :id=log-level
 
-The logging level to use. This can be one of the following: `VERBOSE`, `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` with the default being `INFO`. This only changes the level of logging that is written to the console. The log file is
-always written at the `VERBOSE` level with a verbosity of `5`.
+The logging level to use. This can be one of the following: `VERBOSE`, `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` with the default being `WARNING`: warnings and errors only. The log file, the console and the status bar all follow it unless you set `file-level`, `console-level` or `status-bar-level` (same values) for one of them. Raise it to `INFO` or `DEBUG` when you are chasing a problem; writing every verbose line costs real CPU on a small display.
+
+#### <div class=mono>rich</div>
+
+`rich = 0` turns off rich: plain one-line records on the console and in the file, with no colour, markup parsing or rich tracebacks. It is cheaper and easier to grep. The environment variable `LEVITY_LOG_RICH=0` does the same and wins over the config. `plain = 1` (`LEVITY_LOG_PLAIN=1`) is the same switch the other way round.
 
 The **Logs** menu changes the level while the app runs. **Log Level** sets the file and console levels together, and **Status Bar Level** sets the status bar. A change lasts until restart. It is not written to the config.
 

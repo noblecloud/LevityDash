@@ -186,11 +186,12 @@ class _LevityLogger(logging.Logger):
 
 	LOGGING_DEFAULT_CONFIG: ClassVar[dict] = {
 		"Logging": {
-			"level":                   "INFO",
+			"level":                   "WARNING",
 			"verbosity":               "0",
 			"encoding":                "utf-8",
 			"logTimeFormat":           "%m/%d/%y %H:%M:%S",
 			"logFileWidth":            "120",
+			"rich":                    "1",
 			"plain":                   "0",
 			"tracebackLocals":         "0",
 		}
@@ -257,8 +258,11 @@ class _LevityLogger(logging.Logger):
 		if not lvdash.isBuilding:
 			level = cls.determineLogLevel()
 			console_level = cls.determineLogLevel('console', default=level)
-			file_level = cls.determineLogLevel('file', default=1)
-			status_bar_level = cls.determineLogLevel('status-bar', default=4)
+			# Warnings only unless asked otherwise: the file and the status bar follow `level`.
+			# (They used to default to "everything" and "verbose", and rendering ~1,500 records
+			# per data update through rich was a third of the CPU on a small display.)
+			file_level = cls.determineLogLevel('file', default=level)
+			status_bar_level = cls.determineLogLevel('status-bar', default=level)
 			logtail_level = cls.determineLogLevel('logtail', default=1)
 		else:
 			level = console_level = file_level = status_bar_level = logtail_level = logging.ERROR
@@ -291,9 +295,16 @@ class _LevityLogger(logging.Logger):
 		# (see the Graph.py render-race SIGSEGV). Both are opt-in now -
 		# tracebacks_show_locals defaults off outright since it's a
 		# correctness hazard, not just a perf one.
+		# `rich = 0` / LEVITY_LOG_RICH=0 turns rich off; `plain = 1` / LEVITY_LOG_PLAIN=1 is the same
+		# switch the other way round. Either one off (and the env var beats the config) gives plain logging.
 		plainLogging = cls._parse_bool(
 			os.environ.get('LEVITY_LOG_PLAIN', lvdash.config.getOrSet('Logging', 'plain', '0', str))
 		) or False
+		richLogging = cls._parse_bool(
+			os.environ.get('LEVITY_LOG_RICH', lvdash.config.getOrSet('Logging', 'rich', '1', str))
+		)
+		if richLogging is False:
+			plainLogging = True
 		showLocals = cls._parse_bool(
 			os.environ.get('LEVITY_LOG_SHOW_LOCALS', lvdash.config.getOrSet('Logging', 'tracebackLocals', '0', str))
 		) or False
