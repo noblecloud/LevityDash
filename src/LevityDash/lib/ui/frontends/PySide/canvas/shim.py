@@ -326,25 +326,21 @@ class CanvasPainterShim:
 		t0 = time.perf_counter()
 		key = None
 		if self.cache is not None:
-			n = path.elementCount()
 			b = path.boundingRect()
-			step = max(1, n // 12)
-			key = (n, b.x(), b.y(), b.width(), b.height(), path.fillRule(),
-				tuple((e.x, e.y) for e in map(path.elementAt, range(0, n, step))))
-			hit = self.cache.get(key)
-			if hit is not None:
-				self.report.pathCacheHits += 1
-				self.report.convertSeconds += time.perf_counter() - t0
-				return hit
+			key = (path.elementCount(), b.x(), b.y(), b.width(), b.height(), path.fillRule())
+			for other, hit in self.cache.get(key, ()):
+				if other == path:  # exact, and done in C++
+					self.report.pathCacheHits += 1
+					self.report.convertSeconds += time.perf_counter() - t0
+					return hit
 		c = QCanvasPath()
 		n = path.elementCount()
 		self.report.pathsConverted += 1
 		self.report.pathElements += n
-		E = QPainterPath.ElementType
 		elements = [path.elementAt(i) for i in range(n)]
 		contours = []  # [first element index, signed area]
 		for i, e in enumerate(elements):
-			if e.type == E.MoveToElement:
+			if e.isMoveTo():
 				contours.append([i, 0.0, e.x, e.y, e.x, e.y])  # start index, area, first x/y, previous x/y
 			else:
 				cur = contours[-1]
@@ -360,13 +356,12 @@ class CanvasPainterShim:
 		i = 0
 		while i < n:
 			e = elements[i]
-			t = e.type
-			if t == E.MoveToElement:
+			if e.isMoveTo():
 				if len(contours) > 1:
 					c.beginHoleSubPath() if starts[i] else c.beginSolidSubPath()
 				c.moveTo(e.x, e.y)
 				i += 1
-			elif t == E.LineToElement:
+			elif e.isLineTo():
 				c.lineTo(e.x, e.y)
 				i += 1
 			else:  # CurveToElement is followed by two CurveToDataElements
@@ -376,7 +371,9 @@ class CanvasPainterShim:
 				i += 3
 		self.report.convertSeconds += time.perf_counter() - t0
 		if key is not None:
-			self.cache[key] = c
+			if len(self.cache) > 4000:
+				self.cache.clear()
+			self.cache.setdefault(key, []).append((QPainterPath(path), c))
 		return c
 
 	def _drawCanvasPath(self, cpath: QCanvasPath, fill: bool, stroke: bool, brush=None, evenOdd=False):
@@ -681,10 +678,14 @@ def nativePaintRedirected():
 			cls.paint = original
 
 
-def paintScene(scene, shim: CanvasPainterShim, background: QColor = None, rect: QRectF = None):
-	"""Draw every visible item of `scene` through `shim`, in stacking order."""
+def paintScene(scene, shim: CanvasPainterShim, background: QColor = None, rect: QRectF = None, region: QRectF = None):
+	"""Draw every visible item of `scene` through `shim`, in stacking order.
+
+	`region` (scene coordinates) limits the walk to the items that touch it and clips everything to it, which is how
+	the retained layer repaints only what changed.
+	"""
 	with nativePaintRedirected():
-		return _paintScene(scene, shim, background, rect)
+		return _paintScene(scene, shim, background, rect, region)
 
 
 _CLIPS_CHILDREN = QGraphicsItem.GraphicsItemFlag.ItemClipsChildrenToShape
@@ -728,16 +729,23 @@ def _effectBehind(item, effect, shim: CanvasPainterShim):
 	shim.report.lossy['drop shadow drawn as a box shadow'] += 1
 
 
-def _paintScene(scene, shim: CanvasPainterShim, background: QColor = None, rect: QRectF = None):
+def _paintScene(scene, shim: CanvasPainterShim, background: QColor = None, rect: QRectF = None, region: QRectF = None):
 	canvas = shim.canvas
 	rect = rect or scene.sceneRect()
-	if background is not None:
-		shim.fillRect(rect, QBrush(background))
-	option = QStyleOptionGraphicsItem()
 	shim.base = canvas.getTransform()
+	regionDevice = shim.base.mapRect(region) if region is not None else None
+	if region is not None:
+		items = scene.items(region, Qt.ItemSelectionMode.IntersectsItemBoundingRect, Qt.SortOrder.AscendingOrder)
+	else:
+		items = scene.items(Qt.SortOrder.AscendingOrder)
+	if background is not None:
+		shim._clip = regionDevice
+		shim._applyClip()
+		shim.fillRect(region if region is not None else rect, QBrush(background))
+	option = QStyleOptionGraphicsItem()
 	painted = 0
 	clips = {}
-	for item in scene.items(Qt.SortOrder.AscendingOrder):
+	for item in items:
 		if not item.isVisible() or item.flags() & QGraphicsItem.GraphicsItemFlag.ItemHasNoContents:
 			continue
 		opacity = item.effectiveOpacity()
@@ -757,6 +765,8 @@ def _paintScene(scene, shim: CanvasPainterShim, background: QColor = None, rect:
 			own = item.mapRectToScene(item.shape().boundingRect())
 			clip = own if clip is None else clip.intersected(own)
 		shim._clip = shim.base.mapRect(clip) if clip is not None else None
+		if regionDevice is not None:
+			shim._clip = regionDevice if shim._clip is None else shim._clip.intersected(regionDevice)
 		shim._applyClip()
 		shim.setTransform(item.sceneTransform())
 		effect = item.graphicsEffect()

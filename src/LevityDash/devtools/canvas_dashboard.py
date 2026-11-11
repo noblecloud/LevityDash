@@ -13,6 +13,7 @@ several and this script re-runs itself for each.
 """
 import argparse
 import os
+import statistics
 import subprocess
 import sys
 import time
@@ -74,6 +75,8 @@ def one(args):
 		if layer is None:
 			return 1
 		layer.report.clear()
+		layer.recordSeconds.clear()
+		layer.frames.clear()
 		for _ in range(5):
 			layer.update()
 			pump(app, 0.15)
@@ -87,7 +90,9 @@ def one(args):
 		p.end()
 		side.save(str(out / f'{name}-side.png'))
 		r = layer.report
-		print(f'{name}: items {len(scene.items())}  Qt {qtMs:.1f} ms  mean diff {meanDiff(qt, img):.1f}/255  canvas {img.width()}x{img.height()}')
+		for area, n, sec in layer.frames[:12]:
+			print(f'   frame: area {area:10.0f}  items {n:5d}  {sec * 1000:6.1f} ms')
+		print(f'{name}: items {len(scene.items())}  Qt {qtMs:.1f} ms  canvas record {statistics.median(layer.recordSeconds or [float("nan")]) * 1000:.1f} ms  mean diff {meanDiff(qt, img):.1f}/255  canvas {img.width()}x{img.height()}')
 		for k, n in r.lossy.most_common(8):
 			print(f'   lossy   {n // 5:5d}/frame  {k}')
 		for k, n in r.missing.most_common(8):
