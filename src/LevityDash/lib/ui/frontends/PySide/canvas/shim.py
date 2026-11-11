@@ -315,7 +315,7 @@ class CanvasPainterShim:
 
 	# Section: paths
 
-	def _toCanvasPath(self, path: QPainterPath) -> QCanvasPath:
+	def _toCanvasPath(self, path: QPainterPath, holes: bool = True) -> QCanvasPath:
 		"""A `QCanvasPath` with the same outline.
 
 		Qt fills with the non-zero winding rule, so a hole (the inside of a 0 or an 8, a ring) is just
@@ -327,7 +327,7 @@ class CanvasPainterShim:
 		key = None
 		if self.cache is not None:
 			b = path.boundingRect()
-			key = (path.elementCount(), b.x(), b.y(), b.width(), b.height(), path.fillRule())
+			key = (path.elementCount(), b.x(), b.y(), b.width(), b.height(), path.fillRule(), holes)
 			for other, hit in self.cache.get(key, ()):
 				if other == path:  # exact, and done in C++
 					self.report.pathCacheHits += 1
@@ -337,6 +337,16 @@ class CanvasPainterShim:
 		n = path.elementCount()
 		self.report.pathsConverted += 1
 		self.report.pathElements += n
+		if not holes:
+			# A stroke has no winding, so the native conversion (about 100x the Python loop below) is exact.
+			# It does not keep holes, which is why a fill cannot use it.
+			c.addPath(path)
+			self.report.convertSeconds += time.perf_counter() - t0
+			if key is not None:
+				if len(self.cache) > 4000:
+					self.cache.clear()
+				self.cache.setdefault(key, []).append((QPainterPath(path), c))
+			return c
 		elements = [path.elementAt(i) for i in range(n)]
 		contours = []  # [first element index, signed area]
 		for i, e in enumerate(elements):
@@ -392,10 +402,21 @@ class CanvasPainterShim:
 
 	def _strokeOutline(self, path: QPainterPath) -> QPainterPath:
 		"""The dashed stroke of `path` as a filled outline; Canvas Painter has no line dash."""
-		stroker = QPainterPathStroker(self._pen)
-		if self._pen.widthF() <= 0:
+		pen = self._pen
+		key = None
+		if self.cache is not None:  # the stroker is the dashed path's whole cost, and the same path comes back every frame
+			b = path.boundingRect()
+			key = ('stroke', path.elementCount(), b.x(), b.y(), b.width(), b.height(), pen.widthF(), int(pen.style().value), tuple(pen.dashPattern()), pen.dashOffset(), int(pen.capStyle().value), int(pen.joinStyle().value))
+			for other, hit in self.cache.get(key, ()):
+				if other == path:
+					return hit
+		stroker = QPainterPathStroker(pen)
+		if pen.widthF() <= 0:
 			stroker.setWidth(1.0)
-		return stroker.createStroke(path)
+		outline = stroker.createStroke(path)
+		if key is not None:
+			self.cache.setdefault(key, []).append((QPainterPath(path), outline))
+		return outline
 
 	def drawPath(self, path):
 		if self._dashed():
@@ -403,7 +424,8 @@ class CanvasPainterShim:
 			self._drawCanvasPath(self._toCanvasPath(self._strokeOutline(path)), True, False, self._pen.brush())
 			self.report.lossy['dashed stroke drawn as filled outline'] += 1
 			return
-		self._drawCanvasPath(self._toCanvasPath(path), True, True, evenOdd=path.fillRule() == Qt.FillRule.OddEvenFill)
+		unfilled = self._brush.style() == Qt.BrushStyle.NoBrush  # nothing to wind, so the native conversion is exact
+		self._drawCanvasPath(self._toCanvasPath(path, holes=not unfilled), True, True, evenOdd=path.fillRule() == Qt.FillRule.OddEvenFill)
 
 	def fillPath(self, path, brush):
 		if not isinstance(brush, QBrush):
@@ -417,7 +439,7 @@ class CanvasPainterShim:
 			self._drawCanvasPath(self._toCanvasPath(self._strokeOutline(path)), True, False, self._pen.brush())
 			self.report.lossy['dashed stroke drawn as filled outline'] += 1
 		else:
-			self._drawCanvasPath(self._toCanvasPath(path), False, True)
+			self._drawCanvasPath(self._toCanvasPath(path, holes=False), False, True)
 		self._pen = old
 
 	def _shape(self, build, qpath=None):
