@@ -58,7 +58,7 @@ def one(args):
 	try:
 		window = app.main_window
 		view = window.view
-		pump(app, 1.0)
+		pump(app, 4.0)  # let the fixture data arrive before either render
 		layer = getattr(view, 'canvasLayer', None)
 		print(f'{name}: canvasMode={view.canvasMode} layer={layer is not None}')
 		scene = dashboard.scene

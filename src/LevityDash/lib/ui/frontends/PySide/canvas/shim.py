@@ -20,7 +20,7 @@ from PySide6.QtCanvasPainter import (
 )
 from PySide6.QtCore import QLineF, QPointF, QRectF, Qt
 from PySide6.QtGui import (
-	QBrush, QColor, QFont, QFontMetricsF, QGradient, QImage, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QTransform,
+	QBrush, QColor, QFont, QPainterPathStroker, QFontMetricsF, QGradient, QImage, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QTransform,
 )
 from PySide6.QtWidgets import (
 	QAbstractGraphicsShapeItem, QGraphicsEllipseItem, QGraphicsItem, QGraphicsLineItem, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsPolygonItem,
@@ -302,8 +302,8 @@ class CanvasPainterShim:
 		c.setLineCap(_CAP.get(pen.capStyle(), QCanvasPainter.LineCap.Butt))
 		c.setLineJoin(_JOIN.get(pen.joinStyle(), QCanvasPainter.LineJoin.Miter))
 		c.setMiterLimit(pen.miterLimit())
-		if pen.style() not in (Qt.PenStyle.SolidLine,):
-			self.report.lossy[f'pen style {pen.style().name} (no dash support) drawn solid'] += 1
+		if pen.style() not in (Qt.PenStyle.SolidLine, Qt.PenStyle.NoPen):
+			self.report.lossy[f'pen style {pen.style().name} on a shape drawn solid'] += 1
 		return True
 
 	def _applyFill(self, brush=None):
@@ -390,7 +390,22 @@ class CanvasPainterShim:
 		if stroke and self._applyStroke():
 			c.stroke()
 
+	def _dashed(self) -> bool:
+		return self._pen.style() not in (Qt.PenStyle.SolidLine, Qt.PenStyle.NoPen) and self._pen.brush().style() != Qt.BrushStyle.NoBrush
+
+	def _strokeOutline(self, path: QPainterPath) -> QPainterPath:
+		"""The dashed stroke of `path` as a filled outline; Canvas Painter has no line dash."""
+		stroker = QPainterPathStroker(self._pen)
+		if self._pen.widthF() <= 0:
+			stroker.setWidth(1.0)
+		return stroker.createStroke(path)
+
 	def drawPath(self, path):
+		if self._dashed():
+			self._drawCanvasPath(self._toCanvasPath(path), True, False, evenOdd=path.fillRule() == Qt.FillRule.OddEvenFill)
+			self._drawCanvasPath(self._toCanvasPath(self._strokeOutline(path)), True, False, self._pen.brush())
+			self.report.lossy['dashed stroke drawn as filled outline'] += 1
+			return
 		self._drawCanvasPath(self._toCanvasPath(path), True, True, evenOdd=path.fillRule() == Qt.FillRule.OddEvenFill)
 
 	def fillPath(self, path, brush):
@@ -401,10 +416,18 @@ class CanvasPainterShim:
 	def strokePath(self, path, pen):
 		old = self._pen
 		self._pen = pen if isinstance(pen, QPen) else QPen(pen)
-		self._drawCanvasPath(self._toCanvasPath(path), False, True)
+		if self._dashed():
+			self._drawCanvasPath(self._toCanvasPath(self._strokeOutline(path)), True, False, self._pen.brush())
+			self.report.lossy['dashed stroke drawn as filled outline'] += 1
+		else:
+			self._drawCanvasPath(self._toCanvasPath(path), False, True)
 		self._pen = old
 
-	def _shape(self, build):
+	def _shape(self, build, qpath=None):
+		if qpath is not None and self._dashed():
+			path = QPainterPath()
+			qpath(path)
+			return self.drawPath(path)
 		c = self.canvas
 		c.beginPath()
 		build(c)
@@ -415,12 +438,12 @@ class CanvasPainterShim:
 
 	def drawRect(self, *args):
 		r = args[0] if len(args) == 1 else QRectF(*args)
-		self._shape(lambda c: c.rect(QRectF(r)))
+		self._shape(lambda c: c.rect(QRectF(r)), lambda q: q.addRect(QRectF(r)))
 
 	def drawRoundedRect(self, rect, rx, ry=None, mode=None):
 		if not isinstance(rect, (QRectF,)):
 			rect = QRectF(rect)
-		self._shape(lambda c: c.roundRect(rect, rx))
+		self._shape(lambda c: c.roundRect(rect, rx), lambda q: q.addRoundedRect(rect, rx, rx if ry is None else ry))
 
 	def drawEllipse(self, *args):
 		if len(args) == 1:
@@ -433,7 +456,7 @@ class CanvasPainterShim:
 			r = QRectF(ctr.x() - rx, ctr.y() - ry, 2 * rx, 2 * ry)
 		else:
 			r = QRectF(*args)
-		self._shape(lambda c: c.ellipse(r))
+		self._shape(lambda c: c.ellipse(r), lambda q: q.addEllipse(r))
 
 	def drawLine(self, *args):
 		if len(args) == 1:
@@ -443,6 +466,11 @@ class CanvasPainterShim:
 			p1, p2 = args
 		else:
 			p1, p2 = QPointF(args[0], args[1]), QPointF(args[2], args[3])
+
+		if self._dashed():
+			path = QPainterPath(QPointF(p1))
+			path.lineTo(QPointF(p2))
+			return self.drawPath(path)
 
 		def build(c):
 			c.moveTo(p1)
@@ -461,10 +489,19 @@ class CanvasPainterShim:
 			for p in pts[1:]:
 				c.lineTo(QPointF(p))
 			c.closePath()
-		self._shape(build)
+
+		def qbuild(q):
+			q.addPolygon(QPolygonF([QPointF(p) for p in pts]))
+			q.closeSubpath()
+		self._shape(build, qbuild)
 
 	def drawPolyline(self, poly):
 		pts = list(poly) if not isinstance(poly, QPolygonF) else poly.toList()
+		if self._dashed():
+			path = QPainterPath(QPointF(pts[0]))
+			for p in pts[1:]:
+				path.lineTo(QPointF(p))
+			return self.drawPath(path)
 		c = self.canvas
 		c.beginPath()
 		c.moveTo(QPointF(pts[0]))
