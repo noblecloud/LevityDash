@@ -16,14 +16,14 @@ from math import degrees
 
 from shiboken6 import getCppPointer
 from PySide6.QtCanvasPainter import (
-	QCanvasConicalGradient, QCanvasLinearGradient, QCanvasPainter, QCanvasPath, QCanvasRadialGradient,
+	QCanvasBoxShadow, QCanvasConicalGradient, QCanvasLinearGradient, QCanvasPainter, QCanvasPath, QCanvasRadialGradient,
 )
 from PySide6.QtCore import QLineF, QPointF, QRectF, Qt
 from PySide6.QtGui import (
-	QBrush, QColor, QFont, QFontMetricsF, QGradient, QImage, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QTransform,
+	QBrush, QColor, QFont, QPainterPathStroker, QFontMetricsF, QGradient, QImage, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QTransform,
 )
 from PySide6.QtWidgets import (
-	QAbstractGraphicsShapeItem, QGraphicsEllipseItem, QGraphicsItem, QGraphicsLineItem, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsPolygonItem,
+	QAbstractGraphicsShapeItem, QGraphicsDropShadowEffect, QGraphicsEllipseItem, QGraphicsItem, QGraphicsLineItem, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsPolygonItem,
 	QGraphicsRectItem, QGraphicsSimpleTextItem, QStyleOptionGraphicsItem,
 )
 
@@ -302,8 +302,8 @@ class CanvasPainterShim:
 		c.setLineCap(_CAP.get(pen.capStyle(), QCanvasPainter.LineCap.Butt))
 		c.setLineJoin(_JOIN.get(pen.joinStyle(), QCanvasPainter.LineJoin.Miter))
 		c.setMiterLimit(pen.miterLimit())
-		if pen.style() not in (Qt.PenStyle.SolidLine,):
-			self.report.lossy[f'pen style {pen.style().name} (no dash support) drawn solid'] += 1
+		if pen.style() not in (Qt.PenStyle.SolidLine, Qt.PenStyle.NoPen):
+			self.report.lossy[f'pen style {pen.style().name} on a shape drawn solid'] += 1
 		return True
 
 	def _applyFill(self, brush=None):
@@ -326,25 +326,21 @@ class CanvasPainterShim:
 		t0 = time.perf_counter()
 		key = None
 		if self.cache is not None:
-			n = path.elementCount()
 			b = path.boundingRect()
-			step = max(1, n // 12)
-			key = (n, b.x(), b.y(), b.width(), b.height(), path.fillRule(),
-				tuple((e.x, e.y) for e in map(path.elementAt, range(0, n, step))))
-			hit = self.cache.get(key)
-			if hit is not None:
-				self.report.pathCacheHits += 1
-				self.report.convertSeconds += time.perf_counter() - t0
-				return hit
+			key = (path.elementCount(), b.x(), b.y(), b.width(), b.height(), path.fillRule())
+			for other, hit in self.cache.get(key, ()):
+				if other == path:  # exact, and done in C++
+					self.report.pathCacheHits += 1
+					self.report.convertSeconds += time.perf_counter() - t0
+					return hit
 		c = QCanvasPath()
 		n = path.elementCount()
 		self.report.pathsConverted += 1
 		self.report.pathElements += n
-		E = QPainterPath.ElementType
 		elements = [path.elementAt(i) for i in range(n)]
 		contours = []  # [first element index, signed area]
 		for i, e in enumerate(elements):
-			if e.type == E.MoveToElement:
+			if e.isMoveTo():
 				contours.append([i, 0.0, e.x, e.y, e.x, e.y])  # start index, area, first x/y, previous x/y
 			else:
 				cur = contours[-1]
@@ -360,13 +356,12 @@ class CanvasPainterShim:
 		i = 0
 		while i < n:
 			e = elements[i]
-			t = e.type
-			if t == E.MoveToElement:
+			if e.isMoveTo():
 				if len(contours) > 1:
 					c.beginHoleSubPath() if starts[i] else c.beginSolidSubPath()
 				c.moveTo(e.x, e.y)
 				i += 1
-			elif t == E.LineToElement:
+			elif e.isLineTo():
 				c.lineTo(e.x, e.y)
 				i += 1
 			else:  # CurveToElement is followed by two CurveToDataElements
@@ -376,7 +371,9 @@ class CanvasPainterShim:
 				i += 3
 		self.report.convertSeconds += time.perf_counter() - t0
 		if key is not None:
-			self.cache[key] = c
+			if len(self.cache) > 4000:
+				self.cache.clear()
+			self.cache.setdefault(key, []).append((QPainterPath(path), c))
 		return c
 
 	def _drawCanvasPath(self, cpath: QCanvasPath, fill: bool, stroke: bool, brush=None, evenOdd=False):
@@ -390,7 +387,22 @@ class CanvasPainterShim:
 		if stroke and self._applyStroke():
 			c.stroke()
 
+	def _dashed(self) -> bool:
+		return self._pen.style() not in (Qt.PenStyle.SolidLine, Qt.PenStyle.NoPen) and self._pen.brush().style() != Qt.BrushStyle.NoBrush
+
+	def _strokeOutline(self, path: QPainterPath) -> QPainterPath:
+		"""The dashed stroke of `path` as a filled outline; Canvas Painter has no line dash."""
+		stroker = QPainterPathStroker(self._pen)
+		if self._pen.widthF() <= 0:
+			stroker.setWidth(1.0)
+		return stroker.createStroke(path)
+
 	def drawPath(self, path):
+		if self._dashed():
+			self._drawCanvasPath(self._toCanvasPath(path), True, False, evenOdd=path.fillRule() == Qt.FillRule.OddEvenFill)
+			self._drawCanvasPath(self._toCanvasPath(self._strokeOutline(path)), True, False, self._pen.brush())
+			self.report.lossy['dashed stroke drawn as filled outline'] += 1
+			return
 		self._drawCanvasPath(self._toCanvasPath(path), True, True, evenOdd=path.fillRule() == Qt.FillRule.OddEvenFill)
 
 	def fillPath(self, path, brush):
@@ -401,10 +413,18 @@ class CanvasPainterShim:
 	def strokePath(self, path, pen):
 		old = self._pen
 		self._pen = pen if isinstance(pen, QPen) else QPen(pen)
-		self._drawCanvasPath(self._toCanvasPath(path), False, True)
+		if self._dashed():
+			self._drawCanvasPath(self._toCanvasPath(self._strokeOutline(path)), True, False, self._pen.brush())
+			self.report.lossy['dashed stroke drawn as filled outline'] += 1
+		else:
+			self._drawCanvasPath(self._toCanvasPath(path), False, True)
 		self._pen = old
 
-	def _shape(self, build):
+	def _shape(self, build, qpath=None):
+		if qpath is not None and self._dashed():
+			path = QPainterPath()
+			qpath(path)
+			return self.drawPath(path)
 		c = self.canvas
 		c.beginPath()
 		build(c)
@@ -415,12 +435,12 @@ class CanvasPainterShim:
 
 	def drawRect(self, *args):
 		r = args[0] if len(args) == 1 else QRectF(*args)
-		self._shape(lambda c: c.rect(QRectF(r)))
+		self._shape(lambda c: c.rect(QRectF(r)), lambda q: q.addRect(QRectF(r)))
 
 	def drawRoundedRect(self, rect, rx, ry=None, mode=None):
 		if not isinstance(rect, (QRectF,)):
 			rect = QRectF(rect)
-		self._shape(lambda c: c.roundRect(rect, rx))
+		self._shape(lambda c: c.roundRect(rect, rx), lambda q: q.addRoundedRect(rect, rx, rx if ry is None else ry))
 
 	def drawEllipse(self, *args):
 		if len(args) == 1:
@@ -433,7 +453,7 @@ class CanvasPainterShim:
 			r = QRectF(ctr.x() - rx, ctr.y() - ry, 2 * rx, 2 * ry)
 		else:
 			r = QRectF(*args)
-		self._shape(lambda c: c.ellipse(r))
+		self._shape(lambda c: c.ellipse(r), lambda q: q.addEllipse(r))
 
 	def drawLine(self, *args):
 		if len(args) == 1:
@@ -443,6 +463,11 @@ class CanvasPainterShim:
 			p1, p2 = args
 		else:
 			p1, p2 = QPointF(args[0], args[1]), QPointF(args[2], args[3])
+
+		if self._dashed():
+			path = QPainterPath(QPointF(p1))
+			path.lineTo(QPointF(p2))
+			return self.drawPath(path)
 
 		def build(c):
 			c.moveTo(p1)
@@ -461,10 +486,19 @@ class CanvasPainterShim:
 			for p in pts[1:]:
 				c.lineTo(QPointF(p))
 			c.closePath()
-		self._shape(build)
+
+		def qbuild(q):
+			q.addPolygon(QPolygonF([QPointF(p) for p in pts]))
+			q.closeSubpath()
+		self._shape(build, qbuild)
 
 	def drawPolyline(self, poly):
 		pts = list(poly) if not isinstance(poly, QPolygonF) else poly.toList()
+		if self._dashed():
+			path = QPainterPath(QPointF(pts[0]))
+			for p in pts[1:]:
+				path.lineTo(QPointF(p))
+			return self.drawPath(path)
 		c = self.canvas
 		c.beginPath()
 		c.moveTo(QPointF(pts[0]))
@@ -644,10 +678,14 @@ def nativePaintRedirected():
 			cls.paint = original
 
 
-def paintScene(scene, shim: CanvasPainterShim, background: QColor = None, rect: QRectF = None):
-	"""Draw every visible item of `scene` through `shim`, in stacking order."""
+def paintScene(scene, shim: CanvasPainterShim, background: QColor = None, rect: QRectF = None, region: QRectF = None):
+	"""Draw every visible item of `scene` through `shim`, in stacking order.
+
+	`region` (scene coordinates) limits the walk to the items that touch it and clips everything to it, which is how
+	the retained layer repaints only what changed.
+	"""
 	with nativePaintRedirected():
-		return _paintScene(scene, shim, background, rect)
+		return _paintScene(scene, shim, background, rect, region)
 
 
 _CLIPS_CHILDREN = QGraphicsItem.GraphicsItemFlag.ItemClipsChildrenToShape
@@ -669,16 +707,45 @@ def _clipRect(item, cache: dict):
 	return rect
 
 
-def _paintScene(scene, shim: CanvasPainterShim, background: QColor = None, rect: QRectF = None):
+def _effectBehind(item, effect, shim: CanvasPainterShim):
+	"""A drop shadow becomes a GPU box shadow behind the item; any other `QGraphicsEffect` is skipped.
+
+	The shadow follows the item's bounding rectangle (a capsule when the item is a path, so the moon's glow
+	is round), not its exact silhouette.
+	"""
+	if not isinstance(effect, QGraphicsDropShadowEffect):
+		shim.report.lossy[f'{type(effect).__name__} skipped'] += 1
+		return
+	rect = item.shape().boundingRect() if isinstance(item, QAbstractGraphicsShapeItem) else item.boundingRect()
+	if rect.isEmpty():
+		return
+	offset = effect.offset()
+	box = QCanvasBoxShadow()
+	box.setRect(rect.translated(offset))
+	box.setBlur(max(1.0, effect.blurRadius()))
+	box.setRadius(min(rect.width(), rect.height()) / 2 if isinstance(item, QGraphicsPathItem) else 0.0)
+	box.setColor(effect.color())
+	shim.canvas.drawBoxShadow(box)
+	shim.report.lossy['drop shadow drawn as a box shadow'] += 1
+
+
+def _paintScene(scene, shim: CanvasPainterShim, background: QColor = None, rect: QRectF = None, region: QRectF = None):
 	canvas = shim.canvas
 	rect = rect or scene.sceneRect()
-	if background is not None:
-		shim.fillRect(rect, QBrush(background))
-	option = QStyleOptionGraphicsItem()
 	shim.base = canvas.getTransform()
+	regionDevice = shim.base.mapRect(region) if region is not None else None
+	if region is not None:
+		items = scene.items(region, Qt.ItemSelectionMode.IntersectsItemBoundingRect, Qt.SortOrder.AscendingOrder)
+	else:
+		items = scene.items(Qt.SortOrder.AscendingOrder)
+	if background is not None:
+		shim._clip = regionDevice
+		shim._applyClip()
+		shim.fillRect(region if region is not None else rect, QBrush(background))
+	option = QStyleOptionGraphicsItem()
 	painted = 0
 	clips = {}
-	for item in scene.items(Qt.SortOrder.AscendingOrder):
+	for item in items:
 		if not item.isVisible() or item.flags() & QGraphicsItem.GraphicsItemFlag.ItemHasNoContents:
 			continue
 		opacity = item.effectiveOpacity()
@@ -698,10 +765,13 @@ def _paintScene(scene, shim: CanvasPainterShim, background: QColor = None, rect:
 			own = item.mapRectToScene(item.shape().boundingRect())
 			clip = own if clip is None else clip.intersected(own)
 		shim._clip = shim.base.mapRect(clip) if clip is not None else None
+		if regionDevice is not None:
+			shim._clip = regionDevice if shim._clip is None else shim._clip.intersected(regionDevice)
 		shim._applyClip()
 		shim.setTransform(item.sceneTransform())
-		if item.graphicsEffect() is not None:
-			shim.report.lossy['QGraphicsEffect skipped'] += 1
+		effect = item.graphicsEffect()
+		if effect is not None and effect.isEnabled():
+			_effectBehind(item, effect, shim)
 		try:
 			if _pythonPaint(item):
 				option.rect = item.boundingRect().toRect()
