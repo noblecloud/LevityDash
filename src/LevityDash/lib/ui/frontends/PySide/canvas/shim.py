@@ -16,14 +16,14 @@ from math import degrees
 
 from shiboken6 import getCppPointer
 from PySide6.QtCanvasPainter import (
-	QCanvasConicalGradient, QCanvasLinearGradient, QCanvasPainter, QCanvasPath, QCanvasRadialGradient,
+	QCanvasBoxShadow, QCanvasConicalGradient, QCanvasLinearGradient, QCanvasPainter, QCanvasPath, QCanvasRadialGradient,
 )
 from PySide6.QtCore import QLineF, QPointF, QRectF, Qt
 from PySide6.QtGui import (
 	QBrush, QColor, QFont, QPainterPathStroker, QFontMetricsF, QGradient, QImage, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QTransform,
 )
 from PySide6.QtWidgets import (
-	QAbstractGraphicsShapeItem, QGraphicsEllipseItem, QGraphicsItem, QGraphicsLineItem, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsPolygonItem,
+	QAbstractGraphicsShapeItem, QGraphicsDropShadowEffect, QGraphicsEllipseItem, QGraphicsItem, QGraphicsLineItem, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsPolygonItem,
 	QGraphicsRectItem, QGraphicsSimpleTextItem, QStyleOptionGraphicsItem,
 )
 
@@ -706,6 +706,28 @@ def _clipRect(item, cache: dict):
 	return rect
 
 
+def _effectBehind(item, effect, shim: CanvasPainterShim):
+	"""A drop shadow becomes a GPU box shadow behind the item; any other `QGraphicsEffect` is skipped.
+
+	The shadow follows the item's bounding rectangle (a capsule when the item is a path, so the moon's glow
+	is round), not its exact silhouette.
+	"""
+	if not isinstance(effect, QGraphicsDropShadowEffect):
+		shim.report.lossy[f'{type(effect).__name__} skipped'] += 1
+		return
+	rect = item.shape().boundingRect() if isinstance(item, QAbstractGraphicsShapeItem) else item.boundingRect()
+	if rect.isEmpty():
+		return
+	offset = effect.offset()
+	box = QCanvasBoxShadow()
+	box.setRect(rect.translated(offset))
+	box.setBlur(max(1.0, effect.blurRadius()))
+	box.setRadius(min(rect.width(), rect.height()) / 2 if isinstance(item, QGraphicsPathItem) else 0.0)
+	box.setColor(effect.color())
+	shim.canvas.drawBoxShadow(box)
+	shim.report.lossy['drop shadow drawn as a box shadow'] += 1
+
+
 def _paintScene(scene, shim: CanvasPainterShim, background: QColor = None, rect: QRectF = None):
 	canvas = shim.canvas
 	rect = rect or scene.sceneRect()
@@ -737,8 +759,9 @@ def _paintScene(scene, shim: CanvasPainterShim, background: QColor = None, rect:
 		shim._clip = shim.base.mapRect(clip) if clip is not None else None
 		shim._applyClip()
 		shim.setTransform(item.sceneTransform())
-		if item.graphicsEffect() is not None:
-			shim.report.lossy['QGraphicsEffect skipped'] += 1
+		effect = item.graphicsEffect()
+		if effect is not None and effect.isEnabled():
+			_effectBehind(item, effect, shim)
 		try:
 			if _pythonPaint(item):
 				option.rect = item.boundingRect().toRect()
