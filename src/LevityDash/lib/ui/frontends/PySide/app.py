@@ -26,7 +26,7 @@ from PySide6.QtGui import (
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 from PySide6.QtWidgets import (
-	QApplication, QGraphicsItem, QGraphicsRectItem, QGraphicsScene,
+	QApplication, QGraphicsItem, QGraphicsRectItem, QGraphicsScene, QGridLayout, QWidget,
 	QGraphicsView, QLabel, QMainWindow, QMenu, QMenuBar, QSplashScreen
 )
 from time import perf_counter, process_time, time
@@ -335,6 +335,7 @@ class LevitySceneView(QGraphicsView):
 	resizeFinished = Signal()
 	loadingFinished = Signal()
 	__lastKey = (None, None)
+	canvasMode = False
 
 	def __init__(self, *args, **kwargs):
 		self.status = 'Initializing'
@@ -343,6 +344,12 @@ class LevitySceneView(QGraphicsView):
 		self.lastEventTime = perf_counter()
 		super(LevitySceneView, self).__init__(*args, **kwargs)
 		opengl = userConfig.getOrSet('QtOptions', 'openGL', True, userConfig.getboolean)
+		# 'canvas' draws the scene on the GPU with Qt Canvas Painter (a layer under this view, see
+		# canvas/); this view then only handles input. Optional: falls back to QPainter with a warning.
+		from LevityDash.lib.ui.frontends.PySide import canvas
+		self.canvasMode = canvas.wanted(os.environ.get('LEVITY_RENDERER') or userConfig.getOrSet('QtOptions', 'renderer', 'qpainter'))
+		if self.canvasMode:
+			opengl = False
 		QApplication.instance().resizeFinished = self.resizeFinished
 
 		antialiasing = userConfig.getOrSet('QtOptions', 'antialiasing', True, getter=userConfig.getboolean)
@@ -563,6 +570,11 @@ class LevitySceneView(QGraphicsView):
 		# The scene paints the ground (`LevityScene.drawBackground`), flat or gradient.
 		# The viewport only: the window frame and the rest of the app keep the system palette.
 		self.viewport().setPalette(applyThemeToPalette(colorPalette, active))
+
+	def paintEvent(self, event):
+		if self.canvasMode:
+			return  # the canvas layer underneath draws the scene; the viewport stays transparent
+		super().paintEvent(event)
 
 	def resizeEvent(self, event):
 		super(LevitySceneView, self).resizeEvent(event)
@@ -1109,12 +1121,31 @@ class LevityMainWindow(QMainWindow):
 		self.view.postInit()
 		self.buildMenu()
 
-		self.setCentralWidget(self.view)
+		self.setCentralWidget(self._wrapForCanvas(self.view))
 		self._initConnectionIndicator()
 		self.show()
 
 		if platform.system() != 'Darwin':
 			self.updateMenuBar('show')
+
+	def _wrapForCanvas(self, view):
+		"""In canvas mode stack the GPU layer under the (transparent, input-only) view; otherwise the view itself."""
+		if not view.canvasMode:
+			return view
+		from LevityDash.lib.ui.frontends.PySide.canvas.layer import CanvasSceneLayer
+		holder = QWidget(self)
+		grid = QGridLayout(holder)
+		grid.setContentsMargins(0, 0, 0, 0)
+		self.canvasLayer = CanvasSceneLayer(view, holder)
+		view.canvasLayer = self.canvasLayer
+		view.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+		view.viewport().setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+		view.viewport().setAutoFillBackground(False)
+		view.setBackgroundBrush(Qt.BrushStyle.NoBrush)
+		grid.addWidget(self.canvasLayer, 0, 0)
+		grid.addWidget(view, 0, 0)
+		self.canvasLayer.bind()
+		return holder
 
 	def _initConnectionIndicator(self):
 		# Only meaningful in mode=remote - mode=live has no backend
