@@ -336,6 +336,7 @@ class LevitySceneView(QGraphicsView):
 	loadingFinished = Signal()
 	__lastKey = (None, None)
 	canvasMode = False
+	gpuRenderer = None
 
 	def __init__(self, *args, **kwargs):
 		self.status = 'Initializing'
@@ -346,8 +347,11 @@ class LevitySceneView(QGraphicsView):
 		opengl = userConfig.getOrSet('QtOptions', 'openGL', True, userConfig.getboolean)
 		# 'canvas' draws the scene on the GPU with Qt Canvas Painter (a layer under this view, see
 		# canvas/); this view then only handles input. Optional: falls back to QPainter with a warning.
-		from LevityDash.lib.ui.frontends.PySide import canvas
-		self.canvasMode = canvas.wanted(os.environ.get('LEVITY_RENDERER') or userConfig.getOrSet('QtOptions', 'renderer', 'qpainter'))
+		# 'skia' does the same with Skia on OpenGL (skia/), which has real blur and every blend mode.
+		from LevityDash.lib.ui.frontends.PySide import canvas, skia as skiaTier
+		renderer = os.environ.get('LEVITY_RENDERER') or userConfig.getOrSet('QtOptions', 'renderer', 'qpainter')
+		self.gpuRenderer = 'skia' if skiaTier.wanted(renderer) else 'canvas' if canvas.wanted(renderer) else None
+		self.canvasMode = self.gpuRenderer is not None
 		if self.canvasMode:
 			opengl = False
 		QApplication.instance().resizeFinished = self.resizeFinished
@@ -1129,14 +1133,17 @@ class LevityMainWindow(QMainWindow):
 			self.updateMenuBar('show')
 
 	def _wrapForCanvas(self, view):
-		"""In canvas mode stack the GPU layer under the (transparent, input-only) view; otherwise the view itself."""
+		"""In canvas or skia mode stack the GPU layer under the (transparent, input-only) view; otherwise the view itself."""
 		if not view.canvasMode:
 			return view
-		from LevityDash.lib.ui.frontends.PySide.canvas.layer import CanvasSceneLayer
+		if view.gpuRenderer == 'skia':
+			from LevityDash.lib.ui.frontends.PySide.skia.layer import SkiaSceneLayer as Layer
+		else:
+			from LevityDash.lib.ui.frontends.PySide.canvas.layer import CanvasSceneLayer as Layer
 		holder = QWidget(self)
 		grid = QGridLayout(holder)
 		grid.setContentsMargins(0, 0, 0, 0)
-		self.canvasLayer = CanvasSceneLayer(view, holder)
+		self.canvasLayer = Layer(view, holder)
 		view.canvasLayer = self.canvasLayer
 		view.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 		view.viewport().setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)

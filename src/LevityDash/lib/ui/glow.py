@@ -153,6 +153,9 @@ def paintGlow(painter: QPainter, path: QPainterPath, brush: QBrush, width: float
 	"""
 	if glow is None or glow.strength <= 0 or width <= 0 or path.isEmpty():
 		return
+	if getattr(painter, 'blurGlow', False) and not dashes:  # a GPU painter (the Skia renderer) blurs in one pass
+		_blurredGlow(painter.glowPath, path, brush, width, glow, filled)
+		return
 	painter.save()
 	try:
 		painter.setBrush(Qt.BrushStyle.NoBrush)
@@ -187,6 +190,23 @@ def paintGlow(painter: QPainter, path: QPainterPath, brush: QBrush, width: float
 			painter.drawPath(path)
 	finally:
 		painter.restore()
+
+
+def _blurredGlow(glowPath, path: QPainterPath, brush: QBrush, width: float, glow: Glow, filled: bool) -> None:
+	"""The halo as a real Gaussian blur, for a painter that has ``glowPath`` (the Skia renderer).
+
+	One blurred stroke stands in for the stacked passes: it is as wide as the widest pass would be
+	without its spread, and the blur (sigma = half the reach) supplies the soft edge. The bloom pass is the same stroke, narrower and
+	added (``Plus``), capped as in the stroked version.
+	"""
+	reach = glow.reach_px(width, filled)
+	core = width * 2 if filled else width
+	sigma = max(reach / 2.0, 0.5)
+	alpha = min(1.0, glow.strength * 0.4)
+	glowPath(path, brush, core, sigma, alpha, False)
+	bloom = min(glow.bloom, alpha * 0.5)
+	if bloom > 0:
+		glowPath(path, brush, core, sigma * 0.5, bloom * 2, True)
 
 
 def _glowChanged(item) -> None:
