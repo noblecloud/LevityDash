@@ -15,7 +15,7 @@ runs:
         sudo locale-gen en_US.UTF-8
     - name: unitcorn (path dependency, WeatherUnits repo)
       shell: bash
-      run: git clone --depth 1 --branch dev https://github.com/noblecloud/WeatherUnits.git WeatherUnits
+      run: git clone --depth 1 --branch dev https://github.com/noblecloud/unitcorn.git WeatherUnits
     - name: Install dependencies
       shell: bash
       working-directory: LevityDash
