@@ -43,18 +43,18 @@ class LevityDashApp(QApplication):
 			if keyboardModifiers & Qt.AltModifier:
 				print('Alt is pressed, plugin auto start disabled')
 				return
-			connectSignal(self.main_window.centralWidget().loadingFinished, self.start_plugins)
+			connectSignal(self.main_window.view.loadingFinished, self.start_plugins)
 
 		self.main_window.show()
 		return self.exec_()
 
 	def start_plugins(self):
-		self.main_window.centralWidget().loadingFinished.disconnect(self.start_plugins)
+		self.main_window.view.loadingFinished.disconnect(self.start_plugins)
 		QTimer.singleShot(10, LevityDashboard.plugins.start)
 		# The backend does this for mode=remote; here the plugins run in this process
 		from LevityDash.lib.config import userConfig
 		from LevityDash.lib.plugins.patrol import Patrol, policyFromConfig
-		self.patrol = Patrol(LevityDashboard.plugins, policyFromConfig(userConfig, qtLogger))
+		self.patrol = Patrol(LevityDashboard.plugins, policyFromConfig(userConfig, qtLogger), qtLogger)
 
 
 LevityDashAppInstance = LevityDashApp()
