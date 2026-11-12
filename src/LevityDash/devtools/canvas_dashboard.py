@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _seed import seedEnvironment
 
 if __name__ == '__main__' and '--one' in sys.argv:
-	os.environ['LEVITY_RENDERER'] = 'canvas'
+	os.environ.setdefault('LEVITY_RENDERER', 'canvas')
 	os.environ.setdefault('QT_QPA_PLATFORM', 'xcb')
 	seedEnvironment()
 	sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))

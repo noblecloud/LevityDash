@@ -57,6 +57,22 @@ class LevityDashApp(QApplication):
 		self.patrol = Patrol(LevityDashboard.plugins, policyFromConfig(userConfig, qtLogger), qtLogger)
 
 
+def _prepareRenderer():
+	"""Canvas Painter draws through QRhi, which a widget only gets when QT_WIDGETS_RHI is set before the
+	QApplication exists (on macOS the layer is otherwise blank white and logs `QRhiWidget: No QRhi`)."""
+	import os
+	name = os.environ.get('LEVITY_RENDERER')
+	if name is None:
+		try:
+			from LevityDash.lib.config import userConfig
+			name = userConfig.get('QtOptions', 'renderer', fallback='qpainter')
+		except Exception:  # noqa: BLE001 - a config problem shows up later, where it is reported properly
+			name = 'qpainter'
+	if str(name).strip().lower() == 'canvas':
+		os.environ.setdefault('QT_WIDGETS_RHI', '1')
+
+
+_prepareRenderer()
 LevityDashAppInstance = LevityDashApp()
 
 
