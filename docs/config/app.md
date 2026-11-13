@@ -232,7 +232,7 @@ This is the number of files to keep with the rolling file logger. The default is
 ## unitcorn <!-- {docsify-ignore} -->
 
 The sections below are for unitcorn (formerly WeatherUnits), the library that converts and localizes measurements for display. More information on how it's configured can be found in
-the [unitcorn repo](https://github.com/noblecloud/WeatherUnits).
+the [unitcorn repo](https://github.com/noblecloud/unitcorn).
 
 ```ini
 [Units]

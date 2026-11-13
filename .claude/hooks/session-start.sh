@@ -35,7 +35,7 @@ PY="$("$UV" python find "$PYVER")"
 # unitcorn is a path dependency at ../WeatherUnits (the repo keeps its old name) (develop mode, dev branch).
 WU="$REPO/../WeatherUnits"
 if [ ! -d "$WU/.git" ]; then
-	git clone -q https://github.com/noblecloud/WeatherUnits.git "$WU"
+	git clone -q https://github.com/noblecloud/unitcorn.git "$WU"
 fi
 git -C "$WU" fetch -q origin dev
 git -C "$WU" checkout -q -B dev origin/dev
