@@ -10,6 +10,7 @@
 - [Configuring](config.md)
 	- [Application](config/app.md "Application Configuration")
 	- [Dashboards](config/dashboard.md)
+		- [Reference](config/dashboard/reference.md)
 		- [Themes](config/dashboard/themes.md)
 		- [Bindings](config/dashboard/bindings.md)
 		- [Variables](config/dashboard/variables.md)
