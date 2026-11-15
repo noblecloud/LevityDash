@@ -1,5 +1,7 @@
 # Dashboard Configuration
 
+> New here? [The dashboard reference](dashboard/reference.md) lists every item type, every key and where the examples are.
+
 All dashboard configurations in the YAML format with the extension `.levity`.
 You can get a general understanding of how these work by looking at
 the [template dashboards](https://github.com/noblecloud/LevityDash/tree/main/src/LevityDash/resources/example-config/templates/dashboards).
