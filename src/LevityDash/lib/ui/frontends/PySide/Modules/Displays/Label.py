@@ -395,6 +395,67 @@ class Label(Panel, ColorMixin, tag='label'):
 	def tabular(self, value: bool):
 		self.textBox.setTabular(value)
 
+	@StateProperty(key='italic', default=False, dependencies={'geometry', 'text'})
+	def italic(self) -> bool:
+		"""The font's italic, or a slanted regular where the family has none."""
+		return self.textBox._italic
+
+	@italic.setter
+	def italic(self, value: bool):
+		self.textBox.setItalic(value)
+
+	@StateProperty(key='tracking', default=0.0, dependencies={'geometry', 'text'})
+	def tracking(self) -> float:
+		"""Space added between letters, in em, as CSS `letter-spacing`: `tracking: 0.12` opens all caps
+		up, a negative number tightens a big number. `12%` is the same as `0.12`."""
+		return self.textBox._tracking
+
+	@tracking.setter
+	def tracking(self, value: float):
+		self.textBox.setTracking(value)
+
+	@tracking.decode
+	def tracking(self, value) -> float:
+		if isinstance(value, str):
+			value = value.strip()
+			return float(value[:-1]) / 100 if value.endswith('%') else float(value.removesuffix('em'))
+		return float(value or 0)
+
+	@StateProperty(key='outline', default=None, allowNone=True, dependencies={'geometry', 'text'})
+	def outline(self) -> dict | None:
+		"""Draw the letters as a line round their shape: `outline: true`, a weight in pixels (`outline: 2`),
+		or `{weight, color, fill}`. The inside is empty unless `fill: true`; the line takes the text's
+		colour unless `color` names another."""
+		return self._outlineSpec
+
+	_outlineSpec = None
+
+	@outline.setter
+	def outline(self, value: dict | None):
+		self._outlineSpec = value
+		spec = None
+		if value:
+			spec = dict(value)
+			if spec.get('color') is not None:
+				from LevityDash.lib.ui import Color
+				spec['color'] = Color(spec['color'])
+		self.textBox.setOutline(spec)
+
+	@outline.decode
+	def outline(self, value) -> dict | None:
+		if value in (None, False):
+			return None
+		if value is True:
+			return {'weight': 1.5}
+		if isinstance(value, (int, float)):
+			return {'weight': float(value)}
+		if isinstance(value, str):
+			return {'weight': float(value.removesuffix('px'))}
+		unknown = set(value) - {'weight', 'color', 'fill'}
+		if unknown:
+			raise ValueError(f'outline takes weight, color and fill, not {", ".join(sorted(unknown))}')
+		return dict(value)
+
 	@StateProperty(key='text-height', default=None, dependencies={'geometry', 'text', 'alignment'})
 	def textHeight(self) -> Size.Height | Length | None:
 		return self.textBox.height
