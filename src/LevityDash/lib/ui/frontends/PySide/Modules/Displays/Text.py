@@ -1,6 +1,6 @@
 
 from PySide6.QtCore import QLineF, QObject, QPoint, QPointF, QRectF, Signal, Slot
-from PySide6.QtGui import QBrush, QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPen, Qt, QTransform, QGradient
+from PySide6.QtGui import QBrush, QColor, QFont, QFontInfo, QFontMetricsF, QPainter, QPainterPath, QPen, Qt, QTransform, QGradient
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem
 from datetime import datetime, timedelta
 from dateutil.parser import parser
@@ -325,6 +325,11 @@ class Text(QGraphicsPathItem):
 			font.setPointSize(self.fontSize)
 		if self._tabular or self._numberAlign:
 			self._enableTabular(font)
+		if self._italic:
+			font.setItalic(True)
+		if self._tracking:
+			# In em, as CSS letter-spacing: the gap grows with the text.
+			font.setLetterSpacing(QFont.AbsoluteSpacing, self._tracking * QFontInfo(font).pixelSize())
 		return font
 
 	@staticmethod
@@ -337,9 +342,42 @@ class Text(QGraphicsPathItem):
 			pass
 
 	_tabular: bool = False
+	_italic: bool = False
+	_tracking: float = 0.0
+	_outline: Optional[dict] = None
+	_fillBrush: Optional[QBrush] = None
 	_numberAlign: Optional[str] = None
 	_numExtentKey: tuple = None
 	_numExtent: tuple = (0.0, 0.0)
+
+	def setItalic(self, value: bool):
+		self._italic = bool(value)
+		self.updateTransform(reason='italic')
+
+	def setTracking(self, value: float):
+		self._tracking = float(value or 0)
+		self.updateTransform(reason='tracking')
+
+	def setOutline(self, value: Optional[dict]):
+		self._outline = value or None
+		self._applyInk()
+
+	def _applyInk(self):
+		"""Brush and pen from the fill colour and `outline`. With no outline the glyphs are filled and
+		there is no pen, as before."""
+		brush = self._fillBrush if self._fillBrush is not None else QBrush(Color.text.QColor)
+		outline = self._outline
+		if not outline:
+			self.setPen(QPen(Qt.NoPen))
+			self.setBrush(brush)
+			return
+		color = outline.get('color')
+		pen = QPen(color.QColor if color is not None else brush.color(), float(outline.get('weight', 1.5)))
+		# Device pixels: the path is scaled to fit its box, and the line must not scale with it.
+		pen.setCosmetic(True)
+		pen.setJoinStyle(Qt.RoundJoin)
+		self.setPen(pen)
+		self.setBrush(brush if outline.get('fill', False) else QBrush(Qt.NoBrush))
 
 	def setTabular(self, value: bool):
 		self._tabular = bool(value)
@@ -870,6 +908,8 @@ class Text(QGraphicsPathItem):
 			self.height_px,
 			self._warp,
 			self.tailRun(),
+			self._tracking,
+			self._italic,
 			self._tabular,
 			self._numberAlign,
 			self._numberColumn() if self._numberAlign else None,
@@ -941,11 +981,12 @@ class Text(QGraphicsPathItem):
 	def setFillBrush(self, value: QBrush):
 		if value is None:
 			value = QBrush(Color.text.QColor)
-		self.setBrush(value)
+		self._fillBrush = QBrush(value)
+		self._applyInk()
 
 	@property
 	def fill_brush(self) -> QBrush:
-		return self.brush()
+		return self._fillBrush if self._fillBrush is not None else self.brush()
 
 	@fill_brush.setter
 	def fill_brush(self, value: QBrush):
@@ -1438,7 +1479,8 @@ class Text(QGraphicsPathItem):
 		self._builtSignature = self._layoutSignature()
 		self._sizeHintRect = newTextRect
 		self._fmt_rect = fmt_hint_rect
-		self.setPath(path)
+		# An outline follows every contour, and a font may build a glyph from overlapping ones: merge them first.
+		self.setPath(path.simplified() if self._outline else path)
 
 		if update_others and (group := getattr(self, '_sized', None)) is not None:
 			group: 'SizeGroup'

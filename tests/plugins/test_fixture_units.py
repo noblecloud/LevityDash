@@ -58,3 +58,4 @@ def test_a_scenario_with_kw_loads_as_a_power_and_does_energy_sums(tmp_path, monk
 	assert isinstance(Expression.parse('house.power.net * 1h').evaluate(Resolver(), now), wu.Energy)
 	assert Expression.parse('house.power.net > 4 kW').evaluate(Resolver(), now) is True
 	assert Expression.parse('house.energy.today > 20 kWh').evaluate(Resolver(), now) is False
+

@@ -52,6 +52,7 @@ All the keys of `type: group` (first table under **Key tables**) work on every i
 
 - **Box**: `geometry`, `margins`, `padding`, `opacity` (a number, or `{of, from, to}`), `border`, `align-to`, `time-axis`, `name`.
 - **Behaviour**: `when`, `movable`, `resizable`, `locked`, `frozen` (the last four only matter in edit mode).
+- **Type**: on any text and on a reading's `valueLabel`: `font`, `weight`, `italic`, `tracking` (letter spacing in em; open up capitals, tighten a big number), `outline` (hollow letters: a weight, or `{weight, color, fill}`), `filters`, `warp`. Worked examples: the five dashboards in `docs/design-references/showcase/`.
 - **Effects**: `beam` (a travelling or breathing outline) and `glow` (a halo) work on any item that lists them.
 - **Cascades**: `shared:` (style for every descendant), `preset:` on a stack (defaults for each child), `defaultType:` (children without a `type`), `matchingGroup:` (one text size across a region). Details: `cascading-options.md` in the project files and [size-groups.md](size-groups.md).
 
@@ -367,6 +368,9 @@ Tag: `label`  ·  class `Label`
 | `format-hint` | `None` |  |
 | `number-align` | `None` | Line numbers up on the number and not on the whole string: `end` right-aligns the digits, `decimal` puts the decimal point on one line (a value with no point acts as if it ended in one). The unit and any other text after the cut hang to its right. Members of one size group (and one tier) share the line. The text is not changed: nothing is padded. |
 | `tabular` | `False` | `font-variant-numeric: tabular-nums`: digits of one width. On whenever `number-align` is set. |
+| `italic` | `False` | The font's italic, or a slanted regular where the family has none. |
+| `tracking` | `0.0` | Space added between letters, in em, as CSS `letter-spacing`: `tracking: 0.12` opens all caps up, a negative number tightens a big number. `12%` is the same as `0.12`. |
+| `outline` | `None` | Draw the letters as a line round their shape: `outline: true`, a weight in pixels (`outline: 2`), or `{weight, color, fill}`. The inside is empty unless `fill: true`; the line takes the text's colour unless `color` names another. |
 | `text-height` | `None` |  |
 | `matchingGroup` | `None` | Group to match the height of the label to. Returns ------- |
 
