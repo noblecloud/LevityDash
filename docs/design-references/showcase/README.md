@@ -11,6 +11,8 @@ each runs on made-up data, so most of the keys belong to plugins that do not exi
 | `grid` | Home energy: solar, house, street, battery, car | Big Shoulders Display, Black for numbers and Thin for units | Blue-black |
 | `tide` | Coast: sea level, the next turns, wind, swell | Unbounded Black and Light, hollow for times, Space Grotesk labels | Gradient, hairlines, no cards |
 
+Renders of four of them are beside the files (`rack.png`, `grow.png`, `grid.png`, `tide.png`). There is none of `atmos`, because it is set in Apple's fonts.
+
 ## Rendering one
 
 ```bash
