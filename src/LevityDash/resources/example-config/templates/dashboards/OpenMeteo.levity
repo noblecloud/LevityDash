@@ -1,7 +1,7 @@
 # The default dashboard for OpenMeteo, the forecast LevityDash starts with.
 #
 # Top: the clock (the date on its own line, the time, the moon over am or pm), the temperature with the day's high and
-# low as hollow numerals, and the daylight left over today's sunlight. Middle: two and a half days ahead, with
+# low in bold colour, and the daylight left over today's sunlight. Middle: two and a half days ahead, with
 # today's temperature round a 24 hour clock. Bottom: wind, rain, pressure, the sky, and the last 24 hours.
 #
 # Every key comes from OpenMeteo or the built-in Astronomy plugin. Fonts are the bundled Nunito and Barlow Condensed.
@@ -125,9 +125,8 @@ items:
         font: $body
         weight: Bold
         matchingGroup:
-          group: global.hollow
+          group: global.hilo
           matchAll: true
-        outline: 2
       format-hint: '00'
       format:
         unit_symbol: false
@@ -164,9 +163,8 @@ items:
         font: $body
         weight: Bold
         matchingGroup:
-          group: global.hollow
+          group: global.hilo
           matchAll: true
-        outline: 2
       format-hint: '00'
       format:
         unit_symbol: false

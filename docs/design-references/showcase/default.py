@@ -118,10 +118,10 @@ def board():
 		cap_('OUTSIDE', g(x, 2.8, 12, CAP), '$accent'),
 		num(T, g(x - 0.4, 4.6, 16, 15.6), {'scale': '$temperature', 'of': T}, unit='Inline', hint='00°', weight='Black', tracking=-0.04),
 		cap_('HIGH', g(x + 16.6, 4.8, 7, CAP)),
-		num('environment.temperature.high', g(x + 16.6, 6.8, 8, 5.8), '$bad', hint='00', weight='Bold', outline=2, group='global.hollow',
+		num('environment.temperature.high', g(x + 16.6, 6.8, 8, 5.8), '$bad', hint='00', weight='Bold', group='global.hilo',
 		    fmt={'unit_symbol': False}),
 		cap_('LOW', g(x + 16.6, 13.4, 7, CAP)),
-		num('environment.temperature.low', g(x + 16.6, 15.4, 8, 5.8), '$info', hint='00', weight='Bold', outline=2, group='global.hollow',
+		num('environment.temperature.low', g(x + 16.6, 15.4, 8, 5.8), '$info', hint='00', weight='Bold', group='global.hilo',
 		    fmt={'unit_symbol': False}),
 		# The day's low to high on a 30 to 100 °F track, the temperature now as a line across it.
 		bar(T, g(x, 20.9, 24.6, 2.2), 30, 100, track={'weight': '42%', 'color': '$rule'},
@@ -263,7 +263,7 @@ HEADER = """
 The default dashboard for OpenMeteo, the forecast LevityDash starts with.
 
 Top: the clock (the date on its own line, the time, the moon over am or pm), the temperature with the day's high and
-low as hollow numerals, and the daylight left over today's sunlight. Middle: two and a half days ahead, with
+low in bold colour, and the daylight left over today's sunlight. Middle: two and a half days ahead, with
 today's temperature round a 24 hour clock. Bottom: wind, rain, pressure, the sky, and the last 24 hours.
 
 Every key comes from OpenMeteo or the built-in Astronomy plugin. Fonts are the bundled Nunito and Barlow Condensed.
