@@ -41,7 +41,7 @@ Item types, at a glance:
 | Text | `text` / `label` | [dashboard.md](../dashboard.md) |
 | One live reading | `realtime.text`, `realtime.gauge`, `realtime.bar` (plain `realtime` is the text one) | [dashboard.md](../dashboard.md), [bar.md](bar.md) |
 | Time series | `graph`, `mini-graph` | [dashboard.md](../dashboard.md) |
-| Radial wind or time plots | `polar` (`plot: rose / trail / clock`) | presets `polar-*` |
+| Radial wind or time plots, radar of aircraft | `polar` (`plot: rose / trail / clock / radar`) | presets `polar-*` |
 | Clock, moon | `clock`, `moon` | [dashboard.md](../dashboard.md) |
 | Dividers, gaps | `divider`, `spacer` (inside a stack) | [layout.md](layout.md) |
 | A reusable item | `preset: name` with `props:` | [presets.md](presets.md) |

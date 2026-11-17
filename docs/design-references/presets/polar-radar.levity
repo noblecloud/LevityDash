@@ -1,0 +1,15 @@
+- type: polar
+  name: polar
+  plot: radar
+  prefix: aircraft
+  slots: 14
+  max: 50
+  labels: 8
+  sweep: true
+  rings: 5
+  accent: '#00f0ff'
+  gradient:
+    - {at: 0, color: '#ff2bd6'}
+    - {at: 8000, color: '#ff9124'}
+    - {at: 20000, color: '#f2ff3a'}
+    - {at: 40000, color: '#00f0ff'}

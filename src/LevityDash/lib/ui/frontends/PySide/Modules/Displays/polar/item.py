@@ -2,7 +2,7 @@
 
 ```yaml
 - type: polar
-  plot: rose                  # rose | trail | clock | carousel
+  plot: rose                  # rose | trail | clock | carousel | radar
   direction: environment.wind.direction.direction   # rose and trail
   speed: environment.wind.speed.speed               # rose and trail; a key or an expression
   window: today               # today | 24h | +24h | 3d
@@ -30,6 +30,25 @@
   legend: true                # the bearing and its name under the pointer
 ```
 
+```yaml
+- type: polar
+  plot: radar
+  prefix: aircraft            # the slots to read: aircraft.1.bearing, aircraft.1.distance, ... aircraft.N.callsign
+  slots: 20                   # how many slots to read, from the nearest
+  max: 50                     # the rim, in the slots' distance unit (nautical miles for the Aircraft plugin)
+  rings: 4
+  labels: 6                   # name this many of the nearest; 0 for none
+  ceiling: 40000              # altitude that takes the last colour of the gradient (feet)
+  sweep: true                 # a sweep line turning once every 8 seconds
+```
+
+A radar puts each thing at its bearing from you (north up) and its distance from the middle, out to `max`. It
+reads current values, not series: for each slot `N` of `prefix` the keys `prefix.N.bearing`, `.distance`, `.altitude`,
+`.heading`, `.speed` and `.callsign`, with `prefix.count` saying how many slots are filled (the `Aircraft`
+plugin publishes exactly these). The colour follows altitude through `gradient` (or the theme's cool-to-hot
+ramp), the short tail follows heading and speed. `legend: false` drops the count in the corner and `altitudes: false`
+the flight level after each name.
+
 The carousel is a strip of compass letters that slides so the current direction stays under a pointer
 in the middle (`[w N e]`). It reads one live value (`lib/valuesource.py`), not a series, and slides the
 short way round, so 350 to 10 does not spin through south.
@@ -41,6 +60,7 @@ It is evaluated at every sample time (`series.derive`), because a computed key h
 history. A time where an input has no sample yet is left out. Maths lives in `geometry.py` and the painting in `draw.py`; this
 file reads the settings, owns the feeds and chooses what to hand to the painter.
 """
+import time
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -53,18 +73,22 @@ from LevityDash.lib.plugins.expressions import Expression, ExpressionError
 from LevityDash.lib.stateful import StateProperty
 from LevityDash.lib.ui.colors import Color, Gradient, theme
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
-from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar import draw
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar import draw, radar
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.feed import Series, openFeed, openValue
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.geometry import (
 	parseWindow, roseBins, windowBounds,
 )
 from LevityDash.lib.utils.shared import now as localNow
 
+#: What a radar reads from each slot, and whether it is text.
+_RADAR_FIELDS = {'callsign': True, 'bearing': False, 'distance': False, 'altitude': False, 'heading': False, 'speed': False}
+_SWEEP_SECONDS = 8.0
+
 __all__ = ['Polar']
 
 log = LevityPluginLog.getChild('Polar')
 
-_PLOTS = ('rose', 'trail', 'clock', 'carousel')
+_PLOTS = ('rose', 'trail', 'clock', 'carousel', 'radar')
 
 
 def _oneOf(name: str, value, allowed: tuple):
@@ -83,6 +107,12 @@ def _expression(name: str, value) -> Optional[str]:
 	except ExpressionError as error:
 		raise ValueError(f'{name}: {error}') from None
 	return text
+
+
+def _plain(value) -> Optional[float]:
+	"""A number from whatever a key holds: a measurement's value, or a plain number."""
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.series import number
+	return number(value)
 
 
 class Polar(Panel, tag='polar'):
@@ -115,6 +145,15 @@ class Polar(Panel, tag='polar'):
 		self._slide = None
 		self._source = None
 		self._sourceText = None
+		self._prefix = 'aircraft'
+		self._slots = 20
+		self._labels = 6
+		self._ceiling = 40000.0
+		self._sweep = False
+		self._levels = True
+		self._sweepTimer = None
+		self._radarSources: list = []
+		self._radarValues: dict = {}
 		self._feeds: dict[str, object] = {}
 		self._feedText: dict[str, str] = {}
 		super().__init__(*args, **kwargs)
@@ -147,6 +186,63 @@ class Polar(Panel, tag='polar'):
 				self._source = openValue(text, self._follow)
 			except Exception as error:  # noqa: BLE001 - a bad key must not abort the dashboard load
 				log.warning(f'polar direction {text!r}: {error!r}; it shows no data')
+
+	def _connectRadar(self):
+		"""A radar reads one current value per field per slot, so it opens a value source for each."""
+		wanted = (self._prefix, self._slots) if self._plot == 'radar' else None
+		if wanted == getattr(self, '_radarWanted', None):
+			self._startSweep()
+			return
+		self._dropRadar()
+		self._radarWanted = wanted
+		self._startSweep()
+		if wanted is None:
+			return
+		from LevityDash.lib.valuesource import openValueSource
+		keys = [('count', None, f'{self._prefix}.count')]
+		keys += [(field, n, f'{self._prefix}.{n}.{field}') for n in range(1, self._slots + 1) for field in _RADAR_FIELDS]
+		for field, slot, key in keys:
+			try:
+				source = openValueSource(key, 'polar radar', 'the radar shows nothing for it')
+			except Exception as error:  # noqa: BLE001 - a bad key must not abort the dashboard load
+				log.warning(f'polar radar {key!r}: {error!r}; it shows no data')
+				continue
+			if source is None:
+				continue
+			self._radarSources.append(source)
+			source.subscribe(lambda value, field=field, slot=slot: self._radarChanged(field, slot, value))
+			self._radarChanged(field, slot, source.get())
+
+	def _radarChanged(self, field: str, slot, value):
+		if value is None or type(value).__name__ == 'UnsetType':
+			return
+		if field == 'callsign':
+			self._radarValues[(field, slot)] = str(value).strip()
+		else:
+			number = _plain(value)
+			if number is None:
+				return
+			self._radarValues[(field, slot)] = number
+		self.update()
+
+	def _dropRadar(self):
+		sources, self._radarSources = self._radarSources, []
+		for source in sources:
+			try:
+				source.release()
+			except Exception:  # noqa: BLE001
+				pass
+		self._radarValues.clear()
+
+	def _startSweep(self):
+		on = self._plot == 'radar' and self._sweep
+		if on and self._sweepTimer is None:
+			self._sweepTimer = QTimer(interval=66)
+			self._sweepTimer.timeout.connect(self.update)
+			self._sweepTimer.start()
+		elif not on and self._sweepTimer is not None:
+			self._sweepTimer.stop()
+			self._sweepTimer = None
 
 	def _dropSource(self):
 		source, self._source = self._source, None
@@ -187,9 +283,11 @@ class Polar(Panel, tag='polar'):
 			'trail': {'direction': self._direction, 'speed': self._speed},
 			'clock': {'value': self._key},
 			'carousel': {},
+			'radar': {},
 		}[self._plot]
 		wanted = {name: key for name, key in wanted.items() if key}
 		self._connectDirection()
+		self._connectRadar()
 		for name in list(self._feeds):
 			if wanted.get(name) != self._feedText.get(name):
 				self._feeds.pop(name).close()
@@ -206,6 +304,11 @@ class Polar(Panel, tag='polar'):
 	def release(self):
 		"""Stop the clock and let go of every feed. A dashboard reload and `delete` both end here."""
 		self._clock.stop()
+		if self._sweepTimer is not None:
+			self._sweepTimer.stop()
+			self._sweepTimer = None
+		self._dropRadar()
+		self._radarWanted = None
 		if self._slide is not None:
 			self._slide.stop()
 		self._dropSource()
@@ -275,6 +378,76 @@ class Polar(Panel, tag='polar'):
 	@speed.decode
 	def speed(self, value) -> Optional[str]:
 		return _expression('speed', value)
+
+	@StateProperty(key='prefix', default='aircraft', allowNone=False, after=_connect)
+	def prefix(self) -> str:
+		return self._prefix
+
+	@prefix.setter
+	def prefix(self, value: str):
+		self._prefix = value
+
+	@prefix.decode
+	def prefix(self, value) -> str:
+		text = str(value).strip().strip('.')
+		if not text:
+			raise ValueError('prefix is the start of the keys a radar reads, like aircraft')
+		return text
+
+	@StateProperty(key='slots', default=20, allowNone=False, after=_connect)
+	def slots(self) -> int:
+		return self._slots
+
+	@slots.setter
+	def slots(self, value: int):
+		self._slots = value
+
+	@slots.decode
+	def slots(self, value) -> int:
+		return max(1, min(60, int(value)))
+
+	@StateProperty(key='labels', default=6, allowNone=False, after=refresh)
+	def labels(self) -> int:
+		return self._labels
+
+	@labels.setter
+	def labels(self, value: int):
+		self._labels = value
+
+	@labels.decode
+	def labels(self, value) -> int:
+		return max(0, int(value))
+
+	@StateProperty(key='ceiling', default=40000.0, allowNone=False, after=refresh)
+	def ceiling(self) -> float:
+		return self._ceiling
+
+	@ceiling.setter
+	def ceiling(self, value: float):
+		self._ceiling = value
+
+	@ceiling.decode
+	def ceiling(self, value) -> float:
+		value = float(value)
+		if value <= 0:
+			raise ValueError(f'ceiling is above zero, not {value}')
+		return value
+
+	@StateProperty(key='sweep', default=False, allowNone=False, after=_connect)
+	def sweep(self) -> bool:
+		return self._sweep
+
+	@sweep.setter
+	def sweep(self, value: bool):
+		self._sweep = bool(value)
+
+	@StateProperty(key='altitudes', default=True, allowNone=False, after=refresh)
+	def altitudes(self) -> bool:
+		return self._levels
+
+	@altitudes.setter
+	def altitudes(self, value: bool):
+		self._levels = bool(value)
 
 	@StateProperty(key='window', default='today', allowNone=False, after=refresh)
 	def window(self) -> str:
@@ -483,12 +656,43 @@ class Polar(Panel, tag='polar'):
 					self._paintTrail(painter, look, rect)
 				case 'clock':
 					self._paintClock(painter, look, rect)
+				case 'radar':
+					self._paintRadar(painter, look, rect)
 				case 'carousel':
 					draw.drawCarousel(painter, look, rect, self._shown, self._view, self._compass, self._legend)
 		except Exception as error:  # noqa: BLE001 - a paint error must not take the dashboard down
 			if getattr(self, '_paintError', None) != repr(error):
 				self._paintError = repr(error)
 				log.exception(f'polar {self._plot} failed to paint: {error!r}')
+
+	def _blips(self) -> list:
+		"""The filled slots as `radar.Blip`s: the first `count` of them, or every slot with a name when there is no count."""
+		values = self._radarValues
+		count = values.get(('count', None))
+		blips = []
+		for n in range(1, self._slots + 1):
+			name = values.get(('callsign', n))
+			distance = values.get(('distance', n))
+			bearing = values.get(('bearing', n))
+			if distance is None or bearing is None or (count is not None and n > count) or name == '':
+				continue
+			blips.append(radar.Blip(
+				name or '?', bearing, distance, values.get(('altitude', n), 0.0),
+				values.get(('heading', n), 0.0), values.get(('speed', n), 0.0),
+			))
+		return blips
+
+	def _paintRadar(self, painter, look, rect):
+		blips = self._blips()
+		top = self._max if self._max is not None else 50.0
+		colorFor = self._colorFor(look, Series(), 0.0, self._ceiling)
+		sweep = None
+		if self._sweep:
+			sweep = (time.monotonic() % _SWEEP_SECONDS) / _SWEEP_SECONDS * 360
+		radar.drawRadar(
+			painter, look, rect, blips, top, self._rings, self._compass, colorFor, self._labels, self._levels,
+			sweep, legend=self._legend,
+		)
 
 	def _pairs(self):
 		"""Direction and speed samples that share a timestamp, inside the window."""
