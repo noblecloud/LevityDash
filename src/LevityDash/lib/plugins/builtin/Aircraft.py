@@ -1,0 +1,288 @@
+"""Aircraft near you, from a free ADS-B feed. Off by default, no account or key.
+
+Publishes, every ``interval`` seconds, the ``slots`` aircraft nearest the ``[Location]`` in the main config
+(or ``latitude``/``longitude`` below):
+
+- ``aircraft.count``: how many are inside ``radius``, including those past the last slot.
+- ``aircraft.N.callsign``, ``.type`` (``B738``) and ``.registration`` for N = 1 to ``slots``: text.
+- ``aircraft.N.bearing``: degrees clockwise from north, from you to it.
+- ``aircraft.N.distance``: nautical miles from you.
+- ``aircraft.N.altitude``: feet. ``aircraft.N.speed``: knots over the ground. ``aircraft.N.climb``: feet per
+  minute, negative when descending. ``aircraft.N.heading``: degrees, the way it is flying.
+
+Slot 1 is the nearest. A panel binds to a slot and never to an aircraft, so the ranking can change under it,
+as with the Host plugin's process table. A slot nobody fills has an empty callsign, which is how a display tells
+an empty slot from a plane on the same bearing as the last. ``plot: radar`` of ``type: polar`` reads these.
+
+**It is off until you turn it on.** Set this in ``<config dir>/plugins/Aircraft.ini``, then restart:
+
+	[plugin]
+	enabled = True
+
+	[Aircraft]
+	source = adsb.lol
+	radius = 50
+	interval = 10
+	slots = 20
+
+``source`` is one of the public community feeds, ``adsb.lol`` (the default) or ``airplanes.live``, or the URL of
+your own receiver's ``aircraft.json`` (dump1090, readsb, tar1090: ``http://pi.local:8080/data/aircraft.json``).
+A receiver of your own returns what it hears, so ``radius`` then only trims. The public feeds ask for a request
+every second or so at most; ``interval`` is held at 5 seconds or more for them. ``ground = True`` keeps
+aircraft on the ground (they are dropped otherwise). ``latitude`` and ``longitude`` stand in for the main
+config's location, for a feed over somewhere else.
+
+The public feeds are community run and carry no promise; the plugin logs a failed fetch once and keeps trying.
+A scenario that defines a key wins over it, so renders stay repeatable.
+"""
+import asyncio
+import json
+import math
+import os
+import urllib.request
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from LevityDash.lib.config import userConfig
+from LevityDash.lib.log import LevityPluginLog
+from LevityDash.lib.plugins.ble import LifecyclePlugin
+from LevityDash.lib.plugins.builtin.Fixture import buildSchema, ENV_VAR, loadScenario
+from LevityDash.lib.plugins.schema import LevityDatagram
+
+log = LevityPluginLog.getChild('Aircraft')
+
+#: The most slots the schema declares. ``[Aircraft] slots`` picks how many are published, up to this.
+SLOTS_MAX = 40
+EARTH_RADIUS_NMI = 3440.065
+
+#: The public feeds that share the readsb ``/v2/point/{lat}/{lon}/{radius}`` API.
+FEEDS: Dict[str, str] = {
+	'adsb.lol': 'https://api.adsb.lol/v2/point/{lat}/{lon}/{radius}',
+	'airplanes.live': 'https://api.airplanes.live/v2/point/{lat}/{lon}/{radius}',
+}
+#: The public feeds' radius ceiling, in nautical miles.
+RADIUS_MAX = 250
+
+AIRCRAFT_KEYS: Dict[str, dict] = {
+	'aircraft.count': dict(unit='int', title='Aircraft in range'),
+}
+for _n in range(1, SLOTS_MAX + 1):
+	AIRCRAFT_KEYS.update({
+		f'aircraft.{_n}.callsign': dict(unit='str', title='Callsign'),
+		f'aircraft.{_n}.type': dict(unit='str', title='Type'),
+		f'aircraft.{_n}.registration': dict(unit='str', title='Registration'),
+		f'aircraft.{_n}.bearing': dict(unit='int', title='Bearing (degrees)'),
+		f'aircraft.{_n}.distance': dict(unit='int', title='Distance (nmi)'),
+		f'aircraft.{_n}.altitude': dict(unit='int', title='Altitude (ft)'),
+		f'aircraft.{_n}.speed': dict(unit='int', title='Ground speed (kt)'),
+		f'aircraft.{_n}.climb': dict(unit='int', title='Climb (ft/min)'),
+		f'aircraft.{_n}.heading': dict(unit='int', title='Heading (degrees)'),
+	})
+
+
+def bearingDistance(lat: float, lon: float, toLat: float, toLon: float) -> tuple[float, float]:
+	"""``(degrees clockwise from north, nautical miles)`` from the first point to the second, along the great circle."""
+	p1, p2 = math.radians(lat), math.radians(toLat)
+	dLon = math.radians(toLon - lon)
+	y = math.sin(dLon) * math.cos(p2)
+	x = math.cos(p1) * math.sin(p2) - math.sin(p1) * math.cos(p2) * math.cos(dLon)
+	bearing = (math.degrees(math.atan2(y, x)) + 360) % 360
+	a = math.sin((p2 - p1) / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dLon / 2) ** 2
+	return bearing, 2 * EARTH_RADIUS_NMI * math.asin(min(1.0, math.sqrt(a)))
+
+
+def _number(value: Any) -> Optional[float]:
+	if isinstance(value, bool) or not isinstance(value, (int, float)):
+		return None
+	return None if value != value else float(value)
+
+
+def parseAircraft(data: dict, lat: float, lon: float, radius: float, ground: bool = False) -> List[Dict[str, Any]]:
+	"""The aircraft in a readsb-style reply (``ac`` from the public feeds, ``aircraft`` from a receiver), nearest first.
+
+	Bearing and distance are worked out here from the position, so a receiver's file, which has neither, reads the
+	same as a public feed. An aircraft with no position, or past ``radius``, is left out; so is one on the ground,
+	unless ``ground``. Pure, so a test can call it.
+	"""
+	rows = []
+	for ac in (data.get('ac') if 'ac' in data else data.get('aircraft')) or []:
+		if not isinstance(ac, dict):
+			continue
+		acLat, acLon = _number(ac.get('lat')), _number(ac.get('lon'))
+		if acLat is None or acLon is None:
+			continue
+		altitude = ac.get('alt_baro', ac.get('altitude'))
+		onGround = altitude == 'ground'
+		if onGround and not ground:
+			continue
+		bearing, distance = bearingDistance(lat, lon, acLat, acLon)
+		if distance > radius:
+			continue
+		climb = _number(ac.get('baro_rate', ac.get('geom_rate', ac.get('vert_rate'))))
+		rows.append({
+			'callsign': str(ac.get('flight') or '').strip() or str(ac.get('r') or ac.get('hex') or '?').strip(),
+			'type': str(ac.get('t') or '').strip(),
+			'registration': str(ac.get('r') or '').strip(),
+			'bearing': round(bearing, 1),
+			'distance': round(distance, 1),
+			'altitude': 0 if onGround else round(_number(altitude) or _number(ac.get('alt_geom')) or 0),
+			'speed': round(_number(ac.get('gs')) or 0),
+			'climb': round(climb or 0),
+			'heading': round(_number(ac.get('track', ac.get('true_heading'))) or 0),
+		})
+	rows.sort(key=lambda row: row['distance'])
+	return rows
+
+
+def slotValues(rows: List[Dict[str, Any]], slots: int, previous: int = 0) -> Dict[str, Any]:
+	"""``{key: value}`` for ``rows``: the count, and one slot of fields for each of the first ``slots``.
+
+	``previous`` is how many slots the last reading filled; the ones this reading leaves empty are blanked once
+	(empty callsign, zeros), so a display does not keep a plane that has gone.
+	"""
+	slots = max(0, min(SLOTS_MAX, slots))
+	out: Dict[str, Any] = {'aircraft.count': len(rows)}
+	for n in range(1, max(slots, 0) + 1):
+		if n <= len(rows):
+			for field, value in rows[n - 1].items():
+				out[f'aircraft.{n}.{field}'] = value
+		elif n <= previous:
+			for field in ('callsign', 'type', 'registration'):
+				out[f'aircraft.{n}.{field}'] = ''
+			for field in ('bearing', 'distance', 'altitude', 'speed', 'climb', 'heading'):
+				out[f'aircraft.{n}.{field}'] = 0
+	return out
+
+
+def feedUrl(source: str, lat: float, lon: float, radius: float) -> str:
+	"""The URL to fetch for a ``[Aircraft] source``: a named public feed, or a receiver's own URL as written."""
+	template = FEEDS.get(source.strip().lower())
+	if template is None:
+		if not source.strip().lower().startswith(('http://', 'https://')):
+			raise ValueError(f'Aircraft source {source!r} is not one of {", ".join(FEEDS)} or an http(s) URL')
+		return source.strip()
+	return template.format(lat=f'{lat:.4f}', lon=f'{lon:.4f}', radius=int(min(RADIUS_MAX, max(1, math.ceil(radius)))))
+
+
+def fetch(url: str, timeout: float = 10.0) -> dict:
+	"""One GET of ``url`` as JSON. Blocking; the plugin runs it in a thread."""
+	request = urllib.request.Request(url, headers={'User-Agent': 'LevityDash', 'Accept': 'application/json'})
+	with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - an http(s) URL, checked by feedUrl
+		return json.load(response)
+
+
+class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
+	"""Publishes ``AIRCRAFT_KEYS``. See the module docstring."""
+
+	name = 'Aircraft'
+
+	__defaultConfig__ = """
+	[plugin]
+	enabled = False
+
+	[Aircraft]
+	source = adsb.lol
+	radius = 50
+	interval = 10
+	slots = 20
+	ground = False
+	latitude =
+	longitude =
+	"""
+
+	def __init__(self):
+		self.schema, self._sourceKeys = buildSchema({'keys': {k: dict(v) for k, v in AIRCRAFT_KEYS.items()}}, epoch=True)
+		super().__init__()
+		self._previous = 0
+		self._failed: Optional[str] = None
+		self._scenarioKeys = set()
+		if os.environ.get(ENV_VAR, '').strip():
+			try:
+				self._scenarioKeys = {key.partition('#')[0] for key in loadScenario(os.environ[ENV_VAR].strip())['keys']}
+			except Exception as e:  # noqa: BLE001 - the Fixture reports a bad scenario
+				log.debug(f'Aircraft: no scenario keys to skip: {e}')
+
+	def _get(self, name: str, default: str) -> str:
+		try:
+			return str(self.config.getOrSet('Aircraft', name, default)).strip()
+		except Exception:
+			return default
+
+	@property
+	def source(self) -> str:
+		return self._get('source', 'adsb.lol') or 'adsb.lol'
+
+	@property
+	def radius(self) -> float:
+		try:
+			return max(1.0, float(self._get('radius', '50')))
+		except ValueError:
+			return 50.0
+
+	@property
+	def slots(self) -> int:
+		try:
+			return max(1, min(SLOTS_MAX, int(self._get('slots', '20'))))
+		except ValueError:
+			return 20
+
+	@property
+	def interval(self) -> float:
+		try:
+			value = float(self._get('interval', '10'))
+		except ValueError:
+			value = 10.0
+		return max(1.0 if self.source.lower().startswith('http') else 5.0, value)
+
+	@property
+	def ground(self) -> bool:
+		return self._get('ground', 'False').lower() in ('1', 'true', 'yes', 'on')
+
+	@property
+	def location(self) -> tuple[float, float]:
+		try:
+			return float(self._get('latitude', '')), float(self._get('longitude', ''))
+		except ValueError:
+			return float(userConfig.lat), float(userConfig.lon)
+
+	def publishRows(self, rows: List[Dict[str, Any]]) -> None:
+		values = slotValues(rows, self.slots, self._previous)
+		self._previous = min(len(rows), self.slots)
+		realtime = {'time': int(datetime.now().timestamp())}
+		for key, value in values.items():
+			if key not in self._scenarioKeys:
+				realtime[self._sourceKeys[key]] = value
+		datagram = LevityDatagram(realtime, schema=self.schema, dataMap=self.schema.dataMaps['realtime'], static=False)
+		self.realtime.update(datagram)
+
+	async def publish(self) -> None:
+		lat, lon = self.location
+		url = feedUrl(self.source, lat, lon, self.radius)
+		data = await asyncio.to_thread(fetch, url)
+		self.publishRows(parseAircraft(data, lat, lon, self.radius, self.ground))
+		if self._failed:
+			log.info('Aircraft: the feed is back')
+			self._failed = None
+
+	async def onStart(self) -> None:
+		self._ticker = asyncio.ensure_future(self._tick())
+
+	async def _tick(self) -> None:
+		while True:
+			try:
+				await self.publish()
+			except asyncio.CancelledError:
+				raise
+			except Exception as e:
+				if self._failed != str(e):  # say it once, not every interval
+					self._failed = str(e)
+					log.error(f'Aircraft: fetch failed: {e}')
+			await asyncio.sleep(self.interval)
+
+	async def onStop(self) -> None:
+		ticker = getattr(self, '_ticker', None)
+		if ticker is not None:
+			ticker.cancel()
+
+
+__plugin__ = Aircraft
