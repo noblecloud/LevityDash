@@ -11,7 +11,12 @@ each runs on made-up data, so most of the keys belong to plugins that do not exi
 | `grid` | Home energy: solar, house, street, battery, car | Big Shoulders Display, Black for numbers and Thin for units | Blue-black |
 | `tide` | Coast: sea level, the next turns, wind, swell | Unbounded Black and Light, hollow for times, Space Grotesk labels | Gradient, hairlines, no cards |
 
-Renders of four of them are beside the files (`rack.png`, `grow.png`, `grid.png`, `tide.png`). There is none of `atmos`, because it is set in Apple's fonts.
+`default.py` is a sixth generator with a different job: it writes the dashboard LevityDash ships for OpenMeteo
+(`src/LevityDash/resources/example-config/templates/dashboards/OpenMeteo.levity`, the one a fresh install starts
+with), in the same style but with no invented keys, only bundled fonts (Nunito, Barlow Condensed) and only theme
+tokens, so Dashboard > Theme recolours it. Its scenario is `scenarios/default.yaml`; `default.png` is its render.
+
+Renders of four of them are beside the files (`rack.png`, `grow.png`, `grid.png`, `tide.png`), and of the default (`default.png`). There is none of `atmos`, because it is set in Apple's fonts.
 
 ## Rendering one
 
