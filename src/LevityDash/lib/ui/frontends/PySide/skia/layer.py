@@ -1,4 +1,5 @@
 """The widget that draws the dashboard scene with Skia on OpenGL, underneath a transparent view."""
+import sys
 import time
 
 import skia
@@ -29,6 +30,12 @@ class SkiaSceneLayer(QOpenGLWidget):
 		super().__init__(parent)
 		fmt = QSurfaceFormat(self.format())
 		fmt.setStencilBufferSize(8)
+		if sys.platform == 'darwin':
+			# macOS hands out a legacy 2.1 context (GLSL 1.10) unless a core profile is requested, and
+			# Skia's shaders need GLSL 1.30+: without this every shader compile failed ("Use of
+			# undeclared identifier 'gl_VertexID'") and nothing was drawn.
+			fmt.setVersion(3, 2)
+			fmt.setProfile(QSurfaceFormat.OpenGLContextProfile.CoreProfile)
 		self.setFormat(fmt)
 		self.view = view
 		self.report = Report()
