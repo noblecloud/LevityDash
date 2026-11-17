@@ -19,7 +19,7 @@ from LevityDash.lib.plugins.plugin import AnySource
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.series import Series, derive, number
 from LevityDash.lib.utils.shared import now as localNow
 
-__all__ = ['Series', 'SeriesFeed', 'DerivedFeed', 'openFeed', 'openValue', 'installStandIn', 'standIn']
+__all__ = ['Series', 'SeriesFeed', 'DerivedFeed', 'openFeed', 'openValue', 'openCurrent', 'installStandIn', 'standIn']
 
 log = LevityPluginLog.getChild('PolarFeed')
 
@@ -204,6 +204,46 @@ class ValueFeed:
 		if self._input is not None:
 			self._input.close()
 			self._input = None
+
+
+class CurrentFeed:
+	"""The current value of one key as the source holds it (a number, a measurement or text), not forced to a number.
+
+	A value source in the app, the stand-in's last sample in the Studio. ``onChange`` gets each new value."""
+
+	def __init__(self, key: str, onChange: Callable[[object], None]):
+		self._onChange = onChange
+		self._source = None
+		self._input = None
+		if _standIn is not None:
+			self._input = _standIn(key, lambda: self._onChange(self.get()))
+			return
+		from LevityDash.lib.valuesource import openValueSource
+		self._source = openValueSource(key, 'polar radar', 'the radar shows nothing for it')
+		if self._source is not None:
+			self._source.subscribe(self._onChange)
+
+	def get(self):
+		if self._input is not None:
+			return self._input.series.now
+		return self._source.get() if self._source is not None else None
+
+	@property
+	def opened(self) -> bool:
+		return self._input is not None or self._source is not None
+
+	def close(self) -> None:
+		source, self._source = self._source, None
+		if source is not None and hasattr(source, 'release'):
+			source.release()
+		if self._input is not None:
+			self._input.close()
+			self._input = None
+
+
+def openCurrent(key: str, onChange: Callable[[object], None]) -> CurrentFeed:
+	"""A live raw value for a plain key; ``onChange`` gets each new one. `close()` lets go."""
+	return CurrentFeed(key, onChange)
 
 
 def openValue(text: str, onChange: Callable[[float], None]) -> ValueFeed:

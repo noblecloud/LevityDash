@@ -55,15 +55,17 @@ USED = {
 	'trail': {'direction', 'speed', 'rings', 'max', 'compass', 'gradient', 'stamps'},
 	'clock': {'key', 'rings', 'max', 'min', 'gradient', 'accent', 'span', 'top', 'smooth', 'marks'},
 	'carousel': {'direction', 'view', 'compass', 'legend'},
+	'radar': {'prefix', 'slots', 'max', 'rings', 'compass', 'gradient', 'accent', 'legend', 'labels', 'ceiling', 'sweep',
+	          'glyphs', 'altitudes'},
 }
 ALWAYS = {'plot', 'window', 'beam', 'when'}
 
 #: Where each setting sits in the panel. A property not named here lands in "More".
 SECTIONS = (
 	('Plot', ('plot', 'window')),
-	('Data', ('key', 'direction', 'speed')),
-	('Scale', ('max', 'min', 'rings', 'sectors', 'compass', 'span', 'top', 'view')),
-	('Look', ('gradient', 'accent', 'smooth', 'legend', 'marks', 'stamps')),
+	('Data', ('key', 'direction', 'speed', 'prefix', 'slots')),
+	('Scale', ('max', 'min', 'rings', 'sectors', 'compass', 'span', 'top', 'view', 'ceiling', 'labels')),
+	('Look', ('gradient', 'accent', 'smooth', 'legend', 'marks', 'stamps', 'sweep', 'glyphs', 'altitudes')),
 	('Panel', ('beam', 'when')),
 )
 
@@ -75,14 +77,14 @@ DEFAULT_KEYS = {
 }
 #: The feed a property opens, where the name differs.
 FEEDS = {'key': 'value'}
-NEEDS = {'rose': ('direction', 'speed'), 'trail': ('direction', 'speed'), 'clock': ('key',), 'carousel': ('direction',)}
+NEEDS = {'rose': ('direction', 'speed'), 'trail': ('direction', 'speed'), 'clock': ('key',), 'carousel': ('direction',), 'radar': ()}
 
 STEPS = {'sectors': (4, 8, 12, 16, 24, 32), 'compass': (4, 8, 16), 'span': (12, 24)}
-CHOICES = {'plot': ('rose', 'trail', 'clock', 'carousel'), 'top': ('noon', 'midnight')}
+CHOICES = {'plot': ('rose', 'trail', 'clock', 'carousel', 'radar'), 'top': ('noon', 'midnight')}
 WINDOWS = ('today', '24h', '+24h', '3d')
 #: Slider limits for the two numbers that mean a different thing in each plot (percent, speed, a reading).
-LIMITS = {'max': (0.0, 100.0, 0.5), 'min': (-40.0, 100.0, 0.5), 'view': (20.0, 360.0, 5.0)}
-INTEGERS = {'rings': (1, 12), 'stamps': (0, 24)}
+LIMITS = {'max': (0.0, 100.0, 0.5), 'min': (-40.0, 100.0, 0.5), 'view': (20.0, 360.0, 5.0), 'ceiling': (1000.0, 60000.0, 1000.0)}
+INTEGERS = {'rings': (1, 12), 'stamps': (0, 24), 'slots': (1, 40), 'labels': (0, 20)}
 
 
 # Section: made-up data
@@ -103,6 +105,26 @@ DATA_KEYS = (
 def _series(times, raw) -> Series:
 	first = raw[0]
 	return Series(times, [float(r) for r in raw], str(getattr(first, 'unit', '') or ''), None, type(first), raw)
+
+
+#: Eight aircraft for the radar: callsign, type, category, bearing, distance (nmi), altitude (ft), heading, speed (kt).
+_AIRCRAFT = (
+	('UAL1432', 'B739', 'A3', 12, 8.4, 3200, 196, 182), ('N172SP', 'C172', 'A1', 203, 6.1, 2500, 52, 96),
+	('DAL871', 'A321', 'A3', 48, 14.9, 7800, 224, 251), ('N911LF', 'EC35', 'A7', 160, 19.4, 1500, 330, 118),
+	('SWA2210', 'B738', 'A3', 95, 21.3, 14000, 271, 310), ('EDV5120', 'CRJ9', 'A3', 277, 26.4, 18000, 118, 372),
+	('FDX1180', 'B763', 'A4', 229, 38.6, 31000, 88, 452), ('UPS944', 'B748', 'A5', 304, 44.9, 36000, 141, 478),
+)
+
+
+def _aircraft() -> Dict[str, Series]:
+	"""The `aircraft.*` keys of `_AIRCRAFT`, nearest first, each a series whose current value is the reading."""
+	rows = sorted(_AIRCRAFT, key=lambda row: row[4])
+	data = {'aircraft.count': Series(now=len(rows)), 'aircraft.near': Series(now=2), 'aircraft.active': Series(now=1)}
+	for n, (callsign, kind, category, bearing, distance, altitude, heading, speed) in enumerate(rows, start=1):
+		for field, value in (('callsign', callsign), ('type', kind), ('category', category), ('bearing', bearing),
+		                     ('distance', distance), ('altitude', altitude), ('heading', heading), ('speed', speed)):
+			data[f'aircraft.{n}.{field}'] = Series(now=value)
+	return data
 
 
 def madeUpData(now=None) -> Dict[str, Series]:
@@ -126,6 +148,7 @@ def madeUpData(now=None) -> Dict[str, Series]:
 	for series in data.values():
 		past = [v for t, v in zip(series.times, series.values) if t <= now]
 		series.now = past[-1] if past else None
+	data.update(_aircraft())  # after the loop: these hold one current reading and no history
 	return data
 
 

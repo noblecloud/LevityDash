@@ -79,7 +79,7 @@ from LevityDash.lib.stateful import StateProperty
 from LevityDash.lib.ui.colors import Color, Gradient, theme
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar import draw, radar
-from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.feed import Series, openFeed, openValue
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.feed import Series, openCurrent, openFeed, openValue
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.geometry import (
 	parseWindow, roseBins, windowBounds,
 )
@@ -204,19 +204,17 @@ class Polar(Panel, tag='polar'):
 		self._startSweep()
 		if wanted is None:
 			return
-		from LevityDash.lib.valuesource import openValueSource
 		keys = [('count', None, f'{self._prefix}.count')]
 		keys += [(field, n, f'{self._prefix}.{n}.{field}') for n in range(1, self._slots + 1) for field in _RADAR_FIELDS]
 		for field, slot, key in keys:
 			try:
-				source = openValueSource(key, 'polar radar', 'the radar shows nothing for it')
+				source = openCurrent(key, lambda value, field=field, slot=slot: self._radarChanged(field, slot, value))
 			except Exception as error:  # noqa: BLE001 - a bad key must not abort the dashboard load
 				log.warning(f'polar radar {key!r}: {error!r}; it shows no data')
 				continue
-			if source is None:
+			if not source.opened:
 				continue
 			self._radarSources.append(source)
-			source.subscribe(lambda value, field=field, slot=slot: self._radarChanged(field, slot, value))
 			self._radarChanged(field, slot, source.get())
 
 	def _radarChanged(self, field: str, slot, value):
@@ -235,7 +233,7 @@ class Polar(Panel, tag='polar'):
 		sources, self._radarSources = self._radarSources, []
 		for source in sources:
 			try:
-				source.release()
+				source.close()
 			except Exception:  # noqa: BLE001
 				pass
 		self._radarValues.clear()
