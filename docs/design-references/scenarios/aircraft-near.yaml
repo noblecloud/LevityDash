@@ -1,0 +1,387 @@
+# Fourteen aircraft around a point, for the radar plot (`plot: radar`) and the Aircraft plugin's keys.
+# Slot 1 is the nearest, as the plugin publishes them. Distances in nautical miles, altitude feet, speed knots.
+name: aircraft-near
+description: A busy hour near an airport; fourteen aircraft inside 50 nmi.
+keys:
+  aircraft.count:
+    value: 14
+    unit: int
+    title: Aircraft in range
+  aircraft.1.callsign:
+    value: N172SP
+    unit: str
+  aircraft.1.type:
+    value: C172
+    unit: str
+  aircraft.1.registration:
+    value: N172SP
+    unit: str
+  aircraft.1.bearing:
+    value: 203
+    unit: int
+  aircraft.1.distance:
+    value: 6.1
+    unit: int
+  aircraft.1.altitude:
+    value: 2500
+    unit: int
+  aircraft.1.speed:
+    value: 96
+    unit: int
+  aircraft.1.climb:
+    value: 0
+    unit: int
+  aircraft.1.heading:
+    value: 52
+    unit: int
+  aircraft.2.callsign:
+    value: UAL1432
+    unit: str
+  aircraft.2.type:
+    value: B739
+    unit: str
+  aircraft.2.registration:
+    value: N37408
+    unit: str
+  aircraft.2.bearing:
+    value: 12
+    unit: int
+  aircraft.2.distance:
+    value: 8.4
+    unit: int
+  aircraft.2.altitude:
+    value: 3200
+    unit: int
+  aircraft.2.speed:
+    value: 182
+    unit: int
+  aircraft.2.climb:
+    value: -720
+    unit: int
+  aircraft.2.heading:
+    value: 196
+    unit: int
+  aircraft.3.callsign:
+    value: NKS339
+    unit: str
+  aircraft.3.type:
+    value: A20N
+    unit: str
+  aircraft.3.registration:
+    value: N915NK
+    unit: str
+  aircraft.3.bearing:
+    value: 332
+    unit: int
+  aircraft.3.distance:
+    value: 9.2
+    unit: int
+  aircraft.3.altitude:
+    value: 4600
+    unit: int
+  aircraft.3.speed:
+    value: 214
+    unit: int
+  aircraft.3.climb:
+    value: 2900
+    unit: int
+  aircraft.3.heading:
+    value: 350
+    unit: int
+  aircraft.4.callsign:
+    value: AAL519
+    unit: str
+  aircraft.4.type:
+    value: A320
+    unit: str
+  aircraft.4.registration:
+    value: N124US
+    unit: str
+  aircraft.4.bearing:
+    value: 131
+    unit: int
+  aircraft.4.distance:
+    value: 11.7
+    unit: int
+  aircraft.4.altitude:
+    value: 2100
+    unit: int
+  aircraft.4.speed:
+    value: 162
+    unit: int
+  aircraft.4.climb:
+    value: -640
+    unit: int
+  aircraft.4.heading:
+    value: 312
+    unit: int
+  aircraft.5.callsign:
+    value: DAL871
+    unit: str
+  aircraft.5.type:
+    value: A321
+    unit: str
+  aircraft.5.registration:
+    value: N378DN
+    unit: str
+  aircraft.5.bearing:
+    value: 48
+    unit: int
+  aircraft.5.distance:
+    value: 14.9
+    unit: int
+  aircraft.5.altitude:
+    value: 7800
+    unit: int
+  aircraft.5.speed:
+    value: 251
+    unit: int
+  aircraft.5.climb:
+    value: -1400
+    unit: int
+  aircraft.5.heading:
+    value: 224
+    unit: int
+  aircraft.6.callsign:
+    value: RPA4521
+    unit: str
+  aircraft.6.type:
+    value: E75L
+    unit: str
+  aircraft.6.registration:
+    value: N412YX
+    unit: str
+  aircraft.6.bearing:
+    value: 251
+    unit: int
+  aircraft.6.distance:
+    value: 17.8
+    unit: int
+  aircraft.6.altitude:
+    value: 9800
+    unit: int
+  aircraft.6.speed:
+    value: 288
+    unit: int
+  aircraft.6.climb:
+    value: 1800
+    unit: int
+  aircraft.6.heading:
+    value: 64
+    unit: int
+  aircraft.7.callsign:
+    value: SKW3302
+    unit: str
+  aircraft.7.type:
+    value: CRJ2
+    unit: str
+  aircraft.7.registration:
+    value: N906SW
+    unit: str
+  aircraft.7.bearing:
+    value: 160
+    unit: int
+  aircraft.7.distance:
+    value: 19.4
+    unit: int
+  aircraft.7.altitude:
+    value: 12400
+    unit: int
+  aircraft.7.speed:
+    value: 305
+    unit: int
+  aircraft.7.climb:
+    value: -1100
+    unit: int
+  aircraft.7.heading:
+    value: 330
+    unit: int
+  aircraft.8.callsign:
+    value: SWA2210
+    unit: str
+  aircraft.8.type:
+    value: B738
+    unit: str
+  aircraft.8.registration:
+    value: N8671D
+    unit: str
+  aircraft.8.bearing:
+    value: 95
+    unit: int
+  aircraft.8.distance:
+    value: 21.3
+    unit: int
+  aircraft.8.altitude:
+    value: 14000
+    unit: int
+  aircraft.8.speed:
+    value: 310
+    unit: int
+  aircraft.8.climb:
+    value: -900
+    unit: int
+  aircraft.8.heading:
+    value: 271
+    unit: int
+  aircraft.9.callsign:
+    value: EDV5120
+    unit: str
+  aircraft.9.type:
+    value: CRJ9
+    unit: str
+  aircraft.9.registration:
+    value: N602LR
+    unit: str
+  aircraft.9.bearing:
+    value: 277
+    unit: int
+  aircraft.9.distance:
+    value: 26.4
+    unit: int
+  aircraft.9.altitude:
+    value: 18000
+    unit: int
+  aircraft.9.speed:
+    value: 372
+    unit: int
+  aircraft.9.climb:
+    value: 2200
+    unit: int
+  aircraft.9.heading:
+    value: 118
+    unit: int
+  aircraft.10.callsign:
+    value: JBU628
+    unit: str
+  aircraft.10.type:
+    value: A320
+    unit: str
+  aircraft.10.registration:
+    value: N821JB
+    unit: str
+  aircraft.10.bearing:
+    value: 168
+    unit: int
+  aircraft.10.distance:
+    value: 30.2
+    unit: int
+  aircraft.10.altitude:
+    value: 24000
+    unit: int
+  aircraft.10.speed:
+    value: 398
+    unit: int
+  aircraft.10.climb:
+    value: 0
+    unit: int
+  aircraft.10.heading:
+    value: 7
+    unit: int
+  aircraft.11.callsign:
+    value: ASA27
+    unit: str
+  aircraft.11.type:
+    value: B739
+    unit: str
+  aircraft.11.registration:
+    value: N284AK
+    unit: str
+  aircraft.11.bearing:
+    value: 352
+    unit: int
+  aircraft.11.distance:
+    value: 33.7
+    unit: int
+  aircraft.11.altitude:
+    value: 38000
+    unit: int
+  aircraft.11.speed:
+    value: 467
+    unit: int
+  aircraft.11.climb:
+    value: 0
+    unit: int
+  aircraft.11.heading:
+    value: 172
+    unit: int
+  aircraft.12.callsign:
+    value: FDX1180
+    unit: str
+  aircraft.12.type:
+    value: B763
+    unit: str
+  aircraft.12.registration:
+    value: N296FE
+    unit: str
+  aircraft.12.bearing:
+    value: 229
+    unit: int
+  aircraft.12.distance:
+    value: 38.6
+    unit: int
+  aircraft.12.altitude:
+    value: 31000
+    unit: int
+  aircraft.12.speed:
+    value: 452
+    unit: int
+  aircraft.12.climb:
+    value: 0
+    unit: int
+  aircraft.12.heading:
+    value: 88
+    unit: int
+  aircraft.13.callsign:
+    value: LXJ451
+    unit: str
+  aircraft.13.type:
+    value: GLF4
+    unit: str
+  aircraft.13.registration:
+    value: N451LX
+    unit: str
+  aircraft.13.bearing:
+    value: 72
+    unit: int
+  aircraft.13.distance:
+    value: 41.0
+    unit: int
+  aircraft.13.altitude:
+    value: 41000
+    unit: int
+  aircraft.13.speed:
+    value: 498
+    unit: int
+  aircraft.13.climb:
+    value: 0
+    unit: int
+  aircraft.13.heading:
+    value: 255
+    unit: int
+  aircraft.14.callsign:
+    value: UPS944
+    unit: str
+  aircraft.14.type:
+    value: B748
+    unit: str
+  aircraft.14.registration:
+    value: N610UP
+    unit: str
+  aircraft.14.bearing:
+    value: 304
+    unit: int
+  aircraft.14.distance:
+    value: 44.9
+    unit: int
+  aircraft.14.altitude:
+    value: 36000
+    unit: int
+  aircraft.14.speed:
+    value: 478
+    unit: int
+  aircraft.14.climb:
+    value: 0
+    unit: int
+  aircraft.14.heading:
+    value: 141
+    unit: int
