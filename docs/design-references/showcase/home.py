@@ -1,0 +1,22 @@
+"""The default dashboard with two rooms indoors, a bedroom and a terrarium, each a Govee sensor named by identity."""
+from default import *  # noqa: F403
+import default
+
+FREEZE = default.FREEZE
+LEVITY = None  # beside this file, not over the shipped template
+ROOMS = [('BEDROOM', '#bedroom', '$series-2'), ('TERRARIUM', '#terrarium', '$good')]
+
+HEADER = default.HEADER.replace('The default dashboard for OpenMeteo, the forecast LevityDash starts with.',
+                                'The default dashboard with a bedroom and a terrarium indoors (Govee sensors named bedroom and terrarium).')
+
+
+def data():
+	return default.data(ROOMS, 'home')
+
+
+def board():
+	return default.board(ROOMS)
+
+
+if __name__ == '__main__':
+	write('home', HEADER, board(), data(), FREEZE)  # noqa: F405

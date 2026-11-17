@@ -8,7 +8,7 @@ import kit  # noqa: E402
 from kit import write  # noqa: E402
 
 # `default` is the shipped OpenMeteo template: its generator names where it goes (`LEVITY`).
-BOARDS = ['atmos', 'rack', 'grow', 'grid', 'tide', 'default']
+BOARDS = ['atmos', 'rack', 'grow', 'grid', 'tide', 'default', 'home']
 
 if __name__ == '__main__':
 	for name in BOARDS:
