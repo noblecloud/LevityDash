@@ -107,3 +107,14 @@ def test_the_export_leaves_out_what_the_plot_does_not_read(panel):
 	panel._edited(('plot',), 'clock')
 	display = panel.exportDisplay()
 	assert display['plot'] == 'clock' and 'direction' not in display and 'sectors' not in display
+
+
+def test_the_radar_template_draws_the_made_up_aircraft(panel):
+	panel.loadFile(sp.PRESET_DIR / 'polar-radar.levity')
+	_pump(10)
+	assert len(panel.polar._blips()) == 8
+	assert {b.kind for b in panel.polar._blips()} >= {'B739', 'C172', 'EC35'}
+	assert panel.rows[('prefix',)].ruledOut is False and panel.rows[('sectors',)].ruledOut
+	out = os.environ.get('LEVITY_POLAR_RADAR_OUT')
+	if out:  # keep a picture of it: LEVITY_POLAR_RADAR_OUT=radar.png pytest ...
+		panel.studio.render().save(out)
