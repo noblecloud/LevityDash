@@ -41,3 +41,32 @@ def test_a_blip_lands_at_its_bearing_and_distance():
 
 def test_a_blip_past_the_rim_is_not_drawn():
 	assert _grab([Blip('far', 90, 80)], legend=False) == _grab([], legend=False)
+
+
+def test_a_glyph_is_chosen_by_type_then_family_then_category():
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.glyphs import classify
+	assert classify('B738', 'A3').shape == 'narrow'
+	assert classify('A388').shape == 'quad' and classify('B77W').shape == 'wide'
+	assert classify('GLF4').shape == 'bizjet' and classify('E75L').shape == 'regional'
+	assert classify('AT72').shape == 'twinprop' and classify('C172').shape == 'light'
+	assert classify('EC35').shape == 'heli' and classify('F16').shape == 'fighter'
+	assert classify('B39M').shape == 'narrow'  # listed
+	assert classify('A21X', 'A3').shape == 'narrow'  # not listed: the A32x/A31x family prefix would miss it, so category answers
+	assert classify('QQQQ', 'A5').shape == 'wide' and classify(None, 'A7').shape == 'heli'
+	assert classify('', None).shape == 'unknown'
+	assert classify('b738').shape == 'narrow'  # case does not matter
+
+
+def test_every_shape_has_a_path_inside_the_unit_box():
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar import glyphs
+	for shape in glyphs.SHAPES:
+		bounds = glyphs.path(shape).boundingRect()
+		assert 0.2 < bounds.height() <= 1.1 and bounds.width() <= 1.3, shape
+		assert abs(bounds.center().x()) < 0.01, f'{shape} is not centred side to side'
+
+
+def test_the_radar_paints_a_glyph_turned_to_its_heading():
+	north = _grab([Blip('A', 90, 25, heading=0, speed=200, kind='B738')], legend=False)
+	east = _grab([Blip('A', 90, 25, heading=90, speed=200, kind='B738')], legend=False)
+	dots = _grab([Blip('A', 90, 25, heading=0, speed=200, kind='B738')], legend=False, glyphs=False)
+	assert north != east and north != dots

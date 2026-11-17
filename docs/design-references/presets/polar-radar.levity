@@ -2,7 +2,7 @@
   name: polar
   plot: radar
   prefix: aircraft
-  slots: 14
+  slots: 15
   max: 50
   labels: 8
   sweep: true

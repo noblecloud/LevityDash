@@ -9,11 +9,12 @@ from dataclasses import dataclass
 from typing import Callable, Optional, Sequence
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QBrush, QColor, QConicalGradient, QFontMetricsF, QPainter, QPainterPath, QPen, QRadialGradient
+from PySide6.QtGui import QBrush, QColor, QConicalGradient, QFontMetricsF, QPainter, QPainterPath, QPen, QRadialGradient, QTransform
 
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.draw import (
 	Look, _alpha, _compass, _font, _haloText, _ringLabels, _rings, _spokes, _text, _qtAngle, plotCircle,
 )
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar import glyphs as glyphSet
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.geometry import niceStep, polarPoint
 
 __all__ = ['Blip', 'drawRadar', 'ringValues', 'label']
@@ -28,6 +29,8 @@ class Blip:
 	altitude: float = 0.0
 	heading: float = 0.0
 	speed: float = 0.0
+	kind: str = ''  # ICAO type designator (B738), for the silhouette
+	category: str = ''  # ADS-B emitter category (A3), for the silhouette when the type is unknown
 
 
 def ringValues(top: float, rings: int) -> list[float]:
@@ -46,11 +49,12 @@ def label(blip: Blip, altitudes: bool) -> str:
 def drawRadar(
 	painter: QPainter, look: Look, rect: QRectF, blips: Sequence[Blip], top: float, rings: int, compass: int,
 	colorFor: Callable[[float], QColor], labels: int, altitudes: bool = True, sweep: Optional[float] = None,
-	unit: str = 'nmi', legend: bool = True,
+	unit: str = 'nmi', legend: bool = True, glyphs: bool = True,
 ) -> None:
 	"""The disc, rings, spokes and compass, then the blips nearest first, the nearest ``labels`` named.
 
-	``top`` is the distance of the rim. ``sweep`` is the sweep line's bearing in degrees, or None for no sweep: a
+	``glyphs`` draws each blip as a silhouette of its kind (`glyphs.classify`) turned to its heading; off, a dot with
+	a tail. ``top`` is the distance of the rim. ``sweep`` is the sweep line's bearing in degrees, or None for no sweep: a
 	wedge of light that trails it and brightens the blips it has just passed."""
 	fontPx = max(8.0, min(rect.width(), rect.height()) / 28)
 	cx, cy, radius = plotCircle(rect, fontPx * 2.2)
@@ -93,6 +97,20 @@ def drawRadar(
 	for blip in drawn:
 		x, y = polarPoint(cx, cy, toRadius(blip.distance), blip.bearing)
 		color = colorFor(blip.altitude)
+		if glyphs:
+			glyph = glyphSet.classify(blip.kind, blip.category)
+			half = max(7.0, radius * 0.075) * glyph.size
+			halo = QRadialGradient(QPointF(x, y), half * 2.2)
+			halo.setColorAt(0.0, _alpha(color, 0.38))
+			halo.setColorAt(1.0, _alpha(color, 0.0))
+			painter.setPen(Qt.PenStyle.NoPen)
+			painter.setBrush(QBrush(halo))
+			painter.drawEllipse(QPointF(x, y), half * 2.2, half * 2.2)
+			turn = QTransform().translate(x, y).rotate(blip.heading if blip.speed > 0 else 0.0).scale(half * 2, half * 2)
+			painter.setPen(QPen(QColor(0, 0, 0, 210), max(0.8, half * 0.07), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+			painter.setBrush(color)
+			painter.drawPath(turn.map(glyphSet.path(glyph.shape)))
+			continue
 		if blip.speed > 0:
 			length = tail * (0.6 + min(blip.speed, 600) / 600)
 			ex, ey = polarPoint(x, y, length, blip.heading)

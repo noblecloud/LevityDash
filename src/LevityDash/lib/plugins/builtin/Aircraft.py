@@ -4,7 +4,8 @@ Publishes, every ``interval`` seconds, the ``slots`` aircraft nearest the ``[Loc
 (or ``latitude``/``longitude`` below):
 
 - ``aircraft.count``: how many are inside ``radius``, including those past the last slot.
-- ``aircraft.N.callsign``, ``.type`` (``B738``) and ``.registration`` for N = 1 to ``slots``: text.
+- ``aircraft.N.callsign``, ``.type`` (``B738``), ``.category`` (the ADS-B emitter category, ``A3``) and
+  ``.registration`` for N = 1 to ``slots``: text. The radar draws a silhouette from the type and the category.
 - ``aircraft.N.bearing``: degrees clockwise from north, from you to it.
 - ``aircraft.N.distance``: nautical miles from you.
 - ``aircraft.N.altitude``: feet. ``aircraft.N.speed``: knots over the ground. ``aircraft.N.climb``: feet per
@@ -71,6 +72,7 @@ for _n in range(1, SLOTS_MAX + 1):
 		f'aircraft.{_n}.callsign': dict(unit='str', title='Callsign'),
 		f'aircraft.{_n}.type': dict(unit='str', title='Type'),
 		f'aircraft.{_n}.registration': dict(unit='str', title='Registration'),
+		f'aircraft.{_n}.category': dict(unit='str', title='Category'),
 		f'aircraft.{_n}.bearing': dict(unit='int', title='Bearing (degrees)'),
 		f'aircraft.{_n}.distance': dict(unit='int', title='Distance (nmi)'),
 		f'aircraft.{_n}.altitude': dict(unit='int', title='Altitude (ft)'),
@@ -123,6 +125,7 @@ def parseAircraft(data: dict, lat: float, lon: float, radius: float, ground: boo
 			'callsign': str(ac.get('flight') or '').strip() or str(ac.get('r') or ac.get('hex') or '?').strip(),
 			'type': str(ac.get('t') or '').strip(),
 			'registration': str(ac.get('r') or '').strip(),
+			'category': str(ac.get('category') or '').strip(),
 			'bearing': round(bearing, 1),
 			'distance': round(distance, 1),
 			'altitude': 0 if onGround else round(_number(altitude) or _number(ac.get('alt_geom')) or 0),
@@ -147,7 +150,7 @@ def slotValues(rows: List[Dict[str, Any]], slots: int, previous: int = 0) -> Dic
 			for field, value in rows[n - 1].items():
 				out[f'aircraft.{n}.{field}'] = value
 		elif n <= previous:
-			for field in ('callsign', 'type', 'registration'):
+			for field in ('callsign', 'type', 'registration', 'category'):
 				out[f'aircraft.{n}.{field}'] = ''
 			for field in ('bearing', 'distance', 'altitude', 'speed', 'climb', 'heading'):
 				out[f'aircraft.{n}.{field}'] = 0
