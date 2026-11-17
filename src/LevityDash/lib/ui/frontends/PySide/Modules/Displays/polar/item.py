@@ -40,11 +40,12 @@
   labels: 6                   # name this many of the nearest; 0 for none
   ceiling: 40000              # altitude that takes the last colour of the gradient (feet)
   sweep: true                 # a sweep line turning once every 8 seconds
+  glyphs: true                # a silhouette of each aircraft's kind, turned to its heading; false for dots
 ```
 
 A radar puts each thing at its bearing from you (north up) and its distance from the middle, out to `max`. It
 reads current values, not series: for each slot `N` of `prefix` the keys `prefix.N.bearing`, `.distance`, `.altitude`,
-`.heading`, `.speed` and `.callsign`, with `prefix.count` saying how many slots are filled (the `Aircraft`
+`.heading`, `.speed`, `.callsign`, `.type` and `.category`, with `prefix.count` saying how many slots are filled (the `Aircraft`
 plugin publishes exactly these). The colour follows altitude through `gradient` (or the theme's cool-to-hot
 ramp), the short tail follows heading and speed. `legend: false` drops the count in the corner and `altitudes: false`
 the flight level after each name.
@@ -81,7 +82,7 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.geometry import (
 from LevityDash.lib.utils.shared import now as localNow
 
 #: What a radar reads from each slot, and whether it is text.
-_RADAR_FIELDS = {'callsign': True, 'bearing': False, 'distance': False, 'altitude': False, 'heading': False, 'speed': False}
+_RADAR_FIELDS = {'callsign': True, 'type': True, 'category': True, 'bearing': False, 'distance': False, 'altitude': False, 'heading': False, 'speed': False}
 _SWEEP_SECONDS = 8.0
 
 __all__ = ['Polar']
@@ -151,6 +152,7 @@ class Polar(Panel, tag='polar'):
 		self._ceiling = 40000.0
 		self._sweep = False
 		self._levels = True
+		self._glyphs = True
 		self._sweepTimer = None
 		self._radarSources: list = []
 		self._radarValues: dict = {}
@@ -216,7 +218,7 @@ class Polar(Panel, tag='polar'):
 	def _radarChanged(self, field: str, slot, value):
 		if value is None or type(value).__name__ == 'UnsetType':
 			return
-		if field == 'callsign':
+		if field in ('callsign', 'type', 'category'):
 			self._radarValues[(field, slot)] = str(value).strip()
 		else:
 			number = _plain(value)
@@ -440,6 +442,14 @@ class Polar(Panel, tag='polar'):
 	@sweep.setter
 	def sweep(self, value: bool):
 		self._sweep = bool(value)
+
+	@StateProperty(key='glyphs', default=True, allowNone=False, after=refresh)
+	def glyphs(self) -> bool:
+		return self._glyphs
+
+	@glyphs.setter
+	def glyphs(self, value: bool):
+		self._glyphs = bool(value)
 
 	@StateProperty(key='altitudes', default=True, allowNone=False, after=refresh)
 	def altitudes(self) -> bool:
@@ -679,6 +689,7 @@ class Polar(Panel, tag='polar'):
 			blips.append(radar.Blip(
 				name or '?', bearing, distance, values.get(('altitude', n), 0.0),
 				values.get(('heading', n), 0.0), values.get(('speed', n), 0.0),
+				values.get(('type', n), ''), values.get(('category', n), ''),
 			))
 		return blips
 
@@ -691,7 +702,7 @@ class Polar(Panel, tag='polar'):
 			sweep = (time.monotonic() % _SWEEP_SECONDS) / _SWEEP_SECONDS * 360
 		radar.drawRadar(
 			painter, look, rect, blips, top, self._rings, self._compass, colorFor, self._labels, self._levels,
-			sweep, legend=self._legend,
+			sweep, legend=self._legend, glyphs=self._glyphs,
 		)
 
 	def _pairs(self):
