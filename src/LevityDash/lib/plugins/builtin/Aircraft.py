@@ -4,6 +4,10 @@ Publishes, every ``interval`` seconds, the ``slots`` aircraft nearest the ``[Loc
 (or ``latitude``/``longitude`` below):
 
 - ``aircraft.count``: how many are inside ``radius``, including those past the last slot.
+- ``aircraft.near``: how many are inside ``trigger_radius`` (and under ``trigger_altitude``, when that is set).
+- ``aircraft.active``: 1 while one is near, and for ``hold`` seconds after the last one leaves, else 0. It is what an
+  item's ``when:`` reads, so a radar can stay hidden until something flies over:
+  ``when: aircraft.active``. The hold keeps the radar from blinking as a plane slips in and out of the radius.
 - ``aircraft.N.callsign``, ``.type`` (``B738``), ``.category`` (the ADS-B emitter category, ``A3``) and
   ``.registration`` for N = 1 to ``slots``: text. The radar draws a silhouette from the type and the category.
 - ``aircraft.N.bearing``: degrees clockwise from north, from you to it.
@@ -25,6 +29,13 @@ an empty slot from a plane on the same bearing as the last. ``plot: radar`` of `
 	radius = 50
 	interval = 10
 	slots = 20
+	trigger_radius = 10
+	trigger_altitude = 0
+	hold = 60
+
+``trigger_radius`` is the distance in nautical miles that counts as overhead for ``aircraft.near`` and
+``aircraft.active``, ``trigger_altitude`` a ceiling in feet (0 for none) and ``hold`` the seconds ``active`` stays 1
+after the last plane leaves.
 
 ``source`` is one of the public community feeds, ``adsb.lol`` (the default) or ``airplanes.live``, or the URL of
 your own receiver's ``aircraft.json`` (dump1090, readsb, tar1090: ``http://pi.local:8080/data/aircraft.json``).
@@ -40,6 +51,7 @@ import asyncio
 import json
 import math
 import os
+import time
 import urllib.request
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -66,6 +78,8 @@ RADIUS_MAX = 250
 
 AIRCRAFT_KEYS: Dict[str, dict] = {
 	'aircraft.count': dict(unit='int', title='Aircraft in range'),
+	'aircraft.near': dict(unit='int', title='Aircraft overhead'),
+	'aircraft.active': dict(unit='int', title='Aircraft overhead (hold)'),
 }
 for _n in range(1, SLOTS_MAX + 1):
 	AIRCRAFT_KEYS.update({
@@ -157,6 +171,20 @@ def slotValues(rows: List[Dict[str, Any]], slots: int, previous: int = 0) -> Dic
 	return out
 
 
+def overhead(rows: List[Dict[str, Any]], radius: float, ceiling: float = 0) -> int:
+	"""How many of ``rows`` are inside ``radius`` nautical miles and, when ``ceiling`` is above 0, below it in feet."""
+	return sum(1 for row in rows if row['distance'] <= radius and (ceiling <= 0 or row['altitude'] <= ceiling))
+
+
+def holdActive(near: int, now: float, lastNear: Optional[float], hold: float) -> tuple[int, Optional[float]]:
+	"""``(active, last time one was near)``: active while one is near and for ``hold`` seconds after. Pure."""
+	if near > 0:
+		return 1, now
+	if lastNear is not None and now - lastNear < hold:
+		return 1, lastNear
+	return 0, lastNear
+
+
 def feedUrl(source: str, lat: float, lon: float, radius: float) -> str:
 	"""The URL to fetch for a ``[Aircraft] source``: a named public feed, or a receiver's own URL as written."""
 	template = FEEDS.get(source.strip().lower())
@@ -189,6 +217,9 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 	interval = 10
 	slots = 20
 	ground = False
+	trigger_radius = 10
+	trigger_altitude = 0
+	hold = 60
 	latitude =
 	longitude =
 	"""
@@ -197,6 +228,7 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 		self.schema, self._sourceKeys = buildSchema({'keys': {k: dict(v) for k, v in AIRCRAFT_KEYS.items()}}, epoch=True)
 		super().__init__()
 		self._previous = 0
+		self._lastNear: Optional[float] = None
 		self._failed: Optional[str] = None
 		self._scenarioKeys = set()
 		if os.environ.get(ENV_VAR, '').strip():
@@ -248,9 +280,21 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 		except ValueError:
 			return float(userConfig.lat), float(userConfig.lon)
 
-	def publishRows(self, rows: List[Dict[str, Any]]) -> None:
-		values = slotValues(rows, self.slots, self._previous)
-		self._previous = min(len(rows), self.slots)
+	def _number(self, name: str, default: float) -> float:
+		try:
+			return max(0.0, float(self._get(name, str(default))))
+		except ValueError:
+			return default
+
+	def publishRows(self, rows: Optional[List[Dict[str, Any]]]) -> None:
+		"""Publish a reading. ``None`` is a failed fetch: the slots stay as they were and only ``active`` is brought up to date."""
+		now = time.monotonic()
+		near = overhead(rows or [], self._number('trigger_radius', 10), self._number('trigger_altitude', 0))
+		active, self._lastNear = holdActive(near, now, self._lastNear, self._number('hold', 60))
+		values = {'aircraft.near': near, 'aircraft.active': active} if rows is None else {
+			**slotValues(rows, self.slots, self._previous), 'aircraft.near': near, 'aircraft.active': active}
+		if rows is not None:
+			self._previous = min(len(rows), self.slots)
 		realtime = {'time': int(datetime.now().timestamp())}
 		for key, value in values.items():
 			if key not in self._scenarioKeys:
@@ -280,6 +324,7 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 				if self._failed != str(e):  # say it once, not every interval
 					self._failed = str(e)
 					log.error(f'Aircraft: fetch failed: {e}')
+				self.publishRows(None)  # a dead feed must not leave `active` stuck on
 			await asyncio.sleep(self.interval)
 
 	async def onStop(self) -> None:

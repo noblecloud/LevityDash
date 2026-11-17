@@ -5,6 +5,14 @@
 name: aircraft-near
 description: A busy hour near an airport; fifteen aircraft inside 50 nmi.
 keys:
+  aircraft.near:
+    value: 3
+    unit: int
+    title: Aircraft overhead
+  aircraft.active:
+    value: 1
+    unit: int
+    title: Aircraft overhead (hold)
   aircraft.count:
     value: 15
     unit: int

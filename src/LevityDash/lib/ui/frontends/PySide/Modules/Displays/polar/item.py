@@ -50,6 +50,10 @@ plugin publishes exactly these). The colour follows altitude through `gradient` 
 ramp), the short tail follows heading and speed. `legend: false` drops the count in the corner and `altitudes: false`
 the flight level after each name.
 
+To show the radar only while something is overhead, give the item `when: aircraft.active` (the Aircraft plugin holds it
+on for `hold` seconds after the last plane leaves, so the radar does not blink); `when: aircraft.near > 0` is the same
+without the hold, and `when: aircraft.count > 0` any plane in range.
+
 The carousel is a strip of compass letters that slides so the current direction stays under a pointer
 in the middle (`[w N e]`). It reads one live value (`lib/valuesource.py`), not a series, and slides the
 short way round, so 350 to 10 does not spin through south.
