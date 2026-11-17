@@ -15,6 +15,8 @@ each runs on made-up data, so most of the keys belong to plugins that do not exi
 (`src/LevityDash/resources/example-config/templates/dashboards/OpenMeteo.levity`, the one a fresh install starts
 with), in the same style but with no invented keys, only bundled fonts (Nunito, Barlow Condensed) and only theme
 tokens, so Dashboard > Theme recolours it. Its scenario is `scenarios/default.yaml`; `default.png` is its render.
+`home.py` is the same dashboard with two rooms indoors, a bedroom and a terrarium (Govee sensors named by identity,
+`indoor.…#bedroom`, `indoor.…#terrarium`), written beside it as `home.levity`.
 
 Renders of four of them are beside the files (`rack.png`, `grow.png`, `grid.png`, `tide.png`), and of the default (`default.png`). There is none of `atmos`, because it is set in Apple's fonts.
 
