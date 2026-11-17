@@ -62,3 +62,19 @@ def test_feed_urls():
 	assert feedUrl('http://pi.local:8080/data/aircraft.json', 0, 0, 1) == 'http://pi.local:8080/data/aircraft.json'
 	with pytest.raises(ValueError):
 		feedUrl('file:///etc/passwd', 0, 0, 1)
+
+
+def test_overhead_counts_inside_the_radius_and_under_the_ceiling():
+	from LevityDash.lib.plugins.builtin.Aircraft import overhead
+	rows = [{'distance': 3, 'altitude': 2000}, {'distance': 8, 'altitude': 30000}, {'distance': 20, 'altitude': 1000}]
+	assert overhead(rows, 10) == 2
+	assert overhead(rows, 10, ceiling=10000) == 1
+	assert overhead([], 10) == 0
+
+
+def test_active_holds_after_the_last_plane_leaves_and_then_drops():
+	from LevityDash.lib.plugins.builtin.Aircraft import holdActive
+	assert holdActive(2, 100.0, None, 60) == (1, 100.0)
+	assert holdActive(0, 130.0, 100.0, 60) == (1, 100.0)   # 30 s after: still on
+	assert holdActive(0, 161.0, 100.0, 60) == (0, 100.0)   # 61 s after: off
+	assert holdActive(0, 5.0, None, 60) == (0, None)       # never seen
