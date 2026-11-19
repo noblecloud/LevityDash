@@ -1,13 +1,25 @@
-# Report, not a gate: neither job fails the PR. Read the job summary.
+# Report, not a gate: no job fails the PR. Read the job summaries.
+#
+# Wall time is what a PR waits on, so the slow parts are split across runners:
+#   suite        the whole test suite, on every runner core (pytest-xdist)
+#   capture      the render-diff sweep, one slice per runner, base and head side by side
+#   render-diff  stitches the slices together and compares
+# The shuffled run (order dependencies) and nothing else only runs nightly or on request:
+# it repeats the whole suite and a PR rarely changes what it finds.
 name: Report
 
 on:
   pull_request:
     branches: [ dev, feat/value-sources ]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE*'
+  schedule:
+    - cron: '17 5 * * *'
   workflow_dispatch:
 
 concurrency:
-  group: report-${{ github.ref }}
+  group: report-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -30,7 +42,9 @@ jobs:
         working-directory: LevityDash
         run: |
           set +e
-          .venv/bin/python -m pytest tests -q -p no:cacheprovider -rfE 2>&1 | tee ../suite.log
+          .venv/bin/python -m pip install -q pytest-xdist
+          .venv/bin/python -m pytest tests -q -p no:cacheprovider -n auto --dist worksteal -rfE \
+            --durations=15 2>&1 | tee ../suite.log
           status=${PIPESTATUS[0]}
           {
             echo '### Test suite (Python 3.14)'
@@ -39,11 +53,18 @@ jobs:
             echo '```'
             grep -E '^(FAILED|ERROR)|passed|failed' ../suite.log | tail -40
             echo '```'
+            echo '<details><summary>Slowest tests</summary>'
+            echo
+            echo '```'
+            sed -n '/slowest .* durations/,/^$/p' ../suite.log
+            echo '```'
+            echo '</details>'
           } >> "$GITHUB_STEP_SUMMARY"
           exit 0
 
   random-order:
     name: Test suite in random order (3.14, offscreen)
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
@@ -70,30 +91,79 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           exit 0
 
-  render-diff:
-    name: Render diff against base
+  capture:
+    name: Render ${{ matrix.side }} ${{ matrix.shard }}/4
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     continue-on-error: true
-    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        side: [ base, head ]
+        shard: [ 1, 2, 3, 4 ]
+    steps:
+      # A base capture depends on nothing but the base commit, so every push to a PR
+      # (and every PR opened against the same tip) reuses it.
+      - name: Reuse the base capture
+        id: cache
+        if: matrix.side == 'base'
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/capture
+          key: render-base-${{ github.event.pull_request.base.sha }}-${{ matrix.shard }}of4
+      - name: Skip when the capture is cached
+        id: need
+        run: echo "run=${{ steps.cache.outputs.cache-hit != 'true' }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        if: steps.need.outputs.run == 'true'
+        with:
+          path: LevityDash
+          ref: ${{ matrix.side == 'base' && github.event.pull_request.base.sha || github.sha }}
+      - uses: ./LevityDash/.github/actions/setup
+        if: steps.need.outputs.run == 'true'
+      - name: Capture
+        if: steps.need.outputs.run == 'true'
+        working-directory: LevityDash
+        run: |
+          # An older base has no --shard: it captures everything and the stitch step takes its slice.
+          if .venv/bin/python src/LevityDash/devtools/render_diff.py capture --help | grep -q -- --shard; then
+            shard=(--shard "${{ matrix.shard }}/4")
+          else
+            shard=()
+          fi
+          PYTHONPATH=src .venv/bin/python src/LevityDash/devtools/render_diff.py \
+            capture "$RUNNER_TEMP/capture" "${shard[@]}" || echo "${{ matrix.side }} capture failed"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capture-${{ matrix.side == 'base' && 'before' || 'after' }}-${{ matrix.shard }}
+          path: |
+            ${{ runner.temp }}/capture/*.png
+            ${{ runner.temp }}/capture/_manifest.json
+            ${{ runner.temp }}/capture/_scenario.yaml
+          if-no-files-found: ignore
+
+  render-diff:
+    name: Render diff against base
+    needs: capture
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with:
           path: LevityDash
-          fetch-depth: 0
       - uses: ./LevityDash/.github/actions/setup
-      - name: Check out the base commit
-        working-directory: LevityDash
-        run: git worktree add ../base "${{ github.event.pull_request.base.sha }}"
-      - name: Capture base
-        run: |
-          cd base
-          PYTHONPATH=src ../LevityDash/.venv/bin/python src/LevityDash/devtools/render_diff.py \
-            capture "$RUNNER_TEMP/before" --python ../LevityDash/.venv/bin/python || echo "base capture failed"
-      - name: Capture head
-        working-directory: LevityDash
-        run: |
-          PYTHONPATH=src .venv/bin/python src/LevityDash/devtools/render_diff.py \
-            capture "$RUNNER_TEMP/after" || echo "head capture failed"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: capture-before-*
+          path: ${{ runner.temp }}/before
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: capture-after-*
+          path: ${{ runner.temp }}/after
+          merge-multiple: true
       - name: Compare
         working-directory: LevityDash
         run: |

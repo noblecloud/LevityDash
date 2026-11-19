@@ -87,6 +87,9 @@ SHOWCASE_SIZE = (2560, 1440)
 PRESET_SIZE = (1600, 900)
 DEFAULT_SETTLE = 14.0
 
+#: Seconds one render may take before it is given up on. Ordinary renders take 20 to 60.
+RENDER_TIMEOUT = 1200
+
 #: A pixel counts as different when a channel differs by more than this many
 #: levels. 30 is the figure the meter brief measured the Mock drift with.
 DEFAULT_LEVEL = 30
@@ -331,8 +334,15 @@ def ink_of(array: np.ndarray) -> float:
 # capture
 
 
-def targets(only: Optional[Sequence[str]] = None) -> List[Path]:
+def targets(only: Optional[Sequence[str]] = None, shard: Optional[str] = None) -> List[Path]:
 	found = sorted(PRESET_DIR.glob('*.levity')) + [SHOWCASE, METER_SHOWCASE]
+	if shard:
+		# `I/N`: every Nth target starting at the Ith, so N runners can each take a slice
+		# and CI waits for the slowest slice rather than the whole sweep.
+		index, _, count = shard.partition('/')
+		if not (index.isdigit() and count.isdigit() and 1 <= int(index) <= int(count)):
+			raise SystemExit(f'--shard wants I/N with 1 <= I <= N, got {shard!r}')
+		found = found[int(index) - 1::int(count)]
 	if only:
 		wanted = {name.lower() for name in only}
 		found = [p for p in found if p.stem.lower() in wanted]
@@ -379,7 +389,7 @@ def capture(args) -> int:
 	scenario_path.write_text(yaml.safe_dump(scenario, sort_keys=False, width=120))
 	seed_dir = stage_seed(out_dir / '_seed', scenario)
 
-	selected = targets(args.only)
+	selected = targets(args.only, args.shard)
 	freeze = None if args.no_freeze_time else (args.freeze_time or 'default')
 	manifest = {
 		'created': time.strftime('%Y-%m-%dT%H:%M:%S'),
@@ -404,7 +414,15 @@ def capture(args) -> int:
 		target_freeze = None if target.stem in NO_FREEZE else freeze
 		command = render_command(target, out, seed_dir, scenario_path, size, args.settle, args.scale, target_freeze, args.python)
 		started = time.monotonic()
-		completed = subprocess.run(command, capture_output=True, text=True, env={**os.environ, 'LEVITYDASH_FIXTURE_DELAY_MS': FIXTURE_DELAY_MS})
+		try:
+			completed = subprocess.run(
+				command, capture_output=True, text=True, timeout=RENDER_TIMEOUT,
+				env={**os.environ, 'LEVITYDASH_FIXTURE_DELAY_MS': FIXTURE_DELAY_MS},
+			)
+		except subprocess.TimeoutExpired:
+			# One render that never settles (label-sides once took 42 minutes) must not hold the sweep:
+			# report it as failed and carry on with the rest.
+			return target.stem, {'seconds': RENDER_TIMEOUT, 'size': list(size), 'exit': -1, 'error': f'timed out after {RENDER_TIMEOUT} s'}
 		seconds = time.monotonic() - started
 		entry = {'seconds': round(seconds, 1), 'size': list(size), 'exit': completed.returncode, 'freeze': target_freeze or 'live'}
 		output = (completed.stdout or '') + (completed.stderr or '')
@@ -641,6 +659,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 	def add_capture_arguments(sub):
 		sub.add_argument('directory', help='directory to write the capture into (created if missing)')
 		sub.add_argument('--only', action='append', metavar='STEM', help='render only these files (repeatable)')
+		sub.add_argument('--shard', metavar='I/N', help='render only the Ith of N interleaved slices of the targets (CI splits the sweep across runners)')
 		sub.add_argument('--size', help=f'override every size, e.g. 1600x900 (default: showcase {SHOWCASE_SIZE[0]}x{SHOWCASE_SIZE[1]}, presets {PRESET_SIZE[0]}x{PRESET_SIZE[1]})')
 		sub.add_argument('--settle', type=float, default=DEFAULT_SETTLE, help=f'seconds each render settles for (default {DEFAULT_SETTLE:g})')
 		sub.add_argument('--scale', type=float, default=1.0)
