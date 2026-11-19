@@ -202,3 +202,27 @@ def test_bound_bar_tick_and_label_sizes_follow_a_value(dashboard):
 			sandbox.scene().removeItem(sandbox)
 	finally:
 		installStandIn(saved)
+
+
+def test_a_bare_range_is_read_in_the_unit_of_the_value_class_that_arrives(dashboard):
+	"""`max: 100` on a 0-1 percentage (a battery) is 100%, not 100 whole units.
+
+	A bar whose key is not resolved when it loads reads its range with no value class, so the authored
+	numbers stay bare; the first value names the class, and the range must follow it or a 71% battery
+	fills 0.7% of the track."""
+	from unitcorn import Measurement
+	from unitcorn.others import BatteryPercentage
+
+	sandbox, panel, bar = _bar(dashboard, {'fill': {'color': '#ff0000'}, 'value-label': {'visible': False}})
+	bar._valueClass = float
+	bar._range._min, bar._range._max = Measurement(0), Measurement(100)
+	bar.value = BatteryPercentage(0.71)
+	assert bar.valueClass is BatteryPercentage
+	assert type(bar._range._max) is BatteryPercentage and float(bar._range._max) == pytest.approx(1.0)
+	assert float(bar._range.max) == pytest.approx(1.0)
+	assert bar._t(BatteryPercentage(0.71)) == pytest.approx(0.71)
+	# A range already in a real unit is left alone.
+	bar._range._max = BatteryPercentage(0.5)
+	bar._range.adoptValueClass(BatteryPercentage)
+	assert float(bar._range._max) == pytest.approx(0.5)
+	sandbox.scene().removeItem(sandbox)

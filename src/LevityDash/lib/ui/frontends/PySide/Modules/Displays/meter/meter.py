@@ -141,6 +141,24 @@ class GaugeRange(StatefulGaugeItem):
 		# Nothing divides it (a span like 1/3): keep rounded_min finite.
 		return 10 ** floor(log10(span))
 
+	def adoptValueClass(self, value_class: Type[Measurement]) -> None:
+		"""Turn a `min` or `max` still held as a bare number into ``value_class``.
+
+		A range decoded before the gauge knew its data's class keeps the plain number the author
+		wrote (`decode_measurement`). When the class arrives the number must be read in that
+		class's unit; a bare 100 on a battery (0-1) otherwise stays 100 and the fill never moves."""
+		changed = False
+		for name in ('_min', '_max'):
+			current = getattr(self, name, None)
+			if type(current) in (float, Measurement):
+				try:
+					setattr(self, name, value_class(float(current)))
+					changed = True
+				except Exception:  # noqa: BLE001 - not convertible: keep what was written
+					pass
+		if changed:
+			self._reset_cache()
+
 	@StateProperty(key='min', repr=True)
 	def min(self) -> Measurement:
 		return self._min
@@ -584,6 +602,12 @@ class Meter(Display):
 	def valueClass(self, value):
 		if not isinstance(value, type):
 			value = type(value)
+		# A range written as bare numbers while the class was still unknown is a number in this
+		# class's own unit (`max: 100` is 100%): convert it now, or a 0-1 percentage never fills.
+		# Also when the class is unchanged: a bar sets it from its container before its range is read.
+		if (_range := getattr(self, '_range', None)) is not None:
+			_range.adoptValueClass(value)
+
 		if value is self._valueClass:
 			return
 
