@@ -1,6 +1,6 @@
 """`decimal-scale` and `decimal-align`: the fractional digits of a number at a smaller size."""
 import pytest
-from PySide6.QtGui import QFont, QFontMetricsF
+from PySide6.QtGui import QFont, QFontInfo, QFontMetricsF
 from PySide6.QtTest import QTest
 
 from LevityDash.lib.ui.frontends.PySide.Modules import Panel
@@ -94,7 +94,41 @@ def test_number_align_keeps_the_point_on_one_line(dashboard):
 			t.scene() and t.scene().removeItem(t)
 
 
-def test_bad_scale_is_refused():
+def decode(value):
 	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Label import Label
-	decode = Label.decimalScale.decode if hasattr(Label.decimalScale, 'decode') else None
-	assert decode is not None
+	return Label.decimalScale.decodeValue(value, None)
+
+
+def test_sizes_take_percent_and_absolute_units(dashboard, sandbox):
+	sandbox.state = {'items': [
+		label('1.5', '0%', **{'decimal-scale': '12px'}),
+		label('2.5', '20%', **{'decimal-scale': '3mm'}),
+		label('3.5', '40%', **{'decimal-scale': '9pt', 'decimal-align': 'bottom'}),
+	]}
+	settle(dashboard)
+	got = texts(sandbox)
+	assert got['1.5']._decimalScale == ('px', 12.0)
+	assert got['2.5']._decimalScale[0] == 'in' and got['2.5']._decimalScale[1] == pytest.approx(3 / 25.4, rel=0.01)
+	assert got['3.5']._decimalScale == ('in', pytest.approx(9 / 72))
+	assert got['3.5']._decimalAlign == 'baseline'
+	font = QFont(got['1.5'].font())
+	for item in got.values():
+		ratio = item._decimalRatio(QFont(item.font()))
+		assert 0.05 <= ratio <= 1
+		assert item._decimalRuns(item.text, QFont(item.font())) is not None or ratio == 1
+
+
+def test_absolute_size_is_the_size_on_screen(dashboard, sandbox):
+	sandbox.state = {'items': [label('1.5', '0%', **{'decimal-scale': '10px'})]}
+	settle(dashboard)
+	item = texts(sandbox)['1.5']
+	font = QFont(item.font())
+	ratio = item._decimalRatio(font)
+	scale = item.transform().m11()
+	assert ratio * QFontInfo(font).pixelSize() * scale == pytest.approx(10, rel=0.05) or ratio == 0.05 or ratio == 1.0
+
+
+def test_bad_scale_is_refused():
+	for bad in (2, '0%', '5furlongs', 'big'):
+		with pytest.raises(ValueError):
+			decode(bad)

@@ -348,7 +348,9 @@ class Text(QGraphicsPathItem):
 	_outline: Optional[dict] = None
 	_fillBrush: Optional[QBrush] = None
 	_numberAlign: Optional[str] = None
-	_decimalScale: Optional[float] = None
+	_decimalScale: Optional[float | tuple[str, float]] = None  # a ratio, or ('px', n) / ('in', n) for an absolute size
+	_fitScale: float = 1.0
+	_decimalRefit: int = 0
 	_decimalAlign: str = 'baseline'
 	_numExtentKey: tuple = None
 	_numExtent: tuple = (0.0, 0.0)
@@ -386,12 +388,36 @@ class Text(QGraphicsPathItem):
 		self._tabular = bool(value)
 		self.updateTransform(reason='tabular')
 
-	def setDecimalScale(self, value: Optional[float]):
+	def _decimalRatio(self, font: QFont) -> Optional[float]:
+		"""The small digits' size as a share of `font`, or None when small decimals are off. An absolute size (`12px`,
+		`3mm`) is the em size the digits end up at on screen, so it is divided by the main font's size and by the scale the
+		fit last gave the text (the path is built at the font size and scaled to its box afterwards)."""
+		spec = self._decimalScale
+		if not spec:
+			return None
+		if not isinstance(spec, tuple):
+			return spec
+		unit, amount = spec
+		if unit == 'px':
+			target = amount
+		else:
+			try:
+				dpi = getDPI(self.surface.scene().view.screen())
+			except (AttributeError, RuntimeError):
+				dpi = 96.0
+			target = amount * dpi
+		main = QFontInfo(font).pixelSize() * (self._fitScale or 1.0)
+		if main <= 0:
+			return None
+		return min(1.0, max(0.05, target / main))
+
+	def setDecimalScale(self, value: Optional[float | tuple[str, float]]):
 		self._decimalScale = value or None
 		self.updateTransform(reason='decimal-scale')
 
 	def setDecimalAlign(self, value: str):
-		self._decimalAlign = value or 'baseline'
+		value = str(value or 'baseline').lower()
+		self._decimalAlign = {'bottom': 'baseline', 'super': 'top', 'superscript': 'top', 'middle': 'center'}.get(value, value)
 		self.updateTransform(reason='decimal-align')
 
 	_DECIMALS = re.compile(r'\.\d+')
@@ -402,7 +428,7 @@ class Text(QGraphicsPathItem):
 		(Qt y is down, so it is zero or negative): `baseline` keeps it at 0, `top` puts the top of its digits on
 		the top of the whole digits' cap height, `center` halfway. The integer part, and any unit or sign after the
 		fraction, keep the full size."""
-		scale = self._decimalScale
+		scale = self._decimalRatio(font)
 		if not scale or scale >= 1 or not string:
 			return None
 		match = self._DECIMALS.search(string)
@@ -462,7 +488,7 @@ class Text(QGraphicsPathItem):
 			return None
 		font = self.font()
 		run = self.tailRun()
-		key = (text, hint, mode, font.key(), run, self._decimalScale, self._decimalAlign)
+		key = (text, hint, mode, font.key(), run, self._decimalRatio(font), self._decimalAlign)
 		if self._numExtentKey != key:
 			fm = QFontMetricsF(font)
 			head = tail = 0.0
@@ -668,6 +694,16 @@ class Text(QGraphicsPathItem):
 
 		self.setTransform(transform)
 		self._applyWarp()
+		if not self._fixedFontSize and (scale := transform.m11()) > 0:
+			before, self._fitScale = self._decimalRatio(self.font()), scale
+			after = self._decimalRatio(self.font())
+			# an absolute decimal size depends on the scale the fit gave, which depends on it: a few passes settle it
+			if isinstance(self._decimalScale, tuple) and self._decimalRefit < 6 and before and after and abs(after - before) > 0.002:
+				self._decimalRefit += 1
+				try:
+					self.updateTransform(rect, updateShared, True, 'decimal-size')
+				finally:
+					self._decimalRefit -= 1
 
 	_warp: Optional[WarpSpec] = None
 	_warpActive: bool = False
@@ -974,7 +1010,7 @@ class Text(QGraphicsPathItem):
 			self._italic,
 			self._tabular,
 			self._numberAlign,
-			self._decimalScale,
+			self._decimalRatio(self.font()),
 			self._decimalAlign,
 			self._numberColumn() if self._numberAlign else None,
 		)

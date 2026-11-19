@@ -1,3 +1,4 @@
+import re
 from functools import cached_property
 from typing import List, Optional, Type, ClassVar, Callable
 
@@ -387,28 +388,52 @@ class Label(Panel, ColorMixin, tag='label'):
 		return value
 
 	@StateProperty(key='decimal-scale', default=None, allowNone=True, dependencies={'geometry', 'text', 'alignment'})
-	def decimalScale(self) -> float | None:
-		"""Draw the fractional digits (the `.7` of `67.7`, with their point) smaller than the integer part, as a
-		share of the text size: `decimal-scale: 0.6`, or `60%`. The integer digits keep their size, so with
-		`tabular` or `number-align` they still line up; a unit or degree sign after the fraction keeps the full
-		size. Off (`null`, `1`) by default. Where the fraction sits is `decimal-align`."""
+	def decimalScale(self) -> float | tuple[str, float] | None:
+		"""Draw the fractional digits (the `.7` of `67.7`, with their point) smaller than the integer part. A share of
+		the text size (`0.6`, or `60%`) or an absolute size for the small digits (`12px`, `9pt`, `3mm`, `0.2cm`, `0.1in`:
+		the em size they end up at on screen, so they keep it while the main number grows). The integer digits keep their
+		size, so with `tabular` or `number-align` they still line up; a unit or degree sign after the fraction keeps the
+		full size. Off (`null`, `1`) by default. Where the fraction sits is `decimal-align`."""
 		return self.textBox._decimalScale
 
 	@decimalScale.setter
-	def decimalScale(self, value: float | None):
+	def decimalScale(self, value):
 		self.textBox.setDecimalScale(value)
 
 	@decimalScale.decode
-	def decimalScale(self, value) -> float | None:
+	def decimalScale(self, value):
 		if value in (None, False, 'none', 'off'):
 			return None
 		if isinstance(value, str):
-			value = value.strip()
-			value = float(value[:-1]) / 100 if value.endswith('%') else float(value)
+			text = value.strip().casefold()
+			match = re.fullmatch(r'([\d.]+)\s*([a-z%]*)', text)
+			if match is None:
+				raise ValueError(f'decimal-scale is a share (0.6, 60%) or a size (12px, 9pt, 3mm, 0.2cm, 0.1in), not {value!r}')
+			number, unit = float(match[1]), match[2]
+			if unit == 'px':
+				return ('px', number)
+			if unit == 'pt':
+				return ('in', number / 72)
+			if unit in ('mm', 'cm', 'in'):
+				# the shared size parser, so the units are the ones every other size takes
+				length = parseSize(text, None)
+				return ('in', float(length.inch))
+			if unit == '%':
+				number /= 100
+			elif unit:
+				raise ValueError(f'decimal-scale does not take the unit {unit!r}; use %, px, pt, mm, cm or in')
+			value = number
 		value = float(value)
 		if not 0 < value <= 1:
-			raise ValueError(f'decimal-scale is a share of the text size above 0 and up to 1 (or 1% to 100%), not {value!r}')
+			raise ValueError(f'decimal-scale is a share of the text size above 0 and up to 1 (or 1% to 100%), or a size like 12px, not {value!r}')
 		return None if value == 1 else value
+
+	@decimalScale.encode
+	def decimalScale(self, value):
+		if isinstance(value, tuple):
+			unit, amount = value
+			return f'{round(amount, 4)}{unit}'
+		return value
 
 	@StateProperty(key='decimal-align', default='baseline', dependencies={'geometry', 'text', 'alignment'})
 	def decimalAlign(self) -> str:
