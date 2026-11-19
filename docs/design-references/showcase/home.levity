@@ -57,7 +57,7 @@ items:
         width: 18.8%
         x: 81.2%
         y: 27%
-      glowStrength: 2
+      glowStrength: 0
       interval:
         minutes: 20
     - format: '%p'
@@ -476,7 +476,7 @@ items:
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
-    alignment: BottomLeft
+    alignment: BottomRight
     geometry:
       x: 88.3%
       y: 2.8%
@@ -490,7 +490,7 @@ items:
   - type: realtime.text
     key: environment.light.sunrise
     title: false
-    alignment: BottomLeft
+    alignment: BottomRight
     display:
       unitPosition: Hidden
       precision: 0
@@ -501,10 +501,10 @@ items:
         matchingGroup:
           group: global.detail
           matchAll: true
-        alignment: BottomLeft
+        alignment: BottomRight
         margins:
-          left: 0
-          right: 10%
+          left: 10%
+          right: 0
           top: 0
           bottom: 0
       format-hint: 0:00
@@ -513,7 +513,7 @@ items:
       x: 88.3%
       y: 4.7%
       width: 9.6%
-      height: 3.2%
+      height: 3.6%
     margins:
       left: 0
       right: 0
@@ -524,7 +524,7 @@ items:
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
-    alignment: BottomLeft
+    alignment: BottomRight
     geometry:
       x: 88.3%
       y: 10.4%
@@ -538,7 +538,7 @@ items:
   - type: realtime.text
     key: environment.light.sunset
     title: false
-    alignment: BottomLeft
+    alignment: BottomRight
     display:
       unitPosition: Hidden
       precision: 0
@@ -549,10 +549,10 @@ items:
         matchingGroup:
           group: global.detail
           matchAll: true
-        alignment: BottomLeft
+        alignment: BottomRight
         margins:
-          left: 0
-          right: 10%
+          left: 10%
+          right: 0
           top: 0
           bottom: 0
       format-hint: 0:00
@@ -561,7 +561,7 @@ items:
       x: 88.3%
       y: 12.3%
       width: 9.6%
-      height: 3.2%
+      height: 3.6%
     margins:
       left: 0
       right: 0
@@ -572,7 +572,7 @@ items:
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
-    alignment: BottomLeft
+    alignment: BottomRight
     geometry:
       x: 88.3%
       y: 18.0%
@@ -586,7 +586,7 @@ items:
   - type: realtime.text
     key: environment.light.irradiance.irradiance
     title: false
-    alignment: BottomLeft
+    alignment: BottomRight
     display:
       unitPosition: Hidden
       precision: 0
@@ -597,10 +597,10 @@ items:
         matchingGroup:
           group: global.detail
           matchAll: true
-        alignment: BottomLeft
+        alignment: BottomRight
         margins:
-          left: 0
-          right: 10%
+          left: 10%
+          right: 0
           top: 0
           bottom: 0
       format-hint: '000'
@@ -608,7 +608,7 @@ items:
       x: 88.3%
       y: 19.9%
       width: 9.6%
-      height: 3.2%
+      height: 3.6%
     margins:
       left: 0
       right: 0
@@ -820,7 +820,7 @@ items:
       top: 0
       bottom: 0
   - type: text
-    text: HUMIDITY
+    text: RH
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
@@ -828,7 +828,7 @@ items:
     geometry:
       x: 88.6%
       y: 28.5%
-      width: 9.4%
+      width: 4.4%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -859,15 +859,62 @@ items:
     geometry:
       x: 88.6%
       y: 30.4%
-      width: 9.4%
-      height: 3.2%
+      width: 4.4%
+      height: 3.6%
     margins:
       left: 0
       right: 0
       top: 0
       bottom: 0
   - type: text
-    text: DEW POINT
+    text: FEELS
+    font: Barlow Condensed
+    weight: SemiBold
+    color: $faint
+    alignment: BottomRight
+    geometry:
+      x: 93.3%
+      y: 28.5%
+      width: 4.4%
+      height: 1.5%
+    matchingGroup:
+      group: global.cap
+      matchAll: true
+    tracking: 0.16
+    format-hint: HEADING
+  - type: realtime.text
+    key: indoor.temperature.heatIndex#bedroom
+    title: false
+    alignment: BottomRight
+    display:
+      unitPosition: Inline
+      precision: 0
+      valueLabel:
+        color: $warn
+        font: $mono
+        weight: Regular
+        matchingGroup:
+          group: global.detail
+          matchAll: true
+        alignment: BottomRight
+        margins:
+          left: 10%
+          right: 0
+          top: 0
+          bottom: 0
+      format-hint: 00°
+    geometry:
+      x: 93.3%
+      y: 30.4%
+      width: 4.4%
+      height: 3.6%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
+  - type: text
+    text: DEW
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
@@ -875,7 +922,7 @@ items:
     geometry:
       x: 88.6%
       y: 37.2%
-      width: 9.4%
+      width: 4.4%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -906,8 +953,55 @@ items:
     geometry:
       x: 88.6%
       y: 39.1%
-      width: 9.4%
-      height: 3.2%
+      width: 4.4%
+      height: 3.6%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
+  - type: text
+    text: 24H HI
+    font: Barlow Condensed
+    weight: SemiBold
+    color: $faint
+    alignment: BottomRight
+    geometry:
+      x: 93.3%
+      y: 37.2%
+      width: 4.4%
+      height: 1.5%
+    matchingGroup:
+      group: global.cap
+      matchAll: true
+    tracking: 0.16
+    format-hint: HEADING
+  - type: realtime.text
+    key: max(indoor.temperature.temperature#bedroom, 24h)
+    title: false
+    alignment: BottomRight
+    display:
+      unitPosition: Inline
+      precision: 0
+      valueLabel:
+        color: $bad
+        font: $mono
+        weight: Regular
+        matchingGroup:
+          group: global.detail
+          matchAll: true
+        alignment: BottomRight
+        margins:
+          left: 10%
+          right: 0
+          top: 0
+          bottom: 0
+      format-hint: 00°
+    geometry:
+      x: 93.3%
+      y: 39.1%
+      width: 4.4%
+      height: 3.6%
     margins:
       left: 0
       right: 0
@@ -998,7 +1092,7 @@ items:
       top: 0
       bottom: 0
   - type: text
-    text: HUMIDITY
+    text: RH
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
@@ -1006,7 +1100,7 @@ items:
     geometry:
       x: 88.6%
       y: 48.1%
-      width: 9.4%
+      width: 4.4%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -1037,15 +1131,62 @@ items:
     geometry:
       x: 88.6%
       y: 50.0%
-      width: 9.4%
-      height: 3.2%
+      width: 4.4%
+      height: 3.6%
     margins:
       left: 0
       right: 0
       top: 0
       bottom: 0
   - type: text
-    text: DEW POINT
+    text: FEELS
+    font: Barlow Condensed
+    weight: SemiBold
+    color: $faint
+    alignment: BottomRight
+    geometry:
+      x: 93.3%
+      y: 48.1%
+      width: 4.4%
+      height: 1.5%
+    matchingGroup:
+      group: global.cap
+      matchAll: true
+    tracking: 0.16
+    format-hint: HEADING
+  - type: realtime.text
+    key: indoor.temperature.heatIndex#terrarium
+    title: false
+    alignment: BottomRight
+    display:
+      unitPosition: Inline
+      precision: 0
+      valueLabel:
+        color: $warn
+        font: $mono
+        weight: Regular
+        matchingGroup:
+          group: global.detail
+          matchAll: true
+        alignment: BottomRight
+        margins:
+          left: 10%
+          right: 0
+          top: 0
+          bottom: 0
+      format-hint: 00°
+    geometry:
+      x: 93.3%
+      y: 50.0%
+      width: 4.4%
+      height: 3.6%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
+  - type: text
+    text: DEW
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
@@ -1053,7 +1194,7 @@ items:
     geometry:
       x: 88.6%
       y: 56.8%
-      width: 9.4%
+      width: 4.4%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -1084,8 +1225,55 @@ items:
     geometry:
       x: 88.6%
       y: 58.7%
-      width: 9.4%
-      height: 3.2%
+      width: 4.4%
+      height: 3.6%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
+  - type: text
+    text: 24H HI
+    font: Barlow Condensed
+    weight: SemiBold
+    color: $faint
+    alignment: BottomRight
+    geometry:
+      x: 93.3%
+      y: 56.8%
+      width: 4.4%
+      height: 1.5%
+    matchingGroup:
+      group: global.cap
+      matchAll: true
+    tracking: 0.16
+    format-hint: HEADING
+  - type: realtime.text
+    key: max(indoor.temperature.temperature#terrarium, 24h)
+    title: false
+    alignment: BottomRight
+    display:
+      unitPosition: Inline
+      precision: 0
+      valueLabel:
+        color: $bad
+        font: $mono
+        weight: Regular
+        matchingGroup:
+          group: global.detail
+          matchAll: true
+        alignment: BottomRight
+        margins:
+          left: 10%
+          right: 0
+          top: 0
+          bottom: 0
+      format-hint: 00°
+    geometry:
+      x: 93.3%
+      y: 58.7%
+      width: 4.4%
+      height: 3.6%
     margins:
       left: 0
       right: 0
@@ -1285,7 +1473,7 @@ items:
           x: 6.579%
           y: 66.78%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -1308,7 +1496,7 @@ items:
         tracking: 0.16
         format-hint: HEADING
       - type: realtime.text
-        key: environment.wind.speed.gustMax
+        key: max(environment.wind.speed.gust, today)
         title: false
         alignment: BottomLeft
         display:
@@ -1332,7 +1520,7 @@ items:
           x: 36.442%
           y: 66.78%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -1379,7 +1567,7 @@ items:
           x: 66.299%
           y: 66.78%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -1426,7 +1614,7 @@ items:
           x: 6.579%
           y: 85.763%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -1473,7 +1661,7 @@ items:
           x: 36.442%
           y: 85.763%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -1520,7 +1708,7 @@ items:
           x: 66.299%
           y: 85.763%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -1678,7 +1866,7 @@ items:
           x: 6.579%
           y: 66.78%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -1725,7 +1913,7 @@ items:
           x: 36.442%
           y: 66.78%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -1772,7 +1960,7 @@ items:
           x: 66.299%
           y: 66.78%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -1819,7 +2007,7 @@ items:
           x: 6.579%
           y: 85.763%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -1866,7 +2054,7 @@ items:
           x: 36.442%
           y: 85.763%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -1915,7 +2103,7 @@ items:
           x: 66.299%
           y: 85.763%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -2115,7 +2303,7 @@ items:
           x: 6.579%
           y: 66.78%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -2162,7 +2350,7 @@ items:
           x: 36.442%
           y: 66.78%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -2209,7 +2397,7 @@ items:
           x: 66.299%
           y: 66.78%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -2256,7 +2444,7 @@ items:
           x: 6.579%
           y: 85.763%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -2303,7 +2491,7 @@ items:
           x: 36.442%
           y: 85.763%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -2350,7 +2538,7 @@ items:
           x: 66.299%
           y: 85.763%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -2609,7 +2797,7 @@ items:
           x: 6.579%
           y: 66.78%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -2656,7 +2844,7 @@ items:
           x: 36.442%
           y: 66.78%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -2705,7 +2893,7 @@ items:
           x: 66.299%
           y: 66.78%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -2754,7 +2942,7 @@ items:
           x: 6.579%
           y: 85.763%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -2803,7 +2991,7 @@ items:
           x: 36.442%
           y: 85.763%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -2850,7 +3038,7 @@ items:
           x: 66.299%
           y: 85.763%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -3170,7 +3358,7 @@ items:
           x: 6.579%
           y: 66.78%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -3217,7 +3405,7 @@ items:
           x: 36.442%
           y: 66.78%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -3264,7 +3452,7 @@ items:
           x: 66.299%
           y: 66.78%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -3311,7 +3499,7 @@ items:
           x: 6.579%
           y: 85.763%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -3358,7 +3546,7 @@ items:
           x: 36.442%
           y: 85.763%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -3405,7 +3593,7 @@ items:
           x: 66.299%
           y: 85.763%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -3627,7 +3815,7 @@ items:
           x: 6.579%
           y: 66.78%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -3674,7 +3862,7 @@ items:
           x: 36.442%
           y: 66.78%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -3721,7 +3909,7 @@ items:
           x: 66.299%
           y: 66.78%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -3768,7 +3956,7 @@ items:
           x: 6.579%
           y: 85.763%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -3815,7 +4003,7 @@ items:
           x: 36.442%
           y: 85.763%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -3862,7 +4050,7 @@ items:
           x: 66.299%
           y: 85.763%
           width: 27.122%
-          height: 10.847%
+          height: 12.203%
         margins:
           left: 0
           right: 0
@@ -4012,7 +4200,7 @@ items:
             x: 0.0%
             y: 90.734%
             width: 31.231%
-            height: 12.355%
+            height: 13.9%
           margins:
             left: 0
             right: 0
@@ -4059,7 +4247,7 @@ items:
             x: 34.388%
             y: 90.734%
             width: 31.231%
-            height: 12.355%
+            height: 13.9%
           margins:
             left: 0
             right: 0
@@ -4106,7 +4294,7 @@ items:
             x: 68.769%
             y: 90.734%
             width: 31.231%
-            height: 12.355%
+            height: 13.9%
           margins:
             left: 0
             right: 0
@@ -4190,7 +4378,7 @@ items:
             x: 0.0%
             y: 90.734%
             width: 31.231%
-            height: 12.355%
+            height: 13.9%
           margins:
             left: 0
             right: 0
@@ -4237,7 +4425,7 @@ items:
             x: 34.388%
             y: 90.734%
             width: 31.231%
-            height: 12.355%
+            height: 13.9%
           margins:
             left: 0
             right: 0
@@ -4284,7 +4472,7 @@ items:
             x: 68.769%
             y: 90.734%
             width: 31.231%
-            height: 12.355%
+            height: 13.9%
           margins:
             left: 0
             right: 0

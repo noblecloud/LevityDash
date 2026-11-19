@@ -24,7 +24,7 @@ GLOW = {'strength': 1.2, 'reach': 2.0, 'passes': 6}
 INDOOR = [('INDOOR', '', '$series-2')]
 LABEL = 'Barlow Condensed'
 CAP = 1.5
-TILE = 3.2  # the detail size: every reading read up close has a value box this tall
+TILE = 3.6  # the detail size: every reading read up close has a value box this tall
 
 
 def data(rooms=INDOOR, name='default'):
@@ -122,8 +122,13 @@ def num(key, geom, color='$text', weight='Regular', font='$mono', **kw):
 	return item
 
 
-def tile(caption, key, x, y, w, color='$text', h=TILE, group='global.detail', **kw):
-	return [cap_(caption, g(x, y, w, CAP)), num(key, g(x, y + CAP + 0.4, w, h), color, group=group, **kw)]
+def tile(caption, key, x, y, w, color='$text', h=TILE, group='global.detail', right=False, **kw):
+	"""A caption over a number. `right` sets both flush to the right edge, for a column against the board's edge."""
+	side = {'align': 'BottomRight'} if right else {}
+	value = num(key, g(x, y + CAP + 0.4, w, h), color, group=group, **side, **kw)
+	if right:
+		value['display']['valueLabel']['margins'] = {'left': '10%', 'right': 0, 'top': 0, 'bottom': 0}  # flush to the edge
+	return [cap_(caption, g(x, y, w, CAP), **side), value]
 
 
 def capsules(m, width=0.6, **plot):
@@ -144,7 +149,7 @@ def clock():
 		# The hint sizes the time for its widest form, so it does not grow at 1:00 and shrink at 10:00.
 		{'format': '%-I:%M', 'alignment': 'BottomRight', 'format-hint': '10:00',
 		 'geometry': {'height': '73%', 'width': '80%', 'x': '1.2%', 'y': '27%'}, 'margins': {'right': '10px'}},
-		{'type': 'moon', 'geometry': {'height': '45%', 'width': '18.8%', 'x': '81.2%', 'y': '27%'}, 'glowStrength': 2, 'interval': {'minutes': 20}},
+		{'type': 'moon', 'geometry': {'height': '45%', 'width': '18.8%', 'x': '81.2%', 'y': '27%'}, 'glowStrength': 0, 'interval': {'minutes': 20}},
 		{'format': '%p', 'filters': ['Lower'], 'alignment': 'BottomLeft', 'format-hint': 'am', 'geometry': {'height': '29.6%', 'width': '18.8%', 'x': '81.2%', 'y': '70.4%'}},
 	]}
 
@@ -179,8 +184,15 @@ def room(caption, sfx, color, x, y, w, h, i):
 		num(temp, g(x, y + CAP + 0.8, left - 0.8, hh * 0.62), '$text', weight='Bold', tracking=-0.06, unit='Inline', hint='00.0°', precision=1,
 		    group='global.room', align='TopLeft'),
 	]
+	# Four readings in two columns, the outer one flush to the board's edge so the panel reaches it.
+	rows = [('RH', key('humidity.humidity'), '$info', {'hint': '00%', 'unit': 'Inline'}),
+	        ('FEELS', key('temperature.heatIndex'), '$warn', {'hint': '00°', 'unit': 'Inline'}),
+	        ('DEW', key('temperature.dewpoint'), '$good', {'hint': '00°', 'unit': 'Inline'}),
+	        ('24H HI', f'max({temp}, 24h)', '$bad', {'hint': '00°', 'unit': 'Inline'})]
+	col = (w - left) / 2
 	for j, (name, k, c, kw) in enumerate(rows):
-		out += tile(name, k, x + left, y + j * h / len(rows), w - left, c, h=TILE, group='global.detail', **kw)
+		r, cc = divmod(j, 2)
+		out += tile(name, k, x + left + cc * col, y + r * h / 2, col - 0.3, c, h=TILE, group='global.detail', right=bool(cc), **kw)
 	return out
 
 
@@ -235,9 +247,9 @@ def board(rooms=INDOOR):
 		# One cell for each hour of daylight still to come, lit from warm to the evening colour.
 		bar('astronomy.sun.remaining', g(x, 21.2, 18, 2.2), 0, 960, track={'weight': '100%', 'color': '$rule', 'segments': 16, 'gap': '18%'},
 		    fill={'gradient': {0: '$accent', 1: '$warn'}, 'segments': 16, 'gap': '18%', 'weight': '100%', 'glow': GLOW}),
-		*tile('SUNRISE', f'{L}.sunrise', x + 19.8, 2.8, 9.6, '$warn', fmt='%-I:%M', hint='0:00'),
-		*tile('SUNSET', f'{L}.sunset', x + 19.8, 10.4, 9.6, '$accent', fmt='%-I:%M', hint='0:00'),
-		*tile('SUN · W/M²', f'{L}.irradiance.irradiance', x + 19.8, 18.0, 9.6, '$warn', hint='000'),
+		*tile('SUNRISE', f'{L}.sunrise', x + 19.8, 2.8, 9.6, '$warn', fmt='%-I:%M', hint='0:00', right=True),
+		*tile('SUNSET', f'{L}.sunset', x + 19.8, 10.4, 9.6, '$accent', fmt='%-I:%M', hint='0:00', right=True),
+		*tile('SUN · W/M²', f'{L}.irradiance.irradiance', x + 19.8, 18.0, 9.6, '$warn', hint='000', right=True),
 	]
 	# ------------------------------------------------------------ the days ahead
 	B.append({
@@ -301,7 +313,7 @@ def board(rooms=INDOOR):
 		mini(f'{W}.speed.speed', g(x, pic, iw, 4), color='$series-6', hours=24, past=True, lo=0, top='8%', bottom='0%', glow=GLOW),
 		# Detail captions say what, the card's caption says the unit; a window or offset is 24 h unless it says.
 		*six(x, [('GUST', f'{W}.speed.gust', '$warn', {'hint': '00'}),
-		         ('PEAK', f'{W}.speed.gustMax', '$bad', {'hint': '00'}),
+		         ('PEAK', f'max({W}.speed.gust, today)', '$bad', {'hint': '00'}),
 		         ('FROM', f'{W}.direction.direction', '$info', {'hint': 'SSW'}),
 		         ('AVG', f'avg({W}.speed.speed, 24h)', '$series-6', {'hint': '00'}),
 		         ('MAX', f'max({W}.speed.gust, 24h)', '$warn', {'hint': '00'}),
