@@ -93,12 +93,23 @@ items:
         font: $body
         weight: Black
         tracking: -0.04
+        alignment: BottomLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
       format-hint: 00°
     geometry:
-      x: 39.1%
+      x: 39.5%
       y: 4.6%
-      width: 16%
+      width: 15.4%
       height: 15.6%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
   - type: text
     text: HIGH
     font: Barlow Condensed
@@ -107,7 +118,7 @@ items:
     alignment: BottomLeft
     geometry:
       x: 56.1%
-      y: 4.8%
+      y: 2.8%
       width: 7%
       height: 1.5%
     matchingGroup:
@@ -129,14 +140,25 @@ items:
         matchingGroup:
           group: global.room
           matchAll: true
+        alignment: BottomLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
       format-hint: '00'
       format:
         unit_symbol: false
     geometry:
       x: 56.1%
-      y: 6.8%
+      y: 4.6%
       width: 8%
       height: 5.8%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
   - type: text
     text: LOW
     font: Barlow Condensed
@@ -145,7 +167,7 @@ items:
     alignment: BottomLeft
     geometry:
       x: 56.1%
-      y: 13.4%
+      y: 12.0%
       width: 7%
       height: 1.5%
     matchingGroup:
@@ -167,14 +189,25 @@ items:
         matchingGroup:
           group: global.room
           matchAll: true
+        alignment: BottomLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
       format-hint: '00'
       format:
         unit_symbol: false
     geometry:
       x: 56.1%
-      y: 15.4%
+      y: 13.8%
       width: 8%
       height: 5.8%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
   - type: realtime.bar
     key: environment.temperature.temperature
     title: false
@@ -253,12 +286,23 @@ items:
         matchingGroup:
           group: global.detail
           matchAll: true
+        alignment: CenterLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
       format-hint: 00°
     geometry:
       x: 53.7%
       y: 23.6%
       width: 4%
       height: 2.4%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
   - type: text
     text: dew
     font: $body
@@ -288,12 +332,23 @@ items:
         matchingGroup:
           group: global.detail
           matchAll: true
+        alignment: CenterLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
       format-hint: 00°
     geometry:
       x: 60.9%
       y: 23.6%
       width: 4%
       height: 2.4%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
   - type: text
     text: DAYLIGHT LEFT
     font: Barlow Condensed
@@ -363,6 +418,12 @@ items:
           group: global.room
           matchAll: true
         tracking: -0.04
+        alignment: BottomLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
       format-hint: 00h 00m
       format: duration
     geometry:
@@ -370,6 +431,11 @@ items:
       y: 4.6%
       width: 18%
       height: 9%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
   - type: realtime.bar
     key: astronomy.sun.remaining
     title: false
@@ -406,7 +472,7 @@ items:
     alignment: BottomLeft
     geometry:
       x: 88.3%
-      y: 4.6%
+      y: 2.8%
       width: 9.6%
       height: 1.5%
     matchingGroup:
@@ -428,13 +494,24 @@ items:
         matchingGroup:
           group: global.detail
           matchAll: true
+        alignment: BottomLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
       format-hint: 0:00
       format: '%-I:%M'
     geometry:
       x: 88.3%
-      y: 6.5%
+      y: 4.7%
       width: 9.6%
-      height: 5.2%
+      height: 3.2%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
   - type: text
     text: SUNSET
     font: Barlow Condensed
@@ -443,7 +520,7 @@ items:
     alignment: BottomLeft
     geometry:
       x: 88.3%
-      y: 12.2%
+      y: 10.4%
       width: 9.6%
       height: 1.5%
     matchingGroup:
@@ -465,13 +542,24 @@ items:
         matchingGroup:
           group: global.detail
           matchAll: true
+        alignment: BottomLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
       format-hint: 0:00
       format: '%-I:%M'
     geometry:
       x: 88.3%
-      y: 14.1%
+      y: 12.3%
       width: 9.6%
-      height: 5.2%
+      height: 3.2%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
   - type: text
     text: SUN · W/M²
     font: Barlow Condensed
@@ -480,7 +568,7 @@ items:
     alignment: BottomLeft
     geometry:
       x: 88.3%
-      y: 19.8%
+      y: 18.0%
       width: 9.6%
       height: 1.5%
     matchingGroup:
@@ -502,12 +590,23 @@ items:
         matchingGroup:
           group: global.detail
           matchAll: true
+        alignment: BottomLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
       format-hint: '000'
     geometry:
       x: 88.3%
-      y: 21.7%
+      y: 19.9%
       width: 9.6%
-      height: 4.4%
+      height: 3.2%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
   - type: graph
     name: forecast
     geometry:
@@ -696,12 +795,23 @@ items:
           group: global.room
           matchAll: true
         tracking: -0.06
+        alignment: TopLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
       format-hint: 00.0°
     geometry:
       x: 74.5%
       y: 30.8%
       width: 13.3%
       height: 9.362%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
   - type: text
     text: HUMIDITY
     font: Barlow Condensed
@@ -710,7 +820,7 @@ items:
     alignment: BottomLeft
     geometry:
       x: 88.6%
-      y: 30.8%
+      y: 28.5%
       width: 9.4%
       height: 1.5%
     matchingGroup:
@@ -732,12 +842,23 @@ items:
         matchingGroup:
           group: global.detail
           matchAll: true
+        alignment: BottomLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
       format-hint: 00%
     geometry:
       x: 88.6%
-      y: 32.7%
+      y: 30.4%
       width: 9.4%
-      height: 4.45%
+      height: 3.2%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
   - type: text
     text: DEW POINT
     font: Barlow Condensed
@@ -746,7 +867,7 @@ items:
     alignment: BottomLeft
     geometry:
       x: 88.6%
-      y: 38.35%
+      y: 37.2%
       width: 9.4%
       height: 1.5%
     matchingGroup:
@@ -768,12 +889,23 @@ items:
         matchingGroup:
           group: global.detail
           matchAll: true
+        alignment: BottomLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
       format-hint: 00°
     geometry:
       x: 88.6%
-      y: 40.25%
+      y: 39.1%
       width: 9.4%
-      height: 4.45%
+      height: 3.2%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
   - type: text
     text: TERRARIUM
     font: Barlow Condensed
@@ -841,12 +973,23 @@ items:
           group: global.room
           matchAll: true
         tracking: -0.06
+        alignment: TopLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
       format-hint: 00.0°
     geometry:
       x: 74.5%
       y: 50.4%
       width: 13.3%
       height: 9.362%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
   - type: text
     text: HUMIDITY
     font: Barlow Condensed
@@ -855,7 +998,7 @@ items:
     alignment: BottomLeft
     geometry:
       x: 88.6%
-      y: 50.4%
+      y: 48.1%
       width: 9.4%
       height: 1.5%
     matchingGroup:
@@ -877,12 +1020,23 @@ items:
         matchingGroup:
           group: global.detail
           matchAll: true
+        alignment: BottomLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
       format-hint: 00%
     geometry:
       x: 88.6%
-      y: 52.3%
+      y: 50.0%
       width: 9.4%
-      height: 4.45%
+      height: 3.2%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
   - type: text
     text: DEW POINT
     font: Barlow Condensed
@@ -891,7 +1045,7 @@ items:
     alignment: BottomLeft
     geometry:
       x: 88.6%
-      y: 57.95%
+      y: 56.8%
       width: 9.4%
       height: 1.5%
     matchingGroup:
@@ -913,12 +1067,23 @@ items:
         matchingGroup:
           group: global.detail
           matchAll: true
+        alignment: BottomLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
       format-hint: 00°
     geometry:
       x: 88.6%
-      y: 59.85%
+      y: 58.7%
       width: 9.4%
-      height: 4.45%
+      height: 3.2%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
   - type: group
     name: windCard
     geometry:
@@ -958,12 +1123,23 @@ items:
             group: global.room
             matchAll: true
           tracking: -0.03
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '00'
       geometry:
         x: 6.579%
         y: 13.22%
         width: 42.763%
         height: 30.508%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: polar
       name: rose
       plot: rose
@@ -1082,12 +1258,23 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '00'
       geometry:
         x: 6.579%
         y: 66.78%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: text
       text: PEAK
       font: Barlow Condensed
@@ -1118,12 +1305,23 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '00'
       geometry:
         x: 36.442%
         y: 66.78%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: text
       text: FROM
       font: Barlow Condensed
@@ -1154,12 +1352,23 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: SSW
       geometry:
         x: 66.299%
         y: 66.78%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: text
       text: AVG
       font: Barlow Condensed
@@ -1190,12 +1399,23 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '00'
       geometry:
         x: 6.579%
         y: 85.763%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: text
       text: MAX
       font: Barlow Condensed
@@ -1226,12 +1446,23 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '00'
       geometry:
         x: 36.442%
         y: 85.763%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: text
       text: +6 H
       font: Barlow Condensed
@@ -1262,16 +1493,31 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '00'
       geometry:
         x: 66.299%
         y: 85.763%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     border:
       enabled: true
       radius: 24px
-      fill: $surface
+      fill:
+        color: $surface
+        mix:
+          with: $series-6
+          by: 0.1
       weight: 0
   - type: group
     name: rainCard
@@ -1312,12 +1558,23 @@ items:
             group: global.room
             matchAll: true
           tracking: -0.03
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '0.00'
       geometry:
         x: 6.579%
         y: 13.22%
         width: 52.632%
         height: 30.508%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: text
       text: today
       font: $body
@@ -1397,12 +1654,23 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '0.00'
       geometry:
         x: 6.579%
         y: 66.78%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: text
       text: PEAK
       font: Barlow Condensed
@@ -1433,12 +1701,23 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '0.00'
       geometry:
         x: 36.442%
         y: 66.78%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: text
       text: +3 H
       font: Barlow Condensed
@@ -1469,12 +1748,23 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '0.00'
       geometry:
         x: 66.299%
         y: 66.78%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: text
       text: +6 H
       font: Barlow Condensed
@@ -1505,12 +1795,23 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '0.00'
       geometry:
         x: 6.579%
         y: 85.763%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: text
       text: +12 H
       font: Barlow Condensed
@@ -1541,12 +1842,23 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '0.00'
       geometry:
         x: 36.442%
         y: 85.763%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: text
       text: LOW CLD
       font: Barlow Condensed
@@ -1577,6 +1889,12 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '000'
         format:
           unit_symbol: false
@@ -1585,10 +1903,19 @@ items:
         y: 85.763%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     border:
       enabled: true
       radius: 24px
-      fill: $surface
+      fill:
+        color: $surface
+        mix:
+          with: $info
+          by: 0.1
       weight: 0
   - type: group
     name: pressureCard
@@ -1665,12 +1992,23 @@ items:
             group: global.room
             matchAll: true
           tracking: -0.03
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '00.00'
       geometry:
         x: 6.579%
         y: 13.22%
         width: 86.842%
         height: 30.508%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: switch
       name: tendency
       hold: 10m
@@ -1749,12 +2087,23 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '-0.00'
       geometry:
         x: 6.579%
         y: 66.78%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: text
       text: −24 H
       font: Barlow Condensed
@@ -1785,12 +2134,23 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '-0.00'
       geometry:
         x: 36.442%
         y: 66.78%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: text
       text: +12 H
       font: Barlow Condensed
@@ -1821,12 +2181,23 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '00.00'
       geometry:
         x: 66.299%
         y: 66.78%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: text
       text: HIGH
       font: Barlow Condensed
@@ -1857,12 +2228,23 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '00.00'
       geometry:
         x: 6.579%
         y: 85.763%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: text
       text: LOW
       font: Barlow Condensed
@@ -1893,12 +2275,23 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '00.00'
       geometry:
         x: 36.442%
         y: 85.763%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: text
       text: +24 H
       font: Barlow Condensed
@@ -1929,16 +2322,31 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '00.00'
       geometry:
         x: 66.299%
         y: 85.763%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     border:
       enabled: true
       radius: 24px
-      fill: $surface
+      fill:
+        color: $surface
+        mix:
+          with: $series-4
+          by: 0.1
       weight: 0
   - type: group
     name: skyCard
@@ -1979,6 +2387,12 @@ items:
             group: global.room
             matchAll: true
           tracking: -0.03
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '000'
         format:
           unit_symbol: false
@@ -1987,6 +2401,11 @@ items:
         y: 13.22%
         width: 46.053%
         height: 30.508%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: realtime.bar
       key: environment.clouds.cover.low
       title: false
@@ -2165,12 +2584,23 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: 00%
       geometry:
         x: 6.579%
         y: 66.78%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: text
       text: DEW
       font: Barlow Condensed
@@ -2201,12 +2631,23 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: 00°
       geometry:
         x: 36.442%
         y: 66.78%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: text
       text: VPD
       font: Barlow Condensed
@@ -2237,6 +2678,12 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '0.00'
         format:
           unit_symbol: false
@@ -2245,6 +2692,11 @@ items:
         y: 66.78%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: text
       text: +6 H
       font: Barlow Condensed
@@ -2275,6 +2727,12 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '000'
         format:
           unit_symbol: false
@@ -2283,6 +2741,11 @@ items:
         y: 85.763%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: text
       text: HI CLD
       font: Barlow Condensed
@@ -2313,6 +2776,12 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: '000'
         format:
           unit_symbol: false
@@ -2321,6 +2790,11 @@ items:
         y: 85.763%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     - type: text
       text: MIN RH
       font: Barlow Condensed
@@ -2351,16 +2825,31 @@ items:
           matchingGroup:
             group: global.detail
             matchAll: true
+          alignment: BottomLeft
+          margins:
+            left: 0
+            right: 10%
+            top: 0
+            bottom: 0
         format-hint: 00%
       geometry:
         x: 66.299%
         y: 85.763%
         width: 27.122%
         height: 10.847%
+      margins:
+        left: 0
+        right: 0
+        top: 0
+        bottom: 0
     border:
       enabled: true
       radius: 24px
-      fill: $surface
+      fill:
+        color: $surface
+        mix:
+          with: $muted
+          by: 0.1
       weight: 0
   - type: group
     name: todayCard
@@ -2415,12 +2904,23 @@ items:
               color: $info
               font: $mono
               weight: Bold
+              alignment: TopRight
+              margins:
+                left: 0
+                right: 10%
+                top: 0
+                bottom: 0
             format-hint: '00'
           geometry:
             x: 60.0%
             y: -1.544%
             width: 40.0%
             height: 8.88%
+          margins:
+            left: 0
+            right: 0
+            top: 0
+            bottom: 0
         - type: polar
           name: radar
           plot: radar
@@ -2473,12 +2973,23 @@ items:
               matchingGroup:
                 group: global.callsign
                 matchAll: true
+              alignment: BottomLeft
+              margins:
+                left: 0
+                right: 10%
+                top: 0
+                bottom: 0
             format-hint: AAL000
           geometry:
             x: 0.0%
             y: 90.734%
             width: 31.231%
             height: 12.355%
+          margins:
+            left: 0
+            right: 0
+            top: 0
+            bottom: 0
         - type: text
           text: NM
           font: Barlow Condensed
@@ -2509,12 +3020,23 @@ items:
               matchingGroup:
                 group: global.detail
                 matchAll: true
+              alignment: BottomLeft
+              margins:
+                left: 0
+                right: 10%
+                top: 0
+                bottom: 0
             format-hint: '00.0'
           geometry:
             x: 34.388%
             y: 90.734%
             width: 31.231%
             height: 12.355%
+          margins:
+            left: 0
+            right: 0
+            top: 0
+            bottom: 0
         - type: text
           text: FT
           font: Barlow Condensed
@@ -2545,12 +3067,23 @@ items:
               matchingGroup:
                 group: global.detail
                 matchAll: true
+              alignment: BottomLeft
+              margins:
+                left: 0
+                right: 10%
+                top: 0
+                bottom: 0
             format-hint: '00000'
           geometry:
             x: 68.769%
             y: 90.734%
             width: 31.231%
             height: 12.355%
+          margins:
+            left: 0
+            right: 0
+            top: 0
+            bottom: 0
         when: aircraft.active
       - type: group
         name: dayClock
@@ -2618,12 +3151,23 @@ items:
               matchingGroup:
                 group: global.detail
                 matchAll: true
+              alignment: BottomLeft
+              margins:
+                left: 0
+                right: 10%
+                top: 0
+                bottom: 0
             format-hint: 00°
           geometry:
             x: 0.0%
             y: 90.734%
             width: 31.231%
             height: 12.355%
+          margins:
+            left: 0
+            right: 0
+            top: 0
+            bottom: 0
         - type: text
           text: AVG
           font: Barlow Condensed
@@ -2654,12 +3198,23 @@ items:
               matchingGroup:
                 group: global.detail
                 matchAll: true
+              alignment: BottomLeft
+              margins:
+                left: 0
+                right: 10%
+                top: 0
+                bottom: 0
             format-hint: 00°
           geometry:
             x: 34.388%
             y: 90.734%
             width: 31.231%
             height: 12.355%
+          margins:
+            left: 0
+            right: 0
+            top: 0
+            bottom: 0
         - type: text
           text: +24 H
           font: Barlow Condensed
@@ -2690,14 +3245,29 @@ items:
               matchingGroup:
                 group: global.detail
                 matchAll: true
+              alignment: BottomLeft
+              margins:
+                left: 0
+                right: 10%
+                top: 0
+                bottom: 0
             format-hint: 00°
           geometry:
             x: 68.769%
             y: 90.734%
             width: 31.231%
             height: 12.355%
+          margins:
+            left: 0
+            right: 0
+            top: 0
+            bottom: 0
     border:
       enabled: true
       radius: 24px
-      fill: $surface
+      fill:
+        color: $surface
+        mix:
+          with: $accent
+          by: 0.1
       weight: 0
