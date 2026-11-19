@@ -127,7 +127,7 @@ items:
         font: $mono
         weight: Bold
         matchingGroup:
-          group: global.hilo
+          group: global.room
           matchAll: true
       format-hint: '00'
       format:
@@ -165,7 +165,7 @@ items:
         font: $mono
         weight: Bold
         matchingGroup:
-          group: global.hilo
+          group: global.room
           matchAll: true
       format-hint: '00'
       format:
@@ -222,7 +222,7 @@ items:
         weight: Light
         italic: true
         matchingGroup:
-          group: global.line
+          group: global.detail
           matchAll: true
   - type: text
     text: feels
@@ -236,7 +236,7 @@ items:
       width: 3.6%
       height: 2.4%
     matchingGroup:
-      group: global.line
+      group: global.detail
       matchAll: true
     italic: true
   - type: realtime.text
@@ -251,7 +251,7 @@ items:
         font: $mono
         weight: SemiBold
         matchingGroup:
-          group: global.line
+          group: global.detail
           matchAll: true
       format-hint: 00°
     geometry:
@@ -271,7 +271,7 @@ items:
       width: 2.8%
       height: 2.4%
     matchingGroup:
-      group: global.line
+      group: global.detail
       matchAll: true
     italic: true
   - type: realtime.text
@@ -286,7 +286,7 @@ items:
         font: $mono
         weight: SemiBold
         matchingGroup:
-          group: global.line
+          group: global.detail
           matchAll: true
       format-hint: 00°
     geometry:
@@ -359,6 +359,9 @@ items:
         color: $text
         font: $mono
         weight: Light
+        matchingGroup:
+          group: global.room
+          matchAll: true
         tracking: -0.04
       format-hint: 00h 00m
       format: duration
@@ -423,7 +426,7 @@ items:
         font: $mono
         weight: Regular
         matchingGroup:
-          group: global.tile
+          group: global.detail
           matchAll: true
       format-hint: 0:00
       format: '%-I:%M'
@@ -460,7 +463,7 @@ items:
         font: $mono
         weight: Regular
         matchingGroup:
-          group: global.tile
+          group: global.detail
           matchAll: true
       format-hint: 0:00
       format: '%-I:%M'
@@ -497,7 +500,7 @@ items:
         font: $mono
         weight: Regular
         matchingGroup:
-          group: global.tile
+          group: global.detail
           matchAll: true
       format-hint: '000'
     geometry:
@@ -511,7 +514,7 @@ items:
       x: 1.5%
       y: 28.5%
       width: 69.5%
-      height: 37%
+      height: 23.5%
     timeframe:
       days: 2
       hours: 18
@@ -626,6 +629,92 @@ items:
           radius: 0.5
           glow: *id001
         smooth: false
+  - preset: table
+    name: hours
+    geometry:
+      x: 2%
+      y: 52.6%
+      width: 68.5%
+      height: 13.4%
+    props:
+      columns:
+      - head: +2 H
+      - head: +4 H
+      - head: +6 H
+      - head: +8 H
+      - head: +10 H
+      - head: +12 H
+      - head: +14 H
+      - head: +16 H
+      rows:
+      - label: TEMP °F
+        color: $text
+        precision: 0
+        keys:
+        - at(environment.temperature.temperature, 2h)
+        - at(environment.temperature.temperature, 4h)
+        - at(environment.temperature.temperature, 6h)
+        - at(environment.temperature.temperature, 8h)
+        - at(environment.temperature.temperature, 10h)
+        - at(environment.temperature.temperature, 12h)
+        - at(environment.temperature.temperature, 14h)
+        - at(environment.temperature.temperature, 16h)
+      - label: RAIN in/h
+        color: $info
+        precision: 2
+        keys:
+        - at(environment.precipitation.precipitation, 2h)
+        - at(environment.precipitation.precipitation, 4h)
+        - at(environment.precipitation.precipitation, 6h)
+        - at(environment.precipitation.precipitation, 8h)
+        - at(environment.precipitation.precipitation, 10h)
+        - at(environment.precipitation.precipitation, 12h)
+        - at(environment.precipitation.precipitation, 14h)
+        - at(environment.precipitation.precipitation, 16h)
+      - label: WIND mph
+        color: $series-6
+        precision: 0
+        keys:
+        - at(environment.wind.speed.speed, 2h)
+        - at(environment.wind.speed.speed, 4h)
+        - at(environment.wind.speed.speed, 6h)
+        - at(environment.wind.speed.speed, 8h)
+        - at(environment.wind.speed.speed, 10h)
+        - at(environment.wind.speed.speed, 12h)
+        - at(environment.wind.speed.speed, 14h)
+        - at(environment.wind.speed.speed, 16h)
+      - label: CLOUD %
+        color: $muted
+        precision: 0
+        keys:
+        - at(environment.clouds.cover.cover, 2h)
+        - at(environment.clouds.cover.cover, 4h)
+        - at(environment.clouds.cover.cover, 6h)
+        - at(environment.clouds.cover.cover, 8h)
+        - at(environment.clouds.cover.cover, 10h)
+        - at(environment.clouds.cover.cover, 12h)
+        - at(environment.clouds.cover.cover, 14h)
+        - at(environment.clouds.cover.cover, 16h)
+      - label: HUMID %
+        color: $info
+        precision: 0
+        keys:
+        - at(environment.humidity.humidity, 2h)
+        - at(environment.humidity.humidity, 4h)
+        - at(environment.humidity.humidity, 6h)
+        - at(environment.humidity.humidity, 8h)
+        - at(environment.humidity.humidity, 10h)
+        - at(environment.humidity.humidity, 12h)
+        - at(environment.humidity.humidity, 14h)
+        - at(environment.humidity.humidity, 16h)
+      labelWidth: 11%
+      headHeight: 15%
+      rowGap: 0px
+      font: $mono
+      labelFont: Barlow Condensed
+      alignment: Right
+      titleGroup: global.hoursHead
+      valueGroup: global.detail
   - type: text
     text: BEDROOM
     font: Barlow Condensed
@@ -727,7 +816,7 @@ items:
         font: $mono
         weight: Regular
         matchingGroup:
-          group: global.roomTile
+          group: global.detail
           matchAll: true
       format-hint: 00%
     geometry:
@@ -763,7 +852,7 @@ items:
         font: $mono
         weight: Regular
         matchingGroup:
-          group: global.roomTile
+          group: global.detail
           matchAll: true
       format-hint: 00°
     geometry:
@@ -872,7 +961,7 @@ items:
         font: $mono
         weight: Regular
         matchingGroup:
-          group: global.roomTile
+          group: global.detail
           matchAll: true
       format-hint: 00%
     geometry:
@@ -908,7 +997,7 @@ items:
         font: $mono
         weight: Regular
         matchingGroup:
-          group: global.roomTile
+          group: global.detail
           matchAll: true
       format-hint: 00°
     geometry:
@@ -989,7 +1078,7 @@ items:
           font: $mono
           weight: Bold
           matchingGroup:
-            group: global.hero
+            group: global.room
             matchAll: true
           tracking: -0.03
         format-hint: '00'
@@ -1041,7 +1130,7 @@ items:
           font: $mono
           weight: Regular
           matchingGroup:
-            group: global.tile
+            group: global.detail
             matchAll: true
         format-hint: '00'
       geometry:
@@ -1077,7 +1166,7 @@ items:
           font: $mono
           weight: Regular
           matchingGroup:
-            group: global.tile
+            group: global.detail
             matchAll: true
         format-hint: '00'
       geometry:
@@ -1113,7 +1202,7 @@ items:
           font: $mono
           weight: Regular
           matchingGroup:
-            group: global.tile
+            group: global.detail
             matchAll: true
         format-hint: SSW
       geometry:
@@ -1162,7 +1251,7 @@ items:
           font: $mono
           weight: Bold
           matchingGroup:
-            group: global.hero
+            group: global.room
             matchAll: true
           tracking: -0.03
         format-hint: '0.00'
@@ -1248,7 +1337,7 @@ items:
           font: $mono
           weight: Regular
           matchingGroup:
-            group: global.tile
+            group: global.detail
             matchAll: true
         format-hint: '0.00'
       geometry:
@@ -1284,7 +1373,7 @@ items:
           font: $mono
           weight: Regular
           matchingGroup:
-            group: global.tile
+            group: global.detail
             matchAll: true
         format-hint: '0.00'
       geometry:
@@ -1320,7 +1409,7 @@ items:
           font: $mono
           weight: Regular
           matchingGroup:
-            group: global.tile
+            group: global.detail
             matchAll: true
         format-hint: '0.00'
       geometry:
@@ -1405,7 +1494,7 @@ items:
           font: $mono
           weight: Bold
           matchingGroup:
-            group: global.hero
+            group: global.room
             matchAll: true
           tracking: -0.03
         format-hint: '00.00'
@@ -1490,7 +1579,7 @@ items:
           font: $mono
           weight: Regular
           matchingGroup:
-            group: global.tile
+            group: global.detail
             matchAll: true
         format-hint: '-0.00'
       geometry:
@@ -1526,7 +1615,7 @@ items:
           font: $mono
           weight: Regular
           matchingGroup:
-            group: global.tile
+            group: global.detail
             matchAll: true
         format-hint: '-0.00'
       geometry:
@@ -1562,7 +1651,7 @@ items:
           font: $mono
           weight: Regular
           matchingGroup:
-            group: global.tile
+            group: global.detail
             matchAll: true
         format-hint: '00.00'
       geometry:
@@ -1611,7 +1700,7 @@ items:
           font: $mono
           weight: Bold
           matchingGroup:
-            group: global.hero
+            group: global.room
             matchAll: true
           tracking: -0.03
         format-hint: '000'
@@ -1798,7 +1887,7 @@ items:
           font: $mono
           weight: Regular
           matchingGroup:
-            group: global.tile
+            group: global.detail
             matchAll: true
         format-hint: '000'
         format:
@@ -1836,7 +1925,7 @@ items:
           font: $mono
           weight: Regular
           matchingGroup:
-            group: global.tile
+            group: global.detail
             matchAll: true
         format-hint: '0.00'
         format:
@@ -1859,34 +1948,116 @@ items:
       width: 18.24%
       height: 29.5%
     items:
-    - type: text
-      text: TODAY ROUND THE CLOCK
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $accent
-      alignment: BottomLeft
+    - type: switch
+      name: skyOrClock
+      hold: 2m
+      fade: 0.4s
       geometry:
         x: 6.579%
         y: 6.102%
         width: 86.842%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: polar
-      name: dayClock
-      plot: clock
-      key: environment.temperature.temperature
-      window: today
-      gradient: $temperature
-      marks: false
-      geometry:
-        x: 4.386%
-        y: 12.542%
-        width: 91.228%
-        height: 81.356%
+        height: 87.797%
+      items:
+      - type: group
+        name: planes
+        geometry:
+          x: 0%
+          y: 0%
+          width: 100%
+          height: 100%
+        items:
+        - type: text
+          text: OVERHEAD · NM
+          font: Barlow Condensed
+          weight: SemiBold
+          color: $info
+          alignment: BottomLeft
+          geometry:
+            x: 0.0%
+            y: 0.0%
+            width: 60.0%
+            height: 5.792%
+          matchingGroup:
+            group: global.cap
+            matchAll: true
+          tracking: 0.16
+          format-hint: HEADING
+        - type: realtime.text
+          key: aircraft.count
+          title: false
+          alignment: TopRight
+          display:
+            unitPosition: Hidden
+            precision: 0
+            valueLabel:
+              color: $info
+              font: $mono
+              weight: Bold
+            format-hint: '00'
+          geometry:
+            x: 60.0%
+            y: -1.544%
+            width: 40.0%
+            height: 8.88%
+        - type: polar
+          name: radar
+          plot: radar
+          prefix: aircraft
+          slots: 15
+          max: 30
+          labels: 4
+          sweep: true
+          rings: 3
+          accent: $info
+          gradient:
+          - at: 0
+            color: $bad
+          - at: 8000
+            color: $warn
+          - at: 40000
+            color: $info
+          geometry:
+            x: -2.525%
+            y: 7.336%
+            width: 105.051%
+            height: 92.664%
+        when: aircraft.active
+      - type: group
+        name: dayClock
+        geometry:
+          x: 0%
+          y: 0%
+          width: 100%
+          height: 100%
+        items:
+        - type: text
+          text: TODAY ROUND THE CLOCK
+          font: Barlow Condensed
+          weight: SemiBold
+          color: $accent
+          alignment: BottomLeft
+          geometry:
+            x: 0.0%
+            y: 0.0%
+            width: 100.0%
+            height: 5.792%
+          matchingGroup:
+            group: global.cap
+            matchAll: true
+          tracking: 0.16
+          format-hint: HEADING
+        - type: polar
+          name: dayClock
+          plot: clock
+          key: environment.temperature.temperature
+          window: today
+          gradient: $temperature
+          marks: false
+          geometry:
+            x: -2.525%
+            y: 7.336%
+            width: 105.051%
+            height: 92.664%
     border:
       enabled: true
       radius: 24px

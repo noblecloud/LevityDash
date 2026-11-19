@@ -11,7 +11,14 @@ HEADER = default.HEADER.replace('The default dashboard for OpenMeteo, the foreca
 
 
 def data():
-	return default.data(ROOMS, 'home')
+	# Planes over the house, so the render shows the tracker: the radar scenario's aircraft, as the plugin publishes them.
+	d = default.data(ROOMS, 'home')
+	import yaml
+	from pathlib import Path
+	near = yaml.safe_load((Path(__file__).parent.parent / 'scenarios' / 'aircraft-near.yaml').read_text())['keys']
+	d.keys.update({k: v for k, v in near.items() if k.startswith('aircraft.')})
+	d.keys['aircraft.active'] = {'value': 1, 'unit': 'int', 'title': 'A plane is near'}
+	return d
 
 
 def board():

@@ -26,7 +26,7 @@ NAME = 'table'
 #: property name -> (default, doc). The order is the order of the Studio's property list.
 PROPS: Dict[str, tuple] = {
 	'columns': ([], 'The columns: a list of {head, unit, key, precision, format, hint, color}. `key` may hold {row}, replaced by each row\'s `row` name'),
-	'rows': ([], 'The rows: a list of {label, row, keys, color}. `keys` (one per column, null for an empty cell) replaces the columns\' keys for that row'),
+	'rows': ([], 'The rows: a list of {label, row, keys, color, precision, format}. `keys` (one per column, null for an empty cell) replaces the columns\' keys for that row'),
 	'labelWidth': ('1.2fr', 'Width of the label column, as a grid track size'),
 	'headHeight': ('1fr', 'Height of the head row, as a grid track size; the rows share the rest equally'),
 	'gutter': ('$space_4', 'Space between columns'),
@@ -42,7 +42,7 @@ PROPS: Dict[str, tuple] = {
 }
 
 _COLUMN = {'head', 'unit', 'key', 'precision', 'format', 'hint', 'color'}
-_ROW = {'label', 'row', 'keys', 'color'}
+_ROW = {'label', 'row', 'keys', 'color', 'precision', 'format'}
 _ALIGN = {'Left': 'CenterLeft', 'Center': 'Center', 'Right': 'CenterRight'}
 
 
@@ -121,7 +121,10 @@ def build(props: Dict[str, Any]) -> dict:
 				valueLabel['font'] = props['font']
 			display: Dict[str, Any] = {'unitPosition': 'Hidden', 'valueLabel': valueLabel}
 			for name in ('precision', 'format'):
-				if column.get(name) is not None:
+				# A row's own precision or format wins over its column's: a row of rain wants two places where a row of wind wants none.
+				if row.get(name) is not None:
+					display[name] = row[name]
+				elif column.get(name) is not None:
 					display[name] = column[name]
 			if column.get('hint') is not None:
 				display['format-hint'] = column['hint']
