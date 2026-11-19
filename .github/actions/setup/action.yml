@@ -13,6 +13,15 @@ runs:
         sudo apt-get install -y -qq libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3 \
           libglib2.0-0 libxcb-cursor0 locales fonts-dejavu-core
         sudo locale-gen en_US.UTF-8
+    - name: Poetry download cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/pypoetry/artifacts
+          ~/.cache/pypoetry/cache
+          ~/.cache/pip
+        key: poetry-${{ runner.os }}-py3.14-${{ hashFiles('LevityDash/poetry.lock') }}
+        restore-keys: poetry-${{ runner.os }}-py3.14-
     - name: unitcorn (path dependency, WeatherUnits repo)
       shell: bash
       run: git clone --depth 1 --branch dev https://github.com/noblecloud/unitcorn.git WeatherUnits
