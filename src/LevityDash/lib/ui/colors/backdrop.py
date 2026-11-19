@@ -3,6 +3,7 @@
 A dashboard writes it as a root key, ``background:``, beside ``theme:``::
 
 	theme: dusk
+	background: sky                       # the sun-and-cloud sky: the three lines below, written for you
 	background: $sky                      # a scale of the theme
 	background: $background               # a colour token, same as the default
 	background: '#101820'                 # a raw colour
@@ -107,9 +108,39 @@ def _gradient(spec: Any, angle: float) -> Backdrop:
 FOLLOW_KEYS = frozenset({'by', 'top', 'bottom', 'angle', 'haze', 'haze-strength'})
 HAZE_STRENGTH = 0.8
 
+#: What ``background: sky`` stands for: the sun's height, the theme's two sky scales, greyed by cloud cover.
+SKY = {
+	'by': 'astronomy.sun.elevation',
+	'top': '$sky-top',
+	'bottom': '$sky-horizon',
+	'haze': 'environment.clouds.cover.cover',
+}
+
+
+def normalize(spec: Any) -> Any:
+	"""``spec`` with the sky shorthand written out.
+
+	``background: sky`` is the whole following ground. ``{sky: true, angle: 170}`` (or ``sky: {angle: 170}``) is the same
+	with a setting changed; any key of a following ground (``by``, ``top``, ``bottom``, ``haze``, ``haze-strength``)
+	overrides its default, and ``haze: false`` leaves cloud out. Anything else is returned as it came.
+	"""
+	if isinstance(spec, str) and spec.strip().lower() == 'sky':
+		return dict(SKY)
+	if isinstance(spec, dict) and 'sky' in spec:
+		rest = {k: v for k, v in spec.items() if k != 'sky'}
+		extra = spec['sky'] if isinstance(spec['sky'], dict) else {}
+		if spec['sky'] in (False, None):
+			return rest
+		out = {**SKY, **extra, **rest}
+		if out.get('haze') in (False, None):
+			del out['haze']
+		return out
+	return spec
+
 
 def follows(spec: Any) -> Optional[str]:
 	"""The key or expression a ``background:`` follows (its ``by``), or ``None`` for a ground that does not move."""
+	spec = normalize(spec)
 	if isinstance(spec, dict) and 'by' in spec:
 		by = spec['by']
 		return by if isinstance(by, str) and by.strip() else None
@@ -118,6 +149,7 @@ def follows(spec: Any) -> Optional[str]:
 
 def hazeKey(spec: Any) -> Optional[str]:
 	"""The key or expression a following ground's ``haze`` reads (cloud cover, a percentage), or ``None``."""
+	spec = normalize(spec)
 	if isinstance(spec, dict) and 'by' in spec:
 		haze = spec.get('haze')
 		return haze if isinstance(haze, str) and haze.strip() else None
@@ -174,6 +206,7 @@ def decode(spec: Any = None, active: Optional[_theme.Theme] = None, value: Optio
 	"""
 	active = active or _theme.active()
 	angle = DEFAULT_ANGLE
+	spec = normalize(spec)
 	if isinstance(spec, dict) and 'by' in spec:
 		return _follow(spec, value, active, haze)
 	if isinstance(spec, dict) and 'gradient' in spec:
@@ -202,4 +235,4 @@ def _isColorTuple(spec) -> bool:
 	return isinstance(spec, (list, tuple)) and len(spec) in (3, 4) and all(isinstance(v, (int, float)) for v in spec)
 
 
-__all__ = ('BACKDROP_SCALE', 'Backdrop', 'DEFAULT_ANGLE', 'decode', 'follows', 'hazeKey', 'linearGradient')
+__all__ = ('BACKDROP_SCALE', 'Backdrop', 'DEFAULT_ANGLE', 'SKY', 'decode', 'follows', 'hazeKey', 'linearGradient', 'normalize')

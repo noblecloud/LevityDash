@@ -174,6 +174,8 @@ items:
 background: {by: astronomy.sun.elevation, top: $sky-top, bottom: $sky-horizon, haze: environment.clouds.cover.cover}
 ```
 
+Any dashboard can take the whole thing, sun and cloud, with one line, `background: sky`. Change a setting with `background: {sky: true, angle: 170}`, or leave cloud out with `haze: false`; any key below overrides its default. The ground repaints when the sun moves half a degree, about every two minutes, so it costs almost nothing on a slow display.
+
 `by` is the key. `top` and `bottom` are scale tokens, or stops written in place. `angle` is optional (CSS degrees, default 180). `haze` is a second key, cloud cover as a percentage (a plain number is read as a share from 0 to 1). Cloud takes colour out of the sky: `haze-strength` (default `0.8`) is the share of chroma removed at 100 %, at the same lightness. A value past the first or last stop takes that stop's colour. Until the key has a value, the ground is the theme's `background`.
 
 `astronomy.sun.elevation` is the sun's height above the horizon in degrees, from the Astronomy plugin. The `default` theme defines `sky-top` and `sky-horizon` for it: navy at night, purple then orange near the horizon, blue by day. They stay dark enough for light text. A theme can recolour them under `scales`.
