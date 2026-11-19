@@ -21,7 +21,7 @@ SECTIONS = {
 		('ColorMixin', 'Colour'), ('ColorGradientMixin', 'Colour with a gradient')],
 	'containers': [('CentralPanel', 'The dashboard root'), ('Stack', '`type: stack`'), ('StackedItem', 'On an item inside a stack'),
 		('DividerProperties', '`dividers:`'), ('ValueStack', '`type: value-stack`'), ('GridStack', '`type: grid`'), ('SplitPanel', '`type: split`'),
-		('Switch', '`type: switch`'), ('TitledPanel', '`type: titled-group`')],
+		('Switch', '`type: switch`'), ('Band', '`type: band`'), ('TitledPanel', '`type: titled-group`')],
 	'text': [('Label', '`type: label` / `type: text`'), ('TitleLabel', 'A title label'), ('ClockComponent', 'A clock cell')],
 	'realtime': [('Realtime', '`type: realtime` (and `.text`, `.gauge`, `.bar`)'), ('Connection', '`connection:`'),
 		('MeasurementDisplayProperties', '`display:` on a text reading'), ('DisplayLabel', '`display:` value and unit labels'),
