@@ -118,6 +118,15 @@ keys:
     value: 1
     unit: int
     title: A plane is near
+  aircraft.1.callsign:
+    value: N172SP
+    unit: str
+  aircraft.1.distance:
+    value: 6.1
+    unit: int
+  aircraft.1.altitude:
+    value: 2500
+    unit: int
   indoor.temperature.temperature#bedroom:
     value: 67.7
     unit: f
@@ -154,9 +163,6 @@ keys:
     value: 3
     unit: int
     title: Aircraft overhead
-  aircraft.1.callsign:
-    value: N172SP
-    unit: str
   aircraft.1.type:
     value: C172
     unit: str
@@ -168,12 +174,6 @@ keys:
     unit: str
   aircraft.1.bearing:
     value: 203
-    unit: int
-  aircraft.1.distance:
-    value: 6.1
-    unit: int
-  aircraft.1.altitude:
-    value: 2500
     unit: int
   aircraft.1.speed:
     value: 96
