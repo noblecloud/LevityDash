@@ -867,7 +867,7 @@ items:
       top: 0
       bottom: 0
   - type: text
-    text: FEELS
+    text: BATTERY
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
@@ -883,14 +883,14 @@ items:
     tracking: 0.16
     format-hint: HEADING
   - type: realtime.text
-    key: indoor.temperature.heatIndex#bedroom
+    key: indoor.battery.battery#bedroom
     title: false
     alignment: BottomRight
     display:
       unitPosition: Inline
       precision: 0
       valueLabel:
-        color: $warn
+        color: $good
         font: $mono
         weight: Regular
         matchingGroup:
@@ -902,7 +902,7 @@ items:
           right: 0
           top: 0
           bottom: 0
-      format-hint: 00°
+      format-hint: 100%
     geometry:
       x: 93.3%
       y: 30.4%
@@ -1139,7 +1139,7 @@ items:
       top: 0
       bottom: 0
   - type: text
-    text: FEELS
+    text: BATTERY
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
@@ -1155,14 +1155,14 @@ items:
     tracking: 0.16
     format-hint: HEADING
   - type: realtime.text
-    key: indoor.temperature.heatIndex#terrarium
+    key: indoor.battery.battery#terrarium
     title: false
     alignment: BottomRight
     display:
       unitPosition: Inline
       precision: 0
       valueLabel:
-        color: $warn
+        color: $good
         font: $mono
         weight: Regular
         matchingGroup:
@@ -1174,7 +1174,7 @@ items:
           right: 0
           top: 0
           bottom: 0
-      format-hint: 00°
+      format-hint: 100%
     geometry:
       x: 93.3%
       y: 50.0%
@@ -1745,7 +1745,7 @@ items:
         tracking: 0.16
         format-hint: HEADING
       - type: realtime.text
-        key: environment.precipitation.daily
+        key: environment.precipitation.rainDaily
         title: false
         alignment: BottomLeft
         display:
