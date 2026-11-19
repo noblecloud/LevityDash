@@ -24,7 +24,7 @@ GLOW = {'strength': 1.2, 'reach': 2.0, 'passes': 6}
 INDOOR = [('INDOOR', '', '$series-2')]
 LABEL = 'Barlow Condensed'
 CAP = 1.5
-TILE = 5.2
+TILE = 3.2  # the detail size: every reading read up close has a value box this tall
 
 
 def data(rooms=INDOOR, name='default'):
@@ -102,7 +102,12 @@ def cap_(s, geom, color='$faint', **kw):
 
 def num(key, geom, color='$text', weight='Regular', font='$mono', **kw):
 	"""A number. Fixed-width (Roboto Mono) unless it is the one big temperature, so digits line up and do not jump."""
-	return val(key, geom, color, font=font, weight=weight, **kw)
+	item = val(key, geom, color, font=font, weight=weight, **kw)
+	# No inset: the ink's left edge sits on the box's edge, so a number lines up under its caption.
+	item['margins'] = {'left': 0, 'right': 0, 'top': 0, 'bottom': 0}
+	item['display']['valueLabel'].setdefault('alignment', item['alignment'])
+	item['display']['valueLabel']['margins'] = {'left': 0, 'right': '10%', 'top': 0, 'bottom': 0}  # a gutter to the next column
+	return item
 
 
 def tile(caption, key, x, y, w, color='$text', h=TILE, group='global.detail', **kw):
@@ -150,12 +155,11 @@ def room(caption, sfx, color, x, y, w, h, i):
 		]
 		third = w / 3
 		for j, (name, k, c, kw) in enumerate(rows):
-			out += tile(name, k, x + j * third, y + h - 6.8, third - 0.6, c, h=4.4, group='global.detail', **kw)
+			out += tile(name, k, x + j * third, y + h - 5.4, third - 0.6, c, h=TILE, group='global.detail', **kw)
 		return out
 	# Short: the number over its day on the left, two readings stacked on the right.
 	hh = h - CAP - 0.8
 	left = w * 0.6
-	step = hh / len(rows)
 	out += [
 		mini(temp, g(x, y + CAP + 0.8, left - 0.8, hh), color=color, hours=24, past=True, top='45%', bottom='0%', opacity=0.8, fill=0.3, weight=0.5,
 		     glow=GLOW),
@@ -163,7 +167,7 @@ def room(caption, sfx, color, x, y, w, h, i):
 		    group='global.room', align='TopLeft'),
 	]
 	for j, (name, k, c, kw) in enumerate(rows):
-		out += tile(name, k, x + left, y + CAP + 0.8 + j * step, w - left, c, h=step - CAP - 1.6, group='global.detail', **kw)
+		out += tile(name, k, x + left, y + j * h / len(rows), w - left, c, h=TILE, group='global.detail', **kw)
 	return out
 
 
@@ -175,12 +179,12 @@ def board(rooms=INDOOR):
 	x = 39.5
 	B += [
 		cap_('OUTSIDE', g(x, 2.8, 12, CAP), '$accent'),
-		num(T, g(x - 0.4, 4.6, 16, 15.6), {'scale': '$temperature', 'of': T}, unit='Inline', hint='00°', weight='Black', tracking=-0.04, font='$body'),
-		cap_('HIGH', g(x + 16.6, 4.8, 7, CAP)),
-		num('environment.temperature.high', g(x + 16.6, 6.8, 8, 5.8), '$bad', hint='00', weight='Bold', group='global.room',
+		num(T, g(x, 4.6, 15.4, 15.6), {'scale': '$temperature', 'of': T}, unit='Inline', hint='00°', weight='Black', tracking=-0.04, font='$body'),
+		cap_('HIGH', g(x + 16.6, 2.8, 7, CAP)),
+		num('environment.temperature.high', g(x + 16.6, 4.6, 8, 5.8), '$bad', hint='00', weight='Bold', group='global.room',
 		    fmt={'unit_symbol': False}),
-		cap_('LOW', g(x + 16.6, 13.4, 7, CAP)),
-		num('environment.temperature.low', g(x + 16.6, 15.4, 8, 5.8), '$info', hint='00', weight='Bold', group='global.room',
+		cap_('LOW', g(x + 16.6, 12.0, 7, CAP)),
+		num('environment.temperature.low', g(x + 16.6, 13.8, 8, 5.8), '$info', hint='00', weight='Bold', group='global.room',
 		    fmt={'unit_symbol': False}),
 		# The day's low to high on a 30 to 100 °F track, the temperature now as a line across it.
 		bar(T, g(x, 20.9, 24.6, 2.2), 30, 100, track={'weight': '42%', 'color': '$rule'},
@@ -205,9 +209,9 @@ def board(rooms=INDOOR):
 		# One cell for each hour of daylight still to come, lit from warm to the evening colour.
 		bar('astronomy.sun.remaining', g(x, 21.2, 18, 2.2), 0, 960, track={'weight': '100%', 'color': '$rule', 'segments': 16, 'gap': '18%'},
 		    fill={'gradient': {0: '$accent', 1: '$warn'}, 'segments': 16, 'gap': '18%', 'weight': '100%', 'glow': GLOW}),
-		*tile('SUNRISE', f'{L}.sunrise', x + 19.8, 4.6, 9.6, '$warn', fmt='%-I:%M', hint='0:00'),
-		*tile('SUNSET', f'{L}.sunset', x + 19.8, 12.2, 9.6, '$accent', fmt='%-I:%M', hint='0:00'),
-		*tile('SUN · W/M²', f'{L}.irradiance.irradiance', x + 19.8, 19.8, 9.6, '$warn', hint='000', h=4.4),
+		*tile('SUNRISE', f'{L}.sunrise', x + 19.8, 2.8, 9.6, '$warn', fmt='%-I:%M', hint='0:00'),
+		*tile('SUNSET', f'{L}.sunset', x + 19.8, 10.4, 9.6, '$accent', fmt='%-I:%M', hint='0:00'),
+		*tile('SUN · W/M²', f'{L}.irradiance.irradiance', x + 19.8, 18.0, 9.6, '$warn', hint='000'),
 	]
 	# ------------------------------------------------------------ the days ahead
 	B.append({
@@ -257,7 +261,7 @@ def board(rooms=INDOOR):
 		out = []
 		for n, (caption, key, color, kw) in enumerate(entries):
 			r, c = divmod(n + start, 3)
-			out += tile(caption, key, x + c * (cell + 0.5), rows[r], cell, color, h=3.2, **kw)
+			out += tile(caption, key, x + c * (cell + 0.5), rows[r], cell, color, **kw)
 		return out
 
 	cards = {}
@@ -353,8 +357,11 @@ def board(rooms=INDOOR):
 			*six(x, [('−24 H', f'at({T}, -24h)', '$muted', {'hint': '00°', 'unit': 'Inline'}),
 			         ('AVG', f'avg({T}, 24h)', '$muted', {'hint': '00°', 'unit': 'Inline'}),
 			         ('+24 H', f'at({T}, 24h)', '$muted', {'hint': '00°', 'unit': 'Inline'})], start=3)], fill=None) | {'geometry': g(0, 0, 100, 100)}]}]
+	# Each card is the surface washed with its own colour, so the five read as five things at a glance.
+	tint = {'wind': '$series-6', 'rain': '$info', 'pressure': '$series-4', 'sky': '$muted', 'today': '$accent'}
 	for i, (name, items) in enumerate(cards.items()):
-		B.append(nest(f'{name}Card', (X[i], Y, CW, H), items))
+		fill = {'color': '$surface', 'mix': {'with': tint[name], 'by': 0.1}}
+		B.append(nest(f'{name}Card', (X[i], Y, CW, H), items, fill=fill))
 	return {'items': [{'type': 'group', 'name': 'board', 'items': B}]}
 
 
