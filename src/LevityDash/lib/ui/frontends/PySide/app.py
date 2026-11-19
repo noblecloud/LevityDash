@@ -203,6 +203,8 @@ class LevityScene(RendererScene):
 			value = float(getattr(reading, 'value', reading))
 		except (TypeError, ValueError):
 			return
+		# The sky moves a degree in about four minutes: repaint the whole ground on half degrees, not on every wobble.
+		value = round(value * 2) / 2
 		if value != self._backdropValue:
 			self._backdropValue = value
 			self.refreshBackdrop()

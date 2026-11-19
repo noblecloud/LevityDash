@@ -84,3 +84,18 @@ def test_haze_names_its_key_and_takes_colour_out_of_the_sky():
 	assert backdrop.decode(spec, value=40, haze=0) == clear
 	assert cloudy.stops[-1][1].saturationF() < clear.stops[-1][1].saturationF()
 	assert cloudy != clear
+
+
+def test_sky_shorthand_is_the_following_ground():
+	assert backdrop.normalize('sky') == backdrop.SKY
+	assert backdrop.follows('sky') == 'astronomy.sun.elevation'
+	assert backdrop.hazeKey('sky') == 'environment.clouds.cover.cover'
+	assert backdrop.decode('sky').flat  # no reading yet
+	assert backdrop.decode('sky', value=40) == backdrop.decode(backdrop.SKY, value=40)
+
+
+def test_sky_shorthand_takes_overrides_and_can_drop_cloud():
+	spec = {'sky': True, 'angle': 160, 'haze': False}
+	assert backdrop.hazeKey(spec) is None and backdrop.decode(spec, value=0).angle == 160
+	assert backdrop.hazeKey({'sky': {'haze': 'x.y'}}) == 'x.y'
+	assert backdrop.normalize({'sky': False, 'angle': 90}) == {'angle': 90}
