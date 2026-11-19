@@ -23,7 +23,7 @@ PROPS_KEY = lib.PROPS
 TEMPLATE_KEY = lib.TEMPLATE
 ITEMS_KEY = 'items'
 #: The item types that lay out other items.
-CONTAINER_TYPES = ('group', 'stack', 'grid', 'value-stack', 'titled-group', 'switch')
+CONTAINER_TYPES = ('group', 'stack', 'grid', 'value-stack', 'titled-group', 'switch', 'band')
 
 TYPES = ('number', 'size', 'text', 'key', 'color', 'bool', 'any')
 
@@ -118,7 +118,7 @@ def _without(node: Any, base: Any) -> Any:
 
 
 #: First keys that make a one-key item a shorthand a stack reads (`spacer: {…}`, `{type}: {…}`); a dotted data key does too.
-SHORT_TYPES = ('spacer', 'group', 'stack', 'grid', 'value-stack', 'titled-group', 'switch', 'text', 'label', 'graph', 'mini-graph', 'polar', 'clock', 'moon')
+SHORT_TYPES = ('spacer', 'group', 'stack', 'grid', 'value-stack', 'titled-group', 'switch', 'band', 'text', 'label', 'graph', 'mini-graph', 'polar', 'clock', 'moon')
 
 
 def holds(item: Any) -> bool:

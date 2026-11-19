@@ -36,7 +36,7 @@ Item types, at a glance:
 |---|---|---|
 | Container, free layout | `group`, `titled-group` | [dashboard.md](../dashboard.md) |
 | Container, automatic layout | `stack` (row or column, flex), `value-stack`, `grid` | [layout.md](layout.md) |
-| Container, conditional or interactive | `switch`, `split` | [switch.md](switch.md), [split.md](split.md) |
+| Container, conditional or interactive | `switch`, `band`, `split` | [switch.md](switch.md), [band.md](band.md), [split.md](split.md) |
 | Table | `preset: table` with `props: {columns, rows}` | [table.md](table.md) |
 | Text | `text` / `label` | [dashboard.md](../dashboard.md) |
 | One live reading | `realtime.text`, `realtime.gauge`, `realtime.bar` (plain `realtime` is the text one) | [dashboard.md](../dashboard.md), [bar.md](bar.md) |
@@ -336,6 +336,23 @@ Tag: `switch`  ·  class `Switch`
 | `hold` | `30.0` | Seconds a change must last before the switch flips, so a value hovering at a threshold does not flap. The first pick is instant. |
 | `fade` | `0.3` | Seconds the old child fades out and the new one fades in. `0` swaps at once. |
 | `cycle` | `0.0` | Seconds each matching child stays up before the next takes over. `0` (the default) never rotates. |
+
+#### `type: band`
+Tag: `band`  ·  class `Band`
+
+| Key | Default | What it does |
+|---|---|---|
+| `items` | `DefaultGroup(None, [])` |  |
+| `mode` | `'step'` | `step` moves a page at a time and rests between moves (`dwell`, `transition`, `step`); `continuous` scrolls smoothly like a marquee (`speed`, `fps`). |
+| `visible` | `3.0` | How many items are in view at once. A fraction (`3.5`) lets the next item peek in at the edge. |
+| `direction` | `'left'` | Which way the content moves: `left` (new items come in from the right; the default), `right`, `up` or `down`. |
+| `gap` | `0.0` | Space between items as a share of the band's length: `2%` or `0.02`. |
+| `dwell` | `8.0` | Step mode: seconds each stop lasts. |
+| `transition` | `0.6` | Step mode: seconds one move takes. `0` jumps. |
+| `step` | `1.0` | Step mode: items per move. `page` moves a whole page (`visible` items). |
+| `speed` | `0.25` | Continuous mode: items per second (`0.25` is four seconds an item). `0` stands still. |
+| `fps` | `30.0` | Continuous mode: frames per second. Lower it on a slow machine. |
+| `cache` | `True` | Continuous mode: draw each item once and move the picture. Turn it off for an item that changes every frame. |
 
 #### `type: titled-group`
 Tag: `titled-group`  ·  class `TitledPanel`
@@ -822,6 +839,13 @@ Tag: `polar`  ·  class `Polar`
 | `key` | `None` |  |
 | `direction` | `None` |  |
 | `speed` | `None` |  |
+| `prefix` | `'aircraft'` |  |
+| `slots` | `20` |  |
+| `labels` | `6` |  |
+| `ceiling` | `40000.0` |  |
+| `sweep` | `False` |  |
+| `glyphs` | `True` |  |
+| `altitudes` | `True` |  |
 | `window` | `'today'` |  |
 | `sectors` | `16` |  |
 | `rings` | `4` |  |

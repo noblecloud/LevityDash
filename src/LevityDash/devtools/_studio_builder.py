@@ -58,7 +58,7 @@ REPO = Path(__file__).resolve().parents[3]
 
 CONTAINERS = list(model.CONTAINER_TYPES)
 DISPLAYS = ['realtime.text', 'realtime.gauge', 'realtime.bar', 'text', 'label', 'graph', 'mini-graph', 'polar', 'clock', 'moon', 'spacer']
-LAYOUT_PARENTS = ('stack', 'value-stack', 'grid', 'switch')
+LAYOUT_PARENTS = ('stack', 'value-stack', 'grid', 'switch', 'band')
 STAGES = {'Card 640x400': (640, 400), 'Wide 960x400': (960, 400), 'Tall 400x640': (400, 640), 'Dashboard 1280x800': (1280, 800), 'Dashboard 1440x900': (1440, 900)}
 SETTLE_MS = 350
 
@@ -161,7 +161,7 @@ def newItem(kind: str, parentType: str, n: int) -> dict:
 	elif kind in ('stack', 'value-stack'):
 		item['direction'] = 'Vertical'
 		item['items'] = []
-	elif kind in ('group', 'titled-group', 'switch', 'grid'):
+	elif kind in ('group', 'titled-group', 'switch', 'band', 'grid'):
 		item['items'] = []
 	if parentType not in LAYOUT_PARENTS and kind != 'spacer':
 		off = 8 * (n % 5)

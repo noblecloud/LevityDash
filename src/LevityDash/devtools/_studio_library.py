@@ -25,7 +25,7 @@ TEMPLATES = REPO / 'src' / 'LevityDash' / 'resources' / 'example-config' / 'temp
 DASHBOARD, GAUGE, POLAR, PRESET, CELL = 'dashboard', 'gauge', 'polar', 'preset', 'cell'
 GROUPS = ('Dashboards', 'Presets', 'Gauges', 'Bars', 'Polar plots', 'Panels and fragments', 'Your dashboards')
 
-_CONTAINERS = {'group', 'stack', 'value-stack', 'grid', 'titled-group', 'switch', 'graph', 'mini-graph', 'clock'}
+_CONTAINERS = {'group', 'stack', 'value-stack', 'grid', 'titled-group', 'switch', 'band', 'graph', 'mini-graph', 'clock'}
 
 
 @dataclass(frozen=True)
