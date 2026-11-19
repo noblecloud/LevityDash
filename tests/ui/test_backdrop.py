@@ -138,3 +138,31 @@ def test_a_moon_blocks_stars_by_default_and_any_item_can_ask(dashboard):
 	finally:
 		if slot.scene() is not None:
 			slot.scene().removeItem(slot)
+
+
+def test_the_star_layer_builds_at_the_device_density_and_cuts_holes(dashboard):
+	from PySide6.QtCore import QRectF
+	from PySide6.QtGui import QPainterPath
+	from LevityDash.lib.ui.colors.starsky import StarLayer
+	spec = {'sky': True, 'stars': True, 'star-time': '2026-12-12T04:00:00Z', 'star-place': [40.7, -74.0]}
+	hole = QPainterPath()
+	hole.addRect(QRectF(0, 0, 100, 100))
+	layer = StarLayer()
+	size = QRectF(0, 0, 400, 300)
+	whole = layer.pixmap(size, 2.0, spec, -30, 0.0)
+	assert whole is not None and whole.width() == 800 and whole.height() == 600 and whole.devicePixelRatio() == 2.0
+	cut = layer.pixmap(size, 2.0, spec, -30, 0.0, hole).toImage()
+	assert all(cut.pixelColor(x, y).alpha() == 0 for x in range(0, 200, 7) for y in range(0, 200, 7))
+	assert backdrop.starOptions({'sky': True, 'stars': True, 'milky-way': False}) == {'milky-way': False}
+
+
+def test_chromatic_aberration_parts_the_colours_towards_the_edge():
+	import numpy as np
+	from LevityDash.lib.ui.colors import starsky
+	acc = np.zeros((3, 40, 400), dtype=np.float32)
+	starsky._fringe(acc, 380.0, 20.0, 1.0, np.array([1.0, 1.0, 1.0], dtype=np.float32), 0.01, (200.0, 20.0))
+	xs = [(acc[c] * np.arange(400)[None, :]).sum() / acc[c].sum() for c in range(3)]
+	assert xs[0] > xs[1] > xs[2]  # red further out than green, blue further in
+	flat = np.zeros_like(acc)
+	starsky._fringe(flat, 380.0, 20.0, 1.0, np.array([1.0, 1.0, 1.0], dtype=np.float32), 0.0, (200.0, 20.0))
+	assert np.allclose(flat[0], flat[2])

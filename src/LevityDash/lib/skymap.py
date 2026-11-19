@@ -132,4 +132,76 @@ def color(kelvin: int, whiteness: float = 0.55) -> tuple:
 	return tuple(int(round(c + (255 - c) * whiteness)) for c in rgb)
 
 
-__all__ = ('catalog', 'chart', 'color', 'flux', 'horizontal', 'julianDay', 'localSiderealTime', 'moonlight', 'planets', 'project', 'DEFAULT_LIMIT')
+# --- the Milky Way -------------------------------------------------------------------------------------------------
+
+NGP_RA, NGP_DEC, L_NCP = math.radians(192.85948), math.radians(27.12825), math.radians(122.93192)
+
+
+def _lattice(seed: int, lstep: float, bstep: float):
+	import numpy as np
+	rng = np.random.RandomState(seed)
+	cols, rows = int(round(360 / lstep)), int(round(80 / bstep)) + 1
+	grid = rng.random_sample((rows, cols + 1))
+	grid[:, cols] = grid[:, 0]  # wraps in longitude
+	return grid
+
+
+def _noise(l, b, seed: int, lstep: float, bstep: float):
+	"""Smooth value noise over galactic longitude and latitude (degrees), 0 to 1."""
+	import numpy as np
+	grid = _lattice(seed, lstep, bstep)
+	u = (l % 360.0) / lstep
+	v = (np.clip(b, -40, 40) + 40) / bstep
+	i0, j0 = np.minimum(u.astype(int), grid.shape[1] - 2), np.minimum(v.astype(int), grid.shape[0] - 2)
+	fu, fv = u - i0, v - j0
+	fu, fv = fu * fu * (3 - 2 * fu), fv * fv * (3 - 2 * fv)
+	top = grid[j0, i0] * (1 - fu) + grid[j0, i0 + 1] * fu
+	bottom = grid[j0 + 1, i0] * (1 - fu) + grid[j0 + 1, i0 + 1] * fu
+	return top * (1 - fv) + bottom * fv
+
+
+def galactic(ra, dec):
+	"""Galactic longitude and latitude (radians) of equatorial coordinates (radians; numpy arrays or floats)."""
+	import numpy as np
+	d = ra - NGP_RA
+	sinb = np.sin(dec) * math.sin(NGP_DEC) + np.cos(dec) * math.cos(NGP_DEC) * np.cos(d)
+	y = np.cos(dec) * np.sin(d)
+	x = np.sin(dec) * math.cos(NGP_DEC) - np.cos(dec) * math.sin(NGP_DEC) * np.cos(d)
+	return (L_NCP - np.arctan2(y, x)) % (2 * math.pi), np.arcsin(np.clip(sinb, -1, 1))
+
+
+def milkyway(lat: float, lon: float, when: Optional[datetime], x, y) -> tuple:
+	"""The Milky Way at points of the chart (arrays ``x``, ``y`` as :func:`chart` gives): ``(brightness, warmth, r)``.
+
+	The band is the galactic plane (|b| around 5 to 8 degrees thick, thickest and brightest towards the centre at
+	l = 0, with a second bright reach in Cygnus and one in the south), broken up by two scales of noise and the dark
+	dust of the Great Rift along the plane from Cygnus to Sagittarius. Brightness is 0 to 1, warmth 0 (blue-white arms)
+	to 1 (yellow bulge); ``r`` is the distance from the zenith on the chart, so the caller can cut at the horizon."""
+	import numpy as np
+	when = when or datetime.now(timezone.utc)
+	phi = math.radians(lat)
+	lst = localSiderealTime(when, lon)
+	r = np.hypot(x, y)
+	alt = math.pi / 2 - 2 * np.arctan(r)
+	az = np.arctan2(-x, -y)
+	sinDec = math.sin(phi) * np.sin(alt) + math.cos(phi) * np.cos(alt) * np.cos(az)
+	dec = np.arcsin(np.clip(sinDec, -1, 1))
+	h = np.arctan2(-np.cos(alt) * np.sin(az), math.cos(phi) * np.sin(alt) - math.sin(phi) * np.cos(alt) * np.cos(az))
+	l, b = galactic(lst - h, dec)
+	l, b = np.degrees(l), np.degrees(b)
+	lw = (l + 180.0) % 360.0 - 180.0
+	bulge = np.exp(-(lw / 55.0) ** 2)
+	width = 4.5 + 4.5 * bulge
+	band = np.exp(-0.5 * (b / width) ** 2)
+	reach = np.maximum.reduce([0.22 + 0.78 * np.exp(-(lw / 60.0) ** 2), 0.62 * np.exp(-((lw - 80.0) / 32.0) ** 2) + 0.2, 0.55 * np.exp(-((lw + 95.0) / 35.0) ** 2) + 0.2])
+	broad = _noise(l, b, 11, 14.0, 5.0)
+	fine = _noise(l, b, 23, 4.0, 1.6)
+	mottle = (0.45 + 0.9 * broad) * (0.65 + 0.7 * fine)
+	rift = np.exp(-(((b - 0.8) / 1.7) ** 2)) * np.clip((lw + 12.0) / 14.0, 0, 1) * np.clip((62.0 - lw) / 22.0, 0, 1)
+	dust = 1.0 - 0.7 * rift * (0.45 + 0.55 * _noise(l, b, 37, 6.0, 2.0))
+	brightness = np.clip(band * reach * mottle * dust * 0.95, 0.0, 1.0)
+	warmth = np.clip(bulge * 1.2, 0.0, 1.0)
+	return brightness, warmth, r
+
+
+__all__ = ('galactic', 'milkyway', 'catalog', 'chart', 'color', 'flux', 'horizontal', 'julianDay', 'localSiderealTime', 'moonlight', 'planets', 'project', 'DEFAULT_LIMIT')

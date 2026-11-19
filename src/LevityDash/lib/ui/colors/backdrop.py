@@ -105,7 +105,7 @@ def _gradient(spec: Any, angle: float) -> Backdrop:
 	return Backdrop(stops=stops, angle=angle, space=getattr(gradient, 'space', 'srgb'))
 
 
-FOLLOW_KEYS = frozenset({'by', 'top', 'bottom', 'angle', 'haze', 'haze-strength', 'stars', 'star-time', 'star-place'})
+FOLLOW_KEYS = frozenset({'by', 'top', 'bottom', 'angle', 'haze', 'haze-strength', 'stars', 'star-time', 'star-place', 'milky-way', 'star-aberration'})
 HAZE_STRENGTH = 0.8
 
 #: What ``background: sky`` stands for: the sun's height, the theme's two sky scales, greyed by cloud cover.
@@ -260,7 +260,7 @@ def starOptions(spec: Any) -> dict:
 	"""``star-time`` (an ISO instant that pins the sky, for renders and tests) and ``star-place`` (``[lat, lon]``,
 	default the configured location) of a ground that has stars."""
 	spec = normalize(spec)
-	return {k: spec[k] for k in ('star-time', 'star-place') if isinstance(spec, dict) and k in spec}
+	return {k: spec[k] for k in ('star-time', 'star-place', 'milky-way', 'star-aberration') if isinstance(spec, dict) and k in spec}
 
 
 def twilight(elevation: Optional[float]) -> float:
