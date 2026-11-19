@@ -468,8 +468,8 @@ def board(rooms=INDOOR):
 	          'transition': '900ms', 'step': 1, 'geometry': g(X[0], Y, length, H), 'items': slots})
 	B.append(today)
 	# The ground follows the sun: navy at night, purple and orange near the horizon, blue by day, greyed by cloud.
-	# Stars come out through twilight (all out at -12 degrees), thinned by cloud.
-	sky = {'sky': True, 'haze': f'{C}.cover', 'stars': True}
+	# The ground follows the sun and is greyed by cloud. (Stars are off until they are drawn from a real catalogue.)
+	sky = {'sky': True, 'haze': f'{C}.cover'}
 	return {'background': sky, 'items': [{'type': 'group', 'name': 'board', 'items': B}]}
 
 

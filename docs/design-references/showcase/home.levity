@@ -15,7 +15,6 @@
 background:
   sky: true
   haze: environment.clouds.cover.cover
-  stars: true
 items:
 - type: group
   name: board
