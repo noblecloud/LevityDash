@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QPainter, QPixmap, QRadialGradient
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPixmap, QRadialGradient
 
 from LevityDash.lib import skymap
 from LevityDash.lib.ui.colors import backdrop
@@ -52,7 +52,7 @@ class StarLayer:
 		limit = base - 3.5 * (1 - backdrop.twilight(elevation)) - 2.5 * cloud - 2.0 * moon
 		return round(max(1.0, limit) * 2) / 2
 
-	def pixmap(self, size: QRectF, scale: float, spec, elevation: Optional[float], haze: Optional[float]) -> Optional[QPixmap]:
+	def pixmap(self, size: QRectF, scale: float, spec, elevation: Optional[float], haze: Optional[float], occlusion: Optional[QPainterPath] = None) -> Optional[QPixmap]:
 		base = backdrop.starLimit(spec)
 		if base is None:
 			return None
@@ -63,12 +63,13 @@ class StarLayer:
 		moon = round(skymap.moonlight(lat, lon, when) * 4) / 4
 		limit = self.limit(base, elevation, haze, moon)
 		scale = max(0.5, min(3.0, round(scale * 4) / 4))
-		key = (round(size.width()), round(size.height()), scale, limit, lat, lon, bucket)
+		hidden = tuple(round(v) for v in occlusion.boundingRect().getRect()) + (occlusion.elementCount(),) if occlusion is not None and not occlusion.isEmpty() else None
+		key = (round(size.width()), round(size.height()), scale, limit, lat, lon, bucket, hidden)
 		if key != self._key:
-			self._key, self._pixmap = key, self._render(size, scale, limit, lat, lon, when)
+			self._key, self._pixmap = key, self._render(size, scale, limit, lat, lon, when, occlusion)
 		return self._pixmap
 
-	def _render(self, size: QRectF, scale: float, limit: float, lat: float, lon: float, when: datetime) -> QPixmap:
+	def _render(self, size: QRectF, scale: float, limit: float, lat: float, lon: float, when: datetime, occlusion: Optional[QPainterPath] = None) -> QPixmap:
 		w, h = size.width(), size.height()
 		pixmap = QPixmap(max(1, round(w * scale)), max(1, round(h * scale)))
 		pixmap.setDevicePixelRatio(scale)
@@ -88,6 +89,11 @@ class StarLayer:
 			px, py = cx + x * radius, cy + y * radius
 			if -margin <= px <= w + margin and -margin <= py <= h + margin:
 				self._star(painter, px, py, mag, PLANET_COLORS.get(name, (255, 255, 255)), _horizonFade(x, y), k, planet=True)
+		if occlusion is not None and not occlusion.isEmpty():
+			# Cut out what hides the stars (a moon's disc, an item that says `occludes-stars`).
+			painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationOut)
+			painter.setBrush(Qt.black)
+			painter.drawPath(occlusion.translated(-size.left(), -size.top()))
 		painter.end()
 		return pixmap
 

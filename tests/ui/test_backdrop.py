@@ -1,6 +1,6 @@
 """The dashboard's ground: a flat colour or a gradient, from `background:` or the theme."""
 import pytest
-from PySide6.QtCore import QRectF, Qt
+from PySide6.QtCore import QPointF, QRectF, Qt
 
 from LevityDash.lib.ui.colors import backdrop, theme
 
@@ -114,3 +114,27 @@ def test_stars_fade_in_with_the_dark_and_out_with_cloud():
 	assert backdrop.starAlpha(20) == 0 and backdrop.starAlpha(None) == 0
 	assert 0 < backdrop.starAlpha(-6) < 1 and backdrop.starAlpha(-30) == 1
 	assert backdrop.starAlpha(-30, 1.0) < backdrop.starAlpha(-30, 0.3) < 1
+
+
+def test_a_moon_blocks_stars_by_default_and_any_item_can_ask(dashboard):
+	from tests.conftest import pump
+	from LevityDash.lib.ui.frontends.PySide.Modules import Panel
+	scene = dashboard.scene
+	slot = Panel(parent=scene.base, geometry={'x': '0%', 'y': '0%', 'width': '100%', 'height': '100%'})
+	try:
+		slot.state = {'items': [
+			{'type': 'moon', 'geometry': {'x': '0%', 'y': '0%', 'width': '20%', 'height': '30%'}},
+			{'type': 'group', 'occludes-stars': True, 'geometry': {'x': '50%', 'y': '50%', 'width': '20%', 'height': '20%'}, 'items': []},
+			{'type': 'group', 'geometry': {'x': '80%', 'y': '80%', 'width': '10%', 'height': '10%'}, 'items': []},
+		]}
+		pump(dashboard.app, 0.3)
+		scene.refreshBackdrop()
+		holes = scene._starOcclusion()
+		rect = scene.sceneRect()
+		assert holes.contains(QPointF(rect.width() * 0.6, rect.height() * 0.6))  # the group that asked
+		assert not holes.contains(QPointF(rect.width() * 0.85, rect.height() * 0.85))  # the one that did not
+		moon = next(i for i in scene.items() if getattr(i, 'tag', None) == 'moon' or type(i).__name__ == 'Moon')
+		assert holes.contains(moon.sceneBoundingRect().center())  # the moon by default
+	finally:
+		if slot.scene() is not None:
+			slot.scene().removeItem(slot)

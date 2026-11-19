@@ -187,6 +187,11 @@ class Moon(Panel, tag="moon"):
 	_interval = timedelta(minutes=5)
 
 	__exclude__ = {..., 'items'}
+	occludesStarsDefault = True
+
+	def starOcclusion(self) -> QPainterPath:
+		"""The moon's disc: stars do not shine through it, whatever tint its dark side has."""
+		return self.moonFull.mapToScene(self.moonFull.path())
 
 	valueChanged = Signal(float)
 
