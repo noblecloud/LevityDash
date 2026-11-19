@@ -806,6 +806,8 @@ items:
           right: 10%
           top: 0
           bottom: 0
+        decimal-scale: 0.55
+        decimal-align: top
       format-hint: 00.0°
     geometry:
       x: 74.5%
@@ -1076,6 +1078,8 @@ items:
           right: 10%
           top: 0
           bottom: 0
+        decimal-scale: 0.55
+        decimal-align: top
       format-hint: 00.0°
     geometry:
       x: 74.5%
