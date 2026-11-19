@@ -99,3 +99,23 @@ def test_sky_shorthand_takes_overrides_and_can_drop_cloud():
 	assert backdrop.hazeKey(spec) is None and backdrop.decode(spec, value=0).angle == 160
 	assert backdrop.hazeKey({'sky': {'haze': 'x.y'}}) == 'x.y'
 	assert backdrop.normalize({'sky': False, 'angle': 90}) == {'angle': 90}
+
+
+def test_stars_are_an_option_of_the_sky():
+	assert backdrop.starCount('sky') == 0
+	assert backdrop.starCount({'sky': True, 'stars': True}) == backdrop.STARS
+	assert backdrop.starCount({'sky': True, 'stars': 50}) == 50
+	assert backdrop.starCount({'gradient': {0: '#000', 1: '#fff'}, 'stars': True}) == 0
+	backdrop.decode({'sky': True, 'stars': True}, value=-20)  # a known key
+
+
+def test_stars_fade_in_with_the_dark_and_out_with_cloud():
+	assert backdrop.starAlpha(20) == 0 and backdrop.starAlpha(None) == 0
+	assert 0 < backdrop.starAlpha(-6) < 1 and backdrop.starAlpha(-30) == 1
+	assert backdrop.starAlpha(-30, 1.0) < backdrop.starAlpha(-30, 0.3) < 1
+
+
+def test_the_starfield_is_stable_and_in_bounds():
+	a = backdrop.starfield(100, 7)
+	assert a == backdrop.starfield(100, 7) and a != backdrop.starfield(100, 8)
+	assert all(0 <= x <= 1 and 0 <= y <= 1 and r > 0 and 0 < b <= 1 for x, y, r, b in a)

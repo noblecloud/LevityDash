@@ -105,7 +105,7 @@ def _gradient(spec: Any, angle: float) -> Backdrop:
 	return Backdrop(stops=stops, angle=angle, space=getattr(gradient, 'space', 'srgb'))
 
 
-FOLLOW_KEYS = frozenset({'by', 'top', 'bottom', 'angle', 'haze', 'haze-strength'})
+FOLLOW_KEYS = frozenset({'by', 'top', 'bottom', 'angle', 'haze', 'haze-strength', 'stars', 'star-seed'})
 HAZE_STRENGTH = 0.8
 
 #: What ``background: sky`` stands for: the sun's height, the theme's two sky scales, greyed by cloud cover.
@@ -235,4 +235,54 @@ def _isColorTuple(spec) -> bool:
 	return isinstance(spec, (list, tuple)) and len(spec) in (3, 4) and all(isinstance(v, (int, float)) for v in spec)
 
 
-__all__ = ('BACKDROP_SCALE', 'Backdrop', 'DEFAULT_ANGLE', 'SKY', 'decode', 'follows', 'hazeKey', 'linearGradient', 'normalize')
+#: ``stars: true`` draws this many; ``stars: 300`` says how many.
+STARS = 220
+#: Stars are fully out at this sun height (degrees), begin at ``STAR_FIRST`` (civil twilight, the first ones show).
+STAR_FULL, STAR_FIRST = -12.0, -3.0
+
+
+def starCount(spec: Any) -> int:
+	"""How many stars a ground's ``stars:`` asks for (0 for none)."""
+	spec = normalize(spec)
+	if not (isinstance(spec, dict) and 'by' in spec):
+		return 0
+	stars = spec.get('stars')
+	if stars is True:
+		return STARS
+	if isinstance(stars, (int, float)) and not isinstance(stars, bool):
+		return max(0, min(2000, int(stars)))
+	return 0
+
+
+def starSeed(spec: Any) -> int:
+	spec = normalize(spec)
+	try:
+		return int(spec.get('star-seed', 7)) if isinstance(spec, dict) else 7
+	except (TypeError, ValueError):
+		return 7
+
+
+def starAlpha(elevation: Optional[float], haze: Optional[float] = None) -> float:
+	"""How visible the stars are, 0 to 1: none while the sun is up, all of them by nautical twilight, thinned by cloud."""
+	if elevation is None:
+		return 0.0
+	t = min(1.0, max(0.0, (STAR_FIRST - elevation) / (STAR_FIRST - STAR_FULL)))
+	t = t * t * (3 - 2 * t)  # smoothstep
+	cloud = min(1.0, max(0.0, haze)) if haze is not None else 0.0
+	return t * (1.0 - 0.9 * cloud)
+
+
+def starfield(count: int, seed: int = 7) -> tuple:
+	"""Stable stars as ``(x, y, radius, brightness)``: x and y are shares of the dashboard (denser towards the top),
+	radius a share of the dashboard's short side, brightness 0 to 1. Three tiers: many faint, some medium, a few bright."""
+	import random
+	rng = random.Random(seed)
+	out = []
+	for _ in range(count):
+		roll = rng.random()
+		tier = (0.0016, 0.5) if roll < 0.7 else (0.0024, 0.75) if roll < 0.93 else (0.0036, 1.0)
+		out.append((rng.random(), rng.random() ** 1.5, tier[0] * (0.8 + 0.4 * rng.random()), tier[1] * (0.85 + 0.15 * rng.random())))
+	return tuple(out)
+
+
+__all__ = ('starCount', 'starSeed', 'starAlpha', 'starfield', 'STARS', 'BACKDROP_SCALE', 'Backdrop', 'DEFAULT_ANGLE', 'SKY', 'decode', 'follows', 'hazeKey', 'linearGradient', 'normalize')

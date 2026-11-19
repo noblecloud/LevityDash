@@ -17,10 +17,10 @@ import PySide6
 import sys
 from PySide6 import QtGui
 from PySide6.QtCore import (
-	QByteArray, QEvent, QMimeData, QObject, QRect, QRectF, QSize, Qt, QThread, QTimer, QUrl, Signal, Slot
+	QByteArray, QEvent, QMimeData, QObject, QPointF, QRect, QRectF, QSize, Qt, QThread, QTimer, QUrl, Signal, Slot
 )
 from PySide6.QtGui import (
-	QCursor, QDesktopServices, QDrag, QFont, QIcon, QPainter, QPainterPath, QPixmapCache, QScreen, QShowEvent,
+	QColor, QCursor, QDesktopServices, QDrag, QFont, QIcon, QPainter, QPainterPath, QPixmapCache, QScreen, QShowEvent,
 	QSurfaceFormat, QTransform, QPixmap, QAction, QActionGroup
 )
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
@@ -232,6 +232,32 @@ class LevityScene(RendererScene):
 
 	def drawBackground(self, painter, rect):
 		painter.fillRect(rect, self.backdrop())
+		self._drawStars(painter, rect)
+
+	def _drawStars(self, painter, rect):
+		"""Stars over a sky that follows the sun: faded in with the dark, thinned by cloud. Static, so they cost one
+		pass over a few hundred dots, and only the ones inside ``rect``."""
+		count = backdrop.starCount(self._backdropSpec)
+		if not count:
+			return
+		alpha = backdrop.starAlpha(self._backdropValue, self._backdropHaze)
+		if alpha < 0.01:
+			return
+		scene = self.sceneRect()
+		key = (count, backdrop.starSeed(self._backdropSpec))
+		if getattr(self, '_starKey', None) != key:
+			self._starKey, self._stars = key, backdrop.starfield(*key)
+		w, h = scene.width(), scene.height()
+		short = min(w, h)
+		painter.save()
+		painter.setPen(Qt.NoPen)
+		for x, y, r, b in self._stars:
+			cx, cy, rad = scene.left() + x * w, scene.top() + y * h, max(0.7, r * short)
+			if not rect.intersects(QRectF(cx - rad, cy - rad, rad * 2, rad * 2)):
+				continue
+			painter.setBrush(QColor.fromRgbF(1.0, 0.97, 0.9, min(1.0, b * alpha)))
+			painter.drawEllipse(QPointF(cx, cy), rad, rad)
+		painter.restore()
 
 	def addBusyBlocker(self):
 		self.busyBlocker.setZValue(100)
