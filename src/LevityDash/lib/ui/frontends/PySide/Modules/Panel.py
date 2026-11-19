@@ -2157,6 +2157,30 @@ class Panel(_Panel, Stateful, tag='group'):
 			value = not self._locked
 		self.locked = value
 
+	_occludesStars: bool | None = None
+	#: What an item does about stars in a sky background when it does not say (a moon blocks them, anything else lets them show).
+	occludesStarsDefault = False
+
+	@StateProperty(key='occludes-stars', default=None, allowNone=True)
+	def occludesStars(self) -> bool | None:
+		"""Stars in a `background: {sky: true, stars: true}` are not drawn behind this item. Unset, an item lets them show (a `moon` blocks them)."""
+		return self._occludesStars
+
+	@occludesStars.setter
+	def occludesStars(self, value: bool | None):
+		self._occludesStars = value
+		if scene := self.scene():
+			scene.refreshBackdrop()
+
+	def blocksStars(self) -> bool:
+		return self.occludesStarsDefault if self._occludesStars is None else bool(self._occludesStars)
+
+	def starOcclusion(self) -> QPainterPath:
+		"""The area of the scene this item hides stars behind (default: its whole box)."""
+		path = QPainterPath()
+		path.addRect(self.sceneBoundingRect())
+		return path
+
 	@StateProperty(default=False)
 	def frozen(self) -> bool:
 		return self._frozen

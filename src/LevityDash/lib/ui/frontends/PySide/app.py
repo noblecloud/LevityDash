@@ -221,6 +221,7 @@ class LevityScene(RendererScene):
 
 	def refreshBackdrop(self):
 		self._backdropCache = None
+		self._occluders = None
 		self.invalidate(self.sceneRect(), QGraphicsScene.SceneLayer.BackgroundLayer)
 		for view in self.views():
 			view.viewport().update()
@@ -244,6 +245,19 @@ class LevityScene(RendererScene):
 		painter.fillRect(rect, self.backdrop())
 		self._drawStars(painter, rect)
 
+	def _starOcclusion(self) -> QPainterPath:
+		"""Everything on the scene that hides stars (`occludes-stars`, and a moon by default), in scene coordinates."""
+		items = getattr(self, '_occluders', None)
+		if items is None:
+			items = self._occluders = [i for i in self.items() if getattr(i, 'blocksStars', None) and i.blocksStars()]
+		path = QPainterPath()
+		for item in items:
+			try:
+				path.addPath(item.starOcclusion())
+			except RuntimeError:  # deleted while the dashboard reloads
+				self._occluders = None
+		return path
+
 	def _drawStars(self, painter, rect):
 		"""The real sky over a ground that has `stars:` (`lib/skymap.py`), faded in with the dark and thinned by cloud.
 		One blit of a pixmap that is rebuilt every few minutes."""
@@ -257,7 +271,7 @@ class LevityScene(RendererScene):
 			self._starLayer = StarLayer()
 		scale = painter.worldTransform().m11() * (painter.device().devicePixelRatioF() if painter.device() else 1.0)
 		scene = self.sceneRect()
-		pixmap = self._starLayer.pixmap(scene, scale, self._backdropSpec, self._backdropValue, self._backdropHaze)
+		pixmap = self._starLayer.pixmap(scene, scale, self._backdropSpec, self._backdropValue, self._backdropHaze, self._starOcclusion())
 		if pixmap is None:
 			return
 		painter.save()
