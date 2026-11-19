@@ -110,6 +110,10 @@ keys:
     value: 671
     unit: int
     title: Daylight left (minutes)
+  astronomy.sun.elevation:
+    value: 38.0
+    unit: float
+    title: Sun elevation (degrees)
   aircraft.count:
     value: 15
     unit: int

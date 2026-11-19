@@ -74,6 +74,7 @@ def data(rooms=INDOOR, name='default'):
 		d.add(f'{L}.{key}', 'epoch', value=int(time.mktime(moment.timetuple())) + 4 * 3600, type='datetime')
 	d.add('astronomy.sun.hour', 'int', value=round(d.now, 3), title='Hour of day')
 	d.add('astronomy.sun.remaining', 'int', value=671, title='Daylight left (minutes)')
+	d.add('astronomy.sun.elevation', 'float', value=38.0, title='Sun elevation (degrees)')
 	# No planes near by, so the last card shows the day's clock (home.py brings some over).
 	d.add('aircraft.count', 'int', value=0, title='Aircraft in range')
 	d.add('aircraft.active', 'int', value=0, title='A plane is near')
@@ -128,11 +129,12 @@ def clock():
 	return {'type': 'clock', 'name': 'clock', 'frozen': True, 'geometry': {'height': '22.2%', 'width': '36.5%', 'x': '0%', 'y': '1.6%'}, 'items': [
 		{'format': '%A, %B %-d', 'alignment': 'CenterRight', 'filters': ['AddOrdinal'],
 		 'geometry': {'height': '27%', 'width': '100%', 'x': '0%', 'y': '0%'}, 'margins': {'left': '10px'}},
+		# Time and am/pm are both bottom-aligned in boxes that end at one edge, with descender-free hints, so they share a baseline.
 		# The hint sizes the time for its widest form, so it does not grow at 1:00 and shrink at 10:00.
-		{'format': '%-I:%M', 'alignment': 'CenterRight', 'format-hint': '10:00',
+		{'format': '%-I:%M', 'alignment': 'BottomRight', 'format-hint': '10:00',
 		 'geometry': {'height': '73%', 'width': '80%', 'x': '1.2%', 'y': '27%'}, 'margins': {'right': '10px'}},
 		{'type': 'moon', 'geometry': {'height': '45%', 'width': '18.8%', 'x': '81.2%', 'y': '27%'}, 'glowStrength': 2, 'interval': {'minutes': 20}},
-		{'format': '%p', 'filters': ['Lower'], 'geometry': {'height': '29.6%', 'width': '18.8%', 'x': '81.2%', 'y': '70.4%'}},
+		{'format': '%p', 'filters': ['Lower'], 'alignment': 'BottomLeft', 'format-hint': 'am', 'geometry': {'height': '29.6%', 'width': '18.8%', 'x': '81.2%', 'y': '70.4%'}},
 	]}
 
 
@@ -169,6 +171,14 @@ def room(caption, sfx, color, x, y, w, h, i):
 	for j, (name, k, c, kw) in enumerate(rows):
 		out += tile(name, k, x + left, y + j * h / len(rows), w - left, c, h=TILE, group='global.detail', **kw)
 	return out
+
+
+# A light runs round a card while something is happening in it: rain falling now, a plane overhead.
+# Variants rolled from Neal's creative seed, `a;ksdfv893hakljdfhy98nbaclkjcghb349afohlea89o7ty` (sha256 bytes mod 4).
+BEAMS = {
+	'rain': {'size': 'line', 'variant': 'ocean', 'active': PR, 'radius': 24, 'strength': 0.8},
+	'today': {'size': 'md', 'variant': 'colorful', 'active': 'aircraft.active', 'radius': 24, 'glow': True},
+}
 
 
 def board(rooms=INDOOR):
@@ -359,10 +369,13 @@ def board(rooms=INDOOR):
 			         ('+24 H', f'at({T}, 24h)', '$muted', {'hint': '00°', 'unit': 'Inline'})], start=3)], fill=None) | {'geometry': g(0, 0, 100, 100)}]}]
 	# Each card is the surface washed with its own colour, so the five read as five things at a glance.
 	tint = {'wind': '$series-6', 'rain': '$info', 'pressure': '$series-4', 'sky': '$muted', 'today': '$accent'}
+	# Glass over the sky: the surface, washed with the card's colour, let a little of the ground through.
 	for i, (name, items) in enumerate(cards.items()):
-		fill = {'color': '$surface', 'mix': {'with': tint[name], 'by': 0.1}}
-		B.append(nest(f'{name}Card', (X[i], Y, CW, H), items, fill=fill))
-	return {'items': [{'type': 'group', 'name': 'board', 'items': B}]}
+		fill = {'color': {'color': '$surface', 'mix': {'with': tint[name], 'by': 0.14}}, 'alpha': 0.62}
+		B.append(nest(f'{name}Card', (X[i], Y, CW, H), items, fill=fill, **({'beam': BEAMS[name]} if name in BEAMS else {})))
+	# The ground follows the sun: navy at night, purple and orange near the horizon, blue by day, greyed by cloud.
+	sky = {'by': 'astronomy.sun.elevation', 'top': '$sky-top', 'bottom': '$sky-horizon', 'haze': f'{C}.cover'}
+	return {'background': sky, 'items': [{'type': 'group', 'name': 'board', 'items': B}]}
 
 
 HEADER = """
