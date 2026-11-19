@@ -123,6 +123,17 @@ def num(key, geom, color='$text', weight='Regular', font='$mono', **kw):
 	return item
 
 
+def battery(caption, key, x, y, w, h=TILE, right=False):
+	"""A caption over a battery bar: red under 20 %, amber under 50 %, green above, the number at its end."""
+	side = {'align': 'BottomRight'} if right else {}
+	return [cap_(caption, g(x, y, w, CAP), **side),
+	        {'type': 'realtime.bar', 'key': key, 'title': False, 'geometry': g(x, y + CAP + 0.4 + h * 0.15, w, h * 0.7),
+	         'display': {'style': 'battery', 'range': {'min': 0, 'max': 100}, 'fill': {'color': 'zone', 'glow': GLOW},
+	                     'zones': [{'to': 20, 'color': '$bad', 'opacity': 0}, {'from': 20, 'to': 50, 'color': '$warn', 'opacity': 0},
+	                               {'from': 50, 'color': '$good', 'opacity': 0}],
+	                     'value-label': {'visible': False}}}]
+
+
 def tile(caption, key, x, y, w, color='$text', h=TILE, group='global.detail', right=False, **kw):
 	"""A caption over a number. `right` sets both flush to the right edge, for a column against the board's edge."""
 	side = {'align': 'BottomRight'} if right else {}
@@ -175,7 +186,10 @@ def room(caption, sfx, color, x, y, w, h, i):
 		]
 		quarter = w / len(rows)
 		for j, (name, k, c, kw) in enumerate(rows):
-			out += tile(name, k, x + j * quarter, y + h - 5.4, quarter - 0.6, c, h=TILE, group='global.detail', right=j == len(rows) - 1, **kw)
+			if name == 'BATTERY':
+				out += battery(name, k, x + j * quarter, y + h - 5.4, quarter - 0.6, right=True)
+			else:
+				out += tile(name, k, x + j * quarter, y + h - 5.4, quarter - 0.6, c, h=TILE, group='global.detail', **kw)
 		return out
 	# Short: the number over its day on the left, two readings stacked on the right.
 	hh = h - CAP - 0.8
@@ -194,7 +208,8 @@ def room(caption, sfx, color, x, y, w, h, i):
 	col = (w - left) / 2
 	for j, (name, k, c, kw) in enumerate(rows):
 		r, cc = divmod(j, 2)
-		out += tile(name, k, x + left + cc * col, y + r * h / 2, col - 0.3, c, h=TILE, group='global.detail', right=bool(cc), **kw)
+		make = battery if name == 'BATTERY' else lambda *a, **k: tile(*a[:5], c, h=TILE, group='global.detail', **k, **kw)
+		out += make(name, k, x + left + cc * col, y + r * h / 2, col - 0.3, right=bool(cc))
 	return out
 
 
@@ -453,7 +468,8 @@ def board(rooms=INDOOR):
 	          'transition': '900ms', 'step': 1, 'geometry': g(X[0], Y, length, H), 'items': slots})
 	B.append(today)
 	# The ground follows the sun: navy at night, purple and orange near the horizon, blue by day, greyed by cloud.
-	sky = {'by': 'astronomy.sun.elevation', 'top': '$sky-top', 'bottom': '$sky-horizon', 'haze': f'{C}.cover'}
+	# Stars come out through twilight (all out at -12 degrees), thinned by cloud.
+	sky = {'sky': True, 'haze': f'{C}.cover', 'stars': True}
 	return {'background': sky, 'items': [{'type': 'group', 'name': 'board', 'items': B}]}
 
 
