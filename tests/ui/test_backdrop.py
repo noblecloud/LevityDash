@@ -166,3 +166,21 @@ def test_chromatic_aberration_parts_the_colours_towards_the_edge():
 	flat = np.zeros_like(acc)
 	starsky._fringe(flat, 380.0, 20.0, 1.0, np.array([1.0, 1.0, 1.0], dtype=np.float32), 0.0, (200.0, 20.0))
 	assert np.allclose(flat[0], flat[2])
+
+
+def test_the_milky_way_comes_from_the_photograph_in_galactic_coordinates():
+	import numpy as np
+	from LevityDash.lib.ui.colors import starsky
+	light = starsky._sampleMilkyWay(np.array([5.0, 180.0, 90.0]), np.array([-5.0, 0.0, 45.0])).sum(axis=0)
+	assert light[0] > 2 * light[1] > 2 * light[2]  # the Sagittarius star clouds, the anticentre, high above the plane
+	clouds = starsky._sampleMilkyWay(np.array([280.5, 302.8]), np.array([-32.9, -44.3])).sum(axis=0)
+	assert (clouds > light[2]).all()  # both Magellanic Clouds are there
+
+
+def test_faint_stars_are_splatted_where_they_are():
+	import numpy as np
+	from LevityDash.lib.ui.colors import starsky
+	acc = np.zeros((3, 20, 30), dtype=np.float32)
+	starsky._dust(acc, np.array([5.5, 20.5, -9.0]), np.array([4.5, 12.5, 3.0]), np.ones((3, 3), dtype=np.float32), 0.6)
+	assert acc[0, 4, 5] == pytest.approx(1.0) and acc[1, 12, 20] == pytest.approx(1.0)
+	assert acc.sum() == pytest.approx(2 * acc[:, :10, :10].sum(), rel=0.01)  # two equal stars; the one off the picture adds nothing

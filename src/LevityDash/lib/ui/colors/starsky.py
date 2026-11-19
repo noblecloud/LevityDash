@@ -1,11 +1,15 @@
 """Draws the real night sky (``lib/skymap.py``) for a dashboard's ground.
 
 Stars are splatted into a float image at the screen's own pixel density (so a 2x display gets 2x the pixels, not a
-scaled-up 1x picture): each is a tight bright core plus a faint wider skirt, and the brightest a halo, with the
-brightness following the physical flux of its magnitude through a tone curve so most stars are faint pinpricks and a
-handful stand out. Colours come from the colour temperature, more saturated on the brighter stars. Under them is the
-Milky Way, drawn from the galactic plane's real geometry at low resolution and scaled up (it is soft), and a trace of
-airglow low on the horizon.
+scaled-up 1x picture). The few hundred bright ones each get a tight core, a faint skirt and on the brightest a halo and
+glints, with a touch of lateral chromatic aberration; the tens of thousands of faint ones (to magnitude 8, the dust a
+long exposure shows) are one vectorised pass of tiny Gaussians. Brightness follows each star's flux through a tone
+curve, dimmed by the air it shines through near the horizon, and colour follows its B-V index.
+
+Under them is the Milky Way, sampled from a photograph of the whole galaxy (NASA's Deep Star Maps, built from ESA's Gaia
+star counts; ``resources/data/milkyway.jpg``, galactic coordinates) at the place each pixel looks at, so the dust lanes,
+the Rift, the bright Sagittarius clouds and the Magellanic Clouds are where they are in the real sky, plus a trace of
+airglow low on the horizon. The picture is dithered so its faint gradients do not band.
 
 Building takes a moment of numpy, so it runs on a worker thread (unless the sky is pinned for a render) and the old
 picture stays until the new one arrives; a repaint in between is one ``drawPixmap``.
@@ -14,6 +18,8 @@ from __future__ import annotations
 
 import math
 from datetime import datetime, timezone
+from functools import lru_cache
+from pathlib import Path
 from typing import Callable, Optional
 
 import numpy as np
@@ -28,18 +34,23 @@ REFRESH = 300
 PLANET_COLORS = {'Venus': (255, 248, 230), 'Mars': (255, 170, 120), 'Jupiter': (255, 240, 215), 'Saturn': (250, 232, 190), 'Mercury': (235, 235, 235)}
 #: Photographic tone curve: the exposure and the gamma the light is encoded with.
 EXPOSURE, ENCODE = 2.4, 0.78
-MILKY_WAY_ALPHA = 0.36
+#: Stars brighter than this are drawn one by one (core, skirt, halo, aberration); fainter ones in one vectorised pass.
+BRIGHT = 4.5
+#: Magnitudes lost per airmass: low stars dim (and the faint ones vanish) in the thick air near the horizon.
+EXTINCTION = 0.28
 AIRGLOW = (0.40, 0.75, 0.62)
+
+#: The Milky Way picture: galactic longitude 0 in the middle, increasing to the left; latitude +50 at the top to -50 at
+#: the bottom. Its pixels are an asinh stretch of linear light; MW_STRETCH undoes it.
+MILKY_WAY = Path(__file__).resolve().parents[3] / 'resources' / 'data' / 'milkyway.jpg'
+MW_STRETCH, MW_TOP = 0.02, 0.9089218378067017
+MW_LATITUDE = 50.0
+#: How bright the Milky Way is drawn against the stars (linear light, before the tone curve).
+MW_GAIN = 1.0
 
 
 def _lin(rgb) -> np.ndarray:
 	return (np.asarray(rgb, dtype=np.float32) / 255.0) ** 2.2
-
-
-def _horizonFade(r: float) -> float:
-	"""Stars low over the horizon are dimmed by the air they shine through."""
-	t = min(1.0, max(0.0, (r - 0.78) / 0.22))
-	return 1.0 - 0.75 * t * t * (3 - 2 * t)
 
 
 def _jitter(x: float, y: float) -> float:
@@ -81,11 +92,15 @@ def _fringe(acc, px, py, sigma, amp, aberration, centre, reach=4.0):
 		_gauss(acc, centre[0] + dx * k, centre[1] + dy * k, sigma, float(amp[channel]), reach, channel)
 
 
-def _splat(acc, px, py, mag, rgb, fade, scale, planet=False, aberration=0.0, centre=(0, 0)):
-	flux = 10 ** (-0.4 * 0.45 * (mag - 1.5))  # the flux curve, flattened by a gamma so faint stars stay visible
+def _splat(acc, px, py, mag, rgb, fade, scale, planet=False, aberration=0.0, centre=(0, 0), bv=None):
+	"""One bright star (or planet): a core, a faint skirt, a halo on the brightest and glints on the very brightest.
+	Its colour is ``rgb`` (0-255) or, for a star, its B-V index ``bv``, more saturated the brighter it is."""
+	flux = 10 ** (-0.4 * 0.45 * (mag - 1.5))
 	peak = min(flux, 6.0) * fade * (1.0 + 0.25 * (planet))
 	size = (0.7 + 0.3 * scale) * (0.5 + 0.16 * max(0.0, 3.5 - mag)) * (0.88 + 0.24 * _jitter(px, py))
-	whiteness = 0.52 - 0.26 * min(1.0, flux)
+	whiteness = 0.40 - 0.22 * min(1.0, flux)
+	if rgb is None:
+		rgb = skymap.color(float(skymap.kelvin(bv)), 0.0)
 	tint = _lin(tuple(int(round(c + (255 - c) * whiteness)) for c in rgb))
 	tint = tint / tint.max()
 	_fringe(acc, px, py, size, tint * peak, aberration, centre)
@@ -109,52 +124,153 @@ def _glints(acc, px, py, size, amp) -> None:
 				acc[:, y, x] += amp * math.exp(-abs(step) / (length * 0.32))
 
 
+def _extinct(alt) -> np.ndarray:
+	"""Magnitudes added by the air at altitude ``alt``."""
+	return EXTINCTION * (np.minimum(skymap.airmass(alt), 12.0) - 1.0)
+
+
+@lru_cache(maxsize=4)
+def _tints(whiteness: float) -> np.ndarray:
+	"""Linear RGB (rows) for B-V from -0.4 to 2.0 in steps of 0.05, each normalised to its brightest channel."""
+	rows = []
+	for bv in np.arange(-0.4, 2.0001, 0.05):
+		tint = _lin(skymap.color(float(skymap.kelvin(bv)), whiteness))
+		rows.append(tint / tint.max())
+	return np.array(rows, dtype=np.float32)
+
+
+def _tint(bv, whiteness: float) -> np.ndarray:
+	return _tints(whiteness)[np.clip(np.round((np.asarray(bv) + 0.4) / 0.05).astype(int), 0, 48)]
+
+
+def _peak(mag):
+	"""The flux curve, flattened by a gamma so faint stars stay visible."""
+	return np.minimum(10 ** (-0.4 * 0.45 * (np.asarray(mag) - 1.5)), 6.0)
+
+
+def _faintPeak(mag):
+	"""Below BRIGHT the curve steepens back towards the physical one, so the thousands of faint stars span a real range
+	of brightness (a few distinct, most barely there) rather than one even sprinkle."""
+	return _peak(BRIGHT) * 10 ** (-0.4 * 0.9 * (np.asarray(mag) - BRIGHT))
+
+
+def _dust(acc: np.ndarray, px: np.ndarray, py: np.ndarray, amp: np.ndarray, sigma: float) -> None:
+	"""Add many small Gaussians at once: ``amp`` is (N, 3) peak light, positions in device pixels."""
+	if not len(px):
+		return
+	height, width = acc.shape[1:]
+	reach = 1 if sigma < 0.7 else 2
+	ix, iy = np.floor(px).astype(np.int64), np.floor(py).astype(np.int64)
+	star = np.arange(len(px))
+	index, weight, owner = [], [], []
+	for dy in range(-reach, reach + 1):
+		for dx in range(-reach, reach + 1):
+			x, y = ix + dx, iy + dy
+			inside = (x >= 0) & (x < width) & (y >= 0) & (y < height)
+			index.append((y * width + x)[inside])
+			weight.append(np.exp(-((x + 0.5 - px) ** 2 + (y + 0.5 - py) ** 2) / (2 * sigma * sigma))[inside])
+			owner.append(star[inside])
+	index, weight, owner = np.concatenate(index), np.concatenate(weight), np.concatenate(owner)
+	for channel in range(3):
+		acc[channel] += np.bincount(index, weights=weight * amp[owner, channel], minlength=width * height).reshape(height, width).astype(np.float32)
+
+
 def _stars(size: tuple, scale: float, lat: float, lon: float, when: datetime, limit: float, aberration: float = ABERRATION) -> QImage:
 	w, h = size
 	W, H = max(1, round(w * scale)), max(1, round(h * scale))
 	acc = np.zeros((3, H, W), dtype=np.float32)
 	radius, cx, cy = max(W, H) * 0.62, W / 2, H / 2
 	margin = 14 * scale
-	for x, y, mag, kelvin in skymap.project(lat, lon, when, limit):
-		px, py = cx + x * radius, cy + y * radius
-		if -margin <= px <= W + margin and -margin <= py <= H + margin:
-			_splat(acc, px, py, mag, skymap.color(kelvin, 0.0), _horizonFade(math.hypot(x, y)), scale, aberration=aberration, centre=(cx, cy))
-	for x, y, mag, name in skymap.planets(lat, lon, when):
-		px, py = cx + x * radius, cy + y * radius
-		if -margin <= px <= W + margin and -margin <= py <= H + margin:
-			_splat(acc, px, py, mag, PLANET_COLORS.get(name, (255, 255, 255)), _horizonFade(math.hypot(x, y)), scale, planet=True, aberration=aberration, centre=(cx, cy))
+	faintest = min(skymap.FAINTEST, limit + 2.5)
+	x, y, mag, bv = skymap.project(lat, lon, when, faintest)
+	px, py = cx + x * radius, cy + y * radius
+	alt = math.pi / 2 - 2 * np.arctan(np.hypot(x, y))
+	seen = mag + _extinct(alt)
+	keep = (px >= -margin) & (px <= W + margin) & (py >= -margin) & (py <= H + margin) & (seen <= faintest)
+	px, py, mag, bv, seen = px[keep], py[keep], mag[keep], bv[keep], seen[keep]
+	bright = mag < BRIGHT
+	for X, Y, m, s, c in zip(px[bright], py[bright], mag[bright], seen[bright], bv[bright]):
+		_splat(acc, X, Y, s, None, 1.0, scale, aberration=aberration, centre=(cx, cy), bv=c)
+	faint = ~bright
+	fade = np.clip(faintest - seen[faint], 0.0, 1.0)  # the last magnitude before the cut fades out, so there is no edge
+	amp = _tint(bv[faint], 0.45) * (_faintPeak(seen[faint]) * fade)[:, None]
+	_dust(acc, px[faint], py[faint], amp.astype(np.float32), 0.42 + 0.22 * scale)
+	for X, Y, m, name in skymap.planets(lat, lon, when):
+		PX, PY = cx + X * radius, cy + Y * radius
+		if -margin <= PX <= W + margin and -margin <= PY <= H + margin:
+			alt = math.pi / 2 - 2 * math.atan(math.hypot(X, Y))
+			_splat(acc, PX, PY, m + float(_extinct(alt)), PLANET_COLORS.get(name, (255, 255, 255)), 1.0, scale, planet=True, aberration=aberration, centre=(cx, cy))
 	light = (1.0 - np.exp(-EXPOSURE * acc)) ** ENCODE
 	return _pack(light, light.max(axis=0))
 
 
-def _pack(rgb: np.ndarray, alpha: np.ndarray) -> QImage:
-	"""A premultiplied ARGB image from light (3, H, W) and its coverage (H, W)."""
+def _pack(rgb: np.ndarray, alpha: np.ndarray, dither: bool = False) -> QImage:
+	"""A premultiplied ARGB image from light (3, H, W) and its coverage (H, W). ``dither`` adds a triangular half-step of
+	noise before rounding, so smooth faint gradients do not break into bands."""
 	a = np.clip(alpha, 0, 1)
 	c = np.minimum(np.clip(rgb, 0, 1), a[None])
-	packed = ((a * 255 + 0.5).astype(np.uint32) << 24) | ((c[0] * 255 + 0.5).astype(np.uint32) << 16) | ((c[1] * 255 + 0.5).astype(np.uint32) << 8) | (c[2] * 255 + 0.5).astype(np.uint32)
-	packed = np.ascontiguousarray(packed)
+	scaleA, scaleC = a * 255, c * 255
+	if dither:
+		rng = np.random.default_rng(7)
+		noise = (rng.random(a.shape, dtype=np.float32) - rng.random(a.shape, dtype=np.float32))
+		scaleA = scaleA + noise
+		scaleC = scaleC + noise[None]
+		scaleC = np.minimum(np.maximum(scaleC, 0), np.maximum(scaleA, 0)[None])
+	A = np.clip(scaleA + 0.5, 0, 255).astype(np.uint32)
+	C = np.clip(scaleC + 0.5, 0, 255).astype(np.uint32)
+	C = np.minimum(C, A[None])
+	packed = np.ascontiguousarray((A << 24) | (C[0] << 16) | (C[1] << 8) | C[2])
 	image = QImage(packed.data, packed.shape[1], packed.shape[0], packed.shape[1] * 4, QImage.Format.Format_ARGB32_Premultiplied)
 	return image.copy()  # own the memory
 
 
+@lru_cache(maxsize=1)
+def _milkyWayMap() -> tuple:
+	"""The Milky Way picture as uint8 (H, W, 3) and the table from its pixel values to linear light."""
+	image = QImage(str(MILKY_WAY)).convertToFormat(QImage.Format.Format_RGB888)
+	width, height, stride = image.width(), image.height(), image.bytesPerLine()
+	pixels = np.frombuffer(image.constBits(), dtype=np.uint8, count=stride * height).reshape(height, stride)[:, :width * 3]
+	table = MW_STRETCH * np.sinh(np.arange(256, dtype=np.float32) / 255.0 * math.asinh(MW_TOP / MW_STRETCH))
+	return pixels.reshape(height, width, 3).copy(), table.astype(np.float32)  # a copy: the QImage owns its bytes
+
+
+def _sampleMilkyWay(l: np.ndarray, b: np.ndarray) -> np.ndarray:
+	"""Linear RGB (3, ...) of the Milky Way at galactic longitude and latitude in degrees (bilinear)."""
+	pixels, table = _milkyWayMap()
+	height, width = pixels.shape[:2]
+	u = (0.5 - ((l + 180.0) % 360.0 - 180.0) / 360.0) * width - 0.5
+	v = (MW_LATITUDE - b) / (2 * MW_LATITUDE) * height - 0.5
+	v = np.clip(v, 0, height - 1.001)
+	i0, j0 = np.floor(u).astype(np.int64), np.floor(v).astype(np.int64)
+	fu, fv = (u - i0).astype(np.float32), (v - j0).astype(np.float32)
+	i0, i1 = i0 % width, (i0 + 1) % width
+	out = np.empty((3,) + l.shape, dtype=np.float32)
+	for c in range(3):
+		top = table[pixels[j0, i0, c]] * (1 - fu) + table[pixels[j0, i1, c]] * fu
+		bottom = table[pixels[j0 + 1, i0, c]] * (1 - fu) + table[pixels[j0 + 1, i1, c]] * fu
+		out[c] = top * (1 - fv) + bottom * fv
+	return out
+
+
 def _milkyWay(size: tuple, lat: float, lon: float, when: datetime, strength: float) -> QImage:
-	"""The Milky Way and the airglow at 1/6 of the picture's resolution (they have no fine detail)."""
+	"""The Milky Way and the airglow, one pixel per logical pixel (the photograph has no finer detail than that on a
+	2x screen; it is drawn smoothly scaled)."""
 	w, h = size
-	nx, ny = max(8, int(w // 6)), max(8, int(h // 6))
+	nx, ny = max(8, int(w)), max(8, int(h))
 	radius = max(nx, ny) * 0.62
 	xs = (np.arange(nx, dtype=np.float32) + 0.5 - nx / 2) / radius
 	ys = (np.arange(ny, dtype=np.float32) + 0.5 - ny / 2) / radius
 	x, y = np.meshgrid(xs, ys)
-	brightness, warmth, r = skymap.milkyway(lat, lon, when, x, y)
-	up = (r <= 1.0)
-	edge = np.clip((1.0 - r) / 0.04, 0, 1)
-	arms, bulge = _lin((190, 205, 255)), _lin((255, 232, 196))
-	color = arms[:, None, None] * (1 - warmth)[None] + bulge[:, None, None] * warmth[None]
-	band = brightness * strength * MILKY_WAY_ALPHA * up * edge
-	glow = np.clip((r - 0.80) / 0.17, 0, 1) ** 2 * np.clip((1.0 - r) / 0.06, 0, 1) * 0.10 * up
-	light = color * band[None] + _lin(tuple(int(c * 255) for c in AIRGLOW))[:, None, None] * glow[None]
-	light = np.clip(light, 0, 1) ** ENCODE
-	return _pack(light, light.max(axis=0))
+	l, b, alt = skymap.galacticChart(lat, lon, when, x, y)
+	light = _sampleMilkyWay(l, b)
+	edge = np.clip((MW_LATITUDE - np.abs(b)) / 8.0, 0, 1)  # the picture ends at |b| = 50, where there is nearly nothing left
+	air = 10 ** (-0.4 * _extinct(alt)) * np.clip(alt / 0.03, 0, 1)
+	light *= (edge * air * strength * MW_GAIN).astype(np.float32)[None]
+	r = np.hypot(x, y)
+	glow = np.clip((r - 0.80) / 0.17, 0, 1) ** 2 * np.clip((1.0 - r) / 0.06, 0, 1) * 0.04 * (alt > 0)
+	light += _lin(tuple(int(c * 255) for c in AIRGLOW))[:, None, None] * glow[None].astype(np.float32)
+	light = (1.0 - np.exp(-EXPOSURE * light)) ** ENCODE
+	return _pack(light, light.max(axis=0), dither=True)
 
 
 class _Done(QObject):
@@ -254,7 +370,9 @@ class StarLayer:
 		target = QRectF(0, 0, w, h)
 		if milky is not None:
 			painter.drawImage(target, milky)
+			painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)  # starlight adds to the glow behind it
 		painter.drawImage(target, stars)
+		painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
 		if occlusion is not None and not occlusion.isEmpty():
 			# Cut out what hides the stars (a moon's disc, an item that says `occludes-stars`).
 			painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationOut)
