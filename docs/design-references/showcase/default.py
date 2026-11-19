@@ -113,13 +113,16 @@ def cap_(s, geom, color='$faint', **kw):
 	return cap(s, geom, color, font=LABEL, weight='SemiBold', **kw)
 
 
-def num(key, geom, color='$text', weight='Regular', font='$mono', **kw):
+def num(key, geom, color='$text', weight='Regular', font='$mono', small=False, **kw):
 	"""A number. Fixed-width (Roboto Mono) unless it is the one big temperature, so digits line up and do not jump."""
 	item = val(key, geom, color, font=font, weight=weight, **kw)
 	# No inset: the ink's left edge sits on the box's edge, so a number lines up under its caption.
 	item['margins'] = {'left': 0, 'right': 0, 'top': 0, 'bottom': 0}
 	item['display']['valueLabel'].setdefault('alignment', item['alignment'])
 	item['display']['valueLabel']['margins'] = {'left': 0, 'right': '10%', 'top': 0, 'bottom': 0}  # a gutter to the next column
+	if small:
+		# The tenths drawn smaller, raised to the top of the digits: 67⁷° reads as sixty-seven at a glance.
+		item['display']['valueLabel'].update({'decimal-scale': 0.55, 'decimal-align': 'top'})
 	return item
 
 
@@ -181,7 +184,7 @@ def room(caption, sfx, color, x, y, w, h, i):
 		out += [
 			mini(temp, g(x, y + CAP + 0.8, w, body), color=color, hours=24, past=True, top='42%', bottom='0%', opacity=0.8, fill=0.3, weight=0.5,
 			     glow=GLOW),
-			num(temp, g(x, y + CAP + 0.8, w * 0.7, 11.5), '$text', weight='Bold', tracking=-0.06, unit='Inline', hint='00.0°', precision=1,
+			num(temp, g(x, y + CAP + 0.8, w * 0.7, 11.5), '$text', weight='Bold', tracking=-0.06, unit='Inline', hint='00.0°', precision=1, small=True,
 			    group='global.room', align='TopLeft'),
 		]
 		quarter = w / len(rows)
@@ -197,7 +200,7 @@ def room(caption, sfx, color, x, y, w, h, i):
 	out += [
 		mini(temp, g(x, y + CAP + 0.8, left - 0.8, hh), color=color, hours=24, past=True, top='45%', bottom='0%', opacity=0.8, fill=0.3, weight=0.5,
 		     glow=GLOW),
-		num(temp, g(x, y + CAP + 0.8, left - 0.8, hh * 0.62), '$text', weight='Bold', tracking=-0.06, unit='Inline', hint='00.0°', precision=1,
+		num(temp, g(x, y + CAP + 0.8, left - 0.8, hh * 0.62), '$text', weight='Bold', tracking=-0.06, unit='Inline', hint='00.0°', precision=1, small=True,
 		    group='global.room', align='TopLeft'),
 	]
 	# Four readings in two columns, the outer one flush to the board's edge so the panel reaches it.
