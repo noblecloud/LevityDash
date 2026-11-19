@@ -13,10 +13,9 @@
 # Render: render_dashboard.py OUT.png --levity src/LevityDash/resources/example-config/templates/dashboards/OpenMeteo.levity
 #           --scenario docs/design-references/showcase/scenarios/default.yaml --size 2880x1800 --freeze-time 2026-06-21T09:20:00
 background:
-  by: astronomy.sun.elevation
-  top: $sky-top
-  bottom: $sky-horizon
+  sky: true
   haze: environment.clouds.cover.cover
+  stars: true
 items:
 - type: group
   name: board
@@ -976,37 +975,35 @@ items:
       matchAll: true
     tracking: 0.16
     format-hint: HEADING
-  - type: realtime.text
+  - type: realtime.bar
     key: indoor.battery.battery
     title: false
-    alignment: BottomRight
-    display:
-      unitPosition: Inline
-      precision: 0
-      valueLabel:
-        color: $good
-        font: $mono
-        weight: Regular
-        matchingGroup:
-          group: global.detail
-          matchAll: true
-        alignment: BottomRight
-        margins:
-          left: 10%
-          right: 0
-          top: 0
-          bottom: 0
-      format-hint: 100%
     geometry:
       x: 92.125%
-      y: 62.0%
+      y: 62.54%
       width: 5.275%
-      height: 3.6%
-    margins:
-      left: 0
-      right: 0
-      top: 0
-      bottom: 0
+      height: 2.52%
+    display:
+      style: battery
+      range:
+        min: 0
+        max: 100
+      fill:
+        color: zone
+        glow: *id001
+      zones:
+      - to: 20
+        color: $bad
+        opacity: 0
+      - from: 20
+        to: 50
+        color: $warn
+        opacity: 0
+      - from: 50
+        color: $good
+        opacity: 0
+      value-label:
+        visible: false
   - type: band
     name: cards
     mode: step
