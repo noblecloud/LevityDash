@@ -947,6 +947,14 @@ class Graduations(ColorGradientMixin, StatefulGaugeItem):
 		"""The tick value at `index`, rounded so every caller gets the same float for the same tick."""
 		return self.gauge.valueClass(round(float(self.gauge.range.rounded_min) + index * float(self.interval), 9))
 
+	def tick_key(self) -> tuple:
+		"""What `tick_values` is a pure function of: equal keys, equal ticks. Plain floats, so asking is cheap."""
+		super_grad = self.super_grad
+		return (
+			self.tick_type, float(self.interval), float(self.gauge.range.rounded_min), self.step_count(self.interval),
+			super_grad.tick_key() if super_grad is not None else None,
+		)
+
 	@property
 	def tick_values(self) -> set[GaugeValue]:
 
@@ -1913,6 +1921,22 @@ class GaugeTickTextGroup(AnnotationLabels[GaugeTickText], GlowMixin):
 		repeated float addition. 29.95 arrives as 29.950000000000003, and an
 		exact test would push the answer to 3.
 		"""
+		# Every tick label asks, and building the tick set makes a unit object per tick, so a dial with
+		# n ticks cost n * n of them on every layout pass (a page of full-ring gauges took 42 minutes
+		# to settle). The answer only moves when the ticks do.
+		try:
+			key = self._ticks.tick_key()
+		except Exception:  # noqa: BLE001 - a label rule must never blank the dial
+			key = None
+		memo = getattr(self, '_precisionMemo', None)
+		if key is not None and memo is not None and memo[0] == key:
+			return memo[1]
+		places = self._computeSpacingPrecision()
+		if key is not None:
+			self._precisionMemo = (key, places)
+		return places
+
+	def _computeSpacingPrecision(self) -> Optional[int]:
 		try:
 			values = [float(v) for v in self._ticks.tick_values]
 		except Exception:  # noqa: BLE001 - a label rule must never blank the dial

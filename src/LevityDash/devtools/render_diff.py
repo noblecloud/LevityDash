@@ -87,6 +87,9 @@ SHOWCASE_SIZE = (2560, 1440)
 PRESET_SIZE = (1600, 900)
 DEFAULT_SETTLE = 14.0
 
+#: Seconds one render may take before it is given up on. Ordinary renders take 20 to 60.
+RENDER_TIMEOUT = 1200
+
 #: A pixel counts as different when a channel differs by more than this many
 #: levels. 30 is the figure the meter brief measured the Mock drift with.
 DEFAULT_LEVEL = 30
@@ -411,7 +414,15 @@ def capture(args) -> int:
 		target_freeze = None if target.stem in NO_FREEZE else freeze
 		command = render_command(target, out, seed_dir, scenario_path, size, args.settle, args.scale, target_freeze, args.python)
 		started = time.monotonic()
-		completed = subprocess.run(command, capture_output=True, text=True, env={**os.environ, 'LEVITYDASH_FIXTURE_DELAY_MS': FIXTURE_DELAY_MS})
+		try:
+			completed = subprocess.run(
+				command, capture_output=True, text=True, timeout=RENDER_TIMEOUT,
+				env={**os.environ, 'LEVITYDASH_FIXTURE_DELAY_MS': FIXTURE_DELAY_MS},
+			)
+		except subprocess.TimeoutExpired:
+			# One render that never settles (label-sides once took 42 minutes) must not hold the sweep:
+			# report it as failed and carry on with the rest.
+			return target.stem, {'seconds': RENDER_TIMEOUT, 'size': list(size), 'exit': -1, 'error': f'timed out after {RENDER_TIMEOUT} s'}
 		seconds = time.monotonic() - started
 		entry = {'seconds': round(seconds, 1), 'size': list(size), 'exit': completed.returncode, 'freeze': target_freeze or 'live'}
 		output = (completed.stdout or '') + (completed.stderr or '')
