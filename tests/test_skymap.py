@@ -67,3 +67,22 @@ def test_colour_follows_temperature_and_stays_nearly_white():
 def test_moon_light_is_zero_when_it_is_down_and_bounded():
 	values = [skymap.moonlight(40.7, -74.0, datetime(2026, 12, 21, h, tzinfo=timezone.utc)) for h in range(0, 24, 3)]
 	assert all(0 <= v <= 1 for v in values) and 0.0 in values
+
+
+def test_galactic_coordinates():
+	import numpy as np
+	l, b = skymap.galactic(np.radians(266.405), np.radians(-28.936))  # the galactic centre
+	assert (math.degrees(float(l)) + 180) % 360 - 180 == pytest.approx(0, abs=0.2) and math.degrees(float(b)) == pytest.approx(0, abs=0.2)
+	_, b = skymap.galactic(np.radians(192.859), np.radians(27.128))  # the north galactic pole
+	assert math.degrees(float(b)) == pytest.approx(90, abs=0.01)
+
+
+def test_the_milky_way_is_a_band_across_the_sky():
+	import numpy as np
+	xs = np.linspace(-1, 1, 81, dtype=np.float32)
+	x, y = np.meshgrid(xs, xs)
+	brightness, warmth, r = skymap.milkyway(40.7, -74.0, WHEN, x, y)
+	assert brightness.shape == x.shape and 0 <= brightness.min() and brightness.max() <= 1
+	inside = r < 0.95
+	assert brightness[inside].max() > 0.3 and (brightness[inside] > 0.15).mean() < 0.6  # a band, not a wash
+	assert 0 <= warmth.min() and warmth.max() <= 1

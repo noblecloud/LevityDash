@@ -268,7 +268,7 @@ class LevityScene(RendererScene):
 			return
 		from LevityDash.lib.ui.colors.starsky import StarLayer
 		if getattr(self, '_starLayer', None) is None:
-			self._starLayer = StarLayer()
+			self._starLayer = StarLayer(self.refreshBackdrop)
 		scale = painter.worldTransform().m11() * (painter.device().devicePixelRatioF() if painter.device() else 1.0)
 		scene = self.sceneRect()
 		pixmap = self._starLayer.pixmap(scene, scale, self._backdropSpec, self._backdropValue, self._backdropHaze, self._starOcclusion())
