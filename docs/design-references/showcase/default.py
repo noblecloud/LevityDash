@@ -77,6 +77,9 @@ def data(rooms=INDOOR, name='default'):
 	# No planes near by, so the last card shows the day's clock (home.py brings some over).
 	d.add('aircraft.count', 'int', value=0, title='Aircraft in range')
 	d.add('aircraft.active', 'int', value=0, title='A plane is near')
+	d.add('aircraft.1.callsign', 'str', value='', title='Nearest flight')
+	d.add('aircraft.1.distance', 'int', value=0, title='Nearest distance')
+	d.add('aircraft.1.altitude', 'int', value=0, title='Nearest altitude')
 	# Indoors: a house that holds near 70 °F, and a terrarium that is warm and wet under its lamp from 8 to 20.
 	shapes = {'': (70.5, 1.2, 46, 4), '#bedroom': (68.5, 1.6, 50, 4), '#terrarium': (79, 4.5, 84, -8)}
 	for _, sfx, _ in rooms:
@@ -208,7 +211,7 @@ def board(rooms=INDOOR):
 	]
 	# ------------------------------------------------------------ the days ahead
 	B.append({
-		'type': 'graph', 'name': 'forecast', 'geometry': g(1.5, 28.5, 69.5, 23.5),
+		'type': 'graph', 'name': 'forecast', 'geometry': g(1.5, 28.5, 69.5, 37),
 		'timeframe': {'days': 2, 'hours': 18, 'offset': {'hours': -6}},
 		'annotations': {'dayLabels': {'position': 'Center', 'alignment': 'Center', 'opacity': '12%', 'height': '38%'},
 		                'hourLabels': {'alignment': 'BottomCenter', 'spacingIntervals': '6, 12', 'height': '4%'},
@@ -231,67 +234,80 @@ def board(rooms=INDOOR):
 			{'figure': 'rain', 'margins': {'top': '70%', 'bottom': '9%'}, 'min': 0, 'max': 0.4,
 			 PR: {'plot': {'type': 'bar', 'color': '$info', 'width': 0.62, 'radius': 0.5, 'glow': GLOW}, 'smooth': False}},
 		]})
-	# ------------------------------------------------------------ the next sixteen hours, as numbers
-	hours = list(range(2, 17, 2))
-	at = lambda key, h: f'at({key}, {h}h)'
-	readings = [('TEMP', T, '°F', 0, '$text'), ('RAIN', PR, 'in/h', 2, '$info'), ('WIND', f'{W}.speed.speed', 'mph', 0, '$series-6'), ('CLOUD', f'{C}.cover', '%', 0, '$muted'),
-	            ('HUMID', 'environment.humidity.humidity', '%', 0, '$info')]
-	B.append({'preset': 'table', 'name': 'hours', 'geometry': g(2, 52.6, 68.5, 13.4), 'props': {
-		'columns': [{'head': f'+{h} H'} for h in hours],
-		'rows': [{'label': f'{name} {unit}', 'color': color, 'precision': p, 'keys': [at(key, h) for h in hours]} for name, key, unit, p, color in readings],
-		'labelWidth': '11%', 'headHeight': '15%', 'rowGap': '0px', 'font': '$mono', 'labelFont': LABEL, 'alignment': 'Right',
-		'titleGroup': 'global.hoursHead', 'valueGroup': 'global.detail'}})
 	# ------------------------------------------------------------ indoors
 	top, height, gap = 28.5, 37, 2.2
 	each = (height - gap * (len(rooms) - 1)) / len(rooms)
 	for i, (caption, sfx, color) in enumerate(rooms):
 		B += room(caption, sfx, color, 74.5, top + i * (each + gap), 23.5, each, i)
 	# ------------------------------------------------------------ five cards
+	# Each card: a caption, the hero at room size, a picture of its last or next day, and six readings at detail size.
 	Y, H, CW, GAP = 68.5, 29.5, 18.24, 1.2
 	X = [2 + i * (CW + GAP) for i in range(5)]
 	px, py = 1.2, 1.8
 	iw = CW - 2 * px
-	HERO = 10
-	hero = lambda key, x, w, color, **kw: num(key, g(x, Y + py + CAP + 0.6, w, HERO), color, weight='Bold', tracking=-0.03, group='global.room', **kw)
-	low = Y + 19.6
-	cards = {}
+	HERO = 9
+	top = Y + py + CAP + 0.6
+	hero = lambda key, x, w, color, **kw: num(key, g(x, top, w, HERO), color, weight='Bold', tracking=-0.03, group='global.room', **kw)
+	pic = Y + 13.3
+	rows = (Y + 17.8, Y + 23.4)
+	cell = (iw - 1.0) / 3
 
+	def six(x, entries, start=0):
+		"""Readings in rows of three under the picture: (caption, key, colour, settings)."""
+		out = []
+		for n, (caption, key, color, kw) in enumerate(entries):
+			r, c = divmod(n + start, 3)
+			out += tile(caption, key, x + c * (cell + 0.5), rows[r], cell, color, h=3.2, **kw)
+		return out
+
+	cards = {}
 	x = X[0] + px
 	cards['wind'] = [
 		cap_('WIND · MPH', g(x, Y + py, iw, CAP), '$series-6'),
-		mini(f'{W}.speed.speed', g(x, Y + py + CAP + 0.6, 7.8, HERO), color='$series-6', lo=0, glow=GLOW),
 		hero(f'{W}.speed.speed', x, 7.8, '$series-6', hint='00'),
 		{'type': 'polar', 'name': 'rose', 'plot': 'rose', 'direction': f'{W}.direction.direction', 'speed': f'{W}.speed.speed', 'window': '24h',
-		 'legend': False, 'rings': 3, 'compass': 4, 'gradient': 'WindSpeedGradient', 'geometry': g(x + 7.4, Y + 0.8, 9, 16.4)},
-		*tile('GUST', f'{W}.speed.gust', x, low, 5, '$warn', hint='00'),
-		*tile('PEAK', f'{W}.speed.gustMax', x + 5.4, low, 5.4, '$bad', hint='00'),
-		*tile('FROM', f'{W}.direction.direction', x + 11.2, low, 4.6, '$info', hint='SSW'),
+		 'legend': False, 'rings': 3, 'compass': 4, 'gradient': 'WindSpeedGradient', 'geometry': g(x + 7.8, Y + 0.6, 8.6, 12.6)},
+		mini(f'{W}.speed.gust', g(x, pic, iw, 4), color='$warn', hours=24, past=True, lo=0, top='8%', bottom='0%', opacity=0.5, fill=0.15, weight=0.35),
+		mini(f'{W}.speed.speed', g(x, pic, iw, 4), color='$series-6', hours=24, past=True, lo=0, top='8%', bottom='0%', glow=GLOW),
+		# Detail captions say what, the card's caption says the unit; a window or offset is 24 h unless it says.
+		*six(x, [('GUST', f'{W}.speed.gust', '$warn', {'hint': '00'}),
+		         ('PEAK', f'{W}.speed.gustMax', '$bad', {'hint': '00'}),
+		         ('FROM', f'{W}.direction.direction', '$info', {'hint': 'SSW'}),
+		         ('AVG', f'avg({W}.speed.speed, 24h)', '$series-6', {'hint': '00'}),
+		         ('MAX', f'max({W}.speed.gust, 24h)', '$warn', {'hint': '00'}),
+		         ('+6 H', f'at({W}.speed.speed, 6h)', '$muted', {'hint': '00'})]),
 	]
 	x = X[1] + px
 	cards['rain'] = [
 		cap_('RAIN · INCHES', g(x, Y + py, iw, CAP), '$info'),
 		hero('environment.precipitation.daily', x, 9.6, '$info', precision=2, hint='0.00'),
-		text('today', g(x + 9.8, Y + py + CAP + 6.8, 6, 2.6), font='$body', weight='Light', italic=True, color='$faint', align='BottomLeft'),
-		capsules(mini(PR, g(x, Y + 14.4, iw, 4.6), color='$info', hours=24, lo=0, hi=0.4, kind='bar', top='4%', bottom='2%', opacity=1, glow=GLOW,
+		text('today', g(x + 9.8, top + 5.4, 6, 2.6), font='$body', weight='Light', italic=True, color='$faint', align='BottomLeft'),
+		capsules(mini(PR, g(x, pic, iw, 4), color='$info', hours=24, lo=0, hi=0.4, kind='bar', top='4%', bottom='0%', opacity=1, glow=GLOW,
 		              smooth=False)),
-		*tile('NOW', PR, x, low, 5.2, '$info', precision=2, hint='0.00', h=4.4),
-		*tile('PEAK', f'max({PR}, today)', x + 5.6, low, 5.2, '$series-4', precision=2, hint='0.00', h=4.4),
-		*tile('+12 H', f'at({PR}, 12h)', x + 11.2, low, 4.6, '$faint', precision=2, hint='0.00', h=4.4),
+		*six(x, [('NOW', PR, '$info', {'precision': 2, 'hint': '0.00'}),
+		         ('PEAK', f'max({PR}, today)', '$series-4', {'precision': 2, 'hint': '0.00'}),
+		         ('+3 H', f'at({PR}, 3h)', '$muted', {'precision': 2, 'hint': '0.00'}),
+		         ('+6 H', f'at({PR}, 6h)', '$muted', {'precision': 2, 'hint': '0.00'}),
+		         ('+12 H', f'at({PR}, 12h)', '$muted', {'precision': 2, 'hint': '0.00'}),
+		         ('LOW CLD', f'{C}.low', '$faint', {'hint': '000', 'fmt': {'unit_symbol': False}})]),
 	]
 	x = X[2] + px
-	trend = lambda s, color, when=None: {**text(s, g(0, 0, 100, 100), font=LABEL, weight='SemiBold', color=color, tracking=0.2),
+	trend = lambda s, color, when=None: {**text(s, g(0, 0, 100, 100), font=LABEL, weight='SemiBold', color=color, tracking=0.2, align='CenterLeft'),
 	                                     **({'when': when} if when else {})}
 	cards['pressure'] = [
 		cap_('PRESSURE · INHG', g(x, Y + py, iw, CAP), '$series-4'),
-		mini(P, g(x, Y + py + CAP + 0.6, iw, HERO + 1.5), color='$series-4', hours=24, past=True, top='30%', opacity=0.8, fill=0.3, weight=0.6, glow=GLOW),
+		mini(P, g(x, top, iw, HERO), color='$series-4', hours=24, past=True, top='30%', opacity=0.8, fill=0.3, weight=0.6, glow=GLOW),
 		hero(P, x, iw, '$text', precision=2, hint='00.00'),
-		{'type': 'switch', 'name': 'tendency', 'hold': '10m', 'fade': '0.4s', 'geometry': g(x, Y + 15, iw, 2.8), 'items': [
+		{'type': 'switch', 'name': 'tendency', 'hold': '10m', 'fade': '0.4s', 'geometry': g(x, pic + 0.6, iw, 2.8), 'items': [
 			trend('RISING ▲', '$good', f'{P} - at({P}, -3h) > 0.02 inHg'),
 			trend('FALLING ▼', '$bad', f'at({P}, -3h) - {P} > 0.02 inHg'),
 			trend('STEADY', '$faint')]},
-		*tile('−3 H', f'{P} - at({P}, -3h)', x, low, 5, '$info', precision=2, hint='-0.00', h=4.4),
-		*tile('−24 H', f'{P} - at({P}, -24h)', x + 5.4, low, 5, '$info', precision=2, hint='-0.00', h=4.4),
-		*tile('+12 H', f'at({P}, 12h)', x + 10.8, low, 5, '$series-4', precision=2, hint='00.00', h=4.4),
+		*six(x, [('−3 H', f'{P} - at({P}, -3h)', '$info', {'precision': 2, 'hint': '-0.00'}),
+		         ('−24 H', f'{P} - at({P}, -24h)', '$info', {'precision': 2, 'hint': '-0.00'}),
+		         ('+12 H', f'at({P}, 12h)', '$series-4', {'precision': 2, 'hint': '00.00'}),
+		         ('HIGH', f'max({P}, 24h)', '$muted', {'precision': 2, 'hint': '00.00'}),
+		         ('LOW', f'min({P}, 24h)', '$muted', {'precision': 2, 'hint': '00.00'}),
+		         ('+24 H', f'at({P}, 24h)', '$series-4', {'precision': 2, 'hint': '00.00'})]),
 	]
 	x = X[3] + px
 	cards['sky'] = [
@@ -302,31 +318,41 @@ def board(rooms=INDOOR):
 	for i, (name, layer) in enumerate((('LOW', 'low'), ('MID', 'mid'), ('HIGH', 'high'))):
 		px_ = x + 9.4 + i * 2.4
 		cards['sky'] += [
-			bar(f'{C}.{layer}', g(px_, Y + 4.2, 1.8, 8.6), 0, 1, color='$muted', orientation='vertical', track={'weight': '100%', 'color': '$rule'},
+			bar(f'{C}.{layer}', g(px_, top, 1.8, HERO - 2), 0, 1, color='$muted', orientation='vertical', track={'weight': '100%', 'color': '$rule'},
 			    fill={'weight': '100%'}),
-			cap_(name[0], g(px_ - 0.3, Y + 13.1, 2.4, CAP), group='global.layer', align='Center', tracking=0, **{'format-hint': 'M'}),
+			cap_(name[0], g(px_ - 0.3, top + HERO - 1.6, 2.4, CAP), group='global.layer', align='Center', tracking=0, **{'format-hint': 'M'}),
 		]
 	cards['sky'] += [
-		mini(f'{C}.cover', g(x, Y + 14.6, iw, 4.4), color='$muted', hours=24, lo=0, hi=1, top='6%', bottom='2%', opacity=0.7, fill=0.25, weight=0.35),
-		*tile('HUMIDITY %', 'environment.humidity.humidity', x, low, 7.6, '$info', hint='000', h=4.4, fmt={'unit_symbol': False}),
-		*tile('VPD KPA', 'environment.pressure.vaporPressureDeficit', x + 8.2, low, 7.6, '$good', precision=2, hint='0.00', h=4.4,
-		      fmt={'unit_symbol': False}),
+		mini(f'{C}.cover', g(x, pic, iw, 4), color='$muted', hours=24, lo=0, hi=1, top='6%', bottom='0%', opacity=0.7, fill=0.25, weight=0.35),
+		*six(x, [('RH', 'environment.humidity.humidity', '$info', {'hint': '00%', 'unit': 'Inline'}),
+		         ('DEW', 'environment.temperature.dewpoint', '$good', {'hint': '00°', 'unit': 'Inline'}),
+		         ('VPD', 'environment.pressure.vaporPressureDeficit', '$good', {'precision': 2, 'hint': '0.00', 'fmt': {'unit_symbol': False}}),
+		         ('+6 H', f'at({C}.cover, 6h)', '$muted', {'hint': '000', 'fmt': {'unit_symbol': False}}),
+		         ('HI CLD', f'{C}.high', '$faint', {'hint': '000', 'fmt': {'unit_symbol': False}}),
+		         ('MIN RH', 'min(environment.humidity.humidity, 24h)', '$info', {'hint': '00%', 'unit': 'Inline'})]),
 	]
 	x = X[4] + px
 	# Planes near by take the card over (`aircraft.active`, from the Aircraft plugin, off until Aircraft.ini enables it);
-	# otherwise the day's clock.
-	body = g(x - 0.4, Y + py + CAP + 0.4, iw + 0.8, H - 2 * py - CAP - 0.4)
-	cards['today'] = [{'type': 'switch', 'name': 'skyOrClock', 'hold': '2m', 'fade': '0.4s', 'geometry': g(x, Y + py, iw, H - 2 * py), 'items': [
-		nest('planes', (x, Y + py, iw, H - 2 * py), [
+	# otherwise the day's clock. Either way three readings sit under the picture.
+	body = g(x - 0.4, top, iw + 0.8, rows[1] - top - 0.4)
+	whole = (x, Y + py, iw, H - 2 * py)
+	cards['today'] = [{'type': 'switch', 'name': 'skyOrClock', 'hold': '2m', 'fade': '0.4s', 'geometry': g(*whole), 'items': [
+		nest('planes', whole, [
 			cap_('OVERHEAD · NM', g(x, Y + py, iw * 0.6, CAP), '$info'),
 			num('aircraft.count', g(x + iw * 0.6, Y + py - 0.4, iw * 0.4, CAP + 0.8), '$info', weight='Bold', align='TopRight', hint='00'),
 			{'type': 'polar', 'name': 'radar', 'plot': 'radar', 'prefix': 'aircraft', 'slots': 15, 'max': 30, 'labels': 4, 'sweep': True,
 			 'rings': 3, 'accent': '$info', 'gradient': [{'at': 0, 'color': '$bad'}, {'at': 8000, 'color': '$warn'}, {'at': 40000, 'color': '$info'}],
-			 'geometry': body}], fill=None, when='aircraft.active') | {'geometry': g(0, 0, 100, 100)},
-		nest('dayClock', (x, Y + py, iw, H - 2 * py), [
+			 'geometry': body},
+			*six(x, [('FLIGHT', 'aircraft.1.callsign', '$text', {'hint': 'AAL000', 'group': 'global.callsign'}),
+			         ('NM', 'aircraft.1.distance', '$info', {'precision': 1, 'hint': '00.0'}),
+			         ('FT', 'aircraft.1.altitude', '$warn', {'hint': '00000'})], start=3)], fill=None, when='aircraft.active') | {'geometry': g(0, 0, 100, 100)},
+		nest('dayClock', whole, [
 			cap_('TODAY ROUND THE CLOCK', g(x, Y + py, iw, CAP), '$accent'),
 			{'type': 'polar', 'name': 'dayClock', 'plot': 'clock', 'key': T, 'window': 'today', 'gradient': '$temperature', 'marks': False,
-			 'geometry': body}], fill=None) | {'geometry': g(0, 0, 100, 100)}]}]
+			 'geometry': body},
+			*six(x, [('−24 H', f'at({T}, -24h)', '$muted', {'hint': '00°', 'unit': 'Inline'}),
+			         ('AVG', f'avg({T}, 24h)', '$muted', {'hint': '00°', 'unit': 'Inline'}),
+			         ('+24 H', f'at({T}, 24h)', '$muted', {'hint': '00°', 'unit': 'Inline'})], start=3)], fill=None) | {'geometry': g(0, 0, 100, 100)}]}]
 	for i, (name, items) in enumerate(cards.items()):
 		B.append(nest(f'{name}Card', (X[i], Y, CW, H), items))
 	return {'items': [{'type': 'group', 'name': 'board', 'items': B}]}

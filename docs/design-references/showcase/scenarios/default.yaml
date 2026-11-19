@@ -118,6 +118,18 @@ keys:
     value: 0
     unit: int
     title: A plane is near
+  aircraft.1.callsign:
+    value: ''
+    unit: str
+    title: Nearest flight
+  aircraft.1.distance:
+    value: 0
+    unit: int
+    title: Nearest distance
+  aircraft.1.altitude:
+    value: 0
+    unit: int
+    title: Nearest altitude
   indoor.temperature.temperature:
     value: 69.9
     unit: f
