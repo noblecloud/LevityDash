@@ -1938,6 +1938,7 @@ items:
         active: environment.precipitation.precipitation
         radius: 24
         strength: 0.8
+      when: max(environment.precipitation.precipitation, 24h) > 0 or at(environment.precipitation.precipitation, 6h) > 0
     - type: group
       name: pressureCard
       items:

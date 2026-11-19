@@ -97,6 +97,25 @@ class Band(Panel, tag='band'):
 		return [child for child in self.childItems() if isinstance(child, Panel) and hasattr(child, 'condition')]
 
 	@property
+	def shown(self) -> List[Panel]:
+		"""The items in the ring now: those whose `when:` holds (an item without one always does)."""
+		return [child for child in self.choices if child.condition.holds]
+
+	def childConditionChanged(self, child: Panel) -> None:
+		"""An item's `when:` changed: it leaves or joins the ring, and the others close up around it."""
+		self._reflowShown()
+
+	def _reflowShown(self) -> None:
+		"""Hide the items whose `when:` fails. Each keeps its laid-out slot; `place` translates the rest to close the gap."""
+		shown = self.shown
+		for child in self.choices:
+			child.setVisible(child in shown)
+		self._applied.clear()
+		if shown:
+			self._position %= len(shown)
+		self._restart()
+
+	@property
 	def vertical(self) -> bool:
 		return self._direction in ('up', 'down')
 
@@ -106,7 +125,7 @@ class Band(Panel, tag='band'):
 
 	@property
 	def running(self) -> bool:
-		return scrolls(len(self.choices), self._visible)
+		return scrolls(len(self.shown), self._visible)
 
 	@property
 	def position(self) -> float:
@@ -131,7 +150,8 @@ class Band(Panel, tag='band'):
 		"""Move every item to where `position` puts it. Only translations change; nothing is laid out."""
 		if position is not None:
 			self._position = position
-		children = self.choices
+		every = self.choices
+		children = [child for child in every if child.condition.holds]
 		count = len(children)
 		if count == 0:
 			return
@@ -140,7 +160,8 @@ class Band(Panel, tag='band'):
 		moving = scrolls(count, self._visible)
 		where = slots(count, self._position, self.sign) if moving else list(range(count))
 		for index, child in enumerate(children):
-			delta = round((where[index] - index) * stride, 2) if moving else 0.0
+			# Each item was laid out at its place in the file; a hidden one before it leaves a gap to close.
+			delta = round((where[index] - every.index(child)) * stride, 2)
 			if self._applied.get(child) == delta:
 				continue
 			self._applied[child] = delta
@@ -187,7 +208,7 @@ class Band(Panel, tag='band'):
 			return
 		try:
 			elapsed = time.monotonic() - self._started
-			count = len(self.choices)
+			count = len(self.shown)
 			self.place((elapsed * self._speed * self.sign) % count)
 		except Exception:
 			log.exception('band could not move; stopping it')
@@ -198,7 +219,7 @@ class Band(Panel, tag='band'):
 			self._dwellTimer.start(int(max(self._dwell, 0.05) * 1000))  # look again later; costs nothing
 			return
 		try:
-			count = len(self.choices)
+			count = len(self.shown)
 			step = self._stepSize if self._stepSize else max(1.0, math.floor(self._visible))
 			start, end = self._position, self._position + step * self.sign
 			if self._transition <= 0:
@@ -266,7 +287,7 @@ class Band(Panel, tag='band'):
 		self.geometry.updateSurface()
 		self._applied.clear()
 		itemLoader(self, value, existing=self.choices)
-		self._restart()
+		self._reflowShown()
 
 	@items.condition(method='get')
 	def items(owner: 'Band') -> bool:

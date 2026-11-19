@@ -192,6 +192,11 @@ BEAMS = {
 }
 
 
+# A card that only joins the band while it has something to say: the rain card while rain fell in the last day or
+# is forecast in the next six hours (no data counts as no rain, so it also stays out when the key is missing).
+WHEN = {'rain': f'max({PR}, 24h) > 0 or at({PR}, 6h) > 0'}
+
+
 def board(rooms=INDOOR):
 	B = [clock()]
 	# Two reading sizes (Neal's rule): `global.room` for what is read across the room, `global.detail` for what is
@@ -421,7 +426,8 @@ def board(rooms=INDOOR):
 
 	def card(name):
 		fill = {'color': {'color': '$surface', 'mix': {'with': tint[name], 'by': 0.14}}, 'alpha': 0.62}
-		return nest(f'{name}Card', (origin[name], Y, CW, H), cards.pop(name), fill=fill, **({'beam': BEAMS[name]} if name in BEAMS else {}))
+		extra = ({'beam': BEAMS[name]} if name in BEAMS else {}) | ({'when': WHEN[name]} if name in WHEN else {})
+		return nest(f'{name}Card', (origin[name], Y, CW, H), cards.pop(name), fill=fill, **extra)
 
 	# The last card stays put (a plane overhead must not scroll away); the rest take turns in a band, four in view.
 	today = card('today')
