@@ -1091,1787 +1091,2793 @@ items:
       right: 0
       top: 0
       bottom: 0
-  - type: group
-    name: windCard
+  - type: band
+    name: cards
+    mode: step
+    visible: 4
+    gap: 1.567%
+    dwell: 12s
+    transition: 900ms
+    step: 1
     geometry:
       x: 2.0%
       y: 68.5%
-      width: 18.24%
+      width: 76.56%
       height: 29.5%
     items:
-    - type: text
-      text: WIND · MPH
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $series-6
-      alignment: BottomLeft
-      geometry:
-        x: 6.579%
-        y: 6.102%
-        width: 86.842%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: environment.wind.speed.speed
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 0
-        valueLabel:
-          color: $series-6
-          font: $mono
-          weight: Bold
-          matchingGroup:
-            group: global.room
-            matchAll: true
-          tracking: -0.03
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '00'
-      geometry:
-        x: 6.579%
-        y: 13.22%
-        width: 42.763%
-        height: 30.508%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: polar
-      name: rose
-      plot: rose
-      direction: environment.wind.direction.direction
-      speed: environment.wind.speed.speed
-      window: 24h
-      legend: false
-      rings: 3
-      compass: 4
-      gradient: WindSpeedGradient
-      geometry:
-        x: 49.342%
-        y: 2.034%
-        width: 47.149%
-        height: 42.712%
-    - type: mini-graph
-      geometry:
-        x: 6.579%
-        y: 45.085%
-        width: 86.842%
-        height: 13.559%
-      timeframe:
-        hours: 24
-        lookback:
-          hours: 48
-        offset:
-          hours: -24
-      annotations:
-        dayLabels:
-          enabled: false
-        hourLabels:
-          enabled: false
-        lines:
-          enabled: false
-      indicator:
-        opacity: 0
-      figures:
-      - figure: fig4
-        margins:
-          top: 8%
-          bottom: 0%
-        environment.wind.speed.gust:
-          plot:
-            type: plot
-            weight: 0.35
-            opacity: 0.5
-            fill:
-              opacity: 0.15
-              fade: true
-            color: $warn
-        min: 0
-    - type: mini-graph
-      geometry:
-        x: 6.579%
-        y: 45.085%
-        width: 86.842%
-        height: 13.559%
-      timeframe:
-        hours: 24
-        lookback:
-          hours: 48
-        offset:
-          hours: -24
-      annotations:
-        dayLabels:
-          enabled: false
-        hourLabels:
-          enabled: false
-        lines:
-          enabled: false
-      indicator:
-        opacity: 0
-      figures:
-      - figure: fig5
-        margins:
-          top: 8%
-          bottom: 0%
-        environment.wind.speed.speed:
-          plot:
-            type: plot
-            weight: 0.45
-            opacity: 0.6
-            fill:
-              opacity: 0.25
-              fade: true
-            color: $series-6
-            glow: *id001
-        min: 0
-    - type: text
-      text: GUST
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 6.579%
-        y: 60.339%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: environment.wind.speed.gust
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 0
-        valueLabel:
-          color: $warn
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '00'
-      geometry:
-        x: 6.579%
-        y: 66.78%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: text
-      text: PEAK
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 36.442%
-        y: 60.339%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: environment.wind.speed.gustMax
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 0
-        valueLabel:
-          color: $bad
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '00'
-      geometry:
-        x: 36.442%
-        y: 66.78%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: text
-      text: FROM
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 66.299%
-        y: 60.339%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: environment.wind.direction.direction
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 0
-        valueLabel:
-          color: $info
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: SSW
-      geometry:
-        x: 66.299%
-        y: 66.78%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: text
-      text: AVG
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 6.579%
-        y: 79.322%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: avg(environment.wind.speed.speed, 24h)
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 0
-        valueLabel:
-          color: $series-6
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '00'
-      geometry:
-        x: 6.579%
-        y: 85.763%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: text
-      text: MAX
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 36.442%
-        y: 79.322%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: max(environment.wind.speed.gust, 24h)
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 0
-        valueLabel:
-          color: $warn
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '00'
-      geometry:
-        x: 36.442%
-        y: 85.763%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: text
-      text: +6 H
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 66.299%
-        y: 79.322%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: at(environment.wind.speed.speed, 6h)
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 0
-        valueLabel:
-          color: $muted
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '00'
-      geometry:
-        x: 66.299%
-        y: 85.763%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    border:
-      enabled: true
-      radius: 24px
-      fill:
-        color:
-          color: $surface
-          mix:
-            with: $series-6
-            by: 0.14
-        alpha: 0.62
-      weight: 0
-  - type: group
-    name: rainCard
-    geometry:
-      x: 21.44%
-      y: 68.5%
-      width: 18.24%
-      height: 29.5%
-    items:
-    - type: text
-      text: RAIN · INCHES
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $info
-      alignment: BottomLeft
-      geometry:
-        x: 6.579%
-        y: 6.102%
-        width: 86.842%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: environment.precipitation.daily
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 2
-        valueLabel:
-          color: $info
-          font: $mono
-          weight: Bold
-          matchingGroup:
-            group: global.room
-            matchAll: true
-          tracking: -0.03
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '0.00'
-      geometry:
-        x: 6.579%
-        y: 13.22%
-        width: 52.632%
-        height: 30.508%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: text
-      text: today
-      font: $body
-      weight: Light
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 60.307%
-        y: 31.525%
-        width: 32.895%
-        height: 8.814%
-      italic: true
-    - type: mini-graph
-      geometry:
-        x: 6.579%
-        y: 45.085%
-        width: 86.842%
-        height: 13.559%
-      timeframe:
-        hours: 24
-        lookback:
-          hours: 0
-        offset:
-          hours: 0
-      annotations:
-        dayLabels:
-          enabled: false
-        hourLabels:
-          enabled: false
-        lines:
-          enabled: false
-      indicator:
-        opacity: 0
-      figures:
-      - figure: fig6
-        margins:
-          top: 4%
-          bottom: 0%
-        environment.precipitation.precipitation:
-          plot:
-            type: bar
-            opacity: 1
-            width: 0.6
-            color: $info
-            glow: *id001
-            radius: 0.5
-          smooth: false
-        min: 0
-        max: 0.4
-    - type: text
-      text: NOW
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 6.579%
-        y: 60.339%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: environment.precipitation.precipitation
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 2
-        valueLabel:
-          color: $info
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '0.00'
-      geometry:
-        x: 6.579%
-        y: 66.78%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: text
-      text: PEAK
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 36.442%
-        y: 60.339%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: max(environment.precipitation.precipitation, today)
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 2
-        valueLabel:
-          color: $series-4
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '0.00'
-      geometry:
-        x: 36.442%
-        y: 66.78%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: text
-      text: +3 H
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 66.299%
-        y: 60.339%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: at(environment.precipitation.precipitation, 3h)
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 2
-        valueLabel:
-          color: $muted
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '0.00'
-      geometry:
-        x: 66.299%
-        y: 66.78%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: text
-      text: +6 H
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 6.579%
-        y: 79.322%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: at(environment.precipitation.precipitation, 6h)
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 2
-        valueLabel:
-          color: $muted
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '0.00'
-      geometry:
-        x: 6.579%
-        y: 85.763%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: text
-      text: +12 H
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 36.442%
-        y: 79.322%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: at(environment.precipitation.precipitation, 12h)
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 2
-        valueLabel:
-          color: $muted
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '0.00'
-      geometry:
-        x: 36.442%
-        y: 85.763%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: text
-      text: LOW CLD
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 66.299%
-        y: 79.322%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: environment.clouds.cover.low
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 0
-        valueLabel:
-          color: $faint
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '000'
-        format:
-          unit_symbol: false
-      geometry:
-        x: 66.299%
-        y: 85.763%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    border:
-      enabled: true
-      radius: 24px
-      fill:
-        color:
-          color: $surface
-          mix:
-            with: $info
-            by: 0.14
-        alpha: 0.62
-      weight: 0
-    beam:
-      size: line
-      variant: ocean
-      active: environment.precipitation.precipitation
-      radius: 24
-      strength: 0.8
-  - type: group
-    name: pressureCard
-    geometry:
-      x: 40.88%
-      y: 68.5%
-      width: 18.24%
-      height: 29.5%
-    items:
-    - type: text
-      text: PRESSURE · INHG
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $series-4
-      alignment: BottomLeft
-      geometry:
-        x: 6.579%
-        y: 6.102%
-        width: 86.842%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: mini-graph
-      geometry:
-        x: 6.579%
-        y: 13.22%
-        width: 86.842%
-        height: 30.508%
-      timeframe:
-        hours: 24
-        lookback:
-          hours: 48
-        offset:
-          hours: -24
-      annotations:
-        dayLabels:
-          enabled: false
-        hourLabels:
-          enabled: false
-        lines:
-          enabled: false
-      indicator:
-        opacity: 0
-      figures:
-      - figure: fig7
-        margins:
-          top: 30%
-          bottom: 2%
-        environment.pressure.pressure:
-          plot:
-            type: plot
-            weight: 0.6
-            opacity: 0.8
-            fill:
-              opacity: 0.3
-              fade: true
-            color: $series-4
-            glow: *id001
-    - type: realtime.text
-      key: environment.pressure.pressure
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 2
-        valueLabel:
-          color: $text
-          font: $mono
-          weight: Bold
-          matchingGroup:
-            group: global.room
-            matchAll: true
-          tracking: -0.03
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '00.00'
-      geometry:
-        x: 6.579%
-        y: 13.22%
-        width: 86.842%
-        height: 30.508%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: switch
-      name: tendency
-      hold: 10m
-      fade: 0.4s
-      geometry:
-        x: 6.579%
-        y: 47.119%
-        width: 86.842%
-        height: 9.492%
+    - type: group
+      name: windCard
       items:
       - type: text
-        text: RISING ▲
+        text: WIND · MPH
         font: Barlow Condensed
         weight: SemiBold
-        color: $good
-        alignment: CenterLeft
+        color: $series-6
+        alignment: BottomLeft
         geometry:
-          x: 0%
-          y: 0%
-          width: 100%
-          height: 100%
-        tracking: 0.2
-        when: environment.pressure.pressure - at(environment.pressure.pressure, -3h) > 0.02 inHg
-      - type: text
-        text: FALLING ▼
-        font: Barlow Condensed
-        weight: SemiBold
-        color: $bad
-        alignment: CenterLeft
+          x: 6.579%
+          y: 6.102%
+          width: 86.842%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.wind.speed.speed
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 0
+          valueLabel:
+            color: $series-6
+            font: $mono
+            weight: Bold
+            matchingGroup:
+              group: global.room
+              matchAll: true
+            tracking: -0.03
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '00'
         geometry:
-          x: 0%
-          y: 0%
-          width: 100%
-          height: 100%
-        tracking: 0.2
-        when: at(environment.pressure.pressure, -3h) - environment.pressure.pressure > 0.02 inHg
+          x: 6.579%
+          y: 13.22%
+          width: 42.763%
+          height: 30.508%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: polar
+        name: rose
+        plot: rose
+        direction: environment.wind.direction.direction
+        speed: environment.wind.speed.speed
+        window: 24h
+        legend: false
+        rings: 3
+        compass: 4
+        gradient: WindSpeedGradient
+        geometry:
+          x: 49.342%
+          y: 2.034%
+          width: 47.149%
+          height: 42.712%
+      - type: mini-graph
+        geometry:
+          x: 6.579%
+          y: 45.085%
+          width: 86.842%
+          height: 13.559%
+        timeframe:
+          hours: 24
+          lookback:
+            hours: 48
+          offset:
+            hours: -24
+        annotations:
+          dayLabels:
+            enabled: false
+          hourLabels:
+            enabled: false
+          lines:
+            enabled: false
+        indicator:
+          opacity: 0
+        figures:
+        - figure: fig4
+          margins:
+            top: 8%
+            bottom: 0%
+          environment.wind.speed.gust:
+            plot:
+              type: plot
+              weight: 0.35
+              opacity: 0.5
+              fill:
+                opacity: 0.15
+                fade: true
+              color: $warn
+          min: 0
+      - type: mini-graph
+        geometry:
+          x: 6.579%
+          y: 45.085%
+          width: 86.842%
+          height: 13.559%
+        timeframe:
+          hours: 24
+          lookback:
+            hours: 48
+          offset:
+            hours: -24
+        annotations:
+          dayLabels:
+            enabled: false
+          hourLabels:
+            enabled: false
+          lines:
+            enabled: false
+        indicator:
+          opacity: 0
+        figures:
+        - figure: fig5
+          margins:
+            top: 8%
+            bottom: 0%
+          environment.wind.speed.speed:
+            plot:
+              type: plot
+              weight: 0.45
+              opacity: 0.6
+              fill:
+                opacity: 0.25
+                fade: true
+              color: $series-6
+              glow: *id001
+          min: 0
       - type: text
-        text: STEADY
+        text: GUST
         font: Barlow Condensed
         weight: SemiBold
         color: $faint
-        alignment: CenterLeft
+        alignment: BottomLeft
         geometry:
-          x: 0%
-          y: 0%
-          width: 100%
-          height: 100%
-        tracking: 0.2
-    - type: text
-      text: −3 H
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 6.579%
-        y: 60.339%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: environment.pressure.pressure - at(environment.pressure.pressure, -3h)
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 2
-        valueLabel:
-          color: $info
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '-0.00'
-      geometry:
-        x: 6.579%
-        y: 66.78%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: text
-      text: −24 H
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 36.442%
-        y: 60.339%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: environment.pressure.pressure - at(environment.pressure.pressure, -24h)
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 2
-        valueLabel:
-          color: $info
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '-0.00'
-      geometry:
-        x: 36.442%
-        y: 66.78%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: text
-      text: +12 H
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 66.299%
-        y: 60.339%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: at(environment.pressure.pressure, 12h)
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 2
-        valueLabel:
-          color: $series-4
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '00.00'
-      geometry:
-        x: 66.299%
-        y: 66.78%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: text
-      text: HIGH
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 6.579%
-        y: 79.322%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: max(environment.pressure.pressure, 24h)
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 2
-        valueLabel:
-          color: $muted
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '00.00'
-      geometry:
-        x: 6.579%
-        y: 85.763%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: text
-      text: LOW
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 36.442%
-        y: 79.322%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: min(environment.pressure.pressure, 24h)
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 2
-        valueLabel:
-          color: $muted
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '00.00'
-      geometry:
-        x: 36.442%
-        y: 85.763%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: text
-      text: +24 H
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 66.299%
-        y: 79.322%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: at(environment.pressure.pressure, 24h)
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 2
-        valueLabel:
-          color: $series-4
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '00.00'
-      geometry:
-        x: 66.299%
-        y: 85.763%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    border:
-      enabled: true
-      radius: 24px
-      fill:
-        color:
-          color: $surface
-          mix:
-            with: $series-4
-            by: 0.14
-        alpha: 0.62
-      weight: 0
-  - type: group
-    name: skyCard
-    geometry:
-      x: 60.32%
-      y: 68.5%
-      width: 18.24%
-      height: 29.5%
-    items:
-    - type: text
-      text: CLOUD COVER · %
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $muted
-      alignment: BottomLeft
-      geometry:
-        x: 6.579%
-        y: 6.102%
-        width: 86.842%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: environment.clouds.cover.cover
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 0
-        valueLabel:
-          color: $text
-          font: $mono
-          weight: Bold
-          matchingGroup:
-            group: global.room
-            matchAll: true
-          tracking: -0.03
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '000'
-        format:
-          unit_symbol: false
-      geometry:
-        x: 6.579%
-        y: 13.22%
-        width: 46.053%
-        height: 30.508%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: realtime.bar
-      key: environment.clouds.cover.low
-      title: false
-      geometry:
-        x: 58.114%
-        y: 13.22%
-        width: 9.868%
-        height: 23.729%
-      display:
-        range:
-          min: 0
-          max: 1
-        track:
-          weight: 100%
-          color: $rule
-        fill:
-          color: $muted
-          weight: 100%
-        value-label:
-          visible: false
-        orientation: vertical
-    - type: text
-      text: L
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: Center
-      geometry:
-        x: 56.469%
-        y: 38.305%
-        width: 13.158%
-        height: 5.085%
-      matchingGroup:
-        group: global.layer
-        matchAll: true
-      tracking: 0
-      format-hint: M
-    - type: realtime.bar
-      key: environment.clouds.cover.mid
-      title: false
-      geometry:
-        x: 71.272%
-        y: 13.22%
-        width: 9.868%
-        height: 23.729%
-      display:
-        range:
-          min: 0
-          max: 1
-        track:
-          weight: 100%
-          color: $rule
-        fill:
-          color: $muted
-          weight: 100%
-        value-label:
-          visible: false
-        orientation: vertical
-    - type: text
-      text: M
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: Center
-      geometry:
-        x: 69.627%
-        y: 38.305%
-        width: 13.158%
-        height: 5.085%
-      matchingGroup:
-        group: global.layer
-        matchAll: true
-      tracking: 0
-      format-hint: M
-    - type: realtime.bar
-      key: environment.clouds.cover.high
-      title: false
-      geometry:
-        x: 84.43%
-        y: 13.22%
-        width: 9.868%
-        height: 23.729%
-      display:
-        range:
-          min: 0
-          max: 1
-        track:
-          weight: 100%
-          color: $rule
-        fill:
-          color: $muted
-          weight: 100%
-        value-label:
-          visible: false
-        orientation: vertical
-    - type: text
-      text: H
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: Center
-      geometry:
-        x: 82.785%
-        y: 38.305%
-        width: 13.158%
-        height: 5.085%
-      matchingGroup:
-        group: global.layer
-        matchAll: true
-      tracking: 0
-      format-hint: M
-    - type: mini-graph
-      geometry:
-        x: 6.579%
-        y: 45.085%
-        width: 86.842%
-        height: 13.559%
-      timeframe:
-        hours: 24
-        lookback:
-          hours: 0
-        offset:
-          hours: 0
-      annotations:
-        dayLabels:
-          enabled: false
-        hourLabels:
-          enabled: false
-        lines:
-          enabled: false
-      indicator:
-        opacity: 0
-      figures:
-      - figure: fig8
+          x: 6.579%
+          y: 60.339%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.wind.speed.gust
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 0
+          valueLabel:
+            color: $warn
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '00'
+        geometry:
+          x: 6.579%
+          y: 66.78%
+          width: 27.122%
+          height: 10.847%
         margins:
-          top: 6%
-          bottom: 0%
-        environment.clouds.cover.cover:
-          plot:
-            type: plot
-            weight: 0.35
-            opacity: 0.7
-            fill:
-              opacity: 0.25
-              fade: true
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: PEAK
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 36.442%
+          y: 60.339%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.wind.speed.gustMax
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 0
+          valueLabel:
+            color: $bad
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '00'
+        geometry:
+          x: 36.442%
+          y: 66.78%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: FROM
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 66.299%
+          y: 60.339%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.wind.direction.direction
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 0
+          valueLabel:
+            color: $info
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: SSW
+        geometry:
+          x: 66.299%
+          y: 66.78%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: AVG
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 6.579%
+          y: 79.322%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: avg(environment.wind.speed.speed, 24h)
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 0
+          valueLabel:
+            color: $series-6
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '00'
+        geometry:
+          x: 6.579%
+          y: 85.763%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: MAX
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 36.442%
+          y: 79.322%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: max(environment.wind.speed.gust, 24h)
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 0
+          valueLabel:
+            color: $warn
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '00'
+        geometry:
+          x: 36.442%
+          y: 85.763%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: +6 H
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 66.299%
+          y: 79.322%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: at(environment.wind.speed.speed, 6h)
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 0
+          valueLabel:
             color: $muted
-        min: 0
-        max: 1
-    - type: text
-      text: RH
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 6.579%
-        y: 60.339%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: environment.humidity.humidity
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Inline
-        precision: 0
-        valueLabel:
-          color: $info
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '00'
+        geometry:
+          x: 66.299%
+          y: 85.763%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      border:
+        enabled: true
+        radius: 24px
+        fill:
+          color:
+            color: $surface
+            mix:
+              with: $series-6
+              by: 0.14
+          alpha: 0.62
+        weight: 0
+    - type: group
+      name: rainCard
+      items:
+      - type: text
+        text: RAIN · INCHES
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $info
+        alignment: BottomLeft
+        geometry:
+          x: 6.579%
+          y: 6.102%
+          width: 86.842%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.precipitation.daily
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 2
+          valueLabel:
+            color: $info
+            font: $mono
+            weight: Bold
+            matchingGroup:
+              group: global.room
+              matchAll: true
+            tracking: -0.03
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '0.00'
+        geometry:
+          x: 6.579%
+          y: 13.22%
+          width: 52.632%
+          height: 30.508%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: today
+        font: $body
+        weight: Light
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 60.307%
+          y: 31.525%
+          width: 32.895%
+          height: 8.814%
+        italic: true
+      - type: mini-graph
+        geometry:
+          x: 6.579%
+          y: 45.085%
+          width: 86.842%
+          height: 13.559%
+        timeframe:
+          hours: 24
+          lookback:
+            hours: 0
+          offset:
+            hours: 0
+        annotations:
+          dayLabels:
+            enabled: false
+          hourLabels:
+            enabled: false
+          lines:
+            enabled: false
+        indicator:
+          opacity: 0
+        figures:
+        - figure: fig6
           margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: 00%
-      geometry:
-        x: 6.579%
-        y: 66.78%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: text
-      text: DEW
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 36.442%
-        y: 60.339%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: environment.temperature.dewpoint
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Inline
-        precision: 0
-        valueLabel:
+            top: 4%
+            bottom: 0%
+          environment.precipitation.precipitation:
+            plot:
+              type: bar
+              opacity: 1
+              width: 0.6
+              color: $info
+              glow: *id001
+              radius: 0.5
+            smooth: false
+          min: 0
+          max: 0.4
+      - type: text
+        text: NOW
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 6.579%
+          y: 60.339%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.precipitation.precipitation
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 2
+          valueLabel:
+            color: $info
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '0.00'
+        geometry:
+          x: 6.579%
+          y: 66.78%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: PEAK
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 36.442%
+          y: 60.339%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: max(environment.precipitation.precipitation, today)
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 2
+          valueLabel:
+            color: $series-4
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '0.00'
+        geometry:
+          x: 36.442%
+          y: 66.78%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: +3 H
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 66.299%
+          y: 60.339%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: at(environment.precipitation.precipitation, 3h)
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 2
+          valueLabel:
+            color: $muted
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '0.00'
+        geometry:
+          x: 66.299%
+          y: 66.78%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: +6 H
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 6.579%
+          y: 79.322%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: at(environment.precipitation.precipitation, 6h)
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 2
+          valueLabel:
+            color: $muted
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '0.00'
+        geometry:
+          x: 6.579%
+          y: 85.763%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: +12 H
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 36.442%
+          y: 79.322%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: at(environment.precipitation.precipitation, 12h)
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 2
+          valueLabel:
+            color: $muted
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '0.00'
+        geometry:
+          x: 36.442%
+          y: 85.763%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: LOW CLD
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 66.299%
+          y: 79.322%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.clouds.cover.low
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 0
+          valueLabel:
+            color: $faint
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '000'
+          format:
+            unit_symbol: false
+        geometry:
+          x: 66.299%
+          y: 85.763%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      border:
+        enabled: true
+        radius: 24px
+        fill:
+          color:
+            color: $surface
+            mix:
+              with: $info
+              by: 0.14
+          alpha: 0.62
+        weight: 0
+      beam:
+        size: line
+        variant: ocean
+        active: environment.precipitation.precipitation
+        radius: 24
+        strength: 0.8
+    - type: group
+      name: pressureCard
+      items:
+      - type: text
+        text: PRESSURE · INHG
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $series-4
+        alignment: BottomLeft
+        geometry:
+          x: 6.579%
+          y: 6.102%
+          width: 86.842%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: mini-graph
+        geometry:
+          x: 6.579%
+          y: 13.22%
+          width: 86.842%
+          height: 30.508%
+        timeframe:
+          hours: 24
+          lookback:
+            hours: 48
+          offset:
+            hours: -24
+        annotations:
+          dayLabels:
+            enabled: false
+          hourLabels:
+            enabled: false
+          lines:
+            enabled: false
+        indicator:
+          opacity: 0
+        figures:
+        - figure: fig7
+          margins:
+            top: 30%
+            bottom: 2%
+          environment.pressure.pressure:
+            plot:
+              type: plot
+              weight: 0.6
+              opacity: 0.8
+              fill:
+                opacity: 0.3
+                fade: true
+              color: $series-4
+              glow: *id001
+      - type: realtime.text
+        key: environment.pressure.pressure
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 2
+          valueLabel:
+            color: $text
+            font: $mono
+            weight: Bold
+            matchingGroup:
+              group: global.room
+              matchAll: true
+            tracking: -0.03
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '00.00'
+        geometry:
+          x: 6.579%
+          y: 13.22%
+          width: 86.842%
+          height: 30.508%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: switch
+        name: tendency
+        hold: 10m
+        fade: 0.4s
+        geometry:
+          x: 6.579%
+          y: 47.119%
+          width: 86.842%
+          height: 9.492%
+        items:
+        - type: text
+          text: RISING ▲
+          font: Barlow Condensed
+          weight: SemiBold
           color: $good
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: 00°
-      geometry:
-        x: 36.442%
-        y: 66.78%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: text
-      text: VPD
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 66.299%
-        y: 60.339%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: environment.pressure.vaporPressureDeficit
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 2
-        valueLabel:
-          color: $good
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '0.00'
-        format:
-          unit_symbol: false
-      geometry:
-        x: 66.299%
-        y: 66.78%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: text
-      text: +6 H
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 6.579%
-        y: 79.322%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: at(environment.clouds.cover.cover, 6h)
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 0
-        valueLabel:
-          color: $muted
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
-          margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '000'
-        format:
-          unit_symbol: false
-      geometry:
-        x: 6.579%
-        y: 85.763%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: text
-      text: HI CLD
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 36.442%
-        y: 79.322%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: environment.clouds.cover.high
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Hidden
-        precision: 0
-        valueLabel:
+          alignment: CenterLeft
+          geometry:
+            x: 0%
+            y: 0%
+            width: 100%
+            height: 100%
+          tracking: 0.2
+          when: environment.pressure.pressure - at(environment.pressure.pressure, -3h) > 0.02 inHg
+        - type: text
+          text: FALLING ▼
+          font: Barlow Condensed
+          weight: SemiBold
+          color: $bad
+          alignment: CenterLeft
+          geometry:
+            x: 0%
+            y: 0%
+            width: 100%
+            height: 100%
+          tracking: 0.2
+          when: at(environment.pressure.pressure, -3h) - environment.pressure.pressure > 0.02 inHg
+        - type: text
+          text: STEADY
+          font: Barlow Condensed
+          weight: SemiBold
           color: $faint
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
+          alignment: CenterLeft
+          geometry:
+            x: 0%
+            y: 0%
+            width: 100%
+            height: 100%
+          tracking: 0.2
+      - type: text
+        text: −3 H
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 6.579%
+          y: 60.339%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.pressure.pressure - at(environment.pressure.pressure, -3h)
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 2
+          valueLabel:
+            color: $info
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '-0.00'
+        geometry:
+          x: 6.579%
+          y: 66.78%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: −24 H
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 36.442%
+          y: 60.339%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.pressure.pressure - at(environment.pressure.pressure, -24h)
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 2
+          valueLabel:
+            color: $info
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '-0.00'
+        geometry:
+          x: 36.442%
+          y: 66.78%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: +12 H
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 66.299%
+          y: 60.339%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: at(environment.pressure.pressure, 12h)
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 2
+          valueLabel:
+            color: $series-4
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '00.00'
+        geometry:
+          x: 66.299%
+          y: 66.78%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: HIGH
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 6.579%
+          y: 79.322%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: max(environment.pressure.pressure, 24h)
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 2
+          valueLabel:
+            color: $muted
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '00.00'
+        geometry:
+          x: 6.579%
+          y: 85.763%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: LOW
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 36.442%
+          y: 79.322%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: min(environment.pressure.pressure, 24h)
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 2
+          valueLabel:
+            color: $muted
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '00.00'
+        geometry:
+          x: 36.442%
+          y: 85.763%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: +24 H
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 66.299%
+          y: 79.322%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: at(environment.pressure.pressure, 24h)
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 2
+          valueLabel:
+            color: $series-4
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '00.00'
+        geometry:
+          x: 66.299%
+          y: 85.763%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      border:
+        enabled: true
+        radius: 24px
+        fill:
+          color:
+            color: $surface
+            mix:
+              with: $series-4
+              by: 0.14
+          alpha: 0.62
+        weight: 0
+    - type: group
+      name: skyCard
+      items:
+      - type: text
+        text: CLOUD COVER · %
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $muted
+        alignment: BottomLeft
+        geometry:
+          x: 6.579%
+          y: 6.102%
+          width: 86.842%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.clouds.cover.cover
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 0
+          valueLabel:
+            color: $text
+            font: $mono
+            weight: Bold
+            matchingGroup:
+              group: global.room
+              matchAll: true
+            tracking: -0.03
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '000'
+          format:
+            unit_symbol: false
+        geometry:
+          x: 6.579%
+          y: 13.22%
+          width: 46.053%
+          height: 30.508%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: realtime.bar
+        key: environment.clouds.cover.low
+        title: false
+        geometry:
+          x: 58.114%
+          y: 13.22%
+          width: 9.868%
+          height: 23.729%
+        display:
+          range:
+            min: 0
+            max: 1
+          track:
+            weight: 100%
+            color: $rule
+          fill:
+            color: $muted
+            weight: 100%
+          value-label:
+            visible: false
+          orientation: vertical
+      - type: text
+        text: L
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: Center
+        geometry:
+          x: 56.469%
+          y: 38.305%
+          width: 13.158%
+          height: 5.085%
+        matchingGroup:
+          group: global.layer
+          matchAll: true
+        tracking: 0
+        format-hint: M
+      - type: realtime.bar
+        key: environment.clouds.cover.mid
+        title: false
+        geometry:
+          x: 71.272%
+          y: 13.22%
+          width: 9.868%
+          height: 23.729%
+        display:
+          range:
+            min: 0
+            max: 1
+          track:
+            weight: 100%
+            color: $rule
+          fill:
+            color: $muted
+            weight: 100%
+          value-label:
+            visible: false
+          orientation: vertical
+      - type: text
+        text: M
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: Center
+        geometry:
+          x: 69.627%
+          y: 38.305%
+          width: 13.158%
+          height: 5.085%
+        matchingGroup:
+          group: global.layer
+          matchAll: true
+        tracking: 0
+        format-hint: M
+      - type: realtime.bar
+        key: environment.clouds.cover.high
+        title: false
+        geometry:
+          x: 84.43%
+          y: 13.22%
+          width: 9.868%
+          height: 23.729%
+        display:
+          range:
+            min: 0
+            max: 1
+          track:
+            weight: 100%
+            color: $rule
+          fill:
+            color: $muted
+            weight: 100%
+          value-label:
+            visible: false
+          orientation: vertical
+      - type: text
+        text: H
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: Center
+        geometry:
+          x: 82.785%
+          y: 38.305%
+          width: 13.158%
+          height: 5.085%
+        matchingGroup:
+          group: global.layer
+          matchAll: true
+        tracking: 0
+        format-hint: M
+      - type: mini-graph
+        geometry:
+          x: 6.579%
+          y: 45.085%
+          width: 86.842%
+          height: 13.559%
+        timeframe:
+          hours: 24
+          lookback:
+            hours: 0
+          offset:
+            hours: 0
+        annotations:
+          dayLabels:
+            enabled: false
+          hourLabels:
+            enabled: false
+          lines:
+            enabled: false
+        indicator:
+          opacity: 0
+        figures:
+        - figure: fig8
           margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: '000'
-        format:
-          unit_symbol: false
-      geometry:
-        x: 36.442%
-        y: 85.763%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    - type: text
-      text: MIN RH
-      font: Barlow Condensed
-      weight: SemiBold
-      color: $faint
-      alignment: BottomLeft
-      geometry:
-        x: 66.299%
-        y: 79.322%
-        width: 27.122%
-        height: 5.085%
-      matchingGroup:
-        group: global.cap
-        matchAll: true
-      tracking: 0.16
-      format-hint: HEADING
-    - type: realtime.text
-      key: min(environment.humidity.humidity, 24h)
-      title: false
-      alignment: BottomLeft
-      display:
-        unitPosition: Inline
-        precision: 0
-        valueLabel:
-          color: $info
-          font: $mono
-          weight: Regular
-          matchingGroup:
-            group: global.detail
-            matchAll: true
-          alignment: BottomLeft
+            top: 6%
+            bottom: 0%
+          environment.clouds.cover.cover:
+            plot:
+              type: plot
+              weight: 0.35
+              opacity: 0.7
+              fill:
+                opacity: 0.25
+                fade: true
+              color: $muted
+          min: 0
+          max: 1
+      - type: text
+        text: RH
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 6.579%
+          y: 60.339%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.humidity.humidity
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Inline
+          precision: 0
+          valueLabel:
+            color: $info
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: 00%
+        geometry:
+          x: 6.579%
+          y: 66.78%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: DEW
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 36.442%
+          y: 60.339%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.temperature.dewpoint
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Inline
+          precision: 0
+          valueLabel:
+            color: $good
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: 00°
+        geometry:
+          x: 36.442%
+          y: 66.78%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: VPD
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 66.299%
+          y: 60.339%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.pressure.vaporPressureDeficit
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 2
+          valueLabel:
+            color: $good
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '0.00'
+          format:
+            unit_symbol: false
+        geometry:
+          x: 66.299%
+          y: 66.78%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: +6 H
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 6.579%
+          y: 79.322%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: at(environment.clouds.cover.cover, 6h)
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 0
+          valueLabel:
+            color: $muted
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '000'
+          format:
+            unit_symbol: false
+        geometry:
+          x: 6.579%
+          y: 85.763%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: HI CLD
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 36.442%
+          y: 79.322%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.clouds.cover.high
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 0
+          valueLabel:
+            color: $faint
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '000'
+          format:
+            unit_symbol: false
+        geometry:
+          x: 36.442%
+          y: 85.763%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: MIN RH
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 66.299%
+          y: 79.322%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: min(environment.humidity.humidity, 24h)
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Inline
+          precision: 0
+          valueLabel:
+            color: $info
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: 00%
+        geometry:
+          x: 66.299%
+          y: 85.763%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      border:
+        enabled: true
+        radius: 24px
+        fill:
+          color:
+            color: $surface
+            mix:
+              with: $muted
+              by: 0.14
+          alpha: 0.62
+        weight: 0
+    - type: group
+      name: soilCard
+      items:
+      - type: text
+        text: SOIL · °F
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $good
+        alignment: BottomLeft
+        geometry:
+          x: 6.579%
+          y: 6.102%
+          width: 41.667%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.soil.temperature.temperature
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Inline
+          precision: 0
+          valueLabel:
+            color: $good
+            font: $mono
+            weight: Bold
+            matchingGroup:
+              group: global.room
+              matchAll: true
+            tracking: -0.03
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: 00°
+        geometry:
+          x: 6.579%
+          y: 13.22%
+          width: 41.667%
+          height: 30.508%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: mini-graph
+        geometry:
+          x: 6.579%
+          y: 45.085%
+          width: 39.474%
+          height: 13.559%
+        timeframe:
+          hours: 24
+          lookback:
+            hours: 48
+          offset:
+            hours: -24
+        annotations:
+          dayLabels:
+            enabled: false
+          hourLabels:
+            enabled: false
+          lines:
+            enabled: false
+        indicator:
+          opacity: 0
+        figures:
+        - figure: fig9
           margins:
-            left: 0
-            right: 10%
-            top: 0
-            bottom: 0
-        format-hint: 00%
-      geometry:
-        x: 66.299%
-        y: 85.763%
-        width: 27.122%
-        height: 10.847%
-      margins:
-        left: 0
-        right: 0
-        top: 0
-        bottom: 0
-    border:
-      enabled: true
-      radius: 24px
-      fill:
-        color:
-          color: $surface
-          mix:
-            with: $muted
-            by: 0.14
-        alpha: 0.62
-      weight: 0
+            top: 10%
+            bottom: 0%
+          environment.soil.temperature.temperature:
+            plot:
+              type: plot
+              weight: 0.5
+              opacity: 0.6
+              fill:
+                opacity: 0.3
+                fade: true
+              color: $good
+              glow: *id001
+      - type: text
+        text: '1'
+        font: $mono
+        weight: Medium
+        color: $faint
+        alignment: CenterRight
+        geometry:
+          x: 51.535%
+          y: 6.102%
+          width: 8.772%
+          height: 10.508%
+        matchingGroup:
+          group: global.depth
+          matchAll: true
+      - type: realtime.bar
+        key: environment.soil.moisture.moisture
+        title: false
+        geometry:
+          x: 62.5%
+          y: 8.729%
+          width: 30.921%
+          height: 5.254%
+        display:
+          range:
+            min: 0
+            max: 0.5
+          track:
+            weight: 100%
+            color: $rule
+          fill:
+            color: $info
+            glow: *id001
+            weight: 100%
+          value-label:
+            visible: false
+      - type: text
+        text: '3'
+        font: $mono
+        weight: Medium
+        color: $faint
+        alignment: CenterRight
+        geometry:
+          x: 51.535%
+          y: 16.61%
+          width: 8.772%
+          height: 10.508%
+        matchingGroup:
+          group: global.depth
+          matchAll: true
+      - type: realtime.bar
+        key: environment.soil.moisture.1-3cm
+        title: false
+        geometry:
+          x: 62.5%
+          y: 19.237%
+          width: 30.921%
+          height: 5.254%
+        display:
+          range:
+            min: 0
+            max: 0.5
+          track:
+            weight: 100%
+            color: $rule
+          fill:
+            color: $info
+            glow: *id001
+            weight: 100%
+          value-label:
+            visible: false
+      - type: text
+        text: '9'
+        font: $mono
+        weight: Medium
+        color: $faint
+        alignment: CenterRight
+        geometry:
+          x: 51.535%
+          y: 27.119%
+          width: 8.772%
+          height: 10.508%
+        matchingGroup:
+          group: global.depth
+          matchAll: true
+      - type: realtime.bar
+        key: environment.soil.moisture.3-9cm
+        title: false
+        geometry:
+          x: 62.5%
+          y: 29.746%
+          width: 30.921%
+          height: 5.254%
+        display:
+          range:
+            min: 0
+            max: 0.5
+          track:
+            weight: 100%
+            color: $rule
+          fill:
+            color: $info
+            glow: *id001
+            weight: 100%
+          value-label:
+            visible: false
+      - type: text
+        text: '27'
+        font: $mono
+        weight: Medium
+        color: $faint
+        alignment: CenterRight
+        geometry:
+          x: 51.535%
+          y: 37.627%
+          width: 8.772%
+          height: 10.508%
+        matchingGroup:
+          group: global.depth
+          matchAll: true
+      - type: realtime.bar
+        key: environment.soil.moisture.9-27cm
+        title: false
+        geometry:
+          x: 62.5%
+          y: 40.254%
+          width: 30.921%
+          height: 5.254%
+        display:
+          range:
+            min: 0
+            max: 0.5
+          track:
+            weight: 100%
+            color: $rule
+          fill:
+            color: $info
+            glow: *id001
+            weight: 100%
+          value-label:
+            visible: false
+      - type: text
+        text: '81'
+        font: $mono
+        weight: Medium
+        color: $faint
+        alignment: CenterRight
+        geometry:
+          x: 51.535%
+          y: 48.136%
+          width: 8.772%
+          height: 10.508%
+        matchingGroup:
+          group: global.depth
+          matchAll: true
+      - type: realtime.bar
+        key: environment.soil.moisture.27-81cm
+        title: false
+        geometry:
+          x: 62.5%
+          y: 50.763%
+          width: 30.921%
+          height: 5.254%
+        display:
+          range:
+            min: 0
+            max: 0.5
+          track:
+            weight: 100%
+            color: $rule
+          fill:
+            color: $info
+            glow: *id001
+            weight: 100%
+          value-label:
+            visible: false
+      - type: text
+        text: 6 CM
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 6.579%
+          y: 60.339%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.soil.temperature.6cm
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Inline
+          precision: 0
+          valueLabel:
+            color: $good
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: 00°
+        geometry:
+          x: 6.579%
+          y: 66.78%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: 18 CM
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 36.442%
+          y: 60.339%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.soil.temperature.18cm
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Inline
+          precision: 0
+          valueLabel:
+            color: $good
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: 00°
+        geometry:
+          x: 36.442%
+          y: 66.78%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: 54 CM
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 66.299%
+          y: 60.339%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.soil.temperature.54cm
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Inline
+          precision: 0
+          valueLabel:
+            color: $muted
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: 00°
+        geometry:
+          x: 66.299%
+          y: 66.78%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: WET
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 6.579%
+          y: 79.322%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.soil.moisture.moisture
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Inline
+          precision: 0
+          valueLabel:
+            color: $info
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: 00%
+        geometry:
+          x: 6.579%
+          y: 85.763%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: DEEP
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 36.442%
+          y: 79.322%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.soil.moisture.27-81cm
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Inline
+          precision: 0
+          valueLabel:
+            color: $info
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: 00%
+        geometry:
+          x: 36.442%
+          y: 85.763%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: +6 H
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 66.299%
+          y: 79.322%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: at(environment.soil.temperature.temperature, 6h)
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Inline
+          precision: 0
+          valueLabel:
+            color: $muted
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: 00°
+        geometry:
+          x: 66.299%
+          y: 85.763%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      border:
+        enabled: true
+        radius: 24px
+        fill:
+          color:
+            color: $surface
+            mix:
+              with: $good
+              by: 0.14
+          alpha: 0.62
+        weight: 0
+    - type: group
+      name: lightCard
+      items:
+      - type: text
+        text: LIGHT · W/M²
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $warn
+        alignment: BottomLeft
+        geometry:
+          x: 6.579%
+          y: 6.102%
+          width: 86.842%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.light.irradiance.irradiance
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 0
+          valueLabel:
+            color: $warn
+            font: $mono
+            weight: Bold
+            matchingGroup:
+              group: global.room
+              matchAll: true
+            tracking: -0.03
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '000'
+        geometry:
+          x: 6.579%
+          y: 13.22%
+          width: 49.342%
+          height: 30.508%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: realtime.gauge
+        key: environment.light.irradiance.irradiance
+        title: false
+        geometry:
+          x: 58.333%
+          y: 4.068%
+          width: 35.088%
+          height: 35.254%
+        display:
+          radius: 96%
+          arc:
+            start-angle: 0
+            end-angle: 360
+            weight: 12%
+            color: $rule
+            cap: round
+          range:
+            min: 0
+            max: 1000
+          major:
+            enabled: false
+            labels:
+              enabled: false
+          minor:
+            enabled: false
+          micro:
+            enabled: false
+          needle:
+            visible: false
+          fill:
+            weight: 12%
+            color: $warn
+            cap: round
+            glow: *id001
+          value-label:
+            visible: false
+          unit-label:
+            visible: false
+      - type: mini-graph
+        geometry:
+          x: 6.579%
+          y: 45.085%
+          width: 86.842%
+          height: 13.559%
+        timeframe:
+          hours: 24
+          lookback:
+            hours: 48
+          offset:
+            hours: -24
+        annotations:
+          dayLabels:
+            enabled: false
+          hourLabels:
+            enabled: false
+          lines:
+            enabled: false
+        indicator:
+          opacity: 0
+        figures:
+        - figure: fig10
+          margins:
+            top: 8%
+            bottom: 0%
+          environment.light.irradiance.diffuse:
+            plot:
+              type: plot
+              weight: 0.35
+              opacity: 0.6
+              fill:
+                opacity: 0.2
+                fade: true
+              color: $muted
+          min: 0
+          max: 1000
+      - type: mini-graph
+        geometry:
+          x: 6.579%
+          y: 45.085%
+          width: 86.842%
+          height: 13.559%
+        timeframe:
+          hours: 24
+          lookback:
+            hours: 48
+          offset:
+            hours: -24
+        annotations:
+          dayLabels:
+            enabled: false
+          hourLabels:
+            enabled: false
+          lines:
+            enabled: false
+        indicator:
+          opacity: 0
+        figures:
+        - figure: fig11
+          margins:
+            top: 8%
+            bottom: 0%
+          environment.light.irradiance.direct:
+            plot:
+              type: plot
+              weight: 0.5
+              opacity: 0.6
+              fill:
+                opacity: 0.3
+                fade: true
+              color: $warn
+              glow: *id001
+          min: 0
+          max: 1000
+      - type: text
+        text: DIRECT
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 6.579%
+          y: 60.339%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.light.irradiance.direct
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 0
+          valueLabel:
+            color: $warn
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '000'
+        geometry:
+          x: 6.579%
+          y: 66.78%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: DIFFUSE
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 36.442%
+          y: 60.339%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.light.irradiance.diffuse
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 0
+          valueLabel:
+            color: $muted
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '000'
+        geometry:
+          x: 36.442%
+          y: 66.78%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: DAY MJ
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 66.299%
+          y: 60.339%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: environment.light.irradiance.daily
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 1
+          valueLabel:
+            color: $accent
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '00.0'
+        geometry:
+          x: 66.299%
+          y: 66.78%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: PEAK
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 6.579%
+          y: 79.322%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: max(environment.light.irradiance.irradiance, 24h)
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 0
+          valueLabel:
+            color: $warn
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '000'
+        geometry:
+          x: 6.579%
+          y: 85.763%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: +3 H
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 36.442%
+          y: 79.322%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: at(environment.light.irradiance.irradiance, 3h)
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 0
+          valueLabel:
+            color: $muted
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '000'
+        geometry:
+          x: 36.442%
+          y: 85.763%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      - type: text
+        text: +6 H
+        font: Barlow Condensed
+        weight: SemiBold
+        color: $faint
+        alignment: BottomLeft
+        geometry:
+          x: 66.299%
+          y: 79.322%
+          width: 27.122%
+          height: 5.085%
+        matchingGroup:
+          group: global.cap
+          matchAll: true
+        tracking: 0.16
+        format-hint: HEADING
+      - type: realtime.text
+        key: at(environment.light.irradiance.irradiance, 6h)
+        title: false
+        alignment: BottomLeft
+        display:
+          unitPosition: Hidden
+          precision: 0
+          valueLabel:
+            color: $muted
+            font: $mono
+            weight: Regular
+            matchingGroup:
+              group: global.detail
+              matchAll: true
+            alignment: BottomLeft
+            margins:
+              left: 0
+              right: 10%
+              top: 0
+              bottom: 0
+          format-hint: '000'
+        geometry:
+          x: 66.299%
+          y: 85.763%
+          width: 27.122%
+          height: 10.847%
+        margins:
+          left: 0
+          right: 0
+          top: 0
+          bottom: 0
+      border:
+        enabled: true
+        radius: 24px
+        fill:
+          color:
+            color: $surface
+            mix:
+              with: $warn
+              by: 0.14
+          alpha: 0.62
+        weight: 0
   - type: group
     name: todayCard
     geometry:
