@@ -163,7 +163,17 @@ class LevityScene(RendererScene):
 			self._bindBackdrop(follow)
 		if (haze := backdrop.hazeKey(value)) is not None:
 			self._bindHaze(haze)
+		self._starTimerFor(value)
 		self.refreshBackdrop()
+
+	def _starTimerFor(self, spec) -> None:
+		"""The sky turns: redraw a ground that has stars every five minutes, so a dashboard nothing else repaints keeps up."""
+		timer = getattr(self, '_starTimer', None)
+		if timer is None:
+			timer = self._starTimer = QTimer(self)
+			timer.setInterval(300_000)
+			timer.timeout.connect(self.refreshBackdrop)
+		timer.start() if backdrop.starLimit(spec) is not None else timer.stop()
 
 	def _bindBackdrop(self, follow: str) -> None:
 		"""Watch the key or expression a moving ground follows. Releases with the spec, so a reload lets go of it."""
@@ -235,28 +245,24 @@ class LevityScene(RendererScene):
 		self._drawStars(painter, rect)
 
 	def _drawStars(self, painter, rect):
-		"""Stars over a sky that follows the sun: faded in with the dark, thinned by cloud. Static, so they cost one
-		pass over a few hundred dots, and only the ones inside ``rect``."""
-		count = backdrop.starCount(self._backdropSpec)
-		if not count:
+		"""The real sky over a ground that has `stars:` (`lib/skymap.py`), faded in with the dark and thinned by cloud.
+		One blit of a pixmap that is rebuilt every few minutes."""
+		if backdrop.starLimit(self._backdropSpec) is None:
 			return
 		alpha = backdrop.starAlpha(self._backdropValue, self._backdropHaze)
 		if alpha < 0.01:
 			return
+		from LevityDash.lib.ui.colors.starsky import StarLayer
+		if getattr(self, '_starLayer', None) is None:
+			self._starLayer = StarLayer()
+		scale = painter.worldTransform().m11() * (painter.device().devicePixelRatioF() if painter.device() else 1.0)
 		scene = self.sceneRect()
-		key = (count, backdrop.starSeed(self._backdropSpec))
-		if getattr(self, '_starKey', None) != key:
-			self._starKey, self._stars = key, backdrop.starfield(*key)
-		w, h = scene.width(), scene.height()
-		short = min(w, h)
+		pixmap = self._starLayer.pixmap(scene, scale, self._backdropSpec, self._backdropValue, self._backdropHaze)
+		if pixmap is None:
+			return
 		painter.save()
-		painter.setPen(Qt.NoPen)
-		for x, y, r, b in self._stars:
-			cx, cy, rad = scene.left() + x * w, scene.top() + y * h, max(0.7, r * short)
-			if not rect.intersects(QRectF(cx - rad, cy - rad, rad * 2, rad * 2)):
-				continue
-			painter.setBrush(QColor.fromRgbF(1.0, 0.97, 0.9, min(1.0, b * alpha)))
-			painter.drawEllipse(QPointF(cx, cy), rad, rad)
+		painter.setOpacity(painter.opacity() * alpha)
+		painter.drawPixmap(scene.topLeft(), pixmap)
 		painter.restore()
 
 	def addBusyBlocker(self):
