@@ -15,6 +15,13 @@
 background:
   sky: true
   haze: environment.clouds.cover.cover
+  stars: true
+theme:
+  extends: default
+  colors:
+    moon-shade:
+      color: '#000000'
+      alpha: 0.2
 items:
 - type: group
   name: board
@@ -749,6 +756,34 @@ items:
       matchAll: true
     tracking: 0.16
     format-hint: HEADING
+  - type: realtime.bar
+    key: indoor.battery.battery
+    title: false
+    geometry:
+      x: 88.55%
+      y: 28.725%
+      width: 2.4%
+      height: 1.05%
+    display:
+      style: battery
+      range:
+        min: 0
+        max: 100
+      fill:
+        color: zone
+      zones:
+      - to: 20
+        color: $bad
+        opacity: 0
+      - from: 20
+        to: 50
+        color: $warn
+        opacity: 0
+      - from: 50
+        color: $good
+        opacity: 0
+      value-label:
+        visible: false
   - type: mini-graph
     geometry:
       x: 74.5%
@@ -807,7 +842,7 @@ items:
           top: 0
           bottom: 0
         decimal-scale: 0.55
-        decimal-align: top
+        decimal-align: baseline
       format-hint: 00.0°
     geometry:
       x: 74.5%
@@ -828,7 +863,7 @@ items:
     geometry:
       x: 74.5%
       y: 60.1%
-      width: 5.275%
+      width: 7.233%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -859,7 +894,7 @@ items:
     geometry:
       x: 74.5%
       y: 62.0%
-      width: 5.275%
+      width: 7.233%
       height: 3.6%
     margins:
       left: 0
@@ -873,9 +908,9 @@ items:
     color: $faint
     alignment: BottomLeft
     geometry:
-      x: 80.375%
+      x: 82.333%
       y: 60.1%
-      width: 5.275%
+      width: 7.233%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -904,9 +939,9 @@ items:
           bottom: 0
       format-hint: 00°
     geometry:
-      x: 80.375%
+      x: 82.333%
       y: 62.0%
-      width: 5.275%
+      width: 7.233%
       height: 3.6%
     margins:
       left: 0
@@ -918,11 +953,11 @@ items:
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
-    alignment: BottomLeft
+    alignment: BottomRight
     geometry:
-      x: 86.25%
+      x: 90.167%
       y: 60.1%
-      width: 5.275%
+      width: 7.233%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -932,7 +967,7 @@ items:
   - type: realtime.text
     key: indoor.temperature.heatIndex
     title: false
-    alignment: BottomLeft
+    alignment: BottomRight
     display:
       unitPosition: Inline
       precision: 0
@@ -943,68 +978,23 @@ items:
         matchingGroup:
           group: global.detail
           matchAll: true
-        alignment: BottomLeft
+        alignment: BottomRight
         margins:
-          left: 0
-          right: 10%
+          left: 10%
+          right: 0
           top: 0
           bottom: 0
       format-hint: 00°
     geometry:
-      x: 86.25%
+      x: 90.167%
       y: 62.0%
-      width: 5.275%
+      width: 7.233%
       height: 3.6%
     margins:
       left: 0
       right: 0
       top: 0
       bottom: 0
-  - type: text
-    text: BATTERY
-    font: Barlow Condensed
-    weight: SemiBold
-    color: $faint
-    alignment: BottomRight
-    geometry:
-      x: 92.125%
-      y: 60.1%
-      width: 5.275%
-      height: 1.5%
-    matchingGroup:
-      group: global.cap
-      matchAll: true
-    tracking: 0.16
-    format-hint: HEADING
-  - type: realtime.bar
-    key: indoor.battery.battery
-    title: false
-    geometry:
-      x: 92.125%
-      y: 62.54%
-      width: 5.275%
-      height: 2.52%
-    display:
-      style: battery
-      range:
-        min: 0
-        max: 100
-      fill:
-        color: zone
-        glow: *id001
-      zones:
-      - to: 20
-        color: $bad
-        opacity: 0
-      - from: 20
-        to: 50
-        color: $warn
-        opacity: 0
-      - from: 50
-        color: $good
-        opacity: 0
-      value-label:
-        visible: false
   - type: band
     name: cards
     mode: step

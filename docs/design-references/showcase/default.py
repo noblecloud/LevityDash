@@ -121,9 +121,18 @@ def num(key, geom, color='$text', weight='Regular', font='$mono', small=False, *
 	item['display']['valueLabel'].setdefault('alignment', item['alignment'])
 	item['display']['valueLabel']['margins'] = {'left': 0, 'right': '10%', 'top': 0, 'bottom': 0}  # a gutter to the next column
 	if small:
-		# The tenths drawn smaller, raised to the top of the digits: 67⁷° reads as sixty-seven at a glance.
-		item['display']['valueLabel'].update({'decimal-scale': 0.55, 'decimal-align': 'top'})
+		# The tenths drawn smaller, on the digits' baseline: 67⁷° reads as sixty-seven at a glance.
+		item['display']['valueLabel'].update({'decimal-scale': 0.55, 'decimal-align': 'baseline'})
 	return item
+
+
+def batteryGlyph(key, geom):
+	"""A battery icon, no label or number: red under 20 %, amber under 50 %, green above."""
+	return {'type': 'realtime.bar', 'key': key, 'title': False, 'geometry': geom,
+	        'display': {'style': 'battery', 'range': {'min': 0, 'max': 100}, 'fill': {'color': 'zone'},
+	                    'zones': [{'to': 20, 'color': '$bad', 'opacity': 0}, {'from': 20, 'to': 50, 'color': '$warn', 'opacity': 0},
+	                              {'from': 50, 'color': '$good', 'opacity': 0}],
+	                    'value-label': {'visible': False}}}
 
 
 def battery(caption, key, x, y, w, h=TILE, right=False):
@@ -176,10 +185,12 @@ def room(caption, sfx, color, x, y, w, h, i):
 	rows = [('RH', key('humidity.humidity'), '$info', {'hint': '00%', 'unit': 'Inline'}),
 	        ('DEW', key('temperature.dewpoint'), '$good', {'hint': '00°', 'unit': 'Inline'})]
 	out = [cap_(caption, g(x, y, w, CAP), color)]
+	# The sensor's battery as a small glyph at the end of the name's line, where the number's column ends.
+	glyphX = x + (w * 0.7 if h > 25 else w * 0.6 - 0.8) - 2.4
+	out.append(batteryGlyph(key('battery.battery'), g(glyphX, y + CAP * 0.15, 2.4, CAP * 0.7)))
 	if h > 25:
 		# Tall: the number, a day of temperature under it, and three readings in a row along the bottom.
 		rows.append(('FEELS', key('temperature.heatIndex'), '$warn', {'hint': '00°', 'unit': 'Inline'}))
-		rows.append(('BATTERY', key('battery.battery'), '$good', {'hint': '100%', 'unit': 'Inline'}))
 		body = h - CAP - 0.8 - 7.6
 		out += [
 			mini(temp, g(x, y + CAP + 0.8, w, body), color=color, hours=24, past=True, top='42%', bottom='0%', opacity=0.8, fill=0.3, weight=0.5,
@@ -189,10 +200,7 @@ def room(caption, sfx, color, x, y, w, h, i):
 		]
 		quarter = w / len(rows)
 		for j, (name, k, c, kw) in enumerate(rows):
-			if name == 'BATTERY':
-				out += battery(name, k, x + j * quarter, y + h - 5.4, quarter - 0.6, right=True)
-			else:
-				out += tile(name, k, x + j * quarter, y + h - 5.4, quarter - 0.6, c, h=TILE, group='global.detail', **kw)
+			out += tile(name, k, x + j * quarter, y + h - 5.4, quarter - 0.6, c, h=TILE, group='global.detail', right=j == len(rows) - 1, **kw)
 		return out
 	# Short: the number over its day on the left, two readings stacked on the right.
 	hh = h - CAP - 0.8
@@ -205,14 +213,13 @@ def room(caption, sfx, color, x, y, w, h, i):
 	]
 	# Four readings in two columns, the outer one flush to the board's edge so the panel reaches it.
 	rows = [('RH', key('humidity.humidity'), '$info', {'hint': '00%', 'unit': 'Inline'}),
-	        ('BATTERY', key('battery.battery'), '$good', {'hint': '100%', 'unit': 'Inline'}),
+	        ('24H HI', f'max({temp}, 24h)', '$bad', {'hint': '00°', 'unit': 'Inline'}),
 	        ('DEW', key('temperature.dewpoint'), '$good', {'hint': '00°', 'unit': 'Inline'}),
-	        ('24H HI', f'max({temp}, 24h)', '$bad', {'hint': '00°', 'unit': 'Inline'})]
+	        ('24H LO', f'min({temp}, 24h)', '$info', {'hint': '00°', 'unit': 'Inline'})]
 	col = (w - left) / 2
 	for j, (name, k, c, kw) in enumerate(rows):
 		r, cc = divmod(j, 2)
-		make = battery if name == 'BATTERY' else lambda *a, **k: tile(*a[:5], c, h=TILE, group='global.detail', **k, **kw)
-		out += make(name, k, x + left + cc * col, y + r * h / 2, col - 0.3, right=bool(cc))
+		out += tile(name, k, x + left + cc * col, y + r * h / 2, col - 0.3, c, h=TILE, group='global.detail', right=bool(cc), **kw)
 	return out
 
 
@@ -471,9 +478,10 @@ def board(rooms=INDOOR):
 	          'transition': '900ms', 'step': 1, 'geometry': g(X[0], Y, length, H), 'items': slots})
 	B.append(today)
 	# The ground follows the sun: navy at night, purple and orange near the horizon, blue by day, greyed by cloud.
-	# The ground follows the sun and is greyed by cloud. (Stars are off until they are drawn from a real catalogue.)
-	sky = {'sky': True, 'haze': f'{C}.cover'}
-	return {'background': sky, 'items': [{'type': 'group', 'name': 'board', 'items': B}]}
+	# The ground follows the sun and is greyed by cloud; at night the real sky (bright-star catalogue and planets, placed
+	# for the configured location and time) comes out, thinned by cloud.
+	sky = {'sky': True, 'haze': f'{C}.cover', 'stars': True}
+	return {'background': sky, 'theme': {'extends': 'default', 'colors': {'moon-shade': {'color': '#000000', 'alpha': 0.2}}}, 'items': [{'type': 'group', 'name': 'board', 'items': B}]}
 
 
 HEADER = """
