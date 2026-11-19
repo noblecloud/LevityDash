@@ -67,6 +67,17 @@ def data(rooms=INDOOR, name='default'):
 	d.add(f'{C}.mid', '%c', d.series(lambda h, day, t: min(100, 15 + 70 * bell(t, 12, 7)), digits=0), type='cloudcover', digits=0)
 	d.add(f'{C}.high', '%c', d.series(lambda h, day, t: min(100, 30 + 40 * bell(t, 8, 8)), digits=0), type='cloudcover', digits=0)
 	d.add(f'{L}.irradiance.irradiance', 'W/m^2', irradiance, digits=0)
+	# Light split into what comes straight from the sun and what the cloud scatters.
+	d.add(f'{L}.irradiance.direct', 'W/m^2', [round(v * (1 - c / 110)) for v, c in zip(irradiance, cover)], digits=0)
+	d.add(f'{L}.irradiance.diffuse', 'W/m^2', [round(v * c / 110) for v, c in zip(irradiance, cover)], digits=0)
+	d.add(f'{L}.irradiance.daily', 'MJ/m^2', value=round(sum(irradiance[today]) * 0.0036, 1), type='radiation')
+	# Soil: the surface follows the air, a deeper layer follows it slower and flatter; the rain wets the top first.
+	for depth, (lag, damp) in {'temperature': (1, 1.0), '6cm': (3, 0.7), '18cm': (6, 0.4), '54cm': (12, 0.12)}.items():
+		d.add(f'environment.soil.temperature.{depth}', 'f', d.series(lambda h, day, t, lag=lag, damp=damp: 63 + damp * 9 * daily(h - lag, 15.5), smooth=1),
+		      type='soil')
+	wet = lambda t, k: 0.24 + k * 0.12 / (1 + math.exp(-(t - 12) / 1.5)) * math.exp(-max(0, t - 18) / 30)
+	for depth, k in (('moisture', 1.0), ('1-3cm', 0.85), ('3-9cm', 0.6), ('9-27cm', 0.3), ('27-81cm', 0.1)):
+		d.add(f'environment.soil.moisture.{depth}', '%', d.series(lambda h, day, t, k=k: 100 * wet(t, k), digits=0), type='soil', digits=0)
 	d.add('environment.condition.condition', None, value=3, type='WeatherCode')
 	for key, at in (('sunrise', '05:26'), ('sunset', '20:31')):
 		# The render clock runs in UTC while the seed's place does not: four hours make up the difference.
@@ -345,6 +356,43 @@ def board(rooms=INDOOR):
 		         ('HI CLD', f'{C}.high', '$faint', {'hint': '000', 'fmt': {'unit_symbol': False}}),
 		         ('MIN RH', 'min(environment.humidity.humidity, 24h)', '$info', {'hint': '00%', 'unit': 'Inline'})]),
 	]
+	# Two more cards that only the band has room for: the ground under the plants, and the light that reaches them.
+	x = X[0] + px
+	S = 'environment.soil'
+	depths = [('1', 'moisture'), ('3', '1-3cm'), ('9', '3-9cm'), ('27', '9-27cm'), ('81', '27-81cm')]
+	rowH = (pic + 4 - Y - py) / len(depths)
+	cards['soil'] = [
+		cap_('SOIL · °F', g(x, Y + py, 7.6, CAP), '$good'),
+		hero(f'{S}.temperature.temperature', x, 7.6, '$good', unit='Inline', hint='00°'),
+		mini(f'{S}.temperature.temperature', g(x, pic, 7.2, 4), color='$good', hours=24, past=True, top='10%', bottom='0%', fill=0.3, weight=0.5,
+		     glow=GLOW),
+		# Wetness by depth, top to bottom, like a core pulled out of the bed.
+		*[item for n, (cm, k) in enumerate(depths) for item in (
+			text(cm, g(x + 8.2, Y + py + n * rowH, 1.6, rowH), font='$mono', color='$faint', align='CenterRight', group='global.depth'),
+			bar(f'{S}.moisture.{k}', g(x + 10.2, Y + py + n * rowH + rowH * 0.25, iw - 10.2, rowH * 0.5), 0, 0.5, color='$info', glow=GLOW,
+			    track={'weight': '100%', 'color': '$rule'}, fill={'weight': '100%'}))],
+		*six(x, [('6 CM', f'{S}.temperature.6cm', '$good', {'hint': '00°', 'unit': 'Inline'}),
+		         ('18 CM', f'{S}.temperature.18cm', '$good', {'hint': '00°', 'unit': 'Inline'}),
+		         ('54 CM', f'{S}.temperature.54cm', '$muted', {'hint': '00°', 'unit': 'Inline'}),
+		         ('WET', f'{S}.moisture.moisture', '$info', {'hint': '00%', 'unit': 'Inline'}),
+		         ('DEEP', f'{S}.moisture.27-81cm', '$info', {'hint': '00%', 'unit': 'Inline'}),
+		         ('+6 H', f'at({S}.temperature.temperature, 6h)', '$muted', {'hint': '00°', 'unit': 'Inline'})]),
+	]
+	cards['light'] = [
+		cap_('LIGHT · W/M²', g(x, Y + py, iw, CAP), '$warn'),
+		hero(f'{L}.irradiance.irradiance', x, 9, '$warn', hint='000'),
+		ring(f'{L}.irradiance.irradiance', g(x + iw - 6.4, Y + 1.2, 6.4, 10.4), 0, 1000, '$warn', weight='12%', glow=GLOW),
+		mini(f'{L}.irradiance.diffuse', g(x, pic, iw, 4), color='$muted', hours=24, past=True, lo=0, hi=1000, top='8%', bottom='0%', opacity=0.6,
+		     fill=0.2, weight=0.35),
+		mini(f'{L}.irradiance.direct', g(x, pic, iw, 4), color='$warn', hours=24, past=True, lo=0, hi=1000, top='8%', bottom='0%', fill=0.3, weight=0.5,
+		     glow=GLOW),
+		*six(x, [('DIRECT', f'{L}.irradiance.direct', '$warn', {'hint': '000'}),
+		         ('DIFFUSE', f'{L}.irradiance.diffuse', '$muted', {'hint': '000'}),
+		         ('DAY MJ', f'{L}.irradiance.daily', '$accent', {'precision': 1, 'hint': '00.0'}),
+		         ('PEAK', f'max({L}.irradiance.irradiance, 24h)', '$warn', {'hint': '000'}),
+		         ('+3 H', f'at({L}.irradiance.irradiance, 3h)', '$muted', {'hint': '000'}),
+		         ('+6 H', f'at({L}.irradiance.irradiance, 6h)', '$muted', {'hint': '000'})]),
+	]
 	x = X[4] + px
 	# Planes near by take the card over (`aircraft.active`, from the Aircraft plugin, off until Aircraft.ini enables it);
 	# otherwise the day's clock. Either way three readings sit under the picture.
@@ -367,12 +415,23 @@ def board(rooms=INDOOR):
 			*six(x, [('−24 H', f'at({T}, -24h)', '$muted', {'hint': '00°', 'unit': 'Inline'}),
 			         ('AVG', f'avg({T}, 24h)', '$muted', {'hint': '00°', 'unit': 'Inline'}),
 			         ('+24 H', f'at({T}, 24h)', '$muted', {'hint': '00°', 'unit': 'Inline'})], start=3)], fill=None) | {'geometry': g(0, 0, 100, 100)}]}]
-	# Each card is the surface washed with its own colour, so the five read as five things at a glance.
-	tint = {'wind': '$series-6', 'rain': '$info', 'pressure': '$series-4', 'sky': '$muted', 'today': '$accent'}
-	# Glass over the sky: the surface, washed with the card's colour, let a little of the ground through.
-	for i, (name, items) in enumerate(cards.items()):
+	# Each card is glass over the sky: the surface washed with its own colour, so each reads as its own thing at a glance.
+	tint = {'wind': '$series-6', 'rain': '$info', 'pressure': '$series-4', 'sky': '$muted', 'soil': '$good', 'light': '$warn', 'today': '$accent'}
+	origin = {'wind': X[0], 'rain': X[1], 'pressure': X[2], 'sky': X[3], 'soil': X[0], 'light': X[0], 'today': X[4]}
+
+	def card(name):
 		fill = {'color': {'color': '$surface', 'mix': {'with': tint[name], 'by': 0.14}}, 'alpha': 0.62}
-		B.append(nest(f'{name}Card', (X[i], Y, CW, H), items, fill=fill, **({'beam': BEAMS[name]} if name in BEAMS else {})))
+		return nest(f'{name}Card', (origin[name], Y, CW, H), cards.pop(name), fill=fill, **({'beam': BEAMS[name]} if name in BEAMS else {}))
+
+	# The last card stays put (a plane overhead must not scroll away); the rest take turns in a band, four in view.
+	today = card('today')
+	slots = [card(name) for name in list(cards)]
+	for slot in slots:
+		del slot['geometry']
+	length = X[3] + CW - X[0]
+	B.append({'type': 'band', 'name': 'cards', 'mode': 'step', 'visible': 4, 'gap': f'{GAP / length * 100:.3f}%', 'dwell': '12s',
+	          'transition': '900ms', 'step': 1, 'geometry': g(X[0], Y, length, H), 'items': slots})
+	B.append(today)
 	# The ground follows the sun: navy at night, purple and orange near the horizon, blue by day, greyed by cloud.
 	sky = {'by': 'astronomy.sun.elevation', 'top': '$sky-top', 'bottom': '$sky-horizon', 'haze': f'{C}.cover'}
 	return {'background': sky, 'items': [{'type': 'group', 'name': 'board', 'items': B}]}
