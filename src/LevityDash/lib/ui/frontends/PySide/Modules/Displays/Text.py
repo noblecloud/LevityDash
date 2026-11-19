@@ -9,6 +9,7 @@ from functools import cached_property, lru_cache
 from rich.repr import rich_repr
 from typing import Any, Callable, List, Optional, TYPE_CHECKING, Union, get_type_hints, Set
 
+import re
 import unitcorn as wu
 from LevityDash.lib.plugins import Container
 from LevityDash.lib.plugins.observation import TimeHash
@@ -347,6 +348,8 @@ class Text(QGraphicsPathItem):
 	_outline: Optional[dict] = None
 	_fillBrush: Optional[QBrush] = None
 	_numberAlign: Optional[str] = None
+	_decimalScale: Optional[float] = None
+	_decimalAlign: str = 'baseline'
 	_numExtentKey: tuple = None
 	_numExtent: tuple = (0.0, 0.0)
 
@@ -383,6 +386,65 @@ class Text(QGraphicsPathItem):
 		self._tabular = bool(value)
 		self.updateTransform(reason='tabular')
 
+	def setDecimalScale(self, value: Optional[float]):
+		self._decimalScale = value or None
+		self.updateTransform(reason='decimal-scale')
+
+	def setDecimalAlign(self, value: str):
+		self._decimalAlign = value or 'baseline'
+		self.updateTransform(reason='decimal-align')
+
+	_DECIMALS = re.compile(r'\.\d+')
+
+	def _decimalRuns(self, string: str, font: QFont) -> Optional[list[tuple[str, QFont, float]]]:
+		"""`string` as runs `(text, font, dy)` with the fractional digits (and their point) in a smaller font, or
+		None when small decimals are off or the string has no fraction. `dy` lifts a run off the baseline
+		(Qt y is down, so it is zero or negative): `baseline` keeps it at 0, `top` puts the top of its digits on
+		the top of the whole digits' cap height, `center` halfway. The integer part, and any unit or sign after the
+		fraction, keep the full size."""
+		scale = self._decimalScale
+		if not scale or scale >= 1 or not string:
+			return None
+		match = self._DECIMALS.search(string)
+		if match is None:
+			return None
+		small = self._tailFont(font, scale)
+		lift = QFontMetricsF(font).capHeight() - QFontMetricsF(small).capHeight()
+		dy = {'top': -lift, 'center': -lift / 2}.get(self._decimalAlign, 0.0)
+		runs = [(string[:match.start()], font, 0.0), (match.group(), small, dy), (string[match.end():], font, 0.0)]
+		return [run for run in runs if run[0]]
+
+	def _runPath(self, string: str, font: QFont) -> QPainterPath:
+		"""The glyph outlines of `string` with the baseline origin at (0, 0), small decimals applied."""
+		path = QPainterPath()
+		path.setFillRule(Qt.WindingFill)
+		runs = self._decimalRuns(string, font)
+		if runs is None:
+			path.addText(QPointF(0, 0), font, string)
+			return path
+		x = 0.0
+		for text, run_font, dy in runs:
+			path.addText(QPointF(x, dy), run_font, text)
+			x += QFontMetricsF(run_font).horizontalAdvance(text)
+		return path
+
+	def _advance(self, string: str, font: QFont) -> float:
+		runs = self._decimalRuns(string, font)
+		if runs is None:
+			return QFontMetricsF(font).horizontalAdvance(string)
+		return sum(QFontMetricsF(f).horizontalAdvance(t) for t, f, _ in runs)
+
+	def _inkRect(self, string: str, font: QFont) -> QRectF:
+		"""`tightBoundingRect` of `string`, small decimals applied."""
+		if self._decimalRuns(string, font) is None:
+			return QFontMetricsF(font).tightBoundingRect(string)
+		return self._runPath(string, font).boundingRect()
+
+	def _leftBearing(self, string: str, font: QFont) -> float:
+		if self._decimalRuns(string, font) is None:
+			return QFontMetricsF(font).leftBearing(string[0] if string else ' ')
+		return self._runPath(string, font).boundingRect().left()
+
 	def setNumberAlign(self, value: Optional[str]):
 		self._numberAlign = value or None
 		self.updateTransform(reason='number-align')
@@ -400,14 +462,14 @@ class Text(QGraphicsPathItem):
 			return None
 		font = self.font()
 		run = self.tailRun()
-		key = (text, hint, mode, font.key(), run)
+		key = (text, hint, mode, font.key(), run, self._decimalScale, self._decimalAlign)
 		if self._numExtentKey != key:
 			fm = QFontMetricsF(font)
 			head = tail = 0.0
 			for string in (text, hint):
 				h, t = numberalign.split(string, mode)
-				head = max(head, fm.horizontalAdvance(h))
-				tail = max(tail, fm.horizontalAdvance(t))
+				head = max(head, self._advance(h, font))
+				tail = max(tail, self._advance(t, font))
 			# a unit on the baseline follows the number, so it is part of the tail: the column leaves room for the
 			# widest unit and the cut still lines up when the units differ
 			tail += self._tailWidth(font, run)[0]
@@ -912,6 +974,8 @@ class Text(QGraphicsPathItem):
 			self._italic,
 			self._tabular,
 			self._numberAlign,
+			self._decimalScale,
+			self._decimalAlign,
 			self._numberColumn() if self._numberAlign else None,
 		)
 
@@ -1240,12 +1304,12 @@ class Text(QGraphicsPathItem):
 
 		font_height = fm.height()
 
-		fmt_hint_rect = fm.tightBoundingRect(fmt_hint_text := getattr(self, '_formatHint', None) or text)
-		fmt_hint_rect |= fm.tightBoundingRect(text)
+		fmt_hint_rect = self._inkRect(fmt_hint_text := getattr(self, '_formatHint', None) or text, font)
+		fmt_hint_rect |= self._inkRect(text, font)
 
-		fmt_hint_bearing = QPointF(fm.leftBearing(fmt_hint_text[0] if fmt_hint_text else ' '), 0)
+		fmt_hint_bearing = QPointF(self._leftBearing(fmt_hint_text, font), 0)
 
-		text_rect = fm.tightBoundingRect(text)
+		text_rect = self._inkRect(text, font)
 
 		# A tail (the unit of a value) sits after the text on its baseline, so it widens the text and the format hint by
 		# its own width and a small gap; the hint's tail is the same, so the value's size does not follow the unit.
@@ -1256,7 +1320,7 @@ class Text(QGraphicsPathItem):
 		if tail_font:
 			text_rect.setWidth(main_width + tail_width)
 			fmt_hint_rect.setWidth(hint_width + tail_width)
-		text_bearing = QPointF(fm.leftBearing(text[0] if text else ' '), 0)
+		text_bearing = QPointF(self._leftBearing(text, font), 0)
 
 		pipe_rect = fm.tightBoundingRect('|')
 		pipe_bearing = QPointF(fm.leftBearing('|'), 0)
@@ -1323,10 +1387,10 @@ class Text(QGraphicsPathItem):
 					block_left = -(col_head + col_tail) / 2
 			edge = block_left + col_head
 			mode = self._numberAlign
-			text_x = edge - fm.horizontalAdvance(numberalign.split(text, mode)[0])
-			hint_x = edge - fm.horizontalAdvance(numberalign.split(fmt_hint_text, mode)[0])
-			ink = fm.tightBoundingRect(text)
-			hint_ink = fm.tightBoundingRect(fmt_hint_text)
+			text_x = edge - self._advance(numberalign.split(text, mode)[0], font)
+			hint_x = edge - self._advance(numberalign.split(fmt_hint_text, mode)[0], font)
+			ink = self._inkRect(text, font)
+			hint_ink = self._inkRect(fmt_hint_text, font)
 			text_rect = QRectF(text_x + ink.left(), text_rect.top(), ink.width() + tail_width, text_rect.height())
 			hint_placed = QRectF(hint_x + hint_ink.left(), fmt_hint_rect.top(), hint_ink.width() + tail_width, fmt_hint_rect.height())
 			fmt_hint_rect = hint_placed | text_rect
@@ -1368,8 +1432,8 @@ class Text(QGraphicsPathItem):
 				fmt_text_pos.setY(fmt_text_pos.y() - (fmt_hint_rect.height() / 2 - fm.strikeOutPos()))
 
 		# Draw the value and format hint text
-		fmt_hint_text_path.addText(fmt_text_pos, font, fmt_hint_text)
-		path.addText(text_pos, font, text)
+		fmt_hint_text_path.addPath(self._runPath(fmt_hint_text, font).translated(fmt_text_pos))
+		path.addPath(self._runPath(text, font).translated(text_pos))
 		if tail_font:
 			# ink right edge of the text, then the gap; the tail's own left bearing is taken off so its ink starts there
 			path.addText(QPointF(text_rect.left() + main_width + tail_gap - tail_bearing, text_pos.y()), tail_font, tail_run[0])
