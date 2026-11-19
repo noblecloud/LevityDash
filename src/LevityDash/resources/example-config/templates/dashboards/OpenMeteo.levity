@@ -820,7 +820,7 @@ items:
       top: 0
       bottom: 0
   - type: text
-    text: HUMIDITY
+    text: RH
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
@@ -828,7 +828,7 @@ items:
     geometry:
       x: 74.5%
       y: 60.1%
-      width: 7.233%
+      width: 5.275%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -859,7 +859,7 @@ items:
     geometry:
       x: 74.5%
       y: 62.0%
-      width: 7.233%
+      width: 5.275%
       height: 3.6%
     margins:
       left: 0
@@ -867,15 +867,15 @@ items:
       top: 0
       bottom: 0
   - type: text
-    text: DEW POINT
+    text: DEW
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
     alignment: BottomLeft
     geometry:
-      x: 82.333%
+      x: 80.375%
       y: 60.1%
-      width: 7.233%
+      width: 5.275%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -904,9 +904,9 @@ items:
           bottom: 0
       format-hint: 00°
     geometry:
-      x: 82.333%
+      x: 80.375%
       y: 62.0%
-      width: 7.233%
+      width: 5.275%
       height: 3.6%
     margins:
       left: 0
@@ -914,15 +914,15 @@ items:
       top: 0
       bottom: 0
   - type: text
-    text: FEELS LIKE
+    text: FEELS
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
     alignment: BottomLeft
     geometry:
-      x: 90.167%
+      x: 86.25%
       y: 60.1%
-      width: 7.233%
+      width: 5.275%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -951,9 +951,56 @@ items:
           bottom: 0
       format-hint: 00°
     geometry:
-      x: 90.167%
+      x: 86.25%
       y: 62.0%
-      width: 7.233%
+      width: 5.275%
+      height: 3.6%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
+  - type: text
+    text: BATTERY
+    font: Barlow Condensed
+    weight: SemiBold
+    color: $faint
+    alignment: BottomRight
+    geometry:
+      x: 92.125%
+      y: 60.1%
+      width: 5.275%
+      height: 1.5%
+    matchingGroup:
+      group: global.cap
+      matchAll: true
+    tracking: 0.16
+    format-hint: HEADING
+  - type: realtime.text
+    key: indoor.battery.battery
+    title: false
+    alignment: BottomRight
+    display:
+      unitPosition: Inline
+      precision: 0
+      valueLabel:
+        color: $good
+        font: $mono
+        weight: Regular
+        matchingGroup:
+          group: global.detail
+          matchAll: true
+        alignment: BottomRight
+        margins:
+          left: 10%
+          right: 0
+          top: 0
+          bottom: 0
+      format-hint: 100%
+    geometry:
+      x: 92.125%
+      y: 62.0%
+      width: 5.275%
       height: 3.6%
     margins:
       left: 0
@@ -1426,7 +1473,7 @@ items:
         tracking: 0.16
         format-hint: HEADING
       - type: realtime.text
-        key: environment.precipitation.daily
+        key: environment.precipitation.rainDaily
         title: false
         alignment: BottomLeft
         display:

@@ -61,7 +61,7 @@ def data(rooms=INDOOR, name='default'):
 	d.add(f'{W}.speed.gustMax', WIND, value=round(max(gust[today])), type='wind')
 	d.add(f'{W}.direction.direction', 'º', direction, type='direction', digits=0)
 	d.add(PR, ['in', 'hr'], precipitation, type='precipitationHourly', digits=2)
-	d.add('environment.precipitation.daily', ['in', 'day'], value=round(sum(precipitation[today]), 2), type='precipitationDaily')
+	d.add('environment.precipitation.rainDaily', ['in', 'day'], value=round(sum(precipitation[today]), 2), type='precipitationDaily')
 	d.add(f'{C}.cover', '%c', cover, type='cloudcover', digits=0)
 	d.add(f'{C}.low', '%c', d.series(lambda h, day, t: min(100, 85 * bell(t, 13.5, 5)), digits=0), type='cloudcover', digits=0)
 	d.add(f'{C}.mid', '%c', d.series(lambda h, day, t: min(100, 15 + 70 * bell(t, 12, 7)), digits=0), type='cloudcover', digits=0)
@@ -102,6 +102,7 @@ def data(rooms=INDOOR, name='default'):
 		d.add(f'indoor.temperature.temperature{sfx}', 'f', temp)
 		d.add(f'indoor.humidity.humidity{sfx}', '%', hum, digits=0)
 		d.add(f'indoor.temperature.dewpoint{sfx}', 'f', [round(a - (100 - h) / 2.55, 1) for a, h in zip(temp, hum)])
+		d.add(f'indoor.battery.battery{sfx}', '%', value={'': 91, '#bedroom': 87, '#terrarium': 64}[sfx], type='battery', digits=0)
 		d.add(f'indoor.temperature.heatIndex{sfx}', 'f', [round(a + max(0, h - 40) * 0.05, 1) for a, h in zip(temp, hum)])
 	return d
 
@@ -158,12 +159,13 @@ def room(caption, sfx, color, x, y, w, h, i):
 	"""One room: its name, the temperature over its last day, and humidity and dew point (and feels like, if tall)."""
 	key = lambda name: f'indoor.{name}{sfx}'
 	temp = key('temperature.temperature')
-	rows = [('HUMIDITY', key('humidity.humidity'), '$info', {'hint': '00%', 'unit': 'Inline'}),
-	        ('DEW POINT', key('temperature.dewpoint'), '$good', {'hint': '00°', 'unit': 'Inline'})]
+	rows = [('RH', key('humidity.humidity'), '$info', {'hint': '00%', 'unit': 'Inline'}),
+	        ('DEW', key('temperature.dewpoint'), '$good', {'hint': '00°', 'unit': 'Inline'})]
 	out = [cap_(caption, g(x, y, w, CAP), color)]
 	if h > 25:
 		# Tall: the number, a day of temperature under it, and three readings in a row along the bottom.
-		rows.append(('FEELS LIKE', key('temperature.heatIndex'), '$warn', {'hint': '00°', 'unit': 'Inline'}))
+		rows.append(('FEELS', key('temperature.heatIndex'), '$warn', {'hint': '00°', 'unit': 'Inline'}))
+		rows.append(('BATTERY', key('battery.battery'), '$good', {'hint': '100%', 'unit': 'Inline'}))
 		body = h - CAP - 0.8 - 7.6
 		out += [
 			mini(temp, g(x, y + CAP + 0.8, w, body), color=color, hours=24, past=True, top='42%', bottom='0%', opacity=0.8, fill=0.3, weight=0.5,
@@ -171,9 +173,9 @@ def room(caption, sfx, color, x, y, w, h, i):
 			num(temp, g(x, y + CAP + 0.8, w * 0.7, 11.5), '$text', weight='Bold', tracking=-0.06, unit='Inline', hint='00.0°', precision=1,
 			    group='global.room', align='TopLeft'),
 		]
-		third = w / 3
+		quarter = w / len(rows)
 		for j, (name, k, c, kw) in enumerate(rows):
-			out += tile(name, k, x + j * third, y + h - 5.4, third - 0.6, c, h=TILE, group='global.detail', **kw)
+			out += tile(name, k, x + j * quarter, y + h - 5.4, quarter - 0.6, c, h=TILE, group='global.detail', right=j == len(rows) - 1, **kw)
 		return out
 	# Short: the number over its day on the left, two readings stacked on the right.
 	hh = h - CAP - 0.8
@@ -186,7 +188,7 @@ def room(caption, sfx, color, x, y, w, h, i):
 	]
 	# Four readings in two columns, the outer one flush to the board's edge so the panel reaches it.
 	rows = [('RH', key('humidity.humidity'), '$info', {'hint': '00%', 'unit': 'Inline'}),
-	        ('FEELS', key('temperature.heatIndex'), '$warn', {'hint': '00°', 'unit': 'Inline'}),
+	        ('BATTERY', key('battery.battery'), '$good', {'hint': '100%', 'unit': 'Inline'}),
 	        ('DEW', key('temperature.dewpoint'), '$good', {'hint': '00°', 'unit': 'Inline'}),
 	        ('24H HI', f'max({temp}, 24h)', '$bad', {'hint': '00°', 'unit': 'Inline'})]
 	col = (w - left) / 2
@@ -322,7 +324,7 @@ def board(rooms=INDOOR):
 	x = X[1] + px
 	cards['rain'] = [
 		cap_('RAIN · INCHES', g(x, Y + py, iw, CAP), '$info'),
-		hero('environment.precipitation.daily', x, 9.6, '$info', precision=2, hint='0.00'),
+		hero('environment.precipitation.rainDaily', x, 9.6, '$info', precision=2, hint='0.00'),
 		text('today', g(x + 9.8, top + 5.4, 6, 2.6), font='$body', weight='Light', italic=True, color='$faint', align='BottomLeft'),
 		capsules(mini(PR, g(x, pic, iw, 4), color='$info', hours=24, lo=0, hi=0.4, kind='bar', top='4%', bottom='0%', opacity=1, glow=GLOW,
 		              smooth=False)),
