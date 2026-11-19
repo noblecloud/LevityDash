@@ -99,7 +99,7 @@ def num(key, geom, color='$text', weight='Regular', font='$mono', **kw):
 	return val(key, geom, color, font=font, weight=weight, **kw)
 
 
-def tile(caption, key, x, y, w, color='$text', h=TILE, group='global.tile', **kw):
+def tile(caption, key, x, y, w, color='$text', h=TILE, group='global.detail', **kw):
 	return [cap_(caption, g(x, y, w, CAP)), num(key, g(x, y + CAP + 0.4, w, h), color, group=group, **kw)]
 
 
@@ -144,7 +144,7 @@ def room(caption, sfx, color, x, y, w, h, i):
 		]
 		third = w / 3
 		for j, (name, k, c, kw) in enumerate(rows):
-			out += tile(name, k, x + j * third, y + h - 6.8, third - 0.6, c, h=4.4, group='global.roomTile', **kw)
+			out += tile(name, k, x + j * third, y + h - 6.8, third - 0.6, c, h=4.4, group='global.detail', **kw)
 		return out
 	# Short: the number over its day on the left, two readings stacked on the right.
 	hh = h - CAP - 0.8
@@ -157,22 +157,24 @@ def room(caption, sfx, color, x, y, w, h, i):
 		    group='global.room', align='TopLeft'),
 	]
 	for j, (name, k, c, kw) in enumerate(rows):
-		out += tile(name, k, x + left, y + CAP + 0.8 + j * step, w - left, c, h=step - CAP - 1.6, group='global.roomTile', **kw)
+		out += tile(name, k, x + left, y + CAP + 0.8 + j * step, w - left, c, h=step - CAP - 1.6, group='global.detail', **kw)
 	return out
 
 
 def board(rooms=INDOOR):
 	B = [clock()]
+	# Two reading sizes (Neal's rule): `global.room` for what is read across the room, `global.detail` for what is
+	# read standing in front of it. Every number but the clock and the outdoor temperature is in one of the two.
 	# ------------------------------------------------------------ outside, now
 	x = 39.5
 	B += [
 		cap_('OUTSIDE', g(x, 2.8, 12, CAP), '$accent'),
 		num(T, g(x - 0.4, 4.6, 16, 15.6), {'scale': '$temperature', 'of': T}, unit='Inline', hint='00°', weight='Black', tracking=-0.04, font='$body'),
 		cap_('HIGH', g(x + 16.6, 4.8, 7, CAP)),
-		num('environment.temperature.high', g(x + 16.6, 6.8, 8, 5.8), '$bad', hint='00', weight='Bold', group='global.hilo',
+		num('environment.temperature.high', g(x + 16.6, 6.8, 8, 5.8), '$bad', hint='00', weight='Bold', group='global.room',
 		    fmt={'unit_symbol': False}),
 		cap_('LOW', g(x + 16.6, 13.4, 7, CAP)),
-		num('environment.temperature.low', g(x + 16.6, 15.4, 8, 5.8), '$info', hint='00', weight='Bold', group='global.hilo',
+		num('environment.temperature.low', g(x + 16.6, 15.4, 8, 5.8), '$info', hint='00', weight='Bold', group='global.room',
 		    fmt={'unit_symbol': False}),
 		# The day's low to high on a 30 to 100 °F track, the temperature now as a line across it.
 		bar(T, g(x, 20.9, 24.6, 2.2), 30, 100, track={'weight': '42%', 'color': '$rule'},
@@ -180,12 +182,12 @@ def board(rooms=INDOOR):
 		          'glow': GLOW},
 		    pointer={'type': 'line', 'color': '$accent', 'size': '100%'}),
 		{'type': 'realtime.text', 'key': 'environment.condition.condition', 'title': False, 'alignment': 'CenterLeft', 'geometry': g(x, 23.6, 10, 2.4),
-		 'display': {'valueLabel': {'color': '$muted', 'font': '$body', 'weight': 'Light', 'italic': True, 'matchingGroup': {'group': 'global.line', 'matchAll': True}}}},
-		text('feels', g(x + 10.2, 23.6, 3.6, 2.4), font='$body', weight='Light', italic=True, color='$faint', align='CenterRight', group='global.line'),
-		num('environment.temperature.feelsLike', g(x + 14.2, 23.6, 4, 2.4), unit='Inline', hint='00°', weight='SemiBold', align='CenterLeft', group='global.line'),
-		text('dew', g(x + 18.2, 23.6, 2.8, 2.4), font='$body', weight='Light', italic=True, color='$faint', align='CenterRight', group='global.line'),
+		 'display': {'valueLabel': {'color': '$muted', 'font': '$body', 'weight': 'Light', 'italic': True, 'matchingGroup': {'group': 'global.detail', 'matchAll': True}}}},
+		text('feels', g(x + 10.2, 23.6, 3.6, 2.4), font='$body', weight='Light', italic=True, color='$faint', align='CenterRight', group='global.detail'),
+		num('environment.temperature.feelsLike', g(x + 14.2, 23.6, 4, 2.4), unit='Inline', hint='00°', weight='SemiBold', align='CenterLeft', group='global.detail'),
+		text('dew', g(x + 18.2, 23.6, 2.8, 2.4), font='$body', weight='Light', italic=True, color='$faint', align='CenterRight', group='global.detail'),
 		num('environment.temperature.dewpoint', g(x + 21.4, 23.6, 4, 2.4), '$good', unit='Inline', hint='00°', weight='SemiBold', align='CenterLeft',
-		    group='global.line'),
+		    group='global.detail'),
 	]
 	# ------------------------------------------------------------ the sun
 	x = 68.5
@@ -193,7 +195,7 @@ def board(rooms=INDOOR):
 		cap_('DAYLIGHT LEFT', g(x, 2.8, 16, CAP), '$warn'),
 		mini(f'{L}.irradiance.irradiance', g(x, 7, 18, 13.6), color='$warn', hours=24, past=True, lo=0, hi=1000, top='25%', bottom='0%', opacity=0.75,
 		     fill=0.35, weight=0.5, glow=GLOW),
-		num('astronomy.sun.remaining', g(x, 4.6, 18, 9), '$text', fmt='duration', hint='00h 00m', weight='Light', tracking=-0.04, group=None),
+		num('astronomy.sun.remaining', g(x, 4.6, 18, 9), '$text', fmt='duration', hint='00h 00m', weight='Light', tracking=-0.04, group='global.room'),
 		# One cell for each hour of daylight still to come, lit from warm to the evening colour.
 		bar('astronomy.sun.remaining', g(x, 21.2, 18, 2.2), 0, 960, track={'weight': '100%', 'color': '$rule', 'segments': 16, 'gap': '18%'},
 		    fill={'gradient': {0: '$accent', 1: '$warn'}, 'segments': 16, 'gap': '18%', 'weight': '100%', 'glow': GLOW}),
@@ -203,7 +205,7 @@ def board(rooms=INDOOR):
 	]
 	# ------------------------------------------------------------ the days ahead
 	B.append({
-		'type': 'graph', 'name': 'forecast', 'geometry': g(1.5, 28.5, 69.5, 37),
+		'type': 'graph', 'name': 'forecast', 'geometry': g(1.5, 28.5, 69.5, 23.5),
 		'timeframe': {'days': 2, 'hours': 18, 'offset': {'hours': -6}},
 		'annotations': {'dayLabels': {'position': 'Center', 'alignment': 'Center', 'opacity': '12%', 'height': '38%'},
 		                'hourLabels': {'alignment': 'BottomCenter', 'spacingIntervals': '6, 12', 'height': '4%'},
@@ -226,6 +228,16 @@ def board(rooms=INDOOR):
 			{'figure': 'rain', 'margins': {'top': '70%', 'bottom': '9%'}, 'min': 0, 'max': 0.4,
 			 PR: {'plot': {'type': 'bar', 'color': '$info', 'width': 0.62, 'radius': 0.5, 'glow': GLOW}, 'smooth': False}},
 		]})
+	# ------------------------------------------------------------ the next sixteen hours, as numbers
+	hours = list(range(2, 17, 2))
+	at = lambda key, h: f'at({key}, {h}h)'
+	readings = [('TEMP', T, '°F', 0, '$text'), ('RAIN', PR, 'in/h', 2, '$info'), ('WIND', f'{W}.speed.speed', 'mph', 0, '$series-6'), ('CLOUD', f'{C}.cover', '%', 0, '$muted'),
+	            ('HUMID', 'environment.humidity.humidity', '%', 0, '$info')]
+	B.append({'preset': 'table', 'name': 'hours', 'geometry': g(2, 52.6, 68.5, 13.4), 'props': {
+		'columns': [{'head': f'+{h} H'} for h in hours],
+		'rows': [{'label': f'{name} {unit}', 'color': color, 'precision': p, 'keys': [at(key, h) for h in hours]} for name, key, unit, p, color in readings],
+		'labelWidth': '11%', 'headHeight': '15%', 'rowGap': '0px', 'font': '$mono', 'labelFont': LABEL, 'alignment': 'Right',
+		'titleGroup': 'global.hoursHead', 'valueGroup': 'global.detail'}})
 	# ------------------------------------------------------------ indoors
 	top, height, gap = 28.5, 37, 2.2
 	each = (height - gap * (len(rooms) - 1)) / len(rooms)
@@ -237,7 +249,7 @@ def board(rooms=INDOOR):
 	px, py = 1.2, 1.8
 	iw = CW - 2 * px
 	HERO = 10
-	hero = lambda key, x, w, color, **kw: num(key, g(x, Y + py + CAP + 0.6, w, HERO), color, weight='Bold', tracking=-0.03, group='global.hero', **kw)
+	hero = lambda key, x, w, color, **kw: num(key, g(x, Y + py + CAP + 0.6, w, HERO), color, weight='Bold', tracking=-0.03, group='global.room', **kw)
 	low = Y + 19.6
 	cards = {}
 
@@ -298,11 +310,20 @@ def board(rooms=INDOOR):
 		      fmt={'unit_symbol': False}),
 	]
 	x = X[4] + px
-	cards['today'] = [
-		cap_('TODAY ROUND THE CLOCK', g(x, Y + py, iw, CAP), '$accent'),
-		{'type': 'polar', 'name': 'dayClock', 'plot': 'clock', 'key': T, 'window': 'today', 'gradient': '$temperature', 'marks': False,
-		 'geometry': g(x - 0.4, Y + py + CAP + 0.4, iw + 0.8, H - 2 * py - CAP - 0.4)},
-	]
+	# Planes near by take the card over (`aircraft.active`, from the Aircraft plugin, off until Aircraft.ini enables it);
+	# otherwise the day's clock.
+	body = g(x - 0.4, Y + py + CAP + 0.4, iw + 0.8, H - 2 * py - CAP - 0.4)
+	cards['today'] = [{'type': 'switch', 'name': 'skyOrClock', 'hold': '2m', 'fade': '0.4s', 'geometry': g(x, Y + py, iw, H - 2 * py), 'items': [
+		nest('planes', (x, Y + py, iw, H - 2 * py), [
+			cap_('OVERHEAD · NM', g(x, Y + py, iw * 0.6, CAP), '$info'),
+			num('aircraft.count', g(x + iw * 0.6, Y + py - 0.4, iw * 0.4, CAP + 0.8), '$info', weight='Bold', align='TopRight', hint='00'),
+			{'type': 'polar', 'name': 'radar', 'plot': 'radar', 'prefix': 'aircraft', 'slots': 15, 'max': 30, 'labels': 4, 'sweep': True,
+			 'rings': 3, 'accent': '$info', 'gradient': [{'at': 0, 'color': '$bad'}, {'at': 8000, 'color': '$warn'}, {'at': 40000, 'color': '$info'}],
+			 'geometry': body}], fill=None, when='aircraft.active') | {'geometry': g(0, 0, 100, 100)},
+		nest('dayClock', (x, Y + py, iw, H - 2 * py), [
+			cap_('TODAY ROUND THE CLOCK', g(x, Y + py, iw, CAP), '$accent'),
+			{'type': 'polar', 'name': 'dayClock', 'plot': 'clock', 'key': T, 'window': 'today', 'gradient': '$temperature', 'marks': False,
+			 'geometry': body}], fill=None) | {'geometry': g(0, 0, 100, 100)}]}]
 	for i, (name, items) in enumerate(cards.items()):
 		B.append(nest(f'{name}Card', (X[i], Y, CW, H), items))
 	return {'items': [{'type': 'group', 'name': 'board', 'items': B}]}
