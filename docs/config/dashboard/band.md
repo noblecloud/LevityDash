@@ -36,4 +36,4 @@ The items sit in a ring. The one that leaves one end comes in at the other, so t
 
 The layout is worked out once, as shares of the band. A move changes only each item's own translation, so there is no geometry update and no relayout per frame. In `continuous` mode every item is drawn into a pixmap once and the pixmap is moved (`cache: false` for an item that repaints every frame anyway, such as a graph with a live edge). A `step` band does nothing at all between moves. On a slow machine, lower `fps` (15 still looks smooth at a slow `speed`) or use `step`. A band that is hidden or off the scene does not tick.
 
-`when:` on an item of a band is not used: every item takes its turn. Use a [switch](switch.md) inside an item to change what one slot shows.
+`when:` on an item of a band takes it out of the ring while it is false: it is hidden and the others close up, and it comes back in its place when the condition holds again. Use a [switch](switch.md) inside an item to change what one slot shows instead.

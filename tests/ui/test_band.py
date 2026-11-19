@@ -97,3 +97,23 @@ def test_bad_settings_are_named(dashboard, slot):
 	for name, value in (('mode', 'sideways'), ('direction', 'north'), ('visible', 0), ('gap', '80%')):
 		with pytest.raises(ValueError):
 			getattr(Band, name).decodeValue(value, band)
+
+
+def test_when_takes_an_item_out_of_the_ring(dashboard, slot):
+	"""An item whose `when:` fails is hidden and the others close up; when it holds again the item comes back in place."""
+	state = {'type': 'band', 'name': 'band', 'visible': 3, 'dwell': 3600, 'transition': 0, 'gap': '0%'}
+	state['items'] = [{'type': 'group', 'name': f'c{i}'} for i in range(5)]
+	state['items'][1]['when'] = False
+	slot.state = {'items': [state]}
+	band = next(c for c in slot.childItems() if isinstance(c, Band))
+	pump(dashboard.app, 0.3)
+	third = band.rect().width() / 3
+	at = lambda c: c.pos().x() + c.transform().dx()
+	assert [c.stateName for c in band.shown] == ['c0', 'c2', 'c3', 'c4']
+	assert not child(band, 'c1').isVisible()
+	assert at(child(band, 'c2')) == pytest.approx(third, rel=0.01)  # moved up into c1's slot
+	child(band, 'c1').when = True
+	pump(dashboard.app, 0.3)
+	assert child(band, 'c1').isVisible() and len(band.shown) == 5
+	assert at(child(band, 'c2')) == pytest.approx(2 * third, rel=0.01)
+	assert at(child(band, 'c1')) == pytest.approx(third, rel=0.01)
