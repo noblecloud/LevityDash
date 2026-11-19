@@ -110,6 +110,14 @@ keys:
     value: 671
     unit: int
     title: Daylight left (minutes)
+  aircraft.count:
+    value: 0
+    unit: int
+    title: Aircraft in range
+  aircraft.active:
+    value: 0
+    unit: int
+    title: A plane is near
   indoor.temperature.temperature:
     value: 69.9
     unit: f

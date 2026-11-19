@@ -110,6 +110,14 @@ keys:
     value: 671
     unit: int
     title: Daylight left (minutes)
+  aircraft.count:
+    value: 15
+    unit: int
+    title: Aircraft in range
+  aircraft.active:
+    value: 1
+    unit: int
+    title: A plane is near
   indoor.temperature.temperature#bedroom:
     value: 67.7
     unit: f
@@ -146,14 +154,6 @@ keys:
     value: 3
     unit: int
     title: Aircraft overhead
-  aircraft.active:
-    value: 1
-    unit: int
-    title: A plane is near
-  aircraft.count:
-    value: 15
-    unit: int
-    title: Aircraft in range
   aircraft.1.callsign:
     value: N172SP
     unit: str

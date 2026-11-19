@@ -74,6 +74,9 @@ def data(rooms=INDOOR, name='default'):
 		d.add(f'{L}.{key}', 'epoch', value=int(time.mktime(moment.timetuple())) + 4 * 3600, type='datetime')
 	d.add('astronomy.sun.hour', 'int', value=round(d.now, 3), title='Hour of day')
 	d.add('astronomy.sun.remaining', 'int', value=671, title='Daylight left (minutes)')
+	# No planes near by, so the last card shows the day's clock (home.py brings some over).
+	d.add('aircraft.count', 'int', value=0, title='Aircraft in range')
+	d.add('aircraft.active', 'int', value=0, title='A plane is near')
 	# Indoors: a house that holds near 70 °F, and a terrarium that is warm and wet under its lamp from 8 to 20.
 	shapes = {'': (70.5, 1.2, 46, 4), '#bedroom': (68.5, 1.6, 50, 4), '#terrarium': (79, 4.5, 84, -8)}
 	for _, sfx, _ in rooms:
