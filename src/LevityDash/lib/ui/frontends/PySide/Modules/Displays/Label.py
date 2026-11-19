@@ -386,6 +386,49 @@ class Label(Panel, ColorMixin, tag='label'):
 			raise ValueError(f'number-align must be one of {", ".join(numberalign.MODES)} or none, not {value!r}')
 		return value
 
+	@StateProperty(key='decimal-scale', default=None, allowNone=True, dependencies={'geometry', 'text', 'alignment'})
+	def decimalScale(self) -> float | None:
+		"""Draw the fractional digits (the `.7` of `67.7`, with their point) smaller than the integer part, as a
+		share of the text size: `decimal-scale: 0.6`, or `60%`. The integer digits keep their size, so with
+		`tabular` or `number-align` they still line up; a unit or degree sign after the fraction keeps the full
+		size. Off (`null`, `1`) by default. Where the fraction sits is `decimal-align`."""
+		return self.textBox._decimalScale
+
+	@decimalScale.setter
+	def decimalScale(self, value: float | None):
+		self.textBox.setDecimalScale(value)
+
+	@decimalScale.decode
+	def decimalScale(self, value) -> float | None:
+		if value in (None, False, 'none', 'off'):
+			return None
+		if isinstance(value, str):
+			value = value.strip()
+			value = float(value[:-1]) / 100 if value.endswith('%') else float(value)
+		value = float(value)
+		if not 0 < value <= 1:
+			raise ValueError(f'decimal-scale is a share of the text size above 0 and up to 1 (or 1% to 100%), not {value!r}')
+		return None if value == 1 else value
+
+	@StateProperty(key='decimal-align', default='baseline', dependencies={'geometry', 'text', 'alignment'})
+	def decimalAlign(self) -> str:
+		"""Where the small decimals sit: `baseline` (on the line, as in a price), `top` (their tops level with the
+		integer digits' tops, as a superscript) or `center`."""
+		return self.textBox._decimalAlign
+
+	@decimalAlign.setter
+	def decimalAlign(self, value: str):
+		self.textBox.setDecimalAlign(value)
+
+	@decimalAlign.decode
+	def decimalAlign(self, value) -> str:
+		value = str(value or 'baseline').lower()
+		aliases = {'bottom': 'baseline', 'super': 'top', 'superscript': 'top', 'middle': 'center'}
+		value = aliases.get(value, value)
+		if value not in ('baseline', 'top', 'center'):
+			raise ValueError(f'decimal-align must be baseline, top or center, not {value!r}')
+		return value
+
 	@StateProperty(key='tabular', default=False, dependencies={'geometry', 'text'})
 	def tabular(self) -> bool:
 		"""`font-variant-numeric: tabular-nums`: digits of one width. On whenever `number-align` is set."""

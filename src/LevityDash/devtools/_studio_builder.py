@@ -98,8 +98,29 @@ def numberAlignField(node: dict, kind: str) -> Optional[str]:
 
 #: Fields the Item tab has a control for. Everything else an item holds goes to the "more properties" popover.
 OWNED = {'type', model.PRESET_KEY, 'name', 'key', 'text', 'color', 'direction', 'spacing', 'flex', 'grid', 'when', 'figures', model.ITEMS_KEY}
+#: Where `decimal-scale` and `decimal-align` (the fractional digits at a smaller size) are written, by the same rule as `number-align`.
+DECIMAL_PREFIXES = ('', 'display.valueLabel.', 'shared.display.valueLabel.')
+DECIMAL_FIELDS = tuple(f'{prefix}{name}' for prefix in DECIMAL_PREFIXES for name in ('decimal-scale', 'decimal-align'))
+DECIMAL_ALIGN_CHOICES = [('baseline', None), ('top', 'top'), ('centre', 'center')]
+DECIMAL_TIP = ('Draw the digits after the decimal point smaller, as a share of the text size (0.6 = 60%). The integer digits keep their size, '
+               'so they still line up with number align. "top" lifts the small digits level with the top of the others, as a superscript.')
+
+
+def decimalPrefix(node: dict, kind: str) -> Optional[str]:
+	"""The prefix the decimal fields of this item are written under, or None for an item with no number (or a preset use)."""
+	if model.PRESET_KEY in node:
+		return None
+	if kind in ('text', 'label'):
+		return ''
+	if kind == 'realtime.text':
+		return 'display.valueLabel.'
+	if kind in CONTAINERS:
+		return 'shared.display.valueLabel.'
+	return None
+
+
 OWNED_PATHS = ['geometry.x', 'geometry.y', 'geometry.width', 'geometry.height', 'display.range.min', 'display.range.max', 'display.arc.gradient',
-               *NUMBER_ALIGN_FIELDS]
+               *NUMBER_ALIGN_FIELDS, *DECIMAL_FIELDS]
 
 
 #: What a new property of each type starts as.
@@ -1161,6 +1182,13 @@ class ItemTab(QWidget):
 					value = lib.load(str(node[model.PRESET_KEY])).props['numberAlign'].default
 			row = self._row(head, aligned, 'number align', editors.ChoiceEdit(choices), bindable=not aligned.startswith('props.'), value=value)
 			row.setToolTip(NUMBER_ALIGN_TIP)
+		prefix = decimalPrefix(node, kind)
+		if prefix is not None:
+			row = self._row(head, f'{prefix}decimal-scale', 'decimal size', editors.NumberEdit(autoText='full size', lo=0.1, hi=1.0, step=0.05, decimals=2),
+			                bindable=False, value=model.getField(node, f'{prefix}decimal-scale'))
+			row.setToolTip(DECIMAL_TIP)
+			self._row(head, f'{prefix}decimal-align', 'decimal align', editors.ChoiceEdit(DECIMAL_ALIGN_CHOICES), bindable=False,
+			          value=model.getField(node, f'{prefix}decimal-align'))
 		if kind in ('stack', 'value-stack'):
 			self._row(head, 'direction', 'direction', editors.ChoiceEdit([('Vertical', 'Vertical'), ('Horizontal', 'Horizontal')]), value=node.get('direction'))
 			self._row(head, 'spacing', 'spacing', editors.SizeEdit(nullable=True, ref='full'), value=node.get('spacing'))

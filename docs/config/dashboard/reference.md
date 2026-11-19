@@ -52,7 +52,7 @@ All the keys of `type: group` (first table under **Key tables**) work on every i
 
 - **Box**: `geometry`, `margins`, `padding`, `opacity` (a number, or `{of, from, to}`), `border`, `align-to`, `time-axis`, `name`.
 - **Behaviour**: `when`, `movable`, `resizable`, `locked`, `frozen` (the last four only matter in edit mode).
-- **Type**: on any text and on a reading's `valueLabel`: `font`, `weight`, `italic`, `tracking` (letter spacing in em; open up capitals, tighten a big number), `outline` (hollow letters: a weight, or `{weight, color, fill}`), `filters`, `warp`. Worked examples: the five dashboards in `docs/design-references/showcase/`.
+- **Type**: on any text and on a reading's `valueLabel`: `font`, `weight`, `italic`, `tracking` (letter spacing in em; open up capitals, tighten a big number), `decimal-scale` and `decimal-align` (the digits after the point at a smaller size, level with the baseline or the top), `outline` (hollow letters: a weight, or `{weight, color, fill}`), `filters`, `warp`. Worked examples: the five dashboards in `docs/design-references/showcase/`.
 - **Effects**: `beam` (a travelling or breathing outline) and `glow` (a halo) work on any item that lists them.
 - **Cascades**: `shared:` (style for every descendant), `preset:` on a stack (defaults for each child), `defaultType:` (children without a `type`), `matchingGroup:` (one text size across a region). Details: `cascading-options.md` in the project files and [size-groups.md](size-groups.md).
 
@@ -384,6 +384,8 @@ Tag: `label`  ·  class `Label`
 | `modifiers` | `{}` |  |
 | `format-hint` | `None` |  |
 | `number-align` | `None` | Line numbers up on the number and not on the whole string: `end` right-aligns the digits, `decimal` puts the decimal point on one line (a value with no point acts as if it ended in one). The unit and any other text after the cut hang to its right. Members of one size group (and one tier) share the line. The text is not changed: nothing is padded. |
+| `decimal-scale` | `None` | Draw the fractional digits (the `.7` of `67.7`, with their point) smaller than the integer part, as a share of the text size: `decimal-scale: 0.6`, or `60%`. The integer digits keep their size, so with `tabular` or `number-align` they still line up; a unit or degree sign after the fraction keeps the full size. Off (`null`, `1`) by default. Where the fraction sits is `decimal-align`. |
+| `decimal-align` | `baseline` | Where the small decimals sit: `baseline` (on the line, as in a price), `top` (their tops level with the integer digits' tops, as a superscript) or `center`. |
 | `tabular` | `False` | `font-variant-numeric: tabular-nums`: digits of one width. On whenever `number-align` is set. |
 | `italic` | `False` | The font's italic, or a slanted regular where the family has none. |
 | `tracking` | `0.0` | Space added between letters, in em, as CSS `letter-spacing`: `tracking: 0.12` opens all caps up, a negative number tightens a big number. `12%` is the same as `0.12`. |

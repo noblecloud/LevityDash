@@ -224,6 +224,20 @@ def test_number_align_is_written_where_each_kind_of_item_reads_it(builder):
 	assert builder.piece.node((0,))['shared']['display']['valueLabel']['number-align'] == 'decimal'
 
 
+def test_decimal_fields_are_written_where_each_kind_of_item_reads_them(builder):
+	builder.addItem('realtime.text')
+	builder.select((0,))
+	assert 'display.valueLabel.decimal-scale' in builder.itemTab.rows
+	builder.editField('display.valueLabel.decimal-scale', 0.6)
+	builder.editField('display.valueLabel.decimal-align', 'top')
+	label = builder.piece.node((0,))['display']['valueLabel']
+	assert label['decimal-scale'] == 0.6 and label['decimal-align'] == 'top'
+	assert sb.restOf(builder.piece.node((0,))) == {}
+	builder.editField('display.valueLabel.decimal-scale', None)
+	builder.editField('display.valueLabel.decimal-align', None)
+	assert 'display' not in builder.piece.node((0,))
+
+
 def test_number_align_stays_out_of_the_more_popover(builder):
 	builder.addItem('realtime.text')
 	builder.editField('display.valueLabel.number-align', 'decimal')
