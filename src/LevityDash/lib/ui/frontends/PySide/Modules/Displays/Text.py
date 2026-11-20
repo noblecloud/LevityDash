@@ -18,6 +18,7 @@ from LevityDash.lib.ui.colors import theme
 from LevityDash.lib.ui.Geometry import Alignment, AlignmentFlag, Geometry, getDPI, Size
 from LevityDash.lib.ui.Groups import SizeGroupItem
 from LevityDash.lib.ui import numberalign
+from LevityDash.lib.ui.follow import ValueFollower
 from LevityDash.lib.ui.fonts import defaultFont, FontWeight, getFontFamily
 from LevityDash.lib.ui.frontends.PySide.utils import addCrosshair, addRect, colorPalette, DebugPaint, addPath, move_shape_into_rect, rect_to_shape, add_corner_at_point
 from LevityDash.lib.ui.icons import fa as FontAwesome, Icon
@@ -467,11 +468,11 @@ class Text(QGraphicsPathItem):
 	def _applyInk(self):
 		"""Brush and pen from the fill colour and `outline`. With no outline the glyphs are filled and
 		there is no pen, as before."""
-		brush = self._fillBrush if self._fillBrush is not None else QBrush(Color.text.QColor)
+		brush = self._gradientBrush or (self._fillBrush if self._fillBrush is not None else QBrush(Color.text.QColor))
 		outline = self._outline
 		if not outline:
 			if self._cornerWidth > 0:
-				self.setPen(QPen(brush.color(), self._cornerWidth, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+				self.setPen(QPen(brush, self._cornerWidth, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
 			else:
 				self.setPen(QPen(Qt.NoPen))
 			self.setBrush(brush)
@@ -1225,6 +1226,28 @@ class Text(QGraphicsPathItem):
 		physicalHeight = wu.Length.Inch(rect.height()/window.physicalDpiY()).cm
 		physicalWidth = wu.Length.Inch(rect.width()/window.physicalDpiX()).cm
 		return physicalWidth, physicalHeight
+
+	_gradientBrush: Optional[QBrush] = None
+	_fillGradient = None
+	_gradientFollower = None
+
+	def setFillGradient(self, spec):
+		"""`fill-gradient` (`lib/ui/fill_gradient.py`): fill the glyphs with a scale's gradient around a followed value."""
+		if (follower := self._gradientFollower) is not None:
+			self._gradientFollower = None
+			follower.close()
+		self._fillGradient = spec
+		self._gradientBrush = None
+		if spec is not None:
+			if spec.fallback is not None:
+				self._gradientBrush = QBrush(spec.fallback.QColor)
+
+			def apply(brush):
+				self._gradientBrush = QBrush(brush.QColor) if isinstance(brush, Color) else brush
+				self._applyInk()
+
+			self._gradientFollower = ValueFollower(spec, apply, f'{type(self).__name__} fill-gradient')
+		self._applyInk()
 
 	def setFillBrush(self, value: QBrush):
 		if value is None:

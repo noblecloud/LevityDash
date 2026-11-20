@@ -53,8 +53,8 @@ class BoundColor:
 		self.gradient = Gradient.decode(scale)
 		self.fallback = Color.decode(spec['fallback']) if spec.get('fallback') is not None else None
 
-	def colorFor(self, value: Any) -> Optional[Color]:
-		"""The colour at ``value``, or None when it has no number to place."""
+	def place(self, value: Any):
+		"""``(gradient, number)``: the gradient to read for ``value`` and where ``value`` falls on it, or None when it has no number."""
 		if isinstance(value, bool) or value is None:
 			return None
 		gradient = self.gradient
@@ -69,6 +69,13 @@ class BoundColor:
 				number = float(stop(value)) if isinstance(value, Measurement) and isinstance(stop, type) and issubclass(stop, Measurement) else float(value)
 		except (TypeError, ValueError):
 			return None
+		return gradient, number
+
+	def colorFor(self, value: Any) -> Optional[Color]:
+		"""The colour at ``value``, or None when it has no number to place."""
+		if (placed := self.place(value)) is None:
+			return None
+		gradient, number = placed
 		return gradient.get_color_for_value(number)
 
 	resolve = colorFor
