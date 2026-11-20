@@ -933,7 +933,7 @@ items:
           right: 10%
           top: 0
           bottom: 0
-        decimal-scale: 0.55
+        decimal-scale: 0.36
         decimal-align: baseline
       format-hint: 00.0°
     geometry:
