@@ -76,10 +76,13 @@ BINDABLE = {
 #: Where `number-align` is written for each kind of item: a text item takes it itself, a reading takes it on its value label,
 #: a container hands it to every reading below it through `shared:`, and a preset use passes it as the `numberAlign` property.
 NUMBER_ALIGN_FIELDS = ('number-align', 'display.valueLabel.number-align', 'shared.display.valueLabel.number-align', 'props.numberAlign')
-NUMBER_ALIGN_CHOICES = [('as a whole string', None), ('decimal point', 'decimal'), ('end of the digits', 'end')]
+NUMBER_ALIGN_CHOICES = [('as a whole string', None), ('decimal point', 'decimal'), ('end of the digits', 'end'),
+                        ('first special character', 'special:1'), ('last special character', 'special:-1'), ('first colon', 'char::')]
 NUMBER_ALIGN_TIP = ('Line a column of values up on the number and not on the whole string. "decimal point" puts every point on one line '
                     '(a value with none acts as if it ended in one); "end of the digits" right-aligns the digits. The unit hangs to the right, '
-                    'the text is never changed, and the items of one size group share the line.')
+                    'the text is never changed, and the items of one size group share the line. The other choices anchor on a special character '
+                    '(not a digit, letter or space; a leading sign does not count). Type char:X (a character), nth:N (the Nth character) or '
+                    'special:N for another; a negative N counts from the end.')
 
 
 def numberAlignField(node: dict, kind: str) -> Optional[str]:
@@ -1180,7 +1183,7 @@ class ItemTab(QWidget):
 				choices = [(label, 'none' if v is None else v) for label, v in choices]
 				if value is None:
 					value = lib.load(str(node[model.PRESET_KEY])).props['numberAlign'].default
-			row = self._row(head, aligned, 'number align', editors.ChoiceEdit(choices), bindable=not aligned.startswith('props.'), value=value)
+			row = self._row(head, aligned, 'number align', editors.AnchorEdit(choices), bindable=not aligned.startswith('props.'), value=value)
 			row.setToolTip(NUMBER_ALIGN_TIP)
 		prefix = decimalPrefix(node, kind)
 		if prefix is not None:

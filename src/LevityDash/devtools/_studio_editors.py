@@ -746,6 +746,31 @@ class ChoiceEdit(Editor):
 		return self.combo.hasFocus() or self.combo.view().isVisible()
 
 
+class AnchorEdit(ChoiceEdit):
+	"""A dropdown of number-align choices that also takes a typed anchor (`char:%`, `nth:3`, `special:-1`).
+	What does not parse is not committed: the box goes back to the last good value."""
+
+	def __init__(self, choices: List[tuple]):
+		super().__init__(choices, editable=True)
+		self._good = None
+		self.combo.lineEdit().setPlaceholderText('char:X  nth:N  special:N')
+
+	def setValue(self, value):
+		self._good = value
+		super().setValue(value)
+
+	def value(self):
+		raw = super().value()
+		if raw in (None, 'none'):
+			return raw
+		from LevityDash.lib.ui import numberalign
+		try:
+			return numberalign.parse(raw)
+		except ValueError:
+			self.setValue(self._good)
+			return self._good
+
+
 def pickerFamilies() -> list[str]:
 	"""Bundled and user-folder families, common families, and `[Fonts] extra`, each only if installed."""
 	from LevityDash import LevityDashboard

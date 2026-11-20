@@ -368,9 +368,10 @@ class Label(Panel, ColorMixin, tag='label'):
 
 	@StateProperty(key='number-align', default=None, allowNone=True, dependencies={'geometry', 'text', 'alignment'})
 	def numberAlign(self) -> str | None:
-		"""Line numbers up on the number and not on the whole string: `end` right-aligns the digits, `decimal`
-		puts the decimal point on one line (a value with no point acts as if it ended in one). The unit and any
-		other text after the cut hang to its right. Members of one size group (and one tier) share the line.
+		"""Line values up on an anchor and not on the whole string: `end` right-aligns the digits, `decimal`
+		puts the decimal point on one line (a value with no point acts as if it ended in one). `char:X` anchors on
+		a character, `nth:N` on the Nth character and `special:N` on the Nth special one (not a digit, letter or
+		space); a negative N counts from the end. The unit and any other text after the cut hang to its right. Members of one size group (and one tier) share the line.
 		The text is not changed: nothing is padded."""
 		return self.textBox._numberAlign
 
@@ -384,10 +385,7 @@ class Label(Panel, ColorMixin, tag='label'):
 			return None
 		if value is True:
 			return 'decimal'
-		value = str(value).lower()
-		if value not in numberalign.MODES:
-			raise ValueError(f'number-align must be one of {", ".join(numberalign.MODES)} or none, not {value!r}')
-		return value
+		return numberalign.parse(value)
 
 	@StateProperty(key='decimal-scale', default=None, allowNone=True, dependencies={'geometry', 'text', 'alignment'})
 	def decimalScale(self) -> float | tuple[str, float] | None:
