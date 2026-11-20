@@ -21,6 +21,7 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Handles.MarginHandles import Mar
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import EditableLabelContextMenu, LabelContextMenu
 from LevityDash.lib.ui.frontends.PySide.utils import addRect, DebugPaint
 from LevityDash.lib.ui.Geometry import Alignment, AlignmentFlag, Geometry, parseSize, Position, Size, Margins
+from LevityDash.lib.ui.font_axes import decodeFontAxes, FontAxes
 from LevityDash.lib.ui.icons import getIcon, Icon
 from LevityDash.lib.utils import clearCacheAttr
 from unitcorn.length import Length
@@ -471,6 +472,24 @@ class Label(Panel, ColorMixin, tag='label'):
 	@italic.setter
 	def italic(self, value: bool):
 		self.textBox.setItalic(value)
+
+	@StateProperty(key='font-axes', default=None, allowNone=True, dependencies={'geometry', 'text'})
+	def fontAxes(self) -> FontAxes | None:
+		"""Variable-font axes that follow the value shown: `font-axes: {range: [20°F, 95°F], wght: [500, 800], ROND: [0, 100]}`
+		makes a hot number heavy and round and a cold one lean and sharp (see `lib/ui/font_axes.py`)."""
+		return self.textBox._fontAxes
+
+	@fontAxes.setter
+	def fontAxes(self, value: FontAxes | None):
+		self.textBox.setFontAxes(value)
+
+	@fontAxes.decode
+	def fontAxes(self, value) -> FontAxes | None:
+		return decodeFontAxes(value)
+
+	@fontAxes.encode
+	def fontAxes(value: FontAxes | None):
+		return None if value is None else dict(value.spec)
 
 	@StateProperty(key='tracking', default=0.0, dependencies={'geometry', 'text'})
 	def tracking(self) -> float:

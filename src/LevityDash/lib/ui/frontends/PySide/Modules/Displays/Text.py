@@ -324,8 +324,10 @@ class Text(QGraphicsPathItem):
 			font.setPointSizeF(g.font_size_for(self))
 		else:
 			font.setPointSize(self.fontSize)
-		if self._tabular or self._numberAlign:
+		if self._tabular or self._numberAlign or self._fontAxes is not None:
 			self._enableTabular(font)
+		if self._fontAxes is not None:
+			self._applyAxes(font)
 		if self._italic:
 			font.setItalic(True)
 		if self._tracking:
@@ -342,6 +344,21 @@ class Text(QGraphicsPathItem):
 		except (AttributeError, TypeError, ValueError):
 			pass
 
+	def _applyAxes(self, font: QFont):
+		"""The variable-font axes `font-axes` sets for the value now shown (`lib/ui/font_axes.py`). A static font
+		ignores them. Reads the value, never the text, so a fit that measures other strings keeps this shape."""
+		value = self.value
+		try:
+			for tag, setting in self._fontAxes.resolve(value).items():
+				font.setVariableAxis(QFont.Tag(tag), setting)
+		except (AttributeError, TypeError, ValueError):
+			pass
+
+	def setFontAxes(self, value):
+		self._fontAxes = value
+		self.updateTransform(reason='font-axes')
+
+	_fontAxes = None
 	_tabular: bool = False
 	_italic: bool = False
 	_tracking: float = 0.0
