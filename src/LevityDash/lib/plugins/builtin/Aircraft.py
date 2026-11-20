@@ -31,11 +31,14 @@ an empty slot from a plane on the same bearing as the last. ``plot: radar`` of `
 	slots = 20
 	trigger_radius = 10
 	trigger_altitude = 0
+	max_altitude = 0
+	military = True
 	hold = 60
 
 ``trigger_radius`` is the distance in nautical miles that counts as overhead for ``aircraft.near`` and
 ``aircraft.active``, ``trigger_altitude`` a ceiling in feet (0 for none) and ``hold`` the seconds ``active`` stays 1
-after the last plane leaves.
+after the last plane leaves. ``max_altitude`` (feet, 0 for none) leaves out aircraft above it, so high airliners do
+not show; ``military = True`` keeps military aircraft (ADS-B ``dbFlags``) at any altitude.
 
 ``source`` is one of the public community feeds, ``adsb.lol`` (the default) or ``airplanes.live``, or the URL of
 your own receiver's ``aircraft.json`` (dump1090, readsb, tar1090: ``http://pi.local:8080/data/aircraft.json``).
@@ -113,12 +116,14 @@ def _number(value: Any) -> Optional[float]:
 	return None if value != value else float(value)
 
 
-def parseAircraft(data: dict, lat: float, lon: float, radius: float, ground: bool = False) -> List[Dict[str, Any]]:
+def parseAircraft(data: dict, lat: float, lon: float, radius: float, ground: bool = False,
+		maxAltitude: float = 0, military: bool = True) -> List[Dict[str, Any]]:
 	"""The aircraft in a readsb-style reply (``ac`` from the public feeds, ``aircraft`` from a receiver), nearest first.
 
 	Bearing and distance are worked out here from the position, so a receiver's file, which has neither, reads the
 	same as a public feed. An aircraft with no position, or past ``radius``, is left out; so is one on the ground,
-	unless ``ground``. Pure, so a test can call it.
+	unless ``ground``. ``maxAltitude`` (feet, 0 for none) drops aircraft above it, except military ones (the feeds'
+	``dbFlags`` bit 0) while ``military`` is true. Pure, so a test can call it.
 	"""
 	rows = []
 	for ac in (data.get('ac') if 'ac' in data else data.get('aircraft')) or []:
@@ -134,6 +139,11 @@ def parseAircraft(data: dict, lat: float, lon: float, radius: float, ground: boo
 		bearing, distance = bearingDistance(lat, lon, acLat, acLon)
 		if distance > radius:
 			continue
+		if maxAltitude > 0 and not onGround:
+			isMilitary = military and bool(int(_number(ac.get('dbFlags')) or 0) & 1)
+			height = _number(altitude) or _number(ac.get('alt_geom')) or 0
+			if height > maxAltitude and not isMilitary:
+				continue
 		climb = _number(ac.get('baro_rate', ac.get('geom_rate', ac.get('vert_rate'))))
 		rows.append({
 			'callsign': str(ac.get('flight') or '').strip() or str(ac.get('r') or ac.get('hex') or '?').strip(),
@@ -219,6 +229,8 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 	ground = False
 	trigger_radius = 10
 	trigger_altitude = 0
+	max_altitude = 0
+	military = True
 	hold = 60
 	latitude =
 	longitude =
@@ -306,7 +318,8 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 		lat, lon = self.location
 		url = feedUrl(self.source, lat, lon, self.radius)
 		data = await asyncio.to_thread(fetch, url)
-		self.publishRows(parseAircraft(data, lat, lon, self.radius, self.ground))
+		self.publishRows(parseAircraft(data, lat, lon, self.radius, self.ground,
+			self._number('max_altitude', 0), self._get('military', 'True').lower() in ('1', 'true', 'yes', 'on')))
 		if self._failed:
 			log.info('Aircraft: the feed is back')
 			self._failed = None

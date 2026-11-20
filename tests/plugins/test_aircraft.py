@@ -78,3 +78,14 @@ def test_active_holds_after_the_last_plane_leaves_and_then_drops():
 	assert holdActive(0, 130.0, 100.0, 60) == (1, 100.0)   # 30 s after: still on
 	assert holdActive(0, 161.0, 100.0, 60) == (0, 100.0)   # 61 s after: off
 	assert holdActive(0, 5.0, None, 60) == (0, None)       # never seen
+
+
+def test_max_altitude_drops_high_aircraft_but_keeps_military():
+	low = plane(40.1, -75.0, flight='LOW', alt_baro=3000)
+	jet = plane(40.11, -75.0, flight='JET', alt_baro=36000)
+	mil = plane(40.12, -75.0, flight='MIL', alt_baro=36000, dbFlags=1)
+	rows = parseAircraft({'ac': [low, jet, mil]}, *HOME, radius=50, maxAltitude=10000)
+	assert {r['callsign'] for r in rows} == {'LOW', 'MIL'}
+	rows = parseAircraft({'ac': [low, jet, mil]}, *HOME, radius=50, maxAltitude=10000, military=False)
+	assert {r['callsign'] for r in rows} == {'LOW'}
+	assert len(parseAircraft({'ac': [low, jet, mil]}, *HOME, radius=50)) == 3
