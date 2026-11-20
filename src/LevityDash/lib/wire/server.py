@@ -25,6 +25,24 @@ from LevityDash.lib.log import LevityPluginLog
 
 log = LevityPluginLog.getChild('Wire').getChild('Server')
 
+_unencodable: Set[str] = set()
+
+
+def _unencodableAsNull(value):
+	"""json.dumps' fallback: a value with no JSON form goes out as null, logged once per type.
+
+	A bare sentinel that slipped into a message used to raise here, which dropped the frontend, and the same message
+	was replayed to it on reconnect, so it was dropped again every few seconds and the display stayed blank."""
+	name = type(value).__qualname__
+	if name not in _unencodable:
+		_unencodable.add(name)
+		log.error(f'a wire message held a {name} ({value!r}) with no JSON form; sent as null')
+	return None
+
+
+def _dumps(message: dict) -> str:
+	return json.dumps(message, default=_unencodableAsNull)
+
 __all__ = ['WireServer']
 
 
@@ -113,7 +131,7 @@ class WireServer:
 				self._latestStatus = message
 		if not self._clients:
 			return
-		payload = json.dumps(message)
+		payload = _dumps(message)
 		for ws in list(self._clients):
 			await self._safe_send(ws, payload)
 
@@ -124,9 +142,9 @@ class WireServer:
 		connection = next(self._connectionIds)
 		# replay current snapshot so a late-joining frontend starts populated
 		for message in self._latest.values():
-			await self._safe_send(ws, json.dumps(message))
+			await self._safe_send(ws, _dumps(message))
 		if self._latestStatus is not None:
-			await self._safe_send(ws, json.dumps(self._latestStatus))
+			await self._safe_send(ws, _dumps(self._latestStatus))
 		try:
 			async for msg in ws:
 				if msg.type == WSMsgType.TEXT:
@@ -166,4 +184,4 @@ class WireServer:
 		except Exception as e:
 			log.error(f'on_request handler raised for {incoming.get("id")}: {e!r}')
 			return
-		await self._safe_send(ws, json.dumps(response))
+		await self._safe_send(ws, _dumps(response))

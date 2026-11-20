@@ -202,3 +202,28 @@ def test_a_key_with_a_source_reads_that_source_not_the_preferred_one():
 	engine.register(spread)
 	_wait(engine, engine._entries[spread.key])
 	assert engine.source[spread.key].value.rawValue == 5
+
+
+def test_a_reading_with_no_value_is_left_out_of_a_window():
+	"""A recorded reading with no entry yet answers NoValue, a bare object(). A max over a window that held one
+	published it, and the wire could not serialise it: on lambda that dropped the frontend every few seconds."""
+	from datetime import datetime, timedelta, timezone
+	from types import SimpleNamespace
+	from LevityDash.lib.plugins.computed import _SnapshotResolver
+	from LevityDash.lib.utils.various import NoValue
+
+	t0 = datetime(2026, 11, 20, tzinfo=timezone.utc)
+	items = [SimpleNamespace(timestamp=t0 + timedelta(hours=h), value=v) for h, v in ((0, 40.0), (1, NoValue), (2, 55.0))]
+
+	class Series(list):
+		def __getitem__(self, index):
+			if isinstance(index, slice):
+				return list(self)
+			if isinstance(index, datetime):
+				return next(i for i in self if i.timestamp == index)
+			return list.__getitem__(self, index)
+
+	key = 'indoor.humidity.humidity'
+	resolver = _SnapshotResolver({}, {key: Series(items)})
+	assert [v for _, v in resolver.series(key, t0, t0 + timedelta(hours=3))] == [40.0, 55.0]
+	assert resolver.at(key, t0 + timedelta(hours=1)) is None

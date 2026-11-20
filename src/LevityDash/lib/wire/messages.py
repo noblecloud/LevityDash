@@ -23,6 +23,7 @@ from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, TYPE_
 from uuid import uuid4
 
 from LevityDash.lib.log import LevityPluginLog
+from LevityDash.lib.utils.various import NoValue
 from LevityDash.lib.wire.codec import WIRE_VERSION, decode_timeseries_values, encode_timeseries_values, decode_value, encode_value
 from LevityDash.lib.wire.containers import ContainerFlags, RemoteContainer
 
@@ -60,6 +61,9 @@ def encode_container(container: 'Container') -> Optional[dict]:
 	metadata = container.metadata or {}
 	icon_alias = None
 	rawValue = observationValue.value
+	if rawValue is NoValue:
+		# A recorded log with no entries yet answers NoValue, a bare object(): nothing to push.
+		return None
 	if metadata.get('type') == 'icon':
 		# Icon objects carry a QFont and aren't wire-safe - push the alias
 		# string and let the frontend resolve it lazily (see containers.py's
