@@ -25,7 +25,7 @@ an empty slot from a plane on the same bearing as the last. ``plot: radar`` of `
 	enabled = True
 
 	[Aircraft]
-	source = adsb.lol
+	source = adsb.fi
 	radius = 50
 	interval = 10
 	slots = 20
@@ -40,12 +40,19 @@ an empty slot from a plane on the same bearing as the last. ``plot: radar`` of `
 after the last plane leaves. ``max_altitude`` (feet, 0 for none) leaves out aircraft above it, so high airliners do
 not show; ``military = True`` keeps military aircraft (ADS-B ``dbFlags``) at any altitude.
 
-``source`` is one of the public community feeds, ``adsb.lol`` (the default) or ``airplanes.live``, or the URL of
-your own receiver's ``aircraft.json`` (dump1090, readsb, tar1090: ``http://pi.local:8080/data/aircraft.json``).
+``source`` is one of the public community feeds, ``adsb.fi`` (the default), ``adsb.lol`` or ``airplanes.live``, or
+the URL of your own receiver's ``aircraft.json`` (dump1090, readsb, tar1090: ``http://pi.local:8080/data/aircraft.json``).
 A receiver of your own returns what it hears, so ``radius`` then only trims. The public feeds ask for a request
 every second or so at most; ``interval`` is held at 5 seconds or more for them. ``ground = True`` keeps
 aircraft on the ground (they are dropped otherwise). ``latitude`` and ``longitude`` stand in for the main
 config's location, for a feed over somewhere else.
+
+They do not carry the same allowance, and that is what decides which one to use. ``adsb.fi`` answers 250 nautical
+miles for one request a second, under terms of personal, non-commercial use that ask for credit to adsb.fi and a
+link to its home page. ``adsb.lol`` allows 500 requests a day for an address, so a radar polling every 10 seconds
+spends the whole day's cap inside two hours and then reads 429 until the window resets. ``airplanes.live``
+answers 403 until the project has been cleared with them by email. When a feed does answer 429, the next try waits
+for the reset it names rather than ``interval``, so a capped feed recovers on its own.
 
 The public feeds are community run and carry no promise; the plugin logs a failed fetch once and keeps trying.
 A scenario that defines a key wins over it, so renders stay repeatable.
@@ -71,8 +78,10 @@ log = LevityPluginLog.getChild('Aircraft')
 SLOTS_MAX = 40
 EARTH_RADIUS_NMI = 3440.065
 
-#: The public feeds that share the readsb ``/v2/point/{lat}/{lon}/{radius}`` API.
+#: The public feeds, each a URL template with ``{lat}``, ``{lon}`` and ``{radius}``. ``adsb.fi`` answers aircraft
+#: around a point; the other two share the readsb ``/v2/point/{lat}/{lon}/{radius}`` shape.
 FEEDS: Dict[str, str] = {
+	'adsb.fi': 'https://opendata.adsb.fi/api/v3/lat/{lat}/lon/{lon}/dist/{radius}',
 	'adsb.lol': 'https://api.adsb.lol/v2/point/{lat}/{lon}/{radius}',
 	'airplanes.live': 'https://api.airplanes.live/v2/point/{lat}/{lon}/{radius}',
 }
@@ -212,6 +221,25 @@ def fetch(url: str, timeout: float = 10.0) -> dict:
 		return json.load(response)
 
 
+def retryDelay(error: BaseException, default: float) -> float:
+	"""Seconds to wait after a failed fetch: the feed's own ``Retry-After`` or ``x-ratelimit-reset``, else ``default``.
+
+	The public feeds cap requests for an address, so retrying at ``interval`` after a 429 spends the cap again and
+	the feed never recovers; the reset header says when it will answer. Never shorter than ``default``, never longer
+	than a day. Pure, so a test can call it.
+	"""
+	headers = getattr(error, 'headers', None)
+	if headers is not None:
+		for name in ('Retry-After', 'x-ratelimit-reset'):
+			value = headers.get(name)
+			try:
+				seconds = float(str(value).strip())
+			except (TypeError, ValueError):
+				continue
+			return min(86400.0, max(default, seconds))
+	return default
+
+
 class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 	"""Publishes ``AIRCRAFT_KEYS``. See the module docstring."""
 
@@ -222,7 +250,7 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 	enabled = False
 
 	[Aircraft]
-	source = adsb.lol
+	source = adsb.fi
 	radius = 50
 	interval = 10
 	slots = 20
@@ -257,7 +285,7 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 
 	@property
 	def source(self) -> str:
-		return self._get('source', 'adsb.lol') or 'adsb.lol'
+		return self._get('source', 'adsb.fi') or 'adsb.fi'
 
 	@property
 	def radius(self) -> float:
@@ -329,6 +357,7 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 
 	async def _tick(self) -> None:
 		while True:
+			delay = self.interval
 			try:
 				await self.publish()
 			except asyncio.CancelledError:
@@ -337,8 +366,9 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 				if self._failed != str(e):  # say it once, not every interval
 					self._failed = str(e)
 					log.error(f'Aircraft: fetch failed: {e}')
+				delay = retryDelay(e, delay)  # a capped feed names its own reset
 				self.publishRows(None)  # a dead feed must not leave `active` stuck on
-			await asyncio.sleep(self.interval)
+			await asyncio.sleep(delay)
 
 	async def onStop(self) -> None:
 		ticker = getattr(self, '_ticker', None)
