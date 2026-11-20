@@ -22,6 +22,7 @@ theme:
     moon-shade:
       color: '#000000'
       alpha: 0.2
+    bad: '#ff5d55'
 items:
 - type: group
   name: board
