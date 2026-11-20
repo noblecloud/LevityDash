@@ -82,3 +82,36 @@ def test_snapshot_replayed_to_late_client():
 	ok, received = asyncio.run(scenario())
 	assert ok, 'late client did not receive the replayed snapshot'
 	assert received[0]['source']['name'] == 'TestPlugin'
+
+
+def test_a_value_with_no_json_form_does_not_drop_the_client():
+	"""A bare sentinel in a stored update used to raise in the replay, dropping each frontend as it connected."""
+	async def scenario():
+		server = WireServer()
+		await server.start()
+		message = _make_update_message()
+		message['updates']['environment.temperature.temperature']['value'] = object()
+		await server.broadcast(message)
+		received: list[dict] = []
+		client = WireClient(server.url, received.append)
+		await client.connect()
+		ok = await _wait_for(lambda: bool(received))
+		await server.broadcast(_make_update_message())
+		ok = ok and await _wait_for(lambda: len(received) >= 2)
+		await client.close()
+		await server.stop()
+		return ok, received
+
+	ok, received = asyncio.run(scenario())
+	assert ok, 'the client was dropped or never got the replay'
+	assert received[0]['updates']['environment.temperature.temperature']['value'] is None
+	assert received[1]['updates']['environment.temperature.temperature']['value'] == 72.0
+
+
+def test_a_container_answering_novalue_is_not_encoded():
+	"""A recorded log with no entries answers NoValue (a bare object()); it has nothing to push."""
+	from types import SimpleNamespace
+	from LevityDash.lib.utils.various import NoValue
+	from LevityDash.lib.wire.messages import encode_container
+	container = SimpleNamespace(value=SimpleNamespace(value=NoValue, timestamp=None), metadata={}, title='t')
+	assert encode_container(container) is None

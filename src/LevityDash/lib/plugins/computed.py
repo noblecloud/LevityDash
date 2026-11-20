@@ -62,6 +62,7 @@ from LevityDash.lib.plugins.expressions import Expression, ExpressionError, Miss
 from LevityDash.lib.plugins.places import identitiesAt
 from LevityDash.lib.plugins.observation import DAILY_CUTOFF, MeasurementTimeSeries
 from LevityDash.lib.utils.data import KeyData
+from LevityDash.lib.utils.various import NoValue
 from LevityDash.lib.utils.shared import now as localNow, singleShotSafe, startTimerSafe
 from LevityDash.lib.wire.containers import ContainerFlags, RemotePublisher, RemoteSource
 
@@ -174,7 +175,8 @@ class _SnapshotResolver:
 		timeseries = self._series.get(key)
 		if timeseries is None or len(timeseries) == 0:
 			return None
-		return [(item.timestamp, item.value) for item in timeseries[start:end]]
+		# A recorded reading with no entry yet answers NoValue (a bare object()); a max over it would publish that.
+		return [(item.timestamp, value) for item in timeseries[start:end] if (value := item.value) is not NoValue]
 
 	def at(self, key: CategoryItem, when: datetime) -> Any:
 		timeseries = self._series.get(key)
@@ -184,7 +186,8 @@ class _SnapshotResolver:
 			item = timeseries[when]
 		except (KeyError, IndexError, ValueError):
 			return None
-		return getattr(item, 'value', None)
+		value = getattr(item, 'value', None)
+		return None if value is NoValue else value
 
 
 def _msUntilNextMidnight(at: Optional[float] = None) -> int:
@@ -501,6 +504,8 @@ class ComputedEngine(QObject):
 
 	def _publishValue(self, key: CategoryItem, result: Any, title: str) -> None:
 		container = self.source.getOrCreate(key)
+		if result is NoValue:
+			result = Missing  # a bare object() from an empty recorded log: no JSON form, and nothing to say
 		if result is Missing:
 			# Nothing yet: stay silent, so a panel keeps waiting. Had a value:
 			# clear it, so yesterday's high does not pass for today's.
@@ -533,7 +538,10 @@ class ComputedEngine(QObject):
 			observation = multiSource.value.value
 		except Exception:
 			return None, None
-		return getattr(observation, 'value', None), getattr(observation, 'timestamp', None)
+		value = getattr(observation, 'value', None)
+		if value is NoValue:
+			return None, None  # a recorded log with no entries yet
+		return value, getattr(observation, 'timestamp', None)
 
 	def _currentValue(self, key: CategoryItem) -> Any:
 		multiSource = self._dispatcher.getContainer(key)
@@ -543,7 +551,8 @@ class ComputedEngine(QObject):
 			observation = _container(multiSource, key).value
 		except Exception:
 			return None
-		return getattr(observation, 'value', None)
+		value = getattr(observation, 'value', None)
+		return None if value is NoValue else value  # NoValue: a recorded log with no entries yet
 
 	def _timeseriesFor(self, key: CategoryItem) -> Optional[MeasurementTimeSeries]:
 		multiSource = self._dispatcher.getContainer(key)
