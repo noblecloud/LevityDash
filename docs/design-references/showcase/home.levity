@@ -924,7 +924,7 @@ items:
         matchingGroup:
           group: global.room
           matchAll: true
-        tracking: -0.06
+        tracking: -0.02
         font-axes:
           range:
           - 20°F
@@ -1237,7 +1237,7 @@ items:
         matchingGroup:
           group: global.room
           matchAll: true
-        tracking: -0.06
+        tracking: -0.02
         font-axes:
           range:
           - 20°F

@@ -208,7 +208,7 @@ def room(caption, sfx, color, x, y, w, h, i):
 		out += [
 			mini(temp, g(x, y + CAP + 0.8, w, body), color=color, hours=24, past=True, top='42%', bottom='0%', opacity=0.8, fill=0.3, weight=0.5,
 			     glow=GLOW),
-			num(temp, g(x, y + CAP + 0.8, w * 0.7, 11.5), '$text', weight='Bold', tracking=-0.06, unit='Inline', hint='00.0°', precision=1, small=True,
+			num(temp, g(x, y + CAP + 0.8, w * 0.7, 11.5), '$text', weight='Bold', tracking=-0.02, unit='Inline', hint='00.0°', precision=1, small=True,
 			    group='global.room', align='TopLeft', font=TEMP_FONT, **tempAxes(corner=False)),
 		]
 		quarter = w / len(rows)
@@ -221,7 +221,7 @@ def room(caption, sfx, color, x, y, w, h, i):
 	out += [
 		mini(temp, g(x, y + CAP + 0.8, left - 0.8, hh), color=color, hours=24, past=True, top='45%', bottom='0%', opacity=0.8, fill=0.3, weight=0.5,
 		     glow=GLOW),
-		num(temp, g(x, y + CAP + 0.8, left - 0.8, hh * 0.62), '$text', weight='Bold', tracking=-0.06, unit='Inline', hint='00.0°', precision=1, small=True,
+		num(temp, g(x, y + CAP + 0.8, left - 0.8, hh * 0.62), '$text', weight='Bold', tracking=-0.02, unit='Inline', hint='00.0°', precision=1, small=True,
 		    group='global.room', align='TopLeft', font=TEMP_FONT, **tempAxes(corner=False)),
 	]
 	# Four readings in two columns, the outer one flush to the board's edge so the panel reaches it.
