@@ -131,7 +131,7 @@ def num(key, geom, color='$text', weight='Regular', font='$mono', small=False, *
 	item['display']['valueLabel']['margins'] = {'left': 0, 'right': '10%', 'top': 0, 'bottom': 0}  # a gutter to the next column
 	if small:
 		# The tenths drawn smaller, on the digits' baseline: 67⁷° reads as sixty-seven at a glance.
-		item['display']['valueLabel'].update({'decimal-scale': 0.55, 'decimal-align': 'baseline'})
+		item['display']['valueLabel'].update({'decimal-scale': 0.36, 'decimal-align': 'baseline'})
 	return item
 
 
