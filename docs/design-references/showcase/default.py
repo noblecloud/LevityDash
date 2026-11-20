@@ -260,9 +260,9 @@ def board(rooms=INDOOR):
 		 'display': {'valueLabel': {'color': '$muted', 'font': '$body', 'weight': 'Light', 'italic': True, 'matchingGroup': {'group': 'global.detail', 'matchAll': True}}}},
 		text('feels', g(x + 10.2, 23.6, 3.6, 2.4), font='$body', weight='Light', italic=True, color='$faint', align='CenterRight', group='global.detail'),
 		num('environment.temperature.feelsLike', g(x + 14.2, 23.6, 4, 2.4), unit='Inline', hint='00°', weight='SemiBold', align='CenterLeft', group='global.detail'),
-		text('dew', g(x + 18.2, 23.6, 2.8, 2.4), font='$body', weight='Light', italic=True, color='$faint', align='CenterRight', group='global.detail'),
-		num('environment.temperature.dewpoint', g(x + 21.4, 23.6, 4, 2.4), '$good', unit='Inline', hint='00°', weight='SemiBold', align='CenterLeft',
-		    group='global.detail'),
+		# Humidity and dew point beside the high and low, at the detail size, in the gap before the sun.
+		*tile('RH', 'environment.humidity.humidity', x + 23.4, 2.8, 4.6, '$info', hint='00%', unit='Inline'),
+		*tile('DEW', 'environment.temperature.dewpoint', x + 23.4, 12.0, 4.6, '$good', hint='00°', unit='Inline'),
 	]
 	# ------------------------------------------------------------ the sun
 	x = 68.5
