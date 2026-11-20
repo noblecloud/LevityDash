@@ -910,12 +910,23 @@ items:
       precision: 1
       valueLabel:
         color: $text
-        font: $mono
+        font: Allo Variable
         weight: Bold
         matchingGroup:
           group: global.room
           matchAll: true
         tracking: -0.06
+        font-axes:
+          range:
+          - 20°F
+          - 95°F
+          wght:
+          - 500
+          - 800
+          ROND:
+          - 0
+          - 100
+          opsz: 32
         alignment: TopLeft
         margins:
           left: 0
@@ -1212,12 +1223,23 @@ items:
       precision: 1
       valueLabel:
         color: $text
-        font: $mono
+        font: Allo Variable
         weight: Bold
         matchingGroup:
           group: global.room
           matchAll: true
         tracking: -0.06
+        font-axes:
+          range:
+          - 20°F
+          - 95°F
+          wght:
+          - 500
+          - 800
+          ROND:
+          - 0
+          - 100
+          opsz: 32
         alignment: TopLeft
         margins:
           left: 0
