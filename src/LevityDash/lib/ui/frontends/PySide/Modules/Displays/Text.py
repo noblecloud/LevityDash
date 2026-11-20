@@ -344,15 +344,71 @@ class Text(QGraphicsPathItem):
 		except (AttributeError, TypeError, ValueError):
 			pass
 
+	def _axisSettings(self) -> dict:
+		"""What `font-axes` sets for the value now shown: `{tag: setting}` and `corner` (em)."""
+		try:
+			return self._fontAxes.resolve(self.value)
+		except (AttributeError, TypeError, ValueError):
+			return {}
+
 	def _applyAxes(self, font: QFont):
 		"""The variable-font axes `font-axes` sets for the value now shown (`lib/ui/font_axes.py`). A static font
 		ignores them. Reads the value, never the text, so a fit that measures other strings keeps this shape."""
-		value = self.value
-		try:
-			for tag, setting in self._fontAxes.resolve(value).items():
+		settings = self._axisSettings()
+		for tag, setting in settings.items():
+			if tag == 'corner':
+				continue
+			try:
 				font.setVariableAxis(QFont.Tag(tag), setting)
-		except (AttributeError, TypeError, ValueError):
-			pass
+			except (AttributeError, TypeError, ValueError):
+				pass
+		self._cornerWeight(font, settings)
+
+	_stemRate: dict = {}
+
+	def _cornerEm(self) -> float:
+		return float(self._axisSettings().get('corner') or 0.0) if self._fontAxes is not None else 0.0
+
+	@classmethod
+	def _stemPerWeight(cls, font: QFont) -> float:
+		"""How much a stem (em) thickens per unit of the font's `wght` axis, measured on a capital I; 0 for a font
+		without the axis. Cached per family."""
+		family = font.family()
+		if (rate := cls._stemRate.get(family)) is None:
+			rate = 0.0
+			try:
+				probe = QFont(font)
+				probe.setPixelSize(200)
+				widths = []
+				for weight in (300, 700):
+					probe.setVariableAxis(QFont.Tag('wght'), weight)
+					widths.append(QFontMetricsF(probe).tightBoundingRect('I').width() / 200)
+				rate = max(0.0, (widths[1] - widths[0]) / 400)
+			except (AttributeError, TypeError, ValueError):
+				pass
+			cls._stemRate[family] = rate
+		return rate
+
+	def _cornerWeight(self, font: QFont, settings: dict):
+		"""Make room for the rounding stroke: it fattens every stem by 2 x radius, so the font is lightened by as
+		much and the weight `font-axes` asked for is what is drawn."""
+		em = settings.get('corner') or 0.0
+		weight = settings.get('wght')
+		if em <= 0 or weight is None:
+			return
+		if rate := self._stemPerWeight(font):
+			font.setVariableAxis(QFont.Tag('wght'), max(1.0, weight - 2 * em / rate))
+
+	def _applyCorner(self, font: QFont):
+		"""`font-axes: {corner}`: round the convex corners of the outlines by drawing them with a round-join pen
+		as wide as twice the radius (the font having been lightened to match, `_cornerWeight`). Robust where a path
+		boolean is not, and a font's own `ROND` is left to do what it can."""
+		width = 2 * self._cornerEm() * QFontInfo(font).pixelSize()
+		if abs(width - self._cornerWidth) > 1e-6:
+			self._cornerWidth = width
+			self._applyInk()
+
+	_cornerWidth: float = 0.0
 
 	def setFontAxes(self, value):
 		self._fontAxes = value
@@ -390,7 +446,10 @@ class Text(QGraphicsPathItem):
 		brush = self._fillBrush if self._fillBrush is not None else QBrush(Color.text.QColor)
 		outline = self._outline
 		if not outline:
-			self.setPen(QPen(Qt.NoPen))
+			if self._cornerWidth > 0:
+				self.setPen(QPen(brush.color(), self._cornerWidth, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+			else:
+				self.setPen(QPen(Qt.NoPen))
 			self.setBrush(brush)
 			return
 		color = outline.get('color')
@@ -513,9 +572,9 @@ class Text(QGraphicsPathItem):
 		layout = self._decimalLayout(string, font)
 		if layout is None:
 			path.addText(QPointF(0, 0), font, string)
-			return path
-		for text, run_font, x, dy in layout[0]:
-			path.addText(QPointF(x, dy), run_font, text)
+		else:
+			for text, run_font, x, dy in layout[0]:
+				path.addText(QPointF(x, dy), run_font, text)
 		return path
 
 	def _advance(self, string: str, font: QFont) -> float:
@@ -1387,6 +1446,8 @@ class Text(QGraphicsPathItem):
 		self.resetTransform()
 		self._pickAlternate()
 		font = self.font()
+		if self._fontAxes is not None:
+			self._applyCorner(font)
 		fm = QFontMetricsF(font)
 
 		text = self.text if self.icon is None else str(self.icon)

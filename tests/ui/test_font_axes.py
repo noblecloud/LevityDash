@@ -86,3 +86,28 @@ def test_text_font_takes_the_axes(dashboard, sandbox):
 	assert got['0'].font().variableAxisValue(tag('wght')) == 100
 	assert got['100'].font().variableAxisValue(tag('wght')) == 900
 	assert got['50'].font().variableAxisValue(tag('ROND')) == 50
+
+
+def test_corner_is_a_pseudo_axis():
+	axes = FontAxes({'range': [0, 100], 'wght': [500, 800], 'corner': [0, 0.05]})
+	assert axes.resolve(50) == {'wght': 650, 'corner': 0.025}
+	assert FontAxes({'range': [0, 1], 'corners': [0, 0.04]}).resolve(1) == {'corner': 0.04}
+
+
+def test_corner_draws_with_a_round_pen_and_a_lighter_font(dashboard, sandbox):
+	sandbox.state = {'items': [{'type': 'text', 'text': '100', 'font': 'Allo Variable', 'font-axes': {
+		'range': [0, 100], 'wght': [500, 800], 'corner': [0, 0.05]}}, {'type': 'text', 'text': '0', 'font': 'Allo Variable', 'font-axes': {
+		'range': [0, 100], 'wght': [500, 800], 'corner': [0, 0.05]}}]}
+	for _ in range(6):
+		QTest.qWait(20)
+		dashboard.app.processEvents()
+	got = {i.text: i for i in sandbox.scene().items() if isinstance(i, Text) and sandbox.isAncestorOf(i)}
+	hot, cold = got['100'], got['0']
+	hot._update_path()
+	cold._update_path()
+	assert hot.pen().width() > 0 and hot.pen().joinStyle().name == 'RoundJoin'
+	assert cold.pen().style().name == 'NoPen'
+	tag = QFont.Tag
+	# the stroke thickens each stem, so the font itself is lighter than the 800 asked for
+	assert hot.font().variableAxisValue(tag('wght')) < 800
+	assert cold.font().variableAxisValue(tag('wght')) == 500

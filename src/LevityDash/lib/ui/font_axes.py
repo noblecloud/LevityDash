@@ -15,9 +15,16 @@ The ends of a ``range`` may carry units (as gradient stops do) and are converted
 in. The value is clamped to the range unless ``clamp: false``. A value with no number (text, empty) leaves the font's
 own settings, or the ``fallback`` mapping if there is one (``fallback: {wght: 500, ROND: 50}``).
 
+``corner`` is not a font axis but a treatment of the outlines, so it works with any font: the radius, in em, that
+every convex corner and end of a stroke is rounded to. The text is drawn with a round-join pen twice that wide, and the
+font's ``wght`` is lowered by as much, so the weight asked for is the weight drawn. A font's own ``ROND`` moves little
+on most digits (an 8 not at all), so ``corner: [0, 0.05]`` is what makes hot read round and cold hard. About 0.05 is the
+most a bold figure takes before its counters close.
+
 Names: the four-letter tag of the font (``wght``, ``ROND``, ``opsz``, ``wdth``, ``slnt``, ...) or ``weight``,
 ``round`` / ``roundness``, ``optical-size``, ``width``, ``slant``. Qt-free: `FontAxes.resolve(value)` returns
-``{tag: setting}`` and `Text.font()` applies it with ``QFont.setVariableAxis`` (Qt 6.7+).
+``{tag: setting}``; `Text.font()` applies the four-letter ones with ``QFont.setVariableAxis`` (Qt 6.7+) and
+`Text._applyCorner` the ``corner``.
 """
 from typing import Any, Mapping, Optional
 
@@ -37,14 +44,18 @@ ALIASES = {
 	'opticalsize':  'opsz',
 	'width':        'wdth',
 	'slant':        'slnt',
+	'corner':       'corner',
+	'corners':      'corner',
+	'corner-radius': 'corner',
 }
+CORNER = 'corner'
 OPTIONS = frozenset({'range', 'clamp', 'fallback'})
 
 
 def _tag(name: Any) -> str:
 	key = str(name).strip()
 	tag = ALIASES.get(key.lower().replace('_', '-'), key)
-	if len(tag) != 4 or not tag.isascii():
+	if tag != CORNER and (len(tag) != 4 or not tag.isascii()):
 		raise ValueError(f'{name!r} is not a font axis: use its four-letter tag (wght, ROND, opsz...) or weight, round, optical-size, width, slant')
 	return tag
 
@@ -144,7 +155,7 @@ class FontAxes:
 				continue
 			if self.clamp:
 				t = min(1.0, max(0.0, t))
-			out[axis.tag] = round(axis.start + t * (axis.stop - axis.start), 1)
+			out[axis.tag] = round(axis.start + t * (axis.stop - axis.start), 3)
 		return out
 
 	def __repr__(self):
