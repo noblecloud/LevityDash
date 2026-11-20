@@ -132,3 +132,22 @@ def test_bad_scale_is_refused():
 	for bad in (2, '0%', '5furlongs', 'big'):
 		with pytest.raises(ValueError):
 			decode(bad)
+
+
+def test_degree_sign_tucks_over_baseline_decimals(dashboard):
+	panel = dashboard.scene.base
+	item = Text(panel, value='60.5°')
+	item.setDecimalScale(0.55)
+	try:
+		font = QFont(item.font())
+		runs = item._decimalRuns('60.5°', font)
+		placed, total = item._layoutRuns(runs)
+		naive = sum(QFontMetricsF(f).horizontalAdvance(t) for t, f, _, _ in runs)
+		assert placed[2][2] < placed[1][2] + QFontMetricsF(runs[1][1]).horizontalAdvance('.5'), 'the degree sign starts over the fraction'
+		assert total < naive
+		# at the top the fraction is level with the mark, so it keeps its own place
+		item.setDecimalAlign('top')
+		placed, total = item._layoutRuns(item._decimalRuns('60.5°', font))
+		assert placed[2][2] == pytest.approx(placed[1][2] + QFontMetricsF(runs[1][1]).horizontalAdvance('.5'))
+	finally:
+		item.scene() and item.scene().removeItem(item)

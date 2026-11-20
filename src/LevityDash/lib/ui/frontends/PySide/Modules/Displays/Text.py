@@ -439,8 +439,8 @@ class Text(QGraphicsPathItem):
 
 	_DECIMALS = re.compile(r'\.\d+')
 
-	def _decimalRuns(self, string: str, font: QFont) -> Optional[list[tuple[str, QFont, float]]]:
-		"""`string` as runs `(text, font, dy)` with the fractional digits (and their point) in a smaller font, or
+	def _decimalRuns(self, string: str, font: QFont) -> Optional[list[tuple[str, QFont, float, bool]]]:
+		"""`string` as runs `(text, font, dy, small)` with the fractional digits (and their point) in a smaller font, or
 		None when small decimals are off or the string has no fraction. `dy` lifts a run off the baseline
 		(Qt y is down, so it is zero or negative): `baseline` keeps it at 0, `top` puts the top of its digits on
 		the top of the whole digits' cap height, `center` halfway. The integer part, and any unit or sign after the
@@ -454,28 +454,59 @@ class Text(QGraphicsPathItem):
 		small = self._tailFont(font, scale)
 		lift = QFontMetricsF(font).capHeight() - QFontMetricsF(small).capHeight()
 		dy = {'top': -lift, 'center': -lift / 2}.get(self._decimalAlign, 0.0)
-		runs = [(string[:match.start()], font, 0.0), (match.group(), small, dy), (string[match.end():], font, 0.0)]
+		runs = [(string[:match.start()], font, 0.0, False), (match.group(), small, dy, True), (string[match.end():], font, 0.0, False)]
 		return [run for run in runs if run[0]]
+
+	def _layoutRuns(self, runs: list[tuple[str, QFont, float, bool]]) -> tuple[list[tuple[str, QFont, float, float]], float]:
+		"""`runs` as `(text, font, x, dy)` plus the total advance. A mark after the small decimals that sits clear above
+		them (a degree sign over a baseline fraction) tucks in over the fraction instead of waiting for its advance, so
+		67.7° reads as one number and not as 67, a gap, and a floating °."""
+		placed: list[tuple[str, QFont, float, float]] = []
+		x = 0.0
+		small_ink: Optional[QRectF] = None
+		for text, run_font, dy, small in runs:
+			fm = QFontMetricsF(run_font)
+			if small_ink is not None and not small:
+				ink = self._glyphInk(text, run_font).translated(x, dy)
+				# y runs down from the baseline: the mark must end above the fraction's top, give or take a quarter of it
+				if ink.height() > 0 and ink.bottom() <= small_ink.top() + small_ink.height() * 0.25:
+					x -= max(0.0, x - (small_ink.left() + small_ink.width() * 0.55))
+				small_ink = None
+			placed.append((text, run_font, x, dy))
+			if small:
+				small_ink = self._glyphInk(text, run_font).translated(x, dy)
+			x += fm.horizontalAdvance(text)
+		return placed, x
+
+	@staticmethod
+	def _glyphInk(text: str, font: QFont) -> QRectF:
+		"""The ink of `text` from its outline. `tightBoundingRect` reports a mark such as the degree sign as reaching the
+		baseline, which would hide that it sits clear above the small digits."""
+		path = QPainterPath()
+		path.addText(QPointF(0, 0), font, text)
+		return path.boundingRect()
+
+	def _decimalLayout(self, string: str, font: QFont):
+		runs = self._decimalRuns(string, font)
+		return None if runs is None else self._layoutRuns(runs)
 
 	def _runPath(self, string: str, font: QFont) -> QPainterPath:
 		"""The glyph outlines of `string` with the baseline origin at (0, 0), small decimals applied."""
 		path = QPainterPath()
 		path.setFillRule(Qt.WindingFill)
-		runs = self._decimalRuns(string, font)
-		if runs is None:
+		layout = self._decimalLayout(string, font)
+		if layout is None:
 			path.addText(QPointF(0, 0), font, string)
 			return path
-		x = 0.0
-		for text, run_font, dy in runs:
+		for text, run_font, x, dy in layout[0]:
 			path.addText(QPointF(x, dy), run_font, text)
-			x += QFontMetricsF(run_font).horizontalAdvance(text)
 		return path
 
 	def _advance(self, string: str, font: QFont) -> float:
-		runs = self._decimalRuns(string, font)
-		if runs is None:
+		layout = self._decimalLayout(string, font)
+		if layout is None:
 			return QFontMetricsF(font).horizontalAdvance(string)
-		return sum(QFontMetricsF(f).horizontalAdvance(t) for t, f, _ in runs)
+		return layout[1]
 
 	def _inkRect(self, string: str, font: QFont) -> QRectF:
 		"""`tightBoundingRect` of `string`, small decimals applied."""
