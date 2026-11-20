@@ -266,7 +266,7 @@ def board(rooms=INDOOR):
 	B += [
 		cap_('OUTSIDE', g(x, 2.8, 12, CAP), '$accent'),
 		num(T, g(x, 4.6, 15.4, 15.6), {'scale': '$temperature', 'of': T}, unit='Inline', hint='00°', weight='Black', tracking=-0.04, font=TEMP_FONT,
-		    **tempAxes(500, 800)),
+		    **tempAxes(500, 800), **{'fill-gradient': {'scale': '$temperature', 'of': T, 'spread': '5°F', 'angle': 180}}),
 		cap_('HIGH', g(x + 16.6, 2.8, 7, CAP)),
 		num('environment.temperature.high', g(x + 16.6, 4.6, 8, 5.8), '$bad', hint='00', weight='Bold', group='global.room',
 		    fmt={'unit_symbol': False}, font=TEMP_FONT, **tempAxes()),

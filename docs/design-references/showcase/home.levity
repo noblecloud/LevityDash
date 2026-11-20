@@ -124,6 +124,11 @@ items:
           corner:
           - 0
           - 0.05
+        fill-gradient:
+          scale: $temperature
+          of: environment.temperature.temperature
+          spread: 5°F
+          angle: 180
         alignment: BottomLeft
         margins:
           left: 0
