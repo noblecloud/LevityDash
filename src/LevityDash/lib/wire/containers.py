@@ -23,6 +23,7 @@ whenever the backend pushes an update for the same (source, key) - see
 `RemoteContainer._update`.
 """
 from datetime import datetime, timedelta
+from time import monotonic
 from typing import Any, Callable, Dict, Hashable, List, NamedTuple, Optional, Set, Type
 
 from LevityDash.lib.log import LevityPluginLog
@@ -384,6 +385,9 @@ _REFETCH_RETRY_START = 15
 _REFETCH_RETRY_MAX = 300
 #: Seconds before a requester is called back after a timeseries request that left it with no series.
 _EMPTY_TS_RETRY = 5
+#: Fewest seconds between two refetches of one live sensor's series. A sensor pushes every few seconds,
+#: and each refetch brings the whole window back and rebuilds every plot drawn from it.
+_LIVE_REFETCH_INTERVAL = 30
 
 
 class RemoteContainer:
@@ -407,6 +411,9 @@ class RemoteContainer:
 		self._tsRefetching = False
 		self._tsStale = False
 		self._tsRetries = 0
+		# When the last refetch started, and whether one is already waiting out `_LIVE_REFETCH_INTERVAL`.
+		self._tsLastRefetch = float('-inf')
+		self._tsDeferred = False
 		self.__hash_key = CategoryItem(key, source=[source.name])
 
 	def _update(
@@ -435,7 +442,7 @@ class RemoteContainer:
 		# series fetched when the graph first connected was the only one it
 		# ever saw, and a long-running display ran off the end of its forecast.
 		if self._timeseries is not None:
-			self._refetchTimeseries()
+			self._scheduleRefetch()
 
 	@property
 	def channel(self) -> ChannelSignal:
@@ -555,12 +562,33 @@ class RemoteContainer:
 			self._timeseries._replace(items)
 			log.info(f'{self.log_repr}: timeseries refetched, {len(items)} points, last at {self._timeseries._items[-1].timestamp:%m/%d %H:%M}')
 
+	def _scheduleRefetch(self) -> None:
+		"""Refetch now, or once the live-sensor interval is up.
+
+		A forecast pushes once per fetch, minutes apart, so it refetches at once. A live sensor pushes every
+		few seconds; its pushes inside the interval share one refetch at the end of it."""
+		wait = _LIVE_REFETCH_INTERVAL - (monotonic() - self._tsLastRefetch) if self._flags.isRealtime else 0
+		if wait <= 0:
+			self._refetchTimeseries()
+			return
+		if self._tsDeferred:
+			return
+		self._tsDeferred = True
+		from LevityDash.lib.utils.shared import singleShotSafe  # deferred - Qt-side helper
+
+		def run() -> None:
+			self._tsDeferred = False
+			self._refetchTimeseries()
+
+		singleShotSafe(int(wait * 1000) + 1, run)
+
 	def _refetchTimeseries(self) -> None:
 		if self._tsRefetching:
 			self._tsStale = True
 			return
 		self._tsRefetching = True
 		self._tsStale = False
+		self._tsLastRefetch = monotonic()
 
 		def on_response(response: Optional[dict]) -> None:
 			try:
@@ -575,7 +603,7 @@ class RemoteContainer:
 				return
 			self._tsRetries = 0
 			if self._tsStale:
-				self._refetchTimeseries()
+				self._scheduleRefetch()
 
 		self.source.request_timeseries(self.key, *self._tsPeriod, on_response)
 

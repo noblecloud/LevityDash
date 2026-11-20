@@ -194,3 +194,38 @@ def test_a_request_that_leaves_no_series_calls_back_later_not_at_once(monkeypatc
 	assert container.timeseries is None
 	assert not called, 'the requester was called back at once'
 	assert delayed and delayed[0][0] >= 1000
+
+
+def _live(container):
+	container._flags = container._flags._replace(isRealtime=True)
+
+
+def test_a_live_sensor_refetches_once_per_interval(monkeypatch):
+	"""A Govee sensor pushes every few seconds; each push refetched the whole window."""
+	backend = FakeBackend()
+	container, series, graph = connected(backend)
+	_live(container)
+	timers = []
+	monkeypatch.setattr('LevityDash.lib.utils.shared.singleShotSafe', lambda ms, fn: timers.append(fn))
+
+	container._update(70.5)  # nothing fetched for a while: goes at once
+	assert len(backend.requests) == 2
+	container._update(71.0)
+	container._update(72.0)
+	container._update(73.0)
+	assert len(backend.requests) == 2, 'pushes inside the interval wait'
+	assert len(timers) == 1, 'one pending refetch, not one per push'
+
+	timers.pop()()
+	assert len(backend.requests) == 3, 'the waiting pushes cost one refetch'
+
+
+def test_a_live_sensor_refetches_at_once_when_the_interval_is_up(monkeypatch):
+	backend = FakeBackend()
+	container, series, graph = connected(backend)
+	_live(container)
+	container._tsLastRefetch = float('-inf')
+
+	container._update(71.0)
+
+	assert len(backend.requests) == 2
