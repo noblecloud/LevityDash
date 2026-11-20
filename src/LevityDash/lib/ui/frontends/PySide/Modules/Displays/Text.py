@@ -452,31 +452,47 @@ class Text(QGraphicsPathItem):
 		if match is None:
 			return None
 		small = self._tailFont(font, scale)
+		if font.letterSpacing():
+			# `tracking` is an absolute spacing in the main font's pixels: the smaller digits take their share of it
+			small.setLetterSpacing(QFont.AbsoluteSpacing, font.letterSpacing() * scale)
 		lift = QFontMetricsF(font).capHeight() - QFontMetricsF(small).capHeight()
 		dy = {'top': -lift, 'center': -lift / 2}.get(self._decimalAlign, 0.0)
 		runs = [(string[:match.start()], font, 0.0, False), (match.group(), small, dy, True), (string[match.end():], font, 0.0, False)]
 		return [run for run in runs if run[0]]
 
 	def _layoutRuns(self, runs: list[tuple[str, QFont, float, bool]]) -> tuple[list[tuple[str, QFont, float, float]], float]:
-		"""`runs` as `(text, font, x, dy)` plus the total advance. A mark after the small decimals that sits clear above
-		them (a degree sign over a baseline fraction) tucks in over the fraction instead of waiting for its advance, so
-		67.7° reads as one number and not as 67, a gap, and a floating °."""
+		"""`runs` as `(text, font, x, dy)` plus the total advance. A mark after the small decimals (a degree sign) is
+		placed by ink and not by advance, so 67.7° reads as one number whatever the font's side bearings:
+		- clear above the fraction's ink (it ends above the digits' top): it tucks in over the fraction, from the middle of it;
+		- anywhere it would touch the digits: it sits just right of the fraction's ink, a small gap off it.
+		Either way it never lands on the fraction's ink."""
 		placed: list[tuple[str, QFont, float, float]] = []
 		x = 0.0
 		small_ink: Optional[QRectF] = None
 		for text, run_font, dy, small in runs:
 			fm = QFontMetricsF(run_font)
 			if small_ink is not None and not small:
-				ink = self._glyphInk(text, run_font).translated(x, dy)
-				# y runs down from the baseline: the mark must end above the fraction's top, give or take a quarter of it
-				if ink.height() > 0 and ink.bottom() <= small_ink.top() + small_ink.height() * 0.25:
-					x -= max(0.0, x - (small_ink.left() + small_ink.width() * 0.55))
+				ink = self._glyphInk(text, run_font)
+				ink.translate(0, dy)
+				# only a bare mark (°, %, ′) is placed by ink; a unit word after a space keeps its space
+				if self._isMark(text) and ink.height() > 0 and ink.width() > 0:
+					gap = QFontInfo(run_font).pixelSize() * 0.04
+					# the mark's own left bearing is in `ink.left()`: aim its ink, not its origin
+					if ink.bottom() <= small_ink.top() - gap:
+						left = small_ink.left() + small_ink.width() * 0.55
+					else:
+						left = small_ink.right() + gap
+					x = left - ink.left()
 				small_ink = None
 			placed.append((text, run_font, x, dy))
 			if small:
 				small_ink = self._glyphInk(text, run_font).translated(x, dy)
 			x += fm.horizontalAdvance(text)
 		return placed, x
+
+	@staticmethod
+	def _isMark(text: str) -> bool:
+		return bool(text) and not text[0].isspace() and not any(c.isalnum() for c in text)
 
 	@staticmethod
 	def _glyphInk(text: str, font: QFont) -> QRectF:
