@@ -1,7 +1,7 @@
 import pytest
 
 from LevityDash.lib.plugins.builtin.Aircraft import (
-	AIRCRAFT_KEYS, SLOTS_MAX, bearingDistance, feedUrl, parseAircraft, slotValues,
+	AIRCRAFT_KEYS, SLOTS_MAX, Aircraft, bearingDistance, feedUrl, parseAircraft, retryDelay, slotValues,
 )
 
 HOME = (40.0, -75.0)
@@ -57,11 +57,32 @@ def test_every_published_key_is_declared():
 
 
 def test_feed_urls():
+	assert feedUrl('adsb.fi', 40.0, -75.0, 49.2) == 'https://opendata.adsb.fi/api/v3/lat/40.0000/lon/-75.0000/dist/50'
+	assert feedUrl('ADSB.FI', 40.0, -75.0, 900).endswith('/dist/250')
 	assert feedUrl('adsb.lol', 40.0, -75.0, 49.2) == 'https://api.adsb.lol/v2/point/40.0000/-75.0000/50'
 	assert feedUrl('airplanes.live', 40.0, -75.0, 900).endswith('/250')
 	assert feedUrl('http://pi.local:8080/data/aircraft.json', 0, 0, 1) == 'http://pi.local:8080/data/aircraft.json'
 	with pytest.raises(ValueError):
 		feedUrl('file:///etc/passwd', 0, 0, 1)
+
+
+def test_the_default_source_is_adsb_fi():
+	defaults = Aircraft.__defaultConfig__
+	assert isinstance(defaults, str) and 'source = adsb.fi' in defaults
+
+
+def test_a_capped_feed_waits_for_its_own_reset():
+	class Capped(Exception):
+		headers = {'x-ratelimit-reset': '24631'}
+
+	assert retryDelay(Capped(), 10) == 24631
+	assert retryDelay(Capped(), 30000) == 30000          # never shorter than the interval
+	assert retryDelay(Capped(), 90000) == 86400          # never longer than a day
+	assert retryDelay(ValueError('no headers'), 10) == 10
+
+	class Soon(Exception):
+		headers = {'Retry-After': '2'}
+	assert retryDelay(Soon(), 10) == 10
 
 
 def test_overhead_counts_inside_the_radius_and_under_the_ceiling():
