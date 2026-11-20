@@ -33,6 +33,7 @@ from time import perf_counter, process_time, time
 
 from LevityDash import LevityDashboard
 from LevityDash.lib.config import userConfig
+from LevityDash.lib.ui.locked import isLocked, setLocked
 from LevityDash.lib.plugins import AnySource, Container
 from LevityDash.lib.plugins.categories import CategoryAtom, CategoryItem
 from LevityDash.lib.plugins.dispatcher import backend_mode, MultiSourceContainer
@@ -1436,6 +1437,21 @@ class LevityMainWindow(QMainWindow):
 
 		force_reload.triggered.connect(force_reload_func)
 
+		lock = QAction('Locked (display only)', self)
+		lock.setShortcut('Ctrl+Alt+L')
+		lock.setCheckable(True)
+		lock.setChecked(isLocked())
+		lock.setStatusTip('Lock the dashboard: no editing handles, dragging or menus. Rebuilds the dashboard')
+
+		def toggle_lock(checked: bool):
+			# Locked state is baked into items when they are built, so the dashboard is rebuilt.
+			setLocked(checked)
+			self.view.graphicsScene.base.clear()
+			self.view.graphicsScene.base.reload()
+
+		lock.triggered.connect(toggle_lock)
+		self.addAction(lock)
+
 		refresh = QAction('Refresh', self)
 		refresh.setShortcut('Alt+R')
 		refresh.setStatusTip('Refresh the current dashboard')
@@ -1493,6 +1509,7 @@ class LevityMainWindow(QMainWindow):
 		dashboardMenu.addAction(setAsDefault)
 		dashboardMenu.addAction(reload)
 		dashboardMenu.addAction(force_reload)
+		dashboardMenu.addAction(lock)
 		dashboardMenu.addAction(refresh)
 		dashboardMenu.addAction(clear)
 		dashboardMenu.addAction(printState)

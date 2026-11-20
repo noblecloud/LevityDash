@@ -46,6 +46,7 @@ from LevityDash.lib.utils.shared import (
 )
 from unitcorn import Length
 from .Handles import Handle, HandleGroup
+from LevityDash.lib.ui.locked import isLocked
 from .Handles.Resize import ResizeHandles
 from .Menus import BaseContextMenu
 from .beam.item import PanelBeam
@@ -528,12 +529,14 @@ class Panel(_Panel, Stateful, tag='group'):
 
 		self.hideTimer = QTimer(interval=1000*5, singleShot=True, timeout=self.hideHandles)
 
-		self.setAcceptHoverEvents(True)
-		self.setAcceptDrops(True)
-		self.setFlag(QGraphicsItem.ItemIsSelectable)
-		self.setFlag(QGraphicsItem.ItemSendsGeometryChanges)
+		# A locked dashboard is display-only: nothing to hover, drag, drop, select or focus (see lib/ui/locked.py).
+		editable = not isLocked()
+		self.setAcceptHoverEvents(editable)
+		self.setAcceptDrops(editable)
+		self.setFlag(QGraphicsItem.ItemIsSelectable, editable)
+		self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, editable)
 		self.setFlag(QGraphicsItem.ItemSendsScenePositionChanges, False)
-		self.setFlag(QGraphicsItem.ItemIsFocusable)
+		self.setFlag(QGraphicsItem.ItemIsFocusable, editable)
 
 		self.setBrush(Qt.NoBrush)
 		self.setPen(QColor(Qt.transparent))
@@ -617,6 +620,17 @@ class Panel(_Panel, Stateful, tag='group'):
 
 	def hideHandles(self):
 		self.clearFocus()
+
+	def setAcceptDrops(self, on: bool):
+		super().setAcceptDrops(on and not isLocked())
+
+	_EDIT_FLAGS = (QGraphicsItem.ItemIsMovable, QGraphicsItem.ItemIsSelectable, QGraphicsItem.ItemIsFocusable)
+
+	def setFlag(self, flag, enabled: bool = True):
+		# Locked: whatever a dashboard file or a subclass asks for, an item never becomes movable, selectable or focusable.
+		if enabled and flag in self._EDIT_FLAGS and isLocked():
+			enabled = False
+		super().setFlag(flag, enabled)
 
 	def setSize(self, *args):
 		if len(args) == 1 and isinstance(args[0], QSizeF):
@@ -1292,6 +1306,9 @@ class Panel(_Panel, Stateful, tag='group'):
 		return menu
 
 	def contextMenuEvent(self, event):
+		if isLocked():
+			event.ignore()
+			return
 		if self.canFocus and self.hasFocus():
 			event.accept()
 		else:
@@ -1307,6 +1324,9 @@ class Panel(_Panel, Stateful, tag='group'):
 		return self.scene().underMouse()
 
 	def dragEnterEvent(self, event: QGraphicsSceneDragDropEvent):
+		if isLocked():
+			event.ignore()
+			return
 		if self.acceptsChildren:
 			if {*event.mimeData().formats()} & {'text/plain', 'text/yaml', 'text/x-yaml', 'application/x-yaml', 'application/yaml'}:
 				event.acceptProposedAction()
@@ -1460,6 +1480,9 @@ class Panel(_Panel, Stateful, tag='group'):
 		return self.parent.childHasFocus()
 
 	def mousePressEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
+		if isLocked():
+			mouseEvent.ignore()
+			return
 		self.hideTimer.stop()
 		if mouseEvent.buttons() == Qt.LeftButton | Qt.RightButton:
 			mouseEvent.setButtons(Qt.LeftButton)
@@ -1545,6 +1568,9 @@ class Panel(_Panel, Stateful, tag='group'):
 		self.startingParent = self.parent
 
 	def mouseDoubleClickEvent(self, mouseEvent: QGraphicsSceneMouseEvent):
+		if isLocked():
+			mouseEvent.ignore()
+			return
 		if not self.parent in [self.scene(), self.scene().base]:
 			self._fillParent = not self._fillParent
 			if self._fillParent:

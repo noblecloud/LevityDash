@@ -7,6 +7,7 @@ from LevityDash.lib.stateful import Stateful, StateProperty
 from LevityDash.lib.utils import clamp, clearCacheAttr, ScaleFloat, defer, DeepChainMap
 from LevityDash.lib.ui.Geometry import getDPI, Size, parseSize, LocationFlag, DisplayPosition, RelativeFloat
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles import Handle
+from LevityDash.lib.ui.locked import isLocked
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Label import TitleLabel
 from unitcorn import Length
 
@@ -68,6 +69,11 @@ class Splitter(Handle):
 
 		self.ratio = ratio
 		self.setPos(self.position)
+		if isLocked():
+			# Keeps its ratio and its layout work, loses the grip.
+			self.setAcceptHoverEvents(False)
+			self.setAcceptedMouseButtons(Qt.NoButton)
+			self.setFlag(QGraphicsItem.ItemIsMovable, False)
 
 	@property
 	def primary(self):
