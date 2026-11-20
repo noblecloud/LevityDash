@@ -4,7 +4,7 @@
 ended in one); `end` right-aligns the digits. The unit hangs to the right. The printed text is never changed.
 """
 import pytest
-from PySide6.QtGui import QFontMetricsF
+from PySide6.QtGui import QFont, QFontMetricsF
 
 from LevityDash.lib.ui import numberalign
 from LevityDash.lib.ui.Groups import MatchAllSizeGroup
@@ -88,4 +88,69 @@ def test_a_column_is_shared_only_by_items_on_one_edge(dashboard, monkeypatch):
 			'another column does not widen this one'
 	finally:
 		for t in (short, wide, beside):
+			t.scene() and t.scene().removeItem(t)
+
+
+ANCHOR_VALUES = ['72.4°', '9.5°', '-13.25°', '100°', '4.0°']
+ANCHORS = [('char:.', 'char:.'), ('special:1', 'special:1'), ('nth:-1', 'nth:-1'), ('char:°', 'char:°')]
+
+
+def _anchored_column(dashboard, mode, alignment, name, setup=None):
+	panel = dashboard.scene.base
+	group = MatchAllSizeGroup(panel, name)
+	texts = []
+	for n, value in enumerate(ANCHOR_VALUES):
+		text = Text(panel, value=value, alignment=alignment)
+		text.setNumberAlign(mode)
+		if setup:
+			setup(text, n)
+		group.addItem(text)
+		texts.append(text)
+	for text in texts:
+		text.updateTransform(reason='test')
+	return texts
+
+
+def _anchor_x(text, mode) -> float:
+	"""Where the anchor character starts, as drawn, in the item's own coordinates."""
+	head = numberalign.split(text.text, mode)[0]
+	return text._text_pos.x() + text._advance(head, text.font())
+
+
+@pytest.mark.parametrize('mode, _', ANCHORS)
+@pytest.mark.parametrize('alignment', [AlignmentFlag.Right, AlignmentFlag.Left, AlignmentFlag.HorizontalCenter])
+def test_anchor_modes_land_on_one_line(dashboard, mode, _, alignment):
+	texts = _anchored_column(dashboard, mode, alignment, f'anchor-{mode}-{alignment.name}')
+	try:
+		edges = [_anchor_x(t, mode) for t in texts]
+		assert max(edges) - min(edges) < 0.01, dict(zip(ANCHOR_VALUES, edges))
+		assert [t.text for t in texts] == ANCHOR_VALUES
+	finally:
+		for t in texts:
+			t.scene() and t.scene().removeItem(t)
+
+
+def test_anchor_holds_with_small_decimals(dashboard):
+	"""The anchor is measured through the small-decimal layout, so the integer part still lines up."""
+	def small(text, n):
+		text._decimalScale = 0.6
+	texts = _anchored_column(dashboard, 'char:.', AlignmentFlag.Right, 'anchor-small', small)
+	try:
+		edges = [_anchor_x(t, 'char:.') for t in texts]
+		assert max(edges) - min(edges) < 0.01, dict(zip(ANCHOR_VALUES, edges))
+	finally:
+		for t in texts:
+			t.scene() and t.scene().removeItem(t)
+
+
+def test_anchor_holds_with_different_weights(dashboard):
+	"""Each value measures its head in its own weight (heat-weight), so mixed weights still share the anchor."""
+	def weight(text, n):
+		text._font.setWeight(QFont.Weight((300, 400, 500, 700, 900)[n]))
+	texts = _anchored_column(dashboard, 'char:.', AlignmentFlag.Right, 'anchor-weights', weight)
+	try:
+		edges = [_anchor_x(t, 'char:.') for t in texts]
+		assert max(edges) - min(edges) < 0.01, dict(zip(ANCHOR_VALUES, edges))
+	finally:
+		for t in texts:
 			t.scene() and t.scene().removeItem(t)

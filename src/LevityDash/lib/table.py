@@ -73,8 +73,12 @@ def build(props: Dict[str, Any]) -> dict:
 	if align not in _ALIGN:
 		raise ValueError(f'alignment is {align!r}; it is Left, Center or Right')
 	number_align = props.get('numberAlign')
-	if number_align not in ('decimal', 'end', 'none', None):
-		raise ValueError(f'numberAlign is {number_align!r}; it is decimal, end or none')
+	if number_align not in ('none', None):
+		from LevityDash.lib.ui import numberalign
+		try:
+			numberalign.parse(number_align)
+		except ValueError as error:
+			raise ValueError(f'numberAlign is {number_align!r}: {error}') from None
 	items: List[dict] = []
 	title_group = {'group': props['titleGroup'], 'matchAll': True}
 	value_group = {'group': props['valueGroup'], 'matchAll': True}

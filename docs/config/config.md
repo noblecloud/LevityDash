@@ -226,6 +226,24 @@ when helping debug issues with someone not accustomed to reading error messages 
 
 The maximum size of the folder where pretty error files are stored. This is only used when `prettyErrors` is `True`. The default is `50mb`.
 
+## Comfort Range
+
+Your comfort range is the band of temperatures that feels neutral to you. The temperature scale (`$temperature`, or the older `TemperatureGradient`) is plain white across it, blue below it and orange to purple above it. Every gradient that uses the scale follows the one setting: the forecast line, the outdoor temperature's `fill-gradient`, a gauge arc, a colour bound to a reading.
+
+```ini
+[Comfort]
+low = 55°F
+high = 72°F
+```
+
+### <div class=mono>low/high</div>
+
+The coldest and warmest temperatures you still call comfortable. Write the unit (`55°F`, `13C`, `286K`); a number with no unit uses the temperature unit of `[Units]`. Set one and the other keeps its built-in value. Leave `[Comfort]` out for the built-in band of 12 to 22 °C (about 54 to 72 °F).
+
+The band stretches to your range, and the cold and hot ends of the scale slide with it, so a wider band is not a paler scale. `low` must be below `high`; if it is not, or a value is not a temperature, the log says so and the built-in band is used. Restart (or `Ctrl+R`) after a change.
+
+A colour that you write as stops yourself (`gradient: {50°F: ..., 80°F: ...}`) is not part of the scale and does not move. See [Themes](config/dashboard/themes.md#comfort-range).
+
 ## unitcorn <!-- {docsify-ignore} -->
 
 The sections below are for unitcorn (formerly WeatherUnits), the library that converts and localizes measurements for display. More information on how it's configured can be found in

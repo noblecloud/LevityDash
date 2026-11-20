@@ -463,12 +463,22 @@ This property is used to override the string used for sizing/alignment. If you l
 For example, wind speed frequently changes between 0 and some non-zero float causing the text to constantly resize.
 To fix this, `format-hint` can be set to `'10.0'`.  Note, the quotes are required, without the quotes, the value will be interpreted as a float and the decimal will be dropped.  Since this string will be used to determine the size of the text, it is important that the string is the same length as the longest string that will be displayed.
 
-#### <div class=mono>number-align: end | decimal </div>
+#### <div class=mono>number-align: end | decimal | char:X | nth:N | special:N </div>
 
 Lines a column of values up on the number and not on the whole string. Without it a `72.4°` and a `44%` in one column end at the same edge, so their digits do not line up.
 
 - `decimal` puts every decimal point on one vertical line. A value with no point is treated as if the point sat just after its last digit, so `44%` and `0` line up with `72.4°` on the digits to the left of the point.
 - `end` right-aligns the digits. Everything after the last digit (the unit, a `%`, a `°`) hangs to the right.
+
+Three modes let you pick the anchor yourself, as the character the line runs through (CSS `text-align: "."` is the model). The anchor starts on the line, so the text before it sits to the left and the anchor and everything after it hang to the right:
+
+| value | anchors on |
+| --- | --- |
+| `char:X` | the first `X` (`char::` for a colon, `char:%`); `char:X@2` the second, `char:X@-1` the last |
+| `nth:N` | the Nth character, 1 is the first; `nth:-1` the last one |
+| `special:N` | the Nth special character: not a digit, a letter or a space (so `.` `,` `:` `/` `%` `°`); a leading sign does not count; `special:-1` the last |
+
+A value without the anchor falls back to `end` (cut after its last digit), so a `44%` still lines up in a column of `72.4°` under `special:1`, and a value with no digit and no anchor keeps its plain placement. A mapping works too: `{char: ':', occurrence: 2}`, `{nth: 3}`, `{special: -1}`. Each value is measured in its own font, so the anchors still meet when `font-axes` or `heat-weight` give the values different weights, and with `decimal-scale` small digits. The anchors are lined up across everything in the column, so a `special:1` label next to a `special:1` label in the same stack and size group shares the x.
 
 The text is never changed: nothing is padded and no decimals are added, so `0` stays `0` and `0.0` stays `0.0`. A value with no digit (a compass point such as `WSW`) is not a number and keeps its normal alignment.
 

@@ -1,0 +1,22 @@
+# Your comfort range: one setting in config.ini, every temperature gradient follows it.
+#
+#   [Comfort]
+#   low = 55°F
+#   high = 72°F
+#
+# The temperature now is filled with the `$temperature` scale; change the range and its white band moves with
+# it, as does every other gradient that uses the scale. Nothing here names the range.
+- type: realtime.text
+  name: now
+  key: environment.temperature.temperature
+  title: false
+  format-hint: 00°
+  display:
+    valueLabel:
+      alignment: Center
+      weight: Black
+      fill-gradient:
+        scale: $temperature
+        of: environment.temperature.temperature
+        spread: 5°F
+        angle: 180

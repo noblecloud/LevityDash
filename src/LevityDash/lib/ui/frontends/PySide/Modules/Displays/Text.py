@@ -631,7 +631,7 @@ class Text(QGraphicsPathItem):
 			return None
 		text = self.text or ''
 		hint = getattr(self, '_formatHint', None) or ''
-		if not any(c.isdigit() for c in text + hint):
+		if not (numberalign.anchored(text, mode) or numberalign.anchored(hint, mode)):
 			# a compass point, a name or a placeholder is not a number: it keeps its plain placement and
 			# adds nothing to the column
 			return None

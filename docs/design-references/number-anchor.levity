@@ -1,0 +1,39 @@
+# number-align anchors: every column lines up on its anchor. The text is never changed.
+- type: stack
+  direction: Horizontal
+  spacing: 3%
+  items:
+  - type: stack
+    direction: Vertical
+    items:
+    - {type: text, text: "decimal point", color: "#7fd", size: 14%}
+    - {type: text, text: "72.4°", matchingGroup: {group: global.col0, matchAll: true}, alignment: Right, number-align: "decimal", font: Roboto Mono}
+    - {type: text, text: "9.5°", matchingGroup: {group: global.col0, matchAll: true}, alignment: Right, number-align: "decimal", font: Roboto Mono}
+    - {type: text, text: "-13.25°", matchingGroup: {group: global.col0, matchAll: true}, alignment: Right, number-align: "decimal", font: Roboto Mono}
+    - {type: text, text: "100°", matchingGroup: {group: global.col0, matchAll: true}, alignment: Right, number-align: "decimal", font: Roboto Mono}
+    - {type: text, text: "4.0°", matchingGroup: {group: global.col0, matchAll: true}, alignment: Right, number-align: "decimal", font: Roboto Mono}
+  - type: stack
+    direction: Vertical
+    items:
+    - {type: text, text: "char:: (colon)", color: "#7fd", size: 14%}
+    - {type: text, text: "9:41", matchingGroup: {group: global.col1, matchAll: true}, alignment: Right, number-align: "char::", font: Roboto Mono}
+    - {type: text, text: "12:05", matchingGroup: {group: global.col1, matchAll: true}, alignment: Right, number-align: "char::", font: Roboto Mono}
+    - {type: text, text: "10:30:15", matchingGroup: {group: global.col1, matchAll: true}, alignment: Right, number-align: "char::", font: Roboto Mono}
+    - {type: text, text: "1:02", matchingGroup: {group: global.col1, matchAll: true}, alignment: Right, number-align: "char::", font: Roboto Mono}
+  - type: stack
+    direction: Vertical
+    items:
+    - {type: text, text: "special:1 (first special)", color: "#7fd", size: 14%}
+    - {type: text, text: "72.4°", matchingGroup: {group: global.col2, matchAll: true}, alignment: Right, number-align: "special:1", font: Roboto Mono}
+    - {type: text, text: "44%", matchingGroup: {group: global.col2, matchAll: true}, alignment: Right, number-align: "special:1", font: Roboto Mono}
+    - {type: text, text: "1,234.5", matchingGroup: {group: global.col2, matchAll: true}, alignment: Right, number-align: "special:1", font: Roboto Mono}
+    - {type: text, text: "19.4 mi", matchingGroup: {group: global.col2, matchAll: true}, alignment: Right, number-align: "special:1", font: Roboto Mono}
+    - {type: text, text: "0", matchingGroup: {group: global.col2, matchAll: true}, alignment: Right, number-align: "special:1", font: Roboto Mono}
+  - type: stack
+    direction: Vertical
+    items:
+    - {type: text, text: "nth:3 (third character)", color: "#7fd", size: 14%}
+    - {type: text, text: "A-12", matchingGroup: {group: global.col3, matchAll: true}, alignment: Right, number-align: "nth:3", font: Roboto Mono}
+    - {type: text, text: "BB-7", matchingGroup: {group: global.col3, matchAll: true}, alignment: Right, number-align: "nth:3", font: Roboto Mono}
+    - {type: text, text: "C.456", matchingGroup: {group: global.col3, matchAll: true}, alignment: Right, number-align: "nth:3", font: Roboto Mono}
+    - {type: text, text: "D 90", matchingGroup: {group: global.col3, matchAll: true}, alignment: Right, number-align: "nth:3", font: Roboto Mono}
