@@ -25,7 +25,10 @@ INDOOR = [('INDOOR', '', '$series-2')]
 LABEL = 'Barlow Condensed'
 CAP = 1.5
 # Bright, saturated colours for the room readings (Neal: neon, not muted).
-NEON = {'cyan': '#2ee6ff', 'lime': '#7dff4f'}
+# The board's accents, picked in OKLCH at one lightness band (L 0.78-0.84) and high chroma, so they glow evenly
+# against the sky from noon blue to night black instead of some reading dark and some washed out.
+SKY = {'bad': '#ff4f5e', 'warn': '#ffc23a', 'good': '#5eef8e', 'info': '#4cc3ff', 'aqua': '#40e2f3', 'accent': '#ffa156'}
+NEON = {'cyan': SKY['aqua'], 'lime': SKY['good']}
 ROOM = 5.8  # the room size: a reading read across the room has a value box this tall
 TILE = 3.6  # the detail size: every reading read up close has a value box this tall
 
@@ -229,18 +232,15 @@ def room(caption, sfx, color, x, y, w, h, i):
 		num(temp, g(x, y + CAP + 0.8, left - 0.8, hh * 0.62), '$text', weight='Bold', tracking=-0.02, unit='Inline', hint='00.0°', precision=1, small=True,
 		    group='global.room', align='TopLeft', font=TEMP_FONT, **tempAxes()),
 	]
-	rows = [('RH', key('humidity.humidity'), NEON['cyan'], {'hint': '00%', 'unit': 'Inline'}),
-	        ('DEW', key('temperature.dewpoint'), NEON['lime'], {'hint': '00°', 'unit': 'Inline'})]
-	# RH sits on the temperature's baseline; dew point under it, on the panel's bottom edge. Each caption is at the left
-	# of the column, on its value's baseline.
-	rowH = 4.6
-	base = y + CAP + 0.8 + hh * 0.62 - 0.9
-	spots = [base - rowH, y + h - rowH - 0.6]
-	for r, (name, k, c, kw) in enumerate(rows):
-		ry = spots[r]
-		out += [cap_(name, g(x + left + 0.4, ry + rowH - CAP, 4.2, CAP)),
-		        num(k, g(x + left + 2.6, ry, w - left - 2.6, rowH), c, group='global.side', align='BottomRight', weight='SemiBold', **kw)]
-		out[-1]['display']['valueLabel']['margins'] = {'left': 0, 'right': 0, 'top': 0, 'bottom': 0}
+	# Humidity and dew point: a caption over a number, both on one left edge (the leading edge), the two filling the
+	# temperature's height. The numbers take the temperature's font so the panel reads as one family.
+	xr, wr = x + left + 0.6, w - left - 0.6
+	for r, (name, k, c, hint) in enumerate((('HUMIDITY', key('humidity.humidity'), NEON['cyan'], '00%'),
+	                                         ('DEW POINT', key('temperature.dewpoint'), NEON['lime'], '00°'))):
+		ry = y + CAP + 0.8 + r * (hh * 0.5)
+		out += [cap_(name, g(xr, ry, wr, CAP)),
+		        num(k, g(xr, ry + CAP + 0.3, wr, 4.2), c, group='global.side', align='TopLeft', weight='Medium', font=TEMP_FONT,
+		            hint=hint, unit='Inline')]
 	return out
 
 
@@ -266,7 +266,7 @@ def board(rooms=INDOOR):
 	B += [
 		cap_('OUTSIDE', g(x, 2.8, 12, CAP), '$accent'),
 		num(T, g(x, 4.6, 15.4, 15.6), {'scale': '$temperature', 'of': T}, unit='Inline', hint='00°', weight='Black', tracking=-0.04, font=TEMP_FONT,
-		    **tempAxes(600, 900)),
+		    **tempAxes(500, 800)),
 		cap_('HIGH', g(x + 16.6, 2.8, 7, CAP)),
 		num('environment.temperature.high', g(x + 16.6, 4.6, 8, 5.8), '$bad', hint='00', weight='Bold', group='global.room',
 		    fmt={'unit_symbol': False}, font=TEMP_FONT, **tempAxes()),
@@ -503,7 +503,7 @@ def board(rooms=INDOOR):
 	# The ground follows the sun and is greyed by cloud; at night the real sky (bright-star catalogue and planets, placed
 	# for the configured location and time) comes out, thinned by cloud.
 	sky = {'sky': True, 'haze': f'{C}.cover', 'stars': True}
-	return {'background': sky, 'theme': {'extends': 'default', 'colors': {'moon-shade': {'color': '#000000', 'alpha': 0.2}, 'bad': '#ff5d55'}}, 'items': [{'type': 'group', 'name': 'board', 'items': B}]}
+	return {'background': sky, 'theme': {'extends': 'default', 'colors': {'moon-shade': {'color': '#000000', 'alpha': 0.2}, **{k: v for k, v in SKY.items() if k != 'aqua'}}}, 'items': [{'type': 'group', 'name': 'board', 'items': B}]}
 
 
 HEADER = """
